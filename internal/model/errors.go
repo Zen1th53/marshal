@@ -3,10 +3,13 @@ package model
 import "errors"
 
 var (
-	ErrConflict    = errors.New("conflict")
-	ErrInvalid     = errors.New("invalid input")
-	ErrNotFound    = errors.New("not found")
-	ErrUnavailable = errors.New("unavailable")
+	ErrConflict         = errors.New("conflict")
+	ErrInvalid          = errors.New("invalid input")
+	ErrNotFound         = errors.New("not found")
+	ErrUnavailable      = errors.New("unavailable")
+	ErrPolicyDenied     = errors.New("policy denied")
+	ErrApprovalRequired = errors.New("approval required")
+	ErrSecretMaterial   = errors.New("secret material")
 )
 
 type CodeError struct {
