@@ -1,0 +1,8 @@
+{
+  "id": "CONF-027",
+  "expected": "DENY",
+  "invariant": "Incompatible MCP protocol version must be explicitly rejected.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}
