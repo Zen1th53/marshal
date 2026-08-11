@@ -209,30 +209,47 @@ These are protocol-first and conditionally loaded. No new mandatory runtime serv
 
 ---
 
-## Executable Runtime Specification
+## Executable Local Runtime
 
-`runtime/` contains the executable-control-plane contracts for:
+SLAVES now includes a Go `0.1.0` local runtime implementing the first vertical
+slice of the contracts in `runtime/`:
 
-- `agentctl`,
-- canonical state service,
-- identity/heartbeat,
-- policy engine,
-- worker/sandbox manager,
-- scheduler,
-- event bus,
-- secrets broker,
-- artifact store.
+- one `slaves` binary and a local-only HTTP/JSON API over a mode-`0600` Unix socket;
+- canonical SQLite state with deterministic migrations, atomic task leases,
+  identity sessions, heartbeats, policy checks, and approvals;
+- task-scoped Git worktrees, honest bubblewrap/process-only isolation reporting,
+  a native Codex adapter, durable audit events, and digest-addressed evidence;
+- commit-bound verification invalidation and read-only reconciliation inspection.
 
-`RUNTIME-VERSION.yaml` explicitly marks this as a specification rather than a
-claim that a production daemon has already been implemented.
+Build and initialize it from a Git repository containing this pack:
 
-The recommended first real implementation is:
-
-```text
-local daemon + SQLite + Git worktrees + filesystem artifacts
+```bash
+go build -o slaves ./cmd/slaves
+./slaves init
+./slaves doctor
+./slaves daemon
 ```
 
-before any distributed infrastructure.
+In another terminal:
+
+```bash
+./slaves --json status
+./slaves agent register --name local-codex --role developer
+./slaves task import tasks.json
+./slaves run TASK-001 --adapter codex --agent AGENT-...
+./slaves events
+./slaves artifacts
+./slaves verify
+```
+
+Runtime state lives under the ignored, private `.slaves/` directory. The daemon
+must be running for coordination mutations; `init`, `doctor`, and task-import
+dry-run are safe offline commands.
+
+This milestone is local Linux execution only. Distributed/multi-host runtime,
+non-Codex production adapters, full MCP/A2A servers, production secret brokers,
+and remote artifact/event infrastructure remain specifications, not
+implementation claims.
 
 ---
 
