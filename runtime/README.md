@@ -1,10 +1,9 @@
 # Runtime Plane
 
 This directory defines the executable control-plane contracts for the reusable
-agent engineering system.
-
-It is a specification layer, not a claim that a production daemon is already
-implemented.
+agent engineering system. Runtime Milestone 1 implements a local Linux subset
+in `cmd/slaves` and `internal/`; contracts outside that subset remain
+specifications.
 
 ## Components
 
@@ -24,12 +23,12 @@ implemented.
 - `EVENTS.yaml` — stable event names and fields.
 - `IMPLEMENTATION-ROADMAP.md` — recommended build order.
 
-## Recommended First Implementation
+## Implemented Local Runtime 0.1.0
 
 ```text
-agentctl
+slaves CLI
   ↓
-local daemon
+HTTP/JSON over a local mode-0600 Unix socket
   ↓
 SQLite
   ├── tasks
@@ -43,11 +42,23 @@ SQLite
 
 filesystem
   ├── Git worktrees
-  └── content-addressed artifacts
+  └── SHA-256 content-addressed artifacts
 ```
 
-Add TurboVec, Cognee, Deja Vu, external secret managers, or distributed workers
-only after a real requirement appears.
+The implementation also includes capability-policy enforcement, contextual
+approvals, identity sessions/heartbeats, atomic leases, deterministic ready-task
+ordering, Codex process management, bubblewrap probing/enforcement, durable
+events, worker evidence, HEAD-change verification invalidation, doctor probes,
+and read-only reconciliation diffs.
+
+Bubblewrap is the strong Linux backend. If it is unavailable, only explicitly
+low-risk, network-allowed work may use the honestly reported `process_only`
+fallback; network-denied or R2/R3 execution is blocked.
+
+Not implemented in 0.1.0: distributed or multi-host coordination, production
+secret brokering, external event/artifact services, full MCP/A2A servers, and
+production adapters other than Codex. TurboVec, Cognee, Deja Vu, external
+secret managers, and distributed workers remain optional future evolution.
 
 ---
 
