@@ -183,6 +183,26 @@ func TestClaimRejectsStaleRevisionAndReleaseChecksOwner(t *testing.T) {
 	}
 }
 
+func TestExpiredLeaseDoesNotAuthorizeTaskSteal(t *testing.T) {
+	st := projectStore(t)
+	importTasks(t, st, model.Task{ID: "TASK-001", Title: "expired lease", Status: model.TaskReady, Risk: model.R1})
+	firstAgent, firstSession := activeDeveloper(t, st, "first-expired")
+	secondAgent, secondSession := activeDeveloper(t, st, "second-expired")
+	if _, err := st.ClaimTask(context.Background(), model.ClaimRequest{TaskID: "TASK-001", AgentID: firstAgent.ID,
+		SessionID: firstSession.ID, ExpectedRevision: 0, ExpiresAt: time.Now().UTC().Add(5 * time.Millisecond)}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	_, err := st.ClaimTask(context.Background(), model.ClaimRequest{TaskID: "TASK-001", AgentID: secondAgent.ID,
+		SessionID: secondSession.ID, ExpectedRevision: 1, ExpiresAt: time.Now().UTC().Add(time.Hour)})
+	if !errors.Is(err, model.ErrConflict) {
+		t.Fatalf("steal error = %v", err)
+	}
+	if got := countWhere(t, st, "leases", "status = 'active'"); got != 1 {
+		t.Fatalf("active leases = %d", got)
+	}
+}
+
 func projectStore(t *testing.T) *Store {
 	t.Helper()
 	st := openTestStore(t)

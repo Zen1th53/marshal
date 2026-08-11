@@ -102,6 +102,12 @@ func (c *Client) Verify(ctx context.Context, input app.VerifyRequest) (app.Verif
 	return value, id, err
 }
 
+func (c *Client) Reconcile(ctx context.Context, input app.ReconcileRequest) (app.ReconciliationReport, string, error) {
+	var value app.ReconciliationReport
+	id, err := c.do(ctx, http.MethodPost, "/v1/reconcile", input, &value)
+	return value, id, err
+}
+
 func (c *Client) do(ctx context.Context, method, path string, input, output any) (string, error) {
 	var body bytes.Buffer
 	if input != nil {

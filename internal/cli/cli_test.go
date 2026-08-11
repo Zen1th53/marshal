@@ -61,7 +61,7 @@ func TestTaskImportDryRunDoesNotNeedDaemon(t *testing.T) {
 }
 
 func TestRequiredCommandsHaveUsage(t *testing.T) {
-	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "events", "artifacts", "verify", "daemon"} {
+	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "events", "artifacts", "verify", "reconcile", "daemon"} {
 		var stdout, stderr bytes.Buffer
 		code := Execute(context.Background(), ".", []string{command, "--help"}, strings.NewReader(""), &stdout, &stderr)
 		if code != 0 || !strings.Contains(stdout.String()+stderr.String(), "Usage:") {

@@ -34,6 +34,7 @@ Commands:
   events
   artifacts
   verify [-- command args...]
+  reconcile --file-state state.json
   daemon
 `
 
@@ -94,6 +95,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.artifacts(ctx)
 	case "verify":
 		err = c.verify(ctx, args[1:])
+	case "reconcile":
+		err = c.reconcile(ctx, args[1:])
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}
@@ -375,6 +378,16 @@ func (c command) verify(ctx context.Context, args []string) error {
 		return err
 	}
 	return c.print(value, "PASS "+value.OutputDigest)
+}
+
+func (c command) reconcile(ctx context.Context, args []string) error {
+	set := flag.NewFlagSet("reconcile", flag.ContinueOnError)
+	set.SetOutput(c.stderr)
+	fileState := set.String("file-state", "", "JSON checkpoint to compare")
+	if err := set.Parse(args); err != nil { return fmt.Errorf("%w: %v", model.ErrInvalid, err) }
+	client, err := c.client(); if err != nil { return err }
+	value, _, err := client.Reconcile(ctx, app.ReconcileRequest{FileState: *fileState}); if err != nil { return err }
+	return c.print(value, fmt.Sprintf("%s conflicts=%d", value.Status, len(value.Conflicts)))
 }
 
 func (c command) print(value any, human string) error {
