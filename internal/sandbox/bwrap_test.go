@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -12,6 +13,35 @@ import (
 
 	"github.com/Zen1th53/slaves/internal/model"
 )
+
+func TestBwrapExecutesInsideWritableWorktree(t *testing.T) {
+	binary, err := exec.LookPath("bwrap")
+	if err != nil {
+		t.Skip("bwrap unavailable")
+	}
+	backend := NewBwrap(binary)
+	if capability := backend.Probe(context.Background()); !capability.Available {
+		t.Skip(capability.Reason)
+	}
+	worktree := t.TempDir()
+	spec, err := backend.Wrap(model.SandboxRequest{Worktree: worktree, NetworkAllowed: false}, []string{"/bin/sh", "-c", "printf proof > runtime-proof"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(spec.Path, spec.Args...)
+	command.Env = spec.Env
+	command.Dir = spec.Dir
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("bwrap: %v: %s", err, output)
+	}
+	data, err := os.ReadFile(filepath.Join(worktree, "runtime-proof"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "proof" {
+		t.Fatalf("proof = %q", data)
+	}
+}
 
 func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 	worktree := t.TempDir()
