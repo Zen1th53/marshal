@@ -381,12 +381,28 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	result, runErr := agentAdapter.Run(ctx, adapter.Request{
 		TaskID: task.ID, Title: task.Title, Worktree: worktreeState.Path,
 		BaseCommit: baseCommit, HeadCommit: baseCommit,
-		AllowedOperations: []string{"filesystem.read", "filesystem.write", "shell.execute", "git.commit"},
+		AllowedOperations: []string{"filesystem.read", "filesystem.write", "shell.execute"},
 		EvidenceRequired:  []string{"git status --short", "git log -1 --oneline"},
 		Heartbeat:         heartbeat,
 		HeartbeatInterval: 5 * time.Second,
 	})
 	state, inspectErr := worktreeManager.Inspect(context.Background(), worktreeState.Path)
+	if runErr == nil && inspectErr == nil && result.Status == adapter.StatusSuccess && result.ExitCode == 0 {
+		if state.Dirty {
+			commitInput := input
+			commitInput.Operation = model.GitCommit
+			commitInput.Target = worktreeState.Path
+			runErr = policy.Enforce(r.policy, commitInput, func() error {
+				return commitTaskChanges(ctx, worktreeState.Path, task.ID)
+			})
+			if runErr == nil {
+				state, inspectErr = worktreeManager.Inspect(context.Background(), worktreeState.Path)
+			}
+		}
+		if runErr == nil && inspectErr == nil && state.HEAD == baseCommit {
+			runErr = fmt.Errorf("%w: worker produced no commit", model.ErrConflict)
+		}
+	}
 	resultCommit := baseCommit
 	if inspectErr == nil {
 		resultCommit = state.HEAD
@@ -396,10 +412,13 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
 		TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(result.Stdout),
 	})
-	stderrArtifact, stderrErr := artifacts.Put(context.Background(), model.ArtifactInput{
-		ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
-		TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(result.Stderr),
-	})
+	stderrArtifact, stderrErr := stdoutArtifact, stdoutErr
+	if !bytes.Equal(result.Stdout, result.Stderr) {
+		stderrArtifact, stderrErr = artifacts.Put(context.Background(), model.ArtifactInput{
+			ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
+			TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(result.Stderr),
+		})
+	}
 	success := runErr == nil && inspectErr == nil && stdoutErr == nil && stderrErr == nil &&
 		result.Status == adapter.StatusSuccess && result.ExitCode == 0
 	finishStatus := "failed"
@@ -439,6 +458,22 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	}, nil
 }
 
+func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {
+	for _, args := range [][]string{
+		{"-C", worktreePath, "add", "--all"},
+		{"-C", worktreePath, "commit", "-m", "chore(task): complete " + taskID},
+	} {
+		command := exec.CommandContext(ctx, "git", args...)
+		if output, err := command.CombinedOutput(); err != nil {
+			if len(output) > 4096 {
+				output = output[:4096]
+			}
+			return fmt.Errorf("git task commit: %w: %s", err, bytes.TrimSpace(output))
+		}
+	}
+	return nil
+}
+
 func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath string) (adapter.Adapter, error) {
 	if candidate := r.adapters[name]; candidate != nil {
 		return candidate, nil
@@ -450,6 +485,9 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	if err != nil {
 		return nil, fmt.Errorf("%w: Codex CLI is missing", model.ErrUnavailable)
 	}
+	if resolved, resolveErr := filepath.EvalSymlinks(binary); resolveErr == nil {
+		binary = resolved
+	}
 	process := worker.New(30*time.Minute, 3*time.Second, 8<<20)
 	var runner adapter.ProcessRunner = process
 	if bwrapPath, lookupErr := exec.LookPath("bwrap"); lookupErr == nil {
@@ -460,15 +498,19 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			return nil, chooseErr
 		}
 		if chosen.Level == model.IsolationBwrap {
-			var authBinds []model.Bind
+			readOnlyBinds := []model.Bind{{Source: binary, Target: binary}}
+			gitMetadata := filepath.Join(r.layout.Root, ".git")
+			if info, statErr := os.Stat(gitMetadata); statErr == nil && info.IsDir() {
+				readOnlyBinds = append(readOnlyBinds, model.Bind{Source: gitMetadata, Target: gitMetadata})
+			}
 			if home, homeErr := os.UserHomeDir(); homeErr == nil {
 				auth := filepath.Join(home, ".codex", "auth.json")
 				if _, statErr := os.Stat(auth); statErr == nil {
-					authBinds = []model.Bind{{Source: auth, Target: "/home/slaves/.codex/auth.json"}}
+					readOnlyBinds = append(readOnlyBinds, model.Bind{Source: auth, Target: "/home/slaves/.codex/auth.json"})
 				}
 			}
 			runner = worker.NewSandboxed(process, backend, model.SandboxRequest{
-				Worktree: worktreePath, NetworkAllowed: true, ReadOnlyBinds: authBinds,
+				Worktree: worktreePath, NetworkAllowed: true, ReadOnlyBinds: readOnlyBinds,
 			})
 		}
 	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, true); err != nil {

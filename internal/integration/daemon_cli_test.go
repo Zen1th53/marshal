@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -46,7 +44,9 @@ func TestDaemonCLIEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	runCLI(t, repo.Path(), "task", "import", taskFile)
-	runOutput := runCLI(t, repo.Path(), "--json", "run", "TASK-001", "--adapter", "fake", "--agent", agent.ID)
+	runCLI(t, repo.Path(), "task", "claim", "TASK-001")
+	runCLI(t, repo.Path(), "task", "release", "TASK-001")
+	runOutput := runCLI(t, repo.Path(), "--json", "run", "TASK-001", "--adapter", "fake", "--revision", "2")
 	var result app.RunResult
 	decodeOutput(t, runOutput, &result)
 	if result.Status != "success" || result.ResultCommit == repo.HEAD(t) || result.Isolation.Level != model.IsolationProcessOnly {
@@ -117,12 +117,6 @@ func (fakeCommitAdapter) Run(_ context.Context, request adapter.Request) (adapte
 	path := filepath.Join(request.Worktree, "runtime-proof.txt")
 	if err := os.WriteFile(path, []byte("SLAVES runtime proof\n"), 0o600); err != nil {
 		return adapter.Result{}, err
-	}
-	for _, args := range [][]string{{"add", "runtime-proof.txt"}, {"commit", "-m", "test: prove runtime execution"}} {
-		command := exec.Command("git", append([]string{"-C", request.Worktree}, args...)...)
-		if output, err := command.CombinedOutput(); err != nil {
-			return adapter.Result{}, fmt.Errorf("git %v: %w: %s", args, err, output)
-		}
 	}
 	now := time.Now().UTC()
 	return adapter.Result{Adapter: "fake", AdapterVersion: "test-1", Status: adapter.StatusSuccess,

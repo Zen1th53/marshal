@@ -136,7 +136,7 @@ func buildPrompt(request adapter.Request) ([]byte, error) {
 			"Work only inside the assigned worktree.",
 			"Do not push, rewrite history, deploy, upload externally, or access secrets.",
 			"Do not issue QA or AppSec approval.",
-			"Produce one reviewable commit and report commands actually executed.",
+			"Prepare reviewable changes and report commands actually executed; the runtime creates the task commit.",
 		},
 	}
 	payload, err := json.MarshalIndent(envelope, "", "  ")

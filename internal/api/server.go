@@ -154,7 +154,9 @@ func (s *Server) routes() http.Handler {
 	}))
 	mux.HandleFunc("POST /v1/reconcile", s.handle(func(ctx context.Context, request *http.Request) (any, error) {
 		var input app.ReconcileRequest
-		if err := decode(request, &input); err != nil { return nil, err }
+		if err := decode(request, &input); err != nil {
+			return nil, err
+		}
 		return s.runtime.Reconcile(ctx, input)
 	}))
 	return mux

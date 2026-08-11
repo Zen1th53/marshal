@@ -311,7 +311,11 @@ func (c command) taskClaim(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	value, _, err := client.Claim(ctx, app.ClaimRequest{TaskID: args[0], AgentID: *agent, ExpectedRevision: *revision})
+	agentID, err := resolveAgent(ctx, client, *agent)
+	if err != nil {
+		return err
+	}
+	value, _, err := client.Claim(ctx, app.ClaimRequest{TaskID: args[0], AgentID: agentID, ExpectedRevision: *revision})
 	if err != nil {
 		return err
 	}
@@ -334,11 +338,35 @@ func (c command) run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	value, _, err := client.Run(ctx, app.RunRequest{TaskID: args[0], AgentID: *agent, Adapter: *adapterName, ExpectedRevision: *revision})
+	agentID, err := resolveAgent(ctx, client, *agent)
+	if err != nil {
+		return err
+	}
+	value, _, err := client.Run(ctx, app.RunRequest{TaskID: args[0], AgentID: agentID, Adapter: *adapterName, ExpectedRevision: *revision})
 	if err != nil {
 		return err
 	}
 	return c.print(value, fmt.Sprintf("%s %s %s", value.TaskID, value.Status, value.ResultCommit))
+}
+
+func resolveAgent(ctx context.Context, client *api.Client, requested string) (string, error) {
+	if requested != "" {
+		return requested, nil
+	}
+	agents, _, err := client.Agents(ctx)
+	if err != nil {
+		return "", err
+	}
+	eligible := make([]model.Agent, 0, len(agents))
+	for _, agent := range agents {
+		if agent.Status != model.AgentDisabled {
+			eligible = append(eligible, agent)
+		}
+	}
+	if len(eligible) != 1 {
+		return "", fmt.Errorf("%w: --agent is required unless exactly one enabled agent is registered", model.ErrInvalid)
+	}
+	return eligible[0].ID, nil
 }
 
 func (c command) events(ctx context.Context) error {
@@ -384,9 +412,17 @@ func (c command) reconcile(ctx context.Context, args []string) error {
 	set := flag.NewFlagSet("reconcile", flag.ContinueOnError)
 	set.SetOutput(c.stderr)
 	fileState := set.String("file-state", "", "JSON checkpoint to compare")
-	if err := set.Parse(args); err != nil { return fmt.Errorf("%w: %v", model.ErrInvalid, err) }
-	client, err := c.client(); if err != nil { return err }
-	value, _, err := client.Reconcile(ctx, app.ReconcileRequest{FileState: *fileState}); if err != nil { return err }
+	if err := set.Parse(args); err != nil {
+		return fmt.Errorf("%w: %v", model.ErrInvalid, err)
+	}
+	client, err := c.client()
+	if err != nil {
+		return err
+	}
+	value, _, err := client.Reconcile(ctx, app.ReconcileRequest{FileState: *fileState})
+	if err != nil {
+		return err
+	}
 	return c.print(value, fmt.Sprintf("%s conflicts=%d", value.Status, len(value.Conflicts)))
 }
 

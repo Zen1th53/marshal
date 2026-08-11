@@ -71,6 +71,9 @@ func TestSecurityWorkerCrashPreservesWorktreeAndNeverCompletes(t *testing.T) {
 	if result.Status != "failed" {
 		t.Fatalf("result = %#v", result)
 	}
+	if result.StdoutArtifact.ID == "" || result.StdoutArtifact.ID != result.StderrArtifact.ID {
+		t.Fatalf("identical streams were not deduplicated: %#v", result)
+	}
 	task, err := runtime.Task(context.Background(), "TASK-CRASH")
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +93,7 @@ func (crashAdapter) Probe(context.Context) (adapter.Probe, error) {
 }
 func (crashAdapter) Run(context.Context, adapter.Request) (adapter.Result, error) {
 	now := time.Now().UTC()
-	return adapter.Result{Adapter: "crash", AdapterVersion: "test", Status: adapter.StatusFailure, ExitCode: 137, StartedAt: now, EndedAt: now, Stderr: []byte("worker exited")}, nil
+	return adapter.Result{Adapter: "crash", AdapterVersion: "test", Status: adapter.StatusFailure, ExitCode: 137, StartedAt: now, EndedAt: now, Stdout: []byte("worker exited"), Stderr: []byte("worker exited")}, nil
 }
 func (crashAdapter) Status(context.Context, string) (adapter.Status, error) {
 	return adapter.StatusFailure, nil

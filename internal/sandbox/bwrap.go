@@ -85,7 +85,8 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 	}
 	for _, bind := range request.ReadOnlyBinds {
 		source, err := existingPath(bind.Source)
-		if err != nil || !filepath.IsAbs(bind.Target) || !pathWithin("/home/slaves", bind.Target) {
+		if err != nil || !filepath.IsAbs(bind.Target) ||
+			(!pathWithin("/home/slaves", bind.Target) && source != bind.Target) {
 			return model.CommandSpec{}, fmt.Errorf("%w: invalid read-only bind %s -> %s", model.ErrInvalid, bind.Source, bind.Target)
 		}
 		info, err := os.Stat(source)

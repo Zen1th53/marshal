@@ -47,11 +47,15 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 	worktree := t.TempDir()
 	scratch := t.TempDir()
 	auth := t.TempDir()
+	gitMetadata := t.TempDir()
 	backend := NewBwrap("/sbin/bwrap")
 	spec, err := backend.Wrap(model.SandboxRequest{
-		Worktree:       worktree,
-		WritableDirs:   []string{scratch},
-		ReadOnlyBinds:  []model.Bind{{Source: auth, Target: "/home/slaves/.codex"}},
+		Worktree:     worktree,
+		WritableDirs: []string{scratch},
+		ReadOnlyBinds: []model.Bind{
+			{Source: auth, Target: "/home/slaves/.codex"},
+			{Source: gitMetadata, Target: gitMetadata},
+		},
 		NetworkAllowed: false,
 	}, []string{"/usr/bin/codex", "exec"})
 	if err != nil {
@@ -65,6 +69,7 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 		"/home/slaves/.codex",
 		"--bind", worktree, worktree, "--bind", scratch, scratch,
 		"--ro-bind", auth, "/home/slaves/.codex", "--", "/usr/bin/codex", "exec",
+		gitMetadata,
 	} {
 		if !slices.Contains(spec.Args, required) {
 			t.Fatalf("args missing %q: %#v", required, spec.Args)
