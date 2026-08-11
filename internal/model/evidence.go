@@ -73,3 +73,15 @@ type WorkerRun struct {
 	Verification     []string
 	Revision         int64
 }
+
+type RunFinish struct {
+	ID               string
+	Status           string
+	ResultCommit     string
+	EndedAt          time.Time
+	ExitStatus       *int
+	StdoutArtifactID string
+	StderrArtifactID string
+	Verification     []string
+	ExpectedRevision int64
+}

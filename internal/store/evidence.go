@@ -169,6 +169,142 @@ func (s *Store) RecordVerification(ctx context.Context, verification model.Verif
 	return nil
 }
 
+func (s *Store) StartRun(ctx context.Context, run model.WorkerRun) error {
+	if run.ID == "" || run.TaskID == "" || run.SessionID == "" || run.Adapter == "" ||
+		run.AdapterVersion == "" || run.BaseCommit == "" || run.StartedAt.IsZero() ||
+		run.Status != "running" {
+		return fmt.Errorf("%w: incomplete worker run", model.ErrInvalid)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin worker run: %w", err)
+	}
+	defer tx.Rollback()
+	var projectID, agentID, sessionTask string
+	if err := tx.QueryRowContext(ctx, `
+		SELECT s.project_id, s.agent_id, COALESCE(s.task_id, '')
+		FROM sessions s WHERE s.session_id = ?
+	`, run.SessionID).Scan(&projectID, &agentID, &sessionTask); err != nil {
+		return fmt.Errorf("read worker session: %w", err)
+	}
+	if sessionTask != "" && sessionTask != run.TaskID {
+		return fmt.Errorf("%w: worker session is bound to another task", model.ErrConflict)
+	}
+	verification, err := json.Marshal(nonNilStrings(run.Verification))
+	if err != nil {
+		return fmt.Errorf("%w: encode run verification: %v", model.ErrInvalid, err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO worker_runs(
+			run_id, task_id, session_id, adapter, adapter_version, base_commit,
+			result_commit, started_at, ended_at, exit_status, status,
+			stdout_artifact_id, stderr_artifact_id, verification_json, revision
+		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'running', NULL, NULL, ?, ?)
+	`, run.ID, run.TaskID, run.SessionID, run.Adapter, run.AdapterVersion,
+		run.BaseCommit, nullIfEmpty(run.ResultCommit),
+		run.StartedAt.UTC().Format(time.RFC3339Nano), string(verification), run.Revision); err != nil {
+		return fmt.Errorf("insert worker run: %w", err)
+	}
+	eventID, err := model.NewID("EVENT-")
+	if err != nil {
+		return err
+	}
+	if err := s.AppendEvent(ctx, tx, model.Event{
+		ID: eventID, Type: "WORKER_STARTED", ProjectID: projectID, TaskID: run.TaskID,
+		ActorAgentID: agentID, SessionID: run.SessionID,
+		AggregateRevision: run.Revision, Timestamp: run.StartedAt,
+		Data: map[string]any{"run_id": run.ID, "adapter": run.Adapter},
+	}); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit worker run: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) FinishRun(ctx context.Context, finish model.RunFinish) error {
+	if finish.ID == "" || finish.EndedAt.IsZero() || !validRunTerminalStatus(finish.Status) {
+		return fmt.Errorf("%w: incomplete worker run finish", model.ErrInvalid)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin worker run finish: %w", err)
+	}
+	defer tx.Rollback()
+	var taskID, sessionID, currentStatus, projectID, agentID string
+	var revision int64
+	if err := tx.QueryRowContext(ctx, `
+		SELECT r.task_id, r.session_id, r.status, r.revision, s.project_id, s.agent_id
+		FROM worker_runs r JOIN sessions s ON s.session_id = r.session_id
+		WHERE r.run_id = ?
+	`, finish.ID).Scan(&taskID, &sessionID, &currentStatus, &revision, &projectID, &agentID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: worker run %s", model.ErrNotFound, finish.ID)
+		}
+		return fmt.Errorf("read worker run: %w", err)
+	}
+	if currentStatus != "running" || revision != finish.ExpectedRevision {
+		return fmt.Errorf("%w: worker run is not active at expected revision", model.ErrConflict)
+	}
+	verification, err := json.Marshal(nonNilStrings(finish.Verification))
+	if err != nil {
+		return fmt.Errorf("%w: encode run verification: %v", model.ErrInvalid, err)
+	}
+	result, err := tx.ExecContext(ctx, `
+		UPDATE worker_runs
+		SET result_commit = ?, ended_at = ?, exit_status = ?, status = ?,
+		    stdout_artifact_id = ?, stderr_artifact_id = ?, verification_json = ?,
+		    revision = revision + 1
+		WHERE run_id = ? AND status = 'running' AND revision = ?
+	`, nullIfEmpty(finish.ResultCommit), finish.EndedAt.UTC().Format(time.RFC3339Nano),
+		finish.ExitStatus, finish.Status, nullIfEmpty(finish.StdoutArtifactID),
+		nullIfEmpty(finish.StderrArtifactID), string(verification), finish.ID,
+		finish.ExpectedRevision)
+	if err != nil {
+		return fmt.Errorf("finish worker run: %w", err)
+	}
+	if err := requireOne(result, "finish worker run"); err != nil {
+		return err
+	}
+	if finish.Status != "success" {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE sessions SET status = 'failed', revision = revision + 1
+			WHERE session_id = ? AND status = 'active'
+		`, sessionID); err != nil {
+			return fmt.Errorf("fail worker session: %w", err)
+		}
+	}
+	eventID, err := model.NewID("EVENT-")
+	if err != nil {
+		return err
+	}
+	data := map[string]any{"run_id": finish.ID, "status": finish.Status}
+	if finish.ExitStatus != nil {
+		data["exit_status"] = *finish.ExitStatus
+	}
+	if err := s.AppendEvent(ctx, tx, model.Event{
+		ID: eventID, Type: "WORKER_EXITED", ProjectID: projectID, TaskID: taskID,
+		ActorAgentID: agentID, SessionID: sessionID,
+		AggregateRevision: revision + 1, Timestamp: finish.EndedAt, Data: data,
+	}); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit worker run finish: %w", err)
+	}
+	return nil
+}
+
+func validRunTerminalStatus(status string) bool {
+	switch status {
+	case "success", "failed", "timeout", "cancelled", "blocked":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Store) ObserveHEAD(ctx context.Context, taskID, newCommit string, expectedRevision int64) error {
 	if taskID == "" || newCommit == "" {
 		return fmt.Errorf("%w: task and new HEAD are required", model.ErrInvalid)

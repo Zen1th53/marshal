@@ -116,6 +116,44 @@ func TestRecordVerificationRejectsValidClaimForFailedCommand(t *testing.T) {
 	}
 }
 
+func TestWorkerFailurePersistsExitAndNeverCompletesTask(t *testing.T) {
+	st := projectStore(t)
+	importTasks(t, st, model.Task{
+		ID: "TASK-001", Title: "worker failure", Status: model.TaskReady, Risk: model.R1,
+	})
+	_, session := activeDeveloper(t, st, "run")
+	started := time.Now().UTC()
+	run := model.WorkerRun{
+		ID: "RUN-001", TaskID: "TASK-001", SessionID: session.ID,
+		Adapter: "codex", AdapterVersion: "0.test", BaseCommit: "abc123",
+		StartedAt: started, Status: "running",
+	}
+	if err := st.StartRun(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	exit := 7
+	ended := started.Add(time.Second)
+	if err := st.FinishRun(context.Background(), model.RunFinish{
+		ID: run.ID, Status: "failed", ExitStatus: &exit, EndedAt: ended, ExpectedRevision: 0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var runStatus, taskStatus, sessionStatus string
+	if err := st.db.QueryRow("SELECT status FROM worker_runs WHERE run_id = ?", run.ID).Scan(&runStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.db.QueryRow("SELECT status FROM tasks WHERE task_id = ?", run.TaskID).Scan(&taskStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.db.QueryRow("SELECT status FROM sessions WHERE session_id = ?", run.SessionID).Scan(&sessionStatus); err != nil {
+		t.Fatal(err)
+	}
+	if runStatus != "failed" || taskStatus == "merged" || taskStatus == "ready_to_merge" || sessionStatus != "failed" {
+		t.Fatalf("run=%s task=%s session=%s", runStatus, taskStatus, sessionStatus)
+	}
+	assertEventTypes(t, st, "WORKER_STARTED", "WORKER_EXITED")
+}
+
 func assertEventTypes(t *testing.T, st *Store, want ...string) {
 	t.Helper()
 	rows, err := st.db.Query("SELECT event_type FROM audit_events ORDER BY rowid")
