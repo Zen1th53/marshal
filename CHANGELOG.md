@@ -1,5 +1,14 @@
 # Changelog
 
+## Runtime 0.2.0 — 2026-08-11
+
+Implemented executable multi-agent runtime and interoperability plane for SLAVES:
+- Executable adapters for Gemini CLI, Claude Code, and OpenCode alongside existing Codex adapter.
+- Adapter probing, status, and command execution across native CLI surfaces (`slaves adapters`, `slaves adapter probe <name>`).
+- Real MCP 2026-07-28 Runtime Server (`slaves mcp serve`, `slaves mcp status`) exposing runtime status, tasks, leases, policy checks, events, artifacts, and verification.
+- Real A2A 1.0.0 Agent Server (`slaves a2a serve`, `slaves a2a status`) with Agent Card discovery, canonical task delegation mapping, and remote role spoofing prevention.
+- Maintained strict SLAVES policy enforcement, task-scoped worktrees, and bubblewrap isolation.
+
 ## 6.0.0 — 2026-08-11
 
 Added A2A/MCP protocol interoperability profiles, JSON Schema 2020-12 contracts,
