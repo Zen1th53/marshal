@@ -10,6 +10,7 @@ var (
 	ErrPolicyDenied     = errors.New("policy denied")
 	ErrApprovalRequired = errors.New("approval required")
 	ErrSecretMaterial   = errors.New("secret material")
+	ErrDirtyWorktree    = errors.New("dirty worktree")
 )
 
 type CodeError struct {
