@@ -32,6 +32,7 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 	}
 	for _, required := range []string{
 		"--unshare-net", "--unshare-pid", "--tmpfs", "/tmp",
+		"/home/slaves/.codex",
 		"--bind", worktree, worktree, "--bind", scratch, scratch,
 		"--ro-bind", auth, "/home/slaves/.codex", "--", "/usr/bin/codex", "exec",
 	} {
@@ -41,6 +42,10 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 	}
 	if slices.Contains(spec.Args, ".slaves/runtime.sock") {
 		t.Fatalf("runtime socket exposed: %#v", spec.Args)
+	}
+	authTarget := slices.Index(spec.Args, "/home/slaves/.codex")
+	if authTarget < 1 || spec.Args[authTarget-1] != "--dir" {
+		t.Fatalf("Codex auth target parent is not created before binding: %#v", spec.Args)
 	}
 }
 

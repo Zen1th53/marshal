@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/Zen1th53/slaves/internal/model"
@@ -84,9 +85,18 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 	}
 	for _, bind := range request.ReadOnlyBinds {
 		source, err := existingPath(bind.Source)
-		if err != nil || !filepath.IsAbs(bind.Target) {
+		if err != nil || !filepath.IsAbs(bind.Target) || !pathWithin("/home/slaves", bind.Target) {
 			return model.CommandSpec{}, fmt.Errorf("%w: invalid read-only bind %s -> %s", model.ErrInvalid, bind.Source, bind.Target)
 		}
+		info, err := os.Stat(source)
+		if err != nil {
+			return model.CommandSpec{}, fmt.Errorf("%w: inspect read-only bind %s: %v", model.ErrInvalid, bind.Source, err)
+		}
+		targetParent := filepath.Dir(bind.Target)
+		if info.IsDir() {
+			targetParent = bind.Target
+		}
+		args = append(args, "--dir", targetParent)
 		args = append(args, "--ro-bind", source, bind.Target)
 	}
 	args = append(args, "--chdir", worktree, "--")
@@ -101,6 +111,11 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 			Network: request.NetworkAllowed, Reason: "bubblewrap command envelope",
 		},
 	}, nil
+}
+
+func pathWithin(root, candidate string) bool {
+	relative, err := filepath.Rel(root, candidate)
+	return err == nil && relative != ".." && relative != "." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 func ChooseIsolation(capability model.IsolationCapability, risk model.Risk, networkAllowed bool) (model.IsolationCapability, error) {

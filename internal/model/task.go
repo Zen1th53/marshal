@@ -73,13 +73,19 @@ type ReleaseRequest struct {
 }
 
 type Lease struct {
-	ID         string
-	TaskID     string
-	SessionID  string
-	AcquiredAt time.Time
-	ExpiresAt  time.Time
-	Revision   int64
-	Status     string
+	ID         string    `json:"id"`
+	TaskID     string    `json:"task_id"`
+	SessionID  string    `json:"session_id"`
+	AcquiredAt time.Time `json:"acquired_at"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	Revision   int64     `json:"revision"`
+	Status     string    `json:"status"`
+}
+
+type ActiveLease struct {
+	Lease        Lease  `json:"lease"`
+	AgentID      string `json:"agent_id"`
+	TaskRevision int64  `json:"task_revision"`
 }
 
 var taskIDPattern = regexp.MustCompile(`^TASK-[A-Za-z0-9._-]+$`)

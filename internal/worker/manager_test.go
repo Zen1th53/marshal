@@ -45,6 +45,9 @@ func TestManagerReturnsNonzeroExitAsEvidenceNotInfrastructureError(t *testing.T)
 	if result.ExitCode != 7 || string(result.Stdout) != "out" || string(result.Stderr) != "err" {
 		t.Fatalf("result = %#v", result)
 	}
+	if result.Isolation.Level != model.IsolationProcessOnly || !result.Isolation.Process {
+		t.Fatalf("process isolation = %#v", result.Isolation)
+	}
 }
 
 func TestManagerTimeoutTerminatesProcessGroupAndKeepsHeartbeatEvidence(t *testing.T) {

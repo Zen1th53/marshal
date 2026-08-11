@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/slaves/internal/adapter"
+	"github.com/Zen1th53/slaves/internal/model"
 )
 
 type Manager struct {
@@ -46,7 +47,10 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 	cmd.Stderr = stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	result := adapter.ProcessResult{StartedAt: time.Now().UTC()}
+	result := adapter.ProcessResult{StartedAt: time.Now().UTC(), Isolation: model.IsolationCapability{
+		Level: model.IsolationProcessOnly, Available: true, Process: true,
+		Reason: "task-scoped process without strong filesystem or network isolation",
+	}}
 	if err := cmd.Start(); err != nil {
 		return adapter.ProcessResult{}, fmt.Errorf("start worker process: %w", err)
 	}

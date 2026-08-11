@@ -44,6 +44,17 @@ func TestEventDuplicateIsIdempotentOnlyForSamePayload(t *testing.T) {
 	}
 }
 
+func TestRegisterArtifactEmitsDurableEvent(t *testing.T) {
+	st := projectStore(t)
+	artifact := model.Artifact{ID: "ART-001", ProjectID: "PROJECT-local", Kind: "report",
+		Digest: "sha256:" + strings.Repeat("a", 64), SourceCommit: "abc123", Path: "/evidence/report",
+		CreatedAt: time.Now().UTC()}
+	if err := st.RegisterArtifact(context.Background(), artifact); err != nil {
+		t.Fatal(err)
+	}
+	assertEventTypes(t, st, "ARTIFACT_REGISTERED")
+}
+
 func TestHEADChangeInvalidatesVerificationAtomically(t *testing.T) {
 	st := projectStore(t)
 	commitA := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

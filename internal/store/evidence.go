@@ -86,7 +86,12 @@ func (s *Store) RegisterArtifact(ctx context.Context, artifact model.Artifact) e
 	if !errors.Is(err, model.ErrNotFound) {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin artifact registration: %w", err)
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO artifacts(
 			artifact_id, project_id, kind, digest, source_commit,
 			producer_session_id, task_ids_json, verification_refs_json,
@@ -98,6 +103,22 @@ func (s *Store) RegisterArtifact(ctx context.Context, artifact model.Artifact) e
 		artifact.CreatedAt.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return fmt.Errorf("register artifact: %w", err)
+	}
+	eventID, err := model.NewID("EVENT-")
+	if err != nil {
+		return err
+	}
+	taskID := ""
+	if len(artifact.TaskIDs) > 0 {
+		taskID = artifact.TaskIDs[0]
+	}
+	if err := s.AppendEvent(ctx, tx, model.Event{ID: eventID, Type: "ARTIFACT_REGISTERED",
+		ProjectID: artifact.ProjectID, TaskID: taskID, SessionID: artifact.ProducerSession,
+		Timestamp: artifact.CreatedAt, Data: map[string]any{"artifact_id": artifact.ID, "digest": artifact.Digest, "kind": artifact.Kind}}); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit artifact registration: %w", err)
 	}
 	return nil
 }
