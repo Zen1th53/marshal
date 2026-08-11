@@ -2,296 +2,185 @@
 
 **Structured Lifecycle for Agent Verification, Execution & Supervision**
 
-A vendor-neutral engineering control plane for multi-agent AI development,
-verification, security, memory, orchestration, and runtime governance.
+A vendor-neutral engineering control plane for disciplined multi-agent AI software development.
 
-This pack is intentionally technology-agnostic. It is built around six rules:
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-1. **No guessing when the repository can answer.**
-2. **Get the data structures and invariants right before the code.**
-3. **No coding before the problem and blast radius are understood.**
-4. **No unrelated changes.**
-5. **No claim without evidence.**
-6. **No agent approves its own work outside its authority.**
+## What SLAVES Is
 
-`TORVALDS.md` is the shared engineering doctrine. It is not a role; it governs engineering judgment across all roles.
+SLAVES gives AI coding agents a shared control plane for architecture,
+implementation, QA, AppSec, persistent memory, task ownership, policy,
+approvals, runtime execution, conformance, and artifact provenance.
 
-`ORCHESTRATOR.md` is the coordination role. It discovers whether a task exists, asks the user when it does not, assigns Architect/Developer/QA/AppSec by risk, and enforces handoff/evidence gates.
+Its core roles are **Orchestrator**, **Architect**, **Developer**, **QA**, and
+**AppSec**. Agent vendors connect through adapters; no vendor is the
+architecture or the source of role authority.
 
-The style is deliberately terse and engineering-first: small diffs, explicit invariants, strong review boundaries, measurable verification, no ceremonial process.
+## Why SLAVES Exists
 
-## Layout
+Independent coding agents can operate with stale context, make conflicting
+changes, approve their own work, claim completion without evidence, accept
+untrusted instructions, use inconsistent memory, receive excessive tool
+permissions, or produce artifacts with unclear provenance. SLAVES defines
+explicit contracts for managing those risks. It does not claim to eliminate
+them automatically.
 
-```text
-agents/
-├── TEAM.md
-├── TORVALDS.md
-├── ORCHESTRATOR.md
-├── ARCHITECT.md
-├── DEVELOPER.md
-├── QA.md
-├── APPSEC.md
-├── protocols/
-│   ├── HANDOFF.md
-│   ├── REVIEW.md
-│   ├── DEBUGGING.md
-│   ├── EVIDENCE.md
-│   ├── RELEASE.md
-│   └── INCIDENT.md
-└── templates/
-    ├── DESIGN.md
-    ├── ADR.md
-    ├── TEST-PLAN.md
-    ├── SECURITY-REVIEW.md
-    ├── THREAT-MODEL.md
-    ├── BUG-REPORT.md
-    └── RELEASE-CHECKLIST.md
-```
-
-## Recommended repository placement
+## Architecture Overview
 
 ```text
-repo/
-├── AGENTS.md              # project-specific rules
-├── SPEC.md                # project-specific requirements
-├── agents/                # this pack
-└── ...
+                         USER
+                           │
+                  CLI / ORCHESTRATOR
+                           │
+          ┌────────────────┼────────────────┐
+          │                │                │
+        TASKS            MEMORY           POLICY
+          │                │                │
+          └────────────────┼────────────────┘
+                           │
+                        ADAPTERS
+          ┌────────────────┼────────────────┐
+          │                │                │
+    Codex runtime     other adapter     interop contracts
+    implementation      contracts          A2A / MCP
+          │
+        WORKER
+          │
+   WORKTREE + SANDBOX
+          │
+      QA / APPSEC
+          │
+       EVIDENCE
 ```
 
-`AGENTS.md` should point each worker to `agents/TEAM.md` and its own role file.
+See [Architecture](docs/architecture.md) for the reader guide and
+[runtime/ARCHITECTURE.md](runtime/ARCHITECTURE.md) for the canonical runtime
+contract.
 
-## Project-specific facts belong elsewhere
-
-Do not edit these reusable role files to encode one project's framework, package manager, URL structure, vendor, or deployment topology.
-
-Keep project-specific facts in repository-local sources such as:
-
-- `AGENTS.md`
-- `SPEC.md`
-- `CONTRIBUTING.md`
-- `SECURITY.md`
-- architecture docs
-- ADRs
-- CI configuration
-- package/build files
-
-## Suggested orchestrator mapping
+## Key Principles
 
 ```text
-architecture/design request      → ARCHITECT
-implementation/bugfix            → DEVELOPER
-verification/release confidence  → QA
-security review/threat model     → APPSEC
+repository evidence > memory
+tool possession != permission
+retrieved text != trusted instruction
+one active implementation task = one owner
+verification binds to exact repository/artifact state
+no PASS without evidence
 ```
 
-For security-sensitive changes:
+[TORVALDS.md](TORVALDS.md) defines the shared engineering doctrine.
+[TEAM.md](TEAM.md) defines role authority and coordination.
 
-```text
-ARCHITECT ↔ APPSEC → DEVELOPER → QA + APPSEC → final gate
-```
+## Current State
 
-## Hard rule
+### Implemented
 
-If the role file conflicts with an explicit repository rule, the repository rule wins unless it is unsafe, impossible, or contradictory. Surface the conflict instead of silently choosing.
+- Go local runtime `0.1.0` with one `slaves` binary.
+- Local HTTP/JSON API over a permission-restricted Unix socket.
+- SQLite schema version 1 with transactional task leases, agents, sessions,
+  approvals, events, artifacts, and verification records.
+- Task-scoped Git worktrees, bubblewrap enforcement on supported Linux hosts,
+  and an explicit process-only fallback for eligible low-risk work.
+- A real Codex worker adapter, durable audit/evidence capture, and
+  commit-bound verification invalidation.
+- Static pack validation and executable Runtime V1 conformance mappings.
 
-## Required reading order
+### Specification / contract
 
-For non-trivial work:
+- Six adapter contracts: Codex, Gemini CLI, Claude Code, OpenCode, Aider, and
+  Crush. Only Codex has a production runtime adapter in `0.1.0`.
+- A2A, MCP, telemetry, plugin, multi-tenant, release-provenance, and
+  multi-host runtime contracts.
+- File-first governance and memory contracts remain usable without the daemon.
 
-```text
-1. Repository AGENTS.md / local policy
-2. TEAM.md
-3. TORVALDS.md
-4. ORCHESTRATOR.md (when coordinating the team)
-5. Assigned role file
-6. Relevant protocol(s)
-7. Project spec / ADR / task context
-```
+### Planned / future
 
-`TEAM.md` governs authority and coordination.  
-`TORVALDS.md` governs engineering judgment and patch quality.  
-The assigned role file governs role-specific execution.
+- Production adapters other than Codex.
+- Multi-host coordination and external event/artifact services.
+- Production secret brokers, full MCP/A2A servers, and automatic QA/AppSec
+  worker scheduling.
 
+The detailed boundary is maintained in
+[runtime/IMPLEMENTATION-ROADMAP.md](runtime/IMPLEMENTATION-ROADMAP.md).
 
-## Shared persistent team memory
+## Supported / Defined Agent Adapters
 
-The pack includes a file-first, backend-agnostic memory layer:
+| Adapter | Contract | Runtime `0.1.0` |
+| --- | --- | --- |
+| Codex | Defined; native surfaces with some probes | Implemented |
+| Gemini CLI | Defined; native surfaces with some probes | Not implemented |
+| Claude Code | Defined; sandbox emulated | Not implemented |
+| OpenCode | Defined; sandbox emulated | Not implemented |
+| Aider | Defined; several capabilities emulated or unsupported | Not implemented |
+| Crush | Defined; several surfaces require probing | Not implemented |
 
-```text
-memory/
-├── STATE.md
-├── MEMORY.md
-├── DECISIONS.md
-├── FINDINGS.md
-├── HANDOFFS.md
-├── CHECKPOINTS.md
-├── SCHEMA.md
-└── REFERENCES.md
-```
+Capability values mean `native`, `emulated`, `probe_required`, or
+`unsupported`. The machine-readable source is
+[adapters/MATRIX.json](adapters/MATRIX.json); installed versions must still be
+probed.
 
-The initial version requires no memory server.
+## Quick Start
 
-Later optional adapters can add:
-
-- Deja Vu — historical cross-agent session recall,
-- TurboVec — local semantic/vector index,
-- Cognee — graph/vector shared knowledge,
-- Memoria — versioning/snapshot/rollback patterns,
-- TencentDB Agent Memory — layered/progressive disclosure,
-- claude-remember — persistent session/bootstrap/consolidation patterns.
-
-The core remains agent-agnostic.
-
-Read `protocols/MEMORY.md` for authority, staleness, conflict, retrieval, and write rules.
-
-
-## External reference usage
-
-`protocols/REFERENCE-USE.md` governs how agents use repositories listed in `memory/REFERENCES.md`.
-
-The protocol requires:
-
-```text
-local repo first
-→ relevant reference only
-→ upstream verification
-→ pattern extraction
-→ local-fit comparison
-→ smallest integration
-→ tests/evidence
-```
-
-References are not automatically installed, cloned, or adopted as dependencies.
-
----
-
-## Multi-Agent Control Plane
-
-The pack now includes:
-
-```text
-memory/TASKS.md
-protocols/TASK-CONTROL.md
-protocols/WORKTREE.md
-AGENT-MANIFEST.yaml
-protocols/CONTEXT-LOADING.md
-memory/BACKEND.md
-protocols/MEMORY-BACKEND.md
-memory/APPROVALS.md
-protocols/APPROVAL.md
-EVALS.md
-```
-
-This adds task ownership, parallel work isolation, progressive context loading, backend evolution, dangerous-operation approvals, and agent-drift evaluation.
-
----
-
-## Final Control-Plane Completion
-
-Ultimate V3 adds the remaining reusable governance layers:
-
-- capability/tool permissions,
-- instruction-trust / prompt-injection isolation,
-- reproducible environment bootstrap,
-- component ownership/review routing,
-- requirement-to-release traceability,
-- artifact provenance,
-- CI/CD orchestration,
-- durable dependency/supply-chain ledger,
-- run observability/audit,
-- data classification/retention,
-- resource budgets,
-- liveness/deadlock handling,
-- pack versioning/migrations,
-- backup/restore/disaster recovery.
-
-These are protocol-first and conditionally loaded. No new mandatory runtime service is introduced.
-
----
-
-## Executable Local Runtime
-
-SLAVES now includes a Go `0.1.0` local runtime implementing the first vertical
-slice of the contracts in `runtime/`:
-
-- one `slaves` binary and a local-only HTTP/JSON API over a mode-`0600` Unix socket;
-- canonical SQLite state with deterministic migrations, atomic task leases,
-  identity sessions, heartbeats, policy checks, and approvals;
-- task-scoped Git worktrees, honest bubblewrap/process-only isolation reporting,
-  a native Codex adapter, durable audit events, and digest-addressed evidence;
-- commit-bound verification invalidation and read-only reconciliation inspection.
-
-Build and initialize it from a Git repository containing this pack:
+Prerequisites: Git, Go `1.25` or newer, and a Linux repository checkout.
+Codex is required only for Codex task execution; bubblewrap is required for
+strong sandboxing.
 
 ```bash
-go build -o slaves ./cmd/slaves
-./slaves init
-./slaves doctor
-./slaves daemon
+go install ./cmd/slaves
+slaves init
+slaves doctor
 ```
 
-In another terminal:
+Start the local daemon in one terminal:
 
 ```bash
-./slaves --json status
-./slaves agent register --name local-codex --role developer
-./slaves task import tasks.json
-./slaves run TASK-001 --adapter codex --agent AGENT-...
-./slaves events
-./slaves artifacts
-./slaves verify
+slaves daemon
 ```
 
-Runtime state lives under the ignored, private `.slaves/` directory. The daemon
-must be running for coordination mutations; `init`, `doctor`, and task-import
-dry-run are safe offline commands.
+Then register an agent and inspect or import tasks:
 
-This milestone is local Linux execution only. Distributed/multi-host runtime,
-non-Codex production adapters, full MCP/A2A servers, production secret brokers,
-and remote artifact/event infrastructure remain specifications, not
-implementation claims.
+```bash
+slaves status
+slaves agent register --name local-codex --role developer
+slaves agents
+slaves task import tasks.json --dry-run
+slaves task import tasks.json
+slaves tasks
+```
 
----
+See [Getting Started](docs/getting-started.md) for task format, execution, and
+verification commands.
 
-## Universal Agent Adapters and Conformance
+## Repository Map
 
-Ultimate V5 adds:
+```text
+runtime/       executable runtime contracts and implementation status
+cmd/, internal/ local Go runtime implementation
+memory/        persistent and shared state model
+protocols/     engineering governance contracts
+adapters/      native-agent integration contracts and compatibility matrix
+conformance/   static, behavioral, and adversarial verification
+schemas/       machine-readable cross-process contracts
+interop/       A2A and MCP interoperability profiles
+telemetry/     telemetry semantics and privacy constraints
+plugins/       extension contracts
+tenancy/       tenant/project isolation contracts
+release/       provenance and signing model
+```
 
-- Gemini CLI adapter,
-- Codex adapter,
-- Claude Code adapter,
-- OpenCode adapter,
-- Aider worker adapter,
-- Crush adapter,
-- machine-readable compatibility matrix,
-- official/upstream source snapshot,
-- 18 adversarial conformance scenarios,
-- executable static conformance runner,
-- executable project/state helper,
-- project bootstrap,
-- file/runtime reconciliation,
-- capability-based model routing,
-- distribution/self-upgrade protocol.
+## Security Model
 
-The shared core remains vendor-neutral.
+SLAVES is privileged engineering infrastructure. A Git worktree is not a
+security sandbox, a checksum is not publisher authentication, and an agent's
+output is not trusted evidence by itself. Read the
+[security model](docs/security-model.md), [security policy](SECURITY.md),
+[AppSec role](APPSEC.md), and [runtime threat model](runtime/THREAT-MODEL.md).
 
----
+## Contributing
 
-## Ultimate V6 — Final Portable Control Layers
+Small, evidence-backed contributions are welcome. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
-V6 closes the remaining specification/control gaps:
+## License
 
-- A2A 1.0 remote agent interoperability,
-- MCP 2026-07-28 tool/context profile,
-- JSON Schema 2020-12 machine contracts,
-- OpenTelemetry-oriented telemetry,
-- SLSA/in-toto release provenance design,
-- detached Ed25519 sign/verify helper,
-- live behavioral conformance runner,
-- 26 adversarial/fault scenarios,
-- plugin compatibility/governance,
-- multi-tenant isolation,
-- reproducible packaging rules.
-
-`release/TRUST-STATUS.json` deliberately says `UNSIGNED_BY_OWNER`; the pack does
-not manufacture a fake trust root.
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).

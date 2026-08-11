@@ -10,6 +10,21 @@
   ],
   "files": [
     {
+      "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+      "sha256": "0513c18e66563f991a30cbe348fdcd7076ec62d4552e8fbe823829b11bce863c",
+      "bytes": 1190
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/feature_request.yml",
+      "sha256": "bf61ce335716065ee7b287f4ec4963dd139a89fdd3366ab38315e131d3e1b8ca",
+      "bytes": 846
+    },
+    {
+      "path": ".github/pull_request_template.md",
+      "sha256": "c1136413419630915637697f6cc47dc85d85d3ea68b95dd26bf7c5c29f1ee7e0",
+      "bytes": 843
+    },
+    {
       "path": ".gitignore",
       "sha256": "a0abd6651301dffecf81ed9427f17f93bf6ed67b072d69e5f94f4880d5b8fc6f",
       "bytes": 173
@@ -50,6 +65,16 @@
       "bytes": 2000
     },
     {
+      "path": "CODE_OF_CONDUCT.md",
+      "sha256": "1454994d2b99179e97de883e7829c913056cd50a5a20de4a0efc2489946aafb3",
+      "bytes": 8633
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "sha256": "588a32502fffe4ef601bb4f82dcc44d25144051d0f721dc1e84d69aec1f0a063",
+      "bytes": 2772
+    },
+    {
       "path": "DEVELOPER.md",
       "sha256": "357ca13c0417b0f997be985a5ede30faa9b3bf6db09ebfc333d87e4bfd0e81d4",
       "bytes": 13568
@@ -63,6 +88,11 @@
       "path": "FINAL-PACK.md",
       "sha256": "305bd9c3e1b4a757518b6025465a198b2fff1691e2b0270b5577e17e48eb01a4",
       "bytes": 4441
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358
     },
     {
       "path": "MEMORY-START.md",
@@ -86,13 +116,18 @@
     },
     {
       "path": "README.md",
-      "sha256": "212b8ad72dc102df89d572ab1692bc641c752bcf6d84a6c4e596b020ff427e64",
-      "bytes": 8362
+      "sha256": "7b96114ca70f0421640aad26560cb2617e87f9d423a453d771d43b42a7755a68",
+      "bytes": 6621
     },
     {
       "path": "RUNTIME-VERSION.yaml",
       "sha256": "d9a69eb4e29b07addad0fae61b03d20e7870abc5755ba3b73d82586f0bac554c",
       "bytes": 193
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "de3b7287452c2cb21ca3efdbe212583f2f266ee3df361a32246c310e92330e64",
+      "bytes": 2190
     },
     {
       "path": "TEAM.md",
@@ -593,6 +628,41 @@
       "path": "distribution/README.md",
       "sha256": "a0aa77e05803c2565ea5a10b8626ab4ec356869df1081e1234abfdcfe34867ce",
       "bytes": 220
+    },
+    {
+      "path": "docs/adapters.md",
+      "sha256": "59e1f38853d4ab332079412755ac3bae28af9df886cc97d6b4aef8e57d91ee37",
+      "bytes": 1273
+    },
+    {
+      "path": "docs/architecture.md",
+      "sha256": "0f9ab1ae024e745384e7801b674487bfa2a2f74c98ef0fe1c6c247d7ab0746e3",
+      "bytes": 2879
+    },
+    {
+      "path": "docs/concepts.md",
+      "sha256": "636b107446771eabad1317e0891f6b5db3c7b5f2d3784314655a83d78c8d8cd0",
+      "bytes": 2294
+    },
+    {
+      "path": "docs/conformance.md",
+      "sha256": "519cb2f3492425a734e3535f8806fa95231a1b4c39d2bc7643417df09367091f",
+      "bytes": 1369
+    },
+    {
+      "path": "docs/getting-started.md",
+      "sha256": "81ee33c398c694ac6ed96a9c606ef087b1d5258cffbc7c6952af09560cbbf61e",
+      "bytes": 2375
+    },
+    {
+      "path": "docs/runtime.md",
+      "sha256": "97ed08b88a7be06b772688a1f1a8dcee10644d757f8332c46c9df177e5424322",
+      "bytes": 2406
+    },
+    {
+      "path": "docs/security-model.md",
+      "sha256": "6f99fb61bcb721e1cc3581da635dee10154d3ec1ac2f20d2c30e9ebc13383fd1",
+      "bytes": 2540
     },
     {
       "path": "docs/superpowers/plans/2026-08-11-agent-os-completeness-plan.md",
