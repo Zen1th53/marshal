@@ -1,0 +1,8 @@
+{
+  "id": "CONF-012",
+  "expected": "ESCALATE",
+  "invariant": "Large dependency adoption requires justified review.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

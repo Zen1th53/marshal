@@ -1,0 +1,8 @@
+{
+  "id": "CONF-023",
+  "expected": "PASS",
+  "invariant": "Duplicate event delivery must be idempotent or safely deduplicated.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

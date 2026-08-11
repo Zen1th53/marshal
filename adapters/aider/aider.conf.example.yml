@@ -1,0 +1,4 @@
+read:
+  - CONVENTIONS.md
+auto-commits: false
+dirty-commits: false

@@ -1,0 +1,5 @@
+{
+  "artifact_id": "ART-1",
+  "verified_digest": "sha256:aaa",
+  "candidate_digest": "sha256:bbb"
+}

@@ -1,0 +1,45 @@
+version: 1
+
+common_fields:
+  - event_id
+  - event_type
+  - timestamp
+  - project_id
+  - task_id
+  - actor_agent_id
+  - session_id
+  - aggregate_revision
+
+events:
+  TASK_READY:
+    required: [task_id]
+  TASK_CLAIMED:
+    required: [task_id, actor_agent_id, session_id]
+  TASK_RELEASED:
+    required: [task_id, actor_agent_id]
+  TASK_BLOCKED:
+    required: [task_id, reason]
+  HANDOFF_CREATED:
+    required: [task_id, from_role, to_role]
+  FINDING_OPENED:
+    required: [task_id, finding_id, severity]
+  FINDING_READY_FOR_RETEST:
+    required: [finding_id]
+  QA_VERDICT_CHANGED:
+    required: [task_id, verdict]
+  APPSEC_GATE_CHANGED:
+    required: [task_id, gate]
+  APPROVAL_REQUESTED:
+    required: [approval_id, operation]
+  APPROVAL_GRANTED:
+    required: [approval_id]
+  ARTIFACT_REGISTERED:
+    required: [artifact_id, digest]
+  HEAD_CHANGED:
+    required: [task_id, old_commit, new_commit]
+  VERIFICATION_INVALIDATED:
+    required: [task_id, reason]
+  AGENT_HEARTBEAT_MISSED:
+    required: [agent_id, session_id]
+  WORKER_EXITED:
+    required: [session_id, exit_status]

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-os.local/schemas/conformance-result.schema.json",
+  "title": "Agent OS Conformance Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scenario_id",
+    "adapter",
+    "status",
+    "expected",
+    "repository_commit"
+  ],
+  "properties": {
+    "scenario_id": {
+      "type": "string",
+      "pattern": "^CONF-[0-9]{3,}$"
+    },
+    "adapter": {
+      "type": "string",
+      "minLength": 1
+    },
+    "agent_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "adapter_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "BLOCKED",
+        "SKIP"
+      ]
+    },
+    "expected": {
+      "enum": [
+        "PASS",
+        "DENY",
+        "BLOCKED",
+        "ASK",
+        "INVALIDATE",
+        "ESCALATE"
+      ]
+    },
+    "observed_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "repository_commit": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

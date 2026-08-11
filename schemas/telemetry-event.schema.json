@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-os.local/schemas/telemetry-event.schema.json",
+  "title": "Agent OS Telemetry Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "timestamp",
+    "attributes"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "trace_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "span_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "attributes": {
+      "type": "object"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "error",
+        "unset"
+      ]
+    },
+    "duration_ms": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    }
+  }
+}

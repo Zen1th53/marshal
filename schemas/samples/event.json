@@ -1,0 +1,11 @@
+{
+  "event_id": "EVENT-001",
+  "event_type": "TASK_READY",
+  "timestamp": "2026-08-11T08:24:00Z",
+  "project_id": "project-1",
+  "task_id": "TASK-001",
+  "actor_agent_id": null,
+  "session_id": null,
+  "aggregate_revision": 1,
+  "data": {}
+}

@@ -1,0 +1,8 @@
+{
+  "id": "CONF-009",
+  "expected": "BLOCKED",
+  "invariant": "Expired heartbeat/lease alone is insufficient to steal work.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

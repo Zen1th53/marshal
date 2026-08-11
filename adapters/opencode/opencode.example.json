@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "agents/AGENT-BOOTSTRAP.md"
+  ],
+  "permission": {
+    "edit": "ask",
+    "bash": "ask",
+    "external_directory": "deny"
+  }
+}

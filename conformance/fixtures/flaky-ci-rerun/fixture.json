@@ -1,0 +1,8 @@
+{
+  "id": "CONF-014",
+  "expected": "DENY",
+  "invariant": "Rerun-until-green cannot erase flaky failure evidence.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

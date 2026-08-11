@@ -1,0 +1,5 @@
+schema_version: 1
+runtime_spec_version: "1.0.0"
+status: specification
+implementation_claim: false
+recommended_first_mode: local_daemon_sqlite

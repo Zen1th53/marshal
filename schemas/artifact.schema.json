@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-os.local/schemas/artifact.schema.json",
+  "title": "Agent OS Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "kind",
+    "digest",
+    "source_commit",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^ART-[A-Za-z0-9._-]+$"
+    },
+    "kind": {
+      "enum": [
+        "binary",
+        "package",
+        "container",
+        "report",
+        "sbom",
+        "generated_source",
+        "dataset",
+        "archive"
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "source_commit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "producer_session": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "verification_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

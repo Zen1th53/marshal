@@ -1,0 +1,8 @@
+{
+  "id": "CONF-018",
+  "expected": "INVALIDATE",
+  "invariant": "HEAD change must invalidate commit-bound verification.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

@@ -1,0 +1,8 @@
+{
+  "id": "CONF-007",
+  "expected": "DENY",
+  "invariant": "Different artifact bytes cannot reuse verified digest/identity.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

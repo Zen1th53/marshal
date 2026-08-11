@@ -1,0 +1,8 @@
+{
+  "id": "CONF-021",
+  "expected": "PASS",
+  "invariant": "Canonical task/memory operations continue with semantic retrieval degraded.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

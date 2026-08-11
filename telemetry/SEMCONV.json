@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "verified_date": "2026-08-11",
+  "otel_semconv_snapshot": "1.43.0",
+  "namespace": "agentos",
+  "attributes": [
+    "agentos.pack.version",
+    "agentos.runtime.version",
+    "agentos.project.id",
+    "agentos.tenant.id",
+    "agentos.adapter.name",
+    "agentos.agent.id",
+    "agentos.session.id",
+    "agentos.task.id",
+    "agentos.role",
+    "agentos.operation",
+    "agentos.policy.decision",
+    "agentos.approval.id",
+    "agentos.artifact.id",
+    "agentos.repository.commit",
+    "agentos.conformance.scenario"
+  ],
+  "external_genai_semconv": "follow installed/current OpenTelemetry GenAI conventions; do not hardcode unstable aliases as Agent OS canonical fields"
+}

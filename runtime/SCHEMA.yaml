@@ -1,0 +1,117 @@
+schema_version: 1
+
+entities:
+  project:
+    key: project_id
+    fields:
+      - repository
+      - default_branch
+      - pack_version
+
+  agent:
+    key: agent_id
+    fields:
+      - display_name
+      - role
+      - capabilities
+      - status
+
+  session:
+    key: session_id
+    fields:
+      - agent_id
+      - project_id
+      - task_id
+      - branch
+      - worktree
+      - started_at
+      - last_heartbeat
+      - status
+
+  task:
+    key: task_id
+    fields:
+      - title
+      - status
+      - risk
+      - owner_agent_id
+      - branch
+      - worktree
+      - base_commit
+      - head_commit
+      - revision
+
+  lease:
+    key: lease_id
+    fields:
+      - task_id
+      - session_id
+      - acquired_at
+      - expires_at
+      - revision
+      - status
+
+  decision:
+    key: decision_id
+    fields:
+      - owner_role
+      - status
+      - body
+      - source
+      - revision
+
+  finding:
+    key: finding_id
+    fields:
+      - owner_role
+      - severity
+      - status
+      - task_id
+      - evidence_ref
+      - revision
+
+  approval:
+    key: approval_id
+    fields:
+      - operation
+      - scope
+      - approved_by
+      - status
+      - commit
+      - expires_at
+
+  artifact:
+    key: artifact_id
+    fields:
+      - kind
+      - digest
+      - source_commit
+      - producer_session_id
+      - verification_refs
+
+  checkpoint:
+    key: checkpoint_id
+    fields:
+      - task_id
+      - session_id
+      - repository_commit
+      - state
+
+  audit_event:
+    key: event_id
+    fields:
+      - event_type
+      - task_id
+      - actor_agent_id
+      - timestamp
+      - summary
+
+  memory_record:
+    key: memory_id
+    fields:
+      - memory_type
+      - status
+      - confidence
+      - body
+      - provenance
+      - last_verified_at

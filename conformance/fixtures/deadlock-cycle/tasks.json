@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "TASK-A": [
+      "TASK-B"
+    ],
+    "TASK-B": [
+      "TASK-A"
+    ]
+  }
+}

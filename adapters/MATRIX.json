@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "verified_date": "2026-08-11",
+  "status_values": [
+    "native",
+    "emulated",
+    "probe_required",
+    "unsupported"
+  ],
+  "adapters": {
+    "gemini": {
+      "binary": "gemini",
+      "instructions": "native",
+      "headless": "native",
+      "structured_output": "native",
+      "mcp_client": "native",
+      "native_server_or_protocol": "native",
+      "permissions": "native",
+      "sandbox": "native",
+      "hooks": "native",
+      "session_resume": "native",
+      "subagents": "probe_required"
+    },
+    "codex": {
+      "binary": "codex",
+      "instructions": "native",
+      "headless": "native",
+      "structured_output": "native",
+      "mcp_client": "native",
+      "native_server_or_protocol": "native",
+      "permissions": "native",
+      "sandbox": "native",
+      "hooks": "probe_required",
+      "session_resume": "native",
+      "subagents": "probe_required"
+    },
+    "claude-code": {
+      "binary": "claude",
+      "instructions": "native",
+      "headless": "native",
+      "structured_output": "native",
+      "mcp_client": "native",
+      "native_server_or_protocol": "native",
+      "permissions": "native",
+      "sandbox": "emulated",
+      "hooks": "native",
+      "session_resume": "native",
+      "subagents": "probe_required"
+    },
+    "opencode": {
+      "binary": "opencode",
+      "instructions": "native",
+      "headless": "native",
+      "structured_output": "native",
+      "mcp_client": "native",
+      "native_server_or_protocol": "native",
+      "permissions": "native",
+      "sandbox": "emulated",
+      "hooks": "probe_required",
+      "session_resume": "native",
+      "subagents": "native"
+    },
+    "aider": {
+      "binary": "aider",
+      "instructions": "native",
+      "headless": "native",
+      "structured_output": "emulated",
+      "mcp_client": "unsupported",
+      "native_server_or_protocol": "unsupported",
+      "permissions": "emulated",
+      "sandbox": "emulated",
+      "hooks": "unsupported",
+      "session_resume": "emulated",
+      "subagents": "emulated"
+    },
+    "crush": {
+      "binary": "crush",
+      "instructions": "native",
+      "headless": "probe_required",
+      "structured_output": "probe_required",
+      "mcp_client": "native",
+      "native_server_or_protocol": "probe_required",
+      "permissions": "native",
+      "sandbox": "emulated",
+      "hooks": "native",
+      "session_resume": "native",
+      "subagents": "native"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "protocol": "a2a",
+  "client_version": "1.0",
+  "server_version": "1.0",
+  "decision": "compatible",
+  "extensions": [],
+  "evidence": [
+    "protocol_check"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "plugins": [
+    {
+      "id": "turbovec-semantic-index",
+      "version": "external",
+      "kind": "memory",
+      "status": "disabled",
+      "required_permissions": [
+        "read_scoped_memory"
+      ],
+      "agent_os_version": ">=6.0.0",
+      "runtime_spec_version": "1.x"
+    }
+  ]
+}

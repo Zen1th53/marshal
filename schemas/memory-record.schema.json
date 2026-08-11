@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-os.local/schemas/memory-record.schema.json",
+  "title": "Agent OS Memory Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "project_id",
+    "memory_type",
+    "status",
+    "confidence",
+    "body",
+    "source",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "memory_type": {
+      "enum": [
+        "working",
+        "decision",
+        "finding",
+        "semantic",
+        "episodic",
+        "procedural"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "stale",
+        "superseded",
+        "rejected",
+        "closed"
+      ]
+    },
+    "confidence": {
+      "enum": [
+        "verified",
+        "observed",
+        "inferred",
+        "unverified"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "kind",
+        "reference"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "repository",
+            "user",
+            "test",
+            "runtime",
+            "agent_handoff",
+            "external"
+          ]
+        },
+        "reference": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_verified_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "supersedes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "acl_scope": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "CONF-020",
+  "expected": "BLOCKED",
+  "invariant": "Secret-dependent task blocks instead of using stale plaintext.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "profiles": {
+    "architect": {
+      "required": {
+        "architecture": "high",
+        "long_context": "medium"
+      },
+      "preferred": {
+        "structured_output": "medium"
+      }
+    },
+    "developer": {
+      "required": {
+        "coding": "high",
+        "tool_use": "high"
+      },
+      "preferred": {
+        "debugging": "high",
+        "structured_output": "medium"
+      }
+    },
+    "qa": {
+      "required": {
+        "qa": "high"
+      },
+      "preferred": {
+        "structured_output": "high",
+        "tool_use": "medium"
+      }
+    },
+    "appsec": {
+      "required": {
+        "security_review": "high"
+      },
+      "preferred": {
+        "long_context": "medium",
+        "tool_use": "medium"
+      }
+    },
+    "cheap_indexer": {
+      "required": {
+        "structured_output": "medium"
+      },
+      "preferred": {
+        "cost_efficiency": "high",
+        "latency": "high"
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "CONF-026",
+  "expected": "BLOCKED",
+  "invariant": "Worker crash preserves task/worktree and does not mark completion.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

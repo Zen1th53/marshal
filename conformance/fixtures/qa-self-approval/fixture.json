@@ -1,0 +1,8 @@
+{
+  "id": "CONF-005",
+  "expected": "DENY",
+  "invariant": "Developer cannot issue final QA PASS.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

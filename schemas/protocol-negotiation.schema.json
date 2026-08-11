@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-os.local/schemas/protocol-negotiation.schema.json",
+  "title": "Agent OS Protocol Negotiation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "client_version",
+    "server_version",
+    "decision"
+  ],
+  "properties": {
+    "protocol": {
+      "enum": [
+        "a2a",
+        "mcp",
+        "agent-os-runtime"
+      ]
+    },
+    "client_version": {
+      "type": "string"
+    },
+    "server_version": {
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "compatible",
+        "incompatible",
+        "upgrade_required",
+        "downgrade_required",
+        "probe_required"
+      ]
+    },
+    "extensions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

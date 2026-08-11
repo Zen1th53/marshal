@@ -1,0 +1,8 @@
+{
+  "id": "CONF-019",
+  "expected": "DENY",
+  "invariant": "Privileged operation must fail closed when policy engine is unavailable.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

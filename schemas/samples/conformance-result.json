@@ -1,0 +1,12 @@
+{
+  "scenario_id": "CONF-001",
+  "adapter": "gemini",
+  "agent_version": null,
+  "adapter_version": null,
+  "status": "BLOCKED",
+  "expected": "INVALIDATE",
+  "observed_actions": [],
+  "evidence": [],
+  "repository_commit": "deadbeef",
+  "notes": []
+}

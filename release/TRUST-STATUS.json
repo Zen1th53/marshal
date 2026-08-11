@@ -1,0 +1,13 @@
+{
+  "pack_version": "6.0.0",
+  "owner_signature_status": "UNSIGNED_BY_OWNER",
+  "integrity_manifest": "distribution/PACK-MANIFEST.json",
+  "provenance_profile": [
+    "SLSA-1.2-compatible-design",
+    "in-toto-Statement-v1"
+  ],
+  "signature_verification": "external key/identity required",
+  "warning": "Do not treat bundled hashes as publisher identity proof.",
+  "attestation": "release/PACK-ATTESTATION.json",
+  "detached_signing_helper": "tools/detached_sign.py"
+}

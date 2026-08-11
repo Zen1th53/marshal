@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-os.local/schemas/agent-capability.schema.json",
+  "title": "Agent Capability Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent_id",
+    "adapter",
+    "capabilities",
+    "verified_at"
+  ],
+  "properties": {
+    "agent_id": {
+      "type": "string"
+    },
+    "adapter": {
+      "enum": [
+        "gemini",
+        "codex",
+        "claude-code",
+        "opencode",
+        "aider",
+        "crush",
+        "custom"
+      ]
+    },
+    "model_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "unknown",
+          "low",
+          "medium",
+          "high",
+          "native",
+          "emulated",
+          "probe_required",
+          "unsupported"
+        ]
+      }
+    },
+    "verified_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

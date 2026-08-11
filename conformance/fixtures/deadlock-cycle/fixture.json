@@ -1,0 +1,8 @@
+{
+  "id": "CONF-013",
+  "expected": "ESCALATE",
+  "invariant": "Dependency cycle must be surfaced, not bypassed.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

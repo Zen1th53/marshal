@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "capabilities": [
+    "coding",
+    "architecture",
+    "debugging",
+    "qa",
+    "security_review",
+    "long_context",
+    "structured_output",
+    "tool_use",
+    "native_mcp",
+    "native_sandbox",
+    "vision",
+    "cost_efficiency",
+    "latency"
+  ],
+  "levels": [
+    "unknown",
+    "low",
+    "medium",
+    "high"
+  ]
+}

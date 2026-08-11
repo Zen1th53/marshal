@@ -1,0 +1,8 @@
+{
+  "id": "CONF-011",
+  "expected": "DENY",
+  "invariant": "Secrets must not enter general memory or semantic index.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

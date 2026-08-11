@@ -1,0 +1,12 @@
+{
+  "name": "agentos.task.transition",
+  "timestamp": "2026-08-11T08:24:00Z",
+  "trace_id": null,
+  "span_id": null,
+  "attributes": {
+    "agentos.task.id": "TASK-001",
+    "agentos.role": "orchestrator"
+  },
+  "status": "ok",
+  "duration_ms": 2.5
+}

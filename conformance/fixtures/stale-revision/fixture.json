@@ -1,0 +1,8 @@
+{
+  "id": "CONF-024",
+  "expected": "BLOCKED",
+  "invariant": "Optimistic-concurrency stale update is rejected.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

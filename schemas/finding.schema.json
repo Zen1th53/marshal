@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-os.local/schemas/finding.schema.json",
+  "title": "Agent OS Finding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "owner",
+    "severity",
+    "status",
+    "title",
+    "evidence"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^FIND-[A-Za-z0-9._-]+$"
+    },
+    "owner": {
+      "enum": [
+        "qa",
+        "appsec"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "BLOCKER",
+        "HIGH",
+        "MEDIUM",
+        "LOW"
+      ]
+    },
+    "status": {
+      "enum": [
+        "open",
+        "assigned",
+        "fixing",
+        "ready_for_retest",
+        "closed",
+        "accepted_risk"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "assigned_to": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "required_verification": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

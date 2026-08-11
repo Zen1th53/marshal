@@ -1,0 +1,28 @@
+{
+  "_type": "https://in-toto.io/Statement/v1",
+  "subject": [
+    {
+      "name": "distribution/PACK-MANIFEST.json",
+      "digest": {
+        "sha256": "62108f05997ac34acae7011c0a9e866ab92347ce9a83cfcfffab852f5b23e7b6"
+      }
+    }
+  ],
+  "predicateType": "https://agent-os.local/attestation/pack-manifest/v1",
+  "predicate": {
+    "packVersion": "6.0.0",
+    "runtimeSpecVersion": "1.0.0",
+    "schemaDialect": "https://json-schema.org/draft/2020-12/schema",
+    "protocolProfiles": {
+      "a2a": "1.0",
+      "mcp": "2026-07-28"
+    },
+    "conformanceScenarioCount": 26,
+    "signatureStatus": "UNSIGNED_BY_OWNER",
+    "manifestExclusions": [
+      "VERIFICATION.json",
+      "distribution/PACK-MANIFEST.json",
+      "release/PACK-ATTESTATION.json"
+    ]
+  }
+}

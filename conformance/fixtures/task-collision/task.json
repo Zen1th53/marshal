@@ -1,0 +1,6 @@
+{
+  "task": "TASK-42",
+  "owner": "AGENT-A",
+  "lease": "active",
+  "second_agent": "AGENT-B"
+}

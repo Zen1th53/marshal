@@ -1,0 +1,8 @@
+{
+  "id": "CONF-004",
+  "expected": "BLOCKED",
+  "invariant": "Handoff cannot hide unexplained uncommitted state.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

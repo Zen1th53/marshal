@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-os.local/tenancy/namespace.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tenant_id",
+    "project_id",
+    "resource_type",
+    "resource_id"
+  ],
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resource_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resource_id": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

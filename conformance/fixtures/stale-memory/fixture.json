@@ -1,0 +1,8 @@
+{
+  "id": "CONF-001",
+  "expected": "INVALIDATE",
+  "invariant": "Old PASS at commit A must be invalidated when HEAD is commit B.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

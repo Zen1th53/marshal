@@ -1,0 +1,73 @@
+{
+  "status": "PASS",
+  "pack_version": "6.0.0",
+  "runtime_spec_version": "1.0.0",
+  "protocol_profiles": {
+    "a2a": "1.0",
+    "mcp": "2026-07-28"
+  },
+  "unit_tests": {
+    "conformance": 6,
+    "agentos": 3,
+    "v6": 9,
+    "total": 18
+  },
+  "commands": [
+    {
+      "name": "conformance_unit_tests",
+      "returncode": 0
+    },
+    {
+      "name": "agentos_unit_tests",
+      "returncode": 0
+    },
+    {
+      "name": "v6_unit_tests",
+      "returncode": 0
+    },
+    {
+      "name": "python_compile",
+      "returncode": 0
+    },
+    {
+      "name": "static_conformance",
+      "returncode": 0
+    },
+    {
+      "name": "a2a_protocol_check",
+      "returncode": 0
+    },
+    {
+      "name": "mcp_protocol_check",
+      "returncode": 0
+    },
+    {
+      "name": "manifest_verify",
+      "returncode": 0
+    },
+    {
+      "name": "pack_status",
+      "returncode": 0
+    }
+  ],
+  "command_failures": [],
+  "json_errors": [],
+  "yaml_errors": [],
+  "schema_errors": [],
+  "sample_errors": [],
+  "manifest_missing": [],
+  "distribution_hash_errors": [],
+  "attestation_errors": [],
+  "scenario_errors": [],
+  "scenario_count": 26,
+  "missing_required_files": [],
+  "version_errors": [],
+  "unfinished_placeholder_hits": [],
+  "distribution_manifest_files": 278,
+  "manifest_sha256": "62108f05997ac34acae7011c0a9e866ab92347ce9a83cfcfffab852f5b23e7b6",
+  "owner_signature_status": "UNSIGNED_BY_OWNER",
+  "markdown_files": 190,
+  "json_files": 67,
+  "yaml_files": 6,
+  "python_files": 14
+}

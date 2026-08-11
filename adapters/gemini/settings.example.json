@@ -1,0 +1,16 @@
+{
+  "context": {
+    "fileName": [
+      "GEMINI.md",
+      "AGENTS.md"
+    ]
+  },
+  "mcp": {
+    "allowed": [
+      "agent-os"
+    ]
+  },
+  "tools": {
+    "disableLLMCorrection": true
+  }
+}

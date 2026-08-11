@@ -1,0 +1,5 @@
+# Example only. Verify current Codex config reference before adopting.
+# Keep runtime-specific configuration project-scoped when possible.
+
+# Agent OS policy remains authoritative even if native sandbox/approval config
+# is broader.

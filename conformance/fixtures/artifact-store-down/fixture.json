@@ -1,0 +1,8 @@
+{
+  "id": "CONF-022",
+  "expected": "BLOCKED",
+  "invariant": "Release artifact step blocks when artifact store is unavailable.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

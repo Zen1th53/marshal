@@ -1,0 +1,8 @@
+{
+  "id": "CONF-003",
+  "expected": "BLOCKED",
+  "invariant": "Second implementation agent must not steal an active task lease.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

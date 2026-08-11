@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-os.local/schemas/protocol-extension.schema.json",
+  "title": "Agent OS Protocol Extension",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "protocol",
+    "version",
+    "status",
+    "capabilities"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "protocol": {
+      "enum": [
+        "a2a",
+        "mcp",
+        "agent-os-runtime"
+      ]
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "experimental",
+        "supported",
+        "deprecated",
+        "removed"
+      ]
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "minimum_core_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "security_review": {
+      "type": "boolean"
+    }
+  }
+}

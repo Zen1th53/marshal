@@ -1,0 +1,8 @@
+{
+  "id": "CONF-010",
+  "expected": "DENY",
+  "invariant": "Destructive migration without valid approval must not execute.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}

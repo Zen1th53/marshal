@@ -1,0 +1,333 @@
+version: 1
+
+principles:
+  - repository_evidence_over_memory
+  - torvalds_doctrine
+  - progressive_context_loading
+  - role_authority
+  - no_unverified_completion_claims
+
+always:
+  - AGENTS.md_if_present
+  - TEAM.md
+  - TORVALDS.md
+
+coordination:
+  when:
+    - no_concrete_task
+    - multi_role_work
+    - parallel_work
+    - resumed_project
+  load:
+    - ORCHESTRATOR.md
+    - protocols/TASK-CONTROL.md
+
+role:
+  architect:
+    load:
+      - ARCHITECT.md
+  developer:
+    load:
+      - DEVELOPER.md
+  qa:
+    load:
+      - QA.md
+  appsec:
+    load:
+      - APPSEC.md
+
+conditional:
+  resumed_work:
+    load:
+      - protocols/MEMORY.md
+      - memory/STATE.md
+      - memory/TASKS.md
+      - memory/DECISIONS.md
+      - memory/FINDINGS.md
+
+  bugfix:
+    load:
+      - protocols/DEBUGGING.md
+      - protocols/EVIDENCE.md
+
+  parallel_or_isolated_work:
+    load:
+      - protocols/WORKTREE.md
+      - protocols/TASK-CONTROL.md
+
+  external_reference:
+    load:
+      - memory/REFERENCES.md
+      - protocols/REFERENCE-USE.md
+
+  architecture_change:
+    load:
+      - templates/DESIGN.md
+      - templates/ADR.md
+
+  security_sensitive:
+    load:
+      - APPSEC.md
+      - templates/THREAT-MODEL.md
+      - templates/SECURITY-REVIEW.md
+
+  release:
+    load:
+      - protocols/RELEASE.md
+      - templates/RELEASE-CHECKLIST.md
+
+  incident:
+    load:
+      - protocols/INCIDENT.md
+
+  dangerous_operation:
+    load:
+      - protocols/APPROVAL.md
+      - memory/APPROVALS.md
+
+  final_or_major_gate:
+    load:
+      - EVALS.md
+      - templates/EVAL-REPORT.md
+
+
+  environment_or_bootstrap:
+    load:
+      - memory/ENVIRONMENT.md
+      - protocols/BOOTSTRAP.md
+
+  tool_or_permission_sensitive:
+    load:
+      - CAPABILITIES.yaml
+      - protocols/CAPABILITIES.md
+      - protocols/TOOL-ROUTING.md
+
+  untrusted_or_external_content:
+    load:
+      - protocols/INSTRUCTION-TRUST.md
+
+  ownership_or_review_routing:
+    load:
+      - memory/OWNERSHIP.md
+      - protocols/OWNERSHIP-ROUTING.md
+
+  traceability_required:
+    load:
+      - memory/TRACEABILITY.md
+      - protocols/TRACEABILITY.md
+
+  artifact_or_build_output:
+    load:
+      - memory/ARTIFACTS.md
+      - protocols/ARTIFACT-PROVENANCE.md
+
+  ci_cd:
+    load:
+      - protocols/CI-CD.md
+
+  dependency_or_supply_chain:
+    load:
+      - memory/DEPENDENCIES.md
+      - protocols/SUPPLY-CHAIN.md
+
+  observability_or_audit:
+    load:
+      - memory/RUNS.md
+      - protocols/OBSERVABILITY.md
+
+  sensitive_data_or_external_upload:
+    load:
+      - memory/DATA-POLICY.md
+      - protocols/DATA-GOVERNANCE.md
+
+  resource_intensive:
+    load:
+      - memory/BUDGETS.md
+      - protocols/RESOURCE-BUDGET.md
+
+  stalled_or_deadlocked:
+    load:
+      - protocols/LIVENESS.md
+
+  pack_upgrade:
+    load:
+      - PACK-VERSION.yaml
+      - CHANGELOG.md
+      - protocols/PACK-MIGRATION.md
+
+  recovery:
+    load:
+      - protocols/RECOVERY.md
+
+
+  executable_runtime:
+    load:
+      - runtime/README.md
+      - runtime/ARCHITECTURE.md
+      - runtime/AGENTCTL.md
+
+  runtime_memory_service:
+    load:
+      - runtime/MEMORY-SERVICE.md
+      - runtime/SCHEMA.yaml
+
+  runtime_identity_or_worker:
+    load:
+      - runtime/IDENTITY-REGISTRY.md
+      - runtime/WORKER-PROTOCOL.md
+      - runtime/SANDBOX.md
+
+  runtime_policy:
+    load:
+      - runtime/POLICY-ENGINE.md
+      - CAPABILITIES.yaml
+      - protocols/CAPABILITIES.md
+      - protocols/APPROVAL.md
+
+  runtime_scheduler_or_events:
+    load:
+      - runtime/SCHEDULER.md
+      - runtime/EVENT-BUS.md
+      - runtime/EVENTS.yaml
+
+  runtime_secrets:
+    load:
+      - runtime/SECRETS-BROKER.md
+      - protocols/DATA-GOVERNANCE.md
+
+  runtime_artifacts:
+    load:
+      - runtime/ARTIFACT-STORE.md
+      - protocols/ARTIFACT-PROVENANCE.md
+
+  runtime_operations:
+    load:
+      - runtime/HEALTH.md
+      - runtime/THREAT-MODEL.md
+      - runtime/IMPLEMENTATION-ROADMAP.md
+
+
+  native_agent_adapter:
+    load:
+      - adapters/CONTRACT.md
+      - adapters/MATRIX.json
+      - adapters/COMPATIBILITY.md
+
+  adapter_gemini:
+    load:
+      - adapters/gemini/ADAPTER.md
+
+  adapter_codex:
+    load:
+      - adapters/codex/ADAPTER.md
+
+  adapter_claude_code:
+    load:
+      - adapters/claude-code/ADAPTER.md
+
+  adapter_opencode:
+    load:
+      - adapters/opencode/ADAPTER.md
+
+  adapter_aider:
+    load:
+      - adapters/aider/ADAPTER.md
+
+  adapter_crush:
+    load:
+      - adapters/crush/ADAPTER.md
+
+  adapter_conformance:
+    load:
+      - conformance/CONTRACT.md
+      - conformance/SCENARIOS.json
+      - conformance/ADVERSARIAL.md
+
+  project_bootstrap:
+    load:
+      - bootstrap/PROJECT-INIT.md
+      - bootstrap/DETECTION.md
+      - bootstrap/ADAPTER-SELECTION.md
+
+  state_reconciliation:
+    load:
+      - protocols/RECONCILIATION.md
+      - runtime/RECONCILIATION.md
+
+  model_routing:
+    load:
+      - routing/MODEL-ROUTING.md
+      - routing/CAPABILITY-SCHEMA.json
+      - routing/PROFILES.json
+
+  pack_distribution_or_upgrade:
+    load:
+      - distribution/DISTRIBUTION.md
+      - protocols/SELF-UPGRADE.md
+      - PACK-VERSION.yaml
+      - CHANGELOG.md
+
+
+  remote_agent_interop:
+    load:
+      - interop/README.md
+      - interop/NEGOTIATION.md
+      - protocols/INTEROP.md
+      - protocols/PROTOCOL-VERSIONING.md
+
+  a2a_remote_agent:
+    load:
+      - interop/A2A-1.0.md
+      - runtime/REMOTE-AGENTS.md
+
+  mcp_tool_context:
+    load:
+      - interop/MCP-2026-07-28.md
+      - protocols/INSTRUCTION-TRUST.md
+      - protocols/CAPABILITIES.md
+
+  machine_schema_contract:
+    load:
+      - schemas/README.md
+
+  telemetry:
+    load:
+      - telemetry/README.md
+      - telemetry/OTEL-MAPPING.md
+      - telemetry/PRIVACY.md
+      - protocols/TELEMETRY.md
+
+  release_trust:
+    load:
+      - release/README.md
+      - release/SLSA-PROVENANCE.md
+      - release/IN-TOTO.md
+      - release/SIGNING.md
+      - release/SIGNING-WORKFLOW.md
+      - protocols/RELEASE-TRUST.md
+      - protocols/REPRODUCIBILITY.md
+
+  plugin_extension:
+    load:
+      - plugins/CONTRACT.md
+      - plugins/COMPATIBILITY.md
+      - protocols/PLUGIN-GOVERNANCE.md
+
+  multi_tenant_runtime:
+    load:
+      - tenancy/TENANCY.md
+      - protocols/TENANCY.md
+      - runtime/MULTI-TENANCY.md
+
+  fault_injection:
+    load:
+      - conformance/FAULT-INJECTION.md
+      - conformance/BEHAVIORAL-RUNNER.md
+
+
+rules:
+  - do_not_load_every_file_by_default
+  - load_smallest_context_needed_for_current_decision
+  - deeper_history_only_when_relevant
+  - stale_memory_must_be_revalidated
+  - role_files_do_not_replace_repository_policy

@@ -1,0 +1,22 @@
+{
+  "agent_os_card_version": "1",
+  "agent_id": "example-agent",
+  "role_capabilities": [
+    "developer",
+    "qa"
+  ],
+  "protocols": {
+    "a2a": [
+      "1.0"
+    ],
+    "mcp": [
+      "2026-07-28"
+    ]
+  },
+  "data_classes": [
+    "PUBLIC",
+    "INTERNAL"
+  ],
+  "requires_auth": true,
+  "extensions": []
+}

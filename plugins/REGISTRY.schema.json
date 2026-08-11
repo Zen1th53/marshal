@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-os.local/plugins/registry.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "plugins"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version",
+          "kind",
+          "status",
+          "required_permissions"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "adapter",
+              "memory",
+              "secret",
+              "artifact",
+              "telemetry",
+              "policy",
+              "protocol",
+              "other"
+            ]
+          },
+          "status": {
+            "enum": [
+              "disabled",
+              "enabled",
+              "deprecated",
+              "blocked"
+            ]
+          },
+          "required_permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "agent_os_version": {
+            "type": "string"
+          },
+          "runtime_spec_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
