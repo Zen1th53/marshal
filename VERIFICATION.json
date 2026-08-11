@@ -9,8 +9,8 @@
   "unit_tests": {
     "conformance": 6,
     "agentos": 3,
-    "v6": 9,
-    "total": 18
+    "v6": 13,
+    "total": 22
   },
   "commands": [
     {
@@ -48,6 +48,22 @@
     {
       "name": "pack_status",
       "returncode": 0
+    },
+    {
+      "name": "go_test",
+      "returncode": 0
+    },
+    {
+      "name": "go_vet",
+      "returncode": 0
+    },
+    {
+      "name": "go_test_race",
+      "returncode": 0
+    },
+    {
+      "name": "go_build",
+      "returncode": 0
     }
   ],
   "command_failures": [],
@@ -63,11 +79,12 @@
   "missing_required_files": [],
   "version_errors": [],
   "unfinished_placeholder_hits": [],
-  "distribution_manifest_files": 278,
-  "manifest_sha256": "62108f05997ac34acae7011c0a9e866ab92347ce9a83cfcfffab852f5b23e7b6",
+  "distribution_manifest_files": 339,
+  "manifest_sha256": "0ebb29a8aa093c4ebc4ddcbb02861bc10938a16837dc1f189f2248181dee33d6",
   "owner_signature_status": "UNSIGNED_BY_OWNER",
-  "markdown_files": 190,
+  "markdown_files": 192,
   "json_files": 67,
-  "yaml_files": 6,
-  "python_files": 14
+  "yaml_files": 7,
+  "python_files": 16,
+  "go_files": 55
 }
