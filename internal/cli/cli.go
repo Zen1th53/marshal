@@ -7,13 +7,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/Zen1th53/slaves/internal/a2a"
 	"github.com/Zen1th53/slaves/internal/api"
 	"github.com/Zen1th53/slaves/internal/app"
 	"github.com/Zen1th53/slaves/internal/doctor"
+	"github.com/Zen1th53/slaves/internal/mcp"
 	"github.com/Zen1th53/slaves/internal/model"
 )
 
@@ -30,7 +34,11 @@ Commands:
   task show TASK-ID
   task claim TASK-ID --agent AGENT-ID [--revision N]
   task release TASK-ID
-  run TASK-ID --adapter codex --agent AGENT-ID
+  run TASK-ID --adapter ADAPTER --agent AGENT-ID
+  adapters
+  adapter probe NAME
+  mcp serve [--listen ADDR] | mcp status
+  a2a serve [--listen ADDR] | a2a status
   events
   artifacts
   verify [-- command args...]
@@ -97,6 +105,14 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.verify(ctx, args[1:])
 	case "reconcile":
 		err = c.reconcile(ctx, args[1:])
+	case "adapters":
+		err = c.adapters(ctx)
+	case "adapter":
+		err = c.adapter(ctx, args[1:])
+	case "mcp":
+		err = c.mcp(ctx, args[1:])
+	case "a2a":
+		err = c.a2a(ctx, args[1:])
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}
@@ -424,6 +440,108 @@ func (c command) reconcile(ctx context.Context, args []string) error {
 		return err
 	}
 	return c.print(value, fmt.Sprintf("%s conflicts=%d", value.Status, len(value.Conflicts)))
+}
+
+func (c command) adapters(ctx context.Context) error {
+	names := []string{"codex", "gemini", "claude", "opencode"}
+	list := make([]map[string]any, 0, len(names))
+	for _, name := range names {
+		binary, err := exec.LookPath(name)
+		available := err == nil
+		version := "unknown"
+		if available {
+			if out, err := exec.CommandContext(ctx, binary, "--version").Output(); err == nil {
+				version = strings.TrimSpace(string(out))
+			}
+		}
+		list = append(list, map[string]any{
+			"name":      name,
+			"available": available,
+			"binary":    binary,
+			"version":   version,
+		})
+	}
+	return c.print(list, fmt.Sprintf("%d adapters", len(list)))
+}
+
+func (c command) adapter(ctx context.Context, args []string) error {
+	if len(args) == 0 || args[0] != "probe" {
+		return fmt.Errorf("%w: expected adapter probe <name>", model.ErrInvalid)
+	}
+	if len(args) < 2 {
+		return fmt.Errorf("%w: adapter name required", model.ErrInvalid)
+	}
+	name := args[1]
+	binary, err := exec.LookPath(name)
+	if err != nil {
+		return c.print(map[string]any{
+			"name": name, "available": false, "error": err.Error(),
+		}, fmt.Sprintf("adapter %s: unavailable (CLI missing)", name))
+	}
+	out, err := exec.CommandContext(ctx, binary, "--version").Output()
+	version := "unknown"
+	if err == nil {
+		version = strings.TrimSpace(string(out))
+	}
+	return c.print(map[string]any{
+		"name": name, "available": true, "binary": binary, "version": version,
+	}, fmt.Sprintf("adapter %s: available (%s)", name, version))
+}
+
+func (c command) mcp(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("%w: mcp subcommand required (serve|status)", model.ErrInvalid)
+	}
+	switch args[0] {
+	case "serve":
+		listen := "127.0.0.1:8080"
+		if len(args) >= 3 && args[1] == "--listen" {
+			listen = args[2]
+		}
+		runtime, err := app.Open(ctx, c.root)
+		if err != nil {
+			return err
+		}
+		defer runtime.Close()
+		srv := mcp.NewServer(runtime)
+		fmt.Fprintf(c.stdout, "Starting SLAVES MCP server on http://%s\n", listen)
+		server := &http.Server{Addr: listen, Handler: srv.Handler()}
+		return server.ListenAndServe()
+	case "status":
+		return c.print(map[string]any{
+			"status": "ready", "protocol_version": mcp.ProtocolVersion2026,
+		}, "MCP server ready (2026-07-28)")
+	default:
+		return fmt.Errorf("%w: unknown mcp subcommand %s", model.ErrInvalid, args[0])
+	}
+}
+
+func (c command) a2a(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("%w: a2a subcommand required (serve|status)", model.ErrInvalid)
+	}
+	switch args[0] {
+	case "serve":
+		listen := "127.0.0.1:8081"
+		if len(args) >= 3 && args[1] == "--listen" {
+			listen = args[2]
+		}
+		runtime, err := app.Open(ctx, c.root)
+		if err != nil {
+			return err
+		}
+		defer runtime.Close()
+		srv := a2a.NewServer(runtime)
+		fmt.Fprintf(c.stdout, "Starting SLAVES A2A server on http://%s\n", listen)
+		server := &http.Server{Addr: listen, Handler: srv.Handler()}
+		return server.ListenAndServe()
+	case "status":
+		return c.print(map[string]any{
+			"status": "ready", "protocol_version": a2a.ProtocolVersion100,
+		}, "A2A server ready (1.0.0)")
+	default:
+		return fmt.Errorf("%w: unknown a2a subcommand %s", model.ErrInvalid, args[0])
+	}
 }
 
 func (c command) print(value any, human string) error {

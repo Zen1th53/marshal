@@ -129,6 +129,9 @@ func Check(ctx context.Context, root string, options Options) Report {
 	}
 
 	probeCodex(ctx, lookup, run, add)
+	probeGemini(ctx, lookup, run, add)
+	probeClaude(ctx, lookup, run, add)
+	probeOpenCode(ctx, lookup, run, add)
 	probeBwrap(ctx, lookup, run, add)
 	if secureDirectory(layout.Artifacts) {
 		add(success("artifacts", "stat artifacts", "artifact directory is writable and mode 0700"))
@@ -162,6 +165,48 @@ func probeCodex(ctx context.Context, lookup func(string) (string, error), run fu
 		}
 	}
 	add(success("codex", "codex --version; codex exec --help", strings.TrimSpace(version)))
+}
+
+func probeGemini(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
+	binary, err := lookup("gemini")
+	if err != nil {
+		add(Result{Name: "gemini", Verdict: Degraded, Method: "PATH lookup", Capability: "Gemini execution unavailable", Detail: "Gemini CLI is missing"})
+		return
+	}
+	version, versionErr := runBounded(ctx, run, binary, "--version")
+	if versionErr != nil {
+		add(Result{Name: "gemini", Verdict: Degraded, Method: "gemini --version", Capability: "Gemini execution unavailable", Detail: "Gemini probe failed"})
+		return
+	}
+	add(success("gemini", "gemini --version", strings.TrimSpace(version)))
+}
+
+func probeClaude(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
+	binary, err := lookup("claude")
+	if err != nil {
+		add(Result{Name: "claude", Verdict: Degraded, Method: "PATH lookup", Capability: "Claude execution unavailable", Detail: "Claude CLI is missing"})
+		return
+	}
+	version, versionErr := runBounded(ctx, run, binary, "--version")
+	if versionErr != nil {
+		add(Result{Name: "claude", Verdict: Degraded, Method: "claude --version", Capability: "Claude execution unavailable", Detail: "Claude probe failed"})
+		return
+	}
+	add(success("claude", "claude --version", strings.TrimSpace(version)))
+}
+
+func probeOpenCode(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
+	binary, err := lookup("opencode")
+	if err != nil {
+		add(Result{Name: "opencode", Verdict: Degraded, Method: "PATH lookup", Capability: "OpenCode execution unavailable", Detail: "OpenCode CLI is missing"})
+		return
+	}
+	version, versionErr := runBounded(ctx, run, binary, "--version")
+	if versionErr != nil {
+		add(Result{Name: "opencode", Verdict: Degraded, Method: "opencode --version", Capability: "OpenCode execution unavailable", Detail: "OpenCode probe failed"})
+		return
+	}
+	add(success("opencode", "opencode --version", strings.TrimSpace(version)))
 }
 
 func probeBwrap(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
