@@ -60,7 +60,7 @@ func TestRunUsesNarrowNativeSurfaceAndNormalizesJSONL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"exec", "--json", "-C", "/repo/task", "-s", "workspace-write", "-a", "never", "--ephemeral", "-"}
+	want := []string{"exec", "--json", "-C", "/repo/task", "-s", "workspace-write", "--ephemeral", "--ignore-user-config", "-"}
 	if !slices.Equal(runner.command.Args, want) {
 		t.Fatalf("args = %#v, want %#v", runner.command.Args, want)
 	}
@@ -126,7 +126,7 @@ func fakeProbeBinary(t *testing.T, compatible bool) string {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "codex")
-	help := "--json --sandbox --ask-for-approval --ephemeral --cd"
+	help := "--json --sandbox --ephemeral --ignore-user-config --cd"
 	if !compatible {
 		help = "--json"
 	}

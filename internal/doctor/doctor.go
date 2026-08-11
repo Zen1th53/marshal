@@ -155,7 +155,7 @@ func probeCodex(ctx context.Context, lookup func(string) (string, error), run fu
 		add(Result{Name: "codex", Verdict: Degraded, Method: "codex --version; codex exec --help", Capability: "Codex execution unavailable", Detail: "Codex probe failed"})
 		return
 	}
-	for _, flag := range []string{"--json", "--sandbox", "--ask-for-approval", "--ephemeral", "--cd"} {
+	for _, flag := range []string{"--json", "--sandbox", "--ephemeral", "--ignore-user-config", "--cd"} {
 		if !strings.Contains(help, flag) {
 			add(Result{Name: "codex", Verdict: Degraded, Method: "codex exec --help", Capability: "Codex execution unavailable", Detail: "required non-interactive flags are missing"})
 			return

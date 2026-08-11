@@ -80,7 +80,7 @@ func availableTools(name string) (string, error) {
 
 func successfulProbe(_ context.Context, path string, args ...string) (string, error) {
 	if filepath.Base(path) == "codex" && len(args) > 0 && args[0] == "exec" {
-		return "--json --sandbox --ask-for-approval --ephemeral --cd", nil
+		return "--json --sandbox --ephemeral --ignore-user-config --cd", nil
 	}
 	return filepath.Base(path) + " 1.0", nil
 }

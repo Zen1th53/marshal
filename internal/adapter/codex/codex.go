@@ -38,7 +38,7 @@ func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
 	if err != nil {
 		return adapter.Probe{}, fmt.Errorf("%w: probe Codex exec: %v", model.ErrUnavailable, err)
 	}
-	for _, required := range []string{"--json", "--sandbox", "--ask-for-approval", "--ephemeral", "--cd"} {
+	for _, required := range []string{"--json", "--sandbox", "--ephemeral", "--ignore-user-config", "--cd"} {
 		if !strings.Contains(help, required) {
 			return adapter.Probe{}, fmt.Errorf("%w: Codex exec lacks required flag %s", model.ErrUnavailable, required)
 		}
@@ -62,7 +62,7 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		Path: c.binary,
 		Args: []string{
 			"exec", "--json", "-C", request.Worktree, "-s", "workspace-write",
-			"-a", "never", "--ephemeral", "-",
+			"--ephemeral", "--ignore-user-config", "-",
 		},
 		Dir:               request.Worktree,
 		Stdin:             append(prompt, '\n'),
