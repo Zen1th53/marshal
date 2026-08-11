@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose a scoped improvement to SLAVES
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What concrete engineering problem needs to be solved?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+      description: Describe observable behavior and explicit non-goals.
+    validations:
+      required: true
+  - type: textarea
+    id: contracts
+    attributes:
+      label: Relevant contracts
+      description: Link affected roles, protocols, schemas, runtime components, or adapter surfaces.
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risks and compatibility
+      description: Note security, migration, dependency, or caller impact.

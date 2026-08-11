@@ -79,12 +79,12 @@
   "missing_required_files": [],
   "version_errors": [],
   "unfinished_placeholder_hits": [],
-  "distribution_manifest_files": 339,
-  "manifest_sha256": "0ebb29a8aa093c4ebc4ddcbb02861bc10938a16837dc1f189f2248181dee33d6",
+  "distribution_manifest_files": 353,
+  "manifest_sha256": "a4643048738434b5aba8d639e4ee3fbe2f4c85781a0fb9ebe469a6465df28f12",
   "owner_signature_status": "UNSIGNED_BY_OWNER",
-  "markdown_files": 192,
+  "markdown_files": 203,
   "json_files": 67,
-  "yaml_files": 7,
+  "yaml_files": 9,
   "python_files": 16,
   "go_files": 55
 }
