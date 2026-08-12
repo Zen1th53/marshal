@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/slaves/internal/app"
+	"github.com/Zen1th53/slaves/internal/auth"
 	"github.com/Zen1th53/slaves/internal/testutil/testgit"
 )
 
@@ -183,5 +184,74 @@ func TestA2ATaskDelegation(t *testing.T) {
 	}
 	if res["status"] != "imported" {
 		t.Fatalf("expected task status imported, got %v", res["status"])
+	}
+}
+
+func TestA2AServerBearerAuth(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	authMgr := auth.NewManager(t.TempDir())
+	token, rec, err := authMgr.CreateToken("a2a-agent", auth.KindA2AAgent, []string{"all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServerWithAuth(runtime, authMgr)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	reqBody, _ := json.Marshal(map[string]any{
+		"message": map[string]any{
+			"message_id": "msg-1",
+			"role":       "developer",
+			"parts":      []map[string]string{{"text": "hello"}},
+		},
+	})
+
+	// 1. Missing Token -> 401
+	resp, err := http.Post(ts.URL+"/message:send", "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for missing token, got %d", resp.StatusCode)
+	}
+
+	// 2. Invalid Token -> 401
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer invalid-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for invalid token, got %d", resp.StatusCode)
+	}
+
+	// 3. Revoked Token -> 401
+	if err := authMgr.RevokeToken(rec.ID); err != nil {
+		t.Fatal(err)
+	}
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for revoked token, got %d", resp.StatusCode)
 	}
 }

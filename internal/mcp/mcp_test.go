@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/slaves/internal/app"
+	"github.com/Zen1th53/slaves/internal/auth"
 	"github.com/Zen1th53/slaves/internal/testutil/testgit"
 )
 
@@ -303,5 +304,83 @@ func TestMCPServerDiscover(t *testing.T) {
 	resMap, _ := rpcResp["result"].(map[string]any)
 	if resMap["protocolVersion"] != "2026-07-28" {
 		t.Fatalf("expected protocolVersion 2026-07-28, got %v", resMap["protocolVersion"])
+	}
+}
+
+func TestMCPServerBearerAuth(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	authMgr := auth.NewManager(t.TempDir())
+	token, rec, err := authMgr.CreateToken("mcp-client", auth.KindMCPClient, []string{"all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServerWithAuth(runtime, authMgr)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	reqBody, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/list",
+	})
+
+	// 1. Missing Token -> 401
+	resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for missing token, got %d", resp.StatusCode)
+	}
+
+	// 2. Invalid Token -> 401
+	req, _ := http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer invalid-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for invalid token, got %d", resp.StatusCode)
+	}
+
+	// 3. Valid Token -> 200
+	req, _ = http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for valid token, got %d", resp.StatusCode)
+	}
+
+	// 4. Revoked Token -> 401
+	if err := authMgr.RevokeToken(rec.ID); err != nil {
+		t.Fatal(err)
+	}
+	req, _ = http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for revoked token, got %d", resp.StatusCode)
 	}
 }

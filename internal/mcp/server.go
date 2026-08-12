@@ -5,19 +5,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/Zen1th53/slaves/internal/app"
+	"github.com/Zen1th53/slaves/internal/auth"
 	"github.com/Zen1th53/slaves/internal/model"
 )
 
 const ProtocolVersion2026 = "2026-07-28"
 
 type Server struct {
-	runtime *app.Runtime
+	runtime     *app.Runtime
+	authManager *auth.Manager
 }
 
 func NewServer(runtime *app.Runtime) *Server {
 	return &Server{runtime: runtime}
+}
+
+func NewServerWithAuth(runtime *app.Runtime, authManager *auth.Manager) *Server {
+	return &Server{runtime: runtime, authManager: authManager}
 }
 
 type jsonRPCRequest struct {
@@ -55,6 +62,19 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
+	}
+
+	if s.authManager != nil {
+		authHeader := r.Header.Get("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			s.writeErrorWithStatus(w, nil, http.StatusUnauthorized, -32001, "Unauthorized: missing bearer token")
+			return
+		}
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if _, err := s.authManager.Authenticate(token); err != nil {
+			s.writeErrorWithStatus(w, nil, http.StatusUnauthorized, -32001, "Unauthorized: "+err.Error())
+			return
+		}
 	}
 
 	// 1. Validate MCP-Protocol-Version header if present
