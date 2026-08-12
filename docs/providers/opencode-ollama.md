@@ -1,8 +1,8 @@
 # OpenCode & Local Ollama Provider Operational Guide
 
-**Runtime Milestone**: SLAVES Runtime v0.3.0  
-**Target Provider**: Local Ollama (`http://localhost:11434`)  
-**Target OpenCode**: Stable 1.18.x CLI (`opencode`)  
+**Runtime Milestone**: SLAVES Runtime v0.3.0
+**Target Provider**: Local Ollama (`http://localhost:11434`)
+**Target OpenCode**: Stable 1.18.x CLI (`opencode`)
 
 ---
 
