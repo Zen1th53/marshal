@@ -117,21 +117,9 @@ func TestRealCodexMCPFullChain(t *testing.T) {
 	ts := httptest.NewServer(mcpServer.Handler())
 	defer ts.Close()
 
-	// 1. Initialize MCP 2026-07-28
-	initReq := map[string]any{
-		"jsonrpc": "2.0", "id": 1, "method": "initialize",
-		"params": map[string]any{"protocolVersion": "2026-07-28"},
-	}
-	body, _ := json.Marshal(initReq)
-	resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-
-	// 2. Call tool task_run
+	// Modern stateless MCP 2026-07-28 tools/call request (no initialize required)
 	runReq := map[string]any{
-		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": map[string]any{
 			"name": "task_run",
 			"arguments": map[string]any{
@@ -141,12 +129,25 @@ func TestRealCodexMCPFullChain(t *testing.T) {
 			},
 		},
 	}
-	body, _ = json.Marshal(runReq)
-	resp, err = http.Post(ts.URL, "application/json", bytes.NewReader(body))
+	body, _ := json.Marshal(runReq)
+	req, err := http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("MCP-Protocol-Version", "2026-07-28")
+	req.Header.Set("Mcp-Method", "tools/call")
+	req.Header.Set("Mcp-Name", "task_run")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK from MCP tools/call, got %d", resp.StatusCode)
+	}
 
 	var rpcResp map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
@@ -159,6 +160,14 @@ func TestRealCodexMCPFullChain(t *testing.T) {
 	contentList, _ := resMap["content"].([]any)
 	if len(contentList) == 0 {
 		t.Fatalf("expected content in MCP result")
+	}
+
+	task, err := runtime.Task(context.Background(), "TASK-MCP-CODEX")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Status != model.TaskReview {
+		t.Fatalf("expected task status in review after real Codex run, got %v", task.Status)
 	}
 }
 
@@ -176,49 +185,69 @@ func TestRealCodexA2AFullChain(t *testing.T) {
 	}
 	defer runtime.Close()
 
-	agent, err := runtime.RegisterAgent(context.Background(), app.RegisterAgentRequest{Name: "a2a-codex", Role: model.RoleDeveloper})
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	a2aServer := a2a.NewServer(runtime)
 	ts := httptest.NewServer(a2aServer.Handler())
 	defer ts.Close()
 
 	// 1. Discover Agent Card
-	cardResp, err := http.Get(ts.URL + "/.well-known/agent.json")
+	cardResp, err := http.Get(ts.URL + "/.well-known/agent-card.json")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if cardResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for Agent Card, got %d", cardResp.StatusCode)
+	}
 	cardResp.Body.Close()
 
-	// 2. Delegate task via A2A
+	// 2. Delegate & execute task via standard A2A 1.0 POST /message:send
 	taskReq := map[string]any{
-		"protocol_version": "1.0.0",
-		"sender_id":        "remote-agent-a2a",
-		"requested_role":   "developer",
-		"task": map[string]any{
-			"id":    "TASK-A2A-CODEX",
-			"title": "Create a2a-proof.txt containing A2A full chain proof. Do not commit; the runtime commits changes.",
+		"message": map[string]any{
+			"message_id": "msg-a2a-codex-1",
+			"role":       "ROLE_USER",
+			"parts": []map[string]string{
+				{"text": "Create a2a-proof.txt containing A2A full chain proof. Do not commit; the runtime commits changes."},
+			},
 		},
+		"task_id": "TASK-A2A-CODEX",
+		"adapter": "codex",
 	}
 	body, _ := json.Marshal(taskReq)
-	resp, err := http.Post(ts.URL+"/a2a/tasks", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 OK from A2A task delegation, got %d", resp.StatusCode)
+		t.Fatalf("expected 200 OK from A2A message:send, got %d", resp.StatusCode)
 	}
 
-	// 3. Execute canonical task via runtime using Codex
-	result, err := runtime.Run(context.Background(), app.RunRequest{TaskID: "TASK-A2A-CODEX", AgentID: agent.ID, Adapter: "codex"})
+	var a2aResp map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&a2aResp); err != nil {
+		t.Fatal(err)
+	}
+
+	if a2aResp["state"] != "TASK_STATE_COMPLETED" {
+		t.Fatalf("expected A2A task state TASK_STATE_COMPLETED, got %v", a2aResp["state"])
+	}
+	artifacts, _ := a2aResp["artifacts"].([]any)
+	if len(artifacts) == 0 {
+		t.Fatalf("expected commit artifact in A2A task response")
+	}
+
+	// Verify canonical SQLite task state in runtime
+	task, err := runtime.Task(context.Background(), "TASK-A2A-CODEX")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Status != "success" || result.ResultCommit == result.BaseCommit {
-		t.Fatalf("A2A task runtime execution result = %#v", result)
+	if task.Status != model.TaskReview {
+		t.Fatalf("expected canonical SLAVES task status review, got %v", task.Status)
 	}
 }
