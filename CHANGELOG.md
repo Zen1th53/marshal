@@ -1,5 +1,13 @@
 # Changelog
 
+## Runtime 0.3.0 — 2026-08-12
+
+Production-hardened local control plane with authenticated MCP & A2A protocols and real OpenCode/Ollama execution:
+- High-entropy bearer token authentication (`slaves auth`) protecting MCP 2026-07-28 and A2A 1.0 HTTP endpoints with constant-time HMAC secret validation.
+- Full OpenCode → local Ollama (`qwythos-9b`) execution path with bubblewrap isolation, `WritableTmpfs` support, and `XDG_CONFIG_HOME` / `OLLAMA_HOST` env forwarding.
+- Comprehensive end-to-end integration test suite covering real Codex and real OpenCode adapters across native CLI, MCP 2026-07-28, and A2A 1.0 entry surfaces.
+- Updated operational documentation and model compatibility matrix (`docs/providers/opencode-ollama.md`).
+
 ## Runtime 0.2.1 — 2026-08-12
 
 Codex-first production runtime hardening and protocol standards compliance:
