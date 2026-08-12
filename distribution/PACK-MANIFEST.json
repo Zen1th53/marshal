@@ -901,8 +901,8 @@
     },
     {
       "path": "internal/integration/opencode_real_test.go",
-      "sha256": "9ecafe936ea2eabeb035570a332f5173c4d55c5a940d412699280735d9f9f396",
-      "bytes": 6658
+      "sha256": "6438e628bc7cf9fa3885c7bfcea11eeccc14a915f0f1262aeaf8cbb85ab04131",
+      "bytes": 9052
     },
     {
       "path": "internal/integration/reconciliation_test.go",
