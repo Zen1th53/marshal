@@ -152,6 +152,9 @@ func TestMCPIncompatibleProtocolVersion(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400 Bad Request for incompatible version, got %d", resp.StatusCode)
+	}
 	var initResp map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&initResp); err != nil {
 		t.Fatal(err)
@@ -159,5 +162,146 @@ func TestMCPIncompatibleProtocolVersion(t *testing.T) {
 	errObj, _ := initResp["error"].(map[string]any)
 	if errObj == nil {
 		t.Fatalf("expected error for incompatible protocol version")
+	}
+}
+
+func TestMCPModernStatelessRequest(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	srv := NewServer(runtime)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// Direct stateless tools/call request without prior initialize
+	callReq := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "slaves_status",
+			"arguments": map[string]any{},
+		},
+	}
+	body, _ := json.Marshal(callReq)
+	req, err := http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("MCP-Protocol-Version", "2026-07-28")
+	req.Header.Set("Mcp-Method", "tools/call")
+	req.Header.Set("Mcp-Name", "slaves_status")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for modern stateless request, got %d", resp.StatusCode)
+	}
+	var rpcResp map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
+		t.Fatal(err)
+	}
+	if rpcResp["error"] != nil {
+		t.Fatalf("unexpected error in modern stateless response: %v", rpcResp["error"])
+	}
+}
+
+func TestMCPHeaderBodyMismatch(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	srv := NewServer(runtime)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// 1. Mcp-Method mismatch
+	callReq := map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]any{"name": "slaves_status"},
+	}
+	body, _ := json.Marshal(callReq)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Mcp-Method", "tools/list") // mismatch
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for Mcp-Method mismatch, got %d", resp.StatusCode)
+	}
+
+	// 2. Mcp-Name mismatch
+	req, _ = http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Mcp-Method", "tools/call")
+	req.Header.Set("Mcp-Name", "wrong_name") // mismatch
+
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for Mcp-Name mismatch, got %d", resp.StatusCode)
+	}
+}
+
+func TestMCPServerDiscover(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	srv := NewServer(runtime)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	discReq := map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "server/discover",
+	}
+	body, _ := json.Marshal(discReq)
+	resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for server/discover, got %d", resp.StatusCode)
+	}
+	var rpcResp map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
+		t.Fatal(err)
+	}
+	resMap, _ := rpcResp["result"].(map[string]any)
+	if resMap["protocolVersion"] != "2026-07-28" {
+		t.Fatalf("expected protocolVersion 2026-07-28, got %v", resMap["protocolVersion"])
 	}
 }
