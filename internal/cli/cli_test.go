@@ -61,12 +61,49 @@ func TestTaskImportDryRunDoesNotNeedDaemon(t *testing.T) {
 }
 
 func TestRequiredCommandsHaveUsage(t *testing.T) {
-	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "events", "artifacts", "verify", "reconcile", "daemon"} {
+	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "daemon"} {
 		var stdout, stderr bytes.Buffer
 		code := Execute(context.Background(), ".", []string{command, "--help"}, strings.NewReader(""), &stdout, &stderr)
 		if code != 0 || !strings.Contains(stdout.String()+stderr.String(), "Usage:") {
 			t.Errorf("%s: code=%d output=%q", command, code, stdout.String()+stderr.String())
 		}
+	}
+}
+
+func TestAdaptersAndProbeCLI(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Execute(context.Background(), ".", []string{"--json", "adapters"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("adapters code=%d stderr=%s", code, stderr.String())
+	}
+	var adapters []map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &adapters); err != nil {
+		t.Fatalf("unmarshal adapters: %v", err)
+	}
+	if len(adapters) != 4 {
+		t.Fatalf("expected 4 adapters, got %d", len(adapters))
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(context.Background(), ".", []string{"--json", "adapter", "probe", "gemini"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("adapter probe code=%d stderr=%s", code, stderr.String())
+	}
+}
+
+func TestMCPAndA2AStatusCLI(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Execute(context.Background(), ".", []string{"--json", "mcp", "status"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "2026-07-28") {
+		t.Fatalf("mcp status code=%d stdout=%s", code, stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(context.Background(), ".", []string{"--json", "a2a", "status"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "1.0.0") {
+		t.Fatalf("a2a status code=%d stdout=%s", code, stdout.String())
 	}
 }
 

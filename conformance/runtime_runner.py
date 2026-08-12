@@ -24,6 +24,8 @@ MAPPINGS: dict[str, tuple[str, str, str, str]] = {
     "CONF-024": ("./internal/store", "TestObserveHEADRejectsStaleRevisionWithoutInvalidation", "BLOCKED", "stale revision was rejected without mutation"),
     "CONF-025": ("./internal/integration", "TestReconciliationIsReadOnlyAndReportsSplitBrain", "ESCALATE", "split brain was reported without changing either state"),
     "CONF-026": ("./internal/integration", "TestSecurityWorkerCrashPreservesWorktreeAndNeverCompletes", "BLOCKED", "worker crash preserved worktree and blocked task completion"),
+    "CONF-027": ("./internal/mcp", "TestMCPIncompatibleProtocolVersion", "DENY", "incompatible MCP protocol version was explicitly rejected"),
+    "CONF-028": ("./internal/a2a", "TestA2ARoleSpoofingDenied", "DENY", "remote A2A caller role spoofing was rejected"),
 }
 
 

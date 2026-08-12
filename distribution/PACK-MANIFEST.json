@@ -61,8 +61,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "f8e65517faf73b7df35bcf085b3a4cbfe1ebaec6f6203464dad63189e8e4df07",
-      "bytes": 2000
+      "sha256": "edd406ba1cbc2489d98ede145d28a98943165248a8d77898d01659047616fd3b",
+      "bytes": 2780
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -121,7 +121,7 @@
     },
     {
       "path": "RUNTIME-VERSION.yaml",
-      "sha256": "d9a69eb4e29b07addad0fae61b03d20e7870abc5755ba3b73d82586f0bac554c",
+      "sha256": "e83b89235dd72143987e7542f2ae447227237edcaf62796ae3c2dab84b3acbad",
       "bytes": 193
     },
     {
@@ -306,8 +306,8 @@
     },
     {
       "path": "conformance/SCENARIOS.json",
-      "sha256": "48596e204e219d713b22072902fa7a532240459c67358d6211d27d5be78920cd",
-      "bytes": 4865
+      "sha256": "1acd561208c43aff4e543327fba25daa250095cce0ffb8177ba760e42268cf42",
+      "bytes": 5223
     },
     {
       "path": "conformance/behavioral_runner.py",
@@ -611,8 +611,8 @@
     },
     {
       "path": "conformance/runtime_runner.py",
-      "sha256": "2028dd3545b960fbdf830e779cc83f5d47b30ac2cb49e5245f86d8bce2820529",
-      "bytes": 5221
+      "sha256": "e52581ee40e7f3a72efc5c4ea449b27b4921a6b7a77a2ec3ff04ff242629a237",
+      "bytes": 5485
     },
     {
       "path": "conformance/tests/test_runner.py",
@@ -761,8 +761,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "fed229d163e566addaf6a80d1a6b5e80a1550fd43c8d84b4c6b78c8fa28bea6a",
-      "bytes": 19187
+      "sha256": "6cc1717dc013c8ec605e577e72e9adc1ab48fde453502db1f84e753c9badd527",
+      "bytes": 19713
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -781,18 +781,18 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "6a00e8af83860bdc5e986f765c7a144d2fd3044c89fd0e06079607d26706a030",
-      "bytes": 11633
+      "sha256": "1402bf65316cfedf02650045c67f7e03a6e21529e6feda9673e7eb617a8d8a1f",
+      "bytes": 15227
     },
     {
       "path": "internal/cli/cli_test.go",
-      "sha256": "703fef12900a7fcfa154224ebf9d197a56cd87d4c139a22b752200f445732185",
-      "bytes": 3081
+      "sha256": "d590ab0da53c8afcefcbfc9d0df53651db8bc9e1d5cd86a7e9953336622fe47d",
+      "bytes": 4507
     },
     {
       "path": "internal/doctor/doctor.go",
-      "sha256": "f22d5695d881ed33482a55a3185ffc317aa1f61c20ad298b2acf7fd052966a77",
-      "bytes": 8392
+      "sha256": "5eedef7c5438f7c5154373b0bcfcd932a9264212aa287a5371407ebe770cf981",
+      "bytes": 10615
     },
     {
       "path": "internal/doctor/doctor_test.go",

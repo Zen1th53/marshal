@@ -13,7 +13,10 @@ import (
 	"time"
 
 	"github.com/Zen1th53/slaves/internal/adapter"
+	"github.com/Zen1th53/slaves/internal/adapter/claude"
 	"github.com/Zen1th53/slaves/internal/adapter/codex"
+	"github.com/Zen1th53/slaves/internal/adapter/gemini"
+	"github.com/Zen1th53/slaves/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/slaves/internal/artifact"
 	"github.com/Zen1th53/slaves/internal/model"
 	"github.com/Zen1th53/slaves/internal/policy"
@@ -478,12 +481,14 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	if candidate := r.adapters[name]; candidate != nil {
 		return candidate, nil
 	}
-	if name != "codex" {
+	switch name {
+	case "codex", "gemini", "claude", "opencode":
+	default:
 		return nil, fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
 	}
-	binary, err := exec.LookPath("codex")
+	binary, err := exec.LookPath(name)
 	if err != nil {
-		return nil, fmt.Errorf("%w: Codex CLI is missing", model.ErrUnavailable)
+		return nil, fmt.Errorf("%w: %s CLI is missing", model.ErrUnavailable, name)
 	}
 	if resolved, resolveErr := filepath.EvalSymlinks(binary); resolveErr == nil {
 		binary = resolved
@@ -504,9 +509,9 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				readOnlyBinds = append(readOnlyBinds, model.Bind{Source: gitMetadata, Target: gitMetadata})
 			}
 			if home, homeErr := os.UserHomeDir(); homeErr == nil {
-				auth := filepath.Join(home, ".codex", "auth.json")
+				auth := filepath.Join(home, "."+name, "auth.json")
 				if _, statErr := os.Stat(auth); statErr == nil {
-					readOnlyBinds = append(readOnlyBinds, model.Bind{Source: auth, Target: "/home/slaves/.codex/auth.json"})
+					readOnlyBinds = append(readOnlyBinds, model.Bind{Source: auth, Target: "/home/slaves/." + name + "/auth.json"})
 				}
 			}
 			runner = worker.NewSandboxed(process, backend, model.SandboxRequest{
@@ -516,7 +521,18 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, true); err != nil {
 		return nil, err
 	}
-	return codex.New(binary, runner), nil
+	switch name {
+	case "codex":
+		return codex.New(binary, runner), nil
+	case "gemini":
+		return gemini.New(binary, runner), nil
+	case "claude":
+		return claude.New(binary, runner), nil
+	case "opencode":
+		return opencode.New(binary, runner), nil
+	default:
+		return nil, fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
+	}
 }
 
 func loadPackVersion(path string) (string, error) {

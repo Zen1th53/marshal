@@ -1,0 +1,8 @@
+{
+  "id": "CONF-028",
+  "expected": "DENY",
+  "invariant": "Remote A2A caller role spoofing must be denied.",
+  "safe": true,
+  "requires_network": false,
+  "requires_secrets": false
+}
