@@ -1,7 +1,7 @@
 # Model Context Protocol (MCP) Guide
 
-**Protocol Version**: MCP `2026-07-28`  
-**Runtime Milestone**: `v0.4.0`  
+**Protocol Version**: MCP `2026-07-28`
+**Runtime Milestone**: `v0.4.0`
 
 SLAVES implements an authenticated Model Context Protocol (MCP 2026-07-28) server enabling remote orchestrators, agents, and IDE tools to interact with the SLAVES control plane.
 
