@@ -821,7 +821,7 @@
     },
     {
       "path": "internal/api/server_test.go",
-      "sha256": "125af3317e358eed4a72bc975ad8c84fff51cac5760a56e04c1198ad49a41f7c",
+      "sha256": "2961b1a51252cd40149e4279b5700d08f7617b16da28f791dbbc50818782fe10",
       "bytes": 5213
     },
     {
@@ -831,13 +831,13 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "5123231736cb41aeb3166c296cfda9cc5673790491fad2f473dd9857a32ae5bf",
-      "bytes": 19718
+      "sha256": "9578234f9c77c92ff4f20f259f056a6711b7df8a06cfbf1f9d5c31725b40a2f8",
+      "bytes": 21429
     },
     {
       "path": "internal/app/runtime_test.go",
-      "sha256": "5c2b02c8cd7a41bd20f2cd1d1205924de0ec7ce9a164be29e9b1614457d2ef93",
-      "bytes": 2867
+      "sha256": "bb2dfaea9a1eafd55efdd98af62800b7b42f3b4e22b300c086d49f2896a4a39b",
+      "bytes": 4210
     },
     {
       "path": "internal/artifact/store.go",
@@ -861,8 +861,8 @@
     },
     {
       "path": "internal/doctor/doctor.go",
-      "sha256": "80fbfdc93620fbac12b27f33d4724901005b2e0f6dbfb01f80a6ccf8f61590d9",
-      "bytes": 10620
+      "sha256": "c8b4499bd93fc9da6bd2e1df5125f310b5b1c1d8eef1195c375f924480df5ac3",
+      "bytes": 10657
     },
     {
       "path": "internal/doctor/doctor_test.go",
@@ -1006,8 +1006,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "3d3e348f8a787599e5b8f57e4913e6c524eea9309fbee520c5d54e5679a329cc",
-      "bytes": 9415
+      "sha256": "86107f82dfac9690c7ebd8fbfbdd006f7eab42d1644aadf69f7e9d8b34aeea0c",
+      "bytes": 10137
     },
     {
       "path": "internal/store/policy_records.go",
@@ -1031,7 +1031,7 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "cdeeedab1d2945db7e61e1c39114e327c4c2a2cd9a9d47e35a4dc5f425bc4add",
+      "sha256": "9d6984559152a6151c693d88c712b67f24ef3fbed33b4eaac02430f5dd69025b",
       "bytes": 2470
     },
     {
