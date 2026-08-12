@@ -685,6 +685,11 @@
       "bytes": 2375
     },
     {
+      "path": "docs/providers/opencode-ollama.md",
+      "sha256": "90b1fc72cd4e0ee2cdf197089d189a3cc4b1b46f9efcb6829b6cf5628ed4aa5e",
+      "bytes": 1942
+    },
+    {
       "path": "docs/runtime.md",
       "sha256": "97ed08b88a7be06b772688a1f1a8dcee10644d757f8332c46c9df177e5424322",
       "bytes": 2406
@@ -893,6 +898,11 @@
       "path": "internal/integration/gemini_real_test.go",
       "sha256": "d7cbe3ea26ee77c6668bcfb6190f8ab8ec008a904019a171aa2632fdb6b02fad",
       "bytes": 1071
+    },
+    {
+      "path": "internal/integration/opencode_real_test.go",
+      "sha256": "1dc5fd908a0aa0fa45bbcfecebe81227a0e43be46de3955d782961ef36652284",
+      "bytes": 6922
     },
     {
       "path": "internal/integration/reconciliation_test.go",
