@@ -656,8 +656,8 @@
     },
     {
       "path": "docs/a2a.md",
-      "sha256": "95facb5e5a764b4ae2d13de70543f72eb6629dc7934f1c5bc4cf4729cddf3e2b",
-      "bytes": 2146
+      "sha256": "9703ad226f978194f0ed96b27e24106b3c78807857977b91fea31306fae3bc9c",
+      "bytes": 2142
     },
     {
       "path": "docs/adapters.md",
@@ -696,8 +696,8 @@
     },
     {
       "path": "docs/mcp.md",
-      "sha256": "12e0f446f68f43c049ed5b37fe16c390e318001fd031f878553cf098f9c61a9a",
-      "bytes": 2578
+      "sha256": "21ae00f196237bf16f8bc66ea30cb1319900a0c387ea2f58a6d286adf7b4c420",
+      "bytes": 2574
     },
     {
       "path": "docs/providers.md",
