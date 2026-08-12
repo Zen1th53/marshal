@@ -745,6 +745,11 @@
       "bytes": 13575
     },
     {
+      "path": "docs/superpowers/specs/2026-08-12-runtime-v0.4.0-provider-maturity-daily-operations-design.md",
+      "sha256": "71c0a69ebe33c0eb8478f855214c8fe57ef222a407b7ea7d2d96044a8e9c4a1c",
+      "bytes": 9381
+    },
+    {
       "path": "go.mod",
       "sha256": "974007f0862e42f6dd100d38f1a75c0736ebf39ae99e26dd3ff269e12656eed9",
       "bytes": 556
@@ -876,13 +881,18 @@
     },
     {
       "path": "internal/doctor/doctor.go",
-      "sha256": "78623b9df890e5f2fffda22c5bdc151ab9c32a1d2899fbf8754be4c77e0f32db",
-      "bytes": 12149
+      "sha256": "3659661415c948121e4e69c9bf023c0b22f1b64fabeb73a96388c230fbbf340b",
+      "bytes": 12191
     },
     {
       "path": "internal/doctor/doctor_test.go",
-      "sha256": "1ddd7a2823798e7bb7ad9040f0403df060b3bc0cd94ba89aff4708f9e2865381",
-      "bytes": 3250
+      "sha256": "f890750cc04eefc68cb2e14c1a05a3c6d11c75477445d995ee92076c59092793",
+      "bytes": 3292
+    },
+    {
+      "path": "internal/integration/claude_real_test.go",
+      "sha256": "48d0b203ce4826a5c2a26c8cd4f3da63d3cf0b43677cbbd1a1e43cdc9f9ff1f3",
+      "bytes": 1212
     },
     {
       "path": "internal/integration/codex_real_test.go",
@@ -923,6 +933,11 @@
       "path": "internal/mcp/server.go",
       "sha256": "71bc4dd2acab692951c2c90fa8c9efc518fd6bf6e98ad531057cdc2317ae2b0e",
       "bytes": 10603
+    },
+    {
+      "path": "internal/model/capability.go",
+      "sha256": "e979c9b0a4a9fb2038ac905610ea5076ab3b0dd55c7ad21704358b6cc1bc1ab8",
+      "bytes": 1428
     },
     {
       "path": "internal/model/entities.go",

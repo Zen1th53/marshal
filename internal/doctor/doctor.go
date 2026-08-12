@@ -305,7 +305,7 @@ func failure(name, method, detail string) Result {
 }
 
 func finalizeMissing(report Report) Report {
-	for _, name := range []string{"pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "codex", "bwrap", "artifacts", "policy"} {
+	for _, name := range []string{"pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
 		report.Results = append(report.Results, failure(name, "repository prerequisite", "not checked because repository discovery failed"))
 	}
 	report.Verdict = Fail
