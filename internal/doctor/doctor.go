@@ -55,7 +55,7 @@ type Options struct {
 func Check(ctx context.Context, root string, options Options) Report {
 	lookup := options.Lookup
 	if lookup == nil {
-		lookup = exec.LookPath
+		lookup = project.FindBinary
 	}
 	run := options.Run
 	if run == nil {

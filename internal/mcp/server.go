@@ -56,21 +56,34 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	// 1. Validate MCP-Protocol-Version header if present
+	if protoHeader := r.Header.Get("MCP-Protocol-Version"); protoHeader != "" && protoHeader != ProtocolVersion2026 {
+		s.writeErrorWithStatus(w, nil, http.StatusBadRequest, -32602, fmt.Sprintf("Unsupported protocol version: %s. Pinned version is %s", protoHeader, ProtocolVersion2026))
+		return
+	}
+
 	var req jsonRPCRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, nil, -32700, "Parse error: "+err.Error())
+		s.writeErrorWithStatus(w, nil, http.StatusBadRequest, -32700, "Parse error: "+err.Error())
+		return
+	}
+
+	// 2. Validate Mcp-Method header consistency if present
+	if methodHeader := r.Header.Get("Mcp-Method"); methodHeader != "" && methodHeader != req.Method {
+		s.writeErrorWithStatus(w, req.ID, http.StatusBadRequest, -32600, fmt.Sprintf("Header Mcp-Method (%s) does not match body method (%s)", methodHeader, req.Method))
 		return
 	}
 
 	ctx := r.Context()
 	switch req.Method {
-	case "initialize":
+	case "server/discover", "initialize":
 		var params struct {
 			ProtocolVersion string `json:"protocolVersion"`
 		}
 		_ = json.Unmarshal(req.Params, &params)
-		if params.ProtocolVersion != ProtocolVersion2026 {
-			s.writeError(w, req.ID, -32602, fmt.Sprintf("Unsupported protocol version: %s. Pinned version is %s", params.ProtocolVersion, ProtocolVersion2026))
+		if params.ProtocolVersion != "" && params.ProtocolVersion != ProtocolVersion2026 {
+			s.writeErrorWithStatus(w, req.ID, http.StatusBadRequest, -32602, fmt.Sprintf("Unsupported protocol version: %s. Pinned version is %s", params.ProtocolVersion, ProtocolVersion2026))
 			return
 		}
 		s.writeResult(w, req.ID, map[string]any{
@@ -95,7 +108,12 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 			Arguments map[string]any `json:"arguments"`
 		}
 		if err := json.Unmarshal(req.Params, &params); err != nil {
-			s.writeError(w, req.ID, -32602, "Invalid params")
+			s.writeErrorWithStatus(w, req.ID, http.StatusBadRequest, -32602, "Invalid params")
+			return
+		}
+		// 3. Validate Mcp-Name header consistency if present
+		if nameHeader := r.Header.Get("Mcp-Name"); nameHeader != "" && nameHeader != params.Name {
+			s.writeErrorWithStatus(w, req.ID, http.StatusBadRequest, -32600, fmt.Sprintf("Header Mcp-Name (%s) does not match params.name (%s)", nameHeader, params.Name))
 			return
 		}
 		res, err := s.callTool(ctx, params.Name, params.Arguments)
@@ -112,6 +130,14 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.writeError(w, req.ID, -32601, "Method not found: "+req.Method)
 	}
+}
+
+func (s *Server) writeErrorWithStatus(w http.ResponseWriter, id any, status, code int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(jsonRPCResponse{
+		JSONRPC: "2.0", ID: id, Error: &rpcErr{Code: code, Message: message},
+	})
 }
 
 func (s *Server) listTools() []Tool {

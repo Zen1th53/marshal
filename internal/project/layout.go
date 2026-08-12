@@ -6,7 +6,90 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 )
+
+func FindBinary(name string) (string, error) {
+	if path, err := exec.LookPath(name); err == nil {
+		return path, nil
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		switch name {
+		case "codex":
+			pattern := filepath.Join(home, ".codex", "packages", "standalone", "releases", "*", "bin", "codex")
+			if matches, err := filepath.Glob(pattern); err == nil && len(matches) > 0 {
+				sort.Slice(matches, func(i, j int) bool {
+					dirI := filepath.Base(filepath.Dir(filepath.Dir(matches[i])))
+					dirJ := filepath.Base(filepath.Dir(filepath.Dir(matches[j])))
+					return compareSemver(dirI, dirJ) < 0
+				})
+				return matches[len(matches)-1], nil
+			}
+		case "gemini":
+			pattern := filepath.Join(home, ".gemini", "antigravity-ide", "bin", "gemini")
+			if info, err := os.Stat(pattern); err == nil && !info.IsDir() {
+				return pattern, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("%s binary missing", name)
+}
+
+func compareSemver(v1, v2 string) int {
+	p1 := parseSemver(v1)
+	p2 := parseSemver(v2)
+	maxLen := len(p1)
+	if len(p2) > maxLen {
+		maxLen = len(p2)
+	}
+	for i := 0; i < maxLen; i++ {
+		var n1, n2 int
+		if i < len(p1) {
+			n1 = p1[i]
+		}
+		if i < len(p2) {
+			n2 = p2[i]
+		}
+		if n1 != n2 {
+			if n1 < n2 {
+				return -1
+			}
+			return 1
+		}
+	}
+	if v1 < v2 {
+		return -1
+	} else if v1 > v2 {
+		return 1
+	}
+	return 0
+}
+
+func parseSemver(v string) []int {
+	var nums []int
+	var cur int
+	var inNum bool
+	for i := 0; i < len(v); i++ {
+		ch := v[i]
+		if ch >= '0' && ch <= '9' {
+			cur = cur*10 + int(ch-'0')
+			inNum = true
+		} else {
+			if inNum {
+				nums = append(nums, cur)
+				cur = 0
+				inNum = false
+			}
+			if ch == '-' || ch == '+' {
+				break
+			}
+		}
+	}
+	if inNum {
+		nums = append(nums, cur)
+	}
+	return nums
+}
 
 type Layout struct {
 	Root       string

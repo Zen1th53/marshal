@@ -486,7 +486,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	default:
 		return nil, fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
 	}
-	binary, err := exec.LookPath(name)
+	binary, err := project.FindBinary(name)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s CLI is missing", model.ErrUnavailable, name)
 	}
