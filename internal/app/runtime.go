@@ -572,17 +572,32 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 
 			var extraEnv []string
 			var writableTmpfs []string
+
+			// Adapter runtime storage (.codex, .opencode, etc.) must be writable tmpfs for sqlite DBs / logs
+			writableTmpfs = append(writableTmpfs,
+				"/home/slaves/."+name,
+				"/home/slaves/.local",
+				"/home/slaves/.local/share",
+				"/home/slaves/.local/share/"+name,
+				"/home/slaves/.cache",
+				"/home/slaves/.cache/"+name,
+			)
+
 			if home, homeErr := os.UserHomeDir(); homeErr == nil {
-				// Bind config directories → /home/slaves/.config/<name> (read-only)
-				for _, mapping := range []struct{ sub, slaveSub string }{
-					{"." + name, "." + name},
-					{filepath.Join(".config", name), filepath.Join(".config", name)},
+				// Bind config directories and essential files → /home/slaves/ (read-only)
+				for _, sub := range []string{
+					"auth.json", "config.toml", "config.json", "AGENTS.md",
 				} {
-					src := filepath.Join(home, mapping.sub)
-					tgt := "/home/slaves/" + mapping.slaveSub
+					src := filepath.Join(home, "."+name, sub)
+					tgt := "/home/slaves/." + name + "/" + sub
 					if _, statErr := os.Stat(src); statErr == nil {
 						readOnlyBinds = append(readOnlyBinds, model.Bind{Source: src, Target: tgt})
 					}
+				}
+
+				srcConfigDir := filepath.Join(home, ".config", name)
+				if _, statErr := os.Stat(srcConfigDir); statErr == nil {
+					readOnlyBinds = append(readOnlyBinds, model.Bind{Source: srcConfigDir, Target: "/home/slaves/.config/" + name})
 				}
 
 				// For opencode: bind npm node_modules used by the opencode binary
@@ -606,15 +621,6 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 					"XDG_CACHE_HOME=/home/slaves/.cache",
 				)
 			}
-
-			// Adapter runtime data and log dirs must be writable tmpfs inside sandbox
-			writableTmpfs = append(writableTmpfs,
-				"/home/slaves/.local",
-				"/home/slaves/.local/share",
-				"/home/slaves/.local/share/"+name,
-				"/home/slaves/.cache",
-				"/home/slaves/.cache/"+name,
-			)
 
 			// Forward OLLAMA_HOST; default to localhost:11434 for local Ollama
 			ollamaHost := os.Getenv("OLLAMA_HOST")

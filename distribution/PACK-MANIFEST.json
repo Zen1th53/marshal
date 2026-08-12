@@ -836,8 +836,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "3cdd2744d634566ff462548f95f669205718b66366cb3b5152e3cc780d1639f9",
-      "bytes": 23231
+      "sha256": "2ce5b867366154821fc7414ce4512465bfb719a4eb1c3da92cb7b133b397d991",
+      "bytes": 23464
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -901,8 +901,8 @@
     },
     {
       "path": "internal/integration/opencode_real_test.go",
-      "sha256": "1dc5fd908a0aa0fa45bbcfecebe81227a0e43be46de3955d782961ef36652284",
-      "bytes": 6922
+      "sha256": "9ecafe936ea2eabeb035570a332f5173c4d55c5a940d412699280735d9f9f396",
+      "bytes": 6658
     },
     {
       "path": "internal/integration/reconciliation_test.go",
