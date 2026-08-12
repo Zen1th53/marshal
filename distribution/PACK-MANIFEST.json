@@ -61,8 +61,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "edd406ba1cbc2489d98ede145d28a98943165248a8d77898d01659047616fd3b",
-      "bytes": 2780
+      "sha256": "3613344293559e4791c1a9f94072137d93f6aff3d15d7656d21368a85c441cec",
+      "bytes": 3420
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -121,7 +121,7 @@
     },
     {
       "path": "RUNTIME-VERSION.yaml",
-      "sha256": "e83b89235dd72143987e7542f2ae447227237edcaf62796ae3c2dab84b3acbad",
+      "sha256": "69f6387b3fa4908887d8cd6b651a4cd4efad2b2393dffc4be031d27092d2127c",
       "bytes": 193
     },
     {
