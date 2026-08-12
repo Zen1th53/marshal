@@ -6,7 +6,30 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 )
+
+func FindBinary(name string) (string, error) {
+	if path, err := exec.LookPath(name); err == nil {
+		return path, nil
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		switch name {
+		case "codex":
+			pattern := filepath.Join(home, ".codex", "packages", "standalone", "releases", "*", "bin", "codex")
+			if matches, err := filepath.Glob(pattern); err == nil && len(matches) > 0 {
+				sort.Strings(matches)
+				return matches[len(matches)-1], nil
+			}
+		case "gemini":
+			pattern := filepath.Join(home, ".gemini", "antigravity-ide", "bin", "gemini")
+			if info, err := os.Stat(pattern); err == nil && !info.IsDir() {
+				return pattern, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("%s binary missing", name)
+}
 
 type Layout struct {
 	Root       string
