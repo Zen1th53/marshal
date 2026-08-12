@@ -121,8 +121,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "7b96114ca70f0421640aad26560cb2617e87f9d423a453d771d43b42a7755a68",
-      "bytes": 6621
+      "sha256": "a98f67f7487db7eef3bc6aa654b5fc34073c270102959ac827f8715652ba67fc",
+      "bytes": 8676
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -656,13 +656,13 @@
     },
     {
       "path": "docs/adapters.md",
-      "sha256": "59e1f38853d4ab332079412755ac3bae28af9df886cc97d6b4aef8e57d91ee37",
-      "bytes": 1273
+      "sha256": "3fb24beb6a4f5c2086b82831380b6995200fcc45faff12ad223dc04cf8cc3944",
+      "bytes": 1281
     },
     {
       "path": "docs/architecture.md",
-      "sha256": "0f9ab1ae024e745384e7801b674487bfa2a2f74c98ef0fe1c6c247d7ab0746e3",
-      "bytes": 2879
+      "sha256": "14fe78391e36a004eb778f4ba0ff924a6ea2c7562db8f781abc872d9ff81771c",
+      "bytes": 2922
     },
     {
       "path": "docs/concepts.md",
@@ -681,18 +681,18 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "81ee33c398c694ac6ed96a9c606ef087b1d5258cffbc7c6952af09560cbbf61e",
-      "bytes": 2375
+      "sha256": "836d345647171fb6d37c253f3ba5904e3e42d1c0342f43001fda88922593caa3",
+      "bytes": 5839
     },
     {
       "path": "docs/providers/opencode-ollama.md",
-      "sha256": "4e6810442bd5e9abe1b2a20a1ff1ca8dca97906d24341b21c1c84365cc9453dc",
-      "bytes": 1936
+      "sha256": "c3d804e4c4875f9639d8659e02957442a21bf85c14b69aff1818bd839a85222e",
+      "bytes": 2977
     },
     {
       "path": "docs/runtime.md",
-      "sha256": "97ed08b88a7be06b772688a1f1a8dcee10644d757f8332c46c9df177e5424322",
-      "bytes": 2406
+      "sha256": "7ab92bd97096e39ec358bc6d3d746b3ffe1308b1ccec60899aaeeab03de66b15",
+      "bytes": 2407
     },
     {
       "path": "docs/security-model.md",
