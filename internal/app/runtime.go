@@ -31,10 +31,11 @@ import (
 const localProjectID = "PROJECT-local"
 
 type Runtime struct {
-	layout   project.Layout
-	store    *store.Store
-	policy   *policy.Engine
-	adapters map[string]adapter.Adapter
+	layout            project.Layout
+	store             *store.Store
+	policy            *policy.Engine
+	adapters          map[string]adapter.Adapter
+	runtimeInstanceID string
 }
 
 type Options struct {
@@ -174,10 +175,70 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		database.Close()
 		return nil, err
 	}
-	return &Runtime{layout: layout, store: database, policy: engine, adapters: options.Adapters}, nil
+	instanceID, err := model.NewID("INSTANCE-")
+	if err != nil {
+		database.Close()
+		return nil, err
+	}
+	rt := &Runtime{
+		layout:            layout,
+		store:             database,
+		policy:            engine,
+		adapters:          options.Adapters,
+		runtimeInstanceID: instanceID,
+	}
+	_ = rt.ReconcileStartup(ctx)
+	return rt, nil
 }
 
+func (r *Runtime) InstanceID() string { return r.runtimeInstanceID }
+
 func (r *Runtime) Close() error { return r.store.Close() }
+
+func (r *Runtime) ReconcileStartup(ctx context.Context) error {
+	tasks, err := r.store.ListTasks(ctx)
+	if err != nil {
+		return err
+	}
+	for _, task := range tasks {
+		if task.Status == model.TaskWorking || task.Status == model.TaskClaimed {
+			active, activeErr := r.store.ActiveLease(ctx, task.ID)
+			if activeErr == nil && active.Lease.ExpiresAt.Before(time.Now().UTC()) {
+				_ = r.store.ReleaseTask(ctx, model.ReleaseRequest{
+					TaskID:           task.ID,
+					LeaseID:          active.Lease.ID,
+					SessionID:        active.Lease.SessionID,
+					AgentID:          active.AgentID,
+					ExpectedRevision: active.TaskRevision,
+					BlockedReason:    "reconciled stale lease from previous daemon instance",
+				})
+			}
+		}
+	}
+	return nil
+}
+
+func (r *Runtime) CancelTask(ctx context.Context, taskID string) error {
+	task, err := r.store.GetTask(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if task.Status == model.TaskCancelled {
+		return nil
+	}
+	active, activeErr := r.store.ActiveLease(ctx, taskID)
+	if activeErr == nil {
+		_ = r.store.ReleaseTask(ctx, model.ReleaseRequest{
+			TaskID:           taskID,
+			LeaseID:          active.Lease.ID,
+			SessionID:        active.Lease.SessionID,
+			AgentID:          active.AgentID,
+			ExpectedRevision: active.TaskRevision,
+			BlockedReason:    "task cancelled by supervisor",
+		})
+	}
+	return nil
+}
 
 func (r *Runtime) Status(ctx context.Context) (Status, error) {
 	projectIdentity, err := r.store.Project(ctx)

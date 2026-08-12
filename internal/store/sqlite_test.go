@@ -23,8 +23,8 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 	if got := queryInt(t, st.db, "PRAGMA foreign_keys"); got != 1 {
 		t.Fatalf("foreign_keys = %d, want 1", got)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 1 {
-		t.Fatalf("schema version = %d, want 1", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 2 {
+		t.Fatalf("schema version = %d, want 2", got)
 	}
 
 	wantTables := []string{

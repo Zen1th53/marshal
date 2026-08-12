@@ -217,12 +217,13 @@ func (s *Store) Migrate(ctx context.Context) error {
 	`); err != nil {
 		return fmt.Errorf("create migration ledger: %w", err)
 	}
+
 	var version int
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 1 {
-		return fmt.Errorf("database schema version %d is newer than supported version 1", version)
+	if version > 2 {
+		return fmt.Errorf("database schema version %d is newer than supported version 2", version)
 	}
 	if version == 0 {
 		if _, err := tx.ExecContext(ctx, schemaV1); err != nil {
@@ -230,6 +231,23 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(1, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 1: %w", err)
+		}
+		version = 1
+	}
+	if version == 1 {
+		v2Statements := []string{
+			"ALTER TABLE worker_runs ADD COLUMN runtime_instance_id TEXT;",
+			"ALTER TABLE worker_runs ADD COLUMN process_start_identity TEXT;",
+			"ALTER TABLE worker_runs ADD COLUMN cancellation_requested_at TEXT;",
+			"ALTER TABLE worker_runs ADD COLUMN recovery_epoch INTEGER DEFAULT 0;",
+		}
+		for _, stmt := range v2Statements {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
+				return fmt.Errorf("apply schema version 2 statement (%s): %w", stmt, err)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(2, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 2: %w", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
