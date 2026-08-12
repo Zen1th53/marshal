@@ -21,7 +21,7 @@ func NewClient(socket string) *Client {
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, "unix", socket)
 	}}
-	return &Client{http: &http.Client{Transport: transport, Timeout: 35 * time.Second}}
+	return &Client{http: &http.Client{Transport: transport, Timeout: 15 * time.Minute}}
 }
 
 func (c *Client) HTTP() *http.Client { return c.http }
@@ -106,6 +106,10 @@ func (c *Client) Reconcile(ctx context.Context, input app.ReconcileRequest) (app
 	var value app.ReconciliationReport
 	id, err := c.do(ctx, http.MethodPost, "/v1/reconcile", input, &value)
 	return value, id, err
+}
+
+func (c *Client) CancelTask(ctx context.Context, taskID string) (string, error) {
+	return c.do(ctx, http.MethodPost, "/v1/tasks/"+taskID+"/cancel", nil, nil)
 }
 
 func (c *Client) do(ctx context.Context, method, path string, input, output any) (string, error) {

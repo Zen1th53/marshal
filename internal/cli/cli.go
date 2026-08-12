@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/Zen1th53/slaves/internal/a2a"
 	"github.com/Zen1th53/slaves/internal/api"
@@ -20,13 +22,14 @@ import (
 	"github.com/Zen1th53/slaves/internal/doctor"
 	"github.com/Zen1th53/slaves/internal/mcp"
 	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/slaves/internal/project"
 )
 
 const usage = `Usage: slaves [--json] <command> [arguments]
 
 Commands:
   init
-  doctor
+  doctor [--probe-providers]
   status
   agent register --name NAME --role ROLE
   agents
@@ -35,7 +38,9 @@ Commands:
   task show TASK-ID
   task claim TASK-ID --agent AGENT-ID [--revision N]
   task release TASK-ID
-  run TASK-ID --adapter ADAPTER --agent AGENT-ID
+  run TASK-ID --adapter ADAPTER [--model MODEL] [--agent AGENT-ID]
+  logs TASK-ID
+  cancel TASK-ID
   adapters
   adapter probe NAME
   mcp serve [--listen ADDR] | mcp status
@@ -83,7 +88,7 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 	case "init":
 		err = c.init(ctx)
 	case "doctor":
-		return c.doctor(ctx)
+		return c.doctor(ctx, args[1:])
 	case "daemon":
 		err = c.daemon(ctx)
 	case "status":
@@ -98,6 +103,10 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.task(ctx, args[1:])
 	case "run":
 		err = c.run(ctx, args[1:])
+	case "logs":
+		err = c.logs(ctx, args[1:])
+	case "cancel":
+		err = c.cancel(ctx, args[1:])
 	case "events":
 		err = c.events(ctx)
 	case "artifacts":
@@ -134,11 +143,21 @@ func (c command) init(ctx context.Context) error {
 	return c.print(map[string]any{"status": "initialized", "runtime_dir": layout.RuntimeDir}, "initialized "+layout.RuntimeDir)
 }
 
-func (c command) doctor(ctx context.Context) int {
-	report := doctor.Check(ctx, c.root, doctor.Options{})
-	if err := c.print(report, string(report.Verdict)); err != nil {
-		fmt.Fprintln(c.stderr, err)
-		return 1
+func (c command) doctor(ctx context.Context, args []string) int {
+	probeProviders := false
+	for _, arg := range args {
+		if arg == "--probe-providers" || arg == "--deep" {
+			probeProviders = true
+		}
+	}
+	report := doctor.Check(ctx, c.root, doctor.Options{ProbeProviders: probeProviders})
+	if c.json {
+		if err := c.print(report, string(report.Verdict)); err != nil {
+			fmt.Fprintln(c.stderr, err)
+			return 1
+		}
+	} else {
+		fmt.Fprintln(c.stdout, report.FormattedText())
 	}
 	if report.Verdict == doctor.Pass {
 		return 0
@@ -150,6 +169,15 @@ func (c command) daemon(ctx context.Context) error {
 	layout, err := app.Bootstrap(ctx, c.root)
 	if err != nil {
 		return err
+	}
+	if data, readErr := os.ReadFile(layout.PID); readErr == nil {
+		var oldPID int
+		if _, scanErr := fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &oldPID); scanErr == nil && oldPID > 0 {
+			if killErr := syscall.Kill(oldPID, 0); killErr == syscall.ESRCH {
+				_ = os.Remove(layout.PID)
+				_ = os.Remove(layout.Socket)
+			}
+		}
 	}
 	pid, err := os.OpenFile(layout.PID, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -444,12 +472,77 @@ func (c command) reconcile(ctx context.Context, args []string) error {
 	}
 	return c.print(value, fmt.Sprintf("%s conflicts=%d", value.Status, len(value.Conflicts)))
 }
+func (c command) logs(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("%w: logs requires a TASK-ID", model.ErrInvalid)
+	}
+	taskID := args[0]
+	client, err := c.client()
+	if err != nil {
+		return err
+	}
+	events, _, err := client.Events(ctx)
+	if err != nil {
+		return err
+	}
+	var taskEvents []model.Event
+	for _, e := range events {
+		if e.TaskID == taskID {
+			taskEvents = append(taskEvents, e)
+		}
+	}
+	artifacts, _, _ := client.Artifacts(ctx)
+	var taskArtifacts []model.Artifact
+	for _, a := range artifacts {
+		for _, tid := range a.TaskIDs {
+			if tid == taskID {
+				taskArtifacts = append(taskArtifacts, a)
+				break
+			}
+		}
+	}
+	result := map[string]any{
+		"task_id":   taskID,
+		"events":    taskEvents,
+		"artifacts": taskArtifacts,
+	}
+	if c.json {
+		return c.print(result, "")
+	}
+	var lines []string
+	lines = append(lines, fmt.Sprintf("=== Logs & Events for %s ===", taskID))
+	lines = append(lines, fmt.Sprintf("Events (%d):", len(taskEvents)))
+	for _, e := range taskEvents {
+		lines = append(lines, fmt.Sprintf("  [%s] %s", e.Timestamp.Format(time.RFC3339), e.Type))
+	}
+	lines = append(lines, fmt.Sprintf("Artifacts (%d):", len(taskArtifacts)))
+	for _, a := range taskArtifacts {
+		lines = append(lines, fmt.Sprintf("  [%s] %s size=%d commit=%s", a.ID, a.Kind, a.Size, a.SourceCommit))
+	}
+	return c.print(result, strings.Join(lines, "\n"))
+}
+
+func (c command) cancel(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("%w: cancel requires a TASK-ID", model.ErrInvalid)
+	}
+	taskID := args[0]
+	client, err := c.client()
+	if err != nil {
+		return err
+	}
+	requestID, err := client.CancelTask(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	return c.print(map[string]string{"task_id": taskID, "request_id": requestID}, fmt.Sprintf("cancelled task %s", taskID))
+}
 
 func (c command) adapters(ctx context.Context) error {
 	names := []string{"codex", "gemini", "claude", "opencode"}
 	list := make([]map[string]any, 0, len(names))
 	for _, name := range names {
-		binary, err := exec.LookPath(name)
+		binary, err := project.FindBinary(name)
 		available := err == nil
 		version := "unknown"
 		if available {
@@ -464,6 +557,18 @@ func (c command) adapters(ctx context.Context) error {
 			"version":   version,
 		})
 	}
+	if !c.json {
+		var lines []string
+		lines = append(lines, "=== SLAVES Provider Adapters ===")
+		for _, a := range list {
+			avail := "UNAVAILABLE"
+			if a["available"].(bool) {
+				avail = "AVAILABLE"
+			}
+			lines = append(lines, fmt.Sprintf("  %-10s %-12s binary=%-40s version=%s", a["name"], avail, a["binary"], a["version"]))
+		}
+		return c.print(list, strings.Join(lines, "\n"))
+	}
 	return c.print(list, fmt.Sprintf("%d adapters", len(list)))
 }
 
@@ -475,7 +580,7 @@ func (c command) adapter(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: adapter name required", model.ErrInvalid)
 	}
 	name := args[1]
-	binary, err := exec.LookPath(name)
+	binary, err := project.FindBinary(name)
 	if err != nil {
 		return c.print(map[string]any{
 			"name": name, "available": false, "error": err.Error(),

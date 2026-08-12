@@ -1,5 +1,18 @@
 # Changelog
 
+## Runtime 0.4.0 — 2026-08-12
+
+Provider maturity and daily operations release:
+- Implemented structured Provider Capability Data Model (`IMPLEMENTED`, `INSTALLED`, `AVAILABLE`, `AUTHENTICATED`, `CAPABILITY-PROBED`, `REAL-E2E-VERIFIED`).
+- Enhanced `slaves doctor` with clean human-readable text output and `--probe-providers` / `--deep` capability probing.
+- Added `slaves logs TASK-ID` command to inspect execution stdout/stderr artifacts, task events, and execution history.
+- Added `slaves cancel TASK-ID` command to terminate active task executions cleanly.
+- Added `--model` flag to `slaves run` to allow passing model overrides directly (e.g. local Ollama model selection).
+- Augmented binary lookup in `project.FindBinary` to check `~/.local/bin` and `/usr/local/bin` in addition to `$PATH`.
+- Increased API client HTTP timeout for `slaves run` from 35s to 15 minutes to prevent truncation during long LLM runs.
+- Added automatic stale `.slaves/pid` file cleanup on daemon startup.
+- Added `claude_real_test.go` integration test harness and fixed Gemini test runner duration units.
+
 ## Runtime 0.3.1 — 2026-08-12
 
 Release integrity and bubblewrap sandbox storage patch release:

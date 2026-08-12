@@ -14,6 +14,16 @@ func FindBinary(name string) (string, error) {
 		return path, nil
 	}
 	if home, err := os.UserHomeDir(); err == nil {
+		for _, dir := range []string{
+			filepath.Join(home, ".local", "bin"),
+			"/usr/local/bin",
+			"/usr/bin",
+		} {
+			candidate := filepath.Join(dir, name)
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				return candidate, nil
+			}
+		}
 		switch name {
 		case "codex":
 			pattern := filepath.Join(home, ".codex", "packages", "standalone", "releases", "*", "bin", "codex")
