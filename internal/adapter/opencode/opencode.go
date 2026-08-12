@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -17,10 +18,19 @@ type Client struct {
 	binary  string
 	runner  adapter.ProcessRunner
 	version string
+	model   string
 }
 
 func New(binary string, runner adapter.ProcessRunner) *Client {
 	return &Client{binary: binary, runner: runner}
+}
+
+func NewWithModel(binary string, runner adapter.ProcessRunner, model string) *Client {
+	return &Client{binary: binary, runner: runner, model: model}
+}
+
+func (c *Client) SetModel(model string) {
+	c.model = model
 }
 
 func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
@@ -50,11 +60,21 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 	if err != nil {
 		return adapter.Result{}, err
 	}
+
+	modelOpt := c.model
+	if modelOpt == "" {
+		modelOpt = strings.TrimSpace(os.Getenv("SLAVES_OPENCODE_MODEL"))
+	}
+
+	args := []string{"run", "--format", "json"}
+	if modelOpt != "" {
+		args = append(args, "-m", modelOpt)
+	}
+	args = append(args, string(prompt))
+
 	process, err := c.runner.Run(ctx, adapter.Command{
-		Path: c.binary,
-		Args: []string{
-			"run", "--format", "json", string(prompt),
-		},
+		Path:              c.binary,
+		Args:              args,
 		Dir:               request.Worktree,
 		Heartbeat:         request.Heartbeat,
 		HeartbeatInterval: request.HeartbeatInterval,

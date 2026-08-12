@@ -83,6 +83,12 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		}
 		args = append(args, "--bind", resolved, resolved)
 	}
+	for _, mountPath := range request.WritableTmpfs {
+		if !filepath.IsAbs(mountPath) {
+			return model.CommandSpec{}, fmt.Errorf("%w: writable tmpfs path must be absolute: %s", model.ErrInvalid, mountPath)
+		}
+		args = append(args, "--tmpfs", mountPath)
+	}
 	for _, bind := range request.ReadOnlyBinds {
 		source, err := existingPath(bind.Source)
 		if err != nil || !filepath.IsAbs(bind.Target) ||
@@ -102,10 +108,38 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 	}
 	args = append(args, "--chdir", worktree, "--")
 	args = append(args, command...)
+	baseEnv := []string{"HOME=/home/slaves", "PATH=/usr/bin:/bin"}
+	for _, kv := range request.ExtraEnv {
+		parts := strings.SplitN(kv, "=", 2)
+		if len(parts) == 2 {
+			args = append([]string{}, args...)
+			// insert --setenv before --
+			// rebuild args with setenv entries before --chdir
+		}
+		baseEnv = append(baseEnv, kv)
+	}
+	// rebuild so --setenv comes before command separator
+	var finalArgs []string
+	for i, a := range args {
+		if a == "--chdir" {
+			for _, kv := range request.ExtraEnv {
+				parts := strings.SplitN(kv, "=", 2)
+				if len(parts) == 2 {
+					finalArgs = append(finalArgs, "--setenv", parts[0], parts[1])
+				}
+			}
+			finalArgs = append(finalArgs, args[i:]...)
+			break
+		}
+		finalArgs = append(finalArgs, a)
+	}
+	if finalArgs == nil {
+		finalArgs = args
+	}
 	return model.CommandSpec{
 		Path: b.binary,
-		Args: args,
-		Env:  []string{"HOME=/home/slaves", "PATH=/usr/bin:/bin"},
+		Args: finalArgs,
+		Env:  baseEnv,
 		Dir:  worktree,
 		Isolation: model.IsolationCapability{
 			Level: model.IsolationBwrap, Available: true, Filesystem: true, Process: true,

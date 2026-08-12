@@ -569,14 +569,70 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			if info, statErr := os.Stat(gitMetadata); statErr == nil && info.IsDir() {
 				readOnlyBinds = append(readOnlyBinds, model.Bind{Source: gitMetadata, Target: gitMetadata})
 			}
+
+			var extraEnv []string
+			var writableTmpfs []string
 			if home, homeErr := os.UserHomeDir(); homeErr == nil {
-				auth := filepath.Join(home, "."+name, "auth.json")
-				if _, statErr := os.Stat(auth); statErr == nil {
-					readOnlyBinds = append(readOnlyBinds, model.Bind{Source: auth, Target: "/home/slaves/." + name + "/auth.json"})
+				// Bind config directories → /home/slaves/.config/<name> (read-only)
+				for _, mapping := range []struct{ sub, slaveSub string }{
+					{"." + name, "." + name},
+					{filepath.Join(".config", name), filepath.Join(".config", name)},
+				} {
+					src := filepath.Join(home, mapping.sub)
+					tgt := "/home/slaves/" + mapping.slaveSub
+					if _, statErr := os.Stat(src); statErr == nil {
+						readOnlyBinds = append(readOnlyBinds, model.Bind{Source: src, Target: tgt})
+					}
 				}
+
+				// For opencode: bind npm node_modules used by the opencode binary
+				if name == "opencode" {
+					for _, sub := range []string{
+						filepath.Join(".opencode", "node_modules"),
+						filepath.Join(".config", "opencode", "node_modules"),
+					} {
+						src := filepath.Join(home, sub)
+						tgt := "/home/slaves/" + sub
+						if _, statErr := os.Stat(src); statErr == nil {
+							readOnlyBinds = append(readOnlyBinds, model.Bind{Source: src, Target: tgt})
+						}
+					}
+				}
+
+				// Forward XDG env so apps inside sandbox find config correctly
+				extraEnv = append(extraEnv,
+					"XDG_CONFIG_HOME=/home/slaves/.config",
+					"XDG_DATA_HOME=/home/slaves/.local/share",
+					"XDG_CACHE_HOME=/home/slaves/.cache",
+				)
 			}
+
+			// Adapter runtime data and log dirs must be writable tmpfs inside sandbox
+			writableTmpfs = append(writableTmpfs,
+				"/home/slaves/.local",
+				"/home/slaves/.local/share",
+				"/home/slaves/.local/share/"+name,
+				"/home/slaves/.cache",
+				"/home/slaves/.cache/"+name,
+			)
+
+			// Forward OLLAMA_HOST; default to localhost:11434 for local Ollama
+			ollamaHost := os.Getenv("OLLAMA_HOST")
+			if ollamaHost == "" {
+				ollamaHost = "http://localhost:11434"
+			}
+			extraEnv = append(extraEnv, "OLLAMA_HOST="+ollamaHost)
+
+			// Forward SLAVES_OPENCODE_MODEL if set
+			if m := os.Getenv("SLAVES_OPENCODE_MODEL"); m != "" {
+				extraEnv = append(extraEnv, "SLAVES_OPENCODE_MODEL="+m)
+			}
+
 			runner = worker.NewSandboxed(process, backend, model.SandboxRequest{
-				Worktree: worktreePath, NetworkAllowed: true, ReadOnlyBinds: readOnlyBinds,
+				Worktree: worktreePath, NetworkAllowed: true,
+				ReadOnlyBinds: readOnlyBinds,
+				WritableTmpfs: writableTmpfs,
+				ExtraEnv:      extraEnv,
 			})
 		}
 	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, true); err != nil {

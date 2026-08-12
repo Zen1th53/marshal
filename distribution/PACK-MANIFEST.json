@@ -796,8 +796,8 @@
     },
     {
       "path": "internal/adapter/opencode/opencode.go",
-      "sha256": "71133fb6b8a6abe241b9b417b5464849fa6477dff94e5ebddb6db6da15d672c8",
-      "bytes": 5435
+      "sha256": "4bfe6f0822e757a698000dfde119695f3491817619a6ef36022e6aee1771dc02",
+      "bytes": 5901
     },
     {
       "path": "internal/adapter/opencode/opencode_test.go",
@@ -831,8 +831,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "9578234f9c77c92ff4f20f259f056a6711b7df8a06cfbf1f9d5c31725b40a2f8",
-      "bytes": 21429
+      "sha256": "3cdd2744d634566ff462548f95f669205718b66366cb3b5152e3cc780d1639f9",
+      "bytes": 23231
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -941,8 +941,8 @@
     },
     {
       "path": "internal/model/isolation.go",
-      "sha256": "45cd26faa645d90f2d46afb44891fe62ce294fc913a22bfb4cc600a15a6dd6f2",
-      "bytes": 1114
+      "sha256": "c37f373cc5e2c8de9121066ed093ca2372547ae6c40c859e982ce310fb39d47d",
+      "bytes": 1259
     },
     {
       "path": "internal/model/policy.go",
@@ -981,8 +981,8 @@
     },
     {
       "path": "internal/sandbox/bwrap.go",
-      "sha256": "be1a02a3299b15a732d5815bef7e6e6795b5ee08cbc68c636f883f13fda6572c",
-      "bytes": 5869
+      "sha256": "21ec5bfa3177ee79ea2188438b1894e53537c3b7286537a2fb806d7407242512",
+      "bytes": 6865
     },
     {
       "path": "internal/sandbox/bwrap_test.go",
