@@ -55,8 +55,7 @@ operations to scope, target, commit, status, and expiry. See
 
 The local daemon owns canonical state and exposes a local Unix-socket API.
 Workers are task- and worktree-scoped. Adapters normalize native agent
-lifecycle and evidence without granting role authority. Runtime `0.1.0`
-implements Codex; the other five adapters are contracts. See
+lifecycle and evidence without granting role authority. Runtime `v0.4.0` implements Codex and OpenCode + local Ollama execution; the other adapters have defined contracts. See
 [runtime/README.md](../runtime/README.md) and
 [adapters/CONTRACT.md](../adapters/CONTRACT.md).
 
