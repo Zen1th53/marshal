@@ -686,8 +686,8 @@
     },
     {
       "path": "docs/providers/opencode-ollama.md",
-      "sha256": "90b1fc72cd4e0ee2cdf197089d189a3cc4b1b46f9efcb6829b6cf5628ed4aa5e",
-      "bytes": 1942
+      "sha256": "4e6810442bd5e9abe1b2a20a1ff1ca8dca97906d24341b21c1c84365cc9453dc",
+      "bytes": 1936
     },
     {
       "path": "docs/runtime.md",
