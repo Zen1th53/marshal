@@ -1,98 +1,236 @@
-# Getting Started
+# Getting Started with SLAVES
 
-SLAVES supports two complementary modes:
+**Structured Lifecycle for Agent Verification, Execution & Supervision**
 
-- **File-first mode** uses the role, protocol, memory, and template files
-  directly. It requires no daemon.
-- **Local runtime mode** uses the Go `0.1.0` executable for transactional task
-  state, policy, worktrees, workers, events, and artifacts.
+This guide walks a new engineer through installing, initializing, configuring, and executing AI coding agent tasks with SLAVES Runtime `v0.4.0`.
+
+---
 
 ## Prerequisites
 
-- Git and a Git repository checkout
-- Python 3 for pack and conformance tooling
-- Go 1.25 or newer for the local runtime
-- Linux for Runtime V1 worker execution
-- Codex CLI for Codex-backed task runs
-- bubblewrap (`bwrap`) for strong sandboxing
+Before starting, ensure your host environment meets the following requirements:
 
-Codex and bubblewrap are optional for reading the pack or running static
-validation. `slaves doctor` reports their actual availability.
+| Component | Minimum Version | Required For |
+|---|---|---|
+| **OS** | Linux (Ubuntu, Debian, Fedora, Arch, etc.) | Process sandboxing (`bwrap`) & Git worktrees |
+| **Git** | 2.30+ | Task branch creation and worktree isolation |
+| **Go** | 1.25+ | Building and running the `slaves` local control plane |
+| **Python** | 3.10+ | Static pack validation and conformance testing |
+| **bubblewrap** | `bwrap` binary installed | Fail-closed filesystem & namespace isolation |
+| **Codex CLI** | `codex-cli 0.146.0`+ | Executing tasks using the `codex` adapter |
+| **OpenCode** | `1.18.16`+ | Executing tasks using local LLM models |
+| **Ollama** | `0.32.6`+ (`qwythos-9b` model) | Local model provider backend for OpenCode |
 
-## Validate the pack
+---
+
+## 1. Installation
+
+From your local clone of the `slaves` repository on stable release `runtime-v0.4.0`:
 
 ```bash
-python conformance/runner.py validate-pack
-python -m unittest discover -s conformance/tests -v
+# Clone the repository
+git clone https://github.com/Zen1th53/slaves.git
+cd slaves
+
+# Checkout stable release tag
+git checkout runtime-v0.4.0
+
+# Install the slaves binary to $GOPATH/bin
+go install ./cmd/slaves
 ```
 
-Start an agent with [AGENT-BOOTSTRAP.md](../AGENT-BOOTSTRAP.md). Select a
-vendor integration using [bootstrap/ADAPTER-SELECTION.md](../bootstrap/ADAPTER-SELECTION.md)
-and verify capabilities against [adapters/MATRIX.json](../adapters/MATRIX.json).
+Verify that `slaves` is in your `$PATH`:
+```bash
+slaves --help
+```
 
-## Install and initialize the local runtime
+---
 
-From the repository root:
+## 2. Workspace Initialization & Diagnostics
+
+`slaves init` initializes the `.slaves/` runtime state directory inside your current Git repository. It is idempotent and safe to re-run.
 
 ```bash
-go install ./cmd/slaves
+# Step 1: Initialize local workspace state
 slaves init
+
+# Step 2: Run health diagnostics
 slaves doctor
 ```
 
-`slaves init` is idempotent. It creates private runtime state under the ignored
-`.slaves/` directory; it does not invent tasks or overwrite governance files.
+Expected `slaves doctor` output:
+```text
+SLAVES Doctor Verdict: PASS
+========================================
+[PASS]     git              Git is available
+[PASS]     repository       repository identity resolved
+[PASS]     pack             pack version 6.0.0
+[PASS]     runtime_version  runtime specification 1.0.0
+[PASS]     sqlite           schema version 2 is healthy
+[PASS]     permissions      runtime directory mode is 0700
+[PASS]     socket           daemon is not running
+[PASS]     worktree         Git worktrees are supported
+[PASS]     codex            codex-cli 0.146.0
+[PASS]     opencode         1.18.16
+[PASS]     ollama           ollama version is 0.32.6 (http://localhost:11434)
+[PASS]     gemini           0.50.0
+[PASS]     claude           2.1.218 (Claude Code)
+[PASS]     bwrap            strong local isolation is available
+[PASS]     artifacts        artifact directory is writable and mode 0700
+[PASS]     policy           policy is available
+```
 
-Start the daemon in one terminal:
+To view installed provider binaries:
+```bash
+slaves adapters
+```
 
+---
+
+## 3. Starting the Daemon Process
+
+SLAVES runs a local control plane daemon process that manages transactional task leases, SQLite database connections, and worker execution.
+
+Start the daemon in a background terminal:
 ```bash
 slaves daemon
 ```
 
-Register a developer agent in another terminal:
-
+In a separate terminal, verify the daemon connection:
 ```bash
 slaves status
-slaves agent register --name local-codex --role developer
+```
+
+Output:
+```text
+schema=2 tasks=0 agents=0
+```
+
+---
+
+## 4. Agent Registration & Task Import
+
+### Register an Agent
+Agents must be registered with an explicit role (`architect`, `developer`, `qa`, `security`) before claiming or executing tasks:
+
+```bash
+slaves agent register --name OperatorAgent --role developer
+```
+
+Response:
+```text
+AGENT-6901a5e65c4b30a3049d256623d06c21
+```
+
+List registered agents:
+```bash
 slaves agents
 ```
 
-Import one task or an array of tasks:
-
+### Import Tasks
+Create a `tasks.json` file in your repository:
 ```json
-{
-  "id": "TASK-001",
-  "title": "Implement the scoped change",
-  "status": "ready",
-  "risk": "R1",
-  "revision": 0
-}
+[
+  {
+    "id": "TASK-001",
+    "title": "Create application metadata file",
+    "status": "ready",
+    "risk": "R1",
+    "base_commit": "HEAD",
+    "head_commit": "HEAD"
+  }
+]
 ```
 
+Validate and import the task:
 ```bash
+# Dry run validation
 slaves task import tasks.json --dry-run
+
+# Import into SQLite state store
 slaves task import tasks.json
+
+# List tasks
 slaves tasks
+
+# Show task details
 slaves task show TASK-001
 ```
 
-Run with the agent ID returned by registration:
+---
+
+## 5. Executing Tasks
+
+### Execute Task with Codex
+To execute the task using the Codex adapter:
 
 ```bash
-slaves run TASK-001 --adapter codex --agent AGENT-ID
-slaves events
-slaves artifacts
-slaves verify
+slaves run TASK-001 --adapter codex
 ```
 
-The runtime transitions successful implementation work to review; it does not
-grant Developer self-approval for QA or AppSec.
+During execution, SLAVES:
+1. Creates an isolated Git worktree at `.slaves/worktrees/TASK-001`.
+2. Spawns `codex` inside a `bubblewrap` sandbox.
+3. Captures stdout/stderr execution logs and events into SQLite.
+4. Commits code changes to branch `slaves/TASK-001`.
 
-## Continue reading
+### Execute Task with OpenCode + Local Ollama
+To execute the task locally using OpenCode and an Ollama model (e.g. `qwythos-9b`):
 
-- [Concepts](concepts.md)
-- [Architecture](architecture.md)
-- [Runtime](runtime.md)
-- [Adapters](adapters.md)
-- [Conformance](conformance.md)
-- [Security model](security-model.md)
+```bash
+slaves run TASK-001 --adapter opencode --model qwythos-9b
+```
+
+---
+
+## 6. Daily Monitoring, Logs & Cancellation
+
+### Inspect Task Logs and Events
+To view execution logs, stdout/stderr artifacts, and event history for a task:
+
+```bash
+slaves logs TASK-001
+```
+
+Sample output:
+```text
+=== Logs & Events for TASK-001 ===
+Events (2):
+  [2026-08-12T10:24:01Z] TASK_CLAIMED
+  [2026-08-12T10:24:01Z] TASK_RELEASED
+Artifacts (1):
+  [2026-08-12T10:24:01Z] stdout (842 bytes)
+```
+
+### Cancel an Active Task
+To cancel a running task execution gracefully:
+
+```bash
+slaves cancel TASK-001
+```
+
+---
+
+## 7. Generating Interoperability Auth Tokens
+
+For remote agents or MCP / A2A clients connecting to SLAVES:
+
+```bash
+# Generate a Bearer token
+slaves auth token create --name mcp-operator
+
+# List active tokens
+slaves auth token list
+
+# Revoke a token
+slaves auth token revoke --id TOKEN-ID
+```
+
+---
+
+## Next Steps
+
+- Read the [CLI Reference](cli.md) for full command flags.
+- Explore [Provider Setup](providers.md) and [OpenCode + Ollama Setup](providers/opencode-ollama.md).
+- Learn about [MCP Integration](mcp.md) and [A2A Integration](a2a.md).
+- Consult [Troubleshooting](troubleshooting.md) for common error resolution.

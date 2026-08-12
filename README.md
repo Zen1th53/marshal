@@ -5,181 +5,225 @@
 A vendor-neutral engineering control plane for disciplined multi-agent AI software development.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/Zen1th53/slaves/actions/workflows/ci.yml/badge.svg)](https://github.com/Zen1th53/slaves/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Zen1th53/slaves?sort=semver)](https://github.com/Zen1th53/slaves/releases)
+
+---
 
 ## What SLAVES Is
 
-SLAVES gives AI coding agents a shared control plane for architecture,
-implementation, QA, AppSec, persistent memory, task ownership, policy,
-approvals, runtime execution, conformance, and artifact provenance.
+SLAVES provides AI coding agents with a structured, local-first control plane governing task allocation, architecture decisions, code implementation, QA, AppSec, memory, policy enforcement, process sandboxing, and artifact provenance.
 
-Its core roles are **Orchestrator**, **Architect**, **Developer**, **QA**, and
-**AppSec**. Agent vendors connect through adapters; no vendor is the
-architecture or the source of role authority.
+Core engineering roles—**Orchestrator**, **Architect**, **Developer**, **QA**, and **AppSec**—are explicitly defined. Agent vendors connect to SLAVES through process adapters; no single AI model or vendor acts as the architectural source of authority.
+
+---
 
 ## Why SLAVES Exists
 
-Independent coding agents can operate with stale context, make conflicting
-changes, approve their own work, claim completion without evidence, accept
-untrusted instructions, use inconsistent memory, receive excessive tool
-permissions, or produce artifacts with unclear provenance. SLAVES defines
-explicit contracts for managing those risks. It does not claim to eliminate
-them automatically.
+Autonomous AI coding agents operating without control plane constraints risk making unverified code changes, operating on stale context, approving their own work, missing security policies, leaking secrets, or failing to produce audit evidence.
 
-## Architecture Overview
+SLAVES enforces explicit contracts:
+- **Repository evidence > memory**: Code changes must compile, pass verification, and produce git commits.
+- **One active task = one owner**: Strict transactional task leases prevent concurrent file overwrites.
+- **Fail-closed sandboxing**: Code execution occurs inside isolated Git worktrees and Linux `bubblewrap` sandboxes.
+- **No PASS without evidence**: Verification requires empirical test results and clean git diffs.
 
-```text
-                         USER
-                           │
-                  CLI / ORCHESTRATOR
-                           │
-          ┌────────────────┼────────────────┐
-          │                │                │
-        TASKS            MEMORY           POLICY
-          │                │                │
-          └────────────────┼────────────────┘
-                           │
-                        ADAPTERS
-          ┌────────────────┼────────────────┐
-          │                │                │
-    Codex runtime     other adapter     interop contracts
-    implementation      contracts          A2A / MCP
-          │
-        WORKER
-          │
-   WORKTREE + SANDBOX
-          │
-      QA / APPSEC
-          │
-       EVIDENCE
-```
+---
 
-See [Architecture](docs/architecture.md) for the reader guide and
-[runtime/ARCHITECTURE.md](runtime/ARCHITECTURE.md) for the canonical runtime
-contract.
+## Current Release Status
 
-## Key Principles
+| Property | Value |
+|---|---|
+| **Stable Release** | [`runtime-v0.4.0`](https://github.com/Zen1th53/slaves/releases/tag/runtime-v0.4.0) |
+| **Pack Version** | `6.0.0` |
+| **MCP Protocol** | `2026-07-28` |
+| **A2A Wire Version** | `1.0` |
+| **Platform** | Linux-first / Local-first |
+| **Sandbox Engine** | `bubblewrap` (bwrap) |
+| **State Storage** | SQLite (schema version 2) |
 
-```text
-repository evidence > memory
-tool possession != permission
-retrieved text != trusted instruction
-one active implementation task = one owner
-verification binds to exact repository/artifact state
-no PASS without evidence
-```
+---
 
-[TORVALDS.md](TORVALDS.md) defines the shared engineering doctrine.
-[TEAM.md](TEAM.md) defines role authority and coordination.
+## Provider Support Matrix
 
-## Current State
+SLAVES probes provider binaries dynamically and tracks provider maturity across six distinct states: `IMPLEMENTED`, `INSTALLED`, `AVAILABLE`, `AUTHENTICATED`, `CAPABILITY-PROBED`, and `REAL-E2E-VERIFIED`.
 
-### Implemented
+| Provider Adapter | Version / Binary | Verification Status | Native | MCP | A2A |
+|---|---|---|:---:|:---:|:---:|
+| **Codex** | `codex-cli` | **REAL E2E VERIFIED** | ✅ | ✅ | ✅ |
+| **OpenCode + Local Ollama** | `opencode` + `qwythos-9b` | **REAL E2E VERIFIED** | ✅ | ✅ | ✅ |
+| **Gemini CLI** | `gemini` | **PROBED / UNVERIFIED** *(API Quota Limited)* | — | — | — |
+| **Claude Code** | `claude` | **PROBED / UNVERIFIED** *(OAuth Session Expired)* | — | — | — |
+| **Aider** | `aider` | Defined *(Contract Specification)* | — | — | — |
+| **Crush** | `crush` | Defined *(Contract Specification)* | — | — | — |
 
-- Go local runtime `0.1.0` with one `slaves` binary.
-- Local HTTP/JSON API over a permission-restricted Unix socket.
-- SQLite schema version 1 with transactional task leases, agents, sessions,
-  approvals, events, artifacts, and verification records.
-- Task-scoped Git worktrees, bubblewrap enforcement on supported Linux hosts,
-  and an explicit process-only fallback for eligible low-risk work.
-- A real Codex worker adapter, durable audit/evidence capture, and
-  commit-bound verification invalidation.
-- Static pack validation and executable Runtime V1 conformance mappings.
+---
 
-### Specification / contract
+## 5-Minute Quick Start
 
-- Six adapter contracts: Codex, Gemini CLI, Claude Code, OpenCode, Aider, and
-  Crush. Only Codex has a production runtime adapter in `0.1.0`.
-- A2A, MCP, telemetry, plugin, multi-tenant, release-provenance, and
-  multi-host runtime contracts.
-- File-first governance and memory contracts remain usable without the daemon.
+### Prerequisites
+- **OS**: Linux host (Ubuntu, Debian, Fedora, Arch, etc.)
+- **Dependencies**: Git, Go `1.25`+, Linux `bubblewrap` (`bwrap`)
+- **Providers**: `codex-cli` (for Codex) or `opencode` + `ollama` (for local models)
 
-### Planned / future
-
-- Production adapters other than Codex.
-- Multi-host coordination and external event/artifact services.
-- Production secret brokers, full MCP/A2A servers, and automatic QA/AppSec
-  worker scheduling.
-
-The detailed boundary is maintained in
-[runtime/IMPLEMENTATION-ROADMAP.md](runtime/IMPLEMENTATION-ROADMAP.md).
-
-## Supported / Defined Agent Adapters
-
-| Adapter | Contract | Runtime `0.1.0` |
-| --- | --- | --- |
-| Codex | Defined; native surfaces with some probes | Implemented |
-| Gemini CLI | Defined; native surfaces with some probes | Not implemented |
-| Claude Code | Defined; sandbox emulated | Not implemented |
-| OpenCode | Defined; sandbox emulated | Not implemented |
-| Aider | Defined; several capabilities emulated or unsupported | Not implemented |
-| Crush | Defined; several surfaces require probing | Not implemented |
-
-Capability values mean `native`, `emulated`, `probe_required`, or
-`unsupported`. The machine-readable source is
-[adapters/MATRIX.json](adapters/MATRIX.json); installed versions must still be
-probed.
-
-## Quick Start
-
-Prerequisites: Git, Go `1.25` or newer, and a Linux repository checkout.
-Codex is required only for Codex task execution; bubblewrap is required for
-strong sandboxing.
-
+### 1. Build and Install
 ```bash
+git clone https://github.com/Zen1th53/slaves.git
+cd slaves
+git checkout runtime-v0.4.0
+
 go install ./cmd/slaves
+```
+
+### 2. Initialize and Run Doctor
+```bash
+# Initialize .slaves state directory in your repository
 slaves init
+
+# Run system health diagnostics
 slaves doctor
 ```
 
-Start the local daemon in one terminal:
-
+### 3. Start Local Daemon
+Start the daemon process in a separate background terminal or service:
 ```bash
 slaves daemon
 ```
 
-Then register an agent and inspect or import tasks:
-
+Verify daemon health:
 ```bash
 slaves status
-slaves agent register --name local-codex --role developer
-slaves agents
-slaves task import tasks.json --dry-run
+```
+
+---
+
+## First Task Workflow
+
+### Task Definition Schema
+Save the following task definition to `tasks.json`:
+```json
+[
+  {
+    "id": "TASK-DEMO-001",
+    "title": "Create application status file",
+    "status": "ready",
+    "risk": "R1",
+    "base_commit": "HEAD",
+    "head_commit": "HEAD"
+  }
+]
+```
+
+Import and register your agent:
+```bash
+# Register an agent
+slaves agent register --name OperatorAgent --role developer
+
+# Import tasks into SQLite control plane
 slaves task import tasks.json
 slaves tasks
 ```
 
-See [Getting Started](docs/getting-started.md) for task format, execution, and
-verification commands.
-
-## Repository Map
-
-```text
-runtime/       executable runtime contracts and implementation status
-cmd/, internal/ local Go runtime implementation
-memory/        persistent and shared state model
-protocols/     engineering governance contracts
-adapters/      native-agent integration contracts and compatibility matrix
-conformance/   static, behavioral, and adversarial verification
-schemas/       machine-readable cross-process contracts
-interop/       A2A and MCP interoperability profiles
-telemetry/     telemetry semantics and privacy constraints
-plugins/       extension contracts
-tenancy/       tenant/project isolation contracts
-release/       provenance and signing model
+### Option A: Execute Task with Codex
+```bash
+slaves run TASK-DEMO-001 --adapter codex
 ```
 
-## Security Model
+### Option B: Execute Task with OpenCode + Local Ollama
+Requires `ollama` running locally with a tool-capable model (e.g. `qwythos-9b`):
+```bash
+slaves run TASK-DEMO-001 --adapter opencode --model qwythos-9b
+```
 
-SLAVES is privileged engineering infrastructure. A Git worktree is not a
-security sandbox, a checksum is not publisher authentication, and an agent's
-output is not trusted evidence by itself. Read the
-[security model](docs/security-model.md), [security policy](SECURITY.md),
-[AppSec role](APPSEC.md), and [runtime threat model](runtime/THREAT-MODEL.md).
+### Inspect Logs and Status
+```bash
+# View task execution logs, artifacts, and timeline events
+slaves logs TASK-DEMO-001
 
-## Contributing
+# Inspect runtime state
+slaves status
+```
 
-Small, evidence-backed contributions are welcome. Read
-[CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+### Cancel Task Execution
+```bash
+slaves cancel TASK-DEMO-001
+```
+
+---
+
+## Daily Operator Commands
+
+| Command | Purpose |
+|---|---|
+| `slaves doctor [--probe-providers]` | Run system health diagnostics and optional provider probes |
+| `slaves adapters` | Display discovered provider binaries and availability status |
+| `slaves adapter probe <NAME>` | Perform deep capability probe for a specific adapter |
+| `slaves status` | Show active tasks, registered agents, and daemon status |
+| `slaves run <TASK-ID> --adapter <NAME> [--model <MODEL>]` | Execute a ready task with a specific provider adapter |
+| `slaves logs <TASK-ID>` | Display stdout/stderr logs, artifacts, and event timeline |
+| `slaves cancel <TASK-ID>` | Cancel an active task execution gracefully |
+| `slaves auth token create --name <NAME>` | Generate Bearer token for authenticated MCP/A2A protocols |
+
+---
+
+## Architecture Overview
+
+```text
+                     USER / ORCHESTRATOR
+                              │
+                     CLI / MCP / A2A
+                              │
+                    SLAVES Runtime Server
+                              │
+              ┌───────────────┼───────────────┐
+              │               │               │
+            TASKS          MEMORY           POLICY
+          (SQLite)        (Events)       (Capabilities)
+              │               │               │
+              └───────────────┼───────────────┘
+                              │
+                    Process Supervisor
+                              │
+                 Git Worktree + Bubblewrap
+                              │
+                    Provider Adapter
+              ┌───────────────┴───────────────┐
+              │                               │
+         Codex Adapter                OpenCode Adapter
+              │                               │
+          Codex CLI                   OpenCode → Ollama
+                              │
+                 Artifacts & Evidence Store
+```
+
+For detailed architectural semantics, read [Architecture Guide](docs/architecture.md) and [Runtime Architecture](runtime/ARCHITECTURE.md).
+
+---
+
+## Security Positioning
+
+- **Local-First & Socket-Protected**: Daemon listens exclusively on permission-restricted Unix sockets (`0600`) or authenticated localhost endpoints.
+- **Fail-Closed Sandboxing**: Unprivileged bubblewrap namespaces prevent host filesystem tampering.
+- **Authenticated Interoperability**: MCP and A2A endpoints require high-entropy Bearer tokens generated via `slaves auth token create`.
+- **Secrets Redaction**: Automatic boundary redaction prevents sensitive environment keys from appearing in events or logs.
+
+Read our full [Security Policy](SECURITY.md) and [Security Model](docs/security-model.md).
+
+---
+
+## Documentation Index
+
+- [Getting Started Guide](docs/getting-started.md) — Comprehensive tutorial from zero to first task
+- [CLI Reference](docs/cli.md) — Complete usage for all `slaves` commands
+- [Provider Guide](docs/providers.md) — Capability model and provider setup
+- [OpenCode + Ollama Setup](docs/providers/opencode-ollama.md) — Local LLM task execution guide
+- [MCP Protocol Guide](docs/mcp.md) — MCP 2026-07-28 integration & Bearer auth
+- [A2A Protocol Guide](docs/a2a.md) — Agent-to-Agent 1.0 integration guide
+- [Troubleshooting Guide](docs/troubleshooting.md) — Symptom-based diagnostics & recovery
+- [Architecture Guide](docs/architecture.md) — Reader guide & contract boundary
+- [Contributing Guide](CONTRIBUTING.md) — Guidelines for code and doc contributions
+
+---
 
 ## License
 

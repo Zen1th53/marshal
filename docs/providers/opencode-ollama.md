@@ -1,28 +1,30 @@
-# OpenCode & Local Ollama Provider Operational Guide
+# OpenCode & Local Ollama Provider Guide
 
-**Runtime Milestone**: SLAVES Runtime v0.3.0
-**Target Provider**: Local Ollama (`http://localhost:11434`)
-**Target OpenCode**: Stable 1.18.x CLI (`opencode`)
+**Runtime Milestone**: `v0.4.0`
+**Client Runner**: OpenCode CLI (`opencode`)
+**Local LLM Provider**: Ollama Daemon (`http://localhost:11434`)
+**Tested Model**: `qwythos-9b`
 
 ---
 
 ## 1. Overview
 
-SLAVES Runtime v0.3.0 supports executing repository engineering tasks via OpenCode against local Ollama models with zero external cloud dependencies.
+SLAVES supports executing software engineering tasks locally using OpenCode against Ollama models with **zero external cloud API dependencies**.
+
+- **OpenCode (`opencode`)**: Acts as the local execution agent client that receives task instructions, inspects the workspace, and issues tool calls to modify files.
+- **Ollama (`ollama`)**: Serves local neural network models over HTTP (`localhost:11434`).
 
 ---
 
-## 2. Requirements & Discovery
+## 2. Prerequisites & Verification
 
-### 2.1 OpenCode Binary
-Verify stable `opencode` binary:
+### 2.1 Verify OpenCode Installation
 ```bash
 command -v opencode
 opencode --version
 ```
 
-### 2.2 Local Ollama Endpoint
-Verify local Ollama service and installed models:
+### 2.2 Verify Ollama Installation & Service
 ```bash
 command -v ollama
 ollama --version
@@ -30,40 +32,65 @@ ollama list
 curl -s http://localhost:11434/api/tags
 ```
 
----
-
-## 3. Recommended Models
-
-The following models are confirmed to support OpenCode tool-calling via Ollama:
-
-| Model | Family | Tool Calls | Notes |
-|-------|--------|-----------|-------|
-| `qwythos-9b` | Qwen3.5 9B | ✅ Confirmed | Default for SLAVES E2E tests |
-| `huihui_ai/Qwen3.6-abliterated:27b` | Qwen3.5 27B | ⚠️ Server errors | Requires more RAM |
-| `huihui_ai/qwen2.5-coder-abliterate:14b` | Qwen2 14B | ❌ No tool calls | Returns JSON as text |
-| `blackarch-ai:latest` | Qwen2 9B | ❌ No tool calls | Returns JSON as text |
-
-> **Note**: The Qwen2 (`qwen2`) family models return tool call JSON as plain text and do not execute tools. Use Qwen3.5 (`qwen35`) family models for real tool execution.
+Ensure `ollama` service is running in the background (`ollama serve` or systemd service).
 
 ---
 
-## 4. Execution & Model Selection
+## 3. Model Compatibility & Tool Calling
 
-SLAVES automatically passes non-interactive execution flags to OpenCode:
+> **Crucial Distinction**: Conversational text generation capability **does NOT** imply tool-calling capability.
+> OpenCode requires models that explicitly format and issue structured JSON tool calls to create or modify repository files.
+
+| Model | Family | Tool Calls | Status in SLAVES |
+|---|---|---|---|
+| `qwythos-9b` | Qwen3.5 9B | ✅ **Confirmed** | **E2E VERIFIED Default** |
+| `qwen2.5-coder:14b` | Qwen2.5 14B | ⚠️ Partial | Returns JSON as text in some revisions |
+| `llama3:8b` | Llama 3 8B | ❌ Conversational | Fails to emit tool call schema |
+
+To pull the verified model:
 ```bash
-opencode run --auto --format json -m ollama/<model_name> "<prompt>"
+ollama pull qwythos-9b
+```
+
+---
+
+## 4. Executing Tasks with OpenCode & Ollama
+
+### Model Selection via CLI
+Pass the `--model` flag directly to `slaves run`:
+
+```bash
+slaves run TASK-001 --adapter opencode --model qwythos-9b
 ```
 
 Or set the environment variable:
 ```bash
-export SLAVES_OPENCODE_MODEL="ollama/huihui_ai/qwen2.5-coder-abliterate:14b"
+export SLAVES_OPENCODE_MODEL="ollama/qwythos-9b"
+```
+
+### Deep Provider Probe
+Verify OpenCode flag compatibility and Ollama endpoint connectivity:
+
+```bash
+slaves adapter probe opencode
 ```
 
 ---
 
-## 5. Real Verification Gate
+## 5. Troubleshooting Local Model Execution
 
-To execute the real OpenCode/Ollama E2E verification suite:
-```bash
-SLAVES_TEST_REAL_OPENCODE=1 go test -v ./internal/integration -run TestRealOpenCode
-```
+### Symptom: Ollama connection refused
+- **Cause**: Ollama daemon is not running on `http://localhost:11434`.
+- **Fix**: Run `ollama serve` in a background terminal.
+
+### Symptom: Model missing error
+- **Cause**: The specified model is not downloaded locally in Ollama.
+- **Fix**: Download the model via `ollama pull qwythos-9b`.
+
+### Symptom: Model returns conversational text instead of editing files
+- **Cause**: Selected model lacks OpenCode tool-calling schema support.
+- **Fix**: Switch to a tool-call verified model such as `qwythos-9b`.
+
+### Symptom: Task returns `ErrConflict` or "worker produced no commit"
+- **Cause**: The model executed without error but produced no git diffs or uncommitted files in the worktree.
+- **Fix**: Inspect logs with `slaves logs TASK-ID` to see the LLM's response chain.
