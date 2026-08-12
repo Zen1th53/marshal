@@ -47,9 +47,24 @@ func (r Report) Check(name string) *Result {
 	return nil
 }
 
+func (r Report) FormattedText() string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("SLAVES Doctor Verdict: %s\n", r.Verdict))
+	sb.WriteString("========================================\n")
+	for _, res := range r.Results {
+		status := fmt.Sprintf("[%s]", res.Verdict)
+		sb.WriteString(fmt.Sprintf("%-10s %-16s %s\n", status, res.Name, res.Detail))
+		if res.Capability != "" {
+			sb.WriteString(fmt.Sprintf("           `- Capability: %s\n", res.Capability))
+		}
+	}
+	return strings.TrimSpace(sb.String())
+}
+
 type Options struct {
-	Lookup func(string) (string, error)
-	Run    func(context.Context, string, ...string) (string, error)
+	Lookup         func(string) (string, error)
+	Run            func(context.Context, string, ...string) (string, error)
+	ProbeProviders bool
 }
 
 func Check(ctx context.Context, root string, options Options) Report {
@@ -64,8 +79,10 @@ func Check(ctx context.Context, root string, options Options) Report {
 	report := Report{Verdict: Pass}
 	add := func(result Result) {
 		report.Results = append(report.Results, result)
-		if result.Verdict == Fail || result.Verdict == Degraded && report.Verdict == Pass {
-			report.Verdict = result.Verdict
+		if result.Verdict == Fail {
+			report.Verdict = Fail
+		} else if result.Verdict == Degraded && report.Verdict != Fail {
+			report.Verdict = Degraded
 		}
 	}
 
@@ -129,9 +146,10 @@ func Check(ctx context.Context, root string, options Options) Report {
 	}
 
 	probeCodex(ctx, lookup, run, add)
+	probeOpenCode(ctx, lookup, run, add)
+	probeOllama(ctx, lookup, run, add)
 	probeGemini(ctx, lookup, run, add)
 	probeClaude(ctx, lookup, run, add)
-	probeOpenCode(ctx, lookup, run, add)
 	probeBwrap(ctx, lookup, run, add)
 	if secureDirectory(layout.Artifacts) {
 		add(success("artifacts", "stat artifacts", "artifact directory is writable and mode 0700"))
@@ -167,34 +185,6 @@ func probeCodex(ctx context.Context, lookup func(string) (string, error), run fu
 	add(success("codex", "codex --version; codex exec --help", strings.TrimSpace(version)))
 }
 
-func probeGemini(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
-	binary, err := lookup("gemini")
-	if err != nil {
-		add(Result{Name: "gemini", Verdict: Degraded, Method: "PATH lookup", Capability: "Gemini execution unavailable", Detail: "Gemini CLI is missing"})
-		return
-	}
-	version, versionErr := runBounded(ctx, run, binary, "--version")
-	if versionErr != nil {
-		add(Result{Name: "gemini", Verdict: Degraded, Method: "gemini --version", Capability: "Gemini execution unavailable", Detail: "Gemini probe failed"})
-		return
-	}
-	add(success("gemini", "gemini --version", strings.TrimSpace(version)))
-}
-
-func probeClaude(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
-	binary, err := lookup("claude")
-	if err != nil {
-		add(Result{Name: "claude", Verdict: Degraded, Method: "PATH lookup", Capability: "Claude execution unavailable", Detail: "Claude CLI is missing"})
-		return
-	}
-	version, versionErr := runBounded(ctx, run, binary, "--version")
-	if versionErr != nil {
-		add(Result{Name: "claude", Verdict: Degraded, Method: "claude --version", Capability: "Claude execution unavailable", Detail: "Claude probe failed"})
-		return
-	}
-	add(success("claude", "claude --version", strings.TrimSpace(version)))
-}
-
 func probeOpenCode(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
 	binary, err := lookup("opencode")
 	if err != nil {
@@ -207,6 +197,52 @@ func probeOpenCode(ctx context.Context, lookup func(string) (string, error), run
 		return
 	}
 	add(success("opencode", "opencode --version", strings.TrimSpace(version)))
+}
+
+func probeOllama(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
+	binary, err := lookup("ollama")
+	if err != nil {
+		add(Result{Name: "ollama", Verdict: Pass, Method: "PATH lookup", Capability: "Local Ollama optional", Detail: "Ollama CLI is missing (optional)"})
+		return
+	}
+	version, versionErr := runBounded(ctx, run, binary, "--version")
+	if versionErr != nil {
+		add(Result{Name: "ollama", Verdict: Pass, Method: "ollama --version", Capability: "Local Ollama optional", Detail: "Ollama version probe failed (optional)"})
+		return
+	}
+	host := os.Getenv("OLLAMA_HOST")
+	if host == "" {
+		host = "http://localhost:11434"
+	}
+	add(success("ollama", "ollama --version", fmt.Sprintf("%s (%s)", strings.TrimSpace(version), host)))
+}
+
+func probeGemini(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
+	binary, err := lookup("gemini")
+	if err != nil {
+		add(Result{Name: "gemini", Verdict: Pass, Method: "PATH lookup", Capability: "Gemini execution optional", Detail: "Gemini CLI is missing (optional provider)"})
+		return
+	}
+	version, versionErr := runBounded(ctx, run, binary, "--version")
+	if versionErr != nil {
+		add(Result{Name: "gemini", Verdict: Pass, Method: "gemini --version", Capability: "Gemini execution optional", Detail: "Gemini probe failed (optional provider)"})
+		return
+	}
+	add(success("gemini", "gemini --version", strings.TrimSpace(version)))
+}
+
+func probeClaude(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
+	binary, err := lookup("claude")
+	if err != nil {
+		add(Result{Name: "claude", Verdict: Pass, Method: "PATH lookup", Capability: "Claude execution optional", Detail: "Claude CLI is missing (optional provider)"})
+		return
+	}
+	version, versionErr := runBounded(ctx, run, binary, "--version")
+	if versionErr != nil {
+		add(Result{Name: "claude", Verdict: Pass, Method: "claude --version", Capability: "Claude execution optional", Detail: "Claude probe failed (optional provider)"})
+		return
+	}
+	add(success("claude", "claude --version", strings.TrimSpace(version)))
 }
 
 func probeBwrap(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
@@ -269,7 +305,7 @@ func failure(name, method, detail string) Result {
 }
 
 func finalizeMissing(report Report) Report {
-	for _, name := range []string{"pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "codex", "bwrap", "artifacts", "policy"} {
+	for _, name := range []string{"pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
 		report.Results = append(report.Results, failure(name, "repository prerequisite", "not checked because repository discovery failed"))
 	}
 	report.Verdict = Fail

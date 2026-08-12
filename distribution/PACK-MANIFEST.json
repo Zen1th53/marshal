@@ -66,8 +66,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "06906a0ac0c146163d574005ddb02d8dca8add3e6ad7012df14b1409adf8b5ff",
-      "bytes": 4891
+      "sha256": "cb66ae42e6021710b69ef813e99eebab46f56ab6cfde462d2829d3fe3056fbac",
+      "bytes": 5983
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -126,7 +126,7 @@
     },
     {
       "path": "RUNTIME-VERSION.yaml",
-      "sha256": "cb75c6602bd06e95a7902735d524863b7db9a47081856673d07e8ce0faf9c364",
+      "sha256": "7747969ca1841542fba6762f76707661c277f289bb6578a2f852645bc1a6e20d",
       "bytes": 193
     },
     {
@@ -745,6 +745,11 @@
       "bytes": 13575
     },
     {
+      "path": "docs/superpowers/specs/2026-08-12-runtime-v0.4.0-provider-maturity-daily-operations-design.md",
+      "sha256": "ff71bcc9db52007ae36df6ab1d5a7859feb8dad49d92a3b656e138c559d4c25b",
+      "bytes": 9369
+    },
+    {
       "path": "go.mod",
       "sha256": "974007f0862e42f6dd100d38f1a75c0736ebf39ae99e26dd3ff269e12656eed9",
       "bytes": 556
@@ -811,8 +816,8 @@
     },
     {
       "path": "internal/api/client.go",
-      "sha256": "6616c87bdec74f4f75bd8d328a185ea0bb98edaccc38ec152b375b383f872573",
-      "bytes": 4754
+      "sha256": "f5e2c3f297cb4677c1866f89d9fd4969e0dab39fdd949a8a0ac03cb3b2e09f56",
+      "bytes": 4915
     },
     {
       "path": "internal/api/envelope.go",
@@ -821,8 +826,8 @@
     },
     {
       "path": "internal/api/server.go",
-      "sha256": "5a34b46d231eaeb361886292cf14a144dac749af6d1615633229718979e4ef5b",
-      "bytes": 9128
+      "sha256": "3de6c96581c48d7d88a91774bf2ff3ac31421c9aabb3c93dd2ae06f867e415e5",
+      "bytes": 9324
     },
     {
       "path": "internal/api/server_test.go",
@@ -866,8 +871,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "acbb3ae7a825ee48584f08b60d1b959922f27721e4cc3561b77872c1830420ec",
-      "bytes": 17560
+      "sha256": "0d2e45673a8e98346edd190a27f6d7cec8f819fc3afca3c1f5682d553a7edbc0",
+      "bytes": 20630
     },
     {
       "path": "internal/cli/cli_test.go",
@@ -876,13 +881,18 @@
     },
     {
       "path": "internal/doctor/doctor.go",
-      "sha256": "c8b4499bd93fc9da6bd2e1df5125f310b5b1c1d8eef1195c375f924480df5ac3",
-      "bytes": 10657
+      "sha256": "3659661415c948121e4e69c9bf023c0b22f1b64fabeb73a96388c230fbbf340b",
+      "bytes": 12191
     },
     {
       "path": "internal/doctor/doctor_test.go",
-      "sha256": "1ddd7a2823798e7bb7ad9040f0403df060b3bc0cd94ba89aff4708f9e2865381",
-      "bytes": 3250
+      "sha256": "f890750cc04eefc68cb2e14c1a05a3c6d11c75477445d995ee92076c59092793",
+      "bytes": 3292
+    },
+    {
+      "path": "internal/integration/claude_real_test.go",
+      "sha256": "48d0b203ce4826a5c2a26c8cd4f3da63d3cf0b43677cbbd1a1e43cdc9f9ff1f3",
+      "bytes": 1212
     },
     {
       "path": "internal/integration/codex_real_test.go",
@@ -896,8 +906,8 @@
     },
     {
       "path": "internal/integration/gemini_real_test.go",
-      "sha256": "d7cbe3ea26ee77c6668bcfb6190f8ab8ec008a904019a171aa2632fdb6b02fad",
-      "bytes": 1071
+      "sha256": "da8a9f593b874a7bce3994ca701ffb335624da6c15e8eeefc075909977389bf7",
+      "bytes": 1212
     },
     {
       "path": "internal/integration/opencode_real_test.go",
@@ -923,6 +933,11 @@
       "path": "internal/mcp/server.go",
       "sha256": "71bc4dd2acab692951c2c90fa8c9efc518fd6bf6e98ad531057cdc2317ae2b0e",
       "bytes": 10603
+    },
+    {
+      "path": "internal/model/capability.go",
+      "sha256": "e979c9b0a4a9fb2038ac905610ea5076ab3b0dd55c7ad21704358b6cc1bc1ab8",
+      "bytes": 1428
     },
     {
       "path": "internal/model/entities.go",
@@ -981,8 +996,8 @@
     },
     {
       "path": "internal/project/layout.go",
-      "sha256": "da2de48f42c30c17e8e527e042fed6b8a65ad0963d45d912b6b4f82ef8a94286",
-      "bytes": 3841
+      "sha256": "991c9e48fb27180b25be504efa9251178dfd91e4c252bc08c42fc4d5162e3850",
+      "bytes": 4101
     },
     {
       "path": "internal/project/layout_test.go",

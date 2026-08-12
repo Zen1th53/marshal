@@ -139,6 +139,9 @@ func (s *Server) routes() http.Handler {
 		input.TaskID = request.PathValue("id")
 		return s.runtime.Run(ctx, input)
 	}))
+	mux.HandleFunc("POST /v1/tasks/{id}/cancel", s.handle(func(ctx context.Context, request *http.Request) (any, error) {
+		return struct{}{}, s.runtime.CancelTask(ctx, request.PathValue("id"))
+	}))
 	mux.HandleFunc("GET /v1/events", s.handle(func(ctx context.Context, _ *http.Request) (any, error) {
 		return s.runtime.Events(ctx)
 	}))

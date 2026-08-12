@@ -19,7 +19,7 @@ func TestCheckHealthyRuntime(t *testing.T) {
 	if report.Verdict != Pass {
 		t.Fatalf("report = %#v", report)
 	}
-	for _, required := range []string{"git", "repository", "pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "codex", "bwrap", "artifacts", "policy"} {
+	for _, required := range []string{"git", "repository", "pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
 		if report.Check(required) == nil {
 			t.Errorf("missing check %s", required)
 		}
