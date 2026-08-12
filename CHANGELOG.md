@@ -1,5 +1,13 @@
 # Changelog
 
+## Runtime 0.2.1 — 2026-08-12
+
+Codex-first production runtime hardening and protocol standards compliance:
+- Hardened real Codex execution worker and added semver-based standalone release selection.
+- Modern stateless MCP 2026-07-28 request semantics, `Mcp-Method` / `Mcp-Name` header consistency validation, and `server/discover` endpoint.
+- Standard A2A 1.0 HTTP+JSON binding (`GET /.well-known/agent-card.json`, `POST /message:send`, `A2A-Version: 1.0` header negotiation, ProtoJSON enums, and direct canonical task execution).
+- Verified full-chain real Codex execution across native CLI, MCP 2026-07-28, and A2A 1.0 entry surfaces.
+
 ## Runtime 0.2.0 — 2026-08-11
 
 Implemented executable multi-agent runtime and interoperability plane for SLAVES:
