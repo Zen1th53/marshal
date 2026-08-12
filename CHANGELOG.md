@@ -1,5 +1,12 @@
 # Changelog
 
+## Runtime 0.3.1 — 2026-08-12
+
+Release integrity and bubblewrap sandbox storage patch release:
+- Hardened bubblewrap sandbox storage mounts to allow adapter runtime directories (`/home/slaves/.codex`, `/home/slaves/.opencode`) to mount as `WritableTmpfs` while maintaining read-only binds for configuration files (`auth.json`, `config.toml`). This resolves read-only filesystem locks during SQLite database operations.
+- Repaired OpenCode MCP full-chain E2E test protocol headers, tool invocation (`task_run`), and JSON-RPC response error assertions. Real execution duration (~22s for MCP, ~115s for A2A) confirmed calling OpenCode → local Ollama (`qwythos-9b`).
+- Preserved `runtime-v0.3.0` tag immutably on commit `5f559cc`.
+
 ## Runtime 0.3.0 — 2026-08-12
 
 Production-hardened local control plane with authenticated MCP & A2A protocols and real OpenCode/Ollama execution:
