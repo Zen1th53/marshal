@@ -1,9 +1,9 @@
 # SLAVES Runtime v0.3.0 Architecture Design
 
-**Title**: SLAVES Runtime v0.3.0 — Production-Hardened Local Control Plane  
-**Status**: APPROVED / IMPLEMENTATION  
-**Version**: 0.3.0  
-**Target Date**: 2026-08-12  
+**Title**: SLAVES Runtime v0.3.0 — Production-Hardened Local Control Plane
+**Status**: APPROVED / IMPLEMENTATION
+**Version**: 0.3.0
+**Target Date**: 2026-08-12
 
 ---
 
