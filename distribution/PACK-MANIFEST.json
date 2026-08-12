@@ -746,8 +746,8 @@
     },
     {
       "path": "docs/superpowers/specs/2026-08-12-runtime-v0.4.0-provider-maturity-daily-operations-design.md",
-      "sha256": "71c0a69ebe33c0eb8478f855214c8fe57ef222a407b7ea7d2d96044a8e9c4a1c",
-      "bytes": 9381
+      "sha256": "ff71bcc9db52007ae36df6ab1d5a7859feb8dad49d92a3b656e138c559d4c25b",
+      "bytes": 9369
     },
     {
       "path": "go.mod",
