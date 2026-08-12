@@ -1,6 +1,6 @@
 schema_version: 1
 runtime_spec_version: "1.0.0"
-status: local_runtime_milestone_2
+status: local_runtime_milestone_3
 implementation_claim: true
-runtime_implementation_version: "0.2.1"
+runtime_implementation_version: "0.3.0"
 recommended_first_mode: local_daemon_sqlite
