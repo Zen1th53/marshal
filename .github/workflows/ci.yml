@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Runtime & Pack Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          bwrap --version
+
+      - name: Run Go tests and static analysis
+        run: |
+          go test ./...
+          go vet ./...
+
+      - name: Run Go test suite with race detector
+        run: |
+          go test -race -count=1 ./...
+
+      - name: Validate pack and run Python test suites
+        run: |
+          python3 conformance/runner.py validate-pack
+          python3 -m unittest discover -s conformance/tests -v
+          python3 -m unittest discover -s tools/tests -v
+          python3 -m unittest discover -s tools/tests_v6 -v
+          python3 tools/release_verify.py . distribution/PACK-MANIFEST.json
+
+      - name: Validate diff whitespace
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --check origin/${{ github.base_ref }}...HEAD
+          else
+            git diff --check HEAD~1...HEAD || true
+          fi
