@@ -741,13 +741,13 @@
     },
     {
       "path": "internal/a2a/a2a_test.go",
-      "sha256": "4a6678856c36434af17f0f181f33a26ec8650a7821b91c920fd5789714d0dc25",
-      "bytes": 3731
+      "sha256": "b891ac4460e29a294276f9989abe933234b77e882bf131e6f0b04e388b647079",
+      "bytes": 4853
     },
     {
       "path": "internal/a2a/server.go",
-      "sha256": "fd4a890ffd987cbd8b2c3737e98e9d751d1c06c13c38e5902080f98ca58e9c8a",
-      "bytes": 3138
+      "sha256": "9c320633db24e44383fce776af9d12a44592bb69e7941dff762dd916abe305e0",
+      "bytes": 7008
     },
     {
       "path": "internal/adapter/adapter.go",
@@ -861,8 +861,8 @@
     },
     {
       "path": "internal/integration/codex_real_test.go",
-      "sha256": "565725af6ce1059d84fdc530e0cc634e9416a5b23facaf95f064578ba725f4d9",
-      "bytes": 7006
+      "sha256": "e273ff2f3c4db5bbb89491da981ff9c8e83bce7a63b1432f267fccc9618bd1fa",
+      "bytes": 7838
     },
     {
       "path": "internal/integration/daemon_cli_test.go",
@@ -886,13 +886,13 @@
     },
     {
       "path": "internal/mcp/mcp_test.go",
-      "sha256": "76ccb590a7a1100d5c7ef90d831f1914d017bb8df35d8ffe397c6f49e0dfd942",
-      "bytes": 4105
+      "sha256": "3164449002c168e47f4f7e36386b8f9d9457e098958c95aad3b7ccffc87dc77b",
+      "bytes": 8210
     },
     {
       "path": "internal/mcp/server.go",
-      "sha256": "1fd442d86c208c9792070083e9f43a20206df391a343aab75d669bc52d25af8f",
-      "bytes": 8432
+      "sha256": "ea0492cda4c70667071ffcb1a99e64f89f1f2fdba1735270bd7e21ec03299444",
+      "bytes": 9900
     },
     {
       "path": "internal/model/entities.go",
@@ -951,13 +951,13 @@
     },
     {
       "path": "internal/project/layout.go",
-      "sha256": "28572902b51a94bb2555480bd9f1501d7bfbd9912639fd85caada8c6c760fe8e",
-      "bytes": 2822
+      "sha256": "da2de48f42c30c17e8e527e042fed6b8a65ad0963d45d912b6b4f82ef8a94286",
+      "bytes": 3841
     },
     {
       "path": "internal/project/layout_test.go",
-      "sha256": "9155d10dd5e546c9ba0727d16e9ea17a5ec915255c30f5d51d9c7c479f373bd8",
-      "bytes": 1549
+      "sha256": "52625802e270b849d17f992d792f546a5d6f80e1062a9617b7a3200f223a6c40",
+      "bytes": 1485
     },
     {
       "path": "internal/sandbox/bwrap.go",
