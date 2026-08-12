@@ -850,6 +850,16 @@
       "bytes": 3051
     },
     {
+      "path": "internal/auth/auth.go",
+      "sha256": "bd93f2fee5c2efce1a127fbe0eff3af49af696c68efb2bc533806c59c5d3df40",
+      "bytes": 5183
+    },
+    {
+      "path": "internal/auth/auth_test.go",
+      "sha256": "92af06a14c81df3680dbbb257566bf2760e822a329078de100ca5c5e55c144f7",
+      "bytes": 2063
+    },
+    {
       "path": "internal/cli/cli.go",
       "sha256": "acbb3ae7a825ee48584f08b60d1b959922f27721e4cc3561b77872c1830420ec",
       "bytes": 17560
