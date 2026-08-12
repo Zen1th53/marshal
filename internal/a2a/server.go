@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Zen1th53/slaves/internal/app"
+	"github.com/Zen1th53/slaves/internal/auth"
 	"github.com/Zen1th53/slaves/internal/model"
 )
 
@@ -16,11 +17,16 @@ const (
 )
 
 type Server struct {
-	runtime *app.Runtime
+	runtime     *app.Runtime
+	authManager *auth.Manager
 }
 
 func NewServer(runtime *app.Runtime) *Server {
 	return &Server{runtime: runtime}
+}
+
+func NewServerWithAuth(runtime *app.Runtime, authManager *auth.Manager) *Server {
+	return &Server{runtime: runtime, authManager: authManager}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -64,6 +70,23 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
+	}
+
+	if s.authManager != nil {
+		authHeader := r.Header.Get("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			w.Header().Set("Content-Type", "application/a2a+json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "UNAUTHORIZED", "detail": "Missing bearer token"})
+			return
+		}
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if _, err := s.authManager.Authenticate(token); err != nil {
+			w.Header().Set("Content-Type", "application/a2a+json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "UNAUTHORIZED", "detail": err.Error()})
+			return
+		}
 	}
 
 	// Validate A2A-Version header if provided
@@ -193,6 +216,19 @@ func (s *Server) handleTaskDelegation(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
+	}
+
+	if s.authManager != nil {
+		authHeader := r.Header.Get("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			http.Error(w, "Unauthorized: missing bearer token", http.StatusUnauthorized)
+			return
+		}
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if _, err := s.authManager.Authenticate(token); err != nil {
+			http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+			return
+		}
 	}
 
 	var req struct {

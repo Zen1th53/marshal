@@ -16,6 +16,7 @@ import (
 	"github.com/Zen1th53/slaves/internal/a2a"
 	"github.com/Zen1th53/slaves/internal/api"
 	"github.com/Zen1th53/slaves/internal/app"
+	"github.com/Zen1th53/slaves/internal/auth"
 	"github.com/Zen1th53/slaves/internal/doctor"
 	"github.com/Zen1th53/slaves/internal/mcp"
 	"github.com/Zen1th53/slaves/internal/model"
@@ -113,6 +114,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.mcp(ctx, args[1:])
 	case "a2a":
 		err = c.a2a(ctx, args[1:])
+	case "auth":
+		err = c.auth(ctx, args[1:])
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}
@@ -560,6 +563,75 @@ func taskIDs(tasks []model.Task) string {
 		ids[i] = tasks[i].ID
 	}
 	return strings.Join(ids, "\n")
+}
+
+func (c command) auth(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("%w: missing auth subcommand (token)", model.ErrInvalid)
+	}
+	if args[0] != "token" || len(args) < 2 {
+		return fmt.Errorf("%w: usage: slaves auth token <create|list|revoke>", model.ErrInvalid)
+	}
+	layout, err := app.Bootstrap(ctx, c.root)
+	if err != nil {
+		return err
+	}
+	mgr := auth.NewManager(layout.RuntimeDir)
+
+	sub := args[1]
+	switch sub {
+	case "create":
+		flags := flag.NewFlagSet("token create", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		name := flags.String("name", "", "token name")
+		kind := flags.String("kind", "mcp_client", "principal kind (mcp_client|a2a_agent|local_user)")
+		if err := flags.Parse(args[2:]); err != nil {
+			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
+		if *name == "" {
+			return fmt.Errorf("%w: --name is required", model.ErrInvalid)
+		}
+		plaintext, record, err := mgr.CreateToken(*name, auth.PrincipalKind(*kind), []string{"all"})
+		if err != nil {
+			return err
+		}
+		return c.print(map[string]any{
+			"id":        record.ID,
+			"name":      record.Name,
+			"kind":      record.Kind,
+			"token":     plaintext,
+			"created":   record.CreatedAt,
+		}, fmt.Sprintf("Created Token ID: %s\nPlaintext Token: %s\n(Keep this token secret; it will not be shown again)", record.ID, plaintext))
+
+	case "list":
+		tokens, err := mgr.ListTokens()
+		if err != nil {
+			return err
+		}
+		var lines []string
+		for _, t := range tokens {
+			lines = append(lines, fmt.Sprintf("%s\t%s\t%s\trevoked=%t", t.ID, t.Name, t.Kind, t.Revoked))
+		}
+		return c.print(tokens, strings.Join(lines, "\n"))
+
+	case "revoke":
+		flags := flag.NewFlagSet("token revoke", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		id := flags.String("id", "", "token ID")
+		if err := flags.Parse(args[2:]); err != nil {
+			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
+		if *id == "" {
+			return fmt.Errorf("%w: --id is required", model.ErrInvalid)
+		}
+		if err := mgr.RevokeToken(*id); err != nil {
+			return err
+		}
+		return c.print(map[string]any{"id": *id, "revoked": true}, fmt.Sprintf("Revoked Token ID: %s", *id))
+
+	default:
+		return fmt.Errorf("%w: unknown token subcommand %s", model.ErrInvalid, sub)
+	}
 }
 
 func exitCode(err error) int {
