@@ -655,6 +655,11 @@
       "bytes": 220
     },
     {
+      "path": "docs/a2a.md",
+      "sha256": "95facb5e5a764b4ae2d13de70543f72eb6629dc7934f1c5bc4cf4729cddf3e2b",
+      "bytes": 2146
+    },
+    {
       "path": "docs/adapters.md",
       "sha256": "3fb24beb6a4f5c2086b82831380b6995200fcc45faff12ad223dc04cf8cc3944",
       "bytes": 1281
@@ -663,6 +668,11 @@
       "path": "docs/architecture.md",
       "sha256": "14fe78391e36a004eb778f4ba0ff924a6ea2c7562db8f781abc872d9ff81771c",
       "bytes": 2922
+    },
+    {
+      "path": "docs/cli.md",
+      "sha256": "56df94bbcb294e37b763b2dd3877a27f8595da641be429cf73cdeac47ce72445",
+      "bytes": 6275
     },
     {
       "path": "docs/concepts.md",
@@ -683,6 +693,16 @@
       "path": "docs/getting-started.md",
       "sha256": "836d345647171fb6d37c253f3ba5904e3e42d1c0342f43001fda88922593caa3",
       "bytes": 5839
+    },
+    {
+      "path": "docs/mcp.md",
+      "sha256": "12e0f446f68f43c049ed5b37fe16c390e318001fd031f878553cf098f9c61a9a",
+      "bytes": 2578
+    },
+    {
+      "path": "docs/providers.md",
+      "sha256": "ce52cfa2d770bd53414082f8dd5193cc4d3da5c2a790b3ec18b31788ff51c66b",
+      "bytes": 3486
     },
     {
       "path": "docs/providers/opencode-ollama.md",
@@ -748,6 +768,11 @@
       "path": "docs/superpowers/specs/2026-08-12-runtime-v0.4.0-provider-maturity-daily-operations-design.md",
       "sha256": "ff71bcc9db52007ae36df6ab1d5a7859feb8dad49d92a3b656e138c559d4c25b",
       "bytes": 9369
+    },
+    {
+      "path": "docs/troubleshooting.md",
+      "sha256": "4cc8de024b55794df6e2f104e022511229e73303b097f41dfaf864a1c7708967",
+      "bytes": 4791
     },
     {
       "path": "go.mod",
