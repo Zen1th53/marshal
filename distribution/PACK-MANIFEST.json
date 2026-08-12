@@ -675,6 +675,11 @@
       "bytes": 1369
     },
     {
+      "path": "docs/design/runtime-v0.3.0-production-hardening.md",
+      "sha256": "7e341252c60b03af94d5754ca41c4d5fefeb78dc00971a17407924d22a614de1",
+      "bytes": 3605
+    },
+    {
       "path": "docs/getting-started.md",
       "sha256": "81ee33c398c694ac6ed96a9c606ef087b1d5258cffbc7c6952af09560cbbf61e",
       "bytes": 2375
