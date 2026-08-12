@@ -103,10 +103,10 @@ func Check(ctx context.Context, root string, options Options) Report {
 		defer database.Close()
 		version, versionErr := database.SchemaVersion(ctx)
 		integrityErr := database.Integrity(ctx)
-		if versionErr != nil || integrityErr != nil || version != 1 {
+		if versionErr != nil || integrityErr != nil || version < 1 || version > 2 {
 			add(failure("sqlite", "PRAGMA integrity_check", "canonical state is invalid"))
 		} else {
-			add(success("sqlite", "PRAGMA integrity_check", "schema version 1 is healthy"))
+			add(success("sqlite", "PRAGMA integrity_check", fmt.Sprintf("schema version %d is healthy", version)))
 		}
 	}
 

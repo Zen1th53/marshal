@@ -26,7 +26,7 @@ func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.SchemaVersion != 1 || status.TaskCount != 0 || status.Project.Repository != repo.Path() {
+	if status.SchemaVersion != 2 || status.TaskCount != 0 || status.Project.Repository != repo.Path() {
 		t.Fatalf("status = %#v", status)
 	}
 	info, err := os.Stat(filepath.Join(repo.Path(), ".slaves"))
@@ -85,6 +85,49 @@ func TestRuntimeAgentImportClaimReleaseFlow(t *testing.T) {
 	}
 	if task.Status != model.TaskReady || task.Revision != 2 {
 		t.Fatalf("released task = %#v", task)
+	}
+}
+
+func TestRuntimeInstanceIDAndCancellation(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { runtime.Close() })
+	if runtime.InstanceID() == "" {
+		t.Fatal("expected non-empty instance ID")
+	}
+	agent, err := runtime.RegisterAgent(context.Background(), RegisterAgentRequest{
+		Name: "cancel-test-agent", Role: model.RoleDeveloper,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = runtime.ImportTasks(context.Background(), []model.Task{{
+		ID: "TASK-CANCEL-001", Title: "cancelable task", Status: model.TaskReady, Risk: model.R1,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = runtime.Claim(context.Background(), ClaimRequest{
+		TaskID: "TASK-CANCEL-001", AgentID: agent.ID, ExpectedRevision: 0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.CancelTask(context.Background(), "TASK-CANCEL-001"); err != nil {
+		t.Fatalf("CancelTask: %v", err)
+	}
+	task, err := runtime.Task(context.Background(), "TASK-CANCEL-001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Status != model.TaskBlocked && task.Status != model.TaskCancelled {
+		t.Fatalf("canceled task status = %s, want %s or %s", task.Status, model.TaskBlocked, model.TaskCancelled)
 	}
 }
 
