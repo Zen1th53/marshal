@@ -46,8 +46,10 @@ type Bind struct {
 type SandboxRequest struct {
 	Worktree       string
 	WritableDirs   []string
+	WritableTmpfs  []string // sandbox-internal paths mounted as ephemeral tmpfs
 	ReadOnlyBinds  []Bind
 	NetworkAllowed bool
+	ExtraEnv       []string // KEY=VALUE pairs forwarded into sandbox
 }
 
 type CommandSpec struct {
