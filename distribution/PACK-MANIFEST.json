@@ -10,6 +10,16 @@
   ],
   "files": [
     {
+      "path": ".github/CODEOWNERS",
+      "sha256": "cbb5bc34690750d229dbe507650930f3b4b05d26ebb14fc501efdfe9bc3f62dc",
+      "bytes": 496
+    },
+    {
+      "path": ".github/CONTRIBUTING-IP.md",
+      "sha256": "0e1549aa45577cd364a35f6a68d52fd76ec50b8e2f79a7333ba6f8131977c615",
+      "bytes": 1672
+    },
+    {
       "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
       "sha256": "0513c18e66563f991a30cbe348fdcd7076ec62d4552e8fbe823829b11bce863c",
       "bytes": 1190
@@ -28,6 +38,11 @@
       "path": ".github/workflows/ci.yml",
       "sha256": "f512a6ea48f4cdeecc7e0ed7f627345955269b9a7a18a0e98dc230998d213e1f",
       "bytes": 1983
+    },
+    {
+      "path": ".github/workflows/contributor-rights-check.yml",
+      "sha256": "84439d1d5628ec0ee0f479f4166e8e0112c2faad0ae30587f9cd9d6e9a9c38f6",
+      "bytes": 2770
     },
     {
       "path": ".gitignore",
@@ -75,6 +90,11 @@
       "bytes": 8633
     },
     {
+      "path": "COMMERCIAL-LICENSING.md",
+      "sha256": "ed11946209be1aedaeccf03d4eac7bc2140428da91ec9cf410d75c4db4fb5c94",
+      "bytes": 2701
+    },
+    {
       "path": "CONTRIBUTING.md",
       "sha256": "fe5ddd11bece214dd3798c11c83cf46eb61b8316d3c5f7bc5b41c8e91cfbcd56",
       "bytes": 4816
@@ -98,6 +118,16 @@
       "path": "LICENSE",
       "sha256": "7f8f48e4266aa8fd3033dfaa4bb7f6e83a60c6e099f82d4959b81de90e67cd8f",
       "bytes": 34503
+    },
+    {
+      "path": "LICENSES/Apache-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358
+    },
+    {
+      "path": "LICENSING.md",
+      "sha256": "7a2a2a33fdd5192b9b8efa347b728524ec22b3dca69bd41b1ded9892bca2b44a",
+      "bytes": 3362
     },
     {
       "path": "MEMORY-START.md",
@@ -138,6 +168,11 @@
       "path": "TEAM.md",
       "sha256": "a1a273842a0051cd68dd2cf5c04cb8864c31a67a0e24c8c063f5cc74e60f9eed",
       "bytes": 16329
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "1a624e92870f782a2bc86d3aa1aa7595be7ec2eed271390b9dc1943c443892e8",
+      "bytes": 2337
     },
     {
       "path": "TORVALDS.md",
@@ -695,6 +730,51 @@
       "bytes": 5839
     },
     {
+      "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
+      "sha256": "ae96e6d567a2121c7a11054868626cfcb990ad639c4b403fbf1d6bf7aa012d8a",
+      "bytes": 2166
+    },
+    {
+      "path": "docs/legal/CHAIN-OF-TITLE.md",
+      "sha256": "459b43b0c891bbc46eff30cea98b91223143d4bd3788469639600d8e4be0a32c",
+      "bytes": 6724
+    },
+    {
+      "path": "docs/legal/COMMERCIAL-AGREEMENT-CHECKLIST.md",
+      "sha256": "2a7c48e937ddaf3a2430a2ee338600f7a4c19f4f88e7f844b72ed8a2899c5e00",
+      "bytes": 3064
+    },
+    {
+      "path": "docs/legal/CONTRIBUTOR-MODEL-DECISION.md",
+      "sha256": "6a64c41d07c3a66813009c7013c0551b3969094b3bc6b626a6e45890b6f74a0e",
+      "bytes": 3439
+    },
+    {
+      "path": "docs/legal/CONTRIBUTOR-ONBOARDING.md",
+      "sha256": "a0546d572d5a8da7a807cae7155d646223540e291c2be13373965282c3d8055a",
+      "bytes": 2353
+    },
+    {
+      "path": "docs/legal/IP-PROVENANCE-AUDIT.md",
+      "sha256": "9178e200cc3cd27e52f21dc49f8ed8e87565d4ca6356025caf1f8954620bd10d",
+      "bytes": 6871
+    },
+    {
+      "path": "docs/legal/LICENSE-HISTORY.md",
+      "sha256": "45e191dc73e667a081d7ccf46bca3386d39beadd2303b711debbb2d877056940",
+      "bytes": 2947
+    },
+    {
+      "path": "docs/legal/OWNER-AND-SUCCESSOR-MODEL.md",
+      "sha256": "cce117304c2410e5325438a3161c0291b407721af0bf54d55f558b064346a7fa",
+      "bytes": 2290
+    },
+    {
+      "path": "docs/legal/THIRD-PARTY-POLICY.md",
+      "sha256": "ddf932bb36950b5846a374947979b8d0036912aba800dac1eccfb9274dd8d87c",
+      "bytes": 2149
+    },
+    {
       "path": "docs/mcp.md",
       "sha256": "21ae00f196237bf16f8bc66ea30cb1319900a0c387ea2f58a6d286adf7b4c420",
       "bytes": 2574
@@ -1163,6 +1243,21 @@
       "path": "interop/README.md",
       "sha256": "0e47dc346957c3207781749037df36ed3032fba401b59ca59a11b60cbe0542f0",
       "bytes": 416
+    },
+    {
+      "path": "legal/CORPORATE-CONTRIBUTOR-ASSIGNMENT.md",
+      "sha256": "d4a370a93b886d8d92c0c5b11e3cb5240f0ff935c4fa5f6904db059ab79b548e",
+      "bytes": 5032
+    },
+    {
+      "path": "legal/INDIVIDUAL-CONTRIBUTOR-ASSIGNMENT.md",
+      "sha256": "708ed36e3c33824318486a1aaafd7bfead414e5a491386babbf5a368754c4988",
+      "bytes": 5213
+    },
+    {
+      "path": "legal/assignment-registry.yml",
+      "sha256": "e7b3b2703a79d60c14570c524df07bd29d219534a52078e5d5d7d288329fda69",
+      "bytes": 642
     },
     {
       "path": "memory/APPROVALS.md",

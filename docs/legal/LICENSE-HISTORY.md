@@ -61,7 +61,7 @@ the following commit:
 
 ```
 Branch: chore/acquisition-ready-licensing
-Commit: [TO BE RECORDED AFTER MERGE]
+Commit: 525df58 (licensing(core): adopt AGPL-3.0-only community license)
 ```
 
 This commit:
