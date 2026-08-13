@@ -1,0 +1,81 @@
+name: Contributor Rights Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  check-assignment:
+    name: Verify Contributor IP Assignment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Verify Contributor Assignment Status
+        run: |
+          python3 -c '
+          import sys, os
+
+          actor = os.environ.get("PR_AUTHOR", "").strip().lower()
+          print(f"Checking contributor assignment status for PR author: @{actor}")
+
+          registry_path = "legal/assignment-registry.yml"
+          if not os.path.exists(registry_path):
+              print("::error::legal/assignment-registry.yml is missing!")
+              sys.exit(1)
+
+          with open(registry_path, "r", encoding="utf-8") as f:
+              lines = f.readlines()
+
+          approved = set()
+          current_gh = None
+          current_status = None
+
+          for line in lines:
+              line = line.strip()
+              if line.startswith("- github:"):
+                  if current_gh and current_status in ("active", "signed", "founder"):
+                      approved.add(current_gh.lower())
+                  current_gh = line.split(":", 1)[1].strip()
+                  current_status = None
+              elif line.startswith("github:"):
+                  if current_gh and current_status in ("active", "signed", "founder"):
+                      approved.add(current_gh.lower())
+                  current_gh = line.split(":", 1)[1].strip()
+                  current_status = None
+              elif line.startswith("status:"):
+                  current_status = line.split(":", 1)[1].strip()
+
+          if current_gh and current_status in ("active", "signed", "founder"):
+              approved.add(current_gh.lower())
+
+          if actor in approved:
+              print(f"SUCCESS: @{actor} is verified in legal/assignment-registry.yml.")
+              sys.exit(0)
+          else:
+              print("\n========================================================")
+              print("  Contributor Rights Check: BLOCKED")
+              print("========================================================")
+              print(f"Author: @{actor}")
+              print("Copyright assignment: NOT VERIFIED")
+              print("\nMaterial external contributions are not accepted for merge")
+              print("until the required contributor assignment process is completed.")
+              print("\nAction Required:")
+              print("  1. Review legal/INDIVIDUAL-CONTRIBUTOR-ASSIGNMENT.md (ICAA)")
+              print("     or legal/CORPORATE-CONTRIBUTOR-ASSIGNMENT.md (CCAA).")
+              print("  2. Submit your executed agreement to legal contact.")
+              print("  3. See docs/legal/CONTRIBUTOR-ONBOARDING.md for full details.")
+              print("========================================================\n")
+              print(f"::error::PR Author @{actor} is not present in legal/assignment-registry.yml.")
+              sys.exit(1)
+          '
+        env:
+          PR_AUTHOR: ${{ github.actor }}

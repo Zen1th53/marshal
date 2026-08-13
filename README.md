@@ -4,7 +4,7 @@
 
 A vendor-neutral engineering control plane for disciplined multi-agent AI software development.
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSING.md)
 [![CI](https://github.com/Zen1th53/slaves/actions/workflows/ci.yml/badge.svg)](https://github.com/Zen1th53/slaves/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Zen1th53/slaves?sort=semver)](https://github.com/Zen1th53/slaves/releases)
 
@@ -227,4 +227,9 @@ Read our full [Security Policy](SECURITY.md) and [Security Model](docs/security-
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+SLAVES uses a dual-licensing model:
+
+* **Community Edition**: Licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`). See [LICENSE](LICENSE).
+* **Commercial License**: Alternative commercial licensing is available for organizations requiring non-AGPL terms. See [LICENSING.md](LICENSING.md) and [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
+* **Contributions**: Material external contributions require completion of the SLAVES contributor assignment process before merge. See [CONTRIBUTING.md](CONTRIBUTING.md).
+* **Historical Releases**: Historical releases up to `runtime-v0.4.0` remain available under their original `Apache-2.0` grants. See [docs/legal/LICENSE-HISTORY.md](docs/legal/LICENSE-HISTORY.md).

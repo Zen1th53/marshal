@@ -11,6 +11,7 @@ and remain small enough to review and revert independently.
 3. For non-trivial work, state the requirement, affected contracts, invariants,
    and verification plan before editing.
 4. Report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
+5. **Review IP Contributor Requirements**: Material external contributions require an executed Contributor Assignment Agreement before merge (see [Contributor Assignment Workflow](#contributor-assignment-workflow) below).
 
 ## Workflow
 
@@ -58,32 +59,50 @@ Before committing, inspect `git diff --check`, the complete diff, and the exact
 staged file list. Never claim a check passed unless you ran it on the reported
 commit.
 
-## Pull requests
+## Contributor Assignment Workflow
 
-A pull request should explain:
+> [!IMPORTANT]
+> **Material external contributions are not accepted for merge until the required contributor assignment process is completed.**
 
-- the problem and minimum chosen solution;
-- affected behavior and compatibility;
-- tests and commands actually run;
-- security, migration, or operational impact;
-- verification not performed and known limitations.
+To preserve a clean chain-of-title and support the project's dual-licensing architecture (`AGPL-3.0-only` community + commercial), SLAVES requires external contributors to execute a Copyright Assignment Agreement prior to merging material code changes.
 
-Reviewers may require independent QA or AppSec evidence when role authority or
-risk demands it. Developers cannot self-approve QA/AppSec findings.
+```text
+                     Pull Request Opened
+                             │
+            Contributor Identity Resolution
+                             │
+     ┌───────────────────────┴───────────────────────┐
+     │                                               │
+Individual Contributor                    Corporate Contributor
+     │                                               │
+Individual Agreement (ICAA)             Corporate Agreement (CCAA)
+     │                                               │
+     └───────────────────────┬───────────────────────┘
+                             │
+               Assignment Registry Check (CI Gate)
+                             │
+                  IP Provenance & Technical Review
+                             │
+                           Merge
+```
 
-## Security-sensitive changes
+### Contributor Agreement Types
 
-Changes involving authorization, secrets, process execution, filesystem or
-network access, sandboxing, release trust, or external dependencies require
-explicit threat-boundary analysis and negative tests. Do not weaken a control
-silently to make a test pass.
+* **Individual Contributors**: Execute the [Individual Contributor Assignment Agreement (ICAA)](legal/INDIVIDUAL-CONTRIBUTOR-ASSIGNMENT.md).
+* **Corporate / Employer-Owned Contributions**: Execute the [Corporate Contributor Assignment Agreement (CCAA)](legal/CORPORATE-CONTRIBUTOR-ASSIGNMENT.md).
+
+For step-by-step onboarding, see [docs/legal/CONTRIBUTOR-ONBOARDING.md](docs/legal/CONTRIBUTOR-ONBOARDING.md).
+
+> [!WARNING]
+> Simply opening a Pull Request, checking a PR template checkbox, including a `Signed-off-by` line, or declaring DCO compliance does **NOT** automatically transfer copyright or replace an executed assignment agreement.
+
+## Third-Party & AI-Generated Material
+
+* **Third-Party Code**: Any third-party dependencies, external libraries, or copied code must be explicitly disclosed in the PR description. See [docs/legal/THIRD-PARTY-POLICY.md](docs/legal/THIRD-PARTY-POLICY.md).
+* **AI-Generated Code**: Any material code produced using external AI systems must comply with [docs/legal/AI-CONTRIBUTION-POLICY.md](docs/legal/AI-CONTRIBUTION-POLICY.md) and be disclosed.
 
 ## Licensing
 
-SLAVES is licensed under Apache-2.0. Unless you explicitly state otherwise,
-contributions intentionally submitted for inclusion are provided under the
-repository license, consistent with Section 5 of the Apache License 2.0. This
-project does not require a CLA or DCO at this time.
+SLAVES Community Edition is licensed under `AGPL-3.0-only`. Alternative Commercial Licensing is available for organizations requiring non-AGPL terms. See [LICENSING.md](LICENSING.md) and [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
 
-By participating, you agree to follow the
-[Code of Conduct](CODE_OF_CONDUCT.md).
+By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).

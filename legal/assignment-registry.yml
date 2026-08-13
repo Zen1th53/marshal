@@ -1,0 +1,22 @@
+# SLAVES Contributor Assignment Registry
+# Public record of GitHub accounts with verified assignment agreements.
+# DO NOT store private address, signature, or identity documents in this file.
+
+version: 1
+
+contributors:
+  - github: Zen1th53
+    type: founder
+    agreement: FOUNDER_OWNER
+    status: active
+    signed_at: "2026-08-11"
+    record_ref: LEGAL-FOUNDER-001
+
+# External contributors must be registered here prior to PR merge.
+# Example schema for approved external contributors:
+#  - github: example-user
+#    type: individual
+#    agreement: ICAA
+#    status: active
+#    signed_at: 2026-08-12
+#    record_ref: LEGAL-ICAA-2026-001
