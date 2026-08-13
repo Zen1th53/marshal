@@ -22,9 +22,9 @@ jobs:
       - name: Verify Contributor Assignment Status
         run: |
           python3 -c '
-          import sys, yaml, os
+          import sys, os
 
-          actor = os.environ.get("PR_AUTHOR", "").strip()
+          actor = os.environ.get("PR_AUTHOR", "").strip().lower()
           print(f"Checking contributor assignment status for PR author: @{actor}")
 
           registry_path = "legal/assignment-registry.yml"
@@ -33,20 +33,32 @@ jobs:
               sys.exit(1)
 
           with open(registry_path, "r", encoding="utf-8") as f:
-              data = yaml.safe_load(f) or {}
+              lines = f.readlines()
 
-          contributors = data.get("contributors", [])
-          approved = {}
-          for c in contributors:
-              gh = c.get("github", "").strip().lower()
-              status = c.get("status", "").strip().lower()
-              if gh and status in ("active", "signed", "founder"):
-                  approved[gh] = c
+          approved = set()
+          current_gh = None
+          current_status = None
 
-          actor_lower = actor.lower()
-          if actor_lower in approved:
-              info = approved[actor_lower]
-              print(f"SUCCESS: @{actor} is verified in assignment registry (type: {info.get(\"type\")}, status: {info.get(\"status\")}).")
+          for line in lines:
+              line = line.strip()
+              if line.startswith("- github:"):
+                  if current_gh and current_status in ("active", "signed", "founder"):
+                      approved.add(current_gh.lower())
+                  current_gh = line.split(":", 1)[1].strip()
+                  current_status = None
+              elif line.startswith("github:"):
+                  if current_gh and current_status in ("active", "signed", "founder"):
+                      approved.add(current_gh.lower())
+                  current_gh = line.split(":", 1)[1].strip()
+                  current_status = None
+              elif line.startswith("status:"):
+                  current_status = line.split(":", 1)[1].strip()
+
+          if current_gh and current_status in ("active", "signed", "founder"):
+              approved.add(current_gh.lower())
+
+          if actor in approved:
+              print(f"SUCCESS: @{actor} is verified in legal/assignment-registry.yml.")
               sys.exit(0)
           else:
               print("\n========================================================")
@@ -62,7 +74,7 @@ jobs:
               print("  2. Submit your executed agreement to legal contact.")
               print("  3. See docs/legal/CONTRIBUTOR-ONBOARDING.md for full details.")
               print("========================================================\n")
-              print("::error::PR Author @{actor} is not present in legal/assignment-registry.yml.")
+              print(f"::error::PR Author @{actor} is not present in legal/assignment-registry.yml.")
               sys.exit(1)
           '
         env:

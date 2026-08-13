@@ -41,8 +41,8 @@
     },
     {
       "path": ".github/workflows/contributor-rights-check.yml",
-      "sha256": "84439d1d5628ec0ee0f479f4166e8e0112c2faad0ae30587f9cd9d6e9a9c38f6",
-      "bytes": 2770
+      "sha256": "83f60b766cf3ce49d413d3bffe8c09bcfedeb17280ab48b0150530f5b1a055df",
+      "bytes": 3269
     },
     {
       "path": ".gitignore",
