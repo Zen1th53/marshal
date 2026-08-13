@@ -76,8 +76,8 @@
     },
     {
       "path": "CONTRIBUTING.md",
-      "sha256": "588a32502fffe4ef601bb4f82dcc44d25144051d0f721dc1e84d69aec1f0a063",
-      "bytes": 2772
+      "sha256": "fe5ddd11bece214dd3798c11c83cf46eb61b8316d3c5f7bc5b41c8e91cfbcd56",
+      "bytes": 4816
     },
     {
       "path": "DEVELOPER.md",
@@ -96,8 +96,8 @@
     },
     {
       "path": "LICENSE",
-      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
-      "bytes": 11358
+      "sha256": "7f8f48e4266aa8fd3033dfaa4bb7f6e83a60c6e099f82d4959b81de90e67cd8f",
+      "bytes": 34503
     },
     {
       "path": "MEMORY-START.md",
@@ -121,8 +121,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "a98f67f7487db7eef3bc6aa654b5fc34073c270102959ac827f8715652ba67fc",
-      "bytes": 8676
+      "sha256": "1bc593f1597ceb67bb858c0e94d6506bbe892ffa4524bdbcaaa3298ab3902a48",
+      "bytes": 9354
     },
     {
       "path": "RUNTIME-VERSION.yaml",
