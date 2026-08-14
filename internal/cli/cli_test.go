@@ -61,7 +61,7 @@ func TestTaskImportDryRunDoesNotNeedDaemon(t *testing.T) {
 }
 
 func TestRequiredCommandsHaveUsage(t *testing.T) {
-	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "daemon"} {
+	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "legal", "daemon"} {
 		var stdout, stderr bytes.Buffer
 		code := Execute(context.Background(), ".", []string{command, "--help"}, strings.NewReader(""), &stdout, &stderr)
 		if code != 0 || !strings.Contains(stdout.String()+stderr.String(), "Usage:") {
@@ -120,4 +120,39 @@ func cliRepo(t *testing.T) *testgit.Repository {
 		}
 	}
 	return repo
+}
+
+func TestLegalCLI(t *testing.T) {
+	repo := cliRepo(t)
+	var stdout, stderr bytes.Buffer
+
+	code := Execute(context.Background(), repo.Path(), []string{"legal", "audit"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "SLAVES Acquisition Due-Diligence Audit") {
+		t.Fatalf("legal audit code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(context.Background(), repo.Path(), []string{"legal", "audit", "--json"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("legal audit --json code=%d stderr=%q", code, stderr.String())
+	}
+	var auditReport map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &auditReport); err != nil {
+		t.Fatalf("unmarshal legal audit report: %v", err)
+	}
+	if auditReport["schema"] != "slaves.acquisition-evidence.v1" {
+		t.Fatalf("unexpected audit report schema: %v", auditReport["schema"])
+	}
+
+	exportTar := filepath.Join(t.TempDir(), "test-export.tar.gz")
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(context.Background(), repo.Path(), []string{"legal", "export", "--output", exportTar}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "Evidence pack:") {
+		t.Fatalf("legal export code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(exportTar); err != nil {
+		t.Fatalf("expected export tar file to exist: %v", err)
+	}
 }

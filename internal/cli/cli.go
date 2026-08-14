@@ -20,6 +20,7 @@ import (
 	"github.com/Zen1th53/slaves/internal/app"
 	"github.com/Zen1th53/slaves/internal/auth"
 	"github.com/Zen1th53/slaves/internal/doctor"
+	"github.com/Zen1th53/slaves/internal/legal"
 	"github.com/Zen1th53/slaves/internal/mcp"
 	"github.com/Zen1th53/slaves/internal/model"
 	"github.com/Zen1th53/slaves/internal/project"
@@ -49,6 +50,7 @@ Commands:
   artifacts
   verify [-- command args...]
   reconcile --file-state state.json
+  legal audit [--json] | legal export --output PATH
   daemon
 `
 
@@ -125,6 +127,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.a2a(ctx, args[1:])
 	case "auth":
 		err = c.auth(ctx, args[1:])
+	case "legal":
+		err = c.legal(ctx, args[1:])
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}
@@ -736,6 +740,79 @@ func (c command) auth(ctx context.Context, args []string) error {
 
 	default:
 		return fmt.Errorf("%w: unknown token subcommand %s", model.ErrInvalid, sub)
+	}
+}
+
+func (c command) legal(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("%w: legal subcommand required (audit, export)", model.ErrInvalid)
+	}
+
+	asJSON := c.json
+	sub := args[0]
+	subArgs := args[1:]
+
+	if sub == "--json" && len(subArgs) > 0 {
+		asJSON = true
+		sub = subArgs[0]
+		subArgs = subArgs[1:]
+	}
+
+	switch sub {
+	case "audit":
+		for _, a := range subArgs {
+			if a == "--json" {
+				asJSON = true
+			}
+		}
+		report, err := legal.RunAudit(ctx, c.root)
+		if err != nil {
+			return err
+		}
+		if asJSON {
+			data, err := report.ToJSON()
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(c.stdout, string(data))
+			return nil
+		}
+		fmt.Fprint(c.stdout, report.ToTerminal())
+		return nil
+
+	case "export":
+		flags := flag.NewFlagSet("legal export", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		output := flags.String("output", "", "output tar.gz file path")
+		if err := flags.Parse(subArgs); err != nil {
+			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
+		if *output == "" {
+			return fmt.Errorf("%w: --output is required", model.ErrInvalid)
+		}
+
+		res, err := legal.ExportPack(ctx, c.root, *output)
+		if err != nil {
+			return err
+		}
+
+		if asJSON {
+			data, err := json.MarshalIndent(res, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(c.stdout, string(data))
+			return nil
+		}
+
+		fmt.Fprintf(c.stdout, "Evidence pack: %s\n", res.OutputPath)
+		fmt.Fprintf(c.stdout, "Source HEAD:   %s\n", res.SourceHEAD)
+		fmt.Fprintf(c.stdout, "SHA-256:       %s\n", res.ArchiveSHA256)
+		fmt.Fprintf(c.stdout, "Status:        %s\n", res.OverallStatus)
+		return nil
+
+	default:
+		return fmt.Errorf("%w: unknown legal subcommand %s", model.ErrInvalid, sub)
 	}
 }
 

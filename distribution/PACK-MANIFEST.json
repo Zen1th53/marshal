@@ -755,6 +755,11 @@
       "bytes": 2353
     },
     {
+      "path": "docs/legal/DUE-DILIGENCE-EVIDENCE.md",
+      "sha256": "7eda588f7a092a8a316226b8548ac804c30d7cdceab2af33d5e41337c9cf716e",
+      "bytes": 4071
+    },
+    {
       "path": "docs/legal/IP-PROVENANCE-AUDIT.md",
       "sha256": "9178e200cc3cd27e52f21dc49f8ed8e87565d4ca6356025caf1f8954620bd10d",
       "bytes": 6871
@@ -976,13 +981,13 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "0d2e45673a8e98346edd190a27f6d7cec8f819fc3afca3c1f5682d553a7edbc0",
-      "bytes": 20630
+      "sha256": "c4010aa46c9c75407fa8dded3e843db411e7f53064aa437fbed8567355aada27",
+      "bytes": 22494
     },
     {
       "path": "internal/cli/cli_test.go",
-      "sha256": "d590ab0da53c8afcefcbfc9d0df53651db8bc9e1d5cd86a7e9953336622fe47d",
-      "bytes": 4507
+      "sha256": "0ea5db7d55e044ede68f8780f6a0f6f584387453dbdf977a59bbe5968c127394",
+      "bytes": 5990
     },
     {
       "path": "internal/doctor/doctor.go",
@@ -1028,6 +1033,61 @@
       "path": "internal/integration/security_test.go",
       "sha256": "34fd0a5ac56a254ed5ed0b14193615eaa3ff5f9a484d4824483a67870588a634",
       "bytes": 3808
+    },
+    {
+      "path": "internal/legal/audit.go",
+      "sha256": "da68ab22f1b76ffddcdabb458f22f26954b9db9b1efeae32c12c99dffba283c7",
+      "bytes": 2967
+    },
+    {
+      "path": "internal/legal/audit_test.go",
+      "sha256": "659d600761dcd3a63eaaa7fe98563dcb545edd2037390ccca71ec43c2de28ec5",
+      "bytes": 2499
+    },
+    {
+      "path": "internal/legal/dependencies.go",
+      "sha256": "0a4a0fa85fcc577ab1510431a9b49d970071250fe9ddf07827f8dc3187cfb347",
+      "bytes": 3241
+    },
+    {
+      "path": "internal/legal/dependencies_test.go",
+      "sha256": "2b256b0fe6da72dd0e62a533d6edf571a8a0dd8d33997e014daa32504129a1e8",
+      "bytes": 1129
+    },
+    {
+      "path": "internal/legal/export.go",
+      "sha256": "e5e00fa92e52e6377c33cde393214a1f955a856d9276f702b0971629208d4471",
+      "bytes": 11403
+    },
+    {
+      "path": "internal/legal/export_test.go",
+      "sha256": "52b3aa05b7b4ad58d0b9b63d3f4decc0d803213f77977f6db896444d825eba54",
+      "bytes": 2159
+    },
+    {
+      "path": "internal/legal/git_evidence.go",
+      "sha256": "948fb33e43acc0f6a62d299ff5b379bb083b925baa1b630c99a47ccd02e7db7f",
+      "bytes": 6412
+    },
+    {
+      "path": "internal/legal/git_evidence_test.go",
+      "sha256": "a722d80c3df1b82de859d52496584a1f247ba9f8a03fd0528cdb4a149fb43230",
+      "bytes": 2347
+    },
+    {
+      "path": "internal/legal/report.go",
+      "sha256": "a1a65eca444d6ebdd51d08064913932853ff715339e98b454b1390c715184022",
+      "bytes": 7673
+    },
+    {
+      "path": "internal/legal/repository_evidence.go",
+      "sha256": "cd9b629aef420e3e1f3a38a0274820f75e7237eaf7bf62ab309a37c4aba55be8",
+      "bytes": 4610
+    },
+    {
+      "path": "internal/legal/repository_evidence_test.go",
+      "sha256": "32160f84245fdd848db743a7045b1b9bb6cde1d0c4c873aa6dbacbdd4bf08674",
+      "bytes": 3354
     },
     {
       "path": "internal/mcp/mcp_test.go",
