@@ -171,3 +171,48 @@ func TestRuntimeEvidenceRequiresAuthorizer(t *testing.T) {
 		t.Fatalf("state = %s", node.State)
 	}
 }
+
+func TestRuntimeEvidenceRestartPreservesStateButNotAuthority(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	rt, err := Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, err := rt.RegisterAgent(context.Background(), RegisterAgentRequest{Name: "runtime-restart", Role: model.RoleDeveloper})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.ImportTasks(context.Background(), []model.Task{{ID: "TASK-A06-RESTART", Title: "evidence", Status: model.TaskReady, Risk: model.R1}}); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := rt.Claim(context.Background(), ClaimRequest{TaskID: "TASK-A06-RESTART", AgentID: agent.ID, ExpectedRevision: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata := map[string]string{"source": "restart"}
+	digest, err := evidence.CanonicalDigest(evidence.NodeTypeOutput, metadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := evidence.Node{ID: "EVIDENCE-A06-RESTART", Type: evidence.NodeTypeOutput, Digest: digest, CreatedAt: time.Now().UTC(), Metadata: metadata}
+	if _, err := rt.StoreEvidence(context.Background(), claim.Session.ID, node); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.Close(); err != nil {
+		t.Fatal(err)
+	}
+	rt, err = Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rt.Close()
+	if got, err := rt.Evidence(context.Background(), node.ID); err != nil || got.Digest != node.Digest {
+		t.Fatalf("reopened evidence = %#v, err=%v", got, err)
+	}
+	if err := rt.TransitionEvidence(context.Background(), EvidenceTransitionRequest{SessionID: claim.Session.ID, NodeID: node.ID, TargetState: evidence.StateLinked}); !errors.Is(err, evidence.ErrAuthorizationUnavailable) {
+		t.Fatalf("reopened authority = %v", err)
+	}
+}
