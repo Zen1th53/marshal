@@ -37,8 +37,7 @@ func (s *Store) PutNode(ctx context.Context, node evidence.Node) (evidence.Node,
 	}
 	defer tx.Rollback()
 	var typ, digestStored, metadataStored, createdStored string
-	err = tx.QueryRowContext(ctx, `SELECT node_type, digest, metadata_json, created_at FROM evidence_nodes WHERE node_id = ?`, clean.ID).
-		Scan(&typ, &digestStored, &metadataStored, &createdStored)
+	err = tx.QueryRowContext(ctx, `SELECT node_type, digest, metadata_json, created_at FROM evidence_nodes WHERE node_id = ?`, clean.ID).Scan(&typ, &digestStored, &metadataStored, &createdStored)
 	if err == nil {
 		if typ == string(clean.Type) && digestStored == clean.Digest && metadataStored == string(metadata) && createdStored == created {
 			return evidence.CloneNode(clean), nil
@@ -48,7 +47,7 @@ func (s *Store) PutNode(ctx context.Context, node evidence.Node) (evidence.Node,
 	if !errors.Is(err, sql.ErrNoRows) {
 		return evidence.Node{}, fmt.Errorf("read evidence node: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO evidence_nodes(node_id, node_type, digest, metadata_json, created_at) VALUES(?, ?, ?, ?, ?)`, clean.ID, clean.Type, clean.Digest, string(metadata), created); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO evidence_nodes(node_id, node_type, digest, metadata_json, created_at, state) VALUES(?, ?, ?, ?, ?, 'stored')`, clean.ID, clean.Type, clean.Digest, string(metadata), created); err != nil {
 		return evidence.Node{}, fmt.Errorf("insert evidence node: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -60,8 +59,8 @@ func (s *Store) PutNode(ctx context.Context, node evidence.Node) (evidence.Node,
 func (s *Store) Get(ctx context.Context, id evidence.NodeID) (evidence.Node, error) {
 	var node evidence.Node
 	var typ, metadata, created string
-	err := s.db.QueryRowContext(ctx, `SELECT node_type, digest, metadata_json, created_at FROM evidence_nodes WHERE node_id = ?`, id).
-		Scan(&typ, &node.Digest, &metadata, &created)
+	var state string
+	err := s.db.QueryRowContext(ctx, `SELECT node_type, digest, metadata_json, created_at, state FROM evidence_nodes WHERE node_id = ?`, id).Scan(&typ, &node.Digest, &metadata, &created, &state)
 	if errors.Is(err, sql.ErrNoRows) {
 		return evidence.Node{}, fmt.Errorf("evidence node %s: %w", id, evidence.ErrInvalidEdge)
 	}
@@ -69,6 +68,7 @@ func (s *Store) Get(ctx context.Context, id evidence.NodeID) (evidence.Node, err
 		return evidence.Node{}, fmt.Errorf("read evidence node: %w", err)
 	}
 	node.ID, node.Type = id, evidence.NodeType(typ)
+	node.State = evidence.State(state)
 	if err := json.Unmarshal([]byte(metadata), &node.Metadata); err != nil {
 		return evidence.Node{}, fmt.Errorf("decode evidence metadata: %w", err)
 	}
@@ -77,6 +77,36 @@ func (s *Store) Get(ctx context.Context, id evidence.NodeID) (evidence.Node, err
 		return evidence.Node{}, fmt.Errorf("parse evidence timestamp: %w", err)
 	}
 	return evidence.CloneNode(node), nil
+}
+
+// TransitionNode applies one legal lifecycle transition atomically. Repeating
+// the current state is idempotent; all other illegal transitions fail closed.
+func (s *Store) TransitionNode(ctx context.Context, id evidence.NodeID, target evidence.State) error {
+	if target != evidence.StateStored && target != evidence.StateLinked && target != evidence.StateArchived && target != evidence.StateExported {
+		return evidence.ErrInvalidTransition
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin evidence transition: %w", err)
+	}
+	defer tx.Rollback()
+	var current string
+	if err := tx.QueryRowContext(ctx, `SELECT state FROM evidence_nodes WHERE node_id = ?`, id).Scan(&current); err != nil {
+		return evidence.ErrInvalidTransition
+	}
+	if evidence.State(current) == target {
+		return nil
+	}
+	valid := (current == string(evidence.StateStored) && target == evidence.StateLinked) ||
+		(current == string(evidence.StateLinked) && target == evidence.StateArchived) ||
+		(current == string(evidence.StateArchived) && target == evidence.StateExported)
+	if !valid {
+		return evidence.ErrInvalidTransition
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE evidence_nodes SET state = ? WHERE node_id = ? AND state = ?`, target, id, current); err != nil {
+		return fmt.Errorf("update evidence state: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (s *Store) Link(ctx context.Context, edge evidence.Edge) (evidence.Edge, error) {

@@ -35,6 +35,7 @@ type Node struct {
 	ID        NodeID
 	Type      NodeType
 	Digest    string
+	State     State
 	CreatedAt time.Time
 	Metadata  map[string]string
 }
@@ -45,6 +46,17 @@ type Edge struct {
 	To       NodeID
 	Relation string
 }
+
+// State is the explicit lifecycle state of an evidence node.
+type State string
+
+const (
+	StateDraft    State = "draft"
+	StateStored   State = "stored"
+	StateLinked   State = "linked"
+	StateArchived State = "archived"
+	StateExported State = "exported"
+)
 
 // Store is the narrow graph boundary used by higher layers. Implementations
 // are responsible for durable, idempotent writes and immutable read results.
@@ -64,14 +76,16 @@ const (
 	CodeImmutable      Code = "EVIDENCE_IMMUTABLE"
 	CodeInvalidEdge    Code = "EVIDENCE_EDGE_INVALID"
 	CodeSecretRejected Code = "EVIDENCE_SECRET_REJECTED"
+	CodeInvalidState   Code = "EVIDENCE_INVALID_STATE"
 )
 
 var (
-	ErrInvalidType    = &Error{Code: CodeInvalidType, Message: "evidence type is invalid"}
-	ErrDigestMismatch = &Error{Code: CodeDigestMismatch, Message: "evidence digest does not match"}
-	ErrImmutable      = &Error{Code: CodeImmutable, Message: "evidence is immutable"}
-	ErrInvalidEdge    = &Error{Code: CodeInvalidEdge, Message: "evidence edge is invalid"}
-	ErrSecretRejected = &Error{Code: CodeSecretRejected, Message: "secret material is not accepted as evidence"}
+	ErrInvalidType       = &Error{Code: CodeInvalidType, Message: "evidence type is invalid"}
+	ErrDigestMismatch    = &Error{Code: CodeDigestMismatch, Message: "evidence digest does not match"}
+	ErrImmutable         = &Error{Code: CodeImmutable, Message: "evidence is immutable"}
+	ErrInvalidEdge       = &Error{Code: CodeInvalidEdge, Message: "evidence edge is invalid"}
+	ErrSecretRejected    = &Error{Code: CodeSecretRejected, Message: "secret material is not accepted as evidence"}
+	ErrInvalidTransition = &Error{Code: CodeInvalidState, Message: "evidence state transition is invalid"}
 )
 
 // Error exposes a stable code while retaining a human-safe message. It must
@@ -182,6 +196,8 @@ func safeMessage(code Code) string {
 		return ErrInvalidEdge.Message
 	case CodeSecretRejected:
 		return ErrSecretRejected.Message
+	case CodeInvalidState:
+		return ErrInvalidTransition.Message
 	default:
 		return "evidence operation failed"
 	}

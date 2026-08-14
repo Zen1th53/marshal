@@ -222,8 +222,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 3 {
-		return fmt.Errorf("database schema version %d is newer than supported version 3", version)
+	if version > 4 {
+		return fmt.Errorf("database schema version %d is newer than supported version 4", version)
 	}
 	if version == 0 {
 		if _, err := tx.ExecContext(ctx, schemaV1); err != nil {
@@ -276,6 +276,15 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(3, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 3: %w", err)
+		}
+		version = 3
+	}
+	if version == 3 {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE evidence_nodes ADD COLUMN state TEXT NOT NULL DEFAULT 'stored' CHECK(state IN ('draft','stored','linked','archived','exported'))`); err != nil {
+			return fmt.Errorf("apply schema version 4: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(4, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 4: %w", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
