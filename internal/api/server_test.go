@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/app"
-	"github.com/Zen1th53/slaves/internal/model"
-	"github.com/Zen1th53/slaves/internal/testutil/testgit"
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
 func TestUnixServerVersionStatusAndLifecycle(t *testing.T) {

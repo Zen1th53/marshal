@@ -1,4 +1,4 @@
-# Agent OS Completeness Implementation Plan
+# MARSHAL Completeness Implementation Plan
 
 **Goal:** Complete the reusable multi-agent engineering control plane without adding mandatory runtime infrastructure.
 

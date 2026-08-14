@@ -1,6 +1,6 @@
 # Security Model
 
-SLAVES coordinates privileged engineering operations. Its specifications and
+MARSHAL coordinates privileged engineering operations. Its specifications and
 runtime reduce ambiguity and constrain implemented execution paths; they are
 not an absolute security boundary.
 

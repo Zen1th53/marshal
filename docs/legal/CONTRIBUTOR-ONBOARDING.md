@@ -1,6 +1,6 @@
 # Contributor IP Onboarding Guide
 
-This guide walks new contributors through the step-by-step process of fulfilling SLAVES intellectual property requirements before submitting pull requests.
+This guide walks new contributors through the step-by-step process of fulfilling MARSHAL intellectual property requirements before submitting pull requests.
 
 ---
 
@@ -26,14 +26,14 @@ You write code during working hours, using employer-provided equipment, or under
 1. Download and fill out the appropriate draft agreement.
 2. Sign the document (digital or physical signature).
 3. Email the executed document to `extreme29@proton.me` with the subject:
-   `[SLAVES Contributor Agreement] - @your-github-username`
+   `[MARSHAL Contributor Agreement] - @your-github-username`
 4. Do **not** commit personal private information (physical addresses, phone numbers, Tax IDs) into public Git commits or PR comments.
 
 ---
 
 ## Step 3: Registry Registration & Verification
 
-1. The SLAVES maintainer will verify the document and archive it in private legal records.
+1. The MARSHAL maintainer will verify the document and archive it in private legal records.
 2. The maintainer will update [`legal/assignment-registry.yml`](../../legal/assignment-registry.yml) with an entry referencing your GitHub username and private `record_ref`.
 3. Future Pull Requests submitted by your GitHub account will automatically pass the automated `Contributor Rights Check` CI gate.
 

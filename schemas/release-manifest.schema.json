@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/schemas/release-manifest.schema.json",
-  "title": "Agent OS Release Manifest",
+  "$id": "https://marshal.local/schemas/release-manifest.schema.json",
+  "title": "MARSHAL Release Manifest",
   "type": "object",
   "additionalProperties": false,
   "required": [

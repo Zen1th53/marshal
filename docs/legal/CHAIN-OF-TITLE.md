@@ -1,13 +1,13 @@
-# SLAVES Chain-of-Title & IP Acquisition Due-Diligence Record
+# MARSHAL Chain-of-Title & IP Acquisition Due-Diligence Record
 
-This document provides a comprehensive, auditable record of intellectual property ownership, copyright provenance, contributor agreements, licensing history, and chain-of-title documentation for the SLAVES project (`https://github.com/Zen1th53/slaves`).
+This document provides a comprehensive, auditable record of intellectual property ownership, copyright provenance, contributor agreements, licensing history, and chain-of-title documentation for the MARSHAL project (`https://github.com/Zen1th53/marshal`).
 
 ---
 
 ## 1. Executive Summary & IP Ownership Architecture
 
 ```text
-                                SLAVES IP
+                                MARSHAL IP
                                     │
                         Current Copyright Owner
                                     │
@@ -70,7 +70,7 @@ This document provides a comprehensive, auditable record of intellectual propert
 
 ## 3. Purchaser Due-Diligence Checklist
 
-For legal, M&A, and technical due-diligence teams assessing SLAVES for corporate acquisition, strategic investment, or asset transfer:
+For legal, M&A, and technical due-diligence teams assessing MARSHAL for corporate acquisition, strategic investment, or asset transfer:
 
 | Question | Answer | Evidence / Location |
 |---|---|---|
@@ -82,7 +82,7 @@ For legal, M&A, and technical due-diligence teams assessing SLAVES for corporate
 | **Which third-party licenses exist?** | Permissive only (MIT, BSD-3-Clause, CC BY-SA 4.0 for CoC). | [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) |
 | **Which historical versions were Apache?** | `runtime-v0.2.1` through `runtime-v0.4.0`. Historical grants remain valid for those versions. | [`docs/legal/LICENSE-HISTORY.md`](LICENSE-HISTORY.md) |
 | **Which versions are AGPL?** | Versions released after the migration commit (`chore/acquisition-ready-licensing`). | Root [`LICENSE`](../../LICENSE) |
-| **Who controls commercial licensing?** | Solely controlled by the SLAVES project copyright owner. | [`LICENSING.md`](../../LICENSING.md) |
+| **Who controls commercial licensing?** | Solely controlled by the MARSHAL project copyright owner. | [`LICENSING.md`](../../LICENSING.md) |
 | **Are trademarks/domains controlled separately?** | Domain and GitHub repository are controlled by project owner (`Zen1th53`). | [`docs/legal/OWNER-AND-SUCCESSOR-MODEL.md`](OWNER-AND-SUCCESSOR-MODEL.md) |
 | **Are there outstanding IP disputes?** | None. Zero infringement claims, zero third-party notices, zero disputes. | Verified audit state |
 | **Are any contributions missing agreements?** | No. Current codebase has 0 external contributors. Future PRs are blocked by CI gate. | [`.github/workflows/contributor-rights-check.yml`](../../.github/workflows/contributor-rights-check.yml) |

@@ -164,7 +164,7 @@ conditional:
     load:
       - runtime/README.md
       - runtime/ARCHITECTURE.md
-      - runtime/AGENTCTL.md
+      - runtime/MARSHAL-CLI.md
 
   runtime_memory_service:
     load:

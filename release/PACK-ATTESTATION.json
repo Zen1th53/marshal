@@ -8,7 +8,7 @@
       }
     }
   ],
-  "predicateType": "https://agent-os.local/attestation/pack-manifest/v1",
+  "predicateType": "https://marshal.local/attestation/pack-manifest/v1",
   "predicate": {
     "packVersion": "6.0.0",
     "runtimeSpecVersion": "1.0.0",

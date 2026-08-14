@@ -1,5 +1,5 @@
 {
-  "agent_os_card_version": "1",
+  "marshal_card_version": "1",
   "agent_id": "example-agent",
   "role_capabilities": [
     "developer",

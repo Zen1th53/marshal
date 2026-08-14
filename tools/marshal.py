@@ -156,7 +156,7 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Agent OS local helper")
+    parser = argparse.ArgumentParser(description="MARSHAL local helper")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("detect-project")

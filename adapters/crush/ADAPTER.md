@@ -17,13 +17,13 @@ Upstream design exposes:
 
 Use `AGENTS.template.md`.
 
-Crush native sessions and SQLite remain agent-native state; Agent OS canonical
+Crush native sessions and SQLite remain agent-native state; MARSHAL canonical
 task/decision/finding state remains separate unless a reconciliation adapter is
 implemented.
 
 ## Hooks
 
-Hooks are a useful enforcement point for Agent OS policy.
+Hooks are a useful enforcement point for MARSHAL policy.
 
 Do not assume hook order/shape without probing the installed release.
 

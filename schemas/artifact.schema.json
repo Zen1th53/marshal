@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/schemas/artifact.schema.json",
-  "title": "Agent OS Artifact",
+  "$id": "https://marshal.local/schemas/artifact.schema.json",
+  "title": "MARSHAL Artifact",
   "type": "object",
   "additionalProperties": false,
   "required": [

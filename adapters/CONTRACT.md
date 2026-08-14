@@ -65,7 +65,7 @@ Native output may be richer.
 
 ## 5. Permission Mapping
 
-Map Agent OS semantics rather than command spelling.
+Map MARSHAL semantics rather than command spelling.
 
 ```text
 read

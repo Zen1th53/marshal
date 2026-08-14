@@ -1,15 +1,15 @@
-# SLAVES — License History
+# MARSHAL — License History
 
 ## Overview
 
-This document records the licensing history of the SLAVES project to maintain
+This document records the licensing history of the MARSHAL project to maintain
 a clear, auditable record of licensing changes over time.
 
 ---
 
 ## Historical Licensing: Apache-2.0
 
-All SLAVES releases prior to and including the licensing migration commit
+All MARSHAL releases prior to and including the licensing migration commit
 documented below were distributed under the Apache License, Version 2.0.
 
 ### Releases Distributed Under Apache-2.0
@@ -25,7 +25,7 @@ documented below were distributed under the Apache License, Version 2.0.
 
 Recipients of those historical versions received rights under the Apache
 License 2.0. **Those grants remain associated with the distributed versions
-and are not revoked.** Any person who obtained a copy of SLAVES under
+and are not revoked.** Any person who obtained a copy of MARSHAL under
 Apache-2.0 retains the rights granted to them by that license for the
 version they received.
 
@@ -36,12 +36,12 @@ The official Apache License 2.0 text is preserved at:
 
 ## Current Licensing: AGPL-3.0-only (Community) + Commercial
 
-Beginning with the licensing migration commit identified below, SLAVES
+Beginning with the licensing migration commit identified below, MARSHAL
 uses a dual-licensing model:
 
 ### Community License
 
-The SLAVES community edition is licensed under the GNU Affero General
+The MARSHAL community edition is licensed under the GNU Affero General
 Public License, version 3.0 only (`AGPL-3.0-only`).
 
 The full license text is in the root [`LICENSE`](../../LICENSE) file.
@@ -77,7 +77,7 @@ This commit:
 
 ## Important Clarifications
 
-- **Historical Apache-2.0 copies**: Anyone who received a copy of SLAVES
+- **Historical Apache-2.0 copies**: Anyone who received a copy of MARSHAL
   under Apache-2.0 retains the rights granted by that license for the
   version they received.
 

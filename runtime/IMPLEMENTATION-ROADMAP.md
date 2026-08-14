@@ -7,7 +7,7 @@ Status: implemented in local runtime `0.1.0`.
 Build only:
 
 ```text
-agentctl
+marshal
 + local daemon
 + SQLite
 + task/lease state

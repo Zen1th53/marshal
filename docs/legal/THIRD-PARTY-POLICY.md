@@ -1,16 +1,16 @@
 # Third-Party Code Contribution Policy
 
-This policy governs the inclusion of third-party source code, libraries, schemas, test data, or external material in contributions to the SLAVES project.
+This policy governs the inclusion of third-party source code, libraries, schemas, test data, or external material in contributions to the MARSHAL project.
 
 ---
 
 ## 1. Core Rules
 
-1. **No Falsified Assignment**: The Contributor Assignment Agreement (ICAA/CCAA) assigns rights in original code created by the contributor. It does **NOT** and cannot assign third-party copyrights to SLAVES.
+1. **No Falsified Assignment**: The Contributor Assignment Agreement (ICAA/CCAA) assigns rights in original code created by the contributor. It does **NOT** and cannot assign third-party copyrights to MARSHAL.
 2. **Explicit Disclosure**: Any third-party code, library, or snippet included in a Pull Request must be explicitly declared in the PR description prior to review.
 3. **Preservation of Notices**: All original copyright headers, license notices, and SPDX identifiers in third-party files must be preserved intact.
 4. **License Compatibility**: Third-party material must be licensed under a permissive open-source license compatible with both AGPL-3.0-only distribution and commercial dual-licensing (e.g., MIT, BSD-2/3-Clause, Apache-2.0).
-5. **No Incompatible Copyleft**: Contributions containing GPL, AGPL, LGPL, or MPL code from third parties will **not** be incorporated directly into the SLAVES core repository tree.
+5. **No Incompatible Copyleft**: Contributions containing GPL, AGPL, LGPL, or MPL code from third parties will **not** be incorporated directly into the MARSHAL core repository tree.
 
 ---
 

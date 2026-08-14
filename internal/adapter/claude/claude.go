@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/adapter"
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type Client struct {
@@ -133,7 +133,7 @@ func buildPrompt(request adapter.Request) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encode Claude task prompt: %w", err)
 	}
-	return append([]byte("Execute this SLAVES task envelope:\n"), payload...), nil
+	return append([]byte("Execute this MARSHAL task envelope:\n"), payload...), nil
 }
 
 func parseClaudeOutput(output []byte, result *adapter.Result) {

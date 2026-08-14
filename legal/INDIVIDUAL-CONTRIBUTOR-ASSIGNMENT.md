@@ -2,20 +2,20 @@
 
 > **DRAFT — REQUIRES QUALIFIED SOFTWARE/IP LEGAL REVIEW BEFORE USE**
 
-This Individual Contributor Assignment Agreement ("Agreement") is entered into by and between the undersigned individual contributor ("Contributor") and `[COPYRIGHT OWNER NAME / DESIGNATED ENTITY]` ("Project Owner") regarding contributions made to the SLAVES project (`https://github.com/Zen1th53/slaves`).
+This Individual Contributor Assignment Agreement ("Agreement") is entered into by and between the undersigned individual contributor ("Contributor") and `[COPYRIGHT OWNER NAME / DESIGNATED ENTITY]` ("Project Owner") regarding contributions made to the MARSHAL project (`https://github.com/Zen1th53/marshal`).
 
 ---
 
 ## 1. Definitions
 
-* **"Contribution"**: Any source code, documentation, bug fix, patch, test case, schema, design, or other material intentionally submitted by Contributor for inclusion in, or documentation of, the SLAVES project.
+* **"Contribution"**: Any source code, documentation, bug fix, patch, test case, schema, design, or other material intentionally submitted by Contributor for inclusion in, or documentation of, the MARSHAL project.
 * **"Submitted"**: Any form of electronic, verbal, or written communication sent to Project Owner or its representatives, including but not limited to communication on electronic mailing lists, source code control systems, and issue tracking systems.
 
 ---
 
 ## 2. Copyright Assignment
 
-1. **Assignment**: Subject to accepted legal review and acceptance by Project Owner, Contributor hereby assigns, transfers, and conveys to Project Owner all worldwide right, title, and interest, including all copyrights and copyright renewal rights, in and to all Contributions accepted for incorporation into the SLAVES project.
+1. **Assignment**: Subject to accepted legal review and acceptance by Project Owner, Contributor hereby assigns, transfers, and conveys to Project Owner all worldwide right, title, and interest, including all copyrights and copyright renewal rights, in and to all Contributions accepted for incorporation into the MARSHAL project.
 2. **Authorship & History Preservation**: Contributor retains moral recognition of authorship. Project Owner agrees that Contributor's authorship credit will be maintained in Git commit history and public version control records. Authorship credit does not modify Project Owner's sole copyright ownership of accepted Contributions.
 
 ---
@@ -35,7 +35,7 @@ By virtue of the copyright assignment in Section 2, Project Owner (and its legal
 ## 4. Patent License & Grant
 
 * **Patent Grant**: Contributor hereby grants to Project Owner, and to recipients of software distributed by Project Owner, a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer the Contribution.
-* **Scope**: This patent grant applies strictly to those patent claims licensable by Contributor which are necessarily infringed by Contributor's Contribution alone or by combination of the Contribution with the SLAVES project to which such Contribution was submitted.
+* **Scope**: This patent grant applies strictly to those patent claims licensable by Contributor which are necessarily infringed by Contributor's Contribution alone or by combination of the Contribution with the MARSHAL project to which such Contribution was submitted.
 
 > [!IMPORTANT]
 > *Attorney Review Flag*: The exact scope of patent grant language must be reviewed by qualified IP counsel prior to operational execution.

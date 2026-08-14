@@ -1,4 +1,4 @@
-module github.com/Zen1th53/slaves
+module github.com/Zen1th53/marshal
 
 go 1.25.0
 

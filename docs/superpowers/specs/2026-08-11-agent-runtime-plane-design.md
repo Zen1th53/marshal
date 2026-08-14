@@ -13,7 +13,7 @@ those rules rather than relying only on model compliance.
 
 Define a backend-agnostic runtime architecture for:
 
-- `agentctl` CLI/TUI entrypoint,
+- `marshal` CLI/TUI entrypoint,
 - canonical memory/control-plane service,
 - agent identity registry and heartbeat,
 - policy enforcement,
@@ -40,7 +40,7 @@ Define a backend-agnostic runtime architecture for:
 ```text
                            USER
                             │
-                         agentctl
+                         marshal
                             │
                      Runtime API / MCP
                             │
@@ -96,7 +96,7 @@ Useful for:
 ### Mode B — Local runtime
 
 ```text
-agentctl
+marshal
 + local daemon
 + SQLite
 + filesystem artifact store

@@ -4,7 +4,7 @@
 
 **Material external contributions will not be merged until the author's copyright assignment has been verified and registered.**
 
-SLAVES operates under a **Copyright Assignment + Patent Grant** contribution model to preserve clean chain-of-title, enable dual-licensing (`AGPL-3.0-only` community + commercial), and ensure long-term sustainability.
+MARSHAL operates under a **Copyright Assignment + Patent Grant** contribution model to preserve clean chain-of-title, enable dual-licensing (`AGPL-3.0-only` community + commercial), and ensure long-term sustainability.
 
 ---
 
@@ -14,7 +14,7 @@ SLAVES operates under a **Copyright Assignment + Patent Grant** contribution mod
    - If you own the copyright individually $\rightarrow$ execute the **Individual Agreement (ICAA)** (`legal/INDIVIDUAL-CONTRIBUTOR-ASSIGNMENT.md`).
    - If your employer owns your code $\rightarrow$ execute the **Corporate Agreement (CCAA)** (`legal/CORPORATE-CONTRIBUTOR-ASSIGNMENT.md`).
 2. **Submit Executed Document**:
-   - Send the signed agreement to the SLAVES legal contact (`extreme29@proton.me`).
+   - Send the signed agreement to the MARSHAL legal contact (`extreme29@proton.me`).
 3. **Registry Verification**:
    - Once verified, your GitHub handle will be added to `legal/assignment-registry.yml`.
    - The automated CI check (`Contributor Rights Check`) will then pass for your Pull Requests.

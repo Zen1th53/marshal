@@ -1,14 +1,14 @@
-# SLAVES Provider Capability Model & Adapter Guide
+# MARSHAL Provider Capability Model & Adapter Guide
 
 **Runtime Milestone**: `v0.4.0`
 
-SLAVES implements a vendor-neutral provider architecture where AI coding agents interact with the repository through process adapters.
+MARSHAL implements a vendor-neutral provider architecture where AI coding agents interact with the repository through process adapters.
 
 ---
 
 ## 1. Provider Capability Data Model
 
-SLAVES distinguishes between binary presence, protocol capability, authentication, and empirical end-to-end verification. A provider's maturity is classified into six distinct states:
+MARSHAL distinguishes between binary presence, protocol capability, authentication, and empirical end-to-end verification. A provider's maturity is classified into six distinct states:
 
 | Capability State | Meaning |
 |---|---|
@@ -69,9 +69,9 @@ Inspect available provider binaries and adapter status using the CLI:
 
 ```bash
 # List provider adapters and binary paths
-slaves adapters
+marshal adapters
 
 # Perform a deep probe against a specific adapter
-slaves adapter probe codex
-slaves adapter probe opencode
+marshal adapter probe codex
+marshal adapter probe opencode
 ```

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 func (s *Store) BeginExecution(ctx context.Context, taskID, sessionID, agentID, branch, worktree, baseCommit string, expectedRevision int64) error {

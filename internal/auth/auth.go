@@ -58,7 +58,7 @@ func (m *Manager) CreateToken(name string, kind PrincipalKind, capabilities []st
 	if _, err := rand.Read(rawBytes); err != nil {
 		return "", TokenRecord{}, fmt.Errorf("generate token entropy: %w", err)
 	}
-	plaintext := "slaves_token_" + hex.EncodeToString(rawBytes)
+	plaintext := "marshal_token_" + hex.EncodeToString(rawBytes)
 	digest := hashToken(plaintext)
 
 	idBytes := make([]byte, 8)

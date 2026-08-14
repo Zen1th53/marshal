@@ -2,7 +2,7 @@
 
 ## Scope
 
-A SLAVES security issue includes a vulnerability in the executable runtime,
+A MARSHAL security issue includes a vulnerability in the executable runtime,
 policy or approval enforcement, task ownership, sandbox/worktree handling,
 secrets or memory controls, adapter execution, artifact provenance,
 interoperability boundaries, release tooling, or documentation that would lead
@@ -50,4 +50,4 @@ coordinate disclosure timing in good faith.
 This policy does not authorize testing against systems, accounts, data, or
 infrastructure you do not own or have explicit permission to test. Vendor-agent
 or dependency vulnerabilities should also be reported to the affected upstream
-project when the defect is not specific to SLAVES.
+project when the defect is not specific to MARSHAL.

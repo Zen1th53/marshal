@@ -1,6 +1,6 @@
-# Agent OS Bootstrap for Aider
+# MARSHAL Bootstrap for Aider
 
-Read and obey the project Agent OS entry point at `agents/AGENT-BOOTSTRAP.md`.
+Read and obey the project MARSHAL entry point at `agents/AGENT-BOOTSTRAP.md`.
 
 This file is read-only context.
 

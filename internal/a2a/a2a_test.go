@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Zen1th53/slaves/internal/app"
-	"github.com/Zen1th53/slaves/internal/auth"
-	"github.com/Zen1th53/slaves/internal/testutil/testgit"
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
 func runtimeRepo(t *testing.T) *testgit.Repository {
@@ -61,7 +61,7 @@ func TestA2AServerAgentCardDiscovery(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&card); err != nil {
 		t.Fatal(err)
 	}
-	if card["name"] != "SLAVES Runtime Agent" {
+	if card["name"] != "MARSHAL Runtime Agent" {
 		t.Fatalf("unexpected agent name: %v", card["name"])
 	}
 	if card["protocolBinding"] != "HTTP+JSON" {

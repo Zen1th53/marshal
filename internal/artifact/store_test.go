@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Zen1th53/slaves/internal/model"
-	"github.com/Zen1th53/slaves/internal/store"
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 func TestPutComputesDigestAndStoresImmutableBytes(t *testing.T) {

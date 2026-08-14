@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/schemas/protocol-negotiation.schema.json",
-  "title": "Agent OS Protocol Negotiation",
+  "$id": "https://marshal.local/schemas/protocol-negotiation.schema.json",
+  "title": "MARSHAL Protocol Negotiation",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -15,7 +15,7 @@
       "enum": [
         "a2a",
         "mcp",
-        "agent-os-runtime"
+        "marshal-runtime"
       ]
     },
     "client_version": {

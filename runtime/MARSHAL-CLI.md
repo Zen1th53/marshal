@@ -1,4 +1,4 @@
-# agentctl Command Contract
+# marshal Command Contract
 
 ## Mission
 
@@ -7,27 +7,27 @@ One operator-facing entrypoint for inspecting and controlling the runtime.
 ## Core Commands
 
 ```bash
-agentctl status
-agentctl doctor
-agentctl agents
-agentctl tasks
-agentctl task show TASK-123
-agentctl task claim TASK-123
-agentctl task release TASK-123
-agentctl handoff TASK-123 developer qa
-agentctl checkpoint TASK-123
-agentctl approvals
-agentctl approval show APR-12
-agentctl artifacts
-agentctl artifact show ART-44
-agentctl memory recall "query"
-agentctl events tail
-agentctl validate
+marshal status
+marshal doctor
+marshal agents
+marshal tasks
+marshal task show TASK-123
+marshal task claim TASK-123
+marshal task release TASK-123
+marshal handoff TASK-123 developer qa
+marshal checkpoint TASK-123
+marshal approvals
+marshal approval show APR-12
+marshal artifacts
+marshal artifact show ART-44
+marshal memory recall "query"
+marshal events tail
+marshal validate
 ```
 
 ## Status
 
-`agentctl status` should show:
+`marshal status` should show:
 
 - runtime mode,
 - repository,
@@ -42,7 +42,7 @@ agentctl validate
 
 ## Doctor
 
-`agentctl doctor` verifies:
+`marshal doctor` verifies:
 
 - pack version/schema,
 - repository policy presence,
@@ -74,7 +74,7 @@ Recommended:
 Every read command should support structured output:
 
 ```bash
-agentctl --json status
+marshal --json status
 ```
 
 CLI text is presentation; JSON/API schema is the stable automation contract.

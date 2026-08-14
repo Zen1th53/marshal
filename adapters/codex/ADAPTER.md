@@ -34,7 +34,7 @@ Do not assume experimental or fast-moving event fields without probing.
 
 ## Security
 
-Agent OS policy can only narrow native Codex permissions unless an explicit owner
+MARSHAL policy can only narrow native Codex permissions unless an explicit owner
 policy says otherwise.
 
 Do not use broader sandbox modes merely to avoid an approval integration problem.

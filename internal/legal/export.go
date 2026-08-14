@@ -55,7 +55,7 @@ func ExportPack(ctx context.Context, repoDir string, outputPath string) (*Export
 	addBlob := func(relPath string, archiveRelPath string) {
 		if data, err := ReadBlob(ctx, repoDir, headSHA, relPath); err == nil {
 			files = append(files, fileToArchive{
-				archivePath: filepath.Join("slaves-due-diligence", archiveRelPath),
+				archivePath: filepath.Join("marshal-due-diligence", archiveRelPath),
 				data:        data,
 			})
 		}
@@ -102,20 +102,20 @@ func ExportPack(ctx context.Context, repoDir string, outputPath string) (*Export
 			commitsJSONL.WriteByte('\n')
 		}
 		files = append(files, fileToArchive{
-			archivePath: "slaves-due-diligence/source/commits.jsonl",
+			archivePath: "marshal-due-diligence/source/commits.jsonl",
 			data:        commitsJSONL.Bytes(),
 		})
 
 		authorsJSON, _ := json.MarshalIndent(authors, "", "  ")
 		files = append(files, fileToArchive{
-			archivePath: "slaves-due-diligence/source/authors.json",
+			archivePath: "marshal-due-diligence/source/authors.json",
 			data:        authorsJSON,
 		})
 	}
 
 	sourceStateJSON, _ := json.MarshalIndent(report.Source, "", "  ")
 	files = append(files, fileToArchive{
-		archivePath: "slaves-due-diligence/source/source-state.json",
+		archivePath: "marshal-due-diligence/source/source-state.json",
 		data:        sourceStateJSON,
 	})
 
@@ -140,7 +140,7 @@ func ExportPack(ctx context.Context, repoDir string, outputPath string) (*Export
 						if mDir != "" {
 							if data, err := os.ReadFile(filepath.Join(mDir, fileName)); err == nil {
 								files = append(files, fileToArchive{
-									archivePath: filepath.Join("slaves-due-diligence/third-party/dependencies", sanitizedPath, fileName),
+									archivePath: filepath.Join("marshal-due-diligence/third-party/dependencies", sanitizedPath, fileName),
 									data:        data,
 								})
 							}
@@ -157,13 +157,13 @@ func ExportPack(ctx context.Context, repoDir string, outputPath string) (*Export
 		return nil, fmt.Errorf("marshal report json: %w", err)
 	}
 	files = append(files, fileToArchive{
-		archivePath: "slaves-due-diligence/report.json",
+		archivePath: "marshal-due-diligence/report.json",
 		data:        reportJSON,
 	})
 
 	reportMD := generateMarkdownReport(report)
 	files = append(files, fileToArchive{
-		archivePath: "slaves-due-diligence/REPORT.md",
+		archivePath: "marshal-due-diligence/REPORT.md",
 		data:        []byte(reportMD),
 	})
 
@@ -175,12 +175,12 @@ func ExportPack(ctx context.Context, repoDir string, outputPath string) (*Export
 	// Generate SHA256SUMS file
 	var shaSumsBuf bytes.Buffer
 	for _, f := range files {
-		relSumPath := strings.TrimPrefix(f.archivePath, "slaves-due-diligence/")
+		relSumPath := strings.TrimPrefix(f.archivePath, "marshal-due-diligence/")
 		sum := sha256.Sum256(f.data)
 		shaSumsBuf.WriteString(fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), relSumPath))
 	}
 	files = append(files, fileToArchive{
-		archivePath: "slaves-due-diligence/SHA256SUMS",
+		archivePath: "marshal-due-diligence/SHA256SUMS",
 		data:        shaSumsBuf.Bytes(),
 	})
 
@@ -274,7 +274,7 @@ func findLocalModuleDir(ctx context.Context, repoDir, modPath, modVer string) st
 
 func generateMarkdownReport(r *Report) string {
 	var sb strings.Builder
-	sb.WriteString("# SLAVES Acquisition Due-Diligence Evidence Report\n\n")
+	sb.WriteString("# MARSHAL Acquisition Due-Diligence Evidence Report\n\n")
 	sb.WriteString("> **Notice**: This report is mechanically generated evidence and is not legal advice or a legal opinion.\n\n")
 	sb.WriteString("## Executive Summary\n\n")
 	sb.WriteString(fmt.Sprintf("- **Overall Status**: `%s`\n", r.Review.OverallStatus))

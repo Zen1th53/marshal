@@ -3,6 +3,7 @@ package auth
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -16,6 +17,9 @@ func TestTokenLifecycleAndConstantTimeAuth(t *testing.T) {
 	}
 	if token == "" || record.ID == "" || record.Digest == "" {
 		t.Fatalf("invalid record: %#v", record)
+	}
+	if !strings.HasPrefix(token, "marshal_token_") {
+		t.Fatalf("token prefix = %q, want marshal_token_", token)
 	}
 
 	principal, err := mgr.Authenticate(token)
@@ -40,11 +44,11 @@ func TestTokenLifecycleAndConstantTimeAuth(t *testing.T) {
 }
 
 func TestSecretResolverAndRedaction(t *testing.T) {
-	os.Setenv("TEST_SLAVES_SECRET", "super-secret-key-12345")
-	t.Cleanup(func() { os.Unsetenv("TEST_SLAVES_SECRET") })
+	os.Setenv("MARSHAL_TEST_SECRET", "super-secret-key-12345")
+	t.Cleanup(func() { os.Unsetenv("MARSHAL_TEST_SECRET") })
 
 	resolver := NewSecretResolver()
-	val, err := resolver.Resolve("env:TEST_SLAVES_SECRET")
+	val, err := resolver.Resolve("env:MARSHAL_TEST_SECRET")
 	if err != nil || val != "super-secret-key-12345" {
 		t.Fatalf("Resolve env secret failed: val=%q err=%v", val, err)
 	}

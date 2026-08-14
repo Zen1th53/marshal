@@ -9,7 +9,7 @@
 
 ## 1. Overview
 
-SLAVES supports executing software engineering tasks locally using OpenCode against Ollama models with **zero external cloud API dependencies**.
+MARSHAL supports executing software engineering tasks locally using OpenCode against Ollama models with **zero external cloud API dependencies**.
 
 - **OpenCode (`opencode`)**: Acts as the local execution agent client that receives task instructions, inspects the workspace, and issues tool calls to modify files.
 - **Ollama (`ollama`)**: Serves local neural network models over HTTP (`localhost:11434`).
@@ -41,7 +41,7 @@ Ensure `ollama` service is running in the background (`ollama serve` or systemd 
 > **Crucial Distinction**: Conversational text generation capability **does NOT** imply tool-calling capability.
 > OpenCode requires models that explicitly format and issue structured JSON tool calls to create or modify repository files.
 
-| Model | Family | Tool Calls | Status in SLAVES |
+| Model | Family | Tool Calls | Status in MARSHAL |
 |---|---|---|---|
 | `qwythos-9b` | Qwen3.5 9B | ✅ **Confirmed** | **E2E VERIFIED Default** |
 | `qwen2.5-coder:14b` | Qwen2.5 14B | ⚠️ Partial | Returns JSON as text in some revisions |
@@ -57,22 +57,22 @@ ollama pull qwythos-9b
 ## 4. Executing Tasks with OpenCode & Ollama
 
 ### Model Selection via CLI
-Pass the `--model` flag directly to `slaves run`:
+Pass the `--model` flag directly to `marshal run`:
 
 ```bash
-slaves run TASK-001 --adapter opencode --model qwythos-9b
+marshal run TASK-001 --adapter opencode --model qwythos-9b
 ```
 
 Or set the environment variable:
 ```bash
-export SLAVES_OPENCODE_MODEL="ollama/qwythos-9b"
+export MARSHAL_OPENCODE_MODEL="ollama/qwythos-9b"
 ```
 
 ### Deep Provider Probe
 Verify OpenCode flag compatibility and Ollama endpoint connectivity:
 
 ```bash
-slaves adapter probe opencode
+marshal adapter probe opencode
 ```
 
 ---
@@ -93,4 +93,4 @@ slaves adapter probe opencode
 
 ### Symptom: Task returns `ErrConflict` or "worker produced no commit"
 - **Cause**: The model executed without error but produced no git diffs or uncommitted files in the worktree.
-- **Fix**: Inspect logs with `slaves logs TASK-ID` to see the LLM's response chain.
+- **Fix**: Inspect logs with `marshal logs TASK-ID` to see the LLM's response chain.

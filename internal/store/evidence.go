@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)

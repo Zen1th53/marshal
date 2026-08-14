@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/schemas/event.schema.json",
-  "title": "Agent OS Event",
+  "$id": "https://marshal.local/schemas/event.schema.json",
+  "title": "MARSHAL Event",
   "type": "object",
   "additionalProperties": false,
   "required": [

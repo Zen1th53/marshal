@@ -1,6 +1,6 @@
 # Owner Succession & Corporate Transfer Model
 
-This document outlines the technical and operational procedure for transitioning copyright ownership of the SLAVES project from the current individual owner to a future legal entity (e.g., a newly formed corporation, LLC, foundation, or acquiring company).
+This document outlines the technical and operational procedure for transitioning copyright ownership of the MARSHAL project from the current individual owner to a future legal entity (e.g., a newly formed corporation, LLC, foundation, or acquiring company).
 
 ---
 
@@ -12,8 +12,8 @@ This document outlines the technical and operational procedure for transitioning
                        │
                        │ [Phase A: Incorporation]
                        ▼
-            SLAVES Corporate Entity
-            (e.g., SLAVES Inc. / LLC)
+            MARSHAL Corporate Entity
+            (e.g., MARSHAL Inc. / LLC)
                        │
                        │ [Phase B: M&A / Sale]
                        ▼

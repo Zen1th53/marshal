@@ -2,12 +2,12 @@
 
 This directory defines the executable control-plane contracts for the reusable
 agent engineering system. Runtime Milestone 1 implements a local Linux subset
-in `cmd/slaves` and `internal/`; contracts outside that subset remain
+in `cmd/marshal` and `internal/`; contracts outside that subset remain
 specifications.
 
 ## Components
 
-- `AGENTCTL.md` — CLI/TUI command contract.
+- `MARSHAL-CLI.md` — CLI/TUI command contract.
 - `MEMORY-SERVICE.md` — canonical state service.
 - `IDENTITY-REGISTRY.md` — agent/session identity and heartbeat.
 - `POLICY-ENGINE.md` — runtime authorization.
@@ -26,7 +26,7 @@ specifications.
 ## Implemented Local Runtime 0.1.0
 
 ```text
-slaves CLI
+marshal CLI
   ↓
 HTTP/JSON over a local mode-0600 Unix socket
   ↓

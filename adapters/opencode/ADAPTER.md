@@ -15,27 +15,27 @@
 Use `AGENTS.template.md`.
 
 Do not configure the entire `agents/` tree as unconditional remote/local
-instructions. This would bypass Agent OS progressive context loading.
+instructions. This would bypass MARSHAL progressive context loading.
 
 ## Runtime Integration
 
 OpenCode's server/OpenAPI surface is a strong adapter target:
 
 ```text
-Agent OS Runtime
+MARSHAL Runtime
 ↔ OpenCode server
 ↔ OpenCode agent/session
 ```
 
-Bind work to project/cwd, task, and Agent OS identity.
+Bind work to project/cwd, task, and MARSHAL identity.
 
 ## Permissions
 
-Map OpenCode per-agent permissions to Agent OS semantic capabilities.
+Map OpenCode per-agent permissions to MARSHAL semantic capabilities.
 
-More permissive native config does not override Agent OS deny/approval rules.
+More permissive native config does not override MARSHAL deny/approval rules.
 
 ## Remote Instruction Warning
 
-OpenCode can load remote instruction URLs. Agent OS treats remote instructions as
+OpenCode can load remote instruction URLs. MARSHAL treats remote instructions as
 external/untrusted content unless explicitly promoted by trusted project policy.

@@ -72,13 +72,13 @@ func TestExportPackReproducibilityAndIntegrity(t *testing.T) {
 			t.Errorf("SECURITY RISK: path traversal '..' found in tar header: %s", hdr.Name)
 		}
 
-		if hdr.Name == "slaves-due-diligence/SHA256SUMS" {
+		if hdr.Name == "marshal-due-diligence/SHA256SUMS" {
 			hasSHA256SUMS = true
 		}
-		if hdr.Name == "slaves-due-diligence/REPORT.md" {
+		if hdr.Name == "marshal-due-diligence/REPORT.md" {
 			hasReportMD = true
 		}
-		if hdr.Name == "slaves-due-diligence/report.json" {
+		if hdr.Name == "marshal-due-diligence/report.json" {
 			hasReportJSON = true
 		}
 	}

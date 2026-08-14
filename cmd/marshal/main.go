@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Zen1th53/slaves/internal/cli"
+	"github.com/Zen1th53/marshal/internal/cli"
 )
 
 func main() {

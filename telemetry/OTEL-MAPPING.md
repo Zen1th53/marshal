@@ -5,38 +5,38 @@
 Recommended custom attributes:
 
 ```text
-agentos.pack.version
-agentos.runtime.version
-agentos.project.id
-agentos.tenant.id
-agentos.adapter.name
-agentos.adapter.version
+marshal.pack.version
+marshal.runtime.version
+marshal.project.id
+marshal.tenant.id
+marshal.adapter.name
+marshal.adapter.version
 ```
 
 ## Span Attributes
 
 ```text
-agentos.agent.id
-agentos.session.id
-agentos.task.id
-agentos.role
-agentos.operation
-agentos.policy.decision
-agentos.approval.id
-agentos.artifact.id
-agentos.repository.commit
-agentos.conformance.scenario
+marshal.agent.id
+marshal.session.id
+marshal.task.id
+marshal.role
+marshal.operation
+marshal.policy.decision
+marshal.approval.id
+marshal.artifact.id
+marshal.repository.commit
+marshal.conformance.scenario
 ```
 
 When current OpenTelemetry GenAI conventions provide a semantically matching,
 stable/development attribute, an implementation may dual-emit it.
 
-Do not rename Agent OS canonical state fields every time external semantic
+Do not rename MARSHAL canonical state fields every time external semantic
 conventions evolve.
 
 ## CLI
 
-For `agentctl` and short-lived adapter processes, follow OpenTelemetry CLI
+For `marshal` and short-lived adapter processes, follow OpenTelemetry CLI
 conventions where practical.
 
 ## Privacy

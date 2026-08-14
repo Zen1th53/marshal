@@ -9,11 +9,11 @@ It must not silently replace its own governance while executing a task.
 ## Commands / Desired Runtime Surface
 
 ```text
-agentctl pack status
-agentctl pack diff <new>
-agentctl pack verify <new>
-agentctl pack upgrade <new>
-agentctl pack rollback
+marshal pack status
+marshal pack diff <new>
+marshal pack verify <new>
+marshal pack upgrade <new>
+marshal pack rollback
 ```
 
 ## Gate

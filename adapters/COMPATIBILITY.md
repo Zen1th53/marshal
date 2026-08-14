@@ -5,7 +5,7 @@
 Status meanings:
 
 - **native** — upstream exposes a direct surface.
-- **emulated** — Agent OS wrapper/runtime must provide the behavior.
+- **emulated** — MARSHAL wrapper/runtime must provide the behavior.
 - **probe_required** — known/possible native surface, but installed version must be checked.
 - **unsupported** — do not pretend native support exists.
 

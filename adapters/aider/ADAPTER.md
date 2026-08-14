@@ -8,7 +8,7 @@
 - Git-oriented editing and commits.
 - `.aider.conf.yml` configuration.
 
-## Limitations vs Full Agent OS Runtime
+## Limitations vs Full MARSHAL Runtime
 
 Aider is best treated as an implementation worker adapter, not the canonical
 team orchestrator.
@@ -18,7 +18,7 @@ Capabilities such as:
 - rich policy engine,
 - event bus,
 - granular runtime approvals,
-- native Agent OS memory service
+- native MARSHAL memory service
 
 must be provided outside Aider when needed.
 
@@ -35,9 +35,9 @@ The adapter wrapper/runtime owns:
 
 ## Architect Mode
 
-Do not confuse Aider's architect/editor mode with Agent OS Architect authority.
+Do not confuse Aider's architect/editor mode with MARSHAL Architect authority.
 
-Agent OS Architect decisions remain explicit records/ADRs.
+MARSHAL Architect decisions remain explicit records/ADRs.
 
 ## Security
 

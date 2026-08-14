@@ -26,15 +26,15 @@ Probe the installed CLI before relying on exact flags or experimental features.
 
 ## MCP
 
-Expose the Agent OS runtime/memory service through MCP when implemented.
+Expose the MARSHAL runtime/memory service through MCP when implemented.
 
-Server trust must not bypass Agent OS capability policy.
+Server trust must not bypass MARSHAL capability policy.
 
 ## Native Policy
 
 Map native tool policy to `CAPABILITIES.yaml`.
 
-Agent OS deny remains deny even if Gemini native config would allow it.
+MARSHAL deny remains deny even if Gemini native config would allow it.
 
 ## Known Caution
 

@@ -2,7 +2,7 @@
 
 ## Mission
 
-Install the Agent OS contract into a repository with the minimum local changes.
+Install the MARSHAL contract into a repository with the minimum local changes.
 
 ## Flow
 
@@ -47,7 +47,7 @@ Run:
 
 ```bash
 python agents/conformance/runner.py validate-pack --root agents
-python agents/tools/agentos.py detect-project .
+python agents/tools/marshal.py detect-project .
 ```
 
 Then run the selected adapter's read-only probe.

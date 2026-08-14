@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/schemas/approval.schema.json",
-  "title": "Agent OS Approval",
+  "$id": "https://marshal.local/schemas/approval.schema.json",
+  "title": "MARSHAL Approval",
   "type": "object",
   "additionalProperties": false,
   "required": [

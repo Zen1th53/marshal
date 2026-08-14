@@ -1,6 +1,6 @@
 # Release Trust
 
-Agent OS release trust has four layers:
+MARSHAL release trust has four layers:
 
 ```text
 reproducible inputs

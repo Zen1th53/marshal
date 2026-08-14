@@ -121,7 +121,7 @@ Repository policy
 - `RUNTIME-VERSION.yaml`
 - `runtime/README.md`
 - `runtime/ARCHITECTURE.md`
-- `runtime/AGENTCTL.md`
+- `runtime/MARSHAL-CLI.md`
 - `runtime/MEMORY-SERVICE.md`
 - `runtime/IDENTITY-REGISTRY.md`
 - `runtime/POLICY-ENGINE.md`
@@ -165,7 +165,7 @@ Repository policy
 - `routing/`
 - `distribution/`
 - `protocols/SELF-UPGRADE.md`
-- `tools/agentos.py`
+- `tools/marshal.py`
 
 ---
 

@@ -6,7 +6,7 @@ A plugin declares:
 id
 version
 kind
-agent_os_version_range
+marshal_version_range
 runtime_spec_version_range
 capabilities
 required_permissions

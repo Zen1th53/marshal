@@ -11,7 +11,7 @@ func RunAudit(ctx context.Context, repoDir string) (*Report, error) {
 	}
 
 	report := &Report{
-		Schema: "slaves.acquisition-evidence.v1",
+		Schema: "marshal.acquisition-evidence.v1",
 	}
 
 	source, err := CollectSourceEvidence(ctx, repoDir)

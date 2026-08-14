@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/schemas/agent-capability.schema.json",
+  "$id": "https://marshal.local/schemas/agent-capability.schema.json",
   "title": "Agent Capability Record",
   "type": "object",
   "additionalProperties": false,

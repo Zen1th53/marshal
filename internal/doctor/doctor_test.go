@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Zen1th53/slaves/internal/app"
-	"github.com/Zen1th53/slaves/internal/testutil/testgit"
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
 func TestCheckHealthyRuntime(t *testing.T) {

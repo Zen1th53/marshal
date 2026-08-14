@@ -1,6 +1,6 @@
 # Acquisition Due-Diligence Evidence Exporter
 
-SLAVES provides an automated, reproducible due-diligence auditing and evidence export subsystem via the `slaves legal` CLI suite.
+MARSHAL provides an automated, reproducible due-diligence auditing and evidence export subsystem via the `marshal legal` CLI suite.
 
 This tool allows repository maintainers, prospective acquirers, and legal/IP counsel to inspect and export evidence regarding Git source history, committed licensing, chain-of-title documentation, contributor assignment records, third-party provenance, offline Go dependency licenses, and release integrity metadata.
 
@@ -12,26 +12,26 @@ This tool allows repository maintainers, prospective acquirers, and legal/IP cou
 Run an interactive terminal audit of current repository legal state:
 
 ```bash
-slaves legal audit
+marshal legal audit
 ```
 
 Output structured machine-readable JSON audit report:
 
 ```bash
-slaves legal audit --json
+marshal legal audit --json
 ```
 
 ### Export Reproducible Evidence Pack
 Export a deterministic, self-contained `.tar.gz` evidence pack:
 
 ```bash
-slaves legal export --output /path/to/slaves-due-diligence.tar.gz
+marshal legal export --output /path/to/marshal-due-diligence.tar.gz
 ```
 
 Output example:
 
 ```text
-Evidence pack: /tmp/slaves-due-diligence.tar.gz
+Evidence pack: /tmp/marshal-due-diligence.tar.gz
 Source HEAD:   077ea70398de96d464c42d9ea9f3b7050f8cc153
 SHA-256:       0824d38f2fc088d85e8b72ab5280fbedf9d2dc9cb7479d62d0bee6d6c52174b1
 Status:        REVIEW_REQUIRED
@@ -43,7 +43,7 @@ Status:        REVIEW_REQUIRED
 
 1. **Committed HEAD Binding**: All repository evidence is read directly from committed Git blobs (`git show HEAD:<path>`). Uncommitted working-tree modifications are never packaged into evidence files.
 2. **Dirty Tree Isolation**: If the working tree contains uncommitted changes, `working_tree_clean = false` is reported in `report.json` and `REPORT.md`, but the packaged evidence remains anchored to `HEAD`.
-3. **Secret & Credential Safety**: The exporter never collects `.git/`, `.slaves/`, `.env`, API keys, tokens, runtime state, sockets, or user home directory files.
+3. **Secret & Credential Safety**: The exporter never collects `.git/`, `.marshal/`, `.env`, API keys, tokens, runtime state, sockets, or user home directory files.
 4. **Offline Dependency Collection**: Dependency license files are collected from local Go module cache without network calls (`GOPROXY=off`). Absolute host filesystem paths are sanitized.
 5. **Path Traversal Safety**: Archive entry paths reject `..`, absolute paths, leading slashes, and NUL bytes.
 6. **100% Deterministic Reproducibility**: Exporting the same commit SHA with identical dependency cache produces a byte-for-byte identical `.tar.gz` archive and matching archive SHA-256 hash.
@@ -55,7 +55,7 @@ Status:        REVIEW_REQUIRED
 The exported `.tar.gz` contains the following layout:
 
 ```text
-slaves-due-diligence/
+marshal-due-diligence/
 ├── REPORT.md
 ├── report.json
 ├── SHA256SUMS
@@ -99,7 +99,7 @@ slaves-due-diligence/
 Internal archive integrity can be verified via:
 
 ```bash
-cd slaves-due-diligence && sha256sum -c SHA256SUMS
+cd marshal-due-diligence && sha256sum -c SHA256SUMS
 ```
 
 ---

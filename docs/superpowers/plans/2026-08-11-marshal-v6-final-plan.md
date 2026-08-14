@@ -1,8 +1,8 @@
-# Agent OS V6 Final Implementation Plan
+# MARSHAL V6 Final Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close the final portable-control-plane gaps in Agent OS.
+**Goal:** Close the final portable-control-plane gaps in MARSHAL.
 
 **Architecture:** Add standards-based interop, JSON schemas, telemetry, provenance/signing, live conformance execution, multi-tenancy, plugin governance, fault injection, and reproducibility without creating mandatory cloud services.
 
@@ -29,7 +29,7 @@
 - [x] Add negotiation checker and tests.
 
 ### Task 3: Telemetry
-- [x] Add Agent OS telemetry namespace and OpenTelemetry mapping.
+- [x] Add MARSHAL telemetry namespace and OpenTelemetry mapping.
 - [x] Add privacy rules.
 
 ### Task 4: Release trust

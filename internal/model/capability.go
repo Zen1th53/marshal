@@ -8,7 +8,7 @@ const (
 	CapabilityUnknown     CapabilityState = "UNKNOWN"
 	CapabilitySupported   CapabilityState = "SUPPORTED"
 	CapabilityUnsupported CapabilityState = "UNSUPPORTED"
-	CapabilityVerified   CapabilityState = "VERIFIED"
+	CapabilityVerified    CapabilityState = "VERIFIED"
 	CapabilityFailed      CapabilityState = "FAILED"
 )
 

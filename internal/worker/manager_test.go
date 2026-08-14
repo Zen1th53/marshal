@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/adapter"
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type captureProcessRunner struct {
@@ -29,7 +29,7 @@ func (w *captureWrapper) Wrap(_ model.SandboxRequest, command []string) (model.C
 	w.command = append([]string(nil), command...)
 	return model.CommandSpec{
 		Path: "/sbin/bwrap", Args: []string{"--", command[0]},
-		Env: []string{"HOME=/home/slaves"}, Dir: "/task",
+		Env: []string{"HOME=/home/marshal"}, Dir: "/task",
 		Isolation: model.IsolationCapability{Level: model.IsolationBwrap, Available: true},
 	}, nil
 }

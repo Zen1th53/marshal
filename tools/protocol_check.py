@@ -12,7 +12,7 @@ def a2a_compatible(client: str, server: str) -> bool:
     return cm.groups() == sm.groups()
 
 def mcp_compatible(client: str, server: str) -> bool:
-    # Agent OS pins the exact negotiated MCP specification date.
+    # MARSHAL pins the exact negotiated MCP specification date.
     return bool(re.match(r"^\d{4}-\d{2}-\d{2}$", client)) and client == server
 
 def main() -> int:

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/adapter"
 )
 
 type capturingRunner struct {

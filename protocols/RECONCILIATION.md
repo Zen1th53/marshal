@@ -58,9 +58,9 @@ Do not use latest timestamp alone as truth.
 The lightweight helper supports state comparison:
 
 ```bash
-python tools/agentos.py reconcile-state \
+python tools/marshal.py reconcile-state \
   --file-state state.json \
   --runtime-state runtime.json
 ```
 
-A full runtime should expose equivalent `agentctl diff-state` / `reconcile`.
+A full runtime should expose equivalent `marshal diff-state` / `reconcile`.

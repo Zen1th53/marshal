@@ -53,5 +53,5 @@ Detect:
 Machine-readable detection is provided by:
 
 ```bash
-python tools/agentos.py detect-project .
+python tools/marshal.py detect-project .
 ```

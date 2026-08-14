@@ -3,8 +3,8 @@ package worker
 import (
 	"context"
 
-	"github.com/Zen1th53/slaves/internal/adapter"
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type commandWrapper interface {

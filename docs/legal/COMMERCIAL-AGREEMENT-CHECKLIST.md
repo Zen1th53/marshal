@@ -2,24 +2,24 @@
 
 > **DRAFT — REQUIRES QUALIFIED SOFTWARE/IP LEGAL REVIEW BEFORE USE**
 
-This checklist is provided for qualified IP counsel and the SLAVES copyright owner when drafting, negotiating, and executing custom commercial license agreements.
+This checklist is provided for qualified IP counsel and the MARSHAL copyright owner when drafting, negotiating, and executing custom commercial license agreements.
 
 ---
 
 ## 1. Parties & Definitions
 
-- [ ] **Licensor Identity**: Exact legal entity or individual name of the SLAVES copyright owner.
+- [ ] **Licensor Identity**: Exact legal entity or individual name of the MARSHAL copyright owner.
 - [ ] **Licensee Identity**: Full legal name, jurisdiction of incorporation, and address of the licensee.
-- [ ] **Licensed Software**: Exact definition of SLAVES software, including version bounds, components, and module scope.
+- [ ] **Licensed Software**: Exact definition of MARSHAL software, including version bounds, components, and module scope.
 - [ ] **Derivative Works**: Definition of modified, adapted, or extended code created by or for Licensee.
 
 ---
 
 ## 2. Grant of Rights
 
-- [ ] **Grant Scope**: Non-exclusive, worldwide (or territory-restricted), perpetual (or term-limited) right to use, modify, compile, embed, and execute SLAVES.
+- [ ] **Grant Scope**: Non-exclusive, worldwide (or territory-restricted), perpetual (or term-limited) right to use, modify, compile, embed, and execute MARSHAL.
 - [ ] **AGPL Exemption**: Explicit waiver/relief from AGPL-3.0 copyleft and network source-disclosure obligations for the licensed software.
-- [ ] **Proprietary Combination**: Explicit authorization to combine SLAVES with Licensee's proprietary source code without exposing Licensee source code.
+- [ ] **Proprietary Combination**: Explicit authorization to combine MARSHAL with Licensee's proprietary source code without exposing Licensee source code.
 - [ ] **Distribution Rights**: Scope of permitted internal deployment vs external commercial redistribution (OEM / SaaS / sublicensing).
 
 ---
@@ -34,7 +34,7 @@ This checklist is provided for qualified IP counsel and the SLAVES copyright own
 
 ## 4. IP Ownership & Warranties
 
-- [ ] **Ownership Retention**: Clear statement that Licensor retains sole ownership of SLAVES pre-existing IP and core runtime copyrights.
+- [ ] **Ownership Retention**: Clear statement that Licensor retains sole ownership of MARSHAL pre-existing IP and core runtime copyrights.
 - [ ] **Licensee Ownership**: Clear statement that Licensee retains ownership of its independent proprietary applications and extensions.
 - [ ] **Warranty Disclaimer / Limited Warranty**: Standard disclaimers (`AS IS` or limited warranty regarding non-infringement / original creation).
 - [ ] **Indemnification**: Scope of IP non-infringement indemnification, if negotiated.

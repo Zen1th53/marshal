@@ -16,7 +16,7 @@ class DetachedSignTests(unittest.TestCase):
             pub = root/"public.pem"
             msg = root/"msg.bin"
             sig = root/"msg.sig"
-            msg.write_bytes(b"agent-os")
+            msg.write_bytes(b"marshal")
             detached_sign.generate_keypair(priv, pub)
             detached_sign.sign_file(priv, msg, sig)
             self.assertTrue(detached_sign.verify_file(pub, msg, sig))

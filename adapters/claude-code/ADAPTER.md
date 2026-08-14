@@ -21,7 +21,7 @@ context and defeat progressive loading.
 
 Use native permission controls for the smallest tool surface.
 
-For automated permission decisions, the Agent OS runtime can be exposed through
+For automated permission decisions, the MARSHAL runtime can be exposed through
 an MCP permission tool if the installed Claude Code mode supports it.
 
 ## Managed Policy

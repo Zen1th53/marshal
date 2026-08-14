@@ -26,10 +26,10 @@
 **Files:**
 - Create: `runtime/README.md`
 - Create: `runtime/ARCHITECTURE.md`
-- Create: `runtime/AGENTCTL.md`
+- Create: `runtime/MARSHAL-CLI.md`
 
 - [x] Define runtime modes and component boundaries.
-- [x] Define `agentctl` command surface.
+- [x] Define `marshal` command surface.
 - [x] Define status and error semantics.
 
 ### Task 2: Canonical memory/control-plane service

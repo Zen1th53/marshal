@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Zen1th53/slaves/internal/app"
-	"github.com/Zen1th53/slaves/internal/auth"
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 const ProtocolVersion2026 = "2026-07-28"
@@ -35,10 +35,10 @@ type jsonRPCRequest struct {
 }
 
 type jsonRPCResponse struct {
-	JSONRPC string `json:"jsonrpc"`
-	ID      any    `json:"id"`
-	Result  any    `json:"result,omitempty"`
-	Error   *rpcErr`json:"error,omitempty"`
+	JSONRPC string  `json:"jsonrpc"`
+	ID      any     `json:"id"`
+	Result  any     `json:"result,omitempty"`
+	Error   *rpcErr `json:"error,omitempty"`
 }
 
 type rpcErr struct {
@@ -112,7 +112,7 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 				"tools": map[string]any{},
 			},
 			"serverInfo": map[string]string{
-				"name":    "slaves-mcp-server",
+				"name":    "marshal-mcp-server",
 				"version": "0.2.0",
 			},
 		})
@@ -163,18 +163,18 @@ func (s *Server) writeErrorWithStatus(w http.ResponseWriter, id any, status, cod
 func (s *Server) listTools() []Tool {
 	return []Tool{
 		{
-			Name:        "slaves_status",
-			Description: "Get SLAVES local runtime status and object counts",
+			Name:        "marshal_status",
+			Description: "Get MARSHAL local runtime status and object counts",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "tasks_list",
-			Description: "List canonical SLAVES tasks",
+			Description: "List canonical MARSHAL tasks",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
 			Name:        "task_get",
-			Description: "Get specific SLAVES task by ID",
+			Description: "Get specific MARSHAL task by ID",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
@@ -233,7 +233,7 @@ func (s *Server) listTools() []Tool {
 
 func (s *Server) callTool(ctx context.Context, name string, args map[string]any) (string, error) {
 	switch name {
-	case "slaves_status":
+	case "marshal_status":
 		status, err := s.runtime.Status(ctx)
 		if err != nil {
 			return "", err

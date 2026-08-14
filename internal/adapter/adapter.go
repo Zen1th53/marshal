@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type Status string

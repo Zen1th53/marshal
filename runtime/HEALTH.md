@@ -35,7 +35,7 @@ If semantic index is down:
 
 ## Doctor Output
 
-`agentctl doctor` should classify:
+`marshal doctor` should classify:
 
 ```text
 PASS
