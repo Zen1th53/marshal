@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Deliver a real Linux local SLAVES runtime whose CLI controls a Unix-socket daemon backed by transactional SQLite, enforced policy, task worktrees, a bwrap worker, a real Codex adapter, and commit-bound evidence.
+**Goal:** Deliver a real Linux local MARSHAL runtime whose CLI controls a Unix-socket daemon backed by transactional SQLite, enforced policy, task worktrees, a bwrap worker, a real Codex adapter, and commit-bound evidence.
 
-**Architecture:** A thin `slaves` CLI talks HTTP/JSON over a mode-`0600` Unix socket to one daemon. The daemon owns all live coordination writes in SQLite and composes focused identity, scheduler, policy, worktree, sandbox, worker, event, artifact, and verification packages. Bootstrap init is the only pre-daemon database writer.
+**Architecture:** A thin `marshal` CLI talks HTTP/JSON over a mode-`0600` Unix socket to one daemon. The daemon owns all live coordination writes in SQLite and composes focused identity, scheduler, policy, worktree, sandbox, worker, event, artifact, and verification packages. Bootstrap init is the only pre-daemon database writer.
 
 **Tech Stack:** Go 1.25 baseline, standard library CLI/HTTP/process management, `modernc.org/sqlite v1.56.0`, `go.yaml.in/yaml/v3 v3.0.5`, Git CLI, bubblewrap, Codex CLI, existing Python conformance tooling.
 
@@ -24,7 +24,7 @@
 
 ## File Map
 
-- `cmd/slaves/main.go`: process entrypoint and exit-code handoff.
+- `cmd/marshal/main.go`: process entrypoint and exit-code handoff.
 - `internal/cli/cli.go`: argument parsing, human/JSON rendering, daemon client calls.
 - `internal/api/server.go`: local HTTP/JSON routes and typed response envelopes.
 - `internal/api/client.go`: Unix-socket HTTP client.
@@ -53,7 +53,7 @@
 **Files:**
 - Create: `go.mod`
 - Create: `go.sum`
-- Create: `cmd/slaves/main.go`
+- Create: `cmd/marshal/main.go`
 - Create: `internal/model/errors.go`
 - Create: `internal/model/entities.go`
 - Create: `internal/project/layout.go`
@@ -111,7 +111,7 @@ Expected: compilation fails because the packages and APIs do not exist.
 Use:
 
 ```go
-module github.com/Zen1th53/slaves
+module github.com/Zen1th53/marshal
 
 go 1.25.0
 
@@ -135,13 +135,13 @@ ON leases(task_id) WHERE status = 'active';
 
 `project.Discover` uses `git rev-parse --show-toplevel`,
 `git symbolic-ref --short HEAD`, and `git rev-parse HEAD`; it creates no
-files. `layout.Ensure` creates `.slaves` and `artifacts/worktrees/logs`
+files. `layout.Ensure` creates `.marshal` and `artifacts/worktrees/logs`
 with `0700`.
 
 Add exactly these generated-state ignores:
 
 ```gitignore
-.slaves/
+.marshal/
 ```
 
 Record both direct dependencies in the dependency ledger with version,
@@ -168,7 +168,7 @@ Review that SQL is only in `migrations.go`, connection policy only in
 `sqlite.go`, and no generic repository abstraction was introduced.
 
 ```bash
-git add go.mod go.sum cmd/slaves internal/model internal/project internal/store internal/testutil .gitignore memory/DEPENDENCIES.md
+git add go.mod go.sum cmd/marshal internal/model internal/project internal/store internal/testutil .gitignore memory/DEPENDENCIES.md
 git commit -m "feat(runtime): add canonical SQLite state store"
 ```
 
@@ -455,7 +455,7 @@ Probe by executing a bounded `/usr/bin/true` inside the intended namespace
 shape. Build an argv-only command that read-only binds required system
 directories, writable-binds only the worktree and task log/artifact scratch,
 creates tmpfs `/tmp` and an empty home, unshares user/pid/ipc/uts namespaces,
-and unshares network only when denied. Do not mount `.slaves/runtime.sock`.
+and unshares network only when denied. Do not mount `.marshal/runtime.sock`.
 
 Return exact isolation dimensions. Network-denied Codex returns blocked before
 launch. R2/R3 require successful bwrap probe; permitted R0/R1 may explicitly
@@ -625,7 +625,7 @@ or failed states and never complete the task.
 
 - [ ] **Step 5: Add opt-in real Codex integration**
 
-Gate with `SLAVES_TEST_REAL_CODEX=1`. The test creates a temporary Git repo,
+Gate with `MARSHAL_TEST_REAL_CODEX=1`. The test creates a temporary Git repo,
 uses an R0 task prompt that requests one deterministic file and
 commit, launches the installed authenticated Codex through the real adapter,
 and asserts normalized evidence. Without the flag it reports SKIP, not PASS.
@@ -651,7 +651,7 @@ git commit -m "feat(runtime): add Codex execution worker"
 - Create: `internal/api/client.go`
 - Create: `internal/doctor/doctor.go`
 - Create: `internal/cli/cli.go`
-- Modify: `cmd/slaves/main.go`
+- Modify: `cmd/marshal/main.go`
 - Test: `internal/api/server_test.go`
 - Test: `internal/doctor/doctor_test.go`
 - Test: `internal/cli/cli_test.go`
@@ -707,21 +707,21 @@ exit-code mapping and that mutating commands fail unavailable rather than
 opening SQLite when daemon is absent.
 
 ```text
-slaves init
-slaves doctor
-slaves status
-slaves agent register --name local-codex --role developer
-slaves agents
-slaves tasks
-slaves task import tasks.json [--dry-run]
-slaves task show TASK-001
-slaves task claim TASK-001 [--agent AGENT-...]
-slaves task release TASK-001
-slaves run TASK-001 --adapter codex [--agent AGENT-...]
-slaves events
-slaves artifacts
-slaves verify [-- argv...]
-slaves daemon
+marshal init
+marshal doctor
+marshal status
+marshal agent register --name local-codex --role developer
+marshal agents
+marshal tasks
+marshal task import tasks.json [--dry-run]
+marshal task show TASK-001
+marshal task claim TASK-001 [--agent AGENT-...]
+marshal task release TASK-001
+marshal run TASK-001 --adapter codex [--agent AGENT-...]
+marshal events
+marshal artifacts
+marshal verify [-- argv...]
+marshal daemon
 ```
 
 Run: `go test ./internal/cli -v`
@@ -753,7 +753,7 @@ and CLI implementation.
 go test ./internal/app ./internal/api ./internal/doctor ./internal/cli ./internal/integration -v
 go test ./...
 go vet ./...
-git add cmd/slaves internal/app internal/api internal/doctor internal/cli internal/integration
+git add cmd/marshal internal/app internal/api internal/doctor internal/cli internal/integration
 git commit -m "feat(cli): add executable local runtime commands"
 ```
 
@@ -800,7 +800,7 @@ only the seam, not a new subsystem, then rerun to PASS.
 
 - [ ] **Step 2: Write conformance-runner RED tests**
 
-The Python test invokes a built `slaves` binary against temporary fixture
+The Python test invokes a built `marshal` binary against temporary fixture
 state and expects an evidence envelope containing scenario ID, executable
 command, exit code, observed invariant, and current commit. It rejects a static
 fixture-only PASS.
@@ -849,8 +849,8 @@ git commit -m "test(runtime): add adversarial executable conformance"
 Check exact runtime behavior with:
 
 ```bash
-go run ./cmd/slaves --help
-go run ./cmd/slaves --json doctor
+go run ./cmd/marshal --help
+go run ./cmd/marshal --json doctor
 go test ./...
 ```
 
@@ -922,7 +922,7 @@ test -z "$(gofmt -l cmd internal)"
 go test ./...
 go vet ./...
 go test -race ./...
-go build ./cmd/slaves
+go build ./cmd/marshal
 ```
 
 Every command must exit 0. If race is unsupported by the environment, record
@@ -935,7 +935,7 @@ python conformance/runner.py validate-pack
 python -m unittest discover -s conformance/tests -v
 python -m unittest discover -s tools/tests -v
 python -m unittest discover -s tools/tests_v6 -v
-python tools/agentos.py pack-status
+python tools/marshal.py pack-status
 ```
 
 Expected baseline: 6 conformance tests, 3 tools tests, and at least the original
@@ -946,21 +946,21 @@ Expected baseline: 6 conformance tests, 3 tools tests, and at least the original
 In a temporary Git repository:
 
 ```text
-slaves init
-slaves daemon
-slaves agent register --name smoke-codex --role developer
-slaves task import tasks.json
-slaves status
-slaves tasks
-slaves task show TASK-001
-slaves task claim TASK-001
-slaves task release TASK-001
-slaves events
-slaves artifacts
-slaves verify
+marshal init
+marshal daemon
+marshal agent register --name smoke-codex --role developer
+marshal task import tasks.json
+marshal status
+marshal tasks
+marshal task show TASK-001
+marshal task claim TASK-001
+marshal task release TASK-001
+marshal events
+marshal artifacts
+marshal verify
 ```
 
-Capture exit codes and structured results without committing `.slaves/`.
+Capture exit codes and structured results without committing `.marshal/`.
 
 - [ ] **Step 4: Probe and optionally execute real Codex**
 
@@ -971,7 +971,7 @@ codex --version
 codex exec --help
 ```
 
-Run `SLAVES_TEST_REAL_CODEX=1 go test ./internal/integration -run
+Run `MARSHAL_TEST_REAL_CODEX=1 go test ./internal/integration -run
 TestRealCodex -v` because this task explicitly requires real adapter
 verification and the installed CLI is authenticated. If external service,
 quota, or sandbox policy prevents execution, report `Real adapter execution
@@ -985,10 +985,10 @@ git diff --check
 git diff main...HEAD --stat
 git diff main...HEAD
 git log --oneline --decorate main..HEAD
-rg -n --hidden --glob '!.git/**' --glob '!.slaves/**' +  '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|api[_-]?key[[:space:]]*[:=]|password[[:space:]]*[:=]|token[[:space:]]*[:=])' .
+rg -n --hidden --glob '!.git/**' --glob '!.marshal/**' +  '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|api[_-]?key[[:space:]]*[:=]|password[[:space:]]*[:=]|token[[:space:]]*[:=])' .
 ```
 
-Inspect every match without printing secret values. Confirm `.slaves/` is
+Inspect every match without printing secret values. Confirm `.marshal/` is
 ignored and no database, socket, log, artifact bytes, auth file, or private key
 is tracked.
 

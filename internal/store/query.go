@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 func (s *Store) SchemaVersion(ctx context.Context) (int, error) {

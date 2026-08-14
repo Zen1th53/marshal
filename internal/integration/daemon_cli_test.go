@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/adapter"
-	"github.com/Zen1th53/slaves/internal/api"
-	"github.com/Zen1th53/slaves/internal/app"
-	"github.com/Zen1th53/slaves/internal/cli"
-	"github.com/Zen1th53/slaves/internal/model"
-	"github.com/Zen1th53/slaves/internal/testutil/testgit"
+	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/api"
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/cli"
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
 func TestDaemonCLIEndToEnd(t *testing.T) {
@@ -115,7 +115,7 @@ func (fakeCommitAdapter) Probe(context.Context) (adapter.Probe, error) {
 }
 func (fakeCommitAdapter) Run(_ context.Context, request adapter.Request) (adapter.Result, error) {
 	path := filepath.Join(request.Worktree, "runtime-proof.txt")
-	if err := os.WriteFile(path, []byte("SLAVES runtime proof\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("MARSHAL runtime proof\n"), 0o600); err != nil {
 		return adapter.Result{}, err
 	}
 	now := time.Now().UTC()
@@ -138,7 +138,7 @@ func runCLI(t *testing.T, root string, args ...string) []byte {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	if code := cli.Execute(context.Background(), root, args, bytes.NewReader(nil), &stdout, &stderr); code != 0 {
-		t.Fatalf("slaves %v: code=%d stderr=%s", args, code, stderr.String())
+		t.Fatalf("marshal %v: code=%d stderr=%s", args, code, stderr.String())
 	}
 	return stdout.Bytes()
 }

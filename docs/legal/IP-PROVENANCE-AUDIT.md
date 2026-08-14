@@ -1,8 +1,8 @@
-# SLAVES — IP Provenance Audit
+# MARSHAL — IP Provenance Audit
 
 **Audit Date**: 2026-08-12
 **Auditor**: Automated provenance scan + manual review
-**Repository**: `https://github.com/Zen1th53/slaves`
+**Repository**: `https://github.com/Zen1th53/marshal`
 **HEAD at audit**: `23719e0` (branch `main`)
 **Scope**: All source, documentation, schemas, fixtures, and dependencies
 
@@ -39,7 +39,7 @@ contributor commits exist in the repository history.
 
 | Category | Classification | Notes |
 |---|---|---|
-| `cmd/slaves/` | OWNER-CREATED | CLI entry point |
+| `cmd/marshal/` | OWNER-CREATED | CLI entry point |
 | `internal/` | OWNER-CREATED | All runtime packages (adapter, artifact, auth, daemon, doctor, sandbox, store, task, worktree) |
 | Top-level Go files | OWNER-CREATED | No vendored or copied code detected |
 

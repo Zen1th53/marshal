@@ -6,16 +6,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/adapter"
-	"github.com/Zen1th53/slaves/internal/adapter/gemini"
-	"github.com/Zen1th53/slaves/internal/project"
-	"github.com/Zen1th53/slaves/internal/testutil/testgit"
-	"github.com/Zen1th53/slaves/internal/worker"
+	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/adapter/gemini"
+	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
+	"github.com/Zen1th53/marshal/internal/worker"
 )
 
 func TestRealGeminiAdapter(t *testing.T) {
-	if os.Getenv("SLAVES_TEST_REAL_GEMINI") != "1" {
-		t.Skip("set SLAVES_TEST_REAL_GEMINI=1 for authenticated external integration")
+	if os.Getenv("MARSHAL_TEST_REAL_GEMINI") != "1" {
+		t.Skip("set MARSHAL_TEST_REAL_GEMINI=1 for authenticated external integration")
 	}
 	binary, err := project.FindBinary("gemini")
 	if err != nil {
@@ -28,7 +28,7 @@ func TestRealGeminiAdapter(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := client.Run(context.Background(), adapter.Request{
-		TaskID: "TASK-REAL-GEMINI", Title: "Create gemini-proof.txt containing SLAVES runtime proof.",
+		TaskID: "TASK-REAL-GEMINI", Title: "Create gemini-proof.txt containing MARSHAL runtime proof.",
 		Worktree: repo.Path(), BaseCommit: repo.HEAD(t), HeadCommit: repo.HEAD(t),
 	})
 	if err != nil {

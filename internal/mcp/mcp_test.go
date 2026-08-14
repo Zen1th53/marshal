@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Zen1th53/slaves/internal/app"
-	"github.com/Zen1th53/slaves/internal/auth"
-	"github.com/Zen1th53/slaves/internal/testutil/testgit"
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
 func runtimeRepo(t *testing.T) *testgit.Repository {
@@ -95,13 +95,13 @@ func TestMCPServerWireIntegration(t *testing.T) {
 		t.Fatalf("expected tools in tools/list, got 0")
 	}
 
-	// 3. Test tools/call: slaves_status
+	// 3. Test tools/call: marshal_status
 	callReq := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      3,
 		"method":  "tools/call",
 		"params": map[string]any{
-			"name":      "slaves_status",
+			"name":      "marshal_status",
 			"arguments": map[string]any{},
 		},
 	}
@@ -187,7 +187,7 @@ func TestMCPModernStatelessRequest(t *testing.T) {
 		"id":      1,
 		"method":  "tools/call",
 		"params": map[string]any{
-			"name":      "slaves_status",
+			"name":      "marshal_status",
 			"arguments": map[string]any{},
 		},
 	}
@@ -199,7 +199,7 @@ func TestMCPModernStatelessRequest(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("MCP-Protocol-Version", "2026-07-28")
 	req.Header.Set("Mcp-Method", "tools/call")
-	req.Header.Set("Mcp-Name", "slaves_status")
+	req.Header.Set("Mcp-Name", "marshal_status")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -237,7 +237,7 @@ func TestMCPHeaderBodyMismatch(t *testing.T) {
 	// 1. Mcp-Method mismatch
 	callReq := map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-		"params": map[string]any{"name": "slaves_status"},
+		"params": map[string]any{"name": "marshal_status"},
 	}
 	body, _ := json.Marshal(callReq)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(body))

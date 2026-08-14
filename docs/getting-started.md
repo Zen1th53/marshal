@@ -1,8 +1,8 @@
-# Getting Started with SLAVES
+# Getting Started with MARSHAL
 
-**Structured Lifecycle for Agent Verification, Execution & Supervision**
+**Vibe coding, without Vulnerability-as-a-Service.**
 
-This guide walks a new engineer through installing, initializing, configuring, and executing AI coding agent tasks with SLAVES Runtime `v0.4.0`.
+This guide walks a new engineer through installing, initializing, configuring, and executing AI coding agent tasks with MARSHAL.
 
 ---
 
@@ -14,7 +14,7 @@ Before starting, ensure your host environment meets the following requirements:
 |---|---|---|
 | **OS** | Linux (Ubuntu, Debian, Fedora, Arch, etc.) | Process sandboxing (`bwrap`) & Git worktrees |
 | **Git** | 2.30+ | Task branch creation and worktree isolation |
-| **Go** | 1.25+ | Building and running the `slaves` local control plane |
+| **Go** | 1.25+ | Building and running the `marshal` local control plane |
 | **Python** | 3.10+ | Static pack validation and conformance testing |
 | **bubblewrap** | `bwrap` binary installed | Fail-closed filesystem & namespace isolation |
 | **Codex CLI** | `codex-cli 0.146.0`+ | Executing tasks using the `codex` adapter |
@@ -25,42 +25,39 @@ Before starting, ensure your host environment meets the following requirements:
 
 ## 1. Installation
 
-From your local clone of the `slaves` repository on stable release `runtime-v0.4.0`:
+From your local clone of the `marshal` repository:
 
 ```bash
 # Clone the repository
-git clone https://github.com/Zen1th53/slaves.git
-cd slaves
+git clone https://github.com/Zen1th53/marshal.git
+cd marshal
 
-# Checkout stable release tag
-git checkout runtime-v0.4.0
-
-# Install the slaves binary to $GOPATH/bin
-go install ./cmd/slaves
+# Install the marshal binary to $GOPATH/bin
+go install ./cmd/marshal
 ```
 
-Verify that `slaves` is in your `$PATH`:
+Verify that `marshal` is in your `$PATH`:
 ```bash
-slaves --help
+marshal --help
 ```
 
 ---
 
 ## 2. Workspace Initialization & Diagnostics
 
-`slaves init` initializes the `.slaves/` runtime state directory inside your current Git repository. It is idempotent and safe to re-run.
+`marshal init` initializes the `.marshal/` runtime state directory inside your current Git repository. It is idempotent and safe to re-run.
 
 ```bash
 # Step 1: Initialize local workspace state
-slaves init
+marshal init
 
 # Step 2: Run health diagnostics
-slaves doctor
+marshal doctor
 ```
 
-Expected `slaves doctor` output:
+Expected `marshal doctor` output:
 ```text
-SLAVES Doctor Verdict: PASS
+MARSHAL Doctor Verdict: PASS
 ========================================
 [PASS]     git              Git is available
 [PASS]     repository       repository identity resolved
@@ -82,23 +79,23 @@ SLAVES Doctor Verdict: PASS
 
 To view installed provider binaries:
 ```bash
-slaves adapters
+marshal adapters
 ```
 
 ---
 
 ## 3. Starting the Daemon Process
 
-SLAVES runs a local control plane daemon process that manages transactional task leases, SQLite database connections, and worker execution.
+MARSHAL runs a local control plane daemon process that manages transactional task leases, SQLite database connections, and worker execution.
 
 Start the daemon in a background terminal:
 ```bash
-slaves daemon
+marshal daemon
 ```
 
 In a separate terminal, verify the daemon connection:
 ```bash
-slaves status
+marshal status
 ```
 
 Output:
@@ -114,7 +111,7 @@ schema=2 tasks=0 agents=0
 Agents must be registered with an explicit role (`architect`, `developer`, `qa`, `security`) before claiming or executing tasks:
 
 ```bash
-slaves agent register --name OperatorAgent --role developer
+marshal agent register --name OperatorAgent --role developer
 ```
 
 Response:
@@ -124,7 +121,7 @@ AGENT-6901a5e65c4b30a3049d256623d06c21
 
 List registered agents:
 ```bash
-slaves agents
+marshal agents
 ```
 
 ### Import Tasks
@@ -145,16 +142,16 @@ Create a `tasks.json` file in your repository:
 Validate and import the task:
 ```bash
 # Dry run validation
-slaves task import tasks.json --dry-run
+marshal task import tasks.json --dry-run
 
 # Import into SQLite state store
-slaves task import tasks.json
+marshal task import tasks.json
 
 # List tasks
-slaves tasks
+marshal tasks
 
 # Show task details
-slaves task show TASK-001
+marshal task show TASK-001
 ```
 
 ---
@@ -165,20 +162,20 @@ slaves task show TASK-001
 To execute the task using the Codex adapter:
 
 ```bash
-slaves run TASK-001 --adapter codex
+marshal run TASK-001 --adapter codex
 ```
 
-During execution, SLAVES:
-1. Creates an isolated Git worktree at `.slaves/worktrees/TASK-001`.
+During execution, MARSHAL:
+1. Creates an isolated Git worktree at `.marshal/worktrees/TASK-001`.
 2. Spawns `codex` inside a `bubblewrap` sandbox.
 3. Captures stdout/stderr execution logs and events into SQLite.
-4. Commits code changes to branch `slaves/TASK-001`.
+4. Commits code changes to branch `marshal/TASK-001`.
 
 ### Execute Task with OpenCode + Local Ollama
 To execute the task locally using OpenCode and an Ollama model (e.g. `qwythos-9b`):
 
 ```bash
-slaves run TASK-001 --adapter opencode --model qwythos-9b
+marshal run TASK-001 --adapter opencode --model qwythos-9b
 ```
 
 ---
@@ -189,7 +186,7 @@ slaves run TASK-001 --adapter opencode --model qwythos-9b
 To view execution logs, stdout/stderr artifacts, and event history for a task:
 
 ```bash
-slaves logs TASK-001
+marshal logs TASK-001
 ```
 
 Sample output:
@@ -206,24 +203,24 @@ Artifacts (1):
 To cancel a running task execution gracefully:
 
 ```bash
-slaves cancel TASK-001
+marshal cancel TASK-001
 ```
 
 ---
 
 ## 7. Generating Interoperability Auth Tokens
 
-For remote agents or MCP / A2A clients connecting to SLAVES:
+For remote agents or MCP / A2A clients connecting to MARSHAL:
 
 ```bash
 # Generate a Bearer token
-slaves auth token create --name mcp-operator
+marshal auth token create --name mcp-operator
 
 # List active tokens
-slaves auth token list
+marshal auth token list
 
 # Revoke a token
-slaves auth token revoke --id TOKEN-ID
+marshal auth token revoke --id TOKEN-ID
 ```
 
 ---

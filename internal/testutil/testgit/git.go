@@ -16,8 +16,8 @@ func New(t testing.TB) *Repository {
 
 	path := t.TempDir()
 	run(t, path, "git", "init", "-b", "main")
-	run(t, path, "git", "config", "user.name", "SLAVES Test")
-	run(t, path, "git", "config", "user.email", "slaves-test@example.invalid")
+	run(t, path, "git", "config", "user.name", "MARSHAL Test")
+	run(t, path, "git", "config", "user.email", "marshal-test@example.invalid")
 	run(t, path, "git", "commit", "--allow-empty", "-m", "initial")
 	return &Repository{path: path}
 }

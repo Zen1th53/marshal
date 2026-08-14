@@ -24,7 +24,7 @@
 
 ## Entry Points
 
-- agentctl,
+- marshal,
 - Runtime API/MCP,
 - worker tool requests,
 - repository content,

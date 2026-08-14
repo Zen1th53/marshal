@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/schemas/memory-record.schema.json",
-  "title": "Agent OS Memory Record",
+  "$id": "https://marshal.local/schemas/memory-record.schema.json",
+  "title": "MARSHAL Memory Record",
   "type": "object",
   "additionalProperties": false,
   "required": [

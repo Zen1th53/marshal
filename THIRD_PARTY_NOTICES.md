@@ -1,6 +1,6 @@
 # Third-Party Notices & Attribution
 
-This document contains licensing and copyright notices for third-party software, specifications, standards, and components incorporated in or utilized by the SLAVES project.
+This document contains licensing and copyright notices for third-party software, specifications, standards, and components incorporated in or utilized by the MARSHAL project.
 
 ---
 
@@ -36,4 +36,4 @@ All external Go module dependencies are managed via `go.mod` and fetched during 
 
 ## 3. Policy Regarding Future Third-Party Submissions
 
-Contributors must explicitly disclose any third-party code, snippets, dependencies, or materials included in Pull Requests. Copyright assignment agreements do **not** assign third-party copyrights to SLAVES. See [`docs/legal/THIRD-PARTY-POLICY.md`](docs/legal/THIRD-PARTY-POLICY.md).
+Contributors must explicitly disclose any third-party code, snippets, dependencies, or materials included in Pull Requests. Copyright assignment agreements do **not** assign third-party copyrights to MARSHAL. See [`docs/legal/THIRD-PARTY-POLICY.md`](docs/legal/THIRD-PARTY-POLICY.md).

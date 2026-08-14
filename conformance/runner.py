@@ -122,7 +122,7 @@ def _cmd_probe(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Agent OS static conformance helper")
+    parser = argparse.ArgumentParser(description="MARSHAL static conformance helper")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_validate = sub.add_parser("validate-pack")

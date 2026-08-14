@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Zen1th53/slaves/internal/app"
-	"github.com/Zen1th53/slaves/internal/auth"
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 const (
@@ -45,8 +45,8 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	card := map[string]any{
-		"name":            "SLAVES Runtime Agent",
-		"description":     "Structured Lifecycle for Agent Verification, Execution & Supervision Runtime Agent",
+		"name":            "MARSHAL Runtime Agent",
+		"description":     "Security-first agentic coding runtime and control plane",
 		"version":         "0.2.0",
 		"protocolBinding": "HTTP+JSON",
 		"protocolVersion": WireVersion10,
@@ -58,7 +58,7 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 			{
 				"id":          "repository_engineering",
 				"name":        "Repository Engineering Task Execution",
-				"description": "Executes repository tasks governed by SLAVES policy and worktree sandboxing",
+				"description": "Executes repository tasks governed by MARSHAL policy and worktree sandboxing",
 			},
 		},
 	}
@@ -94,7 +94,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/a2a+json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"error": "VERSION_NOT_SUPPORTED",
+			"error":  "VERSION_NOT_SUPPORTED",
 			"detail": fmt.Sprintf("Requested version %s not supported; server supports %s", verHeader, WireVersion10),
 		})
 		return
@@ -137,7 +137,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/a2a+json")
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error": "ROLE_SPOOFING_DENIED",
+				"error":  "ROLE_SPOOFING_DENIED",
 				"detail": "Remote callers cannot self-assign privileged internal roles",
 			})
 			return

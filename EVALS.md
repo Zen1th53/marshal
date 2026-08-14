@@ -266,7 +266,7 @@ Was the installed adapter version probed?
 Did native instructions remain small?
 Did adapter output bind to repository HEAD?
 Did unsupported capability get reported honestly?
-Did native permissions map to Agent OS semantics?
+Did native permissions map to MARSHAL semantics?
 Did untrusted native/remote instructions cross the trust boundary?
 Did required adversarial conformance scenarios pass?
 ```

@@ -1,17 +1,19 @@
 
 import json
+import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
-import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
+SPEC = importlib.util.spec_from_file_location("marshal_tool", ROOT / "tools" / "marshal.py")
+if SPEC is None or SPEC.loader is None:
+    raise RuntimeError("cannot load tools/marshal.py")
+marshal_tool = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(marshal_tool)
 
-import agentos
 
-
-class AgentOSTests(unittest.TestCase):
+class MarshalTests(unittest.TestCase):
     def test_detect_project_finds_python_github_actions_and_agents(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -20,7 +22,7 @@ class AgentOSTests(unittest.TestCase):
             wf = root / ".github" / "workflows"
             wf.mkdir(parents=True)
             (wf / "test.yml").write_text("name: test\n")
-            result = agentos.detect_project(root)
+            result = marshal_tool.detect_project(root)
             self.assertIn("python", result["stacks"])
             self.assertIn("github-actions", result["ci"])
             self.assertIn("AGENTS.md", result["instruction_files"])
@@ -34,7 +36,7 @@ class AgentOSTests(unittest.TestCase):
             "task": {"id": "TASK-2"},
             "project": {"commit": "bbb"},
         }
-        conflicts = agentos.reconcile_state(file_state, runtime_state)
+        conflicts = marshal_tool.reconcile_state(file_state, runtime_state)
         fields = {c["field"] for c in conflicts}
         self.assertIn("task.id", fields)
         self.assertIn("project.commit", fields)
@@ -43,7 +45,7 @@ class AgentOSTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             (root / "PACK-VERSION.yaml").write_text('pack_version: "5.0.0"\nschema_version: 1\n')
-            result = agentos.read_pack_version(root)
+            result = marshal_tool.read_pack_version(root)
             self.assertEqual(result["pack_version"], "5.0.0")
             self.assertEqual(result["schema_version"], 1)
 

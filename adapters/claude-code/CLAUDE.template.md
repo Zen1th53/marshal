@@ -1,4 +1,4 @@
-# Agent OS Bootstrap
+# MARSHAL Bootstrap
 
 Read `agents/AGENT-BOOTSTRAP.md`.
 

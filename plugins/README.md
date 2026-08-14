@@ -1,6 +1,6 @@
 # Plugin / Extension Layer
 
-Plugins extend Agent OS without modifying core role authority.
+Plugins extend MARSHAL without modifying core role authority.
 
 Examples:
 - memory retrieval adapter,

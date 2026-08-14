@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 func TestBwrapExecutesInsideWritableWorktree(t *testing.T) {
@@ -53,7 +53,7 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 		Worktree:     worktree,
 		WritableDirs: []string{scratch},
 		ReadOnlyBinds: []model.Bind{
-			{Source: auth, Target: "/home/slaves/.codex"},
+			{Source: auth, Target: "/home/marshal/.codex"},
 			{Source: gitMetadata, Target: gitMetadata},
 		},
 		NetworkAllowed: false,
@@ -66,19 +66,19 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 	}
 	for _, required := range []string{
 		"--unshare-net", "--unshare-pid", "--tmpfs", "/tmp",
-		"/home/slaves/.codex",
+		"/home/marshal/.codex",
 		"--bind", worktree, worktree, "--bind", scratch, scratch,
-		"--ro-bind", auth, "/home/slaves/.codex", "--", "/usr/bin/codex", "exec",
+		"--ro-bind", auth, "/home/marshal/.codex", "--", "/usr/bin/codex", "exec",
 		gitMetadata,
 	} {
 		if !slices.Contains(spec.Args, required) {
 			t.Fatalf("args missing %q: %#v", required, spec.Args)
 		}
 	}
-	if slices.Contains(spec.Args, ".slaves/runtime.sock") {
+	if slices.Contains(spec.Args, ".marshal/runtime.sock") {
 		t.Fatalf("runtime socket exposed: %#v", spec.Args)
 	}
-	authTarget := slices.Index(spec.Args, "/home/slaves/.codex")
+	authTarget := slices.Index(spec.Args, "/home/marshal/.codex")
 	if authTarget < 1 || spec.Args[authTarget-1] != "--dir" {
 		t.Fatalf("Codex auth target parent is not created before binding: %#v", spec.Args)
 	}

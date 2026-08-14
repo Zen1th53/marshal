@@ -1,6 +1,6 @@
-# SLAVES Runtime v0.3.0 Architecture Design
+# MARSHAL Runtime v0.3.0 Architecture Design
 
-**Title**: SLAVES Runtime v0.3.0 — Production-Hardened Local Control Plane
+**Title**: MARSHAL Runtime v0.3.0 — Production-Hardened Local Control Plane
 **Status**: APPROVED / IMPLEMENTATION
 **Version**: 0.3.0
 **Target Date**: 2026-08-12
@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 
-SLAVES Runtime v0.3.0 hardens the local multi-agent control plane against crashes, orphaned provider process leaks, race conditions, unauthorized protocol requests, and secret leakage in logs/events. Additionally, it establishes full real-world interoperability for OpenCode executing against local Ollama models alongside existing Codex production verification.
+MARSHAL Runtime v0.3.0 hardens the local multi-agent control plane against crashes, orphaned provider process leaks, race conditions, unauthorized protocol requests, and secret leakage in logs/events. Additionally, it establishes full real-world interoperability for OpenCode executing against local Ollama models alongside existing Codex production verification.
 
 ---
 
@@ -48,7 +48,7 @@ The `ProcessSupervisor` wraps child process execution inside a process group (Li
 ### 2.4 Unified Principal Model & Authentication Boundary
 Principals:
 - `Kind`: `local_user`, `mcp_client`, `a2a_agent`
-- High-entropy bearer tokens (`slaves auth token create/list/revoke`) hashed using SHA-256 and verified using constant-time comparison (`subtle.ConstantTimeCompare`).
+- High-entropy bearer tokens (`marshal auth token create/list/revoke`) hashed using SHA-256 and verified using constant-time comparison (`subtle.ConstantTimeCompare`).
 - MCP 2026-07-28 and A2A 1.0 HTTP servers require `Authorization: Bearer <token>`. Unauthorized requests return HTTP 401 Unauthorized / HTTP 403 Forbidden without launching workers or creating leases.
 
 ### 2.5 Secrets Boundary & Redaction
@@ -60,13 +60,13 @@ Principals:
 ## 3. Provider Adapter Hardening
 
 ### 3.1 Codex Adapter
-- Production supported, real E2E verified via `SLAVES_TEST_REAL_CODEX=1`.
+- Production supported, real E2E verified via `MARSHAL_TEST_REAL_CODEX=1`.
 
 ### 3.2 OpenCode + Ollama Adapter
 - Executable binary: `opencode` (stable 1.18.x).
 - Provider: `ollama` (`http://localhost:11434`).
 - Non-interactive execution: `opencode run --model ollama/<model> --auto --dir <worktree>`.
-- Real E2E verified via `SLAVES_TEST_REAL_OPENCODE=1`.
+- Real E2E verified via `MARSHAL_TEST_REAL_OPENCODE=1`.
 
 ---
 
@@ -75,5 +75,5 @@ Principals:
 1. Deterministic Go unit and integration tests under `-race`.
 2. Python conformance and pack validation suites.
 3. Distribution pack manifest validation (`python3 tools/release_verify.py`).
-4. Real Codex E2E suite (`SLAVES_TEST_REAL_CODEX=1`).
-5. Real OpenCode/Ollama E2E suite (`SLAVES_TEST_REAL_OPENCODE=1`).
+4. Real Codex E2E suite (`MARSHAL_TEST_REAL_CODEX=1`).
+5. Real OpenCode/Ollama E2E suite (`MARSHAL_TEST_REAL_OPENCODE=1`).

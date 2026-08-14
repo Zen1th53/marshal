@@ -8,7 +8,7 @@
   },
   "unit_tests": {
     "conformance": 6,
-    "agentos": 3,
+    "marshal": 3,
     "v6": 13,
     "total": 22
   },
@@ -18,7 +18,7 @@
       "returncode": 0
     },
     {
-      "name": "agentos_unit_tests",
+      "name": "marshal_unit_tests",
       "returncode": 0
     },
     {

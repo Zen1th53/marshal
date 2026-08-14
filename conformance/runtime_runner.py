@@ -60,7 +60,7 @@ def run_scenario(root: Path, scenario_id: str) -> dict[str, Any]:
         }
     package, test_name, verdict, observed = mapping
     command = ["go", "test", package, "-run", f"^{test_name}$", "-count=1"]
-    with tempfile.TemporaryDirectory(prefix="slaves-go-cache-") as cache:
+    with tempfile.TemporaryDirectory(prefix="marshal-go-cache-") as cache:
         environment = os.environ.copy()
         environment.update({"CGO_ENABLED": "0", "GOCACHE": cache})
         try:
@@ -99,7 +99,7 @@ def run_scenario(root: Path, scenario_id: str) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run one executable SLAVES Runtime V1 conformance scenario")
+    parser = argparse.ArgumentParser(description="Run one executable MARSHAL Runtime V1 conformance scenario")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--scenario", required=True)
     args = parser.parse_args()

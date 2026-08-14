@@ -12,19 +12,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/adapter"
-	"github.com/Zen1th53/slaves/internal/adapter/claude"
-	"github.com/Zen1th53/slaves/internal/adapter/codex"
-	"github.com/Zen1th53/slaves/internal/adapter/gemini"
-	"github.com/Zen1th53/slaves/internal/adapter/opencode"
-	artifactstore "github.com/Zen1th53/slaves/internal/artifact"
-	"github.com/Zen1th53/slaves/internal/model"
-	"github.com/Zen1th53/slaves/internal/policy"
-	"github.com/Zen1th53/slaves/internal/project"
-	"github.com/Zen1th53/slaves/internal/sandbox"
-	"github.com/Zen1th53/slaves/internal/store"
-	"github.com/Zen1th53/slaves/internal/worker"
-	"github.com/Zen1th53/slaves/internal/worktree"
+	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/adapter/claude"
+	"github.com/Zen1th53/marshal/internal/adapter/codex"
+	"github.com/Zen1th53/marshal/internal/adapter/gemini"
+	"github.com/Zen1th53/marshal/internal/adapter/opencode"
+	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/policy"
+	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/sandbox"
+	"github.com/Zen1th53/marshal/internal/store"
+	"github.com/Zen1th53/marshal/internal/worker"
+	"github.com/Zen1th53/marshal/internal/worktree"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -397,7 +397,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	if task.BaseCommit != nil {
 		baseCommit = *task.BaseCommit
 	}
-	branch := "slaves/" + task.ID
+	branch := "marshal/" + task.ID
 	worktreeManager := worktree.New(r.layout.Root, r.layout.Worktrees)
 	worktreeState, err := worktreeManager.Prepare(ctx, model.WorktreeRequest{
 		TaskID: task.ID, Branch: branch, BaseCommit: baseCommit,
@@ -575,21 +575,21 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 
 			// Adapter runtime storage (.codex, .opencode, etc.) must be writable tmpfs for sqlite DBs / logs
 			writableTmpfs = append(writableTmpfs,
-				"/home/slaves/."+name,
-				"/home/slaves/.local",
-				"/home/slaves/.local/share",
-				"/home/slaves/.local/share/"+name,
-				"/home/slaves/.cache",
-				"/home/slaves/.cache/"+name,
+				"/home/marshal/."+name,
+				"/home/marshal/.local",
+				"/home/marshal/.local/share",
+				"/home/marshal/.local/share/"+name,
+				"/home/marshal/.cache",
+				"/home/marshal/.cache/"+name,
 			)
 
 			if home, homeErr := os.UserHomeDir(); homeErr == nil {
-				// Bind config directories and essential files → /home/slaves/ (read-only)
+				// Bind config directories and essential files → /home/marshal/ (read-only)
 				for _, sub := range []string{
 					"auth.json", "config.toml", "config.json", "AGENTS.md",
 				} {
 					src := filepath.Join(home, "."+name, sub)
-					tgt := "/home/slaves/." + name + "/" + sub
+					tgt := "/home/marshal/." + name + "/" + sub
 					if _, statErr := os.Stat(src); statErr == nil {
 						readOnlyBinds = append(readOnlyBinds, model.Bind{Source: src, Target: tgt})
 					}
@@ -597,7 +597,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 
 				srcConfigDir := filepath.Join(home, ".config", name)
 				if _, statErr := os.Stat(srcConfigDir); statErr == nil {
-					readOnlyBinds = append(readOnlyBinds, model.Bind{Source: srcConfigDir, Target: "/home/slaves/.config/" + name})
+					readOnlyBinds = append(readOnlyBinds, model.Bind{Source: srcConfigDir, Target: "/home/marshal/.config/" + name})
 				}
 
 				// For opencode: bind npm node_modules used by the opencode binary
@@ -607,7 +607,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 						filepath.Join(".config", "opencode", "node_modules"),
 					} {
 						src := filepath.Join(home, sub)
-						tgt := "/home/slaves/" + sub
+						tgt := "/home/marshal/" + sub
 						if _, statErr := os.Stat(src); statErr == nil {
 							readOnlyBinds = append(readOnlyBinds, model.Bind{Source: src, Target: tgt})
 						}
@@ -616,9 +616,9 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 
 				// Forward XDG env so apps inside sandbox find config correctly
 				extraEnv = append(extraEnv,
-					"XDG_CONFIG_HOME=/home/slaves/.config",
-					"XDG_DATA_HOME=/home/slaves/.local/share",
-					"XDG_CACHE_HOME=/home/slaves/.cache",
+					"XDG_CONFIG_HOME=/home/marshal/.config",
+					"XDG_DATA_HOME=/home/marshal/.local/share",
+					"XDG_CACHE_HOME=/home/marshal/.cache",
 				)
 			}
 
@@ -629,9 +629,9 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			}
 			extraEnv = append(extraEnv, "OLLAMA_HOST="+ollamaHost)
 
-			// Forward SLAVES_OPENCODE_MODEL if set
-			if m := os.Getenv("SLAVES_OPENCODE_MODEL"); m != "" {
-				extraEnv = append(extraEnv, "SLAVES_OPENCODE_MODEL="+m)
+			// Forward MARSHAL_OPENCODE_MODEL if set
+			if m := os.Getenv("MARSHAL_OPENCODE_MODEL"); m != "" {
+				extraEnv = append(extraEnv, "MARSHAL_OPENCODE_MODEL="+m)
 			}
 
 			runner = worker.NewSandboxed(process, backend, model.SandboxRequest{

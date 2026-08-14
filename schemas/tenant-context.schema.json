@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/schemas/tenant-context.schema.json",
-  "title": "Agent OS Tenant Context",
+  "$id": "https://marshal.local/schemas/tenant-context.schema.json",
+  "title": "MARSHAL Tenant Context",
   "type": "object",
   "additionalProperties": false,
   "required": [

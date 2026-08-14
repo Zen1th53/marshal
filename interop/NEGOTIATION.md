@@ -14,14 +14,14 @@ discover endpoint/card
 
 ## A2A
 
-Agent OS supports A2A `1.0`.
+MARSHAL supports A2A `1.0`.
 
 A version mismatch returns an explicit incompatibility; do not silently interpret
 a different major/minor protocol.
 
 ## MCP
 
-Agent OS pins exact MCP specification date for the runtime profile.
+MARSHAL pins exact MCP specification date for the runtime profile.
 
 Unknown/newer protocol:
 ```text

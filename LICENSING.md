@@ -1,9 +1,9 @@
-# SLAVES Dual-Licensing Model
+# MARSHAL Dual-Licensing Model
 
-SLAVES is available under a **dual-licensing architecture** designed to support both community open-source innovation and corporate enterprise adoption.
+MARSHAL is available under a **dual-licensing architecture** designed to support both community open-source innovation and corporate enterprise adoption.
 
 ```text
-                                SLAVES
+                                MARSHAL
                                    │
                            Copyright Owner
                                    │
@@ -21,23 +21,23 @@ SLAVES is available under a **dual-licensing architecture** designed to support 
 
 ## 1. Community Edition (AGPL-3.0-only)
 
-The open-source community edition of SLAVES is licensed under the **GNU Affero General Public License, version 3.0 only (`AGPL-3.0-only`)**.
+The open-source community edition of MARSHAL is licensed under the **GNU Affero General Public License, version 3.0 only (`AGPL-3.0-only`)**.
 
 * **License Text**: See [`LICENSE`](LICENSE).
 * **SPDX Identifier**: `AGPL-3.0-only`
-* **Permitted Uses**: Anyone may use, inspect, modify, run, and distribute SLAVES under the terms of the AGPL-3.0-only.
-* **Network Copyleft Notice**: Commercial or production use is **not** forbidden by AGPL. However, if you run a modified version of SLAVES on a server and let users interact with it over a computer network, AGPL-3.0 requires you to make your modified source code available to those network users under AGPL-3.0.
+* **Permitted Uses**: Anyone may use, inspect, modify, run, and distribute MARSHAL under the terms of the AGPL-3.0-only.
+* **Network Copyleft Notice**: Commercial or production use is **not** forbidden by AGPL. However, if you run a modified version of MARSHAL on a server and let users interact with it over a computer network, AGPL-3.0 requires you to make your modified source code available to those network users under AGPL-3.0.
 
 ---
 
 ## 2. Commercial License (Alternative Terms)
 
-Organizations that do not wish to operate under the AGPL-3.0 terms — such as those integrating SLAVES into proprietary products, embedding SLAVES into closed-source OEM software, or operating under strict corporate policies — may request a separate **Commercial License** directly from the copyright owner.
+Organizations that do not wish to operate under the AGPL-3.0 terms — such as those integrating MARSHAL into proprietary products, embedding MARSHAL into closed-source OEM software, or operating under strict corporate policies — may request a separate **Commercial License** directly from the copyright owner.
 
 A Commercial License provides:
 
 * **Freedom from AGPL network copyleft requirements**
-* **Permission to combine SLAVES with proprietary code without disclosing source**
+* **Permission to combine MARSHAL with proprietary code without disclosing source**
 * **OEM embedding and commercial redistribution rights**
 * **Custom enterprise / private build authorization**
 * **Negotiated commercial terms, SLA options, and dedicated support options**
@@ -52,7 +52,7 @@ A Commercial License provides:
 To inquire about obtaining a Commercial License, custom licensing terms, or enterprise arrangements:
 
 * **Commercial Licensing Guide**: See [`COMMERCIAL-LICENSING.md`](COMMERCIAL-LICENSING.md)
-* **Inquiries**: Contact the copyright owner at `extreme29@proton.me` or visit [`https://github.com/Zen1th53/slaves`](https://github.com/Zen1th53/slaves).
+* **Inquiries**: Contact the copyright owner at `extreme29@proton.me` or visit [`https://github.com/Zen1th53/marshal`](https://github.com/Zen1th53/marshal).
 
 ---
 

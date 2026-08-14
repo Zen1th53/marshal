@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/plugins/registry.schema.json",
+  "$id": "https://marshal.local/plugins/registry.schema.json",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -57,7 +57,7 @@
               "type": "string"
             }
           },
-          "agent_os_version": {
+          "marshal_version": {
             "type": "string"
           },
           "runtime_spec_version": {

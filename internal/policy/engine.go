@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/model"
 	"go.yaml.in/yaml/v3"
 )
 

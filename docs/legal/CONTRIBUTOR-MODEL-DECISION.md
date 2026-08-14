@@ -1,6 +1,6 @@
 # Contributor Model Decision Document
 
-This document records the architectural rationale and comparison of contributor-rights models considered for SLAVES, leading to the selection of a **Copyright Assignment + Patent Grant** model.
+This document records the architectural rationale and comparison of contributor-rights models considered for MARSHAL, leading to the selection of a **Copyright Assignment + Patent Grant** model.
 
 ---
 
@@ -23,14 +23,14 @@ Under an Apache-style CLA (such as the Apache ICLA/CCLA), contributors retain th
 
 If a project owner later seeks to change the open-source license model, offer custom proprietary commercial licenses, or sell/transfer project IP in an acquisition, fragmented copyright ownership creates substantial legal friction and due-diligence risk.
 
-### Harmony / FSF Model (Copyright Assignment) — Chosen by SLAVES
+### Harmony / FSF Model (Copyright Assignment) — Chosen by MARSHAL
 Under a Copyright Assignment model (inspired by Harmony Agreement Assignment option `Ah` and FSF copyright assignment principles), contributors assign their applicable copyright title in accepted contributions to the project owner while retaining authorship credit in Git history and receiving broad patent grants.
 
 ---
 
-## 3. Rationale for SLAVES Selection
+## 3. Rationale for MARSHAL Selection
 
-SLAVES selected **Copyright Assignment + Patent Grant** (ICAA / CCAA) for the following strategic reasons:
+MARSHAL selected **Copyright Assignment + Patent Grant** (ICAA / CCAA) for the following strategic reasons:
 
 1. **Clean Chain-of-Title**: Centralizes project-owned copyright ownership with the project owner, eliminating IP fragmentation.
 2. **Dual-Licensing Flexibility**: Enables the owner to offer both an `AGPL-3.0-only` community edition and custom Commercial Licenses to corporate users without requiring individual consent from every past contributor.

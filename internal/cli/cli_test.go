@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Zen1th53/slaves/internal/testutil/testgit"
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
 func TestInitAndJSONDoctor(t *testing.T) {
@@ -64,7 +64,7 @@ func TestRequiredCommandsHaveUsage(t *testing.T) {
 	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "legal", "daemon"} {
 		var stdout, stderr bytes.Buffer
 		code := Execute(context.Background(), ".", []string{command, "--help"}, strings.NewReader(""), &stdout, &stderr)
-		if code != 0 || !strings.Contains(stdout.String()+stderr.String(), "Usage:") {
+		if code != 0 || !strings.Contains(stdout.String()+stderr.String(), "Usage: marshal ") {
 			t.Errorf("%s: code=%d output=%q", command, code, stdout.String()+stderr.String())
 		}
 	}
@@ -127,7 +127,7 @@ func TestLegalCLI(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
 	code := Execute(context.Background(), repo.Path(), []string{"legal", "audit"}, strings.NewReader(""), &stdout, &stderr)
-	if code != 0 || !strings.Contains(stdout.String(), "SLAVES Acquisition Due-Diligence Audit") {
+	if code != 0 || !strings.Contains(stdout.String(), "MARSHAL Acquisition Due-Diligence Audit") {
 		t.Fatalf("legal audit code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 
@@ -141,7 +141,7 @@ func TestLegalCLI(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &auditReport); err != nil {
 		t.Fatalf("unmarshal legal audit report: %v", err)
 	}
-	if auditReport["schema"] != "slaves.acquisition-evidence.v1" {
+	if auditReport["schema"] != "marshal.acquisition-evidence.v1" {
 		t.Fatalf("unexpected audit report schema: %v", auditReport["schema"])
 	}
 

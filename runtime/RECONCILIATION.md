@@ -45,10 +45,10 @@ Trigger on:
 Recommended:
 
 ```text
-agentctl diff-state
-agentctl export-state
-agentctl import-state
-agentctl reconcile
+marshal diff-state
+marshal export-state
+marshal import-state
+marshal reconcile
 ```
 
 Every resolving mutation should be audit logged.

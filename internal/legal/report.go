@@ -152,7 +152,7 @@ func (r *Report) ToJSON() ([]byte, error) {
 
 func (r *Report) ToTerminal() string {
 	var sb strings.Builder
-	sb.WriteString("SLAVES Acquisition Due-Diligence Audit\n")
+	sb.WriteString("MARSHAL Acquisition Due-Diligence Audit\n")
 	sb.WriteString("======================================\n")
 	sb.WriteString(fmt.Sprintf("Source HEAD:            %s\n", r.Source.HeadSHA))
 	sb.WriteString(fmt.Sprintf("Tree SHA:               %s\n", r.Source.TreeSHA))

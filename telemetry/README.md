@@ -1,10 +1,10 @@
 # Telemetry Plane
 
-Agent OS telemetry follows OpenTelemetry concepts while keeping a stable custom
-`agentos.*` namespace for Agent OS-specific attributes.
+MARSHAL telemetry follows OpenTelemetry concepts while keeping a stable custom
+`marshal.*` namespace for MARSHAL-specific attributes.
 
 This avoids falsely treating development-stage GenAI semantic conventions as a
-permanent Agent OS wire contract.
+permanent MARSHAL wire contract.
 
 Goals:
 - correlate task/session/agent/artifact activity,

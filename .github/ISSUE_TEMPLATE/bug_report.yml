@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible SLAVES defect
+description: Report a reproducible MARSHAL defect
 title: "[Bug]: "
 labels: ["bug"]
 body:

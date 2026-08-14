@@ -1,4 +1,4 @@
-# Contributing to SLAVES
+# Contributing to MARSHAL
 
 Contributions should preserve the project's evidence-first engineering model
 and remain small enough to review and revert independently.
@@ -64,7 +64,7 @@ commit.
 > [!IMPORTANT]
 > **Material external contributions are not accepted for merge until the required contributor assignment process is completed.**
 
-To preserve a clean chain-of-title and support the project's dual-licensing architecture (`AGPL-3.0-only` community + commercial), SLAVES requires external contributors to execute a Copyright Assignment Agreement prior to merging material code changes.
+To preserve a clean chain-of-title and support the project's dual-licensing architecture (`AGPL-3.0-only` community + commercial), MARSHAL requires external contributors to execute a Copyright Assignment Agreement prior to merging material code changes.
 
 ```text
                      Pull Request Opened
@@ -103,6 +103,6 @@ For step-by-step onboarding, see [docs/legal/CONTRIBUTOR-ONBOARDING.md](docs/leg
 
 ## Licensing
 
-SLAVES Community Edition is licensed under `AGPL-3.0-only`. Alternative Commercial Licensing is available for organizations requiring non-AGPL terms. See [LICENSING.md](LICENSING.md) and [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
+MARSHAL Community Edition is licensed under `AGPL-3.0-only`. Alternative Commercial Licensing is available for organizations requiring non-AGPL terms. See [LICENSING.md](LICENSING.md) and [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
 
 By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).

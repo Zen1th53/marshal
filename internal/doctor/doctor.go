@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/policy"
-	"github.com/Zen1th53/slaves/internal/project"
-	"github.com/Zen1th53/slaves/internal/store"
+	"github.com/Zen1th53/marshal/internal/policy"
+	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/store"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -49,7 +49,7 @@ func (r Report) Check(name string) *Result {
 
 func (r Report) FormattedText() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("SLAVES Doctor Verdict: %s\n", r.Verdict))
+	sb.WriteString(fmt.Sprintf("MARSHAL Doctor Verdict: %s\n", r.Verdict))
 	sb.WriteString("========================================\n")
 	for _, res := range r.Results {
 		status := fmt.Sprintf("[%s]", res.Verdict)
@@ -128,9 +128,9 @@ func Check(ctx context.Context, root string, options Options) Report {
 	}
 
 	if secureDirectory(layout.RuntimeDir) {
-		add(success("permissions", "stat .slaves", "runtime directory mode is 0700"))
+		add(success("permissions", "stat .marshal", "runtime directory mode is 0700"))
 	} else {
-		add(failure("permissions", "stat .slaves", "runtime directory must have mode 0700"))
+		add(failure("permissions", "stat .marshal", "runtime directory must have mode 0700"))
 	}
 	if info, err := os.Lstat(layout.Socket); errors.Is(err, os.ErrNotExist) {
 		add(success("socket", "lstat runtime.sock", "daemon is not running"))

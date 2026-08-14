@@ -7,7 +7,7 @@
   },
   "mcp": {
     "allowed": [
-      "agent-os"
+      "marshal"
     ]
   },
   "tools": {

@@ -1,7 +1,7 @@
 # Agent Adapters
 
 Adapters translate native coding-agent lifecycle and configuration into the shared
-Agent OS contract.
+MARSHAL contract.
 
 Supported core adapter specifications:
 
@@ -21,7 +21,7 @@ native agent lifecycle
         ↕
 adapter
         ↕
-Agent OS contract
+MARSHAL contract
 ```
 
 Each adapter must define:

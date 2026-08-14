@@ -1,4 +1,4 @@
-# Agent OS Completeness Design
+# MARSHAL Completeness Design
 
 ## Context
 

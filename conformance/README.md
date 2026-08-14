@@ -1,7 +1,7 @@
-# Agent OS Conformance
+# MARSHAL Conformance
 
 This directory tests whether an adapter/agent behaves according to the shared
-Agent OS contract.
+MARSHAL contract.
 
 Two levels:
 

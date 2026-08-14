@@ -2,7 +2,7 @@
 
 ## Component Boundaries
 
-### agentctl
+### marshal
 
 Human/operator entrypoint.
 

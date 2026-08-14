@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 func (s *Store) ImportTasks(ctx context.Context, tasks []model.Task) (model.ImportResult, error) {

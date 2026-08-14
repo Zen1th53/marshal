@@ -1,6 +1,6 @@
 # Machine-Readable Schemas
 
-Agent OS V6 uses JSON Schema Draft 2020-12 for the portable control-plane records
+MARSHAL V6 uses JSON Schema Draft 2020-12 for the portable control-plane records
 that cross process, adapter, or host boundaries.
 
 Schemas included:

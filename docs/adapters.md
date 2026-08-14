@@ -1,7 +1,7 @@
 # Adapters
 
 Adapters map a native coding agent's bootstrap, execution, permission,
-session, and evidence surfaces into SLAVES. They do not change role authority,
+session, and evidence surfaces into MARSHAL. They do not change role authority,
 policy, or task ownership.
 
 The repository defines contracts for:
@@ -18,7 +18,7 @@ Runtime `v0.4.0` implements and verifies Codex and OpenCode + local Ollama execu
 Capability status is explicit:
 
 - `native`: the upstream agent exposes a direct surface;
-- `emulated`: SLAVES must provide the behavior;
+- `emulated`: MARSHAL must provide the behavior;
 - `probe_required`: the installed version must be checked;
 - `unsupported`: no native capability is claimed.
 

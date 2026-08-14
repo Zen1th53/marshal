@@ -909,7 +909,7 @@ When an external coding agent executes a role:
 
 1. identify adapter,
 2. probe installed capability,
-3. bind Agent OS identity/task,
+3. bind MARSHAL identity/task,
 4. use the smallest native permission surface,
 5. normalize evidence/output,
 6. run relevant conformance scenarios for new/changed adapters.

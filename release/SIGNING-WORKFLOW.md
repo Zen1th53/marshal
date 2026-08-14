@@ -9,8 +9,8 @@ For local testing only:
 
 ```bash
 python tools/detached_sign.py generate-keypair \
-  --private /secure/path/agent-os-private.pem \
-  --public agent-os-public.pem
+  --private /secure/path/marshal-private.pem \
+  --public marshal-public.pem
 ```
 
 Do not put the private key into the repository or ZIP.
@@ -19,7 +19,7 @@ Do not put the private key into the repository or ZIP.
 
 ```bash
 python tools/detached_sign.py sign \
-  --private /secure/path/agent-os-private.pem \
+  --private /secure/path/marshal-private.pem \
   --file distribution/PACK-MANIFEST.json \
   --signature PACK-MANIFEST.sig
 ```
@@ -28,7 +28,7 @@ python tools/detached_sign.py sign \
 
 ```bash
 python tools/detached_sign.py verify \
-  --public agent-os-public.pem \
+  --public marshal-public.pem \
   --file distribution/PACK-MANIFEST.json \
   --signature PACK-MANIFEST.sig
 ```

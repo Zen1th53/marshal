@@ -29,7 +29,7 @@ These definitions summarize the repository contracts.
 - **Memory:** Provenance-bearing shared state whose authority, confidence,
   staleness, and owner are explicit.
 - **Adapter:** A translation layer between a native agent's lifecycle and the
-  SLAVES adapter contract.
+  MARSHAL adapter contract.
 - **Worker:** A task-scoped process managed through prepare, run, heartbeat,
   checkpoint, verify, release, and exit states.
 - **Runtime:** The executable enforcement plane for identity, policy, leases,

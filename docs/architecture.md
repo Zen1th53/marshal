@@ -1,6 +1,6 @@
 # Architecture
 
-SLAVES separates durable engineering authority from the coding-agent vendor
+MARSHAL separates durable engineering authority from the coding-agent vendor
 that performs work. This page is a map; the linked specifications remain
 canonical.
 

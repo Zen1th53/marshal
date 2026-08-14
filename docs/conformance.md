@@ -1,6 +1,6 @@
 # Conformance
 
-SLAVES currently defines 26 adversarial and fault scenarios in
+MARSHAL currently defines 26 adversarial and fault scenarios in
 [conformance/SCENARIOS.json](../conformance/SCENARIOS.json). The repository
 separates three kinds of evidence.
 

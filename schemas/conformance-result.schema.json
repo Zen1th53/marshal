@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/schemas/conformance-result.schema.json",
-  "title": "Agent OS Conformance Result",
+  "$id": "https://marshal.local/schemas/conformance-result.schema.json",
+  "title": "MARSHAL Conformance Result",
   "type": "object",
   "additionalProperties": false,
   "required": [

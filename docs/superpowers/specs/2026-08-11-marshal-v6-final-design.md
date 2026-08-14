@@ -1,4 +1,4 @@
-# Agent OS V6 Final Completeness Design
+# MARSHAL V6 Final Completeness Design
 
 ## Goal
 
@@ -22,7 +22,7 @@ Native Agent Adapters
         ├── MCP → tools/context
         ├── A2A → remote agents
         │
-Agent OS Runtime
+MARSHAL Runtime
         │
    Canonical Schemas
         │

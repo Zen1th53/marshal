@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/schemas/finding.schema.json",
-  "title": "Agent OS Finding",
+  "$id": "https://marshal.local/schemas/finding.schema.json",
+  "title": "MARSHAL Finding",
   "type": "object",
   "additionalProperties": false,
   "required": [

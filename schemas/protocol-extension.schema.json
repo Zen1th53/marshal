@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-os.local/schemas/protocol-extension.schema.json",
-  "title": "Agent OS Protocol Extension",
+  "$id": "https://marshal.local/schemas/protocol-extension.schema.json",
+  "title": "MARSHAL Protocol Extension",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -20,7 +20,7 @@
       "enum": [
         "a2a",
         "mcp",
-        "agent-os-runtime"
+        "marshal-runtime"
       ]
     },
     "version": {

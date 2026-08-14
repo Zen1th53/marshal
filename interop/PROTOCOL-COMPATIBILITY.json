@@ -3,18 +3,18 @@
   "verified_date": "2026-08-11",
   "protocols": {
     "a2a": {
-      "agent_os_profile": "1.0",
+      "marshal_profile": "1.0",
       "compatibility_key": "major.minor",
       "discovery": "agent-card",
       "status": "supported"
     },
     "mcp": {
-      "agent_os_profile": "2026-07-28",
+      "marshal_profile": "2026-07-28",
       "compatibility_key": "exact-spec-date",
       "status": "supported"
     },
-    "agent-os-runtime": {
-      "agent_os_profile": "1.0.0",
+    "marshal-runtime": {
+      "marshal_profile": "1.0.0",
       "compatibility_key": "semver",
       "status": "supported"
     }

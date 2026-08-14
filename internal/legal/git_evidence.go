@@ -78,7 +78,7 @@ func CollectSourceEvidence(ctx context.Context, repoDir string) (*SourceEvidence
 
 	historyComplete := !isShallow
 
-	goModPath := "github.com/Zen1th53/slaves"
+	goModPath := "github.com/Zen1th53/marshal"
 	if data, err := ReadBlob(ctx, repoDir, headSHA, "go.mod"); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			line = strings.TrimSpace(line)

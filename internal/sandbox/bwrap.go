@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type Bwrap struct {
@@ -71,8 +71,8 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		"--dev", "/dev",
 		"--tmpfs", "/tmp",
 		"--dir", "/home",
-		"--dir", "/home/slaves",
-		"--setenv", "HOME", "/home/slaves",
+		"--dir", "/home/marshal",
+		"--setenv", "HOME", "/home/marshal",
 		"--setenv", "PATH", "/usr/bin:/bin",
 		"--bind", worktree, worktree,
 	)
@@ -92,7 +92,7 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 	for _, bind := range request.ReadOnlyBinds {
 		source, err := existingPath(bind.Source)
 		if err != nil || !filepath.IsAbs(bind.Target) ||
-			(!pathWithin("/home/slaves", bind.Target) && source != bind.Target) {
+			(!pathWithin("/home/marshal", bind.Target) && source != bind.Target) {
 			return model.CommandSpec{}, fmt.Errorf("%w: invalid read-only bind %s -> %s", model.ErrInvalid, bind.Source, bind.Target)
 		}
 		info, err := os.Stat(source)
@@ -108,7 +108,7 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 	}
 	args = append(args, "--chdir", worktree, "--")
 	args = append(args, command...)
-	baseEnv := []string{"HOME=/home/slaves", "PATH=/usr/bin:/bin"}
+	baseEnv := []string{"HOME=/home/marshal", "PATH=/usr/bin:/bin"}
 	for _, kv := range request.ExtraEnv {
 		parts := strings.SplitN(kv, "=", 2)
 		if len(parts) == 2 {

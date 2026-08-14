@@ -52,8 +52,8 @@ func TestAuditStatusRules(t *testing.T) {
 		t.Fatalf("RunAudit failed: %v", err)
 	}
 
-	if report.Schema != "slaves.acquisition-evidence.v1" {
-		t.Errorf("expected schema 'slaves.acquisition-evidence.v1', got %q", report.Schema)
+	if report.Schema != "marshal.acquisition-evidence.v1" {
+		t.Errorf("expected schema 'marshal.acquisition-evidence.v1', got %q", report.Schema)
 	}
 	if report.Source.HeadSHA == "" {
 		t.Error("expected non-empty HeadSHA")

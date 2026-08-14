@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Implement the first executable SLAVES runtime as a small local control plane:
+Implement the first executable MARSHAL runtime as a small local control plane:
 a thin CLI, a local Unix-socket daemon, one canonical SQLite writer, enforced
 policy and approvals, task-scoped Git worktrees, a real Codex adapter, durable
 events, and digest-bound evidence.
@@ -13,12 +13,12 @@ secrets broker, or adapters other than Codex.
 
 ## Runtime Boundary
 
-The `slaves` CLI is a client. Protected state mutations go through a daemon
-listening on `.slaves/runtime.sock`; the CLI does not silently fall back to
+The `marshal` CLI is a client. Protected state mutations go through a daemon
+listening on `.marshal/runtime.sock`; the CLI does not silently fall back to
 writing SQLite directly. The daemon is the single canonical writer while it is
 running.
 
-`slaves init` is the bootstrap exception. It verifies Git repository identity,
+`marshal init` is the bootstrap exception. It verifies Git repository identity,
 creates the project-local runtime directory, applies deterministic migrations,
 and records the project before a daemon exists. It is idempotent and does not
 create tasks or overwrite governance files.
@@ -63,7 +63,7 @@ recorded in `memory/DEPENDENCIES.md`.
 
 ## Task Import and Reconciliation
 
-`slaves task import tasks.json` accepts either one task object or an array of
+`marshal task import tasks.json` accepts either one task object or an array of
 task objects matching `schemas/task.schema.json`. Validation is strict:
 unknown fields, malformed IDs, invalid states, duplicate dependency IDs, and
 missing referenced tasks reject the entire import transaction.
@@ -80,7 +80,7 @@ snapshot, not a second writer.
 Concrete agents are registered by the local operator:
 
 ```text
-slaves agent register --name local-codex --role developer
+marshal agent register --name local-codex --role developer
 ```
 
 The role is stored on the agent record and copied into an immutable session
@@ -199,7 +199,7 @@ does not replace the real adapter.
 
 ## Run State Machine
 
-`slaves run TASK-001 --adapter codex` performs:
+`marshal run TASK-001 --adapter codex` performs:
 
 1. authenticate the local request and create/bind a session;
 2. load the task and evaluate scheduler readiness;
@@ -231,14 +231,14 @@ HEAD_CHANGED, VERIFICATION_INVALIDATED, WORKER_STARTED, WORKER_EXITED,
 APPROVAL_REQUIRED, POLICY_DENIED, and ARTIFACT_REGISTERED.
 
 Artifact bytes are stored under
-`.slaves/artifacts/sha256/<digest>`. Registration computes SHA-256 and rejects
+`.marshal/artifacts/sha256/<digest>`. Registration computes SHA-256 and rejects
 a claimed digest that does not match. Evidence binds task, agent/session,
 adapter/version, base and resulting commits, timing, exit status, exact
 verification command, output references, and artifact digest.
 
-`slaves verify` checks runtime/store/policy/worktree/artifact integrity and
+`marshal verify` checks runtime/store/policy/worktree/artifact integrity and
 records exactly those checks at the current HEAD. It does not imply project
-tests ran. `slaves verify -- <argv...>` executes exact argv without a shell,
+tests ran. `marshal verify -- <argv...>` executes exact argv without a shell,
 after policy evaluation, and records its actual exit status and output digest.
 
 If HEAD changes from A to B, every valid verification for A becomes invalid in
@@ -250,25 +250,25 @@ VERIFICATION_INVALIDATED.
 Runtime V1 provides:
 
 ```text
-slaves init
-slaves doctor
-slaves status
-slaves agent register
-slaves agents
-slaves tasks
-slaves task import
-slaves task show
-slaves task claim
-slaves task release
-slaves run
-slaves events
-slaves artifacts
-slaves verify
-slaves daemon
+marshal init
+marshal doctor
+marshal status
+marshal agent register
+marshal agents
+marshal tasks
+marshal task import
+marshal task show
+marshal task claim
+marshal task release
+marshal run
+marshal events
+marshal artifacts
+marshal verify
+marshal daemon
 ```
 
 Read-oriented commands support global `--json`. Human output is concise; JSON
-is the automation contract. Exit codes follow `runtime/AGENTCTL.md`: success,
+is the automation contract. Exit codes follow `runtime/MARSHAL-CLI.md`: success,
 generic failure, usage, policy denied, approval required, conflict, unavailable
 dependency, and verification failure.
 

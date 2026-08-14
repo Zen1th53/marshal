@@ -2,9 +2,39 @@ package project
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
+
+func TestDiscoverUsesMarshalRuntimeDirectory(t *testing.T) {
+	repo := t.TempDir()
+	for _, args := range [][]string{{"init"}, {"config", "user.name", "Test"}, {"config", "user.email", "test@example.invalid"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, output)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("test\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "README.md"}, {"commit", "-m", "initial"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, output)
+		}
+	}
+
+	layout, err := Discover(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := layout.RuntimeDir, filepath.Join(repo, ".marshal"); got != want {
+		t.Fatalf("RuntimeDir = %q, want %q", got, want)
+	}
+}
 
 func TestCompareSemver(t *testing.T) {
 	tests := []struct {

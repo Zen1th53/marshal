@@ -6,7 +6,7 @@ rewriting the repository's native governance.
 Use:
 
 ```bash
-python tools/agentos.py detect-project /path/to/repo
+python tools/marshal.py detect-project /path/to/repo
 ```
 
 Then follow `bootstrap/PROJECT-INIT.md`.

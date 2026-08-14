@@ -131,7 +131,7 @@ func Discover(start string) (Layout, error) {
 	if err != nil {
 		return Layout{}, fmt.Errorf("discover HEAD: %w", err)
 	}
-	runtimeDir := filepath.Join(root, ".slaves")
+	runtimeDir := filepath.Join(root, ".marshal")
 	return Layout{
 		Root:       root,
 		Branch:     branch,

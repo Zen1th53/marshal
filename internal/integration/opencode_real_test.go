@@ -12,19 +12,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/a2a"
-	"github.com/Zen1th53/slaves/internal/adapter"
-	"github.com/Zen1th53/slaves/internal/adapter/opencode"
-	"github.com/Zen1th53/slaves/internal/app"
-	"github.com/Zen1th53/slaves/internal/mcp"
-	"github.com/Zen1th53/slaves/internal/model"
-	"github.com/Zen1th53/slaves/internal/project"
-	"github.com/Zen1th53/slaves/internal/testutil/testgit"
-	"github.com/Zen1th53/slaves/internal/worker"
+	"github.com/Zen1th53/marshal/internal/a2a"
+	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/adapter/opencode"
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/mcp"
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
+	"github.com/Zen1th53/marshal/internal/worker"
 )
 
 func defaultOpenCodeModel() string {
-	if m := os.Getenv("SLAVES_OPENCODE_MODEL"); m != "" {
+	if m := os.Getenv("MARSHAL_OPENCODE_MODEL"); m != "" {
 		return m
 	}
 	// qwythos-9b (Qwen3.5 9B) confirmed tool-calling via Ollama; qwen2 family does not.
@@ -32,8 +32,8 @@ func defaultOpenCodeModel() string {
 }
 
 func TestRealOpenCodeAdapter(t *testing.T) {
-	if os.Getenv("SLAVES_TEST_REAL_OPENCODE") != "1" {
-		t.Skip("set SLAVES_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
+	if os.Getenv("MARSHAL_TEST_REAL_OPENCODE") != "1" {
+		t.Skip("set MARSHAL_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
 	}
 	binary, err := project.FindBinary("opencode")
 	if err != nil {
@@ -46,7 +46,7 @@ func TestRealOpenCodeAdapter(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := client.Run(context.Background(), adapter.Request{
-		TaskID: "TASK-REAL-OPENCODE", Title: "Create opencode-proof.txt containing SLAVES opencode proof. Do not commit.",
+		TaskID: "TASK-REAL-OPENCODE", Title: "Create opencode-proof.txt containing MARSHAL opencode proof. Do not commit.",
 		Worktree: repo.Path(), BaseCommit: repo.HEAD(t), HeadCommit: repo.HEAD(t),
 		AllowedOperations: []string{"filesystem.write", "shell.execute"},
 		EvidenceRequired:  []string{"git status --short"},
@@ -60,10 +60,10 @@ func TestRealOpenCodeAdapter(t *testing.T) {
 }
 
 func TestRealOpenCodeRuntimeE2E(t *testing.T) {
-	if os.Getenv("SLAVES_TEST_REAL_OPENCODE") != "1" {
-		t.Skip("set SLAVES_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
+	if os.Getenv("MARSHAL_TEST_REAL_OPENCODE") != "1" {
+		t.Skip("set MARSHAL_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
 	}
-	t.Setenv("SLAVES_OPENCODE_MODEL", defaultOpenCodeModel())
+	t.Setenv("MARSHAL_OPENCODE_MODEL", defaultOpenCodeModel())
 
 	repo := runtimeIntegrationRepo(t)
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
@@ -80,13 +80,13 @@ func TestRealOpenCodeRuntimeE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := runtime.ImportTasks(context.Background(), []model.Task{{
-		ID: "TASK-REAL-OPENCODE-RUNTIME", Title: "Create opencode-real-proof.txt containing SLAVES opencode real proof.",
+		ID: "TASK-REAL-OPENCODE-RUNTIME", Title: "Create opencode-real-proof.txt containing MARSHAL opencode real proof.",
 		Status: model.TaskReady, Risk: model.R1,
 	}}); err != nil {
 		t.Fatal(err)
 	}
 	result, err := runtime.Run(context.Background(), app.RunRequest{TaskID: "TASK-REAL-OPENCODE-RUNTIME", AgentID: agent.ID, Adapter: "opencode"})
-	requireCommit := os.Getenv("SLAVES_OPENCODE_REQUIRE_COMMIT") == "1"
+	requireCommit := os.Getenv("MARSHAL_OPENCODE_REQUIRE_COMMIT") == "1"
 	if err != nil {
 		if errors.Is(err, model.ErrConflict) && !requireCommit {
 			t.Logf("OpenCode adapter ran to completion without crashing (local model produced no commit — acceptable for E2E gate)")
@@ -103,7 +103,7 @@ func TestRealOpenCodeRuntimeE2E(t *testing.T) {
 	}
 
 	if requireCommit && result.ResultCommit == result.BaseCommit {
-		t.Fatalf("SLAVES_OPENCODE_REQUIRE_COMMIT=1 but no commit produced.\nstdout: %s\nstderr: %s", stdout, stderr)
+		t.Fatalf("MARSHAL_OPENCODE_REQUIRE_COMMIT=1 but no commit produced.\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
 
 	if result.ResultCommit != result.BaseCommit {
@@ -112,10 +112,10 @@ func TestRealOpenCodeRuntimeE2E(t *testing.T) {
 }
 
 func TestRealOpenCodeMCPFullChain(t *testing.T) {
-	if os.Getenv("SLAVES_TEST_REAL_OPENCODE") != "1" {
-		t.Skip("set SLAVES_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
+	if os.Getenv("MARSHAL_TEST_REAL_OPENCODE") != "1" {
+		t.Skip("set MARSHAL_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
 	}
-	t.Setenv("SLAVES_OPENCODE_MODEL", defaultOpenCodeModel())
+	t.Setenv("MARSHAL_OPENCODE_MODEL", defaultOpenCodeModel())
 
 	repo := runtimeIntegrationRepo(t)
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
@@ -180,7 +180,7 @@ func TestRealOpenCodeMCPFullChain(t *testing.T) {
 	if rpcResp["error"] != nil {
 		errMap, _ := rpcResp["error"].(map[string]any)
 		msg, _ := errMap["message"].(string)
-		if strings.Contains(msg, "worker produced no commit") && os.Getenv("SLAVES_OPENCODE_REQUIRE_COMMIT") != "1" {
+		if strings.Contains(msg, "worker produced no commit") && os.Getenv("MARSHAL_OPENCODE_REQUIRE_COMMIT") != "1" {
 			t.Logf("MCP task_run invoked OpenCode successfully (local model produced no commit — acceptable for E2E gate)")
 			return
 		}
@@ -202,10 +202,10 @@ func TestRealOpenCodeMCPFullChain(t *testing.T) {
 }
 
 func TestRealOpenCodeA2AFullChain(t *testing.T) {
-	if os.Getenv("SLAVES_TEST_REAL_OPENCODE") != "1" {
-		t.Skip("set SLAVES_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
+	if os.Getenv("MARSHAL_TEST_REAL_OPENCODE") != "1" {
+		t.Skip("set MARSHAL_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
 	}
-	t.Setenv("SLAVES_OPENCODE_MODEL", defaultOpenCodeModel())
+	t.Setenv("MARSHAL_OPENCODE_MODEL", defaultOpenCodeModel())
 
 	repo := runtimeIntegrationRepo(t)
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
@@ -267,7 +267,7 @@ func TestRealOpenCodeA2AFullChain(t *testing.T) {
 	}
 	state, _ := a2aResp["state"].(string)
 	if state != "TASK_STATE_COMPLETED" {
-		if os.Getenv("SLAVES_OPENCODE_REQUIRE_COMMIT") != "1" {
+		if os.Getenv("MARSHAL_OPENCODE_REQUIRE_COMMIT") != "1" {
 			t.Logf("A2A message:send invoked OpenCode successfully (got state %v — acceptable for E2E gate)", state)
 			return
 		}
@@ -279,6 +279,6 @@ func TestRealOpenCodeA2AFullChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	if task.Status != model.TaskReview && task.Status != model.TaskReady {
-		t.Fatalf("expected canonical SLAVES task status review or ready, got %v", task.Status)
+		t.Fatalf("expected canonical MARSHAL task status review or ready, got %v", task.Status)
 	}
 }

@@ -15,18 +15,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/a2a"
-	"github.com/Zen1th53/slaves/internal/api"
-	"github.com/Zen1th53/slaves/internal/app"
-	"github.com/Zen1th53/slaves/internal/auth"
-	"github.com/Zen1th53/slaves/internal/doctor"
-	"github.com/Zen1th53/slaves/internal/legal"
-	"github.com/Zen1th53/slaves/internal/mcp"
-	"github.com/Zen1th53/slaves/internal/model"
-	"github.com/Zen1th53/slaves/internal/project"
+	"github.com/Zen1th53/marshal/internal/a2a"
+	"github.com/Zen1th53/marshal/internal/api"
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/doctor"
+	"github.com/Zen1th53/marshal/internal/legal"
+	"github.com/Zen1th53/marshal/internal/mcp"
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/project"
 )
 
-const usage = `Usage: slaves [--json] <command> [arguments]
+const usage = `Usage: marshal [--json] <command> [arguments]
 
 Commands:
   init
@@ -206,7 +206,7 @@ func (c command) daemon(ctx context.Context) error {
 }
 
 func (c command) client() (*api.Client, error) {
-	layout, err := filepath.Abs(filepath.Join(c.root, ".slaves", "runtime.sock"))
+	layout, err := filepath.Abs(filepath.Join(c.root, ".marshal", "runtime.sock"))
 	if err != nil {
 		return nil, err
 	}
@@ -563,7 +563,7 @@ func (c command) adapters(ctx context.Context) error {
 	}
 	if !c.json {
 		var lines []string
-		lines = append(lines, "=== SLAVES Provider Adapters ===")
+		lines = append(lines, "=== MARSHAL Provider Adapters ===")
 		for _, a := range list {
 			avail := "UNAVAILABLE"
 			if a["available"].(bool) {
@@ -616,7 +616,7 @@ func (c command) mcp(ctx context.Context, args []string) error {
 		}
 		defer runtime.Close()
 		srv := mcp.NewServer(runtime)
-		fmt.Fprintf(c.stdout, "Starting SLAVES MCP server on http://%s\n", listen)
+		fmt.Fprintf(c.stdout, "Starting MARSHAL MCP server on http://%s\n", listen)
 		server := &http.Server{Addr: listen, Handler: srv.Handler()}
 		return server.ListenAndServe()
 	case "status":
@@ -644,7 +644,7 @@ func (c command) a2a(ctx context.Context, args []string) error {
 		}
 		defer runtime.Close()
 		srv := a2a.NewServer(runtime)
-		fmt.Fprintf(c.stdout, "Starting SLAVES A2A server on http://%s\n", listen)
+		fmt.Fprintf(c.stdout, "Starting MARSHAL A2A server on http://%s\n", listen)
 		server := &http.Server{Addr: listen, Handler: srv.Handler()}
 		return server.ListenAndServe()
 	case "status":
@@ -679,7 +679,7 @@ func (c command) auth(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: missing auth subcommand (token)", model.ErrInvalid)
 	}
 	if args[0] != "token" || len(args) < 2 {
-		return fmt.Errorf("%w: usage: slaves auth token <create|list|revoke>", model.ErrInvalid)
+		return fmt.Errorf("%w: usage: marshal auth token <create|list|revoke>", model.ErrInvalid)
 	}
 	layout, err := app.Bootstrap(ctx, c.root)
 	if err != nil {
@@ -705,11 +705,11 @@ func (c command) auth(ctx context.Context, args []string) error {
 			return err
 		}
 		return c.print(map[string]any{
-			"id":        record.ID,
-			"name":      record.Name,
-			"kind":      record.Kind,
-			"token":     plaintext,
-			"created":   record.CreatedAt,
+			"id":      record.ID,
+			"name":    record.Name,
+			"kind":    record.Kind,
+			"token":   plaintext,
+			"created": record.CreatedAt,
 		}, fmt.Sprintf("Created Token ID: %s\nPlaintext Token: %s\n(Keep this token secret; it will not be shown again)", record.ID, plaintext))
 
 	case "list":

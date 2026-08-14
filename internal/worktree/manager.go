@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 var taskIDPattern = regexp.MustCompile(`^TASK-[A-Za-z0-9._-]+$`)

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Zen1th53/slaves/internal/adapter"
-	"github.com/Zen1th53/slaves/internal/model"
+	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type Client struct {
@@ -63,7 +63,7 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 
 	modelOpt := c.model
 	if modelOpt == "" {
-		modelOpt = strings.TrimSpace(os.Getenv("SLAVES_OPENCODE_MODEL"))
+		modelOpt = strings.TrimSpace(os.Getenv("MARSHAL_OPENCODE_MODEL"))
 	}
 
 	args := []string{"run", "--format", "json"}
@@ -153,7 +153,7 @@ func buildPrompt(request adapter.Request) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encode OpenCode task prompt: %w", err)
 	}
-	return append([]byte("Execute this SLAVES task envelope:\n"), payload...), nil
+	return append([]byte("Execute this MARSHAL task envelope:\n"), payload...), nil
 }
 
 func parseOpenCodeOutput(output []byte, result *adapter.Result) {

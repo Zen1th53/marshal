@@ -1,6 +1,6 @@
 # AI-Generated Contribution Policy
 
-As an AI-agent execution, verification, and supervision platform, SLAVES acknowledges the use of AI tools and code-generation models in software engineering. This policy establishes clear IP provenance standards for AI-assisted or AI-generated contributions.
+As an AI-agent execution, verification, and supervision platform, MARSHAL acknowledges the use of AI tools and code-generation models in software engineering. This policy establishes clear IP provenance standards for AI-assisted or AI-generated contributions.
 
 ---
 
@@ -28,4 +28,4 @@ The following are strictly prohibited:
 
 ## 3. Assignment of Rights
 
-Under the terms of the SLAVES Contributor Assignment Agreement (ICAA/CCAA), the contributor warrants that they possess all legal rights necessary to assign the contribution to the SLAVES copyright owner, including any rights created or acquired through the use of AI generation tools.
+Under the terms of the MARSHAL Contributor Assignment Agreement (ICAA/CCAA), the contributor warrants that they possess all legal rights necessary to assign the contribution to the MARSHAL copyright owner, including any rights created or acquired through the use of AI generation tools.

@@ -6,7 +6,7 @@ Remote agent collaboration uses A2A when available.
 
 Tool/context integration uses MCP.
 
-The Agent OS runtime remains authoritative for:
+The MARSHAL runtime remains authoritative for:
 - local task ownership,
 - approvals,
 - role authority,

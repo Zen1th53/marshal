@@ -1,6 +1,6 @@
 # SLSA Provenance Profile
 
-Agent OS aligns release provenance with SLSA 1.2 concepts:
+MARSHAL aligns release provenance with SLSA 1.2 concepts:
 
 - artifact subjects identified by digest,
 - source/material identity,
