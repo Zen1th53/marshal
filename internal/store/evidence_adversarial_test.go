@@ -37,6 +37,8 @@ func TestEvidenceRejectsAllIllegalLifecycleTransitions(t *testing.T) {
 					next := evidence.StateLinked
 					if state == evidence.StateLinked {
 						next = evidence.StateArchived
+					} else if state == evidence.StateArchived {
+						next = evidence.StateExported
 					}
 					if err := st.TransitionNodeAuthorized(context.Background(), evidence.AccessRequest{SubjectID: "subject", NodeID: node.ID, Action: evidence.ActionTransition, TargetState: next}); err != nil {
 						t.Fatal(err)

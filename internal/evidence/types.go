@@ -94,6 +94,16 @@ const (
 	StateExported State = "exported"
 )
 
+// Valid reports whether a state belongs to the closed lifecycle vocabulary.
+func (s State) Valid() bool {
+	switch s {
+	case StateDraft, StateStored, StateLinked, StateArchived, StateExported:
+		return true
+	default:
+		return false
+	}
+}
+
 // Store is the narrow graph boundary used by higher layers. Implementations
 // are responsible for durable, idempotent writes and immutable read results.
 type Store interface {

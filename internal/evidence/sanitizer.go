@@ -15,11 +15,11 @@ type Sanitizer interface {
 // SanitizerConfig supplies explicit local policy without attempting global
 // secret discovery.
 type SanitizerConfig struct {
-	SensitiveKeys     []string
-	LiteralSecrets    []string
-	MaxMetadataKeyLen int
-	MaxMetadataValLen int
-	MaxMetadataFields int
+	SensitiveKeys      []string
+	LiteralSecrets     []string
+	MaxMetadataKeyLen  int
+	MaxMetadataValLen  int
+	MaxMetadataEntries int
 }
 
 // StrictSanitizer rejects unsafe metadata and returns a detached copy of safe
@@ -33,8 +33,8 @@ func NewStrictSanitizer(config SanitizerConfig) *StrictSanitizer {
 	if config.MaxMetadataValLen == 0 {
 		config.MaxMetadataValLen = 4096
 	}
-	if config.MaxMetadataFields == 0 {
-		config.MaxMetadataFields = 1024
+	if config.MaxMetadataEntries == 0 {
+		config.MaxMetadataEntries = 256
 	}
 	return &StrictSanitizer{config: config}
 }
@@ -44,7 +44,7 @@ func (s *StrictSanitizer) SanitizeNode(ctx context.Context, node Node) (Node, er
 		return Node{}, NewError(CodeSecretRejected, err)
 	}
 	clean := CloneNode(node)
-	if len(clean.Metadata) > s.config.MaxMetadataFields {
+	if len(clean.Metadata) > s.config.MaxMetadataEntries {
 		return Node{}, ErrSecretRejected
 	}
 	for key, value := range clean.Metadata {

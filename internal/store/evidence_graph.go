@@ -133,7 +133,7 @@ func (s *Store) TransitionNodeAuthorized(ctx context.Context, request evidence.A
 }
 
 func (s *Store) transitionNodeIfState(ctx context.Context, id evidence.NodeID, target, expected evidence.State, audit map[string]any) error {
-	if target != evidence.StateStored && target != evidence.StateLinked && target != evidence.StateArchived && target != evidence.StateExported {
+	if !target.Valid() || target == evidence.StateDraft {
 		return evidence.ErrInvalidTransition
 	}
 	tx, err := s.db.BeginTx(ctx, nil)

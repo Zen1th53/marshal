@@ -69,3 +69,15 @@ func FuzzEvidenceEdgeValidate(f *testing.F) {
 		}
 	})
 }
+
+func FuzzEvidenceStateValidation(f *testing.F) {
+	f.Add("stored")
+	f.Add("unknown")
+	f.Fuzz(func(t *testing.T, state string) {
+		valid := State(state).Valid()
+		known := state == string(StateDraft) || state == string(StateStored) || state == string(StateLinked) || state == string(StateArchived) || state == string(StateExported)
+		if valid != known {
+			t.Fatalf("state validity = %v for %q, known = %v", valid, state, known)
+		}
+	})
+}
