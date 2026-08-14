@@ -36,6 +36,7 @@ type Runtime struct {
 	store             *store.Store
 	policy            *policy.Engine
 	adapters          map[string]adapter.Adapter
+	evidenceSanitizer evidence.Sanitizer
 	runtimeInstanceID string
 }
 
@@ -192,6 +193,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		store:             database,
 		policy:            engine,
 		adapters:          options.Adapters,
+		evidenceSanitizer: sanitizer,
 		runtimeInstanceID: instanceID,
 	}
 	_ = rt.ReconcileStartup(ctx)
@@ -479,15 +481,22 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		resultCommit = state.HEAD
 	}
 	artifacts := artifactstore.New(r.layout.Artifacts, r.store)
-	stdoutArtifact, stdoutErr := artifacts.Put(context.Background(), model.ArtifactInput{
-		ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
-		TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(result.Stdout),
-	})
-	stderrArtifact, stderrErr := stdoutArtifact, stdoutErr
-	if !bytes.Equal(result.Stdout, result.Stderr) {
-		stderrArtifact, stderrErr = artifacts.Put(context.Background(), model.ArtifactInput{
+	stdout, stdoutErr := r.sanitizeProviderOutput(ctx, result.Stdout)
+	stderr, stderrErr := r.sanitizeProviderOutput(ctx, result.Stderr)
+	var stdoutArtifact, stderrArtifact model.Artifact
+	if stdoutErr == nil {
+		stdoutArtifact, stdoutErr = artifacts.Put(ctx, model.ArtifactInput{
 			ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
-			TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(result.Stderr),
+			TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(stdout),
+		})
+	}
+	if stderrErr == nil && bytes.Equal(stdout, stderr) {
+		stderrArtifact = stdoutArtifact
+		stderrErr = stdoutErr
+	} else if stderrErr == nil {
+		stderrArtifact, stderrErr = artifacts.Put(ctx, model.ArtifactInput{
+			ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
+			TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(stderr),
 		})
 	}
 	if ctx.Err() == nil {
@@ -532,6 +541,14 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		ResultCommit: resultCommit, ExitStatus: result.ExitCode, Isolation: result.Isolation,
 		StdoutArtifact: stdoutArtifact, StderrArtifact: stderrArtifact,
 	}, nil
+}
+
+func (r *Runtime) sanitizeProviderOutput(ctx context.Context, payload []byte) ([]byte, error) {
+	boundary, ok := r.evidenceSanitizer.(evidence.ByteSanitizer)
+	if !ok {
+		return nil, evidence.ErrSecretRejected
+	}
+	return boundary.SanitizeBytes(ctx, payload)
 }
 
 func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/evidence"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type a05AllowingAuthorizer struct{}
@@ -246,5 +247,26 @@ func TestEvidenceAuditDoesNotExposeAuthorizationErrorSecret(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), marker) {
 		t.Fatal("authorization error marker appeared in audit events")
+	}
+}
+
+func TestEvidenceAuditRejectsNestedProviderPayloadBeforePersistence(t *testing.T) {
+	const marker = "MARSHAL_TEST_SECRET_T06_A07_AUDIT_4c8e"
+	st := openEvidenceStore(t, evidence.NewStrictSanitizer(evidence.SanitizerConfig{}))
+	err := st.recordEvidenceEvent(context.Background(), "evidence.test.rejected", map[string]any{
+		"provider_error": map[string]any{"detail": marker},
+	})
+	if !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("recordEvidenceEvent error = %v, want invalid audit payload", err)
+	}
+	if got := queryInt(t, st.db, "SELECT count(*) FROM audit_events"); got != 0 {
+		t.Fatalf("audit rows = %d, want 0", got)
+	}
+	if events, err := st.ListEvents(context.Background()); err != nil {
+		t.Fatal(err)
+	} else if encoded, err := json.Marshal(events); err != nil {
+		t.Fatal(err)
+	} else if strings.Contains(string(encoded), marker) {
+		t.Fatal("rejected audit marker appeared in events")
 	}
 }

@@ -12,6 +12,14 @@ type Sanitizer interface {
 	SanitizeNode(context.Context, Node) (Node, error)
 }
 
+// ByteSanitizer is the corresponding boundary for opaque provider/tool
+// payloads before they are written to an artifact store. Implementations must
+// reject or safely transform sensitive bytes; callers must not silently fall
+// back to persisting the original payload when this boundary is unavailable.
+type ByteSanitizer interface {
+	SanitizeBytes(context.Context, []byte) ([]byte, error)
+}
+
 // SanitizerConfig supplies explicit local policy without attempting global
 // secret discovery.
 type SanitizerConfig struct {
@@ -53,6 +61,19 @@ func (s *StrictSanitizer) SanitizeNode(ctx context.Context, node Node) (Node, er
 			return Node{}, ErrSecretRejected
 		}
 	}
+	return clean, nil
+}
+
+func (s *StrictSanitizer) SanitizeBytes(ctx context.Context, payload []byte) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, NewError(CodeSecretRejected, err)
+	}
+	value := string(payload)
+	if containsLiteral(value, s.config.LiteralSecrets) {
+		return nil, ErrSecretRejected
+	}
+	clean := make([]byte, len(payload))
+	copy(clean, payload)
 	return clean, nil
 }
 
