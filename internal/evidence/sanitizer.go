@@ -19,6 +19,7 @@ type SanitizerConfig struct {
 	LiteralSecrets    []string
 	MaxMetadataKeyLen int
 	MaxMetadataValLen int
+	MaxMetadataFields int
 }
 
 // StrictSanitizer rejects unsafe metadata and returns a detached copy of safe
@@ -32,6 +33,9 @@ func NewStrictSanitizer(config SanitizerConfig) *StrictSanitizer {
 	if config.MaxMetadataValLen == 0 {
 		config.MaxMetadataValLen = 4096
 	}
+	if config.MaxMetadataFields == 0 {
+		config.MaxMetadataFields = 1024
+	}
 	return &StrictSanitizer{config: config}
 }
 
@@ -40,6 +44,9 @@ func (s *StrictSanitizer) SanitizeNode(ctx context.Context, node Node) (Node, er
 		return Node{}, NewError(CodeSecretRejected, err)
 	}
 	clean := CloneNode(node)
+	if len(clean.Metadata) > s.config.MaxMetadataFields {
+		return Node{}, ErrSecretRejected
+	}
 	for key, value := range clean.Metadata {
 		if len(key) > s.config.MaxMetadataKeyLen || len(value) > s.config.MaxMetadataValLen ||
 			sensitiveKey(key, s.config.SensitiveKeys) || containsLiteral(value, s.config.LiteralSecrets) {
