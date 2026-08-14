@@ -10,8 +10,9 @@ import (
 )
 
 type Store struct {
-	db        *sql.DB
-	sanitizer evidence.Sanitizer
+	db         *sql.DB
+	sanitizer  evidence.Sanitizer
+	authorizer evidence.Authorizer
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -19,6 +20,10 @@ func Open(ctx context.Context, path string) (*Store, error) {
 }
 
 func OpenWithSanitizer(ctx context.Context, path string, sanitizer evidence.Sanitizer) (*Store, error) {
+	return OpenWithSecurity(ctx, path, sanitizer, nil)
+}
+
+func OpenWithSecurity(ctx context.Context, path string, sanitizer evidence.Sanitizer, authorizer evidence.Authorizer) (*Store, error) {
 	if sanitizer == nil {
 		return nil, fmt.Errorf("evidence sanitizer is required")
 	}
@@ -28,7 +33,7 @@ func OpenWithSanitizer(ctx context.Context, path string, sanitizer evidence.Sani
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	st := &Store{db: db, sanitizer: sanitizer}
+	st := &Store{db: db, sanitizer: sanitizer, authorizer: authorizer}
 	if err := st.configure(ctx); err != nil {
 		db.Close()
 		return nil, err

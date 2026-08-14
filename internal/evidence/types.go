@@ -12,6 +12,42 @@ import (
 	"time"
 )
 
+// Action identifies a security-sensitive evidence operation.
+type Action string
+
+const (
+	ActionCreate     Action = "evidence.create"
+	ActionLink       Action = "evidence.link"
+	ActionTransition Action = "evidence.transition"
+	ActionExport     Action = "evidence.export"
+)
+
+type AccessRequest struct {
+	SubjectID    string
+	TaskID       string
+	ChangeID     string
+	NodeID       NodeID
+	Action       Action
+	CurrentState State
+	TargetState  State
+}
+
+type AuthorizationDecision struct {
+	Allowed      bool
+	ReasonCode   Code
+	SubjectID    string
+	TaskID       string
+	ChangeID     string
+	NodeID       NodeID
+	State        State
+	PolicyDigest string
+	FreshUntil   time.Time
+}
+
+type Authorizer interface {
+	Authorize(context.Context, AccessRequest) (AuthorizationDecision, error)
+}
+
 // NodeID identifies one immutable evidence node.
 type NodeID string
 
@@ -71,21 +107,27 @@ type Store interface {
 type Code string
 
 const (
-	CodeInvalidType    Code = "EVIDENCE_INVALID_TYPE"
-	CodeDigestMismatch Code = "EVIDENCE_DIGEST_MISMATCH"
-	CodeImmutable      Code = "EVIDENCE_IMMUTABLE"
-	CodeInvalidEdge    Code = "EVIDENCE_EDGE_INVALID"
-	CodeSecretRejected Code = "EVIDENCE_SECRET_REJECTED"
-	CodeInvalidState   Code = "EVIDENCE_INVALID_STATE"
+	CodeInvalidType              Code = "EVIDENCE_INVALID_TYPE"
+	CodeDigestMismatch           Code = "EVIDENCE_DIGEST_MISMATCH"
+	CodeImmutable                Code = "EVIDENCE_IMMUTABLE"
+	CodeInvalidEdge              Code = "EVIDENCE_EDGE_INVALID"
+	CodeSecretRejected           Code = "EVIDENCE_SECRET_REJECTED"
+	CodeInvalidState             Code = "EVIDENCE_INVALID_STATE"
+	CodeAuthorizationDenied      Code = "AUTHZ_DENIED"
+	CodeAuthorizationStale       Code = "GATE_STALE_EVIDENCE"
+	CodeAuthorizationUnavailable Code = "AUTHZ_UNKNOWN_AUTHORITY"
 )
 
 var (
-	ErrInvalidType       = &Error{Code: CodeInvalidType, Message: "evidence type is invalid"}
-	ErrDigestMismatch    = &Error{Code: CodeDigestMismatch, Message: "evidence digest does not match"}
-	ErrImmutable         = &Error{Code: CodeImmutable, Message: "evidence is immutable"}
-	ErrInvalidEdge       = &Error{Code: CodeInvalidEdge, Message: "evidence edge is invalid"}
-	ErrSecretRejected    = &Error{Code: CodeSecretRejected, Message: "secret material is not accepted as evidence"}
-	ErrInvalidTransition = &Error{Code: CodeInvalidState, Message: "evidence state transition is invalid"}
+	ErrInvalidType              = &Error{Code: CodeInvalidType, Message: "evidence type is invalid"}
+	ErrDigestMismatch           = &Error{Code: CodeDigestMismatch, Message: "evidence digest does not match"}
+	ErrImmutable                = &Error{Code: CodeImmutable, Message: "evidence is immutable"}
+	ErrInvalidEdge              = &Error{Code: CodeInvalidEdge, Message: "evidence edge is invalid"}
+	ErrSecretRejected           = &Error{Code: CodeSecretRejected, Message: "secret material is not accepted as evidence"}
+	ErrInvalidTransition        = &Error{Code: CodeInvalidState, Message: "evidence state transition is invalid"}
+	ErrAuthorizationDenied      = &Error{Code: CodeAuthorizationDenied, Message: "evidence authorization denied"}
+	ErrAuthorizationStale       = &Error{Code: CodeAuthorizationStale, Message: "evidence authorization is stale"}
+	ErrAuthorizationUnavailable = &Error{Code: CodeAuthorizationUnavailable, Message: "evidence authorization is unavailable"}
 )
 
 // Error exposes a stable code while retaining a human-safe message. It must
@@ -198,6 +240,12 @@ func safeMessage(code Code) string {
 		return ErrSecretRejected.Message
 	case CodeInvalidState:
 		return ErrInvalidTransition.Message
+	case CodeAuthorizationDenied:
+		return ErrAuthorizationDenied.Message
+	case CodeAuthorizationStale:
+		return ErrAuthorizationStale.Message
+	case CodeAuthorizationUnavailable:
+		return ErrAuthorizationUnavailable.Message
 	default:
 		return "evidence operation failed"
 	}

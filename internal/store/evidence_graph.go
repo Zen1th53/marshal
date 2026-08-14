@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/evidence"
@@ -105,6 +106,65 @@ func (s *Store) TransitionNode(ctx context.Context, id evidence.NodeID, target e
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE evidence_nodes SET state = ? WHERE node_id = ? AND state = ?`, target, id, current); err != nil {
 		return fmt.Errorf("update evidence state: %w", err)
+	}
+	return tx.Commit()
+}
+
+// TransitionNodeAuthorized enforces the external policy/authority decision
+// immediately before a CAS-like state mutation. No configured authorizer is a
+// deny, never an implicit allow.
+func (s *Store) TransitionNodeAuthorized(ctx context.Context, request evidence.AccessRequest) error {
+	if request.Action != evidence.ActionTransition || request.NodeID == "" {
+		return evidence.ErrAuthorizationDenied
+	}
+	if s.authorizer == nil {
+		return evidence.ErrAuthorizationUnavailable
+	}
+	current, err := s.Get(ctx, request.NodeID)
+	if err != nil {
+		return evidence.ErrAuthorizationDenied
+	}
+	request.CurrentState = current.State
+	decision, err := s.authorizer.Authorize(ctx, request)
+	if err != nil {
+		return evidence.ErrAuthorizationUnavailable
+	}
+	if !decision.Allowed {
+		return evidence.ErrAuthorizationDenied
+	}
+	if decision.SubjectID != request.SubjectID || decision.NodeID != request.NodeID || decision.TaskID != request.TaskID || decision.ChangeID != request.ChangeID {
+		return evidence.ErrAuthorizationDenied
+	}
+	if decision.State != request.CurrentState || decision.PolicyDigest == "" ||
+		!strings.HasPrefix(decision.PolicyDigest, "sha256:") ||
+		!decision.FreshUntil.After(time.Now().UTC()) {
+		return evidence.ErrAuthorizationStale
+	}
+	return s.transitionNodeIfState(ctx, request.NodeID, request.TargetState, request.CurrentState)
+}
+
+func (s *Store) transitionNodeIfState(ctx context.Context, id evidence.NodeID, target, expected evidence.State) error {
+	if target != evidence.StateStored && target != evidence.StateLinked && target != evidence.StateArchived && target != evidence.StateExported {
+		return evidence.ErrInvalidTransition
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin evidence transition: %w", err)
+	}
+	defer tx.Rollback()
+	valid := (expected == evidence.StateStored && target == evidence.StateLinked) ||
+		(expected == evidence.StateLinked && target == evidence.StateArchived) ||
+		(expected == evidence.StateArchived && target == evidence.StateExported) || expected == target
+	if !valid {
+		return evidence.ErrInvalidTransition
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE evidence_nodes SET state = ? WHERE node_id = ? AND state = ?`, target, id, expected)
+	if err != nil {
+		return fmt.Errorf("update evidence state: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil || count != 1 {
+		return evidence.ErrAuthorizationStale
 	}
 	return tx.Commit()
 }
