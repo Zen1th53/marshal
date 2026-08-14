@@ -180,3 +180,45 @@ func TestEvidenceAuditNeverPersistsSecretMarker(t *testing.T) {
 		t.Fatalf("secret marker persisted in audit_events: %q", raw)
 	}
 }
+
+func TestEvidenceDigestMismatchAppendsSafeAuditFact(t *testing.T) {
+	st := openEvidenceStore(t, evidence.NewStrictSanitizer(evidence.SanitizerConfig{}))
+	node := testEvidenceNode("EVIDENCE-A05-DIGEST", "claim", "digest")
+	node.Digest = "sha256:" + strings.Repeat("f", 64)
+	if _, err := st.PutNode(context.Background(), node); !errors.Is(err, evidence.ErrDigestMismatch) {
+		t.Fatalf("PutNode error = %v, want digest mismatch", err)
+	}
+	events, err := st.ListEvents(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, event := range events {
+		if event.Type == "evidence.digest.mismatch" {
+			found = true
+			if event.Data["evidence_id"] != string(node.ID) || event.Data["reason_code"] != string(evidence.CodeDigestMismatch) {
+				t.Fatalf("digest event = %#v", event.Data)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("missing evidence.digest.mismatch audit fact")
+	}
+	if got := queryInt(t, st.db, "SELECT count(*) FROM evidence_nodes"); got != 0 {
+		t.Fatalf("evidence rows = %d, want 0", got)
+	}
+}
+
+func TestEvidenceAuditRejectsOversizedCorrelationBeforeCommit(t *testing.T) {
+	st := openEvidenceStore(t, evidence.NewStrictSanitizer(evidence.SanitizerConfig{}))
+	node := testEvidenceNode("EVIDENCE-"+strings.Repeat("x", maxEvidenceAuditValue), "claim", "bounded")
+	if _, err := st.PutNode(context.Background(), node); err == nil {
+		t.Fatal("oversized evidence correlation was accepted")
+	}
+	if got := queryInt(t, st.db, "SELECT count(*) FROM evidence_nodes"); got != 0 {
+		t.Fatalf("evidence rows = %d, want 0", got)
+	}
+	if got := queryInt(t, st.db, "SELECT count(*) FROM audit_events"); got != 0 {
+		t.Fatalf("audit rows = %d, want 0", got)
+	}
+}

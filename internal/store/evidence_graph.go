@@ -25,6 +25,10 @@ func (s *Store) PutNode(ctx context.Context, node evidence.Node) (evidence.Node,
 		return evidence.Node{}, err
 	}
 	if digest != clean.Digest {
+		_ = s.recordEvidenceEvent(ctx, "evidence.digest.mismatch", map[string]any{
+			"evidence_id": clean.ID, "action": evidence.ActionCreate,
+			"reason_code": evidence.CodeDigestMismatch,
+		})
 		return evidence.Node{}, evidence.ErrDigestMismatch
 	}
 	metadata, err := json.Marshal(clean.Metadata)
@@ -50,6 +54,12 @@ func (s *Store) PutNode(ctx context.Context, node evidence.Node) (evidence.Node,
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO evidence_nodes(node_id, node_type, digest, metadata_json, created_at, state) VALUES(?, ?, ?, ?, ?, 'stored')`, clean.ID, clean.Type, clean.Digest, string(metadata), created); err != nil {
 		return evidence.Node{}, fmt.Errorf("insert evidence node: %w", err)
+	}
+	if err := s.appendEvidenceEvent(ctx, tx, "evidence.node.stored", "", "", map[string]any{
+		"evidence_id": clean.ID, "node_type": clean.Type, "state": evidence.StateStored,
+		"content_digest": clean.Digest, "action": evidence.ActionCreate,
+	}); err != nil {
+		return evidence.Node{}, fmt.Errorf("record evidence node audit: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return evidence.Node{}, fmt.Errorf("commit evidence node: %w", err)
@@ -116,10 +126,15 @@ func (s *Store) TransitionNodeAuthorized(ctx context.Context, request evidence.A
 		!decision.FreshUntil.After(time.Now().UTC()) {
 		return evidence.ErrAuthorizationStale
 	}
-	return s.transitionNodeIfState(ctx, request.NodeID, request.TargetState, request.CurrentState)
+	return s.transitionNodeIfState(ctx, request.NodeID, request.TargetState, request.CurrentState, map[string]any{
+		"evidence_id": request.NodeID, "previous_state": request.CurrentState,
+		"new_state": request.TargetState, "subject_id": request.SubjectID,
+		"task_id": request.TaskID, "change_id": request.ChangeID,
+		"policy_digest": decision.PolicyDigest, "action": evidence.ActionTransition,
+	})
 }
 
-func (s *Store) transitionNodeIfState(ctx context.Context, id evidence.NodeID, target, expected evidence.State) error {
+func (s *Store) transitionNodeIfState(ctx context.Context, id evidence.NodeID, target, expected evidence.State, audit map[string]any) error {
 	if target != evidence.StateStored && target != evidence.StateLinked && target != evidence.StateArchived && target != evidence.StateExported {
 		return evidence.ErrInvalidTransition
 	}
@@ -142,6 +157,15 @@ func (s *Store) transitionNodeIfState(ctx context.Context, id evidence.NodeID, t
 	if err != nil || count != 1 {
 		return evidence.ErrAuthorizationStale
 	}
+	if target != expected {
+		// Subject/task identifiers remain correlation metadata here. The legacy
+		// audit envelope's actor/task columns are foreign-keyed to runtime
+		// identity rows, so unknown runtime identities must not be forged into
+		// those columns.
+		if err := s.appendEvidenceEvent(ctx, tx, "evidence.state.transitioned", "", "", audit); err != nil {
+			return fmt.Errorf("record evidence transition audit: %w", err)
+		}
+	}
 	return tx.Commit()
 }
 
@@ -163,9 +187,21 @@ func (s *Store) Link(ctx context.Context, edge evidence.Edge) (evidence.Edge, er
 			return evidence.Edge{}, evidence.ErrInvalidEdge
 		}
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO evidence_edges(from_node_id, to_node_id, relation, created_at) VALUES(?, ?, ?, ?) ON CONFLICT(from_node_id, to_node_id, relation) DO NOTHING`, edge.From, edge.To, edge.Relation, time.Now().UTC().Format(time.RFC3339Nano))
+	result, err := tx.ExecContext(ctx, `INSERT INTO evidence_edges(from_node_id, to_node_id, relation, created_at) VALUES(?, ?, ?, ?) ON CONFLICT(from_node_id, to_node_id, relation) DO NOTHING`, edge.From, edge.To, edge.Relation, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return evidence.Edge{}, fmt.Errorf("insert evidence edge: %w", err)
+	}
+	inserted, err := result.RowsAffected()
+	if err != nil {
+		return evidence.Edge{}, fmt.Errorf("inspect evidence edge: %w", err)
+	}
+	if inserted == 1 {
+		if err := s.appendEvidenceEvent(ctx, tx, "evidence.edge.linked", "", "", map[string]any{
+			"from_evidence_id": edge.From, "to_evidence_id": edge.To,
+			"relation": edge.Relation, "action": evidence.ActionLink,
+		}); err != nil {
+			return evidence.Edge{}, fmt.Errorf("record evidence edge audit: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return evidence.Edge{}, fmt.Errorf("commit evidence edge: %w", err)
