@@ -5,21 +5,30 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/Zen1th53/marshal/internal/evidence"
 	_ "modernc.org/sqlite"
 )
 
 type Store struct {
-	db *sql.DB
+	db        *sql.DB
+	sanitizer evidence.Sanitizer
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
+	return OpenWithSanitizer(ctx, path, evidence.NewStrictSanitizer(evidence.SanitizerConfig{}))
+}
+
+func OpenWithSanitizer(ctx context.Context, path string, sanitizer evidence.Sanitizer) (*Store, error) {
+	if sanitizer == nil {
+		return nil, fmt.Errorf("evidence sanitizer is required")
+	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open SQLite: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	st := &Store{db: db}
+	st := &Store{db: db, sanitizer: sanitizer}
 	if err := st.configure(ctx); err != nil {
 		db.Close()
 		return nil, err
