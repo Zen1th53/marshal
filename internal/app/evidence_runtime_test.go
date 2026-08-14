@@ -18,7 +18,7 @@ func (a runtimeEvidenceAuthorizer) Authorize(_ context.Context, req evidence.Acc
 	}
 	return evidence.AuthorizationDecision{
 		Allowed: true, SubjectID: req.SubjectID, TaskID: req.TaskID, ChangeID: req.ChangeID,
-		NodeID: req.NodeID, State: req.CurrentState, PolicyDigest: "sha256:runtime-policy",
+		NodeID: req.NodeID, State: req.CurrentState, PolicyDigest: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 		FreshUntil: time.Now().UTC().Add(time.Minute),
 	}, nil
 }

@@ -158,6 +158,10 @@ func ReasonCode(err error) Code {
 
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
+// ValidDigest reports whether a digest uses the canonical lower-case SHA-256
+// representation used for evidence and policy bindings.
+func ValidDigest(digest string) bool { return digestPattern.MatchString(digest) }
+
 // Validate rejects malformed node identities, types, and digests before a
 // store can create any durable side effect.
 func (n Node) Validate() error {

@@ -54,8 +54,14 @@ func (r *Runtime) Evidence(ctx context.Context, id evidence.NodeID) (evidence.No
 	return r.store.Get(ctx, id)
 }
 
-func (r *Runtime) LinkEvidence(ctx context.Context, edge evidence.Edge) (evidence.Edge, error) {
+// LinkEvidence is the canonical runtime edge mutation entry point. A live
+// session is required so an untrusted caller cannot link arbitrary evidence
+// without entering the authenticated runtime boundary.
+func (r *Runtime) LinkEvidence(ctx context.Context, sessionID string, edge evidence.Edge) (evidence.Edge, error) {
 	if err := ctx.Err(); err != nil {
+		return evidence.Edge{}, err
+	}
+	if _, err := r.runtimeSession(ctx, sessionID); err != nil {
 		return evidence.Edge{}, err
 	}
 	return r.store.Link(ctx, edge)

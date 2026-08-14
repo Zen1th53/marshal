@@ -37,7 +37,7 @@ func (r *Runtime) recordRunEvidence(ctx context.Context, runID, taskID, adapterN
 		}
 	}
 	for _, edge := range []evidence.Edge{{From: nodes[0].ID, To: nodes[1].ID, Relation: "produced"}, {From: nodes[0].ID, To: nodes[2].ID, Relation: "executed-in"}} {
-		if _, err := r.LinkEvidence(ctx, edge); err != nil {
+		if _, err := r.LinkEvidence(ctx, sessionForRun(ctx, r, taskID), edge); err != nil {
 			return err
 		}
 	}

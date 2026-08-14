@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/evidence"
@@ -121,8 +120,7 @@ func (s *Store) TransitionNodeAuthorized(ctx context.Context, request evidence.A
 	if decision.SubjectID != request.SubjectID || decision.NodeID != request.NodeID || decision.TaskID != request.TaskID || decision.ChangeID != request.ChangeID {
 		return evidence.ErrAuthorizationDenied
 	}
-	if decision.State != request.CurrentState || decision.PolicyDigest == "" ||
-		!strings.HasPrefix(decision.PolicyDigest, "sha256:") ||
+	if decision.State != request.CurrentState || !evidence.ValidDigest(decision.PolicyDigest) ||
 		!decision.FreshUntil.After(time.Now().UTC()) {
 		return evidence.ErrAuthorizationStale
 	}
