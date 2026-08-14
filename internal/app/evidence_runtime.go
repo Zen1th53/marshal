@@ -48,7 +48,17 @@ func (r *Runtime) StoreEvidence(ctx context.Context, sessionID string, node evid
 // Evidence reads canonical state only; no event or provider result is used as
 // an authority source.
 func (r *Runtime) Evidence(ctx context.Context, id evidence.NodeID) (evidence.Node, error) {
+	if err := ctx.Err(); err != nil {
+		return evidence.Node{}, err
+	}
 	return r.store.Get(ctx, id)
+}
+
+func (r *Runtime) LinkEvidence(ctx context.Context, edge evidence.Edge) (evidence.Edge, error) {
+	if err := ctx.Err(); err != nil {
+		return evidence.Edge{}, err
+	}
+	return r.store.Link(ctx, edge)
 }
 
 // TransitionEvidence binds authorization to an active runtime session and
