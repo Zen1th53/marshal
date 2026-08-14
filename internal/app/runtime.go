@@ -41,8 +41,8 @@ type Runtime struct {
 
 type Options struct {
 	Adapters           map[string]adapter.Adapter
-	EvidenceSanitizer  evidence.Sanitizer
 	EvidenceAuthorizer evidence.Authorizer
+	EvidenceSanitizer  evidence.Sanitizer
 }
 
 type Status struct {
@@ -489,11 +489,6 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
 			TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(result.Stderr),
 		})
-	}
-	if ctx.Err() == nil {
-		if evidenceErr := r.recordRunEvidence(ctx, runID, task.ID, request.Adapter, probe.Version, baseCommit, resultCommit, result); evidenceErr != nil && runErr == nil {
-			runErr = evidenceErr
-		}
 	}
 	success := runErr == nil && inspectErr == nil && stdoutErr == nil && stderrErr == nil &&
 		result.Status == adapter.StatusSuccess && result.ExitCode == 0
