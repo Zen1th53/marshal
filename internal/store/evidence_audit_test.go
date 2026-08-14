@@ -222,3 +222,29 @@ func TestEvidenceAuditRejectsOversizedCorrelationBeforeCommit(t *testing.T) {
 		t.Fatalf("audit rows = %d, want 0", got)
 	}
 }
+
+func TestEvidenceAuditDoesNotExposeAuthorizationErrorSecret(t *testing.T) {
+	const marker = "MARSHAL_TEST_SECRET_T06_A05_backend_9d2c"
+	st := openEvidenceStoreWithSecurity(t, evidence.NewStrictSanitizer(evidence.SanitizerConfig{}), fixedAuthorizer{err: errors.New(marker)})
+	node := testEvidenceNode("EVIDENCE-A05-AUTHZ-SECRET", "claim", "authz")
+	if _, err := st.PutNode(context.Background(), node); err != nil {
+		t.Fatal(err)
+	}
+	err := st.TransitionNodeAuthorized(context.Background(), evidence.AccessRequest{
+		SubjectID: "subject", NodeID: node.ID, Action: evidence.ActionTransition, TargetState: evidence.StateLinked,
+	})
+	if !errors.Is(err, evidence.ErrAuthorizationUnavailable) || strings.Contains(err.Error(), marker) {
+		t.Fatalf("authorization error = %v, marker leaked", err)
+	}
+	events, err := st.ListEvents(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), marker) {
+		t.Fatal("authorization error marker appeared in audit events")
+	}
+}
