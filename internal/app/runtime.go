@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
+	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
@@ -39,7 +40,9 @@ type Runtime struct {
 }
 
 type Options struct {
-	Adapters map[string]adapter.Adapter
+	Adapters           map[string]adapter.Adapter
+	EvidenceSanitizer  evidence.Sanitizer
+	EvidenceAuthorizer evidence.Authorizer
 }
 
 type Status struct {
@@ -153,7 +156,11 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	if err != nil {
 		return nil, err
 	}
-	database, err := store.Open(ctx, layout.Database)
+	sanitizer := options.EvidenceSanitizer
+	if sanitizer == nil {
+		sanitizer = evidence.NewStrictSanitizer(evidence.SanitizerConfig{})
+	}
+	database, err := store.OpenWithSecurity(ctx, layout.Database, sanitizer, options.EvidenceAuthorizer)
 	if err != nil {
 		return nil, err
 	}
@@ -482,6 +489,11 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
 			TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(result.Stderr),
 		})
+	}
+	if ctx.Err() == nil {
+		if evidenceErr := r.recordRunEvidence(ctx, runID, task.ID, request.Adapter, probe.Version, baseCommit, resultCommit, result); evidenceErr != nil && runErr == nil {
+			runErr = evidenceErr
+		}
 	}
 	success := runErr == nil && inspectErr == nil && stdoutErr == nil && stderrErr == nil &&
 		result.Status == adapter.StatusSuccess && result.ExitCode == 0
