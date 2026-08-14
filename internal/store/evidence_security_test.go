@@ -19,6 +19,16 @@ func (a fixedAuthorizer) Authorize(context.Context, evidence.AccessRequest) (evi
 	return a.decision, a.err
 }
 
+type allowingAuthorizer struct{}
+
+func (allowingAuthorizer) Authorize(_ context.Context, request evidence.AccessRequest) (evidence.AuthorizationDecision, error) {
+	return evidence.AuthorizationDecision{
+		Allowed: true, SubjectID: request.SubjectID, NodeID: request.NodeID,
+		State: request.CurrentState, PolicyDigest: "sha256:" + strings.Repeat("c", 64),
+		FreshUntil: time.Now().UTC().Add(time.Minute),
+	}, nil
+}
+
 func openEvidenceStoreWithSecurity(t *testing.T, sanitizer evidence.Sanitizer, authorizer evidence.Authorizer) *Store {
 	t.Helper()
 	st, err := OpenWithSecurity(context.Background(), t.TempDir()+"/state.db", sanitizer, authorizer)

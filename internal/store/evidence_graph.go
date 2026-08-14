@@ -83,31 +83,7 @@ func (s *Store) Get(ctx context.Context, id evidence.NodeID) (evidence.Node, err
 // TransitionNode applies one legal lifecycle transition atomically. Repeating
 // the current state is idempotent; all other illegal transitions fail closed.
 func (s *Store) TransitionNode(ctx context.Context, id evidence.NodeID, target evidence.State) error {
-	if target != evidence.StateStored && target != evidence.StateLinked && target != evidence.StateArchived && target != evidence.StateExported {
-		return evidence.ErrInvalidTransition
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin evidence transition: %w", err)
-	}
-	defer tx.Rollback()
-	var current string
-	if err := tx.QueryRowContext(ctx, `SELECT state FROM evidence_nodes WHERE node_id = ?`, id).Scan(&current); err != nil {
-		return evidence.ErrInvalidTransition
-	}
-	if evidence.State(current) == target {
-		return nil
-	}
-	valid := (current == string(evidence.StateStored) && target == evidence.StateLinked) ||
-		(current == string(evidence.StateLinked) && target == evidence.StateArchived) ||
-		(current == string(evidence.StateArchived) && target == evidence.StateExported)
-	if !valid {
-		return evidence.ErrInvalidTransition
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE evidence_nodes SET state = ? WHERE node_id = ? AND state = ?`, target, id, current); err != nil {
-		return fmt.Errorf("update evidence state: %w", err)
-	}
-	return tx.Commit()
+	return evidence.ErrAuthorizationUnavailable
 }
 
 // TransitionNodeAuthorized enforces the external policy/authority decision
