@@ -50,7 +50,7 @@ policy IDs, subjects, tasks, sessions, resources, providers, or raw errors.
 ## Concurrency and recovery
 
 SQLite WAL, conditional updates, the schema v7 active-policy uniqueness index,
-the schema v8 policy-test result projection, and bounded busy/locked retries
+the schema v8 policy-test result projection plus schema v9 lifecycle state, and bounded busy/locked retries
 provide the durable concurrency boundary.
 Memory and process-local locks are not canonical state. Exact retries and
 restart recovery re-read durable policy state; stale transitions return typed

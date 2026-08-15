@@ -55,13 +55,16 @@ func (s *Store) PutPolicyTestRun(ctx context.Context, run policytest.TestRun) er
 	}
 	defer tx.Rollback()
 
-	var storedPolicyID, storedPolicyDigest, storedFileDigest, storedCreated, storedContent string
+	var storedPolicyID, storedPolicyDigest, storedFileDigest, storedCreated, storedContent, storedState string
 	var storedVersion, storedGeneration int64
 	err = tx.QueryRowContext(ctx, `
-		SELECT policy_id, policy_version, policy_digest, generation, test_file_digest, created_at, content_digest
+		SELECT policy_id, policy_version, policy_digest, generation, test_file_digest, created_at, content_digest, state
 		FROM policy_test_runs WHERE run_id = ?
-	`, canonical.ID).Scan(&storedPolicyID, &storedVersion, &storedPolicyDigest, &storedGeneration, &storedFileDigest, &storedCreated, &storedContent)
+	`, canonical.ID).Scan(&storedPolicyID, &storedVersion, &storedPolicyDigest, &storedGeneration, &storedFileDigest, &storedCreated, &storedContent, &storedState)
 	if err == nil {
+		if err := policytest.ValidateState(policytest.RunState(storedState)); err != nil {
+			return fmt.Errorf("%w: invalid policy test run state", model.ErrInvalid)
+		}
 		if storedContent != string(contentDigest) || storedPolicyID != string(canonical.PolicyID) || storedVersion != int64(canonical.Binding.Version) || storedPolicyDigest != string(canonical.Binding.Digest) || storedGeneration != int64(canonical.Binding.Generation) || storedFileDigest != string(canonical.TestFileDigest) {
 			return fmt.Errorf("%w: policy test run is immutable", model.ErrConflict)
 		}
@@ -82,9 +85,9 @@ func (s *Store) PutPolicyTestRun(ctx context.Context, run policytest.TestRun) er
 
 	created := utcNow()
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO policy_test_runs(run_id, policy_id, policy_version, policy_digest, generation, test_file_digest, created_at, content_digest)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-	`, canonical.ID, string(canonical.PolicyID), int64(canonical.Binding.Version), string(canonical.Binding.Digest), int64(canonical.Binding.Generation), string(canonical.TestFileDigest), created, string(contentDigest)); err != nil {
+		INSERT INTO policy_test_runs(run_id, policy_id, policy_version, policy_digest, generation, test_file_digest, created_at, content_digest, state)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, canonical.ID, string(canonical.PolicyID), int64(canonical.Binding.Version), string(canonical.Binding.Digest), int64(canonical.Binding.Generation), string(canonical.TestFileDigest), created, string(contentDigest), string(policytest.StateLoaded)); err != nil {
 		return fmt.Errorf("%w: policy test persistence unavailable", model.ErrUnavailable)
 	}
 	for _, result := range canonical.Cases {
@@ -130,12 +133,12 @@ func (s *Store) GetPolicyTestRun(ctx context.Context, id string) (policytest.Tes
 	if !validTestRunID(id) {
 		return policytest.TestRun{}, fmt.Errorf("%w: invalid policy test run id", model.ErrInvalid)
 	}
-	var policyID, digest, fileDigest, created, contentDigest string
+	var policyID, digest, fileDigest, created, contentDigest, stateText string
 	var version, generation int64
 	err := s.db.QueryRowContext(ctx, `
-		SELECT policy_id, policy_version, policy_digest, generation, test_file_digest, created_at, content_digest
+		SELECT policy_id, policy_version, policy_digest, generation, test_file_digest, created_at, content_digest, state
 		FROM policy_test_runs WHERE run_id = ?
-	`, id).Scan(&policyID, &version, &digest, &generation, &fileDigest, &created, &contentDigest)
+	`, id).Scan(&policyID, &version, &digest, &generation, &fileDigest, &created, &contentDigest, &stateText)
 	if errors.Is(err, sql.ErrNoRows) {
 		return policytest.TestRun{}, fmt.Errorf("%w: policy test run not found", model.ErrNotFound)
 	}
@@ -150,12 +153,60 @@ func (s *Store) GetPolicyTestRun(ctx context.Context, id string) (policytest.Tes
 	if err != nil {
 		return policytest.TestRun{}, fmt.Errorf("%w: invalid policy test cases", model.ErrInvalid)
 	}
-	run := policytest.TestRun{ID: id, PolicyID: policy.PolicyID(policyID), Binding: policy.PolicyBinding{Version: policy.PolicyVersion(version), Digest: policy.PolicyDigest(digest), Generation: uint64(generation)}, TestFileDigest: policy.PolicyDigest(fileDigest), Cases: cases, CreatedAt: parsedTime.UTC()}
+	state := policytest.RunState(stateText)
+	if err := policytest.ValidateState(state); err != nil {
+		return policytest.TestRun{}, fmt.Errorf("%w: invalid policy test run state", model.ErrInvalid)
+	}
+	run := policytest.TestRun{ID: id, PolicyID: policy.PolicyID(policyID), Binding: policy.PolicyBinding{Version: policy.PolicyVersion(version), Digest: policy.PolicyDigest(digest), Generation: uint64(generation)}, TestFileDigest: policy.PolicyDigest(fileDigest), Cases: cases, State: state, CreatedAt: parsedTime.UTC()}
 	_, _, computed, err := canonicalizeTestRun(run)
 	if err != nil || computed != policy.PolicyDigest(contentDigest) {
 		return policytest.TestRun{}, fmt.Errorf("%w: invalid policy test run content", model.ErrInvalid)
 	}
 	return policytest.CloneTestRun(run), nil
+}
+
+// TransitionPolicyTestRunState performs one validated lifecycle edge using a
+// durable expected-state CAS. Authorization is intentionally deferred to A04.
+func (s *Store) TransitionPolicyTestRunState(ctx context.Context, runID string, expected, target policytest.RunState) (policytest.TestRun, error) {
+	if !validTestRunID(runID) {
+		return policytest.TestRun{}, fmt.Errorf("%w: invalid policy test run id", model.ErrInvalid)
+	}
+	if err := policytest.ValidateTransition(expected, target); err != nil {
+		return policytest.TestRun{}, fmt.Errorf("%w: invalid policy test transition", model.ErrInvalid)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `
+		UPDATE policy_test_runs SET state = ? WHERE run_id = ? AND state = ?
+	`, string(target), runID, string(expected))
+	if err != nil {
+		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+	}
+	if affected != 1 {
+		var current string
+		err := tx.QueryRowContext(ctx, "SELECT state FROM policy_test_runs WHERE run_id = ?", runID).Scan(&current)
+		if errors.Is(err, sql.ErrNoRows) {
+			return policytest.TestRun{}, fmt.Errorf("%w: policy test run not found", model.ErrNotFound)
+		}
+		if err != nil {
+			return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+		}
+		if policytest.ValidateState(policytest.RunState(current)) != nil {
+			return policytest.TestRun{}, fmt.Errorf("%w: invalid policy test run state", model.ErrInvalid)
+		}
+		return policytest.TestRun{}, fmt.Errorf("%w: stale policy test run state", model.ErrConflict)
+	}
+	if err := tx.Commit(); err != nil {
+		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+	}
+	return s.GetPolicyTestRun(ctx, runID)
 }
 
 func validTestRunID(value string) bool {

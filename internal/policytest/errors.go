@@ -9,6 +9,9 @@ const (
 	CodeCaseInvalid         ErrorCode = "POLICYTEST_CASE_INVALID"
 	CodeExpectationMismatch ErrorCode = "POLICYTEST_EXPECTATION_MISMATCH"
 	CodeRunInvalid          ErrorCode = "POLICYTEST_RUN_INVALID"
+	CodeStateInvalid        ErrorCode = "POLICYTEST_STATE_INVALID"
+	CodeIllegalTransition   ErrorCode = "POLICYTEST_ILLEGAL_TRANSITION"
+	CodeStaleState          ErrorCode = "POLICYTEST_STALE_STATE"
 )
 
 // Error intentionally exposes only a stable code. Fixture text and evaluator
@@ -37,4 +40,7 @@ func ReasonCode(err error) ErrorCode {
 var (
 	ErrCaseInvalid         = &Error{Code: CodeCaseInvalid}
 	ErrExpectationMismatch = &Error{Code: CodeExpectationMismatch}
+	ErrStateInvalid        = &Error{Code: CodeStateInvalid}
+	ErrIllegalTransition   = &Error{Code: CodeIllegalTransition}
+	ErrStaleState          = &Error{Code: CodeStaleState}
 )

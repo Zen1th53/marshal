@@ -24,6 +24,7 @@ type TestRun struct {
 	Binding        policy.PolicyBinding
 	TestFileDigest policy.PolicyDigest
 	Cases          []TestCaseResult
+	State          RunState
 	CreatedAt      time.Time
 }
 
@@ -32,6 +33,9 @@ func (r TestRun) Validate() error {
 		return NewError(CodeRunInvalid)
 	}
 	if err := r.Binding.Validate(); err != nil || r.TestFileDigest.Validate() != nil {
+		return NewError(CodeRunInvalid)
+	}
+	if r.State != "" && !r.State.Valid() {
 		return NewError(CodeRunInvalid)
 	}
 	if len(r.Cases) > maxTestRunCases {
