@@ -1656,8 +1656,8 @@
     },
     {
       "path": "internal/store/dag.go",
-      "sha256": "a8e962ef1dfc222b5cd567ba80710fda0182f751e6f48ba9edd47521f1729187",
-      "bytes": 9594
+      "sha256": "8ccc5b6096f133b68e1e84a7d3fa91d4871d500a7d193e1877c5a423c84418ea",
+      "bytes": 10467
     },
     {
       "path": "internal/store/dag_a02_test.go",
@@ -1673,6 +1673,11 @@
       "path": "internal/store/dag_a04_security_test.go",
       "sha256": "6ecad39acb8965aa03e307f01a17b5c75535d6f62c9e7658adc2d20043372dfd",
       "bytes": 3644
+    },
+    {
+      "path": "internal/store/dag_a08_concurrency_test.go",
+      "sha256": "8d5bcaf16d7b753ac1ee7a40dd547f902cd90d1862cfce8311d9b92216a13abd",
+      "bytes": 4238
     },
     {
       "path": "internal/store/dag_authorized_test_helper_test.go",
