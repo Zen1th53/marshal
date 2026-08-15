@@ -39,7 +39,7 @@ func TestUnixServerVersionStatusAndLifecycle(t *testing.T) {
 		t.Fatalf("version=%#v request_id=%q", version, requestID)
 	}
 	status, _, err := client.Status(context.Background())
-	if err != nil || status.SchemaVersion != 6 {
+	if err != nil || status.SchemaVersion != 7 {
 		t.Fatalf("status=%#v err=%v", status, err)
 	}
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
@@ -80,6 +81,15 @@ func (s *Store) transitionPolicyStateOnce(ctx context.Context, id policy.PolicyI
 	if currentState != from {
 		return PolicyRecord{}, fmt.Errorf("%w: stale policy lifecycle state", model.ErrConflict)
 	}
+	if to == policy.StateActive {
+		var activeCount int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM policy_versions WHERE state = ?`, string(policy.StateActive)).Scan(&activeCount); err != nil {
+			return PolicyRecord{}, fmt.Errorf("count active policies: %w", err)
+		}
+		if activeCount != 0 {
+			return PolicyRecord{}, fmt.Errorf("%w: another policy version is already active", model.ErrConflict)
+		}
+	}
 	query := `UPDATE policy_versions SET state = ? WHERE policy_id = ? AND version = ? AND state = ? AND generation = ?`
 	args := []any{string(to), string(id), int64(version), string(from), generation}
 	if binding != nil {
@@ -88,6 +98,9 @@ func (s *Store) transitionPolicyStateOnce(ctx context.Context, id policy.PolicyI
 	}
 	result, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique constraint") {
+			return PolicyRecord{}, fmt.Errorf("%w: active policy already exists", model.ErrConflict)
+		}
 		return PolicyRecord{}, fmt.Errorf("update policy lifecycle state: %w", err)
 	}
 	rows, err := result.RowsAffected()
@@ -103,6 +116,9 @@ func (s *Store) transitionPolicyStateOnce(ctx context.Context, id policy.PolicyI
 		}
 	}
 	if err := tx.Commit(); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique constraint") {
+			return PolicyRecord{}, fmt.Errorf("%w: active policy already exists", model.ErrConflict)
+		}
 		return PolicyRecord{}, fmt.Errorf("commit policy transition: %w", err)
 	}
 	return s.GetPolicy(ctx, id, version)
