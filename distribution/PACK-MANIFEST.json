@@ -1110,6 +1110,11 @@
       "bytes": 1222
     },
     {
+      "path": "internal/dag/adversarial_a07_test.go",
+      "sha256": "3b570c32e45913d0e6b0b86cedd0c37c28a86ca2e13b9dc93d7e2ebf22b49b7d",
+      "bytes": 11588
+    },
+    {
       "path": "internal/dag/authorization.go",
       "sha256": "10ba811068c12d7f5f781326b6626232b335967cb716c46f2ffec7965ad74cd4",
       "bytes": 4644
