@@ -1115,6 +1115,26 @@
       "bytes": 3294
     },
     {
+      "path": "internal/events/bus.go",
+      "sha256": "73bcb5f25b427143803d23f2e4a6bb5f9ab7d9f1bcab932b864a547cd365e225",
+      "bytes": 1811
+    },
+    {
+      "path": "internal/events/bus_a02_test.go",
+      "sha256": "583e64b5ad40f494982c3596c100a9476d3687729f72110b2ce594a260e2ffb5",
+      "bytes": 794
+    },
+    {
+      "path": "internal/events/engine.go",
+      "sha256": "f810e6b01cbe7e9d6935fdf3a9e98ca4ec00d05fe7f5a4014d862e98838632c2",
+      "bytes": 988
+    },
+    {
+      "path": "internal/events/engine_a02_test.go",
+      "sha256": "20293a794d524b78bbfe8c07a368d1707a1cd6227ccf6ff33b2853c1bb69092a",
+      "bytes": 2732
+    },
+    {
       "path": "internal/events/errors.go",
       "sha256": "e7e27c16e200cb98d116a8fe2765cda22b939aa8e70817ba58d42c500b1f807f",
       "bytes": 1863
@@ -1526,8 +1546,18 @@
     },
     {
       "path": "internal/store/dag_a02_test.go",
-      "sha256": "d0eac0b6429f67501a680591064a5aaa72898602796a94cfedc15a5e84b679b8",
-      "bytes": 4249
+      "sha256": "c99f0c372a340a1252f351758da4dc3c09f80f8ed809513da3d084560e43414e",
+      "bytes": 4270
+    },
+    {
+      "path": "internal/store/events.go",
+      "sha256": "58fd4cfe886a037416916de3c06a1af46d5488954840b963ee0ed072aea6fafb",
+      "bytes": 7549
+    },
+    {
+      "path": "internal/store/events_a02_test.go",
+      "sha256": "92542d114c3c69a2b62698610748e87a2084b4020d3763ec9566b40b3de7e64c",
+      "bytes": 8773
     },
     {
       "path": "internal/store/evidence.go",
@@ -1651,8 +1681,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "8a3365dc1e78b2908f4d01125251194fb4c4f00c00b67a005b4ab3ec6bbfa49a",
-      "bytes": 18387
+      "sha256": "a47f8536ae950b95763b6515eb194de88753db7401070a3f910110c610f1f0e3",
+      "bytes": 19656
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",
@@ -1801,8 +1831,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "fc1ae93066853a3685e32b44cf341c06a3cf8e7f809688347e67db991d7791b9",
-      "bytes": 6167
+      "sha256": "3dcf12322e28de16d1d01ad7abd4c2722abfcc7673ae333552f52d3325aaccee",
+      "bytes": 6692
     },
     {
       "path": "internal/store/tasks.go",

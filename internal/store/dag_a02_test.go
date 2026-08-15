@@ -16,8 +16,8 @@ func TestA02DAGMigrationPersistsNodesEdgesAndIndexes(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 12 {
-		t.Fatalf("schema version=%d, want 12", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != LatestSchemaVersion {
+		t.Fatalf("schema version=%d, want latest", got)
 	}
 	for _, table := range []string{"dag_nodes", "dag_edges"} {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
