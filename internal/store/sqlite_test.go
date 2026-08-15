@@ -81,6 +81,46 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 	}
 }
 
+func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		"DROP INDEX policy_test_outcomes_by_status",
+		"DROP TABLE policy_test_outcomes",
+		"ALTER TABLE policy_test_runs DROP COLUMN execution_claimed_at",
+		"ALTER TABLE policy_test_runs DROP COLUMN execution_owner",
+		"ALTER TABLE policy_test_runs DROP COLUMN state",
+		"DROP INDEX policy_test_cases_by_status",
+		"DROP TABLE policy_test_cases",
+		"DROP INDEX policy_test_runs_by_policy",
+		"DROP TABLE policy_test_runs",
+		"DELETE FROM schema_migrations WHERE version >= 8",
+	} {
+		if _, err := st.db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("prepare v7 schema with %q: %v", statement, err)
+		}
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatalf("migrate v7 to v11: %v", err)
+	}
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 11 {
+		t.Fatalf("schema version=%d, want 11", got)
+	}
+	if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('policy_test_runs','policy_test_cases','policy_test_outcomes')"); got != 3 {
+		t.Fatalf("T49 tables=%d, want 3", got)
+	}
+	var integrity string
+	if err := st.db.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&integrity); err != nil || integrity != "ok" {
+		t.Fatalf("integrity=%q err=%v", integrity, err)
+	}
+	if got := queryInt(t, st.db, "SELECT count(*) FROM pragma_foreign_key_check"); got != 0 {
+		t.Fatalf("foreign key violations=%d", got)
+	}
+}
+
 func TestInitProjectIsIdempotentAndRejectsConflictingIdentity(t *testing.T) {
 	st := openTestStore(t)
 	ctx := context.Background()

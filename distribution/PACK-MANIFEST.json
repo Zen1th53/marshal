@@ -1070,6 +1070,11 @@
       "bytes": 10286
     },
     {
+      "path": "internal/cli/policy_test_a10_release_test.go",
+      "sha256": "d1610bd0f758851dd31d752d36bdac33cb67e585f4373bc1d87123e974551df4",
+      "bytes": 1222
+    },
+    {
       "path": "internal/doctor/doctor.go",
       "sha256": "7d6990ac258648e15f549a7966ecb485464ca67bc1bd19bad5f7abdac48dd45a",
       "bytes": 12198
@@ -1736,8 +1741,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "57ba394ef7cb0bcfde4f68d5a07287c3cbf0643775d34d8a9726a57efc44d9e3",
-      "bytes": 4148
+      "sha256": "605ccbc74c82e61b9f0a8a34b221eee16ad14fba25d99ab1124579fbab8ffed3",
+      "bytes": 5747
     },
     {
       "path": "internal/store/tasks.go",
