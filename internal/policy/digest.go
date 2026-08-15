@@ -25,16 +25,25 @@ func (d PolicyDigest) Validate() error {
 
 // Digest returns the deterministic digest of the validated normalized policy.
 func (p Policy) Digest() (PolicyDigest, error) {
-	if err := p.Validate(); err != nil {
-		return "", err
-	}
-	canonical := canonicalizePolicy(p)
-	data, err := json.Marshal(canonical)
+	data, err := p.CanonicalJSON()
 	if err != nil {
-		return "", NewError(CodeParseError, err)
+		return "", err
 	}
 	sum := sha256.Sum256(data)
 	return PolicyDigest("sha256:" + hex.EncodeToString(sum[:])), nil
+}
+
+// CanonicalJSON returns the deterministic, validated representation bound by
+// Digest and suitable for durable storage.
+func (p Policy) CanonicalJSON() ([]byte, error) {
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(canonicalizePolicy(p))
+	if err != nil {
+		return nil, NewError(CodeParseError, err)
+	}
+	return data, nil
 }
 
 type canonicalPolicy struct {
