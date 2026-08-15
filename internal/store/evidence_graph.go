@@ -274,21 +274,32 @@ func (s *Store) linkOnce(ctx context.Context, edge evidence.Edge) (evidence.Edge
 func (s *Store) Neighbors(ctx context.Context, id evidence.NodeID) (nodes []evidence.Node, err error) {
 	started := time.Now()
 	defer func() { s.observeMetric(evidence.MetricOperationNeighbors, err, started) }()
-	rows, err := s.db.QueryContext(ctx, `SELECT to_node_id FROM evidence_edges WHERE from_node_id = ? ORDER BY to_node_id`, id)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT n.node_id, n.node_type, n.digest, n.metadata_json, n.created_at, n.state
+		FROM evidence_edges e
+		JOIN evidence_nodes n ON n.node_id = e.to_node_id
+		WHERE e.from_node_id = ?
+		ORDER BY e.to_node_id`, id)
 	if err != nil {
 		return nil, fmt.Errorf("query evidence neighbors: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var target evidence.NodeID
-		if err := rows.Scan(&target); err != nil {
+		var node evidence.Node
+		var typ, metadata, created, state string
+		if err := rows.Scan(&node.ID, &typ, &node.Digest, &metadata, &created, &state); err != nil {
 			return nil, err
 		}
-		node, err := s.Get(ctx, target)
+		node.Type = evidence.NodeType(typ)
+		node.State = evidence.State(state)
+		if err := json.Unmarshal([]byte(metadata), &node.Metadata); err != nil {
+			return nil, fmt.Errorf("decode evidence neighbor metadata: %w", err)
+		}
+		node.CreatedAt, err = time.Parse(time.RFC3339Nano, created)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parse evidence neighbor timestamp: %w", err)
 		}
-		nodes = append(nodes, node)
+		nodes = append(nodes, evidence.CloneNode(node))
 	}
 	return nodes, rows.Err()
 }
