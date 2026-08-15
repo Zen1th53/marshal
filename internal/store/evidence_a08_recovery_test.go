@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -13,6 +14,55 @@ import (
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 )
+
+func TestA08ConcurrentSecretRequestCannotBorrowSafePersistencePath(t *testing.T) {
+	ctx := context.Background()
+	marker := "MARSHAL_TEST_SECRET_T06_A08_RACE_7c41"
+	path := filepath.Join(t.TempDir(), "evidence.db")
+	st, err := OpenWithSanitizer(ctx, path, evidence.NewStrictSanitizer(evidence.SanitizerConfig{LiteralSecrets: []string{marker}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx); err != nil {
+		st.Close()
+		t.Fatal(err)
+	}
+	defer st.Close()
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	errs := make(chan error, 16)
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			node := testEvidenceNode("EVIDENCE-A08-SECRET-"+string(rune('A'+i)), "claim", marker)
+			_, err := st.PutNode(ctx, node)
+			errs <- err
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if !errors.Is(err, evidence.ErrSecretRejected) {
+			t.Fatalf("secret request error = %v, want secret rejection", err)
+		}
+	}
+	if got := queryInt(t, st.db, "SELECT count(*) FROM evidence_nodes"); got != 0 {
+		t.Fatalf("secret evidence rows = %d, want 0", got)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	bytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(bytes), marker) {
+		t.Fatal("secret marker persisted in SQLite bytes")
+	}
+}
 
 // Two independent Store instances model separate MARSHAL workers. SQLite's
 // unique constraints and conditional updates, rather than a Go mutex, are
