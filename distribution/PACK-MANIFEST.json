@@ -1115,6 +1115,26 @@
       "bytes": 3294
     },
     {
+      "path": "internal/events/errors.go",
+      "sha256": "e7e27c16e200cb98d116a8fe2765cda22b939aa8e70817ba58d42c500b1f807f",
+      "bytes": 1863
+    },
+    {
+      "path": "internal/events/registry.go",
+      "sha256": "4a7b3d4c2f72ba15df257b08cf70ae900ca9567f9a056471bfd654108a7a4406",
+      "bytes": 12981
+    },
+    {
+      "path": "internal/events/types.go",
+      "sha256": "fa37481777fd5ae0a8ca5a193e691b94ca1fa2340f1fafa2928cf8247dcba64f",
+      "bytes": 3575
+    },
+    {
+      "path": "internal/events/types_test.go",
+      "sha256": "28c202a35965dcd986095641d8c0f7c393a297547d8ffc1d6a231b0b2f679904",
+      "bytes": 2897
+    },
+    {
       "path": "internal/evidence/adversarial_fuzz_test.go",
       "sha256": "25c6b027fcc904877b6f52898ccbd2e0436204414febf1a1984da481fece01f1",
       "bytes": 2874
