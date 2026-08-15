@@ -182,34 +182,60 @@ func (s *Store) transitionPolicyTestRunState(ctx context.Context, runID string, 
 		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `
-		UPDATE policy_test_runs SET state = ? WHERE run_id = ? AND state = ?
-	`, string(target), runID, string(expected))
-	if err != nil {
-		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
-	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
-	}
-	if affected != 1 {
-		var current string
-		err := tx.QueryRowContext(ctx, "SELECT state FROM policy_test_runs WHERE run_id = ?", runID).Scan(&current)
-		if errors.Is(err, sql.ErrNoRows) {
-			return policytest.TestRun{}, fmt.Errorf("%w: policy test run not found", model.ErrNotFound)
-		}
-		if err != nil {
-			return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
-		}
-		if policytest.ValidateState(policytest.RunState(current)) != nil {
-			return policytest.TestRun{}, fmt.Errorf("%w: invalid policy test run state", model.ErrInvalid)
-		}
-		return policytest.TestRun{}, fmt.Errorf("%w: stale policy test run state", model.ErrConflict)
+	if err := s.transitionPolicyTestRunStateTx(ctx, tx, runID, expected, target, nil, nil); err != nil {
+		return policytest.TestRun{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
 	}
 	return s.GetPolicyTestRun(ctx, runID)
+}
+
+func (s *Store) transitionPolicyTestRunStateTx(ctx context.Context, tx *sql.Tx, runID string, expected, target policytest.RunState, request *policytest.AuthorizationRequest, event *policytest.EventFact) error {
+	var current, policyID, digest, fileDigest string
+	var version, generation int64
+	if err := tx.QueryRowContext(ctx, `
+		SELECT state, policy_id, policy_version, policy_digest, generation, test_file_digest
+		FROM policy_test_runs WHERE run_id = ?
+	`, runID).Scan(&current, &policyID, &version, &digest, &generation, &fileDigest); errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: policy test run not found", model.ErrNotFound)
+	} else if err != nil {
+		return fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+	} else if policytest.ValidateState(policytest.RunState(current)) != nil {
+		return fmt.Errorf("%w: invalid policy test run state", model.ErrInvalid)
+	} else if request != nil && (request.RunID != runID || string(request.PolicyID) != policyID || int64(request.Binding.Version) != version || string(request.Binding.Digest) != digest || int64(request.Binding.Generation) != generation || string(request.TestFileDigest) != fileDigest || request.ExpectedState != policytest.RunState(current)) {
+		return fmt.Errorf("%w: stale policy test run state", model.ErrConflict)
+	}
+	result, err := tx.ExecContext(ctx, `
+		UPDATE policy_test_runs SET state = ? WHERE run_id = ? AND state = ?
+	`, string(target), runID, string(expected))
+	if err != nil {
+		return fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+	}
+	if affected != 1 {
+		var current string
+		err := tx.QueryRowContext(ctx, "SELECT state FROM policy_test_runs WHERE run_id = ?", runID).Scan(&current)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: policy test run not found", model.ErrNotFound)
+		}
+		if err != nil {
+			return fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+		}
+		if policytest.ValidateState(policytest.RunState(current)) != nil {
+			return fmt.Errorf("%w: invalid policy test run state", model.ErrInvalid)
+		}
+		return fmt.Errorf("%w: stale policy test run state", model.ErrConflict)
+	}
+	if event != nil {
+		if err := s.appendPolicyTestEvent(ctx, tx, *event); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // TransitionPolicyTestRunStateAuthorized is the sole exported T49 lifecycle
@@ -236,7 +262,27 @@ func (s *Store) TransitionPolicyTestRunStateAuthorized(ctx context.Context, requ
 	if err := decision.ValidateFor(request); err != nil {
 		return policytest.TestRun{}, err
 	}
-	return s.transitionPolicyTestRunState(ctx, request.RunID, request.ExpectedState, request.TargetState)
+	fact, emit := policytest.EventFact{}, false
+	if candidate, ok := policytest.EventForTransition(request); ok {
+		fact, emit = candidate, true
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+	}
+	defer tx.Rollback()
+	if err := s.transitionPolicyTestRunStateTx(ctx, tx, request.RunID, request.ExpectedState, request.TargetState, &request, func() *policytest.EventFact {
+		if emit {
+			return &fact
+		}
+		return nil
+	}()); err != nil {
+		return policytest.TestRun{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+	}
+	return s.GetPolicyTestRun(ctx, request.RunID)
 }
 
 func validTestRunID(value string) bool {

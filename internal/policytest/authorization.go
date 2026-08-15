@@ -2,6 +2,7 @@ package policytest
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/policy"
@@ -38,7 +39,7 @@ func (r AuthorizationRequest) Validate() error {
 		!r.Action.Valid() || !r.ExpectedState.Valid() || !r.TargetState.Valid() {
 		return policy.ErrAuthorizationInvalid
 	}
-	if err := r.Binding.Validate(); err != nil || r.TestFileDigest.Validate() != nil {
+	if err := r.Binding.Validate(); err != nil || r.Binding.Generation > math.MaxInt64 || r.TestFileDigest.Validate() != nil {
 		return policy.ErrAuthorizationInvalid
 	}
 	if err := ValidateTransition(r.ExpectedState, r.TargetState); err != nil {
