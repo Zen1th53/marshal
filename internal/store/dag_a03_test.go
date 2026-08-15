@@ -53,7 +53,7 @@ func TestT29A03EngineUnlocksChildOnlyFromCanonicalParentState(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	engine, err := dag.NewEngine(st)
+	engine, err := newAuthorizedDAGEngine(st)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestT29A03FailedRequiredParentKeepsChildBlocked(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	engine, err := dag.NewEngine(st)
+	engine, err := newAuthorizedDAGEngine(st)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestT29A03EngineRejectsCycleWithoutPersistingEdge(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	engine, _ := dag.NewEngine(st)
+	engine, _ := newAuthorizedDAGEngine(st)
 	for _, id := range []dag.TaskID{"TASK-A", "TASK-B"} {
 		if _, err := engine.AddNode(ctx, dag.AddNodeRequest{RequestID: dag.RequestID("REQ-" + string(id)), Node: dag.Node{TaskID: id, Kind: dag.NodeKindTask, Status: dag.StatusPending}}); err != nil {
 			t.Fatal(err)
@@ -158,7 +158,7 @@ func TestT29A03TopologicalOrderStableForDiamond(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	engine, _ := dag.NewEngine(st)
+	engine, _ := newAuthorizedDAGEngine(st)
 	nodes := []dag.Node{
 		{TaskID: "TASK-A", Kind: dag.NodeKindTask, Status: dag.StatusPending, Priority: 10},
 		{TaskID: "TASK-B", Kind: dag.NodeKindTask, Status: dag.StatusPending, Priority: 5},
@@ -203,7 +203,7 @@ func TestT29A03CanAddChildWhileParentRunningButCannotRewriteCompletedTarget(t *t
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	engine, _ := dag.NewEngine(st)
+	engine, _ := newAuthorizedDAGEngine(st)
 	for _, id := range []dag.TaskID{"TASK-PARENT", "TASK-CHILD", "TASK-HISTORY"} {
 		if _, err := engine.AddNode(ctx, dag.AddNodeRequest{RequestID: dag.RequestID("REQ-" + string(id)), Node: dag.Node{TaskID: id, Kind: dag.NodeKindTask, Status: dag.StatusPending}}); err != nil {
 			t.Fatal(err)
@@ -233,7 +233,7 @@ func TestT29A03ExactEdgeRetryReconcilesAfterTargetBecomesReady(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	engine, _ := dag.NewEngine(st)
+	engine, _ := newAuthorizedDAGEngine(st)
 	for _, id := range []dag.TaskID{"TASK-P", "TASK-C"} {
 		if _, err := engine.AddNode(ctx, dag.AddNodeRequest{RequestID: dag.RequestID("REQ-" + string(id)), Node: dag.Node{TaskID: id, Kind: dag.NodeKindTask, Status: dag.StatusPending}}); err != nil {
 			t.Fatal(err)
@@ -268,7 +268,7 @@ func TestT29A03CancelledMutationHasNoSideEffectAndSafeError(t *testing.T) {
 	if err := st.Migrate(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	engine, _ := dag.NewEngine(st)
+	engine, _ := newAuthorizedDAGEngine(st)
 	const marker = "MARSHAL_TEST_SECRET_T29_A03_5b91"
 	_, err := engine.AddNode(ctx, dag.AddNodeRequest{RequestID: marker, Node: dag.Node{TaskID: "TASK-CANCEL", Kind: dag.NodeKindTask, Status: dag.StatusPending}})
 	if err == nil {
@@ -297,7 +297,7 @@ func TestT29A03ReadyStatusCannotOverrideUnsatisfiedCanonicalDependency(t *testin
 	if _, err := st.PutDAGEdge(ctx, dag.Edge{From: "TASK-P", To: "TASK-C", Condition: dag.ConditionCompleted}); err != nil {
 		t.Fatal(err)
 	}
-	engine, _ := dag.NewEngine(st)
+	engine, _ := newAuthorizedDAGEngine(st)
 	got, err := engine.Ready(ctx, "TASK-C")
 	if err != nil {
 		t.Fatal(err)
@@ -369,7 +369,7 @@ func TestT29A03TransitionAndReadinessSurviveRestart(t *testing.T) {
 	if err := first.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	engine, _ := dag.NewEngine(first)
+	engine, _ := newAuthorizedDAGEngine(first)
 	for _, id := range []dag.TaskID{"TASK-P", "TASK-C"} {
 		if _, err := engine.AddNode(ctx, dag.AddNodeRequest{RequestID: dag.RequestID("REQ-" + string(id)), Node: dag.Node{TaskID: id, Kind: dag.NodeKindTask, Status: dag.StatusPending}}); err != nil {
 			t.Fatal(err)
@@ -391,7 +391,7 @@ func TestT29A03TransitionAndReadinessSurviveRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer second.Close()
-	engine2, _ := dag.NewEngine(second)
+	engine2, _ := newAuthorizedDAGEngine(second)
 	got, err := engine2.Ready(ctx, "TASK-C")
 	if err != nil {
 		t.Fatal(err)

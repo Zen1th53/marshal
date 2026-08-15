@@ -116,11 +116,33 @@ func (s *Store) PutDAGEdge(ctx context.Context, edge dag.Edge) (dag.Edge, error)
 	case !errors.Is(err, sql.ErrNoRows):
 		return dag.Edge{}, fmt.Errorf("read dag edge before insert: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `
+	// The cycle predicate and insert are one SQLite statement so no service-level
+	// precheck can become a TOCTOU bypass. A candidate From->To edge is legal
+	// only when To cannot already reach From in the durable graph snapshot used
+	// by this write statement.
+	result, err := tx.ExecContext(ctx, `
+		WITH RECURSIVE reachable(task_id) AS (
+			SELECT to_task FROM dag_edges WHERE from_task = ?
+			UNION
+			SELECT e.to_task
+			FROM dag_edges e
+			JOIN reachable r ON e.from_task = r.task_id
+		)
 		INSERT INTO dag_edges(from_task, to_task, condition, created_at)
-		VALUES(?, ?, ?, ?)
-	`, edge.From, edge.To, edge.Condition, utcNow()); err != nil {
+		SELECT ?, ?, ?, ?
+		WHERE NOT EXISTS (
+			SELECT 1 FROM reachable WHERE task_id = ?
+		)
+	`, edge.To, edge.From, edge.To, edge.Condition, utcNow(), edge.From)
+	if err != nil {
 		return dag.Edge{}, fmt.Errorf("insert dag edge: %w", err)
+	}
+	inserted, err := result.RowsAffected()
+	if err != nil {
+		return dag.Edge{}, fmt.Errorf("inspect dag edge insert: %w", err)
+	}
+	if inserted != 1 {
+		return dag.Edge{}, dag.ErrCycle
 	}
 	if err := tx.Commit(); err != nil {
 		return dag.Edge{}, fmt.Errorf("commit dag edge insert: %w", err)
