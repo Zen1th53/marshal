@@ -31,6 +31,7 @@ func (e EventType) Valid() bool {
 type EventFact struct {
 	Type           EventType
 	RunID          string
+	CaseID         CaseID
 	PolicyID       policy.PolicyID
 	PolicyVersion  policy.PolicyVersion
 	PolicyDigest   policy.PolicyDigest
@@ -58,7 +59,19 @@ func (f EventFact) Validate() error {
 	if f.Result != "allowed" && f.Result != "passed" && f.Result != "failed" {
 		return policy.ErrAuthorizationInvalid
 	}
-	if f.ReasonCode != policy.CodeAuthorizationAllowed && f.ReasonCode != policy.CodeAuthorizationDenied {
+	if (f.Type == EventCasePassed || f.Type == EventCaseFailed) && !validBoundedID(string(f.CaseID), maxCaseID) {
+		return policy.ErrAuthorizationInvalid
+	}
+	if (f.Type != EventCasePassed && f.Type != EventCaseFailed) && f.CaseID != "" {
+		return policy.ErrAuthorizationInvalid
+	}
+	if f.Type == EventCasePassed && f.Result != "passed" || f.Type == EventCaseFailed && f.Result != "failed" {
+		return policy.ErrAuthorizationInvalid
+	}
+	if (f.Type == EventCasePassed || f.Type == EventCaseFailed) && f.ReasonCode == "" {
+		return policy.ErrAuthorizationInvalid
+	}
+	if f.Type != EventCasePassed && f.Type != EventCaseFailed && f.ReasonCode != policy.CodeAuthorizationAllowed && f.ReasonCode != policy.CodeAuthorizationDenied {
 		return policy.ErrAuthorizationInvalid
 	}
 	return nil
@@ -66,7 +79,7 @@ func (f EventFact) Validate() error {
 
 func (f EventFact) Data() map[string]any {
 	return map[string]any{
-		"run_id": string(f.RunID), "policy_id": string(f.PolicyID), "policy_version": int64(f.PolicyVersion),
+		"run_id": string(f.RunID), "case_id": string(f.CaseID), "policy_id": string(f.PolicyID), "policy_version": int64(f.PolicyVersion),
 		"policy_digest": string(f.PolicyDigest), "generation": f.Generation, "test_file_digest": string(f.TestFileDigest),
 		"previous_state": string(f.PreviousState), "target_state": string(f.TargetState), "action": string(f.Action),
 		"subject_id": f.SubjectID, "session_id": f.SessionID, "task_id": f.TaskID, "change_id": f.ChangeID,
