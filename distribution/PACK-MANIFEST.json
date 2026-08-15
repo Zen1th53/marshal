@@ -915,6 +915,21 @@
       "bytes": 4704
     },
     {
+      "path": "docs/terra-evidence/T29-A10.md",
+      "sha256": "9db388b8141b10eb0b26076740deff991d79e1ec4d01b700a144c18012b8fb2a",
+      "bytes": 5235
+    },
+    {
+      "path": "docs/terra-evidence/T43-A10.md",
+      "sha256": "8fe5ed5e9cea133d8ca82dfb9e1ee63bd28295f01f8951e2abe4067301e3212b",
+      "bytes": 5289
+    },
+    {
+      "path": "docs/terra-evidence/WAVE0-GATE.md",
+      "sha256": "3e8f5c2b613391d2acb6dcb066bbfdd1459b17acf3821792d162c2f4ab6e4bc6",
+      "bytes": 1446
+    },
+    {
       "path": "docs/troubleshooting.md",
       "sha256": "023036239396cee34bd3ba5f1c912c981b06b9967e53eb6e879432d60db1538d",
       "bytes": 4814
