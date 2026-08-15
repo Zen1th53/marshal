@@ -41,7 +41,7 @@ func TestPolicyStateRejectsIllegalTransition(t *testing.T) {
 	if err := st.PutPolicy(ctx, record); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.TransitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, policy.StateLoaded, policy.StateActive); err == nil {
+	if _, err := st.transitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, policy.StateLoaded, policy.StateActive, nil); err == nil {
 		t.Fatal("illegal loaded to active transition was accepted")
 	}
 }
@@ -64,14 +64,14 @@ func TestPolicyStateLegalTransitionsAreIdempotentAndPreserveBinding(t *testing.T
 		t.Fatalf("initial state/binding = %q/%#v", initial.State, initial.Binding)
 	}
 	for _, edge := range [][2]policy.State{{policy.StateLoaded, policy.StateValidated}, {policy.StateValidated, policy.StateActive}, {policy.StateActive, policy.StateSuperseded}} {
-		got, err := st.TransitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, edge[0], edge[1])
+		got, err := st.transitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, edge[0], edge[1], nil)
 		if err != nil {
 			t.Fatalf("transition %q->%q: %v", edge[0], edge[1], err)
 		}
 		if got.State != edge[1] || got.Binding != record.Binding {
 			t.Fatalf("transition result = %#v", got)
 		}
-		if _, err := st.TransitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, edge[0], edge[1]); err != nil {
+		if _, err := st.transitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, edge[0], edge[1], nil); err != nil {
 			t.Fatalf("idempotent retry %q->%q: %v", edge[0], edge[1], err)
 		}
 	}
@@ -109,11 +109,11 @@ func TestPolicyStateRejectsStaleAndConflictingTransitionsAcrossStores(t *testing
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, results[0] = first.TransitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, policy.StateLoaded, policy.StateValidated)
+		_, results[0] = first.transitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, policy.StateLoaded, policy.StateValidated, nil)
 	}()
 	go func() {
 		defer wg.Done()
-		_, results[1] = second.TransitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, policy.StateLoaded, policy.StateActive)
+		_, results[1] = second.transitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, policy.StateLoaded, policy.StateActive, nil)
 	}()
 	wg.Wait()
 	if results[0] != nil {

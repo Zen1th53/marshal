@@ -6,14 +6,18 @@ import "errors"
 type ErrorCode string
 
 const (
-	CodeParseError        ErrorCode = "POLICY_PARSE_ERROR"
-	CodeUnknownField      ErrorCode = "POLICY_UNKNOWN_FIELD"
-	CodeUnknownAction     ErrorCode = "POLICY_UNKNOWN_ACTION"
-	CodeConflict          ErrorCode = "POLICY_CONFLICT"
-	CodeDeny              ErrorCode = "POLICY_DENY"
-	CodeInvalidDecision   ErrorCode = CodeParseError
-	CodeInvalidObligation ErrorCode = CodeParseError
-	CodeStaleBinding      ErrorCode = CodeConflict
+	CodeParseError               ErrorCode = "POLICY_PARSE_ERROR"
+	CodeUnknownField             ErrorCode = "POLICY_UNKNOWN_FIELD"
+	CodeUnknownAction            ErrorCode = "POLICY_UNKNOWN_ACTION"
+	CodeConflict                 ErrorCode = "POLICY_CONFLICT"
+	CodeDeny                     ErrorCode = "POLICY_DENY"
+	CodeInvalidDecision          ErrorCode = CodeParseError
+	CodeInvalidObligation        ErrorCode = CodeParseError
+	CodeStaleBinding             ErrorCode = CodeConflict
+	CodeAuthorizationDenied      ErrorCode = "POLICY_AUTHORIZATION_DENIED"
+	CodeAuthorizationUnavailable ErrorCode = "POLICY_AUTHORIZATION_UNAVAILABLE"
+	CodeAuthorizationInvalid     ErrorCode = "POLICY_AUTHORIZATION_INVALID"
+	CodeAuthorizationStale       ErrorCode = "POLICY_AUTHORIZATION_STALE"
 )
 
 // Error is safe to expose: its message is selected only from the code and
@@ -41,12 +45,16 @@ func ReasonCode(err error) ErrorCode {
 }
 
 var (
-	ErrParseError        = &Error{Code: CodeParseError}
-	ErrUnknownField      = &Error{Code: CodeUnknownField}
-	ErrUnknownAction     = &Error{Code: CodeUnknownAction}
-	ErrConflict          = &Error{Code: CodeConflict}
-	ErrDeny              = &Error{Code: CodeDeny}
-	ErrInvalidDecision   = &Error{Code: CodeInvalidDecision}
-	ErrInvalidObligation = &Error{Code: CodeInvalidObligation}
-	ErrStaleBinding      = &Error{Code: CodeStaleBinding}
+	ErrParseError               = &Error{Code: CodeParseError}
+	ErrUnknownField             = &Error{Code: CodeUnknownField}
+	ErrUnknownAction            = &Error{Code: CodeUnknownAction}
+	ErrConflict                 = &Error{Code: CodeConflict}
+	ErrDeny                     = &Error{Code: CodeDeny}
+	ErrInvalidDecision          = &Error{Code: CodeInvalidDecision}
+	ErrInvalidObligation        = &Error{Code: CodeInvalidObligation}
+	ErrStaleBinding             = &Error{Code: CodeStaleBinding}
+	ErrAuthorizationDenied      = &Error{Code: CodeAuthorizationDenied}
+	ErrAuthorizationUnavailable = &Error{Code: CodeAuthorizationUnavailable}
+	ErrAuthorizationInvalid     = &Error{Code: CodeAuthorizationInvalid}
+	ErrAuthorizationStale       = &Error{Code: CodeAuthorizationStale}
 )
