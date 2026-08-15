@@ -1601,8 +1601,8 @@
     },
     {
       "path": "internal/store/policy_test_persistence_a02_test.go",
-      "sha256": "9fa1ee4617e4e7d5781623d0f26ab15bd86e04210b0d210d4e96babf9359dd81",
-      "bytes": 5156
+      "sha256": "f60c677ee9647b150f64e32d52c5bf59ab4f11fada84c0640448e211a5d4ef07",
+      "bytes": 6126
     },
     {
       "path": "internal/store/policy_test_store.go",

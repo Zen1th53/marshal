@@ -135,6 +135,35 @@ func TestPolicyTestRunRejectsSecretBearingAndCorruptDurableValues(t *testing.T) 
 	}
 }
 
+func TestPolicyTestRunTwoStoresObserveCanonicalTruth(t *testing.T) {
+	ctx := context.Background()
+	path := t.TempDir() + "/state.db"
+	first, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	if err := first.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	digest := testPolicyDigest(t)
+	run := policytest.TestRun{ID: "run-two-store", PolicyID: "policy-1", Binding: policy.PolicyBinding{Version: 1, Digest: digest, Generation: 1}, TestFileDigest: digest, Cases: []policytest.TestCaseResult{{ID: "case-1", Result: policytest.Result{Name: "case-1", Status: policytest.StatusPass}}}}
+	if err := first.PutPolicyTestRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.GetPolicyTestRun(ctx, run.ID); err != nil {
+		t.Fatalf("second store did not observe durable run: %v", err)
+	}
+}
+
 func testPolicyDigest(t *testing.T) policy.PolicyDigest {
 	t.Helper()
 	digest, err := (policy.Policy{ID: "policy-1", Version: 1, Default: policy.EffectDeny}).Digest()
