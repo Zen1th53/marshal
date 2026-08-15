@@ -149,6 +149,12 @@ func TestAuthorizedPolicyTransitionRejectsStaleBindingAfterCanonicalChange(t *te
 	if _, err := st.transitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, policy.StateLoaded, policy.StateValidated, nil); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := st.transitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, policy.StateValidated, policy.StateActive, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.transitionPolicyState(ctx, record.Policy.ID, record.Policy.Version, policy.StateActive, policy.StateSuperseded, nil); err != nil {
+		t.Fatal(err)
+	}
 	_, err := st.TransitionPolicyStateAuthorized(ctx, request, policyMutationAuthorizer(func(context.Context, policy.PolicyMutationRequest) (policy.PolicyMutationDecision, error) {
 		return allowedDecision(request), nil
 	}))
@@ -159,7 +165,7 @@ func TestAuthorizedPolicyTransitionRejectsStaleBindingAfterCanonicalChange(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.State != policy.StateValidated {
+	if loaded.State != policy.StateSuperseded {
 		t.Fatalf("stale authorization changed state to %q", loaded.State)
 	}
 }

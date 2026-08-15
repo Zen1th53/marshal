@@ -13,8 +13,12 @@ import (
 // transitionPolicyState is the store-internal lifecycle primitive. It is not
 // an authorization boundary and therefore is intentionally unexported.
 func (s *Store) transitionPolicyState(ctx context.Context, id policy.PolicyID, version policy.PolicyVersion, from, to policy.State, binding *policy.PolicyBinding) (PolicyRecord, error) {
+	return s.transitionPolicyStateWithEvent(ctx, id, version, from, to, binding, nil)
+}
+
+func (s *Store) transitionPolicyStateWithEvent(ctx context.Context, id policy.PolicyID, version policy.PolicyVersion, from, to policy.State, binding *policy.PolicyBinding, event *policy.PolicyMutationRequest) (PolicyRecord, error) {
 	for attempt := 0; ; attempt++ {
-		record, err := s.transitionPolicyStateOnce(ctx, id, version, from, to, binding)
+		record, err := s.transitionPolicyStateOnce(ctx, id, version, from, to, binding, event)
 		if err == nil || !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
 			return record, err
 		}
@@ -24,7 +28,7 @@ func (s *Store) transitionPolicyState(ctx context.Context, id policy.PolicyID, v
 	}
 }
 
-func (s *Store) transitionPolicyStateOnce(ctx context.Context, id policy.PolicyID, version policy.PolicyVersion, from, to policy.State, binding *policy.PolicyBinding) (PolicyRecord, error) {
+func (s *Store) transitionPolicyStateOnce(ctx context.Context, id policy.PolicyID, version policy.PolicyVersion, from, to policy.State, binding *policy.PolicyBinding, event *policy.PolicyMutationRequest) (PolicyRecord, error) {
 	if version <= 0 || !from.Valid() || !to.Valid() || from == to {
 		return PolicyRecord{}, fmt.Errorf("%w: invalid policy lifecycle transition", model.ErrInvalid)
 	}
@@ -57,7 +61,16 @@ func (s *Store) transitionPolicyStateOnce(ctx context.Context, id policy.PolicyI
 	// A retry of a committed edge reconciles to the already-canonical target.
 	if currentState == to {
 		if binding != nil {
-			return PolicyRecord{}, fmt.Errorf("%w: stale policy lifecycle state", model.ErrConflict)
+			if event == nil {
+				return PolicyRecord{}, fmt.Errorf("%w: stale policy lifecycle state", model.ErrConflict)
+			}
+			if err := s.appendPolicyEvent(ctx, tx, policyEventType(*event), *event, "allowed", string(policy.CodeAuthorizationAllowed)); err != nil {
+				return PolicyRecord{}, err
+			}
+			if err := tx.Commit(); err != nil {
+				return PolicyRecord{}, fmt.Errorf("commit policy retry reconciliation: %w", err)
+			}
+			return s.GetPolicy(ctx, id, version)
 		}
 		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			return PolicyRecord{}, fmt.Errorf("rollback idempotent policy transition: %w", err)
@@ -84,6 +97,11 @@ func (s *Store) transitionPolicyStateOnce(ctx context.Context, id policy.PolicyI
 	if rows != 1 {
 		return PolicyRecord{}, fmt.Errorf("%w: stale policy lifecycle state", model.ErrConflict)
 	}
+	if event != nil {
+		if err := s.appendPolicyEvent(ctx, tx, policyEventType(*event), *event, "allowed", string(policy.CodeAuthorizationAllowed)); err != nil {
+			return PolicyRecord{}, fmt.Errorf("record policy mutation event: %w", err)
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return PolicyRecord{}, fmt.Errorf("commit policy transition: %w", err)
 	}
@@ -105,7 +123,10 @@ func (s *Store) TransitionPolicyStateAuthorized(ctx context.Context, request pol
 		return PolicyRecord{}, policy.ErrAuthorizationUnavailable
 	}
 	if err := decision.ValidateFor(request); err != nil {
+		if errors.Is(err, policy.ErrAuthorizationDenied) {
+			_ = s.recordPolicyDeniedEvent(ctx, request)
+		}
 		return PolicyRecord{}, err
 	}
-	return s.transitionPolicyState(ctx, request.PolicyID, request.PolicyVersion, request.ExpectedState, request.TargetState, &request.Binding)
+	return s.transitionPolicyStateWithEvent(ctx, request.PolicyID, request.PolicyVersion, request.ExpectedState, request.TargetState, &request.Binding, &request)
 }

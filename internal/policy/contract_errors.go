@@ -15,6 +15,7 @@ const (
 	CodeInvalidObligation        ErrorCode = CodeParseError
 	CodeStaleBinding             ErrorCode = CodeConflict
 	CodeAuthorizationDenied      ErrorCode = "POLICY_AUTHORIZATION_DENIED"
+	CodeAuthorizationAllowed     ErrorCode = "POLICY_AUTHORIZATION_ALLOWED"
 	CodeAuthorizationUnavailable ErrorCode = "POLICY_AUTHORIZATION_UNAVAILABLE"
 	CodeAuthorizationInvalid     ErrorCode = "POLICY_AUTHORIZATION_INVALID"
 	CodeAuthorizationStale       ErrorCode = "POLICY_AUTHORIZATION_STALE"
@@ -54,6 +55,7 @@ var (
 	ErrInvalidObligation        = &Error{Code: CodeInvalidObligation}
 	ErrStaleBinding             = &Error{Code: CodeStaleBinding}
 	ErrAuthorizationDenied      = &Error{Code: CodeAuthorizationDenied}
+	ErrAuthorizationAllowed     = &Error{Code: CodeAuthorizationAllowed}
 	ErrAuthorizationUnavailable = &Error{Code: CodeAuthorizationUnavailable}
 	ErrAuthorizationInvalid     = &Error{Code: CodeAuthorizationInvalid}
 	ErrAuthorizationStale       = &Error{Code: CodeAuthorizationStale}

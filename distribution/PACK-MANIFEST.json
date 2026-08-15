@@ -1276,8 +1276,8 @@
     },
     {
       "path": "internal/policy/contract_errors.go",
-      "sha256": "23f1920e74362a3bd6f984fb83d25bce9499f62cede3a1777a0dbdac029897d3",
-      "bytes": 2319
+      "sha256": "cb30c1932214c689fb8f7401beed9e038ed2cdd1b64e3a96cde7d91e3253b68b",
+      "bytes": 2462
     },
     {
       "path": "internal/policy/contracts.go",
@@ -1298,6 +1298,11 @@
       "path": "internal/policy/engine_test.go",
       "sha256": "52b812d6b17b78cc0528da25ae0f93d89308f632c8c839b20b2a49905d410b42",
       "bytes": 4373
+    },
+    {
+      "path": "internal/policy/events.go",
+      "sha256": "8e82d5947d1f35600b441f173a4b5f58c8fde8342f2979f0dec737807fed8d5e",
+      "bytes": 701
     },
     {
       "path": "internal/policy/parse.go",
@@ -1456,13 +1461,23 @@
     },
     {
       "path": "internal/store/policy_authorization_a04_matrix_test.go",
-      "sha256": "120193a290abca32d9aa8e9dc4de3c15f728a7321992f37605b3f482e59dc070",
-      "bytes": 5951
+      "sha256": "1e4b07109cb3a24a39a151dcfc1ff069ed7ea7958ca92dec0e7cb2cf9c73252f",
+      "bytes": 6283
     },
     {
       "path": "internal/store/policy_authorization_a04_test.go",
       "sha256": "05a3c244ca2b3f5d7efcab4bf650e14db2b21474561adb2344a27bb4fba99867",
       "bytes": 1099
+    },
+    {
+      "path": "internal/store/policy_events.go",
+      "sha256": "ef53d4e9e4bae669820768889644702d217d067a6df05c259880f90551f3cd07",
+      "bytes": 4785
+    },
+    {
+      "path": "internal/store/policy_events_a05_test.go",
+      "sha256": "87b8472945b4b83d6c4036339870e4d542ae94b44dc1654b85cc5c0d29a21b95",
+      "bytes": 7532
     },
     {
       "path": "internal/store/policy_persistence_a02_test.go",
@@ -1481,8 +1496,8 @@
     },
     {
       "path": "internal/store/policy_state.go",
-      "sha256": "4a1260d9fee290f0c26da2592c524a7cd818905b409d35016a106ab813d674da",
-      "bytes": 4619
+      "sha256": "b59ae78a33030e5b869e75c2b4564fdf057194bcc18ddfb5b75143b21a784f37",
+      "bytes": 5722
     },
     {
       "path": "internal/store/policy_state_a03_test.go",
