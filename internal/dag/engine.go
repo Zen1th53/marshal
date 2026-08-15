@@ -29,6 +29,7 @@ type Engine struct {
 	authorizer Authorizer
 	freshness  FreshnessValidator
 	eventSink  EventSink
+	metrics    *MetricsRecorder
 	now        func() time.Time
 }
 
@@ -36,7 +37,15 @@ func NewEngine(backend Backend) (*Engine, error) {
 	if backend == nil {
 		return nil, ErrInvalidRequest
 	}
-	return &Engine{backend: backend, now: func() time.Time { return time.Now().UTC() }}, nil
+	return &Engine{backend: backend, metrics: NewMetricsRecorder(), now: func() time.Time { return time.Now().UTC() }}, nil
+}
+
+// Metrics returns a detached, non-authoritative operational projection.
+func (e *Engine) Metrics() MetricsSnapshot {
+	if e == nil || e.metrics == nil {
+		return MetricsSnapshot{}
+	}
+	return e.metrics.Snapshot()
 }
 
 func NewAuthorizedEngine(backend Backend, identity IdentityProvider, authorizer Authorizer, freshness FreshnessValidator) (*Engine, error) {
@@ -93,7 +102,17 @@ func (e *Engine) AddNode(ctx context.Context, request AddNodeRequest) (Node, err
 	return stored, nil
 }
 
-func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, error) {
+func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (result Edge, err error) {
+	started := time.Now()
+	defer func() {
+		outcome := MetricOutcomeSuccess
+		if errors.Is(err, ErrCycle) {
+			outcome = MetricOutcomeCycleRejected
+		} else if err != nil {
+			outcome = MetricOutcomeError
+		}
+		e.metrics.Observe(MetricOperationAddEdge, outcome, time.Since(started))
+	}()
 	if err := request.Validate(); err != nil {
 		return Edge{}, err
 	}
@@ -159,7 +178,17 @@ func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, err
 	return edge, nil
 }
 
-func (e *Engine) Ready(ctx context.Context, id TaskID) (Readiness, error) {
+func (e *Engine) Ready(ctx context.Context, id TaskID) (result Readiness, err error) {
+	started := time.Now()
+	defer func() {
+		outcome := MetricOutcomeSuccess
+		if err != nil {
+			outcome = MetricOutcomeError
+		} else if !result.Ready {
+			outcome = MetricOutcomeBlocked
+		}
+		e.metrics.Observe(MetricOperationReady, outcome, time.Since(started))
+	}()
 	node, err := e.backend.GetDAGNode(ctx, id)
 	if err != nil {
 		return Readiness{}, err
@@ -258,7 +287,15 @@ func (e *Engine) authorize(ctx context.Context, request AuthorizationRequest) (A
 	return decision, nil
 }
 
-func (e *Engine) Topological(ctx context.Context) ([]Node, error) {
+func (e *Engine) Topological(ctx context.Context) (result []Node, err error) {
+	started := time.Now()
+	defer func() {
+		outcome := MetricOutcomeSuccess
+		if err != nil {
+			outcome = MetricOutcomeError
+		}
+		e.metrics.Observe(MetricOperationTopological, outcome, time.Since(started))
+	}()
 	nodes, err := e.backend.DAGNodes(ctx)
 	if err != nil {
 		return nil, err
@@ -290,7 +327,7 @@ func (e *Engine) Topological(ctx context.Context) ([]Node, error) {
 		}
 	}
 	orderAvailable(available)
-	result := make([]Node, 0, len(nodes))
+	result = make([]Node, 0, len(nodes))
 	for len(available) > 0 {
 		node := available[0]
 		available = available[1:]
