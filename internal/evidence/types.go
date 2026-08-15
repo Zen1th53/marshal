@@ -53,6 +53,13 @@ type Authorizer interface {
 	Authorize(context.Context, AccessRequest) (AuthorizationDecision, error)
 }
 
+// FreshnessValidator is an optional narrow bridge to the policy/authority
+// owner. It lets the evidence boundary revalidate a decision after it has
+// been issued, without implementing policy evaluation inside T06.
+type FreshnessValidator interface {
+	ValidateFreshness(context.Context, AccessRequest, AuthorizationDecision) error
+}
+
 // NodeID identifies one immutable evidence node.
 type NodeID string
 

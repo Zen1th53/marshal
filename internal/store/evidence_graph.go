@@ -136,6 +136,11 @@ func (s *Store) TransitionNodeAuthorized(ctx context.Context, request evidence.A
 		!decision.FreshUntil.After(time.Now().UTC()) {
 		return evidence.ErrAuthorizationStale
 	}
+	if validator, ok := s.authorizer.(evidence.FreshnessValidator); ok {
+		if err := validator.ValidateFreshness(ctx, request, decision); err != nil {
+			return evidence.ErrAuthorizationStale
+		}
+	}
 	return s.transitionNodeIfState(ctx, request.NodeID, request.TargetState, request.CurrentState, request.SessionID, request.SessionRevision, request.SubjectID, request.TaskID, map[string]any{
 		"evidence_id": request.NodeID, "previous_state": request.CurrentState,
 		"new_state": request.TargetState, "subject_id": request.SubjectID,
