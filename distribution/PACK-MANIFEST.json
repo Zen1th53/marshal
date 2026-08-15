@@ -1061,13 +1061,13 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "39aa893e0737e1ba3dfc97317cb8746e57d64c99caab3e624e9563b548a5d0b7",
-      "bytes": 23507
+      "sha256": "2ac2846afb2f65292ba75fff5da368e7b8d0c9ee8db86cdc69599678837aa263",
+      "bytes": 23723
     },
     {
       "path": "internal/cli/cli_test.go",
-      "sha256": "2ad049acbf2f32dee652d3803027f444130b60e6c4ede7215348eb2bbcbe2e5c",
-      "bytes": 10286
+      "sha256": "0b22416ea9d297f6cdd804632ebdeda7406f3fd4a9d19012a412758f3729b4aa",
+      "bytes": 10701
     },
     {
       "path": "internal/cli/policy_test_a10_release_test.go",
