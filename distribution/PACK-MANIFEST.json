@@ -46,8 +46,8 @@
     },
     {
       "path": ".gitignore",
-      "sha256": "32a315b3ec56346eabf822b76896e3e4c08cb1018411fbd80818c41506b1cb5c",
-      "bytes": 174
+      "sha256": "047fefa24363a1b386cb5675bb7f0283a50aa91ca61665e33e9186bf85fb237b",
+      "bytes": 187
     },
     {
       "path": "AGENT-BOOTSTRAP.md",
@@ -840,6 +840,16 @@
       "bytes": 11821
     },
     {
+      "path": "docs/superpowers/plans/2026-08-15-t29-dynamic-dag.md",
+      "sha256": "bdaad7e1005b66826be53fbfde6a8656081fdde71a43bc398a0e27f198a1bebf",
+      "bytes": 11189
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-15-t43-structured-event-stream.md",
+      "sha256": "380add564ab8aa5852c8bd262032952a8e240af4a0d7e3e0f224b69e35d2a4d6",
+      "bytes": 10162
+    },
+    {
       "path": "docs/superpowers/plans/2026-08-15-t49-a05-events-evidence.md",
       "sha256": "6825bfc7f935027d3432ef0bf51fea8c8932e035251ca43e9945e6f21af55df0",
       "bytes": 7824
@@ -878,6 +888,11 @@
       "path": "docs/superpowers/specs/2026-08-14-marshal-clean-break-design.md",
       "sha256": "9a3e8b8eaeb1b041cb892536e8a8344cc9a230c7e581eb70474fb48b37674ddc",
       "bytes": 3528
+    },
+    {
+      "path": "docs/superpowers/specs/2026-08-15-terra-completion-execution-design.md",
+      "sha256": "8eda5a7e27cb0a962474e75f8fd787b913f7db06466768a2448a74c6f7b9a7bb",
+      "bytes": 8850
     },
     {
       "path": "docs/troubleshooting.md",
@@ -1083,6 +1098,26 @@
       "path": "internal/doctor/doctor_test.go",
       "sha256": "d58c9ed19a7c6ed4e15bae16d5373fae593c29cbbd3f5e0e9cb8b1cc8dc529dc",
       "bytes": 3294
+    },
+    {
+      "path": "internal/events/errors.go",
+      "sha256": "e7e27c16e200cb98d116a8fe2765cda22b939aa8e70817ba58d42c500b1f807f",
+      "bytes": 1863
+    },
+    {
+      "path": "internal/events/registry.go",
+      "sha256": "4a7b3d4c2f72ba15df257b08cf70ae900ca9567f9a056471bfd654108a7a4406",
+      "bytes": 12981
+    },
+    {
+      "path": "internal/events/types.go",
+      "sha256": "fa37481777fd5ae0a8ca5a193e691b94ca1fa2340f1fafa2928cf8247dcba64f",
+      "bytes": 3575
+    },
+    {
+      "path": "internal/events/types_test.go",
+      "sha256": "28c202a35965dcd986095641d8c0f7c393a297547d8ffc1d6a231b0b2f679904",
+      "bytes": 2897
     },
     {
       "path": "internal/evidence/adversarial_fuzz_test.go",
