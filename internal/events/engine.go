@@ -14,6 +14,7 @@ type Engine struct {
 	authorizer Authorizer
 	freshness  FreshnessValidator
 	selfAudit  bool
+	metrics    *MetricsRecorder
 	now        func() time.Time
 }
 
@@ -21,7 +22,15 @@ func NewEngine(store Store, bus Bus) (*Engine, error) {
 	if store == nil || bus == nil {
 		return nil, ErrInvalidEvent
 	}
-	return &Engine{store: store, bus: bus, now: func() time.Time { return time.Now().UTC() }}, nil
+	return &Engine{store: store, bus: bus, metrics: NewMetricsRecorder(), now: func() time.Time { return time.Now().UTC() }}, nil
+}
+
+// Metrics returns a detached, non-authoritative operational projection.
+func (e *Engine) Metrics() MetricsSnapshot {
+	if e == nil || e.metrics == nil {
+		return MetricsSnapshot{}
+	}
+	return e.metrics.Snapshot()
 }
 
 func NewAuthorizedEngine(store Store, bus Bus, identity IdentityProvider, authorizer Authorizer, freshness FreshnessValidator) (*Engine, error) {
@@ -56,8 +65,16 @@ func NewObservedEngine(store Store, bus Bus, identity IdentityProvider, authoriz
 // Process executes the explicit T43 producer lifecycle. The returned state
 // makes a post-commit/live-delivery failure distinguishable from a failure
 // before canonical persistence without treating process memory as authority.
-func (e *Engine) Process(ctx context.Context, event Event) (DeliveryResult, error) {
-	result := DeliveryResult{State: StateProduced}
+func (e *Engine) Process(ctx context.Context, event Event) (result DeliveryResult, err error) {
+	started := time.Now()
+	defer func() {
+		outcome := MetricOutcomeSuccess
+		if err != nil {
+			outcome = MetricOutcomeError
+		}
+		e.metrics.Observe(MetricOperationProcess, outcome, time.Since(started))
+	}()
+	result = DeliveryResult{State: StateProduced}
 	if err := ctx.Err(); err != nil {
 		return result, NewError(CodeStoreFailed, err)
 	}
@@ -97,9 +114,12 @@ func (e *Engine) Process(ctx context.Context, event Event) (DeliveryResult, erro
 		}
 	}
 
+	publishStarted := time.Now()
 	if err := e.bus.Publish(ctx, stored); err != nil {
+		e.metrics.Observe(MetricOperationPublish, MetricOutcomeError, time.Since(publishStarted))
 		return result, NewError(CodeStoreFailed, err)
 	}
+	e.metrics.Observe(MetricOperationPublish, MetricOutcomeSuccess, time.Since(publishStarted))
 	if e.selfAudit && audit.ID != "" {
 		if err := e.bus.Publish(ctx, audit); err != nil {
 			return result, NewError(CodeStoreFailed, err)
@@ -166,7 +186,15 @@ func advanceDelivery(result *DeliveryResult, target DeliveryState) error {
 
 // Since exposes durable sequence resume through the service boundary and
 // returns detached event values.
-func (e *Engine) Since(ctx context.Context, after Sequence, limit int) ([]Event, error) {
+func (e *Engine) Since(ctx context.Context, after Sequence, limit int) (result []Event, err error) {
+	started := time.Now()
+	defer func() {
+		outcome := MetricOutcomeSuccess
+		if err != nil {
+			outcome = MetricOutcomeError
+		}
+		e.metrics.Observe(MetricOperationSince, outcome, time.Since(started))
+	}()
 	items, err := e.store.Since(ctx, after, limit)
 	if err != nil {
 		if ReasonCode(err) != "" {
@@ -183,7 +211,15 @@ func (e *Engine) Since(ctx context.Context, after Sequence, limit int) ([]Event,
 
 // Subscribe exposes non-authoritative live delivery. Missed events must be
 // recovered through Since using the last durable sequence observed.
-func (e *Engine) Subscribe(ctx context.Context, after Sequence) (<-chan Event, func(), error) {
+func (e *Engine) Subscribe(ctx context.Context, after Sequence) (channel <-chan Event, unsubscribe func(), err error) {
+	started := time.Now()
+	defer func() {
+		outcome := MetricOutcomeSuccess
+		if err != nil {
+			outcome = MetricOutcomeError
+		}
+		e.metrics.Observe(MetricOperationSubscribe, outcome, time.Since(started))
+	}()
 	ch, unsubscribe, err := e.bus.Subscribe(ctx, after)
 	if err != nil {
 		if ReasonCode(err) != "" {
