@@ -37,6 +37,7 @@ type Store struct {
 	db         *sql.DB
 	sanitizer  evidence.Sanitizer
 	authorizer evidence.Authorizer
+	metrics    *evidence.MetricsRecorder
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -48,6 +49,12 @@ func OpenWithSanitizer(ctx context.Context, path string, sanitizer evidence.Sani
 }
 
 func OpenWithSecurity(ctx context.Context, path string, sanitizer evidence.Sanitizer, authorizer evidence.Authorizer) (*Store, error) {
+	return OpenWithObservability(ctx, path, sanitizer, authorizer, nil)
+}
+
+// OpenWithObservability attaches an optional bounded operational projection.
+// Metrics never participate in authorization or persistence decisions.
+func OpenWithObservability(ctx context.Context, path string, sanitizer evidence.Sanitizer, authorizer evidence.Authorizer, metrics *evidence.MetricsRecorder) (*Store, error) {
 	if sanitizer == nil {
 		return nil, fmt.Errorf("evidence sanitizer is required")
 	}
@@ -57,13 +64,16 @@ func OpenWithSecurity(ctx context.Context, path string, sanitizer evidence.Sanit
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	st := &Store{db: db, sanitizer: sanitizer, authorizer: authorizer}
+	st := &Store{db: db, sanitizer: sanitizer, authorizer: authorizer, metrics: metrics}
 	if err := st.configure(ctx); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return st, nil
 }
+
+// Metrics returns the configured detached operational recorder, if any.
+func (s *Store) Metrics() *evidence.MetricsRecorder { return s.metrics }
 
 func (s *Store) configure(ctx context.Context) error {
 	for _, statement := range []string{

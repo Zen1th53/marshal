@@ -11,12 +11,15 @@ import (
 	"github.com/Zen1th53/marshal/internal/evidence"
 )
 
-func (s *Store) PutNode(ctx context.Context, node evidence.Node) (evidence.Node, error) {
+func (s *Store) PutNode(ctx context.Context, node evidence.Node) (stored evidence.Node, err error) {
+	started := time.Now()
+	defer func() { s.observeMetric(evidence.MetricOperationPutNode, err, started) }()
 	for attempt := 0; ; attempt++ {
-		stored, err := s.putNodeOnce(ctx, node)
+		stored, err = s.putNodeOnce(ctx, node)
 		if !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
 			return stored, err
 		}
+		s.observeContention()
 		if err := waitSQLiteRetry(ctx, attempt); err != nil {
 			return evidence.Node{}, err
 		}
@@ -78,11 +81,12 @@ func (s *Store) putNodeOnce(ctx context.Context, node evidence.Node) (evidence.N
 	return evidence.CloneNode(clean), nil
 }
 
-func (s *Store) Get(ctx context.Context, id evidence.NodeID) (evidence.Node, error) {
-	var node evidence.Node
+func (s *Store) Get(ctx context.Context, id evidence.NodeID) (node evidence.Node, err error) {
+	started := time.Now()
+	defer func() { s.observeMetric(evidence.MetricOperationGet, err, started) }()
 	var typ, metadata, created string
 	var state string
-	err := s.db.QueryRowContext(ctx, `SELECT node_type, digest, metadata_json, created_at, state FROM evidence_nodes WHERE node_id = ?`, id).Scan(&typ, &node.Digest, &metadata, &created, &state)
+	err = s.db.QueryRowContext(ctx, `SELECT node_type, digest, metadata_json, created_at, state FROM evidence_nodes WHERE node_id = ?`, id).Scan(&typ, &node.Digest, &metadata, &created, &state)
 	if errors.Is(err, sql.ErrNoRows) {
 		return evidence.Node{}, fmt.Errorf("evidence node %s: %w", id, evidence.ErrInvalidEdge)
 	}
@@ -110,7 +114,9 @@ func (s *Store) TransitionNode(ctx context.Context, id evidence.NodeID, target e
 // TransitionNodeAuthorized enforces the external policy/authority decision
 // immediately before a CAS-like state mutation. No configured authorizer is a
 // deny, never an implicit allow.
-func (s *Store) TransitionNodeAuthorized(ctx context.Context, request evidence.AccessRequest) error {
+func (s *Store) TransitionNodeAuthorized(ctx context.Context, request evidence.AccessRequest) (err error) {
+	started := time.Now()
+	defer func() { s.observeMetric(evidence.MetricOperationTransition, err, started) }()
 	if request.Action != evidence.ActionTransition || request.NodeID == "" {
 		return evidence.ErrAuthorizationDenied
 	}
@@ -155,6 +161,7 @@ func (s *Store) transitionNodeIfState(ctx context.Context, id evidence.NodeID, t
 		if !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
 			return err
 		}
+		s.observeContention()
 		if err := waitSQLiteRetry(ctx, attempt); err != nil {
 			return err
 		}
@@ -209,12 +216,15 @@ func (s *Store) transitionNodeIfStateOnce(ctx context.Context, id evidence.NodeI
 	return tx.Commit()
 }
 
-func (s *Store) Link(ctx context.Context, edge evidence.Edge) (evidence.Edge, error) {
+func (s *Store) Link(ctx context.Context, edge evidence.Edge) (linked evidence.Edge, err error) {
+	started := time.Now()
+	defer func() { s.observeMetric(evidence.MetricOperationLink, err, started) }()
 	for attempt := 0; ; attempt++ {
 		linked, err := s.linkOnce(ctx, edge)
 		if !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
 			return linked, err
 		}
+		s.observeContention()
 		if err := waitSQLiteRetry(ctx, attempt); err != nil {
 			return evidence.Edge{}, err
 		}
@@ -261,13 +271,14 @@ func (s *Store) linkOnce(ctx context.Context, edge evidence.Edge) (evidence.Edge
 	return edge, nil
 }
 
-func (s *Store) Neighbors(ctx context.Context, id evidence.NodeID) ([]evidence.Node, error) {
+func (s *Store) Neighbors(ctx context.Context, id evidence.NodeID) (nodes []evidence.Node, err error) {
+	started := time.Now()
+	defer func() { s.observeMetric(evidence.MetricOperationNeighbors, err, started) }()
 	rows, err := s.db.QueryContext(ctx, `SELECT to_node_id FROM evidence_edges WHERE from_node_id = ? ORDER BY to_node_id`, id)
 	if err != nil {
 		return nil, fmt.Errorf("query evidence neighbors: %w", err)
 	}
 	defer rows.Close()
-	var nodes []evidence.Node
 	for rows.Next() {
 		var target evidence.NodeID
 		if err := rows.Scan(&target); err != nil {
