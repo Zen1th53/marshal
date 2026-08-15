@@ -224,8 +224,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 12 {
-		return fmt.Errorf("database schema version %d is newer than supported version 12", version)
 	if version > LatestSchemaVersion {
 		return fmt.Errorf("database schema version %d is newer than supported version %d", version, LatestSchemaVersion)
 	}
@@ -450,8 +448,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 			);
 			CREATE INDEX dag_edges_by_from ON dag_edges(from_task, to_task);
 			CREATE INDEX dag_edges_by_to ON dag_edges(to_task, from_task);
-		`); err != nil { return fmt.Errorf("apply schema version 12: %w", err) }
-		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(12, ?)", utcNow()); err != nil { return fmt.Errorf("record schema version 12: %w", err) }
+		`); err != nil {
+			return fmt.Errorf("apply schema version 12: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(12, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 12: %w", err)
+		}
 		version = 12
 	}
 	if err := tx.Commit(); err != nil {

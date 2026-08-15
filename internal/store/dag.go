@@ -168,3 +168,102 @@ func (s *Store) queryDAGEdges(ctx context.Context, query string, id dag.TaskID) 
 	}
 	return result, nil
 }
+
+// TransitionDAGNode applies one canonical lifecycle edge with an expected-state
+// compare-and-swap. Exact retry after a committed transition reconciles to the
+// canonical target; stale or contradictory writers cannot overwrite it.
+func (s *Store) TransitionDAGNode(ctx context.Context, id dag.TaskID, expected, target dag.NodeStatus) (dag.Node, error) {
+	if err := ctx.Err(); err != nil {
+		return dag.Node{}, dag.NewError(dag.CodeInvalidRequest, err)
+	}
+	if !dag.CanTransition(expected, target) {
+		return dag.Node{}, dag.ErrInvalidNode
+	}
+	probe := dag.Node{TaskID: id, Kind: dag.NodeKindTask, Status: expected}
+	if err := probe.Validate(); err != nil {
+		return dag.Node{}, dag.ErrInvalidNode
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return dag.Node{}, fmt.Errorf("begin dag state transition: %w", err)
+	}
+	defer tx.Rollback()
+
+	var node dag.Node
+	var revision int64
+	err = tx.QueryRowContext(ctx, `
+		SELECT task_id, kind, status, priority, revision
+		FROM dag_nodes WHERE task_id = ?
+	`, id).Scan(&node.TaskID, &node.Kind, &node.Status, &node.Priority, &revision)
+	if errors.Is(err, sql.ErrNoRows) {
+		return dag.Node{}, dag.ErrNodeNotFound
+	}
+	if err != nil {
+		return dag.Node{}, fmt.Errorf("read dag node before transition: %w", err)
+	}
+	if err := node.Validate(); err != nil {
+		return dag.Node{}, err
+	}
+	if node.Status == target {
+		if err := tx.Commit(); err != nil {
+			return dag.Node{}, fmt.Errorf("commit dag transition retry: %w", err)
+		}
+		return node, nil
+	}
+	if node.Status != expected {
+		return dag.Node{}, fmt.Errorf("%w: dag node state changed", model.ErrConflict)
+	}
+
+	result, err := tx.ExecContext(ctx, `
+		UPDATE dag_nodes
+		SET status = ?, revision = revision + 1, updated_at = ?
+		WHERE task_id = ? AND status = ? AND revision = ?
+	`, target, utcNow(), id, expected, revision)
+	if err != nil {
+		return dag.Node{}, fmt.Errorf("update dag node state: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return dag.Node{}, fmt.Errorf("read dag transition result: %w", err)
+	}
+	if rows != 1 {
+		return dag.Node{}, fmt.Errorf("%w: dag node state changed", model.ErrConflict)
+	}
+	node.Status = target
+	if err := tx.Commit(); err != nil {
+		return dag.Node{}, fmt.Errorf("commit dag node transition: %w", err)
+	}
+	return node, nil
+}
+
+// DAGNodes returns a detached snapshot of canonical DAG nodes. Service layers
+// use it for deterministic topological queries; callers cannot mutate storage.
+func (s *Store) DAGNodes(ctx context.Context) ([]dag.Node, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, dag.NewError(dag.CodeInvalidRequest, err)
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT task_id, kind, status, priority
+		FROM dag_nodes ORDER BY task_id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query dag nodes: %w", err)
+	}
+	defer rows.Close()
+	var result []dag.Node
+	for rows.Next() {
+		var node dag.Node
+		if err := rows.Scan(&node.TaskID, &node.Kind, &node.Status, &node.Priority); err != nil {
+			return nil, fmt.Errorf("scan dag node: %w", err)
+		}
+		if err := node.Validate(); err != nil {
+			return nil, err
+		}
+		result = append(result, node)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate dag nodes: %w", err)
+	}
+	return result, nil
+}

@@ -184,3 +184,23 @@ func validText(value string) bool {
 	}
 	return true
 }
+
+// CanTransition reports whether a node lifecycle edge is legal under the
+// canonical T29 state machine. Terminal states are immutable.
+func CanTransition(from, to NodeStatus) bool {
+	if !from.Valid() || !to.Valid() {
+		return false
+	}
+	switch from {
+	case StatusPending:
+		return to == StatusReady
+	case StatusReady:
+		return to == StatusRunning
+	case StatusRunning:
+		switch to {
+		case StatusCompleted, StatusFailed, StatusBlocked, StatusSkipped:
+			return true
+		}
+	}
+	return false
+}
