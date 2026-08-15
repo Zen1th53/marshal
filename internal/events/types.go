@@ -58,6 +58,9 @@ func (e Event) Validate() error {
 		}
 		return ErrInvalidEvent
 	}
+	if e.Type.RequiresEvidence() && e.EvidenceID == "" {
+		return ErrEvidenceRequired
+	}
 	for _, value := range []string{string(e.TaskID), string(e.RunID), string(e.ResourceID), string(e.EvidenceID)} {
 		if value != "" && !validOptional(value) {
 			return ErrInvalidEvent

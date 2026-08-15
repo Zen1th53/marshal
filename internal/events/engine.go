@@ -1,19 +1,40 @@
 package events
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Engine is the canonical producer boundary: durable history is committed
 // before an event is offered to the non-authoritative live bus.
 type Engine struct {
-	store Store
-	bus   Bus
+	store      Store
+	bus        Bus
+	identity   IdentityProvider
+	authorizer Authorizer
+	freshness  FreshnessValidator
+	now        func() time.Time
 }
 
 func NewEngine(store Store, bus Bus) (*Engine, error) {
 	if store == nil || bus == nil {
 		return nil, ErrInvalidEvent
 	}
-	return &Engine{store: store, bus: bus}, nil
+	return &Engine{store: store, bus: bus, now: func() time.Time { return time.Now().UTC() }}, nil
+}
+
+func NewAuthorizedEngine(store Store, bus Bus, identity IdentityProvider, authorizer Authorizer, freshness FreshnessValidator) (*Engine, error) {
+	engine, err := NewEngine(store, bus)
+	if err != nil {
+		return nil, err
+	}
+	if identity == nil || authorizer == nil || freshness == nil {
+		return nil, ErrAuthorizationUnavailable
+	}
+	engine.identity = identity
+	engine.authorizer = authorizer
+	engine.freshness = freshness
+	return engine, nil
 }
 
 // Process executes the explicit T43 producer lifecycle. The returned state
@@ -25,6 +46,9 @@ func (e *Engine) Process(ctx context.Context, event Event) (DeliveryResult, erro
 		return result, NewError(CodeStoreFailed, err)
 	}
 	if err := event.Validate(); err != nil {
+		return result, err
+	}
+	if err := e.authorize(ctx, event); err != nil {
 		return result, err
 	}
 	if err := advanceDelivery(&result, StateValidated); err != nil {
@@ -50,6 +74,43 @@ func (e *Engine) Process(ctx context.Context, event Event) (DeliveryResult, erro
 		return result, err
 	}
 	return result, nil
+}
+
+func (e *Engine) authorize(ctx context.Context, event Event) error {
+	if e.identity == nil || e.authorizer == nil || e.freshness == nil {
+		return ErrAuthorizationUnavailable
+	}
+	identity, err := e.identity.Identity(ctx)
+	if err != nil {
+		return NewError(CodeAuthorizationUnavailable, err)
+	}
+	if !identity.valid() {
+		return ErrAuthorizationDenied
+	}
+	// Subject/task/run claims in the payload may narrow to the authenticated
+	// context but can never impersonate a different canonical identity.
+	if event.Subject != identity.SubjectID || (event.TaskID != "" && event.TaskID != identity.TaskID) ||
+		(event.RunID != "" && event.RunID != identity.RunID) {
+		return ErrAuthorizationDenied
+	}
+	request := authorizationRequestFor(identity, event)
+	if !request.valid() {
+		return ErrAuthorizationDenied
+	}
+	decision, err := e.authorizer.Authorize(ctx, request)
+	if err != nil {
+		return NewError(CodeAuthorizationUnavailable, err)
+	}
+	if err := decision.validateFor(request, e.now()); err != nil {
+		return err
+	}
+	if err := e.freshness.ValidateFreshness(ctx, request, decision); err != nil {
+		return NewError(CodeAuthorizationStale, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return NewError(CodeAuthorizationUnavailable, err)
+	}
+	return nil
 }
 
 // Append preserves the A02 producer API while delegating lifecycle semantics
