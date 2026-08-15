@@ -244,3 +244,20 @@ var canonicalTypes = map[Type]struct{}{
 	Type("trustgate.invalidated"):                  {},
 	Type("trustgate.requested"):                    {},
 }
+
+// evidenceRequiredTypes are PASS outcomes whose owning TERRA contracts require
+// a durable evidence reference before the event can be accepted as canonical
+// history. The list is explicit rather than suffix-based so a future event
+// named "passed" cannot silently gain security semantics.
+var evidenceRequiredTypes = map[Type]struct{}{
+	Type("evaluation.stage.passed"):     {},
+	Type("policytest.case.passed"):      {},
+	Type("conformance.scenario.passed"): {},
+	Type("vibe.passed"):                 {},
+	Type("vibe.stage.passed"):           {},
+}
+
+func (t Type) RequiresEvidence() bool {
+	_, ok := evidenceRequiredTypes[t]
+	return ok
+}

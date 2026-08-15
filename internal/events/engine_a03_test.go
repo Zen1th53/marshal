@@ -12,7 +12,7 @@ func TestT43A03ProcessReportsPublishedOnlyAfterCanonicalPersistence(t *testing.T
 	canonical := Event{ID: "EVENT-A03-1", Sequence: 11, Type: "events.appended", Subject: "system", At: at, Data: map[string]string{"result": "stored"}, IdempotencyKey: "REQ-A03-1"}
 	store := &a02EngineStore{stored: canonical}
 	bus := &a02EngineBus{store: store}
-	engine, err := NewEngine(store, bus)
+	engine, err := newAuthorizedTestEngine(store, bus)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestT43A03ProcessPreservesDurableStateWhenLivePublishFails(t *testing.T) {
 	canonical := Event{ID: "EVENT-A03-2", Sequence: 12, Type: "events.appended", Subject: "system", At: at, IdempotencyKey: "REQ-A03-2"}
 	store := &a02EngineStore{stored: canonical}
 	bus := &a02EngineBus{store: store, err: errors.New("live delivery failed")}
-	engine, _ := NewEngine(store, bus)
+	engine, _ := newAuthorizedTestEngine(store, bus)
 	result, err := engine.Process(context.Background(), Event{ID: "EVENT-A03-2", Type: "events.appended", Subject: "system", IdempotencyKey: "REQ-A03-2"})
 	if err == nil {
 		t.Fatal("publish failure unexpectedly succeeded")
@@ -46,7 +46,7 @@ func TestT43A03ProcessPreservesDurableStateWhenLivePublishFails(t *testing.T) {
 func TestT43A03ProcessStopsAtValidatedWhenStoreFails(t *testing.T) {
 	store := &a02EngineStore{err: errors.New("backend unavailable")}
 	bus := &a02EngineBus{store: store}
-	engine, _ := NewEngine(store, bus)
+	engine, _ := newAuthorizedTestEngine(store, bus)
 	result, err := engine.Process(context.Background(), Event{ID: "EVENT-A03-3", Type: "events.appended", Subject: "system", IdempotencyKey: "REQ-A03-3"})
 	if err == nil {
 		t.Fatal("store failure unexpectedly succeeded")
@@ -91,7 +91,7 @@ func TestT43A03EngineExposesCanonicalResumeAndSubscribeBoundaries(t *testing.T) 
 	stored := Event{ID: "EVENT-RESUME", Sequence: 7, Type: "events.appended", Subject: "system", IdempotencyKey: "REQ-RESUME"}
 	store := &a03ResumeStore{items: []Event{stored}}
 	bus := &a03SubscribeBus{ch: make(chan Event, 1)}
-	engine, err := NewEngine(store, bus)
+	engine, err := newAuthorizedTestEngine(store, bus)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestT43A03EngineExposesCanonicalResumeAndSubscribeBoundaries(t *testing.T) 
 func TestT43A03MalformedEventStopsBeforeDurableStore(t *testing.T) {
 	store := &a02EngineStore{}
 	bus := &a02EngineBus{store: store}
-	engine, _ := NewEngine(store, bus)
+	engine, _ := newAuthorizedTestEngine(store, bus)
 	result, err := engine.Process(context.Background(), Event{ID: "EVENT-BAD", Type: "not.registered", Subject: "system", IdempotencyKey: "REQ-BAD"})
 	if !errors.Is(err, ErrInvalidType) {
 		t.Fatalf("error=%v want=%v", err, ErrInvalidType)
@@ -129,7 +129,7 @@ func TestT43A03CancelledProducerStopsBeforeDurableStore(t *testing.T) {
 	cancel()
 	store := &a02EngineStore{}
 	bus := &a02EngineBus{store: store}
-	engine, _ := NewEngine(store, bus)
+	engine, _ := newAuthorizedTestEngine(store, bus)
 	result, err := engine.Process(ctx, Event{ID: "EVENT-CANCEL", Type: "events.appended", Subject: "system", IdempotencyKey: "REQ-CANCEL"})
 	if err == nil || ReasonCode(err) != CodeStoreFailed {
 		t.Fatalf("error=%v reason=%q", err, ReasonCode(err))

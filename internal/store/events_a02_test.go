@@ -215,7 +215,7 @@ func TestT43A02LiveDeliveryFailureReconcilesFromDurableIdempotentRetry(t *testin
 		t.Fatal(err)
 	}
 	bus := &a02FlakyBus{}
-	engine, err := events.NewEngine(st, bus)
+	engine, err := newAuthorizedEventEngineForStoreTests(st, bus)
 	if err != nil {
 		t.Fatal(err)
 	}

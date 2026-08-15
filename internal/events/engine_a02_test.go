@@ -51,7 +51,7 @@ func TestT43A02EnginePersistsBeforeLivePublish(t *testing.T) {
 	}
 	store := &a02EngineStore{stored: canonical}
 	bus := &a02EngineBus{store: store}
-	engine, err := NewEngine(store, bus)
+	engine, err := newAuthorizedTestEngine(store, bus)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestT43A02EngineContainsRawStoreError(t *testing.T) {
 	const marker = "MARSHAL_TEST_SECRET_T43_A02_STORE_BACKEND_57de"
 	store := &a02EngineStore{err: errors.New(marker)}
 	bus := &a02EngineBus{store: store}
-	engine, err := NewEngine(store, bus)
+	engine, err := newAuthorizedTestEngine(store, bus)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1125,6 +1125,16 @@
       "bytes": 3294
     },
     {
+      "path": "internal/events/authorization.go",
+      "sha256": "4ee8236e85f417d2a6517776c5bc9de7532a36b9bba699839960b443a404cebf",
+      "bytes": 3778
+    },
+    {
+      "path": "internal/events/authorized_test_helper_test.go",
+      "sha256": "85087c921af3bff0ec2f54ff1655f4f74dae59eaefaca24cb4ba07160a1d85a8",
+      "bytes": 999
+    },
+    {
       "path": "internal/events/bus.go",
       "sha256": "73bcb5f25b427143803d23f2e4a6bb5f9ab7d9f1bcab932b864a547cd365e225",
       "bytes": 1811
@@ -1136,28 +1146,33 @@
     },
     {
       "path": "internal/events/engine.go",
-      "sha256": "b0d9332c7235d65af73e037a5cac4a23e140ad9b2faec82daaa64975ffaf3079",
-      "bytes": 3013
+      "sha256": "efe30bb1810162aa77c8a63de64216685effe971937ec50de3ca875dccdc85c7",
+      "bytes": 4961
     },
     {
       "path": "internal/events/engine_a02_test.go",
-      "sha256": "20293a794d524b78bbfe8c07a368d1707a1cd6227ccf6ff33b2853c1bb69092a",
-      "bytes": 2732
+      "sha256": "ce9d3282e29c0ab13d618297faa8cd5be6343b2533d2850972946efa8582820d",
+      "bytes": 2760
     },
     {
       "path": "internal/events/engine_a03_test.go",
-      "sha256": "6369835cb197335e6833625f24e5cbcc25ccfe5518aaff1d27b7180b82831848",
-      "bytes": 5626
+      "sha256": "84b6bed487c16d6bc36956511f5881ad735682531236053a476039d75794b0fb",
+      "bytes": 5710
     },
     {
       "path": "internal/events/errors.go",
-      "sha256": "e7e27c16e200cb98d116a8fe2765cda22b939aa8e70817ba58d42c500b1f807f",
-      "bytes": 1863
+      "sha256": "aa1aa09ebdf413559aa13c6c4fa401d8e0bff6aff13fa130488b56bf5ac07246",
+      "bytes": 2910
     },
     {
       "path": "internal/events/registry.go",
-      "sha256": "4a7b3d4c2f72ba15df257b08cf70ae900ca9567f9a056471bfd654108a7a4406",
-      "bytes": 12981
+      "sha256": "f837511a70bce2e2b0ad4011a0361bbbc52fddcbf7cf288f227dd3faba0893d2",
+      "bytes": 13623
+    },
+    {
+      "path": "internal/events/security_a04_test.go",
+      "sha256": "ec91a5fd5c5d1d395af39c871ea26b0b1d1fc8ed167bb51f74e663f9f969a3b1",
+      "bytes": 7453
     },
     {
       "path": "internal/events/state.go",
@@ -1171,8 +1186,8 @@
     },
     {
       "path": "internal/events/types.go",
-      "sha256": "fa37481777fd5ae0a8ca5a193e691b94ca1fa2340f1fafa2928cf8247dcba64f",
-      "bytes": 3575
+      "sha256": "a44aea9829d41c8c862755e63b47fe644f7d7984832b620696cf7389688efa9c",
+      "bytes": 3661
     },
     {
       "path": "internal/events/types_test.go",
@@ -1586,8 +1601,13 @@
     },
     {
       "path": "internal/store/events_a02_test.go",
-      "sha256": "92542d114c3c69a2b62698610748e87a2084b4020d3763ec9566b40b3de7e64c",
-      "bytes": 8773
+      "sha256": "cce661fb316c963ed63231360906dd86cfe6112b68bf8e9abc21b5571d423525",
+      "bytes": 8794
+    },
+    {
+      "path": "internal/store/events_authorized_test_helper_test.go",
+      "sha256": "d962bbfc2f97a46736656f450479ecbd84615da531d2c9e664644aaa6693a6ba",
+      "bytes": 1126
     },
     {
       "path": "internal/store/evidence.go",
