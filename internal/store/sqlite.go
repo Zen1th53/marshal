@@ -4,10 +4,34 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/evidence"
 	_ "modernc.org/sqlite"
 )
+
+const sqliteBusyRetries = 5
+
+func isSQLiteBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "database is locked") || strings.Contains(message, "database table is locked")
+}
+
+func waitSQLiteRetry(ctx context.Context, attempt int) error {
+	delay := time.Duration(attempt+1) * 10 * time.Millisecond
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
 
 type Store struct {
 	db         *sql.DB
