@@ -56,6 +56,8 @@ Commands:
   daemon
 `
 
+const policyTestUsage = "Usage: marshal policy test SUITE-FILE\n"
+
 type command struct {
 	root   string
 	json   bool
@@ -144,8 +146,12 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 }
 
 func (c command) policy(ctx context.Context, args []string) error {
+	if len(args) == 2 && args[0] == "test" && (args[1] == "--help" || args[1] == "-h") {
+		fmt.Fprint(c.stdout, policyTestUsage)
+		return nil
+	}
 	if len(args) != 2 || args[0] != "test" || args[1] == "" {
-		return fmt.Errorf("%w: usage: marshal policy test SUITE-FILE", model.ErrInvalid)
+		return fmt.Errorf("%w: %s", model.ErrInvalid, policyTestUsage[:len(policyTestUsage)-1])
 	}
 	report, err := app.RunPolicyTestFile(ctx, args[1])
 	if err != nil {

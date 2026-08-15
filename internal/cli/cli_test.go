@@ -72,6 +72,14 @@ func TestRequiredCommandsHaveUsage(t *testing.T) {
 	}
 }
 
+func TestPolicyTestSubcommandHasUsage(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Execute(context.Background(), ".", []string{"policy", "test", "--help"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String()+stderr.String(), "Usage: marshal policy test SUITE-FILE") {
+		t.Fatalf("policy test help code=%d output=%q", code, stdout.String()+stderr.String())
+	}
+}
+
 func TestAdaptersAndProbeCLI(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), ".", []string{"--json", "adapters"}, strings.NewReader(""), &stdout, &stderr)
