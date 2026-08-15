@@ -1370,6 +1370,16 @@
       "bytes": 1718
     },
     {
+      "path": "internal/policytest/state.go",
+      "sha256": "34c7da02f5739f25a644012d8700b85c131caf1e63ac3d5ebd87c5cf7cde0f68",
+      "bytes": 1166
+    },
+    {
+      "path": "internal/policytest/state_test.go",
+      "sha256": "9f691843a96429957eac58d9873e1c2627918c32a73a008f93a4f8ffb55584ef",
+      "bytes": 1107
+    },
+    {
       "path": "internal/policytest/types.go",
       "sha256": "cab701b9a08df15f11cadfde11ad9b5bcc38e75d6f950921faef6d4e8ef1e655",
       "bytes": 5889
@@ -1603,6 +1613,11 @@
       "path": "internal/store/policy_test_persistence_a02_test.go",
       "sha256": "f60c677ee9647b150f64e32d52c5bf59ab4f11fada84c0640448e211a5d4ef07",
       "bytes": 6126
+    },
+    {
+      "path": "internal/store/policy_test_state_a03_test.go",
+      "sha256": "b0ed91cfae1dd04816572ab5e61e148a11608258b4d545f8fc191481a344634d",
+      "bytes": 5060
     },
     {
       "path": "internal/store/policy_test_store.go",
