@@ -4,28 +4,76 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/Zen1th53/marshal/internal/evidence"
 	_ "modernc.org/sqlite"
 )
 
+const sqliteBusyRetries = 5
+
+func isSQLiteBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "database is locked") || strings.Contains(message, "database table is locked")
+}
+
+func waitSQLiteRetry(ctx context.Context, attempt int) error {
+	delay := time.Duration(attempt+1) * 10 * time.Millisecond
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 type Store struct {
-	db *sql.DB
+	db         *sql.DB
+	sanitizer  evidence.Sanitizer
+	authorizer evidence.Authorizer
+	metrics    *evidence.MetricsRecorder
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
+	return OpenWithSanitizer(ctx, path, evidence.NewStrictSanitizer(evidence.SanitizerConfig{}))
+}
+
+func OpenWithSanitizer(ctx context.Context, path string, sanitizer evidence.Sanitizer) (*Store, error) {
+	return OpenWithSecurity(ctx, path, sanitizer, nil)
+}
+
+func OpenWithSecurity(ctx context.Context, path string, sanitizer evidence.Sanitizer, authorizer evidence.Authorizer) (*Store, error) {
+	return OpenWithObservability(ctx, path, sanitizer, authorizer, nil)
+}
+
+// OpenWithObservability attaches an optional bounded operational projection.
+// Metrics never participate in authorization or persistence decisions.
+func OpenWithObservability(ctx context.Context, path string, sanitizer evidence.Sanitizer, authorizer evidence.Authorizer, metrics *evidence.MetricsRecorder) (*Store, error) {
+	if sanitizer == nil {
+		return nil, fmt.Errorf("evidence sanitizer is required")
+	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open SQLite: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	st := &Store{db: db}
+	st := &Store{db: db, sanitizer: sanitizer, authorizer: authorizer, metrics: metrics}
 	if err := st.configure(ctx); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return st, nil
 }
+
+// Metrics returns the configured detached operational recorder, if any.
+func (s *Store) Metrics() *evidence.MetricsRecorder { return s.metrics }
 
 func (s *Store) configure(ctx context.Context) error {
 	for _, statement := range []string{
