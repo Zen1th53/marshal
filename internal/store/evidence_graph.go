@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/evidence"
@@ -181,6 +182,31 @@ func (s *Store) transitionNodeIfState(ctx context.Context, id evidence.NodeID, t
 }
 
 func (s *Store) Link(ctx context.Context, edge evidence.Edge) (evidence.Edge, error) {
+	// SQLite can return SQLITE_BUSY when a second connection has already
+	// committed a concurrent equivalent edge. Retry the complete transaction,
+	// bounded and context-aware, so callers never observe an avoidable lock
+	// failure while preserving the unique-constraint linearization point.
+	var lastErr error
+	for attempt, delay := range []time.Duration{0, 5 * time.Millisecond, 15 * time.Millisecond, 40 * time.Millisecond} {
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return evidence.Edge{}, ctx.Err()
+			case <-timer.C:
+			}
+		}
+		linked, err := s.linkOnce(ctx, edge)
+		if err == nil || !isSQLiteBusy(err) || attempt == 3 {
+			return linked, err
+		}
+		lastErr = err
+	}
+	return evidence.Edge{}, lastErr
+}
+
+func (s *Store) linkOnce(ctx context.Context, edge evidence.Edge) (evidence.Edge, error) {
 	if err := edge.Validate(); err != nil {
 		return evidence.Edge{}, err
 	}
@@ -218,6 +244,14 @@ func (s *Store) Link(ctx context.Context, edge evidence.Edge) (evidence.Edge, er
 		return evidence.Edge{}, fmt.Errorf("commit evidence edge: %w", err)
 	}
 	return edge, nil
+}
+
+func isSQLiteBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "database is locked") || strings.Contains(message, "SQLITE_BUSY")
 }
 
 func (s *Store) Neighbors(ctx context.Context, id evidence.NodeID) ([]evidence.Node, error) {
