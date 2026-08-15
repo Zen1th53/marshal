@@ -1080,14 +1080,29 @@
       "bytes": 1153
     },
     {
+      "path": "internal/dag/authorization.go",
+      "sha256": "10ba811068c12d7f5f781326b6626232b335967cb716c46f2ffec7965ad74cd4",
+      "bytes": 4644
+    },
+    {
       "path": "internal/dag/engine.go",
-      "sha256": "cd564d0536406f2b149202b8b6dbbdc94739a1139db6114b8075b6bec6f03c33",
-      "bytes": 6481
+      "sha256": "6c240c7963029a408cdd89f85942c0a127efd94e0a5c27c8da1fd15f4cb6dde1",
+      "bytes": 8734
     },
     {
       "path": "internal/dag/errors.go",
-      "sha256": "f0f24003a6edb26ee60f1afd7bd0caf8b8d87328b94b58aaac47e55eb3406877",
-      "bytes": 2053
+      "sha256": "e0bf3a30bb6c3d188b102ecc21c1954b1e86f4de1acdf189d3e3ceacd00273d2",
+      "bytes": 2874
+    },
+    {
+      "path": "internal/dag/security_a04_red_test.go",
+      "sha256": "f6e18591fefde9d07c354e7832bfa5aee167ea745cdf5efea2985e9fdd960dd6",
+      "bytes": 169
+    },
+    {
+      "path": "internal/dag/security_a04_test.go",
+      "sha256": "be18ab7163ad403bfff7baa3f6f63fa2a2edaf60344c08fa9bdfd6fcb43f574c",
+      "bytes": 6510
     },
     {
       "path": "internal/dag/state_a03_red_test.go",
@@ -1506,8 +1521,8 @@
     },
     {
       "path": "internal/store/dag.go",
-      "sha256": "c5f98b3764013ce31d3809a080e07d14991e74e7dfdc3b220275833c78589515",
-      "bytes": 8858
+      "sha256": "a8e962ef1dfc222b5cd567ba80710fda0182f751e6f48ba9edd47521f1729187",
+      "bytes": 9594
     },
     {
       "path": "internal/store/dag_a02_red_test.go",
@@ -1521,8 +1536,18 @@
     },
     {
       "path": "internal/store/dag_a03_test.go",
-      "sha256": "a2ce12ae4d8426f6b1408236ea80f9f36d2fcdfe047b6990fc043150d1955b8c",
-      "bytes": 14900
+      "sha256": "1fedf3324ef787394382f37e2cbf79bfcdea4a281b4c3019717adb1bd700af91",
+      "bytes": 14990
+    },
+    {
+      "path": "internal/store/dag_a04_security_test.go",
+      "sha256": "6ecad39acb8965aa03e307f01a17b5c75535d6f62c9e7658adc2d20043372dfd",
+      "bytes": 3644
+    },
+    {
+      "path": "internal/store/dag_authorized_test_helper_test.go",
+      "sha256": "539eacbf7073ba5b64a287fddfffcce6db7c4364681384e96762da2b28d4b861",
+      "bytes": 1085
     },
     {
       "path": "internal/store/evidence.go",
