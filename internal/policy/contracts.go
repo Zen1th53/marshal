@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Effect is the closed outcome vocabulary for a policy rule.
@@ -124,6 +126,9 @@ func (d Decision) Validate() error {
 	if err := d.PolicyDigest.Validate(); err != nil {
 		return err
 	}
+	if err := d.Binding.Validate(); err != nil || d.Binding.Digest != d.PolicyDigest {
+		return NewError(CodeInvalidDecision, nil)
+	}
 	if !d.Effect.Valid() || (d.Allowed && d.Effect != EffectAllow) || (!d.Allowed && d.Effect == EffectAllow) {
 		return NewError(CodeInvalidDecision, nil)
 	}
@@ -139,6 +144,8 @@ func (d Decision) Validate() error {
 				return NewError(CodeInvalidObligation, nil)
 			}
 		}
+	} else if len(d.Requirements) != 0 {
+		return NewError(CodeInvalidDecision, nil)
 	}
 	return nil
 }
@@ -285,7 +292,7 @@ func (p Policy) Validate() error {
 	}
 	seen := make(map[string]struct{}, len(p.Rules))
 	for _, rule := range p.Rules {
-		if !validIdentifier(rule.ID) || rule.Description == "" || len(rule.Description) > maxDescription || rule.Effect == "" || !rule.Effect.Valid() {
+		if !validIdentifier(rule.ID) || rule.Description == "" || !validText(rule.Description) || len(rule.Description) > maxDescription || rule.Effect == "" || !rule.Effect.Valid() {
 			return NewError(CodeParseError, nil)
 		}
 		if _, exists := seen[rule.ID]; exists {
@@ -296,7 +303,7 @@ func (p Policy) Validate() error {
 			return NewError(CodeParseError, nil)
 		}
 		for key, value := range rule.When {
-			if len(key) == 0 || len(key) > maxAttributeKey || len(value) > maxAttributeValue {
+			if key == "" || !validText(key) || len(key) > maxAttributeKey || !validText(value) || len(value) > maxAttributeValue {
 				return NewError(CodeParseError, nil)
 			}
 		}
@@ -310,14 +317,14 @@ func (p Policy) Validate() error {
 }
 
 func (r EvaluationRequest) Validate() error {
-	if !validIdentifier(r.SubjectID) || len(r.TaskID) > maxIdentifier || len(r.ChangeID) > maxIdentifier || !validIdentifier(string(r.Action)) || !validResource(string(r.Resource)) {
+	if !validIdentifier(r.SubjectID) || len(r.TaskID) > maxIdentifier || len(r.ChangeID) > maxIdentifier || !validText(r.TaskID) || !validText(r.ChangeID) || !validIdentifier(string(r.Action)) || !validResource(string(r.Resource)) {
 		return NewError(CodeUnknownAction, nil)
 	}
 	if len(r.Attributes) > maxAttributes {
 		return NewError(CodeParseError, nil)
 	}
 	for key, value := range r.Attributes {
-		if key == "" || len(key) > maxAttributeKey || len(value) > maxAttributeValue {
+		if key == "" || !validText(key) || len(key) > maxAttributeKey || !validText(value) || len(value) > maxAttributeValue {
 			return NewError(CodeParseError, nil)
 		}
 	}
@@ -325,14 +332,26 @@ func (r EvaluationRequest) Validate() error {
 }
 
 func validIdentifier(value string) bool {
-	if value == "" || len(value) > maxIdentifier || strings.ContainsAny(value, " \t\r\n/") {
+	if value == "" || !validText(value) || len(value) > maxIdentifier || strings.ContainsAny(value, " \t\r\n/") {
 		return false
 	}
 	return true
 }
 
+func validText(value string) bool {
+	if !utf8.ValidString(value) {
+		return false
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
 func validResource(value string) bool {
-	if value == "" || len(value) > maxAttributeValue {
+	if value == "" || !validText(value) || len(value) > maxAttributeValue {
 		return false
 	}
 	for _, r := range value {

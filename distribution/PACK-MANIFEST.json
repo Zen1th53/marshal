@@ -991,8 +991,8 @@
     },
     {
       "path": "internal/app/policy_runtime.go",
-      "sha256": "c18e5a5dcbac2bcd9b737a180963ae2f3ebd399e288cdef705175978f759eef1",
-      "bytes": 2435
+      "sha256": "03c28a06bcb798fb1ad18658da8c4ecc27b1717e794ca6b48b4bca892657a539",
+      "bytes": 2302
     },
     {
       "path": "internal/app/policy_runtime_a06_test.go",
@@ -1280,6 +1280,16 @@
       "bytes": 217
     },
     {
+      "path": "internal/policy/a07_contract_fuzz_test.go",
+      "sha256": "95bdb9a299b0535a85c7bdb6b429d578f2274c2f1be8e9ac0b2a384d32808e4a",
+      "bytes": 3398
+    },
+    {
+      "path": "internal/policy/adversarial_fuzz_a07_test.go",
+      "sha256": "de6c8c764b61914d02cc2c65c34e601d72bba2f65bcddbcfbd6f165130f3732c",
+      "bytes": 2604
+    },
+    {
       "path": "internal/policy/authorization.go",
       "sha256": "5f8471ae9bd9858258f3cc55f945cf1ff34963b69f7afb7cb927b6a324d67de6",
       "bytes": 4350
@@ -1291,8 +1301,8 @@
     },
     {
       "path": "internal/policy/contracts.go",
-      "sha256": "821bead5daec0f85990563fd5fd55a26762023d232b33ed8110b6cbc3957edf9",
-      "bytes": 10458
+      "sha256": "0b3fb080913876feb8f64ee294161e44fa1362abfad3362f60d4063e96bfd213",
+      "bytes": 11077
     },
     {
       "path": "internal/policy/digest.go",
@@ -1470,6 +1480,11 @@
       "bytes": 13207
     },
     {
+      "path": "internal/store/policy_a07_generation_test.go",
+      "sha256": "4716d2b01a52d135ea262b4f372b5ed3febc985d8e3f814a4e1f32cd89b6e359",
+      "bytes": 738
+    },
+    {
       "path": "internal/store/policy_authorization_a04_matrix_test.go",
       "sha256": "1e4b07109cb3a24a39a151dcfc1ff069ed7ea7958ca92dec0e7cb2cf9c73252f",
       "bytes": 6283
@@ -1516,8 +1531,8 @@
     },
     {
       "path": "internal/store/policy_store.go",
-      "sha256": "1ceb6362a916e4b77490be5744df9f81f83857a8b62d0eddb69edcf8a74085ec",
-      "bytes": 8541
+      "sha256": "e6fe0a018c7e9082da9c29405597a632381d7c3c0b05beb31dc6c7c9566a9f06",
+      "bytes": 8909
     },
     {
       "path": "internal/store/query.go",

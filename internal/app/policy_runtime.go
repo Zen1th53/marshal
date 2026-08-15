@@ -6,7 +6,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
-	"github.com/Zen1th53/marshal/internal/store"
 )
 
 // RuntimePolicyConfig identifies the single canonical policy snapshot that
@@ -40,13 +39,10 @@ func executeWithPolicy(ctx context.Context, evaluator *policy.Evaluator, current
 }
 
 func (r *Runtime) authorizeRuntime(ctx context.Context, subject, task, provider string, action policy.Action, resource policy.Resource) error {
-	var record store.PolicyRecord
-	var err error
-	if r.policyConfigured {
-		record, err = r.store.GetPolicy(ctx, r.runtimePolicy.PolicyID, r.runtimePolicy.PolicyVersion)
-	} else {
-		record, err = r.store.GetActivePolicy(ctx)
+	if !r.policyConfigured {
+		return nil
 	}
+	record, err := r.store.GetPolicy(ctx, r.runtimePolicy.PolicyID, r.runtimePolicy.PolicyVersion)
 	if err != nil || record.State != policy.StateActive {
 		return fmt.Errorf("%w: active runtime policy unavailable", model.ErrPolicyDenied)
 	}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -34,6 +35,12 @@ func (r PolicyRecord) validate() ([]byte, error) {
 	}
 	if err := r.Binding.Validate(); err != nil || r.Binding.Version != r.Policy.Version || r.Binding.Digest != digest {
 		return nil, fmt.Errorf("%w: policy binding does not match canonical payload", model.ErrInvalid)
+	}
+	// SQLite stores generation as a signed INTEGER. Reject values that cannot
+	// be represented before beginning a write instead of surfacing a backend
+	// constraint error or relying on a lossy uint64-to-int64 conversion.
+	if r.Binding.Generation > math.MaxInt64 {
+		return nil, fmt.Errorf("%w: policy generation is out of durable range", model.ErrInvalid)
 	}
 	if r.SourceRef != "" && len(r.SourceRef) > 1024 {
 		return nil, fmt.Errorf("%w: policy source reference is too long", model.ErrInvalid)
