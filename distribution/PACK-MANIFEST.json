@@ -1136,13 +1136,18 @@
     },
     {
       "path": "internal/events/engine.go",
-      "sha256": "f810e6b01cbe7e9d6935fdf3a9e98ca4ec00d05fe7f5a4014d862e98838632c2",
-      "bytes": 988
+      "sha256": "b0d9332c7235d65af73e037a5cac4a23e140ad9b2faec82daaa64975ffaf3079",
+      "bytes": 3013
     },
     {
       "path": "internal/events/engine_a02_test.go",
       "sha256": "20293a794d524b78bbfe8c07a368d1707a1cd6227ccf6ff33b2853c1bb69092a",
       "bytes": 2732
+    },
+    {
+      "path": "internal/events/engine_a03_test.go",
+      "sha256": "6369835cb197335e6833625f24e5cbcc25ccfe5518aaff1d27b7180b82831848",
+      "bytes": 5626
     },
     {
       "path": "internal/events/errors.go",
@@ -1153,6 +1158,16 @@
       "path": "internal/events/registry.go",
       "sha256": "4a7b3d4c2f72ba15df257b08cf70ae900ca9567f9a056471bfd654108a7a4406",
       "bytes": 12981
+    },
+    {
+      "path": "internal/events/state.go",
+      "sha256": "833297fa6a2e0b1000b85ba18fba28e77d987a2362385e7ebaabb1f3444e2e45",
+      "bytes": 1292
+    },
+    {
+      "path": "internal/events/state_a03_test.go",
+      "sha256": "7233442daf0f6c333af41d78c50c7f80f38d57c6342c28d6706ea4c9be1262b6",
+      "bytes": 904
     },
     {
       "path": "internal/events/types.go",
