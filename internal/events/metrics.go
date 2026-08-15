@@ -15,12 +15,13 @@ const (
 	MetricOperationPublish   MetricOperation = "publish"
 	MetricOutcomeSuccess     MetricOutcome   = "success"
 	MetricOutcomeDenied      MetricOutcome   = "denied"
+	MetricOutcomeInvalid     MetricOutcome   = "invalid"
 	MetricOutcomeDropped     MetricOutcome   = "dropped"
 	MetricOutcomeError       MetricOutcome   = "error"
 )
 
 var eventMetricOperations = map[MetricOperation]struct{}{MetricOperationProcess: {}, MetricOperationSince: {}, MetricOperationSubscribe: {}, MetricOperationPublish: {}}
-var eventMetricOutcomes = map[MetricOutcome]struct{}{MetricOutcomeSuccess: {}, MetricOutcomeDenied: {}, MetricOutcomeDropped: {}, MetricOutcomeError: {}}
+var eventMetricOutcomes = map[MetricOutcome]struct{}{MetricOutcomeSuccess: {}, MetricOutcomeDenied: {}, MetricOutcomeInvalid: {}, MetricOutcomeDropped: {}, MetricOutcomeError: {}}
 
 type MetricsSnapshot struct {
 	Observations        map[MetricOperation]uint64

@@ -40,3 +40,31 @@ func TestT43A09PublishOutcomeUsesClosedDimensions(t *testing.T) {
 		t.Fatal("unbounded dimensions recorded")
 	}
 }
+
+func TestT43A09DeniedAndInvalidProcessUseClosedOutcomes(t *testing.T) {
+	store := &a02EngineStore{}
+	bus := &a02EngineBus{store: store}
+	engine, err := NewAuthorizedEngine(
+		store,
+		bus,
+		IdentityProviderFunc(func(context.Context) (ProducerIdentity, error) {
+			return ProducerIdentity{SubjectID: "SUBJECT-A09", SessionID: "SESSION-A09", TaskID: "TASK-A09", RunID: "RUN-A09", ChangeID: "CHANGE-A09"}, nil
+		}),
+		AuthorizerFunc(func(_ context.Context, r AuthorizationRequest) (AuthorizationDecision, error) {
+			return AuthorizationDecision{Allowed: false, Identity: r.Identity, Action: r.Action, EventID: r.EventID, Type: r.Type, TaskID: r.TaskID, RunID: r.RunID, ResourceID: r.ResourceID, EvidenceID: r.EvidenceID, IdempotencyKey: r.IdempotencyKey, PolicyDigest: "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}, nil
+		}),
+		FreshnessValidatorFunc(func(context.Context, AuthorizationRequest, AuthorizationDecision) error { return nil }),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = engine.Process(context.Background(), Event{ID: "EVENT-A09-DENY", Type: "events.appended", Subject: "SUBJECT-A09", TaskID: "TASK-A09", RunID: "RUN-A09", IdempotencyKey: "REQ-A09-DENY"})
+	_, _ = engine.Process(context.Background(), Event{ID: "EVENT-A09-INVALID", Type: "not.registered", Subject: "SUBJECT-A09", TaskID: "TASK-A09", RunID: "RUN-A09", IdempotencyKey: "REQ-A09-INVALID"})
+	snap := engine.Metrics()
+	if snap.Outcomes[MetricOutcomeDenied] != 1 || snap.Outcomes[MetricOutcomeInvalid] != 1 {
+		t.Fatalf("snapshot=%+v", snap)
+	}
+	if store.called {
+		t.Fatal("metrics changed fail-closed behavior")
+	}
+}

@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -69,7 +70,12 @@ func (e *Engine) Process(ctx context.Context, event Event) (result DeliveryResul
 	started := time.Now()
 	defer func() {
 		outcome := MetricOutcomeSuccess
-		if err != nil {
+		switch {
+		case errors.Is(err, ErrAuthorizationDenied), errors.Is(err, ErrAuthorizationStale), errors.Is(err, ErrAuthorizationUnavailable):
+			outcome = MetricOutcomeDenied
+		case errors.Is(err, ErrInvalidType), errors.Is(err, ErrInvalidEvent), errors.Is(err, ErrSecretField), errors.Is(err, ErrEvidenceRequired):
+			outcome = MetricOutcomeInvalid
+		case err != nil:
 			outcome = MetricOutcomeError
 		}
 		e.metrics.Observe(MetricOperationProcess, outcome, time.Since(started))

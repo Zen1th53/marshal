@@ -1246,8 +1246,8 @@
     },
     {
       "path": "internal/events/engine.go",
-      "sha256": "1304f91727b18a8ea8c057d1c4760aa0ec6fa25e5b7932807c49d0ac69f1e191",
-      "bytes": 7440
+      "sha256": "38a805edd26e114f59db091e1207a64ad59924df47887af8a861e9ab01cad73c",
+      "bytes": 7801
     },
     {
       "path": "internal/events/engine_a02_test.go",
@@ -1276,13 +1276,13 @@
     },
     {
       "path": "internal/events/metrics.go",
-      "sha256": "4d34afe37ca4023048a379b85cc092a03a45cc0b4621d5b1ba9d66d1f464702f",
-      "bytes": 2270
+      "sha256": "90a6f91fca88d4234806986921a7d360b37c755f784f82e53f1b26dde853f3f3",
+      "bytes": 2350
     },
     {
       "path": "internal/events/metrics_a09_test.go",
-      "sha256": "da67dd77e2e8300d538d27ac5998539d390f0bd3e5d2e46a64717d2e0787496e",
-      "bytes": 1448
+      "sha256": "c532a4f220492fdad953f00334e069f659bb6cceaefc2ee885808ea379d0adf7",
+      "bytes": 3073
     },
     {
       "path": "internal/events/registry.go",
