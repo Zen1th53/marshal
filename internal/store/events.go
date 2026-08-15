@@ -43,8 +43,22 @@ func eventContentDigest(event events.Event) (string, []byte, error) {
 
 // Append durably stores one canonical event and assigns its monotonic sequence
 // and UTC timestamp at the authoritative database boundary. Exact retries by
-// idempotency key converge to the already committed event.
+// idempotency key converge to the already committed event. Transient SQLite
+// writer contention is retried using the repository's bounded, context-aware
+// policy so independent Store instances converge instead of leaking SQLITE_BUSY.
 func (s *Store) Append(ctx context.Context, event events.Event) (events.Event, error) {
+	for attempt := 0; ; attempt++ {
+		stored, err := s.appendEventOnce(ctx, event)
+		if err == nil || !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
+			return stored, err
+		}
+		if waitErr := waitSQLiteRetry(ctx, attempt); waitErr != nil {
+			return events.Event{}, events.NewError(events.CodeStoreFailed, waitErr)
+		}
+	}
+}
+
+func (s *Store) appendEventOnce(ctx context.Context, event events.Event) (events.Event, error) {
 	if err := ctx.Err(); err != nil {
 		return events.Event{}, events.NewError(events.CodeStoreFailed, err)
 	}
@@ -70,18 +84,11 @@ func (s *Store) Append(ctx context.Context, event events.Event) (events.Event, e
 	}
 	defer tx.Rollback()
 
-	if existing, existingDigest, found, err := loadEventByIdempotency(ctx, tx, clean.IdempotencyKey); err != nil {
-		return events.Event{}, events.NewError(events.CodeStoreFailed, err)
-	} else if found {
-		if existingDigest != digest {
-			return events.Event{}, events.ErrSequenceConflict
-		}
-		if err := tx.Commit(); err != nil {
-			return events.Event{}, events.NewError(events.CodeStoreFailed, err)
-		}
-		return existing, nil
-	}
-
+	// Write first instead of performing a read-before-write idempotency check.
+	// With SQLite DEFERRED transactions, a read snapshot that is then promoted
+	// to a writer can fail with SQLITE_BUSY under unrelated concurrent appends.
+	// Unique event/idempotency constraints remain authoritative; on a conflict
+	// below we read the winning row and reconcile an exact retry.
 	dataJSON, err := json.Marshal(clean.Data)
 	if err != nil {
 		return events.Event{}, events.NewError(events.CodeInvalidEvent, err)

@@ -1170,6 +1170,11 @@
       "bytes": 3294
     },
     {
+      "path": "internal/events/adversarial_a07_test.go",
+      "sha256": "24f1d429895cdebf3113ca6953bba521df4aea8652815e644a930c7744aded18",
+      "bytes": 3397
+    },
+    {
       "path": "internal/events/audit.go",
       "sha256": "0c366995cccc5000f1c61dc48b722c7621e0bb0e499c89f23045ac9f58d38091",
       "bytes": 3678
@@ -1218,6 +1223,11 @@
       "path": "internal/events/events_a05_test.go",
       "sha256": "3019b11e47594d4d11dfea3e56992000266abdbfb4372b236e09ab6bf38f7589",
       "bytes": 7348
+    },
+    {
+      "path": "internal/events/fuzz_a07_test.go",
+      "sha256": "187bc8b0bc91dd47d8fe70aae67b780df5fe11b64b9f65124d5e23f553c84762",
+      "bytes": 4518
     },
     {
       "path": "internal/events/registry.go",
@@ -1661,13 +1671,18 @@
     },
     {
       "path": "internal/store/events.go",
-      "sha256": "58fd4cfe886a037416916de3c06a1af46d5488954840b963ee0ed072aea6fafb",
-      "bytes": 7549
+      "sha256": "adac4820751f5637535e9715f673c5ef6e9936602548fd494b36046e436846f8",
+      "bytes": 8093
     },
     {
       "path": "internal/store/events_a02_test.go",
       "sha256": "cce661fb316c963ed63231360906dd86cfe6112b68bf8e9abc21b5571d423525",
       "bytes": 8794
+    },
+    {
+      "path": "internal/store/events_a07_adversarial_test.go",
+      "sha256": "f8ebdac5b91346941dc17a2042e09842b23fd27ebd86ff5c11ec4b449c77163c",
+      "bytes": 5060
     },
     {
       "path": "internal/store/events_authorized_test_helper_test.go",
