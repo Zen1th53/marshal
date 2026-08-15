@@ -79,11 +79,13 @@ func (r *Runtime) TransitionEvidence(ctx context.Context, request EvidenceTransi
 		return err
 	}
 	return r.store.TransitionNodeAuthorized(ctx, evidence.AccessRequest{
-		SubjectID:   session.AgentID,
-		TaskID:      *session.TaskID,
-		ChangeID:    request.ChangeID,
-		NodeID:      request.NodeID,
-		Action:      evidence.ActionTransition,
-		TargetState: request.TargetState,
+		SubjectID:       session.AgentID,
+		TaskID:          *session.TaskID,
+		ChangeID:        request.ChangeID,
+		SessionID:       session.ID,
+		SessionRevision: session.Revision,
+		NodeID:          request.NodeID,
+		Action:          evidence.ActionTransition,
+		TargetState:     request.TargetState,
 	})
 }

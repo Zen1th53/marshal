@@ -23,13 +23,18 @@ const (
 )
 
 type AccessRequest struct {
-	SubjectID    string
-	TaskID       string
-	ChangeID     string
-	NodeID       NodeID
-	Action       Action
-	CurrentState State
-	TargetState  State
+	SubjectID string
+	TaskID    string
+	ChangeID  string
+	// SessionID and SessionRevision bind runtime authority to the canonical
+	// session row. They are optional for lower-level callers that do not have
+	// a runtime session, but runtime mutations must provide both.
+	SessionID       string
+	SessionRevision int64
+	NodeID          NodeID
+	Action          Action
+	CurrentState    State
+	TargetState     State
 }
 
 type AuthorizationDecision struct {

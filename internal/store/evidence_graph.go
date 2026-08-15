@@ -124,7 +124,7 @@ func (s *Store) TransitionNodeAuthorized(ctx context.Context, request evidence.A
 		!decision.FreshUntil.After(time.Now().UTC()) {
 		return evidence.ErrAuthorizationStale
 	}
-	return s.transitionNodeIfState(ctx, request.NodeID, request.TargetState, request.CurrentState, map[string]any{
+	return s.transitionNodeIfState(ctx, request.NodeID, request.TargetState, request.CurrentState, request.SessionID, request.SessionRevision, request.SubjectID, request.TaskID, map[string]any{
 		"evidence_id": request.NodeID, "previous_state": request.CurrentState,
 		"new_state": request.TargetState, "subject_id": request.SubjectID,
 		"task_id": request.TaskID, "change_id": request.ChangeID,
@@ -132,7 +132,7 @@ func (s *Store) TransitionNodeAuthorized(ctx context.Context, request evidence.A
 	})
 }
 
-func (s *Store) transitionNodeIfState(ctx context.Context, id evidence.NodeID, target, expected evidence.State, audit map[string]any) error {
+func (s *Store) transitionNodeIfState(ctx context.Context, id evidence.NodeID, target, expected evidence.State, sessionID string, sessionRevision int64, subjectID, taskID string, audit map[string]any) error {
 	if !target.Valid() || target == evidence.StateDraft {
 		return evidence.ErrInvalidTransition
 	}
@@ -141,6 +141,19 @@ func (s *Store) transitionNodeIfState(ctx context.Context, id evidence.NodeID, t
 		return fmt.Errorf("begin evidence transition: %w", err)
 	}
 	defer tx.Rollback()
+	if sessionID != "" {
+		var agentID, boundTask, status string
+		var revision int64
+		if err := tx.QueryRowContext(ctx, `
+			SELECT agent_id, COALESCE(task_id, ''), status, revision
+			FROM sessions WHERE session_id = ?
+		`, sessionID).Scan(&agentID, &boundTask, &status, &revision); err != nil {
+			return evidence.ErrAuthorizationStale
+		}
+		if status != "active" || agentID != subjectID || boundTask != taskID || revision != sessionRevision {
+			return evidence.ErrAuthorizationStale
+		}
+	}
 	valid := (expected == evidence.StateStored && target == evidence.StateLinked) ||
 		(expected == evidence.StateLinked && target == evidence.StateArchived) ||
 		(expected == evidence.StateArchived && target == evidence.StateExported) || expected == target
