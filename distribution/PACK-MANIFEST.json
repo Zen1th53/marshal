@@ -990,14 +990,24 @@
       "bytes": 8896
     },
     {
+      "path": "internal/app/policy_runtime.go",
+      "sha256": "03c28a06bcb798fb1ad18658da8c4ecc27b1717e794ca6b48b4bca892657a539",
+      "bytes": 2302
+    },
+    {
+      "path": "internal/app/policy_runtime_a06_test.go",
+      "sha256": "f18fad20399b67a0e5e65a8a448b20868de892a8747bc8b76c41b3bf9995a8dd",
+      "bytes": 2504
+    },
+    {
       "path": "internal/app/reconciliation.go",
       "sha256": "32ae869ac33feaeee6e0cf548e270dbd82993bc9d28e70879a25cb16be59a323",
       "bytes": 2648
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "d0050c308ec4c6b8281d4fc165d7b997f34007debf0ed57962184658276ecd73",
-      "bytes": 24555
+      "sha256": "c51a95b42b555423e61a10172536314129eebd50806f07a5bb4f16e3fa63d77f",
+      "bytes": 25136
     },
     {
       "path": "internal/app/runtime_test.go",
