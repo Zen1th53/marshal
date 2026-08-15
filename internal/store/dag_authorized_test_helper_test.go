@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/dag"
+	"github.com/Zen1th53/marshal/internal/events"
 )
 
 func newAuthorizedDAGEngine(backend dag.Backend) (*dag.Engine, error) {
@@ -19,5 +20,5 @@ func newAuthorizedDAGEngine(backend dag.Backend) (*dag.Engine, error) {
 			FreshUntil:   time.Now().Add(time.Hour),
 		}, nil
 	})
-	return dag.NewAuthorizedEngine(backend, identity, authorizer, dag.FreshnessValidatorFunc(func(context.Context, dag.AuthorizationRequest, dag.AuthorizationDecision) error { return nil }))
+	return dag.NewAuditedEngine(backend, identity, authorizer, dag.FreshnessValidatorFunc(func(context.Context, dag.AuthorizationRequest, dag.AuthorizationDecision) error { return nil }), dag.EventSinkFunc(func(context.Context, events.Event) (events.Event, error) { return events.Event{}, nil }))
 }

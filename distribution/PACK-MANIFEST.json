@@ -1096,18 +1096,18 @@
     },
     {
       "path": "internal/dag/engine.go",
-      "sha256": "6c240c7963029a408cdd89f85942c0a127efd94e0a5c27c8da1fd15f4cb6dde1",
-      "bytes": 8734
+      "sha256": "bba39c6f91faee7c2053ee3feb1b94356e6ca5e16a65593eb01bb384f538c9da",
+      "bytes": 11152
     },
     {
       "path": "internal/dag/errors.go",
-      "sha256": "e0bf3a30bb6c3d188b102ecc21c1954b1e86f4de1acdf189d3e3ceacd00273d2",
-      "bytes": 2874
+      "sha256": "cf225cc2f6143b5abb10f25ee73f7fef7e032be62ccd17643b7b33c1b3c40094",
+      "bytes": 3108
     },
     {
       "path": "internal/dag/security_a04_test.go",
-      "sha256": "be18ab7163ad403bfff7baa3f6f63fa2a2edaf60344c08fa9bdfd6fcb43f574c",
-      "bytes": 6510
+      "sha256": "b840e7f1faa71717e786ca8074e148c7adb9e0f33e28543a33a37be1dbab4f99",
+      "bytes": 6524
     },
     {
       "path": "internal/dag/state_a03_test.go",
@@ -1611,8 +1611,8 @@
     },
     {
       "path": "internal/store/dag_authorized_test_helper_test.go",
-      "sha256": "539eacbf7073ba5b64a287fddfffcce6db7c4364681384e96762da2b28d4b861",
-      "bytes": 1085
+      "sha256": "82f03976635015bf786414de996cf5b457f2a90d2ea9c1aab35da307e255d5b5",
+      "bytes": 1238
     },
     {
       "path": "internal/store/events.go",

@@ -28,6 +28,7 @@ type Engine struct {
 	identity   IdentityProvider
 	authorizer Authorizer
 	freshness  FreshnessValidator
+	eventSink  EventSink
 	now        func() time.Time
 }
 
@@ -52,27 +53,56 @@ func NewAuthorizedEngine(backend Backend, identity IdentityProvider, authorizer 
 	return engine, nil
 }
 
+// NewAuditedEngine is the A05 mutation boundary. A privileged DAG mutation is
+// not allowed to begin unless a durable event sink is available.
+func NewAuditedEngine(backend Backend, identity IdentityProvider, authorizer Authorizer, freshness FreshnessValidator, eventSink EventSink) (*Engine, error) {
+	engine, err := NewAuthorizedEngine(backend, identity, authorizer, freshness)
+	if err != nil {
+		return nil, err
+	}
+	if eventSink == nil {
+		return nil, ErrEventUnavailable
+	}
+	engine.eventSink = eventSink
+	return engine, nil
+}
+
 func (e *Engine) AddNode(ctx context.Context, request AddNodeRequest) (Node, error) {
 	if err := request.Validate(); err != nil {
 		return Node{}, err
 	}
-	if err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddNode, Resource: nodeResource(request.Node.TaskID)}); err != nil {
+	decision, err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddNode, Resource: nodeResource(request.Node.TaskID)})
+	if err != nil {
 		return Node{}, err
+	}
+	if e.eventSink == nil {
+		return Node{}, ErrEventUnavailable
 	}
 	// New graph history always starts pending. Later lifecycle movement must use
 	// the explicit transition state machine rather than insertion as a setter.
 	if request.Node.Status != StatusPending {
 		return Node{}, ErrInvalidNode
 	}
-	return e.backend.PutDAGNode(ctx, request.Node)
+	stored, err := e.backend.PutDAGNode(ctx, request.Node)
+	if err != nil {
+		return Node{}, err
+	}
+	if err := e.emitMutationEvent(ctx, "dag.node.added", decision, request.RequestID, nodeResource(stored.TaskID), "added", Code(""), "", ""); err != nil {
+		return stored, err
+	}
+	return stored, nil
 }
 
 func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, error) {
 	if err := request.Validate(); err != nil {
 		return Edge{}, err
 	}
-	if err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddEdge, Resource: edgeResource(request.Edge)}); err != nil {
+	decision, err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddEdge, Resource: edgeResource(request.Edge)})
+	if err != nil {
 		return Edge{}, err
+	}
+	if e.eventSink == nil {
+		return Edge{}, ErrEventUnavailable
 	}
 	// Reconcile an exact semantic retry before applying new-edge constraints.
 	existing, err := e.backend.DAGEdgesFrom(ctx, request.Edge.From)
@@ -82,6 +112,9 @@ func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, err
 	for _, edge := range existing {
 		if edge.To == request.Edge.To {
 			if edge.Condition == request.Edge.Condition {
+				if err := e.emitMutationEvent(ctx, "dag.edge.added", decision, request.RequestID, edgeResource(edge), "added", Code(""), "", string(edge.Condition)); err != nil {
+					return edge, err
+				}
 				return edge, nil
 			}
 			return Edge{}, ErrDuplicateEdge
@@ -98,6 +131,9 @@ func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, err
 	if cycle, err := e.wouldCycle(ctx, request.Edge); err != nil {
 		return Edge{}, err
 	} else if cycle {
+		if eventErr := e.emitMutationEvent(ctx, "dag.cycle.rejected", decision, request.RequestID, edgeResource(request.Edge), "rejected", CodeCycle, "", string(request.Edge.Condition)); eventErr != nil {
+			return Edge{}, NewError(CodeEventUnavailable, ErrCycle)
+		}
 		return Edge{}, ErrCycle
 	}
 	edge, err := e.backend.PutDAGEdge(ctx, request.Edge)
@@ -114,7 +150,13 @@ func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, err
 			}
 		}
 	}
-	return edge, err
+	if err != nil {
+		return Edge{}, err
+	}
+	if eventErr := e.emitMutationEvent(ctx, "dag.edge.added", decision, request.RequestID, edgeResource(edge), "added", Code(""), "", string(edge.Condition)); eventErr != nil {
+		return edge, eventErr
+	}
+	return edge, nil
 }
 
 func (e *Engine) Ready(ctx context.Context, id TaskID) (Readiness, error) {
@@ -149,8 +191,12 @@ func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target Nod
 	if !CanTransition(expected, target) {
 		return Node{}, ErrInvalidNode
 	}
-	if err := e.authorize(ctx, AuthorizationRequest{Action: ActionTransition, Resource: nodeResource(id), ExpectedState: expected, TargetState: target}); err != nil {
+	decision, err := e.authorize(ctx, AuthorizationRequest{Action: ActionTransition, Resource: nodeResource(id), ExpectedState: expected, TargetState: target})
+	if err != nil {
 		return Node{}, err
+	}
+	if e.eventSink == nil {
+		return Node{}, ErrEventUnavailable
 	}
 	if target == StatusReady {
 		readiness, err := e.Ready(ctx, id)
@@ -161,38 +207,55 @@ func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target Nod
 			return Node{}, ErrInvalidNode
 		}
 	}
-	return e.backend.TransitionDAGNode(ctx, id, expected, target)
+	stored, err := e.backend.TransitionDAGNode(ctx, id, expected, target)
+	if err != nil {
+		return Node{}, err
+	}
+	eventType := ""
+	result := ""
+	switch target {
+	case StatusReady:
+		eventType, result = "dag.node.ready", "ready"
+	case StatusBlocked:
+		eventType, result = "dag.node.blocked", "blocked"
+	}
+	if eventType != "" {
+		if eventErr := e.emitMutationEvent(ctx, eventType, decision, "", nodeResource(id), result, Code(""), string(target), ""); eventErr != nil {
+			return stored, eventErr
+		}
+	}
+	return stored, nil
 }
 
-func (e *Engine) authorize(ctx context.Context, request AuthorizationRequest) error {
+func (e *Engine) authorize(ctx context.Context, request AuthorizationRequest) (AuthorizationDecision, error) {
 	if err := ctx.Err(); err != nil {
-		return NewError(CodeAuthorizationUnavailable, err)
+		return AuthorizationDecision{}, NewError(CodeAuthorizationUnavailable, err)
 	}
 	if e.identity == nil || e.authorizer == nil || e.freshness == nil {
-		return ErrAuthorizationUnavailable
+		return AuthorizationDecision{}, ErrAuthorizationUnavailable
 	}
 	identity, err := e.identity.Identity(ctx)
 	if err != nil {
-		return NewError(CodeAuthorizationUnavailable, err)
+		return AuthorizationDecision{}, NewError(CodeAuthorizationUnavailable, err)
 	}
 	request.Identity = identity
 	if !request.valid() {
-		return ErrAuthorizationDenied
+		return AuthorizationDecision{}, ErrAuthorizationDenied
 	}
 	decision, err := e.authorizer.Authorize(ctx, request)
 	if err != nil {
-		return NewError(CodeAuthorizationUnavailable, err)
+		return AuthorizationDecision{}, NewError(CodeAuthorizationUnavailable, err)
 	}
 	if err := decision.validateFor(request, e.now()); err != nil {
-		return err
+		return AuthorizationDecision{}, err
 	}
 	if err := e.freshness.ValidateFreshness(ctx, request, decision); err != nil {
-		return NewError(CodeAuthorizationStale, err)
+		return AuthorizationDecision{}, NewError(CodeAuthorizationStale, err)
 	}
 	if err := ctx.Err(); err != nil {
-		return NewError(CodeAuthorizationUnavailable, err)
+		return AuthorizationDecision{}, NewError(CodeAuthorizationUnavailable, err)
 	}
-	return nil
+	return decision, nil
 }
 
 func (e *Engine) Topological(ctx context.Context) ([]Node, error) {

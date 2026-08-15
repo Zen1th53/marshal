@@ -15,6 +15,7 @@ const (
 	CodeAuthorizationDenied      Code = "DAG_AUTHZ_DENIED"
 	CodeAuthorizationStale       Code = "DAG_AUTHZ_STALE"
 	CodeAuthorizationUnavailable Code = "DAG_AUTHZ_UNAVAILABLE"
+	CodeEventUnavailable         Code = "DAG_EVENT_UNAVAILABLE"
 )
 
 // Error is safe to expose: Message is selected only from the stable code and
@@ -42,6 +43,7 @@ var (
 	ErrAuthorizationDenied      = &Error{Code: CodeAuthorizationDenied, Message: "dag authorization denied"}
 	ErrAuthorizationStale       = &Error{Code: CodeAuthorizationStale, Message: "dag authorization is stale"}
 	ErrAuthorizationUnavailable = &Error{Code: CodeAuthorizationUnavailable, Message: "dag authorization is unavailable"}
+	ErrEventUnavailable         = &Error{Code: CodeEventUnavailable, Message: "dag event sink is unavailable"}
 )
 
 func NewError(code Code, cause error) error {
@@ -76,6 +78,8 @@ func safeMessage(code Code) string {
 		return ErrAuthorizationStale.Message
 	case CodeAuthorizationUnavailable:
 		return ErrAuthorizationUnavailable.Message
+	case CodeEventUnavailable:
+		return ErrEventUnavailable.Message
 	default:
 		return "dag operation failed"
 	}

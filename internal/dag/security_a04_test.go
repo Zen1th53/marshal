@@ -116,7 +116,7 @@ func TestT29A04AuthorizationBindsExactResourceAndFreshness(t *testing.T) {
 
 func TestT29A04ValidAuthorizationMutatesExactlyOnce(t *testing.T) {
 	backend := &a04Backend{}
-	engine, err := NewAuthorizedEngine(backend, a04IdentityProvider{identity: a04Identity()}, a04Authorizer{decide: a04Allow}, FreshnessValidatorFunc(func(context.Context, AuthorizationRequest, AuthorizationDecision) error { return nil }))
+	engine, err := NewAuditedEngine(backend, a04IdentityProvider{identity: a04Identity()}, a04Authorizer{decide: a04Allow}, FreshnessValidatorFunc(func(context.Context, AuthorizationRequest, AuthorizationDecision) error { return nil }), &a05EventSink{})
 	if err != nil {
 		t.Fatal(err)
 	}
