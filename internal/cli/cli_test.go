@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -61,7 +63,7 @@ func TestTaskImportDryRunDoesNotNeedDaemon(t *testing.T) {
 }
 
 func TestRequiredCommandsHaveUsage(t *testing.T) {
-	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "legal", "daemon"} {
+	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "policy", "legal", "daemon"} {
 		var stdout, stderr bytes.Buffer
 		code := Execute(context.Background(), ".", []string{command, "--help"}, strings.NewReader(""), &stdout, &stderr)
 		if code != 0 || !strings.Contains(stdout.String()+stderr.String(), "Usage: marshal ") {
@@ -155,4 +157,108 @@ func TestLegalCLI(t *testing.T) {
 	if _, err := os.Stat(exportTar); err != nil {
 		t.Fatalf("expected export tar file to exist: %v", err)
 	}
+}
+
+func TestPolicyTestCLIPassAndFailExitCodes(t *testing.T) {
+	repo := cliRepo(t)
+	passFile := filepath.Join(repo.Path(), "pass.json")
+	if err := os.WriteFile(passFile, policyTestFixture(t, "deny"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Execute(context.Background(), repo.Path(), []string{"policy", "test", passFile}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+		t.Fatalf("pass code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	failFile := filepath.Join(repo.Path(), "fail.json")
+	if err := os.WriteFile(failFile, policyTestFixture(t, "allow"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := Execute(context.Background(), repo.Path(), []string{"policy", "test", failFile}, strings.NewReader(""), &stdout, &stderr); code == 0 {
+		t.Fatalf("fail unexpectedly returned zero stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(repo.Path(), ".marshal")); !os.IsNotExist(err) {
+		t.Fatalf("read-only policy test created runtime state: err=%v", err)
+	}
+}
+
+func TestPolicyTestCLIRejectsMalformedAndUnknownFields(t *testing.T) {
+	repo := cliRepo(t)
+	secret := "MARSHAL_TEST_SECRET_T49_A08_CLI_9f31"
+	unknown := filepath.Join(repo.Path(), "unknown.json")
+	var document map[string]any
+	if err := json.Unmarshal(policyTestFixture(t, "deny"), &document); err != nil {
+		t.Fatal(err)
+	}
+	document["unexpected"] = secret
+	data, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(unknown, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Execute(context.Background(), repo.Path(), []string{"policy", "test", unknown}, strings.NewReader(""), &stdout, &stderr); code == 0 {
+		t.Fatalf("unknown field returned zero stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), secret) {
+		t.Fatalf("secret leaked in CLI output: %q", stdout.String()+stderr.String())
+	}
+	malformed := filepath.Join(repo.Path(), "malformed.json")
+	if err := os.WriteFile(malformed, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := Execute(context.Background(), repo.Path(), []string{"policy", "test", malformed}, strings.NewReader(""), &stdout, &stderr); code == 0 {
+		t.Fatalf("malformed input returned zero stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestPolicyTestCLIEvaluatorErrorIsNonzero(t *testing.T) {
+	repo := cliRepo(t)
+	file := filepath.Join(repo.Path(), "error.json")
+	if err := os.WriteFile(file, policyTestFixtureWithDefault(t, "require", "deny"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := Execute(context.Background(), repo.Path(), []string{"--json", "policy", "test", file}, strings.NewReader(""), &stdout, &stderr); code == 0 {
+		t.Fatalf("evaluator error returned zero stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"status": "ERROR"`) {
+		t.Fatalf("missing typed error status: %q", stdout.String())
+	}
+}
+
+func policyTestFixture(t *testing.T, expected string) []byte {
+	return policyTestFixtureWithDefault(t, "deny", expected)
+}
+
+func policyTestFixtureWithDefault(t *testing.T, defaultEffect, expected string) []byte {
+	t.Helper()
+	p := policy.Policy{ID: "cli-policy", Version: 1, Default: policy.Effect(defaultEffect)}
+	digest, err := p.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := map[string]any{
+		"id": "cli-suite",
+		"cases": []any{map[string]any{
+			"id":   "case-1",
+			"name": "default decision",
+			"given": map[string]any{
+				"policy":  map[string]any{"id": string(p.ID), "version": p.Version, "default": string(p.Default), "rules": []any{}},
+				"binding": map[string]any{"version": p.Version, "digest": string(digest), "generation": 1},
+			},
+			"when":   map[string]any{"subject_id": "subject-1", "task_id": "task-1", "change_id": "change-1", "action": "read", "resource": "repo"},
+			"expect": map[string]any{"decision": expected},
+		}},
+	}
+	data, err := json.Marshal(fixture)
+	if err != nil {
+		t.Fatal(fmt.Errorf("marshal fixture: %w", err))
+	}
+	return data
 }

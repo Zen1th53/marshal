@@ -58,6 +58,9 @@ func RunSuite(ctx context.Context, suite Suite, evaluator Evaluator) (RunResult,
 			return RunResult{}, err
 		}
 		result := evaluateCase(ctx, testCase, evaluator)
+		if err := ctx.Err(); err != nil {
+			return RunResult{}, err
+		}
 		results = append(results, TestCaseResult{ID: testCase.ID, Result: result})
 	}
 	return RunResult{Cases: results, Status: aggregateResults(results)}, nil

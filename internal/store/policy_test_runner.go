@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -15,9 +16,6 @@ import (
 // security history is the bounded A05 case event stream, while the immutable
 // A02 run projection remains unchanged.
 func (s *Store) RunPolicyTest(ctx context.Context, request policytest.RunRequest) (policytest.RunResult, error) {
-	if request.Authorizer == nil || request.Evaluator == nil {
-		return policytest.RunResult{}, policy.ErrAuthorizationUnavailable
-	}
 	if err := request.TestFileDigest.Validate(); err != nil {
 		return policytest.RunResult{}, err
 	}
@@ -63,11 +61,26 @@ func (s *Store) RunPolicyTest(ctx context.Context, request policytest.RunRequest
 			return policytest.RunResult{}, err
 		}
 	}
+	if run.State == policytest.StatePassed || run.State == policytest.StateFailed {
+		return s.recoveredPolicyTestResult(ctx, run)
+	}
+	if request.Authorizer == nil || request.Evaluator == nil {
+		return policytest.RunResult{}, policy.ErrAuthorizationUnavailable
+	}
 	if run.State != policytest.StateExecuted {
 		return policytest.RunResult{}, policytest.ErrIllegalTransition
 	}
+	owner, err := s.claimPolicyTestExecution(ctx, run.ID)
+	if err != nil {
+		latest, readErr := s.GetPolicyTestRun(ctx, run.ID)
+		if readErr == nil && (latest.State == policytest.StatePassed || latest.State == policytest.StateFailed) {
+			return s.recoveredPolicyTestResult(ctx, latest)
+		}
+		return policytest.RunResult{}, err
+	}
 	result, err := policytest.RunSuite(ctx, suite, request.Evaluator)
 	if err != nil {
+		_ = s.releasePolicyTestExecution(ctx, run.ID, owner)
 		return policytest.RunResult{}, err
 	}
 	facts := make([]policytest.EventFact, 0, len(result.Cases))
@@ -105,13 +118,32 @@ func (s *Store) RunPolicyTest(ctx context.Context, request policytest.RunRequest
 	if result.Status == policytest.StatusPass {
 		target = policytest.StatePassed
 	}
-	if _, err := s.authorizedRunTransitionWithCaseEvents(ctx, request, run, target, facts); err != nil {
-		return policytest.RunResult{}, err
+	var finalizeErr error
+	for attempt := 0; ; attempt++ {
+		_, finalizeErr = s.authorizedRunTransitionWithCaseEvents(ctx, request, run, target, owner, result, facts)
+		if finalizeErr == nil {
+			break
+		}
+		if !errors.Is(finalizeErr, model.ErrUnavailable) || attempt >= sqliteBusyRetries {
+			latest, readErr := s.GetPolicyTestRun(ctx, run.ID)
+			if readErr == nil && (latest.State == policytest.StatePassed || latest.State == policytest.StateFailed) {
+				return s.recoveredPolicyTestResult(ctx, latest)
+			}
+			if ctx.Err() != nil {
+				_ = s.releasePolicyTestExecution(context.Background(), run.ID, owner)
+				return policytest.RunResult{}, ctx.Err()
+			}
+			return policytest.RunResult{}, finalizeErr
+		}
+		if err := waitSQLiteRetry(ctx, attempt); err != nil {
+			_ = s.releasePolicyTestExecution(context.Background(), run.ID, owner)
+			return policytest.RunResult{}, err
+		}
 	}
 	return result, nil
 }
 
-func (s *Store) authorizedRunTransitionWithCaseEvents(ctx context.Context, base policytest.RunRequest, run policytest.TestRun, target policytest.RunState, facts []policytest.EventFact) (policytest.TestRun, error) {
+func (s *Store) authorizedRunTransitionWithCaseEvents(ctx context.Context, base policytest.RunRequest, run policytest.TestRun, target policytest.RunState, owner string, result policytest.RunResult, facts []policytest.EventFact) (policytest.TestRun, error) {
 	authRequest := policytest.AuthorizationRequest{
 		SubjectID: base.SubjectID, SessionID: base.SessionID, TaskID: base.TaskID, ChangeID: base.ChangeID,
 		RunID: run.ID, PolicyID: run.PolicyID, Binding: run.Binding, TestFileDigest: run.TestFileDigest,
@@ -144,7 +176,10 @@ func (s *Store) authorizedRunTransitionWithCaseEvents(ctx context.Context, base 
 	if emit {
 		lifecycle = &fact
 	}
-	if err := s.transitionPolicyTestRunStateTx(ctx, tx, authRequest.RunID, authRequest.ExpectedState, authRequest.TargetState, &authRequest, lifecycle); err != nil {
+	if err := s.transitionPolicyTestRunStateTx(ctx, tx, authRequest.RunID, authRequest.ExpectedState, authRequest.TargetState, &authRequest, lifecycle, owner); err != nil {
+		return policytest.TestRun{}, err
+	}
+	if err := persistPolicyTestOutcomesTx(ctx, tx, authRequest.RunID, result); err != nil {
 		return policytest.TestRun{}, err
 	}
 	for _, caseFact := range facts {

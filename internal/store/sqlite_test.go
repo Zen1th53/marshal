@@ -23,8 +23,8 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 	if got := queryInt(t, st.db, "PRAGMA foreign_keys"); got != 1 {
 		t.Fatalf("foreign_keys = %d, want 1", got)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 9 {
-		t.Fatalf("schema version = %d, want 9", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 11 {
+		t.Fatalf("schema version = %d, want 11", got)
 	}
 
 	wantTables := []string{
@@ -34,12 +34,50 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"worker_runs", "verifications",
 		"evidence_nodes", "evidence_edges",
 		"policy_versions",
-		"policy_test_runs", "policy_test_cases",
+		"policy_test_runs", "policy_test_cases", "policy_test_outcomes",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
 			t.Errorf("table %s count = %d, want 1", table, got)
 		}
+	}
+}
+
+func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		"DROP INDEX policy_test_outcomes_by_status",
+		"DROP TABLE policy_test_outcomes",
+		"ALTER TABLE policy_test_runs DROP COLUMN execution_claimed_at",
+		"ALTER TABLE policy_test_runs DROP COLUMN execution_owner",
+		"DELETE FROM schema_migrations WHERE version >= 10",
+	} {
+		if _, err := st.db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("prepare v9 schema with %q: %v", statement, err)
+		}
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatalf("migrate v9: %v", err)
+	}
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 11 {
+		t.Fatalf("schema version=%d, want 11", got)
+	}
+	if got := queryInt(t, st.db, "SELECT count(*) FROM pragma_table_info('policy_test_runs') WHERE name IN ('execution_owner','execution_claimed_at')"); got != 2 {
+		t.Fatalf("claim columns=%d, want 2", got)
+	}
+	if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='policy_test_outcomes'"); got != 1 {
+		t.Fatalf("outcomes table=%d, want 1", got)
+	}
+	var integrity string
+	if err := st.db.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&integrity); err != nil || integrity != "ok" {
+		t.Fatalf("integrity=%q err=%v", integrity, err)
+	}
+	if got := queryInt(t, st.db, "SELECT count(*) FROM pragma_foreign_key_check"); got != 0 {
+		t.Fatalf("foreign key violations=%d", got)
 	}
 }
 

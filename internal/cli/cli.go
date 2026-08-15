@@ -23,6 +23,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/legal"
 	"github.com/Zen1th53/marshal/internal/mcp"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/policytest"
 	"github.com/Zen1th53/marshal/internal/project"
 )
 
@@ -50,6 +51,7 @@ Commands:
   artifacts
   verify [-- command args...]
   reconcile --file-state state.json
+  policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
   daemon
 `
@@ -117,6 +119,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.verify(ctx, args[1:])
 	case "reconcile":
 		err = c.reconcile(ctx, args[1:])
+	case "policy":
+		err = c.policy(ctx, args[1:])
 	case "adapters":
 		err = c.adapters(ctx)
 	case "adapter":
@@ -137,6 +141,37 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		return exitCode(err)
 	}
 	return 0
+}
+
+func (c command) policy(ctx context.Context, args []string) error {
+	if len(args) != 2 || args[0] != "test" || args[1] == "" {
+		return fmt.Errorf("%w: usage: marshal policy test SUITE-FILE", model.ErrInvalid)
+	}
+	report, err := app.RunPolicyTestFile(ctx, args[1])
+	if err != nil {
+		return err
+	}
+	human := fmt.Sprintf("status=%s policy_digest=%s", report.Status, report.PolicyDigest)
+	for _, result := range report.Cases {
+		human += fmt.Sprintf("\n%s=%s", result.ID, result.Status)
+		if result.Diff != "" {
+			human += " diff=" + result.Diff
+		}
+		if result.Reason != "" {
+			human += " reason=" + string(result.Reason)
+		}
+	}
+	if err := c.print(report, human); err != nil {
+		return err
+	}
+	switch report.Status {
+	case policytest.StatusPass:
+		return nil
+	case policytest.StatusError:
+		return policytest.ErrCaseInvalid
+	default:
+		return policytest.ErrExpectationMismatch
+	}
 }
 
 func (c command) init(ctx context.Context) error {
