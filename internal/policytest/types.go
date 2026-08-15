@@ -132,7 +132,7 @@ func (g Given) Validate() error {
 
 func (e Expectation) Validate() error {
 	if e.ExpectedError != "" {
-		if e.Decision != "" || len(e.Required) != 0 || len(e.MatchedRules) != 0 {
+		if !validReasonCode(e.ExpectedError) || e.Decision != "" || len(e.Required) != 0 || len(e.MatchedRules) != 0 {
 			return NewError(CodeCaseInvalid)
 		}
 		return nil
@@ -177,15 +177,36 @@ func (r Result) Validate() error {
 		return NewError(CodeCaseInvalid)
 	}
 	switch r.Status {
-	case StatusPass, StatusFail, StatusError:
+	case StatusPass:
+		if r.Reason != "" {
+			return NewError(CodeCaseInvalid)
+		}
+	case StatusFail, StatusError:
+		if r.Reason != "" && !validReasonCode(r.Reason) {
+			return NewError(CodeCaseInvalid)
+		}
 	case StatusSkip:
-		if r.Reason == "" {
+		if !validReasonCode(r.Reason) {
 			return NewError(CodeCaseInvalid)
 		}
 	default:
 		return NewError(CodeCaseInvalid)
 	}
 	return nil
+}
+
+func validReasonCode(code policy.ErrorCode) bool {
+	switch code {
+	case policy.CodeParseError, policy.CodeUnknownField, policy.CodeUnknownAction, policy.CodeConflict,
+		policy.CodeDeny,
+		policy.CodeAuthorizationDenied, policy.CodeAuthorizationAllowed, policy.CodeAuthorizationUnavailable,
+		policy.CodeAuthorizationInvalid, policy.CodeAuthorizationStale,
+		policy.ErrorCode(CodeCaseInvalid), policy.ErrorCode(CodeExpectationMismatch), policy.ErrorCode(CodeRunInvalid),
+		policy.ErrorCode(CodeStateInvalid), policy.ErrorCode(CodeIllegalTransition), policy.ErrorCode(CodeStaleState):
+		return true
+	default:
+		return false
+	}
 }
 
 func cloneCase(input Case) Case {

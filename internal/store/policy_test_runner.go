@@ -72,7 +72,7 @@ func (s *Store) RunPolicyTest(ctx context.Context, request policytest.RunRequest
 	}
 	facts := make([]policytest.EventFact, 0, len(result.Cases))
 	for _, caseResult := range result.Cases {
-		if caseResult.Result.Status != policytest.StatusPass && caseResult.Result.Status != policytest.StatusFail {
+		if caseResult.Result.Status != policytest.StatusPass && caseResult.Result.Status != policytest.StatusFail && caseResult.Result.Status != policytest.StatusError {
 			continue
 		}
 		fact := policytest.EventFact{
@@ -101,17 +101,61 @@ func (s *Store) RunPolicyTest(ctx context.Context, request policytest.RunRequest
 		}
 		facts = append(facts, fact)
 	}
-	if err := s.appendPolicyTestCaseEvents(ctx, facts); err != nil {
-		return policytest.RunResult{}, err
-	}
 	target := policytest.StateFailed
 	if result.Status == policytest.StatusPass {
 		target = policytest.StatePassed
 	}
-	if _, err := s.authorizedRunTransition(ctx, request, run, target); err != nil {
+	if _, err := s.authorizedRunTransitionWithCaseEvents(ctx, request, run, target, facts); err != nil {
 		return policytest.RunResult{}, err
 	}
 	return result, nil
+}
+
+func (s *Store) authorizedRunTransitionWithCaseEvents(ctx context.Context, base policytest.RunRequest, run policytest.TestRun, target policytest.RunState, facts []policytest.EventFact) (policytest.TestRun, error) {
+	authRequest := policytest.AuthorizationRequest{
+		SubjectID: base.SubjectID, SessionID: base.SessionID, TaskID: base.TaskID, ChangeID: base.ChangeID,
+		RunID: run.ID, PolicyID: run.PolicyID, Binding: run.Binding, TestFileDigest: run.TestFileDigest,
+		ExpectedState: run.State, TargetState: target, Action: policytest.ActionTransition,
+	}
+	if err := authRequest.Validate(); err != nil {
+		return policytest.TestRun{}, err
+	}
+	if base.Authorizer == nil {
+		return policytest.TestRun{}, policy.ErrAuthorizationUnavailable
+	}
+	decision, err := base.Authorizer.AuthorizePolicyTestRun(ctx, authRequest)
+	if err != nil {
+		return policytest.TestRun{}, policy.ErrAuthorizationUnavailable
+	}
+	if err := decision.ValidateFor(authRequest); err != nil {
+		return policytest.TestRun{}, err
+	}
+	fact, emit := policytest.EventFact{}, false
+	if candidate, ok := policytest.EventForTransition(authRequest); ok {
+		fact, emit = candidate, true
+	}
+	sort.Slice(facts, func(i, j int) bool { return facts[i].CaseID < facts[j].CaseID })
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+	}
+	defer tx.Rollback()
+	var lifecycle *policytest.EventFact
+	if emit {
+		lifecycle = &fact
+	}
+	if err := s.transitionPolicyTestRunStateTx(ctx, tx, authRequest.RunID, authRequest.ExpectedState, authRequest.TargetState, &authRequest, lifecycle); err != nil {
+		return policytest.TestRun{}, err
+	}
+	for _, caseFact := range facts {
+		if err := s.appendPolicyTestEvent(ctx, tx, caseFact); err != nil {
+			return policytest.TestRun{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
+	}
+	return s.GetPolicyTestRun(ctx, authRequest.RunID)
 }
 
 func (s *Store) authorizedRunTransition(ctx context.Context, base policytest.RunRequest, run policytest.TestRun, target policytest.RunState) (policytest.TestRun, error) {
@@ -121,25 +165,4 @@ func (s *Store) authorizedRunTransition(ctx context.Context, base policytest.Run
 		ExpectedState: run.State, TargetState: target, Action: policytest.ActionTransition,
 	}
 	return s.TransitionPolicyTestRunStateAuthorized(ctx, authRequest, base.Authorizer)
-}
-
-func (s *Store) appendPolicyTestCaseEvents(ctx context.Context, facts []policytest.EventFact) error {
-	if len(facts) == 0 {
-		return nil
-	}
-	sort.Slice(facts, func(i, j int) bool { return facts[i].CaseID < facts[j].CaseID })
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("%w: policy test case event transaction unavailable", model.ErrUnavailable)
-	}
-	defer tx.Rollback()
-	for _, fact := range facts {
-		if err := s.appendPolicyTestEvent(ctx, tx, fact); err != nil {
-			return err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("%w: policy test case event transaction unavailable", model.ErrUnavailable)
-	}
-	return nil
 }

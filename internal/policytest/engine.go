@@ -75,7 +75,11 @@ func evaluateCase(ctx context.Context, testCase Case, evaluator Evaluator) Resul
 		return Result{Name: string(testCase.ID), Status: StatusFail, Reason: policy.ErrorCode(CodeExpectationMismatch), Diff: "expected error, evaluator returned decision"}
 	}
 	if evalErr != nil {
-		return Result{Name: string(testCase.ID), Status: StatusError, Reason: policy.ReasonCode(evalErr)}
+		reason := policy.ReasonCode(evalErr)
+		if !validReasonCode(reason) {
+			reason = policy.ErrorCode(CodeCaseInvalid)
+		}
+		return Result{Name: string(testCase.ID), Status: StatusError, Reason: reason}
 	}
 	if err := decision.Validate(); err != nil {
 		return Result{Name: string(testCase.ID), Status: StatusError, Reason: policy.ReasonCode(err)}
