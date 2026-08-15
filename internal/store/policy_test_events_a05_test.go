@@ -220,6 +220,54 @@ func TestPolicyTestRunEventAuthorizerSecretNeverPersists(t *testing.T) {
 	}
 }
 
+func TestPolicyTestRunMultiStoreLoserHasNoSuccessEvent(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "policy-test-events-multistore.db")
+	first, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	if err := first.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	run := a03TestRun(t, "run-events-multistore")
+	if err := first.PutPolicyTestRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	req := a04Request(run)
+	authorizer := policyTestAuthorizer(func(_ context.Context, got policytest.AuthorizationRequest) (policytest.AuthorizationDecision, error) {
+		return a04Allowed(got), nil
+	})
+	if _, err := first.TransitionPolicyTestRunStateAuthorized(ctx, req, authorizer); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := second.TransitionPolicyTestRunStateAuthorized(ctx, req, authorizer); err == nil {
+		t.Fatal("stale second store unexpectedly succeeded")
+	}
+	events, err := first.ListEvents(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, event := range events {
+		if event.Type == string(policytest.EventStarted) {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("success events after multi-store race=%d", count)
+	}
+}
+
 func TestPolicyTestRunTerminalEventUsesLifecycleOnly(t *testing.T) {
 	ctx := context.Background()
 	st := openTestStore(t)
