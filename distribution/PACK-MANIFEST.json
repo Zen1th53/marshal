@@ -816,8 +816,8 @@
     },
     {
       "path": "docs/structured-events.md",
-      "sha256": "ac33b25265fd0c046cd37c1c8dc3fc8d5cdf67944994aa0b6ed64a1115d183af",
-      "bytes": 1268
+      "sha256": "331287551fb36abe0e7e4f2f19ecef9d7c3f3ad765398d2ae5d985e5e46fa287",
+      "bytes": 2276
     },
     {
       "path": "docs/superpowers/plans/2026-08-11-agent-runtime-plane-plan.md",
@@ -1295,6 +1295,11 @@
       "bytes": 13623
     },
     {
+      "path": "internal/events/release_a10_test.go",
+      "sha256": "c0f92e4bbb4e4ba1148985baeec01853322b8a96bd2047c2dc3cbf38484aa5ab",
+      "bytes": 565
+    },
+    {
       "path": "internal/events/security_a04_test.go",
       "sha256": "ec91a5fd5c5d1d395af39c871ea26b0b1d1fc8ed167bb51f74e663f9f969a3b1",
       "bytes": 7453
@@ -1758,6 +1763,11 @@
       "path": "internal/store/events_a08_concurrency_test.go",
       "sha256": "6a464474b57b39b1df071e8a1ca4ec992ede9355d78adb1996f5fd53bb22a22c",
       "bytes": 4297
+    },
+    {
+      "path": "internal/store/events_a10_release_test.go",
+      "sha256": "0b69f3389415712dea0d5c661957832c1e62c09cf1bd80ddd552026e08464a1f",
+      "bytes": 2667
     },
     {
       "path": "internal/store/events_authorized_test_helper_test.go",
