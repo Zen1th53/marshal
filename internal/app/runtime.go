@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
+	"github.com/Zen1th53/marshal/internal/dag"
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
@@ -35,6 +36,7 @@ type Runtime struct {
 	layout            project.Layout
 	store             *store.Store
 	policy            *policy.Engine
+	dag               *dag.Engine
 	adapters          map[string]adapter.Adapter
 	evidenceSanitizer evidence.Sanitizer
 	runtimeInstanceID string
@@ -187,6 +189,11 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		database.Close()
 		return nil, err
 	}
+	dagEngine, err := dag.NewEngine(database)
+	if err != nil {
+		database.Close()
+		return nil, err
+	}
 	instanceID, err := model.NewID("INSTANCE-")
 	if err != nil {
 		database.Close()
@@ -196,6 +203,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		layout:            layout,
 		store:             database,
 		policy:            engine,
+		dag:               dagEngine,
 		adapters:          options.Adapters,
 		evidenceSanitizer: sanitizer,
 		runtimeInstanceID: instanceID,
@@ -307,6 +315,9 @@ func (r *Runtime) Task(ctx context.Context, taskID string) (model.Task, error) {
 }
 
 func (r *Runtime) Claim(ctx context.Context, request ClaimRequest) (ClaimResult, error) {
+	if err := r.ensureDAGReady(ctx, request.TaskID); err != nil {
+		return ClaimResult{}, err
+	}
 	sessionID, err := model.NewID("SESSION-")
 	if err != nil {
 		return ClaimResult{}, err
