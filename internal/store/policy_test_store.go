@@ -45,6 +45,9 @@ func canonicalizeTestRun(run policytest.TestRun) (policytest.TestRun, []byte, po
 // projection. The policy binding is referenced exactly; no policy payload or
 // lifecycle state is copied or changed.
 func (s *Store) PutPolicyTestRun(ctx context.Context, run policytest.TestRun) error {
+	if run.State != "" && run.State != policytest.StateLoaded {
+		return fmt.Errorf("%w: policy test runs must start loaded", model.ErrInvalid)
+	}
 	canonical, _, contentDigest, err := canonicalizeTestRun(run)
 	if err != nil {
 		return err
@@ -165,9 +168,9 @@ func (s *Store) GetPolicyTestRun(ctx context.Context, id string) (policytest.Tes
 	return policytest.CloneTestRun(run), nil
 }
 
-// TransitionPolicyTestRunState performs one validated lifecycle edge using a
-// durable expected-state CAS. Authorization is intentionally deferred to A04.
-func (s *Store) TransitionPolicyTestRunState(ctx context.Context, runID string, expected, target policytest.RunState) (policytest.TestRun, error) {
+// transitionPolicyTestRunState is the store-internal A03 lifecycle primitive.
+// Callers must use the authorized A04 boundary below.
+func (s *Store) transitionPolicyTestRunState(ctx context.Context, runID string, expected, target policytest.RunState) (policytest.TestRun, error) {
 	if !validTestRunID(runID) {
 		return policytest.TestRun{}, fmt.Errorf("%w: invalid policy test run id", model.ErrInvalid)
 	}
@@ -207,6 +210,33 @@ func (s *Store) TransitionPolicyTestRunState(ctx context.Context, runID string, 
 		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
 	}
 	return s.GetPolicyTestRun(ctx, runID)
+}
+
+// TransitionPolicyTestRunStateAuthorized is the sole exported T49 lifecycle
+// mutation boundary. It binds an authorizer decision to the canonical run and
+// then delegates to the A03 expected-state CAS primitive.
+func (s *Store) TransitionPolicyTestRunStateAuthorized(ctx context.Context, request policytest.AuthorizationRequest, authorizer policytest.Authorizer) (policytest.TestRun, error) {
+	if err := request.Validate(); err != nil {
+		return policytest.TestRun{}, err
+	}
+	if authorizer == nil {
+		return policytest.TestRun{}, policy.ErrAuthorizationUnavailable
+	}
+	run, err := s.GetPolicyTestRun(ctx, request.RunID)
+	if err != nil {
+		return policytest.TestRun{}, err
+	}
+	if run.PolicyID != request.PolicyID || run.Binding != request.Binding || run.TestFileDigest != request.TestFileDigest || run.State != request.ExpectedState {
+		return policytest.TestRun{}, policy.ErrAuthorizationStale
+	}
+	decision, err := authorizer.AuthorizePolicyTestRun(ctx, request)
+	if err != nil {
+		return policytest.TestRun{}, policy.ErrAuthorizationUnavailable
+	}
+	if err := decision.ValidateFor(request); err != nil {
+		return policytest.TestRun{}, err
+	}
+	return s.transitionPolicyTestRunState(ctx, request.RunID, request.ExpectedState, request.TargetState)
 }
 
 func validTestRunID(value string) bool {

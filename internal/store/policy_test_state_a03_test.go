@@ -24,7 +24,7 @@ func TestPolicyTestRunRejectsIllegalStateTransition(t *testing.T) {
 	if err := st.PutPolicyTestRun(ctx, run); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.TransitionPolicyTestRunState(ctx, run.ID, policytest.StateLoaded, policytest.StatePassed); !errors.Is(err, model.ErrInvalid) {
+	if _, err := st.transitionPolicyTestRunState(ctx, run.ID, policytest.StateLoaded, policytest.StatePassed); !errors.Is(err, model.ErrInvalid) {
 		t.Fatalf("illegal transition error = %v, want invalid", err)
 	}
 }
@@ -49,7 +49,7 @@ func TestPolicyTestRunLifecycleCASPreservesBindingAndRestart(t *testing.T) {
 		t.Fatalf("initial state = %s, err=%v; want loaded", initial.State, err)
 	}
 	for _, edge := range [][2]policytest.RunState{{policytest.StateLoaded, policytest.StateValidated}, {policytest.StateValidated, policytest.StateExecuted}, {policytest.StateExecuted, policytest.StatePassed}} {
-		if _, err := st.TransitionPolicyTestRunState(ctx, run.ID, edge[0], edge[1]); err != nil {
+		if _, err := st.transitionPolicyTestRunState(ctx, run.ID, edge[0], edge[1]); err != nil {
 			t.Fatalf("transition %s -> %s: %v", edge[0], edge[1], err)
 		}
 	}
@@ -99,15 +99,15 @@ func TestPolicyTestRunStaleCASAndCancellationDoNotMutate(t *testing.T) {
 	if err := first.PutPolicyTestRun(ctx, run); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.TransitionPolicyTestRunState(ctx, run.ID, policytest.StateLoaded, policytest.StateValidated); err != nil {
+	if _, err := first.transitionPolicyTestRunState(ctx, run.ID, policytest.StateLoaded, policytest.StateValidated); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := second.TransitionPolicyTestRunState(ctx, run.ID, policytest.StateLoaded, policytest.StateValidated); !errors.Is(err, model.ErrConflict) {
+	if _, err := second.transitionPolicyTestRunState(ctx, run.ID, policytest.StateLoaded, policytest.StateValidated); !errors.Is(err, model.ErrConflict) {
 		t.Fatalf("stale transition error = %v, want conflict", err)
 	}
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	if _, err := first.TransitionPolicyTestRunState(cancelled, run.ID, policytest.StateValidated, policytest.StateExecuted); err == nil {
+	if _, err := first.transitionPolicyTestRunState(cancelled, run.ID, policytest.StateValidated, policytest.StateExecuted); err == nil {
 		t.Fatal("cancelled transition unexpectedly succeeded")
 	}
 	got, err := first.GetPolicyTestRun(ctx, run.ID)
