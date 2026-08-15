@@ -1355,6 +1355,21 @@
       "bytes": 763
     },
     {
+      "path": "internal/policytest/contracts_test.go",
+      "sha256": "e2922d97f8465694de9237ce857f71d05164d6f9a8e21fe222894daddf4c6758",
+      "bytes": 5391
+    },
+    {
+      "path": "internal/policytest/errors.go",
+      "sha256": "32e3ec023a68623d2c372be48711c8311ee5905e035a9af13f9b27b5f5d35b29",
+      "bytes": 960
+    },
+    {
+      "path": "internal/policytest/types.go",
+      "sha256": "cab701b9a08df15f11cadfde11ad9b5bcc38e75d6f950921faef6d4e8ef1e655",
+      "bytes": 5889
+    },
+    {
       "path": "internal/project/layout.go",
       "sha256": "fb3dce5c72a9cb0b421cb1e7c4ebdc127405d51cd8d2c9d1c27fd514e3163a26",
       "bytes": 4102
