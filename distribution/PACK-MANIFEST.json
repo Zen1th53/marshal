@@ -810,6 +810,11 @@
       "bytes": 2710
     },
     {
+      "path": "docs/structured-events.md",
+      "sha256": "ac33b25265fd0c046cd37c1c8dc3fc8d5cdf67944994aa0b6ed64a1115d183af",
+      "bytes": 1268
+    },
+    {
       "path": "docs/superpowers/plans/2026-08-11-agent-runtime-plane-plan.md",
       "sha256": "727e75ea63b9fc5b388e70e93d55e407fba77aa6ed462824dfec50f2e20fa402",
       "bytes": 3264
@@ -1200,6 +1205,11 @@
       "bytes": 999
     },
     {
+      "path": "internal/events/benchmark_test.go",
+      "sha256": "752effbf884693a76f082fe64229098ffd862c634ee24a8f533b5a45b7dc5441",
+      "bytes": 1626
+    },
+    {
       "path": "internal/events/bus.go",
       "sha256": "a169c08b2a064097a3650bab10de135ca6a9c3ad7ad4a65a2bf9581cf3dbe310",
       "bytes": 2345
@@ -1216,8 +1226,8 @@
     },
     {
       "path": "internal/events/engine.go",
-      "sha256": "7bcd5c8c2e5fb5bf0375b9e39b4ada21db70fac28b65665008e508e41d5bde38",
-      "bytes": 6287
+      "sha256": "38a805edd26e114f59db091e1207a64ad59924df47887af8a861e9ab01cad73c",
+      "bytes": 7801
     },
     {
       "path": "internal/events/engine_a02_test.go",
@@ -1243,6 +1253,16 @@
       "path": "internal/events/fuzz_a07_test.go",
       "sha256": "187bc8b0bc91dd47d8fe70aae67b780df5fe11b64b9f65124d5e23f553c84762",
       "bytes": 4518
+    },
+    {
+      "path": "internal/events/metrics.go",
+      "sha256": "90a6f91fca88d4234806986921a7d360b37c755f784f82e53f1b26dde853f3f3",
+      "bytes": 2350
+    },
+    {
+      "path": "internal/events/metrics_a09_test.go",
+      "sha256": "c532a4f220492fdad953f00334e069f659bb6cceaefc2ee885808ea379d0adf7",
+      "bytes": 3073
     },
     {
       "path": "internal/events/registry.go",
