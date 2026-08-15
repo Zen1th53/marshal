@@ -183,3 +183,25 @@ func (s *Store) GetPolicy(ctx context.Context, id policy.PolicyID, version polic
 func (s *Store) GetPolicyVersion(ctx context.Context, id policy.PolicyID, version policy.PolicyVersion) (PolicyRecord, error) {
 	return s.GetPolicy(ctx, id, version)
 }
+
+// GetActivePolicy selects the sole lifecycle-authoritative policy snapshot.
+// Ambiguous or missing active state is fail-closed for runtime callers.
+func (s *Store) GetActivePolicy(ctx context.Context) (PolicyRecord, error) {
+	var id string
+	var version int64
+	err := s.db.QueryRowContext(ctx, `SELECT policy_id, version FROM policy_versions WHERE state = ? ORDER BY policy_id, version LIMIT 2`, string(policy.StateActive)).Scan(&id, &version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PolicyRecord{}, fmt.Errorf("%w: active policy not found", model.ErrNotFound)
+	}
+	if err != nil {
+		return PolicyRecord{}, fmt.Errorf("read active policy: %w", err)
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM policy_versions WHERE state = ?`, string(policy.StateActive)).Scan(&count); err != nil {
+		return PolicyRecord{}, fmt.Errorf("count active policies: %w", err)
+	}
+	if count != 1 {
+		return PolicyRecord{}, fmt.Errorf("%w: active policy selection is ambiguous", model.ErrConflict)
+	}
+	return s.GetPolicy(ctx, policy.PolicyID(id), policy.PolicyVersion(version))
+}
