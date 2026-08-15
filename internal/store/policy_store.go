@@ -20,6 +20,7 @@ type PolicyRecord struct {
 	Binding     policy.PolicyBinding
 	SourceRef   string
 	Status      string
+	State       policy.State
 	ActivatedAt *time.Time
 }
 
@@ -46,6 +47,9 @@ func (r PolicyRecord) validate() ([]byte, error) {
 	}
 	if r.ActivatedAt != nil && r.ActivatedAt.IsZero() {
 		return nil, fmt.Errorf("%w: invalid policy activation time", model.ErrInvalid)
+	}
+	if r.State != "" && !r.State.Valid() {
+		return nil, fmt.Errorf("%w: invalid policy lifecycle state", model.ErrInvalid)
 	}
 	return r.Policy.CanonicalJSON()
 }
@@ -78,6 +82,10 @@ func (s *Store) putPolicyOnce(ctx context.Context, record PolicyRecord) error {
 	if record.ActivatedAt != nil {
 		activatedAt = record.ActivatedAt.UTC().Format(time.RFC3339Nano)
 	}
+	state := record.State
+	if state == "" {
+		state = policy.StateLoaded
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -85,15 +93,15 @@ func (s *Store) putPolicyOnce(ctx context.Context, record PolicyRecord) error {
 	}
 	defer tx.Rollback()
 
-	var storedDigest, storedPayload, storedSource, storedStatus, storedActivated string
+	var storedDigest, storedPayload, storedSource, storedStatus, storedState, storedActivated string
 	var storedGeneration int64
 	err = tx.QueryRowContext(ctx, `
-		SELECT digest, generation, source_ref, normalized_rules, status, COALESCE(activated_at, '')
+		SELECT digest, generation, source_ref, normalized_rules, status, state, COALESCE(activated_at, '')
 		FROM policy_versions WHERE policy_id = ? AND version = ?
-	`, string(record.Policy.ID), int64(record.Policy.Version)).Scan(&storedDigest, &storedGeneration, &storedSource, &storedPayload, &storedStatus, &storedActivated)
+	`, string(record.Policy.ID), int64(record.Policy.Version)).Scan(&storedDigest, &storedGeneration, &storedSource, &storedPayload, &storedStatus, &storedState, &storedActivated)
 	if err == nil {
 		if storedDigest == string(record.Binding.Digest) && storedGeneration == int64(record.Binding.Generation) &&
-			storedSource == record.SourceRef && storedPayload == string(canonical) && storedStatus == status && storedActivated == activatedAt {
+			storedSource == record.SourceRef && storedPayload == string(canonical) && storedStatus == status && storedState == string(state) && storedActivated == activatedAt {
 			return nil
 		}
 		return fmt.Errorf("%w: policy version is immutable", model.ErrConflict)
@@ -102,9 +110,9 @@ func (s *Store) putPolicyOnce(ctx context.Context, record PolicyRecord) error {
 		return fmt.Errorf("read policy version: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO policy_versions(policy_id, version, digest, generation, source_ref, normalized_rules, status, activated_at)
-		VALUES(?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''))
-	`, string(record.Policy.ID), int64(record.Policy.Version), string(record.Binding.Digest), int64(record.Binding.Generation), record.SourceRef, string(canonical), status, activatedAt); err != nil {
+		INSERT INTO policy_versions(policy_id, version, digest, generation, source_ref, normalized_rules, status, state, activated_at)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''))
+	`, string(record.Policy.ID), int64(record.Policy.Version), string(record.Binding.Digest), int64(record.Binding.Generation), record.SourceRef, string(canonical), status, string(state), activatedAt); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique constraint") {
 			return fmt.Errorf("%w: policy version is immutable", model.ErrConflict)
 		}
@@ -124,12 +132,12 @@ func (s *Store) PutPolicyVersion(ctx context.Context, p policy.Policy, binding p
 
 // GetPolicy loads and revalidates a policy snapshot from durable state.
 func (s *Store) GetPolicy(ctx context.Context, id policy.PolicyID, version policy.PolicyVersion) (PolicyRecord, error) {
-	var digest, payload, source, status, activated string
+	var digest, payload, source, status, stateText, activated string
 	var generation int64
 	err := s.db.QueryRowContext(ctx, `
-		SELECT digest, generation, source_ref, normalized_rules, status, COALESCE(activated_at, '')
+		SELECT digest, generation, source_ref, normalized_rules, status, state, COALESCE(activated_at, '')
 		FROM policy_versions WHERE policy_id = ? AND version = ?
-	`, string(id), int64(version)).Scan(&digest, &generation, &source, &payload, &status, &activated)
+	`, string(id), int64(version)).Scan(&digest, &generation, &source, &payload, &status, &stateText, &activated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PolicyRecord{}, fmt.Errorf("%w: policy version not found", model.ErrNotFound)
 	}
@@ -151,6 +159,10 @@ func (s *Store) GetPolicy(ctx context.Context, id policy.PolicyID, version polic
 	if len(source) > 1024 {
 		return PolicyRecord{}, fmt.Errorf("%w: invalid durable policy source reference", model.ErrInvalid)
 	}
+	state := policy.State(stateText)
+	if !state.Valid() {
+		return PolicyRecord{}, fmt.Errorf("%w: invalid durable policy lifecycle state", model.ErrInvalid)
+	}
 	binding := policy.PolicyBinding{Version: version, Digest: computed, Generation: uint64(generation)}
 	if err := binding.Validate(); err != nil {
 		return PolicyRecord{}, fmt.Errorf("%w: invalid durable policy binding", model.ErrInvalid)
@@ -164,7 +176,7 @@ func (s *Store) GetPolicy(ctx context.Context, id policy.PolicyID, version polic
 		parsed = parsed.UTC()
 		activatedAt = &parsed
 	}
-	return PolicyRecord{Policy: p, Binding: binding, SourceRef: source, Status: status, ActivatedAt: activatedAt}, nil
+	return PolicyRecord{Policy: p, Binding: binding, SourceRef: source, Status: status, State: state, ActivatedAt: activatedAt}, nil
 }
 
 // GetPolicyVersion is an explicit alias for versioned policy lookup.
