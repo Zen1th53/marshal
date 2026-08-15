@@ -1146,8 +1146,8 @@
     },
     {
       "path": "internal/dag/engine.go",
-      "sha256": "2c277021551a8ae0e754e8ad4678447cb1a41d09426d8854a65e6ae91a93d673",
-      "bytes": 12220
+      "sha256": "f163d2651a7d91c259ee1166997c52984ce54f6c5141bdcfcbd7b1c8d05ab0af",
+      "bytes": 12634
     },
     {
       "path": "internal/dag/errors.go",
@@ -1166,13 +1166,13 @@
     },
     {
       "path": "internal/dag/metrics.go",
-      "sha256": "eb0309afbdf64a3a342d2894089b812c2e1d9ecc80c0dac47807e7aed558425a",
-      "bytes": 2212
+      "sha256": "3c354b688ce4f29f31bd9cc75e63c63977bbbd89cf39936056cc64aad1c1a4df",
+      "bytes": 2382
     },
     {
       "path": "internal/dag/metrics_a09_test.go",
-      "sha256": "3049cb379147c60b0f033df5fa0e095ac973ec549eb0bd8700656fa1d93dc2ff",
-      "bytes": 1722
+      "sha256": "f0f1c63975ef97e5676bae584db07f3e3beca4a0495b2bc0c50386cc65d949bc",
+      "bytes": 2768
     },
     {
       "path": "internal/dag/security_a04_test.go",

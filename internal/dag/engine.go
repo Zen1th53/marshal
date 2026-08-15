@@ -216,7 +216,17 @@ func (e *Engine) Ready(ctx context.Context, id TaskID) (result Readiness, err er
 
 // Transition applies one explicit lifecycle edge. Moving to ready is allowed
 // only when canonical predecessor state currently satisfies every dependency.
-func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target NodeStatus) (Node, error) {
+func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target NodeStatus) (result Node, err error) {
+	started := time.Now()
+	defer func() {
+		outcome := MetricOutcomeSuccess
+		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrAuthorizationUnavailable) || errors.Is(err, ErrAuthorizationStale) {
+			outcome = MetricOutcomeDenied
+		} else if err != nil {
+			outcome = MetricOutcomeError
+		}
+		e.metrics.Observe(MetricOperationTransition, outcome, time.Since(started))
+	}()
 	if !CanTransition(expected, target) {
 		return Node{}, ErrInvalidNode
 	}
@@ -241,15 +251,15 @@ func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target Nod
 		return Node{}, err
 	}
 	eventType := ""
-	result := ""
+	eventResult := ""
 	switch target {
 	case StatusReady:
-		eventType, result = "dag.node.ready", "ready"
+		eventType, eventResult = "dag.node.ready", "ready"
 	case StatusBlocked:
-		eventType, result = "dag.node.blocked", "blocked"
+		eventType, eventResult = "dag.node.blocked", "blocked"
 	}
 	if eventType != "" {
-		if eventErr := e.emitMutationEvent(ctx, eventType, decision, "", nodeResource(id), result, Code(""), string(target), ""); eventErr != nil {
+		if eventErr := e.emitMutationEvent(ctx, eventType, decision, "", nodeResource(id), eventResult, Code(""), string(target), ""); eventErr != nil {
 			return stored, eventErr
 		}
 	}

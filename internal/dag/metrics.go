@@ -12,14 +12,16 @@ const (
 	MetricOperationAddEdge     MetricOperation = "add_edge"
 	MetricOperationReady       MetricOperation = "ready"
 	MetricOperationTopological MetricOperation = "topological"
+	MetricOperationTransition  MetricOperation = "transition"
 	MetricOutcomeSuccess       MetricOutcome   = "success"
 	MetricOutcomeBlocked       MetricOutcome   = "blocked"
 	MetricOutcomeCycleRejected MetricOutcome   = "cycle_rejected"
+	MetricOutcomeDenied        MetricOutcome   = "denied"
 	MetricOutcomeError         MetricOutcome   = "error"
 )
 
-var dagMetricOperations = map[MetricOperation]struct{}{MetricOperationAddEdge: {}, MetricOperationReady: {}, MetricOperationTopological: {}}
-var dagMetricOutcomes = map[MetricOutcome]struct{}{MetricOutcomeSuccess: {}, MetricOutcomeBlocked: {}, MetricOutcomeCycleRejected: {}, MetricOutcomeError: {}}
+var dagMetricOperations = map[MetricOperation]struct{}{MetricOperationAddEdge: {}, MetricOperationReady: {}, MetricOperationTopological: {}, MetricOperationTransition: {}}
+var dagMetricOutcomes = map[MetricOutcome]struct{}{MetricOutcomeSuccess: {}, MetricOutcomeBlocked: {}, MetricOutcomeCycleRejected: {}, MetricOutcomeDenied: {}, MetricOutcomeError: {}}
 
 type MetricsSnapshot struct {
 	Observations        map[MetricOperation]uint64
