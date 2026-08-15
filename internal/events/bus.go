@@ -3,11 +3,14 @@ package events
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // MemoryBus is a lossy, non-authoritative live fan-out. Durable Store history
 // remains the source of truth and missed events are recovered with Since.
 type dropHook func(context.Context, Event) error
+
+const dropHookTimeout = 250 * time.Millisecond
 
 type MemoryBus struct {
 	mu          sync.Mutex
@@ -59,7 +62,18 @@ func (b *MemoryBus) Publish(ctx context.Context, event Event) error {
 	hook := b.dropHook
 	b.mu.Unlock()
 	if dropped && hook != nil {
-		if err := hook(ctx, copy); err != nil {
+		hookCtx, cancel := context.WithTimeout(ctx, dropHookTimeout)
+		result := make(chan error, 1)
+		go func() { result <- hook(hookCtx, copy) }()
+		select {
+		case err := <-result:
+			cancel()
+			if err != nil {
+				return NewError(CodeStoreFailed, err)
+			}
+		case <-hookCtx.Done():
+			err := hookCtx.Err()
+			cancel()
 			return NewError(CodeStoreFailed, err)
 		}
 	}

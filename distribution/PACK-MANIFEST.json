@@ -1201,13 +1201,18 @@
     },
     {
       "path": "internal/events/bus.go",
-      "sha256": "0e28558e7d498ac2b15092f3f67733754e37617ddd7209f3121647d4727ffcf4",
-      "bytes": 2014
+      "sha256": "a169c08b2a064097a3650bab10de135ca6a9c3ad7ad4a65a2bf9581cf3dbe310",
+      "bytes": 2345
     },
     {
       "path": "internal/events/bus_a02_test.go",
       "sha256": "583e64b5ad40f494982c3596c100a9476d3687729f72110b2ce594a260e2ffb5",
       "bytes": 794
+    },
+    {
+      "path": "internal/events/bus_a08_test.go",
+      "sha256": "29c8faddfdaac153bcd8470696b0eeabd9773fb15d0903e866e17c263d069ee1",
+      "bytes": 2067
     },
     {
       "path": "internal/events/engine.go",
@@ -1693,6 +1698,11 @@
       "path": "internal/store/events_a07_adversarial_test.go",
       "sha256": "f8ebdac5b91346941dc17a2042e09842b23fd27ebd86ff5c11ec4b449c77163c",
       "bytes": 5060
+    },
+    {
+      "path": "internal/store/events_a08_concurrency_test.go",
+      "sha256": "6a464474b57b39b1df071e8a1ca4ec992ede9355d78adb1996f5fd53bb22a22c",
+      "bytes": 4297
     },
     {
       "path": "internal/store/events_authorized_test_helper_test.go",
