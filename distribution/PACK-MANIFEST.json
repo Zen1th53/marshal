@@ -46,8 +46,8 @@
     },
     {
       "path": ".gitignore",
-      "sha256": "32a315b3ec56346eabf822b76896e3e4c08cb1018411fbd80818c41506b1cb5c",
-      "bytes": 174
+      "sha256": "047fefa24363a1b386cb5675bb7f0283a50aa91ca61665e33e9186bf85fb237b",
+      "bytes": 187
     },
     {
       "path": "AGENT-BOOTSTRAP.md",
@@ -840,6 +840,16 @@
       "bytes": 11821
     },
     {
+      "path": "docs/superpowers/plans/2026-08-15-t29-dynamic-dag.md",
+      "sha256": "bdaad7e1005b66826be53fbfde6a8656081fdde71a43bc398a0e27f198a1bebf",
+      "bytes": 11189
+    },
+    {
+      "path": "docs/superpowers/plans/2026-08-15-t43-structured-event-stream.md",
+      "sha256": "380add564ab8aa5852c8bd262032952a8e240af4a0d7e3e0f224b69e35d2a4d6",
+      "bytes": 10162
+    },
+    {
       "path": "docs/superpowers/plans/2026-08-15-t49-a05-events-evidence.md",
       "sha256": "6825bfc7f935027d3432ef0bf51fea8c8932e035251ca43e9945e6f21af55df0",
       "bytes": 7824
@@ -878,6 +888,11 @@
       "path": "docs/superpowers/specs/2026-08-14-marshal-clean-break-design.md",
       "sha256": "9a3e8b8eaeb1b041cb892536e8a8344cc9a230c7e581eb70474fb48b37674ddc",
       "bytes": 3528
+    },
+    {
+      "path": "docs/superpowers/specs/2026-08-15-terra-completion-execution-design.md",
+      "sha256": "8eda5a7e27cb0a962474e75f8fd787b913f7db06466768a2448a74c6f7b9a7bb",
+      "bytes": 8850
     },
     {
       "path": "docs/troubleshooting.md",
@@ -1073,6 +1088,21 @@
       "path": "internal/cli/policy_test_a10_release_test.go",
       "sha256": "d1610bd0f758851dd31d752d36bdac33cb67e585f4373bc1d87123e974551df4",
       "bytes": 1222
+    },
+    {
+      "path": "internal/dag/errors.go",
+      "sha256": "f0f24003a6edb26ee60f1afd7bd0caf8b8d87328b94b58aaac47e55eb3406877",
+      "bytes": 2053
+    },
+    {
+      "path": "internal/dag/types.go",
+      "sha256": "67037e91eb3be03015fc5bc6a4e51acfc45eb278d4b198880abca11c4ba7a02e",
+      "bytes": 4599
+    },
+    {
+      "path": "internal/dag/types_test.go",
+      "sha256": "afc0030c83b071b07aca2e11adb70717ae036d59b22e678292511c6e2bf59100",
+      "bytes": 2809
     },
     {
       "path": "internal/doctor/doctor.go",
