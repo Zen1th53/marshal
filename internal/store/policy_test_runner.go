@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
@@ -15,7 +16,9 @@ import (
 // snapshot. Case outcomes are returned as an ephemeral CI result; durable
 // security history is the bounded A05 case event stream, while the immutable
 // A02 run projection remains unchanged.
-func (s *Store) RunPolicyTest(ctx context.Context, request policytest.RunRequest) (policytest.RunResult, error) {
+func (s *Store) RunPolicyTest(ctx context.Context, request policytest.RunRequest) (result policytest.RunResult, resultErr error) {
+	started := time.Now()
+	defer func() { s.observePolicyTestMetric(result.Status, resultErr, started) }()
 	if err := request.TestFileDigest.Validate(); err != nil {
 		return policytest.RunResult{}, err
 	}
@@ -78,7 +81,7 @@ func (s *Store) RunPolicyTest(ctx context.Context, request policytest.RunRequest
 		}
 		return policytest.RunResult{}, err
 	}
-	result, err := policytest.RunSuite(ctx, suite, request.Evaluator)
+	result, err = policytest.RunSuite(ctx, suite, request.Evaluator)
 	if err != nil {
 		_ = s.releasePolicyTestExecution(ctx, run.ID, owner)
 		return policytest.RunResult{}, err
@@ -190,6 +193,7 @@ func (s *Store) authorizedRunTransitionWithCaseEvents(ctx context.Context, base 
 	if err := tx.Commit(); err != nil {
 		return policytest.TestRun{}, fmt.Errorf("%w: policy test transition unavailable", model.ErrUnavailable)
 	}
+	s.adjustActivePolicyTestClaims(-1)
 	return s.GetPolicyTestRun(ctx, authRequest.RunID)
 }
 

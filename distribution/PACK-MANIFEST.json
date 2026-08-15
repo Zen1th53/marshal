@@ -706,8 +706,8 @@
     },
     {
       "path": "docs/cli.md",
-      "sha256": "5d5fdbd8fdcaaf3a0b83e08fd2215e06d0e5d101f0a85358589ae06bac125d73",
-      "bytes": 6343
+      "sha256": "c7c883b6b46bff7025153e6c24e3acc0bcbb0898226598f6d721fb42ade770ce",
+      "bytes": 7020
     },
     {
       "path": "docs/concepts.md",
@@ -786,8 +786,8 @@
     },
     {
       "path": "docs/policy-as-code.md",
-      "sha256": "b5ef3c8229c343af92b4c0e8592aa73dbae143975d798cb0a18f89e007977b62",
-      "bytes": 2981
+      "sha256": "b62722d76f46a1e2c2355a3ba698d9dd390e4c48a3d5c156ec0aeb31abace3e7",
+      "bytes": 5196
     },
     {
       "path": "docs/providers.md",
@@ -1091,13 +1091,13 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "a62f86617b9794e5f6bbd7917741130966d720f0042f79f55d2951380c76a096",
-      "bytes": 6692
+      "sha256": "912a8c62fb8d49689ff49dc7b5ef3f6bdde018d8d5481f97cc23475deabb1eb4",
+      "bytes": 7524
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
-      "sha256": "3ee7f6618eddf8b04a69a06acd46b5d90171a1e713370a3b1b4664f1563e686a",
-      "bytes": 1454
+      "sha256": "05669b00159f7a09003a2d5a6aa1acb1eacffe6f0fab34dff793da4654c6b2d5",
+      "bytes": 2208
     },
     {
       "path": "internal/evidence/metrics_test.go",
@@ -1420,6 +1420,11 @@
       "bytes": 311
     },
     {
+      "path": "internal/policytest/performance_a09_test.go",
+      "sha256": "a8b085f38a90f85d3cf983a0a5445bdf2c7a2810253a33bbaa009f292568dee8",
+      "bytes": 2599
+    },
+    {
       "path": "internal/policytest/run.go",
       "sha256": "b62f9b95b0c039cbe6730b26b03876e72d5f5edb3fbc1858b4b7a58c3b0d7078",
       "bytes": 1718
@@ -1576,8 +1581,8 @@
     },
     {
       "path": "internal/store/metrics.go",
-      "sha256": "b2062dade8feb60c5d3b0b5f148b55836541b1d51931f5fb62912876f2c3924b",
-      "bytes": 2010
+      "sha256": "a95de2d4a1836938226d48d61aa2b87ed057a1c7b4dd126e5213f986c98476f7",
+      "bytes": 3465
     },
     {
       "path": "internal/store/migrations.go",
@@ -1621,8 +1626,8 @@
     },
     {
       "path": "internal/store/policy_metrics_a09_test.go",
-      "sha256": "1d449955c4ddbeaa1c60c22130d55119783b9edb937f0af1d88d19010307a856",
-      "bytes": 1672
+      "sha256": "94964ff2cb7c28875b728fa3e4e589c494093e606cdad9b9636b9120dae91d0b",
+      "bytes": 4727
     },
     {
       "path": "internal/store/policy_persistence_a02_test.go",
@@ -1686,13 +1691,13 @@
     },
     {
       "path": "internal/store/policy_test_recovery.go",
-      "sha256": "0a2d964ee5b3e81e6a3b285b8cd5c21cf88ca0db8272c7739904c984b67de14f",
-      "bytes": 4403
+      "sha256": "f1df1cf167411147d883011b1f95cf4a408d5535760fba34ba8734227938aecc",
+      "bytes": 4495
     },
     {
       "path": "internal/store/policy_test_runner.go",
-      "sha256": "d83b8dabbaef2d7f8eed70d3963ca02417969dcad0ba0b1a4d4248621b1e95a6",
-      "bytes": 7995
+      "sha256": "5963cba3d3a604535516212bd7e2f19a2d37bfbce3f139261aeb8cbe11b3ef76",
+      "bytes": 8159
     },
     {
       "path": "internal/store/policy_test_runner_a06_test.go",

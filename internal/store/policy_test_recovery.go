@@ -53,6 +53,7 @@ func (s *Store) claimPolicyTestExecution(ctx context.Context, runID string) (str
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("%w: policy test execution claim unavailable", model.ErrUnavailable)
 	}
+	s.adjustActivePolicyTestClaims(1)
 	return owner, nil
 }
 
@@ -62,6 +63,9 @@ func (s *Store) releasePolicyTestExecution(ctx context.Context, runID, owner str
 		SET execution_owner = '', execution_claimed_at = ''
 		WHERE run_id = ? AND state = 'executed' AND execution_owner = ?
 	`, runID, owner)
+	if err == nil {
+		s.adjustActivePolicyTestClaims(-1)
+	}
 	return err
 }
 
