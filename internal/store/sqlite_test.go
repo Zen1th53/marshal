@@ -36,6 +36,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"policy_versions",
 		"policy_test_runs", "policy_test_cases", "policy_test_outcomes",
 		"dag_nodes", "dag_edges",
+		"structured_events",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
@@ -51,6 +52,12 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX structured_events_by_type",
+		"DROP INDEX structured_events_by_run",
+		"DROP INDEX structured_events_by_evidence",
+		"DROP INDEX structured_events_by_task",
+		"DROP INDEX structured_events_by_sequence",
+		"DROP TABLE structured_events",
 		"DROP INDEX dag_edges_by_to",
 		"DROP INDEX dag_edges_by_from",
 		"DROP TABLE dag_edges",
@@ -94,6 +101,12 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX structured_events_by_type",
+		"DROP INDEX structured_events_by_run",
+		"DROP INDEX structured_events_by_evidence",
+		"DROP INDEX structured_events_by_task",
+		"DROP INDEX structured_events_by_sequence",
+		"DROP TABLE structured_events",
 		"DROP INDEX dag_edges_by_to",
 		"DROP INDEX dag_edges_by_from",
 		"DROP TABLE dag_edges",

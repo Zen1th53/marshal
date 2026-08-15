@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 12
+const LatestSchemaVersion = 13
 
 const schemaV1 = `
 CREATE TABLE projects (
@@ -451,6 +451,35 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 12: %w", err)
 		}
 		version = 12
+	}
+	if version == 12 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE structured_events (
+				sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+				event_id TEXT NOT NULL UNIQUE,
+				event_type TEXT NOT NULL,
+				subject TEXT NOT NULL,
+				task_id TEXT REFERENCES tasks(task_id),
+				run_id TEXT REFERENCES worker_runs(run_id),
+				resource_id TEXT,
+				evidence_id TEXT REFERENCES evidence_nodes(node_id),
+				timestamp TEXT NOT NULL,
+				data_json TEXT NOT NULL DEFAULT '{}',
+				idempotency_key TEXT NOT NULL UNIQUE,
+				content_digest TEXT NOT NULL
+			);
+			CREATE UNIQUE INDEX structured_events_by_sequence ON structured_events(sequence);
+			CREATE INDEX structured_events_by_task ON structured_events(task_id, sequence);
+			CREATE INDEX structured_events_by_evidence ON structured_events(evidence_id, sequence);
+			CREATE INDEX structured_events_by_run ON structured_events(run_id, sequence);
+			CREATE INDEX structured_events_by_type ON structured_events(event_type, sequence);
+		`); err != nil {
+			return fmt.Errorf("apply schema version 13: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(13, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 13: %w", err)
+		}
+		version = 13
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
