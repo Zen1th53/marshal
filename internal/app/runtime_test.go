@@ -26,7 +26,7 @@ func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.SchemaVersion != 7 || status.TaskCount != 0 || status.Project.Repository != repo.Path() {
+	if status.SchemaVersion != 8 || status.TaskCount != 0 || status.Project.Repository != repo.Path() {
 		t.Fatalf("status = %#v", status)
 	}
 	info, err := os.Stat(filepath.Join(repo.Path(), ".marshal"))

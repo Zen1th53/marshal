@@ -222,8 +222,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 7 {
-		return fmt.Errorf("database schema version %d is newer than supported version 7", version)
+	if version > 8 {
+		return fmt.Errorf("database schema version %d is newer than supported version 8", version)
 	}
 	if version == 0 {
 		if _, err := tx.ExecContext(ctx, schemaV1); err != nil {
@@ -342,6 +342,38 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 7: %w", err)
 		}
 		version = 7
+	}
+	if version == 7 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE policy_test_runs (
+				run_id TEXT PRIMARY KEY,
+				policy_id TEXT NOT NULL,
+				policy_version INTEGER NOT NULL CHECK(policy_version > 0),
+				policy_digest TEXT NOT NULL,
+				generation INTEGER NOT NULL CHECK(generation >= 0),
+				test_file_digest TEXT NOT NULL,
+				created_at TEXT NOT NULL,
+				content_digest TEXT NOT NULL
+			);
+			CREATE INDEX policy_test_runs_by_policy
+				ON policy_test_runs(policy_id, policy_version, policy_digest, generation);
+			CREATE TABLE policy_test_cases (
+				run_id TEXT NOT NULL REFERENCES policy_test_runs(run_id) ON DELETE CASCADE,
+				case_id TEXT NOT NULL,
+				status TEXT NOT NULL CHECK(status IN ('PASS','FAIL','ERROR','SKIP')),
+				diff TEXT NOT NULL DEFAULT '',
+				reason TEXT NOT NULL DEFAULT '',
+				PRIMARY KEY(run_id, case_id)
+			);
+			CREATE INDEX policy_test_cases_by_status
+				ON policy_test_cases(run_id, status);
+		`); err != nil {
+			return fmt.Errorf("apply schema version 8: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(8, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 8: %w", err)
+		}
+		version = 8
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

@@ -8,6 +8,7 @@ type ErrorCode string
 const (
 	CodeCaseInvalid         ErrorCode = "POLICYTEST_CASE_INVALID"
 	CodeExpectationMismatch ErrorCode = "POLICYTEST_EXPECTATION_MISMATCH"
+	CodeRunInvalid          ErrorCode = "POLICYTEST_RUN_INVALID"
 )
 
 // Error intentionally exposes only a stable code. Fixture text and evaluator

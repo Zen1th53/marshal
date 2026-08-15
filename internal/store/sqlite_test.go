@@ -23,8 +23,8 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 	if got := queryInt(t, st.db, "PRAGMA foreign_keys"); got != 1 {
 		t.Fatalf("foreign_keys = %d, want 1", got)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 7 {
-		t.Fatalf("schema version = %d, want 7", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 8 {
+		t.Fatalf("schema version = %d, want 8", got)
 	}
 
 	wantTables := []string{
@@ -34,6 +34,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"worker_runs", "verifications",
 		"evidence_nodes", "evidence_edges",
 		"policy_versions",
+		"policy_test_runs", "policy_test_cases",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
