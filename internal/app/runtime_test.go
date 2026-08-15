@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -26,7 +27,7 @@ func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.SchemaVersion != 11 || status.TaskCount != 0 || status.Project.Repository != repo.Path() {
+	if status.SchemaVersion != store.LatestSchemaVersion || status.TaskCount != 0 || status.Project.Repository != repo.Path() {
 		t.Fatalf("status = %#v", status)
 	}
 	info, err := os.Stat(filepath.Join(repo.Path(), ".marshal"))
