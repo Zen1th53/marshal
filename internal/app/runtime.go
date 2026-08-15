@@ -46,6 +46,7 @@ type Options struct {
 	Adapters           map[string]adapter.Adapter
 	EvidenceAuthorizer evidence.Authorizer
 	EvidenceSanitizer  evidence.Sanitizer
+	Metrics            *evidence.MetricsRecorder
 	RuntimePolicy      *RuntimePolicyConfig
 }
 
@@ -164,7 +165,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	if sanitizer == nil {
 		sanitizer = evidence.NewStrictSanitizer(evidence.SanitizerConfig{})
 	}
-	database, err := store.OpenWithSecurity(ctx, layout.Database, sanitizer, options.EvidenceAuthorizer)
+	database, err := store.OpenWithObservability(ctx, layout.Database, sanitizer, options.EvidenceAuthorizer, options.Metrics)
 	if err != nil {
 		return nil, err
 	}

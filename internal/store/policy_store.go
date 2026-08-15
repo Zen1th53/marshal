@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 )
@@ -65,13 +66,18 @@ func (r PolicyRecord) validate() ([]byte, error) {
 // the exact canonical record is idempotent; a different payload for the same
 // policy identity is an immutable conflict.
 func (s *Store) PutPolicy(ctx context.Context, record PolicyRecord) error {
+	started := time.Now()
+	var result error
+	defer func() { s.observePolicyMetric(evidence.MetricOperationPolicyPersist, result, started) }()
 	for attempt := 0; ; attempt++ {
 		err := s.putPolicyOnce(ctx, record)
+		result = err
 		if err == nil || !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
 			return err
 		}
-		if err := waitSQLiteRetry(ctx, attempt); err != nil {
-			return err
+		if waitErr := waitSQLiteRetry(ctx, attempt); waitErr != nil {
+			result = waitErr
+			return waitErr
 		}
 	}
 }
@@ -138,7 +144,9 @@ func (s *Store) PutPolicyVersion(ctx context.Context, p policy.Policy, binding p
 }
 
 // GetPolicy loads and revalidates a policy snapshot from durable state.
-func (s *Store) GetPolicy(ctx context.Context, id policy.PolicyID, version policy.PolicyVersion) (PolicyRecord, error) {
+func (s *Store) GetPolicy(ctx context.Context, id policy.PolicyID, version policy.PolicyVersion) (record PolicyRecord, resultErr error) {
+	started := time.Now()
+	defer func() { s.observePolicyMetric(evidence.MetricOperationPolicyLoad, resultErr, started) }()
 	var digest, payload, source, status, stateText, activated string
 	var generation int64
 	err := s.db.QueryRowContext(ctx, `
@@ -146,10 +154,12 @@ func (s *Store) GetPolicy(ctx context.Context, id policy.PolicyID, version polic
 		FROM policy_versions WHERE policy_id = ? AND version = ?
 	`, string(id), int64(version)).Scan(&digest, &generation, &source, &payload, &status, &stateText, &activated)
 	if errors.Is(err, sql.ErrNoRows) {
-		return PolicyRecord{}, fmt.Errorf("%w: policy version not found", model.ErrNotFound)
+		resultErr = fmt.Errorf("%w: policy version not found", model.ErrNotFound)
+		return PolicyRecord{}, resultErr
 	}
 	if err != nil {
-		return PolicyRecord{}, fmt.Errorf("read policy version: %w", err)
+		resultErr = fmt.Errorf("read policy version: %w", err)
+		return PolicyRecord{}, resultErr
 	}
 	p, err := policy.Parse([]byte(payload))
 	if err != nil {
@@ -178,7 +188,8 @@ func (s *Store) GetPolicy(ctx context.Context, id policy.PolicyID, version polic
 	if activated != "" {
 		parsed, parseErr := time.Parse(time.RFC3339Nano, activated)
 		if parseErr != nil {
-			return PolicyRecord{}, fmt.Errorf("%w: invalid durable activation time", model.ErrInvalid)
+			resultErr = fmt.Errorf("%w: invalid durable activation time", model.ErrInvalid)
+			return PolicyRecord{}, resultErr
 		}
 		parsed = parsed.UTC()
 		activatedAt = &parsed
@@ -193,7 +204,9 @@ func (s *Store) GetPolicyVersion(ctx context.Context, id policy.PolicyID, versio
 
 // GetActivePolicy selects the sole lifecycle-authoritative policy snapshot.
 // Ambiguous or missing active state is fail-closed for runtime callers.
-func (s *Store) GetActivePolicy(ctx context.Context) (PolicyRecord, error) {
+func (s *Store) GetActivePolicy(ctx context.Context) (record PolicyRecord, resultErr error) {
+	started := time.Now()
+	defer func() { s.observePolicyMetric(evidence.MetricOperationPolicyLoad, resultErr, started) }()
 	var id string
 	var version int64
 	err := s.db.QueryRowContext(ctx, `SELECT policy_id, version FROM policy_versions WHERE state = ? ORDER BY policy_id, version LIMIT 2`, string(policy.StateActive)).Scan(&id, &version)

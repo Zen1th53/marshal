@@ -51,6 +51,9 @@ operations to scope, target, commit, status, and expiry. See
 [POLICY-ENGINE.md](../runtime/POLICY-ENGINE.md), and
 [APPROVAL.md](../protocols/APPROVAL.md).
 
+The implemented T48 lifecycle, runtime boundary, metrics, and recovery
+semantics are documented in [Policy-as-Code](policy-as-code.md).
+
 ## Runtime, workers, and adapters
 
 The local daemon owns canonical state and exposes a local Unix-socket API.

@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 )
@@ -127,7 +129,9 @@ func (s *Store) transitionPolicyStateOnce(ctx context.Context, id policy.PolicyI
 // TransitionPolicyStateAuthorized is the sole exported policy lifecycle
 // mutation boundary. It validates an exact, fresh management decision before
 // invoking the store-internal A03 compare-and-set primitive.
-func (s *Store) TransitionPolicyStateAuthorized(ctx context.Context, request policy.PolicyMutationRequest, authorizer policy.ManagementAuthorizer) (PolicyRecord, error) {
+func (s *Store) TransitionPolicyStateAuthorized(ctx context.Context, request policy.PolicyMutationRequest, authorizer policy.ManagementAuthorizer) (record PolicyRecord, resultErr error) {
+	started := time.Now()
+	defer func() { s.observePolicyMetric(evidence.MetricOperationPolicyTransition, resultErr, started) }()
 	if err := request.Validate(); err != nil {
 		return PolicyRecord{}, err
 	}

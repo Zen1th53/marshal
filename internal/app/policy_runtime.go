@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 )
@@ -42,15 +44,31 @@ func (r *Runtime) authorizeRuntime(ctx context.Context, subject, task, provider 
 	if !r.policyConfigured {
 		return nil
 	}
+	started := time.Now()
+	var resultErr error
+	defer func() {
+		if metrics := r.store.Metrics(); metrics != nil {
+			result := evidence.MetricResultSuccess
+			reason := ""
+			if resultErr != nil {
+				result = evidence.MetricResultDenied
+				reason = "POLICY_DENIED"
+			}
+			metrics.Observe(evidence.MetricOperationPolicyRuntimeGate, result, reason, time.Since(started))
+		}
+	}()
 	record, err := r.store.GetPolicy(ctx, r.runtimePolicy.PolicyID, r.runtimePolicy.PolicyVersion)
 	if err != nil || record.State != policy.StateActive {
-		return fmt.Errorf("%w: active runtime policy unavailable", model.ErrPolicyDenied)
+		resultErr = fmt.Errorf("%w: active runtime policy unavailable", model.ErrPolicyDenied)
+		return resultErr
 	}
 	evaluator, err := policy.NewEvaluator(record.Policy)
 	if err != nil {
-		return fmt.Errorf("%w: active runtime policy invalid", model.ErrPolicyDenied)
+		resultErr = fmt.Errorf("%w: active runtime policy invalid", model.ErrPolicyDenied)
+		return resultErr
 	}
-	return executeWithPolicy(ctx, evaluator, record.Binding, policy.EvaluationRequest{
+	resultErr = executeWithPolicy(ctx, evaluator, record.Binding, policy.EvaluationRequest{
 		SubjectID: subject, TaskID: task, Action: action, Resource: resource, Provider: provider,
 	}, func() error { return nil })
+	return resultErr
 }
