@@ -165,6 +165,23 @@ marshal task release <TASK-ID>
 
 ## Execution Commands
 
+### `marshal policy test`
+
+Evaluates a declarative T49 JSON policy-test suite without activating or
+mutating a policy-test lifecycle run. The suite is strictly decoded and bound
+to the exact policy digest supplied by every case.
+
+```bash
+marshal policy test policy-suite.json
+marshal --json policy test policy-suite.json
+```
+
+`PASS` exits `0`. A failed case, evaluator error, malformed/unknown-field
+input, or unavailable file exits non-zero. Use `--json` for automation; the
+typed `status`, `policy_digest`, case status, reason, and stable diff are the
+source of truth rather than human output parsing. Raw fixtures, evaluator
+output, and backend error text are not printed.
+
 ### `marshal run`
 
 Purpose: Executes a ready task using a specified provider adapter and sandbox environment.

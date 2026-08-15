@@ -24,7 +24,7 @@ func TestA09MetricsCardinalityRemainsBoundedForAttackerIdentifiers(t *testing.T)
 }
 
 func TestA09MetricsDoNotRetainSecretBearingErrorText(t *testing.T) {
-	marker := "MARSHAL_TEST_SECRET_T48_A09_METRIC"
+	marker := "MARSHAL_TEST_SECRET_T49_A09_7f4c2b91"
 	recorder := NewMetricsRecorder()
 	recorder.Observe(MetricOperationPolicyRuntimeGate, MetricResultError, marker, time.Millisecond)
 	snapshot := recorder.Snapshot()
@@ -36,5 +36,22 @@ func TestA09MetricsDoNotRetainSecretBearingErrorText(t *testing.T) {
 	}
 	if snapshot.Errors["UNCLASSIFIED"] != 1 {
 		t.Fatalf("unclassified errors = %d, want 1", snapshot.Errors["UNCLASSIFIED"])
+	}
+}
+
+func TestA09MetricsTrackActivePolicyClaimsAsNonAuthoritativeGauge(t *testing.T) {
+	recorder := NewMetricsRecorder()
+	recorder.AddActive(MetricOperationPolicyTest, 1)
+	recorder.AddActive(MetricOperationPolicyTest, 1)
+	if got := recorder.Snapshot().Active[MetricOperationPolicyTest]; got != 2 {
+		t.Fatalf("active policy claims = %d, want 2", got)
+	}
+	recorder.AddActive(MetricOperationPolicyTest, -1)
+	if got := recorder.Snapshot().Active[MetricOperationPolicyTest]; got != 1 {
+		t.Fatalf("active policy claims after one release = %d, want 1", got)
+	}
+	recorder.AddActive(MetricOperationPolicyTest, -1)
+	if got := recorder.Snapshot().Active[MetricOperationPolicyTest]; got != 0 {
+		t.Fatalf("active policy claims after release = %d, want 0", got)
 	}
 }

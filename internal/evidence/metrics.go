@@ -25,6 +25,7 @@ const (
 	MetricOperationPolicyPersist     MetricOperation = "policy_persist"
 	MetricOperationPolicyTransition  MetricOperation = "policy_transition"
 	MetricOperationPolicyRuntimeGate MetricOperation = "policy_runtime_gate"
+	MetricOperationPolicyTest        MetricOperation = "policy_test"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -45,6 +46,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationDigest: {}, MetricOperationAudit: {}, MetricOperationFreshness: {},
 	MetricOperationContention: {}, MetricOperationPolicyLoad: {}, MetricOperationPolicyPersist: {},
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
+	MetricOperationPolicyTest: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
@@ -64,6 +66,7 @@ var metricReasons = map[string]struct{}{
 // MetricsSnapshot is a detached, read-only projection of recorder state.
 type MetricsSnapshot struct {
 	Success             map[MetricOperation]uint64
+	Active              map[MetricOperation]uint64
 	Denied              map[string]uint64
 	Invalid             map[string]uint64
 	Conflict            map[string]uint64
@@ -83,11 +86,32 @@ type MetricsRecorder struct {
 
 func NewMetricsRecorder() *MetricsRecorder {
 	return &MetricsRecorder{snapshot: MetricsSnapshot{
-		Success: make(map[MetricOperation]uint64), Denied: make(map[string]uint64),
+		Success: make(map[MetricOperation]uint64), Active: make(map[MetricOperation]uint64), Denied: make(map[string]uint64),
 		Invalid: make(map[string]uint64), Conflict: make(map[string]uint64),
 		Errors: make(map[string]uint64), Cancelled: make(map[MetricOperation]uint64),
 		Observations: make(map[MetricOperation]uint64), DurationNanoseconds: make(map[MetricOperation]uint64),
 	}}
+}
+
+// AddActive records a bounded, non-authoritative count for an owned active
+// object such as a policy-test execution claim.
+func (r *MetricsRecorder) AddActive(operation MetricOperation, delta int64) {
+	if r == nil || !validMetricOperation(operation) {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	current := r.snapshot.Active[operation]
+	if delta < 0 {
+		decrement := uint64(-delta)
+		if decrement >= current {
+			r.snapshot.Active[operation] = 0
+			return
+		}
+		r.snapshot.Active[operation] = current - decrement
+		return
+	}
+	r.snapshot.Active[operation] = current + uint64(delta)
 }
 
 // Observe records only closed vocabulary values. Unknown operation/result or
@@ -141,6 +165,7 @@ func (r *MetricsRecorder) Snapshot() MetricsSnapshot {
 	defer r.mu.RUnlock()
 	out := r.snapshot
 	out.Success = cloneMetricOperations(r.snapshot.Success)
+	out.Active = cloneMetricOperations(r.snapshot.Active)
 	out.Cancelled = cloneMetricOperations(r.snapshot.Cancelled)
 	out.Observations = cloneMetricOperations(r.snapshot.Observations)
 	out.DurationNanoseconds = cloneMetricOperations(r.snapshot.DurationNanoseconds)
