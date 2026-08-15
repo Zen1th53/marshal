@@ -995,6 +995,26 @@
       "bytes": 5286
     },
     {
+      "path": "internal/app/dag_runtime.go",
+      "sha256": "93772cc1c9f61126b006525e14782f7bc1b179df58ea0265027349b0bb3b8a32",
+      "bytes": 708
+    },
+    {
+      "path": "internal/app/dag_runtime_a06_test.go",
+      "sha256": "db19e4b83f43c657872a212bb04db3c7c75482b44b3724afb1f19e7a3e603ea5",
+      "bytes": 7272
+    },
+    {
+      "path": "internal/app/events_runtime.go",
+      "sha256": "93aa0294e070e6fc92ca5caf28aaf838b36ba979cf710f1011f5d12568c9191b",
+      "bytes": 3859
+    },
+    {
+      "path": "internal/app/events_runtime_a06_test.go",
+      "sha256": "31cff28d06437122a0ee1db9702274a21de643cbe8043981b809390745e215ce",
+      "bytes": 6748
+    },
+    {
       "path": "internal/app/evidence_a08_runtime_test.go",
       "sha256": "5ba02f3eb9de436db0b241a490628ca20ab736d1defc7c9fa3fb4cc15ea2c80d",
       "bytes": 2948
@@ -1046,8 +1066,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "42e52c20a2eb81f8d1d2b236291649402c512a0b33a68fcb512ef5d36b0b3ae8",
-      "bytes": 25505
+      "sha256": "35074926bfe2f5bbe1c4e9c3a116cdda3634ddc41cdbc83568dcde2397d217a1",
+      "bytes": 26663
     },
     {
       "path": "internal/app/runtime_test.go",

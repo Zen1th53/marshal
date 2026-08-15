@@ -19,6 +19,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
 	"github.com/Zen1th53/marshal/internal/dag"
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
@@ -39,6 +40,7 @@ type Runtime struct {
 	dag               *dag.Engine
 	adapters          map[string]adapter.Adapter
 	evidenceSanitizer evidence.Sanitizer
+	eventStream       *events.Engine
 	runtimeInstanceID string
 	runtimePolicy     RuntimePolicyConfig
 	policyConfigured  bool
@@ -50,6 +52,9 @@ type Options struct {
 	EvidenceSanitizer  evidence.Sanitizer
 	Metrics            *evidence.MetricsRecorder
 	RuntimePolicy      *RuntimePolicyConfig
+	EventAuthorizer    events.Authorizer
+	EventFreshness     events.FreshnessValidator
+	EventBus           events.Bus
 }
 
 type Status struct {
@@ -199,6 +204,22 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		database.Close()
 		return nil, err
 	}
+	var eventStream *events.Engine
+	if options.EventAuthorizer != nil || options.EventFreshness != nil || options.EventBus != nil {
+		if options.EventAuthorizer == nil || options.EventFreshness == nil {
+			database.Close()
+			return nil, events.ErrAuthorizationUnavailable
+		}
+		bus := options.EventBus
+		if bus == nil {
+			bus = events.NewMemoryBus(64)
+		}
+		eventStream, err = events.NewObservedEngine(database, bus, runtimeEventIdentityProvider{}, options.EventAuthorizer, options.EventFreshness)
+		if err != nil {
+			database.Close()
+			return nil, err
+		}
+	}
 	rt := &Runtime{
 		layout:            layout,
 		store:             database,
@@ -206,6 +227,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		dag:               dagEngine,
 		adapters:          options.Adapters,
 		evidenceSanitizer: sanitizer,
+		eventStream:       eventStream,
 		runtimeInstanceID: instanceID,
 	}
 	if options.RuntimePolicy != nil {
@@ -315,6 +337,16 @@ func (r *Runtime) Task(ctx context.Context, taskID string) (model.Task, error) {
 }
 
 func (r *Runtime) Claim(ctx context.Context, request ClaimRequest) (ClaimResult, error) {
+	if r.eventStream != nil {
+		if existing, ok, err := r.reconcileClaim(ctx, request); err != nil {
+			return ClaimResult{}, err
+		} else if ok {
+			if err := r.recordLeaseAcquired(ctx, existing); err != nil {
+				return existing, err
+			}
+			return existing, nil
+		}
+	}
 	if err := r.ensureDAGReady(ctx, request.TaskID); err != nil {
 		return ClaimResult{}, err
 	}
@@ -341,7 +373,11 @@ func (r *Runtime) Claim(ctx context.Context, request ClaimRequest) (ClaimResult,
 	if err != nil {
 		return ClaimResult{}, err
 	}
-	return ClaimResult{Lease: lease, Session: session}, nil
+	claim := ClaimResult{Lease: lease, Session: session}
+	if err := r.recordLeaseAcquired(ctx, claim); err != nil {
+		return claim, err
+	}
+	return claim, nil
 }
 
 func (r *Runtime) Release(ctx context.Context, request ReleaseRequest) error {
