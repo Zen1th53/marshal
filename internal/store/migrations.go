@@ -222,8 +222,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 4 {
-		return fmt.Errorf("database schema version %d is newer than supported version 4", version)
+	if version > 7 {
+		return fmt.Errorf("database schema version %d is newer than supported version 7", version)
 	}
 	if version == 0 {
 		if _, err := tx.ExecContext(ctx, schemaV1); err != nil {
@@ -286,6 +286,62 @@ func (s *Store) Migrate(ctx context.Context) error {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(4, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 4: %w", err)
 		}
+		version = 4
+	}
+	if version == 4 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE policy_versions (
+				policy_id TEXT NOT NULL,
+				version INTEGER NOT NULL CHECK(version > 0),
+				digest TEXT NOT NULL,
+				generation INTEGER NOT NULL CHECK(generation >= 0),
+				source_ref TEXT NOT NULL DEFAULT '',
+				normalized_rules TEXT NOT NULL,
+				status TEXT NOT NULL CHECK(status IN ('draft','active','retired')),
+				activated_at TEXT,
+				PRIMARY KEY(policy_id, version),
+				UNIQUE(policy_id, version, digest)
+			);
+			CREATE INDEX policy_versions_by_digest ON policy_versions(digest);
+			CREATE INDEX policy_versions_by_generation ON policy_versions(policy_id, generation);
+		`); err != nil {
+			return fmt.Errorf("apply schema version 5: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(5, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 5: %w", err)
+		}
+		version = 5
+	}
+	if version == 5 {
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE policy_versions ADD COLUMN state TEXT NOT NULL DEFAULT 'loaded'
+			CHECK(state IN ('loaded','validated','active','superseded'));
+		`); err != nil {
+			return fmt.Errorf("apply schema version 6: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(6, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 6: %w", err)
+		}
+		version = 6
+	}
+	if version == 6 {
+		var active int
+		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM policy_versions WHERE state = 'active'").Scan(&active); err != nil {
+			return fmt.Errorf("check active policy uniqueness: %w", err)
+		}
+		if active > 1 {
+			return fmt.Errorf("active policy set is ambiguous: %d active policies", active)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			CREATE UNIQUE INDEX policy_versions_one_active
+			ON policy_versions(state) WHERE state = 'active'
+		`); err != nil {
+			return fmt.Errorf("apply schema version 7: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(7, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 7: %w", err)
+		}
+		version = 7
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

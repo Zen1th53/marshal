@@ -71,7 +71,8 @@ func TestA08MultiStoreConflictingTransitionHasOneCanonicalOutcome(t *testing.T) 
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "evidence.db")
 	sanitizer := evidence.NewStrictSanitizer(evidence.SanitizerConfig{})
-	first, err := OpenWithSecurity(ctx, path, sanitizer, a08AllowingAuthorizer{})
+	authorizer := newA08BarrierAuthorizer()
+	first, err := OpenWithSecurity(ctx, path, sanitizer, authorizer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +80,7 @@ func TestA08MultiStoreConflictingTransitionHasOneCanonicalOutcome(t *testing.T) 
 	if err := first.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	second, err := OpenWithSecurity(ctx, path, evidence.NewStrictSanitizer(evidence.SanitizerConfig{}), a08AllowingAuthorizer{})
+	second, err := OpenWithSecurity(ctx, path, evidence.NewStrictSanitizer(evidence.SanitizerConfig{}), authorizer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,6 +104,11 @@ func TestA08MultiStoreConflictingTransitionHasOneCanonicalOutcome(t *testing.T) 
 		}(st)
 	}
 	close(start)
+	go func() {
+		<-authorizer.ready
+		<-authorizer.ready
+		close(authorizer.release)
+	}()
 	wg.Wait()
 	close(results)
 	successes := 0
@@ -261,6 +267,29 @@ func TestA08LostResponseRetrySurvivesReopenWithoutDuplicateAudit(t *testing.T) {
 }
 
 type a08AllowingAuthorizer struct{}
+
+type a08BarrierAuthorizer struct {
+	ready   chan struct{}
+	release chan struct{}
+}
+
+func newA08BarrierAuthorizer() *a08BarrierAuthorizer {
+	return &a08BarrierAuthorizer{ready: make(chan struct{}, 2), release: make(chan struct{})}
+}
+
+func (a *a08BarrierAuthorizer) Authorize(ctx context.Context, request evidence.AccessRequest) (evidence.AuthorizationDecision, error) {
+	select {
+	case a.ready <- struct{}{}:
+	case <-ctx.Done():
+		return evidence.AuthorizationDecision{}, ctx.Err()
+	}
+	select {
+	case <-a.release:
+	case <-ctx.Done():
+		return evidence.AuthorizationDecision{}, ctx.Err()
+	}
+	return a08AllowingAuthorizer{}.Authorize(ctx, request)
+}
 
 func (a08AllowingAuthorizer) Authorize(_ context.Context, request evidence.AccessRequest) (evidence.AuthorizationDecision, error) {
 	return evidence.AuthorizationDecision{

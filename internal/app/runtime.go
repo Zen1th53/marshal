@@ -38,12 +38,16 @@ type Runtime struct {
 	adapters          map[string]adapter.Adapter
 	evidenceSanitizer evidence.Sanitizer
 	runtimeInstanceID string
+	runtimePolicy     RuntimePolicyConfig
+	policyConfigured  bool
 }
 
 type Options struct {
 	Adapters           map[string]adapter.Adapter
 	EvidenceAuthorizer evidence.Authorizer
 	EvidenceSanitizer  evidence.Sanitizer
+	Metrics            *evidence.MetricsRecorder
+	RuntimePolicy      *RuntimePolicyConfig
 }
 
 type Status struct {
@@ -161,7 +165,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	if sanitizer == nil {
 		sanitizer = evidence.NewStrictSanitizer(evidence.SanitizerConfig{})
 	}
-	database, err := store.OpenWithSecurity(ctx, layout.Database, sanitizer, options.EvidenceAuthorizer)
+	database, err := store.OpenWithObservability(ctx, layout.Database, sanitizer, options.EvidenceAuthorizer, options.Metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -195,6 +199,10 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		adapters:          options.Adapters,
 		evidenceSanitizer: sanitizer,
 		runtimeInstanceID: instanceID,
+	}
+	if options.RuntimePolicy != nil {
+		rt.runtimePolicy = *options.RuntimePolicy
+		rt.policyConfigured = true
 	}
 	_ = rt.ReconcileStartup(ctx)
 	return rt, nil
@@ -355,6 +363,9 @@ func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResu
 	if len(request.Command) == 0 {
 		request.Command = []string{"python", "conformance/runner.py", "validate-pack"}
 	}
+	if err := r.authorizeRuntime(ctx, "verification", "", "", policy.Action("verify"), policy.Resource(request.Command[0])); err != nil {
+		return VerifyResult{}, err
+	}
 	process := worker.New(15*time.Minute, 3*time.Second, 8<<20)
 	result, err := process.Run(ctx, adapter.Command{Path: request.Command[0], Args: request.Command[1:], Dir: r.layout.Root})
 	if err != nil {
@@ -377,6 +388,10 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	task, err := r.store.GetTask(ctx, request.TaskID)
 	if err != nil {
 		return RunResult{}, err
+	}
+	if gateErr := r.authorizeRuntime(ctx, request.AgentID, task.ID, request.Adapter,
+		policy.Action("shell.execute"), policy.Resource(r.layout.Root)); gateErr != nil {
+		return RunResult{}, gateErr
 	}
 	claim, err := r.Claim(ctx, ClaimRequest{TaskID: task.ID, AgentID: request.AgentID, ExpectedRevision: request.ExpectedRevision})
 	if err != nil {

@@ -11,16 +11,20 @@ import (
 type MetricOperation string
 
 const (
-	MetricOperationPutNode    MetricOperation = "put_node"
-	MetricOperationGet        MetricOperation = "get"
-	MetricOperationLink       MetricOperation = "link"
-	MetricOperationNeighbors  MetricOperation = "neighbors"
-	MetricOperationTransition MetricOperation = "transition"
-	MetricOperationSanitize   MetricOperation = "sanitize"
-	MetricOperationDigest     MetricOperation = "digest"
-	MetricOperationAudit      MetricOperation = "audit"
-	MetricOperationFreshness  MetricOperation = "freshness"
-	MetricOperationContention MetricOperation = "contention"
+	MetricOperationPutNode           MetricOperation = "put_node"
+	MetricOperationGet               MetricOperation = "get"
+	MetricOperationLink              MetricOperation = "link"
+	MetricOperationNeighbors         MetricOperation = "neighbors"
+	MetricOperationTransition        MetricOperation = "transition"
+	MetricOperationSanitize          MetricOperation = "sanitize"
+	MetricOperationDigest            MetricOperation = "digest"
+	MetricOperationAudit             MetricOperation = "audit"
+	MetricOperationFreshness         MetricOperation = "freshness"
+	MetricOperationContention        MetricOperation = "contention"
+	MetricOperationPolicyLoad        MetricOperation = "policy_load"
+	MetricOperationPolicyPersist     MetricOperation = "policy_persist"
+	MetricOperationPolicyTransition  MetricOperation = "policy_transition"
+	MetricOperationPolicyRuntimeGate MetricOperation = "policy_runtime_gate"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -39,7 +43,8 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationPutNode: {}, MetricOperationGet: {}, MetricOperationLink: {},
 	MetricOperationNeighbors: {}, MetricOperationTransition: {}, MetricOperationSanitize: {},
 	MetricOperationDigest: {}, MetricOperationAudit: {}, MetricOperationFreshness: {},
-	MetricOperationContention: {},
+	MetricOperationContention: {}, MetricOperationPolicyLoad: {}, MetricOperationPolicyPersist: {},
+	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
@@ -53,6 +58,7 @@ var metricReasons = map[string]struct{}{
 	string(CodeDigestMismatch): {}, string(CodeImmutable): {},
 	string(CodeInvalidEdge): {}, string(CodeSecretRejected): {},
 	string(CodeInvalidState): {}, "SQLITE_BUSY": {}, "SQLITE_RETRY_EXHAUSTED": {},
+	"POLICY_CONFLICT": {}, "POLICY_DENIED": {}, "POLICY_ERROR": {},
 }
 
 // MetricsSnapshot is a detached, read-only projection of recorder state.

@@ -8,7 +8,7 @@ not provide transactional concurrency or process enforcement by itself.
 
 ## Local runtime mode
 
-Runtime `v0.4.0` is implemented in Go. A local daemon exposes HTTP/JSON over a mode-`0600` Unix socket and stores canonical live coordination state in SQLite schema version 2. The project-local `.marshal/` directory contains the database, socket, logs, artifacts, and task worktrees and is excluded from Git.
+Runtime `v0.4.0` is implemented in Go. A local daemon exposes HTTP/JSON over a mode-`0600` Unix socket and stores canonical live coordination state in SQLite. The current MARSHAL schema is version 7. The project-local `.marshal/` directory contains the database, socket, logs, artifacts, and task worktrees and is excluded from Git.
 
 Implemented behavior includes:
 
@@ -45,6 +45,8 @@ and full remote protocol servers remain specifications. No PostgreSQL, Redis,
 message broker, or distributed consensus dependency is part of Runtime V1.
 
 Canonical references:
+
+- [Policy-as-Code](policy-as-code.md)
 
 - [runtime/README.md](../runtime/README.md)
 - [runtime/ARCHITECTURE.md](../runtime/ARCHITECTURE.md)

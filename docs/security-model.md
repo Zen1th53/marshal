@@ -53,4 +53,8 @@ See [TENANCY.md](../protocols/TENANCY.md),
 [INTEROP.md](../protocols/INTEROP.md), and
 [runtime/THREAT-MODEL.md](../runtime/THREAT-MODEL.md).
 
+For the implemented T48 management/runtime authority split, lifecycle
+freshness, fail-closed behavior, and concurrency limits, see
+[Policy-as-Code](policy-as-code.md).
+
 Report vulnerabilities through [SECURITY.md](../SECURITY.md).
