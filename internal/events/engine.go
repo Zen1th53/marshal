@@ -13,6 +13,7 @@ type Engine struct {
 	identity   IdentityProvider
 	authorizer Authorizer
 	freshness  FreshnessValidator
+	selfAudit  bool
 	now        func() time.Time
 }
 
@@ -37,6 +38,21 @@ func NewAuthorizedEngine(store Store, bus Bus, identity IdentityProvider, author
 	return engine, nil
 }
 
+// NewObservedEngine enables A05 lifecycle audit facts. Derived audit events are
+// appended directly to the same durable Store so they cannot recursively
+// audit themselves through Process.
+func NewObservedEngine(store Store, bus Bus, identity IdentityProvider, authorizer Authorizer, freshness FreshnessValidator) (*Engine, error) {
+	engine, err := NewAuthorizedEngine(store, bus, identity, authorizer, freshness)
+	if err != nil {
+		return nil, err
+	}
+	engine.selfAudit = true
+	if setter, ok := bus.(interface{ setDropHook(dropHook) }); ok {
+		setter.setDropHook(engine.recordSubscriberDropped)
+	}
+	return engine, nil
+}
+
 // Process executes the explicit T43 producer lifecycle. The returned state
 // makes a post-commit/live-delivery failure distinguishable from a failure
 // before canonical persistence without treating process memory as authority.
@@ -46,9 +62,15 @@ func (e *Engine) Process(ctx context.Context, event Event) (DeliveryResult, erro
 		return result, NewError(CodeStoreFailed, err)
 	}
 	if err := event.Validate(); err != nil {
+		if e.selfAudit {
+			if auditErr := e.recordSchemaRejected(ctx, event, err); auditErr != nil {
+				return result, auditErr
+			}
+		}
 		return result, err
 	}
-	if err := e.authorize(ctx, event); err != nil {
+	decision, err := e.authorize(ctx, event)
+	if err != nil {
 		return result, err
 	}
 	if err := advanceDelivery(&result, StateValidated); err != nil {
@@ -67,8 +89,21 @@ func (e *Engine) Process(ctx context.Context, event Event) (DeliveryResult, erro
 		return result, err
 	}
 
+	var audit Event
+	if e.selfAudit {
+		audit, err = e.recordAppended(ctx, stored, decision)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	if err := e.bus.Publish(ctx, stored); err != nil {
 		return result, NewError(CodeStoreFailed, err)
+	}
+	if e.selfAudit && audit.ID != "" {
+		if err := e.bus.Publish(ctx, audit); err != nil {
+			return result, NewError(CodeStoreFailed, err)
+		}
 	}
 	if err := advanceDelivery(&result, StatePublished); err != nil {
 		return result, err
@@ -76,41 +111,41 @@ func (e *Engine) Process(ctx context.Context, event Event) (DeliveryResult, erro
 	return result, nil
 }
 
-func (e *Engine) authorize(ctx context.Context, event Event) error {
+func (e *Engine) authorize(ctx context.Context, event Event) (AuthorizationDecision, error) {
 	if e.identity == nil || e.authorizer == nil || e.freshness == nil {
-		return ErrAuthorizationUnavailable
+		return AuthorizationDecision{}, ErrAuthorizationUnavailable
 	}
 	identity, err := e.identity.Identity(ctx)
 	if err != nil {
-		return NewError(CodeAuthorizationUnavailable, err)
+		return AuthorizationDecision{}, NewError(CodeAuthorizationUnavailable, err)
 	}
 	if !identity.valid() {
-		return ErrAuthorizationDenied
+		return AuthorizationDecision{}, ErrAuthorizationDenied
 	}
 	// Subject/task/run claims in the payload may narrow to the authenticated
 	// context but can never impersonate a different canonical identity.
 	if event.Subject != identity.SubjectID || (event.TaskID != "" && event.TaskID != identity.TaskID) ||
 		(event.RunID != "" && event.RunID != identity.RunID) {
-		return ErrAuthorizationDenied
+		return AuthorizationDecision{}, ErrAuthorizationDenied
 	}
 	request := authorizationRequestFor(identity, event)
 	if !request.valid() {
-		return ErrAuthorizationDenied
+		return AuthorizationDecision{}, ErrAuthorizationDenied
 	}
 	decision, err := e.authorizer.Authorize(ctx, request)
 	if err != nil {
-		return NewError(CodeAuthorizationUnavailable, err)
+		return AuthorizationDecision{}, NewError(CodeAuthorizationUnavailable, err)
 	}
 	if err := decision.validateFor(request, e.now()); err != nil {
-		return err
+		return AuthorizationDecision{}, err
 	}
 	if err := e.freshness.ValidateFreshness(ctx, request, decision); err != nil {
-		return NewError(CodeAuthorizationStale, err)
+		return AuthorizationDecision{}, NewError(CodeAuthorizationStale, err)
 	}
 	if err := ctx.Err(); err != nil {
-		return NewError(CodeAuthorizationUnavailable, err)
+		return AuthorizationDecision{}, NewError(CodeAuthorizationUnavailable, err)
 	}
-	return nil
+	return decision, nil
 }
 
 // Append preserves the A02 producer API while delegating lifecycle semantics

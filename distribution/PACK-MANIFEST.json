@@ -1146,8 +1146,8 @@
     },
     {
       "path": "internal/events/bus.go",
-      "sha256": "73bcb5f25b427143803d23f2e4a6bb5f9ab7d9f1bcab932b864a547cd365e225",
-      "bytes": 1811
+      "sha256": "0e28558e7d498ac2b15092f3f67733754e37617ddd7209f3121647d4727ffcf4",
+      "bytes": 2014
     },
     {
       "path": "internal/events/bus_a02_test.go",
@@ -1156,8 +1156,8 @@
     },
     {
       "path": "internal/events/engine.go",
-      "sha256": "efe30bb1810162aa77c8a63de64216685effe971937ec50de3ca875dccdc85c7",
-      "bytes": 4961
+      "sha256": "7bcd5c8c2e5fb5bf0375b9e39b4ada21db70fac28b65665008e508e41d5bde38",
+      "bytes": 6287
     },
     {
       "path": "internal/events/engine_a02_test.go",

@@ -7,11 +7,14 @@ import (
 
 // MemoryBus is a lossy, non-authoritative live fan-out. Durable Store history
 // remains the source of truth and missed events are recovered with Since.
+type dropHook func(context.Context, Event) error
+
 type MemoryBus struct {
 	mu          sync.Mutex
 	buffer      int
 	nextID      uint64
 	subscribers map[uint64]*memorySubscriber
+	dropHook    dropHook
 }
 
 type memorySubscriber struct {
@@ -27,6 +30,12 @@ func NewMemoryBus(buffer int) *MemoryBus {
 	return &MemoryBus{buffer: buffer, subscribers: make(map[uint64]*memorySubscriber)}
 }
 
+func (b *MemoryBus) setDropHook(hook dropHook) {
+	b.mu.Lock()
+	b.dropHook = hook
+	b.mu.Unlock()
+}
+
 func (b *MemoryBus) Publish(ctx context.Context, event Event) error {
 	if err := ctx.Err(); err != nil {
 		return NewError(CodeStoreFailed, err)
@@ -36,7 +45,7 @@ func (b *MemoryBus) Publish(ctx context.Context, event Event) error {
 	}
 	copy := CloneEvent(event)
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	dropped := false
 	for _, subscriber := range b.subscribers {
 		if copy.Sequence <= subscriber.after {
 			continue
@@ -44,8 +53,14 @@ func (b *MemoryBus) Publish(ctx context.Context, event Event) error {
 		select {
 		case subscriber.ch <- CloneEvent(copy):
 		default:
-			// A live subscriber is allowed to miss an event; recovery is from
-			// durable sequence history. A08 adds explicit drop accounting.
+			dropped = true
+		}
+	}
+	hook := b.dropHook
+	b.mu.Unlock()
+	if dropped && hook != nil {
+		if err := hook(ctx, copy); err != nil {
+			return NewError(CodeStoreFailed, err)
 		}
 	}
 	return nil
