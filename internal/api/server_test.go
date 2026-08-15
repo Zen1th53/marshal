@@ -13,6 +13,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -39,7 +40,7 @@ func TestUnixServerVersionStatusAndLifecycle(t *testing.T) {
 		t.Fatalf("version=%#v request_id=%q", version, requestID)
 	}
 	status, _, err := client.Status(context.Background())
-	if err != nil || status.SchemaVersion != 12 {
+	if err != nil || status.SchemaVersion != store.LatestSchemaVersion {
 		t.Fatalf("status=%#v err=%v", status, err)
 	}
 

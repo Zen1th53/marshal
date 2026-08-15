@@ -10,6 +10,8 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
+const LatestSchemaVersion = 12
+
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -224,6 +226,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	if version > 12 {
 		return fmt.Errorf("database schema version %d is newer than supported version 12", version)
+	if version > LatestSchemaVersion {
+		return fmt.Errorf("database schema version %d is newer than supported version %d", version, LatestSchemaVersion)
 	}
 	if version == 0 {
 		if _, err := tx.ExecContext(ctx, schemaV1); err != nil {
@@ -422,28 +426,32 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if version == 11 {
 		if _, err := tx.ExecContext(ctx, `
 			CREATE TABLE IF NOT EXISTS structured_events (
-				event_id TEXT NOT NULL UNIQUE,
-				sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-				event_type TEXT NOT NULL,
-				subject TEXT NOT NULL DEFAULT '',
-				task_id TEXT NOT NULL DEFAULT '',
-				run_id TEXT NOT NULL DEFAULT '',
-				resource_id TEXT NOT NULL DEFAULT '',
-				evidence_id TEXT NOT NULL DEFAULT '',
-				at TEXT NOT NULL,
-				data_json TEXT NOT NULL DEFAULT '{}',
-				idempotency_key TEXT UNIQUE
+				event_id TEXT NOT NULL UNIQUE, sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+				event_type TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', task_id TEXT NOT NULL DEFAULT '',
+				run_id TEXT NOT NULL DEFAULT '', resource_id TEXT NOT NULL DEFAULT '', evidence_id TEXT NOT NULL DEFAULT '',
+				at TEXT NOT NULL, data_json TEXT NOT NULL DEFAULT '{}', idempotency_key TEXT UNIQUE
 			);
 			CREATE UNIQUE INDEX IF NOT EXISTS structured_events_by_sequence ON structured_events(sequence);
 			CREATE INDEX IF NOT EXISTS structured_events_by_task_sequence ON structured_events(task_id, sequence);
 			CREATE INDEX IF NOT EXISTS structured_events_by_run_sequence ON structured_events(run_id, sequence);
 			CREATE INDEX IF NOT EXISTS structured_events_by_type_sequence ON structured_events(event_type, sequence);
-		`); err != nil {
-			return fmt.Errorf("apply schema version 12: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(12, ?)", utcNow()); err != nil {
-			return fmt.Errorf("record schema version 12: %w", err)
-		}
+			CREATE TABLE dag_nodes (
+				task_id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('task','gate')),
+				status TEXT NOT NULL CHECK(status IN ('pending','ready','running','completed','failed','blocked','skipped')),
+				priority INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+				created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+			);
+			CREATE INDEX dag_nodes_by_status_priority ON dag_nodes(status, priority DESC, task_id);
+			CREATE TABLE dag_edges (
+				from_task TEXT NOT NULL REFERENCES dag_nodes(task_id) ON DELETE CASCADE,
+				to_task TEXT NOT NULL REFERENCES dag_nodes(task_id) ON DELETE CASCADE,
+				condition TEXT NOT NULL CHECK(condition IN ('completed','failed','blocked','skipped')),
+				created_at TEXT NOT NULL, PRIMARY KEY(from_task, to_task), CHECK(from_task <> to_task)
+			);
+			CREATE INDEX dag_edges_by_from ON dag_edges(from_task, to_task);
+			CREATE INDEX dag_edges_by_to ON dag_edges(to_task, from_task);
+		`); err != nil { return fmt.Errorf("apply schema version 12: %w", err) }
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(12, ?)", utcNow()); err != nil { return fmt.Errorf("record schema version 12: %w", err) }
 		version = 12
 	}
 	if err := tx.Commit(); err != nil {
