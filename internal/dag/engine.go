@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"time"
 )
 
 // Backend is the narrow persistence contract consumed by the T29 service.
@@ -19,18 +20,43 @@ type Backend interface {
 	TransitionDAGNode(context.Context, TaskID, NodeStatus, NodeStatus) (Node, error)
 }
 
-// Engine implements canonical DAG service logic over durable state.
-type Engine struct{ backend Backend }
+// Engine implements canonical DAG service logic over durable state. Mutation
+// methods fail closed unless an authenticated identity source and authorizer
+// are explicitly injected. Read-only graph queries remain available.
+type Engine struct {
+	backend    Backend
+	identity   IdentityProvider
+	authorizer Authorizer
+	freshness  FreshnessValidator
+	now        func() time.Time
+}
 
 func NewEngine(backend Backend) (*Engine, error) {
 	if backend == nil {
 		return nil, ErrInvalidRequest
 	}
-	return &Engine{backend: backend}, nil
+	return &Engine{backend: backend, now: func() time.Time { return time.Now().UTC() }}, nil
+}
+
+func NewAuthorizedEngine(backend Backend, identity IdentityProvider, authorizer Authorizer, freshness FreshnessValidator) (*Engine, error) {
+	engine, err := NewEngine(backend)
+	if err != nil {
+		return nil, err
+	}
+	if identity == nil || authorizer == nil || freshness == nil {
+		return nil, ErrAuthorizationUnavailable
+	}
+	engine.identity = identity
+	engine.authorizer = authorizer
+	engine.freshness = freshness
+	return engine, nil
 }
 
 func (e *Engine) AddNode(ctx context.Context, request AddNodeRequest) (Node, error) {
 	if err := request.Validate(); err != nil {
+		return Node{}, err
+	}
+	if err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddNode, Resource: nodeResource(request.Node.TaskID)}); err != nil {
 		return Node{}, err
 	}
 	// New graph history always starts pending. Later lifecycle movement must use
@@ -43,6 +69,9 @@ func (e *Engine) AddNode(ctx context.Context, request AddNodeRequest) (Node, err
 
 func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, error) {
 	if err := request.Validate(); err != nil {
+		return Edge{}, err
+	}
+	if err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddEdge, Resource: edgeResource(request.Edge)}); err != nil {
 		return Edge{}, err
 	}
 	// Reconcile an exact semantic retry before applying new-edge constraints.
@@ -120,6 +149,9 @@ func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target Nod
 	if !CanTransition(expected, target) {
 		return Node{}, ErrInvalidNode
 	}
+	if err := e.authorize(ctx, AuthorizationRequest{Action: ActionTransition, Resource: nodeResource(id), ExpectedState: expected, TargetState: target}); err != nil {
+		return Node{}, err
+	}
 	if target == StatusReady {
 		readiness, err := e.Ready(ctx, id)
 		if err != nil {
@@ -130,6 +162,37 @@ func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target Nod
 		}
 	}
 	return e.backend.TransitionDAGNode(ctx, id, expected, target)
+}
+
+func (e *Engine) authorize(ctx context.Context, request AuthorizationRequest) error {
+	if err := ctx.Err(); err != nil {
+		return NewError(CodeAuthorizationUnavailable, err)
+	}
+	if e.identity == nil || e.authorizer == nil || e.freshness == nil {
+		return ErrAuthorizationUnavailable
+	}
+	identity, err := e.identity.Identity(ctx)
+	if err != nil {
+		return NewError(CodeAuthorizationUnavailable, err)
+	}
+	request.Identity = identity
+	if !request.valid() {
+		return ErrAuthorizationDenied
+	}
+	decision, err := e.authorizer.Authorize(ctx, request)
+	if err != nil {
+		return NewError(CodeAuthorizationUnavailable, err)
+	}
+	if err := decision.validateFor(request, e.now()); err != nil {
+		return err
+	}
+	if err := e.freshness.ValidateFreshness(ctx, request, decision); err != nil {
+		return NewError(CodeAuthorizationStale, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return NewError(CodeAuthorizationUnavailable, err)
+	}
+	return nil
 }
 
 func (e *Engine) Topological(ctx context.Context) ([]Node, error) {
