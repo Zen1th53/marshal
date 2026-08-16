@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -732,10 +733,11 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 		}
 		if chosen.Level == model.IsolationBwrap {
 			readOnlyBinds := []model.Bind{{Source: binary, Target: binary}}
-			gitMetadata := filepath.Join(r.layout.Root, ".git")
-			if info, statErr := os.Stat(gitMetadata); statErr == nil && info.IsDir() {
-				readOnlyBinds = append(readOnlyBinds, model.Bind{Source: gitMetadata, Target: gitMetadata})
+			gitBinds, gitErr := gitMetadataBinds(worktreePath)
+			if gitErr != nil {
+				return nil, fmt.Errorf("inspect worktree git metadata: %w", gitErr)
 			}
+			readOnlyBinds = append(readOnlyBinds, gitBinds...)
 
 			var extraEnv []string
 			var writableTmpfs []string
@@ -830,6 +832,65 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	default:
 		return nil, fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
 	}
+}
+
+// gitMetadataBinds preserves Git's linked-worktree metadata inside the
+// sandbox. A linked worktree has a .git file pointing at a worktree-specific
+// directory whose commondir points at the shared repository metadata.
+func gitMetadataBinds(worktree string) ([]model.Bind, error) {
+	gitPath := filepath.Join(worktree, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if info.IsDir() {
+		return []model.Bind{{Source: gitPath, Target: gitPath}}, nil
+	}
+
+	data, err := os.ReadFile(gitPath)
+	if err != nil {
+		return nil, err
+	}
+	line := strings.TrimSpace(string(data))
+	if !strings.HasPrefix(line, "gitdir:") {
+		return nil, fmt.Errorf("linked worktree .git file has invalid format")
+	}
+	gitDir := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
+	if gitDir == "" {
+		return nil, fmt.Errorf("linked worktree .git file has empty gitdir")
+	}
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(filepath.Dir(gitPath), gitDir)
+	}
+	gitDir, err = filepath.EvalSymlinks(filepath.Clean(gitDir))
+	if err != nil {
+		return nil, err
+	}
+	commonData, err := os.ReadFile(filepath.Join(gitDir, "commondir"))
+	if err != nil {
+		return nil, fmt.Errorf("read linked worktree commondir: %w", err)
+	}
+	commonDir := strings.TrimSpace(string(commonData))
+	if commonDir == "" {
+		return nil, fmt.Errorf("linked worktree commondir is empty")
+	}
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(gitDir, commonDir)
+	}
+	commonDir, err = filepath.EvalSymlinks(filepath.Clean(commonDir))
+	if err != nil {
+		return nil, err
+	}
+	if info, err := os.Stat(commonDir); err != nil || !info.IsDir() {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("linked worktree common git metadata is not a directory")
+	}
+	return []model.Bind{{Source: commonDir, Target: commonDir}}, nil
 }
 
 func loadPackVersion(path string) (string, error) {

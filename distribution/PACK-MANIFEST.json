@@ -1166,8 +1166,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "9a6b8cb9525d437649a3f0998433309b955b40c3a371c36b4e855ecb34ef5c1d",
-      "bytes": 30182
+      "sha256": "cc6abc0cfc46d92f2707dba20c5265d01225ebe12bcbe7a006e75fd65235c4ee",
+      "bytes": 32024
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1833,6 +1833,16 @@
       "path": "internal/model/task_test.go",
       "sha256": "edb4715487ef1f140d2596e5b4d265e01f574ff5c2a2ac67533872ed154a0e47",
       "bytes": 1931
+    },
+    {
+      "path": "internal/netpolicy/authority.go",
+      "sha256": "bce9493503d8cb39fa4aaba53402aa11ce3fa717dd9cc9d1cbc03b3124fea685",
+      "bytes": 1628
+    },
+    {
+      "path": "internal/netpolicy/authority_test.go",
+      "sha256": "39bb14dd2a207b83ba42d16cd952218ddc44e8d858451507df9105b55def8779",
+      "bytes": 3703
     },
     {
       "path": "internal/netpolicy/engine.go",
