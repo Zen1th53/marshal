@@ -1,0 +1,160 @@
+package risk
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/Zen1th53/marshal/internal/model"
+)
+
+type AssessmentRepository interface {
+	PutRiskAssessment(context.Context, Assessment) error
+	GetRiskAssessment(context.Context, AssessmentID) (Assessment, error)
+	TransitionRiskAssessmentState(context.Context, AssessmentID, AssessmentState, AssessmentState) error
+}
+
+type AssessmentRequest struct {
+	ID           AssessmentID
+	Descriptor   ToolDescriptor
+	PolicyDigest PolicyDigest
+}
+
+func (r AssessmentRequest) Validate() error {
+	if !safeText(string(r.ID)) {
+		return ErrDescriptorInvalid
+	}
+	if err := r.Descriptor.Validate(); err != nil {
+		return err
+	}
+	if r.PolicyDigest != "" && !safeText(string(r.PolicyDigest)) {
+		return ErrDescriptorInvalid
+	}
+	return nil
+}
+
+type Engine struct {
+	repository AssessmentRepository
+}
+
+func NewEngine(repository AssessmentRepository) *Engine {
+	return &Engine{repository: repository}
+}
+
+func (e *Engine) Assess(ctx context.Context, request AssessmentRequest) (Assessment, error) {
+	if e == nil || e.repository == nil {
+		return Assessment{}, fmt.Errorf("%w: risk assessment repository is unavailable", ErrDescriptorInvalid)
+	}
+	if err := request.Validate(); err != nil {
+		return Assessment{}, err
+	}
+	if existing, err := e.repository.GetRiskAssessment(ctx, request.ID); err == nil {
+		if existing.ActionDigest != actionDigest(request.Descriptor) || existing.PolicyDigest != request.PolicyDigest {
+			return Assessment{}, fmt.Errorf("%w: risk assessment identity is immutable", ErrDescriptorInvalid)
+		}
+		return existing, nil
+	} else if !errors.Is(err, model.ErrNotFound) {
+		return Assessment{}, fmt.Errorf("%w: risk assessment lookup unavailable", model.ErrUnavailable)
+	}
+
+	assessment := classify(request)
+	if request.Descriptor.ClaimedLevel != "" && request.Descriptor.ClaimedLevel.Rank() < assessment.Level.Rank() {
+		return Assessment{}, ErrDowngradeForbidden
+	}
+	if err := e.repository.PutRiskAssessment(ctx, assessment); err != nil {
+		return Assessment{}, err
+	}
+	if err := e.repository.TransitionRiskAssessmentState(ctx, assessment.ID, StateRequested, StateClassified); err != nil {
+		return Assessment{}, err
+	}
+	if err := e.repository.TransitionRiskAssessmentState(ctx, assessment.ID, StateClassified, StateRequirementsEmitted); err != nil {
+		return Assessment{}, err
+	}
+	assessment.State = StateRequirementsEmitted
+	return assessment, nil
+}
+
+func classify(request AssessmentRequest) Assessment {
+	factors := request.Descriptor.Factors
+	level := LevelLow
+	score := 0
+	if factors.ScopeBreadth > 0 {
+		score += factors.ScopeBreadth
+		level = LevelMedium
+	}
+	for _, factor := range []struct {
+		active bool
+		weight int
+	}{
+		{factors.ExternalWrite, 3},
+		{factors.Destructive, 4},
+		{factors.SecretUse, 3},
+		{factors.Network, 2},
+		{factors.PrivilegeEscalation, 5},
+		{factors.Deploy, 5},
+	} {
+		if factor.active {
+			score += factor.weight
+			if factor.weight >= 5 {
+				level = LevelCritical
+			} else if level.Rank() < LevelHigh.Rank() {
+				level = LevelHigh
+			}
+		}
+	}
+	if !knownAction(request.Descriptor.Action) && factors.ExternalWrite {
+		level = LevelHigh
+	}
+	requirements := requirementsFor(level, factors)
+	return Assessment{
+		ID:                   request.ID,
+		ActionDigest:         actionDigest(request.Descriptor),
+		Level:                level,
+		Score:                score,
+		Factors:              factors,
+		RequiredAuthorities:  requirements.authorities,
+		RequiredCapabilities: requirements.capabilities,
+		PolicyDigest:         request.PolicyDigest,
+		State:                StateRequested,
+	}
+}
+
+type requirements struct {
+	authorities  []string
+	capabilities []string
+}
+
+func requirementsFor(level Level, factors Factors) requirements {
+	result := requirements{}
+	if level.Rank() >= LevelHigh.Rank() {
+		result.capabilities = append(result.capabilities, "tool.risk.high")
+	}
+	if level == LevelCritical || factors.PrivilegeEscalation || factors.Deploy {
+		result.authorities = append(result.authorities, "owner.approval")
+	}
+	return result
+}
+
+func knownAction(action string) bool {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "read", "list", "status", "test", "go.test", "git.push", "git.commit", "shell.execute", "deploy", "mcp.call":
+		return true
+	default:
+		return false
+	}
+}
+
+func actionDigest(descriptor ToolDescriptor) ActionDigest {
+	canonical, _ := json.Marshal(struct {
+		Tool     string  `json:"tool"`
+		Action   string  `json:"action"`
+		Resource string  `json:"resource"`
+		Factors  Factors `json:"factors"`
+	}{descriptor.Tool, strings.ToLower(strings.TrimSpace(descriptor.Action)), descriptor.Resource, descriptor.Factors})
+	sum := sha256.Sum256(canonical)
+	return ActionDigest("sha256:" + hex.EncodeToString(sum[:]))
+}
