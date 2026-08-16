@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"strings"
+	"time"
 )
 
 type RuleID string
@@ -112,6 +113,33 @@ type Decision struct {
 	Host    string `json:"host"`
 	IP      string `json:"ip,omitempty"`
 	Port    int    `json:"port"`
+}
+
+// DecisionRecord is a bounded durable projection of one normalized request
+// and its decision. Rule definitions remain owned by the active policy
+// configuration; this record is for restart/retry reconstruction only.
+type DecisionRecord struct {
+	ID             string    `json:"id"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	Request        Request   `json:"request"`
+	Decision       Decision  `json:"decision"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+func (r DecisionRecord) Validate() error {
+	if !validIdentifier(r.ID) || !validIdentifier(r.IdempotencyKey) || r.CreatedAt.IsZero() || r.CreatedAt.Location() != time.UTC {
+		return ErrRuleInvalid
+	}
+	if err := r.Request.Validate(); err != nil {
+		return err
+	}
+	if err := r.Decision.Validate(); err != nil {
+		return err
+	}
+	if r.Decision.Host != r.Request.Host || r.Decision.IP != r.Request.IP || r.Decision.Port != r.Request.Port {
+		return ErrRuleInvalid
+	}
+	return nil
 }
 
 func (d Decision) Validate() error {

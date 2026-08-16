@@ -108,6 +108,8 @@ func TestRiskAssessmentMigrationFromSchema21(t *testing.T) {
 		"DROP INDEX execution_cells_by_task",
 		"DROP INDEX execution_cells_by_state",
 		"DROP TABLE execution_cells",
+		"DROP INDEX egress_decisions_by_created",
+		"DROP TABLE egress_decisions",
 		"DROP INDEX risk_assessments_by_action",
 		"DROP INDEX risk_assessments_by_created",
 		"DROP TABLE risk_assessments",
