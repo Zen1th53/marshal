@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 14
+const LatestSchemaVersion = 15
 
 const schemaV1 = `
 CREATE TABLE projects (
@@ -508,6 +508,19 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 14: %w", err)
 		}
 		version = 14
+	}
+	if version == 14 {
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE capability_grants ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT '';
+			CREATE UNIQUE INDEX capability_grants_by_idempotency
+				ON capability_grants(idempotency_key) WHERE idempotency_key <> '';
+		`); err != nil {
+			return fmt.Errorf("apply schema version 15: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(15, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 15: %w", err)
+		}
+		version = 15
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
