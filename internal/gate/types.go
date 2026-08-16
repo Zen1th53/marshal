@@ -73,6 +73,8 @@ type CheckResult struct {
 type Decision struct {
 	DecisionID   string
 	Point        GatePoint
+	Subject      string
+	Resource     string
 	Allowed      bool
 	Checks       []CheckResult
 	PolicyIDs    []string
@@ -82,7 +84,7 @@ type Decision struct {
 }
 
 func (d Decision) Validate() error {
-	if strings.TrimSpace(d.DecisionID) == "" || !validGatePoint(d.Point) || d.CreatedAt.IsZero() {
+	if strings.TrimSpace(d.DecisionID) == "" || strings.TrimSpace(d.Subject) == "" || strings.TrimSpace(d.Resource) == "" || !validGatePoint(d.Point) || d.CreatedAt.IsZero() {
 		if !validGatePoint(d.Point) {
 			return ErrUnknownGatePoint
 		}

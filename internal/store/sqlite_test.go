@@ -39,6 +39,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"structured_events",
 		"capability_grants",
 		"role_bindings",
+		"gate_decisions",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
@@ -54,6 +55,9 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX gate_decisions_by_point_subject",
+		"DROP INDEX gate_decisions_by_resource_change",
+		"DROP TABLE gate_decisions",
 		"DROP INDEX capability_grants_by_expiry",
 		"DROP INDEX capability_grants_by_subject_task_kind",
 		"DROP INDEX capability_grants_by_idempotency",
@@ -111,6 +115,9 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX gate_decisions_by_point_subject",
+		"DROP INDEX gate_decisions_by_resource_change",
+		"DROP TABLE gate_decisions",
 		"DROP INDEX capability_grants_by_expiry",
 		"DROP INDEX capability_grants_by_subject_task_kind",
 		"DROP INDEX capability_grants_by_idempotency",
