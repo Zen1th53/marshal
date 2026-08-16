@@ -26,6 +26,7 @@ const (
 	MetricOperationPolicyTransition  MetricOperation = "policy_transition"
 	MetricOperationPolicyRuntimeGate MetricOperation = "policy_runtime_gate"
 	MetricOperationPolicyTest        MetricOperation = "policy_test"
+	MetricOperationCapability        MetricOperation = "capability"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -46,7 +47,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationDigest: {}, MetricOperationAudit: {}, MetricOperationFreshness: {},
 	MetricOperationContention: {}, MetricOperationPolicyLoad: {}, MetricOperationPolicyPersist: {},
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
-	MetricOperationPolicyTest: {},
+	MetricOperationPolicyTest: {}, MetricOperationCapability: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
@@ -61,6 +62,8 @@ var metricReasons = map[string]struct{}{
 	string(CodeInvalidEdge): {}, string(CodeSecretRejected): {},
 	string(CodeInvalidState): {}, "SQLITE_BUSY": {}, "SQLITE_RETRY_EXHAUSTED": {},
 	"POLICY_CONFLICT": {}, "POLICY_DENIED": {}, "POLICY_ERROR": {},
+	"CAP_DENIED": {}, "CAP_INVALID_SCOPE": {}, "CAP_EXPIRED": {},
+	"CAP_REVOKED": {}, "CAP_SUBJECT_MISMATCH": {}, "CAP_TASK_MISMATCH": {},
 }
 
 // MetricsSnapshot is a detached, read-only projection of recorder state.

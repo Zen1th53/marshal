@@ -37,6 +37,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"policy_test_runs", "policy_test_cases", "policy_test_outcomes",
 		"dag_nodes", "dag_edges",
 		"structured_events",
+		"capability_grants",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
@@ -52,6 +53,11 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX capability_grants_by_expiry",
+		"DROP INDEX capability_grants_by_subject_task_kind",
+		"DROP INDEX capability_grants_by_idempotency",
+		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
+		"DROP TABLE capability_grants",
 		"DROP INDEX structured_events_by_type",
 		"DROP INDEX structured_events_by_run",
 		"DROP INDEX structured_events_by_evidence",
@@ -101,6 +107,11 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX capability_grants_by_expiry",
+		"DROP INDEX capability_grants_by_subject_task_kind",
+		"DROP INDEX capability_grants_by_idempotency",
+		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
+		"DROP TABLE capability_grants",
 		"DROP INDEX structured_events_by_type",
 		"DROP INDEX structured_events_by_run",
 		"DROP INDEX structured_events_by_evidence",

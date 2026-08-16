@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
+	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/dag"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/evidence"
@@ -41,6 +42,7 @@ type Runtime struct {
 	adapters          map[string]adapter.Adapter
 	evidenceSanitizer evidence.Sanitizer
 	eventStream       *events.Engine
+	capabilityBroker  capability.Broker
 	runtimeInstanceID string
 	runtimePolicy     RuntimePolicyConfig
 	policyConfigured  bool
@@ -55,6 +57,7 @@ type Options struct {
 	EventAuthorizer    events.Authorizer
 	EventFreshness     events.FreshnessValidator
 	EventBus           events.Bus
+	CapabilityBroker   capability.Broker
 }
 
 type Status struct {
@@ -228,6 +231,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		adapters:          options.Adapters,
 		evidenceSanitizer: sanitizer,
 		eventStream:       eventStream,
+		capabilityBroker:  options.CapabilityBroker,
 		runtimeInstanceID: instanceID,
 	}
 	if options.RuntimePolicy != nil {
@@ -483,7 +487,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		return RunResult{}, err
 	}
 	executionRevision := claimedRevision + 1
-	agentAdapter, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path)
+	agentAdapter, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
@@ -629,7 +633,7 @@ func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {
 	return nil
 }
 
-func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath string) (adapter.Adapter, error) {
+func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string) (adapter.Adapter, error) {
 	if candidate := r.adapters[name]; candidate != nil {
 		return candidate, nil
 	}
@@ -734,6 +738,9 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 		}
 	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, true); err != nil {
 		return nil, err
+	}
+	if r.capabilityBroker != nil {
+		runner = adapter.NewCapabilityRunner(runner, r.capabilityBroker, subject, task.ID)
 	}
 	switch name {
 	case "codex":
