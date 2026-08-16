@@ -1846,8 +1846,8 @@
     },
     {
       "path": "internal/netpolicy/types.go",
-      "sha256": "1e2a69a1e51047832688b85b904015958df1b8d845a6f93013b9b79fa257afa7",
-      "bytes": 5656
+      "sha256": "4a8da5619d7e558807881300e94335757b51b0940504d370456c5d0512d6bb3c",
+      "bytes": 5806
     },
     {
       "path": "internal/netpolicy/types_test.go",
