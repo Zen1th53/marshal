@@ -1146,8 +1146,8 @@
     },
     {
       "path": "internal/capability/engine.go",
-      "sha256": "e79095028bb7cf0241f9d270a1e0db8715cfdea7d7298f78ac2dd7485d30abfe",
-      "bytes": 11595
+      "sha256": "237b401d4ba312812a8727b2022a35935dde635c6d83a88714c278beebe7d216",
+      "bytes": 13285
     },
     {
       "path": "internal/capability/engine_test.go",
@@ -1163,6 +1163,11 @@
       "path": "internal/capability/events_test.go",
       "sha256": "b9cc2757c0cb8ab4fc7b45f4a94bb0b7aa2217adcb8d8c82b87efd3715c3f0c6",
       "bytes": 4641
+    },
+    {
+      "path": "internal/capability/recovery_a08_test.go",
+      "sha256": "ccdf5645a9272f8bea4ab5074547bd836ab41580083eec5464bf96df379c4cbf",
+      "bytes": 1188
     },
     {
       "path": "internal/capability/types.go",
@@ -1396,8 +1401,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "912a8c62fb8d49689ff49dc7b5ef3f6bdde018d8d5481f97cc23475deabb1eb4",
-      "bytes": 7524
+      "sha256": "bf6cca170012cf41f5e41382df8f1690e97479045663733b091e688baa6c08f9",
+      "bytes": 7756
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
@@ -1773,6 +1778,11 @@
       "path": "internal/store/capability_adversarial_a07_test.go",
       "sha256": "1ffa78b1ae6e9811121b1713fbe0ee3500882ac8c165ea0236edec3ec7a8984e",
       "bytes": 1268
+    },
+    {
+      "path": "internal/store/capability_concurrency_a08_test.go",
+      "sha256": "78a3d572134aaaeb553cf1952355f84e07d8ac000a61d67886ec01b0f0759173",
+      "bytes": 3306
     },
     {
       "path": "internal/store/capability_engine_a03_test.go",
