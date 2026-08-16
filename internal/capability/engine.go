@@ -5,9 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // GrantRepository is the narrow durable boundary used by the broker. The
@@ -20,23 +23,33 @@ type GrantRepository interface {
 	RevokeCapabilityGrant(context.Context, GrantID, time.Time) error
 }
 
+type Authority interface {
+	AuthorizeGrant(context.Context, GrantRequest) error
+	AuthorizeRevoke(context.Context, RevokeRequest, Grant) error
+}
+
 type Engine struct {
 	repository GrantRepository
 	now        func() time.Time
+	authority  Authority
 }
 
 var _ Broker = (*Engine)(nil)
 
 func NewEngine(repository GrantRepository, now func() time.Time) *Engine {
+	return NewAuthorizedEngine(repository, now, nil)
+}
+
+func NewAuthorizedEngine(repository GrantRepository, now func() time.Time, authority Authority) *Engine {
 	if now == nil {
 		now = time.Now
 	}
-	return &Engine{repository: repository, now: now}
+	return &Engine{repository: repository, now: now, authority: authority}
 }
 
 func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error) {
-	if e == nil || e.repository == nil || strings.TrimSpace(request.IdempotencyKey) == "" {
-		return Grant{}, ErrInvalidScope
+	if e == nil || e.repository == nil || e.authority == nil || strings.TrimSpace(request.IdempotencyKey) == "" {
+		return Grant{}, ErrDenied
 	}
 	now := e.now().UTC()
 	validation := request
@@ -45,6 +58,14 @@ func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error)
 	}
 	if err := validation.Validate(); err != nil {
 		return Grant{}, err
+	}
+	resource, err := NormalizeResource(request.Kind, request.Scope.Resource)
+	if err != nil {
+		return Grant{}, err
+	}
+	request.Scope.Resource = resource
+	if err := e.authority.AuthorizeGrant(ctx, request); err != nil {
+		return Grant{}, ErrDenied
 	}
 	if !request.ExpiresAt.After(now) {
 		return Grant{}, ErrExpired
@@ -84,6 +105,11 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 	if query.At.IsZero() {
 		at = e.now().UTC()
 	}
+	resource, err := NormalizeResource(query.Kind, query.Resource)
+	if err != nil {
+		return Decision{}, err
+	}
+	query.Resource = resource
 	grants, err := e.repository.ListCapabilityGrants(ctx)
 	if err != nil {
 		return Decision{}, err
@@ -91,7 +117,8 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 	sort.Slice(grants, func(i, j int) bool { return grants[i].ID < grants[j].ID })
 	var subjectMismatch, taskMismatch bool
 	for _, grant := range grants {
-		if grant.Kind != query.Kind || grant.Scope.Resource != query.Resource || !scopeAllowsAction(grant.Scope, query.Action) {
+		grantResource, normalizeErr := NormalizeResource(grant.Kind, grant.Scope.Resource)
+		if normalizeErr != nil || grant.Kind != query.Kind || grantResource != query.Resource || !scopeAllowsAction(grant.Scope, query.Action) {
 			continue
 		}
 		if grant.Subject != query.Subject {
@@ -123,8 +150,8 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 }
 
 func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
-	if e == nil || e.repository == nil || strings.TrimSpace(string(request.GrantID)) == "" || strings.TrimSpace(string(request.Actor)) == "" {
-		return ErrInvalidScope
+	if e == nil || e.repository == nil || e.authority == nil || strings.TrimSpace(string(request.GrantID)) == "" || strings.TrimSpace(string(request.Actor)) == "" {
+		return ErrDenied
 	}
 	grant, err := e.repository.GetCapabilityGrant(ctx, request.GrantID)
 	if err != nil {
@@ -133,7 +160,32 @@ func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
 	if grant.Issuer != request.Actor {
 		return ErrSubjectMismatch
 	}
+	if err := e.authority.AuthorizeRevoke(ctx, request, grant); err != nil {
+		return ErrDenied
+	}
 	return e.repository.RevokeCapabilityGrant(ctx, request.GrantID, e.now().UTC())
+}
+
+// NormalizeResource canonicalizes resource identity without touching the
+// filesystem or resolving symlinks.
+func NormalizeResource(kind CapabilityKind, resource string) (string, error) {
+	if !utf8.ValidString(resource) || strings.TrimSpace(resource) == "" {
+		return "", ErrInvalidScope
+	}
+	for _, r := range resource {
+		if unicode.IsControl(r) {
+			return "", ErrInvalidScope
+		}
+	}
+	resource = strings.TrimSpace(resource)
+	if kind == KindFilesystemRead || kind == KindFilesystemWrite {
+		clean := filepath.Clean(resource)
+		if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return "", ErrInvalidScope
+		}
+		return clean, nil
+	}
+	return resource, nil
 }
 
 func deterministicGrantID(request GrantRequest) GrantID {

@@ -8,6 +8,15 @@ import (
 	"github.com/Zen1th53/marshal/internal/capability"
 )
 
+type capabilityTestAuthority struct{}
+
+func (capabilityTestAuthority) AuthorizeGrant(context.Context, capability.GrantRequest) error {
+	return nil
+}
+func (capabilityTestAuthority) AuthorizeRevoke(context.Context, capability.RevokeRequest, capability.Grant) error {
+	return nil
+}
+
 func TestCapabilityEngineUsesCanonicalStoreAndSurvivesReload(t *testing.T) {
 	ctx := context.Background()
 	path := t.TempDir() + "/state.db"
@@ -19,7 +28,7 @@ func TestCapabilityEngineUsesCanonicalStoreAndSurvivesReload(t *testing.T) {
 	if err := first.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	engine := capability.NewEngine(first, func() time.Time { return now })
+	engine := capability.NewAuthorizedEngine(first, func() time.Time { return now }, capabilityTestAuthority{})
 	grant, err := engine.Grant(ctx, capability.GrantRequest{
 		Subject: "agent-store", TaskID: "task-store", Kind: capability.KindFilesystemRead,
 		Scope:     capability.Scope{Resource: "/workspace/store", Actions: []string{"read"}},
@@ -40,7 +49,7 @@ func TestCapabilityEngineUsesCanonicalStoreAndSurvivesReload(t *testing.T) {
 	if err := second.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	restarted := capability.NewEngine(second, func() time.Time { return now })
+	restarted := capability.NewAuthorizedEngine(second, func() time.Time { return now }, capabilityTestAuthority{})
 	retry, err := restarted.Grant(ctx, capability.GrantRequest{
 		Subject: "agent-store", TaskID: "task-store", Kind: capability.KindFilesystemRead,
 		Scope:     capability.Scope{Resource: "/workspace/store", Actions: []string{"read"}},
