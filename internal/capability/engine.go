@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/evidence"
 )
 
 // GrantRepository is the narrow durable boundary used by the broker. The
@@ -36,6 +37,7 @@ type Engine struct {
 	now        func() time.Time
 	authority  Authority
 	eventStore events.Store
+	metrics    *evidence.MetricsRecorder
 }
 
 var _ Broker = (*Engine)(nil)
@@ -54,6 +56,15 @@ func NewAuthorizedEngine(repository GrantRepository, now func() time.Time, autho
 func NewAuditedEngine(repository GrantRepository, now func() time.Time, authority Authority, eventStore events.Store) *Engine {
 	engine := NewAuthorizedEngine(repository, now, authority)
 	engine.eventStore = eventStore
+	return engine
+}
+
+// NewObservedEngine attaches the repository's existing bounded, in-process
+// metrics projection. Metrics are diagnostic only and never participate in a
+// capability decision.
+func NewObservedEngine(repository GrantRepository, now func() time.Time, authority Authority, metrics *evidence.MetricsRecorder) *Engine {
+	engine := NewAuthorizedEngine(repository, now, authority)
+	engine.metrics = metrics
 	return engine
 }
 
@@ -118,10 +129,11 @@ func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error)
 }
 
 func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
+	started := time.Now()
 	if e == nil || e.repository == nil || strings.TrimSpace(string(query.Subject)) == "" ||
 		strings.TrimSpace(string(query.TaskID)) == "" || !knownKind(query.Kind) ||
 		strings.TrimSpace(query.Resource) == "" || strings.TrimSpace(query.Action) == "" {
-		return Decision{}, ErrInvalidScope
+		return e.observeDecision(Decision{}, ErrInvalidScope, started)
 	}
 	at := query.At.UTC()
 	if query.At.IsZero() {
@@ -129,12 +141,12 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 	}
 	resource, err := NormalizeResource(query.Kind, query.Resource)
 	if err != nil {
-		return Decision{}, err
+		return e.observeDecision(Decision{}, err, started)
 	}
 	query.Resource = resource
 	grants, err := e.repository.ListCapabilityGrants(ctx)
 	if err != nil {
-		return Decision{}, err
+		return e.observeDecision(Decision{}, err, started)
 	}
 	sort.Slice(grants, func(i, j int) bool { return grants[i].ID < grants[j].ID })
 	var subjectMismatch, taskMismatch bool
@@ -152,23 +164,47 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 			continue
 		}
 		if grant.RevokedAt != nil {
-			return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeRevoked, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
+			decision, decisionErr := e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeRevoked, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
+			return e.observeDecision(decision, decisionErr, started)
 		}
 		if !at.Before(grant.ExpiresAt) {
-			return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeExpired, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
+			decision, decisionErr := e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeExpired, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
+			return e.observeDecision(decision, decisionErr, started)
 		}
 		if at.Before(grant.IssuedAt) {
-			return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeDenied, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
+			decision, decisionErr := e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeDenied, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
+			return e.observeDecision(decision, decisionErr, started)
 		}
-		return e.recordDecision(ctx, query, Decision{Outcome: OutcomeAllow, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt, PolicyDigest: grant.PolicyDigest})
+		decision, decisionErr := e.recordDecision(ctx, query, Decision{Outcome: OutcomeAllow, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt, PolicyDigest: grant.PolicyDigest})
+		return e.observeDecision(decision, decisionErr, started)
 	}
 	if subjectMismatch {
-		return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeSubjectMismatch})
+		decision, decisionErr := e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeSubjectMismatch})
+		return e.observeDecision(decision, decisionErr, started)
 	}
 	if taskMismatch {
-		return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeTaskMismatch})
+		decision, decisionErr := e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeTaskMismatch})
+		return e.observeDecision(decision, decisionErr, started)
 	}
-	return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeDenied})
+	decision, decisionErr := e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeDenied})
+	return e.observeDecision(decision, decisionErr, started)
+}
+
+func (e *Engine) observeDecision(decision Decision, err error, started time.Time) (Decision, error) {
+	if e == nil || e.metrics == nil {
+		return decision, err
+	}
+	result := evidence.MetricResultSuccess
+	reason := ""
+	if err != nil {
+		result = evidence.MetricResultError
+		reason = "CAP_DENIED"
+	} else if decision.Outcome == OutcomeDeny {
+		result = evidence.MetricResultDenied
+		reason = string(decision.Reason)
+	}
+	e.metrics.Observe(evidence.MetricOperationCapability, result, reason, time.Since(started))
+	return decision, err
 }
 
 func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
@@ -179,11 +215,11 @@ func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
 	if err != nil {
 		return err
 	}
-	if grant.RevokedAt != nil {
-		return e.emitGrantEvent(ctx, events.Type("capability.grant.revoked"), grant)
-	}
 	if grant.Issuer != request.Actor {
 		return ErrSubjectMismatch
+	}
+	if grant.RevokedAt != nil {
+		return e.emitGrantEvent(ctx, events.Type("capability.grant.revoked"), grant)
 	}
 	if err := e.authority.AuthorizeRevoke(ctx, request, grant); err != nil {
 		return safeBoundaryError(err)
