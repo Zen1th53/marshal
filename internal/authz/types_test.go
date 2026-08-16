@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCanAllowsDeclaredAuthorityWithStructuredDecision(t *testing.T) {
@@ -35,5 +36,12 @@ func TestRoleValidationRejectsUnknownRoleAndDuplicateAuthorityWithoutSecretLeak(
 	}}, AuthoritySourceWrite, "worktree:/repo")
 	if !errors.Is(err, ErrUnknownRole) || strings.Contains(err.Error(), marker) {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRoleBindingAcceptsNormalizedCustomRoleNameForConfigResolution(t *testing.T) {
+	binding := RoleBinding{ID: "binding-custom", PrincipalID: "agent-1", Role: "release-reviewer", ScopeID: "task:1", BoundBy: "admin", BoundAt: time.Now().UTC(), PolicyDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+	if err := binding.Validate(); err != nil {
+		t.Fatalf("custom role binding: %v", err)
 	}
 }

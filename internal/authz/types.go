@@ -3,6 +3,7 @@ package authz
 import (
 	"context"
 	"strings"
+	"time"
 )
 
 type Authority string
@@ -26,6 +27,32 @@ type Role struct {
 type Principal struct {
 	ID   string `json:"id"`
 	Role Role   `json:"role"`
+}
+
+type RoleBinding struct {
+	ID           string     `json:"id"`
+	PrincipalID  string     `json:"principal_id"`
+	Role         string     `json:"role"`
+	ScopeID      string     `json:"scope_id"`
+	BoundBy      string     `json:"bound_by"`
+	BoundAt      time.Time  `json:"bound_at"`
+	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
+	PolicyDigest string     `json:"policy_digest"`
+}
+
+func (b RoleBinding) Validate() error {
+	if strings.TrimSpace(b.ID) == "" || strings.TrimSpace(b.PrincipalID) == "" ||
+		strings.TrimSpace(b.Role) == "" || strings.TrimSpace(b.ScopeID) == "" ||
+		strings.TrimSpace(b.BoundBy) == "" || b.BoundAt.IsZero() || !validRoleBindingName(b.Role) {
+		return ErrRoleInvalid
+	}
+	if strings.TrimSpace(b.PolicyDigest) == "" || len(b.PolicyDigest) != 71 || !strings.HasPrefix(b.PolicyDigest, "sha256:") {
+		return ErrRoleInvalid
+	}
+	if b.RevokedAt != nil && !b.RevokedAt.After(b.BoundAt) {
+		return ErrRoleInvalid
+	}
+	return nil
 }
 
 type DecisionOutcome string
@@ -56,7 +83,7 @@ var knownAuthorities = map[Authority]struct{}{
 }
 
 func (r Role) Validate() error {
-	if _, ok := defaultRoles[strings.ToLower(strings.TrimSpace(r.Name))]; !ok {
+	if !validRoleName(r.Name) {
 		return ErrUnknownRole
 	}
 	if len(r.Authorities) == 0 {
@@ -73,6 +100,24 @@ func (r Role) Validate() error {
 		seen[authority] = struct{}{}
 	}
 	return nil
+}
+
+func validRoleName(name string) bool {
+	_, ok := defaultRoles[strings.ToLower(strings.TrimSpace(name))]
+	return ok
+}
+
+func validRoleBindingName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > 64 {
+		return false
+	}
+	for _, r := range name {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' && r != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func Can(ctx context.Context, subject Principal, authority Authority, resource string) (Decision, error) {
