@@ -31,7 +31,7 @@ func TestSecretLeasePersistenceSurvivesReopenWithoutSecretValue(t *testing.T) {
 	lease := secrets.Lease{
 		ID: "lease-a02", Subject: "agent-a02", TaskID: "task-a02",
 		Ref:     secrets.Ref{Provider: "env", Name: "API_TOKEN", Version: "v1"},
-		Purpose: "deploy", IssuedAt: time.Unix(10, 0).UTC(), ExpiresAt: time.Unix(20, 0).UTC(),
+		Purpose: "deploy", IssuedAt: time.Unix(10, 0).UTC(), ExpiresAt: time.Unix(20, 0).UTC(), State: secrets.StateRequested,
 	}
 	if err := first.PutSecretLease(ctx, lease); err != nil {
 		t.Fatalf("PutSecretLease: %v", err)

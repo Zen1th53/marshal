@@ -23,14 +23,26 @@ func (r Ref) Validate() error {
 // Lease is the bounded authority to use one secret for one task and purpose.
 // It deliberately contains only the reference, never the resolved value.
 type Lease struct {
-	ID        string    `json:"id"`
-	Subject   string    `json:"subject"`
-	TaskID    string    `json:"task_id"`
-	Ref       Ref       `json:"ref"`
-	Purpose   string    `json:"purpose"`
-	IssuedAt  time.Time `json:"issued_at"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ID        string     `json:"id"`
+	Subject   string     `json:"subject"`
+	TaskID    string     `json:"task_id"`
+	Ref       Ref        `json:"ref"`
+	Purpose   string     `json:"purpose"`
+	IssuedAt  time.Time  `json:"issued_at"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	State     LeaseState `json:"state"`
+	RevokedAt *time.Time `json:"revoked_at,omitempty"`
 }
+
+type LeaseState string
+
+const (
+	StateRequested LeaseState = "requested"
+	StateLeased    LeaseState = "leased"
+	StateUsed      LeaseState = "used"
+	StateRevoked   LeaseState = "revoked"
+	StateExpired   LeaseState = "expired"
+)
 
 func (l Lease) Validate() error {
 	if invalidIdentifier(l.ID) || invalidIdentifier(l.Subject) || invalidIdentifier(l.TaskID) || invalidIdentifier(l.Purpose) || l.IssuedAt.IsZero() || l.ExpiresAt.IsZero() || !l.ExpiresAt.After(l.IssuedAt) {
@@ -46,6 +58,7 @@ type LeaseRequest struct {
 	Purpose   string
 	IssuedAt  time.Time
 	ExpiresAt time.Time
+	ID        string
 }
 
 type RevokeRequest struct {

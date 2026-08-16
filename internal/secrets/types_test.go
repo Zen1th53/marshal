@@ -62,7 +62,7 @@ func TestSecretErrorsNeverExposeProviderCause(t *testing.T) {
 
 type providerFunc func(context.Context, Ref) ([]byte, error)
 
-func (providerFunc) Resolve(context.Context, Ref) ([]byte, error) { return nil, nil }
+func (p providerFunc) Resolve(ctx context.Context, ref Ref) ([]byte, error) { return p(ctx, ref) }
 
 type brokerStub struct{}
 
