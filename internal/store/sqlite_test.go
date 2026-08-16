@@ -42,6 +42,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"gate_decisions",
 		"secret_leases",
 		"risk_assessments",
+		"execution_cells",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
@@ -57,6 +58,9 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX execution_cells_by_task",
+		"DROP INDEX execution_cells_by_state",
+		"DROP TABLE execution_cells",
 		"DROP INDEX risk_assessments_by_action",
 		"DROP INDEX risk_assessments_by_created",
 		"DROP TABLE risk_assessments",
@@ -123,6 +127,9 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX execution_cells_by_task",
+		"DROP INDEX execution_cells_by_state",
+		"DROP TABLE execution_cells",
 		"DROP INDEX risk_assessments_by_action",
 		"DROP INDEX risk_assessments_by_created",
 		"DROP TABLE risk_assessments",

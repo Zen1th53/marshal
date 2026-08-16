@@ -1310,6 +1310,21 @@
       "bytes": 2594
     },
     {
+      "path": "internal/cell/errors.go",
+      "sha256": "19159e7e5b2ef60fce27e9d2ee07cba5e38df7cb9663e9865fe765cd968a0be5",
+      "bytes": 975
+    },
+    {
+      "path": "internal/cell/types.go",
+      "sha256": "9b59784f07055a6938492e3452e038645834f1be986b00bdf7d62bd2cf55f995",
+      "bytes": 4917
+    },
+    {
+      "path": "internal/cell/types_test.go",
+      "sha256": "8206ae775e9710f67cc3b6875e6d6c4aeb5240cdeece28ef1f213aba139e0928",
+      "bytes": 2118
+    },
+    {
       "path": "internal/cli/cli.go",
       "sha256": "2ac2846afb2f65292ba75fff5da368e7b8d0c9ee8db86cdc69599678837aa263",
       "bytes": 23723
@@ -2291,8 +2306,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "b1a6a911edaf33bf5112017dd83f74ec6c74fe9e28339175e056f5f838f48f90",
-      "bytes": 27111
+      "sha256": "1f112764098c7d0d7f539b1341f9b7136b7233c85ee691b582fe19233ad273a8",
+      "bytes": 28128
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",
@@ -2446,8 +2461,8 @@
     },
     {
       "path": "internal/store/risk_persistence_a02_test.go",
-      "sha256": "2948da6c75044d4392a0773f8b1915820ce397e9c5778cd561ec2d8930383b5b",
-      "bytes": 3956
+      "sha256": "311ef900130ea15ad08d22184a158432d5762cadbb64b4c7ab68a832a1ae2467",
+      "bytes": 4069
     },
     {
       "path": "internal/store/secrets_concurrency_a08_test.go",
@@ -2476,8 +2491,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "76cdcc04702be581a7ec998c0a28ee824815f9b165d060bad6c8e56f00fe90bc",
-      "bytes": 8245
+      "sha256": "5fed43d523552bcbe9c9d89ed56d2e11c4c89821100df20bc75eaacaa74ca112",
+      "bytes": 8492
     },
     {
       "path": "internal/store/tasks.go",

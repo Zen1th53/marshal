@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 23
+const LatestSchemaVersion = 24
 
 const schemaV1 = `
 CREATE TABLE projects (
@@ -665,6 +665,31 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 23: %w", err)
 		}
 		version = 23
+	}
+	if version == 23 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE execution_cells (
+				cell_id TEXT PRIMARY KEY,
+				task_id TEXT NOT NULL,
+				backend TEXT NOT NULL CHECK(backend IN ('native','bubblewrap')),
+				workspace TEXT NOT NULL,
+				spec_digest TEXT NOT NULL,
+				state TEXT NOT NULL CHECK(state IN ('new','preparing','ready','running','stopping','destroyed','failed')),
+				process_ref TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL,
+				destroyed_at TEXT,
+				failure_reason TEXT NOT NULL DEFAULT ''
+			);
+			CREATE INDEX execution_cells_by_task ON execution_cells(task_id, cell_id);
+			CREATE INDEX execution_cells_by_state ON execution_cells(state, updated_at, cell_id);
+		`); err != nil {
+			return fmt.Errorf("apply schema version 24: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(24, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 24: %w", err)
+		}
+		version = 24
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
