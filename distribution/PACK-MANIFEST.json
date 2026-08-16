@@ -1170,6 +1170,16 @@
       "bytes": 1799
     },
     {
+      "path": "internal/authz/catalog.go",
+      "sha256": "52efc9a0a8957ad1e87370b09ab5f3a85eb4b5d0a98da95cb84ac47353aae3d4",
+      "bytes": 2010
+    },
+    {
+      "path": "internal/authz/custom_roles_a10_test.go",
+      "sha256": "82b7faf8755c1acfda6908c6dc712aa2a20afdbf8eb0298f6f4648522fd61d70",
+      "bytes": 863
+    },
+    {
       "path": "internal/authz/errors.go",
       "sha256": "914d77110b7a068dd2f3d409873550562e79d3cd2874b6293de87472933f3a38",
       "bytes": 1446
@@ -1211,8 +1221,8 @@
     },
     {
       "path": "internal/authz/types.go",
-      "sha256": "876ecb8003eb7c4d0485e9105b6d43d4981f61c3aa0b04412e130a2c5d9785b6",
-      "bytes": 5883
+      "sha256": "6e69283392430be16117cad253da012f5c090ab21484eb2ad15dbfe17505e877",
+      "bytes": 5698
     },
     {
       "path": "internal/authz/types_test.go",

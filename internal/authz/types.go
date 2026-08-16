@@ -91,23 +91,7 @@ var knownAuthorities = map[Authority]struct{}{
 }
 
 func (r Role) Validate() error {
-	if !validRoleName(r.Name) {
-		return ErrUnknownRole
-	}
-	if len(r.Authorities) == 0 {
-		return ErrRoleInvalid
-	}
-	seen := make(map[Authority]struct{}, len(r.Authorities))
-	for _, authority := range r.Authorities {
-		if _, ok := knownAuthorities[authority]; !ok {
-			return ErrUnknownAuthority
-		}
-		if _, duplicate := seen[authority]; duplicate {
-			return ErrRoleInvalid
-		}
-		seen[authority] = struct{}{}
-	}
-	return nil
+	return validateRole(r, false)
 }
 
 func validRoleName(name string) bool {
@@ -129,6 +113,10 @@ func validRoleBindingName(name string) bool {
 }
 
 func Can(ctx context.Context, subject Principal, authority Authority, resource string) (Decision, error) {
+	return can(ctx, subject, authority, resource, false)
+}
+
+func can(ctx context.Context, subject Principal, authority Authority, resource string, allowCustomRole bool) (Decision, error) {
 	decision := Decision{Outcome: OutcomeDeny, Reason: CodeDenied, SubjectID: subject.ID, Authority: authority, Resource: resource, Role: subject.Role.Name}
 	if err := ctx.Err(); err != nil {
 		return decision, err
@@ -137,7 +125,7 @@ func Can(ctx context.Context, subject Principal, authority Authority, resource s
 		decision.Reason = CodeRoleInvalid
 		return decision, ErrRoleInvalid
 	}
-	if err := subject.Role.Validate(); err != nil {
+	if err := validateRole(subject.Role, allowCustomRole); err != nil {
 		decision.Reason = codeOf(err)
 		return decision, err
 	}
