@@ -1110,6 +1110,11 @@
       "bytes": 8896
     },
     {
+      "path": "internal/app/gate_runtime_a06_test.go",
+      "sha256": "23c9f74b6a1b7fb85ce0cbf2d765771261cbf034f2159beeb2cec9976d3b7b19",
+      "bytes": 2782
+    },
+    {
       "path": "internal/app/policy_metrics_a09_test.go",
       "sha256": "98e56673bcb42b9bd7eb2e42863623284a961dda21444c37d29925dc32b27ed4",
       "bytes": 1693
@@ -1136,8 +1141,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "5d122ae4ec22ff01ceed90ca9d77e592b26aa444011082e9926a86c56ced9798",
-      "bytes": 27495
+      "sha256": "a6a3734c7564d8cf424c82049c4372bafbe7fc92f513f017b519d06696c29dd5",
+      "bytes": 27972
     },
     {
       "path": "internal/app/runtime_test.go",
