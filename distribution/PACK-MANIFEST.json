@@ -1320,6 +1320,11 @@
       "bytes": 2594
     },
     {
+      "path": "internal/cell/a10_security_test.go",
+      "sha256": "0d4053ce1ca64b0e97978ea0f230e7f05c2c991d37d9be1ed6d016f9ecfbf86b",
+      "bytes": 2212
+    },
+    {
       "path": "internal/cell/adversarial_test.go",
       "sha256": "d8bd7a82207443badb368adf88375e96b34143518b4af4fc1c18bb65dc2e2908",
       "bytes": 4131
