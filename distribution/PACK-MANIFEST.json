@@ -740,6 +740,11 @@
       "bytes": 2221
     },
     {
+      "path": "docs/execution-cells.md",
+      "sha256": "46ff83a692dd0e81eb5e6bcb46092fbf64b62c1980a26a70049e123713e1ce94",
+      "bytes": 3109
+    },
+    {
       "path": "docs/getting-started.md",
       "sha256": "069a454251e310fb95a71de68802b37fe8aa9ecb05235c22a62f8a71b89d73f7",
       "bytes": 5745
@@ -1320,9 +1325,14 @@
       "bytes": 4131
     },
     {
+      "path": "internal/cell/benchmark_a09_test.go",
+      "sha256": "094327bb417a46c2389973f43d2a806ad75fffbcbbc59030d080e1d287a5d704",
+      "bytes": 674
+    },
+    {
       "path": "internal/cell/engine.go",
-      "sha256": "6bdb05ba934c0882370a2a6950040a6504925f119487355d7d1625853bc8bf71",
-      "bytes": 12088
+      "sha256": "9c8109a2c520b561017fc857bf02d14929189a1e002f00726325f3486dc441fd",
+      "bytes": 12225
     },
     {
       "path": "internal/cell/engine_test.go",
@@ -1343,6 +1353,11 @@
       "path": "internal/cell/fuzz_test.go",
       "sha256": "73a57bacce5f64ff1a3249008a08e2d1c3face973f34bb77432e7d13e138f5c0",
       "bytes": 337
+    },
+    {
+      "path": "internal/cell/metrics_a09_test.go",
+      "sha256": "4bdba1cd45bc634ce81627d7dd7a88f4c837267876f875ed2784fb2bb06526f4",
+      "bytes": 2276
     },
     {
       "path": "internal/cell/types.go",
