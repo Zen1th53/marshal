@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Zen1th53/marshal/internal/events"
 )
 
 // GrantRepository is the narrow durable boundary used by the broker. The
@@ -32,6 +34,7 @@ type Engine struct {
 	repository GrantRepository
 	now        func() time.Time
 	authority  Authority
+	eventStore events.Store
 }
 
 var _ Broker = (*Engine)(nil)
@@ -45,6 +48,12 @@ func NewAuthorizedEngine(repository GrantRepository, now func() time.Time, autho
 		now = time.Now
 	}
 	return &Engine{repository: repository, now: now, authority: authority}
+}
+
+func NewAuditedEngine(repository GrantRepository, now func() time.Time, authority Authority, eventStore events.Store) *Engine {
+	engine := NewAuthorizedEngine(repository, now, authority)
+	engine.eventStore = eventStore
+	return engine
 }
 
 func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error) {
@@ -74,6 +83,12 @@ func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error)
 		return Grant{}, err
 	} else if found {
 		if grantRequestMatches(existing, request) {
+			if err := e.emitGrantEvent(ctx, events.Type("capability.grant.requested"), existing); err != nil {
+				return Grant{}, err
+			}
+			if err := e.emitGrantEvent(ctx, events.Type("capability.grant.issued"), existing); err != nil {
+				return Grant{}, err
+			}
 			return existing, nil
 		}
 		return Grant{}, ErrDenied
@@ -90,6 +105,12 @@ func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error)
 		IdempotencyKey: request.IdempotencyKey,
 	}
 	if err := e.repository.PutCapabilityGrant(ctx, grant); err != nil {
+		return Grant{}, err
+	}
+	if err := e.emitGrantEvent(ctx, events.Type("capability.grant.requested"), grant); err != nil {
+		return Grant{}, err
+	}
+	if err := e.emitGrantEvent(ctx, events.Type("capability.grant.issued"), grant); err != nil {
 		return Grant{}, err
 	}
 	return grant, nil
@@ -130,23 +151,23 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 			continue
 		}
 		if grant.RevokedAt != nil {
-			return Decision{Outcome: OutcomeDeny, Reason: CodeRevoked, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt}, nil
+			return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeRevoked, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
 		}
 		if !at.Before(grant.ExpiresAt) {
-			return Decision{Outcome: OutcomeDeny, Reason: CodeExpired, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt}, nil
+			return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeExpired, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
 		}
 		if at.Before(grant.IssuedAt) {
-			return Decision{Outcome: OutcomeDeny, Reason: CodeDenied, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt}, nil
+			return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeDenied, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
 		}
-		return Decision{Outcome: OutcomeAllow, Reason: "", MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt, PolicyDigest: grant.PolicyDigest}, nil
+		return e.recordDecision(ctx, query, Decision{Outcome: OutcomeAllow, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt, PolicyDigest: grant.PolicyDigest})
 	}
 	if subjectMismatch {
-		return Decision{Outcome: OutcomeDeny, Reason: CodeSubjectMismatch}, nil
+		return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeSubjectMismatch})
 	}
 	if taskMismatch {
-		return Decision{Outcome: OutcomeDeny, Reason: CodeTaskMismatch}, nil
+		return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeTaskMismatch})
 	}
-	return Decision{Outcome: OutcomeDeny, Reason: CodeDenied}, nil
+	return e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeDenied})
 }
 
 func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
@@ -157,13 +178,71 @@ func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
 	if err != nil {
 		return err
 	}
+	if grant.RevokedAt != nil {
+		return e.emitGrantEvent(ctx, events.Type("capability.grant.revoked"), grant)
+	}
 	if grant.Issuer != request.Actor {
 		return ErrSubjectMismatch
 	}
 	if err := e.authority.AuthorizeRevoke(ctx, request, grant); err != nil {
 		return ErrDenied
 	}
-	return e.repository.RevokeCapabilityGrant(ctx, request.GrantID, e.now().UTC())
+	if err := e.repository.RevokeCapabilityGrant(ctx, request.GrantID, e.now().UTC()); err != nil {
+		return err
+	}
+	return e.emitGrantEvent(ctx, events.Type("capability.grant.revoked"), grant)
+}
+
+func (e *Engine) emitGrantEvent(ctx context.Context, eventType events.Type, grant Grant) error {
+	if e.eventStore == nil {
+		return nil
+	}
+	resourceID := resourceReference(grant.Scope.Resource)
+	key := eventKey(string(eventType), string(grant.ID))
+	_, err := e.eventStore.Append(ctx, events.Event{
+		ID: events.EventID(key), Type: eventType, Subject: events.SubjectID(grant.Subject),
+		TaskID: events.TaskID(grant.TaskID), ResourceID: events.ResourceID(resourceID),
+		At: e.now().UTC(), IdempotencyKey: events.IdempotencyKey(key),
+		Data: map[string]string{"grant_id": string(grant.ID), "kind": string(grant.Kind)},
+	})
+	if err != nil {
+		return ErrDenied
+	}
+	return nil
+}
+
+func (e *Engine) recordDecision(ctx context.Context, query Query, decision Decision) (Decision, error) {
+	if e.eventStore == nil {
+		return decision, nil
+	}
+	eventType := events.Type("capability.authorize.denied")
+	if decision.Outcome == OutcomeAllow {
+		eventType = events.Type("capability.authorize.allowed")
+	}
+	key := eventKey(string(eventType), string(query.Subject), string(query.TaskID), string(query.Kind), query.Resource, query.Action)
+	data := map[string]string{"kind": string(query.Kind), "reason": string(decision.Reason)}
+	if decision.MatchedGrant != "" {
+		data["grant_id"] = string(decision.MatchedGrant)
+	}
+	_, err := e.eventStore.Append(ctx, events.Event{
+		ID: events.EventID(key), Type: eventType, Subject: events.SubjectID(query.Subject),
+		TaskID: events.TaskID(query.TaskID), ResourceID: events.ResourceID(resourceReference(query.Resource)),
+		At: e.now().UTC(), IdempotencyKey: events.IdempotencyKey(key), Data: data,
+	})
+	if err != nil {
+		return decision, ErrDenied
+	}
+	return decision, nil
+}
+
+func eventKey(parts ...string) string {
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return "cap-event-" + hex.EncodeToString(sum[:])
+}
+
+func resourceReference(resource string) string {
+	sum := sha256.Sum256([]byte(resource))
+	return "cap-resource-" + hex.EncodeToString(sum[:])
 }
 
 // NormalizeResource canonicalizes resource identity without touching the

@@ -1131,8 +1131,8 @@
     },
     {
       "path": "internal/capability/engine.go",
-      "sha256": "35d61f3533a4f687679b215d1f7b60482cbfdb700514f13a121db2e6385729f5",
-      "bytes": 8186
+      "sha256": "362a42ab567fd3b7f9bcd1714669e96480271154bf31ca7acf14c24d133efe01",
+      "bytes": 11371
     },
     {
       "path": "internal/capability/engine_test.go",
