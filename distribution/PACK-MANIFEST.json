@@ -1080,6 +1080,11 @@
       "bytes": 5286
     },
     {
+      "path": "internal/app/cell_runtime_a06_test.go",
+      "sha256": "cca97d6cfc040ca331bd089faa34cf1b505e3b12e9c069e156fb9d9d898513a9",
+      "bytes": 1982
+    },
+    {
       "path": "internal/app/dag_runtime.go",
       "sha256": "93772cc1c9f61126b006525e14782f7bc1b179df58ea0265027349b0bb3b8a32",
       "bytes": 708
@@ -1311,13 +1316,13 @@
     },
     {
       "path": "internal/cell/adversarial_test.go",
-      "sha256": "bab87af36b4587419be99c29d287f6632b47e760c84bf468cb9a7cdab06e6b1b",
-      "bytes": 1658
+      "sha256": "d8bd7a82207443badb368adf88375e96b34143518b4af4fc1c18bb65dc2e2908",
+      "bytes": 4131
     },
     {
       "path": "internal/cell/engine.go",
-      "sha256": "1563a95ca479ba3989ed76d305cc538d8f276fb9939a395c592b3c2c420df429",
-      "bytes": 7862
+      "sha256": "3434bb5f78a0be57fe4a0d84e3b7619110ffb1410641238d55670e0e1b8fbae2",
+      "bytes": 8797
     },
     {
       "path": "internal/cell/engine_test.go",
