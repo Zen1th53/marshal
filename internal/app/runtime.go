@@ -20,6 +20,7 @@ import (
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/capability"
+	"github.com/Zen1th53/marshal/internal/cell"
 	"github.com/Zen1th53/marshal/internal/dag"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/evidence"
@@ -50,6 +51,7 @@ type Runtime struct {
 	secretBroker       secrets.Broker
 	gateEngine         *gate.Engine
 	riskEngine         *risk.Engine
+	cellManager        *cell.Manager
 	authorityPrincipal *authz.Principal
 	processAuthority   authz.Authority
 	runtimeInstanceID  string
@@ -72,6 +74,7 @@ type Options struct {
 	ProcessAuthority   authz.Authority
 	GateEngine         *gate.Engine
 	RiskEngine         *risk.Engine
+	CellManager        *cell.Manager
 }
 
 type Status struct {
@@ -249,6 +252,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		secretBroker:       options.SecretBroker,
 		gateEngine:         options.GateEngine,
 		riskEngine:         options.RiskEngine,
+		cellManager:        options.CellManager,
 		authorityPrincipal: options.AuthorityPrincipal,
 		processAuthority:   options.ProcessAuthority,
 		runtimeInstanceID:  instanceID,
@@ -273,6 +277,16 @@ func (r *Runtime) AssessTool(ctx context.Context, request risk.AssessmentRequest
 		return risk.Assessment{}, fmt.Errorf("%w: risk engine is unavailable", model.ErrUnavailable)
 	}
 	return r.riskEngine.Assess(ctx, request)
+}
+
+// PrepareCell is the runtime composition boundary for execution cells. The
+// canonical manager owns validation, authorization, persistence and backend
+// lifecycle; callers do not reproduce those rules.
+func (r *Runtime) PrepareCell(ctx context.Context, spec cell.Spec) (cell.Record, error) {
+	if r == nil || r.cellManager == nil {
+		return cell.Record{}, fmt.Errorf("%w: cell manager is unavailable", model.ErrUnavailable)
+	}
+	return r.cellManager.Prepare(ctx, spec)
 }
 
 // WithSecret is the runtime composition boundary for scoped secret use.
