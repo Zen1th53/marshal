@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
+	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/dag"
 	"github.com/Zen1th53/marshal/internal/events"
@@ -35,17 +36,19 @@ import (
 const localProjectID = "PROJECT-local"
 
 type Runtime struct {
-	layout            project.Layout
-	store             *store.Store
-	policy            *policy.Engine
-	dag               *dag.Engine
-	adapters          map[string]adapter.Adapter
-	evidenceSanitizer evidence.Sanitizer
-	eventStream       *events.Engine
-	capabilityBroker  capability.Broker
-	runtimeInstanceID string
-	runtimePolicy     RuntimePolicyConfig
-	policyConfigured  bool
+	layout             project.Layout
+	store              *store.Store
+	policy             *policy.Engine
+	dag                *dag.Engine
+	adapters           map[string]adapter.Adapter
+	evidenceSanitizer  evidence.Sanitizer
+	eventStream        *events.Engine
+	capabilityBroker   capability.Broker
+	authorityPrincipal *authz.Principal
+	processAuthority   authz.Authority
+	runtimeInstanceID  string
+	runtimePolicy      RuntimePolicyConfig
+	policyConfigured   bool
 }
 
 type Options struct {
@@ -58,6 +61,8 @@ type Options struct {
 	EventFreshness     events.FreshnessValidator
 	EventBus           events.Bus
 	CapabilityBroker   capability.Broker
+	AuthorityPrincipal *authz.Principal
+	ProcessAuthority   authz.Authority
 }
 
 type Status struct {
@@ -224,15 +229,17 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		}
 	}
 	rt := &Runtime{
-		layout:            layout,
-		store:             database,
-		policy:            engine,
-		dag:               dagEngine,
-		adapters:          options.Adapters,
-		evidenceSanitizer: sanitizer,
-		eventStream:       eventStream,
-		capabilityBroker:  options.CapabilityBroker,
-		runtimeInstanceID: instanceID,
+		layout:             layout,
+		store:              database,
+		policy:             engine,
+		dag:                dagEngine,
+		adapters:           options.Adapters,
+		evidenceSanitizer:  sanitizer,
+		eventStream:        eventStream,
+		capabilityBroker:   options.CapabilityBroker,
+		authorityPrincipal: options.AuthorityPrincipal,
+		processAuthority:   options.ProcessAuthority,
+		runtimeInstanceID:  instanceID,
 	}
 	if options.RuntimePolicy != nil {
 		rt.runtimePolicy = *options.RuntimePolicy
@@ -740,7 +747,11 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 		return nil, err
 	}
 	if r.capabilityBroker != nil {
-		runner = adapter.NewCapabilityRunner(runner, r.capabilityBroker, subject, task.ID)
+		if r.authorityPrincipal != nil && r.processAuthority != "" {
+			runner = adapter.NewRoleCapabilityRunner(runner, *r.authorityPrincipal, task.ID, r.processAuthority, r.capabilityBroker)
+		} else {
+			runner = adapter.NewCapabilityRunner(runner, r.capabilityBroker, subject, task.ID)
+		}
 	}
 	switch name {
 	case "codex":

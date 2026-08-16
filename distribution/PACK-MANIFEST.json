@@ -1030,6 +1030,16 @@
       "bytes": 5009
     },
     {
+      "path": "internal/adapter/role_capability_runner.go",
+      "sha256": "59fbd3540cbf02ae071334d8dc2e0295bd41f4616cdcf43a9c6928c03470c0eb",
+      "bytes": 1436
+    },
+    {
+      "path": "internal/adapter/role_capability_runner_a06_test.go",
+      "sha256": "8e9576304b4a482845987410ce0e6a77114fb199558c6ff7dd26de5b33347f04",
+      "bytes": 2081
+    },
+    {
       "path": "internal/api/client.go",
       "sha256": "1df1d1fe46cce7b21398ea86fc209fdc5cabb22cb6a0338d861f4a24c8682ffb",
       "bytes": 4917
@@ -1121,8 +1131,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "737ebaba0888b401ee725950b0fac852f32f4bc39c7672a8486a92dc0521f063",
-      "bytes": 26982
+      "sha256": "5d122ae4ec22ff01ceed90ca9d77e592b26aa444011082e9926a86c56ced9798",
+      "bytes": 27495
     },
     {
       "path": "internal/app/runtime_test.go",
