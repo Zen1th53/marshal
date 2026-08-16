@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/capability"
 )
 
 func TestEngineLeasesUsesSecretOnlyInsideCallbackAndZeroesBytes(t *testing.T) {
@@ -14,7 +16,7 @@ func TestEngineLeasesUsesSecretOnlyInsideCallbackAndZeroesBytes(t *testing.T) {
 		return []byte("MARSHAL_TEST_SECRET_T21_A03"), nil
 	})
 	engine, err := NewEngine(EngineConfig{
-		Store: store, Providers: map[string]Provider{"env": provider}, Now: func() time.Time { return now },
+		Store: store, Providers: map[string]Provider{"env": provider}, Capability: allowSecretCapability{}, Now: func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +59,8 @@ func TestEngineFailsClosedForExpiryRevokeProviderAndCallbackFailures(t *testing.
 			providerCalls++
 			return []byte("secret"), nil
 		})},
-		Now: func() time.Time { return now },
+		Capability: allowSecretCapability{},
+		Now:        func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -96,6 +99,90 @@ func TestEngineFailsClosedForExpiryRevokeProviderAndCallbackFailures(t *testing.
 	if store.leases[failed.ID].State != StateLeased {
 		t.Fatalf("callback failure state=%q, want leased", store.leases[failed.ID].State)
 	}
+}
+
+func TestEngineRequiresCapabilityBeforeProviderResolution(t *testing.T) {
+	store := &memoryLeaseStore{}
+	providerCalls := 0
+	engine, err := NewEngine(EngineConfig{
+		Store: store,
+		Providers: map[string]Provider{"env": providerFunc(func(context.Context, Ref) ([]byte, error) {
+			providerCalls++
+			return []byte("secret"), nil
+		})},
+		Capability: denySecretCapability{},
+		Now:        func() time.Time { return time.Unix(100, 0).UTC() },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := engine.Lease(context.Background(), LeaseRequest{ID: "authz", Subject: "agent", TaskID: "task", Ref: Ref{Provider: "env", Name: "TOKEN", Version: "v1"}, Purpose: "test", IssuedAt: time.Unix(100, 0).UTC(), ExpiresAt: time.Unix(200, 0).UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { t.Fatal("denied callback invoked"); return nil }); !errors.Is(err, ErrDenied) {
+		t.Fatalf("authorization error=%v, want ErrDenied", err)
+	}
+	if providerCalls != 0 {
+		t.Fatalf("provider calls=%d, want 0", providerCalls)
+	}
+}
+
+func TestEngineAuthorizesNormalizedSecretReference(t *testing.T) {
+	capabilityCheck := &captureSecretCapability{}
+	now := time.Unix(100, 0).UTC()
+	store := &memoryLeaseStore{}
+	engine, err := NewEngine(EngineConfig{
+		Store: store, Capability: capabilityCheck,
+		Providers: map[string]Provider{"env": providerFunc(func(context.Context, Ref) ([]byte, error) { return []byte("x"), nil })},
+		Now:       func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := engine.Lease(context.Background(), LeaseRequest{ID: "normalized", Subject: "agent", TaskID: "task", Ref: Ref{Provider: "env", Name: "TOKEN", Version: "v1"}, Purpose: "test", IssuedAt: now, ExpiresAt: now.Add(time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if capabilityCheck.query.Resource != "secret://env/TOKEN/v1" || capabilityCheck.query.Action != "read" || capabilityCheck.query.Kind != capability.KindSecretUse {
+		t.Fatalf("authorization query=%#v", capabilityCheck.query)
+	}
+}
+
+type denySecretCapability struct{}
+
+type allowSecretCapability struct{}
+
+type captureSecretCapability struct{ query capability.Query }
+
+func (c *captureSecretCapability) Grant(context.Context, capability.GrantRequest) (capability.Grant, error) {
+	return capability.Grant{}, nil
+}
+func (c *captureSecretCapability) Authorize(_ context.Context, query capability.Query) (capability.Decision, error) {
+	c.query = query
+	return capability.Decision{Outcome: capability.OutcomeAllow}, nil
+}
+func (c *captureSecretCapability) Revoke(context.Context, capability.RevokeRequest) error { return nil }
+
+func (allowSecretCapability) Grant(context.Context, capability.GrantRequest) (capability.Grant, error) {
+	return capability.Grant{}, nil
+}
+func (allowSecretCapability) Authorize(context.Context, capability.Query) (capability.Decision, error) {
+	return capability.Decision{Outcome: capability.OutcomeAllow, Reason: capability.CodeDenied}, nil
+}
+func (allowSecretCapability) Revoke(context.Context, capability.RevokeRequest) error { return nil }
+
+func (denySecretCapability) Grant(context.Context, capability.GrantRequest) (capability.Grant, error) {
+	return capability.Grant{}, capability.ErrDenied
+}
+func (denySecretCapability) Authorize(context.Context, capability.Query) (capability.Decision, error) {
+	return capability.Decision{Outcome: capability.OutcomeDeny, Reason: capability.CodeDenied}, nil
+}
+func (denySecretCapability) Revoke(context.Context, capability.RevokeRequest) error {
+	return capability.ErrDenied
 }
 
 type memoryLeaseStore struct{ leases map[string]Lease }

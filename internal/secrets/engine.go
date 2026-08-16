@@ -3,7 +3,10 @@ package secrets
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/capability"
 )
 
 type LeaseStore interface {
@@ -13,25 +16,27 @@ type LeaseStore interface {
 }
 
 type EngineConfig struct {
-	Store     LeaseStore
-	Providers map[string]Provider
-	Now       func() time.Time
+	Store      LeaseStore
+	Providers  map[string]Provider
+	Capability capability.Broker
+	Now        func() time.Time
 }
 
 type Engine struct {
-	store     LeaseStore
-	providers map[string]Provider
-	now       func() time.Time
+	store      LeaseStore
+	providers  map[string]Provider
+	capability capability.Broker
+	now        func() time.Time
 }
 
 func NewEngine(config EngineConfig) (*Engine, error) {
-	if config.Store == nil || len(config.Providers) == 0 {
+	if config.Store == nil || len(config.Providers) == 0 || config.Capability == nil {
 		return nil, ErrDenied
 	}
 	if config.Now == nil {
 		config.Now = func() time.Time { return time.Now().UTC() }
 	}
-	return &Engine{store: config.Store, providers: config.Providers, now: config.Now}, nil
+	return &Engine{store: config.Store, providers: config.Providers, capability: config.Capability, now: config.Now}, nil
 }
 
 func (e *Engine) Lease(ctx context.Context, request LeaseRequest) (Lease, error) {
@@ -74,6 +79,17 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 		return ErrLeaseExpired
 	}
 	if current.State != StateLeased {
+		return ErrDenied
+	}
+	resource, err := capability.NormalizeResource(capability.KindSecretUse, "secret://"+strings.Join([]string{current.Ref.Provider, current.Ref.Name, current.Ref.Version}, "/"))
+	if err != nil {
+		return ErrDenied
+	}
+	decision, err := e.capability.Authorize(ctx, capability.Query{
+		Subject: capability.SubjectID(current.Subject), TaskID: capability.TaskID(current.TaskID),
+		Kind: capability.KindSecretUse, Resource: resource, Action: "read", At: now,
+	})
+	if err != nil || decision.Outcome != capability.OutcomeAllow {
 		return ErrDenied
 	}
 	provider, ok := e.providers[current.Ref.Provider]

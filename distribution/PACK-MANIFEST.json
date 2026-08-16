@@ -1920,6 +1920,16 @@
       "bytes": 4715
     },
     {
+      "path": "internal/secrets/engine.go",
+      "sha256": "bbcfd64b9029d0c9d5f8972d0762286bef574e0066add75236cbdb5b5ea66f4a",
+      "bytes": 4286
+    },
+    {
+      "path": "internal/secrets/engine_test.go",
+      "sha256": "bfb79268da1ef6eff1869ae3d2adb24f33749ff06ad66a4120cf56e249ee395d",
+      "bytes": 8489
+    },
+    {
       "path": "internal/secrets/errors.go",
       "sha256": "a3ffb5570bd0d349db6f2c799c83d3397079c127efaf3172c3fc647aab391dfd",
       "bytes": 1714
