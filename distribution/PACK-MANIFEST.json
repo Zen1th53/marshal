@@ -705,6 +705,11 @@
       "bytes": 3060
     },
     {
+      "path": "docs/capability-broker.md",
+      "sha256": "b3d8070d1c19bc75368c8486c7830331bf43b93fbb0b38d311e3e8fb99a2ae84",
+      "bytes": 2464
+    },
+    {
       "path": "docs/cli.md",
       "sha256": "c7c883b6b46bff7025153e6c24e3acc0bcbb0898226598f6d721fb42ade770ce",
       "bytes": 7020
@@ -1145,6 +1150,11 @@
       "bytes": 2755
     },
     {
+      "path": "internal/capability/benchmark_a09_test.go",
+      "sha256": "9ee69c40fac8df6d40235145723647b39ced1c4f5ea4ca30ca635419dafb8d01",
+      "bytes": 1160
+    },
+    {
       "path": "internal/capability/engine.go",
       "sha256": "237b401d4ba312812a8727b2022a35935dde635c6d83a88714c278beebe7d216",
       "bytes": 13285
@@ -1163,6 +1173,11 @@
       "path": "internal/capability/events_test.go",
       "sha256": "b9cc2757c0cb8ab4fc7b45f4a94bb0b7aa2217adcb8d8c82b87efd3715c3f0c6",
       "bytes": 4641
+    },
+    {
+      "path": "internal/capability/metrics_a09_test.go",
+      "sha256": "41a349dc12f0f4679e685b3309c8397850b526756af11fcab7ea9b3c9edbc833",
+      "bytes": 2526
     },
     {
       "path": "internal/capability/recovery_a08_test.go",
