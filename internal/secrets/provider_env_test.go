@@ -33,3 +33,14 @@ func TestEnvironmentProviderHonorsCancellation(t *testing.T) {
 		t.Fatalf("canceled error=%v, want context.Canceled", err)
 	}
 }
+
+func BenchmarkEnvironmentProviderResolve(b *testing.B) {
+	provider := EnvironmentProvider{Lookup: func(name string) (string, bool) { return name, true }}
+	ref := Ref{Provider: "env", Name: "API_TOKEN", Version: "v1"}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if _, err := provider.Resolve(context.Background(), ref); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
