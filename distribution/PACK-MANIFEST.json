@@ -1150,6 +1150,21 @@
       "bytes": 2190
     },
     {
+      "path": "internal/authz/errors.go",
+      "sha256": "e2b97c62b8870ea0a81fc045ecc745c61a7c069bb24d37a9307c8b89c98610f5",
+      "bytes": 1304
+    },
+    {
+      "path": "internal/authz/types.go",
+      "sha256": "1b84a5ab717f07399abb844c6692c688cbed719f6fc3ea2a30a5b236ea467060",
+      "bytes": 3041
+    },
+    {
+      "path": "internal/authz/types_test.go",
+      "sha256": "b742a787dc6689a5813489d883d2d2b0a273523a2ea73f560e1d1f8ce26f6416",
+      "bytes": 1498
+    },
+    {
       "path": "internal/capability/adversarial_test.go",
       "sha256": "9c4224f6960c15a75b4f4ab648c3cb7f01664d9eff0c11250823b79a268482bc",
       "bytes": 2755
