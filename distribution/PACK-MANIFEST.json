@@ -1920,6 +1920,21 @@
       "bytes": 2445
     },
     {
+      "path": "internal/risk/errors.go",
+      "sha256": "164137bed5edb37cb242dc9d33c68efd301dfac4aca9a30a4f38b75b1202a018",
+      "bytes": 1407
+    },
+    {
+      "path": "internal/risk/types.go",
+      "sha256": "1f95b11f0c0c59816727048599250bcd0f639d68d028fafe8210ecbc32c649c1",
+      "bytes": 3687
+    },
+    {
+      "path": "internal/risk/types_test.go",
+      "sha256": "8e91b7e24b3c9af87a62583ef3c4945eadaa12635b0a1a22bfe4f3a299861b31",
+      "bytes": 1899
+    },
+    {
       "path": "internal/sandbox/bwrap.go",
       "sha256": "ea4a7d985cbbaa42a122f08aed29cfa19588bdebdf1caf8558e1f9429f1b5b29",
       "bytes": 6870
@@ -2231,8 +2246,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "d3e59f0cddc1ce42bec3f982b36a62a6c1c6aa225d189c912b1b7595f4e7fddb",
-      "bytes": 25724
+      "sha256": "3a3f1a76cbf7d6ed7b8a5917bc7576c4b41deb3de9b5b5bc4d0f5b9980364709",
+      "bytes": 26613
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",
@@ -2401,8 +2416,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "6da7c05b42c32a4b9170abf1e54365951117750bcca9c8280e6c9a0a8db5dde0",
-      "bytes": 7983
+      "sha256": "76cdcc04702be581a7ec998c0a28ee824815f9b165d060bad6c8e56f00fe90bc",
+      "bytes": 8245
     },
     {
       "path": "internal/store/tasks.go",
