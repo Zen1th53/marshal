@@ -1155,6 +1155,16 @@
       "bytes": 1446
     },
     {
+      "path": "internal/authz/events.go",
+      "sha256": "02ae7f1924ab19ff4015c328998ef66f51cf311483ddc0b62c2dfb71f7fcde62",
+      "bytes": 1828
+    },
+    {
+      "path": "internal/authz/events_a05_test.go",
+      "sha256": "2cf82db3a12b60864c3bc14a616995d7aa69563fc1879e367ec961761eb5b930",
+      "bytes": 1899
+    },
+    {
       "path": "internal/authz/security_a04_test.go",
       "sha256": "628c6ffc3365543d9518f95624b6cb14fec204eec0616de85a15bf1a9ba5136d",
       "bytes": 2252
