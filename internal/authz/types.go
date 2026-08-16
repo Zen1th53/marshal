@@ -2,8 +2,11 @@ package authz
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/capability"
 )
 
 type Authority string
@@ -67,13 +70,14 @@ const (
 )
 
 type Decision struct {
-	Allowed   bool            `json:"allowed"`
-	Outcome   DecisionOutcome `json:"outcome"`
-	Reason    ErrorCode       `json:"reason"`
-	SubjectID string          `json:"subject_id"`
-	Authority Authority       `json:"authority"`
-	Resource  string          `json:"resource"`
-	Role      string          `json:"role"`
+	Allowed           bool            `json:"allowed"`
+	Outcome           DecisionOutcome `json:"outcome"`
+	Reason            ErrorCode       `json:"reason"`
+	SubjectID         string          `json:"subject_id"`
+	Authority         Authority       `json:"authority"`
+	Resource          string          `json:"resource"`
+	Role              string          `json:"role"`
+	CapabilityGrantID string          `json:"capability_grant_id,omitempty"`
 }
 
 var defaultRoles = map[string]struct{}{
@@ -154,4 +158,31 @@ func Can(ctx context.Context, subject Principal, authority Authority, resource s
 		}
 	}
 	return decision, ErrDenied
+}
+
+// CanWithCapability composes role authority with the canonical T01 concrete
+// capability check. A role declaration never substitutes for a scoped grant.
+func CanWithCapability(ctx context.Context, subject Principal, authority Authority, resource string, query capability.Query, broker capability.Broker) (Decision, error) {
+	decision, err := Can(ctx, subject, authority, resource)
+	if err != nil {
+		return decision, err
+	}
+	if broker == nil || query.Subject != capability.SubjectID(subject.ID) || query.Resource != resource {
+		decision.Allowed = false
+		decision.Outcome = OutcomeDeny
+		decision.Reason = CodeDenied
+		return decision, ErrDenied
+	}
+	capabilityDecision, err := broker.Authorize(ctx, query)
+	if err != nil || capabilityDecision.Outcome != capability.OutcomeAllow {
+		decision.Allowed = false
+		decision.Outcome = OutcomeDeny
+		decision.Reason = CodeDenied
+		if err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+			return decision, err
+		}
+		return decision, ErrDenied
+	}
+	decision.CapabilityGrantID = string(capabilityDecision.MatchedGrant)
+	return decision, nil
 }
