@@ -1076,8 +1076,8 @@
     },
     {
       "path": "internal/capability/types.go",
-      "sha256": "9578c2d622c99ececb80b2b3024463bd3a777daedaccb5bfb8ae2240ca41da1f",
-      "bytes": 4647
+      "sha256": "865c18303d5026ed6dc59bcc51b913427191a52d6273c948f52134429dfaae73",
+      "bytes": 4733
     },
     {
       "path": "internal/capability/types_test.go",
@@ -1518,6 +1518,52 @@
       "path": "internal/sandbox/bwrap_test.go",
       "sha256": "2eac11348c990a0282e10adca7d6089c1d8af0f4e986f5eca6ea94d8060699a5",
       "bytes": 4715
+    },
+    {
+ 
+      "path": "internal/store/capability_grants.go",
+      "sha256": "c33fea9539ec18fe8cb8166d969cbd506638679d6ba9935be924806da6a7b8d7",
+      "bytes": 9106
+    },
+    {
+      "path": "internal/store/capability_persistence_a02_test.go",
+      "sha256": "17d32e3d5bd017830483f20abe203963ceee9b47c8d5e21fa13980c77354a1e0",
+      "bytes": 4742
+    },
+    {
+      "path": "internal/store/dag.go",
+      "sha256": "8ccc5b6096f133b68e1e84a7d3fa91d4871d500a7d193e1877c5a423c84418ea",
+      "bytes": 10467
+    },
+    {
+      "path": "internal/store/dag_a02_test.go",
+      "sha256": "c99f0c372a340a1252f351758da4dc3c09f80f8ed809513da3d084560e43414e",
+      "bytes": 4270
+    },
+    {
+      "path": "internal/store/dag_a03_test.go",
+      "sha256": "1fedf3324ef787394382f37e2cbf79bfcdea4a281b4c3019717adb1bd700af91",
+      "bytes": 14990
+    },
+    {
+      "path": "internal/store/dag_a04_security_test.go",
+      "sha256": "6ecad39acb8965aa03e307f01a17b5c75535d6f62c9e7658adc2d20043372dfd",
+      "bytes": 3644
+    },
+    {
+      "path": "internal/store/dag_a08_concurrency_test.go",
+      "sha256": "8d5bcaf16d7b753ac1ee7a40dd547f902cd90d1862cfce8311d9b92216a13abd",
+      "bytes": 4238
+    },
+    {
+      "path": "internal/store/dag_a10_release_test.go",
+      "sha256": "7f573d812b24a60d1b5846f7bc86a9efe2ceea3cae70684ca95833f81baf27f7",
+      "bytes": 3313
+    },
+    {
+      "path": "internal/store/dag_authorized_test_helper_test.go",
+      "sha256": "82f03976635015bf786414de996cf5b457f2a90d2ea9c1aab35da307e255d5b5",
+      "bytes": 1238
     },
     {
       "path": "internal/store/events.go",

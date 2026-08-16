@@ -54,6 +54,8 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 	for _, statement := range []string{
 		"DROP INDEX capability_grants_by_expiry",
 		"DROP INDEX capability_grants_by_subject_task_kind",
+		"DROP INDEX capability_grants_by_idempotency",
+		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
 		"DROP TABLE capability_grants",
 		"DROP INDEX policy_test_outcomes_by_status",
 		"DROP TABLE policy_test_outcomes",
@@ -95,6 +97,8 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 	for _, statement := range []string{
 		"DROP INDEX capability_grants_by_expiry",
 		"DROP INDEX capability_grants_by_subject_task_kind",
+		"DROP INDEX capability_grants_by_idempotency",
+		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
 		"DROP TABLE capability_grants",
 		"DROP INDEX policy_test_outcomes_by_status",
 		"DROP TABLE policy_test_outcomes",
