@@ -820,6 +820,11 @@
       "bytes": 2471
     },
     {
+      "path": "docs/secrets.md",
+      "sha256": "505ae4366d12162722658f1f17381a30b3a5ebd9d935f620063c338785db019b",
+      "bytes": 2240
+    },
+    {
       "path": "docs/security-gates.md",
       "sha256": "7b2af736a14b485b5e75c418c57e59ae4c68d0f3e8ecf8a01ee53375d738f895",
       "bytes": 2563
@@ -1146,13 +1151,18 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "a6a3734c7564d8cf424c82049c4372bafbe7fc92f513f017b519d06696c29dd5",
-      "bytes": 27972
+      "sha256": "a946bd7366f331e32b9be3f73bab91e862517a47a9ea952040390787cb2b60a3",
+      "bytes": 28497
     },
     {
       "path": "internal/app/runtime_test.go",
       "sha256": "09e7d796c7afcf02e81c3adb2b5dedeb2b5e5e7ba52857cffb52e87f0d36c1d5",
       "bytes": 4283
+    },
+    {
+      "path": "internal/app/secrets_runtime_a06_test.go",
+      "sha256": "b3fb2e67c4b8389c12d6e922ebdc11526131263c4d1c9ece3f8314d2c3c41ede",
+      "bytes": 1173
     },
     {
       "path": "internal/artifact/store.go",
@@ -1516,8 +1526,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "bbbd85ef8c03df1bb8650b74915e4825cc73ab52b884b0f2db8f9442a95b663f",
-      "bytes": 8155
+      "sha256": "7270bb5ee7998f7203eaae68a8da4424f578578c55983044e7eab6d1b51d9dd2",
+      "bytes": 8378
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
@@ -1920,6 +1930,51 @@
       "bytes": 4715
     },
     {
+      "path": "internal/secrets/adversarial_test.go",
+      "sha256": "f7bd2046824c1b2205754788c059b0ddc69688eabd34bcc601d3e2dd2e9b9014",
+      "bytes": 3194
+    },
+    {
+      "path": "internal/secrets/engine.go",
+      "sha256": "74b2b8a2d88ba9b6e753683942a1d2b641a36a820b72cd357ceb84b5752558ac",
+      "bytes": 9335
+    },
+    {
+      "path": "internal/secrets/engine_test.go",
+      "sha256": "06ae65b860caac7b274631c814d7fd15adb13e7b430f7f2811a7c77b8f3e9895",
+      "bytes": 14664
+    },
+    {
+      "path": "internal/secrets/errors.go",
+      "sha256": "a3ffb5570bd0d349db6f2c799c83d3397079c127efaf3172c3fc647aab391dfd",
+      "bytes": 1714
+    },
+    {
+      "path": "internal/secrets/metrics_a09_test.go",
+      "sha256": "5b7ec9b39fd65e872083f42937f427ad361b862ce1bd9e4e73297755502fb84c",
+      "bytes": 2004
+    },
+    {
+      "path": "internal/secrets/provider_env.go",
+      "sha256": "db846717485abcdc352671d569bc71ff12fef62d0b9a264f18ac2f1bb9243dba",
+      "bytes": 778
+    },
+    {
+      "path": "internal/secrets/provider_env_test.go",
+      "sha256": "c4723d91ef95c225f00ced54c41c1685d9a3ab0db44c10e2d756488c78219a0f",
+      "bytes": 1719
+    },
+    {
+      "path": "internal/secrets/types.go",
+      "sha256": "f491329236659ccb22db5b8318c06ee80eaab8de165b1ce5d581450544e19137",
+      "bytes": 2593
+    },
+    {
+      "path": "internal/secrets/types_test.go",
+      "sha256": "c4ea19a7ab31d4414b00f16096bcb68976939523a3fcbeebdbce7354f5ff5f0b",
+      "bytes": 2574
+    },
+    {
       "path": "internal/store/authz_concurrency_a08_test.go",
       "sha256": "28134ebdbcce23bd67c6bcc365bac49582307788e64b3dd6e87dbbaca3ac6262",
       "bytes": 5357
@@ -2176,8 +2231,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "0ed0f35b73d99ee07ec188c1218fb842a06959e6da2affe6d81c23e831bcc224",
-      "bytes": 23786
+      "sha256": "d3e59f0cddc1ce42bec3f982b36a62a6c1c6aa225d189c912b1b7595f4e7fddb",
+      "bytes": 25724
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",
@@ -2320,14 +2375,34 @@
       "bytes": 7522
     },
     {
+      "path": "internal/store/secrets_concurrency_a08_test.go",
+      "sha256": "2d3c0e742dfc04d64c593b14a5291d789a69d61b121567769c7b55495faa2183",
+      "bytes": 3372
+    },
+    {
+      "path": "internal/store/secrets_persistence.go",
+      "sha256": "756925a8b09447415639c044b4f8d98338e6cf580429ff009a4c4ad8b6662261",
+      "bytes": 6555
+    },
+    {
+      "path": "internal/store/secrets_persistence_a02_test.go",
+      "sha256": "93fa92ffd7b9fdcf5d9df97cfde72016a3cb0d83060fc80796332ed731f5e83a",
+      "bytes": 2978
+    },
+    {
+      "path": "internal/store/secrets_recovery_a08_test.go",
+      "sha256": "762cb653b24d5f9ac06fa4a75b9063aefb894a43646e143ab4180c7820c12f3a",
+      "bytes": 2085
+    },
+    {
       "path": "internal/store/sqlite.go",
       "sha256": "2fa8cf13af9e1785f30bc25021d70b78592c82d46942cd1cee745fc3531c12d6",
       "bytes": 2880
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "d164fe57888a5325d65f3738a58bcc0d63d8def28bb051ad31ddc42133dd9b02",
-      "bytes": 7736
+      "sha256": "6da7c05b42c32a4b9170abf1e54365951117750bcca9c8280e6c9a0a8db5dde0",
+      "bytes": 7983
     },
     {
       "path": "internal/store/tasks.go",
