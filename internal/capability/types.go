@@ -73,15 +73,16 @@ func (s Scope) Validate() error {
 }
 
 type Grant struct {
-	ID        GrantID        `json:"id"`
-	Subject   SubjectID      `json:"subject"`
-	TaskID    TaskID         `json:"task_id"`
-	Kind      CapabilityKind `json:"kind"`
-	Scope     Scope          `json:"scope"`
-	IssuedAt  time.Time      `json:"issued_at"`
-	ExpiresAt time.Time      `json:"expires_at"`
-	Issuer    SubjectID      `json:"issuer"`
-	RevokedAt *time.Time     `json:"revoked_at,omitempty"`
+	ID           GrantID        `json:"id"`
+	Subject      SubjectID      `json:"subject"`
+	TaskID       TaskID         `json:"task_id"`
+	Kind         CapabilityKind `json:"kind"`
+	Scope        Scope          `json:"scope"`
+	IssuedAt     time.Time      `json:"issued_at"`
+	ExpiresAt    time.Time      `json:"expires_at"`
+	Issuer       SubjectID      `json:"issuer"`
+	PolicyDigest string         `json:"policy_digest,omitempty"`
+	RevokedAt    *time.Time     `json:"revoked_at,omitempty"`
 }
 
 func (g Grant) Validate() error {
