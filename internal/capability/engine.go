@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -74,7 +75,7 @@ func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error)
 	}
 	request.Scope.Resource = resource
 	if err := e.authority.AuthorizeGrant(ctx, request); err != nil {
-		return Grant{}, ErrDenied
+		return Grant{}, safeBoundaryError(err)
 	}
 	if !request.ExpiresAt.After(now) {
 		return Grant{}, ErrExpired
@@ -185,7 +186,7 @@ func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
 		return ErrSubjectMismatch
 	}
 	if err := e.authority.AuthorizeRevoke(ctx, request, grant); err != nil {
-		return ErrDenied
+		return safeBoundaryError(err)
 	}
 	if err := e.repository.RevokeCapabilityGrant(ctx, request.GrantID, e.now().UTC()); err != nil {
 		return err
@@ -206,7 +207,7 @@ func (e *Engine) emitGrantEvent(ctx context.Context, eventType events.Type, gran
 		Data: map[string]string{"grant_id": string(grant.ID), "kind": string(grant.Kind)},
 	})
 	if err != nil {
-		return ErrDenied
+		return safeBoundaryError(err)
 	}
 	return nil
 }
@@ -230,9 +231,16 @@ func (e *Engine) recordDecision(ctx context.Context, query Query, decision Decis
 		At: e.now().UTC(), IdempotencyKey: events.IdempotencyKey(key), Data: data,
 	})
 	if err != nil {
-		return decision, ErrDenied
+		return decision, safeBoundaryError(err)
 	}
 	return decision, nil
+}
+
+func safeBoundaryError(err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return ErrDenied
 }
 
 func eventKey(parts ...string) string {
