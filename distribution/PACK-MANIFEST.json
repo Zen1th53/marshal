@@ -1140,9 +1140,14 @@
       "bytes": 2190
     },
     {
+      "path": "internal/capability/adversarial_test.go",
+      "sha256": "9c4224f6960c15a75b4f4ab648c3cb7f01664d9eff0c11250823b79a268482bc",
+      "bytes": 2755
+    },
+    {
       "path": "internal/capability/engine.go",
-      "sha256": "362a42ab567fd3b7f9bcd1714669e96480271154bf31ca7acf14c24d133efe01",
-      "bytes": 11371
+      "sha256": "e79095028bb7cf0241f9d270a1e0db8715cfdea7d7298f78ac2dd7485d30abfe",
+      "bytes": 11595
     },
     {
       "path": "internal/capability/engine_test.go",
@@ -1763,6 +1768,11 @@
       "path": "internal/sandbox/bwrap_test.go",
       "sha256": "2eac11348c990a0282e10adca7d6089c1d8af0f4e986f5eca6ea94d8060699a5",
       "bytes": 4715
+    },
+    {
+      "path": "internal/store/capability_adversarial_a07_test.go",
+      "sha256": "1ffa78b1ae6e9811121b1713fbe0ee3500882ac8c165ea0236edec3ec7a8984e",
+      "bytes": 1268
     },
     {
       "path": "internal/store/capability_engine_a03_test.go",
