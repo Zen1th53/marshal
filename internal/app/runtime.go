@@ -115,6 +115,7 @@ type RunRequest struct {
 	AgentID          string `json:"agent_id"`
 	Adapter          string `json:"adapter"`
 	ExpectedRevision int64  `json:"expected_revision"`
+	NetworkRequired  bool   `json:"network_required,omitempty"`
 }
 
 type RunResult struct {
@@ -559,7 +560,15 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		return RunResult{}, err
 	}
 	executionRevision := claimedRevision + 1
-	agentAdapter, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID)
+	networkAllowed := false
+	if request.NetworkRequired {
+		if err := authorizeNetworkAccess(r.policy, request.AgentID, claim.Session.ID, task.ID, claim.Session.Role, task.Risk, true); err != nil {
+			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
+			return RunResult{}, err
+		}
+		networkAllowed = true
+	}
+	agentAdapter, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, networkAllowed)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
@@ -705,7 +714,7 @@ func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {
 	return nil
 }
 
-func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string) (adapter.Adapter, error) {
+func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string, networkAllowed bool) (adapter.Adapter, error) {
 	if candidate := r.adapters[name]; candidate != nil {
 		return candidate, nil
 	}
@@ -726,7 +735,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	if bwrapPath, lookupErr := exec.LookPath("bwrap"); lookupErr == nil {
 		backend := sandbox.NewBwrap(bwrapPath)
 		capability := backend.Probe(ctx)
-		chosen, chooseErr := sandbox.ChooseIsolation(capability, task.Risk, true)
+		chosen, chooseErr := sandbox.ChooseIsolation(capability, task.Risk, networkAllowed)
 		if chooseErr != nil {
 			return nil, chooseErr
 		}
@@ -802,13 +811,13 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			}
 
 			runner = worker.NewSandboxed(process, backend, model.SandboxRequest{
-				Worktree: worktreePath, NetworkAllowed: true,
+				Worktree: worktreePath, NetworkAllowed: networkAllowed,
 				ReadOnlyBinds: readOnlyBinds,
 				WritableTmpfs: writableTmpfs,
 				ExtraEnv:      extraEnv,
 			})
 		}
-	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, true); err != nil {
+	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed); err != nil {
 		return nil, err
 	}
 	if r.capabilityBroker != nil {
