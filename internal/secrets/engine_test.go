@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/capability"
+	"github.com/Zen1th53/marshal/internal/events"
 )
 
 func TestEngineLeasesUsesSecretOnlyInsideCallbackAndZeroesBytes(t *testing.T) {
@@ -44,8 +45,8 @@ func TestEngineLeasesUsesSecretOnlyInsideCallbackAndZeroesBytes(t *testing.T) {
 	if store.leases[lease.ID].State != StateUsed {
 		t.Fatalf("stored state=%q, want used", store.leases[lease.ID].State)
 	}
-	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { return nil }); !errors.Is(err, ErrDenied) {
-		t.Fatalf("reused lease error=%v, want ErrDenied", err)
+	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { t.Fatal("used lease callback invoked"); return nil }); err != nil {
+		t.Fatalf("terminal retry error=%v", err)
 	}
 }
 
@@ -145,11 +146,105 @@ func TestEngineAuthorizesNormalizedSecretReference(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { return nil }); err != nil {
-		t.Fatal(err)
+		t.Fatalf("WithSecret: %v", err)
 	}
 	if capabilityCheck.query.Resource != "secret://env/TOKEN/v1" || capabilityCheck.query.Action != "read" || capabilityCheck.query.Kind != capability.KindSecretUse {
 		t.Fatalf("authorization query=%#v", capabilityCheck.query)
 	}
+}
+
+func TestEngineEmitsReferenceOnlySecretLifecycleEvents(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	eventStore := &memoryEventStore{}
+	engine, err := NewEngine(EngineConfig{
+		Store: &memoryLeaseStore{}, Capability: allowSecretCapability{}, EventStore: eventStore,
+		Providers: map[string]Provider{"env": providerFunc(func(context.Context, Ref) ([]byte, error) { return []byte("secret"), nil })},
+		Now:       func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("Lease: %v events=%#v", err, eventStore.events)
+	}
+	lease, err := engine.Lease(context.Background(), LeaseRequest{ID: "events", Subject: "agent", TaskID: "task", Ref: Ref{Provider: "env", Name: "TOKEN", Version: "v1"}, Purpose: "test", IssuedAt: now, ExpiresAt: now.Add(time.Minute)})
+	if err != nil {
+		t.Fatalf("Lease: %v events=%#v", err, eventStore.events)
+	}
+	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { t.Fatal("terminal retry callback invoked"); return nil }); err != nil {
+		t.Fatalf("terminal retry: %v", err)
+	}
+	want := []events.Type{"secret.lease.requested", "secret.lease.issued", "secret.access.used"}
+	if len(eventStore.events) != len(want) {
+		t.Fatalf("event count=%d, want %d", len(eventStore.events), len(want))
+	}
+	for i, event := range eventStore.events {
+		if event.Type != want[i] || event.Subject != "agent" || event.TaskID != "task" || event.Data["secret_value"] != "" {
+			t.Fatalf("event[%d]=%#v", i, event)
+		}
+	}
+}
+
+func TestEngineReconcilesDurableUseWhenEventDeliveryFails(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	eventStore := &flakyEventStore{failUsed: true}
+	store := &memoryLeaseStore{}
+	providerCalls := 0
+	engine, err := NewEngine(EngineConfig{
+		Store: store, Capability: allowSecretCapability{}, EventStore: eventStore,
+		Providers: map[string]Provider{"env": providerFunc(func(context.Context, Ref) ([]byte, error) { providerCalls++; return []byte("secret"), nil })},
+		Now:       func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := engine.Lease(context.Background(), LeaseRequest{ID: "event-failure", Subject: "agent", TaskID: "task", Ref: Ref{Provider: "env", Name: "TOKEN", Version: "v1"}, Purpose: "test", IssuedAt: now, ExpiresAt: now.Add(time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { return nil }); !errors.Is(err, ErrDenied) {
+		t.Fatalf("first use error=%v, want ErrDenied", err)
+	}
+	if store.leases[lease.ID].State != StateUsed || providerCalls != 1 {
+		t.Fatalf("durable state=%q provider calls=%d", store.leases[lease.ID].State, providerCalls)
+	}
+	eventStore.failUsed = false
+	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { t.Fatal("reconciliation callback invoked"); return nil }); err != nil {
+		t.Fatalf("reconciliation error=%v", err)
+	}
+	if providerCalls != 1 {
+		t.Fatalf("provider calls after reconciliation=%d, want 1", providerCalls)
+	}
+}
+
+type memoryEventStore struct{ events []events.Event }
+
+type flakyEventStore struct {
+	memoryEventStore
+	failUsed bool
+}
+
+func (s *flakyEventStore) Append(ctx context.Context, event events.Event) (events.Event, error) {
+	if s.failUsed && event.Type == events.Type("secret.access.used") {
+		return events.Event{}, errors.New("downstream event unavailable")
+	}
+	return s.memoryEventStore.Append(ctx, event)
+}
+
+func (s *memoryEventStore) Append(_ context.Context, event events.Event) (events.Event, error) {
+	if err := event.Validate(); err != nil {
+		return events.Event{}, err
+	}
+	for _, existing := range s.events {
+		if existing.IdempotencyKey == event.IdempotencyKey {
+			return existing, nil
+		}
+	}
+	s.events = append(s.events, events.CloneEvent(event))
+	return event, nil
+}
+func (s *memoryEventStore) Since(context.Context, events.Sequence, int) ([]events.Event, error) {
+	return nil, nil
 }
 
 type denySecretCapability struct{}
