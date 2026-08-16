@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -46,6 +48,7 @@ type Engine struct {
 	repository AssessmentRepository
 	authority  Authority
 	eventStore events.Store
+	metrics    *evidence.MetricsRecorder
 }
 
 func NewEngine(repository AssessmentRepository) *Engine {
@@ -59,6 +62,12 @@ func NewAuthorizedEngine(repository AssessmentRepository, authority Authority) *
 func NewAuditedEngine(repository AssessmentRepository, authority Authority, eventStore events.Store) *Engine {
 	engine := NewAuthorizedEngine(repository, authority)
 	engine.eventStore = eventStore
+	return engine
+}
+
+func NewObservedEngine(repository AssessmentRepository, authority Authority, metrics *evidence.MetricsRecorder) *Engine {
+	engine := NewAuthorizedEngine(repository, authority)
+	engine.metrics = metrics
 	return engine
 }
 
@@ -86,40 +95,78 @@ func (e *Engine) Require(ctx context.Context, assessment Assessment) error {
 }
 
 func (e *Engine) Assess(ctx context.Context, request AssessmentRequest) (Assessment, error) {
+	started := time.Now()
+	var resultErr error
+	defer func() { e.observe(resultErr, time.Since(started)) }()
 	if e == nil || e.repository == nil {
-		return Assessment{}, fmt.Errorf("%w: risk assessment repository is unavailable", ErrDescriptorInvalid)
+		resultErr = fmt.Errorf("%w: risk assessment repository is unavailable", ErrDescriptorInvalid)
+		return Assessment{}, resultErr
 	}
 	if err := request.Validate(); err != nil {
+		resultErr = err
 		return Assessment{}, err
 	}
 	if existing, err := e.repository.GetRiskAssessment(ctx, request.ID); err == nil {
 		if existing.ActionDigest != actionDigest(request.Descriptor) || existing.PolicyDigest != request.PolicyDigest {
-			return Assessment{}, fmt.Errorf("%w: risk assessment identity is immutable", ErrDescriptorInvalid)
+			resultErr = fmt.Errorf("%w: risk assessment identity is immutable", ErrDescriptorInvalid)
+			return Assessment{}, resultErr
 		}
 		if err := e.emitAssessmentEvents(ctx, existing, request.Descriptor.Resource); err != nil {
+			resultErr = err
 			return Assessment{}, err
 		}
 		return existing, nil
 	} else if !errors.Is(err, model.ErrNotFound) {
-		return Assessment{}, fmt.Errorf("%w: risk assessment lookup unavailable", model.ErrUnavailable)
+		resultErr = fmt.Errorf("%w: risk assessment lookup unavailable", model.ErrUnavailable)
+		return Assessment{}, resultErr
 	}
 
 	assessment := classify(request)
 	if request.Descriptor.ClaimedLevel != "" && request.Descriptor.ClaimedLevel.Rank() < assessment.Level.Rank() {
-		return Assessment{}, ErrDowngradeForbidden
+		resultErr = ErrDowngradeForbidden
+		return Assessment{}, resultErr
 	}
 	if err := e.repository.PutRiskAssessment(ctx, assessment); err != nil {
+		resultErr = err
 		return Assessment{}, err
 	}
 	advanced, err := e.advanceToRequirements(ctx, assessment.ID)
 	if err != nil {
+		resultErr = err
 		return Assessment{}, err
 	}
 	assessment = advanced
 	if err := e.emitAssessmentEvents(ctx, assessment, request.Descriptor.Resource); err != nil {
+		resultErr = err
 		return Assessment{}, err
 	}
 	return assessment, nil
+}
+
+func (e *Engine) observe(err error, duration time.Duration) {
+	if e == nil || e.metrics == nil {
+		return
+	}
+	result := evidence.MetricResultSuccess
+	reason := ""
+	if err != nil {
+		result = evidence.MetricResultError
+		if errors.Is(err, ErrDescriptorInvalid) {
+			result = evidence.MetricResultInvalid
+			reason = string(CodeDescriptorInvalid)
+		} else if errors.Is(err, ErrDowngradeForbidden) {
+			result = evidence.MetricResultDenied
+			reason = string(CodeDowngradeForbidden)
+		} else if errors.Is(err, model.ErrConflict) {
+			result = evidence.MetricResultConflict
+			reason = "SQLITE_BUSY"
+		} else if errors.Is(err, context.Canceled) {
+			result = evidence.MetricResultCancelled
+		} else {
+			reason = "RISK_ERROR"
+		}
+	}
+	e.metrics.Observe(evidence.MetricOperationRisk, result, reason, duration)
 }
 
 func (e *Engine) advanceToRequirements(ctx context.Context, id AssessmentID) (Assessment, error) {
