@@ -155,6 +155,18 @@ func (s *Store) GetArtifact(ctx context.Context, artifactID string) (model.Artif
 	return artifact, nil
 }
 
+func (s *Store) GetArtifactByDigest(ctx context.Context, digest string) (model.Artifact, error) {
+	var artifactID string
+	err := s.db.QueryRowContext(ctx, "SELECT artifact_id FROM artifacts WHERE digest = ?", digest).Scan(&artifactID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Artifact{}, fmt.Errorf("%w: artifact digest %s", model.ErrNotFound, digest)
+	}
+	if err != nil {
+		return model.Artifact{}, fmt.Errorf("find artifact by digest: %w", err)
+	}
+	return s.GetArtifact(ctx, artifactID)
+}
+
 func (s *Store) RecordVerification(ctx context.Context, verification model.Verification) error {
 	if verification.ID == "" || verification.TaskID == "" || verification.Commit == "" ||
 		!digestPattern.MatchString(verification.OutputDigest) || verification.CreatedAt.IsZero() {
