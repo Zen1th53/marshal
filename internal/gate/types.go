@@ -111,7 +111,7 @@ func (d Decision) Validate() error {
 	if err := d.PolicyDigest.Validate(); err != nil {
 		return ErrInvalidDecision
 	}
-	if d.ChangeDigest != "" && len(d.ChangeDigest) != len("sha256:")+64 {
+	if d.ChangeDigest != "" && policy.PolicyDigest(d.ChangeDigest).Validate() != nil {
 		return ErrInvalidDecision
 	}
 	if len(d.Checks) == 0 {
