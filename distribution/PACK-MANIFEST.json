@@ -1310,9 +1310,14 @@
       "bytes": 2594
     },
     {
+      "path": "internal/cell/adversarial_test.go",
+      "sha256": "bab87af36b4587419be99c29d287f6632b47e760c84bf468cb9a7cdab06e6b1b",
+      "bytes": 1658
+    },
+    {
       "path": "internal/cell/engine.go",
-      "sha256": "d6cd0db1cbd2e43c548f71cb5a2165d1ebeb26a45595de5fcfccbb87d3df175a",
-      "bytes": 5535
+      "sha256": "1563a95ca479ba3989ed76d305cc538d8f276fb9939a395c592b3c2c420df429",
+      "bytes": 7862
     },
     {
       "path": "internal/cell/engine_test.go",
