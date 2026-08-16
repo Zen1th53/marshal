@@ -1321,8 +1321,8 @@
     },
     {
       "path": "internal/cell/engine.go",
-      "sha256": "fd493076f723c0f99beb41404aa96e01dac4d301a1ebda0e493e933a1918b40b",
-      "bytes": 10292
+      "sha256": "6bdb05ba934c0882370a2a6950040a6504925f119487355d7d1625853bc8bf71",
+      "bytes": 12088
     },
     {
       "path": "internal/cell/engine_test.go",
@@ -1576,8 +1576,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "5e853e85eab7cdc2bf3d25ff29f8b42933b748662e78e06d6697ea8b35e031e3",
-      "bytes": 8645
+      "sha256": "abbfaed2bb57c676194a19552b5e3284cb385f274ef72d78eb9fed64733f14fc",
+      "bytes": 8919
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
@@ -2118,6 +2118,11 @@
       "path": "internal/store/capability_persistence_a02_test.go",
       "sha256": "17d32e3d5bd017830483f20abe203963ceee9b47c8d5e21fa13980c77354a1e0",
       "bytes": 4742
+    },
+    {
+      "path": "internal/store/cell_concurrency_a08_test.go",
+      "sha256": "5b07d52a104b26a528e47c4895251dd36b9c08154734fd1c5454fa9313a46062",
+      "bytes": 3731
     },
     {
       "path": "internal/store/cell_persistence.go",
