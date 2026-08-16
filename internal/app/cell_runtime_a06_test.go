@@ -23,6 +23,13 @@ func (r *runtimeCellRepository) GetCell(_ context.Context, id cell.CellID) (cell
 	}
 	return r.record, nil
 }
+func (r *runtimeCellRepository) ClaimCellPreparation(_ context.Context, id cell.CellID) (bool, error) {
+	if r.record.ID != id || r.record.State != cell.StateNew {
+		return false, nil
+	}
+	r.record.State = cell.StatePreparing
+	return true, nil
+}
 func (r *runtimeCellRepository) TransitionCellState(_ context.Context, id cell.CellID, from, to cell.State) error {
 	if r.record.ID != id || r.record.State != from {
 		return errors.New("conflict")

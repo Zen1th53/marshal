@@ -10,10 +10,21 @@ type memoryCellRepository struct{ record Record }
 
 func (r *memoryCellRepository) PutCell(_ context.Context, record Record) error {
 	if r.record.ID != "" {
-		return errors.New("cell already exists")
+		return nil
 	}
 	r.record = record
 	return nil
+}
+
+func (r *memoryCellRepository) ClaimCellPreparation(_ context.Context, id CellID) (bool, error) {
+	if r.record.ID != id {
+		return false, errors.New("not found")
+	}
+	if r.record.State != StateNew {
+		return false, nil
+	}
+	r.record.State = StatePreparing
+	return true, nil
 }
 
 func (r *memoryCellRepository) GetCell(_ context.Context, id CellID) (Record, error) {

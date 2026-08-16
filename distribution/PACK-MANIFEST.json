@@ -1081,8 +1081,8 @@
     },
     {
       "path": "internal/app/cell_runtime_a06_test.go",
-      "sha256": "cca97d6cfc040ca331bd089faa34cf1b505e3b12e9c069e156fb9d9d898513a9",
-      "bytes": 1982
+      "sha256": "205f380cb91a56c6f5d8e871b5297c943c906b3568f93bf3843fb34d5b577db2",
+      "bytes": 2226
     },
     {
       "path": "internal/app/dag_runtime.go",
@@ -1321,13 +1321,13 @@
     },
     {
       "path": "internal/cell/engine.go",
-      "sha256": "3434bb5f78a0be57fe4a0d84e3b7619110ffb1410641238d55670e0e1b8fbae2",
-      "bytes": 8797
+      "sha256": "fd493076f723c0f99beb41404aa96e01dac4d301a1ebda0e493e933a1918b40b",
+      "bytes": 10292
     },
     {
       "path": "internal/cell/engine_test.go",
-      "sha256": "201c492a1368a13957887deea364c9d106c27e5064273e8a2add8dd8975a2c17",
-      "bytes": 3451
+      "sha256": "48504cca5fbced1e459041fff59b87afcd11e7e21d84f8ad69f6f11f46fd8c85",
+      "bytes": 3696
     },
     {
       "path": "internal/cell/errors.go",
@@ -1338,6 +1338,11 @@
       "path": "internal/cell/events_test.go",
       "sha256": "77990c8b3adfd5c0ef459f6288c747ed58ecdfc0379e8588f7899afed8e42b41",
       "bytes": 1631
+    },
+    {
+      "path": "internal/cell/fuzz_test.go",
+      "sha256": "73a57bacce5f64ff1a3249008a08e2d1c3face973f34bb77432e7d13e138f5c0",
+      "bytes": 337
     },
     {
       "path": "internal/cell/types.go",
@@ -2116,8 +2121,8 @@
     },
     {
       "path": "internal/store/cell_persistence.go",
-      "sha256": "bf4d1068c4e426a1ff828b4978552de99ac0497352a5bbb3075c44c1ff7db6da",
-      "bytes": 5175
+      "sha256": "f068cbf29eb9dc8c50ada30f7c53a60a7ad9b36ae4d2396a4e289c50e59aa373",
+      "bytes": 6058
     },
     {
       "path": "internal/store/cell_persistence_a02_test.go",
