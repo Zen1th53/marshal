@@ -1101,8 +1101,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "35074926bfe2f5bbe1c4e9c3a116cdda3634ddc41cdbc83568dcde2397d217a1",
-      "bytes": 26663
+      "sha256": "737ebaba0888b401ee725950b0fac852f32f4bc39c7672a8486a92dc0521f063",
+      "bytes": 26982
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1143,6 +1143,11 @@
       "path": "internal/capability/errors.go",
       "sha256": "4adb391217f79ba83e6c613651e8ab58cac4862ec2debd66906b543b0815d3af",
       "bytes": 1628
+    },
+    {
+      "path": "internal/capability/events_test.go",
+      "sha256": "b9cc2757c0cb8ab4fc7b45f4a94bb0b7aa2217adcb8d8c82b87efd3715c3f0c6",
+      "bytes": 4641
     },
     {
       "path": "internal/capability/types.go",
