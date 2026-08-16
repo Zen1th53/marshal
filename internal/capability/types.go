@@ -51,20 +51,41 @@ func (s Scope) Validate() error {
 	return nil
 }
 
+type GrantState string
+
+const (
+	GrantRequested GrantState = "requested"
+	GrantIssued    GrantState = "issued"
+	GrantActive    GrantState = "active"
+	GrantRevoked   GrantState = "revoked"
+	GrantExpired   GrantState = "expired"
+)
+
+func (s GrantState) Valid() bool {
+	switch s {
+	case GrantRequested, GrantIssued, GrantActive, GrantRevoked, GrantExpired:
+		return true
+	default:
+		return false
+	}
+}
+
 type Grant struct {
-	ID        string     `json:"id"`
-	Subject   string     `json:"subject"`
-	TaskID    string     `json:"task_id"`
-	Kind      Kind       `json:"kind"`
-	Scope     Scope      `json:"scope"`
-	IssuedAt  time.Time  `json:"issued_at"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	Issuer    string     `json:"issuer"`
-	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+	ID           string     `json:"id"`
+	Subject      string     `json:"subject"`
+	TaskID       string     `json:"task_id"`
+	Kind         Kind       `json:"kind"`
+	Scope        Scope      `json:"scope"`
+	IssuedAt     time.Time  `json:"issued_at"`
+	ExpiresAt    time.Time  `json:"expires_at"`
+	Issuer       string     `json:"issuer"`
+	State        GrantState `json:"state"`
+	PolicyDigest string     `json:"policy_digest,omitempty"`
+	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
 }
 
 func (g Grant) Validate() error {
-	if !nonEmpty(g.ID) || !nonEmpty(g.Subject) || !nonEmpty(g.TaskID) || !nonEmpty(g.Issuer) || !g.Kind.Valid() {
+	if !nonEmpty(g.ID) || !nonEmpty(g.Subject) || !nonEmpty(g.TaskID) || !nonEmpty(g.Issuer) || !g.Kind.Valid() || !g.State.Valid() {
 		return ErrInvalidGrant
 	}
 	if err := g.Scope.Validate(); err != nil {
@@ -86,6 +107,13 @@ type GrantRequest struct {
 	Scope   Scope
 	TTL     time.Duration
 	Issuer  string
+}
+
+type GrantRepository interface {
+	SaveGrant(context.Context, Grant) error
+	LoadGrant(context.Context, string) (Grant, error)
+	ListGrants(context.Context, Kind) ([]Grant, error)
+	RevokeGrant(context.Context, string, time.Time) error
 }
 
 type Query struct {
@@ -143,6 +171,7 @@ var (
 	ErrInvalidGrant    = errors.New("invalid capability grant")
 	ErrInvalidDecision = errors.New("invalid capability decision")
 	ErrDenied          = errors.Join(ErrCapability, errors.New("capability denied"))
+	ErrGrantNotFound   = errors.Join(ErrCapability, errors.New("capability grant not found"))
 )
 
 func nonEmpty(value string) bool { return strings.TrimSpace(value) != "" }

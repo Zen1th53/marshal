@@ -18,6 +18,7 @@ func TestCapabilityContractProvidesTypedGrantDecisionAndErrors(t *testing.T) {
 		IssuedAt:  issued,
 		ExpiresAt: issued.Add(time.Hour),
 		Issuer:    "broker-admin",
+		State:     GrantActive,
 	}
 	if err := grant.Validate(); err != nil {
 		t.Fatalf("valid grant rejected: %v", err)
