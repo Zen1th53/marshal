@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,15 @@ func (r *gateEventRecorder) Append(_ context.Context, event events.Event) (event
 }
 func (r *gateEventRecorder) Since(context.Context, events.Sequence, int) ([]events.Event, error) {
 	return append([]events.Event(nil), r.events...), nil
+}
+
+type gateEventFailure struct{}
+
+func (gateEventFailure) Append(context.Context, events.Event) (events.Event, error) {
+	return events.Event{}, errors.New("downstream event unavailable")
+}
+func (gateEventFailure) Since(context.Context, events.Sequence, int) ([]events.Event, error) {
+	return nil, nil
 }
 
 func TestGateDecisionDurableStatePrecedesBoundedAuditEvent(t *testing.T) {
@@ -64,6 +74,26 @@ func TestGateDecisionAuditDoesNotPersistRawResourceOrSecret(t *testing.T) {
 		if strings.Contains(string(event.ResourceID), "MARSHAL_TEST_SECRET_T20_A05") {
 			t.Fatal("raw secret resource in event")
 		}
+	}
+}
+
+func TestGateDecisionRetryReconcilesAfterEventFailure(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	decision := a05GateDecision()
+	decision.DecisionID = "decision-a05-retry"
+	if err := st.PutGateDecisionWithAudit(ctx, decision, gateEventFailure{}); err == nil {
+		t.Fatal("event failure unexpectedly succeeded")
+	}
+	recorder := &gateEventRecorder{}
+	if err := st.PutGateDecisionWithAudit(ctx, decision, recorder); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorder.events) != 1 || queryInt(t, st.db, "SELECT count(*) FROM gate_decisions WHERE decision_id = ?", decision.DecisionID) != 1 {
+		t.Fatalf("events=%d durable=%d", len(recorder.events), queryInt(t, st.db, "SELECT count(*) FROM gate_decisions WHERE decision_id = ?", decision.DecisionID))
 	}
 }
 
