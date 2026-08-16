@@ -12,6 +12,11 @@ type memoryGrantRepository struct {
 	grants map[GrantID]Grant
 }
 
+type testAuthority struct{}
+
+func (testAuthority) AuthorizeGrant(context.Context, GrantRequest) error          { return nil }
+func (testAuthority) AuthorizeRevoke(context.Context, RevokeRequest, Grant) error { return nil }
+
 func (r *memoryGrantRepository) PutCapabilityGrant(_ context.Context, grant Grant) error {
 	if existing, ok := r.grants[grant.ID]; ok && !reflect.DeepEqual(existing, grant) {
 		return ErrDenied
@@ -58,7 +63,7 @@ func (r *memoryGrantRepository) RevokeCapabilityGrant(_ context.Context, id Gran
 func TestEngineGrantsAndAuthorizesExactScopedRequest(t *testing.T) {
 	now := time.Date(2026, 8, 16, 14, 0, 0, 0, time.UTC)
 	repo := &memoryGrantRepository{grants: map[GrantID]Grant{}}
-	engine := NewEngine(repo, func() time.Time { return now })
+	engine := NewAuthorizedEngine(repo, func() time.Time { return now }, testAuthority{})
 	grant, err := engine.Grant(context.Background(), GrantRequest{
 		Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemWrite,
 		Scope:     Scope{Resource: "/workspace/task-1", Actions: []string{"write"}},
@@ -79,7 +84,7 @@ func TestEngineGrantsAndAuthorizesExactScopedRequest(t *testing.T) {
 func TestEngineDenyReasonsAndIdempotentGrant(t *testing.T) {
 	now := time.Date(2026, 8, 16, 14, 0, 0, 0, time.UTC)
 	repo := &memoryGrantRepository{grants: map[GrantID]Grant{}}
-	engine := NewEngine(repo, func() time.Time { return now })
+	engine := NewAuthorizedEngine(repo, func() time.Time { return now }, testAuthority{})
 	request := GrantRequest{
 		Subject: "agent-1", TaskID: "task-1", Kind: KindSecretUse,
 		Scope:     Scope{Resource: "secret://task-1", Actions: []string{"use"}},
@@ -118,7 +123,7 @@ func TestEngineDenyReasonsAndIdempotentGrant(t *testing.T) {
 func TestEngineRejectsMismatchExpiryAndUnauthorizedRevoke(t *testing.T) {
 	now := time.Date(2026, 8, 16, 14, 0, 0, 0, time.UTC)
 	repo := &memoryGrantRepository{grants: map[GrantID]Grant{}}
-	engine := NewEngine(repo, func() time.Time { return now })
+	engine := NewAuthorizedEngine(repo, func() time.Time { return now }, testAuthority{})
 	grant, err := engine.Grant(context.Background(), GrantRequest{
 		Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead,
 		Scope:     Scope{Resource: "/workspace/task-1", Actions: []string{"read"}},
@@ -149,5 +154,49 @@ func TestEngineRejectsMismatchExpiryAndUnauthorizedRevoke(t *testing.T) {
 	}
 	if err := engine.Revoke(context.Background(), RevokeRequest{GrantID: grant.ID, Actor: "other"}); !errors.Is(err, ErrSubjectMismatch) {
 		t.Fatalf("unauthorized revoke error=%v", err)
+	}
+}
+
+func TestEngineFailsClosedWithoutGrantAuthority(t *testing.T) {
+	now := time.Date(2026, 8, 16, 14, 0, 0, 0, time.UTC)
+	repo := &memoryGrantRepository{grants: map[GrantID]Grant{}}
+	engine := NewEngine(repo, func() time.Time { return now })
+	_, err := engine.Grant(context.Background(), GrantRequest{
+		Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead,
+		Scope:     Scope{Resource: "/workspace/task-1", Actions: []string{"read"}},
+		ExpiresAt: now.Add(time.Hour), Issuer: "agent-1", IdempotencyKey: "request-no-authority",
+	})
+	if !errors.Is(err, ErrDenied) {
+		t.Fatalf("unauthorized grant error=%v, want ErrDenied", err)
+	}
+	if len(repo.grants) != 0 {
+		t.Fatalf("unauthorized grant mutated repository: %d rows", len(repo.grants))
+	}
+}
+
+func TestEngineNormalizesFilesystemResourcesBeforeComparison(t *testing.T) {
+	now := time.Date(2026, 8, 16, 14, 0, 0, 0, time.UTC)
+	repo := &memoryGrantRepository{grants: map[GrantID]Grant{}}
+	engine := NewAuthorizedEngine(repo, func() time.Time { return now }, testAuthority{})
+	grant, err := engine.Grant(context.Background(), GrantRequest{
+		Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead,
+		Scope:     Scope{Resource: "/workspace/task-1/../task-1", Actions: []string{"read"}},
+		ExpiresAt: now.Add(time.Hour), Issuer: "broker", IdempotencyKey: "request-normalize",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if grant.Scope.Resource != "/workspace/task-1" {
+		t.Fatalf("normalized grant resource=%q", grant.Scope.Resource)
+	}
+	decision, err := engine.Authorize(context.Background(), Query{
+		Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead,
+		Resource: "/workspace/task-1/./", Action: "read", At: now,
+	})
+	if err != nil || decision.Outcome != OutcomeAllow {
+		t.Fatalf("decision=%#v err=%v", decision, err)
+	}
+	if _, err := NormalizeResource(KindFilesystemRead, "../../outside"); !errors.Is(err, ErrInvalidScope) {
+		t.Fatalf("path escape error=%v", err)
 	}
 }
