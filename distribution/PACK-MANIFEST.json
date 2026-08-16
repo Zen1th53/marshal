@@ -815,6 +815,11 @@
       "bytes": 2984
     },
     {
+      "path": "docs/risk-engine.md",
+      "sha256": "b14bdf846f12dffe2b84c25257d79233aadc8003e46a02d7e385f9d4fbdc7526",
+      "bytes": 2250
+    },
+    {
       "path": "docs/runtime.md",
       "sha256": "39b5931b576d0e3181b230db5e03f2ebcedfbccf2d5d4d5315ba5b70bfc557bd",
       "bytes": 2471
@@ -1930,6 +1935,11 @@
       "bytes": 1185
     },
     {
+      "path": "internal/risk/benchmark_a09_test.go",
+      "sha256": "bb213e885fbd90e6e77908b5005c47cf3e6a47d8b4af7a1e76a1fe6f9cb22874",
+      "bytes": 763
+    },
+    {
       "path": "internal/risk/engine.go",
       "sha256": "8238317534ec9b23c83f2b915fc8f200cbc66f5848aabaa995f62e79660e557a",
       "bytes": 10118
@@ -1948,6 +1958,11 @@
       "path": "internal/risk/events_test.go",
       "sha256": "39545951317475eb3bd1a173aa30e270038dc56e5f9a5bcb2b3dba282e601376",
       "bytes": 2307
+    },
+    {
+      "path": "internal/risk/metrics_a09_test.go",
+      "sha256": "b1c0e7e90fd5ef65172d8ad0a006dc4c200b2ae5b38fb3378984579dd9648fd5",
+      "bytes": 984
     },
     {
       "path": "internal/risk/types.go",
