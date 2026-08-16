@@ -2,13 +2,14 @@ package capability
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
 
 func TestEngineGrantAuthorizeAndRevokeUsesExplicitState(t *testing.T) {
 	repo := newMemoryRepository()
-	engine := NewEngine(repo, func() time.Time { return time.Unix(100, 0).UTC() })
+	engine := NewEngine(repo, func() time.Time { return time.Unix(100, 0).UTC() }, allowAuthority{})
 	ctx := context.Background()
 
 	grant, err := engine.Grant(ctx, GrantRequest{
@@ -27,7 +28,7 @@ func TestEngineGrantAuthorizeAndRevokeUsesExplicitState(t *testing.T) {
 	if err != nil || !decision.Allowed || decision.GrantID != grant.ID {
 		t.Fatalf("Authorize = %#v, err=%v", decision, err)
 	}
-	if err := engine.Revoke(ctx, grant.ID); err != nil {
+	if err := engine.Revoke(ctx, RevokeRequest{ID: grant.ID, Actor: "admin-1"}); err != nil {
 		t.Fatalf("Revoke: %v", err)
 	}
 	decision, err = engine.Authorize(ctx, Query{Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead, Resource: "/workspace", Action: "read"})
@@ -38,7 +39,7 @@ func TestEngineGrantAuthorizeAndRevokeUsesExplicitState(t *testing.T) {
 
 func TestEngineDeniesSubjectAndTaskMismatch(t *testing.T) {
 	repo := newMemoryRepository()
-	engine := NewEngine(repo, func() time.Time { return time.Unix(100, 0).UTC() })
+	engine := NewEngine(repo, func() time.Time { return time.Unix(100, 0).UTC() }, allowAuthority{})
 	ctx := context.Background()
 	if _, err := engine.Grant(ctx, GrantRequest{Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead, Scope: Scope{Resource: "/workspace", Actions: []string{"read"}}, TTL: time.Hour, Issuer: "admin-1"}); err != nil {
 		t.Fatal(err)
@@ -52,6 +53,20 @@ func TestEngineDeniesSubjectAndTaskMismatch(t *testing.T) {
 		t.Fatalf("task mismatch = %#v, err=%v", decision, err)
 	}
 }
+
+func TestEngineRejectsGrantWithoutSeparateAuthorityBeforeMutation(t *testing.T) {
+	repo := newMemoryRepository()
+	engine := NewEngine(repo, func() time.Time { return time.Unix(100, 0).UTC() }, nil)
+	_, err := engine.Grant(context.Background(), GrantRequest{Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead, Scope: Scope{Resource: "/workspace", Actions: []string{"read"}}, TTL: time.Hour, Issuer: "agent-1"})
+	if !errors.Is(err, ErrDenied) || len(repo.grants) != 0 {
+		t.Fatalf("grant err=%v rows=%d, want denied and zero mutation", err, len(repo.grants))
+	}
+}
+
+type allowAuthority struct{}
+
+func (allowAuthority) AuthorizeGrant(context.Context, GrantRequest) error   { return nil }
+func (allowAuthority) AuthorizeRevoke(context.Context, RevokeRequest) error { return nil }
 
 type memoryRepository struct{ grants map[string]Grant }
 

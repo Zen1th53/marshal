@@ -15,13 +15,14 @@ import (
 type Engine struct {
 	repository GrantRepository
 	now        func() time.Time
+	authority  Authority
 }
 
-func NewEngine(repository GrantRepository, now func() time.Time) *Engine {
+func NewEngine(repository GrantRepository, now func() time.Time, authority Authority) *Engine {
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	return &Engine{repository: repository, now: now}
+	return &Engine{repository: repository, now: now, authority: authority}
 }
 
 func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error) {
@@ -32,6 +33,12 @@ func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error)
 		return Grant{}, ErrInvalidGrant
 	}
 	if err := request.Scope.Validate(); err != nil {
+		return Grant{}, err
+	}
+	if e.authority == nil {
+		return Grant{}, ErrDenied
+	}
+	if err := e.authority.AuthorizeGrant(ctx, request); err != nil {
 		return Grant{}, err
 	}
 	id, err := model.NewID("cap-")
@@ -100,14 +107,20 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 	return Decision{Reason: ReasonDenied}, nil
 }
 
-func (e *Engine) Revoke(ctx context.Context, id string) error {
-	if !nonEmpty(id) {
+func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
+	if !nonEmpty(request.ID) || !nonEmpty(request.Actor) {
 		return ErrGrantNotFound
+	}
+	if e.authority == nil {
+		return ErrDenied
+	}
+	if err := e.authority.AuthorizeRevoke(ctx, request); err != nil {
+		return err
 	}
 	if e.repository == nil {
 		return ErrCapability
 	}
-	return e.repository.RevokeGrant(ctx, id, e.now().UTC())
+	return e.repository.RevokeGrant(ctx, request.ID, e.now().UTC())
 }
 
 func canonicalResource(resource string) string { return path.Clean(strings.TrimSpace(resource)) }

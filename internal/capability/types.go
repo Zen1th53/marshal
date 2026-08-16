@@ -116,6 +116,16 @@ type GrantRepository interface {
 	RevokeGrant(context.Context, string, time.Time) error
 }
 
+type Authority interface {
+	AuthorizeGrant(context.Context, GrantRequest) error
+	AuthorizeRevoke(context.Context, RevokeRequest) error
+}
+
+type RevokeRequest struct {
+	ID    string
+	Actor string
+}
+
 type Query struct {
 	Subject  string
 	TaskID   string
@@ -162,7 +172,7 @@ func (d Decision) Validate() error {
 type Broker interface {
 	Grant(context.Context, GrantRequest) (Grant, error)
 	Authorize(context.Context, Query) (Decision, error)
-	Revoke(context.Context, string) error
+	Revoke(context.Context, RevokeRequest) error
 }
 
 var (

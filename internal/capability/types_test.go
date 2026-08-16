@@ -55,4 +55,4 @@ type contractProbe struct{}
 
 func (contractProbe) Grant(context.Context, GrantRequest) (Grant, error) { return Grant{}, nil }
 func (contractProbe) Authorize(context.Context, Query) (Decision, error) { return Decision{}, nil }
-func (contractProbe) Revoke(context.Context, string) error               { return nil }
+func (contractProbe) Revoke(context.Context, RevokeRequest) error        { return nil }
