@@ -1556,13 +1556,13 @@
     },
     {
       "path": "internal/gate/contract_a01_test.go",
-      "sha256": "03e919d702875d36bd6953d3c815e40fa6ad84a39d10753576cb2190bdcf15c4",
-      "bytes": 1585
+      "sha256": "bfa30cb8ac5e27a6a579914386ed1f83f994419abb90dfbe862003a338481836",
+      "bytes": 1686
     },
     {
       "path": "internal/gate/types.go",
-      "sha256": "6d0da46bdedc7543a553ddd3450d0a96f2561523d27a7dd5d7aeaff9d1ed3454",
-      "bytes": 3879
+      "sha256": "365a823e42b1f0d96c8a2ddb688d8012c4d7b76159bc138524f53550e7d7bb08",
+      "bytes": 5118
     },
     {
       "path": "internal/integration/claude_real_test.go",
@@ -2101,13 +2101,18 @@
     },
     {
       "path": "internal/store/gate_decisions.go",
-      "sha256": "f5da0acda77121f2b954b0592ec8563f56a4c75cec4cb0c2b6dfd0139f2f97fa",
-      "bytes": 3043
+      "sha256": "406f11e4147a5f615770ffce46e44e36dcc617f2ba1187cb87d33570ec8259cd",
+      "bytes": 3948
     },
     {
       "path": "internal/store/gate_persistence_a02_test.go",
       "sha256": "90eca344e6695fb5dbea30b0062513d9a9fe3e7f7c0661fae65b1f8e1ae53197",
       "bytes": 1651
+    },
+    {
+      "path": "internal/store/gate_state_a03_test.go",
+      "sha256": "3b28280f2616783822a6c8e97a0de370a9c485476f1ad4d9b5cace19c6eb1662",
+      "bytes": 1915
     },
     {
       "path": "internal/store/identity.go",
@@ -2126,8 +2131,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "941fb339cab30a9b421e335a5dddf16e070edd04f07ec0e60985169cbbae9dec",
-      "bytes": 23259
+      "sha256": "0ed0f35b73d99ee07ec188c1218fb842a06959e6da2affe6d81c23e831bcc224",
+      "bytes": 23786
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",

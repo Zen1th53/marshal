@@ -14,6 +14,9 @@ import (
 )
 
 func (s *Store) PutGateDecision(ctx context.Context, decision gate.Decision) error {
+	if decision.State == "" {
+		decision.State = gate.DecisionStateRequested
+	}
 	if err := decision.Validate(); err != nil {
 		return err
 	}
@@ -26,9 +29,9 @@ func (s *Store) PutGateDecision(ctx context.Context, decision gate.Decision) err
 		return fmt.Errorf("encode gate policy IDs: %w", err)
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO gate_decisions
-		(decision_id, gate_point, subject, resource, allowed, checks_json, policy_ids_json, policy_digest, change_digest, created_at)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, decision.DecisionID, decision.Point, decision.Subject, decision.Resource,
-		decision.Allowed, string(checks), string(policyIDs), decision.PolicyDigest, decision.ChangeDigest, decision.CreatedAt.UTC().Format(time.RFC3339Nano))
+		(decision_id, gate_point, subject, resource, allowed, checks_json, policy_ids_json, policy_digest, change_digest, created_at, state)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, decision.DecisionID, decision.Point, decision.Subject, decision.Resource,
+		decision.Allowed, string(checks), string(policyIDs), decision.PolicyDigest, decision.ChangeDigest, decision.CreatedAt.UTC().Format(time.RFC3339Nano), decision.State)
 	if err == nil {
 		return nil
 	}
@@ -44,10 +47,10 @@ func (s *Store) PutGateDecision(ctx context.Context, decision gate.Decision) err
 
 func (s *Store) GetGateDecision(ctx context.Context, id string) (gate.Decision, error) {
 	var decision gate.Decision
-	var point, checks, policyIDs, policyDigest, createdAt, changeDigest string
+	var point, checks, policyIDs, policyDigest, createdAt, changeDigest, state string
 	var allowed int
-	err := s.db.QueryRowContext(ctx, `SELECT decision_id, gate_point, subject, resource, allowed, checks_json, policy_ids_json, policy_digest, change_digest, created_at FROM gate_decisions WHERE decision_id = ?`, id).
-		Scan(&decision.DecisionID, &point, &decision.Subject, &decision.Resource, &allowed, &checks, &policyIDs, &policyDigest, &changeDigest, &createdAt)
+	err := s.db.QueryRowContext(ctx, `SELECT decision_id, gate_point, subject, resource, allowed, checks_json, policy_ids_json, policy_digest, change_digest, created_at, state FROM gate_decisions WHERE decision_id = ?`, id).
+		Scan(&decision.DecisionID, &point, &decision.Subject, &decision.Resource, &allowed, &checks, &policyIDs, &policyDigest, &changeDigest, &createdAt, &state)
 	if err == sql.ErrNoRows {
 		return gate.Decision{}, fmt.Errorf("%w: gate decision not found", model.ErrNotFound)
 	}
@@ -58,6 +61,7 @@ func (s *Store) GetGateDecision(ctx context.Context, id string) (gate.Decision, 
 	decision.Allowed = allowed != 0
 	decision.PolicyDigest = policy.PolicyDigest(policyDigest)
 	decision.ChangeDigest = changeDigest
+	decision.State = gate.DecisionState(state)
 	if err := json.Unmarshal([]byte(checks), &decision.Checks); err != nil {
 		return gate.Decision{}, fmt.Errorf("%w: invalid gate checks", model.ErrInvalid)
 	}
@@ -73,4 +77,22 @@ func (s *Store) GetGateDecision(ctx context.Context, id string) (gate.Decision, 
 		return gate.Decision{}, fmt.Errorf("%w: invalid durable gate decision", model.ErrInvalid)
 	}
 	return decision, nil
+}
+
+func (s *Store) TransitionGateDecision(ctx context.Context, id, actor string, from, to gate.DecisionState) (gate.Decision, error) {
+	if actor == "" || !gate.ValidDecisionTransition(from, to) {
+		return gate.Decision{}, fmt.Errorf("%w: invalid gate transition", model.ErrConflict)
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE gate_decisions SET state = ? WHERE decision_id = ? AND state = ?`, to, id, from)
+	if err != nil {
+		return gate.Decision{}, fmt.Errorf("transition gate decision: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return gate.Decision{}, err
+	}
+	if rows != 1 {
+		return gate.Decision{}, fmt.Errorf("%w: stale gate decision state", model.ErrConflict)
+	}
+	return s.GetGateDecision(ctx, id)
 }
