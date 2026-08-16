@@ -53,6 +53,9 @@ func (s Scope) Validate() error {
 	if strings.TrimSpace(s.Resource) == "" || len(s.Actions) == 0 {
 		return ErrInvalidScope
 	}
+	if containsRawSecret(s.Resource) {
+		return ErrInvalidScope
+	}
 	seen := make(map[string]struct{}, len(s.Actions))
 	for _, action := range s.Actions {
 		action = strings.TrimSpace(action)
@@ -68,8 +71,24 @@ func (s Scope) Validate() error {
 		if strings.TrimSpace(key) == "" || strings.TrimSpace(value) == "" {
 			return ErrInvalidScope
 		}
+		if containsRawSecret(value) {
+			return ErrInvalidScope
+		}
 	}
 	return nil
+}
+
+func containsRawSecret(value string) bool {
+	lower := strings.ToLower(value)
+	for _, marker := range []string{
+		"marshal_test_secret", "-----begin", "password=", "password:",
+		"api_key=", "api-key=", "access_token=", "access-token=", "secret=",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 type Grant struct {
