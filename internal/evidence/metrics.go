@@ -28,6 +28,7 @@ const (
 	MetricOperationPolicyTest        MetricOperation = "policy_test"
 	MetricOperationCapability        MetricOperation = "capability"
 	MetricOperationAuthority         MetricOperation = "authority"
+	MetricOperationGate              MetricOperation = "gate"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -48,7 +49,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationDigest: {}, MetricOperationAudit: {}, MetricOperationFreshness: {},
 	MetricOperationContention: {}, MetricOperationPolicyLoad: {}, MetricOperationPolicyPersist: {},
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
-	MetricOperationPolicyTest: {}, MetricOperationCapability: {}, MetricOperationAuthority: {},
+	MetricOperationPolicyTest: {}, MetricOperationCapability: {}, MetricOperationAuthority: {}, MetricOperationGate: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
@@ -65,6 +66,9 @@ var metricReasons = map[string]struct{}{
 	"POLICY_CONFLICT": {}, "POLICY_DENIED": {}, "POLICY_ERROR": {},
 	"CAP_DENIED": {}, "CAP_INVALID_SCOPE": {}, "CAP_EXPIRED": {},
 	"CAP_REVOKED": {}, "CAP_SUBJECT_MISMATCH": {}, "CAP_TASK_MISMATCH": {},
+	"GATE_ALLOWED": {}, "GATE_REQUIRED_CHECK_MISSING": {},
+	"GATE_POLICY_DENY": {}, "GATE_QUORUM_UNMET": {}, "GATE_UNKNOWN_CHECK": {},
+	"GATE_UNKNOWN_POINT": {}, "GATE_INVALID_CHECK_STATUS": {}, "GATE_INVALID_DECISION": {},
 }
 
 // MetricsSnapshot is a detached, read-only projection of recorder state.

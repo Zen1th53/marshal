@@ -23,6 +23,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/dag"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/evidence"
+	"github.com/Zen1th53/marshal/internal/gate"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
@@ -44,6 +45,7 @@ type Runtime struct {
 	evidenceSanitizer  evidence.Sanitizer
 	eventStream        *events.Engine
 	capabilityBroker   capability.Broker
+	gateEngine         *gate.Engine
 	authorityPrincipal *authz.Principal
 	processAuthority   authz.Authority
 	runtimeInstanceID  string
@@ -63,6 +65,7 @@ type Options struct {
 	CapabilityBroker   capability.Broker
 	AuthorityPrincipal *authz.Principal
 	ProcessAuthority   authz.Authority
+	GateEngine         *gate.Engine
 }
 
 type Status struct {
@@ -237,6 +240,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		evidenceSanitizer:  sanitizer,
 		eventStream:        eventStream,
 		capabilityBroker:   options.CapabilityBroker,
+		gateEngine:         options.GateEngine,
 		authorityPrincipal: options.AuthorityPrincipal,
 		processAuthority:   options.ProcessAuthority,
 		runtimeInstanceID:  instanceID,
@@ -446,6 +450,15 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	task, err := r.store.GetTask(ctx, request.TaskID)
 	if err != nil {
 		return RunResult{}, err
+	}
+	if r.gateEngine != nil {
+		gateDecision, gateErr := r.gateEngine.Evaluate(ctx, gate.GatePointPreExecution, request.AgentID, r.layout.Root)
+		if gateErr != nil {
+			return RunResult{}, gateErr
+		}
+		if err := r.store.PutGateDecisionWithAudit(ctx, gateDecision, r.eventStream); err != nil {
+			return RunResult{}, err
+		}
 	}
 	if gateErr := r.authorizeRuntime(ctx, request.AgentID, task.ID, request.Adapter,
 		policy.Action("shell.execute"), policy.Resource(r.layout.Root)); gateErr != nil {
