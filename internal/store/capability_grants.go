@@ -33,11 +33,11 @@ func (s *Store) PutCapabilityGrant(ctx context.Context, grant capability.Grant) 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO capability_grants(
 			id, subject, task_id, kind, resource, actions_json, constraints_json,
-			issuer, issued_at, expires_at, revoked_at, policy_digest
-		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			issuer, issued_at, expires_at, revoked_at, policy_digest, idempotency_key
+		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, string(grant.ID), string(grant.Subject), string(grant.TaskID), string(grant.Kind), grant.Scope.Resource,
 		string(actions), string(constraints), string(grant.Issuer), grant.IssuedAt.UTC().Format(time.RFC3339Nano),
-		grant.ExpiresAt.UTC().Format(time.RFC3339Nano), formatOptionalTime(grant.RevokedAt), grant.PolicyDigest)
+		grant.ExpiresAt.UTC().Format(time.RFC3339Nano), formatOptionalTime(grant.RevokedAt), grant.PolicyDigest, grant.IdempotencyKey)
 	if err == nil {
 		return nil
 	}
@@ -46,6 +46,9 @@ func (s *Store) PutCapabilityGrant(ctx context.Context, grant capability.Grant) 
 	}
 	stored, loadErr := s.GetCapabilityGrant(ctx, grant.ID)
 	if loadErr != nil {
+		if existing, found, findErr := s.FindCapabilityGrantByIdempotencyKey(ctx, grant.IdempotencyKey); findErr == nil && found && existing.ID != grant.ID {
+			return fmt.Errorf("%w: capability idempotency key is already bound", model.ErrConflict)
+		}
 		return fmt.Errorf("read existing capability grant: %w", loadErr)
 	}
 	if capabilityGrantsEqual(stored, grant) {
@@ -59,10 +62,10 @@ func (s *Store) GetCapabilityGrant(ctx context.Context, id capability.GrantID) (
 	var subject, taskID, kind, resource, actionsJSON, constraintsJSON, issuer, issuedAt, expiresAt, revokedAt, digest string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, subject, task_id, kind, resource, actions_json, constraints_json,
-		       issuer, issued_at, expires_at, COALESCE(revoked_at, ''), policy_digest
+		       issuer, issued_at, expires_at, COALESCE(revoked_at, ''), policy_digest, idempotency_key
 		FROM capability_grants WHERE id = ?
 	`, string(id)).Scan(&grant.ID, &subject, &taskID, &kind, &resource, &actionsJSON, &constraintsJSON,
-		&issuer, &issuedAt, &expiresAt, &revokedAt, &digest)
+		&issuer, &issuedAt, &expiresAt, &revokedAt, &digest, &grant.IdempotencyKey)
 	if errors.Is(err, sql.ErrNoRows) {
 		return capability.Grant{}, fmt.Errorf("%w: capability grant not found", model.ErrNotFound)
 	}
@@ -104,6 +107,53 @@ func (s *Store) GetCapabilityGrant(ctx context.Context, id capability.GrantID) (
 		return capability.Grant{}, fmt.Errorf("%w: invalid durable capability grant", model.ErrInvalid)
 	}
 	return grant, nil
+}
+
+func (s *Store) FindCapabilityGrantByIdempotencyKey(ctx context.Context, key string) (capability.Grant, bool, error) {
+	if strings.TrimSpace(key) == "" {
+		return capability.Grant{}, false, nil
+	}
+	var id string
+	err := s.db.QueryRowContext(ctx, "SELECT id FROM capability_grants WHERE idempotency_key = ?", key).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return capability.Grant{}, false, nil
+	}
+	if err != nil {
+		return capability.Grant{}, false, fmt.Errorf("find capability idempotency key: %w", err)
+	}
+	grant, err := s.GetCapabilityGrant(ctx, capability.GrantID(id))
+	return grant, err == nil, err
+}
+
+func (s *Store) ListCapabilityGrants(ctx context.Context) ([]capability.Grant, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id FROM capability_grants ORDER BY id")
+	if err != nil {
+		return nil, fmt.Errorf("list capability grants: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan capability grant id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list capability grants rows: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close capability grants rows: %w", err)
+	}
+	result := make([]capability.Grant, 0, len(ids))
+	for _, id := range ids {
+		grant, err := s.GetCapabilityGrant(ctx, capability.GrantID(id))
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, grant)
+	}
+	return result, nil
 }
 
 // RevokeCapabilityGrant performs a compare-and-set revocation transition.
@@ -166,7 +216,7 @@ func capabilityGrantsEqual(left, right capability.Grant) bool {
 	if leftErr != nil || rightErr != nil {
 		return false
 	}
-	return left.ID == right.ID && left.Subject == right.Subject && left.TaskID == right.TaskID && left.Kind == right.Kind && left.Scope.Resource == right.Scope.Resource && string(leftActions) == string(rightActions) && string(leftConstraints) == string(rightConstraints) && left.Issuer == right.Issuer && left.IssuedAt.UTC().Equal(right.IssuedAt.UTC()) && left.ExpiresAt.UTC().Equal(right.ExpiresAt.UTC()) && optionalTimesEqual(left.RevokedAt, right.RevokedAt) && left.PolicyDigest == right.PolicyDigest
+	return left.ID == right.ID && left.Subject == right.Subject && left.TaskID == right.TaskID && left.Kind == right.Kind && left.Scope.Resource == right.Scope.Resource && string(leftActions) == string(rightActions) && string(leftConstraints) == string(rightConstraints) && left.Issuer == right.Issuer && left.IssuedAt.UTC().Equal(right.IssuedAt.UTC()) && left.ExpiresAt.UTC().Equal(right.ExpiresAt.UTC()) && optionalTimesEqual(left.RevokedAt, right.RevokedAt) && left.PolicyDigest == right.PolicyDigest && left.IdempotencyKey == right.IdempotencyKey
 }
 
 func optionalTimesEqual(left, right *time.Time) bool {

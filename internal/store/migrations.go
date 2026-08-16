@@ -222,8 +222,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 12 {
-		return fmt.Errorf("database schema version %d is newer than supported version 12", version)
+	if version > 13 {
+		return fmt.Errorf("database schema version %d is newer than supported version 13", version)
 	}
 	if version == 0 {
 		if _, err := tx.ExecContext(ctx, schemaV1); err != nil {
@@ -444,6 +444,18 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 12: %w", err)
 		}
 		version = 12
+	}
+	if version == 12 {
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE capability_grants ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT '';
+			CREATE UNIQUE INDEX capability_grants_by_idempotency ON capability_grants(idempotency_key) WHERE idempotency_key <> '';
+		`); err != nil {
+			return fmt.Errorf("apply schema version 13: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(13, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 13: %w", err)
+		}
+		version = 13
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
