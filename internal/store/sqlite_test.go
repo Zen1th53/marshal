@@ -23,8 +23,8 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 	if got := queryInt(t, st.db, "PRAGMA foreign_keys"); got != 1 {
 		t.Fatalf("foreign_keys = %d, want 1", got)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 12 {
-		t.Fatalf("schema version = %d, want 12", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 13 {
+		t.Fatalf("schema version = %d, want 13", got)
 	}
 
 	wantTables := []string{
@@ -35,6 +35,8 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"evidence_nodes", "evidence_edges",
 		"policy_versions",
 		"policy_test_runs", "policy_test_cases", "policy_test_outcomes",
+		"structured_events",
+		"capability_grants",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
@@ -50,6 +52,9 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX capability_grants_by_expiry",
+		"DROP INDEX capability_grants_by_subject_task_kind",
+		"DROP TABLE capability_grants",
 		"DROP INDEX policy_test_outcomes_by_status",
 		"DROP TABLE policy_test_outcomes",
 		"ALTER TABLE policy_test_runs DROP COLUMN execution_claimed_at",
@@ -63,8 +68,8 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("migrate v9: %v", err)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 12 {
-		t.Fatalf("schema version=%d, want 12", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 13 {
+		t.Fatalf("schema version=%d, want 13", got)
 	}
 	if got := queryInt(t, st.db, "SELECT count(*) FROM pragma_table_info('policy_test_runs') WHERE name IN ('execution_owner','execution_claimed_at')"); got != 2 {
 		t.Fatalf("claim columns=%d, want 2", got)
@@ -88,6 +93,9 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX capability_grants_by_expiry",
+		"DROP INDEX capability_grants_by_subject_task_kind",
+		"DROP TABLE capability_grants",
 		"DROP INDEX policy_test_outcomes_by_status",
 		"DROP TABLE policy_test_outcomes",
 		"ALTER TABLE policy_test_runs DROP COLUMN execution_claimed_at",
@@ -106,8 +114,8 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("migrate v7 to v11: %v", err)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 12 {
-		t.Fatalf("schema version=%d, want 12", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 13 {
+		t.Fatalf("schema version=%d, want 13", got)
 	}
 	if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('policy_test_runs','policy_test_cases','policy_test_outcomes')"); got != 3 {
 		t.Fatalf("T49 tables=%d, want 3", got)

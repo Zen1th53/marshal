@@ -1070,6 +1070,21 @@
       "bytes": 2190
     },
     {
+      "path": "internal/capability/errors.go",
+      "sha256": "4adb391217f79ba83e6c613651e8ab58cac4862ec2debd66906b543b0815d3af",
+      "bytes": 1628
+    },
+    {
+      "path": "internal/capability/types.go",
+      "sha256": "9578c2d622c99ececb80b2b3024463bd3a777daedaccb5bfb8ae2240ca41da1f",
+      "bytes": 4647
+    },
+    {
+      "path": "internal/capability/types_test.go",
+      "sha256": "d62c4cf4cc2cf93b905635f2a092990fba7c115c3fb21ec85a959dcbb7e08f90",
+      "bytes": 2594
+    },
+    {
       "path": "internal/cli/cli.go",
       "sha256": "2ac2846afb2f65292ba75fff5da368e7b8d0c9ee8db86cdc69599678837aa263",
       "bytes": 23723

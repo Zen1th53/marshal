@@ -10,6 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
+const LatestSchemaVersion = 13
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -223,7 +224,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return fmt.Errorf("read schema version: %w", err)
 	}
 	if version > 12 {
-		return fmt.Errorf("database schema version %d is newer than supported version 12", version)
+		return fmt.Errorf("database schema version %d is newer than supported version %d", version, LatestSchemaVersion)
 	}
 	if version == 0 {
 		if _, err := tx.ExecContext(ctx, schemaV1); err != nil {
@@ -445,6 +446,34 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 12: %w", err)
 		}
 		version = 12
+	}
+	if version == 12 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE capability_grants (
+				id TEXT PRIMARY KEY,
+				subject TEXT NOT NULL,
+				task_id TEXT NOT NULL,
+				kind TEXT NOT NULL CHECK(kind IN ('fs.read','fs.write','shell.exec','git.commit','git.push','network.egress','secret.use','mcp.call','deploy.execute')),
+				resource TEXT NOT NULL,
+				actions_json TEXT NOT NULL,
+				constraints_json TEXT NOT NULL,
+				issuer TEXT NOT NULL,
+				issued_at TEXT NOT NULL,
+				expires_at TEXT NOT NULL,
+				revoked_at TEXT,
+				policy_digest TEXT NOT NULL DEFAULT ''
+			);
+			CREATE INDEX capability_grants_by_subject_task_kind
+				ON capability_grants(subject, task_id, kind, resource);
+			CREATE INDEX capability_grants_by_expiry
+				ON capability_grants(expires_at, revoked_at);
+		`); err != nil {
+			return fmt.Errorf("apply schema version 13: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(13, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 13: %w", err)
+		}
+		version = 13
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

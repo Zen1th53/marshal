@@ -35,7 +35,7 @@ func TestA10MigrationFromSchemaV2PreservesCanonicalRows(t *testing.T) {
 		t.Fatalf("migrate v2: %v", err)
 	}
 	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 12 {
-		t.Fatalf("schema version = %d, want 12", got)
+		t.Fatalf("schema version = %d, want 13", got)
 	}
 	if got := queryInt(t, st.db, "SELECT count(*) FROM projects WHERE project_id='P1'"); got != 1 {
 		t.Fatalf("preserved projects = %d, want 1", got)
