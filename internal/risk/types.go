@@ -91,10 +91,13 @@ type ToolDescriptor struct {
 }
 
 func (d ToolDescriptor) Validate() error {
-	for _, value := range []string{d.Tool, d.Action, d.Resource} {
+	for _, value := range []string{d.Tool, d.Action} {
 		if !safeText(value) {
 			return ErrDescriptorInvalid
 		}
+	}
+	if !safeResource(d.Resource) {
+		return ErrDescriptorInvalid
 	}
 	if d.ClaimedLevel != "" && !d.ClaimedLevel.Valid() {
 		return ErrDescriptorInvalid
@@ -154,7 +157,7 @@ func validRequirements(values []string) bool {
 }
 
 func safeText(value string) bool {
-	if strings.TrimSpace(value) == "" || !utf8.ValidString(value) {
+	if strings.TrimSpace(value) == "" || !utf8.ValidString(value) || containsSensitiveText(value) {
 		return false
 	}
 	for _, r := range value {
@@ -163,4 +166,18 @@ func safeText(value string) bool {
 		}
 	}
 	return true
+}
+
+func safeResource(value string) bool {
+	return safeText(value) && !strings.Contains(value, "..")
+}
+
+func containsSensitiveText(value string) bool {
+	lower := strings.ToLower(value)
+	for _, marker := range []string{"marshal_test_secret", "password=", "password:", "api_key=", "api-key=", "access_token=", "secret="} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }

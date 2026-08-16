@@ -1946,8 +1946,8 @@
     },
     {
       "path": "internal/risk/types.go",
-      "sha256": "09fa7dd711da04c40ebeecc629edbcba507f3595916b27280c047a20388d90ac",
-      "bytes": 4238
+      "sha256": "4b7bd4d7d5e01d6269cc83e86425c14e65db2b824425c797abcfbf85ce58cf11",
+      "bytes": 4718
     },
     {
       "path": "internal/risk/types_test.go",
