@@ -24,7 +24,8 @@ func (s *memoryAssessmentStore) GetRiskAssessment(_ context.Context, _ Assessmen
 	return s.assessment, nil
 }
 
-func (s *memoryAssessmentStore) TransitionRiskAssessmentState(_ context.Context, _ AssessmentID, _, _ AssessmentState) error {
+func (s *memoryAssessmentStore) TransitionRiskAssessmentState(_ context.Context, _ AssessmentID, _, to AssessmentState) error {
+	s.assessment.State = to
 	return nil
 }
 

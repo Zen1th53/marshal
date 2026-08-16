@@ -111,17 +111,41 @@ func (e *Engine) Assess(ctx context.Context, request AssessmentRequest) (Assessm
 	if err := e.repository.PutRiskAssessment(ctx, assessment); err != nil {
 		return Assessment{}, err
 	}
-	if err := e.repository.TransitionRiskAssessmentState(ctx, assessment.ID, StateRequested, StateClassified); err != nil {
+	advanced, err := e.advanceToRequirements(ctx, assessment.ID)
+	if err != nil {
 		return Assessment{}, err
 	}
-	if err := e.repository.TransitionRiskAssessmentState(ctx, assessment.ID, StateClassified, StateRequirementsEmitted); err != nil {
-		return Assessment{}, err
-	}
-	assessment.State = StateRequirementsEmitted
+	assessment = advanced
 	if err := e.emitAssessmentEvents(ctx, assessment, request.Descriptor.Resource); err != nil {
 		return Assessment{}, err
 	}
 	return assessment, nil
+}
+
+func (e *Engine) advanceToRequirements(ctx context.Context, id AssessmentID) (Assessment, error) {
+	for attempt := 0; attempt < 32; attempt++ {
+		assessment, err := e.repository.GetRiskAssessment(ctx, id)
+		if err != nil {
+			return Assessment{}, err
+		}
+		switch assessment.State {
+		case StateRequirementsEmitted:
+			return assessment, nil
+		case StateRequested:
+			err = e.repository.TransitionRiskAssessmentState(ctx, id, StateRequested, StateClassified)
+		case StateClassified:
+			err = e.repository.TransitionRiskAssessmentState(ctx, id, StateClassified, StateRequirementsEmitted)
+		default:
+			return Assessment{}, ErrDescriptorInvalid
+		}
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, model.ErrConflict) {
+			return Assessment{}, err
+		}
+	}
+	return Assessment{}, fmt.Errorf("%w: risk assessment state reconciliation exceeded retry bound", model.ErrConflict)
 }
 
 func (e *Engine) emitAssessmentEvents(ctx context.Context, assessment Assessment, resource string) error {
