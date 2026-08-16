@@ -1855,6 +1855,11 @@
       "bytes": 4715
     },
     {
+      "path": "internal/store/authz_concurrency_a08_test.go",
+      "sha256": "28134ebdbcce23bd67c6bcc365bac49582307788e64b3dd6e87dbbaca3ac6262",
+      "bytes": 5357
+    },
+    {
       "path": "internal/store/authz_persistence_a02_test.go",
       "sha256": "e1b894b453111ba10c42d63c14f4d604dfd54499be136431a6442964433d43dc",
       "bytes": 1810
