@@ -28,6 +28,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/sandbox"
+	"github.com/Zen1th53/marshal/internal/secrets"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/worker"
 	"github.com/Zen1th53/marshal/internal/worktree"
@@ -45,6 +46,7 @@ type Runtime struct {
 	evidenceSanitizer  evidence.Sanitizer
 	eventStream        *events.Engine
 	capabilityBroker   capability.Broker
+	secretBroker       secrets.Broker
 	gateEngine         *gate.Engine
 	authorityPrincipal *authz.Principal
 	processAuthority   authz.Authority
@@ -63,6 +65,7 @@ type Options struct {
 	EventFreshness     events.FreshnessValidator
 	EventBus           events.Bus
 	CapabilityBroker   capability.Broker
+	SecretBroker       secrets.Broker
 	AuthorityPrincipal *authz.Principal
 	ProcessAuthority   authz.Authority
 	GateEngine         *gate.Engine
@@ -240,6 +243,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		evidenceSanitizer:  sanitizer,
 		eventStream:        eventStream,
 		capabilityBroker:   options.CapabilityBroker,
+		secretBroker:       options.SecretBroker,
 		gateEngine:         options.GateEngine,
 		authorityPrincipal: options.AuthorityPrincipal,
 		processAuthority:   options.ProcessAuthority,
@@ -254,6 +258,15 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 }
 
 func (r *Runtime) InstanceID() string { return r.runtimeInstanceID }
+
+// WithSecret is the runtime composition boundary for scoped secret use.
+// Callers never receive a secret outside the broker callback.
+func (r *Runtime) WithSecret(ctx context.Context, lease secrets.Lease, use func([]byte) error) error {
+	if r == nil || r.secretBroker == nil {
+		return secrets.ErrDenied
+	}
+	return r.secretBroker.WithSecret(ctx, lease, use)
+}
 
 func (r *Runtime) Close() error { return r.store.Close() }
 
