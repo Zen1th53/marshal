@@ -27,6 +27,7 @@ const (
 	MetricOperationPolicyRuntimeGate MetricOperation = "policy_runtime_gate"
 	MetricOperationPolicyTest        MetricOperation = "policy_test"
 	MetricOperationCapability        MetricOperation = "capability"
+	MetricOperationAuthority         MetricOperation = "authority"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -47,7 +48,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationDigest: {}, MetricOperationAudit: {}, MetricOperationFreshness: {},
 	MetricOperationContention: {}, MetricOperationPolicyLoad: {}, MetricOperationPolicyPersist: {},
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
-	MetricOperationPolicyTest: {}, MetricOperationCapability: {},
+	MetricOperationPolicyTest: {}, MetricOperationCapability: {}, MetricOperationAuthority: {},
 }
 
 var metricResults = map[MetricResult]struct{}{

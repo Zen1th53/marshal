@@ -38,6 +38,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"dag_nodes", "dag_edges",
 		"structured_events",
 		"capability_grants",
+		"role_bindings",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
@@ -58,6 +59,9 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		"DROP INDEX capability_grants_by_idempotency",
 		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
 		"DROP TABLE capability_grants",
+		"DROP INDEX role_bindings_by_principal_scope",
+		"DROP INDEX role_bindings_by_role",
+		"DROP TABLE role_bindings",
 		"DROP INDEX structured_events_by_type",
 		"DROP INDEX structured_events_by_run",
 		"DROP INDEX structured_events_by_evidence",
@@ -112,6 +116,9 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		"DROP INDEX capability_grants_by_idempotency",
 		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
 		"DROP TABLE capability_grants",
+		"DROP INDEX role_bindings_by_principal_scope",
+		"DROP INDEX role_bindings_by_role",
+		"DROP TABLE role_bindings",
 		"DROP INDEX structured_events_by_type",
 		"DROP INDEX structured_events_by_run",
 		"DROP INDEX structured_events_by_evidence",
