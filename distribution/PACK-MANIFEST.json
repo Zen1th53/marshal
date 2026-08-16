@@ -2090,6 +2090,16 @@
       "bytes": 4742
     },
     {
+      "path": "internal/store/cell_persistence.go",
+      "sha256": "bf4d1068c4e426a1ff828b4978552de99ac0497352a5bbb3075c44c1ff7db6da",
+      "bytes": 5175
+    },
+    {
+      "path": "internal/store/cell_persistence_a02_test.go",
+      "sha256": "e71c0daef5b017d048b1af3d8c4ba4c4fcc8ca41e7ec22a6b240b7c8d21ee216",
+      "bytes": 1853
+    },
+    {
       "path": "internal/store/dag.go",
       "sha256": "8ccc5b6096f133b68e1e84a7d3fa91d4871d500a7d193e1877c5a423c84418ea",
       "bytes": 10467

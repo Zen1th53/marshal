@@ -98,6 +98,27 @@ func (s *Store) GetCell(ctx context.Context, id cell.CellID) (cell.Record, error
 	return record, nil
 }
 
+func (s *Store) TransitionCellState(ctx context.Context, id cell.CellID, from, to cell.State) error {
+	if id == "" {
+		return fmt.Errorf("%w: execution cell id is required", model.ErrInvalid)
+	}
+	if err := cell.ValidateTransition(from, to); err != nil {
+		return err
+	}
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE execution_cells SET state = ?, updated_at = ?
+		WHERE cell_id = ? AND state = ?
+	`, string(to), utcNow(), string(id), string(from))
+	if err != nil {
+		return fmt.Errorf("%w: execution cell transition unavailable", model.ErrUnavailable)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil || rows != 1 {
+		return model.ErrConflict
+	}
+	return nil
+}
+
 func (s *Store) ensureCellTimes(record cell.Record) error {
 	if record.CreatedAt.Location() != time.UTC || record.UpdatedAt.Location() != time.UTC {
 		return fmt.Errorf("%w: execution cell timestamps must be UTC", model.ErrInvalid)
@@ -129,3 +150,5 @@ func formatCellTime(value *time.Time) string {
 	}
 	return value.UTC().Format(time.RFC3339Nano)
 }
+
+var _ cell.Repository = (*Store)(nil)
