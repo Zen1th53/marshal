@@ -1560,9 +1560,19 @@
       "bytes": 1686
     },
     {
+      "path": "internal/gate/engine.go",
+      "sha256": "0d0d9ad6c902de868230bed34df6d61b331627f41021e745d7416cbe6aeab7d5",
+      "bytes": 3907
+    },
+    {
+      "path": "internal/gate/engine_a04_test.go",
+      "sha256": "c6bdcc7f2d476560426a78b8ebf890f661e9b107909e9cce394a0a308b901766",
+      "bytes": 3287
+    },
+    {
       "path": "internal/gate/types.go",
-      "sha256": "365a823e42b1f0d96c8a2ddb688d8012c4d7b76159bc138524f53550e7d7bb08",
-      "bytes": 5118
+      "sha256": "0a23e729e15d40d37388aae78f8dcb4c72690a077f7c95e519626cfc445576eb",
+      "bytes": 5278
     },
     {
       "path": "internal/integration/claude_real_test.go",
