@@ -4,18 +4,22 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type LeaseStore interface {
 	PutSecretLease(context.Context, Lease) error
 	GetSecretLease(context.Context, string) (Lease, error)
 	TransitionSecretLease(context.Context, string, LeaseState, LeaseState, time.Time) (Lease, error)
+	ClaimSecretLease(context.Context, string, string, time.Time) (Lease, error)
+	CompleteSecretLease(context.Context, string, string, time.Time) (Lease, error)
+	ReleaseSecretLeaseClaim(context.Context, string, string) error
 }
 
 type EngineConfig struct {
@@ -32,6 +36,7 @@ type Engine struct {
 	capability capability.Broker
 	eventStore events.Store
 	now        func() time.Time
+	owner      string
 }
 
 func NewEngine(config EngineConfig) (*Engine, error) {
@@ -41,7 +46,11 @@ func NewEngine(config EngineConfig) (*Engine, error) {
 	if config.Now == nil {
 		config.Now = func() time.Time { return time.Now().UTC() }
 	}
-	return &Engine{store: config.Store, providers: config.Providers, capability: config.Capability, eventStore: config.EventStore, now: config.Now}, nil
+	owner, err := model.NewID("secret-owner-")
+	if err != nil {
+		return nil, ErrProviderFailed
+	}
+	return &Engine{store: config.Store, providers: config.Providers, capability: config.Capability, eventStore: config.EventStore, now: config.Now, owner: owner}, nil
 }
 
 func (e *Engine) Lease(ctx context.Context, request LeaseRequest) (Lease, error) {
@@ -116,15 +125,34 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 		Kind: capability.KindSecretUse, Resource: resource, Action: "read", At: now,
 	})
 	if err != nil || decision.Outcome != capability.OutcomeAllow {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		return ErrDenied
 	}
-	provider, ok := e.providers[current.Ref.Provider]
+	claimed, err := e.store.ClaimSecretLease(ctx, current.ID, e.owner, now)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		return ErrDenied
+	}
+	completed := false
+	defer func() {
+		if !completed {
+			_ = e.store.ReleaseSecretLeaseClaim(context.Background(), claimed.ID, e.owner)
+		}
+	}()
+	provider, ok := e.providers[claimed.Ref.Provider]
 	if !ok {
 		_ = e.emit(ctx, events.Type("secret.access.denied"), current, string(CodeProviderFailed))
 		return ErrProviderFailed
 	}
-	value, err := provider.Resolve(ctx, current.Ref)
+	value, err := provider.Resolve(ctx, claimed.Ref)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
 		_ = e.emit(ctx, events.Type("secret.access.denied"), current, string(CodeProviderFailed))
 		return ErrProviderFailed
 	}
@@ -133,9 +161,13 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 		_ = e.emit(ctx, events.Type("secret.access.denied"), current, string(CodeDenied))
 		return ErrDenied
 	}
-	if _, err := e.store.TransitionSecretLease(ctx, current.ID, StateLeased, StateUsed, now); err != nil {
+	if _, err := e.store.CompleteSecretLease(ctx, claimed.ID, e.owner, now); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		return ErrDenied
 	}
+	completed = true
 	if err := e.emit(ctx, events.Type("secret.access.used"), current, "used"); err != nil {
 		return err
 	}
@@ -197,5 +229,5 @@ func zero(value []byte) {
 }
 
 func isNotFound(err error) bool {
-	return err == ErrNotFound || fmt.Sprint(err) == ErrNotFound.Error()
+	return errors.Is(err, ErrNotFound) || errors.Is(err, model.ErrNotFound)
 }

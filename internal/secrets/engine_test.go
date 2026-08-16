@@ -217,6 +217,31 @@ func TestEngineReconcilesDurableUseWhenEventDeliveryFails(t *testing.T) {
 	}
 }
 
+func TestEngineCancellationReleasesExecutionClaim(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	store := &memoryLeaseStore{}
+	engine, err := NewEngine(EngineConfig{
+		Store: store, Capability: allowSecretCapability{},
+		Providers: map[string]Provider{"env": providerFunc(func(ctx context.Context, _ Ref) ([]byte, error) { <-ctx.Done(); return nil, ctx.Err() })},
+		Now:       func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := engine.Lease(context.Background(), LeaseRequest{ID: "cancel", Subject: "agent", TaskID: "task", Ref: Ref{Provider: "env", Name: "TOKEN", Version: "v1"}, Purpose: "test", IssuedAt: now, ExpiresAt: now.Add(time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := engine.WithSecret(ctx, lease, func([]byte) error { return nil }); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation error=%v, want context.Canceled", err)
+	}
+	if store.leases[lease.ID].AccessOwner != "" || store.leases[lease.ID].State != StateLeased {
+		t.Fatalf("claim after cancellation=%#v", store.leases[lease.ID])
+	}
+}
+
 type memoryEventStore struct{ events []events.Event }
 
 type flakyEventStore struct {
@@ -307,4 +332,38 @@ func (s *memoryLeaseStore) TransitionSecretLease(_ context.Context, id string, f
 	lease.State = to
 	s.leases[id] = lease
 	return lease, nil
+}
+
+func (s *memoryLeaseStore) ClaimSecretLease(_ context.Context, id, owner string, at time.Time) (Lease, error) {
+	lease, ok := s.leases[id]
+	if !ok || lease.State != StateLeased || lease.AccessOwner != "" {
+		return Lease{}, ErrDenied
+	}
+	lease.AccessOwner = owner
+	lease.AccessClaimedAt = &at
+	s.leases[id] = lease
+	return lease, nil
+}
+
+func (s *memoryLeaseStore) CompleteSecretLease(_ context.Context, id, owner string, _ time.Time) (Lease, error) {
+	lease, ok := s.leases[id]
+	if !ok || lease.State != StateLeased || lease.AccessOwner != owner {
+		return Lease{}, ErrDenied
+	}
+	lease.State = StateUsed
+	lease.AccessOwner = ""
+	lease.AccessClaimedAt = nil
+	s.leases[id] = lease
+	return lease, nil
+}
+
+func (s *memoryLeaseStore) ReleaseSecretLeaseClaim(_ context.Context, id, owner string) error {
+	lease, ok := s.leases[id]
+	if !ok || lease.AccessOwner != owner {
+		return ErrDenied
+	}
+	lease.AccessOwner = ""
+	lease.AccessClaimedAt = nil
+	s.leases[id] = lease
+	return nil
 }
