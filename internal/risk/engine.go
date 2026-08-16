@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -44,6 +45,7 @@ func (r AssessmentRequest) Validate() error {
 type Engine struct {
 	repository AssessmentRepository
 	authority  Authority
+	eventStore events.Store
 }
 
 func NewEngine(repository AssessmentRepository) *Engine {
@@ -52,6 +54,12 @@ func NewEngine(repository AssessmentRepository) *Engine {
 
 func NewAuthorizedEngine(repository AssessmentRepository, authority Authority) *Engine {
 	return &Engine{repository: repository, authority: authority}
+}
+
+func NewAuditedEngine(repository AssessmentRepository, authority Authority, eventStore events.Store) *Engine {
+	engine := NewAuthorizedEngine(repository, authority)
+	engine.eventStore = eventStore
+	return engine
 }
 
 // Require delegates authorization to the existing authority boundary. An
@@ -68,6 +76,7 @@ func (e *Engine) Require(ctx context.Context, assessment Assessment) error {
 		return err
 	}
 	if err := e.authority.AuthorizeRisk(ctx, assessment); err != nil {
+		_ = e.emitEvent(ctx, assessment, events.Type("risk.override.denied"), "denied")
 		if errors.Is(err, ErrAuthorizationDenied) {
 			return ErrAuthorizationDenied
 		}
@@ -86,6 +95,9 @@ func (e *Engine) Assess(ctx context.Context, request AssessmentRequest) (Assessm
 	if existing, err := e.repository.GetRiskAssessment(ctx, request.ID); err == nil {
 		if existing.ActionDigest != actionDigest(request.Descriptor) || existing.PolicyDigest != request.PolicyDigest {
 			return Assessment{}, fmt.Errorf("%w: risk assessment identity is immutable", ErrDescriptorInvalid)
+		}
+		if err := e.emitAssessmentEvents(ctx, existing, request.Descriptor.Resource); err != nil {
+			return Assessment{}, err
 		}
 		return existing, nil
 	} else if !errors.Is(err, model.ErrNotFound) {
@@ -106,7 +118,61 @@ func (e *Engine) Assess(ctx context.Context, request AssessmentRequest) (Assessm
 		return Assessment{}, err
 	}
 	assessment.State = StateRequirementsEmitted
+	if err := e.emitAssessmentEvents(ctx, assessment, request.Descriptor.Resource); err != nil {
+		return Assessment{}, err
+	}
 	return assessment, nil
+}
+
+func (e *Engine) emitAssessmentEvents(ctx context.Context, assessment Assessment, resource string) error {
+	if e.eventStore == nil {
+		return nil
+	}
+	if err := e.emitEventWithResource(ctx, assessment, resource, events.Type("risk.assessment.created"), "classified"); err != nil {
+		return err
+	}
+	levelEvent := events.Type("")
+	switch assessment.Level {
+	case LevelHigh:
+		levelEvent = events.Type("risk.level.high")
+	case LevelCritical:
+		levelEvent = events.Type("risk.level.critical")
+	}
+	if levelEvent != "" {
+		return e.emitEventWithResource(ctx, assessment, resource, levelEvent, string(assessment.Level))
+	}
+	return nil
+}
+
+func (e *Engine) emitEvent(ctx context.Context, assessment Assessment, eventType events.Type, result string) error {
+	return e.emitEventWithResource(ctx, assessment, "", eventType, result)
+}
+
+func (e *Engine) emitEventWithResource(ctx context.Context, assessment Assessment, resource string, eventType events.Type, result string) error {
+	if e.eventStore == nil {
+		return nil
+	}
+	key := string(eventType) + "/" + string(assessment.ID)
+	_, err := e.eventStore.Append(ctx, events.Event{
+		ID:         events.EventID("RISK-" + hex.EncodeToString(sha256Bytes([]byte(key)))),
+		Type:       eventType,
+		Subject:    events.SubjectID("risk-engine"),
+		ResourceID: events.ResourceID(resource),
+		Data: map[string]string{
+			"assessment_id": string(assessment.ID),
+			"level":         string(assessment.Level),
+			"result":        result,
+			"policy_digest": string(assessment.PolicyDigest),
+			"resource":      resource,
+		},
+		IdempotencyKey: events.IdempotencyKey(key),
+	})
+	return err
+}
+
+func sha256Bytes(value []byte) []byte {
+	sum := sha256.Sum256(value)
+	return sum[:]
 }
 
 func classify(request AssessmentRequest) Assessment {
