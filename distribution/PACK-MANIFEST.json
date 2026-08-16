@@ -1151,13 +1151,23 @@
     },
     {
       "path": "internal/authz/errors.go",
-      "sha256": "e2b97c62b8870ea0a81fc045ecc745c61a7c069bb24d37a9307c8b89c98610f5",
-      "bytes": 1304
+      "sha256": "914d77110b7a068dd2f3d409873550562e79d3cd2874b6293de87472933f3a38",
+      "bytes": 1446
+    },
+    {
+      "path": "internal/authz/state.go",
+      "sha256": "bf94b79fa85c64b6e23d329350d51dfefeb71c7e30a10273a27123d18b07b9f8",
+      "bytes": 1200
+    },
+    {
+      "path": "internal/authz/state_a03_test.go",
+      "sha256": "133888e53ef4aba3b5a1ccec677ba21893d35fdd9510df7837c26bfde945ddf1",
+      "bytes": 1693
     },
     {
       "path": "internal/authz/types.go",
-      "sha256": "901488fc7dbfe45fe7e448485e24d6ee1617489d0dcfc0df67d9ac98c37f4844",
-      "bytes": 4341
+      "sha256": "6affaa85c7c542c95bb7359d16f7bf4767fcab8c7639d786e9867fc27c50f508",
+      "bytes": 4562
     },
     {
       "path": "internal/authz/types_test.go",
