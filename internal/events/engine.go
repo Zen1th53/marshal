@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -32,8 +33,33 @@ func AppendAuditEvent(event Event, reason, result string) Event {
 // Append commits to Store before publishing, so a lost live delivery can
 // always be recovered with Since.
 type Engine struct {
-	store Store
-	bus   *localBus
+	store   Store
+	bus     *localBus
+	metrics eventMetrics
+}
+
+type MetricsSnapshot struct {
+	Appended    uint64
+	Denied      uint64
+	Invalid     uint64
+	TotalNanos  uint64
+	LastFailure Code
+}
+
+type eventMetrics struct {
+	appended    atomic.Uint64
+	denied      atomic.Uint64
+	invalid     atomic.Uint64
+	totalNanos  atomic.Uint64
+	lastFailure atomic.Value
+}
+
+func (e *Engine) Metrics() MetricsSnapshot {
+	var last Code
+	if value := e.metrics.lastFailure.Load(); value != nil {
+		last, _ = value.(Code)
+	}
+	return MetricsSnapshot{Appended: e.metrics.appended.Load(), Denied: e.metrics.denied.Load(), Invalid: e.metrics.invalid.Load(), TotalNanos: e.metrics.totalNanos.Load(), LastFailure: last}
 }
 
 // AppendAuthorized evaluates the owning authorization boundary immediately
@@ -41,16 +67,24 @@ type Engine struct {
 // closed and produces no store or publish side effect.
 func (e *Engine) AppendAuthorized(ctx context.Context, event Event, authorizer Authorizer) (Event, error) {
 	if authorizer == nil {
+		e.metrics.denied.Add(1)
+		e.metrics.lastFailure.Store(CodeEventAuthorizationUnavailable)
 		return Event{}, ErrEventAuthorizationUnavailable
 	}
 	decision, err := authorizer.Authorize(ctx, event)
 	if err != nil {
+		e.metrics.denied.Add(1)
+		e.metrics.lastFailure.Store(CodeEventAuthorizationUnavailable)
 		return Event{}, NewError(CodeEventAuthorizationUnavailable, err)
 	}
 	if !decision.Allowed {
+		e.metrics.denied.Add(1)
+		e.metrics.lastFailure.Store(CodeEventAuthorizationDenied)
 		return Event{}, ErrEventAuthorizationDenied
 	}
 	if decision.FreshUntil.IsZero() || !time.Now().UTC().Before(decision.FreshUntil) {
+		e.metrics.denied.Add(1)
+		e.metrics.lastFailure.Store(CodeEventAuthorizationStale)
 		return Event{}, ErrEventAuthorizationStale
 	}
 	return e.Append(ctx, event)
@@ -64,19 +98,31 @@ func NewEngine(store Store) *Engine {
 // Append validates and durably appends an event, then publishes the stored
 // record to current subscribers.
 func (e *Engine) Append(ctx context.Context, event Event) (Event, error) {
-	if e == nil || e.store == nil {
+	started := time.Now()
+	if e == nil {
+		return Event{}, NewError(CodeEventStoreFailed, fmt.Errorf("event store is unavailable"))
+	}
+	if e.store == nil {
+		e.metrics.invalid.Add(1)
 		return Event{}, NewError(CodeEventStoreFailed, fmt.Errorf("event store is unavailable"))
 	}
 	if err := event.Validate(); err != nil {
+		e.metrics.invalid.Add(1)
+		e.metrics.lastFailure.Store(ReasonCode(err))
 		return Event{}, err
 	}
 	stored, err := e.store.Append(ctx, event)
 	if err != nil {
+		e.metrics.invalid.Add(1)
+		e.metrics.lastFailure.Store(ReasonCode(err))
 		return Event{}, err
 	}
 	if err := e.bus.Publish(ctx, stored); err != nil {
+		e.metrics.lastFailure.Store(ReasonCode(err))
 		return Event{}, err
 	}
+	e.metrics.appended.Add(1)
+	e.metrics.totalNanos.Add(uint64(time.Since(started).Nanoseconds()))
 	return stored, nil
 }
 

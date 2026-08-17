@@ -132,6 +132,18 @@ func TestAppendAuditEventContainsReferencesNotPayload(t *testing.T) {
 	}
 }
 
+func TestEngineMetricsExposeBoundedOutcomeCounters(t *testing.T) {
+	engine := NewEngine(&memoryEventStore{})
+	if _, err := engine.Append(context.Background(), Event{ID: "metric-1", Type: EventTypeTaskCreated, At: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = engine.AppendAuthorized(context.Background(), Event{ID: "metric-2", Type: EventTypeTaskCreated, At: time.Now().UTC()}, staticAuthorizer{decision: AuthorizationDecision{Allowed: false}})
+	snapshot := engine.Metrics()
+	if snapshot.Appended != 1 || snapshot.Denied != 1 || snapshot.Invalid != 0 || snapshot.LastFailure != CodeEventAuthorizationDenied {
+		t.Fatalf("metrics = %+v", snapshot)
+	}
+}
+
 type staticAuthorizer struct{ decision AuthorizationDecision }
 
 func (a staticAuthorizer) Authorize(context.Context, Event) (AuthorizationDecision, error) {
