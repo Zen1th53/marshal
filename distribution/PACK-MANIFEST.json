@@ -1520,6 +1520,11 @@
       "bytes": 4715
     },
     {
+      "path": "internal/store/capability_concurrency_a08_test.go",
+      "sha256": "40421acdfb8576b2afe2ef15cbbec986ab74674fc1785884b81f1742383244f8",
+      "bytes": 1128
+    },
+    {
       "path": "internal/store/capability_engine_a03_test.go",
       "sha256": "0b624025c37c5971ab45752be8efcf74bea12fe1d8b6422f40521365a27ee03a",
       "bytes": 2293
