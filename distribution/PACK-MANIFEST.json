@@ -1075,6 +1075,26 @@
       "bytes": 1222
     },
     {
+      "path": "internal/dag/adversarial_test.go",
+      "sha256": "013573b45bcc94b1b5d97ccaf9c7c70209b5e155842667542363e0109f538bfd",
+      "bytes": 1153
+    },
+    {
+      "path": "internal/dag/errors.go",
+      "sha256": "f0f24003a6edb26ee60f1afd7bd0caf8b8d87328b94b58aaac47e55eb3406877",
+      "bytes": 2053
+    },
+    {
+      "path": "internal/dag/types.go",
+      "sha256": "67037e91eb3be03015fc5bc6a4e51acfc45eb278d4b198880abca11c4ba7a02e",
+      "bytes": 4599
+    },
+    {
+      "path": "internal/dag/types_test.go",
+      "sha256": "78bc0ec7bed5ec889030f99d15a31decd16d09bb28f5daa0884b2c56d4fa6529",
+      "bytes": 2801
+    },
+    {
       "path": "internal/doctor/doctor.go",
       "sha256": "7d6990ac258648e15f549a7966ecb485464ca67bc1bd19bad5f7abdac48dd45a",
       "bytes": 12198
