@@ -1061,13 +1061,13 @@
     },
     {
       "path": "internal/capability/engine.go",
-      "sha256": "b84e7332c2d8c73a8f50c9d4209148910a5484b8172fee903358437e0a4deeac",
-      "bytes": 6473
+      "sha256": "35d61f3533a4f687679b215d1f7b60482cbfdb700514f13a121db2e6385729f5",
+      "bytes": 8186
     },
     {
       "path": "internal/capability/engine_test.go",
-      "sha256": "7351e2083232ccb72f7cc8608598b34dbc93b37ecdaf38ad4e8f18bdd37a591f",
-      "bytes": 5501
+      "sha256": "c9eab7db9dfa4e9e4c6d25be5fb32d0cc51239fd36e63e724ddb9d283f47739f",
+      "bytes": 7750
     },
     {
       "path": "internal/capability/errors.go",
@@ -1496,8 +1496,8 @@
     },
     {
       "path": "internal/store/capability_engine_a03_test.go",
-      "sha256": "65547f2761969f92efcbb0a1d4e3da0550814cd81561e53c652985467c0743d6",
-      "bytes": 1939
+      "sha256": "0b624025c37c5971ab45752be8efcf74bea12fe1d8b6422f40521365a27ee03a",
+      "bytes": 2293
     },
     {
       "path": "internal/store/capability_grants.go",
