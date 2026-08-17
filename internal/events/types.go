@@ -45,28 +45,33 @@ func ValidateTransition(source, target LifecycleState) error {
 type EventType string
 
 const (
-	EventTypeAgentCreated       EventType = "agent.created"
-	EventTypeAgentStarted       EventType = "agent.started"
-	EventTypeAgentCompleted     EventType = "agent.completed"
-	EventTypeAgentFailed        EventType = "agent.failed"
-	EventTypeTaskCreated        EventType = "task.created"
-	EventTypeTaskClaimed        EventType = "task.claimed"
-	EventTypeTaskCompleted      EventType = "task.completed"
-	EventTypeTaskFailed         EventType = "task.failed"
-	EventTypeToolStarted        EventType = "tool.started"
-	EventTypeToolCompleted      EventType = "tool.completed"
-	EventTypeToolFailed         EventType = "tool.failed"
-	EventTypePolicyAllowed      EventType = "policy.allowed"
-	EventTypePolicyDenied       EventType = "policy.denied"
-	EventTypeFileChanged        EventType = "file.changed"
-	EventTypeTestStarted        EventType = "test.started"
-	EventTypeTestPassed         EventType = "test.passed"
-	EventTypeTestFailed         EventType = "test.failed"
-	EventTypeVerificationPassed EventType = "verification.passed"
-	EventTypeVerificationFailed EventType = "verification.failed"
-	EventTypeApprovalRequested  EventType = "approval.requested"
-	EventTypeApprovalGranted    EventType = "approval.granted"
-	EventTypeApprovalDenied     EventType = "approval.denied"
+	EventTypeAgentCreated             EventType = "agent.created"
+	EventTypeAgentStarted             EventType = "agent.started"
+	EventTypeAgentCompleted           EventType = "agent.completed"
+	EventTypeAgentFailed              EventType = "agent.failed"
+	EventTypeTaskCreated              EventType = "task.created"
+	EventTypeTaskClaimed              EventType = "task.claimed"
+	EventTypeTaskCompleted            EventType = "task.completed"
+	EventTypeTaskFailed               EventType = "task.failed"
+	EventTypeToolStarted              EventType = "tool.started"
+	EventTypeToolCompleted            EventType = "tool.completed"
+	EventTypeToolFailed               EventType = "tool.failed"
+	EventTypePolicyAllowed            EventType = "policy.allowed"
+	EventTypePolicyDenied             EventType = "policy.denied"
+	EventTypeFileChanged              EventType = "file.changed"
+	EventTypeTestStarted              EventType = "test.started"
+	EventTypeTestPassed               EventType = "test.passed"
+	EventTypeTestFailed               EventType = "test.failed"
+	EventTypeVerificationPassed       EventType = "verification.passed"
+	EventTypeVerificationFailed       EventType = "verification.failed"
+	EventTypeApprovalRequested        EventType = "approval.requested"
+	EventTypeApprovalGranted          EventType = "approval.granted"
+	EventTypeApprovalDenied           EventType = "approval.denied"
+	EventTypeCapabilityGrantRequested EventType = "capability.grant.requested"
+	EventTypeCapabilityGrantIssued    EventType = "capability.grant.issued"
+	EventTypeCapabilityGrantRevoked   EventType = "capability.grant.revoked"
+	EventTypeCapabilityAllowed        EventType = "capability.authorize.allowed"
+	EventTypeCapabilityDenied         EventType = "capability.authorize.denied"
 
 	EventTypeAppended          EventType = "events.appended"
 	EventTypeSubscriberDropped EventType = "events.subscriber.dropped"
@@ -81,6 +86,8 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeTestStarted: {}, EventTypeTestPassed: {}, EventTypeTestFailed: {},
 	EventTypeVerificationPassed: {}, EventTypeVerificationFailed: {},
 	EventTypeApprovalRequested: {}, EventTypeApprovalGranted: {}, EventTypeApprovalDenied: {},
+	EventTypeCapabilityGrantRequested: {}, EventTypeCapabilityGrantIssued: {}, EventTypeCapabilityGrantRevoked: {},
+	EventTypeCapabilityAllowed: {}, EventTypeCapabilityDenied: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 

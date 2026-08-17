@@ -223,7 +223,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 12 {
+	if version > LatestSchemaVersion {
 		return fmt.Errorf("database schema version %d is newer than supported version %d", version, LatestSchemaVersion)
 	}
 	if version == 0 {
