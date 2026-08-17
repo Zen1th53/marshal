@@ -1075,6 +1075,11 @@
       "bytes": 963
     },
     {
+      "path": "internal/capability/benchmark_a09_test.go",
+      "sha256": "1d75191462dd18e8819d9a983f4a9df5c9bbf43c7065e34c5f7adb89583ae150",
+      "bytes": 938
+    },
+    {
       "path": "internal/capability/engine.go",
       "sha256": "a4dd0b7d30d0240790c9f055bb5902d0f4758e663c3259fc55a3c1f7f508aea0",
       "bytes": 9667
