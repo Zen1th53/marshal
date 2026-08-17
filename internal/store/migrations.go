@@ -222,8 +222,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 11 {
-		return fmt.Errorf("database schema version %d is newer than supported version 11", version)
+	if version > 12 {
+		return fmt.Errorf("database schema version %d is newer than supported version 12", version)
 	}
 	if version == 0 {
 		if _, err := tx.ExecContext(ctx, schemaV1); err != nil {
@@ -418,6 +418,32 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 11: %w", err)
 		}
 		version = 11
+	}
+	if version == 11 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE capability_grants (
+				id TEXT PRIMARY KEY,
+				subject TEXT NOT NULL,
+				task_id TEXT NOT NULL,
+				kind TEXT NOT NULL CHECK(kind IN ('fs.read','fs.write','shell.exec','git.commit','git.push','network.egress','secret.use','mcp.call','deploy.execute')),
+				resource TEXT NOT NULL,
+				actions_json TEXT NOT NULL,
+				constraints_json TEXT NOT NULL DEFAULT '{}',
+				issuer TEXT NOT NULL,
+				issued_at TEXT NOT NULL,
+				expires_at TEXT NOT NULL,
+				revoked_at TEXT,
+				policy_digest TEXT NOT NULL DEFAULT ''
+			);
+			CREATE INDEX capability_grants_by_subject_task_kind ON capability_grants(subject, task_id, kind);
+			CREATE INDEX capability_grants_by_expiry ON capability_grants(expires_at);
+		`); err != nil {
+			return fmt.Errorf("apply schema version 12: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(12, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 12: %w", err)
+		}
+		version = 12
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
