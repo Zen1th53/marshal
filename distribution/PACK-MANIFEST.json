@@ -725,6 +725,11 @@
       "bytes": 3605
     },
     {
+      "path": "docs/dynamic-dag.md",
+      "sha256": "fbae51c8604e7a934d29a185753908c4e19be324808daaaecb1fab2eba3a8afc",
+      "bytes": 820
+    },
+    {
       "path": "docs/events.md",
       "sha256": "28d878883062a259236b17f3e4efc1085046fb518a698fa0a705f20173cb8472",
       "bytes": 1019
@@ -1113,6 +1118,11 @@
       "path": "internal/dag/events_a05_test.go",
       "sha256": "f80acbd940ac8aa759c7e722105af7c24669fe8762f81b0df580d14075dad42e",
       "bytes": 2352
+    },
+    {
+      "path": "internal/dag/metrics_a09_test.go",
+      "sha256": "ee6a099976e50d35aefecdd9390cbcf767f567cf6b96a223396d1b7c80fd25e9",
+      "bytes": 1212
     },
     {
       "path": "internal/dag/security_a04_red_test.go",
