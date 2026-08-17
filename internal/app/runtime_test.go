@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
@@ -36,6 +38,33 @@ func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o700 {
 		t.Fatalf("runtime mode = %o", info.Mode().Perm())
+	}
+}
+
+func TestRuntimeEventAPIPersistsAndResumesBySequence(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := runtime.EmitEvent(context.Background(), events.Event{ID: "runtime-evt-1", Type: events.EventTypeAgentStarted, At: time.Now().UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	got, err := reopened.EventsSince(context.Background(), first.Sequence-1)
+	if err != nil || len(got) != 1 || got[0].ID != first.ID {
+		t.Fatalf("EventsSince() = %#v, err=%v", got, err)
 	}
 }
 

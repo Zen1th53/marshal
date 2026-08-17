@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
@@ -34,6 +35,7 @@ const localProjectID = "PROJECT-local"
 type Runtime struct {
 	layout            project.Layout
 	store             *store.Store
+	eventEngine       *events.Engine
 	policy            *policy.Engine
 	adapters          map[string]adapter.Adapter
 	evidenceSanitizer evidence.Sanitizer
@@ -195,6 +197,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	rt := &Runtime{
 		layout:            layout,
 		store:             database,
+		eventEngine:       events.NewEngine(database),
 		policy:            engine,
 		adapters:          options.Adapters,
 		evidenceSanitizer: sanitizer,
