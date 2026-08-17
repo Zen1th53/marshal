@@ -32,6 +32,13 @@ type Engine struct {
 	repository GrantRepository
 	now        func() time.Time
 	authority  Authority
+	audit      AuditSink
+}
+
+func NewAuthorizedEngineWithAudit(repository GrantRepository, now func() time.Time, authority Authority, audit AuditSink) *Engine {
+	engine := NewAuthorizedEngine(repository, now, authority)
+	engine.audit = audit
+	return engine
 }
 
 var _ Broker = (*Engine)(nil)
@@ -92,6 +99,9 @@ func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error)
 	if err := e.repository.PutCapabilityGrant(ctx, grant); err != nil {
 		return Grant{}, err
 	}
+	if err := e.appendAudit(ctx, AuditEvent{ID: "capability.grant.issued:" + string(grant.ID), Type: "capability.grant.issued", GrantID: grant.ID, Subject: grant.Subject, TaskID: grant.TaskID, Kind: grant.Kind, Resource: grant.Scope.Resource, Timestamp: now}); err != nil {
+		return Grant{}, err
+	}
 	return grant, nil
 }
 
@@ -138,7 +148,11 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 		if at.Before(grant.IssuedAt) {
 			return Decision{Outcome: OutcomeDeny, Reason: CodeDenied, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt}, nil
 		}
-		return Decision{Outcome: OutcomeAllow, Reason: "", MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt, PolicyDigest: grant.PolicyDigest}, nil
+		decision := Decision{Outcome: OutcomeAllow, Reason: "", MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt, PolicyDigest: grant.PolicyDigest}
+		if err := e.appendAudit(ctx, AuditEvent{ID: "capability.authorize:" + string(grant.ID), Type: "capability.authorized", GrantID: grant.ID, Subject: query.Subject, TaskID: query.TaskID, Kind: query.Kind, Resource: query.Resource, Reason: decision.Reason, Timestamp: at}); err != nil {
+			return Decision{}, err
+		}
+		return decision, nil
 	}
 	if subjectMismatch {
 		return Decision{Outcome: OutcomeDeny, Reason: CodeSubjectMismatch}, nil
@@ -146,7 +160,18 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 	if taskMismatch {
 		return Decision{Outcome: OutcomeDeny, Reason: CodeTaskMismatch}, nil
 	}
-	return Decision{Outcome: OutcomeDeny, Reason: CodeDenied}, nil
+	decision := Decision{Outcome: OutcomeDeny, Reason: CodeDenied}
+	if err := e.appendAudit(ctx, AuditEvent{ID: "capability.authorize:deny:" + string(query.Subject) + ":" + string(query.TaskID), Type: "capability.denied", Subject: query.Subject, TaskID: query.TaskID, Kind: query.Kind, Resource: query.Resource, Reason: decision.Reason, Timestamp: at}); err != nil {
+		return Decision{}, err
+	}
+	return decision, nil
+}
+
+func (e *Engine) appendAudit(ctx context.Context, event AuditEvent) error {
+	if e.audit == nil {
+		return nil
+	}
+	return e.audit.AppendCapabilityEvent(ctx, event)
 }
 
 func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
