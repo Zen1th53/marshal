@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/capability"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 func (s *Store) SaveGrant(ctx context.Context, grant capability.Grant) error {
@@ -32,6 +35,13 @@ func (s *Store) SaveGrant(ctx context.Context, grant capability.Grant) error {
 		string(actions), string(constraints), grant.Issuer, grant.IssuedAt.UTC().Format(time.RFC3339Nano),
 		grant.ExpiresAt.UTC().Format(time.RFC3339Nano), nullableTime(grant.RevokedAt), grant.PolicyDigest, string(grant.State))
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique constraint") {
+			stored, loadErr := s.LoadGrant(ctx, grant.ID)
+			if loadErr == nil && reflect.DeepEqual(stored, grant) {
+				return nil
+			}
+			return fmt.Errorf("%w: capability grant identity is immutable", model.ErrConflict)
+		}
 		return fmt.Errorf("persist capability grant: %w", err)
 	}
 	return nil
