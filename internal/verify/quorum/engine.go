@@ -161,6 +161,9 @@ func eventTypeForState(state QuorumState) EventType {
 }
 
 func (e *Engine) EvaluateAuthorized(ctx context.Context, authority Authority, requirements []Requirement, attestations []Attestation, provenance Provenance) (Evaluation, error) {
+	if err := ctx.Err(); err != nil {
+		return Evaluation{State: StateInvalidated}, err
+	}
 	if authority == nil {
 		return Evaluation{State: StateInvalidated}, ErrAuthorityUnavailable
 	}

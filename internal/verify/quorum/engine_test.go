@@ -65,6 +65,24 @@ func TestEngineAuthorizedEvaluationFailsClosedWithoutAuthority(t *testing.T) {
 	}
 }
 
+type countingAuthority struct{ calls int }
+
+func (a *countingAuthority) Authorize(context.Context, Provenance) error {
+	a.calls++
+	return nil
+}
+
+func TestEngineAuthorizedEvaluationChecksCancellationBeforeAuthority(t *testing.T) {
+	engine := NewEngine(func() time.Time { return time.Unix(100, 0).UTC() })
+	authority := &countingAuthority{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := engine.EvaluateAuthorized(ctx, authority, nil, nil, Provenance{ChangeID: "change-1", ContentDigest: "sha256:change"})
+	if !errors.Is(err, context.Canceled) || authority.calls != 0 {
+		t.Fatalf("err=%v authority.calls=%d, want canceled and zero calls", err, authority.calls)
+	}
+}
+
 type recordingEventSink struct{ events []Event }
 
 func (s *recordingEventSink) Append(_ context.Context, event Event) error {
