@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/events"
@@ -32,6 +33,27 @@ type Engine struct {
 	freshness  FreshnessValidator
 	now        func() time.Time
 	eventStore events.Store
+	metrics    dagMetrics
+}
+
+type dagMetrics struct {
+	success atomic.Uint64
+	denied  atomic.Uint64
+	invalid atomic.Uint64
+	totalNs atomic.Uint64
+}
+
+// MetricsSnapshot is a bounded operational projection; it is never used for
+// readiness, authorization, or graph correctness.
+type MetricsSnapshot struct {
+	Success uint64
+	Denied  uint64
+	Invalid uint64
+	TotalNs uint64
+}
+
+func (e *Engine) Metrics() MetricsSnapshot {
+	return MetricsSnapshot{Success: e.metrics.success.Load(), Denied: e.metrics.denied.Load(), Invalid: e.metrics.invalid.Load(), TotalNs: e.metrics.totalNs.Load()}
 }
 
 // NewEngineWithEvents enables the canonical durable event hook. Events are
@@ -84,10 +106,14 @@ func NewAuthorizedEngineWithEvents(backend Backend, identity IdentityProvider, a
 }
 
 func (e *Engine) AddNode(ctx context.Context, request AddNodeRequest) (Node, error) {
+	started := time.Now()
+	defer func() { e.metrics.totalNs.Add(uint64(time.Since(started).Nanoseconds())) }()
 	if err := request.Validate(); err != nil {
+		e.metrics.invalid.Add(1)
 		return Node{}, err
 	}
 	if err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddNode, Resource: nodeResource(request.Node.TaskID)}); err != nil {
+		e.metrics.denied.Add(1)
 		return Node{}, err
 	}
 	// New graph history always starts pending. Later lifecycle movement must use
@@ -104,14 +130,19 @@ func (e *Engine) AddNode(ctx context.Context, request AddNodeRequest) (Node, err
 	}); err != nil {
 		return node, err
 	}
+	e.metrics.success.Add(1)
 	return node, nil
 }
 
 func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, error) {
+	started := time.Now()
+	defer func() { e.metrics.totalNs.Add(uint64(time.Since(started).Nanoseconds())) }()
 	if err := request.Validate(); err != nil {
+		e.metrics.invalid.Add(1)
 		return Edge{}, err
 	}
 	if err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddEdge, Resource: edgeResource(request.Edge)}); err != nil {
+		e.metrics.denied.Add(1)
 		return Edge{}, err
 	}
 	// Reconcile an exact semantic retry before applying new-edge constraints.
@@ -162,6 +193,7 @@ func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, err
 	}); err != nil {
 		return edge, err
 	}
+	e.metrics.success.Add(1)
 	return edge, nil
 }
 
@@ -194,10 +226,14 @@ func (e *Engine) Ready(ctx context.Context, id TaskID) (Readiness, error) {
 // Transition applies one explicit lifecycle edge. Moving to ready is allowed
 // only when canonical predecessor state currently satisfies every dependency.
 func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target NodeStatus) (Node, error) {
+	started := time.Now()
+	defer func() { e.metrics.totalNs.Add(uint64(time.Since(started).Nanoseconds())) }()
 	if !CanTransition(expected, target) {
+		e.metrics.invalid.Add(1)
 		return Node{}, ErrInvalidNode
 	}
 	if err := e.authorize(ctx, AuthorizationRequest{Action: ActionTransition, Resource: nodeResource(id), ExpectedState: expected, TargetState: target}); err != nil {
+		e.metrics.denied.Add(1)
 		return Node{}, err
 	}
 	if target == StatusReady {
@@ -222,6 +258,7 @@ func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target Nod
 	}); err != nil {
 		return node, err
 	}
+	e.metrics.success.Add(1)
 	return node, nil
 }
 
