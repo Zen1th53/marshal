@@ -124,3 +124,31 @@ func TestAggregateResultsUsesFailClosedPrecedence(t *testing.T) {
 		t.Fatalf("aggregate = %s, want ERROR", got)
 	}
 }
+
+func TestRunSuiteProviderLabelsDoNotChangeSemantics(t *testing.T) {
+	for _, provider := range []string{"Codex", "Claude", "Gemini", "OpenCode"} {
+		t.Run(provider, func(t *testing.T) {
+			caseInput := validCase(t)
+			caseInput.When.Provider = provider
+			suite, err := NewSuite(Suite{ID: SuiteID("provider-" + provider), Cases: []Case{caseInput}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			digest := suite.Cases[0].Given.Binding.Digest
+			evaluator := &countingEvaluator{decision: policy.Decision{
+				Allowed:      true,
+				Effect:       policy.EffectAllow,
+				PolicyDigest: digest,
+				AllowedBy:    "allow-read",
+				Binding:      policy.PolicyBinding{Version: 1, Digest: digest},
+			}}
+			result, err := RunSuite(context.Background(), suite, evaluator)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Status != StatusPass || evaluator.calls != 1 {
+				t.Fatalf("result=%#v calls=%d", result, evaluator.calls)
+			}
+		})
+	}
+}
