@@ -950,6 +950,11 @@
       "bytes": 2038
     },
     {
+      "path": "docs/terra-evidence/T06-A10.md",
+      "sha256": "9878fd0debebd86ec78ac6be25f128c8e9089dbaad330b9bc25c9c293573bf09",
+      "bytes": 3332
+    },
+    {
       "path": "docs/terra-evidence/T29-A10.md",
       "sha256": "9db388b8141b10eb0b26076740deff991d79e1ec4d01b700a144c18012b8fb2a",
       "bytes": 5235
