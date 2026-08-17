@@ -1,10 +1,12 @@
 package dag
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestA03EngineRejectsCycleBeforeMutation(t *testing.T) {
-	engine := NewEngine(nil)
-	if engine == nil {
-		t.Fatal("expected DAG engine")
+	if _, err := NewEngine(nil); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("nil backend error = %v, want invalid request", err)
 	}
 }
