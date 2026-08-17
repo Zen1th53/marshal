@@ -16,6 +16,7 @@ import (
 
 type registrar interface {
 	RegisterArtifact(context.Context, model.Artifact) error
+	GetArtifactByDigest(context.Context, string) (model.Artifact, error)
 }
 
 type Store struct {
@@ -95,6 +96,11 @@ func (s *Store) Put(ctx context.Context, input model.ArtifactInput) (model.Artif
 		ProducerSession:  input.ProducerSession,
 		VerificationRefs: nonNil(input.VerificationRefs),
 		Path:             target, Size: size, CreatedAt: time.Now().UTC(),
+	}
+	if existing, err := s.registrar.GetArtifactByDigest(ctx, digest); err == nil {
+		return existing, nil
+	} else if !errors.Is(err, model.ErrNotFound) {
+		return model.Artifact{}, err
 	}
 	if err := s.registrar.RegisterArtifact(ctx, artifact); err != nil {
 		return model.Artifact{}, err

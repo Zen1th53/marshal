@@ -1191,8 +1191,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "d46abdbad875d83ac04db8abb6c1c501743c336c37dc8dcaacd0487f1eaae97c",
-      "bytes": 30671
+      "sha256": "9ffd7ea6362af22b5b7395efc4beb3e481ba5d38fa73bd3679ca068577a12f51",
+      "bytes": 32513
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1206,8 +1206,8 @@
     },
     {
       "path": "internal/artifact/store.go",
-      "sha256": "59d4228e10f0ddcf73659296cba8c0d0808da3f5d3c4b645db60229af431f50d",
-      "bytes": 3953
+      "sha256": "a244b8ff05b512a956d26428fdc9a923b7aeecf839cf504b76af98ed1d6ac4f6",
+      "bytes": 4208
     },
     {
       "path": "internal/artifact/store_test.go",
@@ -2281,8 +2281,8 @@
     },
     {
       "path": "internal/store/evidence.go",
-      "sha256": "95c15162995a6c9bb6e9435cac0ec6a4f2d580f688a55895e13681a0a370d905",
-      "bytes": 15350
+      "sha256": "86cea63970eb01e5d930d4251a64e2bf03f754073bab6aad9e5c3758eb04e561",
+      "bytes": 15851
     },
     {
       "path": "internal/store/evidence_a07_secret_test.go",
