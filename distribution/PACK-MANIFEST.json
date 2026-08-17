@@ -920,6 +920,11 @@
       "bytes": 4704
     },
     {
+      "path": "docs/terra-evidence/T01-A10.md",
+      "sha256": "d6dfe5db7c9597317d6387f96034e17c3711032f26b82b4139a8b6d516bb6e9b",
+      "bytes": 2038
+    },
+    {
       "path": "docs/terra-evidence/T29-A10.md",
       "sha256": "9db388b8141b10eb0b26076740deff991d79e1ec4d01b700a144c18012b8fb2a",
       "bytes": 5235
@@ -1183,6 +1188,11 @@
       "path": "internal/capability/recovery_a08_test.go",
       "sha256": "ccdf5645a9272f8bea4ab5074547bd836ab41580083eec5464bf96df379c4cbf",
       "bytes": 1188
+    },
+    {
+      "path": "internal/capability/release_a10_test.go",
+      "sha256": "72f801ba0a7c1bdc97cfedab664b63fdd23855e083ba55bab2c57db014452836",
+      "bytes": 1584
     },
     {
       "path": "internal/capability/types.go",
