@@ -126,12 +126,14 @@ func buildPrompt(request adapter.Request) ([]byte, error) {
 		HeadCommit        string   `json:"head_commit"`
 		AllowedOperations []string `json:"allowed_operations"`
 		EvidenceRequired  []string `json:"evidence_required"`
+		TrustedContext    string   `json:"trusted_context,omitempty"`
 		Rules             []string `json:"rules"`
 	}{
 		TaskID: request.TaskID, Title: request.Title, Worktree: request.Worktree,
 		BaseCommit: request.BaseCommit, HeadCommit: request.HeadCommit,
 		AllowedOperations: request.AllowedOperations,
 		EvidenceRequired:  request.EvidenceRequired,
+		TrustedContext:    request.TrustedContext,
 		Rules: []string{
 			"Work only inside the assigned worktree.",
 			"Do not push, rewrite history, deploy, upload externally, or access secrets.",

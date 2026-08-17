@@ -33,6 +33,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/secrets"
 	"github.com/Zen1th53/marshal/internal/store"
+	"github.com/Zen1th53/marshal/internal/trustcontent"
 	"github.com/Zen1th53/marshal/internal/worker"
 	"github.com/Zen1th53/marshal/internal/worktree"
 	"go.yaml.in/yaml/v3"
@@ -569,6 +570,11 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		}
 		networkAllowed = true
 	}
+	trustedContext, err := r.renderTaskContext(ctx, task)
+	if err != nil {
+		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
+		return RunResult{}, err
+	}
 	agentAdapter, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, networkAllowed)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
@@ -600,10 +606,11 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		}
 	}
 	result, runErr := agentAdapter.Run(ctx, adapter.Request{
-		TaskID: task.ID, Title: task.Title, Worktree: worktreeState.Path,
+		TaskID: task.ID, Title: "MARSHAL task details are supplied in marked context.", Worktree: worktreeState.Path,
 		BaseCommit: baseCommit, HeadCommit: baseCommit,
 		AllowedOperations: []string{"filesystem.read", "filesystem.write", "shell.execute"},
 		EvidenceRequired:  []string{"git status --short", "git log -1 --oneline"},
+		TrustedContext:    trustedContext,
 		Heartbeat:         heartbeat,
 		HeartbeatInterval: 5 * time.Second,
 	})
@@ -697,6 +704,23 @@ func (r *Runtime) sanitizeProviderOutput(ctx context.Context, payload []byte) ([
 		return nil, evidence.ErrSecretRejected
 	}
 	return boundary.SanitizeBytes(ctx, payload)
+}
+
+func (r *Runtime) renderTaskContext(ctx context.Context, task model.Task) (string, error) {
+	if r == nil {
+		return "", fmt.Errorf("%w: trust-content renderer is unavailable", model.ErrUnavailable)
+	}
+	boundary, ok := r.evidenceSanitizer.(evidence.ByteSanitizer)
+	if !ok {
+		return "", fmt.Errorf("%w: trust-content sanitizer is unavailable", model.ErrUnavailable)
+	}
+	payload, err := trustcontent.NewRenderer(boundary).Render(ctx, []trustcontent.Segment{{
+		Zone: trustcontent.UntrustedContent, SourceID: "task/" + task.ID, Content: task.Title,
+	}})
+	if err != nil {
+		return "", fmt.Errorf("%w: render task trust context", model.ErrInvalid)
+	}
+	return payload, nil
 }
 
 func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {

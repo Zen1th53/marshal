@@ -34,6 +34,7 @@ const (
 	MetricOperationCell              MetricOperation = "cell"
 	MetricOperationQuorum            MetricOperation = "quorum"
 	MetricOperationNetworkEgress     MetricOperation = "network_egress"
+	MetricOperationTrustContent      MetricOperation = "trust_content"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -55,7 +56,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationContention: {}, MetricOperationPolicyLoad: {}, MetricOperationPolicyPersist: {},
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
 	MetricOperationPolicyTest: {}, MetricOperationCapability: {}, MetricOperationAuthority: {}, MetricOperationGate: {}, MetricOperationSecret: {}, MetricOperationRisk: {}, MetricOperationCell: {}, MetricOperationNetworkEgress: {},
-	MetricOperationQuorum: {},
+	MetricOperationQuorum: {}, MetricOperationTrustContent: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
@@ -77,9 +78,10 @@ var metricReasons = map[string]struct{}{
 	"GATE_UNKNOWN_POINT": {}, "GATE_INVALID_CHECK_STATUS": {}, "GATE_INVALID_DECISION": {},
 	"SECRET_DENIED": {}, "SECRET_NOT_FOUND": {}, "SECRET_LEASE_EXPIRED": {}, "SECRET_PURPOSE_MISMATCH": {}, "SECRET_PROVIDER_FAILED": {},
 	"RISK_DESCRIPTOR_INVALID": {}, "RISK_UNKNOWN_MUTATION": {}, "RISK_DOWNGRADE_FORBIDDEN": {}, "RISK_AUTHORIZATION_UNAVAILABLE": {}, "RISK_AUTHORIZATION_DENIED": {},
-	"RISK_ERROR": {},
+	"RISK_ERROR":              {},
 	"VERIFY_QUORUM_SATISFIED": {}, "VERIFY_QUORUM_UNMET": {}, "VERIFY_VETO": {}, "VERIFY_STALE_ATTESTATION": {}, "VERIFY_AUTHORITY_UNAVAILABLE": {}, "VERIFY_INVALID": {},
 	"NET_ALLOWED": {}, "NET_DENIED": {}, "NET_RULE_INVALID": {}, "NET_PROTOCOL_DENIED": {}, "NET_REDIRECT_DENIED": {}, "NET_ENFORCEMENT_UNAVAILABLE": {},
+	"TRUST_ZONE_INVALID": {}, "TRUST_UPGRADE_FORBIDDEN": {}, "TRUST_SEGMENT_TOO_LARGE": {}, "TRUST_RENDER_FAILED": {},
 	"CELL_BACKEND_UNAVAILABLE": {}, "CELL_PREPARE_FAILED": {}, "CELL_SCOPE_ESCAPE": {},
 	"CELL_NOT_READY": {}, "CELL_DESTROYED": {}, "CELL_CLEANUP_FAILED": {}, "CELL_AUTHORIZATION_DENIED": {},
 }
