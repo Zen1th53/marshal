@@ -111,6 +111,20 @@ func TestAuthorizedAppendFailsClosedForDeniedOrStaleDecision(t *testing.T) {
 	}
 }
 
+func TestAppendAuditEventContainsReferencesNotPayload(t *testing.T) {
+	original := Event{ID: "evt-1", Sequence: 4, Type: EventTypeTaskCompleted, Subject: "agent-1", TaskID: "task-1", RunID: "run-1", ResourceID: "artifact-1", EvidenceID: "ev-1", At: time.Now().UTC(), Data: map[string]any{"prompt": "sensitive payload"}}
+	audit := AppendAuditEvent(original, "", "stored")
+	if audit.Type != EventTypeAppended || audit.ID == original.ID || audit.Sequence != original.Sequence {
+		t.Fatalf("audit event = %+v", audit)
+	}
+	if audit.Data["result"] != "stored" || audit.Data["event_id"] != original.ID || audit.Data["task_id"] != original.TaskID {
+		t.Fatalf("audit data = %#v", audit.Data)
+	}
+	if _, ok := audit.Data["prompt"]; ok {
+		t.Fatal("audit event copied unbounded payload")
+	}
+}
+
 type staticAuthorizer struct{ decision AuthorizationDecision }
 
 func (a staticAuthorizer) Authorize(context.Context, Event) (AuthorizationDecision, error) {

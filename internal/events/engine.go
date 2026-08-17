@@ -7,6 +7,27 @@ import (
 	"time"
 )
 
+// AppendAuditEvent creates a bounded projection describing a durable append.
+// It deliberately copies identifiers and outcome metadata only; producer
+// payloads are never promoted into audit data.
+func AppendAuditEvent(event Event, reason, result string) Event {
+	data := map[string]any{
+		"event_id": event.ID,
+		"result":   result,
+	}
+	for key, value := range map[string]string{
+		"subject": event.Subject, "task_id": event.TaskID, "run_id": event.RunID,
+		"resource_id": event.ResourceID, "evidence_id": event.EvidenceID, "reason": reason,
+	} {
+		if value != "" {
+			data[key] = value
+		}
+	}
+	return Event{ID: event.ID + ":appended", Sequence: event.Sequence, Type: EventTypeAppended,
+		Subject: event.Subject, TaskID: event.TaskID, RunID: event.RunID, ResourceID: event.ResourceID,
+		EvidenceID: event.EvidenceID, At: event.At.UTC(), Data: data}
+}
+
 // Engine coordinates the durable event store and the live subscriber bus.
 // Append commits to Store before publishing, so a lost live delivery can
 // always be recovered with Since.
