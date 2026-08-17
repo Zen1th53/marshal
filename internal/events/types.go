@@ -5,10 +5,13 @@ package events
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
 )
+
+const maxDataBytes = 64 * 1024
 
 // Sequence is the store-assigned, strictly increasing event position.
 type Sequence uint64
@@ -126,6 +129,9 @@ func (e Event) Validate() error {
 			return ErrEventSecretField
 		}
 	}
+	if encoded, err := json.Marshal(e.Data); err != nil || len(encoded) > maxDataBytes {
+		return ErrEventDataInvalid
+	}
 	return nil
 }
 
@@ -171,6 +177,7 @@ const (
 	CodeEventAuthorizationDenied      Code = "EVENT_AUTHORIZATION_DENIED"
 	CodeEventAuthorizationStale       Code = "EVENT_AUTHORIZATION_STALE"
 	CodeEventAuthorizationUnavailable Code = "EVENT_AUTHORIZATION_UNAVAILABLE"
+	CodeEventDataInvalid              Code = "EVENT_DATA_INVALID"
 )
 
 var (
@@ -182,6 +189,7 @@ var (
 	ErrEventAuthorizationDenied      = &Error{Code: CodeEventAuthorizationDenied, Message: "event authorization denied"}
 	ErrEventAuthorizationStale       = &Error{Code: CodeEventAuthorizationStale, Message: "event authorization is stale"}
 	ErrEventAuthorizationUnavailable = &Error{Code: CodeEventAuthorizationUnavailable, Message: "event authorization is unavailable"}
+	ErrEventDataInvalid              = &Error{Code: CodeEventDataInvalid, Message: "event data is invalid or exceeds the safety bound"}
 )
 
 // Error carries a stable code and a human-safe message. Causes are available
@@ -231,6 +239,8 @@ func safeMessage(code Code) string {
 		return ErrEventAuthorizationStale.Message
 	case CodeEventAuthorizationUnavailable:
 		return ErrEventAuthorizationUnavailable.Message
+	case CodeEventDataInvalid:
+		return ErrEventDataInvalid.Message
 	default:
 		return "event operation failed"
 	}

@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+func TestEventValidationRejectsOversizedUntrustedData(t *testing.T) {
+	err := (Event{Type: EventTypeTaskCreated, Data: map[string]any{"output": strings.Repeat("x", maxDataBytes)}}).Validate()
+	if !errors.Is(err, ErrEventDataInvalid) {
+		t.Fatalf("Validate() error = %v, want ErrEventDataInvalid", err)
+	}
+}
+
 func TestEventContractExposesCanonicalLifecycleFields(t *testing.T) {
 	event := Event{
 		ID:         "evt-1",

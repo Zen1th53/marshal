@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -64,5 +66,43 @@ func TestEventStoreRejectsSensitiveFieldBeforePersistence(t *testing.T) {
 	_, err = st.Append(ctx, events.Event{ID: "evt-secret", Type: events.EventTypeTaskCreated, At: time.Now().UTC(), Data: map[string]any{"token": "MARSHAL_TEST_SECRET_T43_A02"}})
 	if !errors.Is(err, events.ErrEventSecretField) {
 		t.Fatalf("Append() error = %v, want ErrEventSecretField", err)
+	}
+}
+
+func TestEventStoreConcurrentAppendsHaveUniqueMonotonicSequences(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(ctx, filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sequences := make([]events.Sequence, 100)
+	errs := make(chan error, 100)
+	var wg sync.WaitGroup
+	for i := range sequences {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			stored, appendErr := st.Append(ctx, events.Event{ID: "concurrent-" + string(rune('A'+i)), Type: events.EventTypeTaskCreated, At: time.Now().UTC()})
+			if appendErr != nil {
+				errs <- appendErr
+				return
+			}
+			sequences[i] = stored.Sequence
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	sort.Slice(sequences, func(i, j int) bool { return sequences[i] < sequences[j] })
+	for i, sequence := range sequences {
+		if sequence != events.Sequence(i+1) {
+			t.Fatalf("sorted sequence[%d] = %d, want %d", i, sequence, i+1)
+		}
 	}
 }
