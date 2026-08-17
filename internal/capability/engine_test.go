@@ -54,6 +54,37 @@ func TestEngineDeniesSubjectAndTaskMismatch(t *testing.T) {
 	}
 }
 
+func TestEngineAuditSinkReceivesBoundedCapabilityEvents(t *testing.T) {
+	repo := newMemoryRepository()
+	audit := &memoryAudit{}
+	engine := NewEngineWithAudit(repo, func() time.Time { return time.Unix(100, 0).UTC() }, allowAuthority{}, audit)
+	grant, err := engine.Grant(context.Background(), GrantRequest{Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead, Scope: Scope{Resource: "/workspace", Actions: []string{"read"}}, TTL: time.Hour, Issuer: "admin-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.Authorize(context.Background(), Query{Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead, Resource: "/workspace", Action: "read"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(audit.events) != 2 || audit.events[0].Type != "capability.grant.issued" || audit.events[1].Type != "capability.authorize.allowed" || audit.events[0].GrantID != grant.ID {
+		t.Fatalf("events = %#v", audit.events)
+	}
+	if audit.events[0].Resource != "/workspace" || audit.events[0].Timestamp.IsZero() {
+		t.Fatalf("event metadata = %#v", audit.events[0])
+	}
+}
+
+func TestEngineAuditSinkReceivesDeniedDecision(t *testing.T) {
+	audit := &memoryAudit{}
+	engine := NewEngineWithAudit(newMemoryRepository(), func() time.Time { return time.Unix(100, 0).UTC() }, allowAuthority{}, audit)
+	decision, err := engine.Authorize(context.Background(), Query{Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead, Resource: "/workspace", Action: "read"})
+	if err != nil || decision.Allowed || decision.Reason != ReasonSubjectMismatch {
+		t.Fatalf("decision=%#v err=%v", decision, err)
+	}
+	if len(audit.events) != 1 || audit.events[0].Type != "capability.authorize.denied" {
+		t.Fatalf("events=%#v", audit.events)
+	}
+}
+
 func TestEngineRejectsGrantWithoutSeparateAuthorityBeforeMutation(t *testing.T) {
 	repo := newMemoryRepository()
 	engine := NewEngine(repo, func() time.Time { return time.Unix(100, 0).UTC() }, nil)
@@ -67,6 +98,13 @@ type allowAuthority struct{}
 
 func (allowAuthority) AuthorizeGrant(context.Context, GrantRequest) error   { return nil }
 func (allowAuthority) AuthorizeRevoke(context.Context, RevokeRequest) error { return nil }
+
+type memoryAudit struct{ events []AuditEvent }
+
+func (a *memoryAudit) AppendCapabilityEvent(_ context.Context, event AuditEvent) error {
+	a.events = append(a.events, event)
+	return nil
+}
 
 type memoryRepository struct{ grants map[string]Grant }
 

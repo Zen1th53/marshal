@@ -22,6 +22,15 @@ const (
 	KindDeployExecute   Kind = "deploy.execute"
 )
 
+func (r Reason) Valid() bool {
+	switch r {
+	case ReasonAllowed, ReasonDenied, ReasonExpired, ReasonRevoked, ReasonSubjectMismatch, ReasonTaskMismatch, ReasonInvalidScope:
+		return true
+	default:
+		return false
+	}
+}
+
 func (k Kind) Valid() bool {
 	switch k {
 	case KindFilesystemRead, KindFilesystemWrite, KindShellExec, KindGitCommit,
@@ -119,6 +128,22 @@ type GrantRepository interface {
 type Authority interface {
 	AuthorizeGrant(context.Context, GrantRequest) error
 	AuthorizeRevoke(context.Context, RevokeRequest) error
+}
+
+type AuditEvent struct {
+	ID        string
+	Type      string
+	GrantID   string
+	Subject   string
+	TaskID    string
+	Kind      Kind
+	Resource  string
+	Reason    Reason
+	Timestamp time.Time
+}
+
+type AuditSink interface {
+	AppendCapabilityEvent(context.Context, AuditEvent) error
 }
 
 type RevokeRequest struct {
