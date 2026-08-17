@@ -135,16 +135,6 @@ func (r GrantRequest) Validate() error {
 	return validateGrantFields(r.Subject, r.TaskID, r.Kind, r.Scope, r.IssuedAt, r.ExpiresAt, r.Issuer, nil)
 }
 
-type Authority interface {
-	AuthorizeGrant(context.Context, GrantRequest) error
-	AuthorizeRevoke(context.Context, RevokeRequest) error
-}
-
-type RevokeRequest struct {
-	ID    string
-	Actor string
-}
-
 type Query struct {
 	Subject  SubjectID
 	TaskID   TaskID
