@@ -1096,8 +1096,8 @@
     },
     {
       "path": "internal/dag/security_a04_red_test.go",
-      "sha256": "f6e18591fefde9d07c354e7832bfa5aee167ea745cdf5efea2985e9fdd960dd6",
-      "bytes": 169
+      "sha256": "084008e30ca70ead7148b57b7338a7ecca2c57d18d6c8e8b9a37a504e1a94820",
+      "bytes": 189
     },
     {
       "path": "internal/dag/security_a04_test.go",
