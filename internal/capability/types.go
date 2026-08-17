@@ -2,46 +2,51 @@ package capability
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
 
-// Kind is a closed vocabulary for privileged capability classes.
-type Kind string
+type GrantID string
+type SubjectID string
+type TaskID string
+
+// CapabilityKind is the closed vocabulary of privileged capability classes.
+type CapabilityKind string
 
 const (
-	KindFilesystemRead  Kind = "fs.read"
-	KindFilesystemWrite Kind = "fs.write"
-	KindShellExec       Kind = "shell.exec"
-	KindGitCommit       Kind = "git.commit"
-	KindGitPush         Kind = "git.push"
-	KindNetworkEgress   Kind = "network.egress"
-	KindSecretUse       Kind = "secret.use"
-	KindMCPCall         Kind = "mcp.call"
-	KindDeployExecute   Kind = "deploy.execute"
+	KindFilesystemRead  CapabilityKind = "fs.read"
+	KindFilesystemWrite CapabilityKind = "fs.write"
+	KindShellExec       CapabilityKind = "shell.exec"
+	KindGitCommit       CapabilityKind = "git.commit"
+	KindGitPush         CapabilityKind = "git.push"
+	KindNetworkEgress   CapabilityKind = "network.egress"
+	KindSecretUse       CapabilityKind = "secret.use"
+	KindMCPCall         CapabilityKind = "mcp.call"
+	KindDeployExecute   CapabilityKind = "deploy.execute"
 )
 
-func (r Reason) Valid() bool {
-	switch r {
-	case ReasonAllowed, ReasonDenied, ReasonExpired, ReasonRevoked, ReasonSubjectMismatch, ReasonTaskMismatch, ReasonInvalidScope:
-		return true
-	default:
-		return false
-	}
-}
+// GrantState describes the lifecycle states recognized by the broker.
+type GrantState string
 
-func (k Kind) Valid() bool {
-	switch k {
-	case KindFilesystemRead, KindFilesystemWrite, KindShellExec, KindGitCommit,
-		KindGitPush, KindNetworkEgress, KindSecretUse, KindMCPCall, KindDeployExecute:
-		return true
-	default:
-		return false
-	}
-}
+const (
+	StateRequested GrantState = "requested"
+	StateIssued    GrantState = "issued"
+	StateActive    GrantState = "active"
+	StateRevoked   GrantState = "revoked"
+	StateExpired   GrantState = "expired"
+)
 
-// Scope is the normalized resource and action boundary for a grant.
+type DecisionOutcome string
+
+const (
+	OutcomeAllow DecisionOutcome = "ALLOW"
+	OutcomeDeny  DecisionOutcome = "DENY"
+)
+
+// Scope is the resource/action boundary for a grant. Resource normalization
+// is enforced by the authorization implementation in a later atomic unit.
 type Scope struct {
 	Resource    string            `json:"resource"`
 	Actions     []string          `json:"actions"`
@@ -52,161 +57,120 @@ func (s Scope) Validate() error {
 	if strings.TrimSpace(s.Resource) == "" || len(s.Actions) == 0 {
 		return ErrInvalidScope
 	}
+	seen := make(map[string]struct{}, len(s.Actions))
 	for _, action := range s.Actions {
-		if strings.TrimSpace(action) == "" {
+		action = strings.TrimSpace(action)
+		if action == "" {
+			return ErrInvalidScope
+		}
+		if _, ok := seen[action]; ok {
+			return ErrInvalidScope
+		}
+		seen[action] = struct{}{}
+	}
+	for key, value := range s.Constraints {
+		if strings.TrimSpace(key) == "" || strings.TrimSpace(value) == "" {
 			return ErrInvalidScope
 		}
 	}
 	return nil
 }
 
-type GrantState string
+type Grant struct {
+	ID             GrantID        `json:"id"`
+	Subject        SubjectID      `json:"subject"`
+	TaskID         TaskID         `json:"task_id"`
+	Kind           CapabilityKind `json:"kind"`
+	Scope          Scope          `json:"scope"`
+	IssuedAt       time.Time      `json:"issued_at"`
+	ExpiresAt      time.Time      `json:"expires_at"`
+	Issuer         SubjectID      `json:"issuer"`
+	PolicyDigest   string         `json:"policy_digest,omitempty"`
+	IdempotencyKey string         `json:"idempotency_key,omitempty"`
+	RevokedAt      *time.Time     `json:"revoked_at,omitempty"`
+}
 
-const (
-	GrantRequested GrantState = "requested"
-	GrantIssued    GrantState = "issued"
-	GrantActive    GrantState = "active"
-	GrantRevoked   GrantState = "revoked"
-	GrantExpired   GrantState = "expired"
-)
+func (g Grant) Validate() error {
+	if strings.TrimSpace(string(g.ID)) == "" {
+		return ErrInvalidScope
+	}
+	return validateGrantFields(g.Subject, g.TaskID, g.Kind, g.Scope, g.IssuedAt, g.ExpiresAt, g.Issuer, g.RevokedAt)
+}
 
-func (s GrantState) Valid() bool {
-	switch s {
-	case GrantRequested, GrantIssued, GrantActive, GrantRevoked, GrantExpired:
+func validateGrantFields(subject SubjectID, taskID TaskID, kind CapabilityKind, scope Scope, issuedAt, expiresAt time.Time, issuer SubjectID, revokedAt *time.Time) error {
+	if strings.TrimSpace(string(subject)) == "" || strings.TrimSpace(string(taskID)) == "" || strings.TrimSpace(string(issuer)) == "" {
+		return ErrInvalidScope
+	}
+	if !knownKind(kind) || issuedAt.IsZero() || expiresAt.IsZero() || !expiresAt.After(issuedAt) {
+		return ErrInvalidScope
+	}
+	if revokedAt != nil && revokedAt.Before(issuedAt) {
+		return ErrInvalidScope
+	}
+	return scope.Validate()
+}
+
+func knownKind(kind CapabilityKind) bool {
+	switch kind {
+	case KindFilesystemRead, KindFilesystemWrite, KindShellExec, KindGitCommit,
+		KindGitPush, KindNetworkEgress, KindSecretUse, KindMCPCall, KindDeployExecute:
 		return true
 	default:
 		return false
 	}
 }
 
-type Grant struct {
-	ID           string     `json:"id"`
-	Subject      string     `json:"subject"`
-	TaskID       string     `json:"task_id"`
-	Kind         Kind       `json:"kind"`
-	Scope        Scope      `json:"scope"`
-	IssuedAt     time.Time  `json:"issued_at"`
-	ExpiresAt    time.Time  `json:"expires_at"`
-	Issuer       string     `json:"issuer"`
-	State        GrantState `json:"state"`
-	PolicyDigest string     `json:"policy_digest,omitempty"`
-	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
-}
-
-func (g Grant) Validate() error {
-	if !nonEmpty(g.ID) || !nonEmpty(g.Subject) || !nonEmpty(g.TaskID) || !nonEmpty(g.Issuer) || !g.Kind.Valid() || !g.State.Valid() {
-		return ErrInvalidGrant
-	}
-	if err := g.Scope.Validate(); err != nil {
-		return ErrInvalidGrant
-	}
-	if g.IssuedAt.IsZero() || g.ExpiresAt.IsZero() || !g.ExpiresAt.After(g.IssuedAt) {
-		return ErrInvalidGrant
-	}
-	if g.RevokedAt != nil && g.RevokedAt.Before(g.IssuedAt) {
-		return ErrInvalidGrant
-	}
-	return nil
-}
-
 type GrantRequest struct {
-	Subject string
-	TaskID  string
-	Kind    Kind
-	Scope   Scope
-	TTL     time.Duration
-	Issuer  string
+	Subject        SubjectID
+	TaskID         TaskID
+	Kind           CapabilityKind
+	Scope          Scope
+	IssuedAt       time.Time
+	ExpiresAt      time.Time
+	Issuer         SubjectID
+	IdempotencyKey string
 }
 
-type GrantRepository interface {
-	SaveGrant(context.Context, Grant) error
-	LoadGrant(context.Context, string) (Grant, error)
-	ListGrants(context.Context, Kind) ([]Grant, error)
-	RevokeGrant(context.Context, string, time.Time) error
-}
-
-type Authority interface {
-	AuthorizeGrant(context.Context, GrantRequest) error
-	AuthorizeRevoke(context.Context, RevokeRequest) error
-}
-
-type AuditEvent struct {
-	ID        string
-	Type      string
-	GrantID   string
-	Subject   string
-	TaskID    string
-	Kind      Kind
-	Resource  string
-	Reason    Reason
-	Timestamp time.Time
-}
-
-type AuditSink interface {
-	AppendCapabilityEvent(context.Context, AuditEvent) error
-}
-
-type RevokeRequest struct {
-	ID    string
-	Actor string
+func (r GrantRequest) Validate() error {
+	return validateGrantFields(r.Subject, r.TaskID, r.Kind, r.Scope, r.IssuedAt, r.ExpiresAt, r.Issuer, nil)
 }
 
 type Query struct {
-	Subject  string
-	TaskID   string
-	Kind     Kind
+	Subject  SubjectID
+	TaskID   TaskID
+	Kind     CapabilityKind
 	Resource string
 	Action   string
+	At       time.Time
 }
-
-type Reason string
-
-const (
-	ReasonAllowed         Reason = "CAP_ALLOWED"
-	ReasonDenied          Reason = "CAP_DENIED"
-	ReasonExpired         Reason = "CAP_EXPIRED"
-	ReasonRevoked         Reason = "CAP_REVOKED"
-	ReasonSubjectMismatch Reason = "CAP_SUBJECT_MISMATCH"
-	ReasonTaskMismatch    Reason = "CAP_TASK_MISMATCH"
-	ReasonInvalidScope    Reason = "CAP_INVALID_SCOPE"
-)
 
 type Decision struct {
-	Allowed bool   `json:"allowed"`
-	Reason  Reason `json:"reason"`
-	GrantID string `json:"grant_id,omitempty"`
+	Outcome      DecisionOutcome `json:"outcome"`
+	Reason       ErrorCode       `json:"reason"`
+	MatchedGrant GrantID         `json:"matched_grant,omitempty"`
+	PolicyDigest string          `json:"policy_digest,omitempty"`
+	ExpiresAt    time.Time       `json:"expires_at,omitempty"`
 }
 
-func (d Decision) Validate() error {
-	switch d.Reason {
-	case ReasonAllowed:
-		if !d.Allowed || !nonEmpty(d.GrantID) {
-			return ErrInvalidDecision
-		}
-	case ReasonDenied, ReasonExpired, ReasonRevoked, ReasonSubjectMismatch,
-		ReasonTaskMismatch, ReasonInvalidScope:
-		if d.Allowed {
-			return ErrInvalidDecision
-		}
-	default:
-		return ErrInvalidDecision
-	}
-	return nil
+type RevokeRequest struct {
+	GrantID        GrantID
+	Actor          SubjectID
+	IdempotencyKey string
 }
 
+// Broker is the only contract privileged callers should depend on.
 type Broker interface {
 	Grant(context.Context, GrantRequest) (Grant, error)
 	Authorize(context.Context, Query) (Decision, error)
 	Revoke(context.Context, RevokeRequest) error
 }
 
-var (
-	ErrCapability      = errors.New("capability error")
-	ErrInvalidScope    = errors.New("invalid capability scope")
-	ErrInvalidGrant    = errors.New("invalid capability grant")
-	ErrInvalidDecision = errors.New("invalid capability decision")
-	ErrDenied          = errors.Join(ErrCapability, errors.New("capability denied"))
-	ErrGrantNotFound   = errors.Join(ErrCapability, errors.New("capability grant not found"))
-)
+func normalizeActions(actions []string) []string {
+	result := append([]string(nil), actions...)
+	sort.Strings(result)
+	return result
+}
 
-func nonEmpty(value string) bool { return strings.TrimSpace(value) != "" }
+func (s Scope) String() string {
+	return fmt.Sprintf("%s:%s", s.Resource, strings.Join(normalizeActions(s.Actions), ","))
+}
