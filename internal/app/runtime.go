@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
+	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
@@ -40,6 +41,7 @@ type Runtime struct {
 	runtimeInstanceID string
 	runtimePolicy     RuntimePolicyConfig
 	policyConfigured  bool
+	capabilityBroker  capability.Broker
 }
 
 type Options struct {
@@ -48,6 +50,7 @@ type Options struct {
 	EvidenceSanitizer  evidence.Sanitizer
 	Metrics            *evidence.MetricsRecorder
 	RuntimePolicy      *RuntimePolicyConfig
+	CapabilityBroker   capability.Broker
 }
 
 type Status struct {
@@ -104,6 +107,7 @@ type RunResult struct {
 
 type VerifyRequest struct {
 	Command []string `json:"command"`
+	AgentID string   `json:"agent_id,omitempty"`
 }
 
 type VerifyResult struct {
@@ -199,6 +203,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		adapters:          options.Adapters,
 		evidenceSanitizer: sanitizer,
 		runtimeInstanceID: instanceID,
+		capabilityBroker:  options.CapabilityBroker,
 	}
 	if options.RuntimePolicy != nil {
 		rt.runtimePolicy = *options.RuntimePolicy
@@ -366,7 +371,10 @@ func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResu
 	if err := r.authorizeRuntime(ctx, "verification", "", "", policy.Action("verify"), policy.Resource(request.Command[0])); err != nil {
 		return VerifyResult{}, err
 	}
-	process := worker.New(15*time.Minute, 3*time.Second, 8<<20)
+	var process adapter.ProcessRunner = worker.New(15*time.Minute, 3*time.Second, 8<<20)
+	if r.capabilityBroker != nil {
+		process = adapter.NewCapabilityRunner(process, r.capabilityBroker, request.AgentID, request.Command[0])
+	}
 	result, err := process.Run(ctx, adapter.Command{Path: request.Command[0], Args: request.Command[1:], Dir: r.layout.Root})
 	if err != nil {
 		return VerifyResult{}, err

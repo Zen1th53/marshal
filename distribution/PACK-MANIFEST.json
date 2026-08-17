@@ -910,6 +910,16 @@
       "bytes": 2115
     },
     {
+      "path": "internal/adapter/capability_runner.go",
+      "sha256": "d2e3c27b740161064fa04def2f32e6f50aa8e867b2a0680e7a832b5ffb7f381f",
+      "bytes": 1215
+    },
+    {
+      "path": "internal/adapter/capability_runner_a06_test.go",
+      "sha256": "af45915911a1935af694f0a6340c70451ed58d143973652e5c2b15558e435c42",
+      "bytes": 1417
+    },
+    {
       "path": "internal/adapter/claude/claude.go",
       "sha256": "e542f520f33882f4d93683e6cf86e1cd42c2c1b4367e710be5b996cb8aa88ba4",
       "bytes": 5420
@@ -1031,8 +1041,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "109e6b43469e6b835f0f921853a04e2baa54ddcf2e6b05bc135c560d203181aa",
-      "bytes": 25204
+      "sha256": "2c0e9d144fe22a1743366b55f4dcc179fb44bcc5273d890636da48b8aa27f3e1",
+      "bytes": 25589
     },
     {
       "path": "internal/app/runtime_test.go",
