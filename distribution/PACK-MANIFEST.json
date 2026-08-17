@@ -970,6 +970,11 @@
       "bytes": 4814
     },
     {
+      "path": "docs/verification-quorum.md",
+      "sha256": "9d114f47ac6c9a4eaee504d07d72157a2379ca9493c466a95aca93d80da27a43",
+      "bytes": 1057
+    },
+    {
       "path": "go.mod",
       "sha256": "6753cba61b13575fd6b206be74b8e6cbd06e715b8504fd7cbb3a861e6693bde5",
       "bytes": 557
@@ -1053,6 +1058,16 @@
       "path": "internal/adapter/provider_evidence_conformance_test.go",
       "sha256": "1af31ca3be2712dab09202124207ed4bfc632f927164ea42e18be9f3ce30dcb1",
       "bytes": 5009
+    },
+    {
+      "path": "internal/adapter/quorum_check.go",
+      "sha256": "a7816f62850ec49c73a16cb270959db74264dfc2834300280b4cf5e271d52e70",
+      "bytes": 1278
+    },
+    {
+      "path": "internal/adapter/quorum_check_test.go",
+      "sha256": "7b0d8cc8fbdf222776fd0c3b0e36a7b33a346dea061c8d1f2b3d317082d21e84",
+      "bytes": 1447
     },
     {
       "path": "internal/adapter/role_capability_runner.go",
@@ -1596,8 +1611,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "abbfaed2bb57c676194a19552b5e3284cb385f274ef72d78eb9fed64733f14fc",
-      "bytes": 8919
+      "sha256": "57877779c7e0cf7dcba391d63cb1411431377f7e92389b9732d049543dbaa60d",
+      "bytes": 9188
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
@@ -2371,8 +2386,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "1f112764098c7d0d7f539b1341f9b7136b7233c85ee691b582fe19233ad273a8",
-      "bytes": 28128
+      "sha256": "9d29b3b79568735071abe99ec06f6542f6bdfd6c9600de5147aa9afcb35d75be",
+      "bytes": 29175
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",
@@ -2515,6 +2530,11 @@
       "bytes": 7522
     },
     {
+      "path": "internal/store/quorum_persistence_a02_test.go",
+      "sha256": "1b808f01824b70d9548fb3c0697640b14ef72c6e7194578a6dd5b74dbdb2c1d7",
+      "bytes": 723
+    },
+    {
       "path": "internal/store/risk_concurrency_a08_test.go",
       "sha256": "5350d0ecc1500eb33a736bf1e49e6b79a041710ed50b877eb5e1bf2144b08509",
       "bytes": 3177
@@ -2526,8 +2546,8 @@
     },
     {
       "path": "internal/store/risk_persistence_a02_test.go",
-      "sha256": "311ef900130ea15ad08d22184a158432d5762cadbb64b4c7ab68a832a1ae2467",
-      "bytes": 4069
+      "sha256": "3b3a62a05633e3bb476738d2b145aa4e6e0b518a450ef6fe234c17acbb461a73",
+      "bytes": 4218
     },
     {
       "path": "internal/store/secrets_concurrency_a08_test.go",
@@ -2556,8 +2576,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "5fed43d523552bcbe9c9d89ed56d2e11c4c89821100df20bc75eaacaa74ca112",
-      "bytes": 8492
+      "sha256": "97dca34f4743140c1aa9255ae8b63bfdf115fa0692b1b5aad70abf469c5b64c2",
+      "bytes": 8790
     },
     {
       "path": "internal/store/tasks.go",
@@ -2573,6 +2593,36 @@
       "path": "internal/testutil/testgit/git.go",
       "sha256": "bbd792910982a9118e7424727c833c9c687288289b1e8a3ad5284f6bfa68e62d",
       "bytes": 1132
+    },
+    {
+      "path": "internal/verify/quorum/adversarial_test.go",
+      "sha256": "555edd6f20e21d733886b68c119dc52625a13a0c8ee7ab8d043d435ca8edf6d9",
+      "bytes": 2738
+    },
+    {
+      "path": "internal/verify/quorum/benchmark_test.go",
+      "sha256": "8face994cda9d987b5d834992f02d7a163cfe45528bb711aae2068f957f4a39b",
+      "bytes": 1235
+    },
+    {
+      "path": "internal/verify/quorum/engine.go",
+      "sha256": "bbc8d14820403a78908eedeb3e50e7239099bcfd22947dc70e05eb814aac5fe3",
+      "bytes": 5668
+    },
+    {
+      "path": "internal/verify/quorum/engine_test.go",
+      "sha256": "94901f0b9351e197192de64792692dcf5b3e0ae26e6e1f86b974d3c68c5a7c09",
+      "bytes": 5071
+    },
+    {
+      "path": "internal/verify/quorum/types.go",
+      "sha256": "d6d6ee2a97c09debd58c68be4ddc14ad88550cfcf346b5915c0b3c6240d173a0",
+      "bytes": 4020
+    },
+    {
+      "path": "internal/verify/quorum/types_test.go",
+      "sha256": "bcdbc525e3b58d85dfa6d63b855e630af468b8490da4f253c3db0ad4131398ae",
+      "bytes": 1581
     },
     {
       "path": "internal/worker/manager.go",
