@@ -204,6 +204,9 @@ func NormalizeResource(kind CapabilityKind, resource string) (string, error) {
 	}
 	resource = strings.TrimSpace(resource)
 	if kind == KindFilesystemRead || kind == KindFilesystemWrite {
+		if strings.ContainsRune(resource, '\\') {
+			return "", ErrInvalidScope
+		}
 		clean := filepath.Clean(resource)
 		if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 			return "", ErrInvalidScope

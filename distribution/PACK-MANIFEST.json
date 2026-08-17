@@ -1070,9 +1070,14 @@
       "bytes": 2190
     },
     {
+      "path": "internal/capability/adversarial_a07_test.go",
+      "sha256": "16886f09d5509360ce55cb3183e88e640d0b6ebc68e7c6297af231192c26a652",
+      "bytes": 963
+    },
+    {
       "path": "internal/capability/engine.go",
-      "sha256": "707e83cb48c43b2528c61ef4d84d8f47ca091c1c0d442c01540b5c6093ff845f",
-      "bytes": 9589
+      "sha256": "a4dd0b7d30d0240790c9f055bb5902d0f4758e663c3259fc55a3c1f7f508aea0",
+      "bytes": 9667
     },
     {
       "path": "internal/capability/engine_test.go",
