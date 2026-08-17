@@ -30,7 +30,7 @@ func (r *memoryRepository) Transition(_ context.Context, id HandoffID, from, to 
 	return r.stored, nil
 }
 
-func (r *memoryRepository) Get(_ context.Context, id HandoffID) (Handoff, error) {
+func (r *memoryRepository) GetHandoff(_ context.Context, id HandoffID) (Handoff, error) {
 	if r.stored.ID != id {
 		return Handoff{}, ErrHandoffNotFound
 	}
@@ -51,6 +51,15 @@ func (allowAuthorizer) Authorize(_ context.Context, action Action, principal Pri
 		return AuthorizationDecision{Allowed: false, Reason: ReasonSenderForged}, ErrSenderForged
 	}
 	return AuthorizationDecision{Allowed: true, Reason: ReasonAccepted, FreshUntil: time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)}, nil
+}
+
+type allActionsAuthorizer struct{}
+
+func (allActionsAuthorizer) Authorize(_ context.Context, action Action, principal Principal, _ Handoff) (AuthorizationDecision, error) {
+	if action != ActionCreate && action != ActionConsume {
+		return AuthorizationDecision{Allowed: false}, ErrAuthorization
+	}
+	return AuthorizationDecision{Allowed: principal.ID != "", Reason: ReasonAccepted, FreshUntil: time.Date(2026, 8, 18, 0, 0, 0, 0, time.UTC)}, nil
 }
 
 func validSubmission() Submission {
@@ -133,5 +142,38 @@ func TestHandoffRejectsClaimsThatAttemptToTransferAuthorityOrSecrets(t *testing.
 		if !errors.Is(handoff.Validate(), ErrAuthorityTransfer) {
 			t.Fatalf("claim %q was accepted", key)
 		}
+	}
+}
+
+func TestConsumeRequiresIndependentRecipientAuthority(t *testing.T) {
+	repository := &memoryRepository{}
+	service := NewService(Config{Now: func() time.Time { return time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC) }}, repository, allActionsAuthorizer{})
+	accepted, err := service.Submit(context.Background(), Principal{ID: "AGENT-developer", Role: RoleDeveloper}, validSubmission())
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	consumed, err := service.Consume(context.Background(), Principal{ID: "AGENT-qa", Role: RoleQA}, accepted.ID)
+	if err != nil {
+		t.Fatalf("Consume: %v", err)
+	}
+	if consumed.Status != StatusConsumed || consumed.ConsumedAt == nil {
+		t.Fatalf("consumed handoff = %#v, want durable consumed state", consumed)
+	}
+}
+
+func TestA08SubmitReplayReturnsOneAcceptedSemanticResult(t *testing.T) {
+	repository := &memoryRepository{}
+	service := NewService(Config{Now: func() time.Time { return time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC) }}, repository, allActionsAuthorizer{})
+	principal := Principal{ID: "AGENT-developer", Role: RoleDeveloper}
+	first, err := service.Submit(context.Background(), principal, validSubmission())
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.Submit(context.Background(), principal, validSubmission())
+	if err != nil {
+		t.Fatalf("replay Submit: %v", err)
+	}
+	if second.Status != StatusAccepted || second.ID != first.ID || repository.createCalls != 2 {
+		t.Fatalf("replay = %#v create calls=%d, want original accepted semantic result", second, repository.createCalls)
 	}
 }

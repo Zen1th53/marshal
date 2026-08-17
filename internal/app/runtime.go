@@ -29,6 +29,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/protocol"
 	"github.com/Zen1th53/marshal/internal/risk"
 	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/secrets"
@@ -58,6 +59,7 @@ type Runtime struct {
 	runtimeInstanceID  string
 	runtimePolicy      RuntimePolicyConfig
 	policyConfigured   bool
+	handoffService     *protocol.Service
 }
 
 type Options struct {
@@ -76,6 +78,7 @@ type Options struct {
 	GateEngine         *gate.Engine
 	RiskEngine         *risk.Engine
 	CellManager        *cell.Manager
+	HandoffAuthorizer  protocol.Authorizer
 }
 
 type Status struct {
@@ -266,6 +269,11 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		rt.runtimePolicy = *options.RuntimePolicy
 		rt.policyConfigured = true
 	}
+	handoffAuthorizer := options.HandoffAuthorizer
+	if handoffAuthorizer == nil {
+		handoffAuthorizer = runtimeHandoffAuthorizer{}
+	}
+	rt.handoffService = protocol.NewService(protocol.Config{RepositoryRoot: layout.Root}, database, handoffAuthorizer)
 	_ = rt.ReconcileStartup(ctx)
 	return rt, nil
 }
@@ -298,6 +306,38 @@ func (r *Runtime) WithSecret(ctx context.Context, lease secrets.Lease, use func(
 		return secrets.ErrDenied
 	}
 	return r.secretBroker.WithSecret(ctx, lease, use)
+}
+
+// SubmitHandoff is the sole runtime path for accepting typed inter-agent
+// handoff state. A2A and future CLI callers must not write typed_handoffs
+// directly.
+func (r *Runtime) SubmitHandoff(ctx context.Context, principal protocol.Principal, submission protocol.Submission) (protocol.Handoff, error) {
+	if r == nil || r.handoffService == nil {
+		return protocol.Handoff{}, protocol.ErrUnavailable
+	}
+	return r.handoffService.Submit(ctx, principal, submission)
+}
+
+func (r *Runtime) ConsumeHandoff(ctx context.Context, principal protocol.Principal, id protocol.HandoffID) (protocol.Handoff, error) {
+	if r == nil || r.handoffService == nil {
+		return protocol.Handoff{}, protocol.ErrUnavailable
+	}
+	return r.handoffService.Consume(ctx, principal, id)
+}
+
+type runtimeHandoffAuthorizer struct{}
+
+func (runtimeHandoffAuthorizer) Authorize(_ context.Context, action protocol.Action, principal protocol.Principal, _ protocol.Handoff) (protocol.AuthorizationDecision, error) {
+	needed := "handoff.create"
+	if action == protocol.ActionConsume {
+		needed = "handoff.consume"
+	}
+	for _, capability := range principal.Capabilities {
+		if capability == "all" || capability == needed {
+			return protocol.AuthorizationDecision{Allowed: true, Reason: protocol.ReasonAccepted, FreshUntil: time.Now().UTC().Add(time.Minute)}, nil
+		}
+	}
+	return protocol.AuthorizationDecision{Allowed: false}, protocol.ErrAuthorization
 }
 
 func (r *Runtime) Close() error { return r.store.Close() }

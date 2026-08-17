@@ -10,6 +10,7 @@ import (
 type Config struct {
 	RepositoryRoot string
 	Now            func() time.Time
+	Metrics        *Metrics
 }
 
 type Service struct {
@@ -25,7 +26,15 @@ func NewService(config Config, repository Repository, authorizer Authorizer) *Se
 	return &Service{config: config, repository: repository, authorizer: authorizer}
 }
 
-func (s *Service) Submit(ctx context.Context, principal Principal, submission Submission) (Handoff, error) {
+func (s *Service) Submit(ctx context.Context, principal Principal, submission Submission) (result Handoff, err error) {
+	started := time.Now()
+	var metrics *Metrics
+	if s != nil {
+		metrics = s.config.Metrics
+	}
+	defer func() {
+		metrics.observe(err, time.Since(started), err == nil && result.Status == StatusAccepted, false)
+	}()
 	if s == nil || s.repository == nil || s.authorizer == nil {
 		return Handoff{}, ErrUnavailable
 	}
@@ -59,15 +68,59 @@ func (s *Service) Submit(ctx context.Context, principal Principal, submission Su
 	if err != nil {
 		return Handoff{}, err
 	}
-	validated, err := s.repository.Transition(ctx, created.ID, StatusCreated, StatusValidated, principal)
-	if err != nil {
-		return Handoff{}, err
+	if created.Status == StatusAccepted || created.Status == StatusConsumed || created.Status == StatusRejected {
+		return cloneHandoff(created), nil
+	}
+	validated := created
+	if created.Status == StatusCreated {
+		validated, err = s.repository.Transition(ctx, created.ID, StatusCreated, StatusValidated, principal)
+		if err != nil {
+			return Handoff{}, err
+		}
+	}
+	if validated.Status != StatusValidated {
+		return Handoff{}, ErrTransitionInvalid
 	}
 	accepted, err := s.repository.Transition(ctx, validated.ID, StatusValidated, StatusAccepted, principal)
 	if err != nil {
 		return Handoff{}, err
 	}
 	return cloneHandoff(accepted), nil
+}
+
+// Consume resolves the recipient's authority from its authenticated principal;
+// it never derives authority from the sender's handoff claims.
+func (s *Service) Consume(ctx context.Context, principal Principal, id HandoffID) (result Handoff, err error) {
+	started := time.Now()
+	var metrics *Metrics
+	if s != nil {
+		metrics = s.config.Metrics
+	}
+	defer func() {
+		metrics.observe(err, time.Since(started), false, err == nil && result.Status == StatusConsumed)
+	}()
+	if s == nil || s.repository == nil || s.authorizer == nil {
+		return Handoff{}, ErrUnavailable
+	}
+	if err := ctx.Err(); err != nil {
+		return Handoff{}, err
+	}
+	handoff, err := s.repository.GetHandoff(ctx, id)
+	if err != nil {
+		return Handoff{}, err
+	}
+	if handoff.Status != StatusAccepted || principal.ID == "" || principal.Role != handoff.ToRole {
+		return Handoff{}, ErrTransitionInvalid
+	}
+	decision, err := s.authorizer.Authorize(ctx, ActionConsume, principal, cloneHandoff(handoff))
+	if err != nil || !decision.Allowed || !decision.FreshUntil.After(s.config.Now().UTC()) {
+		return Handoff{}, ErrAuthorization
+	}
+	consumed, err := s.repository.Transition(ctx, id, StatusAccepted, StatusConsumed, principal)
+	if err != nil {
+		return Handoff{}, err
+	}
+	return cloneHandoff(consumed), nil
 }
 
 func normalizeChangedFiles(files []string) ([]string, error) {

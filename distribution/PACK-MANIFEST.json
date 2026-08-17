@@ -996,13 +996,13 @@
     },
     {
       "path": "internal/a2a/a2a_test.go",
-      "sha256": "e9574271573a2da6193df8c8ed36435606416f40ed1d50ec84b8a719257802e2",
-      "bytes": 6950
+      "sha256": "309ca15495a0158a3d199593c332212ec8375125318cc9370a76aebd7ad88a31",
+      "bytes": 9829
     },
     {
       "path": "internal/a2a/server.go",
-      "sha256": "4abed80136d6ded993ed62470b1745dde6bf6fcb90f7b8070dc5bc0eb693619d",
-      "bytes": 8305
+      "sha256": "1a7812ceb62e22a7950cb8e8e7eb462f451feb809511a8003c058b16ec2d80b2",
+      "bytes": 10455
     },
     {
       "path": "internal/adapter/adapter.go",
@@ -1170,6 +1170,11 @@
       "bytes": 924
     },
     {
+      "path": "internal/app/handoff_runtime_test.go",
+      "sha256": "741223fea33ad0fdc03562c162923dc5c067fc2823edf0cdb2adc67bb9dc0f7e",
+      "bytes": 2195
+    },
+    {
       "path": "internal/app/policy_metrics_a09_test.go",
       "sha256": "98e56673bcb42b9bd7eb2e42863623284a961dda21444c37d29925dc32b27ed4",
       "bytes": 1693
@@ -1196,8 +1201,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "9ffd7ea6362af22b5b7395efc4beb3e481ba5d38fa73bd3679ca068577a12f51",
-      "bytes": 32513
+      "sha256": "8e98c4e6df34d8b4bc534c6c6831a273148955dfe658ca521ee9549a4898c7c1",
+      "bytes": 34295
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -2060,6 +2065,41 @@
       "bytes": 2445
     },
     {
+      "path": "internal/protocol/adversarial_test.go",
+      "sha256": "7da4ac1bd41e7a72d097321876bc1e3f1c8efc2f9341020abb11e68a98a5c770",
+      "bytes": 3855
+    },
+    {
+      "path": "internal/protocol/benchmark_test.go",
+      "sha256": "c187a3555c1a58397a64165be6790db588f6cedfa435198f4424d53796068c43",
+      "bytes": 824
+    },
+    {
+      "path": "internal/protocol/engine.go",
+      "sha256": "7e93817604dcba72015dcdefaeb2e4628944b8141f3f40566fea054004a8434c",
+      "bytes": 4517
+    },
+    {
+      "path": "internal/protocol/engine_test.go",
+      "sha256": "fb2f9881a1d18f9a7f51c5c01daf56cd0d54b880d192c4860ab63ce638f88b64",
+      "bytes": 6890
+    },
+    {
+      "path": "internal/protocol/metrics.go",
+      "sha256": "42235872eaf55bd28b0a35797422f71ec5405d67281bc5c8580fdb7b6b7ead2e",
+      "bytes": 1903
+    },
+    {
+      "path": "internal/protocol/metrics_test.go",
+      "sha256": "97d56985554e980f3215bb135bfbb8d4473a426759d9709b4c0c07f4e1eb22d5",
+      "bytes": 929
+    },
+    {
+      "path": "internal/protocol/types.go",
+      "sha256": "2daf2ef36bba6e61ab0c34793c9a8a142bd718b3d86242a0bb71ba14f94ab757",
+      "bytes": 7804
+    },
+    {
       "path": "internal/risk/a10_release_test.go",
       "sha256": "70c3960fba236e9b7b64c2ccdf665f172e60ef203406716c8b69b3129942289f",
       "bytes": 1042
@@ -2441,13 +2481,13 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "b6501f7090f1a51125db97ad275ca011de5c0e962f418a5e942fab05f804f75e",
-      "bytes": 29820
+      "sha256": "d8bb2137aba26ec7761467dbccff82b6b6f24df9cbdb65dda4c06aed7ce578e4",
+      "bytes": 31165
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
-      "sha256": "3950edb1dc6cd2c6635764ccf9c334952eaa5879f78822d3c54af6decb72b9f0",
-      "bytes": 779
+      "sha256": "fabc375f50f5356b8728ad8f271cadf3c220370472ed0eed7fa0627fa2193254",
+      "bytes": 814
     },
     {
       "path": "internal/store/netpolicy_persistence.go",
@@ -2621,8 +2661,8 @@
     },
     {
       "path": "internal/store/risk_persistence_a02_test.go",
-      "sha256": "eac9129ffa6d18b859c9b211e99d7d0d99c23ac19cdba8af426a3dae88e3cb30",
-      "bytes": 4295
+      "sha256": "8712f60488f323cf75755adaf9a39a86526f948bbbbcc19c1c2b01bde0deaed7",
+      "bytes": 4413
     },
     {
       "path": "internal/store/secrets_concurrency_a08_test.go",
@@ -2651,8 +2691,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "7c29f90a7b4793559e6abf686ca89ab99126f5bb9b11a6a859e50538d8c29e75",
-      "bytes": 8966
+      "sha256": "4a0d45a9754b4c9e317f06549696256a67abb6e89f0b6351ded0580dbeca5ff8",
+      "bytes": 9222
     },
     {
       "path": "internal/store/tasks.go",
@@ -2663,6 +2703,16 @@
       "path": "internal/store/tasks_test.go",
       "sha256": "d7d696f1b767ce9c17239eab24c5f6d6ee12ce39680d63fe9dc8bfbfc8cd1b2a",
       "bytes": 8582
+    },
+    {
+      "path": "internal/store/typed_handoffs.go",
+      "sha256": "dec529c2c13f7d990328c6e64262109fe1ff96406c8f6bdf89725d7491260ea3",
+      "bytes": 10920
+    },
+    {
+      "path": "internal/store/typed_handoffs_a02_test.go",
+      "sha256": "7af8f57af59015e1943ce3d418cf0ed7507405526d86b797c253d8b935431375",
+      "bytes": 10357
     },
     {
       "path": "internal/testutil/testgit/git.go",
@@ -3218,6 +3268,11 @@
       "path": "runtime/THREAT-MODEL.md",
       "sha256": "77233271e70c4359fe4ac8fcadaaf18b461d771f9912625ccc20a53440b4fd78",
       "bytes": 1669
+    },
+    {
+      "path": "runtime/TYPED-HANDOFFS.md",
+      "sha256": "4b8c72dddc6ab233d85360fe0d6b009d823299f27b23682899fcfc72ae66f6b1",
+      "bytes": 2406
     },
     {
       "path": "runtime/WORKER-PROTOCOL.md",

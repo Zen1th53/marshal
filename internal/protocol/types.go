@@ -3,6 +3,7 @@ package protocol
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -88,8 +89,17 @@ var (
 )
 
 type Principal struct {
-	ID   string `json:"id"`
-	Role Role   `json:"role"`
+	ID           string   `json:"id"`
+	Role         Role     `json:"role"`
+	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+func CodeOf(err error) ErrorCode {
+	var typed *Error
+	if errors.As(err, &typed) {
+		return typed.Code
+	}
+	return CodeUnavailable
 }
 
 // Handoff is bounded data and evidence references. It deliberately has no
@@ -132,7 +142,7 @@ type Authorizer interface {
 type Repository interface {
 	Create(context.Context, Handoff) (Handoff, error)
 	Transition(context.Context, HandoffID, Status, Status, Principal) (Handoff, error)
-	Get(context.Context, HandoffID) (Handoff, error)
+	GetHandoff(context.Context, HandoffID) (Handoff, error)
 	EvidenceBelongsToTask(context.Context, TaskID, []EvidenceID) error
 }
 
