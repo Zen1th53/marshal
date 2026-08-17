@@ -1085,6 +1085,11 @@
       "bytes": 1222
     },
     {
+      "path": "internal/dag/adversarial_a07_test.go",
+      "sha256": "29b7d5796055b90bd47c5c062fdf8740b7a9ac4a241f9c3bfc570ae191f80afd",
+      "bytes": 780
+    },
+    {
       "path": "internal/dag/adversarial_test.go",
       "sha256": "013573b45bcc94b1b5d97ccaf9c7c70209b5e155842667542363e0109f538bfd",
       "bytes": 1153
@@ -1561,8 +1566,8 @@
     },
     {
       "path": "internal/store/dag.go",
-      "sha256": "a8e962ef1dfc222b5cd567ba80710fda0182f751e6f48ba9edd47521f1729187",
-      "bytes": 9594
+      "sha256": "7b9e242dd3b71ad2acc0e4ae8bb8dac36d1c3d36fde71709c905a6816913158b",
+      "bytes": 9994
     },
     {
       "path": "internal/store/dag_a02_red_test.go",

@@ -195,6 +195,18 @@ func (s *Store) queryDAGEdges(ctx context.Context, query string, id dag.TaskID) 
 // compare-and-swap. Exact retry after a committed transition reconciles to the
 // canonical target; stale or contradictory writers cannot overwrite it.
 func (s *Store) TransitionDAGNode(ctx context.Context, id dag.TaskID, expected, target dag.NodeStatus) (dag.Node, error) {
+	for attempt := 0; ; attempt++ {
+		node, err := s.transitionDAGNodeOnce(ctx, id, expected, target)
+		if !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
+			return node, err
+		}
+		if err := waitSQLiteRetry(ctx, attempt); err != nil {
+			return dag.Node{}, err
+		}
+	}
+}
+
+func (s *Store) transitionDAGNodeOnce(ctx context.Context, id dag.TaskID, expected, target dag.NodeStatus) (dag.Node, error) {
 	if err := ctx.Err(); err != nil {
 		return dag.Node{}, dag.NewError(dag.CodeInvalidRequest, err)
 	}
