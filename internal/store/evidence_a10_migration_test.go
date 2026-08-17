@@ -34,8 +34,8 @@ func TestA10MigrationFromSchemaV2PreservesCanonicalRows(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("migrate v2: %v", err)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 11 {
-		t.Fatalf("schema version = %d, want 11", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 13 {
+		t.Fatalf("schema version = %d, want 13", got)
 	}
 	if got := queryInt(t, st.db, "SELECT count(*) FROM projects WHERE project_id='P1'"); got != 1 {
 		t.Fatalf("preserved projects = %d, want 1", got)
@@ -117,7 +117,7 @@ func TestA10MigrationFromSchemaV3PreservesEvidenceAndAddsState(t *testing.T) {
 func TestA10MigrationRejectsNewerSchemaWithoutMutation(t *testing.T) {
 	ctx := context.Background()
 	st := openTestStore(t)
-	if _, err := st.db.ExecContext(ctx, `CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); INSERT INTO schema_migrations(version, applied_at) VALUES(12, '2026-01-01T00:00:00Z')`); err != nil {
+	if _, err := st.db.ExecContext(ctx, `CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); INSERT INTO schema_migrations(version, applied_at) VALUES(14, '2026-01-01T00:00:00Z')`); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Migrate(ctx); err == nil {
@@ -127,7 +127,7 @@ func TestA10MigrationRejectsNewerSchemaWithoutMutation(t *testing.T) {
 	if err := st.db.QueryRowContext(ctx, "SELECT max(version) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 12 {
+	if version != 14 {
 		t.Fatalf("schema version changed to %d", version)
 	}
 }
