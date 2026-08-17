@@ -24,6 +24,30 @@ func (s *Store) Append(ctx context.Context, event events.Event) (events.Event, e
 	if err != nil {
 		return events.Event{}, events.NewError(events.CodeEventStoreFailed, err)
 	}
+	if event.IdempotencyKey != "" {
+		var existingID, existingType, existingSubject, existingTask, existingRun, existingResource, existingEvidence, existingAt, existingData string
+		var existingSequence int64
+		err = s.db.QueryRowContext(ctx, `
+			SELECT event_id, sequence, event_type, subject, task_id, run_id, resource_id, evidence_id, at, data_json
+			FROM structured_events WHERE idempotency_key = ?`, event.IdempotencyKey).
+			Scan(&existingID, &existingSequence, &existingType, &existingSubject, &existingTask, &existingRun,
+				&existingResource, &existingEvidence, &existingAt, &existingData)
+		if err == nil {
+			if existingType != string(event.Type) || existingSubject != event.Subject || existingTask != event.TaskID ||
+				existingRun != event.RunID || existingResource != event.ResourceID || existingEvidence != event.EvidenceID ||
+				existingAt != event.At.UTC().Format(time.RFC3339Nano) || existingData != string(data) {
+				return events.Event{}, events.NewError(events.CodeEventSequenceConflict, fmt.Errorf("idempotency key has different payload"))
+			}
+			event.ID = existingID
+			event.Sequence = events.Sequence(existingSequence)
+			event.At, _ = time.Parse(time.RFC3339Nano, existingAt)
+			_ = json.Unmarshal([]byte(existingData), &event.Data)
+			return event, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return events.Event{}, events.NewError(events.CodeEventStoreFailed, err)
+		}
+	}
 	var stored events.Event
 	var storedAt, storedData string
 	var storedIdempotency sql.NullString

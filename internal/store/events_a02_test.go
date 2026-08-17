@@ -106,3 +106,32 @@ func TestEventStoreConcurrentAppendsHaveUniqueMonotonicSequences(t *testing.T) {
 		}
 	}
 }
+
+func TestEventStoreIdempotencyKeyReplaysOneDurableEvent(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(ctx, filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	input := events.Event{ID: "retry-1", Type: events.EventTypeTaskCreated, TaskID: "task-1", IdempotencyKey: "request-1", At: time.Now().UTC()}
+	first, err := st.Append(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.ID = "retry-2"
+	second, err := st.Append(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Sequence != second.Sequence {
+		t.Fatalf("retry sequences = %d and %d", first.Sequence, second.Sequence)
+	}
+	all, err := st.Since(ctx, 0)
+	if err != nil || len(all) != 1 {
+		t.Fatalf("durable events = %#v, err=%v", all, err)
+	}
+}
