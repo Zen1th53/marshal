@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -19,6 +20,13 @@ type Engine struct {
 	now        func() time.Time
 	authority  Authority
 	audit      AuditSink
+	metrics    *evidence.MetricsRecorder
+}
+
+func NewEngineWithObservability(repository GrantRepository, now func() time.Time, authority Authority, audit AuditSink, metrics *evidence.MetricsRecorder) *Engine {
+	engine := NewEngineWithAudit(repository, now, authority, audit)
+	engine.metrics = metrics
+	return engine
 }
 
 func NewEngine(repository GrantRepository, now func() time.Time, authority Authority) *Engine {
@@ -72,7 +80,21 @@ func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error)
 	return grant, nil
 }
 
-func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
+func (e *Engine) Authorize(ctx context.Context, query Query) (decision Decision, resultErr error) {
+	started := time.Now()
+	defer func() {
+		if e.metrics == nil {
+			return
+		}
+		result := evidence.MetricResultSuccess
+		reason := string(decision.Reason)
+		if resultErr != nil {
+			result = evidence.MetricResultError
+		} else if !decision.Allowed {
+			result = evidence.MetricResultDenied
+		}
+		e.metrics.Observe(evidence.MetricOperationCapability, result, reason, time.Since(started))
+	}()
 	if err := ctx.Err(); err != nil {
 		return Decision{}, err
 	}
@@ -125,7 +147,7 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 		decision := Decision{Reason: ReasonTaskMismatch}
 		return decision, e.appendAudit(ctx, e.decisionEvent(query, decision))
 	}
-	decision := Decision{Reason: ReasonDenied}
+	decision = Decision{Reason: ReasonDenied}
 	return decision, e.appendAudit(ctx, e.decisionEvent(query, decision))
 }
 

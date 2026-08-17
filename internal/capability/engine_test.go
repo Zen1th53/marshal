@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/evidence"
 )
 
 func TestEngineGrantAuthorizeAndRevokeUsesExplicitState(t *testing.T) {
@@ -82,6 +84,20 @@ func TestEngineAuditSinkReceivesDeniedDecision(t *testing.T) {
 	}
 	if len(audit.events) != 1 || audit.events[0].Type != "capability.authorize.denied" {
 		t.Fatalf("events=%#v", audit.events)
+	}
+}
+
+func TestEngineMetricsRecordAllowAndDeniedWithoutIdentifiers(t *testing.T) {
+	metrics := evidence.NewMetricsRecorder()
+	engine := NewEngineWithObservability(newMemoryRepository(), func() time.Time { return time.Unix(100, 0).UTC() }, allowAuthority{}, nil, metrics)
+	if _, err := engine.Grant(context.Background(), GrantRequest{Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead, Scope: Scope{Resource: "/workspace", Actions: []string{"read"}}, TTL: time.Hour, Issuer: "admin"}); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = engine.Authorize(context.Background(), Query{Subject: "agent-1", TaskID: "task-1", Kind: KindFilesystemRead, Resource: "/workspace", Action: "read"})
+	_, _ = engine.Authorize(context.Background(), Query{Subject: "agent-2", TaskID: "task-1", Kind: KindFilesystemRead, Resource: "/workspace", Action: "read"})
+	snapshot := metrics.Snapshot()
+	if snapshot.Observations[evidence.MetricOperationCapability] != 2 || snapshot.Success[evidence.MetricOperationCapability] != 1 || len(snapshot.Denied) != 1 {
+		t.Fatalf("metrics = %#v", snapshot)
 	}
 }
 
