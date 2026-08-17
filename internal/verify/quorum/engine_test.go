@@ -100,3 +100,18 @@ func TestEngineObservabilityRecordsBoundedQuorumMetric(t *testing.T) {
 		t.Fatalf("metrics=%+v", snapshot)
 	}
 }
+
+func TestEngineObservabilityClassifiesStaleAttestationAsError(t *testing.T) {
+	created := time.Unix(100, 0).UTC()
+	metrics := evidence.NewMetricsRecorder()
+	engine := NewEngineWithObservability(func() time.Time { return created }, nil, metrics)
+	attestation := Attestation{Subject: "agent-a", Provider: "Codex", Role: "reviewer", ChangeID: "change-1", EvidenceID: "evidence-1", Kind: "security", Result: ResultPass, ContentDigest: "sha256:change", CreatedAt: created.Add(time.Hour)}
+	_, err := engine.Evaluate(context.Background(), nil, []Attestation{attestation}, Provenance{ChangeID: "change-1", ContentDigest: "sha256:change"})
+	if !errors.Is(err, ErrStaleAttestation) {
+		t.Fatalf("error=%v, want ErrStaleAttestation", err)
+	}
+	snapshot := metrics.Snapshot()
+	if snapshot.Success[evidence.MetricOperationQuorum] != 0 || snapshot.Errors["VERIFY_INVALID"] != 1 {
+		t.Fatalf("metrics=%+v, want one invalid quorum error and no success", snapshot)
+	}
+}

@@ -87,7 +87,9 @@ func (e *Engine) Evaluate(ctx context.Context, requirements []Requirement, attes
 			return result, resultErr
 		}
 		if attestation.InvalidatedAt != nil || !attestation.CreatedAt.Before(e.now().Add(time.Nanosecond)) {
-			return Evaluation{State: StateInvalidated}, ErrStaleAttestation
+			result = Evaluation{State: StateInvalidated}
+			resultErr = ErrStaleAttestation
+			return result, resultErr
 		}
 		if attestation.Result == ResultVeto {
 			result.Rejected = append(result.Rejected, attestation)
