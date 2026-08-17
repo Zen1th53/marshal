@@ -1105,6 +1105,11 @@
       "bytes": 1503
     },
     {
+      "path": "internal/capability/release_a10_test.go",
+      "sha256": "481a552c029bbf10cd08f9924a32885c917f072ee4ab709e10bc89b2cf744a31",
+      "bytes": 721
+    },
+    {
       "path": "internal/capability/types.go",
       "sha256": "39928b53ff83e24570b7fce01fa7cf5f470710ce7201ef8a9f179f835134e9a6",
       "bytes": 5101
