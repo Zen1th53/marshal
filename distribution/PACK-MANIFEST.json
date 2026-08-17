@@ -1495,6 +1495,11 @@
       "bytes": 5605
     },
     {
+      "path": "internal/store/dag_a02_red_test.go",
+      "sha256": "e1b22e18ad3adfcbd60e9a9f35e621c6cf2813ec5bb2315cd5084522bb05cfb8",
+      "bytes": 412
+    },
+    {
       "path": "internal/store/dag_a02_test.go",
       "sha256": "d0eac0b6429f67501a680591064a5aaa72898602796a94cfedc15a5e84b679b8",
       "bytes": 4249
