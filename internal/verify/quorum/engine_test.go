@@ -53,3 +53,12 @@ func TestEngineVetoBlocksQuorum(t *testing.T) {
 		t.Fatalf("result=%+v err=%v, want blocked veto result", result, err)
 	}
 }
+
+func TestEngineAuthorizedEvaluationFailsClosedWithoutAuthority(t *testing.T) {
+	created := time.Unix(100, 0).UTC()
+	engine := NewEngine(func() time.Time { return created })
+	_, err := engine.EvaluateAuthorized(context.Background(), nil, nil, nil, Provenance{ChangeID: "change-1", ContentDigest: "sha256:change"})
+	if !errors.Is(err, ErrAuthorityUnavailable) {
+		t.Fatalf("EvaluateAuthorized() error = %v, want ErrAuthorityUnavailable", err)
+	}
+}

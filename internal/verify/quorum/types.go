@@ -94,15 +94,16 @@ const (
 )
 
 var (
-	ErrInvalidRequirement = errors.New("verification requirement is invalid")
-	ErrInvalidAttestation = errors.New("verification attestation is invalid")
-	ErrInvalidProvenance  = errors.New("verification provenance is invalid")
-	ErrStaleAttestation   = errors.New("VERIFY_STALE_ATTESTATION")
-	ErrSelfApproval       = errors.New("VERIFY_SELF_APPROVAL")
-	ErrDuplicatePrincipal = errors.New("VERIFY_DUPLICATE_PRINCIPAL")
-	ErrEvidenceMissing    = errors.New("VERIFY_EVIDENCE_MISSING")
-	ErrQuorumUnmet        = errors.New("VERIFY_QUORUM_UNMET")
-	ErrVeto               = errors.New("VERIFY_VETO")
+	ErrInvalidRequirement   = errors.New("verification requirement is invalid")
+	ErrInvalidAttestation   = errors.New("verification attestation is invalid")
+	ErrInvalidProvenance    = errors.New("verification provenance is invalid")
+	ErrStaleAttestation     = errors.New("VERIFY_STALE_ATTESTATION")
+	ErrSelfApproval         = errors.New("VERIFY_SELF_APPROVAL")
+	ErrDuplicatePrincipal   = errors.New("VERIFY_DUPLICATE_PRINCIPAL")
+	ErrEvidenceMissing      = errors.New("VERIFY_EVIDENCE_MISSING")
+	ErrQuorumUnmet          = errors.New("VERIFY_QUORUM_UNMET")
+	ErrVeto                 = errors.New("VERIFY_VETO")
+	ErrAuthorityUnavailable = errors.New("VERIFY_AUTHORITY_UNAVAILABLE")
 )
 
 func validList(values []string) bool {

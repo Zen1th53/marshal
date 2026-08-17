@@ -10,6 +10,10 @@ type Engine struct {
 	now func() time.Time
 }
 
+type Authority interface {
+	Authorize(context.Context, Provenance) error
+}
+
 func NewEngine(now func() time.Time) *Engine {
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
@@ -72,6 +76,16 @@ func (e *Engine) Evaluate(ctx context.Context, requirements []Requirement, attes
 		result.State = StatePartiallySatisfied
 	}
 	return result, nil
+}
+
+func (e *Engine) EvaluateAuthorized(ctx context.Context, authority Authority, requirements []Requirement, attestations []Attestation, provenance Provenance) (Evaluation, error) {
+	if authority == nil {
+		return Evaluation{State: StateInvalidated}, ErrAuthorityUnavailable
+	}
+	if err := authority.Authorize(ctx, provenance); err != nil {
+		return Evaluation{State: StateInvalidated}, err
+	}
+	return e.Evaluate(ctx, requirements, attestations, provenance)
 }
 
 func matches(requirement Requirement, attestation Attestation) bool {
