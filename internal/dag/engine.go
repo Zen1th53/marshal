@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sort"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/events"
 )
 
 // Backend is the narrow persistence contract consumed by the T29 service.
@@ -29,6 +31,21 @@ type Engine struct {
 	authorizer Authorizer
 	freshness  FreshnessValidator
 	now        func() time.Time
+	eventStore events.Store
+}
+
+// NewEngineWithEvents enables the canonical durable event hook. Events are
+// appended only after the corresponding backend mutation is durable.
+func NewEngineWithEvents(backend Backend, eventStore events.Store) (*Engine, error) {
+	engine, err := NewEngine(backend)
+	if err != nil {
+		return nil, err
+	}
+	if eventStore == nil {
+		return nil, ErrInvalidRequest
+	}
+	engine.eventStore = eventStore
+	return engine, nil
 }
 
 func NewEngine(backend Backend) (*Engine, error) {
@@ -52,6 +69,20 @@ func NewAuthorizedEngine(backend Backend, identity IdentityProvider, authorizer 
 	return engine, nil
 }
 
+// NewAuthorizedEngineWithEvents combines the A04 authority boundary with the
+// canonical A05 durable event hook.
+func NewAuthorizedEngineWithEvents(backend Backend, identity IdentityProvider, authorizer Authorizer, freshness FreshnessValidator, eventStore events.Store) (*Engine, error) {
+	engine, err := NewAuthorizedEngine(backend, identity, authorizer, freshness)
+	if err != nil {
+		return nil, err
+	}
+	if eventStore == nil {
+		return nil, ErrInvalidRequest
+	}
+	engine.eventStore = eventStore
+	return engine, nil
+}
+
 func (e *Engine) AddNode(ctx context.Context, request AddNodeRequest) (Node, error) {
 	if err := request.Validate(); err != nil {
 		return Node{}, err
@@ -64,7 +95,16 @@ func (e *Engine) AddNode(ctx context.Context, request AddNodeRequest) (Node, err
 	if request.Node.Status != StatusPending {
 		return Node{}, ErrInvalidNode
 	}
-	return e.backend.PutDAGNode(ctx, request.Node)
+	node, err := e.backend.PutDAGNode(ctx, request.Node)
+	if err != nil {
+		return Node{}, err
+	}
+	if err := e.record(ctx, events.EventTypeDAGNodeAdded, string(node.TaskID), request.RequestID, map[string]any{
+		"task_id": string(node.TaskID), "kind": string(node.Kind), "status": string(node.Status),
+	}); err != nil {
+		return node, err
+	}
+	return node, nil
 }
 
 func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, error) {
@@ -114,7 +154,15 @@ func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, err
 			}
 		}
 	}
-	return edge, err
+	if err != nil {
+		return Edge{}, err
+	}
+	if err := e.record(ctx, events.EventTypeDAGEdgeAdded, string(edge.To), request.RequestID, map[string]any{
+		"from_task": string(edge.From), "to_task": string(edge.To), "condition": string(edge.Condition),
+	}); err != nil {
+		return edge, err
+	}
+	return edge, nil
 }
 
 func (e *Engine) Ready(ctx context.Context, id TaskID) (Readiness, error) {
@@ -161,7 +209,31 @@ func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target Nod
 			return Node{}, ErrInvalidNode
 		}
 	}
-	return e.backend.TransitionDAGNode(ctx, id, expected, target)
+	node, err := e.backend.TransitionDAGNode(ctx, id, expected, target)
+	if err != nil {
+		return Node{}, err
+	}
+	eventType := events.EventTypeDAGNodeBlocked
+	if target == StatusReady {
+		eventType = events.EventTypeDAGNodeReady
+	}
+	if err := e.record(ctx, eventType, string(id), RequestID(string(id)+":"+string(expected)+":"+string(target)), map[string]any{
+		"task_id": string(id), "previous_state": string(expected), "target_state": string(target),
+	}); err != nil {
+		return node, err
+	}
+	return node, nil
+}
+
+func (e *Engine) record(ctx context.Context, eventType events.EventType, resource string, requestID RequestID, data map[string]any) error {
+	if e.eventStore == nil {
+		return nil
+	}
+	at := e.now().UTC()
+	event := events.Event{ID: "dag:" + string(eventType) + ":" + resource + ":" + string(requestID), Type: eventType,
+		TaskID: resource, ResourceID: resource, At: at, Data: data, IdempotencyKey: "dag:" + string(eventType) + ":" + resource + ":" + string(requestID)}
+	_, err := e.eventStore.Append(ctx, event)
+	return err
 }
 
 func (e *Engine) authorize(ctx context.Context, request AuthorizationRequest) error {

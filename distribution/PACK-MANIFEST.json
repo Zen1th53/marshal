@@ -725,6 +725,11 @@
       "bytes": 3605
     },
     {
+      "path": "docs/events.md",
+      "sha256": "28d878883062a259236b17f3e4efc1085046fb518a698fa0a705f20173cb8472",
+      "bytes": 1019
+    },
+    {
       "path": "docs/getting-started.md",
       "sha256": "069a454251e310fb95a71de68802b37fe8aa9ecb05235c22a62f8a71b89d73f7",
       "bytes": 5745
@@ -980,6 +985,11 @@
       "bytes": 5286
     },
     {
+      "path": "internal/app/events.go",
+      "sha256": "4eae578f6be7ebf985bb01d52cc2f7eebbef06bbf942a7f815a03640bd203b41",
+      "bytes": 1027
+    },
+    {
       "path": "internal/app/evidence_a08_runtime_test.go",
       "sha256": "5ba02f3eb9de436db0b241a490628ca20ab736d1defc7c9fa3fb4cc15ea2c80d",
       "bytes": 2948
@@ -1031,13 +1041,13 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "109e6b43469e6b835f0f921853a04e2baa54ddcf2e6b05bc135c560d203181aa",
-      "bytes": 25204
+      "sha256": "58ca2c24ce33fe13bbd5f8d7e6dfc16cc35caa0aa1974c80b7f5d6d6af24ec98",
+      "bytes": 25334
     },
     {
       "path": "internal/app/runtime_test.go",
-      "sha256": "09e7d796c7afcf02e81c3adb2b5dedeb2b5e5e7ba52857cffb52e87f0d36c1d5",
-      "bytes": 4283
+      "sha256": "c4423fda75ff1554e33020b7018b2ef68bef43232234262ee0d303863b66b0f6",
+      "bytes": 5164
     },
     {
       "path": "internal/artifact/store.go",
@@ -1086,8 +1096,8 @@
     },
     {
       "path": "internal/dag/engine.go",
-      "sha256": "6c240c7963029a408cdd89f85942c0a127efd94e0a5c27c8da1fd15f4cb6dde1",
-      "bytes": 8734
+      "sha256": "581eb7ba7bbea6a62fb4e6d8360f3463f8acb20ecefc973125da6bd57d1083a7",
+      "bytes": 11311
     },
     {
       "path": "internal/dag/errors.go",
@@ -1133,6 +1143,31 @@
       "path": "internal/doctor/doctor_test.go",
       "sha256": "d58c9ed19a7c6ed4e15bae16d5373fae593c29cbbd3f5e0e9cb8b1cc8dc529dc",
       "bytes": 3294
+    },
+    {
+      "path": "internal/events/engine.go",
+      "sha256": "bbbdcdd8dc50cb31eb7927c3e32a4ccacf8856b4961a3f5dddba96721b96545e",
+      "bytes": 6203
+    },
+    {
+      "path": "internal/events/engine_benchmark_test.go",
+      "sha256": "6a679e0b42a72e2c60d0b2787d85448d66dd3d95ff17e1e3c2934aaafa1032bd",
+      "bytes": 391
+    },
+    {
+      "path": "internal/events/persistence_a02_test.go",
+      "sha256": "edda1a2ef96e42009977cfc213ac4331075f98f1c0b274915b39406aa4d80a86",
+      "bytes": 1634
+    },
+    {
+      "path": "internal/events/types.go",
+      "sha256": "6055b371bfb78a1f2462ee33161ff5c993669d0317f86f4ea62af851082fee8a",
+      "bytes": 10402
+    },
+    {
+      "path": "internal/events/types_test.go",
+      "sha256": "877d261dedf2a0cf1a121aa7ee2de6d7658a402b178fd69d1b37262cb8e39008",
+      "bytes": 6586
     },
     {
       "path": "internal/evidence/adversarial_fuzz_test.go",
@@ -1550,6 +1585,16 @@
       "bytes": 1085
     },
     {
+      "path": "internal/store/events.go",
+      "sha256": "38afb3a534208df1321acec92231d4ce68de986e1455c80dbf86954889bbe47d",
+      "bytes": 5739
+    },
+    {
+      "path": "internal/store/events_a02_test.go",
+      "sha256": "b2cbab20c36f8ee711945190dd83a93d56f4dbb58e2fea08b6487425ffd43b8d",
+      "bytes": 3877
+    },
+    {
       "path": "internal/store/evidence.go",
       "sha256": "95c15162995a6c9bb6e9435cac0ec6a4f2d580f688a55895e13681a0a370d905",
       "bytes": 15350
@@ -1671,8 +1716,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "8a3365dc1e78b2908f4d01125251194fb4c4f00c00b67a005b4ab3ec6bbfa49a",
-      "bytes": 18387
+      "sha256": "3b23ea664ca1386c60a99fd0112cc206575f6f90323ab9a51037db4c0ae37e45",
+      "bytes": 19267
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",
