@@ -222,8 +222,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > 11 {
-		return fmt.Errorf("database schema version %d is newer than supported version 11", version)
+	if version > 12 {
+		return fmt.Errorf("database schema version %d is newer than supported version 12", version)
 	}
 	if version == 0 {
 		if _, err := tx.ExecContext(ctx, schemaV1); err != nil {
@@ -418,6 +418,33 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 11: %w", err)
 		}
 		version = 11
+	}
+	if version == 11 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS structured_events (
+				event_id TEXT NOT NULL UNIQUE,
+				sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+				event_type TEXT NOT NULL,
+				subject TEXT NOT NULL DEFAULT '',
+				task_id TEXT NOT NULL DEFAULT '',
+				run_id TEXT NOT NULL DEFAULT '',
+				resource_id TEXT NOT NULL DEFAULT '',
+				evidence_id TEXT NOT NULL DEFAULT '',
+				at TEXT NOT NULL,
+				data_json TEXT NOT NULL DEFAULT '{}',
+				idempotency_key TEXT UNIQUE
+			);
+			CREATE UNIQUE INDEX IF NOT EXISTS structured_events_by_sequence ON structured_events(sequence);
+			CREATE INDEX IF NOT EXISTS structured_events_by_task_sequence ON structured_events(task_id, sequence);
+			CREATE INDEX IF NOT EXISTS structured_events_by_run_sequence ON structured_events(run_id, sequence);
+			CREATE INDEX IF NOT EXISTS structured_events_by_type_sequence ON structured_events(event_type, sequence);
+		`); err != nil {
+			return fmt.Errorf("apply schema version 12: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(12, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 12: %w", err)
+		}
+		version = 12
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
