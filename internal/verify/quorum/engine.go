@@ -4,11 +4,20 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/evidence"
 )
 
 type Engine struct {
 	now       func() time.Time
 	eventSink EventSink
+	metrics   *evidence.MetricsRecorder
+}
+
+func NewEngineWithObservability(now func() time.Time, sink EventSink, metrics *evidence.MetricsRecorder) *Engine {
+	engine := NewEngineWithEvents(now, sink)
+	engine.metrics = metrics
+	return engine
 }
 
 func NewEngineWithEvents(now func() time.Time, sink EventSink) *Engine {
@@ -29,25 +38,53 @@ func NewEngine(now func() time.Time) *Engine {
 }
 
 func (e *Engine) Evaluate(ctx context.Context, requirements []Requirement, attestations []Attestation, provenance Provenance) (Evaluation, error) {
+	started := time.Now()
+	var result Evaluation
+	var resultErr error
+	defer func() {
+		if e.metrics == nil {
+			return
+		}
+		metricResult := evidence.MetricResultSuccess
+		reason := "VERIFY_QUORUM_SATISFIED"
+		if resultErr != nil {
+			metricResult = evidence.MetricResultError
+			reason = "VERIFY_INVALID"
+		} else if !result.Satisfied {
+			metricResult = evidence.MetricResultDenied
+			reason = "VERIFY_QUORUM_UNMET"
+		}
+		e.metrics.Observe(evidence.MetricOperationQuorum, metricResult, reason, time.Since(started))
+	}()
 	if err := ctx.Err(); err != nil {
-		return Evaluation{State: StateInvalidated}, err
+		result = Evaluation{State: StateInvalidated}
+		resultErr = err
+		return result, err
 	}
 	if err := provenance.Validate(); err != nil {
-		return Evaluation{State: StateInvalidated}, err
+		result = Evaluation{State: StateInvalidated}
+		resultErr = err
+		return result, err
 	}
 	for _, requirement := range requirements {
 		if err := requirement.Validate(); err != nil {
-			return Evaluation{State: StateInvalidated}, err
+			result = Evaluation{State: StateInvalidated}
+			resultErr = err
+			return result, err
 		}
 	}
-	result := Evaluation{State: StatePending}
+	result = Evaluation{State: StatePending}
 	seen := make(map[string]struct{}, len(attestations))
 	for _, attestation := range attestations {
 		if err := attestation.Validate(); err != nil {
-			return Evaluation{State: StateInvalidated}, err
+			result = Evaluation{State: StateInvalidated}
+			resultErr = err
+			return result, err
 		}
 		if attestation.ChangeID != provenance.ChangeID || attestation.ContentDigest != provenance.ContentDigest {
-			return Evaluation{State: StateInvalidated}, ErrStaleAttestation
+			result = Evaluation{State: StateInvalidated}
+			resultErr = ErrStaleAttestation
+			return result, resultErr
 		}
 		if attestation.InvalidatedAt != nil || !attestation.CreatedAt.Before(e.now().Add(time.Nanosecond)) {
 			return Evaluation{State: StateInvalidated}, ErrStaleAttestation
@@ -56,13 +93,17 @@ func (e *Engine) Evaluate(ctx context.Context, requirements []Requirement, attes
 			result.Rejected = append(result.Rejected, attestation)
 			result.State = StateBlocked
 			if err := e.emit(ctx, Event{Type: EventQuorumBlocked, ChangeID: provenance.ChangeID, Principal: attestation.Subject, EvidenceID: attestation.EvidenceID, ContentDigest: provenance.ContentDigest, State: result.State, Reason: string(ErrVeto.Error())}); err != nil {
+				resultErr = err
 				return result, err
 			}
-			return result, ErrVeto
+			resultErr = ErrVeto
+			return result, resultErr
 		}
 		key := strings.TrimSpace(attestation.Subject) + "\x00" + string(attestation.Kind)
 		if _, exists := seen[key]; exists {
-			return Evaluation{State: StateInvalidated}, ErrDuplicatePrincipal
+			result = Evaluation{State: StateInvalidated}
+			resultErr = ErrDuplicatePrincipal
+			return result, resultErr
 		}
 		seen[key] = struct{}{}
 		result.Accepted = append(result.Accepted, attestation)
@@ -91,6 +132,7 @@ func (e *Engine) Evaluate(ctx context.Context, requirements []Requirement, attes
 		event.EvidenceID = result.Accepted[0].EvidenceID
 	}
 	if err := e.emit(ctx, event); err != nil {
+		resultErr = err
 		return result, err
 	}
 	return result, nil

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/evidence"
 )
 
 func TestEngineEvaluateTransitionsToSatisfied(t *testing.T) {
@@ -82,5 +84,19 @@ func TestEngineEmitsSatisfiedEventWithBoundedReferences(t *testing.T) {
 	_, err := engine.Evaluate(context.Background(), []Requirement{{Kind: "security", Minimum: 1, Independent: true, AllowedRoles: []string{"reviewer"}}}, []Attestation{attestation}, Provenance{ChangeID: "change-1", ContentDigest: "sha256:change"})
 	if err != nil || len(sink.events) != 1 || sink.events[0].Type != EventQuorumSatisfied || sink.events[0].EvidenceID != "evidence-1" {
 		t.Fatalf("err=%v events=%+v", err, sink.events)
+	}
+}
+
+func TestEngineObservabilityRecordsBoundedQuorumMetric(t *testing.T) {
+	created := time.Unix(100, 0).UTC()
+	metrics := evidence.NewMetricsRecorder()
+	engine := NewEngineWithObservability(func() time.Time { return created }, nil, metrics)
+	attestation := Attestation{Subject: "agent-a", Provider: "Codex", Role: "reviewer", ChangeID: "change-1", EvidenceID: "evidence-1", Kind: "security", Result: ResultPass, ContentDigest: "sha256:change", CreatedAt: created}
+	if _, err := engine.Evaluate(context.Background(), []Requirement{{Kind: "security", Minimum: 1, Independent: true, AllowedRoles: []string{"reviewer"}}}, []Attestation{attestation}, Provenance{ChangeID: "change-1", ContentDigest: "sha256:change"}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := metrics.Snapshot()
+	if snapshot.Success[evidence.MetricOperationQuorum] != 1 || snapshot.DurationNanoseconds[evidence.MetricOperationQuorum] == 0 {
+		t.Fatalf("metrics=%+v", snapshot)
 	}
 }
