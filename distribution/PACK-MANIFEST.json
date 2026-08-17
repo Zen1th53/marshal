@@ -1881,8 +1881,8 @@
     },
     {
       "path": "internal/store/sqlite.go",
-      "sha256": "2fa8cf13af9e1785f30bc25021d70b78592c82d46942cd1cee745fc3531c12d6",
-      "bytes": 2880
+      "sha256": "11135e17198eafc301c484039adc7db2a446d72619a618895a18108925ce2849",
+      "bytes": 3159
     },
     {
       "path": "internal/store/sqlite_test.go",
