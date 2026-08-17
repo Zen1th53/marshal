@@ -73,6 +73,22 @@ func TestStoreAndBusContractsRequireContext(t *testing.T) {
 	var _ = context.Background()
 }
 
+func TestLifecycleTransitionMatrixRejectsIllegalTransitions(t *testing.T) {
+	for _, step := range [][2]LifecycleState{
+		{StateProduced, StateValidated},
+		{StateValidated, StateDurablyAppended},
+		{StateDurablyAppended, StatePublished},
+		{StatePublished, StateConsumed},
+	} {
+		if err := ValidateTransition(step[0], step[1]); err != nil {
+			t.Fatalf("ValidateTransition(%q, %q) error = %v", step[0], step[1], err)
+		}
+	}
+	if err := ValidateTransition(StateProduced, StatePublished); !errors.Is(err, ErrEventIllegalTransition) {
+		t.Fatalf("illegal transition error = %v, want ErrEventIllegalTransition", err)
+	}
+}
+
 type contractStore struct{}
 
 func (contractStore) Append(context.Context, Event) (Event, error)     { return Event{}, nil }

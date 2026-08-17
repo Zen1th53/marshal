@@ -13,6 +13,31 @@ import (
 // Sequence is the store-assigned, strictly increasing event position.
 type Sequence uint64
 
+// LifecycleState is the explicit state of an event through the durable
+// delivery pipeline. State is not inferred from field presence.
+type LifecycleState string
+
+const (
+	StateProduced        LifecycleState = "produced"
+	StateValidated       LifecycleState = "validated"
+	StateDurablyAppended LifecycleState = "durably_appended"
+	StatePublished       LifecycleState = "published"
+	StateConsumed        LifecycleState = "consumed"
+)
+
+// ValidateTransition enforces the only legal forward lifecycle edges.
+func ValidateTransition(source, target LifecycleState) error {
+	switch {
+	case source == StateProduced && target == StateValidated,
+		source == StateValidated && target == StateDurablyAppended,
+		source == StateDurablyAppended && target == StatePublished,
+		source == StatePublished && target == StateConsumed:
+		return nil
+	default:
+		return ErrEventIllegalTransition
+	}
+}
+
 // EventType is a closed, provider-neutral lifecycle vocabulary.
 type EventType string
 
@@ -124,17 +149,19 @@ type Bus interface {
 type Code string
 
 const (
-	CodeEventTypeInvalid      Code = "EVENT_TYPE_INVALID"
-	CodeEventSecretField      Code = "EVENT_SECRET_FIELD"
-	CodeEventStoreFailed      Code = "EVENT_STORE_FAILED"
-	CodeEventSequenceConflict Code = "EVENT_SEQUENCE_CONFLICT"
+	CodeEventTypeInvalid       Code = "EVENT_TYPE_INVALID"
+	CodeEventSecretField       Code = "EVENT_SECRET_FIELD"
+	CodeEventStoreFailed       Code = "EVENT_STORE_FAILED"
+	CodeEventSequenceConflict  Code = "EVENT_SEQUENCE_CONFLICT"
+	CodeEventIllegalTransition Code = "EVENT_ILLEGAL_TRANSITION"
 )
 
 var (
-	ErrEventTypeInvalid      = &Error{Code: CodeEventTypeInvalid, Message: "event type is invalid"}
-	ErrEventSecretField      = &Error{Code: CodeEventSecretField, Message: "event contains a forbidden sensitive field"}
-	ErrEventStoreFailed      = &Error{Code: CodeEventStoreFailed, Message: "event store operation failed"}
-	ErrEventSequenceConflict = &Error{Code: CodeEventSequenceConflict, Message: "event sequence conflicts with durable history"}
+	ErrEventTypeInvalid       = &Error{Code: CodeEventTypeInvalid, Message: "event type is invalid"}
+	ErrEventSecretField       = &Error{Code: CodeEventSecretField, Message: "event contains a forbidden sensitive field"}
+	ErrEventStoreFailed       = &Error{Code: CodeEventStoreFailed, Message: "event store operation failed"}
+	ErrEventSequenceConflict  = &Error{Code: CodeEventSequenceConflict, Message: "event sequence conflicts with durable history"}
+	ErrEventIllegalTransition = &Error{Code: CodeEventIllegalTransition, Message: "event lifecycle transition is invalid"}
 )
 
 // Error carries a stable code and a human-safe message. Causes are available
@@ -176,6 +203,8 @@ func safeMessage(code Code) string {
 		return ErrEventStoreFailed.Message
 	case CodeEventSequenceConflict:
 		return ErrEventSequenceConflict.Message
+	case CodeEventIllegalTransition:
+		return ErrEventIllegalTransition.Message
 	default:
 		return "event operation failed"
 	}
