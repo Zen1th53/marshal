@@ -144,6 +144,23 @@ func TestEngineMetricsExposeBoundedOutcomeCounters(t *testing.T) {
 	}
 }
 
+func TestSubscriptionCloseStopsDeliveryAndClosesChannel(t *testing.T) {
+	engine := NewEngine(&memoryEventStore{})
+	sub, err := engine.Subscribe(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub.Close()
+	select {
+	case _, ok := <-sub.Events:
+		if ok {
+			t.Fatal("closed subscription still delivered an event")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscription channel was not closed")
+	}
+}
+
 type staticAuthorizer struct{ decision AuthorizationDecision }
 
 func (a staticAuthorizer) Authorize(context.Context, Event) (AuthorizationDecision, error) {

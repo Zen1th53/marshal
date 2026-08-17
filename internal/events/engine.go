@@ -172,6 +172,7 @@ func (b *localBus) Publish(ctx context.Context, event Event) error {
 
 func (b *localBus) subscribe(ctx context.Context, history []Event) (Subscription, error) {
 	ch := make(chan Event, 64)
+	subCtx, cancel := context.WithCancel(ctx)
 	b.mu.Lock()
 	b.nextID++
 	id := b.nextID
@@ -179,6 +180,7 @@ func (b *localBus) subscribe(ctx context.Context, history []Event) (Subscription
 		select {
 		case ch <- event:
 		default:
+			cancel()
 			b.mu.Unlock()
 			close(ch)
 			return Subscription{}, NewError(CodeEventStoreFailed, fmt.Errorf("subscriber history exceeds buffer"))
@@ -190,6 +192,7 @@ func (b *localBus) subscribe(ctx context.Context, history []Event) (Subscription
 	closeOnce := sync.Once{}
 	closeFn := func() {
 		closeOnce.Do(func() {
+			cancel()
 			b.mu.Lock()
 			if current, ok := b.clients[id]; ok {
 				delete(b.clients, id)
@@ -199,7 +202,7 @@ func (b *localBus) subscribe(ctx context.Context, history []Event) (Subscription
 		})
 	}
 	go func() {
-		<-ctx.Done()
+		<-subCtx.Done()
 		closeFn()
 	}()
 	return Subscription{Events: ch, Close: closeFn}, nil
