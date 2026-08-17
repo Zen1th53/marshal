@@ -76,11 +76,22 @@ func (p Provenance) Validate() error {
 }
 
 type Evaluation struct {
+	State     QuorumState
 	Satisfied bool
 	Missing   []Requirement
 	Accepted  []Attestation
 	Rejected  []Attestation
 }
+
+type QuorumState string
+
+const (
+	StatePending            QuorumState = "pending"
+	StatePartiallySatisfied QuorumState = "partially_satisfied"
+	StateSatisfied          QuorumState = "satisfied"
+	StateBlocked            QuorumState = "blocked"
+	StateInvalidated        QuorumState = "invalidated"
+)
 
 var (
 	ErrInvalidRequirement = errors.New("verification requirement is invalid")
