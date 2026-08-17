@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // Engine coordinates the durable event store and the live subscriber bus.
@@ -12,6 +13,26 @@ import (
 type Engine struct {
 	store Store
 	bus   *localBus
+}
+
+// AppendAuthorized evaluates the owning authorization boundary immediately
+// before durable append. Any unavailable, denied, or stale decision fails
+// closed and produces no store or publish side effect.
+func (e *Engine) AppendAuthorized(ctx context.Context, event Event, authorizer Authorizer) (Event, error) {
+	if authorizer == nil {
+		return Event{}, ErrEventAuthorizationUnavailable
+	}
+	decision, err := authorizer.Authorize(ctx, event)
+	if err != nil {
+		return Event{}, NewError(CodeEventAuthorizationUnavailable, err)
+	}
+	if !decision.Allowed {
+		return Event{}, ErrEventAuthorizationDenied
+	}
+	if decision.FreshUntil.IsZero() || !time.Now().UTC().Before(decision.FreshUntil) {
+		return Event{}, ErrEventAuthorizationStale
+	}
+	return e.Append(ctx, event)
 }
 
 // NewEngine constructs an event coordinator over a durable Store.

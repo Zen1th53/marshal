@@ -101,6 +101,20 @@ type Event struct {
 	IdempotencyKey string         `json:"idempotency_key,omitempty"`
 }
 
+// AuthorizationDecision is the provider-neutral, fail-closed result of the
+// owning policy/capability boundary. FreshUntil is authoritative for replay.
+type AuthorizationDecision struct {
+	Allowed    bool
+	ReasonCode Code
+	FreshUntil time.Time
+}
+
+// Authorizer owns policy and authority evaluation; events only consume its
+// structured decision and never parse provider-specific messages.
+type Authorizer interface {
+	Authorize(context.Context, Event) (AuthorizationDecision, error)
+}
+
 // Validate checks the contract boundary before a store or bus can observe an
 // event. Secret-bearing field names are rejected rather than silently stored.
 func (e Event) Validate() error {
@@ -149,19 +163,25 @@ type Bus interface {
 type Code string
 
 const (
-	CodeEventTypeInvalid       Code = "EVENT_TYPE_INVALID"
-	CodeEventSecretField       Code = "EVENT_SECRET_FIELD"
-	CodeEventStoreFailed       Code = "EVENT_STORE_FAILED"
-	CodeEventSequenceConflict  Code = "EVENT_SEQUENCE_CONFLICT"
-	CodeEventIllegalTransition Code = "EVENT_ILLEGAL_TRANSITION"
+	CodeEventTypeInvalid              Code = "EVENT_TYPE_INVALID"
+	CodeEventSecretField              Code = "EVENT_SECRET_FIELD"
+	CodeEventStoreFailed              Code = "EVENT_STORE_FAILED"
+	CodeEventSequenceConflict         Code = "EVENT_SEQUENCE_CONFLICT"
+	CodeEventIllegalTransition        Code = "EVENT_ILLEGAL_TRANSITION"
+	CodeEventAuthorizationDenied      Code = "EVENT_AUTHORIZATION_DENIED"
+	CodeEventAuthorizationStale       Code = "EVENT_AUTHORIZATION_STALE"
+	CodeEventAuthorizationUnavailable Code = "EVENT_AUTHORIZATION_UNAVAILABLE"
 )
 
 var (
-	ErrEventTypeInvalid       = &Error{Code: CodeEventTypeInvalid, Message: "event type is invalid"}
-	ErrEventSecretField       = &Error{Code: CodeEventSecretField, Message: "event contains a forbidden sensitive field"}
-	ErrEventStoreFailed       = &Error{Code: CodeEventStoreFailed, Message: "event store operation failed"}
-	ErrEventSequenceConflict  = &Error{Code: CodeEventSequenceConflict, Message: "event sequence conflicts with durable history"}
-	ErrEventIllegalTransition = &Error{Code: CodeEventIllegalTransition, Message: "event lifecycle transition is invalid"}
+	ErrEventTypeInvalid              = &Error{Code: CodeEventTypeInvalid, Message: "event type is invalid"}
+	ErrEventSecretField              = &Error{Code: CodeEventSecretField, Message: "event contains a forbidden sensitive field"}
+	ErrEventStoreFailed              = &Error{Code: CodeEventStoreFailed, Message: "event store operation failed"}
+	ErrEventSequenceConflict         = &Error{Code: CodeEventSequenceConflict, Message: "event sequence conflicts with durable history"}
+	ErrEventIllegalTransition        = &Error{Code: CodeEventIllegalTransition, Message: "event lifecycle transition is invalid"}
+	ErrEventAuthorizationDenied      = &Error{Code: CodeEventAuthorizationDenied, Message: "event authorization denied"}
+	ErrEventAuthorizationStale       = &Error{Code: CodeEventAuthorizationStale, Message: "event authorization is stale"}
+	ErrEventAuthorizationUnavailable = &Error{Code: CodeEventAuthorizationUnavailable, Message: "event authorization is unavailable"}
 )
 
 // Error carries a stable code and a human-safe message. Causes are available
@@ -205,6 +225,12 @@ func safeMessage(code Code) string {
 		return ErrEventSequenceConflict.Message
 	case CodeEventIllegalTransition:
 		return ErrEventIllegalTransition.Message
+	case CodeEventAuthorizationDenied:
+		return ErrEventAuthorizationDenied.Message
+	case CodeEventAuthorizationStale:
+		return ErrEventAuthorizationStale.Message
+	case CodeEventAuthorizationUnavailable:
+		return ErrEventAuthorizationUnavailable.Message
 	default:
 		return "event operation failed"
 	}

@@ -89,6 +89,34 @@ func TestLifecycleTransitionMatrixRejectsIllegalTransitions(t *testing.T) {
 	}
 }
 
+func TestAuthorizedAppendFailsClosedForDeniedOrStaleDecision(t *testing.T) {
+	store := &memoryEventStore{}
+	engine := NewEngine(store)
+	for name, authorizer := range map[string]Authorizer{
+		"denied": staticAuthorizer{decision: AuthorizationDecision{Allowed: false}},
+		"stale":  staticAuthorizer{decision: AuthorizationDecision{Allowed: true, FreshUntil: time.Now().Add(-time.Second)}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := engine.AppendAuthorized(context.Background(), Event{ID: name, Type: EventTypeTaskCreated, At: time.Now().UTC()}, authorizer)
+			if name == "denied" && !errors.Is(err, ErrEventAuthorizationDenied) {
+				t.Fatalf("error = %v, want denial", err)
+			}
+			if name == "stale" && !errors.Is(err, ErrEventAuthorizationStale) {
+				t.Fatalf("error = %v, want stale", err)
+			}
+		})
+	}
+	if len(store.events) != 0 {
+		t.Fatalf("denied/stale requests persisted %d events", len(store.events))
+	}
+}
+
+type staticAuthorizer struct{ decision AuthorizationDecision }
+
+func (a staticAuthorizer) Authorize(context.Context, Event) (AuthorizationDecision, error) {
+	return a.decision, nil
+}
+
 type contractStore struct{}
 
 func (contractStore) Append(context.Context, Event) (Event, error)     { return Event{}, nil }
