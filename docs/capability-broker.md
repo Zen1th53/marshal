@@ -1,41 +1,47 @@
 # Capability Broker
 
-The capability broker is the single decision path for privileged actions. A
-request is bound to an authenticated subject and task, then matched against a
-durable grant with a normalized resource, closed capability kind, explicit
-actions, and an expiry time.
+The capability broker is the explicit authorization boundary for privileged
+filesystem, process, Git, network, secret, MCP, and deployment actions. A
+grant is bound to a subject, task, capability kind, canonical resource, action
+set, issuer, and finite expiry. The durable store is authoritative for grant
+state; process-local memory is not.
 
 ## Operator behavior
 
-No matching grant returns a structured `CAP_DENIED` decision. Expired or
-revoked grants return `CAP_EXPIRED` or `CAP_REVOKED`. Missing authority fails
-closed before a grant or process mutation is attempted. The worker capability
-gate must run before the process runner; it does not start a shell, provider,
-network client, or runtime action on denial.
+An authorized caller issues a scoped grant and then presents the same subject,
+task, kind, canonical resource, and action to the broker. A matching active
+grant returns `ALLOW` and its grant identifier. No matching, expired, revoked,
+stale, or foreign grant returns a typed `DENY` reason. The adapter boundary
+checks this decision before invoking a provider process runner.
 
-Example allowed request: an authorized administrator issues `fs.read` for
-subject `agent-1`, task `task-1`, resource `/workspace`, action `read`.
+Example success: a broker-issued `shell.exec` grant for `/workspace/build`
+with action `execute` allows the matching task to reach the process adapter.
+Example denial: the same task requesting `/workspace/other`, or an expired
+grant, is denied and the process adapter is not called.
 
-Example denied request: the same subject asks for `fs.write` or a different
-task; the broker returns a non-allowed decision and the worker gate performs
-zero process calls.
+## Diagnostics and events
 
-## Persistence and recovery
+Capability authorization can attach the existing in-process
+`evidence.MetricsRecorder` through `capability.NewObservedEngine`. It records
+only the closed `capability` operation and bounded result/reason vocabularies,
+plus aggregate monotonic duration. It does not persist identifiers, resources,
+subjects, provider data, or errors, and it cannot affect authorization.
 
-Capability grants are stored in the canonical SQLite `capability_grants` table.
-The current schema is v13. Grant state is explicit: `requested`, `issued`,
-`active`, `revoked`, or `expired`. Exact duplicate grant retries are
-idempotent; a different payload using an existing grant ID is an immutable
-conflict. Revoke uses a conditional update, so competing stores have one
-durable winner.
+Audited engines emit bounded capability grant/authorization/revocation events.
+Events carry correlation identifiers and hashed resource references rather
+than raw resource text or secret material. Durable grant state is written
+before downstream event reconciliation; retrying an idempotent request does
+not create a second grant.
 
-Audit events use bounded metadata and deterministic IDs. Metrics are an
-in-process, non-authoritative projection: they cannot grant authority or
-change a decision. The capability operation metric uses only closed reason
-codes and does not label by subject, task, resource, grant ID, or secret data.
+## Recovery and limitations
 
-## Limitations
+Grant idempotency is enforced by the durable idempotency key and unique
+constraint, so independent store instances converge on one grant. Revocation
+uses a durable compare-and-set and a revoked grant cannot be finalized by a
+foreign actor. Cancellation before persistence leaves no grant.
 
-The worker gate is an explicit adapter and must be installed by each process
-runner composition point. Bubblewrap and network isolation remain platform
-dependent; a failed isolation probe must not be treated as capability grant.
+The broker's metrics are process-local diagnostics, not a Prometheus endpoint
+or authority cache. The active-grant state remains in SQLite and must be
+reloaded after restart. Runtime process enforcement is installed when
+`Options.CapabilityBroker` is supplied; an unconfigured runtime retains its
+legacy provider behavior and must not be described as capability-enforced.

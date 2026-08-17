@@ -18,11 +18,19 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
+	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/capability"
+	"github.com/Zen1th53/marshal/internal/cell"
+	"github.com/Zen1th53/marshal/internal/dag"
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/evidence"
+	"github.com/Zen1th53/marshal/internal/gate"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/risk"
 	"github.com/Zen1th53/marshal/internal/sandbox"
+	"github.com/Zen1th53/marshal/internal/secrets"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/worker"
 	"github.com/Zen1th53/marshal/internal/worktree"
@@ -32,14 +40,23 @@ import (
 const localProjectID = "PROJECT-local"
 
 type Runtime struct {
-	layout            project.Layout
-	store             *store.Store
-	policy            *policy.Engine
-	adapters          map[string]adapter.Adapter
-	evidenceSanitizer evidence.Sanitizer
-	runtimeInstanceID string
-	runtimePolicy     RuntimePolicyConfig
-	policyConfigured  bool
+	layout             project.Layout
+	store              *store.Store
+	policy             *policy.Engine
+	dag                *dag.Engine
+	adapters           map[string]adapter.Adapter
+	evidenceSanitizer  evidence.Sanitizer
+	eventStream        *events.Engine
+	capabilityBroker   capability.Broker
+	secretBroker       secrets.Broker
+	gateEngine         *gate.Engine
+	riskEngine         *risk.Engine
+	cellManager        *cell.Manager
+	authorityPrincipal *authz.Principal
+	processAuthority   authz.Authority
+	runtimeInstanceID  string
+	runtimePolicy      RuntimePolicyConfig
+	policyConfigured   bool
 }
 
 type Options struct {
@@ -48,6 +65,16 @@ type Options struct {
 	EvidenceSanitizer  evidence.Sanitizer
 	Metrics            *evidence.MetricsRecorder
 	RuntimePolicy      *RuntimePolicyConfig
+	EventAuthorizer    events.Authorizer
+	EventFreshness     events.FreshnessValidator
+	EventBus           events.Bus
+	CapabilityBroker   capability.Broker
+	SecretBroker       secrets.Broker
+	AuthorityPrincipal *authz.Principal
+	ProcessAuthority   authz.Authority
+	GateEngine         *gate.Engine
+	RiskEngine         *risk.Engine
+	CellManager        *cell.Manager
 }
 
 type Status struct {
@@ -187,18 +214,51 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		database.Close()
 		return nil, err
 	}
+	dagEngine, err := dag.NewEngine(database)
+	if err != nil {
+		database.Close()
+		return nil, err
+	}
 	instanceID, err := model.NewID("INSTANCE-")
 	if err != nil {
 		database.Close()
 		return nil, err
 	}
+	var eventStream *events.Engine
+	if options.EventAuthorizer != nil || options.EventFreshness != nil || options.EventBus != nil {
+		if options.EventAuthorizer == nil || options.EventFreshness == nil {
+			database.Close()
+			return nil, events.ErrAuthorizationUnavailable
+		}
+		bus := options.EventBus
+		if bus == nil {
+			bus = events.NewMemoryBus(64)
+		}
+		eventStream, err = events.NewObservedEngine(database, bus, runtimeEventIdentityProvider{}, options.EventAuthorizer, options.EventFreshness)
+		if err != nil {
+			database.Close()
+			return nil, err
+		}
+	}
 	rt := &Runtime{
-		layout:            layout,
-		store:             database,
-		policy:            engine,
-		adapters:          options.Adapters,
-		evidenceSanitizer: sanitizer,
-		runtimeInstanceID: instanceID,
+		layout:             layout,
+		store:              database,
+		policy:             engine,
+		dag:                dagEngine,
+		adapters:           options.Adapters,
+		evidenceSanitizer:  sanitizer,
+		eventStream:        eventStream,
+		capabilityBroker:   options.CapabilityBroker,
+		secretBroker:       options.SecretBroker,
+		gateEngine:         options.GateEngine,
+		riskEngine:         options.RiskEngine,
+		cellManager:        options.CellManager,
+		authorityPrincipal: options.AuthorityPrincipal,
+		processAuthority:   options.ProcessAuthority,
+		runtimeInstanceID:  instanceID,
+	}
+	if rt.riskEngine == nil {
+		rt.riskEngine = risk.NewObservedEngine(database, nil, options.Metrics)
 	}
 	if options.RuntimePolicy != nil {
 		rt.runtimePolicy = *options.RuntimePolicy
@@ -209,6 +269,34 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 }
 
 func (r *Runtime) InstanceID() string { return r.runtimeInstanceID }
+
+// AssessTool is the runtime composition boundary for T24. Callers provide
+// structured metadata; classification and persistence stay in internal/risk.
+func (r *Runtime) AssessTool(ctx context.Context, request risk.AssessmentRequest) (risk.Assessment, error) {
+	if r == nil || r.riskEngine == nil {
+		return risk.Assessment{}, fmt.Errorf("%w: risk engine is unavailable", model.ErrUnavailable)
+	}
+	return r.riskEngine.Assess(ctx, request)
+}
+
+// PrepareCell is the runtime composition boundary for execution cells. The
+// canonical manager owns validation, authorization, persistence and backend
+// lifecycle; callers do not reproduce those rules.
+func (r *Runtime) PrepareCell(ctx context.Context, spec cell.Spec) (cell.Record, error) {
+	if r == nil || r.cellManager == nil {
+		return cell.Record{}, fmt.Errorf("%w: cell manager is unavailable", model.ErrUnavailable)
+	}
+	return r.cellManager.Prepare(ctx, spec)
+}
+
+// WithSecret is the runtime composition boundary for scoped secret use.
+// Callers never receive a secret outside the broker callback.
+func (r *Runtime) WithSecret(ctx context.Context, lease secrets.Lease, use func([]byte) error) error {
+	if r == nil || r.secretBroker == nil {
+		return secrets.ErrDenied
+	}
+	return r.secretBroker.WithSecret(ctx, lease, use)
+}
 
 func (r *Runtime) Close() error { return r.store.Close() }
 
@@ -307,6 +395,19 @@ func (r *Runtime) Task(ctx context.Context, taskID string) (model.Task, error) {
 }
 
 func (r *Runtime) Claim(ctx context.Context, request ClaimRequest) (ClaimResult, error) {
+	if r.eventStream != nil {
+		if existing, ok, err := r.reconcileClaim(ctx, request); err != nil {
+			return ClaimResult{}, err
+		} else if ok {
+			if err := r.recordLeaseAcquired(ctx, existing); err != nil {
+				return existing, err
+			}
+			return existing, nil
+		}
+	}
+	if err := r.ensureDAGReady(ctx, request.TaskID); err != nil {
+		return ClaimResult{}, err
+	}
 	sessionID, err := model.NewID("SESSION-")
 	if err != nil {
 		return ClaimResult{}, err
@@ -330,7 +431,11 @@ func (r *Runtime) Claim(ctx context.Context, request ClaimRequest) (ClaimResult,
 	if err != nil {
 		return ClaimResult{}, err
 	}
-	return ClaimResult{Lease: lease, Session: session}, nil
+	claim := ClaimResult{Lease: lease, Session: session}
+	if err := r.recordLeaseAcquired(ctx, claim); err != nil {
+		return claim, err
+	}
+	return claim, nil
 }
 
 func (r *Runtime) Release(ctx context.Context, request ReleaseRequest) error {
@@ -389,6 +494,24 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	if err != nil {
 		return RunResult{}, err
 	}
+	if _, err := r.AssessTool(ctx, risk.AssessmentRequest{
+		ID: risk.AssessmentID("run-risk-" + task.ID + "-" + request.Adapter),
+		Descriptor: risk.ToolDescriptor{
+			Tool: "marshal-runtime", Action: "shell.execute", Resource: r.layout.Root,
+			Factors: risk.Factors{ExternalWrite: true, ScopeBreadth: 1},
+		},
+	}); err != nil {
+		return RunResult{}, err
+	}
+	if r.gateEngine != nil {
+		gateDecision, gateErr := r.gateEngine.Evaluate(ctx, gate.GatePointPreExecution, request.AgentID, r.layout.Root)
+		if gateErr != nil {
+			return RunResult{}, gateErr
+		}
+		if err := r.store.PutGateDecisionWithAudit(ctx, gateDecision, r.eventStream); err != nil {
+			return RunResult{}, err
+		}
+	}
 	if gateErr := r.authorizeRuntime(ctx, request.AgentID, task.ID, request.Adapter,
 		policy.Action("shell.execute"), policy.Resource(r.layout.Root)); gateErr != nil {
 		return RunResult{}, gateErr
@@ -436,7 +559,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		return RunResult{}, err
 	}
 	executionRevision := claimedRevision + 1
-	agentAdapter, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path)
+	agentAdapter, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
@@ -582,7 +705,7 @@ func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {
 	return nil
 }
 
-func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath string) (adapter.Adapter, error) {
+func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string) (adapter.Adapter, error) {
 	if candidate := r.adapters[name]; candidate != nil {
 		return candidate, nil
 	}
@@ -687,6 +810,13 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 		}
 	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, true); err != nil {
 		return nil, err
+	}
+	if r.capabilityBroker != nil {
+		if r.authorityPrincipal != nil && r.processAuthority != "" {
+			runner = adapter.NewRoleCapabilityRunner(runner, *r.authorityPrincipal, task.ID, r.processAuthority, r.capabilityBroker)
+		} else {
+			runner = adapter.NewCapabilityRunner(runner, r.capabilityBroker, subject, task.ID)
+		}
 	}
 	switch name {
 	case "codex":

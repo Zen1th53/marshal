@@ -1,58 +1,73 @@
 package capability
 
 import (
-	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestCapabilityContractProvidesTypedGrantDecisionAndErrors(t *testing.T) {
-	issued := time.Unix(100, 0).UTC()
-	grant := Grant{
-		ID:        "cap-1",
-		Subject:   "agent-1",
-		TaskID:    "task-1",
-		Kind:      KindFilesystemRead,
-		Scope:     Scope{Resource: "/workspace", Actions: []string{"read"}},
-		IssuedAt:  issued,
-		ExpiresAt: issued.Add(time.Hour),
-		Issuer:    "broker-admin",
-		State:     GrantActive,
-	}
+func TestGrantContractValidatesScopedExpiringIdentity(t *testing.T) {
+	now := time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC)
+	grant := Grant{ID: "CAP-01", Subject: "AGENT-01", TaskID: "TASK-01", Kind: KindFilesystemWrite,
+		Scope:    Scope{Resource: "/workspace/task-01", Actions: []string{"write"}, Constraints: map[string]string{"worktree": "/workspace/task-01"}},
+		IssuedAt: now, ExpiresAt: now.Add(time.Hour), Issuer: "AGENT-ADMIN"}
 	if err := grant.Validate(); err != nil {
 		t.Fatalf("valid grant rejected: %v", err)
 	}
-
-	decision := Decision{Allowed: false, Reason: ReasonDenied, GrantID: grant.ID}
-	if err := decision.Validate(); err != nil {
-		t.Fatalf("valid deny decision rejected: %v", err)
-	}
-	if !errors.Is(ErrDenied, ErrCapability) {
-		t.Fatal("typed capability errors must support errors.Is")
-	}
-
-	var broker Broker = contractProbe{}
-	if broker == nil {
-		t.Fatal("broker contract must accept an implementation")
-	}
-	_ = context.Background()
 }
 
-func TestCapabilityContractRejectsUnknownKindInvalidScopeAndAllowedDeny(t *testing.T) {
-	if (Kind("filesystem.read")).Valid() {
-		t.Fatal("unknown capability kind accepted")
-	}
-	if err := (Scope{Resource: "/workspace"}).Validate(); !errors.Is(err, ErrInvalidScope) {
-		t.Fatalf("invalid scope error = %v", err)
-	}
-	if err := (Decision{Allowed: true, Reason: ReasonDenied}).Validate(); !errors.Is(err, ErrInvalidDecision) {
-		t.Fatalf("allowed deny decision error = %v", err)
+func TestScopeRejectsEmptyResourceAndUnknownKind(t *testing.T) {
+	grant := Grant{ID: "CAP-02", Subject: "AGENT-01", TaskID: "TASK-01", Kind: CapabilityKind("arbitrary.privilege"), Scope: Scope{Actions: []string{"write"}}, IssuedAt: time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC), ExpiresAt: time.Date(2026, 8, 16, 13, 0, 0, 0, time.UTC), Issuer: "AGENT-ADMIN"}
+	if err := grant.Validate(); !errors.Is(err, ErrInvalidScope) {
+		t.Fatalf("Validate() error = %v, want ErrInvalidScope", err)
 	}
 }
 
-type contractProbe struct{}
+func TestCapabilityErrorsExposeStableSafeCodes(t *testing.T) {
+	err := NewError(CodeDenied, "capability denied")
+	if err.Code != CodeDenied || err.Error() != "capability denied" {
+		t.Fatalf("error = %#v", err)
+	}
+	if !errors.Is(err, ErrDenied) {
+		t.Fatal("denied error does not support errors.Is")
+	}
+}
 
-func (contractProbe) Grant(context.Context, GrantRequest) (Grant, error) { return Grant{}, nil }
-func (contractProbe) Authorize(context.Context, Query) (Decision, error) { return Decision{}, nil }
-func (contractProbe) Revoke(context.Context, RevokeRequest) error        { return nil }
+func TestGrantRequestValidatesTheSameScopedContract(t *testing.T) {
+	now := time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC)
+	request := GrantRequest{
+		Subject:   "AGENT-01",
+		TaskID:    "TASK-01",
+		Kind:      KindFilesystemRead,
+		Scope:     Scope{Resource: "/workspace/task-01", Actions: []string{"read"}},
+		IssuedAt:  now,
+		ExpiresAt: now.Add(time.Hour),
+		Issuer:    "AGENT-ADMIN",
+	}
+	if err := request.Validate(); err != nil {
+		t.Fatalf("valid grant request rejected: %v", err)
+	}
+}
+
+func TestGrantValidationDoesNotExposeUntrustedScopeText(t *testing.T) {
+	secret := "MARSHAL_TEST_SECRET_T01_A01"
+	grant := Grant{
+		ID:        "CAP-03",
+		Subject:   "AGENT-01",
+		TaskID:    "TASK-01",
+		Kind:      KindFilesystemWrite,
+		Scope:     Scope{Resource: secret, Actions: []string{"write", "write"}},
+		IssuedAt:  time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC),
+		ExpiresAt: time.Date(2026, 8, 16, 13, 0, 0, 0, time.UTC),
+		Issuer:    "AGENT-ADMIN",
+	}
+
+	err := grant.Validate()
+	if !errors.Is(err, ErrInvalidScope) {
+		t.Fatalf("Validate() error = %v, want ErrInvalidScope", err)
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatal("validation error exposed untrusted scope text")
+	}
+}

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/risk"
+	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -26,7 +28,7 @@ func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.SchemaVersion != 13 || status.TaskCount != 0 || status.Project.Repository != repo.Path() {
+	if status.SchemaVersion != store.LatestSchemaVersion || status.TaskCount != 0 || status.Project.Repository != repo.Path() {
 		t.Fatalf("status = %#v", status)
 	}
 	info, err := os.Stat(filepath.Join(repo.Path(), ".marshal"))
@@ -35,6 +37,31 @@ func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o700 {
 		t.Fatalf("runtime mode = %o", info.Mode().Perm())
+	}
+}
+
+func TestRuntimeAssessesToolThroughCanonicalRiskService(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { runtime.Close() })
+	assessment, err := runtime.AssessTool(context.Background(), risk.AssessmentRequest{
+		ID: "assessment-a06",
+		Descriptor: risk.ToolDescriptor{
+			Tool: "git", Action: "push", Resource: "repo:marshal",
+			Factors: risk.Factors{ExternalWrite: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AssessTool: %v", err)
+	}
+	if assessment.Level != risk.LevelHigh || assessment.State != risk.StateRequirementsEmitted {
+		t.Fatalf("assessment=%+v", assessment)
 	}
 }
 

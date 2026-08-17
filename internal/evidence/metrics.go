@@ -27,6 +27,11 @@ const (
 	MetricOperationPolicyRuntimeGate MetricOperation = "policy_runtime_gate"
 	MetricOperationPolicyTest        MetricOperation = "policy_test"
 	MetricOperationCapability        MetricOperation = "capability"
+	MetricOperationAuthority         MetricOperation = "authority"
+	MetricOperationGate              MetricOperation = "gate"
+	MetricOperationSecret            MetricOperation = "secret"
+	MetricOperationRisk              MetricOperation = "risk"
+	MetricOperationCell              MetricOperation = "cell"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -47,7 +52,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationDigest: {}, MetricOperationAudit: {}, MetricOperationFreshness: {},
 	MetricOperationContention: {}, MetricOperationPolicyLoad: {}, MetricOperationPolicyPersist: {},
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
-	MetricOperationPolicyTest: {}, MetricOperationCapability: {},
+	MetricOperationPolicyTest: {}, MetricOperationCapability: {}, MetricOperationAuthority: {}, MetricOperationGate: {}, MetricOperationSecret: {}, MetricOperationRisk: {}, MetricOperationCell: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
@@ -62,8 +67,16 @@ var metricReasons = map[string]struct{}{
 	string(CodeInvalidEdge): {}, string(CodeSecretRejected): {},
 	string(CodeInvalidState): {}, "SQLITE_BUSY": {}, "SQLITE_RETRY_EXHAUSTED": {},
 	"POLICY_CONFLICT": {}, "POLICY_DENIED": {}, "POLICY_ERROR": {},
-	"CAP_ALLOWED": {}, "CAP_DENIED": {}, "CAP_EXPIRED": {}, "CAP_REVOKED": {},
-	"CAP_SUBJECT_MISMATCH": {}, "CAP_TASK_MISMATCH": {}, "CAP_INVALID_SCOPE": {},
+	"CAP_DENIED": {}, "CAP_INVALID_SCOPE": {}, "CAP_EXPIRED": {},
+	"CAP_REVOKED": {}, "CAP_SUBJECT_MISMATCH": {}, "CAP_TASK_MISMATCH": {},
+	"GATE_ALLOWED": {}, "GATE_REQUIRED_CHECK_MISSING": {},
+	"GATE_POLICY_DENY": {}, "GATE_QUORUM_UNMET": {}, "GATE_UNKNOWN_CHECK": {},
+	"GATE_UNKNOWN_POINT": {}, "GATE_INVALID_CHECK_STATUS": {}, "GATE_INVALID_DECISION": {},
+	"SECRET_DENIED": {}, "SECRET_NOT_FOUND": {}, "SECRET_LEASE_EXPIRED": {}, "SECRET_PURPOSE_MISMATCH": {}, "SECRET_PROVIDER_FAILED": {},
+	"RISK_DESCRIPTOR_INVALID": {}, "RISK_UNKNOWN_MUTATION": {}, "RISK_DOWNGRADE_FORBIDDEN": {}, "RISK_AUTHORIZATION_UNAVAILABLE": {}, "RISK_AUTHORIZATION_DENIED": {},
+	"RISK_ERROR": {},
+	"CELL_BACKEND_UNAVAILABLE": {}, "CELL_PREPARE_FAILED": {}, "CELL_SCOPE_ESCAPE": {},
+	"CELL_NOT_READY": {}, "CELL_DESTROYED": {}, "CELL_CLEANUP_FAILED": {}, "CELL_AUTHORIZATION_DENIED": {},
 }
 
 // MetricsSnapshot is a detached, read-only projection of recorder state.

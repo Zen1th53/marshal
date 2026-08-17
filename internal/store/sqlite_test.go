@@ -23,8 +23,8 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 	if got := queryInt(t, st.db, "PRAGMA foreign_keys"); got != 1 {
 		t.Fatalf("foreign_keys = %d, want 1", got)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 13 {
-		t.Fatalf("schema version = %d, want 13", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != LatestSchemaVersion {
+		t.Fatalf("schema version = %d, want latest", got)
 	}
 
 	wantTables := []string{
@@ -35,6 +35,14 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"evidence_nodes", "evidence_edges",
 		"policy_versions",
 		"policy_test_runs", "policy_test_cases", "policy_test_outcomes",
+		"dag_nodes", "dag_edges",
+		"structured_events",
+		"capability_grants",
+		"role_bindings",
+		"gate_decisions",
+		"secret_leases",
+		"risk_assessments",
+		"execution_cells",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
@@ -50,9 +58,37 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
-		"DROP INDEX capability_grants_active_by_expiry",
-		"DROP INDEX capability_grants_by_subject_task",
+		"DROP INDEX execution_cells_by_task",
+		"DROP INDEX execution_cells_by_state",
+		"DROP TABLE execution_cells",
+		"DROP INDEX risk_assessments_by_action",
+		"DROP INDEX risk_assessments_by_created",
+		"DROP TABLE risk_assessments",
+		"DROP INDEX gate_decisions_by_point_subject",
+		"DROP INDEX gate_decisions_by_resource_change",
+		"DROP TABLE gate_decisions",
+		"DROP INDEX secret_leases_by_expiry",
+		"DROP INDEX secret_leases_by_task_scope",
+		"DROP TABLE secret_leases",
+		"DROP INDEX capability_grants_by_expiry",
+		"DROP INDEX capability_grants_by_subject_task_kind",
+		"DROP INDEX capability_grants_by_idempotency",
+		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
 		"DROP TABLE capability_grants",
+		"DROP INDEX role_bindings_by_principal_scope",
+		"DROP INDEX role_bindings_by_role",
+		"DROP TABLE role_bindings",
+		"DROP INDEX structured_events_by_type",
+		"DROP INDEX structured_events_by_run",
+		"DROP INDEX structured_events_by_evidence",
+		"DROP INDEX structured_events_by_task",
+		"DROP INDEX structured_events_by_sequence",
+		"DROP TABLE structured_events",
+		"DROP INDEX dag_edges_by_to",
+		"DROP INDEX dag_edges_by_from",
+		"DROP TABLE dag_edges",
+		"DROP INDEX dag_nodes_by_status_priority",
+		"DROP TABLE dag_nodes",
 		"DROP INDEX policy_test_outcomes_by_status",
 		"DROP TABLE policy_test_outcomes",
 		"ALTER TABLE policy_test_runs DROP COLUMN execution_claimed_at",
@@ -66,8 +102,8 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("migrate v9: %v", err)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 13 {
-		t.Fatalf("schema version=%d, want 13", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != LatestSchemaVersion {
+		t.Fatalf("schema version=%d, want latest", got)
 	}
 	if got := queryInt(t, st.db, "SELECT count(*) FROM pragma_table_info('policy_test_runs') WHERE name IN ('execution_owner','execution_claimed_at')"); got != 2 {
 		t.Fatalf("claim columns=%d, want 2", got)
@@ -91,9 +127,37 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
-		"DROP INDEX capability_grants_active_by_expiry",
-		"DROP INDEX capability_grants_by_subject_task",
+		"DROP INDEX execution_cells_by_task",
+		"DROP INDEX execution_cells_by_state",
+		"DROP TABLE execution_cells",
+		"DROP INDEX risk_assessments_by_action",
+		"DROP INDEX risk_assessments_by_created",
+		"DROP TABLE risk_assessments",
+		"DROP INDEX gate_decisions_by_point_subject",
+		"DROP INDEX gate_decisions_by_resource_change",
+		"DROP TABLE gate_decisions",
+		"DROP INDEX secret_leases_by_expiry",
+		"DROP INDEX secret_leases_by_task_scope",
+		"DROP TABLE secret_leases",
+		"DROP INDEX capability_grants_by_expiry",
+		"DROP INDEX capability_grants_by_subject_task_kind",
+		"DROP INDEX capability_grants_by_idempotency",
+		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
 		"DROP TABLE capability_grants",
+		"DROP INDEX role_bindings_by_principal_scope",
+		"DROP INDEX role_bindings_by_role",
+		"DROP TABLE role_bindings",
+		"DROP INDEX structured_events_by_type",
+		"DROP INDEX structured_events_by_run",
+		"DROP INDEX structured_events_by_evidence",
+		"DROP INDEX structured_events_by_task",
+		"DROP INDEX structured_events_by_sequence",
+		"DROP TABLE structured_events",
+		"DROP INDEX dag_edges_by_to",
+		"DROP INDEX dag_edges_by_from",
+		"DROP TABLE dag_edges",
+		"DROP INDEX dag_nodes_by_status_priority",
+		"DROP TABLE dag_nodes",
 		"DROP INDEX policy_test_outcomes_by_status",
 		"DROP TABLE policy_test_outcomes",
 		"ALTER TABLE policy_test_runs DROP COLUMN execution_claimed_at",
@@ -110,10 +174,10 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		}
 	}
 	if err := st.Migrate(ctx); err != nil {
-		t.Fatalf("migrate v7 to v11: %v", err)
+		t.Fatalf("migrate v7 to latest: %v", err)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 13 {
-		t.Fatalf("schema version=%d, want 13", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != LatestSchemaVersion {
+		t.Fatalf("schema version=%d, want latest", got)
 	}
 	if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('policy_test_runs','policy_test_cases','policy_test_outcomes')"); got != 3 {
 		t.Fatalf("T49 tables=%d, want 3", got)
