@@ -67,6 +67,11 @@ const (
 	EventTypeApprovalRequested  EventType = "approval.requested"
 	EventTypeApprovalGranted    EventType = "approval.granted"
 	EventTypeApprovalDenied     EventType = "approval.denied"
+	EventTypeDAGNodeAdded       EventType = "dag.node.added"
+	EventTypeDAGEdgeAdded       EventType = "dag.edge.added"
+	EventTypeDAGNodeReady       EventType = "dag.node.ready"
+	EventTypeDAGNodeBlocked     EventType = "dag.node.blocked"
+	EventTypeDAGCycleRejected   EventType = "dag.cycle.rejected"
 
 	EventTypeAppended          EventType = "events.appended"
 	EventTypeSubscriberDropped EventType = "events.subscriber.dropped"
@@ -81,6 +86,8 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeTestStarted: {}, EventTypeTestPassed: {}, EventTypeTestFailed: {},
 	EventTypeVerificationPassed: {}, EventTypeVerificationFailed: {},
 	EventTypeApprovalRequested: {}, EventTypeApprovalGranted: {}, EventTypeApprovalDenied: {},
+	EventTypeDAGNodeAdded: {}, EventTypeDAGEdgeAdded: {}, EventTypeDAGNodeReady: {},
+	EventTypeDAGNodeBlocked: {}, EventTypeDAGCycleRejected: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 
