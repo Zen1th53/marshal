@@ -1091,8 +1091,8 @@
     },
     {
       "path": "internal/dag/state_a03_red_test.go",
-      "sha256": "4da5aad042d802407602ca500178632b7e8f5cb9b0f0b7a54b706938e25c7d98",
-      "bytes": 176
+      "sha256": "44c229d08ed9847e75d20ad3e41b561f2a4e259e90fe74f87065f2a8ffdeff21",
+      "bytes": 243
     },
     {
       "path": "internal/dag/state_a03_test.go",
