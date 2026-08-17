@@ -62,3 +62,25 @@ func TestEngineAuthorizedEvaluationFailsClosedWithoutAuthority(t *testing.T) {
 		t.Fatalf("EvaluateAuthorized() error = %v, want ErrAuthorityUnavailable", err)
 	}
 }
+
+type recordingEventSink struct{ events []Event }
+
+func (s *recordingEventSink) Append(_ context.Context, event Event) error {
+	s.events = append(s.events, event)
+	return nil
+}
+
+func TestEngineEmitsSatisfiedEventWithBoundedReferences(t *testing.T) {
+	created := time.Unix(100, 0).UTC()
+	sink := &recordingEventSink{}
+	engine := NewEngineWithEvents(func() time.Time { return created }, sink)
+	attestation := Attestation{
+		Subject: "agent-a", Provider: "Codex", Role: "reviewer", ChangeID: "change-1",
+		EvidenceID: "evidence-1", Kind: "security", Result: ResultPass,
+		ContentDigest: "sha256:change", CreatedAt: created,
+	}
+	_, err := engine.Evaluate(context.Background(), []Requirement{{Kind: "security", Minimum: 1, Independent: true, AllowedRoles: []string{"reviewer"}}}, []Attestation{attestation}, Provenance{ChangeID: "change-1", ContentDigest: "sha256:change"})
+	if err != nil || len(sink.events) != 1 || sink.events[0].Type != EventQuorumSatisfied || sink.events[0].EvidenceID != "evidence-1" {
+		t.Fatalf("err=%v events=%+v", err, sink.events)
+	}
+}

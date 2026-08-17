@@ -1,6 +1,7 @@
 package quorum
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
@@ -81,6 +82,31 @@ type Evaluation struct {
 	Missing   []Requirement
 	Accepted  []Attestation
 	Rejected  []Attestation
+}
+
+type EventType string
+
+const (
+	EventAttestationRecorded EventType = "verify.attestation.recorded"
+	EventAttestationRejected EventType = "verify.attestation.rejected"
+	EventQuorumPartial       EventType = "verify.quorum.partial"
+	EventQuorumSatisfied     EventType = "verify.quorum.satisfied"
+	EventQuorumBlocked       EventType = "verify.quorum.blocked"
+	EventQuorumInvalidated   EventType = "verify.quorum.invalidated"
+)
+
+type Event struct {
+	Type          EventType
+	ChangeID      string
+	Principal     string
+	EvidenceID    string
+	ContentDigest string
+	State         QuorumState
+	Reason        string
+}
+
+type EventSink interface {
+	Append(context.Context, Event) error
 }
 
 type QuorumState string

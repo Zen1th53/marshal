@@ -7,7 +7,14 @@ import (
 )
 
 type Engine struct {
-	now func() time.Time
+	now       func() time.Time
+	eventSink EventSink
+}
+
+func NewEngineWithEvents(now func() time.Time, sink EventSink) *Engine {
+	engine := NewEngine(now)
+	engine.eventSink = sink
+	return engine
 }
 
 type Authority interface {
@@ -48,6 +55,9 @@ func (e *Engine) Evaluate(ctx context.Context, requirements []Requirement, attes
 		if attestation.Result == ResultVeto {
 			result.Rejected = append(result.Rejected, attestation)
 			result.State = StateBlocked
+			if err := e.emit(ctx, Event{Type: EventQuorumBlocked, ChangeID: provenance.ChangeID, Principal: attestation.Subject, EvidenceID: attestation.EvidenceID, ContentDigest: provenance.ContentDigest, State: result.State, Reason: string(ErrVeto.Error())}); err != nil {
+				return result, err
+			}
 			return result, ErrVeto
 		}
 		key := strings.TrimSpace(attestation.Subject) + "\x00" + string(attestation.Kind)
@@ -75,7 +85,35 @@ func (e *Engine) Evaluate(ctx context.Context, requirements []Requirement, attes
 	} else if len(result.Accepted) > 0 {
 		result.State = StatePartiallySatisfied
 	}
+	event := Event{Type: eventTypeForState(result.State), ChangeID: provenance.ChangeID, ContentDigest: provenance.ContentDigest, State: result.State}
+	if len(result.Accepted) > 0 {
+		event.Principal = result.Accepted[0].Subject
+		event.EvidenceID = result.Accepted[0].EvidenceID
+	}
+	if err := e.emit(ctx, event); err != nil {
+		return result, err
+	}
 	return result, nil
+}
+
+func (e *Engine) emit(ctx context.Context, event Event) error {
+	if e.eventSink == nil {
+		return nil
+	}
+	return e.eventSink.Append(ctx, event)
+}
+
+func eventTypeForState(state QuorumState) EventType {
+	switch state {
+	case StateSatisfied:
+		return EventQuorumSatisfied
+	case StatePartiallySatisfied:
+		return EventQuorumPartial
+	case StateBlocked:
+		return EventQuorumBlocked
+	default:
+		return EventQuorumInvalidated
+	}
 }
 
 func (e *Engine) EvaluateAuthorized(ctx context.Context, authority Authority, requirements []Requirement, attestations []Attestation, provenance Provenance) (Evaluation, error) {
