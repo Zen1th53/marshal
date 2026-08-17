@@ -2606,13 +2606,13 @@
     },
     {
       "path": "internal/verify/quorum/engine.go",
-      "sha256": "bbc8d14820403a78908eedeb3e50e7239099bcfd22947dc70e05eb814aac5fe3",
-      "bytes": 5668
+      "sha256": "2917d98c75e9a15faaad1d495824b6ddbb8439cd50dbea75c73bff0f607e0126",
+      "bytes": 5712
     },
     {
       "path": "internal/verify/quorum/engine_test.go",
-      "sha256": "94901f0b9351e197192de64792692dcf5b3e0ae26e6e1f86b974d3c68c5a7c09",
-      "bytes": 5071
+      "sha256": "f01394b539a1e554b6e72a57f037c67638af258110166f5e1d291af028b70550",
+      "bytes": 6024
     },
     {
       "path": "internal/verify/quorum/types.go",
