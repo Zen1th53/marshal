@@ -87,9 +87,7 @@ func (e *Engine) Evaluate(ctx context.Context, requirements []Requirement, attes
 			return result, resultErr
 		}
 		if attestation.InvalidatedAt != nil || !attestation.CreatedAt.Before(e.now().Add(time.Nanosecond)) {
-			result = Evaluation{State: StateInvalidated}
-			resultErr = ErrStaleAttestation
-			return result, resultErr
+			return Evaluation{State: StateInvalidated}, ErrStaleAttestation
 		}
 		if attestation.Result == ResultVeto {
 			result.Rejected = append(result.Rejected, attestation)
@@ -161,9 +159,6 @@ func eventTypeForState(state QuorumState) EventType {
 }
 
 func (e *Engine) EvaluateAuthorized(ctx context.Context, authority Authority, requirements []Requirement, attestations []Attestation, provenance Provenance) (Evaluation, error) {
-	if err := ctx.Err(); err != nil {
-		return Evaluation{State: StateInvalidated}, err
-	}
 	if authority == nil {
 		return Evaluation{State: StateInvalidated}, ErrAuthorityUnavailable
 	}

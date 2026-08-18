@@ -31,6 +31,7 @@ type Request struct {
 	HeadCommit        string
 	AllowedOperations []string
 	EvidenceRequired  []string
+	TrustedContext    string
 	Heartbeat         func()
 	HeartbeatInterval time.Duration
 }

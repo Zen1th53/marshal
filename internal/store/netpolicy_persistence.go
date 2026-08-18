@@ -97,28 +97,33 @@ func (s *Store) putEgressDecisionOnce(ctx context.Context, record netpolicy.Deci
 }
 
 func (s *Store) appendEgressEvents(ctx context.Context, record netpolicy.DecisionRecord) error {
+	at := record.CreatedAt.UTC()
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
 	base := events.Event{
-		Subject:    events.SubjectID(record.Request.SubjectID),
-		TaskID:     events.TaskID(record.Request.TaskID),
-		ResourceID: events.ResourceID("egress-" + record.ID),
-		Data:       map[string]string{"change_id": record.Request.ChangeID, "decision_id": record.ID, "protocol": string(record.Request.Protocol), "port": strconv.Itoa(record.Request.Port)},
+		Subject:    record.Request.SubjectID,
+		TaskID:     record.Request.TaskID,
+		ResourceID: "egress-" + record.ID,
+		At:         at,
+		Data:       map[string]any{"change_id": record.Request.ChangeID, "decision_id": record.ID, "protocol": string(record.Request.Protocol), "port": strconv.Itoa(record.Request.Port)},
 	}
 	requested := base
-	requested.ID = events.EventID("EVENT-NETWORK-EGRESS-REQUESTED-" + record.ID)
-	requested.Type = events.Type("network.egress.requested")
-	requested.IdempotencyKey = events.IdempotencyKey("NETWORK-EGRESS-REQUESTED-" + record.ID)
+	requested.ID = "EVENT-NETWORK-EGRESS-REQUESTED-" + record.ID
+	requested.Type = events.EventTypeNetworkEgressRequested
+	requested.IdempotencyKey = "NETWORK-EGRESS-REQUESTED-" + record.ID
 	requested.Data["result"] = "requested"
 	if _, err := s.Append(ctx, requested); err != nil {
 		return fmt.Errorf("append network egress requested event: %w", err)
 	}
 	result := base
-	result.ID = events.EventID("EVENT-NETWORK-EGRESS-RESULT-" + record.ID)
-	result.IdempotencyKey = events.IdempotencyKey("NETWORK-EGRESS-RESULT-" + record.ID)
+	result.ID = "EVENT-NETWORK-EGRESS-RESULT-" + record.ID
+	result.IdempotencyKey = "NETWORK-EGRESS-RESULT-" + record.ID
 	result.Data["reason"] = string(record.Decision.Reason)
 	result.Data["result"] = "denied"
-	result.Type = events.Type("network.egress.denied")
+	result.Type = events.EventTypeNetworkEgressDenied
 	if record.Decision.Allowed {
-		result.Type = events.Type("network.egress.allowed")
+		result.Type = events.EventTypeNetworkEgressAllowed
 		result.Data["result"] = "allowed"
 		result.Data["rule_id"] = string(record.Decision.RuleID)
 	}

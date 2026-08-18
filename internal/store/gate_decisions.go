@@ -130,21 +130,21 @@ func (s *Store) PutGateDecisionWithAudit(ctx context.Context, decision gate.Deci
 		return nil
 	}
 	key := gateDecisionEventKey(decision)
-	eventType := "gate.blocked"
+	eventType := events.EventTypeGateBlocked
 	switch decision.State {
 	case gate.DecisionStateAllowed:
-		eventType = "gate.allowed"
+		eventType = events.EventTypeGateAllowed
 	case gate.DecisionStateDenied:
-		eventType = "gate.denied"
+		eventType = events.EventTypeGateDenied
 	case gate.DecisionStateInvalidated:
-		eventType = "gate.decision.invalidated"
+		eventType = events.EventTypeGateDecisionInvalidated
 	case gate.DecisionStateConsumed:
-		eventType = "gate.decision.consumed"
+		eventType = events.EventTypeGateDecisionConsumed
 	}
 	_, err := eventStore.Append(ctx, events.Event{
-		ID: events.EventID(key), Type: events.Type(eventType), Subject: events.SubjectID(decision.Subject),
-		ResourceID: events.ResourceID(gateResourceReference(decision.Resource)), At: decision.CreatedAt.UTC(),
-		IdempotencyKey: events.IdempotencyKey(key), Data: map[string]string{
+		ID: key, Type: eventType, Subject: decision.Subject,
+		ResourceID: gateResourceReference(decision.Resource), At: decision.CreatedAt.UTC(),
+		IdempotencyKey: key, Data: map[string]any{
 			"decision_id": decision.DecisionID, "gate_point": string(decision.Point), "state": string(decision.State),
 			"policy_digest": string(decision.PolicyDigest), "change_digest": decision.ChangeDigest,
 		},

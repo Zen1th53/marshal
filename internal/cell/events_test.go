@@ -13,11 +13,11 @@ func (s *memoryCellEvents) Append(_ context.Context, event events.Event) (events
 	if err := event.Validate(); err != nil {
 		return events.Event{}, err
 	}
-	s.events = append(s.events, events.CloneEvent(event))
+	s.events = append(s.events, event)
 	return event, nil
 }
 
-func (s *memoryCellEvents) Since(context.Context, events.Sequence, int) ([]events.Event, error) {
+func (s *memoryCellEvents) Since(context.Context, events.Sequence) ([]events.Event, error) {
 	return s.events, nil
 }
 
@@ -30,11 +30,11 @@ func TestA05PrepareEmitsDurableLifecycleEventsWithoutRawPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
-	if len(eventStore.events) != 2 || eventStore.events[0].Type != events.Type("cell.prepare.started") || eventStore.events[1].Type != events.Type("cell.ready") {
+	if len(eventStore.events) != 2 || eventStore.events[0].Type != events.EventType("cell.prepare.started") || eventStore.events[1].Type != events.EventType("cell.ready") {
 		t.Fatalf("events = %+v, want prepare.started then ready", eventStore.events)
 	}
 	for _, event := range eventStore.events {
-		if event.TaskID != events.TaskID("TASK-cell-a05") || event.ResourceID != events.ResourceID("/tmp/cell-a05") || event.Subject != events.SubjectID("cell-manager") {
+		if event.TaskID != "TASK-cell-a05" || event.ResourceID != "/tmp/cell-a05" || event.Subject != "cell-manager" {
 			t.Fatalf("event identity = %+v", event)
 		}
 		if _, ok := event.Data["workspace"]; ok {

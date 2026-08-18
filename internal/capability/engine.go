@@ -95,10 +95,10 @@ func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error)
 		return Grant{}, err
 	} else if found {
 		if grantRequestMatches(existing, request) {
-			if err := e.emitGrantEvent(ctx, events.Type("capability.grant.requested"), existing); err != nil {
+			if err := e.emitGrantEvent(ctx, events.EventType("capability.grant.requested"), existing); err != nil {
 				return Grant{}, err
 			}
-			if err := e.emitGrantEvent(ctx, events.Type("capability.grant.issued"), existing); err != nil {
+			if err := e.emitGrantEvent(ctx, events.EventType("capability.grant.issued"), existing); err != nil {
 				return Grant{}, err
 			}
 			return existing, nil
@@ -119,10 +119,10 @@ func (e *Engine) Grant(ctx context.Context, request GrantRequest) (Grant, error)
 	if err := e.repository.PutCapabilityGrant(ctx, grant); err != nil {
 		return Grant{}, err
 	}
-	if err := e.emitGrantEvent(ctx, events.Type("capability.grant.requested"), grant); err != nil {
+	if err := e.emitGrantEvent(ctx, events.EventType("capability.grant.requested"), grant); err != nil {
 		return Grant{}, err
 	}
-	if err := e.emitGrantEvent(ctx, events.Type("capability.grant.issued"), grant); err != nil {
+	if err := e.emitGrantEvent(ctx, events.EventType("capability.grant.issued"), grant); err != nil {
 		return Grant{}, err
 	}
 	return grant, nil
@@ -219,7 +219,7 @@ func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
 		return ErrSubjectMismatch
 	}
 	if grant.RevokedAt != nil {
-		return e.emitGrantEvent(ctx, events.Type("capability.grant.revoked"), grant)
+		return e.emitGrantEvent(ctx, events.EventType("capability.grant.revoked"), grant)
 	}
 	if err := e.authority.AuthorizeRevoke(ctx, request, grant); err != nil {
 		return safeBoundaryError(err)
@@ -227,20 +227,20 @@ func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
 	if err := e.repository.RevokeCapabilityGrant(ctx, request.GrantID, e.now().UTC()); err != nil {
 		return err
 	}
-	return e.emitGrantEvent(ctx, events.Type("capability.grant.revoked"), grant)
+	return e.emitGrantEvent(ctx, events.EventType("capability.grant.revoked"), grant)
 }
 
-func (e *Engine) emitGrantEvent(ctx context.Context, eventType events.Type, grant Grant) error {
+func (e *Engine) emitGrantEvent(ctx context.Context, eventType events.EventType, grant Grant) error {
 	if e.eventStore == nil {
 		return nil
 	}
 	resourceID := resourceReference(grant.Scope.Resource)
 	key := eventKey(string(eventType), string(grant.ID))
 	_, err := e.eventStore.Append(ctx, events.Event{
-		ID: events.EventID(key), Type: eventType, Subject: events.SubjectID(grant.Subject),
-		TaskID: events.TaskID(grant.TaskID), ResourceID: events.ResourceID(resourceID),
-		At: e.now().UTC(), IdempotencyKey: events.IdempotencyKey(key),
-		Data: map[string]string{"grant_id": string(grant.ID), "kind": string(grant.Kind)},
+		ID: key, Type: eventType, Subject: string(grant.Subject),
+		TaskID: string(grant.TaskID), ResourceID: resourceID,
+		At: e.now().UTC(), IdempotencyKey: key,
+		Data: map[string]any{"grant_id": string(grant.ID), "kind": string(grant.Kind)},
 	})
 	if err != nil {
 		return safeBoundaryError(err)
@@ -252,9 +252,9 @@ func (e *Engine) recordDecision(ctx context.Context, query Query, decision Decis
 	if e.eventStore == nil {
 		return decision, nil
 	}
-	eventType := events.Type("capability.authorize.denied")
+	eventType := events.EventType("capability.authorize.denied")
 	if decision.Outcome == OutcomeAllow {
-		eventType = events.Type("capability.authorize.allowed")
+		eventType = events.EventType("capability.authorize.allowed")
 	}
 	key := eventKey(string(eventType), string(query.Subject), string(query.TaskID), string(query.Kind), query.Resource, query.Action)
 	data := map[string]string{"kind": string(query.Kind), "reason": string(decision.Reason)}
@@ -262,14 +262,22 @@ func (e *Engine) recordDecision(ctx context.Context, query Query, decision Decis
 		data["grant_id"] = string(decision.MatchedGrant)
 	}
 	_, err := e.eventStore.Append(ctx, events.Event{
-		ID: events.EventID(key), Type: eventType, Subject: events.SubjectID(query.Subject),
-		TaskID: events.TaskID(query.TaskID), ResourceID: events.ResourceID(resourceReference(query.Resource)),
-		At: e.now().UTC(), IdempotencyKey: events.IdempotencyKey(key), Data: data,
+		ID: key, Type: eventType, Subject: string(query.Subject),
+		TaskID: string(query.TaskID), ResourceID: resourceReference(query.Resource),
+		At: e.now().UTC(), IdempotencyKey: key, Data: stringMapAny(data),
 	})
 	if err != nil {
 		return decision, safeBoundaryError(err)
 	}
 	return decision, nil
+}
+
+func stringMapAny(input map[string]string) map[string]any {
+	output := make(map[string]any, len(input))
+	for key, value := range input {
+		output[key] = value
+	}
+	return output
 }
 
 func safeBoundaryError(err error) error {
