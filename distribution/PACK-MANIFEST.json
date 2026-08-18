@@ -1835,6 +1835,21 @@
       "bytes": 2445
     },
     {
+      "path": "internal/risk/errors.go",
+      "sha256": "164137bed5edb37cb242dc9d33c68efd301dfac4aca9a30a4f38b75b1202a018",
+      "bytes": 1407
+    },
+    {
+      "path": "internal/risk/types.go",
+      "sha256": "1f95b11f0c0c59816727048599250bcd0f639d68d028fafe8210ecbc32c649c1",
+      "bytes": 3687
+    },
+    {
+      "path": "internal/risk/types_test.go",
+      "sha256": "8e91b7e24b3c9af87a62583ef3c4945eadaa12635b0a1a22bfe4f3a299861b31",
+      "bytes": 1899
+    },
+    {
       "path": "internal/sandbox/bwrap.go",
       "sha256": "ea4a7d985cbbaa42a122f08aed29cfa19588bdebdf1caf8558e1f9429f1b5b29",
       "bytes": 6870
