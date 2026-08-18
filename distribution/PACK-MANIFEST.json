@@ -3150,6 +3150,11 @@
       "bytes": 1459
     },
     {
+      "path": "internal/store/trustgate_persistence_a02_test.go",
+      "sha256": "7319908a30b54463bde399d8f6e2cd7361c6195e88ef501949edcfda6fdb690e",
+      "bytes": 235
+    },
+    {
       "path": "internal/store/trustscore_persistence_a02_test.go",
       "sha256": "3f084d0be329990c7ceb0984d0ebb116960b2050d73b87730af2e6dd50416b2b",
       "bytes": 236
