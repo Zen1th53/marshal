@@ -15,18 +15,27 @@ type Repository interface {
 	TransitionCellState(context.Context, CellID, State, State) error
 }
 
+type Authorizer interface {
+	AuthorizeCellPrepare(context.Context, Spec) error
+}
+
 type Manager struct {
 	repository Repository
 	backends   map[BackendKind]Backend
+	authorizer Authorizer
 	now        func() time.Time
 }
 
-func NewManager(repository Repository, backends map[BackendKind]Backend) *Manager {
+func NewManager(repository Repository, backends map[BackendKind]Backend, authorizers ...Authorizer) *Manager {
 	copyBackends := make(map[BackendKind]Backend, len(backends))
 	for kind, backend := range backends {
 		copyBackends[kind] = backend
 	}
-	return &Manager{repository: repository, backends: copyBackends, now: func() time.Time { return time.Now().UTC() }}
+	var authorizer Authorizer
+	if len(authorizers) > 0 {
+		authorizer = authorizers[0]
+	}
+	return &Manager{repository: repository, backends: copyBackends, authorizer: authorizer, now: func() time.Time { return time.Now().UTC() }}
 }
 
 func (m *Manager) Prepare(ctx context.Context, spec Spec) (Record, error) {
@@ -35,6 +44,12 @@ func (m *Manager) Prepare(ctx context.Context, spec Spec) (Record, error) {
 	}
 	if err := spec.Validate(); err != nil {
 		return Record{}, err
+	}
+	if m.authorizer == nil {
+		return Record{}, ErrAuthorizationDenied
+	}
+	if err := m.authorizer.AuthorizeCellPrepare(ctx, spec); err != nil {
+		return Record{}, ErrAuthorizationDenied
 	}
 	backend := m.backends[spec.Backend]
 	if backend == nil {

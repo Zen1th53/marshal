@@ -36,6 +36,10 @@ type countingCellBackend struct {
 	destroyCalls int
 }
 
+type allowingCellAuthorizer struct{}
+
+func (allowingCellAuthorizer) AuthorizeCellPrepare(context.Context, Spec) error { return nil }
+
 func (b *countingCellBackend) Prepare(_ context.Context, spec Spec) (Handle, error) {
 	b.prepareCalls++
 	return Handle{ID: CellID("cell-a03"), TaskID: spec.TaskID, Backend: spec.Backend, Workspace: spec.Workspace}, nil
@@ -53,7 +57,7 @@ func (b *countingCellBackend) Destroy(context.Context, Handle) error {
 func TestA03PrepareTransitionsThroughPreparingToReady(t *testing.T) {
 	repository := &memoryCellRepository{}
 	backend := &countingCellBackend{}
-	manager := NewManager(repository, map[BackendKind]Backend{BackendNative: backend})
+	manager := NewManager(repository, map[BackendKind]Backend{BackendNative: backend}, allowingCellAuthorizer{})
 	record, err := manager.Prepare(context.Background(), Spec{
 		TaskID: "TASK-cell-a03", Workspace: "/tmp/cell-a03", Backend: BackendNative,
 	})
@@ -68,7 +72,7 @@ func TestA03PrepareTransitionsThroughPreparingToReady(t *testing.T) {
 func TestA03IllegalTransitionHasNoBackendSideEffect(t *testing.T) {
 	repository := &memoryCellRepository{record: Record{ID: "cell-a03", TaskID: "TASK-cell-a03", Backend: BackendNative, Workspace: "/tmp/cell-a03", SpecDigest: "sha256:cell", State: StateNew}}
 	backend := &countingCellBackend{}
-	manager := NewManager(repository, map[BackendKind]Backend{BackendNative: backend})
+	manager := NewManager(repository, map[BackendKind]Backend{BackendNative: backend}, allowingCellAuthorizer{})
 	if err := manager.Transition(context.Background(), CellID("cell-a03"), StateNew, StateDestroyed); !errors.Is(err, ErrNotReady) {
 		t.Fatalf("transition error=%v, want ErrNotReady", err)
 	}
@@ -80,7 +84,7 @@ func TestA03IllegalTransitionHasNoBackendSideEffect(t *testing.T) {
 func TestA03DestroyIsIdempotentAfterDestroyed(t *testing.T) {
 	repository := &memoryCellRepository{record: Record{ID: "cell-a03", TaskID: "TASK-cell-a03", Backend: BackendNative, Workspace: "/tmp/cell-a03", SpecDigest: "sha256:cell", State: StateDestroyed}}
 	backend := &countingCellBackend{}
-	manager := NewManager(repository, map[BackendKind]Backend{BackendNative: backend})
+	manager := NewManager(repository, map[BackendKind]Backend{BackendNative: backend}, allowingCellAuthorizer{})
 	if err := manager.Destroy(context.Background(), Handle{ID: "cell-a03", TaskID: "TASK-cell-a03", Backend: BackendNative, Workspace: "/tmp/cell-a03"}); err != nil {
 		t.Fatalf("Destroy retry: %v", err)
 	}
