@@ -35,7 +35,9 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"evidence_nodes", "evidence_edges",
 		"policy_versions",
 		"policy_test_runs", "policy_test_cases", "policy_test_outcomes",
+		"structured_events",
 		"dag_nodes", "dag_edges",
+		"capability_grants",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
@@ -51,11 +53,21 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX capability_grants_by_expiry",
+		"DROP INDEX capability_grants_by_subject_task_kind",
+		"DROP INDEX capability_grants_by_idempotency",
+		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
+		"DROP TABLE capability_grants",
 		"DROP INDEX dag_edges_by_to",
 		"DROP INDEX dag_edges_by_from",
 		"DROP TABLE dag_edges",
 		"DROP INDEX dag_nodes_by_status_priority",
 		"DROP TABLE dag_nodes",
+		"DROP INDEX structured_events_by_type_sequence",
+		"DROP INDEX structured_events_by_run_sequence",
+		"DROP INDEX structured_events_by_task_sequence",
+		"DROP INDEX structured_events_by_sequence",
+		"DROP TABLE structured_events",
 		"DROP INDEX policy_test_outcomes_by_status",
 		"DROP TABLE policy_test_outcomes",
 		"ALTER TABLE policy_test_runs DROP COLUMN execution_claimed_at",
@@ -94,11 +106,21 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX capability_grants_by_expiry",
+		"DROP INDEX capability_grants_by_subject_task_kind",
+		"DROP INDEX capability_grants_by_idempotency",
+		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
+		"DROP TABLE capability_grants",
 		"DROP INDEX dag_edges_by_to",
 		"DROP INDEX dag_edges_by_from",
 		"DROP TABLE dag_edges",
 		"DROP INDEX dag_nodes_by_status_priority",
 		"DROP TABLE dag_nodes",
+		"DROP INDEX structured_events_by_type_sequence",
+		"DROP INDEX structured_events_by_run_sequence",
+		"DROP INDEX structured_events_by_task_sequence",
+		"DROP INDEX structured_events_by_sequence",
+		"DROP TABLE structured_events",
 		"DROP INDEX policy_test_outcomes_by_status",
 		"DROP TABLE policy_test_outcomes",
 		"ALTER TABLE policy_test_runs DROP COLUMN execution_claimed_at",

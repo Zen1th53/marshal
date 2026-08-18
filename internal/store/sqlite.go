@@ -11,7 +11,11 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const sqliteBusyRetries = 5
+// SQLite serializes writers per database. Multiple Store handles can therefore
+// observe transient SQLITE_BUSY even with busy_timeout configured; retain a
+// bounded retry window for transactional operations rather than leaking a
+// scheduler-dependent lock error to callers.
+const sqliteBusyRetries = 32
 
 func isSQLiteBusy(err error) bool {
 	if err == nil {
