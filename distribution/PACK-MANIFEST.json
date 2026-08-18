@@ -2490,6 +2490,11 @@
       "bytes": 1853
     },
     {
+      "path": "internal/store/chaos_persistence_a02_test.go",
+      "sha256": "7b12b3de2a5ac2a662146ceeeacc986e93a2245335e7934fb1bd5a148bc91022",
+      "bytes": 231
+    },
+    {
       "path": "internal/store/checkpoint_persistence_a02_test.go",
       "sha256": "435e9315a2f4b95293ece8138ec82125c2357d91a7d1ddc8ea427d38b09ac1e8",
       "bytes": 236
@@ -2746,8 +2751,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "8a000e2a4ceafa62c5dc21b95c40f76590df9d7d6b4f61518f938661b9660a19",
-      "bytes": 54143
+      "sha256": "74a5d2a81f1eae81128713c0692c8a9dcd8942b304487c46890a61b14f2e38c5",
+      "bytes": 54774
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -2950,6 +2955,11 @@
       "bytes": 236
     },
     {
+      "path": "internal/store/research_persistence_a02_test.go",
+      "sha256": "c9c5c36f31aaee14de4cc9a709dd3b76d2fc0f73d3f92121d72c26db19d59f45",
+      "bytes": 234
+    },
+    {
       "path": "internal/store/risk_concurrency_a08_test.go",
       "sha256": "5350d0ecc1500eb33a736bf1e49e6b79a041710ed50b877eb5e1bf2144b08509",
       "bytes": 3177
@@ -2961,8 +2971,8 @@
     },
     {
       "path": "internal/store/risk_persistence_a02_test.go",
-      "sha256": "a8953da2195b41c53324ad3f66535cc9c5528d0c4bcf1898b564b426b7cd3b9f",
-      "bytes": 7920
+      "sha256": "7033f07ba7eb59233dc6032ea0e2ad308e6c818f82630f15efefbbf45919a598",
+      "bytes": 8030
     },
     {
       "path": "internal/store/router_persistence_a02_test.go",
@@ -3011,8 +3021,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "4aa30de31858fa28bec0a20e61ecc9185e7046744040de481b9a9c0d3e5cf8a3",
-      "bytes": 17921
+      "sha256": "3f98bb5aa9c220b955e9eafd21c751640ef78d7e9e364e16dae72087345c54df",
+      "bytes": 18197
     },
     {
       "path": "internal/store/tasks.go",
@@ -3041,8 +3051,8 @@
     },
     {
       "path": "internal/store/trustcontent_persistence_test.go",
-      "sha256": "95f0cbc0a63d020d93e00bbea9396b32d351d1a8ca02b18fd498065b818c825f",
-      "bytes": 8755
+      "sha256": "2f3b6250fb6065b05b92c9868a268dffd51eafe30e94b100a8a85140d7ce9917",
+      "bytes": 8865
     },
     {
       "path": "internal/store/trustcontent_recovery_a08_test.go",
@@ -3061,8 +3071,8 @@
     },
     {
       "path": "internal/store/typed_handoffs_a02_test.go",
-      "sha256": "633ffcbb0b2ec669eeeec62088d21b6f9c34dbc1d0575c3c6e6d3d4745bda2d0",
-      "bytes": 13981
+      "sha256": "a90e9281f0fa8b216827d994fddad6d0914324ed0eff3498a89a9c4c69d66c41",
+      "bytes": 14091
     },
     {
       "path": "internal/store/xverify_persistence_a02_test.go",

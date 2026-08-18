@@ -102,6 +102,8 @@ func TestRiskAssessmentMigrationFromSchema21(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS chaos_conformance_runs_by_scenario",
+		"DROP TABLE IF EXISTS chaos_conformance_runs",
 		"DROP INDEX IF EXISTS research_reports_by_question",
 		"DROP TABLE IF EXISTS research_reports",
 		"DROP INDEX IF EXISTS scheduler_explanations_by_task",
