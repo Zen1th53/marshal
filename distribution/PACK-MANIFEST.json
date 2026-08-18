@@ -956,8 +956,8 @@
     },
     {
       "path": "internal/adapter/adapter.go",
-      "sha256": "577ed6af15083bf7264624d80e014b815a7c85470ea19f52def2e5d92df58eda",
-      "bytes": 2115
+      "sha256": "54ff765f4b62609f250e04dd88b0a261db49fcafd48d6d35cda9617602be9dfa",
+      "bytes": 2141
     },
     {
       "path": "internal/adapter/capability_runner.go",
@@ -971,8 +971,8 @@
     },
     {
       "path": "internal/adapter/claude/claude.go",
-      "sha256": "e542f520f33882f4d93683e6cf86e1cd42c2c1b4367e710be5b996cb8aa88ba4",
-      "bytes": 5420
+      "sha256": "c77f4ea53fa01ec5ba360f7353a4d9ad630437512f8bb80f5bcf84f8e9cc569c",
+      "bytes": 5529
     },
     {
       "path": "internal/adapter/claude/claude_test.go",
@@ -981,8 +981,8 @@
     },
     {
       "path": "internal/adapter/codex/codex.go",
-      "sha256": "489812e8644bc42532d393ed17dd60120fbd25635c5eba49f7b674208589ea8c",
-      "bytes": 6355
+      "sha256": "921c9b63aff9e57c13e0a69d08adf9df00d7016422bc0dce000149b57dcac418",
+      "bytes": 6464
     },
     {
       "path": "internal/adapter/codex/codex_test.go",
@@ -991,8 +991,8 @@
     },
     {
       "path": "internal/adapter/gemini/gemini.go",
-      "sha256": "04ce053cb2ea18369996e58cbec3431a5cae188ca2b10eb34fa3849dea2aa620",
-      "bytes": 5555
+      "sha256": "34b27d9fbf4b376a4c43cf23d8009b17aa33e68f4672e7bced17c2b0b68c9e74",
+      "bytes": 5664
     },
     {
       "path": "internal/adapter/gemini/gemini_test.go",
@@ -1001,8 +1001,8 @@
     },
     {
       "path": "internal/adapter/opencode/opencode.go",
-      "sha256": "de5750e2086e213ff5977d04c281a5e33d8b2eeacf1d839eadb38eb5505b1435",
-      "bytes": 5905
+      "sha256": "360bf58a8d4ad84b780c99607723914f7cbca732193aac882c4da701892a60bd",
+      "bytes": 6014
     },
     {
       "path": "internal/adapter/opencode/opencode_test.go",
@@ -1116,8 +1116,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "d8cd5e874b5c314ee00f1ac4968fb36fc210822adcf17b2e7b920d49f6510cfe",
-      "bytes": 29711
+      "sha256": "45f35d2a6e1d38d1c6f6e9176a711f6d34a4819a08a1d8b125d4dd29bca5bcc6",
+      "bytes": 30723
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1431,8 +1431,8 @@
     },
     {
       "path": "internal/events/types.go",
-      "sha256": "f9b24b8835d026b2b82e0b2ddf42f5b1402b25396e9ed77b9037a5095bfb1a36",
-      "bytes": 13734
+      "sha256": "7252a7736387668aa1138f0043aa0d8b519b77577c0be185bff017f85d7e84a4",
+      "bytes": 14214
     },
     {
       "path": "internal/events/types_test.go",
@@ -1451,8 +1451,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "8cc0f34dc42c980ef0c7216db6452b23926589418f56c12c08aa0d892ada32db",
-      "bytes": 9175
+      "sha256": "6c21986552020ac27198de9c6027b6d44fbb3279a41c3f0beb25a6c286c3c91c",
+      "bytes": 9392
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
@@ -2241,8 +2241,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "1fd2a7a5b6f5936d1c6eab10a2252638f31861477040132dfd680fb58b328988",
-      "bytes": 28340
+      "sha256": "5c74ac5df2532024095b955a60cc05c444aa10a4c74999a2270aee11d83af596",
+      "bytes": 29401
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -2416,8 +2416,8 @@
     },
     {
       "path": "internal/store/risk_persistence_a02_test.go",
-      "sha256": "9892e4ddc56b20f4289f06b89f80c7544080d6ef3b7547482b76670126eff9eb",
-      "bytes": 4033
+      "sha256": "744ae24c0308e48b200caf1970e1dd0a87554474d5baea2892d1f20d39827f7d",
+      "bytes": 4175
     },
     {
       "path": "internal/store/secrets_concurrency_a08_test.go",
@@ -2446,8 +2446,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "33001a0010bce26626bca3b61ba1db44ac16128e5758dac2abe3dca8eb1f63fa",
-      "bytes": 8630
+      "sha256": "730d22d1998b3240c9cc8a6f181c273887aa7414a4f0de3953747ef72c6e0679",
+      "bytes": 8944
     },
     {
       "path": "internal/store/tasks.go",
