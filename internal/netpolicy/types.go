@@ -87,10 +87,13 @@ func (r Rule) Validate() error {
 }
 
 type Request struct {
-	Host     string   `json:"host"`
-	IP       string   `json:"ip,omitempty"`
-	Protocol Protocol `json:"protocol"`
-	Port     int      `json:"port"`
+	SubjectID string   `json:"subject_id,omitempty"`
+	TaskID    string   `json:"task_id,omitempty"`
+	ChangeID  string   `json:"change_id,omitempty"`
+	Host      string   `json:"host"`
+	IP        string   `json:"ip,omitempty"`
+	Protocol  Protocol `json:"protocol"`
+	Port      int      `json:"port"`
 }
 
 func (r Request) Validate() error {
