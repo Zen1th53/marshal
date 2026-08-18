@@ -25,11 +25,13 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policytest"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/version"
 )
 
 const usage = `Usage: marshal [--json] <command> [arguments]
 
 Commands:
+  version
   init
   doctor [--probe-providers]
   status
@@ -81,6 +83,10 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		c.json = true
 		args = args[1:]
 	}
+	if len(args) == 1 && args[0] == "--version" {
+		fmt.Fprintln(stdout, version.Current().String())
+		return 0
+	}
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
 		fmt.Fprint(stdout, usage)
 		return 0
@@ -91,6 +97,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 	}
 	var err error
 	switch args[0] {
+	case "version":
+		err = c.version()
 	case "init":
 		err = c.init(ctx)
 	case "doctor":
@@ -143,6 +151,11 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		return exitCode(err)
 	}
 	return 0
+}
+
+func (c command) version() error {
+	info := version.Current()
+	return c.print(info, info.String())
 }
 
 func (c command) policy(ctx context.Context, args []string) error {

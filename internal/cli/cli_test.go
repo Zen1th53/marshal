@@ -63,11 +63,39 @@ func TestTaskImportDryRunDoesNotNeedDaemon(t *testing.T) {
 }
 
 func TestRequiredCommandsHaveUsage(t *testing.T) {
-	for _, command := range []string{"init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "policy", "legal", "daemon"} {
+	for _, command := range []string{"version", "init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "policy", "legal", "daemon"} {
 		var stdout, stderr bytes.Buffer
 		code := Execute(context.Background(), ".", []string{command, "--help"}, strings.NewReader(""), &stdout, &stderr)
 		if code != 0 || !strings.Contains(stdout.String()+stderr.String(), "Usage: marshal ") {
 			t.Errorf("%s: code=%d output=%q", command, code, stdout.String()+stderr.String())
+		}
+	}
+}
+
+func TestVersionCommandsReportBuildMetadata(t *testing.T) {
+	for _, args := range [][]string{{"version"}, {"--version"}} {
+		var stdout, stderr bytes.Buffer
+		if code := Execute(context.Background(), ".", args, strings.NewReader(""), &stdout, &stderr); code != 0 {
+			t.Fatalf("Execute(%v) code=%d stderr=%s", args, code, stderr.String())
+		}
+		if !strings.HasPrefix(stdout.String(), "marshal ") || !strings.Contains(stdout.String(), "commit ") {
+			t.Fatalf("Execute(%v) output=%q", args, stdout.String())
+		}
+	}
+}
+
+func TestVersionJSONIsMachineReadable(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := Execute(context.Background(), ".", []string{"--json", "version"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+		t.Fatalf("version code=%d stderr=%s", code, stderr.String())
+	}
+	var got map[string]string
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal version output: %v", err)
+	}
+	for _, field := range []string{"version", "commit", "build_date"} {
+		if got[field] == "" {
+			t.Fatalf("version output missing %s: %#v", field, got)
 		}
 	}
 }
