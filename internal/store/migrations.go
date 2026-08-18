@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 17
+const LatestSchemaVersion = 18
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -567,6 +567,18 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 17: %w", err)
 		}
 		version = 17
+	}
+	if version < 18 {
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE gate_decisions ADD COLUMN state TEXT NOT NULL DEFAULT 'requested'
+				CHECK(state IN ('requested','evaluating','allowed','denied','blocked','consumed','invalidated'));
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 18: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(18, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 18: %w", err)
+		}
+		version = 18
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

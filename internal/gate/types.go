@@ -27,6 +27,18 @@ const (
 	CheckStatusInvalid CheckStatus = "INVALID"
 )
 
+type DecisionState string
+
+const (
+	DecisionStateRequested   DecisionState = "requested"
+	DecisionStateEvaluating  DecisionState = "evaluating"
+	DecisionStateAllowed     DecisionState = "allowed"
+	DecisionStateDenied      DecisionState = "denied"
+	DecisionStateBlocked     DecisionState = "blocked"
+	DecisionStateConsumed    DecisionState = "consumed"
+	DecisionStateInvalidated DecisionState = "invalidated"
+)
+
 type ErrorCode string
 
 const (
@@ -76,6 +88,7 @@ type Decision struct {
 	Subject      string
 	Resource     string
 	Allowed      bool
+	State        DecisionState
 	Checks       []CheckResult
 	PolicyIDs    []string
 	PolicyDigest policy.PolicyDigest
@@ -88,6 +101,9 @@ func (d Decision) Validate() error {
 		if !validGatePoint(d.Point) {
 			return ErrUnknownGatePoint
 		}
+		return ErrInvalidDecision
+	}
+	if d.State != "" && !validDecisionState(d.State) {
 		return ErrInvalidDecision
 	}
 	if err := d.PolicyDigest.Validate(); err != nil {
@@ -108,6 +124,21 @@ func (d Decision) Validate() error {
 		}
 	}
 	return nil
+}
+
+func validDecisionState(state DecisionState) bool {
+	switch state {
+	case DecisionStateRequested, DecisionStateEvaluating, DecisionStateAllowed, DecisionStateDenied, DecisionStateBlocked, DecisionStateConsumed, DecisionStateInvalidated:
+		return true
+	default:
+		return false
+	}
+}
+
+func ValidDecisionTransition(from, to DecisionState) bool {
+	return (from == DecisionStateRequested && to == DecisionStateEvaluating) ||
+		(from == DecisionStateEvaluating && (to == DecisionStateAllowed || to == DecisionStateDenied || to == DecisionStateBlocked)) ||
+		((from == DecisionStateAllowed || from == DecisionStateDenied || from == DecisionStateBlocked) && (to == DecisionStateConsumed || to == DecisionStateInvalidated))
 }
 
 func validGatePoint(point GatePoint) bool {
