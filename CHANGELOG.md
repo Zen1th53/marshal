@@ -1,5 +1,52 @@
 # Changelog
 
+All notable changes to the MARSHAL project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.0] - 2026-08-18
+
+### Added
+- **Complete MARSHAL TERRA v3 Execution Engine (55/55 Epics Completed)**:
+  - **T14: Agent Auto-Recovery**: Automatic detection and state recovery for stalled agent executions (`internal/recovery`).
+  - **T15: Model Router**: Capabilities-based LLM routing engine (`internal/router`).
+  - **T16: Adversarial Cross-Model Verification**: Cross-model verification review pipeline (`internal/verify/crossmodel`).
+  - **T17: Agent Tournament**: Multi-candidate execution arena across weighted performance/accuracy dimensions (`internal/tournament`).
+  - **T18: Evolution Lab**: Genetic algorithm search engine for prompt strategy and policy optimization (`internal/evolution`).
+  - **T27: Full MCP & A2A Runtime**: Production MCP (2026-07-28) and A2A (1.0) runtime session management (`internal/runtime/mcp_a2a`).
+  - **T32: Verified Merge Queue**: Automated branch integration queue operating in isolated git worktrees (`internal/mergequeue`).
+  - **T33: Deterministic Reconciliation 2.0**: State divergence recovery and reconciliation engine (`internal/reconciliation`).
+  - **T34: Distributed MARSHAL**: Multi-node coordination and gossip state sync (`internal/distributed`).
+  - **T35: Remote Worker Attestation**: Cryptographic attestation and hardware token verification (`internal/attestation`).
+  - **T38: Explainable Scheduler**: Human-readable task scheduling decision explanations (`internal/explainable`).
+  - **T40: Security Reputation**: Provider security reputation and threat tracking (`internal/reputation/security`).
+  - **T42: MARSHAL TUI**: Terminal user interface for live task monitoring (`internal/tui`).
+  - **T45: Research Agent & Evidence Pipeline**: Evidence collection and report synthesis (`internal/research`).
+  - **T47: Controlled Self-Improvement**: Self-improvement recommendation engine with human approval guardrails (`internal/recommendation`).
+  - **T51: marshal doctor 2.0**: Next-generation profile-aware system diagnostics (`internal/doctor2`).
+  - **T52: Security Chaos & Conformance**: Fault injection and adversarial security scenario testing (`internal/chaos`).
+  - **T53: Vibe Firewall**: Composite security evaluation firewall (`internal/vibefirewall`).
+  - **T54: Evidence-Derived Trust Score**: Composite 0..100 trust scoring engine (`internal/trustscore`).
+  - **T55: Trust Gate**: Final security gate enforcing evidence score minimums and officer vetoes (`internal/trustgate`).
+- **CLI Enhancements**:
+  - `marshal version` / `marshal --version` / `marshal --json version` subcommand outputting version (`v1.0.0`), commit SHA, build date, and database schema version (`v67`).
+- **GitHub Release & Supply Chain Engineering**:
+  - Reproducible release workflow (`.github/workflows/release.yml`) for Linux x86_64 and arm64 archives.
+  - Automatic SHA-256 checksum generation (`checksums.txt`) and Software Bill of Materials (SBOM).
+  - CodeQL static security analysis workflow (`.github/workflows/codeql.yml`).
+  - Dependency review workflow (`.github/workflows/dependency-review.yml`).
+  - Dependabot configuration (`.github/dependabot.yml`) for Go modules and GitHub Actions.
+
+### Changed
+- Updated SQLite database schema to **`v67`** with 67 fully migrated and indexed tables.
+- Reconciled runtime version references across `internal/cli`, `internal/legal`, `RUNTIME-VERSION.yaml`, and documentation to `v1.0.0`.
+- Overhauled `README.md` into a release-grade landing page with badges and Mermaid architecture diagram.
+
+### Security
+- Verified fail-closed `bubblewrap` mount isolation, mode `0600` Unix domain sockets, HMAC-backed Bearer tokens for MCP/A2A, and zero secret leakage in logs or committed files.
+
+
 ## Runtime 0.4.0 — 2026-08-12
 
 Provider maturity and daily operations release:

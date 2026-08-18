@@ -32,14 +32,14 @@ var (
 )
 
 type Report struct {
-	NodeID          string   `json:"node_id"`
-	MarshalVersion  string   `json:"marshal_version"`
-	OS              string   `json:"os"`
-	Arch            string   `json:"arch"`
-	RuntimeDigest   string   `json:"runtime_digest"`
-	PolicyDigest    string   `json:"policy_digest"`
-	Nonce           string   `json:"nonce"`
-	EvidenceIDs     []string `json:"evidence_ids,omitempty"`
+	NodeID         string   `json:"node_id"`
+	MarshalVersion string   `json:"marshal_version"`
+	OS             string   `json:"os"`
+	Arch           string   `json:"arch"`
+	RuntimeDigest  string   `json:"runtime_digest"`
+	PolicyDigest   string   `json:"policy_digest"`
+	Nonce          string   `json:"nonce"`
+	EvidenceIDs    []string `json:"evidence_ids,omitempty"`
 }
 
 type Verdict struct {

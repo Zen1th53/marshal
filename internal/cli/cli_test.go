@@ -270,3 +270,26 @@ func policyTestFixtureWithDefault(t *testing.T, defaultEffect, expected string) 
 	}
 	return data
 }
+
+func TestCLIVersionCommand(t *testing.T) {
+	ctx := context.Background()
+	var stdout, stderr bytes.Buffer
+
+	code := Run(ctx, []string{"version"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "MARSHAL v1.0.0") {
+		t.Fatalf("unexpected stdout: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Run(ctx, []string{"--json", "version"}, nil, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"version": "v1.0.0"`) {
+		t.Fatalf("unexpected json stdout: %s", stdout.String())
+	}
+}

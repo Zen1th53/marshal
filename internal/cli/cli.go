@@ -27,6 +27,12 @@ import (
 	"github.com/Zen1th53/marshal/internal/project"
 )
 
+var (
+	Version   = "v1.0.0"
+	Commit    = "head"
+	BuildDate = "unknown"
+)
+
 const usage = `Usage: marshal [--json] <command> [arguments]
 
 Commands:
@@ -54,6 +60,7 @@ Commands:
   policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
   daemon
+  version
 `
 
 const policyTestUsage = "Usage: marshal policy test SUITE-FILE\n"
@@ -91,6 +98,13 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 	}
 	var err error
 	switch args[0] {
+	case "version", "--version", "-version", "-v":
+		err = c.print(map[string]any{
+			"version":        Version,
+			"commit":         Commit,
+			"build_date":     BuildDate,
+			"schema_version": 67,
+		}, fmt.Sprintf("MARSHAL %s (commit: %s, build date: %s, schema: v67)", Version, Commit, BuildDate))
 	case "init":
 		err = c.init(ctx)
 	case "doctor":

@@ -1,6 +1,6 @@
 # MARSHAL CLI Reference
 
-**Runtime Version**: `v0.4.0`
+**Runtime Version**: `v1.0.0`
 
 This document provides a comprehensive command reference for the `marshal` command-line executable.
 

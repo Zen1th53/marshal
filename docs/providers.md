@@ -1,6 +1,6 @@
 # MARSHAL Provider Capability Model & Adapter Guide
 
-**Runtime Milestone**: `v0.4.0`
+**Runtime Milestone**: `v1.0.0`
 
 MARSHAL implements a vendor-neutral provider architecture where AI coding agents interact with the repository through process adapters.
 

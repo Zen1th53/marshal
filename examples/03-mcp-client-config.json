@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "marshal": {
+      "command": "marshal",
+      "args": ["mcp", "serve"],
+      "headers": {
+        "Authorization": "Bearer mcp_sec_live_9f8a3b7c2d1e"
+      }
+    }
+  }
+}

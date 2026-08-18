@@ -3,10 +3,10 @@ package scheduler
 type Code string
 
 const (
-	CodeNoEligibleAgent    Code = "SCHED_NO_ELIGIBLE_AGENT"
-	CodeLeaseConflict      Code = "SCHED_LEASE_CONFLICT"
-	CodeTaskNotReady       Code = "SCHED_TASK_NOT_READY"
-	CodeStaleWorker        Code = "SCHED_STALE_WORKER"
+	CodeNoEligibleAgent   Code = "SCHED_NO_ELIGIBLE_AGENT"
+	CodeLeaseConflict     Code = "SCHED_LEASE_CONFLICT"
+	CodeTaskNotReady      Code = "SCHED_TASK_NOT_READY"
+	CodeStaleWorker       Code = "SCHED_STALE_WORKER"
 	CodeCapabilityMissing Code = "SCHED_CAPABILITY_MISSING"
 )
 
@@ -24,10 +24,10 @@ func (e *Error) Is(target error) bool {
 }
 
 var (
-	ErrNoEligibleAgent    = &Error{Code: CodeNoEligibleAgent, Message: "no eligible agent available for task criteria"}
-	ErrLeaseConflict      = &Error{Code: CodeLeaseConflict, Message: "scheduler lease renewal conflict"}
-	ErrTaskNotReady       = &Error{Code: CodeTaskNotReady, Message: "task is not ready for scheduling"}
-	ErrStaleWorker        = &Error{Code: CodeStaleWorker, Message: "worker lease is stale or expired"}
+	ErrNoEligibleAgent   = &Error{Code: CodeNoEligibleAgent, Message: "no eligible agent available for task criteria"}
+	ErrLeaseConflict     = &Error{Code: CodeLeaseConflict, Message: "scheduler lease renewal conflict"}
+	ErrTaskNotReady      = &Error{Code: CodeTaskNotReady, Message: "task is not ready for scheduling"}
+	ErrStaleWorker       = &Error{Code: CodeStaleWorker, Message: "worker lease is stale or expired"}
 	ErrCapabilityMissing = &Error{Code: CodeCapabilityMissing, Message: "required worker capability missing"}
 )
 

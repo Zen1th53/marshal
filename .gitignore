@@ -17,3 +17,7 @@ dist/
 *~
 .DS_Store
 .marshal/
+bin/
+*.tar.gz
+*.db
+*.log

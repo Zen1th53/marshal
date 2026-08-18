@@ -1,0 +1,10 @@
+[
+  {
+    "id": "TASK-CODEX-001",
+    "title": "Implement status endpoint health check",
+    "status": "ready",
+    "risk": "R1",
+    "base_commit": "HEAD",
+    "head_commit": "HEAD"
+  }
+]

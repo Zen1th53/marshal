@@ -1,6 +1,6 @@
 # OpenCode & Local Ollama Provider Guide
 
-**Runtime Milestone**: `v0.4.0`
+**Runtime Milestone**: `v1.0.0`
 **Client Runner**: OpenCode CLI (`opencode`)
 **Local LLM Provider**: Ollama Daemon (`http://localhost:11434`)
 **Tested Model**: `qwythos-9b`

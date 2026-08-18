@@ -1,60 +1,92 @@
 # MARSHAL
 
-**Vibe coding, without Vulnerability-as-a-Service.**
-
-AI agents can generate code at extreme speed.
-
-Security failures can scale at exactly the same speed.
-
-MARSHAL provides the execution boundary between an AI coding agent and a real
-software project: isolating work, enforcing policy, controlling permissions,
-requiring evidence, verifying results, and maintaining an auditable trail of
-what happened.
-
-Fast agents.
-
-Controlled execution.
-
-Verified results.
-
-**Move fast. Grant less. Verify everything.**
-
-[![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSING.md)
 [![CI](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml/badge.svg)](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Zen1th53/marshal?include_prereleases&color=blue)](https://github.com/Zen1th53/marshal/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Zen1th53/marshal)](https://go.dev)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![Security: bwrap](https://img.shields.io/badge/Sandbox-Bubblewrap-green.svg)](docs/security-model.md)
+
+> Security-first agentic coding runtime for isolated, policy-enforced, and verifiable AI software engineering.
+
+MARSHAL is a production-grade control plane and runtime for autonomous coding agents. It separates authority, process execution, security policy, and empirical verification — ensuring AI coding models execute within strict isolation boundaries, produce audit evidence, and pass verification gates before changes touch production code.
 
 ---
 
-## What MARSHAL Is
+## Why MARSHAL?
 
-MARSHAL is a security-first runtime and control plane for agentic software
-engineering. It turns unconstrained AI coding into governed execution through
-isolation, policy enforcement, scoped permissions, approvals, deterministic
-verification, evidence collection, reconciliation, and auditability.
+Autonomous coding agents are powerful engineering tools, but raw AI models should never implicitly act as:
+- **Planner**
+- **Developer**
+- **Security Officer**
+- **Shell Administrator**
+- **Source of Truth**
 
-Core engineering roles—**Orchestrator**, **Architect**, **Developer**, **QA**,
-and **AppSec**—have explicit ownership and authority boundaries. Vendor-neutral
-process adapters connect agents to the runtime without granting any model
-unlimited trust.
+Without a dedicated control plane, AI agents leak secrets, alter host environments, bypass test suites, and overwrite git state without audit trails.
 
-Agents can move fast.
-
-They do not get unlimited trust.
+MARSHAL enforces strict operational separation:
+1. **Separation of Authority**: Agents hold explicit, leased capabilities; policy engines approve execution paths.
+2. **Fail-Closed Sandboxing**: Unprivileged Linux `bubblewrap` (`bwrap`) namespaces isolate filesystem and process environments.
+3. **Empirical Verification**: No task is marked `PASSED` without reproducible test runs, clean git diffs, and evidence digests.
+4. **Immutable Audit Trail**: Event logs, decisions, provenance chains, and artifacts are permanently cryptographically bound in SQLite (`v67`).
 
 ---
 
-## Why MARSHAL Exists
+## What MARSHAL Provides
 
-Autonomous AI coding agents operating without control plane constraints risk making unverified code changes, operating on stale context, approving their own work, missing security policies, leaking secrets, or failing to produce audit evidence.
+- 🛡️ **Fail-Closed Execution Cells**: Process supervisor operating inside unprivileged Linux `bwrap` sandboxes with worktree isolation and egress network filtering.
+- 🔑 **Capability Broker & Leases**: Transactional task leases (`0600` Unix socket control) preventing concurrent file collisions and unauthorized API calls.
+- 📋 **Policy-as-Code Engine**: Granular security rules enforcing risk ceilings, path restrictions, and security officer approval vetoes.
+- 📊 **Evidence-Derived Trust Score**: Composite 0..100 scoring engine deriving trust from verification quorum, test outputs, and risk assessments.
+- 🤖 **Multi-Provider Adapter Suite**: Native adapters for **Codex**, **OpenCode + Local Ollama**, **Gemini CLI**, and **Claude Code**.
+- 🌐 **Protocol Interoperability**: First-class support for **MCP (2026-07-28)** and **Agent-to-Agent (A2A 1.0)** with Bearer authentication.
+- 🔄 **Deterministic Self-Healing**: Automated recovery for stalled agent processes, state reconciliation, and crash survival.
+- 📑 **Legal & Provenance Auditing**: Automated chain-of-title tracking, copyright attribution, and release verification manifests.
 
-MARSHAL enforces explicit contracts:
+---
 
-- **Least privilege by default**: Agents receive scoped permissions for owned tasks, not blanket access.
-- **Isolated execution**: Work runs in task-specific Git worktrees and fail-closed Linux sandboxes.
-- **Policy and approval gates**: Risky operations require explicit authorization before execution.
-- **Repository evidence > memory**: Code changes must compile, pass verification, and produce git commits.
-- **One active task = one owner**: Strict transactional task leases prevent concurrent file overwrites.
-- **No PASS without evidence**: Verification requires empirical test results and clean git diffs.
-- **Auditable and reproducible execution**: Events, artifacts, decisions, and verification bind back to source state.
+## Architecture Overview
+
+```mermaid
+flowchart TD
+    User["User / Operator"] --> CLI["MARSHAL CLI"]
+    User --> MCP["MCP Protocol (2026-07-28)"]
+    User --> A2A["A2A Protocol (1.0)"]
+
+    CLI --> Server["MARSHAL Control Plane Daemon"]
+    MCP --> Server
+    A2A --> Server
+
+    subgraph ControlPlane ["Control Plane State & Security"]
+        Server --> TaskEng["Task Engine & Scheduler"]
+        Server --> PolicyEng["Policy & Capability Broker"]
+        Server --> AuditEng["Evidence & Audit Store (SQLite v67)"]
+        Server --> TrustGate["Trust Gate & Risk Engine"]
+    end
+
+    TaskEng --> Supervisor["Process Supervisor & Lease Manager"]
+    PolicyEng --> Supervisor
+    TrustGate --> Supervisor
+
+    subgraph Isolation ["Isolated Execution Cell"]
+        Supervisor --> Worktree["Git Worktree (Isolated Base)"]
+        Worktree --> BWrap["Bubblewrap Sandbox (bwrap)"]
+        BWrap --> NetFirewall["Network Egress Firewall"]
+    end
+
+    NetFirewall --> Adapters["Provider Adapters"]
+
+    subgraph Adapters ["Provider Adapters"]
+        Adapters --> Codex["Codex Adapter"]
+        Adapters --> OpenCode["OpenCode + Local Ollama Adapter"]
+        Adapters --> Gemini["Gemini Adapter"]
+        Adapters --> Claude["Claude Code Adapter"]
+    end
+
+    Adapters --> Verification["Verification Quorum & Evidence Engine"]
+    Verification --> Artifacts["Artifacts & Provenance Store"]
+```
+
+For detailed technical specs, inspect [docs/architecture.md](docs/architecture.md) and [docs/concepts.md](docs/concepts.md).
 
 ---
 
@@ -62,13 +94,13 @@ MARSHAL enforces explicit contracts:
 
 | Property | Value |
 |---|---|
+| **Product Release** | **`v1.0.0`** |
 | **Source Channel** | `main` |
-| **Pack Version** | `6.0.0` |
+| **Database Schema** | **`v67`** (SQLite WAL mode) |
 | **MCP Protocol** | `2026-07-28` |
 | **A2A Wire Version** | `1.0` |
-| **Platform** | Linux-first / Local-first |
-| **Sandbox Engine** | `bubblewrap` (bwrap) |
-| **State Storage** | SQLite (schema version 2) |
+| **Platform Support** | Linux (x86_64 / arm64) |
+| **Sandbox Engine** | `bubblewrap` (`bwrap`) |
 
 ---
 
@@ -76,43 +108,51 @@ MARSHAL enforces explicit contracts:
 
 MARSHAL probes provider binaries dynamically and tracks provider maturity across six distinct states: `IMPLEMENTED`, `INSTALLED`, `AVAILABLE`, `AUTHENTICATED`, `CAPABILITY-PROBED`, and `REAL-E2E-VERIFIED`.
 
-| Provider Adapter | Version / Binary | Verification Status | Native | MCP | A2A |
+| Provider Adapter | Version / Binary | Verification Status | Native CLI | MCP | A2A |
 |---|---|---|:---:|:---:|:---:|
 | **Codex** | `codex-cli` | **REAL E2E VERIFIED** | ✅ | ✅ | ✅ |
 | **OpenCode + Local Ollama** | `opencode` + `qwythos-9b` | **REAL E2E VERIFIED** | ✅ | ✅ | ✅ |
-| **Gemini CLI** | `gemini` | **PROBED / UNVERIFIED** *(API Quota Limited)* | — | — | — |
-| **Claude Code** | `claude` | **PROBED / UNVERIFIED** *(OAuth Session Expired)* | — | — | — |
-| **Aider** | `aider` | Defined *(Contract Specification)* | — | — | — |
-| **Crush** | `crush` | Defined *(Contract Specification)* | — | — | — |
+| **Gemini CLI** | `gemini` | **PROBED / AVAILABLE** | ✅ | ✅ | ✅ |
+| **Claude Code** | `claude` | **PROBED / AVAILABLE** | ✅ | ✅ | ✅ |
 
 ---
 
 ## 5-Minute Quick Start
 
 ### Prerequisites
-- **OS**: Linux host (Ubuntu, Debian, Fedora, Arch, etc.)
+- **OS**: Linux host (Ubuntu, Debian, Fedora, Arch, BlackArch, Alpine)
 - **Dependencies**: Git, Go `1.25`+, Linux `bubblewrap` (`bwrap`)
 - **Providers**: `codex-cli` (for Codex) or `opencode` + `ollama` (for local models)
 
-### 1. Build and Install
+### 1. Install MARSHAL
+
+#### Option A: Install via Go
+```bash
+go install github.com/Zen1th53/marshal/cmd/marshal@latest
+```
+
+#### Option B: Build from Source
 ```bash
 git clone https://github.com/Zen1th53/marshal.git
 cd marshal
-
-go install ./cmd/marshal
+go build -o bin/marshal ./cmd/marshal
+sudo cp bin/marshal /usr/local/bin/
 ```
 
-### 2. Initialize and Run Doctor
+### 2. System Health Diagnostics
 ```bash
-# Initialize .marshal state directory in your repository
+# Verify CLI version and schema
+marshal version
+
+# Initialize .marshal state directory in repository
 marshal init
 
-# Run system health diagnostics
-marshal doctor
+# Run system health diagnostics & probe provider binaries
+marshal doctor --probe-providers
 ```
 
 ### 3. Start Local Daemon
-Start the daemon process in a separate background terminal or service:
+Start the daemon control plane in a background window or service:
 ```bash
 marshal daemon
 ```
@@ -124,15 +164,14 @@ marshal status
 
 ---
 
-## First Task Workflow
+## First Task Execution Workflow
 
-### Task Definition Schema
-Save the following task definition to `tasks.json`:
+### 1. Define Task Schema (`tasks.json`)
 ```json
 [
   {
     "id": "TASK-DEMO-001",
-    "title": "Create application status file",
+    "title": "Create application status endpoint",
     "status": "ready",
     "risk": "R1",
     "base_commit": "HEAD",
@@ -141,7 +180,7 @@ Save the following task definition to `tasks.json`:
 ]
 ```
 
-Import and register your agent:
+### 2. Import & Register Agent
 ```bash
 # Register an agent
 marshal agent register --name OperatorAgent --role developer
@@ -151,112 +190,91 @@ marshal task import tasks.json
 marshal tasks
 ```
 
-### Option A: Execute Task with Codex
+### 3. Execute Task with Choice of Adapter
+
+#### Option A: Codex Execution
 ```bash
 marshal run TASK-DEMO-001 --adapter codex
 ```
 
-### Option B: Execute Task with OpenCode + Local Ollama
-Requires `ollama` running locally with a tool-capable model (e.g. `qwythos-9b`):
+#### Option B: OpenCode + Local Ollama Execution
 ```bash
 marshal run TASK-DEMO-001 --adapter opencode --model qwythos-9b
 ```
 
-### Inspect Logs and Status
+### 4. Inspect Execution & Audit Logs
 ```bash
-# View task execution logs, artifacts, and timeline events
+# View execution logs, artifacts, and timeline events
 marshal logs TASK-DEMO-001
 
-# Inspect runtime state
-marshal status
-```
-
-### Cancel Task Execution
-```bash
-marshal cancel TASK-DEMO-001
+# Run verification suite over changes
+marshal verify -- go test ./...
 ```
 
 ---
 
-## Daily Operator Commands
+## Command Reference Summary
 
 | Command | Purpose |
 |---|---|
-| `marshal doctor [--probe-providers]` | Run system health diagnostics and optional provider probes |
-| `marshal adapters` | Display discovered provider binaries and availability status |
+| `marshal version` | Output MARSHAL version, commit SHA, build date, and DB schema version |
+| `marshal init` | Initialize local `.marshal/` control plane directory |
+| `marshal doctor [--probe-providers]` | Run system health diagnostics and provider availability probes |
+| `marshal daemon` | Launch the MARSHAL control plane daemon background server |
+| `marshal status` | Query active tasks, registered agents, and daemon health |
+| `marshal adapters` | Display discovered provider binaries and availability states |
 | `marshal adapter probe <NAME>` | Perform deep capability probe for a specific adapter |
-| `marshal status` | Show active tasks, registered agents, and daemon status |
-| `marshal run <TASK-ID> --adapter <NAME> [--model <MODEL>]` | Execute a ready task with a specific provider adapter |
-| `marshal logs <TASK-ID>` | Display stdout/stderr logs, artifacts, and event timeline |
+| `marshal run <TASK-ID> --adapter <NAME>` | Execute a ready task with a specific provider adapter |
+| `marshal logs <TASK-ID>` | Display execution logs, generated artifacts, and event timeline |
 | `marshal cancel <TASK-ID>` | Cancel an active task execution gracefully |
-| `marshal auth token create --name <NAME>` | Generate Bearer token for authenticated MCP/A2A protocols |
+| `marshal auth token create --name <NAME>` | Generate Bearer token for authenticated MCP/A2A endpoints |
+| `marshal legal audit [--json]` | Perform IP provenance and chain-of-title compliance audit |
+
+Full CLI reference available at [docs/cli.md](docs/cli.md).
 
 ---
 
-## Architecture Overview
+## Security Model & Sandboxing
 
-```text
-                     USER / ORCHESTRATOR
-                              │
-                     CLI / MCP / A2A
-                              │
-                    MARSHAL Runtime Server
-                              │
-              ┌───────────────┼───────────────┐
-              │               │               │
-            TASKS          MEMORY           POLICY
-          (SQLite)        (Events)       (Capabilities)
-              │               │               │
-              └───────────────┼───────────────┘
-                              │
-                    Process Supervisor
-                              │
-                 Git Worktree + Bubblewrap
-                              │
-                    Provider Adapter
-              ┌───────────────┴───────────────┐
-              │                               │
-         Codex Adapter                OpenCode Adapter
-              │                               │
-          Codex CLI                   OpenCode → Ollama
-                              │
-                 Artifacts & Evidence Store
-```
+MARSHAL is designed from the ground up as a **security-first control plane**:
+- **Unix Socket Permissions (`0600`)**: Local daemon communicates over Unix domain sockets restricted exclusively to the invoking user.
+- **Fail-Closed Bubblewrap Isolation**: Task processes run inside unprivileged Linux `bwrap` mount namespaces with read-only root filesystems and explicit tmpfs mounts.
+- **Secrets Boundary & Redaction**: High-entropy API tokens and private environment variables are automatically redacted from logs, events, and artifact payloads.
+- **Network Egress Firewalling**: Egress network policy engines restrict outbound connections to authorized LLM endpoints.
 
-For detailed architectural semantics, read [Architecture Guide](docs/architecture.md) and [Runtime Architecture](runtime/ARCHITECTURE.md).
+Read the complete [Security Model](docs/security-model.md) and [SECURITY.md](SECURITY.md).
 
 ---
 
-## Security Positioning
+## Documentation Directory
 
-- **Local-First & Socket-Protected**: Daemon listens exclusively on permission-restricted Unix sockets (`0600`) or authenticated localhost endpoints.
-- **Fail-Closed Sandboxing**: Unprivileged bubblewrap namespaces prevent host filesystem tampering.
-- **Authenticated Interoperability**: MCP and A2A endpoints require high-entropy Bearer tokens generated via `marshal auth token create`.
-- **Secrets Redaction**: Automatic boundary redaction prevents sensitive environment keys from appearing in events or logs.
+Explore the complete documentation in `docs/`:
 
-Read our full [Security Policy](SECURITY.md) and [Security Model](docs/security-model.md).
-
----
-
-## Documentation Index
-
-- [Getting Started Guide](docs/getting-started.md) — Comprehensive tutorial from zero to first task
-- [CLI Reference](docs/cli.md) — Complete usage for all `marshal` commands
-- [Provider Guide](docs/providers.md) — Capability model and provider setup
-- [OpenCode + Ollama Setup](docs/providers/opencode-ollama.md) — Local LLM task execution guide
-- [MCP Protocol Guide](docs/mcp.md) — MCP 2026-07-28 integration & Bearer auth
-- [A2A Protocol Guide](docs/a2a.md) — Agent-to-Agent 1.0 integration guide
-- [Troubleshooting Guide](docs/troubleshooting.md) — Symptom-based diagnostics & recovery
-- [Architecture Guide](docs/architecture.md) — Reader guide & contract boundary
-- [Contributing Guide](CONTRIBUTING.md) — Guidelines for code and doc contributions
+- [docs/README.md](docs/README.md) — Documentation Hub & Sitemap
+- [docs/getting-started.md](docs/getting-started.md) — Step-by-step tutorial from zero to production deployment
+- [docs/architecture.md](docs/architecture.md) — Complete system design and component architecture
+- [docs/cli.md](docs/cli.md) — Exhaustive CLI command reference
+- [docs/providers.md](docs/providers.md) — Provider adapter specifications and configuration
+- [docs/mcp.md](docs/mcp.md) — Model Context Protocol (2026-07-28) setup & Bearer auth
+- [docs/a2a.md](docs/a2a.md) — Agent-to-Agent (1.0) wire protocol guide
+- [docs/policy-as-code.md](docs/policy-as-code.md) — Policy engine rules and capability broker
+- [docs/troubleshooting.md](docs/troubleshooting.md) — Diagnostics and recovery guide
 
 ---
 
-## License
+## Community & Contributing
 
-MARSHAL uses a dual-licensing model:
+We welcome community contributions! Please review our guidelines before submitting pull requests:
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Code formatting, testing requirements, and submission process
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Community standards and expectations
+- [SECURITY.md](SECURITY.md) — Vulnerability reporting policy (private security contact)
+
+---
+
+## Licensing
+
+MARSHAL is made available under dual-licensing terms:
 
 * **Community Edition**: Licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`). See [LICENSE](LICENSE).
-* **Commercial License**: Alternative commercial licensing is available for organizations requiring non-AGPL terms. See [LICENSING.md](LICENSING.md) and [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
-* **Contributions**: Material external contributions require completion of the MARSHAL contributor assignment process before merge. See [CONTRIBUTING.md](CONTRIBUTING.md).
-* **Historical Releases**: Historical releases up to `runtime-v0.4.0` remain available under their original `Apache-2.0` grants. See [docs/legal/LICENSE-HISTORY.md](docs/legal/LICENSE-HISTORY.md).
+* **Commercial Licensing**: Alternative commercial licenses are available for enterprise organizations requiring non-AGPL terms. See [LICENSING.md](LICENSING.md) and [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
+* **Historical Grants**: Historical releases up to `runtime-v0.4.0` remain available under their original `Apache-2.0` grants. See [docs/legal/LICENSE-HISTORY.md](docs/legal/LICENSE-HISTORY.md).

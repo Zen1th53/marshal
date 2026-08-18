@@ -1,0 +1,117 @@
+name: Release Engineering
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-release:
+    name: Build & Publish Release Artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Determine Version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG_NAME="${{ github.event.inputs.version }}"
+          else
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION_NUM="${TAG_NAME#v}"
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION_NUM}" >> $GITHUB_OUTPUT
+          echo "commit=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "build_date=$(date -u +%Y-%m-%d)" >> $GITHUB_OUTPUT
+
+      - name: Run Release Gate Tests
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Build Linux amd64 and arm64 binaries
+        run: |
+          mkdir -p dist/
+          VERSION="${{ steps.version.outputs.tag_name }}"
+          COMMIT="${{ steps.version.outputs.commit }}"
+          BUILD_DATE="${{ steps.version.outputs.build_date }}"
+          LDFLAGS="-X 'github.com/Zen1th53/marshal/internal/cli.Version=${VERSION}' -X 'github.com/Zen1th53/marshal/internal/cli.Commit=${COMMIT}' -X 'github.com/Zen1th53/marshal/internal/cli.BuildDate=${BUILD_DATE}'"
+
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -o dist/marshal ./cmd/marshal
+          tar -czvf "dist/marshal_${{ steps.version.outputs.version }}_linux_amd64.tar.gz" -C dist marshal -C ../ LICENSE README.md
+          rm dist/marshal
+
+          # Linux arm64
+          GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -o dist/marshal ./cmd/marshal
+          tar -czvf "dist/marshal_${{ steps.version.outputs.version }}_linux_arm64.tar.gz" -C dist marshal -C ../ LICENSE README.md
+          rm dist/marshal
+
+      - name: Generate SHA-256 Checksums
+        run: |
+          cd dist
+          sha256sum marshal_*.tar.gz > checksums.txt
+          cat checksums.txt
+
+      - name: Generate Software Bill of Materials (SBOM)
+        run: |
+          cat << 'SBOM_EOF' > dist/sbom.json
+          {
+            "spdxVersion": "SPDX-2.3",
+            "dataLicense": "CC0-1.0",
+            "name": "MARSHAL Release ${{ steps.version.outputs.tag_name }}",
+            "documentNamespace": "https://github.com/Zen1th53/marshal/releases/tag/${{ steps.version.outputs.tag_name }}/sbom",
+            "creationInfo": {
+              "creators": ["Tool: MARSHAL Release Pipeline"],
+              "created": "${{ steps.version.outputs.build_date }}T00:00:00Z"
+            },
+            "packages": [
+              {
+                "name": "marshal",
+                "versionInfo": "${{ steps.version.outputs.version }}",
+                "downloadLocation": "https://github.com/Zen1th53/marshal",
+                "licenseConcluded": "AGPL-3.0-only"
+              }
+            ]
+          }
+          SBOM_EOF
+
+      - name: Generate Artifact Attestation
+        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebaf3290a2f21376 # v2.2.3
+        with:
+          subject-path: 'dist/marshal_*.tar.gz'
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@c95fe0f26b7776fe17d071741544a0344d5c1417 # v2.2.1
+        with:
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: "MARSHAL ${{ steps.version.outputs.tag_name }} — Release Candidate 1"
+          body_path: CHANGELOG.md
+          files: |
+            dist/marshal_${{ steps.version.outputs.version }}_linux_amd64.tar.gz
+            dist/marshal_${{ steps.version.outputs.version }}_linux_arm64.tar.gz
+            dist/checksums.txt
+            dist/sbom.json

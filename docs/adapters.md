@@ -13,7 +13,7 @@ The repository defines contracts for:
 - Aider
 - Crush
 
-Runtime `v0.4.0` implements and verifies Codex and OpenCode + local Ollama execution adapters. The other adapter directories contain integration contracts, templates, and probe guidance.
+Runtime `v1.0.0` implements and verifies Codex and OpenCode + local Ollama execution adapters. The other adapter directories contain integration contracts, templates, and probe guidance.
 
 Capability status is explicit:
 

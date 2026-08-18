@@ -1,0 +1,8 @@
+{
+  "agent": {
+    "name": "MARSHAL Control Plane",
+    "version": "1.0.0",
+    "protocols": ["a2a/1.0", "mcp/2026-07-28"],
+    "capabilities": ["task.claim", "task.run", "verify", "audit"]
+  }
+}
