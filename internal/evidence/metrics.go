@@ -33,6 +33,7 @@ const (
 	MetricOperationSecret            MetricOperation = "secret"
 	MetricOperationRisk              MetricOperation = "risk"
 	MetricOperationNetworkEgress     MetricOperation = "network_egress"
+	MetricOperationTrustContent      MetricOperation = "trust_content"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -55,7 +56,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
 	MetricOperationPolicyTest: {}, MetricOperationCapability: {}, MetricOperationCell: {},
 	MetricOperationAuthority: {}, MetricOperationGate: {}, MetricOperationSecret: {}, MetricOperationRisk: {},
-	MetricOperationNetworkEgress: {},
+	MetricOperationNetworkEgress: {}, MetricOperationTrustContent: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
@@ -81,6 +82,7 @@ var metricReasons = map[string]struct{}{
 	"RISK_DESCRIPTOR_INVALID": {}, "RISK_UNKNOWN_MUTATION": {}, "RISK_DOWNGRADE_FORBIDDEN": {}, "RISK_AUTHORIZATION_UNAVAILABLE": {}, "RISK_AUTHORIZATION_DENIED": {},
 	"RISK_ERROR": {},
 	"NET_ALLOWED": {}, "NET_DENIED": {}, "NET_RULE_INVALID": {}, "NET_PROTOCOL_DENIED": {}, "NET_REDIRECT_DENIED": {}, "NET_ENFORCEMENT_UNAVAILABLE": {},
+	"TRUST_ZONE_INVALID": {}, "TRUST_UPGRADE_FORBIDDEN": {}, "TRUST_SEGMENT_TOO_LARGE": {}, "TRUST_RENDER_FAILED": {},
 }
 
 // MetricsSnapshot is a detached, read-only projection of recorder state.

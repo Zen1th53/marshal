@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 24
+const LatestSchemaVersion = 25
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -682,6 +682,29 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 24: %w", err)
 		}
 		version = 24
+	}
+	if version < 25 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE trusted_content_segments (
+				segment_id TEXT PRIMARY KEY,
+				idempotency_key TEXT NOT NULL UNIQUE,
+				source_id TEXT NOT NULL,
+				zone TEXT NOT NULL CHECK(zone IN ('system','owner_policy','project_policy','trusted_tool','repository_data','web_data','untrusted_content')),
+				digest TEXT NOT NULL,
+				content_ref TEXT NOT NULL,
+				state TEXT NOT NULL CHECK(state IN ('ingested','zoned','rendered')),
+				created_at TEXT NOT NULL,
+				CHECK(digest = content_ref)
+			);
+			CREATE INDEX trusted_content_segments_by_source ON trusted_content_segments(source_id, created_at, segment_id);
+			CREATE INDEX trusted_content_segments_by_state ON trusted_content_segments(state, created_at, segment_id);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 25: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(25, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 25: %w", err)
+		}
+		version = 25
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
