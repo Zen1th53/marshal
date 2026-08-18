@@ -3,10 +3,10 @@ package evolution
 type Code string
 
 const (
-	CodeBudgetExceeded   Code = "EVOLVE_BUDGET_EXCEEDED"
-	CodeMutationInvalid  Code = "EVOLVE_MUTATION_INVALID"
-	CodeArchiveCorrupt   Code = "EVOLVE_ARCHIVE_CORRUPT"
-	CodeProtectedTarget  Code = "EVOLVE_PROTECTED_TARGET"
+	CodeBudgetExceeded  Code = "EVOLVE_BUDGET_EXCEEDED"
+	CodeMutationInvalid Code = "EVOLVE_MUTATION_INVALID"
+	CodeArchiveCorrupt  Code = "EVOLVE_ARCHIVE_CORRUPT"
+	CodeProtectedTarget Code = "EVOLVE_PROTECTED_TARGET"
 )
 
 type Error struct {

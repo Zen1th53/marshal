@@ -3,10 +3,10 @@ package recovery
 type Code string
 
 const (
-	CodeRetryExhausted     Code = "RECOVERY_RETRY_EXHAUSTED"
+	CodeRetryExhausted    Code = "RECOVERY_RETRY_EXHAUSTED"
 	CodeNoValidCheckpoint Code = "RECOVERY_NO_VALID_CHECKPOINT"
-	CodeConcurrentOwner    Code = "RECOVERY_CONCURRENT_OWNER"
-	CodePolicyBlocked      Code = "RECOVERY_POLICY_BLOCKED"
+	CodeConcurrentOwner   Code = "RECOVERY_CONCURRENT_OWNER"
+	CodePolicyBlocked     Code = "RECOVERY_POLICY_BLOCKED"
 )
 
 type Error struct {
@@ -23,10 +23,10 @@ func (e *Error) Is(target error) bool {
 }
 
 var (
-	ErrRetryExhausted     = &Error{Code: CodeRetryExhausted, Message: "recovery retry count exhausted"}
+	ErrRetryExhausted    = &Error{Code: CodeRetryExhausted, Message: "recovery retry count exhausted"}
 	ErrNoValidCheckpoint = &Error{Code: CodeNoValidCheckpoint, Message: "no valid checkpoint found for recovery"}
-	ErrConcurrentOwner    = &Error{Code: CodeConcurrentOwner, Message: "concurrent owner active during recovery attempt"}
-	ErrPolicyBlocked      = &Error{Code: CodePolicyBlocked, Message: "recovery policy blocked auto recovery"}
+	ErrConcurrentOwner   = &Error{Code: CodeConcurrentOwner, Message: "concurrent owner active during recovery attempt"}
+	ErrPolicyBlocked     = &Error{Code: CodePolicyBlocked, Message: "recovery policy blocked auto recovery"}
 )
 
 type Plan struct {

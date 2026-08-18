@@ -40,24 +40,24 @@ var (
 )
 
 type ChangeRecord struct {
-	ChangeID      string    
-	TaskID        string    
-	AgentID       string    
-	Provider      string    
-	ContextDigest string    
-	PatchDigest   string    
-	CommitSHA     string    
-	ToolCallIDs   []string  
-	EvidenceIDs   []string  
-	ApprovalIDs   []string  
-	Sealed        bool      
-	CreatedAt     time.Time 
-	SealedAt      time.Time 
+	ChangeID      string
+	TaskID        string
+	AgentID       string
+	Provider      string
+	ContextDigest string
+	PatchDigest   string
+	CommitSHA     string
+	ToolCallIDs   []string
+	EvidenceIDs   []string
+	ApprovalIDs   []string
+	Sealed        bool
+	CreatedAt     time.Time
+	SealedAt      time.Time
 }
 
 type ChainCustodyView struct {
-	Record    ChangeRecord 
-	ChainHash string       
+	Record    ChangeRecord
+	ChainHash string
 }
 
 func CalculateDigest(input string) string {

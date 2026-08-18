@@ -113,7 +113,7 @@
 
 **Files:**
 - Create: `.github/workflows/release.yml`
-- Create: `release/RELEASE_NOTES_v1.0.0-rc.1.md`
+- Create: `release/RELEASE_NOTES_1.0.0-rc.1.md`
 - Modify: `.gitignore`
 
 **Interfaces:**
@@ -144,4 +144,3 @@
 - [ ] Clone the public tag into a temporary directory and run the documented install, doctor, daemon/status, policy-test, and task smoke flows.
 - [ ] Download a published archive, verify `checksums.txt`, inspect its SBOM/build metadata, and run its binary.
 - [ ] Update repository description/topics/settings and record any UI-only limitation.
-

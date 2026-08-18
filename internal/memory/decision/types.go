@@ -24,10 +24,10 @@ func (s Status) Valid() bool {
 type Code string
 
 const (
-	CodeInvalidStatus        Code = "DECISION_INVALID_STATUS"
-	CodeAuthorityRequired    Code = "DECISION_AUTHORITY_REQUIRED"
-	CodeAlreadyFinal         Code = "DECISION_ALREADY_FINAL"
-	CodeSupersessionInvalid  Code = "DECISION_SUPERSESSION_INVALID"
+	CodeInvalidStatus       Code = "DECISION_INVALID_STATUS"
+	CodeAuthorityRequired   Code = "DECISION_AUTHORITY_REQUIRED"
+	CodeAlreadyFinal        Code = "DECISION_ALREADY_FINAL"
+	CodeSupersessionInvalid Code = "DECISION_SUPERSESSION_INVALID"
 )
 
 type Error struct {
