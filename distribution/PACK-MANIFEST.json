@@ -1065,6 +1065,11 @@
       "bytes": 8896
     },
     {
+      "path": "internal/app/gate_runtime_a06_test.go",
+      "sha256": "23c9f74b6a1b7fb85ce0cbf2d765771261cbf034f2159beeb2cec9976d3b7b19",
+      "bytes": 2782
+    },
+    {
       "path": "internal/app/policy_metrics_a09_test.go",
       "sha256": "98e56673bcb42b9bd7eb2e42863623284a961dda21444c37d29925dc32b27ed4",
       "bytes": 1693
@@ -1091,8 +1096,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "0e5617817b3833b52806756c70e252a82483d69dc684c08a193252fcc66db436",
-      "bytes": 27164
+      "sha256": "f0968763f899b866f898ee2b1c9ede576a17303a80c87db8623ea7af4b68dc38",
+      "bytes": 27641
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -2023,6 +2028,11 @@
       "path": "internal/store/gate_decisions.go",
       "sha256": "377fb0b2816d7893280451a3eca2d2d55c088bc8a53c1385a629fff8ec639592",
       "bytes": 5681
+    },
+    {
+      "path": "internal/store/gate_events_a05_test.go",
+      "sha256": "6fc705c13158d2a3e38454628975a3cad8f459ce5503438a467100cb5d9b8ddc",
+      "bytes": 2816
     },
     {
       "path": "internal/store/gate_persistence_a02_test.go",
