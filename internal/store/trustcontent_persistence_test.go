@@ -76,6 +76,8 @@ func TestT23MigrationUpgradesSchema26(t *testing.T) {
 		"DROP TABLE resource_accounting",
 		"DROP INDEX decision_records_by_task",
 		"DROP TABLE decision_records",
+		"DROP INDEX failure_memory_records_by_signature",
+		"DROP TABLE failure_memory_records",
 		"DROP INDEX verification_attestations_by_change",
 		"DROP INDEX verification_attestations_by_principal",
 		"DROP TABLE verification_attestations",
