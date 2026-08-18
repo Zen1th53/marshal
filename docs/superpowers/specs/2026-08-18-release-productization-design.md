@@ -88,4 +88,3 @@ if the API and CLI confirm it.
 - Bubblewrap enforcement depends on Linux kernel and distribution support.
 - GitHub-hosted provenance establishes build origin, not independently verified
   bit-for-bit reproducibility.
-
