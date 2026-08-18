@@ -2590,6 +2590,11 @@
       "bytes": 6636
     },
     {
+      "path": "internal/verify/quorum/adversarial_test.go",
+      "sha256": "555edd6f20e21d733886b68c119dc52625a13a0c8ee7ab8d043d435ca8edf6d9",
+      "bytes": 2738
+    },
+    {
       "path": "internal/verify/quorum/engine.go",
       "sha256": "bbc8d14820403a78908eedeb3e50e7239099bcfd22947dc70e05eb814aac5fe3",
       "bytes": 5668
