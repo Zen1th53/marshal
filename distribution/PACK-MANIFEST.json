@@ -2635,6 +2635,11 @@
       "bytes": 2085
     },
     {
+      "path": "internal/store/simulator_persistence_a02_test.go",
+      "sha256": "3926900e7e719edd444cfbae5c3e7b2e668b6548e0d8aa705d29da2fcc5f36d9",
+      "bytes": 235
+    },
+    {
       "path": "internal/store/sqlite.go",
       "sha256": "11135e17198eafc301c484039adc7db2a446d72619a618895a18108925ce2849",
       "bytes": 3159
