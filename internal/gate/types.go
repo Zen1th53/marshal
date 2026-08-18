@@ -76,10 +76,12 @@ var (
 )
 
 type CheckResult struct {
-	CheckID    string      `json:"check_id"`
-	Status     CheckStatus `json:"status"`
-	EvidenceID string      `json:"evidence_id,omitempty"`
-	Reason     ErrorCode   `json:"reason"`
+	CheckID           string      `json:"check_id"`
+	Status            CheckStatus `json:"status"`
+	EvidenceID        string      `json:"evidence_id,omitempty"`
+	Reason            ErrorCode   `json:"reason"`
+	VerifierID        string      `json:"verifier_id,omitempty"`
+	EvidenceExpiresAt *time.Time  `json:"evidence_expires_at,omitempty"`
 }
 
 type Decision struct {
