@@ -2470,6 +2470,11 @@
       "bytes": 8582
     },
     {
+      "path": "internal/store/trustcontent_concurrency_a08_test.go",
+      "sha256": "3764c35d60a22d281b1d7e9cd7c34ccc977714ce9313b5b6e2091b9fa932279c",
+      "bytes": 1702
+    },
+    {
       "path": "internal/store/trustcontent_persistence.go",
       "sha256": "6283f4e2f2f6a5530231b85736ba09781ec71406a7d5b32e20a96871d8c13cd5",
       "bytes": 4622
@@ -2478,6 +2483,11 @@
       "path": "internal/store/trustcontent_persistence_test.go",
       "sha256": "06ce37e0bd5aac494e5e5fbdcebc30b60c33878e1b30c2d5e760b8c37b2f214c",
       "bytes": 5010
+    },
+    {
+      "path": "internal/store/trustcontent_recovery_a08_test.go",
+      "sha256": "6ee002530de51a974b829c2796370b55244240d61d7ec2d1c05a8cc8115ae8d2",
+      "bytes": 1459
     },
     {
       "path": "internal/testutil/testgit/git.go",
