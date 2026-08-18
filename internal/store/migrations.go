@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 28
+const LatestSchemaVersion = 30
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -791,6 +791,52 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 28: %w", err)
 		}
 		version = 28
+	}
+	if version < 29 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE persistent_agent_memory (
+				entry_id TEXT PRIMARY KEY,
+				scope TEXT NOT NULL,
+				scope_id TEXT NOT NULL,
+				kind TEXT NOT NULL,
+				text TEXT NOT NULL,
+				confidence REAL NOT NULL DEFAULT 1.0,
+				source_evidence_ids TEXT NOT NULL DEFAULT '',
+				superseded_by TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			);
+			CREATE INDEX persistent_agent_memory_by_scope
+				ON persistent_agent_memory(scope, scope_id, created_at);
+			CREATE INDEX persistent_agent_memory_by_kind
+				ON persistent_agent_memory(kind, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 29: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(29, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 29: %w", err)
+		}
+		version = 29
+	}
+	if version < 30 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE code_ownership_leases (
+				lease_id TEXT PRIMARY KEY,
+				task_id TEXT NOT NULL,
+				agent_id TEXT NOT NULL,
+				targets_json TEXT NOT NULL,
+				expires_at TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX code_ownership_leases_by_task
+				ON code_ownership_leases(task_id, expires_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 30: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(30, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 30: %w", err)
+		}
+		version = 30
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

@@ -47,7 +47,9 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"trusted_content_segments",
 		"typed_handoffs",
 		"verification_attestations",
+		"code_ownership_leases",
 		"provenance_records",
+		"persistent_agent_memory",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
@@ -63,9 +65,14 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX persistent_agent_memory_by_kind",
+		"DROP INDEX persistent_agent_memory_by_scope",
+		"DROP TABLE persistent_agent_memory",
 		"DROP INDEX provenance_records_by_agent",
 		"DROP INDEX provenance_records_by_task",
 		"DROP TABLE provenance_records",
+		"DROP INDEX code_ownership_leases_by_task",
+		"DROP TABLE code_ownership_leases",
 		"DROP INDEX verification_attestations_by_change",
 		"DROP INDEX verification_attestations_by_principal",
 		"DROP TABLE verification_attestations",
@@ -145,9 +152,14 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX persistent_agent_memory_by_kind",
+		"DROP INDEX persistent_agent_memory_by_scope",
+		"DROP TABLE persistent_agent_memory",
 		"DROP INDEX provenance_records_by_agent",
 		"DROP INDEX provenance_records_by_task",
 		"DROP TABLE provenance_records",
+		"DROP INDEX code_ownership_leases_by_task",
+		"DROP TABLE code_ownership_leases",
 		"DROP INDEX verification_attestations_by_change",
 		"DROP INDEX verification_attestations_by_principal",
 		"DROP TABLE verification_attestations",
