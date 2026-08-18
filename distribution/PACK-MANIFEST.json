@@ -2046,8 +2046,8 @@
     },
     {
       "path": "internal/store/gate_decisions.go",
-      "sha256": "377fb0b2816d7893280451a3eca2d2d55c088bc8a53c1385a629fff8ec639592",
-      "bytes": 5681
+      "sha256": "59aac283dc8a0e6c707a9d123eac359dcb920b12b381b1d8f8b6522850086080",
+      "bytes": 6427
     },
     {
       "path": "internal/store/gate_events_a05_test.go",
@@ -2058,6 +2058,11 @@
       "path": "internal/store/gate_persistence_a02_test.go",
       "sha256": "90eca344e6695fb5dbea30b0062513d9a9fe3e7f7c0661fae65b1f8e1ae53197",
       "bytes": 1651
+    },
+    {
+      "path": "internal/store/gate_release_a10_test.go",
+      "sha256": "2d9b93ace50957ca68e66f72bbd872dcbc37793b3ee0c3243ca87f40a1008a91",
+      "bytes": 958
     },
     {
       "path": "internal/store/gate_state_a03_test.go",

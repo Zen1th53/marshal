@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -16,6 +17,8 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 )
+
+var ErrStaleGateDecision = errors.New("gate decision is stale")
 
 func (s *Store) PutGateDecision(ctx context.Context, decision gate.Decision) error {
 	if decision.State == "" {
@@ -79,6 +82,22 @@ func (s *Store) GetGateDecision(ctx context.Context, id string) (gate.Decision, 
 	decision.CreatedAt = parsed
 	if err := decision.Validate(); err != nil {
 		return gate.Decision{}, fmt.Errorf("%w: invalid durable gate decision", model.ErrInvalid)
+	}
+	return decision, nil
+}
+
+// GetGateDecisionForPolicy revalidates the immutable policy binding at the
+// privileged consumption boundary; a prior ALLOW is not ambient authority.
+func (s *Store) GetGateDecisionForPolicy(ctx context.Context, id string, current policy.PolicyDigest) (gate.Decision, error) {
+	if err := current.Validate(); err != nil {
+		return gate.Decision{}, fmt.Errorf("%w: current policy digest is invalid", model.ErrInvalid)
+	}
+	decision, err := s.GetGateDecision(ctx, id)
+	if err != nil {
+		return gate.Decision{}, err
+	}
+	if decision.PolicyDigest != current {
+		return gate.Decision{}, fmt.Errorf("%w: policy digest changed", ErrStaleGateDecision)
 	}
 	return decision, nil
 }
