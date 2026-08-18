@@ -935,6 +935,11 @@
       "bytes": 4814
     },
     {
+      "path": "docs/verification-quorum.md",
+      "sha256": "9d114f47ac6c9a4eaee504d07d72157a2379ca9493c466a95aca93d80da27a43",
+      "bytes": 1057
+    },
+    {
       "path": "go.mod",
       "sha256": "6753cba61b13575fd6b206be74b8e6cbd06e715b8504fd7cbb3a861e6693bde5",
       "bytes": 557
@@ -2603,6 +2608,11 @@
       "path": "internal/verify/quorum/adversarial_test.go",
       "sha256": "555edd6f20e21d733886b68c119dc52625a13a0c8ee7ab8d043d435ca8edf6d9",
       "bytes": 2738
+    },
+    {
+      "path": "internal/verify/quorum/benchmark_test.go",
+      "sha256": "8face994cda9d987b5d834992f02d7a163cfe45528bb711aae2068f957f4a39b",
+      "bytes": 1235
     },
     {
       "path": "internal/verify/quorum/engine.go",
