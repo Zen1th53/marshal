@@ -63,6 +63,9 @@ func TestT23MigrationUpgradesSchema26(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX typed_handoffs_by_sender",
+		"DROP INDEX typed_handoffs_by_task_status",
+		"DROP TABLE typed_handoffs",
 		"DROP INDEX trusted_content_segments_by_state",
 		"DROP INDEX trusted_content_segments_by_source",
 		"DROP TABLE trusted_content_segments",
