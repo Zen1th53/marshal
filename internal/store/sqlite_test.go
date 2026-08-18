@@ -47,6 +47,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"trusted_content_segments",
 		"typed_handoffs",
 		"verification_attestations",
+		"remote_worker_attestations",
 		"distributed_nodes",
 		"mcp_a2a_runtime_sessions",
 		"cross_model_reviews",
@@ -64,6 +65,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"reproducible_replay_runs",
 		"context_budget_decisions",
 		"conflict_predictions",
+		"remote_worker_attestations",
 		"distributed_nodes",
 		"mcp_a2a_runtime_sessions",
 		"cross_model_reviews",
@@ -107,6 +109,8 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS remote_worker_attestations_by_node",
+		"DROP TABLE IF EXISTS remote_worker_attestations",
 		"DROP INDEX IF EXISTS distributed_nodes_by_status",
 		"DROP TABLE IF EXISTS distributed_nodes",
 		"DROP INDEX IF EXISTS mcp_a2a_runtime_sessions_by_proto",
@@ -245,6 +249,8 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS remote_worker_attestations_by_node",
+		"DROP TABLE IF EXISTS remote_worker_attestations",
 		"DROP INDEX IF EXISTS distributed_nodes_by_status",
 		"DROP TABLE IF EXISTS distributed_nodes",
 		"DROP INDEX IF EXISTS mcp_a2a_runtime_sessions_by_proto",
