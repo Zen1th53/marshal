@@ -125,6 +125,8 @@ func TestRiskAssessmentMigrationFromSchema21(t *testing.T) {
 		"DROP TABLE compiled_contexts",
 		"DROP INDEX cascade_evaluations_by_change",
 		"DROP TABLE cascade_evaluations",
+		"DROP INDEX mcp_gateway_logs_by_task",
+		"DROP TABLE mcp_gateway_logs",
 		"DROP INDEX verification_attestations_by_change",
 		"DROP INDEX verification_attestations_by_principal",
 		"DROP TABLE verification_attestations",
