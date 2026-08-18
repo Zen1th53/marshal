@@ -1150,6 +1150,21 @@
       "bytes": 2594
     },
     {
+      "path": "internal/cell/errors.go",
+      "sha256": "19159e7e5b2ef60fce27e9d2ee07cba5e38df7cb9663e9865fe765cd968a0be5",
+      "bytes": 975
+    },
+    {
+      "path": "internal/cell/types.go",
+      "sha256": "10d9e226157656b83ca4a5743629537c455714a3bd10dd95bd5c1d4cca480a4d",
+      "bytes": 3180
+    },
+    {
+      "path": "internal/cell/types_test.go",
+      "sha256": "8206ae775e9710f67cc3b6875e6d6c4aeb5240cdeece28ef1f213aba139e0928",
+      "bytes": 2118
+    },
+    {
       "path": "internal/cli/cli.go",
       "sha256": "2ac2846afb2f65292ba75fff5da368e7b8d0c9ee8db86cdc69599678837aa263",
       "bytes": 23723
