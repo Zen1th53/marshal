@@ -3,8 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: read
@@ -15,59 +14,50 @@ concurrency:
 
 jobs:
   verify:
-    name: Runtime & Pack Verification
+    name: Build, test, and verify
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 25
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           persist-credentials: false
-
       - name: Set up Go
-        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
-          go-version-file: 'go.mod'
-
+          go-version-file: go.mod
+          cache: true
       - name: Set up Python
-        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.11'
-
-      - name: Install Python dependencies
+          python-version: "3.11"
+      - name: Install test dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install cryptography==49.0.0
-
-      - name: Install system dependencies
-        run: |
+          python -m pip install --disable-pip-version-check cryptography==49.0.0
           sudo apt-get update
           sudo apt-get install -y bubblewrap
-          bwrap --version
-
-      - name: Run Go tests and static analysis
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+      - name: Formatting
+        run: test -z "$(gofmt -l .)"
+      - name: Static analysis and build
         run: |
-          go test ./...
           go vet ./...
-
-      - name: Run Go test suite with race detector
+          go build ./...
+          govulncheck ./...
+      - name: Unit and race tests
         run: |
+          go test -count=1 ./...
           go test -race -count=1 ./...
-
-      - name: Validate pack and run Python test suites
+      - name: Pack and Python verification
         run: |
           python3 conformance/runner.py validate-pack
           python3 -m unittest discover -s conformance/tests -v
           python3 -m unittest discover -s tools/tests -v
           python3 -m unittest discover -s tools/tests_v6 -v
           python3 tools/release_verify.py . distribution/PACK-MANIFEST.json
-
-      - name: Validate diff whitespace
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git diff --check origin/${{ github.base_ref }}...HEAD
-          else
-            git diff --check HEAD~1...HEAD || true
-          fi
+      - name: Documentation links
+        run: python3 tools/check_markdown_links.py .
+      - name: Diff whitespace
+        if: github.event_name == 'pull_request'
+        run: git diff --check "origin/${{ github.base_ref }}...HEAD"

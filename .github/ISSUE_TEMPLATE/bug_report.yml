@@ -28,6 +28,16 @@ body:
       description: Runtime version, pack version, or Git commit.
     validations:
       required: true
+  - type: input
+    id: go_version
+    attributes:
+      label: Go version
+      description: Required for source builds; otherwise write not applicable.
+  - type: input
+    id: provider
+    attributes:
+      label: Provider adapter and state
+      description: Include adapter name and sanitized probe result, or not applicable.
   - type: textarea
     id: environment
     attributes:
