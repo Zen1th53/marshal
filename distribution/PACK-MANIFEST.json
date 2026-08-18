@@ -1475,6 +1475,11 @@
       "bytes": 2207
     },
     {
+      "path": "internal/gate/adversarial_a07_test.go",
+      "sha256": "47a003f9e85f26552e79b1709e8a0f7a70e211189dfbfd9bf04e79048bb0120f",
+      "bytes": 2157
+    },
+    {
       "path": "internal/gate/contract_a01_test.go",
       "sha256": "bfa30cb8ac5e27a6a579914386ed1f83f994419abb90dfbe862003a338481836",
       "bytes": 1686
@@ -1491,8 +1496,8 @@
     },
     {
       "path": "internal/gate/types.go",
-      "sha256": "0a23e729e15d40d37388aae78f8dcb4c72690a077f7c95e519626cfc445576eb",
-      "bytes": 5278
+      "sha256": "24937746ff4cf8cea18d0e0b37c7fda8567c993e68fb8fa49bbbc0a5148aec02",
+      "bytes": 5291
     },
     {
       "path": "internal/integration/claude_real_test.go",
