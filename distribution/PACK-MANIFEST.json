@@ -1890,6 +1890,11 @@
       "bytes": 2445
     },
     {
+      "path": "internal/protocol/types.go",
+      "sha256": "2daf2ef36bba6e61ab0c34793c9a8a142bd718b3d86242a0bb71ba14f94ab757",
+      "bytes": 7804
+    },
+    {
       "path": "internal/risk/a10_release_test.go",
       "sha256": "70c3960fba236e9b7b64c2ccdf665f172e60ef203406716c8b69b3129942289f",
       "bytes": 1042

@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 25
+const LatestSchemaVersion = 26
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -705,6 +705,36 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 25: %w", err)
 		}
 		version = 25
+	}
+	if version < 26 {
+		// `handoffs` is a legacy free-form compatibility history. Typed
+		// handoffs are deliberately separate so no legacy body is silently
+		// reinterpreted as canonical state.
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE typed_handoffs (
+				handoff_id TEXT PRIMARY KEY,
+				idempotency_key TEXT NOT NULL UNIQUE,
+				version INTEGER NOT NULL CHECK(version = 1),
+				task_id TEXT NOT NULL REFERENCES tasks(task_id),
+				sender_principal TEXT NOT NULL,
+				target_role TEXT NOT NULL CHECK(target_role IN ('orchestrator','architect','developer','qa','appsec')),
+				status TEXT NOT NULL CHECK(status IN ('created','validated','accepted','rejected','consumed')),
+				refs_json TEXT NOT NULL,
+				context_digest TEXT NOT NULL CHECK(length(context_digest) = 71),
+				created_at TEXT NOT NULL,
+				consumed_at TEXT
+			);
+			CREATE INDEX typed_handoffs_by_task_status
+				ON typed_handoffs(task_id, status, created_at, handoff_id);
+			CREATE INDEX typed_handoffs_by_sender
+				ON typed_handoffs(sender_principal, created_at, handoff_id);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 26: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(26, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 26: %w", err)
+		}
+		version = 26
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
