@@ -770,6 +770,11 @@
       "bytes": 1019
     },
     {
+      "path": "docs/evidence-trust-score.md",
+      "sha256": "b0d2a216dbd6fac5a265015465867370b09a2460905bdf84872dcb66f1648e93",
+      "bytes": 236
+    },
+    {
       "path": "docs/execution-cells.md",
       "sha256": "46ff83a692dd0e81eb5e6bcb46092fbf64b62c1980a26a70049e123713e1ce94",
       "bytes": 3109
@@ -1183,6 +1188,16 @@
       "path": "internal/adapter/trustcontent_a06_test.go",
       "sha256": "aa2a53ec11233d69f2afe02d9a47abe4d2b87f460db2b33b384a226fdac86303",
       "bytes": 1867
+    },
+    {
+      "path": "internal/adapter/trustscore_check.go",
+      "sha256": "19b115645e73d1b39f496c7e14b45720dc66ab6cef8e3c437e2854cc0c49e52f",
+      "bytes": 681
+    },
+    {
+      "path": "internal/adapter/trustscore_check_test.go",
+      "sha256": "17f6b4da9ab2dc14c47a0383bcc461b807fe9978570ca0119e72489bc544d45d",
+      "bytes": 438
     },
     {
       "path": "internal/api/client.go",
@@ -2801,8 +2816,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "9de27cbca42f62a635d4259e4fab28364d3441ac492c2add9591ee89eabf36f3",
-      "bytes": 56703
+      "sha256": "3e8c1c77bbdfb50f4074dfe8c1a7e0fce406d9047da5a2119db92eb52bf332c6",
+      "bytes": 57378
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -3026,8 +3041,8 @@
     },
     {
       "path": "internal/store/risk_persistence_a02_test.go",
-      "sha256": "2a8a68ced8242b0abc552cea404864771888395a014e7d706fa7d640a62a90bf",
-      "bytes": 8369
+      "sha256": "340b22c827adf7c48aebb74622f46ccb51b2a5a871e01467edb9027fa2ba4a57",
+      "bytes": 8475
     },
     {
       "path": "internal/store/router_persistence_a02_test.go",
@@ -3076,8 +3091,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "ab9e2a7fa492b0479a668f4c453dc49cbcd5c733af9dda48ce17817750d8389b",
-      "bytes": 19061
+      "sha256": "d172a5b7e1d16f7bead7d74f821d9603a52a7ad1991a929c17f4a5fcf6e434be",
+      "bytes": 19327
     },
     {
       "path": "internal/store/tasks.go",
@@ -3106,13 +3121,18 @@
     },
     {
       "path": "internal/store/trustcontent_persistence_test.go",
-      "sha256": "3775979fb19ad807530cce3465b6b9b145aed86ae5df1f92f6b0816b0b61e914",
-      "bytes": 9204
+      "sha256": "bd80de3b9c4cb0e2242cdc1f1d390a4abdd3643b23bfe1459f19a8338294bdda",
+      "bytes": 9310
     },
     {
       "path": "internal/store/trustcontent_recovery_a08_test.go",
       "sha256": "6ee002530de51a974b829c2796370b55244240d61d7ec2d1c05a8cc8115ae8d2",
       "bytes": 1459
+    },
+    {
+      "path": "internal/store/trustscore_persistence_a02_test.go",
+      "sha256": "3f084d0be329990c7ceb0984d0ebb116960b2050d73b87730af2e6dd50416b2b",
+      "bytes": 236
     },
     {
       "path": "internal/store/tui_persistence_a02_test.go",
@@ -3126,8 +3146,8 @@
     },
     {
       "path": "internal/store/typed_handoffs_a02_test.go",
-      "sha256": "4cb49daf74a2ea91626d1a9832f8ab81da0650886f427e28e72adacbb9a29a9b",
-      "bytes": 14430
+      "sha256": "8d476233b6304af1a8fdbb054382521aa72a97545c37caa4ed36ee6f88c1f171",
+      "bytes": 14536
     },
     {
       "path": "internal/store/vibe_persistence_a02_test.go",
@@ -3183,6 +3203,36 @@
       "path": "internal/trustcontent/types.go",
       "sha256": "a1827a9a475d5b99da6575abac03cc357698d878729915814f7a88a37d9e7c4e",
       "bytes": 6636
+    },
+    {
+      "path": "internal/trustscore/adversarial_test.go",
+      "sha256": "4333d24b9602ca8fa023f647a6c8c4f0096384d0ce0e97bd265e936ddaebee16",
+      "bytes": 321
+    },
+    {
+      "path": "internal/trustscore/benchmark_test.go",
+      "sha256": "dbab3479069022dbaddc8692bc21dbb68c435b7595020136fffd9ff0e1dd10f1",
+      "bytes": 297
+    },
+    {
+      "path": "internal/trustscore/engine.go",
+      "sha256": "208f38c723d29ae1b0e3f15090a7b4b59b3c1fab25baf99e1de646a7c8262d09",
+      "bytes": 959
+    },
+    {
+      "path": "internal/trustscore/engine_test.go",
+      "sha256": "bf94a355a8f8f9c999aae41e0cb81e8b4f13eccfcbcdb59f06fe7b69141defd6",
+      "bytes": 398
+    },
+    {
+      "path": "internal/trustscore/types.go",
+      "sha256": "cddba97b519ed71a931c98b6e2192269a0594f7719b4ca8ea253ffed7683f1d8",
+      "bytes": 1098
+    },
+    {
+      "path": "internal/trustscore/types_test.go",
+      "sha256": "8b21395acf1ffcf01c86c93117f0166a9da66b5f6f135089624fb11c0344c91d",
+      "bytes": 213
     },
     {
       "path": "internal/verify/quorum/adversarial_test.go",
