@@ -10,6 +10,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -27,6 +28,7 @@ type EngineConfig struct {
 	Providers  map[string]Provider
 	Capability capability.Broker
 	EventStore events.Store
+	Metrics    *evidence.MetricsRecorder
 	Now        func() time.Time
 }
 
@@ -35,6 +37,7 @@ type Engine struct {
 	providers  map[string]Provider
 	capability capability.Broker
 	eventStore events.Store
+	metrics    *evidence.MetricsRecorder
 	now        func() time.Time
 	owner      string
 }
@@ -50,7 +53,7 @@ func NewEngine(config EngineConfig) (*Engine, error) {
 	if err != nil {
 		return nil, ErrProviderFailed
 	}
-	return &Engine{store: config.Store, providers: config.Providers, capability: config.Capability, eventStore: config.EventStore, now: config.Now, owner: owner}, nil
+	return &Engine{store: config.Store, providers: config.Providers, capability: config.Capability, eventStore: config.EventStore, metrics: config.Metrics, now: config.Now, owner: owner}, nil
 }
 
 func (e *Engine) Lease(ctx context.Context, request LeaseRequest) (Lease, error) {
@@ -95,6 +98,7 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 	if use == nil {
 		return ErrDenied
 	}
+	started := time.Now()
 	current, err := e.store.GetSecretLease(ctx, lease.ID)
 	if err != nil || !sameLeaseScope(current, lease) {
 		return ErrDenied
@@ -103,16 +107,12 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 	if !now.Before(current.ExpiresAt) {
 		_, _ = e.store.TransitionSecretLease(ctx, current.ID, StateLeased, StateExpired, now)
 		_ = e.emit(ctx, events.EventTypeSecretAccessDenied, current, string(CodeLeaseExpired))
+		e.observe(evidence.MetricResultDenied, string(CodeLeaseExpired), started)
 		return ErrLeaseExpired
 	}
-	if current.State == StateUsed {
-		if err := e.emit(ctx, events.EventTypeSecretAccessUsed, current, "used"); err != nil {
-			return err
-		}
-		return nil
-	}
-	if current.State != StateLeased {
+	if current.State != StateLeased && current.State != StateUsed {
 		_ = e.emit(ctx, events.EventTypeSecretAccessDenied, current, string(CodeDenied))
+		e.observe(evidence.MetricResultDenied, string(CodeDenied), started)
 		return ErrDenied
 	}
 	resource, err := capability.NormalizeResource(capability.KindSecretUse, "secret://"+strings.Join([]string{current.Ref.Provider, current.Ref.Name, current.Ref.Version}, "/"))
@@ -126,17 +126,36 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 	})
 	if err != nil || decision.Outcome != capability.OutcomeAllow {
 		if ctxErr := ctx.Err(); ctxErr != nil {
+			e.observe(evidence.MetricResultCancelled, "CANCELLED", started)
 			return ctxErr
 		}
+		e.observe(evidence.MetricResultDenied, string(CodeDenied), started)
 		return ErrDenied
+	}
+	if current.State == StateUsed {
+		if err := e.emit(ctx, events.EventTypeSecretAccessUsed, current, "used"); err != nil {
+			return err
+		}
+		e.observe(evidence.MetricResultSuccess, "SECRET_USED", started)
+		return nil
 	}
 	claimed, err := e.store.ClaimSecretLease(ctx, current.ID, e.owner, now)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
+			e.observe(evidence.MetricResultCancelled, "CANCELLED", started)
 			return ctxErr
 		}
+		e.observe(evidence.MetricResultConflict, "SECRET_CLAIM_CONFLICT", started)
 		return ErrDenied
 	}
+	if e.metrics != nil {
+		e.metrics.AddActive(evidence.MetricOperationSecret, 1)
+	}
+	defer func() {
+		if e.metrics != nil {
+			e.metrics.AddActive(evidence.MetricOperationSecret, -1)
+		}
+	}()
 	completed := false
 	defer func() {
 		if !completed {
@@ -146,32 +165,45 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 	provider, ok := e.providers[claimed.Ref.Provider]
 	if !ok {
 		_ = e.emit(ctx, events.EventTypeSecretAccessDenied, current, string(CodeProviderFailed))
+		e.observe(evidence.MetricResultError, string(CodeProviderFailed), started)
 		return ErrProviderFailed
 	}
 	value, err := provider.Resolve(ctx, claimed.Ref)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			e.observe(evidence.MetricResultCancelled, "CANCELLED", started)
 			return err
 		}
 		_ = e.emit(ctx, events.EventTypeSecretAccessDenied, current, string(CodeProviderFailed))
+		e.observe(evidence.MetricResultError, string(CodeProviderFailed), started)
 		return ErrProviderFailed
 	}
 	defer zero(value)
 	if err := use(value); err != nil {
 		_ = e.emit(ctx, events.EventTypeSecretAccessDenied, current, string(CodeDenied))
+		e.observe(evidence.MetricResultDenied, string(CodeDenied), started)
 		return ErrDenied
 	}
 	if _, err := e.store.CompleteSecretLease(ctx, claimed.ID, e.owner, now); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
+			e.observe(evidence.MetricResultCancelled, "CANCELLED", started)
 			return ctxErr
 		}
+		e.observe(evidence.MetricResultConflict, "SECRET_COMPLETE_CONFLICT", started)
 		return ErrDenied
 	}
 	completed = true
 	if err := e.emit(ctx, events.EventTypeSecretAccessUsed, current, "used"); err != nil {
 		return err
 	}
+	e.observe(evidence.MetricResultSuccess, "SECRET_USED", started)
 	return nil
+}
+
+func (e *Engine) observe(result evidence.MetricResult, reason string, started time.Time) {
+	if e.metrics != nil {
+		e.metrics.Observe(evidence.MetricOperationSecret, result, reason, time.Since(started))
+	}
 }
 
 func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
