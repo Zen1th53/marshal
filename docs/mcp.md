@@ -1,7 +1,6 @@
 # Model Context Protocol (MCP) Guide
 
 **Protocol Version**: MCP `2026-07-28`
-**Runtime Milestone**: `v0.4.0`
 
 MARSHAL implements an authenticated Model Context Protocol (MCP 2026-07-28) server enabling remote orchestrators, agents, and IDE tools to interact with the MARSHAL control plane.
 
@@ -16,12 +15,8 @@ All MCP HTTP endpoints require Bearer authentication using high-entropy tokens g
 marshal auth token create --name mcp-orchestrator
 ```
 
-Output:
-```text
-Created Token ID: TOKEN-e6eeb825c43740c7
-Plaintext Token: marshal_token_6e86f061e255da6d5b075084e08c3ff7821002ad9d02b250bee90024ab0e63d0
-(Keep this token secret; it will not be shown again)
-```
+The plaintext token is returned once. Store it outside the repository and do
+not copy it into examples, issue reports, or logs.
 
 ### Authorization Header
 Include the token in all HTTP requests:

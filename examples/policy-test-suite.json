@@ -1,0 +1,37 @@
+{
+  "id": "example-deny-suite",
+  "cases": [
+    {
+      "id": "deny-unmatched-write",
+      "name": "unmatched write is denied",
+      "given": {
+        "policy": {
+          "id": "cli-policy",
+          "version": 1,
+          "default": "deny",
+          "rules": []
+        },
+        "binding": {
+          "version": 1,
+          "digest": "sha256:8fa859756bf51b7cbe5110cab3c9c70595542b77682002a7672bd03c4cb83791",
+          "generation": 1
+        }
+      },
+      "when": {
+        "subject_id": "example-user",
+        "task_id": "example-task",
+        "change_id": "example-change",
+        "action": "write",
+        "resource": "repository",
+        "provider": "example",
+        "attributes": {}
+      },
+      "expect": {
+        "decision": "deny",
+        "required": [],
+        "matched_rules": [],
+        "expected_error": ""
+      }
+    }
+  ]
+}

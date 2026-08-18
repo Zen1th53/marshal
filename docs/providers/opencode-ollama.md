@@ -1,15 +1,15 @@
 # OpenCode & Local Ollama Provider Guide
 
-**Runtime Milestone**: `v0.4.0`
 **Client Runner**: OpenCode CLI (`opencode`)
 **Local LLM Provider**: Ollama Daemon (`http://localhost:11434`)
-**Tested Model**: `qwythos-9b`
 
 ---
 
 ## 1. Overview
 
-MARSHAL supports executing software engineering tasks locally using OpenCode against Ollama models with **zero external cloud API dependencies**.
+MARSHAL supports executing software engineering tasks locally using OpenCode
+against Ollama. This path can avoid cloud inference, but operators must verify
+their own OpenCode configuration, model provenance, and network policy.
 
 - **OpenCode (`opencode`)**: Acts as the local execution agent client that receives task instructions, inspects the workspace, and issues tool calls to modify files.
 - **Ollama (`ollama`)**: Serves local neural network models over HTTP (`localhost:11434`).
@@ -41,16 +41,10 @@ Ensure `ollama` service is running in the background (`ollama serve` or systemd 
 > **Crucial Distinction**: Conversational text generation capability **does NOT** imply tool-calling capability.
 > OpenCode requires models that explicitly format and issue structured JSON tool calls to create or modify repository files.
 
-| Model | Family | Tool Calls | Status in MARSHAL |
-|---|---|---|---|
-| `qwythos-9b` | Qwen3.5 9B | ✅ **Confirmed** | **E2E VERIFIED Default** |
-| `qwen2.5-coder:14b` | Qwen2.5 14B | ⚠️ Partial | Returns JSON as text in some revisions |
-| `llama3:8b` | Llama 3 8B | ❌ Conversational | Fails to emit tool call schema |
-
-To pull the verified model:
-```bash
-ollama pull qwythos-9b
-```
+Model compatibility changes independently of MARSHAL. Select a model that the
+installed OpenCode version can use for structured tool calls, then validate it
+with a disposable low-risk repository. Historical model observations are not a
+current support guarantee.
 
 ---
 
@@ -60,12 +54,12 @@ ollama pull qwythos-9b
 Pass the `--model` flag directly to `marshal run`:
 
 ```bash
-marshal run TASK-001 --adapter opencode --model qwythos-9b
+marshal run TASK-001 --adapter opencode --model YOUR_TOOL_CAPABLE_MODEL
 ```
 
 Or set the environment variable:
 ```bash
-export MARSHAL_OPENCODE_MODEL="ollama/qwythos-9b"
+export MARSHAL_OPENCODE_MODEL="ollama/YOUR_TOOL_CAPABLE_MODEL"
 ```
 
 ### Deep Provider Probe
@@ -85,7 +79,7 @@ marshal adapter probe opencode
 
 ### Symptom: Model missing error
 - **Cause**: The specified model is not downloaded locally in Ollama.
-- **Fix**: Download the model via `ollama pull qwythos-9b`.
+- **Fix**: Download the intended model with `ollama pull MODEL`.
 
 ### Symptom: Model returns conversational text instead of editing files
 - **Cause**: Selected model lacks OpenCode tool-calling schema support.

@@ -4,16 +4,16 @@ Adapters map a native coding agent's bootstrap, execution, permission,
 session, and evidence surfaces into MARSHAL. They do not change role authority,
 policy, or task ownership.
 
-The repository defines contracts for:
+The runtime implements process adapters for:
 
 - Gemini CLI
 - Codex
 - Claude Code
 - OpenCode
-- Aider
-- Crush
 
-Runtime `v0.4.0` implements and verifies Codex and OpenCode + local Ollama execution adapters. The other adapter directories contain integration contracts, templates, and probe guidance.
+Historical releases contain dated external execution evidence. Current support
+claims distinguish contract tests from installation, authentication, capability
+probes, and fresh E2E evidence; see [Provider adapters](providers.md).
 
 Capability status is explicit:
 

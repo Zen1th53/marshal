@@ -1,262 +1,247 @@
 # MARSHAL
 
-**Vibe coding, without Vulnerability-as-a-Service.**
+**Security-first agentic coding runtime for isolated, policy-enforced, and verifiable software engineering.**
 
-AI agents can generate code at extreme speed.
+MARSHAL separates an AI coding agent's ability to propose and execute work from
+the authority to approve, verify, or trust that work.
 
-Security failures can scale at exactly the same speed.
-
-MARSHAL provides the execution boundary between an AI coding agent and a real
-software project: isolating work, enforcing policy, controlling permissions,
-requiring evidence, verifying results, and maintaining an auditable trail of
-what happened.
-
-Fast agents.
-
-Controlled execution.
-
-Verified results.
-
-**Move fast. Grant less. Verify everything.**
-
-[![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSING.md)
 [![CI](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml/badge.svg)](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml)
+[![Release candidate](https://img.shields.io/badge/status-v1.0.0--rc.1-orange.svg)](release/RELEASE_NOTES_v1.0.0-rc.1.md)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](go.mod)
+[![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)](docs/installation.md)
+[![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSING.md)
 
----
+> Move fast. Grant less. Verify everything.
 
-## What MARSHAL Is
+## Why MARSHAL
 
-MARSHAL is a security-first runtime and control plane for agentic software
-engineering. It turns unconstrained AI coding into governed execution through
-isolation, policy enforcement, scoped permissions, approvals, deterministic
-verification, evidence collection, reconciliation, and auditability.
+An autonomous coding model should not implicitly become the planner,
+developer, approver, security authority, shell administrator, and source of
+truth at the same time. MARSHAL introduces a local control plane between an
+agent and a Git repository so those responsibilities can be enforced as
+separate, auditable operations.
 
-Core engineering roles—**Orchestrator**, **Architect**, **Developer**, **QA**,
-and **AppSec**—have explicit ownership and authority boundaries. Vendor-neutral
-process adapters connect agents to the runtime without granting any model
-unlimited trust.
+MARSHAL is not a claim that AI output is trustworthy. It is infrastructure for
+constraining execution, requiring evidence, and making trust decisions explicit.
 
-Agents can move fast.
+## What MARSHAL provides
 
-They do not get unlimited trust.
+- **Task orchestration:** durable tasks, dependency DAGs, leases, ownership,
+  lifecycle transitions, recovery, and reconciliation.
+- **Execution isolation:** task-specific Git worktrees and fail-closed Linux
+  sandbox integration through bubblewrap.
+- **Authority boundaries:** explicit roles, scoped capabilities, policy gates,
+  approvals, network egress controls, and destructive-operation risk checks.
+- **Provider-neutral adapters:** Codex, Claude Code, Gemini CLI, and OpenCode
+  process adapters behind one runtime contract.
+- **Verification:** evidence-bound test execution, quorum decisions,
+  cross-model review contracts, policy conformance, and merge gates.
+- **Evidence and artifacts:** structured events, provenance, immutable digests,
+  audit history, artifact records, trust scoring, and release pack validation.
+- **Interoperability:** authenticated MCP `2026-07-28` and A2A `1.0.0`
+  interfaces mapped onto the same runtime authority model.
+- **Operations:** local daemon, SQLite state, diagnostics, logs, cancellation,
+  observability, backup/recovery guidance, and terminal UI support.
 
----
+Every item above is represented in the merged implementation and automated test
+suite. External provider availability and authentication remain properties of
+the operator's environment.
 
-## Why MARSHAL Exists
+## Architecture
 
-Autonomous AI coding agents operating without control plane constraints risk making unverified code changes, operating on stale context, approving their own work, missing security policies, leaking secrets, or failing to produce audit evidence.
+```mermaid
+flowchart TD
+    operator[User / Operator]
+    entry[CLI / MCP / A2A]
+    control[MARSHAL control plane]
+    state[Scheduler / Tasks / Leases / DAG]
+    authority[Policy / Capabilities / Approvals]
+    adapter[Provider adapter]
+    worker[Isolated worker]
+    verify[Verification / Reconciliation]
+    evidence[Events / Evidence / Artifacts]
 
-MARSHAL enforces explicit contracts:
-
-- **Least privilege by default**: Agents receive scoped permissions for owned tasks, not blanket access.
-- **Isolated execution**: Work runs in task-specific Git worktrees and fail-closed Linux sandboxes.
-- **Policy and approval gates**: Risky operations require explicit authorization before execution.
-- **Repository evidence > memory**: Code changes must compile, pass verification, and produce git commits.
-- **One active task = one owner**: Strict transactional task leases prevent concurrent file overwrites.
-- **No PASS without evidence**: Verification requires empirical test results and clean git diffs.
-- **Auditable and reproducible execution**: Events, artifacts, decisions, and verification bind back to source state.
-
----
-
-## Current Release Status
-
-| Property | Value |
-|---|---|
-| **Source Channel** | `main` |
-| **Pack Version** | `6.0.0` |
-| **MCP Protocol** | `2026-07-28` |
-| **A2A Wire Version** | `1.0` |
-| **Platform** | Linux-first / Local-first |
-| **Sandbox Engine** | `bubblewrap` (bwrap) |
-| **State Storage** | SQLite (schema version 2) |
-
----
-
-## Provider Support Matrix
-
-MARSHAL probes provider binaries dynamically and tracks provider maturity across six distinct states: `IMPLEMENTED`, `INSTALLED`, `AVAILABLE`, `AUTHENTICATED`, `CAPABILITY-PROBED`, and `REAL-E2E-VERIFIED`.
-
-| Provider Adapter | Version / Binary | Verification Status | Native | MCP | A2A |
-|---|---|---|:---:|:---:|:---:|
-| **Codex** | `codex-cli` | **REAL E2E VERIFIED** | ✅ | ✅ | ✅ |
-| **OpenCode + Local Ollama** | `opencode` + `qwythos-9b` | **REAL E2E VERIFIED** | ✅ | ✅ | ✅ |
-| **Gemini CLI** | `gemini` | **PROBED / UNVERIFIED** *(API Quota Limited)* | — | — | — |
-| **Claude Code** | `claude` | **PROBED / UNVERIFIED** *(OAuth Session Expired)* | — | — | — |
-| **Aider** | `aider` | Defined *(Contract Specification)* | — | — | — |
-| **Crush** | `crush` | Defined *(Contract Specification)* | — | — | — |
-
----
-
-## 5-Minute Quick Start
-
-### Prerequisites
-- **OS**: Linux host (Ubuntu, Debian, Fedora, Arch, etc.)
-- **Dependencies**: Git, Go `1.25`+, Linux `bubblewrap` (`bwrap`)
-- **Providers**: `codex-cli` (for Codex) or `opencode` + `ollama` (for local models)
-
-### 1. Build and Install
-```bash
-git clone https://github.com/Zen1th53/marshal.git
-cd marshal
-
-go install ./cmd/marshal
+    operator --> entry --> control
+    control --> state
+    control --> authority
+    state --> adapter
+    authority --> adapter
+    adapter --> worker
+    worker -->|Git worktree + bubblewrap| verify
+    verify --> evidence
+    evidence --> control
 ```
 
-### 2. Initialize and Run Doctor
+The runtime remains local-first. SQLite stores canonical control-plane state;
+Git stores source truth; event, evidence, and artifact records bind decisions to
+the source and runtime state that produced them.
+
+See [Architecture](docs/architecture.md), [Execution Cells](docs/execution-cells.md),
+and the [Security Model](docs/security-model.md).
+
+## Trust model
+
+MARSHAL enforces a control plane; it does not make models, provider output, or
+the local machine inherently safe.
+
+- A worktree separates changes; bubblewrap supplies the Linux security boundary.
+- Possessing a tool does not grant authority to use it.
+- Provider identity and model labels do not grant permissions.
+- Policy, test results, metrics, and historical evidence are not themselves
+  authorization capabilities.
+- The host owner remains responsible for kernel, filesystem, provider
+  credentials, and deployment trust.
+
+Read [SECURITY.md](SECURITY.md) before using MARSHAL with sensitive repositories.
+
+## Install
+
+MARSHAL supports Linux on amd64 and arm64. Go `1.25` is required for source
+installation; bubblewrap is required for strong worker isolation.
+
+### Binary release
+
 ```bash
-# Initialize .marshal state directory in your repository
+version=1.0.0-rc.1
+arch=amd64  # or arm64
+curl -LO "https://github.com/Zen1th53/marshal/releases/download/v${version}/marshal_${version}_linux_${arch}.tar.gz"
+curl -LO "https://github.com/Zen1th53/marshal/releases/download/v${version}/checksums.txt"
+sha256sum -c --ignore-missing checksums.txt
+tar -xzf "marshal_${version}_linux_${arch}.tar.gz"
+install -Dm755 marshal "$HOME/.local/bin/marshal"
+marshal version
+```
+
+### Go install
+
+```bash
+go install github.com/Zen1th53/marshal/cmd/marshal@v1.0.0-rc.1
+marshal version
+```
+
+See [Installation](docs/installation.md) for dependencies and artifact
+verification.
+
+## Five-minute start
+
+Run these commands inside a Git repository. `marshal init` creates missing
+project contracts with fail-closed defaults and never overwrites existing ones.
+
+```bash
 marshal init
-
-# Run system health diagnostics
 marshal doctor
+marshal adapters
 ```
 
-### 3. Start Local Daemon
-Start the daemon process in a separate background terminal or service:
+Start the local daemon in one terminal:
+
 ```bash
 marshal daemon
 ```
 
-Verify daemon health:
+In another terminal, register an explicitly scoped agent and import a task:
+
 ```bash
-marshal status
-```
+marshal agent register --name operator-agent --role developer
 
----
-
-## First Task Workflow
-
-### Task Definition Schema
-Save the following task definition to `tasks.json`:
-```json
+cat > tasks.json <<'JSON'
 [
   {
     "id": "TASK-DEMO-001",
-    "title": "Create application status file",
+    "title": "Add a repository status document",
     "status": "ready",
     "risk": "R1",
     "base_commit": "HEAD",
     "head_commit": "HEAD"
   }
 ]
-```
+JSON
 
-Import and register your agent:
-```bash
-# Register an agent
-marshal agent register --name OperatorAgent --role developer
-
-# Import tasks into SQLite control plane
+marshal task import tasks.json --dry-run
 marshal task import tasks.json
 marshal tasks
 ```
 
-### Option A: Execute Task with Codex
+Execute with a provider that is installed and authenticated in your environment:
+
 ```bash
 marshal run TASK-DEMO-001 --adapter codex
-```
+# or
+marshal run TASK-DEMO-001 --adapter opencode --model YOUR_TOOL_CAPABLE_MODEL
 
-### Option B: Execute Task with OpenCode + Local Ollama
-Requires `ollama` running locally with a tool-capable model (e.g. `qwythos-9b`):
-```bash
-marshal run TASK-DEMO-001 --adapter opencode --model qwythos-9b
-```
-
-### Inspect Logs and Status
-```bash
-# View task execution logs, artifacts, and timeline events
 marshal logs TASK-DEMO-001
-
-# Inspect runtime state
-marshal status
+marshal events
+marshal artifacts
 ```
 
-### Cancel Task Execution
+The deterministic [policy-test example](examples/policy-test-suite.json) can be
+run without external provider credentials:
+
 ```bash
-marshal cancel TASK-DEMO-001
+marshal policy test examples/policy-test-suite.json
 ```
 
----
+## Provider support
 
-## Daily Operator Commands
+| Adapter | Implemented and contract-tested | Local availability check | Fresh external E2E status |
+|---|:---:|---|---|
+| Codex | Yes | `marshal adapter probe codex` | Operator credentials required; not part of the hermetic release gate |
+| OpenCode | Yes | `marshal adapter probe opencode` | OpenCode and a tool-capable backend are required |
+| Gemini CLI | Yes | `marshal adapter probe gemini` | Not verified for this RC because quota/authentication is external |
+| Claude Code | Yes | `marshal adapter probe claude` | Not verified for this RC because authentication is external |
 
-| Command | Purpose |
+`IMPLEMENTED`, `INSTALLED`, `AVAILABLE`, `AUTHENTICATED`,
+`CAPABILITY-PROBED`, and `REAL-E2E-VERIFIED` are deliberately distinct states.
+See [Provider Adapters](docs/providers.md) and
+[OpenCode with Ollama](docs/providers/opencode-ollama.md).
+
+## Security
+
+MARSHAL's security controls include:
+
+- least-privilege role and capability enforcement;
+- task-scoped worktrees and Linux sandbox policy;
+- authenticated MCP and A2A entry points;
+- policy-as-code and policy conformance tests;
+- secret-boundary sanitization and bounded audit data;
+- artifact digests, provenance records, and release checksums;
+- fail-closed handling of missing policy, authority, or verification evidence.
+
+These controls reduce risk; they do not replace host hardening, credential
+management, code review, or deployment policy. Report vulnerabilities privately
+using [SECURITY.md](SECURITY.md), not a public issue.
+
+## Documentation
+
+| Start here | Reference and operations |
 |---|---|
-| `marshal doctor [--probe-providers]` | Run system health diagnostics and optional provider probes |
-| `marshal adapters` | Display discovered provider binaries and availability status |
-| `marshal adapter probe <NAME>` | Perform deep capability probe for a specific adapter |
-| `marshal status` | Show active tasks, registered agents, and daemon status |
-| `marshal run <TASK-ID> --adapter <NAME> [--model <MODEL>]` | Execute a ready task with a specific provider adapter |
-| `marshal logs <TASK-ID>` | Display stdout/stderr logs, artifacts, and event timeline |
-| `marshal cancel <TASK-ID>` | Cancel an active task execution gracefully |
-| `marshal auth token create --name <NAME>` | Generate Bearer token for authenticated MCP/A2A protocols |
+| [Documentation portal](docs/README.md) | [CLI reference](docs/cli.md) |
+| [Getting started](docs/getting-started.md) | [Provider adapters](docs/providers.md) |
+| [Installation](docs/installation.md) | [MCP](docs/mcp.md) / [A2A](docs/a2a.md) |
+| [Architecture](docs/architecture.md) | [Troubleshooting](docs/troubleshooting.md) |
+| [Security model](docs/security-model.md) | [Upgrade and migration](docs/operations/upgrades.md) |
+| [Examples](examples/README.md) | [Release process](docs/development/release-process.md) |
 
----
+## Release and compatibility status
 
-## Architecture Overview
+`v1.0.0-rc.1` is the first unified MARSHAL product release candidate. All
+planned T01-T55 implementation epics are merged. The RC exists to validate the
+public binary installation path and compatibility promise before `v1.0.0`.
 
-```text
-                     USER / ORCHESTRATOR
-                              │
-                     CLI / MCP / A2A
-                              │
-                    MARSHAL Runtime Server
-                              │
-              ┌───────────────┼───────────────┐
-              │               │               │
-            TASKS          MEMORY           POLICY
-          (SQLite)        (Events)       (Capabilities)
-              │               │               │
-              └───────────────┼───────────────┘
-                              │
-                    Process Supervisor
-                              │
-                 Git Worktree + Bubblewrap
-                              │
-                    Provider Adapter
-              ┌───────────────┴───────────────┐
-              │                               │
-         Codex Adapter                OpenCode Adapter
-              │                               │
-          Codex CLI                   OpenCode → Ollama
-                              │
-                 Artifacts & Evidence Store
-```
+The repository also carries pack contract version `6.0.0` and runtime
+specification version `1.0.0`; these are not product release numbers. Historical
+`runtime-v0.x` releases remain available under their original license grants.
+See [CHANGELOG.md](CHANGELOG.md) and [Licensing](LICENSING.md).
 
-For detailed architectural semantics, read [Architecture Guide](docs/architecture.md) and [Runtime Architecture](runtime/ARCHITECTURE.md).
+## Contributing and support
 
----
-
-## Security Positioning
-
-- **Local-First & Socket-Protected**: Daemon listens exclusively on permission-restricted Unix sockets (`0600`) or authenticated localhost endpoints.
-- **Fail-Closed Sandboxing**: Unprivileged bubblewrap namespaces prevent host filesystem tampering.
-- **Authenticated Interoperability**: MCP and A2A endpoints require high-entropy Bearer tokens generated via `marshal auth token create`.
-- **Secrets Redaction**: Automatic boundary redaction prevents sensitive environment keys from appearing in events or logs.
-
-Read our full [Security Policy](SECURITY.md) and [Security Model](docs/security-model.md).
-
----
-
-## Documentation Index
-
-- [Getting Started Guide](docs/getting-started.md) — Comprehensive tutorial from zero to first task
-- [CLI Reference](docs/cli.md) — Complete usage for all `marshal` commands
-- [Provider Guide](docs/providers.md) — Capability model and provider setup
-- [OpenCode + Ollama Setup](docs/providers/opencode-ollama.md) — Local LLM task execution guide
-- [MCP Protocol Guide](docs/mcp.md) — MCP 2026-07-28 integration & Bearer auth
-- [A2A Protocol Guide](docs/a2a.md) — Agent-to-Agent 1.0 integration guide
-- [Troubleshooting Guide](docs/troubleshooting.md) — Symptom-based diagnostics & recovery
-- [Architecture Guide](docs/architecture.md) — Reader guide & contract boundary
-- [Contributing Guide](CONTRIBUTING.md) — Guidelines for code and doc contributions
-
----
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Bug and
+usage support paths are documented in [SUPPORT.md](SUPPORT.md). Security reports
+must follow [SECURITY.md](SECURITY.md).
 
 ## License
 
-MARSHAL uses a dual-licensing model:
-
-* **Community Edition**: Licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`). See [LICENSE](LICENSE).
-* **Commercial License**: Alternative commercial licensing is available for organizations requiring non-AGPL terms. See [LICENSING.md](LICENSING.md) and [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
-* **Contributions**: Material external contributions require completion of the MARSHAL contributor assignment process before merge. See [CONTRIBUTING.md](CONTRIBUTING.md).
-* **Historical Releases**: Historical releases up to `runtime-v0.4.0` remain available under their original `Apache-2.0` grants. See [docs/legal/LICENSE-HISTORY.md](docs/legal/LICENSE-HISTORY.md).
+The current open-source release is licensed under
+[AGPL-3.0-only](LICENSE). Commercial licensing is available under separate
+terms; see [LICENSING.md](LICENSING.md). Previously published Apache-2.0
+versions retain their historical grants.

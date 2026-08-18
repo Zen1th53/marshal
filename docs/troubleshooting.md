@@ -1,7 +1,5 @@
 # MARSHAL Troubleshooting Guide
 
-**Runtime Milestone**: `v0.4.0`
-
 This guide provides symptom-based troubleshooting for engineers operating MARSHAL local control plane and provider adapters.
 
 ---
@@ -10,7 +8,8 @@ This guide provides symptom-based troubleshooting for engineers operating MARSHA
 
 ### Symptom: `marshal doctor` reports `bwrap` is missing / unavailable
 - **Meaning**: Linux `bubblewrap` binary is not found on `$PATH`.
-- **Impact**: Execution falls back to process isolation without strong filesystem namespaces.
+- **Impact**: Strong isolation is unavailable. R2/R3 and network-denied
+  execution is blocked; only policy-eligible low-risk process-only work can run.
 - **Fix**: Install bubblewrap using your host package manager:
   ```bash
   # Ubuntu / Debian

@@ -58,7 +58,9 @@ semantics are documented in [Policy-as-Code](policy-as-code.md).
 
 The local daemon owns canonical state and exposes a local Unix-socket API.
 Workers are task- and worktree-scoped. Adapters normalize native agent
-lifecycle and evidence without granting role authority. Runtime `v0.4.0` implements Codex and OpenCode + local Ollama execution; the other adapters have defined contracts. See
+lifecycle and evidence without granting role authority. Codex, Claude Code,
+Gemini CLI, and OpenCode have runtime adapters; local availability and fresh
+external E2E evidence are reported separately. See
 [runtime/README.md](../runtime/README.md) and
 [adapters/CONTRACT.md](../adapters/CONTRACT.md).
 
@@ -73,5 +75,5 @@ an exact commit. See [conformance/README.md](../conformance/README.md),
 ## Interoperability
 
 [interop/](../interop/README.md) specifies A2A and MCP negotiation boundaries.
-They are contracts in Runtime V1, not deployed remote servers. Remote agents
+The runtime implements authenticated MCP and A2A servers. Remote agents
 remain external principals until local policy establishes identity and scope.

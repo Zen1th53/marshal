@@ -1,5 +1,44 @@
 # Changelog
 
+This changelog follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Public product releases use Semantic Versioning; pack, protocol, schema, and
+historical runtime milestones are separate version domains.
+
+## [1.0.0-rc.1] — 2026-08-18
+
+### Added
+
+- Unified local control plane for tasks, leases, isolated worktrees, sandbox
+  execution, policy and approval gates, provider adapters, verification,
+  evidence, artifacts, MCP, and A2A.
+- Build-aware version output and self-contained fail-closed initialization.
+- Linux amd64/arm64 archives, checksums, CycloneDX SBOM, build metadata, and
+  GitHub build provenance.
+- Release-oriented documentation, examples, and community health files.
+
+### Changed
+
+- One Semantic Versioning product version now fronts the release. Pack 6.0.0,
+  runtime specification 1.0.0, protocol versions, and schema 67 remain internal
+  compatibility contracts.
+- Provider docs distinguish implementation, installation, authentication,
+  capability probing, and dated E2E evidence.
+
+### Security
+
+- Release workflows use least-privilege permissions and immutable action pins.
+- Installation guidance verifies checksums and GitHub artifact attestations.
+
+### Known limitations
+
+- Linux is the supported execution platform.
+- External provider E2E depends on operator credentials, quota, and local
+  availability; unavailable services are not reported as hermetic CI PASS.
+- This RC validates the first unified public binary compatibility contract
+  before `v1.0.0`.
+
+[1.0.0-rc.1]: https://github.com/Zen1th53/marshal/releases/tag/v1.0.0-rc.1
+
 ## Runtime 0.4.0 — 2026-08-12
 
 Provider maturity and daily operations release:

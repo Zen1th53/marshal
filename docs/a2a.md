@@ -1,7 +1,6 @@
 # Agent-to-Agent (A2A) Protocol Guide
 
 **Wire Version**: `A2A-Version: 1.0`
-**Runtime Milestone**: `v0.4.0`
 
 MARSHAL implements the Agent-to-Agent (A2A 1.0) protocol standard, allowing multi-agent platforms and external orchestrators to discover agent capabilities, exchange structured messages, and delegate tasks safely.
 

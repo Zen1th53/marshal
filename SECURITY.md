@@ -1,53 +1,52 @@
-# Security Policy
+# Security policy
 
-## Scope
+## Scope and supported versions
 
-A MARSHAL security issue includes a vulnerability in the executable runtime,
-policy or approval enforcement, task ownership, sandbox/worktree handling,
-secrets or memory controls, adapter execution, artifact provenance,
-interoperability boundaries, release tooling, or documentation that would lead
-operators to deploy an unsafe configuration.
+Security issues include defects in runtime authority, policy or approval
+enforcement, task ownership, sandbox/worktree handling, secret boundaries,
+adapter execution, MCP/A2A authentication, evidence, artifacts, migrations,
+release tooling, or unsafe security documentation.
 
-The specification documents also welcome reports of concrete security
-contradictions, but a missing future implementation is not by itself a runtime
-vulnerability when its status is accurately documented.
+The latest MARSHAL product release and `main` receive security fixes. The
+`v1.0.0-rc.1` line is supported until superseded. Historical `runtime-v0.x`
+tags and downstream modifications are not independently supported.
 
-## Supported versions
+## Report privately
 
-The project currently has no tagged release series. Security fixes are assessed
-against the `main` branch and the current documented local runtime version.
-Older commits and downstream modifications are not independently supported.
+Do not disclose exploit details, credentials, private source, or proof-of-
+concept attacks in a public issue. Use GitHub private vulnerability reporting.
+If that channel is unavailable, contact `extreme29@proton.me`.
 
-## Reporting privately
+Include the affected version/commit and environment, impacted boundary,
+prerequisites, reproducible steps, expected and observed behavior, and likely
+impact. Use synthetic data; never send live secrets or third-party data.
 
-Do not disclose exploit details, credentials, private repository content, or
-proof-of-concept attacks in a public issue.
-
-Use GitHub's private vulnerability reporting when enabled for this repository.
-Otherwise contact the project maintainer through an explicitly published
-private security contact. If neither private channel is available, open a
-minimal public issue asking the maintainer to establish one; include no
-vulnerability details.
-
-Useful reports include:
-
-- affected commit, version, and environment;
-- impacted trust boundary or asset;
-- prerequisites and reproducible steps;
-- expected and observed behavior;
-- impact and likely scope;
-- suggested mitigation, if known.
-
-Do not include live secrets or data belonging to others.
+This policy does not authorize testing against systems, accounts, data, or
+infrastructure you do not own or have explicit permission to test. Report
+upstream provider or dependency defects to that project when they are not
+specific to MARSHAL.
 
 ## Coordinated disclosure
 
-Allow maintainers reasonable time to reproduce, assess, fix, and coordinate a
-release before public disclosure. Maintainers should acknowledge receipt,
-communicate material status changes, credit reporters who request credit, and
-coordinate disclosure timing in good faith.
+Allow reasonable time to reproduce, assess, fix, and coordinate a release.
+Material status changes and disclosure timing will be communicated in good
+faith. Reporter credit is provided when requested.
 
-This policy does not authorize testing against systems, accounts, data, or
-infrastructure you do not own or have explicit permission to test. Vendor-agent
-or dependency vulnerabilities should also be reported to the affected upstream
-project when the defect is not specific to MARSHAL.
+## Trust assumptions and limits
+
+- Git worktrees provide source separation, not a security sandbox. Linux
+  bubblewrap supplies the worker isolation boundary.
+- The host owner, kernel, filesystem, Git configuration, and operator account
+  remain trusted. MARSHAL is not a hostile-host containment system.
+- Network access follows configured egress policy. Provider network needs do
+  not permit arbitrary task traffic.
+- MCP and A2A endpoints require scoped bearer-token authentication. Deployers
+  remain responsible for transport exposure and token storage.
+- Provider output, tool output, fixtures, model labels, policy-test PASS, and
+  historical evidence are data, not authorization.
+- Sanitization is defense in depth, not permission to put secrets in prompts,
+  fixtures, or logs.
+- Release checksums and attestations establish artifact integrity and workflow
+  provenance; they do not prove the absence of vulnerabilities.
+
+Read the detailed [security model](docs/security-model.md) before sensitive use.

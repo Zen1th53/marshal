@@ -1,7 +1,5 @@
 # MARSHAL CLI Reference
 
-**Runtime Version**: `v0.4.0`
-
 This document provides a comprehensive command reference for the `marshal` command-line executable.
 
 ---
@@ -15,6 +13,17 @@ Usage: marshal [--json] <command> [arguments]
 | Option | Description |
 |---|---|
 | `--json` | Format output as structured JSON instead of human-readable text |
+| `--version` | Print product version, commit, and build date |
+
+### `marshal version`
+
+Print build metadata. Release binaries report the tag, source commit, and UTC
+build time; local source builds report `dev` and unknown metadata.
+
+```bash
+marshal version
+marshal --json version
+```
 
 ---
 
@@ -62,7 +71,7 @@ marshal status
 
 Output:
 ```text
-schema=2 tasks=1 agents=1
+schema=67 tasks=1 agents=1
 ```
 
 ---
