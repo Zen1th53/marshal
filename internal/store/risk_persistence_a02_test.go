@@ -119,6 +119,8 @@ func TestRiskAssessmentMigrationFromSchema21(t *testing.T) {
 		"DROP TABLE failure_memory_records",
 		"DROP INDEX agent_checkpoints_by_task",
 		"DROP TABLE agent_checkpoints",
+		"DROP INDEX simulation_records_by_command",
+		"DROP TABLE simulation_records",
 		"DROP INDEX verification_attestations_by_change",
 		"DROP INDEX verification_attestations_by_principal",
 		"DROP TABLE verification_attestations",
