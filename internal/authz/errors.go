@@ -11,6 +11,7 @@ const (
 	CodeDenied           ErrorCode = "AUTHZ_DENIED"
 	CodeSelfApproval     ErrorCode = "AUTHZ_SELF_APPROVAL"
 	CodeRoleInvalid      ErrorCode = "AUTHZ_ROLE_INVALID"
+	CodeConflict         ErrorCode = "AUTHZ_CONFLICT"
 )
 
 var (
@@ -19,6 +20,7 @@ var (
 	ErrDenied           = &Error{Code: CodeDenied, message: "authorization denied"}
 	ErrSelfApproval     = &Error{Code: CodeSelfApproval, message: "authorization self-approval is denied"}
 	ErrRoleInvalid      = &Error{Code: CodeRoleInvalid, message: "authorization role is invalid"}
+	ErrConflict         = &Error{Code: CodeConflict, message: "authorization state conflict"}
 )
 
 type Error struct {

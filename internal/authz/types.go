@@ -30,14 +30,15 @@ type Principal struct {
 }
 
 type RoleBinding struct {
-	ID           string     `json:"id"`
-	PrincipalID  string     `json:"principal_id"`
-	Role         string     `json:"role"`
-	ScopeID      string     `json:"scope_id"`
-	BoundBy      string     `json:"bound_by"`
-	BoundAt      time.Time  `json:"bound_at"`
-	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
-	PolicyDigest string     `json:"policy_digest"`
+	ID           string       `json:"id"`
+	PrincipalID  string       `json:"principal_id"`
+	Role         string       `json:"role"`
+	ScopeID      string       `json:"scope_id"`
+	BoundBy      string       `json:"bound_by"`
+	BoundAt      time.Time    `json:"bound_at"`
+	RevokedAt    *time.Time   `json:"revoked_at,omitempty"`
+	PolicyDigest string       `json:"policy_digest"`
+	State        BindingState `json:"state,omitempty"`
 }
 
 func (b RoleBinding) Validate() error {
@@ -47,6 +48,9 @@ func (b RoleBinding) Validate() error {
 		return ErrRoleInvalid
 	}
 	if strings.TrimSpace(b.PolicyDigest) == "" || len(b.PolicyDigest) != 71 || !strings.HasPrefix(b.PolicyDigest, "sha256:") {
+		return ErrRoleInvalid
+	}
+	if b.State != "" && b.State != StateUnbound && b.State != StateBound && b.State != StateChanged && b.State != StateRevoked {
 		return ErrRoleInvalid
 	}
 	if b.RevokedAt != nil && !b.RevokedAt.After(b.BoundAt) {
