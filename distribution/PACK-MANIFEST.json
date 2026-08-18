@@ -2935,6 +2935,11 @@
       "bytes": 1459
     },
     {
+      "path": "internal/store/tui_persistence_a02_test.go",
+      "sha256": "1446bae7c86d6ffff08029947f17f02d6e6d0e271e1c3fc2969a1c21c25a3b6b",
+      "bytes": 229
+    },
+    {
       "path": "internal/store/typed_handoffs.go",
       "sha256": "c54e948abf2d67fc655075881be17507ccce58681de81fd22f0d98db9e3f3ee8",
       "bytes": 11012
