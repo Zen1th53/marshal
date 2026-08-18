@@ -1836,13 +1836,13 @@
     },
     {
       "path": "internal/secrets/engine.go",
-      "sha256": "e05d0a199963a8e21b6e43e86e45e2338811b91aeac2a3db8ab201f4170824b8",
-      "bytes": 3558
+      "sha256": "bbcfd64b9029d0c9d5f8972d0762286bef574e0066add75236cbdb5b5ea66f4a",
+      "bytes": 4286
     },
     {
       "path": "internal/secrets/engine_test.go",
-      "sha256": "d0bc40d00bdd87e7569cdb93eaf7b2d23153af2ce3533ceefbc1d8ec39b55b3c",
-      "bytes": 4664
+      "sha256": "bfb79268da1ef6eff1869ae3d2adb24f33749ff06ad66a4120cf56e249ee395d",
+      "bytes": 8489
     },
     {
       "path": "internal/secrets/errors.go",
