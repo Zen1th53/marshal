@@ -2400,6 +2400,11 @@
       "bytes": 1085
     },
     {
+      "path": "internal/store/dashboard_persistence_a02_test.go",
+      "sha256": "60015bda6a7932237a63529084031e79d2e073a295c70ad591366ee1f2afe5d3",
+      "bytes": 235
+    },
+    {
       "path": "internal/store/decision_persistence_a02_test.go",
       "sha256": "a09dcbed1df6f12a0caf34419d9dea195280f0be75a1bd419bd37da9dbe02682",
       "bytes": 234
@@ -2581,8 +2586,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "4903a66b4a9d3d11b0358b5a8ef5e506677554637833dad09df6dbf6660cf93c",
-      "bytes": 45071
+      "sha256": "f617b61faeea83146b8ab44e64ec33996882cf84641f0a27ca15451e2c1dd065",
+      "bytes": 46427
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -2781,8 +2786,8 @@
     },
     {
       "path": "internal/store/risk_persistence_a02_test.go",
-      "sha256": "6f60a2ed0a580ee8f1cc5263b6b4d889421106eab0aeff026d03d340297256ce",
-      "bytes": 6365
+      "sha256": "87580c3cb78d35ffaaa17caa2c70b31350458e1cc931e804b3da17239da65101",
+      "bytes": 6613
     },
     {
       "path": "internal/store/scheduler_persistence_a02_test.go",
@@ -2821,8 +2826,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "31339204fc28589a61505a8c6c1e1c141f31cea83ac33e18d47fce7ce63ddc62",
-      "bytes": 13983
+      "sha256": "ba3689ce92165260fc1336dc11494ddd2330e5041584d1785c03be0fa79eb4ee",
+      "bytes": 14621
     },
     {
       "path": "internal/store/tasks.go",
@@ -2851,8 +2856,8 @@
     },
     {
       "path": "internal/store/trustcontent_persistence_test.go",
-      "sha256": "725ea59cd554175961da0c52b9af75fb286647100b7600e8b49b60f9185e69b8",
-      "bytes": 7200
+      "sha256": "67cca7e8b1ab1ead91ad5262e8b6012c6e5e03502089f252653e2ee9a128a15b",
+      "bytes": 7448
     },
     {
       "path": "internal/store/trustcontent_recovery_a08_test.go",
@@ -2866,8 +2871,8 @@
     },
     {
       "path": "internal/store/typed_handoffs_a02_test.go",
-      "sha256": "65343e4da131879837d19531644e417185d8b4aff1c16ccb89548986b2089dfb",
-      "bytes": 12426
+      "sha256": "d01e26935b1a6e83f39c81b637e2a822e7b5d33d5e221d1b691a76df6494e32a",
+      "bytes": 12674
     },
     {
       "path": "internal/testutil/testgit/git.go",
