@@ -2675,6 +2675,11 @@
       "bytes": 3606
     },
     {
+      "path": "internal/store/explain_persistence_a02_test.go",
+      "sha256": "b325141f118aab1f299a623e975a5c606becf24872f23a6686ccae5bd86b9196",
+      "bytes": 233
+    },
+    {
       "path": "internal/store/failure_persistence_a02_test.go",
       "sha256": "fef8170b57978f0ef08d6cdec5d6bb2f62e0ab59c11769486962bcff32692967",
       "bytes": 233
@@ -2741,8 +2746,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "04822cd159a200b23f3c2b5918e2eb07f84d0e550180e24118bc7ddb47aea1de",
-      "bytes": 52931
+      "sha256": "8a000e2a4ceafa62c5dc21b95c40f76590df9d7d6b4f61518f938661b9660a19",
+      "bytes": 54143
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -2956,8 +2961,8 @@
     },
     {
       "path": "internal/store/risk_persistence_a02_test.go",
-      "sha256": "ec5131ba499d739762bbf6ed916afe3305c5c8d8de8fa0f023f0af98ed0e0993",
-      "bytes": 7716
+      "sha256": "a8953da2195b41c53324ad3f66535cc9c5528d0c4bcf1898b564b426b7cd3b9f",
+      "bytes": 7920
     },
     {
       "path": "internal/store/router_persistence_a02_test.go",
@@ -3006,8 +3011,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "57294966ea0ad07cdd576425b3d574967515d35e6e18eed72e6ba9bcb0c465a0",
-      "bytes": 17413
+      "sha256": "4aa30de31858fa28bec0a20e61ecc9185e7046744040de481b9a9c0d3e5cf8a3",
+      "bytes": 17921
     },
     {
       "path": "internal/store/tasks.go",
@@ -3036,8 +3041,8 @@
     },
     {
       "path": "internal/store/trustcontent_persistence_test.go",
-      "sha256": "68831a630206f69fcefeecc456905b10d575738856e3fa8ff27bef444631a4c3",
-      "bytes": 8551
+      "sha256": "95f0cbc0a63d020d93e00bbea9396b32d351d1a8ca02b18fd498065b818c825f",
+      "bytes": 8755
     },
     {
       "path": "internal/store/trustcontent_recovery_a08_test.go",
@@ -3056,8 +3061,8 @@
     },
     {
       "path": "internal/store/typed_handoffs_a02_test.go",
-      "sha256": "ae59d0dde1263d3c269dadb966fd40c158fcea8812303ce37d15f0bd35fe7b2d",
-      "bytes": 13777
+      "sha256": "633ffcbb0b2ec669eeeec62088d21b6f9c34dbc1d0575c3c6e6d3d4745bda2d0",
+      "bytes": 13981
     },
     {
       "path": "internal/store/xverify_persistence_a02_test.go",

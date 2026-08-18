@@ -47,6 +47,8 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"trusted_content_segments",
 		"typed_handoffs",
 		"verification_attestations",
+		"research_reports",
+		"scheduler_explanations",
 		"remote_worker_attestations",
 		"distributed_nodes",
 		"mcp_a2a_runtime_sessions",
@@ -65,6 +67,8 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"reproducible_replay_runs",
 		"context_budget_decisions",
 		"conflict_predictions",
+		"research_reports",
+		"scheduler_explanations",
 		"remote_worker_attestations",
 		"distributed_nodes",
 		"mcp_a2a_runtime_sessions",
@@ -109,6 +113,10 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS research_reports_by_question",
+		"DROP TABLE IF EXISTS research_reports",
+		"DROP INDEX IF EXISTS scheduler_explanations_by_task",
+		"DROP TABLE IF EXISTS scheduler_explanations",
 		"DROP INDEX IF EXISTS remote_worker_attestations_by_node",
 		"DROP TABLE IF EXISTS remote_worker_attestations",
 		"DROP INDEX IF EXISTS distributed_nodes_by_status",
@@ -249,6 +257,10 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS research_reports_by_question",
+		"DROP TABLE IF EXISTS research_reports",
+		"DROP INDEX IF EXISTS scheduler_explanations_by_task",
+		"DROP TABLE IF EXISTS scheduler_explanations",
 		"DROP INDEX IF EXISTS remote_worker_attestations_by_node",
 		"DROP TABLE IF EXISTS remote_worker_attestations",
 		"DROP INDEX IF EXISTS distributed_nodes_by_status",
