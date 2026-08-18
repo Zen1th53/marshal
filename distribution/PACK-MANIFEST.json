@@ -1890,6 +1890,16 @@
       "bytes": 2445
     },
     {
+      "path": "internal/protocol/engine.go",
+      "sha256": "7e93817604dcba72015dcdefaeb2e4628944b8141f3f40566fea054004a8434c",
+      "bytes": 4517
+    },
+    {
+      "path": "internal/protocol/engine_test.go",
+      "sha256": "159dfa7cceccdf7bcb19d5eee5843238dae300f745b3208279748403bb99cbe8",
+      "bytes": 6864
+    },
+    {
       "path": "internal/protocol/types.go",
       "sha256": "2daf2ef36bba6e61ab0c34793c9a8a142bd718b3d86242a0bb71ba14f94ab757",
       "bytes": 7804
