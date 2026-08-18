@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 41
+const LatestSchemaVersion = 43
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1086,6 +1086,47 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 41: %w", err)
 		}
 		version = 41
+	}
+	if version < 42 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE audit_timeline_items (
+				sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+				event_type TEXT NOT NULL,
+				subject TEXT NOT NULL,
+				resource_id TEXT NOT NULL,
+				evidence_id TEXT NOT NULL DEFAULT '',
+				summary TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX audit_timeline_items_by_resource
+				ON audit_timeline_items(resource_id, sequence);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 42: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(42, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 42: %w", err)
+		}
+		version = 42
+	}
+	if version < 43 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE agent_reputation_scores (
+				score_id TEXT PRIMARY KEY,
+				subject_id TEXT NOT NULL,
+				domain TEXT NOT NULL,
+				value REAL NOT NULL DEFAULT 0.0,
+				confidence REAL NOT NULL DEFAULT 0.0,
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX agent_reputation_scores_by_subject
+				ON agent_reputation_scores(subject_id, domain);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 43: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(43, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 43: %w", err)
+		}
+		version = 43
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
