@@ -710,6 +710,11 @@
       "bytes": 1941
     },
     {
+      "path": "docs/agent-tournament.md",
+      "sha256": "0f15b1a24d4f4471f563cbccb34ea73c24887effd1d4bda512f9c78c9c618a8a",
+      "bytes": 214
+    },
+    {
       "path": "docs/architecture.md",
       "sha256": "1307345a203cc7c123146f112fe96ef96bcba7e13d0ab838ee8273be69932d43",
       "bytes": 3060
@@ -1183,6 +1188,16 @@
       "path": "internal/adapter/scheduler_check_test.go",
       "sha256": "b8ab54a45d4007563a0bc506386a61fcbeafa66104e971900164f885b926bcc1",
       "bytes": 490
+    },
+    {
+      "path": "internal/adapter/tournament_check.go",
+      "sha256": "d051eb0f6b987f5f160c6e490dd3a5070e765c7150cd3c5f9ae4984ca045702a",
+      "bytes": 644
+    },
+    {
+      "path": "internal/adapter/tournament_check_test.go",
+      "sha256": "dcd2b02ba625fa43bad4edb1b6dcba46c09b0908ada9e3648484a345d202467e",
+      "bytes": 453
     },
     {
       "path": "internal/adapter/trustcontent_a06_test.go",
@@ -2816,8 +2831,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "3e8c1c77bbdfb50f4074dfe8c1a7e0fce406d9047da5a2119db92eb52bf332c6",
-      "bytes": 57378
+      "sha256": "c5ef99598a7b19d0e3bd65afcbb8e540b37df0e00ed50a23e5862ea2f2b64e21",
+      "bytes": 57992
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -3041,8 +3056,8 @@
     },
     {
       "path": "internal/store/risk_persistence_a02_test.go",
-      "sha256": "340b22c827adf7c48aebb74622f46ccb51b2a5a871e01467edb9027fa2ba4a57",
-      "bytes": 8475
+      "sha256": "ffb5449fbb146d138876a64f34868e9ed5f4cd1b91e7402d7b1e6834bb4df016",
+      "bytes": 8569
     },
     {
       "path": "internal/store/router_persistence_a02_test.go",
@@ -3091,8 +3106,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "d172a5b7e1d16f7bead7d74f821d9603a52a7ad1991a929c17f4a5fcf6e434be",
-      "bytes": 19327
+      "sha256": "a1c8170620d0dcee8995a6ed6be1254948201094825b194b184fed860ab15751",
+      "bytes": 19557
     },
     {
       "path": "internal/store/tasks.go",
@@ -3110,6 +3125,11 @@
       "bytes": 234
     },
     {
+      "path": "internal/store/tournament_persistence_a02_test.go",
+      "sha256": "a212ec55523ef29c1c427dc990b05611355daff74dce47a45cfc540a1cb71356",
+      "bytes": 236
+    },
+    {
       "path": "internal/store/trustcontent_concurrency_a08_test.go",
       "sha256": "3764c35d60a22d281b1d7e9cd7c34ccc977714ce9313b5b6e2091b9fa932279c",
       "bytes": 1702
@@ -3121,8 +3141,8 @@
     },
     {
       "path": "internal/store/trustcontent_persistence_test.go",
-      "sha256": "bd80de3b9c4cb0e2242cdc1f1d390a4abdd3643b23bfe1459f19a8338294bdda",
-      "bytes": 9310
+      "sha256": "827e4270240bd048e61d594ef8e78724267a91cc99fccc86abf907bd00f32d7c",
+      "bytes": 9404
     },
     {
       "path": "internal/store/trustcontent_recovery_a08_test.go",
@@ -3146,8 +3166,8 @@
     },
     {
       "path": "internal/store/typed_handoffs_a02_test.go",
-      "sha256": "8d476233b6304af1a8fdbb054382521aa72a97545c37caa4ed36ee6f88c1f171",
-      "bytes": 14536
+      "sha256": "f4c04a5ec4be6e442474d97e32265556802329404b9022278386234b7c654971",
+      "bytes": 14630
     },
     {
       "path": "internal/store/vibe_persistence_a02_test.go",
@@ -3163,6 +3183,36 @@
       "path": "internal/testutil/testgit/git.go",
       "sha256": "bbd792910982a9118e7424727c833c9c687288289b1e8a3ad5284f6bfa68e62d",
       "bytes": 1132
+    },
+    {
+      "path": "internal/tournament/adversarial_test.go",
+      "sha256": "a02b1c15f1797e4443079bb8ad2acfd825e24df99dae38b0a53f4fb79bcaf9f1",
+      "bytes": 369
+    },
+    {
+      "path": "internal/tournament/benchmark_test.go",
+      "sha256": "70375ced4f7099887f20677fd30de63b6f7539b7d6c6c3f4ff8e0f9bc9ba63b3",
+      "bytes": 290
+    },
+    {
+      "path": "internal/tournament/engine.go",
+      "sha256": "c3a5e6200512fd54a3bec599f61ce621dc09a9cb605c5882cfd629ca057d74a5",
+      "bytes": 641
+    },
+    {
+      "path": "internal/tournament/engine_test.go",
+      "sha256": "e649e053d256787880dd7c0f3e903df4afec885824ba3dbbffe5e8aa1a99196b",
+      "bytes": 467
+    },
+    {
+      "path": "internal/tournament/types.go",
+      "sha256": "f7d88edfe021a296dff7a684cb4de54e880416ad59fbfcc3163a674ce279eb48",
+      "bytes": 1663
+    },
+    {
+      "path": "internal/tournament/types_test.go",
+      "sha256": "82e940f50bfdd79f610e63170076ec5fb6ea34ed118db1c897c9f42b4e9b50f3",
+      "bytes": 222
     },
     {
       "path": "internal/trustcontent/README.md",
