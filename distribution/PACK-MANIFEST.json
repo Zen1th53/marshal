@@ -2755,6 +2755,11 @@
       "bytes": 13892
     },
     {
+      "path": "internal/store/profiles_persistence_a02_test.go",
+      "sha256": "dc84f078ca43263d3da80e90f82e4ee2d38f66a4d68bc1e822cc54d5739ff44c",
+      "bytes": 234
+    },
+    {
       "path": "internal/store/provenance_persistence_a02_test.go",
       "sha256": "5270a194a0e2ede9dfb611792468963b29fa9b0721b84fb3be6de813842953ae",
       "bytes": 553
