@@ -1,5 +1,9 @@
 # MARSHAL
 
+<p align="center">
+  <img src="docs/assets/marshal-social-preview.svg" alt="MARSHAL — constrain execution, preserve evidence" width="820">
+</p>
+
 **Security-first agentic coding runtime for isolated, policy-enforced, and verifiable software engineering.**
 
 MARSHAL separates an AI coding agent's ability to propose and execute work from

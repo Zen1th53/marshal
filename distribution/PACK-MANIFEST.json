@@ -186,8 +186,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "ac205826699efadba841d4b5c3e70854c499819cb436890bced2ce530b6f10d4",
-      "bytes": 9397
+      "sha256": "e868072d576eb176b7abe2fd2a76615552f63dfff68856082fb144a51efa40f1",
+      "bytes": 9544
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -763,6 +763,11 @@
       "path": "docs/architecture.md",
       "sha256": "1c5d3c46e7d4426038399960ad51e086e3a532beb4e78c56a1b0033792100f6b",
       "bytes": 3083
+    },
+    {
+      "path": "docs/assets/marshal-social-preview.svg",
+      "sha256": "d381b5f61b540e5d524f372a54ac6d47800432d554c17dbaa8408e172353e05a",
+      "bytes": 1555
     },
     {
       "path": "docs/capability-broker.md",

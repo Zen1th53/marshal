@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">MARSHAL</title>
+  <desc id="desc">Security-first agentic coding runtime. Constrain execution, preserve evidence.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="1" stop-color="#102a3d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" rx="32" fill="url(#background)"/>
+  <path d="M90 112h12v416H90zM1178 112h12v416h-12z" fill="#1e3a4d"/>
+  <path d="M172 235l72-42 72 42v84c0 69-47 110-72 126-25-16-72-57-72-126z" fill="none" stroke="url(#accent)" stroke-width="12"/>
+  <path d="M211 315l24 24 49-57" fill="none" stroke="#d1fae5" stroke-linecap="round" stroke-linejoin="round" stroke-width="12"/>
+  <text x="370" y="300" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="112" font-weight="750" letter-spacing="8">MARSHAL</text>
+  <rect x="374" y="338" width="710" height="6" rx="3" fill="url(#accent)"/>
+  <text x="374" y="409" fill="#bae6fd" font-family="system-ui, sans-serif" font-size="33" font-weight="500">CONSTRAIN EXECUTION · PRESERVE EVIDENCE</text>
+  <text x="374" y="468" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="25">Security-first agentic coding runtime</text>
+</svg>
