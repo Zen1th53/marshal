@@ -47,10 +47,12 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"trusted_content_segments",
 		"typed_handoffs",
 		"verification_attestations",
+		"agent_reputation_scores",
 		"audit_timeline_items",
 		"reproducible_replay_runs",
 		"context_budget_decisions",
 		"conflict_predictions",
+		"agent_reputation_scores",
 		"audit_timeline_items",
 		"reproducible_replay_runs",
 		"context_budget_decisions",
@@ -81,6 +83,8 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS agent_reputation_scores_by_subject",
+		"DROP TABLE IF EXISTS agent_reputation_scores",
 		"DROP INDEX IF EXISTS audit_timeline_items_by_resource",
 		"DROP TABLE IF EXISTS audit_timeline_items",
 		"DROP INDEX IF EXISTS reproducible_replay_runs_by_commit",
@@ -193,6 +197,8 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS agent_reputation_scores_by_subject",
+		"DROP TABLE IF EXISTS agent_reputation_scores",
 		"DROP INDEX IF EXISTS audit_timeline_items_by_resource",
 		"DROP TABLE IF EXISTS audit_timeline_items",
 		"DROP INDEX IF EXISTS reproducible_replay_runs_by_commit",
