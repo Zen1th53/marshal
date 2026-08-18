@@ -47,6 +47,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"trusted_content_segments",
 		"typed_handoffs",
 		"verification_attestations",
+		"merge_queue_entries",
 		"evolution_lab_runs",
 		"trust_gate_evaluations",
 		"tournament_runs",
@@ -75,6 +76,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"reproducible_replay_runs",
 		"context_budget_decisions",
 		"conflict_predictions",
+		"merge_queue_entries",
 		"evolution_lab_runs",
 		"trust_gate_evaluations",
 		"tournament_runs",
@@ -129,6 +131,8 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS merge_queue_entries_by_change",
+		"DROP TABLE IF EXISTS merge_queue_entries",
 		"DROP INDEX IF EXISTS evolution_lab_runs_by_individual",
 		"DROP TABLE IF EXISTS evolution_lab_runs",
 		"DROP INDEX IF EXISTS trust_gate_evaluations_by_change",
@@ -289,6 +293,8 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS merge_queue_entries_by_change",
+		"DROP TABLE IF EXISTS merge_queue_entries",
 		"DROP INDEX IF EXISTS evolution_lab_runs_by_individual",
 		"DROP TABLE IF EXISTS evolution_lab_runs",
 		"DROP INDEX IF EXISTS trust_gate_evaluations_by_change",
