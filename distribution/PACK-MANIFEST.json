@@ -1900,6 +1900,11 @@
       "bytes": 3855
     },
     {
+      "path": "internal/protocol/benchmark_test.go",
+      "sha256": "c187a3555c1a58397a64165be6790db588f6cedfa435198f4424d53796068c43",
+      "bytes": 824
+    },
+    {
       "path": "internal/protocol/engine.go",
       "sha256": "7e93817604dcba72015dcdefaeb2e4628944b8141f3f40566fea054004a8434c",
       "bytes": 4517
@@ -1908,6 +1913,16 @@
       "path": "internal/protocol/engine_test.go",
       "sha256": "159dfa7cceccdf7bcb19d5eee5843238dae300f745b3208279748403bb99cbe8",
       "bytes": 6864
+    },
+    {
+      "path": "internal/protocol/metrics.go",
+      "sha256": "42235872eaf55bd28b0a35797422f71ec5405d67281bc5c8580fdb7b6b7ead2e",
+      "bytes": 1903
+    },
+    {
+      "path": "internal/protocol/metrics_test.go",
+      "sha256": "97d56985554e980f3215bb135bfbb8d4473a426759d9709b4c0c07f4e1eb22d5",
+      "bytes": 929
     },
     {
       "path": "internal/protocol/types.go",
@@ -3088,6 +3103,11 @@
       "path": "runtime/THREAT-MODEL.md",
       "sha256": "77233271e70c4359fe4ac8fcadaaf18b461d771f9912625ccc20a53440b4fd78",
       "bytes": 1669
+    },
+    {
+      "path": "runtime/TYPED-HANDOFFS.md",
+      "sha256": "4b8c72dddc6ab233d85360fe0d6b009d823299f27b23682899fcfc72ae66f6b1",
+      "bytes": 2406
     },
     {
       "path": "runtime/WORKER-PROTOCOL.md",
