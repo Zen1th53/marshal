@@ -1156,8 +1156,8 @@
     },
     {
       "path": "internal/cell/engine.go",
-      "sha256": "d6cd0db1cbd2e43c548f71cb5a2165d1ebeb26a45595de5fcfccbb87d3df175a",
-      "bytes": 5535
+      "sha256": "44d16df0b19dec31965fa213eb820be418b3f7088848dd7177fbb63102e78ffa",
+      "bytes": 7826
     },
     {
       "path": "internal/cell/engine_test.go",
@@ -1168,6 +1168,11 @@
       "path": "internal/cell/errors.go",
       "sha256": "552933e987de517cf5254447f41636213ad7592e9f074d28b2d319542be3b550",
       "bytes": 1116
+    },
+    {
+      "path": "internal/cell/events_test.go",
+      "sha256": "287cbcc8d1120ed133f8fc902cd34725492fea34a06c1d09d995098028561c55",
+      "bytes": 1565
     },
     {
       "path": "internal/cell/types.go",
@@ -1286,8 +1291,8 @@
     },
     {
       "path": "internal/events/types.go",
-      "sha256": "e8cf1dc489d1295e812dc63d2d507e7efe7fb11236c7cebb4175f4c8c3db1295",
-      "bytes": 11119
+      "sha256": "6cf3c0a06498e0e286ea831ce9eb7dd5fa70d0dad47d0a40050339da92cd4110",
+      "bytes": 11786
     },
     {
       "path": "internal/events/types_test.go",

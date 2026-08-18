@@ -77,6 +77,13 @@ const (
 	EventTypeDAGNodeReady             EventType = "dag.node.ready"
 	EventTypeDAGNodeBlocked           EventType = "dag.node.blocked"
 	EventTypeDAGCycleRejected         EventType = "dag.cycle.rejected"
+	EventTypeCellPrepareStarted       EventType = "cell.prepare.started"
+	EventTypeCellReady                EventType = "cell.ready"
+	EventTypeCellExecStarted          EventType = "cell.exec.started"
+	EventTypeCellExecFinished         EventType = "cell.exec.finished"
+	EventTypeCellDestroyStarted       EventType = "cell.destroy.started"
+	EventTypeCellDestroyed            EventType = "cell.destroyed"
+	EventTypeCellFailed               EventType = "cell.failed"
 
 	EventTypeAppended          EventType = "events.appended"
 	EventTypeSubscriberDropped EventType = "events.subscriber.dropped"
@@ -95,6 +102,9 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeCapabilityAllowed: {}, EventTypeCapabilityDenied: {},
 	EventTypeDAGNodeAdded: {}, EventTypeDAGEdgeAdded: {}, EventTypeDAGNodeReady: {},
 	EventTypeDAGNodeBlocked: {}, EventTypeDAGCycleRejected: {},
+	EventTypeCellPrepareStarted: {}, EventTypeCellReady: {}, EventTypeCellExecStarted: {},
+	EventTypeCellExecFinished: {}, EventTypeCellDestroyStarted: {}, EventTypeCellDestroyed: {},
+	EventTypeCellFailed: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 
