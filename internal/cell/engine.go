@@ -21,12 +21,17 @@ type Authorizer interface {
 	AuthorizeCellPrepare(context.Context, Spec) error
 }
 
+type SecretBroker interface {
+	AuthorizeCellSecretRefs(context.Context, TaskID, []SecretRef) error
+}
+
 type Manager struct {
-	repository Repository
-	backends   map[BackendKind]Backend
-	authorizer Authorizer
-	eventStore events.Store
-	now        func() time.Time
+	repository   Repository
+	backends     map[BackendKind]Backend
+	authorizer   Authorizer
+	secretBroker SecretBroker
+	eventStore   events.Store
+	now          func() time.Time
 }
 
 func NewManager(repository Repository, backends map[BackendKind]Backend, authorizers ...Authorizer) *Manager {
@@ -47,6 +52,12 @@ func NewAuditedManager(repository Repository, backends map[BackendKind]Backend, 
 	return manager
 }
 
+func NewManagerWithSecretBroker(repository Repository, backends map[BackendKind]Backend, authorizer Authorizer, broker SecretBroker) *Manager {
+	manager := NewManager(repository, backends, authorizer)
+	manager.secretBroker = broker
+	return manager
+}
+
 func (m *Manager) Prepare(ctx context.Context, spec Spec) (Record, error) {
 	if m == nil || m.repository == nil {
 		return Record{}, fmt.Errorf("%w: cell repository is unavailable", ErrPrepareFailed)
@@ -59,6 +70,14 @@ func (m *Manager) Prepare(ctx context.Context, spec Spec) (Record, error) {
 	}
 	if err := m.authorizer.AuthorizeCellPrepare(ctx, spec); err != nil {
 		return Record{}, ErrAuthorizationDenied
+	}
+	if len(spec.SecretRefs) > 0 {
+		if m.secretBroker == nil {
+			return Record{}, ErrAuthorizationDenied
+		}
+		if err := m.secretBroker.AuthorizeCellSecretRefs(ctx, spec.TaskID, spec.SecretRefs); err != nil {
+			return Record{}, ErrAuthorizationDenied
+		}
 	}
 	backend := m.backends[spec.Backend]
 	if backend == nil {
@@ -129,6 +148,9 @@ func (m *Manager) Exec(ctx context.Context, handle Handle, request ExecRequest) 
 	if record.State == StateDestroyed {
 		return ExecResult{}, ErrDestroyed
 	}
+	if record.TaskID != handle.TaskID || record.Backend != handle.Backend || record.Workspace != handle.Workspace {
+		return ExecResult{}, ErrNotReady
+	}
 	if record.State != StateRunning {
 		return ExecResult{}, ErrNotReady
 	}
@@ -163,6 +185,9 @@ func (m *Manager) Destroy(ctx context.Context, handle Handle) error {
 	}
 	if record.State == StateDestroyed {
 		return nil
+	}
+	if record.TaskID != handle.TaskID || record.Backend != handle.Backend || record.Workspace != handle.Workspace {
+		return ErrNotReady
 	}
 	if record.State != StateReady && record.State != StateRunning {
 		return ErrNotReady
