@@ -47,6 +47,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"trusted_content_segments",
 		"typed_handoffs",
 		"verification_attestations",
+		"security_profile_assignments",
 		"evidence_confidence_evaluations",
 		"security_dashboard_snapshots",
 		"scheduler_task_leases",
@@ -55,6 +56,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"reproducible_replay_runs",
 		"context_budget_decisions",
 		"conflict_predictions",
+		"security_profile_assignments",
 		"evidence_confidence_evaluations",
 		"security_dashboard_snapshots",
 		"scheduler_task_leases",
@@ -89,6 +91,8 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS security_profile_assignments_by_name",
+		"DROP TABLE IF EXISTS security_profile_assignments",
 		"DROP INDEX IF EXISTS evidence_confidence_evaluations_by_created",
 		"DROP TABLE IF EXISTS evidence_confidence_evaluations",
 		"DROP INDEX IF EXISTS security_dashboard_snapshots_by_created",
@@ -209,6 +213,8 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS security_profile_assignments_by_name",
+		"DROP TABLE IF EXISTS security_profile_assignments",
 		"DROP INDEX IF EXISTS evidence_confidence_evaluations_by_created",
 		"DROP TABLE IF EXISTS evidence_confidence_evaluations",
 		"DROP INDEX IF EXISTS security_dashboard_snapshots_by_created",
