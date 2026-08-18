@@ -1161,8 +1161,8 @@
     },
     {
       "path": "internal/cell/engine.go",
-      "sha256": "0e79da791b73d82058e6b44ac9ac0cf031d29268bce8c3ea966464e7870825fb",
-      "bytes": 10256
+      "sha256": "a0515dd7ffdd2defc445d227d591152533a3443aac42fc0cdb10d175d1556b5d",
+      "bytes": 11937
     },
     {
       "path": "internal/cell/engine_test.go",
@@ -1321,8 +1321,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "bf6cca170012cf41f5e41382df8f1690e97479045663733b091e688baa6c08f9",
-      "bytes": 7756
+      "sha256": "8f932b50c2e32d76655b0bfb837af53f2ed48e75fb447c357bbc9790e32a052a",
+      "bytes": 8030
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",

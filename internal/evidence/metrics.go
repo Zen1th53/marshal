@@ -27,6 +27,7 @@ const (
 	MetricOperationPolicyRuntimeGate MetricOperation = "policy_runtime_gate"
 	MetricOperationPolicyTest        MetricOperation = "policy_test"
 	MetricOperationCapability        MetricOperation = "capability"
+	MetricOperationCell              MetricOperation = "cell"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -47,7 +48,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationDigest: {}, MetricOperationAudit: {}, MetricOperationFreshness: {},
 	MetricOperationContention: {}, MetricOperationPolicyLoad: {}, MetricOperationPolicyPersist: {},
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
-	MetricOperationPolicyTest: {}, MetricOperationCapability: {},
+	MetricOperationPolicyTest: {}, MetricOperationCapability: {}, MetricOperationCell: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
@@ -64,6 +65,8 @@ var metricReasons = map[string]struct{}{
 	"POLICY_CONFLICT": {}, "POLICY_DENIED": {}, "POLICY_ERROR": {},
 	"CAP_DENIED": {}, "CAP_INVALID_SCOPE": {}, "CAP_EXPIRED": {},
 	"CAP_REVOKED": {}, "CAP_SUBJECT_MISMATCH": {}, "CAP_TASK_MISMATCH": {},
+	"CELL_BACKEND_UNAVAILABLE": {}, "CELL_PREPARE_FAILED": {}, "CELL_SCOPE_ESCAPE": {},
+	"CELL_NOT_READY": {}, "CELL_DESTROYED": {}, "CELL_CLEANUP_FAILED": {}, "CELL_AUTHORIZATION_DENIED": {},
 }
 
 // MetricsSnapshot is a detached, read-only projection of recorder state.

@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/evidence"
 )
 
 type Repository interface {
@@ -32,6 +34,7 @@ type Manager struct {
 	authorizer   Authorizer
 	secretBroker SecretBroker
 	eventStore   events.Store
+	metrics      *evidence.MetricsRecorder
 	now          func() time.Time
 }
 
@@ -59,7 +62,18 @@ func NewManagerWithSecretBroker(repository Repository, backends map[BackendKind]
 	return manager
 }
 
-func (m *Manager) Prepare(ctx context.Context, spec Spec) (Record, error) {
+// NewObservedManager attaches the existing bounded operational projection to
+// cell lifecycle work. Metrics are advisory only and never participate in
+// authorization, persistence or state transitions.
+func NewObservedManager(repository Repository, backends map[BackendKind]Backend, authorizer Authorizer, metrics *evidence.MetricsRecorder) *Manager {
+	manager := NewManager(repository, backends, authorizer)
+	manager.metrics = metrics
+	return manager
+}
+
+func (m *Manager) Prepare(ctx context.Context, spec Spec) (record Record, resultErr error) {
+	started := time.Now()
+	defer func() { m.observe(evidence.MetricOperationCell, resultErr, started) }()
 	if m == nil || m.repository == nil {
 		return Record{}, fmt.Errorf("%w: cell repository is unavailable", ErrPrepareFailed)
 	}
@@ -85,7 +99,7 @@ func (m *Manager) Prepare(ctx context.Context, spec Spec) (Record, error) {
 		return Record{}, ErrBackendUnavailable
 	}
 	now := m.now().UTC()
-	record := Record{
+	record = Record{
 		ID:         cellIDFor(spec),
 		TaskID:     spec.TaskID,
 		Backend:    spec.Backend,
@@ -107,6 +121,30 @@ func (m *Manager) Prepare(ctx context.Context, spec Spec) (Record, error) {
 	}
 	record.State = StatePreparing
 	return m.completePreparation(ctx, record, spec, backend)
+}
+
+func (m *Manager) observe(operation evidence.MetricOperation, err error, started time.Time) {
+	if m == nil || m.metrics == nil {
+		return
+	}
+	result := evidence.MetricResultSuccess
+	reason := "CELL_READY"
+	switch {
+	case err == nil:
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		result, reason = evidence.MetricResultCancelled, "CANCELLED"
+	case errors.Is(err, ErrAuthorizationDenied):
+		result, reason = evidence.MetricResultDenied, string(CodeAuthorizationDenied)
+	case errors.Is(err, ErrScopeEscape):
+		result, reason = evidence.MetricResultInvalid, string(CodeScopeEscape)
+	case errors.Is(err, ErrPrepareFailed):
+		result, reason = evidence.MetricResultInvalid, string(CodePrepareFailed)
+	case errors.Is(err, ErrBackendUnavailable):
+		result, reason = evidence.MetricResultError, string(CodeBackendUnavailable)
+	default:
+		result, reason = evidence.MetricResultError, "CELL_PREPARE_FAILED"
+	}
+	m.metrics.Observe(operation, result, reason, time.Since(started))
 }
 
 func (m *Manager) completePreparation(ctx context.Context, record Record, spec Spec, backend Backend) (Record, error) {
