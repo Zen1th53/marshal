@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 49
+const LatestSchemaVersion = 51
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1238,6 +1238,43 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 49: %w", err)
 		}
 		version = 49
+	}
+	if version < 50 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE security_reputation_evaluations (
+				eval_id TEXT PRIMARY KEY,
+				subject_id TEXT NOT NULL,
+				value REAL NOT NULL DEFAULT 0.0,
+				confidence REAL NOT NULL DEFAULT 0.0,
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX security_reputation_evaluations_by_subject
+				ON security_reputation_evaluations(subject_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 50: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(50, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 50: %w", err)
+		}
+		version = 50
+	}
+	if version < 51 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE tui_session_snapshots (
+				session_id TEXT PRIMARY KEY,
+				agents_count INTEGER NOT NULL DEFAULT 0,
+				tasks_count INTEGER NOT NULL DEFAULT 0,
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX tui_session_snapshots_by_created
+				ON tui_session_snapshots(created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 51: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(51, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 51: %w", err)
+		}
+		version = 51
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
