@@ -1846,13 +1846,13 @@
     },
     {
       "path": "internal/risk/engine.go",
-      "sha256": "1b38818a3705c3511c44c6442cb3b6e18afe46e3367e2a0dbd6f10bc980e152c",
-      "bytes": 7978
+      "sha256": "7e611211a7254aa132807ab8b03f690aa5815ecb8cbf5e28589b7f80b199b781",
+      "bytes": 8631
     },
     {
       "path": "internal/risk/engine_test.go",
-      "sha256": "169dacfaa8307ddf297f7df38effd0ac6adf7a05924804cbebc317552cddf245",
-      "bytes": 2039
+      "sha256": "017346016cdb18564390affbca2ad7e20bd1ed70d5eb22db90b45f9ae3d87888",
+      "bytes": 2065
     },
     {
       "path": "internal/risk/errors.go",
@@ -2323,6 +2323,11 @@
       "path": "internal/store/query.go",
       "sha256": "8939e118fa83aa7c098b3cc90ea54fba30151dc4003890cf89be8e1966f3da24",
       "bytes": 7522
+    },
+    {
+      "path": "internal/store/risk_concurrency_a08_test.go",
+      "sha256": "5350d0ecc1500eb33a736bf1e49e6b79a041710ed50b877eb5e1bf2144b08509",
+      "bytes": 3177
     },
     {
       "path": "internal/store/risk_persistence.go",
