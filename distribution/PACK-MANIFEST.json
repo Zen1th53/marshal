@@ -3130,6 +3130,11 @@
       "bytes": 14430
     },
     {
+      "path": "internal/store/vibe_persistence_a02_test.go",
+      "sha256": "0eb3df5dc386ca9b0794d01abf978fe21d48d4987c4e67751b748676a75a1f9f",
+      "bytes": 230
+    },
+    {
       "path": "internal/store/xverify_persistence_a02_test.go",
       "sha256": "de9bdd595790baf4396e2636a941d586a868b7657fe1cb5175426b2160e1b017",
       "bytes": 233
