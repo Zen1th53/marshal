@@ -23,8 +23,8 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 	if got := queryInt(t, st.db, "PRAGMA foreign_keys"); got != 1 {
 		t.Fatalf("foreign_keys = %d, want 1", got)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 14 {
-		t.Fatalf("schema version = %d, want 14", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != LatestSchemaVersion {
+		t.Fatalf("schema version = %d, want latest", got)
 	}
 
 	wantTables := []string{
@@ -36,6 +36,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"policy_versions",
 		"policy_test_runs", "policy_test_cases", "policy_test_outcomes",
 		"structured_events",
+		"dag_nodes", "dag_edges",
 		"capability_grants",
 	}
 	for _, table := range wantTables {
@@ -57,6 +58,16 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		"DROP INDEX capability_grants_by_idempotency",
 		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
 		"DROP TABLE capability_grants",
+		"DROP INDEX dag_edges_by_to",
+		"DROP INDEX dag_edges_by_from",
+		"DROP TABLE dag_edges",
+		"DROP INDEX dag_nodes_by_status_priority",
+		"DROP TABLE dag_nodes",
+		"DROP INDEX structured_events_by_type_sequence",
+		"DROP INDEX structured_events_by_run_sequence",
+		"DROP INDEX structured_events_by_task_sequence",
+		"DROP INDEX structured_events_by_sequence",
+		"DROP TABLE structured_events",
 		"DROP INDEX policy_test_outcomes_by_status",
 		"DROP TABLE policy_test_outcomes",
 		"ALTER TABLE policy_test_runs DROP COLUMN execution_claimed_at",
@@ -70,8 +81,8 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("migrate v9: %v", err)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 14 {
-		t.Fatalf("schema version=%d, want 14", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != LatestSchemaVersion {
+		t.Fatalf("schema version=%d, want latest", got)
 	}
 	if got := queryInt(t, st.db, "SELECT count(*) FROM pragma_table_info('policy_test_runs') WHERE name IN ('execution_owner','execution_claimed_at')"); got != 2 {
 		t.Fatalf("claim columns=%d, want 2", got)
@@ -100,6 +111,16 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		"DROP INDEX capability_grants_by_idempotency",
 		"ALTER TABLE capability_grants DROP COLUMN idempotency_key",
 		"DROP TABLE capability_grants",
+		"DROP INDEX dag_edges_by_to",
+		"DROP INDEX dag_edges_by_from",
+		"DROP TABLE dag_edges",
+		"DROP INDEX dag_nodes_by_status_priority",
+		"DROP TABLE dag_nodes",
+		"DROP INDEX structured_events_by_type_sequence",
+		"DROP INDEX structured_events_by_run_sequence",
+		"DROP INDEX structured_events_by_task_sequence",
+		"DROP INDEX structured_events_by_sequence",
+		"DROP TABLE structured_events",
 		"DROP INDEX policy_test_outcomes_by_status",
 		"DROP TABLE policy_test_outcomes",
 		"ALTER TABLE policy_test_runs DROP COLUMN execution_claimed_at",
@@ -116,10 +137,10 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		}
 	}
 	if err := st.Migrate(ctx); err != nil {
-		t.Fatalf("migrate v7 to v11: %v", err)
+		t.Fatalf("migrate v7 to latest: %v", err)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 14 {
-		t.Fatalf("schema version=%d, want 14", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != LatestSchemaVersion {
+		t.Fatalf("schema version=%d, want latest", got)
 	}
 	if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('policy_test_runs','policy_test_cases','policy_test_outcomes')"); got != 3 {
 		t.Fatalf("T49 tables=%d, want 3", got)

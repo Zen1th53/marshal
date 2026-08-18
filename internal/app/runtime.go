@@ -19,6 +19,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
 	"github.com/Zen1th53/marshal/internal/capability"
+	"github.com/Zen1th53/marshal/internal/dag"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -41,6 +42,7 @@ type Runtime struct {
 	adapters          map[string]adapter.Adapter
 	evidenceSanitizer evidence.Sanitizer
 	capabilityBroker  capability.Broker
+	dagGraph          *dag.Engine
 	runtimeInstanceID string
 	runtimePolicy     RuntimePolicyConfig
 	policyConfigured  bool
@@ -201,6 +203,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		layout:            layout,
 		store:             database,
 		eventEngine:       events.NewEngine(database),
+		dagGraph:          func() *dag.Engine { graph, _ := dag.NewEngine(database); return graph }(),
 		policy:            engine,
 		adapters:          options.Adapters,
 		evidenceSanitizer: sanitizer,
@@ -214,6 +217,10 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	_ = rt.ReconcileStartup(ctx)
 	return rt, nil
 }
+
+// DAG exposes the canonical dynamic task graph read/query surface. Mutations
+// remain behind dag.Engine's authenticated service boundary.
+func (r *Runtime) DAG() dag.Graph { return r.dagGraph }
 
 func (r *Runtime) InstanceID() string { return r.runtimeInstanceID }
 

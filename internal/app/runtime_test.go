@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/dag"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -28,7 +30,7 @@ func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.SchemaVersion != 14 || status.TaskCount != 0 || status.Project.Repository != repo.Path() {
+	if status.SchemaVersion != store.LatestSchemaVersion || status.TaskCount != 0 || status.Project.Repository != repo.Path() {
 		t.Fatalf("status = %#v", status)
 	}
 	info, err := os.Stat(filepath.Join(repo.Path(), ".marshal"))
@@ -37,6 +39,26 @@ func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o700 {
 		t.Fatalf("runtime mode = %o", info.Mode().Perm())
+	}
+}
+
+func TestRuntimeExposesCanonicalDAGQuerySurface(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	if runtime.DAG() == nil {
+		t.Fatal("runtime DAG surface is nil")
+	}
+	if _, ok := runtime.DAG().(interface {
+		Ready(context.Context, dag.TaskID) (dag.Readiness, error)
+	}); !ok {
+		t.Fatal("runtime DAG surface lacks readiness query")
 	}
 }
 

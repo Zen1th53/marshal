@@ -72,6 +72,11 @@ const (
 	EventTypeCapabilityGrantRevoked   EventType = "capability.grant.revoked"
 	EventTypeCapabilityAllowed        EventType = "capability.authorize.allowed"
 	EventTypeCapabilityDenied         EventType = "capability.authorize.denied"
+	EventTypeDAGNodeAdded             EventType = "dag.node.added"
+	EventTypeDAGEdgeAdded             EventType = "dag.edge.added"
+	EventTypeDAGNodeReady             EventType = "dag.node.ready"
+	EventTypeDAGNodeBlocked           EventType = "dag.node.blocked"
+	EventTypeDAGCycleRejected         EventType = "dag.cycle.rejected"
 
 	EventTypeAppended          EventType = "events.appended"
 	EventTypeSubscriberDropped EventType = "events.subscriber.dropped"
@@ -88,6 +93,8 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeApprovalRequested: {}, EventTypeApprovalGranted: {}, EventTypeApprovalDenied: {},
 	EventTypeCapabilityGrantRequested: {}, EventTypeCapabilityGrantIssued: {}, EventTypeCapabilityGrantRevoked: {},
 	EventTypeCapabilityAllowed: {}, EventTypeCapabilityDenied: {},
+	EventTypeDAGNodeAdded: {}, EventTypeDAGEdgeAdded: {}, EventTypeDAGNodeReady: {},
+	EventTypeDAGNodeBlocked: {}, EventTypeDAGCycleRejected: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 
