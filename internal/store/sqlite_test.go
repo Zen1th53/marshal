@@ -48,6 +48,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"typed_handoffs",
 		"verification_attestations",
 		"provenance_records",
+		"persistent_agent_memory",
 	}
 	for _, table := range wantTables {
 		if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table); got != 1 {
@@ -63,6 +64,9 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX persistent_agent_memory_by_kind",
+		"DROP INDEX persistent_agent_memory_by_scope",
+		"DROP TABLE persistent_agent_memory",
 		"DROP INDEX provenance_records_by_agent",
 		"DROP INDEX provenance_records_by_task",
 		"DROP TABLE provenance_records",
@@ -145,6 +149,9 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX persistent_agent_memory_by_kind",
+		"DROP INDEX persistent_agent_memory_by_scope",
+		"DROP TABLE persistent_agent_memory",
 		"DROP INDEX provenance_records_by_agent",
 		"DROP INDEX provenance_records_by_task",
 		"DROP TABLE provenance_records",

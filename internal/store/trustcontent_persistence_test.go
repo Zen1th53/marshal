@@ -63,6 +63,9 @@ func TestT23MigrationUpgradesSchema26(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX persistent_agent_memory_by_kind",
+		"DROP INDEX persistent_agent_memory_by_scope",
+		"DROP TABLE persistent_agent_memory",
 		"DROP INDEX provenance_records_by_agent",
 		"DROP INDEX provenance_records_by_task",
 		"DROP TABLE provenance_records",
