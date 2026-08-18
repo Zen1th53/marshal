@@ -35,6 +35,7 @@ const (
 	MetricOperationNetworkEgress     MetricOperation = "network_egress"
 	MetricOperationTrustContent      MetricOperation = "trust_content"
 	MetricOperationQuorum            MetricOperation = "quorum"
+	MetricOperationProvenance        MetricOperation = "provenance"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -57,7 +58,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
 	MetricOperationPolicyTest: {}, MetricOperationCapability: {}, MetricOperationCell: {},
 	MetricOperationAuthority: {}, MetricOperationGate: {}, MetricOperationSecret: {}, MetricOperationRisk: {},
-	MetricOperationNetworkEgress: {}, MetricOperationTrustContent: {}, MetricOperationQuorum: {},
+	MetricOperationNetworkEgress: {}, MetricOperationTrustContent: {}, MetricOperationQuorum: {}, MetricOperationProvenance: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
