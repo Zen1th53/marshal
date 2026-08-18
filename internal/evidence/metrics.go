@@ -34,6 +34,7 @@ const (
 	MetricOperationRisk              MetricOperation = "risk"
 	MetricOperationNetworkEgress     MetricOperation = "network_egress"
 	MetricOperationTrustContent      MetricOperation = "trust_content"
+	MetricOperationQuorum            MetricOperation = "quorum"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -56,7 +57,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
 	MetricOperationPolicyTest: {}, MetricOperationCapability: {}, MetricOperationCell: {},
 	MetricOperationAuthority: {}, MetricOperationGate: {}, MetricOperationSecret: {}, MetricOperationRisk: {},
-	MetricOperationNetworkEgress: {}, MetricOperationTrustContent: {},
+	MetricOperationNetworkEgress: {}, MetricOperationTrustContent: {}, MetricOperationQuorum: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
@@ -83,6 +84,7 @@ var metricReasons = map[string]struct{}{
 	"RISK_ERROR": {},
 	"NET_ALLOWED": {}, "NET_DENIED": {}, "NET_RULE_INVALID": {}, "NET_PROTOCOL_DENIED": {}, "NET_REDIRECT_DENIED": {}, "NET_ENFORCEMENT_UNAVAILABLE": {},
 	"TRUST_ZONE_INVALID": {}, "TRUST_UPGRADE_FORBIDDEN": {}, "TRUST_SEGMENT_TOO_LARGE": {}, "TRUST_RENDER_FAILED": {},
+	"VERIFY_QUORUM_SATISFIED": {}, "VERIFY_QUORUM_UNMET": {}, "VERIFY_VETO": {}, "VERIFY_STALE_ATTESTATION": {}, "VERIFY_AUTHORITY_UNAVAILABLE": {}, "VERIFY_INVALID": {},
 }
 
 // MetricsSnapshot is a detached, read-only projection of recorder state.
