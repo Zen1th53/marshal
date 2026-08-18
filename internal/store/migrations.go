@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 55
+const LatestSchemaVersion = 57
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1352,6 +1352,42 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 55: %w", err)
 		}
 		version = 55
+	}
+	if version < 56 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE remote_worker_attestations (
+				attestation_id TEXT PRIMARY KEY,
+				node_id TEXT NOT NULL,
+				trusted INTEGER NOT NULL DEFAULT 1,
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX remote_worker_attestations_by_node
+				ON remote_worker_attestations(node_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 56: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(56, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 56: %w", err)
+		}
+		version = 56
+	}
+	if version < 57 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE scheduler_explanations (
+				explanation_id TEXT PRIMARY KEY,
+				task_id TEXT NOT NULL,
+				selected_worker TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX scheduler_explanations_by_task
+				ON scheduler_explanations(task_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 57: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(57, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 57: %w", err)
+		}
+		version = 57
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
