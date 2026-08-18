@@ -1101,13 +1101,18 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "f0968763f899b866f898ee2b1c9ede576a17303a80c87db8623ea7af4b68dc38",
-      "bytes": 27641
+      "sha256": "bfd26e6c1a9f24a30c7cf0262c78071b50002788ce0692f8ea26aa68b5b5138d",
+      "bytes": 28166
     },
     {
       "path": "internal/app/runtime_test.go",
       "sha256": "4603b4fed075d1d8cd93116164c8142f37191cd5285d890e5c46038fef9c971d",
       "bytes": 5744
+    },
+    {
+      "path": "internal/app/secrets_runtime_a06_test.go",
+      "sha256": "b3fb2e67c4b8389c12d6e922ebdc11526131263c4d1c9ece3f8314d2c3c41ede",
+      "bytes": 1173
     },
     {
       "path": "internal/artifact/store.go",

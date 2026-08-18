@@ -29,6 +29,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/sandbox"
+	"github.com/Zen1th53/marshal/internal/secrets"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/worker"
 	"github.com/Zen1th53/marshal/internal/worktree"
@@ -47,6 +48,7 @@ type Runtime struct {
 	capabilityBroker   capability.Broker
 	dagGraph           *dag.Engine
 	cellManager        *cell.Manager
+	secretBroker       secrets.Broker
 	gateEngine         *gate.Engine
 	authorityPrincipal *authz.Principal
 	processAuthority   authz.Authority
@@ -63,6 +65,7 @@ type Options struct {
 	RuntimePolicy      *RuntimePolicyConfig
 	CapabilityBroker   capability.Broker
 	CellManager        *cell.Manager
+	SecretBroker       secrets.Broker
 	GateEngine         *gate.Engine
 	AuthorityPrincipal *authz.Principal
 	ProcessAuthority   authz.Authority
@@ -220,6 +223,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		evidenceSanitizer:  sanitizer,
 		capabilityBroker:   options.CapabilityBroker,
 		cellManager:        options.CellManager,
+		secretBroker:       options.SecretBroker,
 		gateEngine:         options.GateEngine,
 		authorityPrincipal: options.AuthorityPrincipal,
 		processAuthority:   options.ProcessAuthority,
@@ -238,6 +242,15 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 func (r *Runtime) DAG() dag.Graph { return r.dagGraph }
 
 func (r *Runtime) InstanceID() string { return r.runtimeInstanceID }
+
+// WithSecret is the runtime composition boundary for scoped secret use.
+// Callers never receive a secret outside the broker callback.
+func (r *Runtime) WithSecret(ctx context.Context, lease secrets.Lease, use func([]byte) error) error {
+	if r == nil || r.secretBroker == nil {
+		return secrets.ErrDenied
+	}
+	return r.secretBroker.WithSecret(ctx, lease, use)
+}
 
 // PrepareCell is the runtime composition boundary for execution cells. The
 // canonical manager owns validation, authorization, persistence and backend
