@@ -12,6 +12,8 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/protocol"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -253,5 +255,81 @@ func TestA2AServerBearerAuth(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401 Unauthorized for revoked token, got %d", resp.StatusCode)
+	}
+}
+
+func TestA06TypedHandoffEndpointFailsClosedWithoutAuthenticatedPrincipal(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	server := httptest.NewServer(NewServer(runtime).Handler())
+	defer server.Close()
+	response, err := http.Post(server.URL+"/a2a/handoffs", "application/a2a+json", bytes.NewBufferString(`{"idempotency_key":"handoff-a06","handoff":{}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want authenticated handoff endpoint to fail closed", response.StatusCode)
+	}
+}
+
+func TestA06TypedHandoffEndpointUsesAuthenticatedTypedContract(t *testing.T) {
+	ctx := context.Background()
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(ctx, repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(ctx, repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	if _, err := runtime.ImportTasks(ctx, []model.Task{{ID: "TASK-T28", Title: "typed handoff", Status: model.TaskReady, Risk: model.R1}}); err != nil {
+		t.Fatal(err)
+	}
+
+	authManager := auth.NewManager(t.TempDir())
+	token, record, err := authManager.CreateToken("typed-handoff", auth.KindA2AAgent, []string{"handoff.create"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	submission := protocol.Submission{IdempotencyKey: "a2a-t28-request", Handoff: protocol.Handoff{
+		ID: "HANDOFF-A2A-T28", Version: protocol.Version1, TaskID: "TASK-T28", FromAgent: record.ID,
+		ToRole: protocol.RoleQA, Claims: map[string]string{"summary": "ready"}, ChangedFiles: []string{"internal/protocol/engine.go"},
+		ContextDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}}
+	body, err := json.Marshal(submission)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(NewServerWithAuth(runtime, authManager).Handler())
+	defer server.Close()
+	request, err := http.NewRequest(http.MethodPost, server.URL+"/a2a/handoffs", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+	var handoff protocol.Handoff
+	if err := json.NewDecoder(response.Body).Decode(&handoff); err != nil {
+		t.Fatal(err)
+	}
+	if handoff.ID != submission.Handoff.ID || handoff.Status != protocol.StatusAccepted || handoff.FromAgent != record.ID {
+		t.Fatalf("handoff = %#v, want authenticated accepted typed record", handoff)
 	}
 }
