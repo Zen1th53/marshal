@@ -25,18 +25,22 @@ func (r Ref) Validate() error {
 // Lease is the bounded authority to use one secret for one task and purpose.
 // It deliberately contains only the reference, never the resolved value.
 type Lease struct {
-	ID        string     `json:"id"`
-	Subject   string     `json:"subject"`
-	TaskID    string     `json:"task_id"`
-	Ref       Ref        `json:"ref"`
-	Purpose   string     `json:"purpose"`
-	IssuedAt  time.Time  `json:"issued_at"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	State     LeaseState `json:"state"`
-	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+	ID              string     `json:"id"`
+	Subject         string     `json:"subject"`
+	TaskID          string     `json:"task_id"`
+	Ref             Ref        `json:"ref"`
+	Purpose         string     `json:"purpose"`
+	IssuedAt        time.Time  `json:"issued_at"`
+	ExpiresAt       time.Time  `json:"expires_at"`
+	State           LeaseState `json:"state"`
+	RevokedAt       *time.Time `json:"revoked_at,omitempty"`
+	AccessOwner     string     `json:"-"`
+	AccessClaimedAt *time.Time `json:"-"`
 }
 
 type LeaseState string
+
+const ClaimTTL = time.Minute
 
 const (
 	StateRequested LeaseState = "requested"
