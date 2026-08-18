@@ -2495,6 +2495,16 @@
       "bytes": 1459
     },
     {
+      "path": "internal/store/typed_handoffs.go",
+      "sha256": "c54e948abf2d67fc655075881be17507ccce58681de81fd22f0d98db9e3f3ee8",
+      "bytes": 11012
+    },
+    {
+      "path": "internal/store/typed_handoffs_a02_test.go",
+      "sha256": "29fe3d44b9bde98027a24ffca9a34a514136f5054306fc4d5d80b4879ade0d99",
+      "bytes": 10354
+    },
+    {
       "path": "internal/testutil/testgit/git.go",
       "sha256": "bbd792910982a9118e7424727c833c9c687288289b1e8a3ad5284f6bfa68e62d",
       "bytes": 1132
