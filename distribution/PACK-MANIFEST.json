@@ -2156,8 +2156,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "c57f1d085e3a7c81e13a9f97e4bd64b180cc202fe7b0dd1efe62728c26a64189",
-      "bytes": 26305
+      "sha256": "c5de999cda47dee78fc31f525a141ad8d21ef64d0c55f4ac8f0e2f2e7c6350b2",
+      "bytes": 27195
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",
@@ -2300,6 +2300,16 @@
       "bytes": 7522
     },
     {
+      "path": "internal/store/risk_persistence.go",
+      "sha256": "4073542e5c79076fa15d76aed9978a5a155af7dc91e06e48f599ee25ca6ef552",
+      "bytes": 3927
+    },
+    {
+      "path": "internal/store/risk_persistence_a02_test.go",
+      "sha256": "a4c217089803461c0d7b6200c483d5a4a33e10f5e2107ea2db5899f3008d8c9d",
+      "bytes": 3131
+    },
+    {
       "path": "internal/store/secrets_concurrency_a08_test.go",
       "sha256": "2d3c0e742dfc04d64c593b14a5291d789a69d61b121567769c7b55495faa2183",
       "bytes": 3372
@@ -2326,8 +2336,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "1108e627e1f3ff9ea60a092d0b364018319c806d7dab544eb7962ca2329c7164",
-      "bytes": 8192
+      "sha256": "ee17b0b8a3aa85da64014def1b9f50debec503e71dc3dadc9b70eb09452ac00a",
+      "bytes": 8454
     },
     {
       "path": "internal/store/tasks.go",
