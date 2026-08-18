@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 37
+const LatestSchemaVersion = 39
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -964,6 +964,26 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 		version = 35
 	}
+	if version < 39 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE conflict_predictions (
+				prediction_id TEXT PRIMARY KEY,
+				task_a TEXT NOT NULL,
+				task_b TEXT NOT NULL,
+				conflict_level TEXT NOT NULL,
+				overlap_files_json TEXT NOT NULL DEFAULT '[]',
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX conflict_predictions_by_tasks
+				ON conflict_predictions(task_a, task_b);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 39: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(39, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 39: %w", err)
+		}
+		version = 39
+	}
 	if version < 36 {
 		if _, err := tx.ExecContext(ctx, `
 			CREATE TABLE compiled_contexts (
@@ -1005,6 +1025,48 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 37: %w", err)
 		}
 		version = 37
+	}
+	if version < 38 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE mcp_gateway_logs (
+				log_id TEXT PRIMARY KEY,
+				subject TEXT NOT NULL,
+				task_id TEXT NOT NULL,
+				server TEXT NOT NULL,
+				tool TEXT NOT NULL,
+				allowed INTEGER NOT NULL DEFAULT 1,
+				evidence_id TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX mcp_gateway_logs_by_task
+				ON mcp_gateway_logs(task_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 38: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(38, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 38: %w", err)
+		}
+		version = 38
+	}
+	if version < 39 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE conflict_predictions (
+				prediction_id TEXT PRIMARY KEY,
+				task_a TEXT NOT NULL,
+				task_b TEXT NOT NULL,
+				conflict_level TEXT NOT NULL,
+				overlap_files_json TEXT NOT NULL DEFAULT '[]',
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX conflict_predictions_by_tasks
+				ON conflict_predictions(task_a, task_b);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 39: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(39, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 39: %w", err)
+		}
+		version = 39
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
