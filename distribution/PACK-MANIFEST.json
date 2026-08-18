@@ -1685,6 +1685,11 @@
       "bytes": 1931
     },
     {
+      "path": "internal/netpolicy/adversarial_fuzz_test.go",
+      "sha256": "994990a1b3caa26be3de947edd46f4159ad6d5a095cc457c4034b2e676a5882d",
+      "bytes": 1543
+    },
+    {
       "path": "internal/netpolicy/authority.go",
       "sha256": "bce9493503d8cb39fa4aaba53402aa11ce3fa717dd9cc9d1cbc03b3124fea685",
       "bytes": 1628
