@@ -25,9 +25,19 @@
       "bytes": 1191
     },
     {
+      "path": ".github/ISSUE_TEMPLATE/config.yml",
+      "sha256": "0a5fe388c169ba9555003f1413480a8775cbeaa7c9e3f56f359924f196deb7cc",
+      "bytes": 235
+    },
+    {
       "path": ".github/ISSUE_TEMPLATE/feature_request.yml",
       "sha256": "f2dcdab16aa35c88ebd935438d5875fcaecff81ed28e1095ab96c745b92a7a74",
       "bytes": 847
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "sha256": "8e8b2d746134ff04ce6943f21e56f352afae1d1abd329c6c5555dcfbacc037b0",
+      "bytes": 207
     },
     {
       "path": ".github/pull_request_template.md",
@@ -40,9 +50,24 @@
       "bytes": 1983
     },
     {
+      "path": ".github/workflows/codeql.yml",
+      "sha256": "08a9e6437dc0507e0fcb7e1877beed44cd9edd4e5cd544b13fbc4cee8cd5d946",
+      "bytes": 768
+    },
+    {
       "path": ".github/workflows/contributor-rights-check.yml",
       "sha256": "83f60b766cf3ce49d413d3bffe8c09bcfedeb17280ab48b0150530f5b1a055df",
       "bytes": 3269
+    },
+    {
+      "path": ".github/workflows/dependency-review.yml",
+      "sha256": "b60b8bc2eb71b1715e51d1bcaf2808043f72e6e086e46f97d4cb13be8ce09818",
+      "bytes": 409
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "sha256": "338442d93089fb00e709a625568ab766fa654ef258a49686f145688f684a6512",
+      "bytes": 4286
     },
     {
       "path": ".gitignore",
@@ -115,6 +140,11 @@
       "bytes": 4444
     },
     {
+      "path": "GOVERNANCE.md",
+      "sha256": "68f64131c89b72d4165a9afef64654a13eec031be55959735c561805532250df",
+      "bytes": 972
+    },
+    {
       "path": "LICENSE",
       "sha256": "7f8f48e4266aa8fd3033dfaa4bb7f6e83a60c6e099f82d4959b81de90e67cd8f",
       "bytes": 34503
@@ -163,6 +193,11 @@
       "path": "SECURITY.md",
       "sha256": "d29e0bc824f6c88d7cf862f5e07062622e57d92da28092159753b40cf88203a9",
       "bytes": 2192
+    },
+    {
+      "path": "SUPPORT.md",
+      "sha256": "1ca638f5cb4945bbbffa938ead6f4ddca71e6d402b37be3adc9cffe41a0c987b",
+      "bytes": 1244
     },
     {
       "path": "TEAM.md",
@@ -690,6 +725,11 @@
       "bytes": 220
     },
     {
+      "path": "docs/README.md",
+      "sha256": "0cef39c536829682851c985deec5e8849300c118d61034fc94d42214b408ffe7",
+      "bytes": 2661
+    },
+    {
       "path": "docs/a2a.md",
       "sha256": "add8379f8a62b03198ba5025aafdc86a4620aaf15354caa423b567a5574f5b91",
       "bytes": 2152
@@ -793,6 +833,11 @@
       "path": "docs/getting-started.md",
       "sha256": "069a454251e310fb95a71de68802b37fe8aa9ecb05235c22a62f8a71b89d73f7",
       "bytes": 5745
+    },
+    {
+      "path": "docs/installation.md",
+      "sha256": "c40a4c28abe3289adbbac1f92a07b072e82c1e359d80c1fa92b29926f96e4f30",
+      "bytes": 2206
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -998,6 +1043,31 @@
       "path": "docs/verification-quorum.md",
       "sha256": "9d114f47ac6c9a4eaee504d07d72157a2379ca9493c466a95aca93d80da27a43",
       "bytes": 1057
+    },
+    {
+      "path": "examples/01-codex-task.json",
+      "sha256": "592d3ff43d759421881c7c2db5083284cb79a694e084a3c1b3c4ca0c98816841",
+      "bytes": 189
+    },
+    {
+      "path": "examples/02-opencode-ollama-task.json",
+      "sha256": "3b5d1c17b20d570aca10265e1c536a23fd8e554336eec221f7f77e1b96fd0537",
+      "bytes": 183
+    },
+    {
+      "path": "examples/03-mcp-client-config.json",
+      "sha256": "5f1afbd16bf330c710fdd2d2105f6ee58aeeb24d75a9ea288cfb83896354a3b6",
+      "bytes": 196
+    },
+    {
+      "path": "examples/04-a2a-agent-card.json",
+      "sha256": "ab4363148c120b235b6d631e98796034390a617fa988b0eaa4ec92d463750206",
+      "bytes": 196
+    },
+    {
+      "path": "examples/README.md",
+      "sha256": "1aa6a26c8a2ab2cbbe934c44ad7fe3c42a85008c8f58694c15e04702f0c5d887",
+      "bytes": 995
     },
     {
       "path": "go.mod",
