@@ -14,6 +14,7 @@ import (
 type Repository interface {
 	PutCell(context.Context, Record) error
 	GetCell(context.Context, CellID) (Record, error)
+	ClaimCellPreparation(context.Context, CellID) (bool, error)
 	TransitionCellState(context.Context, CellID, State, State) error
 }
 
@@ -90,13 +91,25 @@ func (m *Manager) Prepare(ctx context.Context, spec Spec) (Record, error) {
 		Backend:    spec.Backend,
 		Workspace:  spec.Workspace,
 		SpecDigest: digestSpec(spec),
-		State:      StatePreparing,
+		State:      StateNew,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
 	if err := m.repository.PutCell(ctx, record); err != nil {
 		return Record{}, err
 	}
+	claimed, err := m.repository.ClaimCellPreparation(ctx, record.ID)
+	if err != nil {
+		return Record{}, err
+	}
+	if !claimed {
+		return m.reconcilePreparation(ctx, record.ID, spec)
+	}
+	record.State = StatePreparing
+	return m.completePreparation(ctx, record, spec, backend)
+}
+
+func (m *Manager) completePreparation(ctx context.Context, record Record, spec Spec, backend Backend) (Record, error) {
 	if err := m.emit(ctx, record, events.EventType("cell.prepare.started"), "started"); err != nil {
 		_ = m.repository.TransitionCellState(ctx, record.ID, StatePreparing, StateFailed)
 		return Record{}, err
@@ -122,6 +135,44 @@ func (m *Manager) Prepare(ctx context.Context, spec Spec) (Record, error) {
 		return Record{}, err
 	}
 	return ready, nil
+}
+
+func (m *Manager) reconcilePreparation(ctx context.Context, id CellID, spec Spec) (Record, error) {
+	for attempt := 0; attempt < 1000; attempt++ {
+		record, err := m.repository.GetCell(ctx, id)
+		if err != nil {
+			return Record{}, err
+		}
+		switch record.State {
+		case StateReady:
+			return record, nil
+		case StateFailed:
+			return Record{}, ErrPrepareFailed
+		case StateDestroyed:
+			return Record{}, ErrDestroyed
+		case StateNew:
+			claimed, claimErr := m.repository.ClaimCellPreparation(ctx, id)
+			if claimErr != nil {
+				return Record{}, claimErr
+			}
+			if claimed {
+				backend := m.backends[spec.Backend]
+				if backend == nil {
+					return Record{}, ErrBackendUnavailable
+				}
+				record.State = StatePreparing
+				return m.completePreparation(ctx, record, spec, backend)
+			}
+		}
+		timer := time.NewTimer(time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return Record{}, ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return Record{}, fmt.Errorf("%w: preparation reconciliation exceeded retry bound", ErrPrepareFailed)
 }
 
 func (m *Manager) Transition(ctx context.Context, id CellID, from, to State) error {

@@ -44,7 +44,7 @@ func (s *Store) PutCell(ctx context.Context, record cell.Record) error {
 	)
 	if err == nil {
 		parseErr := parseCellTimes(&existing, created, updated, destroyed)
-		if parseErr != nil || existing != record {
+		if parseErr != nil || !sameCellIdentity(existing, record) {
 			return fmt.Errorf("%w: execution cell identity is immutable", model.ErrConflict)
 		}
 		return nil
@@ -66,6 +66,24 @@ func (s *Store) PutCell(ctx context.Context, record cell.Record) error {
 		return fmt.Errorf("%w: execution cell commit failed", model.ErrUnavailable)
 	}
 	return nil
+}
+
+func (s *Store) ClaimCellPreparation(ctx context.Context, id cell.CellID) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("%w: execution cell id is required", model.ErrInvalid)
+	}
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE execution_cells SET state = 'preparing', updated_at = ?
+		WHERE cell_id = ? AND state = 'new'
+	`, utcNow(), string(id))
+	if err != nil {
+		return false, fmt.Errorf("%w: execution cell claim unavailable", model.ErrUnavailable)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("%w: execution cell claim unavailable", model.ErrUnavailable)
+	}
+	return rows == 1, nil
 }
 
 func (s *Store) GetCell(ctx context.Context, id cell.CellID) (cell.Record, error) {
@@ -149,6 +167,11 @@ func formatCellTime(value *time.Time) string {
 		return ""
 	}
 	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func sameCellIdentity(left, right cell.Record) bool {
+	return left.ID == right.ID && left.TaskID == right.TaskID && left.Backend == right.Backend &&
+		left.Workspace == right.Workspace && left.SpecDigest == right.SpecDigest
 }
 
 var _ cell.Repository = (*Store)(nil)
