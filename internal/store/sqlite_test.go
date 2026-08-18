@@ -47,6 +47,8 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"trusted_content_segments",
 		"typed_handoffs",
 		"verification_attestations",
+		"security_reputation_evaluations",
+		"reconciliation_runs",
 		"model_router_decisions",
 		"security_profile_assignments",
 		"evidence_confidence_evaluations",
@@ -57,6 +59,8 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"reproducible_replay_runs",
 		"context_budget_decisions",
 		"conflict_predictions",
+		"security_reputation_evaluations",
+		"reconciliation_runs",
 		"model_router_decisions",
 		"security_profile_assignments",
 		"evidence_confidence_evaluations",
@@ -93,6 +97,10 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS security_reputation_evaluations_by_subject",
+		"DROP TABLE IF EXISTS security_reputation_evaluations",
+		"DROP INDEX IF EXISTS reconciliation_runs_by_status",
+		"DROP TABLE IF EXISTS reconciliation_runs",
 		"DROP INDEX IF EXISTS model_router_decisions_by_provider",
 		"DROP TABLE IF EXISTS model_router_decisions",
 		"DROP INDEX IF EXISTS security_profile_assignments_by_name",
@@ -217,6 +225,10 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS security_reputation_evaluations_by_subject",
+		"DROP TABLE IF EXISTS security_reputation_evaluations",
+		"DROP INDEX IF EXISTS reconciliation_runs_by_status",
+		"DROP TABLE IF EXISTS reconciliation_runs",
 		"DROP INDEX IF EXISTS model_router_decisions_by_provider",
 		"DROP TABLE IF EXISTS model_router_decisions",
 		"DROP INDEX IF EXISTS security_profile_assignments_by_name",
