@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/policy"
 )
 
@@ -18,6 +20,35 @@ type CheckRequest struct {
 	Subject      string
 	Resource     string
 	PolicyDigest policy.PolicyDigest
+}
+
+// EvaluateObserved records a bounded operational projection around the
+// canonical evaluation. Metrics are never consulted by Evaluate and cannot
+// authorize or alter a gate decision.
+func (e *Engine) EvaluateObserved(ctx context.Context, point GatePoint, subject, resource string, metrics *evidence.MetricsRecorder) (Decision, error) {
+	started := time.Now()
+	decision, err := e.Evaluate(ctx, point, subject, resource)
+	if metrics != nil && ctx.Err() == nil {
+		result := evidence.MetricResultSuccess
+		if err != nil || !decision.Allowed {
+			result = evidence.MetricResultDenied
+			if errors.Is(err, ErrUnknownCheck) || errors.Is(err, ErrInvalidDecision) || errors.Is(err, ErrUnknownGatePoint) {
+				result = evidence.MetricResultInvalid
+			}
+		}
+		metrics.Observe(evidence.MetricOperationGate, result, gateMetricReason(err), time.Since(started))
+	}
+	return decision, err
+}
+
+func gateMetricReason(err error) string {
+	if err == nil {
+		return string(CodeAllowed)
+	}
+	if typed, ok := err.(*Error); ok {
+		return string(typed.Code)
+	}
+	return "GATE_ERROR"
 }
 
 type CheckFunc func(context.Context, CheckRequest) (CheckResult, error)

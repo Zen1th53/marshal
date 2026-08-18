@@ -830,6 +830,11 @@
       "bytes": 2471
     },
     {
+      "path": "docs/security-gates.md",
+      "sha256": "7b2af736a14b485b5e75c418c57e59ae4c68d0f3e8ecf8a01ee53375d738f895",
+      "bytes": 2563
+    },
+    {
       "path": "docs/security-model.md",
       "sha256": "3dd997aed2f58cd16a767375b5e573e5e524015c03e06ca11f3ac9f7969680c1",
       "bytes": 2710
@@ -1426,8 +1431,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "eef7284b30dd3be2098a3575aac4e55781d94e7b380cb766c1b7ee7b51e9409f",
-      "bytes": 8125
+      "sha256": "3f43177579a9c9a3044746629cb7064e828caa3bd5c9779749df45711fb7e771",
+      "bytes": 8430
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
@@ -1486,13 +1491,18 @@
     },
     {
       "path": "internal/gate/engine.go",
-      "sha256": "0d0d9ad6c902de868230bed34df6d61b331627f41021e745d7416cbe6aeab7d5",
-      "bytes": 3907
+      "sha256": "0fad97c9447422e7b7c023ec93ceaf74bc07fb2f74ea0598cc3dca897565110c",
+      "bytes": 5028
     },
     {
       "path": "internal/gate/engine_a04_test.go",
       "sha256": "c6bdcc7f2d476560426a78b8ebf890f661e9b107909e9cce394a0a308b901766",
       "bytes": 3287
+    },
+    {
+      "path": "internal/gate/metrics_a09_test.go",
+      "sha256": "6b2edf279636045f5c40d4aa6ded3ffd6be1fa854da3fbb297be3470850fe167",
+      "bytes": 2504
     },
     {
       "path": "internal/gate/types.go",
