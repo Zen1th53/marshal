@@ -1835,6 +1835,21 @@
       "bytes": 4715
     },
     {
+      "path": "internal/secrets/errors.go",
+      "sha256": "a3ffb5570bd0d349db6f2c799c83d3397079c127efaf3172c3fc647aab391dfd",
+      "bytes": 1714
+    },
+    {
+      "path": "internal/secrets/types.go",
+      "sha256": "868b153d5a1bdb2bf494c65068bcfbe866b59ddd0c9ec375eb4e8ac4acc5384d",
+      "bytes": 1827
+    },
+    {
+      "path": "internal/secrets/types_test.go",
+      "sha256": "981514f81791b24196117c6a1020f5fbbf8aef1b5e9a056baffdfb1ff3824d28",
+      "bytes": 2525
+    },
+    {
       "path": "internal/store/authz_concurrency_a08_test.go",
       "sha256": "28134ebdbcce23bd67c6bcc365bac49582307788e64b3dd6e87dbbaca3ac6262",
       "bytes": 5357
