@@ -1021,8 +1021,8 @@
     },
     {
       "path": "docs/superpowers/plans/2026-08-18-release-productization.md",
-      "sha256": "589416e0a7f79076e34b1ada4d2296283a78606181aeb1284d77ab7cffe047eb",
-      "bytes": 7404
+      "sha256": "cf414f5d6e51cb9d7baa8b3d788af3dca510ee3972888255e1937e493a8bdd2b",
+      "bytes": 7402
     },
     {
       "path": "docs/superpowers/specs/2026-08-11-agent-runtime-plane-design.md",
@@ -1476,8 +1476,8 @@
     },
     {
       "path": "internal/attestation/types.go",
-      "sha256": "8bb49423c80a1ea2cd5f23e58cc2d7d1fb4a0577b7d349b7654b4d4735a11f7c",
-      "bytes": 1728
+      "sha256": "cf3d2afad34eccd9a7c8087d3edcac19eb89e06ef9d39f66c4bff798d0de205f",
+      "bytes": 1720
     },
     {
       "path": "internal/attestation/types_test.go",
@@ -1836,8 +1836,8 @@
     },
     {
       "path": "internal/events/types.go",
-      "sha256": "b45f322d652b7f734eea33440d4151a1ce4478a77dda963c5e8153c463289311",
-      "bytes": 14598
+      "sha256": "eb69f299dac13c32bdada726ec40030aa729eb7439ce8e03183307a96b82180f",
+      "bytes": 15000
     },
     {
       "path": "internal/events/types_test.go",
@@ -1856,8 +1856,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "4082ca1e0a5b602cdd0d52d3fb2e5956b20912ffebd48ec73ccf2482a854658a",
-      "bytes": 9744
+      "sha256": "b1469f0dcd1e0ac99ee960b473762f3bae27ff425c389ea83b7429c32281582e",
+      "bytes": 9745
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
@@ -1926,8 +1926,8 @@
     },
     {
       "path": "internal/evolution/types.go",
-      "sha256": "8c9748ad4b3e4a6cefc187ab17f70248748adb982a0fe7e2c73d979c03bd1a5d",
-      "bytes": 1728
+      "sha256": "fa15cd17bc6412b5368a3604ff8aae6e8b35297436bea743e43a76035c36e66e",
+      "bytes": 1724
     },
     {
       "path": "internal/evolution/types_test.go",
@@ -2096,8 +2096,8 @@
     },
     {
       "path": "internal/memory/decision/types.go",
-      "sha256": "170cc75d6c48f26f2db74af54d02896bb566ed024168c0980c5ec4d37c422663",
-      "bytes": 1947
+      "sha256": "052adf0814662fa6ea9a93625cdf62c91f76427bfc4b4d8fc63c78364165752c",
+      "bytes": 1943
     },
     {
       "path": "internal/memory/decision/types_test.go",
@@ -2401,8 +2401,8 @@
     },
     {
       "path": "internal/provenance/types.go",
-      "sha256": "0057b69ec5266e280431183f91d49349e86e3303264493d17ee52bff6a85f92e",
-      "bytes": 2222
+      "sha256": "e13f4fff076117ff37959f1fccd596877db33ce4773ca863971b47794acb93cc",
+      "bytes": 2172
     },
     {
       "path": "internal/provenance/types_test.go",
@@ -2461,8 +2461,8 @@
     },
     {
       "path": "internal/recovery/types.go",
-      "sha256": "4bfbf202cfcf4b891b5ffe99b0153b78cf1d44b8250e6ab265de0846c040588b",
-      "bytes": 1229
+      "sha256": "d99503a288a4a1f32733aa6fe24a96a9fbc7283a5379f9f460c108fed3df4228",
+      "bytes": 1223
     },
     {
       "path": "internal/recovery/types_test.go",
@@ -2586,8 +2586,8 @@
     },
     {
       "path": "internal/scheduler/types.go",
-      "sha256": "9832cbde338b111a1e76794464b39b4a6e8e5343890c5f89502c16a309fed812",
-      "bytes": 1875
+      "sha256": "f9be7a2dbbdaa11fc6f9791e7f980ac7a6667519bef52253bc261b9ce4bcf994",
+      "bytes": 1867
     },
     {
       "path": "internal/scheduler/types_test.go",
