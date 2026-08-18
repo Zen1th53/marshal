@@ -1685,6 +1685,16 @@
       "bytes": 1931
     },
     {
+      "path": "internal/netpolicy/engine.go",
+      "sha256": "c09cccf87463ff6b02d5669d534a1fe200c439ec3c6900d7a731b38766d2e3cb",
+      "bytes": 2777
+    },
+    {
+      "path": "internal/netpolicy/engine_test.go",
+      "sha256": "b5b5e2199531522cabbcacf995b562c5f1fb549a6de82588118fdd8e2f9420e3",
+      "bytes": 3083
+    },
+    {
       "path": "internal/netpolicy/types.go",
       "sha256": "1e2a69a1e51047832688b85b904015958df1b8d845a6f93013b9b79fa257afa7",
       "bytes": 5656
