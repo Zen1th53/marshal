@@ -2475,6 +2475,21 @@
       "bytes": 1132
     },
     {
+      "path": "internal/trustcontent/engine.go",
+      "sha256": "03763c357964cd2db68151db352295a680500cd0f1e57c1a080f784b6616aa81",
+      "bytes": 8930
+    },
+    {
+      "path": "internal/trustcontent/engine_test.go",
+      "sha256": "6e1f63734f62d138370606d24b7015d75f9be9705c859d46ed0e9678e85f3809",
+      "bytes": 3504
+    },
+    {
+      "path": "internal/trustcontent/renderer.go",
+      "sha256": "57cab3cde0485a3fc5f351bc86d4e6281be284a10bf056bfe1f95f367c46cd3b",
+      "bytes": 2077
+    },
+    {
       "path": "internal/trustcontent/types.go",
       "sha256": "a1827a9a475d5b99da6575abac03cc357698d878729915814f7a88a37d9e7c4e",
       "bytes": 6636
