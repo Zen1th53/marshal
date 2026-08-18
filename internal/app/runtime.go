@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
+	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/cell"
 	"github.com/Zen1th53/marshal/internal/dag"
@@ -36,18 +37,20 @@ import (
 const localProjectID = "PROJECT-local"
 
 type Runtime struct {
-	layout            project.Layout
-	store             *store.Store
-	eventEngine       *events.Engine
-	policy            *policy.Engine
-	adapters          map[string]adapter.Adapter
-	evidenceSanitizer evidence.Sanitizer
-	capabilityBroker  capability.Broker
-	dagGraph          *dag.Engine
-	cellManager       *cell.Manager
-	runtimeInstanceID string
-	runtimePolicy     RuntimePolicyConfig
-	policyConfigured  bool
+	layout             project.Layout
+	store              *store.Store
+	eventEngine        *events.Engine
+	policy             *policy.Engine
+	adapters           map[string]adapter.Adapter
+	evidenceSanitizer  evidence.Sanitizer
+	capabilityBroker   capability.Broker
+	dagGraph           *dag.Engine
+	cellManager        *cell.Manager
+	authorityPrincipal *authz.Principal
+	processAuthority   authz.Authority
+	runtimeInstanceID  string
+	runtimePolicy      RuntimePolicyConfig
+	policyConfigured   bool
 }
 
 type Options struct {
@@ -58,6 +61,8 @@ type Options struct {
 	RuntimePolicy      *RuntimePolicyConfig
 	CapabilityBroker   capability.Broker
 	CellManager        *cell.Manager
+	AuthorityPrincipal *authz.Principal
+	ProcessAuthority   authz.Authority
 }
 
 type Status struct {
@@ -203,16 +208,18 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		return nil, err
 	}
 	rt := &Runtime{
-		layout:            layout,
-		store:             database,
-		eventEngine:       events.NewEngine(database),
-		dagGraph:          func() *dag.Engine { graph, _ := dag.NewEngine(database); return graph }(),
-		policy:            engine,
-		adapters:          options.Adapters,
-		evidenceSanitizer: sanitizer,
-		capabilityBroker:  options.CapabilityBroker,
-		cellManager:       options.CellManager,
-		runtimeInstanceID: instanceID,
+		layout:             layout,
+		store:              database,
+		eventEngine:        events.NewEngine(database),
+		dagGraph:           func() *dag.Engine { graph, _ := dag.NewEngine(database); return graph }(),
+		policy:             engine,
+		adapters:           options.Adapters,
+		evidenceSanitizer:  sanitizer,
+		capabilityBroker:   options.CapabilityBroker,
+		cellManager:        options.CellManager,
+		authorityPrincipal: options.AuthorityPrincipal,
+		processAuthority:   options.ProcessAuthority,
+		runtimeInstanceID:  instanceID,
 	}
 	if options.RuntimePolicy != nil {
 		rt.runtimePolicy = *options.RuntimePolicy
@@ -717,7 +724,11 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 		return nil, err
 	}
 	if r.capabilityBroker != nil {
-		runner = adapter.NewCapabilityRunner(runner, r.capabilityBroker, subject, task.ID)
+		if r.authorityPrincipal != nil && r.processAuthority != "" {
+			runner = adapter.NewRoleCapabilityRunner(runner, *r.authorityPrincipal, task.ID, r.processAuthority, r.capabilityBroker)
+		} else {
+			runner = adapter.NewCapabilityRunner(runner, r.capabilityBroker, subject, task.ID)
+		}
 	}
 	switch name {
 	case "codex":

@@ -995,6 +995,16 @@
       "bytes": 5009
     },
     {
+      "path": "internal/adapter/role_capability_runner.go",
+      "sha256": "59fbd3540cbf02ae071334d8dc2e0295bd41f4616cdcf43a9c6928c03470c0eb",
+      "bytes": 1436
+    },
+    {
+      "path": "internal/adapter/role_capability_runner_a06_test.go",
+      "sha256": "8e9576304b4a482845987410ce0e6a77114fb199558c6ff7dd26de5b33347f04",
+      "bytes": 2081
+    },
+    {
       "path": "internal/api/client.go",
       "sha256": "1df1d1fe46cce7b21398ea86fc209fdc5cabb22cb6a0338d861f4a24c8682ffb",
       "bytes": 4917
@@ -1076,8 +1086,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "45cafd1fb2c23c3a79f915938e451dd07054cb9e06cf8ca77fb9f8bd4dd1acec",
-      "bytes": 26649
+      "sha256": "0e5617817b3833b52806756c70e252a82483d69dc684c08a193252fcc66db436",
+      "bytes": 27164
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1108,6 +1118,16 @@
       "path": "internal/authz/errors.go",
       "sha256": "914d77110b7a068dd2f3d409873550562e79d3cd2874b6293de87472933f3a38",
       "bytes": 1446
+    },
+    {
+      "path": "internal/authz/events.go",
+      "sha256": "b2a485ab1842a6032d3aaac7a4a90e5338a9f48afbfe033d240d84f0ed0d7e6b",
+      "bytes": 1740
+    },
+    {
+      "path": "internal/authz/events_a05_test.go",
+      "sha256": "31a11eed26087483812966d618e55243622bd7d04d3577b6c2fdb19c21efedc7",
+      "bytes": 1857
     },
     {
       "path": "internal/authz/security_a04_test.go",
