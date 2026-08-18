@@ -2681,8 +2681,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "2c3cffb6e709be17e07612871733251f6e7cf58b31db96d0a3a6d1e1b451c3d9",
-      "bytes": 50328
+      "sha256": "a3212d974e54ceeb0751815e5e06213a998c0fc96500953c9038218d2f1682ad",
+      "bytes": 51636
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -2896,8 +2896,8 @@
     },
     {
       "path": "internal/store/risk_persistence_a02_test.go",
-      "sha256": "b997118ff28dda50da7909331c75bb83c6bad9b0e683d75f0826b60f819427bf",
-      "bytes": 7291
+      "sha256": "e82be869287476e92051cf6c30d0b64fae3f8ca7b169e75164c92340d7e37a99",
+      "bytes": 7504
     },
     {
       "path": "internal/store/router_persistence_a02_test.go",
@@ -2946,8 +2946,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "2722ecbf8ff0a84403ecb77c35a8f5e19181f2c32bcc330c2f22d1ed996ad906",
-      "bytes": 16343
+      "sha256": "e4b55f284ce7a9acc9b87336585bf9c14578a87201c49f9293d7e3ed7f51b491",
+      "bytes": 16879
     },
     {
       "path": "internal/store/tasks.go",
@@ -2976,8 +2976,8 @@
     },
     {
       "path": "internal/store/trustcontent_persistence_test.go",
-      "sha256": "c8d62f5d95834a5c880b177fd34101f36e49bba86e2db328a7683d909d6d5d70",
-      "bytes": 8126
+      "sha256": "8757ff765a148bc4560f3ef505be6b93d9ac0fd455780418f9aa6415c6f38589",
+      "bytes": 8339
     },
     {
       "path": "internal/store/trustcontent_recovery_a08_test.go",
@@ -2996,8 +2996,13 @@
     },
     {
       "path": "internal/store/typed_handoffs_a02_test.go",
-      "sha256": "e872c3c48eb669338a99d5ed6089a779ff62fcc002e3279e6af8446ad993b4b2",
-      "bytes": 13352
+      "sha256": "f9124a862b99be74179076636e893ece21da47bab724d063f5241238ecfb8ee1",
+      "bytes": 13565
+    },
+    {
+      "path": "internal/store/xverify_persistence_a02_test.go",
+      "sha256": "de9bdd595790baf4396e2636a941d586a868b7657fe1cb5175426b2160e1b017",
+      "bytes": 233
     },
     {
       "path": "internal/testutil/testgit/git.go",
