@@ -1840,6 +1840,11 @@
       "bytes": 4715
     },
     {
+      "path": "internal/secrets/adversarial_test.go",
+      "sha256": "f7bd2046824c1b2205754788c059b0ddc69688eabd34bcc601d3e2dd2e9b9014",
+      "bytes": 3194
+    },
+    {
       "path": "internal/secrets/engine.go",
       "sha256": "6d1873c412a3c89587ba6ca77a99a74c03cb465c48e4017c1ff539f18405acb7",
       "bytes": 6583
@@ -1866,8 +1871,8 @@
     },
     {
       "path": "internal/secrets/types.go",
-      "sha256": "c003b7b9b2fc324702af7cbb5fb4480e93037a6d4469ebd871df143746ca35c0",
-      "bytes": 2287
+      "sha256": "1bc012578bb2e229e835b4a9d04d1ac81507471c5f31c7d287bf360cd9c26105",
+      "bytes": 2431
     },
     {
       "path": "internal/secrets/types_test.go",

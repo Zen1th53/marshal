@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Ref identifies a secret without containing its value.
@@ -80,6 +82,13 @@ type Broker interface {
 }
 
 func invalidIdentifier(value string) bool {
-	value = strings.TrimSpace(value)
-	return value == "" || strings.IndexByte(value, '\x00') >= 0
+	if value == "" || value != strings.TrimSpace(value) || len(value) > 1024 || !utf8.ValidString(value) {
+		return true
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return true
+		}
+	}
+	return false
 }
