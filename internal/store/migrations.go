@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 61
+const LatestSchemaVersion = 62
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1461,6 +1461,24 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 61: %w", err)
 		}
 		version = 61
+	}
+	if version < 62 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE vibe_firewall_evaluations (
+				evaluation_id TEXT PRIMARY KEY,
+				change_id TEXT NOT NULL,
+				status TEXT NOT NULL DEFAULT 'ALLOWED',
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX vibe_firewall_evaluations_by_change
+				ON vibe_firewall_evaluations(change_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 62: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(62, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 62: %w", err)
+		}
+		version = 62
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

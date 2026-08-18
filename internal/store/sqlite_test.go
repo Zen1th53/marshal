@@ -47,6 +47,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"trusted_content_segments",
 		"typed_handoffs",
 		"verification_attestations",
+		"vibe_firewall_evaluations",
 		"doctor2_check_runs",
 		"self_improvement_recommendations",
 		"chaos_conformance_runs",
@@ -70,6 +71,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"reproducible_replay_runs",
 		"context_budget_decisions",
 		"conflict_predictions",
+		"vibe_firewall_evaluations",
 		"doctor2_check_runs",
 		"self_improvement_recommendations",
 		"chaos_conformance_runs",
@@ -119,6 +121,8 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS vibe_firewall_evaluations_by_change",
+		"DROP TABLE IF EXISTS vibe_firewall_evaluations",
 		"DROP INDEX IF EXISTS doctor2_check_runs_by_check",
 		"DROP TABLE IF EXISTS doctor2_check_runs",
 		"DROP INDEX IF EXISTS self_improvement_recommendations_by_kind",
@@ -269,6 +273,8 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS vibe_firewall_evaluations_by_change",
+		"DROP TABLE IF EXISTS vibe_firewall_evaluations",
 		"DROP INDEX IF EXISTS doctor2_check_runs_by_check",
 		"DROP TABLE IF EXISTS doctor2_check_runs",
 		"DROP INDEX IF EXISTS self_improvement_recommendations_by_kind",
