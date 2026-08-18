@@ -700,6 +700,11 @@
       "bytes": 1283
     },
     {
+      "path": "docs/agent-roles.md",
+      "sha256": "10f61bc0b91c81a94432240782b1dee2ad4ed0b43bb3419f34f6c2b581671267",
+      "bytes": 1941
+    },
+    {
       "path": "docs/architecture.md",
       "sha256": "1307345a203cc7c123146f112fe96ef96bcba7e13d0ab838ee8273be69932d43",
       "bytes": 3060
@@ -995,6 +1000,16 @@
       "bytes": 5009
     },
     {
+      "path": "internal/adapter/role_capability_runner.go",
+      "sha256": "59fbd3540cbf02ae071334d8dc2e0295bd41f4616cdcf43a9c6928c03470c0eb",
+      "bytes": 1436
+    },
+    {
+      "path": "internal/adapter/role_capability_runner_a06_test.go",
+      "sha256": "8e9576304b4a482845987410ce0e6a77114fb199558c6ff7dd26de5b33347f04",
+      "bytes": 2081
+    },
+    {
       "path": "internal/api/client.go",
       "sha256": "1df1d1fe46cce7b21398ea86fc209fdc5cabb22cb6a0338d861f4a24c8682ffb",
       "bytes": 4917
@@ -1076,8 +1091,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "45cafd1fb2c23c3a79f915938e451dd07054cb9e06cf8ca77fb9f8bd4dd1acec",
-      "bytes": 26649
+      "sha256": "0e5617817b3833b52806756c70e252a82483d69dc684c08a193252fcc66db436",
+      "bytes": 27164
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1103,6 +1118,71 @@
       "path": "internal/auth/auth_test.go",
       "sha256": "6d64dd030e4e3750edd506b836a86dca513d6fd1a8426c1a2b4d359bf32be453",
       "bytes": 2190
+    },
+    {
+      "path": "internal/authz/adversarial_a07_test.go",
+      "sha256": "889eb52c93cf78c0e7bbdb3ec7cc7d43d7f7dc073e3a5e2c9fb6d779f6254acc",
+      "bytes": 1799
+    },
+    {
+      "path": "internal/authz/catalog.go",
+      "sha256": "52efc9a0a8957ad1e87370b09ab5f3a85eb4b5d0a98da95cb84ac47353aae3d4",
+      "bytes": 2010
+    },
+    {
+      "path": "internal/authz/custom_roles_a10_test.go",
+      "sha256": "82b7faf8755c1acfda6908c6dc712aa2a20afdbf8eb0298f6f4648522fd61d70",
+      "bytes": 863
+    },
+    {
+      "path": "internal/authz/errors.go",
+      "sha256": "914d77110b7a068dd2f3d409873550562e79d3cd2874b6293de87472933f3a38",
+      "bytes": 1446
+    },
+    {
+      "path": "internal/authz/events.go",
+      "sha256": "b2a485ab1842a6032d3aaac7a4a90e5338a9f48afbfe033d240d84f0ed0d7e6b",
+      "bytes": 1740
+    },
+    {
+      "path": "internal/authz/events_a05_test.go",
+      "sha256": "31a11eed26087483812966d618e55243622bd7d04d3577b6c2fdb19c21efedc7",
+      "bytes": 1857
+    },
+    {
+      "path": "internal/authz/metrics.go",
+      "sha256": "25c4ad9b495903ec0d5a60233354efa83ecfb8733e935855f956583b2dee3c64",
+      "bytes": 1312
+    },
+    {
+      "path": "internal/authz/metrics_a09_test.go",
+      "sha256": "1db8e1ec5fe6aea686c0df1248eb0ccd2c97be71f867a4676b785d948567c1dd",
+      "bytes": 2280
+    },
+    {
+      "path": "internal/authz/security_a04_test.go",
+      "sha256": "628c6ffc3365543d9518f95624b6cb14fec204eec0616de85a15bf1a9ba5136d",
+      "bytes": 2252
+    },
+    {
+      "path": "internal/authz/state.go",
+      "sha256": "bf94b79fa85c64b6e23d329350d51dfefeb71c7e30a10273a27123d18b07b9f8",
+      "bytes": 1200
+    },
+    {
+      "path": "internal/authz/state_a03_test.go",
+      "sha256": "133888e53ef4aba3b5a1ccec677ba21893d35fdd9510df7837c26bfde945ddf1",
+      "bytes": 1693
+    },
+    {
+      "path": "internal/authz/types.go",
+      "sha256": "6e69283392430be16117cad253da012f5c090ab21484eb2ad15dbfe17505e877",
+      "bytes": 5698
+    },
+    {
+      "path": "internal/authz/types_test.go",
+      "sha256": "41516e147634bf532ff2836020a98e9ec32917d104200c5367f48bf2328997a2",
+      "bytes": 1935
     },
     {
       "path": "internal/capability/adversarial_test.go",
@@ -1321,8 +1401,8 @@
     },
     {
       "path": "internal/events/types.go",
-      "sha256": "6cf3c0a06498e0e286ea831ce9eb7dd5fa70d0dad47d0a40050339da92cd4110",
-      "bytes": 11786
+      "sha256": "5552bd3a36a9478e55ae2b5dfa7e15522be9c33ef09d9d8bcdc1f8bc4234fece",
+      "bytes": 12003
     },
     {
       "path": "internal/events/types_test.go",
@@ -1341,8 +1421,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "8f932b50c2e32d76655b0bfb837af53f2ed48e75fb447c357bbc9790e32a052a",
-      "bytes": 8030
+      "sha256": "eef7284b30dd3be2098a3575aac4e55781d94e7b380cb766c1b7ee7b51e9409f",
+      "bytes": 8125
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
@@ -1715,6 +1795,21 @@
       "bytes": 4715
     },
     {
+      "path": "internal/store/authz_concurrency_a08_test.go",
+      "sha256": "28134ebdbcce23bd67c6bcc365bac49582307788e64b3dd6e87dbbaca3ac6262",
+      "bytes": 5357
+    },
+    {
+      "path": "internal/store/authz_persistence_a02_test.go",
+      "sha256": "e1b894b453111ba10c42d63c14f4d604dfd54499be136431a6442964433d43dc",
+      "bytes": 1810
+    },
+    {
+      "path": "internal/store/authz_role_bindings.go",
+      "sha256": "be5ddd5aa81fdb75c9e756482997356c5b5bc0395ddd7dbd037f521fda5dd946",
+      "bytes": 3134
+    },
+    {
       "path": "internal/store/capability_adversarial_a07_test.go",
       "sha256": "1ffa78b1ae6e9811121b1713fbe0ee3500882ac8c165ea0236edec3ec7a8984e",
       "bytes": 1268
@@ -1921,8 +2016,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "fbbf180b6c30f18417122b58de4564fa37cdf42a2fad2ba1b1a407d181a1f11a",
-      "bytes": 21864
+      "sha256": "79010dbb17d80cbe82a860fc1084bb412a4dc2a46e65d72939bb98e1fb1f7220",
+      "bytes": 22712
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",
@@ -2071,8 +2166,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "b21384522ba022e5c5db64af0a4a8aa61b78a133ccc0fe3ed7fa5fb8f8376b71",
-      "bytes": 7414
+      "sha256": "fb4a7bc6bdb71431accbad1a55c87df88607ea57e48cca5c790ca2ca54a30716",
+      "bytes": 7667
     },
     {
       "path": "internal/store/tasks.go",

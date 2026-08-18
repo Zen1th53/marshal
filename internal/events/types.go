@@ -84,6 +84,8 @@ const (
 	EventTypeCellDestroyStarted       EventType = "cell.destroy.started"
 	EventTypeCellDestroyed            EventType = "cell.destroyed"
 	EventTypeCellFailed               EventType = "cell.failed"
+	EventTypeAuthzAuthorityAllowed    EventType = "authz.authority.allowed"
+	EventTypeAuthzAuthorityDenied     EventType = "authz.authority.denied"
 
 	EventTypeAppended          EventType = "events.appended"
 	EventTypeSubscriberDropped EventType = "events.subscriber.dropped"
@@ -105,6 +107,7 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeCellPrepareStarted: {}, EventTypeCellReady: {}, EventTypeCellExecStarted: {},
 	EventTypeCellExecFinished: {}, EventTypeCellDestroyStarted: {}, EventTypeCellDestroyed: {},
 	EventTypeCellFailed: {},
+	EventTypeAuthzAuthorityAllowed: {}, EventTypeAuthzAuthorityDenied: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 
