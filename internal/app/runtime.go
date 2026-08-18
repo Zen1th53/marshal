@@ -569,6 +569,9 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		releasePreparationFailure()
 		return RunResult{}, err
 	}
+	// Prepare resolves symbolic revisions such as HEAD. From this point forward,
+	// bind execution, evidence, and no-op detection to the immutable commit hash.
+	baseCommit = worktreeState.HEAD
 	if err := r.store.BeginExecution(ctx, task.ID, claim.Session.ID, request.AgentID,
 		branch, worktreeState.Path, baseCommit, claimedRevision); err != nil {
 		releasePreparationFailure()
@@ -652,20 +655,11 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	stdout, stdoutErr := r.sanitizeProviderOutput(ctx, result.Stdout)
 	stderr, stderrErr := r.sanitizeProviderOutput(ctx, result.Stderr)
 	var stdoutArtifact, stderrArtifact model.Artifact
-	if stdoutErr == nil {
-		stdoutArtifact, stdoutErr = artifacts.Put(ctx, model.ArtifactInput{
-			ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
-			TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(stdout),
-		})
-	}
-	if stderrErr == nil && bytes.Equal(stdout, stderr) {
-		stderrArtifact = stdoutArtifact
+	if stdoutErr == nil && stderrErr == nil {
+		stdoutArtifact, stderrArtifact, stdoutErr = persistProviderArtifacts(
+			ctx, artifacts, localProjectID, task.ID, claim.Session.ID, resultCommit, stdout, stderr,
+		)
 		stderrErr = stdoutErr
-	} else if stderrErr == nil {
-		stderrArtifact, stderrErr = artifacts.Put(ctx, model.ArtifactInput{
-			ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
-			TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(stderr),
-		})
 	}
 	if ctx.Err() == nil {
 		if evidenceErr := r.recordRunEvidence(ctx, runID, task.ID, request.Adapter, probe.Version, baseCommit, resultCommit, result); evidenceErr != nil {
@@ -709,6 +703,48 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		ResultCommit: resultCommit, ExitStatus: result.ExitCode, Isolation: result.Isolation,
 		StdoutArtifact: stdoutArtifact, StderrArtifact: stderrArtifact,
 	}, nil
+}
+
+type providerArtifactWriter interface {
+	Put(context.Context, model.ArtifactInput) (model.Artifact, error)
+}
+
+func persistProviderArtifacts(
+	ctx context.Context,
+	writer providerArtifactWriter,
+	projectID string,
+	taskID string,
+	sessionID string,
+	sourceCommit string,
+	stdout []byte,
+	stderr []byte,
+) (model.Artifact, model.Artifact, error) {
+	put := func(data []byte) (model.Artifact, error) {
+		return writer.Put(ctx, model.ArtifactInput{
+			ProjectID: projectID, Kind: "report", SourceCommit: sourceCommit,
+			TaskIDs: []string{taskID}, ProducerSession: sessionID, Data: bytes.NewReader(data),
+		})
+	}
+
+	var stdoutArtifact model.Artifact
+	var err error
+	if len(stdout) > 0 {
+		stdoutArtifact, err = put(stdout)
+		if err != nil {
+			return model.Artifact{}, model.Artifact{}, err
+		}
+	}
+	if len(stderr) == 0 {
+		return stdoutArtifact, model.Artifact{}, nil
+	}
+	if len(stdout) > 0 && bytes.Equal(stdout, stderr) {
+		return stdoutArtifact, stdoutArtifact, nil
+	}
+	stderrArtifact, err := put(stderr)
+	if err != nil {
+		return model.Artifact{}, model.Artifact{}, err
+	}
+	return stdoutArtifact, stderrArtifact, nil
 }
 
 func (r *Runtime) sanitizeProviderOutput(ctx context.Context, payload []byte) ([]byte, error) {

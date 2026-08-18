@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -108,7 +109,41 @@ func TestRuntimeFakeAdapterExecution(t *testing.T) {
 	}
 }
 
+func TestRuntimeRejectsNoOpAdapterWhenTaskBaseIsHEAD(t *testing.T) {
+	repo := runtimeIntegrationRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{Adapters: map[string]adapter.Adapter{"noop": noCommitAdapter{}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	agent, err := runtime.RegisterAgent(context.Background(), app.RegisterAgentRequest{Name: "noop", Role: model.RoleDeveloper})
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := "HEAD"
+	if _, err := runtime.ImportTasks(context.Background(), []model.Task{{
+		ID: "TASK-NOOP-001", Title: "must create a commit", Status: model.TaskReady, Risk: model.R1, BaseCommit: &base,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Run(context.Background(), app.RunRequest{TaskID: "TASK-NOOP-001", AgentID: agent.ID, Adapter: "noop"}); !errors.Is(err, model.ErrConflict) {
+		t.Fatalf("Run error = %v, want conflict", err)
+	}
+}
+
 type fakeCommitAdapter struct{}
+
+type noCommitAdapter struct{ fakeCommitAdapter }
+
+func (noCommitAdapter) Run(_ context.Context, _ adapter.Request) (adapter.Result, error) {
+	now := time.Now().UTC()
+	return adapter.Result{Adapter: "noop", AdapterVersion: "test-1", Status: adapter.StatusSuccess,
+		ExitCode: 0, StartedAt: now.Add(-time.Second), EndedAt: now,
+		Isolation: model.IsolationCapability{Level: model.IsolationProcessOnly, Available: true, Process: true, Network: true, Reason: "deterministic test adapter"}}, nil
+}
 
 func (fakeCommitAdapter) Probe(context.Context) (adapter.Probe, error) {
 	return adapter.Probe{Name: "fake", Available: true, Version: "test-1", Capabilities: map[string]string{"run": "native"}}, nil

@@ -58,6 +58,13 @@ func TestUnixServerVersionStatusAndLifecycle(t *testing.T) {
 	}
 }
 
+func TestHTTPServerDoesNotCutOffLongRunningTaskResponses(t *testing.T) {
+	server := newHTTPServer(http.NewServeMux())
+	if server.WriteTimeout != 0 {
+		t.Fatalf("write timeout = %s, want no global deadline for long-running tasks", server.WriteTimeout)
+	}
+}
+
 func TestUnixServerTaskFlowAndTypedConflict(t *testing.T) {
 	runtime, socket := apiRuntime(t)
 	ctx, cancel := context.WithCancel(context.Background())

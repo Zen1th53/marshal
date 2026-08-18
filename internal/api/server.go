@@ -42,13 +42,7 @@ func (s *Server) Serve(ctx context.Context, socketPath string) error {
 		os.Remove(socketPath)
 		return fmt.Errorf("secure runtime socket: %w", err)
 	}
-	server := &http.Server{
-		Handler:           s.routes(),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
+	server := newHTTPServer(s.routes())
 	stopped := make(chan struct{})
 	go func() {
 		select {
@@ -67,6 +61,18 @@ func (s *Server) Serve(ctx context.Context, socketPath string) error {
 		return nil
 	}
 	return err
+}
+
+func newHTTPServer(handler http.Handler) *http.Server {
+	return &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		// Worker runs are synchronous and may legitimately outlive a transport
+		// deadline. Their context and runtime limits own execution cancellation.
+		WriteTimeout: 0,
+		IdleTimeout:  60 * time.Second,
+	}
 }
 
 func (s *Server) routes() http.Handler {

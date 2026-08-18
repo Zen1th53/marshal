@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -15,6 +16,30 @@ import (
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
+
+type recordingArtifactWriter struct {
+	inputs []model.ArtifactInput
+}
+
+func (w *recordingArtifactWriter) Put(_ context.Context, input model.ArtifactInput) (model.Artifact, error) {
+	w.inputs = append(w.inputs, input)
+	return model.Artifact{ID: "ART-test"}, nil
+}
+
+func TestPersistProviderArtifactsSkipsEmptyStreams(t *testing.T) {
+	writer := &recordingArtifactWriter{}
+	stdout, stderr, err := persistProviderArtifacts(context.Background(), writer, "PROJECT-local", "TASK-001", "SESSION-001", "commit", []byte("result"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(writer.inputs) != 1 || stdout.ID == "" || stderr.ID != "" {
+		t.Fatalf("inputs=%d stdout=%#v stderr=%#v", len(writer.inputs), stdout, stderr)
+	}
+	data, err := bytes.NewBuffer(nil).ReadFrom(writer.inputs[0].Data)
+	if err != nil || data != int64(len("result")) {
+		t.Fatalf("persisted data length=%d err=%v", data, err)
+	}
+}
 
 func TestRunRejectsUnboundOrMalformedModelOverrideBeforeMutation(t *testing.T) {
 	runtime := &Runtime{}
