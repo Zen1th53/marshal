@@ -91,6 +91,11 @@ const (
 	EventTypeGateBlocked              EventType = "gate.blocked"
 	EventTypeGateDecisionInvalidated  EventType = "gate.decision.invalidated"
 	EventTypeGateDecisionConsumed     EventType = "gate.decision.consumed"
+	EventTypeSecretLeaseRequested     EventType = "secret.lease.requested"
+	EventTypeSecretLeaseIssued        EventType = "secret.lease.issued"
+	EventTypeSecretLeaseRevoked       EventType = "secret.lease.revoked"
+	EventTypeSecretAccessUsed         EventType = "secret.access.used"
+	EventTypeSecretAccessDenied       EventType = "secret.access.denied"
 
 	EventTypeAppended          EventType = "events.appended"
 	EventTypeSubscriberDropped EventType = "events.subscriber.dropped"
@@ -115,6 +120,8 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeAuthzAuthorityAllowed: {}, EventTypeAuthzAuthorityDenied: {},
 	EventTypeGateAllowed: {}, EventTypeGateDenied: {}, EventTypeGateBlocked: {},
 	EventTypeGateDecisionInvalidated: {}, EventTypeGateDecisionConsumed: {},
+	EventTypeSecretLeaseRequested: {}, EventTypeSecretLeaseIssued: {}, EventTypeSecretLeaseRevoked: {},
+	EventTypeSecretAccessUsed: {}, EventTypeSecretAccessDenied: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 

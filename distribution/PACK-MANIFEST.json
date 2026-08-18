@@ -1411,8 +1411,8 @@
     },
     {
       "path": "internal/events/types.go",
-      "sha256": "a45a7429642c7a437e32d4747e60b91768c33b57320c4e9905cc6f0d7e78a595",
-      "bytes": 12487
+      "sha256": "ebf4b0e5716d056b4d1e2d103007498604df23f080653ba95f0e8f88364c2a31",
+      "bytes": 13002
     },
     {
       "path": "internal/events/types_test.go",
@@ -1836,18 +1836,28 @@
     },
     {
       "path": "internal/secrets/engine.go",
-      "sha256": "bbcfd64b9029d0c9d5f8972d0762286bef574e0066add75236cbdb5b5ea66f4a",
-      "bytes": 4286
+      "sha256": "6d1873c412a3c89587ba6ca77a99a74c03cb465c48e4017c1ff539f18405acb7",
+      "bytes": 6583
     },
     {
       "path": "internal/secrets/engine_test.go",
-      "sha256": "bfb79268da1ef6eff1869ae3d2adb24f33749ff06ad66a4120cf56e249ee395d",
-      "bytes": 8489
+      "sha256": "59a2d5dd9fe93efc5838efcf5f9a0c867ed144974929ef5cf98eec391a405063",
+      "bytes": 9536
     },
     {
       "path": "internal/secrets/errors.go",
       "sha256": "a3ffb5570bd0d349db6f2c799c83d3397079c127efaf3172c3fc647aab391dfd",
       "bytes": 1714
+    },
+    {
+      "path": "internal/secrets/provider_env.go",
+      "sha256": "db846717485abcdc352671d569bc71ff12fef62d0b9a264f18ac2f1bb9243dba",
+      "bytes": 778
+    },
+    {
+      "path": "internal/secrets/provider_env_test.go",
+      "sha256": "5b286acc6807267110a9a8a56cd25aec211d0e19849d4b743db429c8c9021d60",
+      "bytes": 1357
     },
     {
       "path": "internal/secrets/types.go",
