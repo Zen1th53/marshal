@@ -1351,8 +1351,8 @@
     },
     {
       "path": "internal/events/types.go",
-      "sha256": "6cf3c0a06498e0e286ea831ce9eb7dd5fa70d0dad47d0a40050339da92cd4110",
-      "bytes": 11786
+      "sha256": "5552bd3a36a9478e55ae2b5dfa7e15522be9c33ef09d9d8bcdc1f8bc4234fece",
+      "bytes": 12003
     },
     {
       "path": "internal/events/types_test.go",
