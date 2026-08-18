@@ -113,6 +113,8 @@ func TestRiskAssessmentMigrationFromSchema21(t *testing.T) {
 		"DROP INDEX resource_accounting_by_provider",
 		"DROP INDEX resource_accounting_by_task",
 		"DROP TABLE resource_accounting",
+		"DROP INDEX decision_records_by_task",
+		"DROP TABLE decision_records",
 		"DROP INDEX verification_attestations_by_change",
 		"DROP INDEX verification_attestations_by_principal",
 		"DROP TABLE verification_attestations",
