@@ -47,6 +47,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"trusted_content_segments",
 		"typed_handoffs",
 		"verification_attestations",
+		"agent_auto_recovery_events",
 		"tui_session_snapshots",
 		"security_reputation_evaluations",
 		"reconciliation_runs",
@@ -60,6 +61,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"reproducible_replay_runs",
 		"context_budget_decisions",
 		"conflict_predictions",
+		"agent_auto_recovery_events",
 		"tui_session_snapshots",
 		"security_reputation_evaluations",
 		"reconciliation_runs",
@@ -99,6 +101,8 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS agent_auto_recovery_events_by_task",
+		"DROP TABLE IF EXISTS agent_auto_recovery_events",
 		"DROP INDEX IF EXISTS tui_session_snapshots_by_created",
 		"DROP TABLE IF EXISTS tui_session_snapshots",
 		"DROP INDEX IF EXISTS security_reputation_evaluations_by_subject",
@@ -229,6 +233,8 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS agent_auto_recovery_events_by_task",
+		"DROP TABLE IF EXISTS agent_auto_recovery_events",
 		"DROP INDEX IF EXISTS tui_session_snapshots_by_created",
 		"DROP TABLE IF EXISTS tui_session_snapshots",
 		"DROP INDEX IF EXISTS security_reputation_evaluations_by_subject",
