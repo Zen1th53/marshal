@@ -11,7 +11,7 @@ the authority to approve, verify, or trust that work.
 
 [![CI](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml/badge.svg)](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml)
 [![Release candidate](https://img.shields.io/badge/status-v1.0.0--rc.1-orange.svg)](release/RELEASE_NOTES_v1.0.0-rc.1.md)
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](go.mod)
+[![Go](https://img.shields.io/badge/Go-1.25.13+-00ADD8.svg)](go.mod)
 [![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)](docs/installation.md)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSING.md)
 
@@ -100,7 +100,7 @@ Read [SECURITY.md](SECURITY.md) before using MARSHAL with sensitive repositories
 
 ## Install
 
-MARSHAL supports Linux on amd64 and arm64. Go `1.25` is required for source
+MARSHAL supports Linux on amd64 and arm64. Go `1.25.13` or newer is required for source
 installation; bubblewrap is required for strong worker isolation.
 
 ### Binary release

@@ -186,8 +186,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "5a99172b961f1618e658e5c9fe4553fbb50ed47668c08bef2603a053fbf4a182",
-      "bytes": 9582
+      "sha256": "9fb921a0f8548c20b7edbd6234db063c8a7ab8c181c5321c7076225acddaf435",
+      "bytes": 9598
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -851,8 +851,8 @@
     },
     {
       "path": "docs/installation.md",
-      "sha256": "64a8545ac1c6c33ba7b537893f22463396f04cacbc06d8e76ea0d23258412e83",
-      "bytes": 1676
+      "sha256": "26d9cfa23f9565839a41bfe4275aa1b67fe2aa92b481e0e8f1098c1272e130f2",
+      "bytes": 1796
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -1091,8 +1091,8 @@
     },
     {
       "path": "go.mod",
-      "sha256": "6753cba61b13575fd6b206be74b8e6cbd06e715b8504fd7cbb3a861e6693bde5",
-      "bytes": 557
+      "sha256": "a501ab1549508f804fa0cc2b91b7a715d8f6491671ba99df18a907125ded19e0",
+      "bytes": 558
     },
     {
       "path": "go.sum",

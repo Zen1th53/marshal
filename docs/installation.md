@@ -23,7 +23,8 @@ notes. Verify GitHub build provenance as described in
 
 ## Go install
 
-Go 1.25 or newer is required.
+Go 1.25.13 or newer is required. Earlier Go 1.25 patch releases contain
+standard-library vulnerabilities reachable from MARSHAL's HTTP and TLS paths.
 
 ```bash
 go install github.com/Zen1th53/marshal/cmd/marshal@v1.0.0-rc.1
