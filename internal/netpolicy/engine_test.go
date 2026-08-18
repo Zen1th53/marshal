@@ -3,8 +3,29 @@ package netpolicy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/evidence"
 )
+
+func TestA09EvaluatorRecordsBoundedNetworkMetrics(t *testing.T) {
+	recorder := evidence.NewMetricsRecorder()
+	evaluator, err := NewEvaluatorWithMetrics([]Rule{{ID: "rule-github-443", HostPattern: "github.com", Protocol: ProtocolTCP, Ports: []int{443}, Action: ActionAllow}}, recorder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evaluator.Evaluate(context.Background(), Request{Host: "github.com", Protocol: ProtocolTCP, Port: 443}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evaluator.Evaluate(context.Background(), Request{Host: "evilgithub.com", Protocol: ProtocolTCP, Port: 443}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := recorder.Snapshot()
+	if snapshot.Success[evidence.MetricOperationNetworkEgress] != 1 || snapshot.Denied[string(ReasonDenied)] != 1 {
+		t.Fatalf("metrics=%+v, want one allow and one bounded deny", snapshot)
+	}
+}
 
 func TestA03EvaluatorDefaultsToDenyAndNormalizesHost(t *testing.T) {
 	evaluator, err := NewEvaluator([]Rule{{ID: "rule-github-443", HostPattern: "github.com", Protocol: ProtocolTCP, Ports: []int{443}, Action: ActionAllow}})
@@ -22,6 +43,29 @@ func TestA03EvaluatorDefaultsToDenyAndNormalizesHost(t *testing.T) {
 	unknown, err := evaluator.Evaluate(context.Background(), Request{Host: "github.com", Protocol: ProtocolTCP, Port: 8443})
 	if err != nil || unknown.Allowed || unknown.Reason != ReasonDenied {
 		t.Fatalf("unknown port decision=%+v err=%v", unknown, err)
+	}
+}
+
+func BenchmarkA09EvaluatorScale(b *testing.B) {
+	for _, size := range []int{1, 100, 1000} {
+		b.Run(fmt.Sprintf("%d_cases", size), func(b *testing.B) {
+			rules := make([]Rule, size)
+			for i := range rules {
+				rules[i] = Rule{ID: RuleID(fmt.Sprintf("rule-%04d", i)), HostPattern: fmt.Sprintf("host-%04d.example", i), Protocol: ProtocolTCP, Ports: []int{443}, Action: ActionAllow}
+			}
+			evaluator, err := NewEvaluator(rules)
+			if err != nil {
+				b.Fatal(err)
+			}
+			request := Request{Host: fmt.Sprintf("host-%04d.example", size-1), Protocol: ProtocolTCP, Port: 443}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if _, err := evaluator.Evaluate(context.Background(), request); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }
 

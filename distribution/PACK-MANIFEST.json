@@ -810,6 +810,11 @@
       "bytes": 2584
     },
     {
+      "path": "docs/network-egress-firewall.md",
+      "sha256": "357fad7a73ea2b9a78df007cb6829eb1a88249dfc23c16d486398c9f59e96d9c",
+      "bytes": 1964
+    },
+    {
       "path": "docs/policy-as-code.md",
       "sha256": "b62722d76f46a1e2c2355a3ba698d9dd390e4c48a3d5c156ec0aeb31abace3e7",
       "bytes": 5196
@@ -1446,8 +1451,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "54253210f18e4b32346b44a53cb3f36770d3b127c5167b529b0082de4bed70de",
-      "bytes": 8920
+      "sha256": "8cc0f34dc42c980ef0c7216db6452b23926589418f56c12c08aa0d892ada32db",
+      "bytes": 9175
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
@@ -1701,13 +1706,13 @@
     },
     {
       "path": "internal/netpolicy/engine.go",
-      "sha256": "c09cccf87463ff6b02d5669d534a1fe200c439ec3c6900d7a731b38766d2e3cb",
-      "bytes": 2777
+      "sha256": "83d3e8b53f0b4d9c91399cf484fbd1c0c982606a5a855b40f00d1af948ca7c12",
+      "bytes": 3574
     },
     {
       "path": "internal/netpolicy/engine_test.go",
-      "sha256": "b5b5e2199531522cabbcacf995b562c5f1fb549a6de82588118fdd8e2f9420e3",
-      "bytes": 3083
+      "sha256": "a23c72eb18eedd31aecdc481e7fd2e070e62efdaa697c4cc93c25871ad567f45",
+      "bytes": 4752
     },
     {
       "path": "internal/netpolicy/types.go",
