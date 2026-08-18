@@ -234,7 +234,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		runtimeInstanceID:  instanceID,
 	}
 	if rt.riskEngine == nil {
-		rt.riskEngine = risk.NewEngine(database)
+		rt.riskEngine = risk.NewObservedEngine(database, nil, options.Metrics)
 	}
 	if options.RuntimePolicy != nil {
 		rt.runtimePolicy = *options.RuntimePolicy

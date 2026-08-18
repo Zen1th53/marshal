@@ -825,6 +825,11 @@
       "bytes": 2984
     },
     {
+      "path": "docs/risk-engine.md",
+      "sha256": "b14bdf846f12dffe2b84c25257d79233aadc8003e46a02d7e385f9d4fbdc7526",
+      "bytes": 2250
+    },
+    {
       "path": "docs/runtime.md",
       "sha256": "39b5931b576d0e3181b230db5e03f2ebcedfbccf2d5d4d5315ba5b70bfc557bd",
       "bytes": 2471
@@ -1106,8 +1111,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "ed50aadfb52972212e1826f6178d9b09976b35a1e6e2cdb12b3f166023fdf460",
-      "bytes": 29192
+      "sha256": "8a81acd11cd7a3acbf595e52b74cadbce920650ce362286b881336eee4a2a1bc",
+      "bytes": 29222
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1441,8 +1446,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "76bdca8b8331c307a53ec91710c2f9e1fc081db7267376c5b9166c32fa4466f8",
-      "bytes": 8653
+      "sha256": "54253210f18e4b32346b44a53cb3f36770d3b127c5167b529b0082de4bed70de",
+      "bytes": 8920
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
@@ -1845,9 +1850,14 @@
       "bytes": 1185
     },
     {
+      "path": "internal/risk/benchmark_a09_test.go",
+      "sha256": "bb213e885fbd90e6e77908b5005c47cf3e6a47d8b4af7a1e76a1fe6f9cb22874",
+      "bytes": 763
+    },
+    {
       "path": "internal/risk/engine.go",
-      "sha256": "7e611211a7254aa132807ab8b03f690aa5815ecb8cbf5e28589b7f80b199b781",
-      "bytes": 8631
+      "sha256": "144249368c40afecf2604f7310053593e44429266fe6d8bd070bd633af6708b8",
+      "bytes": 10047
     },
     {
       "path": "internal/risk/engine_test.go",
@@ -1863,6 +1873,11 @@
       "path": "internal/risk/events_test.go",
       "sha256": "1eec4ee59a719022aae8a045cfb60f7ff992d943280a549e8368926430afd1f7",
       "bytes": 2300
+    },
+    {
+      "path": "internal/risk/metrics_a09_test.go",
+      "sha256": "b1c0e7e90fd5ef65172d8ad0a006dc4c200b2ae5b38fb3378984579dd9648fd5",
+      "bytes": 984
     },
     {
       "path": "internal/risk/types.go",
