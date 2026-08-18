@@ -2455,6 +2455,11 @@
       "bytes": 7522
     },
     {
+      "path": "internal/store/quorum_persistence_a02_test.go",
+      "sha256": "1b808f01824b70d9548fb3c0697640b14ef72c6e7194578a6dd5b74dbdb2c1d7",
+      "bytes": 723
+    },
+    {
       "path": "internal/store/risk_concurrency_a08_test.go",
       "sha256": "5350d0ecc1500eb33a736bf1e49e6b79a041710ed50b877eb5e1bf2144b08509",
       "bytes": 3177
