@@ -1115,6 +1115,11 @@
       "bytes": 2190
     },
     {
+      "path": "internal/authz/adversarial_a07_test.go",
+      "sha256": "889eb52c93cf78c0e7bbdb3ec7cc7d43d7f7dc073e3a5e2c9fb6d779f6254acc",
+      "bytes": 1799
+    },
+    {
       "path": "internal/authz/errors.go",
       "sha256": "914d77110b7a068dd2f3d409873550562e79d3cd2874b6293de87472933f3a38",
       "bytes": 1446
