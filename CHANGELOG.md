@@ -29,6 +29,8 @@ historical runtime milestones are separate version domains.
 
 - Release workflows use least-privilege permissions and immutable action pins.
 - Installation guidance verifies checksums and GitHub artifact attestations.
+- Codex companion discovery is constrained to the resolved installation root;
+  escaping symlinks are rejected before sandbox binds are constructed.
 
 ### Known limitations
 

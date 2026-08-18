@@ -111,8 +111,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "9f4b6fcabcc4d061df3eb4ff5273ae119b091c0f6bcbb76af0d7c7085266a690",
-      "bytes": 7931
+      "sha256": "6d2508d5f627e119c107142470937af28302456371ecc894c25856eed2c96fbe",
+      "bytes": 8080
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -1451,13 +1451,13 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "33e61eb9e3ac81ad61a70439b71b3cfcaeda6dd0fa5b50f09fc5f0e972da1aa1",
-      "bytes": 34585
+      "sha256": "3e56b1b4a3b8d7241790d7797ccfc173f71af9d13998f4f3c733dcba41112d8e",
+      "bytes": 34961
     },
     {
       "path": "internal/app/runtime_test.go",
-      "sha256": "1e6df808d12c1d868dc20498ca5dd6b483b27826e1db827f0a4c617b31e6f463",
-      "bytes": 8471
+      "sha256": "ad425b340590a30b75b132db75fbb59655de49dc37857627a68fca2abde7510e",
+      "bytes": 9925
     },
     {
       "path": "internal/app/secrets_runtime_a06_test.go",

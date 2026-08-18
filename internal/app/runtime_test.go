@@ -68,6 +68,49 @@ func TestAdapterExecutableBindsIncludeInstalledCodexCodeModeHost(t *testing.T) {
 	}
 }
 
+func TestAdapterExecutableBindsRejectSymlinkedCodexCodeModeHost(t *testing.T) {
+	directory := t.TempDir()
+	binary := filepath.Join(directory, "codex")
+	host := filepath.Join(directory, "codex-code-mode-host")
+	if err := os.WriteFile(binary, []byte("binary"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/etc/passwd", host); err != nil {
+		t.Fatal(err)
+	}
+	binds := adapterExecutableBinds(binary)
+	if len(binds) != 1 {
+		t.Fatalf("binds=%#v, want only Codex binary", binds)
+	}
+}
+
+func TestAdapterExecutableBindsResolveCodexInstallationWithoutEscaping(t *testing.T) {
+	root := t.TempDir()
+	install := filepath.Join(root, "install")
+	bin := filepath.Join(root, "bin")
+	for _, directory := range []string{install, bin} {
+		if err := os.Mkdir(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resolvedBinary := filepath.Join(install, "codex")
+	hostSource := filepath.Join(install, "codex-code-mode-host")
+	for _, path := range []string{resolvedBinary, hostSource} {
+		if err := os.WriteFile(path, []byte("binary"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	binary := filepath.Join(bin, "codex")
+	if err := os.Symlink(resolvedBinary, binary); err != nil {
+		t.Fatal(err)
+	}
+	binds := adapterExecutableBinds(binary)
+	hostTarget := filepath.Join(bin, "codex-code-mode-host")
+	if len(binds) != 2 || binds[1].Source != hostSource || binds[1].Target != hostTarget {
+		t.Fatalf("binds=%#v, want safe resolved companion bind", binds)
+	}
+}
+
 func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	repo := runtimeRepo(t)
 	for i := 0; i < 2; i++ {

@@ -920,15 +920,30 @@ func adapterExecutableBinds(binary string) []model.Bind {
 	if filepath.Base(binary) != "codex" {
 		return binds
 	}
-	hostTarget := filepath.Join(filepath.Dir(binary), "codex-code-mode-host")
-	hostSource, err := filepath.EvalSymlinks(hostTarget)
+	resolvedBinary, err := filepath.EvalSymlinks(binary)
 	if err != nil {
 		return binds
 	}
-	info, err := os.Stat(hostSource)
+	resolvedBinary, err = filepath.Abs(resolvedBinary)
+	if err != nil {
+		return binds
+	}
+	root, err := os.OpenRoot(filepath.Dir(resolvedBinary))
+	if err != nil {
+		return binds
+	}
+	defer root.Close()
+	host, err := root.Open("codex-code-mode-host")
+	if err != nil {
+		return binds
+	}
+	defer host.Close()
+	info, err := host.Stat()
 	if err != nil || !info.Mode().IsRegular() {
 		return binds
 	}
+	hostSource := filepath.Join(filepath.Dir(resolvedBinary), "codex-code-mode-host")
+	hostTarget := filepath.Join(filepath.Dir(binary), "codex-code-mode-host")
 	return append(binds, model.Bind{Source: hostSource, Target: hostTarget})
 }
 
