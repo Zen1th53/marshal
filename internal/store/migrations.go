@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 51
+const LatestSchemaVersion = 53
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1275,6 +1275,44 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 51: %w", err)
 		}
 		version = 51
+	}
+	if version < 52 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE agent_auto_recovery_events (
+				event_id TEXT PRIMARY KEY,
+				task_id TEXT NOT NULL,
+				checkpoint_id TEXT NOT NULL,
+				status TEXT NOT NULL DEFAULT 'RECOVERED',
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX agent_auto_recovery_events_by_task
+				ON agent_auto_recovery_events(task_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 52: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(52, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 52: %w", err)
+		}
+		version = 52
+	}
+	if version < 53 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE cross_model_reviews (
+				review_id TEXT PRIMARY KEY,
+				change_id TEXT NOT NULL,
+				verifier_id TEXT NOT NULL,
+				verdict TEXT NOT NULL DEFAULT 'PASSED',
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX cross_model_reviews_by_change
+				ON cross_model_reviews(change_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 53: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(53, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 53: %w", err)
+		}
+		version = 53
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
