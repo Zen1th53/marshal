@@ -19,6 +19,9 @@ func TestA02TypedHandoffMigrationPreservesLegacyHandoffs(t *testing.T) {
 		t.Fatalf("initial Migrate: %v", err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX verification_attestations_by_change",
+		"DROP INDEX verification_attestations_by_principal",
+		"DROP TABLE verification_attestations",
 		"DROP INDEX typed_handoffs_by_sender",
 		"DROP INDEX typed_handoffs_by_task_status",
 		"DROP TABLE typed_handoffs",

@@ -2585,6 +2585,16 @@
       "bytes": 6636
     },
     {
+      "path": "internal/verify/quorum/types.go",
+      "sha256": "d6d6ee2a97c09debd58c68be4ddc14ad88550cfcf346b5915c0b3c6240d173a0",
+      "bytes": 4020
+    },
+    {
+      "path": "internal/verify/quorum/types_test.go",
+      "sha256": "bcdbc525e3b58d85dfa6d63b855e630af468b8490da4f253c3db0ad4131398ae",
+      "bytes": 1581
+    },
+    {
       "path": "internal/worker/manager.go",
       "sha256": "aeffa634126cebe6354275823eb6d6ebcdced4c6504053265ed2540b7e95c390",
       "bytes": 3845
