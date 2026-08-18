@@ -19,6 +19,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
 	"github.com/Zen1th53/marshal/internal/capability"
+	"github.com/Zen1th53/marshal/internal/cell"
 	"github.com/Zen1th53/marshal/internal/dag"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/evidence"
@@ -43,6 +44,7 @@ type Runtime struct {
 	evidenceSanitizer evidence.Sanitizer
 	capabilityBroker  capability.Broker
 	dagGraph          *dag.Engine
+	cellManager       *cell.Manager
 	runtimeInstanceID string
 	runtimePolicy     RuntimePolicyConfig
 	policyConfigured  bool
@@ -55,6 +57,7 @@ type Options struct {
 	Metrics            *evidence.MetricsRecorder
 	RuntimePolicy      *RuntimePolicyConfig
 	CapabilityBroker   capability.Broker
+	CellManager        *cell.Manager
 }
 
 type Status struct {
@@ -208,6 +211,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		adapters:          options.Adapters,
 		evidenceSanitizer: sanitizer,
 		capabilityBroker:  options.CapabilityBroker,
+		cellManager:       options.CellManager,
 		runtimeInstanceID: instanceID,
 	}
 	if options.RuntimePolicy != nil {
@@ -223,6 +227,16 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 func (r *Runtime) DAG() dag.Graph { return r.dagGraph }
 
 func (r *Runtime) InstanceID() string { return r.runtimeInstanceID }
+
+// PrepareCell is the runtime composition boundary for execution cells. The
+// canonical manager owns validation, authorization, persistence and backend
+// lifecycle; callers do not reproduce those rules.
+func (r *Runtime) PrepareCell(ctx context.Context, spec cell.Spec) (cell.Record, error) {
+	if r == nil || r.cellManager == nil {
+		return cell.Record{}, fmt.Errorf("%w: cell manager is unavailable", model.ErrUnavailable)
+	}
+	return r.cellManager.Prepare(ctx, spec)
+}
 
 func (r *Runtime) Close() error { return r.store.Close() }
 
