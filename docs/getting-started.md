@@ -7,6 +7,8 @@ through an installed provider adapter. See [Installation](installation.md) first
 
 ```bash
 cd /path/to/your/git/repository
+git config user.name
+git config user.email
 marshal init
 marshal doctor
 marshal adapters
@@ -15,7 +17,8 @@ marshal adapters
 `marshal init` creates `.marshal/` and missing project contracts without
 overwriting existing contracts. Treat `doctor` output as evidence about this
 machine; documentation cannot guarantee provider authentication or sandbox
-availability.
+availability. Configure a real Git author identity before execution; MARSHAL
+will not fabricate one when creating a task commit.
 
 ## Start the control plane
 

@@ -33,7 +33,8 @@ go install github.com/Zen1th53/marshal/cmd/marshal@v1.0.0-rc.1
 
 ## Runtime dependencies
 
-- `git` for repository discovery, diffs, and isolated worktrees
+- `git` for repository discovery, diffs, and isolated worktrees; the target
+  repository must have a valid author name and email
 - `bwrap` for sandboxed agent execution
 - one supported provider CLI for provider-backed tasks
 - an Ollama server only when using the OpenCode/Ollama path

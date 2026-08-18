@@ -130,8 +130,12 @@ verification.
 
 Run these commands inside a Git repository. `marshal init` creates missing
 project contracts with fail-closed defaults and never overwrites existing ones.
+The repository must have a valid Git author name and email so MARSHAL can create
+the task commit.
 
 ```bash
+git config user.name
+git config user.email
 marshal init
 marshal doctor
 marshal adapters
