@@ -28,6 +28,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/risk"
 	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/secrets"
 	"github.com/Zen1th53/marshal/internal/store"
@@ -50,6 +51,7 @@ type Runtime struct {
 	cellManager        *cell.Manager
 	secretBroker       secrets.Broker
 	gateEngine         *gate.Engine
+	riskEngine         *risk.Engine
 	authorityPrincipal *authz.Principal
 	processAuthority   authz.Authority
 	runtimeInstanceID  string
@@ -67,6 +69,7 @@ type Options struct {
 	CellManager        *cell.Manager
 	SecretBroker       secrets.Broker
 	GateEngine         *gate.Engine
+	RiskEngine         *risk.Engine
 	AuthorityPrincipal *authz.Principal
 	ProcessAuthority   authz.Authority
 }
@@ -225,9 +228,13 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		cellManager:        options.CellManager,
 		secretBroker:       options.SecretBroker,
 		gateEngine:         options.GateEngine,
+		riskEngine:         options.RiskEngine,
 		authorityPrincipal: options.AuthorityPrincipal,
 		processAuthority:   options.ProcessAuthority,
 		runtimeInstanceID:  instanceID,
+	}
+	if rt.riskEngine == nil {
+		rt.riskEngine = risk.NewObservedEngine(database, nil, options.Metrics)
 	}
 	if options.RuntimePolicy != nil {
 		rt.runtimePolicy = *options.RuntimePolicy
@@ -242,6 +249,15 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 func (r *Runtime) DAG() dag.Graph { return r.dagGraph }
 
 func (r *Runtime) InstanceID() string { return r.runtimeInstanceID }
+
+// AssessTool is the runtime composition boundary for T24. Callers provide
+// structured metadata; classification and persistence stay in internal/risk.
+func (r *Runtime) AssessTool(ctx context.Context, request risk.AssessmentRequest) (risk.Assessment, error) {
+	if r == nil || r.riskEngine == nil {
+		return risk.Assessment{}, fmt.Errorf("%w: risk engine is unavailable", model.ErrUnavailable)
+	}
+	return r.riskEngine.Assess(ctx, request)
+}
 
 // WithSecret is the runtime composition boundary for scoped secret use.
 // Callers never receive a secret outside the broker callback.
@@ -439,6 +455,15 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	}
 	task, err := r.store.GetTask(ctx, request.TaskID)
 	if err != nil {
+		return RunResult{}, err
+	}
+	if _, err := r.AssessTool(ctx, risk.AssessmentRequest{
+		ID: risk.AssessmentID("run-risk-" + task.ID + "-" + request.Adapter),
+		Descriptor: risk.ToolDescriptor{
+			Tool: "marshal-runtime", Action: "shell.execute", Resource: r.layout.Root,
+			Factors: risk.Factors{ExternalWrite: true, ScopeBreadth: 1},
+		},
+	}); err != nil {
 		return RunResult{}, err
 	}
 	if r.gateEngine != nil {

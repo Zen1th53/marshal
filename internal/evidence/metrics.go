@@ -31,6 +31,7 @@ const (
 	MetricOperationAuthority         MetricOperation = "authority"
 	MetricOperationGate              MetricOperation = "gate"
 	MetricOperationSecret            MetricOperation = "secret"
+	MetricOperationRisk              MetricOperation = "risk"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -52,7 +53,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationContention: {}, MetricOperationPolicyLoad: {}, MetricOperationPolicyPersist: {},
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
 	MetricOperationPolicyTest: {}, MetricOperationCapability: {}, MetricOperationCell: {},
-	MetricOperationAuthority: {}, MetricOperationGate: {}, MetricOperationSecret: {},
+	MetricOperationAuthority: {}, MetricOperationGate: {}, MetricOperationSecret: {}, MetricOperationRisk: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
@@ -75,6 +76,8 @@ var metricReasons = map[string]struct{}{
 	"GATE_POLICY_DENY": {}, "GATE_QUORUM_UNMET": {}, "GATE_UNKNOWN_CHECK": {},
 	"GATE_UNKNOWN_POINT": {}, "GATE_INVALID_CHECK_STATUS": {}, "GATE_INVALID_DECISION": {},
 	"SECRET_DENIED": {}, "SECRET_NOT_FOUND": {}, "SECRET_LEASE_EXPIRED": {}, "SECRET_PURPOSE_MISMATCH": {}, "SECRET_PROVIDER_FAILED": {},
+	"RISK_DESCRIPTOR_INVALID": {}, "RISK_UNKNOWN_MUTATION": {}, "RISK_DOWNGRADE_FORBIDDEN": {}, "RISK_AUTHORIZATION_UNAVAILABLE": {}, "RISK_AUTHORIZATION_DENIED": {},
+	"RISK_ERROR": {},
 }
 
 // MetricsSnapshot is a detached, read-only projection of recorder state.
