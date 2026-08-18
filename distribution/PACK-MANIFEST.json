@@ -1890,6 +1890,11 @@
       "bytes": 2445
     },
     {
+      "path": "internal/protocol/adversarial_test.go",
+      "sha256": "7da4ac1bd41e7a72d097321876bc1e3f1c8efc2f9341020abb11e68a98a5c770",
+      "bytes": 3855
+    },
+    {
       "path": "internal/protocol/engine.go",
       "sha256": "7e93817604dcba72015dcdefaeb2e4628944b8141f3f40566fea054004a8434c",
       "bytes": 4517

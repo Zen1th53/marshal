@@ -107,6 +107,10 @@ const (
 	EventTypeTrustContentSegmentIngested EventType = "trustcontent.segment.ingested"
 	EventTypeTrustContentZoneAssigned EventType = "trustcontent.zone.assigned"
 	EventTypeTrustContentInjectionSuspected EventType = "trustcontent.injection.suspected"
+	EventTypeHandoffCreated           EventType = "handoff.created"
+	EventTypeHandoffAccepted          EventType = "handoff.accepted"
+	EventTypeHandoffRejected          EventType = "handoff.rejected"
+	EventTypeHandoffConsumed          EventType = "handoff.consumed"
 
 	EventTypeAppended          EventType = "events.appended"
 	EventTypeSubscriberDropped EventType = "events.subscriber.dropped"
@@ -138,6 +142,8 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeNetworkEgressRequested: {}, EventTypeNetworkEgressAllowed: {}, EventTypeNetworkEgressDenied: {},
 	EventTypeTrustContentRendered: {}, EventTypeTrustContentSegmentIngested: {},
 	EventTypeTrustContentZoneAssigned: {}, EventTypeTrustContentInjectionSuspected: {},
+	EventTypeHandoffCreated: {}, EventTypeHandoffAccepted: {},
+	EventTypeHandoffRejected: {}, EventTypeHandoffConsumed: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 
