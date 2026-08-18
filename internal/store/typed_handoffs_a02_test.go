@@ -19,6 +19,8 @@ func TestA02TypedHandoffMigrationPreservesLegacyHandoffs(t *testing.T) {
 		t.Fatalf("initial Migrate: %v", err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS audit_timeline_items_by_resource",
+		"DROP TABLE IF EXISTS audit_timeline_items",
 		"DROP INDEX IF EXISTS reproducible_replay_runs_by_commit",
 		"DROP TABLE IF EXISTS reproducible_replay_runs",
 		"DROP INDEX IF EXISTS context_budget_decisions_by_action",
