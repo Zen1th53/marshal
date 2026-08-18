@@ -2495,9 +2495,19 @@
       "bytes": 1132
     },
     {
+      "path": "internal/trustcontent/README.md",
+      "sha256": "e36bed9980d62569ee53131b9b17ef50d46fedcd92a48e8aad80a3288a299e09",
+      "bytes": 1949
+    },
+    {
       "path": "internal/trustcontent/adversarial_test.go",
       "sha256": "d2ed8c195aefe20409587f0145af789b3e340615a54c5bacfad369abbe5156cf",
       "bytes": 9509
+    },
+    {
+      "path": "internal/trustcontent/benchmark_test.go",
+      "sha256": "8b1db8bd2cb70036ab8832f435fef4f53814b61ee1e94f72b090960654247405",
+      "bytes": 650
     },
     {
       "path": "internal/trustcontent/engine.go",
@@ -2508,6 +2518,11 @@
       "path": "internal/trustcontent/engine_test.go",
       "sha256": "6e1f63734f62d138370606d24b7015d75f9be9705c859d46ed0e9678e85f3809",
       "bytes": 3504
+    },
+    {
+      "path": "internal/trustcontent/metrics_a09_test.go",
+      "sha256": "b4ab08dcc604f9c26d8ad774116c5c86904713baa9f5d408afe9885b01773d95",
+      "bytes": 851
     },
     {
       "path": "internal/trustcontent/renderer.go",
