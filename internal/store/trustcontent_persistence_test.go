@@ -63,6 +63,8 @@ func TestT23MigrationUpgradesSchema26(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS cross_model_reviews_by_change",
+		"DROP TABLE IF EXISTS cross_model_reviews",
 		"DROP INDEX IF EXISTS agent_auto_recovery_events_by_task",
 		"DROP TABLE IF EXISTS agent_auto_recovery_events",
 		"DROP INDEX IF EXISTS tui_session_snapshots_by_created",
