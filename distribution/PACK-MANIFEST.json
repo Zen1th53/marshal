@@ -700,6 +700,11 @@
       "bytes": 1283
     },
     {
+      "path": "docs/agent-roles.md",
+      "sha256": "10f61bc0b91c81a94432240782b1dee2ad4ed0b43bb3419f34f6c2b581671267",
+      "bytes": 1941
+    },
+    {
       "path": "docs/architecture.md",
       "sha256": "1307345a203cc7c123146f112fe96ef96bcba7e13d0ab838ee8273be69932d43",
       "bytes": 3060
@@ -1135,6 +1140,16 @@
       "bytes": 1857
     },
     {
+      "path": "internal/authz/metrics.go",
+      "sha256": "25c4ad9b495903ec0d5a60233354efa83ecfb8733e935855f956583b2dee3c64",
+      "bytes": 1312
+    },
+    {
+      "path": "internal/authz/metrics_a09_test.go",
+      "sha256": "1db8e1ec5fe6aea686c0df1248eb0ccd2c97be71f867a4676b785d948567c1dd",
+      "bytes": 2280
+    },
+    {
       "path": "internal/authz/security_a04_test.go",
       "sha256": "628c6ffc3365543d9518f95624b6cb14fec204eec0616de85a15bf1a9ba5136d",
       "bytes": 2252
@@ -1396,8 +1411,8 @@
     },
     {
       "path": "internal/evidence/metrics.go",
-      "sha256": "8f932b50c2e32d76655b0bfb837af53f2ed48e75fb447c357bbc9790e32a052a",
-      "bytes": 8030
+      "sha256": "eef7284b30dd3be2098a3575aac4e55781d94e7b380cb766c1b7ee7b51e9409f",
+      "bytes": 8125
     },
     {
       "path": "internal/evidence/metrics_a09_test.go",
