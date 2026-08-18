@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 36
+const LatestSchemaVersion = 38
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -984,6 +984,49 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 36: %w", err)
 		}
 		version = 36
+	}
+	if version < 37 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE cascade_evaluations (
+				evaluation_id TEXT PRIMARY KEY,
+				change_id TEXT NOT NULL,
+				stage_name TEXT NOT NULL,
+				status TEXT NOT NULL,
+				evidence_id TEXT NOT NULL DEFAULT '',
+				stop_reason TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX cascade_evaluations_by_change
+				ON cascade_evaluations(change_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 37: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(37, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 37: %w", err)
+		}
+		version = 37
+	}
+	if version < 38 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE mcp_gateway_logs (
+				log_id TEXT PRIMARY KEY,
+				subject TEXT NOT NULL,
+				task_id TEXT NOT NULL,
+				server TEXT NOT NULL,
+				tool TEXT NOT NULL,
+				allowed INTEGER NOT NULL DEFAULT 1,
+				evidence_id TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX mcp_gateway_logs_by_task
+				ON mcp_gateway_logs(task_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 38: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(38, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 38: %w", err)
+		}
+		version = 38
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
