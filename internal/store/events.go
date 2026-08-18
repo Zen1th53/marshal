@@ -2,223 +2,132 @@ package store
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/events"
-	"github.com/Zen1th53/marshal/internal/evidence"
 )
 
-type eventDigestPayload struct {
-	ID             events.EventID        `json:"id"`
-	Type           events.Type           `json:"type"`
-	Subject        events.SubjectID      `json:"subject"`
-	TaskID         events.TaskID         `json:"task_id,omitempty"`
-	RunID          events.RunID          `json:"run_id,omitempty"`
-	ResourceID     events.ResourceID     `json:"resource_id,omitempty"`
-	EvidenceID     events.EvidenceID     `json:"evidence_id,omitempty"`
-	Data           map[string]string     `json:"data,omitempty"`
-	IdempotencyKey events.IdempotencyKey `json:"idempotency_key"`
-}
-
-func eventContentDigest(event events.Event) (string, []byte, error) {
-	payload := eventDigestPayload{
-		ID: event.ID, Type: event.Type, Subject: event.Subject,
-		TaskID: event.TaskID, RunID: event.RunID, ResourceID: event.ResourceID,
-		EvidenceID: event.EvidenceID, Data: events.CloneEvent(event).Data,
-		IdempotencyKey: event.IdempotencyKey,
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", nil, events.NewError(events.CodeInvalidEvent, err)
-	}
-	digest := sha256.Sum256(body)
-	return "sha256:" + hex.EncodeToString(digest[:]), body, nil
-}
-
-// Append durably stores one canonical event and assigns its monotonic sequence
-// and UTC timestamp at the authoritative database boundary. Exact retries by
-// idempotency key converge to the already committed event. Transient SQLite
-// writer contention is retried using the repository's bounded, context-aware
-// policy so independent Store instances converge instead of leaking SQLITE_BUSY.
+// Append stores one structured event in the canonical SQLite history. The
+// database assigns sequence; callers cannot supply or overwrite it.
 func (s *Store) Append(ctx context.Context, event events.Event) (events.Event, error) {
-	for attempt := 0; ; attempt++ {
-		stored, err := s.appendEventOnce(ctx, event)
-		if err == nil || !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
-			return stored, err
-		}
-		if waitErr := waitSQLiteRetry(ctx, attempt); waitErr != nil {
-			return events.Event{}, events.NewError(events.CodeStoreFailed, waitErr)
-		}
-	}
-}
-
-func (s *Store) appendEventOnce(ctx context.Context, event events.Event) (events.Event, error) {
-	if err := ctx.Err(); err != nil {
-		return events.Event{}, events.NewError(events.CodeStoreFailed, err)
-	}
-	clean := events.CloneEvent(event)
-	clean.Sequence = 0
-	clean.At = time.Time{}
-	if err := clean.Validate(); err != nil {
+	if err := event.Validate(); err != nil {
 		return events.Event{}, err
 	}
-	sanitized, err := s.sanitizer.SanitizeNode(ctx, evidence.Node{Metadata: clean.Data})
-	if err != nil {
-		return events.Event{}, events.NewError(events.CodeSecretField, err)
+	if event.ID == "" || event.At.IsZero() {
+		return events.Event{}, events.NewError(events.CodeEventTypeInvalid, fmt.Errorf("event identity or timestamp is missing"))
 	}
-	clean.Data = sanitized.Metadata
-	digest, _, err := eventContentDigest(clean)
+	data, err := json.Marshal(event.Data)
 	if err != nil {
-		return events.Event{}, err
+		return events.Event{}, events.NewError(events.CodeEventStoreFailed, err)
 	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return events.Event{}, events.NewError(events.CodeStoreFailed, err)
-	}
-	defer tx.Rollback()
-
-	// Write first instead of performing a read-before-write idempotency check.
-	// With SQLite DEFERRED transactions, a read snapshot that is then promoted
-	// to a writer can fail with SQLITE_BUSY under unrelated concurrent appends.
-	// Unique event/idempotency constraints remain authoritative; on a conflict
-	// below we read the winning row and reconcile an exact retry.
-	dataJSON, err := json.Marshal(clean.Data)
-	if err != nil {
-		return events.Event{}, events.NewError(events.CodeInvalidEvent, err)
-	}
-	at := time.Now().UTC()
-	result, err := tx.ExecContext(ctx, `
-		INSERT INTO structured_events(
-			event_id, event_type, subject, task_id, run_id, resource_id, evidence_id,
-			timestamp, data_json, idempotency_key, content_digest
-		) VALUES(?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?)
-	`, clean.ID, clean.Type, clean.Subject, clean.TaskID, clean.RunID, clean.ResourceID, clean.EvidenceID,
-		at.Format(time.RFC3339Nano), string(dataJSON), clean.IdempotencyKey, digest)
-	if err != nil {
-		// A concurrent exact retry may have won the unique idempotency key.
-		if existing, existingDigest, found, readErr := loadEventByIdempotency(ctx, tx, clean.IdempotencyKey); readErr == nil && found {
-			if existingDigest == digest {
-				if commitErr := tx.Commit(); commitErr != nil {
-					return events.Event{}, events.NewError(events.CodeStoreFailed, commitErr)
-				}
-				return existing, nil
+	if event.IdempotencyKey != "" {
+		var existingID, existingType, existingSubject, existingTask, existingRun, existingResource, existingEvidence, existingAt, existingData string
+		var existingSequence int64
+		err = s.db.QueryRowContext(ctx, `
+			SELECT event_id, sequence, event_type, subject, task_id, run_id, resource_id, evidence_id, at, data_json
+			FROM structured_events WHERE idempotency_key = ?`, event.IdempotencyKey).
+			Scan(&existingID, &existingSequence, &existingType, &existingSubject, &existingTask, &existingRun,
+				&existingResource, &existingEvidence, &existingAt, &existingData)
+		if err == nil {
+			if existingType != string(event.Type) || existingSubject != event.Subject || existingTask != event.TaskID ||
+				existingRun != event.RunID || existingResource != event.ResourceID || existingEvidence != event.EvidenceID ||
+				existingAt != event.At.UTC().Format(time.RFC3339Nano) || existingData != string(data) {
+				return events.Event{}, events.NewError(events.CodeEventSequenceConflict, fmt.Errorf("idempotency key has different payload"))
 			}
-			return events.Event{}, events.ErrSequenceConflict
+			event.ID = existingID
+			event.Sequence = events.Sequence(existingSequence)
+			event.At, _ = time.Parse(time.RFC3339Nano, existingAt)
+			_ = json.Unmarshal([]byte(existingData), &event.Data)
+			return event, nil
 		}
-		return events.Event{}, events.NewError(events.CodeStoreFailed, err)
+		if !errors.Is(err, sql.ErrNoRows) {
+			return events.Event{}, events.NewError(events.CodeEventStoreFailed, err)
+		}
 	}
-	seq, err := result.LastInsertId()
-	if err != nil || seq <= 0 {
-		return events.Event{}, events.NewError(events.CodeStoreFailed, err)
+	var stored events.Event
+	var storedAt, storedData string
+	var storedIdempotency sql.NullString
+	var storedSequence int64
+	err = s.db.QueryRowContext(ctx, `
+		SELECT sequence, event_type, subject, task_id, run_id, resource_id,
+		       evidence_id, at, data_json, idempotency_key
+		FROM structured_events WHERE event_id = ?`, event.ID).
+		Scan(&storedSequence, &stored.Type, &stored.Subject, &stored.TaskID, &stored.RunID,
+			&stored.ResourceID, &stored.EvidenceID, &storedAt, &storedData, &storedIdempotency)
+	if err == nil {
+		stored.IdempotencyKey = storedIdempotency.String
+		if stored.Type == event.Type && stored.Subject == event.Subject && stored.TaskID == event.TaskID &&
+			stored.RunID == event.RunID && stored.ResourceID == event.ResourceID && stored.EvidenceID == event.EvidenceID &&
+			storedAt == event.At.UTC().Format(time.RFC3339Nano) && storedData == string(data) &&
+			stored.IdempotencyKey == event.IdempotencyKey {
+			stored.ID = event.ID
+			stored.At, _ = time.Parse(time.RFC3339Nano, storedAt)
+			_ = json.Unmarshal([]byte(storedData), &stored.Data)
+			stored.Sequence = events.Sequence(storedSequence)
+			return stored, nil
+		}
+		return events.Event{}, events.NewError(events.CodeEventSequenceConflict, fmt.Errorf("event ID already exists"))
 	}
-	clean.Sequence = events.Sequence(seq)
-	clean.At = at
-	if err := tx.Commit(); err != nil {
-		return events.Event{}, events.NewError(events.CodeStoreFailed, err)
+	if !errors.Is(err, sql.ErrNoRows) {
+		return events.Event{}, events.NewError(events.CodeEventStoreFailed, err)
 	}
-	return clean, nil
+
+	result, err := s.db.ExecContext(ctx, `
+		INSERT INTO structured_events(
+			event_id, event_type, subject, task_id, run_id, resource_id,
+			evidence_id, at, data_json, idempotency_key
+		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''))`,
+		event.ID, event.Type, event.Subject, event.TaskID, event.RunID, event.ResourceID,
+		event.EvidenceID, event.At.UTC().Format(time.RFC3339Nano), string(data), event.IdempotencyKey)
+	if err != nil {
+		return events.Event{}, events.NewError(events.CodeEventStoreFailed, err)
+	}
+	sequence, err := result.LastInsertId()
+	if err != nil {
+		return events.Event{}, events.NewError(events.CodeEventStoreFailed, err)
+	}
+	event.Sequence = events.Sequence(sequence)
+	event.At = event.At.UTC()
+	return event, nil
 }
 
-// Since returns durable events with sequence strictly greater than after.
-func (s *Store) Since(ctx context.Context, after events.Sequence, limit int) ([]events.Event, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, events.NewError(events.CodeStoreFailed, err)
-	}
-	if limit <= 0 || limit > 1000 {
-		return nil, events.ErrInvalidEvent
-	}
+// Since returns durable events strictly after after, ordered by sequence.
+func (s *Store) Since(ctx context.Context, after events.Sequence) ([]events.Event, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT sequence, event_id, event_type, subject,
-			COALESCE(task_id, ''), COALESCE(run_id, ''), COALESCE(resource_id, ''), COALESCE(evidence_id, ''),
-			timestamp, data_json, idempotency_key
-		FROM structured_events
-		WHERE sequence > ?
-		ORDER BY sequence ASC
-		LIMIT ?
-	`, after, limit)
+		SELECT event_id, sequence, event_type, subject, task_id, run_id,
+		       resource_id, evidence_id, at, data_json, idempotency_key
+		FROM structured_events WHERE sequence > ? ORDER BY sequence ASC`, int64(after))
 	if err != nil {
-		return nil, events.NewError(events.CodeStoreFailed, err)
+		return nil, events.NewError(events.CodeEventStoreFailed, err)
 	}
 	defer rows.Close()
-	result := make([]events.Event, 0)
+	var result []events.Event
 	for rows.Next() {
-		event, err := scanEvent(rows)
+		var event events.Event
+		var at, data string
+		var idempotency sql.NullString
+		var sequence int64
+		if err := rows.Scan(&event.ID, &sequence, &event.Type, &event.Subject, &event.TaskID, &event.RunID,
+			&event.ResourceID, &event.EvidenceID, &at, &data, &idempotency); err != nil {
+			return nil, events.NewError(events.CodeEventStoreFailed, err)
+		}
+		event.IdempotencyKey = idempotency.String
+		event.Sequence = events.Sequence(sequence)
+		event.At, err = time.Parse(time.RFC3339Nano, at)
 		if err != nil {
-			return nil, err
+			return nil, events.NewError(events.CodeEventStoreFailed, err)
+		}
+		if err := json.Unmarshal([]byte(data), &event.Data); err != nil {
+			return nil, events.NewError(events.CodeEventStoreFailed, err)
 		}
 		result = append(result, event)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, events.NewError(events.CodeStoreFailed, err)
+		return nil, events.NewError(events.CodeEventStoreFailed, err)
 	}
 	return result, nil
-}
-
-type eventScanner interface {
-	Scan(...any) error
-}
-
-func scanEvent(scanner eventScanner) (events.Event, error) {
-	var event events.Event
-	var timestamp, dataJSON string
-	if err := scanner.Scan(
-		&event.Sequence, &event.ID, &event.Type, &event.Subject,
-		&event.TaskID, &event.RunID, &event.ResourceID, &event.EvidenceID,
-		&timestamp, &dataJSON, &event.IdempotencyKey,
-	); err != nil {
-		return events.Event{}, events.NewError(events.CodeStoreFailed, err)
-	}
-	at, err := time.Parse(time.RFC3339Nano, timestamp)
-	if err != nil {
-		return events.Event{}, events.NewError(events.CodeStoreFailed, err)
-	}
-	event.At = at.UTC()
-	if err := json.Unmarshal([]byte(dataJSON), &event.Data); err != nil {
-		return events.Event{}, events.NewError(events.CodeStoreFailed, err)
-	}
-	if err := event.Validate(); err != nil {
-		return events.Event{}, err
-	}
-	return events.CloneEvent(event), nil
-}
-
-func loadEventByIdempotency(ctx context.Context, tx *sql.Tx, key events.IdempotencyKey) (events.Event, string, bool, error) {
-	row := tx.QueryRowContext(ctx, `
-		SELECT sequence, event_id, event_type, subject,
-			COALESCE(task_id, ''), COALESCE(run_id, ''), COALESCE(resource_id, ''), COALESCE(evidence_id, ''),
-			timestamp, data_json, idempotency_key, content_digest
-		FROM structured_events WHERE idempotency_key = ?
-	`, key)
-	var event events.Event
-	var timestamp, dataJSON, digest string
-	err := row.Scan(
-		&event.Sequence, &event.ID, &event.Type, &event.Subject,
-		&event.TaskID, &event.RunID, &event.ResourceID, &event.EvidenceID,
-		&timestamp, &dataJSON, &event.IdempotencyKey, &digest,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return events.Event{}, "", false, nil
-	}
-	if err != nil {
-		return events.Event{}, "", false, err
-	}
-	at, err := time.Parse(time.RFC3339Nano, timestamp)
-	if err != nil {
-		return events.Event{}, "", false, fmt.Errorf("parse structured event timestamp: %w", err)
-	}
-	event.At = at.UTC()
-	if err := json.Unmarshal([]byte(dataJSON), &event.Data); err != nil {
-		return events.Event{}, "", false, err
-	}
-	if err := event.Validate(); err != nil {
-		return events.Event{}, "", false, err
-	}
-	return events.CloneEvent(event), digest, true, nil
 }

@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"sync/atomic"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/events"
 )
 
 // Backend is the narrow persistence contract consumed by the T29 service.
@@ -28,24 +31,50 @@ type Engine struct {
 	identity   IdentityProvider
 	authorizer Authorizer
 	freshness  FreshnessValidator
-	eventSink  EventSink
-	metrics    *MetricsRecorder
 	now        func() time.Time
+	eventStore events.Store
+	metrics    dagMetrics
+}
+
+type dagMetrics struct {
+	success atomic.Uint64
+	denied  atomic.Uint64
+	invalid atomic.Uint64
+	totalNs atomic.Uint64
+}
+
+// MetricsSnapshot is a bounded operational projection; it is never used for
+// readiness, authorization, or graph correctness.
+type MetricsSnapshot struct {
+	Success uint64
+	Denied  uint64
+	Invalid uint64
+	TotalNs uint64
+}
+
+func (e *Engine) Metrics() MetricsSnapshot {
+	return MetricsSnapshot{Success: e.metrics.success.Load(), Denied: e.metrics.denied.Load(), Invalid: e.metrics.invalid.Load(), TotalNs: e.metrics.totalNs.Load()}
+}
+
+// NewEngineWithEvents enables the canonical durable event hook. Events are
+// appended only after the corresponding backend mutation is durable.
+func NewEngineWithEvents(backend Backend, eventStore events.Store) (*Engine, error) {
+	engine, err := NewEngine(backend)
+	if err != nil {
+		return nil, err
+	}
+	if eventStore == nil {
+		return nil, ErrInvalidRequest
+	}
+	engine.eventStore = eventStore
+	return engine, nil
 }
 
 func NewEngine(backend Backend) (*Engine, error) {
 	if backend == nil {
 		return nil, ErrInvalidRequest
 	}
-	return &Engine{backend: backend, metrics: NewMetricsRecorder(), now: func() time.Time { return time.Now().UTC() }}, nil
-}
-
-// Metrics returns a detached, non-authoritative operational projection.
-func (e *Engine) Metrics() MetricsSnapshot {
-	if e == nil || e.metrics == nil {
-		return MetricsSnapshot{}
-	}
-	return e.metrics.Snapshot()
+	return &Engine{backend: backend, now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
 func NewAuthorizedEngine(backend Backend, identity IdentityProvider, authorizer Authorizer, freshness FreshnessValidator) (*Engine, error) {
@@ -62,66 +91,59 @@ func NewAuthorizedEngine(backend Backend, identity IdentityProvider, authorizer 
 	return engine, nil
 }
 
-// NewAuditedEngine is the A05 mutation boundary. A privileged DAG mutation is
-// not allowed to begin unless a durable event sink is available.
-func NewAuditedEngine(backend Backend, identity IdentityProvider, authorizer Authorizer, freshness FreshnessValidator, eventSink EventSink) (*Engine, error) {
+// NewAuthorizedEngineWithEvents combines the A04 authority boundary with the
+// canonical A05 durable event hook.
+func NewAuthorizedEngineWithEvents(backend Backend, identity IdentityProvider, authorizer Authorizer, freshness FreshnessValidator, eventStore events.Store) (*Engine, error) {
 	engine, err := NewAuthorizedEngine(backend, identity, authorizer, freshness)
 	if err != nil {
 		return nil, err
 	}
-	if eventSink == nil {
-		return nil, ErrEventUnavailable
+	if eventStore == nil {
+		return nil, ErrInvalidRequest
 	}
-	engine.eventSink = eventSink
+	engine.eventStore = eventStore
 	return engine, nil
 }
 
 func (e *Engine) AddNode(ctx context.Context, request AddNodeRequest) (Node, error) {
+	started := time.Now()
+	defer func() { e.metrics.totalNs.Add(uint64(time.Since(started).Nanoseconds())) }()
 	if err := request.Validate(); err != nil {
+		e.metrics.invalid.Add(1)
 		return Node{}, err
 	}
-	decision, err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddNode, Resource: nodeResource(request.Node.TaskID)})
-	if err != nil {
+	if err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddNode, Resource: nodeResource(request.Node.TaskID)}); err != nil {
+		e.metrics.denied.Add(1)
 		return Node{}, err
-	}
-	if e.eventSink == nil {
-		return Node{}, ErrEventUnavailable
 	}
 	// New graph history always starts pending. Later lifecycle movement must use
 	// the explicit transition state machine rather than insertion as a setter.
 	if request.Node.Status != StatusPending {
 		return Node{}, ErrInvalidNode
 	}
-	stored, err := e.backend.PutDAGNode(ctx, request.Node)
+	node, err := e.backend.PutDAGNode(ctx, request.Node)
 	if err != nil {
 		return Node{}, err
 	}
-	if err := e.emitMutationEvent(ctx, "dag.node.added", decision, request.RequestID, nodeResource(stored.TaskID), "added", Code(""), "", ""); err != nil {
-		return stored, err
+	if err := e.record(ctx, events.EventTypeDAGNodeAdded, string(node.TaskID), request.RequestID, map[string]any{
+		"task_id": string(node.TaskID), "kind": string(node.Kind), "status": string(node.Status),
+	}); err != nil {
+		return node, err
 	}
-	return stored, nil
+	e.metrics.success.Add(1)
+	return node, nil
 }
 
-func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (result Edge, err error) {
+func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (Edge, error) {
 	started := time.Now()
-	defer func() {
-		outcome := MetricOutcomeSuccess
-		if errors.Is(err, ErrCycle) {
-			outcome = MetricOutcomeCycleRejected
-		} else if err != nil {
-			outcome = MetricOutcomeError
-		}
-		e.metrics.Observe(MetricOperationAddEdge, outcome, time.Since(started))
-	}()
+	defer func() { e.metrics.totalNs.Add(uint64(time.Since(started).Nanoseconds())) }()
 	if err := request.Validate(); err != nil {
+		e.metrics.invalid.Add(1)
 		return Edge{}, err
 	}
-	decision, err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddEdge, Resource: edgeResource(request.Edge)})
-	if err != nil {
+	if err := e.authorize(ctx, AuthorizationRequest{RequestID: request.RequestID, Action: ActionAddEdge, Resource: edgeResource(request.Edge)}); err != nil {
+		e.metrics.denied.Add(1)
 		return Edge{}, err
-	}
-	if e.eventSink == nil {
-		return Edge{}, ErrEventUnavailable
 	}
 	// Reconcile an exact semantic retry before applying new-edge constraints.
 	existing, err := e.backend.DAGEdgesFrom(ctx, request.Edge.From)
@@ -131,9 +153,6 @@ func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (result Ed
 	for _, edge := range existing {
 		if edge.To == request.Edge.To {
 			if edge.Condition == request.Edge.Condition {
-				if err := e.emitMutationEvent(ctx, "dag.edge.added", decision, request.RequestID, edgeResource(edge), "added", Code(""), "", string(edge.Condition)); err != nil {
-					return edge, err
-				}
 				return edge, nil
 			}
 			return Edge{}, ErrDuplicateEdge
@@ -150,9 +169,6 @@ func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (result Ed
 	if cycle, err := e.wouldCycle(ctx, request.Edge); err != nil {
 		return Edge{}, err
 	} else if cycle {
-		if eventErr := e.emitMutationEvent(ctx, "dag.cycle.rejected", decision, request.RequestID, edgeResource(request.Edge), "rejected", CodeCycle, "", string(request.Edge.Condition)); eventErr != nil {
-			return Edge{}, NewError(CodeEventUnavailable, ErrCycle)
-		}
 		return Edge{}, ErrCycle
 	}
 	edge, err := e.backend.PutDAGEdge(ctx, request.Edge)
@@ -172,23 +188,16 @@ func (e *Engine) AddEdge(ctx context.Context, request AddEdgeRequest) (result Ed
 	if err != nil {
 		return Edge{}, err
 	}
-	if eventErr := e.emitMutationEvent(ctx, "dag.edge.added", decision, request.RequestID, edgeResource(edge), "added", Code(""), "", string(edge.Condition)); eventErr != nil {
-		return edge, eventErr
+	if err := e.record(ctx, events.EventTypeDAGEdgeAdded, string(edge.To), request.RequestID, map[string]any{
+		"from_task": string(edge.From), "to_task": string(edge.To), "condition": string(edge.Condition),
+	}); err != nil {
+		return edge, err
 	}
+	e.metrics.success.Add(1)
 	return edge, nil
 }
 
-func (e *Engine) Ready(ctx context.Context, id TaskID) (result Readiness, err error) {
-	started := time.Now()
-	defer func() {
-		outcome := MetricOutcomeSuccess
-		if err != nil {
-			outcome = MetricOutcomeError
-		} else if !result.Ready {
-			outcome = MetricOutcomeBlocked
-		}
-		e.metrics.Observe(MetricOperationReady, outcome, time.Since(started))
-	}()
+func (e *Engine) Ready(ctx context.Context, id TaskID) (Readiness, error) {
 	node, err := e.backend.GetDAGNode(ctx, id)
 	if err != nil {
 		return Readiness{}, err
@@ -216,26 +225,16 @@ func (e *Engine) Ready(ctx context.Context, id TaskID) (result Readiness, err er
 
 // Transition applies one explicit lifecycle edge. Moving to ready is allowed
 // only when canonical predecessor state currently satisfies every dependency.
-func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target NodeStatus) (result Node, err error) {
+func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target NodeStatus) (Node, error) {
 	started := time.Now()
-	defer func() {
-		outcome := MetricOutcomeSuccess
-		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrAuthorizationUnavailable) || errors.Is(err, ErrAuthorizationStale) {
-			outcome = MetricOutcomeDenied
-		} else if err != nil {
-			outcome = MetricOutcomeError
-		}
-		e.metrics.Observe(MetricOperationTransition, outcome, time.Since(started))
-	}()
+	defer func() { e.metrics.totalNs.Add(uint64(time.Since(started).Nanoseconds())) }()
 	if !CanTransition(expected, target) {
+		e.metrics.invalid.Add(1)
 		return Node{}, ErrInvalidNode
 	}
-	decision, err := e.authorize(ctx, AuthorizationRequest{Action: ActionTransition, Resource: nodeResource(id), ExpectedState: expected, TargetState: target})
-	if err != nil {
+	if err := e.authorize(ctx, AuthorizationRequest{Action: ActionTransition, Resource: nodeResource(id), ExpectedState: expected, TargetState: target}); err != nil {
+		e.metrics.denied.Add(1)
 		return Node{}, err
-	}
-	if e.eventSink == nil {
-		return Node{}, ErrEventUnavailable
 	}
 	if target == StatusReady {
 		readiness, err := e.Ready(ctx, id)
@@ -246,66 +245,66 @@ func (e *Engine) Transition(ctx context.Context, id TaskID, expected, target Nod
 			return Node{}, ErrInvalidNode
 		}
 	}
-	stored, err := e.backend.TransitionDAGNode(ctx, id, expected, target)
+	node, err := e.backend.TransitionDAGNode(ctx, id, expected, target)
 	if err != nil {
 		return Node{}, err
 	}
-	eventType := ""
-	eventResult := ""
-	switch target {
-	case StatusReady:
-		eventType, eventResult = "dag.node.ready", "ready"
-	case StatusBlocked:
-		eventType, eventResult = "dag.node.blocked", "blocked"
+	eventType := events.EventTypeDAGNodeBlocked
+	if target == StatusReady {
+		eventType = events.EventTypeDAGNodeReady
 	}
-	if eventType != "" {
-		if eventErr := e.emitMutationEvent(ctx, eventType, decision, "", nodeResource(id), eventResult, Code(""), string(target), ""); eventErr != nil {
-			return stored, eventErr
-		}
+	if err := e.record(ctx, eventType, string(id), RequestID(string(id)+":"+string(expected)+":"+string(target)), map[string]any{
+		"task_id": string(id), "previous_state": string(expected), "target_state": string(target),
+	}); err != nil {
+		return node, err
 	}
-	return stored, nil
+	e.metrics.success.Add(1)
+	return node, nil
 }
 
-func (e *Engine) authorize(ctx context.Context, request AuthorizationRequest) (AuthorizationDecision, error) {
+func (e *Engine) record(ctx context.Context, eventType events.EventType, resource string, requestID RequestID, data map[string]any) error {
+	if e.eventStore == nil {
+		return nil
+	}
+	at := e.now().UTC()
+	event := events.Event{ID: "dag:" + string(eventType) + ":" + resource + ":" + string(requestID), Type: eventType,
+		TaskID: resource, ResourceID: resource, At: at, Data: data, IdempotencyKey: "dag:" + string(eventType) + ":" + resource + ":" + string(requestID)}
+	_, err := e.eventStore.Append(ctx, event)
+	return err
+}
+
+func (e *Engine) authorize(ctx context.Context, request AuthorizationRequest) error {
 	if err := ctx.Err(); err != nil {
-		return AuthorizationDecision{}, NewError(CodeAuthorizationUnavailable, err)
+		return NewError(CodeAuthorizationUnavailable, err)
 	}
 	if e.identity == nil || e.authorizer == nil || e.freshness == nil {
-		return AuthorizationDecision{}, ErrAuthorizationUnavailable
+		return ErrAuthorizationUnavailable
 	}
 	identity, err := e.identity.Identity(ctx)
 	if err != nil {
-		return AuthorizationDecision{}, NewError(CodeAuthorizationUnavailable, err)
+		return NewError(CodeAuthorizationUnavailable, err)
 	}
 	request.Identity = identity
 	if !request.valid() {
-		return AuthorizationDecision{}, ErrAuthorizationDenied
+		return ErrAuthorizationDenied
 	}
 	decision, err := e.authorizer.Authorize(ctx, request)
 	if err != nil {
-		return AuthorizationDecision{}, NewError(CodeAuthorizationUnavailable, err)
+		return NewError(CodeAuthorizationUnavailable, err)
 	}
 	if err := decision.validateFor(request, e.now()); err != nil {
-		return AuthorizationDecision{}, err
+		return err
 	}
 	if err := e.freshness.ValidateFreshness(ctx, request, decision); err != nil {
-		return AuthorizationDecision{}, NewError(CodeAuthorizationStale, err)
+		return NewError(CodeAuthorizationStale, err)
 	}
 	if err := ctx.Err(); err != nil {
-		return AuthorizationDecision{}, NewError(CodeAuthorizationUnavailable, err)
+		return NewError(CodeAuthorizationUnavailable, err)
 	}
-	return decision, nil
+	return nil
 }
 
-func (e *Engine) Topological(ctx context.Context) (result []Node, err error) {
-	started := time.Now()
-	defer func() {
-		outcome := MetricOutcomeSuccess
-		if err != nil {
-			outcome = MetricOutcomeError
-		}
-		e.metrics.Observe(MetricOperationTopological, outcome, time.Since(started))
-	}()
+func (e *Engine) Topological(ctx context.Context) ([]Node, error) {
 	nodes, err := e.backend.DAGNodes(ctx)
 	if err != nil {
 		return nil, err
@@ -337,7 +336,7 @@ func (e *Engine) Topological(ctx context.Context) (result []Node, err error) {
 		}
 	}
 	orderAvailable(available)
-	result = make([]Node, 0, len(nodes))
+	result := make([]Node, 0, len(nodes))
 	for len(available) > 0 {
 		node := available[0]
 		available = available[1:]

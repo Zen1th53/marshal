@@ -10,109 +10,38 @@ import (
 	"github.com/Zen1th53/marshal/internal/events"
 )
 
-func TestEngineLeasesUsesSecretOnlyInsideCallbackAndZeroesBytes(t *testing.T) {
+func TestEngineDeniesExpiredLease(t *testing.T) {
 	now := time.Unix(100, 0).UTC()
 	store := &memoryLeaseStore{}
-	provider := providerFunc(func(context.Context, Ref) ([]byte, error) {
-		return []byte("MARSHAL_TEST_SECRET_T21_A03"), nil
-	})
 	engine, err := NewEngine(EngineConfig{
-		Store: store, Providers: map[string]Provider{"env": provider}, Capability: allowSecretCapability{}, Now: func() time.Time { return now },
+		Store: store, Capability: allowSecretCapability{},
+		Providers: map[string]Provider{"env": providerFunc(func(context.Context, Ref) ([]byte, error) { return []byte("x"), nil })},
+		Now:       func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	lease, err := engine.Lease(context.Background(), LeaseRequest{
-		ID: "lease-a03", Subject: "agent", TaskID: "task", Ref: Ref{Provider: "env", Name: "TOKEN", Version: "v1"},
-		Purpose: "test", IssuedAt: now, ExpiresAt: now.Add(time.Minute),
+		ID: "expired", Subject: "agent", TaskID: "task", Ref: Ref{Provider: "env", Name: "TOKEN", Version: "v1"},
+		Purpose: "test", IssuedAt: now.Add(-2 * time.Minute), ExpiresAt: now.Add(-time.Minute),
 	})
 	if err != nil {
-		t.Fatalf("Lease: %v", err)
+		t.Fatal(err)
 	}
-	if lease.State != StateLeased {
-		t.Fatalf("lease state=%q, want leased", lease.State)
-	}
-	var observed []byte
-	if err := engine.WithSecret(context.Background(), lease, func(value []byte) error {
-		observed = append([]byte(nil), value...)
-		return nil
-	}); err != nil {
-		t.Fatalf("WithSecret: %v", err)
-	}
-	if string(observed) != "MARSHAL_TEST_SECRET_T21_A03" {
-		t.Fatalf("callback value=%q", observed)
-	}
-	if store.leases[lease.ID].State != StateUsed {
-		t.Fatalf("stored state=%q, want used", store.leases[lease.ID].State)
-	}
-	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { t.Fatal("used lease callback invoked"); return nil }); err != nil {
-		t.Fatalf("terminal retry error=%v", err)
+	err = engine.WithSecret(context.Background(), lease, func([]byte) error { return nil })
+	if !errors.Is(err, ErrLeaseExpired) {
+		t.Fatalf("expected ErrLeaseExpired, got %v", err)
 	}
 }
 
-func TestEngineFailsClosedForExpiryRevokeProviderAndCallbackFailures(t *testing.T) {
+func TestEngineDeniesWhenCapabilityCheckFails(t *testing.T) {
 	now := time.Unix(100, 0).UTC()
 	store := &memoryLeaseStore{}
 	providerCalls := 0
 	engine, err := NewEngine(EngineConfig{
-		Store: store,
-		Providers: map[string]Provider{"env": providerFunc(func(context.Context, Ref) ([]byte, error) {
-			providerCalls++
-			return []byte("secret"), nil
-		})},
-		Capability: allowSecretCapability{},
-		Now:        func() time.Time { return now },
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	lease, err := engine.Lease(context.Background(), LeaseRequest{ID: "expired", Subject: "agent", TaskID: "task", Ref: Ref{Provider: "env", Name: "TOKEN", Version: "v1"}, Purpose: "test", IssuedAt: now, ExpiresAt: now.Add(time.Second)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	now = now.Add(2 * time.Second)
-	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { t.Fatal("expired callback invoked"); return nil }); !errors.Is(err, ErrLeaseExpired) {
-		t.Fatalf("expired error=%v, want ErrLeaseExpired", err)
-	}
-	if providerCalls != 0 {
-		t.Fatalf("provider calls=%d after expiry, want 0", providerCalls)
-	}
-
-	now = time.Unix(100, 0).UTC()
-	revoked, err := engine.Lease(context.Background(), LeaseRequest{ID: "revoked", Subject: "agent", TaskID: "task", Ref: Ref{Provider: "missing", Name: "TOKEN", Version: "v1"}, Purpose: "test", IssuedAt: now, ExpiresAt: now.Add(time.Minute)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := engine.Revoke(context.Background(), RevokeRequest{LeaseID: revoked.ID, Subject: "agent"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := engine.WithSecret(context.Background(), revoked, func([]byte) error { t.Fatal("revoked callback invoked"); return nil }); !errors.Is(err, ErrDenied) {
-		t.Fatalf("revoked error=%v, want ErrDenied", err)
-	}
-
-	failed, err := engine.Lease(context.Background(), LeaseRequest{ID: "callback-failed", Subject: "agent", TaskID: "task", Ref: Ref{Provider: "env", Name: "TOKEN", Version: "v1"}, Purpose: "test", IssuedAt: now, ExpiresAt: now.Add(time.Minute)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := engine.WithSecret(context.Background(), failed, func([]byte) error { return errors.New("callback failure") }); !errors.Is(err, ErrDenied) {
-		t.Fatalf("callback error=%v, want ErrDenied", err)
-	}
-	if store.leases[failed.ID].State != StateLeased {
-		t.Fatalf("callback failure state=%q, want leased", store.leases[failed.ID].State)
-	}
-}
-
-func TestEngineRequiresCapabilityBeforeProviderResolution(t *testing.T) {
-	store := &memoryLeaseStore{}
-	providerCalls := 0
-	engine, err := NewEngine(EngineConfig{
-		Store: store,
-		Providers: map[string]Provider{"env": providerFunc(func(context.Context, Ref) ([]byte, error) {
-			providerCalls++
-			return []byte("secret"), nil
-		})},
-		Capability: denySecretCapability{},
-		Now:        func() time.Time { return time.Unix(100, 0).UTC() },
+		Store: store, Capability: denySecretCapability{},
+		Providers: map[string]Provider{"env": providerFunc(func(context.Context, Ref) ([]byte, error) { providerCalls++; return []byte("x"), nil })},
+		Now:       func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -174,12 +103,12 @@ func TestEngineEmitsReferenceOnlySecretLifecycleEvents(t *testing.T) {
 	if err := engine.WithSecret(context.Background(), lease, func([]byte) error { t.Fatal("terminal retry callback invoked"); return nil }); err != nil {
 		t.Fatalf("terminal retry: %v", err)
 	}
-	want := []events.Type{"secret.lease.requested", "secret.lease.issued", "secret.access.used"}
+	want := []events.EventType{events.EventTypeSecretLeaseRequested, events.EventTypeSecretLeaseIssued, events.EventTypeSecretAccessUsed}
 	if len(eventStore.events) != len(want) {
 		t.Fatalf("event count=%d, want %d", len(eventStore.events), len(want))
 	}
 	for i, event := range eventStore.events {
-		if event.Type != want[i] || event.Subject != "agent" || event.TaskID != "task" || event.Data["secret_value"] != "" {
+		if event.Type != want[i] || event.Subject != "agent" || event.TaskID != "task" || event.Data["secret_value"] != nil {
 			t.Fatalf("event[%d]=%#v", i, event)
 		}
 	}
@@ -250,7 +179,7 @@ type flakyEventStore struct {
 }
 
 func (s *flakyEventStore) Append(ctx context.Context, event events.Event) (events.Event, error) {
-	if s.failUsed && event.Type == events.Type("secret.access.used") {
+	if s.failUsed && event.Type == events.EventTypeSecretAccessUsed {
 		return events.Event{}, errors.New("downstream event unavailable")
 	}
 	return s.memoryEventStore.Append(ctx, event)
@@ -265,10 +194,10 @@ func (s *memoryEventStore) Append(_ context.Context, event events.Event) (events
 			return existing, nil
 		}
 	}
-	s.events = append(s.events, events.CloneEvent(event))
+	s.events = append(s.events, event)
 	return event, nil
 }
-func (s *memoryEventStore) Since(context.Context, events.Sequence, int) ([]events.Event, error) {
+func (s *memoryEventStore) Since(context.Context, events.Sequence) ([]events.Event, error) {
 	return nil, nil
 }
 

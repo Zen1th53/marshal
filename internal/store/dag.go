@@ -86,18 +86,6 @@ func (s *Store) GetDAGNode(ctx context.Context, id dag.TaskID) (dag.Node, error)
 // retry is surfaced as the stable duplicate-edge condition for the A03 service
 // to reconcile using its request identity.
 func (s *Store) PutDAGEdge(ctx context.Context, edge dag.Edge) (dag.Edge, error) {
-	for attempt := 0; ; attempt++ {
-		stored, err := s.putDAGEdgeOnce(ctx, edge)
-		if err == nil || !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
-			return stored, err
-		}
-		if waitErr := waitSQLiteRetry(ctx, attempt); waitErr != nil {
-			return dag.Edge{}, dag.NewError(dag.CodeInvalidRequest, waitErr)
-		}
-	}
-}
-
-func (s *Store) putDAGEdgeOnce(ctx context.Context, edge dag.Edge) (dag.Edge, error) {
 	if err := ctx.Err(); err != nil {
 		return dag.Edge{}, dag.NewError(dag.CodeInvalidRequest, err)
 	}
@@ -208,12 +196,12 @@ func (s *Store) queryDAGEdges(ctx context.Context, query string, id dag.TaskID) 
 // canonical target; stale or contradictory writers cannot overwrite it.
 func (s *Store) TransitionDAGNode(ctx context.Context, id dag.TaskID, expected, target dag.NodeStatus) (dag.Node, error) {
 	for attempt := 0; ; attempt++ {
-		stored, err := s.transitionDAGNodeOnce(ctx, id, expected, target)
-		if err == nil || !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
-			return stored, err
+		node, err := s.transitionDAGNodeOnce(ctx, id, expected, target)
+		if !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
+			return node, err
 		}
-		if waitErr := waitSQLiteRetry(ctx, attempt); waitErr != nil {
-			return dag.Node{}, dag.NewError(dag.CodeInvalidRequest, waitErr)
+		if err := waitSQLiteRetry(ctx, attempt); err != nil {
+			return dag.Node{}, err
 		}
 	}
 }

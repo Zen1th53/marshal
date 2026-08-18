@@ -85,7 +85,7 @@ func (e *Engine) Require(ctx context.Context, assessment Assessment) error {
 		return err
 	}
 	if err := e.authority.AuthorizeRisk(ctx, assessment); err != nil {
-		_ = e.emitEvent(ctx, assessment, events.Type("risk.override.denied"), "denied")
+		_ = e.emitEvent(ctx, assessment, events.EventTypeRiskOverrideDenied, "denied")
 		if errors.Is(err, ErrAuthorizationDenied) {
 			return ErrAuthorizationDenied
 		}
@@ -199,15 +199,15 @@ func (e *Engine) emitAssessmentEvents(ctx context.Context, assessment Assessment
 	if e.eventStore == nil {
 		return nil
 	}
-	if err := e.emitEventWithResource(ctx, assessment, resource, events.Type("risk.assessment.created"), "classified"); err != nil {
+	if err := e.emitEventWithResource(ctx, assessment, resource, events.EventTypeRiskAssessmentCreated, "classified"); err != nil {
 		return err
 	}
-	levelEvent := events.Type("")
+	var levelEvent events.EventType
 	switch assessment.Level {
 	case LevelHigh:
-		levelEvent = events.Type("risk.level.high")
+		levelEvent = events.EventTypeRiskLevelHigh
 	case LevelCritical:
-		levelEvent = events.Type("risk.level.critical")
+		levelEvent = events.EventTypeRiskLevelCritical
 	}
 	if levelEvent != "" {
 		return e.emitEventWithResource(ctx, assessment, resource, levelEvent, string(assessment.Level))
@@ -215,28 +215,28 @@ func (e *Engine) emitAssessmentEvents(ctx context.Context, assessment Assessment
 	return nil
 }
 
-func (e *Engine) emitEvent(ctx context.Context, assessment Assessment, eventType events.Type, result string) error {
+func (e *Engine) emitEvent(ctx context.Context, assessment Assessment, eventType events.EventType, result string) error {
 	return e.emitEventWithResource(ctx, assessment, "", eventType, result)
 }
 
-func (e *Engine) emitEventWithResource(ctx context.Context, assessment Assessment, resource string, eventType events.Type, result string) error {
+func (e *Engine) emitEventWithResource(ctx context.Context, assessment Assessment, resource string, eventType events.EventType, result string) error {
 	if e.eventStore == nil {
 		return nil
 	}
 	key := string(eventType) + "/" + string(assessment.ID)
 	_, err := e.eventStore.Append(ctx, events.Event{
-		ID:         events.EventID("RISK-" + hex.EncodeToString(sha256Bytes([]byte(key)))),
+		ID:         "RISK-" + hex.EncodeToString(sha256Bytes([]byte(key))),
 		Type:       eventType,
-		Subject:    events.SubjectID("risk-engine"),
-		ResourceID: events.ResourceID(resource),
-		Data: map[string]string{
+		Subject:    "risk-engine",
+		ResourceID: resource,
+		Data: map[string]any{
 			"assessment_id": string(assessment.ID),
 			"level":         string(assessment.Level),
 			"result":        result,
 			"policy_digest": string(assessment.PolicyDigest),
 			"resource":      resource,
 		},
-		IdempotencyKey: events.IdempotencyKey(key),
+		IdempotencyKey: key,
 	})
 	return err
 }

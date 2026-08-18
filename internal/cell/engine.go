@@ -121,8 +121,6 @@ func (m *Manager) Prepare(ctx context.Context, spec Spec) (record Record, result
 	if !claimed {
 		return m.reconcilePreparation(ctx, record.ID, spec)
 	}
-	m.metrics.AddActive(evidence.MetricOperationCell, 1)
-	defer m.metrics.AddActive(evidence.MetricOperationCell, -1)
 	record.State = StatePreparing
 	return m.completePreparation(ctx, record, spec, backend)
 }
@@ -152,14 +150,14 @@ func (m *Manager) observe(operation evidence.MetricOperation, err error, started
 }
 
 func (m *Manager) completePreparation(ctx context.Context, record Record, spec Spec, backend Backend) (Record, error) {
-	if err := m.emit(ctx, record, events.Type("cell.prepare.started"), "started"); err != nil {
+	if err := m.emit(ctx, record, events.EventType("cell.prepare.started"), "started"); err != nil {
 		_ = m.repository.TransitionCellState(ctx, record.ID, StatePreparing, StateFailed)
 		return Record{}, err
 	}
 	handle, err := backend.Prepare(ctx, spec)
 	if err != nil {
 		_ = m.repository.TransitionCellState(ctx, record.ID, StatePreparing, StateFailed)
-		_ = m.emit(ctx, record, events.Type("cell.failed"), string(CodePrepareFailed))
+		_ = m.emit(ctx, record, events.EventType("cell.failed"), string(CodePrepareFailed))
 		return Record{}, fmt.Errorf("%w: backend prepare failed", ErrPrepareFailed)
 	}
 	if err := handle.Validate(); err != nil || handle.TaskID != spec.TaskID || handle.Backend != spec.Backend || handle.Workspace != spec.Workspace {
@@ -173,7 +171,7 @@ func (m *Manager) completePreparation(ctx context.Context, record Record, spec S
 	if err != nil {
 		return Record{}, err
 	}
-	if err := m.emit(ctx, ready, events.Type("cell.ready"), "ready"); err != nil {
+	if err := m.emit(ctx, ready, events.EventType("cell.ready"), "ready"); err != nil {
 		return Record{}, err
 	}
 	return ready, nil
@@ -253,15 +251,15 @@ func (m *Manager) Exec(ctx context.Context, handle Handle, request ExecRequest) 
 	if backend == nil {
 		return ExecResult{}, ErrBackendUnavailable
 	}
-	if err := m.emit(ctx, record, events.Type("cell.exec.started"), "started"); err != nil {
+	if err := m.emit(ctx, record, events.EventType("cell.exec.started"), "started"); err != nil {
 		return ExecResult{}, err
 	}
 	result, execErr := backend.Exec(ctx, handle, request)
 	if execErr != nil {
-		_ = m.emit(ctx, record, events.Type("cell.failed"), string(CodePrepareFailed))
+		_ = m.emit(ctx, record, events.EventType("cell.failed"), string(CodePrepareFailed))
 		return ExecResult{}, execErr
 	}
-	if err := m.emit(ctx, record, events.Type("cell.exec.finished"), "finished"); err != nil {
+	if err := m.emit(ctx, record, events.EventType("cell.exec.finished"), "finished"); err != nil {
 		return ExecResult{}, err
 	}
 	return result, nil
@@ -294,7 +292,7 @@ func (m *Manager) Destroy(ctx context.Context, handle Handle) error {
 	}
 	stopping := record
 	stopping.State = StateStopping
-	if err := m.emit(ctx, stopping, events.Type("cell.destroy.started"), "started"); err != nil {
+	if err := m.emit(ctx, stopping, events.EventType("cell.destroy.started"), "started"); err != nil {
 		return err
 	}
 	backend := m.backends[record.Backend]
@@ -303,7 +301,7 @@ func (m *Manager) Destroy(ctx context.Context, handle Handle) error {
 	}
 	if err := backend.Destroy(ctx, handle); err != nil {
 		_ = m.repository.TransitionCellState(ctx, handle.ID, StateStopping, StateFailed)
-		_ = m.emit(ctx, stopping, events.Type("cell.failed"), string(CodeCleanupFailed))
+		_ = m.emit(ctx, stopping, events.EventType("cell.failed"), string(CodeCleanupFailed))
 		return fmt.Errorf("%w: backend destroy failed", ErrCleanupFailed)
 	}
 	if err := m.repository.TransitionCellState(ctx, handle.ID, StateStopping, StateDestroyed); err != nil {
@@ -311,7 +309,7 @@ func (m *Manager) Destroy(ctx context.Context, handle Handle) error {
 	}
 	destroyed := stopping
 	destroyed.State = StateDestroyed
-	return m.emit(ctx, destroyed, events.Type("cell.destroyed"), "destroyed")
+	return m.emit(ctx, destroyed, events.EventType("cell.destroyed"), "destroyed")
 }
 
 func validTransition(from, to State) bool {
@@ -349,24 +347,24 @@ func digestSpec(spec Spec) SpecDigest {
 	return SpecDigest("sha256:" + hex.EncodeToString(sum[:]))
 }
 
-func (m *Manager) emit(ctx context.Context, record Record, eventType events.Type, result string) error {
+func (m *Manager) emit(ctx context.Context, record Record, eventType events.EventType, result string) error {
 	if m.eventStore == nil {
 		return nil
 	}
 	key := string(eventType) + "/" + string(record.ID)
 	sum := sha256.Sum256([]byte(key))
 	_, err := m.eventStore.Append(ctx, events.Event{
-		ID:         events.EventID("CELL-" + hex.EncodeToString(sum[:8])),
+		ID:         "CELL-" + hex.EncodeToString(sum[:8]),
 		Type:       eventType,
-		Subject:    events.SubjectID("cell-manager"),
-		TaskID:     events.TaskID(record.TaskID),
-		ResourceID: events.ResourceID(record.Workspace),
-		Data: map[string]string{
+		Subject:    "cell-manager",
+		TaskID:     string(record.TaskID),
+		ResourceID: record.Workspace,
+		Data: map[string]any{
 			"cell_id":     string(record.ID),
 			"result":      result,
 			"spec_digest": string(record.SpecDigest),
 		},
-		IdempotencyKey: events.IdempotencyKey(key),
+		IdempotencyKey: key,
 	})
 	return err
 }

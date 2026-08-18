@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -14,10 +15,10 @@ import (
 type gateEventRecorder struct{ events []events.Event }
 
 func (r *gateEventRecorder) Append(_ context.Context, event events.Event) (events.Event, error) {
-	r.events = append(r.events, events.CloneEvent(event))
+	r.events = append(r.events, event)
 	return event, nil
 }
-func (r *gateEventRecorder) Since(context.Context, events.Sequence, int) ([]events.Event, error) {
+func (r *gateEventRecorder) Since(context.Context, events.Sequence) ([]events.Event, error) {
 	return append([]events.Event(nil), r.events...), nil
 }
 
@@ -26,7 +27,7 @@ type gateEventFailure struct{}
 func (gateEventFailure) Append(context.Context, events.Event) (events.Event, error) {
 	return events.Event{}, errors.New("downstream event unavailable")
 }
-func (gateEventFailure) Since(context.Context, events.Sequence, int) ([]events.Event, error) {
+func (gateEventFailure) Since(context.Context, events.Sequence) ([]events.Event, error) {
 	return nil, nil
 }
 
@@ -41,10 +42,10 @@ func TestGateDecisionDurableStatePrecedesBoundedAuditEvent(t *testing.T) {
 	if err := st.PutGateDecisionWithAudit(ctx, decision, recorder); err != nil {
 		t.Fatal(err)
 	}
-	if len(recorder.events) != 1 || recorder.events[0].Type != events.Type("gate.allowed") {
+	if len(recorder.events) != 1 || recorder.events[0].Type != events.EventTypeGateAllowed {
 		t.Fatalf("events=%#v", recorder.events)
 	}
-	if recorder.events[0].Data["policy_digest"] != string(decision.PolicyDigest) || recorder.events[0].Data["resource"] != "" {
+	if recorder.events[0].Data["policy_digest"] != string(decision.PolicyDigest) || recorder.events[0].Data["resource"] != nil {
 		t.Fatalf("event data=%#v", recorder.events[0].Data)
 	}
 	if got, err := st.GetGateDecision(ctx, decision.DecisionID); err != nil || got.DecisionID != decision.DecisionID {
@@ -67,8 +68,9 @@ func TestGateDecisionAuditDoesNotPersistRawResourceOrSecret(t *testing.T) {
 	}
 	for _, event := range recorder.events {
 		for key, value := range event.Data {
-			if strings.Contains(key, "secret") || strings.Contains(value, "MARSHAL_TEST_SECRET_T20_A05") {
-				t.Fatalf("secret in event %s=%q", key, value)
+			valStr := fmt.Sprintf("%v", value)
+			if strings.Contains(key, "secret") || strings.Contains(valStr, "MARSHAL_TEST_SECRET_T20_A05") {
+				t.Fatalf("secret in event %s=%q", key, valStr)
 			}
 		}
 		if strings.Contains(string(event.ResourceID), "MARSHAL_TEST_SECRET_T20_A05") {

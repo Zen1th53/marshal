@@ -13,14 +13,13 @@ func TestNodeContractValidatesClosedIdentityAndEnums(t *testing.T) {
 		t.Fatalf("valid node rejected: %v", err)
 	}
 
-	cases := []Node{
+	for _, candidate := range []Node{
 		{TaskID: "build", Kind: NodeKindTask, Status: StatusPending},
 		{TaskID: "TASK-build", Kind: NodeKind("provider"), Status: StatusPending},
 		{TaskID: "TASK-build", Kind: NodeKindTask, Status: NodeStatus("unknown")},
-	}
-	for _, candidate := range cases {
-		if err := candidate.Validate(); err == nil {
-			t.Fatalf("invalid node accepted: %+v", candidate)
+	} {
+		if err := candidate.Validate(); !errors.Is(err, ErrInvalidNode) {
+			t.Fatalf("invalid node error = %v, want %v", err, ErrInvalidNode)
 		}
 	}
 }
@@ -48,8 +47,8 @@ func TestMutationRequestsRequireStableRequestIdentity(t *testing.T) {
 		t.Fatalf("valid add-node request rejected: %v", err)
 	}
 	add.RequestID = ""
-	if err := add.Validate(); err == nil {
-		t.Fatal("empty request identity accepted")
+	if err := add.Validate(); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("empty request error = %v, want %v", err, ErrInvalidRequest)
 	}
 }
 
@@ -77,7 +76,6 @@ func TestDAGErrorIsMachineReadableAndSecretSafe(t *testing.T) {
 	}
 }
 
-// compileGraph is a compile-time assertion for the frozen A01 service surface.
 func compileGraph(g Graph, ctx context.Context) {
 	_, _ = g.AddNode(ctx, AddNodeRequest{})
 	_, _ = g.AddEdge(ctx, AddEdgeRequest{})
