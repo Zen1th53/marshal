@@ -18,6 +18,10 @@ type AssessmentRepository interface {
 	TransitionRiskAssessmentState(context.Context, AssessmentID, AssessmentState, AssessmentState) error
 }
 
+type Authority interface {
+	AuthorizeRisk(context.Context, Assessment) error
+}
+
 type AssessmentRequest struct {
 	ID           AssessmentID
 	Descriptor   ToolDescriptor
@@ -39,10 +43,37 @@ func (r AssessmentRequest) Validate() error {
 
 type Engine struct {
 	repository AssessmentRepository
+	authority  Authority
 }
 
 func NewEngine(repository AssessmentRepository) *Engine {
-	return &Engine{repository: repository}
+	return NewAuthorizedEngine(repository, nil)
+}
+
+func NewAuthorizedEngine(repository AssessmentRepository, authority Authority) *Engine {
+	return &Engine{repository: repository, authority: authority}
+}
+
+// Require delegates authorization to the existing authority boundary. An
+// assessment's level and score only produce requirements; they never grant
+// permission on their own.
+func (e *Engine) Require(ctx context.Context, assessment Assessment) error {
+	if e == nil || e.authority == nil {
+		return ErrAuthorizationUnavailable
+	}
+	if assessment.State != StateRequirementsEmitted {
+		return ErrDescriptorInvalid
+	}
+	if err := assessment.Validate(); err != nil {
+		return err
+	}
+	if err := e.authority.AuthorizeRisk(ctx, assessment); err != nil {
+		if errors.Is(err, ErrAuthorizationDenied) {
+			return ErrAuthorizationDenied
+		}
+		return ErrAuthorizationDenied
+	}
+	return nil
 }
 
 func (e *Engine) Assess(ctx context.Context, request AssessmentRequest) (Assessment, error) {

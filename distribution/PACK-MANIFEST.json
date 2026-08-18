@@ -1835,9 +1835,14 @@
       "bytes": 2445
     },
     {
+      "path": "internal/risk/authorization_test.go",
+      "sha256": "5be4829ce0b5bf9eb9a43c2611b72405293b38b9261eeb43a898fb37f3829234",
+      "bytes": 1185
+    },
+    {
       "path": "internal/risk/engine.go",
-      "sha256": "a9b743d6a9bcfaaa1677a5f218f846b7943f0e820d20451dd1e01f98ad5d9357",
-      "bytes": 4790
+      "sha256": "984b184802fc431a8ada14918033296c3390d10410cd06933ffcece7a763aaa6",
+      "bytes": 5731
     },
     {
       "path": "internal/risk/engine_test.go",
@@ -1846,8 +1851,8 @@
     },
     {
       "path": "internal/risk/errors.go",
-      "sha256": "164137bed5edb37cb242dc9d33c68efd301dfac4aca9a30a4f38b75b1202a018",
-      "bytes": 1407
+      "sha256": "bc4efb50dc5ee431f4947eb41ba678f31af720f51ff95e2d39b9cef17519b7a2",
+      "bytes": 1951
     },
     {
       "path": "internal/risk/types.go",

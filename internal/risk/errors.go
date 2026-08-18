@@ -6,15 +6,19 @@ import "errors"
 type ErrorCode string
 
 const (
-	CodeDescriptorInvalid  ErrorCode = "RISK_DESCRIPTOR_INVALID"
-	CodeUnknownMutation    ErrorCode = "RISK_UNKNOWN_MUTATION"
-	CodeDowngradeForbidden ErrorCode = "RISK_DOWNGRADE_FORBIDDEN"
+	CodeDescriptorInvalid        ErrorCode = "RISK_DESCRIPTOR_INVALID"
+	CodeUnknownMutation          ErrorCode = "RISK_UNKNOWN_MUTATION"
+	CodeDowngradeForbidden       ErrorCode = "RISK_DOWNGRADE_FORBIDDEN"
+	CodeAuthorizationUnavailable ErrorCode = "RISK_AUTHORIZATION_UNAVAILABLE"
+	CodeAuthorizationDenied      ErrorCode = "RISK_AUTHORIZATION_DENIED"
 )
 
 var (
-	ErrDescriptorInvalid  = &Error{Code: CodeDescriptorInvalid, message: "risk descriptor is invalid"}
-	ErrUnknownMutation    = &Error{Code: CodeUnknownMutation, message: "risk assessment rejected an unknown mutating action"}
-	ErrDowngradeForbidden = &Error{Code: CodeDowngradeForbidden, message: "risk level downgrade is forbidden"}
+	ErrDescriptorInvalid        = &Error{Code: CodeDescriptorInvalid, message: "risk descriptor is invalid"}
+	ErrUnknownMutation          = &Error{Code: CodeUnknownMutation, message: "risk assessment rejected an unknown mutating action"}
+	ErrDowngradeForbidden       = &Error{Code: CodeDowngradeForbidden, message: "risk level downgrade is forbidden"}
+	ErrAuthorizationUnavailable = &Error{Code: CodeAuthorizationUnavailable, message: "risk authorization is unavailable"}
+	ErrAuthorizationDenied      = &Error{Code: CodeAuthorizationDenied, message: "risk authorization denied"}
 )
 
 // Error contains no caller-controlled detail so it is safe for public surfaces.
@@ -50,6 +54,10 @@ func NewError(code ErrorCode, _ string) *Error {
 		return ErrUnknownMutation
 	case CodeDowngradeForbidden:
 		return ErrDowngradeForbidden
+	case CodeAuthorizationUnavailable:
+		return ErrAuthorizationUnavailable
+	case CodeAuthorizationDenied:
+		return ErrAuthorizationDenied
 	default:
 		return ErrDescriptorInvalid
 	}
