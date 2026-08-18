@@ -2465,6 +2465,11 @@
       "bytes": 1132
     },
     {
+      "path": "internal/trustcontent/types.go",
+      "sha256": "a1827a9a475d5b99da6575abac03cc357698d878729915814f7a88a37d9e7c4e",
+      "bytes": 6636
+    },
+    {
       "path": "internal/worker/manager.go",
       "sha256": "aeffa634126cebe6354275823eb6d6ebcdced4c6504053265ed2540b7e95c390",
       "bytes": 3845
