@@ -1470,6 +1470,16 @@
       "bytes": 2207
     },
     {
+      "path": "internal/gate/contract_a01_test.go",
+      "sha256": "03e919d702875d36bd6953d3c815e40fa6ad84a39d10753576cb2190bdcf15c4",
+      "bytes": 1585
+    },
+    {
+      "path": "internal/gate/types.go",
+      "sha256": "551c2d85418dc135b9ae629ed208dfd58f38e0ee672682612d65fc5ec1484ed3",
+      "bytes": 3760
+    },
+    {
       "path": "internal/integration/claude_real_test.go",
       "sha256": "9c70d1f14e5ce95cdde26670764efda5aefaeffff6f86f1c4e5bc165e27e676b",
       "bytes": 1220
