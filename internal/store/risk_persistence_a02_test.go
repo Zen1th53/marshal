@@ -108,6 +108,8 @@ func TestRiskAssessmentMigrationFromSchema21(t *testing.T) {
 		"DROP INDEX provenance_records_by_agent",
 		"DROP INDEX provenance_records_by_task",
 		"DROP TABLE provenance_records",
+		"DROP INDEX code_ownership_leases_by_task",
+		"DROP TABLE code_ownership_leases",
 		"DROP INDEX verification_attestations_by_change",
 		"DROP INDEX verification_attestations_by_principal",
 		"DROP TABLE verification_attestations",
