@@ -28,6 +28,21 @@ func TestRunRejectsUnboundOrMalformedModelOverrideBeforeMutation(t *testing.T) {
 	}
 }
 
+func TestAdapterExecutableBindsIncludeInstalledCodexCodeModeHost(t *testing.T) {
+	directory := t.TempDir()
+	binary := filepath.Join(directory, "codex")
+	host := filepath.Join(directory, "codex-code-mode-host")
+	for _, path := range []string{binary, host} {
+		if err := os.WriteFile(path, []byte("binary"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	binds := adapterExecutableBinds(binary)
+	if len(binds) != 2 || binds[0].Target != binary || binds[1].Target != host {
+		t.Fatalf("binds=%#v, want Codex binary and code-mode host", binds)
+	}
+}
+
 func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	repo := runtimeRepo(t)
 	for i := 0; i < 2; i++ {

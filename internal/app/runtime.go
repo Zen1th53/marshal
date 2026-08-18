@@ -778,7 +778,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			return nil, chooseErr
 		}
 		if chosen.Level == model.IsolationBwrap {
-			readOnlyBinds := []model.Bind{{Source: binary, Target: binary}}
+			readOnlyBinds := adapterExecutableBinds(binary)
 			gitMetadata := filepath.Join(r.layout.Root, ".git")
 			if info, statErr := os.Stat(gitMetadata); statErr == nil && info.IsDir() {
 				readOnlyBinds = append(readOnlyBinds, model.Bind{Source: gitMetadata, Target: gitMetadata})
@@ -877,6 +877,23 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	default:
 		return nil, fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
 	}
+}
+
+func adapterExecutableBinds(binary string) []model.Bind {
+	binds := []model.Bind{{Source: binary, Target: binary}}
+	if filepath.Base(binary) != "codex" {
+		return binds
+	}
+	hostTarget := filepath.Join(filepath.Dir(binary), "codex-code-mode-host")
+	hostSource, err := filepath.EvalSymlinks(hostTarget)
+	if err != nil {
+		return binds
+	}
+	info, err := os.Stat(hostSource)
+	if err != nil || !info.Mode().IsRegular() {
+		return binds
+	}
+	return append(binds, model.Bind{Source: hostSource, Target: hostTarget})
 }
 
 func validModelOverride(value string) bool {
