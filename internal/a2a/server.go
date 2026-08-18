@@ -3,12 +3,14 @@ package a2a
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/protocol"
 )
 
 const (
@@ -36,7 +38,65 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/a2a/agent.json", s.handleAgentCard)
 	mux.HandleFunc("/message:send", s.handleSendMessage)
 	mux.HandleFunc("/a2a/tasks", s.handleTaskDelegation)
+	mux.HandleFunc("/a2a/handoffs", s.handleTypedHandoff)
 	return mux
+}
+
+func (s *Server) handleTypedHandoff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.authManager == nil {
+		writeHandoffError(w, http.StatusUnauthorized, protocol.CodeAuthorization)
+		return
+	}
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		writeHandoffError(w, http.StatusUnauthorized, protocol.CodeAuthorization)
+		return
+	}
+	caller, err := s.authManager.Authenticate(strings.TrimPrefix(authHeader, "Bearer "))
+	if err != nil {
+		writeHandoffError(w, http.StatusUnauthorized, protocol.CodeAuthorization)
+		return
+	}
+	body := http.MaxBytesReader(w, r.Body, 1<<20)
+	defer body.Close()
+	var submission protocol.Submission
+	decoder := json.NewDecoder(body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&submission); err != nil {
+		writeHandoffError(w, http.StatusBadRequest, protocol.CodeInvalid)
+		return
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		writeHandoffError(w, http.StatusBadRequest, protocol.CodeInvalid)
+		return
+	}
+	role := protocol.RoleDeveloper
+	if caller.Kind != auth.KindA2AAgent {
+		writeHandoffError(w, http.StatusForbidden, protocol.CodeAuthorization)
+		return
+	}
+	handoff, err := s.runtime.SubmitHandoff(r.Context(), protocol.Principal{ID: caller.ID, Role: role, Capabilities: caller.Capabilities}, submission)
+	if err != nil {
+		status := http.StatusBadRequest
+		if protocol.CodeOf(err) == protocol.CodeAuthorization || protocol.CodeOf(err) == protocol.CodeSenderForged {
+			status = http.StatusForbidden
+		}
+		writeHandoffError(w, status, protocol.CodeOf(err))
+		return
+	}
+	w.Header().Set("Content-Type", "application/a2a+json")
+	_ = json.NewEncoder(w).Encode(handoff)
+}
+
+func writeHandoffError(w http.ResponseWriter, status int, code protocol.ErrorCode) {
+	w.Header().Set("Content-Type", "application/a2a+json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": string(code)})
 }
 
 func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {

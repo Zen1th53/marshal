@@ -169,14 +169,15 @@ func (e *Engine) Render(ctx context.Context, request RenderRequest) (payload str
 	}
 	digest := Digest(payload)
 	_, err = e.eventStore.Append(ctx, events.Event{
-		ID:             events.EventID("TRUSTCONTENT-rendered-" + digest),
-		Type:           events.Type("trustcontent.rendered"),
-		Subject:        events.SubjectID(request.SubjectID),
-		TaskID:         events.TaskID(request.TaskID),
-		RunID:          events.RunID(request.RunID),
-		ResourceID:     events.ResourceID("trustcontent-render-" + digest),
-		Data:           map[string]string{"result": "rendered", "digest": digest, "segment_count": strconv.Itoa(len(request.Segments))},
-		IdempotencyKey: events.IdempotencyKey("trustcontent.rendered/" + digest),
+		ID:             "TRUSTCONTENT-rendered-" + digest,
+		Type:           events.EventTypeTrustContentRendered,
+		Subject:        request.SubjectID,
+		TaskID:         request.TaskID,
+		RunID:          request.RunID,
+		ResourceID:     "trustcontent-render-" + digest,
+		At:             e.now().UTC(),
+		Data:           map[string]any{"result": "rendered", "digest": digest, "segment_count": strconv.Itoa(len(request.Segments))},
+		IdempotencyKey: "trustcontent.rendered/" + digest,
 	})
 	if err != nil {
 		return "", ErrRenderFailed
@@ -211,30 +212,35 @@ func (e *Engine) emitZonedEvents(ctx context.Context, request IngestRequest, rec
 	if e.eventStore == nil || request.SubjectID == "" {
 		return nil
 	}
-	base := events.Event{
-		Subject: events.SubjectID(request.SubjectID), TaskID: events.TaskID(request.TaskID), RunID: events.RunID(request.RunID),
-		ResourceID: events.ResourceID("trustcontent-" + record.ID),
-		Data:       map[string]string{"segment_id": record.ID, "source_id": record.SourceID, "zone": string(record.Zone), "digest": record.Digest},
-	}
 	items := []struct {
-		typeName events.Type
+		typeName events.EventType
 		result   string
 	}{
-		{events.Type("trustcontent.segment.ingested"), "ingested"},
-		{events.Type("trustcontent.zone.assigned"), "zoned"},
+		{events.EventTypeTrustContentSegmentIngested, "ingested"},
+		{events.EventTypeTrustContentZoneAssigned, "zoned"},
 	}
 	if suspected {
 		items = append(items, struct {
-			typeName events.Type
+			typeName events.EventType
 			result   string
-		}{events.Type(EventInjectionSuspected), "suspected"})
+		}{events.EventTypeTrustContentInjectionSuspected, "suspected"})
 	}
 	for _, item := range items {
-		event := events.CloneEvent(base)
-		event.ID = events.EventID("TRUSTCONTENT-" + string(item.typeName) + "-" + record.ID)
-		event.Type = item.typeName
-		event.IdempotencyKey = events.IdempotencyKey(string(item.typeName) + "/" + record.ID)
-		event.Data["result"] = item.result
+		data := map[string]any{
+			"segment_id": record.ID, "source_id": record.SourceID, "zone": string(record.Zone), "digest": record.Digest,
+			"result": item.result,
+		}
+		event := events.Event{
+			ID:             "TRUSTCONTENT-" + string(item.typeName) + "-" + record.ID,
+			Type:           item.typeName,
+			Subject:        request.SubjectID,
+			TaskID:         request.TaskID,
+			RunID:          request.RunID,
+			ResourceID:     "trustcontent-" + record.ID,
+			At:             e.now().UTC(),
+			Data:           data,
+			IdempotencyKey: string(item.typeName) + "/" + record.ID,
+		}
 		if _, err := e.eventStore.Append(ctx, event); err != nil {
 			return err
 		}

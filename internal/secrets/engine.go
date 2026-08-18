@@ -80,7 +80,7 @@ func (e *Engine) Lease(ctx context.Context, request LeaseRequest) (Lease, error)
 		if err := e.store.PutSecretLease(ctx, lease); err != nil {
 			return Lease{}, ErrDenied
 		}
-		if err := e.emit(ctx, events.Type("secret.lease.requested"), lease, "requested"); err != nil {
+		if err := e.emit(ctx, events.EventTypeSecretLeaseRequested, lease, "requested"); err != nil {
 			return Lease{}, err
 		}
 	}
@@ -88,7 +88,7 @@ func (e *Engine) Lease(ctx context.Context, request LeaseRequest) (Lease, error)
 	if err != nil {
 		return Lease{}, ErrDenied
 	}
-	if err := e.emit(ctx, events.Type("secret.lease.issued"), leased, "issued"); err != nil {
+	if err := e.emit(ctx, events.EventTypeSecretLeaseIssued, leased, "issued"); err != nil {
 		return Lease{}, err
 	}
 	return leased, nil
@@ -106,18 +106,18 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 	now := e.now().UTC()
 	if !now.Before(current.ExpiresAt) {
 		_, _ = e.store.TransitionSecretLease(ctx, current.ID, StateLeased, StateExpired, now)
-		_ = e.emit(ctx, events.Type("secret.access.denied"), current, string(CodeLeaseExpired))
+		_ = e.emit(ctx, events.EventTypeSecretAccessDenied, current, string(CodeLeaseExpired))
 		e.observe(evidence.MetricResultDenied, string(CodeLeaseExpired), started)
 		return ErrLeaseExpired
 	}
 	if current.State != StateLeased && current.State != StateUsed {
-		_ = e.emit(ctx, events.Type("secret.access.denied"), current, string(CodeDenied))
+		_ = e.emit(ctx, events.EventTypeSecretAccessDenied, current, string(CodeDenied))
 		e.observe(evidence.MetricResultDenied, string(CodeDenied), started)
 		return ErrDenied
 	}
 	resource, err := capability.NormalizeResource(capability.KindSecretUse, "secret://"+strings.Join([]string{current.Ref.Provider, current.Ref.Name, current.Ref.Version}, "/"))
 	if err != nil {
-		_ = e.emit(ctx, events.Type("secret.access.denied"), current, string(CodeDenied))
+		_ = e.emit(ctx, events.EventTypeSecretAccessDenied, current, string(CodeDenied))
 		return ErrDenied
 	}
 	decision, err := e.capability.Authorize(ctx, capability.Query{
@@ -133,7 +133,7 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 		return ErrDenied
 	}
 	if current.State == StateUsed {
-		if err := e.emit(ctx, events.Type("secret.access.used"), current, "used"); err != nil {
+		if err := e.emit(ctx, events.EventTypeSecretAccessUsed, current, "used"); err != nil {
 			return err
 		}
 		e.observe(evidence.MetricResultSuccess, "SECRET_USED", started)
@@ -148,8 +148,14 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 		e.observe(evidence.MetricResultConflict, "SECRET_CLAIM_CONFLICT", started)
 		return ErrDenied
 	}
-	e.metrics.AddActive(evidence.MetricOperationSecret, 1)
-	defer e.metrics.AddActive(evidence.MetricOperationSecret, -1)
+	if e.metrics != nil {
+		e.metrics.AddActive(evidence.MetricOperationSecret, 1)
+	}
+	defer func() {
+		if e.metrics != nil {
+			e.metrics.AddActive(evidence.MetricOperationSecret, -1)
+		}
+	}()
 	completed := false
 	defer func() {
 		if !completed {
@@ -158,7 +164,7 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 	}()
 	provider, ok := e.providers[claimed.Ref.Provider]
 	if !ok {
-		_ = e.emit(ctx, events.Type("secret.access.denied"), current, string(CodeProviderFailed))
+		_ = e.emit(ctx, events.EventTypeSecretAccessDenied, current, string(CodeProviderFailed))
 		e.observe(evidence.MetricResultError, string(CodeProviderFailed), started)
 		return ErrProviderFailed
 	}
@@ -168,13 +174,13 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 			e.observe(evidence.MetricResultCancelled, "CANCELLED", started)
 			return err
 		}
-		_ = e.emit(ctx, events.Type("secret.access.denied"), current, string(CodeProviderFailed))
+		_ = e.emit(ctx, events.EventTypeSecretAccessDenied, current, string(CodeProviderFailed))
 		e.observe(evidence.MetricResultError, string(CodeProviderFailed), started)
 		return ErrProviderFailed
 	}
 	defer zero(value)
 	if err := use(value); err != nil {
-		_ = e.emit(ctx, events.Type("secret.access.denied"), current, string(CodeDenied))
+		_ = e.emit(ctx, events.EventTypeSecretAccessDenied, current, string(CodeDenied))
 		e.observe(evidence.MetricResultDenied, string(CodeDenied), started)
 		return ErrDenied
 	}
@@ -187,7 +193,7 @@ func (e *Engine) WithSecret(ctx context.Context, lease Lease, use func([]byte) e
 		return ErrDenied
 	}
 	completed = true
-	if err := e.emit(ctx, events.Type("secret.access.used"), current, "used"); err != nil {
+	if err := e.emit(ctx, events.EventTypeSecretAccessUsed, current, "used"); err != nil {
 		return err
 	}
 	e.observe(evidence.MetricResultSuccess, "SECRET_USED", started)
@@ -211,27 +217,24 @@ func (e *Engine) Revoke(ctx context.Context, request RevokeRequest) error {
 	if _, err := e.store.TransitionSecretLease(ctx, current.ID, current.State, StateRevoked, e.now().UTC()); err != nil {
 		return ErrDenied
 	}
-	if err := e.emit(ctx, events.Type("secret.lease.revoked"), current, "revoked"); err != nil {
+	if err := e.emit(ctx, events.EventTypeSecretLeaseRevoked, current, "revoked"); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (e *Engine) emit(ctx context.Context, typ events.Type, lease Lease, reason string) error {
+func (e *Engine) emit(ctx context.Context, typ events.EventType, lease Lease, reason string) error {
 	if e.eventStore == nil {
 		return nil
-	}
-	if len(lease.Subject) > events.MaxIdentifierBytes || len(lease.TaskID) > events.MaxIdentifierBytes || len(lease.Purpose) > events.MaxDataValueBytes {
-		return ErrDenied
 	}
 	key := string(typ) + "/" + lease.ID
 	sum := sha256.Sum256([]byte(key))
 	event := events.Event{
-		ID: events.EventID("secret-" + hex.EncodeToString(sum[:])), Type: typ,
-		Subject: events.SubjectID(lease.Subject), TaskID: events.TaskID(lease.TaskID),
-		ResourceID: events.ResourceID(secretResourceID(lease.Ref)), At: e.now().UTC(),
-		IdempotencyKey: events.IdempotencyKey(key),
-		Data:           map[string]string{"provider": lease.Ref.Provider, "version": lease.Ref.Version, "purpose": lease.Purpose, "reason": reason},
+		ID: "secret-" + hex.EncodeToString(sum[:]), Type: typ,
+		Subject: lease.Subject, TaskID: lease.TaskID,
+		ResourceID: secretResourceID(lease.Ref), At: e.now().UTC(),
+		IdempotencyKey: key,
+		Data:           map[string]any{"provider": lease.Ref.Provider, "version": lease.Ref.Version, "purpose": lease.Purpose, "reason": reason},
 	}
 	if _, err := e.eventStore.Append(ctx, event); err != nil {
 		return ErrDenied

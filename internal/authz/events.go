@@ -17,19 +17,19 @@ func CanWithAudit(ctx context.Context, subject Principal, authority Authority, r
 	if eventStore == nil {
 		return decision, decisionErr
 	}
-	eventType := events.Type("authz.authority.denied")
+	eventType := events.EventTypeAuthzAuthorityDenied
 	if decision.Allowed {
-		eventType = events.Type("authz.authority.allowed")
+		eventType = events.EventTypeAuthzAuthorityAllowed
 	}
 	key := auditKey(string(eventType), subject.ID, string(query.TaskID), string(authority), resource, string(decision.CapabilityGrantID))
-	data := map[string]string{"authority": string(authority), "reason": string(decision.Reason), "role": subject.Role.Name}
+	data := map[string]any{"authority": string(authority), "reason": string(decision.Reason), "role": subject.Role.Name}
 	if decision.CapabilityGrantID != "" {
 		data["grant_id"] = decision.CapabilityGrantID
 	}
 	_, eventErr := eventStore.Append(ctx, events.Event{
-		ID: events.EventID(key), Type: eventType, Subject: events.SubjectID(subject.ID),
-		TaskID: events.TaskID(query.TaskID), ResourceID: events.ResourceID(resourceReference(resource)),
-		IdempotencyKey: events.IdempotencyKey(key), Data: data,
+		ID: key, Type: eventType, Subject: subject.ID,
+		TaskID: string(query.TaskID), ResourceID: resourceReference(resource),
+		IdempotencyKey: key, Data: data,
 	})
 	if eventErr != nil {
 		return decision, eventErr

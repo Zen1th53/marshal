@@ -29,6 +29,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/protocol"
 	"github.com/Zen1th53/marshal/internal/risk"
 	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/secrets"
@@ -44,21 +45,22 @@ const localProjectID = "PROJECT-local"
 type Runtime struct {
 	layout             project.Layout
 	store              *store.Store
+	eventEngine        *events.Engine
 	policy             *policy.Engine
-	dag                *dag.Engine
 	adapters           map[string]adapter.Adapter
 	evidenceSanitizer  evidence.Sanitizer
-	eventStream        *events.Engine
 	capabilityBroker   capability.Broker
+	dagGraph           *dag.Engine
+	cellManager        *cell.Manager
 	secretBroker       secrets.Broker
 	gateEngine         *gate.Engine
 	riskEngine         *risk.Engine
-	cellManager        *cell.Manager
 	authorityPrincipal *authz.Principal
 	processAuthority   authz.Authority
 	runtimeInstanceID  string
 	runtimePolicy      RuntimePolicyConfig
 	policyConfigured   bool
+	handoffService     *protocol.Service
 }
 
 type Options struct {
@@ -67,16 +69,14 @@ type Options struct {
 	EvidenceSanitizer  evidence.Sanitizer
 	Metrics            *evidence.MetricsRecorder
 	RuntimePolicy      *RuntimePolicyConfig
-	EventAuthorizer    events.Authorizer
-	EventFreshness     events.FreshnessValidator
-	EventBus           events.Bus
 	CapabilityBroker   capability.Broker
+	CellManager        *cell.Manager
 	SecretBroker       secrets.Broker
-	AuthorityPrincipal *authz.Principal
-	ProcessAuthority   authz.Authority
 	GateEngine         *gate.Engine
 	RiskEngine         *risk.Engine
-	CellManager        *cell.Manager
+	AuthorityPrincipal *authz.Principal
+	ProcessAuthority   authz.Authority
+	HandoffAuthorizer  protocol.Authorizer
 }
 
 type Status struct {
@@ -246,16 +246,16 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	rt := &Runtime{
 		layout:             layout,
 		store:              database,
+		eventEngine:        events.NewEngine(database),
+		dagGraph:           func() *dag.Engine { graph, _ := dag.NewEngine(database); return graph }(),
 		policy:             engine,
-		dag:                dagEngine,
 		adapters:           options.Adapters,
 		evidenceSanitizer:  sanitizer,
-		eventStream:        eventStream,
 		capabilityBroker:   options.CapabilityBroker,
+		cellManager:        options.CellManager,
 		secretBroker:       options.SecretBroker,
 		gateEngine:         options.GateEngine,
 		riskEngine:         options.RiskEngine,
-		cellManager:        options.CellManager,
 		authorityPrincipal: options.AuthorityPrincipal,
 		processAuthority:   options.ProcessAuthority,
 		runtimeInstanceID:  instanceID,
@@ -267,11 +267,52 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		rt.runtimePolicy = *options.RuntimePolicy
 		rt.policyConfigured = true
 	}
+	handoffAuthorizer := options.HandoffAuthorizer
+	if handoffAuthorizer == nil {
+		handoffAuthorizer = runtimeHandoffAuthorizer{}
+	}
+	rt.handoffService = protocol.NewService(protocol.Config{RepositoryRoot: layout.Root}, database, handoffAuthorizer)
 	_ = rt.ReconcileStartup(ctx)
 	return rt, nil
 }
 
+// DAG exposes the canonical dynamic task graph read/query surface. Mutations
+// remain behind dag.Engine's authenticated service boundary.
+func (r *Runtime) DAG() dag.Graph { return r.dagGraph }
+
 func (r *Runtime) InstanceID() string { return r.runtimeInstanceID }
+
+// SubmitHandoff is the sole runtime path for accepting typed inter-agent
+// handoff state. A2A and future CLI callers must not write typed_handoffs
+// directly.
+func (r *Runtime) SubmitHandoff(ctx context.Context, principal protocol.Principal, submission protocol.Submission) (protocol.Handoff, error) {
+	if r == nil || r.handoffService == nil {
+		return protocol.Handoff{}, protocol.ErrUnavailable
+	}
+	return r.handoffService.Submit(ctx, principal, submission)
+}
+
+func (r *Runtime) ConsumeHandoff(ctx context.Context, principal protocol.Principal, id protocol.HandoffID) (protocol.Handoff, error) {
+	if r == nil || r.handoffService == nil {
+		return protocol.Handoff{}, protocol.ErrUnavailable
+	}
+	return r.handoffService.Consume(ctx, principal, id)
+}
+
+type runtimeHandoffAuthorizer struct{}
+
+func (runtimeHandoffAuthorizer) Authorize(_ context.Context, action protocol.Action, principal protocol.Principal, _ protocol.Handoff) (protocol.AuthorizationDecision, error) {
+	needed := "handoff.create"
+	if action == protocol.ActionConsume {
+		needed = "handoff.consume"
+	}
+	for _, capability := range principal.Capabilities {
+		if capability == "all" || capability == needed {
+			return protocol.AuthorizationDecision{Allowed: true, Reason: protocol.ReasonAccepted, FreshUntil: time.Now().UTC().Add(time.Minute)}, nil
+		}
+	}
+	return protocol.AuthorizationDecision{Allowed: false}, protocol.ErrAuthorization
+}
 
 // AssessTool is the runtime composition boundary for T24. Callers provide
 // structured metadata; classification and persistence stay in internal/risk.
@@ -282,6 +323,15 @@ func (r *Runtime) AssessTool(ctx context.Context, request risk.AssessmentRequest
 	return r.riskEngine.Assess(ctx, request)
 }
 
+// WithSecret is the runtime composition boundary for scoped secret use.
+// Callers never receive a secret outside the broker callback.
+func (r *Runtime) WithSecret(ctx context.Context, lease secrets.Lease, use func([]byte) error) error {
+	if r == nil || r.secretBroker == nil {
+		return secrets.ErrDenied
+	}
+	return r.secretBroker.WithSecret(ctx, lease, use)
+}
+
 // PrepareCell is the runtime composition boundary for execution cells. The
 // canonical manager owns validation, authorization, persistence and backend
 // lifecycle; callers do not reproduce those rules.
@@ -290,15 +340,6 @@ func (r *Runtime) PrepareCell(ctx context.Context, spec cell.Spec) (cell.Record,
 		return cell.Record{}, fmt.Errorf("%w: cell manager is unavailable", model.ErrUnavailable)
 	}
 	return r.cellManager.Prepare(ctx, spec)
-}
-
-// WithSecret is the runtime composition boundary for scoped secret use.
-// Callers never receive a secret outside the broker callback.
-func (r *Runtime) WithSecret(ctx context.Context, lease secrets.Lease, use func([]byte) error) error {
-	if r == nil || r.secretBroker == nil {
-		return secrets.ErrDenied
-	}
-	return r.secretBroker.WithSecret(ctx, lease, use)
 }
 
 func (r *Runtime) Close() error { return r.store.Close() }
@@ -511,7 +552,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		if gateErr != nil {
 			return RunResult{}, gateErr
 		}
-		if err := r.store.PutGateDecisionWithAudit(ctx, gateDecision, r.eventStream); err != nil {
+		if err := r.store.PutGateDecisionWithAudit(ctx, gateDecision, r.eventEngine); err != nil {
 			return RunResult{}, err
 		}
 	}

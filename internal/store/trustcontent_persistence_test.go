@@ -14,8 +14,8 @@ func TestT23MigrationCreatesTrustedContentSegments(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 27 {
-		t.Fatalf("schema version = %d, want 27", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != LatestSchemaVersion {
+		t.Fatalf("schema version = %d, want %d", got, LatestSchemaVersion)
 	}
 	if got := queryInt(t, st.db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='trusted_content_segments'"); got != 1 {
 		t.Fatalf("trusted_content_segments tables = %d, want 1", got)
@@ -63,20 +63,26 @@ func TestT23MigrationUpgradesSchema26(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX verification_attestations_by_change",
+		"DROP INDEX verification_attestations_by_principal",
+		"DROP TABLE verification_attestations",
+		"DROP INDEX typed_handoffs_by_sender",
+		"DROP INDEX typed_handoffs_by_task_status",
+		"DROP TABLE typed_handoffs",
 		"DROP INDEX trusted_content_segments_by_state",
 		"DROP INDEX trusted_content_segments_by_source",
 		"DROP TABLE trusted_content_segments",
-		"DELETE FROM schema_migrations WHERE version >= 27",
+		"DELETE FROM schema_migrations WHERE version >= 25",
 	} {
 		if _, err := st.db.ExecContext(ctx, statement); err != nil {
-			t.Fatalf("prepare schema 26 with %q: %v", statement, err)
+			t.Fatalf("prepare schema 24 with %q: %v", statement, err)
 		}
 	}
 	if err := st.Migrate(ctx); err != nil {
-		t.Fatalf("upgrade schema 26: %v", err)
+		t.Fatalf("upgrade schema: %v", err)
 	}
-	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != 27 {
-		t.Fatalf("schema version = %d, want 27", got)
+	if got := queryInt(t, st.db, "SELECT max(version) FROM schema_migrations"); got != LatestSchemaVersion {
+		t.Fatalf("schema version = %d, want %d", got, LatestSchemaVersion)
 	}
 }
 

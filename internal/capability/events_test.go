@@ -25,18 +25,15 @@ func (s *memoryEventStore) Append(_ context.Context, event events.Event) (events
 		}
 	}
 	event.Sequence = events.Sequence(len(s.items) + 1)
-	s.items = append(s.items, events.CloneEvent(event))
+	s.items = append(s.items, event)
 	return event, nil
 }
 
-func (s *memoryEventStore) Since(_ context.Context, after events.Sequence, limit int) ([]events.Event, error) {
-	if limit <= 0 {
-		return nil, errors.New("invalid limit")
-	}
-	result := make([]events.Event, 0, limit)
+func (s *memoryEventStore) Since(_ context.Context, after events.Sequence) ([]events.Event, error) {
+	result := make([]events.Event, 0, len(s.items))
 	for _, event := range s.items {
-		if event.Sequence > after && len(result) < limit {
-			result = append(result, events.CloneEvent(event))
+		if event.Sequence > after {
+			result = append(result, event)
 		}
 	}
 	return result, nil
@@ -68,7 +65,7 @@ func TestAuditedEngineAppendsBoundedCapabilityEvents(t *testing.T) {
 	if len(eventStore.items) != 4 {
 		t.Fatalf("event count=%d want 4", len(eventStore.items))
 	}
-	wantTypes := []events.Type{
+	wantTypes := []events.EventType{
 		"capability.grant.requested", "capability.grant.issued",
 		"capability.authorize.allowed", "capability.grant.revoked",
 	}
@@ -77,7 +74,8 @@ func TestAuditedEngineAppendsBoundedCapabilityEvents(t *testing.T) {
 			t.Errorf("event[%d]=%#v", i, event)
 		}
 		for _, value := range event.Data {
-			if strings.Contains(value, "/workspace/task-1") || strings.Contains(value, "MARSHAL_TEST_SECRET") {
+			text, ok := value.(string)
+			if ok && (strings.Contains(text, "/workspace/task-1") || strings.Contains(text, "MARSHAL_TEST_SECRET")) {
 				t.Errorf("event[%d] leaked raw resource/secret: %#v", i, event.Data)
 			}
 		}

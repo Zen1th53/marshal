@@ -24,7 +24,7 @@ func (s *memoryRiskEventStore) Append(_ context.Context, event events.Event) (ev
 	return event, nil
 }
 
-func (s *memoryRiskEventStore) Since(context.Context, events.Sequence, int) ([]events.Event, error) {
+func (s *memoryRiskEventStore) Since(context.Context, events.Sequence) ([]events.Event, error) {
 	return append([]events.Event(nil), s.events...), nil
 }
 
@@ -46,7 +46,7 @@ func TestAuditedEngineEmitsReconstructableRiskEventsAfterStateCommit(t *testing.
 	if assessment.State != StateRequirementsEmitted || len(eventStore.events) != 2 {
 		t.Fatalf("state=%q events=%d, want requirements_emitted/2", assessment.State, len(eventStore.events))
 	}
-	if eventStore.events[0].Type != events.Type("risk.assessment.created") || eventStore.events[1].Type != events.Type("risk.level.high") {
+	if eventStore.events[0].Type != events.EventTypeRiskAssessmentCreated || eventStore.events[1].Type != events.EventTypeRiskLevelHigh {
 		t.Fatalf("event types = %q, %q", eventStore.events[0].Type, eventStore.events[1].Type)
 	}
 	for _, event := range eventStore.events {

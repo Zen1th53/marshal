@@ -11,7 +11,6 @@ import (
 )
 
 const LatestSchemaVersion = 27
-
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -423,24 +422,28 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	if version == 11 {
 		if _, err := tx.ExecContext(ctx, `
-			CREATE TABLE dag_nodes (
-				task_id TEXT PRIMARY KEY,
-				kind TEXT NOT NULL CHECK(kind IN ('task','gate')),
-				status TEXT NOT NULL CHECK(status IN ('pending','ready','running','completed','failed','blocked','skipped')),
-				priority INTEGER NOT NULL,
-				revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
-				created_at TEXT NOT NULL,
-				updated_at TEXT NOT NULL
+			CREATE TABLE IF NOT EXISTS structured_events (
+				event_id TEXT NOT NULL UNIQUE, sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+				event_type TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', task_id TEXT NOT NULL DEFAULT '',
+				run_id TEXT NOT NULL DEFAULT '', resource_id TEXT NOT NULL DEFAULT '', evidence_id TEXT NOT NULL DEFAULT '',
+				at TEXT NOT NULL, data_json TEXT NOT NULL DEFAULT '{}', idempotency_key TEXT UNIQUE
 			);
-			CREATE INDEX dag_nodes_by_status_priority
-				ON dag_nodes(status, priority DESC, task_id);
+			CREATE UNIQUE INDEX IF NOT EXISTS structured_events_by_sequence ON structured_events(sequence);
+			CREATE INDEX IF NOT EXISTS structured_events_by_task_sequence ON structured_events(task_id, sequence);
+			CREATE INDEX IF NOT EXISTS structured_events_by_run_sequence ON structured_events(run_id, sequence);
+			CREATE INDEX IF NOT EXISTS structured_events_by_type_sequence ON structured_events(event_type, sequence);
+			CREATE TABLE dag_nodes (
+				task_id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('task','gate')),
+				status TEXT NOT NULL CHECK(status IN ('pending','ready','running','completed','failed','blocked','skipped')),
+				priority INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+				created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+			);
+			CREATE INDEX dag_nodes_by_status_priority ON dag_nodes(status, priority DESC, task_id);
 			CREATE TABLE dag_edges (
 				from_task TEXT NOT NULL REFERENCES dag_nodes(task_id) ON DELETE CASCADE,
 				to_task TEXT NOT NULL REFERENCES dag_nodes(task_id) ON DELETE CASCADE,
 				condition TEXT NOT NULL CHECK(condition IN ('completed','failed','blocked','skipped')),
-				created_at TEXT NOT NULL,
-				PRIMARY KEY(from_task, to_task),
-				CHECK(from_task <> to_task)
+				created_at TEXT NOT NULL, PRIMARY KEY(from_task, to_task), CHECK(from_task <> to_task)
 			);
 			CREATE INDEX dag_edges_by_from ON dag_edges(from_task, to_task);
 			CREATE INDEX dag_edges_by_to ON dag_edges(to_task, from_task);
@@ -453,35 +456,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 		version = 12
 	}
 	if version == 12 {
-		if _, err := tx.ExecContext(ctx, `
-			CREATE TABLE structured_events (
-				sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-				event_id TEXT NOT NULL UNIQUE,
-				event_type TEXT NOT NULL,
-				subject TEXT NOT NULL,
-				task_id TEXT REFERENCES tasks(task_id),
-				run_id TEXT REFERENCES worker_runs(run_id),
-				resource_id TEXT,
-				evidence_id TEXT REFERENCES evidence_nodes(node_id),
-				timestamp TEXT NOT NULL,
-				data_json TEXT NOT NULL DEFAULT '{}',
-				idempotency_key TEXT NOT NULL UNIQUE,
-				content_digest TEXT NOT NULL
-			);
-			CREATE UNIQUE INDEX structured_events_by_sequence ON structured_events(sequence);
-			CREATE INDEX structured_events_by_task ON structured_events(task_id, sequence);
-			CREATE INDEX structured_events_by_evidence ON structured_events(evidence_id, sequence);
-			CREATE INDEX structured_events_by_run ON structured_events(run_id, sequence);
-			CREATE INDEX structured_events_by_type ON structured_events(event_type, sequence);
-		`); err != nil {
-			return fmt.Errorf("apply schema version 13: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(13, ?)", utcNow()); err != nil {
-			return fmt.Errorf("record schema version 13: %w", err)
-		}
-		version = 13
-	}
-	if version == 13 {
 		if _, err := tx.ExecContext(ctx, `
 			CREATE TABLE capability_grants (
 				id TEXT PRIMARY KEY,
@@ -502,6 +476,19 @@ func (s *Store) Migrate(ctx context.Context) error {
 			CREATE INDEX capability_grants_by_expiry
 				ON capability_grants(expires_at, revoked_at);
 		`); err != nil {
+			return fmt.Errorf("apply schema version 13: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(13, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 13: %w", err)
+		}
+		version = 13
+	}
+	if version == 13 {
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE capability_grants ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT '';
+			CREATE UNIQUE INDEX capability_grants_by_idempotency
+				ON capability_grants(idempotency_key) WHERE idempotency_key <> '';
+		`); err != nil {
 			return fmt.Errorf("apply schema version 14: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(14, ?)", utcNow()); err != nil {
@@ -511,9 +498,21 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	if version == 14 {
 		if _, err := tx.ExecContext(ctx, `
-			ALTER TABLE capability_grants ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT '';
-			CREATE UNIQUE INDEX capability_grants_by_idempotency
-				ON capability_grants(idempotency_key) WHERE idempotency_key <> '';
+			CREATE TABLE execution_cells (
+				cell_id TEXT PRIMARY KEY,
+				task_id TEXT NOT NULL,
+				backend TEXT NOT NULL CHECK(backend IN ('native','bubblewrap')),
+				workspace TEXT NOT NULL,
+				spec_digest TEXT NOT NULL,
+				state TEXT NOT NULL CHECK(state IN ('new','preparing','ready','running','stopping','destroyed','failed')),
+				process_ref TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL,
+				destroyed_at TEXT,
+				failure_reason TEXT NOT NULL DEFAULT ''
+			);
+			CREATE INDEX execution_cells_by_task ON execution_cells(task_id, cell_id);
+			CREATE INDEX execution_cells_by_state ON execution_cells(state, updated_at, cell_id);
 		`); err != nil {
 			return fmt.Errorf("apply schema version 15: %w", err)
 		}
@@ -522,7 +521,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 		version = 15
 	}
-	if version == 15 {
+	if version < 16 {
 		if _, err := tx.ExecContext(ctx, `
 			CREATE TABLE role_bindings (
 				binding_id TEXT PRIMARY KEY,
@@ -537,14 +536,14 @@ func (s *Store) Migrate(ctx context.Context) error {
 			CREATE INDEX role_bindings_by_principal_scope ON role_bindings(principal_id, scope_id, revoked_at);
 			CREATE INDEX role_bindings_by_role ON role_bindings(role, revoked_at);
 		`); err != nil {
-			return fmt.Errorf("apply schema version 16: %w", err)
+			return fmt.Errorf("migrate schema version 16: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(16, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 16: %w", err)
 		}
 		version = 16
 	}
-	if version == 16 {
+	if version < 17 {
 		if _, err := tx.ExecContext(ctx, `
 			CREATE TABLE gate_decisions (
 				decision_id TEXT PRIMARY KEY,
@@ -562,26 +561,26 @@ func (s *Store) Migrate(ctx context.Context) error {
 			CREATE INDEX gate_decisions_by_point_subject ON gate_decisions(gate_point, subject, created_at);
 			CREATE INDEX gate_decisions_by_resource_change ON gate_decisions(resource, change_digest);
 		`); err != nil {
-			return fmt.Errorf("apply schema version 17: %w", err)
+			return fmt.Errorf("migrate schema version 17: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(17, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 17: %w", err)
 		}
 		version = 17
 	}
-	if version == 17 {
+	if version < 18 {
 		if _, err := tx.ExecContext(ctx, `
 			ALTER TABLE gate_decisions ADD COLUMN state TEXT NOT NULL DEFAULT 'requested'
 				CHECK(state IN ('requested','evaluating','allowed','denied','blocked','consumed','invalidated'));
 		`); err != nil {
-			return fmt.Errorf("apply schema version 18: %w", err)
+			return fmt.Errorf("migrate schema version 18: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(18, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 18: %w", err)
 		}
 		version = 18
 	}
-	if version == 18 {
+	if version < 19 {
 		if _, err := tx.ExecContext(ctx, `
 			CREATE TABLE secret_leases (
 				lease_id TEXT PRIMARY KEY,
@@ -601,38 +600,38 @@ func (s *Store) Migrate(ctx context.Context) error {
 			CREATE INDEX secret_leases_by_expiry
 				ON secret_leases(expires_at, revoked_at);
 		`); err != nil {
-			return fmt.Errorf("apply schema version 19: %w", err)
+			return fmt.Errorf("migrate schema version 19: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(19, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 19: %w", err)
 		}
 		version = 19
 	}
-	if version == 19 {
+	if version < 20 {
 		if _, err := tx.ExecContext(ctx, `
 			ALTER TABLE secret_leases ADD COLUMN state TEXT NOT NULL DEFAULT 'requested'
 				CHECK(state IN ('requested','leased','used','revoked','expired'));
 		`); err != nil {
-			return fmt.Errorf("apply schema version 20: %w", err)
+			return fmt.Errorf("migrate schema version 20: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(20, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 20: %w", err)
 		}
 		version = 20
 	}
-	if version == 20 {
+	if version < 21 {
 		if _, err := tx.ExecContext(ctx, `
 			ALTER TABLE secret_leases ADD COLUMN access_owner TEXT NOT NULL DEFAULT '';
 			ALTER TABLE secret_leases ADD COLUMN access_claimed_at TEXT NOT NULL DEFAULT '';
 		`); err != nil {
-			return fmt.Errorf("apply schema version 21: %w", err)
+			return fmt.Errorf("migrate schema version 21: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(21, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 21: %w", err)
 		}
 		version = 21
 	}
-	if version == 21 {
+	if version < 22 {
 		if _, err := tx.ExecContext(ctx, `
 			CREATE TABLE risk_assessments (
 				assessment_id TEXT PRIMARY KEY,
@@ -647,51 +646,97 @@ func (s *Store) Migrate(ctx context.Context) error {
 			CREATE INDEX risk_assessments_by_action ON risk_assessments(action_digest);
 			CREATE INDEX risk_assessments_by_created ON risk_assessments(created_at, assessment_id);
 		`); err != nil {
-			return fmt.Errorf("apply schema version 22: %w", err)
+			return fmt.Errorf("migrate schema version 22: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(22, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 22: %w", err)
 		}
 		version = 22
 	}
-	if version == 22 {
+	if version < 23 {
 		if _, err := tx.ExecContext(ctx, `
 			ALTER TABLE risk_assessments ADD COLUMN state TEXT NOT NULL DEFAULT 'requested'
 				CHECK(state IN ('requested','classified','requirements_emitted'));
 		`); err != nil {
-			return fmt.Errorf("apply schema version 23: %w", err)
+			return fmt.Errorf("migrate schema version 23: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(23, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 23: %w", err)
 		}
 		version = 23
 	}
-	if version == 23 {
+	if version < 24 {
 		if _, err := tx.ExecContext(ctx, `
-			CREATE TABLE execution_cells (
-				cell_id TEXT PRIMARY KEY,
-				task_id TEXT NOT NULL,
-				backend TEXT NOT NULL CHECK(backend IN ('native','bubblewrap')),
-				workspace TEXT NOT NULL,
-				spec_digest TEXT NOT NULL,
-				state TEXT NOT NULL CHECK(state IN ('new','preparing','ready','running','stopping','destroyed','failed')),
-				process_ref TEXT NOT NULL DEFAULT '',
-				created_at TEXT NOT NULL,
-				updated_at TEXT NOT NULL,
-				destroyed_at TEXT,
-				failure_reason TEXT NOT NULL DEFAULT ''
+			CREATE TABLE egress_decisions (
+				decision_id TEXT PRIMARY KEY,
+				idempotency_key TEXT NOT NULL UNIQUE,
+				request_json TEXT NOT NULL,
+				decision_json TEXT NOT NULL,
+				created_at TEXT NOT NULL
 			);
-			CREATE INDEX execution_cells_by_task ON execution_cells(task_id, cell_id);
-			CREATE INDEX execution_cells_by_state ON execution_cells(state, updated_at, cell_id);
+			CREATE INDEX egress_decisions_by_created ON egress_decisions(created_at, decision_id);
 		`); err != nil {
-			return fmt.Errorf("apply schema version 24: %w", err)
+			return fmt.Errorf("migrate schema version 24: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(24, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 24: %w", err)
 		}
 		version = 24
 	}
-	if version == 24 {
+	if version < 25 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE trusted_content_segments (
+				segment_id TEXT PRIMARY KEY,
+				idempotency_key TEXT NOT NULL UNIQUE,
+				source_id TEXT NOT NULL,
+				zone TEXT NOT NULL CHECK(zone IN ('system','owner_policy','project_policy','trusted_tool','repository_data','web_data','untrusted_content')),
+				digest TEXT NOT NULL,
+				content_ref TEXT NOT NULL,
+				state TEXT NOT NULL CHECK(state IN ('ingested','zoned','rendered')),
+				created_at TEXT NOT NULL,
+				CHECK(digest = content_ref)
+			);
+			CREATE INDEX trusted_content_segments_by_source ON trusted_content_segments(source_id, created_at, segment_id);
+			CREATE INDEX trusted_content_segments_by_state ON trusted_content_segments(state, created_at, segment_id);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 25: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(25, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 25: %w", err)
+		}
+		version = 25
+	}
+	if version < 26 {
+		// `handoffs` is a legacy free-form compatibility history. Typed
+		// handoffs are deliberately separate so no legacy body is silently
+		// reinterpreted as canonical state.
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE typed_handoffs (
+				handoff_id TEXT PRIMARY KEY,
+				idempotency_key TEXT NOT NULL UNIQUE,
+				version INTEGER NOT NULL CHECK(version = 1),
+				task_id TEXT NOT NULL REFERENCES tasks(task_id),
+				sender_principal TEXT NOT NULL,
+				target_role TEXT NOT NULL CHECK(target_role IN ('orchestrator','architect','developer','qa','appsec')),
+				status TEXT NOT NULL CHECK(status IN ('created','validated','accepted','rejected','consumed')),
+				refs_json TEXT NOT NULL,
+				context_digest TEXT NOT NULL CHECK(length(context_digest) = 71),
+				created_at TEXT NOT NULL,
+				consumed_at TEXT
+			);
+			CREATE INDEX typed_handoffs_by_task_status
+				ON typed_handoffs(task_id, status, created_at, handoff_id);
+			CREATE INDEX typed_handoffs_by_sender
+				ON typed_handoffs(sender_principal, created_at, handoff_id);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 26: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(26, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 26: %w", err)
+		}
+		version = 26
+	}
+	if version < 27 {
 		if _, err := tx.ExecContext(ctx, `
 			CREATE TABLE verification_attestations (
 				attestation_id TEXT PRIMARY KEY,
@@ -711,48 +756,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			CREATE INDEX verification_attestations_by_principal
 				ON verification_attestations(principal, change_id, kind, created_at);
 		`); err != nil {
-			return fmt.Errorf("apply schema version 25: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(25, ?)", utcNow()); err != nil {
-			return fmt.Errorf("record schema version 25: %w", err)
-		}
-		version = 25
-	}
-	if version == 25 {
-		if _, err := tx.ExecContext(ctx, `
-			CREATE TABLE egress_decisions (
-				decision_id TEXT PRIMARY KEY,
-				idempotency_key TEXT NOT NULL UNIQUE,
-				request_json TEXT NOT NULL,
-				decision_json TEXT NOT NULL,
-				created_at TEXT NOT NULL
-			);
-			CREATE INDEX egress_decisions_by_created ON egress_decisions(created_at, decision_id);
-		`); err != nil {
-			return fmt.Errorf("apply schema version 26: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(26, ?)", utcNow()); err != nil {
-			return fmt.Errorf("record schema version 26: %w", err)
-		}
-		version = 26
-	}
-	if version == 26 {
-		if _, err := tx.ExecContext(ctx, `
-			CREATE TABLE trusted_content_segments (
-				segment_id TEXT PRIMARY KEY,
-				idempotency_key TEXT NOT NULL UNIQUE,
-				source_id TEXT NOT NULL,
-				zone TEXT NOT NULL CHECK(zone IN ('system','owner_policy','project_policy','trusted_tool','repository_data','web_data','untrusted_content')),
-				digest TEXT NOT NULL,
-				content_ref TEXT NOT NULL,
-				state TEXT NOT NULL CHECK(state IN ('ingested','zoned','rendered')),
-				created_at TEXT NOT NULL,
-				CHECK(digest = content_ref)
-			);
-			CREATE INDEX trusted_content_segments_by_source ON trusted_content_segments(source_id, created_at, segment_id);
-			CREATE INDEX trusted_content_segments_by_state ON trusted_content_segments(state, created_at, segment_id);
-		`); err != nil {
-			return fmt.Errorf("apply schema version 27: %w", err)
+			return fmt.Errorf("migrate schema version 27: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(27, ?)", utcNow()); err != nil {
 			return fmt.Errorf("record schema version 27: %w", err)

@@ -8,87 +8,173 @@ import (
 	"time"
 )
 
-func TestEventTypeUsesCanonicalClosedRegistry(t *testing.T) {
-	for _, eventType := range []Type{"events.appended", "policy.activated", "dag.node.ready", "trustgate.denied"} {
-		if !eventType.Valid() {
-			t.Fatalf("canonical event type rejected: %q", eventType)
-		}
-	}
-	if Type("provider.trusted").Valid() {
-		t.Fatal("unknown provider-controlled event type accepted")
+func TestEventValidationRejectsOversizedUntrustedData(t *testing.T) {
+	err := (Event{Type: EventTypeTaskCreated, Data: map[string]any{"output": strings.Repeat("x", maxDataBytes)}}).Validate()
+	if !errors.Is(err, ErrEventDataInvalid) {
+		t.Fatalf("Validate() error = %v, want ErrEventDataInvalid", err)
 	}
 }
 
-func TestEventRejectsUnknownTypeAndSecretField(t *testing.T) {
-	base := Event{
-		ID:             "EVENT-a01",
-		Type:           "events.appended",
-		Subject:        "system",
-		At:             time.Unix(1, 0).UTC(),
-		Data:           map[string]string{"result": "stored"},
-		IdempotencyKey: "REQ-a01",
+func TestEventContractExposesCanonicalLifecycleFields(t *testing.T) {
+	event := Event{
+		ID:         "evt-1",
+		Sequence:   7,
+		Type:       EventTypeTaskCompleted,
+		Subject:    "agent-1",
+		TaskID:     "task-1",
+		RunID:      "run-1",
+		ResourceID: "artifact-1",
+		EvidenceID: "evidence-1",
+		At:         time.Unix(10, 0).UTC(),
+		Data:       map[string]any{"result": "ok"},
 	}
-	if err := base.Validate(); err != nil {
-		t.Fatalf("valid event rejected: %v", err)
+	if err := event.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
 	}
-
-	invalid := base
-	invalid.Type = "unknown"
-	if err := invalid.Validate(); !errors.Is(err, ErrInvalidType) {
-		t.Fatalf("unknown type error = %v, want %v", err, ErrInvalidType)
-	}
-
-	invalid = base
-	invalid.Data = map[string]string{"token": "not-a-real-token"}
-	if err := invalid.Validate(); !errors.Is(err, ErrSecretField) {
-		t.Fatalf("secret field error = %v, want %v", err, ErrSecretField)
+	if !event.Type.Valid() {
+		t.Fatal("canonical event type should be valid")
 	}
 }
 
-func TestCloneEventDoesNotAliasData(t *testing.T) {
-	original := Event{Data: map[string]string{"result": "stored"}}
-	clone := CloneEvent(original)
-	clone.Data["result"] = "changed"
-	if original.Data["result"] != "stored" {
-		t.Fatalf("clone mutated source: %#v", original.Data)
+func TestEventContractRejectsUnknownTypeWithStableSafeError(t *testing.T) {
+	err := (Event{Type: EventType("agent.injected")}).Validate()
+	if !errors.Is(err, ErrEventTypeInvalid) {
+		t.Fatalf("Validate() error = %v, want ErrEventTypeInvalid", err)
+	}
+	if got := ReasonCode(err); got != CodeEventTypeInvalid {
+		t.Fatalf("ReasonCode() = %q, want %q", got, CodeEventTypeInvalid)
+	}
+	if got := err.Error(); got != ErrEventTypeInvalid.Error() {
+		t.Fatalf("error message = %q, want safe message %q", got, ErrEventTypeInvalid.Error())
 	}
 }
 
-func TestEventValidationRejectsControlAndOversizedData(t *testing.T) {
-	event := Event{ID: "EVENT-a", Type: "events.appended", Subject: "system", Data: map[string]string{"result": "ok\nspoof"}}
-	if err := event.Validate(); err == nil {
-		t.Fatal("control-bearing data accepted")
-	}
-
-	data := make(map[string]string, MaxDataEntries+1)
-	for i := 0; i < MaxDataEntries+1; i++ {
-		data[string(rune('a'+(i%26)))+strings.Repeat("x", i/26)] = "v"
-	}
-	event.Data = data
-	if err := event.Validate(); err == nil {
-		t.Fatal("oversized data map accepted")
-	}
-}
-
-func TestEventErrorIsMachineReadableAndSecretSafe(t *testing.T) {
-	const marker = "MARSHAL_TEST_SECRET_T43_A01_Q9"
-	cause := errors.New(marker)
-	err := NewError(CodeStoreFailed, cause)
-	if !errors.Is(err, cause) || !errors.Is(err, ErrStoreFailed) {
-		t.Fatalf("error lost stable identity or cause: %v", err)
+func TestEventContractRejectsSensitiveDataFieldWithoutLeakingValue(t *testing.T) {
+	const marker = "MARSHAL_TEST_SECRET_T43_A01"
+	err := (Event{Type: EventTypeTaskCompleted, Data: map[string]any{"api_token": marker}}).Validate()
+	if !errors.Is(err, ErrEventSecretField) {
+		t.Fatalf("Validate() error = %v, want ErrEventSecretField", err)
 	}
 	if strings.Contains(err.Error(), marker) {
-		t.Fatalf("public error leaked secret marker: %q", err.Error())
-	}
-	if ReasonCode(err) != CodeStoreFailed {
-		t.Fatalf("ReasonCode = %q, want %q", ReasonCode(err), CodeStoreFailed)
+		t.Fatalf("validation error leaked secret marker: %q", err)
 	}
 }
 
-// compileContracts freezes the provider-neutral A01 store/bus boundary.
-func compileContracts(store Store, bus Bus, ctx context.Context) {
-	_, _ = store.Append(ctx, Event{})
-	_, _ = store.Since(ctx, 0, 100)
-	_ = bus.Publish(ctx, Event{})
-	_, _, _ = bus.Subscribe(ctx, 0)
+func TestEventErrorCodesAreMachineReadableAndUnwrapCauses(t *testing.T) {
+	cause := errors.New("private store detail")
+	err := NewError(CodeEventStoreFailed, cause)
+	if !errors.Is(err, cause) {
+		t.Fatal("structured error should retain its cause for errors.Is")
+	}
+	if ReasonCode(err) != CodeEventStoreFailed {
+		t.Fatalf("ReasonCode() = %q, want %q", ReasonCode(err), CodeEventStoreFailed)
+	}
+	if err.Error() != ErrEventStoreFailed.Error() {
+		t.Fatalf("error leaked cause: %q", err)
+	}
+}
+
+func TestStoreAndBusContractsRequireContext(t *testing.T) {
+	var _ Store = contractStore{}
+	var _ Bus = contractBus{}
+	var _ = context.Background()
+}
+
+func TestLifecycleTransitionMatrixRejectsIllegalTransitions(t *testing.T) {
+	for _, step := range [][2]LifecycleState{
+		{StateProduced, StateValidated},
+		{StateValidated, StateDurablyAppended},
+		{StateDurablyAppended, StatePublished},
+		{StatePublished, StateConsumed},
+	} {
+		if err := ValidateTransition(step[0], step[1]); err != nil {
+			t.Fatalf("ValidateTransition(%q, %q) error = %v", step[0], step[1], err)
+		}
+	}
+	if err := ValidateTransition(StateProduced, StatePublished); !errors.Is(err, ErrEventIllegalTransition) {
+		t.Fatalf("illegal transition error = %v, want ErrEventIllegalTransition", err)
+	}
+}
+
+func TestAuthorizedAppendFailsClosedForDeniedOrStaleDecision(t *testing.T) {
+	store := &memoryEventStore{}
+	engine := NewEngine(store)
+	for name, authorizer := range map[string]Authorizer{
+		"denied": staticAuthorizer{decision: AuthorizationDecision{Allowed: false}},
+		"stale":  staticAuthorizer{decision: AuthorizationDecision{Allowed: true, FreshUntil: time.Now().Add(-time.Second)}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := engine.AppendAuthorized(context.Background(), Event{ID: name, Type: EventTypeTaskCreated, At: time.Now().UTC()}, authorizer)
+			if name == "denied" && !errors.Is(err, ErrEventAuthorizationDenied) {
+				t.Fatalf("error = %v, want denial", err)
+			}
+			if name == "stale" && !errors.Is(err, ErrEventAuthorizationStale) {
+				t.Fatalf("error = %v, want stale", err)
+			}
+		})
+	}
+	if len(store.events) != 0 {
+		t.Fatalf("denied/stale requests persisted %d events", len(store.events))
+	}
+}
+
+func TestAppendAuditEventContainsReferencesNotPayload(t *testing.T) {
+	original := Event{ID: "evt-1", Sequence: 4, Type: EventTypeTaskCompleted, Subject: "agent-1", TaskID: "task-1", RunID: "run-1", ResourceID: "artifact-1", EvidenceID: "ev-1", At: time.Now().UTC(), Data: map[string]any{"prompt": "sensitive payload"}}
+	audit := AppendAuditEvent(original, "", "stored")
+	if audit.Type != EventTypeAppended || audit.ID == original.ID || audit.Sequence != original.Sequence {
+		t.Fatalf("audit event = %+v", audit)
+	}
+	if audit.Data["result"] != "stored" || audit.Data["event_id"] != original.ID || audit.Data["task_id"] != original.TaskID {
+		t.Fatalf("audit data = %#v", audit.Data)
+	}
+	if _, ok := audit.Data["prompt"]; ok {
+		t.Fatal("audit event copied unbounded payload")
+	}
+}
+
+func TestEngineMetricsExposeBoundedOutcomeCounters(t *testing.T) {
+	engine := NewEngine(&memoryEventStore{})
+	if _, err := engine.Append(context.Background(), Event{ID: "metric-1", Type: EventTypeTaskCreated, At: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = engine.AppendAuthorized(context.Background(), Event{ID: "metric-2", Type: EventTypeTaskCreated, At: time.Now().UTC()}, staticAuthorizer{decision: AuthorizationDecision{Allowed: false}})
+	snapshot := engine.Metrics()
+	if snapshot.Appended != 1 || snapshot.Denied != 1 || snapshot.Invalid != 0 || snapshot.LastFailure != CodeEventAuthorizationDenied {
+		t.Fatalf("metrics = %+v", snapshot)
+	}
+}
+
+func TestSubscriptionCloseStopsDeliveryAndClosesChannel(t *testing.T) {
+	engine := NewEngine(&memoryEventStore{})
+	sub, err := engine.Subscribe(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub.Close()
+	select {
+	case _, ok := <-sub.Events:
+		if ok {
+			t.Fatal("closed subscription still delivered an event")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscription channel was not closed")
+	}
+}
+
+type staticAuthorizer struct{ decision AuthorizationDecision }
+
+func (a staticAuthorizer) Authorize(context.Context, Event) (AuthorizationDecision, error) {
+	return a.decision, nil
+}
+
+type contractStore struct{}
+
+func (contractStore) Append(context.Context, Event) (Event, error)     { return Event{}, nil }
+func (contractStore) Since(context.Context, Sequence) ([]Event, error) { return nil, nil }
+
+type contractBus struct{}
+
+func (contractBus) Publish(context.Context, Event) error { return nil }
+func (contractBus) Subscribe(context.Context, Sequence) (Subscription, error) {
+	return Subscription{}, nil
 }
