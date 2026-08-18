@@ -1840,6 +1840,11 @@
       "bytes": 2445
     },
     {
+      "path": "internal/risk/a10_release_test.go",
+      "sha256": "70c3960fba236e9b7b64c2ccdf665f172e60ef203406716c8b69b3129942289f",
+      "bytes": 1042
+    },
+    {
       "path": "internal/risk/adversarial_test.go",
       "sha256": "155987e5fe49ebce1c90c3c59114bd460740ea7375079388e0458ddbc3ce62d5",
       "bytes": 904
