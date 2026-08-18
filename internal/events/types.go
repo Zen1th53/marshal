@@ -86,6 +86,11 @@ const (
 	EventTypeCellFailed               EventType = "cell.failed"
 	EventTypeAuthzAuthorityAllowed    EventType = "authz.authority.allowed"
 	EventTypeAuthzAuthorityDenied     EventType = "authz.authority.denied"
+	EventTypeGateAllowed              EventType = "gate.allowed"
+	EventTypeGateDenied               EventType = "gate.denied"
+	EventTypeGateBlocked              EventType = "gate.blocked"
+	EventTypeGateDecisionInvalidated  EventType = "gate.decision.invalidated"
+	EventTypeGateDecisionConsumed     EventType = "gate.decision.consumed"
 
 	EventTypeAppended          EventType = "events.appended"
 	EventTypeSubscriberDropped EventType = "events.subscriber.dropped"
@@ -108,6 +113,8 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeCellExecFinished: {}, EventTypeCellDestroyStarted: {}, EventTypeCellDestroyed: {},
 	EventTypeCellFailed: {},
 	EventTypeAuthzAuthorityAllowed: {}, EventTypeAuthzAuthorityDenied: {},
+	EventTypeGateAllowed: {}, EventTypeGateDenied: {}, EventTypeGateBlocked: {},
+	EventTypeGateDecisionInvalidated: {}, EventTypeGateDecisionConsumed: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 

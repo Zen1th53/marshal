@@ -29,6 +29,7 @@ const (
 	MetricOperationCapability        MetricOperation = "capability"
 	MetricOperationCell              MetricOperation = "cell"
 	MetricOperationAuthority         MetricOperation = "authority"
+	MetricOperationGate              MetricOperation = "gate"
 )
 
 // MetricResult is a bounded outcome dimension.
@@ -50,7 +51,7 @@ var metricOperations = map[MetricOperation]struct{}{
 	MetricOperationContention: {}, MetricOperationPolicyLoad: {}, MetricOperationPolicyPersist: {},
 	MetricOperationPolicyTransition: {}, MetricOperationPolicyRuntimeGate: {},
 	MetricOperationPolicyTest: {}, MetricOperationCapability: {}, MetricOperationCell: {},
-	MetricOperationAuthority: {},
+	MetricOperationAuthority: {}, MetricOperationGate: {},
 }
 
 var metricResults = map[MetricResult]struct{}{
@@ -69,6 +70,9 @@ var metricReasons = map[string]struct{}{
 	"CAP_REVOKED": {}, "CAP_SUBJECT_MISMATCH": {}, "CAP_TASK_MISMATCH": {},
 	"CELL_BACKEND_UNAVAILABLE": {}, "CELL_PREPARE_FAILED": {}, "CELL_SCOPE_ESCAPE": {},
 	"CELL_NOT_READY": {}, "CELL_DESTROYED": {}, "CELL_CLEANUP_FAILED": {}, "CELL_AUTHORIZATION_DENIED": {},
+	"GATE_ALLOWED": {}, "GATE_REQUIRED_CHECK_MISSING": {},
+	"GATE_POLICY_DENY": {}, "GATE_QUORUM_UNMET": {}, "GATE_UNKNOWN_CHECK": {},
+	"GATE_UNKNOWN_POINT": {}, "GATE_INVALID_CHECK_STATUS": {}, "GATE_INVALID_DECISION": {},
 }
 
 // MetricsSnapshot is a detached, read-only projection of recorder state.
