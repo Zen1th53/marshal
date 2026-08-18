@@ -2380,6 +2380,11 @@
       "bytes": 1648
     },
     {
+      "path": "internal/store/ownership_persistence_a02_test.go",
+      "sha256": "338e8a3f8c2d4dbacd2c8f73ae02d13767cda7ba82f155209432e75e6009830f",
+      "bytes": 235
+    },
+    {
       "path": "internal/store/policy_a07_generation_test.go",
       "sha256": "4716d2b01a52d135ea262b4f372b5ed3febc985d8e3f814a4e1f32cd89b6e359",
       "bytes": 738
