@@ -2831,8 +2831,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "c5ef99598a7b19d0e3bd65afcbb8e540b37df0e00ed50a23e5862ea2f2b64e21",
-      "bytes": 57992
+      "sha256": "0bff88f8cae353f99be53b52da5762a7a2012857676c23342c390ca657d021e5",
+      "bytes": 58618
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -3056,8 +3056,8 @@
     },
     {
       "path": "internal/store/risk_persistence_a02_test.go",
-      "sha256": "ffb5449fbb146d138876a64f34868e9ed5f4cd1b91e7402d7b1e6834bb4df016",
-      "bytes": 8569
+      "sha256": "1f73523ce76dffa095bbf175c26fdc2866c55dbf1a84e10a4b9a8afe5d225ac7",
+      "bytes": 8677
     },
     {
       "path": "internal/store/router_persistence_a02_test.go",
@@ -3106,8 +3106,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "a1c8170620d0dcee8995a6ed6be1254948201094825b194b184fed860ab15751",
-      "bytes": 19557
+      "sha256": "604a8846fffe5357043eda96837960f32ec4a6f3cec612d506d19764814d894d",
+      "bytes": 19829
     },
     {
       "path": "internal/store/tasks.go",
@@ -3141,8 +3141,8 @@
     },
     {
       "path": "internal/store/trustcontent_persistence_test.go",
-      "sha256": "827e4270240bd048e61d594ef8e78724267a91cc99fccc86abf907bd00f32d7c",
-      "bytes": 9404
+      "sha256": "25f2c0c99b86ab705d885169cc35910f54a3cff598da91c0d2593e7eea6bda7b",
+      "bytes": 9512
     },
     {
       "path": "internal/store/trustcontent_recovery_a08_test.go",
@@ -3166,8 +3166,8 @@
     },
     {
       "path": "internal/store/typed_handoffs_a02_test.go",
-      "sha256": "f4c04a5ec4be6e442474d97e32265556802329404b9022278386234b7c654971",
-      "bytes": 14630
+      "sha256": "b7390a9af7f9f55792173b0f3df2e903f298e6e03bb7c40627effe929adacdb6",
+      "bytes": 14738
     },
     {
       "path": "internal/store/vibe_persistence_a02_test.go",
