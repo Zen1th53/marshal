@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/events"
@@ -36,6 +37,7 @@ type Manager struct {
 	eventStore   events.Store
 	metrics      *evidence.MetricsRecorder
 	now          func() time.Time
+	lifecycleMu  sync.Mutex
 }
 
 func NewManager(repository Repository, backends map[BackendKind]Backend, authorizers ...Authorizer) *Manager {
@@ -227,6 +229,8 @@ func (m *Manager) Exec(ctx context.Context, handle Handle, request ExecRequest) 
 	if m == nil || m.repository == nil {
 		return ExecResult{}, fmt.Errorf("%w: cell repository is unavailable", ErrNotReady)
 	}
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
 	if err := handle.Validate(); err != nil {
 		return ExecResult{}, err
 	}
@@ -265,6 +269,8 @@ func (m *Manager) Destroy(ctx context.Context, handle Handle) error {
 	if m == nil || m.repository == nil {
 		return fmt.Errorf("%w: cell repository is unavailable", ErrCleanupFailed)
 	}
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
 	if err := handle.Validate(); err != nil {
 		return err
 	}
