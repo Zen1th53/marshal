@@ -2505,6 +2505,11 @@
       "bytes": 234
     },
     {
+      "path": "internal/store/dist_persistence_a02_test.go",
+      "sha256": "92d334b915442b67a3bfe081a04f07be41c2a74e307b8ba971de947c8124a751",
+      "bytes": 230
+    },
+    {
       "path": "internal/store/events.go",
       "sha256": "38afb3a534208df1321acec92231d4ce68de986e1455c80dbf86954889bbe47d",
       "bytes": 5739
