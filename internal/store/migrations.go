@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 18
+const LatestSchemaVersion = 19
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -579,6 +579,33 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 18: %w", err)
 		}
 		version = 18
+	}
+	if version < 19 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE secret_leases (
+				lease_id TEXT PRIMARY KEY,
+				subject TEXT NOT NULL,
+				task_id TEXT NOT NULL REFERENCES tasks(task_id),
+				provider TEXT NOT NULL,
+				secret_name TEXT NOT NULL,
+				secret_version TEXT NOT NULL,
+				purpose TEXT NOT NULL,
+				issued_at TEXT NOT NULL,
+				expires_at TEXT NOT NULL,
+				revoked_at TEXT,
+				CHECK(expires_at > issued_at)
+			);
+			CREATE INDEX secret_leases_by_task_scope
+				ON secret_leases(task_id, provider, secret_name, secret_version, purpose);
+			CREATE INDEX secret_leases_by_expiry
+				ON secret_leases(expires_at, revoked_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 19: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(19, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 19: %w", err)
+		}
+		version = 19
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

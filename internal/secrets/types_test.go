@@ -16,6 +16,7 @@ func TestSecretContractTypesValidateAndExposeStableErrors(t *testing.T) {
 		TaskID:    "task-1",
 		Ref:       ref,
 		Purpose:   "deploy",
+		IssuedAt:  time.Unix(1, 0).UTC(),
 		ExpiresAt: time.Unix(2, 0).UTC(),
 	}
 	if err := ref.Validate(); err != nil {

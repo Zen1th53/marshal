@@ -28,11 +28,12 @@ type Lease struct {
 	TaskID    string    `json:"task_id"`
 	Ref       Ref       `json:"ref"`
 	Purpose   string    `json:"purpose"`
+	IssuedAt  time.Time `json:"issued_at"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
 func (l Lease) Validate() error {
-	if invalidIdentifier(l.ID) || invalidIdentifier(l.Subject) || invalidIdentifier(l.TaskID) || invalidIdentifier(l.Purpose) || l.ExpiresAt.IsZero() {
+	if invalidIdentifier(l.ID) || invalidIdentifier(l.Subject) || invalidIdentifier(l.TaskID) || invalidIdentifier(l.Purpose) || l.IssuedAt.IsZero() || l.ExpiresAt.IsZero() || !l.ExpiresAt.After(l.IssuedAt) {
 		return ErrDenied
 	}
 	return l.Ref.Validate()
@@ -43,6 +44,7 @@ type LeaseRequest struct {
 	TaskID    string
 	Ref       Ref
 	Purpose   string
+	IssuedAt  time.Time
 	ExpiresAt time.Time
 }
 
