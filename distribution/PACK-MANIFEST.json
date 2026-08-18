@@ -1835,19 +1835,29 @@
       "bytes": 4715
     },
     {
+      "path": "internal/secrets/engine.go",
+      "sha256": "e05d0a199963a8e21b6e43e86e45e2338811b91aeac2a3db8ab201f4170824b8",
+      "bytes": 3558
+    },
+    {
+      "path": "internal/secrets/engine_test.go",
+      "sha256": "d0bc40d00bdd87e7569cdb93eaf7b2d23153af2ce3533ceefbc1d8ec39b55b3c",
+      "bytes": 4664
+    },
+    {
       "path": "internal/secrets/errors.go",
       "sha256": "a3ffb5570bd0d349db6f2c799c83d3397079c127efaf3172c3fc647aab391dfd",
       "bytes": 1714
     },
     {
       "path": "internal/secrets/types.go",
-      "sha256": "cad343103777177cc0c49e12146b868315e89a1b38266bd16f5efab06b3ebc62",
-      "bytes": 1945
+      "sha256": "c003b7b9b2fc324702af7cbb5fb4480e93037a6d4469ebd871df143746ca35c0",
+      "bytes": 2287
     },
     {
       "path": "internal/secrets/types_test.go",
-      "sha256": "d7b6756c2260aac634a5816e3d0c4f56aedb669f58a982bfa9530a9b1db1f613",
-      "bytes": 2561
+      "sha256": "c4ea19a7ab31d4414b00f16096bcb68976939523a3fcbeebdbce7354f5ff5f0b",
+      "bytes": 2574
     },
     {
       "path": "internal/store/authz_concurrency_a08_test.go",
@@ -2101,8 +2111,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "0365094f5cb1fee646df6262f6518b0e10a3933f7f64553305cf83ac7de613f2",
-      "bytes": 25301
+      "sha256": "ce0fd98df055bc042fa089ae0dac914d5dff7f99636f1187b258783415879307",
+      "bytes": 25797
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",
@@ -2246,13 +2256,13 @@
     },
     {
       "path": "internal/store/secrets_persistence.go",
-      "sha256": "b5414edc8b457345df2f3e5c20441d46a9ae756ab21f87442395102e0531a78b",
-      "bytes": 2483
+      "sha256": "de83e4d6e2a1903ecee7232473a4438e9f16d39f65a458673fda24d6f3670908",
+      "bytes": 4027
     },
     {
       "path": "internal/store/secrets_persistence_a02_test.go",
-      "sha256": "1b94b6fce782ca9ed54021c29720902fd9cdb9eeb089209e8bd06ef44b899da2",
-      "bytes": 2947
+      "sha256": "93fa92ffd7b9fdcf5d9df97cfde72016a3cb0d83060fc80796332ed731f5e83a",
+      "bytes": 2978
     },
     {
       "path": "internal/store/sqlite.go",

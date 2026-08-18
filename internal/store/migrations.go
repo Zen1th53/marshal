@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 19
+const LatestSchemaVersion = 20
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -606,6 +606,18 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 19: %w", err)
 		}
 		version = 19
+	}
+	if version < 20 {
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE secret_leases ADD COLUMN state TEXT NOT NULL DEFAULT 'requested'
+				CHECK(state IN ('requested','leased','used','revoked','expired'));
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 20: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(20, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 20: %w", err)
+		}
+		version = 20
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
