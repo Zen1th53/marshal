@@ -1020,6 +1020,16 @@
       "bytes": 5009
     },
     {
+      "path": "internal/adapter/quorum_check.go",
+      "sha256": "a7816f62850ec49c73a16cb270959db74264dfc2834300280b4cf5e271d52e70",
+      "bytes": 1278
+    },
+    {
+      "path": "internal/adapter/quorum_check_test.go",
+      "sha256": "7b0d8cc8fbdf222776fd0c3b0e36a7b33a346dea061c8d1f2b3d317082d21e84",
+      "bytes": 1447
+    },
+    {
       "path": "internal/adapter/role_capability_runner.go",
       "sha256": "59fbd3540cbf02ae071334d8dc2e0295bd41f4616cdcf43a9c6928c03470c0eb",
       "bytes": 1436
