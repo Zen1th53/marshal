@@ -8,6 +8,34 @@ import (
 	"github.com/Zen1th53/marshal/internal/risk"
 )
 
+func TestRiskAssessmentEnginePersistsTerminalRequirementState(t *testing.T) {
+	ctx := context.Background()
+	st := openTestStore(t)
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	result, err := risk.NewEngine(st).Assess(ctx, risk.AssessmentRequest{
+		ID: "assessment-a03-store",
+		Descriptor: risk.ToolDescriptor{
+			Tool: "git", Action: "push", Resource: "repo:marshal",
+			Factors: risk.Factors{ExternalWrite: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Assess: %v", err)
+	}
+	if result.State != risk.StateRequirementsEmitted {
+		t.Fatalf("result state=%q", result.State)
+	}
+	stored, err := st.GetRiskAssessment(ctx, result.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.State != risk.StateRequirementsEmitted {
+		t.Fatalf("stored state=%q", stored.State)
+	}
+}
+
 func TestRiskAssessmentPersistsAndReopensWithoutRawPayload(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "risk.db")
@@ -20,6 +48,7 @@ func TestRiskAssessmentPersistsAndReopensWithoutRawPayload(t *testing.T) {
 		RequiredAuthorities:  []string{"owner.approval"},
 		RequiredCapabilities: []string{"git.push"},
 		PolicyDigest:         "sha256:policy-a02",
+		State:                risk.StateRequested,
 	}
 
 	first, err := Open(ctx, dbPath)
@@ -76,7 +105,7 @@ func TestRiskAssessmentMigrationFromSchema21(t *testing.T) {
 		"DROP INDEX risk_assessments_by_action",
 		"DROP INDEX risk_assessments_by_created",
 		"DROP TABLE risk_assessments",
-		"DELETE FROM schema_migrations WHERE version = 22",
+		"DELETE FROM schema_migrations WHERE version >= 22",
 	} {
 		if _, err := st.db.ExecContext(ctx, statement); err != nil {
 			t.Fatalf("prepare schema 21 with %q: %v", statement, err)

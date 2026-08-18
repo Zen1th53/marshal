@@ -9,6 +9,23 @@ type AssessmentID string
 type ActionDigest string
 type PolicyDigest string
 
+type AssessmentState string
+
+const (
+	StateRequested           AssessmentState = "requested"
+	StateClassified          AssessmentState = "classified"
+	StateRequirementsEmitted AssessmentState = "requirements_emitted"
+)
+
+func ValidateState(state AssessmentState) error {
+	switch state {
+	case StateRequested, StateClassified, StateRequirementsEmitted:
+		return nil
+	default:
+		return ErrDescriptorInvalid
+	}
+}
+
 // Level is ordered from least to most dangerous. The order is part of the
 // contract; it is not an authorization decision.
 type Level string
@@ -89,19 +106,23 @@ func (d ToolDescriptor) Validate() error {
 // Risk is informative and requirement-producing; it never authorizes an
 // operation by itself.
 type Assessment struct {
-	ID                   AssessmentID `json:"assessment_id"`
-	ActionDigest         ActionDigest `json:"action_digest"`
-	Level                Level        `json:"level"`
-	Score                int          `json:"score"`
-	Factors              Factors      `json:"factors"`
-	RequiredAuthorities  []string     `json:"required_authorities,omitempty"`
-	RequiredCapabilities []string     `json:"required_capabilities,omitempty"`
-	PolicyDigest         PolicyDigest `json:"policy_digest,omitempty"`
+	ID                   AssessmentID    `json:"assessment_id"`
+	ActionDigest         ActionDigest    `json:"action_digest"`
+	Level                Level           `json:"level"`
+	Score                int             `json:"score"`
+	Factors              Factors         `json:"factors"`
+	RequiredAuthorities  []string        `json:"required_authorities,omitempty"`
+	RequiredCapabilities []string        `json:"required_capabilities,omitempty"`
+	PolicyDigest         PolicyDigest    `json:"policy_digest,omitempty"`
+	State                AssessmentState `json:"state"`
 }
 
 func (a Assessment) Validate() error {
 	if !safeText(string(a.ID)) || !a.Level.Valid() || a.Score < 0 {
 		return ErrDescriptorInvalid
+	}
+	if err := ValidateState(a.State); err != nil {
+		return err
 	}
 	if err := a.Factors.Validate(); err != nil {
 		return err

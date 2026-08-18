@@ -35,10 +35,10 @@ func (s *Store) PutRiskAssessment(ctx context.Context, assessment risk.Assessmen
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO risk_assessments(
 			assessment_id, action_digest, level, score, factors_json,
-			requirements_json, policy_digest, created_at
-		) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+			requirements_json, policy_digest, state, created_at
+		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, string(assessment.ID), string(assessment.ActionDigest), string(assessment.Level), assessment.Score,
-		string(factors), string(requirements), string(assessment.PolicyDigest), utcNow())
+		string(factors), string(requirements), string(assessment.PolicyDigest), string(assessment.State), utcNow())
 	if err == nil {
 		return nil
 	}
@@ -63,10 +63,10 @@ func (s *Store) GetRiskAssessment(ctx context.Context, id risk.AssessmentID) (ri
 	var factorsJSON, requirementsJSON string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT assessment_id, action_digest, level, score, factors_json,
-		       requirements_json, policy_digest
+		       requirements_json, policy_digest, state
 		FROM risk_assessments WHERE assessment_id = ?
 	`, string(id)).Scan(&assessment.ID, &assessment.ActionDigest, &assessment.Level, &assessment.Score,
-		&factorsJSON, &requirementsJSON, &assessment.PolicyDigest)
+		&factorsJSON, &requirementsJSON, &assessment.PolicyDigest, &assessment.State)
 	if errors.Is(err, sql.ErrNoRows) {
 		return risk.Assessment{}, fmt.Errorf("%w: risk assessment not found", model.ErrNotFound)
 	}
@@ -86,6 +86,26 @@ func (s *Store) GetRiskAssessment(ctx context.Context, id risk.AssessmentID) (ri
 		return risk.Assessment{}, fmt.Errorf("%w: invalid durable risk assessment", model.ErrInvalid)
 	}
 	return assessment, nil
+}
+
+func (s *Store) TransitionRiskAssessmentState(ctx context.Context, id risk.AssessmentID, from, to risk.AssessmentState) error {
+	if err := risk.ValidateState(from); err != nil {
+		return err
+	}
+	if err := risk.ValidateState(to); err != nil {
+		return err
+	}
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE risk_assessments SET state = ? WHERE assessment_id = ? AND state = ?
+	`, string(to), string(id), string(from))
+	if err != nil {
+		return fmt.Errorf("transition risk assessment state: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil || rows != 1 {
+		return fmt.Errorf("%w: risk assessment state transition conflict", model.ErrConflict)
+	}
+	return nil
 }
 
 func riskAssessmentsEqual(left, right risk.Assessment) bool {

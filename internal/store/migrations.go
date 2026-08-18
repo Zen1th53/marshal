@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 22
+const LatestSchemaVersion = 23
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -652,6 +652,18 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 22: %w", err)
 		}
 		version = 22
+	}
+	if version < 23 {
+		if _, err := tx.ExecContext(ctx, `
+			ALTER TABLE risk_assessments ADD COLUMN state TEXT NOT NULL DEFAULT 'requested'
+				CHECK(state IN ('requested','classified','requirements_emitted'));
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 23: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(23, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 23: %w", err)
+		}
+		version = 23
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
