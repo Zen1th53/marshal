@@ -1421,8 +1421,8 @@
     },
     {
       "path": "internal/events/types.go",
-      "sha256": "ebf4b0e5716d056b4d1e2d103007498604df23f080653ba95f0e8f88364c2a31",
-      "bytes": 13002
+      "sha256": "8748fd343e4fbec945dad17417a55e55d1dbfa8d2caee802c2bcf57b63553b9e",
+      "bytes": 13410
     },
     {
       "path": "internal/events/types_test.go",
@@ -1841,8 +1841,8 @@
     },
     {
       "path": "internal/risk/engine.go",
-      "sha256": "984b184802fc431a8ada14918033296c3390d10410cd06933ffcece7a763aaa6",
-      "bytes": 5731
+      "sha256": "1b38818a3705c3511c44c6442cb3b6e18afe46e3367e2a0dbd6f10bc980e152c",
+      "bytes": 7978
     },
     {
       "path": "internal/risk/engine_test.go",

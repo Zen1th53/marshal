@@ -96,6 +96,10 @@ const (
 	EventTypeSecretLeaseRevoked       EventType = "secret.lease.revoked"
 	EventTypeSecretAccessUsed         EventType = "secret.access.used"
 	EventTypeSecretAccessDenied       EventType = "secret.access.denied"
+	EventTypeRiskAssessmentCreated    EventType = "risk.assessment.created"
+	EventTypeRiskLevelHigh            EventType = "risk.level.high"
+	EventTypeRiskLevelCritical        EventType = "risk.level.critical"
+	EventTypeRiskOverrideDenied       EventType = "risk.override.denied"
 
 	EventTypeAppended          EventType = "events.appended"
 	EventTypeSubscriberDropped EventType = "events.subscriber.dropped"
@@ -122,6 +126,8 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeGateDecisionInvalidated: {}, EventTypeGateDecisionConsumed: {},
 	EventTypeSecretLeaseRequested: {}, EventTypeSecretLeaseIssued: {}, EventTypeSecretLeaseRevoked: {},
 	EventTypeSecretAccessUsed: {}, EventTypeSecretAccessDenied: {},
+	EventTypeRiskAssessmentCreated: {}, EventTypeRiskLevelHigh: {}, EventTypeRiskLevelCritical: {},
+	EventTypeRiskOverrideDenied: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 
