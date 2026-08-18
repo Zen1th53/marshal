@@ -35,6 +35,35 @@ func TestInitAndJSONDoctor(t *testing.T) {
 	}
 }
 
+func TestInitCreatesMissingProjectContractsWithoutOverwritingExistingFiles(t *testing.T) {
+	repo := testgit.New(t)
+	capabilities := filepath.Join(repo.Path(), "CAPABILITIES.yaml")
+	if err := os.WriteFile(capabilities, []byte("version: 1\nprinciple: custom\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := Execute(context.Background(), repo.Path(), []string{"init"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+		t.Fatalf("init code=%d stderr=%s", code, stderr.String())
+	}
+	for _, name := range []string{"PACK-VERSION.yaml", "RUNTIME-VERSION.yaml", "CAPABILITIES.yaml"} {
+		info, err := os.Stat(filepath.Join(repo.Path(), name))
+		if err != nil {
+			t.Fatalf("%s not created: %v", name, err)
+		}
+		if info.Mode().Perm()&0o022 != 0 {
+			t.Fatalf("%s mode=%o is group/world writable", name, info.Mode().Perm())
+		}
+	}
+	data, err := os.ReadFile(capabilities)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "version: 1\nprinciple: custom\n" {
+		t.Fatalf("init overwrote existing capabilities: %q", data)
+	}
+}
+
 func TestMutatingCommandFailsUnavailableWithoutDaemon(t *testing.T) {
 	repo := cliRepo(t)
 	var stdout, stderr bytes.Buffer
