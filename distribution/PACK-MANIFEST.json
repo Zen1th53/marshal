@@ -2860,6 +2860,11 @@
       "bytes": 235
     },
     {
+      "path": "internal/store/secrep_persistence_a02_test.go",
+      "sha256": "63e2f1a0c7ca92661165a43f8855045f16bcba788ae226493040b8213c3de23a",
+      "bytes": 232
+    },
+    {
       "path": "internal/store/secrets_concurrency_a08_test.go",
       "sha256": "2d3c0e742dfc04d64c593b14a5291d789a69d61b121567769c7b55495faa2183",
       "bytes": 3372
