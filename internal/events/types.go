@@ -100,6 +100,9 @@ const (
 	EventTypeRiskLevelHigh            EventType = "risk.level.high"
 	EventTypeRiskLevelCritical        EventType = "risk.level.critical"
 	EventTypeRiskOverrideDenied       EventType = "risk.override.denied"
+	EventTypeNetworkEgressRequested   EventType = "network.egress.requested"
+	EventTypeNetworkEgressAllowed     EventType = "network.egress.allowed"
+	EventTypeNetworkEgressDenied      EventType = "network.egress.denied"
 
 	EventTypeAppended          EventType = "events.appended"
 	EventTypeSubscriberDropped EventType = "events.subscriber.dropped"
@@ -128,6 +131,7 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeSecretAccessUsed: {}, EventTypeSecretAccessDenied: {},
 	EventTypeRiskAssessmentCreated: {}, EventTypeRiskLevelHigh: {}, EventTypeRiskLevelCritical: {},
 	EventTypeRiskOverrideDenied: {},
+	EventTypeNetworkEgressRequested: {}, EventTypeNetworkEgressAllowed: {}, EventTypeNetworkEgressDenied: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 

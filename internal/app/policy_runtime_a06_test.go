@@ -4,8 +4,27 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 )
+
+func TestRuntimeNetworkAccessRequiresExplicitTaskRequirement(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { runtime.Close() })
+	if err := authorizeNetworkAccess(runtime.policy, "agent-a06", "session-a06", "TASK-A06", model.RoleDeveloper, model.R1, false); err == nil {
+		t.Fatal("network access without explicit task requirement was allowed")
+	}
+	if err := authorizeNetworkAccess(runtime.policy, "agent-a06", "session-a06", "TASK-A06", model.RoleDeveloper, model.R1, true); err != nil {
+		t.Fatalf("explicit task network requirement denied: %v", err)
+	}
+}
 
 func TestRuntimeDeniedByPolicyDoesNotExecuteOperation(t *testing.T) {
 	p := policy.Policy{ID: "runtime", Version: 1, Default: policy.EffectDeny}

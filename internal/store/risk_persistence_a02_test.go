@@ -102,6 +102,8 @@ func TestRiskAssessmentMigrationFromSchema21(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX egress_decisions_by_created",
+		"DROP TABLE egress_decisions",
 		"DROP INDEX risk_assessments_by_action",
 		"DROP INDEX risk_assessments_by_created",
 		"DROP TABLE risk_assessments",
