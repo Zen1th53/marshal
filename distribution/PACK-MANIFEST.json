@@ -71,8 +71,8 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "d2b09608345036037200bf4edb554b15179cab615036dffec86bc8f6bae3aca3",
-      "bytes": 2343
+      "sha256": "04f98e9f2daf6a2b1e91d4686645ad9dcf3210d8870854066ec0b938d20808ef",
+      "bytes": 3000
     },
     {
       "path": ".gitignore",

@@ -29,13 +29,24 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
+      - name: Install release-gate dependencies
+        run: |
+          python -m pip install --disable-pip-version-check cryptography==49.0.0
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
       - name: Release gate
         run: |
           test -z "$(gofmt -l .)"
           go vet ./...
           go test -count=1 ./...
+          go test -race -count=1 ./...
           go build ./...
-          python3 -m unittest discover -s tools/tests -p 'test_*.py'
+          govulncheck ./...
+          python3 conformance/runner.py validate-pack
+          python3 -m unittest discover -s conformance/tests -v
+          python3 -m unittest discover -s tools/tests -v
+          python3 -m unittest discover -s tools/tests_v6 -v
           python3 tools/check_markdown_links.py .
           python3 tools/release_verify.py . distribution/PACK-MANIFEST.json
       - name: Build release assets
@@ -62,9 +73,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          release_flags=()
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
           gh release create "${GITHUB_REF_NAME}" dist/* \
             --repo "${GITHUB_REPOSITORY}" \
             --title "MARSHAL ${GITHUB_REF_NAME}" \
             --notes-file "release/RELEASE_NOTES_${GITHUB_REF_NAME#v}.md" \
-            --prerelease \
+            "${release_flags[@]}" \
             --verify-tag
