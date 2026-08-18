@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +15,26 @@ import (
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
+
+func TestProtocolServersCreatedByCLIRequireAuthentication(t *testing.T) {
+	for name, handler := range map[string]http.Handler{
+		"mcp": newMCPServer(nil, t.TempDir()).Handler(),
+		"a2a": newA2AServer(nil, t.TempDir()).Handler(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := "/"
+			if name == "a2a" {
+				path = "/message:send"
+			}
+			request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
+			}
+		})
+	}
+}
 
 func TestInitAndJSONDoctor(t *testing.T) {
 	repo := cliRepo(t)
@@ -115,7 +137,7 @@ func TestRunOptionsRejectModelForUnrelatedAdapter(t *testing.T) {
 }
 
 func TestRequiredCommandsHaveUsage(t *testing.T) {
-	for _, command := range []string{"version", "init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "policy", "legal", "daemon"} {
+	for _, command := range []string{"version", "init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "auth", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "policy", "legal", "daemon"} {
 		var stdout, stderr bytes.Buffer
 		code := Execute(context.Background(), ".", []string{command, "--help"}, strings.NewReader(""), &stdout, &stderr)
 		if code != 0 || !strings.Contains(stdout.String()+stderr.String(), "Usage: marshal ") {

@@ -89,7 +89,7 @@ func CollectSourceEvidence(ctx context.Context, repoDir string) (*SourceEvidence
 		}
 	}
 
-	runtimeVersion := "v0.4.0"
+	runtimeVersion := "v1.0.0"
 	if data, err := ReadBlob(ctx, repoDir, headSHA, "RUNTIME-VERSION.yaml"); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			line = strings.TrimSpace(line)

@@ -47,6 +47,7 @@ Commands:
   cancel TASK-ID
   adapters
   adapter probe NAME
+  auth token create|list|revoke
   mcp serve [--listen ADDR] | mcp status
   a2a serve [--listen ADDR] | a2a status
   events
@@ -685,12 +686,16 @@ func (c command) mcp(ctx context.Context, args []string) error {
 		if len(args) >= 3 && args[1] == "--listen" {
 			listen = args[2]
 		}
+		layout, err := project.Discover(c.root)
+		if err != nil {
+			return err
+		}
 		runtime, err := app.Open(ctx, c.root)
 		if err != nil {
 			return err
 		}
 		defer runtime.Close()
-		srv := mcp.NewServer(runtime)
+		srv := newMCPServer(runtime, layout.RuntimeDir)
 		fmt.Fprintf(c.stdout, "Starting MARSHAL MCP server on http://%s\n", listen)
 		server := &http.Server{Addr: listen, Handler: srv.Handler()}
 		return server.ListenAndServe()
@@ -713,12 +718,16 @@ func (c command) a2a(ctx context.Context, args []string) error {
 		if len(args) >= 3 && args[1] == "--listen" {
 			listen = args[2]
 		}
+		layout, err := project.Discover(c.root)
+		if err != nil {
+			return err
+		}
 		runtime, err := app.Open(ctx, c.root)
 		if err != nil {
 			return err
 		}
 		defer runtime.Close()
-		srv := a2a.NewServer(runtime)
+		srv := newA2AServer(runtime, layout.RuntimeDir)
 		fmt.Fprintf(c.stdout, "Starting MARSHAL A2A server on http://%s\n", listen)
 		server := &http.Server{Addr: listen, Handler: srv.Handler()}
 		return server.ListenAndServe()
@@ -729,6 +738,14 @@ func (c command) a2a(ctx context.Context, args []string) error {
 	default:
 		return fmt.Errorf("%w: unknown a2a subcommand %s", model.ErrInvalid, args[0])
 	}
+}
+
+func newMCPServer(runtime *app.Runtime, runtimeDir string) *mcp.Server {
+	return mcp.NewServerWithAuth(runtime, auth.NewManager(runtimeDir))
+}
+
+func newA2AServer(runtime *app.Runtime, runtimeDir string) *a2a.Server {
+	return a2a.NewServerWithAuth(runtime, auth.NewManager(runtimeDir))
 }
 
 func (c command) print(value any, human string) error {

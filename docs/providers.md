@@ -18,17 +18,17 @@ authenticated, usable with the selected model, or freshly verified end to end.
 States describe evidence, not authority. A provider or model name cannot bypass
 policy, capability, approval, sandbox, or verification gates.
 
-## Release-candidate matrix
+## Release matrix
 
 | Adapter | Contract implementation | Local probe | Fresh external E2E for this release |
 |---|:---:|---|---|
 | Codex | Yes | `marshal adapter probe codex` | Requires operator authentication; outside hermetic CI |
-| OpenCode | Yes | `marshal adapter probe opencode` | Requires OpenCode and a tool-capable backend |
+| OpenCode | Yes | `marshal adapter probe opencode` | Verified 2026-08-18 with OpenCode 1.18.4 and local Ollama `qwythos-9b`; environment-specific |
 | Gemini CLI | Yes | `marshal adapter probe gemini` | Not claimed; quota and authentication are external |
 | Claude Code | Yes | `marshal adapter probe claude` | Not claimed; authentication is external |
 
 Historical tagged releases contain dated provider E2E evidence. That history is
-not presented as a fresh result for a new machine or release candidate.
+not presented as a fresh result for a new machine or release.
 
 ## Probe locally
 

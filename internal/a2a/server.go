@@ -11,6 +11,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/protocol"
+	"github.com/Zen1th53/marshal/internal/version"
 )
 
 const (
@@ -107,7 +108,7 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 	card := map[string]any{
 		"name":            "MARSHAL Runtime Agent",
 		"description":     "Security-first agentic coding runtime and control plane",
-		"version":         "0.2.0",
+		"version":         version.Current().Version,
 		"protocolBinding": "HTTP+JSON",
 		"protocolVersion": WireVersion10,
 		"capabilities": map[string]any{

@@ -111,8 +111,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "b3a14d2515c1bd3f0e3b7b7e4bd2644e97faae445932cba266b6647547cf8f1f",
-      "bytes": 7579
+      "sha256": "9f4b6fcabcc4d061df3eb4ff5273ae119b091c0f6bcbb76af0d7c7085266a690",
+      "bytes": 7931
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -186,13 +186,13 @@
     },
     {
       "path": "README.md",
-      "sha256": "852f89861b2b7f222432df5ca2f0b5d2fa44e6751f934d075eb6b0c8441fce51",
-      "bytes": 9739
+      "sha256": "ada3e0a989edc3844f8c6762e9ee97913970fa0e85aab3cb315b5960656a4969",
+      "bytes": 9823
     },
     {
       "path": "RUNTIME-VERSION.yaml",
-      "sha256": "089eb5c49f2648852479caedac3678149bbeac224f2dfc6ea992b33ee7e592b5",
-      "bytes": 145
+      "sha256": "19fe4aa1d99e2b4e4ced17bf6eb77d3f61a06026683bdec373503392ff8feb62",
+      "bytes": 136
     },
     {
       "path": "SECURITY.md",
@@ -736,8 +736,8 @@
     },
     {
       "path": "docs/a2a.md",
-      "sha256": "0997d0928c095cd2bfafefb38c3f042448462c25360274e6b85a3a9a36db5618",
-      "bytes": 2120
+      "sha256": "fcb639053844bb7877eccae028e885b65b0d451ad3af3de6da272ee0532908b1",
+      "bytes": 2234
     },
     {
       "path": "docs/adapters.md",
@@ -816,8 +816,8 @@
     },
     {
       "path": "docs/development/release-process.md",
-      "sha256": "3a4e7081f4d55804584aae792dffd4de1cc802334c2ecc23cb00f20b8fce8f87",
-      "bytes": 1363
+      "sha256": "4684f6dfd978bf594a0c200a30456c776f8e0a4154d2dc3ac89ef1e6936dbf02",
+      "bytes": 1359
     },
     {
       "path": "docs/dynamic-dag.md",
@@ -851,8 +851,8 @@
     },
     {
       "path": "docs/installation.md",
-      "sha256": "2b44f9fedf03eddcd56f860531ef0000559ccfdd94454af91ba1ccb81a31c7a6",
-      "bytes": 1861
+      "sha256": "941eaa6622b0ba275db4f6f4c77f64877c0580b013aa18c12b50518faf1507d8",
+      "bytes": 1851
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -906,8 +906,8 @@
     },
     {
       "path": "docs/mcp.md",
-      "sha256": "6f30f7434f606a930e8b73c4e8caddf437ca739ad959e5b44590a154bec5b1f3",
-      "bytes": 2470
+      "sha256": "36da31bb1aaf583ba90de3784e520c47edf5deb2ef0e7236472d32c2182f1f09",
+      "bytes": 2288
     },
     {
       "path": "docs/model-router.md",
@@ -941,8 +941,8 @@
     },
     {
       "path": "docs/providers.md",
-      "sha256": "56e795a6806d19a3611954276c79b1797d19723d27f16c839e10d262367c58d4",
-      "bytes": 2219
+      "sha256": "92678af67942cd161fbcf0aebabbd4f2ca0fa3c79c2025311d45560003c7a20e",
+      "bytes": 2247
     },
     {
       "path": "docs/providers/opencode-ollama.md",
@@ -981,8 +981,8 @@
     },
     {
       "path": "docs/security/supply-chain.md",
-      "sha256": "1d8631d896700e7cc190698df94c6a63003ad0e739ea6fa80e18f17313d0ae5b",
-      "bytes": 1294
+      "sha256": "56b531cc34a93f7342842229b97003105d51402bf02e483ef6a6e5524e9e1c32",
+      "bytes": 1289
     },
     {
       "path": "docs/superpowers/plans/2026-08-11-agent-runtime-plane-plan.md",
@@ -1026,8 +1026,8 @@
     },
     {
       "path": "docs/superpowers/plans/2026-08-18-release-productization.md",
-      "sha256": "cf414f5d6e51cb9d7baa8b3d788af3dca510ee3972888255e1937e493a8bdd2b",
-      "bytes": 7402
+      "sha256": "1ce129699b13041a6dde23485b7cd7541cf9d6e51ddd1e7917ef50876786ded4",
+      "bytes": 7622
     },
     {
       "path": "docs/superpowers/specs/2026-08-11-agent-runtime-plane-design.md",
@@ -1080,9 +1080,29 @@
       "bytes": 1057
     },
     {
+      "path": "examples/01-codex-task.json",
+      "sha256": "592d3ff43d759421881c7c2db5083284cb79a694e084a3c1b3c4ca0c98816841",
+      "bytes": 189
+    },
+    {
+      "path": "examples/02-opencode-ollama-task.json",
+      "sha256": "3b5d1c17b20d570aca10265e1c536a23fd8e554336eec221f7f77e1b96fd0537",
+      "bytes": 183
+    },
+    {
+      "path": "examples/03-mcp-request.json",
+      "sha256": "a12424ff140c364c7162b162010656fb96bfae341e5f0462a950d0e89c2de634",
+      "bytes": 76
+    },
+    {
+      "path": "examples/04-a2a-agent-card.json",
+      "sha256": "ab8f5ba75530e64798b062441a447cd93a3a1538daad6a6bab74e63062757acb",
+      "bytes": 273
+    },
+    {
       "path": "examples/README.md",
-      "sha256": "48656feffb048590afd7033391aa593b664e70f2b9c82ce7a29e0b45ba59bdcf",
-      "bytes": 771
+      "sha256": "96210c174bb81e0d712e6c96f983604db7a7e540293c03397c830610918f2afb",
+      "bytes": 1564
     },
     {
       "path": "examples/policy-test-suite.json",
@@ -1101,13 +1121,13 @@
     },
     {
       "path": "internal/a2a/a2a_test.go",
-      "sha256": "309ca15495a0158a3d199593c332212ec8375125318cc9370a76aebd7ad88a31",
-      "bytes": 9829
+      "sha256": "bf1ea4dc31482d0af2714464e5dc07f23c145f653434e68ebd5599a83607a596",
+      "bytes": 9943
     },
     {
       "path": "internal/a2a/server.go",
-      "sha256": "1a7812ceb62e22a7950cb8e8e7eb462f451feb809511a8003c058b16ec2d80b2",
-      "bytes": 10455
+      "sha256": "ae5a08b2cdfbec74cfa598016a3672052ed9f1f5ca78feed8a0433777c216b27",
+      "bytes": 10521
     },
     {
       "path": "internal/adapter/adapter.go",
@@ -1356,8 +1376,8 @@
     },
     {
       "path": "internal/app/defaults/RUNTIME-VERSION.yaml",
-      "sha256": "9050b8c16dc656ef3ac9eabb31b47085c9f181f69fd7db6595cc03794adaefb9",
-      "bytes": 101
+      "sha256": "56738518053cf828b4d3ada2d803f7791f281469b89ac0a3862c8d79077972de",
+      "bytes": 92
     },
     {
       "path": "internal/app/events.go",
@@ -1676,13 +1696,13 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "c8c37c8f03a1a242ecc7a2b90dde428473a5091b58851e0739329bf0edbc6a6d",
-      "bytes": 24887
+      "sha256": "0985f0d28013b04d61d5bf8dcaff851b065a49c38131c34adc2be7148f307162",
+      "bytes": 25399
     },
     {
       "path": "internal/cli/cli_test.go",
-      "sha256": "5433acd92dc0ec0db074fdf3f2ab64f1ab1ec5157f92538f3d33f024cf5effbc",
-      "bytes": 13717
+      "sha256": "19a3499cd57fb3f4beb71c3088fad3c058b73b3c14627a6c9f4bdd330db9b960",
+      "bytes": 14398
     },
     {
       "path": "internal/cli/policy_test_a10_release_test.go",
@@ -2046,7 +2066,7 @@
     },
     {
       "path": "internal/legal/git_evidence.go",
-      "sha256": "85df8ad30d00de869f08aea21cd5b26cb3bcc79bd9486a3f098780dedfeac2b6",
+      "sha256": "cd8378f03e19e9e0f2f6b50c05e02ee483437ac580e94b9a6f9ccc3ff4d800e6",
       "bytes": 6413
     },
     {
@@ -3876,8 +3896,8 @@
     },
     {
       "path": "release/INSTALL.md",
-      "sha256": "649e63d3dc8c4a92a7549fd9a9cc4987170237dc65ff3c92e7665177424800f1",
-      "bytes": 541
+      "sha256": "4af5f4749ddf46678c280cd89ee95a8b37f866d92783605b9126a30629796252",
+      "bytes": 536
     },
     {
       "path": "release/README.md",
@@ -3885,9 +3905,9 @@
       "bytes": 338
     },
     {
-      "path": "release/RELEASE_NOTES_1.0.0-rc.1.md",
-      "sha256": "06c8e858abba2a7c43604d76c86403375052a304c034b1ca665f22adfbc63bbd",
-      "bytes": 3269
+      "path": "release/RELEASE_NOTES_1.0.1.md",
+      "sha256": "253ce3e76c4adccb0d2731f310606a5789f318ba40cb3cd2c1fb65ea3ea153ff",
+      "bytes": 3511
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",

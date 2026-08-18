@@ -4,23 +4,24 @@ This changelog follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Public product releases use Semantic Versioning; pack, protocol, schema, and
 historical runtime milestones are separate version domains.
 
-## [1.0.0-rc.1] — 2026-08-18
+## [1.0.1] — 2026-08-18
 
 ### Added
 
-- Unified local control plane for tasks, leases, isolated worktrees, sandbox
-  execution, policy and approval gates, provider adapters, verification,
-  evidence, artifacts, MCP, and A2A.
 - Build-aware version output and self-contained fail-closed initialization.
 - Linux amd64/arm64 archives, checksums, CycloneDX SBOM, build metadata, and
   GitHub build provenance.
-- Release-oriented documentation, examples, and community health files.
+- Release-oriented documentation, verified examples, and community health
+  files.
 
 ### Changed
 
-- One Semantic Versioning product version now fronts the release. Pack 6.0.0,
-  runtime specification 1.0.0, protocol versions, and schema 67 remain internal
-  compatibility contracts.
+- Long-running provider requests are no longer truncated by the daemon's HTTP
+  write deadline.
+- Provider output persistence skips empty streams instead of rejecting an
+  otherwise successful task.
+- Symbolic task bases such as `HEAD` are resolved to immutable commits before
+  no-op detection, evidence, and execution state are recorded.
 - Provider docs distinguish implementation, installation, authentication,
   capability probing, and dated E2E evidence.
 
@@ -34,10 +35,18 @@ historical runtime milestones are separate version domains.
 - Linux is the supported execution platform.
 - External provider E2E depends on operator credentials, quota, and local
   availability; unavailable services are not reported as hermetic CI PASS.
-- This RC validates the first unified public binary compatibility contract
-  before `v1.0.0`.
+- External provider behavior remains dependent on the operator's provider
+  version and environment.
 
-[1.0.0-rc.1]: https://github.com/Zen1th53/marshal/releases/tag/v1.0.0-rc.1
+[1.0.1]: https://github.com/Zen1th53/marshal/releases/tag/v1.0.1
+
+## [1.0.0] — 2026-08-18
+
+First stable MARSHAL product release. It published the completed T01-T55
+implementation as a Linux control-plane release with public documentation,
+community health files, checksums, an SBOM, and GitHub build provenance. See
+the immutable [v1.0.0 release](https://github.com/Zen1th53/marshal/releases/tag/v1.0.0)
+and Git history for its exact contents.
 
 ## Runtime 0.4.0 — 2026-08-12
 

@@ -16,7 +16,7 @@ sha256sum -c --ignore-missing checksums.txt
 For GitHub artifact attestations, install a current GitHub CLI and run:
 
 ```bash
-gh attestation verify marshal_1.0.0-rc.1_linux_amd64.tar.gz \
+gh attestation verify marshal_1.0.1_linux_amd64.tar.gz \
   --repo Zen1th53/marshal
 ```
 

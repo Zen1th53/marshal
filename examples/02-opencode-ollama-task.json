@@ -1,0 +1,10 @@
+[
+  {
+    "id": "TASK-OLLAMA-001",
+    "title": "Add input validation unit tests",
+    "status": "ready",
+    "risk": "R1",
+    "base_commit": "HEAD",
+    "head_commit": "HEAD"
+  }
+]

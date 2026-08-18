@@ -61,20 +61,9 @@ marshal mcp status
 ```bash
 curl -s -X POST http://127.0.0.1:8080/mcp \
   -H "Authorization: Bearer $MARSHAL_TOKEN" \
-  -H "Mcp-Method: tools/call" \
-  -H "Mcp-Name: task_status" \
+  -H "Mcp-Method: tools/list" \
   -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "tools/call",
-    "params": {
-      "name": "task_status",
-      "arguments": {
-        "task_id": "TASK-001"
-      }
-    }
-  }'
+  -d @examples/03-mcp-request.json
 ```
 
 ---

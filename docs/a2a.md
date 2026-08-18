@@ -8,11 +8,13 @@ MARSHAL implements the Agent-to-Agent (A2A 1.0) protocol standard, allowing mult
 
 ## 1. Authentication & Bearer Tokens
 
-A2A HTTP endpoints require constant-time HMAC-validated Bearer tokens.
+A2A mutation endpoints require constant-time HMAC-validated Bearer tokens.
+Agent Card discovery is intentionally public and contains no credentials or
+repository data.
 
 ### Generate Token
 ```bash
-marshal auth token create --name a2a-agent
+marshal auth token create --name a2a-agent --kind a2a_agent
 ```
 
 ### Authorization Header

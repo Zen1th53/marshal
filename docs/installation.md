@@ -7,7 +7,7 @@ required for repository and worktree management.
 ## Release archive
 
 ```bash
-version=1.0.0-rc.1
+version=1.0.1
 arch=amd64 # or arm64
 curl -LO "https://github.com/Zen1th53/marshal/releases/download/v${version}/marshal_${version}_linux_${arch}.tar.gz"
 curl -LO "https://github.com/Zen1th53/marshal/releases/download/v${version}/checksums.txt"
@@ -27,7 +27,7 @@ Go 1.25.13 or newer is required. Earlier Go 1.25 patch releases contain
 standard-library vulnerabilities reachable from MARSHAL's HTTP and TLS paths.
 
 ```bash
-go install github.com/Zen1th53/marshal/cmd/marshal@v1.0.0-rc.1
+go install github.com/Zen1th53/marshal/cmd/marshal@v1.0.1
 "$(go env GOPATH)/bin/marshal" version
 ```
 

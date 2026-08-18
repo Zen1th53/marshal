@@ -1,5 +1,9 @@
 # MARSHAL Release Productization Implementation Plan
 
+> Historical plan: superseded when `v1.0.0` was published from `main` during
+> execution. The completed follow-up ships as `v1.0.1`; this file is retained
+> as an engineering design record, not current release instructions.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Publish an evidence-backed `v1.0.0-rc.1` MARSHAL release with professional documentation, Linux artifacts, checksums, SBOM, provenance, and verified installation.
@@ -113,7 +117,7 @@
 
 **Files:**
 - Create: `.github/workflows/release.yml`
-- Create: `release/RELEASE_NOTES_1.0.0-rc.1.md`
+- Create: `release/RELEASE_NOTES_1.0.1.md`
 - Modify: `.gitignore`
 
 **Interfaces:**

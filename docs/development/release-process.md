@@ -25,7 +25,7 @@ reported separately because they depend on operator credentials and quota.
 ## Package
 
 ```bash
-tools/build_release.sh 1.0.0-rc.1 "$(git rev-parse HEAD)" \
+tools/build_release.sh v1.0.1 "$(git rev-parse HEAD)" \
   2026-08-18T00:00:00Z ./dist
 ```
 

@@ -10,7 +10,7 @@ MARSHAL separates an AI coding agent's ability to propose and execute work from
 the authority to approve, verify, or trust that work.
 
 [![CI](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml/badge.svg)](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml)
-[![Release candidate](https://img.shields.io/badge/status-v1.0.0--rc.1-orange.svg)](release/RELEASE_NOTES_v1.0.0-rc.1.md)
+[![Latest release](https://img.shields.io/github/v/release/Zen1th53/marshal)](https://github.com/Zen1th53/marshal/releases/latest)
 [![Go](https://img.shields.io/badge/Go-1.25.13+-00ADD8.svg)](go.mod)
 [![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)](docs/installation.md)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSING.md)
@@ -44,8 +44,8 @@ constraining execution, requiring evidence, and making trust decisions explicit.
   audit history, artifact records, trust scoring, and release pack validation.
 - **Interoperability:** authenticated MCP `2026-07-28` and A2A `1.0.0`
   interfaces mapped onto the same runtime authority model.
-- **Operations:** local daemon, SQLite state, diagnostics, logs, cancellation,
-  observability, backup/recovery guidance, and terminal UI support.
+- **Operations:** local daemon, SQLite state, CLI diagnostics, logs,
+  cancellation, observability, and backup/recovery guidance.
 
 Every item above is represented in the merged implementation and automated test
 suite. External provider availability and authentication remain properties of
@@ -106,7 +106,7 @@ installation; bubblewrap is required for strong worker isolation.
 ### Binary release
 
 ```bash
-version=1.0.0-rc.1
+version=1.0.1
 arch=amd64  # or arm64
 curl -LO "https://github.com/Zen1th53/marshal/releases/download/v${version}/marshal_${version}_linux_${arch}.tar.gz"
 curl -LO "https://github.com/Zen1th53/marshal/releases/download/v${version}/checksums.txt"
@@ -119,7 +119,7 @@ marshal version
 ### Go install
 
 ```bash
-go install github.com/Zen1th53/marshal/cmd/marshal@v1.0.0-rc.1
+go install github.com/Zen1th53/marshal/cmd/marshal@v1.0.1
 marshal version
 ```
 
@@ -194,9 +194,9 @@ marshal policy test examples/policy-test-suite.json
 | Adapter | Implemented and contract-tested | Local availability check | Fresh external E2E status |
 |---|:---:|---|---|
 | Codex | Yes | `marshal adapter probe codex` | Operator credentials required; not part of the hermetic release gate |
-| OpenCode | Yes | `marshal adapter probe opencode` | OpenCode and a tool-capable backend are required |
-| Gemini CLI | Yes | `marshal adapter probe gemini` | Not verified for this RC because quota/authentication is external |
-| Claude Code | Yes | `marshal adapter probe claude` | Not verified for this RC because authentication is external |
+| OpenCode | Yes | `marshal adapter probe opencode` | Verified 2026-08-18 with OpenCode 1.18.4 and local Ollama `qwythos-9b`; environment-specific |
+| Gemini CLI | Yes | `marshal adapter probe gemini` | Not verified for this release because quota/authentication is external |
+| Claude Code | Yes | `marshal adapter probe claude` | Not verified for this release because authentication is external |
 
 `IMPLEMENTED`, `INSTALLED`, `AVAILABLE`, `AUTHENTICATED`,
 `CAPABILITY-PROBED`, and `REAL-E2E-VERIFIED` are deliberately distinct states.
@@ -232,9 +232,10 @@ using [SECURITY.md](SECURITY.md), not a public issue.
 
 ## Release and compatibility status
 
-`v1.0.0-rc.1` is the first unified MARSHAL product release candidate. All
-planned T01-T55 implementation epics are merged. The RC exists to validate the
-public binary installation path and compatibility promise before `v1.0.0`.
+`v1.0.1` is the current MARSHAL patch release. It hardens the first stable
+release with verified build metadata, deterministic Linux packaging, a complete
+release gate, and fixes found during clean-user provider execution. All planned
+T01-T55 implementation epics are merged.
 
 The repository also carries pack contract version `6.0.0` and runtime
 specification version `1.0.0`; these are not product release numbers. Historical

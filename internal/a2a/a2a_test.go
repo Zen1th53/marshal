@@ -72,6 +72,9 @@ func TestA2AServerAgentCardDiscovery(t *testing.T) {
 	if card["protocolVersion"] != "1.0" {
 		t.Fatalf("expected A2A protocolVersion 1.0, got %v", card["protocolVersion"])
 	}
+	if card["version"] != "dev" {
+		t.Fatalf("expected build-aware development version, got %v", card["version"])
+	}
 }
 
 func TestA2AUsupportedVersionHeader(t *testing.T) {
