@@ -19,6 +19,18 @@ import (
 // Repeating the exact ID and idempotency key is safe; conflicting reuse is a
 // durable conflict.
 func (s *Store) PutEgressDecision(ctx context.Context, record netpolicy.DecisionRecord) error {
+	for attempt := 0; ; attempt++ {
+		err := s.putEgressDecisionOnce(ctx, record)
+		if err == nil || !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
+			return err
+		}
+		if waitErr := waitSQLiteRetry(ctx, attempt); waitErr != nil {
+			return fmt.Errorf("%w: retry egress decision persistence: %v", model.ErrUnavailable, waitErr)
+		}
+	}
+}
+
+func (s *Store) putEgressDecisionOnce(ctx context.Context, record netpolicy.DecisionRecord) error {
 	if err := record.Validate(); err != nil {
 		return fmt.Errorf("%w: invalid egress decision", model.ErrInvalid)
 	}
@@ -59,6 +71,18 @@ func (s *Store) PutEgressDecision(ctx context.Context, record netpolicy.Decision
 		INSERT INTO egress_decisions(decision_id, idempotency_key, request_json, decision_json, created_at)
 		VALUES(?, ?, ?, ?, ?)
 	`, record.ID, record.IdempotencyKey, string(requestJSON), string(decisionJSON), record.CreatedAt.Format(time.RFC3339Nano)); err != nil {
+		_ = tx.Rollback()
+		if existing, readErr := s.GetEgressDecision(ctx, record.ID); readErr == nil && existing == record {
+			if record.Request.SubjectID != "" {
+				if eventErr := s.appendEgressEvents(ctx, record); eventErr != nil {
+					return eventErr
+				}
+			}
+			return nil
+		}
+		if isSQLiteBusy(err) {
+			return fmt.Errorf("%w: insert egress decision: %w", model.ErrUnavailable, err)
+		}
 		return fmt.Errorf("%w: insert egress decision", model.ErrConflict)
 	}
 	if err := tx.Commit(); err != nil {

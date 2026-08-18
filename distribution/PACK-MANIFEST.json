@@ -2241,13 +2241,18 @@
     },
     {
       "path": "internal/store/netpolicy_persistence.go",
-      "sha256": "c7a24cd6b6ebac9c47ad2a8bc764d04e9c7b42f436e2c87b7f2c26782fccabfa",
-      "bytes": 5622
+      "sha256": "5006d3814c2366a0063b960f5afc88503e6383f851b1cae6430c1927054804c4",
+      "bytes": 6456
     },
     {
       "path": "internal/store/netpolicy_persistence_a02_test.go",
       "sha256": "f7364ef0f15be2b545c92ebee9ea7c89de9c8fd238fc05098ce5b46ecc63c0f2",
       "bytes": 2991
+    },
+    {
+      "path": "internal/store/netpolicy_persistence_a08_test.go",
+      "sha256": "7942b4b3c6f69229a6682941994e03a883150b751d090e7704c2f3421233cbbc",
+      "bytes": 1648
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",
