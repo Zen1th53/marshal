@@ -169,9 +169,9 @@ marshal tasks
 Execute with a provider that is installed and authenticated in your environment:
 
 ```bash
-marshal run TASK-DEMO-001 --adapter codex
+marshal run TASK-DEMO-001 --adapter codex --network-required
 # or
-marshal run TASK-DEMO-001 --adapter opencode --model YOUR_TOOL_CAPABLE_MODEL
+marshal run TASK-DEMO-001 --adapter opencode --model YOUR_TOOL_CAPABLE_MODEL --network-required
 
 marshal logs TASK-DEMO-001
 marshal events

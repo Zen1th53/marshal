@@ -42,7 +42,7 @@ Commands:
   task show TASK-ID
   task claim TASK-ID --agent AGENT-ID [--revision N]
   task release TASK-ID
-  run TASK-ID --adapter ADAPTER [--model MODEL] [--agent AGENT-ID]
+  run TASK-ID --adapter ADAPTER [--model MODEL] [--network-required] [--agent AGENT-ID]
   logs TASK-ID
   cancel TASK-ID
   adapters
@@ -431,27 +431,48 @@ func (c command) run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("%w: run requires a task ID", model.ErrInvalid)
 	}
-	set := flag.NewFlagSet("run", flag.ContinueOnError)
-	set.SetOutput(c.stderr)
-	adapterName := set.String("adapter", "codex", "worker adapter")
-	agent := set.String("agent", "", "agent ID")
-	revision := set.Int64("revision", 0, "expected task revision")
-	if err := set.Parse(args[1:]); err != nil {
-		return fmt.Errorf("%w: %v", model.ErrInvalid, err)
+	request, requestedAgent, err := parseRunRequest(args[0], args[1:], c.stderr)
+	if err != nil {
+		return err
 	}
 	client, err := c.client()
 	if err != nil {
 		return err
 	}
-	agentID, err := resolveAgent(ctx, client, *agent)
+	agentID, err := resolveAgent(ctx, client, requestedAgent)
 	if err != nil {
 		return err
 	}
-	value, _, err := client.Run(ctx, app.RunRequest{TaskID: args[0], AgentID: agentID, Adapter: *adapterName, ExpectedRevision: *revision})
+	request.AgentID = agentID
+	value, _, err := client.Run(ctx, request)
 	if err != nil {
 		return err
 	}
 	return c.print(value, fmt.Sprintf("%s %s %s", value.TaskID, value.Status, value.ResultCommit))
+}
+
+func parseRunRequest(taskID string, args []string, stderr io.Writer) (app.RunRequest, string, error) {
+	set := flag.NewFlagSet("run", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	adapterName := set.String("adapter", "codex", "worker adapter")
+	agent := set.String("agent", "", "agent ID")
+	modelName := set.String("model", "", "OpenCode model override")
+	networkRequired := set.Bool("network-required", false, "request policy-authorized network access")
+	revision := set.Int64("revision", 0, "expected task revision")
+	if err := set.Parse(args); err != nil {
+		return app.RunRequest{}, "", fmt.Errorf("%w: %v", model.ErrInvalid, err)
+	}
+	if set.NArg() != 0 {
+		return app.RunRequest{}, "", fmt.Errorf("%w: unexpected run arguments", model.ErrInvalid)
+	}
+	trimmedModel := strings.TrimSpace(*modelName)
+	if trimmedModel != "" && *adapterName != "opencode" {
+		return app.RunRequest{}, "", fmt.Errorf("%w: --model is supported only by opencode", model.ErrInvalid)
+	}
+	return app.RunRequest{
+		TaskID: taskID, Adapter: *adapterName, Model: trimmedModel,
+		ExpectedRevision: *revision, NetworkRequired: *networkRequired,
+	}, *agent, nil
 }
 
 func resolveAgent(ctx context.Context, client *api.Client, requested string) (string, error) {

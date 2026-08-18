@@ -25,6 +25,10 @@ marshal version
 marshal --json version
 ```
 
+Provider-backed `marshal run` accepts `--network-required` to request network
+access through the canonical policy gate. The flag is an explicit request, not
+an authorization bypass. `--model` is supported only by the OpenCode adapter.
+
 ---
 
 ## Core Operational Commands

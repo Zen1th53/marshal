@@ -186,8 +186,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "e868072d576eb176b7abe2fd2a76615552f63dfff68856082fb144a51efa40f1",
-      "bytes": 9544
+      "sha256": "5a99172b961f1618e658e5c9fe4553fbb50ed47668c08bef2603a053fbf4a182",
+      "bytes": 9582
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -776,8 +776,8 @@
     },
     {
       "path": "docs/cli.md",
-      "sha256": "dcf113db5e6da315f8d39d2eef1c9e52f3615a493e9d6fcc20c60b22ab706278",
-      "bytes": 7275
+      "sha256": "aa65bdcfeb07a77f90f4b57a433541847e8bd551bd8178bf9984221c37f2cef4",
+      "bytes": 7511
     },
     {
       "path": "docs/concepts.md",
@@ -846,8 +846,8 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "1ce52b0c0de4e6b36e5d19cadc2f428768525b8828e4dcca64f6336c14cb466d",
-      "bytes": 1924
+      "sha256": "721ca3a43facf3dec8d9f77e674caa3166af36b5af0d52d5f933fb6cbce8f489",
+      "bytes": 2092
     },
     {
       "path": "docs/installation.md",
@@ -946,8 +946,8 @@
     },
     {
       "path": "docs/providers/opencode-ollama.md",
-      "sha256": "cc4ed6ebce10748635e7d24b643901fc419513c012236c785c7aa89ce95dda57",
-      "bytes": 2907
+      "sha256": "2f72af7d4099a4175c5f1f969029f22aa848f2dd8d8aaf9effe0d2ce23c34580",
+      "bytes": 2926
     },
     {
       "path": "docs/remote-worker-attestation.md",
@@ -1431,13 +1431,13 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "07a9437e3fb97552e7621cd30d853f83b8c36184108c119b5e243948a7fdbe0d",
-      "bytes": 32599
+      "sha256": "86ea75f50df253319dd8290409d2497c5626559e5143191e2190874327514560",
+      "bytes": 33205
     },
     {
       "path": "internal/app/runtime_test.go",
-      "sha256": "58b4aee7e842c667a21dedf16ed2caaf80f8c0ef89afac43741cc1260282d22c",
-      "bytes": 6560
+      "sha256": "a21a0a7b4dcd49c8e9801040ddaf79eef6d77127b5494faaeb53f911823950a5",
+      "bytes": 7026
     },
     {
       "path": "internal/app/secrets_runtime_a06_test.go",
@@ -1676,13 +1676,13 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "69c21eb81003c839dba83ba201e697c24a31181d8ab2f4cd73a9f79090545330",
-      "bytes": 24032
+      "sha256": "c8c37c8f03a1a242ecc7a2b90dde428473a5091b58851e0739329bf0edbc6a6d",
+      "bytes": 24887
     },
     {
       "path": "internal/cli/cli_test.go",
-      "sha256": "a1fe58061852aa000c7f9bcf6f4a6a3e7fdea6b7d9fbc45468d72ab72682d928",
-      "bytes": 12880
+      "sha256": "5433acd92dc0ec0db074fdf3f2ab64f1ab1ec5157f92538f3d33f024cf5effbc",
+      "bytes": 13717
     },
     {
       "path": "internal/cli/policy_test_a10_release_test.go",

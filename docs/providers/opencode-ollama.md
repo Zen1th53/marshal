@@ -54,7 +54,7 @@ current support guarantee.
 Pass the `--model` flag directly to `marshal run`:
 
 ```bash
-marshal run TASK-001 --adapter opencode --model YOUR_TOOL_CAPABLE_MODEL
+marshal run TASK-001 --adapter opencode --model YOUR_TOOL_CAPABLE_MODEL --network-required
 ```
 
 Or set the environment variable:

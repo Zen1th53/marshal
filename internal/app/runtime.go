@@ -9,8 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/adapter/claude"
@@ -115,6 +118,7 @@ type RunRequest struct {
 	TaskID           string `json:"task_id"`
 	AgentID          string `json:"agent_id"`
 	Adapter          string `json:"adapter"`
+	Model            string `json:"model,omitempty"`
 	ExpectedRevision int64  `json:"expected_revision"`
 	NetworkRequired  bool   `json:"network_required,omitempty"`
 }
@@ -498,6 +502,10 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	if request.Adapter == "" {
 		request.Adapter = "codex"
 	}
+	request.Model = strings.TrimSpace(request.Model)
+	if !validModelOverride(request.Model) || (request.Model != "" && request.Adapter != "opencode") {
+		return RunResult{}, fmt.Errorf("%w: invalid model override", model.ErrInvalid)
+	}
 	task, err := r.store.GetTask(ctx, request.TaskID)
 	if err != nil {
 		return RunResult{}, err
@@ -580,7 +588,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
 	}
-	agentAdapter, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, networkAllowed)
+	agentAdapter, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, networkAllowed, request.Model)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
@@ -744,7 +752,7 @@ func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {
 	return nil
 }
 
-func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string, networkAllowed bool) (adapter.Adapter, error) {
+func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string, networkAllowed bool, modelOverride string) (adapter.Adapter, error) {
 	if candidate := r.adapters[name]; candidate != nil {
 		return candidate, nil
 	}
@@ -865,10 +873,22 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	case "claude":
 		return claude.New(binary, runner), nil
 	case "opencode":
-		return opencode.New(binary, runner), nil
+		return opencode.NewWithModel(binary, runner, modelOverride), nil
 	default:
 		return nil, fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
 	}
+}
+
+func validModelOverride(value string) bool {
+	if len(value) > 256 || !utf8.ValidString(value) {
+		return false
+	}
+	for _, character := range value {
+		if unicode.IsControl(character) {
+			return false
+		}
+	}
+	return true
 }
 
 func loadPackVersion(path string) (string, error) {

@@ -91,6 +91,29 @@ func TestTaskImportDryRunDoesNotNeedDaemon(t *testing.T) {
 	}
 }
 
+func TestRunOptionsCarryExplicitModelAndNetworkRequirement(t *testing.T) {
+	request, agent, err := parseRunRequest("TASK-001", []string{
+		"--adapter", "opencode",
+		"--model", "ollama/tool-model",
+		"--agent", "AGENT-001",
+		"--revision", "4",
+		"--network-required",
+	}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.TaskID != "TASK-001" || request.Adapter != "opencode" || request.Model != "ollama/tool-model" || !request.NetworkRequired || request.ExpectedRevision != 4 || agent != "AGENT-001" {
+		t.Fatalf("request=%#v agent=%q", request, agent)
+	}
+}
+
+func TestRunOptionsRejectModelForUnrelatedAdapter(t *testing.T) {
+	_, _, err := parseRunRequest("TASK-001", []string{"--adapter", "codex", "--model", "ignored"}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("model override for Codex was silently accepted")
+	}
+}
+
 func TestRequiredCommandsHaveUsage(t *testing.T) {
 	for _, command := range []string{"version", "init", "doctor", "status", "agents", "tasks", "task", "run", "adapters", "adapter", "mcp", "a2a", "events", "artifacts", "verify", "reconcile", "policy", "legal", "daemon"} {
 		var stdout, stderr bytes.Buffer

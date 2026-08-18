@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,6 +15,18 @@ import (
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
+
+func TestRunRejectsUnboundOrMalformedModelOverrideBeforeMutation(t *testing.T) {
+	runtime := &Runtime{}
+	for _, request := range []RunRequest{
+		{TaskID: "TASK-001", Adapter: "codex", Model: "model-for-wrong-adapter"},
+		{TaskID: "TASK-001", Adapter: "opencode", Model: "bad\nmodel"},
+	} {
+		if _, err := runtime.Run(context.Background(), request); !errors.Is(err, model.ErrInvalid) {
+			t.Fatalf("Run(%#v) error=%v, want invalid", request, err)
+		}
+	}
+}
 
 func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	repo := runtimeRepo(t)

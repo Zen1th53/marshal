@@ -57,7 +57,7 @@ marshal task show TASK-DEMO-001
 
 ```bash
 marshal adapter probe codex
-marshal run TASK-DEMO-001 --adapter codex
+marshal run TASK-DEMO-001 --adapter codex --network-required
 marshal logs TASK-DEMO-001
 marshal events
 marshal artifacts
@@ -67,10 +67,12 @@ For a local OpenCode backend, probe it and select a tool-capable model:
 
 ```bash
 marshal adapter probe opencode
-marshal run TASK-DEMO-001 --adapter opencode --model YOUR_TOOL_CAPABLE_MODEL
+marshal run TASK-DEMO-001 --adapter opencode --model YOUR_TOOL_CAPABLE_MODEL --network-required
 ```
 
 Provider execution requires the provider's binary, authentication, and quota.
+`--network-required` requests egress through MARSHAL's policy engine; it does
+not weaken or bypass the configured network policy.
 Review the resulting branch and evidence before approving or merging changes.
 
 ## Credential-free conformance check
