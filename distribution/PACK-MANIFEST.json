@@ -186,8 +186,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "9fb921a0f8548c20b7edbd6234db063c8a7ab8c181c5321c7076225acddaf435",
-      "bytes": 9598
+      "sha256": "852f89861b2b7f222432df5ca2f0b5d2fa44e6751f934d075eb6b0c8441fce51",
+      "bytes": 9739
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -846,13 +846,13 @@
     },
     {
       "path": "docs/getting-started.md",
-      "sha256": "721ca3a43facf3dec8d9f77e674caa3166af36b5af0d52d5f933fb6cbce8f489",
-      "bytes": 2092
+      "sha256": "e09fd5b954b0b597d13b6ce7f713def39bb4d912e84c280cff97a28d22f2413c",
+      "bytes": 2250
     },
     {
       "path": "docs/installation.md",
-      "sha256": "26d9cfa23f9565839a41bfe4275aa1b67fe2aa92b481e0e8f1098c1272e130f2",
-      "bytes": 1796
+      "sha256": "2b44f9fedf03eddcd56f860531ef0000559ccfdd94454af91ba1ccb81a31c7a6",
+      "bytes": 1861
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -1331,13 +1331,13 @@
     },
     {
       "path": "internal/api/server.go",
-      "sha256": "216f8a3b1b8f03ea37811990b233518729538e08ca1cddf532d4a65ec1b13075",
-      "bytes": 9326
+      "sha256": "3a2f71a6a71d2d158458b3ffd2574e7f9aec445410e4014de0e5a6bef271f916",
+      "bytes": 9541
     },
     {
       "path": "internal/api/server_test.go",
-      "sha256": "74af6c18491ad8253dd5310fedcb4f1c4b8333061c2aca4f47ddce87e1cb86ac",
-      "bytes": 5286
+      "sha256": "5e6b42e009fe6d70a4678afddce263e10dba8d7035a8e64790e41851fb80897a",
+      "bytes": 5543
     },
     {
       "path": "internal/app/cell_runtime_a06_test.go",
@@ -1431,13 +1431,13 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "9645087a2d701284a974ba1405a79a3868a3bfe3c2fe43ee986283d27b43437a",
-      "bytes": 33699
+      "sha256": "33e61eb9e3ac81ad61a70439b71b3cfcaeda6dd0fa5b50f09fc5f0e972da1aa1",
+      "bytes": 34585
     },
     {
       "path": "internal/app/runtime_test.go",
-      "sha256": "a612b59a3bfd93c36f96f95ffc372d069098a758b8ecca3c067e34d21cb5d6f9",
-      "bytes": 7570
+      "sha256": "1e6df808d12c1d868dc20498ca5dd6b483b27826e1db827f0a4c617b31e6f463",
+      "bytes": 8471
     },
     {
       "path": "internal/app/secrets_runtime_a06_test.go",
@@ -1981,8 +1981,8 @@
     },
     {
       "path": "internal/integration/daemon_cli_test.go",
-      "sha256": "a21eb1213ea9fa176ba121342230cf1089013eb26b710f30d9811b7eed2ed91b",
-      "bytes": 6620
+      "sha256": "de6b1d8eb3e07aef38f402eb4c02a6cc266c863bd175d294d96e3eabe341c555",
+      "bytes": 8148
     },
     {
       "path": "internal/integration/evidence_runtime_test.go",
