@@ -72,3 +72,13 @@ func (r *Runtime) authorizeRuntime(ctx context.Context, subject, task, provider 
 	}, func() error { return nil })
 	return resultErr
 }
+
+func authorizeNetworkAccess(engine *policy.Engine, agentID, sessionID, taskID string, role model.Role, risk model.Risk, required bool) error {
+	if !required {
+		return fmt.Errorf("%w: network access was not explicitly required", model.ErrPolicyDenied)
+	}
+	return policy.Enforce(engine, model.PolicyInput{
+		AgentID: agentID, SessionID: sessionID, Role: role, TaskID: taskID, Risk: risk,
+		Operation: model.NetworkAccess, Target: "network", TaskOwned: true, TargetInScope: true, Required: true,
+	}, func() error { return nil })
+}

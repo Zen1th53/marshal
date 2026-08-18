@@ -1091,13 +1091,13 @@
     },
     {
       "path": "internal/app/policy_runtime.go",
-      "sha256": "932f7cdd40f58ddab46f4d35b63ea3694241ffd0e1211bbee9fad2e47ad8f65f",
-      "bytes": 2808
+      "sha256": "b0fc70c8e0d842ef2709610b9d59d5dbc3ba3d0246cef75e2ead44d05ff20cb7",
+      "bytes": 3338
     },
     {
       "path": "internal/app/policy_runtime_a06_test.go",
-      "sha256": "f18fad20399b67a0e5e65a8a448b20868de892a8747bc8b76c41b3bf9995a8dd",
-      "bytes": 2504
+      "sha256": "e7dd3ba6bac4797bde336b9a350b660c33b6a6dc717320ba5d568806fdab4667",
+      "bytes": 3303
     },
     {
       "path": "internal/app/policytest_service.go",
@@ -1111,8 +1111,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "8a81acd11cd7a3acbf595e52b74cadbce920650ce362286b881336eee4a2a1bc",
-      "bytes": 29222
+      "sha256": "d8cd5e874b5c314ee00f1ac4968fb36fc210822adcf17b2e7b920d49f6510cfe",
+      "bytes": 29711
     },
     {
       "path": "internal/app/runtime_test.go",
