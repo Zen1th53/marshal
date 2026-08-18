@@ -2490,6 +2490,11 @@
       "bytes": 1853
     },
     {
+      "path": "internal/store/chaos_persistence_a02_test.go",
+      "sha256": "7b12b3de2a5ac2a662146ceeeacc986e93a2245335e7934fb1bd5a148bc91022",
+      "bytes": 231
+    },
+    {
       "path": "internal/store/checkpoint_persistence_a02_test.go",
       "sha256": "435e9315a2f4b95293ece8138ec82125c2357d91a7d1ddc8ea427d38b09ac1e8",
       "bytes": 236
