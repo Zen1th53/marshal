@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/netpolicy"
 )
@@ -40,6 +42,12 @@ func (s *Store) PutEgressDecision(ctx context.Context, record netpolicy.Decision
 	`, record.ID).Scan(&storedKey, &storedRequest, &storedDecision, &storedCreated)
 	if err == nil {
 		if storedKey == record.IdempotencyKey && storedRequest == string(requestJSON) && storedDecision == string(decisionJSON) && storedCreated == record.CreatedAt.Format(time.RFC3339Nano) {
+			_ = tx.Rollback()
+			if record.Request.SubjectID != "" {
+				if eventErr := s.appendEgressEvents(ctx, record); eventErr != nil {
+					return eventErr
+				}
+			}
 			return nil
 		}
 		return fmt.Errorf("%w: egress decision identity is immutable", model.ErrConflict)
@@ -55,6 +63,48 @@ func (s *Store) PutEgressDecision(ctx context.Context, record netpolicy.Decision
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("%w: commit egress decision", model.ErrUnavailable)
+	}
+	if record.Request.SubjectID != "" {
+		if err := s.appendEgressEvents(ctx, record); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) appendEgressEvents(ctx context.Context, record netpolicy.DecisionRecord) error {
+	at := record.CreatedAt.UTC()
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	base := events.Event{
+		Subject:    record.Request.SubjectID,
+		TaskID:     record.Request.TaskID,
+		ResourceID: "egress-" + record.ID,
+		At:         at,
+		Data:       map[string]any{"change_id": record.Request.ChangeID, "decision_id": record.ID, "protocol": string(record.Request.Protocol), "port": strconv.Itoa(record.Request.Port)},
+	}
+	requested := base
+	requested.ID = "EVENT-NETWORK-EGRESS-REQUESTED-" + record.ID
+	requested.Type = events.EventTypeNetworkEgressRequested
+	requested.IdempotencyKey = "NETWORK-EGRESS-REQUESTED-" + record.ID
+	requested.Data["result"] = "requested"
+	if _, err := s.Append(ctx, requested); err != nil {
+		return fmt.Errorf("append network egress requested event: %w", err)
+	}
+	result := base
+	result.ID = "EVENT-NETWORK-EGRESS-RESULT-" + record.ID
+	result.IdempotencyKey = "NETWORK-EGRESS-RESULT-" + record.ID
+	result.Data["reason"] = string(record.Decision.Reason)
+	result.Data["result"] = "denied"
+	result.Type = events.EventTypeNetworkEgressDenied
+	if record.Decision.Allowed {
+		result.Type = events.EventTypeNetworkEgressAllowed
+		result.Data["result"] = "allowed"
+		result.Data["rule_id"] = string(record.Decision.RuleID)
+	}
+	if _, err := s.Append(ctx, result); err != nil {
+		return fmt.Errorf("append network egress result event: %w", err)
 	}
 	return nil
 }

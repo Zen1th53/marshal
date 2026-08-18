@@ -1426,8 +1426,8 @@
     },
     {
       "path": "internal/events/types.go",
-      "sha256": "8748fd343e4fbec945dad17417a55e55d1dbfa8d2caee802c2bcf57b63553b9e",
-      "bytes": 13410
+      "sha256": "f9b24b8835d026b2b82e0b2ddf42f5b1402b25396e9ed77b9037a5095bfb1a36",
+      "bytes": 13734
     },
     {
       "path": "internal/events/types_test.go",
@@ -2236,13 +2236,13 @@
     },
     {
       "path": "internal/store/netpolicy_persistence.go",
-      "sha256": "2daabafa82f061df2eb8c01eb21fcace3b3113e513ab3a21a20705a49c3fce53",
-      "bytes": 3808
+      "sha256": "c7a24cd6b6ebac9c47ad2a8bc764d04e9c7b42f436e2c87b7f2c26782fccabfa",
+      "bytes": 5622
     },
     {
       "path": "internal/store/netpolicy_persistence_a02_test.go",
-      "sha256": "644a87fc07056fc12ef9bd3f9b7cb1c2922bca16211cd406790c31f72ae8bec7",
-      "bytes": 2466
+      "sha256": "f7364ef0f15be2b545c92ebee9ea7c89de9c8fd238fc05098ce5b46ecc63c0f2",
+      "bytes": 2991
     },
     {
       "path": "internal/store/policy_a07_generation_test.go",
