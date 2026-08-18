@@ -12,6 +12,8 @@ func TestDecisionContractValidatesGatePointChecksAndDigest(t *testing.T) {
 	decision := Decision{
 		DecisionID:   "decision-a01",
 		Point:        GatePointPrePush,
+		Subject:      "agent-a01",
+		Resource:     "repo:a01",
 		Allowed:      true,
 		Checks:       []CheckResult{{CheckID: "secret-scan", Status: CheckStatusPass, EvidenceID: "evidence-a01", Reason: CodeAllowed}},
 		PolicyIDs:    []string{"policy-a01"},
@@ -25,7 +27,7 @@ func TestDecisionContractValidatesGatePointChecksAndDigest(t *testing.T) {
 }
 
 func TestDecisionContractRejectsUnknownPointAndUnknownCheckStatus(t *testing.T) {
-	decision := Decision{Point: GatePoint("pre-deploy"), Checks: []CheckResult{{CheckID: "check", Status: CheckStatus("maybe")}}}
+	decision := Decision{Point: GatePoint("pre-deploy"), Subject: "agent-a01", Resource: "repo:a01", Checks: []CheckResult{{CheckID: "check", Status: CheckStatus("maybe")}}}
 	if err := decision.Validate(); !errors.Is(err, ErrUnknownGatePoint) {
 		t.Fatalf("point error=%v want=%v", err, ErrUnknownGatePoint)
 	}

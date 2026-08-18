@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 16
+const LatestSchemaVersion = 17
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -542,6 +542,31 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 16: %w", err)
 		}
 		version = 16
+	}
+	if version < 17 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE gate_decisions (
+				decision_id TEXT PRIMARY KEY,
+				gate_point TEXT NOT NULL CHECK(gate_point IN ('pre-execution','pre-commit','pre-push','pre-merge','pre-release')),
+				subject TEXT NOT NULL,
+				resource TEXT NOT NULL,
+				allowed INTEGER NOT NULL CHECK(allowed IN (0,1)),
+				checks_json TEXT NOT NULL,
+				policy_ids_json TEXT NOT NULL,
+				policy_digest TEXT NOT NULL CHECK(length(policy_digest) = 71),
+				change_digest TEXT NOT NULL DEFAULT '' CHECK(change_digest = '' OR length(change_digest) = 71),
+				created_at TEXT NOT NULL,
+				consumed_at TEXT
+			);
+			CREATE INDEX gate_decisions_by_point_subject ON gate_decisions(gate_point, subject, created_at);
+			CREATE INDEX gate_decisions_by_resource_change ON gate_decisions(resource, change_digest);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 17: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(17, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 17: %w", err)
+		}
+		version = 17
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
