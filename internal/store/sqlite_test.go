@@ -47,6 +47,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"trusted_content_segments",
 		"typed_handoffs",
 		"verification_attestations",
+		"self_improvement_recommendations",
 		"chaos_conformance_runs",
 		"research_reports",
 		"scheduler_explanations",
@@ -68,6 +69,7 @@ func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
 		"reproducible_replay_runs",
 		"context_budget_decisions",
 		"conflict_predictions",
+		"self_improvement_recommendations",
 		"chaos_conformance_runs",
 		"research_reports",
 		"scheduler_explanations",
@@ -115,6 +117,8 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS self_improvement_recommendations_by_kind",
+		"DROP TABLE IF EXISTS self_improvement_recommendations",
 		"DROP INDEX IF EXISTS chaos_conformance_runs_by_scenario",
 		"DROP TABLE IF EXISTS chaos_conformance_runs",
 		"DROP INDEX IF EXISTS research_reports_by_question",
@@ -261,6 +265,8 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, statement := range []string{
+		"DROP INDEX IF EXISTS self_improvement_recommendations_by_kind",
+		"DROP TABLE IF EXISTS self_improvement_recommendations",
 		"DROP INDEX IF EXISTS chaos_conformance_runs_by_scenario",
 		"DROP TABLE IF EXISTS chaos_conformance_runs",
 		"DROP INDEX IF EXISTS research_reports_by_question",
