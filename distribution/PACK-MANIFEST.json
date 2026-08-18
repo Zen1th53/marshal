@@ -2245,6 +2245,11 @@
       "bytes": 28340
     },
     {
+      "path": "internal/store/netpolicy_migration_test.go",
+      "sha256": "c54029894efe392a6a8f6a38623f0a06d5aa9cfb72e39e7c325042aca523fe4c",
+      "bytes": 610
+    },
+    {
       "path": "internal/store/netpolicy_persistence.go",
       "sha256": "5006d3814c2366a0063b960f5afc88503e6383f851b1cae6430c1927054804c4",
       "bytes": 6456
