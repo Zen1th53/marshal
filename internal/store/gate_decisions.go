@@ -2,12 +2,16 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/gate"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
@@ -95,4 +99,46 @@ func (s *Store) TransitionGateDecision(ctx context.Context, id, actor string, fr
 		return gate.Decision{}, fmt.Errorf("%w: stale gate decision state", model.ErrConflict)
 	}
 	return s.GetGateDecision(ctx, id)
+}
+
+// PutGateDecisionWithAudit commits canonical state before appending its
+// bounded, idempotent audit projection. Event delivery is not authority.
+func (s *Store) PutGateDecisionWithAudit(ctx context.Context, decision gate.Decision, eventStore events.Store) error {
+	if err := s.PutGateDecision(ctx, decision); err != nil {
+		return err
+	}
+	if eventStore == nil {
+		return nil
+	}
+	key := gateDecisionEventKey(decision)
+	eventType := events.EventTypeGateBlocked
+	switch decision.State {
+	case gate.DecisionStateAllowed:
+		eventType = events.EventTypeGateAllowed
+	case gate.DecisionStateDenied:
+		eventType = events.EventTypeGateDenied
+	case gate.DecisionStateInvalidated:
+		eventType = events.EventTypeGateDecisionInvalidated
+	case gate.DecisionStateConsumed:
+		eventType = events.EventTypeGateDecisionConsumed
+	}
+	_, err := eventStore.Append(ctx, events.Event{
+		ID: key, Type: eventType, Subject: decision.Subject,
+		ResourceID: gateResourceReference(decision.Resource), At: decision.CreatedAt.UTC(),
+		IdempotencyKey: key, Data: map[string]any{
+			"decision_id": decision.DecisionID, "gate_point": string(decision.Point), "state": string(decision.State),
+			"policy_digest": string(decision.PolicyDigest), "change_digest": decision.ChangeDigest,
+		},
+	})
+	return err
+}
+
+func gateDecisionEventKey(decision gate.Decision) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{decision.DecisionID, string(decision.State)}, "\x00")))
+	return "gate-event-" + hex.EncodeToString(sum[:])
+}
+
+func gateResourceReference(resource string) string {
+	sum := sha256.Sum256([]byte(resource))
+	return "gate-resource-" + hex.EncodeToString(sum[:])
 }
