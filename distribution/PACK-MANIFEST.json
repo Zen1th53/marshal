@@ -2475,6 +2475,11 @@
       "bytes": 1132
     },
     {
+      "path": "internal/trustcontent/adversarial_test.go",
+      "sha256": "d2ed8c195aefe20409587f0145af789b3e340615a54c5bacfad369abbe5156cf",
+      "bytes": 9509
+    },
+    {
       "path": "internal/trustcontent/engine.go",
       "sha256": "03763c357964cd2db68151db352295a680500cd0f1e57c1a080f784b6616aa81",
       "bytes": 8930
