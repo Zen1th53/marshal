@@ -1150,6 +1150,16 @@
       "bytes": 2594
     },
     {
+      "path": "internal/cell/engine.go",
+      "sha256": "9e3c68d982905a5924ce33923b7d63a4a58534e4ce995535de40ccd18baac3db",
+      "bytes": 5106
+    },
+    {
+      "path": "internal/cell/engine_test.go",
+      "sha256": "87b9c79163f4f358919a29d91cb2cd8d4a0fe3cfd8bd7bd7fdc3a057ad88faa8",
+      "bytes": 3239
+    },
+    {
       "path": "internal/cell/errors.go",
       "sha256": "19159e7e5b2ef60fce27e9d2ee07cba5e38df7cb9663e9865fe765cd968a0be5",
       "bytes": 975
@@ -1691,8 +1701,8 @@
     },
     {
       "path": "internal/store/cell_persistence.go",
-      "sha256": "241a9c824fd659e1fc9ca291dad3f6580d88eda59c3877fd6745fe116c9ec97b",
-      "bytes": 4467
+      "sha256": "bf4d1068c4e426a1ff828b4978552de99ac0497352a5bbb3075c44c1ff7db6da",
+      "bytes": 5175
     },
     {
       "path": "internal/store/cell_persistence_a02_test.go",
