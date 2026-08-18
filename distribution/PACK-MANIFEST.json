@@ -2670,6 +2670,11 @@
       "bytes": 236
     },
     {
+      "path": "internal/store/mcpa2a_persistence_a02_test.go",
+      "sha256": "cc1462d50dea018509646900a640321d7bba833c402aa7c4e75a40485e41c715",
+      "bytes": 232
+    },
+    {
       "path": "internal/store/memory_persistence_a02_test.go",
       "sha256": "a806e1f93cf15b1348b1dda4d6cac384c1b235529a78a654a155758837fd9ff1",
       "bytes": 232
