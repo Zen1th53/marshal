@@ -77,6 +77,9 @@ func authorizeNetworkAccess(engine *policy.Engine, agentID, sessionID, taskID st
 	if !required {
 		return fmt.Errorf("%w: network access was not explicitly required", model.ErrPolicyDenied)
 	}
+	if (risk == model.R2 || risk == model.R3) && role == model.RoleDeveloper {
+		return fmt.Errorf("%w: high-risk task network access requires explicit architect or appsec review", model.ErrPolicyDenied)
+	}
 	return policy.Enforce(engine, model.PolicyInput{
 		AgentID: agentID, SessionID: sessionID, Role: role, TaskID: taskID, Risk: risk,
 		Operation: model.NetworkAccess, Target: "network", TaskOwned: true, TargetInScope: true, Required: true,

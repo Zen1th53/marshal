@@ -903,7 +903,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			)
 
 			if home, homeErr := os.UserHomeDir(); homeErr == nil {
-				// Bind config directories and essential files → /home/marshal/ (read-only)
+				// Bind only explicit minimal config files, avoiding broad host directory traversal
 				for _, sub := range []string{
 					"auth.json", "config.toml", "config.json", "AGENTS.md",
 				} {
@@ -912,24 +912,10 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 					if _, statErr := os.Stat(src); statErr == nil {
 						readOnlyBinds = append(readOnlyBinds, model.Bind{Source: src, Target: tgt})
 					}
-				}
-
-				srcConfigDir := filepath.Join(home, ".config", name)
-				if _, statErr := os.Stat(srcConfigDir); statErr == nil {
-					readOnlyBinds = append(readOnlyBinds, model.Bind{Source: srcConfigDir, Target: "/home/marshal/.config/" + name})
-				}
-
-				// For opencode: bind npm node_modules used by the opencode binary
-				if name == "opencode" {
-					for _, sub := range []string{
-						filepath.Join(".opencode", "node_modules"),
-						filepath.Join(".config", "opencode", "node_modules"),
-					} {
-						src := filepath.Join(home, sub)
-						tgt := "/home/marshal/" + sub
-						if _, statErr := os.Stat(src); statErr == nil {
-							readOnlyBinds = append(readOnlyBinds, model.Bind{Source: src, Target: tgt})
-						}
+					srcConfig := filepath.Join(home, ".config", name, sub)
+					tgtConfig := "/home/marshal/.config/" + name + "/" + sub
+					if _, statErr := os.Stat(srcConfig); statErr == nil {
+						readOnlyBinds = append(readOnlyBinds, model.Bind{Source: srcConfig, Target: tgtConfig})
 					}
 				}
 

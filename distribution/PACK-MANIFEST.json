@@ -1386,8 +1386,8 @@
     },
     {
       "path": "internal/app/policy_runtime.go",
-      "sha256": "b0fc70c8e0d842ef2709610b9d59d5dbc3ba3d0246cef75e2ead44d05ff20cb7",
-      "bytes": 3338
+      "sha256": "8206b1fec05bad4daf861f1cc72f9929ffbef67e35b54d3c32534a85c6d79f67",
+      "bytes": 3542
     },
     {
       "path": "internal/app/policy_runtime_a06_test.go",
@@ -1406,8 +1406,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "d9ad6b67d3d2cf9d6cbcecdd1d0c4cfa2f11c00edeba10c4359c3082390b2067",
-      "bytes": 36885
+      "sha256": "4cb9b3f2f0793f25823f3dc5c87e8dbb0f0ccbc2c75a8507685f6f0f5392c05a",
+      "bytes": 36444
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1990,6 +1990,11 @@
       "bytes": 9080
     },
     {
+      "path": "internal/integration/provider_secret_execution_test.go",
+      "sha256": "0993f6f2ca343ac849a294dc29c4d09b0b4b7bc184dabb47ce14a0c8d4a3d095",
+      "bytes": 3771
+    },
+    {
       "path": "internal/integration/reconciliation_test.go",
       "sha256": "a0deb4976623fbb1f6547e52c0e5f8446c4422297a15aff53ee4e382db44bd90",
       "bytes": 1554
@@ -2556,13 +2561,13 @@
     },
     {
       "path": "internal/sandbox/bwrap.go",
-      "sha256": "ea4a7d985cbbaa42a122f08aed29cfa19588bdebdf1caf8558e1f9429f1b5b29",
-      "bytes": 6870
+      "sha256": "6ae2201660bb085510202d7bd9ad941868431ecb3a75ab1cf3d42e22aefd16d5",
+      "bytes": 7521
     },
     {
       "path": "internal/sandbox/bwrap_test.go",
-      "sha256": "2eac11348c990a0282e10adca7d6089c1d8af0f4e986f5eca6ea94d8060699a5",
-      "bytes": 4715
+      "sha256": "298db340aa25e17a20e775f65e29eaa0d616f5728d9e0218ab788fbcafbb318d",
+      "bytes": 5459
     },
     {
       "path": "internal/scheduler/adversarial_test.go",

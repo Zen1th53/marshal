@@ -143,3 +143,28 @@ func TestWrapRejectsMissingPathsAndCommand(t *testing.T) {
 		t.Fatalf("empty command error = %v", err)
 	}
 }
+
+func TestWrapRejectsForbiddenCredentialBinds(t *testing.T) {
+	backend := NewBwrap("/sbin/bwrap")
+	worktree := t.TempDir()
+	for _, forbidden := range []string{
+		"/home/user/.ssh/id_rsa",
+		"/home/user/.aws/credentials",
+		"/home/user/.netrc",
+		"/home/user/.gnupg/secring.gpg",
+		"/home/user/.kube/config",
+		"/home/user/.docker/config.json",
+		"/home/user/.vault-token",
+		"/home/user/.git-credentials",
+	} {
+		_, err := backend.Wrap(model.SandboxRequest{
+			Worktree: worktree,
+			ReadOnlyBinds: []model.Bind{
+				{Source: forbidden, Target: "/home/marshal/stolen"},
+			},
+		}, []string{"true"})
+		if err == nil || !errors.Is(err, model.ErrInvalid) {
+			t.Errorf("expected ErrInvalid for forbidden bind %s, got %v", forbidden, err)
+		}
+	}
+}

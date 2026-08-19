@@ -90,6 +90,9 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		args = append(args, "--tmpfs", mountPath)
 	}
 	for _, bind := range request.ReadOnlyBinds {
+		if isForbiddenCredentialPath(bind.Source) || isForbiddenCredentialPath(bind.Target) {
+			return model.CommandSpec{}, fmt.Errorf("%w: read-only bind to credential file forbidden: %s -> %s", model.ErrInvalid, bind.Source, bind.Target)
+		}
 		source, err := existingPath(bind.Source)
 		if err != nil || !filepath.IsAbs(bind.Target) ||
 			(!pathWithin("/home/marshal", bind.Target) && source != bind.Target) {
@@ -224,4 +227,19 @@ func bounded(value []byte, limit int) string {
 		value = value[:limit]
 	}
 	return string(value)
+}
+
+var forbiddenCredentialPatterns = []string{
+	".ssh", ".aws", ".netrc", ".gnupg", ".kube", "id_rsa", "id_ed25519",
+	".docker/config.json", ".vault-token", ".git-credentials",
+}
+
+func isForbiddenCredentialPath(path string) bool {
+	lower := strings.ToLower(filepath.ToSlash(path))
+	for _, pattern := range forbiddenCredentialPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
 }
