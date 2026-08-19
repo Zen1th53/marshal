@@ -1741,8 +1741,8 @@
     },
     {
       "path": "internal/context/compiler/engine.go",
-      "sha256": "54d55fe8b4b2447ff3be90e65c6a9b4e605bae075064c6222e68e8ddcdb1ce38",
-      "bytes": 1475
+      "sha256": "f4da5fbdffb46c3506c35c2fb5f539e4ebb13f1ccf2f0dedab6b0f2fba61f318",
+      "bytes": 2863
     },
     {
       "path": "internal/context/compiler/engine_test.go",
@@ -2168,6 +2168,16 @@
       "path": "internal/memory/conflict/detector_test.go",
       "sha256": "069724e9fbb0c3079152e68f97fc236ef28dc56c7c65dce70908a91ba4e92db1",
       "bytes": 3033
+    },
+    {
+      "path": "internal/memory/consolidation/consolidator.go",
+      "sha256": "db419bee32b68c50ebd0a852c8a0670d69b5f5d0f7552e933cb034a3394aec00",
+      "bytes": 2645
+    },
+    {
+      "path": "internal/memory/consolidation/consolidator_test.go",
+      "sha256": "f823c4308184d9cf2bcd2c894c9d298a15dac004b1adfc1b28cba162394dd34d",
+      "bytes": 2459
     },
     {
       "path": "internal/memory/decision/adapter.go",

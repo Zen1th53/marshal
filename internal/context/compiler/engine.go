@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type Compiler struct {
@@ -56,6 +58,45 @@ func (c *Compiler) Compile(ctx context.Context, id, taskID, agentID, promptText 
 	}
 
 	c.compiled[id] = res
+	return res, nil
+}
+
+type MemoryCompileRequest struct {
+	ID          string                `json:"id"`
+	TaskID      string                `json:"task_id"`
+	AgentID     string                `json:"agent_id"`
+	PromptText  string                `json:"prompt_text"`
+	BudgetLimit int                   `json:"budget_limit"`
+	Memories    []model.MemoryRecordV2 `json:"memories,omitempty"`
+}
+
+// CompileWithMemory compiles task prompt with delimited, source-cited memory records.
+func (c *Compiler) CompileWithMemory(ctx context.Context, req MemoryCompileRequest) (*CompiledContext, error) {
+	var memoryIDs []string
+	var memoryBlocks []string
+
+	for _, m := range req.Memories {
+		memoryIDs = append(memoryIDs, m.ID)
+		block := fmt.Sprintf("[%s (rev:%d, auth:%s)] %s: %s", m.ID, m.Revision, m.Authority, m.Title, m.Body)
+		memoryBlocks = append(memoryBlocks, block)
+	}
+
+	fullPrompt := req.PromptText
+	if len(memoryBlocks) > 0 {
+		fullPrompt = fmt.Sprintf("%s\n\n<retrieved_memory_data>\n%s\n</retrieved_memory_data>", req.PromptText, strings.Join(memoryBlocks, "\n\n"))
+	}
+
+	return c.Compile(ctx, req.ID, req.TaskID, req.AgentID, fullPrompt, req.BudgetLimit, memoryIDs, nil)
+}
+
+func (c *Compiler) Get(id string) (*CompiledContext, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	res, ok := c.compiled[id]
+	if !ok {
+		return nil, ErrSourceInvalid
+	}
 	return res, nil
 }
 
