@@ -1406,8 +1406,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "84d0932b21edc9ef1aef1ea1d325f640e3b63f82c845b61eaefe29c2bb347cfe",
-      "bytes": 36986
+      "sha256": "a097c6e5ca7046b8300e32ee9bfe000a72211b11b2e90415786a55ac2b83466b",
+      "bytes": 39337
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -2158,6 +2158,11 @@
       "path": "internal/model/task_test.go",
       "sha256": "edb4715487ef1f140d2596e5b4d265e01f574ff5c2a2ac67533872ed154a0e47",
       "bytes": 1931
+    },
+    {
+      "path": "internal/model/task_transition_test.go",
+      "sha256": "39c6f13a283e5d14b586aaf822969026c50020431d365bb25ef7f0611898f23b",
+      "bytes": 3950
     },
     {
       "path": "internal/netpolicy/adversarial_fuzz_test.go",
@@ -3283,6 +3288,11 @@
       "path": "internal/store/sqlite_test.go",
       "sha256": "1aa893eb16a392d92ae6cc2f6b8b206b5f9816b60ff75187292deda744056cb8",
       "bytes": 20339
+    },
+    {
+      "path": "internal/store/task_lifecycle_test.go",
+      "sha256": "677d6e79f96f1ac1ebfc682fbbbc99255a09c65405fe2ad38cca799f5d926b07",
+      "bytes": 2832
     },
     {
       "path": "internal/store/tasks.go",

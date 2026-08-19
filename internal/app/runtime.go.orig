@@ -297,11 +297,6 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	if handoffAuthorizer == nil {
 		handoffAuthorizer = runtimeHandoffAuthorizer{}
 	}
-	if options.QuorumEngine != nil {
-		rt.quorumEngine = options.QuorumEngine
-	} else {
-		rt.quorumEngine = quorum.NewEngine(nil)
-	}
 	rt.handoffService = protocol.NewService(protocol.Config{RepositoryRoot: layout.Root}, database, handoffAuthorizer)
 	_ = rt.ReconcileStartup(ctx)
 	return rt, nil
@@ -1022,71 +1017,4 @@ func (runtimeCapabilityAuthority) AuthorizeRevoke(context.Context, capability.Re
 // CalculateDirectorySize returns total recursive file size in bytes for the specified directory path.
 func CalculateDirectorySize(path string) (int64, error) {
 	return worktree.CalculateDirectorySize(path)
-}
-
-type QuorumVerifyRequest struct {
-	TaskID        string               `json:"task_id"`
-	ChangeID      string               `json:"change_id,omitempty"`
-	ContentDigest string               `json:"content_digest,omitempty"`
-	Attestations  []quorum.Attestation `json:"attestations"`
-}
-
-func DeriveQuorumRequirements(risk model.Risk) []quorum.Requirement {
-	switch risk {
-	case model.R2:
-		return []quorum.Requirement{
-			{Kind: "qa", Minimum: 1, AllowedRoles: []string{"qa", "reviewer", "architect"}},
-			{Kind: "security", Minimum: 1, AllowedRoles: []string{"appsec", "architect"}},
-		}
-	case model.R3:
-		return []quorum.Requirement{
-			{Kind: "qa", Minimum: 1, AllowedRoles: []string{"qa", "reviewer", "architect"}},
-			{Kind: "security", Minimum: 1, AllowedRoles: []string{"appsec", "architect"}},
-			{Kind: "architecture", Minimum: 1, AllowedRoles: []string{"architect"}},
-		}
-	default: // R0, R1
-		return []quorum.Requirement{
-			{Kind: "qa", Minimum: 1, AllowedRoles: []string{"qa", "reviewer", "architect"}},
-		}
-	}
-}
-
-func (r *Runtime) QuorumEngine() *quorum.Engine {
-	return r.quorumEngine
-}
-
-func (r *Runtime) VerifyQuorum(ctx context.Context, req QuorumVerifyRequest) (quorum.Evaluation, error) {
-	if req.TaskID == "" {
-		return quorum.Evaluation{State: quorum.StateInvalidated}, fmt.Errorf("%w: task ID cannot be empty", model.ErrInvalid)
-	}
-
-	task, err := r.store.GetTask(ctx, req.TaskID)
-	if err != nil {
-		return quorum.Evaluation{State: quorum.StateInvalidated}, fmt.Errorf("get task: %w", err)
-	}
-
-	requirements := DeriveQuorumRequirements(task.Risk)
-	changeID := req.ChangeID
-	if changeID == "" {
-		changeID = req.TaskID
-	}
-	contentDigest := req.ContentDigest
-	if contentDigest == "" && task.HeadCommit != nil {
-		contentDigest = *task.HeadCommit
-	}
-	if contentDigest == "" {
-		contentDigest = "head-digest-" + req.TaskID
-	}
-
-	provenance := quorum.Provenance{
-		ChangeID:      changeID,
-		ContentDigest: contentDigest,
-	}
-
-	engine := r.quorumEngine
-	if engine == nil {
-		engine = quorum.NewEngine(nil)
-	}
-
-	return engine.Evaluate(ctx, requirements, req.Attestations, provenance)
 }
