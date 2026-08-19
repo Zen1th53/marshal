@@ -2195,6 +2195,16 @@
       "bytes": 2304
     },
     {
+      "path": "internal/memory/review/approval.go",
+      "sha256": "b268fd14ee4cd7348fc34fc6d7a30e45b2304f4736689b733da8c71dd5a5953c",
+      "bytes": 3561
+    },
+    {
+      "path": "internal/memory/review/approval_test.go",
+      "sha256": "dc6ac0fa60a779feac4a75cbc4f67cd7427f204f22153896029cab79b03163b3",
+      "bytes": 2485
+    },
+    {
       "path": "internal/memory/security/firewall.go",
       "sha256": "0552406cc7589ee45a079c6ee48a23fa717eabe5631a8e7e9528b0fd78c61d44",
       "bytes": 4327
@@ -3796,8 +3806,8 @@
     },
     {
       "path": "memory/DATA-POLICY.md",
-      "sha256": "bdd8da6c4f7b684fbe51c6913f48f50730f367a69b8faa613563533e82f622cb",
-      "bytes": 1004
+      "sha256": "0db5da74a2decf980bfb96aa306c78b8e6a3e6396cf3c4aad18be4ae08df8513",
+      "bytes": 1516
     },
     {
       "path": "memory/DECISIONS.md",
