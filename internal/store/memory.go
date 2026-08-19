@@ -219,6 +219,110 @@ func (s *Store) GetMemoryV2(ctx context.Context, projectID, memoryID string) (mo
 	return rec, nil
 }
 
+// FindMemoryByDigest retrieves a memory record by its project ID and canonical content digest.
+func (s *Store) FindMemoryByDigest(ctx context.Context, projectID, contentDigest string) (model.MemoryRecordV2, error) {
+	var (
+		rec                                          model.MemoryRecordV2
+		kind, lifecycle, confidence, authority       string
+		sourceJSON, evidenceIDs, extMetaJSON         string
+		supersededBy, supersedes, conflictIDs        string
+		observedAt, ingestedAt, validFrom            string
+		createdAt, updatedAt                         string
+		validTo, lastVerifiedAt                      sql.NullString
+	)
+	err := s.db.QueryRowContext(ctx, `
+		SELECT
+			memory_id, project_id, kind, lifecycle, confidence, authority,
+			title, body, content_digest, scope, scope_id,
+			source_json, evidence_ids, head_commit, branch_name, worktree_id,
+			session_id, run_id,
+			observed_at, ingested_at, valid_from, valid_to, last_verified_at,
+			revision, superseded_by, supersedes, conflict_ids, acl_scope,
+			created_at, updated_at, ext_meta_json
+		FROM memory_records_v2
+		WHERE project_id = ? AND content_digest = ?
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, projectID, contentDigest).Scan(
+		&rec.ID, &rec.ProjectID, &kind, &lifecycle, &confidence, &authority,
+		&rec.Title, &rec.Body, &rec.ContentDigest, &rec.Scope, &rec.ScopeID,
+		&sourceJSON, &evidenceIDs, &rec.HeadCommit, &rec.BranchName, &rec.WorktreeID,
+		&rec.SessionID, &rec.RunID,
+		&observedAt, &ingestedAt, &validFrom, &validTo, &lastVerifiedAt,
+		&rec.Revision, &supersededBy, &supersedes, &conflictIDs, &rec.ACLScope,
+		&createdAt, &updatedAt, &extMetaJSON,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.MemoryRecordV2{}, fmt.Errorf("%w: memory record with digest %s not found", model.ErrNotFound, contentDigest)
+	}
+	if err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("find memory by digest: %w", err)
+	}
+
+	rec.Kind = model.MemoryKind(kind)
+	rec.Lifecycle = model.MemoryLifecycle(lifecycle)
+	rec.Confidence = model.MemoryConfidence(confidence)
+	rec.Authority = model.MemoryAuthority(authority)
+
+	if err := json.Unmarshal([]byte(sourceJSON), &rec.Source); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("decode source: %w", err)
+	}
+	if evidenceIDs != "" {
+		rec.EvidenceIDs = strings.Split(evidenceIDs, ",")
+	}
+	if supersededBy != "" {
+		rec.SupersededBy = strings.Split(supersededBy, ",")
+	}
+	if supersedes != "" {
+		rec.SupersedesID = strings.Split(supersedes, ",")
+	}
+	if conflictIDs != "" {
+		rec.ConflictIDs = strings.Split(conflictIDs, ",")
+	}
+	if extMetaJSON != "" && extMetaJSON != "{}" {
+		if err := json.Unmarshal([]byte(extMetaJSON), &rec.ExtMeta); err != nil {
+			return model.MemoryRecordV2{}, fmt.Errorf("decode ext_meta: %w", err)
+		}
+	}
+
+	parseTS := func(s string) (time.Time, error) {
+		return time.Parse(time.RFC3339Nano, s)
+	}
+
+	var parseErr error
+	if rec.ObservedAt, parseErr = parseTS(observedAt); parseErr != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("parse observed_at: %w", parseErr)
+	}
+	if rec.IngestedAt, parseErr = parseTS(ingestedAt); parseErr != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("parse ingested_at: %w", parseErr)
+	}
+	if rec.ValidFrom, parseErr = parseTS(validFrom); parseErr != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("parse valid_from: %w", parseErr)
+	}
+	if rec.CreatedAt, parseErr = parseTS(createdAt); parseErr != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("parse created_at: %w", parseErr)
+	}
+	if rec.UpdatedAt, parseErr = parseTS(updatedAt); parseErr != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("parse updated_at: %w", parseErr)
+	}
+	if validTo.Valid {
+		t, err := parseTS(validTo.String)
+		if err != nil {
+			return model.MemoryRecordV2{}, fmt.Errorf("parse valid_to: %w", err)
+		}
+		rec.ValidTo = &t
+	}
+	if lastVerifiedAt.Valid {
+		t, err := parseTS(lastVerifiedAt.String)
+		if err != nil {
+			return model.MemoryRecordV2{}, fmt.Errorf("parse last_verified_at: %w", err)
+		}
+		rec.LastVerifiedAt = &t
+	}
+
+	return rec, nil
+}
+
 // MemoryQueryFilter specifies filtering parameters for memory queries.
 type MemoryQueryFilter struct {
 	ProjectID string

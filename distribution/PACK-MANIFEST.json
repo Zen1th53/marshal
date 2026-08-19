@@ -2175,6 +2175,16 @@
       "bytes": 2304
     },
     {
+      "path": "internal/memory/security/firewall.go",
+      "sha256": "0552406cc7589ee45a079c6ee48a23fa717eabe5631a8e7e9528b0fd78c61d44",
+      "bytes": 4327
+    },
+    {
+      "path": "internal/memory/security/firewall_test.go",
+      "sha256": "9e33af4ef1df1232f7b33b04e222b31bd354f350a62a6cd5a7e7c788cd08e475",
+      "bytes": 3327
+    },
+    {
       "path": "internal/model/capability.go",
       "sha256": "11995bfbb4f0a57fb35caa30b54723957a20e9573067e1941feda2def349e774",
       "bytes": 1429
@@ -3091,8 +3101,8 @@
     },
     {
       "path": "internal/store/memory.go",
-      "sha256": "9993fba5e203e95d6459aa98db548034780785a73352de3d859b2e6bf7af4b63",
-      "bytes": 21462
+      "sha256": "4038317f16bbfe5e7d156352dee0f782e4dd0ab86b9bafd0648685258b2f27a8",
+      "bytes": 25473
     },
     {
       "path": "internal/store/memory_audit_t77_test.go",
@@ -3123,6 +3133,11 @@
       "path": "internal/store/memory_scope_t80_test.go",
       "sha256": "5b2d318124c588967a7e00a98be2f2a3a2c92b00598da6c981eab4a667b9392a",
       "bytes": 3507
+    },
+    {
+      "path": "internal/store/memory_security_t86_test.go",
+      "sha256": "b6d9c590738a6cf9421c2129d8f80f017a2bca934fefb4e8162b16583ef0fe92",
+      "bytes": 1609
     },
     {
       "path": "internal/store/memory_t79_test.go",
