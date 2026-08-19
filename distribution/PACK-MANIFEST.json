@@ -2400,6 +2400,16 @@
       "bytes": 3520
     },
     {
+      "path": "internal/memory/governance/forgetting.go",
+      "sha256": "e626fff391aa57124f2b1342be29586b77ebe26e9efe87b01fc6374c9e6630b4",
+      "bytes": 2435
+    },
+    {
+      "path": "internal/memory/governance/forgetting_test.go",
+      "sha256": "16d1ae9a60d30ceb85d09362d7804b2def9a8b9e27a2e8fd7bbf95412ec0d8b0",
+      "bytes": 2397
+    },
+    {
       "path": "internal/memory/hooks/recall_hook.go",
       "sha256": "d4320e6d8a685144f05117d96c1c3ed3537d0084215b27379ae14d1e79bf9b87",
       "bytes": 2240
