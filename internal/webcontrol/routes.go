@@ -1,0 +1,71 @@
+package webcontrol
+
+import (
+	"net/http"
+	"time"
+)
+
+func (s *Server) registerRoutes(mux *http.ServeMux) {
+	// 1. System Health & Diagnostics
+	mux.HandleFunc("GET /api/v1/system/status", s.handleSystemStatus)
+	mux.HandleFunc("GET /api/v1/system/adapters", s.handleSystemAdapters)
+
+	// 2. Agents
+	mux.HandleFunc("GET /api/v1/agents", s.handleListAgents)
+
+	// 3. Tasks & Runs
+	mux.HandleFunc("GET /api/v1/tasks", s.handleListTasks)
+
+	// 4. Memory
+	mux.HandleFunc("GET /api/v1/memory/search", s.handleMemorySearch)
+}
+
+func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
+	status := SystemStatusDTO{
+		State:          HealthReady,
+		Version:        "1.0.0",
+		CommitSHA:      "5668671",
+		DatabaseSchema: "v67",
+		ActiveWorkers:  0,
+		PendingTasks:   0,
+		UpdatedAt:      time.Now().UTC(),
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (s *Server) handleSystemAdapters(w http.ResponseWriter, r *http.Request) {
+	adapters := []AdapterSummaryDTO{
+		{
+			Name:       "codex",
+			BinaryName: "codex-cli",
+			Installed:  true,
+			State:      HealthReady,
+			Version:    "1.0.0",
+			ProbedAt:   time.Now().UTC(),
+		},
+		{
+			Name:       "opencode",
+			BinaryName: "opencode",
+			Installed:  true,
+			State:      HealthReady,
+			Version:    "1.0.0",
+			ProbedAt:   time.Now().UTC(),
+		},
+	}
+	writeJSON(w, http.StatusOK, adapters)
+}
+
+func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
+	resp := NewPagedResponse([]AgentSummaryDTO{}, "", 0, DefaultPageLimit)
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
+	resp := NewPagedResponse([]TaskSummaryDTO{}, "", 0, DefaultPageLimit)
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleMemorySearch(w http.ResponseWriter, r *http.Request) {
+	resp := NewPagedResponse([]MemoryRecordDTO{}, "", 0, DefaultPageLimit)
+	writeJSON(w, http.StatusOK, resp)
+}

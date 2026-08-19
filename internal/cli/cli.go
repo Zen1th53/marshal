@@ -61,6 +61,7 @@ Commands:
   memory status | recall | show | list | promote | tombstone | audit
   policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
+  web serve [--listen ADDR] [--port PORT]
   daemon
   version
 `
@@ -157,6 +158,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.state(ctx, args[1:])
 	case "memory":
 		err = c.memory(ctx, args[1:])
+	case "web":
+		err = c.web(ctx, args[1:])
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}

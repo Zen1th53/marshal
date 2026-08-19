@@ -1190,6 +1190,11 @@
       "bytes": 1057
     },
     {
+      "path": "docs/web/API-CONTRACT.md",
+      "sha256": "f70052aba11b2384b6ed9f97c7ad9aa9d77eb92fa71d8bf3ac7ee793ce76ba75",
+      "bytes": 1589
+    },
+    {
       "path": "docs/web/CONTROL-PLANE-API-MAP.md",
       "sha256": "7533400532e568df4953bd2420e0b19ef876295eb614d137fd495a816951d03f",
       "bytes": 5402
@@ -1821,8 +1826,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "4ccdecdc141427b0e373dfda5c77f23f4c31be33274ca0f5f67382888a4b26d7",
-      "bytes": 31715
+      "sha256": "6752305825d231fd62976b9a4a7423252694de5eef7bcc64759ebb382e7db7eb",
+      "bytes": 31799
     },
     {
       "path": "internal/cli/cli_test.go",
@@ -4463,6 +4468,16 @@
       "path": "internal/verify/quorum/types_test.go",
       "sha256": "bcdbc525e3b58d85dfa6d63b855e630af468b8490da4f253c3db0ad4131398ae",
       "bytes": 1581
+    },
+    {
+      "path": "internal/webcontrol/contracts.go",
+      "sha256": "957c2b5086de15db0fae2c51b6589affc2853cc2705a67c2bc166c079371007e",
+      "bytes": 3489
+    },
+    {
+      "path": "internal/webcontrol/contracts_test.go",
+      "sha256": "dba507ae1c5c6c6fe35f88f0210b8c82000755e0714688e966f612bfc9ba8a5c",
+      "bytes": 1508
     },
     {
       "path": "internal/worker/manager.go",
