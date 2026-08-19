@@ -3095,6 +3095,16 @@
       "bytes": 5176
     },
     {
+      "path": "internal/store/memory_outbox.go",
+      "sha256": "8cbc643e990bc746208680d3a50bd54f887b08163fb30456b0286409c9590892",
+      "bytes": 3551
+    },
+    {
+      "path": "internal/store/memory_outbox_t84_test.go",
+      "sha256": "cdf31c1a9952026702b0de88aec6f93108d4c7d83ad17419f0fded7bd1648fe7",
+      "bytes": 2827
+    },
+    {
       "path": "internal/store/memory_persistence_a02_test.go",
       "sha256": "a806e1f93cf15b1348b1dda4d6cac384c1b235529a78a654a155758837fd9ff1",
       "bytes": 232
