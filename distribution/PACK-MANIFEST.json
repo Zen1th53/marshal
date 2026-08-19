@@ -2800,6 +2800,16 @@
       "bytes": 1715
     },
     {
+      "path": "internal/memory/tiering/tier_manager.go",
+      "sha256": "167602b2d7024684e3f37737588e0d057603f504117b5da48f5e0b3cb0e5956c",
+      "bytes": 2085
+    },
+    {
+      "path": "internal/memory/tiering/tier_manager_test.go",
+      "sha256": "3050db0deb54b304ca9e41f8882b4b5bd6bb456cc7af78057ac6c76c669f1da1",
+      "bytes": 1750
+    },
+    {
       "path": "internal/memory/trust/scoring.go",
       "sha256": "cdd88e79cc066d9560d637917143698a8e2713637de3e69c8e5dc5d13fb066fd",
       "bytes": 3073
