@@ -910,6 +910,11 @@
       "bytes": 2584
     },
     {
+      "path": "docs/memory/cli.md",
+      "sha256": "b103b5e1d5ed36ca5aabd49256718b75c72f8831c221364af09019edf0ab977a",
+      "bytes": 588
+    },
+    {
       "path": "docs/memory/current-state-audit.md",
       "sha256": "aa78f04ab73510c3fecd90bef2de54f8fcc68aabee07631eba6ad03cf7a5bd07",
       "bytes": 6567
@@ -1708,6 +1713,16 @@
       "path": "internal/cli/cli_test.go",
       "sha256": "a5c26f061eafdaebc1aa16b78e4f97342766dfe82608d30179aba94d27084e88",
       "bytes": 16697
+    },
+    {
+      "path": "internal/cli/memory_cli.go",
+      "sha256": "e98a737831e961dc81e7e66fa68a8c1c3f53e737b002dccb783dc3d5a317fe1a",
+      "bytes": 2534
+    },
+    {
+      "path": "internal/cli/memory_cli_test.go",
+      "sha256": "ce66e0840b2f67d6db3a261d6688f534f401bebf0a19d9531d79eb535a4cc922",
+      "bytes": 2007
     },
     {
       "path": "internal/cli/policy_test_a10_release_test.go",
