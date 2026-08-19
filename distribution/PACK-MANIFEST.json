@@ -915,6 +915,11 @@
       "bytes": 6567
     },
     {
+      "path": "docs/memory/lifecycle.md",
+      "sha256": "14a067d1c4dbc2b01f7ae7ecad640839f6efd041f00cd9217a2d17510ddfacc5",
+      "bytes": 1268
+    },
+    {
       "path": "docs/model-router.md",
       "sha256": "9dd8fe439d29610cf74ebe840d42534a9be43d9e04c4dad66999bd62eaf0c099",
       "bytes": 266
@@ -2133,6 +2138,16 @@
       "path": "internal/memory/decision/types_test.go",
       "sha256": "8f0b6850c9394e2be5c0efa7bb91e414e8f69289f1cdcb13df268d3dd74df661",
       "bytes": 220
+    },
+    {
+      "path": "internal/memory/lifecycle/engine.go",
+      "sha256": "c10ed75ae0d1310ec8930d11c05d77fda6e969f10ecc5ac3a496df3096797632",
+      "bytes": 4062
+    },
+    {
+      "path": "internal/memory/lifecycle/engine_test.go",
+      "sha256": "27dc63e2c8e69d174aa86b1b9438d301e10d78fbd5d01e5ae3b7c2e443e4820f",
+      "bytes": 3868
     },
     {
       "path": "internal/model/capability.go",
