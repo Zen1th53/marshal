@@ -1190,6 +1190,16 @@
       "bytes": 1057
     },
     {
+      "path": "docs/web/CONTROL-PLANE-API-MAP.md",
+      "sha256": "7533400532e568df4953bd2420e0b19ef876295eb614d137fd495a816951d03f",
+      "bytes": 5402
+    },
+    {
+      "path": "docs/web/CONTROL-PLANE-GAPS.md",
+      "sha256": "fc616a0f47ba4daac48f91bf9632c839b53b5e0aae74ad5e79814ef11324e807",
+      "bytes": 1900
+    },
+    {
       "path": "examples/01-codex-task.json",
       "sha256": "592d3ff43d759421881c7c2db5083284cb79a694e084a3c1b3c4ca0c98816841",
       "bytes": 189
@@ -1443,6 +1453,11 @@
       "path": "internal/adapter/trustscore_check_test.go",
       "sha256": "17f6b4da9ab2dc14c47a0383bcc461b807fe9978570ca0119e72489bc544d45d",
       "bytes": 438
+    },
+    {
+      "path": "internal/api/capability_map_test.go",
+      "sha256": "3841426a05766646f21455907af22cfda95049e35dbc23c5bb7594ac519b29b2",
+      "bytes": 852
     },
     {
       "path": "internal/api/client.go",
