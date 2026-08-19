@@ -5371,13 +5371,13 @@
     },
     {
       "path": "web/package-lock.json",
-      "sha256": "98ea3da1798776470b645a1f2cbf517f14446653c5089566d84176aae4ce7a4c",
-      "bytes": 119015
+      "sha256": "0e0cbded37f6251ac309ba680fbbda434e0c4eb1e82aad1a2cbd8d23583dd4cf",
+      "bytes": 119562
     },
     {
       "path": "web/package.json",
-      "sha256": "1b60fd5214f0b572230d05726702b23c745f979c66ebbb2f8af545e2d3ee54fd",
-      "bytes": 817
+      "sha256": "8690465fc2cb84bf3e12877ec9966e0ef4fcce12322c651c3227c950d51a1b22",
+      "bytes": 863
     },
     {
       "path": "web/src/App.tsx",
@@ -5386,8 +5386,8 @@
     },
     {
       "path": "web/src/index.css",
-      "sha256": "ee0931ecaac111d44dd9d3299950f6fafbda347da54341da0e155a39adf02d2a",
-      "bytes": 912
+      "sha256": "95acbb129d5e5194489d76847468c24dd7306a3a2766f9ff557d7b162a12717a",
+      "bytes": 66
     },
     {
       "path": "web/src/main.tsx",
