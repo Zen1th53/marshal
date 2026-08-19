@@ -3525,6 +3525,11 @@
       "bytes": 1112
     },
     {
+      "path": "internal/worktree/gc_test.go",
+      "sha256": "02733d55ae57a352e4a9d79e4415dad5d56fa5b22f86ff94399e07f7e40b0ea1",
+      "bytes": 3097
+    },
+    {
       "path": "internal/worktree/manager.go",
       "sha256": "f2d6c613e6a978319960547941e02598f823a1630c79fb58da654e5b46f4b535",
       "bytes": 9833
