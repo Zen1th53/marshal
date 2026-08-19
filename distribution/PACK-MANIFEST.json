@@ -2025,6 +2025,11 @@
       "bytes": 3811
     },
     {
+      "path": "internal/integration/startup_reconciliation_test.go",
+      "sha256": "67ae212a305658faa329212dbafc102b366b684cafe2b290ec462c3ec4cb9647",
+      "bytes": 3988
+    },
+    {
       "path": "internal/legal/audit.go",
       "sha256": "11c0e1418a2e402d895508143d527ad9066ee7c512972f7e92dfabaf3b724b4e",
       "bytes": 2968
@@ -2846,8 +2851,8 @@
     },
     {
       "path": "internal/store/evidence.go",
-      "sha256": "95c15162995a6c9bb6e9435cac0ec6a4f2d580f688a55895e13681a0a370d905",
-      "bytes": 15350
+      "sha256": "57d8940dd949c6558bd17f47ba4280a1e8941cb26ab35a3aeaa3a8948468db70",
+      "bytes": 15705
     },
     {
       "path": "internal/store/evidence_a07_secret_test.go",

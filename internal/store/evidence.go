@@ -16,6 +16,21 @@ import (
 var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 func (s *Store) AppendEvent(ctx context.Context, tx *sql.Tx, event model.Event) error {
+	if tx == nil {
+		newTx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer newTx.Rollback()
+		if err := s.appendEventTx(ctx, newTx, event); err != nil {
+			return err
+		}
+		return newTx.Commit()
+	}
+	return s.appendEventTx(ctx, tx, event)
+}
+
+func (s *Store) appendEventTx(ctx context.Context, tx *sql.Tx, event model.Event) error {
 	if event.ID == "" || event.Type == "" || event.Timestamp.IsZero() || event.AggregateRevision < 0 {
 		return fmt.Errorf("%w: incomplete event", model.ErrInvalid)
 	}
