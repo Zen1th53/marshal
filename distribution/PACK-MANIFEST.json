@@ -2355,6 +2355,16 @@
       "bytes": 3868
     },
     {
+      "path": "internal/memory/procedure/distiller.go",
+      "sha256": "edc7d38209011e379437dcfba33a8851b72beb3ae0d5595dcf61d911c1e25e00",
+      "bytes": 3041
+    },
+    {
+      "path": "internal/memory/procedure/distiller_test.go",
+      "sha256": "e150f0c16ae0005df2ceb24c08d92f60ebbd9940c6ba978fa73d2d057c49e9ec",
+      "bytes": 2377
+    },
+    {
       "path": "internal/memory/provenance/trust.go",
       "sha256": "7111757f55e563d3d3f04f074e70a2a48c3cc05d4f6bf7d8c5cd095e001374e7",
       "bytes": 2154
