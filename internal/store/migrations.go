@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 68
+const LatestSchemaVersion = 69
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1621,6 +1621,27 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 68: %w", err)
 		}
 		version = 68
+	}
+	if version < 69 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS memory_outbox (
+				event_id     TEXT PRIMARY KEY,
+				project_id   TEXT NOT NULL REFERENCES projects(project_id),
+				memory_id    TEXT NOT NULL,
+				event_type   TEXT NOT NULL,
+				payload_json TEXT NOT NULL,
+				created_at   TEXT NOT NULL,
+				processed_at TEXT
+			);
+			CREATE INDEX IF NOT EXISTS memory_outbox_by_unprocessed
+				ON memory_outbox(project_id, processed_at, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 69: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(69, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 69: %w", err)
+		}
+		version = 69
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

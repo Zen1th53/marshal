@@ -60,7 +60,13 @@ func (s *Store) WriteMemoryV2(ctx context.Context, rec model.MemoryRecordV2) err
 		rec.UpdatedAt = now
 	}
 
-	_, err = s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin write memory tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO memory_records_v2(
 			memory_id, project_id, kind, lifecycle, confidence, authority,
 			title, body, content_digest, scope, scope_id,
@@ -93,6 +99,14 @@ func (s *Store) WriteMemoryV2(ctx context.Context, rec model.MemoryRecordV2) err
 	)
 	if err != nil {
 		return fmt.Errorf("write memory v2: %w", err)
+	}
+
+	if err := insertMemoryOutboxTx(ctx, tx, rec.ProjectID, rec.ID, "memory.created", rec); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit write memory v2: %w", err)
 	}
 	return nil
 }
@@ -536,6 +550,17 @@ func (s *Store) UpdateMemory(ctx context.Context, projectID, memoryID string, ex
 	}
 	if rowsAffected == 0 {
 		return model.MemoryRecordV2{}, fmt.Errorf("%w: concurrent modification on memory %s", model.ErrConflict, memoryID)
+	}
+
+	eventType := "memory.updated"
+	if rec.Lifecycle == model.MemorySuperseded {
+		eventType = "memory.superseded"
+	} else if rec.Lifecycle == model.MemoryTombstoned {
+		eventType = "memory.tombstoned"
+	}
+
+	if err := insertMemoryOutboxTx(ctx, tx, projectID, memoryID, eventType, rec); err != nil {
+		return model.MemoryRecordV2{}, err
 	}
 
 	if err := tx.Commit(); err != nil {

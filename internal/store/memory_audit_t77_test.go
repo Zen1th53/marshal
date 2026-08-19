@@ -17,6 +17,8 @@ var knownMemoryTables = map[string]string{
 	"failure_memory_records":  "canonical-legacy: failure patterns, T77",
 	// T79: canonical v2 convergence destination
 	"memory_records_v2": "canonical-v2: primary memory store, T79",
+	// T84: transactional outbox for derived indexers
+	"memory_outbox": "canonical-outbox: derived index mutation log, T84",
 }
 
 // derivedDecisionTables are subsystem decision logs, not canonical memory.

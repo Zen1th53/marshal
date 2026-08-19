@@ -920,6 +920,11 @@
       "bytes": 1268
     },
     {
+      "path": "docs/memory/provenance.md",
+      "sha256": "05521cc190af1dde1eca2975cc9d36f70ad1353d6049cfdc10d53ceff3f4dc68",
+      "bytes": 1282
+    },
+    {
       "path": "docs/model-router.md",
       "sha256": "9dd8fe439d29610cf74ebe840d42534a9be43d9e04c4dad66999bd62eaf0c099",
       "bytes": 266
@@ -2150,6 +2155,16 @@
       "bytes": 3868
     },
     {
+      "path": "internal/memory/provenance/trust.go",
+      "sha256": "7111757f55e563d3d3f04f074e70a2a48c3cc05d4f6bf7d8c5cd095e001374e7",
+      "bytes": 2154
+    },
+    {
+      "path": "internal/memory/provenance/trust_test.go",
+      "sha256": "ca0952053017d4e747d63b5cd977737bc00d19792389284e4c6f55bed43c63cf",
+      "bytes": 2304
+    },
+    {
       "path": "internal/model/capability.go",
       "sha256": "11995bfbb4f0a57fb35caa30b54723957a20e9573067e1941feda2def349e774",
       "bytes": 1429
@@ -3066,13 +3081,13 @@
     },
     {
       "path": "internal/store/memory.go",
-      "sha256": "44a58a2fda67e3da77eb06b397298af663c3cd12136c86a2d161bbcb71a7b633",
-      "bytes": 20360
+      "sha256": "006efa2cb2eb3a3279020cbdc528a1dd95cb347a8df0f2a682b6e3b90f187098",
+      "bytes": 21038
     },
     {
       "path": "internal/store/memory_audit_t77_test.go",
-      "sha256": "6f7fb4f3d468d23b30b898e20a5ee1db724163c8d5f95b3b970c9e10a77d889f",
-      "bytes": 3598
+      "sha256": "22745fec1a1f03d9d57d5b3d7bb904628fd2d3b201cc605f0a98e3761fe2bebd",
+      "bytes": 3720
     },
     {
       "path": "internal/store/memory_cas_t81_test.go",
@@ -3106,8 +3121,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "a599200961a3dd881499d998f74cf198f6f2902605e7e5089d7b9594a1149898",
-      "bytes": 61951
+      "sha256": "7edc5a8d712117cf89a41484f9b8bcee83220b2e8d098bcbe10dbdd54ee52591",
+      "bytes": 62716
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
