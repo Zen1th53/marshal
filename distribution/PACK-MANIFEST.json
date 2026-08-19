@@ -2365,6 +2365,16 @@
       "bytes": 2017
     },
     {
+      "path": "internal/memory/retrieval/rerank/reranker.go",
+      "sha256": "6936230062a1d246a6a974d163b65da12ec01328d284fa542f6742dfe441cd9f",
+      "bytes": 2852
+    },
+    {
+      "path": "internal/memory/retrieval/rerank/reranker_test.go",
+      "sha256": "dd1693a4fad04c57ecad02c62612bad88c7159d1407ff188d741e83766934c58",
+      "bytes": 2015
+    },
+    {
       "path": "internal/memory/review/approval.go",
       "sha256": "b268fd14ee4cd7348fc34fc6d7a30e45b2304f4736689b733da8c71dd5a5953c",
       "bytes": 3561
