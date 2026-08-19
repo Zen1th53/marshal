@@ -2480,6 +2480,16 @@
       "bytes": 1450
     },
     {
+      "path": "internal/memory/proactive/trigger.go",
+      "sha256": "e4cc3a4d85511618aab2d49154b4dc28e8c634b8ecd7f91f8017c58fed87451c",
+      "bytes": 3391
+    },
+    {
+      "path": "internal/memory/proactive/trigger_test.go",
+      "sha256": "9f18211bdd8dfa13afd4506430a486778c4a84465e91edb49940fd99f7a6a44f",
+      "bytes": 2494
+    },
+    {
       "path": "internal/memory/procedure/distiller.go",
       "sha256": "edc7d38209011e379437dcfba33a8851b72beb3ae0d5595dcf61d911c1e25e00",
       "bytes": 3041
