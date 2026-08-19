@@ -2320,6 +2320,16 @@
       "bytes": 2459
     },
     {
+      "path": "internal/memory/consolidation/loss_aware.go",
+      "sha256": "d995dd18fe328bf2588f53d07fcdc68c9009214352c53a43fc397c33265e7bbc",
+      "bytes": 2353
+    },
+    {
+      "path": "internal/memory/consolidation/loss_aware_test.go",
+      "sha256": "3ef26d0e6a1ced84df5bdeac02eb2c1f15c303c86089b5847594e6bacee61919",
+      "bytes": 1558
+    },
+    {
       "path": "internal/memory/decision/adapter.go",
       "sha256": "ba9a55835f324336298fcbb28e19979f7617175047c24512851e7c62979f13dc",
       "bytes": 4099
