@@ -715,6 +715,11 @@
       "bytes": 783
     },
     {
+      "path": "conformance/memory/base_checkpoint_test.go",
+      "sha256": "f8305d661ba9a3199a4ae46df3fcb2254439a2bdc8ad934d243cd62750606714",
+      "bytes": 1606
+    },
+    {
       "path": "conformance/memory/baselines/baselines.go",
       "sha256": "32baa4753dfbc3675958b0dde68861036ab4fd65d0172f536874ba485069bced",
       "bytes": 1322
@@ -4228,6 +4233,11 @@
       "path": "legal/assignment-registry.yml",
       "sha256": "89435ac4962c787656b844f8ffb3a448d4ec98c9b2dd22fe269cafd00582312a",
       "bytes": 643
+    },
+    {
+      "path": "memory-conformance.json",
+      "sha256": "b5f5fe0263e142c2ae2c36471ecd1839d108ba0cfcc4ea8bcfc37ccd9888322e",
+      "bytes": 1351
     },
     {
       "path": "memory/APPROVALS.md",
