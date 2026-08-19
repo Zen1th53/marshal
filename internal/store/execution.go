@@ -94,3 +94,95 @@ func (s *Store) FinalizeExecution(ctx context.Context, taskID, sessionID string,
 	}
 	return tx.Commit()
 }
+
+type ReconcileResult struct {
+	ReconciledTasks    int `json:"reconciled_tasks"`
+	TerminatedSessions int `json:"terminated_sessions"`
+	FailedWorkerRuns   int `json:"failed_worker_runs"`
+}
+
+func (s *Store) ReconcileStartupOrphans(ctx context.Context) (ReconcileResult, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ReconcileResult{}, fmt.Errorf("begin startup reconciliation: %w", err)
+	}
+	defer tx.Rollback()
+
+	projectID, err := currentProjectID(ctx, tx)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+
+	now := utcNow()
+	res := ReconcileResult{}
+
+	// 1. Terminate running worker runs with no active lease
+	wrRes, err := tx.ExecContext(ctx, `
+		UPDATE worker_runs
+		SET exit_status = 137, status = 'failed', ended_at = ?, revision = revision + 1
+		WHERE ended_at IS NULL AND session_id NOT IN (
+			SELECT session_id FROM leases WHERE status = 'active' AND expires_at >= ?
+		)
+	`, now, now)
+	if err == nil {
+		n, _ := wrRes.RowsAffected()
+		res.FailedWorkerRuns = int(n)
+	}
+
+	// 2. Mark active sessions with no active unexpired lease as stale
+	sessRes, err := tx.ExecContext(ctx, `
+		UPDATE sessions
+		SET status = 'stale', revision = revision + 1
+		WHERE status = 'active' AND session_id NOT IN (
+			SELECT session_id FROM leases WHERE status = 'active' AND expires_at >= ?
+		)
+	`, now)
+	if err == nil {
+		n, _ := sessRes.RowsAffected()
+		res.TerminatedSessions = int(n)
+	}
+
+	// 3. Mark expired active leases as released
+	leaseRes, err := tx.ExecContext(ctx, `
+		UPDATE leases
+		SET status = 'released', revision = revision + 1
+		WHERE status = 'active' AND expires_at < ?
+	`, now)
+	if err == nil {
+		n, _ := leaseRes.RowsAffected()
+		res.ReconciledTasks = int(n)
+	}
+
+	// 4. Release tasks that were claimed/working with expired or missing leases
+	_, _ = tx.ExecContext(ctx, `
+		UPDATE tasks
+		SET status = 'ready', owner_agent_id = NULL, revision = revision + 1, updated_at = ?
+		WHERE status IN ('claimed', 'working') AND task_id NOT IN (
+			SELECT task_id FROM leases WHERE status = 'active' AND expires_at >= ?
+		)
+	`, now, now)
+
+	if res.FailedWorkerRuns > 0 || res.TerminatedSessions > 0 || res.ReconciledTasks > 0 {
+		eventID, err := model.NewID("EVENT-")
+		if err == nil {
+			_ = s.AppendEvent(ctx, tx, model.Event{
+				ID:                eventID,
+				Type:              "STARTUP_RECONCILIATION",
+				ProjectID:         projectID,
+				AggregateRevision: 0,
+				Timestamp:         time.Now().UTC(),
+				Data: map[string]any{
+					"reconciled_tasks":    res.ReconciledTasks,
+					"terminated_sessions": res.TerminatedSessions,
+					"failed_worker_runs":  res.FailedWorkerRuns,
+				},
+			})
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return ReconcileResult{}, fmt.Errorf("commit startup reconciliation: %w", err)
+	}
+
+	return res, nil
+}

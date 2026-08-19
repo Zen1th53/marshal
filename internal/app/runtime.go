@@ -376,6 +376,12 @@ func (r *Runtime) PrepareCell(ctx context.Context, spec cell.Spec) (cell.Record,
 func (r *Runtime) Close() error { return r.store.Close() }
 
 func (r *Runtime) ReconcileStartup(ctx context.Context) error {
+	// 1. Reconcile database orphans (dead worker runs, stale sessions, expired leases)
+	if _, err := r.store.ReconcileStartupOrphans(ctx); err != nil {
+		return err
+	}
+
+	// 2. Reconcile remaining tasks
 	tasks, err := r.store.ListTasks(ctx)
 	if err != nil {
 		return err

@@ -1406,8 +1406,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "07aabfe6c33b76c630fb4c25483673510f6f89767b1e0e802ffeb4f3429081cd",
-      "bytes": 41282
+      "sha256": "20524cd47261796b968fdb953a05d5b36671c1ab8935ad1aee4e5f3ebc71db7e",
+      "bytes": 41482
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -2695,6 +2695,16 @@
       "bytes": 3134
     },
     {
+      "path": "internal/store/backup.go",
+      "sha256": "7a89ab8da5c9f391188d5d77a395bdf8b14e24fcc26f114c6ce28f33aedd76df",
+      "bytes": 6567
+    },
+    {
+      "path": "internal/store/backup_test.go",
+      "sha256": "79586370c3448b7ecd1987c1e3053c188d285980f8b333f6bc14a3273a84c1b6",
+      "bytes": 3487
+    },
+    {
       "path": "internal/store/budget_persistence_a02_test.go",
       "sha256": "d47aaf7ad6abcde326ff292a002f211254395af9d03c69b45063e854b4d70e14",
       "bytes": 232
@@ -2941,8 +2951,8 @@
     },
     {
       "path": "internal/store/execution.go",
-      "sha256": "630e454883fb36a925cb25b59ec79a3544d0741c226d7e107e5606d0dbb43944",
-      "bytes": 3606
+      "sha256": "9298437e37c5c03e2a9f5b99f810dda871f1dc66fa50fe39f5ea90f01b082dd7",
+      "bytes": 6377
     },
     {
       "path": "internal/store/explain_persistence_a02_test.go",
