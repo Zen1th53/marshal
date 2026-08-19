@@ -58,6 +58,7 @@ Commands:
   artifacts
   verify [-- command args...]
   reconcile --file-state state.json
+  memory status | recall | show | list | promote | tombstone | audit
   policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
   daemon
@@ -154,6 +155,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.gc(ctx, args[1:])
 	case "state":
 		err = c.state(ctx, args[1:])
+	case "memory":
+		err = c.memory(ctx, args[1:])
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}

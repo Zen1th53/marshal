@@ -1701,8 +1701,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "74606351ba8eef825d594e358440fba64b5d69740ca6ac1839f4b089485d51c9",
-      "bytes": 31598
+      "sha256": "4ccdecdc141427b0e373dfda5c77f23f4c31be33274ca0f5f67382888a4b26d7",
+      "bytes": 31715
     },
     {
       "path": "internal/cli/cli_test.go",
@@ -2163,6 +2163,11 @@
       "path": "internal/mcp/mcp_test.go",
       "sha256": "a1b8748e71772cccec31ffe237de58cca70dcab33f82ea6fb5705cac35315a20",
       "bytes": 18338
+    },
+    {
+      "path": "internal/mcp/memory_tools_test.go",
+      "sha256": "c3975ea52d1ab30f98d2c99a568619d579773bde4ddece7f2166e2acffe6b2d3",
+      "bytes": 1937
     },
     {
       "path": "internal/mcp/server.go",
