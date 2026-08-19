@@ -1,50 +1,61 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://marshal.local/schemas/memory-record.schema.json",
-  "title": "MARSHAL Memory Record",
+  "title": "MARSHAL Memory Record v2",
+  "description": "Canonical durable memory record. Supersedes the v1 memory_records schema. See internal/model/memory.go (MemoryRecordV2).",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "id",
     "project_id",
-    "memory_type",
-    "status",
-    "confidence",
+    "kind",
+    "lifecycle",
+    "authority",
+    "title",
     "body",
+    "scope",
+    "scope_id",
     "source",
+    "observed_at",
+    "ingested_at",
+    "valid_from",
     "created_at",
     "updated_at"
   ],
   "properties": {
     "id": {
-      "type": "string"
+      "type": "string",
+      "description": "Stable unique identifier independent of mutable title."
     },
     "project_id": {
       "type": "string"
     },
-    "memory_type": {
+    "kind": {
+      "description": "Memory kind. Zero/unknown is invalid.",
       "enum": [
         "working",
-        "decision",
-        "finding",
         "semantic",
         "episodic",
-        "procedural"
+        "decision",
+        "procedural",
+        "finding",
+        "handoff",
+        "checkpoint",
+        "failure"
       ]
     },
-    "title": {
-      "type": "string"
-    },
-    "body": {
-      "type": "string"
-    },
-    "status": {
+    "lifecycle": {
+      "description": "Lifecycle state. Forward: observed → candidate → verified → durable. Exceptional: rejected, stale, conflicted, superseded, tombstoned.",
       "enum": [
-        "active",
-        "stale",
-        "superseded",
+        "observed",
+        "candidate",
+        "verified",
+        "durable",
         "rejected",
-        "closed"
+        "stale",
+        "conflicted",
+        "superseded",
+        "tombstoned"
       ]
     },
     "confidence": {
@@ -55,12 +66,37 @@
         "unverified"
       ]
     },
+    "authority": {
+      "description": "Authority class that controls promotion rules.",
+      "enum": [
+        "operator",
+        "policy",
+        "verified",
+        "agent"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_digest": {
+      "type": "string",
+      "description": "SHA-256 of canonical content fields, computed by store on write."
+    },
+    "scope": {
+      "type": "string",
+      "description": "Namespace: project | task | agent | session | branch | team"
+    },
+    "scope_id": {
+      "type": "string"
+    },
     "source": {
       "type": "object",
-      "required": [
-        "kind",
-        "reference"
-      ],
+      "required": ["kind", "reference"],
+      "additionalProperties": false,
       "properties": {
         "kind": {
           "enum": [
@@ -74,12 +110,84 @@
         },
         "reference": {
           "type": "string"
+        },
+        "agent_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
         }
-      },
-      "additionalProperties": false
+      }
     },
-    "provenance": {
-      "type": "object"
+    "evidence_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "head_commit": {
+      "type": "string"
+    },
+    "branch_name": {
+      "type": "string"
+    },
+    "worktree_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the fact was observed in the real world."
+    },
+    "ingested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When MARSHAL first recorded it."
+    },
+    "valid_from": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Start of the interval during which the fact is asserted true."
+    },
+    "valid_to": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "End of validity interval (null = open-ended)."
+    },
+    "last_verified_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "superseded_by": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "supersedes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "conflict_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "acl_scope": {
+      "type": "string",
+      "description": "Restricts reads to agents/roles matching this scope. Empty = project-wide readable."
     },
     "created_at": {
       "type": "string",
@@ -89,29 +197,9 @@
       "type": "string",
       "format": "date-time"
     },
-    "last_verified_at": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "format": "date-time"
-    },
-    "supersedes": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "uniqueItems": true
-    },
-    "tags": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "uniqueItems": true
-    },
-    "acl_scope": {
-      "type": "string"
+    "ext_meta": {
+      "type": "object",
+      "description": "Versioned extension metadata. The only field that may use free-form structure. Excluded from canonical digest."
     }
   }
 }
