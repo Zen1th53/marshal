@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"strings"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/httpsrv"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -537,5 +539,42 @@ func TestMCPActionLevelCapabilityAuthorization(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 OK for task.read capability, got %d", resp.StatusCode)
+	}
+}
+
+func TestMCPOversizedBodyAndMalformedJSON(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	srv := NewServer(runtime)
+	ts := httptest.NewServer(httpsrv.LimitBodyMiddleware(srv.Handler(), 100))
+	defer ts.Close()
+
+	// 1. Malformed JSON -> 400 Bad Request / code -32700
+	resp, err := http.Post(ts.URL, "application/json", strings.NewReader(`{invalid json`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for malformed JSON, got %d", resp.StatusCode)
+	}
+
+	// 2. Oversized body -> 413 Request Entity Too Large
+	largePayload := bytes.Repeat([]byte(" "), 500)
+	resp, err = http.Post(ts.URL, "application/json", bytes.NewReader(largePayload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 for oversized body, got %d", resp.StatusCode)
 	}
 }

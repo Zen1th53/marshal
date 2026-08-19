@@ -2,6 +2,7 @@ package a2a
 
 import (
 	"bytes"
+	"strings"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/httpsrv"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/protocol"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
@@ -477,5 +479,48 @@ func TestA2AActionLevelCapabilityAuthorization(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403 Forbidden for missing task.execute capability, got %d", resp.StatusCode)
+	}
+}
+
+func TestA2AOversizedBodyAndMalformedJSON(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	srv := NewServer(runtime)
+	ts := httptest.NewServer(httpsrv.LimitBodyMiddleware(srv.Handler(), 100))
+	defer ts.Close()
+
+	// 1. Malformed JSON -> 400 Bad Request
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/message:send", strings.NewReader(`{invalid json`))
+	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for malformed JSON, got %d", resp.StatusCode)
+	}
+
+	// 2. Oversized body -> 413 Request Entity Too Large
+	largePayload := bytes.Repeat([]byte("a"), 500)
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(largePayload))
+	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 for oversized body, got %d", resp.StatusCode)
 	}
 }

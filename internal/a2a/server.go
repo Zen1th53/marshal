@@ -2,6 +2,7 @@ package a2a
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -67,6 +68,11 @@ func (s *Server) handleTypedHandoff(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&submission); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeHandoffError(w, http.StatusRequestEntityTooLarge, protocol.CodeInvalid)
+			return
+		}
 		writeHandoffError(w, http.StatusBadRequest, protocol.CodeInvalid)
 		return
 	}
@@ -328,6 +334,11 @@ func (s *Server) handleTaskDelegation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
 		return
 	}

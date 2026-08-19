@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -92,6 +93,11 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 
 	var req jsonRPCRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			s.writeErrorWithStatus(w, nil, http.StatusRequestEntityTooLarge, -32000, "Request body too large")
+			return
+		}
 		s.writeErrorWithStatus(w, nil, http.StatusBadRequest, -32700, "Parse error: "+err.Error())
 		return
 	}

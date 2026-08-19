@@ -20,6 +20,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/api"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/httpsrv"
 	"github.com/Zen1th53/marshal/internal/doctor"
 	"github.com/Zen1th53/marshal/internal/legal"
 	"github.com/Zen1th53/marshal/internal/mcp"
@@ -693,8 +694,23 @@ func (c command) mcp(ctx context.Context, args []string) error {
 		}
 
 		fmt.Fprintf(c.stdout, "Starting MARSHAL MCP server on http://%s\n", *listen)
-		server := &http.Server{Addr: *listen, Handler: srv.Handler()}
-		return server.ListenAndServe()
+		server := httpsrv.NewServer(httpsrv.Config{
+			Addr:    *listen,
+			Handler: srv.Handler(),
+		})
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- server.ListenAndServe()
+		}()
+		select {
+		case <-ctx.Done():
+			shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = server.Shutdown(shutCtx)
+			return ctx.Err()
+		case err := <-errCh:
+			return err
+		}
 	case "status":
 		return c.print(map[string]any{
 			"status": "ready", "protocol_version": mcp.ProtocolVersion2026,
