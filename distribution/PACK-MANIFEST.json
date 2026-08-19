@@ -2195,6 +2195,16 @@
       "bytes": 2304
     },
     {
+      "path": "internal/memory/retention/policy.go",
+      "sha256": "0fbd4e0676ca50da1bd3f28a7683882d7a0f9e4acfb7c7bc1569b58e8bed9cbf",
+      "bytes": 1865
+    },
+    {
+      "path": "internal/memory/retention/policy_test.go",
+      "sha256": "1a4b364aae0d89531ce8182679decca5b1029efb57846effb8790a87ed92e7b8",
+      "bytes": 2136
+    },
+    {
       "path": "internal/memory/review/approval.go",
       "sha256": "b268fd14ee4cd7348fc34fc6d7a30e45b2304f4736689b733da8c71dd5a5953c",
       "bytes": 3561
