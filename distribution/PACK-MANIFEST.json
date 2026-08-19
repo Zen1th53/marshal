@@ -2155,6 +2155,16 @@
       "bytes": 220
     },
     {
+      "path": "internal/memory/episode/capture.go",
+      "sha256": "ff573ecaa322ca99eb1ec418e8c72b83fa78ecb0d0a72c43cf6b4d87bf6af4ce",
+      "bytes": 3724
+    },
+    {
+      "path": "internal/memory/episode/capture_test.go",
+      "sha256": "c4d80f1f801e6b753caa3611f57b2359021a56c66e488b6f9add3ce2a685970d",
+      "bytes": 2414
+    },
+    {
       "path": "internal/memory/extract/pipeline.go",
       "sha256": "a7ec35a5252379fbf207aa70bf869e529fa9f588731a700d6c322b0801b30d06",
       "bytes": 5121
