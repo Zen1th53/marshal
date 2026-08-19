@@ -10,6 +10,8 @@ const (
 	RoleDeveloper    Role = "developer"
 	RoleQA           Role = "qa"
 	RoleAppSec       Role = "appsec"
+	RoleReviewer     Role = "reviewer"
+	RoleAdmin        Role = "admin"
 )
 
 type AgentStatus string
@@ -66,7 +68,7 @@ type Session struct {
 
 func (r Role) Valid() bool {
 	switch r {
-	case RoleOrchestrator, RoleArchitect, RoleDeveloper, RoleQA, RoleAppSec:
+	case RoleOrchestrator, RoleArchitect, RoleDeveloper, RoleQA, RoleAppSec, RoleReviewer, RoleAdmin:
 		return true
 	default:
 		return false

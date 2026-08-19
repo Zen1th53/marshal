@@ -11,6 +11,7 @@ var (
 	ErrApprovalRequired = errors.New("approval required")
 	ErrSecretMaterial   = errors.New("secret material")
 	ErrDirtyWorktree    = errors.New("dirty worktree")
+	ErrUnauthorized     = errors.New("unauthorized")
 )
 
 type CodeError struct {

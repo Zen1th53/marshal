@@ -416,3 +416,86 @@ func claimConflict(message string, cause error) error {
 	}
 	return fmt.Errorf("%w: %s: %v", model.ErrConflict, message, cause)
 }
+
+func (s *Store) TransitionTask(ctx context.Context, req model.TaskTransitionRequest) (model.Task, error) {
+	if req.TaskID == "" {
+		return model.Task{}, fmt.Errorf("%w: task ID cannot be empty", model.ErrInvalid)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return model.Task{}, fmt.Errorf("begin task transition: %w", err)
+	}
+	defer tx.Rollback()
+
+	projectID, err := currentProjectID(ctx, tx)
+	if err != nil {
+		return model.Task{}, err
+	}
+
+	task, exists, err := loadTaskTx(ctx, tx, projectID, req.TaskID)
+	if err != nil {
+		return model.Task{}, fmt.Errorf("load task: %w", err)
+	}
+	if !exists {
+		return model.Task{}, fmt.Errorf("%w: task %s not found", model.ErrNotFound, req.TaskID)
+	}
+
+	if task.Status != req.FromStatus || task.Revision != req.ExpectedRevision {
+		return model.Task{}, fmt.Errorf("%w: task status or revision mismatch (current status=%s rev=%d, expected status=%s rev=%d)",
+			model.ErrConflict, task.Status, task.Revision, req.FromStatus, req.ExpectedRevision)
+	}
+
+	currentHead := ""
+	if task.HeadCommit != nil {
+		currentHead = *task.HeadCommit
+	}
+
+	if err := model.ValidateTaskTransition(task.Status, req.ToStatus, task.Risk, req.ActorRole, currentHead, req.HeadCommit); err != nil {
+		return model.Task{}, err
+	}
+
+	now := utcNow()
+	newRevision := task.Revision + 1
+
+	result, err := tx.ExecContext(ctx, `
+		UPDATE tasks
+		SET status = ?, revision = ?, updated_at = ?
+		WHERE project_id = ? AND task_id = ? AND status = ? AND revision = ?
+	`, req.ToStatus, newRevision, now, projectID, req.TaskID, req.FromStatus, req.ExpectedRevision)
+	if err != nil {
+		return model.Task{}, fmt.Errorf("update task status: %w", err)
+	}
+	if err := requireOne(result, "transition task"); err != nil {
+		return model.Task{}, err
+	}
+
+	eventID, err := model.NewID("EVENT-")
+	if err != nil {
+		return model.Task{}, err
+	}
+
+	var actorAgent any
+	if req.ActorID != "" {
+		var exists int
+		if err := tx.QueryRowContext(ctx, "SELECT 1 FROM agents WHERE agent_id = ?", req.ActorID).Scan(&exists); err == nil && exists == 1 {
+			actorAgent = req.ActorID
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO audit_events(
+			event_id, event_type, project_id, task_id, actor_agent_id,
+			aggregate_revision, timestamp, data_json
+		) VALUES(?, 'TASK_TRANSITIONED', ?, ?, ?, ?, ?, '{}')
+	`, eventID, projectID, req.TaskID, actorAgent, newRevision, now); err != nil {
+		return model.Task{}, fmt.Errorf("record task transition event: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return model.Task{}, fmt.Errorf("commit task transition: %w", err)
+	}
+
+	task.Status = req.ToStatus
+	task.Revision = newRevision
+	return task, nil
+}

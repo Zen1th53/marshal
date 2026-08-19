@@ -72,6 +72,17 @@ type ReleaseRequest struct {
 	BlockedReason    string
 }
 
+type TaskTransitionRequest struct {
+	TaskID           string     `json:"task_id"`
+	FromStatus       TaskStatus `json:"from_status"`
+	ToStatus         TaskStatus `json:"to_status"`
+	ActorRole        Role       `json:"actor_role"`
+	ActorID          string     `json:"actor_id"`
+	HeadCommit       string     `json:"head_commit,omitempty"`
+	Reason           string     `json:"reason,omitempty"`
+	ExpectedRevision int64      `json:"expected_revision"`
+}
+
 type Lease struct {
 	ID         string    `json:"id"`
 	TaskID     string    `json:"task_id"`
@@ -182,4 +193,168 @@ func validTaskStatus(status TaskStatus) bool {
 	default:
 		return false
 	}
+}
+
+func ValidateTaskTransition(from, to TaskStatus, risk Risk, actor Role, currentCommit, reqCommit string) error {
+	if !validTaskStatus(from) || !validTaskStatus(to) {
+		return fmt.Errorf("%w: invalid task status transition %s -> %s", ErrInvalid, from, to)
+	}
+	if from == to {
+		return fmt.Errorf("%w: self transition not allowed", ErrInvalid)
+	}
+
+	// Terminal states cannot transition
+	if from == TaskMerged || from == TaskCancelled || from == TaskSuperseded {
+		return fmt.Errorf("%w: cannot transition out of terminal state %s", ErrConflict, from)
+	}
+
+	// Any state can transition to cancelled with authorized role
+	if to == TaskCancelled {
+		if actor == RoleDeveloper || actor == RoleArchitect || actor == RoleAdmin || actor == RoleOrchestrator {
+			return nil
+		}
+		return fmt.Errorf("%w: unauthorized role %s for cancellation", ErrUnauthorized, actor)
+	}
+
+	switch from {
+	case TaskProposed:
+		if to == TaskReady {
+			if actor == RoleArchitect || actor == RoleAdmin || actor == RoleOrchestrator || actor == RoleDeveloper {
+				return nil
+			}
+			return fmt.Errorf("%w: unauthorized role %s for proposed -> ready", ErrUnauthorized, actor)
+		}
+
+	case TaskReady:
+		if to == TaskClaimed {
+			return nil // handled by ClaimTask
+		}
+		if to == TaskBlocked {
+			return nil
+		}
+		if to == TaskSuperseded {
+			if actor == RoleArchitect || actor == RoleAdmin {
+				return nil
+			}
+			return fmt.Errorf("%w: unauthorized role %s for superseding task", ErrUnauthorized, actor)
+		}
+
+	case TaskClaimed:
+		if to == TaskWorking || to == TaskReady || to == TaskBlocked {
+			return nil
+		}
+
+	case TaskWorking:
+		if to == TaskReview {
+			if currentCommit != "" && reqCommit != "" && currentCommit != reqCommit {
+				return fmt.Errorf("%w: commit mismatch during review submission", ErrConflict)
+			}
+			return nil
+		}
+		if to == TaskBlocked || to == TaskReady {
+			return nil
+		}
+
+	case TaskBlocked:
+		if to == TaskReady || to == TaskWorking {
+			return nil
+		}
+
+	case TaskReview:
+		// Reviewer / Architect approves review -> QA
+		if to == TaskQA {
+			if actor != RoleReviewer && actor != RoleArchitect && actor != RoleAdmin {
+				return fmt.Errorf("%w: review approval requires reviewer, architect, or admin role (got %s)", ErrUnauthorized, actor)
+			}
+			if currentCommit != "" && reqCommit != "" && currentCommit != reqCommit {
+				return fmt.Errorf("%w: stale review approval: head commit %s does not match request commit %s", ErrConflict, currentCommit, reqCommit)
+			}
+			return nil
+		}
+		// Reviewer requests changes -> back to working
+		if to == TaskWorking {
+			if actor == RoleReviewer || actor == RoleArchitect || actor == RoleAdmin || actor == RoleDeveloper {
+				return nil
+			}
+			return fmt.Errorf("%w: unauthorized role %s for review rejection", ErrUnauthorized, actor)
+		}
+		if to == TaskBlocked {
+			return nil
+		}
+
+	case TaskQA:
+		// Rejection -> back to working
+		if to == TaskWorking {
+			if actor == RoleQA || actor == RoleArchitect || actor == RoleAdmin {
+				return nil
+			}
+			return fmt.Errorf("%w: unauthorized role %s for QA rejection", ErrUnauthorized, actor)
+		}
+		// QA passes -> Security Review (for R2/R3)
+		if to == TaskSecurityReview {
+			if actor != RoleQA && actor != RoleArchitect && actor != RoleAdmin {
+				return fmt.Errorf("%w: QA transition requires qa, architect, or admin role (got %s)", ErrUnauthorized, actor)
+			}
+			if currentCommit != "" && reqCommit != "" && currentCommit != reqCommit {
+				return fmt.Errorf("%w: stale QA approval: head commit %s does not match request commit %s", ErrConflict, currentCommit, reqCommit)
+			}
+			return nil
+		}
+		if to == TaskReadyToMerge {
+			// High risk tasks (R2, R3) MUST pass security_review first!
+			if risk == R2 || risk == R3 {
+				return fmt.Errorf("%w: high-risk task (%s) requires security_review before ready_to_merge", ErrConflict, risk)
+			}
+			if actor != RoleQA && actor != RoleArchitect && actor != RoleAdmin {
+				return fmt.Errorf("%w: QA pass requires qa, architect, or admin role (got %s)", ErrUnauthorized, actor)
+			}
+			if currentCommit != "" && reqCommit != "" && currentCommit != reqCommit {
+				return fmt.Errorf("%w: stale QA approval: head commit %s does not match request commit %s", ErrConflict, currentCommit, reqCommit)
+			}
+			return nil
+		}
+		if to == TaskBlocked {
+			return nil
+		}
+
+	case TaskSecurityReview:
+		// AppSec approves -> ready_to_merge
+		if to == TaskReadyToMerge {
+			if actor != RoleAppSec && actor != RoleAdmin {
+				return fmt.Errorf("%w: security approval requires appsec or admin role (got %s)", ErrUnauthorized, actor)
+			}
+			if currentCommit != "" && reqCommit != "" && currentCommit != reqCommit {
+				return fmt.Errorf("%w: stale security approval: head commit %s does not match request commit %s", ErrConflict, currentCommit, reqCommit)
+			}
+			return nil
+		}
+		// Security findings -> back to working
+		if to == TaskWorking {
+			if actor == RoleAppSec || actor == RoleAdmin || actor == RoleArchitect {
+				return nil
+			}
+			return fmt.Errorf("%w: unauthorized role %s for security rejection", ErrUnauthorized, actor)
+		}
+		if to == TaskBlocked {
+			return nil
+		}
+
+	case TaskReadyToMerge:
+		// Merge execution -> merged
+		if to == TaskMerged {
+			if actor != RoleOrchestrator && actor != RoleAdmin && actor != RoleArchitect {
+				return fmt.Errorf("%w: merge execution requires orchestrator, admin, or architect role (got %s)", ErrUnauthorized, actor)
+			}
+			if currentCommit != "" && reqCommit != "" && currentCommit != reqCommit {
+				return fmt.Errorf("%w: stale merge execution: head commit %s does not match request commit %s", ErrConflict, currentCommit, reqCommit)
+			}
+			return nil
+		}
+		// Conflict during merge attempt -> back to working
+		if to == TaskWorking || to == TaskBlocked {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%w: illegal direct transition from %s to %s", ErrConflict, from, to)
 }
