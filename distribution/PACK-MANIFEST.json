@@ -2570,6 +2570,16 @@
       "bytes": 1700
     },
     {
+      "path": "internal/memory/mutation/crypto_signer.go",
+      "sha256": "3d72f7600a7033c696eb2d9d05b1f0e95eaa318db88d775e4608f355e6544211",
+      "bytes": 2856
+    },
+    {
+      "path": "internal/memory/mutation/crypto_signer_test.go",
+      "sha256": "3c450d3f05d3d09f24ce0c1e9e1e47f69df34c56447ffb995f5a93de522d2cf1",
+      "bytes": 2354
+    },
+    {
       "path": "internal/memory/proactive/trigger.go",
       "sha256": "e4cc3a4d85511618aab2d49154b4dc28e8c634b8ecd7f91f8017c58fed87451c",
       "bytes": 3391
