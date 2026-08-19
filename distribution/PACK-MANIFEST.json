@@ -2255,6 +2255,16 @@
       "bytes": 3520
     },
     {
+      "path": "internal/memory/hooks/recall_hook.go",
+      "sha256": "d4320e6d8a685144f05117d96c1c3ed3537d0084215b27379ae14d1e79bf9b87",
+      "bytes": 2240
+    },
+    {
+      "path": "internal/memory/hooks/recall_hook_test.go",
+      "sha256": "6160dbef3cde04354e18ea1e86b3b7d54c32cce7bb4706a69a0fba6fb55b6d1b",
+      "bytes": 2178
+    },
+    {
       "path": "internal/memory/identity/dedup.go",
       "sha256": "f09c00a2bdbb4dbf8cf0d5b583e57c4831f72550e0143c1bf87dbc3cf1a8ac05",
       "bytes": 1652
