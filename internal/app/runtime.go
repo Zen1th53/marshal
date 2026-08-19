@@ -1154,3 +1154,5 @@ func RestoreState(ctx context.Context, rootDir, backupPath string) error {
 	}
 	return store.RestoreDatabase(ctx, backupPath, layout.Database, "", 67)
 }
+
+func (r *Runtime) Store() *store.Store { return r.store }

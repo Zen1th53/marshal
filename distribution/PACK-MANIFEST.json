@@ -1406,8 +1406,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "20524cd47261796b968fdb953a05d5b36671c1ab8935ad1aee4e5f3ebc71db7e",
-      "bytes": 41482
+      "sha256": "fbae3a2a96ca6f5806309aaf5cfcde89b8b818ee44990f1bd552007e4baa337b",
+      "bytes": 41541
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -4323,6 +4323,11 @@
       "path": "tools/protocol_check.py",
       "sha256": "464c47d16fe4f0cca2804e10c0787da063cc20d4389e686ebfb076eb51b7eee4",
       "bytes": 1027
+    },
+    {
+      "path": "tools/release_trust.py",
+      "sha256": "9aa05f38dc694786e917fe02744aaa69fe571c397e99a0e45f33c0d6d6c28d2c",
+      "bytes": 6107
     },
     {
       "path": "tools/release_verify.py",
