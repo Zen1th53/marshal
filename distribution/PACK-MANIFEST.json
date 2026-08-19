@@ -2050,6 +2050,11 @@
       "bytes": 1220
     },
     {
+      "path": "internal/integration/memory_isolation_test.go",
+      "sha256": "be0d3d3118b3ed450e48709622c0ba44dd89d51a5c3c1b8daa3dc9f12e1211ee",
+      "bytes": 4273
+    },
+    {
       "path": "internal/integration/opencode_real_test.go",
       "sha256": "1c1f797b4c94d85c0f89819a204d9bdb15d230dab6b41998cceb45102d914328",
       "bytes": 9080
@@ -2316,8 +2321,8 @@
     },
     {
       "path": "internal/memory/index/lexical/indexer.go",
-      "sha256": "10c67088db0a69e8740ffd5767d48e680a8b62670637dd8f319db7456f34f835",
-      "bytes": 3871
+      "sha256": "238ea8704d56658c1970548c53a808320a7109ad9f2a68dbf7cb4859398b6274",
+      "bytes": 4105
     },
     {
       "path": "internal/memory/index/lexical/indexer_test.go",

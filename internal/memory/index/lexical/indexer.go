@@ -73,6 +73,14 @@ func (idx *LexicalIndex) IndexRecord(ctx context.Context, rec model.MemoryRecord
 	return nil
 }
 
+// DeleteRecord permanently removes a record from the lexical index.
+func (idx *LexicalIndex) DeleteRecord(ctx context.Context, memoryID string) error {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	delete(idx.docs, memoryID)
+	return nil
+}
+
 // RemoveRecord deletes a memory record from the lexical index.
 func (idx *LexicalIndex) RemoveRecord(ctx context.Context, memoryID string) error {
 	idx.mu.Lock()
