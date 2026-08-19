@@ -915,6 +915,11 @@
       "bytes": 6567
     },
     {
+      "path": "docs/memory/import.md",
+      "sha256": "e0127fde9ea431aecc524c05d4fb483458d25ffa032aa82726e352c5dec75524",
+      "bytes": 798
+    },
+    {
       "path": "docs/memory/lifecycle.md",
       "sha256": "14a067d1c4dbc2b01f7ae7ecad640839f6efd041f00cd9217a2d17510ddfacc5",
       "bytes": 1268
@@ -2183,6 +2188,16 @@
       "path": "internal/memory/identity/dedup_test.go",
       "sha256": "17bc8169c81b229c812c6120bc24423db80af27af7eef27e532dd42f2057ceee",
       "bytes": 2998
+    },
+    {
+      "path": "internal/memory/importer/session_importer.go",
+      "sha256": "387d7c6f49ef2815983f4a09ed9a6135d2785c8d6c55c5130c01cc486f841a6a",
+      "bytes": 3634
+    },
+    {
+      "path": "internal/memory/importer/session_importer_test.go",
+      "sha256": "c80a1631d636153ef9edacff63975510e1878a9a176e2b422060c658c4b17669",
+      "bytes": 2527
     },
     {
       "path": "internal/memory/lifecycle/engine.go",
