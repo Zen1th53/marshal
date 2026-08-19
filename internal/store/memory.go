@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/memory/security"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -18,6 +19,11 @@ import (
 func (s *Store) WriteMemoryV2(ctx context.Context, rec model.MemoryRecordV2) error {
 	if err := rec.Validate(); err != nil {
 		return fmt.Errorf("memory write rejected: %w", err)
+	}
+
+	fw := security.NewFirewall(security.FirewallConfig{})
+	if err := fw.ScanRecord(ctx, rec); err != nil {
+		return fmt.Errorf("memory write firewall rejected: %w", err)
 	}
 
 	// Compute and assign content digest.
@@ -490,6 +496,11 @@ func (s *Store) UpdateMemory(ctx context.Context, projectID, memoryID string, ex
 	// 4. Validate updated record
 	if err := rec.Validate(); err != nil {
 		return model.MemoryRecordV2{}, fmt.Errorf("updated record invalid: %w", err)
+	}
+
+	fw := security.NewFirewall(security.FirewallConfig{})
+	if err := fw.ScanRecord(ctx, rec); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("updated record firewall rejected: %w", err)
 	}
 
 	rec.Revision = expectedRevision + 1

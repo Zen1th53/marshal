@@ -2145,6 +2145,16 @@
       "bytes": 220
     },
     {
+      "path": "internal/memory/extract/pipeline.go",
+      "sha256": "a7ec35a5252379fbf207aa70bf869e529fa9f588731a700d6c322b0801b30d06",
+      "bytes": 5121
+    },
+    {
+      "path": "internal/memory/extract/pipeline_test.go",
+      "sha256": "a7c10136680a21bba1f63f620739ce4fe1745a4dfa525f9dd9bb35a72a2fcd8f",
+      "bytes": 3520
+    },
+    {
       "path": "internal/memory/lifecycle/engine.go",
       "sha256": "c10ed75ae0d1310ec8930d11c05d77fda6e969f10ecc5ac3a496df3096797632",
       "bytes": 4062
@@ -3081,8 +3091,8 @@
     },
     {
       "path": "internal/store/memory.go",
-      "sha256": "006efa2cb2eb3a3279020cbdc528a1dd95cb347a8df0f2a682b6e3b90f187098",
-      "bytes": 21038
+      "sha256": "9993fba5e203e95d6459aa98db548034780785a73352de3d859b2e6bf7af4b63",
+      "bytes": 21462
     },
     {
       "path": "internal/store/memory_audit_t77_test.go",
