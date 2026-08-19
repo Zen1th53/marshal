@@ -15,6 +15,8 @@ var knownMemoryTables = map[string]string{
 	"persistent_agent_memory": "canonical-legacy: agent-scoped memory, T77",
 	"decision_records":        "canonical-legacy: task-scoped decisions, T77",
 	"failure_memory_records":  "canonical-legacy: failure patterns, T77",
+	// T79: canonical v2 convergence destination
+	"memory_records_v2": "canonical-v2: primary memory store, T79",
 }
 
 // derivedDecisionTables are subsystem decision logs, not canonical memory.

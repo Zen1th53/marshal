@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 67
+const LatestSchemaVersion = 68
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1571,11 +1571,63 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 		version = 67
 	}
+	if version < 68 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS memory_records_v2 (
+				memory_id    TEXT PRIMARY KEY,
+				project_id   TEXT NOT NULL REFERENCES projects(project_id),
+				kind         TEXT NOT NULL,
+				lifecycle    TEXT NOT NULL,
+				confidence   TEXT NOT NULL DEFAULT '',
+				authority    TEXT NOT NULL,
+				title        TEXT NOT NULL DEFAULT '',
+				body         TEXT NOT NULL,
+				content_digest TEXT NOT NULL DEFAULT '',
+				scope        TEXT NOT NULL,
+				scope_id     TEXT NOT NULL,
+				source_json  TEXT NOT NULL DEFAULT '{}',
+				evidence_ids TEXT NOT NULL DEFAULT '',
+				head_commit  TEXT NOT NULL DEFAULT '',
+				branch_name  TEXT NOT NULL DEFAULT '',
+				worktree_id  TEXT NOT NULL DEFAULT '',
+				session_id   TEXT NOT NULL DEFAULT '',
+				run_id       TEXT NOT NULL DEFAULT '',
+				observed_at  TEXT NOT NULL,
+				ingested_at  TEXT NOT NULL,
+				valid_from   TEXT NOT NULL,
+				valid_to     TEXT,
+				last_verified_at TEXT,
+				revision     INTEGER NOT NULL DEFAULT 0,
+				superseded_by TEXT NOT NULL DEFAULT '',
+				supersedes   TEXT NOT NULL DEFAULT '',
+				conflict_ids TEXT NOT NULL DEFAULT '',
+				acl_scope    TEXT NOT NULL DEFAULT '',
+				created_at   TEXT NOT NULL,
+				updated_at   TEXT NOT NULL,
+				ext_meta_json TEXT NOT NULL DEFAULT '{}'
+			);
+			CREATE INDEX IF NOT EXISTS memory_records_v2_by_project_kind
+				ON memory_records_v2(project_id, kind, lifecycle, created_at);
+			CREATE INDEX IF NOT EXISTS memory_records_v2_by_scope
+				ON memory_records_v2(project_id, scope, scope_id, created_at);
+			CREATE INDEX IF NOT EXISTS memory_records_v2_by_lifecycle
+				ON memory_records_v2(project_id, lifecycle, updated_at);
+			CREATE INDEX IF NOT EXISTS memory_records_v2_by_digest
+				ON memory_records_v2(content_digest);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 68: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(68, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 68: %w", err)
+		}
+		version = 68
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
 	}
 	return nil
 }
+
 
 func (s *Store) InitProject(ctx context.Context, project model.Project) error {
 	if project.ID == "" || project.Repository == "" || project.DefaultBranch == "" || project.PackVersion == "" {

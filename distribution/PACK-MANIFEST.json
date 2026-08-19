@@ -910,6 +910,11 @@
       "bytes": 2584
     },
     {
+      "path": "docs/memory/current-state-audit.md",
+      "sha256": "aa78f04ab73510c3fecd90bef2de54f8fcc68aabee07631eba6ad03cf7a5bd07",
+      "bytes": 6567
+    },
+    {
       "path": "docs/model-router.md",
       "sha256": "9dd8fe439d29610cf74ebe840d42534a9be43d9e04c4dad66999bd62eaf0c099",
       "bytes": 266
@@ -1970,6 +1975,11 @@
       "bytes": 7858
     },
     {
+      "path": "internal/integration/core_conformance_test.go",
+      "sha256": "7a6fe2fdab14b278be57e65eca63c0718ff9b5561da0c9b0c29437279c14cf41",
+      "bytes": 8979
+    },
+    {
       "path": "internal/integration/daemon_cli_test.go",
       "sha256": "a21eb1213ea9fa176ba121342230cf1089013eb26b710f30d9811b7eed2ed91b",
       "bytes": 6620
@@ -2158,6 +2168,16 @@
       "path": "internal/model/isolation.go",
       "sha256": "c37f373cc5e2c8de9121066ed093ca2372547ae6c40c859e982ce310fb39d47d",
       "bytes": 1259
+    },
+    {
+      "path": "internal/model/memory.go",
+      "sha256": "0b062eeb34d74a11078c7fdb0e1c0824a2802921e4c91fe658635c3f612cb692",
+      "bytes": 9414
+    },
+    {
+      "path": "internal/model/memory_t78_test.go",
+      "sha256": "f22ba58b450c6222e31ab835cdecc8dcb2405684c25e3f89b9f45d668be65866",
+      "bytes": 5034
     },
     {
       "path": "internal/model/policy.go",
@@ -3025,6 +3045,11 @@
       "bytes": 232
     },
     {
+      "path": "internal/store/memory_audit_t77_test.go",
+      "sha256": "6f7fb4f3d468d23b30b898e20a5ee1db724163c8d5f95b3b970c9e10a77d889f",
+      "bytes": 3598
+    },
+    {
       "path": "internal/store/memory_persistence_a02_test.go",
       "sha256": "a806e1f93cf15b1348b1dda4d6cac384c1b235529a78a654a155758837fd9ff1",
       "bytes": 232
@@ -3041,8 +3066,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "8af45d6c979f16e1be6e1610f315be0c13ae432b4bfc1820b99b6f5f6f59c054",
-      "bytes": 59874
+      "sha256": "a599200961a3dd881499d998f74cf198f6f2902605e7e5089d7b9594a1149898",
+      "bytes": 61951
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -4106,8 +4131,8 @@
     },
     {
       "path": "schemas/memory-record.schema.json",
-      "sha256": "f0a69c7e2c8b5079dabe38984ecb26a5170b8ed65a7fa3059484fd307cd64233",
-      "bytes": 2094
+      "sha256": "9c630642a2ff0e13cfd5baccec6854908c59de8d62a4701666fd42a10e0dc965",
+      "bytes": 4828
     },
     {
       "path": "schemas/protocol-extension.schema.json",
