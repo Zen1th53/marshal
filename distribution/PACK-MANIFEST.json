@@ -2505,6 +2505,16 @@
       "bytes": 3294
     },
     {
+      "path": "internal/memory/writeback/reflector.go",
+      "sha256": "388c451c22ee006b60f3515f7892eecdf97ae6d449f46604cc64885ed9babacb",
+      "bytes": 3395
+    },
+    {
+      "path": "internal/memory/writeback/reflector_test.go",
+      "sha256": "0a3861e3a8fa4f68b3956cb1e2c6a8171d15b12c43e967c357fddec4f0e6f7cb",
+      "bytes": 2682
+    },
+    {
       "path": "internal/model/capability.go",
       "sha256": "11995bfbb4f0a57fb35caa30b54723957a20e9573067e1941feda2def349e774",
       "bytes": 1429
