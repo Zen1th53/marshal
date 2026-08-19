@@ -2400,6 +2400,16 @@
       "bytes": 2136
     },
     {
+      "path": "internal/memory/retention/purge.go",
+      "sha256": "cbd2fd0281914572e082bd3c91acb8f7ed3f4b06ea9ee2604678e52745c6573e",
+      "bytes": 1369
+    },
+    {
+      "path": "internal/memory/retention/purge_test.go",
+      "sha256": "248882330078d5320e8f0d5da7e27c73b0eb88c4e39007ee38c5137b00931971",
+      "bytes": 2196
+    },
+    {
       "path": "internal/memory/retrieval/disclosure/progressive.go",
       "sha256": "ce319c476d8e96770b0f80ac34df32b7ca038a7558801a8cd42b629c9e553d91",
       "bytes": 4227
