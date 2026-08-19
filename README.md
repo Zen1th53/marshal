@@ -233,10 +233,19 @@ Explore the complete documentation in `docs/`:
 
 ## Community & Contributing
 
-We welcome community contributions! Please review our guidelines before submitting pull requests:
+We welcome community feedback, ideas, and contributions!
+
+### 💡 Submitting Ideas & Requests
+Have a feature suggestion or need support for a new AI model / coding agent?
+- 🚀 **[Open a Feature Request](https://github.com/Zen1th53/marshal/issues/new?template=feature_request.yml)** to suggest new capabilities, runtime policies, or CLI enhancements.
+- 🔌 **[Request a Provider Adapter](https://github.com/Zen1th53/marshal/issues/new?template=adapter_request.yml)** for new LLM providers, local inference runtimes, or agent CLIs.
+- 🐛 **[Report a Bug](https://github.com/Zen1th53/marshal/issues/new?template=bug_report.yml)** with reproduction steps and diagnostic logs.
+
+### 🤝 Guidelines
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Code formatting, testing requirements, and submission process
+- [SUPPORT.md](SUPPORT.md) — Community support channels and lifecycle
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Community standards and expectations
-- [SECURITY.md](SECURITY.md) — Vulnerability reporting policy (private security contact)
+- [SECURITY.md](SECURITY.md) — Vulnerability reporting policy (confidential security contact)
 
 ---
 

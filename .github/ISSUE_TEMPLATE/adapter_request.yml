@@ -1,0 +1,35 @@
+name: Provider Adapter Request
+description: Request support for a new AI model, coding agent, or CLI provider
+title: "[Adapter Request]: "
+labels: ["enhancement", "adapter"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to request a native MARSHAL adapter for a new LLM provider, agent CLI, or local inference engine.
+  - type: input
+    id: provider_name
+    attributes:
+      label: Provider / Tool Name
+      description: The name and official repository/website of the agent or LLM tool.
+      placeholder: e.g., Cursor CLI, DeepSeek Coder, Mistral CLI, GitHub Copilot CLI
+    validations:
+      required: true
+  - type: textarea
+    id: execution_model
+    attributes:
+      label: Execution & Invocation Model
+      description: How is the tool invoked from CLI or API (arguments, stdin/stdout, JSON-RPC, MCP)?
+      placeholder: e.g., `tool --prompt "..." --workspace /path`
+    validations:
+      required: true
+  - type: textarea
+    id: sandboxing
+    attributes:
+      label: Sandboxing & Environment Requirements
+      description: Does this tool require network access, local GPU/Ollama sockets, or specific environment variables?
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why should this be in MARSHAL?
+      description: Explain the community value and typical use cases.

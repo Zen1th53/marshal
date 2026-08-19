@@ -26,13 +26,13 @@
     },
     {
       "path": ".github/ISSUE_TEMPLATE/config.yml",
-      "sha256": "0a5fe388c169ba9555003f1413480a8775cbeaa7c9e3f56f359924f196deb7cc",
-      "bytes": 235
+      "sha256": "92233ff1ff11a715913447caab839b878fe3c8477f3dfcbc501580754357be39",
+      "bytes": 413
     },
     {
       "path": ".github/ISSUE_TEMPLATE/feature_request.yml",
-      "sha256": "f2dcdab16aa35c88ebd935438d5875fcaecff81ed28e1095ab96c745b92a7a74",
-      "bytes": 847
+      "sha256": "01f4c9660cc9641a5f21fa60ac7aae4c85706aaa0465e0d33c3e10966ea77777",
+      "bytes": 1307
     },
     {
       "path": ".github/dependabot.yml",
@@ -181,8 +181,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "a12a38ab88c3ea71c5eda5bc32bd48378e9972a61c5113a60f90aa289c479e7b",
-      "bytes": 10511
+      "sha256": "4bcd5e7021eaada5a067092295ef6a15f9fd1bff1435c9e89791d7f573b3cb88",
+      "bytes": 11188
     },
     {
       "path": "RUNTIME-VERSION.yaml",
