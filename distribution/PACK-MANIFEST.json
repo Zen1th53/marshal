@@ -2240,6 +2240,16 @@
       "bytes": 2851
     },
     {
+      "path": "internal/memory/index/vector/adapter.go",
+      "sha256": "5f1e0b40164267fe561113bb4f447f96221747033e6af8c4553977cec52ed26d",
+      "bytes": 3128
+    },
+    {
+      "path": "internal/memory/index/vector/adapter_test.go",
+      "sha256": "1f2dc88216843a80e89e49a11ce95b77c824b8deb3b86bace94fd8d16575d5a9",
+      "bytes": 1817
+    },
+    {
       "path": "internal/memory/lifecycle/engine.go",
       "sha256": "c10ed75ae0d1310ec8930d11c05d77fda6e969f10ecc5ac3a496df3096797632",
       "bytes": 4062
