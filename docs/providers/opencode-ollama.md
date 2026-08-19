@@ -43,9 +43,9 @@ Ensure `ollama` service is running in the background (`ollama serve` or systemd 
 
 | Model | Family | Tool Calls | Status in MARSHAL |
 |---|---|---|---|
-| `qwythos-9b` | Qwen3.5 9B | ✅ **Confirmed** | **E2E VERIFIED Default** |
-| `qwen2.5-coder:14b` | Qwen2.5 14B | ⚠️ Partial | Returns JSON as text in some revisions |
-| `llama3:8b` | Llama 3 8B | ❌ Conversational | Fails to emit tool call schema |
+| `qwythos-9b` | Qwen3.5 9B | **Confirmed** | **E2E VERIFIED Default** |
+| `qwen2.5-coder:14b` | Qwen2.5 14B | Partial | Returns JSON as text in some revisions |
+| `llama3:8b` | Llama 3 8B | Conversational (Unsupported) | Fails to emit tool call schema |
 
 To pull the verified model:
 ```bash

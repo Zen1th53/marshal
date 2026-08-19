@@ -20,6 +20,11 @@
       "bytes": 1674
     },
     {
+      "path": ".github/ISSUE_TEMPLATE/adapter_request.yml",
+      "sha256": "df9c1e9acecb495e9ac7ab3472392189d220f04f087e2b648717a545dcf14c9a",
+      "bytes": 1348
+    },
+    {
       "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
       "sha256": "480dd6ca13539e37aa9c1314c9a9a9694b54c78463381145a7c43e1f31079a67",
       "bytes": 1191
@@ -181,8 +186,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "4bcd5e7021eaada5a067092295ef6a15f9fd1bff1435c9e89791d7f573b3cb88",
-      "bytes": 11188
+      "sha256": "69e1a272616af8c3bf7e0bf32ed3b0f5cf217d449954e413ec3a5d23a4c0d051",
+      "bytes": 11163
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -931,13 +936,13 @@
     },
     {
       "path": "docs/providers.md",
-      "sha256": "627be4d31d8aa2905b2d0b8ab20b7592ae57eed19eccf867fdab83ce358f1efe",
+      "sha256": "d0eb78b65000f817a48d5ce1adc9e29a6ed760fd4aff10564a531ceb3c98cc93",
       "bytes": 3492
     },
     {
       "path": "docs/providers/opencode-ollama.md",
-      "sha256": "5286de5960644ffa8a76d3f7fc3d47984b39fb5ad7f70b8eca6f2a2a700a9851",
-      "bytes": 2984
+      "sha256": "2615b0df8872bd17ce5020d97a495a2230f3ccd9a72eadc342df8b4047b17202",
+      "bytes": 2983
     },
     {
       "path": "docs/remote-worker-attestation.md",

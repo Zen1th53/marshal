@@ -25,8 +25,8 @@ MARSHAL distinguishes between binary presence, protocol capability, authenticati
 
 | Provider Adapter | Binary | Current State | Native | MCP | A2A | Notes |
 |---|---|---|:---:|:---:|:---:|---|
-| **Codex** | `codex` | `REAL-E2E-VERIFIED` | ✅ | ✅ | ✅ | Mandatory Release Gate |
-| **OpenCode + Ollama** | `opencode` + `ollama` | `REAL-E2E-VERIFIED` | ✅ | ✅ | ✅ | Mandatory Release Gate (`qwythos-9b`) |
+| **Codex** | `codex` | `REAL-E2E-VERIFIED` | Yes | Yes | Yes | Mandatory Release Gate |
+| **OpenCode + Ollama** | `opencode` + `ollama` | `REAL-E2E-VERIFIED` | Yes | Yes | Yes | Mandatory Release Gate (`qwythos-9b`) |
 | **Gemini CLI** | `gemini` | `CAPABILITY-PROBED` | — | — | — | API Quota Limited (429) |
 | **Claude Code** | `claude` | `CAPABILITY-PROBED` | — | — | — | OAuth Session Expired |
 | **Aider** | `aider` | `IMPLEMENTED` | — | — | — | Contract specification |
