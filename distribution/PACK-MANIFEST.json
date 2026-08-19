@@ -2680,6 +2680,16 @@
       "bytes": 3294
     },
     {
+      "path": "internal/memory/working/scratchpad.go",
+      "sha256": "ff5b02cd0211407f1fc9804993c03c18f8d671bbc4b222938b0d984f82df7faa",
+      "bytes": 4484
+    },
+    {
+      "path": "internal/memory/working/scratchpad_test.go",
+      "sha256": "4ea9c4ba72b0b267c4092dba309fc53509105477a4dbe88149320ec6bcd51da0",
+      "bytes": 2602
+    },
+    {
       "path": "internal/memory/writeback/reflector.go",
       "sha256": "388c451c22ee006b60f3515f7892eecdf97ae6d449f46604cc64885ed9babacb",
       "bytes": 3395
