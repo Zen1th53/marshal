@@ -2690,6 +2690,16 @@
       "bytes": 2542
     },
     {
+      "path": "internal/memory/utility/ledger.go",
+      "sha256": "f5e69c5fe5ed282a7b483e85986a7da1440fba15f3d18f630c18ae4574a5d340",
+      "bytes": 2188
+    },
+    {
+      "path": "internal/memory/utility/ledger_test.go",
+      "sha256": "97c71722224ac87ded83b38a938edf3b45a5188148b9899b43bfa48fe5c7ff8c",
+      "bytes": 1653
+    },
+    {
       "path": "internal/memory/versioning/branch.go",
       "sha256": "87ec1f7e450f4f86a3ecf90c35d29e06b8b36a82770014fb4f5a60e7aa626ba0",
       "bytes": 2862
