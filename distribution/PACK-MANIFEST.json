@@ -2245,6 +2245,16 @@
       "bytes": 2527
     },
     {
+      "path": "internal/memory/index/codegraph/enricher.go",
+      "sha256": "862869056f741b294884a22eaaea49fef09339bc37fcb88572c39585571dedf9",
+      "bytes": 3348
+    },
+    {
+      "path": "internal/memory/index/codegraph/enricher_test.go",
+      "sha256": "3441cb6d1097a82a0c9d282638826b4f2966be36f8a39fe9aabe311a43ef9684",
+      "bytes": 2074
+    },
+    {
       "path": "internal/memory/index/graph/graph_index.go",
       "sha256": "cef3efe1683a8a68580ffdd805b1e61b8f2b7bb7552cda1277eefb5859b06f54",
       "bytes": 3180
