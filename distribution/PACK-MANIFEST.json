@@ -2171,8 +2171,8 @@
     },
     {
       "path": "internal/model/memory.go",
-      "sha256": "0b062eeb34d74a11078c7fdb0e1c0824a2802921e4c91fe658635c3f612cb692",
-      "bytes": 9414
+      "sha256": "b169dbb7d6072760b1d08b8163df04a1147ae6de6688209453e4e6db5c422cf5",
+      "bytes": 11121
     },
     {
       "path": "internal/model/memory_t78_test.go",
@@ -3045,6 +3045,11 @@
       "bytes": 232
     },
     {
+      "path": "internal/store/memory.go",
+      "sha256": "a6e16972f60d36275a29e359344d71e64f8d6385dc3df3884fcda9bf61546824",
+      "bytes": 11858
+    },
+    {
       "path": "internal/store/memory_audit_t77_test.go",
       "sha256": "6f7fb4f3d468d23b30b898e20a5ee1db724163c8d5f95b3b970c9e10a77d889f",
       "bytes": 3598
@@ -3053,6 +3058,11 @@
       "path": "internal/store/memory_persistence_a02_test.go",
       "sha256": "a806e1f93cf15b1348b1dda4d6cac384c1b235529a78a654a155758837fd9ff1",
       "bytes": 232
+    },
+    {
+      "path": "internal/store/memory_t79_test.go",
+      "sha256": "01bb510efa5f847918f2ff0c82c9f34851662ba857d29b54311cf0683ae43b75",
+      "bytes": 4393
     },
     {
       "path": "internal/store/mergequeue_persistence_a02_test.go",

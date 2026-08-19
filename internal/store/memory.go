@@ -198,3 +198,161 @@ func (s *Store) GetMemoryV2(ctx context.Context, projectID, memoryID string) (mo
 
 	return rec, nil
 }
+
+// MemoryQueryFilter specifies filtering parameters for memory queries.
+type MemoryQueryFilter struct {
+	ProjectID string
+	Kind      model.MemoryKind
+	Lifecycle model.MemoryLifecycle
+	Scope     model.MemoryScopeKind
+	ScopeID   string
+	ActorID   string // for ACL / operator_private scope filtering
+	Limit     int
+}
+
+// ListMemoryV2 queries memory_records_v2 applying strict project and scope boundaries.
+func (s *Store) ListMemoryV2(ctx context.Context, filter MemoryQueryFilter) ([]model.MemoryRecordV2, error) {
+	if filter.ProjectID == "" {
+		return nil, fmt.Errorf("%w: project ID is required for memory query", model.ErrInvalid)
+	}
+
+	query := `
+		SELECT
+			memory_id, project_id, kind, lifecycle, confidence, authority,
+			title, body, content_digest, scope, scope_id,
+			source_json, evidence_ids, head_commit, branch_name, worktree_id,
+			session_id, run_id,
+			observed_at, ingested_at, valid_from, valid_to, last_verified_at,
+			revision, superseded_by, supersedes, conflict_ids, acl_scope,
+			created_at, updated_at, ext_meta_json
+		FROM memory_records_v2
+		WHERE project_id = ?
+	`
+	args := []any{filter.ProjectID}
+
+	if filter.Kind != "" {
+		query += " AND kind = ?"
+		args = append(args, string(filter.Kind))
+	}
+	if filter.Lifecycle != "" {
+		query += " AND lifecycle = ?"
+		args = append(args, string(filter.Lifecycle))
+	}
+	if filter.Scope != "" {
+		query += " AND scope = ?"
+		args = append(args, string(filter.Scope))
+	}
+	if filter.ScopeID != "" {
+		query += " AND scope_id = ?"
+		args = append(args, filter.ScopeID)
+	}
+
+	query += " ORDER BY created_at DESC"
+	if filter.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, filter.Limit)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list memory v2: %w", err)
+	}
+	defer rows.Close()
+
+	var records []model.MemoryRecordV2
+	for rows.Next() {
+		var (
+			rec                                          model.MemoryRecordV2
+			kind, lifecycle, confidence, authority       string
+			sourceJSON, evidenceIDs, extMetaJSON         string
+			supersededBy, supersedes, conflictIDs        string
+			observedAt, ingestedAt, validFrom            string
+			createdAt, updatedAt                         string
+			validTo, lastVerifiedAt                      sql.NullString
+		)
+		err := rows.Scan(
+			&rec.ID, &rec.ProjectID, &kind, &lifecycle, &confidence, &authority,
+			&rec.Title, &rec.Body, &rec.ContentDigest, &rec.Scope, &rec.ScopeID,
+			&sourceJSON, &evidenceIDs, &rec.HeadCommit, &rec.BranchName, &rec.WorktreeID,
+			&rec.SessionID, &rec.RunID,
+			&observedAt, &ingestedAt, &validFrom, &validTo, &lastVerifiedAt,
+			&rec.Revision, &supersededBy, &supersedes, &conflictIDs, &rec.ACLScope,
+			&createdAt, &updatedAt, &extMetaJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan memory v2 row: %w", err)
+		}
+
+		// Enforce ACL and operator-private scope boundaries before disclosure
+		scopeObj, err := model.NewMemoryScope(rec.Scope, rec.ScopeID)
+		if err == nil {
+			if !scopeObj.AllowsRead(filter.ProjectID, filter.ActorID) {
+				continue // Skip unauthorized record
+			}
+		}
+
+		rec.Kind = model.MemoryKind(kind)
+		rec.Lifecycle = model.MemoryLifecycle(lifecycle)
+		rec.Confidence = model.MemoryConfidence(confidence)
+		rec.Authority = model.MemoryAuthority(authority)
+
+		if err := json.Unmarshal([]byte(sourceJSON), &rec.Source); err != nil {
+			return nil, fmt.Errorf("decode source: %w", err)
+		}
+		if evidenceIDs != "" {
+			rec.EvidenceIDs = strings.Split(evidenceIDs, ",")
+		}
+		if supersededBy != "" {
+			rec.SupersededBy = strings.Split(supersededBy, ",")
+		}
+		if supersedes != "" {
+			rec.SupersedesID = strings.Split(supersedes, ",")
+		}
+		if conflictIDs != "" {
+			rec.ConflictIDs = strings.Split(conflictIDs, ",")
+		}
+		if extMetaJSON != "" && extMetaJSON != "{}" {
+			if err := json.Unmarshal([]byte(extMetaJSON), &rec.ExtMeta); err != nil {
+				return nil, fmt.Errorf("decode ext_meta: %w", err)
+			}
+		}
+
+		parseTS := func(s string) (time.Time, error) {
+			return time.Parse(time.RFC3339Nano, s)
+		}
+
+		if rec.ObservedAt, err = parseTS(observedAt); err != nil {
+			return nil, fmt.Errorf("parse observed_at: %w", err)
+		}
+		if rec.IngestedAt, err = parseTS(ingestedAt); err != nil {
+			return nil, fmt.Errorf("parse ingested_at: %w", err)
+		}
+		if rec.ValidFrom, err = parseTS(validFrom); err != nil {
+			return nil, fmt.Errorf("parse valid_from: %w", err)
+		}
+		if rec.CreatedAt, err = parseTS(createdAt); err != nil {
+			return nil, fmt.Errorf("parse created_at: %w", err)
+		}
+		if rec.UpdatedAt, err = parseTS(updatedAt); err != nil {
+			return nil, fmt.Errorf("parse updated_at: %w", err)
+		}
+		if validTo.Valid {
+			t, err := parseTS(validTo.String)
+			if err != nil {
+				return nil, fmt.Errorf("parse valid_to: %w", err)
+			}
+			rec.ValidTo = &t
+		}
+		if lastVerifiedAt.Valid {
+			t, err := parseTS(lastVerifiedAt.String)
+			if err != nil {
+				return nil, fmt.Errorf("parse last_verified_at: %w", err)
+			}
+			rec.LastVerifiedAt = &t
+		}
+
+		records = append(records, rec)
+	}
+
+	return records, nil
+}

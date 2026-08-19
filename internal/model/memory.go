@@ -103,6 +103,58 @@ func (a MemoryAuthority) IsValid() bool {
 	return false
 }
 
+// MemoryScopeKind defines the namespace boundary for memory records.
+type MemoryScopeKind string
+
+const (
+	ScopeProject         MemoryScopeKind = "project"
+	ScopeTask            MemoryScopeKind = "task"
+	ScopeAgent           MemoryScopeKind = "agent"
+	ScopeSession         MemoryScopeKind = "session"
+	ScopeBranch          MemoryScopeKind = "branch"
+	ScopeTeam            MemoryScopeKind = "team"
+	ScopeOperatorPrivate MemoryScopeKind = "operator_private"
+)
+
+func (s MemoryScopeKind) IsValid() bool {
+	switch s {
+	case ScopeProject, ScopeTask, ScopeAgent, ScopeSession, ScopeBranch, ScopeTeam, ScopeOperatorPrivate:
+		return true
+	}
+	return false
+}
+
+// MemoryScope defines a scope instance with kind and scope ID.
+type MemoryScope struct {
+	Kind    MemoryScopeKind `json:"kind"`
+	ScopeID string          `json:"scope_id"`
+}
+
+func NewMemoryScope(kind string, scopeID string) (MemoryScope, error) {
+	k := MemoryScopeKind(strings.TrimSpace(kind))
+	if !k.IsValid() {
+		return MemoryScope{}, fmt.Errorf("%w: invalid memory scope kind %q", ErrInvalid, kind)
+	}
+	if strings.TrimSpace(scopeID) == "" {
+		return MemoryScope{}, fmt.Errorf("%w: memory scope ID cannot be empty", ErrInvalid)
+	}
+	return MemoryScope{Kind: k, ScopeID: strings.TrimSpace(scopeID)}, nil
+}
+
+// AllowsRead checks if an actor reading in a given project with an optional actorID
+// is allowed to access this scoped memory.
+func (s MemoryScope) AllowsRead(requestProjectID string, actorID string) bool {
+	switch s.Kind {
+	case ScopeProject:
+		return requestProjectID == s.ScopeID
+	case ScopeOperatorPrivate:
+		return actorID == s.ScopeID
+	default:
+		// For task, agent, session, branch, team: default project boundary check
+		return true
+	}
+}
+
 // MemorySource describes the structured origin of a record.
 type MemorySource struct {
 	Kind      string `json:"kind"`      // "repository" | "user" | "runtime" | "agent_handoff" | "test" | "external"
