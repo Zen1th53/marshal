@@ -750,6 +750,16 @@
       "bytes": 1249
     },
     {
+      "path": "conformance/memory/external/evomembench_adapter.go",
+      "sha256": "747a85bc6a31213986926027c627fa49aa6beb7a6589b8f1943c8f7f378977d0",
+      "bytes": 2039
+    },
+    {
+      "path": "conformance/memory/external/evomembench_adapter_test.go",
+      "sha256": "f45799aea480b7d4bf9fccc80e177c240d44ff78a5b7c8a471d074c9bf8fdf7e",
+      "bytes": 1303
+    },
+    {
       "path": "conformance/runner.py",
       "sha256": "1e3486798600f3f5dc1a4c25c30dd74ec1cba18df6b5f1de147a87c31c5c74c5",
       "bytes": 5263
