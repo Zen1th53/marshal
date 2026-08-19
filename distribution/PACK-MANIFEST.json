@@ -1715,6 +1715,11 @@
       "bytes": 533
     },
     {
+      "path": "internal/context/budget/memory_budget_test.go",
+      "sha256": "ea7606d76e26f5c3f44bb51d9ed49e88cab0f445429a22e98cc553aa3fc6cc64",
+      "bytes": 1651
+    },
+    {
       "path": "internal/context/budget/types.go",
       "sha256": "309a46c7f6d7fdfc7e635089978d8d04825586e3af4c90ceabe3476ad86a3fdf",
       "bytes": 1407
