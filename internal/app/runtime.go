@@ -1129,3 +1129,22 @@ func (r *Runtime) GCArtifacts(ctx context.Context, dryRun bool, ttl time.Duratio
 		ReferencedDigests: digests,
 	})
 }
+
+func (r *Runtime) BackupState(ctx context.Context, outputPath string) (store.BackupMetadata, error) {
+	if outputPath == "" {
+		outputPath = filepath.Join(r.layout.RuntimeDir, fmt.Sprintf("backup-%d.db", time.Now().Unix()))
+	}
+	return r.store.Backup(ctx, outputPath)
+}
+
+func VerifyStateBackup(ctx context.Context, backupPath, expectedProjectID string, expectedSchema int) (store.BackupMetadata, error) {
+	return store.VerifyBackup(ctx, backupPath, expectedProjectID, expectedSchema)
+}
+
+func RestoreState(ctx context.Context, rootDir, backupPath string) error {
+	layout, err := project.Discover(rootDir)
+	if err != nil {
+		return err
+	}
+	return store.RestoreDatabase(ctx, backupPath, layout.Database, "", 67)
+}

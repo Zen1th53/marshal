@@ -1406,8 +1406,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "212755c9848849aebe8a1cf6ad20fe3a10254f925f3915b5dec4ee6c7024f12b",
-      "bytes": 40572
+      "sha256": "07aabfe6c33b76c630fb4c25483673510f6f89767b1e0e802ffeb4f3429081cd",
+      "bytes": 41282
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1423,6 +1423,11 @@
       "path": "internal/app/trustcontent_a06_test.go",
       "sha256": "19e7e28cc9978b4e41557b5605e68995fe9edf1e1f77ca7bf819a561e383e571",
       "bytes": 730
+    },
+    {
+      "path": "internal/artifact/gc_test.go",
+      "sha256": "760e396fbc62a9d7ac1b10b14d17af024c69529c378a99dcba5d2461e217adae",
+      "bytes": 2409
     },
     {
       "path": "internal/artifact/store.go",
@@ -1651,13 +1656,13 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "3da0a815bb8a700fc0076b6f3688057d6bac498ad197f499e513479d3ddcadd5",
-      "bytes": 29668
+      "sha256": "74606351ba8eef825d594e358440fba64b5d69740ca6ac1839f4b089485d51c9",
+      "bytes": 31598
     },
     {
       "path": "internal/cli/cli_test.go",
-      "sha256": "6d3c7d60b569308abcfe20e8e86700ebd8eb9a9ff5c43024736af1c11a8f0433",
-      "bytes": 15027
+      "sha256": "a5c26f061eafdaebc1aa16b78e4f97342766dfe82608d30179aba94d27084e88",
+      "bytes": 16697
     },
     {
       "path": "internal/cli/policy_test_a10_release_test.go",

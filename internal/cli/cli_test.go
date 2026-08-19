@@ -397,3 +397,47 @@ func TestCLIGCArtifacts(t *testing.T) {
 		t.Fatalf("unexpected gc artifacts output: %s", stdout.String())
 	}
 }
+
+func TestCLIStateBackupVerifyRestore(t *testing.T) {
+	repo := cliRepo(t)
+	var stdout, stderr bytes.Buffer
+
+	if code := Execute(context.Background(), repo.Path(), []string{"init"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+		t.Fatal(stderr.String())
+	}
+
+	backupFile := filepath.Join(t.TempDir(), "test_backup.db")
+
+	// 1. marshal state backup --output ...
+	stdout.Reset()
+	stderr.Reset()
+	code := Execute(context.Background(), repo.Path(), []string{"state", "backup", "--output", backupFile}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("state backup failed with code %d: stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Backup created:") {
+		t.Fatalf("unexpected state backup output: %s", stdout.String())
+	}
+
+	// 2. marshal state verify-backup ...
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(context.Background(), repo.Path(), []string{"state", "verify-backup", backupFile}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("state verify-backup failed with code %d: stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Backup verified:") {
+		t.Fatalf("unexpected state verify-backup output: %s", stdout.String())
+	}
+
+	// 3. marshal state restore ...
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(context.Background(), repo.Path(), []string{"state", "restore", backupFile}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("state restore failed with code %d: stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "successfully restored") {
+		t.Fatalf("unexpected state restore output: %s", stdout.String())
+	}
+}

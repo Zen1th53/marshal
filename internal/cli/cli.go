@@ -152,6 +152,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.legal(ctx, args[1:])
 	case "gc":
 		err = c.gc(ctx, args[1:])
+	case "state":
+		err = c.state(ctx, args[1:])
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}
@@ -1053,5 +1055,63 @@ func (c command) gc(ctx context.Context, args []string) error {
 
 	default:
 		return fmt.Errorf("%w: unknown gc target %s (supported: worktrees, artifacts)", model.ErrInvalid, target)
+	}
+}
+
+func (c command) state(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("%w: state subcommand required (backup|verify-backup|restore)", model.ErrInvalid)
+	}
+
+	sub := args[0]
+	switch sub {
+	case "backup":
+		flags := flag.NewFlagSet("state backup", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		output := flags.String("output", "", "output backup file path")
+		if err := flags.Parse(args[1:]); err != nil {
+			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
+
+		runtime, err := app.Open(ctx, c.root)
+		if err != nil {
+			return err
+		}
+		defer runtime.Close()
+
+		meta, err := runtime.BackupState(ctx, *output)
+		if err != nil {
+			return err
+		}
+
+		return c.print(meta, fmt.Sprintf("Backup created: %s (Project: %s, Schema: v%d, SHA-256: %s)",
+			meta.DatabaseSHA256, meta.ProjectID, meta.SchemaVersion, meta.DatabaseSHA256))
+
+	case "verify-backup":
+		if len(args) < 2 {
+			return fmt.Errorf("%w: backup file path required: marshal state verify-backup BACKUP-PATH", model.ErrInvalid)
+		}
+		backupPath := args[1]
+		meta, err := app.VerifyStateBackup(ctx, backupPath, "", 0)
+		if err != nil {
+			return err
+		}
+
+		return c.print(meta, fmt.Sprintf("Backup verified: valid SQLite database (Project: %s, Schema: v%d, SHA-256: %s)",
+			meta.ProjectID, meta.SchemaVersion, meta.DatabaseSHA256))
+
+	case "restore":
+		if len(args) < 2 {
+			return fmt.Errorf("%w: backup file path required: marshal state restore BACKUP-PATH", model.ErrInvalid)
+		}
+		backupPath := args[1]
+		if err := app.RestoreState(ctx, c.root, backupPath); err != nil {
+			return err
+		}
+
+		return c.print(map[string]any{"status": "restored", "backup": backupPath}, fmt.Sprintf("State database successfully restored from %s", backupPath))
+
+	default:
+		return fmt.Errorf("%w: unknown state subcommand %s (supported: backup, verify-backup, restore)", model.ErrInvalid, sub)
 	}
 }
