@@ -2130,6 +2130,16 @@
       "bytes": 3033
     },
     {
+      "path": "internal/memory/decision/adapter.go",
+      "sha256": "ba9a55835f324336298fcbb28e19979f7617175047c24512851e7c62979f13dc",
+      "bytes": 4099
+    },
+    {
+      "path": "internal/memory/decision/adapter_test.go",
+      "sha256": "6d522409d04c261e0fb76eddd166d3ed54cd2415f647688659361955c5763fc6",
+      "bytes": 2612
+    },
+    {
       "path": "internal/memory/decision/adversarial_test.go",
       "sha256": "4377e7d52b9f4d7662d11dd0a72152e557a7699201fa3d981005312a5d9fc490",
       "bytes": 589
