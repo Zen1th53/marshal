@@ -2250,6 +2250,16 @@
       "bytes": 1521
     },
     {
+      "path": "internal/memory/belief/belief_engine.go",
+      "sha256": "9a440e69a035d519b8f900d401a19e36a8844adfd3ef6ab8121dff934ff1a4dd",
+      "bytes": 4098
+    },
+    {
+      "path": "internal/memory/belief/belief_engine_test.go",
+      "sha256": "87e87d724ea1aad46dc9d1bd019b4fe73f8934e7271758c5777bc35f8a7da8a4",
+      "bytes": 2239
+    },
+    {
       "path": "internal/memory/blocks/block_manager.go",
       "sha256": "13c98d56e08e6b590bab72c4613ff9997bf4aac74a0636c75d2c5900d6105a31",
       "bytes": 3689
