@@ -2420,6 +2420,16 @@
       "bytes": 3868
     },
     {
+      "path": "internal/memory/metrics/collector.go",
+      "sha256": "4b61a5d7146b41671b3e1a252a53e19cdc7437b696e7731cda144cbd374061e2",
+      "bytes": 2631
+    },
+    {
+      "path": "internal/memory/metrics/collector_test.go",
+      "sha256": "eb20723a1e5a62e13f2a0b905f022197a02fa795a10b33f6fe34a1b0821d7894",
+      "bytes": 1450
+    },
+    {
       "path": "internal/memory/procedure/distiller.go",
       "sha256": "edc7d38209011e379437dcfba33a8851b72beb3ae0d5595dcf61d911c1e25e00",
       "bytes": 3041
