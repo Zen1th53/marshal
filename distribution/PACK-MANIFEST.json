@@ -2620,6 +2620,16 @@
       "bytes": 2354
     },
     {
+      "path": "internal/memory/portable/manifest.go",
+      "sha256": "8c7803455b2a0c2dbccd16ecac4e068d17894518cbab4a35ff52285af97d5964",
+      "bytes": 1984
+    },
+    {
+      "path": "internal/memory/portable/manifest_test.go",
+      "sha256": "a224c179418091fa702d1895b075e7b69075c6bd83519de12df123d4d3a03f89",
+      "bytes": 2093
+    },
+    {
       "path": "internal/memory/proactive/trigger.go",
       "sha256": "e4cc3a4d85511618aab2d49154b4dc28e8c634b8ecd7f91f8017c58fed87451c",
       "bytes": 3391
