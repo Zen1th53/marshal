@@ -6,13 +6,14 @@ MARSHAL separates durable engineering authority from the coding-agent vendor tha
 
 ## Implemented Runtime Architecture
 
-The diagram below is source-faithful to the implemented codebase (Runtime `1.0.0`, SQLite schema `v67`). It describes verified execution paths across entry surfaces, control plane state, task isolation, provider execution, and audit evidence persistence.
-
 <p align="center">
-  <img src="assets/marshal-architecture-source-faithful.svg" alt="MARSHAL Implemented Runtime Architecture" width="100%">
+  <img src="assets/marshal-architecture-graphite.svg"
+       alt="MARSHAL implemented runtime architecture"
+       width="100%">
 </p>
 
-> **Scope Note**: Verification quorum and `netpolicy` are implemented subsystems, but they operate as configurable gate checks rather than unconditional linear stages in `Runtime.Run`. Aider/Crush contract-only material and speculative multi-host architectures are deliberately omitted.
+> Source-faithful to runtime `1.0.0` / SQLite schema `v67` at source snapshot
+> `8f7d092e038e`. Roadmap-only or contract-only components are intentionally omitted.
 
 ---
 
