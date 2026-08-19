@@ -715,6 +715,16 @@
       "bytes": 886
     },
     {
+      "path": "conformance/memory/external/adapters.go",
+      "sha256": "6064ee49a99feee9addc5526036d69b8e073df6d66a619503697c7ec49e9e247",
+      "bytes": 2764
+    },
+    {
+      "path": "conformance/memory/external/adapters_test.go",
+      "sha256": "23e21c133db25d177ad60ce3a5a93d6f4c4aa98bf9cfa8ce6367a164462415e9",
+      "bytes": 1249
+    },
+    {
       "path": "conformance/runner.py",
       "sha256": "1e3486798600f3f5dc1a4c25c30dd74ec1cba18df6b5f1de147a87c31c5c74c5",
       "bytes": 5263
@@ -4908,6 +4918,11 @@
       "path": "tools/marshal.py",
       "sha256": "db469fd8cfd48c56e954c65e33c6e213b026036a4bb99fe66519a2378a5f0f0d",
       "bytes": 5666
+    },
+    {
+      "path": "tools/memory-bench/main.go",
+      "sha256": "f678deae35c06a64a5ab5eaf3f38d6cb64702d1ea6e838f635f28351312596b1",
+      "bytes": 800
     },
     {
       "path": "tools/protocol_check.py",
