@@ -2750,6 +2750,16 @@
       "bytes": 1902
     },
     {
+      "path": "internal/memory/security/sycophancy/defense.go",
+      "sha256": "5808ce2a4d73987ff7cda1480f3ecc0ec335e2d0f1a8b8c1e30764223a93c2af",
+      "bytes": 1919
+    },
+    {
+      "path": "internal/memory/security/sycophancy/defense_test.go",
+      "sha256": "82e630479fbf59f831de969b9b19a4470d4be3d4e911b6a20fe654151b8358a8",
+      "bytes": 2413
+    },
+    {
       "path": "internal/memory/shared/archive.go",
       "sha256": "b79b55013a48c2087859208a449ec4bde29e273bead0dfca8ae6af1ba7f9e57c",
       "bytes": 2897
