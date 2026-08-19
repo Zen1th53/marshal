@@ -48,46 +48,63 @@ MARSHAL enforces strict operational separation:
 
 ```mermaid
 flowchart TD
-    User["User / Operator"] --> CLI["MARSHAL CLI"]
-    User --> MCP["MCP Protocol (2026-07-28)"]
-    User --> A2A["A2A Protocol (1.0)"]
-
-    CLI --> Server["MARSHAL Control Plane Daemon"]
-    MCP --> Server
-    A2A --> Server
-
-    subgraph ControlPlane ["Control Plane State & Security"]
-        Server --> TaskEng["Task Engine & Scheduler"]
-        Server --> PolicyEng["Policy & Capability Broker"]
-        Server --> AuditEng["Evidence & Audit Store (SQLite v67)"]
-        Server --> TrustGate["Trust Gate & Risk Engine"]
+    subgraph Clients ["Interfaces & Protocols"]
+        CLI["MARSHAL CLI"]
+        MCP["MCP Protocol (2026-07-28)"]
+        A2A["A2A Protocol (1.0)"]
     end
 
-    TaskEng --> Supervisor["Process Supervisor & Lease Manager"]
-    PolicyEng --> Supervisor
-    TrustGate --> Supervisor
+    subgraph ControlPlane ["MARSHAL Control Plane"]
+        Daemon["Control Plane Daemon"]
+        DB[(State & Evidence Store\nSQLite v67)]
+        Policy["Policy & Trust Gate Engine"]
+        Scheduler["Task Engine & Scheduler"]
 
-    subgraph Isolation ["Isolated Execution Cell"]
-        Supervisor --> Worktree["Git Worktree (Isolated Base)"]
-        Worktree --> BWrap["Bubblewrap Sandbox (bwrap)"]
-        BWrap --> NetFirewall["Network Egress Firewall"]
+        Daemon <--> DB
+        Daemon <--> Policy
+        Daemon <--> Scheduler
     end
 
-    NetFirewall --> Router["Adapter Dispatch Router"]
+    subgraph ExecutionCell ["Isolated Execution Cell"]
+        Supervisor["Process Supervisor & Lease Manager"]
+        Worktree["Git Worktree Isolation"]
+        Sandbox["Bubblewrap Sandbox (bwrap)"]
+        Firewall["Network Egress Firewall"]
 
-    subgraph Adapters ["Provider Adapters"]
-        Router --> Codex["Codex Adapter"]
-        Router --> OpenCode["OpenCode + Local Ollama Adapter"]
-        Router --> Gemini["Gemini Adapter"]
-        Router --> Claude["Claude Code Adapter"]
+        Supervisor --> Worktree
+        Worktree --> Sandbox
+        Sandbox --> Firewall
     end
 
-    Codex --> Verification["Verification Quorum & Evidence Engine"]
-    OpenCode --> Verification
-    Gemini --> Verification
-    Claude --> Verification
+    subgraph Adapters ["Provider Execution Adapters"]
+        Codex["Codex Adapter"]
+        OpenCode["OpenCode + Local Ollama"]
+        Gemini["Gemini Adapter"]
+        Claude["Claude Code Adapter"]
+    end
 
-    Verification --> Artifacts["Artifacts & Provenance Store"]
+    subgraph Verification ["Verification & Audit"]
+        Quorum["Verification Quorum & Evidence Engine"]
+        Artifacts["Artifacts & Provenance Store"]
+        Quorum --> Artifacts
+    end
+
+    CLI --> Daemon
+    MCP --> Daemon
+    A2A --> Daemon
+
+    Daemon --> Supervisor
+    Firewall --> Codex
+    Firewall --> OpenCode
+    Firewall --> Gemini
+    Firewall --> Claude
+
+    Codex --> Quorum
+    OpenCode --> Quorum
+    Gemini --> Quorum
+    Claude --> Quorum
+
+    Artifacts -.-> DB
 ```
 
 For detailed technical specs, inspect [docs/architecture.md](docs/architecture.md) and [docs/concepts.md](docs/concepts.md).
