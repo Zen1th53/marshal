@@ -2260,6 +2260,16 @@
       "bytes": 2220
     },
     {
+      "path": "internal/memory/artifactref/referenced_memory.go",
+      "sha256": "015f920705c720dc4422cf09485f1769b0a19be6863fb29f1d2704ccf8026453",
+      "bytes": 2888
+    },
+    {
+      "path": "internal/memory/artifactref/referenced_memory_test.go",
+      "sha256": "ee04a3cae427dd21294ddeca2719d7c99755ae810b76c60bc88033820f7d3c22",
+      "bytes": 1831
+    },
+    {
       "path": "internal/memory/audit/tracer.go",
       "sha256": "ab557cd63d4a20ad20b8d7a50637115bc6a2931fce23b21f4631e4d0e43ba19c",
       "bytes": 2544
