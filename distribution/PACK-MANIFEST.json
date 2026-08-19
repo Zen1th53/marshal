@@ -2520,6 +2520,16 @@
       "bytes": 1450
     },
     {
+      "path": "internal/memory/multitrack/strategy.go",
+      "sha256": "259c6dadc058a2aaa6ce8444df82003b61e26ee058b1316729dd74d4ab342d63",
+      "bytes": 2425
+    },
+    {
+      "path": "internal/memory/multitrack/strategy_test.go",
+      "sha256": "d4872d8eb02504a0605d87088fae08225fb91e05a1a9fb53adc65475f7361625",
+      "bytes": 1700
+    },
+    {
       "path": "internal/memory/proactive/trigger.go",
       "sha256": "e4cc3a4d85511618aab2d49154b4dc28e8c634b8ecd7f91f8017c58fed87451c",
       "bytes": 3391
