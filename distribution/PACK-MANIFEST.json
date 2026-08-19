@@ -2345,6 +2345,16 @@
       "bytes": 3892
     },
     {
+      "path": "internal/memory/retrieval/fusion/rrf.go",
+      "sha256": "2abb1faea062ef39b2f93ad0460bbebbae2106f56d05cc432057bcf666fb3d86",
+      "bytes": 3329
+    },
+    {
+      "path": "internal/memory/retrieval/fusion/rrf_test.go",
+      "sha256": "d780fa1577bb4b1fd73f2b1b0be7d2e91594d3949576b1336ff09b053cfd6dde",
+      "bytes": 2209
+    },
+    {
       "path": "internal/memory/retrieval/planner/planner.go",
       "sha256": "2bcfe1d26060208ffdbf7d48985b8e4ecd21d9251c6364446f3892fce9eaf9eb",
       "bytes": 3468
