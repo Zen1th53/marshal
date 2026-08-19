@@ -2390,6 +2390,16 @@
       "bytes": 2304
     },
     {
+      "path": "internal/memory/quota/limiter.go",
+      "sha256": "6f78a8bebab6f8486af223c4c4503ca89a211ac216487fc8e55cea039bf9c82d",
+      "bytes": 2730
+    },
+    {
+      "path": "internal/memory/quota/limiter_test.go",
+      "sha256": "67d9c4a88e82c5ff5aea65ec8f0805a7809074030636873470927577c581b82d",
+      "bytes": 1413
+    },
+    {
       "path": "internal/memory/retention/policy.go",
       "sha256": "0fbd4e0676ca50da1bd3f28a7683882d7a0f9e4acfb7c7bc1569b58e8bed9cbf",
       "bytes": 1865
