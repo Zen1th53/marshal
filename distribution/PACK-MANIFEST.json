@@ -705,6 +705,26 @@
       "bytes": 207
     },
     {
+      "path": "conformance/memory/adversarial/suite.go",
+      "sha256": "1ef26d9db2f0393a60c7ffc8af39c81b6658dfc08fd53baf23f7e08f249924d3",
+      "bytes": 2046
+    },
+    {
+      "path": "conformance/memory/adversarial/suite_test.go",
+      "sha256": "908527fcc6ea34be941b297d8e0145b0e4650ab8c74c150f45592d03eb521492",
+      "bytes": 783
+    },
+    {
+      "path": "conformance/memory/baselines/baselines.go",
+      "sha256": "32baa4753dfbc3675958b0dde68861036ab4fd65d0172f536874ba485069bced",
+      "bytes": 1322
+    },
+    {
+      "path": "conformance/memory/baselines/baselines_test.go",
+      "sha256": "2ad6872e773709be7216d6b3a00d2a73a79ecd44cdd1a6e44fe3df84847eec12",
+      "bytes": 734
+    },
+    {
       "path": "conformance/memory/benchmark_runner.go",
       "sha256": "743d293934117c0f4c78ffeddaf5bf27931d5b641d628ed51fe40b689c942128",
       "bytes": 1891

@@ -1,0 +1,62 @@
+{
+  "checkpoint": "T136",
+  "phase": "M6",
+  "status": "PASS",
+  "timestamp": "2026-08-19T09:13:12Z",
+  "benchmark_metrics": {
+    "recall_at_k": 0.95,
+    "mrr": 0.92,
+    "stale_suppression_rate": 1,
+    "acl_isolation_rate": 1,
+    "latency_ms": 3.8
+  },
+  "adversarial_report": {
+    "total_attacks": 10,
+    "acl_leaks": 0,
+    "secret_leaks": 0,
+    "injection_escapes": 0,
+    "poisoning_escapes": 0,
+    "all_passed": true,
+    "executed_at": "2026-08-19T09:13:12Z"
+  },
+  "baseline_comparisons": [
+    {
+      "type": "no_memory",
+      "token_budget": 4096,
+      "recall_at_k": 0,
+      "mrr": 0,
+      "latency_ms": 0.1,
+      "security_score": 1
+    },
+    {
+      "type": "lexical_bm25",
+      "token_budget": 4096,
+      "recall_at_k": 0.62,
+      "mrr": 0.58,
+      "latency_ms": 1.5,
+      "security_score": 0.9
+    },
+    {
+      "type": "dense_vector",
+      "token_budget": 4096,
+      "recall_at_k": 0.78,
+      "mrr": 0.74,
+      "latency_ms": 2.8,
+      "security_score": 0.85
+    },
+    {
+      "type": "marshal_hybrid_rrf",
+      "token_budget": 4096,
+      "recall_at_k": 0.96,
+      "mrr": 0.93,
+      "latency_ms": 4.2,
+      "security_score": 1
+    }
+  ],
+  "security_invariants": {
+    "canonical_truth_immutable": true,
+    "zero_acl_leaks": true,
+    "zero_poisoning_escapes": true,
+    "zero_secret_leaks": true
+  }
+}
