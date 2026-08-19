@@ -2215,6 +2215,16 @@
       "bytes": 1715
     },
     {
+      "path": "internal/memory/trust/scoring.go",
+      "sha256": "cdd88e79cc066d9560d637917143698a8e2713637de3e69c8e5dc5d13fb066fd",
+      "bytes": 3073
+    },
+    {
+      "path": "internal/memory/trust/scoring_test.go",
+      "sha256": "61dbe59bf2b1c04ac269cdebe949704408ed113cc6fb54c95deb6c02eb7bb203",
+      "bytes": 2542
+    },
+    {
       "path": "internal/model/capability.go",
       "sha256": "11995bfbb4f0a57fb35caa30b54723957a20e9573067e1941feda2def349e774",
       "bytes": 1429
