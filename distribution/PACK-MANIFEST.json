@@ -1535,6 +1535,16 @@
       "bytes": 1857
     },
     {
+      "path": "internal/authz/memory_actions.go",
+      "sha256": "fa182b03d30b6ee84a1476bac7fec66b92f38d49a03958e8582fb3d46684ea85",
+      "bytes": 2339
+    },
+    {
+      "path": "internal/authz/memory_authz_test.go",
+      "sha256": "05a5960265184ba22c0daf22b29ee06b514f2998ea075063549409937f43887c",
+      "bytes": 1769
+    },
+    {
       "path": "internal/authz/metrics.go",
       "sha256": "25c4ad9b495903ec0d5a60233354efa83ecfb8733e935855f956583b2dee3c64",
       "bytes": 1312
