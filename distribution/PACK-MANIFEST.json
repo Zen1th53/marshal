@@ -2370,6 +2370,16 @@
       "bytes": 1263
     },
     {
+      "path": "internal/memory/integrity/checker.go",
+      "sha256": "959ecf6c6f7dcb6c2d4b9b6017d77c7380c1b52159ec953dbe79e5f0e8ffd8cd",
+      "bytes": 3461
+    },
+    {
+      "path": "internal/memory/integrity/checker_test.go",
+      "sha256": "883a16ac7886c04ccb2eabd274521fa2fca6f76cffeb96e590135150bb984ee2",
+      "bytes": 2120
+    },
+    {
       "path": "internal/memory/lifecycle/engine.go",
       "sha256": "c10ed75ae0d1310ec8930d11c05d77fda6e969f10ecc5ac3a496df3096797632",
       "bytes": 4062
