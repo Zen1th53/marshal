@@ -2160,6 +2160,16 @@
       "bytes": 12836
     },
     {
+      "path": "internal/memory/audit/tracer.go",
+      "sha256": "ab557cd63d4a20ad20b8d7a50637115bc6a2931fce23b21f4631e4d0e43ba19c",
+      "bytes": 2544
+    },
+    {
+      "path": "internal/memory/audit/tracer_test.go",
+      "sha256": "aa36baea3611e878de95c7c766969ef0e46c6b8d489d9bce2f4a2fec741023cb",
+      "bytes": 1521
+    },
+    {
       "path": "internal/memory/blocks/block_manager.go",
       "sha256": "13c98d56e08e6b590bab72c4613ff9997bf4aac74a0636c75d2c5900d6105a31",
       "bytes": 3689
