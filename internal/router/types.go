@@ -1,5 +1,7 @@
 package router
 
+import "github.com/Zen1th53/marshal/internal/model"
+
 type Code string
 
 const (
@@ -30,12 +32,25 @@ var (
 )
 
 type ModelProfile struct {
-	Provider     string   `json:"provider"`
-	Model        string   `json:"model"`
-	Capabilities []string `json:"capabilities,omitempty"`
-	MaxContext   int      `json:"max_context"`
-	CostClass    string   `json:"cost_class"`
-	LatencyClass string   `json:"latency_class"`
+	Provider     string     `json:"provider"`
+	Model        string     `json:"model"`
+	Capabilities []string   `json:"capabilities,omitempty"`
+	MaxContext   int        `json:"max_context"`
+	CostClass    string     `json:"cost_class"`
+	LatencyClass string     `json:"latency_class"`
+	Available    bool       `json:"available"`
+	LocalOnly    bool       `json:"local_only,omitempty"`
+	MaxRisk      model.Risk `json:"max_risk,omitempty"`
+}
+
+type RouteRequest struct {
+	RequiredCapabilities []string   `json:"required_capabilities,omitempty"`
+	MinContext           int        `json:"min_context,omitempty"`
+	PreferLocal          bool       `json:"prefer_local,omitempty"`
+	PinProvider          string     `json:"pin_provider,omitempty"`
+	PinModel             string     `json:"pin_model,omitempty"`
+	Risk                 model.Risk `json:"risk,omitempty"`
+	DisabledProviders    []string   `json:"disabled_providers,omitempty"`
 }
 
 type RouteDecision struct {
