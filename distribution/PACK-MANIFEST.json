@@ -930,6 +930,11 @@
       "bytes": 1282
     },
     {
+      "path": "docs/memory/vector-backends.md",
+      "sha256": "6ce084b110c4785ed51accd5561fa0f63266a5f3c48175b94c7e681a8bd60c78",
+      "bytes": 935
+    },
+    {
       "path": "docs/model-router.md",
       "sha256": "9dd8fe439d29610cf74ebe840d42534a9be43d9e04c4dad66999bd62eaf0c099",
       "bytes": 266
@@ -2258,6 +2263,16 @@
       "path": "internal/memory/index/vector/sqlitevec/backend_test.go",
       "sha256": "c2e97a885928a9c4dcbdd15437a911b4b083edb94e155c096574e86bf8ee0671",
       "bytes": 1563
+    },
+    {
+      "path": "internal/memory/index/vector/turbovec/adapter.go",
+      "sha256": "32305531643ff227153bb9ef0323531118c5b2960abaa470d2b2bbd0c4e8cfb7",
+      "bytes": 3067
+    },
+    {
+      "path": "internal/memory/index/vector/turbovec/adapter_test.go",
+      "sha256": "9a2920531cd31f3ceb6e804dc28b6dc3a5788ded3a86c80b7e5518c8bbb6744b",
+      "bytes": 1263
     },
     {
       "path": "internal/memory/lifecycle/engine.go",
