@@ -2120,6 +2120,16 @@
       "bytes": 12836
     },
     {
+      "path": "internal/memory/blocks/block_manager.go",
+      "sha256": "13c98d56e08e6b590bab72c4613ff9997bf4aac74a0636c75d2c5900d6105a31",
+      "bytes": 3689
+    },
+    {
+      "path": "internal/memory/blocks/block_manager_test.go",
+      "sha256": "c56fea9ccd0f1d6db445cbcc1adf1f4b1430c8773e0f22fd6971ef1bad59e9ec",
+      "bytes": 2385
+    },
+    {
       "path": "internal/memory/conflict/detector.go",
       "sha256": "416a1d45a2e4db61752abf13299c5272bc4a3a70d0df969c82bd3d1a89ddd16d",
       "bytes": 2235
