@@ -384,3 +384,76 @@ func TestMCPServerBearerAuth(t *testing.T) {
 		t.Fatalf("expected 401 Unauthorized for revoked token, got %d", resp.StatusCode)
 	}
 }
+
+func TestMCPPrincipalKindIsolation(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	authMgr := auth.NewManager(t.TempDir())
+	mcpToken, _, err := authMgr.CreateToken("mcp-user", auth.KindMCPClient, []string{"all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a2aToken, _, err := authMgr.CreateToken("a2a-agent", auth.KindA2AAgent, []string{"all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	localToken, _, err := authMgr.CreateToken("local-admin", auth.KindLocalUser, []string{"all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServerWithAuth(runtime, authMgr)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	reqBody, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/list",
+	})
+
+	// 1. A2A Token attempting MCP call -> 403 Forbidden
+	req, _ := http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+a2aToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for A2A token calling MCP, got %d", resp.StatusCode)
+	}
+
+	// 2. MCP Token -> 200 OK
+	req, _ = http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+mcpToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for MCP token, got %d", resp.StatusCode)
+	}
+
+	// 3. Local User Token -> 200 OK
+	req, _ = http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+localToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for Local User token, got %d", resp.StatusCode)
+	}
+}

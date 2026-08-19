@@ -1096,13 +1096,13 @@
     },
     {
       "path": "internal/a2a/a2a_test.go",
-      "sha256": "309ca15495a0158a3d199593c332212ec8375125318cc9370a76aebd7ad88a31",
-      "bytes": 9829
+      "sha256": "b4f597982629ce0ffbdcd79b1382dc6b052078ee04a67ba98346b04a0d6a4fbf",
+      "bytes": 13045
     },
     {
       "path": "internal/a2a/server.go",
-      "sha256": "1a7812ceb62e22a7950cb8e8e7eb462f451feb809511a8003c058b16ec2d80b2",
-      "bytes": 10455
+      "sha256": "78fc1d98f0c29db8d60006179eba4b56c88f4a7634c6344f00ab4b90781e4ead",
+      "bytes": 11034
     },
     {
       "path": "internal/adapter/adapter.go",
@@ -1466,13 +1466,13 @@
     },
     {
       "path": "internal/auth/auth.go",
-      "sha256": "f9d8ec839a5e260db0d4e29f8bd15271726be1de6d6dea5e000fada7d179c229",
-      "bytes": 5184
+      "sha256": "3796a425f9e605ed37d1ad31c90a495e4a7171d4843ef1a7fe39ec647e30ce33",
+      "bytes": 5449
     },
     {
       "path": "internal/auth/auth_test.go",
-      "sha256": "6d64dd030e4e3750edd506b836a86dca513d6fd1a8426c1a2b4d359bf32be453",
-      "bytes": 2190
+      "sha256": "8a7f3f9e6729dd63f2c3d0ffd882ee1b4f64bdc437ef95234b70d98da0bb740a",
+      "bytes": 3086
     },
     {
       "path": "internal/authz/adversarial_a07_test.go",
@@ -1651,13 +1651,13 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "65fb9e9bc216b42b58b4b42388079f995156901addff642cebeb13f2f391a740",
-      "bytes": 24105
+      "sha256": "16abae9c2a571a0cc30cac5284916cd89262c055d404b0c95dba2643852fdcd6",
+      "bytes": 25215
     },
     {
       "path": "internal/cli/cli_test.go",
-      "sha256": "98fc6bf7c470b7a874d2fa083843b27d63dc4f0133c4ae0187bf9570a3d50d5b",
-      "bytes": 11400
+      "sha256": "f2b9111996c82e7c7cb12743756780f2f6d161f5dd0d9c5c64f53eab0bbbe344",
+      "bytes": 12447
     },
     {
       "path": "internal/cli/policy_test_a10_release_test.go",
@@ -2046,13 +2046,13 @@
     },
     {
       "path": "internal/mcp/mcp_test.go",
-      "sha256": "25cb772e35ae89fdc46c594f7008735aa51e2722eadc5c912404dccce2e7dabb",
-      "bytes": 10584
+      "sha256": "938aa87617628fbb120afa22d5e0d2bd2df2ba2843a7f333d3f8f603a20abca0",
+      "bytes": 12820
     },
     {
       "path": "internal/mcp/server.go",
-      "sha256": "99fc81e5752245837e32bf07beb0eb3b00ad4c80600069bc80d6c3ed9f2f2de6",
-      "bytes": 10616
+      "sha256": "cfdd9af0be79ffa66f226a48f90a1fddfb7ea8ddbcccf21623bc5028e5981d8b",
+      "bytes": 10862
     },
     {
       "path": "internal/memory/decision/adversarial_test.go",

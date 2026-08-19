@@ -293,3 +293,32 @@ func TestCLIVersionCommand(t *testing.T) {
 		t.Fatalf("unexpected json stdout: %s", stdout.String())
 	}
 }
+
+func TestMCPA2AServerInsecureRemoteBindRejection(t *testing.T) {
+	repo := cliRepo(t)
+	dir := repo.Path()
+	var stdout, stderr bytes.Buffer
+	c := command{
+		root:   dir,
+		stdout: &stdout,
+		stderr: &stderr,
+	}
+
+	// 1. MCP serve with --insecure on 0.0.0.0:8080 should fail immediately
+	err := c.mcp(context.Background(), []string{"serve", "--listen", "0.0.0.0:8080", "--insecure"})
+	if err == nil {
+		t.Fatal("expected error for mcp serve with --insecure on non-loopback 0.0.0.0, got nil")
+	}
+	if !strings.Contains(err.Error(), "--insecure mode is forbidden on non-loopback") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+
+	// 2. A2A serve with --insecure on 0.0.0.0:8081 should fail immediately
+	err = c.a2a(context.Background(), []string{"serve", "--listen", "0.0.0.0:8081", "--insecure"})
+	if err == nil {
+		t.Fatal("expected error for a2a serve with --insecure on non-loopback 0.0.0.0, got nil")
+	}
+	if !strings.Contains(err.Error(), "--insecure mode is forbidden on non-loopback") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+}

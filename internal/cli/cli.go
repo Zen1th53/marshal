@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -661,18 +662,38 @@ func (c command) mcp(ctx context.Context, args []string) error {
 	}
 	switch args[0] {
 	case "serve":
-		listen := "127.0.0.1:8080"
-		if len(args) >= 3 && args[1] == "--listen" {
-			listen = args[2]
+		flags := flag.NewFlagSet("mcp serve", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		listen := flags.String("listen", "127.0.0.1:8080", "listen address (host:port)")
+		insecure := flags.Bool("insecure", false, "allow unauthenticated execution (loopback only)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
 		}
+
 		runtime, err := app.Open(ctx, c.root)
 		if err != nil {
 			return err
 		}
 		defer runtime.Close()
-		srv := mcp.NewServer(runtime)
-		fmt.Fprintf(c.stdout, "Starting MARSHAL MCP server on http://%s\n", listen)
-		server := &http.Server{Addr: listen, Handler: srv.Handler()}
+
+		var srv *mcp.Server
+		if *insecure {
+			if !isLoopbackAddr(*listen) {
+				return fmt.Errorf("%w: --insecure mode is forbidden on non-loopback address %s", model.ErrInvalid, *listen)
+			}
+			fmt.Fprintln(c.stderr, "WARNING: Running MCP server in insecure mode on loopback (authentication disabled)")
+			srv = mcp.NewServer(runtime)
+		} else {
+			layout, err := app.Bootstrap(ctx, c.root)
+			if err != nil {
+				return err
+			}
+			authMgr := auth.NewManager(layout.RuntimeDir)
+			srv = mcp.NewServerWithAuth(runtime, authMgr)
+		}
+
+		fmt.Fprintf(c.stdout, "Starting MARSHAL MCP server on http://%s\n", *listen)
+		server := &http.Server{Addr: *listen, Handler: srv.Handler()}
 		return server.ListenAndServe()
 	case "status":
 		return c.print(map[string]any{
@@ -888,4 +909,17 @@ func exitCode(err error) int {
 		return 6
 	}
 	return 1
+}
+
+func isLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	host = strings.TrimSpace(strings.ToLower(host))
+	if host == "" || host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

@@ -70,3 +70,31 @@ func TestSecretResolverAndRedaction(t *testing.T) {
 		t.Fatalf("RedactSecrets output mismatch: %s", string(redacted))
 	}
 }
+
+func TestTokenFileInsecurePermissionsRejection(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr := NewManager(tempDir)
+
+	_, _, err := mgr.CreateToken("mcp-client-1", KindMCPClient, []string{"task.read"})
+	if err != nil {
+		t.Fatalf("CreateToken: %v", err)
+	}
+
+	// Change file permissions to insecure 0644
+	tokenPath := filepath.Join(tempDir, "auth_tokens.json")
+	if err := os.Chmod(tokenPath, 0o644); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	// Authenticate should fail closed due to insecure permissions
+	if _, err := mgr.Authenticate("any-token"); err == nil {
+		t.Fatal("expected error due to insecure 0644 file permissions, got nil")
+	} else if !strings.Contains(err.Error(), "insecure permissions") {
+		t.Fatalf("expected insecure permissions error, got: %v", err)
+	}
+
+	// Fix permissions back to 0600
+	if err := os.Chmod(tokenPath, 0o600); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+}

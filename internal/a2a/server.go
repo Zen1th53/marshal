@@ -141,10 +141,17 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if _, err := s.authManager.Authenticate(token); err != nil {
+		caller, err := s.authManager.Authenticate(token)
+		if err != nil {
 			w.Header().Set("Content-Type", "application/a2a+json")
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "UNAUTHORIZED", "detail": err.Error()})
+			return
+		}
+		if caller.Kind != auth.KindA2AAgent && caller.Kind != auth.KindLocalUser {
+			w.Header().Set("Content-Type", "application/a2a+json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "FORBIDDEN", "detail": fmt.Sprintf("Forbidden: principal kind %q is not authorized for A2A", caller.Kind)})
 			return
 		}
 	}
@@ -285,8 +292,13 @@ func (s *Server) handleTaskDelegation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if _, err := s.authManager.Authenticate(token); err != nil {
+		caller, err := s.authManager.Authenticate(token)
+		if err != nil {
 			http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+			return
+		}
+		if caller.Kind != auth.KindA2AAgent && caller.Kind != auth.KindLocalUser {
+			http.Error(w, fmt.Sprintf("Forbidden: principal kind %q is not authorized for A2A", caller.Kind), http.StatusForbidden)
 			return
 		}
 	}

@@ -71,8 +71,13 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if _, err := s.authManager.Authenticate(token); err != nil {
+		caller, err := s.authManager.Authenticate(token)
+		if err != nil {
 			s.writeErrorWithStatus(w, nil, http.StatusUnauthorized, -32001, "Unauthorized: "+err.Error())
+			return
+		}
+		if caller.Kind != auth.KindMCPClient && caller.Kind != auth.KindLocalUser {
+			s.writeErrorWithStatus(w, nil, http.StatusForbidden, -32001, fmt.Sprintf("Forbidden: principal kind %q is not authorized for MCP", caller.Kind))
 			return
 		}
 	}

@@ -91,6 +91,7 @@ func TestA2AUsupportedVersionHeader(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader([]byte("{}")))
 	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
 	req.Header.Set("A2A-Version", "9.9") // unsupported
 
 	resp, err := http.DefaultClient.Do(req)
@@ -132,6 +133,7 @@ func TestA2ASendMessageValidationAndRoleSpoof(t *testing.T) {
 	body, _ := json.Marshal(spoofReq)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
 	req.Header.Set("A2A-Version", "1.0")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -331,5 +333,104 @@ func TestA06TypedHandoffEndpointUsesAuthenticatedTypedContract(t *testing.T) {
 	}
 	if handoff.ID != submission.Handoff.ID || handoff.Status != protocol.StatusAccepted || handoff.FromAgent != record.ID {
 		t.Fatalf("handoff = %#v, want authenticated accepted typed record", handoff)
+	}
+}
+
+func TestA2APrincipalKindIsolation(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	authMgr := auth.NewManager(t.TempDir())
+	mcpToken, _, err := authMgr.CreateToken("mcp-user", auth.KindMCPClient, []string{"all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a2aToken, rec, err := authMgr.CreateToken("a2a-agent", auth.KindA2AAgent, []string{"all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	localToken, _, err := authMgr.CreateToken("local-admin", auth.KindLocalUser, []string{"all"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServerWithAuth(runtime, authMgr)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	reqBody, _ := json.Marshal(map[string]any{
+		"message": map[string]any{
+			"message_id": "msg-test-1",
+			"role":       "ROLE_USER",
+			"parts": []map[string]string{
+				{"text": "hello normal user"},
+			},
+		},
+	})
+
+	// 1. MCP Token attempting A2A call -> 403 Forbidden
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
+	req.Header.Set("Authorization", "Bearer "+mcpToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for MCP token calling A2A, got %d", resp.StatusCode)
+	}
+
+	// 2. A2A Token -> 200 OK (or handled message response)
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
+	req.Header.Set("Authorization", "Bearer "+a2aToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for A2A token, got %d", resp.StatusCode)
+	}
+
+	// 3. Local User Token -> 200 OK
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
+	req.Header.Set("Authorization", "Bearer "+localToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for Local User token, got %d", resp.StatusCode)
+	}
+
+	// 4. Revoked Token -> 401 Unauthorized
+	if err := authMgr.RevokeToken(rec.ID); err != nil {
+		t.Fatal(err)
+	}
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
+	req.Header.Set("Authorization", "Bearer "+a2aToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for revoked token, got %d", resp.StatusCode)
 	}
 }

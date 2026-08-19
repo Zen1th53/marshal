@@ -141,10 +141,17 @@ func (m *Manager) RevokeToken(id string) error {
 }
 
 func (m *Manager) loadUnlocked() ([]TokenRecord, error) {
-	data, err := os.ReadFile(m.path)
+	info, err := os.Stat(m.path)
 	if os.IsNotExist(err) {
 		return []TokenRecord{}, nil
 	}
+	if err != nil {
+		return nil, fmt.Errorf("read auth tokens: %w", err)
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("auth tokens file %s has insecure permissions %04o (expected 0600)", m.path, info.Mode().Perm())
+	}
+	data, err := os.ReadFile(m.path)
 	if err != nil {
 		return nil, fmt.Errorf("read auth tokens: %w", err)
 	}
