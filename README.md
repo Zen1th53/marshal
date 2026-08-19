@@ -46,14 +46,96 @@ MARSHAL enforces strict operational separation:
 
 ## Architecture
 
-<p align="center">
-  <img src="docs/assets/marshal-architecture-graphite.svg"
-       alt="MARSHAL implemented runtime architecture"
-       width="100%">
-</p>
+```mermaid
+flowchart TD
+    subgraph S1["1 · ENTRY POINTS"]
+        CLI["marshal CLI<br/><small>Native commands &amp; local management</small>"]
+        MCP["MCP HTTP server<br/><small>protocol 2026-07-28 · Bearer Auth</small>"]
+        A2A["A2A HTTP+JSON server<br/><small>accepts wire protocol 1.0 / 1.0.0</small>"]
+    end
 
-> Source-faithful to runtime `1.0.0` / SQLite schema `v67` at source snapshot
-> `8f7d092e038e`. Roadmap-only or contract-only components are intentionally omitted.
+    subgraph S2["2 · RUNTIME / CONTROL PLANE"]
+        DAEMON["Local daemon API<br/><small>HTTP/JSON over .marshal/runtime.sock<br/>socket mode 0600</small>"]
+        RUNTIME["app.Runtime<br/><small>orchestration boundary</small>"]
+        PREEXEC["Run pre-execution checks<br/><small>risk assessment · GateEngine · policy</small>"]
+        COORD["Task / session coordination<br/><small>atomic claim + lease · heartbeat · Finalize</small>"]
+        EVENTS["events.Engine"]
+    end
+
+    subgraph S3["3 · RUNTIME.RUN TASK EXECUTION"]
+        WT["worktree.Manager.Prepare<br/><small>.marshal/worktrees/&lt;task&gt;</small>"]
+        RESOLVE["resolveAdapter + Probe<br/><small>Codex · OpenCode · Gemini · Claude</small>"]
+        SANDBOX["Sandbox wrapper<br/><small>When bwrap is available: worker.NewSandboxed<br/>worktree bind · read-only binds · tmpfs runtime dirs<br/>--unshare-net when network isolation is required</small>"]
+        ADAPTER_RUN["provider Adapter.Run<br/><small>builds provider execution command</small>"]
+        RUNNER["ProcessRunner<br/><small>worker.Manager · timeout · cancel · bounded output</small>"]
+    end
+
+    subgraph S3_VERIFY["SEPARATE VERIFICATION API"]
+        VERIFY["Runtime.Verify<br/><small>CLI: marshal verify [-- cmd args...]<br/>HTTP: POST /v1/verify<br/>authorize → worker.Manager.Run(exact argv)<br/>returns exit status + SHA-256(stdout|stderr)</small>"]
+    end
+
+    subgraph S4["4 · PROVIDER PROCESSES"]
+        P_CODEX["codex CLI<br/><b>REAL-E2E-VERIFIED</b>"]
+        P_OPENCODE["opencode + Ollama<br/><b>REAL-E2E-VERIFIED</b>"]
+        P_GEMINI["gemini CLI<br/><i>PROBED / AVAILABLE</i>"]
+        P_CLAUDE["claude CLI<br/><i>PROBED / AVAILABLE</i>"]
+    end
+
+    subgraph S5["5 · RESULT HANDLING &amp; PROVENANCE EVIDENCE"]
+        SANITIZE["sanitizeProviderOutput<br/><small>credential-boundary redaction (stdout / stderr)</small>"]
+        ART["artifact.Store.Put<br/><small>SHA-256 content-addressed reports<br/>.marshal/artifacts/sha256/&lt;hex&gt;</small>"]
+        INSPECT["Inspect Task Worktree<br/><small>commit dirty changes under policy<br/>reject success with no new commit</small>"]
+        EVID["recordRunEvidence<br/><small>command/output/env evidence<br/>raw I/O bound by SHA-256 digests</small>"]
+        FINISH["FinishRun → ObserveHEAD → FinalizeExecution"]
+    end
+
+    subgraph S6["6 · CANONICAL LOCAL PERSISTENCE"]
+        SQLITE[("SQLite v67 — .marshal/state.db<br/><small>canonical live coordination state · task leases · audit ledger · evidence graphs</small>")]
+    end
+
+    %% Wiring
+    CLI --> DAEMON
+    DAEMON --> RUNTIME
+    MCP --> RUNTIME
+    A2A --> RUNTIME
+
+    RUNTIME --> PREEXEC
+    RUNTIME --> COORD
+    RUNTIME --> EVENTS
+
+    RUNTIME --> WT
+    RUNTIME --> VERIFY
+
+    WT --> RESOLVE
+    RESOLVE --> SANDBOX
+    SANDBOX --> RUNNER
+    WT --> ADAPTER_RUN
+    ADAPTER_RUN --> RUNNER
+
+    RUNNER -->|"provider command"| P_CODEX
+    RUNNER -->|"provider command"| P_OPENCODE
+    RUNNER -->|"provider command"| P_GEMINI
+    RUNNER -->|"provider command"| P_CLAUDE
+
+    P_CODEX --> SANITIZE
+    P_OPENCODE --> SANITIZE
+    P_GEMINI --> SANITIZE
+    P_CLAUDE --> SANITIZE
+
+    SANITIZE --> ART
+    SANITIZE --> INSPECT
+    SANITIZE --> EVID
+
+    ART --> FINISH
+    INSPECT --> FINISH
+    EVID --> FINISH
+
+    FINISH --> SQLITE
+    EVENTS -.-> SQLITE
+    VERIFY -.-> SQLITE
+```
+
+> **Source-Faithful Implementation Guarantee**: Faithful to runtime `1.0.0` / SQLite schema `v67` at source snapshot `8f7d092e038e`. Roadmap-only or contract-only components are intentionally omitted.
 
 For detailed technical specs, inspect [docs/architecture.md](docs/architecture.md) and [docs/concepts.md](docs/concepts.md).
 
