@@ -1750,6 +1750,11 @@
       "bytes": 384
     },
     {
+      "path": "internal/context/compiler/memory_compiler_test.go",
+      "sha256": "87fa30283cb200d32a72e7674c23d2d533de16342901ba7c16f5f102d5fd79f8",
+      "bytes": 2055
+    },
+    {
       "path": "internal/context/compiler/types.go",
       "sha256": "909f49fa5256da2d5d4191e0d0c21fc92d6258cea2a98cbff2394f42ffcbbbfa",
       "bytes": 1424
