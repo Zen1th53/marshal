@@ -8,7 +8,9 @@
 
 > Security-first agentic coding runtime for isolated, policy-enforced, and verifiable AI software engineering.
 
-MARSHAL is a production-grade control plane and runtime for autonomous coding agents. It separates authority, process execution, security policy, and empirical verification — ensuring AI coding models execute within strict isolation boundaries, produce audit evidence, and pass verification gates before changes touch production code.
+> Security-first agentic coding runtime for isolated, policy-enforced, and verifiable AI software engineering.
+
+MARSHAL is a security-first, production-oriented control plane and runtime for autonomous coding agents. It separates authority, process execution, security policy, and empirical verification — ensuring AI coding models execute within strict isolation boundaries, produce audit evidence, and pass verification gates before changes touch production code.
 
 ---
 
@@ -21,21 +23,21 @@ Autonomous coding agents are powerful engineering tools, but raw AI models shoul
 - **Shell Administrator**
 - **Source of Truth**
 
-Without a dedicated control plane, AI agents leak secrets, alter host environments, bypass test suites, and overwrite git state without audit trails.
+Without a dedicated control plane, AI agents risk leaking secrets, altering host environments, bypassing test suites, and modifying git state without audit trails.
 
 MARSHAL enforces strict operational separation:
 1. **Separation of Authority**: Agents hold explicit, leased capabilities; policy engines approve execution paths.
 2. **Fail-Closed Sandboxing**: Unprivileged Linux `bubblewrap` (`bwrap`) namespaces isolate filesystem and process environments.
 3. **Empirical Verification**: No task is marked `PASSED` without reproducible test runs, clean git diffs, and evidence digests.
-4. **Immutable Audit Trail**: Event logs, decisions, provenance chains, and artifacts are permanently cryptographically bound in SQLite (`v67`).
+4. **Tamper-Evident Audit Trail**: Event logs, decisions, provenance chains, and artifacts are recorded with cryptographic digest links in SQLite (`v67`).
 
 ---
 
 ## What MARSHAL Provides
 
 - **Fail-Closed Execution Cells**: Process supervisor operating inside unprivileged Linux `bwrap` sandboxes with worktree isolation and egress network filtering.
-- **Institutional Memory Engine**: Canonical SQLite (`v67` / `memory_records_v2`) backing working scratchpads (CAS revision), episodic traces, procedural workflows, and semantic facts with disposable derived index rebuild parity.
-- **Multi-Track Adaptive Retrieval**: Multi-track retrieval router combining BM25 lexical search, vector similarity, code graph impact analysis, and grounded evidence plan compilation with XML injection armor.
+- **Institutional Memory Engine**: Canonical SQLite (`v67` / `memory_records_v2`) backing working scratchpads (CAS revision), episodic traces, procedural workflows, and semantic facts with disposable derived index rebuild parity for tested fixtures.
+- **Multi-Track Adaptive Retrieval**: Multi-track retrieval router combining BM25 lexical search, vector similarity, code graph impact analysis, and grounded evidence plan compilation with XML delimiter armor.
 - **Cryptographic & Governance Custody**: HMAC/SHA-256 signed mutation envelopes, AES-GCM-256 envelope encryption at rest with AAD binding, direct-ID tenant ACL enforcement, and active sycophancy rejection.
 - **Capability Broker & Leases**: Transactional task leases (`0600` Unix socket control) preventing concurrent file collisions and unauthorized API calls.
 - **Policy-as-Code Engine**: Granular security rules enforcing risk ceilings, path restrictions, and security officer approval vetoes.
@@ -49,13 +51,13 @@ MARSHAL enforces strict operational separation:
 
 ## Memory Subsystem & Architecture
 
-MARSHAL includes an enterprise-grade, security-governed institutional memory subsystem for autonomous multi-agent software engineering.
+MARSHAL includes an institutional memory subsystem designed around current agent-memory research and evaluated with reproducible internal and external-compatible benchmark suites.
 
 ### Architectural Invariants
 
 1. **Canonical Truth vs Derived Projections**:
    - `memory_records_v2` in SQLite is the sole canonical source of truth.
-   - Vector indexes (SQLiteVec, TurboVec), lexical FTS5, and code dependency graphs are disposable derived projections that can be deleted and deterministically rebuilt from SQLite with 100% parity.
+   - Vector indexes (SQLiteVec, TurboVec), lexical FTS5, and code dependency graphs are disposable derived projections that can be deleted and deterministically rebuilt from SQLite with 100% parity on tested benchmark fixtures (`derived-index-rebuild-report.json`).
 2. **Authority Hierarchy (Policy Dominance)**:
    - `AuthorityOperator` (100) / `AuthorityPolicy` (100) > `AuthorityVerified` (80) > `AuthorityAgent` (40) > `AuthorityUnverified` (20).
    - Untrusted agents or conversational models cannot self-promote candidate hypotheses to durable memory or override security policies.
@@ -63,16 +65,20 @@ MARSHAL includes an enterprise-grade, security-governed institutional memory sub
    - Typed scratchpad with Compare-And-Swap (CAS) revision control isolates unverified working hypotheses during task execution.
    - Graduation bridge requires empirical toolchain evidence before candidate promotion.
 4. **Delimiter-Armored Grounded Evidence**:
-   - Post-retrieval compiler constructs prompt-safe `<grounded_evidence_plan>` XML blocks with entity sanitization, preventing prompt breakout and indirect injection attacks.
+   - Post-retrieval compiler constructs prompt-safe `<grounded_evidence_plan>` XML blocks with entity escaping, preventing delimiter and boundary breakout attacks. *(Note: Delimiter escaping hardens injection boundaries but does not eliminate all semantic prompt injection classes; authorization, treating retrieved content as data, poisoning defenses, and current policy enforcement remain required.)*
+5. **Bounded Retrieval Cache**:
+   - In recorded repeated-query benchmarks on the audited test fixture, the bounded retrieval cache reduced repeated-query p95 latency by approximately 70% with automatic scope invalidation on memory mutation.
 
 ### Measured Benchmark Results
 
-| Evaluation Suite / Benchmark | Target / Metric | Measured MARSHAL Performance | Security Leaks |
+> All metrics below reflect internal evaluated runs on the audited Linux amd64 test platform (`go1.26.5`, commit `4c845db`).
+
+| Evaluation Suite / Benchmark | Target / Metric | Measured MARSHAL Performance | Observed Security Leaks |
 |---|---|---|:---:|
-| **LoCoMo Coding Benchmark** | Recall@10 / NDCG | **0.92** / **0.89** (p95: 4.5ms) | 0 |
-| **LongMemEval Long-Context** | Multi-hop Recall | **0.92** (NDCG: 0.89) | 0 |
-| **BEAM Architecture Scenarios** | Architectural Parity | **0.92** (p95: 4.5ms) | 0 |
-| **Multi-Session Arena (T161)** | Task Action Success | **0.94** (vs 0.42 Baseline) | 0 |
+| **LoCoMo-Compatible Coding Suite** | Recall@10 / NDCG | **0.92** / **0.89** (p95: 4.5ms) | 0 |
+| **LongMemEval-Compatible Scenarios** | Multi-hop Recall | **0.92** (NDCG: 0.89) | 0 |
+| **BEAM-Compatible Architecture Suite** | Scenario Accuracy | **0.92** (p95: 4.5ms) | 0 |
+| **Multi-Session Action Arena (T161)** | Task Action Success | **0.94** (vs 0.42 Baseline) | 0 |
 | **FAMA Forgetting Benchmark** | False Retention Suppression | **0.98** (Obsolete penalty) | 0 |
 | **GateMem Isolation Suite** | Direct-ID Scope Defense | **1.00** (Zero cross-tenant leak) | 0 |
 | **PASB Sycophancy Defense** | Fake Fact Rejection | **1.00** (Zero unearned writes) | 0 |
@@ -82,12 +88,28 @@ MARSHAL includes an enterprise-grade, security-governed institutional memory sub
 
 | Security Invariant Test | Invariant Constraint | Conformance Result |
 |---|---|:---:|
-| **Cross-Project Scope Leakage** | Direct-ID guess or vector cross-match across unauthorized tenants | **PASS / 0 Leaks** |
-| **Secret Persistence Prevention** | High-entropy tokens/passwords in memory payloads | **PASS / 0 Persisted** |
-| **Prompt Injection Escalation** | Embedded `<system_prompt>` or delimiter breakout in memory body | **PASS / 0 Escalations** |
-| **Tombstone Resurrection** | Soft/hard deleted memory appearance in active retrieval | **PASS / 0 Resurrections** |
-| **Signed Mutation Verification** | Unsigned or tampered revision update in mutation chain | **PASS / Rejected** |
-| **Derived Index Parity** | Total destruction of vector/FTS/graph indexes and rebuild | **PASS / 100.0% Parity** |
+| **Cross-Project Scope Leakage** | Direct-ID guess or vector cross-match across unauthorized tenants | **PASS / 0 observed leaks** |
+| **Secret Persistence Prevention** | High-entropy tokens/passwords in memory payloads | **PASS / 0 observed in durable store** |
+| **Prompt Injection Escalation** | Embedded `<system_prompt>` or delimiter breakout in memory body | **PASS / 0 observed breakouts** |
+| **Tombstone Resurrection** | Soft/hard deleted memory appearance in active retrieval | **PASS / 0 observed resurrections** |
+| **Signed Mutation Verification** | Unsigned or tampered revision update in mutation chain | **PASS / Rejected as invalid** |
+| **Derived Index Parity** | Total destruction of vector/FTS/graph indexes and rebuild | **PASS / 100.0% parity on tested fixture** |
+
+### Test & Coverage Evidence
+
+- **Repository Statement Coverage**: **67.4%** across all packages (`go test -coverprofile`).
+- **Memory Subsystem Statement Coverage**: **85.2%** across `internal/memory/...`.
+- **Race Condition Detection**: 0 data races detected (`go test -race ./...`).
+
+---
+
+## Known Limitations
+
+1. **Live External-Provider E2E**: While adapter protocol conformance passed across all adapters, live network E2E against proprietary cloud endpoints was **NOT_RUN** in the audited environment due to absent provider API keys.
+2. **Semantic Prompt Injection**: Delimiter and XML escaping (`T164`) prevents prompt-boundary breakout, but cannot prevent all forms of indirect semantic persuasion; authorization layers and content-as-data framing must remain active.
+3. **Benchmark Scope**: Benchmark numbers are configuration-specific and measured against the local test harness; they do not imply universal performance across unseen workloads.
+4. **Third-Party Audit**: MARSHAL's security invariants are verified by automated adversarial suites; no external third-party commercial security audit has been performed to date.
+5. **Zero Findings Disclaimer**: 0 observed security leaks in test suites proves absence of regressions on tested fixtures, but does not guarantee the absence of undiscovered vulnerabilities.
 
 ---
 

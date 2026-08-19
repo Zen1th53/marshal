@@ -186,8 +186,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "6b279b85cb5d697553680a508dfb2b34fdd563948df99947c70d6639877900d0",
-      "bytes": 14866
+      "sha256": "1956b68ed505fc4bf827ae6d55767a72f6eb0fb1fb37a9e230388500bb41b0da",
+      "bytes": 17182
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -780,6 +780,11 @@
       "bytes": 1245
     },
     {
+      "path": "conformance/memory/rebuild_test.go",
+      "sha256": "d7eab8bba150bbc9243a6c17d1bbbac4a740b1a3bcd22562e79c4fd4d65be3c8",
+      "bytes": 5015
+    },
+    {
       "path": "conformance/memory/ultimate_conformance_test.go",
       "sha256": "f7aecdac40b67c948b93fd4bb7493c7d27e2f82373c9189dc2ac44269fd05805",
       "bytes": 8795
@@ -798,6 +803,11 @@
       "path": "conformance/tests/test_runner.py",
       "sha256": "1c74fb292307bf144364f187e527ea2e5001b208c6373a44aee34ed77f216746",
       "bytes": 2840
+    },
+    {
+      "path": "derived-index-rebuild-report.json",
+      "sha256": "dd09e2e3fd77e368ef00b18b3fa95e797709d2df96a6463bfed832a0da1c7b5e",
+      "bytes": 191
     },
     {
       "path": "distribution/DISTRIBUTION.md",
@@ -991,8 +1001,8 @@
     },
     {
       "path": "docs/memory/benchmark.md",
-      "sha256": "028894b342c68af6ae1bb6da09610029e6799f9679c288cb03e04d57787b873f",
-      "bytes": 798
+      "sha256": "dd794efb4bbe22d399fe36b312a51c1bc5608379ae0a932ad08afdf55b7f3bfc",
+      "bytes": 2517
     },
     {
       "path": "docs/memory/cli.md",
@@ -1016,8 +1026,8 @@
     },
     {
       "path": "docs/memory/overview.md",
-      "sha256": "0d06911a561b8f4b4d280d85fc2ddd4aa9f2579c2f5fed4d1f5908307438057c",
-      "bytes": 2419
+      "sha256": "c663a86b8e1962285a774ba7baefd39926c74feb8f807c6b11234a9865076623",
+      "bytes": 3275
     },
     {
       "path": "docs/memory/provenance.md",
@@ -2470,6 +2480,16 @@
       "bytes": 2414
     },
     {
+      "path": "internal/memory/evidenceplan/armor.go",
+      "sha256": "3aeece84129405c9062099734f417c9773a31157aa6062c5d08d9f24851b925b",
+      "bytes": 960
+    },
+    {
+      "path": "internal/memory/evidenceplan/armor_test.go",
+      "sha256": "97c2881b98ddf58db97f600a7100914830452722c8ee2d687a89880d8fdefce3",
+      "bytes": 1215
+    },
+    {
       "path": "internal/memory/evidenceplan/planner.go",
       "sha256": "720c46e0bcffa99b891444760dd6a9b37dd8dbe3218b322294af358d43e1a8ed",
       "bytes": 3752
@@ -2738,6 +2758,16 @@
       "path": "internal/memory/retention/purge_test.go",
       "sha256": "248882330078d5320e8f0d5da7e27c73b0eb88c4e39007ee38c5137b00931971",
       "bytes": 2196
+    },
+    {
+      "path": "internal/memory/retrieval/cache/cache.go",
+      "sha256": "7b880d08cab5cf471e57b7a48f11a62a09c72da79c11216ba26a9cca26e025ca",
+      "bytes": 2445
+    },
+    {
+      "path": "internal/memory/retrieval/cache/cache_test.go",
+      "sha256": "27322136b9a3657e0a82274b5bca01667b28e4901855d11e878ab0971be3496f",
+      "bytes": 1225
     },
     {
       "path": "internal/memory/retrieval/disclosure/progressive.go",
