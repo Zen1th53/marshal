@@ -46,66 +46,13 @@ MARSHAL enforces strict operational separation:
 
 ## Architecture Overview
 
-```mermaid
-flowchart TD
-    subgraph Clients ["Interfaces & Protocols"]
-        CLI["MARSHAL CLI"]
-        MCP["MCP Protocol (2026-07-28)"]
-        A2A["A2A Protocol (1.0)"]
-    end
+The diagram below is source-faithful to the implemented repository codebase (Runtime `1.0.0`, SQLite schema `v67`). It describes verified execution paths across entry surfaces, control plane state, task isolation, provider execution, and audit evidence persistence.
 
-    subgraph ControlPlane ["MARSHAL Control Plane"]
-        Daemon["Control Plane Daemon"]
-        DB[(State & Evidence Store\nSQLite v67)]
-        Policy["Policy & Trust Gate Engine"]
-        Scheduler["Task Engine & Scheduler"]
+<p align="center">
+  <img src="docs/assets/marshal-architecture-source-faithful.svg" alt="MARSHAL Implemented Runtime Architecture" width="100%">
+</p>
 
-        Daemon <--> DB
-        Daemon <--> Policy
-        Daemon <--> Scheduler
-    end
-
-    subgraph ExecutionCell ["Isolated Execution Cell"]
-        Supervisor["Process Supervisor & Lease Manager"]
-        Worktree["Git Worktree Isolation"]
-        Sandbox["Bubblewrap Sandbox (bwrap)"]
-        Firewall["Network Egress Firewall"]
-
-        Supervisor --> Worktree
-        Worktree --> Sandbox
-        Sandbox --> Firewall
-    end
-
-    subgraph Adapters ["Provider Execution Adapters"]
-        Codex["Codex Adapter"]
-        OpenCode["OpenCode + Local Ollama"]
-        Gemini["Gemini Adapter"]
-        Claude["Claude Code Adapter"]
-    end
-
-    subgraph Verification ["Verification & Audit"]
-        Quorum["Verification Quorum & Evidence Engine"]
-        Artifacts["Artifacts & Provenance Store"]
-        Quorum --> Artifacts
-    end
-
-    CLI --> Daemon
-    MCP --> Daemon
-    A2A --> Daemon
-
-    Daemon --> Supervisor
-    Firewall --> Codex
-    Firewall --> OpenCode
-    Firewall --> Gemini
-    Firewall --> Claude
-
-    Codex --> Quorum
-    OpenCode --> Quorum
-    Gemini --> Quorum
-    Claude --> Quorum
-
-    Artifacts -.-> DB
-```
+> **Scope Note**: Verification quorum and `netpolicy` are implemented subsystems, but they operate as configurable gate checks rather than unconditional linear stages in `Runtime.Run`. Aider/Crush contract-only material and speculative multi-host architectures are deliberately omitted.
 
 For detailed technical specs, inspect [docs/architecture.md](docs/architecture.md) and [docs/concepts.md](docs/concepts.md).
 

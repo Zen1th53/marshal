@@ -181,8 +181,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "2d51079c841b3ab6c50b5479bc301036dcb48619436fca1fe7b34cfcbb34269e",
-      "bytes": 11747
+      "sha256": "4f2d5ea23d44fdf3e753f77230dd96f0a8775a3bea137960cf69cbe2ec45ca6b",
+      "bytes": 10903
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -756,8 +756,8 @@
     },
     {
       "path": "docs/architecture.md",
-      "sha256": "5a11122a7e263331f1ce14ac080b6923145ae25c368675164b187c4694e6ca5c",
-      "bytes": 3060
+      "sha256": "acebc83ab4124e698bdd4bfce9d26ccf7dc0963ac1eeaf66465da3f04e753f66",
+      "bytes": 3667
     },
     {
       "path": "docs/capability-broker.md",
