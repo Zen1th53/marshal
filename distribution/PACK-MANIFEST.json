@@ -1850,6 +1850,16 @@
       "bytes": 1222
     },
     {
+      "path": "internal/cli/web_cli.go",
+      "sha256": "20925aac64e224d2c154323388efbf4e382fce08f463bc9e3a1204eb45ddca69",
+      "bytes": 1685
+    },
+    {
+      "path": "internal/cli/web_cli_test.go",
+      "sha256": "02357548895ac85e483ee52b58f9723075d6cabdbc63c6ef86c3f6d9310ed067",
+      "bytes": 696
+    },
+    {
       "path": "internal/context/budget/adversarial_test.go",
       "sha256": "11755173dcb76c6a18c128be00b243713382cb83cb68b8fef7fdd53d4407a07f",
       "bytes": 459
@@ -4478,6 +4488,21 @@
       "path": "internal/webcontrol/contracts_test.go",
       "sha256": "dba507ae1c5c6c6fe35f88f0210b8c82000755e0714688e966f612bfc9ba8a5c",
       "bytes": 1508
+    },
+    {
+      "path": "internal/webcontrol/routes.go",
+      "sha256": "64d0636fcb491c58158e60caf693cee15eef3215c9e8e1851908b07db9e6cf33",
+      "bytes": 1905
+    },
+    {
+      "path": "internal/webcontrol/server.go",
+      "sha256": "2880a5d9b2fa0ec6a6528f5ca3164f4d6ef8acbc84b1538b29525a25911ff907",
+      "bytes": 2756
+    },
+    {
+      "path": "internal/webcontrol/server_test.go",
+      "sha256": "aea9deef8f11cf15cc8c60eca1da1c7e451dba3a52e42924f293979707092e28",
+      "bytes": 2266
     },
     {
       "path": "internal/worker/manager.go",
