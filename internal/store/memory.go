@@ -356,3 +356,224 @@ func (s *Store) ListMemoryV2(ctx context.Context, filter MemoryQueryFilter) ([]m
 
 	return records, nil
 }
+
+// UpdateMemory performs a compare-and-swap (CAS) update on a MemoryRecordV2.
+// It verifies that expectedRevision matches the stored record's revision,
+// invokes mutator to apply changes, validates the resulting record,
+// computes the updated ContentDigest, increments revision, and commits atomically.
+func (s *Store) UpdateMemory(ctx context.Context, projectID, memoryID string, expectedRevision int64, mutator func(*model.MemoryRecordV2) error) (model.MemoryRecordV2, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("begin update memory: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Fetch existing record with row-level lock/transaction
+	var (
+		rec                                          model.MemoryRecordV2
+		kind, lifecycle, confidence, authority       string
+		sourceJSON, evidenceIDs, extMetaJSON         string
+		supersededBy, supersedes, conflictIDs        string
+		observedAt, ingestedAt, validFrom            string
+		createdAt, updatedAt                         string
+		validTo, lastVerifiedAt                      sql.NullString
+	)
+	err = tx.QueryRowContext(ctx, `
+		SELECT
+			memory_id, project_id, kind, lifecycle, confidence, authority,
+			title, body, content_digest, scope, scope_id,
+			source_json, evidence_ids, head_commit, branch_name, worktree_id,
+			session_id, run_id,
+			observed_at, ingested_at, valid_from, valid_to, last_verified_at,
+			revision, superseded_by, supersedes, conflict_ids, acl_scope,
+			created_at, updated_at, ext_meta_json
+		FROM memory_records_v2
+		WHERE project_id = ? AND memory_id = ?
+	`, projectID, memoryID).Scan(
+		&rec.ID, &rec.ProjectID, &kind, &lifecycle, &confidence, &authority,
+		&rec.Title, &rec.Body, &rec.ContentDigest, &rec.Scope, &rec.ScopeID,
+		&sourceJSON, &evidenceIDs, &rec.HeadCommit, &rec.BranchName, &rec.WorktreeID,
+		&rec.SessionID, &rec.RunID,
+		&observedAt, &ingestedAt, &validFrom, &validTo, &lastVerifiedAt,
+		&rec.Revision, &supersededBy, &supersedes, &conflictIDs, &rec.ACLScope,
+		&createdAt, &updatedAt, &extMetaJSON,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.MemoryRecordV2{}, fmt.Errorf("%w: memory record %s not found", model.ErrNotFound, memoryID)
+	}
+	if err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("read memory for update: %w", err)
+	}
+
+	// 2. CAS revision check
+	if rec.Revision != expectedRevision {
+		return model.MemoryRecordV2{}, fmt.Errorf("%w: memory record %s revision mismatch (expected %d, found %d)",
+			model.ErrConflict, memoryID, expectedRevision, rec.Revision)
+	}
+
+	rec.Kind = model.MemoryKind(kind)
+	rec.Lifecycle = model.MemoryLifecycle(lifecycle)
+	rec.Confidence = model.MemoryConfidence(confidence)
+	rec.Authority = model.MemoryAuthority(authority)
+
+	if err := json.Unmarshal([]byte(sourceJSON), &rec.Source); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("decode source: %w", err)
+	}
+	if evidenceIDs != "" {
+		rec.EvidenceIDs = strings.Split(evidenceIDs, ",")
+	}
+	if supersededBy != "" {
+		rec.SupersededBy = strings.Split(supersededBy, ",")
+	}
+	if supersedes != "" {
+		rec.SupersedesID = strings.Split(supersedes, ",")
+	}
+	if conflictIDs != "" {
+		rec.ConflictIDs = strings.Split(conflictIDs, ",")
+	}
+	if extMetaJSON != "" && extMetaJSON != "{}" {
+		if err := json.Unmarshal([]byte(extMetaJSON), &rec.ExtMeta); err != nil {
+			return model.MemoryRecordV2{}, fmt.Errorf("decode ext_meta: %w", err)
+		}
+	}
+
+	parseTS := func(s string) (time.Time, error) {
+		return time.Parse(time.RFC3339Nano, s)
+	}
+
+	if rec.ObservedAt, err = parseTS(observedAt); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("parse observed_at: %w", err)
+	}
+	if rec.IngestedAt, err = parseTS(ingestedAt); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("parse ingested_at: %w", err)
+	}
+	if rec.ValidFrom, err = parseTS(validFrom); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("parse valid_from: %w", err)
+	}
+	if rec.CreatedAt, err = parseTS(createdAt); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("parse created_at: %w", err)
+	}
+	if validTo.Valid {
+		t, err := parseTS(validTo.String)
+		if err != nil {
+			return model.MemoryRecordV2{}, fmt.Errorf("parse valid_to: %w", err)
+		}
+		rec.ValidTo = &t
+	}
+	if lastVerifiedAt.Valid {
+		t, err := parseTS(lastVerifiedAt.String)
+		if err != nil {
+			return model.MemoryRecordV2{}, fmt.Errorf("parse last_verified_at: %w", err)
+		}
+		rec.LastVerifiedAt = &t
+	}
+
+	// 3. Apply mutator
+	if err := mutator(&rec); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("mutator error: %w", err)
+	}
+
+	// 4. Validate updated record
+	if err := rec.Validate(); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("updated record invalid: %w", err)
+	}
+
+	rec.Revision = expectedRevision + 1
+	rec.UpdatedAt = time.Now().UTC()
+	rec.ContentDigest = rec.CanonicalDigest()
+
+	// 5. Write back updated record in transaction
+	updatedSourceJSON, err := json.Marshal(rec.Source)
+	if err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("%w: encode updated source: %v", model.ErrInvalid, err)
+	}
+	updatedExtMetaJSON := []byte("{}")
+	if rec.ExtMeta != nil {
+		if updatedExtMetaJSON, err = json.Marshal(rec.ExtMeta); err != nil {
+			return model.MemoryRecordV2{}, fmt.Errorf("%w: encode updated ext_meta: %v", model.ErrInvalid, err)
+		}
+	}
+
+	var updatedValidTo any
+	if rec.ValidTo != nil {
+		updatedValidTo = rec.ValidTo.UTC().Format(time.RFC3339Nano)
+	}
+	var updatedLastVerifiedAt any
+	if rec.LastVerifiedAt != nil {
+		updatedLastVerifiedAt = rec.LastVerifiedAt.UTC().Format(time.RFC3339Nano)
+	}
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE memory_records_v2 SET
+			kind = ?, lifecycle = ?, confidence = ?, authority = ?,
+			title = ?, body = ?, content_digest = ?, scope = ?, scope_id = ?,
+			source_json = ?, evidence_ids = ?, head_commit = ?, branch_name = ?, worktree_id = ?,
+			session_id = ?, run_id = ?,
+			observed_at = ?, ingested_at = ?, valid_from = ?, valid_to = ?, last_verified_at = ?,
+			revision = ?, superseded_by = ?, supersedes = ?, conflict_ids = ?, acl_scope = ?,
+			updated_at = ?, ext_meta_json = ?
+		WHERE project_id = ? AND memory_id = ? AND revision = ?
+	`,
+		string(rec.Kind), string(rec.Lifecycle), string(rec.Confidence), string(rec.Authority),
+		rec.Title, rec.Body, rec.ContentDigest, rec.Scope, rec.ScopeID,
+		string(updatedSourceJSON), strings.Join(rec.EvidenceIDs, ","), rec.HeadCommit, rec.BranchName, rec.WorktreeID,
+		rec.SessionID, rec.RunID,
+		rec.ObservedAt.UTC().Format(time.RFC3339Nano),
+		rec.IngestedAt.UTC().Format(time.RFC3339Nano),
+		rec.ValidFrom.UTC().Format(time.RFC3339Nano),
+		updatedValidTo, updatedLastVerifiedAt,
+		rec.Revision, strings.Join(rec.SupersededBy, ","), strings.Join(rec.SupersedesID, ","),
+		strings.Join(rec.ConflictIDs, ","), rec.ACLScope,
+		rec.UpdatedAt.UTC().Format(time.RFC3339Nano), string(updatedExtMetaJSON),
+		projectID, memoryID, expectedRevision,
+	)
+	if err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("update memory row: %w", err)
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return model.MemoryRecordV2{}, err
+	}
+	if rowsAffected == 0 {
+		return model.MemoryRecordV2{}, fmt.Errorf("%w: concurrent modification on memory %s", model.ErrConflict, memoryID)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("commit update memory: %w", err)
+	}
+
+	return rec, nil
+}
+
+// SupersedeMemory transitions an existing record to 'superseded', referencing newerID.
+func (s *Store) SupersedeMemory(ctx context.Context, projectID, memoryID string, expectedRevision int64, newerID string) (model.MemoryRecordV2, error) {
+	return s.UpdateMemory(ctx, projectID, memoryID, expectedRevision, func(m *model.MemoryRecordV2) error {
+		m.Lifecycle = model.MemorySuperseded
+		if newerID != "" {
+			alreadyPresent := false
+			for _, id := range m.SupersededBy {
+				if id == newerID {
+					alreadyPresent = true
+					break
+				}
+			}
+			if !alreadyPresent {
+				m.SupersededBy = append(m.SupersededBy, newerID)
+			}
+		}
+		return nil
+	})
+}
+
+// TombstoneMemory marks a memory record as tombstoned with a rationale reason.
+func (s *Store) TombstoneMemory(ctx context.Context, projectID, memoryID string, expectedRevision int64, reason string) (model.MemoryRecordV2, error) {
+	return s.UpdateMemory(ctx, projectID, memoryID, expectedRevision, func(m *model.MemoryRecordV2) error {
+		m.Lifecycle = model.MemoryTombstoned
+		if m.ExtMeta == nil {
+			m.ExtMeta = make(map[string]any)
+		}
+		m.ExtMeta["tombstone_reason"] = reason
+		return nil
+	})
+}
+
