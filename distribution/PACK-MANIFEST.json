@@ -186,8 +186,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "69e1a272616af8c3bf7e0bf32ed3b0f5cf217d449954e413ec3a5d23a4c0d051",
-      "bytes": 11163
+      "sha256": "6b279b85cb5d697553680a508dfb2b34fdd563948df99947c70d6639877900d0",
+      "bytes": 14866
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -1016,8 +1016,8 @@
     },
     {
       "path": "docs/memory/overview.md",
-      "sha256": "043190f980bc9812d1a1c7dc305a023d2bdc2284b4a7c3bcd8174eb71b37116f",
-      "bytes": 2044
+      "sha256": "0d06911a561b8f4b4d280d85fc2ddd4aa9f2579c2f5fed4d1f5908307438057c",
+      "bytes": 2419
     },
     {
       "path": "docs/memory/provenance.md",

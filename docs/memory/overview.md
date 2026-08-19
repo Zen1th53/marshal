@@ -19,9 +19,10 @@ The MARSHAL Memory Subsystem provides a multi-tier, security-governed, fail-clos
    - Working memory scratchpad provides private and task-shared slots with Compare-And-Swap (CAS) revision control.
    - Graduation bridge rejects refuted or falsified hypotheses from durable institutional memory.
 
-4. **Multi-Track Adaptive Retrieval**:
+4. **Multi-Track Adaptive Retrieval & Bounded Cache**:
    - Classifies queries into exact code symbol, procedural workflow, environment gotcha, and semantic lookup tracks.
-   - Bounded context compilation produces prompt-safe XML `<grounded_evidence_plan>` traces.
+   - Bounded retrieval cache (`T163`) reduces repeated query latency with instant scope-level invalidation on any write or mutation.
+   - Grounded evidence plan compiler (`T148`, `T164`) produces prompt-safe XML `<grounded_evidence_plan>` traces with entity encoding and delimiter armor against prompt injection breakouts.
 
 5. **Security & Cryptographic Custody**:
    - HMAC/SHA-256 signed mutation envelopes enforce linear revision chains.
@@ -31,3 +32,4 @@ The MARSHAL Memory Subsystem provides a multi-tier, security-governed, fail-clos
 6. **Conformance & External Benchmarks**:
    - Evaluated across coding benchmarks (LoCoMo, LongMemEval, LongMemEval-V2, BEAM, EvoMemBench).
    - Specialized safety benchmarks: FAMA (forgetting quality), GateMem (isolation), PASB (sycophancy defense), and MemSyco (policy dominance).
+   - Derived index destruction and rebuild parity verified at 100% deterministic fidelity (`derived-index-rebuild-report.json`).

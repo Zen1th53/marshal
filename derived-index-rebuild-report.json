@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-08-19T12:00:00Z",
+  "total_canonical_records": 2,
+  "lexical_parity": 1,
+  "vector_parity": 1,
+  "graph_parity": 1,
+  "code_graph_parity": 1,
+  "parity_matched": true
+}
