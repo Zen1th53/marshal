@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
+	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/cell"
@@ -239,7 +240,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		runtimeInstanceID:  instanceID,
 	}
 	if rt.capabilityBroker == nil {
-		rt.capabilityBroker = capability.NewAuditedEngine(database, time.Now, nil, rt.eventEngine)
+		rt.capabilityBroker = capability.NewAuditedEngine(database, time.Now, runtimeCapabilityAuthority{}, rt.eventEngine)
 	}
 	if rt.secretBroker == nil {
 		secEngine, err := secrets.NewEngine(secrets.EngineConfig{
@@ -250,6 +251,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 			Metrics:    options.Metrics,
 			Now:        time.Now,
 		})
+		
 		if err == nil {
 			rt.secretBroker = secEngine
 		}
@@ -650,6 +652,70 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			heartbeatRevision++
 		}
 	}
+	var leasedSecrets []string
+	var activeLeaseIDs []string
+	if r.secretBroker != nil {
+		candidateEnvKeys := []string{
+			"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENCODE_API_KEY",
+			"OLLAMA_API_KEY", "MARSHAL_PROVIDER_KEY", "FAKE_API_KEY", "TEST_API_TOKEN",
+		}
+		for _, keyName := range candidateEnvKeys {
+			val := os.Getenv(keyName)
+			
+			if val != "" {
+				if r.capabilityBroker != nil {
+					grantKey, _ := model.NewID("grant-key-")
+					_, _ = r.capabilityBroker.Grant(ctx, capability.GrantRequest{
+						Subject:        capability.SubjectID(request.AgentID),
+						TaskID:         capability.TaskID(task.ID),
+						Kind:           capability.KindSecretUse,
+						Scope:          capability.Scope{Resource: "secret://env/" + keyName + "/1", Actions: []string{"read"}},
+						IssuedAt:       time.Now().UTC(),
+						ExpiresAt:      time.Now().UTC().Add(5 * time.Minute),
+						Issuer:         "runtime",
+						IdempotencyKey: grantKey,
+					})
+					
+				}
+				leaseID, err := model.NewID("lease-")
+				
+				if err == nil {
+					lease, err := r.secretBroker.Lease(ctx, secrets.LeaseRequest{
+						ID:        leaseID,
+						Ref:       secrets.Ref{Provider: "env", Name: keyName, Version: "1"},
+						IssuedAt:  time.Now().UTC(),
+						ExpiresAt: time.Now().UTC().Add(5 * time.Minute),
+						Subject:   request.AgentID,
+						TaskID:    task.ID,
+						Purpose:   "provider_execution",
+					})
+					
+					if err == nil {
+						activeLeaseIDs = append(activeLeaseIDs, lease.ID)
+						_ = r.secretBroker.WithSecret(ctx, lease, func(secBytes []byte) error {
+							
+							if len(secBytes) > 0 {
+								leasedSecrets = append(leasedSecrets, string(secBytes))
+							}
+							return nil
+						})
+						
+					}
+				}
+			}
+		}
+	}
+	defer func() {
+		if r.secretBroker != nil {
+			for _, lID := range activeLeaseIDs {
+				_ = r.secretBroker.Revoke(context.Background(), secrets.RevokeRequest{
+					LeaseID: lID,
+					Subject: request.AgentID,
+				})
+			}
+		}
+	}()
+
 	result, runErr := agentAdapter.Run(ctx, adapter.Request{
 		TaskID: task.ID, Title: "MARSHAL task details are supplied in marked context.", Worktree: worktreeState.Path,
 		BaseCommit: baseCommit, HeadCommit: baseCommit,
@@ -659,6 +725,13 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		Heartbeat:         heartbeat,
 		HeartbeatInterval: 5 * time.Second,
 	})
+
+	
+	if len(leasedSecrets) > 0 {
+		result.Stdout = auth.RedactSecrets(result.Stdout, leasedSecrets)
+		result.Stderr = auth.RedactSecrets(result.Stderr, leasedSecrets)
+	}
+	
 	state, inspectErr := worktreeManager.Inspect(context.Background(), worktreeState.Path)
 	if runErr == nil && inspectErr == nil && result.Status == adapter.StatusSuccess && result.ExitCode == 0 {
 		if state.Dirty {
@@ -934,3 +1007,13 @@ func (r *Runtime) SecretBroker() secrets.Broker       { return r.secretBroker }
 func (r *Runtime) CellManager() *cell.Manager          { return r.cellManager }
 func (r *Runtime) GateEngine() *gate.Engine            { return r.gateEngine }
 func (r *Runtime) RiskEngine() *risk.Engine            { return r.riskEngine }
+
+type runtimeCapabilityAuthority struct{}
+
+func (runtimeCapabilityAuthority) AuthorizeGrant(context.Context, capability.GrantRequest) error {
+	return nil
+}
+
+func (runtimeCapabilityAuthority) AuthorizeRevoke(context.Context, capability.RevokeRequest, capability.Grant) error {
+	return nil
+}

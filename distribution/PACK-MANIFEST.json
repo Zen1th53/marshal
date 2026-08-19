@@ -1406,8 +1406,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "5029621842bafa86d9362854639e50809b6d5f33855beba7f330a40dad330259",
-      "bytes": 34374
+      "sha256": "d9ad6b67d3d2cf9d6cbcecdd1d0c4cfa2f11c00edeba10c4359c3082390b2067",
+      "bytes": 36885
     },
     {
       "path": "internal/app/runtime_test.go",
