@@ -80,4 +80,40 @@ func TestT99SnapshotDigestStabilityAndDiff(t *testing.T) {
 	if len(diff.Modified) != 1 || diff.Modified[0] != "MEM-1" {
 		t.Fatalf("expected Modified=[MEM-1], got: %+v", diff.Modified)
 	}
+
+	// 4. GetSnapshot & ListSnapshots
+	fetchedA, err := mgr.GetSnapshot(ctx, snapA.SnapshotID)
+	if err != nil || fetchedA.ManifestDigest != snapA.ManifestDigest {
+		t.Fatalf("GetSnapshot failed: %v", err)
+	}
+
+	snaps, err := mgr.ListSnapshots(ctx, "PROJ-1")
+	if err != nil || len(snaps) < 2 {
+		t.Fatalf("ListSnapshots returned %d items, err=%v", len(snaps), err)
+	}
+}
+
+func TestT99ConcurrentSnapshotCreation(t *testing.T) {
+	mgr := versioning.NewManager()
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	done := make(chan bool)
+	for i := 0; i < 8; i++ {
+		go func(idx int) {
+			rec := model.MemoryRecordV2{
+				ID:            "MEM-C",
+				ProjectID:     "PROJ-C",
+				Revision:      int64(idx),
+				ContentDigest: "digest-c",
+				ObservedAt:    now,
+				CreatedAt:     now,
+			}
+			_, _ = mgr.CreateSnapshot(ctx, "PROJ-C", "snap-concurrent", []model.MemoryRecordV2{rec})
+			done <- true
+		}(i)
+	}
+	for i := 0; i < 8; i++ {
+		<-done
+	}
 }

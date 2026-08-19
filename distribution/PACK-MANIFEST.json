@@ -2310,14 +2310,24 @@
       "bytes": 2542
     },
     {
+      "path": "internal/memory/versioning/branch.go",
+      "sha256": "87ec1f7e450f4f86a3ecf90c35d29e06b8b36a82770014fb4f5a60e7aa626ba0",
+      "bytes": 2862
+    },
+    {
+      "path": "internal/memory/versioning/branch_test.go",
+      "sha256": "bbfde20452ce838641e6664c47ca64b8fde49e8458cf52952fcc8535e9b687da",
+      "bytes": 3159
+    },
+    {
       "path": "internal/memory/versioning/snapshot.go",
-      "sha256": "2743f8d56d8f9547b7f7485e568e79242f3611874328860f414bc1c9da76864c",
-      "bytes": 3133
+      "sha256": "c3194973615d5a75065ee885c9c4753b946d44004e2a85206e788ee724bcc180",
+      "bytes": 3885
     },
     {
       "path": "internal/memory/versioning/snapshot_test.go",
-      "sha256": "7c6650c18ce349c0dd32627c0cea3a97046d477c6a63e9e874eea4ba61bef917",
-      "bytes": 2353
+      "sha256": "e0a826f1151035210eee5a0d3d9b39c3d33e6eba80338f8a672580425066357b",
+      "bytes": 3294
     },
     {
       "path": "internal/model/capability.go",

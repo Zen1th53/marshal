@@ -95,6 +95,35 @@ func (m *Manager) CreateSnapshot(ctx context.Context, projectID, name string, re
 	return snap, nil
 }
 
+// GetSnapshot retrieves a snapshot by its unique ID.
+func (m *Manager) GetSnapshot(ctx context.Context, snapshotID string) (Snapshot, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	snap, ok := m.snapshots[snapshotID]
+	if !ok {
+		return Snapshot{}, errors.New("snapshot not found")
+	}
+	return *snap, nil
+}
+
+// ListSnapshots returns all snapshots belonging to a project.
+func (m *Manager) ListSnapshots(ctx context.Context, projectID string) ([]Snapshot, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []Snapshot
+	for _, s := range m.snapshots {
+		if s.ProjectID == projectID {
+			result = append(result, *s)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.Before(result[j].CreatedAt)
+	})
+	return result, nil
+}
+
 // DiffSnapshots compares two snapshots and outputs added, removed, modified, and unchanged record IDs.
 func (m *Manager) DiffSnapshots(a, b Snapshot) SnapshotDiff {
 	var diff SnapshotDiff
