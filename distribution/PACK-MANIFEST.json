@@ -2440,6 +2440,16 @@
       "bytes": 2610
     },
     {
+      "path": "internal/memory/evolution/canary_eval.go",
+      "sha256": "35a6af317ae4ae4d01d53cfefd3fd3ca0aebe4860262ea38ab737fd00bfd9cd6",
+      "bytes": 2522
+    },
+    {
+      "path": "internal/memory/evolution/canary_eval_test.go",
+      "sha256": "9855dcc2b383b3c9920931cffcc080de268a44371404110156f4b731456feeeb",
+      "bytes": 1992
+    },
+    {
       "path": "internal/memory/evolution/relinker.go",
       "sha256": "253bddec2335f8f54240f2f76d0f15dae12f23975773fd90bf5cb0f35d77b5b0",
       "bytes": 1673
