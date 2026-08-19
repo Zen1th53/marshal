@@ -1405,6 +1405,16 @@
       "bytes": 2195
     },
     {
+      "path": "internal/app/memory_runtime.go",
+      "sha256": "78a475ade90737bc7e9c228440d18d3a78b5bfca6948481d14fa9cd8f373c649",
+      "bytes": 4799
+    },
+    {
+      "path": "internal/app/memory_runtime_test.go",
+      "sha256": "26bd8cbcad1a7ca75e26a972700fe6574945a4342123c0d9b5179693e868df83",
+      "bytes": 2698
+    },
+    {
       "path": "internal/app/policy_metrics_a09_test.go",
       "sha256": "98e56673bcb42b9bd7eb2e42863623284a961dda21444c37d29925dc32b27ed4",
       "bytes": 1693
@@ -2156,8 +2166,8 @@
     },
     {
       "path": "internal/mcp/server.go",
-      "sha256": "bcafde9d1b2e272c28860368496fae926e996f914a10be71cea187e0024c2944",
-      "bytes": 12836
+      "sha256": "438a50ee713fe38ec91a37f00fc64955b2606e5754f48ab38df15ff75a71557a",
+      "bytes": 14699
     },
     {
       "path": "internal/memory/audit/tracer.go",
