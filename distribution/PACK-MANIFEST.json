@@ -181,8 +181,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "6c82af5bf6e8101d3cc4cd220c4742aff8ea5be31f6f3eff6528f22e77dc36a2",
-      "bytes": 10583
+      "sha256": "ee1846649b3356298b9d2877d728b4b6f5799532e187c5b447cf42f87a7e8baf",
+      "bytes": 15263
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -756,8 +756,8 @@
     },
     {
       "path": "docs/architecture.md",
-      "sha256": "037819ef29cce18da300dae590c7c6dfea0fbfb68839dfe341447600f842d228",
-      "bytes": 3362
+      "sha256": "285fa59ec789aa1d9c6da3c35d4a582707dca1ab595985971fd92edb147c5945",
+      "bytes": 8052
     },
     {
       "path": "docs/assets/marshal-architecture-graphite.svg",
