@@ -2475,6 +2475,16 @@
       "bytes": 3327
     },
     {
+      "path": "internal/memory/security/retrieved_content.go",
+      "sha256": "9ceadb42169b341af5bf22a8853179bf470087f508b600b9e0b4f2b6a33ccb4d",
+      "bytes": 1842
+    },
+    {
+      "path": "internal/memory/security/retrieved_content_test.go",
+      "sha256": "1244616351941ea018389cb2bb895ed5f3366e0fca3304f67c151a547890be05",
+      "bytes": 1902
+    },
+    {
       "path": "internal/memory/shared/archive.go",
       "sha256": "b79b55013a48c2087859208a449ec4bde29e273bead0dfca8ae6af1ba7f9e57c",
       "bytes": 2897
