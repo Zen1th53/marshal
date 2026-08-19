@@ -2466,18 +2466,18 @@
     },
     {
       "path": "internal/recovery/engine.go",
-      "sha256": "e12eb31d6ebeee7ab6f45c051b7042db10d58612dbac4477a06c06bef38b1ec6",
-      "bytes": 511
+      "sha256": "42d0b7f628733912ac96e5474d84d97756b671245d3d39dd919176844f5c9bc1",
+      "bytes": 3783
     },
     {
       "path": "internal/recovery/engine_test.go",
-      "sha256": "c7c7c30160f8c68b324edc563d4abaee949123963520b9afd86de35557279d01",
-      "bytes": 361
+      "sha256": "46b268b9c1a6b28b9d67dd7a12e038e45d28bc2195d80dd8ea54b2becb01b8fe",
+      "bytes": 3273
     },
     {
       "path": "internal/recovery/types.go",
-      "sha256": "d99503a288a4a1f32733aa6fe24a96a9fbc7283a5379f9f460c108fed3df4228",
-      "bytes": 1223
+      "sha256": "1e87265cd5f81f71039a23846211231c724ca46da0842b82e645ba6b7d4b3ca2",
+      "bytes": 2873
     },
     {
       "path": "internal/recovery/types_test.go",
