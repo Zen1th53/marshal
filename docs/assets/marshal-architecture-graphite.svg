@@ -1,251 +1,248 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 900" width="100%" height="100%" style="background-color: #0d0f12; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SF Pro Text', Roboto, Helvetica, Arial, sans-serif;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 920" width="100%" height="100%" style="background-color: #0d0f12; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SF Pro Text', Roboto, Helvetica, Arial, sans-serif;">
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#6e7681"/>
-    </marker>
-    <marker id="arrow-active" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#8b949e"/>
     </marker>
   </defs>
 
   <style>
-    .title-main { fill: #ffffff; font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
+    .title-main { fill: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
     .title-sub { fill: #8b949e; font-size: 13px; font-weight: 400; }
     .meta-tag { fill: #8b949e; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
     .meta-val { fill: #6e7681; font-size: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
     
     .sec-border { fill: none; stroke: #21262d; stroke-width: 1; }
-    .sec-label { fill: #8b949e; font-size: 9.5px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
+    .sec-label { fill: #8b949e; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
     
     .card-bg { fill: #161b22; stroke: #30363d; stroke-width: 1; rx: 4px; }
     .card-bg-sub { fill: #111418; stroke: #21262d; stroke-width: 1; rx: 3px; }
     
     .node-h1 { fill: #ffffff; font-size: 12px; font-weight: 600; }
-    .node-desc { fill: #8b949e; font-size: 9.5px; font-weight: 400; }
-    .node-mono { fill: #8b949e; font-size: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .badge-verified { fill: #3fb950; font-size: 8px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, monospace; letter-spacing: 0.5px; }
-    .badge-avail { fill: #d29922; font-size: 8px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, monospace; letter-spacing: 0.5px; }
+    .node-desc { fill: #8b949e; font-size: 10px; font-weight: 400; }
+    .node-mono { fill: #8b949e; font-size: 9.5px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .badge-verified { fill: #3fb950; font-size: 8.5px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, monospace; letter-spacing: 0.5px; }
+    .badge-avail { fill: #d29922; font-size: 8.5px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, monospace; letter-spacing: 0.5px; }
     
     .wire { stroke: #484f58; stroke-width: 1; fill: none; }
     .wire-dash { stroke: #30363d; stroke-width: 1; stroke-dasharray: 3,3; fill: none; }
-    .footer-text { fill: #6e7681; font-size: 9px; }
+    .footer-text { fill: #6e7681; font-size: 9.5px; }
   </style>
 
   <!-- ==================== HEADER ==================== -->
-  <text x="45" y="42" class="title-main">MARSHAL</text>
-  <text x="45" y="60" class="title-sub">Implemented Runtime Architecture</text>
+  <text x="45" y="45" class="title-main">MARSHAL</text>
+  <text x="45" y="64" class="title-sub">Implemented Runtime Architecture</text>
   
-  <text x="1255" y="40" class="meta-tag" text-anchor="end">SOURCE-FAITHFUL</text>
-  <text x="1255" y="56" class="meta-val" text-anchor="end">runtime 1.0.0 · SQLite schema v67 · source 8f7d092e038e</text>
+  <text x="1315" y="42" class="meta-tag" text-anchor="end">SOURCE-FAITHFUL</text>
+  <text x="1315" y="58" class="meta-val" text-anchor="end">runtime 1.0.0 · SQLite schema v67 · source 8f7d092e038e</text>
 
   <!-- ==================== 1 · ENTRY POINTS ==================== -->
-  <rect x="45" y="85" width="1210" height="75" class="sec-border" rx="4" />
+  <rect x="45" y="85" width="1270" height="75" class="sec-border" rx="4" />
   <text x="55" y="100" class="sec-label">1 · ENTRY POINTS</text>
   
   <!-- marshal CLI -->
-  <rect x="100" y="107" width="280" height="42" class="card-bg" />
-  <text x="120" y="124" class="node-h1">marshal CLI</text>
-  <text x="120" y="138" class="node-desc">Native commands &amp; local management</text>
+  <rect x="90" y="108" width="300" height="42" class="card-bg" />
+  <text x="110" y="125" class="node-h1">marshal CLI</text>
+  <text x="110" y="139" class="node-desc">Native commands &amp; local management</text>
   
   <!-- MCP HTTP server -->
-  <rect x="500" y="107" width="280" height="42" class="card-bg" />
-  <text x="520" y="124" class="node-h1">MCP HTTP server</text>
-  <text x="520" y="138" class="node-desc">protocol 2026-07-28 · Bearer Auth</text>
+  <rect x="530" y="108" width="300" height="42" class="card-bg" />
+  <text x="550" y="125" class="node-h1">MCP HTTP server</text>
+  <text x="550" y="139" class="node-desc">protocol 2026-07-28 · Bearer Auth</text>
   
   <!-- A2A HTTP+JSON server -->
-  <rect x="890" y="107" width="280" height="42" class="card-bg" />
-  <text x="910" y="124" class="node-h1">A2A HTTP+JSON server</text>
-  <text x="910" y="138" class="node-desc">accepts wire protocol 1.0 / 1.0.0</text>
+  <rect x="970" y="108" width="300" height="42" class="card-bg" />
+  <text x="990" y="125" class="node-h1">A2A HTTP+JSON server</text>
+  <text x="990" y="139" class="node-desc">accepts wire protocol 1.0 / 1.0.0</text>
 
   <!-- ==================== 2 · RUNTIME / CONTROL PLANE ==================== -->
-  <rect x="45" y="170" width="1210" height="150" class="sec-border" rx="4" />
+  <rect x="45" y="170" width="1270" height="150" class="sec-border" rx="4" />
   <text x="55" y="185" class="sec-label">2 · RUNTIME / CONTROL PLANE</text>
   
   <!-- Local daemon API -->
-  <rect x="120" y="200" width="290" height="52" class="card-bg" />
-  <text x="140" y="219" class="node-h1">Local daemon API</text>
-  <text x="140" y="233" class="node-mono">HTTP/JSON over .marshal/runtime.sock</text>
-  <text x="140" y="244" class="node-mono">socket mode 0600</text>
+  <rect x="110" y="200" width="310" height="54" class="card-bg" />
+  <text x="130" y="219" class="node-h1">Local daemon API</text>
+  <text x="130" y="233" class="node-mono">HTTP/JSON over .marshal/runtime.sock</text>
+  <text x="130" y="245" class="node-mono">socket mode 0600</text>
   
   <!-- app.Runtime Core -->
-  <rect x="495" y="200" width="290" height="52" class="card-bg" />
-  <text x="515" y="222" class="node-h1">app.Runtime</text>
-  <text x="515" y="238" class="node-desc">orchestration boundary</text>
+  <rect x="525" y="200" width="310" height="54" class="card-bg" />
+  <text x="545" y="222" class="node-h1">app.Runtime</text>
+  <text x="545" y="239" class="node-desc">orchestration boundary</text>
   
   <!-- Right Stack (3 items) -->
-  <rect x="865" y="190" width="280" height="36" class="card-bg-sub" />
-  <text x="880" y="204" class="node-h1" font-size="11px">Run pre-execution checks</text>
-  <text x="880" y="217" class="node-desc">risk assessment · GateEngine · policy</text>
+  <rect x="935" y="190" width="320" height="36" class="card-bg-sub" />
+  <text x="950" y="204" class="node-h1" font-size="11px">Run pre-execution checks</text>
+  <text x="950" y="217" class="node-desc">risk assessment · GateEngine · policy</text>
   
-  <rect x="865" y="232" width="280" height="36" class="card-bg-sub" />
-  <text x="880" y="246" class="node-h1" font-size="11px">Task / session coordination</text>
-  <text x="880" y="259" class="node-desc">atomic claim + lease · heartbeat · Finalize</text>
+  <rect x="935" y="232" width="320" height="36" class="card-bg-sub" />
+  <text x="950" y="246" class="node-h1" font-size="11px">Task / session coordination</text>
+  <text x="950" y="259" class="node-desc">atomic claim + lease · heartbeat · Finalize</text>
   
-  <rect x="865" y="274" width="280" height="32" class="card-bg-sub" />
-  <text x="880" y="294" class="node-h1" font-size="11px">events.Engine</text>
+  <rect x="935" y="274" width="320" height="32" class="card-bg-sub" />
+  <text x="950" y="294" class="node-h1" font-size="11px">events.Engine</text>
 
   <!-- ==================== 3 · TASK EXECUTION + VERIFY API ==================== -->
   <!-- Left Box: Runtime.Run Task Execution -->
-  <rect x="45" y="330" width="820" height="180" class="sec-border" rx="4" />
+  <rect x="45" y="330" width="875" height="180" class="sec-border" rx="4" />
   <text x="55" y="345" class="sec-label">3 · RUNTIME.RUN TASK EXECUTION</text>
   
   <!-- Step 1: Worktree -->
-  <rect x="65" y="360" width="235" height="52" class="card-bg" />
+  <rect x="65" y="360" width="250" height="52" class="card-bg" />
   <text x="80" y="380" class="node-h1">worktree.Manager.Prepare</text>
   <text x="80" y="398" class="node-mono">.marshal/worktrees/&lt;task&gt;</text>
   
   <!-- Step 2: Adapter.Run -->
-  <rect x="65" y="425" width="235" height="52" class="card-bg" />
+  <rect x="65" y="425" width="250" height="52" class="card-bg" />
   <text x="80" y="445" class="node-h1">provider Adapter.Run</text>
   <text x="80" y="463" class="node-desc">builds provider execution command</text>
   
   <!-- Step 3: resolveAdapter -->
-  <rect x="320" y="360" width="235" height="52" class="card-bg" />
-  <text x="335" y="380" class="node-h1">resolveAdapter + Probe</text>
-  <text x="335" y="398" class="node-desc">Codex · OpenCode · Gemini · Claude</text>
+  <rect x="345" y="360" width="250" height="52" class="card-bg" />
+  <text x="360" y="380" class="node-h1">resolveAdapter + Probe</text>
+  <text x="360" y="398" class="node-desc">Codex · OpenCode · Gemini · Claude</text>
   
   <!-- Step 4: ProcessRunner -->
-  <rect x="320" y="425" width="235" height="52" class="card-bg" />
-  <text x="335" y="445" class="node-h1">ProcessRunner</text>
-  <text x="335" y="463" class="node-desc">worker.Manager · timeout · cancel · bounded output</text>
+  <rect x="345" y="425" width="250" height="52" class="card-bg" />
+  <text x="360" y="445" class="node-h1">ProcessRunner</text>
+  <text x="360" y="463" class="node-desc">worker.Manager · timeout · cancel · bounded output</text>
   
   <!-- Step 5: Sandbox wrapper -->
-  <rect x="575" y="360" width="270" height="117" class="card-bg" />
-  <text x="590" y="382" class="node-h1">Sandbox wrapper</text>
-  <text x="590" y="402" class="node-desc">When bwrap is available: worker.NewSandboxed</text>
-  <text x="590" y="416" class="node-desc">worktree bind · read-only binds · tmpfs runtime dirs</text>
-  <text x="590" y="430" class="node-desc">--unshare-net when network isolation is required</text>
+  <rect x="625" y="360" width="275" height="117" class="card-bg" />
+  <text x="640" y="382" class="node-h1">Sandbox wrapper</text>
+  <text x="640" y="402" class="node-desc">When bwrap is available: worker.NewSandboxed</text>
+  <text x="640" y="416" class="node-desc">worktree bind · read-only binds · tmpfs runtime dirs</text>
+  <text x="640" y="430" class="node-desc">--unshare-net when network isolation is required</text>
 
   <!-- Right Box: Separate Verification API -->
-  <rect x="880" y="330" width="375" height="180" class="sec-border" rx="4" />
-  <text x="890" y="345" class="sec-label">SEPARATE VERIFICATION API</text>
+  <rect x="935" y="330" width="380" height="180" class="sec-border" rx="4" />
+  <text x="945" y="345" class="sec-label">SEPARATE VERIFICATION API</text>
   
-  <rect x="900" y="360" width="335" height="117" class="card-bg" />
-  <text x="920" y="385" class="node-h1" font-size="13px">Runtime.Verify</text>
-  <text x="920" y="405" class="node-mono">CLI: marshal verify [-- cmd args...]</text>
-  <text x="920" y="419" class="node-mono">HTTP: POST /v1/verify</text>
-  <text x="920" y="437" class="node-desc">authorize → worker.Manager.Run(exact argv)</text>
-  <text x="920" y="451" class="node-desc">returns exit status + SHA-256(stdout|stderr)</text>
+  <rect x="955" y="360" width="340" height="117" class="card-bg" />
+  <text x="975" y="385" class="node-h1" font-size="13px">Runtime.Verify</text>
+  <text x="975" y="405" class="node-mono">CLI: marshal verify [-- cmd args...]</text>
+  <text x="975" y="419" class="node-mono">HTTP: POST /v1/verify</text>
+  <text x="975" y="437" class="node-desc">authorize → worker.Manager.Run(exact argv)</text>
+  <text x="975" y="451" class="node-desc">returns exit status + SHA-256(stdout|stderr)</text>
 
   <!-- ==================== 4 · PROVIDER PROCESSES ==================== -->
-  <rect x="45" y="520" width="1210" height="85" class="sec-border" rx="4" />
+  <rect x="45" y="520" width="1270" height="85" class="sec-border" rx="4" />
   <text x="55" y="535" class="sec-label">4 · PROVIDER PROCESSES</text>
   
   <!-- Codex -->
-  <rect x="65" y="547" width="270" height="46" class="card-bg" />
+  <rect x="65" y="547" width="285" height="46" class="card-bg" />
   <text x="80" y="567" class="node-h1">codex CLI</text>
   <text x="80" y="582" class="badge-verified">REAL-E2E-VERIFIED</text>
   
   <!-- OpenCode -->
-  <rect x="365" y="547" width="270" height="46" class="card-bg" />
-  <text x="380" y="567" class="node-h1">opencode + Ollama</text>
-  <text x="380" y="582" class="badge-verified">REAL-E2E-VERIFIED</text>
+  <rect x="380" y="547" width="285" height="46" class="card-bg" />
+  <text x="395" y="567" class="node-h1">opencode + Ollama</text>
+  <text x="395" y="582" class="badge-verified">REAL-E2E-VERIFIED</text>
   
   <!-- Gemini -->
-  <rect x="665" y="547" width="270" height="46" class="card-bg" />
-  <text x="680" y="567" class="node-h1">gemini CLI</text>
-  <text x="680" y="582" class="badge-avail">PROBED / AVAILABLE</text>
+  <rect x="695" y="547" width="285" height="46" class="card-bg" />
+  <text x="710" y="567" class="node-h1">gemini CLI</text>
+  <text x="710" y="582" class="badge-avail">PROBED / AVAILABLE</text>
   
   <!-- Claude -->
-  <rect x="965" y="547" width="270" height="46" class="card-bg" />
-  <text x="980" y="567" class="node-h1">claude CLI</text>
-  <text x="980" y="582" class="badge-avail">PROBED / AVAILABLE</text>
+  <rect x="1010" y="547" width="285" height="46" class="card-bg" />
+  <text x="1025" y="567" class="node-h1">claude CLI</text>
+  <text x="1025" y="582" class="badge-avail">PROBED / AVAILABLE</text>
 
   <!-- ==================== 5 · RESULT HANDLING & PROVENANCE ==================== -->
-  <rect x="45" y="615" width="1210" height="175" class="sec-border" rx="4" />
+  <rect x="45" y="615" width="1270" height="175" class="sec-border" rx="4" />
   <text x="55" y="630" class="sec-label">5 · RESULT HANDLING &amp; PROVENANCE EVIDENCE</text>
   
   <!-- sanitizeProviderOutput -->
-  <rect x="480" y="640" width="320" height="38" class="card-bg" />
-  <text x="500" y="656" class="node-h1">sanitizeProviderOutput</text>
-  <text x="500" y="670" class="node-desc">credential-boundary redaction (stdout / stderr)</text>
+  <rect x="500" y="640" width="340" height="38" class="card-bg" />
+  <text x="520" y="656" class="node-h1">sanitizeProviderOutput</text>
+  <text x="520" y="670" class="node-desc">credential-boundary redaction (stdout / stderr)</text>
   
   <!-- 3 Result cards -->
-  <rect x="65" y="695" width="370" height="48" class="card-bg" />
+  <rect x="65" y="695" width="390" height="48" class="card-bg" />
   <text x="80" y="714" class="node-h1">artifact.Store.Put</text>
   <text x="80" y="730" class="node-desc">SHA-256 content-addressed reports · .marshal/artifacts/sha256/&lt;hex&gt;</text>
   
-  <rect x="465" y="695" width="350" height="48" class="card-bg" />
-  <text x="480" y="714" class="node-h1">Inspect Task Worktree</text>
-  <text x="480" y="730" class="node-desc">commit dirty changes under policy · reject success with no new commit</text>
+  <rect x="485" y="695" width="370" height="48" class="card-bg" />
+  <text x="500" y="714" class="node-h1">Inspect Task Worktree</text>
+  <text x="500" y="730" class="node-desc">commit dirty changes under policy · reject success with no new commit</text>
   
-  <rect x="845" y="695" width="390" height="48" class="card-bg" />
-  <text x="860" y="714" class="node-h1">recordRunEvidence</text>
-  <text x="860" y="730" class="node-desc">command/output/env evidence · raw I/O bound by SHA-256 digests</text>
+  <rect x="885" y="695" width="410" height="48" class="card-bg" />
+  <text x="900" y="714" class="node-h1">recordRunEvidence</text>
+  <text x="900" y="730" class="node-desc">command/output/env evidence · raw I/O bound by SHA-256 digests</text>
   
-  <text x="640" y="768" class="node-desc" text-anchor="middle" font-size="10px">FinishRun → ObserveHEAD → FinalizeExecution</text>
+  <text x="670" y="768" class="node-desc" text-anchor="middle" font-size="10px">FinishRun → ObserveHEAD → FinalizeExecution</text>
 
   <!-- ==================== 6 · CANONICAL LOCAL PERSISTENCE ==================== -->
-  <rect x="45" y="800" width="1210" height="55" class="sec-border" rx="4" />
+  <rect x="45" y="800" width="1270" height="55" class="sec-border" rx="4" />
   <text x="55" y="830" class="sec-label">6 · CANONICAL LOCAL PERSISTENCE</text>
   
-  <rect x="370" y="810" width="540" height="36" class="card-bg" />
-  <text x="390" y="826" class="node-h1">SQLite v67 — .marshal/state.db</text>
-  <text x="390" y="838" class="node-desc">canonical live coordination state · task leases · audit ledger · evidence graphs</text>
+  <rect x="390" y="810" width="580" height="36" class="card-bg" />
+  <text x="410" y="826" class="node-h1">SQLite v67 — .marshal/state.db</text>
+  <text x="410" y="838" class="node-desc">canonical live coordination state · task leases · audit ledger · evidence graphs</text>
 
   <!-- ==================== FOOTER NOTES ==================== -->
-  <text x="45" y="880" class="footer-text">Scope: verification quorum and netpolicy are implemented subsystems but are not shown as unconditional linear Runtime.Run stages.</text>
-  <text x="1255" y="880" class="footer-text" text-anchor="end">No roadmap-only / contract-only components or unproven universal network-firewall claim.</text>
+  <text x="45" y="885" class="footer-text">Scope: verification quorum and netpolicy are implemented subsystems but are not shown as unconditional linear Runtime.Run stages.</text>
+  <text x="1315" y="885" class="footer-text" text-anchor="end">No roadmap-only / contract-only components or unproven universal network-firewall claim.</text>
 
   <!-- ==================== WIRING / ROUTING LINES ==================== -->
   <!-- Entry to Control Plane -->
-  <path d="M 240 149 L 240 200" class="wire" marker-end="url(#arrow)" />
-  <path d="M 640 149 L 640 200" class="wire" marker-end="url(#arrow)" />
-  <path d="M 1030 149 L 1030 180 L 740 180 L 740 200" class="wire" marker-end="url(#arrow)" />
+  <path d="M 240 150 L 240 200" class="wire" marker-end="url(#arrow)" />
+  <path d="M 680 150 L 680 200" class="wire" marker-end="url(#arrow)" />
+  <path d="M 1120 150 L 1120 180 L 780 180 L 780 200" class="wire" marker-end="url(#arrow)" />
   
   <!-- Local daemon to app.Runtime -->
-  <path d="M 410 226 L 495 226" class="wire" marker-end="url(#arrow)" />
+  <path d="M 420 227 L 525 227" class="wire" marker-end="url(#arrow)" />
   
   <!-- app.Runtime to right stack -->
-  <path d="M 785 208 L 865 208" class="wire" marker-end="url(#arrow)" />
-  <path d="M 785 226 L 825 226 L 825 250 L 865 250" class="wire" marker-end="url(#arrow)" />
-  <path d="M 785 244 L 825 244 L 825 290 L 865 290" class="wire" marker-end="url(#arrow)" />
+  <path d="M 835 208 L 935 208" class="wire" marker-end="url(#arrow)" />
+  <path d="M 835 227 L 885 227 L 885 250 L 935 250" class="wire" marker-end="url(#arrow)" />
+  <path d="M 835 245 L 885 245 L 885 290 L 935 290" class="wire" marker-end="url(#arrow)" />
   
   <!-- app.Runtime down to Runtime.Run (Left) -->
-  <path d="M 520 252 L 520 320 L 180 320 L 180 360" class="wire" marker-end="url(#arrow)" />
+  <path d="M 550 254 L 550 320 L 190 320 L 190 360" class="wire" marker-end="url(#arrow)" />
   
   <!-- app.Runtime down to Runtime.Verify (Right) -->
-  <path d="M 760 252 L 760 320 L 1060 320 L 1060 360" class="wire" marker-end="url(#arrow)" />
+  <path d="M 810 254 L 810 320 L 1125 320 L 1125 360" class="wire" marker-end="url(#arrow)" />
   
   <!-- Inside Runtime.Run Section -->
-  <path d="M 180 412 L 180 425" class="wire" marker-end="url(#arrow)" />
-  <path d="M 300 386 L 320 386" class="wire" marker-end="url(#arrow)" />
-  <path d="M 437 412 L 437 425" class="wire" marker-end="url(#arrow)" />
-  <path d="M 555 448 L 575 448" class="wire" marker-end="url(#arrow)" />
+  <path d="M 190 412 L 190 425" class="wire" marker-end="url(#arrow)" />
+  <path d="M 315 386 L 345 386" class="wire" marker-end="url(#arrow)" />
+  <path d="M 470 412 L 470 425" class="wire" marker-end="url(#arrow)" />
+  <path d="M 595 448 L 625 448" class="wire" marker-end="url(#arrow)" />
   
   <!-- ProcessRunner to Provider Processes -->
-  <path d="M 437 477 L 437 510 L 200 510 L 200 547" class="wire" marker-end="url(#arrow)" />
-  <path d="M 437 477 L 437 510 L 500 510 L 500 547" class="wire" marker-end="url(#arrow)" />
-  <path d="M 437 477 L 437 510 L 800 510 L 800 547" class="wire" marker-end="url(#arrow)" />
-  <path d="M 437 477 L 437 510 L 1100 510 L 1100 547" class="wire" marker-end="url(#arrow)" />
-  <text x="437" y="504" class="node-desc" text-anchor="middle" font-size="9px">provider command</text>
+  <path d="M 470 477 L 470 510 L 207 510 L 207 547" class="wire" marker-end="url(#arrow)" />
+  <path d="M 470 477 L 470 510 L 522 510 L 522 547" class="wire" marker-end="url(#arrow)" />
+  <path d="M 470 477 L 470 510 L 837 510 L 837 547" class="wire" marker-end="url(#arrow)" />
+  <path d="M 470 477 L 470 510 L 1152 510 L 1152 547" class="wire" marker-end="url(#arrow)" />
+  <text x="470" y="504" class="node-desc" text-anchor="middle" font-size="9px">provider command</text>
   
   <!-- Provider Processes to Sanitize -->
-  <path d="M 200 593 L 200 628 L 640 628 L 640 640" class="wire" marker-end="url(#arrow)" />
-  <path d="M 500 593 L 500 628 L 640 628 L 640 640" class="wire" />
-  <path d="M 800 593 L 800 628 L 640 628 L 640 640" class="wire" />
-  <path d="M 1100 593 L 1100 628 L 640 628 L 640 640" class="wire" />
+  <path d="M 207 593 L 207 628 L 670 628 L 670 640" class="wire" marker-end="url(#arrow)" />
+  <path d="M 522 593 L 522 628 L 670 628 L 670 640" class="wire" />
+  <path d="M 837 593 L 837 628 L 670 628 L 670 640" class="wire" />
+  <path d="M 1152 593 L 1152 628 L 670 628 L 670 640" class="wire" />
   
   <!-- Sanitize to 3 outputs -->
-  <path d="M 540 678 L 540 688 L 250 688 L 250 695" class="wire" marker-end="url(#arrow)" />
-  <path d="M 640 678 L 640 695" class="wire" marker-end="url(#arrow)" />
-  <path d="M 740 678 L 740 688 L 1040 688 L 1040 695" class="wire" marker-end="url(#arrow)" />
+  <path d="M 570 678 L 570 688 L 260 688 L 260 695" class="wire" marker-end="url(#arrow)" />
+  <path d="M 670 678 L 670 695" class="wire" marker-end="url(#arrow)" />
+  <path d="M 770 678 L 770 688 L 1090 688 L 1090 695" class="wire" marker-end="url(#arrow)" />
   
   <!-- 3 outputs to FinishRun -->
-  <path d="M 250 743 L 250 754 L 540 754" class="wire" />
-  <path d="M 640 743 L 640 754" class="wire" />
-  <path d="M 1040 743 L 1040 754 L 740 754" class="wire" />
+  <path d="M 260 743 L 260 754 L 570 754" class="wire" />
+  <path d="M 670 743 L 670 754" class="wire" />
+  <path d="M 1090 743 L 1090 754 L 770 754" class="wire" />
   
   <!-- FinishRun to SQLite -->
-  <path d="M 640 774 L 640 810" class="wire" marker-end="url(#arrow)" />
+  <path d="M 670 774 L 670 810" class="wire" marker-end="url(#arrow)" />
   
   <!-- Side bypass dashed lines into SQLite -->
   <!-- From events.Engine on Right down through right channel -->
-  <path d="M 1145 290 L 1235 290 L 1235 828 L 910 828" class="wire-dash" marker-end="url(#arrow)" />
+  <path d="M 1255 290 L 1295 290 L 1295 828 L 970 828" class="wire-dash" marker-end="url(#arrow)" />
   
   <!-- From Runtime.Verify on Right -->
-  <path d="M 1235 448 L 1245 448 L 1245 828" class="wire-dash" />
+  <path d="M 1295 448 L 1305 448 L 1305 828" class="wire-dash" />
   
   <!-- Left Side bypass from Pre-execution checks / Worktree -->
-  <path d="M 50 128 L 40 128 L 40 828 L 370 828" class="wire-dash" marker-end="url(#arrow)" />
+  <path d="M 50 128 L 35 128 L 35 828 L 390 828" class="wire-dash" marker-end="url(#arrow)" />
 </svg>
