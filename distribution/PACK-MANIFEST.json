@@ -2240,6 +2240,16 @@
       "bytes": 14699
     },
     {
+      "path": "internal/memory/adaptive/controller.go",
+      "sha256": "f2cc38f3215bdc56c665c557206b9b7a28a62659808cdf11e7d041b5bd6f80cf",
+      "bytes": 2302
+    },
+    {
+      "path": "internal/memory/adaptive/controller_test.go",
+      "sha256": "8b826b4430fa7c00903ec76598b11cdfe11d35034db902ec675c3bda26030cb2",
+      "bytes": 1668
+    },
+    {
       "path": "internal/memory/audit/tracer.go",
       "sha256": "ab557cd63d4a20ad20b8d7a50637115bc6a2931fce23b21f4631e4d0e43ba19c",
       "bytes": 2544
