@@ -4,7 +4,7 @@ Welcome to the official MARSHAL documentation portal. Use this index to navigate
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 - [Getting Started Guide](getting-started.md) — Quick start tutorial from zero setup to first task execution
 - [Installation Guide](installation.md) — Binary downloads, building from source, system dependencies
@@ -12,7 +12,7 @@ Welcome to the official MARSHAL documentation portal. Use this index to navigate
 
 ---
 
-## 🏗️ Core Architecture & Concepts
+## Core Architecture & Concepts
 
 - [Architecture Overview](architecture.md) — System design, control plane boundaries, and component roles
 - [Core Concepts](concepts.md) — Task leases, capability brokers, execution cells, and verification quorum
@@ -21,7 +21,7 @@ Welcome to the official MARSHAL documentation portal. Use this index to navigate
 
 ---
 
-## 🛡️ Security & Governance
+## Security & Governance
 
 - [Security Model](security-model.md) — Fail-closed sandboxing, secret redaction, and boundary invariants
 - [Policy-as-Code Engine](policy-as-code.md) — Security rules, capability broker, and approval gates
@@ -31,7 +31,7 @@ Welcome to the official MARSHAL documentation portal. Use this index to navigate
 
 ---
 
-## 🤖 Provider Adapters & Integrations
+## Provider Adapters & Integrations
 
 - [Provider Support Guide](providers.md) — Capability matrix, provider probing, and maturity states
 - [Codex Adapter](providers/opencode-ollama.md) — OpenAI Codex execution configuration
@@ -41,7 +41,7 @@ Welcome to the official MARSHAL documentation portal. Use this index to navigate
 
 ---
 
-## ⚖️ Legal & Provenance
+## Legal & Provenance
 
 - [Legal Audit Guide](legal/IP-PROVENANCE-AUDIT.md) — Chain-of-title tracking, copyright attribution, and verification
 - [License History](legal/LICENSE-HISTORY.md) — AGPL-3.0 and historical Apache-2.0 release grants
@@ -49,7 +49,7 @@ Welcome to the official MARSHAL documentation portal. Use this index to navigate
 
 ---
 
-## 🛠️ Operations & Troubleshooting
+## Operations & Troubleshooting
 
 - [Troubleshooting Guide](troubleshooting.md) — Diagnostics, common errors, and recovery steps
 - [Conformance Suite](conformance.md) — Verification runner and test suite validation

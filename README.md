@@ -33,14 +33,14 @@ MARSHAL enforces strict operational separation:
 
 ## What MARSHAL Provides
 
-- 🛡️ **Fail-Closed Execution Cells**: Process supervisor operating inside unprivileged Linux `bwrap` sandboxes with worktree isolation and egress network filtering.
-- 🔑 **Capability Broker & Leases**: Transactional task leases (`0600` Unix socket control) preventing concurrent file collisions and unauthorized API calls.
-- 📋 **Policy-as-Code Engine**: Granular security rules enforcing risk ceilings, path restrictions, and security officer approval vetoes.
-- 📊 **Evidence-Derived Trust Score**: Composite 0..100 scoring engine deriving trust from verification quorum, test outputs, and risk assessments.
-- 🤖 **Multi-Provider Adapter Suite**: Native adapters for **Codex**, **OpenCode + Local Ollama**, **Gemini CLI**, and **Claude Code**.
-- 🌐 **Protocol Interoperability**: First-class support for **MCP (2026-07-28)** and **Agent-to-Agent (A2A 1.0)** with Bearer authentication.
-- 🔄 **Deterministic Self-Healing**: Automated recovery for stalled agent processes, state reconciliation, and crash survival.
-- 📑 **Legal & Provenance Auditing**: Automated chain-of-title tracking, copyright attribution, and release verification manifests.
+- **Fail-Closed Execution Cells**: Process supervisor operating inside unprivileged Linux `bwrap` sandboxes with worktree isolation and egress network filtering.
+- **Capability Broker & Leases**: Transactional task leases (`0600` Unix socket control) preventing concurrent file collisions and unauthorized API calls.
+- **Policy-as-Code Engine**: Granular security rules enforcing risk ceilings, path restrictions, and security officer approval vetoes.
+- **Evidence-Derived Trust Score**: Composite 0..100 scoring engine deriving trust from verification quorum, test outputs, and risk assessments.
+- **Multi-Provider Adapter Suite**: Native adapters for **Codex**, **OpenCode + Local Ollama**, **Gemini CLI**, and **Claude Code**.
+- **Protocol Interoperability**: First-class support for **MCP (2026-07-28)** and **Agent-to-Agent (A2A 1.0)** with Bearer authentication.
+- **Deterministic Self-Healing**: Automated recovery for stalled agent processes, state reconciliation, and crash survival.
+- **Legal & Provenance Auditing**: Automated chain-of-title tracking, copyright attribution, and release verification manifests.
 
 ---
 
@@ -73,16 +73,20 @@ flowchart TD
         BWrap --> NetFirewall["Network Egress Firewall"]
     end
 
-    NetFirewall --> Adapters["Provider Adapters"]
+    NetFirewall --> Router["Adapter Dispatch Router"]
 
     subgraph Adapters ["Provider Adapters"]
-        Adapters --> Codex["Codex Adapter"]
-        Adapters --> OpenCode["OpenCode + Local Ollama Adapter"]
-        Adapters --> Gemini["Gemini Adapter"]
-        Adapters --> Claude["Claude Code Adapter"]
+        Router --> Codex["Codex Adapter"]
+        Router --> OpenCode["OpenCode + Local Ollama Adapter"]
+        Router --> Gemini["Gemini Adapter"]
+        Router --> Claude["Claude Code Adapter"]
     end
 
-    Adapters --> Verification["Verification Quorum & Evidence Engine"]
+    Codex --> Verification["Verification Quorum & Evidence Engine"]
+    OpenCode --> Verification
+    Gemini --> Verification
+    Claude --> Verification
+
     Verification --> Artifacts["Artifacts & Provenance Store"]
 ```
 
@@ -110,10 +114,10 @@ MARSHAL probes provider binaries dynamically and tracks provider maturity across
 
 | Provider Adapter | Version / Binary | Verification Status | Native CLI | MCP | A2A |
 |---|---|---|:---:|:---:|:---:|
-| **Codex** | `codex-cli` | **REAL E2E VERIFIED** | ✅ | ✅ | ✅ |
-| **OpenCode + Local Ollama** | `opencode` + `qwythos-9b` | **REAL E2E VERIFIED** | ✅ | ✅ | ✅ |
-| **Gemini CLI** | `gemini` | **PROBED / AVAILABLE** | ✅ | ✅ | ✅ |
-| **Claude Code** | `claude` | **PROBED / AVAILABLE** | ✅ | ✅ | ✅ |
+| **Codex** | `codex-cli` | **REAL E2E VERIFIED** | Yes | Yes | Yes |
+| **OpenCode + Local Ollama** | `opencode` + `qwythos-9b` | **REAL E2E VERIFIED** | Yes | Yes | Yes |
+| **Gemini CLI** | `gemini` | **PROBED / AVAILABLE** | Yes | Yes | Yes |
+| **Claude Code** | `claude` | **PROBED / AVAILABLE** | Yes | Yes | Yes |
 
 ---
 

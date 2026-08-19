@@ -181,8 +181,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "8e31efc48210848848a4020e775f7b327542d862cf33b6f0ce381bcb65b6a1d7",
-      "bytes": 11608
+      "sha256": "114b0bdf707b86658bf8d24dbeda9fa407d44c29d0471073e6b10534cbdde52b",
+      "bytes": 11645
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -726,8 +726,8 @@
     },
     {
       "path": "docs/README.md",
-      "sha256": "0cef39c536829682851c985deec5e8849300c118d61034fc94d42214b408ffe7",
-      "bytes": 2661
+      "sha256": "5d1c70bf07dedc371cd0409a6342e4caa072f2471d14970c6bfc0525d9842652",
+      "bytes": 2620
     },
     {
       "path": "docs/a2a.md",
