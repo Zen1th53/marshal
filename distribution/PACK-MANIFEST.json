@@ -2151,8 +2151,8 @@
     },
     {
       "path": "internal/memory/decision/types.go",
-      "sha256": "052adf0814662fa6ea9a93625cdf62c91f76427bfc4b4d8fc63c78364165752c",
-      "bytes": 1943
+      "sha256": "8b146dbc4e8377187cf641d0be7f8cbe69715f24f07e6cbc3fda74b080ac22bc",
+      "bytes": 2053
     },
     {
       "path": "internal/memory/decision/types_test.go",
@@ -2248,6 +2248,16 @@
       "path": "internal/memory/security/firewall_test.go",
       "sha256": "9e33af4ef1df1232f7b33b04e222b31bd354f350a62a6cd5a7e7c788cd08e475",
       "bytes": 3327
+    },
+    {
+      "path": "internal/memory/shared/archive.go",
+      "sha256": "b79b55013a48c2087859208a449ec4bde29e273bead0dfca8ae6af1ba7f9e57c",
+      "bytes": 2897
+    },
+    {
+      "path": "internal/memory/shared/archive_test.go",
+      "sha256": "1bdb9bf9d2c7dfd61439b7df5b6eae6726ad7322ce850102c58e3cd01a8bcc66",
+      "bytes": 2753
     },
     {
       "path": "internal/memory/temporal/bitemporal.go",

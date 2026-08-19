@@ -59,6 +59,8 @@ type DecisionRecord struct {
 	Decision     string    `json:"decision"`
 	Consequences string    `json:"consequences,omitempty"`
 	Status       Status    `json:"status"`
+	AuthorityID  string    `json:"authority_id,omitempty"`
+	Supersedes   string    `json:"supersedes,omitempty"`
 	SupersededBy string    `json:"superseded_by,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
