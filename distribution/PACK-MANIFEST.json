@@ -2680,6 +2680,16 @@
       "bytes": 3294
     },
     {
+      "path": "internal/memory/working/bridge.go",
+      "sha256": "5dc7b8c53fa96b1c00c392f04a7c1c6ce9226668d12e722c130bdb6222b0e947",
+      "bytes": 1882
+    },
+    {
+      "path": "internal/memory/working/bridge_test.go",
+      "sha256": "953fd59c86545fa4017edd23131a14031bff2dfe47d0c667636392bc05a753e3",
+      "bytes": 1547
+    },
+    {
       "path": "internal/memory/working/scratchpad.go",
       "sha256": "ff5b02cd0211407f1fc9804993c03c18f8d671bbc4b222938b0d984f82df7faa",
       "bytes": 4484
