@@ -781,8 +781,8 @@
     },
     {
       "path": "conformance/memory/ultimate_conformance_test.go",
-      "sha256": "85e26d86548010aea572f89e4119c2cf9dfb651aed40b65359bd5c10d09db205",
-      "bytes": 8737
+      "sha256": "f7aecdac40b67c948b93fd4bb7493c7d27e2f82373c9189dc2ac44269fd05805",
+      "bytes": 8795
     },
     {
       "path": "conformance/runner.py",
@@ -4501,8 +4501,8 @@
     },
     {
       "path": "memory-ultimate-conformance.json",
-      "sha256": "051e43b2f02caa010bfb8bbf900bf26b601be5d63f4a832b805130249bc22cd5",
-      "bytes": 329
+      "sha256": "46ce2dc895b1bf607fa2577551fc8c1a364a35bacce9393cf78c4d7a2f584ea2",
+      "bytes": 319
     },
     {
       "path": "memory/APPROVALS.md",

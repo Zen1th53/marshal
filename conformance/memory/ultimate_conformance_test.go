@@ -207,10 +207,10 @@ func TestT162UltimateMemoryConformanceGate(t *testing.T) {
 		t.Fatal("Proactive benchmark failed")
 	}
 
-	// Generate ultimate conformance JSON artifact
+	// Generate ultimate conformance JSON artifact with deterministic timestamp
 	finalReport := UltimateConformanceReport{
 		Subsystem:                "MARSHAL-MEMORY-SYSTEM",
-		Timestamp:                time.Now().UTC(),
+		Timestamp:                time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC),
 		AllPhasesComplete:        true,
 		TaskRange:                "T77-T162",
 		DerivedIndexRebuildParity: true,
