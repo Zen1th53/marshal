@@ -770,6 +770,16 @@
       "bytes": 1330
     },
     {
+      "path": "conformance/memory/external/proactive_benchmarks.go",
+      "sha256": "ebc0de01733281f6612ae39a4210226482a96ee2ecc4669c418939fd3b1bb73e",
+      "bytes": 1809
+    },
+    {
+      "path": "conformance/memory/external/proactive_benchmarks_test.go",
+      "sha256": "6b5293c6aee17e1a4e1ab8260185e92dc84abc6d883425e95760d403615519d2",
+      "bytes": 1245
+    },
+    {
       "path": "conformance/runner.py",
       "sha256": "1e3486798600f3f5dc1a4c25c30dd74ec1cba18df6b5f1de147a87c31c5c74c5",
       "bytes": 5263
