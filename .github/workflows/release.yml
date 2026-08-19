@@ -100,12 +100,12 @@ jobs:
           SBOM_EOF
 
       - name: Generate Artifact Attestation
-        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebaf3290a2f21376 # v2.2.3
+        uses: actions/attest-build-provenance@v2
         with:
           subject-path: 'dist/marshal_*.tar.gz'
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@c95fe0f26b7776fe17d071741544a0344d5c1417 # v2.2.1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag_name }}
           name: "MARSHAL ${{ steps.version.outputs.tag_name }} — Release Candidate 1"

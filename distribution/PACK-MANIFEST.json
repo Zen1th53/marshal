@@ -51,8 +51,8 @@
     },
     {
       "path": ".github/workflows/codeql.yml",
-      "sha256": "08a9e6437dc0507e0fcb7e1877beed44cd9edd4e5cd544b13fbc4cee8cd5d946",
-      "bytes": 768
+      "sha256": "1cfc2a72119521a854509004ddf61aa88ce4d8e67bc5dab7aa439792f34cb332",
+      "bytes": 670
     },
     {
       "path": ".github/workflows/contributor-rights-check.yml",
@@ -61,13 +61,13 @@
     },
     {
       "path": ".github/workflows/dependency-review.yml",
-      "sha256": "b60b8bc2eb71b1715e51d1bcaf2808043f72e6e086e46f97d4cb13be8ce09818",
-      "bytes": 409
+      "sha256": "4f2d383ef3296cff2ba76d5d8c77854ba9424f1b459325018f601320f1296daf",
+      "bytes": 362
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "338442d93089fb00e709a625568ab766fa654ef258a49686f145688f684a6512",
-      "bytes": 4286
+      "sha256": "310dc7a90422498a3b620cda6671205f14a5869cab455a1a32b7a4a206b78740",
+      "bytes": 4192
     },
     {
       "path": ".gitignore",
