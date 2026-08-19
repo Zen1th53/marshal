@@ -1,246 +1,270 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1120" width="100%" height="100%" style="background-color: #0b0f19; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1480" width="100%" height="100%" style="background-color: #0b0f19; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <defs>
-    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M 0 1 L 10 5 L 0 9 z" fill="#58a6ff"/>
     </marker>
-    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#8b949e"/>
-    </marker>
-    <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#bc8cff"/>
-    </marker>
-    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+    <marker id="arr-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M 0 1 L 10 5 L 0 9 z" fill="#3fb950"/>
     </marker>
-    <marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#d29922"/>
+    <marker id="arr-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#bc8cff"/>
     </marker>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="4" result="blur" />
+    <marker id="arr-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#f0883e"/>
+    </marker>
+    <marker id="arr-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#8b949e"/>
+    </marker>
+    <filter id="glow-blue" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
   </defs>
 
   <style>
-    .title { fill: #f0f6fc; font-size: 20px; font-weight: 700; text-anchor: middle; }
+    .title { fill: #f0f6fc; font-size: 22px; font-weight: 700; text-anchor: middle; }
     .subtitle { fill: #79c0ff; font-size: 13px; font-weight: 500; text-anchor: middle; font-family: monospace; }
-    .box-title { fill: #8b949e; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-    .node-text { fill: #e6edf3; font-size: 11px; text-anchor: middle; }
-    .node-title { fill: #ffffff; font-size: 12px; font-weight: 600; text-anchor: middle; }
-    .node-sub { fill: #8b949e; font-size: 10px; text-anchor: middle; }
-    .badge-verified { fill: #3fb950; font-size: 9px; font-weight: 700; font-family: monospace; }
-    .badge-unverified { fill: #d29922; font-size: 9px; font-weight: 700; font-family: monospace; }
-    .link-line { stroke: #58a6ff; stroke-width: 1.5; fill: none; }
-    .link-gray { stroke: #484f58; stroke-width: 1.2; fill: none; }
-    .link-dashed { stroke: #8b949e; stroke-width: 1.2; stroke-dasharray: 4,4; fill: none; }
-    .link-purple { stroke: #bc8cff; stroke-width: 1.2; stroke-dasharray: 4,4; fill: none; }
+    .section-title { font-size: 14px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+    .node-title { fill: #ffffff; font-size: 13px; font-weight: 600; text-anchor: middle; }
+    .node-sub { fill: #8b949e; font-size: 11px; text-anchor: middle; }
+    .node-mono { fill: #7ee787; font-size: 10px; font-family: monospace; text-anchor: middle; }
+    .badge-verified { fill: #3fb950; font-size: 10px; font-weight: 700; font-family: monospace; text-anchor: middle; }
+    .badge-unverified { fill: #d29922; font-size: 10px; font-weight: 700; font-family: monospace; text-anchor: middle; }
+    
+    .line-blue { stroke: #58a6ff; stroke-width: 1.5; fill: none; }
+    .line-green { stroke: #3fb950; stroke-width: 1.5; fill: none; }
+    .line-orange { stroke: #f0883e; stroke-width: 1.5; fill: none; }
+    .line-purple { stroke: #bc8cff; stroke-width: 1.5; fill: none; }
+    .line-gray { stroke: #30363d; stroke-width: 1.5; fill: none; }
+    
+    .line-dashed-blue { stroke: #58a6ff; stroke-width: 1.5; stroke-dasharray: 4,4; fill: none; }
+    .line-dashed-purple { stroke: #bc8cff; stroke-width: 1.5; stroke-dasharray: 4,4; fill: none; }
+    .line-dashed-orange { stroke: #f0883e; stroke-width: 1.5; stroke-dasharray: 4,4; fill: none; }
+    .line-dashed-green { stroke: #3fb950; stroke-width: 1.5; stroke-dasharray: 4,4; fill: none; }
   </style>
 
-  <!-- TITLE -->
-  <text x="550" y="38" class="title">MARSHAL — Implemented Runtime Architecture</text>
-  <text x="550" y="58" class="subtitle">source: 8f7d092e038e · runtime 1.0.0 · SQLite schema v67</text>
+  <!-- ==================== HEADER ==================== -->
+  <text x="600" y="38" class="title">MARSHAL — Implemented Runtime Architecture</text>
+  <text x="600" y="60" class="subtitle">source: 8f7d092e038e · runtime 1.0.0 · SQLite schema v67</text>
 
-  <!-- 1. ENTRY POINTS BOX -->
-  <g transform="translate(560, 75)">
-    <rect width="500" height="90" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1.2" />
-    <text x="250" y="18" class="box-title" text-anchor="middle">Entry points implemented in cmd/internal</text>
+  <!-- ==================== 1. ENTRY POINTS (TOP ROW) ==================== -->
+  <g transform="translate(60, 85)">
+    <rect width="1080" height="95" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.5" />
+    <text x="540" y="24" fill="#8b949e" class="section-title" text-anchor="middle">Entry points implemented in cmd/internal</text>
     
     <!-- marshal CLI -->
-    <rect x="15" y="28" width="110" height="48" rx="4" fill="#0d1117" stroke="#30363d" />
-    <text x="70" y="56" class="node-title" font-size="11px">marshal CLI</text>
-    
+    <rect x="50" y="36" width="280" height="46" rx="6" fill="#0d1117" stroke="#30363d" />
+    <text x="190" y="58" class="node-title">marshal CLI</text>
+    <text x="190" y="72" class="node-sub">Native commands &amp; local management</text>
+
     <!-- MCP -->
-    <rect x="140" y="28" width="165" height="48" rx="4" fill="#0d1117" stroke="#30363d" />
-    <text x="222" y="48" class="node-title" font-size="11px">MCP HTTP server</text>
-    <text x="222" y="63" class="node-sub">protocol 2026-07-28</text>
+    <rect x="400" y="36" width="280" height="46" rx="6" fill="#0d1117" stroke="#30363d" />
+    <text x="540" y="56" class="node-title">MCP HTTP server</text>
+    <text x="540" y="72" class="node-sub">protocol 2026-07-28 · Bearer Auth</text>
 
     <!-- A2A -->
-    <rect x="320" y="28" width="165" height="48" rx="4" fill="#0d1117" stroke="#30363d" />
-    <text x="402" y="48" class="node-title" font-size="11px">A2A HTTP+JSON server</text>
-    <text x="402" y="63" class="node-sub">accepts 1.0 / 1.0.0</text>
+    <rect x="750" y="36" width="280" height="46" rx="6" fill="#0d1117" stroke="#30363d" />
+    <text x="890" y="56" class="node-title">A2A HTTP+JSON server</text>
+    <text x="890" y="72" class="node-sub">accepts wire protocol 1.0 / 1.0.0</text>
   </g>
 
-  <!-- 2. RUNTIME / CONTROL PLANE BOX -->
-  <g transform="translate(40, 180)">
-    <rect width="730" height="235" rx="6" fill="#0d1117" stroke="#1f6feb" stroke-width="1.5" />
-    <text x="365" y="22" fill="#58a6ff" font-size="15px" font-weight="600" text-anchor="middle">Runtime / control plane</text>
-    
+  <!-- Flow lines from Entry points to Local Daemon API -->
+  <path d="M 250 180 L 250 205 L 500 205 L 500 225" class="line-blue" marker-end="url(#arr-blue)" />
+  <path d="M 600 180 L 600 225" class="line-blue" marker-end="url(#arr-blue)" />
+  <path d="M 950 180 L 950 205 L 700 205 L 700 225" class="line-blue" marker-end="url(#arr-blue)" />
+
+  <!-- ==================== 2. CONTROL PLANE ==================== -->
+  <g transform="translate(60, 225)">
+    <rect width="1080" height="195" rx="8" fill="#0d1117" stroke="#1f6feb" stroke-width="1.5" />
+    <text x="40" y="26" fill="#58a6ff" class="section-title">Runtime / Control Plane</text>
+
     <!-- Local daemon API -->
-    <rect x="230" y="38" width="270" height="48" rx="4" fill="#161b22" stroke="#388bfd" />
-    <text x="365" y="56" class="node-title" fill="#58a6ff">Local daemon API</text>
-    <text x="365" y="72" class="node-sub">HTTP/JSON over .marshal/runtime.sock mode 0600</text>
+    <rect x="410" y="15" width="380" height="42" rx="6" fill="#161b22" stroke="#388bfd" />
+    <text x="600" y="33" class="node-title" fill="#58a6ff">Local daemon API</text>
+    <text x="600" y="47" class="node-sub">HTTP/JSON over .marshal/runtime.sock (mode 0600)</text>
 
     <!-- app.Runtime Core Node -->
-    <rect x="290" y="108" width="150" height="36" rx="6" fill="#1f6feb" stroke="#58a6ff" stroke-width="1.5" filter="url(#glow)" />
-    <text x="365" y="131" fill="#ffffff" font-size="13px" font-weight="700" text-anchor="middle">app.Runtime</text>
+    <rect x="490" y="72" width="220" height="38" rx="6" fill="#1f6feb" stroke="#58a6ff" stroke-width="1.5" filter="url(#glow-blue)" />
+    <text x="600" y="96" fill="#ffffff" font-size="14px" font-weight="700" text-anchor="middle">app.Runtime</text>
 
-    <!-- Pre-execution checks -->
-    <rect x="15" y="165" width="220" height="52" rx="4" fill="#161b22" stroke="#30363d" />
-    <text x="125" y="184" class="node-title">Run pre-execution checks</text>
-    <text x="125" y="201" class="node-sub">risk assessment · GateEngine · policy</text>
+    <!-- Control Plane Sub-Engines -->
+    <rect x="30" y="125" width="310" height="52" rx="6" fill="#161b22" stroke="#30363d" />
+    <text x="185" y="145" class="node-title">Run pre-execution checks</text>
+    <text x="185" y="163" class="node-sub">risk assessment · GateEngine · policy</text>
 
-    <!-- Task/session coordination -->
-    <rect x="250" y="165" width="230" height="52" rx="4" fill="#161b22" stroke="#30363d" />
-    <text x="365" y="184" class="node-title">Task/session coordination</text>
-    <text x="365" y="201" class="node-sub">atomic claim + lease · heartbeat · Finalize</text>
+    <rect x="385" y="125" width="310" height="52" rx="6" fill="#161b22" stroke="#30363d" />
+    <text x="540" y="145" class="node-title">Task/session coordination</text>
+    <text x="540" y="163" class="node-sub">atomic claim + lease · heartbeat · Finalize</text>
 
-    <!-- events.Engine -->
-    <rect x="495" y="165" width="220" height="52" rx="4" fill="#161b22" stroke="#30363d" />
-    <text x="605" y="184" class="node-title">events.Engine</text>
-    <text x="605" y="201" class="node-sub">+ durable audit/event records</text>
+    <rect x="740" y="125" width="310" height="52" rx="6" fill="#161b22" stroke="#30363d" />
+    <text x="895" y="145" class="node-title">events.Engine</text>
+    <text x="895" y="163" class="node-sub">+ durable audit / event records</text>
 
     <!-- Lines inside control plane -->
-    <path d="M 365 86 L 365 108" class="link-line" marker-end="url(#arrow-blue)" />
-    <path d="M 320 144 L 160 165" class="link-line" marker-end="url(#arrow-blue)" />
-    <path d="M 365 144 L 365 165" class="link-line" marker-end="url(#arrow-blue)" />
-    <path d="M 410 144 L 570 165" class="link-line" marker-end="url(#arrow-blue)" />
+    <path d="M 600 57 L 600 72" class="line-blue" marker-end="url(#arr-blue)" />
+    <path d="M 520 110 L 520 118 L 185 118 L 185 125" class="line-blue" marker-end="url(#arr-blue)" />
+    <path d="M 600 110 L 600 125" class="line-blue" marker-end="url(#arr-blue)" />
+    <path d="M 680 110 L 680 118 L 895 118 L 895 125" class="line-blue" marker-end="url(#arr-blue)" />
   </g>
 
-  <!-- Line from Entry points to Local daemon API -->
-  <path d="M 630 165 L 490 218" class="link-gray" marker-end="url(#arrow-blue)" />
-  <path d="M 782 165 L 500 225" class="link-gray" marker-end="url(#arrow-blue)" />
-  <path d="M 962 165 L 500 235" class="link-gray" marker-end="url(#arrow-blue)" />
+  <!-- ==================== 3. SPLIT ROW: TASK EXECUTION & EXPLICIT VERIFY ==================== -->
+  
+  <!-- Left Side: Runtime.Run Task Execution (Green) -->
+  <g transform="translate(60, 440)">
+    <rect width="680" height="235" rx="8" fill="#0d1117" stroke="#238636" stroke-width="1.5" />
+    <text x="30" y="26" fill="#3fb950" class="section-title">Runtime.Run task execution</text>
 
-  <!-- 3. EXPLICIT VERIFICATION API BOX -->
-  <g transform="translate(790, 240)">
-    <rect width="270" height="110" rx="6" fill="#161b22" stroke="#d29922" stroke-width="1.5" />
-    <text x="135" y="20" fill="#f0883e" font-size="12px" font-weight="600" text-anchor="middle">Separate explicit verification API</text>
-    <text x="135" y="44" class="node-title">Runtime.Verify</text>
-    <text x="135" y="60" class="node-sub">marshal verify / POST /v1/verify</text>
-    <text x="135" y="76" class="node-sub">authorize =&gt; worker.Manager.Run(exact argv)</text>
-    <text x="135" y="94" class="node-sub">returns exit status + SHA-256(stdout|stderr)</text>
-  </g>
-  <path d="M 440 308 L 790 295" class="link-dashed" stroke="#d29922" marker-end="url(#arrow-orange)" />
+    <!-- Step 1: Worktree Prep -->
+    <rect x="30" y="42" width="290" height="48" rx="6" fill="#161b22" stroke="#30363d" />
+    <text x="175" y="62" class="node-title">worktree.Manager.Prepare</text>
+    <text x="175" y="78" class="node-mono">.marshal/worktrees/&lt;task&gt;</text>
 
-  <!-- 4. RUNTIME.RUN TASK EXECUTION -->
-  <g transform="translate(40, 440)">
-    <rect width="320" height="340" rx="6" fill="#0d1117" stroke="#238636" stroke-width="1.5" />
-    <text x="160" y="24" fill="#3fb950" font-size="14px" font-weight="600" text-anchor="middle">Runtime.Run task execution</text>
+    <!-- Step 2: resolveAdapter -->
+    <rect x="360" y="42" width="290" height="48" rx="6" fill="#161b22" stroke="#30363d" />
+    <text x="505" y="62" class="node-title">resolveAdapter + Probe</text>
+    <text x="505" y="78" class="node-sub">Codex · OpenCode · Gemini · Claude</text>
 
-    <!-- Step 1: Worktree -->
-    <rect x="25" y="40" width="270" height="42" rx="4" fill="#161b22" stroke="#30363d" />
-    <text x="160" y="58" class="node-title">worktree.Manager.Prepare</text>
-    <text x="160" y="73" class="node-sub">.marshal/worktrees/&lt;task&gt;</text>
-
-    <!-- Step 2: Resolve Adapter -->
-    <rect x="25" y="105" width="270" height="42" rx="4" fill="#161b22" stroke="#30363d" />
-    <text x="160" y="123" class="node-title">resolveAdapter + Probe</text>
-    <text x="160" y="138" class="node-sub">Codex · OpenCode · Gemini · Claude</text>
-
-    <!-- Step 3: Provider Run -->
-    <rect x="25" y="170" width="270" height="42" rx="4" fill="#161b22" stroke="#30363d" />
-    <text x="160" y="188" class="node-title">provider Adapter.Run</text>
-    <text x="160" y="203" class="node-sub">builds provider execution command</text>
+    <!-- Step 3: Adapter.Run -->
+    <rect x="30" y="105" width="290" height="48" rx="6" fill="#161b22" stroke="#30363d" />
+    <text x="175" y="125" class="node-title">provider Adapter.Run</text>
+    <text x="175" y="141" class="node-sub">builds provider execution command</text>
 
     <!-- Step 4: ProcessRunner -->
-    <rect x="25" y="235" width="270" height="48" rx="4" fill="#161b22" stroke="#30363d" />
-    <text x="160" y="253" class="node-title">ProcessRunner (worker.Manager)</text>
-    <text x="160" y="271" class="node-sub">30m timeout · cancel · heartbeat · bounded out</text>
+    <rect x="360" y="105" width="290" height="48" rx="6" fill="#161b22" stroke="#30363d" />
+    <text x="505" y="125" class="node-title">ProcessRunner (worker.Manager)</text>
+    <text x="505" y="141" class="node-sub">30m timeout · cancel · bounded out</text>
 
-    <!-- Internal flow arrows -->
-    <path d="M 160 82 L 160 105" class="link-line" stroke="#3fb950" marker-end="url(#arrow-green)" />
-    <path d="M 160 147 L 160 170" class="link-line" stroke="#3fb950" marker-end="url(#arrow-green)" />
-    <path d="M 160 212 L 160 235" class="link-line" stroke="#3fb950" marker-end="url(#arrow-green)" />
+    <!-- Sandbox Badge -->
+    <rect x="30" y="168" width="620" height="52" rx="6" fill="#041f0f" stroke="#238636" stroke-width="1" />
+    <text x="340" y="188" fill="#7ee787" font-size="11.5px" font-weight="600" text-anchor="middle">When bwrap is available: worker.NewSandboxed wraps the provider command</text>
+    <text x="340" y="206" fill="#8b949e" font-size="10.5px" text-anchor="middle">worktree bind · read-only binds · tmpfs runtime dirs · --unshare-net network isolation</text>
 
-    <!-- Note on Sandboxing -->
-    <rect x="15" y="292" width="290" height="38" rx="3" fill="#041f0f" stroke="#238636" stroke-width="0.8" />
-    <text x="160" y="306" fill="#7ee787" font-size="8.5px" text-anchor="middle">When bwrap is available: worker.NewSandboxed wraps</text>
-    <text x="160" y="319" fill="#7ee787" font-size="8px" text-anchor="middle">worktree bind · read-only binds · tmpfs runtime · --unshare-net</text>
+    <!-- Internal Green Connectors -->
+    <path d="M 320 66 L 360 66" class="line-green" marker-end="url(#arr-green)" />
+    <path d="M 505 90 L 505 98 L 175 98 L 175 105" class="line-green" marker-end="url(#arr-green)" />
+    <path d="M 320 129 L 360 129" class="line-green" marker-end="url(#arr-green)" />
+    <path d="M 505 153 L 505 168" class="line-green" marker-end="url(#arr-green)" />
   </g>
-  <path d="M 160 395 L 160 440" class="link-dashed" stroke="#3fb950" marker-end="url(#arrow-green)" />
 
-  <!-- 5. PROVIDER PROCESS BOX -->
-  <g transform="translate(380, 480)">
-    <rect width="680" height="90" rx="6" fill="#161b22" stroke="#8957e5" stroke-width="1.5" />
-    <text x="340" y="20" fill="#d2a8ff" font-size="13px" font-weight="600" text-anchor="middle">Provider process</text>
+  <!-- Connector from Control Plane to Task Execution -->
+  <path d="M 245 420 L 245 440" class="line-green" marker-end="url(#arr-green)" />
+
+  <!-- Right Side: Separate Explicit Verification API (Orange) -->
+  <g transform="translate(770, 440)">
+    <rect width="370" height="235" rx="8" fill="#161b22" stroke="#d29922" stroke-width="1.5" />
+    <text x="25" y="28" fill="#f0883e" class="section-title">Separate Verification API</text>
+    
+    <rect x="25" y="48" width="320" height="165" rx="6" fill="#0d1117" stroke="#d29922" stroke-width="0.8" />
+    <text x="185" y="78" class="node-title" fill="#f0883e" font-size="14px">Runtime.Verify</text>
+    <text x="185" y="104" class="node-sub">CLI: marshal verify [-- cmd args...]</text>
+    <text x="185" y="124" class="node-sub">HTTP: POST /v1/verify</text>
+    <text x="185" y="152" class="node-mono">authorize =&gt; worker.Manager.Run(exact argv)</text>
+    <text x="185" y="180" class="node-sub">Returns exit status + SHA-256(stdout|stderr)</text>
+  </g>
+
+  <!-- Connector from app.Runtime to Verification API -->
+  <path d="M 955 420 L 955 440" class="line-orange" marker-end="url(#arr-orange)" />
+
+  <!-- ==================== 4. PROVIDER PROCESSES (PURPLE ROW) ==================== -->
+  <g transform="translate(60, 695)">
+    <rect width="1080" height="115" rx="8" fill="#161b22" stroke="#8957e5" stroke-width="1.5" />
+    <text x="40" y="24" fill="#d2a8ff" class="section-title">Provider Process Isolation</text>
 
     <!-- Codex -->
-    <rect x="20" y="32" width="145" height="46" rx="4" fill="#0d1117" stroke="#30363d" />
-    <text x="92" y="50" class="node-title">codex CLI</text>
-    <text x="92" y="67" class="badge-verified" text-anchor="middle">REAL-E2E-VERIFIED</text>
-
-    <!-- Claude -->
-    <rect x="180" y="32" width="150" height="46" rx="4" fill="#0d1117" stroke="#30363d" />
-    <text x="255" y="50" class="node-title">claude CLI</text>
-    <text x="255" y="67" class="badge-unverified" text-anchor="middle">PROBED / UNVERIFIED</text>
+    <rect x="30" y="38" width="235" height="60" rx="6" fill="#0d1117" stroke="#30363d" />
+    <text x="147" y="62" class="node-title">codex CLI</text>
+    <text x="147" y="82" class="badge-verified">REAL-E2E-VERIFIED</text>
 
     <!-- OpenCode -->
-    <rect x="345" y="32" width="160" height="46" rx="4" fill="#0d1117" stroke="#30363d" />
-    <text x="425" y="50" class="node-title">opencode + Ollama</text>
-    <text x="425" y="67" class="badge-verified" text-anchor="middle">REAL-E2E-VERIFIED</text>
+    <rect x="295" y="38" width="240" height="60" rx="6" fill="#0d1117" stroke="#30363d" />
+    <text x="415" y="62" class="node-title">opencode + Ollama</text>
+    <text x="415" y="82" class="badge-verified">REAL-E2E-VERIFIED</text>
 
     <!-- Gemini -->
-    <rect x="520" y="32" width="145" height="46" rx="4" fill="#0d1117" stroke="#30363d" />
-    <text x="592" y="50" class="node-title">gemini CLI</text>
-    <text x="592" y="67" class="badge-unverified" text-anchor="middle">PROBED / UNVERIFIED</text>
-  </g>
-  <path d="M 335 700 L 380 540" class="link-line" stroke="#8957e5" marker-end="url(#arrow-purple)" />
+    <rect x="565" y="38" width="235" height="60" rx="6" fill="#0d1117" stroke="#30363d" />
+    <text x="682" y="62" class="node-title">gemini CLI</text>
+    <text x="682" y="82" class="badge-unverified">PROBED / AVAILABLE</text>
 
-  <!-- 6. RESULT HANDLING BOX -->
-  <g transform="translate(250, 610)">
-    <rect width="810" height="230" rx="6" fill="#0d1117" stroke="#d29922" stroke-width="1.5" />
-    <text x="405" y="24" fill="#f0883e" font-size="14px" font-weight="600" text-anchor="middle">Result handling</text>
+    <!-- Claude -->
+    <rect x="830" y="38" width="220" height="60" rx="6" fill="#0d1117" stroke="#30363d" />
+    <text x="940" y="62" class="node-title">claude CLI</text>
+    <text x="940" y="82" class="badge-unverified">PROBED / AVAILABLE</text>
+  </g>
+
+  <!-- Flow from Task Execution to Providers -->
+  <path d="M 400 675 L 400 695" class="line-purple" marker-end="url(#arr-purple)" />
+
+  <!-- ==================== 5. RESULT HANDLING (GOLD ROW) ==================== -->
+  <g transform="translate(60, 830)">
+    <rect width="1080" height="245" rx="8" fill="#0d1117" stroke="#d29922" stroke-width="1.5" />
+    <text x="40" y="26" fill="#f0883e" class="section-title">Result Handling &amp; Provenance Evidence</text>
 
     <!-- Sanitize -->
-    <rect x="305" y="38" width="200" height="38" rx="4" fill="#161b22" stroke="#d29922" />
-    <text x="405" y="55" class="node-title">sanitizeProviderOutput</text>
-    <text x="405" y="68" class="node-sub">stdout / stderr</text>
+    <rect x="420" y="36" width="360" height="42" rx="6" fill="#161b22" stroke="#d29922" />
+    <text x="600" y="55" class="node-title" fill="#f0883e">sanitizeProviderOutput</text>
+    <text x="600" y="69" class="node-sub">credential boundary redaction (stdout / stderr)</text>
 
-    <!-- 3 Outcome Branches -->
-    <rect x="25" y="95" width="235" height="54" rx="4" fill="#161b22" stroke="#30363d" />
-    <text x="142" y="114" class="node-title">artifact.Store.Put</text>
-    <text x="142" y="128" class="node-sub">SHA-256 content-addressed reports</text>
-    <text x="142" y="141" class="node-sub">.marshal/artifacts/sha256/&lt;hex&gt;</text>
+    <!-- 3 Parallel Evidence Engines -->
+    <rect x="30" y="95" width="320" height="70" rx="6" fill="#161b22" stroke="#30363d" />
+    <text x="190" y="118" class="node-title">artifact.Store.Put</text>
+    <text x="190" y="136" class="node-sub">SHA-256 content-addressed reports</text>
+    <text x="190" y="152" class="node-mono">.marshal/artifacts/sha256/&lt;hex&gt;</text>
 
-    <rect x="275" y="95" width="260" height="54" rx="4" fill="#161b22" stroke="#30363d" />
-    <text x="405" y="114" class="node-title">Inspect task worktree</text>
-    <text x="405" y="128" class="node-sub">commit dirty changes under policy</text>
-    <text x="405" y="141" class="node-sub">reject successful run with no commit</text>
+    <rect x="380" y="95" width="320" height="70" rx="6" fill="#161b22" stroke="#30363d" />
+    <text x="540" y="118" class="node-title">Inspect Task Worktree</text>
+    <text x="540" y="136" class="node-sub">commit dirty changes under policy</text>
+    <text x="540" y="152" class="node-sub">reject successful run with no new commit</text>
 
-    <rect x="550" y="95" width="235" height="54" rx="4" fill="#161b22" stroke="#30363d" />
-    <text x="667" y="114" class="node-title">recordRunEvidence</text>
-    <text x="667" y="128" class="node-sub">cmd/output/env evidence nodes</text>
-    <text x="667" y="141" class="node-sub">raw I/O bound by SHA-256</text>
+    <rect x="730" y="95" width="320" height="70" rx="6" fill="#161b22" stroke="#30363d" />
+    <text x="890" y="118" class="node-title">recordRunEvidence</text>
+    <text x="890" y="136" class="node-sub">command/output/env evidence nodes</text>
+    <text x="890" y="152" class="node-sub">raw I/O bound by SHA-256 digests</text>
 
     <!-- Finalize -->
-    <rect x="250" y="170" width="310" height="42" rx="4" fill="#161b22" stroke="#d29922" />
-    <text x="405" y="194" class="node-title">FinishRun + ObserveHEAD + FinalizeExecution</text>
+    <rect x="350" y="182" width="500" height="46" rx="6" fill="#161b22" stroke="#d29922" />
+    <text x="600" y="204" class="node-title" fill="#f0883e">FinishRun + ObserveHEAD + FinalizeExecution</text>
+    <text x="600" y="219" class="node-sub">Atomic lifecycle transition &amp; coordination closure</text>
 
-    <!-- Internal result lines -->
-    <path d="M 370 76 L 180 95" class="link-gray" marker-end="url(#arrow-orange)" />
-    <path d="M 405 76 L 405 95" class="link-gray" marker-end="url(#arrow-orange)" />
-    <path d="M 440 76 L 620 95" class="link-gray" marker-end="url(#arrow-orange)" />
+    <!-- Connectors inside Result Handling -->
+    <path d="M 490 78 L 490 86 L 190 86 L 190 95" class="line-orange" marker-end="url(#arr-orange)" />
+    <path d="M 600 78 L 600 95" class="line-orange" marker-end="url(#arr-orange)" />
+    <path d="M 710 78 L 710 86 L 890 86 L 890 95" class="line-orange" marker-end="url(#arr-orange)" />
 
-    <path d="M 180 149 L 340 170" class="link-gray" marker-end="url(#arrow-orange)" />
-    <path d="M 405 149 L 405 170" class="link-gray" marker-end="url(#arrow-orange)" />
-    <path d="M 620 149 L 470 170" class="link-gray" marker-end="url(#arrow-orange)" />
+    <path d="M 190 165 L 190 174 L 450 174 L 450 182" class="line-orange" marker-end="url(#arr-orange)" />
+    <path d="M 540 165 L 540 182" class="line-orange" marker-end="url(#arr-orange)" />
+    <path d="M 890 165 L 890 174 L 750 174 L 750 182" class="line-orange" marker-end="url(#arr-orange)" />
   </g>
 
-  <!-- Provider output connects into sanitize -->
-  <path d="M 470 570 L 655 648" class="link-dashed" stroke="#8957e5" marker-end="url(#arrow-orange)" />
-  <path d="M 635 570 L 655 648" class="link-dashed" stroke="#8957e5" marker-end="url(#arrow-orange)" />
-  <path d="M 805 570 L 655 648" class="link-dashed" stroke="#8957e5" marker-end="url(#arrow-orange)" />
-  <path d="M 975 570 L 655 648" class="link-dashed" stroke="#8957e5" marker-end="url(#arrow-orange)" />
+  <!-- Flow from Provider processes to Sanitize -->
+  <path d="M 600 810 L 600 830" class="line-orange" marker-end="url(#arr-orange)" />
 
-  <!-- 7. CANONICAL LOCAL PERSISTENCE -->
-  <g transform="translate(680, 880)">
-    <rect width="380" height="70" rx="6" fill="#161b22" stroke="#a371f7" stroke-width="1.5" />
-    <text x="190" y="24" fill="#d2a8ff" font-size="13px" font-weight="600" text-anchor="middle">Canonical Local persistence</text>
-    <text x="190" y="46" class="node-title" fill="#ffffff">SQLite v67 — .marshal/state.db</text>
-    <text x="190" y="60" class="node-sub">canonical live coordination state &amp; audit</text>
+  <!-- ==================== 6. CANONICAL LOCAL PERSISTENCE (BOTTOM ROW) ==================== -->
+  <g transform="translate(60, 1095)">
+    <rect width="1080" height="110" rx="8" fill="#161b22" stroke="#a371f7" stroke-width="1.5" />
+    <text x="40" y="26" fill="#d2a8ff" class="section-title">Canonical Local Persistence</text>
+
+    <!-- SQLite v67 Box -->
+    <rect x="340" y="36" width="520" height="58" rx="8" fill="#0d1117" stroke="#bc8cff" stroke-width="1.5" />
+    <text x="600" y="60" class="node-title" fill="#ffffff" font-size="15px">SQLite v67 — .marshal/state.db</text>
+    <text x="600" y="80" class="node-sub">Canonical live coordination state, task leases, audit ledger &amp; evidence graphs</text>
   </g>
 
-  <!-- Persistence dashed links -->
-  <path d="M 645 395 L 810 880" class="link-purple" marker-end="url(#arrow-purple)" />
-  <path d="M 925 350 L 890 880" class="link-purple" marker-end="url(#arrow-purple)" />
-  <path d="M 560 810 L 720 880" class="link-purple" marker-end="url(#arrow-purple)" />
+  <!-- Flow into SQLite Persistence -->
+  <!-- 1. From Result Handling Finalize (Center) -->
+  <path d="M 600 1058 L 600 1095" class="line-purple" marker-end="url(#arr-purple)" />
 
-  <!-- 8. FOOTER SCOPE NOTE -->
-  <g transform="translate(200, 990)">
-    <rect width="700" height="90" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1" />
-    <text x="350" y="22" fill="#8b949e" font-size="11px" font-weight="600" text-anchor="middle">Deliberately omitted from the main linear Run path:</text>
-    <text x="350" y="44" fill="#6e7681" font-size="10.5px" text-anchor="middle">• verification quorum (implemented as a gate/check subsystem, configuration-dependent)</text>
-    <text x="350" y="62" fill="#6e7681" font-size="10.5px" text-anchor="middle">• netpolicy evaluator (implemented, but not claimed here as a universal mediated HTTP/DNS firewall)</text>
-    <text x="350" y="80" fill="#6e7681" font-size="10.5px" text-anchor="middle">• Aider/Crush contract-only material and future multi-host/external-store architecture</text>
+  <!-- 2. From Verification API (Right side bypass) -->
+  <path d="M 955 675 L 955 1095" class="line-dashed-orange" marker-end="url(#arr-orange)" />
+
+  <!-- 3. From Events Engine (Left side bypass) -->
+  <path d="M 80 420 L 80 1095" class="line-dashed-purple" marker-end="url(#arr-purple)" />
+
+  <!-- ==================== 7. FOOTER SCOPE NOTE ==================== -->
+  <g transform="translate(60, 1225)">
+    <rect width="1080" height="95" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1" />
+    <text x="540" y="24" fill="#8b949e" font-size="12px" font-weight="700" text-anchor="middle">Deliberately omitted from the main linear Run path:</text>
+    <text x="540" y="46" fill="#6e7681" font-size="11.5px" text-anchor="middle">• verification quorum (implemented as a configurable gate/check subsystem, not an unconditional linear step)</text>
+    <text x="540" y="64" fill="#6e7681" font-size="11.5px" text-anchor="middle">• netpolicy evaluator (implemented, but not claimed here as a universal mediated HTTP/DNS firewall)</text>
+    <text x="540" y="82" fill="#6e7681" font-size="11.5px" text-anchor="middle">• Aider/Crush contract-only material and speculative multi-host / external-store distributed architectures</text>
   </g>
 </svg>

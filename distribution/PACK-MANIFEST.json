@@ -760,6 +760,11 @@
       "bytes": 3667
     },
     {
+      "path": "docs/assets/marshal-architecture-source-faithful.svg",
+      "sha256": "6bcee78d4d9982a6f312604ac1be9023e797181b01a0fee869a3741b84239848",
+      "bytes": 16782
+    },
+    {
       "path": "docs/capability-broker.md",
       "sha256": "b3d8070d1c19bc75368c8486c7830331bf43b93fbb0b38d311e3e8fb99a2ae84",
       "bytes": 2464
