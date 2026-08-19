@@ -2250,6 +2250,16 @@
       "bytes": 1817
     },
     {
+      "path": "internal/memory/index/vector/sqlitevec/backend.go",
+      "sha256": "a755a85da66d603059a9d081b0c04e66a1fded32911a327eab6a555effec8e52",
+      "bytes": 2993
+    },
+    {
+      "path": "internal/memory/index/vector/sqlitevec/backend_test.go",
+      "sha256": "c2e97a885928a9c4dcbdd15437a911b4b083edb94e155c096574e86bf8ee0671",
+      "bytes": 1563
+    },
+    {
       "path": "internal/memory/lifecycle/engine.go",
       "sha256": "c10ed75ae0d1310ec8930d11c05d77fda6e969f10ecc5ac3a496df3096797632",
       "bytes": 4062
