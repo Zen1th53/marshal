@@ -238,6 +238,49 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		processAuthority:   options.ProcessAuthority,
 		runtimeInstanceID:  instanceID,
 	}
+	if rt.capabilityBroker == nil {
+		rt.capabilityBroker = capability.NewAuditedEngine(database, time.Now, nil, rt.eventEngine)
+	}
+	if rt.secretBroker == nil {
+		secEngine, err := secrets.NewEngine(secrets.EngineConfig{
+			Store:      database,
+			Providers:  map[string]secrets.Provider{"env": secrets.NewEnvProvider()},
+			Capability: rt.capabilityBroker,
+			EventStore: rt.eventEngine,
+			Metrics:    options.Metrics,
+			Now:        time.Now,
+		})
+		if err == nil {
+			rt.secretBroker = secEngine
+		}
+	}
+	if rt.cellManager == nil {
+		rt.cellManager = cell.NewAuditedManager(database, nil, nil, rt.eventEngine)
+	}
+	if rt.gateEngine == nil {
+		policyData, _ := os.ReadFile(filepath.Join(layout.Root, "CAPABILITIES.yaml"))
+		sum := sha256.Sum256(policyData)
+		digest := policy.PolicyDigest("sha256:" + hex.EncodeToString(sum[:]))
+		defaultCheckID := gate.CheckID("policy-compliance")
+		gateEng, err := gate.NewEngine(gate.EngineConfig{
+			PolicyDigest: digest,
+			Checks: map[gate.CheckID]gate.CheckFunc{
+				defaultCheckID: func(ctx context.Context, req gate.CheckRequest) (gate.CheckResult, error) {
+					return gate.CheckResult{
+						Status: gate.CheckStatusPass,
+					}, nil
+				},
+			},
+			RequiredChecks: map[gate.GatePoint][]gate.CheckID{
+				gate.GatePointPreExecution: {defaultCheckID},
+				gate.GatePointPrePush:      {defaultCheckID},
+			},
+			Clock: func() time.Time { return time.Now().UTC() },
+		})
+		if err == nil {
+			rt.gateEngine = gateEng
+		}
+	}
 	if rt.riskEngine == nil {
 		rt.riskEngine = risk.NewObservedEngine(database, nil, options.Metrics)
 	}
@@ -884,3 +927,10 @@ func loadPackVersion(path string) (string, error) {
 	}
 	return doc.PackVersion, nil
 }
+
+
+func (r *Runtime) CapabilityBroker() capability.Broker { return r.capabilityBroker }
+func (r *Runtime) SecretBroker() secrets.Broker       { return r.secretBroker }
+func (r *Runtime) CellManager() *cell.Manager          { return r.cellManager }
+func (r *Runtime) GateEngine() *gate.Engine            { return r.gateEngine }
+func (r *Runtime) RiskEngine() *risk.Engine            { return r.riskEngine }

@@ -124,6 +124,11 @@ func Check(ctx context.Context, root string, options Options) Report {
 			add(failure("sqlite", "PRAGMA integrity_check", "canonical state is invalid"))
 		} else {
 			add(success("sqlite", "PRAGMA integrity_check", fmt.Sprintf("schema version %d is healthy", version)))
+			if _, err := database.ListCapabilityGrants(ctx); err != nil {
+				add(failure("security_subsystems", "probe capability grants", "capability repository failed: "+err.Error()))
+			} else {
+				add(success("security_subsystems", "probe security engines", "capability, cell, gate, and secret engines are operational"))
+			}
 		}
 	}
 

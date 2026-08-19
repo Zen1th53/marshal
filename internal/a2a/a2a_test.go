@@ -590,7 +590,7 @@ func TestA2AOversizedBodyAndMalformedJSON(t *testing.T) {
 	}
 
 	// 2. Oversized body -> 413 Request Entity Too Large
-	largePayload := bytes.Repeat([]byte("a"), 500)
+	largePayload := []byte(`{"message":{"role":"user","parts":[{"text":"` + strings.Repeat("a", 500) + `"}]}}`)
 	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(largePayload))
 	req.Header.Set("Content-Type", "application/a2a+json")
 	req.Header.Set("A2A-Version", "1.0")

@@ -223,3 +223,42 @@ func runtimeRepo(t *testing.T) *testgit.Repository {
 	}
 	return repo
 }
+
+func TestDefaultRuntimeWiredSecuritySubsystems(t *testing.T) {
+	repo := testgit.New(t)
+	for _, name := range []string{"CAPABILITIES.yaml", "PACK-VERSION.yaml", "RUNTIME-VERSION.yaml"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo.Path(), name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+
+	runtime, err := Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	if runtime.CapabilityBroker() == nil {
+		t.Fatal("expected non-nil CapabilityBroker in default runtime")
+	}
+	if runtime.SecretBroker() == nil {
+		t.Fatal("expected non-nil SecretBroker in default runtime")
+	}
+	if runtime.CellManager() == nil {
+		t.Fatal("expected non-nil CellManager in default runtime")
+	}
+	if runtime.GateEngine() == nil {
+		t.Fatal("expected non-nil GateEngine in default runtime")
+	}
+	if runtime.RiskEngine() == nil {
+		t.Fatal("expected non-nil RiskEngine in default runtime")
+	}
+}

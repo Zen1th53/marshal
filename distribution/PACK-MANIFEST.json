@@ -1096,13 +1096,13 @@
     },
     {
       "path": "internal/a2a/a2a_test.go",
-      "sha256": "fe6d6b20d65e2c30033e582e2a8208db6b511a423d457ce021002dc016b6120c",
-      "bytes": 18425
+      "sha256": "e1bbc8a14aa046ac50a48c7f002348a0ac46a37c7b261203684d36d55aa3ed65",
+      "bytes": 18486
     },
     {
       "path": "internal/a2a/server.go",
-      "sha256": "7dcb89c4e26db260551613f42bafa3852781f31535dd6c3b952205c8740d6bd6",
-      "bytes": 13404
+      "sha256": "5bde2fea972166d8a8ab876b5fb7a0681322a9a4df9a0cdcc74bbefcf4584948",
+      "bytes": 14025
     },
     {
       "path": "internal/adapter/adapter.go",
@@ -1406,13 +1406,13 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "90717163ca2ddec62eda8d824b72173308e212984f1ea5cdcf9ff9251acc59c6",
-      "bytes": 32505
+      "sha256": "5029621842bafa86d9362854639e50809b6d5f33855beba7f330a40dad330259",
+      "bytes": 34374
     },
     {
       "path": "internal/app/runtime_test.go",
-      "sha256": "58b4aee7e842c667a21dedf16ed2caaf80f8c0ef89afac43741cc1260282d22c",
-      "bytes": 6560
+      "sha256": "4436a026ed5df08fa4dd9c5e6f67d24e5949bb991c4b2b7113b8ba41ffd315bc",
+      "bytes": 7668
     },
     {
       "path": "internal/app/secrets_runtime_a06_test.go",
@@ -1791,8 +1791,8 @@
     },
     {
       "path": "internal/doctor/doctor.go",
-      "sha256": "36f373d01d574c482ab821a934761b8a237f0886ff4d4202d3385a1b4d6b24e4",
-      "bytes": 12221
+      "sha256": "3fc253232342289ea508b1b31e3be754e3ad84afb7c650dcf3f1b874aa2e9e85",
+      "bytes": 12544
     },
     {
       "path": "internal/doctor/doctor_test.go",
@@ -2400,6 +2400,16 @@
       "bytes": 662
     },
     {
+      "path": "internal/ratelimit/limiter.go",
+      "sha256": "3f8801c74cd6f5b33b7bfd5b3e08b282f484d356ebf20ee328542fc010aeac43",
+      "bytes": 2914
+    },
+    {
+      "path": "internal/ratelimit/limiter_test.go",
+      "sha256": "74b248120a7d461bdd67b7b64ae8e30b8811190cfacb3c31dc94482fbd2a1ce6",
+      "bytes": 2086
+    },
+    {
       "path": "internal/recommendation/adversarial_test.go",
       "sha256": "8786910d625e1e435ddd52dd52f19da4e37ca38443f4d5c38c674c03c769d690",
       "bytes": 338
@@ -2621,8 +2631,8 @@
     },
     {
       "path": "internal/secrets/types.go",
-      "sha256": "f491329236659ccb22db5b8318c06ee80eaab8de165b1ce5d581450544e19137",
-      "bytes": 2593
+      "sha256": "7e33634a460f69efbe8e5184882f400088a8ef9d001ac2557e6c5d8393baef51",
+      "bytes": 2862
     },
     {
       "path": "internal/secrets/types_test.go",

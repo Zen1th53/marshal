@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -95,4 +96,18 @@ func invalidIdentifier(value string) bool {
 		}
 	}
 	return false
+}
+
+type EnvProvider struct{}
+
+func NewEnvProvider() Provider {
+	return &EnvProvider{}
+}
+
+func (p *EnvProvider) Resolve(_ context.Context, ref Ref) ([]byte, error) {
+	val := os.Getenv(ref.Name)
+	if val == "" {
+		return nil, ErrNotFound
+	}
+	return []byte(val), nil
 }
