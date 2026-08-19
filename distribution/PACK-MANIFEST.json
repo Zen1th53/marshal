@@ -2310,6 +2310,16 @@
       "bytes": 2542
     },
     {
+      "path": "internal/memory/versioning/snapshot.go",
+      "sha256": "2743f8d56d8f9547b7f7485e568e79242f3611874328860f414bc1c9da76864c",
+      "bytes": 3133
+    },
+    {
+      "path": "internal/memory/versioning/snapshot_test.go",
+      "sha256": "7c6650c18ce349c0dd32627c0cea3a97046d477c6a63e9e874eea4ba61bef917",
+      "bytes": 2353
+    },
+    {
       "path": "internal/model/capability.go",
       "sha256": "11995bfbb4f0a57fb35caa30b54723957a20e9573067e1941feda2def349e774",
       "bytes": 1429
