@@ -1,5 +1,35 @@
 # Changelog
 
+## Runtime 1.0.0 (Hardened) — 2026-08-19
+
+Comprehensive Core Hardening release (T56–T76):
+
+### Added & Hardened Subsystems
+- **Remote Control-Plane Security (T56–T59)**:
+  - Insecure remote bind rejection: MCP and A2A servers strictly enforce loopback binding (`127.0.0.1`, `::1`, `localhost`). Non-loopback addresses return `ErrInsecureRemoteBind`.
+  - Fine-grained token capabilities: Bearer tokens now enforce explicit scopes (`task:run`, `task:claim`, `mcp:read`, `a2a:send`).
+  - Constant-time HMAC authentication, rate limiting, and sensitive credential redaction across all protocol boundaries.
+  - A2A role spoofing prevention: remote agents cannot self-assign internal administrative or orchestrator roles.
+- **Runtime Security Composition (T60–T63)**:
+  - Execution cell composition boundary and fail-closed permission checks.
+  - Strict policy enforcement requiring explicit active allow (`Allow: true`).
+  - Network namespace isolation and explicit task-level network access requirements.
+  - Real resource governance: CPU, RAM, and PID quotas, 500MB worktree disk budget, and process group escalation timeouts.
+- **Real Orchestration Engine (T64–T66)**:
+  - Multi-factor scheduler scoring engine (success rate 0.40, load 0.30, context util 0.20, cost 0.10) with deterministic tie-breaking.
+  - Dynamic model profile routing scoring context headroom, latency class, cost class, locality preference, and provider pinning.
+  - Recovery state machine with failure classification, poisoned checkpoint quarantine, and exponential backoff.
+- **Task Lifecycle & Verification Quorum (T67–T68)**:
+  - Canonical Review -> QA -> Security -> Merge task lifecycle with role authorization and HeadCommit binding.
+  - Quorum verification merge gate requiring multi-party signed attestations (QA + AppSec) with veto blocking.
+- **Lifecycle Hygiene & Storage Safety (T69–T73)**:
+  - Worktree lifecycle retention and garbage collection CLI (`marshal gc worktrees`).
+  - Content-addressed artifact reference tracking and garbage collection CLI (`marshal gc artifacts`).
+  - SQLite online backup, restore preflight, and integrity verification workflow (`marshal state backup`, `verify-backup`, `restore`).
+  - Startup reconciliation recovering dead worker runs, stale sessions, and expired leases.
+  - SQLite concurrency and load profile hardening under heavy read/write contention.
+
+
 All notable changes to the MARSHAL project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

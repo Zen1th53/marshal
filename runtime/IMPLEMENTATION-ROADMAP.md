@@ -1,90 +1,40 @@
 # Runtime Implementation Roadmap
 
-## Phase 1 — Local Control Plane
+## Milestone 1 — Local Control Plane
+Status: Fully implemented in runtime `1.0.0` (SQLite schema `v67`).
+- Local daemon over mode-0600 Unix socket.
+- SQLite WAL storage with transactions, foreign keys, and migration engine.
+- Task DAG, atomic leases, and session identity registry.
+- Policy engine with capability broker and contextual approvals.
+- Git worktree lifecycle management and content-addressed artifact store.
 
-Status: implemented in local runtime `0.1.0`.
+## Milestone 2 — Worker & Execution Subsystem
+Status: Fully implemented in runtime `1.0.0`.
+- Bubblewrap sandbox engine with read-only rootfs and tmpfs mounts.
+- Provider adapters for Codex, OpenCode (local Ollama), Gemini CLI, and Claude Code.
+- Resource governance: CPU, memory, PID limits, and 500MB worktree disk budget.
+- Worker process group termination and timeout enforcement.
 
-Build only:
+## Milestone 3 — Orchestration & Recovery Engine
+Status: Fully implemented in runtime `1.0.0`.
+- Multi-factor scheduler scoring (success rate, load, context, cost).
+- Dynamic model profile routing with latency, cost, and locality weighting.
+- Recovery state machine with failure classification and backoff.
+- Startup reconciliation recovering dead runs, stale sessions, and expired leases.
 
-```text
-marshal
-+ local daemon
-+ SQLite
-+ task/lease state
-+ identity/session registry
-+ policy checks
-+ filesystem worktrees
-+ local artifact store
-```
+## Milestone 4 — Verification, Lifecycle & Quorum Merge Gate
+Status: Fully implemented in runtime `1.0.0`.
+- Canonical Review -> QA -> Security -> Merge task lifecycle.
+- Quorum verification engine requiring multi-party attestations (QA + AppSec).
+- Append-only audit logging and provenance chain generation.
 
-This is the highest-value executable milestone.
+## Milestone 5 — Protocols & Remote Control Plane
+Status: Fully implemented for local operations in runtime `1.0.0`.
+- Loopback-bound, capability-token authorized MCP (`2026-07-28`) server.
+- Loopback-bound, role-protected A2A (`1.0`) agent server.
+- Fail-closed remote bind protection (`ErrInsecureRemoteBind`).
 
-## Phase 2 — Worker Manager
-
-Status: implemented for task-scoped local Codex and deterministic test adapters.
-
-Add:
-- worker spawn/terminate,
-- heartbeat,
-- task-scoped environment,
-- evidence capture,
-- sandbox limits.
-
-## Phase 3 — Events and Automation
-
-Status: partially implemented in `0.1.0`.
-
-Add:
-- transactional outbox,
-- scheduler wakeups,
-- QA/AppSec trigger events,
-- verification invalidation on HEAD change.
-
-Durable transactional audit events and HEAD invalidation are implemented.
-Background scheduler wakeups and automatic QA/AppSec workers are not.
-
-## Phase 4 — Secrets
-
-Status: not implemented.
-
-Add a local secret backend first.
-
-Then adapters only if required.
-
-## Phase 5 — Retrieval
-
-Status: not implemented.
-
-Add in this order only as real needs appear:
-
-```text
-exact/lexical
-→ TurboVec semantic
-→ Deja Vu session history
-→ Cognee graph relationships
-```
-
-## Phase 6 — Multi-host
-
-Status: not implemented.
-
-Only after single-host limits are measured.
-
-Potential changes:
-- Postgres,
-- object artifact store,
-- distributed workers,
-- external event transport,
-- centralized secrets.
-
-## Torvalds Test
-
-At every phase:
-
-```text
-Does this layer solve a current problem?
-Can we delete a component?
-Can SQLite/filesystem still do it?
-Is the abstraction serving real callers?
-Can the change be independently verified and reverted?
-```
+## Future Milestones
+- Distributed multi-host worker clustering.
+- Remote object storage backends (S3/GCS) for artifact distribution.
+- Hardware security module (HSM) secrets brokering.

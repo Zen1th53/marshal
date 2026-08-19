@@ -1,72 +1,69 @@
 # Runtime Plane
 
-This directory defines the executable control-plane contracts for the reusable
-agent engineering system. Runtime Milestone 1 implements a local Linux subset
-in `cmd/marshal` and `internal/`; contracts outside that subset remain
-specifications.
+This directory defines the executable control-plane contracts and implementation
+for the MARSHAL agent runtime (`1.0.0`, SQLite schema `v67`).
 
 ## Components
 
-- `MARSHAL-CLI.md` — CLI/TUI command contract.
+- `MARSHAL-CLI.md` — CLI command contract.
 - `MEMORY-SERVICE.md` — canonical state service.
 - `IDENTITY-REGISTRY.md` — agent/session identity and heartbeat.
-- `POLICY-ENGINE.md` — runtime authorization.
+- `POLICY-ENGINE.md` — runtime authorization and capability broker.
 - `SANDBOX.md` — isolated worker execution.
-- `SCHEDULER.md` — task dispatch and leases.
-- `EVENT-BUS.md` — event semantics.
-- `SECRETS-BROKER.md` — scoped secret leasing.
-- `ARTIFACT-STORE.md` — immutable artifact storage.
+- `SCHEDULER.md` — task dispatch, scoring engine, and atomic leases.
+- `EVENT-BUS.md` — append-only durable event semantics.
+- `SECRETS-BROKER.md` — scoped secret leasing and redaction.
+- `ARTIFACT-STORE.md` — content-addressed immutable artifact store.
 - `WORKER-PROTOCOL.md` — worker lifecycle contract.
-- `HEALTH.md` — health/readiness semantics.
-- `THREAT-MODEL.md` — runtime threat model.
+- `HEALTH.md` — health and readiness diagnostics.
+- `THREAT-MODEL.md` — runtime threat model and security boundaries.
 - `SCHEMA.yaml` — canonical runtime entities.
 - `EVENTS.yaml` — stable event names and fields.
-- `IMPLEMENTATION-ROADMAP.md` — recommended build order.
+- `IMPLEMENTATION-ROADMAP.md` — implemented milestones and build order.
 
-## Implemented Local Runtime 0.1.0
+## Implemented Runtime Architecture (v1.0.0)
 
 ```text
-marshal CLI
-  ↓
-HTTP/JSON over a local mode-0600 Unix socket
-  ↓
-SQLite
-  ├── tasks
-  ├── agents
-  ├── leases
-  ├── decisions
-  ├── findings
-  ├── approvals
-  ├── artifacts
-  └── audit_events
+marshal CLI / Local UI
+  |
+  +--> Mode-0600 Unix Domain Socket (Local Control Plane)
+  +--> Loopback-only Bearer-token MCP Server (2026-07-28)
+  +--> Loopback-only Bearer-token A2A Server (1.0)
+  |
+SQLite (WAL Mode, Schema v67)
+  |-- tasks (Canonical Review -> QA -> Security -> Merge Lifecycle)
+  |-- agents & sessions (Role Authorization & Heartbeats)
+  |-- leases (Multi-factor Scheduler Scoring & TTL)
+  |-- worker_runs & execution_cells
+  |-- audit_events (Append-only Audit Log)
+  |-- artifacts (Content-addressed sha256 reference tracking)
+  +-- quorum_verifications & risk_assessments
 
-filesystem
-  ├── Git worktrees
-  └── SHA-256 content-addressed artifacts
+Storage & Sandbox Execution
+  |-- Git Worktrees (.marshal/worktrees/ with retention GC)
+  |-- SHA-256 Content-Addressed Artifacts (.marshal/artifacts/ with GC)
+  +-- Bubblewrap Sandbox (Unprivileged mount & network namespaces)
 ```
 
-The implementation also includes capability-policy enforcement, contextual
-approvals, identity sessions/heartbeats, atomic leases, deterministic ready-task
-ordering, Codex process management, bubblewrap probing/enforcement, durable
-events, worker evidence, HEAD-change verification invalidation, doctor probes,
-and read-only reconciliation diffs.
+The runtime enforces:
+- Fail-closed security boundaries across native CLI, MCP, and A2A interfaces.
+- Fine-grained token capabilities (`task:run`, `task:claim`, `mcp:read`, `a2a:send`).
+- Dynamic multi-factor scheduler scoring and profile-based model routing.
+- Real recovery state machine with failure classification and backoff.
+- Task merge gate with multi-party quorum verification.
+- Content-addressed artifact reference tracking and GC.
+- SQLite online backup, restore preflight, and startup orphan reconciliation.
+- Bubblewrap process isolation with 500MB worktree disk budget and process group timeouts.
 
-Bubblewrap is the strong Linux backend. If it is unavailable, only explicitly
-low-risk, network-allowed work may use the honestly reported `process_only`
-fallback; network-denied or R2/R3 execution is blocked.
+If bubblewrap is unavailable, only low-risk (R1) tasks with explicit network allowance
+may use the process-only fallback; high-risk (R2/R3) or network-denied tasks fail closed.
 
-Not implemented in 0.1.0: distributed or multi-host coordination, production
-secret brokering, external event/artifact services, full MCP/A2A servers, and
-production adapters other than Codex. TurboVec, Cognee, Deja Vu, external
-secret managers, and distributed workers remain optional future evolution.
+Distributed multi-host clustering and cloud-native object stores remain future milestones.
 
 ---
 
 ## V6 Protocol Boundaries
 
-- remote agent collaboration: A2A `1.0`,
-- MCP profile: `2026-07-28`,
-- runtime remote coordination: `runtime/REMOTE-AGENTS.md`,
-- shared-service isolation: `runtime/MULTI-TENANCY.md`.
-
-Protocol profiles are negotiated/probed; they are not inferred from agent name.
+- Remote agent collaboration: A2A `1.0` (loopback-bound, bearer-authorized).
+- MCP profile: `2026-07-28` (stateless, capability-token protected).
+- Multi-tenancy and remote coordination: see `runtime/REMOTE-AGENTS.md` and `runtime/MULTI-TENANCY.md`.

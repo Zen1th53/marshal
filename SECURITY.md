@@ -12,13 +12,16 @@ The specification documents also welcome reports of concrete security
 contradictions, but a missing future implementation is not by itself a runtime
 vulnerability when its status is accurately documented.
 
-## Supported versions
+## Supported Versions
 
-The project currently has no tagged release series. Security fixes are assessed
-against the `main` branch and the current documented local runtime version.
-Older commits and downstream modifications are not independently supported.
+Security fixes are assessed against the active release and main branch:
 
-## Reporting privately
+| Version | Schema | Status | Supported Platforms |
+|---|---|---|---|
+| **v1.0.0** | **v67** | **Active Support** | Linux x86_64, arm64 |
+| < 1.0.0 | < v67 | End of Support | None |
+
+## Reporting Privately
 
 Do not disclose exploit details, credentials, private repository content, or
 proof-of-concept attacks in a public issue.
@@ -40,7 +43,7 @@ Useful reports include:
 
 Do not include live secrets or data belonging to others.
 
-## Coordinated disclosure
+## Coordinated Disclosure
 
 Allow maintainers reasonable time to reproduce, assess, fix, and coordinate a
 release before public disclosure. Maintainers should acknowledge receipt,

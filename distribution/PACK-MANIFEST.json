@@ -111,8 +111,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "8bbc7602b20a4f7a665e4a97961bc1fdea45f5b130f1518a07f7d6a145c1466e",
-      "bytes": 9938
+      "sha256": "cf6a42e2dce9c133299e50fb6143afc2ebbf3b68398f485b485c4fa4e30fe068",
+      "bytes": 12329
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -196,8 +196,8 @@
     },
     {
       "path": "SECURITY.md",
-      "sha256": "d29e0bc824f6c88d7cf862f5e07062622e57d92da28092159753b40cf88203a9",
-      "bytes": 2192
+      "sha256": "3c8a1f99c0907ccb9d6107cf9b607c454d77756faa6b92146ffb4bfd247648ff",
+      "bytes": 2215
     },
     {
       "path": "SUPPORT.md",
@@ -971,8 +971,8 @@
     },
     {
       "path": "docs/security-model.md",
-      "sha256": "3dd997aed2f58cd16a767375b5e573e5e524015c03e06ca11f3ac9f7969680c1",
-      "bytes": 2710
+      "sha256": "369a4e7a56b0a39ca45b447fd843c3873bbeb92aeb7ef8714b4858ba578c1e41",
+      "bytes": 2655
     },
     {
       "path": "docs/superpowers/plans/2026-08-11-agent-runtime-plane-plan.md",
@@ -2775,6 +2775,11 @@
       "bytes": 234
     },
     {
+      "path": "internal/store/concurrency_hardening_test.go",
+      "sha256": "7abd33a0a4b19902b46035ff365a08008a76498e50fbf6868659130fbcf03c8f",
+      "bytes": 4948
+    },
+    {
       "path": "internal/store/confidence_persistence_a02_test.go",
       "sha256": "25c3d38021e64cdfe41517194d96db573e260e83df190e7b0da21eedb67ffb66",
       "bytes": 236
@@ -3991,8 +3996,8 @@
     },
     {
       "path": "runtime/IMPLEMENTATION-ROADMAP.md",
-      "sha256": "8d5291e156b188e6bfc652d0b7f0b65bdc7cdb53f5641cbbaedccdff74cee36f",
-      "bytes": 1704
+      "sha256": "8617409cbf0811d3bdf317c8c4d1ab36164a44dad8630eaf3330715e235f9b29",
+      "bytes": 2053
     },
     {
       "path": "runtime/MARSHAL-CLI.md",
@@ -4016,8 +4021,8 @@
     },
     {
       "path": "runtime/README.md",
-      "sha256": "6f9a4213fb86bc01bc3c10c60e89e99c82aef0ceb5ff75adc48b8f2f9153641b",
-      "bytes": 2572
+      "sha256": "1e14c85097877fb258b9ab51491c9ee4ff3394e5815e389df698bf9ecb537c2f",
+      "bytes": 3112
     },
     {
       "path": "runtime/RECONCILIATION.md",

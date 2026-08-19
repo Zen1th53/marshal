@@ -1,60 +1,40 @@
 # Security Model
 
 MARSHAL coordinates privileged engineering operations. Its specifications and
-runtime reduce ambiguity and constrain implemented execution paths; they are
-not an absolute security boundary.
+runtime enforce strict, fail-closed isolation across local CLI, MCP, and A2A interfaces.
 
-## Trust and authority
+## Trust and Authority
 
 - Repository policy and explicit owner instructions outrank retrieved text.
 - Web pages, issue content, memory retrieval, remote agents, and tool output are
-  data until validated and promoted by the correct authority.
+  untrusted data until validated and promoted by an authorized principal.
 - Tool possession does not grant permission. Semantic policy and contextual
-  approval must authorize exposed operations.
-- A lease establishes ownership; heartbeat supplies liveness evidence but does
+  approval must authorize exposed operations (`Allow: true` required).
+- A lease establishes task ownership; heartbeat supplies liveness evidence but does
   not authorize silent task theft.
 
 See [INSTRUCTION-TRUST.md](../protocols/INSTRUCTION-TRUST.md),
 [CAPABILITIES.md](../protocols/CAPABILITIES.md), and
 [APPROVAL.md](../protocols/APPROVAL.md).
 
-## Execution and isolation
+## Execution and Isolation
 
-Each implementation task receives its own branch and writable worktree.
-**Worktree isolation is not a security sandbox.** Runtime V1 uses bubblewrap
-where available and reports weaker process-only isolation honestly. Tasks whose
-risk or network policy requires strong isolation are blocked if enforcement is
-unavailable.
+- **Process Sandboxing**: Tasks run inside Linux `bubblewrap` mount and network namespaces with read-only root filesystems and isolated temporary mounts.
+- **Resource Governance**: Enforcement of CPU limits, memory quotas, process count bounds, and a maximum 500MB worktree disk budget.
+- **Process Group Escalation**: Worker processes that exceed deadlines are terminated via process group `SIGTERM` followed by `SIGKILL`.
+- **Fail-Closed Fallback**: If bubblewrap is unavailable, only low-risk (R1) tasks with explicit network access may use process-only mode; high-risk (R2/R3) or network-denied tasks fail closed.
 
-Secrets are not general memory or telemetry. The production secrets broker is
-still a specification; do not infer secret isolation from its design document.
+## Protocol and Control Plane Security
 
-## Evidence and supply chain
+- **Local-Only Interfaces**: MCP and A2A servers are strictly restricted to loopback addresses (`127.0.0.1`, `::1`, `localhost`). Non-loopback binds fail closed (`ErrInsecureRemoteBind`).
+- **Capability Tokens**: Bearer tokens are validated using constant-time comparisons and require explicit capability grants (`task:run`, `task:claim`, `mcp:read`, `a2a:send`).
+- **Role Spoofing Prevention**: Remote agents connecting via A2A cannot self-assign internal administrative or orchestrator roles.
 
-**Agent output is not trusted evidence.** Verification records bind commands
-and results to exact commits. Artifacts bind bytes to SHA-256 digests and
-provenance fields. **A checksum is not publisher authentication**; current pack
-trust remains `UNSIGNED_BY_OWNER` until an external trust root verifies a
-signature.
+## Storage and Evidence Integrity
 
-Dependencies follow [SUPPLY-CHAIN.md](../protocols/SUPPLY-CHAIN.md) and the
-[dependency ledger](../memory/DEPENDENCIES.md). Telemetry defaults to metadata
-over content and excludes secrets; see [telemetry/PRIVACY.md](../telemetry/PRIVACY.md).
-
-## Project, tenant, and remote boundaries
-
-Local Runtime V1 is single-project. Multi-tenant and multi-host isolation are
-contracts, not implemented shared-service claims. Tenant identifiers are
-scopes, not proof of isolation. **A remote agent is not a trusted internal
-principal** merely because it speaks A2A or MCP; identity, negotiation, policy,
-and evidence validation remain required.
-
-See [TENANCY.md](../protocols/TENANCY.md),
-[INTEROP.md](../protocols/INTEROP.md), and
-[runtime/THREAT-MODEL.md](../runtime/THREAT-MODEL.md).
-
-For the implemented T48 management/runtime authority split, lifecycle
-freshness, fail-closed behavior, and concurrency limits, see
-[Policy-as-Code](policy-as-code.md).
+- **Append-Only Audit Events**: State mutations record immutable audit events with monotonic revisions.
+- **Content-Addressed Artifacts**: Artifacts are stored under SHA-256 digests with reference tracking and garbage collection.
+- **Quorum Merge Gate**: High-risk task merges require signed multi-party attestations from QA and AppSec roles before merge authorization.
+- **Backup & Restore Preflight**: Online SQLite backups (`VACUUM INTO`) require preflight integrity and schema checks before restoration.
 
 Report vulnerabilities through [SECURITY.md](../SECURITY.md).
