@@ -2475,6 +2475,16 @@
       "bytes": 3327
     },
     {
+      "path": "internal/memory/security/poisoning/detector.go",
+      "sha256": "6f7537fc6839749407d0548e55dac0ad5bcae083e50a38c715c90aab1cd2e268",
+      "bytes": 3536
+    },
+    {
+      "path": "internal/memory/security/poisoning/detector_test.go",
+      "sha256": "bd3916f59e357fdbc15aae7ec443df00e1ba5587f4ef81337222cc1bbb0f92d8",
+      "bytes": 2095
+    },
+    {
       "path": "internal/memory/security/retrieved_content.go",
       "sha256": "9ceadb42169b341af5bf22a8853179bf470087f508b600b9e0b4f2b6a33ccb4d",
       "bytes": 1842
