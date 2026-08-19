@@ -705,6 +705,16 @@
       "bytes": 207
     },
     {
+      "path": "conformance/memory/benchmark_runner.go",
+      "sha256": "743d293934117c0f4c78ffeddaf5bf27931d5b641d628ed51fe40b689c942128",
+      "bytes": 1891
+    },
+    {
+      "path": "conformance/memory/benchmark_test.go",
+      "sha256": "467c1988871258e1ffc5c5867f2ff1e5f395c7a1ecdf6e365113eb8ca70b4f88",
+      "bytes": 886
+    },
+    {
       "path": "conformance/runner.py",
       "sha256": "1e3486798600f3f5dc1a4c25c30dd74ec1cba18df6b5f1de147a87c31c5c74c5",
       "bytes": 5263
@@ -908,6 +918,11 @@
       "path": "docs/mcp.md",
       "sha256": "6f3ed676dace2bc621d603a2b2506acdb7bd86ebac586750e5ed7ad1ef164a87",
       "bytes": 2584
+    },
+    {
+      "path": "docs/memory/benchmark.md",
+      "sha256": "028894b342c68af6ae1bb6da09610029e6799f9679c288cb03e04d57787b873f",
+      "bytes": 798
     },
     {
       "path": "docs/memory/cli.md",
