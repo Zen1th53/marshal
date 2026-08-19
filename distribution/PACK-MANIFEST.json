@@ -2000,6 +2000,11 @@
       "bytes": 1554
     },
     {
+      "path": "internal/integration/resource_governance_test.go",
+      "sha256": "05ddd6a09698cbdcc6af931115c13f2d3f6d9e921080192250de3292dfcf0b05",
+      "bytes": 3957
+    },
+    {
       "path": "internal/integration/sandbox_credential_isolation_test.go",
       "sha256": "354ae0c07a4062e58d3512239cbccb27021f7d5db2d05232f0f455b4d20e23a7",
       "bytes": 2874
@@ -2586,13 +2591,13 @@
     },
     {
       "path": "internal/scheduler/engine.go",
-      "sha256": "d34f0e17bd8ba07a2e4112eedb0d577fc55736a7c4d96763f4ece86b8f9b62c4",
-      "bytes": 974
+      "sha256": "40c72352852ae508423a4d7ae8f3d1495e90cc9db68ecf7bb14e35daaabb907c",
+      "bytes": 3792
     },
     {
       "path": "internal/scheduler/engine_test.go",
-      "sha256": "2ee32971965a3bb9b3da1f4314b173920c2b048bd478c144d989e36ef0c50b20",
-      "bytes": 362
+      "sha256": "ea70dd6ffbc29a4c70079b4158dcc63b863141172087c3a13f68b6dc07fd75df",
+      "bytes": 4039
     },
     {
       "path": "internal/scheduler/types.go",
