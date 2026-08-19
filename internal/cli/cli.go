@@ -8,8 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
-	"os"
+		"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -670,6 +669,9 @@ func (c command) mcp(ctx context.Context, args []string) error {
 		if err := flags.Parse(args[1:]); err != nil {
 			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
 		}
+		if *insecure && !isLoopbackAddr(*listen) {
+			return fmt.Errorf("%w: --insecure mode is forbidden on non-loopback address %s", model.ErrInvalid, *listen)
+		}
 
 		runtime, err := app.Open(ctx, c.root)
 		if err != nil {
@@ -679,9 +681,6 @@ func (c command) mcp(ctx context.Context, args []string) error {
 
 		var srv *mcp.Server
 		if *insecure {
-			if !isLoopbackAddr(*listen) {
-				return fmt.Errorf("%w: --insecure mode is forbidden on non-loopback address %s", model.ErrInvalid, *listen)
-			}
 			fmt.Fprintln(c.stderr, "WARNING: Running MCP server in insecure mode on loopback (authentication disabled)")
 			srv = mcp.NewServer(runtime)
 		} else {
@@ -726,19 +725,54 @@ func (c command) a2a(ctx context.Context, args []string) error {
 	}
 	switch args[0] {
 	case "serve":
-		listen := "127.0.0.1:8081"
-		if len(args) >= 3 && args[1] == "--listen" {
-			listen = args[2]
+		flags := flag.NewFlagSet("a2a serve", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		listen := flags.String("listen", "127.0.0.1:8081", "listen address (host:port)")
+		insecure := flags.Bool("insecure", false, "allow unauthenticated execution (loopback only)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
 		}
+		if *insecure && !isLoopbackAddr(*listen) {
+			return fmt.Errorf("%w: --insecure mode is forbidden on non-loopback address %s", model.ErrInvalid, *listen)
+		}
+
 		runtime, err := app.Open(ctx, c.root)
 		if err != nil {
 			return err
 		}
 		defer runtime.Close()
-		srv := a2a.NewServer(runtime)
-		fmt.Fprintf(c.stdout, "Starting MARSHAL A2A server on http://%s\n", listen)
-		server := &http.Server{Addr: listen, Handler: srv.Handler()}
-		return server.ListenAndServe()
+
+		var srv *a2a.Server
+		if *insecure {
+			fmt.Fprintln(c.stderr, "WARNING: Running A2A server in insecure mode on loopback (authentication disabled)")
+			srv = a2a.NewServer(runtime)
+		} else {
+			layout, err := app.Bootstrap(ctx, c.root)
+			if err != nil {
+				return err
+			}
+			authMgr := auth.NewManager(layout.RuntimeDir)
+			srv = a2a.NewServerWithAuth(runtime, authMgr)
+		}
+
+		fmt.Fprintf(c.stdout, "Starting MARSHAL A2A server on http://%s\n", *listen)
+		server := httpsrv.NewServer(httpsrv.Config{
+			Addr:    *listen,
+			Handler: srv.Handler(),
+		})
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- server.ListenAndServe()
+		}()
+		select {
+		case <-ctx.Done():
+			shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = server.Shutdown(shutCtx)
+			return ctx.Err()
+		case err := <-errCh:
+			return err
+		}
 	case "status":
 		return c.print(map[string]any{
 			"status": "ready", "protocol_version": a2a.ProtocolVersion100,

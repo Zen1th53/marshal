@@ -7,11 +7,13 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/protocol"
+	"github.com/Zen1th53/marshal/internal/ratelimit"
 )
 
 const (
@@ -20,16 +22,30 @@ const (
 )
 
 type Server struct {
-	runtime     *app.Runtime
-	authManager *auth.Manager
+	runtime            *app.Runtime
+	authManager        *auth.Manager
+	rateLimiter        *ratelimit.RateLimiter
+	concurrencyLimiter *ratelimit.ConcurrencyLimiter
+	idempotencyStore   *ratelimit.IdempotencyStore
 }
 
 func NewServer(runtime *app.Runtime) *Server {
-	return &Server{runtime: runtime}
+	return &Server{
+		runtime:            runtime,
+		rateLimiter:        ratelimit.NewRateLimiter(50, 100, 10*time.Minute),
+		concurrencyLimiter: ratelimit.NewConcurrencyLimiter(50),
+		idempotencyStore:   ratelimit.NewIdempotencyStore(10 * time.Minute),
+	}
 }
 
 func NewServerWithAuth(runtime *app.Runtime, authManager *auth.Manager) *Server {
-	return &Server{runtime: runtime, authManager: authManager}
+	return &Server{
+		runtime:            runtime,
+		authManager:        authManager,
+		rateLimiter:        ratelimit.NewRateLimiter(50, 100, 10*time.Minute),
+		concurrencyLimiter: ratelimit.NewConcurrencyLimiter(50),
+		idempotencyStore:   ratelimit.NewIdempotencyStore(10 * time.Minute),
+	}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -137,6 +153,7 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
+	var caller auth.Principal
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -151,7 +168,8 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-		caller, err := s.authManager.Authenticate(token)
+		var err error
+		caller, err = s.authManager.Authenticate(token)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/a2a+json")
 			w.WriteHeader(http.StatusUnauthorized)
@@ -170,6 +188,18 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "FORBIDDEN", "detail": "Missing required capability: task.execute"})
 			return
 		}
+	}
+
+	limitKey := "anonymous"
+	if s.authManager != nil {
+		limitKey = caller.ID
+	}
+	if allowed, retryAfter := s.rateLimiter.Allow(limitKey); !allowed {
+		w.Header().Set("Content-Type", "application/a2a+json")
+		w.Header().Set("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "TOO_MANY_REQUESTS", "detail": "Rate limit exceeded"})
+		return
 	}
 
 	// Validate A2A-Version header if provided
@@ -281,7 +311,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	successResp, _ := json.Marshal(map[string]any{
 		"task_id":    taskID,
 		"message_id": req.Message.MessageID,
 		"state":      "TASK_STATE_COMPLETED",
@@ -293,9 +323,14 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	})
+	if req.Message.MessageID != "" {
+		s.idempotencyStore.Set(req.Message.MessageID, successResp)
+	}
+	_, _ = w.Write(successResp)
 }
 
 func (s *Server) handleTaskDelegation(w http.ResponseWriter, r *http.Request) {
+	var caller auth.Principal
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -308,7 +343,8 @@ func (s *Server) handleTaskDelegation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-		caller, err := s.authManager.Authenticate(token)
+		var err error
+		caller, err = s.authManager.Authenticate(token)
 		if err != nil {
 			http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 			return

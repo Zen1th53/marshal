@@ -1096,13 +1096,13 @@
     },
     {
       "path": "internal/a2a/a2a_test.go",
-      "sha256": "2afc9d8c01e10fbc41b915a97cd0140455692a1bc332c13c92f0abb51e564647",
-      "bytes": 15927
+      "sha256": "fe6d6b20d65e2c30033e582e2a8208db6b511a423d457ce021002dc016b6120c",
+      "bytes": 18425
     },
     {
       "path": "internal/a2a/server.go",
-      "sha256": "75ace614e78405bd2548b2d90dbd92aa3532395807d50ff06fd0e18aa88809cd",
-      "bytes": 12083
+      "sha256": "7dcb89c4e26db260551613f42bafa3852781f31535dd6c3b952205c8740d6bd6",
+      "bytes": 13404
     },
     {
       "path": "internal/adapter/adapter.go",
@@ -1651,8 +1651,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "32e8391252a48648de8787f5f50bd800361bdf050eeebdcb54ff0211205610a0",
-      "bytes": 26153
+      "sha256": "1acddf6a86dd6f45e112db967de44d2cc5e3bbb11bf8733bb8982c76c54a9a25",
+      "bytes": 27250
     },
     {
       "path": "internal/cli/cli_test.go",
@@ -1945,6 +1945,16 @@
       "bytes": 5291
     },
     {
+      "path": "internal/httpsrv/server.go",
+      "sha256": "510ab830548292aa382f9f8c545bff9fec9e4a66f666fe0cd94d57bfe79a4ecb",
+      "bytes": 2517
+    },
+    {
+      "path": "internal/httpsrv/server_test.go",
+      "sha256": "95c0cbe0f01266a27574f55ab7ed37e028755595f3cc68919886fd43268655eb",
+      "bytes": 3099
+    },
+    {
       "path": "internal/integration/claude_real_test.go",
       "sha256": "9c70d1f14e5ce95cdde26670764efda5aefaeffff6f86f1c4e5bc165e27e676b",
       "bytes": 1220
@@ -2046,13 +2056,13 @@
     },
     {
       "path": "internal/mcp/mcp_test.go",
-      "sha256": "488f952d2adab9fd8113d79e87321ebc80ac085fed21ec7d4e1502f3aa770ef0",
-      "bytes": 16801
+      "sha256": "a1b8748e71772cccec31ffe237de58cca70dcab33f82ea6fb5705cac35315a20",
+      "bytes": 18338
     },
     {
       "path": "internal/mcp/server.go",
-      "sha256": "5cd94678656c890ca7e986ec8d4cce4c5a90e19fc6b7245cbdd780c16f8ffeb3",
-      "bytes": 12005
+      "sha256": "bcafde9d1b2e272c28860368496fae926e996f914a10be71cea187e0024c2944",
+      "bytes": 12836
     },
     {
       "path": "internal/memory/decision/adversarial_test.go",

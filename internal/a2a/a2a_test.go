@@ -3,8 +3,10 @@ package a2a
 import (
 	"bytes"
 	"strings"
+	"time"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/httpsrv"
+	"github.com/Zen1th53/marshal/internal/ratelimit"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/protocol"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
@@ -367,20 +370,20 @@ func TestA2APrincipalKindIsolation(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	reqBody, _ := json.Marshal(map[string]any{
-		"message": map[string]any{
-			"message_id": "msg-test-1",
-			"role":       "ROLE_USER",
-			"parts": []map[string]string{
-				{"text": "hello normal user"},
-			},
+	taskReq := map[string]any{
+		"protocol_version": "1.0.0",
+		"sender_id":        "remote-agent-1",
+		"requested_role":   "developer",
+		"task": map[string]any{
+			"id":    "TASK-A2A-ISO",
+			"title": "A2A delegated task",
 		},
-	})
+	}
+	body, _ := json.Marshal(taskReq)
 
 	// 1. MCP Token attempting A2A call -> 403 Forbidden
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/a2a+json")
-	req.Header.Set("A2A-Version", "1.0")
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/a2a/tasks", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+mcpToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -391,10 +394,9 @@ func TestA2APrincipalKindIsolation(t *testing.T) {
 		t.Fatalf("expected 403 Forbidden for MCP token calling A2A, got %d", resp.StatusCode)
 	}
 
-	// 2. A2A Token -> 200 OK (or handled message response)
-	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/a2a+json")
-	req.Header.Set("A2A-Version", "1.0")
+	// 2. A2A Token -> 200 OK
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/a2a/tasks", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a2aToken)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -406,9 +408,8 @@ func TestA2APrincipalKindIsolation(t *testing.T) {
 	}
 
 	// 3. Local User Token -> 200 OK
-	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/a2a+json")
-	req.Header.Set("A2A-Version", "1.0")
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/a2a/tasks", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+localToken)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -423,9 +424,8 @@ func TestA2APrincipalKindIsolation(t *testing.T) {
 	if err := authMgr.RevokeToken(rec.ID); err != nil {
 		t.Fatal(err)
 	}
-	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/a2a+json")
-	req.Header.Set("A2A-Version", "1.0")
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/a2a/tasks", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a2aToken)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -458,19 +458,20 @@ func TestA2AActionLevelCapabilityAuthorization(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	// 1. Read-only token calling /message:send without task.execute capability -> 403 Forbidden
-	reqBody, _ := json.Marshal(map[string]any{
-		"message": map[string]any{
-			"message_id": "msg-test-cap",
-			"role":       "ROLE_USER",
-			"parts": []map[string]string{
-				{"text": "hello normal user"},
-			},
+	taskReq := map[string]any{
+		"protocol_version": "1.0.0",
+		"sender_id":        "remote-agent-1",
+		"requested_role":   "developer",
+		"task": map[string]any{
+			"id":    "TASK-A2A-CAP",
+			"title": "A2A delegated task",
 		},
-	})
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/a2a+json")
-	req.Header.Set("A2A-Version", "1.0")
+	}
+	body, _ := json.Marshal(taskReq)
+
+	// Read-only token calling /a2a/tasks without task.create capability -> 403 Forbidden
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/a2a/tasks", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+readOnlyToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -478,7 +479,85 @@ func TestA2AActionLevelCapabilityAuthorization(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("expected 403 Forbidden for missing task.execute capability, got %d", resp.StatusCode)
+		t.Fatalf("expected 403 Forbidden for missing task.create capability, got %d", resp.StatusCode)
+	}
+}
+
+func TestA2AMessageIdempotencyAndRateLimiting(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	srv := NewServer(runtime)
+	srv.rateLimiter = ratelimit.NewRateLimiter(1, 2, time.Minute) // 1 rps, burst 2
+	srv.idempotencyStore.Set("msg-cached-1", []byte(`{"status":"cached_result"}`))
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	reqBody, _ := json.Marshal(map[string]any{
+		"message": map[string]any{
+			"message_id": "msg-cached-1",
+			"role":       "ROLE_USER",
+			"parts": []map[string]string{
+				{"text": "idempotent test task"},
+			},
+		},
+	})
+
+	// 1. Request with cached message_id -> Returns cached idempotent response immediately
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body1, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for cached request, got %d", resp.StatusCode)
+	}
+	if resp.Header.Get("X-Idempotent-Replay") != "true" {
+		t.Fatal("expected X-Idempotent-Replay header for duplicate message_id")
+	}
+	if string(body1) != `{"status":"cached_result"}` {
+		t.Fatalf("expected cached payload, got %s", string(body1))
+	}
+
+	// 2. Second request (uses burst token 2) -> still returns cached response
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for 2nd request, got %d", resp.StatusCode)
+	}
+
+	// 3. Exhausted Rate Limit (3rd request) -> 429 Too Many Requests
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 Too Many Requests for rate limited request, got %d", resp.StatusCode)
+	}
+	if resp.Header.Get("Retry-After") == "" {
+		t.Fatal("expected Retry-After header in 429 response")
 	}
 }
 

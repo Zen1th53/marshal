@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"strings"
+	"time"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/httpsrv"
+	"github.com/Zen1th53/marshal/internal/ratelimit"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -576,5 +578,54 @@ func TestMCPOversizedBodyAndMalformedJSON(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Fatalf("expected 413 for oversized body, got %d", resp.StatusCode)
+	}
+}
+
+func TestMCPRateLimiting(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	srv := NewServer(runtime)
+	srv.rateLimiter = ratelimit.NewRateLimiter(1, 2, time.Minute) // 1 rps, burst 2
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	reqBody, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/list",
+	})
+
+	// Request 1: OK
+	resp, err := http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for 1st request, got %v / %d", err, resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// Request 2: OK (burst)
+	resp, err = http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for 2nd request, got %v / %d", err, resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// Request 3: 429 Too Many Requests
+	resp, err = http.Post(ts.URL, "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 Too Many Requests for 3rd request, got %d", resp.StatusCode)
+	}
+	if resp.Header.Get("Retry-After") == "" {
+		t.Fatal("expected Retry-After header in 429 response")
 	}
 }

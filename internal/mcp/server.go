@@ -7,25 +7,38 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/ratelimit"
 )
 
 const ProtocolVersion2026 = "2026-07-28"
 
 type Server struct {
-	runtime     *app.Runtime
-	authManager *auth.Manager
+	runtime            *app.Runtime
+	authManager        *auth.Manager
+	rateLimiter        *ratelimit.RateLimiter
+	concurrencyLimiter *ratelimit.ConcurrencyLimiter
 }
 
 func NewServer(runtime *app.Runtime) *Server {
-	return &Server{runtime: runtime}
+	return &Server{
+		runtime:            runtime,
+		rateLimiter:        ratelimit.NewRateLimiter(50, 100, 10*time.Minute),
+		concurrencyLimiter: ratelimit.NewConcurrencyLimiter(50),
+	}
 }
 
 func NewServerWithAuth(runtime *app.Runtime, authManager *auth.Manager) *Server {
-	return &Server{runtime: runtime, authManager: authManager}
+	return &Server{
+		runtime:            runtime,
+		authManager:        authManager,
+		rateLimiter:        ratelimit.NewRateLimiter(50, 100, 10*time.Minute),
+		concurrencyLimiter: ratelimit.NewConcurrencyLimiter(50),
+	}
 }
 
 type jsonRPCRequest struct {
@@ -83,6 +96,16 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 			s.writeErrorWithStatus(w, nil, http.StatusForbidden, -32001, fmt.Sprintf("Forbidden: principal kind %q is not authorized for MCP", callerPrincipal.Kind))
 			return
 		}
+	}
+
+	limitKey := "anonymous"
+	if callerPrincipal.ID != "" {
+		limitKey = callerPrincipal.ID
+	}
+	if allowed, retryAfter := s.rateLimiter.Allow(limitKey); !allowed {
+		w.Header().Set("Retry-After", fmt.Sprintf("%.0f", retryAfter.Seconds()))
+		s.writeErrorWithStatus(w, nil, http.StatusTooManyRequests, -32000, "Too Many Requests: Rate limit exceeded")
+		return
 	}
 
 	// 1. Validate MCP-Protocol-Version header if present
