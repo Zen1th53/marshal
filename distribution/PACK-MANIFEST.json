@@ -2195,6 +2195,16 @@
       "bytes": 220
     },
     {
+      "path": "internal/memory/embedding/embedder.go",
+      "sha256": "6bb666e1a2eeb17181e7a6ad58f80779fce932eb2d4e9cc288842dfa6a7545a8",
+      "bytes": 3217
+    },
+    {
+      "path": "internal/memory/embedding/embedder_test.go",
+      "sha256": "8155a636fc8995a58357ae1f77dc1723bdf4472f40d49f7f648099ba0b1787d5",
+      "bytes": 1777
+    },
+    {
       "path": "internal/memory/episode/capture.go",
       "sha256": "ff573ecaa322ca99eb1ec418e8c72b83fa78ecb0d0a72c43cf6b4d87bf6af4ce",
       "bytes": 3724
