@@ -457,3 +457,85 @@ func TestMCPPrincipalKindIsolation(t *testing.T) {
 		t.Fatalf("expected 200 OK for Local User token, got %d", resp.StatusCode)
 	}
 }
+
+func TestMCPActionLevelCapabilityAuthorization(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	authMgr := auth.NewManager(t.TempDir())
+	readOnlyToken, _, err := authMgr.CreateToken("readonly-client", auth.KindMCPClient, []string{string(auth.CapStatusRead)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskToken, _, err := authMgr.CreateToken("task-client", auth.KindMCPClient, []string{string(auth.CapTaskRead), string(auth.CapTaskExecute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServerWithAuth(runtime, authMgr)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// 1. Read-only token calling marshal_status -> 200 OK
+	reqBody, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]any{"name": "marshal_status", "arguments": map[string]any{}},
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+readOnlyToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for allowed status.read, got %d", resp.StatusCode)
+	}
+
+	// 2. Read-only token calling task_run -> 403 Forbidden
+	runBody, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+		"params": map[string]any{
+			"name": "task_run",
+			"arguments": map[string]any{"task_id": "TASK-1", "agent_id": "AGENT-1"},
+		},
+	})
+	req, _ = http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(runBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+readOnlyToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for missing task.execute capability, got %d", resp.StatusCode)
+	}
+
+	// 3. Task token calling task_get -> 200 OK
+	taskBody, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+		"params": map[string]any{
+			"name": "tasks_list", "arguments": map[string]any{},
+		},
+	})
+	req, _ = http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader(taskBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+taskToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for task.read capability, got %d", resp.StatusCode)
+	}
+}

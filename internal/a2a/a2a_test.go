@@ -434,3 +434,48 @@ func TestA2APrincipalKindIsolation(t *testing.T) {
 		t.Fatalf("expected 401 Unauthorized for revoked token, got %d", resp.StatusCode)
 	}
 }
+
+func TestA2AActionLevelCapabilityAuthorization(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	authMgr := auth.NewManager(t.TempDir())
+	readOnlyToken, _, err := authMgr.CreateToken("readonly-agent", auth.KindA2AAgent, []string{string(auth.CapStatusRead)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := NewServerWithAuth(runtime, authMgr)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// 1. Read-only token calling /message:send without task.execute capability -> 403 Forbidden
+	reqBody, _ := json.Marshal(map[string]any{
+		"message": map[string]any{
+			"message_id": "msg-test-cap",
+			"role":       "ROLE_USER",
+			"parts": []map[string]string{
+				{"text": "hello normal user"},
+			},
+		},
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/message:send", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/a2a+json")
+	req.Header.Set("A2A-Version", "1.0")
+	req.Header.Set("Authorization", "Bearer "+readOnlyToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for missing task.execute capability, got %d", resp.StatusCode)
+	}
+}

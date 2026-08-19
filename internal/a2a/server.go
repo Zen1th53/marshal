@@ -76,7 +76,11 @@ func (s *Server) handleTypedHandoff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role := protocol.RoleDeveloper
-	if caller.Kind != auth.KindA2AAgent {
+	if caller.Kind != auth.KindA2AAgent && caller.Kind != auth.KindLocalUser {
+		writeHandoffError(w, http.StatusForbidden, protocol.CodeAuthorization)
+		return
+	}
+	if !caller.HasCapability(auth.CapHandoffCreate) {
 		writeHandoffError(w, http.StatusForbidden, protocol.CodeAuthorization)
 		return
 	}
@@ -152,6 +156,12 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/a2a+json")
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "FORBIDDEN", "detail": fmt.Sprintf("Forbidden: principal kind %q is not authorized for A2A", caller.Kind)})
+			return
+		}
+		if !caller.HasCapability(auth.CapTaskExecute) && !caller.HasCapability(auth.CapTaskRead) {
+			w.Header().Set("Content-Type", "application/a2a+json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "FORBIDDEN", "detail": "Missing required capability: task.execute"})
 			return
 		}
 	}
@@ -299,6 +309,10 @@ func (s *Server) handleTaskDelegation(w http.ResponseWriter, r *http.Request) {
 		}
 		if caller.Kind != auth.KindA2AAgent && caller.Kind != auth.KindLocalUser {
 			http.Error(w, fmt.Sprintf("Forbidden: principal kind %q is not authorized for A2A", caller.Kind), http.StatusForbidden)
+			return
+		}
+		if !caller.HasCapability(auth.CapTaskCreate) && !caller.HasCapability(auth.CapTaskExecute) {
+			http.Error(w, "Forbidden: missing required capability: task.create", http.StatusForbidden)
 			return
 		}
 	}

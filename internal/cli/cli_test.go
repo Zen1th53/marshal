@@ -322,3 +322,33 @@ func TestMCPA2AServerInsecureRemoteBindRejection(t *testing.T) {
 		t.Fatalf("unexpected error message: %v", err)
 	}
 }
+
+func TestCLITokenCreationCapabilitiesValidation(t *testing.T) {
+	repo := cliRepo(t)
+	dir := repo.Path()
+	var stdout, stderr bytes.Buffer
+	c := command{
+		root:   dir,
+		stdout: &stdout,
+		stderr: &stderr,
+	}
+
+	// 1. Unknown capability should fail closed
+	err := c.auth(context.Background(), []string{"token", "create", "--name", "bad-token", "--capabilities", "task.read,invalid.superpower"})
+	if err == nil {
+		t.Fatal("expected error for unknown capability, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown capability") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+
+	// 2. Valid explicit capabilities should succeed
+	stdout.Reset()
+	err = c.auth(context.Background(), []string{"token", "create", "--name", "good-token", "--kind", "mcp_client", "--capabilities", "status.read,task.read"})
+	if err != nil {
+		t.Fatalf("unexpected error for valid capabilities: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "TOKEN-") {
+		t.Fatalf("expected token ID in output, got: %s", stdout.String())
+	}
+}

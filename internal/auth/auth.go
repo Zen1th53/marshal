@@ -221,3 +221,83 @@ func RedactSecrets(content []byte, secrets []string) []byte {
 	}
 	return result
 }
+
+type Capability string
+
+const (
+	CapAll           Capability = "all"
+	CapStatusRead    Capability = "status.read"
+	CapTaskRead      Capability = "task.read"
+	CapTaskCreate    Capability = "task.create"
+	CapTaskExecute   Capability = "task.execute"
+	CapTaskCancel    Capability = "task.cancel"
+	CapVerifyRun     Capability = "verify.run"
+	CapAgentRead     Capability = "agent.read"
+	CapAgentRegister Capability = "agent.register"
+	CapHandoffCreate Capability = "handoff.create"
+	CapHandoffRead   Capability = "handoff.read"
+	CapEvidenceRead  Capability = "evidence.read"
+)
+
+var KnownCapabilities = map[Capability]bool{
+	CapAll:           true,
+	CapStatusRead:    true,
+	CapTaskRead:      true,
+	CapTaskCreate:    true,
+	CapTaskExecute:   true,
+	CapTaskCancel:    true,
+	CapVerifyRun:     true,
+	CapAgentRead:     true,
+	CapAgentRegister: true,
+	CapHandoffCreate: true,
+	CapHandoffRead:   true,
+	CapEvidenceRead:  true,
+}
+
+func ValidateCapabilities(caps []string) ([]string, error) {
+	if len(caps) == 0 {
+		return nil, errors.New("capabilities list cannot be empty")
+	}
+	var validated []string
+	seen := make(map[string]bool)
+	for _, c := range caps {
+		trimmed := strings.ToLower(strings.TrimSpace(c))
+		if trimmed == "" {
+			continue
+		}
+		if !KnownCapabilities[Capability(trimmed)] {
+			return nil, fmt.Errorf("unknown capability: %q", trimmed)
+		}
+		if !seen[trimmed] {
+			seen[trimmed] = true
+			validated = append(validated, trimmed)
+		}
+	}
+	if len(validated) == 0 {
+		return nil, errors.New("no valid capabilities specified")
+	}
+	return validated, nil
+}
+
+func (p Principal) HasCapability(required Capability) bool {
+	for _, capStr := range p.Capabilities {
+		c := Capability(strings.TrimSpace(capStr))
+		if c == CapAll || c == required {
+			return true
+		}
+	}
+	return false
+}
+
+func DefaultCapabilitiesForKind(kind PrincipalKind) []string {
+	switch kind {
+	case KindMCPClient:
+		return []string{string(CapStatusRead), string(CapTaskRead), string(CapAgentRead), string(CapEvidenceRead)}
+	case KindA2AAgent:
+		return []string{string(CapStatusRead), string(CapTaskRead), string(CapHandoffCreate), string(CapHandoffRead)}
+	case KindLocalUser:
+		return []string{string(CapAll)}
+	default:
+		return []string{string(CapStatusRead)}
+	}
+}

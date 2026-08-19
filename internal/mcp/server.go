@@ -59,6 +59,7 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
+	var callerPrincipal auth.Principal
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -71,13 +72,14 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		token := strings.TrimPrefix(authHeader, "Bearer ")
-		caller, err := s.authManager.Authenticate(token)
+		var err error
+		callerPrincipal, err = s.authManager.Authenticate(token)
 		if err != nil {
 			s.writeErrorWithStatus(w, nil, http.StatusUnauthorized, -32001, "Unauthorized: "+err.Error())
 			return
 		}
-		if caller.Kind != auth.KindMCPClient && caller.Kind != auth.KindLocalUser {
-			s.writeErrorWithStatus(w, nil, http.StatusForbidden, -32001, fmt.Sprintf("Forbidden: principal kind %q is not authorized for MCP", caller.Kind))
+		if callerPrincipal.Kind != auth.KindMCPClient && callerPrincipal.Kind != auth.KindLocalUser {
+			s.writeErrorWithStatus(w, nil, http.StatusForbidden, -32001, fmt.Sprintf("Forbidden: principal kind %q is not authorized for MCP", callerPrincipal.Kind))
 			return
 		}
 	}
@@ -140,6 +142,13 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 		if nameHeader := r.Header.Get("Mcp-Name"); nameHeader != "" && nameHeader != params.Name {
 			s.writeErrorWithStatus(w, req.ID, http.StatusBadRequest, -32600, fmt.Sprintf("Header Mcp-Name (%s) does not match params.name (%s)", nameHeader, params.Name))
 			return
+		}
+		if s.authManager != nil {
+			reqCap := requiredCapabilityForTool(params.Name)
+			if !callerPrincipal.HasCapability(reqCap) {
+				s.writeErrorWithStatus(w, req.ID, http.StatusForbidden, -32003, fmt.Sprintf("Forbidden: principal %q lacks required capability %q for tool %q", callerPrincipal.Name, reqCap, params.Name))
+				return
+			}
 		}
 		res, err := s.callTool(ctx, params.Name, params.Arguments)
 		if err != nil {
@@ -355,4 +364,25 @@ func (s *Server) writeError(w http.ResponseWriter, id any, code int, message str
 	_ = json.NewEncoder(w).Encode(jsonRPCResponse{
 		JSONRPC: "2.0", ID: id, Error: &rpcErr{Code: code, Message: message},
 	})
+}
+
+func requiredCapabilityForTool(toolName string) auth.Capability {
+	switch toolName {
+	case "marshal_status":
+		return auth.CapStatusRead
+	case "tasks_list", "task_get":
+		return auth.CapTaskRead
+	case "task_claim", "task_release":
+		return auth.CapTaskExecute
+	case "task_run":
+		return auth.CapTaskExecute
+	case "agents_list":
+		return auth.CapAgentRead
+	case "events_list", "artifacts_list":
+		return auth.CapEvidenceRead
+	case "verification_status":
+		return auth.CapVerifyRun
+	default:
+		return auth.CapAll
+	}
 }

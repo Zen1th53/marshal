@@ -770,23 +770,35 @@ func (c command) auth(ctx context.Context, args []string) error {
 		flags.SetOutput(c.stderr)
 		name := flags.String("name", "", "token name")
 		kind := flags.String("kind", "mcp_client", "principal kind (mcp_client|a2a_agent|local_user)")
+		caps := flags.String("capabilities", "", "comma-separated capabilities or 'all'")
 		if err := flags.Parse(args[2:]); err != nil {
 			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
 		}
 		if *name == "" {
 			return fmt.Errorf("%w: --name is required", model.ErrInvalid)
 		}
-		plaintext, record, err := mgr.CreateToken(*name, auth.PrincipalKind(*kind), []string{"all"})
+		var requestedCaps []string
+		if *caps != "" {
+			requestedCaps = strings.Split(*caps, ",")
+		} else {
+			requestedCaps = auth.DefaultCapabilitiesForKind(auth.PrincipalKind(*kind))
+		}
+		validatedCaps, err := auth.ValidateCapabilities(requestedCaps)
+		if err != nil {
+			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
+		plaintext, record, err := mgr.CreateToken(*name, auth.PrincipalKind(*kind), validatedCaps)
 		if err != nil {
 			return err
 		}
 		return c.print(map[string]any{
-			"id":      record.ID,
-			"name":    record.Name,
-			"kind":    record.Kind,
-			"token":   plaintext,
-			"created": record.CreatedAt,
-		}, fmt.Sprintf("Created Token ID: %s\nPlaintext Token: %s\n(Keep this token secret; it will not be shown again)", record.ID, plaintext))
+			"id":           record.ID,
+			"name":         record.Name,
+			"kind":         record.Kind,
+			"capabilities": record.Capabilities,
+			"token":        plaintext,
+			"created":      record.CreatedAt,
+		}, fmt.Sprintf("Created Token ID: %s\nPrincipal: %s (%s)\nCapabilities: %s\nPlaintext Token: %s\n(Keep this token secret; it will not be shown again)", record.ID, record.Name, record.Kind, strings.Join(record.Capabilities, ", "), plaintext))
 
 	case "list":
 		tokens, err := mgr.ListTokens()
