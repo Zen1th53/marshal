@@ -749,6 +749,13 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			runErr = fmt.Errorf("%w: worker produced no commit", model.ErrConflict)
 		}
 	}
+
+	const maxWorktreeDiskBudget = 500 << 20
+	if currentSize, sizeErr := worktree.CalculateDirectorySize(worktreeState.Path); sizeErr == nil {
+		if currentSize > maxWorktreeDiskBudget {
+			runErr = fmt.Errorf("%w: task worktree size %d bytes exceeds disk budget %d bytes", model.ErrConflict, currentSize, maxWorktreeDiskBudget)
+		}
+	}
 	resultCommit := baseCommit
 	if inspectErr == nil {
 		resultCommit = state.HEAD
@@ -1002,4 +1009,9 @@ func (runtimeCapabilityAuthority) AuthorizeGrant(context.Context, capability.Gra
 
 func (runtimeCapabilityAuthority) AuthorizeRevoke(context.Context, capability.RevokeRequest, capability.Grant) error {
 	return nil
+}
+
+// CalculateDirectorySize returns total recursive file size in bytes for the specified directory path.
+func CalculateDirectorySize(path string) (int64, error) {
+	return worktree.CalculateDirectorySize(path)
 }

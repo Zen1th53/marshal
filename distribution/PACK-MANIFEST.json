@@ -1406,8 +1406,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "4cb9b3f2f0793f25823f3dc5c87e8dbb0f0ccbc2c75a8507685f6f0f5392c05a",
-      "bytes": 36444
+      "sha256": "84d0932b21edc9ef1aef1ea1d325f640e3b63f82c845b61eaefe29c2bb347cfe",
+      "bytes": 36986
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1998,6 +1998,11 @@
       "path": "internal/integration/reconciliation_test.go",
       "sha256": "a0deb4976623fbb1f6547e52c0e5f8446c4422297a15aff53ee4e382db44bd90",
       "bytes": 1554
+    },
+    {
+      "path": "internal/integration/sandbox_credential_isolation_test.go",
+      "sha256": "354ae0c07a4062e58d3512239cbccb27021f7d5db2d05232f0f455b4d20e23a7",
+      "bytes": 2874
     },
     {
       "path": "internal/integration/security_test.go",
@@ -3501,8 +3506,8 @@
     },
     {
       "path": "internal/worktree/manager.go",
-      "sha256": "05e95cdba8118dd8c4f5b010808efc292c727a65a9d366282ba046b0d1833657",
-      "bytes": 6053
+      "sha256": "80d2944af69ef4ad9ef4a32c5c14ac70b42c01c4019e0d74b10f07b66bd28421",
+      "bytes": 6441
     },
     {
       "path": "internal/worktree/manager_test.go",

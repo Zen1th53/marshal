@@ -171,3 +171,18 @@ func pathWithin(root, candidate string) bool {
 	relative, err := filepath.Rel(rootAbsolute, candidateAbsolute)
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
+
+// CalculateDirectorySize returns the total file size in bytes for the specified directory path.
+func CalculateDirectorySize(path string) (int64, error) {
+	var totalSize int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			totalSize += info.Size()
+		}
+		return nil
+	})
+	return totalSize, err
+}
