@@ -2245,6 +2245,16 @@
       "bytes": 2527
     },
     {
+      "path": "internal/memory/index/graph/graph_index.go",
+      "sha256": "cef3efe1683a8a68580ffdd805b1e61b8f2b7bb7552cda1277eefb5859b06f54",
+      "bytes": 3180
+    },
+    {
+      "path": "internal/memory/index/graph/graph_index_test.go",
+      "sha256": "e4c1a213677dd518e380619b03429d6a1ffbaf5cf1365c90c3b683768d3db5bd",
+      "bytes": 2825
+    },
+    {
       "path": "internal/memory/index/lexical/indexer.go",
       "sha256": "10c67088db0a69e8740ffd5767d48e680a8b62670637dd8f319db7456f34f835",
       "bytes": 3871
