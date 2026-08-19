@@ -2460,6 +2460,16 @@
       "bytes": 2397
     },
     {
+      "path": "internal/memory/governance/multiprincipal.go",
+      "sha256": "43d339be8c9ec2bc928aa1864531e830a081ae8e88f01c2ff715fa8b4ede559d",
+      "bytes": 1768
+    },
+    {
+      "path": "internal/memory/governance/multiprincipal_test.go",
+      "sha256": "dd0c70604469dfb25be91ce5d0593f24e78063f759acf4e3950e04dd3628963c",
+      "bytes": 1935
+    },
+    {
       "path": "internal/memory/hooks/recall_hook.go",
       "sha256": "d4320e6d8a685144f05117d96c1c3ed3537d0084215b27379ae14d1e79bf9b87",
       "bytes": 2240
