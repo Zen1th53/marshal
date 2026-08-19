@@ -1406,8 +1406,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "1b16a53460c95044e009c28fabe27bd8a6b16cb84646ab4db2c696d3ec10084f",
-      "bytes": 40041
+      "sha256": "212755c9848849aebe8a1cf6ad20fe3a10254f925f3915b5dec4ee6c7024f12b",
+      "bytes": 40572
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1426,8 +1426,8 @@
     },
     {
       "path": "internal/artifact/store.go",
-      "sha256": "59d4228e10f0ddcf73659296cba8c0d0808da3f5d3c4b645db60229af431f50d",
-      "bytes": 3953
+      "sha256": "88da7be51f19bead1e6d661ccfba36e1bf418e06760ce00dade93901dae8dd0c",
+      "bytes": 7196
     },
     {
       "path": "internal/artifact/store_test.go",
@@ -1651,13 +1651,13 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "9801011e3b3c18f7fdadce5bf7daf7e0c428b284ac6000a671b56b1d615183d5",
-      "bytes": 28529
+      "sha256": "3da0a815bb8a700fc0076b6f3688057d6bac498ad197f499e513479d3ddcadd5",
+      "bytes": 29668
     },
     {
       "path": "internal/cli/cli_test.go",
-      "sha256": "589b78232ce10199d0db2dbee8380ca4032a92fd2771813d6dfcfd47e3612b4b",
-      "bytes": 14375
+      "sha256": "6d3c7d60b569308abcfe20e8e86700ebd8eb9a9ff5c43024736af1c11a8f0433",
+      "bytes": 15027
     },
     {
       "path": "internal/cli/policy_test_a10_release_test.go",
@@ -3191,8 +3191,8 @@
     },
     {
       "path": "internal/store/query.go",
-      "sha256": "8939e118fa83aa7c098b3cc90ea54fba30151dc4003890cf89be8e1966f3da24",
-      "bytes": 7522
+      "sha256": "87f61f85088c5dfb602a89baf53f753fcf5c743888408b6a06903c417cdfa1a2",
+      "bytes": 8018
     },
     {
       "path": "internal/store/quorum_persistence_a02_test.go",

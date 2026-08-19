@@ -990,7 +990,7 @@ func isLoopbackAddr(addr string) bool {
 
 func (c command) gc(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("%w: gc target required (worktrees)", model.ErrInvalid)
+		return fmt.Errorf("%w: gc target required (worktrees|artifacts)", model.ErrInvalid)
 	}
 	target := args[0]
 	switch target {
@@ -1021,7 +1021,37 @@ func (c command) gc(ctx context.Context, args []string) error {
 
 		return c.print(res, fmt.Sprintf("Inspected: %d, Cleaned: %d, Retained: %d, Skipped Dirty: %d",
 			res.InspectedCount, len(res.CleanedPaths), len(res.RetainedPaths), len(res.SkippedDirty)))
+
+	case "artifacts":
+		flags := flag.NewFlagSet("gc artifacts", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		dryRun := flags.Bool("dry-run", false, "simulate garbage collection without deleting files")
+		ttlStr := flags.String("ttl", "24h", "maximum retention duration for unreferenced artifacts")
+		maxBudget := flags.Int64("max-budget", 0, "maximum disk budget in bytes (0 for unlimited)")
+		if err := flags.Parse(args[1:]); err != nil {
+			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
+
+		ttl, err := time.ParseDuration(*ttlStr)
+		if err != nil {
+			return fmt.Errorf("%w: invalid --ttl format: %v", model.ErrInvalid, err)
+		}
+
+		runtime, err := app.Open(ctx, c.root)
+		if err != nil {
+			return err
+		}
+		defer runtime.Close()
+
+		res, err := runtime.GCArtifacts(ctx, *dryRun, ttl, *maxBudget)
+		if err != nil {
+			return err
+		}
+
+		return c.print(res, fmt.Sprintf("Total: %d files (%d bytes), Cleaned: %d (%d bytes), Retained: %d (%d bytes), Orphans: %d",
+			res.TotalFiles, res.TotalBytes, len(res.CleanedFiles), res.CleanedBytes, len(res.RetainedFiles), res.RetainedBytes, len(res.OrphanFiles)))
+
 	default:
-		return fmt.Errorf("%w: unknown gc target %s (supported: worktrees)", model.ErrInvalid, target)
+		return fmt.Errorf("%w: unknown gc target %s (supported: worktrees, artifacts)", model.ErrInvalid, target)
 	}
 }

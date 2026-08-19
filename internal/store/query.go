@@ -234,3 +234,23 @@ func (s *Store) ListArtifacts(ctx context.Context) ([]model.Artifact, error) {
 	}
 	return artifacts, nil
 }
+
+func (s *Store) ListReferencedArtifactDigests(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT digest FROM artifacts WHERE digest IS NOT NULL AND digest != ''
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list artifact digests: %w", err)
+	}
+	defer rows.Close()
+
+	var digests []string
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		digests = append(digests, d)
+	}
+	return digests, rows.Err()
+}

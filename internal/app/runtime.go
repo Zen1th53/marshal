@@ -1114,3 +1114,18 @@ func (r *Runtime) GCWorktrees(ctx context.Context, dryRun bool, ttl time.Duratio
 		TaskStatuses: taskStatuses,
 	})
 }
+
+func (r *Runtime) GCArtifacts(ctx context.Context, dryRun bool, ttl time.Duration, maxBudget int64) (artifactstore.GCResult, error) {
+	digests, err := r.store.ListReferencedArtifactDigests(ctx)
+	if err != nil {
+		return artifactstore.GCResult{}, fmt.Errorf("list referenced digests: %w", err)
+	}
+
+	artStore := artifactstore.New(r.layout.Artifacts, r.store)
+	return artStore.GC(ctx, artifactstore.GCRequest{
+		DryRun:            dryRun,
+		TTL:               ttl,
+		MaxDiskBudget:     maxBudget,
+		ReferencedDigests: digests,
+	})
+}

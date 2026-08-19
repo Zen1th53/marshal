@@ -378,3 +378,22 @@ func TestCLIGCWorktrees(t *testing.T) {
 		t.Fatalf("unexpected gc output: %s", stdout.String())
 	}
 }
+
+func TestCLIGCArtifacts(t *testing.T) {
+	repo := cliRepo(t)
+	var stdout, stderr bytes.Buffer
+
+	if code := Execute(context.Background(), repo.Path(), []string{"init"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+		t.Fatal(stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code := Execute(context.Background(), repo.Path(), []string{"gc", "artifacts", "--dry-run"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("gc artifacts --dry-run failed with code %d: stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Total:") {
+		t.Fatalf("unexpected gc artifacts output: %s", stdout.String())
+	}
+}
