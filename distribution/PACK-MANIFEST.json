@@ -2380,6 +2380,16 @@
       "bytes": 1777
     },
     {
+      "path": "internal/memory/encryption/crypto_vault.go",
+      "sha256": "4efb9cd8de3956e4046968b7ff51f6bad9bd0a0628f30aafa0543aee6e8fcb95",
+      "bytes": 2906
+    },
+    {
+      "path": "internal/memory/encryption/crypto_vault_test.go",
+      "sha256": "dbdf66a621adf03f49f2c6fc8436efda0d98a74ae9c582dd780b8a50afc24afd",
+      "bytes": 2238
+    },
+    {
       "path": "internal/memory/environment/experience.go",
       "sha256": "c15f336cbc47b3fb381415dc522398b29221d5f84046b0338a1df0641ed35b66",
       "bytes": 2274
