@@ -1755,6 +1755,16 @@
       "bytes": 249
     },
     {
+      "path": "internal/context/tokens/counter.go",
+      "sha256": "81b6ca29774a72027847f38e76faaa7ee3884e4964845469c71bce67d9c80131",
+      "bytes": 2164
+    },
+    {
+      "path": "internal/context/tokens/counter_test.go",
+      "sha256": "760d6204d9af38b3e8c5bb927f809350bb6327bcbdc72362c0433b08a3fa02e3",
+      "bytes": 1637
+    },
+    {
       "path": "internal/dag/adversarial_a07_test.go",
       "sha256": "29b7d5796055b90bd47c5c062fdf8740b7a9ac4a241f9c3bfc570ae191f80afd",
       "bytes": 780
