@@ -2115,6 +2115,16 @@
       "bytes": 12836
     },
     {
+      "path": "internal/memory/conflict/detector.go",
+      "sha256": "416a1d45a2e4db61752abf13299c5272bc4a3a70d0df969c82bd3d1a89ddd16d",
+      "bytes": 2235
+    },
+    {
+      "path": "internal/memory/conflict/detector_test.go",
+      "sha256": "069724e9fbb0c3079152e68f97fc236ef28dc56c7c65dce70908a91ba4e92db1",
+      "bytes": 3033
+    },
+    {
       "path": "internal/memory/decision/adversarial_test.go",
       "sha256": "4377e7d52b9f4d7662d11dd0a72152e557a7699201fa3d981005312a5d9fc490",
       "bytes": 589
@@ -3111,8 +3121,8 @@
     },
     {
       "path": "internal/store/memory.go",
-      "sha256": "4038317f16bbfe5e7d156352dee0f782e4dd0ab86b9bafd0648685258b2f27a8",
-      "bytes": 25473
+      "sha256": "a2fde836c3c62b8e277db248a6b83288ab7708ca76faa5b74ac2cb9272109389",
+      "bytes": 25864
     },
     {
       "path": "internal/store/memory_audit_t77_test.go",

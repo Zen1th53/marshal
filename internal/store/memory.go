@@ -331,6 +331,8 @@ type MemoryQueryFilter struct {
 	Scope     model.MemoryScopeKind
 	ScopeID   string
 	ActorID   string // for ACL / operator_private scope filtering
+	ValidAsOf time.Time
+	KnownAt   time.Time
 	Limit     int
 }
 
@@ -369,6 +371,15 @@ func (s *Store) ListMemoryV2(ctx context.Context, filter MemoryQueryFilter) ([]m
 	if filter.ScopeID != "" {
 		query += " AND scope_id = ?"
 		args = append(args, filter.ScopeID)
+	}
+	if !filter.KnownAt.IsZero() {
+		query += " AND ingested_at <= ?"
+		args = append(args, filter.KnownAt.UTC().Format(time.RFC3339Nano))
+	}
+	if !filter.ValidAsOf.IsZero() {
+		asOfStr := filter.ValidAsOf.UTC().Format(time.RFC3339Nano)
+		query += " AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)"
+		args = append(args, asOfStr, asOfStr)
 	}
 
 	query += " ORDER BY created_at DESC"
