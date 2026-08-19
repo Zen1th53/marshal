@@ -21,3 +21,5 @@ bin/
 *.tar.gz
 *.db
 *.log
+web/node_modules/
+web/dist/

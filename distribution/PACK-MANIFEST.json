@@ -76,8 +76,8 @@
     },
     {
       "path": ".gitignore",
-      "sha256": "58f5c41682646ba154a6c2bd996b0d004a6a06495679c0479446194660ba11bc",
-      "bytes": 199
+      "sha256": "5150b30526909e35c6c30343cce9df1c504aff113637c856c05ceb5ec15bacc5",
+      "bytes": 227
     },
     {
       "path": "AGENT-BOOTSTRAP.md",
@@ -5358,6 +5358,76 @@
       "path": "tools/tests_v6/test_schema_validate.py",
       "sha256": "c711349d1b87e6295860d3747839274cb97b0505f8a54a89c06a370a75a755cd",
       "bytes": 898
+    },
+    {
+      "path": "web/.gitignore",
+      "sha256": "fe718e7babb14f3cbad2d97f08889b9ce5215ed3fe0e43b2b8cfbfb3b9b844e8",
+      "bytes": 253
+    },
+    {
+      "path": "web/index.html",
+      "sha256": "f19f7a347f2349e77b175551d77e0bf287a5bea8f108e1a321bd935e0f58a1f4",
+      "bytes": 501
+    },
+    {
+      "path": "web/package-lock.json",
+      "sha256": "98ea3da1798776470b645a1f2cbf517f14446653c5089566d84176aae4ce7a4c",
+      "bytes": 119015
+    },
+    {
+      "path": "web/package.json",
+      "sha256": "1b60fd5214f0b572230d05726702b23c745f979c66ebbb2f8af545e2d3ee54fd",
+      "bytes": 817
+    },
+    {
+      "path": "web/src/App.tsx",
+      "sha256": "6fce5f3da269e89106e66fff5891f2f2038455c99fa79b66c8ede95fd33160ae",
+      "bytes": 154
+    },
+    {
+      "path": "web/src/index.css",
+      "sha256": "ee0931ecaac111d44dd9d3299950f6fafbda347da54341da0e155a39adf02d2a",
+      "bytes": 912
+    },
+    {
+      "path": "web/src/main.tsx",
+      "sha256": "35bcb03385a9d91788d82ec118bcb99f540c47bc41859186b213f127a466937c",
+      "bytes": 310
+    },
+    {
+      "path": "web/src/test/App.test.tsx",
+      "sha256": "d6aeffdcbe36d8c91a0467e83f9b9f8d407f472da4c186ed712116e29d10365f",
+      "bytes": 730
+    },
+    {
+      "path": "web/src/test/setup.ts",
+      "sha256": "91a3c8962a0edcb956206a501d943fe99e1c78c6d4d8b5c9a948a3362c75978c",
+      "bytes": 43
+    },
+    {
+      "path": "web/tsconfig.app.json",
+      "sha256": "8e5d12ba330e7d86409edec74b95451e0db22ee09b9426c94b5bf817571eddb0",
+      "bytes": 655
+    },
+    {
+      "path": "web/tsconfig.json",
+      "sha256": "770b4140bbb581e2dfd9ea9946ffc9c75a1d86ba7d2db5f77c83e37cbdf9d808",
+      "bytes": 119
+    },
+    {
+      "path": "web/tsconfig.node.json",
+      "sha256": "d366cc0827139db39c61815f22491bbfda56c654354a42ad7795143d314e45e8",
+      "bytes": 558
+    },
+    {
+      "path": "web/vite.config.ts",
+      "sha256": "ecfcbbc37d8d05405a9b81871b94dd06bca243f9e3358c01892fbd202325163f",
+      "bytes": 415
+    },
+    {
+      "path": "web/vitest.config.ts",
+      "sha256": "37c87c0a7bf4ed2a3b89c4bcaf89045f30de89ca2e36f33c284d520a51b0a1b6",
+      "bytes": 269
     }
   ]
 }
