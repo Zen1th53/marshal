@@ -2370,6 +2370,16 @@
       "bytes": 1777
     },
     {
+      "path": "internal/memory/environment/experience.go",
+      "sha256": "c15f336cbc47b3fb381415dc522398b29221d5f84046b0338a1df0641ed35b66",
+      "bytes": 2274
+    },
+    {
+      "path": "internal/memory/environment/experience_test.go",
+      "sha256": "7ae2e15d1caafb35b7221878d9db3d2c2d4323e74273032c257ddad1a91c60f5",
+      "bytes": 1706
+    },
+    {
       "path": "internal/memory/episode/capture.go",
       "sha256": "ff573ecaa322ca99eb1ec418e8c72b83fa78ecb0d0a72c43cf6b4d87bf6af4ce",
       "bytes": 3724
