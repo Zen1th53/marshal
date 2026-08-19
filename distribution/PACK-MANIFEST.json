@@ -2335,6 +2335,16 @@
       "bytes": 2136
     },
     {
+      "path": "internal/memory/retrieval/disclosure/progressive.go",
+      "sha256": "ce319c476d8e96770b0f80ac34df32b7ca038a7558801a8cd42b629c9e553d91",
+      "bytes": 4227
+    },
+    {
+      "path": "internal/memory/retrieval/disclosure/progressive_test.go",
+      "sha256": "2c93aad62d19f3df900fac039390fdec1be4053779cca19ca34b421512293357",
+      "bytes": 2666
+    },
+    {
       "path": "internal/memory/retrieval/engine/hybrid_engine.go",
       "sha256": "8a92d0cc1c235941e1a9ae30ae84c81f5f4a31517d1f5ad971de668976d3e393",
       "bytes": 3739
