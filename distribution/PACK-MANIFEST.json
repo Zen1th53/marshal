@@ -2250,6 +2250,16 @@
       "bytes": 1668
     },
     {
+      "path": "internal/memory/adaptive/envelope.go",
+      "sha256": "96a829c82958f1bd0f4e4077273b11946e7860e05d357f8efc5b5b39f32578cf",
+      "bytes": 2540
+    },
+    {
+      "path": "internal/memory/adaptive/envelope_test.go",
+      "sha256": "4bcea07f8090649bb5cd73ca83f9ee7900ad759f8287dfbf1e0fa535d9a3d405",
+      "bytes": 2220
+    },
+    {
       "path": "internal/memory/audit/tracer.go",
       "sha256": "ab557cd63d4a20ad20b8d7a50637115bc6a2931fce23b21f4631e4d0e43ba19c",
       "bytes": 2544
