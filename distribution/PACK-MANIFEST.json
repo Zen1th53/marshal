@@ -56,8 +56,8 @@
     },
     {
       "path": ".github/workflows/contributor-rights-check.yml",
-      "sha256": "83f60b766cf3ce49d413d3bffe8c09bcfedeb17280ab48b0150530f5b1a055df",
-      "bytes": 3269
+      "sha256": "f1fa2a0b6efcfee69e2a50c9bd28a38aa10626f53a84a247185cc13b9d507618",
+      "bytes": 3477
     },
     {
       "path": ".github/workflows/dependency-review.yml",

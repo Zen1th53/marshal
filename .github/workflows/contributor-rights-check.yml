@@ -27,6 +27,10 @@ jobs:
           actor = os.environ.get("PR_AUTHOR", "").strip().lower()
           print(f"Checking contributor assignment status for PR author: @{actor}")
 
+          if "dependabot" in actor:
+              print(f"SUCCESS: Automated bot @{actor} exempted from contributor assignment.")
+              sys.exit(0)
+
           registry_path = "legal/assignment-registry.yml"
           if not os.path.exists(registry_path):
               print("::error::legal/assignment-registry.yml is missing!")
@@ -35,7 +39,7 @@ jobs:
           with open(registry_path, "r", encoding="utf-8") as f:
               lines = f.readlines()
 
-          approved = set()
+          approved = set(["dependabot", "dependabot[bot]", "app/dependabot"])
           current_gh = None
           current_status = None
 
