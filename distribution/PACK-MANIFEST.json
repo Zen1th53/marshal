@@ -2205,6 +2205,16 @@
       "bytes": 3327
     },
     {
+      "path": "internal/memory/temporal/bitemporal.go",
+      "sha256": "b73c787b9b94fdb92d5659512c6cbc96f6e2a0d8fee8f0ffeccb981eb167dfc5",
+      "bytes": 1123
+    },
+    {
+      "path": "internal/memory/temporal/bitemporal_test.go",
+      "sha256": "845930b50c5c858e4522c5b88d919109d56baea407ddc81d332addd0a54ec829",
+      "bytes": 1715
+    },
+    {
       "path": "internal/model/capability.go",
       "sha256": "11995bfbb4f0a57fb35caa30b54723957a20e9573067e1941feda2def349e774",
       "bytes": 1429
@@ -3163,6 +3173,11 @@
       "path": "internal/store/memory_t79_test.go",
       "sha256": "01bb510efa5f847918f2ff0c82c9f34851662ba857d29b54311cf0683ae43b75",
       "bytes": 4393
+    },
+    {
+      "path": "internal/store/memory_temporal_t89_test.go",
+      "sha256": "317a1344562c964353261174e99cab71c2327de07b4e788d09831807984cf326",
+      "bytes": 2611
     },
     {
       "path": "internal/store/mergequeue_persistence_a02_test.go",
