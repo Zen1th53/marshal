@@ -2130,6 +2130,16 @@
       "bytes": 2385
     },
     {
+      "path": "internal/memory/checkpoint/session_checkpoint.go",
+      "sha256": "076e72a03455d663414f47b1d8deb83ffee6a2720ba7a674076f044084e91d13",
+      "bytes": 3712
+    },
+    {
+      "path": "internal/memory/checkpoint/session_checkpoint_test.go",
+      "sha256": "be3e159ccb1394007832ad641f24b4fdc48d2fe51d47f035216e248b1e394e1b",
+      "bytes": 2556
+    },
+    {
       "path": "internal/memory/conflict/detector.go",
       "sha256": "416a1d45a2e4db61752abf13299c5272bc4a3a70d0df969c82bd3d1a89ddd16d",
       "bytes": 2235
