@@ -2345,6 +2345,16 @@
       "bytes": 3892
     },
     {
+      "path": "internal/memory/retrieval/finalize/finalizer.go",
+      "sha256": "d07ef325f8d4d042d9efbbe6f58f3cc6a956d363989a3d215c08705604113bcc",
+      "bytes": 2569
+    },
+    {
+      "path": "internal/memory/retrieval/finalize/finalizer_test.go",
+      "sha256": "6bd7e72894a9e3e27431025920b5636fd10e2f604e9f808f250887b13a95c61d",
+      "bytes": 3148
+    },
+    {
       "path": "internal/memory/retrieval/fusion/rrf.go",
       "sha256": "2abb1faea062ef39b2f93ad0460bbebbae2106f56d05cc432057bcf666fb3d86",
       "bytes": 3329
