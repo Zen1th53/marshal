@@ -1090,3 +1090,27 @@ func (r *Runtime) VerifyQuorum(ctx context.Context, req QuorumVerifyRequest) (qu
 
 	return engine.Evaluate(ctx, requirements, req.Attestations, provenance)
 }
+
+func (r *Runtime) GCWorktrees(ctx context.Context, dryRun bool, ttl time.Duration) (worktree.GCResult, error) {
+	tasks, err := r.store.ListTasks(ctx)
+	if err != nil {
+		return worktree.GCResult{}, fmt.Errorf("list tasks for gc: %w", err)
+	}
+
+	taskStatuses := make(map[string]model.TaskStatus, len(tasks))
+	var activeLeases []string
+	for _, t := range tasks {
+		taskStatuses[t.ID] = t.Status
+		if t.OwnerAgentID != nil && *t.OwnerAgentID != "" {
+			activeLeases = append(activeLeases, t.ID)
+		}
+	}
+
+	wm := worktree.New(r.layout.Root, r.layout.Worktrees)
+	return wm.GC(ctx, worktree.GCRequest{
+		DryRun:       dryRun,
+		TTL:          ttl,
+		ActiveLeases: activeLeases,
+		TaskStatuses: taskStatuses,
+	})
+}

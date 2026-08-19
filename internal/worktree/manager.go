@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/model"
 )
@@ -185,4 +186,119 @@ func CalculateDirectorySize(path string) (int64, error) {
 		return nil
 	})
 	return totalSize, err
+}
+
+type RetentionState string
+
+const (
+	RetentionActive         RetentionState = "active"
+	RetentionReviewRetained RetentionState = "review-retained"
+	RetentionMergedCleanup  RetentionState = "merged-cleanup"
+	RetentionFailedDebug    RetentionState = "failed-retained-for-debug"
+	RetentionExpired        RetentionState = "expired"
+)
+
+type GCRequest struct {
+	DryRun       bool                        `json:"dry_run"`
+	TTL          time.Duration               `json:"ttl"`
+	ActiveLeases []string                    `json:"active_leases,omitempty"`
+	TaskStatuses map[string]model.TaskStatus `json:"task_statuses,omitempty"`
+}
+
+type GCResult struct {
+	InspectedCount int      `json:"inspected_count"`
+	CleanedPaths   []string `json:"cleaned_paths,omitempty"`
+	RetainedPaths  []string `json:"retained_paths,omitempty"`
+	SkippedDirty   []string `json:"skipped_dirty,omitempty"`
+	Errors         []string `json:"errors,omitempty"`
+}
+
+func (m *Manager) GC(ctx context.Context, req GCRequest) (GCResult, error) {
+	result := GCResult{}
+	entries, err := os.ReadDir(m.root)
+	if errors.Is(err, os.ErrNotExist) {
+		return result, nil
+	}
+	if err != nil {
+		return result, fmt.Errorf("read worktrees root: %w", err)
+	}
+
+	activeLeaseMap := make(map[string]bool, len(req.ActiveLeases))
+	for _, l := range req.ActiveLeases {
+		activeLeaseMap[l] = true
+	}
+
+	now := time.Now().UTC()
+	ttl := req.TTL
+	if ttl <= 0 {
+		ttl = 24 * time.Hour
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		result.InspectedCount++
+		taskID := entry.Name()
+		targetPath := filepath.Join(m.root, taskID)
+
+		// 1. Active lease must never be removed
+		if activeLeaseMap[taskID] {
+			result.RetainedPaths = append(result.RetainedPaths, targetPath)
+			continue
+		}
+
+		// 2. Inspect worktree git state
+		state, err := m.Inspect(ctx, targetPath)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: inspect failed: %v", targetPath, err))
+			result.RetainedPaths = append(result.RetainedPaths, targetPath)
+			continue
+		}
+
+		// 3. Dirty uncommitted worktree must never be deleted (fail-closed)
+		if state.Dirty {
+			result.SkippedDirty = append(result.SkippedDirty, targetPath)
+			result.RetainedPaths = append(result.RetainedPaths, targetPath)
+			continue
+		}
+
+		// 4. Determine retention state based on task status and TTL
+		status, hasStatus := req.TaskStatuses[taskID]
+		canClean := false
+
+		if hasStatus {
+			switch status {
+			case model.TaskMerged, model.TaskCancelled, model.TaskSuperseded:
+				canClean = true
+			case model.TaskWorking, model.TaskReview, model.TaskQA, model.TaskSecurityReview, model.TaskReadyToMerge:
+				canClean = false
+			default:
+				canClean = false
+			}
+		}
+
+		// 5. Check directory age against TTL if not explicitly retained
+		if !canClean {
+			info, err := entry.Info()
+			if err == nil && now.Sub(info.ModTime()) > ttl {
+				canClean = true
+			}
+		}
+
+		if canClean {
+			if !req.DryRun {
+				if err := m.Remove(ctx, model.Worktree{Path: state.Path, Branch: state.Branch}); err != nil {
+					result.Errors = append(result.Errors, fmt.Sprintf("%s: remove failed: %v", targetPath, err))
+					result.RetainedPaths = append(result.RetainedPaths, targetPath)
+					continue
+				}
+			}
+			result.CleanedPaths = append(result.CleanedPaths, targetPath)
+		} else {
+			result.RetainedPaths = append(result.RetainedPaths, targetPath)
+		}
+	}
+
+	return result, nil
 }

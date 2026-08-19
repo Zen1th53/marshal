@@ -1406,8 +1406,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "a097c6e5ca7046b8300e32ee9bfe000a72211b11b2e90415786a55ac2b83466b",
-      "bytes": 39337
+      "sha256": "1b16a53460c95044e009c28fabe27bd8a6b16cb84646ab4db2c696d3ec10084f",
+      "bytes": 40041
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1651,13 +1651,13 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "1acddf6a86dd6f45e112db967de44d2cc5e3bbb11bf8733bb8982c76c54a9a25",
-      "bytes": 27250
+      "sha256": "9801011e3b3c18f7fdadce5bf7daf7e0c428b284ac6000a671b56b1d615183d5",
+      "bytes": 28529
     },
     {
       "path": "internal/cli/cli_test.go",
-      "sha256": "fb1a9288139529709edfa86364afc50eb8287e73b52deeb2c9105cd3660b2df2",
-      "bytes": 13461
+      "sha256": "589b78232ce10199d0db2dbee8380ca4032a92fd2771813d6dfcfd47e3612b4b",
+      "bytes": 14375
     },
     {
       "path": "internal/cli/policy_test_a10_release_test.go",
@@ -3526,8 +3526,8 @@
     },
     {
       "path": "internal/worktree/manager.go",
-      "sha256": "80d2944af69ef4ad9ef4a32c5c14ac70b42c01c4019e0d74b10f07b66bd28421",
-      "bytes": 6441
+      "sha256": "f2d6c613e6a978319960547941e02598f823a1630c79fb58da654e5b46f4b535",
+      "bytes": 9833
     },
     {
       "path": "internal/worktree/manager_test.go",

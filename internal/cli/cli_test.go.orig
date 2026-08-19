@@ -357,10 +357,6 @@ func TestCLIGCWorktrees(t *testing.T) {
 	repo := cliRepo(t)
 	var stdout, stderr bytes.Buffer
 
-	if code := Execute(context.Background(), repo.Path(), []string{"init"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
-		t.Fatal(stderr.String())
-	}
-
 	// 1. gc without args fails with usage
 	code := Execute(context.Background(), repo.Path(), []string{"gc"}, strings.NewReader(""), &stdout, &stderr)
 	if code == 0 {
