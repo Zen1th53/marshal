@@ -4491,8 +4491,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "64d0636fcb491c58158e60caf693cee15eef3215c9e8e1851908b07db9e6cf33",
-      "bytes": 1905
+      "sha256": "56e1509f155c80e50b3e037c673eed81f8869bf99c0feaeab80a5bc1a006e6d8",
+      "bytes": 1984
     },
     {
       "path": "internal/webcontrol/server.go",
@@ -5383,6 +5383,26 @@
       "path": "web/src/App.tsx",
       "sha256": "6fce5f3da269e89106e66fff5891f2f2038455c99fa79b66c8ede95fd33160ae",
       "bytes": 154
+    },
+    {
+      "path": "web/src/api/client.test.ts",
+      "sha256": "37fcd002f360aeed888f30fc9a2b6333a463f2a6139a64ad620061ceb3e58da2",
+      "bytes": 3937
+    },
+    {
+      "path": "web/src/api/client.ts",
+      "sha256": "958c6c850b3903616c4712222880e7e73b511d9ef5ab9599f0123834ad8f6ef9",
+      "bytes": 5731
+    },
+    {
+      "path": "web/src/api/errors.ts",
+      "sha256": "c06f233dfd3d2004ee281dc4de67c73df35b35197924b3c5c873e0b250a8b827",
+      "bytes": 972
+    },
+    {
+      "path": "web/src/api/types.ts",
+      "sha256": "bfc68ae98822c267bf017248bf66037466fc7a76dd389756d08ca864ae699fcf",
+      "bytes": 1864
     },
     {
       "path": "web/src/components/layout/AppShell.tsx",

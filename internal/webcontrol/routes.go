@@ -9,6 +9,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// 1. System Health & Diagnostics
 	mux.HandleFunc("GET /api/v1/system/status", s.handleSystemStatus)
 	mux.HandleFunc("GET /api/v1/system/adapters", s.handleSystemAdapters)
+	mux.HandleFunc("GET /api/v1/system/capabilities", s.handleSystemCapabilities)
 
 	// 2. Agents
 	mux.HandleFunc("GET /api/v1/agents", s.handleListAgents)

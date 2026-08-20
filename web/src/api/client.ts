@@ -148,6 +148,10 @@ export class APIClient {
     return this.request<AdapterSummaryDTO[]>('/api/v1/system/adapters', { method: 'GET', signal });
   }
 
+  getCapabilities(signal?: AbortSignal): Promise<{ capabilities: Record<string, { state: string; reason?: string }> }> {
+    return this.request('/api/v1/system/capabilities', { method: 'GET', signal });
+  }
+
   getAgents(signal?: AbortSignal): Promise<PagedResponse<AgentSummaryDTO>> {
     return this.request<PagedResponse<AgentSummaryDTO>>('/api/v1/agents', { method: 'GET', signal });
   }

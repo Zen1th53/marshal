@@ -2,6 +2,24 @@ export type SystemHealthState = 'READY' | 'DEGRADED' | 'UNAVAILABLE' | 'NOT_RUN'
 
 export type TaskStatus = 'pending' | 'ready' | 'running' | 'completed' | 'failed' | 'canceled';
 
+export type CapabilityState =
+  | 'AVAILABLE'
+  | 'DISABLED_BY_POLICY'
+  | 'DEGRADED'
+  | 'UNAVAILABLE'
+  | 'NOT_RUN';
+
+export interface CapabilityStatusDTO {
+  state: CapabilityState;
+  reason?: string;
+  last_checked: string;
+}
+
+export interface CapabilitiesDTO {
+  capabilities: Record<string, CapabilityStatusDTO>;
+  evaluated_at: string;
+}
+
 export interface PagedResponse<T> {
   items: T[];
   next_cursor?: string;
