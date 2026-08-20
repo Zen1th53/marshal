@@ -1210,6 +1210,11 @@
       "bytes": 1900
     },
     {
+      "path": "docs/web/DEPLOYMENT.md",
+      "sha256": "20b238245c573a070e84b366e657bbf2c99f0fd893a83c7c3c54b88eea239c14",
+      "bytes": 1925
+    },
+    {
       "path": "docs/web/PERFORMANCE.md",
       "sha256": "1530d4995b0cc6efb39b36390d1332a75cda5a158ff2390eb705fca353c02e34",
       "bytes": 2202
@@ -4510,6 +4515,16 @@
       "bytes": 2131
     },
     {
+      "path": "internal/webcontrol/assets.go",
+      "sha256": "1e1b16ba30288f4e4c3cdfbec9cde903b1ceeb6753e3cf50d373bb1141e6cb03",
+      "bytes": 2077
+    },
+    {
+      "path": "internal/webcontrol/assets_test.go",
+      "sha256": "d571fe6649e8fa36dd87dc93dbb80a8b894ae3353117fa4a38c62166592e29c9",
+      "bytes": 2030
+    },
+    {
       "path": "internal/webcontrol/audit.go",
       "sha256": "b291fad34ebaafb09b890b8bd8fd3c3b4ff0249f22a51ffbc25e5c9def0420e4",
       "bytes": 3704
@@ -4571,8 +4586,8 @@
     },
     {
       "path": "internal/webcontrol/csrf.go",
-      "sha256": "6a0f1641b8327b6f2a7fcfe8696899e8c13a03243a59712e8359681001382478",
-      "bytes": 3845
+      "sha256": "eced398f23f0dc70209250f3d63a51413e07e900daf203c4c6ea92ce88fe063f",
+      "bytes": 3818
     },
     {
       "path": "internal/webcontrol/csrf_test.go",
@@ -5598,6 +5613,11 @@
       "path": "schemas/tenant-context.schema.json",
       "sha256": "e9e9a7114bd65ca30b291316f1c41392cb1bc458e115211f1d7ad4b7581249b4",
       "bytes": 812
+    },
+    {
+      "path": "scripts/build-web.sh",
+      "sha256": "66b05571e76b290add3f292ca178fafe788dd9afd72302e99a5b4e3a00503f82",
+      "bytes": 625
     },
     {
       "path": "standards/REFERENCES.md",
