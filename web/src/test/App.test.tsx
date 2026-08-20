@@ -1,17 +1,54 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import App from '../App';
 
-describe('App', () => {
-  it('renders MARSHAL Control Plane heading', () => {
-    render(<App />);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      'MARSHAL Control Plane',
-    );
+describe('App (T180)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes('/api/v1/auth/me')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              principal_id: 'operator-loopback',
+              role: 'admin',
+              authorities: ['*'],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+        );
+      }
+      if (u.includes('/api/v1/system/capabilities')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              capabilities: {
+                'cap:system:read': { state: 'AVAILABLE' },
+                'cap:task:read': { state: 'AVAILABLE' },
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+    });
   });
 
-  it('does not expose secrets in document', () => {
+  it('renders MARSHAL heading after loading', async () => {
     render(<App />);
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('MARSHAL');
+  });
+
+  it('does not expose secrets in document', async () => {
+    render(<App />);
+    await screen.findByRole('heading', { level: 1 });
     const html = document.documentElement.innerHTML;
     const forbidden = [
       'private_key',

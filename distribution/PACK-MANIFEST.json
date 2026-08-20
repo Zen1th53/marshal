@@ -4520,6 +4520,16 @@
       "bytes": 1508
     },
     {
+      "path": "internal/webcontrol/correlation.go",
+      "sha256": "e0857a012afe3c33426d3d35f09226d21e8f3872d39364c4b5f0b63519a25f15",
+      "bytes": 1203
+    },
+    {
+      "path": "internal/webcontrol/correlation_test.go",
+      "sha256": "be88d10b333d9f6783ce4c5b549f31ba4d8a01d6ae33ff2bf46283460399bec4",
+      "bytes": 1564
+    },
+    {
       "path": "internal/webcontrol/csrf.go",
       "sha256": "6a0f1641b8327b6f2a7fcfe8696899e8c13a03243a59712e8359681001382478",
       "bytes": 3845
@@ -5456,8 +5466,8 @@
     },
     {
       "path": "web/src/App.tsx",
-      "sha256": "6fce5f3da269e89106e66fff5891f2f2038455c99fa79b66c8ede95fd33160ae",
-      "bytes": 154
+      "sha256": "8069fb29c7d1a9e55d561f422a0f7ec23a09a47ec3f41258e1bb96d582bd8ac3",
+      "bytes": 3504
     },
     {
       "path": "web/src/api/client.test.ts",
@@ -5468,6 +5478,11 @@
       "path": "web/src/api/client.ts",
       "sha256": "12f7025b973d4fe6280e3f4456186dabfa85bd491fe9bcecb82626fcc8c6c41c",
       "bytes": 6036
+    },
+    {
+      "path": "web/src/api/correlation.ts",
+      "sha256": "ff1b1fbd5130f4e6a23ad566a239595a2b1f20716507dab3577be288d9add23c",
+      "bytes": 306
     },
     {
       "path": "web/src/api/csrf.ts",
@@ -5493,6 +5508,16 @@
       "path": "web/src/auth/permissions.ts",
       "sha256": "8fb55c6a15e412bb35fa4a6f195f58db4fc6381acb9cc09acc9de58c90ee956f",
       "bytes": 410
+    },
+    {
+      "path": "web/src/components/audit/CorrelationLink.test.tsx",
+      "sha256": "8566dfe5f7ac22d828820d6b89f3eb793d069ef849fb7c1cd673dcecbd440fef",
+      "bytes": 1171
+    },
+    {
+      "path": "web/src/components/audit/CorrelationLink.tsx",
+      "sha256": "33c03ea15fcc8c6abfb2950183f0639a0a8c890dd93398e55e1969dab3d4e18e",
+      "bytes": 1316
     },
     {
       "path": "web/src/components/layout/AppShell.tsx",
@@ -5631,8 +5656,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "7486d347117d1218345092811b80e1477879ac5c7ada1225f1813984e6efc296",
-      "bytes": 10327
+      "sha256": "e94e61e188ea28b6e185f50cc4a1d64ec94a323e935d9e8458f8e259deeaba55",
+      "bytes": 14875
     },
     {
       "path": "web/src/styles/tokens.css",
@@ -5641,8 +5666,8 @@
     },
     {
       "path": "web/src/test/App.test.tsx",
-      "sha256": "d6aeffdcbe36d8c91a0467e83f9b9f8d407f472da4c186ed712116e29d10365f",
-      "bytes": 730
+      "sha256": "c81a0a7100a0e60a6da35c22fba6f4b292518e07a7f0853857eb18b55a6fec75",
+      "bytes": 1920
     },
     {
       "path": "web/src/test/DesignSystem.test.tsx",
