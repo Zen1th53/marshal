@@ -62,7 +62,7 @@ func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
 
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
-	s.handler = s.wrapMiddleware(mux)
+	s.handler = s.SecurityHeadersMiddleware(s.CSRFMiddleware(s.wrapMiddleware(mux)))
 
 	return s, nil
 }

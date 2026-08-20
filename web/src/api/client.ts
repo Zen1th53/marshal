@@ -1,5 +1,6 @@
 import { APIError } from './errors';
 import type { APIErrorEnvelope } from './errors';
+import { fetchCSRFToken } from './csrf';
 import type {
   SystemStatusDTO,
   AdapterSummaryDTO,
@@ -72,6 +73,14 @@ export class APIClient {
     const headers = new Headers(options.headers || {});
     headers.set('Accept', 'application/json');
     headers.set('X-Correlation-ID', correlationId);
+
+    // For state-changing mutations, attach X-CSRF-Token
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+      const csrfToken = await fetchCSRFToken();
+      if (csrfToken) {
+        headers.set('X-CSRF-Token', csrfToken);
+      }
+    }
 
     let body: BodyInit | undefined;
     if (options.body !== undefined) {

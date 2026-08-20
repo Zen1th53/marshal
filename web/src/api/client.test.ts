@@ -84,8 +84,9 @@ describe('APIClient (T170)', () => {
       })
     ).rejects.toThrowError(APIError);
 
-    // Exactly 1 attempt, 0 retries!
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    // Exactly 1 POST attempt, 0 retries!
+    const postCalls = fetchSpy.mock.calls.filter(([, init]) => (init as RequestInit)?.method === 'POST');
+    expect(postCalls).toHaveLength(1);
   });
 
   it('rejects unexpected non-JSON content-type responses', async () => {

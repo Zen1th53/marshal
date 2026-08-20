@@ -15,6 +15,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/login", s.handleAuthLogin)
 	mux.HandleFunc("GET /api/v1/auth/me", s.handleAuthMe)
 	mux.HandleFunc("POST /api/v1/auth/logout", s.handleAuthLogout)
+	mux.HandleFunc("GET /api/v1/auth/csrf", s.handleGetCSRFToken)
 
 	// 3. Agents
 	mux.HandleFunc("GET /api/v1/agents", s.handleListAgents)

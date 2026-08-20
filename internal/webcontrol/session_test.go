@@ -80,13 +80,15 @@ func TestT173OneTimeCodeAndSessionLifecycle(t *testing.T) {
 		t.Fatalf("unexpected authUser: %+v", authUser)
 	}
 
-	// 5. Logout revokes session
+	// 5. Logout revokes session (with valid CSRF token)
+	csrfToken := webcontrol.GenerateCSRFToken(sessionCookie.Value, "marshal-csrf-secret-key")
 	reqLogout := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	reqLogout.AddCookie(sessionCookie)
+	reqLogout.Header.Set("X-CSRF-Token", csrfToken)
 	wLogout := httptest.NewRecorder()
 	server.Handler().ServeHTTP(wLogout, reqLogout)
 	if wLogout.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK for logout, got: %d", wLogout.Code)
+		t.Fatalf("expected 200 OK for logout, got: %d (%s)", wLogout.Code, wLogout.Body.String())
 	}
 
 	// 6. Subsquent /auth/me with revoked session must be rejected (in non-loopback or explicit check)
