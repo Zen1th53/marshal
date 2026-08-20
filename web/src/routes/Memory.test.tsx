@@ -45,13 +45,30 @@ describe('Memory Route (T200)', () => {
 
   it('opens record detail modal on card click', async () => {
     vi.spyOn(api, 'searchMemory').mockResolvedValue(mockMemoryData);
+    vi.spyOn(api, 'getMemoryDetail').mockResolvedValue({
+      ...mockMemoryData.items[0],
+      digest_sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+      revision: 3,
+      is_encrypted: false,
+      provenance: {
+        producer_agent_id: 'agent-arch-lead',
+        source_run_id: 'RUN-TASK-001-01',
+        correlation_id: 'req-audit-mem-001',
+        evidence_ids: ['EVID-001-TESTS'],
+        created_at: '2026-08-20T00:00:00Z',
+      },
+      lineage: {
+        conflict_status: 'none',
+        lineage_depth: 1,
+      },
+    });
 
     render(<Memory />);
     const card = await screen.findByText('Loopback Architecture Invariant');
     await userEvent.click(card);
 
-    expect(screen.getByText('Content Body')).toBeInTheDocument();
-    expect(screen.getByText('Retrieval Explanation')).toBeInTheDocument();
-    expect(screen.getByText('Exact lexical match')).toBeInTheDocument();
+    expect(await screen.findByText('Record Body Content')).toBeInTheDocument();
+    expect(screen.getByText('Causal Provenance & Attestation')).toBeInTheDocument();
+    expect(screen.getByText('agent-arch-lead')).toBeInTheDocument();
   });
 });

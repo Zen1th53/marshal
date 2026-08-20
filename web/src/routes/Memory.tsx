@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import { api } from '../api/client';
 import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState, EmptyState } from '../components/state';
+import { MemoryDetail } from './MemoryDetail';
 
 interface MemoryItem {
   id: string;
@@ -202,65 +203,10 @@ export function Memory() {
 
       {/* Record Inspector Modal */}
       {selectedRecord && (
-        <div className="modal-backdrop" onClick={() => setSelectedRecord(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="task-detail-title-group">
-                <h3 className="modal-title">{selectedRecord.title}</h3>
-                <code className="task-id-badge">{selectedRecord.id}</code>
-              </div>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setSelectedRecord(null)}
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="task-meta-grid" style={{ marginBottom: 'var(--space-3)' }}>
-                <div className="meta-box">
-                  <span className="meta-label">Kind</span>
-                  <span className="meta-value font-mono text-xs">{selectedRecord.kind}</span>
-                </div>
-                <div className="meta-box">
-                  <span className="meta-label">Scope</span>
-                  <span className="meta-value font-mono text-xs">
-                    {selectedRecord.scope} ({selectedRecord.scope_id})
-                  </span>
-                </div>
-                <div className="meta-box">
-                  <span className="meta-label">Confidence</span>
-                  <span className="meta-value font-mono text-xs">
-                    {(selectedRecord.confidence * 100).toFixed(0)}%
-                  </span>
-                </div>
-                <div className="meta-box">
-                  <span className="meta-label">Lifecycle</span>
-                  <span className="meta-value font-mono text-xs">{selectedRecord.lifecycle}</span>
-                </div>
-              </div>
-
-              <div className="memory-modal-section">
-                <h5 className="section-subtitle">Content Body</h5>
-                <div className="code-block font-mono text-xs">{selectedRecord.body}</div>
-              </div>
-
-              <div className="memory-modal-section" style={{ marginTop: 'var(--space-3)' }}>
-                <h5 className="section-subtitle">Retrieval Explanation</h5>
-                <p className="text-xs text-dim">{selectedRecord.retrieval_reason}</p>
-              </div>
-            </div>
-
-            <div className="modal-actions">
-              <Button variant="secondary" size="sm" onClick={() => setSelectedRecord(null)}>
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
+        <MemoryDetail
+          memoryId={selectedRecord.id}
+          onClose={() => setSelectedRecord(null)}
+        />
       )}
     </div>
   );

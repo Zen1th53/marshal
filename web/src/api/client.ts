@@ -742,6 +742,39 @@ export class APIClient {
     return this.request(`/api/v1/memory/${encodeURIComponent(id)}`, { method: 'GET', signal });
   }
 
+  getMemoryDetail(id: string, signal?: AbortSignal): Promise<{
+    id: string;
+    project_id: string;
+    scope: string;
+    scope_id: string;
+    kind: string;
+    title: string;
+    body: string;
+    lifecycle: string;
+    authority: string;
+    confidence: number;
+    digest_sha256: string;
+    revision: number;
+    is_encrypted: boolean;
+    observed_at: string;
+    expires_at?: string;
+    provenance: {
+      producer_agent_id: string;
+      source_run_id: string;
+      correlation_id: string;
+      evidence_ids: string[];
+      created_at: string;
+    };
+    lineage: {
+      supersedes_id?: string;
+      superseded_by_id?: string;
+      conflict_status: string;
+      lineage_depth: number;
+    };
+  }> {
+    return this.request(`/api/v1/memory/${encodeURIComponent(id)}/detail`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
