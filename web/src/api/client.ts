@@ -609,6 +609,30 @@ export class APIClient {
     });
   }
 
+  getSecurityPolicy(signal?: AbortSignal): Promise<{
+    policy_id: string;
+    revision: number;
+    global_risk_level: string;
+    degraded_controls: string[];
+    gate_rules: Array<{
+      id: string;
+      name: string;
+      enforcement: string;
+      status: string;
+      description: string;
+      last_evaluated_at: string;
+    }>;
+    capability_rules: Array<{
+      capability_name: string;
+      required_role: string;
+      decision: string;
+      denial_reason?: string;
+    }>;
+    last_audited_at: string;
+  }> {
+    return this.request('/api/v1/security/policy', { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

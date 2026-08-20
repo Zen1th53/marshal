@@ -51,6 +51,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/provenance/trace", s.handleGetProvenanceTrace)
 	mux.HandleFunc("GET /api/v1/providers", s.handleGetProviders)
 	mux.HandleFunc("POST /api/v1/providers/router/override", s.handleOverrideRouter)
+	mux.HandleFunc("GET /api/v1/security/policy", s.handleGetSecurityPolicy)
 
 	// 4. Memory
 	mux.HandleFunc("GET /api/v1/memory/search", s.handleMemorySearch)

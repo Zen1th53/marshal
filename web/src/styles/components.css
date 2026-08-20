@@ -2487,6 +2487,75 @@
   line-height: 1.4;
 }
 
+/* --- Security Policy Inspector --- */
+.security-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.security-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.security-headline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.security-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+
+.security-subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-dim);
+}
+
+.policy-overview-card {
+  padding: var(--space-4);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.security-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.gate-id-code {
+  color: var(--color-accent);
+}
+
+.enforcement-badge {
+  font-size: 0.5625rem;
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-semibold);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  background: rgba(52, 152, 219, 0.15);
+  color: #3498db;
+}
+
+.cap-name-badge {
+  color: var(--color-text);
+}
+
+.description-cell, .denial-cell {
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+
 
 
 
