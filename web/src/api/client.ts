@@ -213,9 +213,27 @@ export class APIClient {
     assigned_to?: string;
     base_commit: string;
     head_commit: string;
-    runs_count: number;
+    head_mismatch_detected?: boolean;
+    approvals_count?: number;
+    required_quorum?: number;
+    stale_approval_detected?: boolean;
+    correlation_id?: string;
+    runs_count?: number;
     created_at: string;
     updated_at: string;
+    lifecycle_history?: Array<{
+      timestamp: string;
+      actor: string;
+      state: string;
+      message: string;
+    }>;
+    runs?: Array<{
+      run_id: string;
+      status: string;
+      step_count: number;
+      duration_ms: number;
+      started_at: string;
+    }>;
   }> {
     return this.request(`/api/v1/tasks/${encodeURIComponent(id)}`, { method: 'GET', signal });
   }

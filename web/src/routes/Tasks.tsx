@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { useRealtimeEvent } from '../realtime/useRealtime';
 import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState, EmptyState } from '../components/state';
+import { TaskDetail } from './TaskDetail';
 import type { TaskSummaryDTO, TaskStatus } from '../api/types';
 
 interface TasksProps {
@@ -16,6 +17,7 @@ export function Tasks({ onNavigateRuns }: TasksProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [riskFilter, setRiskFilter] = useState<string>('all');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
@@ -199,7 +201,7 @@ export function Tasks({ onNavigateRuns }: TasksProps) {
             </thead>
             <tbody>
               {filteredTasks.map((t) => (
-                <tr key={t.id}>
+                <tr key={t.id} onClick={() => setSelectedTaskId(t.id)} style={{ cursor: 'pointer' }}>
                   <td>
                     <code className="task-id-code">{t.id}</code>
                   </td>
@@ -229,7 +231,10 @@ export function Tasks({ onNavigateRuns }: TasksProps) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onNavigateRuns?.(t.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNavigateRuns?.(t.id);
+                      }}
                       aria-label={`View execution runs for ${t.id}`}
                     >
                       Runs →
@@ -240,6 +245,14 @@ export function Tasks({ onNavigateRuns }: TasksProps) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {selectedTaskId && (
+        <TaskDetail
+          taskId={selectedTaskId}
+          onClose={() => setSelectedTaskId(null)}
+          onNavigateRuns={onNavigateRuns}
+        />
       )}
     </div>
   );
