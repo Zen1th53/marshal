@@ -540,6 +540,37 @@ export class APIClient {
     return this.request(`/api/v1/evidence/${encodeURIComponent(id)}`, { method: 'GET', signal });
   }
 
+  getProvenanceTrace(targetId?: string, depth = 3, signal?: AbortSignal): Promise<{
+    target_id: string;
+    root_node: {
+      id: string;
+      type: string;
+      title: string;
+      producer: string;
+      timestamp: string;
+      relationship: string;
+      is_proven_binding: boolean;
+    };
+    nodes: Array<{
+      id: string;
+      type: string;
+      title: string;
+      producer: string;
+      timestamp: string;
+      relationship: string;
+      is_proven_binding: boolean;
+      parent_id?: string;
+    }>;
+    max_depth: number;
+    total_nodes: number;
+    generated_at: string;
+  }> {
+    const sp = new URLSearchParams();
+    if (targetId) sp.set('target_id', targetId);
+    sp.set('depth', String(depth));
+    return this.request(`/api/v1/provenance/trace?${sp.toString()}`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
