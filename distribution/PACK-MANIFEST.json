@@ -1190,6 +1190,11 @@
       "bytes": 1057
     },
     {
+      "path": "docs/web/ACCESSIBILITY.md",
+      "sha256": "5031f5065cc022bd7c2ed86e9d1f7f6e7970d16178d4fbfc21b72155285eef77",
+      "bytes": 3863
+    },
+    {
       "path": "docs/web/API-CONTRACT.md",
       "sha256": "f70052aba11b2384b6ed9f97c7ad9aa9d77eb92fa71d8bf3ac7ee793ce76ba75",
       "bytes": 1589
@@ -6388,6 +6393,11 @@
       "path": "web/src/styles/tokens.css",
       "sha256": "917bee311253e395fe3ce36c18d20d335d0f68d1107861939e5e18cf0696ec4c",
       "bytes": 5151
+    },
+    {
+      "path": "web/src/test/Accessibility.test.tsx",
+      "sha256": "26e741fcddc54629a8a93434fa4cf2ab8feb08070fc6f5645e299acdc3e0650a",
+      "bytes": 2764
     },
     {
       "path": "web/src/test/App.test.tsx",
