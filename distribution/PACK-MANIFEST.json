@@ -5385,6 +5385,31 @@
       "bytes": 154
     },
     {
+      "path": "web/src/components/layout/AppShell.tsx",
+      "sha256": "88a02c5d6e92f5cf6b4062bb12aff5a808a96f07bd133f51118655a9ad93e3fd",
+      "bytes": 744
+    },
+    {
+      "path": "web/src/components/ui/Button.tsx",
+      "sha256": "2d9d92873fd7f1ef4f8fb0f20da085a09476708d71c6935b37c541f1642243f1",
+      "bytes": 674
+    },
+    {
+      "path": "web/src/components/ui/CodeBlock.tsx",
+      "sha256": "608664ba6b109ca2aaa7b705e42a95b91a3b8dc891e9d31cbb824e649d328bf7",
+      "bytes": 256
+    },
+    {
+      "path": "web/src/components/ui/StatusBadge.tsx",
+      "sha256": "26a8e8db944b87195cdadaf495f8248b1b2323acf95a9ae415a26bfacac98c0e",
+      "bytes": 1471
+    },
+    {
+      "path": "web/src/components/ui/index.ts",
+      "sha256": "1aea84e424536e05112851652683eaec76fd5064f8dc2f324fca87fa52d18b06",
+      "bytes": 170
+    },
+    {
       "path": "web/src/index.css",
       "sha256": "95acbb129d5e5194489d76847468c24dd7306a3a2766f9ff557d7b162a12717a",
       "bytes": 66
@@ -5395,9 +5420,24 @@
       "bytes": 310
     },
     {
+      "path": "web/src/styles/components.css",
+      "sha256": "1c364f52a6f3eefd4ba6d98a687d5232aae7ebe7a142ddbe4d6f6b13f1fd5a5c",
+      "bytes": 4274
+    },
+    {
+      "path": "web/src/styles/tokens.css",
+      "sha256": "917bee311253e395fe3ce36c18d20d335d0f68d1107861939e5e18cf0696ec4c",
+      "bytes": 5151
+    },
+    {
       "path": "web/src/test/App.test.tsx",
       "sha256": "d6aeffdcbe36d8c91a0467e83f9b9f8d407f472da4c186ed712116e29d10365f",
       "bytes": 730
+    },
+    {
+      "path": "web/src/test/DesignSystem.test.tsx",
+      "sha256": "b505eddd7b0b46a03c062798e9f764ae622b6ec8ee31e8fb3991b8205797e767",
+      "bytes": 2337
     },
     {
       "path": "web/src/test/setup.ts",
