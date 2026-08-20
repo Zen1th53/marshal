@@ -1205,6 +1205,11 @@
       "bytes": 1900
     },
     {
+      "path": "docs/web/SECURITY.md",
+      "sha256": "b79525d08b0edc9f41d2b045b32ac479580a52c01dc13bbc36aa0f0cee97555d",
+      "bytes": 2018
+    },
+    {
       "path": "examples/01-codex-task.json",
       "sha256": "592d3ff43d759421881c7c2db5083284cb79a694e084a3c1b3c4ca0c98816841",
       "bytes": 189
@@ -4520,6 +4525,11 @@
       "bytes": 1349
     },
     {
+      "path": "internal/webcontrol/security_headers_test.go",
+      "sha256": "1394bdbf66dd3d045cee5f405260f15fea2cba82f11ad09184883c97d37af299",
+      "bytes": 2155
+    },
+    {
       "path": "internal/webcontrol/server.go",
       "sha256": "961eb74976e8c884aa0ee6c826384932aad035fcfe4622a8cbe38e6b6db26bbc",
       "bytes": 2930
@@ -5561,8 +5571,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "baead2a7dbc03b990722b6cc354329b5d3fdea7b407b8edd948eec7c8fb2eb32",
-      "bytes": 8734
+      "sha256": "c2f421f50252a15a08704f397d5083489dc4f97da717b9538ca9424453ed96e0",
+      "bytes": 9593
     },
     {
       "path": "web/src/styles/tokens.css",
