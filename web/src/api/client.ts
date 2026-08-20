@@ -7,6 +7,7 @@ import type {
   PagedResponse,
   AgentSummaryDTO,
   TaskSummaryDTO,
+  TaskStatus,
   MemoryRecordDTO,
 } from './types';
 
@@ -201,6 +202,22 @@ export class APIClient {
 
   getTasks(signal?: AbortSignal): Promise<PagedResponse<TaskSummaryDTO>> {
     return this.request<PagedResponse<TaskSummaryDTO>>('/api/v1/tasks', { method: 'GET', signal });
+  }
+
+  getTaskDetail(id: string, signal?: AbortSignal): Promise<{
+    id: string;
+    title: string;
+    description: string;
+    status: TaskStatus;
+    risk: string;
+    assigned_to?: string;
+    base_commit: string;
+    head_commit: string;
+    runs_count: number;
+    created_at: string;
+    updated_at: string;
+  }> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}`, { method: 'GET', signal });
   }
 
   searchMemory(query: string, signal?: AbortSignal): Promise<PagedResponse<MemoryRecordDTO>> {

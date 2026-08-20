@@ -9,6 +9,7 @@ import { CommandPalette } from './components/command/CommandPalette';
 import { Login } from './routes/Login';
 import { Overview } from './routes/Overview';
 import { Agents } from './routes/Agents';
+import { Tasks } from './routes/Tasks';
 import { api } from './api/client';
 import type { CapabilityStatusDTO } from './api/types';
 
@@ -79,6 +80,10 @@ function MainApp() {
             ) : currentRoute === 'agents' ? (
               <Agents onNavigateTask={() => {
                 setCurrentRoute('tasks');
+              }} />
+            ) : currentRoute === 'tasks' ? (
+              <Tasks onNavigateRuns={() => {
+                setCurrentRoute('runs');
               }} />
             ) : (
               <div className="route-header">

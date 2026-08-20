@@ -27,6 +27,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// 3. Tasks & Runs
 	mux.HandleFunc("GET /api/v1/tasks", s.handleListTasks)
+	mux.HandleFunc("GET /api/v1/tasks/{id}", s.handleGetTaskDetail)
 
 	// 4. Memory
 	mux.HandleFunc("GET /api/v1/memory/search", s.handleMemorySearch)
@@ -65,11 +66,6 @@ func (s *Server) handleSystemAdapters(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	writeJSON(w, http.StatusOK, adapters)
-}
-
-func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
-	resp := NewPagedResponse([]TaskSummaryDTO{}, "", 0, DefaultPageLimit)
-	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleMemorySearch(w http.ResponseWriter, r *http.Request) {
