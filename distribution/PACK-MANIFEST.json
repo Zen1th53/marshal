@@ -4556,8 +4556,8 @@
     },
     {
       "path": "internal/webcontrol/server.go",
-      "sha256": "20a842354212eed5fe44440a2a0a624079f727602272efc235be69dc86f3b3bb",
-      "bytes": 3029
+      "sha256": "e90ce7a78223f667f2248b885285efa323acc1d6e87ff0d77e7b4c171eb4dece",
+      "bytes": 3025
     },
     {
       "path": "internal/webcontrol/server_test.go",
@@ -5600,6 +5600,26 @@
       "bytes": 310
     },
     {
+      "path": "web/src/realtime/client.test.ts",
+      "sha256": "346712cd2ff1db9995eb960aedc935a5e1936339e05c2ac75ba4160a80df17d8",
+      "bytes": 3127
+    },
+    {
+      "path": "web/src/realtime/client.ts",
+      "sha256": "bc09094fd6d11c49b595f962d142bc7e1b614bf5cc7921ea49e3a09eda3e6bfe",
+      "bytes": 5687
+    },
+    {
+      "path": "web/src/realtime/store.tsx",
+      "sha256": "e4c412af25533537e851d2d70307eab479db01aa328d2415225b3a9d1fde6e51",
+      "bytes": 1138
+    },
+    {
+      "path": "web/src/realtime/useRealtime.ts",
+      "sha256": "62999b7edeec80fd68704c975d1329348c3eddbfa70d9b9df1e4b354857d59de",
+      "bytes": 682
+    },
+    {
       "path": "web/src/routes/Login.test.tsx",
       "sha256": "b54164c21a68406a399c85d6c1a18f227f4e7606262dfb23ed3d100f2dce9f5e",
       "bytes": 1842
@@ -5611,8 +5631,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "c2f421f50252a15a08704f397d5083489dc4f97da717b9538ca9424453ed96e0",
-      "bytes": 9593
+      "sha256": "7486d347117d1218345092811b80e1477879ac5c7ada1225f1813984e6efc296",
+      "bytes": 10327
     },
     {
       "path": "web/src/styles/tokens.css",

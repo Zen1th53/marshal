@@ -68,7 +68,7 @@ func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
 
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
-	s.handler = s.SecurityHeadersMiddleware(s.CSRFMiddleware(s.wrapMiddleware(mux)))
+	s.handler = s.SecurityHeadersMiddleware(s.CSRFMiddleware(s.CorrelationMiddleware(s.wrapMiddleware(mux))))
 
 	return s, nil
 }
@@ -84,9 +84,9 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) wrapMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		correlationID := r.Header.Get("X-Correlation-ID")
+		correlationID := GetCorrelationID(r.Context())
 		if correlationID == "" {
-			correlationID = fmt.Sprintf("req-%d", time.Now().UnixNano())
+			correlationID = NewCorrelationID()
 		}
 		w.Header().Set("X-Correlation-ID", correlationID)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
