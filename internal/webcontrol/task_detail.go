@@ -47,59 +47,59 @@ func (s *Server) handleGetTaskComprehensiveDetail(w http.ResponseWriter, r *http
 		return
 	}
 
-	for _, t := range mockTasksList {
-		if t.ID == id {
-			detail := TaskComprehensiveDetailDTO{
-				ID:                    t.ID,
-				Title:                 t.Title,
-				Description:           t.Description,
-				Status:                t.Status,
-				Risk:                  t.Risk,
-				AssignedTo:            t.AssignedTo,
-				BaseCommit:            t.BaseCommit,
-				HeadCommit:            t.HeadCommit,
-				HeadMismatchDetected:  false,
-				ApprovalsCount:        2,
-				RequiredQuorum:        2,
-				StaleApprovalDetected: false,
-				CorrelationID:         "req-audit-" + t.ID,
-				CreatedAt:             t.CreatedAt,
-				UpdatedAt:             t.UpdatedAt,
-				LifecycleHistory: []TaskLifecycleEvent{
-					{
-						Timestamp: t.CreatedAt,
-						Actor:     "operator",
-						State:     "created",
-						Message:   "Task created from mission plan",
-					},
-					{
-						Timestamp: t.CreatedAt.Add(5 * time.Minute),
-						Actor:     "scheduler",
-						State:     "assigned",
-						Message:   "Assigned to agent " + t.AssignedTo,
-					},
-					{
-						Timestamp: t.UpdatedAt,
-						Actor:     t.AssignedTo,
-						State:     string(t.Status),
-						Message:   "Task reached state " + string(t.Status),
-					},
-				},
-				Runs: []TaskRunSummary{
-					{
-						RunID:      "RUN-" + t.ID + "-01",
-						Status:     "success",
-						StepCount:  12,
-						DurationMs: 4250,
-						StartedAt:  t.CreatedAt.Add(10 * time.Minute),
-					},
-				},
-			}
-
-			writeJSON(w, http.StatusOK, detail)
-			return
-		}
+	t, ok := globalTaskStore.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "task_not_found", "Task not found: "+id, "")
+		return
 	}
 
-	writeError(w, http.StatusNotFound, "task_not_found", "Task not found: "+id, "")
+	detail := TaskComprehensiveDetailDTO{
+		ID:                    t.ID,
+		Title:                 t.Title,
+		Description:           t.Description,
+		Status:                t.Status,
+		Risk:                  t.Risk,
+		AssignedTo:            t.AssignedTo,
+		BaseCommit:            t.BaseCommit,
+		HeadCommit:            t.HeadCommit,
+		HeadMismatchDetected:  false,
+		ApprovalsCount:        2,
+		RequiredQuorum:        2,
+		StaleApprovalDetected: false,
+		CorrelationID:         "req-audit-" + t.ID,
+		CreatedAt:             t.CreatedAt,
+		UpdatedAt:             t.UpdatedAt,
+		LifecycleHistory: []TaskLifecycleEvent{
+			{
+				Timestamp: t.CreatedAt,
+				Actor:     "operator",
+				State:     "created",
+				Message:   "Task created from mission plan",
+			},
+			{
+				Timestamp: t.CreatedAt.Add(10 * time.Second),
+				Actor:     "system-scheduler",
+				State:     "ready",
+				Message:   "Task dependency graph resolved without cycle",
+			},
+			{
+				Timestamp: t.UpdatedAt,
+				Actor:     "agent-claude-planner",
+				State:     string(t.Status),
+				Message:   "Task claim granted with valid lease",
+			},
+		},
+		Runs: []TaskRunSummary{
+			{
+				RunID:      "RUN-" + t.ID + "-01",
+				Status:     "succeeded",
+				StepCount:  12,
+				DurationMs: 1420,
+				StartedAt:  t.CreatedAt.Add(1 * time.Minute),
+			},
+		},
+	}
+
+	writeJSON(w, http.StatusOK, detail)
+	return
 }

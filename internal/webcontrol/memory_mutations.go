@@ -52,16 +52,8 @@ func (s *Server) handlePromoteMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify target exists in corpus
-	var found *MemorySearchResultItemDTO
-	for _, m := range mockMemoryCorpus {
-		if m.ID == payload.MemoryID {
-			found = &m
-			break
-		}
-	}
-
-	if found == nil {
+	found, ok := globalMemoryStore.Get(payload.MemoryID)
+	if !ok {
 		writeError(w, http.StatusNotFound, "not_found", "Memory record not found", "")
 		return
 	}
@@ -74,6 +66,8 @@ func (s *Server) handlePromoteMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	globalMemoryStore.Promote(payload.MemoryID, payload.AssignedAuthority)
+
 	sig := sha256.Sum256([]byte("sig:" + payload.MemoryID + ":promoted"))
 	sigHex := hex.EncodeToString(sig[:])
 
@@ -81,6 +75,12 @@ func (s *Server) handlePromoteMemory(w http.ResponseWriter, r *http.Request) {
 	if found.Confidence < 0.9 {
 		rev = 2
 	}
+
+	s.sseHub.Broadcast("memory.mutated", "memory", payload.MemoryID, map[string]any{
+		"memory_id": payload.MemoryID,
+		"action":    "promoted",
+		"lifecycle": "active",
+	})
 
 	writeJSON(w, http.StatusOK, MemoryMutationResponseDTO{
 		MutationType: "promote",
@@ -106,6 +106,14 @@ func (s *Server) handleSupersedeMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	globalMemoryStore.Supersede(payload.TargetMemoryID, payload.SuccessorID)
+
+	s.sseHub.Broadcast("memory.mutated", "memory", payload.TargetMemoryID, map[string]any{
+		"memory_id":    payload.TargetMemoryID,
+		"action":       "superseded",
+		"successor_id": payload.SuccessorID,
+	})
+
 	writeJSON(w, http.StatusOK, MemoryMutationResponseDTO{
 		MutationType: "supersede",
 		MemoryID:     payload.TargetMemoryID,
@@ -129,6 +137,14 @@ func (s *Server) handleTombstoneMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_payload", "TargetMemoryID and Reason are required", "")
 		return
 	}
+
+	globalMemoryStore.Tombstone(payload.TargetMemoryID)
+
+	s.sseHub.Broadcast("memory.mutated", "memory", payload.TargetMemoryID, map[string]any{
+		"memory_id": payload.TargetMemoryID,
+		"action":    "tombstoned",
+		"lifecycle": "evicted",
+	})
 
 	writeJSON(w, http.StatusOK, MemoryMutationResponseDTO{
 		MutationType: "tombstone",

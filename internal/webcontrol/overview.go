@@ -40,6 +40,7 @@ type OverviewSummaryDTO struct {
 
 func (s *Server) handleGetOverview(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
+	taskCounts := globalTaskStore.GetCounts()
 
 	dto := OverviewSummaryDTO{
 		SystemStatus: SystemStatusDTO{
@@ -47,23 +48,15 @@ func (s *Server) handleGetOverview(w http.ResponseWriter, r *http.Request) {
 			Version:        "1.0.0",
 			CommitSHA:      "67816af",
 			DatabaseSchema: "v67",
-			ActiveWorkers:  0,
-			PendingTasks:   0,
+			ActiveWorkers:  taskCounts.Active,
+			PendingTasks:   taskCounts.Queued,
 			UpdatedAt:      now,
 		},
-		Tasks: TaskMetricCounts{
-			Active:    0,
-			Queued:    0,
-			Blocked:   0,
-			Review:    0,
-			Completed: 0,
-			Failed:    0,
-			Total:     0,
-		},
+		Tasks: taskCounts,
 		Agents: AgentMetricCounts{
 			Total:  4,
-			Active: 0,
-			Idle:   4,
+			Active: taskCounts.Active,
+			Idle:   4 - taskCounts.Active,
 		},
 		Providers: []AdapterSummaryDTO{
 			{

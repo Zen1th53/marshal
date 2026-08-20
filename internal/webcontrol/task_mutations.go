@@ -104,6 +104,8 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:   time.Now().UTC(),
 	}
 
+	globalTaskStore.Create(created)
+
 	// Broadcast realtime event
 	s.sseHub.Broadcast("task.status", "task", newID, map[string]any{
 		"task_id": newID,

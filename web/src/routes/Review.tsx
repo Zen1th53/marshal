@@ -3,6 +3,8 @@ import { api } from '../api/client';
 import { useRealtimeEvent } from '../realtime/useRealtime';
 import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState, EmptyState } from '../components/state';
+import { QuorumWorkspace } from '../features/review/QuorumWorkspace';
+import { MergeAction } from '../features/review/MergeAction';
 
 interface ReviewQueueItem {
   task_id: string;
@@ -25,6 +27,7 @@ export function Review() {
   const [error, setError] = useState<string | null>(null);
   const [stageFilter, setStageFilter] = useState('all');
   const [riskFilter, setRiskFilter] = useState('all');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const fetchQueue = useCallback(async () => {
     setLoading(true);
@@ -134,7 +137,11 @@ export function Review() {
             </thead>
             <tbody>
               {items.map((item) => (
-                <tr key={item.task_id}>
+                <tr
+                  key={item.task_id}
+                  onClick={() => setSelectedTaskId(item.task_id)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <td>
                     <code className="task-id-code">{item.task_id}</code>
                     {item.is_stale_head && (
@@ -169,6 +176,44 @@ export function Review() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {selectedTaskId && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setSelectedTaskId(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Review & Quorum Workspace"
+        >
+          <div
+            className="modal-card modal-lg"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '800px' }}
+          >
+            <div className="flex-row items-center justify-between" style={{ marginBottom: 'var(--space-3)' }}>
+              <h3 className="section-title">Review Workspace: {selectedTaskId}</h3>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedTaskId(null)}>
+                ✕ Close
+              </Button>
+            </div>
+
+            <QuorumWorkspace
+              taskId={selectedTaskId}
+              onDecisionSubmitted={() => void fetchQueue()}
+            />
+
+            <div style={{ marginTop: 'var(--space-4)' }}>
+              <MergeAction
+                taskId={selectedTaskId}
+                onMerged={() => {
+                  void fetchQueue();
+                  setSelectedTaskId(null);
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

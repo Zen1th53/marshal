@@ -49,16 +49,8 @@ func (s *Server) handleGetMemoryDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find base item or return not found
-	var baseItem *MemorySearchResultItemDTO
-	for _, m := range mockMemoryCorpus {
-		if m.ID == id {
-			baseItem = &m
-			break
-		}
-	}
-
-	if baseItem == nil {
+	baseItem, ok := globalMemoryStore.Get(id)
+	if !ok {
 		writeError(w, http.StatusNotFound, "not_found", "Memory record not found", "")
 		return
 	}

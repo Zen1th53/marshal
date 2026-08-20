@@ -113,16 +113,18 @@ func (s *Server) handleGetCSRFToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := GenerateCSRFToken(sessionID, "marshal-csrf-secret-key")
+	w.Header().Set("X-CSRF-Token", token)
 
 	// Set double-submit CSRF cookie (readable by frontend)
 	http.SetCookie(w, &http.Cookie{
 		Name:     CSRFCookieName,
 		Value:    token,
 		Path:     "/",
-		HttpOnly: false, // Accessible by JavaScript client to send in header
 		SameSite: http.SameSiteLaxMode,
 		Secure:   !s.IsLoopback(),
 	})
 
-	writeJSON(w, http.StatusOK, map[string]string{"csrf_token": token})
+	writeJSON(w, http.StatusOK, map[string]string{
+		"csrf_token": token,
+	})
 }

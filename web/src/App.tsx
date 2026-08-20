@@ -31,17 +31,7 @@ function MainApp() {
   const [currentRoute, setCurrentRoute] = useState('overview');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        setIsSearchOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  const [selectedTaskIdForRuns, setSelectedTaskIdForRuns] = useState<string | undefined>(undefined);
   const [capabilities, setCapabilities] = useState<Record<string, CapabilityStatusDTO>>({});
 
   const loadCapabilities = useCallback(async () => {
@@ -61,17 +51,30 @@ function MainApp() {
     }
   }, [isAuthenticated, loadCapabilities]);
 
-  // Global keyboard shortcut for Command Palette (Cmd+K / Ctrl+K)
+  // Global keyboard shortcuts:
+  // Cmd+K / Ctrl+K: Command Palette
+  // Cmd+P / Ctrl+P: Global Entity Search & Navigator
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+      if (isCmdOrCtrl && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
+      } else if (isCmdOrCtrl && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  const handleNavigate = (route: string) => {
+    if (route !== 'runs') {
+      setSelectedTaskIdForRuns(undefined);
+    }
+    setCurrentRoute(route);
+  };
 
   if (isLoading) {
     return (
@@ -96,16 +99,26 @@ function MainApp() {
       }}
     >
       <div className="app-shell">
-        <Header onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />
+        <Header
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          onOpenSearch={() => setIsSearchOpen(true)}
+        />
         <div className="app-body">
-          <Sidebar currentRoute={currentRoute} onRouteChange={setCurrentRoute} />
+          <Sidebar currentRoute={currentRoute} onRouteChange={handleNavigate} />
           <main className="app-main" id="main-content" role="main">
             {currentRoute === 'overview' && (
-              <Overview onNavigate={(route) => setCurrentRoute(route as any)} />
+              <Overview onNavigate={(route) => handleNavigate(route as any)} />
             )}
             {currentRoute === 'agents' && <Agents />}
-            {currentRoute === 'tasks' && <Tasks onNavigateRuns={(_taskId) => setCurrentRoute('runs')} />}
-            {currentRoute === 'runs' && <Runs />}
+            {currentRoute === 'tasks' && (
+              <Tasks
+                onNavigateRuns={(taskId) => {
+                  setSelectedTaskIdForRuns(taskId);
+                  setCurrentRoute('runs');
+                }}
+              />
+            )}
+            {currentRoute === 'runs' && <Runs initialTaskId={selectedTaskIdForRuns} />}
             {currentRoute === 'review' && <Review />}
             {currentRoute === 'evidence' && <Evidence />}
             {currentRoute === 'trace' && <Trace />}
@@ -129,12 +142,12 @@ function MainApp() {
         <CommandPalette
           isOpen={isCommandPaletteOpen}
           onClose={() => setIsCommandPaletteOpen(false)}
-          onNavigate={setCurrentRoute}
+          onNavigate={handleNavigate}
         />
         <GlobalEntityNavigator
           isOpen={isSearchOpen}
           onClose={() => setIsSearchOpen(false)}
-          onNavigate={setCurrentRoute}
+          onNavigate={handleNavigate}
         />
         <ToastContainer />
       </div>

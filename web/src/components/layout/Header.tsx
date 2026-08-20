@@ -4,9 +4,10 @@ import { StatusBadge } from '../ui';
 
 interface HeaderProps {
   onOpenCommandPalette: () => void;
+  onOpenSearch?: () => void;
 }
 
-export function Header({ onOpenCommandPalette }: HeaderProps) {
+export function Header({ onOpenCommandPalette, onOpenSearch }: HeaderProps) {
   const { user, logout } = useAuth();
   const { status: sseStatus } = useRealtimeStatus();
 
@@ -22,12 +23,12 @@ export function Header({ onOpenCommandPalette }: HeaderProps) {
         <button
           type="button"
           className="header-command-trigger"
-          onClick={onOpenCommandPalette}
-          aria-label="Open command palette"
+          onClick={onOpenSearch || onOpenCommandPalette}
+          aria-label="Open global search and navigator"
         >
           <span className="search-icon" aria-hidden="true">🔍</span>
-          <span className="command-placeholder">Search commands or routes…</span>
-          <kbd className="command-kbd">⌘K</kbd>
+          <span className="command-placeholder">Search entities, tasks, memory or routes…</span>
+          <kbd className="command-kbd">⌘K / ⌘P</kbd>
         </button>
       </div>
 

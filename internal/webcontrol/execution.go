@@ -63,6 +63,7 @@ func (s *Server) handleClaimTask(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
 	}
 	globalExecutionStore.claims[id] = claim
+	globalTaskStore.SetAssigned(id, user.PrincipalID)
 
 	s.sseHub.Broadcast("task.status", "task", id, map[string]any{
 		"task_id": id,
@@ -97,6 +98,8 @@ func (s *Server) handleRunTask(w http.ResponseWriter, r *http.Request) {
 		StartedAt: time.Now().UTC(),
 	}
 	globalExecutionStore.runs[id] = run
+	globalTaskStore.SetStatus(id, TaskStatusRunning)
+	globalTaskStore.IncrementRuns(id)
 
 	s.sseHub.Broadcast("task.status", "task", id, map[string]any{
 		"task_id": id,
@@ -121,6 +124,7 @@ func (s *Server) handleCancelTask(w http.ResponseWriter, r *http.Request) {
 	if run, ok := globalExecutionStore.runs[id]; ok {
 		run.Status = "canceled"
 	}
+	globalTaskStore.SetStatus(id, TaskStatusCanceled)
 
 	res := CancellationResultDTO{
 		TaskID:     id,
@@ -156,6 +160,8 @@ func (s *Server) handleRetryTask(w http.ResponseWriter, r *http.Request) {
 		StartedAt: time.Now().UTC(),
 	}
 	globalExecutionStore.runs[id] = run
+	globalTaskStore.SetStatus(id, TaskStatusRunning)
+	globalTaskStore.IncrementRuns(id)
 
 	s.sseHub.Broadcast("task.status", "task", id, map[string]any{
 		"task_id": id,

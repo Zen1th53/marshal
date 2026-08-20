@@ -92,15 +92,21 @@ func (s *Server) handleGetConflictComparison(w http.ResponseWriter, r *http.Requ
 
 	for _, item := range mockGovernanceQueue {
 		if item.ID == id && item.Category == "conflicted" {
-			base := mockMemoryCorpus[0]
-			comp := mockMemoryCorpus[3]
+			base, _ := globalMemoryStore.Get("MEM-001-ARCH-DECISION")
+			comp, _ := globalMemoryStore.Get("MEM-004-CANDIDATE-HEURISTIC")
+			if base == nil {
+				base = &MemorySearchResultItemDTO{ID: "MEM-001-ARCH-DECISION", Title: "Loopback Architecture Invariant"}
+			}
+			if comp == nil {
+				comp = &MemorySearchResultItemDTO{ID: "MEM-004-CANDIDATE-HEURISTIC", Title: "Dynamic Token Pruning Heuristic"}
+			}
 
 			writeJSON(w, http.StatusOK, MemoryConflictComparisonDTO{
 				ConflictID:      item.ID,
 				Status:          item.Status,
 				ResolutionMode:  "manual_review_required",
-				BaseMemory:      base,
-				CompetingMemory: comp,
+				BaseMemory:      *base,
+				CompetingMemory: *comp,
 				DetectedAt:      item.DetectedAt,
 			})
 			return
