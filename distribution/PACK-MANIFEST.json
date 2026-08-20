@@ -1205,6 +1205,11 @@
       "bytes": 1900
     },
     {
+      "path": "docs/web/REALTIME.md",
+      "sha256": "784f6d83f16b4c1dc628acc59421ac98e44383aad15be045502174be1a436753",
+      "bytes": 1491
+    },
+    {
       "path": "docs/web/SECURITY.md",
       "sha256": "b79525d08b0edc9f41d2b045b32ac479580a52c01dc13bbc36aa0f0cee97555d",
       "bytes": 2018
@@ -4523,6 +4528,16 @@
       "path": "internal/webcontrol/csrf_test.go",
       "sha256": "c5d0a124b55b1256e2fcdc0d79199f20af519e7d112295bb0f9b73791ad33494",
       "bytes": 3801
+    },
+    {
+      "path": "internal/webcontrol/events.go",
+      "sha256": "abf58beba571e925a47af5a8b762a9b9fcb11d614122c415bbdafc96c96f3cbe",
+      "bytes": 4991
+    },
+    {
+      "path": "internal/webcontrol/events_test.go",
+      "sha256": "71e7e73f66a8c4fc20c1a5243a9144f5ff7d9f985add83f4e98511a69f4b01b3",
+      "bytes": 1820
     },
     {
       "path": "internal/webcontrol/routes.go",
