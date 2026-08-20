@@ -1617,6 +1617,54 @@
   gap: var(--space-2);
 }
 
+/* --- Runs Explorer --- */
+.runs-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.runs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.runs-headline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.runs-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+
+.runs-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-dim);
+}
+
+.badge-steps {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 var(--space-1);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+.badge-evidence {
+  color: var(--color-accent);
+}
+
+
 
 
 

@@ -10,6 +10,7 @@ import { Login } from './routes/Login';
 import { Overview } from './routes/Overview';
 import { Agents } from './routes/Agents';
 import { Tasks } from './routes/Tasks';
+import { Runs } from './routes/Runs';
 import { api } from './api/client';
 import type { CapabilityStatusDTO } from './api/types';
 
@@ -75,20 +76,16 @@ function MainApp() {
         <div className="app-body">
           <Sidebar currentRoute={currentRoute} onRouteChange={setCurrentRoute} />
           <main className="app-main" id="main-content" role="main">
-            {currentRoute === 'overview' ? (
-              <Overview onNavigate={setCurrentRoute} />
-            ) : currentRoute === 'agents' ? (
-              <Agents onNavigateTask={() => {
-                setCurrentRoute('tasks');
-              }} />
-            ) : currentRoute === 'tasks' ? (
-              <Tasks onNavigateRuns={() => {
-                setCurrentRoute('runs');
-              }} />
-            ) : (
-              <div className="route-header">
-                <h2 className="route-title">{currentRoute.toUpperCase()}</h2>
-                <p className="route-desc">Active View: {currentRoute}</p>
+            {currentRoute === 'overview' && (
+              <Overview onNavigate={(route) => setCurrentRoute(route as any)} />
+            )}
+            {currentRoute === 'agents' && <Agents />}
+            {currentRoute === 'tasks' && <Tasks onNavigateRuns={(_taskId) => setCurrentRoute('runs')} />}
+            {currentRoute === 'runs' && <Runs />}
+            {currentRoute !== 'overview' && currentRoute !== 'agents' && currentRoute !== 'tasks' && currentRoute !== 'runs' && (
+              <div className="placeholder-view">
+                <h2>{currentRoute.toUpperCase()} Control Surface</h2>
+                <p>Telemetry, controls and state introspection for {currentRoute}.</p>
               </div>
             )}
           </main>

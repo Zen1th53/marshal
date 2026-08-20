@@ -288,6 +288,41 @@ export class APIClient {
     return this.request(`/api/v1/tasks/${encodeURIComponent(id)}/retry`, { method: 'POST', signal });
   }
 
+  listRuns(params?: {
+    task_id?: string;
+    agent_id?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }, signal?: AbortSignal): Promise<{
+    items: Array<{
+      run_id: string;
+      task_id: string;
+      agent_id: string;
+      provider: string;
+      status: string;
+      duration_ms: number;
+      step_count: number;
+      evidence_count: number;
+      base_commit: string;
+      head_commit: string;
+      started_at: string;
+      finished_at?: string;
+    }>;
+    total_count: number;
+    limit: number;
+    offset: number;
+  }> {
+    const sp = new URLSearchParams();
+    if (params?.task_id) sp.set('task_id', params.task_id);
+    if (params?.agent_id) sp.set('agent_id', params.agent_id);
+    if (params?.status) sp.set('status', params.status);
+    if (params?.limit) sp.set('limit', String(params.limit));
+    if (params?.offset) sp.set('offset', String(params.offset));
+    const qs = sp.toString();
+    return this.request(`/api/v1/runs${qs ? `?${qs}` : ''}`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
