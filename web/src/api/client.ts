@@ -427,6 +427,40 @@ export class APIClient {
     return this.request(`/api/v1/review/queue${qs ? `?${qs}` : ''}`, { method: 'GET', signal });
   }
 
+  getTaskQuorum(id: string, signal?: AbortSignal): Promise<{
+    task_id: string;
+    head_commit: string;
+    required_quorum: number;
+    current_approvals_count: number;
+    has_veto: boolean;
+    veto_reason?: string;
+    is_quorum_met: boolean;
+    independence_note: string;
+    attestations: Array<{
+      reviewer_id: string;
+      provider: string;
+      role: string;
+      decision: string;
+      comment: string;
+      commit_hash: string;
+      signed_at: string;
+    }>;
+  }> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}/quorum`, { method: 'GET', signal });
+  }
+
+  submitQuorumDecision(id: string, payload: {
+    decision: 'approved' | 'rejected' | 'vetoed';
+    comment: string;
+    commit_hash: string;
+  }, signal?: AbortSignal): Promise<{ task_id: string; decision: string; status: string }> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}/quorum/decision`, {
+      method: 'POST',
+      body: JSON.stringify({ payload }),
+      signal,
+    });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

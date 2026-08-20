@@ -1922,6 +1922,112 @@
   border-radius: var(--radius-sm);
 }
 
+/* --- Quorum Workspace --- */
+.quorum-workspace-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.quorum-header-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.quorum-progress-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quorum-progress-count {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+}
+
+.quorum-independence-note {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-dim);
+}
+
+.attestations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+
+.attestation-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.attestation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.reviewer-name {
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.decision-pill {
+  font-size: 0.5625rem;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  font-weight: var(--font-weight-semibold);
+}
+.pill-approved {
+  background: rgba(46, 204, 113, 0.15);
+  color: #2ecc71;
+}
+.pill-rejected {
+  background: rgba(243, 156, 18, 0.15);
+  color: #f39c12;
+}
+.pill-vetoed {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+}
+
+.attestation-comment {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.attestation-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: var(--border-width) solid var(--color-border);
+  padding-top: var(--space-1);
+}
+
+.quorum-decision-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+
 
 
 

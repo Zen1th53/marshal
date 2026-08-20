@@ -42,6 +42,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/runs/{id}/recover", s.handleRecoverRun)
 	mux.HandleFunc("GET /api/v1/artifacts/{id}/download", s.handleDownloadArtifact)
 	mux.HandleFunc("GET /api/v1/review/queue", s.handleGetReviewQueue)
+	mux.HandleFunc("GET /api/v1/tasks/{id}/quorum", s.handleGetTaskQuorum)
+	mux.HandleFunc("POST /api/v1/tasks/{id}/quorum/decision", s.handleSubmitQuorumDecision)
 
 	// 4. Memory
 	mux.HandleFunc("GET /api/v1/memory/search", s.handleMemorySearch)
