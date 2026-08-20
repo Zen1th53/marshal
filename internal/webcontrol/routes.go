@@ -58,6 +58,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// 4. Memory
 	mux.HandleFunc("GET /api/v1/memory/search", s.handleMemorySearch)
+	mux.HandleFunc("GET /api/v1/memory/{id}", s.handleGetMemoryRecord)
 }
 
 func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
@@ -93,9 +94,4 @@ func (s *Server) handleSystemAdapters(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	writeJSON(w, http.StatusOK, adapters)
-}
-
-func (s *Server) handleMemorySearch(w http.ResponseWriter, r *http.Request) {
-	resp := NewPagedResponse([]MemoryRecordDTO{}, "", 0, DefaultPageLimit)
-	writeJSON(w, http.StatusOK, resp)
 }

@@ -2711,6 +2711,156 @@
   gap: var(--space-1);
 }
 
+/* --- Memory Explorer & Hybrid Search --- */
+.memory-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.memory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.memory-headline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.memory-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+
+.memory-subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-dim);
+}
+
+.index-status-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.memory-search-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  background: var(--color-surface-alt);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.search-input-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 300px;
+}
+
+.memory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-3);
+}
+
+.memory-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.memory-card:hover {
+  border-color: var(--color-accent);
+}
+
+.memory-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.memory-badges-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.kind-badge {
+  font-size: 0.5625rem;
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-semibold);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+}
+.kind-decision {
+  color: #9b59b6;
+  background: rgba(155, 89, 182, 0.15);
+}
+.kind-procedure {
+  color: #3498db;
+  background: rgba(52, 152, 219, 0.15);
+}
+.kind-episode {
+  color: #e67e22;
+  background: rgba(230, 126, 34, 0.15);
+}
+.kind-belief {
+  color: #2ecc71;
+  background: rgba(46, 204, 113, 0.15);
+}
+
+.scope-badge {
+  color: var(--color-text-muted);
+}
+
+.score-pill {
+  color: #f1c40f;
+}
+
+.memory-card-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  margin: 0;
+}
+
+.memory-card-body {
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.memory-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.memory-id-tag {
+  font-size: 0.625rem;
+  color: var(--color-accent);
+}
+
+
 
 
 

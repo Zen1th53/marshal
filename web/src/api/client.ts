@@ -8,7 +8,6 @@ import type {
   AgentSummaryDTO,
   TaskSummaryDTO,
   TaskStatus,
-  MemoryRecordDTO,
 } from './types';
 
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
@@ -686,6 +685,63 @@ export class APIClient {
     return this.request(`/api/v1/audit/events${qs ? `?${qs}` : ''}`, { method: 'GET', signal });
   }
 
+  searchMemory(params?: {
+    query?: string;
+    scope?: string;
+    kind?: string;
+    lifecycle?: string;
+    limit?: number;
+    offset?: number;
+  }, signal?: AbortSignal): Promise<{
+    items: Array<{
+      id: string;
+      project_id: string;
+      scope: string;
+      scope_id: string;
+      kind: string;
+      title: string;
+      body: string;
+      lifecycle: string;
+      authority: string;
+      confidence: number;
+      observed_at: string;
+      retrieval_score: number;
+      retrieval_reason: string;
+    }>;
+    total_count: number;
+    limit: number;
+    offset: number;
+    index_status: string;
+  }> {
+    const sp = new URLSearchParams();
+    if (params?.query) sp.set('query', params.query);
+    if (params?.scope) sp.set('scope', params.scope);
+    if (params?.kind) sp.set('kind', params.kind);
+    if (params?.lifecycle) sp.set('lifecycle', params.lifecycle);
+    if (params?.limit) sp.set('limit', String(params.limit));
+    if (params?.offset) sp.set('offset', String(params.offset));
+    const qs = sp.toString();
+    return this.request(`/api/v1/memory/search${qs ? `?${qs}` : ''}`, { method: 'GET', signal });
+  }
+
+  getMemoryRecord(id: string, signal?: AbortSignal): Promise<{
+    id: string;
+    project_id: string;
+    scope: string;
+    scope_id: string;
+    kind: string;
+    title: string;
+    body: string;
+    lifecycle: string;
+    authority: string;
+    confidence: number;
+    observed_at: string;
+    retrieval_score: number;
+    retrieval_reason: string;
+  }> {
+    return this.request(`/api/v1/memory/${encodeURIComponent(id)}`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
@@ -705,14 +761,6 @@ export class APIClient {
     max_depth: number;
   }> {
     return this.request(`/api/v1/tasks/dag?max_depth=${encodeURIComponent(maxDepth)}`, { method: 'GET', signal });
-  }
-
-  searchMemory(query: string, signal?: AbortSignal): Promise<PagedResponse<MemoryRecordDTO>> {
-    return this.request<PagedResponse<MemoryRecordDTO>>('/api/v1/memory/search', {
-      method: 'GET',
-      params: { q: query },
-      signal,
-    });
   }
 }
 
