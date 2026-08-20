@@ -161,6 +161,18 @@ export class APIClient {
     return this.request('/api/v1/system/capabilities', { method: 'GET', signal });
   }
 
+  getOverview(signal?: AbortSignal): Promise<{
+    system_status: SystemStatusDTO;
+    tasks: { active: number; queued: number; blocked: number; review: number; completed: number; failed: number; total: number };
+    agents: { total: number; active: number; idle: number };
+    providers: AdapterSummaryDTO[];
+    memory_health: string;
+    security_notices: Array<{ level: string; title: string; message: string; created_at: string }>;
+    evaluated_at: string;
+  }> {
+    return this.request('/api/v1/overview', { method: 'GET', signal });
+  }
+
   getAgents(signal?: AbortSignal): Promise<PagedResponse<AgentSummaryDTO>> {
     return this.request<PagedResponse<AgentSummaryDTO>>('/api/v1/agents', { method: 'GET', signal });
   }

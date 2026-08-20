@@ -7,6 +7,7 @@ import { Header } from './components/layout/Header';
 import { Sidebar } from './components/nav/Sidebar';
 import { CommandPalette } from './components/command/CommandPalette';
 import { Login } from './routes/Login';
+import { Overview } from './routes/Overview';
 import { api } from './api/client';
 import type { CapabilityStatusDTO } from './api/types';
 
@@ -72,11 +73,14 @@ function MainApp() {
         <div className="app-body">
           <Sidebar currentRoute={currentRoute} onRouteChange={setCurrentRoute} />
           <main className="app-main" id="main-content" role="main">
-            <div className="route-header">
-              <h2 className="route-title">{currentRoute.toUpperCase()}</h2>
-              <p className="route-desc">Active View: {currentRoute}</p>
-            </div>
-            {/* Detailed route views are populated in Phase W2-W6 */}
+            {currentRoute === 'overview' ? (
+              <Overview onNavigate={setCurrentRoute} />
+            ) : (
+              <div className="route-header">
+                <h2 className="route-title">{currentRoute.toUpperCase()}</h2>
+                <p className="route-desc">Active View: {currentRoute}</p>
+              </div>
+            )}
           </main>
         </div>
 
