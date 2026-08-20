@@ -4500,9 +4500,24 @@
       "bytes": 1508
     },
     {
+      "path": "internal/webcontrol/csrf.go",
+      "sha256": "6a0f1641b8327b6f2a7fcfe8696899e8c13a03243a59712e8359681001382478",
+      "bytes": 3845
+    },
+    {
+      "path": "internal/webcontrol/csrf_test.go",
+      "sha256": "c5d0a124b55b1256e2fcdc0d79199f20af519e7d112295bb0f9b73791ad33494",
+      "bytes": 3801
+    },
+    {
       "path": "internal/webcontrol/routes.go",
       "sha256": "f83d2627f3d0971c024ff68b87109eafb9058230863b9bb113de9c57484487bc",
       "bytes": 2272
+    },
+    {
+      "path": "internal/webcontrol/security_headers.go",
+      "sha256": "50b06e545e99f64cdfb5253ebd664167a3d17c55292592050dacf493f5527edc",
+      "bytes": 1349
     },
     {
       "path": "internal/webcontrol/server.go",
@@ -5418,6 +5433,11 @@
       "path": "web/src/api/client.ts",
       "sha256": "12f7025b973d4fe6280e3f4456186dabfa85bd491fe9bcecb82626fcc8c6c41c",
       "bytes": 6036
+    },
+    {
+      "path": "web/src/api/csrf.ts",
+      "sha256": "be7a7066563ab4e7665e017884e9fa520600932696b58d435867556c74c99a6a",
+      "bytes": 921
     },
     {
       "path": "web/src/api/errors.ts",
