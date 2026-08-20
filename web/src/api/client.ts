@@ -905,6 +905,81 @@ export class APIClient {
     });
   }
 
+  promoteMemory(payload: {
+    memory_id: string;
+    expected_revision?: number;
+    expected_digest_sha256?: string;
+    assigned_authority?: string;
+    review_rationale: string;
+  }, idempotencyKey?: string, signal?: AbortSignal): Promise<{
+    mutation_type: string;
+    memory_id: string;
+    new_lifecycle: string;
+    new_revision: number;
+    audit_id: string;
+    signature_id: string;
+    mutated_at: string;
+  }> {
+    return this.request('/api/v1/memory/mutations/promote', {
+      method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey ?? `idem-promote-${Date.now()}`,
+        payload,
+      }),
+      signal,
+    });
+  }
+
+  supersedeMemory(payload: {
+    target_memory_id: string;
+    successor_id: string;
+    expected_revision?: number;
+    reason: string;
+  }, idempotencyKey?: string, signal?: AbortSignal): Promise<{
+    mutation_type: string;
+    memory_id: string;
+    new_lifecycle: string;
+    new_revision: number;
+    audit_id: string;
+    signature_id: string;
+    mutated_at: string;
+  }> {
+    return this.request('/api/v1/memory/mutations/supersede', {
+      method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey ?? `idem-sup-${Date.now()}`,
+        payload,
+      }),
+      signal,
+    });
+  }
+
+  tombstoneMemory(payload: {
+    target_memory_id: string;
+    expected_revision?: number;
+    reason: string;
+  }, idempotencyKey?: string, signal?: AbortSignal): Promise<{
+    mutation_type: string;
+    memory_id: string;
+    new_lifecycle: string;
+    new_revision: number;
+    audit_id: string;
+    signature_id: string;
+    mutated_at: string;
+  }> {
+    return this.request('/api/v1/memory/mutations/tombstone', {
+      method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey ?? `idem-tomb-${Date.now()}`,
+        payload,
+      }),
+      signal,
+    });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
