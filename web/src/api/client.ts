@@ -1232,6 +1232,30 @@ export class APIClient {
     });
   }
 
+  listBenchmarks(signal?: AbortSignal): Promise<{
+    reports: Array<{
+      suite_id: string;
+      suite_name: string;
+      harness_type: string;
+      status: string;
+      dataset_subset: string;
+      commit_sha: string;
+      metrics: Array<{
+        name: string;
+        value: number;
+        unit: string;
+        baseline: number;
+        threshold: number;
+      }>;
+      scope_notice: string;
+      evaluated_at: string;
+    }>;
+    total_suites: number;
+    evaluated_at: string;
+  }> {
+    return this.request('/api/v1/benchmarks', { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

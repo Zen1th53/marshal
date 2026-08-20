@@ -3091,6 +3091,51 @@
   border-radius: var(--radius-md);
 }
 
+/* --- Benchmarks Dashboard --- */
+.benchmarks-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.benchmarks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+  gap: var(--space-4);
+}
+
+.benchmark-card {
+  padding: var(--space-4);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.benchmark-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.benchmark-suite-title {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  margin: 0;
+}
+
+.benchmark-scope-notice {
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border-left: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+
 
 
 

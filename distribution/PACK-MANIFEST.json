@@ -4610,6 +4610,16 @@
       "bytes": 1388
     },
     {
+      "path": "internal/webcontrol/maintenance.go",
+      "sha256": "53230919dfe5e053abfeae4e574fbac55497d09b3e2dc843ab00c07c92e9775f",
+      "bytes": 3469
+    },
+    {
+      "path": "internal/webcontrol/maintenance_test.go",
+      "sha256": "96e815950b9ce8c249b47e8a4170d688c6556c15d3cb950380422b0f409fb50f",
+      "bytes": 3140
+    },
+    {
       "path": "internal/webcontrol/memory.go",
       "sha256": "7efd1ac3fd3b722f354b3505fa78e2adce8595dc01d9a37d4e1e084e63973851",
       "bytes": 5728
@@ -4751,8 +4761,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "90871c596a746d663bbce397fee8df66c2361e80b088fa2f82630180babdf30d",
-      "bytes": 5875
+      "sha256": "84839738dc59f874324cb717ad5125738f0691f2c0b0ada58660c8f879ef4b78",
+      "bytes": 5941
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -5766,8 +5776,8 @@
     },
     {
       "path": "web/src/App.tsx",
-      "sha256": "674482220b68d6890202a25554f80b80eddfa244cb5a30a3802a30e2dbadf340",
-      "bytes": 5336
+      "sha256": "a7b111e3c2e82c65713eba381715803b5ca3fad0d14f1bfaa547cf8408dc268a",
+      "bytes": 5481
     },
     {
       "path": "web/src/api/client.test.ts",
@@ -5776,8 +5786,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "0a3574197ef205d8954d14e36c211028a53a4129c7f44353dc5006810aec33b5",
-      "bytes": 36750
+      "sha256": "0a2afdb952e6f786cc8d6f826471a71bb54a17ed24c977078850b0b28dd66f09",
+      "bytes": 37332
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -6018,6 +6028,16 @@
       "path": "web/src/features/operations/backup/BackupRestoreWorkspace.tsx",
       "sha256": "6c19ce1588b9e3960ed06a552a556248ef8b89752d76c33c95afc2ed675cb690",
       "bytes": 8093
+    },
+    {
+      "path": "web/src/features/operations/maintenance/MaintenanceWorkspace.test.tsx",
+      "sha256": "ea201d7e328997022c3baaba9d2eba4fef0123859ed1011e4b8a837bfc51e952",
+      "bytes": 2192
+    },
+    {
+      "path": "web/src/features/operations/maintenance/MaintenanceWorkspace.tsx",
+      "sha256": "1c9e19854976e8ce0e12c132c787d34f465c00d55e7355c21003bd1ba42b4b2e",
+      "bytes": 6677
     },
     {
       "path": "web/src/features/review/MergeAction.test.tsx",
@@ -6281,8 +6301,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "9b6903a769969cc9aeceb052fb9089f1870f21156e2cab37ddd121452a4cbc03",
-      "bytes": 63702
+      "sha256": "5402f20d02b7d01cdb8582f28a3527d57adc94968ffcd14a28d2025ef459c9df",
+      "bytes": 64631
     },
     {
       "path": "web/src/styles/tokens.css",
