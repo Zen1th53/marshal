@@ -4580,6 +4580,16 @@
       "bytes": 1082
     },
     {
+      "path": "internal/webcontrol/quorum.go",
+      "sha256": "19d3be9c5716f7db0ec68a355982300ee7ad9e6b80c8b92e81c82f0bfa624a8b",
+      "bytes": 4903
+    },
+    {
+      "path": "internal/webcontrol/quorum_test.go",
+      "sha256": "4d11ef5792362023bf2d6152cae43a980ac5a8f6e394ba7dabaf1a985f221bb6",
+      "bytes": 2933
+    },
+    {
       "path": "internal/webcontrol/review.go",
       "sha256": "75b7cb9394b5bf1d7dd4bc97b915f1efeb2862e593e31b4878b4ec6b6003342e",
       "bytes": 3529
@@ -4591,8 +4601,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "1c905b9d99b327dd33f3c91f48e16f2dae18f8aea232a7998f67faad5115c512",
-      "bytes": 3288
+      "sha256": "c6625776385e3e3807a9ad806c633d36761a3cedb7c4b64d0c44bf82e8c44735",
+      "bytes": 3441
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -5586,8 +5596,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "7385c169985aee24c50eeac0c6d5392302d1a1ca56ab7c4734d1c260df867625",
-      "bytes": 15453
+      "sha256": "3451b66716a2695a0d6772f2767ea4df98762ea5863ae45d5957ec71f720f6b4",
+      "bytes": 16318
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -5760,6 +5770,16 @@
       "bytes": 6057
     },
     {
+      "path": "web/src/features/review/QuorumWorkspace.test.tsx",
+      "sha256": "06a49609df57f0f5dfe65487f15aad162d42e50ebc6585694c04592b339e5d90",
+      "bytes": 2320
+    },
+    {
+      "path": "web/src/features/review/QuorumWorkspace.tsx",
+      "sha256": "3366f6639e60efec3162e16e0411f3de370b11b58afba3d2a8069c9268854da2",
+      "bytes": 6613
+    },
+    {
       "path": "web/src/features/runs/result/RunResultViewer.test.tsx",
       "sha256": "e4f5c2ecdb2a83f661292381702b5e75ac094e1699daa5ee858ecd441f68d0be",
       "bytes": 2447
@@ -5901,8 +5921,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "38aa2e9ab3391867d84aab9b7f144da351baac8d2fa41233f10a1deea147f213",
-      "bytes": 43123
+      "sha256": "e9ea2d86b16fb80f718a6b4c68139d8f7806564f085d68b0a74107ed6682e0a7",
+      "bytes": 44606
     },
     {
       "path": "web/src/styles/tokens.css",

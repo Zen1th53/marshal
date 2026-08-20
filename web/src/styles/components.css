@@ -2027,6 +2027,89 @@
   border-radius: var(--radius-md);
 }
 
+/* --- Merge Action --- */
+.merge-action-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.merge-preflight-card, .merge-success-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.preflight-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preflight-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.target-branch-badge {
+  color: var(--color-text-dim);
+}
+
+.gating-checks-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.gate-check-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.check-mark {
+  color: #2ecc71;
+  font-weight: var(--font-weight-bold);
+}
+
+.merge-actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.merge-success-card {
+  border-color: rgba(46, 204, 113, 0.4);
+  background: rgba(46, 204, 113, 0.05);
+}
+
+.merge-success-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.merge-success-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: #2ecc71;
+}
+
+.merge-success-details {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+
 
 
 

@@ -461,6 +461,38 @@ export class APIClient {
     });
   }
 
+  getMergePreflight(id: string, signal?: AbortSignal): Promise<{
+    task_id: string;
+    is_eligible: boolean;
+    expected_head: string;
+    target_branch: string;
+    quorum_met: boolean;
+    has_veto: boolean;
+    is_stale_head: boolean;
+    gating_checks: string[];
+    denial_reason?: string;
+  }> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}/merge/preflight`, { method: 'GET', signal });
+  }
+
+  executeMerge(id: string, payload: {
+    expected_head: string;
+    strategy: string;
+  }, signal?: AbortSignal): Promise<{
+    task_id: string;
+    merged: boolean;
+    merge_commit: string;
+    target_branch: string;
+    merged_at: string;
+    correlation_id: string;
+  }> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ payload }),
+      signal,
+    });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
