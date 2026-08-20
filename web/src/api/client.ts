@@ -1055,6 +1055,27 @@ export class APIClient {
     });
   }
 
+  getMemoryUsageTrace(memoryId: string, signal?: AbortSignal): Promise<{
+    memory_id: string;
+    title: string;
+    total_recalls: number;
+    total_injections: number;
+    total_citations: number;
+    events: Array<{
+      event_id: string;
+      event_type: string;
+      task_id: string;
+      run_id: string;
+      agent_id: string;
+      revision_used: number;
+      evidence_plan_id?: string;
+      causal_link_status: string;
+      timestamp: string;
+    }>;
+  }> {
+    return this.request(`/api/v1/memory/${encodeURIComponent(memoryId)}/usage`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

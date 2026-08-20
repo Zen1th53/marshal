@@ -73,6 +73,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/memory/versioning/rollback", s.handleRollbackSnapshot)
 	mux.HandleFunc("GET /api/v1/memory/{id}", s.handleGetMemoryRecord)
 	mux.HandleFunc("GET /api/v1/memory/{id}/detail", s.handleGetMemoryDetail)
+	mux.HandleFunc("GET /api/v1/memory/{id}/usage", s.handleGetMemoryUsageTrace)
 }
 
 func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {

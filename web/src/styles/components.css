@@ -3049,6 +3049,28 @@
   color: #e74c3c;
 }
 
+/* --- Memory Influence & Receipts --- */
+.receipt-type-pill {
+  font-size: 0.5625rem;
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-semibold);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+}
+.type-retrieved {
+  background: rgba(149, 165, 166, 0.2);
+  color: #95a5a6;
+}
+.type-injected_to_prompt {
+  background: rgba(52, 152, 219, 0.2);
+  color: #3498db;
+}
+.type-cited_in_action {
+  background: rgba(46, 204, 113, 0.2);
+  color: #2ecc71;
+}
+
+
 
 
 

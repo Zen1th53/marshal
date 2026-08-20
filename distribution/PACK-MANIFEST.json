@@ -4640,6 +4640,16 @@
       "bytes": 2187
     },
     {
+      "path": "internal/webcontrol/memory_versioning.go",
+      "sha256": "cd566ecbf8c7c1e844daa64670514a3e7125975f7b8e07a6692b8631365d4f6c",
+      "bytes": 5659
+    },
+    {
+      "path": "internal/webcontrol/memory_versioning_test.go",
+      "sha256": "d60d876acf15d9ec4a88b7b02ded52e3988159716a42916b45b7449a3100ff25",
+      "bytes": 3665
+    },
+    {
       "path": "internal/webcontrol/merge.go",
       "sha256": "bb29665a81b4421b3e5b4605d0a1cdbae51a77188ebc9cf0510a5a1e03ae8637",
       "bytes": 3582
@@ -4711,8 +4721,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "9532197f88a8fc94e83c27f6c9b8ab81cfe92ee7e279ee3ac79a4f415d2067b9",
-      "bytes": 5121
+      "sha256": "3cb2cafe898ca66fe9355f5d338c30d272370e9f83528e60b22d69f7eb031db4",
+      "bytes": 5199
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -5726,8 +5736,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "a7681be011955a5859e8708e15569f4af49d33c5764ca3283e935cf4cc77cfc1",
-      "bytes": 31815
+      "sha256": "da889df9f391afaea3c8e1f1b0d9878699f69cbd4bd3c5e1950346a917a34321",
+      "bytes": 32404
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -5918,6 +5928,16 @@
       "path": "web/src/features/memory/retrieval/RetrievalExplainability.tsx",
       "sha256": "112c30ff872d99087cfa9cbf12334567ad512591d944c0103ceb94a54b25cf37",
       "bytes": 6044
+    },
+    {
+      "path": "web/src/features/memory/versioning/MemoryVersioningWorkspace.test.tsx",
+      "sha256": "86c2f86d7f334de9299c70bac421c5495593ec34c5000368c6ff898ca4ad5b6a",
+      "bytes": 2762
+    },
+    {
+      "path": "web/src/features/memory/versioning/MemoryVersioningWorkspace.tsx",
+      "sha256": "0a3e4bc3da4b316fbe26acb09c956eea3f40c1d5c56bafd96853561a4671bdf7",
+      "bytes": 13253
     },
     {
       "path": "web/src/features/memory/working/WorkingMemoryInspector.test.tsx",
@@ -6181,8 +6201,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "cfd3a90711aec8775e6534170491a38fc4ee5cf209b59c7103e51ec8558b100f",
-      "bytes": 62714
+      "sha256": "379d2564c0c4c67815c6f6311be77804d2c3d541bd25d043f24766d6644e3971",
+      "bytes": 63184
     },
     {
       "path": "web/src/styles/tokens.css",
