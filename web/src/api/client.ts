@@ -272,6 +272,22 @@ export class APIClient {
     });
   }
 
+  claimTask(id: string, signal?: AbortSignal): Promise<{ task_id: string; agent_id: string; lease_id: string; expires_at: string }> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}/claim`, { method: 'POST', signal });
+  }
+
+  runTask(id: string, signal?: AbortSignal): Promise<{ run_id: string; task_id: string; status: string; started_at: string }> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}/run`, { method: 'POST', signal });
+  }
+
+  cancelTask(id: string, signal?: AbortSignal): Promise<{ task_id: string; status: string; canceled_at: string; reason?: string }> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST', signal });
+  }
+
+  retryTask(id: string, signal?: AbortSignal): Promise<{ run_id: string; task_id: string; status: string; started_at: string }> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}/retry`, { method: 'POST', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

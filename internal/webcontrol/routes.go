@@ -31,6 +31,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/tasks/dag", s.handleGetTaskDAG)
 	mux.HandleFunc("GET /api/v1/tasks/{id}", s.handleGetTaskComprehensiveDetail)
 	mux.HandleFunc("PATCH /api/v1/tasks/{id}", s.handleUpdateTask)
+	mux.HandleFunc("POST /api/v1/tasks/{id}/claim", s.handleClaimTask)
+	mux.HandleFunc("POST /api/v1/tasks/{id}/run", s.handleRunTask)
+	mux.HandleFunc("POST /api/v1/tasks/{id}/cancel", s.handleCancelTask)
+	mux.HandleFunc("POST /api/v1/tasks/{id}/retry", s.handleRetryTask)
 
 	// 4. Memory
 	mux.HandleFunc("GET /api/v1/memory/search", s.handleMemorySearch)

@@ -1610,6 +1610,14 @@
   gap: var(--space-3);
 }
 
+/* --- Task Action Controls --- */
+.task-action-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+
 
 
 
