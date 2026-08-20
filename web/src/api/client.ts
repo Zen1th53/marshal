@@ -220,6 +220,27 @@ export class APIClient {
     return this.request(`/api/v1/tasks/${encodeURIComponent(id)}`, { method: 'GET', signal });
   }
 
+  getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
+    nodes: Array<{
+      id: string;
+      title: string;
+      status: TaskStatus;
+      risk: string;
+      assigned_to?: string;
+      layer: number;
+    }>;
+    edges: Array<{
+      source_id: string;
+      target_id: string;
+      type: string;
+    }>;
+    has_cycles: boolean;
+    cycle_path?: string[];
+    max_depth: number;
+  }> {
+    return this.request(`/api/v1/tasks/dag?max_depth=${encodeURIComponent(maxDepth)}`, { method: 'GET', signal });
+  }
+
   searchMemory(query: string, signal?: AbortSignal): Promise<PagedResponse<MemoryRecordDTO>> {
     return this.request<PagedResponse<MemoryRecordDTO>>('/api/v1/memory/search', {
       method: 'GET',
