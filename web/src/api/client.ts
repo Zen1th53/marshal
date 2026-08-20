@@ -571,6 +571,44 @@ export class APIClient {
     return this.request(`/api/v1/provenance/trace?${sp.toString()}`, { method: 'GET', signal });
   }
 
+  getProviders(signal?: AbortSignal): Promise<{
+    providers: Array<{
+      id: string;
+      name: string;
+      class: string;
+      probe_status: string;
+      capabilities: string[];
+      models: Array<{
+        id: string;
+        context_window: number;
+        latency_p95_ms: number;
+      }>;
+      last_probed_at: string;
+    }>;
+    routing_decisions: Array<{
+      intent: string;
+      selected_model: string;
+      provider_id: string;
+      rationale: string;
+      is_pinned: boolean;
+    }>;
+    last_evaluated_at: string;
+  }> {
+    return this.request('/api/v1/providers', { method: 'GET', signal });
+  }
+
+  overrideRouter(payload: {
+    intent: string;
+    model_id: string;
+    is_pinned: boolean;
+  }, signal?: AbortSignal): Promise<{ intent: string; model_id: string; is_pinned: boolean; status: string }> {
+    return this.request('/api/v1/providers/router/override', {
+      method: 'POST',
+      body: JSON.stringify({ payload }),
+      signal,
+    });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

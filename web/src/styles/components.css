@@ -2346,6 +2346,148 @@
   color: var(--color-text-muted);
 }
 
+/* --- Providers & Router Matrix --- */
+.providers-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.providers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.providers-headline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.providers-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+
+.providers-subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-dim);
+}
+
+.providers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+
+.provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.provider-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.provider-name-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.provider-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  margin: 0;
+}
+
+.class-badge {
+  font-size: 0.5625rem;
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-semibold);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+.class-cloud {
+  color: #3498db;
+  background: rgba(52, 152, 219, 0.15);
+}
+.class-local {
+  color: #2ecc71;
+  background: rgba(46, 204, 113, 0.15);
+}
+
+.provider-caps-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.provider-cap-pill {
+  font-size: 0.625rem;
+  font-family: var(--font-mono);
+  padding: 1px 6px;
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+
+.provider-models-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.provider-footer {
+  border-top: var(--border-width) solid var(--color-border);
+  padding-top: var(--space-2);
+}
+
+.router-matrix-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.intent-badge {
+  color: var(--color-accent);
+}
+
+.pinned-tag {
+  margin-left: var(--space-2);
+  font-size: 0.5625rem;
+  font-family: var(--font-mono);
+  color: #f39c12;
+  background: rgba(243, 156, 18, 0.15);
+  border: 1px solid rgba(243, 156, 18, 0.4);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.rationale-cell {
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+
 
 
 
