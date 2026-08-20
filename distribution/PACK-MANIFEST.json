@@ -4480,6 +4480,16 @@
       "bytes": 1581
     },
     {
+      "path": "internal/webcontrol/capabilities.go",
+      "sha256": "9482491a751b725351c425720ef5d362d39193cd65a007aa3e76e03b2e5eb71a",
+      "bytes": 2237
+    },
+    {
+      "path": "internal/webcontrol/capabilities_test.go",
+      "sha256": "0f8d9a81c6694ee9c62a61ff4cd5a6f79c61d7cad2c40a239cb53baa7c049686",
+      "bytes": 1488
+    },
+    {
       "path": "internal/webcontrol/contracts.go",
       "sha256": "957c2b5086de15db0fae2c51b6589affc2853cc2705a67c2bc166c079371007e",
       "bytes": 3489
@@ -5430,6 +5440,21 @@
       "bytes": 170
     },
     {
+      "path": "web/src/features/Capability.test.tsx",
+      "sha256": "36bbdcd24ecdb7a55e9504c302cfd1701c05b7a8206f3a729553768e57627ffa",
+      "bytes": 2763
+    },
+    {
+      "path": "web/src/features/Capability.tsx",
+      "sha256": "1ff4da996d0c810dd96b91293e9e39f802b7364ee005d8a4929de86dc747a52f",
+      "bytes": 1038
+    },
+    {
+      "path": "web/src/features/capabilities.ts",
+      "sha256": "3e9c377a248b0af460114c62675fd1a0b50026fef9ee277f93f5d447e44d2091",
+      "bytes": 718
+    },
+    {
       "path": "web/src/index.css",
       "sha256": "95acbb129d5e5194489d76847468c24dd7306a3a2766f9ff557d7b162a12717a",
       "bytes": 66
@@ -5441,8 +5466,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "1c364f52a6f3eefd4ba6d98a687d5232aae7ebe7a142ddbe4d6f6b13f1fd5a5c",
-      "bytes": 4274
+      "sha256": "60e9e786fa5bd070db2a8ddbcb503435951dc444b778d5a52a7b3b52945de1a0",
+      "bytes": 7065
     },
     {
       "path": "web/src/styles/tokens.css",
