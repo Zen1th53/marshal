@@ -4571,8 +4571,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "7b9af10d675b64aaf621b7ec04d2671e43814f25bfee7310b1be19e8cbd9b665",
-      "bytes": 2263
+      "sha256": "512e665d6f748e8d88ae940fd6d463895828191a277f8b3eee0e7bf83fb13cca",
+      "bytes": 2385
     },
     {
       "path": "internal/webcontrol/security_headers.go",
@@ -4618,6 +4618,16 @@
       "path": "internal/webcontrol/task_dag_test.go",
       "sha256": "80bdb0882e7912ba523f20784669522c088c6f9fd38b08b5ca9da171dd6c9c51",
       "bytes": 1204
+    },
+    {
+      "path": "internal/webcontrol/task_detail.go",
+      "sha256": "a88ff4efd5f3028d539926322330b951acfd18d328dd4fa849935a5a8fe4f916",
+      "bytes": 3435
+    },
+    {
+      "path": "internal/webcontrol/task_detail_test.go",
+      "sha256": "ca7f1afb1e589cd3962ab50c5106a46f565d05b4902d9971eb4946004b14831f",
+      "bytes": 1170
     },
     {
       "path": "internal/webcontrol/tasks.go",
@@ -5516,8 +5526,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "f2812c22683795d7337e99e9ff9f4c7e2bd3ece9b54c4b6928d1d3f932f4268e",
-      "bytes": 8582
+      "sha256": "5548456d2948eb6eb8a5ac07c816ae747c4aa46f7067c26104eb16c0b74cee96",
+      "bytes": 9498
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -5755,19 +5765,29 @@
       "bytes": 6960
     },
     {
+      "path": "web/src/routes/TaskDetail.test.tsx",
+      "sha256": "15c172a4294c05c16cbfeef8832d9d995023ec6d2f169eccf9af0f612ec34102",
+      "bytes": 2560
+    },
+    {
+      "path": "web/src/routes/TaskDetail.tsx",
+      "sha256": "147f8482cbf9f462412b9599173299213e9d92031fb610223d20afcd73e8e6bc",
+      "bytes": 7668
+    },
+    {
       "path": "web/src/routes/Tasks.test.tsx",
       "sha256": "b7f8d4d9070cea7cda0a90a4a081d18d1c132b9198ea4ab0877377fe58ec49dc",
       "bytes": 2201
     },
     {
       "path": "web/src/routes/Tasks.tsx",
-      "sha256": "a268abc8739d2c18db63eeb8b83174a88150ac8cf914acbee2bfb544e163f084",
-      "bytes": 8610
+      "sha256": "190beadff62d396d9b6ede9f3788679af7d0ad9280287e4d15077e6326c011d7",
+      "bytes": 9132
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "8e8cafa8add1fd8ef34635148c6d6845cab867a8cb435a733ab8b5a29754aa0f",
-      "bytes": 33937
+      "sha256": "f04a875c193fb49d7efb4988a3a5d17d5dd05bd6ba4a1f5bee1042b5bfc20ab4",
+      "bytes": 34888
     },
     {
       "path": "web/src/styles/tokens.css",

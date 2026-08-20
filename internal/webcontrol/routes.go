@@ -27,8 +27,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// 3. Tasks & Runs
 	mux.HandleFunc("GET /api/v1/tasks", s.handleListTasks)
+	mux.HandleFunc("POST /api/v1/tasks", s.handleCreateTask)
 	mux.HandleFunc("GET /api/v1/tasks/dag", s.handleGetTaskDAG)
 	mux.HandleFunc("GET /api/v1/tasks/{id}", s.handleGetTaskComprehensiveDetail)
+	mux.HandleFunc("PATCH /api/v1/tasks/{id}", s.handleUpdateTask)
 
 	// 4. Memory
 	mux.HandleFunc("GET /api/v1/memory/search", s.handleMemorySearch)

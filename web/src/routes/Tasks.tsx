@@ -4,6 +4,7 @@ import { useRealtimeEvent } from '../realtime/useRealtime';
 import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState, EmptyState } from '../components/state';
 import { TaskDetail } from './TaskDetail';
+import { CreateTaskModal } from '../features/tasks/forms/CreateTaskModal';
 import type { TaskSummaryDTO, TaskStatus } from '../api/types';
 
 interface TasksProps {
@@ -18,6 +19,7 @@ export function Tasks({ onNavigateRuns }: TasksProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
@@ -77,9 +79,14 @@ export function Tasks({ onNavigateRuns }: TasksProps) {
           <h2 className="tasks-title">Task Explorer & Mission Queue</h2>
           <span className="tasks-count">{tasks.length} Total Registered Tasks</span>
         </div>
-        <Button variant="secondary" size="sm" onClick={fetchTasks}>
-          Refresh Queue
-        </Button>
+        <div className="tasks-header-actions" style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <Button variant="primary" size="sm" onClick={() => setIsCreateOpen(true)}>
+            + New Task
+          </Button>
+          <Button variant="secondary" size="sm" onClick={fetchTasks}>
+            Refresh Queue
+          </Button>
+        </div>
       </div>
 
       {/* Filter Controls & Saved Views */}
@@ -254,6 +261,12 @@ export function Tasks({ onNavigateRuns }: TasksProps) {
           onNavigateRuns={onNavigateRuns}
         />
       )}
+
+      <CreateTaskModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onSuccess={fetchTasks}
+      />
     </div>
   );
 }

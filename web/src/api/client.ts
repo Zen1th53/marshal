@@ -238,6 +238,40 @@ export class APIClient {
     return this.request(`/api/v1/tasks/${encodeURIComponent(id)}`, { method: 'GET', signal });
   }
 
+  createTask(payload: {
+    title: string;
+    description: string;
+    risk: string;
+    assigned_to?: string;
+    dependencies?: string[];
+  }, idempotencyKey?: string, signal?: AbortSignal): Promise<TaskSummaryDTO> {
+    return this.request<TaskSummaryDTO>('/api/v1/tasks', {
+      method: 'POST',
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey,
+        payload,
+      }),
+      signal,
+    });
+  }
+
+  updateTask(id: string, payload: {
+    title?: string;
+    description?: string;
+    risk?: string;
+    assigned_to?: string;
+    dependencies?: string[];
+  }, expectedRevision?: number, signal?: AbortSignal): Promise<{ id: string; revision: number; status: string }> {
+    return this.request(`/api/v1/tasks/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        expected_revision: expectedRevision,
+        payload,
+      }),
+      signal,
+    });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
