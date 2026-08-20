@@ -3070,6 +3070,21 @@
   color: #2ecc71;
 }
 
+/* --- Operations & Doctor --- */
+.operations-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.doctor-summary-card {
+  padding: var(--space-4);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+
 
 
 

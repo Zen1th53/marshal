@@ -1101,6 +1101,19 @@ export class APIClient {
     return this.request('/api/v1/memory/security/health', { method: 'GET', signal });
   }
 
+  getDoctorReport(signal?: AbortSignal): Promise<{
+    overall_status: string;
+    checks: Array<{
+      component: string;
+      status: string;
+      latency_ms: number;
+      message: string;
+    }>;
+    evaluated_at: string;
+  }> {
+    return this.request('/api/v1/health/doctor', { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

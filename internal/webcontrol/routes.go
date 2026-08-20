@@ -75,6 +75,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/memory/{id}/detail", s.handleGetMemoryDetail)
 	mux.HandleFunc("GET /api/v1/memory/{id}/usage", s.handleGetMemoryUsageTrace)
 	mux.HandleFunc("GET /api/v1/memory/security/health", s.handleGetMemorySecurityHealth)
+
+	// 5. Operations & Health
+	mux.HandleFunc("GET /api/v1/health/doctor", s.handleGetDoctorReport)
 }
 
 func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
