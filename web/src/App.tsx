@@ -21,6 +21,7 @@ import { Memory } from './routes/Memory';
 import { MemoryGovernance } from './routes/MemoryGovernance';
 import { Operations } from './routes/Operations';
 import { Benchmarks } from './routes/Benchmarks';
+import { Settings } from './routes/Settings';
 import { api } from './api/client';
 import type { CapabilityStatusDTO } from './api/types';
 
@@ -102,7 +103,8 @@ function MainApp() {
             {currentRoute === 'memory-governance' && <MemoryGovernance />}
             {currentRoute === 'operations' && <Operations />}
             {currentRoute === 'benchmarks' && <Benchmarks />}
-            {currentRoute !== 'overview' && currentRoute !== 'agents' && currentRoute !== 'tasks' && currentRoute !== 'runs' && currentRoute !== 'review' && currentRoute !== 'evidence' && currentRoute !== 'trace' && currentRoute !== 'providers' && currentRoute !== 'security' && currentRoute !== 'audit' && currentRoute !== 'memory' && currentRoute !== 'memory-governance' && currentRoute !== 'operations' && currentRoute !== 'benchmarks' && (
+            {currentRoute === 'settings' && <Settings />}
+            {currentRoute !== 'overview' && currentRoute !== 'agents' && currentRoute !== 'tasks' && currentRoute !== 'runs' && currentRoute !== 'review' && currentRoute !== 'evidence' && currentRoute !== 'trace' && currentRoute !== 'providers' && currentRoute !== 'security' && currentRoute !== 'audit' && currentRoute !== 'memory' && currentRoute !== 'memory-governance' && currentRoute !== 'operations' && currentRoute !== 'benchmarks' && currentRoute !== 'settings' && (
               <div className="placeholder-view">
                 <h2>{currentRoute.toUpperCase()} Control Surface</h2>
                 <p>Telemetry, controls and state introspection for {currentRoute}.</p>

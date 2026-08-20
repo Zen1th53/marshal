@@ -4750,6 +4750,16 @@
       "bytes": 2933
     },
     {
+      "path": "internal/webcontrol/release_trust.go",
+      "sha256": "4aa7b24dc87201a92b6067baa5a982cfc67fd5f5374bbe01c622683571fc43bc",
+      "bytes": 2568
+    },
+    {
+      "path": "internal/webcontrol/release_trust_test.go",
+      "sha256": "6998def8da53d71d606878809ba12f589fe4574d22fc680bb8ddf45eec7f9908",
+      "bytes": 1054
+    },
+    {
       "path": "internal/webcontrol/retrieval_trace.go",
       "sha256": "8ce2cc045182e80c89e91543ddf3fefd2220c1ce7b553017b8094194afc4653b",
       "bytes": 3070
@@ -4771,8 +4781,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "ecaa2bcfd1f15ce3934c54ffd28cb21bfdf3d60768abcb2a29a332ad4c8b428b",
-      "bytes": 6014
+      "sha256": "0e4e7fbfc52104b2b064105353f31b22c08f42183d665fab94351ecdb8c5acd2",
+      "bytes": 6139
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -5786,8 +5796,8 @@
     },
     {
       "path": "web/src/App.tsx",
-      "sha256": "a7b111e3c2e82c65713eba381715803b5ca3fad0d14f1bfaa547cf8408dc268a",
-      "bytes": 5481
+      "sha256": "cf9e355f2d039c930e4a17149090f00b6a490ab3ca39937ef0cfb4d00b8b3990",
+      "bytes": 5616
     },
     {
       "path": "web/src/api/client.test.ts",
@@ -5796,8 +5806,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "d8ecd180ff97fce1ec110f7d321e7e55464c4d275e3a29c7d2cf548a89bb4ec7",
-      "bytes": 37903
+      "sha256": "83327d437d68e6f1466d6371a2b0c8c1d1b0afb551eae50a67cf617d73009616",
+      "bytes": 39391
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -6048,6 +6058,16 @@
       "path": "web/src/features/operations/maintenance/MaintenanceWorkspace.tsx",
       "sha256": "1c9e19854976e8ce0e12c132c787d34f465c00d55e7355c21003bd1ba42b4b2e",
       "bytes": 6677
+    },
+    {
+      "path": "web/src/features/operations/trust/ReleaseTrustView.test.tsx",
+      "sha256": "d4ab48f275344dbaff76d9f65d3716845d58de36db26fb77f88db06d094b7283",
+      "bytes": 1652
+    },
+    {
+      "path": "web/src/features/operations/trust/ReleaseTrustView.tsx",
+      "sha256": "c7f0b5b5cf671352f0cfaf617efd921a2d9ccf88f37a72d0e95fe72bbd9acbf6",
+      "bytes": 5254
     },
     {
       "path": "web/src/features/review/MergeAction.test.tsx",
@@ -6321,8 +6341,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "5402f20d02b7d01cdb8582f28a3527d57adc94968ffcd14a28d2025ef459c9df",
-      "bytes": 64631
+      "sha256": "7acc5715d3195dbce22a65db18c33a9e0aa9e535110d167677066776a0db2886",
+      "bytes": 65058
     },
     {
       "path": "web/src/styles/tokens.css",

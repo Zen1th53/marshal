@@ -3135,6 +3135,27 @@
   border-radius: var(--radius-sm);
 }
 
+/* --- Settings Workspace --- */
+.settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: var(--space-4);
+}
+
+.settings-card {
+  padding: var(--space-4);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+
 
 
 

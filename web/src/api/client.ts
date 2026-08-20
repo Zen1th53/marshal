@@ -1277,6 +1277,59 @@ export class APIClient {
     return this.request('/api/v1/operations/trust', { method: 'GET', signal });
   }
 
+  getSettings(signal?: AbortSignal): Promise<{
+    revision: number;
+    system_mode: string;
+    max_concurrent_workers: number;
+    telemetry_level: string;
+    auto_consolidation_enabled: boolean;
+    memory_retention_days: number;
+    requires_restart: boolean;
+    env_diagnostics: {
+      os_arch: string;
+      go_version: string;
+      sandbox_kind: string;
+      storage_engine: string;
+    };
+    updated_at: string;
+  }> {
+    return this.request('/api/v1/settings', { method: 'GET', signal });
+  }
+
+  updateSettings(payload: {
+    expected_revision: number;
+    system_mode: string;
+    max_concurrent_workers: number;
+    telemetry_level: string;
+    auto_consolidation_enabled: boolean;
+    memory_retention_days: number;
+  }, idempotencyKey?: string, signal?: AbortSignal): Promise<{
+    revision: number;
+    system_mode: string;
+    max_concurrent_workers: number;
+    telemetry_level: string;
+    auto_consolidation_enabled: boolean;
+    memory_retention_days: number;
+    requires_restart: boolean;
+    env_diagnostics: {
+      os_arch: string;
+      go_version: string;
+      sandbox_kind: string;
+      storage_engine: string;
+    };
+    updated_at: string;
+  }> {
+    return this.request('/api/v1/settings', {
+      method: 'PUT',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey ?? `idem-set-${Date.now()}`,
+        payload,
+      }),
+      signal,
+    });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
