@@ -363,6 +363,35 @@ export class APIClient {
     return this.request(`/api/v1/runs/${encodeURIComponent(id)}/logs?cursor=${cursor}&limit=${limit}`, { method: 'GET', signal });
   }
 
+  getRunResult(id: string, signal?: AbortSignal): Promise<{
+    run_id: string;
+    base_commit: string;
+    head_commit: string;
+    files_summary: Array<{
+      path: string;
+      status: string;
+      insertions: number;
+      deletions: number;
+    }>;
+    artifacts: Array<{
+      id: string;
+      name: string;
+      sha256: string;
+      size_bytes: number;
+      content_type: string;
+    }>;
+    worktree_status: string;
+    checkpoint_id?: string;
+    can_recover: boolean;
+    created_at: string;
+  }> {
+    return this.request(`/api/v1/runs/${encodeURIComponent(id)}/result`, { method: 'GET', signal });
+  }
+
+  recoverRun(id: string, signal?: AbortSignal): Promise<{ run_id: string; checkpoint_id: string; recovered_at: string; status: string }> {
+    return this.request(`/api/v1/runs/${encodeURIComponent(id)}/recover`, { method: 'POST', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

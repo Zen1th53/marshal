@@ -38,6 +38,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/runs", s.handleListRuns)
 	mux.HandleFunc("GET /api/v1/runs/{id}", s.handleGetRunDetail)
 	mux.HandleFunc("GET /api/v1/runs/{id}/logs", s.handleGetRunLogs)
+	mux.HandleFunc("GET /api/v1/runs/{id}/result", s.handleGetRunResult)
+	mux.HandleFunc("POST /api/v1/runs/{id}/recover", s.handleRecoverRun)
+	mux.HandleFunc("GET /api/v1/artifacts/{id}/download", s.handleDownloadArtifact)
 
 	// 4. Memory
 	mux.HandleFunc("GET /api/v1/memory/search", s.handleMemorySearch)

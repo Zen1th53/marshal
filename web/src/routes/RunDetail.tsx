@@ -4,6 +4,7 @@ import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState } from '../components/state';
 import { CorrelationLink } from '../components/audit/CorrelationLink';
 import { SafeLogViewer, type LogLine } from '../features/logs/SafeLogViewer';
+import { RunResultViewer } from '../features/runs/result/RunResultViewer';
 
 interface RunDetailProps {
   runId: string;
@@ -32,6 +33,7 @@ export function RunDetail({ runId, onClose }: RunDetailProps) {
   const [data, setData] = useState<RunDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'logs' | 'results'>('logs');
 
   const fetchRunDetail = useCallback(async () => {
     setLoading(true);
@@ -101,11 +103,31 @@ export function RunDetail({ runId, onClose }: RunDetailProps) {
                 <CorrelationLink correlationId={data.correlation_id} />
               </div>
 
-              {/* Terminal Log Viewer */}
-              <div className="run-logs-wrapper">
-                <h4 className="section-subtitle">Execution Step Logs</h4>
-                <SafeLogViewer lines={data.logs} onRefresh={fetchRunDetail} />
+              {/* Tab Selector */}
+              <div className="filter-presets" style={{ marginBottom: 'var(--space-3)' }}>
+                <button
+                  type="button"
+                  className={`preset-tab ${activeTab === 'logs' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('logs')}
+                >
+                  Step Logs ({data.logs.length})
+                </button>
+                <button
+                  type="button"
+                  className={`preset-tab ${activeTab === 'results' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('results')}
+                >
+                  Artifacts & Diff Results
+                </button>
               </div>
+
+              {activeTab === 'logs' ? (
+                <div className="run-logs-wrapper">
+                  <SafeLogViewer lines={data.logs} onRefresh={fetchRunDetail} />
+                </div>
+              ) : (
+                <RunResultViewer runId={runId} />
+              )}
             </div>
           ) : null}
         </div>
