@@ -88,6 +88,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/benchmarks", s.handleListBenchmarks)
 	mux.HandleFunc("GET /api/v1/settings", s.handleGetSettings)
 	mux.HandleFunc("PUT /api/v1/settings", s.handleUpdateSettings)
+	mux.HandleFunc("GET /api/v1/search", s.handleGlobalSearch)
 }
 
 func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {

@@ -3155,6 +3155,47 @@
   border-radius: var(--radius-md);
 }
 
+/* --- Global Entity Navigator --- */
+.search-navigator-header {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.search-navigator-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-base);
+}
+
+.search-navigator-body {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.search-results-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.search-result-item {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border-width) solid var(--color-border-subtle);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.search-result-item:hover,
+.search-result-item.selected {
+  background: var(--color-surface);
+}
+
+.search-navigator-footer {
+  padding: var(--space-2) var(--space-4);
+  border-top: var(--border-width) solid var(--color-border);
+  background: var(--color-surface-alt);
+}
+
+
 
 
 

@@ -1330,6 +1330,23 @@ export class APIClient {
     });
   }
 
+  searchGlobal(query: string, signal?: AbortSignal): Promise<{
+    query: string;
+    total_matches: number;
+    results: Array<{
+      entity_type: string;
+      id: string;
+      title: string;
+      subtitle: string;
+      route_target: string;
+      badge_status: string;
+      score: number;
+    }>;
+    evaluated_at: string;
+  }> {
+    return this.request(`/api/v1/search?q=${encodeURIComponent(query)}`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

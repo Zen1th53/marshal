@@ -22,6 +22,7 @@ import { MemoryGovernance } from './routes/MemoryGovernance';
 import { Operations } from './routes/Operations';
 import { Benchmarks } from './routes/Benchmarks';
 import { Settings } from './routes/Settings';
+import { GlobalEntityNavigator } from './features/search/GlobalEntityNavigator';
 import { api } from './api/client';
 import type { CapabilityStatusDTO } from './api/types';
 
@@ -29,6 +30,18 @@ function MainApp() {
   const { isAuthenticated, isLoading } = useAuth();
   const [currentRoute, setCurrentRoute] = useState('overview');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   const [capabilities, setCapabilities] = useState<Record<string, CapabilityStatusDTO>>({});
 
   const loadCapabilities = useCallback(async () => {
@@ -116,6 +129,11 @@ function MainApp() {
         <CommandPalette
           isOpen={isCommandPaletteOpen}
           onClose={() => setIsCommandPaletteOpen(false)}
+          onNavigate={setCurrentRoute}
+        />
+        <GlobalEntityNavigator
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
           onNavigate={setCurrentRoute}
         />
         <ToastContainer />
