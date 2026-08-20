@@ -46,6 +46,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/tasks/{id}/quorum/decision", s.handleSubmitQuorumDecision)
 	mux.HandleFunc("GET /api/v1/tasks/{id}/merge/preflight", s.handleMergePreflight)
 	mux.HandleFunc("POST /api/v1/tasks/{id}/merge", s.handleExecuteMerge)
+	mux.HandleFunc("GET /api/v1/evidence", s.handleListEvidence)
+	mux.HandleFunc("GET /api/v1/evidence/{id}", s.handleGetEvidenceDetail)
 
 	// 4. Memory
 	mux.HandleFunc("GET /api/v1/memory/search", s.handleMemorySearch)

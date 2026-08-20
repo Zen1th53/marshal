@@ -4570,6 +4570,16 @@
       "bytes": 3014
     },
     {
+      "path": "internal/webcontrol/merge.go",
+      "sha256": "bb29665a81b4421b3e5b4605d0a1cdbae51a77188ebc9cf0510a5a1e03ae8637",
+      "bytes": 3582
+    },
+    {
+      "path": "internal/webcontrol/merge_test.go",
+      "sha256": "a6ae75407dd129e7a476d569a82a1045b08dd78b64d556f364c16edc8f502d91",
+      "bytes": 3431
+    },
+    {
       "path": "internal/webcontrol/overview.go",
       "sha256": "a8e918019cc0a2daeaed2f265f156d14500c60bc8f8dfa0cb6e475bd41ba299a",
       "bytes": 2659
@@ -4601,8 +4611,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "c6625776385e3e3807a9ad806c633d36761a3cedb7c4b64d0c44bf82e8c44735",
-      "bytes": 3441
+      "sha256": "6b5b87ed0742b5ad81b55eaf3de54882aff1571ee4eaedb85cc4985b3c2e008d",
+      "bytes": 3575
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -5586,8 +5596,8 @@
     },
     {
       "path": "web/src/App.tsx",
-      "sha256": "84a356d80d393362e4457375da2192f86d5b577455baf2c77447dbf2731e3b99",
-      "bytes": 4239
+      "sha256": "1e75479d2be9d0500c9ff06a239c2e9632be7b7619bdf204573350c700230cbf",
+      "bytes": 4374
     },
     {
       "path": "web/src/api/client.test.ts",
@@ -5596,8 +5606,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "3451b66716a2695a0d6772f2767ea4df98762ea5863ae45d5957ec71f720f6b4",
-      "bytes": 16318
+      "sha256": "4e7c1af58caebda841433ef388f80720e6ae9f122501d2ab25a534ec27446e42",
+      "bytes": 17639
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -5770,6 +5780,16 @@
       "bytes": 6057
     },
     {
+      "path": "web/src/features/review/MergeAction.test.tsx",
+      "sha256": "8db2104906874bcdef3d3ce83ce1da3d15a2c2cd26b11c3007af905562c5db9d",
+      "bytes": 2399
+    },
+    {
+      "path": "web/src/features/review/MergeAction.tsx",
+      "sha256": "f6df65d1d947e46d00bd14d347989002f4d56a46543fc95f50e60479064e6481",
+      "bytes": 5285
+    },
+    {
       "path": "web/src/features/review/QuorumWorkspace.test.tsx",
       "sha256": "06a49609df57f0f5dfe65487f15aad162d42e50ebc6585694c04592b339e5d90",
       "bytes": 2320
@@ -5921,8 +5941,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "e9ea2d86b16fb80f718a6b4c68139d8f7806564f085d68b0a74107ed6682e0a7",
-      "bytes": 44606
+      "sha256": "a0e16209733d08c45089ce2b7dd206a1ed859681911ce262d3c4e42c2f545cc7",
+      "bytes": 45884
     },
     {
       "path": "web/src/styles/tokens.css",

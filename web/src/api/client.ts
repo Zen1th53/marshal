@@ -493,6 +493,53 @@ export class APIClient {
     });
   }
 
+  listEvidence(params?: {
+    task_id?: string;
+    type?: string;
+    limit?: number;
+    offset?: number;
+  }, signal?: AbortSignal): Promise<{
+    items: Array<{
+      id: string;
+      task_id: string;
+      run_id: string;
+      type: string;
+      producer: string;
+      digest: string;
+      size_bytes: number;
+      integrity_status: string;
+      created_at: string;
+    }>;
+    total_count: number;
+    limit: number;
+    offset: number;
+  }> {
+    const sp = new URLSearchParams();
+    if (params?.task_id) sp.set('task_id', params.task_id);
+    if (params?.type) sp.set('type', params.type);
+    if (params?.limit) sp.set('limit', String(params.limit));
+    if (params?.offset) sp.set('offset', String(params.offset));
+    const qs = sp.toString();
+    return this.request(`/api/v1/evidence${qs ? `?${qs}` : ''}`, { method: 'GET', signal });
+  }
+
+  getEvidenceDetail(id: string, signal?: AbortSignal): Promise<{
+    id: string;
+    task_id: string;
+    run_id: string;
+    type: string;
+    producer: string;
+    digest: string;
+    calculated_digest: string;
+    integrity_status: string;
+    artifact_id?: string;
+    signature: string;
+    payload: Record<string, any>;
+    created_at: string;
+  }> {
+    return this.request(`/api/v1/evidence/${encodeURIComponent(id)}`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
