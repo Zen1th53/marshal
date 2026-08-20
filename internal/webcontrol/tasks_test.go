@@ -11,15 +11,11 @@ import (
 )
 
 func TestT183TasksListAndDetail(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. List tasks with status filter
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks?status=running", nil)
-	w := httptest.NewRecorder()
-	server.Handler().ServeHTTP(w, req)
+	w := client.Do(req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", w.Code)
@@ -36,8 +32,7 @@ func TestT183TasksListAndDetail(t *testing.T) {
 
 	// 2. Search tasks by title / keyword
 	reqSearch := httptest.NewRequest(http.MethodGet, "/api/v1/tasks?search=memory", nil)
-	wSearch := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wSearch, reqSearch)
+	wSearch := client.Do(reqSearch)
 
 	var pagedSearch webcontrol.PagedResponse[webcontrol.TaskSummaryDTO]
 	if err := json.NewDecoder(wSearch.Body).Decode(&pagedSearch); err != nil {
@@ -49,8 +44,7 @@ func TestT183TasksListAndDetail(t *testing.T) {
 
 	// 3. Detail view
 	reqDetail := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/TASK-001-CORE-MEMORY", nil)
-	wDetail := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDetail, reqDetail)
+	wDetail := client.Do(reqDetail)
 	if wDetail.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for task detail, got: %d", wDetail.Code)
 	}
@@ -65,8 +59,7 @@ func TestT183TasksListAndDetail(t *testing.T) {
 
 	// 4. Unknown task ID
 	req404 := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/TASK-UNKNOWN-999", nil)
-	w404 := httptest.NewRecorder()
-	server.Handler().ServeHTTP(w404, req404)
+	w404 := client.Do(req404)
 	if w404.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown task, got %d", w404.Code)
 	}

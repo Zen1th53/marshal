@@ -35,23 +35,28 @@ func (s *Store) Backup(ctx context.Context, outputPath string) (BackupMetadata, 
 		return BackupMetadata{}, fmt.Errorf("create backup directory: %w", err)
 	}
 
-	// 2. Remove existing destination if present
-	_ = os.Remove(outputPath)
+	// 2. Write to a temporary sibling file, then atomically rename onto the
+	//    requested destination. A failure at any stage therefore never leaves a
+	//    partial or corrupt artifact at the requested path.
+	tmpPath := fmt.Sprintf("%s.tmp-%d", outputPath, time.Now().UnixNano())
+	defer os.Remove(tmpPath)
 
-	// 3. Perform atomic online SQLite VACUUM INTO
-	_, err := s.db.ExecContext(ctx, "VACUUM INTO ?", outputPath)
-	if err != nil {
-		// Fallback to manual checkpoint and copy if VACUUM INTO fails
-		if _, cpErr := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); cpErr != nil {
-			return BackupMetadata{}, fmt.Errorf("backup sqlite: %w (checkpoint failed: %v)", err, cpErr)
-		}
+	if err := s.writeBackup(ctx, tmpPath); err != nil {
+		return BackupMetadata{}, err
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		return BackupMetadata{}, fmt.Errorf("set backup permissions: %w", err)
 	}
 
-	// 4. Verify integrity and extract metadata from the generated backup
-	meta, err := VerifyBackup(ctx, outputPath, "", 0)
+	// 3. Verify integrity and extract metadata before exposing the artifact.
+	meta, err := VerifyBackup(ctx, tmpPath, "", 0)
 	if err != nil {
-		_ = os.Remove(outputPath)
 		return BackupMetadata{}, fmt.Errorf("verify generated backup: %w", err)
+	}
+
+	// 4. Atomically publish the verified backup at the requested path.
+	if err := os.Rename(tmpPath, outputPath); err != nil {
+		return BackupMetadata{}, fmt.Errorf("publish backup artifact: %w", err)
 	}
 
 	// 5. Write companion metadata JSON (e.g. outputPath + ".json")
@@ -60,6 +65,60 @@ func (s *Store) Backup(ctx context.Context, outputPath string) (BackupMetadata, 
 	_ = os.WriteFile(metaPath, metaBytes, 0o600)
 
 	return meta, nil
+}
+
+// vacuumInto is a package-level seam so tests can force the fallback path.
+var vacuumInto = func(s *Store, ctx context.Context, dest string) error {
+	_, err := s.db.ExecContext(ctx, "VACUUM INTO ?", dest)
+	return err
+}
+
+// writeBackup produces a consistent snapshot of the live database at dest.
+// It prefers SQLite's atomic online VACUUM INTO; when that is unavailable it
+// checkpoints the WAL into the main database file and copies that file, so a
+// successful return always leaves a valid backup artifact at dest.
+func (s *Store) writeBackup(ctx context.Context, dest string) error {
+	if err := vacuumInto(s, ctx, dest); err == nil {
+		return nil
+	} else {
+		vacuumErr := err
+		// Fold the WAL into the main database file so the copy below captures
+		// all committed transactions.
+		if _, cpErr := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); cpErr != nil {
+			return fmt.Errorf("backup sqlite: %w (checkpoint failed: %v)", vacuumErr, cpErr)
+		}
+		src, err := s.mainDatabasePath(ctx)
+		if err != nil {
+			return fmt.Errorf("backup sqlite: %w (locate database file: %v)", vacuumErr, err)
+		}
+		if err := copyFile(src, dest); err != nil {
+			return fmt.Errorf("backup sqlite: %w (copy database file: %v)", vacuumErr, err)
+		}
+		return nil
+	}
+}
+
+// mainDatabasePath returns the filesystem path of the primary SQLite database.
+func (s *Store) mainDatabasePath(ctx context.Context) (string, error) {
+	rows, err := s.db.QueryContext(ctx, "PRAGMA database_list")
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var seq int
+		var name, file string
+		if err := rows.Scan(&seq, &name, &file); err != nil {
+			return "", err
+		}
+		if name == "main" {
+			return file, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	return "", fmt.Errorf("main database not found in database_list")
 }
 
 func VerifyBackup(ctx context.Context, backupPath string, expectedProjectID string, expectedSchema int) (BackupMetadata, error) {
@@ -102,11 +161,12 @@ func VerifyBackup(ctx context.Context, backupPath string, expectedProjectID stri
 		return BackupMetadata{}, fmt.Errorf("%w: backup project ID mismatch (expected %s, got %s)", model.ErrConflict, expectedProjectID, projectID)
 	}
 
-	// 4. Extract schema version
+	// 4. Extract schema version from the migration ledger. This is the same
+	//    source consulted by Store.SchemaVersion and must not be inferred from
+	//    a hardcoded constant or PRAGMA user_version.
 	var schemaVersion int
-	_ = db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&schemaVersion)
-	if schemaVersion == 0 {
-		schemaVersion = 67
+	if err := db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&schemaVersion); err != nil {
+		return BackupMetadata{}, fmt.Errorf("%w: read backup schema version: %v", model.ErrConflict, err)
 	}
 	if expectedSchema > 0 && schemaVersion != expectedSchema {
 		return BackupMetadata{}, fmt.Errorf("%w: backup schema version mismatch (expected %d, got %d)", model.ErrConflict, expectedSchema, schemaVersion)

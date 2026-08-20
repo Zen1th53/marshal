@@ -1,6 +1,7 @@
 package web_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -20,7 +21,21 @@ func TestT220WebControlUltimateConformanceGate(t *testing.T) {
 		t.Fatalf("expected loopback bind to be true")
 	}
 
-	// 2. Doctor Health Diagnostic Preflight
+	// Authenticate session for protected endpoints
+	code, err := server.Sessions().CreateOneTimeCode("conformance-admin", "admin")
+	if err != nil {
+		t.Fatalf("CreateOneTimeCode: %v", err)
+	}
+	loginPayload, _ := json.Marshal(map[string]string{"code": code})
+	reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginPayload))
+	wLogin := httptest.NewRecorder()
+	server.Handler().ServeHTTP(wLogin, reqLogin)
+	if wLogin.Code != http.StatusOK {
+		t.Fatalf("Login failed: %d", wLogin.Code)
+	}
+	sessionCookie := wLogin.Result().Cookies()[0]
+
+	// 2. Doctor Health Diagnostic Preflight (Public)
 	reqDoctor := httptest.NewRequest(http.MethodGet, "/api/v1/health/doctor", nil)
 	wDoctor := httptest.NewRecorder()
 	server.Handler().ServeHTTP(wDoctor, reqDoctor)
@@ -29,8 +44,9 @@ func TestT220WebControlUltimateConformanceGate(t *testing.T) {
 		t.Fatalf("expected 200 OK for doctor diagnostics, got: %d", wDoctor.Code)
 	}
 
-	// 3. Security Policy & Gates Inspector
+	// 3. Security Policy & Gates Inspector (Authenticated)
 	reqPolicy := httptest.NewRequest(http.MethodGet, "/api/v1/security/policy", nil)
+	reqPolicy.AddCookie(sessionCookie)
 	wPolicy := httptest.NewRecorder()
 	server.Handler().ServeHTTP(wPolicy, reqPolicy)
 
@@ -46,7 +62,7 @@ func TestT220WebControlUltimateConformanceGate(t *testing.T) {
 		t.Fatalf("expected active gate rules, got 0")
 	}
 
-	// 4. Release Trust & Provenance SBOM
+	// 4. Release Trust & Provenance SBOM (Public)
 	reqTrust := httptest.NewRequest(http.MethodGet, "/api/v1/operations/trust", nil)
 	wTrust := httptest.NewRecorder()
 	server.Handler().ServeHTTP(wTrust, reqTrust)
@@ -55,8 +71,9 @@ func TestT220WebControlUltimateConformanceGate(t *testing.T) {
 		t.Fatalf("expected 200 OK for release trust SBOM, got: %d", wTrust.Code)
 	}
 
-	// 5. Global Search Index
+	// 5. Global Search Index (Authenticated)
 	reqSearch := httptest.NewRequest(http.MethodGet, "/api/v1/search?q=TSK-001", nil)
+	reqSearch.AddCookie(sessionCookie)
 	wSearch := httptest.NewRecorder()
 	server.Handler().ServeHTTP(wSearch, reqSearch)
 

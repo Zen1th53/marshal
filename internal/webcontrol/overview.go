@@ -1,8 +1,11 @@
 package webcontrol
 
 import (
+	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 type TaskMetricCounts struct {
@@ -47,7 +50,7 @@ func (s *Server) handleGetOverview(w http.ResponseWriter, r *http.Request) {
 			State:          "READY",
 			Version:        "1.0.0",
 			CommitSHA:      "67816af",
-			DatabaseSchema: "v67",
+			DatabaseSchema: fmt.Sprintf("v%d", store.LatestSchemaVersion),
 			ActiveWorkers:  taskCounts.Active,
 			PendingTasks:   taskCounts.Queued,
 			UpdatedAt:      now,

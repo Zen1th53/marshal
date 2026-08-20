@@ -13,6 +13,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/ratelimit"
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 const ProtocolVersion2026 = "2026-07-28"
@@ -312,10 +313,20 @@ func (s *Server) callTool(ctx context.Context, name string, args map[string]any)
 
 	case "memory_status":
 		proj, _ := args["project_id"].(string)
+		if proj == "" {
+			if p, err := s.runtime.Store().Project(ctx); err == nil {
+				proj = p.ID
+			}
+		}
+		records, err := s.runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: proj})
+		if err != nil {
+			return "", err
+		}
 		status := map[string]any{
 			"version":    "2.0.0",
 			"healthy":    true,
 			"project_id": proj,
+			"records":    len(records),
 		}
 		data, _ := json.Marshal(status)
 		return string(data), nil
@@ -323,11 +334,25 @@ func (s *Server) callTool(ctx context.Context, name string, args map[string]any)
 	case "memory_recall":
 		proj, _ := args["project_id"].(string)
 		query, _ := args["query"].(string)
-		res := map[string]any{
-			"project_id": proj,
-			"query":      query,
-			"results":    []any{},
+		records, err := s.runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: proj})
+		if err != nil {
+			return "", err
 		}
+		results := []map[string]any{}
+		q := strings.ToLower(strings.TrimSpace(query))
+		for _, rec := range records {
+			if rec.Lifecycle == model.MemoryTombstoned {
+				continue
+			}
+			if q != "" && !strings.Contains(strings.ToLower(rec.Title), q) && !strings.Contains(strings.ToLower(rec.Body), q) {
+				continue
+			}
+			results = append(results, map[string]any{
+				"id": rec.ID, "title": rec.Title, "kind": string(rec.Kind),
+				"lifecycle": string(rec.Lifecycle), "authority": string(rec.Authority),
+			})
+		}
+		res := map[string]any{"project_id": proj, "query": query, "results": results}
 		data, _ := json.Marshal(res)
 		return string(data), nil
 
@@ -335,14 +360,27 @@ func (s *Server) callTool(ctx context.Context, name string, args map[string]any)
 		proj, _ := args["project_id"].(string)
 		title, _ := args["title"].(string)
 		body, _ := args["body"].(string)
-		rec := map[string]any{
-			"id":         "MEM-MCP-CANDIDATE",
-			"project_id": proj,
-			"title":      title,
-			"body":       body,
-			"lifecycle":  "candidate",
+		now := time.Now().UTC()
+		id, err := model.NewID("MEM-")
+		if err != nil {
+			return "", err
 		}
-		data, _ := json.Marshal(rec)
+		rec := model.MemoryRecordV2{
+			ID: id, ProjectID: proj, Kind: model.MemoryKindSemantic,
+			Lifecycle: model.MemoryCandidate, Confidence: model.ConfidenceObserved,
+			Authority: model.AuthorityAgent, Title: title, Body: body,
+			Scope: string(model.ScopeProject), ScopeID: proj,
+			ObservedAt: now, IngestedAt: now, ValidFrom: now, CreatedAt: now, UpdatedAt: now,
+			Source: model.MemorySource{Kind: "mcp", Reference: "memory_remember"},
+		}
+		if err := s.runtime.Store().WriteMemoryV2(ctx, rec); err != nil {
+			return "", err
+		}
+		out := map[string]any{
+			"id": rec.ID, "project_id": proj, "title": title, "body": body,
+			"lifecycle": "candidate",
+		}
+		data, _ := json.Marshal(out)
 		return string(data), nil
 
 	case "tasks_list":

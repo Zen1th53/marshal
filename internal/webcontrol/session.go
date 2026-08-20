@@ -46,10 +46,21 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, cookie)
 
+	// Issue double-submit CSRF cookie on login
+	csrfToken := GenerateCSRFToken(session.ID, s.csrfSecret)
+	http.SetCookie(w, &http.Cookie{
+		Name:     CSRFCookieName,
+		Value:    csrfToken,
+		Path:     "/",
+		SameSite: http.SameSiteLaxMode,
+		Secure:   !s.IsLoopback(),
+	})
+	w.Header().Set(CSRFHeaderName, csrfToken)
+
 	user := AuthUserDTO{
 		PrincipalID: session.PrincipalID,
 		Role:        session.Role,
-		Authorities: []string{"task.plan", "source.write", "verify.qa", "verify.security", "release.approve", "policy.admin"},
+		Authorities: s.getAuthoritiesForRole(session.Role),
 	}
 
 	writeJSON(w, http.StatusOK, user)
@@ -58,30 +69,20 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil || cookie.Value == "" {
-		// In loopback development mode without explicit session, return loopback operator
-		if s.IsLoopback() {
-			user := AuthUserDTO{
-				PrincipalID: "operator-loopback",
-				Role:        "admin",
-				Authorities: []string{"task.plan", "source.write", "verify.qa", "verify.security", "release.approve", "policy.admin"},
-			}
-			writeJSON(w, http.StatusOK, user)
-			return
-		}
 		writeError(w, http.StatusUnauthorized, "unauthorized", "No active session cookie", "")
 		return
 	}
 
 	session, err := s.sessions.GetSession(cookie.Value)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "session_expired", err.Error(), "")
+	if err != nil || session == nil {
+		writeError(w, http.StatusUnauthorized, "session_expired", "Invalid or expired session", "")
 		return
 	}
 
 	user := AuthUserDTO{
 		PrincipalID: session.PrincipalID,
 		Role:        session.Role,
-		Authorities: []string{"task.plan", "source.write", "verify.qa", "verify.security", "release.approve", "policy.admin"},
+		Authorities: s.getAuthoritiesForRole(session.Role),
 	}
 
 	writeJSON(w, http.StatusOK, user)

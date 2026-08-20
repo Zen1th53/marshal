@@ -11,15 +11,11 @@ import (
 )
 
 func TestT182AgentsListAndDetail(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. List agents
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents?provider=claude", nil)
-	w := httptest.NewRecorder()
-	server.Handler().ServeHTTP(w, req)
+	w := client.Do(req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got %d", w.Code)
@@ -36,8 +32,7 @@ func TestT182AgentsListAndDetail(t *testing.T) {
 
 	// 2. Get agent detail
 	reqDetail := httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-claude-planner", nil)
-	wDetail := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDetail, reqDetail)
+	wDetail := client.Do(reqDetail)
 
 	if wDetail.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for agent detail, got %d", wDetail.Code)
@@ -53,8 +48,7 @@ func TestT182AgentsListAndDetail(t *testing.T) {
 
 	// 3. IDOR / Not found
 	req404 := httptest.NewRequest(http.MethodGet, "/api/v1/agents/non-existent-agent", nil)
-	w404 := httptest.NewRecorder()
-	server.Handler().ServeHTTP(w404, req404)
+	w404 := client.Do(req404)
 	if w404.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for unknown agent, got %d", w404.Code)
 	}

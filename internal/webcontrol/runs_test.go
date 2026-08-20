@@ -10,15 +10,11 @@ import (
 )
 
 func TestT188RunsExplorer(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. List all runs
 	reqAll := httptest.NewRequest(http.MethodGet, "/api/v1/runs?limit=10", nil)
-	wAll := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wAll, reqAll)
+	wAll := client.Do(reqAll)
 
 	if wAll.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wAll.Code)
@@ -33,8 +29,7 @@ func TestT188RunsExplorer(t *testing.T) {
 
 	// 2. Filter by status=running
 	reqRunning := httptest.NewRequest(http.MethodGet, "/api/v1/runs?status=running", nil)
-	wRunning := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wRunning, reqRunning)
+	wRunning := client.Do(reqRunning)
 
 	var respRunning webcontrol.RunsListResponseDTO
 	_ = json.NewDecoder(wRunning.Body).Decode(&respRunning)
@@ -45,8 +40,7 @@ func TestT188RunsExplorer(t *testing.T) {
 
 	// 3. Filter by task_id
 	reqTask := httptest.NewRequest(http.MethodGet, "/api/v1/runs?task_id=TASK-001-CORE-MEMORY", nil)
-	wTask := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wTask, reqTask)
+	wTask := client.Do(reqTask)
 
 	var respTask webcontrol.RunsListResponseDTO
 	_ = json.NewDecoder(wTask.Body).Decode(&respTask)

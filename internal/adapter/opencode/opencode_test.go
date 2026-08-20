@@ -70,3 +70,49 @@ func TestOpenCodeRunSuccess(t *testing.T) {
 		t.Fatalf("unexpected final text: %s", result.FinalText)
 	}
 }
+
+func TestOpenCodeModelSelectionPrecedence(t *testing.T) {
+	runWith := func(client *Client) []string {
+		var captured []string
+		runner := &mockRunner{runFunc: func(_ context.Context, cmd adapter.Command) (adapter.ProcessResult, error) {
+			captured = cmd.Args
+			return adapter.ProcessResult{ExitCode: 0, Stdout: []byte("{}")}, nil
+		}}
+		client.runner = runner
+		if _, err := client.Run(context.Background(), adapter.Request{
+			TaskID: "TASK-MODEL", Title: "model", Worktree: "/tmp/wt",
+		}); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		return captured
+	}
+
+	hasModelArg := func(args []string, want string) bool {
+		for i := 0; i+1 < len(args); i++ {
+			if args[i] == "-m" && args[i+1] == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 1. Explicit model wins over environment.
+	t.Setenv("MARSHAL_OPENCODE_MODEL", "env-model")
+	if args := runWith(NewWithModel("opencode", nil, "explicit-model")); !hasModelArg(args, "explicit-model") {
+		t.Fatalf("explicit model not forwarded: %v", args)
+	}
+
+	// 2. Environment fallback when no explicit model.
+	t.Setenv("MARSHAL_OPENCODE_MODEL", "env-model")
+	if args := runWith(New("opencode", nil)); !hasModelArg(args, "env-model") {
+		t.Fatalf("env model not forwarded: %v", args)
+	}
+
+	// 3. No model and no env -> no -m flag.
+	t.Setenv("MARSHAL_OPENCODE_MODEL", "")
+	for _, a := range runWith(New("opencode", nil)) {
+		if a == "-m" {
+			t.Fatalf("unexpected -m flag with no model configured")
+		}
+	}
+}

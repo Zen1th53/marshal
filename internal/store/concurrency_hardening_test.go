@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -95,28 +94,29 @@ func TestConcurrentClaimAndReadContention(t *testing.T) {
 			defer wg.Done()
 			sess := sessions[workerID%len(sessions)]
 
-			for i := 0; i < 20; i++ {
-				taskIdx := rand.Intn(taskCount)
-				taskID := fmt.Sprintf("TASK-CONC-%03d", taskIdx)
+			for rep := 0; rep < 3; rep++ {
+				for i := 0; i < taskCount; i++ {
+					taskID := fmt.Sprintf("TASK-CONC-%03d", (i+workerID)%taskCount)
 
-				// Attempt claim
-				_, err := st.ClaimTask(ctx, model.ClaimRequest{
-					TaskID:           taskID,
-					AgentID:          sess.AgentID,
-					SessionID:        sess.ID,
-					ExpectedRevision: 0,
-					ExpiresAt:        time.Now().UTC().Add(time.Minute),
-				})
-				if err == nil {
-					atomic.AddInt32(&claimedCount, 1)
-				} else {
-					atomic.AddInt32(&conflictCount, 1)
-				}
+					// Attempt claim
+					_, err := st.ClaimTask(ctx, model.ClaimRequest{
+						TaskID:           taskID,
+						AgentID:          sess.AgentID,
+						SessionID:        sess.ID,
+						ExpectedRevision: 0,
+						ExpiresAt:        time.Now().UTC().Add(time.Minute),
+					})
+					if err == nil {
+						atomic.AddInt32(&claimedCount, 1)
+					} else {
+						atomic.AddInt32(&conflictCount, 1)
+					}
 
-				// Concurrent read
-				list, err := st.ListTasks(ctx)
-				if err == nil && len(list) == taskCount {
-					atomic.AddInt32(&readCount, 1)
+					// Concurrent read
+					list, err := st.ListTasks(ctx)
+					if err == nil && len(list) == taskCount {
+						atomic.AddInt32(&readCount, 1)
+					}
 				}
 			}
 		}(g)
@@ -130,7 +130,7 @@ func TestConcurrentClaimAndReadContention(t *testing.T) {
 	}
 
 	// PRAGMA integrity_check to verify zero corruption
-	meta, err := VerifyBackup(ctx, dbPath, "PRJ-CONCURRENCY", 67)
+	meta, err := VerifyBackup(ctx, dbPath, "PRJ-CONCURRENCY", LatestSchemaVersion)
 	if err != nil {
 		t.Fatalf("post-concurrency integrity verification failed: %v", err)
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policytest"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 var (
@@ -106,8 +107,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 			"version":        Version,
 			"commit":         Commit,
 			"build_date":     BuildDate,
-			"schema_version": 67,
-		}, fmt.Sprintf("MARSHAL %s (commit: %s, build date: %s, schema: v67)", Version, Commit, BuildDate))
+			"schema_version": store.LatestSchemaVersion,
+		}, fmt.Sprintf("MARSHAL %s (commit: %s, build date: %s, schema: v%d)", Version, Commit, BuildDate, store.LatestSchemaVersion))
 	case "init":
 		err = c.init(ctx)
 	case "doctor":
@@ -446,6 +447,7 @@ func (c command) run(ctx context.Context, args []string) error {
 	set := flag.NewFlagSet("run", flag.ContinueOnError)
 	set.SetOutput(c.stderr)
 	adapterName := set.String("adapter", "codex", "worker adapter")
+	modelName := set.String("model", "", "model name (OpenCode only)")
 	agent := set.String("agent", "", "agent ID")
 	revision := set.Int64("revision", 0, "expected task revision")
 	if err := set.Parse(args[1:]); err != nil {
@@ -459,11 +461,15 @@ func (c command) run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	value, _, err := client.Run(ctx, app.RunRequest{TaskID: args[0], AgentID: agentID, Adapter: *adapterName, ExpectedRevision: *revision})
+	value, _, err := client.Run(ctx, app.RunRequest{TaskID: args[0], AgentID: agentID, Adapter: *adapterName, Model: *modelName, ExpectedRevision: *revision})
 	if err != nil {
 		return err
 	}
-	return c.print(value, fmt.Sprintf("%s %s %s", value.TaskID, value.Status, value.ResultCommit))
+	human := fmt.Sprintf("%s %s %s isolation=%s", value.TaskID, value.Status, value.ResultCommit, value.Isolation.Level)
+	if value.Isolation.Level == model.IsolationProcessOnly {
+		human += " (DEGRADED: unsandboxed process-only execution)"
+	}
+	return c.print(value, human)
 }
 
 func resolveAgent(ctx context.Context, client *api.Client, requested string) (string, error) {

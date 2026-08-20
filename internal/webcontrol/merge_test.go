@@ -11,15 +11,11 @@ import (
 )
 
 func TestT193MergeAndFinalizationControls(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. Merge preflight check for eligible approved task
 	reqPreflight := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/TASK-003-SECURITY-AUDIT/merge/preflight", nil)
-	wPreflight := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wPreflight, reqPreflight)
+	wPreflight := client.Do(reqPreflight)
 
 	if wPreflight.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wPreflight.Code)
@@ -33,17 +29,15 @@ func TestT193MergeAndFinalizationControls(t *testing.T) {
 	}
 
 	// Setup authenticated session & CSRF
-	code, _ := server.Sessions().CreateOneTimeCode("operator", "admin")
+	code, _ := client.Sessions().CreateOneTimeCode("operator", "admin")
 	loginPayload, _ := json.Marshal(map[string]string{"code": code})
 	reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginPayload))
-	wLogin := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wLogin, reqLogin)
+	wLogin := client.Do(reqLogin)
 	cookie := wLogin.Result().Cookies()[0]
 
 	reqCSRF := httptest.NewRequest(http.MethodGet, "/api/v1/auth/csrf", nil)
 	reqCSRF.AddCookie(cookie)
-	wCSRF := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wCSRF, reqCSRF)
+	wCSRF := client.Do(reqCSRF)
 	var csrfResp map[string]string
 	_ = json.NewDecoder(wCSRF.Body).Decode(&csrfResp)
 	csrfToken := csrfResp["csrf_token"]
@@ -60,8 +54,7 @@ func TestT193MergeAndFinalizationControls(t *testing.T) {
 	reqBad.Header.Set("Content-Type", "application/json")
 	reqBad.Header.Set("X-CSRF-Token", csrfToken)
 	reqBad.AddCookie(cookie)
-	wBad := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wBad, reqBad)
+	wBad := client.Do(reqBad)
 
 	if wBad.Code != http.StatusPreconditionFailed {
 		t.Fatalf("expected 412 Precondition Failed for unapproved task, got: %d", wBad.Code)
@@ -79,8 +72,7 @@ func TestT193MergeAndFinalizationControls(t *testing.T) {
 	reqValid.Header.Set("Content-Type", "application/json")
 	reqValid.Header.Set("X-CSRF-Token", csrfToken)
 	reqValid.AddCookie(cookie)
-	wValid := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wValid, reqValid)
+	wValid := client.Do(reqValid)
 
 	if wValid.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for valid merge, got %d: %s", wValid.Code, wValid.Body.String())

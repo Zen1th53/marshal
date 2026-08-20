@@ -81,7 +81,14 @@ func TestT173OneTimeCodeAndSessionLifecycle(t *testing.T) {
 	}
 
 	// 5. Logout revokes session (with valid CSRF token)
-	csrfToken := webcontrol.GenerateCSRFToken(sessionCookie.Value, "marshal-csrf-secret-key")
+	reqCSRF := httptest.NewRequest(http.MethodGet, "/api/v1/auth/csrf", nil)
+	reqCSRF.AddCookie(sessionCookie)
+	wCSRF := httptest.NewRecorder()
+	server.Handler().ServeHTTP(wCSRF, reqCSRF)
+	var csrfResp map[string]string
+	_ = json.NewDecoder(wCSRF.Body).Decode(&csrfResp)
+	csrfToken := csrfResp["csrf_token"]
+
 	reqLogout := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	reqLogout.AddCookie(sessionCookie)
 	reqLogout.Header.Set("X-CSRF-Token", csrfToken)

@@ -12,7 +12,7 @@ MARSHAL separates durable engineering authority from the coding-agent vendor tha
        width="100%">
 </p>
 
-> Source-faithful to runtime `1.0.0` / SQLite schema `v67` at source snapshot
+> Source-faithful to runtime `1.0.0` / SQLite schema `v69` at source snapshot
 > `8f7d092e038e`. Roadmap-only or contract-only components are intentionally omitted.
 
 ---
@@ -55,4 +55,4 @@ Upon process termination:
 2. **Artifact Ingestion**: Reports are stored in `.marshal/artifacts/sha256/<hex>` with content-addressed SHA-256 digests.
 3. **Worktree Inspection**: Git working trees are inspected; changes are committed under policy, or uncommitted runs are rejected.
 4. **Evidence Recording**: Command, environment, and output evidence nodes are recorded with cryptographic binding.
-5. **Finalization**: `FinishRun` updates HEAD observations, finalizes execution status, and commits canonical live coordination state to SQLite (`v67`).
+5. **Finalization**: `FinishRun` updates HEAD observations, finalizes execution status, and commits canonical live coordination state to SQLite (`v69`).

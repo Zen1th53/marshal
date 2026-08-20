@@ -5,8 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 type BackupRecordDTO struct {
@@ -63,6 +67,15 @@ var (
 )
 
 func (s *Server) handleListBackups(w http.ResponseWriter, r *http.Request) {
+	if s.store != nil {
+		backups, err := listRealBackups(s.config.BackupDir)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "backup_list_failed", err.Error(), "")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"backups": backups, "total_count": len(backups)})
+		return
+	}
 	backupsMu.RLock()
 	defer backupsMu.RUnlock()
 
@@ -76,6 +89,27 @@ func (s *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
 	var env MutationEnvelope[CreateBackupPayload]
 	if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "Invalid backup creation payload", "")
+		return
+	}
+
+	if s.store != nil {
+		if err := os.MkdirAll(s.config.BackupDir, 0o700); err != nil {
+			writeError(w, http.StatusInternalServerError, "backup_failed", "create backup directory: "+err.Error(), "")
+			return
+		}
+		outputPath := filepath.Join(s.config.BackupDir, "backup-"+time.Now().UTC().Format("20060102T150405.000")+".db")
+		meta, err := s.store.Backup(r.Context(), outputPath)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "backup_failed", err.Error(), "")
+			return
+		}
+		writeJSON(w, http.StatusOK, BackupRecordDTO{
+			BackupID:      filepath.Base(outputPath),
+			SchemaVersion: meta.SchemaVersion,
+			DigestSHA256:  meta.DatabaseSHA256,
+			Status:        "verified",
+			CreatedAt:     meta.CreatedAt,
+		})
 		return
 	}
 
@@ -108,6 +142,23 @@ func (s *Server) handleVerifyBackup(w http.ResponseWriter, r *http.Request) {
 	payload := env.Payload
 	if payload.BackupID == "" {
 		writeError(w, http.StatusBadRequest, "invalid_payload", "BackupID is required", "")
+		return
+	}
+
+	if s.store != nil {
+		backupPath := filepath.Join(s.config.BackupDir, filepath.Base(payload.BackupID))
+		meta, err := store.VerifyBackup(r.Context(), backupPath, "", 0)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "not_found", "Backup verification failed: "+err.Error(), "")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"backup_id":        payload.BackupID,
+			"integrity_status": "verified_clean",
+			"schema_version":   meta.SchemaVersion,
+			"digest_sha256":    meta.DatabaseSHA256,
+			"verified_at":      time.Now().UTC(),
+		})
 		return
 	}
 
@@ -148,6 +199,13 @@ func (s *Server) handleRestoreBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.store != nil {
+		// Hot-restoring the live database under an open connection is unsafe;
+		// fail closed rather than returning a false success.
+		writeError(w, http.StatusNotImplemented, "restore_unsupported", "Online restore is not supported via the web control plane; perform an offline restore via `marshal state restore`", "")
+		return
+	}
+
 	backupsMu.RLock()
 	var found *BackupRecordDTO
 	for _, b := range mockBackups {
@@ -178,4 +236,31 @@ func (s *Server) handleRestoreBackup(w http.ResponseWriter, r *http.Request) {
 		AuditID:          "AUD-RESTORE-" + found.BackupID,
 		RestoredAt:       time.Now().UTC(),
 	})
+}
+
+func listRealBackups(dir string) ([]BackupRecordDTO, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []BackupRecordDTO{}, nil
+		}
+		return nil, err
+	}
+	var backups []BackupRecordDTO
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".db" {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		backups = append(backups, BackupRecordDTO{
+			BackupID:   entry.Name(),
+			SizeBytes:  info.Size(),
+			Status:     "available",
+			CreatedAt:  info.ModTime().UTC(),
+		})
+	}
+	return backups, nil
 }

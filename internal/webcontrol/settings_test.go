@@ -11,31 +11,25 @@ import (
 )
 
 func TestT214SettingsAndCASConcurrency(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// Login and acquire CSRF token
-	code, _ := server.Sessions().CreateOneTimeCode("operator", "admin")
+	code, _ := client.Sessions().CreateOneTimeCode("operator", "admin")
 	loginPayload, _ := json.Marshal(map[string]string{"code": code})
 	reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginPayload))
-	wLogin := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wLogin, reqLogin)
+	wLogin := client.Do(reqLogin)
 	cookie := wLogin.Result().Cookies()[0]
 
 	reqCSRF := httptest.NewRequest(http.MethodGet, "/api/v1/auth/csrf", nil)
 	reqCSRF.AddCookie(cookie)
-	wCSRF := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wCSRF, reqCSRF)
+	wCSRF := client.Do(reqCSRF)
 	var csrfResp map[string]string
 	_ = json.NewDecoder(wCSRF.Body).Decode(&csrfResp)
 	csrfToken := csrfResp["csrf_token"]
 
 	// 1. Get Settings
 	reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/settings", nil)
-	wGet := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wGet, reqGet)
+	wGet := client.Do(reqGet)
 
 	if wGet.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for get settings, got: %d", wGet.Code)
@@ -57,8 +51,7 @@ func TestT214SettingsAndCASConcurrency(t *testing.T) {
 	reqInvalid.Header.Set("Content-Type", "application/json")
 	reqInvalid.Header.Set("X-CSRF-Token", csrfToken)
 	reqInvalid.AddCookie(cookie)
-	wInvalid := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wInvalid, reqInvalid)
+	wInvalid := client.Do(reqInvalid)
 
 	if wInvalid.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 Bad Request for invalid mode, got: %d", wInvalid.Code)
@@ -81,8 +74,7 @@ func TestT214SettingsAndCASConcurrency(t *testing.T) {
 	reqStale.Header.Set("Content-Type", "application/json")
 	reqStale.Header.Set("X-CSRF-Token", csrfToken)
 	reqStale.AddCookie(cookie)
-	wStale := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wStale, reqStale)
+	wStale := client.Do(reqStale)
 
 	if wStale.Code != http.StatusConflict {
 		t.Fatalf("expected 409 Conflict for stale revision, got: %d", wStale.Code)
@@ -105,8 +97,7 @@ func TestT214SettingsAndCASConcurrency(t *testing.T) {
 	reqValid.Header.Set("Content-Type", "application/json")
 	reqValid.Header.Set("X-CSRF-Token", csrfToken)
 	reqValid.AddCookie(cookie)
-	wValid := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wValid, reqValid)
+	wValid := client.Do(reqValid)
 
 	if wValid.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for valid update, got: %d", wValid.Code)

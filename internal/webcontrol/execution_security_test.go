@@ -11,15 +11,11 @@ import (
 )
 
 func TestT198ExecutionBoundaryAndSandboxEnforcement(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. Get Boundary for standard run
 	reqBoundary := httptest.NewRequest(http.MethodGet, "/api/v1/runs/RUN-001/boundary", nil)
-	wBoundary := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wBoundary, reqBoundary)
+	wBoundary := client.Do(reqBoundary)
 
 	if wBoundary.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wBoundary.Code)
@@ -41,8 +37,7 @@ func TestT198ExecutionBoundaryAndSandboxEnforcement(t *testing.T) {
 
 	// 3. OOM Killed diagnostic test
 	reqOOM := httptest.NewRequest(http.MethodGet, "/api/v1/runs/RUN-TASK-OOM-01/boundary", nil)
-	wOOM := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wOOM, reqOOM)
+	wOOM := client.Do(reqOOM)
 
 	var oomResp webcontrol.ExecutionBoundaryDTO
 	_ = json.NewDecoder(wOOM.Body).Decode(&oomResp)

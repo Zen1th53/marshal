@@ -27,6 +27,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/gate"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/netpolicy"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/protocol"
@@ -63,6 +64,7 @@ type Runtime struct {
 	policyConfigured   bool
 	handoffService     *protocol.Service
 	quorumEngine       *quorum.Engine
+	allowProcessOnly   bool
 }
 
 type Options struct {
@@ -80,6 +82,10 @@ type Options struct {
 	ProcessAuthority   authz.Authority
 	HandoffAuthorizer  protocol.Authorizer
 	QuorumEngine       *quorum.Engine
+	// AllowProcessOnlyFallback permits unsandboxed process-only execution for
+	// R0/R1 tasks when bubblewrap is unavailable. This is an explicit security
+	// opt-in and defaults to false (fail closed).
+	AllowProcessOnlyFallback bool
 }
 
 type Status struct {
@@ -116,11 +122,13 @@ type ReleaseRequest struct {
 }
 
 type RunRequest struct {
-	TaskID           string `json:"task_id"`
-	AgentID          string `json:"agent_id"`
-	Adapter          string `json:"adapter"`
-	ExpectedRevision int64  `json:"expected_revision"`
-	NetworkRequired  bool   `json:"network_required,omitempty"`
+	TaskID           string           `json:"task_id"`
+	AgentID          string           `json:"agent_id"`
+	Adapter          string           `json:"adapter"`
+	Model            string           `json:"model,omitempty"`
+	ExpectedRevision int64            `json:"expected_revision"`
+	NetworkRequired  bool             `json:"network_required,omitempty"`
+	EgressRules      []netpolicy.Rule `json:"egress_rules,omitempty"`
 }
 
 type RunResult struct {
@@ -241,6 +249,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		authorityPrincipal: options.AuthorityPrincipal,
 		processAuthority:   options.ProcessAuthority,
 		runtimeInstanceID:  instanceID,
+		allowProcessOnly:   options.AllowProcessOnlyFallback,
 	}
 	if rt.capabilityBroker == nil {
 		rt.capabilityBroker = capability.NewAuditedEngine(database, time.Now, runtimeCapabilityAuthority{}, rt.eventEngine)
@@ -624,11 +633,27 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	}
 	executionRevision := claimedRevision + 1
 	networkAllowed := false
+	var proxyURL string
 	if request.NetworkRequired {
-		if err := authorizeNetworkAccess(r.policy, request.AgentID, claim.Session.ID, task.ID, claim.Session.Role, task.Risk, true); err != nil {
+		evaluator, err := authorizeNetworkEgress(r.policy, request.AgentID, claim.Session.ID, task.ID, claim.Session.Role, task.Risk, request.EgressRules)
+		if err != nil {
 			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 			return RunResult{}, err
 		}
+
+		egressProxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{
+			Evaluator: evaluator,
+			Store:     r.store,
+			SubjectID: request.AgentID,
+			TaskID:    task.ID,
+		})
+		if err != nil {
+			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
+			return RunResult{}, fmt.Errorf("%w: failed to start egress proxy: %v", netpolicy.ErrEnforcementUnavailable, err)
+		}
+		egressProxy.Start()
+		defer egressProxy.Close()
+		proxyURL = egressProxy.URL()
 		networkAllowed = true
 	}
 	trustedContext, err := r.renderTaskContext(ctx, task)
@@ -636,10 +661,17 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
 	}
-	agentAdapter, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, networkAllowed)
+	agentAdapter, shellExecGrant, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, networkAllowed, request.Model, proxyURL)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
+	}
+	if shellExecGrant != "" && r.capabilityBroker != nil {
+		defer func() {
+			_ = r.capabilityBroker.Revoke(context.Background(), capability.RevokeRequest{
+				GrantID: shellExecGrant, Actor: capability.SubjectID("runtime"),
+			})
+		}()
 	}
 	probe, err := agentAdapter.Probe(ctx)
 	if err != nil {
@@ -878,18 +910,28 @@ func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {
 	return nil
 }
 
-func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string, networkAllowed bool) (adapter.Adapter, error) {
+// egressEnforcementAvailable reports whether the runtime can actually restrict
+// provider egress to the task's endpoint allowlist. bubblewrap can only toggle
+// network entirely (--unshare-net) and cannot enforce host/port rules; no
+// egress-filtering proxy is wired today. Until such a mechanism exists, this
+// returns false so endpoint-restricted network requests fail closed rather than
+// being silently broadened to unrestricted host networking.
+func (r *Runtime) egressEnforcementAvailable() bool {
+	return false
+}
+
+func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string, networkAllowed bool, modelName string, proxyURL string) (adapter.Adapter, capability.GrantID, error) {
 	if candidate := r.adapters[name]; candidate != nil {
-		return candidate, nil
+		return candidate, "", nil
 	}
 	switch name {
 	case "codex", "gemini", "claude", "opencode":
 	default:
-		return nil, fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
+		return nil, "", fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
 	}
 	binary, err := project.FindBinary(name)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s CLI is missing", model.ErrUnavailable, name)
+		return nil, "", fmt.Errorf("%w: %s CLI is missing", model.ErrUnavailable, name)
 	}
 	if resolved, resolveErr := filepath.EvalSymlinks(binary); resolveErr == nil {
 		binary = resolved
@@ -899,9 +941,9 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	if bwrapPath, lookupErr := exec.LookPath("bwrap"); lookupErr == nil {
 		backend := sandbox.NewBwrap(bwrapPath)
 		capability := backend.Probe(ctx)
-		chosen, chooseErr := sandbox.ChooseIsolation(capability, task.Risk, networkAllowed)
+		chosen, chooseErr := sandbox.ChooseIsolation(capability, task.Risk, networkAllowed, r.allowProcessOnly)
 		if chooseErr != nil {
-			return nil, chooseErr
+			return nil, "", chooseErr
 		}
 		if chosen.Level == model.IsolationBwrap {
 			readOnlyBinds := []model.Bind{{Source: binary, Target: binary}}
@@ -960,6 +1002,18 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				extraEnv = append(extraEnv, "MARSHAL_OPENCODE_MODEL="+m)
 			}
 
+			// Forward egress proxy settings into sandboxed runner environment
+			if proxyURL != "" {
+				extraEnv = append(extraEnv,
+					"HTTP_PROXY="+proxyURL,
+					"HTTPS_PROXY="+proxyURL,
+					"ALL_PROXY="+proxyURL,
+					"http_proxy="+proxyURL,
+					"https_proxy="+proxyURL,
+					"all_proxy="+proxyURL,
+				)
+			}
+
 			runner = worker.NewSandboxed(process, backend, model.SandboxRequest{
 				Worktree: worktreePath, NetworkAllowed: networkAllowed,
 				ReadOnlyBinds: readOnlyBinds,
@@ -967,8 +1021,8 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				ExtraEnv:      extraEnv,
 			})
 		}
-	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed); err != nil {
-		return nil, err
+	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed, r.allowProcessOnly); err != nil {
+		return nil, "", err
 	}
 	if r.capabilityBroker != nil {
 		if r.authorityPrincipal != nil && r.processAuthority != "" {
@@ -977,17 +1031,42 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			runner = adapter.NewCapabilityRunner(runner, r.capabilityBroker, subject, task.ID)
 		}
 	}
+	// Issue the minimum scoped capability the provider process launch requires:
+	// a shell-exec grant bound to this exact executable, task, and agent. It is
+	// deliberately narrow (single binary path, "execute" only) and expires on a
+	// short lease so a provider never holds a global execution grant.
+	var shellExecGrant capability.GrantID
+	if r.capabilityBroker != nil {
+		grantKey, keyErr := model.NewID("shell-exec-grant-")
+		if keyErr != nil {
+			return nil, "", keyErr
+		}
+		grant, grantErr := r.capabilityBroker.Grant(ctx, capability.GrantRequest{
+			Subject:        capability.SubjectID(subject),
+			TaskID:         capability.TaskID(task.ID),
+			Kind:           capability.KindShellExec,
+			Scope:          capability.Scope{Resource: binary, Actions: []string{"execute"}},
+			IssuedAt:       time.Now().UTC(),
+			ExpiresAt:      time.Now().UTC().Add(30 * time.Minute),
+			Issuer:         "runtime",
+			IdempotencyKey: grantKey,
+		})
+		if grantErr != nil {
+			return nil, "", fmt.Errorf("%w: grant provider execution capability: %v", model.ErrPolicyDenied, grantErr)
+		}
+		shellExecGrant = grant.ID
+	}
 	switch name {
 	case "codex":
-		return codex.New(binary, runner), nil
+		return codex.New(binary, runner), shellExecGrant, nil
 	case "gemini":
-		return gemini.New(binary, runner), nil
+		return gemini.New(binary, runner), shellExecGrant, nil
 	case "claude":
-		return claude.New(binary, runner), nil
+		return claude.New(binary, runner), shellExecGrant, nil
 	case "opencode":
-		return opencode.New(binary, runner), nil
+		return opencode.NewWithModel(binary, runner, modelName), shellExecGrant, nil
 	default:
-		return nil, fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
+		return nil, "", fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
 	}
 }
 
@@ -1152,7 +1231,7 @@ func RestoreState(ctx context.Context, rootDir, backupPath string) error {
 	if err != nil {
 		return err
 	}
-	return store.RestoreDatabase(ctx, backupPath, layout.Database, "", 67)
+	return store.RestoreDatabase(ctx, backupPath, layout.Database, "", store.LatestSchemaVersion)
 }
 
 func (r *Runtime) Store() *store.Store { return r.store }

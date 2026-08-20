@@ -2,7 +2,7 @@
 
 **Produced by:** T77 — Memory Baseline Audit and Authority Map
 **Baseline commit:** f9dd8d1 (T56–T76 PASS confirmed)
-**Schema version:** v67
+**Schema version:** v69
 
 ## 1. Canonical Memory Tables
 

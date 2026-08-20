@@ -1,14 +1,18 @@
 package webcontrol
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 var (
@@ -21,15 +25,21 @@ type ServerConfig struct {
 	AllowInsecureNonLoopback bool
 	ReadTimeout              time.Duration
 	WriteTimeout             time.Duration
+	// BackupDir is the directory where real backups are written/read when the
+	// server is backed by a live store. When empty, backup operations fall
+	// back to in-memory fixtures (dev-demo/tests).
+	BackupDir string
 }
 
 type Server struct {
-	config   ServerConfig
-	handler  http.Handler
-	runtime  any
-	sessions *SessionStore
-	sseHub   *SSEHub
-	mu       sync.RWMutex
+	config     ServerConfig
+	handler    http.Handler
+	runtime    any
+	store      *store.Store
+	sessions   *SessionStore
+	sseHub     *SSEHub
+	csrfSecret []byte
+	mu         sync.RWMutex
 }
 
 func (s *Server) Sessions() *SessionStore {
@@ -60,12 +70,27 @@ func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
 		return nil, fmt.Errorf("%w: host=%s", ErrNonLoopbackInsecure, cfg.Host)
 	}
 
-	s := &Server{
-		config:   cfg,
-		runtime:  runtime,
-		sessions: NewSessionStore(),
-		sseHub:   NewSSEHub(),
+	csrfSecret := make([]byte, 32)
+	if _, err := rand.Read(csrfSecret); err != nil {
+		return nil, fmt.Errorf("generate csrf secret: %w", err)
 	}
+
+	s := &Server{
+		config:     cfg,
+		runtime:    runtime,
+		sessions:   NewSessionStore(),
+		sseHub:     NewSSEHub(),
+		csrfSecret: csrfSecret,
+	}
+	// Wire the canonical store when a runtime is supplied. In tests / dev-demo
+	// mode (nil runtime) handlers fall back to in-memory fixtures.
+	if rt, ok := runtime.(interface{ Store() *store.Store }); ok {
+		s.store = rt.Store()
+	}
+	if cfg.BackupDir == "" {
+		cfg.BackupDir = filepath.Join(".", "backups")
+	}
+	s.config = cfg
 
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)

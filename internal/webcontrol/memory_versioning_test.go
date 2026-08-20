@@ -11,31 +11,25 @@ import (
 )
 
 func TestT206MemorySnapshotsDiffAndRollback(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// Login and acquire CSRF token
-	code, _ := server.Sessions().CreateOneTimeCode("operator", "admin")
+	code, _ := client.Sessions().CreateOneTimeCode("operator", "admin")
 	loginPayload, _ := json.Marshal(map[string]string{"code": code})
 	reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginPayload))
-	wLogin := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wLogin, reqLogin)
+	wLogin := client.Do(reqLogin)
 	cookie := wLogin.Result().Cookies()[0]
 
 	reqCSRF := httptest.NewRequest(http.MethodGet, "/api/v1/auth/csrf", nil)
 	reqCSRF.AddCookie(cookie)
-	wCSRF := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wCSRF, reqCSRF)
+	wCSRF := client.Do(reqCSRF)
 	var csrfResp map[string]string
 	_ = json.NewDecoder(wCSRF.Body).Decode(&csrfResp)
 	csrfToken := csrfResp["csrf_token"]
 
 	// 1. List Snapshots
 	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/memory/versioning/snapshots", nil)
-	wList := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wList, reqList)
+	wList := client.Do(reqList)
 
 	if wList.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for list snapshots, got: %d", wList.Code)
@@ -54,8 +48,7 @@ func TestT206MemorySnapshotsDiffAndRollback(t *testing.T) {
 	reqCreate.Header.Set("Content-Type", "application/json")
 	reqCreate.Header.Set("X-CSRF-Token", csrfToken)
 	reqCreate.AddCookie(cookie)
-	wCreate := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wCreate, reqCreate)
+	wCreate := client.Do(reqCreate)
 
 	if wCreate.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for create snapshot, got: %d", wCreate.Code)
@@ -69,8 +62,7 @@ func TestT206MemorySnapshotsDiffAndRollback(t *testing.T) {
 
 	// 3. Get Diff
 	reqDiff := httptest.NewRequest(http.MethodGet, "/api/v1/memory/versioning/diff?from_snapshot=SNAP-001-INIT&to_snapshot=SNAP-002-QUORUM-UPDATE", nil)
-	wDiff := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDiff, reqDiff)
+	wDiff := client.Do(reqDiff)
 
 	if wDiff.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for diff, got: %d", wDiff.Code)
@@ -95,8 +87,7 @@ func TestT206MemorySnapshotsDiffAndRollback(t *testing.T) {
 	reqRollback.Header.Set("Content-Type", "application/json")
 	reqRollback.Header.Set("X-CSRF-Token", csrfToken)
 	reqRollback.AddCookie(cookie)
-	wRollback := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wRollback, reqRollback)
+	wRollback := client.Do(reqRollback)
 
 	if wRollback.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for rollback, got: %d", wRollback.Code)

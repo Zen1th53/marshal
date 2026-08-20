@@ -10,14 +10,10 @@ import (
 )
 
 func TestT207MemoryUsageTraceAndReadReceipts(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	reqTrace := httptest.NewRequest(http.MethodGet, "/api/v1/memory/MEM-001-ARCH-DECISION/usage", nil)
-	wTrace := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wTrace, reqTrace)
+	wTrace := client.Do(reqTrace)
 
 	if wTrace.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for usage trace, got: %d", wTrace.Code)

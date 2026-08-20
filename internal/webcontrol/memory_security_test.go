@@ -11,14 +11,10 @@ import (
 )
 
 func TestT208MemorySecurityACLAndIntegrityHealth(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	reqHealth := httptest.NewRequest(http.MethodGet, "/api/v1/memory/security/health", nil)
-	wHealth := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wHealth, reqHealth)
+	wHealth := client.Do(reqHealth)
 
 	if wHealth.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for memory security health, got: %d", wHealth.Code)

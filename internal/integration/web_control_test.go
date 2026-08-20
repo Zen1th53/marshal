@@ -53,8 +53,23 @@ func TestT219EndToEndOperatorLifecycleAndAdversarialSecurity(t *testing.T) {
 		t.Fatalf("expected 403 Forbidden for cross-origin state mutation, got: %d", wCSRFAttack.Code)
 	}
 
+	// Authenticate valid session for authorized testing
+	code, err := server.Sessions().CreateOneTimeCode("admin-operator", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loginPayload, _ := json.Marshal(map[string]string{"code": code})
+	reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginPayload))
+	wLogin := httptest.NewRecorder()
+	server.Handler().ServeHTTP(wLogin, reqLogin)
+	if wLogin.Code != http.StatusOK {
+		t.Fatalf("Login failed: %d", wLogin.Code)
+	}
+	sessionCookie := wLogin.Result().Cookies()[0]
+
 	// Get valid CSRF token for authorized mutations
 	reqCSRF := httptest.NewRequest(http.MethodGet, "/api/v1/auth/csrf", nil)
+	reqCSRF.AddCookie(sessionCookie)
 	wCSRF := httptest.NewRecorder()
 	server.Handler().ServeHTTP(wCSRF, reqCSRF)
 	csrfToken := wCSRF.Header().Get("X-CSRF-Token")
@@ -73,6 +88,7 @@ func TestT219EndToEndOperatorLifecycleAndAdversarialSecurity(t *testing.T) {
 	xBytes, _ := json.Marshal(xssPayload)
 	reqXSS := httptest.NewRequest(http.MethodPost, "/api/v1/tasks", bytes.NewReader(xBytes))
 	reqXSS.Header.Set("Content-Type", "application/json")
+	reqXSS.AddCookie(sessionCookie)
 	if csrfToken != "" {
 		reqXSS.Header.Set("X-CSRF-Token", csrfToken)
 	}
@@ -108,6 +124,7 @@ func TestT219EndToEndOperatorLifecycleAndAdversarialSecurity(t *testing.T) {
 	sBytes, _ := json.Marshal(staleSettingsPayload)
 	reqStale := httptest.NewRequest(http.MethodPut, "/api/v1/settings", bytes.NewReader(sBytes))
 	reqStale.Header.Set("Content-Type", "application/json")
+	reqStale.AddCookie(sessionCookie)
 	if csrfToken != "" {
 		reqStale.Header.Set("X-CSRF-Token", csrfToken)
 	}
@@ -122,6 +139,7 @@ func TestT219EndToEndOperatorLifecycleAndAdversarialSecurity(t *testing.T) {
 	// FLOW 2: Global Entity Search & Routing Boundary
 	// -------------------------------------------------------------
 	reqSearch := httptest.NewRequest(http.MethodGet, "/api/v1/search?q=TSK-001", nil)
+	reqSearch.AddCookie(sessionCookie)
 	wSearch := httptest.NewRecorder()
 	server.Handler().ServeHTTP(wSearch, reqSearch)
 

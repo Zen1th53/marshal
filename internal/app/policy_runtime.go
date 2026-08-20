@@ -7,6 +7,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/netpolicy"
 	"github.com/Zen1th53/marshal/internal/policy"
 )
 
@@ -84,4 +85,23 @@ func authorizeNetworkAccess(engine *policy.Engine, agentID, sessionID, taskID st
 		AgentID: agentID, SessionID: sessionID, Role: role, TaskID: taskID, Risk: risk,
 		Operation: model.NetworkAccess, Target: "network", TaskOwned: true, TargetInScope: true, Required: true,
 	}, func() error { return nil })
+}
+
+// authorizeNetworkEgress runs the runtime network-authorization gate and then
+// validates the task's explicit egress allowlist into a network-policy
+// evaluator. Network access is deny-by-default: an empty or malformed allowlist
+// fails closed, so a task can never receive unrestricted egress by omitting
+// rules.
+func authorizeNetworkEgress(engine *policy.Engine, agentID, sessionID, taskID string, role model.Role, risk model.Risk, rules []netpolicy.Rule) (*netpolicy.Engine, error) {
+	if err := authorizeNetworkAccess(engine, agentID, sessionID, taskID, role, risk, true); err != nil {
+		return nil, err
+	}
+	if len(rules) == 0 {
+		return nil, fmt.Errorf("%w: network access requires an explicit egress allowlist", model.ErrPolicyDenied)
+	}
+	evaluator, err := netpolicy.NewEvaluator(rules)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid egress allowlist", model.ErrPolicyDenied)
+	}
+	return evaluator, nil
 }

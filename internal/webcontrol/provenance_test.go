@@ -10,15 +10,11 @@ import (
 )
 
 func TestT195ProvenanceWhyTrace(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. Get Provenance Trace
 	reqTrace := httptest.NewRequest(http.MethodGet, "/api/v1/provenance/trace?target_id=TASK-002-CONTROL-PLANE&depth=5", nil)
-	wTrace := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wTrace, reqTrace)
+	wTrace := client.Do(reqTrace)
 
 	if wTrace.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wTrace.Code)
@@ -49,8 +45,7 @@ func TestT195ProvenanceWhyTrace(t *testing.T) {
 
 	// 3. Depth bounding test
 	reqDeep := httptest.NewRequest(http.MethodGet, "/api/v1/provenance/trace?depth=99", nil)
-	wDeep := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDeep, reqDeep)
+	wDeep := client.Do(reqDeep)
 
 	var deepResp webcontrol.ProvenanceTraceResponseDTO
 	_ = json.NewDecoder(wDeep.Body).Decode(&deepResp)

@@ -10,15 +10,11 @@ import (
 )
 
 func TestT215GlobalEntitySearch(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. Empty Query
 	reqEmpty := httptest.NewRequest(http.MethodGet, "/api/v1/search?q=", nil)
-	wEmpty := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wEmpty, reqEmpty)
+	wEmpty := client.Do(reqEmpty)
 
 	var emptyResp webcontrol.GlobalSearchResponseDTO
 	_ = json.NewDecoder(wEmpty.Body).Decode(&emptyResp)
@@ -28,8 +24,7 @@ func TestT215GlobalEntitySearch(t *testing.T) {
 
 	// 2. Exact ID Search
 	reqExact := httptest.NewRequest(http.MethodGet, "/api/v1/search?q=TSK-001", nil)
-	wExact := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wExact, reqExact)
+	wExact := client.Do(reqExact)
 
 	var exactResp webcontrol.GlobalSearchResponseDTO
 	_ = json.NewDecoder(wExact.Body).Decode(&exactResp)
@@ -39,8 +34,7 @@ func TestT215GlobalEntitySearch(t *testing.T) {
 
 	// 3. Substring Search
 	reqSub := httptest.NewRequest(http.MethodGet, "/api/v1/search?q=graph", nil)
-	wSub := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wSub, reqSub)
+	wSub := client.Do(reqSub)
 
 	var subResp webcontrol.GlobalSearchResponseDTO
 	_ = json.NewDecoder(wSub.Body).Decode(&subResp)

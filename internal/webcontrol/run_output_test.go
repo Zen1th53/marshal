@@ -11,15 +11,11 @@ import (
 )
 
 func TestT189RunDetailAndSafeLogs(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. Get run detail
 	reqDetail := httptest.NewRequest(http.MethodGet, "/api/v1/runs/RUN-TASK-001-01", nil)
-	wDetail := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDetail, reqDetail)
+	wDetail := client.Do(reqDetail)
 
 	if wDetail.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for run detail, got: %d", wDetail.Code)
@@ -37,8 +33,7 @@ func TestT189RunDetailAndSafeLogs(t *testing.T) {
 
 	// 2. Query paginated logs with cursor
 	reqLogs := httptest.NewRequest(http.MethodGet, "/api/v1/runs/RUN-TASK-001-01/logs?cursor=0&limit=3", nil)
-	wLogs := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wLogs, reqLogs)
+	wLogs := client.Do(reqLogs)
 
 	if wLogs.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for logs, got: %d", wLogs.Code)

@@ -10,15 +10,11 @@ import (
 )
 
 func TestT201MemoryDetailProvenanceAndLifecycle(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. Get Memory Detail for MEM-001
 	reqDetail := httptest.NewRequest(http.MethodGet, "/api/v1/memory/MEM-001-ARCH-DECISION/detail", nil)
-	wDetail := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDetail, reqDetail)
+	wDetail := client.Do(reqDetail)
 
 	if wDetail.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wDetail.Code)
@@ -33,8 +29,7 @@ func TestT201MemoryDetailProvenanceAndLifecycle(t *testing.T) {
 
 	// 2. Temporal Memory Record (Belief MEM-004 has expiration)
 	reqBelief := httptest.NewRequest(http.MethodGet, "/api/v1/memory/MEM-004-CANDIDATE-HEURISTIC/detail", nil)
-	wBelief := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wBelief, reqBelief)
+	wBelief := client.Do(reqBelief)
 
 	var beliefDetail webcontrol.MemoryDetailDTO
 	_ = json.NewDecoder(wBelief.Body).Decode(&beliefDetail)
@@ -45,8 +40,7 @@ func TestT201MemoryDetailProvenanceAndLifecycle(t *testing.T) {
 
 	// 3. 404 for Unknown ID
 	req404 := httptest.NewRequest(http.MethodGet, "/api/v1/memory/MEM-UNKNOWN-999/detail", nil)
-	w404 := httptest.NewRecorder()
-	server.Handler().ServeHTTP(w404, req404)
+	w404 := client.Do(req404)
 
 	if w404.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 Not Found, got: %d", w404.Code)

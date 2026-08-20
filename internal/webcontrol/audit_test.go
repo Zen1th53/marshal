@@ -12,15 +12,11 @@ import (
 )
 
 func TestT199GlobalAuditTimelineAndExport(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. List Audit Events
 	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/audit/events", nil)
-	wList := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wList, reqList)
+	wList := client.Do(reqList)
 
 	if wList.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wList.Code)
@@ -35,8 +31,7 @@ func TestT199GlobalAuditTimelineAndExport(t *testing.T) {
 
 	// 2. Filter by outcome=denied
 	reqDenied := httptest.NewRequest(http.MethodGet, "/api/v1/audit/events?outcome=denied", nil)
-	wDenied := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDenied, reqDenied)
+	wDenied := client.Do(reqDenied)
 
 	var deniedResp webcontrol.AuditEventsResponseDTO
 	_ = json.NewDecoder(wDenied.Body).Decode(&deniedResp)
@@ -48,25 +43,22 @@ func TestT199GlobalAuditTimelineAndExport(t *testing.T) {
 	// 3. Unauthenticated/Invalid Session Export -> 401
 	reqUnauth := httptest.NewRequest(http.MethodGet, "/api/v1/audit/export", nil)
 	reqUnauth.AddCookie(&http.Cookie{Name: webcontrol.SessionCookieName, Value: "invalid-expired-session"})
-	wUnauth := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wUnauth, reqUnauth)
+	wUnauth := client.Do(reqUnauth)
 
 	if wUnauth.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 Unauthorized for unauth export, got: %d", wUnauth.Code)
 	}
 
 	// 4. Authenticated Export
-	code, _ := server.Sessions().CreateOneTimeCode("auditor-zen1th", "admin")
+	code, _ := client.Sessions().CreateOneTimeCode("auditor-zen1th", "admin")
 	loginPayload, _ := json.Marshal(map[string]string{"code": code})
 	reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginPayload))
-	wLogin := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wLogin, reqLogin)
+	wLogin := client.Do(reqLogin)
 	cookie := wLogin.Result().Cookies()[0]
 
 	reqExport := httptest.NewRequest(http.MethodGet, "/api/v1/audit/export", nil)
 	reqExport.AddCookie(cookie)
-	wExport := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wExport, reqExport)
+	wExport := client.Do(reqExport)
 
 	if wExport.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for auth export, got: %d", wExport.Code)

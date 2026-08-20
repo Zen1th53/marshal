@@ -1,7 +1,7 @@
 # Runtime Implementation Roadmap
 
 ## Milestone 1 — Local Control Plane
-Status: Fully implemented in runtime `1.0.0` (SQLite schema `v67`).
+Status: Fully implemented in runtime `1.0.0` (SQLite schema `v69`).
 - Local daemon over mode-0600 Unix socket.
 - SQLite WAL storage with transactions, foreign keys, and migration engine.
 - Task DAG, atomic leases, and session identity registry.

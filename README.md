@@ -29,14 +29,14 @@ MARSHAL enforces strict operational separation:
 1. **Separation of Authority**: Agents hold explicit, leased capabilities; policy engines approve execution paths.
 2. **Fail-Closed Sandboxing**: Unprivileged Linux `bubblewrap` (`bwrap`) namespaces isolate filesystem and process environments.
 3. **Empirical Verification**: No task is marked `PASSED` without reproducible test runs, clean git diffs, and evidence digests.
-4. **Tamper-Evident Audit Trail**: Event logs, decisions, provenance chains, and artifacts are recorded with cryptographic digest links in SQLite (`v67`).
+4. **Tamper-Evident Audit Trail**: Event logs, decisions, provenance chains, and artifacts are recorded with cryptographic digest links in SQLite (`v69`).
 
 ---
 
 ## What MARSHAL Provides
 
 - **Fail-Closed Execution Cells**: Process supervisor operating inside unprivileged Linux `bwrap` sandboxes with worktree isolation and egress network filtering.
-- **Institutional Memory Engine**: Canonical SQLite (`v67` / `memory_records_v2`) backing working scratchpads (CAS revision), episodic traces, procedural workflows, and semantic facts with disposable derived index rebuild parity for tested fixtures.
+- **Institutional Memory Engine**: Canonical SQLite (`v69` / `memory_records_v2`) backing working scratchpads (CAS revision), episodic traces, procedural workflows, and semantic facts with disposable derived index rebuild parity for tested fixtures.
 - **Multi-Track Adaptive Retrieval**: Multi-track retrieval router combining BM25 lexical search, vector similarity, code graph impact analysis, and grounded evidence plan compilation with XML delimiter armor.
 - **Cryptographic & Governance Custody**: HMAC/SHA-256 signed mutation envelopes, AES-GCM-256 envelope encryption at rest with AAD binding, direct-ID tenant ACL enforcement, and active sycophancy rejection.
 - **Capability Broker & Leases**: Transactional task leases (`0600` Unix socket control) preventing concurrent file collisions and unauthorized API calls.
@@ -111,6 +111,10 @@ MARSHAL includes an institutional memory subsystem designed around current agent
 3. **Benchmark Scope**: Benchmark numbers are configuration-specific and measured against the local test harness; they do not imply universal performance across unseen workloads.
 4. **Third-Party Audit**: MARSHAL's security invariants are verified by automated adversarial suites; no external third-party commercial security audit has been performed to date.
 5. **Zero Findings Disclaimer**: 0 observed security leaks in test suites proves absence of regressions on tested fixtures, but does not guarantee the absence of undiscovered vulnerabilities.
+6. **Endpoint-Restricted Egress Is Fail-Closed**: The network policy engine (`netpolicy`) authoritatively evaluates host/port allowlists, but `bubblewrap` can only toggle networking on/off — it cannot restrict egress to specific endpoints. MARSHAL therefore refuses (fails closed) to grant endpoint-restricted egress rather than silently broadening it to unrestricted host networking. An egress-filtering proxy is not yet wired.
+7. **Local Providers Require Shared Network**: Reaching a host-local provider (e.g. Ollama on `127.0.0.1:11434`) requires the sandbox to share the host network namespace, which `bubblewrap` cannot scope to loopback-only. Local-provider access is only available through the explicit, policy-governed network path and is subject to the same fail-closed egress limitations above.
+8. **Unsandboxed Execution Is Opt-In**: If `bwrap` is unavailable, tasks fail closed by default. Process-only (unsandboxed) execution for `R0`/`R1` tasks requires an explicit operator opt-in and is clearly reported as degraded isolation.
+9. **Web Control Plane Data Sources**: The web control plane serves canonical store data for memory, backups, and status. Endpoints without a persisted counterpart (review queue, quorum workspace, governance queue, snapshots, maintenance) currently serve dev-demo fixtures or an explicit "unsupported" response rather than invented production data.
 
 ---
 
@@ -122,7 +126,7 @@ MARSHAL includes an institutional memory subsystem designed around current agent
        width="100%">
 </p>
 
-> Source-faithful to runtime `1.0.0` / SQLite schema `v67` at source snapshot
+> Source-faithful to runtime `1.0.0` / SQLite schema `v69` at source snapshot
 > `8f7d092e038e`. Roadmap-only or contract-only components are intentionally omitted.
 
 For detailed technical specs, inspect [docs/architecture.md](docs/architecture.md) and [docs/concepts.md](docs/concepts.md).
@@ -135,7 +139,7 @@ For detailed technical specs, inspect [docs/architecture.md](docs/architecture.m
 |---|---|
 | **Product Release** | **`v1.0.0`** |
 | **Source Channel** | `main` |
-| **Database Schema** | **`v67`** (SQLite WAL mode) |
+| **Database Schema** | **`v69`** (SQLite WAL mode) |
 | **MCP Protocol** | `2026-07-28` |
 | **A2A Wire Version** | `1.0` |
 | **Platform Support** | Linux (x86_64 / arm64) |
@@ -279,7 +283,7 @@ MARSHAL is designed from the ground up as a **security-first control plane**:
 - **Unix Socket Permissions (`0600`)**: Local daemon communicates over Unix domain sockets restricted exclusively to the invoking user.
 - **Fail-Closed Bubblewrap Isolation**: Task processes run inside unprivileged Linux `bwrap` mount namespaces with read-only root filesystems and explicit tmpfs mounts.
 - **Secrets Boundary & Redaction**: High-entropy API tokens and private environment variables are automatically redacted from logs, events, and artifact payloads.
-- **Network Egress Firewalling**: Egress network policy engines restrict outbound connections to authorized LLM endpoints.
+- **Network Egress Firewalling**: Egress network policy is deny-by-default and requires an explicit host/port allowlist. Because `bwrap` cannot enforce per-endpoint filtering, endpoint-restricted requests currently fail closed (see Known Limitations).
 
 Read the complete [Security Model](docs/security-model.md) and [SECURITY.md](SECURITY.md).
 

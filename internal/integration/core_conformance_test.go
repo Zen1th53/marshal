@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/recovery"
 	"github.com/Zen1th53/marshal/internal/router"
 	"github.com/Zen1th53/marshal/internal/scheduler"
+	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/verify/quorum"
 )
 
@@ -280,7 +281,7 @@ func TestCoreConformanceStorageAndGC(t *testing.T) {
 		t.Fatal("expected non-empty database hash in backup")
 	}
 
-	verified, err := app.VerifyStateBackup(ctx, backupPath, meta.ProjectID, 67)
+	verified, err := app.VerifyStateBackup(ctx, backupPath, meta.ProjectID, store.LatestSchemaVersion)
 	if err != nil {
 		t.Fatalf("VerifyStateBackup: %v", err)
 	}

@@ -16,7 +16,7 @@ Welcome to the official MARSHAL documentation portal. Use this index to navigate
 
 - [Architecture Overview](architecture.md) — System design, control plane boundaries, and component roles
 - [Core Concepts](concepts.md) — Task leases, capability brokers, execution cells, and verification quorum
-- [Runtime Specification](runtime.md) — Daemon lifecycle, Unix socket protocols, and SQLite schema (`v67`)
+- [Runtime Specification](runtime.md) — Daemon lifecycle, Unix socket protocols, and SQLite schema (`v69`)
 - [Execution Cells](execution-cells.md) — Process isolation, `bubblewrap` sandboxing, and worktrees
 
 ---

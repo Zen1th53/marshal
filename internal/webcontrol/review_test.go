@@ -10,15 +10,11 @@ import (
 )
 
 func TestT191ReviewCenterQueue(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. List review queue
 	reqQueue := httptest.NewRequest(http.MethodGet, "/api/v1/review/queue", nil)
-	wQueue := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wQueue, reqQueue)
+	wQueue := client.Do(reqQueue)
 
 	if wQueue.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wQueue.Code)
@@ -33,8 +29,7 @@ func TestT191ReviewCenterQueue(t *testing.T) {
 
 	// 2. Filter by stage=merge_approval
 	reqMerge := httptest.NewRequest(http.MethodGet, "/api/v1/review/queue?stage=merge_approval", nil)
-	wMerge := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wMerge, reqMerge)
+	wMerge := client.Do(reqMerge)
 
 	var respMerge webcontrol.ReviewQueueResponseDTO
 	_ = json.NewDecoder(wMerge.Body).Decode(&respMerge)

@@ -171,16 +171,43 @@ func validProtocol(protocol Protocol) bool {
 	return protocol == ProtocolTCP || protocol == ProtocolUDP
 }
 
+func parseIPLiteral(value string) (net.IP, bool) {
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		inner := trimmed[1 : len(trimmed)-1]
+		ip := net.ParseIP(inner)
+		if ip != nil {
+			return ip, true
+		}
+		return nil, false
+	}
+	if strings.Contains(trimmed, "[") || strings.Contains(trimmed, "]") {
+		// Mismatched brackets
+		return nil, false
+	}
+	ip := net.ParseIP(trimmed)
+	if ip != nil {
+		return ip, true
+	}
+	return nil, false
+}
+
 func validHostPattern(value string) bool {
 	value = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(value)), ".")
-	if value == "" || strings.ContainsAny(value, "/:@ \t\r\n") {
+	if value == "" {
+		return false
+	}
+	if _, isIP := parseIPLiteral(value); isIP {
+		return true
+	}
+	if strings.ContainsAny(value, "/:@ \t\r\n[]") {
 		return false
 	}
 	if strings.HasPrefix(value, "*.") {
 		value = strings.TrimPrefix(value, "*.")
 	}
-	if strings.Contains(value, "*") || net.ParseIP(value) != nil {
-		return net.ParseIP(value) != nil
+	if strings.Contains(value, "*") {
+		return false
 	}
 	labels := strings.Split(value, ".")
 	for _, label := range labels {
@@ -198,7 +225,7 @@ func validHostPattern(value string) bool {
 
 func validHost(value string) bool {
 	value = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(value)), ".")
-	if net.ParseIP(value) != nil {
+	if _, isIP := parseIPLiteral(value); isIP {
 		return true
 	}
 	return validHostPattern(value)

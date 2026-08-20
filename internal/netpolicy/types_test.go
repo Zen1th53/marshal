@@ -49,3 +49,47 @@ func TestA01DecisionValidationIsClosedAndErrorsAreSafe(t *testing.T) {
 		t.Fatalf("marker-bearing rule error=%v, want stable redacted error", err)
 	}
 }
+
+func TestIPv6HostPatternValidation(t *testing.T) {
+	validIPv6s := []string{
+		"2001:db8::1",
+		"[2001:db8::1]",
+		"::1",
+		"[::1]",
+		"fe80::1",
+		"[fe80::1]",
+		"::",
+		"[::]",
+		"::ffff:192.0.2.1",
+		"[::ffff:192.0.2.1]",
+	}
+
+	for _, v := range validIPv6s {
+		r := Rule{ID: "rule-ipv6", HostPattern: v, Protocol: ProtocolTCP, Ports: []int{443}, Action: ActionAllow}
+		if err := r.Validate(); err != nil {
+			t.Errorf("expected valid IPv6 rule for %q, got error: %v", v, err)
+		}
+
+		req := Request{Host: v, Protocol: ProtocolTCP, Port: 443}
+		if err := req.Validate(); err != nil {
+			t.Errorf("expected valid IPv6 request for %q, got error: %v", v, err)
+		}
+	}
+
+	invalidIPv6s := []string{
+		"[2001:db8::1",
+		"2001:db8::1]",
+		"[2001:db8::1]trailing",
+		"prefix[2001:db8::1]",
+		"2001:db8:::1",
+		"[2001:db8:::1]",
+		"2001:db8:xyz::1",
+	}
+
+	for _, v := range invalidIPv6s {
+		r := Rule{ID: "rule-bad-ipv6", HostPattern: v, Protocol: ProtocolTCP, Ports: []int{443}, Action: ActionAllow}
+		if err := r.Validate(); err == nil {
+			t.Errorf("expected invalid IPv6 rule for %q, got nil error", v)
+		}
+	}
+}

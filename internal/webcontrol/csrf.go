@@ -3,6 +3,7 @@ package webcontrol
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"net/http"
@@ -22,18 +23,18 @@ const (
 	CSRFHeaderName = "X-CSRF-Token"
 )
 
-func GenerateCSRFToken(sessionID, secretKey string) string {
-	mac := hmac.New(sha256.New, []byte(secretKey))
+func GenerateCSRFToken(sessionID string, secretKey []byte) string {
+	mac := hmac.New(sha256.New, secretKey)
 	mac.Write([]byte(sessionID))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func ValidateCSRFToken(token, sessionID, secretKey string) bool {
-	if token == "" || sessionID == "" {
+func ValidateCSRFToken(token, sessionID string, secretKey []byte) bool {
+	if token == "" || sessionID == "" || len(secretKey) == 0 {
 		return false
 	}
 	expected := GenerateCSRFToken(sessionID, secretKey)
-	return hmac.Equal([]byte(token), []byte(expected))
+	return subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
 }
 
 // CSRFMiddleware validates Origin, Host, and CSRF token for state-changing requests
@@ -64,11 +65,14 @@ func (s *Server) CSRFMiddleware(next http.Handler) http.Handler {
 			if r.URL.Path != "/api/v1/auth/login" {
 				sessionCookie, err := r.Cookie(SessionCookieName)
 				if err != nil || sessionCookie.Value == "" {
-					// If not in loopback, reject state change without session
-					if !s.IsLoopback() {
-						writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication session required for state changes", "")
-						return
-					}
+					writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication session required for state changes", "")
+					return
+				}
+
+				session, err := s.sessions.GetSession(sessionCookie.Value)
+				if err != nil || session == nil {
+					writeError(w, http.StatusUnauthorized, "session_expired", "Invalid or expired session", "")
+					return
 				}
 
 				// Check CSRF token header
@@ -78,14 +82,7 @@ func (s *Server) CSRFMiddleware(next http.Handler) http.Handler {
 					return
 				}
 
-				sessionID := ""
-				if sessionCookie != nil {
-					sessionID = sessionCookie.Value
-				} else {
-					sessionID = "loopback-session"
-				}
-
-				if !ValidateCSRFToken(csrfToken, sessionID, "marshal-csrf-secret-key") {
+				if !ValidateCSRFToken(csrfToken, sessionCookie.Value, s.csrfSecret) {
 					writeError(w, http.StatusForbidden, "csrf_invalid", "Invalid or mismatched CSRF token", "")
 					return
 				}
@@ -107,13 +104,20 @@ func (s *Server) isAllowedOrigin(originHost string) bool {
 }
 
 func (s *Server) handleGetCSRFToken(w http.ResponseWriter, r *http.Request) {
-	sessionID := "loopback-session"
-	if cookie, err := r.Cookie(SessionCookieName); err == nil && cookie.Value != "" {
-		sessionID = cookie.Value
+	sessionCookie, err := r.Cookie(SessionCookieName)
+	if err != nil || sessionCookie.Value == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Session required to obtain CSRF token", "")
+		return
 	}
 
-	token := GenerateCSRFToken(sessionID, "marshal-csrf-secret-key")
-	w.Header().Set("X-CSRF-Token", token)
+	session, err := s.sessions.GetSession(sessionCookie.Value)
+	if err != nil || session == nil {
+		writeError(w, http.StatusUnauthorized, "session_expired", "Invalid or expired session", "")
+		return
+	}
+
+	token := GenerateCSRFToken(session.ID, s.csrfSecret)
+	w.Header().Set(CSRFHeaderName, token)
 
 	// Set double-submit CSRF cookie (readable by frontend)
 	http.SetCookie(w, &http.Cookie{

@@ -2,14 +2,13 @@ package app
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 type MemoryServiceStatus struct {
@@ -28,8 +27,9 @@ type RememberRequest struct {
 }
 
 type PromoteRequest struct {
-	MemoryID string `json:"memory_id"`
-	ScopeID  string `json:"scope_id"`
+	ProjectID string `json:"project_id"`
+	MemoryID  string `json:"memory_id"`
+	ScopeID   string `json:"scope_id"`
 }
 
 type RecallRequest struct {
@@ -49,16 +49,18 @@ type RecallResponse struct {
 	Results []RecallItem `json:"results"`
 }
 
+// MemoryService is the canonical product-facing memory facade. It is backed
+// exclusively by the persistent store (memory_records_v2) — there is no
+// separate in-memory source of truth.
 type MemoryService struct {
-	mu         sync.RWMutex
+	store      *store.Store
 	authorizer *authz.MemoryAuthorizer
-	records    map[string]model.MemoryRecordV2
 }
 
-func NewMemoryService() *MemoryService {
+func NewMemoryService(st *store.Store) *MemoryService {
 	return &MemoryService{
+		store:      st,
 		authorizer: authz.NewMemoryAuthorizer(),
-		records:    make(map[string]model.MemoryRecordV2),
 	}
 }
 
@@ -81,27 +83,34 @@ func (s *MemoryService) Remember(ctx context.Context, principal authz.Principal,
 	if err := ctx.Err(); err != nil {
 		return model.MemoryRecordV2{}, err
 	}
-
+	if s == nil || s.store == nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("%w: memory store is unavailable", model.ErrUnavailable)
+	}
 	if err := s.authorizer.Authorize(ctx, principal, authz.ActionMemoryRemember, req.ScopeID, model.MemoryCandidate); err != nil {
 		return model.MemoryRecordV2{}, err
 	}
 
+	kind := req.Kind
+	if !kind.IsValid() {
+		kind = model.MemoryKindSemantic
+	}
 	now := time.Now().UTC()
-	h := sha256.New()
-	fmt.Fprintf(h, "%s:%s:%s", req.ProjectID, req.Title, req.Body)
-	idHash := hex.EncodeToString(h.Sum(nil))[:16]
+	id, err := model.NewID("MEM-")
+	if err != nil {
+		return model.MemoryRecordV2{}, err
+	}
 
 	rec := model.MemoryRecordV2{
-		ID:          fmt.Sprintf("MEM-SVC-%s", idHash),
+		ID:          id,
 		ProjectID:   req.ProjectID,
-		Kind:        req.Kind,
+		Kind:        kind,
 		Lifecycle:   model.MemoryCandidate,
 		Confidence:  model.ConfidenceInferred,
 		Authority:   model.AuthorityAgent,
 		Title:       req.Title,
 		Body:        req.Body,
 		Scope:       string(model.ScopeProject),
-		ScopeID:     req.ScopeID,
+		ScopeID:     req.ProjectID,
 		EvidenceIDs: req.EvidenceIDs,
 		ObservedAt:  now,
 		IngestedAt:  now,
@@ -113,12 +122,9 @@ func (s *MemoryService) Remember(ctx context.Context, principal authz.Principal,
 			Reference: principal.ID,
 		},
 	}
-	rec.ContentDigest = rec.CanonicalDigest()
-
-	s.mu.Lock()
-	s.records[rec.ID] = rec
-	s.mu.Unlock()
-
+	if err := s.store.WriteMemoryV2(ctx, rec); err != nil {
+		return model.MemoryRecordV2{}, err
+	}
 	return rec, nil
 }
 
@@ -126,51 +132,60 @@ func (s *MemoryService) Promote(ctx context.Context, principal authz.Principal, 
 	if err := ctx.Err(); err != nil {
 		return model.MemoryRecordV2{}, err
 	}
-
+	if s == nil || s.store == nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("%w: memory store is unavailable", model.ErrUnavailable)
+	}
 	if err := s.authorizer.Authorize(ctx, principal, authz.ActionMemoryPromote, req.ScopeID, model.MemoryDurable); err != nil {
 		return model.MemoryRecordV2{}, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	rec, ok := s.records[req.MemoryID]
-	if !ok {
-		return model.MemoryRecordV2{}, fmt.Errorf("record %s not found", req.MemoryID)
+	existing, err := s.store.GetMemoryV2(ctx, req.ProjectID, req.MemoryID)
+	if err != nil {
+		return model.MemoryRecordV2{}, err
 	}
-
-	rec.Lifecycle = model.MemoryDurable
-	rec.Authority = model.AuthorityOperator
-	rec.UpdatedAt = time.Now().UTC()
-	rec.ContentDigest = rec.CanonicalDigest()
-	s.records[req.MemoryID] = rec
-
-	return rec, nil
+	promoted, err := s.store.UpdateMemory(ctx, existing.ProjectID, req.MemoryID, existing.Revision, func(rec *model.MemoryRecordV2) error {
+		rec.Lifecycle = model.MemoryDurable
+		rec.Authority = model.AuthorityOperator
+		rec.UpdatedAt = time.Now().UTC()
+		return nil
+	})
+	if err != nil {
+		return model.MemoryRecordV2{}, err
+	}
+	return promoted, nil
 }
 
 func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, req RecallRequest) (RecallResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return RecallResponse{}, err
 	}
-
+	if s == nil || s.store == nil {
+		return RecallResponse{}, fmt.Errorf("%w: memory store is unavailable", model.ErrUnavailable)
+	}
 	if err := s.authorizer.Authorize(ctx, principal, authz.ActionMemoryRecall, req.ProjectID, model.MemoryDurable); err != nil {
 		return RecallResponse{}, err
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	records, err := s.store.ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: req.ProjectID})
+	if err != nil {
+		return RecallResponse{}, err
+	}
 
 	allowedScopeMap := make(map[string]bool)
 	for _, sc := range req.AllowedScopeIDs {
 		allowedScopeMap[sc] = true
 	}
 
+	query := strings.ToLower(strings.TrimSpace(req.Query))
 	var results []RecallItem
-	for _, rec := range s.records {
+	for _, rec := range records {
 		if rec.ProjectID != req.ProjectID {
 			continue
 		}
 		if len(req.AllowedScopeIDs) > 0 && rec.ScopeID != "" && !allowedScopeMap[rec.ScopeID] {
+			continue
+		}
+		if query != "" && !strings.Contains(strings.ToLower(rec.Title), query) && !strings.Contains(strings.ToLower(rec.Body), query) {
 			continue
 		}
 		results = append(results, RecallItem{

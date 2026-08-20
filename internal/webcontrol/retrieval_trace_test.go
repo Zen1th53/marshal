@@ -10,14 +10,10 @@ import (
 )
 
 func TestT202RetrievalExplainabilityAndRRFFusion(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	reqExplain := httptest.NewRequest(http.MethodGet, "/api/v1/memory/retrieval/explain?query=loopback+invariant", nil)
-	wExplain := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wExplain, reqExplain)
+	wExplain := client.Do(reqExplain)
 
 	if wExplain.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wExplain.Code)

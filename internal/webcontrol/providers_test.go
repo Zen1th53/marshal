@@ -12,15 +12,11 @@ import (
 )
 
 func TestT196ProviderInventoryAndRouter(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. Get Provider Inventory
 	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil)
-	wList := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wList, reqList)
+	wList := client.Do(reqList)
 
 	if wList.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wList.Code)
@@ -44,17 +40,15 @@ func TestT196ProviderInventoryAndRouter(t *testing.T) {
 	}
 
 	// 3. Router Override with Auth
-	code, _ := server.Sessions().CreateOneTimeCode("admin-zen1th", "admin")
+	code, _ := client.Sessions().CreateOneTimeCode("admin-zen1th", "admin")
 	loginPayload, _ := json.Marshal(map[string]string{"code": code})
 	reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginPayload))
-	wLogin := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wLogin, reqLogin)
+	wLogin := client.Do(reqLogin)
 	cookie := wLogin.Result().Cookies()[0]
 
 	reqCSRF := httptest.NewRequest(http.MethodGet, "/api/v1/auth/csrf", nil)
 	reqCSRF.AddCookie(cookie)
-	wCSRF := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wCSRF, reqCSRF)
+	wCSRF := client.Do(reqCSRF)
 	var csrfResp map[string]string
 	_ = json.NewDecoder(wCSRF.Body).Decode(&csrfResp)
 	csrfToken := csrfResp["csrf_token"]
@@ -72,8 +66,7 @@ func TestT196ProviderInventoryAndRouter(t *testing.T) {
 	reqOverride.Header.Set("Content-Type", "application/json")
 	reqOverride.Header.Set("X-CSRF-Token", csrfToken)
 	reqOverride.AddCookie(cookie)
-	wOverride := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wOverride, reqOverride)
+	wOverride := client.Do(reqOverride)
 
 	if wOverride.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for router override, got: %d: %s", wOverride.Code, wOverride.Body.String())

@@ -11,17 +11,13 @@ import (
 )
 
 func TestT192QuorumWorkspaceAndAttestations(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	taskID := "TASK-002-CONTROL-PLANE"
 
 	// 1. Get Quorum Status
 	reqStatus := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+taskID+"/quorum", nil)
-	wStatus := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wStatus, reqStatus)
+	wStatus := client.Do(reqStatus)
 
 	if wStatus.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wStatus.Code)
@@ -35,17 +31,15 @@ func TestT192QuorumWorkspaceAndAttestations(t *testing.T) {
 	}
 
 	// 2. Submit Decision (Login & CSRF)
-	code, _ := server.Sessions().CreateOneTimeCode("auditor-gemini", "qa_lead")
+	code, _ := client.Sessions().CreateOneTimeCode("auditor-gemini", "qa_lead")
 	loginPayload, _ := json.Marshal(map[string]string{"code": code})
 	reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginPayload))
-	wLogin := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wLogin, reqLogin)
+	wLogin := client.Do(reqLogin)
 	cookie := wLogin.Result().Cookies()[0]
 
 	reqCSRF := httptest.NewRequest(http.MethodGet, "/api/v1/auth/csrf", nil)
 	reqCSRF.AddCookie(cookie)
-	wCSRF := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wCSRF, reqCSRF)
+	wCSRF := client.Do(reqCSRF)
 	var csrfResp map[string]string
 	_ = json.NewDecoder(wCSRF.Body).Decode(&csrfResp)
 	csrfToken := csrfResp["csrf_token"]
@@ -63,8 +57,7 @@ func TestT192QuorumWorkspaceAndAttestations(t *testing.T) {
 	reqDecision.Header.Set("Content-Type", "application/json")
 	reqDecision.Header.Set("X-CSRF-Token", csrfToken)
 	reqDecision.AddCookie(cookie)
-	wDecision := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDecision, reqDecision)
+	wDecision := client.Do(reqDecision)
 
 	if wDecision.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for quorum decision, got: %d: %s", wDecision.Code, wDecision.Body.String())
@@ -75,8 +68,7 @@ func TestT192QuorumWorkspaceAndAttestations(t *testing.T) {
 	reqDup.Header.Set("Content-Type", "application/json")
 	reqDup.Header.Set("X-CSRF-Token", csrfToken)
 	reqDup.AddCookie(cookie)
-	wDup := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDup, reqDup)
+	wDup := client.Do(reqDup)
 
 	if wDup.Code != http.StatusConflict {
 		t.Fatalf("expected 409 Conflict for duplicate signature, got: %d", wDup.Code)

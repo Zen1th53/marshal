@@ -10,15 +10,11 @@ import (
 )
 
 func TestT194EvidenceExplorerAndIntegrity(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. List Evidence
 	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/evidence", nil)
-	wList := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wList, reqList)
+	wList := client.Do(reqList)
 
 	if wList.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wList.Code)
@@ -33,8 +29,7 @@ func TestT194EvidenceExplorerAndIntegrity(t *testing.T) {
 
 	// 2. Filter by type=merkle_proof
 	reqFilter := httptest.NewRequest(http.MethodGet, "/api/v1/evidence?type=merkle_proof", nil)
-	wFilter := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wFilter, reqFilter)
+	wFilter := client.Do(reqFilter)
 
 	var filterResp webcontrol.EvidenceListResponseDTO
 	_ = json.NewDecoder(wFilter.Body).Decode(&filterResp)
@@ -45,8 +40,7 @@ func TestT194EvidenceExplorerAndIntegrity(t *testing.T) {
 
 	// 3. Get Evidence Detail with Digest Parity Check
 	reqDetail := httptest.NewRequest(http.MethodGet, "/api/v1/evidence/EVID-002-MERKLE", nil)
-	wDetail := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDetail, reqDetail)
+	wDetail := client.Do(reqDetail)
 
 	if wDetail.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for detail, got: %d", wDetail.Code)

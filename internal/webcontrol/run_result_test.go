@@ -11,15 +11,11 @@ import (
 )
 
 func TestT190RunResultsArtifactsAndRecovery(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. Get Run Result
 	reqResult := httptest.NewRequest(http.MethodGet, "/api/v1/runs/RUN-001/result", nil)
-	wResult := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wResult, reqResult)
+	wResult := client.Do(reqResult)
 
 	if wResult.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for result, got %d", wResult.Code)
@@ -34,8 +30,7 @@ func TestT190RunResultsArtifactsAndRecovery(t *testing.T) {
 
 	// 2. Safe Artifact Download
 	reqDownload := httptest.NewRequest(http.MethodGet, "/api/v1/artifacts/art-001/download", nil)
-	wDownload := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDownload, reqDownload)
+	wDownload := client.Do(reqDownload)
 
 	if wDownload.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for artifact download, got %d", wDownload.Code)
@@ -51,8 +46,7 @@ func TestT190RunResultsArtifactsAndRecovery(t *testing.T) {
 
 	// 3. Security Invariant: Path Traversal IDOR rejection
 	reqEvil := httptest.NewRequest(http.MethodGet, "/api/v1/artifacts/..%2F..%2Fetc%2Fpasswd/download", nil)
-	wEvil := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wEvil, reqEvil)
+	wEvil := client.Do(reqEvil)
 
 	if wEvil.Code != http.StatusBadRequest && wEvil.Code != http.StatusNotFound {
 		t.Fatalf("expected 400 or 404 for traversal attempt, got %d", wEvil.Code)

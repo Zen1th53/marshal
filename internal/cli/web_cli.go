@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/webcontrol"
 )
 
@@ -50,13 +51,22 @@ func (c *command) webServe(ctx context.Context, args []string) error {
 		return err
 	}
 
+	// Open the canonical runtime so the control plane serves real store data.
+	// If the runtime cannot be opened (e.g. uninitialized repo), the web server
+	// still starts but reports data through its dev-demo fixtures.
+	var runtime any
+	if rt, err := app.Open(ctx, c.root); err == nil {
+		defer rt.Close()
+		runtime = rt
+	}
+
 	cfg := webcontrol.ServerConfig{
 		Host:                     *host,
 		Port:                     *port,
 		AllowInsecureNonLoopback: *allowInsecure,
 	}
 
-	srv, err := webcontrol.NewServer(cfg, nil)
+	srv, err := webcontrol.NewServer(cfg, runtime)
 	if err != nil {
 		return err
 	}

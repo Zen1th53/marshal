@@ -87,19 +87,29 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 func TestChooseIsolationNeverSilentlyDropsNetworkDenialOrStrongRisk(t *testing.T) {
 	unavailable := model.IsolationCapability{Level: model.IsolationProcessOnly, Available: false, Reason: "missing"}
 	tests := []struct {
-		name           string
-		risk           model.Risk
-		networkAllowed bool
-		wantLevel      model.IsolationLevel
-		wantErr        bool
+		name                   string
+		risk                   model.Risk
+		networkAllowed         bool
+		allowProcessOnly       bool
+		wantLevel              model.IsolationLevel
+		wantErr                bool
 	}{
-		{name: "low risk network allowed", risk: model.R1, networkAllowed: true, wantLevel: model.IsolationProcessOnly},
-		{name: "low risk network denied", risk: model.R1, networkAllowed: false, wantLevel: model.IsolationBlocked, wantErr: true},
-		{name: "high risk", risk: model.R2, networkAllowed: true, wantLevel: model.IsolationBlocked, wantErr: true},
+		// Without an explicit opt-in, every unavailable-bwrap case must fail
+		// closed, regardless of risk or network.
+		{name: "low risk network allowed no opt-in", risk: model.R1, networkAllowed: true, allowProcessOnly: false, wantLevel: model.IsolationBlocked, wantErr: true},
+		{name: "low risk network denied no opt-in", risk: model.R1, networkAllowed: false, allowProcessOnly: false, wantLevel: model.IsolationBlocked, wantErr: true},
+		{name: "zero risk no opt-in", risk: model.R0, networkAllowed: false, allowProcessOnly: false, wantLevel: model.IsolationBlocked, wantErr: true},
+		{name: "high risk no opt-in", risk: model.R2, networkAllowed: true, allowProcessOnly: false, wantLevel: model.IsolationBlocked, wantErr: true},
+		// Explicit opt-in permits process-only only for low risk classes.
+		{name: "low risk opt-in", risk: model.R1, networkAllowed: true, allowProcessOnly: true, wantLevel: model.IsolationProcessOnly},
+		{name: "zero risk opt-in", risk: model.R0, networkAllowed: false, allowProcessOnly: true, wantLevel: model.IsolationProcessOnly},
+		// Explicit opt-in must never weaken high-risk handling.
+		{name: "high risk opt-in still blocked", risk: model.R2, networkAllowed: true, allowProcessOnly: true, wantLevel: model.IsolationBlocked, wantErr: true},
+		{name: "critical risk opt-in still blocked", risk: model.R3, networkAllowed: true, allowProcessOnly: true, wantLevel: model.IsolationBlocked, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ChooseIsolation(unavailable, tt.risk, tt.networkAllowed)
+			got, err := ChooseIsolation(unavailable, tt.risk, tt.networkAllowed, tt.allowProcessOnly)
 			if (err != nil) != tt.wantErr || got.Level != tt.wantLevel {
 				t.Fatalf("got=%#v err=%v", got, err)
 			}

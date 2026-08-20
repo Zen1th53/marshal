@@ -5,11 +5,16 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/app"
 )
 
 func TestT131MemoryCLIAndOperatorWorkflows(t *testing.T) {
 	repo := cliRepo(t)
 	ctx := context.Background()
+	if _, err := app.Bootstrap(ctx, repo.Path()); err != nil {
+		t.Fatal(err)
+	}
 
 	// 1. Help output should document memory command
 	var helpBuf bytes.Buffer
@@ -30,7 +35,17 @@ func TestT131MemoryCLIAndOperatorWorkflows(t *testing.T) {
 		t.Fatalf("unexpected JSON status output: %s", outBuf.String())
 	}
 
-	// 3. memory recall command
+	// 3. Write memory then recall it through the same CLI surface.
+	var rememberBuf bytes.Buffer
+	var rememberErr bytes.Buffer
+	code = Execute(ctx, repo.Path(), []string{"--json", "memory", "remember", "SQLite WAL", "journal_mode=WAL"}, strings.NewReader(""), &rememberBuf, &rememberErr)
+	if code != 0 {
+		t.Fatalf("memory remember failed, code=%d err=%s", code, rememberErr.String())
+	}
+	if !strings.Contains(rememberBuf.String(), `"REMEMBERED"`) && !strings.Contains(rememberBuf.String(), "REMEMBERED") {
+		t.Fatalf("unexpected remember output: %s", rememberBuf.String())
+	}
+
 	var recallBuf bytes.Buffer
 	var recallErr bytes.Buffer
 	code = Execute(ctx, repo.Path(), []string{"--json", "memory", "recall", "SQLite", "WAL"}, strings.NewReader(""), &recallBuf, &recallErr)
@@ -39,6 +54,9 @@ func TestT131MemoryCLIAndOperatorWorkflows(t *testing.T) {
 	}
 	if !strings.Contains(recallBuf.String(), `"query"`) {
 		t.Fatalf("unexpected recall output: %s", recallBuf.String())
+	}
+	if !strings.Contains(recallBuf.String(), "SQLite WAL") {
+		t.Fatalf("recall did not return the persisted record: %s", recallBuf.String())
 	}
 
 	// 4. memory promote dry-run

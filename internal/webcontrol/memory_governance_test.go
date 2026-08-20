@@ -10,15 +10,11 @@ import (
 )
 
 func TestT203MemoryGovernanceQueueAndConflicts(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. List all governance queue items
 	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/memory/governance/queue", nil)
-	wList := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wList, reqList)
+	wList := client.Do(reqList)
 
 	if wList.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wList.Code)
@@ -33,8 +29,7 @@ func TestT203MemoryGovernanceQueueAndConflicts(t *testing.T) {
 
 	// 2. Filter by category=conflicted
 	reqConf := httptest.NewRequest(http.MethodGet, "/api/v1/memory/governance/queue?category=conflicted", nil)
-	wConf := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wConf, reqConf)
+	wConf := client.Do(reqConf)
 
 	var confResp webcontrol.GovernanceQueueResponseDTO
 	_ = json.NewDecoder(wConf.Body).Decode(&confResp)
@@ -45,8 +40,7 @@ func TestT203MemoryGovernanceQueueAndConflicts(t *testing.T) {
 
 	// 3. Get Conflict Comparison Details
 	reqComp := httptest.NewRequest(http.MethodGet, "/api/v1/memory/governance/conflicts/GOV-CONF-001", nil)
-	wComp := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wComp, reqComp)
+	wComp := client.Do(reqComp)
 
 	if wComp.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for conflict comparison, got: %d", wComp.Code)

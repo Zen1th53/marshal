@@ -11,15 +11,11 @@ import (
 )
 
 func TestT204WorkingMemoryAndScratchpadInspector(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. Get Working Memory
 	reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/memory/working", nil)
-	wGet := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wGet, reqGet)
+	wGet := client.Do(reqGet)
 
 	if wGet.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wGet.Code)
@@ -33,17 +29,15 @@ func TestT204WorkingMemoryAndScratchpadInspector(t *testing.T) {
 	}
 
 	// Setup session and CSRF token via login
-	code, _ := server.Sessions().CreateOneTimeCode("operator", "admin")
+	code, _ := client.Sessions().CreateOneTimeCode("operator", "admin")
 	loginPayload, _ := json.Marshal(map[string]string{"code": code})
 	reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginPayload))
-	wLogin := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wLogin, reqLogin)
+	wLogin := client.Do(reqLogin)
 	cookie := wLogin.Result().Cookies()[0]
 
 	reqCSRF := httptest.NewRequest(http.MethodGet, "/api/v1/auth/csrf", nil)
 	reqCSRF.AddCookie(cookie)
-	wCSRF := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wCSRF, reqCSRF)
+	wCSRF := client.Do(reqCSRF)
 	var csrfResp map[string]string
 	_ = json.NewDecoder(wCSRF.Body).Decode(&csrfResp)
 	csrfToken := csrfResp["csrf_token"]
@@ -59,8 +53,7 @@ func TestT204WorkingMemoryAndScratchpadInspector(t *testing.T) {
 	reqConflict.Header.Set("Content-Type", "application/json")
 	reqConflict.Header.Set("X-CSRF-Token", csrfToken)
 	reqConflict.AddCookie(cookie)
-	wConflict := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wConflict, reqConflict)
+	wConflict := client.Do(reqConflict)
 
 	if wConflict.Code != http.StatusConflict {
 		t.Fatalf("expected 409 Conflict for stale CAS revision, got: %d", wConflict.Code)
@@ -75,8 +68,7 @@ func TestT204WorkingMemoryAndScratchpadInspector(t *testing.T) {
 	reqPromote.Header.Set("Content-Type", "application/json")
 	reqPromote.Header.Set("X-CSRF-Token", csrfToken)
 	reqPromote.AddCookie(cookie)
-	wPromote := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wPromote, reqPromote)
+	wPromote := client.Do(reqPromote)
 
 	if wPromote.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for promote, got: %d", wPromote.Code)

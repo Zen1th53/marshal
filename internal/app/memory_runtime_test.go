@@ -3,18 +3,45 @@ package app_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
 func TestT129RuntimeMemoryServiceAPI(t *testing.T) {
-	svc := app.NewMemoryService()
+	repo := testgit.New(t)
+	for _, name := range []string{"CAPABILITIES.yaml", "PACK-VERSION.yaml", "RUNTIME-VERSION.yaml"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo.Path(), name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { runtime.Close() })
+	svc := app.NewMemoryService(runtime.Store())
 	ctx := context.Background()
 	now := time.Now().UTC()
+
+	proj, err := runtime.Store().Project(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectID := proj.ID
 
 	adminPrincipal := authz.Principal{
 		ID: "admin-user",
@@ -33,7 +60,7 @@ func TestT129RuntimeMemoryServiceAPI(t *testing.T) {
 	}
 
 	// 1. Service Status
-	status, err := svc.Status(ctx, "PROJ-1")
+	status, err := svc.Status(ctx, projectID)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -43,10 +70,10 @@ func TestT129RuntimeMemoryServiceAPI(t *testing.T) {
 
 	// 2. Remember Candidate Record
 	candidate, err := svc.Remember(ctx, adminPrincipal, app.RememberRequest{
-		ProjectID: "PROJ-1",
+		ProjectID: projectID,
 		Title:     "SQLite WAL Configuration",
 		Body:      "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
-		ScopeID:   "scope-1",
+		ScopeID:   projectID,
 		Kind:      model.MemoryKindDecision,
 	})
 	if err != nil {
@@ -58,8 +85,9 @@ func TestT129RuntimeMemoryServiceAPI(t *testing.T) {
 
 	// 3. Promote Candidate (Authorized by Admin)
 	promoted, err := svc.Promote(ctx, adminPrincipal, app.PromoteRequest{
-		MemoryID: candidate.ID,
-		ScopeID:  "scope-1",
+		ProjectID: projectID,
+		MemoryID:  candidate.ID,
+		ScopeID:   projectID,
 	})
 	if err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -70,8 +98,9 @@ func TestT129RuntimeMemoryServiceAPI(t *testing.T) {
 
 	// 4. Unauthorized Promotion Attempt by Read-Only Agent
 	_, err = svc.Promote(ctx, readOnlyPrincipal, app.PromoteRequest{
-		MemoryID: candidate.ID,
-		ScopeID:  "scope-1",
+		ProjectID: projectID,
+		MemoryID:  candidate.ID,
+		ScopeID:   projectID,
 	})
 	if !errors.Is(err, authz.ErrUnauthorized) {
 		t.Fatalf("expected ErrUnauthorized for read-only promotion, got: %v", err)
@@ -79,9 +108,9 @@ func TestT129RuntimeMemoryServiceAPI(t *testing.T) {
 
 	// 5. Recall
 	recallRes, err := svc.Recall(ctx, readOnlyPrincipal, app.RecallRequest{
-		ProjectID:       "PROJ-1",
+		ProjectID:       projectID,
 		Query:           "SQLite WAL Configuration",
-		AllowedScopeIDs: []string{"scope-1"},
+		AllowedScopeIDs: []string{projectID},
 	})
 	if err != nil {
 		t.Fatalf("Recall: %v", err)
@@ -93,7 +122,7 @@ func TestT129RuntimeMemoryServiceAPI(t *testing.T) {
 	// 6. Context cancellation
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err = svc.Status(cancelCtx, "PROJ-1")
+	_, err = svc.Status(cancelCtx, projectID)
 	if err == nil {
 		t.Fatal("expected error on cancelled context")
 	}

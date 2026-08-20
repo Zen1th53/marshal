@@ -10,15 +10,11 @@ import (
 )
 
 func TestT197SecurityPolicyAndGateInspector(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// 1. Get Security Policy
 	reqPolicy := httptest.NewRequest(http.MethodGet, "/api/v1/security/policy", nil)
-	wPolicy := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wPolicy, reqPolicy)
+	wPolicy := client.Do(reqPolicy)
 
 	if wPolicy.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", wPolicy.Code)
@@ -47,8 +43,7 @@ func TestT197SecurityPolicyAndGateInspector(t *testing.T) {
 
 	// 3. Security invariant: Policy is read-only (arbitrary POST denied by CSRF or router)
 	reqPost := httptest.NewRequest(http.MethodPost, "/api/v1/security/policy", nil)
-	wPost := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wPost, reqPost)
+	wPost := client.Do(reqPost)
 
 	if wPost.Code != http.StatusMethodNotAllowed && wPost.Code != http.StatusNotFound && wPost.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, 404, or 405 for POST on read-only policy, got: %d", wPost.Code)

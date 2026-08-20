@@ -66,8 +66,13 @@ func (e *Engine) Evaluate(ctx context.Context, request Request) (Decision, error
 
 func normalizeRequest(request Request) Request {
 	request.Host = normalizeHost(request.Host)
+	if ip, ok := parseIPLiteral(request.Host); ok {
+		request.Host = ip.String()
+	}
 	if request.IP != "" {
-		request.IP = net.ParseIP(request.IP).String()
+		if parsed := net.ParseIP(request.IP); parsed != nil {
+			request.IP = parsed.String()
+		}
 	}
 	return request
 }
@@ -77,17 +82,32 @@ func ruleMatches(rule Rule, request Request) bool {
 		return false
 	}
 	pattern := normalizeHost(rule.HostPattern)
+	reqHost := normalizeHost(request.Host)
+
+	patternIP, patternIsIP := parseIPLiteral(pattern)
+	reqHostIP, reqHostIsIP := parseIPLiteral(reqHost)
+
 	if request.IP != "" {
-		return net.ParseIP(pattern) != nil && pattern == request.IP
+		reqIP := net.ParseIP(request.IP)
+		return patternIsIP && reqIP != nil && patternIP.Equal(reqIP)
 	}
-	if net.ParseIP(pattern) != nil {
+
+	if patternIsIP {
+		if reqHostIsIP {
+			return patternIP.Equal(reqHostIP)
+		}
 		return false
 	}
+
+	if reqHostIsIP {
+		return false
+	}
+
 	if strings.HasPrefix(pattern, "*.") {
 		base := strings.TrimPrefix(pattern, "*.")
-		return request.Host != base && strings.HasSuffix(request.Host, "."+base)
+		return reqHost != base && strings.HasSuffix(reqHost, "."+base)
 	}
-	return pattern == request.Host
+	return pattern == reqHost
 }
 
 func containsPort(ports []int, wanted int) bool {

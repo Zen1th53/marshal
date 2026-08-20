@@ -53,6 +53,18 @@ func (s *Server) RequireAuthority(authority string, next http.HandlerFunc) http.
 	}
 }
 
+// RequireAuth requires only a valid authenticated session (any role), and is
+// used for read-only endpoints that a viewer may access.
+func (s *Server) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.getAuthenticatedUser(r) == nil {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Valid authentication session required", "")
+			return
+		}
+		next(w, r)
+	}
+}
+
 func (s *Server) getAuthenticatedUser(r *http.Request) *AuthUserDTO {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err == nil && cookie.Value != "" {
@@ -65,18 +77,9 @@ func (s *Server) getAuthenticatedUser(r *http.Request) *AuthUserDTO {
 				Authorities: authorities,
 			}
 		}
-		// An invalid or expired session cookie was provided -> explicitly unauthorized
-		return nil
 	}
-
-	if s.IsLoopback() {
-		return &AuthUserDTO{
-			PrincipalID: "operator-loopback",
-			Role:        "admin",
-			Authorities: []string{"task.plan", "source.write", "verify.qa", "verify.security", "release.approve", "policy.admin"},
-		}
-	}
-
+	// Anonymous requests have NO privileged authority (even on loopback).
+	// Callers must establish an authenticated session.
 	return nil
 }
 
@@ -84,10 +87,12 @@ func (s *Server) getAuthoritiesForRole(role string) []string {
 	switch strings.ToLower(role) {
 	case "admin":
 		return []string{"task.plan", "source.write", "verify.qa", "verify.security", "release.approve", "policy.admin"}
-	case "operator":
+	case "operator", "orchestrator", "architect", "developer":
 		return []string{"task.plan", "source.write", "verify.qa"}
-	case "security_officer":
+	case "security_officer", "appsec":
 		return []string{"verify.security", "release.approve", "policy.admin"}
+	case "qa", "qa_lead":
+		return []string{"verify.qa", "task.plan"}
 	case "viewer":
 		return []string{}
 	default:

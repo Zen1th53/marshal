@@ -11,31 +11,25 @@ import (
 )
 
 func TestT211MaintenanceJobsGCAndRebuild(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	// Login and acquire CSRF token
-	code, _ := server.Sessions().CreateOneTimeCode("operator", "admin")
+	code, _ := client.Sessions().CreateOneTimeCode("operator", "admin")
 	loginPayload, _ := json.Marshal(map[string]string{"code": code})
 	reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginPayload))
-	wLogin := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wLogin, reqLogin)
+	wLogin := client.Do(reqLogin)
 	cookie := wLogin.Result().Cookies()[0]
 
 	reqCSRF := httptest.NewRequest(http.MethodGet, "/api/v1/auth/csrf", nil)
 	reqCSRF.AddCookie(cookie)
-	wCSRF := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wCSRF, reqCSRF)
+	wCSRF := client.Do(reqCSRF)
 	var csrfResp map[string]string
 	_ = json.NewDecoder(wCSRF.Body).Decode(&csrfResp)
 	csrfToken := csrfResp["csrf_token"]
 
 	// 1. List Jobs
 	reqList := httptest.NewRequest(http.MethodGet, "/api/v1/operations/maintenance/jobs", nil)
-	wList := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wList, reqList)
+	wList := client.Do(reqList)
 
 	if wList.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for list maintenance jobs, got: %d", wList.Code)
@@ -55,8 +49,7 @@ func TestT211MaintenanceJobsGCAndRebuild(t *testing.T) {
 	reqDry.Header.Set("Content-Type", "application/json")
 	reqDry.Header.Set("X-CSRF-Token", csrfToken)
 	reqDry.AddCookie(cookie)
-	wDry := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wDry, reqDry)
+	wDry := client.Do(reqDry)
 
 	if wDry.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for dry run job, got: %d", wDry.Code)
@@ -82,8 +75,7 @@ func TestT211MaintenanceJobsGCAndRebuild(t *testing.T) {
 	reqReal.Header.Set("Content-Type", "application/json")
 	reqReal.Header.Set("X-CSRF-Token", csrfToken)
 	reqReal.AddCookie(cookie)
-	wReal := httptest.NewRecorder()
-	server.Handler().ServeHTTP(wReal, reqReal)
+	wReal := client.Do(reqReal)
 
 	if wReal.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for real maintenance execution, got: %d", wReal.Code)

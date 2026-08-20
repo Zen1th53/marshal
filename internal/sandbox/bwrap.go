@@ -156,20 +156,23 @@ func pathWithin(root, candidate string) bool {
 	return err == nil && relative != ".." && relative != "." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
-func ChooseIsolation(capability model.IsolationCapability, risk model.Risk, networkAllowed bool) (model.IsolationCapability, error) {
+func ChooseIsolation(capability model.IsolationCapability, risk model.Risk, networkAllowed bool, allowProcessOnlyFallback bool) (model.IsolationCapability, error) {
 	if capability.Available && capability.Level == model.IsolationBwrap {
 		capability.Network = networkAllowed
 		return capability, nil
 	}
-	if (risk == model.R0 || risk == model.R1) && networkAllowed {
+	// Unsandboxed process-only execution is a broad host-exposure risk. It is
+	// permitted only when the operator explicitly opts in, and only for the
+	// lowest risk classes. Without an explicit opt-in, fail closed.
+	if allowProcessOnlyFallback && (risk == model.R0 || risk == model.R1) {
 		return model.IsolationCapability{
-			Level: model.IsolationProcessOnly, Available: true, Process: true, Network: true,
-			Reason: "bubblewrap unavailable; explicit low-risk process-only fallback",
+			Level: model.IsolationProcessOnly, Available: true, Process: true, Network: networkAllowed,
+			Reason: "operator opted in to unsandboxed process-only execution (no filesystem/process/network isolation)",
 		}, nil
 	}
 	blocked := model.IsolationCapability{
 		Level: model.IsolationBlocked, Available: false, Network: networkAllowed,
-		Reason: "required isolation cannot be enforced",
+		Reason: "required isolation cannot be enforced (bubblewrap unavailable and process-only fallback not explicitly permitted)",
 	}
 	return blocked, fmt.Errorf("%w: %s", model.ErrUnavailable, blocked.Reason)
 }

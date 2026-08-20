@@ -10,14 +10,10 @@ import (
 )
 
 func TestT184TaskDAGDeterministicLayout(t *testing.T) {
-	server, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, nil)
-	if err != nil {
-		t.Fatalf("NewServer: %v", err)
-	}
+	client := newAuthenticatedTestClient(t, "admin")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/dag?max_depth=50", nil)
-	w := httptest.NewRecorder()
-	server.Handler().ServeHTTP(w, req)
+	w := client.Do(req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got: %d", w.Code)
