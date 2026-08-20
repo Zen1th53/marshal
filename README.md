@@ -44,6 +44,7 @@ MARSHAL enforces strict operational separation:
 - **Evidence-Derived Trust Score**: Composite 0..100 scoring engine deriving trust from verification quorum, test outputs, and risk assessments.
 - **Multi-Provider Adapter Suite**: Native adapters for **Codex**, **OpenCode + Local Ollama**, **Gemini CLI**, and **Claude Code**.
 - **Protocol Interoperability**: First-class support for **MCP (2026-07-28)** and **Agent-to-Agent (A2A 1.0)** with Bearer authentication.
+- **Web Control Plane**: Complete web operator console (React 19 + TypeScript + Graphite DS) with one-time login tokens, DAG inspection, multi-agent quorum review, memory governance, health diagnostics, and global search.
 - **Deterministic Self-Healing**: Automated recovery for stalled agent processes, state reconciliation, and crash survival.
 - **Legal & Provenance Auditing**: Automated chain-of-title tracking, copyright attribution, and release verification manifests.
 

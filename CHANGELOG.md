@@ -1,5 +1,24 @@
 # Changelog
 
+## Web Control Plane 1.0.0 (T165–T220) — 2026-08-20
+
+Comprehensive Web Operator Control Plane:
+
+### Added & Hardened Subsystems
+- **Web Control API & Security Gateway (T165–T180)**:
+  - Loopback-bound REST API gateway (`127.0.0.1:8787`) with one-time login token redemption, HttpOnly session cookies, double-submit CSRF, strict CSP (`default-src 'self'`), and correlation ID propagation.
+  - Zero-secret egress filters and realtime SSE streaming engine with ring-buffer reconnection replay.
+- **Mission Control, Tasks & DAGs (T181–T190)**:
+  - System overview dashboard, agent inventory, task lifecycle manager with deterministic DAG visualization, CAS revision concurrency, idempotency deduplication, and safe log viewer.
+- **Review, Quorum, Evidence & Provenance (T191–T199)**:
+  - Multi-party quorum workspace, merge gate preflight, cryptographic evidence inspector, causal provenance "Why" trace, provider fleet inventory, security gate inspector, and global audit export.
+- **Institutional Memory Explorer (T200–T207)**:
+  - Hybrid lexical/vector retrieval explainability with RRF fusion, memory record lineage, governance conflict resolution workspace, working scratchpad inspector, snapshot diff/rollback, and read receipts influence tracing.
+- **Operations, Diagnostics & Search (T208–T215)**:
+  - Doctor diagnostic center, SQLite state backup creation/verification/restore, GC retention maintenance jobs, empirical benchmarks dashboard, release trust SBOM viewer, capability-aware settings, and global entity search.
+- **Packaging, Performance & Conformance (T216–T220)**:
+  - Strict keyboard accessibility pass, p50/p95 latency benchmarking, zero-Node standalone Go `embed.FS` production asset serving, end-to-end adversarial security test suite, and release manifest parity.
+
 ## Runtime 1.0.0 (Hardened) — 2026-08-19
 
 Comprehensive Core Hardening release (T56–T76):

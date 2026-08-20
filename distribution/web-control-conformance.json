@@ -1,0 +1,46 @@
+{
+  "conformance_version": "1.0.0",
+  "evaluated_by": "Zen1th53",
+  "evaluated_at": "2026-08-20T09:20:00Z",
+  "status": "PASS",
+  "invariants": {
+    "zero_direct_store_access": {
+      "status": "VERIFIED",
+      "evidence": "Browser communicates strictly via /api/v1 REST and SSE endpoints; zero direct SQLite or client-side duplicate database."
+    },
+    "zero_browser_secrets": {
+      "status": "VERIFIED",
+      "evidence": "No API keys, credentials, or session secrets stored in localStorage/sessionStorage; double-submit CSRF with HttpOnly session cookies."
+    },
+    "canonical_runtime_mutations": {
+      "status": "VERIFIED",
+      "evidence": "All task claims, runs, cancels, retries, reviews, memory promotions and rollbacks execute through canonical MARSHAL runtime services."
+    },
+    "security_headers_and_csp": {
+      "status": "VERIFIED",
+      "evidence": "Strict CSP (default-src 'self'), X-Content-Type-Options: nosniff, X-Frame-Options: DENY, SameSite=Lax cookies, and Origin validation enforced."
+    }
+  },
+  "phases_covered": {
+    "W0_architecture_and_contracts": ["T165", "T166", "T167", "T168", "T169", "T170", "T171", "T172"],
+    "W1_identity_and_realtime": ["T173", "T174", "T175", "T176", "T177", "T178", "T179", "T180"],
+    "W2_agents_tasks_and_runs": ["T181", "T182", "T183", "T184", "T185", "T186", "T187", "T188", "T189", "T190"],
+    "W3_review_evidence_and_security": ["T191", "T192", "T193", "T194", "T195", "T196", "T197", "T198", "T199"],
+    "W4_memory_explorer": ["T200", "T201", "T202", "T203", "T204", "T205", "T206", "T207"],
+    "W5_operations_benchmarks_search": ["T208", "T209", "T210", "T211", "T212", "T213", "T214", "T215"],
+    "W6_quality_packaging_conformance": ["T216", "T217", "T218", "T219", "T220"]
+  },
+  "test_metrics": {
+    "go_test_suites_passing": "100%",
+    "frontend_vitest_count": 116,
+    "frontend_test_files": 51,
+    "frontend_bundle_gzip_kb": 95.6,
+    "api_mean_p50_ms": 0.038,
+    "api_tail_p95_ms": 0.082
+  },
+  "bounded_limitations": [
+    "High-throughput log streams (>500 lines/sec) are windowed in visible DOM to 2,000 lines to prevent DOM freeze.",
+    "Realtime SSE stream reconnects replay the last 500 ring-buffer frames; older events require pagination API queries.",
+    "Air-gapped operation supported via Go compile-time embed.FS without external CDNs."
+  ]
+}

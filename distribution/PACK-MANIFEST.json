@@ -111,8 +111,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "cf6a42e2dce9c133299e50fb6143afc2ebbf3b68398f485b485c4fa4e30fe068",
-      "bytes": 12329
+      "sha256": "9e8c7b9a4e65c0a4a8eb93357e915d1b9d8d442c6b651e11eca32f0d38bbd179",
+      "bytes": 14132
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -186,8 +186,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "1956b68ed505fc4bf827ae6d55767a72f6eb0fb1fb37a9e230388500bb41b0da",
-      "bytes": 17182
+      "sha256": "53fe5596d9da3f5f16776be5e13e36e4e2f35e63d884df197a3bbc2b5a92df19",
+      "bytes": 17404
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -2273,6 +2273,11 @@
       "path": "internal/integration/startup_reconciliation_test.go",
       "sha256": "67ae212a305658faa329212dbafc102b366b684cafe2b290ec462c3ec4cb9647",
       "bytes": 3988
+    },
+    {
+      "path": "internal/integration/web_control_test.go",
+      "sha256": "7281eebf902e3c790b2189837ee5ca56f2c229c9a5087202580f71055e462427",
+      "bytes": 5910
     },
     {
       "path": "internal/legal/audit.go",
@@ -6430,6 +6435,11 @@
       "bytes": 2764
     },
     {
+      "path": "web/src/test/AdversarialSecurity.test.tsx",
+      "sha256": "49f8e771d741419a44134c1d5658754182c5301b3614bb6d3aee43d170202770",
+      "bytes": 1346
+    },
+    {
       "path": "web/src/test/App.test.tsx",
       "sha256": "c81a0a7100a0e60a6da35c22fba6f4b292518e07a7f0853857eb18b55a6fec75",
       "bytes": 1920
@@ -6438,6 +6448,11 @@
       "path": "web/src/test/DesignSystem.test.tsx",
       "sha256": "b505eddd7b0b46a03c062798e9f764ae622b6ec8ee31e8fb3991b8205797e767",
       "bytes": 2337
+    },
+    {
+      "path": "web/src/test/OperatorLifecycleE2E.test.tsx",
+      "sha256": "888bcd63e935dcbb99bfec309dce7e2ee570c078af7e8a68dc50edbf853d7cd4",
+      "bytes": 2316
     },
     {
       "path": "web/src/test/Performance.test.tsx",
