@@ -16,6 +16,7 @@ import { Evidence } from './routes/Evidence';
 import { Trace } from './routes/Trace';
 import { Providers } from './routes/Providers';
 import { Security } from './routes/Security';
+import { Audit } from './routes/Audit';
 import { api } from './api/client';
 import type { CapabilityStatusDTO } from './api/types';
 
@@ -92,7 +93,8 @@ function MainApp() {
             {currentRoute === 'trace' && <Trace />}
             {currentRoute === 'providers' && <Providers />}
             {currentRoute === 'security' && <Security />}
-            {currentRoute !== 'overview' && currentRoute !== 'agents' && currentRoute !== 'tasks' && currentRoute !== 'runs' && currentRoute !== 'review' && currentRoute !== 'evidence' && currentRoute !== 'trace' && currentRoute !== 'providers' && currentRoute !== 'security' && (
+            {currentRoute === 'audit' && <Audit />}
+            {currentRoute !== 'overview' && currentRoute !== 'agents' && currentRoute !== 'tasks' && currentRoute !== 'runs' && currentRoute !== 'review' && currentRoute !== 'evidence' && currentRoute !== 'trace' && currentRoute !== 'providers' && currentRoute !== 'security' && currentRoute !== 'audit' && (
               <div className="placeholder-view">
                 <h2>{currentRoute.toUpperCase()} Control Surface</h2>
                 <p>Telemetry, controls and state introspection for {currentRoute}.</p>

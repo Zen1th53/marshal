@@ -53,6 +53,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/providers", s.handleGetProviders)
 	mux.HandleFunc("POST /api/v1/providers/router/override", s.handleOverrideRouter)
 	mux.HandleFunc("GET /api/v1/security/policy", s.handleGetSecurityPolicy)
+	mux.HandleFunc("GET /api/v1/audit/events", s.handleListAuditEvents)
+	mux.HandleFunc("GET /api/v1/audit/export", s.handleExportAuditEvents)
 
 	// 4. Memory
 	mux.HandleFunc("GET /api/v1/memory/search", s.handleMemorySearch)

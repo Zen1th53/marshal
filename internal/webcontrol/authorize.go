@@ -65,6 +65,8 @@ func (s *Server) getAuthenticatedUser(r *http.Request) *AuthUserDTO {
 				Authorities: authorities,
 			}
 		}
+		// An invalid or expired session cookie was provided -> explicitly unauthorized
+		return nil
 	}
 
 	if s.IsLoopback() {

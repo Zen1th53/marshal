@@ -2645,6 +2645,73 @@
   border-radius: var(--radius-sm);
 }
 
+/* --- Global Audit Timeline --- */
+.audit-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.audit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.audit-headline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.audit-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+
+.audit-subtitle {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-dim);
+}
+
+.audit-actions-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.audit-id-code {
+  color: var(--color-accent);
+}
+
+.actor-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.actor-id {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.action-tag {
+  padding: 1px 6px;
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-accent);
+}
+
+.resource-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+
 
 
 

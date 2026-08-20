@@ -117,11 +117,19 @@ type MemoryRecordDTO struct {
 	ObservedAt time.Time `json:"observed_at"`
 }
 
+type AuditActorDTO struct {
+	PrincipalID string `json:"principal_id"`
+	Role        string `json:"role"`
+}
+
 type AuditEventDTO struct {
-	ID        string    `json:"id"`
-	Timestamp time.Time `json:"timestamp"`
-	Actor     string    `json:"actor"`
-	Action    string    `json:"action"`
-	TargetID  string    `json:"target_id"`
-	Outcome   string    `json:"outcome"`
+	ID            string         `json:"id"`
+	Actor         AuditActorDTO  `json:"actor"`
+	Action        string         `json:"action"`
+	ResourceType  string         `json:"resource_type"`
+	ResourceID    string         `json:"resource_id"`
+	Outcome       string         `json:"outcome"`
+	CorrelationID string         `json:"correlation_id"`
+	Timestamp     time.Time      `json:"timestamp"`
+	Details       map[string]any `json:"details,omitempty"`
 }

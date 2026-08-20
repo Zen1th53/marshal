@@ -652,6 +652,40 @@ export class APIClient {
     return this.request(`/api/v1/runs/${encodeURIComponent(id)}/boundary`, { method: 'GET', signal });
   }
 
+  listAuditEvents(params?: {
+    outcome?: string;
+    action?: string;
+    actor?: string;
+    correlation_id?: string;
+    limit?: number;
+    offset?: number;
+  }, signal?: AbortSignal): Promise<{
+    events: Array<{
+      id: string;
+      actor: { principal_id: string; role: string };
+      action: string;
+      resource_type: string;
+      resource_id: string;
+      outcome: string;
+      correlation_id: string;
+      timestamp: string;
+      details: Record<string, any>;
+    }>;
+    total_count: number;
+    limit: number;
+    offset: number;
+  }> {
+    const sp = new URLSearchParams();
+    if (params?.outcome) sp.set('outcome', params.outcome);
+    if (params?.action) sp.set('action', params.action);
+    if (params?.actor) sp.set('actor', params.actor);
+    if (params?.correlation_id) sp.set('correlation_id', params.correlation_id);
+    if (params?.limit) sp.set('limit', String(params.limit));
+    if (params?.offset) sp.set('offset', String(params.offset));
+    const qs = sp.toString();
+    return this.request(`/api/v1/audit/events${qs ? `?${qs}` : ''}`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
