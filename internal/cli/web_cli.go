@@ -70,6 +70,11 @@ func (c *command) webServe(ctx context.Context, args []string) error {
 
 	fmt.Fprintf(c.stdout, "MARSHAL Web Control Plane listening on http://%s\n", addr)
 
+	if initialCode, err := srv.Sessions().CreateOneTimeCode("operator", "admin"); err == nil {
+		fmt.Fprintf(c.stdout, "One-Time Login Code: %s\n", initialCode)
+		fmt.Fprintf(c.stdout, "Direct Login URL:    http://%s/login?code=%s\n", addr, initialCode)
+	}
+
 	httpServer := &http.Server{
 		Handler: srv.Handler(),
 	}

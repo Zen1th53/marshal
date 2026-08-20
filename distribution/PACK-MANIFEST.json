@@ -805,6 +805,11 @@
       "bytes": 2840
     },
     {
+      "path": "conformance/web/web_control_conformance_test.go",
+      "sha256": "1e59626d6680abbc08cfd4b3fbd796f399de3636086a2155b4c1b9aaa2d08456",
+      "bytes": 2035
+    },
+    {
       "path": "derived-index-rebuild-report.json",
       "sha256": "dd09e2e3fd77e368ef00b18b3fa95e797709d2df96a6463bfed832a0da1c7b5e",
       "bytes": 191
@@ -818,6 +823,11 @@
       "path": "distribution/README.md",
       "sha256": "a0aa77e05803c2565ea5a10b8626ab4ec356869df1081e1234abfdcfe34867ce",
       "bytes": 220
+    },
+    {
+      "path": "distribution/web-control-conformance.json",
+      "sha256": "65d302b4f7e3fdcc670a9940e62a9864adb9815351bc405ecd206b97a3acede8",
+      "bytes": 2356
     },
     {
       "path": "docs/README.md",
@@ -1198,6 +1208,11 @@
       "path": "docs/web/API-CONTRACT.md",
       "sha256": "f70052aba11b2384b6ed9f97c7ad9aa9d77eb92fa71d8bf3ac7ee793ce76ba75",
       "bytes": 1589
+    },
+    {
+      "path": "docs/web/ARCHITECTURE.md",
+      "sha256": "cf6ac307b5ecc05408dc4a9f4dd675be9feed6d0f733e615707bbde2013a5d41",
+      "bytes": 2243
     },
     {
       "path": "docs/web/CONTROL-PLANE-API-MAP.md",
@@ -1876,8 +1891,8 @@
     },
     {
       "path": "internal/cli/web_cli.go",
-      "sha256": "6dd73969c5a98d92ccb82a2c5865eb3bf30ed93f1a1686cb4453640c4eb72f8c",
-      "bytes": 2210
+      "sha256": "563052da3c65e9bd9641604b1210f8b05a816ee6cd579b8f2310ef922d9271fa",
+      "bytes": 2465
     },
     {
       "path": "internal/cli/web_cli_test.go",
