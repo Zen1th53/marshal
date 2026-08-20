@@ -2999,6 +2999,57 @@
   margin-top: var(--space-1);
 }
 
+/* --- Memory Versioning & Diff --- */
+.memory-versioning-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.diff-entries-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.diff-entry-item {
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.change-added {
+  border-left: 3px solid #2ecc71;
+}
+.change-modified {
+  border-left: 3px solid #3498db;
+}
+.change-removed {
+  border-left: 3px solid #e74c3c;
+}
+
+.diff-tag {
+  font-size: 0.5625rem;
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-bold);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+.tag-added {
+  background: rgba(46, 204, 113, 0.2);
+  color: #2ecc71;
+}
+.tag-modified {
+  background: rgba(52, 152, 219, 0.2);
+  color: #3498db;
+}
+.tag-removed {
+  background: rgba(231, 76, 60, 0.2);
+  color: #e74c3c;
+}
+
+
 
 
 

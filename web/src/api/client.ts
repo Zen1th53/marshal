@@ -980,6 +980,81 @@ export class APIClient {
     });
   }
 
+  listMemorySnapshots(signal?: AbortSignal): Promise<{
+    snapshots: Array<{
+      snapshot_id: string;
+      branch: string;
+      manifest_digest_sha256: string;
+      record_count: number;
+      message: string;
+      created_by: string;
+      created_at: string;
+    }>;
+    active_head: string;
+    total_count: number;
+  }> {
+    return this.request('/api/v1/memory/versioning/snapshots', { method: 'GET', signal });
+  }
+
+  createMemorySnapshot(payload: {
+    branch?: string;
+    message: string;
+  }, idempotencyKey?: string, signal?: AbortSignal): Promise<{
+    snapshot_id: string;
+    branch: string;
+    manifest_digest_sha256: string;
+    record_count: number;
+    message: string;
+    created_by: string;
+    created_at: string;
+  }> {
+    return this.request('/api/v1/memory/versioning/snapshots', {
+      method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey ?? `idem-snap-${Date.now()}`,
+        payload,
+      }),
+      signal,
+    });
+  }
+
+  getMemorySnapshotDiff(fromSnapshot: string, toSnapshot: string, signal?: AbortSignal): Promise<{
+    from_snapshot: string;
+    to_snapshot: string;
+    entries: Array<{
+      memory_id: string;
+      change_type: string;
+      old_title?: string;
+      new_title?: string;
+      details: string;
+    }>;
+    has_conflict: boolean;
+  }> {
+    return this.request(`/api/v1/memory/versioning/diff?from_snapshot=${encodeURIComponent(fromSnapshot)}&to_snapshot=${encodeURIComponent(toSnapshot)}`, { method: 'GET', signal });
+  }
+
+  rollbackMemorySnapshot(payload: {
+    target_snapshot_id: string;
+    reason: string;
+  }, idempotencyKey?: string, signal?: AbortSignal): Promise<{
+    status: string;
+    target_snapshot_id: string;
+    new_head_digest: string;
+    audit_id: string;
+    rolled_back_at: string;
+  }> {
+    return this.request('/api/v1/memory/versioning/rollback', {
+      method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey ?? `idem-rollback-${Date.now()}`,
+        payload,
+      }),
+      signal,
+    });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

@@ -4625,6 +4625,16 @@
       "bytes": 1984
     },
     {
+      "path": "internal/webcontrol/memory_mutations.go",
+      "sha256": "25311da7db1d134e3833748a0f4b9edc3178d474760e8ac3e94379cb3da4144d",
+      "bytes": 4512
+    },
+    {
+      "path": "internal/webcontrol/memory_mutations_test.go",
+      "sha256": "e443dcac70c4a309d147dd4eb39b30139b723b502065c4e4eb03afd554660696",
+      "bytes": 4077
+    },
+    {
       "path": "internal/webcontrol/memory_test.go",
       "sha256": "3682429b192c8313b1275f5e47065ee8aab3aad8ed384445d8777e1f75d44c1e",
       "bytes": 2187
@@ -4701,8 +4711,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "63449b7eb7691e8a968de5f25dd4adfb132242a6fbcb6e3d18d235e9120aad18",
-      "bytes": 4791
+      "sha256": "9532197f88a8fc94e83c27f6c9b8ab81cfe92ee7e279ee3ac79a4f415d2067b9",
+      "bytes": 5121
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -5716,8 +5726,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "b9af5d0237a0e3d6d54f8b451f5a1a85b7c65fd7fd9bb83d22aca36a880ca0ad",
-      "bytes": 29598
+      "sha256": "a7681be011955a5859e8708e15569f4af49d33c5764ca3283e935cf4cc77cfc1",
+      "bytes": 31815
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -5888,6 +5898,16 @@
       "path": "web/src/features/dag/DAGViewer.tsx",
       "sha256": "4ffa446f314ff1f11bac09979f09a833abb4af2e28954cfd1086e9ae468665bd",
       "bytes": 6057
+    },
+    {
+      "path": "web/src/features/memory/actions/MemoryMutationActions.test.tsx",
+      "sha256": "d3ca5fe6edfe725c76d0e5e8e55e10d900221711ed5b7a202338605eb686aff2",
+      "bytes": 2470
+    },
+    {
+      "path": "web/src/features/memory/actions/MemoryMutationActions.tsx",
+      "sha256": "19ccd1cf8f8a92f6aafd432f849efabcc1134d66e9cabf03c4c017eb0f84977c",
+      "bytes": 5344
     },
     {
       "path": "web/src/features/memory/retrieval/RetrievalExplainability.test.tsx",
@@ -6161,8 +6181,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "829220ed93bc9894069a6ba0c104688c38455ba9fa88cbd6e9c7a1db64894b4a",
-      "bytes": 61739
+      "sha256": "cfd3a90711aec8775e6534170491a38fc4ee5cf209b59c7103e51ec8558b100f",
+      "bytes": 62714
     },
     {
       "path": "web/src/styles/tokens.css",

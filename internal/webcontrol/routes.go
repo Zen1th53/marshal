@@ -67,6 +67,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/memory/mutations/promote", s.handlePromoteMemory)
 	mux.HandleFunc("POST /api/v1/memory/mutations/supersede", s.handleSupersedeMemory)
 	mux.HandleFunc("POST /api/v1/memory/mutations/tombstone", s.handleTombstoneMemory)
+	mux.HandleFunc("GET /api/v1/memory/versioning/snapshots", s.handleListSnapshots)
+	mux.HandleFunc("POST /api/v1/memory/versioning/snapshots", s.handleCreateSnapshot)
+	mux.HandleFunc("GET /api/v1/memory/versioning/diff", s.handleGetSnapshotDiff)
+	mux.HandleFunc("POST /api/v1/memory/versioning/rollback", s.handleRollbackSnapshot)
 	mux.HandleFunc("GET /api/v1/memory/{id}", s.handleGetMemoryRecord)
 	mux.HandleFunc("GET /api/v1/memory/{id}/detail", s.handleGetMemoryDetail)
 }
