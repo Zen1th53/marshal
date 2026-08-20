@@ -633,6 +633,25 @@ export class APIClient {
     return this.request('/api/v1/security/policy', { method: 'GET', signal });
   }
 
+  getRunBoundary(id: string, signal?: AbortSignal): Promise<{
+    run_id: string;
+    sandbox_backend: string;
+    backend_status: string;
+    network_policy: string;
+    is_network_isolated: boolean;
+    cpu_quota_pct: number;
+    memory: { limit: number; used: number; unit: string; usage_pct: number };
+    pids: { limit: number; used: number; unit: string; usage_pct: number };
+    disk: { limit: number; used: number; unit: string; usage_pct: number };
+    was_oom_killed: boolean;
+    was_pid_exhausted: boolean;
+    was_disk_exhausted: boolean;
+    mounted_paths: string[];
+    audited_at: string;
+  }> {
+    return this.request(`/api/v1/runs/${encodeURIComponent(id)}/boundary`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

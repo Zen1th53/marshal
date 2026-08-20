@@ -5,6 +5,7 @@ import { LoadingState, ErrorState } from '../components/state';
 import { CorrelationLink } from '../components/audit/CorrelationLink';
 import { SafeLogViewer, type LogLine } from '../features/logs/SafeLogViewer';
 import { RunResultViewer } from '../features/runs/result/RunResultViewer';
+import { ExecutionBoundary } from '../features/security/ExecutionBoundary';
 
 interface RunDetailProps {
   runId: string;
@@ -33,7 +34,7 @@ export function RunDetail({ runId, onClose }: RunDetailProps) {
   const [data, setData] = useState<RunDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'logs' | 'results'>('logs');
+  const [activeTab, setActiveTab] = useState<'logs' | 'results' | 'boundary'>('logs');
 
   const fetchRunDetail = useCallback(async () => {
     setLoading(true);
@@ -119,14 +120,23 @@ export function RunDetail({ runId, onClose }: RunDetailProps) {
                 >
                   Artifacts & Diff Results
                 </button>
+                <button
+                  type="button"
+                  className={`preset-tab ${activeTab === 'boundary' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('boundary')}
+                >
+                  Sandbox & Boundaries
+                </button>
               </div>
 
               {activeTab === 'logs' ? (
                 <div className="run-logs-wrapper">
                   <SafeLogViewer lines={data.logs} onRefresh={fetchRunDetail} />
                 </div>
-              ) : (
+              ) : activeTab === 'results' ? (
                 <RunResultViewer runId={runId} />
+              ) : (
+                <ExecutionBoundary runId={runId} />
               )}
             </div>
           ) : null}
