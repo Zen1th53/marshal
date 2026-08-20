@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { useRealtimeEvent } from '../realtime/useRealtime';
 import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState, EmptyState } from '../components/state';
+import { RunDetail } from './RunDetail';
 
 interface RunItem {
   run_id: string;
@@ -29,6 +30,7 @@ export function Runs({ initialTaskId }: RunsProps) {
   const [error, setError] = useState<string | null>(null);
   const [taskFilter, setTaskFilter] = useState(initialTaskId ?? '');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   const fetchRuns = useCallback(async () => {
     setLoading(true);
@@ -138,7 +140,7 @@ export function Runs({ initialTaskId }: RunsProps) {
             </thead>
             <tbody>
               {runs.map((r) => (
-                <tr key={r.run_id}>
+                <tr key={r.run_id} onClick={() => setSelectedRunId(r.run_id)} style={{ cursor: 'pointer' }}>
                   <td>
                     <code className="run-id-code">{r.run_id}</code>
                   </td>
@@ -170,6 +172,10 @@ export function Runs({ initialTaskId }: RunsProps) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {selectedRunId && (
+        <RunDetail runId={selectedRunId} onClose={() => setSelectedRunId(null)} />
       )}
     </div>
   );

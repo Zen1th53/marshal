@@ -323,6 +323,46 @@ export class APIClient {
     return this.request(`/api/v1/runs${qs ? `?${qs}` : ''}`, { method: 'GET', signal });
   }
 
+  getRunDetail(id: string, signal?: AbortSignal): Promise<{
+    run_id: string;
+    task_id: string;
+    agent_id: string;
+    provider: string;
+    status: string;
+    duration_ms: number;
+    step_count: number;
+    evidence_count: number;
+    base_commit: string;
+    head_commit: string;
+    started_at: string;
+    finished_at?: string;
+    correlation_id: string;
+    summary: string;
+    logs: Array<{
+      index: number;
+      timestamp: string;
+      stream: string;
+      message: string;
+    }>;
+  }> {
+    return this.request(`/api/v1/runs/${encodeURIComponent(id)}`, { method: 'GET', signal });
+  }
+
+  getRunLogs(id: string, cursor = 0, limit = 100, signal?: AbortSignal): Promise<{
+    run_id: string;
+    lines: Array<{
+      index: number;
+      timestamp: string;
+      stream: string;
+      message: string;
+    }>;
+    total_lines: number;
+    is_truncated: boolean;
+    next_cursor: number;
+  }> {
+    return this.request(`/api/v1/runs/${encodeURIComponent(id)}/logs?cursor=${cursor}&limit=${limit}`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

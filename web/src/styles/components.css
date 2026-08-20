@@ -1664,6 +1664,127 @@
   color: var(--color-accent);
 }
 
+/* --- Run Detail Modal & Safe Log Viewer --- */
+.run-detail-card {
+  max-width: 780px;
+}
+
+.run-logs-wrapper {
+  margin-top: var(--space-4);
+}
+
+.log-viewer-container {
+  display: flex;
+  flex-direction: column;
+  background: #0d1117;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-alt);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.log-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.log-filter-input {
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+  padding: 2px var(--space-2);
+  outline: none;
+}
+
+.log-lines-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-dim);
+}
+
+.log-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.log-truncation-notice {
+  background: rgba(52, 152, 219, 0.15);
+  border-bottom: 1px solid rgba(52, 152, 219, 0.3);
+  padding: var(--space-1) var(--space-3);
+  color: #3498db;
+  font-size: var(--font-size-xs);
+}
+
+.log-viewport {
+  max-height: 380px;
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.log-empty {
+  color: var(--color-text-dim);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  padding: var(--space-3) 0;
+}
+
+.log-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-num {
+  color: var(--color-text-dim);
+  min-width: 24px;
+  text-align: right;
+  user-select: none;
+  font-family: var(--font-mono);
+}
+
+.log-time {
+  color: var(--color-text-dim);
+  font-size: 0.625rem;
+}
+
+.log-stream-badge {
+  font-size: 0.625rem;
+  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-mono);
+}
+.stream-stdout {
+  color: #2ecc71;
+}
+.stream-stderr {
+  color: #e74c3c;
+}
+.stream-system {
+  color: #3498db;
+}
+
+.log-msg {
+  color: #c9d1d9;
+}
+
+
 
 
 
