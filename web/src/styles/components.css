@@ -1860,6 +1860,69 @@
   color: var(--color-text-dim);
 }
 
+/* --- Review Center Queue --- */
+.review-queue-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.review-headline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.review-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+
+.review-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-dim);
+}
+
+.stage-badge {
+  font-size: 0.625rem;
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-semibold);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+}
+.stage-plan {
+  color: #3498db;
+  border-color: rgba(52, 152, 219, 0.4);
+}
+.stage-gate {
+  color: #f39c12;
+  border-color: rgba(243, 156, 18, 0.4);
+}
+.stage-merge {
+  color: #2ecc71;
+  border-color: rgba(46, 204, 113, 0.4);
+}
+
+.stale-pill {
+  margin-left: var(--space-2);
+  font-size: 0.5625rem;
+  font-family: var(--font-mono);
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.15);
+  border: 1px solid rgba(231, 76, 60, 0.4);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+
+
 
 
 

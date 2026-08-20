@@ -11,6 +11,7 @@ import { Overview } from './routes/Overview';
 import { Agents } from './routes/Agents';
 import { Tasks } from './routes/Tasks';
 import { Runs } from './routes/Runs';
+import { Review } from './routes/Review';
 import { api } from './api/client';
 import type { CapabilityStatusDTO } from './api/types';
 
@@ -82,7 +83,8 @@ function MainApp() {
             {currentRoute === 'agents' && <Agents />}
             {currentRoute === 'tasks' && <Tasks onNavigateRuns={(_taskId) => setCurrentRoute('runs')} />}
             {currentRoute === 'runs' && <Runs />}
-            {currentRoute !== 'overview' && currentRoute !== 'agents' && currentRoute !== 'tasks' && currentRoute !== 'runs' && (
+            {currentRoute === 'review' && <Review />}
+            {currentRoute !== 'overview' && currentRoute !== 'agents' && currentRoute !== 'tasks' && currentRoute !== 'runs' && currentRoute !== 'review' && (
               <div className="placeholder-view">
                 <h2>{currentRoute.toUpperCase()} Control Surface</h2>
                 <p>Telemetry, controls and state introspection for {currentRoute}.</p>

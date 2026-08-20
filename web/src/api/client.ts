@@ -392,6 +392,41 @@ export class APIClient {
     return this.request(`/api/v1/runs/${encodeURIComponent(id)}/recover`, { method: 'POST', signal });
   }
 
+  getReviewQueue(params?: {
+    stage?: string;
+    risk?: string;
+    owner?: string;
+    limit?: number;
+    offset?: number;
+  }, signal?: AbortSignal): Promise<{
+    items: Array<{
+      task_id: string;
+      title: string;
+      stage: string;
+      risk: string;
+      owner: string;
+      base_commit: string;
+      head_commit: string;
+      is_stale_head: boolean;
+      approvals_count: number;
+      required_quorum: number;
+      blocker_count: number;
+      submitted_at: string;
+    }>;
+    total_count: number;
+    limit: number;
+    offset: number;
+  }> {
+    const sp = new URLSearchParams();
+    if (params?.stage) sp.set('stage', params.stage);
+    if (params?.risk) sp.set('risk', params.risk);
+    if (params?.owner) sp.set('owner', params.owner);
+    if (params?.limit) sp.set('limit', String(params.limit));
+    if (params?.offset) sp.set('offset', String(params.offset));
+    const qs = sp.toString();
+    return this.request(`/api/v1/review/queue${qs ? `?${qs}` : ''}`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

@@ -4581,8 +4581,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "39477bbe45d5e70154c3245e9c49b4c643a6ec1d43148b169aed114f370cd55f",
-      "bytes": 3059
+      "sha256": "90bb0a43271311140c8e61c262f2a7400c53e74d440f3747bb6b8bd6ac21208f",
+      "bytes": 3127
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -4593,6 +4593,16 @@
       "path": "internal/webcontrol/run_output_test.go",
       "sha256": "8b85ce4a398e3257bce41de0e2a4aae995d5ae940a71816c56243f36c43089ea",
       "bytes": 1780
+    },
+    {
+      "path": "internal/webcontrol/run_result.go",
+      "sha256": "2eb1ab96603b9aa4bbaf535d6c2826bc95c08763620b847a26e2068377581837",
+      "bytes": 4679
+    },
+    {
+      "path": "internal/webcontrol/run_result_test.go",
+      "sha256": "45e8f949e887034c86d050589ed0e441b64cf30608e3783241d41356439d0e05",
+      "bytes": 1986
     },
     {
       "path": "internal/webcontrol/runs.go",
@@ -5556,8 +5566,8 @@
     },
     {
       "path": "web/src/App.tsx",
-      "sha256": "306c7233eb254db4604b0ba6edd5572996352c7f84cfc5327e83052181af507e",
-      "bytes": 4114
+      "sha256": "84a356d80d393362e4457375da2192f86d5b577455baf2c77447dbf2731e3b99",
+      "bytes": 4239
     },
     {
       "path": "web/src/api/client.test.ts",
@@ -5566,8 +5576,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "67dec1e3f8f22f396adf3097f2ed9d25ac854a12016ba8ddfbb1e6aa457dd9ca",
-      "bytes": 13415
+      "sha256": "0d7986d7b444df93902b22e174448f6635f8b5967086ac5037ec82d12cc174c8",
+      "bytes": 14444
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -5740,6 +5750,16 @@
       "bytes": 6057
     },
     {
+      "path": "web/src/features/runs/result/RunResultViewer.test.tsx",
+      "sha256": "e4f5c2ecdb2a83f661292381702b5e75ac094e1699daa5ee858ecd441f68d0be",
+      "bytes": 2447
+    },
+    {
+      "path": "web/src/features/runs/result/RunResultViewer.tsx",
+      "sha256": "121c5a1f96130936caa00bff57ab897251920489ed79a269f2ef98728ba5c33a",
+      "bytes": 5722
+    },
+    {
       "path": "web/src/features/tasks/actions/TaskActionControls.test.tsx",
       "sha256": "ecf902959e56f2e2930f5ff247bcfa2283a42156ea520f9e4b1a5c029bfefef0",
       "bytes": 2448
@@ -5861,8 +5881,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "b8620ca2d2358189c1e938cb24a3c9a1c5792a352334c66ae206973d6b97b09c",
-      "bytes": 39624
+      "sha256": "141e1ae906460e623e2293e72fb95c584351b60eba076dd0d1af51a595715437",
+      "bytes": 40885
     },
     {
       "path": "web/src/styles/tokens.css",
