@@ -76,8 +76,8 @@
     },
     {
       "path": ".gitignore",
-      "sha256": "5150b30526909e35c6c30343cce9df1c504aff113637c856c05ceb5ec15bacc5",
-      "bytes": 227
+      "sha256": "a46931d7d54e990d10c3c23b3b7c3c39c7fdd7a5ea5b7d83b441f6d47359c047",
+      "bytes": 221
     },
     {
       "path": "AGENT-BOOTSTRAP.md",
@@ -5916,8 +5916,8 @@
     },
     {
       "path": "web/.gitignore",
-      "sha256": "fe718e7babb14f3cbad2d97f08889b9ce5215ed3fe0e43b2b8cfbfb3b9b844e8",
-      "bytes": 253
+      "sha256": "fc6df2352cea58e90dbe4eb26b4a89a142037100b8acad91195a126cc195f30c",
+      "bytes": 248
     },
     {
       "path": "web/index.html",
