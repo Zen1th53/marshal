@@ -4,6 +4,7 @@ import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState } from '../components/state';
 import { BackupRestoreWorkspace } from '../features/operations/backup/BackupRestoreWorkspace';
 import { MaintenanceWorkspace } from '../features/operations/maintenance/MaintenanceWorkspace';
+import { ReleaseTrustView } from '../features/operations/trust/ReleaseTrustView';
 
 interface DiagnosticCheck {
   component: string;
@@ -112,6 +113,9 @@ export function Operations() {
 
           {/* GC & Maintenance Workspace */}
           <MaintenanceWorkspace />
+
+          {/* Release Trust & SBOM View */}
+          <ReleaseTrustView />
         </div>
       ) : null}
     </div>

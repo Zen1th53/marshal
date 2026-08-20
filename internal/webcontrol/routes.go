@@ -84,6 +84,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/operations/backups/restore", s.handleRestoreBackup)
 	mux.HandleFunc("GET /api/v1/operations/maintenance/jobs", s.handleListMaintenanceJobs)
 	mux.HandleFunc("POST /api/v1/operations/maintenance/jobs", s.handleCreateMaintenanceJob)
+	mux.HandleFunc("GET /api/v1/operations/trust", s.handleGetReleaseTrust)
 	mux.HandleFunc("GET /api/v1/benchmarks", s.handleListBenchmarks)
 }
 

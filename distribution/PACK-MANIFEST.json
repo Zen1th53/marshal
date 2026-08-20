@@ -4520,6 +4520,16 @@
       "bytes": 3219
     },
     {
+      "path": "internal/webcontrol/benchmarks.go",
+      "sha256": "625144d026b17efe22450cf31fcdfaa5da482ab10f25a18ade6c1880cc7fc100",
+      "bytes": 3823
+    },
+    {
+      "path": "internal/webcontrol/benchmarks_test.go",
+      "sha256": "0c598106e99f7cc991299597044279c63e723e8f8d4d28b4b43a3c133c1bfcdb",
+      "bytes": 1480
+    },
+    {
       "path": "internal/webcontrol/capabilities.go",
       "sha256": "9482491a751b725351c425720ef5d362d39193cd65a007aa3e76e03b2e5eb71a",
       "bytes": 2237
@@ -4761,8 +4771,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "84839738dc59f874324cb717ad5125738f0691f2c0b0ada58660c8f879ef4b78",
-      "bytes": 5941
+      "sha256": "ecaa2bcfd1f15ce3934c54ffd28cb21bfdf3d60768abcb2a29a332ad4c8b428b",
+      "bytes": 6014
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -5786,8 +5796,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "0a2afdb952e6f786cc8d6f826471a71bb54a17ed24c977078850b0b28dd66f09",
-      "bytes": 37332
+      "sha256": "d8ecd180ff97fce1ec110f7d321e7e55464c4d275e3a29c7d2cf548a89bb4ec7",
+      "bytes": 37903
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -6155,6 +6165,16 @@
       "bytes": 6026
     },
     {
+      "path": "web/src/routes/Benchmarks.test.tsx",
+      "sha256": "5a0b22493fc5a10a7794af9bb59344d5d903c9b8c64a52436df49fe4405e8c8b",
+      "bytes": 1923
+    },
+    {
+      "path": "web/src/routes/Benchmarks.tsx",
+      "sha256": "a2eecea9ca08f0057def646f5538d1f270d1c4d2644ad23e112098b286737e62",
+      "bytes": 5549
+    },
+    {
       "path": "web/src/routes/Evidence.test.tsx",
       "sha256": "d4bbe319a890a829401b07a263cdfd7597176da228477d0e0ed6ab89b8f91eef",
       "bytes": 2615
@@ -6211,8 +6231,8 @@
     },
     {
       "path": "web/src/routes/Operations.tsx",
-      "sha256": "efd8255377662f83c46bdae8d4c14afe1bd727a290c80f062fc98a61f7b43a00",
-      "bytes": 4200
+      "sha256": "a0b4704a9e2f88819780496682c586805edcaf8cf5912b0a6cfff4b973a8c5c4",
+      "bytes": 4358
     },
     {
       "path": "web/src/routes/Overview.test.tsx",

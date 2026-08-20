@@ -1256,6 +1256,27 @@ export class APIClient {
     return this.request('/api/v1/benchmarks', { method: 'GET', signal });
   }
 
+  getReleaseTrust(signal?: AbortSignal): Promise<{
+    binary_commit_sha: string;
+    source_repo: string;
+    pack_manifest_status: string;
+    pack_manifest_digest: string;
+    sbom_status: string;
+    sbom_format: string;
+    signing_status: string;
+    signer_identity: string;
+    reproducibility_status: string;
+    artifacts: Array<{
+      name: string;
+      digest_sha256: string;
+      size_bytes: number;
+      download_path: string;
+    }>;
+    evaluated_at: string;
+  }> {
+    return this.request('/api/v1/operations/trust', { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
