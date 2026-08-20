@@ -4815,6 +4815,16 @@
       "bytes": 1768
     },
     {
+      "path": "internal/webcontrol/search.go",
+      "sha256": "5e7ac314e29a6bce327ba92f974fce3119f13b33ccc8df158bbe0d7277c2fd3c",
+      "bytes": 3757
+    },
+    {
+      "path": "internal/webcontrol/search_test.go",
+      "sha256": "2793209c8b9fe58df0ac1714006de21b6e13e45f4085ac76ccebedf2bff1e4dc",
+      "bytes": 1598
+    },
+    {
       "path": "internal/webcontrol/security.go",
       "sha256": "15da2bbf6da038969153cab05b7100b121be5b9c03c55d8ba18f8384cc2342de",
       "bytes": 3855
@@ -6108,6 +6118,16 @@
       "path": "web/src/features/runs/result/RunResultViewer.tsx",
       "sha256": "121c5a1f96130936caa00bff57ab897251920489ed79a269f2ef98728ba5c33a",
       "bytes": 5722
+    },
+    {
+      "path": "web/src/features/search/GlobalEntityNavigator.test.tsx",
+      "sha256": "f6b69a9f96e4a3cc812416b19cb87889ddaf4b89cf3078b16aeb49a29c0012c0",
+      "bytes": 1983
+    },
+    {
+      "path": "web/src/features/search/GlobalEntityNavigator.tsx",
+      "sha256": "cdfa6bead4f78a20655b1db21214e22c0c97f27ef4576e4a33fcee00d5f1835e",
+      "bytes": 5162
     },
     {
       "path": "web/src/features/security/ExecutionBoundary.test.tsx",
