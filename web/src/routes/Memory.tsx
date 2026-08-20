@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState, EmptyState } from '../components/state';
 import { MemoryDetail } from './MemoryDetail';
+import { RetrievalExplainability } from '../features/memory/retrieval/RetrievalExplainability';
 
 interface MemoryItem {
   id: string;
@@ -33,6 +34,7 @@ export function Memory() {
   const [lifecycleFilter, setLifecycleFilter] = useState('all');
 
   const [selectedRecord, setSelectedRecord] = useState<MemoryItem | null>(null);
+  const [showExplain, setShowExplain] = useState(false);
 
   const fetchMemory = useCallback(async () => {
     setLoading(true);
@@ -71,12 +73,17 @@ export function Memory() {
             Episodic, architectural and procedural memory corpus introspection
           </span>
         </div>
-        <div className="index-status-pill">
-          <span className="text-dim text-xs">Index:</span>
-          <StatusBadge
-            status={indexStatus === 'healthy' ? 'ready' : 'degraded'}
-            label={indexStatus.toUpperCase()}
-          />
+        <div className="flex-row items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setShowExplain(true)}>
+            Explain Ranking (RRF)
+          </Button>
+          <div className="index-status-pill">
+            <span className="text-dim text-xs">Index:</span>
+            <StatusBadge
+              status={indexStatus === 'healthy' ? 'ready' : 'degraded'}
+              label={indexStatus.toUpperCase()}
+            />
+          </div>
         </div>
       </div>
 
@@ -206,6 +213,14 @@ export function Memory() {
         <MemoryDetail
           memoryId={selectedRecord.id}
           onClose={() => setSelectedRecord(null)}
+        />
+      )}
+
+      {/* RRF Explainability Modal */}
+      {showExplain && (
+        <RetrievalExplainability
+          query={activeQuery || 'architectural loopback invariant'}
+          onClose={() => setShowExplain(false)}
         />
       )}
     </div>

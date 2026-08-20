@@ -775,6 +775,31 @@ export class APIClient {
     return this.request(`/api/v1/memory/${encodeURIComponent(id)}/detail`, { method: 'GET', signal });
   }
 
+  explainRetrieval(query?: string, signal?: AbortSignal): Promise<{
+    query: string;
+    embedder_model: string;
+    embedder_status: string;
+    fusion_algorithm: string;
+    candidates: Array<{
+      memory_id: string;
+      title: string;
+      kind: string;
+      scope: string;
+      lexical_rank: number;
+      lexical_score: number;
+      dense_rank: number;
+      dense_score: number;
+      graph_bonus: number;
+      freshness_penalty: number;
+      final_rrf_score: number;
+      rerank_rationale: string;
+    }>;
+    evaluated_at: string;
+  }> {
+    const qParam = query ? `?query=${encodeURIComponent(query)}` : '';
+    return this.request(`/api/v1/memory/retrieval/explain${qParam}`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

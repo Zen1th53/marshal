@@ -2860,6 +2860,22 @@
   color: var(--color-accent);
 }
 
+/* --- Retrieval Explainability --- */
+.candidate-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rrf-score-badge {
+  font-weight: var(--font-weight-bold);
+  color: #f1c40f;
+  background: rgba(241, 196, 15, 0.15);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+
 
 
 
