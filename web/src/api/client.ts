@@ -800,6 +800,51 @@ export class APIClient {
     return this.request(`/api/v1/memory/retrieval/explain${qParam}`, { method: 'GET', signal });
   }
 
+  listGovernanceQueue(category?: string, signal?: AbortSignal): Promise<{
+    items: Array<{
+      id: string;
+      category: string;
+      status: string;
+      target_memory_id: string;
+      conflict_with_id?: string;
+      reason: string;
+      detected_at: string;
+    }>;
+    total_count: number;
+  }> {
+    const qParam = category && category !== 'all' ? `?category=${encodeURIComponent(category)}` : '';
+    return this.request(`/api/v1/memory/governance/queue${qParam}`, { method: 'GET', signal });
+  }
+
+  getConflictComparison(id: string, signal?: AbortSignal): Promise<{
+    conflict_id: string;
+    status: string;
+    resolution_mode: string;
+    base_memory: {
+      id: string;
+      title: string;
+      body: string;
+      authority: string;
+      confidence: number;
+      scope: string;
+      kind: string;
+      observed_at: string;
+    };
+    competing_memory: {
+      id: string;
+      title: string;
+      body: string;
+      authority: string;
+      confidence: number;
+      scope: string;
+      kind: string;
+      observed_at: string;
+    };
+    detected_at: string;
+  }> {
+    return this.request(`/api/v1/memory/governance/conflicts/${encodeURIComponent(id)}`, { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

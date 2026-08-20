@@ -4670,6 +4670,16 @@
       "bytes": 2933
     },
     {
+      "path": "internal/webcontrol/retrieval_trace.go",
+      "sha256": "8ce2cc045182e80c89e91543ddf3fefd2220c1ce7b553017b8094194afc4653b",
+      "bytes": 3070
+    },
+    {
+      "path": "internal/webcontrol/retrieval_trace_test.go",
+      "sha256": "52e0405d0bdd835780eb0162acd5ed215acaa15398996ee4a08960d865e1f0fb",
+      "bytes": 1183
+    },
+    {
       "path": "internal/webcontrol/review.go",
       "sha256": "75b7cb9394b5bf1d7dd4bc97b915f1efeb2862e593e31b4878b4ec6b6003342e",
       "bytes": 3529
@@ -4681,8 +4691,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "856dc8b31cf195c2d613ed8d351507a08c8836ee517addf90a4a3b0922a7eefd",
-      "bytes": 4130
+      "sha256": "4883bc6e44ffa488839ef0fb355657f535203e6accdbd22e067697a12dda4121",
+      "bytes": 4309
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -5676,8 +5686,8 @@
     },
     {
       "path": "web/src/App.tsx",
-      "sha256": "97b694411155c85f2b6df7e074db1e9150236d1b57b816dab2c72d31d0727bf7",
-      "bytes": 5014
+      "sha256": "37af286ef1f6de4ed46eda054de00a49b8992eff2f14244809469495bd8d000c",
+      "bytes": 5191
     },
     {
       "path": "web/src/api/client.test.ts",
@@ -5686,8 +5696,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "bde0b0708c236fdce81f3e4a35a3f2dba85fc1cca9604f05ddd76c42843d529a",
-      "bytes": 24798
+      "sha256": "bad1e4b33169eb4dab2ab4e53a4b19cceae05302c028c592979839495f5ba6c4",
+      "bytes": 26022
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -5858,6 +5868,16 @@
       "path": "web/src/features/dag/DAGViewer.tsx",
       "sha256": "4ffa446f314ff1f11bac09979f09a833abb4af2e28954cfd1086e9ae468665bd",
       "bytes": 6057
+    },
+    {
+      "path": "web/src/features/memory/retrieval/RetrievalExplainability.test.tsx",
+      "sha256": "36eec61c8fd5ba2b921c5e1f315b04cce1236b1180dbe47edc00de650dffd75b",
+      "bytes": 2046
+    },
+    {
+      "path": "web/src/features/memory/retrieval/RetrievalExplainability.tsx",
+      "sha256": "112c30ff872d99087cfa9cbf12334567ad512591d944c0103ceb94a54b25cf37",
+      "bytes": 6044
     },
     {
       "path": "web/src/features/review/MergeAction.test.tsx",
@@ -6101,8 +6121,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "8c633e0e70cd7812f71f510d23db4ccc29164773160bab3641c684b4df7b8dcf",
-      "bytes": 59249
+      "sha256": "d25ffbce50a316b7c6213a5aa2911df912df1ea6e5e4322171a5dbd56aeaf89c",
+      "bytes": 60497
     },
     {
       "path": "web/src/styles/tokens.css",

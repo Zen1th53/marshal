@@ -2875,6 +2875,71 @@
   border-radius: var(--radius-sm);
 }
 
+/* --- Memory Governance & Conflicts --- */
+.memory-governance-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.gov-id-code {
+  color: var(--color-accent);
+}
+
+.gov-category-badge {
+  font-size: 0.5625rem;
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-semibold);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+}
+.cat-conflicted {
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.15);
+}
+.cat-stale {
+  color: #f39c12;
+  background: rgba(243, 156, 18, 0.15);
+}
+.cat-superseded {
+  color: #9b59b6;
+  background: rgba(155, 89, 182, 0.15);
+}
+.cat-forgetting {
+  color: #7f8c8d;
+  background: rgba(127, 140, 141, 0.15);
+}
+
+.conflict-diff-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.conflict-side-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.base-side {
+  border-color: rgba(46, 204, 113, 0.3);
+}
+.competing-side {
+  border-color: rgba(231, 76, 60, 0.3);
+}
+
+.conflict-side-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+
 
 
 

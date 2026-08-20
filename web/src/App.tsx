@@ -18,6 +18,7 @@ import { Providers } from './routes/Providers';
 import { Security } from './routes/Security';
 import { Audit } from './routes/Audit';
 import { Memory } from './routes/Memory';
+import { MemoryGovernance } from './routes/MemoryGovernance';
 import { api } from './api/client';
 import type { CapabilityStatusDTO } from './api/types';
 
@@ -96,7 +97,8 @@ function MainApp() {
             {currentRoute === 'security' && <Security />}
             {currentRoute === 'audit' && <Audit />}
             {currentRoute === 'memory' && <Memory />}
-            {currentRoute !== 'overview' && currentRoute !== 'agents' && currentRoute !== 'tasks' && currentRoute !== 'runs' && currentRoute !== 'review' && currentRoute !== 'evidence' && currentRoute !== 'trace' && currentRoute !== 'providers' && currentRoute !== 'security' && currentRoute !== 'audit' && currentRoute !== 'memory' && (
+            {currentRoute === 'memory-governance' && <MemoryGovernance />}
+            {currentRoute !== 'overview' && currentRoute !== 'agents' && currentRoute !== 'tasks' && currentRoute !== 'runs' && currentRoute !== 'review' && currentRoute !== 'evidence' && currentRoute !== 'trace' && currentRoute !== 'providers' && currentRoute !== 'security' && currentRoute !== 'audit' && currentRoute !== 'memory' && currentRoute !== 'memory-governance' && (
               <div className="placeholder-view">
                 <h2>{currentRoute.toUpperCase()} Control Surface</h2>
                 <p>Telemetry, controls and state introspection for {currentRoute}.</p>
