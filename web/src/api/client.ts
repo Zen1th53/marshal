@@ -1187,6 +1187,51 @@ export class APIClient {
     });
   }
 
+  listMaintenanceJobs(signal?: AbortSignal): Promise<{
+    jobs: Array<{
+      job_id: string;
+      job_type: string;
+      status: string;
+      is_dry_run: boolean;
+      target_scope: string;
+      reclaimed_bytes: number;
+      records_affected: number;
+      audit_id: string;
+      started_at: string;
+      completed_at?: string;
+    }>;
+    total_count: number;
+  }> {
+    return this.request('/api/v1/operations/maintenance/jobs', { method: 'GET', signal });
+  }
+
+  createMaintenanceJob(payload: {
+    job_type: string;
+    is_dry_run: boolean;
+    target_scope: string;
+  }, idempotencyKey?: string, signal?: AbortSignal): Promise<{
+    job_id: string;
+    job_type: string;
+    status: string;
+    is_dry_run: boolean;
+    target_scope: string;
+    reclaimed_bytes: number;
+    records_affected: number;
+    audit_id: string;
+    started_at: string;
+    completed_at?: string;
+  }> {
+    return this.request('/api/v1/operations/maintenance/jobs', {
+      method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey ?? `idem-maint-${Date.now()}`,
+        payload,
+      }),
+      signal,
+    });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState } from '../components/state';
 import { BackupRestoreWorkspace } from '../features/operations/backup/BackupRestoreWorkspace';
+import { MaintenanceWorkspace } from '../features/operations/maintenance/MaintenanceWorkspace';
 
 interface DiagnosticCheck {
   component: string;
@@ -108,6 +109,9 @@ export function Operations() {
 
           {/* State Backups & Restore Workspace */}
           <BackupRestoreWorkspace />
+
+          {/* GC & Maintenance Workspace */}
+          <MaintenanceWorkspace />
         </div>
       ) : null}
     </div>

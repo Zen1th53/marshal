@@ -3084,6 +3084,14 @@
   border-radius: var(--radius-md);
 }
 
+.maintenance-action-card {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+
 
 
 
