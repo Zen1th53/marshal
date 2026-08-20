@@ -55,8 +55,14 @@ export interface AdapterSummaryDTO {
 export interface AgentSummaryDTO {
   id: string;
   name: string;
-  role: string;
+  role?: string;
+  provider?: string;
+  model?: string;
   status: string;
+  capabilities?: string[];
+  current_task_id?: string;
+  completed_task_count?: number;
+  last_heartbeat?: string;
   created_at: string;
 }
 

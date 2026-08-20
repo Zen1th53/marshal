@@ -23,6 +23,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// 3. Agents
 	mux.HandleFunc("GET /api/v1/agents", s.handleListAgents)
+	mux.HandleFunc("GET /api/v1/agents/{id}", s.handleGetAgentDetail)
 
 	// 3. Tasks & Runs
 	mux.HandleFunc("GET /api/v1/tasks", s.handleListTasks)
@@ -64,11 +65,6 @@ func (s *Server) handleSystemAdapters(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	writeJSON(w, http.StatusOK, adapters)
-}
-
-func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
-	resp := NewPagedResponse([]AgentSummaryDTO{}, "", 0, DefaultPageLimit)
-	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {

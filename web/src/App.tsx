@@ -8,6 +8,7 @@ import { Sidebar } from './components/nav/Sidebar';
 import { CommandPalette } from './components/command/CommandPalette';
 import { Login } from './routes/Login';
 import { Overview } from './routes/Overview';
+import { Agents } from './routes/Agents';
 import { api } from './api/client';
 import type { CapabilityStatusDTO } from './api/types';
 
@@ -75,6 +76,10 @@ function MainApp() {
           <main className="app-main" id="main-content" role="main">
             {currentRoute === 'overview' ? (
               <Overview onNavigate={setCurrentRoute} />
+            ) : currentRoute === 'agents' ? (
+              <Agents onNavigateTask={() => {
+                setCurrentRoute('tasks');
+              }} />
             ) : (
               <div className="route-header">
                 <h2 className="route-title">{currentRoute.toUpperCase()}</h2>

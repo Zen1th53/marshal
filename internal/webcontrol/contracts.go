@@ -78,11 +78,17 @@ type AdapterSummaryDTO struct {
 }
 
 type AgentSummaryDTO struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Role      string    `json:"role"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                 string    `json:"id"`
+	Name               string    `json:"name"`
+	Role               string    `json:"role,omitempty"`
+	Provider           string    `json:"provider,omitempty"`
+	Model              string    `json:"model,omitempty"`
+	Status             string    `json:"status"`
+	Capabilities       []string  `json:"capabilities,omitempty"`
+	CurrentTaskID      string    `json:"current_task_id,omitempty"`
+	CompletedTaskCount int       `json:"completed_task_count,omitempty"`
+	LastHeartbeat      time.Time `json:"last_heartbeat,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 type TaskSummaryDTO struct {

@@ -177,6 +177,28 @@ export class APIClient {
     return this.request<PagedResponse<AgentSummaryDTO>>('/api/v1/agents', { method: 'GET', signal });
   }
 
+  getAgentDetail(id: string, signal?: AbortSignal): Promise<{
+    id: string;
+    name: string;
+    provider: string;
+    model: string;
+    status: string;
+    capabilities: string[];
+    current_task_id?: string;
+    current_run_id?: string;
+    completed_task_count: number;
+    failed_task_count: number;
+    last_heartbeat: string;
+    created_at: string;
+    memory_contributions: {
+      episodes_extracted: number;
+      decisions_logged: number;
+      facts_asserted: number;
+    };
+  }> {
+    return this.request(`/api/v1/agents/${encodeURIComponent(id)}`, { method: 'GET', signal });
+  }
+
   getTasks(signal?: AbortSignal): Promise<PagedResponse<TaskSummaryDTO>> {
     return this.request<PagedResponse<TaskSummaryDTO>>('/api/v1/tasks', { method: 'GET', signal });
   }
