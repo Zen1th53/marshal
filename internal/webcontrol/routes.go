@@ -17,6 +17,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/logout", s.handleAuthLogout)
 	mux.HandleFunc("GET /api/v1/auth/csrf", s.handleGetCSRFToken)
 
+	// Realtime Event Stream
+	mux.HandleFunc("GET /api/v1/events/stream", s.handleEventsStream)
+
 	// 3. Agents
 	mux.HandleFunc("GET /api/v1/agents", s.handleListAgents)
 

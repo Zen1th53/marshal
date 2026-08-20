@@ -27,11 +27,16 @@ type Server struct {
 	handler  http.Handler
 	runtime  any
 	sessions *SessionStore
+	sseHub   *SSEHub
 	mu       sync.RWMutex
 }
 
 func (s *Server) Sessions() *SessionStore {
 	return s.sessions
+}
+
+func (s *Server) SSEHub() *SSEHub {
+	return s.sseHub
 }
 
 func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
@@ -58,6 +63,7 @@ func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
 		config:   cfg,
 		runtime:  runtime,
 		sessions: NewSessionStore(),
+		sseHub:   NewSSEHub(),
 	}
 
 	mux := http.NewServeMux()

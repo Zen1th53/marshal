@@ -4485,6 +4485,16 @@
       "bytes": 1581
     },
     {
+      "path": "internal/webcontrol/authorize.go",
+      "sha256": "e9ef7c5740122780348b5da877d98cd7bec5e70dc1529bb3106cff7cc01ab395",
+      "bytes": 2829
+    },
+    {
+      "path": "internal/webcontrol/authorize_test.go",
+      "sha256": "a70f8e11959f5894bb48cb85749baef47d7c0f4d9a9a404094c8143dc3569ddc",
+      "bytes": 3219
+    },
+    {
       "path": "internal/webcontrol/capabilities.go",
       "sha256": "9482491a751b725351c425720ef5d362d39193cd65a007aa3e76e03b2e5eb71a",
       "bytes": 2237
@@ -4516,8 +4526,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "f83d2627f3d0971c024ff68b87109eafb9058230863b9bb113de9c57484487bc",
-      "bytes": 2272
+      "sha256": "5d88dc43caec05f690709248679a1503ac029c61cf6bf53eb8f958c6ce09c4a9",
+      "bytes": 2366
     },
     {
       "path": "internal/webcontrol/security_headers.go",
@@ -4531,8 +4541,8 @@
     },
     {
       "path": "internal/webcontrol/server.go",
-      "sha256": "961eb74976e8c884aa0ee6c826384932aad035fcfe4622a8cbe38e6b6db26bbc",
-      "bytes": 2930
+      "sha256": "20a842354212eed5fe44440a2a0a624079f727602272efc235be69dc86f3b3bb",
+      "bytes": 3029
     },
     {
       "path": "internal/webcontrol/server_test.go",
@@ -5465,9 +5475,24 @@
       "bytes": 1891
     },
     {
+      "path": "web/src/auth/permissions.ts",
+      "sha256": "8fb55c6a15e412bb35fa4a6f195f58db4fc6381acb9cc09acc9de58c90ee956f",
+      "bytes": 410
+    },
+    {
       "path": "web/src/components/layout/AppShell.tsx",
       "sha256": "88a02c5d6e92f5cf6b4062bb12aff5a808a96f07bd133f51118655a9ad93e3fd",
       "bytes": 744
+    },
+    {
+      "path": "web/src/components/security/AuthorizedAction.test.tsx",
+      "sha256": "a916c2ed5cc062aa897d148c72c1e9c3f25119986d6394dc8e7ec4491cb701a5",
+      "bytes": 2728
+    },
+    {
+      "path": "web/src/components/security/AuthorizedAction.tsx",
+      "sha256": "740a0afdb98b1adf1d1037a72e32c45189eeb7440c960d236c937ab7c127e3cb",
+      "bytes": 2990
     },
     {
       "path": "web/src/components/state/EmptyState.tsx",
