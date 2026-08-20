@@ -1114,6 +1114,79 @@ export class APIClient {
     return this.request('/api/v1/health/doctor', { method: 'GET', signal });
   }
 
+  listBackups(signal?: AbortSignal): Promise<{
+    backups: Array<{
+      backup_id: string;
+      schema_version: number;
+      size_bytes: number;
+      digest_sha256: string;
+      status: string;
+      created_at: string;
+    }>;
+    total_count: number;
+  }> {
+    return this.request('/api/v1/operations/backups', { method: 'GET', signal });
+  }
+
+  createBackup(payload: { label: string }, idempotencyKey?: string, signal?: AbortSignal): Promise<{
+    backup_id: string;
+    schema_version: number;
+    size_bytes: number;
+    digest_sha256: string;
+    status: string;
+    created_at: string;
+  }> {
+    return this.request('/api/v1/operations/backups/create', {
+      method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey ?? `idem-bkp-${Date.now()}`,
+        payload,
+      }),
+      signal,
+    });
+  }
+
+  verifyBackup(backupId: string, idempotencyKey?: string, signal?: AbortSignal): Promise<{
+    backup_id: string;
+    integrity_status: string;
+    schema_version: number;
+    digest_sha256: string;
+    verified_at: string;
+  }> {
+    return this.request('/api/v1/operations/backups/verify', {
+      method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey ?? `idem-verify-${Date.now()}`,
+        payload: { backup_id: backupId },
+      }),
+      signal,
+    });
+  }
+
+  restoreBackup(payload: {
+    backup_id: string;
+    expected_digest_sha256?: string;
+    safety_backup_label: string;
+  }, idempotencyKey?: string, signal?: AbortSignal): Promise<{
+    status: string;
+    restored_backup_id: string;
+    safety_backup_id: string;
+    audit_id: string;
+    restored_at: string;
+  }> {
+    return this.request('/api/v1/operations/backups/restore', {
+      method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey ?? `idem-restore-${Date.now()}`,
+        payload,
+      }),
+      signal,
+    });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

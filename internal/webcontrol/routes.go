@@ -78,6 +78,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 
 	// 5. Operations & Health
 	mux.HandleFunc("GET /api/v1/health/doctor", s.handleGetDoctorReport)
+	mux.HandleFunc("GET /api/v1/operations/backups", s.handleListBackups)
+	mux.HandleFunc("POST /api/v1/operations/backups/create", s.handleCreateBackup)
+	mux.HandleFunc("POST /api/v1/operations/backups/verify", s.handleVerifyBackup)
+	mux.HandleFunc("POST /api/v1/operations/backups/restore", s.handleRestoreBackup)
 }
 
 func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {

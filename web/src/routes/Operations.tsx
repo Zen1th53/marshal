@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
 import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState } from '../components/state';
+import { BackupRestoreWorkspace } from '../features/operations/backup/BackupRestoreWorkspace';
 
 interface DiagnosticCheck {
   component: string;
@@ -75,7 +76,7 @@ export function Operations() {
           </div>
 
           {/* Diagnostic Checks Table */}
-          <div className="table-responsive">
+          <div className="table-responsive" style={{ marginBottom: 'var(--space-5)' }}>
             <table className="data-table" aria-label="System Diagnostics Table">
               <thead>
                 <tr>
@@ -104,6 +105,9 @@ export function Operations() {
               </tbody>
             </table>
           </div>
+
+          {/* State Backups & Restore Workspace */}
+          <BackupRestoreWorkspace />
         </div>
       ) : null}
     </div>

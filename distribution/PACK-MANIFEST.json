@@ -4600,6 +4600,16 @@
       "bytes": 3014
     },
     {
+      "path": "internal/webcontrol/health.go",
+      "sha256": "5cbf6120768419b21120d73dba6fa9950b01d89394ac1bf4fd70658ca1b5b19e",
+      "bytes": 1781
+    },
+    {
+      "path": "internal/webcontrol/health_test.go",
+      "sha256": "94fa0ca4e6727de9b43bf287470ab6b5e50f3bf28bd1133371f8de753ccec279",
+      "bytes": 1388
+    },
+    {
       "path": "internal/webcontrol/memory.go",
       "sha256": "7efd1ac3fd3b722f354b3505fa78e2adce8595dc01d9a37d4e1e084e63973851",
       "bytes": 5728
@@ -4741,8 +4751,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "3543f74dc8cbfd3f62aeb151b13615d9c7713933bfcd5df217722b181536c553",
-      "bytes": 5384
+      "sha256": "a02f8c5aa5be38f93ab5d476a4afefeea5f9e900806a0b84961fa0fe4fb751ab",
+      "bytes": 5697
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -5756,8 +5766,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "2f9247ab0d7636faad21e73b92946489a71a99ed73a3aa8da043b3695c6ba4f3",
-      "bytes": 33380
+      "sha256": "107f19b98fd89affb8c3f32f1b802bc738ab4dc6cd2adad20ff54cecd569148c",
+      "bytes": 35530
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -6153,6 +6163,16 @@
       "path": "web/src/routes/MemoryGovernance.tsx",
       "sha256": "55e018a41147ab580ce40a51c5c054fd971498c2716cc13e27d3dfe7f1044550",
       "bytes": 10202
+    },
+    {
+      "path": "web/src/routes/Operations.test.tsx",
+      "sha256": "7b013c11acc459e59d4c34b357d4037a2c2021d530dc9616b9bc41f00d2759c6",
+      "bytes": 1644
+    },
+    {
+      "path": "web/src/routes/Operations.tsx",
+      "sha256": "d87a72673f21dcb1da79c7eb5069152e5d4cb9d532f3da77952fa17dd3a21e03",
+      "bytes": 4023
     },
     {
       "path": "web/src/routes/Overview.test.tsx",
