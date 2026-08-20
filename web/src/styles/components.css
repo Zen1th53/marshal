@@ -2939,6 +2939,67 @@
   justify-content: space-between;
 }
 
+/* --- Working Memory & Scratchpad --- */
+.working-memory-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.working-slots-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.working-slot-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.working-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.slot-key-code {
+  color: var(--color-accent);
+}
+
+.temporary-pill {
+  font-size: 0.5625rem;
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-semibold);
+  padding: 1px 5px;
+  background: rgba(243, 156, 18, 0.15);
+  color: #f39c12;
+  border-radius: var(--radius-sm);
+}
+
+.slot-content-body {
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.working-slot-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-1);
+}
+
+
 
 
 

@@ -845,6 +845,66 @@ export class APIClient {
     return this.request(`/api/v1/memory/governance/conflicts/${encodeURIComponent(id)}`, { method: 'GET', signal });
   }
 
+  getWorkingMemory(signal?: AbortSignal): Promise<{
+    slots: Array<{
+      slot_key: string;
+      owner_scope: string;
+      scope_id: string;
+      content: string;
+      revision: number;
+      is_pinned: boolean;
+      is_private: boolean;
+      allocated_bytes: number;
+      expires_at: string;
+      last_updated_at: string;
+    }>;
+    total_quota_bytes: number;
+    used_bytes: number;
+    eviction_strategy: string;
+  }> {
+    return this.request('/api/v1/memory/working', { method: 'GET', signal });
+  }
+
+  updateWorkingSlot(payload: {
+    slot_key: string;
+    expected_revision: number;
+    content: string;
+    is_pinned: boolean;
+  }, signal?: AbortSignal): Promise<{
+    slot_key: string;
+    owner_scope: string;
+    scope_id: string;
+    content: string;
+    revision: number;
+    is_pinned: boolean;
+    is_private: boolean;
+    allocated_bytes: number;
+    expires_at: string;
+    last_updated_at: string;
+  }> {
+    return this.request('/api/v1/memory/working/slot', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      signal,
+    });
+  }
+
+  promoteWorkingSlot(payload: {
+    slot_key: string;
+    target_title: string;
+  }, signal?: AbortSignal): Promise<{
+    slot_key: string;
+    candidate_memory_id: string;
+    status: string;
+    message: string;
+  }> {
+    return this.request('/api/v1/memory/working/promote', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      signal,
+    });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;
