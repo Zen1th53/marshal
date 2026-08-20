@@ -1076,6 +1076,31 @@ export class APIClient {
     return this.request(`/api/v1/memory/${encodeURIComponent(memoryId)}/usage`, { method: 'GET', signal });
   }
 
+  getMemorySecurityHealth(signal?: AbortSignal): Promise<{
+    encryption_status: string;
+    key_id: string;
+    integrity_status: string;
+    verified_records: number;
+    tampered_records: number;
+    rebuild_watermark: number;
+    indexes: Array<{
+      name: string;
+      generation: number;
+      status: string;
+      outbox_lag_ms: number;
+      records_indexed: number;
+    }>;
+    acl_matrix: Array<{
+      scope: string;
+      enforcement_mode: string;
+      read_isolation: string;
+      write_authority: string;
+    }>;
+    evaluated_at: string;
+  }> {
+    return this.request('/api/v1/memory/security/health', { method: 'GET', signal });
+  }
+
   getTaskDAG(maxDepth = 5, signal?: AbortSignal): Promise<{
     nodes: Array<{
       id: string;

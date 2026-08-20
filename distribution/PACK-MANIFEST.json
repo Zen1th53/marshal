@@ -4640,6 +4640,16 @@
       "bytes": 2187
     },
     {
+      "path": "internal/webcontrol/memory_usage.go",
+      "sha256": "613c907d630bc693711db3b9b4236b80324b385844a387a6777738ab4a49753c",
+      "bytes": 2672
+    },
+    {
+      "path": "internal/webcontrol/memory_usage_test.go",
+      "sha256": "018467e50d904107fd61928560333e8b4f4902b365e23114c47b6de23b9f6cd3",
+      "bytes": 1234
+    },
+    {
       "path": "internal/webcontrol/memory_versioning.go",
       "sha256": "cd566ecbf8c7c1e844daa64670514a3e7125975f7b8e07a6692b8631365d4f6c",
       "bytes": 5659
@@ -4721,8 +4731,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "3cb2cafe898ca66fe9355f5d338c30d272370e9f83528e60b22d69f7eb031db4",
-      "bytes": 5199
+      "sha256": "bb70a54c111092cf8679223c7f46a24ad0536590fb2d79cf9405817bed6719f4",
+      "bytes": 5286
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -5736,8 +5746,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "da889df9f391afaea3c8e1f1b0d9878699f69cbd4bd3c5e1950346a917a34321",
-      "bytes": 32404
+      "sha256": "13f8083808e2219f5fe726058abf04bf39bf3a0ba00a53ba78096fc6c2b215c8",
+      "bytes": 33062
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -5928,6 +5938,16 @@
       "path": "web/src/features/memory/retrieval/RetrievalExplainability.tsx",
       "sha256": "112c30ff872d99087cfa9cbf12334567ad512591d944c0103ceb94a54b25cf37",
       "bytes": 6044
+    },
+    {
+      "path": "web/src/features/memory/usage/MemoryInfluenceTrace.test.tsx",
+      "sha256": "753c7ba2b3c4996b87ba23268a7be14ef9b65054c4bae46756135a77ec79f905",
+      "bytes": 1878
+    },
+    {
+      "path": "web/src/features/memory/usage/MemoryInfluenceTrace.tsx",
+      "sha256": "aa97e6a25256644dc2e1f0683d4a8022edf611894c0c5b963b48df11925e199d",
+      "bytes": 6493
     },
     {
       "path": "web/src/features/memory/versioning/MemoryVersioningWorkspace.test.tsx",
