@@ -4675,6 +4675,21 @@
       "bytes": 3801
     },
     {
+      "path": "internal/webcontrol/dist/assets/index-3Wsf25zc.css",
+      "sha256": "6d7e5fb6f42c8fa9bff87c78164d9a2b99143098e98d2f604b2e359f37441b7a",
+      "bytes": 56233
+    },
+    {
+      "path": "internal/webcontrol/dist/assets/index-BY4gMnWL.js",
+      "sha256": "a95e83debd19bac6eae55525dddb7935aed050a3d8d406ec31af298f7c11d685",
+      "bytes": 345597
+    },
+    {
+      "path": "internal/webcontrol/dist/index.html",
+      "sha256": "e8d7476b34aebbff70ad09ed47b40b182d0946c3f62fa507635c0bc575217f2b",
+      "bytes": 599
+    },
+    {
       "path": "internal/webcontrol/events.go",
       "sha256": "abf58beba571e925a47af5a8b762a9b9fcb11d614122c415bbdafc96c96f3cbe",
       "bytes": 4991
@@ -6118,6 +6133,16 @@
       "path": "web/src/features/dag/DAGViewer.tsx",
       "sha256": "4ffa446f314ff1f11bac09979f09a833abb4af2e28954cfd1086e9ae468665bd",
       "bytes": 6057
+    },
+    {
+      "path": "web/src/features/logs/SafeLogViewer.test.tsx",
+      "sha256": "a2e2636afda1b928fd26df47732db8329f2505989ab810b75fb7462b576d9967",
+      "bytes": 2337
+    },
+    {
+      "path": "web/src/features/logs/SafeLogViewer.tsx",
+      "sha256": "e15df49a55961de086f03f1635e7cdb0d6e22d7eb8bf6ccebcddd294c0953757",
+      "bytes": 3004
     },
     {
       "path": "web/src/features/memory/actions/MemoryMutationActions.test.tsx",
