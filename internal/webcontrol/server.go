@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -89,7 +90,9 @@ func (s *Server) wrapMiddleware(next http.Handler) http.Handler {
 			correlationID = NewCorrelationID()
 		}
 		w.Header().Set("X-Correlation-ID", correlationID)
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 

@@ -1210,6 +1210,11 @@
       "bytes": 1900
     },
     {
+      "path": "docs/web/PERFORMANCE.md",
+      "sha256": "1530d4995b0cc6efb39b36390d1332a75cda5a158ff2390eb705fca353c02e34",
+      "bytes": 2202
+    },
+    {
       "path": "docs/web/REALTIME.md",
       "sha256": "784f6d83f16b4c1dc628acc59421ac98e44383aad15be045502174be1a436753",
       "bytes": 1491
@@ -4725,6 +4730,11 @@
       "bytes": 1082
     },
     {
+      "path": "internal/webcontrol/performance_bench_test.go",
+      "sha256": "3fa900c44132d448c321a76d75503375b574f29a16d193647fb2781819873ddd",
+      "bytes": 1629
+    },
+    {
       "path": "internal/webcontrol/provenance.go",
       "sha256": "d985315b7f96e1ae475e58a0215c0deed21ef9503310b0d6c2a18cac3fcc500b",
       "bytes": 3662
@@ -4786,8 +4796,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "aa2077fb112fe90c3d577e7dfb5805d29c1b9f9106f0fcb4daec39733fcb992e",
-      "bytes": 6199
+      "sha256": "37adede7226d8eedc716e3d6fbde8f1739c1bda673270359882c4e4f02dd9b50",
+      "bytes": 6269
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -4851,8 +4861,8 @@
     },
     {
       "path": "internal/webcontrol/server.go",
-      "sha256": "e90ce7a78223f667f2248b885285efa323acc1d6e87ff0d77e7b4c171eb4dece",
-      "bytes": 3025
+      "sha256": "fdccb8b9c578c6023061d425cc0c4d6720ca309634a10afa71ecebebad63cd10",
+      "bytes": 3087
     },
     {
       "path": "internal/webcontrol/server_test.go",
@@ -6408,6 +6418,11 @@
       "path": "web/src/test/DesignSystem.test.tsx",
       "sha256": "b505eddd7b0b46a03c062798e9f764ae622b6ec8ee31e8fb3991b8205797e767",
       "bytes": 2337
+    },
+    {
+      "path": "web/src/test/Performance.test.tsx",
+      "sha256": "87ce22df6c41c975c020ef62e1adb4826b349a416e8ce8ab862f659026af48d7",
+      "bytes": 999
     },
     {
       "path": "web/src/test/setup.ts",
