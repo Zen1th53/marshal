@@ -1851,8 +1851,8 @@
     },
     {
       "path": "internal/cli/web_cli.go",
-      "sha256": "20925aac64e224d2c154323388efbf4e382fce08f463bc9e3a1204eb45ddca69",
-      "bytes": 1685
+      "sha256": "6dd73969c5a98d92ccb82a2c5865eb3bf30ed93f1a1686cb4453640c4eb72f8c",
+      "bytes": 2210
     },
     {
       "path": "internal/cli/web_cli_test.go",
@@ -4501,13 +4501,13 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "56e1509f155c80e50b3e037c673eed81f8869bf99c0feaeab80a5bc1a006e6d8",
-      "bytes": 1984
+      "sha256": "277049fced6b08742fd92dff0e1e422596487c0069b844806f51a52d2d893060",
+      "bytes": 2209
     },
     {
       "path": "internal/webcontrol/server.go",
-      "sha256": "2880a5d9b2fa0ec6a6528f5ca3164f4d6ef8acbc84b1538b29525a25911ff907",
-      "bytes": 2756
+      "sha256": "ef9d4e1c8e264b820c92d73fd3ba7075791e9d5585ebe8ae94efc9e34e6d5446",
+      "bytes": 2883
     },
     {
       "path": "internal/webcontrol/server_test.go",
@@ -5420,6 +5420,51 @@
       "bytes": 744
     },
     {
+      "path": "web/src/components/state/EmptyState.tsx",
+      "sha256": "bb36d484cc497edd1d8615a098438cd2557915e22825475fae8c3ec74a20222f",
+      "bytes": 567
+    },
+    {
+      "path": "web/src/components/state/ErrorState.tsx",
+      "sha256": "f25e191c43bc2d997d48e92eb0c3da6f3ca43c2c40baf641091f32b3f9683109",
+      "bytes": 1660
+    },
+    {
+      "path": "web/src/components/state/LoadingState.tsx",
+      "sha256": "ac139861afea6344de6d4d1784e3ac8637cbe955d55d07275eb541942171386d",
+      "bytes": 359
+    },
+    {
+      "path": "web/src/components/state/StateViews.test.tsx",
+      "sha256": "f9d3ea41ff9949cbfe2804e7ee384980630cdba2fba9f3641e008a17f28f67ad",
+      "bytes": 1890
+    },
+    {
+      "path": "web/src/components/state/index.ts",
+      "sha256": "e600fdef4488bc7d3136e0573fa6235382963d52f229aaa606cc942c466e8443",
+      "bytes": 184
+    },
+    {
+      "path": "web/src/components/toast/Toast.test.tsx",
+      "sha256": "8b22d91cd0ddb2912c490c946436f6f0fcd74b0b0bc858fcb7fcc1c9c379977f",
+      "bytes": 2332
+    },
+    {
+      "path": "web/src/components/toast/ToastContainer.tsx",
+      "sha256": "197b5769dcadda4f9af0c127ebeefa53d5b5b29aaf907ec001d52a0e3dabf040",
+      "bytes": 858
+    },
+    {
+      "path": "web/src/components/toast/ToastContext.tsx",
+      "sha256": "7a5237bd89631f3f7d17d899a7846177e9537ea1dbe8a18fdd33b7cb767319b0",
+      "bytes": 1664
+    },
+    {
+      "path": "web/src/components/toast/index.ts",
+      "sha256": "a025b60119663a107d3d83cb01270bfd3050e6b746d59e0f618b989415dd27f8",
+      "bytes": 188
+    },
+    {
       "path": "web/src/components/ui/Button.tsx",
       "sha256": "2d9d92873fd7f1ef4f8fb0f20da085a09476708d71c6935b37c541f1642243f1",
       "bytes": 674
@@ -5466,8 +5511,8 @@
     },
     {
       "path": "web/src/styles/components.css",
-      "sha256": "60e9e786fa5bd070db2a8ddbcb503435951dc444b778d5a52a7b3b52945de1a0",
-      "bytes": 7065
+      "sha256": "baead2a7dbc03b990722b6cc354329b5d3fdea7b407b8edd948eec7c8fb2eb32",
+      "bytes": 8734
     },
     {
       "path": "web/src/styles/tokens.css",

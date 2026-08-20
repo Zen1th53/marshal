@@ -256,16 +256,104 @@
   to   { transform: translateY(0); opacity: 1; }
 }
 
-/* --- Capability Unavailable Banner --- */
-.capability-unavailable-banner {
+/* --- Login Screen --- */
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--color-bg);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-lg);
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: var(--space-6);
+}
+
+.login-logo {
+  font-size: 2.5rem;
+  color: var(--color-accent);
+  display: inline-block;
+  margin-bottom: var(--space-2);
+}
+
+.login-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-2);
+}
+
+.login-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.login-error-banner {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-surface-alt);
-  border: var(--border-width) dashed var(--color-border);
+  padding: var(--space-3);
+  background: rgba(239, 68, 68, 0.1);
+  border: var(--border-width) solid var(--color-danger);
   border-radius: var(--radius-md);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-4);
 }
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+
+.form-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.form-input {
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.form-input:focus {
+  border-color: var(--color-border-focus);
+}
+
+.form-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-dim);
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-actions .btn {
+  width: 100%;
+}
+
 

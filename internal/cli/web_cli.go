@@ -12,15 +12,30 @@ import (
 
 func (c *command) web(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: marshal web serve [--listen ADDR] [--port PORT]")
+		return fmt.Errorf("usage: marshal web <serve|code> [options]")
 	}
 
 	switch args[0] {
 	case "serve":
 		return c.webServe(ctx, args[1:])
+	case "code", "login":
+		return c.webCode(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown web command: %s", args[0])
 	}
+}
+
+func (c *command) webCode(ctx context.Context, args []string) error {
+	store := webcontrol.NewSessionStore()
+	code, err := store.CreateOneTimeCode("operator", "admin")
+	if err != nil {
+		return fmt.Errorf("generate login code: %w", err)
+	}
+
+	fmt.Fprintf(c.stdout, "One-Time Login Code: %s\n", code)
+	fmt.Fprintf(c.stdout, "Login URL: http://127.0.0.1:8787/login?code=%s\n", code)
+	fmt.Fprintf(c.stdout, "(Code expires in 5 minutes and can only be redeemed once)\n")
+	return nil
 }
 
 func (c *command) webServe(ctx context.Context, args []string) error {

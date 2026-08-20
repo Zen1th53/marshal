@@ -23,10 +23,15 @@ type ServerConfig struct {
 }
 
 type Server struct {
-	config  ServerConfig
-	handler http.Handler
-	runtime any
-	mu      sync.RWMutex
+	config   ServerConfig
+	handler  http.Handler
+	runtime  any
+	sessions *SessionStore
+	mu       sync.RWMutex
+}
+
+func (s *Server) Sessions() *SessionStore {
+	return s.sessions
 }
 
 func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
@@ -50,8 +55,9 @@ func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
 	}
 
 	s := &Server{
-		config:  cfg,
-		runtime: runtime,
+		config:   cfg,
+		runtime:  runtime,
+		sessions: NewSessionStore(),
 	}
 
 	mux := http.NewServeMux()
