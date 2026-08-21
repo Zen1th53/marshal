@@ -16,12 +16,12 @@ func TestT140AgenticMemoryEvolutionAndSafeRelinking(t *testing.T) {
 
 	// 1. Old historical record
 	oldRec := model.MemoryRecordV2{
-		ID:        "MEM-OLD-01",
-		ProjectID: "PROJ-1",
-		Title:     "SQLite Multi-reader Issue",
-		Body:      "Observed database locked errors under concurrent agent runs",
-		Lifecycle: model.MemoryDurable,
-		Authority: model.AuthorityOperator,
+		ID:         "MEM-OLD-01",
+		ProjectID:  "PROJ-1",
+		Title:      "SQLite Multi-reader Issue",
+		Body:       "Observed database locked errors under concurrent agent runs",
+		Lifecycle:  model.MemoryDurable,
+		Authority:  model.AuthorityOperator,
 		ObservedAt: now,
 	}
 	oldRec.ContentDigest = oldRec.CanonicalDigest()
@@ -29,12 +29,12 @@ func TestT140AgenticMemoryEvolutionAndSafeRelinking(t *testing.T) {
 
 	// 2. New decision record that resolves the older issue
 	newDecision := model.MemoryRecordV2{
-		ID:        "MEM-NEW-DECISION",
-		ProjectID: "PROJ-1",
-		Title:     "Enable SQLite WAL Mode",
-		Body:      "PRAGMA journal_mode=WAL; enables concurrent readers while writing",
-		Lifecycle: model.MemoryDurable,
-		Authority: model.AuthorityOperator,
+		ID:         "MEM-NEW-DECISION",
+		ProjectID:  "PROJ-1",
+		Title:      "Enable SQLite WAL Mode",
+		Body:       "PRAGMA journal_mode=WAL; enables concurrent readers while writing",
+		Lifecycle:  model.MemoryDurable,
+		Authority:  model.AuthorityOperator,
 		ObservedAt: now,
 	}
 	newDecision.ContentDigest = newDecision.CanonicalDigest()

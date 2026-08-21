@@ -15,11 +15,11 @@ type TrustArtifactDTO struct {
 type ReleaseTrustReportDTO struct {
 	BinaryCommitSHA       string             `json:"binary_commit_sha"`
 	SourceRepo            string             `json:"source_repo"`
-	PackManifestStatus    string             `json:"pack_manifest_status"`    // "VERIFIED_PASS", "DEGRADED", "NOT_VERIFIED"
+	PackManifestStatus    string             `json:"pack_manifest_status"` // "VERIFIED_PASS", "DEGRADED", "NOT_VERIFIED"
 	PackManifestDigest    string             `json:"pack_manifest_digest"`
-	SBOMStatus            string             `json:"sbom_status"`            // "GENERATED_AVAILABLE", "NOT_AVAILABLE"
+	SBOMStatus            string             `json:"sbom_status"` // "GENERATED_AVAILABLE", "NOT_AVAILABLE"
 	SBOMFormat            string             `json:"sbom_format"`
-	SigningStatus         string             `json:"signing_status"`         // "COSIGN_PKI_VERIFIED", "UNSIGNED"
+	SigningStatus         string             `json:"signing_status"` // "COSIGN_PKI_VERIFIED", "UNSIGNED"
 	SignerIdentity        string             `json:"signer_identity"`
 	ReproducibilityStatus string             `json:"reproducibility_status"` // "REPRODUCIBLE_BIT_EXACT"
 	Artifacts             []TrustArtifactDTO `json:"artifacts"`

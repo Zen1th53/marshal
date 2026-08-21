@@ -19,12 +19,12 @@ type MemoryReadReceiptEventDTO struct {
 }
 
 type MemoryUsageTraceResponseDTO struct {
-	MemoryID       string                      `json:"memory_id"`
-	Title          string                      `json:"title"`
-	TotalRecalls   int                         `json:"total_recalls"`
-	TotalInjections int                        `json:"total_injections"`
-	TotalCitations int                         `json:"total_citations"`
-	Events         []MemoryReadReceiptEventDTO `json:"events"`
+	MemoryID        string                      `json:"memory_id"`
+	Title           string                      `json:"title"`
+	TotalRecalls    int                         `json:"total_recalls"`
+	TotalInjections int                         `json:"total_injections"`
+	TotalCitations  int                         `json:"total_citations"`
+	Events          []MemoryReadReceiptEventDTO `json:"events"`
 }
 
 func (s *Server) handleGetMemoryUsageTrace(w http.ResponseWriter, r *http.Request) {

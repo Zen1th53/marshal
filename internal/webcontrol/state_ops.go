@@ -37,16 +37,16 @@ type RestoreBackupPayload struct {
 }
 
 type RestoreBackupResponseDTO struct {
-	Status              string    `json:"status"` // "restored_success"
-	RestoredBackupID    string    `json:"restored_backup_id"`
-	SafetyBackupID      string    `json:"safety_backup_id"`
-	AuditID             string    `json:"audit_id"`
-	RestoredAt          time.Time `json:"restored_at"`
+	Status           string    `json:"status"` // "restored_success"
+	RestoredBackupID string    `json:"restored_backup_id"`
+	SafetyBackupID   string    `json:"safety_backup_id"`
+	AuditID          string    `json:"audit_id"`
+	RestoredAt       time.Time `json:"restored_at"`
 }
 
 var (
-	backupsMu    sync.RWMutex
-	mockBackups  = []BackupRecordDTO{
+	backupsMu   sync.RWMutex
+	mockBackups = []BackupRecordDTO{
 		{
 			BackupID:      "BKP-20260820-001",
 			SchemaVersion: 1,
@@ -256,10 +256,10 @@ func listRealBackups(dir string) ([]BackupRecordDTO, error) {
 			continue
 		}
 		backups = append(backups, BackupRecordDTO{
-			BackupID:   entry.Name(),
-			SizeBytes:  info.Size(),
-			Status:     "available",
-			CreatedAt:  info.ModTime().UTC(),
+			BackupID:  entry.Name(),
+			SizeBytes: info.Size(),
+			Status:    "available",
+			CreatedAt: info.ModTime().UTC(),
 		})
 	}
 	return backups, nil

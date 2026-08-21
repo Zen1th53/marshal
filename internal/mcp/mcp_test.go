@@ -2,15 +2,15 @@ package mcp
 
 import (
 	"bytes"
-	"strings"
-	"time"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
@@ -508,7 +508,7 @@ func TestMCPActionLevelCapabilityAuthorization(t *testing.T) {
 	runBody, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
 		"params": map[string]any{
-			"name": "task_run",
+			"name":      "task_run",
 			"arguments": map[string]any{"task_id": "TASK-1", "agent_id": "AGENT-1"},
 		},
 	})

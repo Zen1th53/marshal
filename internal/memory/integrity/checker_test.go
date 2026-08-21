@@ -16,12 +16,12 @@ func TestT128MemoryIntegrityAndTamperDetection(t *testing.T) {
 
 	// 1. Untampered record passes cleanly
 	cleanRec := model.MemoryRecordV2{
-		ID:        "MEM-CLEAN-01",
-		ProjectID: "PROJ-1",
-		Kind:      model.MemoryKindDecision,
-		Lifecycle: model.MemoryDurable,
-		Title:     "SQLite WAL Configuration",
-		Body:      "PRAGMA journal_mode=WAL;",
+		ID:         "MEM-CLEAN-01",
+		ProjectID:  "PROJ-1",
+		Kind:       model.MemoryKindDecision,
+		Lifecycle:  model.MemoryDurable,
+		Title:      "SQLite WAL Configuration",
+		Body:       "PRAGMA journal_mode=WAL;",
 		ObservedAt: now,
 	}
 	cleanRec.ContentDigest = cleanRec.CanonicalDigest()

@@ -120,13 +120,13 @@ func (s *Store) WriteMemoryV2(ctx context.Context, rec model.MemoryRecordV2) err
 // GetMemoryV2 retrieves a single MemoryRecordV2 by project ID and memory ID.
 func (s *Store) GetMemoryV2(ctx context.Context, projectID, memoryID string) (model.MemoryRecordV2, error) {
 	var (
-		rec                                          model.MemoryRecordV2
-		kind, lifecycle, confidence, authority       string
-		sourceJSON, evidenceIDs, extMetaJSON         string
-		supersededBy, supersedes, conflictIDs        string
-		observedAt, ingestedAt, validFrom            string
-		createdAt, updatedAt                         string
-		validTo, lastVerifiedAt                      sql.NullString
+		rec                                    model.MemoryRecordV2
+		kind, lifecycle, confidence, authority string
+		sourceJSON, evidenceIDs, extMetaJSON   string
+		supersededBy, supersedes, conflictIDs  string
+		observedAt, ingestedAt, validFrom      string
+		createdAt, updatedAt                   string
+		validTo, lastVerifiedAt                sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
@@ -222,13 +222,13 @@ func (s *Store) GetMemoryV2(ctx context.Context, projectID, memoryID string) (mo
 // FindMemoryByDigest retrieves a memory record by its project ID and canonical content digest.
 func (s *Store) FindMemoryByDigest(ctx context.Context, projectID, contentDigest string) (model.MemoryRecordV2, error) {
 	var (
-		rec                                          model.MemoryRecordV2
-		kind, lifecycle, confidence, authority       string
-		sourceJSON, evidenceIDs, extMetaJSON         string
-		supersededBy, supersedes, conflictIDs        string
-		observedAt, ingestedAt, validFrom            string
-		createdAt, updatedAt                         string
-		validTo, lastVerifiedAt                      sql.NullString
+		rec                                    model.MemoryRecordV2
+		kind, lifecycle, confidence, authority string
+		sourceJSON, evidenceIDs, extMetaJSON   string
+		supersededBy, supersedes, conflictIDs  string
+		observedAt, ingestedAt, validFrom      string
+		createdAt, updatedAt                   string
+		validTo, lastVerifiedAt                sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
@@ -397,13 +397,13 @@ func (s *Store) ListMemoryV2(ctx context.Context, filter MemoryQueryFilter) ([]m
 	var records []model.MemoryRecordV2
 	for rows.Next() {
 		var (
-			rec                                          model.MemoryRecordV2
-			kind, lifecycle, confidence, authority       string
-			sourceJSON, evidenceIDs, extMetaJSON         string
-			supersededBy, supersedes, conflictIDs        string
-			observedAt, ingestedAt, validFrom            string
-			createdAt, updatedAt                         string
-			validTo, lastVerifiedAt                      sql.NullString
+			rec                                    model.MemoryRecordV2
+			kind, lifecycle, confidence, authority string
+			sourceJSON, evidenceIDs, extMetaJSON   string
+			supersededBy, supersedes, conflictIDs  string
+			observedAt, ingestedAt, validFrom      string
+			createdAt, updatedAt                   string
+			validTo, lastVerifiedAt                sql.NullString
 		)
 		err := rows.Scan(
 			&rec.ID, &rec.ProjectID, &kind, &lifecycle, &confidence, &authority,
@@ -505,13 +505,13 @@ func (s *Store) UpdateMemory(ctx context.Context, projectID, memoryID string, ex
 
 	// 1. Fetch existing record with row-level lock/transaction
 	var (
-		rec                                          model.MemoryRecordV2
-		kind, lifecycle, confidence, authority       string
-		sourceJSON, evidenceIDs, extMetaJSON         string
-		supersededBy, supersedes, conflictIDs        string
-		observedAt, ingestedAt, validFrom            string
-		createdAt, updatedAt                         string
-		validTo, lastVerifiedAt                      sql.NullString
+		rec                                    model.MemoryRecordV2
+		kind, lifecycle, confidence, authority string
+		sourceJSON, evidenceIDs, extMetaJSON   string
+		supersededBy, supersedes, conflictIDs  string
+		observedAt, ingestedAt, validFrom      string
+		createdAt, updatedAt                   string
+		validTo, lastVerifiedAt                sql.NullString
 	)
 	err = tx.QueryRowContext(ctx, `
 		SELECT
@@ -727,4 +727,3 @@ func (s *Store) TombstoneMemory(ctx context.Context, projectID, memoryID string,
 		return nil
 	})
 }
-

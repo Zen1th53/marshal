@@ -15,10 +15,10 @@ func TestT143AdaptiveMemoryController(t *testing.T) {
 
 	// 1. Clean, trivial early task -> ActionNoOp
 	act1 := ctrl.DecideAction(ctx, adaptive.TaskState{
-		TaskID:         "TASK-CLEAN",
-		StepIndex:      0,
-		FailureCount:   0,
-		HasKnownSkill:  false,
+		TaskID:          "TASK-CLEAN",
+		StepIndex:       0,
+		FailureCount:    0,
+		HasKnownSkill:   false,
 		BudgetRemaining: 4096,
 	})
 	if act1.Type != adaptive.ActionNoOp {
@@ -27,10 +27,10 @@ func TestT143AdaptiveMemoryController(t *testing.T) {
 
 	// 2. Repeated goal with established skill -> ActionInjectProcedure
 	act2 := ctrl.DecideAction(ctx, adaptive.TaskState{
-		TaskID:         "TASK-SKILL-RUN",
-		StepIndex:      1,
-		FailureCount:   0,
-		HasKnownSkill:  true,
+		TaskID:          "TASK-SKILL-RUN",
+		StepIndex:       1,
+		FailureCount:    0,
+		HasKnownSkill:   true,
 		BudgetRemaining: 3000,
 	})
 	if act2.Type != adaptive.ActionInjectProcedure {
@@ -39,9 +39,9 @@ func TestT143AdaptiveMemoryController(t *testing.T) {
 
 	// 3. Stuck / failing task -> ActionReQuery
 	act3 := ctrl.DecideAction(ctx, adaptive.TaskState{
-		TaskID:         "TASK-STUCK",
-		StepIndex:      4,
-		FailureCount:   2,
+		TaskID:          "TASK-STUCK",
+		StepIndex:       4,
+		FailureCount:    2,
 		BudgetRemaining: 2000,
 	})
 	if act3.Type != adaptive.ActionReQuery {

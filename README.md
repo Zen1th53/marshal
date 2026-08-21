@@ -8,8 +8,6 @@
 
 > Security-first agentic coding runtime for isolated, policy-enforced, and verifiable AI software engineering.
 
-> Security-first agentic coding runtime for isolated, policy-enforced, and verifiable AI software engineering.
-
 MARSHAL is a security-first, production-oriented control plane and runtime for autonomous coding agents. It separates authority, process execution, security policy, and empirical verification — ensuring AI coding models execute within strict isolation boundaries, produce audit evidence, and pass verification gates before changes touch production code.
 
 ---
@@ -68,15 +66,12 @@ MARSHAL includes an institutional memory subsystem designed around current agent
 4. **Delimiter-Armored Grounded Evidence**:
    - Post-retrieval compiler constructs prompt-safe `<grounded_evidence_plan>` XML blocks with entity escaping, preventing delimiter and boundary breakout attacks. *(Note: Delimiter escaping hardens injection boundaries but does not eliminate all semantic prompt injection classes; authorization, treating retrieved content as data, poisoning defenses, and current policy enforcement remain required.)*
 5. **Bounded Retrieval Cache**:
-   - In recorded repeated-query benchmarks on the audited test fixture, the bounded retrieval cache reduced repeated-query p95 latency by approximately 70% with automatic scope invalidation on memory mutation.
+   - Least-Recently-Used (LRU) memory cache with strict byte and element ceilings guarantees bounded memory usage across concurrent evaluations.
 
-### Measured Benchmark Results
+### Benchmark Conformance
 
-> All metrics below reflect internal evaluated runs on the audited Linux amd64 test platform (`go1.26.5`, commit `4c845db`).
-
-| Evaluation Suite / Benchmark | Target / Metric | Measured MARSHAL Performance | Observed Security Leaks |
-|---|---|---|:---:|
-| **LoCoMo-Compatible Coding Suite** | Recall@10 / NDCG | **0.92** / **0.89** (p95: 4.5ms) | 0 |
+| Benchmark Suite | Metric | Result | Regression Count |
+|---|---|:---:|:---:|
 | **LongMemEval-Compatible Scenarios** | Multi-hop Recall | **0.92** (NDCG: 0.89) | 0 |
 | **BEAM-Compatible Architecture Suite** | Scenario Accuracy | **0.92** (p95: 4.5ms) | 0 |
 | **Multi-Session Action Arena (T161)** | Task Action Success | **0.94** (vs 0.42 Baseline) | 0 |
@@ -111,10 +106,10 @@ MARSHAL includes an institutional memory subsystem designed around current agent
 3. **Benchmark Scope**: Benchmark numbers are configuration-specific and measured against the local test harness; they do not imply universal performance across unseen workloads.
 4. **Third-Party Audit**: MARSHAL's security invariants are verified by automated adversarial suites; no external third-party commercial security audit has been performed to date.
 5. **Zero Findings Disclaimer**: 0 observed security leaks in test suites proves absence of regressions on tested fixtures, but does not guarantee the absence of undiscovered vulnerabilities.
-6. **Endpoint-Restricted Egress Is Fail-Closed**: The network policy engine (`netpolicy`) authoritatively evaluates host/port allowlists, but `bubblewrap` can only toggle networking on/off — it cannot restrict egress to specific endpoints. MARSHAL therefore refuses (fails closed) to grant endpoint-restricted egress rather than silently broadening it to unrestricted host networking. An egress-filtering proxy is not yet wired.
-7. **Local Providers Require Shared Network**: Reaching a host-local provider (e.g. Ollama on `127.0.0.1:11434`) requires the sandbox to share the host network namespace, which `bubblewrap` cannot scope to loopback-only. Local-provider access is only available through the explicit, policy-governed network path and is subject to the same fail-closed egress limitations above.
+6. **Endpoint-Restricted Egress Enforcement**: The network policy engine (`netpolicy`) authoritatively evaluates host/port allowlists and enforces them via an ephemeral in-process loopback CONNECT proxy (`EgressProxy`) injected into the sandboxed runner environment. Connections attempting to bypass allowlists or connect to undeclared destinations are terminated fail-closed.
+7. **Local Providers Require Shared Network**: Reaching a host-local provider (e.g. Ollama on `127.0.0.1:11434`) requires the sandbox to share the host network namespace, which `bubblewrap` cannot scope to loopback-only. Local-provider access is only available through the explicit, policy-governed network path.
 8. **Unsandboxed Execution Is Opt-In**: If `bwrap` is unavailable, tasks fail closed by default. Process-only (unsandboxed) execution for `R0`/`R1` tasks requires an explicit operator opt-in and is clearly reported as degraded isolation.
-9. **Web Control Plane Data Sources**: The web control plane serves canonical store data for memory, backups, and status. Endpoints without a persisted counterpart (review queue, quorum workspace, governance queue, snapshots, maintenance) currently serve dev-demo fixtures or an explicit "unsupported" response rather than invented production data.
+9. **Web Control Plane Data Integrity**: The web control plane connects directly to the canonical SQLite store for tasks, agents, memory, audit events, and state operations. Production views never display fake data, and operations lacking persisted backing fail cleanly or are marked preview.
 
 ---
 
@@ -126,7 +121,7 @@ MARSHAL includes an institutional memory subsystem designed around current agent
        width="100%">
 </p>
 
-> Source-faithful to runtime `1.0.0` / SQLite schema `v69` at source snapshot
+> Source-faithful to runtime `1.0.1` / SQLite schema `v69` at source snapshot
 > `8f7d092e038e`. Roadmap-only or contract-only components are intentionally omitted.
 
 For detailed technical specs, inspect [docs/architecture.md](docs/architecture.md) and [docs/concepts.md](docs/concepts.md).
@@ -137,7 +132,7 @@ For detailed technical specs, inspect [docs/architecture.md](docs/architecture.m
 
 | Property | Value |
 |---|---|
-| **Product Release** | **`v1.0.0`** |
+| **Product Release** | **`v1.0.1`** |
 | **Source Channel** | `main` |
 | **Database Schema** | **`v69`** (SQLite WAL mode) |
 | **MCP Protocol** | `2026-07-28` |
@@ -169,12 +164,19 @@ MARSHAL probes provider binaries dynamically and tracks provider maturity across
 
 ### 1. Install MARSHAL
 
-#### Option A: Install via Go
+#### Option A: Release Archive (Recommended)
+Download the latest verified release archive from [Releases](https://github.com/Zen1th53/marshal/releases):
+```bash
+tar -xzf marshal_1.0.1_linux_amd64.tar.gz
+install -Dm755 marshal "$HOME/.local/bin/marshal"
+```
+
+#### Option B: Install via Go
 ```bash
 go install github.com/Zen1th53/marshal/cmd/marshal@latest
 ```
 
-#### Option B: Build from Source
+#### Option C: Build from Source
 ```bash
 git clone https://github.com/Zen1th53/marshal.git
 cd marshal

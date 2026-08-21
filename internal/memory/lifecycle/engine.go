@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ErrInvalidTransition    = errors.New("invalid memory lifecycle transition")
+	ErrInvalidTransition     = errors.New("invalid memory lifecycle transition")
 	ErrInsufficientAuthority = errors.New("insufficient authority for memory promotion")
 	ErrTerminalLifecycle     = errors.New("record is in a terminal lifecycle state and cannot be reactivated")
 )

@@ -23,23 +23,23 @@ type MemoryLineageDTO struct {
 }
 
 type MemoryDetailDTO struct {
-	ID             string              `json:"id"`
-	ProjectID      string              `json:"project_id"`
-	Scope          string              `json:"scope"`
-	ScopeID        string              `json:"scope_id"`
-	Kind           string              `json:"kind"`
-	Title          string              `json:"title"`
-	Body           string              `json:"body"`
-	Lifecycle      string              `json:"lifecycle"`
-	Authority      string              `json:"authority"`
-	Confidence     float64             `json:"confidence"`
-	DigestSHA256   string              `json:"digest_sha256"`
-	Revision       int                 `json:"revision"`
-	IsEncrypted    bool                `json:"is_encrypted"`
-	ObservedAt     time.Time           `json:"observed_at"`
-	ExpiresAt      *time.Time          `json:"expires_at,omitempty"`
-	Provenance     MemoryProvenanceDTO `json:"provenance"`
-	Lineage        MemoryLineageDTO    `json:"lineage"`
+	ID           string              `json:"id"`
+	ProjectID    string              `json:"project_id"`
+	Scope        string              `json:"scope"`
+	ScopeID      string              `json:"scope_id"`
+	Kind         string              `json:"kind"`
+	Title        string              `json:"title"`
+	Body         string              `json:"body"`
+	Lifecycle    string              `json:"lifecycle"`
+	Authority    string              `json:"authority"`
+	Confidence   float64             `json:"confidence"`
+	DigestSHA256 string              `json:"digest_sha256"`
+	Revision     int                 `json:"revision"`
+	IsEncrypted  bool                `json:"is_encrypted"`
+	ObservedAt   time.Time           `json:"observed_at"`
+	ExpiresAt    *time.Time          `json:"expires_at,omitempty"`
+	Provenance   MemoryProvenanceDTO `json:"provenance"`
+	Lineage      MemoryLineageDTO    `json:"lineage"`
 }
 
 func (s *Server) handleGetMemoryDetail(w http.ResponseWriter, r *http.Request) {

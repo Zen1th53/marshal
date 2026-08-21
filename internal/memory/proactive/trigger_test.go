@@ -43,10 +43,10 @@ func TestT139ProactiveMemoryTriggeringAndNavigableRecall(t *testing.T) {
 	// 3. Navigable recall: Depth cap and scope isolation
 	nodesMap := map[string]model.MemoryRecordV2{
 		"MEM-1": {
-			ID:        "MEM-1",
-			ScopeID:   "scope-1",
-			Title:     "SQLite Busy Timeout",
-			Lifecycle: model.MemoryDurable,
+			ID:          "MEM-1",
+			ScopeID:     "scope-1",
+			Title:       "SQLite Busy Timeout",
+			Lifecycle:   model.MemoryDurable,
 			EvidenceIDs: []string{"EVID-1"},
 		},
 		"MEM-2": {

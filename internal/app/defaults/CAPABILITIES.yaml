@@ -1,0 +1,48 @@
+version: 1
+
+principle: "tool possession does not imply authority"
+
+default:
+  filesystem_read: allow
+  filesystem_write: task_scoped
+  shell_execute: task_scoped
+  network_read: task_scoped
+  network_write: deny_unless_required
+  git_read: allow
+  git_commit: task_scoped
+  git_history_rewrite: deny
+  dependency_add: architect_or_policy_review
+  secrets_read: deny_unless_explicit
+  secrets_write: deny_unless_explicit
+  production_read: deny_unless_explicit
+  production_write: deny
+  deploy: approval_required
+  destructive_operation: approval_required
+  external_upload: deny_unless_explicit
+
+roles:
+  orchestrator:
+    may: [coordinate_tasks, read_team_state, update_coordination_state, request_approval]
+    may_not: [falsify_role_verdicts, accept_security_risk_for_owner]
+  architect:
+    may: [write_designs, write_architecture_decisions, define_interfaces]
+    may_not: [declare_qa_pass, accept_security_risk_for_owner]
+  developer:
+    may: [modify_task_scoped_code, create_task_scoped_tests, create_task_scoped_commits]
+    may_not: [close_qa_findings, close_appsec_findings, deploy_without_approval]
+  qa:
+    may: [create_qa_findings, issue_qa_verdict, create_verification_artifacts]
+    may_not: [redefine_requirements, silently_modify_implementation_to_make_tests_pass]
+  appsec:
+    may: [create_security_findings, issue_security_gate, challenge_design]
+    may_not: [accept_organizational_risk, redefine_product_scope_silently]
+
+dangerous_operations:
+  - production_deploy
+  - production_data_delete
+  - destructive_migration
+  - force_push_shared_history
+  - rotate_or_revoke_credentials
+  - expose_admin_or_internal_service_publicly
+  - break_public_contract
+  - accept_blocking_security_risk

@@ -26,10 +26,10 @@ type UpdateTaskPayload struct {
 }
 
 type TaskMutationStore struct {
-	mu           sync.Mutex
-	idempotent   map[string]string // key -> created task ID
-	taskRevs     map[string]int    // task ID -> revision
-	taskGraph    map[string][]string // task ID -> dependencies
+	mu         sync.Mutex
+	idempotent map[string]string   // key -> created task ID
+	taskRevs   map[string]int      // task ID -> revision
+	taskGraph  map[string][]string // task ID -> dependencies
 }
 
 var globalTaskMutationStore = &TaskMutationStore{
@@ -67,10 +67,10 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 	if env.IdempotencyKey != "" {
 		if existingID, ok := globalTaskMutationStore.idempotent[env.IdempotencyKey]; ok {
 			writeJSON(w, http.StatusOK, map[string]any{
-				"id":          existingID,
-				"status":      "ready",
-				"idempotent":  true,
-				"message":     "Task returned from idempotency cache",
+				"id":         existingID,
+				"status":     "ready",
+				"idempotent": true,
+				"message":    "Task returned from idempotency cache",
 			})
 			return
 		}

@@ -20,13 +20,13 @@ func TestT111RerankingDiversityAndSecurity(t *testing.T) {
 	// 1. Cluster of near-duplicate records (same title/provenance cluster)
 	candidates := []fusion.FusedResult{
 		{MemoryID: "MEM-DUP-1", RankScore: 0.95},
-		{MemoryID: "MEM-DUP-2", RankScore: 0.93}, // Near duplicate of MEM-DUP-1
+		{MemoryID: "MEM-DUP-2", RankScore: 0.93},  // Near duplicate of MEM-DUP-1
 		{MemoryID: "MEM-DIFF-3", RankScore: 0.80}, // Distinct informative record
 	}
 
 	records := map[string]model.MemoryRecordV2{
-		"MEM-DUP-1": {ID: "MEM-DUP-1", Title: "Fix DB lock timeout", Body: "Set busy_timeout=5000 in config.go"},
-		"MEM-DUP-2": {ID: "MEM-DUP-2", Title: "Fix DB lock timeout", Body: "Set busy_timeout=5000 in config.go (duplicate note)"},
+		"MEM-DUP-1":  {ID: "MEM-DUP-1", Title: "Fix DB lock timeout", Body: "Set busy_timeout=5000 in config.go"},
+		"MEM-DUP-2":  {ID: "MEM-DUP-2", Title: "Fix DB lock timeout", Body: "Set busy_timeout=5000 in config.go (duplicate note)"},
 		"MEM-DIFF-3": {ID: "MEM-DIFF-3", Title: "Implement RLS in postgres", Body: "Row level security for tenant isolation"},
 	}
 

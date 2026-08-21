@@ -80,20 +80,20 @@ func TestT78MemoryRecordV2Validate(t *testing.T) {
 	now := time.Now().UTC()
 
 	good := model.MemoryRecordV2{
-		ID:          "MEM-001",
-		ProjectID:   "PROJ-1",
-		Kind:        model.MemoryKindDecision,
-		Lifecycle:   model.MemoryDurable,
-		Authority:   model.AuthorityVerified,
-		Title:       "Use SQLite for single-host canonical store",
-		Body:        "Decision: canonical store is SQLite for MARSHAL 1.0",
-		Scope:       "project",
-		ScopeID:     "PROJ-1",
-		ObservedAt:  now.Add(-time.Hour),
-		IngestedAt:  now.Add(-time.Minute),
-		ValidFrom:   now.Add(-time.Hour),
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:         "MEM-001",
+		ProjectID:  "PROJ-1",
+		Kind:       model.MemoryKindDecision,
+		Lifecycle:  model.MemoryDurable,
+		Authority:  model.AuthorityVerified,
+		Title:      "Use SQLite for single-host canonical store",
+		Body:       "Decision: canonical store is SQLite for MARSHAL 1.0",
+		Scope:      "project",
+		ScopeID:    "PROJ-1",
+		ObservedAt: now.Add(-time.Hour),
+		IngestedAt: now.Add(-time.Minute),
+		ValidFrom:  now.Add(-time.Hour),
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	if err := good.Validate(); err != nil {
 		t.Errorf("expected valid record, got: %v", err)

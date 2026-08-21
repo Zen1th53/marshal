@@ -14,11 +14,11 @@ func TestT158ShadowEvaluationAndCanaryRollout(t *testing.T) {
 
 	// 1. Candidate config improves speed/metric but causes a security scope leak -> MUST BE REJECTED
 	leakyCandidate := evolution.CandidateConfig{
-		ConfigID:      "CFG-LEAKY-01",
-		LexicalWeight: 0.8,
-		VectorWeight:  0.2,
+		ConfigID:                "CFG-LEAKY-01",
+		LexicalWeight:           0.8,
+		VectorWeight:            0.2,
 		ScopeViolationsDetected: 1, // Leaked cross-tenant memory in shadow eval
-		RecallScore:   0.98,
+		RecallScore:             0.98,
 	}
 
 	report, err := evaluator.EvaluateCandidate(ctx, leakyCandidate, 0.90)

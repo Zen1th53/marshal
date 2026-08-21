@@ -11,9 +11,9 @@ import (
 type MemorySearchResultItemDTO struct {
 	ID              string    `json:"id"`
 	ProjectID       string    `json:"project_id"`
-	Scope           string    `json:"scope"`    // "global", "project", "task", "session"
+	Scope           string    `json:"scope"` // "global", "project", "task", "session"
 	ScopeID         string    `json:"scope_id"`
-	Kind            string    `json:"kind"`     // "belief", "decision", "procedure", "episode"
+	Kind            string    `json:"kind"` // "belief", "decision", "procedure", "episode"
 	Title           string    `json:"title"`
 	Body            string    `json:"body"`
 	Lifecycle       string    `json:"lifecycle"` // "candidate", "active", "consolidated", "evicted", "superseded"

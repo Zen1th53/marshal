@@ -22,18 +22,18 @@ type EvidenceItemDTO struct {
 }
 
 type EvidenceDetailDTO struct {
-	ID              string         `json:"id"`
-	TaskID          string         `json:"task_id"`
-	RunID           string         `json:"run_id"`
-	Type            string         `json:"type"`
-	Producer        string         `json:"producer"`
-	Digest          string         `json:"digest"`
-	CalculatedDigest string        `json:"calculated_digest"`
-	IntegrityStatus string         `json:"integrity_status"`
-	ArtifactID      string         `json:"artifact_id,omitempty"`
-	Signature       string         `json:"signature"`
-	Payload         map[string]any `json:"payload"`
-	CreatedAt       time.Time      `json:"created_at"`
+	ID               string         `json:"id"`
+	TaskID           string         `json:"task_id"`
+	RunID            string         `json:"run_id"`
+	Type             string         `json:"type"`
+	Producer         string         `json:"producer"`
+	Digest           string         `json:"digest"`
+	CalculatedDigest string         `json:"calculated_digest"`
+	IntegrityStatus  string         `json:"integrity_status"`
+	ArtifactID       string         `json:"artifact_id,omitempty"`
+	Signature        string         `json:"signature"`
+	Payload          map[string]any `json:"payload"`
+	CreatedAt        time.Time      `json:"created_at"`
 }
 
 type EvidenceListResponseDTO struct {

@@ -13,9 +13,9 @@ import (
 )
 
 var (
-	ErrBlockNotFound   = errors.New("core memory block not found")
-	ErrBlockTooLarge   = errors.New("core memory block exceeds size limit")
-	ErrInvalidBlockID  = errors.New("invalid block ID")
+	ErrBlockNotFound  = errors.New("core memory block not found")
+	ErrBlockTooLarge  = errors.New("core memory block exceeds size limit")
+	ErrInvalidBlockID = errors.New("invalid block ID")
 )
 
 type Config struct {

@@ -27,15 +27,15 @@ import (
 )
 
 type UltimateConformanceReport struct {
-	Subsystem                string    `json:"subsystem"`
-	Timestamp                time.Time `json:"timestamp"`
-	AllPhasesComplete        bool      `json:"all_phases_complete"`
-	TaskRange                string    `json:"task_range"`
-	DerivedIndexRebuildParity bool     `json:"derived_index_rebuild_parity"`
-	ZeroSecurityLeaks        bool      `json:"zero_security_leaks"`
-	DeterministicAuthority   bool      `json:"deterministic_authority"`
-	MultiSessionActionScore  float64   `json:"multi_session_action_score"`
-	GovernanceSafetyScore    float64   `json:"governance_safety_score"`
+	Subsystem                 string    `json:"subsystem"`
+	Timestamp                 time.Time `json:"timestamp"`
+	AllPhasesComplete         bool      `json:"all_phases_complete"`
+	TaskRange                 string    `json:"task_range"`
+	DerivedIndexRebuildParity bool      `json:"derived_index_rebuild_parity"`
+	ZeroSecurityLeaks         bool      `json:"zero_security_leaks"`
+	DeterministicAuthority    bool      `json:"deterministic_authority"`
+	MultiSessionActionScore   float64   `json:"multi_session_action_score"`
+	GovernanceSafetyScore     float64   `json:"governance_safety_score"`
 }
 
 func TestT162UltimateMemoryConformanceGate(t *testing.T) {
@@ -209,15 +209,15 @@ func TestT162UltimateMemoryConformanceGate(t *testing.T) {
 
 	// Generate ultimate conformance JSON artifact with deterministic timestamp
 	finalReport := UltimateConformanceReport{
-		Subsystem:                "MARSHAL-MEMORY-SYSTEM",
-		Timestamp:                time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC),
-		AllPhasesComplete:        true,
-		TaskRange:                "T77-T162",
+		Subsystem:                 "MARSHAL-MEMORY-SYSTEM",
+		Timestamp:                 time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC),
+		AllPhasesComplete:         true,
+		TaskRange:                 "T77-T162",
 		DerivedIndexRebuildParity: true,
-		ZeroSecurityLeaks:        true,
-		DeterministicAuthority:   true,
-		MultiSessionActionScore:  proRep.ActionSuccessRate,
-		GovernanceSafetyScore:    govRep.FAMAForgettingScore,
+		ZeroSecurityLeaks:         true,
+		DeterministicAuthority:    true,
+		MultiSessionActionScore:   proRep.ActionSuccessRate,
+		GovernanceSafetyScore:     govRep.FAMAForgettingScore,
 	}
 
 	data, err := json.MarshalIndent(finalReport, "", "  ")

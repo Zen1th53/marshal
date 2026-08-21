@@ -13,14 +13,14 @@ func TestT166WebControlContractsSerialization(t *testing.T) {
 	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
 
 	taskDTO := webcontrol.TaskSummaryDTO{
-		ID:          "TASK-001",
-		Title:       "Implement User Auth",
-		Status:      webcontrol.TaskStatusReady,
-		Risk:        "R1",
-		BaseCommit:  "a1b2c3d",
-		HeadCommit:  "e5f6a7b",
-		UpdatedAt:   now,
-		CreatedAt:   now,
+		ID:         "TASK-001",
+		Title:      "Implement User Auth",
+		Status:     webcontrol.TaskStatusReady,
+		Risk:       "R1",
+		BaseCommit: "a1b2c3d",
+		HeadCommit: "e5f6a7b",
+		UpdatedAt:  now,
+		CreatedAt:  now,
 	}
 
 	data, err := json.Marshal(taskDTO)

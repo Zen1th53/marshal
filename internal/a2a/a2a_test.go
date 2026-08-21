@@ -2,8 +2,6 @@ package a2a
 
 import (
 	"bytes"
-	"strings"
-	"time"
 	"context"
 	"encoding/json"
 	"io"
@@ -11,14 +9,16 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/httpsrv"
-	"github.com/Zen1th53/marshal/internal/ratelimit"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/protocol"
+	"github.com/Zen1th53/marshal/internal/ratelimit"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 

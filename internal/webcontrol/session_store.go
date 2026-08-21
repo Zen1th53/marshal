@@ -17,10 +17,10 @@ var (
 )
 
 const (
-	SessionCookieName = "marshal_session"
-	DefaultIdleTTL    = 30 * time.Minute
+	SessionCookieName  = "marshal_session"
+	DefaultIdleTTL     = 30 * time.Minute
 	DefaultAbsoluteTTL = 24 * time.Hour
-	OneTimeCodeTTL    = 5 * time.Minute
+	OneTimeCodeTTL     = 5 * time.Minute
 )
 
 type OneTimeCode struct {
@@ -42,11 +42,11 @@ type Session struct {
 }
 
 type SessionStore struct {
-	mu           sync.RWMutex
-	otcMap       map[string]*OneTimeCode
-	sessions     map[string]*Session
-	idleTTL      time.Duration
-	absoluteTTL  time.Duration
+	mu          sync.RWMutex
+	otcMap      map[string]*OneTimeCode
+	sessions    map[string]*Session
+	idleTTL     time.Duration
+	absoluteTTL time.Duration
 }
 
 func NewSessionStore() *SessionStore {

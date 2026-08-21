@@ -10,11 +10,11 @@ import (
 type ExperienceKind string
 
 const (
-	ExpStaticObservation  ExperienceKind = "STATIC_OBSERVATION"
-	ExpDynamicEvent        ExperienceKind = "DYNAMIC_EVENT"
-	ExpWorkflowNote        ExperienceKind = "WORKFLOW_NOTE"
-	ExpGotchaFailureMode   ExperienceKind = "GOTCHA_FAILURE_MODE"
-	ExpPremiseConstraint  ExperienceKind = "PREMISE_CONSTRAINT"
+	ExpStaticObservation ExperienceKind = "STATIC_OBSERVATION"
+	ExpDynamicEvent      ExperienceKind = "DYNAMIC_EVENT"
+	ExpWorkflowNote      ExperienceKind = "WORKFLOW_NOTE"
+	ExpGotchaFailureMode ExperienceKind = "GOTCHA_FAILURE_MODE"
+	ExpPremiseConstraint ExperienceKind = "PREMISE_CONSTRAINT"
 )
 
 type Signature struct {

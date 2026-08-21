@@ -1649,7 +1649,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	return nil
 }
 
-
 func (s *Store) InitProject(ctx context.Context, project model.Project) error {
 	if project.ID == "" || project.Repository == "" || project.DefaultBranch == "" || project.PackVersion == "" {
 		return fmt.Errorf("%w: incomplete project identity", model.ErrInvalid)
@@ -1667,8 +1666,16 @@ func (s *Store) InitProject(ctx context.Context, project model.Project) error {
 	`, project.ID).Scan(&repository, &branch, &pack)
 	switch {
 	case err == nil:
-		if repository != project.Repository || branch != project.DefaultBranch || pack != project.PackVersion {
+		if repository != project.Repository {
 			return fmt.Errorf("%w: project %s has different identity", model.ErrConflict, project.ID)
+		}
+		if branch != project.DefaultBranch || pack != project.PackVersion {
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE projects SET default_branch = ?, pack_version = ?
+				WHERE project_id = ?
+			`, project.DefaultBranch, project.PackVersion, project.ID); err != nil {
+				return fmt.Errorf("update project identity: %w", err)
+			}
 		}
 	case errors.Is(err, sql.ErrNoRows):
 		if _, err := tx.ExecContext(ctx, `

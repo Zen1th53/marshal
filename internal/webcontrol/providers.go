@@ -16,7 +16,7 @@ type ActiveModelDTO struct {
 type ProviderDTO struct {
 	ID           string           `json:"id"`
 	Name         string           `json:"name"`
-	Class        string           `json:"class"` // "cloud", "local"
+	Class        string           `json:"class"`        // "cloud", "local"
 	ProbeStatus  string           `json:"probe_status"` // "healthy", "degraded", "unavailable", "not_run"
 	Capabilities []string         `json:"capabilities"`
 	Models       []ActiveModelDTO `json:"models"`
@@ -32,9 +32,9 @@ type RouterDecisionDTO struct {
 }
 
 type ProviderInventoryResponseDTO struct {
-	Providers      []ProviderDTO       `json:"providers"`
+	Providers        []ProviderDTO       `json:"providers"`
 	RoutingDecisions []RouterDecisionDTO `json:"routing_decisions"`
-	LastEvaluatedAt time.Time           `json:"last_evaluated_at"`
+	LastEvaluatedAt  time.Time           `json:"last_evaluated_at"`
 }
 
 type RouterOverridePayload struct {
@@ -60,10 +60,10 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 
 	providers := []ProviderDTO{
 		{
-			ID:          "anthropic",
-			Name:        "Anthropic Claude",
-			Class:       "cloud",
-			ProbeStatus: "healthy",
+			ID:           "anthropic",
+			Name:         "Anthropic Claude",
+			Class:        "cloud",
+			ProbeStatus:  "healthy",
 			Capabilities: []string{"reasoning", "tool_use", "code_generation", "json_mode"},
 			Models: []ActiveModelDTO{
 				{ID: "claude-3-7-sonnet", ContextWindow: 200000, LatencyP95Ms: 850.0},
@@ -72,10 +72,10 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 			LastProbedAt: now.Add(-2 * time.Minute),
 		},
 		{
-			ID:          "google",
-			Name:        "Google Gemini",
-			Class:       "cloud",
-			ProbeStatus: "healthy",
+			ID:           "google",
+			Name:         "Google Gemini",
+			Class:        "cloud",
+			ProbeStatus:  "healthy",
 			Capabilities: []string{"multimodal", "1m_context", "code_generation", "tool_use"},
 			Models: []ActiveModelDTO{
 				{ID: "gemini-2.0-pro-exp", ContextWindow: 1000000, LatencyP95Ms: 620.0},
@@ -84,10 +84,10 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 			LastProbedAt: now.Add(-3 * time.Minute),
 		},
 		{
-			ID:          "openai",
-			Name:        "OpenAI Platform",
-			Class:       "cloud",
-			ProbeStatus: "healthy",
+			ID:           "openai",
+			Name:         "OpenAI Platform",
+			Class:        "cloud",
+			ProbeStatus:  "healthy",
 			Capabilities: []string{"code_generation", "structured_outputs", "tool_use"},
 			Models: []ActiveModelDTO{
 				{ID: "gpt-4o", ContextWindow: 128000, LatencyP95Ms: 540.0},
@@ -96,10 +96,10 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 			LastProbedAt: now.Add(-1 * time.Minute),
 		},
 		{
-			ID:          "ollama-local",
-			Name:        "Local Ollama Engine",
-			Class:       "local",
-			ProbeStatus: "healthy",
+			ID:           "ollama-local",
+			Name:         "Local Ollama Engine",
+			Class:        "local",
+			ProbeStatus:  "healthy",
 			Capabilities: []string{"offline_airgap", "code_generation"},
 			Models: []ActiveModelDTO{
 				{ID: "llama-3.3-70b", ContextWindow: 32768, LatencyP95Ms: 1400.0},

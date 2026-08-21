@@ -36,7 +36,7 @@ type UpdateSettingsPayload struct {
 }
 
 var (
-	settingsMu sync.RWMutex
+	settingsMu  sync.RWMutex
 	appSettings = SystemSettingsDTO{
 		Revision:                 1,
 		SystemMode:               "strict",

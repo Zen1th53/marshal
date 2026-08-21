@@ -37,10 +37,10 @@ type RunResultComprehensiveDTO struct {
 }
 
 var mockArtifactStore = map[string]struct {
-	name    string
-	data    []byte
-	mime    string
-	sha256  string
+	name   string
+	data   []byte
+	mime   string
+	sha256 string
 }{
 	"art-001": {
 		name:   "benchmark_results.json",

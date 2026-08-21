@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/adapter/claude"
@@ -166,6 +168,9 @@ func Bootstrap(ctx context.Context, root string) (project.Layout, error) {
 	if err != nil {
 		return project.Layout{}, err
 	}
+	if err := ensureProjectDefaults(layout.Root); err != nil {
+		return project.Layout{}, err
+	}
 	version, err := loadPackVersion(filepath.Join(layout.Root, "PACK-VERSION.yaml"))
 	if err != nil {
 		return project.Layout{}, err
@@ -263,7 +268,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 			Metrics:    options.Metrics,
 			Now:        time.Now,
 		})
-		
+
 		if err == nil {
 			rt.secretBroker = secEngine
 		}
@@ -707,7 +712,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		}
 		for _, keyName := range candidateEnvKeys {
 			val := os.Getenv(keyName)
-			
+
 			if val != "" {
 				if r.capabilityBroker != nil {
 					grantKey, _ := model.NewID("grant-key-")
@@ -721,10 +726,10 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 						Issuer:         "runtime",
 						IdempotencyKey: grantKey,
 					})
-					
+
 				}
 				leaseID, err := model.NewID("lease-")
-				
+
 				if err == nil {
 					lease, err := r.secretBroker.Lease(ctx, secrets.LeaseRequest{
 						ID:        leaseID,
@@ -735,17 +740,17 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 						TaskID:    task.ID,
 						Purpose:   "provider_execution",
 					})
-					
+
 					if err == nil {
 						activeLeaseIDs = append(activeLeaseIDs, lease.ID)
 						_ = r.secretBroker.WithSecret(ctx, lease, func(secBytes []byte) error {
-							
+
 							if len(secBytes) > 0 {
 								leasedSecrets = append(leasedSecrets, string(secBytes))
 							}
 							return nil
 						})
-						
+
 					}
 				}
 			}
@@ -772,12 +777,11 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		HeartbeatInterval: 5 * time.Second,
 	})
 
-	
 	if len(leasedSecrets) > 0 {
 		result.Stdout = auth.RedactSecrets(result.Stdout, leasedSecrets)
 		result.Stderr = auth.RedactSecrets(result.Stderr, leasedSecrets)
 	}
-	
+
 	state, inspectErr := worktreeManager.Inspect(context.Background(), worktreeState.Path)
 	if runErr == nil && inspectErr == nil && result.Status == adapter.StatusSuccess && result.ExitCode == 0 {
 		if state.Dirty {
@@ -810,20 +814,11 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	stdout, stdoutErr := r.sanitizeProviderOutput(ctx, result.Stdout)
 	stderr, stderrErr := r.sanitizeProviderOutput(ctx, result.Stderr)
 	var stdoutArtifact, stderrArtifact model.Artifact
-	if stdoutErr == nil {
-		stdoutArtifact, stdoutErr = artifacts.Put(ctx, model.ArtifactInput{
-			ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
-			TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(stdout),
-		})
-	}
-	if stderrErr == nil && bytes.Equal(stdout, stderr) {
-		stderrArtifact = stdoutArtifact
+	if stdoutErr == nil && stderrErr == nil {
+		stdoutArtifact, stderrArtifact, stdoutErr = persistProviderArtifacts(
+			ctx, artifacts, localProjectID, task.ID, claim.Session.ID, resultCommit, stdout, stderr,
+		)
 		stderrErr = stdoutErr
-	} else if stderrErr == nil {
-		stderrArtifact, stderrErr = artifacts.Put(ctx, model.ArtifactInput{
-			ProjectID: localProjectID, Kind: "report", SourceCommit: resultCommit,
-			TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(stderr),
-		})
 	}
 	if ctx.Err() == nil {
 		if evidenceErr := r.recordRunEvidence(ctx, runID, task.ID, request.Adapter, probe.Version, baseCommit, resultCommit, result); evidenceErr != nil {
@@ -946,7 +941,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			return nil, "", chooseErr
 		}
 		if chosen.Level == model.IsolationBwrap {
-			readOnlyBinds := []model.Bind{{Source: binary, Target: binary}}
+			readOnlyBinds := adapterExecutableBinds(binary)
 			gitMetadata := filepath.Join(r.layout.Root, ".git")
 			if info, statErr := os.Stat(gitMetadata); statErr == nil && info.IsDir() {
 				readOnlyBinds = append(readOnlyBinds, model.Bind{Source: gitMetadata, Target: gitMetadata})
@@ -1056,6 +1051,9 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 		}
 		shellExecGrant = grant.ID
 	}
+	if modelName != "" && !validModelOverride(modelName) {
+		return nil, "", fmt.Errorf("%w: invalid model override %q", model.ErrInvalid, modelName)
+	}
 	switch name {
 	case "codex":
 		return codex.New(binary, runner), shellExecGrant, nil
@@ -1068,6 +1066,77 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	default:
 		return nil, "", fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
 	}
+}
+
+func adapterExecutableBinds(binary string) []model.Bind {
+	binds := []model.Bind{{Source: binary, Target: binary}}
+	if filepath.Base(binary) != "codex" {
+		return binds
+	}
+	hostTarget := filepath.Join(filepath.Dir(binary), "codex-code-mode-host")
+	hostSource, err := filepath.EvalSymlinks(hostTarget)
+	if err != nil {
+		return binds
+	}
+	info, err := os.Stat(hostSource)
+	if err != nil || !info.Mode().IsRegular() {
+		return binds
+	}
+	return append(binds, model.Bind{Source: hostSource, Target: hostTarget})
+}
+
+func validModelOverride(value string) bool {
+	if len(value) > 256 || !utf8.ValidString(value) {
+		return false
+	}
+	for _, character := range value {
+		if unicode.IsControl(character) {
+			return false
+		}
+	}
+	return true
+}
+
+type providerArtifactWriter interface {
+	Put(context.Context, model.ArtifactInput) (model.Artifact, error)
+}
+
+func persistProviderArtifacts(
+	ctx context.Context,
+	writer providerArtifactWriter,
+	projectID string,
+	taskID string,
+	sessionID string,
+	sourceCommit string,
+	stdout []byte,
+	stderr []byte,
+) (model.Artifact, model.Artifact, error) {
+	put := func(data []byte) (model.Artifact, error) {
+		return writer.Put(ctx, model.ArtifactInput{
+			ProjectID: projectID, Kind: "report", SourceCommit: sourceCommit,
+			TaskIDs: []string{taskID}, ProducerSession: sessionID, Data: bytes.NewReader(data),
+		})
+	}
+
+	var stdoutArtifact model.Artifact
+	var err error
+	if len(stdout) > 0 {
+		stdoutArtifact, err = put(stdout)
+		if err != nil {
+			return model.Artifact{}, model.Artifact{}, err
+		}
+	}
+	if len(stderr) == 0 {
+		return stdoutArtifact, model.Artifact{}, nil
+	}
+	if len(stdout) > 0 && bytes.Equal(stdout, stderr) {
+		return stdoutArtifact, stdoutArtifact, nil
+	}
+	stderrArtifact, err := put(stderr)
+	if err != nil {
+		return model.Artifact{}, model.Artifact{}, err
+	}
+	return stdoutArtifact, stderrArtifact, nil
 }
 
 func loadPackVersion(path string) (string, error) {
@@ -1087,9 +1156,8 @@ func loadPackVersion(path string) (string, error) {
 	return doc.PackVersion, nil
 }
 
-
 func (r *Runtime) CapabilityBroker() capability.Broker { return r.capabilityBroker }
-func (r *Runtime) SecretBroker() secrets.Broker       { return r.secretBroker }
+func (r *Runtime) SecretBroker() secrets.Broker        { return r.secretBroker }
 func (r *Runtime) CellManager() *cell.Manager          { return r.cellManager }
 func (r *Runtime) GateEngine() *gate.Engine            { return r.gateEngine }
 func (r *Runtime) RiskEngine() *risk.Engine            { return r.riskEngine }

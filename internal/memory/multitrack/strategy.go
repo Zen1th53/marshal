@@ -15,10 +15,10 @@ const (
 )
 
 type TrackAllocation struct {
-	PrimaryTrack MemoryTrack          `json:"primary_track"`
-	TrackBudgets map[MemoryTrack]int  `json:"track_budgets"`
-	TrackTopK    map[MemoryTrack]int  `json:"track_top_k"`
-	Reason       string               `json:"reason"`
+	PrimaryTrack MemoryTrack         `json:"primary_track"`
+	TrackBudgets map[MemoryTrack]int `json:"track_budgets"`
+	TrackTopK    map[MemoryTrack]int `json:"track_top_k"`
+	Reason       string              `json:"reason"`
 }
 
 type Router struct{}
