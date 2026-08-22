@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	ErrCASConflict      = errors.New("working memory CAS revision conflict")
-	ErrSlotNotFound     = errors.New("working memory slot not found")
-	ErrCeilingExceeded  = errors.New("working memory byte ceiling exceeded")
+	ErrCASConflict     = errors.New("working memory CAS revision conflict")
+	ErrSlotNotFound    = errors.New("working memory slot not found")
+	ErrCeilingExceeded = errors.New("working memory byte ceiling exceeded")
 )
 
 type SlotType string

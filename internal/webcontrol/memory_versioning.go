@@ -21,11 +21,11 @@ type MemorySnapshotDTO struct {
 }
 
 type MemoryDiffEntryDTO struct {
-	MemoryID  string `json:"memory_id"`
+	MemoryID   string `json:"memory_id"`
 	ChangeType string `json:"change_type"` // "added", "modified", "removed", "conflicted"
-	OldTitle  string `json:"old_title,omitempty"`
-	NewTitle  string `json:"new_title,omitempty"`
-	Details   string `json:"details"`
+	OldTitle   string `json:"old_title,omitempty"`
+	NewTitle   string `json:"new_title,omitempty"`
+	Details    string `json:"details"`
 }
 
 type MemoryDiffResponseDTO struct {
@@ -46,7 +46,7 @@ type RollbackSnapshotPayload struct {
 }
 
 var (
-	versioningMu sync.RWMutex
+	versioningMu  sync.RWMutex
 	mockSnapshots = []MemorySnapshotDTO{
 		{
 			SnapshotID:           "SNAP-001-INIT",

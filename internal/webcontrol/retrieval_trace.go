@@ -12,7 +12,7 @@ type RetrievalCandidateDTO struct {
 	Kind             string  `json:"kind"`
 	Scope            string  `json:"scope"`
 	LexicalRank      int     `json:"lexical_rank"`
-	LexicalScore     float64 `json:"lexical_score"`     // BM25 match score
+	LexicalScore     float64 `json:"lexical_score"` // BM25 match score
 	DenseRank        int     `json:"dense_rank"`
 	DenseScore       float64 `json:"dense_score"`       // Vector similarity
 	GraphBonus       float64 `json:"graph_bonus"`       // Knowledge graph proximity
@@ -24,7 +24,7 @@ type RetrievalCandidateDTO struct {
 type RetrievalExplainResponseDTO struct {
 	Query           string                  `json:"query"`
 	EmbedderModel   string                  `json:"embedder_model"`
-	EmbedderStatus  string                  `json:"embedder_status"` // "ready", "degraded"
+	EmbedderStatus  string                  `json:"embedder_status"`  // "ready", "degraded"
 	FusionAlgorithm string                  `json:"fusion_algorithm"` // "RRF-k60"
 	Candidates      []RetrievalCandidateDTO `json:"candidates"`
 	EvaluatedAt     time.Time               `json:"evaluated_at"`

@@ -12,11 +12,11 @@ import (
 type StorageTier string
 
 const (
-	TierCorePinned       StorageTier = "CORE_PINNED"
-	TierHotActive        StorageTier = "HOT_ACTIVE"
-	TierWarmDurable      StorageTier = "WARM_DURABLE"
-	TierColdHistorical   StorageTier = "COLD_HISTORICAL"
-	TierArchivalEpisode  StorageTier = "ARCHIVAL_EPISODE"
+	TierCorePinned      StorageTier = "CORE_PINNED"
+	TierHotActive       StorageTier = "HOT_ACTIVE"
+	TierWarmDurable     StorageTier = "WARM_DURABLE"
+	TierColdHistorical  StorageTier = "COLD_HISTORICAL"
+	TierArchivalEpisode StorageTier = "ARCHIVAL_EPISODE"
 )
 
 type TierEntry struct {

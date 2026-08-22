@@ -22,13 +22,13 @@ type CapabilityPolicyRuleDTO struct {
 }
 
 type SecurityPolicyInspectorResponseDTO struct {
-	PolicyID          string                    `json:"policy_id"`
-	Revision          int                       `json:"revision"`
-	GlobalRiskLevel   string                    `json:"global_risk_level"`
-	DegradedControls  []string                  `json:"degraded_controls"`
-	GateRules         []GateRuleDTO             `json:"gate_rules"`
-	CapabilityRules   []CapabilityPolicyRuleDTO `json:"capability_rules"`
-	LastAuditedAt     time.Time                 `json:"last_audited_at"`
+	PolicyID         string                    `json:"policy_id"`
+	Revision         int                       `json:"revision"`
+	GlobalRiskLevel  string                    `json:"global_risk_level"`
+	DegradedControls []string                  `json:"degraded_controls"`
+	GateRules        []GateRuleDTO             `json:"gate_rules"`
+	CapabilityRules  []CapabilityPolicyRuleDTO `json:"capability_rules"`
+	LastAuditedAt    time.Time                 `json:"last_audited_at"`
 }
 
 func (s *Server) handleGetSecurityPolicy(w http.ResponseWriter, r *http.Request) {

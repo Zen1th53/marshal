@@ -30,8 +30,8 @@ func TestT167WebControlServerRoutesAndLoopback(t *testing.T) {
 
 	// Invariant 2: Non-loopback without auth must fail
 	badCfg := webcontrol.ServerConfig{
-		Host: "0.0.0.0",
-		Port: 8787,
+		Host:                     "0.0.0.0",
+		Port:                     8787,
 		AllowInsecureNonLoopback: false,
 	}
 	_, err = webcontrol.NewServer(badCfg, nil)

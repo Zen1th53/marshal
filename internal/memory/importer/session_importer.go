@@ -36,10 +36,10 @@ type ImportResult struct {
 }
 
 type SessionImporter struct {
-	mu           sync.Mutex
-	config       Config
-	firewall     *security.Firewall
-	seenDigests  map[string]bool
+	mu          sync.Mutex
+	config      Config
+	firewall    *security.Firewall
+	seenDigests map[string]bool
 }
 
 func NewSessionImporter(config Config) *SessionImporter {
@@ -90,29 +90,29 @@ func (s *SessionImporter) ImportRawJSON(ctx context.Context, projectID string, d
 	importID := generateDeterministicImportID(projectID, tr.SessionID, body)
 
 	rec := model.MemoryRecordV2{
-		ID:          importID,
-		ProjectID:   projectID,
-		Kind:        model.MemoryKindEpisodic,
-		Lifecycle:   model.MemoryCandidate,
-		Confidence:  model.ConfidenceObserved,
-		Authority:   model.AuthorityAgent,
-		Title:       fmt.Sprintf("Imported Session %s (%s)", tr.SessionID, tr.Provider),
-		Body:        body,
-		Scope:       string(model.ScopeSession),
-		ScopeID:     tr.SessionID,
-		ObservedAt:  baseTime,
-		IngestedAt:  baseTime,
-		ValidFrom:   baseTime,
-		CreatedAt:   baseTime,
-		UpdatedAt:   baseTime,
-		SessionID:   tr.SessionID,
+		ID:         importID,
+		ProjectID:  projectID,
+		Kind:       model.MemoryKindEpisodic,
+		Lifecycle:  model.MemoryCandidate,
+		Confidence: model.ConfidenceObserved,
+		Authority:  model.AuthorityAgent,
+		Title:      fmt.Sprintf("Imported Session %s (%s)", tr.SessionID, tr.Provider),
+		Body:       body,
+		Scope:      string(model.ScopeSession),
+		ScopeID:    tr.SessionID,
+		ObservedAt: baseTime,
+		IngestedAt: baseTime,
+		ValidFrom:  baseTime,
+		CreatedAt:  baseTime,
+		UpdatedAt:  baseTime,
+		SessionID:  tr.SessionID,
 		Source: model.MemorySource{
 			Kind:      "external",
 			Reference: tr.SessionID,
 		},
 		ExtMeta: map[string]any{
-			"provider":          tr.Provider,
-			"execution_success": tr.Success,
+			"provider":             tr.Provider,
+			"execution_success":    tr.Success,
 			"imported_retroactive": true,
 		},
 	}

@@ -176,10 +176,10 @@ type MemoryRecordV2 struct {
 	ProjectID string `json:"project_id"`
 
 	// --- Classification ---
-	Kind      MemoryKind      `json:"kind"`
-	Lifecycle MemoryLifecycle `json:"lifecycle"`
+	Kind       MemoryKind       `json:"kind"`
+	Lifecycle  MemoryLifecycle  `json:"lifecycle"`
 	Confidence MemoryConfidence `json:"confidence,omitempty"`
-	Authority MemoryAuthority `json:"authority"`
+	Authority  MemoryAuthority  `json:"authority"`
 
 	// --- Content ---
 	Title         string `json:"title"`
@@ -192,22 +192,22 @@ type MemoryRecordV2 struct {
 	ScopeID string `json:"scope_id"`
 
 	// --- Provenance / Source ---
-	Source     MemorySource   `json:"source"`
-	EvidenceIDs []string      `json:"evidence_ids,omitempty"` // artifact / attestation IDs
-	HeadCommit string         `json:"head_commit,omitempty"`
-	BranchName string         `json:"branch_name,omitempty"`
-	WorktreeID string         `json:"worktree_id,omitempty"`
-	SessionID  string         `json:"session_id,omitempty"`
-	RunID      string         `json:"run_id,omitempty"`
+	Source      MemorySource `json:"source"`
+	EvidenceIDs []string     `json:"evidence_ids,omitempty"` // artifact / attestation IDs
+	HeadCommit  string       `json:"head_commit,omitempty"`
+	BranchName  string       `json:"branch_name,omitempty"`
+	WorktreeID  string       `json:"worktree_id,omitempty"`
+	SessionID   string       `json:"session_id,omitempty"`
+	RunID       string       `json:"run_id,omitempty"`
 
 	// --- Temporal model ---
 	// ObservedAt: when the fact was observed in the real world.
-	ObservedAt time.Time  `json:"observed_at"`
+	ObservedAt time.Time `json:"observed_at"`
 	// IngestedAt: when MARSHAL first recorded it.
-	IngestedAt time.Time  `json:"ingested_at"`
+	IngestedAt time.Time `json:"ingested_at"`
 	// ValidFrom / ValidTo: closed interval during which the fact is asserted true.
-	ValidFrom  time.Time  `json:"valid_from"`
-	ValidTo    *time.Time `json:"valid_to,omitempty"`
+	ValidFrom time.Time  `json:"valid_from"`
+	ValidTo   *time.Time `json:"valid_to,omitempty"`
 	// LastVerifiedAt: when the record was last independently confirmed.
 	LastVerifiedAt *time.Time `json:"last_verified_at,omitempty"`
 

@@ -18,7 +18,8 @@ Security fixes are assessed against the active release and main branch:
 
 | Version | Schema | Status | Supported Platforms |
 |---|---|---|---|
-| **v1.0.0** | **v67** | **Active Support** | Linux x86_64, arm64 |
+| **v1.0.1** | **v69** | **Active Support** | Linux x86_64, arm64 |
+| v1.0.0 | v69 | Maintained | Linux x86_64, arm64 |
 | < 1.0.0 | < v67 | End of Support | None |
 
 ## Reporting Privately

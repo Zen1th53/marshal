@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	ErrUnauthorizedMemoryAccess   = errors.New("unauthorized memory access: principal cannot access record scope")
-	ErrMemoryNotFoundOrRevoked    = errors.New("memory record not found or revoked/tombstoned")
+	ErrUnauthorizedMemoryAccess = errors.New("unauthorized memory access: principal cannot access record scope")
+	ErrMemoryNotFoundOrRevoked  = errors.New("memory record not found or revoked/tombstoned")
 )
 
 type Principal struct {

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-		"os"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -19,25 +19,21 @@ import (
 	"github.com/Zen1th53/marshal/internal/api"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
-	"github.com/Zen1th53/marshal/internal/httpsrv"
 	"github.com/Zen1th53/marshal/internal/doctor"
+	"github.com/Zen1th53/marshal/internal/httpsrv"
 	"github.com/Zen1th53/marshal/internal/legal"
 	"github.com/Zen1th53/marshal/internal/mcp"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policytest"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/store"
-)
-
-var (
-	Version   = "v1.0.0"
-	Commit    = "head"
-	BuildDate = "unknown"
+	"github.com/Zen1th53/marshal/internal/version"
 )
 
 const usage = `Usage: marshal [--json] <command> [arguments]
 
 Commands:
+  version
   init
   doctor [--probe-providers]
   status
@@ -92,6 +88,10 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		c.json = true
 		args = args[1:]
 	}
+	if len(args) == 1 && (args[0] == "--version" || args[0] == "-v") {
+		fmt.Fprintln(stdout, version.Current().String())
+		return 0
+	}
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
 		fmt.Fprint(stdout, usage)
 		return 0
@@ -103,12 +103,13 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 	var err error
 	switch args[0] {
 	case "version", "--version", "-version", "-v":
+		info := version.Current()
 		err = c.print(map[string]any{
-			"version":        Version,
-			"commit":         Commit,
-			"build_date":     BuildDate,
+			"version":        info.Version,
+			"commit":         info.Commit,
+			"build_date":     info.BuildDate,
 			"schema_version": store.LatestSchemaVersion,
-		}, fmt.Sprintf("MARSHAL %s (commit: %s, build date: %s, schema: v%d)", Version, Commit, BuildDate, store.LatestSchemaVersion))
+		}, info.String())
 	case "init":
 		err = c.init(ctx)
 	case "doctor":

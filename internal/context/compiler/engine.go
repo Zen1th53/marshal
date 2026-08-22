@@ -62,11 +62,11 @@ func (c *Compiler) Compile(ctx context.Context, id, taskID, agentID, promptText 
 }
 
 type MemoryCompileRequest struct {
-	ID          string                `json:"id"`
-	TaskID      string                `json:"task_id"`
-	AgentID     string                `json:"agent_id"`
-	PromptText  string                `json:"prompt_text"`
-	BudgetLimit int                   `json:"budget_limit"`
+	ID          string                 `json:"id"`
+	TaskID      string                 `json:"task_id"`
+	AgentID     string                 `json:"agent_id"`
+	PromptText  string                 `json:"prompt_text"`
+	BudgetLimit int                    `json:"budget_limit"`
 	Memories    []model.MemoryRecordV2 `json:"memories,omitempty"`
 }
 

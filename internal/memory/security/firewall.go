@@ -28,9 +28,9 @@ var (
 )
 
 type FirewallConfig struct {
-	CanarySecrets        []string
-	ForbiddenKeywords    []string
-	CustomRegexPatterns  []*regexp.Regexp
+	CanarySecrets       []string
+	ForbiddenKeywords   []string
+	CustomRegexPatterns []*regexp.Regexp
 }
 
 type Firewall struct {

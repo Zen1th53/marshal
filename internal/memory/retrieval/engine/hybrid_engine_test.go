@@ -39,10 +39,10 @@ func TestT109ParallelMultiIndexRetrievalAndDegradation(t *testing.T) {
 	_ = graphIdx.AddNode(ctx, graph.GraphNode{ID: "MEM-109-A", Kind: "decision", ScopeID: "scope-1"})
 
 	hybrid := engine.NewHybridEngine(engine.Config{
-		Lexical:  lexIdx,
-		Vector:   vecStore,
-		Graph:    graphIdx,
-		Timeout:  100 * time.Millisecond,
+		Lexical: lexIdx,
+		Vector:  vecStore,
+		Graph:   graphIdx,
+		Timeout: 100 * time.Millisecond,
 	})
 
 	// 1. Full healthy parallel query
@@ -112,5 +112,7 @@ func (f *failingVectorBackend) SearchVectors(ctx context.Context, proj string, s
 	time.Sleep(100 * time.Millisecond) // exceeds 50ms timeout
 	return nil, context.DeadlineExceeded
 }
-func (f *failingVectorBackend) Rebuild(ctx context.Context, items []vector.VectorItem) error { return nil }
+func (f *failingVectorBackend) Rebuild(ctx context.Context, items []vector.VectorItem) error {
+	return nil
+}
 func (f *failingVectorBackend) Health(ctx context.Context) error { return nil }

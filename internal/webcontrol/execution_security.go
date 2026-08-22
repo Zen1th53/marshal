@@ -7,27 +7,27 @@ import (
 )
 
 type ResourceQuotaDTO struct {
-	Limit int64   `json:"limit"`
-	Used  int64   `json:"used"`
-	Unit  string  `json:"unit"`
+	Limit    int64   `json:"limit"`
+	Used     int64   `json:"used"`
+	Unit     string  `json:"unit"`
 	UsagePct float64 `json:"usage_pct"`
 }
 
 type ExecutionBoundaryDTO struct {
-	RunID            string           `json:"run_id"`
-	SandboxBackend   string           `json:"sandbox_backend"` // "bubblewrap", "landlock", "docker", "native_process"
-	BackendStatus    string           `json:"backend_status"`  // "enforced", "degraded", "unsupported"
-	NetworkPolicy    string           `json:"network_policy"`  // "blocked", "allowlist_only", "unrestricted"
+	RunID             string           `json:"run_id"`
+	SandboxBackend    string           `json:"sandbox_backend"` // "bubblewrap", "landlock", "docker", "native_process"
+	BackendStatus     string           `json:"backend_status"`  // "enforced", "degraded", "unsupported"
+	NetworkPolicy     string           `json:"network_policy"`  // "blocked", "allowlist_only", "unrestricted"
 	IsNetworkIsolated bool             `json:"is_network_isolated"`
-	CPUQuotaPct      float64          `json:"cpu_quota_pct"`
-	Memory           ResourceQuotaDTO `json:"memory"`
-	PIDs             ResourceQuotaDTO `json:"pids"`
-	Disk             ResourceQuotaDTO `json:"disk"`
-	WasOOMKilled     bool             `json:"was_oom_killed"`
-	WasPIDExhausted  bool             `json:"was_pid_exhausted"`
-	WasDiskExhausted bool             `json:"was_disk_exhausted"`
-	MountedPaths     []string         `json:"mounted_paths"` // Redacted / safe paths only
-	AuditedAt        time.Time        `json:"audited_at"`
+	CPUQuotaPct       float64          `json:"cpu_quota_pct"`
+	Memory            ResourceQuotaDTO `json:"memory"`
+	PIDs              ResourceQuotaDTO `json:"pids"`
+	Disk              ResourceQuotaDTO `json:"disk"`
+	WasOOMKilled      bool             `json:"was_oom_killed"`
+	WasPIDExhausted   bool             `json:"was_pid_exhausted"`
+	WasDiskExhausted  bool             `json:"was_disk_exhausted"`
+	MountedPaths      []string         `json:"mounted_paths"` // Redacted / safe paths only
+	AuditedAt         time.Time        `json:"audited_at"`
 }
 
 func (s *Server) handleGetRunExecutionBoundary(w http.ResponseWriter, r *http.Request) {

@@ -11,10 +11,10 @@ import (
 )
 
 type testClient struct {
-	server  *webcontrol.Server
-	cookie  *http.Cookie
-	csrf    string
-	user    webcontrol.AuthUserDTO
+	server *webcontrol.Server
+	cookie *http.Cookie
+	csrf   string
+	user   webcontrol.AuthUserDTO
 }
 
 func newAuthenticatedTestClient(t *testing.T, role string) *testClient {

@@ -18,18 +18,18 @@ func TestT95SharedArchivePeerProtection(t *testing.T) {
 
 	// 1. Agent-1 contributes a finding
 	rec1 := model.MemoryRecordV2{
-		ID:        "MEM-SHARE-01",
-		ProjectID: "PROJ-1",
-		Kind:      model.MemoryKindFinding,
-		Lifecycle: model.MemoryCandidate,
-		Authority: model.AuthorityAgent,
-		Title:     "Memory Leak in HTTP Client",
-		Body:      "Discovered unclosed response body in client.go",
-		Scope:     string(model.ScopeTeam),
-		ScopeID:   "team-core",
+		ID:         "MEM-SHARE-01",
+		ProjectID:  "PROJ-1",
+		Kind:       model.MemoryKindFinding,
+		Lifecycle:  model.MemoryCandidate,
+		Authority:  model.AuthorityAgent,
+		Title:      "Memory Leak in HTTP Client",
+		Body:       "Discovered unclosed response body in client.go",
+		Scope:      string(model.ScopeTeam),
+		ScopeID:    "team-core",
 		ObservedAt: now,
 		ValidFrom:  now,
-		Source:    model.MemorySource{Kind: "runtime", Reference: "task-1", AgentID: "agent-1"},
+		Source:     model.MemorySource{Kind: "runtime", Reference: "task-1", AgentID: "agent-1"},
 	}
 
 	err := arc.Contribute(ctx, "agent-1", rec1)
@@ -75,17 +75,17 @@ func TestT95ParallelContributions(t *testing.T) {
 			defer wg.Done()
 			agentID := "agent-worker"
 			rec := model.MemoryRecordV2{
-				ID:        model.MemoryRecordV2{}.ID, // unique ID per worker
-				ProjectID: "PROJ-1",
-				Kind:      model.MemoryKindSemantic,
-				Lifecycle: model.MemoryCandidate,
-				Title:     "Worker Note",
-				Body:      "Completed parallel iteration",
-				Scope:     string(model.ScopeTeam),
-				ScopeID:   "team-core",
+				ID:         model.MemoryRecordV2{}.ID, // unique ID per worker
+				ProjectID:  "PROJ-1",
+				Kind:       model.MemoryKindSemantic,
+				Lifecycle:  model.MemoryCandidate,
+				Title:      "Worker Note",
+				Body:       "Completed parallel iteration",
+				Scope:      string(model.ScopeTeam),
+				ScopeID:    "team-core",
 				ObservedAt: now,
 				ValidFrom:  now,
-				Source:    model.MemorySource{Kind: "runtime", Reference: "parallel", AgentID: agentID},
+				Source:     model.MemorySource{Kind: "runtime", Reference: "parallel", AgentID: agentID},
 			}
 			_ = arc.Contribute(ctx, agentID, rec)
 		}(i)

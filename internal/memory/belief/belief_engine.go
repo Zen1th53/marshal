@@ -8,27 +8,27 @@ import (
 )
 
 var (
-	ErrBeliefSetNotFound = errors.New("belief set not found")
+	ErrBeliefSetNotFound  = errors.New("belief set not found")
 	ErrHypothesisNotFound = errors.New("hypothesis not found in belief set")
 )
 
 type Hypothesis struct {
-	ID                   string   `json:"id"`
-	Description          string   `json:"description"`
-	AgentClaim           float64  `json:"agent_claim"` // Raw unverified model assertion
-	Probability          float64  `json:"probability"`  // System-derived probability
+	ID                    string   `json:"id"`
+	Description           string   `json:"description"`
+	AgentClaim            float64  `json:"agent_claim"` // Raw unverified model assertion
+	Probability           float64  `json:"probability"` // System-derived probability
 	SupportingEvidenceIDs []string `json:"supporting_evidence_ids"`
 }
 
 type BeliefSet struct {
-	ObservationID       string       `json:"observation_id"`
-	Description         string       `json:"description"`
-	Hypotheses          []Hypothesis `json:"hypotheses"`
-	Resolved            bool         `json:"resolved"`
-	ResolvedWinnerID    string       `json:"resolved_winner_id,omitempty"`
-	DecisiveEvidenceID  string       `json:"decisive_evidence_id,omitempty"`
-	PriorAlternatives   []Hypothesis `json:"prior_alternatives,omitempty"`
-	UpdatedAt           time.Time    `json:"updated_at"`
+	ObservationID      string       `json:"observation_id"`
+	Description        string       `json:"description"`
+	Hypotheses         []Hypothesis `json:"hypotheses"`
+	Resolved           bool         `json:"resolved"`
+	ResolvedWinnerID   string       `json:"resolved_winner_id,omitempty"`
+	DecisiveEvidenceID string       `json:"decisive_evidence_id,omitempty"`
+	PriorAlternatives  []Hypothesis `json:"prior_alternatives,omitempty"`
+	UpdatedAt          time.Time    `json:"updated_at"`
 }
 
 type Engine struct {

@@ -122,6 +122,8 @@ func Check(ctx context.Context, root string, options Options) Report {
 		integrityErr := database.Integrity(ctx)
 		if versionErr != nil || integrityErr != nil || version < 1 || version > store.LatestSchemaVersion {
 			add(failure("sqlite", "PRAGMA integrity_check", "canonical state is invalid"))
+		} else if version < store.LatestSchemaVersion {
+			add(Result{Name: "sqlite", Verdict: Degraded, Method: "PRAGMA integrity_check", Detail: fmt.Sprintf("schema version %d is outdated (latest is %d); run 'marshal init' to migrate", version, store.LatestSchemaVersion)})
 		} else {
 			add(success("sqlite", "PRAGMA integrity_check", fmt.Sprintf("schema version %d is healthy", version)))
 			if _, err := database.ListCapabilityGrants(ctx); err != nil {

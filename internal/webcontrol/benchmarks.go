@@ -14,15 +14,15 @@ type BenchmarkMetricDTO struct {
 }
 
 type BenchmarkReportDTO struct {
-	SuiteID        string               `json:"suite_id"`
-	SuiteName      string               `json:"suite_name"`
-	HarnessType    string               `json:"harness_type"` // "internal_compatible", "official_full"
-	Status         string               `json:"status"`       // "PASSED", "DEGRADED", "NOT_RUN"
-	DatasetSubset  string               `json:"dataset_subset"`
-	CommitSHA      string               `json:"commit_sha"`
-	Metrics        []BenchmarkMetricDTO `json:"metrics"`
-	ScopeNotice    string               `json:"scope_notice"`
-	EvaluatedAt    time.Time            `json:"evaluated_at"`
+	SuiteID       string               `json:"suite_id"`
+	SuiteName     string               `json:"suite_name"`
+	HarnessType   string               `json:"harness_type"` // "internal_compatible", "official_full"
+	Status        string               `json:"status"`       // "PASSED", "DEGRADED", "NOT_RUN"
+	DatasetSubset string               `json:"dataset_subset"`
+	CommitSHA     string               `json:"commit_sha"`
+	Metrics       []BenchmarkMetricDTO `json:"metrics"`
+	ScopeNotice   string               `json:"scope_notice"`
+	EvaluatedAt   time.Time            `json:"evaluated_at"`
 }
 
 type BenchmarksResponseDTO struct {

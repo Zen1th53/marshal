@@ -42,11 +42,11 @@ func (c command) memory(ctx context.Context, args []string) error {
 			return err
 		}
 		status := map[string]any{
-			"version":       "2.0.0",
-			"healthy":       true,
+			"version":        "2.0.0",
+			"healthy":        true,
 			"schema_version": version,
-			"records":       len(records),
-			"project_id":    projectID,
+			"records":        len(records),
+			"project_id":     projectID,
 		}
 		return c.print(status, fmt.Sprintf("status=healthy version=2.0.0 records=%d schema=v%d", len(records), version))
 

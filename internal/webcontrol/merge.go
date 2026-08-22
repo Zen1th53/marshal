@@ -8,15 +8,15 @@ import (
 )
 
 type MergePreflightDTO struct {
-	TaskID         string   `json:"task_id"`
-	IsEligible     bool     `json:"is_eligible"`
-	ExpectedHead   string   `json:"expected_head"`
-	TargetBranch   string   `json:"target_branch"`
-	QuorumMet      bool     `json:"quorum_met"`
-	HasVeto        bool     `json:"has_veto"`
-	IsStaleHead    bool     `json:"is_stale_head"`
-	GatingChecks   []string `json:"gating_checks"`
-	DenialReason   string   `json:"denial_reason,omitempty"`
+	TaskID       string   `json:"task_id"`
+	IsEligible   bool     `json:"is_eligible"`
+	ExpectedHead string   `json:"expected_head"`
+	TargetBranch string   `json:"target_branch"`
+	QuorumMet    bool     `json:"quorum_met"`
+	HasVeto      bool     `json:"has_veto"`
+	IsStaleHead  bool     `json:"is_stale_head"`
+	GatingChecks []string `json:"gating_checks"`
+	DenialReason string   `json:"denial_reason,omitempty"`
 }
 
 type MergeRequestPayload struct {

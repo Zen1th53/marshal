@@ -87,12 +87,12 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 func TestChooseIsolationNeverSilentlyDropsNetworkDenialOrStrongRisk(t *testing.T) {
 	unavailable := model.IsolationCapability{Level: model.IsolationProcessOnly, Available: false, Reason: "missing"}
 	tests := []struct {
-		name                   string
-		risk                   model.Risk
-		networkAllowed         bool
-		allowProcessOnly       bool
-		wantLevel              model.IsolationLevel
-		wantErr                bool
+		name             string
+		risk             model.Risk
+		networkAllowed   bool
+		allowProcessOnly bool
+		wantLevel        model.IsolationLevel
+		wantErr          bool
 	}{
 		// Without an explicit opt-in, every unavailable-bwrap case must fail
 		// closed, regardless of risk or network.

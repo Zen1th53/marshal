@@ -69,12 +69,12 @@ type SystemStatusDTO struct {
 }
 
 type AdapterSummaryDTO struct {
-	Name         string            `json:"name"`
-	BinaryName   string            `json:"binary_name"`
-	Installed    bool              `json:"installed"`
-	State        SystemHealthState `json:"state"`
-	Version      string            `json:"version,omitempty"`
-	ProbedAt     time.Time         `json:"probed_at"`
+	Name       string            `json:"name"`
+	BinaryName string            `json:"binary_name"`
+	Installed  bool              `json:"installed"`
+	State      SystemHealthState `json:"state"`
+	Version    string            `json:"version,omitempty"`
+	ProbedAt   time.Time         `json:"probed_at"`
 }
 
 type AgentSummaryDTO struct {
@@ -92,15 +92,15 @@ type AgentSummaryDTO struct {
 }
 
 type TaskSummaryDTO struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Status      TaskStatus `json:"status"`
-	Risk        string     `json:"risk"`
-	AssignedTo  string     `json:"assigned_to,omitempty"`
-	BaseCommit  string     `json:"base_commit"`
-	HeadCommit  string     `json:"head_commit"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID         string     `json:"id"`
+	Title      string     `json:"title"`
+	Status     TaskStatus `json:"status"`
+	Risk       string     `json:"risk"`
+	AssignedTo string     `json:"assigned_to,omitempty"`
+	BaseCommit string     `json:"base_commit"`
+	HeadCommit string     `json:"head_commit"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 type MemoryRecordDTO struct {

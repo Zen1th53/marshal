@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	ErrDecryptionFailed       = errors.New("decryption failed: ciphertext or authenticated associated data (AAD) invalid")
-	ErrMissingDecryptionKey   = errors.New("missing decryption key for epoch")
+	ErrDecryptionFailed     = errors.New("decryption failed: ciphertext or authenticated associated data (AAD) invalid")
+	ErrMissingDecryptionKey = errors.New("missing decryption key for epoch")
 )
 
 type EncryptedPayload struct {

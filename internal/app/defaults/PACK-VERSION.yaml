@@ -1,0 +1,13 @@
+schema_version: 1
+pack_version: "6.0.0"
+compatibility:
+  minimum_memory_schema: 1
+  minimum_manifest_version: 1
+
+breaking_change_policy:
+  role_authority_change: major
+  memory_schema_change: major_or_migrated
+  protocol_behavior_change: minor_or_major_by_impact
+  typo_or_clarification: patch
+
+current_generation: marshal-pack-v6

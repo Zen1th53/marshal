@@ -14,12 +14,12 @@ type Params struct {
 }
 
 type FinalCandidate struct {
-	MemoryID     string                `json:"memory_id"`
-	Record       model.MemoryRecordV2  `json:"record"`
-	RankScore    float64               `json:"rank_score"`
-	IsHistorical bool                  `json:"is_historical"`
-	IsConflicted bool                  `json:"is_conflicted"`
-	ConflictIDs  []string              `json:"conflict_ids,omitempty"`
+	MemoryID     string               `json:"memory_id"`
+	Record       model.MemoryRecordV2 `json:"record"`
+	RankScore    float64              `json:"rank_score"`
+	IsHistorical bool                 `json:"is_historical"`
+	IsConflicted bool                 `json:"is_conflicted"`
+	ConflictIDs  []string             `json:"conflict_ids,omitempty"`
 }
 
 type Finalizer struct{}

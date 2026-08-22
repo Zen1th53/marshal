@@ -20,11 +20,11 @@ var (
 )
 
 type ExportManifest struct {
-	Version            string                      `json:"version"`
-	CreatedAt          time.Time                   `json:"created_at"`
-	Records            []model.MemoryRecordV2      `json:"records"`
-	MutationEnvelopes  []mutation.MutationEnvelope `json:"mutation_envelopes"`
-	IntegrityDigest    string                      `json:"integrity_digest"`
+	Version           string                      `json:"version"`
+	CreatedAt         time.Time                   `json:"created_at"`
+	Records           []model.MemoryRecordV2      `json:"records"`
+	MutationEnvelopes []mutation.MutationEnvelope `json:"mutation_envelopes"`
+	IntegrityDigest   string                      `json:"integrity_digest"`
 }
 
 type ImportOptions struct {

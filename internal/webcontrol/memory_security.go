@@ -6,11 +6,11 @@ import (
 )
 
 type IndexHealthDTO struct {
-	Name        string `json:"name"`
-	Generation  int    `json:"generation"`
-	Status      string `json:"status"` // "healthy", "degraded", "rebuilding"
-	OutboxLagMs int64  `json:"outbox_lag_ms"`
-	RecordsIndexed int `json:"records_indexed"`
+	Name           string `json:"name"`
+	Generation     int    `json:"generation"`
+	Status         string `json:"status"` // "healthy", "degraded", "rebuilding"
+	OutboxLagMs    int64  `json:"outbox_lag_ms"`
+	RecordsIndexed int    `json:"records_indexed"`
 }
 
 type ACLScopeSummaryDTO struct {
@@ -21,15 +21,15 @@ type ACLScopeSummaryDTO struct {
 }
 
 type MemorySecurityHealthResponseDTO struct {
-	EncryptionStatus  string               `json:"encryption_status"` // "aes_256_gcm_active"
-	KeyID             string               `json:"key_id"`            // Redacted / Key ID only
-	IntegrityStatus   string               `json:"integrity_status"`  // "verified_clean"
-	VerifiedRecords   int                  `json:"verified_records"`
-	TamperedRecords   int                  `json:"tampered_records"`
-	RebuildWatermark  int                  `json:"rebuild_watermark"`
-	Indexes           []IndexHealthDTO     `json:"indexes"`
-	ACLMatrix         []ACLScopeSummaryDTO `json:"acl_matrix"`
-	EvaluatedAt       time.Time            `json:"evaluated_at"`
+	EncryptionStatus string               `json:"encryption_status"` // "aes_256_gcm_active"
+	KeyID            string               `json:"key_id"`            // Redacted / Key ID only
+	IntegrityStatus  string               `json:"integrity_status"`  // "verified_clean"
+	VerifiedRecords  int                  `json:"verified_records"`
+	TamperedRecords  int                  `json:"tampered_records"`
+	RebuildWatermark int                  `json:"rebuild_watermark"`
+	Indexes          []IndexHealthDTO     `json:"indexes"`
+	ACLMatrix        []ACLScopeSummaryDTO `json:"acl_matrix"`
+	EvaluatedAt      time.Time            `json:"evaluated_at"`
 }
 
 func (s *Server) handleGetMemorySecurityHealth(w http.ResponseWriter, r *http.Request) {

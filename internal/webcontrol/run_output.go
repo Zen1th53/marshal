@@ -26,21 +26,21 @@ type RunLogsResponseDTO struct {
 }
 
 type RunDetailComprehensiveDTO struct {
-	RunID         string          `json:"run_id"`
-	TaskID        string          `json:"task_id"`
-	AgentID       string          `json:"agent_id"`
-	Provider      string          `json:"provider"`
-	Status        string          `json:"status"`
-	DurationMs    int64           `json:"duration_ms"`
-	StepCount     int             `json:"step_count"`
-	EvidenceCount int             `json:"evidence_count"`
-	BaseCommit    string          `json:"base_commit"`
-	HeadCommit    string          `json:"head_commit"`
-	StartedAt     time.Time       `json:"started_at"`
-	FinishedAt    *time.Time      `json:"finished_at,omitempty"`
-	CorrelationID string          `json:"correlation_id"`
-	Summary       string          `json:"summary"`
-	Logs          []LogLineDTO    `json:"logs"`
+	RunID         string       `json:"run_id"`
+	TaskID        string       `json:"task_id"`
+	AgentID       string       `json:"agent_id"`
+	Provider      string       `json:"provider"`
+	Status        string       `json:"status"`
+	DurationMs    int64        `json:"duration_ms"`
+	StepCount     int          `json:"step_count"`
+	EvidenceCount int          `json:"evidence_count"`
+	BaseCommit    string       `json:"base_commit"`
+	HeadCommit    string       `json:"head_commit"`
+	StartedAt     time.Time    `json:"started_at"`
+	FinishedAt    *time.Time   `json:"finished_at,omitempty"`
+	CorrelationID string       `json:"correlation_id"`
+	Summary       string       `json:"summary"`
+	Logs          []LogLineDTO `json:"logs"`
 }
 
 func sanitizeLogMessage(msg string) string {

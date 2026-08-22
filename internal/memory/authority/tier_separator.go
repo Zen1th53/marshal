@@ -24,11 +24,11 @@ func getAuthorityRank(auth model.MemoryAuthority) int {
 	case model.AuthorityPolicy, model.AuthorityOperator:
 		return 100 // Top tier: Immutable policy & Operator rules
 	case model.AuthorityVerified:
-		return 80  // Objective verified facts
+		return 80 // Objective verified facts
 	case model.AuthorityAgent:
-		return 40  // Subjective / agent beliefs
+		return 40 // Subjective / agent beliefs
 	default:
-		return 20  // Unverified
+		return 20 // Unverified
 	}
 }
 

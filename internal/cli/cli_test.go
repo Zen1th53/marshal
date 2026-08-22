@@ -12,6 +12,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
+	"github.com/Zen1th53/marshal/internal/version"
 )
 
 func TestInitAndJSONDoctor(t *testing.T) {
@@ -279,7 +280,7 @@ func TestCLIVersionCommand(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "MARSHAL v1.0.0") {
+	if !strings.Contains(strings.ToLower(stdout.String()), "marshal") || !strings.Contains(stdout.String(), version.Current().Version) {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 
@@ -289,7 +290,7 @@ func TestCLIVersionCommand(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), `"version": "v1.0.0"`) {
+	if !strings.Contains(stdout.String(), fmt.Sprintf(`"version": %q`, version.Current().Version)) && !strings.Contains(stdout.String(), fmt.Sprintf(`"version":"%s"`, version.Current().Version)) {
 		t.Fatalf("unexpected json stdout: %s", stdout.String())
 	}
 }
@@ -439,5 +440,62 @@ func TestCLIStateBackupVerifyRestore(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "successfully restored") {
 		t.Fatalf("unexpected state restore output: %s", stdout.String())
+	}
+}
+
+func TestInitCreatesMissingProjectContractsWithoutOverwritingExistingFiles(t *testing.T) {
+	repo := testgit.New(t)
+	capabilities := filepath.Join(repo.Path(), "CAPABILITIES.yaml")
+	if err := os.WriteFile(capabilities, []byte("version: 1\nprinciple: custom\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := Execute(context.Background(), repo.Path(), []string{"init"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+		t.Fatalf("init code=%d stderr=%s", code, stderr.String())
+	}
+	for _, name := range []string{"PACK-VERSION.yaml", "RUNTIME-VERSION.yaml", "CAPABILITIES.yaml"} {
+		info, err := os.Stat(filepath.Join(repo.Path(), name))
+		if err != nil {
+			t.Fatalf("%s not created: %v", name, err)
+		}
+		if info.Mode().Perm()&0o022 != 0 {
+			t.Fatalf("%s mode=%o is group/world writable", name, info.Mode().Perm())
+		}
+	}
+	data, err := os.ReadFile(capabilities)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "version: 1\nprinciple: custom\n" {
+		t.Fatalf("init overwrote existing capabilities: %q", data)
+	}
+}
+
+func TestVersionCommandsReportBuildMetadata(t *testing.T) {
+	for _, args := range [][]string{{"version"}, {"--version"}} {
+		var stdout, stderr bytes.Buffer
+		if code := Execute(context.Background(), ".", args, strings.NewReader(""), &stdout, &stderr); code != 0 {
+			t.Fatalf("Execute(%v) code=%d stderr=%s", args, code, stderr.String())
+		}
+		if !strings.HasPrefix(stdout.String(), "marshal ") || !strings.Contains(stdout.String(), "commit ") {
+			t.Fatalf("Execute(%v) output=%q", args, stdout.String())
+		}
+	}
+}
+
+func TestVersionJSONIsMachineReadable(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := Execute(context.Background(), ".", []string{"--json", "version"}, strings.NewReader(""), &stdout, &stderr); code != 0 {
+		t.Fatalf("version code=%d stderr=%s", code, stderr.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal version output: %v", err)
+	}
+	for _, field := range []string{"version", "commit", "build_date"} {
+		if got[field] == nil || got[field] == "" {
+			t.Fatalf("version output missing %s: %#v", field, got)
+		}
 	}
 }
