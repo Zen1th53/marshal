@@ -186,7 +186,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "7e146bbbd9c461b94f5fa0141b4bd72b8cf6a25d049ca829861c317e8dbbca42",
+      "sha256": "5a558d9cbe269e668a1140e4700855a8d48a1d8b4769031920e3c24931eea831",
       "bytes": 18558
     },
     {
@@ -831,8 +831,8 @@
     },
     {
       "path": "docs/README.md",
-      "sha256": "f75a8f16fa693cebd62c103e4bb6321394e3f6fe41058f0fb01c6ff32aebfa66",
-      "bytes": 2620
+      "sha256": "42846f6b6630812f5a0ab6746b12edc74d4d965dc820c702e0cd5229c770ba61",
+      "bytes": 2749
     },
     {
       "path": "docs/a2a.md",
@@ -861,7 +861,7 @@
     },
     {
       "path": "docs/architecture.md",
-      "sha256": "6622de13291589cfa7984f2629406e35a798b86fffd7223e4c9e48830c24436f",
+      "sha256": "40d53cc76f1b9c877f244777e1ab8243df0ed78ac0e7ac79e8704b880847cbf6",
       "bytes": 3295
     },
     {
@@ -1021,8 +1021,8 @@
     },
     {
       "path": "docs/memory/current-state-audit.md",
-      "sha256": "61509be13fbfad18aa2870e876344912669855263db5ce1aa2264eed29a3aa4f",
-      "bytes": 6567
+      "sha256": "883516d970023f1a1212837a22e7d5b49246e903561d0b9cd741f170861a2063",
+      "bytes": 6879
     },
     {
       "path": "docs/memory/import.md",
@@ -1036,13 +1036,18 @@
     },
     {
       "path": "docs/memory/overview.md",
-      "sha256": "c663a86b8e1962285a774ba7baefd39926c74feb8f807c6b11234a9865076623",
-      "bytes": 3275
+      "sha256": "49ee41b00a6b62700cc05ca5c9efdf4bd4c791acaf7dc18be08667c1248f3bd2",
+      "bytes": 3457
     },
     {
       "path": "docs/memory/provenance.md",
       "sha256": "05521cc190af1dde1eca2975cc9d36f70ad1353d6049cfdc10d53ceff3f4dc68",
       "bytes": 1282
+    },
+    {
+      "path": "docs/memory/runtime-lifecycle.md",
+      "sha256": "0b3309bfb057299be8852b235b4e165156dc52e946714d562212974e7c63751b",
+      "bytes": 4304
     },
     {
       "path": "docs/memory/vector-backends.md",
@@ -1206,13 +1211,13 @@
     },
     {
       "path": "docs/web/API-CONTRACT.md",
-      "sha256": "f70052aba11b2384b6ed9f97c7ad9aa9d77eb92fa71d8bf3ac7ee793ce76ba75",
-      "bytes": 1589
+      "sha256": "0ddbb40bbea74a0f6ee99ced9c7645297998149e508d4c78b83889b7046f0097",
+      "bytes": 1675
     },
     {
       "path": "docs/web/API-REALITY-MATRIX.md",
-      "sha256": "6b85640d7db8104640093124b397ab7ce3499ce0c417da65387d5479b6731dea",
-      "bytes": 9978
+      "sha256": "f8b9f2b2d327a97eb6871564fab02d4070c969164a703e296bcc49d6c5ed95be",
+      "bytes": 10014
     },
     {
       "path": "docs/web/ARCHITECTURE.md",
@@ -1595,6 +1600,16 @@
       "bytes": 2195
     },
     {
+      "path": "internal/app/memory_lifecycle.go",
+      "sha256": "8f7979c1d7cb73b7346d3464587a6dcba80711cc8b8733b218d48c8bf89cf7d0",
+      "bytes": 16244
+    },
+    {
+      "path": "internal/app/memory_lifecycle_test.go",
+      "sha256": "90a5c51cbd0bf7adcf7be11b0f3401c553839b9dd10afc7c745c34a16c3c8ef8",
+      "bytes": 7633
+    },
+    {
       "path": "internal/app/memory_runtime.go",
       "sha256": "0a509cfa1f3e3a712256fd15fa64dc13db5b42bed6df9d3fea4efed094491d4d",
       "bytes": 5802
@@ -1641,8 +1656,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "eb829e0f2205dd2553c2b45a525dc055da322037bdf5f97286312a9724b1b998",
-      "bytes": 46734
+      "sha256": "f04b848ae6c72639f384fb938bbe29a79c50589d883f32b605ec5dd05e8db651",
+      "bytes": 48554
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -2303,6 +2318,11 @@
       "path": "internal/integration/memory_persistence_test.go",
       "sha256": "4bb3e1e13d3502b25390ccb4f6a15535bbe1f800b67d75012e936a9cd624c45e",
       "bytes": 2682
+    },
+    {
+      "path": "internal/integration/memory_runtime_lifecycle_test.go",
+      "sha256": "a551daef2ef2df8f8e892acb1d92c14959096342e47111376bc95c52f6130eb0",
+      "bytes": 4512
     },
     {
       "path": "internal/integration/opencode_real_test.go",
@@ -4051,8 +4071,8 @@
     },
     {
       "path": "internal/store/memory_audit_t77_test.go",
-      "sha256": "22745fec1a1f03d9d57d5b3d7bb904628fd2d3b201cc605f0a98e3761fe2bebd",
-      "bytes": 3720
+      "sha256": "ebe32a3fb3c48d5ab47d7b8c813eaf71bdb909028b6b39db280e249a968880a7",
+      "bytes": 4048
     },
     {
       "path": "internal/store/memory_cas_t81_test.go",
@@ -4073,6 +4093,11 @@
       "path": "internal/store/memory_persistence_a02_test.go",
       "sha256": "a806e1f93cf15b1348b1dda4d6cac384c1b235529a78a654a155758837fd9ff1",
       "bytes": 232
+    },
+    {
+      "path": "internal/store/memory_runtime.go",
+      "sha256": "354c5b83f0693f2e09c5937e2a720c522c6d40490aecdadb18346146963c0b1d",
+      "bytes": 7942
     },
     {
       "path": "internal/store/memory_scope_t80_test.go",
@@ -4106,8 +4131,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "2a79211f7133a3288a8247cd2b61e5b8233354a1ddf87861b8d3512ff2a77416",
-      "bytes": 62986
+      "sha256": "53fb1f5f678f3dc2c267d835051fd0091b964640efcb5a46c9b530fb1e82c825",
+      "bytes": 64798
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -4916,13 +4941,13 @@
     },
     {
       "path": "internal/webcontrol/retrieval_trace.go",
-      "sha256": "6832e99f3d060aa02558521eff70563bc6223d6b23e0feac828fe72054523759",
-      "bytes": 3067
+      "sha256": "c147158dcf7b20b7366b4d3d77dc2b695d0345ed506caa842d119746ea2d23f9",
+      "bytes": 4986
     },
     {
       "path": "internal/webcontrol/retrieval_trace_test.go",
-      "sha256": "cfa9f65c8f37f6a4cdd7f8cb1234a762342fb036218734f0cd333a1af6d36ac8",
-      "bytes": 1031
+      "sha256": "256ee6a55be6acc7c3704974d64df8122ee34de2c32ca1eda3f825463cccdf1e",
+      "bytes": 5286
     },
     {
       "path": "internal/webcontrol/review.go",
@@ -5006,7 +5031,7 @@
     },
     {
       "path": "internal/webcontrol/server_test.go",
-      "sha256": "328affa035ff9b0d127ea4dd56de74af9c30d35d66d97a2359ff9b700fb0594d",
+      "sha256": "4789f2f537dcaba46bfed150067018fcb8d6e9c67742fb65fe30b663e474b650",
       "bytes": 2306
     },
     {
@@ -5086,8 +5111,8 @@
     },
     {
       "path": "internal/webcontrol/test_helper_test.go",
-      "sha256": "35d17525a64e374403120bbb9fafabde521eed6056c3fda7e4795f1166fe5203",
-      "bytes": 2297
+      "sha256": "4e37862c1c27ccb77fabf5281f6c41a0e90a2b44ace7e848b74c50b9cf682a23",
+      "bytes": 2468
     },
     {
       "path": "internal/webcontrol/working_memory.go",
@@ -5576,7 +5601,7 @@
     },
     {
       "path": "runtime/IMPLEMENTATION-ROADMAP.md",
-      "sha256": "ea29bce42db2a54048cdf2f6763b8d0246f2fbe5a516c57778ed24456c7791aa",
+      "sha256": "4c253341124f8c88b0465e92e8051fc70fd0053d9373a93dbab8fdce9e2389ea",
       "bytes": 2053
     },
     {
@@ -5601,7 +5626,7 @@
     },
     {
       "path": "runtime/README.md",
-      "sha256": "482f23c195296d718bc2387da647ea0f0d491a7ffdf32f0bc66fd0de2755cd0f",
+      "sha256": "9839af74e7f4f24b0b7a39ea9a642d26b0fd1e8cce71356ccd2b290258ef2c48",
       "bytes": 3112
     },
     {

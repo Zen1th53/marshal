@@ -1,7 +1,7 @@
 # Runtime Plane
 
 This directory defines the executable control-plane contracts and implementation
-for the MARSHAL agent runtime (`1.0.0`, SQLite schema `v69`).
+for the MARSHAL agent runtime (`1.0.0`, SQLite schema `v70`).
 
 ## Components
 
@@ -30,7 +30,7 @@ marshal CLI / Local UI
   +--> Loopback-only Bearer-token MCP Server (2026-07-28)
   +--> Loopback-only Bearer-token A2A Server (1.0)
   |
-SQLite (WAL Mode, Schema v69)
+SQLite (WAL Mode, Schema v70)
   |-- tasks (Canonical Review -> QA -> Security -> Merge Lifecycle)
   |-- agents & sessions (Role Authorization & Heartbeats)
   |-- leases (Multi-factor Scheduler Scoring & TTL)
