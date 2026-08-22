@@ -52,7 +52,7 @@ func TestT167WebControlServerRoutesAndLoopback(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&statusDTO); err != nil {
 		t.Fatalf("Decode SystemStatusDTO: %v", err)
 	}
-	if statusDTO.State == "" || statusDTO.DatabaseSchema != "v69" {
+	if statusDTO.State == "" || statusDTO.DatabaseSchema != "v70" {
 		t.Fatalf("unexpected status DTO: %+v", statusDTO)
 	}
 }
