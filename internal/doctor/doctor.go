@@ -13,6 +13,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/resources"
 	"github.com/Zen1th53/marshal/internal/store"
 	"go.yaml.in/yaml/v3"
 )
@@ -151,6 +152,21 @@ func Check(ctx context.Context, root string, options Options) Report {
 	} else {
 		add(success("worktree", "git worktree list --porcelain", "Git worktrees are supported"))
 	}
+	resourceSnapshot := resources.NewCollector().Collect(ctx, layout.RuntimeDir)
+	resourceDetail := fmt.Sprintf("%d effective CPUs, %s RAM available, %s disk free; safe concurrency %d", resourceSnapshot.CPU.Effective, formatBytes(resourceSnapshot.Memory.AvailableBytes), formatBytes(resourceSnapshot.Storage.FreeBytes), resourceSnapshot.Recommendation.Concurrency)
+	if resourceSnapshot.Health.Overall == resources.StatusCritical {
+		resourceDetail += " (critical pressure)"
+	} else if resourceSnapshot.Health.Overall == resources.StatusWarn {
+		resourceDetail += " (pressure warning)"
+	}
+	// Pressure is advisory: it must be visible without making an otherwise
+	// healthy installation fail diagnostics or changing scheduler behavior.
+	add(Result{Name: "resources", Verdict: Pass, Method: "bounded local inventory", Capability: "Community advisory only", Detail: resourceDetail})
+	ollamaDetail := "Ollama: NOT_AVAILABLE"
+	if resourceSnapshot.Ollama.Status == "DETECTED" {
+		ollamaDetail = fmt.Sprintf("Ollama: detected; models: %d", len(resourceSnapshot.Ollama.Models))
+	}
+	add(Result{Name: "ollama_models", Verdict: Pass, Method: "local Ollama API", Capability: "Local model advisory", Detail: ollamaDetail})
 
 	probeCodex(ctx, lookup, run, add)
 	probeOpenCode(ctx, lookup, run, add)
@@ -312,9 +328,17 @@ func failure(name, method, detail string) Result {
 }
 
 func finalizeMissing(report Report) Report {
-	for _, name := range []string{"pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
+	for _, name := range []string{"pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "resources", "ollama_models", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
 		report.Results = append(report.Results, failure(name, "repository prerequisite", "not checked because repository discovery failed"))
 	}
 	report.Verdict = Fail
 	return report
+}
+
+func formatBytes(value uint64) string {
+	const gib = uint64(1 << 30)
+	if value >= gib {
+		return fmt.Sprintf("%.1f GiB", float64(value)/float64(gib))
+	}
+	return fmt.Sprintf("%d MiB", value>>20)
 }

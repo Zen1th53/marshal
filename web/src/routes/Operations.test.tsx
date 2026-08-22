@@ -23,6 +23,17 @@ const mockDoctorData = {
   evaluated_at: '2026-08-20T00:00:00Z',
 };
 
+const mockResources = {
+  cpu: { model: 'Fixture CPU', logical: 8, effective: 4, architecture: 'amd64', source: '/proc/cpuinfo' },
+  memory: { total_bytes: 16 * 1073741824, available_bytes: 8 * 1073741824, swap_total_bytes: 0, swap_used_bytes: 0 },
+  storage: { path: '/tmp', total_bytes: 100 * 1073741824, free_bytes: 60 * 1073741824 },
+  accelerators: [],
+  ollama: { status: 'NOT_AVAILABLE', endpoint: 'http://127.0.0.1:11434', models: [] },
+  health: { overall: 'OK', ram: 'OK', swap: 'UNKNOWN', disk: 'OK', thermal: 'UNKNOWN' },
+  recommendation: { concurrency: 2, profile: 'Safe', reasons: ['fixture'] },
+  collected_at: '2026-08-20T00:00:00Z',
+};
+
 describe('Operations Route (T209)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -30,6 +41,7 @@ describe('Operations Route (T209)', () => {
 
   it('renders system health overview and diagnostic checks', async () => {
     vi.spyOn(api, 'getDoctorReport').mockResolvedValueOnce(mockDoctorData);
+    vi.spyOn(api, 'getResources').mockResolvedValueOnce(mockResources);
 
     render(<Operations />);
 
@@ -41,6 +53,7 @@ describe('Operations Route (T209)', () => {
 
   it('refreshes doctor report on button click', async () => {
     const doctorSpy = vi.spyOn(api, 'getDoctorReport').mockResolvedValue(mockDoctorData);
+    vi.spyOn(api, 'getResources').mockResolvedValue(mockResources);
 
     render(<Operations />);
 
