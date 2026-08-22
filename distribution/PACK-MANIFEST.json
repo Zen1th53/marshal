@@ -1540,6 +1540,21 @@
       "bytes": 2226
     },
     {
+      "path": "internal/app/defaults/CAPABILITIES.yaml",
+      "sha256": "237c27355e46d904ee89005da95f3b659cd87b93cb6b7cd93c1518c1e5fc8b0e",
+      "bytes": 1712
+    },
+    {
+      "path": "internal/app/defaults/PACK-VERSION.yaml",
+      "sha256": "cf8be084e5cc89c361980b9ca0d1539014c44a0ba51394f19e114e88a6c60dea",
+      "bytes": 331
+    },
+    {
+      "path": "internal/app/defaults/RUNTIME-VERSION.yaml",
+      "sha256": "56738518053cf828b4d3ada2d803f7791f281469b89ac0a3862c8d79077972de",
+      "bytes": 92
+    },
+    {
       "path": "internal/app/events.go",
       "sha256": "4eae578f6be7ebf985bb01d52cc2f7eebbef06bbf942a7f815a03640bd203b41",
       "bytes": 1027
@@ -1613,6 +1628,11 @@
       "path": "internal/app/policytest_service.go",
       "sha256": "7cc9d424fb1ecf228b121c027759a7c65c30387f5ac0b2790494eafa6ac4d60f",
       "bytes": 2716
+    },
+    {
+      "path": "internal/app/project_defaults.go",
+      "sha256": "a28398cfacfadc0a693264a52c6c8b3f06b073b94e775d6112c24c1bb4c2944e",
+      "bytes": 1134
     },
     {
       "path": "internal/app/reconciliation.go",
@@ -4580,6 +4600,16 @@
       "bytes": 1581
     },
     {
+      "path": "internal/version/version.go",
+      "sha256": "632400cdc601c4de00a9cf78231eb4259904f72269e19aa45a15f0395f1f15a4",
+      "bytes": 978
+    },
+    {
+      "path": "internal/version/version_test.go",
+      "sha256": "3e6ff2d3647ad0746e6419cecec920543a3db31df1617c6edd19c36cb11dc71a",
+      "bytes": 465
+    },
+    {
       "path": "internal/webcontrol/agents.go",
       "sha256": "06b96e64f8e2afb212cf7e0088895498859c250641016c4773bead1993731d64",
       "bytes": 5224
@@ -5465,6 +5495,11 @@
       "bytes": 458
     },
     {
+      "path": "release/INSTALL.md",
+      "sha256": "4af5f4749ddf46678c280cd89ee95a8b37f866d92783605b9126a30629796252",
+      "bytes": 536
+    },
+    {
       "path": "release/README.md",
       "sha256": "cf286df25d9a04958ec1bdcb6d57c7a4b31fb976cc37b503c0f70b1f3824d32a",
       "bytes": 338
@@ -5720,6 +5755,11 @@
       "bytes": 625
     },
     {
+      "path": "scripts/community-release-gate.sh",
+      "sha256": "bba1dbc49ad4b4148c6465d01af6c9d17f8a46a373705592e849c16bc94eb185",
+      "bytes": 4663
+    },
+    {
       "path": "standards/REFERENCES.md",
       "sha256": "4a224b7c89866186a225c9c83e45c4c51527497c6e49977ec8fc51b259255d78",
       "bytes": 760
@@ -5860,9 +5900,24 @@
       "bytes": 683
     },
     {
+      "path": "tools/build_release.sh",
+      "sha256": "c232cf6c8b29f4adf6904ce1bd63140ad58233d941a588f20578126d8d20c7e0",
+      "bytes": 2751
+    },
+    {
+      "path": "tools/check_markdown_links.py",
+      "sha256": "92ac490742b30ffccc2fe05779fe295afda68460dc33433e6a7a2f20b094c0b1",
+      "bytes": 2839
+    },
+    {
       "path": "tools/detached_sign.py",
       "sha256": "ce209a620e6cdc3c99593ef59c0f32b19236270415863fcd34c0a7f39caec23a",
       "bytes": 3096
+    },
+    {
+      "path": "tools/generate_sbom.py",
+      "sha256": "dc965d67e6396fc4936778f790e0ddbd0aa991228634217c33d32c7b9701ddc4",
+      "bytes": 4124
     },
     {
       "path": "tools/marshal.py",
@@ -5893,6 +5948,26 @@
       "path": "tools/schema_validate.py",
       "sha256": "9e4f5746aa18135b75add750f26ecba2c860b3c9a0b1b55235d30ad831cc98da",
       "bytes": 2883
+    },
+    {
+      "path": "tools/tests/test_build_release.py",
+      "sha256": "1a4db0b8b9905e10d7e23f91650d3da6e14391c13442574fd45948fb38bcef7a",
+      "bytes": 2362
+    },
+    {
+      "path": "tools/tests/test_check_markdown_links.py",
+      "sha256": "a19bf1432c7e5f3f3ffc7a5200b6da306afa6485fefb8348f52b6176ffbfae10",
+      "bytes": 1414
+    },
+    {
+      "path": "tools/tests/test_clean_install.py",
+      "sha256": "76c7ead5080a06ca14ff6579270eb8beb6d2aa46c98fa3d8f782597a89df6de0",
+      "bytes": 7134
+    },
+    {
+      "path": "tools/tests/test_generate_sbom.py",
+      "sha256": "8b7f452ee7aee15a8abac5b3b2855ec864da4fe6d7cbac5d5d018cc0ffc9db95",
+      "bytes": 2939
     },
     {
       "path": "tools/tests/test_marshal.py",
