@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 69
+const LatestSchemaVersion = 70
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1642,6 +1642,47 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 69: %w", err)
 		}
 		version = 69
+	}
+	if version < 70 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS memory_runtime_traces (
+				run_id TEXT PRIMARY KEY REFERENCES worker_runs(run_id) ON DELETE CASCADE,
+				project_id TEXT NOT NULL REFERENCES projects(project_id),
+				task_id TEXT NOT NULL REFERENCES tasks(task_id),
+				query_digest TEXT NOT NULL,
+				head_commit TEXT NOT NULL DEFAULT '',
+				candidates_json TEXT NOT NULL,
+				admitted_memory_ids_json TEXT NOT NULL,
+				tokens_requested INTEGER NOT NULL CHECK(tokens_requested >= 0),
+				tokens_admitted INTEGER NOT NULL CHECK(tokens_admitted >= 0),
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS memory_runtime_trace_project_task_idx
+				ON memory_runtime_traces(project_id, task_id, created_at);
+			CREATE TABLE IF NOT EXISTS memory_runtime_outcomes (
+				run_id TEXT NOT NULL REFERENCES worker_runs(run_id) ON DELETE CASCADE,
+				memory_id TEXT NOT NULL,
+				project_id TEXT NOT NULL REFERENCES projects(project_id),
+				task_id TEXT NOT NULL REFERENCES tasks(task_id),
+				success INTEGER NOT NULL CHECK(success IN (0, 1)),
+				created_at TEXT NOT NULL,
+				PRIMARY KEY(run_id, memory_id)
+			);
+			CREATE TABLE IF NOT EXISTS memory_utility_scores (
+				project_id TEXT NOT NULL REFERENCES projects(project_id),
+				memory_id TEXT NOT NULL,
+				success_count INTEGER NOT NULL DEFAULT 0 CHECK(success_count >= 0),
+				failure_count INTEGER NOT NULL DEFAULT 0 CHECK(failure_count >= 0),
+				last_used_at TEXT NOT NULL,
+				PRIMARY KEY(project_id, memory_id)
+			);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 70: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(70, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 70: %w", err)
+		}
+		version = 70
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
