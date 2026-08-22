@@ -24,6 +24,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/system/status", s.handleSystemStatus)
 	mux.HandleFunc("GET /api/v1/system/adapters", s.handleSystemAdapters)
 	mux.HandleFunc("GET /api/v1/system/capabilities", s.handleSystemCapabilities)
+	mux.HandleFunc("GET /api/v1/resources", s.RequireAuth(s.handleGetResources))
 	mux.HandleFunc("GET /api/v1/overview", s.handleGetOverview)
 
 	// 2. Authentication & Session Management (public)

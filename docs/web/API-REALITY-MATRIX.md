@@ -75,6 +75,7 @@ This document provides the definitive, audit-verified reality classification for
 | `/api/v1/memory/{id}/usage` | `GET` | `REAL (CANONICAL)` | Memory usage trace & influence receipts | Authenticated Session |
 | `/api/v1/memory/security/health` | `GET` | `REAL (CANONICAL)` | Memory security ACL & integrity scanner | `policy.admin` |
 | `/api/v1/health/doctor` | `GET` | `REAL (CANONICAL)` | System diagnostics (`doctor.RunChecks`) | Public (Read-Only) |
+| `/api/v1/resources` | `GET` | `REAL (LOCAL ADVISORY)` | Bounded host/Ollama resource snapshot | Authenticated Session |
 | `/api/v1/operations/backups` | `GET` | `REAL (CANONICAL)` | `store.ListBackups` artifact directory query | `policy.admin` |
 | `/api/v1/operations/backups/create` | `POST` | `REAL (CANONICAL)` | `store.Backup` atomic WAL checkpointing | `policy.admin` + CSRF |
 | `/api/v1/operations/backups/verify` | `POST` | `REAL (CANONICAL)` | `store.VerifyBackup` SQLite PRAGMA check | `policy.admin` + CSRF |

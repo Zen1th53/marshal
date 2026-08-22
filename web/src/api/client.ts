@@ -1114,6 +1114,19 @@ export class APIClient {
     return this.request('/api/v1/health/doctor', { method: 'GET', signal });
   }
 
+  getResources(signal?: AbortSignal): Promise<{
+    cpu: { model?: string; logical: number; effective: number; architecture: string; source: string };
+    memory: { total_bytes: number; available_bytes: number; swap_total_bytes: number; swap_used_bytes: number };
+    storage: { path: string; total_bytes: number; free_bytes: number };
+    accelerators: Array<{ vendor: string; model?: string; memory_semantics: string; total_vram_bytes?: number; used_vram_bytes?: number; temperature_c?: number; source: string; inventory_source: string; telemetry_source: string }>;
+    ollama: { status: string; endpoint: string; models: Array<{ name: string; compatibility: string; reason: string }> };
+    health: { overall: string; ram: string; swap: string; disk: string; thermal: string; warnings?: string[] };
+    recommendation: { concurrency: number; profile: string; reasons: string[]; recommended_model?: string };
+    collected_at: string;
+  }> {
+    return this.request('/api/v1/resources', { method: 'GET', signal });
+  }
+
   listBackups(signal?: AbortSignal): Promise<{
     backups: Array<{
       backup_id: string;

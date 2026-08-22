@@ -20,6 +20,8 @@ This document formalizes the complete JSON HTTP contract for the MARSHAL Web Con
 ## 2. Core Resource Endpoints
 
 ### 2.1 System Diagnostics & Health
+
+- `GET /api/v1/resources` -> authenticated point-in-time Community resource snapshot
 - `GET /api/v1/system/status` -> `SystemStatusDTO`
 - `GET /api/v1/system/adapters` -> `[]AdapterSummaryDTO`
 
