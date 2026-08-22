@@ -66,6 +66,7 @@ type Runtime struct {
 	policyConfigured   bool
 	handoffService     *protocol.Service
 	quorumEngine       *quorum.Engine
+	memoryLifecycle    *memoryLifecycle
 	allowProcessOnly   bool
 }
 
@@ -211,6 +212,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	if sanitizer == nil {
 		sanitizer = evidence.NewStrictSanitizer(evidence.SanitizerConfig{})
 	}
+	byteSanitizer, _ := sanitizer.(evidence.ByteSanitizer)
 	database, err := store.OpenWithObservability(ctx, layout.Database, sanitizer, options.EvidenceAuthorizer, options.Metrics)
 	if err != nil {
 		return nil, err
@@ -254,6 +256,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		authorityPrincipal: options.AuthorityPrincipal,
 		processAuthority:   options.ProcessAuthority,
 		runtimeInstanceID:  instanceID,
+		memoryLifecycle:    newMemoryLifecycle(database, byteSanitizer),
 		allowProcessOnly:   options.AllowProcessOnlyFallback,
 	}
 	if rt.capabilityBroker == nil {
@@ -661,11 +664,6 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		proxyURL = egressProxy.URL()
 		networkAllowed = true
 	}
-	trustedContext, err := r.renderTaskContext(ctx, task)
-	if err != nil {
-		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
-		return RunResult{}, err
-	}
 	agentAdapter, shellExecGrant, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, networkAllowed, request.Model, proxyURL)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
@@ -693,6 +691,20 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	}); err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
+	}
+	baseContext, err := r.renderTaskContext(ctx, task)
+	if err != nil {
+		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
+		return RunResult{}, err
+	}
+	freshHead := r.currentRepositoryHEAD(ctx, baseCommit)
+	trustedContext := baseContext
+	memoryTrace := store.MemoryRuntimeTrace{RunID: runID, ProjectID: localProjectID, TaskID: task.ID, QueryDigest: digestMemoryQuery(task.Title), HeadCommit: freshHead, CreatedAt: time.Now().UTC()}
+	if r.memoryLifecycle != nil {
+		trustedContext, memoryTrace = r.memoryLifecycle.buildContext(ctx, task, claim.Session.ID, request.AgentID, r.layout.Branch, request.Adapter, freshHead, baseContext, runID)
+		// Attribution is enhancement-only. A trace persistence problem must not
+		// turn a safely prepared task into a false execution failure.
+		_ = r.store.PutMemoryRuntimeTrace(ctx, memoryTrace)
 	}
 	heartbeatRevision := claim.Session.Revision
 	var heartbeatMu sync.Mutex
@@ -843,6 +855,13 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		ExitStatus: &exitStatus, StdoutArtifactID: stdoutArtifact.ID,
 		StderrArtifactID: stderrArtifact.ID, ExpectedRevision: 0,
 	})
+	if finishErr == nil && r.memoryLifecycle != nil {
+		r.memoryLifecycle.recordOutcome(context.Background(), memoryTrace, success)
+		r.terminalMemoryEvent(context.Background(), task.ID, runID, success, time.Now().UTC())
+		r.memoryLifecycle.captureTerminalOutcome(context.Background(), task, claim.Session.ID, request.AgentID,
+			runID, request.Adapter, baseCommit, resultCommit, finishStatus, success,
+			[]string{"EVIDENCE-RUN-" + runID + "-COMMAND", "EVIDENCE-RUN-" + runID + "-OUTPUT", "EVIDENCE-RUN-" + runID + "-ENV"})
+	}
 	currentRevision := executionRevision
 	if success && resultCommit != baseCommit {
 		if err := r.store.ObserveHEAD(context.Background(), task.ID, resultCommit, currentRevision); err != nil {
@@ -887,6 +906,24 @@ func (r *Runtime) renderTaskContext(ctx context.Context, task model.Task) (strin
 		return "", fmt.Errorf("%w: render task trust context", model.ErrInvalid)
 	}
 	return payload, nil
+}
+
+func (r *Runtime) currentRepositoryHEAD(ctx context.Context, fallback string) string {
+	command := exec.CommandContext(ctx, "git", "-C", r.layout.Root, "rev-parse", "HEAD")
+	output, err := command.Output()
+	if err != nil {
+		return fallback
+	}
+	head := string(bytes.TrimSpace(output))
+	if len(head) != 40 {
+		return fallback
+	}
+	for _, r := range head {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return fallback
+		}
+	}
+	return head
 }
 
 func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {

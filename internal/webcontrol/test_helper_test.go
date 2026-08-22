@@ -23,6 +23,11 @@ func newAuthenticatedTestClient(t *testing.T, role string) *testClient {
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
+	return newAuthenticatedServerClient(t, server, role)
+}
+
+func newAuthenticatedServerClient(t *testing.T, server *webcontrol.Server, role string) *testClient {
+	t.Helper()
 
 	code, err := server.Sessions().CreateOneTimeCode("test-operator", role)
 	if err != nil {

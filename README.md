@@ -27,14 +27,14 @@ MARSHAL enforces strict operational separation:
 1. **Separation of Authority**: Agents hold explicit, leased capabilities; policy engines approve execution paths.
 2. **Fail-Closed Sandboxing**: Unprivileged Linux `bubblewrap` (`bwrap`) namespaces isolate filesystem and process environments.
 3. **Empirical Verification**: No task is marked `PASSED` without reproducible test runs, clean git diffs, and evidence digests.
-4. **Tamper-Evident Audit Trail**: Event logs, decisions, provenance chains, and artifacts are recorded with cryptographic digest links in SQLite (`v69`).
+4. **Tamper-Evident Audit Trail**: Event logs, decisions, provenance chains, and artifacts are recorded with cryptographic digest links in SQLite (`v70`).
 
 ---
 
 ## What MARSHAL Provides
 
 - **Fail-Closed Execution Cells**: Process supervisor operating inside unprivileged Linux `bwrap` sandboxes with worktree isolation and egress network filtering.
-- **Institutional Memory Engine**: Canonical SQLite (`v69` / `memory_records_v2`) backing working scratchpads (CAS revision), episodic traces, procedural workflows, and semantic facts with disposable derived index rebuild parity for tested fixtures.
+- **Institutional Memory Engine**: Canonical SQLite (`v70` / `memory_records_v2`) backing working scratchpads (CAS revision), episodic traces, procedural workflows, and semantic facts with disposable derived index rebuild parity for tested fixtures.
 - **Multi-Track Adaptive Retrieval**: Multi-track retrieval router combining BM25 lexical search, vector similarity, code graph impact analysis, and grounded evidence plan compilation with XML delimiter armor.
 - **Cryptographic & Governance Custody**: HMAC/SHA-256 signed mutation envelopes, AES-GCM-256 envelope encryption at rest with AAD binding, direct-ID tenant ACL enforcement, and active sycophancy rejection.
 - **Capability Broker & Leases**: Transactional task leases (`0600` Unix socket control) preventing concurrent file collisions and unauthorized API calls.
@@ -121,7 +121,7 @@ MARSHAL includes an institutional memory subsystem designed around current agent
        width="100%">
 </p>
 
-> Source-faithful to runtime `1.0.1` / SQLite schema `v69` at source snapshot
+> Source-faithful to runtime `1.0.1` / SQLite schema `v70` at source snapshot
 > `8f7d092e038e`. Roadmap-only or contract-only components are intentionally omitted.
 
 For detailed technical specs, inspect [docs/architecture.md](docs/architecture.md) and [docs/concepts.md](docs/concepts.md).
@@ -134,7 +134,7 @@ For detailed technical specs, inspect [docs/architecture.md](docs/architecture.m
 |---|---|
 | **Product Release** | **`v1.0.1`** |
 | **Source Channel** | `main` |
-| **Database Schema** | **`v69`** (SQLite WAL mode) |
+| **Database Schema** | **`v70`** (SQLite WAL mode) |
 | **MCP Protocol** | `2026-07-28` |
 | **A2A Wire Version** | `1.0` |
 | **Platform Support** | Linux (x86_64 / arm64) |

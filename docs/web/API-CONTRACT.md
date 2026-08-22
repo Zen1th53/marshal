@@ -35,6 +35,7 @@ This document formalizes the complete JSON HTTP contract for the MARSHAL Web Con
 
 ### 2.4 Institutional Memory
 - `GET /api/v1/memory/search?q=...` -> `PagedResponse[MemoryRecordDTO]`
+- `GET /api/v1/memory/retrieval/explain?task_id=...` -> `RetrievalExplainResponseDTO`
 - `GET /api/v1/memory/:id` -> `MemoryRecordDTO`
 - `POST /api/v1/memory/:id/mutate` -> `MutationEnvelope[MemoryMutationDTO]`
 

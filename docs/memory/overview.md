@@ -4,6 +4,8 @@
 
 The MARSHAL Memory Subsystem provides a multi-tier, security-governed institutional memory architecture for autonomous coding agents, evaluated with reproducible internal and external-compatible benchmarks.
 
+See [Runtime Memory Lifecycle](runtime-lifecycle.md) for the production task-start recall, bounded admission, terminal capture, utility attribution, and retrieval receipt behavior.
+
 ## Core Architectural Invariants
 
 1. **Canonical Truth vs Derived Indexes**:

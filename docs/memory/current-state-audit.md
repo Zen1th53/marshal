@@ -2,7 +2,7 @@
 
 **Produced by:** T77 — Memory Baseline Audit and Authority Map
 **Baseline commit:** f9dd8d1 (T56–T76 PASS confirmed)
-**Schema version:** v69
+**Schema version:** v70
 
 ## 1. Canonical Memory Tables
 
@@ -76,6 +76,9 @@ These are NOT canonical memory stores. They are decision logs for runtime subsys
 | `egress_decisions` | v23 | network egress policy outcomes | subsystem-derived |
 | `context_budget_decisions` | v38 | context budget allocations | subsystem-derived |
 | `model_router_decisions` | v47 | model selection logs | subsystem-derived |
+| `memory_runtime_traces` | v70 | content-free task recall/admission attribution | subsystem-derived |
+| `memory_runtime_outcomes` | v70 | idempotent task outcome attribution for admitted memory IDs | subsystem-derived |
+| `memory_utility_scores` | v70 | bounded learned ranking aggregates | subsystem-derived |
 
 These must not be merged into the canonical memory store.
 

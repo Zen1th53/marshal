@@ -57,7 +57,7 @@ This document provides the definitive, audit-verified reality classification for
 | `/api/v1/audit/events` | `GET` | `REAL (CANONICAL)` | Audit trail query with outcome filters | `policy.admin` |
 | `/api/v1/audit/export` | `GET` | `REAL (CANONICAL)` | Streaming tamper-evident JSON audit export | `policy.admin` |
 | `/api/v1/memory/search` | `GET` | `REAL (CANONICAL)` | Hybrid vector + lexical memory search | Authenticated Session |
-| `/api/v1/memory/retrieval/explain` | `GET` | `REAL (CANONICAL)` | RRF fusion explainability & score breakdown | Authenticated Session |
+| `/api/v1/memory/retrieval/explain?task_id=...` | `GET` | `REAL (RUNTIME TRACE)` | Content-free recall/admission receipt for the task's latest run | Authenticated Session |
 | `/api/v1/memory/governance/queue` | `GET` | `REAL (CANONICAL)` | Memory governance & conflict queue | `policy.admin` |
 | `/api/v1/memory/governance/conflicts/{id}` | `GET` | `REAL (CANONICAL)` | Conflict comparison & diff analysis | `policy.admin` |
 | `/api/v1/memory/working` | `GET` | `REAL (CANONICAL)` | Working memory slot inspector | Authenticated Session |

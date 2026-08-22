@@ -1,24 +1,31 @@
 package webcontrol
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type RetrievalCandidateDTO struct {
-	MemoryID         string  `json:"memory_id"`
-	Title            string  `json:"title"`
-	Kind             string  `json:"kind"`
-	Scope            string  `json:"scope"`
-	LexicalRank      int     `json:"lexical_rank"`
-	LexicalScore     float64 `json:"lexical_score"` // BM25 match score
-	DenseRank        int     `json:"dense_rank"`
-	DenseScore       float64 `json:"dense_score"`       // Vector similarity
-	GraphBonus       float64 `json:"graph_bonus"`       // Knowledge graph proximity
-	FreshnessPenalty float64 `json:"freshness_penalty"` // Age decay
-	FinalRRFScore    float64 `json:"final_rrf_score"`   // Reciprocal rank fusion
-	RerankRationale  string  `json:"rerank_rationale"`
+	MemoryID         string   `json:"memory_id"`
+	Title            string   `json:"title"`
+	Kind             string   `json:"kind"`
+	Scope            string   `json:"scope"`
+	LexicalRank      int      `json:"lexical_rank"`
+	LexicalScore     float64  `json:"lexical_score"` // BM25 match score
+	DenseRank        int      `json:"dense_rank"`
+	DenseScore       float64  `json:"dense_score"`       // Vector similarity
+	GraphBonus       float64  `json:"graph_bonus"`       // Knowledge graph proximity
+	FreshnessPenalty float64  `json:"freshness_penalty"` // Age decay
+	FinalRRFScore    float64  `json:"final_rrf_score"`   // Reciprocal rank fusion
+	RerankRationale  string   `json:"rerank_rationale"`
+	UtilityScore     float64  `json:"utility_score,omitempty"`
+	ContextTokens    int      `json:"context_tokens,omitempty"`
+	Decision         string   `json:"decision,omitempty"`
+	Reasons          []string `json:"reasons,omitempty"`
 }
 
 type RetrievalExplainResponseDTO struct {
@@ -32,6 +39,41 @@ type RetrievalExplainResponseDTO struct {
 
 func (s *Server) handleExplainRetrieval(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("query"))
+	if s.store != nil {
+		taskID := strings.TrimSpace(r.URL.Query().Get("task_id"))
+		if taskID == "" {
+			writeError(w, http.StatusBadRequest, "task_id_required", "task_id is required for live retrieval traces", GetCorrelationID(r.Context()))
+			return
+		}
+		project, err := s.store.Project(r.Context())
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "trace_unavailable", "memory trace is unavailable", GetCorrelationID(r.Context()))
+			return
+		}
+		trace, err := s.store.LatestMemoryRuntimeTrace(r.Context(), project.ID, taskID)
+		if err != nil {
+			if errors.Is(err, model.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "trace_not_found", "no retrieval trace exists for this task", GetCorrelationID(r.Context()))
+				return
+			}
+			writeError(w, http.StatusServiceUnavailable, "trace_unavailable", "memory trace is unavailable", GetCorrelationID(r.Context()))
+			return
+		}
+		candidates := make([]RetrievalCandidateDTO, 0, len(trace.Candidates))
+		for _, candidate := range trace.Candidates {
+			candidates = append(candidates, RetrievalCandidateDTO{
+				MemoryID: candidate.MemoryID, FinalRRFScore: candidate.RankScore,
+				UtilityScore: candidate.UtilityScore, ContextTokens: candidate.Tokens,
+				Decision: candidate.Decision, Reasons: candidate.Reasons,
+				RerankRationale: strings.Join(candidate.Reasons, "; "),
+			})
+		}
+		writeJSON(w, http.StatusOK, RetrievalExplainResponseDTO{
+			Query: trace.QueryDigest, EmbedderModel: "runtime-memory", EmbedderStatus: "ready",
+			FusionAlgorithm: "RRF-k60 + bounded utility", Candidates: candidates, EvaluatedAt: trace.CreatedAt,
+		})
+		return
+	}
 	if q == "" {
 		q = "architectural loopback invariant"
 	}

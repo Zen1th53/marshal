@@ -19,6 +19,11 @@ var knownMemoryTables = map[string]string{
 	"memory_records_v2": "canonical-v2: primary memory store, T79",
 	// T84: transactional outbox for derived indexers
 	"memory_outbox": "canonical-outbox: derived index mutation log, T84",
+	// M70: bounded runtime attribution and learned utility; neither stores
+	// canonical memory content.
+	"memory_runtime_traces":   "derived: content-free recall attribution, M70",
+	"memory_runtime_outcomes": "derived: idempotent outcome attribution, M70",
+	"memory_utility_scores":   "derived: bounded ranking aggregates, M70",
 }
 
 // derivedDecisionTables are subsystem decision logs, not canonical memory.
