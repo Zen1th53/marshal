@@ -50,12 +50,15 @@ type Storage struct {
 	Source     string `json:"source"`
 }
 type Accelerator struct {
-	Vendor         string   `json:"vendor"`
-	Model          string   `json:"model,omitempty"`
-	TotalVRAMBytes *uint64  `json:"total_vram_bytes,omitempty"`
-	UsedVRAMBytes  *uint64  `json:"used_vram_bytes,omitempty"`
-	TemperatureC   *float64 `json:"temperature_c,omitempty"`
-	Source         string   `json:"source"`
+	Vendor          string   `json:"vendor"`
+	Model           string   `json:"model,omitempty"`
+	MemorySemantics string   `json:"memory_semantics"`
+	TotalVRAMBytes  *uint64  `json:"total_vram_bytes,omitempty"`
+	UsedVRAMBytes   *uint64  `json:"used_vram_bytes,omitempty"`
+	TemperatureC    *float64 `json:"temperature_c,omitempty"`
+	Source          string   `json:"source"`
+	InventorySource string   `json:"inventory_source"`
+	TelemetrySource string   `json:"telemetry_source"`
 }
 type Health struct {
 	RAM      Status   `json:"ram"`
@@ -168,7 +171,7 @@ func (c *Collector) Collect(ctx context.Context, statePath string) Snapshot {
 	} else {
 		s.Failures = append(s.Failures, "storage inventory unavailable")
 	}
-	s.Accelerators = c.nvidia(ctx)
+	s.Accelerators = c.accelerators(ctx)
 	thermal, thermalWarning := c.thermal()
 	s.Health = assess(s.Memory, s.Storage, thermal, thermalWarning)
 	s.Ollama = c.ollama(ctx, s.Memory.AvailableBytes, s.Accelerators)
@@ -255,19 +258,165 @@ func statStorage(path string) (Storage, error) {
 	size := uint64(st.Bsize)
 	return Storage{Path: path, TotalBytes: st.Blocks * size, FreeBytes: st.Bavail * size, Source: "statfs"}, nil
 }
-func (c *Collector) nvidia(ctx context.Context) []Accelerator {
+func (c *Collector) accelerators(ctx context.Context) []Accelerator {
+	result := c.drmAccelerators()
+	return c.enrichNVIDIA(ctx, result)
+}
+
+// drmAccelerators is intentionally limited to the generic Linux DRM and hwmon
+// interfaces. It does not require privileges or retain a polling process.
+func (c *Collector) drmAccelerators() []Accelerator {
+	cards, _ := filepath.Glob(filepath.Join(c.SysRoot, "class", "drm", "card[0-9]*"))
+	result := make([]Accelerator, 0, len(cards))
+	for _, card := range cards {
+		deviceDir := filepath.Join(card, "device")
+		vendorID, err := readHex(filepath.Join(deviceDir, "vendor"))
+		if err != nil {
+			continue
+		}
+		vendor := acceleratorVendor(vendorID)
+		if vendor == "" {
+			continue
+		}
+		deviceID, _ := readHex(filepath.Join(deviceDir, "device"))
+		a := Accelerator{
+			Vendor:          vendor,
+			Model:           acceleratorModel(vendor, deviceID, deviceDir),
+			MemorySemantics: "SHARED_OR_UNKNOWN",
+			Source:          "sysfs-drm",
+			InventorySource: "sysfs-drm",
+			TelemetrySource: "UNKNOWN",
+		}
+		if total, err := readUint(filepath.Join(deviceDir, "mem_info_vram_total")); err == nil && total > 0 {
+			a.TotalVRAMBytes = &total
+			a.MemorySemantics = "DEDICATED"
+			if used, err := readUint(filepath.Join(deviceDir, "mem_info_vram_used")); err == nil {
+				a.UsedVRAMBytes = &used
+			}
+			a.TelemetrySource = "sysfs-drm"
+		}
+		if temp, ok := c.drmTemperature(deviceDir); ok {
+			a.TemperatureC = &temp
+			a.TelemetrySource = appendSource(a.TelemetrySource, "sysfs-hwmon")
+		}
+		result = append(result, a)
+	}
+	return result
+}
+
+func acceleratorVendor(id uint64) string {
+	switch id {
+	case 0x8086:
+		return "Intel"
+	case 0x1002:
+		return "AMD"
+	case 0x10de:
+		return "NVIDIA"
+	default:
+		return ""
+	}
+}
+
+func acceleratorModel(vendor string, device uint64, deviceDir string) string {
+	for _, name := range []string{"product_name", "name"} {
+		if raw, err := os.ReadFile(filepath.Join(deviceDir, name)); err == nil && strings.TrimSpace(string(raw)) != "" {
+			return strings.TrimSpace(string(raw))
+		}
+	}
+	switch vendor {
+	case "Intel":
+		if device >= 0x5600 && device <= 0x56ff {
+			return "Intel Arc Graphics"
+		}
+		return "Intel Graphics"
+	case "AMD":
+		return "AMD Radeon Graphics"
+	case "NVIDIA":
+		return "NVIDIA GPU"
+	default:
+		return ""
+	}
+}
+
+func readHex(path string) (uint64, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseUint(strings.TrimPrefix(strings.TrimSpace(string(raw)), "0x"), 16, 64)
+}
+
+func readUint(path string) (uint64, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
+}
+
+func (c *Collector) drmTemperature(deviceDir string) (float64, bool) {
+	paths, _ := filepath.Glob(filepath.Join(deviceDir, "hwmon", "hwmon*", "temp*_input"))
+	for _, path := range paths {
+		if temp, ok := readTemperature(path); ok {
+			return temp, true
+		}
+	}
+	// Some drivers expose hwmon only through the generic class directory. A
+	// direct device link keeps this association bounded to the DRM card.
+	hwmons, _ := filepath.Glob(filepath.Join(c.SysRoot, "class", "hwmon", "hwmon*"))
+	for _, hwmon := range hwmons {
+		linkedDevice, err := filepath.EvalSymlinks(filepath.Join(hwmon, "device"))
+		if err != nil || linkedDevice != deviceDir {
+			continue
+		}
+		paths, _ := filepath.Glob(filepath.Join(hwmon, "temp*_input"))
+		for _, path := range paths {
+			if temp, ok := readTemperature(path); ok {
+				return temp, true
+			}
+		}
+	}
+	return 0, false
+}
+
+func readTemperature(path string) (float64, bool) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	temp, err := strconv.ParseFloat(strings.TrimSpace(string(raw)), 64)
+	if err != nil || temp < 0 {
+		return 0, false
+	}
+	if temp > 1000 {
+		temp /= 1000
+	}
+	return temp, true
+}
+
+func appendSource(current, source string) string {
+	if current == "" || current == "UNKNOWN" {
+		return source
+	}
+	if strings.Contains(current, source) {
+		return current
+	}
+	return current + "+" + source
+}
+
+func (c *Collector) enrichNVIDIA(ctx context.Context, result []Accelerator) []Accelerator {
 	if c.LookPath == nil || c.Run == nil {
-		return nil
+		return result
 	}
 	bin, err := c.LookPath("nvidia-smi")
 	if err != nil {
-		return nil
+		return result
 	}
 	out, err := run(ctx, c.Run, bin, "--query-gpu=name,memory.total,memory.used,temperature.gpu", "--format=csv,noheader,nounits")
 	if err != nil {
-		return nil
+		return result
 	}
-	var result []Accelerator
+	nvidiaIndex := 0
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		p := strings.Split(line, ",")
 		if len(p) != 4 {
@@ -276,16 +425,32 @@ func (c *Collector) nvidia(ctx context.Context) []Accelerator {
 		total, e1 := strconv.ParseUint(strings.TrimSpace(p[1]), 10, 64)
 		used, e2 := strconv.ParseUint(strings.TrimSpace(p[2]), 10, 64)
 		temp, e3 := strconv.ParseFloat(strings.TrimSpace(p[3]), 64)
-		if e1 != nil || e2 != nil {
-			continue
+		var a *Accelerator
+		for i := nvidiaIndex; i < len(result); i++ {
+			if result[i].Vendor == "NVIDIA" {
+				a = &result[i]
+				nvidiaIndex = i + 1
+				break
+			}
 		}
-		total *= 1024 * 1024
-		used *= 1024 * 1024
-		a := Accelerator{Vendor: "NVIDIA", Model: strings.TrimSpace(p[0]), TotalVRAMBytes: &total, UsedVRAMBytes: &used, Source: "nvidia-smi"}
+		if a == nil {
+			result = append(result, Accelerator{Vendor: "NVIDIA", MemorySemantics: "SHARED_OR_UNKNOWN", Source: "nvidia-smi", InventorySource: "nvidia-smi", TelemetrySource: "UNKNOWN"})
+			a = &result[len(result)-1]
+		}
+		a.Model = strings.TrimSpace(p[0])
+		a.Source = appendSource(a.Source, "nvidia-smi")
+		a.InventorySource = appendSource(a.InventorySource, "nvidia-smi")
+		if e1 == nil && e2 == nil {
+			total *= 1024 * 1024
+			used *= 1024 * 1024
+			a.TotalVRAMBytes, a.UsedVRAMBytes = &total, &used
+			a.MemorySemantics = "DEDICATED"
+			a.TelemetrySource = appendSource(a.TelemetrySource, "nvidia-smi")
+		}
 		if e3 == nil {
 			a.TemperatureC = &temp
+			a.TelemetrySource = appendSource(a.TelemetrySource, "nvidia-smi")
 		}
-		result = append(result, a)
 	}
 	return result
 }

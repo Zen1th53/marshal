@@ -23,7 +23,7 @@ interface ResourceData {
   cpu: { model?: string; logical: number; effective: number; architecture: string };
   memory: { total_bytes: number; available_bytes: number; swap_total_bytes: number; swap_used_bytes: number };
   storage: { path: string; total_bytes: number; free_bytes: number };
-  accelerators: Array<{ vendor: string; model?: string; total_vram_bytes?: number; used_vram_bytes?: number; temperature_c?: number }>;
+  accelerators: Array<{ vendor: string; model?: string; memory_semantics: string; total_vram_bytes?: number; used_vram_bytes?: number; temperature_c?: number; source: string; inventory_source: string; telemetry_source: string }>;
   ollama: { status: string; endpoint: string; models: Array<{ name: string; compatibility: string; reason: string }> };
   health: { overall: string; ram: string; swap: string; disk: string; thermal: string; warnings?: string[] };
   recommendation: { concurrency: number; profile: string; reasons: string[]; recommended_model?: string };
@@ -110,6 +110,11 @@ export function Operations() {
                 <div className="text-xs text-muted">RAM: {bytes(resources.memory.available_bytes)} available of {bytes(resources.memory.total_bytes)}</div>
                 <div className="text-xs text-muted">Disk: {bytes(resources.storage.free_bytes)} free</div>
                 <div className="text-xs text-muted">Ollama: {resources.ollama.status} · {resources.ollama.models.length} installed models</div>
+              </div>
+              <div className="text-xs text-muted" style={{ marginTop: 'var(--space-2)' }}>
+                Accelerators: {resources.accelerators.length === 0 ? 'none detected' : resources.accelerators.map((accelerator) => (
+                  `${accelerator.vendor} ${accelerator.model || 'UNKNOWN'} · memory: ${accelerator.total_vram_bytes ? bytes(accelerator.total_vram_bytes) : accelerator.memory_semantics} · temperature: ${accelerator.temperature_c === undefined ? 'UNKNOWN' : `${accelerator.temperature_c.toFixed(0)} °C`} · telemetry: ${accelerator.telemetry_source || 'UNKNOWN'}`
+                )).join('; ')}
               </div>
               {resources.recommendation.recommended_model ? <p className="text-xs text-muted" style={{ marginTop: 'var(--space-2)' }}>Recommended installed local model: {resources.recommendation.recommended_model}</p> : null}
               {resources.health.warnings?.length ? <p className="text-xs text-muted" style={{ marginTop: 'var(--space-2)' }}>Warnings: {resources.health.warnings.join('; ')}</p> : null}

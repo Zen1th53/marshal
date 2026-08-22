@@ -154,6 +154,23 @@ func Check(ctx context.Context, root string, options Options) Report {
 	}
 	resourceSnapshot := resources.NewCollector().Collect(ctx, layout.RuntimeDir)
 	resourceDetail := fmt.Sprintf("%d effective CPUs, %s RAM available, %s disk free; safe concurrency %d", resourceSnapshot.CPU.Effective, formatBytes(resourceSnapshot.Memory.AvailableBytes), formatBytes(resourceSnapshot.Storage.FreeBytes), resourceSnapshot.Recommendation.Concurrency)
+	if len(resourceSnapshot.Accelerators) == 0 {
+		resourceDetail += "; accelerators: none detected"
+	} else {
+		var accelerators []string
+		for _, accelerator := range resourceSnapshot.Accelerators {
+			model := accelerator.Model
+			if model == "" {
+				model = "UNKNOWN"
+			}
+			telemetry := accelerator.TelemetrySource
+			if telemetry == "" {
+				telemetry = "UNKNOWN"
+			}
+			accelerators = append(accelerators, fmt.Sprintf("%s %s (telemetry: %s)", accelerator.Vendor, model, telemetry))
+		}
+		resourceDetail += "; accelerators: " + strings.Join(accelerators, ", ")
+	}
 	if resourceSnapshot.Health.Overall == resources.StatusCritical {
 		resourceDetail += " (critical pressure)"
 	} else if resourceSnapshot.Health.Overall == resources.StatusWarn {

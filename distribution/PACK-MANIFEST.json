@@ -1091,8 +1091,8 @@
     },
     {
       "path": "docs/resources.md",
-      "sha256": "bbc130327a63e130d1fc81aaf9a9ea707f9a496ac5524b91740120d0d50819fa",
-      "bytes": 2414
+      "sha256": "d4ca2d58d47348c30812a59d8cb92143a4aa794a4d303e17e22133aed8f0f877",
+      "bytes": 2865
     },
     {
       "path": "docs/risk-engine.md",
@@ -2086,8 +2086,8 @@
     },
     {
       "path": "internal/doctor/doctor.go",
-      "sha256": "7a8a0d209994d59434a9ca0b6e38b0a9bf70414a0e286f58d884101b2f84b442",
-      "bytes": 14298
+      "sha256": "269f08f4f2a4fd96cead1165d26761e87e2411e7b1fc8ef68a86b9aeb865b5e0",
+      "bytes": 14868
     },
     {
       "path": "internal/doctor/doctor_test.go",
@@ -3531,13 +3531,13 @@
     },
     {
       "path": "internal/resources/resources.go",
-      "sha256": "41f5a0805d95e4c0b8a7a330e092d3a530b7c04718ed903ff6175d2748e267d3",
-      "bytes": 14719
+      "sha256": "85bcae7c59e8e7cb361ef987cce0bbccbbcc98e0f307cb04d90b7ed22765b12d",
+      "bytes": 19559
     },
     {
       "path": "internal/resources/resources_test.go",
-      "sha256": "efb65efddd848ae59e3282a7e1eec45ba503d86027c884cf97a1637d18d28eaa",
-      "bytes": 4581
+      "sha256": "ba0fdf1b27c4c23c5c6c0211278bb5c5fa341f4bb17f6440db3a808a6fd9ab38",
+      "bytes": 9507
     },
     {
       "path": "internal/risk/a10_release_test.go",
@@ -4725,13 +4725,13 @@
       "bytes": 56233
     },
     {
-      "path": "internal/webcontrol/dist/assets/index-BY4gMnWL.js",
-      "sha256": "a95e83debd19bac6eae55525dddb7935aed050a3d8d406ec31af298f7c11d685",
-      "bytes": 345597
+      "path": "internal/webcontrol/dist/assets/index-DkeppT-G.js",
+      "sha256": "de2294292ebfdce39977576a99dc71c56eab6decc5b228ef44dd145619a54b4f",
+      "bytes": 347945
     },
     {
       "path": "internal/webcontrol/dist/index.html",
-      "sha256": "e8d7476b34aebbff70ad09ed47b40b182d0946c3f62fa507635c0bc575217f2b",
+      "sha256": "7a921494ae534269a121db7e860773655749ffd64799cadc76308e02fb290c8e",
       "bytes": 599
     },
     {
@@ -6061,8 +6061,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "928c95865df468ca79676e5e9ab8f8f7367c70069e015161ce102034c39c5075",
-      "bytes": 40763
+      "sha256": "c19fceab8c2cc8b1525cca2829d5566cb4b1257341caa04787754269ecaccd51",
+      "bytes": 40857
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -6526,8 +6526,8 @@
     },
     {
       "path": "web/src/routes/Operations.tsx",
-      "sha256": "14517cc7eb497bc8f1f73bdfc4a77602bffb0523b1b103e1ad6e4417c82de484",
-      "bytes": 7278
+      "sha256": "9fa4524781959a4db05e83d9f12d11c8c72a82a32d6abf6d7d61e4eb339ea6f3",
+      "bytes": 8014
     },
     {
       "path": "web/src/routes/Overview.test.tsx",

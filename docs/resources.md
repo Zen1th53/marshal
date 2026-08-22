@@ -7,7 +7,8 @@ MARSHAL Community can inspect the local machine and make conservative safety rec
 - CPU model, logical/effective CPU count, and architecture;
 - RAM, available RAM, swap use, and cgroup v2 CPU/memory limits where exposed;
 - free space for the MARSHAL state location;
-- best-effort NVIDIA telemetry through a fixed, timeout-bounded `nvidia-smi` invocation;
+- generic Linux accelerator inventory through `/sys/class/drm`, with best-effort temperature and dedicated-memory telemetry from `/sys/class/hwmon` and DRM memory attributes;
+- optional, timeout-bounded `nvidia-smi` enrichment for NVIDIA model, memory, and temperature telemetry;
 - best-effort thermal-zone readings; unavailable sensors are `UNKNOWN`, never zero; and
 - a fixed loopback-only Ollama `/api/tags` request, including installed-model size metadata when supplied by Ollama.
 
@@ -23,6 +24,6 @@ Installed local models are classified as `RECOMMENDED`, `MAY_FIT`, `NOT_RECOMMEN
 
 ## Limits and boundary
 
-GPU and thermal discovery are optional. CPU-only systems, missing vendor CLIs, unavailable Ollama, malformed API responses, and containers without telemetry continue safely with unavailable/unknown fields. Localhost discovery does not relax egress controls and no network destinations are inspected.
+GPU and thermal discovery are optional. CPU-only systems, missing vendor CLIs, unavailable Ollama, malformed sysfs/API responses, and containers without telemetry continue safely with unavailable/`UNKNOWN` fields. Intel Arc, AMD, and NVIDIA cards are inventoried from DRM without a vendor utility; `nvidia-smi` only enriches NVIDIA results when present. Integrated/shared-memory GPUs deliberately report `SHARED_OR_UNKNOWN` rather than a fabricated zero-VRAM value. Localhost discovery does not relax egress controls and no network destinations are inspected.
 
 Enterprise-only features remain intentionally absent: adaptive governors, continuous optimization, fleet placement, cross-worker telemetry, GPU packing, automatic model migration, and organization-level model economics.
