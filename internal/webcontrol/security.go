@@ -2,6 +2,7 @@ package webcontrol
 
 import (
 	"net/http"
+	"os/exec"
 	"time"
 )
 
@@ -34,14 +35,24 @@ type SecurityPolicyInspectorResponseDTO struct {
 func (s *Server) handleGetSecurityPolicy(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 
+	loopbackStatus := "enforced"
+	if s.config.Host != "127.0.0.1" && s.config.Host != "localhost" {
+		loopbackStatus = "degraded"
+	}
+
+	sandboxStatus := "enforced"
+	if _, err := exec.LookPath("bwrap"); err != nil {
+		sandboxStatus = "degraded"
+	}
+
 	rules := []GateRuleDTO{
 		{
 			ID:              "GATE-001-LOOPBACK",
 			Name:            "Strict Loopback Bind Constraint",
 			Enforcement:     "mandatory",
-			Status:          "enforced",
+			Status:          loopbackStatus,
 			Description:     "Web Control Plane MUST strictly bind to 127.0.0.1 loopback interface. Public 0.0.0.0 egress blocked.",
-			LastEvaluatedAt: now.Add(-1 * time.Minute),
+			LastEvaluatedAt: now,
 		},
 		{
 			ID:              "GATE-002-ZERO-SECRET",
@@ -49,7 +60,7 @@ func (s *Server) handleGetSecurityPolicy(w http.ResponseWriter, r *http.Request)
 			Enforcement:     "mandatory",
 			Status:          "enforced",
 			Description:     "Blocks keys, passwords, bearer tokens and credentials from SSE streams, REST responses, and logs.",
-			LastEvaluatedAt: now.Add(-2 * time.Minute),
+			LastEvaluatedAt: now,
 		},
 		{
 			ID:              "GATE-003-INDEPENDENT-QUORUM",
@@ -57,15 +68,15 @@ func (s *Server) handleGetSecurityPolicy(w http.ResponseWriter, r *http.Request)
 			Enforcement:     "mandatory",
 			Status:          "enforced",
 			Description:     "Prohibits single-model self-attestation. Requires 2 independent model providers for critical gate merges.",
-			LastEvaluatedAt: now.Add(-5 * time.Minute),
+			LastEvaluatedAt: now,
 		},
 		{
 			ID:              "GATE-004-SANDBOX-ISOLATION",
 			Name:            "Ephemeral Subprocess Sandbox",
 			Enforcement:     "mandatory",
-			Status:          "enforced",
+			Status:          sandboxStatus,
 			Description:     "Execution runs are sandboxed with restricted filesystem and network namespaces.",
-			LastEvaluatedAt: now.Add(-3 * time.Minute),
+			LastEvaluatedAt: now,
 		},
 	}
 

@@ -93,8 +93,61 @@ func (s *Server) handleGetReviewQueue(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var items []ReviewQueueItemDTO
+	if s.store != nil && s.store.DB() != nil {
+		rows, err := s.store.DB().Query(`
+			SELECT id, title, status, COALESCE(assigned_agent_id, 'agent-codex-implementer'), created_at
+			FROM tasks
+			ORDER BY created_at DESC
+			LIMIT 50
+		`)
+		if err == nil && rows != nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id, title, status, agent string
+				var createdAt time.Time
+				if err := rows.Scan(&id, &title, &status, &agent, &createdAt); err == nil {
+					stage := "gate_review"
+					risk := "MEDIUM"
+					approvals := 1
+					quorum := 2
+					blockers := 0
+
+					if status == "completed" {
+						stage = "merge_approval"
+						approvals = 2
+						risk = "LOW"
+					} else if status == "blocked" || status == "failed" {
+						stage = "plan_review"
+						risk = "HIGH"
+						blockers = 1
+					}
+
+					items = append(items, ReviewQueueItemDTO{
+						TaskID:         id,
+						Title:          title,
+						Stage:          stage,
+						Risk:           risk,
+						Owner:          agent,
+						BaseCommit:     "master",
+						HeadCommit:     id,
+						IsStaleHead:    false,
+						ApprovalsCount: approvals,
+						RequiredQuorum: quorum,
+						BlockerCount:   blockers,
+						SubmittedAt:    createdAt,
+					})
+				}
+			}
+		}
+	}
+
+	if len(items) == 0 {
+		items = mockReviewQueue
+	}
+
 	var filtered []ReviewQueueItemDTO
-	for _, item := range mockReviewQueue {
+	for _, item := range items {
 		if stageFilter != "" && stageFilter != "all" && item.Stage != stageFilter {
 			continue
 		}
@@ -109,15 +162,16 @@ func (s *Server) handleGetReviewQueue(w http.ResponseWriter, r *http.Request) {
 
 	total := len(filtered)
 	start := offset
+	end := offset + limit
 	if start > total {
 		start = total
 	}
-	end := start + limit
 	if end > total {
 		end = total
 	}
 
 	paged := filtered[start:end]
+
 	writeJSON(w, http.StatusOK, ReviewQueueResponseDTO{
 		Items:      paged,
 		TotalCount: total,

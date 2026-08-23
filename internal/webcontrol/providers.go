@@ -3,6 +3,7 @@ package webcontrol
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -58,54 +59,101 @@ func (s *Server) handleGetProviders(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 
+	// Live environment probe
+	hasAnthropic := os.Getenv("ANTHROPIC_API_KEY") != ""
+	hasOpenAI := os.Getenv("OPENAI_API_KEY") != ""
+	hasGemini := os.Getenv("GEMINI_API_KEY") != ""
+
+	// Live Ollama probe
+	ollamaStatus := "unavailable"
+	var ollamaModels []ActiveModelDTO
+	client := http.Client{Timeout: 500 * time.Millisecond}
+	resp, err := client.Get("http://127.0.0.1:11434/api/tags")
+	if err == nil && resp != nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			ollamaStatus = "healthy"
+			var data struct {
+				Models []struct {
+					Name string `json:"name"`
+				} `json:"models"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&data); err == nil {
+				for _, m := range data.Models {
+					ollamaModels = append(ollamaModels, ActiveModelDTO{
+						ID:            m.Name,
+						ContextWindow: 32768,
+						LatencyP95Ms:  45.0,
+					})
+				}
+			}
+		}
+	}
+	if len(ollamaModels) == 0 {
+		ollamaModels = []ActiveModelDTO{
+			{ID: "llama-3.3-70b", ContextWindow: 32768, LatencyP95Ms: 1400.0},
+			{ID: "qwen2.5-coder-32b", ContextWindow: 32768, LatencyP95Ms: 920.0},
+		}
+	}
+
+	anthropicStatus := "unavailable"
+	if hasAnthropic {
+		anthropicStatus = "healthy"
+	}
+	openAIStatus := "unavailable"
+	if hasOpenAI {
+		openAIStatus = "healthy"
+	}
+	geminiStatus := "unavailable"
+	if hasGemini {
+		geminiStatus = "healthy"
+	}
+
 	providers := []ProviderDTO{
 		{
 			ID:           "anthropic",
 			Name:         "Anthropic Claude",
 			Class:        "cloud",
-			ProbeStatus:  "healthy",
+			ProbeStatus:  anthropicStatus,
 			Capabilities: []string{"reasoning", "tool_use", "code_generation", "json_mode"},
 			Models: []ActiveModelDTO{
 				{ID: "claude-3-7-sonnet", ContextWindow: 200000, LatencyP95Ms: 850.0},
 				{ID: "claude-3-5-haiku", ContextWindow: 200000, LatencyP95Ms: 280.0},
 			},
-			LastProbedAt: now.Add(-2 * time.Minute),
+			LastProbedAt: now,
 		},
 		{
 			ID:           "google",
 			Name:         "Google Gemini",
 			Class:        "cloud",
-			ProbeStatus:  "healthy",
+			ProbeStatus:  geminiStatus,
 			Capabilities: []string{"multimodal", "1m_context", "code_generation", "tool_use"},
 			Models: []ActiveModelDTO{
 				{ID: "gemini-2.0-pro-exp", ContextWindow: 1000000, LatencyP95Ms: 620.0},
 				{ID: "gemini-2.0-flash", ContextWindow: 1000000, LatencyP95Ms: 210.0},
 			},
-			LastProbedAt: now.Add(-3 * time.Minute),
+			LastProbedAt: now,
 		},
 		{
 			ID:           "openai",
 			Name:         "OpenAI Platform",
 			Class:        "cloud",
-			ProbeStatus:  "healthy",
+			ProbeStatus:  openAIStatus,
 			Capabilities: []string{"code_generation", "structured_outputs", "tool_use"},
 			Models: []ActiveModelDTO{
 				{ID: "gpt-4o", ContextWindow: 128000, LatencyP95Ms: 540.0},
 				{ID: "gpt-4o-mini", ContextWindow: 128000, LatencyP95Ms: 190.0},
 			},
-			LastProbedAt: now.Add(-1 * time.Minute),
+			LastProbedAt: now,
 		},
 		{
 			ID:           "ollama-local",
 			Name:         "Local Ollama Engine",
 			Class:        "local",
-			ProbeStatus:  "healthy",
+			ProbeStatus:  ollamaStatus,
 			Capabilities: []string{"offline_airgap", "code_generation"},
-			Models: []ActiveModelDTO{
-				{ID: "llama-3.3-70b", ContextWindow: 32768, LatencyP95Ms: 1400.0},
-				{ID: "qwen2.5-coder-32b", ContextWindow: 32768, LatencyP95Ms: 920.0},
-			},
-			LastProbedAt: now.Add(-5 * time.Minute),
+			Models:       ollamaModels,
+			LastProbedAt: now,
 		},
 	}
 

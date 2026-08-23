@@ -4391,8 +4391,8 @@
     },
     {
       "path": "internal/store/sqlite.go",
-      "sha256": "11135e17198eafc301c484039adc7db2a446d72619a618895a18108925ce2849",
-      "bytes": 3159
+      "sha256": "40e3783cb06b9de85aea98773f67e8cfd1e243a3b88078b945b9b39031c719d0",
+      "bytes": 3281
     },
     {
       "path": "internal/store/sqlite_test.go",
@@ -4626,8 +4626,8 @@
     },
     {
       "path": "internal/webcontrol/agents.go",
-      "sha256": "06b96e64f8e2afb212cf7e0088895498859c250641016c4773bead1993731d64",
-      "bytes": 5224
+      "sha256": "a88895e8035a53993b446b1ce24d49e1db37a1f9dba51e652a70522780dab216",
+      "bytes": 6827
     },
     {
       "path": "internal/webcontrol/agents_test.go",
@@ -4746,8 +4746,8 @@
     },
     {
       "path": "internal/webcontrol/evidence.go",
-      "sha256": "802d4112c7f8d67264a66fdd4b30138e7e8d3687c90fee8639b11266adf7d420",
-      "bytes": 5446
+      "sha256": "d902f13347062685428187424deb6a9a23d2cd37149365292c4bef017e53580b",
+      "bytes": 6672
     },
     {
       "path": "internal/webcontrol/evidence_test.go",
@@ -4776,8 +4776,8 @@
     },
     {
       "path": "internal/webcontrol/health.go",
-      "sha256": "5cbf6120768419b21120d73dba6fa9950b01d89394ac1bf4fd70658ca1b5b19e",
-      "bytes": 1781
+      "sha256": "2ed798c09e5b8f40170500187c44a11ad92a07d0bad41a54c257646b8e06c787",
+      "bytes": 6218
     },
     {
       "path": "internal/webcontrol/health_test.go",
@@ -4891,8 +4891,8 @@
     },
     {
       "path": "internal/webcontrol/provenance.go",
-      "sha256": "d985315b7f96e1ae475e58a0215c0deed21ef9503310b0d6c2a18cac3fcc500b",
-      "bytes": 3662
+      "sha256": "9f86b7c6628d31e6e35a713319a8109aa64997b8ff7c63e50574c657e079fd6b",
+      "bytes": 4098
     },
     {
       "path": "internal/webcontrol/provenance_test.go",
@@ -4901,8 +4901,8 @@
     },
     {
       "path": "internal/webcontrol/providers.go",
-      "sha256": "365c311673944f9da1740391a367d2a4c6d6570fe9e08cf4dde64e1544817bda",
-      "bytes": 6132
+      "sha256": "74a56788bed1cb7c52927d61e331020c286a7163f6441123f5b4fd2abd7a36c9",
+      "bytes": 7252
     },
     {
       "path": "internal/webcontrol/providers_test.go",
@@ -4921,8 +4921,8 @@
     },
     {
       "path": "internal/webcontrol/release_trust.go",
-      "sha256": "c541320e488fab46e67f3ab89f392112119d31239edc73c3a13861a6833b6093",
-      "bytes": 2546
+      "sha256": "66f8585fd52cd03b5e62d85a13b8e906a639fd4fa31becb21ca9aa22f259065a",
+      "bytes": 4246
     },
     {
       "path": "internal/webcontrol/release_trust_test.go",
@@ -4941,8 +4941,8 @@
     },
     {
       "path": "internal/webcontrol/retrieval_trace.go",
-      "sha256": "6832e99f3d060aa02558521eff70563bc6223d6b23e0feac828fe72054523759",
-      "bytes": 3067
+      "sha256": "368d9d381c196ac5984a35c90cae8e3ecc647624cdb773b806ee9b258104b64e",
+      "bytes": 4265
     },
     {
       "path": "internal/webcontrol/retrieval_trace_test.go",
@@ -4951,8 +4951,8 @@
     },
     {
       "path": "internal/webcontrol/review.go",
-      "sha256": "75b7cb9394b5bf1d7dd4bc97b915f1efeb2862e593e31b4878b4ec6b6003342e",
-      "bytes": 3529
+      "sha256": "1a3af6f38dfb703f051d0442e8a554e83f1671dc0ec594ee33f8b5c69e81248d",
+      "bytes": 4837
     },
     {
       "path": "internal/webcontrol/review_test.go",
@@ -5006,8 +5006,8 @@
     },
     {
       "path": "internal/webcontrol/security.go",
-      "sha256": "e287af6235191ce35b47c8829ac9801696ed5813ef642e6117374be19428d8a8",
-      "bytes": 3848
+      "sha256": "a009514e5c7b1160c8bbc6dcbdbb44ccae492534b7a6218a22d2c97be23cd3ab",
+      "bytes": 4022
     },
     {
       "path": "internal/webcontrol/security_headers.go",

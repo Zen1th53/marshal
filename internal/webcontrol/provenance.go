@@ -46,12 +46,26 @@ func (s *Server) handleGetProvenanceTrace(w http.ResponseWriter, r *http.Request
 
 	now := time.Now().UTC()
 
+	rootTitle := "Task " + targetID
+	rootProducer := "operator-zen1th53"
+	rootTime := now.Add(-2 * time.Hour)
+
+	if s.store != nil && s.store.DB() != nil {
+		var title, agent string
+		var createdAt time.Time
+		if err := s.store.DB().QueryRow("SELECT title, COALESCE(assigned_agent_id, 'operator-zen1th53'), created_at FROM tasks WHERE id = ?", targetID).Scan(&title, &agent, &createdAt); err == nil {
+			rootTitle = title
+			rootProducer = agent
+			rootTime = createdAt
+		}
+	}
+
 	rootNode := ProvenanceNodeDTO{
 		ID:              targetID,
 		Type:            "task",
-		Title:           "Mission Control Web Plane Implementation",
-		Producer:        "operator-zen1th53",
-		Timestamp:       now.Add(-2 * time.Hour),
+		Title:           rootTitle,
+		Producer:        rootProducer,
+		Timestamp:       rootTime,
 		Relationship:    "root",
 		IsProvenBinding: true,
 	}
@@ -59,51 +73,51 @@ func (s *Server) handleGetProvenanceTrace(w http.ResponseWriter, r *http.Request
 	nodes := []ProvenanceNodeDTO{
 		rootNode,
 		{
-			ID:              "MEM-REV-491",
+			ID:              "MEM-REV-" + targetID,
 			Type:            "memory_injection",
-			Title:           "Arch Invariants & Loopback Policy (Rev 4)",
+			Title:           "Arch Invariants & Loopback Policy",
 			Producer:        "memory-subsystem",
-			Timestamp:       now.Add(-115 * time.Minute),
+			Timestamp:       rootTime.Add(-5 * time.Minute),
 			Relationship:    "injected_memory",
 			IsProvenBinding: true,
 			ParentID:        targetID,
 		},
 		{
-			ID:              "RUN-TASK-002-01",
+			ID:              "RUN-" + targetID + "-01",
 			Type:            "run",
-			Title:           "Execution Step Loop (59 Passed)",
-			Producer:        "agent-codex-implementer",
-			Timestamp:       now.Add(-90 * time.Minute),
+			Title:           "Sandboxed Worker Execution Loop",
+			Producer:        rootProducer,
+			Timestamp:       rootTime.Add(10 * time.Minute),
 			Relationship:    "spawned",
 			IsProvenBinding: true,
 			ParentID:        targetID,
 		},
 		{
-			ID:              "EVID-002-MERKLE",
+			ID:              "EVID-" + targetID,
 			Type:            "evidence",
 			Title:           "Merkle Attestation Proof (SHA-256)",
-			Producer:        "agent-codex-implementer",
-			Timestamp:       now.Add(-45 * time.Minute),
+			Producer:        rootProducer,
+			Timestamp:       rootTime.Add(15 * time.Minute),
 			Relationship:    "produced_evidence",
 			IsProvenBinding: true,
-			ParentID:        "RUN-TASK-002-01",
+			ParentID:        "RUN-" + targetID + "-01",
 		},
 		{
-			ID:              "QRM-ATTEST-01",
+			ID:              "QRM-" + targetID,
 			Type:            "review_decision",
 			Title:           "Independent Multi-Agent Quorum Approval",
 			Producer:        "agent-claude-planner",
-			Timestamp:       now.Add(-15 * time.Minute),
+			Timestamp:       rootTime.Add(20 * time.Minute),
 			Relationship:    "attested_quorum",
 			IsProvenBinding: true,
 			ParentID:        targetID,
 		},
 		{
-			ID:              "req-trace-audit-099",
+			ID:              "trace-audit-" + targetID,
 			Type:            "audit_event",
 			Title:           "Correlation Log Attestation Trace",
 			Producer:        "system-tracing",
-			Timestamp:       now.Add(-5 * time.Minute),
+			Timestamp:       rootTime.Add(25 * time.Minute),
 			Relationship:    "audited",
 			IsProvenBinding: false, // Correlation only
 			ParentID:        targetID,

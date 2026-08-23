@@ -76,6 +76,9 @@ func OpenWithObservability(ctx context.Context, path string, sanitizer evidence.
 	return st, nil
 }
 
+// DB returns the underlying SQLite connection for diagnostics and queries.
+func (s *Store) DB() *sql.DB { return s.db }
+
 // Metrics returns the configured detached operational recorder, if any.
 func (s *Store) Metrics() *evidence.MetricsRecorder { return s.metrics }
 
