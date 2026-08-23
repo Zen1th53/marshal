@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,6 +64,7 @@ type Runtime struct {
 	runtimePolicy      RuntimePolicyConfig
 	policyConfigured   bool
 	handoffService     *protocol.Service
+	memoryService      *MemoryService
 	quorumEngine       *quorum.Engine
 	allowProcessOnly   bool
 }
@@ -263,7 +265,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 			Metrics:    options.Metrics,
 			Now:        time.Now,
 		})
-		
+
 		if err == nil {
 			rt.secretBroker = secEngine
 		}
@@ -312,6 +314,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		rt.quorumEngine = quorum.NewEngine(nil)
 	}
 	rt.handoffService = protocol.NewService(protocol.Config{RepositoryRoot: layout.Root}, database, handoffAuthorizer)
+	rt.memoryService = NewMemoryService(database)
 	_ = rt.ReconcileStartup(ctx)
 	return rt, nil
 }
@@ -661,6 +664,18 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
 	}
+	memoryPrincipal := authz.Principal{ID: request.AgentID, Role: authz.Role{Name: "developer", Authorities: []authz.Authority{authz.AuthorityTaskPlan}}}
+	fingerprintQuery := strings.Join([]string{task.ID, task.Title, branch, baseCommit, request.AgentID, request.Adapter, string(task.Risk)}, " ")
+	recall, err := r.memoryService.Recall(ctx, memoryPrincipal, RecallRequest{
+		ProjectID: localProjectID, Query: fingerprintQuery,
+		AllowedScopeIDs: []string{localProjectID, task.ID, request.AgentID, branch},
+		CurrentHead:     baseCommit, CurrentBranch: branch, MaxRecords: 8, MaxBytes: 12 << 10,
+	})
+	if err != nil {
+		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
+		return RunResult{}, fmt.Errorf("automatic memory recall: %w", err)
+	}
+	trustedContext += "\n" + recall.Context
 	agentAdapter, shellExecGrant, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, networkAllowed, request.Model, proxyURL)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
@@ -707,7 +722,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		}
 		for _, keyName := range candidateEnvKeys {
 			val := os.Getenv(keyName)
-			
+
 			if val != "" {
 				if r.capabilityBroker != nil {
 					grantKey, _ := model.NewID("grant-key-")
@@ -721,10 +736,10 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 						Issuer:         "runtime",
 						IdempotencyKey: grantKey,
 					})
-					
+
 				}
 				leaseID, err := model.NewID("lease-")
-				
+
 				if err == nil {
 					lease, err := r.secretBroker.Lease(ctx, secrets.LeaseRequest{
 						ID:        leaseID,
@@ -735,17 +750,17 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 						TaskID:    task.ID,
 						Purpose:   "provider_execution",
 					})
-					
+
 					if err == nil {
 						activeLeaseIDs = append(activeLeaseIDs, lease.ID)
 						_ = r.secretBroker.WithSecret(ctx, lease, func(secBytes []byte) error {
-							
+
 							if len(secBytes) > 0 {
 								leasedSecrets = append(leasedSecrets, string(secBytes))
 							}
 							return nil
 						})
-						
+
 					}
 				}
 			}
@@ -772,12 +787,11 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		HeartbeatInterval: 5 * time.Second,
 	})
 
-	
 	if len(leasedSecrets) > 0 {
 		result.Stdout = auth.RedactSecrets(result.Stdout, leasedSecrets)
 		result.Stderr = auth.RedactSecrets(result.Stderr, leasedSecrets)
 	}
-	
+
 	state, inspectErr := worktreeManager.Inspect(context.Background(), worktreeState.Path)
 	if runErr == nil && inspectErr == nil && result.Status == adapter.StatusSuccess && result.ExitCode == 0 {
 		if state.Dirty {
@@ -825,9 +839,12 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			TaskIDs: []string{task.ID}, ProducerSession: claim.Session.ID, Data: bytes.NewReader(stderr),
 		})
 	}
+	var runEvidenceIDs []string
 	if ctx.Err() == nil {
 		if evidenceErr := r.recordRunEvidence(ctx, runID, task.ID, request.Adapter, probe.Version, baseCommit, resultCommit, result); evidenceErr != nil {
 			runErr = evidenceErr
+		} else {
+			runEvidenceIDs = []string{"EVIDENCE-RUN-" + runID + "-COMMAND", "EVIDENCE-RUN-" + runID + "-OUTPUT", "EVIDENCE-RUN-" + runID + "-ENV"}
 		}
 	}
 	success := runErr == nil && inspectErr == nil && stdoutErr == nil && stderrErr == nil &&
@@ -848,6 +865,15 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		ExitStatus: &exitStatus, StdoutArtifactID: stdoutArtifact.ID,
 		StderrArtifactID: stderrArtifact.ID, ExpectedRevision: 0,
 	})
+	var captureErr error
+	if finishErr == nil && len(runEvidenceIDs) > 0 {
+		_, captureErr = r.memoryService.CaptureOutcome(context.Background(), OutcomeCaptureRequest{
+			ProjectID: localProjectID, TaskID: task.ID, TaskTitle: task.Title, RunID: runID, SessionID: claim.Session.ID,
+			AgentID: request.AgentID, Provider: request.Adapter, Status: finishStatus,
+			ExitStatus: result.ExitCode, BaseCommit: baseCommit, HeadCommit: resultCommit, Branch: branch,
+			EvidenceIDs: runEvidenceIDs,
+		})
+	}
 	currentRevision := executionRevision
 	if success && resultCommit != baseCommit {
 		if err := r.store.ObserveHEAD(context.Background(), task.ID, resultCommit, currentRevision); err != nil {
@@ -857,7 +883,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		}
 	}
 	finalizeErr := r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, success, currentRevision)
-	for _, candidate := range []error{runErr, inspectErr, stdoutErr, stderrErr, finishErr, finalizeErr} {
+	for _, candidate := range []error{runErr, inspectErr, stdoutErr, stderrErr, finishErr, captureErr, finalizeErr} {
 		if candidate != nil {
 			return RunResult{}, candidate
 		}
@@ -1087,9 +1113,8 @@ func loadPackVersion(path string) (string, error) {
 	return doc.PackVersion, nil
 }
 
-
 func (r *Runtime) CapabilityBroker() capability.Broker { return r.capabilityBroker }
-func (r *Runtime) SecretBroker() secrets.Broker       { return r.secretBroker }
+func (r *Runtime) SecretBroker() secrets.Broker        { return r.secretBroker }
 func (r *Runtime) CellManager() *cell.Manager          { return r.cellManager }
 func (r *Runtime) GateEngine() *gate.Engine            { return r.gateEngine }
 func (r *Runtime) RiskEngine() *risk.Engine            { return r.riskEngine }
@@ -1235,3 +1260,7 @@ func RestoreState(ctx context.Context, rootDir, backupPath string) error {
 }
 
 func (r *Runtime) Store() *store.Store { return r.store }
+
+// Memory exposes the single canonical product-facing memory service to local
+// interfaces. Callers must use its authorization and governance boundaries.
+func (r *Runtime) Memory() *MemoryService { return r.memoryService }

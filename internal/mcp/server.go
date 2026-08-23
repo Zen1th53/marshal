@@ -11,6 +11,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/ratelimit"
 	"github.com/Zen1th53/marshal/internal/store"
@@ -180,7 +181,11 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		res, err := s.callTool(ctx, params.Name, params.Arguments)
+		principalID := callerPrincipal.ID
+		if principalID == "" {
+			principalID = "mcp-client"
+		}
+		res, err := s.callTool(ctx, principalID, params.Name, params.Arguments)
 		if err != nil {
 			s.writeError(w, req.ID, -32000, err.Error())
 			return
@@ -301,7 +306,7 @@ func (s *Server) listTools() []Tool {
 	}
 }
 
-func (s *Server) callTool(ctx context.Context, name string, args map[string]any) (string, error) {
+func (s *Server) callTool(ctx context.Context, principalID, name string, args map[string]any) (string, error) {
 	switch name {
 	case "marshal_status":
 		status, err := s.runtime.Status(ctx)
@@ -334,25 +339,16 @@ func (s *Server) callTool(ctx context.Context, name string, args map[string]any)
 	case "memory_recall":
 		proj, _ := args["project_id"].(string)
 		query, _ := args["query"].(string)
-		records, err := s.runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: proj})
+		if proj == "" {
+			if p, projectErr := s.runtime.Store().Project(ctx); projectErr == nil {
+				proj = p.ID
+			}
+		}
+		principal := authz.Principal{ID: principalID, Role: authz.Role{Name: "developer", Authorities: []authz.Authority{authz.AuthorityTaskPlan}}}
+		res, err := s.runtime.Memory().Recall(ctx, principal, app.RecallRequest{ProjectID: proj, Query: query})
 		if err != nil {
 			return "", err
 		}
-		results := []map[string]any{}
-		q := strings.ToLower(strings.TrimSpace(query))
-		for _, rec := range records {
-			if rec.Lifecycle == model.MemoryTombstoned {
-				continue
-			}
-			if q != "" && !strings.Contains(strings.ToLower(rec.Title), q) && !strings.Contains(strings.ToLower(rec.Body), q) {
-				continue
-			}
-			results = append(results, map[string]any{
-				"id": rec.ID, "title": rec.Title, "kind": string(rec.Kind),
-				"lifecycle": string(rec.Lifecycle), "authority": string(rec.Authority),
-			})
-		}
-		res := map[string]any{"project_id": proj, "query": query, "results": results}
 		data, _ := json.Marshal(res)
 		return string(data), nil
 
@@ -360,20 +356,14 @@ func (s *Server) callTool(ctx context.Context, name string, args map[string]any)
 		proj, _ := args["project_id"].(string)
 		title, _ := args["title"].(string)
 		body, _ := args["body"].(string)
-		now := time.Now().UTC()
-		id, err := model.NewID("MEM-")
+		if proj == "" {
+			if p, projectErr := s.runtime.Store().Project(ctx); projectErr == nil {
+				proj = p.ID
+			}
+		}
+		principal := authz.Principal{ID: principalID, Role: authz.Role{Name: "developer", Authorities: []authz.Authority{authz.AuthoritySourceWrite}}}
+		rec, err := s.runtime.Memory().Remember(ctx, principal, app.RememberRequest{ProjectID: proj, ScopeID: proj, Title: title, Body: body, Kind: model.MemoryKindSemantic})
 		if err != nil {
-			return "", err
-		}
-		rec := model.MemoryRecordV2{
-			ID: id, ProjectID: proj, Kind: model.MemoryKindSemantic,
-			Lifecycle: model.MemoryCandidate, Confidence: model.ConfidenceObserved,
-			Authority: model.AuthorityAgent, Title: title, Body: body,
-			Scope: string(model.ScopeProject), ScopeID: proj,
-			ObservedAt: now, IngestedAt: now, ValidFrom: now, CreatedAt: now, UpdatedAt: now,
-			Source: model.MemorySource{Kind: "mcp", Reference: "memory_remember"},
-		}
-		if err := s.runtime.Store().WriteMemoryV2(ctx, rec); err != nil {
 			return "", err
 		}
 		out := map[string]any{

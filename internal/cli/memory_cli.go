@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/store"
 )
@@ -25,6 +25,8 @@ func (c command) memory(ctx context.Context, args []string) error {
 	}
 	defer runtime.Close()
 	st := runtime.Store()
+	memoryService := runtime.Memory()
+	operator := authz.Principal{ID: "cli-operator", Role: authz.Role{Name: "operator", Authorities: []authz.Authority{authz.AuthorityPolicyAdmin}}}
 
 	projectID, err := currentProjectID(ctx, st)
 	if err != nil {
@@ -42,28 +44,26 @@ func (c command) memory(ctx context.Context, args []string) error {
 			return err
 		}
 		status := map[string]any{
-			"version":       "2.0.0",
-			"healthy":       true,
+			"version":        "2.0.0",
+			"healthy":        true,
 			"schema_version": version,
-			"records":       len(records),
-			"project_id":    projectID,
+			"records":        len(records),
+			"project_id":     projectID,
 		}
 		return c.print(status, fmt.Sprintf("status=healthy version=2.0.0 records=%d schema=v%d", len(records), version))
 
 	case "remember", "write":
-		return c.memoryRemember(ctx, st, projectID, subArgs)
+		return c.memoryRemember(ctx, memoryService, operator, projectID, subArgs)
 
 	case "recall":
 		query := strings.Join(subArgs, " ")
-		records, err := st.ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: projectID})
+		res, err := memoryService.Recall(ctx, operator, app.RecallRequest{ProjectID: projectID, Query: query})
 		if err != nil {
 			return err
 		}
-		results := filterMemoryByQuery(records, query)
-		res := map[string]any{"query": query, "results": results}
-		human := fmt.Sprintf("recall query=%q results=%d", query, len(results))
-		for _, r := range results {
-			human += fmt.Sprintf("\n%s %s %s", r["id"], r["lifecycle"], r["title"])
+		human := fmt.Sprintf("recall query=%q results=%d", query, len(res.Results))
+		for _, item := range res.Results {
+			human += fmt.Sprintf("\n%s %s %s", item.ID, item.Lifecycle, item.Title)
 		}
 		return c.print(res, human)
 
@@ -97,16 +97,7 @@ func (c command) memory(ctx context.Context, args []string) error {
 		if dryRun {
 			return c.print(map[string]any{"action": "memory.promote", "memory_id": memID, "dry_run": true, "status": "DRY_RUN"}, fmt.Sprintf("promote dry-run memory_id=%s", memID))
 		}
-		rec, err := st.GetMemoryV2(ctx, projectID, memID)
-		if err != nil {
-			return err
-		}
-		promoted, err := st.UpdateMemory(ctx, projectID, memID, rec.Revision, func(m *model.MemoryRecordV2) error {
-			m.Lifecycle = model.MemoryDurable
-			m.Authority = model.AuthorityOperator
-			m.UpdatedAt = time.Now().UTC()
-			return nil
-		})
+		promoted, err := memoryService.Promote(ctx, operator, app.PromoteRequest{ProjectID: projectID, MemoryID: memID, ScopeID: projectID})
 		if err != nil {
 			return err
 		}
@@ -155,7 +146,7 @@ func currentProjectID(ctx context.Context, st *store.Store) (string, error) {
 	return project.ID, nil
 }
 
-func (c command) memoryRemember(ctx context.Context, st *store.Store, projectID string, args []string) error {
+func (c command) memoryRemember(ctx context.Context, service *app.MemoryService, principal authz.Principal, projectID string, args []string) error {
 	title := ""
 	body := ""
 	kind := model.MemoryKindSemantic
@@ -180,30 +171,8 @@ func (c command) memoryRemember(ctx context.Context, st *store.Store, projectID 
 		}
 		kind = model.MemoryKindSemantic
 	}
-	now := time.Now().UTC()
-	id, err := model.NewID("MEM-")
+	rec, err := service.Remember(ctx, principal, app.RememberRequest{ProjectID: projectID, ScopeID: projectID, Title: title, Body: body, Kind: kind})
 	if err != nil {
-		return err
-	}
-	rec := model.MemoryRecordV2{
-		ID:         id,
-		ProjectID:  projectID,
-		Kind:       kind,
-		Lifecycle:  model.MemoryCandidate,
-		Confidence: model.ConfidenceObserved,
-		Authority:  model.AuthorityOperator,
-		Title:      title,
-		Body:       body,
-		Scope:      string(model.ScopeProject),
-		ScopeID:    projectID,
-		ObservedAt: now,
-		IngestedAt: now,
-		ValidFrom:  now,
-		CreatedAt:  now,
-		UpdatedAt:  now,
-		Source:     model.MemorySource{Kind: "user", Reference: "cli"},
-	}
-	if err := st.WriteMemoryV2(ctx, rec); err != nil {
 		return err
 	}
 	return c.print(map[string]any{"id": rec.ID, "status": "REMEMBERED", "lifecycle": rec.Lifecycle}, fmt.Sprintf("remembered memory_id=%s", rec.ID))

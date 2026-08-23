@@ -6,14 +6,17 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 type MemorySearchResultItemDTO struct {
 	ID              string    `json:"id"`
 	ProjectID       string    `json:"project_id"`
-	Scope           string    `json:"scope"`    // "global", "project", "task", "session"
+	Scope           string    `json:"scope"` // "global", "project", "task", "session"
 	ScopeID         string    `json:"scope_id"`
-	Kind            string    `json:"kind"`     // "belief", "decision", "procedure", "episode"
+	Kind            string    `json:"kind"` // "belief", "decision", "procedure", "episode"
 	Title           string    `json:"title"`
 	Body            string    `json:"body"`
 	Lifecycle       string    `json:"lifecycle"` // "candidate", "active", "consolidated", "evicted", "superseded"
@@ -193,6 +196,10 @@ func (s *Server) handleMemorySearch(w http.ResponseWriter, r *http.Request) {
 			offset = o
 		}
 	}
+	if s.store != nil {
+		s.handleCanonicalMemorySearch(w, r, q, scope, kind, lifecycle, limit, offset)
+		return
+	}
 
 	globalMemoryStore.mu.RLock()
 	var matched []MemorySearchResultItemDTO
@@ -248,6 +255,16 @@ func (s *Server) handleGetMemoryRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.store != nil {
+		rec, ok := s.canonicalMemoryByID(r, id)
+		if !ok {
+			writeError(w, http.StatusNotFound, "not_found", "Memory record not found", "")
+			return
+		}
+		writeJSON(w, http.StatusOK, memoryDTOFromRecord(rec))
+		return
+	}
+
 	item, ok := globalMemoryStore.Get(id)
 	if !ok {
 		writeError(w, http.StatusNotFound, "not_found", "Memory record not found", "")
@@ -255,4 +272,85 @@ func (s *Server) handleGetMemoryRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) handleCanonicalMemorySearch(w http.ResponseWriter, r *http.Request, q, scope, kind, lifecycle string, limit, offset int) {
+	project, err := s.store.Project(r.Context())
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "memory_unavailable", "Canonical memory store unavailable", "")
+		return
+	}
+	user := s.getAuthenticatedUser(r)
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required", "")
+		return
+	}
+	records, err := s.store.ListMemoryV2(r.Context(), store.MemoryQueryFilter{ProjectID: project.ID, ActorID: user.PrincipalID})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "memory_query_failed", "Canonical memory query failed", "")
+		return
+	}
+	matched := make([]MemorySearchResultItemDTO, 0, len(records))
+	for _, rec := range records {
+		if q != "" && !strings.Contains(strings.ToLower(rec.ID+" "+rec.Title+" "+rec.Body), q) {
+			continue
+		}
+		if scope != "" && scope != "all" && rec.Scope != scope {
+			continue
+		}
+		if kind != "" && kind != "all" && string(rec.Kind) != kind {
+			continue
+		}
+		if lifecycle != "" && lifecycle != "all" && string(rec.Lifecycle) != lifecycle {
+			continue
+		}
+		matched = append(matched, memoryDTOFromRecord(rec))
+	}
+	total := len(matched)
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	writeJSON(w, http.StatusOK, MemorySearchResponseDTO{Items: matched[offset:end], TotalCount: total, Limit: limit, Offset: offset, IndexStatus: "canonical"})
+}
+
+func (s *Server) canonicalMemoryByID(r *http.Request, id string) (model.MemoryRecordV2, bool) {
+	project, err := s.store.Project(r.Context())
+	if err != nil {
+		return model.MemoryRecordV2{}, false
+	}
+	user := s.getAuthenticatedUser(r)
+	if user == nil {
+		return model.MemoryRecordV2{}, false
+	}
+	rec, err := s.store.GetMemoryV2(r.Context(), project.ID, id)
+	if err != nil {
+		return model.MemoryRecordV2{}, false
+	}
+	scope, err := model.NewMemoryScope(rec.Scope, rec.ScopeID)
+	if err != nil || !scope.AllowsRead(project.ID, user.PrincipalID) || (rec.ACLScope != "" && rec.ACLScope != user.PrincipalID) {
+		return model.MemoryRecordV2{}, false
+	}
+	if rec.Lifecycle == model.MemoryTombstoned || rec.Lifecycle == model.MemoryRejected {
+		return model.MemoryRecordV2{}, false
+	}
+	return rec, true
+}
+
+func memoryDTOFromRecord(rec model.MemoryRecordV2) MemorySearchResultItemDTO {
+	confidence := 0.5
+	switch rec.Confidence {
+	case model.ConfidenceVerified:
+		confidence = 1
+	case model.ConfidenceObserved:
+		confidence = 0.8
+	case model.ConfidenceInferred:
+		confidence = 0.6
+	case model.ConfidenceUnverified:
+		confidence = 0.2
+	}
+	return MemorySearchResultItemDTO{ID: rec.ID, ProjectID: rec.ProjectID, Scope: rec.Scope, ScopeID: rec.ScopeID, Kind: string(rec.Kind), Title: rec.Title, Body: rec.Body, Lifecycle: string(rec.Lifecycle), Authority: string(rec.Authority), Confidence: confidence, ObservedAt: rec.ObservedAt, RetrievalReason: "canonical SQLite record"}
 }

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type PromoteMemoryPayload struct {
@@ -49,6 +51,39 @@ func (s *Server) handlePromoteMemory(w http.ResponseWriter, r *http.Request) {
 	payload := env.Payload
 	if payload.MemoryID == "" || payload.ReviewRationale == "" {
 		writeError(w, http.StatusBadRequest, "invalid_payload", "MemoryID and ReviewRationale are required", "")
+		return
+	}
+	if s.store != nil {
+		project, err := s.store.Project(r.Context())
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_unavailable", "Canonical memory store unavailable", "")
+			return
+		}
+		rec, ok := s.canonicalMemoryByID(r, payload.MemoryID)
+		if !ok {
+			writeError(w, http.StatusNotFound, "not_found", "Memory record not found", "")
+			return
+		}
+		if payload.ExpectedDigestSHA256 != "" && payload.ExpectedDigestSHA256 != rec.ContentDigest {
+			writeError(w, http.StatusPreconditionFailed, "digest_mismatch", "Precondition Failed: canonical memory digest has diverged", "")
+			return
+		}
+		expected := int64(payload.ExpectedRevision)
+		if expected == 0 {
+			expected = rec.Revision
+		}
+		updated, err := s.store.UpdateMemory(r.Context(), project.ID, rec.ID, expected, func(m *model.MemoryRecordV2) error {
+			m.Lifecycle = model.MemoryDurable
+			m.Authority = model.AuthorityVerified
+			m.LastVerifiedAt = func() *time.Time { now := time.Now().UTC(); return &now }()
+			return nil
+		})
+		if err != nil {
+			writeError(w, http.StatusConflict, "revision_conflict", "Canonical memory revision changed", "")
+			return
+		}
+		s.sseHub.Broadcast("memory.mutated", "memory", rec.ID, map[string]any{"memory_id": rec.ID, "action": "promoted", "lifecycle": string(updated.Lifecycle)})
+		writeJSON(w, http.StatusOK, MemoryMutationResponseDTO{MutationType: "promote", MemoryID: rec.ID, NewLifecycle: string(updated.Lifecycle), NewRevision: int(updated.Revision), MutatedAt: updated.UpdatedAt})
 		return
 	}
 
@@ -105,6 +140,40 @@ func (s *Server) handleSupersedeMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_payload", "TargetMemoryID and SuccessorID are required", "")
 		return
 	}
+	if s.store != nil {
+		project, err := s.store.Project(r.Context())
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_unavailable", "Canonical memory store unavailable", "")
+			return
+		}
+		target, ok := s.canonicalMemoryByID(r, payload.TargetMemoryID)
+		if !ok {
+			writeError(w, http.StatusNotFound, "not_found", "Target memory record not found", "")
+			return
+		}
+		if _, ok := s.canonicalMemoryByID(r, payload.SuccessorID); !ok {
+			writeError(w, http.StatusNotFound, "successor_not_found", "Successor memory record not found", "")
+			return
+		}
+		expected := int64(payload.ExpectedRevision)
+		if expected == 0 {
+			expected = target.Revision
+		}
+		updated, err := s.store.UpdateMemory(r.Context(), project.ID, target.ID, expected, func(m *model.MemoryRecordV2) error {
+			now := time.Now().UTC()
+			m.Lifecycle = model.MemorySuperseded
+			m.SupersededBy = append(m.SupersededBy, payload.SuccessorID)
+			m.ValidTo = &now
+			return nil
+		})
+		if err != nil {
+			writeError(w, http.StatusConflict, "revision_conflict", "Canonical memory revision changed", "")
+			return
+		}
+		s.sseHub.Broadcast("memory.mutated", "memory", target.ID, map[string]any{"memory_id": target.ID, "action": "superseded", "successor_id": payload.SuccessorID})
+		writeJSON(w, http.StatusOK, MemoryMutationResponseDTO{MutationType: "supersede", MemoryID: target.ID, NewLifecycle: string(updated.Lifecycle), NewRevision: int(updated.Revision), MutatedAt: updated.UpdatedAt})
+		return
+	}
 
 	globalMemoryStore.Supersede(payload.TargetMemoryID, payload.SuccessorID)
 
@@ -135,6 +204,30 @@ func (s *Server) handleTombstoneMemory(w http.ResponseWriter, r *http.Request) {
 	payload := env.Payload
 	if payload.TargetMemoryID == "" || payload.Reason == "" {
 		writeError(w, http.StatusBadRequest, "invalid_payload", "TargetMemoryID and Reason are required", "")
+		return
+	}
+	if s.store != nil {
+		project, err := s.store.Project(r.Context())
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_unavailable", "Canonical memory store unavailable", "")
+			return
+		}
+		target, ok := s.canonicalMemoryByID(r, payload.TargetMemoryID)
+		if !ok {
+			writeError(w, http.StatusNotFound, "not_found", "Memory record not found", "")
+			return
+		}
+		expected := int64(payload.ExpectedRevision)
+		if expected == 0 {
+			expected = target.Revision
+		}
+		updated, err := s.store.TombstoneMemory(r.Context(), project.ID, target.ID, expected, payload.Reason)
+		if err != nil {
+			writeError(w, http.StatusConflict, "revision_conflict", "Canonical memory revision changed", "")
+			return
+		}
+		s.sseHub.Broadcast("memory.mutated", "memory", target.ID, map[string]any{"memory_id": target.ID, "action": "tombstoned", "lifecycle": string(updated.Lifecycle)})
+		writeJSON(w, http.StatusOK, MemoryMutationResponseDTO{MutationType: "tombstone", MemoryID: target.ID, NewLifecycle: string(updated.Lifecycle), NewRevision: int(updated.Revision), MutatedAt: updated.UpdatedAt})
 		return
 	}
 

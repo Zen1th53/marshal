@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
@@ -36,6 +37,7 @@ type Server struct {
 	handler    http.Handler
 	runtime    any
 	store      *store.Store
+	memory     *app.MemoryService
 	sessions   *SessionStore
 	sseHub     *SSEHub
 	csrfSecret []byte
@@ -86,6 +88,9 @@ func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
 	// mode (nil runtime) handlers fall back to in-memory fixtures.
 	if rt, ok := runtime.(interface{ Store() *store.Store }); ok {
 		s.store = rt.Store()
+	}
+	if rt, ok := runtime.(interface{ Memory() *app.MemoryService }); ok {
+		s.memory = rt.Memory()
 	}
 	if cfg.BackupDir == "" {
 		cfg.BackupDir = filepath.Join(".", "backups")
