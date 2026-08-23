@@ -103,24 +103,24 @@ export function Operations() {
                 <div>
                   <span className="text-xs text-dim">COMMUNITY RESOURCE AWARENESS</span>
                   <h3 className="text-lg font-bold" style={{ marginTop: 'var(--space-1)' }}>
-                    Safe local concurrency: {resources.recommendation.concurrency}
+                    Safe local concurrency: {resources.recommendation?.concurrency ?? 'Auto'}
                   </h3>
                 </div>
-                <StatusBadge status={resources.health.overall === 'OK' ? 'ready' : 'degraded'} label={resources.health.overall} />
+                <StatusBadge status={resources.health?.overall === 'OK' ? 'ready' : 'degraded'} label={resources.health?.overall ?? 'UNKNOWN'} />
               </div>
               <div className="grid-2" style={{ marginTop: 'var(--space-3)' }}>
-                <div className="text-xs text-muted">CPU: {resources.cpu.model || 'Unavailable'} · {resources.cpu.effective}/{resources.cpu.logical} effective/logical</div>
-                <div className="text-xs text-muted">RAM: {bytes(resources.memory.available_bytes)} available of {bytes(resources.memory.total_bytes)}</div>
-                <div className="text-xs text-muted">Disk: {bytes(resources.storage.free_bytes)} free</div>
-                <div className="text-xs text-muted">Ollama: {resources.ollama.status} · {resources.ollama.models.length} installed models</div>
+                <div className="text-xs text-muted">CPU: {resources.cpu?.model || 'Unavailable'} · {resources.cpu?.effective ?? 0}/{resources.cpu?.logical ?? 0} effective/logical</div>
+                <div className="text-xs text-muted">RAM: {bytes(resources.memory?.available_bytes ?? 0)} available of {bytes(resources.memory?.total_bytes ?? 0)}</div>
+                <div className="text-xs text-muted">Disk: {bytes(resources.storage?.free_bytes ?? 0)} free</div>
+                <div className="text-xs text-muted">Ollama: {resources.ollama?.status ?? 'UNAVAILABLE'} · {resources.ollama?.models?.length ?? 0} installed models</div>
               </div>
               <div className="text-xs text-muted" style={{ marginTop: 'var(--space-2)' }}>
-                Accelerators: {resources.accelerators.length === 0 ? 'none detected' : resources.accelerators.map((accelerator) => (
+                Accelerators: {(resources.accelerators?.length ?? 0) === 0 ? 'none detected' : (resources.accelerators ?? []).map((accelerator) => (
                   `${accelerator.vendor} ${accelerator.model || 'UNKNOWN'} · memory: ${accelerator.total_vram_bytes ? bytes(accelerator.total_vram_bytes) : accelerator.memory_semantics} · temperature: ${accelerator.temperature_c === undefined ? 'UNKNOWN' : `${accelerator.temperature_c.toFixed(0)} °C`} · telemetry: ${accelerator.telemetry_source || 'UNKNOWN'}`
                 )).join('; ')}
               </div>
-              {resources.recommendation.recommended_model ? <p className="text-xs text-muted" style={{ marginTop: 'var(--space-2)' }}>Recommended installed local model: {resources.recommendation.recommended_model}</p> : null}
-              {resources.health.warnings?.length ? <p className="text-xs text-muted" style={{ marginTop: 'var(--space-2)' }}>Warnings: {resources.health.warnings.join('; ')}</p> : null}
+              {resources.recommendation?.recommended_model ? <p className="text-xs text-muted" style={{ marginTop: 'var(--space-2)' }}>Recommended installed local model: {resources.recommendation.recommended_model}</p> : null}
+              {resources.health?.warnings?.length ? <p className="text-xs text-muted" style={{ marginTop: 'var(--space-2)' }}>Warnings: {resources.health.warnings.join('; ')}</p> : null}
             </section>
           ) : null}
 

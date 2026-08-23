@@ -90,7 +90,7 @@ type Ollama struct {
 	Status   string  `json:"status"`
 	Endpoint string  `json:"endpoint"`
 	Version  string  `json:"version,omitempty"`
-	Models   []Model `json:"models,omitempty"`
+	Models   []Model `json:"models"`
 	Source   string  `json:"source"`
 }
 type Recommendation struct {
@@ -260,7 +260,11 @@ func statStorage(path string) (Storage, error) {
 }
 func (c *Collector) accelerators(ctx context.Context) []Accelerator {
 	result := c.drmAccelerators()
-	return c.enrichNVIDIA(ctx, result)
+	res := c.enrichNVIDIA(ctx, result)
+	if res == nil {
+		return make([]Accelerator, 0)
+	}
+	return res
 }
 
 // drmAccelerators is intentionally limited to the generic Linux DRM and hwmon
@@ -539,7 +543,7 @@ func assess(m Memory, d Storage, thermal Status, thermalWarning string) Health {
 	return h
 }
 func (c *Collector) ollama(ctx context.Context, available uint64, accelerators []Accelerator) Ollama {
-	o := Ollama{Status: "NOT_AVAILABLE", Endpoint: "http://127.0.0.1:11434", Source: "local_api"}
+	o := Ollama{Status: "NOT_AVAILABLE", Endpoint: "http://127.0.0.1:11434", Source: "local_api", Models: make([]Model, 0)}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, o.Endpoint+"/api/tags", nil)
 	if err != nil {
 		return o

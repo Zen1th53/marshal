@@ -3531,8 +3531,8 @@
     },
     {
       "path": "internal/resources/resources.go",
-      "sha256": "85bcae7c59e8e7cb361ef987cce0bbccbbcc98e0f307cb04d90b7ed22765b12d",
-      "bytes": 19559
+      "sha256": "c777b171dbd1225de846f55b8c8eaab055c9be62a56d9a8b36657b8b24786040",
+      "bytes": 19639
     },
     {
       "path": "internal/resources/resources_test.go",
@@ -4725,13 +4725,13 @@
       "bytes": 56233
     },
     {
-      "path": "internal/webcontrol/dist/assets/index-D1-oVMrX.js",
-      "sha256": "92863e571f8b24169bf23d815670b83c77ae4e6700dddfa2dcc1e168ee682c97",
-      "bytes": 348817
+      "path": "internal/webcontrol/dist/assets/index-Dm95Fv_r.js",
+      "sha256": "192bd7567aed63506a35dd1841353539635be4c7fe955f81b74f652566df61d6",
+      "bytes": 348895
     },
     {
       "path": "internal/webcontrol/dist/index.html",
-      "sha256": "82a5b8246f0971cfe1c8860507884fdf56b14784a8ebed4c1fd3690a06491ebd",
+      "sha256": "ac447157685a9d54630a935fc14d18942e0f99b8036a9846e61cdad74fb9e86c",
       "bytes": 599
     },
     {
@@ -6526,8 +6526,8 @@
     },
     {
       "path": "web/src/routes/Operations.tsx",
-      "sha256": "ef78b0e368947126451088dfc98b575c501b4aeb4f096caa071a75aafd0ef6bc",
-      "bytes": 8057
+      "sha256": "e6d8f6c6fad67e30523ff1c2f36bcc6f4eaca9c5b5d3a15b7e489599f3f79a2c",
+      "bytes": 8157
     },
     {
       "path": "web/src/routes/Overview.test.tsx",
