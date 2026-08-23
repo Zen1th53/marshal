@@ -4725,13 +4725,13 @@
       "bytes": 56233
     },
     {
-      "path": "internal/webcontrol/dist/assets/index-Bsi7zhhr.js",
-      "sha256": "cd94cfa29a6caaa5170d51ff21d2ad6c8bcde50291fd836f085cc3abab3a6bac",
-      "bytes": 348005
+      "path": "internal/webcontrol/dist/assets/index-D1-oVMrX.js",
+      "sha256": "92863e571f8b24169bf23d815670b83c77ae4e6700dddfa2dcc1e168ee682c97",
+      "bytes": 348817
     },
     {
       "path": "internal/webcontrol/dist/index.html",
-      "sha256": "b52ecadf6f977406a9837e26fd384f08e0971ff2e88a1b3932357d9644193db1",
+      "sha256": "82a5b8246f0971cfe1c8860507884fdf56b14784a8ebed4c1fd3690a06491ebd",
       "bytes": 599
     },
     {
@@ -6051,8 +6051,8 @@
     },
     {
       "path": "web/src/App.tsx",
-      "sha256": "278c5b9ed63c09b896ef595d13a1b7c37681da8e5d336ef3b17c0622478872e6",
-      "bytes": 6657
+      "sha256": "32f0d9f2fe3c764775beb422a32f254fbe5a31c73c4e2a62065088f55a775914",
+      "bytes": 7599
     },
     {
       "path": "web/src/api/client.test.ts",
@@ -6486,8 +6486,8 @@
     },
     {
       "path": "web/src/routes/Login.tsx",
-      "sha256": "800e2199083ee82fecbc2df8e97c4dacd2b1968b958f447a17aaf84972030687",
-      "bytes": 3135
+      "sha256": "f4d9efb12ac491f3b7401d547125291eadec73a6beac2bf61fa7a7fd1ebd76de",
+      "bytes": 3626
     },
     {
       "path": "web/src/routes/Memory.test.tsx",

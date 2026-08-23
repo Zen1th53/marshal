@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Component, type ReactNode } from 'react';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { CapabilitiesContext } from './features/capabilities';
 import { RealtimeProvider } from './realtime/store';
@@ -25,6 +25,32 @@ import { Settings } from './routes/Settings';
 import { GlobalEntityNavigator } from './features/search/GlobalEntityNavigator';
 import { api } from './api/client';
 import type { CapabilityStatusDTO } from './api/types';
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  override render() {
+    if (this.state.hasError) {
+      return (
+        <div className="state-view state-error" style={{ minHeight: '100vh', margin: 0, padding: '2rem' }}>
+          <h2>Application Error</h2>
+          <p className="state-message">{this.state.error?.message || 'An unexpected rendering error occurred'}</p>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>
+            Reload Application
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function MainApp() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -157,12 +183,14 @@ function MainApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <RealtimeProvider>
-        <ToastProvider>
-          <MainApp />
-        </ToastProvider>
-      </RealtimeProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <RealtimeProvider>
+          <ToastProvider>
+            <MainApp />
+          </ToastProvider>
+        </RealtimeProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

@@ -14,13 +14,29 @@ export function Login({ onSuccess }: LoginProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // Auto-fill from URL query param if present
+    // Auto-fill and auto-submit from URL query param if present
     const params = new URLSearchParams(window.location.search);
     const codeParam = params.get('code');
     if (codeParam) {
       setCode(codeParam);
+      setIsSubmitting(true);
+      setError(null);
+      void login(codeParam.trim())
+        .then(() => {
+          if (onSuccess) onSuccess();
+        })
+        .catch((err: unknown) => {
+          if (err instanceof APIError) {
+            setError(err.message);
+          } else {
+            setError('Login failed. Please verify your code and try again.');
+          }
+        })
+        .finally(() => {
+          setIsSubmitting(false);
+        });
     }
-  }, []);
+  }, [login, onSuccess]);
 
   useEffect(() => {
     if (isAuthenticated && onSuccess) {
