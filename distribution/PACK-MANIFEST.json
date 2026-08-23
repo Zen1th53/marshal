@@ -2086,8 +2086,8 @@
     },
     {
       "path": "internal/doctor/doctor.go",
-      "sha256": "269f08f4f2a4fd96cead1165d26761e87e2411e7b1fc8ef68a86b9aeb865b5e0",
-      "bytes": 14868
+      "sha256": "fdad99e3738817d107c8ad51edafb0ca6565c656a35c8606167cd0f01425cd50",
+      "bytes": 14894
     },
     {
       "path": "internal/doctor/doctor_test.go",
@@ -4725,13 +4725,13 @@
       "bytes": 56233
     },
     {
-      "path": "internal/webcontrol/dist/assets/index-DkeppT-G.js",
-      "sha256": "de2294292ebfdce39977576a99dc71c56eab6decc5b228ef44dd145619a54b4f",
-      "bytes": 347945
+      "path": "internal/webcontrol/dist/assets/index-BUIZghoD.js",
+      "sha256": "00951ea34f7b0b87727434acc93082588e5ad67efea0a2fefead62a191f585cc",
+      "bytes": 347989
     },
     {
       "path": "internal/webcontrol/dist/index.html",
-      "sha256": "7a921494ae534269a121db7e860773655749ffd64799cadc76308e02fb290c8e",
+      "sha256": "45a39b64c434d0d4c3110838e005d9cd32e3518b2c6187028003387da888e478",
       "bytes": 599
     },
     {
@@ -6056,13 +6056,13 @@
     },
     {
       "path": "web/src/api/client.test.ts",
-      "sha256": "8679f5cd37b5e1d21a935ad3661dc4030e489aa55835f00de6d15f17c2527f9e",
-      "bytes": 4040
+      "sha256": "24f43544f9ef455e0206997c2dd3426ebaa08f8b4c1ca5e31079e5e69957c294",
+      "bytes": 4036
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "c19fceab8c2cc8b1525cca2829d5566cb4b1257341caa04787754269ecaccd51",
-      "bytes": 40857
+      "sha256": "d8545cc03174116773cf8ac1d97573ca3f189fdbdf5e89d677ebc4025590df0b",
+      "bytes": 40967
     },
     {
       "path": "web/src/api/correlation.ts",

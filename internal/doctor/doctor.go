@@ -228,12 +228,12 @@ func probeCodex(ctx context.Context, lookup func(string) (string, error), run fu
 func probeOpenCode(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
 	binary, err := lookup("opencode")
 	if err != nil {
-		add(Result{Name: "opencode", Verdict: Degraded, Method: "PATH lookup", Capability: "OpenCode execution unavailable", Detail: "OpenCode CLI is missing"})
+		add(Result{Name: "opencode", Verdict: Pass, Method: "PATH lookup", Capability: "OpenCode execution optional", Detail: "OpenCode CLI is missing (optional provider)"})
 		return
 	}
 	version, versionErr := runBounded(ctx, run, binary, "--version")
 	if versionErr != nil {
-		add(Result{Name: "opencode", Verdict: Degraded, Method: "opencode --version", Capability: "OpenCode execution unavailable", Detail: "OpenCode probe failed"})
+		add(Result{Name: "opencode", Verdict: Pass, Method: "opencode --version", Capability: "OpenCode execution optional", Detail: "OpenCode probe failed (optional provider)"})
 		return
 	}
 	add(success("opencode", "opencode --version", strings.TrimSpace(version)))

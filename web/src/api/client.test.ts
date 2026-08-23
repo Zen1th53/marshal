@@ -90,7 +90,7 @@ describe('APIClient (T170)', () => {
   });
 
   it('rejects unexpected non-JSON content-type responses', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('<html><body>502 Bad Gateway from Nginx</body></html>', {
         status: 502,
         headers: { 'Content-Type': 'text/html' },

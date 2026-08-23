@@ -94,7 +94,11 @@ export class APIClient {
 
     // Combine signals if external signal passed
     if (options.signal) {
-      options.signal.addEventListener('abort', () => controller.abort(options.signal?.reason));
+      if (options.signal.aborted) {
+        controller.abort(options.signal.reason);
+      } else {
+        options.signal.addEventListener('abort', () => controller.abort(options.signal?.reason));
+      }
     }
 
     let response: Response;
