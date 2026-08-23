@@ -44,7 +44,10 @@ export function Operations() {
     setLoading(true);
     setError(null);
     try {
-      const [resp, resourceSnapshot] = await Promise.all([api.getDoctorReport(), api.getResources()]);
+      const [resp, resourceSnapshot] = await Promise.all([
+        api.getDoctorReport(),
+        api.getResources().catch(() => null),
+      ]);
       setData(resp);
       setResources(resourceSnapshot);
     } catch (err: unknown) {
