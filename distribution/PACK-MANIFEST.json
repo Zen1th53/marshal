@@ -6335,6 +6335,86 @@
       "bytes": 5254
     },
     {
+      "path": "web/src/features/pet/MarshalPet.test.tsx",
+      "sha256": "3468d7001d21c57be7df3ba309f7c9c5753b2e3d3909cbc5a6005d1463afc534",
+      "bytes": 3100
+    },
+    {
+      "path": "web/src/features/pet/MarshalPet.tsx",
+      "sha256": "a7da93c63e539983120bcfcfe1952e4360b34b76ef87edcf22d280943061056a",
+      "bytes": 10684
+    },
+    {
+      "path": "web/src/features/pet/PetAudio.ts",
+      "sha256": "53681e15a40d947b2539de05987172636c822bf261c729dddddc15779c90fb8a",
+      "bytes": 2689
+    },
+    {
+      "path": "web/src/features/pet/PetDevTools.tsx",
+      "sha256": "ec9ed729009c3b5e1a8277a67bf712d1c775bcbe6113bc2bdef3fef1ec9a7b15",
+      "bytes": 4355
+    },
+    {
+      "path": "web/src/features/pet/PetEventBridge.test.ts",
+      "sha256": "b6b878905921115fbaa5ccf56a07c4588372239907966ec97e5982c0af1bbbae",
+      "bytes": 2292
+    },
+    {
+      "path": "web/src/features/pet/PetEventBridge.ts",
+      "sha256": "bd5dcbc6f20e84a0e7ce4c4c69a3ae4965227005a7d20dbd17a1132bcdee044f",
+      "bytes": 7317
+    },
+    {
+      "path": "web/src/features/pet/PetPopover.tsx",
+      "sha256": "75aeb80baaf851258c5f81c89e814b38b0b6eab305b2706488980028006b55e6",
+      "bytes": 3499
+    },
+    {
+      "path": "web/src/features/pet/PetRenderer.tsx",
+      "sha256": "330e81b4523e609c5aa45da56bc3ed393a48af1c62ab16ec78cbfa1a2a42956d",
+      "bytes": 7817
+    },
+    {
+      "path": "web/src/features/pet/PetSpeechBubble.tsx",
+      "sha256": "541887ba91afec9d576bc76f284c0c83cfb76f5f6d8bdf4d7a0e29295453bb1f",
+      "bytes": 1582
+    },
+    {
+      "path": "web/src/features/pet/PetStateMachine.test.ts",
+      "sha256": "9ad6e0e5394a40974e48c5b9def90f001f42a075c80b07506da8baf3d71881d3",
+      "bytes": 1613
+    },
+    {
+      "path": "web/src/features/pet/PetStateMachine.ts",
+      "sha256": "90933ea57710aa9e1550401b4135745fdb8f677863eeb8ecdd0471a16a2783cb",
+      "bytes": 1678
+    },
+    {
+      "path": "web/src/features/pet/PetTargetRegistry.ts",
+      "sha256": "90123edda8d726a42be2d2ac2e05840aac8f62af47ab722bb781907c275ee0ae",
+      "bytes": 1284
+    },
+    {
+      "path": "web/src/features/pet/index.ts",
+      "sha256": "e35dfe5da736b6322615e32871cdeb83677c728194cf2cf36399439e1fbb2ceb",
+      "bytes": 313
+    },
+    {
+      "path": "web/src/features/pet/pet.css",
+      "sha256": "873a2b81be630c02c7793a544350cdfe66d1d112d273aa408a7cc17be2ecc239",
+      "bytes": 8924
+    },
+    {
+      "path": "web/src/features/pet/petStore.ts",
+      "sha256": "ab2929d9262803fe35cffd3efd1e7f6970588ba14f15858bcdc64db11b4389b7",
+      "bytes": 1961
+    },
+    {
+      "path": "web/src/features/pet/types.ts",
+      "sha256": "6e8dc7e61dd3b48fb3bcd9cbcdbec2566dda52de93c758426cd8c4d3284bcc76",
+      "bytes": 1955
+    },
+    {
       "path": "web/src/features/review/MergeAction.test.tsx",
       "sha256": "8db2104906874bcdef3d3ce83ce1da3d15a2c2cd26b11c3007af905562c5db9d",
       "bytes": 2399
