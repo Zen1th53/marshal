@@ -5041,8 +5041,8 @@
     },
     {
       "path": "internal/webcontrol/session_store.go",
-      "sha256": "3cd9afa04bd74211b0ed230b194c694c06b2a5ad11b3ff0f8b4acd58d9c65c28",
-      "bytes": 3494
+      "sha256": "0a9a89a42175e2139fc7f94aae6460600ef0c5c583fb97b8d0c7de8fbdcefa67",
+      "bytes": 4545
     },
     {
       "path": "internal/webcontrol/session_test.go",

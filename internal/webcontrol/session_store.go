@@ -3,8 +3,11 @@ package webcontrol
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -66,6 +69,46 @@ func generateRandomToken(bytesLen int) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
+func otcFilePath() string {
+	if fi, err := os.Stat(".marshal"); err == nil && fi.IsDir() {
+		return filepath.Join(".marshal", "otc.json")
+	}
+	return filepath.Join(os.TempDir(), "marshal_otc.json")
+}
+
+func (s *SessionStore) loadOTCsLocked() {
+	p := otcFilePath()
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return
+	}
+	var list []*OneTimeCode
+	if err := json.Unmarshal(data, &list); err != nil {
+		return
+	}
+	now := time.Now().UTC()
+	for _, item := range list {
+		if item != nil && !item.Redeemed && now.Before(item.ExpiresAt) {
+			s.otcMap[item.Code] = item
+		}
+	}
+}
+
+func (s *SessionStore) saveOTCsLocked() {
+	p := otcFilePath()
+	now := time.Now().UTC()
+	var list []*OneTimeCode
+	for _, item := range s.otcMap {
+		if item != nil && !item.Redeemed && now.Before(item.ExpiresAt) {
+			list = append(list, item)
+		}
+	}
+	data, err := json.Marshal(list)
+	if err == nil {
+		_ = os.WriteFile(p, data, 0o600)
+	}
+}
+
 func (s *SessionStore) CreateOneTimeCode(principalID, role string) (string, error) {
 	code, err := generateRandomToken(16)
 	if err != nil {
@@ -76,6 +119,7 @@ func (s *SessionStore) CreateOneTimeCode(principalID, role string) (string, erro
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.loadOTCsLocked()
 	s.otcMap[code] = &OneTimeCode{
 		Code:        code,
 		PrincipalID: principalID,
@@ -84,6 +128,7 @@ func (s *SessionStore) CreateOneTimeCode(principalID, role string) (string, erro
 		ExpiresAt:   now.Add(OneTimeCodeTTL),
 		Redeemed:    false,
 	}
+	s.saveOTCsLocked()
 
 	return code, nil
 }
@@ -92,6 +137,7 @@ func (s *SessionStore) RedeemOneTimeCode(code string) (*Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.loadOTCsLocked()
 	otc, ok := s.otcMap[code]
 	if !ok || otc == nil {
 		return nil, ErrCodeInvalid
@@ -104,12 +150,14 @@ func (s *SessionStore) RedeemOneTimeCode(code string) (*Session, error) {
 	now := time.Now().UTC()
 	if now.After(otc.ExpiresAt) {
 		delete(s.otcMap, code)
+		s.saveOTCsLocked()
 		return nil, ErrCodeInvalid
 	}
 
 	// Burn code immediately (single-use invariant)
 	otc.Redeemed = true
 	delete(s.otcMap, code)
+	s.saveOTCsLocked()
 
 	// Create new session ID (session fixation defense)
 	sessionID, err := generateRandomToken(32)
