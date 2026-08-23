@@ -4720,18 +4720,18 @@
       "bytes": 3801
     },
     {
-      "path": "internal/webcontrol/dist/assets/index-3Wsf25zc.css",
-      "sha256": "6d7e5fb6f42c8fa9bff87c78164d9a2b99143098e98d2f604b2e359f37441b7a",
-      "bytes": 56233
+      "path": "internal/webcontrol/dist/assets/index-B7QbmPpS.js",
+      "sha256": "7749b59376d9ba5fb42b5a6bf84af6b7963d6f256f8b8e540c31bb2af3af3996",
+      "bytes": 372091
     },
     {
-      "path": "internal/webcontrol/dist/assets/index-Dm95Fv_r.js",
-      "sha256": "192bd7567aed63506a35dd1841353539635be4c7fe955f81b74f652566df61d6",
-      "bytes": 348895
+      "path": "internal/webcontrol/dist/assets/index-Dq4UAgJt.css",
+      "sha256": "247b97e72bd765b93e6cd22baa7f450df02abdcb6d876a01f81f291fbe74c628",
+      "bytes": 63135
     },
     {
       "path": "internal/webcontrol/dist/index.html",
-      "sha256": "ac447157685a9d54630a935fc14d18942e0f99b8036a9846e61cdad74fb9e86c",
+      "sha256": "b835ed05580a52fb7ee106b90aa08949d2bcadf5eab5c55b5ed05dbe5e5ecdf5",
       "bytes": 599
     },
     {
@@ -6051,8 +6051,8 @@
     },
     {
       "path": "web/src/App.tsx",
-      "sha256": "32f0d9f2fe3c764775beb422a32f254fbe5a31c73c4e2a62065088f55a775914",
-      "bytes": 7599
+      "sha256": "ce235d4a846c5fb8ad5bf1733f333cfd6cf6b619eb8de7efff69134dbacc4e05",
+      "bytes": 7695
     },
     {
       "path": "web/src/api/client.test.ts",
@@ -6591,8 +6591,8 @@
     },
     {
       "path": "web/src/routes/Settings.tsx",
-      "sha256": "8d3b39809af974829d7b7c45d249b744c7abb35ec88f35e214bb067a624c1470",
-      "bytes": 9140
+      "sha256": "a008e7e64f386507cb056bb6de0ca2af67464c0a63f2d429d516e2e9130660b8",
+      "bytes": 12796
     },
     {
       "path": "web/src/routes/TaskDetail.test.tsx",
@@ -6661,8 +6661,8 @@
     },
     {
       "path": "web/src/test/Performance.test.tsx",
-      "sha256": "87ce22df6c41c975c020ef62e1adb4826b349a416e8ce8ab862f659026af48d7",
-      "bytes": 999
+      "sha256": "91f0cbade9a4a7f15e8cf218ab1f98fdae96f2a20e6624ec60cb1ef99c895bca",
+      "bytes": 1014
     },
     {
       "path": "web/src/test/setup.ts",

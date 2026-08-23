@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { Button } from '../components/ui';
 import { useToast } from '../components/toast';
 import { LoadingState, ErrorState } from '../components/state';
+import { usePetSettings, type PetIntensity } from '../features/pet';
 
 interface SafeEnvDiagnostics {
   os_arch: string;
@@ -188,6 +189,18 @@ export function Settings() {
               </form>
             </div>
 
+            {/* MARSHAL Interactive Companion Settings */}
+            <div className="settings-card">
+              <h3 className="text-base font-semibold" style={{ marginBottom: 'var(--space-2)' }}>
+                Interactive Companion
+              </h3>
+              <p className="text-xs text-dim" style={{ marginBottom: 'var(--space-4)' }}>
+                Autonomous desktop/web assistant that interacts with task events, security alerts, and system health.
+              </p>
+
+              <CompanionSettingsSection />
+            </div>
+
             {/* Read-Only Host Environment Diagnostics */}
             <div className="settings-card">
               <h3 className="text-base font-semibold" style={{ marginBottom: 'var(--space-3)' }}>
@@ -222,3 +235,86 @@ export function Settings() {
     </div>
   );
 }
+
+function CompanionSettingsSection() {
+  const { settings, updateSettings } = usePetSettings();
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+      <label className="flex-row items-center gap-2 text-xs cursor-pointer">
+        <input
+          type="checkbox"
+          checked={settings.enabled}
+          onChange={(e) => updateSettings({ enabled: e.target.checked })}
+        />
+        <span className="font-medium">Enable MARSHAL Companion</span>
+      </label>
+
+      <label className="flex-row items-center gap-2 text-xs cursor-pointer">
+        <input
+          type="checkbox"
+          checked={settings.autonomousMovement}
+          disabled={!settings.enabled}
+          onChange={(e) => updateSettings({ autonomousMovement: e.target.checked })}
+        />
+        <span>Autonomous Roaming & Movement</span>
+      </label>
+
+      <label className="flex-row items-center gap-2 text-xs cursor-pointer">
+        <input
+          type="checkbox"
+          checked={settings.taskNotifications}
+          disabled={!settings.enabled}
+          onChange={(e) => updateSettings({ taskNotifications: e.target.checked })}
+        />
+        <span>Task & Workflow Notifications</span>
+      </label>
+
+      <label className="flex-row items-center gap-2 text-xs cursor-pointer">
+        <input
+          type="checkbox"
+          checked={settings.securityNotifications}
+          disabled={!settings.enabled}
+          onChange={(e) => updateSettings({ securityNotifications: e.target.checked })}
+        />
+        <span>Security & Policy Notifications</span>
+      </label>
+
+      <label className="flex-row items-center gap-2 text-xs cursor-pointer">
+        <input
+          type="checkbox"
+          checked={settings.tipsAndSuggestions}
+          disabled={!settings.enabled}
+          onChange={(e) => updateSettings({ tipsAndSuggestions: e.target.checked })}
+        />
+        <span>Tips & Proactive Suggestions</span>
+      </label>
+
+      <label className="flex-row items-center gap-2 text-xs cursor-pointer">
+        <input
+          type="checkbox"
+          checked={settings.soundEnabled}
+          disabled={!settings.enabled}
+          onChange={(e) => updateSettings({ soundEnabled: e.target.checked })}
+        />
+        <span>Audio Effects & Chirps</span>
+      </label>
+
+      <div className="form-group" style={{ marginTop: 'var(--space-2)' }}>
+        <label className="form-label text-xs">Movement Intensity</label>
+        <select
+          className="form-input form-select text-xs"
+          value={settings.intensity}
+          disabled={!settings.enabled || !settings.autonomousMovement}
+          onChange={(e) => updateSettings({ intensity: e.target.value as PetIntensity })}
+          style={{ maxWidth: '240px' }}
+        >
+          <option value="low">Low (Calm, infrequent)</option>
+          <option value="normal">Normal (Balanced)</option>
+          <option value="high">High (Active)</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+

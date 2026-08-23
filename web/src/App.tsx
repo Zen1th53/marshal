@@ -23,6 +23,7 @@ import { Operations } from './routes/Operations';
 import { Benchmarks } from './routes/Benchmarks';
 import { Settings } from './routes/Settings';
 import { GlobalEntityNavigator } from './features/search/GlobalEntityNavigator';
+import { MarshalPet } from './features/pet';
 import { api } from './api/client';
 import type { CapabilityStatusDTO } from './api/types';
 
@@ -175,6 +176,7 @@ function MainApp() {
           onClose={() => setIsSearchOpen(false)}
           onNavigate={handleNavigate}
         />
+        <MarshalPet onNavigate={handleNavigate} />
         <ToastContainer />
       </div>
     </CapabilitiesContext.Provider>

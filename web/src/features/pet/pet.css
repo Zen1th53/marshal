@@ -1,0 +1,429 @@
+/* ===================================================================
+   MARSHAL Interactive Web Pet Styles
+   =================================================================== */
+
+.marshal-pet-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.marshal-pet-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 72px;
+  height: 80px;
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+  will-change: transform;
+}
+
+.marshal-pet-container.dragging {
+  cursor: grabbing;
+  transition: none !important;
+}
+
+.marshal-pet-container.reduced-motion {
+  transition: none !important;
+}
+
+/* Floating Bob Animation */
+.marshal-pet-body-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: pet-float 3s ease-in-out infinite;
+}
+
+.marshal-pet-container.state-sleeping .marshal-pet-body-wrapper {
+  animation: pet-sleep 4s ease-in-out infinite;
+}
+
+.marshal-pet-container.state-working .marshal-pet-body-wrapper {
+  animation: pet-work 1.2s ease-in-out infinite;
+}
+
+.marshal-pet-container.state-success .marshal-pet-body-wrapper {
+  animation: pet-celebrate 0.6s ease-in-out 3;
+}
+
+.marshal-pet-container.state-warning .marshal-pet-body-wrapper,
+.marshal-pet-container.state-error .marshal-pet-body-wrapper {
+  animation: pet-alert 0.4s ease-in-out infinite alternate;
+}
+
+/* SVG Robot Visuals */
+.marshal-pet-svg {
+  width: 64px;
+  height: 72px;
+  filter: drop-shadow(0 4px 12px rgba(99, 102, 241, 0.35));
+  transition: filter 0.3s ease;
+}
+
+.marshal-pet-container:hover .marshal-pet-svg {
+  filter: drop-shadow(0 6px 16px rgba(99, 102, 241, 0.6));
+}
+
+.marshal-pet-container.state-warning .marshal-pet-svg {
+  filter: drop-shadow(0 4px 14px rgba(234, 179, 8, 0.6));
+}
+
+.marshal-pet-container.state-error .marshal-pet-svg {
+  filter: drop-shadow(0 4px 14px rgba(239, 68, 68, 0.7));
+}
+
+.marshal-pet-container.state-success .marshal-pet-svg {
+  filter: drop-shadow(0 4px 14px rgba(34, 197, 94, 0.6));
+}
+
+/* Eye Glow & Animations */
+.pet-eye-glow {
+  filter: drop-shadow(0 0 4px #38bdf8);
+}
+
+.pet-thruster-flame {
+  animation: thruster-flicker 0.2s ease-in-out infinite alternate;
+  transform-origin: center top;
+}
+
+.pet-antenna-beacon {
+  animation: beacon-pulse 2s infinite ease-in-out;
+}
+
+.marshal-pet-container.state-working .pet-antenna-beacon {
+  animation: beacon-pulse 0.6s infinite ease-in-out;
+}
+
+/* Speech Bubble */
+.marshal-pet-speech-bubble {
+  position: absolute;
+  bottom: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 160px;
+  max-width: 240px;
+  background: var(--color-surface, #1c1c21);
+  border: 1px solid var(--color-border, #2e2e36);
+  border-radius: var(--radius-md, 8px);
+  padding: 8px 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.1);
+  color: var(--color-text, #e0e0e6);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.4;
+  pointer-events: auto;
+  animation: bubble-appear 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 10001;
+  text-align: left;
+}
+
+.marshal-pet-speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px 6px 0;
+  border-style: solid;
+  border-color: var(--color-surface, #1c1c21) transparent transparent;
+  display: block;
+  width: 0;
+}
+
+.marshal-pet-speech-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 7px 7px 0;
+  border-style: solid;
+  border-color: var(--color-border, #2e2e36) transparent transparent;
+  display: block;
+  width: 0;
+}
+
+.marshal-pet-speech-bubble.priority-critical {
+  border-color: var(--color-danger, #ef4444);
+  background: #1f1214;
+}
+
+.marshal-pet-speech-bubble.priority-warning {
+  border-color: var(--color-warning, #eab308);
+  background: #1f1b10;
+}
+
+.marshal-pet-speech-bubble.priority-success {
+  border-color: var(--color-success, #22c55e);
+  background: #101f14;
+}
+
+.pet-bubble-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted, #8f8fa0);
+}
+
+.pet-bubble-body {
+  margin: 0;
+  word-break: break-word;
+}
+
+.pet-bubble-action {
+  margin-top: 6px;
+  display: inline-block;
+  font-size: 11px;
+  color: var(--color-accent, #6366f1);
+  cursor: pointer;
+  text-decoration: underline;
+  background: none;
+  border: none;
+  padding: 0;
+  font-weight: 500;
+}
+
+.pet-bubble-action:hover {
+  color: var(--color-accent-hover, #818cf8);
+}
+
+.pet-bubble-dismiss {
+  background: none;
+  border: none;
+  color: var(--color-text-dim, #606070);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.pet-bubble-dismiss:hover {
+  color: var(--color-text, #e0e0e6);
+}
+
+/* Pet Quick Popover Menu */
+.marshal-pet-popover {
+  position: absolute;
+  bottom: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+  background: var(--color-surface, #1c1c21);
+  border: 1px solid var(--color-border, #2e2e36);
+  border-radius: var(--radius-md, 8px);
+  padding: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+  z-index: 10002;
+  animation: bubble-appear 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pet-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border, #2e2e36);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.pet-popover-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text, #e0e0e6);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pet-popover-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success, #22c55e);
+}
+
+.pet-popover-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--color-text, #e0e0e6);
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.pet-popover-menu-item:hover {
+  background: var(--color-surface-alt, #222228);
+  color: var(--color-accent-hover, #818cf8);
+}
+
+/* Dev Playground */
+.pet-dev-panel {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  background: rgba(28, 28, 33, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--color-border, #2e2e36);
+  border-radius: 8px;
+  padding: 12px;
+  z-index: 10010;
+  max-width: 320px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.pet-dev-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.pet-dev-btn {
+  background: #222228;
+  border: 1px solid #333340;
+  color: #ccc;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pet-dev-btn:hover {
+  background: #333344;
+  color: #fff;
+}
+
+/* Keyframes */
+@keyframes pet-float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(1.5deg);
+  }
+}
+
+@keyframes pet-sleep {
+  0%, 100% {
+    transform: translateY(0px) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(3px) rotate(0deg);
+  }
+}
+
+@keyframes pet-work {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.03);
+  }
+}
+
+@keyframes pet-celebrate {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-10px) rotate(-6deg);
+  }
+  75% {
+    transform: translateY(-10px) rotate(6deg);
+  }
+}
+
+@keyframes pet-alert {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    transform: translateY(-2px) scale(1.05);
+  }
+}
+
+@keyframes thruster-flicker {
+  0% {
+    opacity: 0.7;
+    transform: scaleY(0.85);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(1.15);
+  }
+}
+
+@keyframes beacon-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes bubble-appear {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .marshal-pet-container {
+    transition: none !important;
+  }
+  .marshal-pet-body-wrapper,
+  .pet-thruster-flame,
+  .pet-antenna-beacon {
+    animation: none !important;
+  }
+  .marshal-pet-speech-bubble,
+  .marshal-pet-popover {
+    animation: none !important;
+  }
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .marshal-pet-container {
+    width: 60px;
+    height: 68px;
+  }
+  .marshal-pet-svg {
+    width: 52px;
+    height: 60px;
+  }
+  .marshal-pet-speech-bubble {
+    max-width: 190px;
+    bottom: 74px;
+  }
+}
