@@ -64,6 +64,9 @@ Every service recall returns a machine-readable receipt with:
 - stale and budget-exclusion reasons.
 
 Records denied by the canonical store's private-scope gate do not appear in the receipt, preventing identifier leakage.
+Receipts are persisted caller-bound with query digests only and are linked to
+run/task/provider plus resulting evidence and outcome. Memory tombstones do not
+rewrite audit history; policy-admin retention pruning is explicit.
 
 ### Automatic completion and failure capture
 
@@ -81,8 +84,8 @@ Promotion remains a separate privileged operation.
 ### Interface convergence
 
 - CLI recall, remember, and promote route through `Runtime.Memory()`.
-- MCP recall and remember route through `Runtime.Memory()`.
-- A2A task execution already routes through `Runtime.Run`, so it receives automatic recall and completion capture without a parallel A2A memory store.
+- MCP recall, remember, task blackboard, grant/revoke, and handoff operations route through `Runtime.Memory()` and the durable protocol service.
+- A2A task execution, task blackboard, explicit task grants, and handoff operations use the same canonical runtime services without a parallel memory store.
 - A live Web server reads search, direct-ID, detail, and retrieval explanation from canonical state. Fixture data remains restricted to explicit `runtime=nil` dev/test mode.
 - Live Web promote, supersede, and tombstone operations use canonical CAS mutations. They no longer synthesize successful production writes or signatures.
 
@@ -194,15 +197,16 @@ All commands above passed. The Web lint command reported one existing warning in
 
 ## Performance
 
-No new 10k/100k runtime-memory benchmark was executed for this tranche, so no latency, throughput, memory-growth, Recall@K, NDCG, or task-uplift values are claimed. Existing repository benchmark and conformance tests passed as part of `go test ./...`; they are not presented as measurements of this new canonical runtime path.
+The canonical 10k-record validation and four benchmarks were executed on the
+recorded release machine. Exact commands and raw figures are maintained in
+`memory-fabric-validation.md`. Recall@K, NDCG, 100k-record memory growth, and
+task-uplift remain unmeasured and are not claimed.
 
 ## Remaining limitations
 
-- The runtime facade currently uses deterministic exact/lexical ranking. Existing BM25/vector/graph candidate providers are not yet assembled into this production facade.
-- Retrieval receipts are returned to callers but are not yet persisted as a dedicated canonical audit entity.
-- Automatic capture records a deterministic episode/failure candidate; richer procedure/finding extraction and conflict reconciliation still require governance integration.
-- Existing typed handoffs are canonical runtime objects, but the CLI/Web do not yet expose every handoff operation.
-- Session importer interfaces exist, but automatic Codex/OpenCode/Gemini/Claude history discovery is not enabled.
-- Outcome utility feedback and recall-use attribution are not yet connected to runtime success metrics.
+- Vector retrieval remains optional and disabled unless a real local provider is configured; exact, lexical, and graph tracks remain available.
+- Automatic capture records deterministic episode/failure candidates; consolidation proposals for repeated verified facts/failures remain future governance work.
+- Typed handoffs are available through Runtime, MCP, and A2A; CLI/Web do not duplicate every operation.
+- Verified Codex and Claude JSONL import adapters are available. Automatic filesystem discovery/checkpointing and unverified OpenCode/Gemini formats remain disabled.
 - Federation remains outside the Community runtime; no network sync was introduced.
-- Scale benchmarks for this change have not yet been executed. No new performance claim is made.
+- Recall@K, NDCG, 100k scale, and task-success uplift remain unmeasured.

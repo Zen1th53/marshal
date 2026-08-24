@@ -4,11 +4,26 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/evidence"
 )
+
+type capturedOnlyAuthorizer struct{}
+
+func (capturedOnlyAuthorizer) Authorize(_ context.Context, request evidence.AccessRequest) (evidence.AuthorizationDecision, error) {
+	if request.CurrentState != evidence.StateStored {
+		return evidence.AuthorizationDecision{Allowed: false}, evidence.ErrInvalidTransition
+	}
+	return evidence.AuthorizationDecision{
+		Allowed: true, SubjectID: request.SubjectID, NodeID: request.NodeID,
+		State: evidence.StateStored, PolicyDigest: "sha256:" + strings.Repeat("c", 64),
+		FreshUntil: time.Now().UTC().Add(time.Minute),
+	}, nil
+}
 
 func TestA08ConcurrentStoresDuplicatePutNodeHasOneCanonicalResult(t *testing.T) {
 	ctx := context.Background()
@@ -70,7 +85,7 @@ func TestA08ConcurrentStoresConflictingTransitionsHaveOneWinner(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "evidence.db")
 	sanitizer := evidence.NewStrictSanitizer(evidence.SanitizerConfig{})
-	first, err := OpenWithSecurity(ctx, path, sanitizer, allowingAuthorizer{})
+	first, err := OpenWithSecurity(ctx, path, sanitizer, capturedOnlyAuthorizer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +93,7 @@ func TestA08ConcurrentStoresConflictingTransitionsHaveOneWinner(t *testing.T) {
 		first.Close()
 		t.Fatal(err)
 	}
-	second, err := OpenWithSecurity(ctx, path, sanitizer, allowingAuthorizer{})
+	second, err := OpenWithSecurity(ctx, path, sanitizer, capturedOnlyAuthorizer{})
 	if err != nil {
 		first.Close()
 		t.Fatal(err)

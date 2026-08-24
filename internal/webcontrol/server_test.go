@@ -3,12 +3,14 @@ package webcontrol_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/webcontrol"
 )
 
@@ -23,20 +25,22 @@ func TestT167WebControlServerRoutesAndLoopback(t *testing.T) {
 		t.Fatalf("NewServer: %v", err)
 	}
 
-	// Invariant 1: Loopback validation
-	if !server.IsLoopback() {
-		t.Fatal("expected server to be in loopback mode for 127.0.0.1")
-	}
-
-	// Invariant 2: Non-loopback without auth must fail
-	badCfg := webcontrol.ServerConfig{
+	// Invariant 1: Loopback protection — non-loopback bind without production flag rejected
+	invalidCfg := webcontrol.ServerConfig{
 		Host: "0.0.0.0",
 		Port: 8787,
-		AllowInsecureNonLoopback: false,
 	}
-	_, err = webcontrol.NewServer(badCfg, nil)
-	if err == nil {
-		t.Fatal("expected error when binding to 0.0.0.0 without authentication/insecure flag")
+	if _, err := webcontrol.NewServer(invalidCfg, nil); err == nil {
+		t.Fatalf("expected error binding to 0.0.0.0 without production flag")
+	}
+
+	// Invariant 2: HTTP GET / returns HTML SPA shell
+	reqSpa := httptest.NewRequest(http.MethodGet, "/", nil)
+	wSpa := httptest.NewRecorder()
+	server.Handler().ServeHTTP(wSpa, reqSpa)
+
+	if wSpa.Code != http.StatusOK || !strings.Contains(wSpa.Body.String(), "<!doctype html>") {
+		t.Fatalf("expected 200 OK HTML SPA shell, got: %d", wSpa.Code)
 	}
 
 	// Invariant 3: HTTP GET /api/v1/system/status returns structured JSON
@@ -52,8 +56,9 @@ func TestT167WebControlServerRoutesAndLoopback(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&statusDTO); err != nil {
 		t.Fatalf("Decode SystemStatusDTO: %v", err)
 	}
-	if statusDTO.State == "" || statusDTO.DatabaseSchema != "v69" {
-		t.Fatalf("unexpected status DTO: %+v", statusDTO)
+	expectedSchema := fmt.Sprintf("v%d", store.LatestSchemaVersion)
+	if statusDTO.State == "" || statusDTO.DatabaseSchema != expectedSchema {
+		t.Fatalf("unexpected status DTO: %+v (expected schema %s)", statusDTO, expectedSchema)
 	}
 }
 

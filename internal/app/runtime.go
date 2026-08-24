@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -315,6 +316,9 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	}
 	rt.handoffService = protocol.NewService(protocol.Config{RepositoryRoot: layout.Root}, database, handoffAuthorizer)
 	rt.memoryService = NewMemoryService(database)
+	if err := rt.memoryService.RebuildProjections(ctx, localProjectID); err != nil {
+		return nil, err
+	}
 	_ = rt.ReconcileStartup(ctx)
 	return rt, nil
 }
@@ -340,6 +344,63 @@ func (r *Runtime) ConsumeHandoff(ctx context.Context, principal protocol.Princip
 		return protocol.Handoff{}, protocol.ErrUnavailable
 	}
 	return r.handoffService.Consume(ctx, principal, id)
+}
+
+// CompileAndSubmitHandoff compiles governed canonical task memory and routes
+// the resulting provider-neutral reference packet through the existing typed,
+// authenticated, durable handoff service. Raw transcript/context content is
+// deliberately not duplicated into the handoff row.
+func (r *Runtime) CompileAndSubmitHandoff(ctx context.Context, principal authz.Principal, request HandoffCompileRequest) (protocol.Handoff, error) {
+	if r == nil || r.memoryService == nil || r.handoffService == nil {
+		return protocol.Handoff{}, protocol.ErrUnavailable
+	}
+	bundle, err := r.memoryService.CompileHandoff(ctx, principal, request)
+	if err != nil {
+		return protocol.Handoff{}, err
+	}
+	raw, err := json.Marshal(bundle)
+	if err != nil {
+		return protocol.Handoff{}, protocol.ErrInvalid
+	}
+	sum := sha256.Sum256(raw)
+	claims := map[string]string{
+		"goal":               bundle.TaskDefinition.Title,
+		"status":             string(bundle.TaskDefinition.Status),
+		"memory_ids":         strings.Join(bundle.MemoryIDs, ","),
+		"working_slot_count": fmt.Sprintf("%d", len(bundle.WorkingSlots)),
+	}
+	for key, value := range map[string]string{
+		"repository_head":   request.CurrentHead,
+		"repository_branch": request.CurrentBranch,
+		"diff_digest":       request.DiffHash,
+	} {
+		if strings.TrimSpace(value) != "" {
+			claims[key] = value
+		}
+	}
+	for key, value := range claims {
+		if strings.TrimSpace(value) == "" {
+			delete(claims, key)
+		}
+	}
+	evidenceIDs := make([]protocol.EvidenceID, 0, len(bundle.EvidenceIDs))
+	for _, id := range bundle.EvidenceIDs {
+		evidenceIDs = append(evidenceIDs, protocol.EvidenceID(id))
+	}
+	handoffPrincipal := protocol.Principal{
+		ID: principal.ID, Role: protocol.Role(strings.ToLower(principal.Role.Name)),
+		Capabilities: append([]string(nil), principal.Role.Capabilities...),
+	}
+	handoff := protocol.Handoff{
+		ID: protocol.HandoffID(bundle.BundleID), Version: protocol.Version1,
+		TaskID: protocol.TaskID(bundle.TaskID), FromAgent: principal.ID,
+		ToRole: protocol.Role(request.TargetRole), Claims: claims,
+		EvidenceIDs: evidenceIDs, ChangedFiles: append([]string(nil), bundle.ChangedFiles...),
+		ContextDigest: "sha256:" + hex.EncodeToString(sum[:]),
+	}
+	return r.handoffService.Submit(ctx, handoffPrincipal, protocol.Submission{
+		IdempotencyKey: bundle.BundleID, Handoff: handoff,
+	})
 }
 
 type runtimeHandoffAuthorizer struct{}
@@ -664,12 +725,17 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
 	}
+	runID, err := model.NewID("RUN-")
+	if err != nil {
+		return RunResult{}, err
+	}
 	memoryPrincipal := authz.Principal{ID: request.AgentID, Role: authz.Role{Name: "developer", Authorities: []authz.Authority{authz.AuthorityTaskPlan}}}
 	fingerprintQuery := strings.Join([]string{task.ID, task.Title, branch, baseCommit, request.AgentID, request.Adapter, string(task.Risk)}, " ")
 	recall, err := r.memoryService.Recall(ctx, memoryPrincipal, RecallRequest{
 		ProjectID: localProjectID, Query: fingerprintQuery,
 		AllowedScopeIDs: []string{localProjectID, task.ID, request.AgentID, branch},
 		CurrentHead:     baseCommit, CurrentBranch: branch, MaxRecords: 8, MaxBytes: 12 << 10,
+		RunID: runID, TaskID: task.ID, Provider: request.Adapter,
 	})
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
@@ -691,10 +757,6 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	probe, err := agentAdapter.Probe(ctx)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
-		return RunResult{}, err
-	}
-	runID, err := model.NewID("RUN-")
-	if err != nil {
 		return RunResult{}, err
 	}
 	if err := r.store.StartRun(ctx, model.WorkerRun{
@@ -867,11 +929,32 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	})
 	var captureErr error
 	if finishErr == nil && len(runEvidenceIDs) > 0 {
+		failureReason := ""
+		retryCondition := ""
+		if !success {
+			failureReason = finishStatus
+			if runErr != nil {
+				failureReason = runErr.Error()
+			}
+			switch finishStatus {
+			case "timeout":
+				retryCondition = "retry only after the execution time budget or approach changes"
+			case "blocked":
+				retryCondition = "retry only after the blocking policy or capability changes"
+			case "cancelled":
+				retryCondition = "retry only after an operator submits a new run"
+			default:
+				retryCondition = "retry only after the recorded failure evidence is reviewed"
+			}
+		}
+		errorDigest := sha256.Sum256(append([]byte(finishStatus+":"), stderr...))
 		_, captureErr = r.memoryService.CaptureOutcome(context.Background(), OutcomeCaptureRequest{
 			ProjectID: localProjectID, TaskID: task.ID, TaskTitle: task.Title, RunID: runID, SessionID: claim.Session.ID,
 			AgentID: request.AgentID, Provider: request.Adapter, Status: finishStatus,
 			ExitStatus: result.ExitCode, BaseCommit: baseCommit, HeadCommit: resultCommit, Branch: branch,
-			EvidenceIDs: runEvidenceIDs,
+			EvidenceIDs: runEvidenceIDs, ErrorSignature: "sha256:" + hex.EncodeToString(errorDigest[:]),
+			FailureReason: failureReason, RetryCondition: retryCondition,
+			Environment: map[string]string{"adapter_version": probe.Version, "isolation": fmt.Sprint(result.Isolation)},
 		})
 	}
 	currentRevision := executionRevision

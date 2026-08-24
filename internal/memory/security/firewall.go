@@ -25,12 +25,16 @@ var (
 	googleApiKeyPattern     = regexp.MustCompile(`(?i)\bAIza[0-9A-Za-z\-_]{35}\b`)
 	secretAssignmentPattern = regexp.MustCompile(`(?i)(?:api[_-]?key|password|access[_-]?token|secret_key|client_secret|auth_token)\s*[:=]\s*['"]?[^\s'"]{8,}`)
 	dbConnStringPattern     = regexp.MustCompile(`(?i)(?:postgres|postgresql|mysql|mongodb|redis|amqp|couchdb):\/\/[^:]+:[^@]+@`)
+	jwtPattern              = regexp.MustCompile(`\beyJ[0-9A-Za-z_-]{8,}\.[0-9A-Za-z_-]{8,}\.[0-9A-Za-z_-]{8,}\b`)
+	authorizationPattern    = regexp.MustCompile(`(?i)\bauthorization\s*:\s*(?:bearer|basic)\s+[^\s,;]{8,}`)
+	sessionCookiePattern    = regexp.MustCompile(`(?i)\b(?:cookie|set-cookie)\s*:\s*[^\r\n]{8,}`)
+	oauthTokenPattern       = regexp.MustCompile(`(?i)\bya29\.[0-9A-Za-z_-]{16,}\b`)
 )
 
 type FirewallConfig struct {
-	CanarySecrets        []string
-	ForbiddenKeywords    []string
-	CustomRegexPatterns  []*regexp.Regexp
+	CanarySecrets       []string
+	ForbiddenKeywords   []string
+	CustomRegexPatterns []*regexp.Regexp
 }
 
 type Firewall struct {
@@ -133,6 +137,18 @@ func (f *Firewall) detectSecret(text string) string {
 	}
 	if secretAssignmentPattern.MatchString(text) {
 		return "explicit secret/password assignment"
+	}
+	if jwtPattern.MatchString(text) {
+		return "jwt credential pattern"
+	}
+	if authorizationPattern.MatchString(text) {
+		return "authorization header credential"
+	}
+	if sessionCookiePattern.MatchString(text) {
+		return "session cookie credential"
+	}
+	if oauthTokenPattern.MatchString(text) {
+		return "oauth token pattern"
 	}
 
 	// 3. Custom regex patterns

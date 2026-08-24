@@ -33,6 +33,8 @@ func TestRuntimeMemoryFabricCrossProviderRestartAndStaleness(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer rt.Close()
+		grantMemoryTaskAccess(t, rt, taskID,
+			memoryReader("agent-gemini"), memoryReader("agent-ollama"), memoryReader("agent-claude"))
 
 		captured, err := rt.Memory().CaptureOutcome(ctx, app.OutcomeCaptureRequest{
 			ProjectID: "PROJECT-local", TaskID: taskID, TaskTitle: "Preserve SQLite as canonical memory",
@@ -196,6 +198,12 @@ func TestRuntimeRecallDefaultsDenyUnspecifiedTaskScope(t *testing.T) {
 		t.Fatalf("unspecified task scope was not denied before ranking: %+v", denied)
 	}
 
+	if _, err := rt.Memory().Recall(ctx, memoryReader("agent-a"), app.RecallRequest{
+		ProjectID: "PROJECT-local", Query: "other task needle", AllowedScopeIDs: []string{"TASK-OTHER"},
+	}); !errors.Is(err, authz.ErrUnauthorized) {
+		t.Fatalf("ungranted explicit task scope was accepted: %v", err)
+	}
+	grantMemoryTaskAccess(t, rt, "TASK-OTHER", memoryReader("agent-a"))
 	allowed, err := rt.Memory().Recall(ctx, memoryReader("agent-a"), app.RecallRequest{
 		ProjectID: "PROJECT-local", Query: "other task needle", AllowedScopeIDs: []string{"TASK-OTHER"},
 	})

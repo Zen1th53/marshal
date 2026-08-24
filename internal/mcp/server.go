@@ -12,7 +12,9 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/memory/working"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/protocol"
 	"github.com/Zen1th53/marshal/internal/ratelimit"
 	"github.com/Zen1th53/marshal/internal/store"
 )
@@ -181,11 +183,10 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		principalID := callerPrincipal.ID
-		if principalID == "" {
-			principalID = "mcp-client"
+		if callerPrincipal.ID == "" {
+			callerPrincipal.ID = "mcp-client"
 		}
-		res, err := s.callTool(ctx, principalID, params.Name, params.Arguments)
+		res, err := s.callTool(ctx, callerPrincipal, params.Name, params.Arguments)
 		if err != nil {
 			s.writeError(w, req.ID, -32000, err.Error())
 			return
@@ -303,10 +304,52 @@ func (s *Server) listTools() []Tool {
 				"required":   []string{"project_id", "title", "body"},
 			},
 		},
+		{
+			Name:        "task_memory_list",
+			Description: "List governed shared working-memory slots for an authorized task",
+			InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "task_id": stringSchema()}, "task_id"),
+		},
+		{
+			Name:        "task_memory_set",
+			Description: "Create a governed task working-memory slot; existing slots require CAS",
+			InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "task_id": stringSchema(), "slot_type": stringSchema(), "value": stringSchema(), "pinned": map[string]any{"type": "boolean"}}, "task_id", "slot_type", "value"),
+		},
+		{
+			Name:        "task_memory_cas",
+			Description: "Update a task working-memory slot using its expected revision",
+			InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "task_id": stringSchema(), "slot_type": stringSchema(), "expected_revision": map[string]any{"type": "integer", "minimum": 1}, "value": stringSchema()}, "task_id", "slot_type", "expected_revision", "value"),
+		},
+		{
+			Name:        "task_memory_promote",
+			Description: "Propose a task slot as a governed candidate memory",
+			InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "task_id": stringSchema(), "slot_type": stringSchema(), "kind": stringSchema(), "title": stringSchema()}, "task_id", "slot_type", "kind", "title"),
+		},
+		{
+			Name:        "task_memory_grant",
+			Description: "Policy-admin-only grant of task memory access to an existing agent",
+			InputSchema: objectSchema(map[string]any{"task_id": stringSchema(), "principal_id": stringSchema(), "role": stringSchema(), "policy_digest": stringSchema()}, "task_id", "principal_id", "policy_digest"),
+		},
+		{
+			Name:        "task_memory_revoke",
+			Description: "Policy-admin-only revocation of a task memory grant",
+			InputSchema: objectSchema(map[string]any{"binding_id": stringSchema()}, "binding_id"),
+		},
+		{
+			Name:        "memory_handoff_create",
+			Description: "Compile and persist a bounded provider-neutral handoff from governed task memory",
+			InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "task_id": stringSchema(), "target_role": stringSchema(), "current_head": stringSchema(), "current_branch": stringSchema(), "changed_files": map[string]any{"type": "array", "items": stringSchema()}, "diff_hash": stringSchema(), "max_bytes": map[string]any{"type": "integer", "minimum": 1}}, "task_id", "target_role"),
+		},
+		{
+			Name:        "memory_handoff_consume",
+			Description: "Consume an authorized durable provider-neutral handoff",
+			InputSchema: objectSchema(map[string]any{"handoff_id": stringSchema()}, "handoff_id"),
+		},
 	}
 }
 
-func (s *Server) callTool(ctx context.Context, principalID, name string, args map[string]any) (string, error) {
+func (s *Server) callTool(ctx context.Context, caller auth.Principal, name string, args map[string]any) (string, error) {
+	principalID := caller.ID
+	principal := memoryPrincipal(caller)
 	switch name {
 	case "marshal_status":
 		status, err := s.runtime.Status(ctx)
@@ -323,7 +366,7 @@ func (s *Server) callTool(ctx context.Context, principalID, name string, args ma
 				proj = p.ID
 			}
 		}
-		records, err := s.runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: proj})
+		records, err := s.runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: proj, Scope: model.ScopeProject, ActorID: principalID})
 		if err != nil {
 			return "", err
 		}
@@ -344,7 +387,6 @@ func (s *Server) callTool(ctx context.Context, principalID, name string, args ma
 				proj = p.ID
 			}
 		}
-		principal := authz.Principal{ID: principalID, Role: authz.Role{Name: "developer", Authorities: []authz.Authority{authz.AuthorityTaskPlan}}}
 		res, err := s.runtime.Memory().Recall(ctx, principal, app.RecallRequest{ProjectID: proj, Query: query})
 		if err != nil {
 			return "", err
@@ -361,7 +403,6 @@ func (s *Server) callTool(ctx context.Context, principalID, name string, args ma
 				proj = p.ID
 			}
 		}
-		principal := authz.Principal{ID: principalID, Role: authz.Role{Name: "developer", Authorities: []authz.Authority{authz.AuthoritySourceWrite}}}
 		rec, err := s.runtime.Memory().Remember(ctx, principal, app.RememberRequest{ProjectID: proj, ScopeID: proj, Title: title, Body: body, Kind: model.MemoryKindSemantic})
 		if err != nil {
 			return "", err
@@ -372,6 +413,74 @@ func (s *Server) callTool(ctx context.Context, principalID, name string, args ma
 		}
 		data, _ := json.Marshal(out)
 		return string(data), nil
+
+	case "task_memory_list":
+		projectID := s.projectID(ctx, args)
+		taskID := stringArg(args, "task_id")
+		slots, err := s.runtime.Memory().ListTaskSlots(ctx, principal, projectID, taskID)
+		return marshalToolResult(slots, err)
+
+	case "task_memory_set":
+		projectID := s.projectID(ctx, args)
+		slotType, err := parseSlotType(stringArg(args, "slot_type"))
+		if err != nil {
+			return "", err
+		}
+		slot, err := s.runtime.Memory().SetTaskSlotWithProvenance(ctx, principal, projectID, stringArg(args, "task_id"), slotType, stringArg(args, "value"), boolArg(args, "pinned"), app.WorkingProvenance{Provider: "mcp"})
+		return marshalToolResult(slot, err)
+
+	case "task_memory_cas":
+		projectID := s.projectID(ctx, args)
+		slotType, err := parseSlotType(stringArg(args, "slot_type"))
+		if err != nil {
+			return "", err
+		}
+		revision, err := intArg(args, "expected_revision")
+		if err != nil {
+			return "", err
+		}
+		slot, err := s.runtime.Memory().UpdateTaskSlotCASWithProvenance(ctx, principal, projectID, stringArg(args, "task_id"), slotType, revision, stringArg(args, "value"), app.WorkingProvenance{Provider: "mcp"})
+		return marshalToolResult(slot, err)
+
+	case "task_memory_promote":
+		projectID := s.projectID(ctx, args)
+		slotType, err := parseSlotType(stringArg(args, "slot_type"))
+		if err != nil {
+			return "", err
+		}
+		kind := model.MemoryKind(stringArg(args, "kind"))
+		rec, err := s.runtime.Memory().PromoteTaskSlot(ctx, principal, projectID, stringArg(args, "task_id"), slotType, kind, stringArg(args, "title"))
+		return marshalToolResult(rec, err)
+
+	case "task_memory_grant":
+		binding, err := s.runtime.Memory().GrantTaskAccess(ctx, principal, app.TaskMemoryGrantRequest{TaskID: stringArg(args, "task_id"), PrincipalID: stringArg(args, "principal_id"), Role: stringArg(args, "role"), PolicyDigest: stringArg(args, "policy_digest")})
+		return marshalToolResult(binding, err)
+
+	case "task_memory_revoke":
+		if err := s.runtime.Memory().RevokeTaskAccess(ctx, principal, stringArg(args, "binding_id")); err != nil {
+			return "", err
+		}
+		return `{"status":"revoked"}`, nil
+
+	case "memory_handoff_create":
+		maxBytes, err := optionalIntArg(args, "max_bytes")
+		if err != nil {
+			return "", err
+		}
+		handoff, err := s.runtime.CompileAndSubmitHandoff(ctx, principal, app.HandoffCompileRequest{ProjectID: s.projectID(ctx, args), TaskID: stringArg(args, "task_id"), SourceAgentID: principalID, TargetRole: stringArg(args, "target_role"), MaxBytes: maxBytes, CurrentHead: stringArg(args, "current_head"), CurrentBranch: stringArg(args, "current_branch"), ChangedFiles: stringSliceArg(args, "changed_files"), DiffHash: stringArg(args, "diff_hash")})
+		return marshalToolResult(handoff, err)
+
+	case "memory_handoff_consume":
+		handoffID := protocol.HandoffID(stringArg(args, "handoff_id"))
+		pending, err := s.runtime.Store().GetHandoff(ctx, handoffID)
+		if err != nil {
+			return "", err
+		}
+		if _, err := s.runtime.Memory().ListTaskSlots(ctx, principal, s.projectID(ctx, args), string(pending.TaskID)); err != nil {
+			return "", err
+		}
+		handoff, err := s.runtime.ConsumeHandoff(ctx, protocol.Principal{ID: principalID, Role: protocol.Role(principal.Role.Name), Capabilities: []string{"handoff.consume"}}, handoffID)
+		return marshalToolResult(handoff, err)
 
 	case "tasks_list":
 		tasks, err := s.runtime.Tasks(ctx)
@@ -494,6 +603,16 @@ func requiredCapabilityForTool(toolName string) auth.Capability {
 		return auth.CapTaskExecute
 	case "task_run":
 		return auth.CapTaskExecute
+	case "memory_status", "memory_recall", "task_memory_list":
+		return auth.CapTaskRead
+	case "memory_remember", "task_memory_set", "task_memory_cas", "task_memory_promote":
+		return auth.CapTaskExecute
+	case "task_memory_grant", "task_memory_revoke":
+		return auth.CapAll
+	case "memory_handoff_create":
+		return auth.CapHandoffCreate
+	case "memory_handoff_consume":
+		return auth.CapHandoffRead
 	case "agents_list":
 		return auth.CapAgentRead
 	case "events_list", "artifacts_list":
@@ -502,5 +621,106 @@ func requiredCapabilityForTool(toolName string) auth.Capability {
 		return auth.CapVerifyRun
 	default:
 		return auth.CapAll
+	}
+}
+
+func memoryPrincipal(caller auth.Principal) authz.Principal {
+	authorities := make([]authz.Authority, 0, 3)
+	if caller.HasCapability(auth.CapAll) {
+		authorities = append(authorities, authz.AuthorityTaskPlan, authz.AuthoritySourceWrite, authz.AuthorityPolicyAdmin)
+	} else {
+		if caller.HasCapability(auth.CapTaskRead) || caller.HasCapability(auth.CapHandoffCreate) || caller.HasCapability(auth.CapHandoffRead) {
+			authorities = append(authorities, authz.AuthorityTaskPlan)
+		}
+		if caller.HasCapability(auth.CapTaskExecute) {
+			authorities = append(authorities, authz.AuthorityTaskPlan, authz.AuthoritySourceWrite)
+		}
+	}
+	// The unauthenticated server constructor is retained for local-only tests
+	// and development mode. Production authenticated servers never take this
+	// path.
+	if len(caller.Capabilities) == 0 {
+		authorities = append(authorities, authz.AuthorityTaskPlan, authz.AuthoritySourceWrite)
+	}
+	return authz.Principal{ID: caller.ID, Role: authz.Role{Name: "developer", Capabilities: append([]string(nil), caller.Capabilities...), Authorities: authorities}}
+}
+
+func (s *Server) projectID(ctx context.Context, args map[string]any) string {
+	if projectID := stringArg(args, "project_id"); projectID != "" {
+		return projectID
+	}
+	if project, err := s.runtime.Store().Project(ctx); err == nil {
+		return project.ID
+	}
+	return ""
+}
+
+func stringSchema() map[string]any { return map[string]any{"type": "string"} }
+
+func objectSchema(properties map[string]any, required ...string) map[string]any {
+	schema := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	return schema
+}
+
+func stringArg(args map[string]any, name string) string {
+	value, _ := args[name].(string)
+	return strings.TrimSpace(value)
+}
+
+func boolArg(args map[string]any, name string) bool {
+	value, _ := args[name].(bool)
+	return value
+}
+
+func intArg(args map[string]any, name string) (int, error) {
+	value, ok := args[name].(float64)
+	if !ok || value < 1 || value != float64(int(value)) {
+		return 0, fmt.Errorf("%w: %s must be a positive integer", model.ErrInvalid, name)
+	}
+	return int(value), nil
+}
+
+func optionalIntArg(args map[string]any, name string) (int, error) {
+	if _, exists := args[name]; !exists {
+		return 0, nil
+	}
+	return intArg(args, name)
+}
+
+func stringSliceArg(args map[string]any, name string) []string {
+	raw, _ := args[name].([]any)
+	result := make([]string, 0, len(raw))
+	for _, item := range raw {
+		if value, ok := item.(string); ok && strings.TrimSpace(value) != "" {
+			result = append(result, strings.TrimSpace(value))
+		}
+	}
+	return result
+}
+
+func marshalToolResult(value any, err error) (string, error) {
+	if err != nil {
+		return "", err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func parseSlotType(value string) (working.SlotType, error) {
+	slotType := working.SlotType(value)
+	switch slotType {
+	case working.SlotHypothesis, working.SlotPlanState, working.SlotActiveSymbols, working.SlotBlockers,
+		working.SlotTemporaryObservations, working.SlotToolResults, working.SlotFinding, working.SlotDecision,
+		working.SlotConstraint, working.SlotFailedApproach, working.SlotArtifactReference, working.SlotOpenQuestion,
+		working.SlotHandoffNote:
+		return slotType, nil
+	default:
+		return "", fmt.Errorf("%w: unsupported task memory slot type %q", model.ErrInvalid, value)
 	}
 }

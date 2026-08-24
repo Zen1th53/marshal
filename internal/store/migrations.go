@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 69
+const LatestSchemaVersion = 71
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1643,12 +1643,67 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 		version = 69
 	}
+	if version < 70 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS memory_retrieval_receipts (
+				receipt_id       TEXT PRIMARY KEY,
+				project_id       TEXT NOT NULL REFERENCES projects(project_id),
+				caller_id        TEXT NOT NULL,
+				query_text       TEXT NOT NULL DEFAULT '',
+				query_digest     TEXT NOT NULL DEFAULT '',
+				allowed_scopes   TEXT NOT NULL DEFAULT '[]',
+				current_head     TEXT NOT NULL DEFAULT '',
+				current_branch   TEXT NOT NULL DEFAULT '',
+				max_records      INTEGER NOT NULL DEFAULT 0,
+				max_bytes        INTEGER NOT NULL DEFAULT 0,
+				consumed_bytes   INTEGER NOT NULL DEFAULT 0,
+					decisions_json   TEXT NOT NULL DEFAULT '[]',
+					run_id           TEXT NOT NULL DEFAULT '',
+					task_id          TEXT NOT NULL DEFAULT '',
+					provider         TEXT NOT NULL DEFAULT '',
+					denied_count     INTEGER NOT NULL DEFAULT 0,
+					created_at       TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS memory_retrieval_receipts_by_project
+				ON memory_retrieval_receipts(project_id, created_at);
+			CREATE INDEX IF NOT EXISTS memory_retrieval_receipts_by_task
+				ON memory_retrieval_receipts(project_id, task_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 70: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(70, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 70: %w", err)
+		}
+		version = 70
+	}
+	if version < 71 {
+		columns := []struct{ name, statement string }{
+			{"evidence_ids", "ALTER TABLE memory_retrieval_receipts ADD COLUMN evidence_ids TEXT NOT NULL DEFAULT '';"},
+			{"outcome_memory_id", "ALTER TABLE memory_retrieval_receipts ADD COLUMN outcome_memory_id TEXT NOT NULL DEFAULT '';"},
+			{"outcome_status", "ALTER TABLE memory_retrieval_receipts ADD COLUMN outcome_status TEXT NOT NULL DEFAULT '';"},
+		}
+		for _, column := range columns {
+			var exists int
+			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM pragma_table_info('memory_retrieval_receipts') WHERE name = ?`, column.name).Scan(&exists); err != nil {
+				return fmt.Errorf("inspect schema version 71 column %s: %w", column.name, err)
+			}
+			if exists > 0 {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, column.statement); err != nil {
+				return fmt.Errorf("migrate schema version 71: %w", err)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(71, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 71: %w", err)
+		}
+		version = 71
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
 	}
 	return nil
 }
-
 
 func (s *Store) InitProject(ctx context.Context, project model.Project) error {
 	if project.ID == "" || project.Repository == "" || project.DefaultBranch == "" || project.PackVersion == "" {

@@ -1,6 +1,7 @@
 package webcontrol_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -71,5 +72,56 @@ func TestWebMemoryUsesCanonicalRuntimeStore(t *testing.T) {
 		if item.ID == "MEM-001-ARCH-DECISION" {
 			t.Fatal("dev fixture leaked into production server")
 		}
+	}
+}
+
+func TestWebWorkingMemoryUsesCanonicalRuntimeService(t *testing.T) {
+	ctx := context.Background()
+	repo := testgit.New(t)
+	for _, name := range []string{"CAPABILITIES.yaml", "PACK-VERSION.yaml", "RUNTIME-VERSION.yaml"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo.Path(), name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := app.Bootstrap(ctx, repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	rt, err := app.Open(ctx, repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rt.Close()
+	srv, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, rt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie, csrf := loginAndCSRF(t, srv, "operator", "admin")
+	payload, _ := json.Marshal(map[string]any{"task_id": "TASK-WEB-CANONICAL", "slot_key": "plan_state", "content": "persist through canonical service", "is_pinned": true})
+	post := httptest.NewRequest(http.MethodPost, "/api/v1/memory/working/slot", bytes.NewReader(payload))
+	post.Header.Set("Content-Type", "application/json")
+	post.Header.Set("X-CSRF-Token", csrf)
+	post.AddCookie(cookie)
+	wPost := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(wPost, post)
+	if wPost.Code != http.StatusOK {
+		t.Fatalf("post status=%d body=%s", wPost.Code, wPost.Body.String())
+	}
+	get := httptest.NewRequest(http.MethodGet, "/api/v1/memory/working?task_id=TASK-WEB-CANONICAL", nil)
+	get.AddCookie(cookie)
+	wGet := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(wGet, get)
+	if wGet.Code != http.StatusOK {
+		t.Fatalf("get status=%d body=%s", wGet.Code, wGet.Body.String())
+	}
+	var response webcontrol.WorkingMemoryResponseDTO
+	if err := json.NewDecoder(wGet.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Slots) != 1 || response.Slots[0].Content != "persist through canonical service" || response.EvictionStrategy != "bounded-canonical" {
+		t.Fatalf("web returned non-canonical working memory: %+v", response)
 	}
 }

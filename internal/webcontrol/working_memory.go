@@ -2,9 +2,14 @@ package webcontrol
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/memory/working"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 type WorkingMemorySlotDTO struct {
@@ -28,6 +33,7 @@ type WorkingMemoryResponseDTO struct {
 }
 
 type UpdateWorkingSlotRequestDTO struct {
+	TaskID           string `json:"task_id"`
 	SlotKey          string `json:"slot_key"`
 	ExpectedRevision int    `json:"expected_revision"`
 	Content          string `json:"content"`
@@ -35,6 +41,7 @@ type UpdateWorkingSlotRequestDTO struct {
 }
 
 type PromoteWorkingSlotRequestDTO struct {
+	TaskID      string `json:"task_id"`
 	SlotKey     string `json:"slot_key"`
 	TargetTitle string `json:"target_title"`
 }
@@ -77,6 +84,35 @@ var (
 )
 
 func (s *Server) handleGetWorkingMemory(w http.ResponseWriter, r *http.Request) {
+	if s.memory != nil && s.store != nil {
+		taskID := r.URL.Query().Get("task_id")
+		if taskID == "" {
+			writeError(w, http.StatusBadRequest, "task_id_required", "task_id is required", "")
+			return
+		}
+		project, err := s.store.Project(r.Context())
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_unavailable", "Canonical memory store unavailable", "")
+			return
+		}
+		principal, ok := s.memoryPrincipal(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required", "")
+			return
+		}
+		slots, err := s.memory.ListTaskSlots(r.Context(), principal, project.ID, taskID)
+		if err != nil {
+			writeError(w, http.StatusForbidden, "memory_recall_denied", "Task memory access denied", "")
+			return
+		}
+		response := WorkingMemoryResponseDTO{TotalQuotaBytes: 65536, EvictionStrategy: "bounded-canonical"}
+		for _, slot := range slots {
+			response.Slots = append(response.Slots, WorkingMemorySlotDTO{SlotKey: string(slot.Type), OwnerScope: "task", ScopeID: taskID, Content: slot.Value, Revision: slot.Revision, IsPinned: slot.Pinned, AllocatedBytes: len(slot.Value), LastUpdatedAt: slot.UpdatedAt})
+			response.UsedBytes += len(slot.Value)
+		}
+		writeJSON(w, http.StatusOK, response)
+		return
+	}
 	workingMemoryMu.RLock()
 	defer workingMemoryMu.RUnlock()
 
@@ -104,6 +140,38 @@ func (s *Server) handleUpdateWorkingSlot(w http.ResponseWriter, r *http.Request)
 
 	if req.SlotKey == "" {
 		writeError(w, http.StatusBadRequest, "invalid_key", "SlotKey is required", "")
+		return
+	}
+	if s.memory != nil && s.store != nil {
+		if req.TaskID == "" {
+			writeError(w, http.StatusBadRequest, "task_id_required", "task_id is required", "")
+			return
+		}
+		project, err := s.store.Project(r.Context())
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_unavailable", "Canonical memory store unavailable", "")
+			return
+		}
+		principal, ok := s.memoryPrincipal(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required", "")
+			return
+		}
+		var slot working.WorkingSlot
+		if req.ExpectedRevision == 0 {
+			slot, err = s.memory.SetTaskSlot(r.Context(), principal, project.ID, req.TaskID, working.SlotType(req.SlotKey), req.Content, req.IsPinned)
+		} else {
+			slot, err = s.memory.UpdateTaskSlotCAS(r.Context(), principal, project.ID, req.TaskID, working.SlotType(req.SlotKey), req.ExpectedRevision, req.Content)
+		}
+		if errors.Is(err, working.ErrCASConflict) {
+			writeError(w, http.StatusConflict, "stale_revision", "Working memory slot revision conflict", "")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusForbidden, "working_memory_denied", "Working memory update denied", "")
+			return
+		}
+		writeJSON(w, http.StatusOK, WorkingMemorySlotDTO{SlotKey: string(slot.Type), OwnerScope: "task", ScopeID: req.TaskID, Content: slot.Value, Revision: slot.Revision, IsPinned: slot.Pinned, AllocatedBytes: len(slot.Value), LastUpdatedAt: slot.UpdatedAt})
 		return
 	}
 
@@ -155,6 +223,33 @@ func (s *Server) handlePromoteWorkingSlot(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "invalid_key", "SlotKey is required", "")
 		return
 	}
+	if s.memory != nil && s.store != nil {
+		if req.TaskID == "" || req.TargetTitle == "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "task_id and target_title are required", "")
+			return
+		}
+		project, err := s.store.Project(r.Context())
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_unavailable", "Canonical memory store unavailable", "")
+			return
+		}
+		principal, ok := s.memoryPrincipal(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required", "")
+			return
+		}
+		candidate, err := s.memory.PromoteTaskSlot(r.Context(), principal, project.ID, req.TaskID, working.SlotType(req.SlotKey), model.MemoryKindFinding, req.TargetTitle)
+		if errors.Is(err, model.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "Slot key not found in working memory", "")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusForbidden, "promotion_denied", "Working memory promotion denied", "")
+			return
+		}
+		writeJSON(w, http.StatusOK, PromoteWorkingSlotResponseDTO{SlotKey: req.SlotKey, CandidateMemoryID: candidate.ID, Status: "candidate_enqueued", Message: "Working memory slot promoted to candidate state for governance review."})
+		return
+	}
 
 	workingMemoryMu.RLock()
 	_, exists := workingSlots[req.SlotKey]
@@ -172,4 +267,16 @@ func (s *Server) handlePromoteWorkingSlot(w http.ResponseWriter, r *http.Request
 		Status:            "candidate_enqueued",
 		Message:           "Working memory slot promoted to candidate state for governance review.",
 	})
+}
+
+func (s *Server) memoryPrincipal(r *http.Request) (authz.Principal, bool) {
+	user := s.getAuthenticatedUser(r)
+	if user == nil {
+		return authz.Principal{}, false
+	}
+	authorities := make([]authz.Authority, 0, len(user.Authorities))
+	for _, authority := range user.Authorities {
+		authorities = append(authorities, authz.Authority(authority))
+	}
+	return authz.Principal{ID: user.PrincipalID, Role: authz.Role{Name: user.Role, Authorities: authorities}}, true
 }

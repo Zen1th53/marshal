@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -68,18 +69,24 @@ func (s *Server) handlePromoteMemory(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusPreconditionFailed, "digest_mismatch", "Precondition Failed: canonical memory digest has diverged", "")
 			return
 		}
-		expected := int64(payload.ExpectedRevision)
-		if expected == 0 {
-			expected = rec.Revision
+		if payload.ExpectedRevision != 0 && int64(payload.ExpectedRevision) != rec.Revision {
+			writeError(w, http.StatusConflict, "revision_conflict", "Canonical memory revision changed", "")
+			return
 		}
-		updated, err := s.store.UpdateMemory(r.Context(), project.ID, rec.ID, expected, func(m *model.MemoryRecordV2) error {
-			m.Lifecycle = model.MemoryDurable
-			m.Authority = model.AuthorityVerified
-			m.LastVerifiedAt = func() *time.Time { now := time.Now().UTC(); return &now }()
-			return nil
+		if s.memory == nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_unavailable", "Canonical memory service unavailable", "")
+			return
+		}
+		principal, ok := s.memoryPrincipal(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required", "")
+			return
+		}
+		updated, err := s.memory.Promote(r.Context(), principal, app.PromoteRequest{
+			ProjectID: project.ID, MemoryID: rec.ID, ScopeID: rec.ScopeID, Rationale: payload.ReviewRationale,
 		})
 		if err != nil {
-			writeError(w, http.StatusConflict, "revision_conflict", "Canonical memory revision changed", "")
+			writeError(w, http.StatusForbidden, "promotion_denied", "Canonical memory promotion denied", "")
 			return
 		}
 		s.sseHub.Broadcast("memory.mutated", "memory", rec.ID, map[string]any{"memory_id": rec.ID, "action": "promoted", "lifecycle": string(updated.Lifecycle)})
@@ -170,6 +177,12 @@ func (s *Server) handleSupersedeMemory(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "revision_conflict", "Canonical memory revision changed", "")
 			return
 		}
+		if s.memory != nil {
+			if err := s.memory.IndexRecord(r.Context(), updated); err != nil {
+				writeError(w, http.StatusInternalServerError, "memory_index_failed", "Canonical mutation committed but projection update failed", "")
+				return
+			}
+		}
 		s.sseHub.Broadcast("memory.mutated", "memory", target.ID, map[string]any{"memory_id": target.ID, "action": "superseded", "successor_id": payload.SuccessorID})
 		writeJSON(w, http.StatusOK, MemoryMutationResponseDTO{MutationType: "supersede", MemoryID: target.ID, NewLifecycle: string(updated.Lifecycle), NewRevision: int(updated.Revision), MutatedAt: updated.UpdatedAt})
 		return
@@ -225,6 +238,12 @@ func (s *Server) handleTombstoneMemory(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeError(w, http.StatusConflict, "revision_conflict", "Canonical memory revision changed", "")
 			return
+		}
+		if s.memory != nil {
+			if err := s.memory.IndexRecord(r.Context(), updated); err != nil {
+				writeError(w, http.StatusInternalServerError, "memory_index_failed", "Canonical mutation committed but projection update failed", "")
+				return
+			}
 		}
 		s.sseHub.Broadcast("memory.mutated", "memory", target.ID, map[string]any{"memory_id": target.ID, "action": "tombstoned", "lifecycle": string(updated.Lifecycle)})
 		writeJSON(w, http.StatusOK, MemoryMutationResponseDTO{MutationType: "tombstone", MemoryID: target.ID, NewLifecycle: string(updated.Lifecycle), NewRevision: int(updated.Revision), MutatedAt: updated.UpdatedAt})
