@@ -104,3 +104,19 @@ func TestT86FirewallDetectsSecretsInBodyAndMetadata(t *testing.T) {
 		t.Fatalf("clean record should pass firewall, got: %v", err)
 	}
 }
+
+func TestFirewallRejectsRuntimeCredentialFormats(t *testing.T) {
+	fw := security.NewFirewall(security.FirewallConfig{})
+	for name, value := range map[string]string{
+		"jwt":           "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEyMyJ9.c2lnbmF0dXJlMTIzNDU2",
+		"authorization": "Authorization: Bearer credential-value-1234567890",
+		"cookie":        "Cookie: session_id=credential-value-1234567890",
+		"oauth":         "ya29.A0ARrdaMcredentialvalue1234567890",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := fw.ScanText(value); !errors.Is(err, security.ErrSecretDetected) {
+				t.Fatalf("credential was accepted: %v", err)
+			}
+		})
+	}
+}

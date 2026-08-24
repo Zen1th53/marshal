@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	ErrCASConflict      = errors.New("working memory CAS revision conflict")
-	ErrSlotNotFound     = errors.New("working memory slot not found")
-	ErrCeilingExceeded  = errors.New("working memory byte ceiling exceeded")
+	ErrCASConflict     = errors.New("working memory CAS revision conflict")
+	ErrSlotNotFound    = errors.New("working memory slot not found")
+	ErrCeilingExceeded = errors.New("working memory byte ceiling exceeded")
 )
 
 type SlotType string
@@ -23,6 +23,13 @@ const (
 	SlotBlockers              SlotType = "blockers"
 	SlotTemporaryObservations SlotType = "temporary_observations"
 	SlotToolResults           SlotType = "tool_results"
+	SlotFinding               SlotType = "finding"
+	SlotDecision              SlotType = "decision"
+	SlotConstraint            SlotType = "constraint"
+	SlotFailedApproach        SlotType = "failed_approach"
+	SlotArtifactReference     SlotType = "artifact_reference"
+	SlotOpenQuestion          SlotType = "open_question"
+	SlotHandoffNote           SlotType = "handoff_note"
 )
 
 type WorkingSlot struct {

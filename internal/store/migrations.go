@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 69
+const LatestSchemaVersion = 70
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1643,12 +1643,44 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 		version = 69
 	}
+	if version < 70 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS memory_retrieval_receipts (
+				receipt_id       TEXT PRIMARY KEY,
+				project_id       TEXT NOT NULL REFERENCES projects(project_id),
+				caller_id        TEXT NOT NULL,
+				query_text       TEXT NOT NULL DEFAULT '',
+				query_digest     TEXT NOT NULL DEFAULT '',
+				allowed_scopes   TEXT NOT NULL DEFAULT '[]',
+				current_head     TEXT NOT NULL DEFAULT '',
+				current_branch   TEXT NOT NULL DEFAULT '',
+				max_records      INTEGER NOT NULL DEFAULT 0,
+				max_bytes        INTEGER NOT NULL DEFAULT 0,
+				consumed_bytes   INTEGER NOT NULL DEFAULT 0,
+					decisions_json   TEXT NOT NULL DEFAULT '[]',
+					run_id           TEXT NOT NULL DEFAULT '',
+					task_id          TEXT NOT NULL DEFAULT '',
+					provider         TEXT NOT NULL DEFAULT '',
+					denied_count     INTEGER NOT NULL DEFAULT 0,
+					created_at       TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS memory_retrieval_receipts_by_project
+				ON memory_retrieval_receipts(project_id, created_at);
+			CREATE INDEX IF NOT EXISTS memory_retrieval_receipts_by_task
+				ON memory_retrieval_receipts(project_id, task_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 70: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(70, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 70: %w", err)
+		}
+		version = 70
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
 	}
 	return nil
 }
-
 
 func (s *Store) InitProject(ctx context.Context, project model.Project) error {
 	if project.ID == "" || project.Repository == "" || project.DefaultBranch == "" || project.PackVersion == "" {

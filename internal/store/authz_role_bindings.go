@@ -85,6 +85,34 @@ func (s *Store) RevokeRoleBinding(ctx context.Context, id string, revokedAt time
 	return nil
 }
 
+func (s *Store) HasActiveRoleBinding(ctx context.Context, principalID, scopeID string) (bool, error) {
+	if principalID == "" || scopeID == "" {
+		return false, fmt.Errorf("%w: principal and scope are required", model.ErrInvalid)
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT count(*) FROM role_bindings
+		WHERE principal_id = ? AND scope_id = ? AND revoked_at IS NULL
+	`, principalID, scopeID).Scan(&count); err != nil {
+		return false, fmt.Errorf("query active role binding: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (s *Store) HasActiveTaskSession(ctx context.Context, principalID, taskID string) (bool, error) {
+	if principalID == "" || taskID == "" {
+		return false, fmt.Errorf("%w: principal and task are required", model.ErrInvalid)
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT count(*) FROM sessions
+		WHERE agent_id = ? AND task_id = ? AND status = 'active'
+	`, principalID, taskID).Scan(&count); err != nil {
+		return false, fmt.Errorf("query active task session: %w", err)
+	}
+	return count > 0, nil
+}
+
 func optionalRoleTime(value *time.Time) any {
 	if value == nil {
 		return nil

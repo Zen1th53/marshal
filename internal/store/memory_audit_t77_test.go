@@ -19,6 +19,8 @@ var knownMemoryTables = map[string]string{
 	"memory_records_v2": "canonical-v2: primary memory store, T79",
 	// T84: transactional outbox for derived indexers
 	"memory_outbox": "canonical-outbox: derived index mutation log, T84",
+	// M11: retrieval audit trail and receipts
+	"memory_retrieval_receipts": "canonical-receipts: retrieval audit trail and receipts, M11",
 }
 
 // derivedDecisionTables are subsystem decision logs, not canonical memory.

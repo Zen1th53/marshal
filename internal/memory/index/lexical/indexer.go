@@ -120,6 +120,13 @@ func (idx *LexicalIndex) Rebuild(ctx context.Context, records []model.MemoryReco
 
 // Search performs term-matching and exact-phrase boosted search over the lexical index.
 func (idx *LexicalIndex) Search(ctx context.Context, projectID, query string, limit int) ([]SearchResult, error) {
+	return idx.SearchAuthorized(ctx, projectID, query, nil, limit)
+}
+
+// SearchAuthorized applies the caller's canonical authorization set before
+// examining document content or calculating a score. A nil set is retained
+// only for index unit tests and trusted maintenance callers.
+func (idx *LexicalIndex) SearchAuthorized(ctx context.Context, projectID, query string, authorizedIDs map[string]struct{}, limit int) ([]SearchResult, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
@@ -136,6 +143,11 @@ func (idx *LexicalIndex) Search(ctx context.Context, projectID, query string, li
 	for _, doc := range idx.docs {
 		if doc.ProjectID != projectID {
 			continue
+		}
+		if authorizedIDs != nil {
+			if _, allowed := authorizedIDs[doc.MemoryID]; !allowed {
+				continue
+			}
 		}
 
 		var score float64

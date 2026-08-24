@@ -120,13 +120,13 @@ func (s *Store) WriteMemoryV2(ctx context.Context, rec model.MemoryRecordV2) err
 // GetMemoryV2 retrieves a single MemoryRecordV2 by project ID and memory ID.
 func (s *Store) GetMemoryV2(ctx context.Context, projectID, memoryID string) (model.MemoryRecordV2, error) {
 	var (
-		rec                                          model.MemoryRecordV2
-		kind, lifecycle, confidence, authority       string
-		sourceJSON, evidenceIDs, extMetaJSON         string
-		supersededBy, supersedes, conflictIDs        string
-		observedAt, ingestedAt, validFrom            string
-		createdAt, updatedAt                         string
-		validTo, lastVerifiedAt                      sql.NullString
+		rec                                    model.MemoryRecordV2
+		kind, lifecycle, confidence, authority string
+		sourceJSON, evidenceIDs, extMetaJSON   string
+		supersededBy, supersedes, conflictIDs  string
+		observedAt, ingestedAt, validFrom      string
+		createdAt, updatedAt                   string
+		validTo, lastVerifiedAt                sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
@@ -219,16 +219,33 @@ func (s *Store) GetMemoryV2(ctx context.Context, projectID, memoryID string) (mo
 	return rec, nil
 }
 
+// GetMemoryV2ByID resolves a globally unique canonical memory ID without
+// disclosing content until the caller applies its authorization policy.
+func (s *Store) GetMemoryV2ByID(ctx context.Context, memoryID string) (model.MemoryRecordV2, error) {
+	if strings.TrimSpace(memoryID) == "" {
+		return model.MemoryRecordV2{}, fmt.Errorf("%w: memory ID is required", model.ErrInvalid)
+	}
+	var projectID string
+	err := s.db.QueryRowContext(ctx, `SELECT project_id FROM memory_records_v2 WHERE memory_id = ?`, memoryID).Scan(&projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.MemoryRecordV2{}, fmt.Errorf("%w: memory record %s not found", model.ErrNotFound, memoryID)
+	}
+	if err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("resolve memory project: %w", err)
+	}
+	return s.GetMemoryV2(ctx, projectID, memoryID)
+}
+
 // FindMemoryByDigest retrieves a memory record by its project ID and canonical content digest.
 func (s *Store) FindMemoryByDigest(ctx context.Context, projectID, contentDigest string) (model.MemoryRecordV2, error) {
 	var (
-		rec                                          model.MemoryRecordV2
-		kind, lifecycle, confidence, authority       string
-		sourceJSON, evidenceIDs, extMetaJSON         string
-		supersededBy, supersedes, conflictIDs        string
-		observedAt, ingestedAt, validFrom            string
-		createdAt, updatedAt                         string
-		validTo, lastVerifiedAt                      sql.NullString
+		rec                                    model.MemoryRecordV2
+		kind, lifecycle, confidence, authority string
+		sourceJSON, evidenceIDs, extMetaJSON   string
+		supersededBy, supersedes, conflictIDs  string
+		observedAt, ingestedAt, validFrom      string
+		createdAt, updatedAt                   string
+		validTo, lastVerifiedAt                sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
@@ -397,13 +414,13 @@ func (s *Store) ListMemoryV2(ctx context.Context, filter MemoryQueryFilter) ([]m
 	var records []model.MemoryRecordV2
 	for rows.Next() {
 		var (
-			rec                                          model.MemoryRecordV2
-			kind, lifecycle, confidence, authority       string
-			sourceJSON, evidenceIDs, extMetaJSON         string
-			supersededBy, supersedes, conflictIDs        string
-			observedAt, ingestedAt, validFrom            string
-			createdAt, updatedAt                         string
-			validTo, lastVerifiedAt                      sql.NullString
+			rec                                    model.MemoryRecordV2
+			kind, lifecycle, confidence, authority string
+			sourceJSON, evidenceIDs, extMetaJSON   string
+			supersededBy, supersedes, conflictIDs  string
+			observedAt, ingestedAt, validFrom      string
+			createdAt, updatedAt                   string
+			validTo, lastVerifiedAt                sql.NullString
 		)
 		err := rows.Scan(
 			&rec.ID, &rec.ProjectID, &kind, &lifecycle, &confidence, &authority,
@@ -505,13 +522,13 @@ func (s *Store) UpdateMemory(ctx context.Context, projectID, memoryID string, ex
 
 	// 1. Fetch existing record with row-level lock/transaction
 	var (
-		rec                                          model.MemoryRecordV2
-		kind, lifecycle, confidence, authority       string
-		sourceJSON, evidenceIDs, extMetaJSON         string
-		supersededBy, supersedes, conflictIDs        string
-		observedAt, ingestedAt, validFrom            string
-		createdAt, updatedAt                         string
-		validTo, lastVerifiedAt                      sql.NullString
+		rec                                    model.MemoryRecordV2
+		kind, lifecycle, confidence, authority string
+		sourceJSON, evidenceIDs, extMetaJSON   string
+		supersededBy, supersedes, conflictIDs  string
+		observedAt, ingestedAt, validFrom      string
+		createdAt, updatedAt                   string
+		validTo, lastVerifiedAt                sql.NullString
 	)
 	err = tx.QueryRowContext(ctx, `
 		SELECT
@@ -728,3 +745,82 @@ func (s *Store) TombstoneMemory(ctx context.Context, projectID, memoryID string,
 	})
 }
 
+type RetrievalReceiptRecord struct {
+	ReceiptID     string    `json:"receipt_id"`
+	ProjectID     string    `json:"project_id"`
+	CallerID      string    `json:"caller_id"`
+	QueryText     string    `json:"query_text"`
+	QueryDigest   string    `json:"query_digest"`
+	AllowedScopes []string  `json:"allowed_scopes"`
+	CurrentHead   string    `json:"current_head"`
+	CurrentBranch string    `json:"current_branch"`
+	MaxRecords    int       `json:"max_records"`
+	MaxBytes      int       `json:"max_bytes"`
+	ConsumedBytes int       `json:"consumed_bytes"`
+	DecisionsJSON string    `json:"decisions_json"`
+	RunID         string    `json:"run_id"`
+	TaskID        string    `json:"task_id"`
+	Provider      string    `json:"provider"`
+	DeniedCount   int       `json:"denied_count"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+func (s *Store) WriteRetrievalReceipt(ctx context.Context, r RetrievalReceiptRecord) error {
+	if r.ReceiptID == "" || r.ProjectID == "" || r.CallerID == "" {
+		return fmt.Errorf("%w: receipt_id, project_id, and caller_id are required", model.ErrInvalid)
+	}
+	scopesJSON, err := json.Marshal(r.AllowedScopes)
+	if err != nil {
+		return fmt.Errorf("encode retrieval receipt scopes: %w", err)
+	}
+	if r.CreatedAt.IsZero() {
+		r.CreatedAt = time.Now().UTC()
+	}
+	query := `
+		INSERT INTO memory_retrieval_receipts(
+			receipt_id, project_id, caller_id, query_text, query_digest, allowed_scopes,
+			current_head, current_branch, max_records, max_bytes, consumed_bytes,
+			decisions_json, run_id, task_id, provider, denied_count, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	_, err = s.db.ExecContext(ctx, query,
+		r.ReceiptID, r.ProjectID, r.CallerID, r.QueryText, r.QueryDigest, string(scopesJSON),
+		r.CurrentHead, r.CurrentBranch, r.MaxRecords, r.MaxBytes, r.ConsumedBytes,
+		r.DecisionsJSON, r.RunID, r.TaskID, r.Provider, r.DeniedCount, r.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return fmt.Errorf("write retrieval receipt: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetRetrievalReceipt(ctx context.Context, projectID, receiptID string) (RetrievalReceiptRecord, error) {
+	query := `
+		SELECT receipt_id, project_id, caller_id, query_text, query_digest, allowed_scopes,
+		       current_head, current_branch, max_records, max_bytes, consumed_bytes,
+		       decisions_json, run_id, task_id, provider, denied_count, created_at
+		FROM memory_retrieval_receipts
+		WHERE project_id = ? AND receipt_id = ?
+	`
+	var r RetrievalReceiptRecord
+	var scopesJSON, createdAtStr string
+	err := s.db.QueryRowContext(ctx, query, projectID, receiptID).Scan(
+		&r.ReceiptID, &r.ProjectID, &r.CallerID, &r.QueryText, &r.QueryDigest, &scopesJSON,
+		&r.CurrentHead, &r.CurrentBranch, &r.MaxRecords, &r.MaxBytes, &r.ConsumedBytes,
+		&r.DecisionsJSON, &r.RunID, &r.TaskID, &r.Provider, &r.DeniedCount, &createdAtStr,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return RetrievalReceiptRecord{}, model.ErrNotFound
+		}
+		return RetrievalReceiptRecord{}, fmt.Errorf("get retrieval receipt: %w", err)
+	}
+	if err := json.Unmarshal([]byte(scopesJSON), &r.AllowedScopes); err != nil {
+		return RetrievalReceiptRecord{}, fmt.Errorf("decode retrieval receipt scopes: %w", err)
+	}
+	r.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAtStr)
+	if err != nil {
+		return RetrievalReceiptRecord{}, fmt.Errorf("parse retrieval receipt timestamp: %w", err)
+	}
+	return r, nil
+}
