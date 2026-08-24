@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 70
+const LatestSchemaVersion = 71
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1675,6 +1675,29 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 70: %w", err)
 		}
 		version = 70
+	}
+	if version < 71 {
+		columns := []struct{ name, statement string }{
+			{"evidence_ids", "ALTER TABLE memory_retrieval_receipts ADD COLUMN evidence_ids TEXT NOT NULL DEFAULT '';"},
+			{"outcome_memory_id", "ALTER TABLE memory_retrieval_receipts ADD COLUMN outcome_memory_id TEXT NOT NULL DEFAULT '';"},
+			{"outcome_status", "ALTER TABLE memory_retrieval_receipts ADD COLUMN outcome_status TEXT NOT NULL DEFAULT '';"},
+		}
+		for _, column := range columns {
+			var exists int
+			if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM pragma_table_info('memory_retrieval_receipts') WHERE name = ?`, column.name).Scan(&exists); err != nil {
+				return fmt.Errorf("inspect schema version 71 column %s: %w", column.name, err)
+			}
+			if exists > 0 {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, column.statement); err != nil {
+				return fmt.Errorf("migrate schema version 71: %w", err)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(71, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 71: %w", err)
+		}
+		version = 71
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

@@ -38,6 +38,9 @@ type WorkingSlot struct {
 	Revision    int       `json:"revision"`
 	Pinned      bool      `json:"pinned"`
 	LastAgentID string    `json:"last_agent_id"`
+	Provider    string    `json:"provider,omitempty"`
+	SessionID   string    `json:"session_id,omitempty"`
+	RunID       string    `json:"run_id,omitempty"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 

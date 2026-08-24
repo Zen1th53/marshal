@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -27,6 +29,29 @@ func TestMemoryWritesCannotForgePrivateOrProjectScope(t *testing.T) {
 		Scope: model.ScopeProject, ScopeID: "PROJECT-OTHER",
 	}); !errors.Is(err, authz.ErrUnauthorized) {
 		t.Fatalf("foreign project scope accepted: %v", err)
+	}
+}
+
+func TestM12_FailureOutcomePreservesEvidenceAndRetryBoundary(t *testing.T) {
+	ctx := context.Background()
+	_, svc := openTestMemoryService(t)
+	rec, err := svc.CaptureOutcome(ctx, OutcomeCaptureRequest{
+		ProjectID: "PROJECT-local", TaskID: "TASK-FAILURE-LESSON", TaskTitle: "kernel sandbox probe",
+		RunID: "RUN-FAILURE-LESSON", AgentID: "agent-local", Provider: "local", Status: "failed", ExitStatus: 1,
+		BaseCommit: "base-a", HeadCommit: "head-a", EvidenceIDs: []string{"EVID-FAILURE-COMMAND", "EVID-FAILURE-STDERR"},
+		FilesChanged: []string{"internal/sandbox/probe.go"}, TestsRun: []string{"TestSandboxProbe"},
+		ErrorSignature: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		FailureReason:  "kernel user namespaces disabled", RetryCondition: "retry only when user namespaces are enabled",
+		Environment: map[string]string{"kernel": "test-kernel", "isolation": "process-only"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Kind != model.MemoryKindFailure || rec.Lifecycle != model.MemoryCandidate || rec.Authority != model.AuthorityAgent {
+		t.Fatalf("unexpected failure candidate: %+v", rec)
+	}
+	if rec.ExtMeta["retry_condition"] != "retry only when user namespaces are enabled" || len(rec.EvidenceIDs) != 2 {
+		t.Fatalf("failure lesson lost retry/evidence semantics: %+v", rec)
 	}
 }
 
@@ -127,7 +152,7 @@ func TestM12_SemanticContradictionConflictDetection(t *testing.T) {
 
 func TestM12_GovernedOperatorPromotion(t *testing.T) {
 	ctx := context.Background()
-	_, svc := openTestMemoryService(t)
+	rt, svc := openTestMemoryService(t)
 
 	const projectID = "PROJECT-local"
 	pAgent := testPrincipal("agent-worker-1")
@@ -140,15 +165,49 @@ func TestM12_GovernedOperatorPromotion(t *testing.T) {
 			},
 		},
 	}
+	evidenceMetadata := map[string]string{"task_id": "TASK-300", "finding": "connection-pool-limit"}
+	digest, err := evidence.CanonicalDigest(evidence.NodeTypeClaim, evidenceMetadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.Store().PutNode(ctx, evidence.Node{
+		ID: "EVID-TASK-300", Type: evidence.NodeTypeClaim, Digest: digest,
+		Metadata: evidenceMetadata, CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	unverified, err := svc.ExtractCandidate(ctx, pAgent, ExtractCandidateRequest{
+		ProjectID: projectID, TaskID: "TASK-300", Kind: model.MemoryKindSemantic,
+		Title: "Unverified pool claim", Body: "this claim has no evidence", Scope: model.ScopeProject,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Promote(ctx, pOperator, PromoteRequest{ProjectID: projectID, MemoryID: unverified.ID, ScopeID: projectID}); err == nil {
+		t.Fatal("operator promotion accepted an unevidenced agent claim")
+	}
+	conflicted := unverified
+	conflicted.ID = "MEM-CONFLICTED-PROMOTION"
+	conflicted.Lifecycle = model.MemoryConflicted
+	conflicted.EvidenceIDs = []string{"EVID-TASK-300"}
+	conflicted.ConflictIDs = []string{unverified.ID}
+	conflicted.ContentDigest = ""
+	if err := rt.Store().WriteMemoryV2(ctx, conflicted); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Promote(ctx, pOperator, PromoteRequest{ProjectID: projectID, MemoryID: conflicted.ID, ScopeID: projectID}); !errors.Is(err, model.ErrConflict) {
+		t.Fatalf("conflicted memory promotion error = %v, want conflict", err)
+	}
 
 	// 1. Agent creates candidate
 	cand, err := svc.ExtractCandidate(ctx, pAgent, ExtractCandidateRequest{
-		ProjectID: projectID,
-		TaskID:    "TASK-300",
-		Kind:      model.MemoryKindSemantic,
-		Title:     "PostgreSQL Connection Pool Maximum",
-		Body:      "Max open connections must not exceed 50 per node",
-		Scope:     model.ScopeProject,
+		ProjectID:   projectID,
+		TaskID:      "TASK-300",
+		Kind:        model.MemoryKindSemantic,
+		Title:       "PostgreSQL Connection Pool Maximum",
+		Body:        "Max open connections must not exceed 50 per node",
+		Scope:       model.ScopeProject,
+		EvidenceIDs: []string{"EVID-TASK-300"},
 	})
 	if err != nil {
 		t.Fatalf("create candidate: %v", err)

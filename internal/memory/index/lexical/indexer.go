@@ -127,6 +127,9 @@ func (idx *LexicalIndex) Search(ctx context.Context, projectID, query string, li
 // examining document content or calculating a score. A nil set is retained
 // only for index unit tests and trusted maintenance callers.
 func (idx *LexicalIndex) SearchAuthorized(ctx context.Context, projectID, query string, authorizedIDs map[string]struct{}, limit int) ([]SearchResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
@@ -141,6 +144,9 @@ func (idx *LexicalIndex) SearchAuthorized(ctx context.Context, projectID, query 
 	var scored []SearchResult
 
 	for _, doc := range idx.docs {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if doc.ProjectID != projectID {
 			continue
 		}

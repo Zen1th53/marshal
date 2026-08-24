@@ -929,11 +929,32 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	})
 	var captureErr error
 	if finishErr == nil && len(runEvidenceIDs) > 0 {
+		failureReason := ""
+		retryCondition := ""
+		if !success {
+			failureReason = finishStatus
+			if runErr != nil {
+				failureReason = runErr.Error()
+			}
+			switch finishStatus {
+			case "timeout":
+				retryCondition = "retry only after the execution time budget or approach changes"
+			case "blocked":
+				retryCondition = "retry only after the blocking policy or capability changes"
+			case "cancelled":
+				retryCondition = "retry only after an operator submits a new run"
+			default:
+				retryCondition = "retry only after the recorded failure evidence is reviewed"
+			}
+		}
+		errorDigest := sha256.Sum256(append([]byte(finishStatus+":"), stderr...))
 		_, captureErr = r.memoryService.CaptureOutcome(context.Background(), OutcomeCaptureRequest{
 			ProjectID: localProjectID, TaskID: task.ID, TaskTitle: task.Title, RunID: runID, SessionID: claim.Session.ID,
 			AgentID: request.AgentID, Provider: request.Adapter, Status: finishStatus,
 			ExitStatus: result.ExitCode, BaseCommit: baseCommit, HeadCommit: resultCommit, Branch: branch,
-			EvidenceIDs: runEvidenceIDs,
+			EvidenceIDs: runEvidenceIDs, ErrorSignature: "sha256:" + hex.EncodeToString(errorDigest[:]),
+			FailureReason: failureReason, RetryCondition: retryCondition,
+			Environment: map[string]string{"adapter_version": probe.Version, "isolation": fmt.Sprint(result.Isolation)},
 		})
 	}
 	currentRevision := executionRevision

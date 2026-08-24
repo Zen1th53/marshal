@@ -193,3 +193,35 @@ func TestM13_ValidityIntervalExpiration(t *testing.T) {
 		t.Fatalf("expected expired reason in receipt decision: %+v", res.Receipt.Decisions)
 	}
 }
+
+func TestM13_RepositoryEvidenceSignals(t *testing.T) {
+	rec := model.MemoryRecordV2{
+		ID: "MEM-CODE-SIGNALS", ProjectID: "PROJECT-local", Kind: model.MemoryKindSemantic,
+		Lifecycle: model.MemoryCandidate, HeadCommit: "old-head", BranchName: "main",
+		ExtMeta: map[string]any{
+			"referenced_files": []any{"internal/app/old.go"},
+			"file_hashes":      map[string]any{"internal/app/old.go": "old-hash"},
+			"symbols":          []any{"app.oldSymbol"},
+			"verified_tests":   []any{"TestOldBehavior"},
+		},
+	}
+	_, svc := openTestMemoryService(t)
+	tests := []struct {
+		name string
+		req  MemoryReconcileRequest
+		want FreshnessClassification
+	}{
+		{"rename", MemoryReconcileRequest{RenamedFiles: map[string]string{"internal/app/old.go": "internal/app/new.go"}}, FreshnessPossiblyStale},
+		{"hash", MemoryReconcileRequest{CurrentFileHashes: map[string]string{"internal/app/old.go": "new-hash"}}, FreshnessStale},
+		{"symbol", MemoryReconcileRequest{ExistingSymbols: map[string]bool{"app.oldSymbol": false}}, FreshnessStale},
+		{"test", MemoryReconcileRequest{InvalidatedTests: []string{"TestOldBehavior"}}, FreshnessPossiblyStale},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := svc.EvaluateFreshness(rec, tc.req)
+			if got.Classification != tc.want || got.Reason == "" {
+				t.Fatalf("EvaluateFreshness() = %+v, want %s with reason", got, tc.want)
+			}
+		})
+	}
+}

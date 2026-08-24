@@ -69,6 +69,9 @@ func (g *GraphIndex) RemoveNode(ctx context.Context, nodeID string) error {
 
 // Traverse performs bounded point-in-time BFS neighborhood search starting from seedNodeIDs within allowedScopeIDs.
 func (g *GraphIndex) Traverse(ctx context.Context, seedNodeIDs []string, allowedScopeIDs []string, asOf time.Time, maxDepth int) ([]GraphNode, []GraphEdge, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
@@ -94,10 +97,16 @@ func (g *GraphIndex) Traverse(ctx context.Context, seedNodeIDs []string, allowed
 	}
 
 	for depth := 0; depth < maxDepth && len(queue) > 0; depth++ {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
 		var nextQueue []string
 
 		for _, currentID := range queue {
 			for _, edge := range g.edges {
+				if err := ctx.Err(); err != nil {
+					return nil, nil, err
+				}
 				if edge.FromID != currentID {
 					continue
 				}

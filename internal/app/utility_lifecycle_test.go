@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -130,5 +132,51 @@ func TestM17_OutcomeUtilityFeedbackAndAuthorityDominance(t *testing.T) {
 	// Invariant 2: Agent A (high utility) MUST rank ahead of Agent B (low utility)
 	if res.Results[1].ID != agentA.ID || res.Results[2].ID != agentB.ID {
 		t.Fatalf("expected Agent A (rank 2) ahead of Agent B (rank 3), got order: %+v", res.Results)
+	}
+}
+
+func TestM17_UtilitySignalsAreIdempotentBoundedAndInactiveSafe(t *testing.T) {
+	ctx := context.Background()
+	rt, svc := openTestMemoryService(t)
+	now := time.Now().UTC()
+	rec := model.MemoryRecordV2{
+		ID: "MEM-UTILITY-SIGNALS", ProjectID: "PROJECT-local", Kind: model.MemoryKindSemantic,
+		Lifecycle: model.MemoryCandidate, Confidence: model.ConfidenceObserved, Authority: model.AuthorityAgent,
+		Title: "utility", Body: "bounded utility signals", Scope: string(model.ScopeProject), ScopeID: "PROJECT-local",
+		ObservedAt: now, IngestedAt: now, ValidFrom: now, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := rt.Store().WriteMemoryV2(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RecordUtilitySignal(ctx, rec.ID, "TASK-1", "event-1", UtilityHelpful, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RecordUtilitySignal(ctx, rec.ID, "TASK-1", "event-1", UtilityHelpful, false); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := rt.Store().GetMemoryV2(ctx, rec.ProjectID, rec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, _ := numericMeta(persisted.ExtMeta["utility_helpful_count"]); count != 1 {
+		t.Fatalf("duplicate event changed count: %v", count)
+	}
+	for i := 0; i < 300; i++ {
+		if err := svc.RecordUtilitySignal(ctx, rec.ID, "TASK-1", fmt.Sprintf("event-%d", i+2), UtilityUsed, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	persisted, err = rt.Store().GetMemoryV2(ctx, rec.ProjectID, rec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(stringMetaSlice(persisted.ExtMeta["utility_event_ids"])); got != 256 {
+		t.Fatalf("event window = %d, want 256", got)
+	}
+	if _, err := rt.Store().TombstoneMemory(ctx, rec.ProjectID, rec.ID, persisted.Revision, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RecordUtilitySignal(ctx, rec.ID, "TASK-1", "after-delete", UtilityUsed, false); !errors.Is(err, model.ErrConflict) {
+		t.Fatalf("inactive signal error = %v, want conflict", err)
 	}
 }

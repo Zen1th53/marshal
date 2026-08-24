@@ -66,6 +66,14 @@ func (d *degradedProvider) QueryCandidates(ctx context.Context, projectID string
 	return nil, errors.New("simulated remote vector service timeout")
 }
 
+type blockingProvider struct{}
+
+func (blockingProvider) Name() string { return "blocking-provider" }
+func (blockingProvider) QueryCandidates(ctx context.Context, _ string, _ []string, _ string, _ int) ([]CandidateResult, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 func TestM10_DerivedIndexRebuildAndTombstone(t *testing.T) {
 	ctx := context.Background()
 	rt, svc := openTestMemoryService(t)
@@ -182,6 +190,81 @@ func TestM10_DegradedCandidateProviderGracefulFallback(t *testing.T) {
 	}
 	if len(res.Results) != 1 || res.Results[0].ID != r1.ID {
 		t.Fatalf("expected r1 to be recalled despite degraded provider: %+v", res)
+	}
+}
+
+func TestM10_CandidateProviderTimeoutFallsBackToCanonicalRecall(t *testing.T) {
+	ctx := context.Background()
+	_, svc := openTestMemoryService(t)
+	p := testPrincipal("timeout-reader")
+	rec, err := svc.Remember(ctx, p, RememberRequest{
+		ProjectID: "PROJECT-local", Title: "bounded fallback", Body: "lexical recall remains available",
+		Kind: model.MemoryKindSemantic, Scope: model.ScopeProject,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.RegisterCandidateProvider(blockingProvider{})
+	started := time.Now()
+	response, err := svc.Recall(ctx, p, RecallRequest{ProjectID: "PROJECT-local", Query: "bounded fallback"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("degraded provider exceeded recall bound: %s", elapsed)
+	}
+	if len(response.Results) != 1 || response.Results[0].ID != rec.ID {
+		t.Fatalf("canonical fallback failed: %+v", response)
+	}
+}
+
+func TestM10_CacheCannotResurrectCanonicalTombstone(t *testing.T) {
+	ctx := context.Background()
+	rt, svc := openTestMemoryService(t)
+	p := testPrincipal("cache-reader")
+	rec, err := svc.Remember(ctx, p, RememberRequest{
+		ProjectID: "PROJECT-local", Title: "cached tombstone", Body: "must remain deleted",
+		Kind: model.MemoryKindSemantic, Scope: model.ScopeProject,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Recall(ctx, p, RecallRequest{ProjectID: "PROJECT-local", Query: "cached tombstone"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.Store().TombstoneMemory(ctx, "PROJECT-local", rec.ID, rec.Revision, "test revocation"); err != nil {
+		t.Fatal(err)
+	}
+	response, err := svc.Recall(ctx, p, RecallRequest{ProjectID: "PROJECT-local", Query: "cached tombstone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results) != 0 {
+		t.Fatalf("cache resurrected tombstoned canonical row: %+v", response)
+	}
+}
+
+func TestM10_DerivedIndexCorruptionRecoversFromCanonicalSQLite(t *testing.T) {
+	ctx := context.Background()
+	_, svc := openTestMemoryService(t)
+	rogue := model.MemoryRecordV2{
+		ID: "MEM-ROGUE-DERIVED", ProjectID: "PROJECT-local", Title: "rogue projection marker",
+		Body: "not canonical", Scope: string(model.ScopeProject), ScopeID: "PROJECT-local",
+		Lifecycle: model.MemoryDurable,
+	}
+	if err := svc.lexicalIndex.IndexRecord(ctx, rogue); err != nil {
+		t.Fatal(err)
+	}
+	before, err := svc.lexicalIndex.Search(ctx, "PROJECT-local", "rogue projection marker", 10)
+	if err != nil || len(before) != 1 {
+		t.Fatalf("failed to seed derived corruption: results=%+v err=%v", before, err)
+	}
+	if err := svc.RebuildProjections(ctx, "PROJECT-local"); err != nil {
+		t.Fatal(err)
+	}
+	after, err := svc.lexicalIndex.Search(ctx, "PROJECT-local", "rogue projection marker", 10)
+	if err != nil || len(after) != 0 {
+		t.Fatalf("derived corruption survived canonical rebuild: results=%+v err=%v", after, err)
 	}
 }
 

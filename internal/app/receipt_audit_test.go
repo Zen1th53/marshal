@@ -185,3 +185,48 @@ func TestM11_ReceiptNonDisclosureOfUnauthorizedScopes(t *testing.T) {
 		t.Fatalf("operator could not recall own private record: %+v", opRes)
 	}
 }
+
+func TestM11_ReceiptLinksOutcomeAndUsesExplicitRetention(t *testing.T) {
+	ctx := context.Background()
+	rt, svc := openTestMemoryService(t)
+	owner := testPrincipal("receipt-run-owner")
+	response, err := svc.Recall(ctx, owner, RecallRequest{
+		ProjectID: "PROJECT-local", Query: "run context", RunID: "RUN-RECEIPT-LINK",
+		TaskID: "TASK-RECEIPT-LINK", Provider: "local-test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, err := svc.CaptureOutcome(ctx, OutcomeCaptureRequest{
+		ProjectID: "PROJECT-local", TaskID: "TASK-RECEIPT-LINK", TaskTitle: "receipt linkage",
+		RunID: "RUN-RECEIPT-LINK", AgentID: owner.ID, Provider: "local-test", Status: "failed",
+		ExitStatus: 7, HeadCommit: "commit-receipt", EvidenceIDs: []string{"EVID-RECEIPT-LINK"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	linked, err := svc.GetReceipt(ctx, owner, "PROJECT-local", response.Receipt.ReceiptID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linked.OutcomeMemoryID != outcome.ID || linked.OutcomeStatus != "failed" || len(linked.EvidenceIDs) != 1 {
+		t.Fatalf("receipt was not linked to outcome: %+v", linked)
+	}
+	if _, err := rt.Store().TombstoneMemory(ctx, "PROJECT-local", outcome.ID, outcome.Revision, "revoked outcome"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.GetReceipt(ctx, owner, "PROJECT-local", response.Receipt.ReceiptID); err != nil {
+		t.Fatalf("memory tombstone rewrote immutable receipt history: %v", err)
+	}
+	if _, err := svc.PruneReceipts(ctx, owner, "PROJECT-local", time.Now().UTC().Add(time.Hour)); !errors.Is(err, authz.ErrUnauthorized) {
+		t.Fatalf("non-admin pruned receipts: %v", err)
+	}
+	admin := authz.Principal{ID: "receipt-admin", Role: authz.Role{Name: "admin", Authorities: []authz.Authority{authz.AuthorityPolicyAdmin}}}
+	count, err := svc.PruneReceipts(ctx, admin, "PROJECT-local", time.Now().UTC().Add(time.Hour))
+	if err != nil || count == 0 {
+		t.Fatalf("admin retention prune: count=%d err=%v", count, err)
+	}
+	if _, err := svc.GetReceipt(ctx, owner, "PROJECT-local", response.Receipt.ReceiptID); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("pruned receipt remained readable: %v", err)
+	}
+}

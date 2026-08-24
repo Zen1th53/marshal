@@ -746,23 +746,26 @@ func (s *Store) TombstoneMemory(ctx context.Context, projectID, memoryID string,
 }
 
 type RetrievalReceiptRecord struct {
-	ReceiptID     string    `json:"receipt_id"`
-	ProjectID     string    `json:"project_id"`
-	CallerID      string    `json:"caller_id"`
-	QueryText     string    `json:"query_text"`
-	QueryDigest   string    `json:"query_digest"`
-	AllowedScopes []string  `json:"allowed_scopes"`
-	CurrentHead   string    `json:"current_head"`
-	CurrentBranch string    `json:"current_branch"`
-	MaxRecords    int       `json:"max_records"`
-	MaxBytes      int       `json:"max_bytes"`
-	ConsumedBytes int       `json:"consumed_bytes"`
-	DecisionsJSON string    `json:"decisions_json"`
-	RunID         string    `json:"run_id"`
-	TaskID        string    `json:"task_id"`
-	Provider      string    `json:"provider"`
-	DeniedCount   int       `json:"denied_count"`
-	CreatedAt     time.Time `json:"created_at"`
+	ReceiptID       string    `json:"receipt_id"`
+	ProjectID       string    `json:"project_id"`
+	CallerID        string    `json:"caller_id"`
+	QueryText       string    `json:"query_text"`
+	QueryDigest     string    `json:"query_digest"`
+	AllowedScopes   []string  `json:"allowed_scopes"`
+	CurrentHead     string    `json:"current_head"`
+	CurrentBranch   string    `json:"current_branch"`
+	MaxRecords      int       `json:"max_records"`
+	MaxBytes        int       `json:"max_bytes"`
+	ConsumedBytes   int       `json:"consumed_bytes"`
+	DecisionsJSON   string    `json:"decisions_json"`
+	RunID           string    `json:"run_id"`
+	TaskID          string    `json:"task_id"`
+	Provider        string    `json:"provider"`
+	DeniedCount     int       `json:"denied_count"`
+	EvidenceIDs     []string  `json:"evidence_ids,omitempty"`
+	OutcomeMemoryID string    `json:"outcome_memory_id,omitempty"`
+	OutcomeStatus   string    `json:"outcome_status,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 func (s *Store) WriteRetrievalReceipt(ctx context.Context, r RetrievalReceiptRecord) error {
@@ -780,13 +783,15 @@ func (s *Store) WriteRetrievalReceipt(ctx context.Context, r RetrievalReceiptRec
 		INSERT INTO memory_retrieval_receipts(
 			receipt_id, project_id, caller_id, query_text, query_digest, allowed_scopes,
 			current_head, current_branch, max_records, max_bytes, consumed_bytes,
-			decisions_json, run_id, task_id, provider, denied_count, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			decisions_json, run_id, task_id, provider, denied_count,
+			evidence_ids, outcome_memory_id, outcome_status, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err = s.db.ExecContext(ctx, query,
 		r.ReceiptID, r.ProjectID, r.CallerID, r.QueryText, r.QueryDigest, string(scopesJSON),
 		r.CurrentHead, r.CurrentBranch, r.MaxRecords, r.MaxBytes, r.ConsumedBytes,
-		r.DecisionsJSON, r.RunID, r.TaskID, r.Provider, r.DeniedCount, r.CreatedAt.UTC().Format(time.RFC3339Nano),
+		r.DecisionsJSON, r.RunID, r.TaskID, r.Provider, r.DeniedCount,
+		strings.Join(r.EvidenceIDs, ","), r.OutcomeMemoryID, r.OutcomeStatus, r.CreatedAt.UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {
 		return fmt.Errorf("write retrieval receipt: %w", err)
@@ -798,16 +803,18 @@ func (s *Store) GetRetrievalReceipt(ctx context.Context, projectID, receiptID st
 	query := `
 		SELECT receipt_id, project_id, caller_id, query_text, query_digest, allowed_scopes,
 		       current_head, current_branch, max_records, max_bytes, consumed_bytes,
-		       decisions_json, run_id, task_id, provider, denied_count, created_at
+		       decisions_json, run_id, task_id, provider, denied_count,
+		       evidence_ids, outcome_memory_id, outcome_status, created_at
 		FROM memory_retrieval_receipts
 		WHERE project_id = ? AND receipt_id = ?
 	`
 	var r RetrievalReceiptRecord
-	var scopesJSON, createdAtStr string
+	var scopesJSON, evidenceIDs, createdAtStr string
 	err := s.db.QueryRowContext(ctx, query, projectID, receiptID).Scan(
 		&r.ReceiptID, &r.ProjectID, &r.CallerID, &r.QueryText, &r.QueryDigest, &scopesJSON,
 		&r.CurrentHead, &r.CurrentBranch, &r.MaxRecords, &r.MaxBytes, &r.ConsumedBytes,
-		&r.DecisionsJSON, &r.RunID, &r.TaskID, &r.Provider, &r.DeniedCount, &createdAtStr,
+		&r.DecisionsJSON, &r.RunID, &r.TaskID, &r.Provider, &r.DeniedCount,
+		&evidenceIDs, &r.OutcomeMemoryID, &r.OutcomeStatus, &createdAtStr,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -818,9 +825,42 @@ func (s *Store) GetRetrievalReceipt(ctx context.Context, projectID, receiptID st
 	if err := json.Unmarshal([]byte(scopesJSON), &r.AllowedScopes); err != nil {
 		return RetrievalReceiptRecord{}, fmt.Errorf("decode retrieval receipt scopes: %w", err)
 	}
+	if evidenceIDs != "" {
+		r.EvidenceIDs = strings.Split(evidenceIDs, ",")
+	}
 	r.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAtStr)
 	if err != nil {
 		return RetrievalReceiptRecord{}, fmt.Errorf("parse retrieval receipt timestamp: %w", err)
 	}
 	return r, nil
+}
+
+func (s *Store) LinkRetrievalReceiptsForRun(ctx context.Context, projectID, runID, outcomeMemoryID, outcomeStatus string, evidenceIDs []string) error {
+	if projectID == "" || runID == "" || outcomeMemoryID == "" || outcomeStatus == "" {
+		return fmt.Errorf("%w: project, run, outcome memory, and status are required", model.ErrInvalid)
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE memory_retrieval_receipts
+		SET evidence_ids = ?, outcome_memory_id = ?, outcome_status = ?
+		WHERE project_id = ? AND run_id = ?
+	`, strings.Join(evidenceIDs, ","), outcomeMemoryID, outcomeStatus, projectID, runID)
+	if err != nil {
+		return fmt.Errorf("link retrieval receipt outcome: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) PruneRetrievalReceipts(ctx context.Context, projectID string, before time.Time) (int64, error) {
+	if projectID == "" || before.IsZero() {
+		return 0, fmt.Errorf("%w: project and retention cutoff are required", model.ErrInvalid)
+	}
+	result, err := s.db.ExecContext(ctx, `DELETE FROM memory_retrieval_receipts WHERE project_id = ? AND created_at < ?`, projectID, before.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return 0, fmt.Errorf("prune retrieval receipts: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("read pruned receipt count: %w", err)
+	}
+	return count, nil
 }

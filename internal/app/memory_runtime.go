@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/memory/conflict"
 	"github.com/Zen1th53/marshal/internal/memory/extract"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
@@ -45,6 +46,14 @@ type CandidateProvider interface {
 	QueryCandidates(ctx context.Context, projectID string, allowedScopeIDs []string, query string, limit int) ([]CandidateResult, error)
 }
 
+const (
+	maxCandidateProviders  = 8
+	lexicalCandidateLimit  = 50
+	providerCandidateLimit = 20
+	graphTraversalDepth    = 2
+	derivedTrackTimeout    = 250 * time.Millisecond
+)
+
 type RememberRequest struct {
 	ProjectID   string                `json:"project_id"`
 	Title       string                `json:"title"`
@@ -59,22 +68,29 @@ type PromoteRequest struct {
 	ProjectID string `json:"project_id"`
 	MemoryID  string `json:"memory_id"`
 	ScopeID   string `json:"scope_id"`
+	Rationale string `json:"rationale,omitempty"`
 }
 
 type OutcomeCaptureRequest struct {
-	ProjectID   string
-	TaskID      string
-	TaskTitle   string
-	RunID       string
-	SessionID   string
-	AgentID     string
-	Provider    string
-	Status      string
-	ExitStatus  int
-	BaseCommit  string
-	HeadCommit  string
-	Branch      string
-	EvidenceIDs []string
+	ProjectID      string
+	TaskID         string
+	TaskTitle      string
+	RunID          string
+	SessionID      string
+	AgentID        string
+	Provider       string
+	Status         string
+	ExitStatus     int
+	BaseCommit     string
+	HeadCommit     string
+	Branch         string
+	EvidenceIDs    []string
+	FilesChanged   []string
+	TestsRun       []string
+	ErrorSignature string
+	FailureReason  string
+	RetryCondition string
+	Environment    map[string]string
 }
 
 type RecallRequest struct {
@@ -138,6 +154,9 @@ type RetrievalReceipt struct {
 	RunID           string              `json:"run_id,omitempty"`
 	TaskID          string              `json:"task_id,omitempty"`
 	Provider        string              `json:"provider,omitempty"`
+	EvidenceIDs     []string            `json:"evidence_ids,omitempty"`
+	OutcomeMemoryID string              `json:"outcome_memory_id,omitempty"`
+	OutcomeStatus   string              `json:"outcome_status,omitempty"`
 	GeneratedAt     time.Time           `json:"generated_at"`
 }
 
@@ -178,8 +197,14 @@ func NewMemoryService(st *store.Store) *MemoryService {
 }
 
 func (s *MemoryService) RegisterCandidateProvider(p CandidateProvider) {
+	if p == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(s.providers) >= maxCandidateProviders {
+		return
+	}
 	s.providers = append(s.providers, p)
 }
 
@@ -442,15 +467,38 @@ func (s *MemoryService) Promote(ctx context.Context, principal authz.Principal, 
 	if err := s.authorizer.Authorize(ctx, principal, authz.ActionMemoryPromote, existing.ScopeID, model.MemoryDurable); err != nil {
 		return model.MemoryRecordV2{}, err
 	}
+	if existing.Lifecycle != model.MemoryCandidate && existing.Lifecycle != model.MemoryVerified {
+		return model.MemoryRecordV2{}, fmt.Errorf("%w: only candidate or verified memory can be promoted", model.ErrConflict)
+	}
 	if model.MemoryScopeKind(existing.Scope) == model.ScopeTask {
 		if err := s.authorizeTaskScope(ctx, principal, authz.ActionMemoryPromote, existing.ScopeID); err != nil {
 			return model.MemoryRecordV2{}, err
 		}
 	}
+	// Operator-authored runtime_service candidates are explicit operator
+	// proposals. Every model/import/outcome candidate remains evidence-gated,
+	// even when the promoting principal happens to share its source identity.
+	if existing.Authority == model.AuthorityAgent && existing.Source.Kind != "runtime_service" {
+		if len(existing.EvidenceIDs) == 0 {
+			return model.MemoryRecordV2{}, fmt.Errorf("%w: agent candidate promotion requires evidence", model.ErrInvalid)
+		}
+		for _, evidenceID := range existing.EvidenceIDs {
+			node, err := s.store.Get(ctx, evidence.NodeID(evidenceID))
+			if err != nil || (node.State != evidence.StateStored && node.State != evidence.StateLinked) {
+				return model.MemoryRecordV2{}, fmt.Errorf("%w: promotion evidence %s is unavailable", model.ErrInvalid, evidenceID)
+			}
+		}
+	}
 	promoted, err := s.store.UpdateMemory(ctx, existing.ProjectID, req.MemoryID, existing.Revision, func(rec *model.MemoryRecordV2) error {
 		rec.Lifecycle = model.MemoryDurable
 		rec.Authority = model.AuthorityOperator
-		rec.UpdatedAt = time.Now().UTC()
+		now := time.Now().UTC()
+		rec.LastVerifiedAt = &now
+		if rec.ExtMeta == nil {
+			rec.ExtMeta = map[string]any{}
+		}
+		rec.ExtMeta["promoted_by"] = principal.ID
+		rec.ExtMeta["promotion_rationale"] = truncateMemoryField(req.Rationale, 2048)
 		return nil
 	})
 	if err != nil {
@@ -639,6 +687,19 @@ func (s *MemoryService) CaptureOutcome(ctx context.Context, req OutcomeCaptureRe
 	if req.Status != "success" {
 		kind = model.MemoryKindFailure
 	}
+	metadata := map[string]any{
+		"outcome_status": req.Status, "exit_status": req.ExitStatus,
+		"files_changed":   boundedStrings(req.FilesChanged, 256, 1024),
+		"tests_run":       boundedStrings(req.TestsRun, 128, 2048),
+		"error_signature": truncateMemoryField(req.ErrorSignature, 512),
+		"failure_reason":  truncateMemoryField(req.FailureReason, 2048),
+		"retry_condition": truncateMemoryField(req.RetryCondition, 2048),
+		"environment":     req.Environment,
+	}
+	body := fmt.Sprintf("task_id=%s provider=%s status=%s exit_status=%d base_commit=%s result_commit=%s", req.TaskID, req.Provider, req.Status, req.ExitStatus, req.BaseCommit, req.HeadCommit)
+	if req.Status != "success" {
+		body += fmt.Sprintf(" error_signature=%s failure_reason=%s retry_condition=%s", metadata["error_signature"], metadata["failure_reason"], metadata["retry_condition"])
+	}
 	rec := model.MemoryRecordV2{
 		ID:         "MEM-RUN-" + req.RunID,
 		ProjectID:  req.ProjectID,
@@ -647,7 +708,7 @@ func (s *MemoryService) CaptureOutcome(ctx context.Context, req OutcomeCaptureRe
 		Confidence: model.ConfidenceObserved,
 		Authority:  model.AuthorityAgent,
 		Title:      fmt.Sprintf("Run %s outcome: %s", req.Status, req.TaskTitle),
-		Body:       fmt.Sprintf("task_id=%s provider=%s status=%s exit_status=%d base_commit=%s result_commit=%s", req.TaskID, req.Provider, req.Status, req.ExitStatus, req.BaseCommit, req.HeadCommit),
+		Body:       body,
 		Scope:      string(model.ScopeTask),
 		ScopeID:    req.TaskID,
 		Source: model.MemorySource{
@@ -664,6 +725,7 @@ func (s *MemoryService) CaptureOutcome(ctx context.Context, req OutcomeCaptureRe
 		ValidFrom:   now,
 		CreatedAt:   now,
 		UpdatedAt:   now,
+		ExtMeta:     metadata,
 	}
 	if err := s.store.WriteMemoryV2(ctx, rec); err != nil {
 		return model.MemoryRecordV2{}, err
@@ -671,7 +733,31 @@ func (s *MemoryService) CaptureOutcome(ctx context.Context, req OutcomeCaptureRe
 	if err := s.IndexRecord(ctx, rec); err != nil {
 		return model.MemoryRecordV2{}, fmt.Errorf("index run outcome: %w", err)
 	}
+	if err := s.store.LinkRetrievalReceiptsForRun(ctx, req.ProjectID, req.RunID, rec.ID, req.Status, req.EvidenceIDs); err != nil {
+		return model.MemoryRecordV2{}, err
+	}
 	return rec, nil
+}
+
+func boundedStrings(values []string, maxItems, maxLength int) []string {
+	if len(values) > maxItems {
+		values = values[:maxItems]
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			result = append(result, truncateMemoryField(value, maxLength))
+		}
+	}
+	return result
+}
+
+func truncateMemoryField(value string, maxLength int) string {
+	if maxLength > 0 && len(value) > maxLength {
+		return value[:maxLength]
+	}
+	return value
 }
 
 type FreshnessClassification string
@@ -994,10 +1080,21 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 	// Multi-track candidate discovery across derived projections
 	matchedTrackMap := make(map[string][]string) // memoryID -> tracks
 	scoreMap := make(map[string]int)
+	cacheKey := cache.QueryKey{ProjectID: req.ProjectID, ScopeIDs: req.AllowedScopeIDs, Query: query, TopK: req.MaxRecords}
+	if cached, ok := s.cache.Get(cacheKey); ok {
+		for _, rec := range cached {
+			if _, allowed := authorizedIDs[rec.ID]; !allowed {
+				continue
+			}
+			matchedTrackMap[rec.ID] = appendIfMissing(matchedTrackMap[rec.ID], "cache")
+		}
+	}
 
 	// 1. Lexical track candidates
 	if lexicalIndex != nil && query != "" {
-		lexResults, err := lexicalIndex.SearchAuthorized(ctx, req.ProjectID, query, authorizedIDs, 50)
+		trackCtx, cancel := context.WithTimeout(ctx, derivedTrackTimeout)
+		lexResults, err := lexicalIndex.SearchAuthorized(trackCtx, req.ProjectID, query, authorizedIDs, lexicalCandidateLimit)
+		cancel()
 		if err == nil {
 			for _, r := range lexResults {
 				matchedTrackMap[r.MemoryID] = appendIfMissing(matchedTrackMap[r.MemoryID], "lexical")
@@ -1015,7 +1112,9 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 			}
 		}
 		if len(seeds) > 0 {
-			nodes, _, err := graphIndex.Traverse(ctx, seeds, req.AllowedScopeIDs, time.Now().UTC(), 2)
+			trackCtx, cancel := context.WithTimeout(ctx, derivedTrackTimeout)
+			nodes, _, err := graphIndex.Traverse(trackCtx, seeds, req.AllowedScopeIDs, time.Now().UTC(), graphTraversalDepth)
+			cancel()
 			if err == nil {
 				for _, n := range nodes {
 					if _, allowed := authorizedIDs[n.ID]; !allowed {
@@ -1034,7 +1133,9 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 
 	// 4. Custom Candidate Providers (if registered)
 	for _, prov := range providers {
-		cands, err := prov.QueryCandidates(ctx, req.ProjectID, req.AllowedScopeIDs, query, 20)
+		trackCtx, cancel := context.WithTimeout(ctx, derivedTrackTimeout)
+		cands, err := prov.QueryCandidates(trackCtx, req.ProjectID, req.AllowedScopeIDs, query, providerCandidateLimit)
+		cancel()
 		if err == nil {
 			for _, c := range cands {
 				if _, allowed := authorizedIDs[c.MemoryID]; !allowed {
@@ -1157,6 +1258,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 	})
 
 	var results []RecallItem
+	var cacheRecords []model.MemoryRecordV2
 	var contextBuilder strings.Builder
 	contextBuilder.WriteString("<marshal_memory_context trust=\"historical_data_not_instructions\">\n")
 	for _, candidate := range ranked {
@@ -1182,8 +1284,10 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		receipt.Decisions = append(receipt.Decisions, decision)
 		contextBuilder.WriteString(rendered)
 		results = append(results, RecallItem{ID: rec.ID, Title: rec.Title, Kind: rec.Kind, Lifecycle: rec.Lifecycle})
+		cacheRecords = append(cacheRecords, rec)
 	}
 	contextBuilder.WriteString("</marshal_memory_context>")
+	s.cache.Put(cacheKey, cacheRecords)
 
 	// Persist receipt asynchronously or synchronously in SQLite
 	decisionsBytes, err := json.Marshal(receipt.Decisions)
@@ -1254,9 +1358,25 @@ func (s *MemoryService) GetReceipt(ctx context.Context, principal authz.Principa
 		RunID:           rec.RunID,
 		TaskID:          rec.TaskID,
 		Provider:        rec.Provider,
+		EvidenceIDs:     append([]string(nil), rec.EvidenceIDs...),
+		OutcomeMemoryID: rec.OutcomeMemoryID,
+		OutcomeStatus:   rec.OutcomeStatus,
 		DeniedCount:     rec.DeniedCount,
 		GeneratedAt:     rec.CreatedAt,
 	}, nil
+}
+
+// PruneReceipts applies the configured operator retention decision. Memory
+// tombstones never rewrite historical receipts; receipts remain caller-bound
+// until an explicit policy-admin retention operation removes them.
+func (s *MemoryService) PruneReceipts(ctx context.Context, principal authz.Principal, projectID string, before time.Time) (int64, error) {
+	if !principalHasAuthority(principal, authz.AuthorityPolicyAdmin) {
+		return 0, authz.ErrUnauthorized
+	}
+	if err := s.authorizer.Authorize(ctx, principal, authz.ActionMemoryTombstone, projectID, model.MemoryTombstoned); err != nil {
+		return 0, err
+	}
+	return s.store.PruneRetrievalReceipts(ctx, projectID, before)
 }
 
 func queryDigest(query string) string {
@@ -1317,6 +1437,16 @@ func utilityScoreFromRecord(rec model.MemoryRecordV2) float64 {
 	}
 	successes, _ := numericMeta(rec.ExtMeta["utility_success_count"])
 	failures, _ := numericMeta(rec.ExtMeta["utility_failure_count"])
+	// The legacy success counter mirrors verification_contributing signals for
+	// compatibility, so do not count that signal twice when ranking.
+	for _, key := range []string{"utility_helpful_count", "utility_used_count"} {
+		value, _ := numericMeta(rec.ExtMeta[key])
+		successes += value
+	}
+	for _, key := range []string{"utility_ignored_count", "utility_contradicted_count"} {
+		value, _ := numericMeta(rec.ExtMeta[key])
+		failures += value
+	}
 	return (1 + successes) / (2 + successes + failures)
 }
 
@@ -1345,6 +1475,16 @@ func appendIfMissing(slice []string, val string) []string {
 // Task Blackboard and Working Memory Methods (M14)
 
 func (s *MemoryService) SetTaskSlot(ctx context.Context, principal authz.Principal, projectID, taskID string, slotType working.SlotType, value string, pinned bool) (working.WorkingSlot, error) {
+	return s.SetTaskSlotWithProvenance(ctx, principal, projectID, taskID, slotType, value, pinned, WorkingProvenance{})
+}
+
+type WorkingProvenance struct {
+	Provider  string `json:"provider,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	RunID     string `json:"run_id,omitempty"`
+}
+
+func (s *MemoryService) SetTaskSlotWithProvenance(ctx context.Context, principal authz.Principal, projectID, taskID string, slotType working.SlotType, value string, pinned bool, provenance WorkingProvenance) (working.WorkingSlot, error) {
 	if err := ctx.Err(); err != nil {
 		return working.WorkingSlot{}, err
 	}
@@ -1358,8 +1498,13 @@ func (s *MemoryService) SetTaskSlot(ctx context.Context, principal authz.Princip
 		return working.WorkingSlot{}, fmt.Errorf("%w: project, task, slot type, and value are required", model.ErrInvalid)
 	}
 	rec := newWorkingRecord(projectID, taskID, principal.ID, taskSlotID(projectID, taskID, string(slotType)), slotType, value, pinned, false)
+	rec.Source.SessionID = truncateMemoryField(strings.TrimSpace(provenance.SessionID), 256)
+	rec.Source.RunID = truncateMemoryField(strings.TrimSpace(provenance.RunID), 256)
+	rec.ExtMeta["provider"] = truncateMemoryField(strings.TrimSpace(provenance.Provider), 128)
+	rec.SessionID = rec.Source.SessionID
+	rec.RunID = rec.Source.RunID
 	if _, err := s.store.GetMemoryV2(ctx, projectID, rec.ID); err == nil {
-		if conflictErr := s.persistWorkingConflict(ctx, projectID, taskID, principal.ID, slotType, value, rec.ID); conflictErr != nil {
+		if conflictErr := s.persistWorkingConflict(ctx, projectID, taskID, principal.ID, slotType, value, rec.ID, provenance); conflictErr != nil {
 			return working.WorkingSlot{}, fmt.Errorf("persist competing slot proposal: %w", conflictErr)
 		}
 		return working.WorkingSlot{}, fmt.Errorf("%w: slot already exists; use CAS update", working.ErrCASConflict)
@@ -1368,7 +1513,7 @@ func (s *MemoryService) SetTaskSlot(ctx context.Context, principal authz.Princip
 	}
 	if err := s.store.WriteMemoryV2(ctx, rec); err != nil {
 		if _, existsErr := s.store.GetMemoryV2(ctx, projectID, rec.ID); existsErr == nil {
-			if conflictErr := s.persistWorkingConflict(ctx, projectID, taskID, principal.ID, slotType, value, rec.ID); conflictErr != nil {
+			if conflictErr := s.persistWorkingConflict(ctx, projectID, taskID, principal.ID, slotType, value, rec.ID, provenance); conflictErr != nil {
 				return working.WorkingSlot{}, fmt.Errorf("persist competing slot proposal: %w", conflictErr)
 			}
 			return working.WorkingSlot{}, fmt.Errorf("%w: concurrent slot creation", working.ErrCASConflict)
@@ -1382,6 +1527,10 @@ func (s *MemoryService) SetTaskSlot(ctx context.Context, principal authz.Princip
 }
 
 func (s *MemoryService) UpdateTaskSlotCAS(ctx context.Context, principal authz.Principal, projectID, taskID string, slotType working.SlotType, expectedRevision int, newValue string) (working.WorkingSlot, error) {
+	return s.UpdateTaskSlotCASWithProvenance(ctx, principal, projectID, taskID, slotType, expectedRevision, newValue, WorkingProvenance{})
+}
+
+func (s *MemoryService) UpdateTaskSlotCASWithProvenance(ctx context.Context, principal authz.Principal, projectID, taskID string, slotType working.SlotType, expectedRevision int, newValue string, provenance WorkingProvenance) (working.WorkingSlot, error) {
 	if err := ctx.Err(); err != nil {
 		return working.WorkingSlot{}, err
 	}
@@ -1404,11 +1553,17 @@ func (s *MemoryService) UpdateTaskSlotCAS(ctx context.Context, principal authz.P
 			rec.ExtMeta = map[string]any{}
 		}
 		rec.ExtMeta["last_agent_id"] = principal.ID
+		rec.ExtMeta["provider"] = truncateMemoryField(strings.TrimSpace(provenance.Provider), 128)
+		rec.Source.AgentID = principal.ID
+		rec.Source.SessionID = truncateMemoryField(strings.TrimSpace(provenance.SessionID), 256)
+		rec.Source.RunID = truncateMemoryField(strings.TrimSpace(provenance.RunID), 256)
+		rec.SessionID = rec.Source.SessionID
+		rec.RunID = rec.Source.RunID
 		return nil
 	})
 	if err != nil {
 		if errors.Is(err, model.ErrConflict) {
-			if conflictErr := s.persistWorkingConflict(ctx, projectID, taskID, principal.ID, slotType, newValue, id); conflictErr != nil {
+			if conflictErr := s.persistWorkingConflict(ctx, projectID, taskID, principal.ID, slotType, newValue, id, provenance); conflictErr != nil {
 				return working.WorkingSlot{}, fmt.Errorf("persist competing CAS proposal: %w", conflictErr)
 			}
 			return working.WorkingSlot{}, fmt.Errorf("%w: %v", working.ErrCASConflict, err)
@@ -1563,15 +1718,21 @@ func workingSlotFromRecord(rec model.MemoryRecordV2) working.WorkingSlot {
 	slotType, _ := rec.ExtMeta["slot_type"].(string)
 	pinned, _ := rec.ExtMeta["pinned"].(bool)
 	lastAgentID, _ := rec.ExtMeta["last_agent_id"].(string)
-	return working.WorkingSlot{Type: working.SlotType(slotType), Value: rec.Body, Revision: int(rec.Revision) + 1, Pinned: pinned, LastAgentID: lastAgentID, UpdatedAt: rec.UpdatedAt}
+	provider, _ := rec.ExtMeta["provider"].(string)
+	return working.WorkingSlot{Type: working.SlotType(slotType), Value: rec.Body, Revision: int(rec.Revision) + 1, Pinned: pinned, LastAgentID: lastAgentID, Provider: provider, SessionID: rec.Source.SessionID, RunID: rec.Source.RunID, UpdatedAt: rec.UpdatedAt}
 }
 
-func (s *MemoryService) persistWorkingConflict(ctx context.Context, projectID, taskID, agentID string, slotType working.SlotType, value, existingID string) error {
+func (s *MemoryService) persistWorkingConflict(ctx context.Context, projectID, taskID, agentID string, slotType working.SlotType, value, existingID string, provenance WorkingProvenance) error {
 	id, err := model.NewID("MEM-CONFLICT-")
 	if err != nil {
 		return err
 	}
 	rec := newWorkingRecord(projectID, taskID, agentID, id, slotType, value, false, false)
+	rec.Source.SessionID = truncateMemoryField(strings.TrimSpace(provenance.SessionID), 256)
+	rec.Source.RunID = truncateMemoryField(strings.TrimSpace(provenance.RunID), 256)
+	rec.SessionID = rec.Source.SessionID
+	rec.RunID = rec.Source.RunID
+	rec.ExtMeta["provider"] = truncateMemoryField(strings.TrimSpace(provenance.Provider), 128)
 	rec.Lifecycle = model.MemoryConflicted
 	rec.ConflictIDs = []string{existingID}
 	rec.ExtMeta["record_type"] = "task_slot_conflict"
@@ -1638,6 +1799,8 @@ type HandoffBundle struct {
 	MemoryContext  string                `json:"memory_context"`
 	MemoryIDs      []string              `json:"memory_ids"`
 	EvidenceIDs    []string              `json:"evidence_ids"`
+	CurrentHead    string                `json:"current_head"`
+	CurrentBranch  string                `json:"current_branch"`
 	ChangedFiles   []string              `json:"changed_files"`
 	DiffHash       string                `json:"diff_hash"`
 	ByteSize       int                   `json:"byte_size"`
@@ -1734,6 +1897,8 @@ func (s *MemoryService) CompileHandoff(ctx context.Context, principal authz.Prin
 		MemoryContext:  recallRes.Context,
 		MemoryIDs:      memoryIDs,
 		EvidenceIDs:    evidenceIDs,
+		CurrentHead:    req.CurrentHead,
+		CurrentBranch:  req.CurrentBranch,
 		ChangedFiles:   req.ChangedFiles,
 		DiffHash:       req.DiffHash,
 		GeneratedAt:    time.Now().UTC(),
@@ -1803,12 +1968,51 @@ func (s *MemoryService) ImportSessionTranscript(ctx context.Context, principal a
 
 // Outcome Utility and Lifecycle Consistency (M17)
 
+type UtilitySignal string
+
+const (
+	UtilityRetrieved                UtilitySignal = "retrieved"
+	UtilityIncluded                 UtilitySignal = "included"
+	UtilityUsed                     UtilitySignal = "used"
+	UtilityHelpful                  UtilitySignal = "helpful"
+	UtilityIgnored                  UtilitySignal = "ignored"
+	UtilityContradicted             UtilitySignal = "contradicted"
+	UtilitySuperseded               UtilitySignal = "superseded"
+	UtilityVerificationContributing UtilitySignal = "verification_contributing"
+	UtilityFailed                   UtilitySignal = "failed"
+)
+
+func (signal UtilitySignal) valid() bool {
+	switch signal {
+	case UtilityRetrieved, UtilityIncluded, UtilityUsed, UtilityHelpful, UtilityIgnored,
+		UtilityContradicted, UtilitySuperseded, UtilityVerificationContributing, UtilityFailed:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *MemoryService) RecordOutcome(ctx context.Context, memoryID, taskID string, success, operatorApproved bool) error {
+	eventID, err := model.NewID("UTIL-")
+	if err != nil {
+		return err
+	}
+	signal := UtilityFailed
+	if success {
+		signal = UtilityVerificationContributing
+	}
+	return s.RecordUtilitySignal(ctx, memoryID, taskID, eventID, signal, operatorApproved)
+}
+
+func (s *MemoryService) RecordUtilitySignal(ctx context.Context, memoryID, taskID, eventID string, signal UtilitySignal, operatorApproved bool) error {
 	if s == nil || s.store == nil {
 		return fmt.Errorf("%w: memory store unavailable", model.ErrUnavailable)
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if memoryID == "" || taskID == "" || eventID == "" || !signal.valid() {
+		return fmt.Errorf("%w: memory, task, event, and valid utility signal are required", model.ErrInvalid)
 	}
 	for attempt := 0; attempt < 3; attempt++ {
 		rec, err := s.store.GetMemoryV2ByID(ctx, memoryID)
@@ -1816,15 +2020,35 @@ func (s *MemoryService) RecordOutcome(ctx context.Context, memoryID, taskID stri
 			return err
 		}
 		updated, err := s.store.UpdateMemory(ctx, rec.ProjectID, rec.ID, rec.Revision, func(current *model.MemoryRecordV2) error {
+			if current.Lifecycle == model.MemoryTombstoned || current.Lifecycle == model.MemorySuperseded ||
+				(current.ValidTo != nil && current.ValidTo.Before(time.Now().UTC())) {
+				return fmt.Errorf("%w: inactive memory cannot receive utility", model.ErrConflict)
+			}
 			if current.ExtMeta == nil {
 				current.ExtMeta = map[string]any{}
 			}
-			key := "utility_failure_count"
-			if success {
-				key = "utility_success_count"
+			events := stringMetaSlice(current.ExtMeta["utility_event_ids"])
+			for _, existingEvent := range events {
+				if existingEvent == eventID {
+					return nil
+				}
 			}
+			events = append(events, eventID)
+			if len(events) > 256 {
+				events = events[len(events)-256:]
+			}
+			current.ExtMeta["utility_event_ids"] = events
+			key := "utility_" + string(signal) + "_count"
 			count, _ := numericMeta(current.ExtMeta[key])
-			current.ExtMeta[key] = count + 1
+			if count < 1_000_000 {
+				current.ExtMeta[key] = count + 1
+			}
+			if signal == UtilityVerificationContributing {
+				current.ExtMeta["utility_success_count"] = minNumericMeta(current.ExtMeta["utility_success_count"], 1_000_000)
+			}
+			if signal == UtilityFailed {
+				current.ExtMeta["utility_failure_count"] = minNumericMeta(current.ExtMeta["utility_failure_count"], 1_000_000)
+			}
 			current.ExtMeta["utility_last_task_id"] = taskID
 			current.ExtMeta["utility_last_used_at"] = time.Now().UTC().Format(time.RFC3339Nano)
 			// operatorApproved is intentionally not an authority escalation. It is
@@ -1845,6 +2069,29 @@ func (s *MemoryService) RecordOutcome(ctx context.Context, memoryID, taskID stri
 		}
 	}
 	return fmt.Errorf("%w: utility update remained contended", model.ErrConflict)
+}
+
+func stringMetaSlice(value any) []string {
+	var result []string
+	switch values := value.(type) {
+	case []string:
+		return append([]string(nil), values...)
+	case []any:
+		for _, item := range values {
+			if text, ok := item.(string); ok {
+				result = append(result, text)
+			}
+		}
+	}
+	return result
+}
+
+func minNumericMeta(value any, maximum float64) float64 {
+	count, _ := numericMeta(value)
+	if count >= maximum {
+		return maximum
+	}
+	return count + 1
 }
 
 func (s *MemoryService) GetUtilityScore(ctx context.Context, memoryID string) float64 {

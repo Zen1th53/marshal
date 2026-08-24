@@ -106,6 +106,9 @@ func TestM15_ProviderNeutralHandoffCompilation(t *testing.T) {
 	if bundle.BundleID == "" || bundle.TaskID != taskID {
 		t.Fatalf("unexpected bundle header: %+v", bundle)
 	}
+	if bundle.CurrentHead != "commit-abc123" || bundle.CurrentBranch != "main" {
+		t.Fatalf("repository freshness anchor missing: %+v", bundle)
+	}
 	if len(bundle.WorkingSlots) == 0 || bundle.WorkingSlots[0].Type != working.SlotPlanState {
 		t.Fatalf("working slots not packaged: %+v", bundle.WorkingSlots)
 	}

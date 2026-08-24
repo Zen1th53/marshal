@@ -172,7 +172,7 @@ func TestM14_TaskAndPrivateSlotsSurviveRestart(t *testing.T) {
 		}
 		defer runtime.Close()
 		grantTaskMemoryAccess(t, runtime, taskID, principal)
-		if _, err := runtime.Memory().SetTaskSlot(ctx, principal, projectID, taskID, working.SlotPlanState, "durable shared state", true); err != nil {
+		if _, err := runtime.Memory().SetTaskSlotWithProvenance(ctx, principal, projectID, taskID, working.SlotPlanState, "durable shared state", true, WorkingProvenance{Provider: "codex", SessionID: "SESSION-1", RunID: "RUN-1"}); err != nil {
 			t.Fatal(err)
 		}
 		if err := runtime.Memory().SetPrivateTaskSlot(ctx, principal, projectID, taskID, "scratch", "durable private state"); err != nil {
@@ -188,6 +188,9 @@ func TestM14_TaskAndPrivateSlotsSurviveRestart(t *testing.T) {
 		slots, err := runtime.Memory().ListTaskSlots(ctx, principal, projectID, taskID)
 		if err != nil || len(slots) != 1 || slots[0].Value != "durable shared state" {
 			t.Fatalf("shared slot after restart: slots=%+v err=%v", slots, err)
+		}
+		if slots[0].Provider != "codex" || slots[0].SessionID != "SESSION-1" || slots[0].RunID != "RUN-1" || slots[0].LastAgentID != principal.ID {
+			t.Fatalf("working provenance after restart: %+v", slots[0])
 		}
 		value, ok, err := runtime.Memory().GetPrivateTaskSlot(ctx, principal, projectID, taskID, "scratch")
 		if err != nil || !ok || value != "durable private state" {
