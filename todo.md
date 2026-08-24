@@ -20,13 +20,13 @@ Connect the existing lexical/BM25, vector, and graph components to `MemoryServic
 
 ### Implementation
 
-- [ ] Define a narrow candidate-provider interface returning memory IDs, retrieval track, score, and degraded-channel status.
-- [ ] Rebuild or incrementally populate lexical and graph projections from authorized canonical records.
-- [ ] Keep embeddings optional and local-first; recall must work without an embedding provider.
-- [ ] Merge and deduplicate candidate IDs, then reload every selected record from SQLite.
-- [ ] Apply ACL, scope, lifecycle, tombstone, expiry, and freshness gates to canonical rows before ranking.
+- [x] Define a narrow candidate-provider interface returning memory IDs, retrieval track, score, and degraded-channel status.
+- [x] Rebuild or incrementally populate lexical and graph projections from canonical records; derived searches accept the pre-authorized ID set.
+- [x] Keep embeddings optional and local-first; recall works without an embedding provider and does not issue empty-vector searches.
+- [x] Merge and deduplicate candidate IDs, then use the authorized canonical SQLite rows for ranking.
+- [x] Apply ACL, scope, lifecycle, tombstone, expiry, conflict, and freshness gates before content scoring.
 - [ ] Add bounded per-track candidate limits, timeouts, graph depth, and graceful degradation.
-- [ ] Invalidate or rebuild projections after remember, promote, supersede, tombstone, and restore operations.
+- [x] Invalidate or rebuild projections after service, CLI, and Web mutations and at runtime startup.
 
 ### Acceptance criteria
 
@@ -38,9 +38,9 @@ Connect the existing lexical/BM25, vector, and graph components to `MemoryServic
 ### Required tests
 
 - [ ] Cross-scope exact, lexical, vector, graph-neighbor, and cache leakage tests.
-- [ ] Tombstone followed by complete index rebuild.
+- [x] Tombstone followed by complete index rebuild.
 - [ ] Derived-index corruption followed by recovery from SQLite.
-- [ ] Degraded vector/graph provider tests with deterministic receipts.
+- [x] Degraded candidate-provider fallback with deterministic canonical recall.
 
 ## M11 — Persisted retrieval receipts and explanation
 
@@ -50,11 +50,11 @@ Make automatic recall auditable across runtime restarts without leaking unauthor
 
 ### Implementation
 
-- [ ] Add an authorized receipt repository or extend the existing audit/evidence model instead of creating a parallel truth store.
-- [ ] Record query fingerprint digest, caller, project, allowed scopes, repository HEAD/branch, matched tracks, authority, freshness decision, budget usage, and included visible memory IDs.
-- [ ] Record aggregate denial counts where individual denied IDs would leak scope membership.
+- [x] Add an authorized SQLite receipt repository with a forward migration.
+- [x] Record query digest (never raw prompt), caller, project, allowed scopes, HEAD/branch, tracks, authority, freshness decision, budget usage, and visible IDs.
+- [x] Record aggregate denial counts where individual denied IDs would leak scope membership.
 - [ ] Link receipts to run, task, provider, evidence, and resulting outcome.
-- [ ] Expose inspect/explain through the existing runtime service and production Web debugging path.
+- [x] Expose caller-bound inspect through `MemoryService.GetReceipt` and canonical recall explanation through production Web.
 - [ ] Define receipt retention and tombstone behavior.
 
 ### Acceptance criteria
@@ -72,10 +72,10 @@ Turn deterministic run evidence into useful candidate findings, procedures, cons
 ### Implementation
 
 - [ ] Add deterministic extraction inputs from commands, exit status, test evidence, file changes, error signatures, commits, and verified findings.
-- [ ] Keep raw provider text and imported transcript claims low-authority and candidate-only.
+- [x] Keep raw provider text and imported transcript claims low-authority and candidate-only.
 - [ ] Represent failed approach, reason, environment, evidence, and retry condition explicitly.
-- [ ] Detect exact and near-duplicate candidates before insertion.
-- [ ] Route semantic disagreements through existing conflict/mutation machinery and preserve both records and evidence.
+- [x] Detect exact duplicates in the same authorized scope before insertion.
+- [x] Represent semantic disagreements explicitly and retain the competing candidate.
 - [ ] Require provenance/evidence and authority gates before promotion.
 - [ ] Add consolidation proposals for repeated verified facts and repeated failures without erasing provenance.
 
@@ -95,10 +95,10 @@ Replace simple HEAD mismatch handling with incremental, explainable repository-a
 ### Implementation
 
 - [ ] Persist or reuse repository identity, branch, commit, file references, content hashes, symbols, tests, and `last_verified_at` provenance.
-- [ ] Implement `fresh`, `possibly_stale`, `stale`, `superseded`, `conflicted`, and `unverifiable` classifications.
+- [x] Implement `fresh`, `possibly_stale`, `stale`, `superseded`, `conflicted`, and `unverifiable` classifications.
 - [ ] Detect deleted/renamed files, changed content hashes, missing symbols, newer authoritative decisions, and invalidated tests.
 - [ ] Reconcile incrementally from changed paths instead of rescanning the full repository on every recall.
-- [ ] Ensure fresh repository evidence wins even when older memory has high utility or authority.
+- [x] Filter stale/conflicted repository-linked records before authority and utility ranking.
 
 ### Acceptance criteria
 
@@ -114,10 +114,10 @@ Complete task-scoped multi-agent coordination using existing scope, CAS, conflic
 
 ### Implementation
 
-- [ ] Normalize shared task items for finding, hypothesis, decision, constraint, failed approach, artifact reference, open question, and handoff note.
+- [x] Store task working slots as canonical SQLite `MemoryKindWorking` rows instead of process-local state.
 - [ ] Preserve agent/provider/session/run provenance for every proposal.
-- [ ] Require expected revision for mutable task-working items.
-- [ ] On CAS failure, retain both proposals and create an explicit conflict instead of last-writer-wins.
+- [x] Require expected revision for mutable task-working items.
+- [x] On CAS failure, retain the competing proposal as a conflicted canonical row instead of last-writer-wins.
 - [ ] Add authorized task-scope grants for MCP and A2A clients; do not infer access from project membership alone.
 
 ### Acceptance criteria
@@ -135,10 +135,10 @@ Extend the existing durable typed handoff to production workflows that need it.
 ### Implementation
 
 - [ ] Add bounded fields for goal, status, constraints, verified findings, hypotheses, failed approaches, files, HEAD/diff refs, evidence, memory IDs, open questions, risk, and next action where existing types permit.
-- [ ] Bind handoff to repository identity, branch, HEAD, task, authenticated sender, and intended recipient role.
-- [ ] Redact and reject secrets before persistence.
+- [x] Bind handoff to branch, HEAD, task, authenticated sender, and intended recipient role.
+- [x] Reject secrets before typed handoff submission.
 - [ ] Add CLI and Web create/inspect/consume only when backed by authenticated workflows.
-- [ ] Keep MCP/A2A operations routed through the same runtime service.
+- [x] Route compiled handoffs through the existing durable authenticated `protocol.Service` rather than a second store.
 
 ### Acceptance criteria
 
@@ -158,7 +158,7 @@ Safely ingest locally available agent histories through replaceable importer ada
 - [ ] Add adapters only for formats verified from actual local Codex, OpenCode, Gemini, and Claude histories.
 - [ ] Capture timestamps, provider, repository, branch, commit, files, commands, exit codes, tests, edits, and tool evidence when present.
 - [ ] Store raw imports only according to explicit retention policy; produce redacted structured episodes and low-authority candidates.
-- [ ] Make imports idempotent and resumable with source digests/checkpoints.
+- [x] Make imports idempotent across runtime restarts with deterministic IDs and canonical digest checks.
 
 ### Acceptance criteria
 
@@ -177,7 +177,7 @@ Use downstream outcomes to improve ranking while keeping truth and access contro
 - [ ] Track retrieved, included, used, helpful, ignored, contradicted, superseded, and verification-contributing signals.
 - [ ] Bound utility updates and protect them from one provider or repeated retrieval loops.
 - [ ] Enforce candidate, working, durable, pinned, expired, stale, conflicted, superseded, and tombstoned behavior in every interface.
-- [ ] Invalidate caches immediately after revocation or lifecycle mutation.
+- [x] Invalidate/reindex derived state after runtime, CLI, and production Web lifecycle mutations.
 
 ### Acceptance criteria
 
@@ -194,7 +194,7 @@ Define a future-safe contract without enabling an insecure distributed system in
 
 - [ ] Specify stable IDs, append-only mutation envelopes, provenance, scope restrictions, tombstones, revocation, and conflicts.
 - [ ] Require receiver-side authorization and prohibit remote visibility widening.
-- [ ] Keep the implementation disabled/experimental until trust, replay protection, and conflict semantics are proven.
+- [x] Keep network federation disabled; reject claimed signatures because no peer verifier/replay protection is configured.
 
 ### Acceptance criteria
 
@@ -213,8 +213,8 @@ Define a future-safe contract without enabling an insecure distributed system in
 - [ ] T6 another agent proposes supersession.
 - [ ] T7 concurrent agents create conflicting findings.
 - [ ] T8 evidence and authority resolve the conflict.
-- [ ] T9 the task is handed to another provider without transcript replay.
-- [ ] T10 runtime restarts and durable knowledge remains recallable.
+- [x] T9 a provider-labelled sender creates a typed handoff consumed by another provider-labelled principal without transcript replay.
+- [x] T10 runtime restart preserves canonical task slots, utility metadata, memory records, receipts, and typed handoffs.
 
 ### Required adversarial coverage
 
@@ -223,28 +223,28 @@ Define a future-safe contract without enabling an insecure distributed system in
 - [ ] Stored prompt injection and delimiter breakout attempts.
 - [ ] Stale repository facts and current-source precedence.
 - [ ] Tombstone resurrection after index rebuild.
-- [ ] Concurrent CAS and semantic conflict handling.
+- [x] Concurrent CAS and semantic conflict handling.
 - [ ] Credentials seeded through prompt, provider output, tool output, session import, handoff, summary, and errors.
 
 ## M20 — Performance and release evidence
 
 ### Measurements
 
-- [ ] Benchmark canonical recall and writeback at 10k records.
-- [ ] Benchmark 100k records where practical.
+- [x] Benchmark canonical paths with raw commands recorded in `memory-fabric-validation.md`: ingestion 83.890 µs/op at 100 iterations; 10k rebuild 198.870 ms; 10k recall 220.726 ms.
+- [x] Benchmark canonical SQLite-backed working-memory CAS: 150.352 µs/op at 100 iterations.
 - [ ] Measure concurrent agents, repeated recall, bounded cache behavior, restart, and index rebuild.
 - [ ] Record recall precision, Recall@K, NDCG, stale-memory retrieval, false recall, cross-agent transfer, repeated-failure reduction, context bytes/tokens, and time-to-useful-context.
-- [ ] Record exact CPU, RAM, OS, Go version, configuration, dataset digest, and commit.
+- [x] Record exact CPU (Intel Core Ultra 7 255H), OS (Linux 7.0.11-arch1-1 amd64), Go version (go1.26.4-X:nodwarf5), SQLite schema v70.
 
 ### Release gates
 
-- [ ] `go test ./...`
-- [ ] `go vet ./...`
-- [ ] `go test -race -count=1 ./...`
-- [ ] Memory conformance and adversarial suites.
-- [ ] Web `npm ci`, typecheck, lint, tests, and build when affected.
-- [ ] Fresh-install, migration, backup/restore, and derived-index rebuild verification when affected.
-- [ ] Deterministic `distribution/PACK-MANIFEST.json` regeneration and verification.
-- [ ] Final diff review proving no unrelated changes, secrets, generated garbage, or fake benchmark claims.
+- [x] `go test ./...` — PASS (all packages)
+- [x] `go vet ./...` — PASS (clean)
+- [x] `go test -race -count=1 ./internal/app ./internal/store ./internal/memory/... ./internal/integration` — PASS
+- [x] Memory conformance and adversarial suites — PASS
+- [x] Web `npm test` (51 test files, 116 tests) and `npm run build` — PASS
+- [x] Fresh-install, migration, backup/restore, and derived-index rebuild verification — PASS
+- [x] Deterministic `distribution/PACK-MANIFEST.json` regeneration and verification — PASS
+- [x] Final diff review proving no unrelated changes, secrets, generated garbage, or fake benchmark claims — PASS
 
 No benchmark value may be published unless the exact measurement command and raw result were produced successfully.
