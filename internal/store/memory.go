@@ -107,7 +107,9 @@ func (s *Store) WriteMemoryV2(ctx context.Context, rec model.MemoryRecordV2) err
 		return fmt.Errorf("write memory v2: %w", err)
 	}
 
-	if err := insertMemoryOutboxTx(ctx, tx, rec.ProjectID, rec.ID, "memory.created", rec); err != nil {
+	if err := insertMemoryOutboxTx(ctx, tx, rec.ProjectID, rec.ID, "memory.created", MemoryOutboxPointer{
+		MemoryID: rec.ID, Revision: rec.Revision, Lifecycle: rec.Lifecycle, ContentDigest: rec.ContentDigest,
+	}); err != nil {
 		return err
 	}
 
@@ -351,6 +353,89 @@ type MemoryQueryFilter struct {
 	ValidAsOf time.Time
 	KnownAt   time.Time
 	Limit     int
+}
+
+// ListAuthorizedMemoryIDs returns only IDs from the caller's already-granted
+// scope set. It intentionally does not load titles or bodies: derived
+// candidate discovery can enforce authorization before ranking without a
+// full canonical-content scan.
+func (s *Store) ListAuthorizedMemoryIDs(ctx context.Context, projectID, actorID string, allowedScopeIDs []string) (map[string]struct{}, error) {
+	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(actorID) == "" || len(allowedScopeIDs) == 0 {
+		return nil, fmt.Errorf("%w: project, actor, and allowed scopes are required", model.ErrInvalid)
+	}
+	query := `SELECT memory_id FROM memory_records_v2 WHERE project_id = ? AND (acl_scope = '' OR acl_scope = ?) AND scope_id IN (`
+	args := make([]any, 0, len(allowedScopeIDs)+2)
+	args = append(args, projectID, actorID)
+	for i, scopeID := range allowedScopeIDs {
+		if i > 0 {
+			query += ","
+		}
+		query += "?"
+		args = append(args, scopeID)
+	}
+	query += ")"
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list authorized memory IDs: %w", err)
+	}
+	defer rows.Close()
+	ids := make(map[string]struct{})
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan authorized memory ID: %w", err)
+		}
+		ids[id] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate authorized memory IDs: %w", err)
+	}
+	return ids, nil
+}
+
+// SearchAuthorizedMemoryIDs provides a bounded canonical fallback while
+// disposable lexical projections are cold. Authorization predicates are part
+// of the SQL query and only opaque IDs leave the store; canonical content is
+// reloaded and gated by MemoryService before ranking.
+func (s *Store) SearchAuthorizedMemoryIDs(ctx context.Context, projectID, actorID string, allowedScopeIDs []string, phrase string, limit int) ([]string, error) {
+	phrase = strings.TrimSpace(phrase)
+	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(actorID) == "" || len(allowedScopeIDs) == 0 || phrase == "" {
+		return nil, fmt.Errorf("%w: project, actor, allowed scopes, and phrase are required", model.ErrInvalid)
+	}
+	if limit <= 0 || limit > 256 {
+		limit = 50
+	}
+	query := `SELECT memory_id FROM memory_records_v2
+		WHERE project_id = ? AND (acl_scope = '' OR acl_scope = ?) AND scope_id IN (`
+	args := make([]any, 0, len(allowedScopeIDs)+4)
+	args = append(args, projectID, actorID)
+	for i, scopeID := range allowedScopeIDs {
+		if i > 0 {
+			query += ","
+		}
+		query += "?"
+		args = append(args, scopeID)
+	}
+	query += `) AND instr(lower(memory_id || ' ' || title || ' ' || body), lower(?)) > 0
+		ORDER BY updated_at DESC, memory_id ASC LIMIT ?`
+	args = append(args, phrase, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("search authorized memory IDs: %w", err)
+	}
+	defer rows.Close()
+	ids := make([]string, 0, limit)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan authorized memory search result: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate authorized memory search results: %w", err)
+	}
+	return ids, nil
 }
 
 // ListMemoryV2 queries memory_records_v2 applying strict project and scope boundaries.
@@ -702,7 +787,9 @@ func (s *Store) UpdateMemory(ctx context.Context, projectID, memoryID string, ex
 		eventType = "memory.tombstoned"
 	}
 
-	if err := insertMemoryOutboxTx(ctx, tx, projectID, memoryID, eventType, rec); err != nil {
+	if err := insertMemoryOutboxTx(ctx, tx, projectID, memoryID, eventType, MemoryOutboxPointer{
+		MemoryID: rec.ID, Revision: rec.Revision, Lifecycle: rec.Lifecycle, ContentDigest: rec.ContentDigest,
+	}); err != nil {
 		return model.MemoryRecordV2{}, err
 	}
 

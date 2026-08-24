@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 // MemoryOutboxEvent represents a durable event published for derived index consumers.
@@ -19,6 +21,15 @@ type MemoryOutboxEvent struct {
 	PayloadJSON string     `json:"payload_json"`
 	CreatedAt   time.Time  `json:"created_at"`
 	ProcessedAt *time.Time `json:"processed_at,omitempty"`
+}
+
+// MemoryOutboxPointer is intentionally small. Outbox events are notifications,
+// never a second source of truth; consumers reload the canonical row by ID.
+type MemoryOutboxPointer struct {
+	MemoryID      string                `json:"memory_id"`
+	Revision      int64                 `json:"revision"`
+	Lifecycle     model.MemoryLifecycle `json:"lifecycle"`
+	ContentDigest string                `json:"content_digest,omitempty"`
 }
 
 // insertMemoryOutboxTx records an outbox event within an existing transaction.
