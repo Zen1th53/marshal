@@ -1,6 +1,7 @@
 package a2a
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/memory/working"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/protocol"
 	"github.com/Zen1th53/marshal/internal/ratelimit"
@@ -56,7 +59,147 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/message:send", s.handleSendMessage)
 	mux.HandleFunc("/a2a/tasks", s.handleTaskDelegation)
 	mux.HandleFunc("/a2a/handoffs", s.handleTypedHandoff)
+	mux.HandleFunc("/a2a/task-memory", s.handleTaskMemory)
+	mux.HandleFunc("/a2a/memory-handoffs", s.handleMemoryHandoff)
 	return mux
+}
+
+func (s *Server) handleTaskMemory(w http.ResponseWriter, r *http.Request) {
+	caller, ok := s.authenticateMemoryCaller(w, r)
+	if !ok {
+		return
+	}
+	principal := a2aMemoryPrincipal(caller)
+	if r.Method == http.MethodGet {
+		if !caller.HasCapability(auth.CapTaskRead) {
+			writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+			return
+		}
+		projectID := s.memoryProjectID(r.Context(), r.URL.Query().Get("project_id"))
+		slots, err := s.runtime.Memory().ListTaskSlots(r.Context(), principal, projectID, strings.TrimSpace(r.URL.Query().Get("task_id")))
+		writeA2AMemoryResult(w, slots, err)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var request struct {
+		Operation        string `json:"operation"`
+		ProjectID        string `json:"project_id,omitempty"`
+		TaskID           string `json:"task_id,omitempty"`
+		SlotType         string `json:"slot_type,omitempty"`
+		Value            string `json:"value,omitempty"`
+		Pinned           bool   `json:"pinned,omitempty"`
+		ExpectedRevision int    `json:"expected_revision,omitempty"`
+		Kind             string `json:"kind,omitempty"`
+		Title            string `json:"title,omitempty"`
+		PrincipalID      string `json:"principal_id,omitempty"`
+		Role             string `json:"role,omitempty"`
+		PolicyDigest     string `json:"policy_digest,omitempty"`
+		BindingID        string `json:"binding_id,omitempty"`
+	}
+	if err := decodeA2AMemoryRequest(w, r, &request); err != nil {
+		return
+	}
+	projectID := s.memoryProjectID(r.Context(), request.ProjectID)
+	switch request.Operation {
+	case "set":
+		if !caller.HasCapability(auth.CapTaskExecute) {
+			writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+			return
+		}
+		slotType, err := a2aSlotType(request.SlotType)
+		if err != nil {
+			writeA2AMemoryError(w, http.StatusBadRequest, err)
+			return
+		}
+		slot, err := s.runtime.Memory().SetTaskSlotWithProvenance(r.Context(), principal, projectID, request.TaskID, slotType, request.Value, request.Pinned, app.WorkingProvenance{Provider: "a2a"})
+		writeA2AMemoryResult(w, slot, err)
+	case "cas":
+		if !caller.HasCapability(auth.CapTaskExecute) {
+			writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+			return
+		}
+		slotType, err := a2aSlotType(request.SlotType)
+		if err != nil {
+			writeA2AMemoryError(w, http.StatusBadRequest, err)
+			return
+		}
+		slot, err := s.runtime.Memory().UpdateTaskSlotCASWithProvenance(r.Context(), principal, projectID, request.TaskID, slotType, request.ExpectedRevision, request.Value, app.WorkingProvenance{Provider: "a2a"})
+		writeA2AMemoryResult(w, slot, err)
+	case "promote":
+		if !caller.HasCapability(auth.CapTaskExecute) {
+			writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+			return
+		}
+		slotType, err := a2aSlotType(request.SlotType)
+		if err != nil {
+			writeA2AMemoryError(w, http.StatusBadRequest, err)
+			return
+		}
+		record, err := s.runtime.Memory().PromoteTaskSlot(r.Context(), principal, projectID, request.TaskID, slotType, model.MemoryKind(request.Kind), request.Title)
+		writeA2AMemoryResult(w, record, err)
+	case "grant":
+		if !caller.HasCapability(auth.CapAll) {
+			writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+			return
+		}
+		binding, err := s.runtime.Memory().GrantTaskAccess(r.Context(), principal, app.TaskMemoryGrantRequest{TaskID: request.TaskID, PrincipalID: request.PrincipalID, Role: request.Role, PolicyDigest: request.PolicyDigest})
+		writeA2AMemoryResult(w, binding, err)
+	case "revoke":
+		if !caller.HasCapability(auth.CapAll) {
+			writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+			return
+		}
+		err := s.runtime.Memory().RevokeTaskAccess(r.Context(), principal, request.BindingID)
+		writeA2AMemoryResult(w, map[string]string{"status": "revoked"}, err)
+	default:
+		writeA2AMemoryError(w, http.StatusBadRequest, fmt.Errorf("%w: unsupported operation", model.ErrInvalid))
+	}
+}
+
+func (s *Server) handleMemoryHandoff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	caller, ok := s.authenticateMemoryCaller(w, r)
+	if !ok {
+		return
+	}
+	if r.Method == http.MethodGet {
+		if !caller.HasCapability(auth.CapHandoffRead) {
+			writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+			return
+		}
+		principal := a2aMemoryPrincipal(caller)
+		handoffID := protocol.HandoffID(strings.TrimSpace(r.URL.Query().Get("handoff_id")))
+		pending, err := s.runtime.Store().GetHandoff(r.Context(), handoffID)
+		if err != nil {
+			writeA2AMemoryResult(w, nil, err)
+			return
+		}
+		if _, err := s.runtime.Memory().ListTaskSlots(r.Context(), principal, s.memoryProjectID(r.Context(), r.URL.Query().Get("project_id")), string(pending.TaskID)); err != nil {
+			writeA2AMemoryResult(w, nil, err)
+			return
+		}
+		handoff, err := s.runtime.ConsumeHandoff(r.Context(), protocol.Principal{ID: caller.ID, Role: protocol.Role(principal.Role.Name), Capabilities: []string{"handoff.consume"}}, handoffID)
+		writeA2AMemoryResult(w, handoff, err)
+		return
+	}
+	if !caller.HasCapability(auth.CapHandoffCreate) {
+		writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+		return
+	}
+	var request app.HandoffCompileRequest
+	if err := decodeA2AMemoryRequest(w, r, &request); err != nil {
+		return
+	}
+	request.ProjectID = s.memoryProjectID(r.Context(), request.ProjectID)
+	request.SourceAgentID = caller.ID
+	handoff, err := s.runtime.CompileAndSubmitHandoff(r.Context(), a2aMemoryPrincipal(caller), request)
+	writeA2AMemoryResult(w, handoff, err)
 }
 
 func (s *Server) handleTypedHandoff(w http.ResponseWriter, r *http.Request) {
@@ -429,4 +572,106 @@ func (s *Server) handleTaskDelegation(w http.ResponseWriter, r *http.Request) {
 		"imported": imported,
 		"task_id":  req.Task.ID,
 	})
+}
+
+func (s *Server) authenticateMemoryCaller(w http.ResponseWriter, r *http.Request) (auth.Principal, bool) {
+	if s.authManager == nil {
+		writeA2AMemoryError(w, http.StatusUnauthorized, authz.ErrUnauthorized)
+		return auth.Principal{}, false
+	}
+	header := r.Header.Get("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
+		writeA2AMemoryError(w, http.StatusUnauthorized, authz.ErrUnauthorized)
+		return auth.Principal{}, false
+	}
+	caller, err := s.authManager.Authenticate(strings.TrimPrefix(header, "Bearer "))
+	if err != nil {
+		writeA2AMemoryError(w, http.StatusUnauthorized, authz.ErrUnauthorized)
+		return auth.Principal{}, false
+	}
+	if caller.Kind != auth.KindA2AAgent && caller.Kind != auth.KindLocalUser {
+		writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+		return auth.Principal{}, false
+	}
+	return caller, true
+}
+
+func a2aMemoryPrincipal(caller auth.Principal) authz.Principal {
+	authorities := make([]authz.Authority, 0, 3)
+	if caller.HasCapability(auth.CapAll) {
+		authorities = append(authorities, authz.AuthorityTaskPlan, authz.AuthoritySourceWrite, authz.AuthorityPolicyAdmin)
+	} else {
+		if caller.HasCapability(auth.CapTaskRead) || caller.HasCapability(auth.CapHandoffCreate) || caller.HasCapability(auth.CapHandoffRead) {
+			authorities = append(authorities, authz.AuthorityTaskPlan)
+		}
+		if caller.HasCapability(auth.CapTaskExecute) {
+			authorities = append(authorities, authz.AuthorityTaskPlan, authz.AuthoritySourceWrite)
+		}
+	}
+	return authz.Principal{ID: caller.ID, Role: authz.Role{Name: "developer", Capabilities: append([]string(nil), caller.Capabilities...), Authorities: authorities}}
+}
+
+func (s *Server) memoryProjectID(ctx context.Context, requested string) string {
+	if requested = strings.TrimSpace(requested); requested != "" {
+		return requested
+	}
+	if project, err := s.runtime.Store().Project(ctx); err == nil {
+		return project.ID
+	}
+	return ""
+}
+
+func decodeA2AMemoryRequest(w http.ResponseWriter, r *http.Request, target any) error {
+	body := http.MaxBytesReader(w, r.Body, 1<<20)
+	defer body.Close()
+	decoder := json.NewDecoder(body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		status := http.StatusBadRequest
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeA2AMemoryError(w, status, err)
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		invalid := fmt.Errorf("%w: trailing JSON", model.ErrInvalid)
+		writeA2AMemoryError(w, http.StatusBadRequest, invalid)
+		return invalid
+	}
+	return nil
+}
+
+func writeA2AMemoryResult(w http.ResponseWriter, value any, err error) {
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, authz.ErrUnauthorized) {
+			status = http.StatusForbidden
+		}
+		writeA2AMemoryError(w, status, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/a2a+json")
+	_ = json.NewEncoder(w).Encode(value)
+}
+
+func writeA2AMemoryError(w http.ResponseWriter, status int, err error) {
+	w.Header().Set("Content-Type", "application/a2a+json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+func a2aSlotType(value string) (working.SlotType, error) {
+	slotType := working.SlotType(strings.TrimSpace(value))
+	switch slotType {
+	case working.SlotHypothesis, working.SlotPlanState, working.SlotActiveSymbols, working.SlotBlockers,
+		working.SlotTemporaryObservations, working.SlotToolResults, working.SlotFinding, working.SlotDecision,
+		working.SlotConstraint, working.SlotFailedApproach, working.SlotArtifactReference, working.SlotOpenQuestion,
+		working.SlotHandoffNote:
+		return slotType, nil
+	default:
+		return "", fmt.Errorf("%w: unsupported task memory slot type %q", model.ErrInvalid, value)
+	}
 }
