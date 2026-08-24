@@ -323,7 +323,7 @@ func (s *Server) callTool(ctx context.Context, principalID, name string, args ma
 				proj = p.ID
 			}
 		}
-		records, err := s.runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: proj})
+		records, err := s.runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: proj, Scope: model.ScopeProject, ActorID: principalID})
 		if err != nil {
 			return "", err
 		}

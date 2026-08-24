@@ -119,6 +119,9 @@ func (c command) memory(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+		if err := memoryService.IndexRecord(ctx, tombstoned); err != nil {
+			return err
+		}
 		return c.print(map[string]any{"action": "memory.tombstone", "memory_id": memID, "status": "TOMBSTONED_OK", "revision": tombstoned.Revision}, fmt.Sprintf("tombstoned memory_id=%s revision=%d", memID, tombstoned.Revision))
 
 	case "audit":

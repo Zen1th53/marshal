@@ -82,6 +82,12 @@ func (s *Server) handlePromoteMemory(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "revision_conflict", "Canonical memory revision changed", "")
 			return
 		}
+		if s.memory != nil {
+			if err := s.memory.IndexRecord(r.Context(), updated); err != nil {
+				writeError(w, http.StatusInternalServerError, "memory_index_failed", "Canonical mutation committed but projection update failed", "")
+				return
+			}
+		}
 		s.sseHub.Broadcast("memory.mutated", "memory", rec.ID, map[string]any{"memory_id": rec.ID, "action": "promoted", "lifecycle": string(updated.Lifecycle)})
 		writeJSON(w, http.StatusOK, MemoryMutationResponseDTO{MutationType: "promote", MemoryID: rec.ID, NewLifecycle: string(updated.Lifecycle), NewRevision: int(updated.Revision), MutatedAt: updated.UpdatedAt})
 		return
@@ -170,6 +176,12 @@ func (s *Server) handleSupersedeMemory(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "revision_conflict", "Canonical memory revision changed", "")
 			return
 		}
+		if s.memory != nil {
+			if err := s.memory.IndexRecord(r.Context(), updated); err != nil {
+				writeError(w, http.StatusInternalServerError, "memory_index_failed", "Canonical mutation committed but projection update failed", "")
+				return
+			}
+		}
 		s.sseHub.Broadcast("memory.mutated", "memory", target.ID, map[string]any{"memory_id": target.ID, "action": "superseded", "successor_id": payload.SuccessorID})
 		writeJSON(w, http.StatusOK, MemoryMutationResponseDTO{MutationType: "supersede", MemoryID: target.ID, NewLifecycle: string(updated.Lifecycle), NewRevision: int(updated.Revision), MutatedAt: updated.UpdatedAt})
 		return
@@ -225,6 +237,12 @@ func (s *Server) handleTombstoneMemory(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeError(w, http.StatusConflict, "revision_conflict", "Canonical memory revision changed", "")
 			return
+		}
+		if s.memory != nil {
+			if err := s.memory.IndexRecord(r.Context(), updated); err != nil {
+				writeError(w, http.StatusInternalServerError, "memory_index_failed", "Canonical mutation committed but projection update failed", "")
+				return
+			}
 		}
 		s.sseHub.Broadcast("memory.mutated", "memory", target.ID, map[string]any{"memory_id": target.ID, "action": "tombstoned", "lifecycle": string(updated.Lifecycle)})
 		writeJSON(w, http.StatusOK, MemoryMutationResponseDTO{MutationType: "tombstone", MemoryID: target.ID, NewLifecycle: string(updated.Lifecycle), NewRevision: int(updated.Revision), MutatedAt: updated.UpdatedAt})

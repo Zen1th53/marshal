@@ -292,6 +292,9 @@ func (s *Server) handleCanonicalMemorySearch(w http.ResponseWriter, r *http.Requ
 	}
 	matched := make([]MemorySearchResultItemDTO, 0, len(records))
 	for _, rec := range records {
+		if !webMemoryRecordReadable(rec, project.ID, user) {
+			continue
+		}
 		if q != "" && !strings.Contains(strings.ToLower(rec.ID+" "+rec.Title+" "+rec.Body), q) {
 			continue
 		}
@@ -330,14 +333,32 @@ func (s *Server) canonicalMemoryByID(r *http.Request, id string) (model.MemoryRe
 	if err != nil {
 		return model.MemoryRecordV2{}, false
 	}
-	scope, err := model.NewMemoryScope(rec.Scope, rec.ScopeID)
-	if err != nil || !scope.AllowsRead(project.ID, user.PrincipalID) || (rec.ACLScope != "" && rec.ACLScope != user.PrincipalID) {
+	if !webMemoryRecordReadable(rec, project.ID, user) {
 		return model.MemoryRecordV2{}, false
 	}
 	if rec.Lifecycle == model.MemoryTombstoned || rec.Lifecycle == model.MemoryRejected {
 		return model.MemoryRecordV2{}, false
 	}
 	return rec, true
+}
+
+func webMemoryRecordReadable(rec model.MemoryRecordV2, projectID string, user *AuthUserDTO) bool {
+	if user == nil || rec.ProjectID != projectID {
+		return false
+	}
+	if rec.ACLScope != "" && rec.ACLScope != user.PrincipalID && user.Role != "admin" {
+		return false
+	}
+	scope, err := model.NewMemoryScope(rec.Scope, rec.ScopeID)
+	if err != nil || !scope.AllowsRead(projectID, user.PrincipalID) {
+		return false
+	}
+	if scope.Kind == model.ScopeProject || scope.Kind == model.ScopeOperatorPrivate {
+		return true
+	}
+	// Task/team/session/branch grants are not yet represented in the Web
+	// session. Fail closed except for an explicit per-principal ACL or admin.
+	return user.Role == "admin" || rec.ACLScope == user.PrincipalID
 }
 
 func memoryDTOFromRecord(rec model.MemoryRecordV2) MemorySearchResultItemDTO {
