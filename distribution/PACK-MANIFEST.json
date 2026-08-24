@@ -1096,8 +1096,8 @@
     },
     {
       "path": "docs/runtime-memory-fabric.md",
-      "sha256": "2983f012095d86bbaee686f19080f91e7ff5a2dd1d407cf6adff0c7319051977",
-      "bytes": 12361
+      "sha256": "dc50a7bb57ef62b0249ed947df97e2c9fc7f7f8c3fbed7d871ae497b1861cb08",
+      "bytes": 12395
     },
     {
       "path": "docs/runtime.md",
@@ -1295,9 +1295,14 @@
       "bytes": 18486
     },
     {
+      "path": "internal/a2a/memory_parity_test.go",
+      "sha256": "abd6f4ed94e6a387e3e611bf7bd5d0ab80bcc7cd98d5c0bc9ad1868513c870d8",
+      "bytes": 7883
+    },
+    {
       "path": "internal/a2a/server.go",
-      "sha256": "5bde2fea972166d8a8ab876b5fb7a0681322a9a4df9a0cdcc74bbefcf4584948",
-      "bytes": 14025
+      "sha256": "a60da2dddf62b45545f2fee66e888fed3d492ace41c5a9b015d2702e0ca0eb97",
+      "bytes": 23730
     },
     {
       "path": "internal/adapter/adapter.go",
@@ -1546,8 +1551,8 @@
     },
     {
       "path": "internal/app/derived_retrieval_test.go",
-      "sha256": "958fcb249d86704e4739ac15b6fa08c081fe1119c3e11b7f663e23d7dcba82f7",
-      "bytes": 7198
+      "sha256": "91c780354d46830bbeab42c4d9a91da64b54106f71af335d5d963b8ca2e23d3d",
+      "bytes": 10310
     },
     {
       "path": "internal/app/events.go",
@@ -1586,13 +1591,13 @@
     },
     {
       "path": "internal/app/governed_extract_test.go",
-      "sha256": "e95c68c5a84c4b4704baab99e057f26cf084ba878932beb598418beeb4b252f8",
-      "bytes": 5648
+      "sha256": "ba37c10281d2c7f9e5c8fb74a5409138c325cf87bfb4f92d4f350007b1cd68a4",
+      "bytes": 8591
     },
     {
       "path": "internal/app/handoff_compiler_test.go",
-      "sha256": "0f0e99250afb2661068b47067374063b7dc7752a5acd30102465ba06b536df56",
-      "bytes": 3811
+      "sha256": "0950e260f8b22b1846971208fd4d0613d54f68b495625abf4708231bf1d6c544",
+      "bytes": 3955
     },
     {
       "path": "internal/app/handoff_runtime_test.go",
@@ -1601,13 +1606,33 @@
     },
     {
       "path": "internal/app/memory_fabric_benchmark_test.go",
-      "sha256": "2541aa7f2271bed8c1f833d965e094c13119737f4174224fc30cd1d736f85696",
-      "bytes": 7836
+      "sha256": "689a5ed40ae8f5aa44b322a230937a3431fa211b2e579a468d0f89a7baa6326a",
+      "bytes": 8265
+    },
+    {
+      "path": "internal/app/memory_grants.go",
+      "sha256": "a14a87027ea8587a811c02f6da37c250900e5430d0d772a0728d2f4899823f98",
+      "bytes": 3716
+    },
+    {
+      "path": "internal/app/memory_grants_test.go",
+      "sha256": "e1e82773b82c4658433976eb3b5408738861cd628f3f3a28507898fc56625891",
+      "bytes": 1867
+    },
+    {
+      "path": "internal/app/memory_import.go",
+      "sha256": "dc30230225fc13a3955f885632db0e16e7e14f43d8d98651a0c22774f7b6f4ae",
+      "bytes": 2127
+    },
+    {
+      "path": "internal/app/memory_import_test.go",
+      "sha256": "6822dd1cc4204ba852c0f7bdbd767e34c7b21465df3b0522a931fe9f61b98e77",
+      "bytes": 1967
     },
     {
       "path": "internal/app/memory_runtime.go",
-      "sha256": "ed796b376549457978edf486591c3674557c8ea1247a8dc50e93bdf43cbb55c3",
-      "bytes": 65968
+      "sha256": "b656aa52aa09656c5ad1ce4e959a1544b363713b6e1441802000d23ecec5ee40",
+      "bytes": 76573
     },
     {
       "path": "internal/app/memory_runtime_test.go",
@@ -1641,8 +1666,8 @@
     },
     {
       "path": "internal/app/receipt_audit_test.go",
-      "sha256": "a69214fa06d610140f9806a73f996268d580bd27185c20318f906b5ce18df2d0",
-      "bytes": 5834
+      "sha256": "b862af36ba3676154fcd0f16a82a22761d8f7554bded3210d826fb59a2a8ea5d",
+      "bytes": 7947
     },
     {
       "path": "internal/app/reconciliation.go",
@@ -1651,13 +1676,13 @@
     },
     {
       "path": "internal/app/reconciliation_freshness_test.go",
-      "sha256": "191cecf7c058d17ff30f426d90824a00f21bb7e3c16e70c1a61832f4af4ed725",
-      "bytes": 5950
+      "sha256": "f5045c9458783b1b13372162682bd3d3c04cc663110e4a04d6d4ae42a3ac126b",
+      "bytes": 7345
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "b1284911edaef982f8a69b0353a38b860577be8d12345979ba54709daa4aaaea",
-      "bytes": 49395
+      "sha256": "780228ec5497d42fbaa163600740470ce5eb338a32ab9ce0446747aba7667be2",
+      "bytes": 50292
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -1676,8 +1701,8 @@
     },
     {
       "path": "internal/app/task_blackboard_test.go",
-      "sha256": "ac8f98692a0163df9bcac4ac945c5c67330a5a9fb55e7364c4960626e6502d05",
-      "bytes": 6748
+      "sha256": "80b26ad65fa36a782fdce5134d695cf53a728b74d80099012fc2ab1d4297d6ba",
+      "bytes": 7049
     },
     {
       "path": "internal/app/trustcontent_a06_test.go",
@@ -1686,8 +1711,8 @@
     },
     {
       "path": "internal/app/utility_lifecycle_test.go",
-      "sha256": "c0b1c27dc150f0bb4da57ca51c7a1fd7c5774d9ee1f05f8c7033e78bf6421bbc",
-      "bytes": 4202
+      "sha256": "1ff2bce94b2a6515f285a154c62028e4d0feaab7e90112e372d3829c9e2f87c7",
+      "bytes": 6133
     },
     {
       "path": "internal/artifact/gc_test.go",
@@ -2326,8 +2351,8 @@
     },
     {
       "path": "internal/integration/memory_fabric_m19_test.go",
-      "sha256": "e8e449722347fb1ced9f5b2a8448394d26bacaad7c832d530fb2c395273635d5",
-      "bytes": 11504
+      "sha256": "361c429320551d668228f20d6edfd0eb91e131b08faf17d327a21dcab1c2e8a7",
+      "bytes": 20104
     },
     {
       "path": "internal/integration/memory_isolation_test.go",
@@ -2460,14 +2485,19 @@
       "bytes": 18338
     },
     {
+      "path": "internal/mcp/memory_parity_test.go",
+      "sha256": "ec2b33d385f2bfe975758e74292acfbf8fa0fa08ef6724c29ad495139b4ad267",
+      "bytes": 7140
+    },
+    {
       "path": "internal/mcp/memory_tools_test.go",
       "sha256": "c3975ea52d1ab30f98d2c99a568619d579773bde4ddece7f2166e2acffe6b2d3",
       "bytes": 1937
     },
     {
       "path": "internal/mcp/server.go",
-      "sha256": "40fef1ccd5772471c0d2508f3f052266c8e8dd04488dacaf2bfd71bb18664399",
-      "bytes": 15966
+      "sha256": "0ab51e2397b2a1ef513a1d121aba737341713e1ad40067de1db39721261223ae",
+      "bytes": 25606
     },
     {
       "path": "internal/memory/adaptive/controller.go",
@@ -2750,14 +2780,24 @@
       "bytes": 2998
     },
     {
+      "path": "internal/memory/importer/provider_adapters.go",
+      "sha256": "11a2cd05d5b66ea8ca3852cc18ffe352e8efa8bb7206958b9b638e24841a5646",
+      "bytes": 7256
+    },
+    {
+      "path": "internal/memory/importer/provider_adapters_test.go",
+      "sha256": "4d0c994fce44ba8b211a52e83993fedebc3995a25540228db897f0ac74f535e3",
+      "bytes": 6591
+    },
+    {
       "path": "internal/memory/importer/session_importer.go",
-      "sha256": "387d7c6f49ef2815983f4a09ed9a6135d2785c8d6c55c5130c01cc486f841a6a",
-      "bytes": 3634
+      "sha256": "4595f9fc3d78585e8222d9ca7b9213147067e654a0e1385e096d3ea1b88f08b9",
+      "bytes": 5341
     },
     {
       "path": "internal/memory/importer/session_importer_test.go",
-      "sha256": "c80a1631d636153ef9edacff63975510e1878a9a176e2b422060c658c4b17669",
-      "bytes": 2527
+      "sha256": "b6efd2a8dc1b92dc8467013b25721cbf30ed187f66254a9b548f764a906f674f",
+      "bytes": 2636
     },
     {
       "path": "internal/memory/index/codegraph/enricher.go",
@@ -2771,8 +2811,8 @@
     },
     {
       "path": "internal/memory/index/graph/graph_index.go",
-      "sha256": "cef3efe1683a8a68580ffdd805b1e61b8f2b7bb7552cda1277eefb5859b06f54",
-      "bytes": 3180
+      "sha256": "15a475044c2e03c5265d0633b8aa90798923dae0e7ef842a8cc0e7ca8e7e45b5",
+      "bytes": 3375
     },
     {
       "path": "internal/memory/index/graph/graph_index_test.go",
@@ -2781,8 +2821,8 @@
     },
     {
       "path": "internal/memory/index/lexical/indexer.go",
-      "sha256": "5553a06d36a00bc3fa090dce48a6c3366d3658ca1d2b9ccd931dcca3d886f4f6",
-      "bytes": 4656
+      "sha256": "f7dbe69c5ed04028781c845bd06d4a727b9d9242f0da940730d7e387ad381628",
+      "bytes": 4771
     },
     {
       "path": "internal/memory/index/lexical/indexer_test.go",
@@ -3151,8 +3191,8 @@
     },
     {
       "path": "internal/memory/working/scratchpad.go",
-      "sha256": "99e5b4018f76e16b16d74fe1b81b46ba84c16fcf747af9066e898e72d5083654",
-      "bytes": 4851
+      "sha256": "68f5c937c3c443f821b99cea769ad25a8a0fd9bf8a6ed52af085650547ae6aed",
+      "bytes": 5004
     },
     {
       "path": "internal/memory/working/scratchpad_test.go",
@@ -4096,8 +4136,8 @@
     },
     {
       "path": "internal/store/memory.go",
-      "sha256": "9bbdd105c8a651e34e307c74a5b648d64d0933ac6a1ab4020e6de17a0e666320",
-      "bytes": 29945
+      "sha256": "5a69ec5263dd04e403d72a7bcb16dce330d46ea1392b5269ea2b4755173a1445",
+      "bytes": 31831
     },
     {
       "path": "internal/store/memory_audit_t77_test.go",
@@ -4126,8 +4166,8 @@
     },
     {
       "path": "internal/store/memory_receipt_migration_test.go",
-      "sha256": "5ab5f2c78911dcf1b073d53bfcfba74a6806ebb8a55c4bff2b6d7fd98439db10",
-      "bytes": 1891
+      "sha256": "b7afd2cb404b7137071c8b5086542383262404a782e9686e0b394f2322741bfc",
+      "bytes": 3198
     },
     {
       "path": "internal/store/memory_scope_t80_test.go",
@@ -4161,8 +4201,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "82537b0cac5deb5c2e9d8974bb93819c6c3905aa3324fea13c32a363bfc93455",
-      "bytes": 64187
+      "sha256": "1117bda7a1db0fa12add1af9a61187ba4bbcb008ee60bfe71a18da209bbc7872",
+      "bytes": 65295
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -4856,8 +4896,8 @@
     },
     {
       "path": "internal/webcontrol/memory_mutations.go",
-      "sha256": "df08cb1ce2abd935a90bf29fcc08a7e36bfc9e9bef4942657299a9e5a70ba8f6",
-      "bytes": 10065
+      "sha256": "6cbdda21c91c603ab38a52367416a24d6603fb9b4d13e2c01ed289e09a6c4d51",
+      "bytes": 10153
     },
     {
       "path": "internal/webcontrol/memory_mutations_test.go",
@@ -5231,8 +5271,8 @@
     },
     {
       "path": "memory-fabric-validation.md",
-      "sha256": "49f664fe662fcd9bd293106b0e141d0b323942295e54032865d4f148ee262acd",
-      "bytes": 11966
+      "sha256": "019e29d7de8aae4f288d3acf1791324475e8cfb9246a7523dd812b2a4c537ba4",
+      "bytes": 12589
     },
     {
       "path": "memory-ultimate-conformance.json",
@@ -5946,8 +5986,8 @@
     },
     {
       "path": "todo.md",
-      "sha256": "2fa6a9c78772a95e8e3db822065c23d9bba23c1a8f4dfc5b0f06bd748c9f512b",
-      "bytes": 13669
+      "sha256": "745822a860ec1431e259ec7745991db9f73d3a5ae06df2fd9179f54b82cb6453",
+      "bytes": 14132
     },
     {
       "path": "tools/detached_sign.py",

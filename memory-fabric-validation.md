@@ -28,13 +28,14 @@
 | Change | Primary files | Reason | Security / compatibility |
 | --- | --- | --- | --- |
 | Canonical progressive recall with authorized ID prefilter, canonical reload, freshness/lifecycle gates, bounded context, and authority-first ranking | `internal/app/memory_runtime.go`, `internal/memory/index/lexical/indexer.go` | Make SQLite authoritative across tracks | Unauthorized IDs never enter content scoring; vector remains optional |
-| Durable, caller-bound retrieval receipts with query digest only | `internal/store/migrations.go`, `internal/store/memory.go`, `internal/app/memory_runtime.go` | Explain recall across restarts | Schema v70 forward migration; raw prompts are not stored |
+| Durable, caller-bound retrieval receipts with query digest and outcome/evidence linkage | `internal/store/migrations.go`, `internal/store/memory.go`, `internal/app/memory_runtime.go` | Explain recall across restarts and connect it to results | Schema v70 created receipts; v71 adds outcome/evidence fields; raw prompts are not stored |
 | Governed candidate extraction, deduplication, explicit conflicts, and write-scope validation | `internal/app/memory_runtime.go` | Prevent self-promotion and forged private/project scopes | Candidate authority remains agent-level; existing promotion authority is reused |
 | Repository freshness classifications and recall filtering | `internal/app/memory_runtime.go` | Ensure repository truth outranks history | Stale/conflicted/superseded records are excluded or penalized with receipt reasons |
 | Canonical task blackboard, private slots, CAS, and retained competing proposals | `internal/app/memory_runtime.go`, `internal/memory/working/scratchpad.go` | Share bounded task state across agents and restarts | Explicit role binding or active task session is required; no silent last-write-wins |
 | Durable provider-neutral memory handoff | `internal/app/runtime.go`, `internal/app/handoff_runtime_test.go` | Continue without transcript replay | Authenticated sender, task/repository binding, secret firewall, typed protocol storage |
-| Generic idempotent session-import foundation | `internal/app/memory_runtime.go` | Normalize historical evidence without provider coupling | Imports remain candidate/low-authority and pass the store firewall |
-| Canonical outcome utility metadata | `internal/app/memory_runtime.go` | Persist downstream usefulness | Utility cannot outrank authority, ACL, lifecycle, or freshness |
+| Provider-adapter session-import foundation | `internal/app/memory_import.go`, `internal/memory/importer/` | Normalize verified Codex/Claude histories without provider coupling | Hidden/tool reasoning is excluded; imports remain candidate/low-authority and pass the store firewall |
+| Canonical bounded outcome utility metadata | `internal/app/memory_runtime.go` | Persist downstream usefulness without event replay inflation | Utility cannot outrank authority, ACL, lifecycle, or freshness |
+| Authenticated MCP/A2A blackboard and handoff parity | `internal/mcp/server.go`, `internal/a2a/server.go`, `internal/app/memory_grants.go` | Allow provider-neutral cooperation through canonical state | Explicit policy-admin grants are revocable; exact-ID handoff reads are task-authorized |
 | Fail-closed federation boundary | `internal/memory/portable/federation_boundary.go` | Preserve a future sync boundary without insecure networking | Private/non-project export is denied; signed packs are rejected until verification exists |
 | Canonical Web working memory and projection invalidation | `internal/webcontrol/working_memory.go`, `internal/webcontrol/memory*.go`, `internal/cli/memory_cli.go` | Remove independent production state | Nil-runtime fixture behavior remains test/demo-only; non-project Web reads fail closed |
 | Expanded deterministic secret firewall | `internal/memory/security/firewall.go` | Block more credential classes at the canonical boundary | Store write/update firewall remains the final enforcement point |
@@ -108,7 +109,8 @@ and task working state survive; the transcript is not replayed.
 | Federation trust boundary | PASS | scope narrowing, downgrade, unsigned-only local import tests |
 
 This finite fixture suite is evidence for the tested paths, not a universal
-zero-leak guarantee. Full MCP/A2A task-blackboard surface parity remains open.
+zero-leak guarantee. Optional vector providers must continue honoring the same
+authorized-ID contract.
 
 ## 8. Performance
 
@@ -118,23 +120,23 @@ Environment:
 CPU: Intel(R) Core(TM) Ultra 7 255H
 OS: Linux 7.0.11-arch1-1 x86_64 GNU/Linux
 Go: go1.26.4-X:nodwarf5 linux/amd64
-SQLite schema: v70
+SQLite schema: v71
 ```
 
 Raw commands and results:
 
 ```text
-go test -run '^$' -bench '^BenchmarkMemoryIngestionThroughput$' -benchmem -benchtime=100x ./internal/app
-BenchmarkMemoryIngestionThroughput-16  100  83890 ns/op  7247 B/op  94 allocs/op
+go test -count=1 -run '^TestM20_Scale10kRecordsVerification$' -v ./internal/app
+seed 10,000: 2.301025105s (4345.9 records/sec)
+rebuild 10,000: 274.37291ms
+recall 10,000: 239.22958ms (8 records)
+20 concurrent recalls, maximum observed latency: 4.174951309s
 
-go test -run '^$' -bench '^BenchmarkWorkingMemoryCASThroughput$' -benchmem -benchtime=100x ./internal/app
-BenchmarkWorkingMemoryCASThroughput-16  100  150352 ns/op  16602 B/op  315 allocs/op
-
-go test -run '^$' -bench '^BenchmarkDerivedIndexRebuild10kRecords$' -benchmem -benchtime=1x ./internal/app
-BenchmarkDerivedIndexRebuild10kRecords-16  1  198869716 ns/op  74249040 B/op  710285 allocs/op
-
-go test -run '^$' -bench '^BenchmarkRecallLatency10kRecords$' -benchmem -benchtime=1x ./internal/app
-BenchmarkRecallLatency10kRecords-16  1  220726427 ns/op  110569864 B/op  740699 allocs/op
+go test -run '^$' -bench '^(BenchmarkMemoryIngestionThroughput|BenchmarkWorkingMemoryCASThroughput|BenchmarkDerivedIndexRebuild10kRecords|BenchmarkRecallLatency10kRecords)$' -benchmem -benchtime=3x ./internal/app
+BenchmarkMemoryIngestionThroughput-16          3     264395 ns/op      3791 records/s
+BenchmarkWorkingMemoryCASThroughput-16         3     600439 ns/op      1667 cas_writes/s
+BenchmarkDerivedIndexRebuild10kRecords-16      3  259035059 ns/op     38605 records_rebuilt/s
+BenchmarkRecallLatency10kRecords-16            3  315281339 ns/op         3.172 recalls/s
 ```
 
 Recall@K, NDCG, 100k-record, and task-success-uplift figures were not measured.
@@ -144,7 +146,7 @@ Recall@K, NDCG, 100k-record, and task-success-uplift figures were not measured.
 ```text
 go test -count=1 ./...                                                        PASS
 go vet ./...                                                                 PASS
-go test -race -count=1 ./internal/app ./internal/store ./internal/memory/... ./internal/integration
+go test -race -count=1 ./internal/app ./internal/store ./internal/memory/... ./internal/integration ./internal/mcp ./internal/a2a
                                                                              PASS
 cd web && npm ci                                                             PASS (0 vulnerabilities)
 cd web && npm run typecheck                                                  PASS
@@ -158,18 +160,17 @@ python3 -m unittest discover -s tools/tests_v6 -v                            PAS
 python3 tools/release_verify.py . distribution/PACK-MANIFEST.json            PASS
 ```
 
-Fresh install, schema 69-to-70 upgrade, backup/restore, migration idempotence,
+Fresh install, schema 69-to-71 and 70-to-71 upgrades, backup/restore, migration idempotence,
 and derived-index destruction/rebuild are included in the passing Go tests and
 also received targeted runs during implementation.
 
 ## 10. Remaining limitations
 
 - No embedding provider is configured by default. Semantic vector retrieval is disabled instead of simulated with empty vectors.
-- MCP/A2A task-blackboard grant-management parity remains open.
-- Session import supports the verified generic JSON transcript contract, not discovery adapters for every provider history format.
+- Session import supports verified Codex and Claude JSONL plus the generic interchange contract. Automatic filesystem discovery/checkpointing and unverified OpenCode/Gemini formats remain disabled.
 - Federation has no network transport, signature trust store, replay protection, or remote mutation application.
 - Recall@K, NDCG, task-success uplift, and 100k-record measurements remain open in `todo.md`.
-- Web/CLI/MCP do not expose every typed handoff operation; the authenticated runtime API is canonical.
+- Web/CLI do not expose every typed handoff operation; authenticated Runtime, MCP, and A2A paths are canonical.
 
 ## 11. Additional findings
 

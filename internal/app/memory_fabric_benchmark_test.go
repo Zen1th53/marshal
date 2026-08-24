@@ -45,6 +45,7 @@ func BenchmarkMemoryIngestionThroughput(b *testing.B) {
 	now := time.Now().UTC()
 
 	b.ResetTimer()
+	started := time.Now()
 	for i := 0; i < b.N; i++ {
 		rec := model.MemoryRecordV2{
 			ID:         fmt.Sprintf("MEM-BENCH-%d", i),
@@ -67,6 +68,7 @@ func BenchmarkMemoryIngestionThroughput(b *testing.B) {
 			b.Fatalf("write memory: %v", err)
 		}
 	}
+	b.ReportMetric(float64(b.N)/time.Since(started).Seconds(), "records/s")
 }
 
 func BenchmarkWorkingMemoryCASThroughput(b *testing.B) {
@@ -86,6 +88,7 @@ func BenchmarkWorkingMemoryCASThroughput(b *testing.B) {
 	curRev := slot.Revision
 
 	b.ResetTimer()
+	started := time.Now()
 	for i := 0; i < b.N; i++ {
 		updated, err := svc.UpdateTaskSlotCAS(ctx, p, projectID, taskID, working.SlotPlanState, curRev, fmt.Sprintf("val-%d", i))
 		if err != nil {
@@ -93,6 +96,7 @@ func BenchmarkWorkingMemoryCASThroughput(b *testing.B) {
 		}
 		curRev = updated.Revision
 	}
+	b.ReportMetric(float64(b.N)/time.Since(started).Seconds(), "cas_writes/s")
 }
 
 func BenchmarkDerivedIndexRebuild10kRecords(b *testing.B) {
@@ -128,11 +132,13 @@ func BenchmarkDerivedIndexRebuild10kRecords(b *testing.B) {
 	}
 
 	b.ResetTimer()
+	started := time.Now()
 	for i := 0; i < b.N; i++ {
 		if err := svc.RebuildProjections(ctx, projectID); err != nil {
 			b.Fatalf("rebuild: %v", err)
 		}
 	}
+	b.ReportMetric(float64(totalRecords*b.N)/time.Since(started).Seconds(), "records_rebuilt/s")
 }
 
 func BenchmarkRecallLatency10kRecords(b *testing.B) {
@@ -174,6 +180,7 @@ func BenchmarkRecallLatency10kRecords(b *testing.B) {
 	p := testPrincipal("agent-bench")
 
 	b.ResetTimer()
+	started := time.Now()
 	for i := 0; i < b.N; i++ {
 		res, err := svc.Recall(ctx, p, RecallRequest{
 			ProjectID: projectID,
@@ -183,6 +190,7 @@ func BenchmarkRecallLatency10kRecords(b *testing.B) {
 			b.Fatalf("recall failed: err=%v results=%d", err, len(res.Results))
 		}
 	}
+	b.ReportMetric(float64(b.N)/time.Since(started).Seconds(), "recalls/s")
 }
 
 func TestM20_Scale10kRecordsVerification(t *testing.T) {
@@ -221,7 +229,8 @@ func TestM20_Scale10kRecordsVerification(t *testing.T) {
 			t.Fatalf("seed %d: %v", i, err)
 		}
 	}
-	t.Logf("Seeding completed in %v (%0.1f records/sec)", time.Since(seedStart), float64(totalRecords)/time.Since(seedStart).Seconds())
+	seedDuration := time.Since(seedStart)
+	t.Logf("Seeding completed in %v (%0.1f records/sec)", seedDuration, float64(totalRecords)/seedDuration.Seconds())
 
 	// Rebuild Projections
 	rebuildStart := time.Now()

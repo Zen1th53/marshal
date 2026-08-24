@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/memory/security"
 	"github.com/Zen1th53/marshal/internal/memory/working"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 func grantMemoryTaskAccess(t *testing.T, rt *app.Runtime, taskID string, principals ...authz.Principal) {
@@ -320,18 +322,40 @@ func TestM19_AdversarialSuite(t *testing.T) {
 		t.Fatalf("expected ErrSecretDetected for API key leak, got %v", err)
 	}
 
-	// 4. Attack Vector: Concurrent race condition on shared task slots
+	// 4. Attack Vector: two agents concurrently CAS the same revision. Exactly
+	// one proposal may win; the other must remain as an explicit conflict.
 	const taskID = "TASK-RACE-ATTACK"
-	grantMemoryTaskAccess(t, rt, taskID, pMalicious)
+	pPeer := memoryReader("agent-peer")
+	grantMemoryTaskAccess(t, rt, taskID, pMalicious, pPeer)
+	initial, err := svc.SetTaskSlot(ctx, pMalicious, projectID, taskID, working.SlotHypothesis, "initial hypothesis", false)
+	if err != nil {
+		t.Fatalf("set initial shared slot: %v", err)
+	}
+
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	var mu sync.Mutex
+	var successful, conflicted int
+	for i, principal := range []authz.Principal{pMalicious, pPeer} {
 		wg.Add(1)
-		go func(idx int) {
+		go func(idx int, actor authz.Principal) {
 			defer wg.Done()
-			_, _ = svc.SetTaskSlot(ctx, pMalicious, projectID, taskID, working.SlotHypothesis, "race hypothesis", false)
-		}(i)
+			_, updateErr := svc.UpdateTaskSlotCAS(ctx, actor, projectID, taskID, working.SlotHypothesis, initial.Revision, fmt.Sprintf("proposal-%d", idx))
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case updateErr == nil:
+				successful++
+			case errors.Is(updateErr, working.ErrCASConflict):
+				conflicted++
+			default:
+				t.Errorf("unexpected CAS result: %v", updateErr)
+			}
+		}(i, principal)
 	}
 	wg.Wait()
+	if successful != 1 || conflicted != 1 {
+		t.Fatalf("CAS silently overwrote a proposal: successful=%d conflicted=%d", successful, conflicted)
+	}
 
 	slots, err := svc.ListTaskSlots(ctx, pMalicious, projectID, taskID)
 	if err != nil {
@@ -339,5 +363,191 @@ func TestM19_AdversarialSuite(t *testing.T) {
 	}
 	if len(slots) != 1 {
 		t.Fatalf("expected exactly 1 slot for SlotHypothesis, got %d", len(slots))
+	}
+	conflictRows, err := rt.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{
+		ProjectID: projectID, Kind: model.MemoryKindWorking, Lifecycle: model.MemoryConflicted,
+	})
+	if err != nil {
+		t.Fatalf("list persisted CAS conflicts: %v", err)
+	}
+	if len(conflictRows) != 1 || len(conflictRows[0].ConflictIDs) != 1 {
+		t.Fatalf("losing CAS proposal was not preserved: %+v", conflictRows)
+	}
+}
+
+func TestM19_ProgressiveTracksScopeGateAndTombstoneRebuild(t *testing.T) {
+	ctx := context.Background()
+	repo := runtimeIntegrationRepo(t)
+	if _, err := app.Bootstrap(ctx, repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+
+	const projectID = "PROJECT-local"
+	caller := memoryReader("agent-track-reader")
+	privateOwner := "agent-private-owner"
+	var targetID string
+
+	func() {
+		rt, err := app.Open(ctx, repo.Path())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rt.Close()
+
+		now := time.Now().UTC()
+		record := func(id, title, body, scope, scopeID, acl string) model.MemoryRecordV2 {
+			return model.MemoryRecordV2{
+				ID: id, ProjectID: projectID, Kind: model.MemoryKindFinding,
+				Lifecycle: model.MemoryDurable, Confidence: model.ConfidenceVerified, Authority: model.AuthorityVerified,
+				Title: title, Body: body, Scope: scope, ScopeID: scopeID, ACLScope: acl,
+				Source:     model.MemorySource{Kind: "test", Reference: "M19-progressive"},
+				ObservedAt: now, IngestedAt: now, ValidFrom: now, CreatedAt: now, UpdatedAt: now,
+			}
+		}
+
+		target := record("MEM-M19-GRAPH-TARGET", "Related implementation detail", "graph-only-neighbor-value", string(model.ScopeProject), projectID, "")
+		targetID = target.ID
+		private := record("MEM-M19-PRIVATE-GRAPH", "Private graph neighbor", "cross-scope-canary-value", string(model.ScopeOperatorPrivate), privateOwner, privateOwner)
+		seed := record("MEM-M19-GRAPH-SEED", "progressive graph seed", "seed body", string(model.ScopeProject), projectID, "")
+		seed.SupersedesID = []string{target.ID, private.ID}
+		for _, rec := range []model.MemoryRecordV2{target, private, seed} {
+			if err := rt.Store().WriteMemoryV2(ctx, rec); err != nil {
+				t.Fatalf("write %s: %v", rec.ID, err)
+			}
+		}
+		if err := rt.Memory().RebuildProjections(ctx, projectID); err != nil {
+			t.Fatalf("rebuild projections: %v", err)
+		}
+
+		res, err := rt.Memory().Recall(ctx, caller, app.RecallRequest{
+			ProjectID: projectID, Query: "progressive graph seed", MaxRecords: 10, MaxBytes: 8192,
+		})
+		if err != nil {
+			t.Fatalf("progressive recall: %v", err)
+		}
+		tracksByID := make(map[string]map[string]bool)
+		for _, decision := range res.Receipt.Decisions {
+			tracksByID[decision.MemoryID] = make(map[string]bool)
+			for _, track := range decision.MatchedTracks {
+				tracksByID[decision.MemoryID][track] = true
+			}
+		}
+		if !tracksByID[seed.ID]["exact"] || !tracksByID[seed.ID]["lexical"] {
+			t.Fatalf("seed receipt omitted exact/lexical tracks: %+v", res.Receipt.Decisions)
+		}
+		if !tracksByID[target.ID]["graph"] {
+			t.Fatalf("related canonical row omitted graph track: %+v", res.Receipt.Decisions)
+		}
+		if strings.Contains(res.Context, private.ID) || strings.Contains(res.Context, private.Body) {
+			t.Fatalf("private graph neighbor leaked into context: %s", res.Context)
+		}
+		for _, decision := range res.Receipt.Decisions {
+			if decision.MemoryID == private.ID {
+				t.Fatalf("private graph neighbor leaked into receipt: %+v", decision)
+			}
+		}
+
+		tombstoned, err := rt.Store().TombstoneMemory(ctx, projectID, target.ID, target.Revision, "M19 revocation test")
+		if err != nil {
+			t.Fatalf("tombstone graph target: %v", err)
+		}
+		if err := rt.Memory().IndexRecord(ctx, tombstoned); err != nil {
+			t.Fatalf("invalidate tombstoned projections: %v", err)
+		}
+		assertNotRecalled(t, rt, caller, projectID, target.ID)
+		if err := rt.Memory().RebuildProjections(ctx, projectID); err != nil {
+			t.Fatalf("rebuild after tombstone: %v", err)
+		}
+		assertNotRecalled(t, rt, caller, projectID, target.ID)
+	}()
+
+	// A restart and full projection rebuild must not resurrect the tombstone.
+	rt, err := app.Open(ctx, repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rt.Close()
+	assertNotRecalled(t, rt, caller, projectID, targetID)
+}
+
+func assertNotRecalled(t *testing.T, rt *app.Runtime, principal authz.Principal, projectID, memoryID string) {
+	t.Helper()
+	res, err := rt.Memory().Recall(context.Background(), principal, app.RecallRequest{
+		ProjectID: projectID, Query: memoryID, MaxRecords: 20, MaxBytes: 8192,
+	})
+	if err != nil {
+		t.Fatalf("recall tombstoned memory: %v", err)
+	}
+	for _, item := range res.Results {
+		if item.ID == memoryID {
+			t.Fatalf("tombstoned memory resurrected: %+v", res)
+		}
+	}
+	if strings.Contains(res.Context, memoryID) {
+		t.Fatalf("tombstoned memory leaked into context: %s", res.Context)
+	}
+}
+
+func TestM19_SecretFirewallCoversRuntimeIngressesAndHandoff(t *testing.T) {
+	ctx := context.Background()
+	repo := runtimeIntegrationRepo(t)
+	if _, err := app.Bootstrap(ctx, repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	rt, err := app.Open(ctx, repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rt.Close()
+
+	const projectID = "PROJECT-local"
+	const taskID = "TASK-M19-SECRET-HANDOFF"
+	principal := authz.Principal{ID: "agent-secret-probe", Role: authz.Role{Name: "writer", Authorities: []authz.Authority{authz.AuthorityTaskPlan, authz.AuthoritySourceWrite}}}
+	grantMemoryTaskAccess(t, rt, taskID, principal)
+	if _, err := rt.ImportTasks(ctx, []model.Task{{ID: taskID, Title: "secret-free provider handoff", Status: model.TaskReady, Risk: model.R1}}); err != nil {
+		t.Fatalf("create handoff task: %v", err)
+	}
+
+	for name, secret := range map[string]string{
+		"provider output": "Authorization: Bearer provider-credential-value-1234567890",
+		"tool error":      "Cookie: session_id=tool-error-cookie-value-1234567890",
+		"private key":     "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := rt.Memory().ExtractCandidate(ctx, principal, app.ExtractCandidateRequest{
+				ProjectID: projectID, TaskID: taskID, Kind: model.MemoryKindFinding,
+				Title: "tainted runtime observation", Body: secret, Scope: model.ScopeTask, ScopeID: taskID,
+			})
+			if !errors.Is(err, security.ErrSecretDetected) {
+				t.Fatalf("secret ingress accepted: %v", err)
+			}
+		})
+	}
+
+	transcript := []byte(`{"session_id":"SES-M19-SECRET","provider":"codex","task_id":"TASK-M19-SECRET-HANDOFF","messages":[{"role":"assistant","content":"Set-Cookie: session=credential-value-1234567890"}],"success":false}`)
+	if _, err := rt.Memory().ImportSessionTranscript(ctx, principal, projectID, transcript, false); !errors.Is(err, security.ErrSecretDetected) {
+		t.Fatalf("secret session import accepted: %v", err)
+	}
+
+	if err := rt.Memory().SetPrivateTaskSlot(ctx, principal, projectID, taskID, "scratch", "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB"); !errors.Is(err, security.ErrSecretDetected) {
+		t.Fatalf("secret private working memory accepted: %v", err)
+	}
+
+	_, err = rt.Memory().CompileHandoff(ctx, principal, app.HandoffCompileRequest{
+		ProjectID: projectID, TaskID: taskID, SourceAgentID: principal.ID,
+		TargetRole: "gemini", ChangedFiles: []string{"Authorization: Basic credential-value-1234567890"},
+	})
+	if !errors.Is(err, security.ErrSecretDetected) {
+		t.Fatalf("secret handoff accepted: %v", err)
+	}
+
+	records, err := rt.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: projectID})
+	if err != nil {
+		t.Fatalf("list canonical memory after secret probes: %v", err)
+	}
+	for _, rec := range records {
+		if strings.Contains(rec.Title+rec.Body, "credential-value") || strings.Contains(rec.Title+rec.Body, "ghp_") {
+			t.Fatalf("credential persisted in canonical memory: %s", rec.ID)
+		}
 	}
 }
