@@ -67,7 +67,7 @@ func TestMemoryReceiptMigrationFromSchema70PreservesReceipts(t *testing.T) {
 		ALTER TABLE memory_retrieval_receipts DROP COLUMN evidence_ids;
 		ALTER TABLE memory_retrieval_receipts DROP COLUMN outcome_memory_id;
 		ALTER TABLE memory_retrieval_receipts DROP COLUMN outcome_status;
-		DELETE FROM schema_migrations WHERE version = 71;
+		DELETE FROM schema_migrations WHERE version >= 71;
 	`); err != nil {
 		t.Fatalf("prepare schema 70 fixture: %v", err)
 	}
