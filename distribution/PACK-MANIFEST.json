@@ -2421,8 +2421,8 @@
     },
     {
       "path": "internal/integration/parallel_real_providers_test.go",
-      "sha256": "e22c1e89949b2090ab0eb9bef1c429dc93ac8b8e6bde88e96e576378343af94c",
-      "bytes": 6953
+      "sha256": "cba932ed354ec3b91ebceb71ece4b527ff286f5fec49251df28393d825d47530",
+      "bytes": 7776
     },
     {
       "path": "internal/integration/provider_execution_e2e_test.go",
@@ -5351,8 +5351,8 @@
     },
     {
       "path": "memory-fabric-phase2-validation.md",
-      "sha256": "853afb1538489151a4b276dd59c6c9d6e1cf2bdf3beaa505db426281b553839c",
-      "bytes": 8700
+      "sha256": "17387d7b24384127c5fe69d192b6d87bcd89c39d2e21982b9d0f56edcc326efe",
+      "bytes": 8795
     },
     {
       "path": "memory-fabric-validation.md",

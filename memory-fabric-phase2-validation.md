@@ -101,16 +101,17 @@ agents  write p50   write p95   write p99   refresh p50  refresh p95  refresh p9
 All levels reported missed updates `0` and duplicate deliveries `0`.
 
 The opt-in real-provider test started two independent authenticated Codex CLI
-processes concurrently. Their execution intervals overlapped; both published
-through normal `MemoryService` task APIs, each refreshed and observed the
-other's finding, and a same-revision concurrent write produced exactly one
-winner and one CAS conflict. Command and result:
+processes concurrently. Their execution intervals overlapped. Each live agent
+workflow published through normal `MemoryService` task APIs, waited at an
+explicit turn boundary, then both were released to refresh canonical state and
+observed the other's finding. A same-revision concurrent write produced exactly
+one winner and one CAS conflict. Command and final result:
 
 ```text
 MARSHAL_TEST_REAL_PARALLEL_CODEX_AGENTS=1 \
   go test -count=1 -run '^TestRealParallelProviderAgentsSharedMemory$' \
   -v ./internal/integration
-PASS (18.28 seconds)
+PASS (48.40 seconds)
 ```
 
 Codex + Claude was attempted but Claude Code reported that it was not logged

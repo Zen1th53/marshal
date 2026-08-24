@@ -101,8 +101,15 @@ func TestRealParallelProviderAgentsSharedMemory(t *testing.T) {
 		result adapter.Result
 		err    error
 	}
+	type refreshResult struct {
+		index int
+		err   error
+	}
 	start := make(chan struct{})
 	results := make(chan providerResult, len(providers))
+	readyToRefresh := make(chan int, len(providers))
+	refreshStart := make(chan struct{})
+	refreshResults := make(chan refreshResult, len(providers))
 	var wg sync.WaitGroup
 	for i := range providers {
 		provider := providers[i]
@@ -116,13 +123,38 @@ func TestRealParallelProviderAgentsSharedMemory(t *testing.T) {
 				AllowedOperations: []string{"filesystem.read"},
 			})
 			results <- providerResult{index: index, result: result, err: runErr}
+			if runErr != nil || result.Status != adapter.StatusSuccess || !strings.Contains(result.FinalText, provider.needle) {
+				return
+			}
+			if _, publishErr := rt.Memory().SetTaskSlotWithProvenance(ctx, principals[index], "PROJECT-local", taskID, provider.slot, result.FinalText, false,
+				app.WorkingProvenance{Provider: provider.name, RunID: "REAL-" + strings.ToUpper(provider.name)}); publishErr != nil {
+				refreshResults <- refreshResult{index: index, err: publishErr}
+				readyToRefresh <- index
+				return
+			}
+			// The agent workflow remains active at an explicit turn boundary.
+			// Once both peers have published, each refreshes canonical task state.
+			readyToRefresh <- index
+			<-refreshStart
+			page, refreshErr := rt.Memory().RefreshTaskMemory(ctx, principals[index], "PROJECT-local", taskID, 0, 20)
+			if refreshErr == nil {
+				combined := ""
+				for _, change := range page.Changes {
+					if change.Slot != nil {
+						combined += change.Slot.Value + "\n"
+					}
+				}
+				if !strings.Contains(combined, providers[1-index].needle) {
+					refreshErr = errors.New("peer finding was not visible at the live refresh boundary")
+				}
+			}
+			refreshResults <- refreshResult{index: index, err: refreshErr}
 		}(i)
 	}
 	close(start)
-	wg.Wait()
-	close(results)
 	got := make([]adapter.Result, len(providers))
-	for outcome := range results {
+	for range providers {
+		outcome := <-results
 		if outcome.err != nil || outcome.result.Status != adapter.StatusSuccess {
 			t.Fatalf("%s run: status=%s exit=%d err=%v stdout=%s stderr=%s final=%s", providers[outcome.index].name, outcome.result.Status, outcome.result.ExitCode, outcome.err, outcome.result.Stdout, outcome.result.Stderr, outcome.result.FinalText)
 		}
@@ -131,24 +163,19 @@ func TestRealParallelProviderAgentsSharedMemory(t *testing.T) {
 		}
 		got[outcome.index] = outcome.result
 	}
+	for range providers {
+		<-readyToRefresh
+	}
+	close(refreshStart)
+	wg.Wait()
+	for range providers {
+		outcome := <-refreshResults
+		if outcome.err != nil {
+			t.Fatalf("%s live refresh: %v", providers[outcome.index].name, outcome.err)
+		}
+	}
 	if !intervalsOverlap(got[0].StartedAt, got[0].EndedAt, got[1].StartedAt, got[1].EndedAt) {
 		t.Fatalf("provider calls did not overlap: codex=%s..%s claude=%s..%s", got[0].StartedAt, got[0].EndedAt, got[1].StartedAt, got[1].EndedAt)
-	}
-
-	for i, provider := range providers {
-		if _, err := rt.Memory().SetTaskSlotWithProvenance(ctx, principals[i], "PROJECT-local", taskID, provider.slot, got[i].FinalText, false, app.WorkingProvenance{Provider: provider.name, RunID: "REAL-" + strings.ToUpper(provider.name)}); err != nil {
-			t.Fatalf("publish %s finding: %v", provider.name, err)
-		}
-	}
-	for i, principal := range principals {
-		page, err := rt.Memory().RefreshTaskMemory(ctx, principal, "PROJECT-local", taskID, 0, 20)
-		if err != nil || len(page.Changes) != 2 {
-			t.Fatalf("%s refresh: changes=%+v err=%v", providers[i].name, page, err)
-		}
-		combined := page.Changes[0].Slot.Value + "\n" + page.Changes[1].Slot.Value
-		if !strings.Contains(combined, providers[1-i].needle) {
-			t.Fatalf("%s did not receive peer finding: %q", providers[i].name, combined)
-		}
 	}
 
 	plan, err := rt.Memory().SetTaskSlot(ctx, principals[0], "PROJECT-local", taskID, working.SlotPlanState, "revision one", false)
