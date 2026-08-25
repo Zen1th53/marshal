@@ -83,7 +83,7 @@ jobs:
           python3 tools/release_trust.py verify --manifest dist/RELEASE-MANIFEST.json --dist dist
 
       - name: Generate Artifact Attestation
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'dist/marshal_*.tar.gz'
 
