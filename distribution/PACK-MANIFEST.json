@@ -831,8 +831,8 @@
     },
     {
       "path": "docs/README.md",
-      "sha256": "f75a8f16fa693cebd62c103e4bb6321394e3f6fe41058f0fb01c6ff32aebfa66",
-      "bytes": 2620
+      "sha256": "38514a6810bb095937d03ab629ad612dd37cae78e6fab3b0a7a7837aad51eb81",
+      "bytes": 2743
     },
     {
       "path": "docs/a2a.md",
@@ -1090,6 +1090,11 @@
       "bytes": 201
     },
     {
+      "path": "docs/resources.md",
+      "sha256": "d4ca2d58d47348c30812a59d8cb92143a4aa794a4d303e17e22133aed8f0f877",
+      "bytes": 2865
+    },
+    {
       "path": "docs/risk-engine.md",
       "sha256": "b14bdf846f12dffe2b84c25257d79233aadc8003e46a02d7e385f9d4fbdc7526",
       "bytes": 2250
@@ -1211,13 +1216,13 @@
     },
     {
       "path": "docs/web/API-CONTRACT.md",
-      "sha256": "f70052aba11b2384b6ed9f97c7ad9aa9d77eb92fa71d8bf3ac7ee793ce76ba75",
-      "bytes": 1589
+      "sha256": "2a921affeaa550cbde58a3e2b19944f740b1561f49d3ab25ca1e78d63b887a17",
+      "bytes": 1675
     },
     {
       "path": "docs/web/API-REALITY-MATRIX.md",
-      "sha256": "6b85640d7db8104640093124b397ab7ce3499ce0c417da65387d5479b6731dea",
-      "bytes": 9978
+      "sha256": "15a051955da19c26a0f51dc6bd3e3416cecd6de9323efaf5816c00af164a6f9c",
+      "bytes": 10100
     },
     {
       "path": "docs/web/ARCHITECTURE.md",
@@ -2186,13 +2191,13 @@
     },
     {
       "path": "internal/doctor/doctor.go",
-      "sha256": "3fc253232342289ea508b1b31e3be754e3ad84afb7c650dcf3f1b874aa2e9e85",
-      "bytes": 12544
+      "sha256": "bdf1dcde3c06ebf2680a25c899baef4f5d09d0e9b58bb237785b2ab0c74beb75",
+      "bytes": 14598
     },
     {
       "path": "internal/doctor/doctor_test.go",
-      "sha256": "d58c9ed19a7c6ed4e15bae16d5373fae593c29cbbd3f5e0e9cb8b1cc8dc529dc",
-      "bytes": 3294
+      "sha256": "8dc68e85bc1119c3c1b4f7126f9faf5b70f763c7b0da32c6d69972379b3c3c5f",
+      "bytes": 3324
     },
     {
       "path": "internal/events/engine.go",
@@ -3685,6 +3690,16 @@
       "bytes": 213
     },
     {
+      "path": "internal/resources/resources.go",
+      "sha256": "c2c0620a9c91fc1f7575028268745925d43b41078b046b168f81d86f880e8bcb",
+      "bytes": 19729
+    },
+    {
+      "path": "internal/resources/resources_test.go",
+      "sha256": "234e6094d190accba74d301fb5ca213896c4bc5451713ef0c22c943ca0ba8710",
+      "bytes": 9719
+    },
+    {
       "path": "internal/risk/a10_release_test.go",
       "sha256": "70c3960fba236e9b7b64c2ccdf665f172e60ef203406716c8b69b3129942289f",
       "bytes": 1042
@@ -4875,13 +4890,13 @@
       "bytes": 56233
     },
     {
-      "path": "internal/webcontrol/dist/assets/index-BY4gMnWL.js",
-      "sha256": "a95e83debd19bac6eae55525dddb7935aed050a3d8d406ec31af298f7c11d685",
-      "bytes": 345597
+      "path": "internal/webcontrol/dist/assets/index-Dau0lel0.js",
+      "sha256": "7eb047689da388563f640068a60df129f5e10e177cef5fde2d6778a9870bb22a",
+      "bytes": 347994
     },
     {
       "path": "internal/webcontrol/dist/index.html",
-      "sha256": "e8d7476b34aebbff70ad09ed47b40b182d0946c3f62fa507635c0bc575217f2b",
+      "sha256": "919730bbb9f739e0295498ba7ca46f1ee992560e19c18d46beafa8ca304ab562",
       "bytes": 599
     },
     {
@@ -5085,6 +5100,16 @@
       "bytes": 1054
     },
     {
+      "path": "internal/webcontrol/resources.go",
+      "sha256": "a8a9e85050252730c0afd453ed80b99ffb8f6693cc56571c354f316473626db0",
+      "bytes": 575
+    },
+    {
+      "path": "internal/webcontrol/resources_test.go",
+      "sha256": "8591d1ce429fe7e82b2f3af2b88c1ad4b818fde85090ee9fe6a496691d24c5a2",
+      "bytes": 620
+    },
+    {
       "path": "internal/webcontrol/retrieval_trace.go",
       "sha256": "2d0a2ec71387efd614075c99596a17258459db9462a8f33d694952bf1e288474",
       "bytes": 5025
@@ -5106,8 +5131,8 @@
     },
     {
       "path": "internal/webcontrol/routes.go",
-      "sha256": "082f9768db678b5bd82546e0a4e01cd8740d8dd869125d6e142c75221196017f",
-      "bytes": 8604
+      "sha256": "3c838537079165033c8a8307df0b9d79880f9b72b3e521a6df30ae3a3fe73fc0",
+      "bytes": 8687
     },
     {
       "path": "internal/webcontrol/run_output.go",
@@ -6176,8 +6201,8 @@
     },
     {
       "path": "web/src/api/client.ts",
-      "sha256": "24bca9f4b0cb8f2d672e3273dea7d9191d1ed0583baa86002609eeefbe4a63fc",
-      "bytes": 39835
+      "sha256": "d8545cc03174116773cf8ac1d97573ca3f189fdbdf5e89d677ebc4025590df0b",
+      "bytes": 40967
     },
     {
       "path": "web/src/api/correlation.ts",
@@ -6636,13 +6661,13 @@
     },
     {
       "path": "web/src/routes/Operations.test.tsx",
-      "sha256": "7b013c11acc459e59d4c34b357d4037a2c2021d530dc9616b9bc41f00d2759c6",
-      "bytes": 1644
+      "sha256": "55659b63217b8471c6d342bd488c2859950b1ed760a127180dec79f645c37b68",
+      "bytes": 2439
     },
     {
       "path": "web/src/routes/Operations.tsx",
-      "sha256": "a0b4704a9e2f88819780496682c586805edcaf8cf5912b0a6cfff4b973a8c5c4",
-      "bytes": 4358
+      "sha256": "e6d8f6c6fad67e30523ff1c2f36bcc6f4eaca9c5b5d3a15b7e489599f3f79a2c",
+      "bytes": 8157
     },
     {
       "path": "web/src/routes/Overview.test.tsx",

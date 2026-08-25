@@ -11,12 +11,12 @@ import (
 // Authority tokens required by route-level authorization. These mirror the
 // authority vocabulary in getAuthoritiesForRole.
 const (
-	authTaskPlan      = "task.plan"
-	authSourceWrite   = "source.write"
-	authVerifyQA      = "verify.qa"
-	authVerifySec     = "verify.security"
+	authTaskPlan       = "task.plan"
+	authSourceWrite    = "source.write"
+	authVerifyQA       = "verify.qa"
+	authVerifySec      = "verify.security"
 	authReleaseApprove = "release.approve"
-	authPolicyAdmin   = "policy.admin"
+	authPolicyAdmin    = "policy.admin"
 )
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
@@ -24,6 +24,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/system/status", s.handleSystemStatus)
 	mux.HandleFunc("GET /api/v1/system/adapters", s.handleSystemAdapters)
 	mux.HandleFunc("GET /api/v1/system/capabilities", s.handleSystemCapabilities)
+	mux.HandleFunc("GET /api/v1/resources", s.RequireAuth(s.handleGetResources))
 	mux.HandleFunc("GET /api/v1/overview", s.handleGetOverview)
 
 	// 2. Authentication & Session Management (public)
