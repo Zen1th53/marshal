@@ -1,10 +1,13 @@
 package webcontrol
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
@@ -112,17 +115,42 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
 	status := SystemStatusDTO{
 		State:          HealthReady,
-		Version:        "1.0.0",
-		CommitSHA:      "5668671",
+		Version:        s.config.Version,
+		CommitSHA:      s.config.Commit,
 		DatabaseSchema: fmt.Sprintf("v%d", store.LatestSchemaVersion),
 		ActiveWorkers:  0,
 		PendingTasks:   0,
 		UpdatedAt:      time.Now().UTC(),
 	}
+	if source, ok := s.runtime.(interface {
+		Status(context.Context) (app.Status, error)
+	}); ok {
+		liveStatus, err := source.Status(r.Context())
+		if err != nil {
+			status.State = HealthDegraded
+		} else {
+			status.DatabaseSchema = fmt.Sprintf("v%d", liveStatus.SchemaVersion)
+			status.ActiveWorkers = liveStatus.LeaseCount
+			tasks, listErr := s.store.ListTasks(r.Context())
+			if listErr != nil {
+				status.State = HealthDegraded
+			} else {
+				for _, task := range tasks {
+					if task.Status == model.TaskProposed || task.Status == model.TaskReady {
+						status.PendingTasks++
+					}
+				}
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, status)
 }
 
 func (s *Server) handleSystemAdapters(w http.ResponseWriter, r *http.Request) {
+	if s.store != nil {
+		writeError(w, http.StatusNotImplemented, "unsupported_live_surface", "live adapter inventory is not implemented; use marshal adapters or marshal doctor --probe-providers", "")
+		return
+	}
 	adapters := []AdapterSummaryDTO{
 		{
 			Name:       "codex",

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/webcontrol"
@@ -63,6 +64,8 @@ func (c *command) webServe(ctx context.Context, args []string) error {
 	cfg := webcontrol.ServerConfig{
 		Host:                     *host,
 		Port:                     *port,
+		Version:                  strings.TrimPrefix(Version, "v"),
+		Commit:                   Commit,
 		AllowInsecureNonLoopback: *allowInsecure,
 	}
 
