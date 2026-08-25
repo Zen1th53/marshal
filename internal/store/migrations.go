@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 71
+const LatestSchemaVersion = 72
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1698,6 +1698,97 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 71: %w", err)
 		}
 		version = 71
+	}
+	if version < 72 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS task_memory_event_heads (
+				task_id     TEXT PRIMARY KEY,
+				project_id  TEXT NOT NULL REFERENCES projects(project_id),
+				latest_seq  INTEGER NOT NULL DEFAULT 0 CHECK(latest_seq >= 0)
+			);
+			CREATE TABLE IF NOT EXISTS task_memory_events (
+				task_id     TEXT NOT NULL,
+				sequence    INTEGER NOT NULL CHECK(sequence > 0),
+				project_id  TEXT NOT NULL REFERENCES projects(project_id),
+				event_type  TEXT NOT NULL CHECK(event_type IN (
+					'SLOT_CREATED','SLOT_UPDATED','SLOT_TOMBSTONED',
+					'CANDIDATE_CREATED','MEMORY_PROMOTED','MEMORY_SUPERSEDED',
+					'CONFLICT_CREATED','CONFLICT_RESOLVED','GRANT_REVOKED'
+				)),
+				priority    TEXT NOT NULL CHECK(priority IN ('LOW','MEDIUM','HIGH','CRITICAL')),
+				memory_id   TEXT NOT NULL DEFAULT '',
+				created_at  TEXT NOT NULL,
+				PRIMARY KEY(task_id, sequence)
+			);
+			CREATE INDEX IF NOT EXISTS task_memory_events_by_project_task
+				ON task_memory_events(project_id, task_id, sequence);
+
+			CREATE TRIGGER IF NOT EXISTS task_memory_events_after_memory_insert
+			AFTER INSERT ON memory_records_v2
+			WHEN NEW.scope = 'task'
+			 AND NEW.acl_scope = ''
+			 AND (
+				json_extract(NEW.ext_meta_json, '$.record_type') IN ('task_slot', 'task_slot_conflict')
+				OR NEW.lifecycle IN ('candidate', 'conflicted')
+			 )
+			BEGIN
+				INSERT INTO task_memory_event_heads(task_id, project_id, latest_seq)
+				VALUES(NEW.scope_id, NEW.project_id, 1)
+				ON CONFLICT(task_id) DO UPDATE SET latest_seq = latest_seq + 1;
+				INSERT INTO task_memory_events(task_id, sequence, project_id, event_type, priority, memory_id, created_at)
+				SELECT NEW.scope_id, latest_seq, NEW.project_id,
+					CASE
+						WHEN NEW.lifecycle = 'conflicted' THEN 'CONFLICT_CREATED'
+						WHEN NEW.lifecycle = 'candidate' THEN 'CANDIDATE_CREATED'
+						ELSE 'SLOT_CREATED'
+					END,
+					CASE WHEN NEW.lifecycle = 'conflicted' THEN 'HIGH' ELSE 'MEDIUM' END,
+					NEW.memory_id, NEW.updated_at
+				FROM task_memory_event_heads WHERE task_id = NEW.scope_id;
+				DELETE FROM task_memory_events
+				WHERE task_id = NEW.scope_id AND sequence <= (
+					SELECT latest_seq - 4096 FROM task_memory_event_heads WHERE task_id = NEW.scope_id
+				);
+			END;
+
+			CREATE TRIGGER IF NOT EXISTS task_memory_events_after_memory_update
+			AFTER UPDATE ON memory_records_v2
+			WHEN NEW.scope = 'task'
+			 AND NEW.acl_scope = ''
+			 AND (
+				json_extract(NEW.ext_meta_json, '$.record_type') = 'task_slot'
+				OR NEW.lifecycle IN ('superseded', 'tombstoned', 'durable')
+			 )
+			BEGIN
+				INSERT INTO task_memory_event_heads(task_id, project_id, latest_seq)
+				VALUES(NEW.scope_id, NEW.project_id, 1)
+				ON CONFLICT(task_id) DO UPDATE SET latest_seq = latest_seq + 1;
+				INSERT INTO task_memory_events(task_id, sequence, project_id, event_type, priority, memory_id, created_at)
+				SELECT NEW.scope_id, latest_seq, NEW.project_id,
+					CASE
+						WHEN NEW.lifecycle = 'tombstoned' THEN 'SLOT_TOMBSTONED'
+						WHEN NEW.lifecycle = 'superseded' THEN 'MEMORY_SUPERSEDED'
+						WHEN NEW.lifecycle = 'durable' THEN 'MEMORY_PROMOTED'
+						ELSE 'SLOT_UPDATED'
+					END,
+					CASE
+						WHEN NEW.lifecycle IN ('tombstoned', 'superseded') THEN 'HIGH'
+						ELSE 'MEDIUM'
+					END,
+					NEW.memory_id, NEW.updated_at
+				FROM task_memory_event_heads WHERE task_id = NEW.scope_id;
+				DELETE FROM task_memory_events
+				WHERE task_id = NEW.scope_id AND sequence <= (
+					SELECT latest_seq - 4096 FROM task_memory_event_heads WHERE task_id = NEW.scope_id
+				);
+			END;
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 72: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(72, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 72: %w", err)
+		}
+		version = 72
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

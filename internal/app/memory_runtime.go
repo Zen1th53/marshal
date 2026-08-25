@@ -84,6 +84,7 @@ type OutcomeCaptureRequest struct {
 	BaseCommit     string
 	HeadCommit     string
 	Branch         string
+	WorktreeID     string
 	EvidenceIDs    []string
 	FilesChanged   []string
 	TestsRun       []string
@@ -98,7 +99,9 @@ type RecallRequest struct {
 	Query             string            `json:"query"`
 	AllowedScopeIDs   []string          `json:"allowed_scope_ids"`
 	CurrentHead       string            `json:"current_head,omitempty"`
+	CanonicalHead     string            `json:"canonical_head,omitempty"`
 	CurrentBranch     string            `json:"current_branch,omitempty"`
+	CurrentWorktreeID string            `json:"current_worktree_id,omitempty"`
 	ModifiedFiles     []string          `json:"modified_files,omitempty"`
 	DeletedFiles      []string          `json:"deleted_files,omitempty"`
 	RenamedFiles      map[string]string `json:"renamed_files,omitempty"`
@@ -140,24 +143,25 @@ type RetrievalReceipt struct {
 	ReceiptID string `json:"receipt_id"`
 	// Query is returned only to the caller in the immediate response. Raw
 	// prompts are never persisted because they may contain credentials.
-	Query           string              `json:"query,omitempty"`
-	QueryDigest     string              `json:"query_digest"`
-	ProjectID       string              `json:"project_id"`
-	AllowedScopeIDs []string            `json:"allowed_scope_ids"`
-	CurrentHead     string              `json:"current_head,omitempty"`
-	CurrentBranch   string              `json:"current_branch,omitempty"`
-	MaxRecords      int                 `json:"max_records"`
-	MaxBytes        int                 `json:"max_bytes"`
-	ConsumedBytes   int                 `json:"consumed_bytes"`
-	Decisions       []RetrievalDecision `json:"decisions"`
-	DeniedCount     int                 `json:"denied_count,omitempty"`
-	RunID           string              `json:"run_id,omitempty"`
-	TaskID          string              `json:"task_id,omitempty"`
-	Provider        string              `json:"provider,omitempty"`
-	EvidenceIDs     []string            `json:"evidence_ids,omitempty"`
-	OutcomeMemoryID string              `json:"outcome_memory_id,omitempty"`
-	OutcomeStatus   string              `json:"outcome_status,omitempty"`
-	GeneratedAt     time.Time           `json:"generated_at"`
+	Query                string              `json:"query,omitempty"`
+	QueryDigest          string              `json:"query_digest"`
+	ProjectID            string              `json:"project_id"`
+	AllowedScopeIDs      []string            `json:"allowed_scope_ids"`
+	CurrentHead          string              `json:"current_head,omitempty"`
+	CurrentBranch        string              `json:"current_branch,omitempty"`
+	MaxRecords           int                 `json:"max_records"`
+	MaxBytes             int                 `json:"max_bytes"`
+	ConsumedBytes        int                 `json:"consumed_bytes"`
+	Decisions            []RetrievalDecision `json:"decisions"`
+	DeniedCount          int                 `json:"denied_count,omitempty"`
+	OmittedDecisionCount int                 `json:"omitted_decision_count,omitempty"`
+	RunID                string              `json:"run_id,omitempty"`
+	TaskID               string              `json:"task_id,omitempty"`
+	Provider             string              `json:"provider,omitempty"`
+	EvidenceIDs          []string            `json:"evidence_ids,omitempty"`
+	OutcomeMemoryID      string              `json:"outcome_memory_id,omitempty"`
+	OutcomeStatus        string              `json:"outcome_status,omitempty"`
+	GeneratedAt          time.Time           `json:"generated_at"`
 }
 
 // MemoryService is the canonical product-facing memory facade. It is backed
@@ -718,6 +722,7 @@ func (s *MemoryService) CaptureOutcome(ctx context.Context, req OutcomeCaptureRe
 		EvidenceIDs: req.EvidenceIDs,
 		HeadCommit:  req.HeadCommit,
 		BranchName:  req.Branch,
+		WorktreeID:  req.WorktreeID,
 		SessionID:   req.SessionID,
 		RunID:       req.RunID,
 		ObservedAt:  now,
@@ -763,13 +768,16 @@ func truncateMemoryField(value string, maxLength int) string {
 type FreshnessClassification string
 
 const (
-	FreshnessFresh         FreshnessClassification = "fresh"
-	FreshnessPossiblyStale FreshnessClassification = "possibly_stale"
-	FreshnessStale         FreshnessClassification = "stale"
-	FreshnessExpired       FreshnessClassification = "expired"
-	FreshnessSuperseded    FreshnessClassification = "superseded"
-	FreshnessConflicted    FreshnessClassification = "conflicted"
-	FreshnessUnverifiable  FreshnessClassification = "unverifiable"
+	FreshnessFresh            FreshnessClassification = "fresh"
+	FreshnessPossiblyStale    FreshnessClassification = "possibly_stale"
+	FreshnessStale            FreshnessClassification = "stale"
+	FreshnessExpired          FreshnessClassification = "expired"
+	FreshnessSuperseded       FreshnessClassification = "superseded"
+	FreshnessConflicted       FreshnessClassification = "conflicted"
+	FreshnessUnverifiable     FreshnessClassification = "unverifiable"
+	FreshnessWorktreeLocal    FreshnessClassification = "worktree_local"
+	FreshnessUnmerged         FreshnessClassification = "unmerged"
+	FreshnessWorktreeMismatch FreshnessClassification = "worktree_mismatch"
 )
 
 type FreshnessEvaluation struct {
@@ -782,7 +790,9 @@ type FreshnessEvaluation struct {
 type MemoryReconcileRequest struct {
 	ProjectID         string            `json:"project_id"`
 	CurrentHead       string            `json:"current_head"`
+	CanonicalHead     string            `json:"canonical_head,omitempty"`
 	CurrentBranch     string            `json:"current_branch"`
+	CurrentWorktreeID string            `json:"current_worktree_id,omitempty"`
 	ModifiedFiles     []string          `json:"modified_files,omitempty"`
 	DeletedFiles      []string          `json:"deleted_files,omitempty"`
 	RenamedFiles      map[string]string `json:"renamed_files,omitempty"`
@@ -830,6 +840,23 @@ func (s *MemoryService) EvaluateFreshness(rec model.MemoryRecordV2, req MemoryRe
 			Reason:         "lifecycle marked as stale",
 			ScorePenalty:   500,
 		}
+	}
+
+	// A fact observed in an agent worktree is not canonical project truth until
+	// its commit is the canonical repository HEAD. The same worktree may use it
+	// as local context; other worktrees must not see an unmerged assertion.
+	canonicalHead := strings.TrimSpace(req.CanonicalHead)
+	if canonicalHead == "" {
+		canonicalHead = strings.TrimSpace(req.CurrentHead)
+	}
+	if rec.WorktreeID != "" && rec.HeadCommit != "" && rec.HeadCommit != canonicalHead {
+		if req.CurrentWorktreeID != "" && rec.WorktreeID == req.CurrentWorktreeID && rec.HeadCommit == req.CurrentHead {
+			return FreshnessEvaluation{MemoryID: rec.ID, Classification: FreshnessWorktreeLocal, Reason: "record is verified only in the caller's unmerged worktree"}
+		}
+		if req.CurrentWorktreeID != "" && rec.WorktreeID != req.CurrentWorktreeID {
+			return FreshnessEvaluation{MemoryID: rec.ID, Classification: FreshnessWorktreeMismatch, Reason: "record belongs to a different unmerged worktree", ScorePenalty: 1000}
+		}
+		return FreshnessEvaluation{MemoryID: rec.ID, Classification: FreshnessUnmerged, Reason: "worktree commit is not canonical repository HEAD", ScorePenalty: 1000}
 	}
 
 	// 4. File-grounding checks (ext_meta file_path / referenced_files)
@@ -1043,34 +1070,22 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		req.AllowedScopeIDs = validatedScopes
 	}
 
-	records, err := s.store.ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: req.ProjectID, ActorID: principal.ID})
-	if err != nil {
-		return RecallResponse{}, err
-	}
-
 	allowedScopeMap := make(map[string]bool)
 	for _, sc := range req.AllowedScopeIDs {
 		if sc != "" {
 			allowedScopeMap[sc] = true
 		}
 	}
-	authorizedIDs := make(map[string]struct{})
-	authorizedRecords := make([]model.MemoryRecordV2, 0, len(records))
-	deniedScopeCount := 0
-	for _, rec := range records {
-		scope, scopeErr := model.NewMemoryScope(rec.Scope, rec.ScopeID)
-		if scopeErr != nil || !scope.AllowsRead(req.ProjectID, principal.ID) ||
-			(rec.ACLScope != "" && rec.ACLScope != principal.ID) || !allowedScopeMap[rec.ScopeID] {
-			deniedScopeCount++
-			continue
-		}
-		authorizedIDs[rec.ID] = struct{}{}
-		authorizedRecords = append(authorizedRecords, rec)
-	}
-	records = authorizedRecords
-
 	query := strings.ToLower(strings.TrimSpace(req.Query))
-	queryTerms := strings.Fields(query)
+	authorizedIDs, err := s.store.ListAuthorizedMemoryIDs(ctx, req.ProjectID, principal.ID, req.AllowedScopeIDs)
+	if err != nil {
+		return RecallResponse{}, err
+	}
+	queryTerms := memorySearchTokens(query)
+	queryTermSet := make(map[string]struct{}, len(queryTerms))
+	for _, term := range queryTerms {
+		queryTermSet[term] = struct{}{}
+	}
 	s.mu.RLock()
 	lexicalIndex := s.lexicalIndex
 	graphIndex := s.graphIndex
@@ -1089,6 +1104,13 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 			matchedTrackMap[rec.ID] = appendIfMissing(matchedTrackMap[rec.ID], "cache")
 		}
 	}
+	// Exact canonical IDs are admitted only after the store-level authorized
+	// ID set has been constructed. An unauthorized ID remains nonexistent.
+	if _, allowed := authorizedIDs[strings.ToUpper(query)]; allowed {
+		id := strings.ToUpper(query)
+		matchedTrackMap[id] = appendIfMissing(matchedTrackMap[id], "exact")
+		scoreMap[id] += 200
+	}
 
 	// 1. Lexical track candidates
 	if lexicalIndex != nil && query != "" {
@@ -1098,17 +1120,41 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		if err == nil {
 			for _, r := range lexResults {
 				matchedTrackMap[r.MemoryID] = appendIfMissing(matchedTrackMap[r.MemoryID], "lexical")
+				if r.ExactTitleSeed {
+					matchedTrackMap[r.MemoryID] = appendIfMissing(matchedTrackMap[r.MemoryID], "lexical_title_exact")
+				}
 				scoreMap[r.MemoryID] += int(r.Score)
 			}
+		}
+	}
+	// A freshly constructed service may not have rebuilt its disposable
+	// projections yet, and trusted maintenance code may write canonical rows
+	// directly. Use a bounded SQL fallback only when no derived candidate was
+	// found. The store applies project/scope/ACL predicates before returning
+	// IDs, so this does not restore the old full-content production scan.
+	if query != "" && len(matchedTrackMap) == 0 {
+		fallbackIDs, fallbackErr := s.store.SearchAuthorizedMemoryIDs(ctx, req.ProjectID, principal.ID, req.AllowedScopeIDs, query, lexicalCandidateLimit)
+		if fallbackErr != nil {
+			return RecallResponse{}, fallbackErr
+		}
+		for _, id := range fallbackIDs {
+			matchedTrackMap[id] = appendIfMissing(matchedTrackMap[id], "canonical_lexical")
+			scoreMap[id] += 20
 		}
 	}
 
 	// 2. Graph neighbor track candidates
 	if graphIndex != nil && query != "" {
 		var seeds []string
-		for _, rec := range records {
-			if strings.Contains(strings.ToLower(rec.ID), query) || strings.Contains(strings.ToLower(rec.Title), query) {
-				seeds = append(seeds, rec.ID)
+		for id, tracks := range matchedTrackMap {
+			for _, track := range tracks {
+				// Graph expansion starts only from an exact canonical identity.
+				// Expanding every weak lexical hit lets graph-connected but
+				// irrelevant high-authority records bypass relevance admission.
+				if track == "exact" || track == "lexical_title_exact" {
+					seeds = append(seeds, id)
+					break
+				}
 			}
 		}
 		if len(seeds) > 0 {
@@ -1145,6 +1191,44 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 				scoreMap[c.MemoryID] += int(c.Score)
 			}
 		}
+	}
+
+	// Reload only bounded derived candidates from canonical SQLite. The
+	// authorization set was computed without touching record content, and is
+	// checked again before each canonical reload.
+	type candidateSeed struct {
+		id    string
+		score int
+	}
+	seeds := make([]candidateSeed, 0, len(matchedTrackMap))
+	for id := range matchedTrackMap {
+		if _, allowed := authorizedIDs[id]; allowed {
+			seeds = append(seeds, candidateSeed{id: id, score: scoreMap[id]})
+		}
+	}
+	sort.SliceStable(seeds, func(i, j int) bool {
+		if seeds[i].score == seeds[j].score {
+			return seeds[i].id < seeds[j].id
+		}
+		return seeds[i].score > seeds[j].score
+	})
+	if len(seeds) > 256 {
+		seeds = seeds[:256]
+	}
+	records := make([]model.MemoryRecordV2, 0, len(seeds))
+	for _, seed := range seeds {
+		rec, getErr := s.store.GetMemoryV2(ctx, req.ProjectID, seed.id)
+		if getErr != nil {
+			if errors.Is(getErr, model.ErrNotFound) {
+				continue
+			}
+			return RecallResponse{}, getErr
+		}
+		scope, scopeErr := model.NewMemoryScope(rec.Scope, rec.ScopeID)
+		if scopeErr != nil || !scope.AllowsRead(req.ProjectID, principal.ID) || !allowedScopeMap[rec.ScopeID] || (rec.ACLScope != "" && rec.ACLScope != principal.ID) {
+			continue
+		}
+		records = append(records, rec)
 	}
 
 	type rankedRecord struct {
@@ -1187,7 +1271,9 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		freshness := s.EvaluateFreshness(rec, MemoryReconcileRequest{
 			ProjectID:         req.ProjectID,
 			CurrentHead:       req.CurrentHead,
+			CanonicalHead:     req.CanonicalHead,
 			CurrentBranch:     req.CurrentBranch,
+			CurrentWorktreeID: req.CurrentWorktreeID,
 			ModifiedFiles:     req.ModifiedFiles,
 			DeletedFiles:      req.DeletedFiles,
 			RenamedFiles:      req.RenamedFiles,
@@ -1216,6 +1302,12 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 			receipt.Decisions = append(receipt.Decisions, decision)
 			continue
 		}
+		if freshness.Classification == FreshnessUnmerged || freshness.Classification == FreshnessWorktreeMismatch {
+			decision.Reason = "worktree_mismatch: " + freshness.Reason
+			decision.Stale = true
+			receipt.Decisions = append(receipt.Decisions, decision)
+			continue
+		}
 
 		haystack := strings.ToLower(rec.ID + " " + rec.Title + " " + rec.Body)
 		score := scoreMap[rec.ID]
@@ -1225,17 +1317,33 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 			score -= freshness.ScorePenalty
 		}
 
-		if query != "" && strings.Contains(haystack, query) {
+		exactPhrase := query != "" && strings.Contains(haystack, query)
+		if exactPhrase {
 			score += 100
 			tracks = appendIfMissing(tracks, "exact")
 		}
-		for _, term := range queryTerms {
-			if strings.Contains(haystack, term) {
-				score += 10
-				tracks = appendIfMissing(tracks, "lexical")
-			}
+		matchedTerms := matchedMemorySearchTerms(haystack, queryTermSet)
+		if matchedTerms > 0 {
+			score += matchedTerms * 10
+			tracks = appendIfMissing(tracks, "lexical")
 		}
-		if query != "" && score <= 0 && len(tracks) == 0 {
+		// A single common token is too weak for a multi-token query and caused
+		// high-authority but unrelated records to outrank exact task evidence.
+		// This relevance admission gate runs only after canonical authorization,
+		// lifecycle, and freshness gates. Strong semantic/graph providers may
+		// still admit paraphrases with no lexical overlap.
+		minimumTerms := (3*len(queryTerms) + 3) / 4 // ceil(75% overlap)
+		if minimumTerms > 4 {
+			// Long natural-language task prompts need not repeat every stop word;
+			// four exact cues are sufficient for lexical admission.
+			minimumTerms = 4
+		}
+		if minimumTerms < 1 {
+			minimumTerms = 1
+		}
+		strongDerivedMatch := hasStrongDerivedTrack(tracks, scoreMap[rec.ID])
+		taskScopedMatch := req.TaskID != "" && rec.Scope == string(model.ScopeTask) && rec.ScopeID == req.TaskID
+		if query != "" && !exactPhrase && matchedTerms < minimumTerms && !strongDerivedMatch && !taskScopedMatch {
 			decision.Reason = "not_relevant"
 			receipt.Decisions = append(receipt.Decisions, decision)
 			continue
@@ -1244,8 +1352,6 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		score += int(utilityScore * 5)
 		ranked = append(ranked, rankedRecord{record: rec, score: score, authorityRank: memoryAuthorityRank(rec.Authority), tracks: tracks})
 	}
-
-	receipt.DeniedCount = deniedScopeCount
 
 	sort.SliceStable(ranked, func(i, j int) bool {
 		if ranked[i].authorityRank != ranked[j].authorityRank {
@@ -1288,6 +1394,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 	}
 	contextBuilder.WriteString("</marshal_memory_context>")
 	s.cache.Put(cacheKey, cacheRecords)
+	receipt.Decisions, receipt.OmittedDecisionCount = boundRetrievalDecisions(receipt.Decisions, 256)
 
 	// Persist receipt asynchronously or synchronously in SQLite
 	decisionsBytes, err := json.Marshal(receipt.Decisions)
@@ -1317,6 +1424,31 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 	}
 
 	return RecallResponse{Results: results, Receipt: receipt, Context: contextBuilder.String()}, nil
+}
+
+func boundRetrievalDecisions(decisions []RetrievalDecision, limit int) ([]RetrievalDecision, int) {
+	if limit <= 0 || len(decisions) <= limit {
+		return decisions, 0
+	}
+	bounded := make([]RetrievalDecision, 0, limit)
+	for _, decision := range decisions {
+		if decision.Included || decision.Reason != "not_relevant" {
+			bounded = append(bounded, decision)
+			if len(bounded) == limit {
+				return bounded, len(decisions) - len(bounded)
+			}
+		}
+	}
+	for _, decision := range decisions {
+		if decision.Included || decision.Reason != "not_relevant" {
+			continue
+		}
+		bounded = append(bounded, decision)
+		if len(bounded) == limit {
+			break
+		}
+	}
+	return bounded, len(decisions) - len(bounded)
 }
 
 func (s *MemoryService) GetReceipt(ctx context.Context, principal authz.Principal, projectID, receiptID string) (RetrievalReceipt, error) {
@@ -1470,6 +1602,45 @@ func appendIfMissing(slice []string, val string) []string {
 		}
 	}
 	return append(slice, val)
+}
+
+func memorySearchTokens(value string) []string {
+	return strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
+		switch r {
+		case '/', '.', '_', '-', ':', '(', ')', '[', ']', '"', '\'', ' ', '\t', '\r', '\n':
+			return true
+		default:
+			return false
+		}
+	})
+}
+
+func matchedMemorySearchTerms(value string, queryTerms map[string]struct{}) int {
+	matched := make(map[string]struct{}, len(queryTerms))
+	for _, token := range memorySearchTokens(value) {
+		if _, wanted := queryTerms[token]; wanted {
+			matched[token] = struct{}{}
+		}
+	}
+	return len(matched)
+}
+
+func hasStrongDerivedTrack(tracks []string, providerScore int) bool {
+	for _, track := range tracks {
+		switch track {
+		case "lexical", "cache", "exact", "":
+			continue
+		case "graph", "vector":
+			return true
+		default:
+			// Custom semantic providers must make an explicit strong match; a
+			// low-confidence plugin hint cannot flood canonical context.
+			if providerScore >= 50 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Task Blackboard and Working Memory Methods (M14)

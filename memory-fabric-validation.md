@@ -1,5 +1,9 @@
 # Runtime memory fabric implementation report
 
+> This report records the Phase 1 / PR #94 baseline. Current Phase 2 measured
+> evidence is in `memory-fabric-phase2-validation.md`; where figures differ,
+> the newer report and its exact commands are authoritative.
+
 ## 1. Starting state
 
 - Branch: `feat/runtime-memory-fabric-completion`

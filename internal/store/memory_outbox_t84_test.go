@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -60,6 +61,13 @@ func TestT84TransactionalMemoryOutbox(t *testing.T) {
 	}
 	if events[0].MemoryID != "MEM-OUTBOX-01" {
 		t.Fatalf("expected memoryID 'MEM-OUTBOX-01', got: %s", events[0].MemoryID)
+	}
+	var pointer MemoryOutboxPointer
+	if err := json.Unmarshal([]byte(events[0].PayloadJSON), &pointer); err != nil {
+		t.Fatalf("decode bounded outbox pointer: %v", err)
+	}
+	if pointer.MemoryID != rec.ID || pointer.Lifecycle != rec.Lifecycle || len(events[0].PayloadJSON) > 512 {
+		t.Fatalf("unexpected outbox pointer: payload=%s decoded=%+v", events[0].PayloadJSON, pointer)
 	}
 
 	// 3. Acknowledge the event

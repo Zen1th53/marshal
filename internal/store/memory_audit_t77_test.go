@@ -21,6 +21,10 @@ var knownMemoryTables = map[string]string{
 	"memory_outbox": "canonical-outbox: derived index mutation log, T84",
 	// M11: retrieval audit trail and receipts
 	"memory_retrieval_receipts": "canonical-receipts: retrieval audit trail and receipts, M11",
+	// Phase 2: bounded notification cursor over canonical task memory. Event
+	// rows never contain memory bodies and consumers reload memory_records_v2.
+	"task_memory_event_heads": "canonical-cursor: task-local monotonic sequence",
+	"task_memory_events":      "canonical-cursor: bounded task change notifications",
 }
 
 // derivedDecisionTables are subsystem decision logs, not canonical memory.

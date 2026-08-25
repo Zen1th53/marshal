@@ -168,9 +168,10 @@ func TestM11_ReceiptNonDisclosureOfUnauthorizedScopes(t *testing.T) {
 			t.Fatalf("unauthorized memory ID disclosed in receipt decision to guest caller: %+v", dec)
 		}
 	}
-	// Verify aggregate denied count is tracked without leaking identities
-	if res.Receipt.DeniedCount == 0 {
-		t.Fatalf("expected non-zero DeniedCount in receipt, got %d", res.Receipt.DeniedCount)
+	// Counts are also an existence oracle. Unauthorized rows are semantically
+	// nonexistent to this caller, including in aggregate receipt metadata.
+	if res.Receipt.DeniedCount != 0 {
+		t.Fatalf("unauthorized memory count disclosed in receipt: %d", res.Receipt.DeniedCount)
 	}
 
 	// Operator can recall its record

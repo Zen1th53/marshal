@@ -1,5 +1,11 @@
 # Runtime memory fabric implementation report
 
+> Phase 2 extends this original implementation with measured retrieval quality,
+> governed consolidation, a durable live task-change cursor, worktree-aware
+> freshness, Gemini session import, real concurrent-provider validation, and a
+> 100k scheduled gate. See `memory-fabric-phase2-validation.md` for current
+> evidence and honest `NOT_RUN` items.
+
 ## Starting state
 
 - Starting commit: `5bfbc44f4f50687f7c7c03ad0c3990a92bcf57ba`

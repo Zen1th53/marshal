@@ -64,14 +64,36 @@ func (s *Store) GetRoleBinding(ctx context.Context, id string) (authz.RoleBindin
 }
 
 func (s *Store) RevokeRoleBinding(ctx context.Context, id string, revokedAt time.Time) error {
-	binding, err := s.GetRoleBinding(ctx, id)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin role binding revoke: %w", err)
+	}
+	defer tx.Rollback()
+	var binding authz.RoleBinding
+	var boundAt, existingRevokedAt string
+	err = tx.QueryRowContext(ctx, `
+		SELECT binding_id, principal_id, role, scope_id, bound_by, bound_at,
+		       COALESCE(revoked_at, ''), policy_digest
+		FROM role_bindings WHERE binding_id = ?
+	`, id).Scan(&binding.ID, &binding.PrincipalID, &binding.Role, &binding.ScopeID,
+		&binding.BoundBy, &boundAt, &existingRevokedAt, &binding.PolicyDigest)
+	if errorsIsNoRows(err) {
+		return fmt.Errorf("%w: role binding not found", model.ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("read role binding for revoke: %w", err)
+	}
+	binding.BoundAt, err = time.Parse(time.RFC3339Nano, boundAt)
+	if err != nil {
+		return fmt.Errorf("%w: invalid role binding time", model.ErrInvalid)
 	}
 	if !revokedAt.After(binding.BoundAt) {
 		return fmt.Errorf("%w: revoke time is invalid", model.ErrInvalid)
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE role_bindings SET revoked_at = ? WHERE binding_id = ? AND revoked_at IS NULL`, revokedAt.UTC().Format(time.RFC3339Nano), id)
+	if existingRevokedAt != "" {
+		return fmt.Errorf("%w: role binding already revoked", model.ErrConflict)
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE role_bindings SET revoked_at = ? WHERE binding_id = ? AND revoked_at IS NULL`, revokedAt.UTC().Format(time.RFC3339Nano), id)
 	if err != nil {
 		return fmt.Errorf("revoke role binding: %w", err)
 	}
@@ -81,6 +103,12 @@ func (s *Store) RevokeRoleBinding(ctx context.Context, id string, revokedAt time
 	}
 	if rows != 1 {
 		return fmt.Errorf("%w: role binding already revoked", model.ErrConflict)
+	}
+	if err := appendTaskMemoryEventTx(ctx, tx, binding.ScopeID, "GRANT_REVOKED", "CRITICAL", "", revokedAt); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit role binding revoke: %w", err)
 	}
 	return nil
 }

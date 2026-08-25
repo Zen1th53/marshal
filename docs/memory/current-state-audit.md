@@ -79,6 +79,18 @@ These are NOT canonical memory stores. They are decision logs for runtime subsys
 
 These must not be merged into the canonical memory store.
 
+### 2.1 Task memory change cursor
+
+`task_memory_event_heads` and `task_memory_events` are a durable, bounded
+notification cursor over shared task mutations. They contain sequence and
+reference metadata, never memory bodies, and are not an alternate memory
+source. Consumers must reload referenced records from canonical
+`memory_records_v2`; authorization is checked before cursor metadata is read.
+Private/operator-scoped writes do not advance this cursor.
+The notification window is capped at 4096 events per task. A consumer older
+than that window receives an explicit cursor-expired error and must reload
+canonical task slots before continuing.
+
 ## 3. Non-Persistent Memory Components
 
 ### 3.1 `internal/memory/decision.Engine`
