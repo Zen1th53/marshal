@@ -51,14 +51,14 @@ func (c *command) webServe(ctx context.Context, args []string) error {
 		return err
 	}
 
-	// Open the canonical runtime so the control plane serves real store data.
-	// If the runtime cannot be opened (e.g. uninitialized repo), the web server
-	// still starts but reports data through its dev-demo fixtures.
-	var runtime any
-	if rt, err := app.Open(ctx, c.root); err == nil {
-		defer rt.Close()
-		runtime = rt
+	// Production CLI serving always requires the canonical runtime. A nil
+	// runtime remains available to explicit test fixtures through NewServer,
+	// but must never be an implicit production fallback.
+	runtime, err := app.Open(ctx, c.root)
+	if err != nil {
+		return fmt.Errorf("open canonical runtime: %w", err)
 	}
+	defer runtime.Close()
 
 	cfg := webcontrol.ServerConfig{
 		Host:                     *host,

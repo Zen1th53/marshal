@@ -1716,8 +1716,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "14a5d796f46b37eb0aee102cbe13c077a42905bdb60e9b90fb797d7177c04839",
-      "bytes": 50762
+      "sha256": "b5eda121f5e484b1a8f46ebe49a304184e2881830188739cabe90d850d0fb864",
+      "bytes": 50856
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -2036,13 +2036,13 @@
     },
     {
       "path": "internal/cli/web_cli.go",
-      "sha256": "0e2b8d71c3901574df393b4a94cc2e9be80631a54dab2ea078d789340aa3f870",
-      "bytes": 2838
+      "sha256": "9314ce9b38f176ace1d2030f860225ce509e3fb2d1794c3ae7bcd6328b06e1e3",
+      "bytes": 2853
     },
     {
       "path": "internal/cli/web_cli_test.go",
-      "sha256": "02357548895ac85e483ee52b58f9723075d6cabdbc63c6ef86c3f6d9310ed067",
-      "bytes": 696
+      "sha256": "328e6e491f8c0f2b33f4b6a58840bca3e6fdfe5839443e04bbb59685b4dd3597",
+      "bytes": 1451
     },
     {
       "path": "internal/context/budget/adversarial_test.go",
@@ -2191,13 +2191,13 @@
     },
     {
       "path": "internal/doctor/doctor.go",
-      "sha256": "bdf1dcde3c06ebf2680a25c899baef4f5d09d0e9b58bb237785b2ab0c74beb75",
-      "bytes": 14598
+      "sha256": "2b85e6af92037c3b974960a1ae89f94c1b0f2fca466bb13d84e2dad4ad3cf8be",
+      "bytes": 14963
     },
     {
       "path": "internal/doctor/doctor_test.go",
-      "sha256": "8dc68e85bc1119c3c1b4f7126f9faf5b70f763c7b0da32c6d69972379b3c3c5f",
-      "bytes": 3324
+      "sha256": "653da2b6dbf6abaa12c432c2ccc48002729409119428a61eaf13b1b9d1c8cf9e",
+      "bytes": 4099
     },
     {
       "path": "internal/events/engine.go",
@@ -2491,8 +2491,8 @@
     },
     {
       "path": "internal/legal/audit_test.go",
-      "sha256": "d541677def6d18018d4db00c18ffa6e264a4bd5b8ec10732921d7da97414563f",
-      "bytes": 2501
+      "sha256": "526e8cae9fcf2c5c7d223e779b67348705cde9371cf2c4cffb45d5e3a8c4b862",
+      "bytes": 2802
     },
     {
       "path": "internal/legal/dependencies.go",
@@ -2516,13 +2516,13 @@
     },
     {
       "path": "internal/legal/git_evidence.go",
-      "sha256": "cd8378f03e19e9e0f2f6b50c05e02ee483437ac580e94b9a6f9ccc3ff4d800e6",
-      "bytes": 6413
+      "sha256": "891b709cabd1cd07ad31c25db535cbb3c2966ac48d024e4150c5976e7dfdbba3",
+      "bytes": 6448
     },
     {
       "path": "internal/legal/git_evidence_test.go",
-      "sha256": "a722d80c3df1b82de859d52496584a1f247ba9f8a03fd0528cdb4a149fb43230",
-      "bytes": 2347
+      "sha256": "3c488ea77811915a94ab41df1a2331902ac8b8d79440dd2d654a783909b0d72d",
+      "bytes": 2562
     },
     {
       "path": "internal/legal/report.go",
@@ -5196,8 +5196,8 @@
     },
     {
       "path": "internal/webcontrol/server.go",
-      "sha256": "63c7aaa7cca0b3400c025eb7fdbe98bce722f4ca43bbcd71a521055de52779da",
-      "bytes": 4115
+      "sha256": "0923c7ec0750c8bb6a98a5999573cf6c9f61952b844d8c4ea9521cdad774c906",
+      "bytes": 4110
     },
     {
       "path": "internal/webcontrol/server_test.go",

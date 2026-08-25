@@ -169,6 +169,9 @@ func Bootstrap(ctx context.Context, root string) (project.Layout, error) {
 	if err != nil {
 		return project.Layout{}, err
 	}
+	if err := ensureProjectDefaults(layout.Root); err != nil {
+		return project.Layout{}, err
+	}
 	version, err := loadPackVersion(filepath.Join(layout.Root, "PACK-VERSION.yaml"))
 	if err != nil {
 		return project.Layout{}, err

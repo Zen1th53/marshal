@@ -18,6 +18,12 @@ func TestGitEvidenceReadsCommittedBlobNotDirtyWorkingTree(t *testing.T) {
 	if !source.WorkingTreeClean {
 		t.Error("expected initial repository working tree to be clean")
 	}
+	if source.RuntimeVersion != "1.0.1" {
+		t.Errorf("runtime version = %q, want 1.0.1", source.RuntimeVersion)
+	}
+	if source.PackVersion != "6.0.0" {
+		t.Errorf("pack version = %q, want 6.0.0", source.PackVersion)
+	}
 
 	origBlob, err := ReadBlob(ctx, repoDir, source.HeadSHA, "LICENSE")
 	if err != nil {

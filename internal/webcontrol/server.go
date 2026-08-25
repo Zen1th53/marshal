@@ -27,8 +27,8 @@ type ServerConfig struct {
 	ReadTimeout              time.Duration
 	WriteTimeout             time.Duration
 	// BackupDir is the directory where real backups are written/read when the
-	// server is backed by a live store. When empty, backup operations fall
-	// back to in-memory fixtures (dev-demo/tests).
+	// server is backed by a live store. When empty, backup operations in
+	// explicitly constructed test servers use in-memory fixtures.
 	BackupDir string
 }
 
@@ -84,8 +84,8 @@ func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
 		sseHub:     NewSSEHub(),
 		csrfSecret: csrfSecret,
 	}
-	// Wire the canonical store when a runtime is supplied. In tests / dev-demo
-	// mode (nil runtime) handlers fall back to in-memory fixtures.
+	// Wire the canonical store when a runtime is supplied. Explicit test
+	// servers may pass nil and use in-memory fixtures.
 	if rt, ok := runtime.(interface{ Store() *store.Store }); ok {
 		s.store = rt.Store()
 	}

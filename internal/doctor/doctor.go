@@ -24,6 +24,7 @@ const (
 	Pass     Verdict = "PASS"
 	Degraded Verdict = "DEGRADED"
 	Fail     Verdict = "FAIL"
+	NotRun   Verdict = "NOT_RUN"
 )
 
 type Result struct {
@@ -183,11 +184,23 @@ func Check(ctx context.Context, root string, options Options) Report {
 	}
 	add(Result{Name: "ollama_models", Verdict: Pass, Method: "local Ollama API", Capability: "Local model advisory", Detail: ollamaDetail})
 
-	probeCodex(ctx, lookup, run, add)
-	probeOpenCode(ctx, lookup, run, add)
-	probeOllama(ctx, lookup, run, add)
-	probeGemini(ctx, lookup, run, add)
-	probeClaude(ctx, lookup, run, add)
+	if options.ProbeProviders {
+		probeCodex(ctx, lookup, run, add)
+		probeOpenCode(ctx, lookup, run, add)
+		probeOllama(ctx, lookup, run, add)
+		probeGemini(ctx, lookup, run, add)
+		probeClaude(ctx, lookup, run, add)
+	} else {
+		for _, name := range []string{"codex", "opencode", "ollama", "gemini", "claude"} {
+			add(Result{
+				Name:       name,
+				Verdict:    NotRun,
+				Method:     "not requested",
+				Capability: "run doctor --probe-providers",
+				Detail:     "optional provider probe not run",
+			})
+		}
+	}
 	probeBwrap(ctx, lookup, run, add)
 	if secureDirectory(layout.Artifacts) {
 		add(success("artifacts", "stat artifacts", "artifact directory is writable and mode 0700"))
