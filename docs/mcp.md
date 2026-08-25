@@ -1,7 +1,7 @@
 # Model Context Protocol (MCP) Guide
 
 **Protocol Version**: MCP `2026-07-28`
-**Runtime Milestone**: `v1.0.0`
+**Runtime Milestone**: `v1.0.1`
 
 MARSHAL implements an authenticated Model Context Protocol (MCP 2026-07-28) server enabling remote orchestrators, agents, and IDE tools to interact with the MARSHAL control plane.
 

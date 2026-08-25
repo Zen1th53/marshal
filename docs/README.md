@@ -16,7 +16,7 @@ Welcome to the official MARSHAL documentation portal. Use this index to navigate
 
 - [Architecture Overview](architecture.md) — System design, control plane boundaries, and component roles
 - [Core Concepts](concepts.md) — Task leases, capability brokers, execution cells, and verification quorum
-- [Runtime Specification](runtime.md) — Daemon lifecycle, Unix socket protocols, and SQLite schema (`v69`)
+- [Runtime Specification](runtime.md) — Daemon lifecycle, Unix socket protocols, and SQLite schema (`v72`)
 - [Execution Cells](execution-cells.md) — Process isolation, `bubblewrap` sandboxing, and worktrees
 - [Community Resource Awareness](resources.md) — Read-only host health, local Ollama discovery, and safe recommendations
 
@@ -35,7 +35,6 @@ Welcome to the official MARSHAL documentation portal. Use this index to navigate
 ## Provider Adapters & Integrations
 
 - [Provider Support Guide](providers.md) — Capability matrix, provider probing, and maturity states
-- [Codex Adapter](providers/opencode-ollama.md) — OpenAI Codex execution configuration
 - [OpenCode + Ollama Adapter](providers/opencode-ollama.md) — Local LLM execution with Ollama models
 - [MCP Protocol Guide](mcp.md) — Model Context Protocol (2026-07-28) server integration & Bearer auth
 - [A2A Protocol Guide](a2a.md) — Agent-to-Agent 1.0 wire protocol specification

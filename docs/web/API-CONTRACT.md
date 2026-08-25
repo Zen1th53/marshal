@@ -1,44 +1,27 @@
-# MARSHAL Web Control Plane — API Contract & DTO Specification
+# Web Control Plane API contract
 
-**Specification Version:** `1.0.0`  
-**Task:** T166  
+**Contract version:** `1.0.0`
 
-This document formalizes the complete JSON HTTP contract for the MARSHAL Web Control Plane.
+**Product release:** `v1.0.1`
 
----
+All JSON endpoints use `application/json; charset=utf-8`. Mutations require an
+authenticated session, a session-bound `X-CSRF-Token`, and any route authority
+declared by the server.
 
-## 1. Common Conventions
+The production-supported route groups are:
 
-- **Encoding:** `application/json; charset=utf-8`
-- **Timestamps:** ISO-8601 / RFC-3339 in UTC (`2026-08-19T12:00:00Z`)
-- **Identifiers:** Opaque URL-safe strings (`TASK-001`, `MEM-8a9b0c`)
-- **Pagination:** Cursor-based pagination with `limit` (default 50, maximum 100) and `next_cursor`
-- **Mutations:** Include optional `idempotency_key` and `expected_revision` for CAS safety.
+- `GET /api/v1/system/status`;
+- `POST /api/v1/auth/login`, session/CSRF inspection, and logout;
+- `GET /api/v1/resources`;
+- `GET /api/v1/health/doctor`;
+- canonical memory search, explain, record/detail, working-memory, and
+  mutation routes described in [API reality](API-REALITY-MATRIX.md); and
+- backup list/create/verify operations.
 
----
+Other registered routes retain DTOs and explicit test/demo handlers but return
+`501 Not Implemented` when a live runtime is attached. They are not part of
+the v1.0.1 production API claim.
 
-## 2. Core Resource Endpoints
-
-### 2.1 System Diagnostics & Health
-
-- `GET /api/v1/resources` -> authenticated point-in-time Community resource snapshot
-- `GET /api/v1/system/status` -> `SystemStatusDTO`
-- `GET /api/v1/system/adapters` -> `[]AdapterSummaryDTO`
-
-### 2.2 Agents
-- `GET /api/v1/agents` -> `PagedResponse[AgentSummaryDTO]`
-- `POST /api/v1/agents` -> `MutationEnvelope[AgentCreateRequest]` -> `AgentSummaryDTO`
-
-### 2.3 Tasks & Runs
-- `GET /api/v1/tasks` -> `PagedResponse[TaskSummaryDTO]`
-- `POST /api/v1/tasks/import` -> `[]TaskImportDTO` -> `TaskImportResultDTO`
-- `POST /api/v1/tasks/:id/run` -> `TaskRunTriggerDTO` -> `RunSummaryDTO`
-- `POST /api/v1/tasks/:id/cancel` -> `TaskCancelRequestDTO` -> `TaskSummaryDTO`
-
-### 2.4 Institutional Memory
-- `GET /api/v1/memory/search?q=...` -> `PagedResponse[MemoryRecordDTO]`
-- `GET /api/v1/memory/:id` -> `MemoryRecordDTO`
-- `POST /api/v1/memory/:id/mutate` -> `MutationEnvelope[MemoryMutationDTO]`
-
-### 2.5 Realtime SSE Stream
-- `GET /api/v1/events/stream` (SSE: `text/event-stream`)
+Identifiers are opaque URL-safe strings. Timestamps are RFC 3339 UTC. Error
+responses use an `error` object containing `code`, `message`, and an optional
+`correlation_id`.

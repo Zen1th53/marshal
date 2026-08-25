@@ -1,6 +1,6 @@
 # MARSHAL Troubleshooting Guide
 
-**Runtime Milestone**: `v1.0.0`
+**Runtime Milestone**: `v1.0.1`
 
 This guide provides symptom-based troubleshooting for engineers operating MARSHAL local control plane and provider adapters.
 
@@ -10,7 +10,7 @@ This guide provides symptom-based troubleshooting for engineers operating MARSHA
 
 ### Symptom: `marshal doctor` reports `bwrap` is missing / unavailable
 - **Meaning**: Linux `bubblewrap` binary is not found on `$PATH`.
-- **Impact**: Execution falls back to process isolation without strong filesystem namespaces.
+- **Impact**: Provider execution fails closed by default. Process-only execution is available only through an explicit operator opt-in for eligible R0/R1 work.
 - **Fix**: Install bubblewrap using your host package manager:
   ```bash
   # Ubuntu / Debian
@@ -79,7 +79,7 @@ This guide provides symptom-based troubleshooting for engineers operating MARSHA
 ### Symptom: Local model returns conversational text instead of executing tool calls
 - **Meaning**: The selected model lacks OpenCode tool-calling schema support.
 - **Explanation**: Conversational text capability does NOT imply tool-calling capability.
-- **Fix**: Switch to a verified tool-calling model such as `qwythos-9b`.
+- **Fix**: Select a model that exposes compatible tool calls in your installed OpenCode/Ollama versions and verify it locally.
 
 ---
 

@@ -1,6 +1,7 @@
 # MARSHAL Web Control Plane — Security Architecture & Hardening Guide
 
-**Security Baseline:** `1.0.0`  
+**Security Baseline:** `1.0.1`
+
 **Task:** T175  
 
 This document details the security model, defense-in-depth layers, headers, and invariants enforced across the MARSHAL Web Control Plane.

@@ -1,58 +1,61 @@
-# MARSHAL Architecture
+# MARSHAL architecture
 
-MARSHAL separates durable engineering authority from the coding-agent vendor that performs work. This page provides the authoritative runtime architecture map and component interaction specification.
+MARSHAL separates durable engineering authority from the provider process that
+performs work. This page describes the v1.0.1 Community runtime at SQLite
+schema v72.
 
----
+```text
+CLI / Unix socket / MCP / A2A / loopback Web
+                     |
+                     v
+                  Runtime
+                     |
+       capability broker + role authority
+                     |
+          risk gate + network decision
+                     |
+        worktree + Bubblewrap sandbox
+                     |
+          Codex / OpenCode / Gemini / Claude
+                     |
+         sanitized evidence + event log
+                     |
+        canonical SQLite state and memory
+```
 
-## Implemented Runtime Architecture
+## Entry surfaces
 
-<p align="center">
-  <img src="assets/marshal-architecture-graphite.svg"
-       alt="MARSHAL implemented runtime architecture"
-       width="100%">
-</p>
+The CLI can call the runtime directly or through the mode-`0600` local daemon
+socket. MCP (`2026-07-28`) and A2A (`1.0`) are authenticated protocol entry
+points into the same runtime. The Web UI is loopback-bound by default and uses
+one-time codes, sessions, CSRF checks, CSP, and route authority checks.
 
-> Source-faithful to runtime `1.0.0` / SQLite schema `v69` at source snapshot
-> `8f7d092e038e`. Roadmap-only or contract-only components are intentionally omitted.
+## Execution path
 
----
+`Runtime.Run` performs the canonical sequence:
 
-## 1. Entry Surfaces (`cmd/internal`)
+1. load the task and validate its expected revision;
+2. evaluate role, capability, risk, gate, and network policy;
+3. prepare a task-scoped Git worktree;
+4. recall bounded, authorized canonical memory;
+5. resolve and probe the selected provider adapter;
+6. choose an enforceable isolation boundary;
+7. supervise the process with timeout and output bounds;
+8. sanitize and persist evidence and Git observations; and
+9. finalize runtime state and capture evidence-linked candidate memory.
 
-The MARSHAL control plane exposes three interoperable entry surfaces:
-- **Native CLI (`marshal`)**: Direct command execution and administrative management.
-- **MCP HTTP Server (`protocol 2026-07-28`)**: Model Context Protocol endpoint secured by HMAC Bearer tokens.
-- **A2A HTTP+JSON Server (`protocol 1.0`)**: Agent-to-Agent wire protocol exposing agent card discovery and task delegation.
+Bubblewrap provides the strong Linux filesystem/process boundary. Endpoint
+host/port rules are evaluated by policy, but Bubblewrap alone cannot enforce
+them. Until an enforcing proxy is configured, endpoint-restricted egress is
+rejected instead of broadened.
 
-All entry points communicate with `app.Runtime` either in-process or over the local Unix domain socket (`.marshal/runtime.sock`, permissions `0600`).
+## Canonical state
 
----
+SQLite in WAL mode is authoritative for projects, agents, sessions, tasks,
+leases, runs, events, evidence references, policy state, handoffs, and memory.
+Git worktrees isolate task modifications, and content-addressed artifacts bind
+captured bytes to SHA-256 digests. Derived memory indexes can be rebuilt and do
+not replace `memory_records_v2` as the source of truth.
 
-## 2. Runtime Control Plane (`app.Runtime`)
-
-The central coordination engine performs:
-- **Pre-execution checks**: Risk descriptor evaluation (`R0`..`R3`), capability authorization, and security officer veto validation.
-- **Task & Session Coordination**: Atomic task claims, lease heartbeats, and transactional status transitions.
-- **Events Engine**: Real-time event streaming and append-only audit recording.
-- **Explicit Verification API**: Dedicated `Runtime.Verify` endpoint authorizing `worker.Manager.Run` with exact command arguments and recording SHA-256 digests of stdout/stderr.
-
----
-
-## 3. Isolated Task Execution (`Runtime.Run`)
-
-Task runs follow a strict, fail-closed isolation pipeline:
-1. **Worktree Preparation**: `worktree.Manager.Prepare` allocates an isolated git worktree under `.marshal/worktrees/<task-id>`.
-2. **Adapter Resolution & Probing**: Resolves the configured provider binary (`Codex`, `OpenCode + Ollama`, `Gemini`, `Claude`) and verifies its capability state.
-3. **Command Construction**: `providerAdapter.Run` builds the execution command.
-4. **Sandboxed Process Supervisor**: `worker.Manager` enforces timeouts (default 30m), output limits, and heartbeat tracking. When Linux kernel namespaces are available, `worker.NewSandboxed` wraps the process in an unprivileged `bubblewrap` (`bwrap`) container with read-only root mounts, tmpfs runtime directories, and `--unshare-net` egress isolation.
-
----
-
-## 4. Result Handling & Persistence
-
-Upon process termination:
-1. **Sanitization**: Output streams are filtered and credential boundary redaction is applied.
-2. **Artifact Ingestion**: Reports are stored in `.marshal/artifacts/sha256/<hex>` with content-addressed SHA-256 digests.
-3. **Worktree Inspection**: Git working trees are inspected; changes are committed under policy, or uncommitted runs are rejected.
-4. **Evidence Recording**: Command, environment, and output evidence nodes are recorded with cryptographic binding.
-5. **Finalization**: `FinishRun` updates HEAD observations, finalizes execution status, and commits canonical live coordination state to SQLite (`v69`).
+See [Runtime modes](runtime.md), [Security model](security-model.md), and
+[Runtime memory](runtime-memory-fabric.md).

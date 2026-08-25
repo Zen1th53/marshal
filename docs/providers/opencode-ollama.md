@@ -1,9 +1,9 @@
 # OpenCode & Local Ollama Provider Guide
 
-**Runtime Milestone**: `v1.0.0`
+**Runtime Milestone**: `v1.0.1`
 **Client Runner**: OpenCode CLI (`opencode`)
 **Local LLM Provider**: Ollama Daemon (`http://localhost:11434`)
-**Tested Model**: `qwythos-9b`
+**Example Model**: `qwythos-9b`
 
 ---
 
@@ -43,11 +43,11 @@ Ensure `ollama` service is running in the background (`ollama serve` or systemd 
 
 | Model | Family | Tool Calls | Status in MARSHAL |
 |---|---|---|---|
-| `qwythos-9b` | Qwen3.5 9B | **Confirmed** | **E2E VERIFIED Default** |
+| `qwythos-9b` | Qwen3.5 9B | Provider-dependent | Example only; v1.0.1 E2E NOT_RUN |
 | `qwen2.5-coder:14b` | Qwen2.5 14B | Partial | Returns JSON as text in some revisions |
 | `llama3:8b` | Llama 3 8B | Conversational (Unsupported) | Fails to emit tool call schema |
 
-To pull the verified model:
+To pull this example model:
 ```bash
 ollama pull qwythos-9b
 ```
@@ -89,7 +89,7 @@ marshal adapter probe opencode
 
 ### Symptom: Model returns conversational text instead of editing files
 - **Cause**: Selected model lacks OpenCode tool-calling schema support.
-- **Fix**: Switch to a tool-call verified model such as `qwythos-9b`.
+- **Fix**: Select a model whose current OpenCode/Ollama versions actually expose compatible tool calls, then verify it in your environment.
 
 ### Symptom: Task returns `ErrConflict` or "worker produced no commit"
 - **Cause**: The model executed without error but produced no git diffs or uncommitted files in the worktree.

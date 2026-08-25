@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.0.1 — Canonical Community Consolidation and Production Hardening
+
+### Fixed
+
+- Reconciled the current memory runtime on schema v72, including governed
+  consolidation, live task-memory refresh, retrieval quality gates, and
+  provider-session import support.
+- Added bounded Community Resource Awareness without adaptive Enterprise
+  control behavior.
+- Made clean initialization self-contained and symlink-safe.
+- Prevented the production Web CLI from falling back to demo fixtures and
+  disabled fixture-only API surfaces when a live runtime is attached.
+- Made optional provider probes explicitly opt-in and reports them as
+  `NOT_RUN` when not requested.
+- Corrected runtime/pack version extraction in legal source evidence.
+
+### Changed
+
+- Consolidated current dependency and pinned GitHub Action updates.
+- Synchronized README, installation, architecture, provider, memory, resource,
+  Web boundary, security, and licensing/dependency documentation with the
+  actual Community implementation.
+- Added deterministic Linux amd64/arm64 release archives, SPDX SBOM generation,
+  checksums, release-manifest verification, and clean-install validation to the
+  existing release process.
+
+See [`release/RELEASE_NOTES_1.0.1.md`](release/RELEASE_NOTES_1.0.1.md) for
+exact verification and provider qualification results.
+
 ## Web Control Plane 1.0.0 (T165–T220) — 2026-08-20
 
 Comprehensive Web Operator Control Plane:
