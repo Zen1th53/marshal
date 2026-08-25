@@ -14,14 +14,14 @@ This document contains licensing and copyright notices for third-party software,
 
 ---
 
-## 2. Direct Go Module Dependencies
+## 2. Go Module Dependencies
 
 All external Go module dependencies are managed via `go.mod` and fetched during build time. No dependency source code is vendored into the repository tree.
 
 | Dependency Module | Version | License | Upstream Copyright / Notice |
 |---|---|---|---|
 | `go.yaml.in/yaml/v3` | `v3.0.5` | MIT / Apache-2.0 | Copyright (c) 2011-2019 Canonical Ltd |
-| `modernc.org/sqlite` | `v1.56.0` | BSD-3-Clause | Copyright (c) 2017 The C-Go Authors |
+| `modernc.org/sqlite` | `v1.57.0` | BSD-3-Clause | Copyright (c) 2017 The C-Go Authors |
 | `github.com/dustin/go-humanize` | `v1.0.1` | MIT | Copyright (c) 2010 Dustin Sallings |
 | `github.com/google/uuid` | `v1.6.0` | BSD-3-Clause | Copyright (c) 2009, 2014 Google Inc. |
 | `github.com/mattn/go-isatty` | `v0.0.24` | MIT | Copyright (c) Yasuhiro Matsumoto |
@@ -34,6 +34,19 @@ All external Go module dependencies are managed via `go.mod` and fetched during 
 
 ---
 
-## 3. Policy Regarding Future Third-Party Submissions
+## 3. External Runtime Tools
+
+MARSHAL executes the separately installed `bubblewrap` (`bwrap`) binary to
+construct Linux sandbox namespaces. Bubblewrap is not linked into MARSHAL,
+vendored in this repository, or bundled in MARSHAL release archives. Its
+upstream source identifies the license as `LGPL-2.0-or-later` and is available
+from [containers/bubblewrap](https://github.com/containers/bubblewrap).
+
+Provider CLIs are likewise discovered and executed as separately installed
+operator-selected tools; MARSHAL does not redistribute them.
+
+---
+
+## 4. Policy Regarding Future Third-Party Submissions
 
 Contributors must explicitly disclose any third-party code, snippets, dependencies, or materials included in Pull Requests. Copyright assignment agreements do **not** assign third-party copyrights to MARSHAL. See [`docs/legal/THIRD-PARTY-POLICY.md`](docs/legal/THIRD-PARTY-POLICY.md).

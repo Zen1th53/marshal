@@ -51,28 +51,28 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "b5a706be45d3c195db7da995f5be79723326a4c16de9eb8ed2750efbeb056b85",
+      "sha256": "c5237dcc3bf934ecfa31e167bd084304fc8ad7a723256eba485df9361806a6e4",
       "bytes": 2751
     },
     {
       "path": ".github/workflows/codeql.yml",
-      "sha256": "1cfc2a72119521a854509004ddf61aa88ce4d8e67bc5dab7aa439792f34cb332",
-      "bytes": 670
+      "sha256": "3eea5c17be1c02a936383b70c0a1239ae7327e5f96a124a87f7e5ef143f7e48c",
+      "bytes": 756
     },
     {
       "path": ".github/workflows/contributor-rights-check.yml",
-      "sha256": "f1fa2a0b6efcfee69e2a50c9bd28a38aa10626f53a84a247185cc13b9d507618",
+      "sha256": "0fc692d3da73dd5db3a271a3a1334597f5d8f5721f93a49c22c69c4560eed590",
       "bytes": 3477
     },
     {
       "path": ".github/workflows/dependency-review.yml",
-      "sha256": "4f2d383ef3296cff2ba76d5d8c77854ba9424f1b459325018f601320f1296daf",
-      "bytes": 362
+      "sha256": "90deab0e92db15e662c0a4efdf23878c867a7d1676a77fe462a7bdc58ba869d3",
+      "bytes": 405
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "7eb04d0c88331bb893eb49b4719fc594f7febdf041f35f0f3bc69624c5b9d7b3",
-      "bytes": 3795
+      "sha256": "d26c23064b6d67da755cf4f4e802ac44feedeae4238b6a4017bd1aea2d58c35f",
+      "bytes": 3881
     },
     {
       "path": ".gitignore",
@@ -211,8 +211,8 @@
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
-      "sha256": "09d7bc30095dbf7093484e867f46246ba946f3888d3a4f4c5b15ea721bb25e0b",
-      "bytes": 2339
+      "sha256": "51748c17616ef8518761ecfda8ddcf209ef9438a21051e629848acabf913c446",
+      "bytes": 2879
     },
     {
       "path": "TORVALDS.md",
@@ -1286,12 +1286,12 @@
     },
     {
       "path": "go.mod",
-      "sha256": "6753cba61b13575fd6b206be74b8e6cbd06e715b8504fd7cbb3a861e6693bde5",
+      "sha256": "7ecf9ff7c5339e2c7d73edc06b86b8a3865302616452d947b35a4cba1f4bc61d",
       "bytes": 557
     },
     {
       "path": "go.sum",
-      "sha256": "61f456ccdeff8ecd0e15124abf90271b79c6be35ecd6015ef5ad6210ed483b98",
+      "sha256": "961b4a7886af9084ed2890f5e4fbef884f34a801a0b68546565d0824e71a8fcc",
       "bytes": 4290
     },
     {
@@ -3491,8 +3491,8 @@
     },
     {
       "path": "internal/policytest/engine_test.go",
-      "sha256": "b09614d957384a8351ec3e730e95cf544742fbde8454ecd4162058c992ec5b1f",
-      "bytes": 5029
+      "sha256": "744e486ddffaa490a130942aea7ecf5d8c3af852811514e90f2d86adfd7610aa",
+      "bytes": 5968
     },
     {
       "path": "internal/policytest/errors.go",
