@@ -1555,6 +1555,21 @@
       "bytes": 2226
     },
     {
+      "path": "internal/app/defaults/CAPABILITIES.yaml",
+      "sha256": "b3cb698c174f1e390ff4e09e2cbe62edc42abf7b828471d13168aa1cf001db2b",
+      "bytes": 1895
+    },
+    {
+      "path": "internal/app/defaults/PACK-VERSION.yaml",
+      "sha256": "b45031c5051a0675214d810a95587101709ce980b61fdf6e9d425828d571ef9a",
+      "bytes": 333
+    },
+    {
+      "path": "internal/app/defaults/RUNTIME-VERSION.yaml",
+      "sha256": "dc96d620a7582abb6580a67d6396cf60b1e8be8b271c732f783b9028f0f2d940",
+      "bytes": 182
+    },
+    {
       "path": "internal/app/derived_retrieval_test.go",
       "sha256": "91c780354d46830bbeab42c4d9a91da64b54106f71af335d5d963b8ca2e23d3d",
       "bytes": 10310
@@ -1693,6 +1708,16 @@
       "path": "internal/app/policytest_service.go",
       "sha256": "7cc9d424fb1ecf228b121c027759a7c65c30387f5ac0b2790494eafa6ac4d60f",
       "bytes": 2716
+    },
+    {
+      "path": "internal/app/project_defaults.go",
+      "sha256": "8726a0f938f2adaf193345d8c333ecc597b9c909e2f28ffc440fd5ba0c0b9778",
+      "bytes": 1634
+    },
+    {
+      "path": "internal/app/project_defaults_test.go",
+      "sha256": "71704b43e7d39920ab0c9b80dd178af2cd57260927be5f2d3a6b38a62020a1d9",
+      "bytes": 2383
     },
     {
       "path": "internal/app/receipt_audit_test.go",
@@ -6121,8 +6146,8 @@
     },
     {
       "path": "tools/release_trust.py",
-      "sha256": "9aa05f38dc694786e917fe02744aaa69fe571c397e99a0e45f33c0d6d6c28d2c",
-      "bytes": 6107
+      "sha256": "2932e678b4bb60c781a2fd9226bf4f45f6a509209b8bb7129614a42ef09be525",
+      "bytes": 8127
     },
     {
       "path": "tools/release_verify.py",
