@@ -186,8 +186,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "4ff4481b910ef5272f201b5d7eeac32e429ac6f0fe362ddf0d46c84fb5b7527b",
-      "bytes": 9773
+      "sha256": "dd79c59cd65f96174d43bd8a38adf73292f23549176b8c15fc514848968dda1a",
+      "bytes": 29612
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -871,8 +871,13 @@
     },
     {
       "path": "docs/assets/marshal-architecture-source-faithful.svg",
-      "sha256": "6bcee78d4d9982a6f312604ac1be9023e797181b01a0fee869a3741b84239848",
-      "bytes": 16782
+      "sha256": "c693ced03026ccb68bcbe2d3ca0d2f825f78e4ba1a9c0b301cf6160394040d48",
+      "bytes": 19307
+    },
+    {
+      "path": "docs/assets/marshal-architecture.svg",
+      "sha256": "e7b77512812f08b36e9f119134bac2a32f9b77191d0a6ecb582f5b7f6174665b",
+      "bytes": 19308
     },
     {
       "path": "docs/capability-broker.md",
@@ -6861,8 +6866,8 @@
     },
     {
       "path": "web/src/test/Performance.test.tsx",
-      "sha256": "87ce22df6c41c975c020ef62e1adb4826b349a416e8ce8ab862f659026af48d7",
-      "bytes": 999
+      "sha256": "5b72c6bdcf34b2d35263b74178731d7462412a585d5032c5cf6244b113b26f51",
+      "bytes": 1034
     },
     {
       "path": "web/src/test/setup.ts",
