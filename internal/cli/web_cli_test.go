@@ -17,8 +17,9 @@ func TestT167WebCLIServeHelpAndExecution(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 
-	// Context with immediate timeout so web serve terminates gracefully
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	// Keep the server bounded while allowing SQLite startup under the race
+	// detector and loaded CI runners.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	_ = Execute(ctx, repo.Path(), []string{"web", "serve", "--listen", "127.0.0.1", "--port", "18787"}, strings.NewReader(""), &stdout, &stderr)

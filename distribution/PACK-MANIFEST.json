@@ -1286,8 +1286,8 @@
     },
     {
       "path": "go.mod",
-      "sha256": "7ecf9ff7c5339e2c7d73edc06b86b8a3865302616452d947b35a4cba1f4bc61d",
-      "bytes": 557
+      "sha256": "8c38fed2fd9fc291c7c6a83d3f645875183bf67fabf1e563b628e8920ddbd1bb",
+      "bytes": 558
     },
     {
       "path": "go.sum",
@@ -2066,8 +2066,8 @@
     },
     {
       "path": "internal/cli/web_cli_test.go",
-      "sha256": "328e6e491f8c0f2b33f4b6a58840bca3e6fdfe5839443e04bbb59685b4dd3597",
-      "bytes": 1451
+      "sha256": "a9f69bddfd4d248cd6ec7044f01032f589d1e99b0224d6b504c6a6dc0410df66",
+      "bytes": 1484
     },
     {
       "path": "internal/context/budget/adversarial_test.go",
