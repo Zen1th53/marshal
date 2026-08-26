@@ -1546,8 +1546,8 @@
     },
     {
       "path": "internal/app/capability_grant_test.go",
-      "sha256": "ceddeeee2421da41e7e1c38eeb835623901364ac66e3ba10f22920dc15b40d8a",
-      "bytes": 2114
+      "sha256": "592ad11c1dcf35cae21fc16f7dcc3f7bb12a861c1e67188b4e9432b56e0012a6",
+      "bytes": 2578
     },
     {
       "path": "internal/app/cell_runtime_a06_test.go",
@@ -1936,8 +1936,8 @@
     },
     {
       "path": "internal/capability/engine.go",
-      "sha256": "0011d400ba0b159c2fbf24e2edd850e79f831a41a9dbcb885ef4398ab5c3d4f7",
-      "bytes": 13371
+      "sha256": "276a1a5c75e313301db01768e1121ff6690e1983a5ef57a7999080bfc80624a2",
+      "bytes": 13506
     },
     {
       "path": "internal/capability/engine_test.go",

@@ -70,4 +70,15 @@ func TestResolveAdapterIssuesScopedShellExecGrant(t *testing.T) {
 	if grant.Scope.Resource != resolvedBin {
 		t.Fatalf("grant resource = %q, want exact provider binary %q", grant.Scope.Resource, resolvedBin)
 	}
+
+	query := capability.Query{
+		Subject: "agent-grant", TaskID: "TASK-GRANT", Kind: capability.KindShellExec,
+		Resource: resolvedBin, Action: "execute",
+	}
+	for attempt := 1; attempt <= 2; attempt++ {
+		decision, authorizeErr := runtime.capabilityBroker.Authorize(context.Background(), query)
+		if authorizeErr != nil || decision.Outcome != capability.OutcomeAllow {
+			t.Fatalf("authorize attempt %d: decision=%#v err=%v", attempt, decision, authorizeErr)
+		}
+	}
 }
