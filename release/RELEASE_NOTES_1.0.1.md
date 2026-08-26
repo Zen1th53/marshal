@@ -49,18 +49,23 @@ verifiable.
 
 ## Verification
 
-Final results will be recorded here after the release commit completes all
-mandatory local and GitHub release gates.
+The mandatory Community release gate ran on 2026-08-26 with Go 1.25.13.
 
 | Gate | Result |
 |---|---|
-| Go build / vet / test / race | PENDING |
-| Vulnerability scan | PENDING |
-| Sandbox, policy, authz, memory, migration, resource, provider, backup tests | PENDING |
-| Web install / typecheck / lint / test / build | PENDING |
-| Python conformance and release tooling | PENDING |
-| Clean install and first local workflow | PENDING |
-| Pack manifest and release artifact verification | PENDING |
+| Go build / vet / test / race | PASS |
+| `govulncheck ./...` | PASS — no vulnerabilities found |
+| Sandbox, policy, authz, memory, migration, resource, provider, backup tests | PASS |
+| Web `npm ci` / typecheck / lint / 116 tests / build / embedded-asset parity | PASS |
+| Python pack conformance, release tooling, and legacy tooling | PASS |
+| Clean install, initialization, doctor, daemon, first local workflow, backup, Web start, restart persistence | PASS |
+| Source pack manifest | PASS |
+| Reproducible archives, SPDX SBOM, checksums, and release-manifest tests | PASS |
+
+ESLint emitted one non-fatal `no-useless-escape` warning in
+`web/src/api/errors.ts`; lint still exited successfully. Credentialed provider
+qualification is reported separately below and is not included in the
+mandatory gate PASS.
 
 ## Provider verification
 

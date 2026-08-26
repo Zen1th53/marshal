@@ -5736,8 +5736,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
-      "sha256": "8476ba6efa8f4576ed88c764402851e7fe1f72ce77f3b3a0a70caf16426bfad1",
-      "bytes": 4587
+      "sha256": "cddc917ee264db538c79ddbee80f5042474a0ad454cbae8955a109be19de244e",
+      "bytes": 4959
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",
