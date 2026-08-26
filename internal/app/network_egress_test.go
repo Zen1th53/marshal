@@ -120,7 +120,7 @@ func (a *netpolMockAdapter) Capabilities() map[string]string               { ret
 func (a *netpolMockAdapter) CollectEvidence(adapter.Result) map[string]any { return nil }
 func (a *netpolMockAdapter) Shutdown(context.Context, string) error        { return nil }
 
-func TestRunWithRestrictedEgressWithProxy(t *testing.T) {
+func TestRunWithRestrictedEgressFailsClosedWithoutEnforcingBackend(t *testing.T) {
 	repo := runtimeRepo(t)
 	if _, err := Bootstrap(context.Background(), repo.Path()); err != nil {
 		t.Fatal(err)
@@ -144,18 +144,15 @@ func TestRunWithRestrictedEgressWithProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := runtime.Run(context.Background(), RunRequest{
+	_, err = runtime.Run(context.Background(), RunRequest{
 		TaskID:          "TASK-NETPOL-RUN",
 		AgentID:         agent.ID,
 		Adapter:         "codex",
 		NetworkRequired: true,
 		EgressRules:     allowRule("api.example.com", 443),
 	})
-	if err != nil {
-		t.Fatalf("expected run with egress proxy to succeed, got error: %v", err)
-	}
-	if res.Status != "success" {
-		t.Fatalf("expected success status, got %s", res.Status)
+	if !errors.Is(err, netpolicy.ErrEnforcementUnavailable) {
+		t.Fatalf("expected ErrEnforcementUnavailable, got %v", err)
 	}
 }
 

@@ -94,7 +94,8 @@ run_check "DOCS AND MANIFEST" bash -c '
 
 printf '%s\n' "---------------------------------------------------------" "Opt-in external provider qualification"
 run_optional_e2e "CODEX E2E" MARSHAL_TEST_REAL_CODEX 'TestRealCodex'
-run_optional_e2e "OPENCODE+OLLAMA E2E" MARSHAL_TEST_REAL_OPENCODE 'TestRealOpenCode'
+run_optional_e2e "OPENCODE ADAPTER E2E" MARSHAL_TEST_REAL_OPENCODE '^TestRealOpenCodeAdapter$'
+printf "%-26s ... NOT_RUN (endpoint-enforcing provider runtime egress is unavailable)\n" "OPENCODE RUNTIME E2E"
 run_optional_e2e "GEMINI E2E" MARSHAL_TEST_REAL_GEMINI 'TestRealGemini'
 run_optional_e2e "CLAUDE E2E" MARSHAL_TEST_REAL_CLAUDE 'TestRealClaude'
 run_optional_e2e "CODEX+CLAUDE PARALLEL" MARSHAL_TEST_REAL_PARALLEL_CODEX_CLAUDE 'TestRealParallelProviderAgentsSharedMemory'

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -57,12 +56,25 @@ func TestRealOpenCodeAdapter(t *testing.T) {
 	if result.Status != adapter.StatusSuccess {
 		t.Fatalf("result = %#v", result)
 	}
+	proof, err := os.ReadFile(repo.Path() + "/opencode-proof.txt")
+	if err != nil {
+		t.Fatalf("read OpenCode proof: %v", err)
+	}
+	if !strings.Contains(string(proof), "MARSHAL opencode proof") {
+		t.Fatalf("unexpected OpenCode proof content: %q", proof)
+	}
+}
+
+func requireOpenCodeRuntimeEgress(t *testing.T) {
+	t.Helper()
+	t.Skip("NOT_RUN: canonical provider runtime egress is fail-closed until an endpoint-enforcing backend is wired")
 }
 
 func TestRealOpenCodeRuntimeE2E(t *testing.T) {
 	if os.Getenv("MARSHAL_TEST_REAL_OPENCODE") != "1" {
 		t.Skip("set MARSHAL_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
 	}
+	requireOpenCodeRuntimeEgress(t)
 	t.Setenv("MARSHAL_OPENCODE_MODEL", defaultOpenCodeModel())
 
 	repo := runtimeIntegrationRepo(t)
@@ -86,12 +98,7 @@ func TestRealOpenCodeRuntimeE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := runtime.Run(context.Background(), app.RunRequest{TaskID: "TASK-REAL-OPENCODE-RUNTIME", AgentID: agent.ID, Adapter: "opencode"})
-	requireCommit := os.Getenv("MARSHAL_OPENCODE_REQUIRE_COMMIT") == "1"
 	if err != nil {
-		if errors.Is(err, model.ErrConflict) && !requireCommit {
-			t.Logf("OpenCode adapter ran to completion without crashing (local model produced no commit — acceptable for E2E gate)")
-			return
-		}
 		t.Fatal(err)
 	}
 
@@ -102,8 +109,8 @@ func TestRealOpenCodeRuntimeE2E(t *testing.T) {
 		t.Fatalf("OpenCode adapter crashed (exit %d):\nstdout: %s\nstderr: %s", result.ExitStatus, stdout, stderr)
 	}
 
-	if requireCommit && result.ResultCommit == result.BaseCommit {
-		t.Fatalf("MARSHAL_OPENCODE_REQUIRE_COMMIT=1 but no commit produced.\nstdout: %s\nstderr: %s", stdout, stderr)
+	if result.ResultCommit == result.BaseCommit {
+		t.Fatalf("OpenCode produced no task commit.\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
 
 	if result.ResultCommit != result.BaseCommit {
@@ -115,6 +122,7 @@ func TestRealOpenCodeMCPFullChain(t *testing.T) {
 	if os.Getenv("MARSHAL_TEST_REAL_OPENCODE") != "1" {
 		t.Skip("set MARSHAL_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
 	}
+	requireOpenCodeRuntimeEgress(t)
 	t.Setenv("MARSHAL_OPENCODE_MODEL", defaultOpenCodeModel())
 
 	repo := runtimeIntegrationRepo(t)
@@ -178,12 +186,6 @@ func TestRealOpenCodeMCPFullChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	if rpcResp["error"] != nil {
-		errMap, _ := rpcResp["error"].(map[string]any)
-		msg, _ := errMap["message"].(string)
-		if strings.Contains(msg, "worker produced no commit") && os.Getenv("MARSHAL_OPENCODE_REQUIRE_COMMIT") != "1" {
-			t.Logf("MCP task_run invoked OpenCode successfully (local model produced no commit — acceptable for E2E gate)")
-			return
-		}
 		t.Fatalf("MCP tool call returned error: %v", rpcResp["error"])
 	}
 	resMap, _ := rpcResp["result"].(map[string]any)
@@ -205,6 +207,7 @@ func TestRealOpenCodeA2AFullChain(t *testing.T) {
 	if os.Getenv("MARSHAL_TEST_REAL_OPENCODE") != "1" {
 		t.Skip("set MARSHAL_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
 	}
+	requireOpenCodeRuntimeEgress(t)
 	t.Setenv("MARSHAL_OPENCODE_MODEL", defaultOpenCodeModel())
 
 	repo := runtimeIntegrationRepo(t)
@@ -267,10 +270,6 @@ func TestRealOpenCodeA2AFullChain(t *testing.T) {
 	}
 	state, _ := a2aResp["state"].(string)
 	if state != "TASK_STATE_COMPLETED" {
-		if os.Getenv("MARSHAL_OPENCODE_REQUIRE_COMMIT") != "1" {
-			t.Logf("A2A message:send invoked OpenCode successfully (got state %v — acceptable for E2E gate)", state)
-			return
-		}
 		t.Fatalf("expected A2A task state TASK_STATE_COMPLETED, got %v", a2aResp["state"])
 	}
 

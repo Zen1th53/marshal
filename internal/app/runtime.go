@@ -707,6 +707,10 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 			return RunResult{}, err
 		}
+		if !r.egressEnforcementAvailable() {
+			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
+			return RunResult{}, netpolicy.ErrEnforcementUnavailable
+		}
 
 		egressProxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{
 			Evaluator: evaluator,

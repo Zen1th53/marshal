@@ -1686,8 +1686,8 @@
     },
     {
       "path": "internal/app/network_egress_test.go",
-      "sha256": "5a03826fd4d49fade984ef98e4267a5345838e8976f4dd63181b8b779900f160",
-      "bytes": 7127
+      "sha256": "b3a83e7c49062d858a62022370fff7efc4eb968c971967379ab82e48bac10099",
+      "bytes": 7086
     },
     {
       "path": "internal/app/policy_metrics_a09_test.go",
@@ -1741,8 +1741,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "b5eda121f5e484b1a8f46ebe49a304184e2881830188739cabe90d850d0fb864",
-      "bytes": 50856
+      "sha256": "6d0c21a529df134e447e284a9d80961ec33f313e6e5a491c3f6436b1ec9dbf01",
+      "bytes": 51066
     },
     {
       "path": "internal/app/runtime_test.go",
@@ -2446,8 +2446,8 @@
     },
     {
       "path": "internal/integration/opencode_real_test.go",
-      "sha256": "1c1f797b4c94d85c0f89819a204d9bdb15d230dab6b41998cceb45102d914328",
-      "bytes": 9080
+      "sha256": "617a59b34ef84bdf95b2d084b9b87b98004037805e171722505dd0c009e228a5",
+      "bytes": 8777
     },
     {
       "path": "internal/integration/parallel_real_providers_test.go",
@@ -2456,8 +2456,8 @@
     },
     {
       "path": "internal/integration/provider_execution_e2e_test.go",
-      "sha256": "d604d7a589486899aa2ca1a8163e7796ef693dc2ad074a7bb9045a723849936e",
-      "bytes": 3213
+      "sha256": "740875383c976a1d30e53e3992cb36753c8beb3885a5153f82d3578e3617c455",
+      "bytes": 2850
     },
     {
       "path": "internal/integration/provider_secret_execution_test.go",
@@ -5991,8 +5991,8 @@
     },
     {
       "path": "scripts/community-release-gate.sh",
-      "sha256": "b8e268700f90beed9810918e3613f01cf7e70801378802aab38ddfd115fcabdb",
-      "bytes": 4060
+      "sha256": "46eae6598536d51613989c71a2df22c09a911eebc02c07619d9c5885465f30fa",
+      "bytes": 4182
     },
     {
       "path": "standards/REFERENCES.md",
