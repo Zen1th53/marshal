@@ -19,7 +19,8 @@ permissions:
 jobs:
   build-release:
     name: Build & Publish Release Artifacts
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04 hosted runners restrict the user namespaces required by bwrap.
+    runs-on: ubuntu-22.04
     timeout-minutes: 60
 
     steps:

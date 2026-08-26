@@ -16,7 +16,8 @@ concurrency:
 jobs:
   verify:
     name: Runtime & Pack Verification
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04 hosted runners restrict the user namespaces required by bwrap.
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
 
     steps:
