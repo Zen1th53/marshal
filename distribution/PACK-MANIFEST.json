@@ -186,8 +186,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "bdeb6f33e4b5556be3cc07edb241eed00e426db8d194a7d06f6a5003ce90c47b",
-      "bytes": 9443
+      "sha256": "4ff4481b910ef5272f201b5d7eeac32e429ac6f0fe362ddf0d46c84fb5b7527b",
+      "bytes": 9773
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -1076,13 +1076,13 @@
     },
     {
       "path": "docs/providers.md",
-      "sha256": "71d20911bda4faaf0ee00fb3f04931b090ab42b2869cfd519fc75d625d4020ef",
-      "bytes": 1501
+      "sha256": "29810eea2890b9a25d8b05b7e9e9b098594f3a99f2d13ee366b224e60147a527",
+      "bytes": 2133
     },
     {
       "path": "docs/providers/opencode-ollama.md",
-      "sha256": "d6d7e906863337f5c6f5e76d1ff7e85d5851eafecf9f9b28853ab071170019d8",
-      "bytes": 3067
+      "sha256": "5e205228411db7bde87a59e2b215e3a828e51683faa02f8394e408be8c806700",
+      "bytes": 2509
     },
     {
       "path": "docs/remote-worker-attestation.md",
@@ -5736,8 +5736,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
-      "sha256": "66d026c0fc101f1cc4840e8416c7741f1dad62ea61181bb905babd081859f42b",
-      "bytes": 3458
+      "sha256": "8476ba6efa8f4576ed88c764402851e7fe1f72ce77f3b3a0a70caf16426bfad1",
+      "bytes": 4587
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",

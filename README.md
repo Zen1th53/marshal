@@ -128,12 +128,13 @@ network isolation.
 process contract. It does not mean the provider binary, credentials, or remote
 service were available during this release.
 
-| Provider | Runtime adapter | Local probe in v1.0.1 release validation | Authenticated E2E in v1.0.1 release validation |
-|---|---:|---|---|
-| Codex (`codex`) | Yes | Reported in release notes | NOT_RUN |
-| OpenCode + Ollama (`opencode`) | Yes | Reported in release notes | NOT_RUN |
-| Gemini CLI (`gemini`) | Yes | Reported in release notes | NOT_RUN |
-| Claude Code (`claude`) | Yes | Reported in release notes | NOT_RUN |
+| Provider path | Runtime adapter | Release probe | Adapter/model E2E | Canonical Runtime E2E |
+|---|---:|---|---|---|
+| Codex (`codex`) | Yes | Reported in release notes | NOT_RUN | NOT_RUN |
+| OpenCode + DeepSeek V4 (`opencode`) | Yes | PASS | PASS — Flash and Pro | NOT_RUN — enforcing provider egress unavailable |
+| OpenCode + Ollama (`opencode`) | Yes | PASS | FAIL — tested local models did not satisfy the proof task | NOT_RUN — enforcing provider egress unavailable |
+| Gemini CLI (`gemini`) | Yes | Reported in release notes | NOT_RUN | NOT_RUN |
+| Claude Code (`claude`) | Yes | Reported in release notes | NOT_RUN | NOT_RUN |
 
 External-provider tests are opt-in because they require installed binaries,
 valid credentials or a running local service, and provider access. Skipped
@@ -210,8 +211,10 @@ provider routing.
 
 ## Known limitations
 
-- v1.0.1 does not claim an authenticated external-provider E2E run; see the
-  release notes for exact `PASS` and `NOT_RUN` results.
+- v1.0.1 verified the OpenCode adapter directly with authenticated DeepSeek V4
+  Flash and Pro models. It does not claim a canonical Runtime/MCP/A2A provider
+  E2E run; see the release notes for exact `PASS`, `FAIL`, and `NOT_RUN`
+  results.
 - Endpoint-specific provider egress is unavailable without an enforcing
   proxy, so those requests fail closed.
 - Linux Bubblewrap is the supported sandbox backend. There is no equivalent

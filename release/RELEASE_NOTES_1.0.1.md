@@ -29,6 +29,13 @@ verifiable.
   `pack_version` from committed blobs instead of stale defaults.
 - Clean `marshal init` can create the required policy/version defaults without
   a source checkout and rejects symlink replacements.
+- Repeated provider capability checks no longer collide in the durable audit
+  stream; each decision retains fail-closed audit enforcement.
+- Network-required provider runs now return `NET_ENFORCEMENT_UNAVAILABLE`
+  instead of opening a Bubblewrap network namespace that could bypass the
+  endpoint allowlist proxy.
+- The release toolchain now uses Go 1.25.13, which clears the reachable
+  standard-library vulnerabilities reported against Go 1.25.0.
 
 ## Changed
 
@@ -57,12 +64,18 @@ mandatory local and GitHub release gates.
 
 ## Provider verification
 
-| Provider | Adapter | Local binary probe | Authenticated E2E |
-|---|---:|---|---|
-| Codex | IMPLEMENTED | PENDING | NOT_RUN — external credentialed test not requested |
-| OpenCode + Ollama | IMPLEMENTED | PENDING | NOT_RUN — OpenCode binary/service qualification unavailable unless explicitly enabled |
-| Gemini CLI | IMPLEMENTED | PENDING | NOT_RUN — external credentialed test not requested |
-| Claude Code | IMPLEMENTED | PENDING | NOT_RUN — external credentialed test not requested |
+| Provider path | Adapter/probe | Adapter/model E2E | Canonical Runtime E2E |
+|---|---|---|---|
+| Codex | PASS — local `codex-cli 0.149.1` | NOT_RUN — credentialed execution not enabled | NOT_RUN |
+| OpenCode + DeepSeek V4 | PASS — workstation OpenCode 1.18.16 | PASS — Flash 7.01s and Pro 6.64s; strict proof rerun also PASS | NOT_RUN — endpoint-enforcing provider egress unavailable |
+| OpenCode + Ollama | PASS — workstation Ollama 0.32.9 and model inventory; release host service unavailable | FAIL — `qwythos-9b` and `blackarch-ai` wrote incorrect proof content; `qwen2.5-coder-abliterate:14b` created no proof file | NOT_RUN — endpoint-enforcing provider egress unavailable |
+| Gemini CLI | NOT_AVAILABLE — optional binary absent | NOT_RUN — binary and credentialed execution unavailable | NOT_RUN |
+| Claude Code | PASS — local Claude Code 2.1.198 | NOT_RUN — credentialed execution not enabled | NOT_RUN |
+
+The OpenCode model qualification ran on commit `b37b187` in an isolated
+temporary repository. Process exit zero was insufficient: the test required
+the requested proof file and exact content. No local-model failure is reported
+as PASS.
 
 ## Known limitations
 
