@@ -3,13 +3,13 @@ name: Release Engineering
 on:
   push:
     tags:
-      - 'v*'
+      - 'v1.0.1'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version tag (e.g. v1.0.0)'
+        description: 'Release version tag (e.g. v1.0.1)'
         required: true
-        default: 'v1.0.0'
+        default: 'v1.0.1'
 
 permissions:
   contents: write
@@ -20,18 +20,39 @@ jobs:
   build-release:
     name: Build & Publish Release Artifacts
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref }}
           fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: 'go.mod'
+
+      - name: Set up Node
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Install release dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install cryptography==49.0.0
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
 
       - name: Determine Version
         id: version
@@ -42,60 +63,43 @@ jobs:
             TAG_NAME="${GITHUB_REF#refs/tags/}"
           fi
           VERSION_NUM="${TAG_NAME#v}"
-          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
-          echo "version=${VERSION_NUM}" >> $GITHUB_OUTPUT
-          echo "commit=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          echo "build_date=$(date -u +%Y-%m-%d)" >> $GITHUB_OUTPUT
+          test "$TAG_NAME" = "v1.0.1"
+          test "$(git cat-file -t "$TAG_NAME")" = "tag"
+          test "$(git rev-parse "$TAG_NAME^{commit}")" = "$(git rev-parse HEAD)"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION_NUM}" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          COMMIT_EPOCH=$(git show -s --format=%ct HEAD)
+          BUILD_DATE=$(date -u -d "@${COMMIT_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)
+          echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
 
-      - name: Run Release Gate Tests
+      - name: Run Community release gates
+        run: scripts/community-release-gate.sh
+
+      - name: Build release artifacts
         run: |
-          go vet ./...
-          go test ./...
+          tools/build_release.sh \
+            "${{ steps.version.outputs.tag_name }}" \
+            "${{ steps.version.outputs.commit }}" \
+            "${{ steps.version.outputs.build_date }}" \
+            dist
 
-      - name: Build Linux amd64 and arm64 binaries
+      - name: Generate and verify release manifest
         run: |
-          mkdir -p dist/
-          VERSION="${{ steps.version.outputs.tag_name }}"
-          COMMIT="${{ steps.version.outputs.commit }}"
-          BUILD_DATE="${{ steps.version.outputs.build_date }}"
-          LDFLAGS="-X 'github.com/Zen1th53/marshal/internal/cli.Version=${VERSION}' -X 'github.com/Zen1th53/marshal/internal/cli.Commit=${COMMIT}' -X 'github.com/Zen1th53/marshal/internal/cli.BuildDate=${BUILD_DATE}'"
-
-          # Linux amd64
-          GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -o dist/marshal ./cmd/marshal
-          tar -czvf "dist/marshal_${{ steps.version.outputs.version }}_linux_amd64.tar.gz" -C dist marshal -C ../ LICENSE README.md
-          rm dist/marshal
-
-          # Linux arm64
-          GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -o dist/marshal ./cmd/marshal
-          tar -czvf "dist/marshal_${{ steps.version.outputs.version }}_linux_arm64.tar.gz" -C dist marshal -C ../ LICENSE README.md
-          rm dist/marshal
-
-      - name: Generate SHA-256 Checksums
-        run: |
-          cd dist
-          sha256sum marshal_*.tar.gz > checksums.txt
-          cat checksums.txt
-
-      - name: Generate SPDX SBOM and Release Manifest
-        run: |
-          python3 tools/release_trust.py generate-sbom --repo . --version "${{ steps.version.outputs.tag_name }}" --output dist/sbom.spdx.json
           python3 tools/release_trust.py generate-manifest --dist dist --commit "${{ steps.version.outputs.commit }}" --version "${{ steps.version.outputs.tag_name }}" --output dist/RELEASE-MANIFEST.json
           python3 tools/release_trust.py verify --manifest dist/RELEASE-MANIFEST.json --dist dist
+          (cd dist && sha256sum -c checksums.txt)
 
       - name: Generate Artifact Attestation
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
-          subject-path: 'dist/marshal_*.tar.gz'
+          subject-path: 'dist/*'
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.version.outputs.tag_name }}
           name: "MARSHAL ${{ steps.version.outputs.tag_name }}"
-          body_path: CHANGELOG.md
-          files: |
-            dist/marshal_${{ steps.version.outputs.version }}_linux_amd64.tar.gz
-            dist/marshal_${{ steps.version.outputs.version }}_linux_arm64.tar.gz
-            dist/checksums.txt
-            dist/sbom.spdx.json
-            dist/RELEASE-MANIFEST.json
+          body_path: release/RELEASE_NOTES_1.0.1.md
+          fail_on_unmatched_files: true
+          files: 'dist/*'

@@ -82,6 +82,10 @@ run_check "WEB CONTROL PLANE" bash -c '
 run_check "RELEASE TOOLING" python3 -m unittest \
   tools/tests/test_build_release.py \
   tools/tests/test_release_trust.py
+run_check "PACK CONFORMANCE" bash -c '
+  python3 conformance/runner.py validate-pack
+  python3 -m unittest discover -s conformance/tests -p "test_*.py"
+'
 run_check "LEGACY TOOLING" python3 -m unittest discover -s tools/tests_v6 -p 'test_*.py'
 run_check "CLEAN INSTALL" python3 -m unittest tools/tests/test_clean_install.py
 run_check "DOCS AND MANIFEST" bash -c '
