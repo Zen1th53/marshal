@@ -1,92 +1,68 @@
-# MARSHAL Installation Guide
+# MARSHAL installation
 
-MARSHAL is packaged as a static, single binary for Linux systems.
+MARSHAL v1.0.1 publishes Linux archives for amd64 and arm64. Bubblewrap is a
+separately installed runtime dependency for sandboxed provider execution.
 
----
+## Release archive
 
-## Supported Operating Systems
-
-- **Linux (x86_64 / amd64)**: Ubuntu 22.04+, Debian 11+, Fedora 38+, Arch Linux, BlackArch, Alpine Linux
-- **Linux (arm64)**: Ubuntu 22.04+, Debian 11+, Raspberry Pi OS (64-bit)
-
----
-
-## Method 1: Pre-Built Binary Release (Recommended)
-
-Download the latest release archive from [GitHub Releases](https://github.com/Zen1th53/marshal/releases):
+Download the archive for your architecture and `checksums.txt` from the
+[v1.0.1 release](https://github.com/Zen1th53/marshal/releases/tag/v1.0.1).
 
 ```bash
-# Download latest release tarball for Linux amd64
-curl -LO https://github.com/Zen1th53/marshal/releases/download/v1.0.0/marshal_1.0.0_linux_amd64.tar.gz
-
-# Extract archive
-tar -xzf marshal_1.0.0_linux_amd64.tar.gz
-
-# Verify binary execution
-./marshal version
-
-# Install to system path
-sudo install -m 0755 marshal /usr/local/bin/
-```
-
-### Checksum Verification
-```bash
-# Download checksums file
-curl -LO https://github.com/Zen1th53/marshal/releases/download/v1.0.0/checksums.txt
-
-# Verify SHA-256 hash
-sha256sum --ignore-missing -c checksums.txt
-```
-
----
-
-## Method 2: Install via Go (`go install`)
-
-Requires Go `1.25` or higher installed:
-
-```bash
-go install github.com/Zen1th53/marshal/cmd/marshal@latest
-```
-
-Verify installation:
-```bash
+sha256sum -c checksums.txt --ignore-missing
+tar -xzf marshal_1.0.1_linux_amd64.tar.gz
+install -Dm755 marshal "$HOME/.local/bin/marshal"
 marshal version
 ```
 
----
+The release also publishes an SPDX SBOM, build metadata, a release manifest,
+and GitHub build-provenance attestations.
 
-## Method 3: Build from Source
+## Build from source
+
+Go 1.25 or newer is required:
 
 ```bash
-# Clone repository
 git clone https://github.com/Zen1th53/marshal.git
 cd marshal
-
-# Run test suite
 go test ./...
-
-# Build production binary
-go build -ldflags="-X 'github.com/Zen1th53/marshal/internal/cli.Version=v1.0.0' -X 'github.com/Zen1th53/marshal/internal/cli.Commit=$(git rev-parse --short HEAD)' -X 'github.com/Zen1th53/marshal/internal/cli.BuildDate=$(date -u +%Y-%m-%d)'" -o bin/marshal ./cmd/marshal
-
-# Install
-sudo install -m 0755 bin/marshal /usr/local/bin/
+go build -o ./bin/marshal ./cmd/marshal
+./bin/marshal version
 ```
 
----
+For a release-style build with embedded metadata:
 
-## System Dependencies
+```bash
+go build -trimpath \
+  -ldflags="-X github.com/Zen1th53/marshal/internal/cli.Version=v1.0.1 \
+  -X github.com/Zen1th53/marshal/internal/cli.Commit=$(git rev-parse HEAD) \
+  -X github.com/Zen1th53/marshal/internal/cli.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -o ./bin/marshal ./cmd/marshal
+```
 
-MARSHAL relies on Linux kernel namespaces for process sandboxing:
+## Bubblewrap
 
-### Bubblewrap (`bwrap`)
-Required for fail-closed sandbox execution cells.
+Install `bwrap` with the host package manager:
 
-- **Ubuntu / Debian**: `sudo apt-get install -y bubblewrap`
-- **Fedora / RHEL**: `sudo dnf install -y bubblewrap`
-- **Arch / BlackArch**: `sudo pacman -S bubblewrap`
-- **Alpine**: `sudo apk add bubblewrap`
+```bash
+# Debian / Ubuntu
+sudo apt-get install bubblewrap
 
-Verify bubblewrap installation:
+# Fedora
+sudo dnf install bubblewrap
+
+# Arch / BlackArch
+sudo pacman -S bubblewrap
+```
+
+Verify the installation and initialize a Git repository for MARSHAL:
+
 ```bash
 bwrap --version
+cd /path/to/repository
+marshal init
+marshal doctor
 ```
+
+Provider CLIs are optional and not bundled. Probe them explicitly with
+`marshal doctor --probe-providers`.

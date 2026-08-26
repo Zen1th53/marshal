@@ -38,6 +38,22 @@ type SSEHub struct {
 	currentSeq   int64
 }
 
+type SSEHubStatus struct {
+	Clients     int   `json:"clients"`
+	Buffered    int   `json:"buffered"`
+	CurrentSeq  int64 `json:"current_seq"`
+	BufferLimit int   `json:"buffer_limit"`
+}
+
+func (h *SSEHub) Status() SSEHubStatus {
+	if h == nil {
+		return SSEHubStatus{BufferLimit: MaxReplayBufferSize}
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return SSEHubStatus{Clients: len(h.clients), Buffered: len(h.replayBuffer), CurrentSeq: h.currentSeq, BufferLimit: MaxReplayBufferSize}
+}
+
 func NewSSEHub() *SSEHub {
 	return &SSEHub{
 		clients:      make(map[string]*SSEClient),

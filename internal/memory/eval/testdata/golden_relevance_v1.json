@@ -1,0 +1,218 @@
+{
+  "version": 1,
+  "description": "MARSHAL canonical runtime-memory recall corpus with realistic security and repository-freshness distractors.",
+  "project_id": "PROJECT-local",
+  "records": [
+    {
+      "id": "MEM-Q-CANONICAL-SQLITE",
+      "title": "Canonical durable memory architecture",
+      "body": "SQLite memory_records_v2 is the canonical durable memory store. Persistent truth is kept in SQLite; vector, lexical, graph, and cache state are disposable projections.",
+      "kind": "decision", "lifecycle": "durable", "confidence": "verified", "authority": "operator",
+      "scope": "project", "scope_id": "PROJECT-local", "tags": ["architecture", "decision"]
+    },
+    {
+      "id": "MEM-Q-VECTOR-FALSE",
+      "title": "Vector database canonical claim",
+      "body": "The vector index is the canonical durable store and SQLite can be discarded.",
+      "kind": "semantic", "lifecycle": "candidate", "confidence": "unverified", "authority": "agent",
+      "scope": "project", "scope_id": "PROJECT-local", "tags": ["similar_wrong_distractor"]
+    },
+    {
+      "id": "MEM-Q-REDIS-FALSE",
+      "title": "Redis canonical runtime claim",
+      "body": "Redis stores canonical runtime knowledge and derived indexes are authoritative.",
+      "kind": "semantic", "lifecycle": "candidate", "confidence": "unverified", "authority": "agent",
+      "scope": "project", "scope_id": "PROJECT-local", "tags": ["similar_wrong_distractor"]
+    },
+    {
+      "id": "MEM-Q-WAL-PROCEDURE",
+      "title": "SQLite WAL concurrency procedure",
+      "body": "For local concurrent agents, enable SQLite WAL, keep transactions bounded, and retry SQLITE_BUSY with the runtime's bounded policy.",
+      "kind": "procedural", "lifecycle": "durable", "confidence": "verified", "authority": "verified",
+      "scope": "project", "scope_id": "PROJECT-local", "tags": ["procedure"]
+    },
+    {
+      "id": "MEM-Q-WAL-DISTRACTOR",
+      "title": "SQLite rollback journal procedure",
+      "body": "Disable WAL and hold one global write transaction for all agent operations.",
+      "kind": "procedural", "lifecycle": "candidate", "confidence": "unverified", "authority": "agent",
+      "scope": "project", "scope_id": "PROJECT-local", "tags": ["similar_wrong_distractor"]
+    },
+    {
+      "id": "MEM-Q-KERNEL-FAILURE",
+      "title": "Bubblewrap user namespace failure",
+      "body": "Error signature bwrap: Creating new namespace failed: Operation not permitted. The approach fails when unprivileged user namespaces are disabled; retry only after that kernel policy changes.",
+      "kind": "failure", "lifecycle": "durable", "confidence": "verified", "authority": "verified",
+      "scope": "project", "scope_id": "PROJECT-local", "head_commit": "HEAD-current", "branch": "main",
+      "tags": ["failed_approach", "error_signature", "environment_specific"]
+    },
+    {
+      "id": "MEM-Q-KERNEL-DISTRACTOR",
+      "title": "Bubblewrap missing executable",
+      "body": "Error signature exec: bwrap: executable file not found. Install bubblewrap before retrying.",
+      "kind": "failure", "lifecycle": "durable", "confidence": "verified", "authority": "agent",
+      "scope": "project", "scope_id": "PROJECT-local", "head_commit": "HEAD-current", "branch": "main",
+      "tags": ["similar_failure_distractor"]
+    },
+    {
+      "id": "MEM-Q-FOO-CONFIG",
+      "title": "Foo configuration location",
+      "body": "Foo runtime configuration lives in config/foo.yaml and is loaded by config.LoadFoo in internal/config/foo.go.",
+      "kind": "semantic", "lifecycle": "durable", "confidence": "verified", "authority": "verified",
+      "scope": "project", "scope_id": "PROJECT-local", "head_commit": "HEAD-current", "branch": "main",
+      "ext_meta": {"referenced_files": ["config/foo.yaml", "internal/config/foo.go"], "symbols": ["config.LoadFoo"]},
+      "tags": ["repo_fact", "file_path", "symbol"]
+    },
+    {
+      "id": "MEM-Q-FOO-OLD",
+      "title": "Old Foo configuration location",
+      "body": "Foo runtime configuration lives in config/legacy-foo.json and is loaded by legacy.LoadFoo.",
+      "kind": "semantic", "lifecycle": "stale", "confidence": "observed", "authority": "agent",
+      "scope": "project", "scope_id": "PROJECT-local", "head_commit": "HEAD-old", "branch": "main",
+      "ext_meta": {"referenced_files": ["config/legacy-foo.json"], "symbols": ["legacy.LoadFoo"]},
+      "tags": ["stale"]
+    },
+    {
+      "id": "MEM-Q-AUTH-FRESH",
+      "title": "Bearer authorization parser",
+      "body": "Authorization bearer headers are parsed by ParseBearer in internal/auth/token.go at the current repository head.",
+      "kind": "finding", "lifecycle": "durable", "confidence": "verified", "authority": "verified",
+      "scope": "project", "scope_id": "PROJECT-local", "head_commit": "HEAD-current", "branch": "main",
+      "ext_meta": {"referenced_files": ["internal/auth/token.go"], "symbols": ["auth.ParseBearer"]},
+      "tags": ["fresh_repo_fact"]
+    },
+    {
+      "id": "MEM-Q-AUTH-SUPERSEDED",
+      "title": "Bearer authorization parser legacy decision",
+      "body": "Authorization bearer headers are parsed by legacyAuth in internal/legacy/auth.go.",
+      "kind": "finding", "lifecycle": "superseded", "confidence": "verified", "authority": "operator",
+      "scope": "project", "scope_id": "PROJECT-local", "head_commit": "HEAD-old", "branch": "main",
+      "superseded_by": ["MEM-Q-AUTH-FRESH"], "tags": ["superseded"]
+    },
+    {
+      "id": "MEM-Q-AUTH-TOMBSTONED",
+      "title": "Bearer authorization parser deleted note",
+      "body": "Authorization bearer headers use a removed debug bypass.",
+      "kind": "semantic", "lifecycle": "tombstoned", "confidence": "unverified", "authority": "agent",
+      "scope": "project", "scope_id": "PROJECT-local", "tags": ["tombstoned"]
+    },
+    {
+      "id": "MEM-Q-AUDIT-PUBLIC",
+      "title": "Authorization audit storage policy",
+      "body": "Authorization audit events store redacted decision reason codes in canonical SQLite.",
+      "kind": "decision", "lifecycle": "durable", "confidence": "verified", "authority": "policy",
+      "scope": "project", "scope_id": "PROJECT-local", "tags": ["policy"]
+    },
+    {
+      "id": "MEM-Q-AUDIT-PRIVATE",
+      "title": "Authorization audit storage private operator detail",
+      "body": "Authorization audit storage private recovery material is accessible only to the owning operator.",
+      "kind": "semantic", "lifecycle": "durable", "confidence": "verified", "authority": "operator",
+      "scope": "operator_private", "scope_id": "operator-owner", "acl_scope": "operator-owner",
+      "tags": ["private", "unauthorized"]
+    },
+    {
+      "id": "MEM-Q-TASK-TESTS",
+      "title": "Task T42 verification result",
+      "body": "Task T42 verified that TestMemoryGrantRevocation passes after the canonical grant is revoked.",
+      "kind": "finding", "lifecycle": "candidate", "confidence": "observed", "authority": "agent",
+      "scope": "task", "scope_id": "TASK-T42", "tags": ["task_scoped", "test_result"]
+    },
+    {
+      "id": "MEM-Q-WORKTREE-LOCAL",
+      "title": "Foo worktree local implementation",
+      "body": "In agent-a-worktree only, foo.go uses experimental implementation X; this is unmerged and is not canonical project truth.",
+      "kind": "finding", "lifecycle": "candidate", "confidence": "observed", "authority": "agent",
+      "scope": "project", "scope_id": "PROJECT-local", "head_commit": "HEAD-agent-a", "branch": "feat/foo-x", "worktree_id": "agent-a-worktree",
+      "tags": ["worktree_local", "unmerged"]
+    },
+    {
+      "id": "MEM-Q-CONFLICT-A",
+      "title": "Session cache backend hypothesis A",
+      "body": "The session cache backend is an in-process map.",
+      "kind": "semantic", "lifecycle": "conflicted", "confidence": "inferred", "authority": "agent",
+      "scope": "project", "scope_id": "PROJECT-local", "conflict_ids": ["MEM-Q-CONFLICT-B"], "tags": ["conflict"]
+    },
+    {
+      "id": "MEM-Q-CONFLICT-B",
+      "title": "Session cache backend hypothesis B",
+      "body": "The session cache backend is SQLite.",
+      "kind": "semantic", "lifecycle": "conflicted", "confidence": "inferred", "authority": "agent",
+      "scope": "project", "scope_id": "PROJECT-local", "conflict_ids": ["MEM-Q-CONFLICT-A"], "tags": ["conflict"]
+    },
+    {
+      "id": "MEM-Q-CONFLICT-RESOLVED",
+      "title": "Verified session cache backend",
+      "body": "The current session cache backend is the bounded runtime cache backed by canonical SQLite reloads; the older incompatible hypotheses remain unresolved history.",
+      "kind": "finding", "lifecycle": "durable", "confidence": "verified", "authority": "verified",
+      "scope": "project", "scope_id": "PROJECT-local", "tags": ["verified_fact", "conflict_resolution"]
+    },
+    {
+      "id": "MEM-Q-GRAPH-NEW",
+      "title": "Current memory revocation decision",
+      "body": "Revocation invalidates cache entries and reloads canonical lifecycle state before recall.",
+      "kind": "decision", "lifecycle": "durable", "confidence": "verified", "authority": "operator",
+      "scope": "project", "scope_id": "PROJECT-local", "supersedes": ["MEM-Q-GRAPH-OLD"], "tags": ["concept_relation"]
+    },
+    {
+      "id": "MEM-Q-GRAPH-OLD",
+      "title": "Old memory revocation decision",
+      "body": "Revocation only hides memory from one lexical query.",
+      "kind": "decision", "lifecycle": "superseded", "confidence": "verified", "authority": "operator",
+      "scope": "project", "scope_id": "PROJECT-local", "superseded_by": ["MEM-Q-GRAPH-NEW"], "tags": ["superseded", "concept_relation"]
+    }
+  ],
+  "queries": [
+    {
+      "id": "Q-CANONICAL-EXACT", "category": "exact_architecture_decision", "text": "canonical durable memory store", "principal_id": "quality-reader",
+      "required": ["MEM-Q-CANONICAL-SQLITE"], "acceptable": [], "irrelevant": ["MEM-Q-VECTOR-FALSE", "MEM-Q-REDIS-FALSE"], "forbidden": {}
+    },
+    {
+      "id": "Q-CANONICAL-PARAPHRASE", "category": "paraphrase", "text": "where is persistent truth kept", "principal_id": "quality-reader",
+      "required": ["MEM-Q-CANONICAL-SQLITE"], "acceptable": [], "irrelevant": ["MEM-Q-VECTOR-FALSE", "MEM-Q-REDIS-FALSE"], "forbidden": {}
+    },
+    {
+      "id": "Q-WAL-ABBREVIATION", "category": "abbreviation_procedure", "text": "WAL concurrent agents SQLITE_BUSY", "principal_id": "quality-reader",
+      "required": ["MEM-Q-WAL-PROCEDURE"], "acceptable": [], "irrelevant": ["MEM-Q-WAL-DISTRACTOR"], "forbidden": {}
+    },
+    {
+      "id": "Q-FAILURE-SIGNATURE", "category": "failure_similarity_error", "text": "bwrap Creating new namespace Operation not permitted", "principal_id": "quality-reader",
+      "current_head": "HEAD-current", "current_branch": "main", "required": ["MEM-Q-KERNEL-FAILURE"], "acceptable": [], "irrelevant": ["MEM-Q-KERNEL-DISTRACTOR"], "forbidden": {}
+    },
+    {
+      "id": "Q-FILE-PATH", "category": "file_path", "text": "config/foo.yaml", "principal_id": "quality-reader",
+      "current_head": "HEAD-current", "current_branch": "main", "required": ["MEM-Q-FOO-CONFIG"], "acceptable": [], "irrelevant": [], "forbidden": {"stale": ["MEM-Q-FOO-OLD"]}
+    },
+    {
+      "id": "Q-SYMBOL", "category": "symbol", "text": "config.LoadFoo", "principal_id": "quality-reader",
+      "current_head": "HEAD-current", "current_branch": "main", "existing_symbols": {"config.LoadFoo": true, "legacy.LoadFoo": false},
+      "required": ["MEM-Q-FOO-CONFIG"], "acceptable": [], "irrelevant": [], "forbidden": {"stale": ["MEM-Q-FOO-OLD"]}
+    },
+    {
+      "id": "Q-FRESH-REPLACEMENT", "category": "stale_superseded_distractors", "text": "Authorization bearer headers parsed", "principal_id": "quality-reader",
+      "current_head": "HEAD-current", "current_branch": "main", "required": ["MEM-Q-AUTH-FRESH"], "acceptable": [], "irrelevant": [],
+      "forbidden": {"superseded": ["MEM-Q-AUTH-SUPERSEDED"], "tombstoned": ["MEM-Q-AUTH-TOMBSTONED"]}
+    },
+    {
+      "id": "Q-PRIVATE-DISTRACTOR", "category": "private_scope", "text": "Authorization audit storage", "principal_id": "quality-reader",
+      "required": ["MEM-Q-AUDIT-PUBLIC"], "acceptable": [], "irrelevant": [], "forbidden": {"unauthorized": ["MEM-Q-AUDIT-PRIVATE"]}
+    },
+    {
+      "id": "Q-TASK-SHARED", "category": "task_scope", "text": "TestMemoryGrantRevocation", "principal_id": "quality-reader",
+      "allowed_scope_ids": ["PROJECT-local", "TASK-T42"], "required": ["MEM-Q-TASK-TESTS"], "acceptable": [], "irrelevant": [], "forbidden": {}
+    },
+    {
+      "id": "Q-WORKTREE", "category": "worktree_local", "text": "agent-a-worktree experimental implementation X", "principal_id": "quality-reader",
+      "current_head": "HEAD-agent-a", "canonical_head": "HEAD-current", "current_branch": "feat/foo-x", "current_worktree_id": "agent-a-worktree",
+      "required": ["MEM-Q-WORKTREE-LOCAL"], "acceptable": [], "irrelevant": [], "forbidden": {}
+    },
+    {
+      "id": "Q-CONFLICT", "category": "unresolved_conflict", "text": "session cache backend", "principal_id": "quality-reader",
+      "required": ["MEM-Q-CONFLICT-RESOLVED"], "acceptable": [], "irrelevant": [], "forbidden": {"conflicted": ["MEM-Q-CONFLICT-A", "MEM-Q-CONFLICT-B"]}
+    },
+    {
+      "id": "Q-GRAPH-SUPERSESSION", "category": "concept_relation", "text": "memory revocation decision", "principal_id": "quality-reader",
+      "required": ["MEM-Q-GRAPH-NEW"], "acceptable": [], "irrelevant": [], "forbidden": {"superseded": ["MEM-Q-GRAPH-OLD"]}
+    }
+  ]
+}

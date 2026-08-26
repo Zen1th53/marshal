@@ -1,5 +1,47 @@
 # Runtime memory fabric follow-up
 
+## Phase 2 status (2026-08-24)
+
+Completed and validated on `feat/memory-fabric-phase2`:
+
+- [x] Versioned 21-record/12-query golden retrieval corpus with Recall@K,
+  Precision@K, MRR, NDCG, forbidden exposure, context cost, and first-useful
+  timing.
+- [x] ACL-first bounded candidate lookup, bounded canonical reload, bounded
+  persisted receipts, and cold-projection canonical fallback.
+- [x] Governed procedure, anti-pattern, and verified-fact consolidation
+  candidates with provenance, scope preservation, conflict semantics, and
+  completion-triggered bounded scheduling.
+- [x] Durable bounded task-change cursor with monotonic revisions, refresh,
+  revocation, private-event isolation, cursor expiry, restart persistence, and
+  same-slot CAS conflict preservation.
+- [x] Canonical/worktree HEAD and worktree identity freshness semantics.
+- [x] Verified Gemini CLI JSONL importer adapter.
+- [x] Opt-in real parallel provider harness; two authenticated Codex processes
+  were proven concurrently active and exchanged bidirectional task findings.
+- [x] 2/5/10/20/50-agent shared-write and refresh measurements with zero missed
+  updates and zero duplicate deliveries in the measured run.
+- [x] 100k canonical record scheduled benchmark and bounded outbox/receipt
+  persistence fixes.
+- [x] Truthful Web doctor probes; unavailable probes report UNKNOWN/DEGRADED
+  instead of synthetic READY/0ms.
+
+Remaining work, without overstating completion:
+
+- [ ] Run authenticated cross-provider E2E when at least two different provider
+  CLIs are available. Claude was present but logged out; Gemini/OpenCode were
+  absent; Ollama had no running model service.
+- [ ] Add bounded automatic session discovery/checkpointing and a verified
+  OpenCode SQLite importer.
+- [ ] Run 250k+ scale, long soak, and statistically powered real-provider
+  memory/no-memory uplift studies.
+- [ ] Reduce the 100k lexical projection's heap footprint and add cold/warm
+  startup, RSS, CPU and derived-index on-disk measurements.
+- [ ] Add canonical historical quality-series aggregation for the Web dashboard.
+
+Exact Phase 2 evidence and `NOT_RUN` items are in
+`memory-fabric-phase2-validation.md`.
+
 The canonical runtime integration tranche is complete. The work below remains before the full memory-fabric mega-task can be declared complete. Items are ordered by dependency and must be delivered as reviewable stages with green tests after every stage.
 
 ## Delivery rules

@@ -89,25 +89,17 @@ func CollectSourceEvidence(ctx context.Context, repoDir string) (*SourceEvidence
 		}
 	}
 
-	runtimeVersion := "v1.0.0"
+	runtimeVersion := "unknown"
 	if data, err := ReadBlob(ctx, repoDir, headSHA, "RUNTIME-VERSION.yaml"); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "version:") {
-				runtimeVersion = strings.Trim(strings.TrimPrefix(line, "version:"), " \"'")
-				break
-			}
+		if value := versionFromBlob(data, "runtime_implementation_version"); value != "" {
+			runtimeVersion = value
 		}
 	}
 
-	packVersion := "6.0.0"
+	packVersion := "unknown"
 	if data, err := ReadBlob(ctx, repoDir, headSHA, "PACK-VERSION.yaml"); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "version:") {
-				packVersion = strings.Trim(strings.TrimPrefix(line, "version:"), " \"'")
-				break
-			}
+		if value := versionFromBlob(data, "pack_version"); value != "" {
+			packVersion = value
 		}
 	}
 
@@ -130,6 +122,17 @@ func CollectSourceEvidence(ctx context.Context, repoDir string) (*SourceEvidence
 		PackVersion:      packVersion,
 		Status:           status,
 	}, nil
+}
+
+func versionFromBlob(data []byte, key string) string {
+	prefix := key + ":"
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, prefix) {
+			return strings.Trim(strings.TrimPrefix(line, prefix), " \"'")
+		}
+	}
+	return ""
 }
 
 func ReadBlob(ctx context.Context, repoDir string, headSHA string, relPath string) ([]byte, error) {

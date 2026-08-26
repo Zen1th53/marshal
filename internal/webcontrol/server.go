@@ -23,12 +23,14 @@ var (
 type ServerConfig struct {
 	Host                     string
 	Port                     int
+	Version                  string
+	Commit                   string
 	AllowInsecureNonLoopback bool
 	ReadTimeout              time.Duration
 	WriteTimeout             time.Duration
 	// BackupDir is the directory where real backups are written/read when the
-	// server is backed by a live store. When empty, backup operations fall
-	// back to in-memory fixtures (dev-demo/tests).
+	// server is backed by a live store. When empty, backup operations in
+	// explicitly constructed test servers use in-memory fixtures.
 	BackupDir string
 }
 
@@ -59,6 +61,12 @@ func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
 	if cfg.Port <= 0 {
 		cfg.Port = 8787
 	}
+	if cfg.Version == "" {
+		cfg.Version = "1.0.1"
+	}
+	if cfg.Commit == "" {
+		cfg.Commit = "unknown"
+	}
 	if cfg.ReadTimeout <= 0 {
 		cfg.ReadTimeout = 15 * time.Second
 	}
@@ -84,8 +92,8 @@ func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
 		sseHub:     NewSSEHub(),
 		csrfSecret: csrfSecret,
 	}
-	// Wire the canonical store when a runtime is supplied. In tests / dev-demo
-	// mode (nil runtime) handlers fall back to in-memory fixtures.
+	// Wire the canonical store when a runtime is supplied. Explicit test
+	// servers may pass nil and use in-memory fixtures.
 	if rt, ok := runtime.(interface{ Store() *store.Store }); ok {
 		s.store = rt.Store()
 	}
@@ -99,9 +107,64 @@ func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
 
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
-	s.handler = s.SecurityHeadersMiddleware(s.CSRFMiddleware(s.CorrelationMiddleware(s.wrapMiddleware(mux))))
+	s.handler = s.SecurityHeadersMiddleware(s.CSRFMiddleware(s.CorrelationMiddleware(s.wrapMiddleware(s.liveRuntimeBoundary(mux)))))
 
 	return s, nil
+}
+
+// liveRuntimeBoundary prevents fixture-only handlers from becoming implicit
+// production behavior. Explicit nil-runtime servers remain available to tests;
+// a CLI-started server exposes only surfaces backed by canonical or bounded
+// local state.
+func (s *Server) liveRuntimeBoundary(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.store == nil || liveRuntimePathAllowed(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if liveRuntimePathRequiresAuth(r.URL.Path) && s.getAuthenticatedUser(r) == nil {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required", "")
+			return
+		}
+		writeError(w, http.StatusNotImplemented, "unsupported_live_surface", "this surface is available only in explicit test/demo mode and is disabled for a live runtime", "")
+	})
+}
+
+func liveRuntimePathAllowed(requestPath string) bool {
+	if !strings.HasPrefix(requestPath, "/api/") {
+		return true
+	}
+	switch requestPath {
+	case "/api/v1/system/status", "/api/v1/resources", "/api/v1/health/doctor":
+		return true
+	}
+	if strings.HasPrefix(requestPath, "/api/v1/auth/") ||
+		strings.HasPrefix(requestPath, "/api/v1/operations/backups") ||
+		strings.HasPrefix(requestPath, "/api/v1/memory/working") ||
+		strings.HasPrefix(requestPath, "/api/v1/memory/mutations/") {
+		return true
+	}
+	if requestPath == "/api/v1/memory/search" || requestPath == "/api/v1/memory/retrieval/explain" {
+		return true
+	}
+	if strings.HasPrefix(requestPath, "/api/v1/memory/") {
+		remainder := strings.TrimPrefix(requestPath, "/api/v1/memory/")
+		if remainder == "" || strings.HasPrefix(remainder, "governance/") ||
+			strings.HasPrefix(remainder, "versioning/") || remainder == "security/health" ||
+			strings.HasSuffix(remainder, "/usage") {
+			return false
+		}
+		return !strings.Contains(remainder, "/") || strings.HasSuffix(remainder, "/detail")
+	}
+	return false
+}
+
+func liveRuntimePathRequiresAuth(requestPath string) bool {
+	return requestPath != "/api/v1/system/adapters" &&
+		requestPath != "/api/v1/system/capabilities" &&
+		requestPath != "/api/v1/overview" &&
+		requestPath != "/api/v1/operations/trust" &&
+		requestPath != "/api/v1/benchmarks"
 }
 
 func (s *Server) IsLoopback() bool {

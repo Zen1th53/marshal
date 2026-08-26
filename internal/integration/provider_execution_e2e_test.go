@@ -10,7 +10,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/netpolicy"
 )
 
 type e2eMockProviderAdapter struct {
@@ -71,23 +70,11 @@ func TestProviderExecutionE2EChain(t *testing.T) {
 		t.Fatalf("ImportTasks: %v", err)
 	}
 
-	// 3. Execute RunRequest with Network & Egress rules through entire chain
-	egressRules := []netpolicy.Rule{
-		{
-			ID:          "rule-pkg-go",
-			HostPattern: "proxy.golang.org",
-			Protocol:    netpolicy.ProtocolTCP,
-			Ports:       []int{443},
-			Action:      netpolicy.ActionAllow,
-		},
-	}
-
+	// 3. Execute an offline RunRequest through the entire chain.
 	runResult, err := runtime.Run(ctx, app.RunRequest{
-		TaskID:          "TASK-E2E-001",
-		AgentID:         agent.ID,
-		Adapter:         "codex",
-		NetworkRequired: true,
-		EgressRules:     egressRules,
+		TaskID:  "TASK-E2E-001",
+		AgentID: agent.ID,
+		Adapter: "codex",
 	})
 	if err != nil {
 		t.Fatalf("runtime.Run failed: %v", err)

@@ -1,212 +1,84 @@
-# Runtime memory fabric implementation report
+# Runtime memory fabric
 
-## Starting state
+MARSHAL v1.0.1 uses SQLite schema v72. `memory_records_v2` is the canonical
+durable memory store; lexical, vector, graph, and cache structures are derived
+projections.
 
-- Starting commit: `5bfbc44f4f50687f7c7c03ad0c3990a92bcf57ba`
-- Starting branch: `main`
-- Starting worktree: clean
-- Implementation branch: `feat/runtime-memory-fabric`
-- Canonical database: SQLite `memory_records_v2`; lexical, vector, and graph indexes remain derived projections.
+## Runtime lifecycle
 
-The starting repository already contained canonical memory records, scope and lifecycle types, a write firewall, CAS-backed working memory, conflict and supersession helpers, hybrid candidate retrieval packages, context armor, importer interfaces, typed handoffs, and conformance suites. The production runtime did not call the product-facing memory service during provider execution, and several public interfaces bypassed that service.
+`app.Runtime` owns one `MemoryService`:
 
-## Current-state gaps found
+1. At task start, it builds a query from task and repository state.
+2. Recall applies private-scope filtering, principal/task/project ACLs,
+   lifecycle, expiry, repository freshness, and record/byte budgets.
+3. The selected records are escaped and rendered as historical data, not
+   instructions, in a provider-neutral context block.
+4. A caller-bound retrieval receipt records included/excluded decisions,
+   tracks, budgets, and resulting evidence links without leaking denied IDs.
+5. At completion, deterministic run metadata and evidence references are
+   captured as a task-scoped candidate. Raw hidden reasoning and provider
+   transcripts are not automatically persisted.
 
-| Gap | Root cause | Production path | Severity |
-|---|---|---|---|
-| No automatic recall before provider execution | `Runtime.Run` rendered task text only | Runtime, all adapters, A2A task execution | P0 |
-| No automatic outcome memory | Run evidence was stored but no canonical memory candidate was created | Runtime completion | P0 |
-| Recall ignored lifecycle and repository freshness | `MemoryService.Recall` was a substring filter over all project rows | Runtime service, future callers | P0 |
-| No retrieval receipt or byte/record budget | Recall returned IDs and titles only | Runtime and debugging | P0 |
-| CLI and MCP bypassed the facade | Both read/wrote `memory_records_v2` directly | CLI, MCP | P0 |
-| Web production memory used fixture state | Memory handlers used a process-global demo store even with a live runtime | Web | P0 |
-| Web mutations reported synthetic success | Mutation handlers changed only fixture rows and synthesized audit/signature IDs | Web | P0 |
-| Existing hybrid/vector/graph packages remain disconnected from the canonical runtime facade | Components were tested independently but not assembled in `MemoryService` | Runtime recall quality | P1 |
+Promotion remains governed. Candidate, verified, durable, superseded,
+tombstoned, conflicted, expired, and rejected lifecycle states are enforced
+before retrieval.
 
-## Implemented changes
+## Sharing and freshness
 
-| Change | Files | Why | Security implications | Compatibility implications |
-|---|---|---|---|---|
-| Canonical service and runtime lifecycle wiring | `internal/app/memory_runtime.go`, `internal/app/runtime.go` | Make recall and evidence-bound capture automatic | Scope/ACL/lifecycle/freshness gates run before ranking; capture remains candidate-only | Existing adapters receive provider-neutral trusted context without format-specific durable state |
-| Public interface convergence | `internal/cli/memory_cli.go`, `internal/mcp/server.go` | Remove direct/synthetic recall and write paths | MCP uses the authenticated principal ID; empty scope requests fail closed to project/caller scope | Existing command/tool names and response basics remain intact; recall responses gain context and receipts |
-| Canonical Web memory paths | `internal/webcontrol/memory.go`, `memory_detail.go`, `memory_mutations.go`, `retrieval_trace.go`, `server.go` | Replace production fixture state with SQLite truth | Authenticated actor filtering, direct-ID scope checks, CAS mutations, and no synthetic live success | Fixture behavior remains only for explicit nil-runtime tests/demo use |
-| Cross-provider, restart, ACL, staleness, secret, and Web tests | `internal/integration/runtime_memory_fabric_test.go`, `internal/app/handoff_runtime_test.go`, `internal/webcontrol/memory_canonical_test.go` | Prove the production path with real SQLite and repository state | Covers private/task scope non-disclosure and rejected credential persistence | No schema change; tests exercise existing migration/bootstrap paths |
-| Distribution and operator documentation | `distribution/PACK-MANIFEST.json`, `docs/runtime-memory-fabric.md`, `todo.md` | Keep release integrity and implementation claims synchronized | Manifest includes the new tracked tests/report/backlog | Manifest version and historical generated date remain unchanged |
+Project/task scopes permit authorized agents and providers to share canonical
+memory across runtime restarts. Private/operator scopes remain isolated. Typed
+handoffs use the same SQLite runtime rather than a provider-specific memory
+database.
 
-### Canonical runtime recall
+Schema v72 adds a durable, bounded task-memory change cursor. Consumers can
+refresh shared task state without storing memory bodies in the event table. An
+expired cursor forces a canonical reload, and authorization is checked before
+cursor metadata is exposed.
 
-`Runtime` owns one per-runtime `MemoryService`. Before an adapter starts, `Runtime.Run` builds a query from the canonical task and repository execution state and requests a bounded context pack.
+Repository HEAD and worktree changes participate in freshness checks. Stale
+records can be excluded with an explainable receipt instead of silently
+influencing a task.
 
-Recall performs these operations in order:
+## Retrieval and consolidation
 
-1. canonical project query;
-2. store-level private-scope filtering;
-3. scope and ACL hard gates;
-4. lifecycle, expiry, and repository-HEAD freshness gates;
-5. exact and lexical relevance scoring;
-6. authority weighting;
-7. deterministic ordering;
-8. record-count and byte-budget allocation;
-9. HTML/XML escaping and data-only context rendering.
+Canonical recall supports exact and lexical tracks, with optional derived
+vector and graph tracks. Ranking is deterministic and bounded. Retrieval
+quality/scale tests include fixture metrics and a scheduled 100k-record gate;
+release notes distinguish executed gates from unrun external-provider tests.
 
-The generated `<marshal_memory_context>` explicitly labels recalled content as historical data, not instructions. Adapter-specific prompt builders receive the same provider-neutral context through their existing `TrustedContext` field.
+Consolidation proposes governed candidates from repeated verified material. It
+does not bypass authority, evidence, conflict, scope, or lifecycle rules.
+Conflicting facts preserve provenance and require governed resolution.
 
-### Retrieval receipts
+## Session imports
 
-Every service recall returns a machine-readable receipt with:
+Verified import adapters exist for supported provider/session formats,
+including Codex, Claude, and Gemini paths represented in the current code.
+Imports retain provenance and pass through the memory firewall. A parser being
+implemented does not imply that every provider filesystem/session version was
+validated in the v1.0.1 release environment.
 
-- query and repository state;
-- record and byte budgets;
-- consumed bytes;
-- included/excluded decision per visible candidate;
-- matched retrieval tracks;
-- lifecycle and authority;
-- stale and budget-exclusion reasons.
+## Security and custody
 
-Records denied by the canonical store's private-scope gate do not appear in the receipt, preventing identifier leakage.
-Receipts are persisted caller-bound with query digests only and are linked to
-run/task/provider plus resulting evidence and outcome. Memory tombstones do not
-rewrite audit history; policy-admin retention pruning is explicit.
+- direct-ID reads repeat scope and ACL checks;
+- secret/high-entropy content is rejected or sanitized before persistence;
+- context delimiters are escaped, but semantic prompt injection still requires
+  policy and content-as-data handling;
+- mutation envelopes, evidence IDs, authority, source, timestamps, conflicts,
+  and supersession links are retained; and
+- tombstones do not rewrite historical receipts or audit evidence.
 
-### Automatic completion and failure capture
+Backups include the canonical SQLite state. Restore performs integrity,
+project, and schema preflight checks and keeps a safety backup when replacing
+an existing database.
 
-Every completed run whose deterministic evidence was persisted creates an evidence-linked task-scoped candidate:
+## Known limits
 
-- success produces an episodic candidate;
-- failure, timeout, cancellation, or block produces a failure candidate;
-- the body contains deterministic run metadata only;
-- raw transcript and hidden reasoning are not stored;
-- provider, agent, session, run, branch, base/result commits, and evidence IDs are preserved;
-- lifecycle is always `candidate` and authority is always `agent`.
+- optional vector retrieval requires a configured local provider;
+- federation and network memory sync are not Community v1.0.1 features;
+- CLI/Web do not expose every lower-level handoff or consolidation operation;
+  and
+- authenticated external-provider E2E is NOT_RUN for v1.0.1 unless the release
+  notes explicitly report otherwise.
 
-Promotion remains a separate privileged operation.
-
-### Interface convergence
-
-- CLI recall, remember, and promote route through `Runtime.Memory()`.
-- MCP recall, remember, task blackboard, grant/revoke, and handoff operations route through `Runtime.Memory()` and the durable protocol service.
-- A2A task execution, task blackboard, explicit task grants, and handoff operations use the same canonical runtime services without a parallel memory store.
-- A live Web server reads search, direct-ID, detail, and retrieval explanation from canonical state. Fixture data remains restricted to explicit `runtime=nil` dev/test mode.
-- Live Web promote, supersede, and tombstone operations use canonical CAS mutations. They no longer synthesize successful production writes or signatures.
-
-## Runtime architecture after changes
-
-```text
-CLI / MCP / A2A / Web / Runtime
-                |
-                v
-       Canonical MemoryService
-                |
-                v
-       SQLite memory_records_v2
-                |
-        scope + ACL hard gate
-                |
-      lifecycle + expiry + HEAD
-                |
-        exact/lexical ranking
-                |
-         context byte budget
-                |
-                v
-      <marshal_memory_context>
-                |
-                v
-        provider-neutral adapter
-                |
-                v
-       evidence + run outcome
-                |
-                v
-   task-scoped candidate memory
-```
-
-Derived indexes remain non-authoritative and disposable. The runtime implementation in this tranche does not require a cloud embedding service.
-
-## Multi-agent demonstration
-
-`TestRuntimeMemoryFabricCrossProviderRestartAndStaleness` uses a real temporary Git repository and MARSHAL SQLite database:
-
-```text
-Codex-labelled Agent A captures an evidence-linked outcome
-  -> Gemini-labelled Agent B recalls it from canonical memory
-  -> Runtime closes and reopens
-  -> Ollama-labelled Agent C recalls the same memory ID
-  -> A newer repository HEAD excludes it as stale with a receipt
-```
-
-No provider transcript or in-memory memory mock is used in this demonstration.
-
-## Handoff demonstration
-
-`TestA06RuntimeSubmitsProviderNeutralTypedHandoff` uses the real runtime and SQLite store. A developer-role agent submits a bounded evidence-linked handoff, the runtime closes, a new runtime opens the same repository, and a different QA-role agent consumes the persisted handoff. The test verifies sender provenance, accepted/consumed lifecycle, idempotent submission, and restart survival without transcript replay.
-
-A2A task execution also uses `Runtime.Run`; therefore a provider change receives canonical task memory through the same automatic recall path. This tranche did not duplicate handoff state into a second memory database.
-
-## Security verification
-
-- Store-level operator-private filtering is verified to omit both content and memory IDs from another principal's receipt.
-- The private record remains recallable by its owning principal.
-- Task-start recall rejects tombstoned, rejected, superseded, expired, and repository-stale records before context compilation.
-- Context content is escaped and wrapped as data.
-- Completion capture stores deterministic metadata and evidence references, not raw provider output.
-- Automatic completion capture is tested with a credential marker; the canonical firewall rejects it and SQLite remains empty for that memory ID.
-- Web direct-ID reads repeat scope and ACL checks and hide inactive records.
-
-## External design review
-
-Concepts were reviewed from the following projects without copying implementation:
-
-- MegaMemory (MIT): concept graphs and source-verified branch conflict resolution.
-- cass-memory (MIT with an additional OpenAI/Anthropic rider in its current release): cross-agent procedural learning and failure lessons.
-- deja-vu: local session-history indexing and compact cross-harness recall.
-- Agent Memory Control Plane (MIT): candidate-first writes, source precedence, conflict receipts, and explainable retrieval.
-- Agent-Memory-OS (Apache-2.0): hard ACL before ranking, disposable candidate indexes, and token-budgeted context packs.
-
-MARSHAL retains its own types, governance, SQLite schema, and security boundaries; no external source code or dependency was added.
-
-## Tests
-
-Executed during implementation:
-
-```text
-go test -count=1 ./internal/app ./internal/integration
-go test -count=1 ./internal/webcontrol ./internal/integration
-go test -count=1 ./internal/mcp ./internal/cli ./internal/webcontrol ./internal/app ./internal/integration
-go test -count=1 ./...
-go vet ./...
-go test -race -count=1 ./...
-
-cd web
-npm ci
-npm run typecheck
-npm run lint
-npm run test:run
-npm run build
-cd ..
-
-python3 conformance/runner.py validate-pack
-python3 -m unittest discover -s conformance/tests -v
-python3 -m unittest discover -s tools/tests -v
-python3 -m unittest discover -s tools/tests_v6 -v
-python3 tools/release_verify.py . distribution/PACK-MANIFEST.json
-git diff --check
-```
-
-All commands above passed. The Web lint command reported one existing warning in `web/src/api/errors.ts:31` and no errors. Frontend tests passed 51 files and 116 tests. `npm ci` reported zero vulnerabilities. The manifest generator was run twice with the same resulting SHA-256 before verification, proving deterministic output for tracked files.
-
-## Performance
-
-The canonical 10k-record validation and four benchmarks were executed on the
-recorded release machine. Exact commands and raw figures are maintained in
-`memory-fabric-validation.md`. Recall@K, NDCG, 100k-record memory growth, and
-task-uplift remain unmeasured and are not claimed.
-
-## Remaining limitations
-
-- Vector retrieval remains optional and disabled unless a real local provider is configured; exact, lexical, and graph tracks remain available.
-- Automatic capture records deterministic episode/failure candidates; consolidation proposals for repeated verified facts/failures remain future governance work.
-- Typed handoffs are available through Runtime, MCP, and A2A; CLI/Web do not duplicate every operation.
-- Verified Codex and Claude JSONL import adapters are available. Automatic filesystem discovery/checkpointing and unverified OpenCode/Gemini formats remain disabled.
-- Federation remains outside the Community runtime; no network sync was introduced.
-- Recall@K, NDCG, 100k scale, and task-success uplift remain unmeasured.
+See the [memory authority map](memory/current-state-audit.md).

@@ -1,55 +1,43 @@
-# Runtime Modes
+# Runtime modes
 
 ## File-first mode
 
-The role, protocol, memory, and template files can govern agent work without a
-runtime service. Markdown is human-readable coordination state. This mode does
-not provide transactional concurrency or process enforcement by itself.
+Repository policy and protocol files can guide agents without starting a
+runtime. This mode does not provide transactional concurrency, provider
+sandboxing, or runtime evidence by itself.
 
-## Local runtime mode
+## Local Community runtime
 
-Runtime `v1.0.0` is implemented in Go. A local daemon exposes HTTP/JSON over a mode-`0600` Unix socket and stores canonical live coordination state in SQLite. The current MARSHAL schema is version 67. The project-local `.marshal/` directory contains the database, socket, logs, artifacts, and task worktrees and is excluded from Git.
+MARSHAL v1.0.1 runs a project-local Go daemon over a mode-`0600` Unix socket.
+Canonical state is SQLite schema v72 under the mode-`0700` `.marshal/`
+directory. The same runtime services are used by CLI, MCP, A2A, and supported
+live Web handlers.
 
 Implemented behavior includes:
 
-- deterministic migrations and transactional writes;
-- atomic task claims, sessions, heartbeats, and leases;
-- semantic policy decisions and contextual approvals;
-- task-scoped Git worktrees and worker process management;
-- Codex execution, durable events, digest-addressed artifacts, and evidence;
-- verification invalidation when repository HEAD changes;
-- read-only file/runtime reconciliation inspection.
+- deterministic forward migrations and transactional writes;
+- task claims, sessions, heartbeats, leases, and startup reconciliation;
+- role/capability/policy/risk gates;
+- task-scoped Git worktrees and supervised provider processes;
+- Codex, OpenCode, Gemini, and Claude adapters;
+- sanitized, digest-addressed artifacts and durable events;
+- canonical task-start memory recall and completion capture;
+- backup creation, integrity verification, and offline restore; and
+- bounded Community Resource Awareness.
 
 The worker lifecycle is `REGISTER → ASSIGN → PREPARE → RUN → HEARTBEAT →
-CHECKPOINT → VERIFY → RELEASE → EXIT`. A crash preserves worktree and evidence
-and cannot mark a task complete.
+CHECKPOINT → VERIFY → RELEASE → EXIT`. A crash cannot mark a task complete.
 
 ## Sandbox honesty
 
-Git worktrees isolate modifications; they are not a security sandbox.
-Bubblewrap is the strong Runtime V1 Linux backend. When it is unavailable, the
-runtime reports `process_only` and permits fallback only for eligible low-risk,
-network-allowed tasks. It blocks network-denied and R2/R3 execution rather than
-silently running unrestricted.
+Git worktrees are not security sandboxes. Bubblewrap is the strong Linux
+backend. Missing required isolation fails closed. Process-only execution is an
+explicit opt-in limited to eligible R0/R1 work; it is never silently selected
+for R2/R3 work.
 
-## Events and audit
+## Community boundary
 
-Canonical state transitions and durable audit events share the SQLite
-transaction boundary. Events contain operational metadata, not hidden model
-reasoning. Artifacts bind bytes to digests, tasks, sessions, and source commits.
-
-## Future multi-host mode
-
-Multi-host coordination, external event/artifact stores, production secrets,
-and full remote protocol servers remain specifications. No PostgreSQL, Redis,
-message broker, or distributed consensus dependency is part of Runtime V1.
-
-Canonical references:
-
-- [Policy-as-Code](policy-as-code.md)
-
-- [runtime/README.md](../runtime/README.md)
-- [runtime/ARCHITECTURE.md](../runtime/ARCHITECTURE.md)
-- [runtime/IMPLEMENTATION-ROADMAP.md](../runtime/IMPLEMENTATION-ROADMAP.md)
-- [runtime/SANDBOX.md](../runtime/SANDBOX.md)
-- [runtime/EVENT-BUS.md](../runtime/EVENT-BUS.md)
+Resource measurements and recommendations are read-only. Community does not
+include an adaptive resource governor, fleet-wide placement, automatic model
+migration, or continuous dynamic concurrency/context tuning. Multi-host
+coordination and remote artifact stores are not part of v1.0.1.

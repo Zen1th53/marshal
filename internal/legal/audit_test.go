@@ -38,6 +38,12 @@ func createTestRepo(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Test Repo"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "RUNTIME-VERSION.yaml"), []byte("runtime_implementation_version: \"1.0.1\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "PACK-VERSION.yaml"), []byte("pack_version: \"6.0.0\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	runCmd("git", "add", ".")
 	runCmd("git", "commit", "-m", "Initial commit")

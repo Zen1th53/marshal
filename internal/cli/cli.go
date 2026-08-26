@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-		"os"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -19,8 +19,8 @@ import (
 	"github.com/Zen1th53/marshal/internal/api"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
-	"github.com/Zen1th53/marshal/internal/httpsrv"
 	"github.com/Zen1th53/marshal/internal/doctor"
+	"github.com/Zen1th53/marshal/internal/httpsrv"
 	"github.com/Zen1th53/marshal/internal/legal"
 	"github.com/Zen1th53/marshal/internal/mcp"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	Version   = "v1.0.0"
+	Version   = "v1.0.1"
 	Commit    = "head"
 	BuildDate = "unknown"
 )

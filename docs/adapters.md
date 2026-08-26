@@ -1,35 +1,23 @@
-# Adapters
+# Adapter contracts
 
-Adapters map a native coding agent's bootstrap, execution, permission,
-session, and evidence surfaces into MARSHAL. They do not change role authority,
-policy, or task ownership.
+Adapters map provider bootstrap, process, permission, session, and evidence
+surfaces into MARSHAL. They do not change task ownership, role authority, or
+policy.
 
-The repository defines contracts for:
+The v1.0.1 runtime resolves only `codex`, `opencode`, `gemini`, and `claude`.
+Other entries in the compatibility matrix are contract research and are not
+runtime support claims.
 
-- Gemini CLI
-- Codex
-- Claude Code
-- OpenCode
-- Aider
-- Crush
+Capability labels in the contract files mean:
 
-Runtime `v1.0.0` implements and verifies Codex and OpenCode + local Ollama execution adapters. The other adapter directories contain integration contracts, templates, and probe guidance.
-
-Capability status is explicit:
-
-- `native`: the upstream agent exposes a direct surface;
-- `emulated`: MARSHAL must provide the behavior;
-- `probe_required`: the installed version must be checked;
+- `native`: the upstream tool exposes the surface;
+- `emulated`: MARSHAL would have to provide it;
+- `probe_required`: the installed version must be checked; and
 - `unsupported`: no native capability is claimed.
 
-Do not copy the compatibility table into another source of truth. Read:
+Canonical contract sources:
 
-- [adapters/MATRIX.json](../adapters/MATRIX.json)
-- [adapters/CONTRACT.md](../adapters/CONTRACT.md)
-- [adapters/COMPATIBILITY.md](../adapters/COMPATIBILITY.md)
+- [matrix](../adapters/MATRIX.json)
+- [contract](../adapters/CONTRACT.md)
+- [compatibility notes](../adapters/COMPATIBILITY.md)
 - [adapter-specific contracts](../adapters/README.md)
-
-Native context files such as `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, and
-`CONVENTIONS.md` stay thin. They point agents to
-[AGENT-BOOTSTRAP.md](../AGENT-BOOTSTRAP.md), then progressive context loading
-selects only the role and protocols required for the current task.

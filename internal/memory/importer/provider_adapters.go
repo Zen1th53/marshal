@@ -16,6 +16,7 @@ type ProviderFormat string
 const (
 	FormatCodexJSONL  ProviderFormat = "codex-jsonl"
 	FormatClaudeJSONL ProviderFormat = "claude-jsonl"
+	FormatGeminiJSONL ProviderFormat = "gemini-jsonl"
 )
 
 // HistoryAdapter is the provider boundary. Implementations normalize only
@@ -38,6 +39,13 @@ type ClaudeJSONLAdapter struct{}
 func (ClaudeJSONLAdapter) Format() ProviderFormat { return FormatClaudeJSONL }
 func (ClaudeJSONLAdapter) Decode(data []byte) (SessionTranscript, error) {
 	return decodeClaudeJSONL(data)
+}
+
+type GeminiJSONLAdapter struct{}
+
+func (GeminiJSONLAdapter) Format() ProviderFormat { return FormatGeminiJSONL }
+func (GeminiJSONLAdapter) Decode(data []byte) (SessionTranscript, error) {
+	return decodeGeminiJSONL(data)
 }
 
 const (
@@ -222,6 +230,64 @@ func decodeClaudeJSONL(data []byte) (SessionTranscript, error) {
 	})
 	if err != nil {
 		return SessionTranscript{}, fmt.Errorf("parse Claude history: %w", err)
+	}
+	return tr, nil
+}
+
+type geminiHistoryEntry struct {
+	SessionID   string          `json:"sessionId"`
+	StartTime   time.Time       `json:"startTime"`
+	LastUpdated time.Time       `json:"lastUpdated"`
+	Type        string          `json:"type"`
+	Content     json.RawMessage `json:"content"`
+}
+
+// decodeGeminiJSONL implements Gemini CLI's current append-only chat format:
+// one metadata record followed by user/gemini message records. Thoughts, tool
+// calls, info records, and every unknown field are excluded by construction.
+func decodeGeminiJSONL(data []byte) (SessionTranscript, error) {
+	tr := SessionTranscript{Provider: "gemini"}
+	err := scanJSONL(data, func(line []byte) error {
+		var entry geminiHistoryEntry
+		if err := json.Unmarshal(line, &entry); err != nil {
+			return err
+		}
+		if entry.SessionID != "" {
+			if tr.SessionID != "" && tr.SessionID != entry.SessionID {
+				return errors.New("Gemini history contains multiple session IDs")
+			}
+			tr.SessionID = entry.SessionID
+			tr.Timestamp = firstTime(tr.Timestamp, entry.StartTime, entry.LastUpdated)
+		}
+		if entry.Type != "user" && entry.Type != "gemini" {
+			return nil
+		}
+		role := "user"
+		if entry.Type == "gemini" {
+			role = "assistant"
+		}
+		var plain string
+		if err := json.Unmarshal(entry.Content, &plain); err == nil {
+			if strings.TrimSpace(plain) != "" {
+				tr.Messages = append(tr.Messages, Message{Role: role, Content: plain})
+			}
+			return nil
+		}
+		var parts []struct {
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(entry.Content, &parts); err != nil {
+			return fmt.Errorf("parse Gemini message content: %w", err)
+		}
+		for _, part := range parts {
+			if strings.TrimSpace(part.Text) != "" {
+				tr.Messages = append(tr.Messages, Message{Role: role, Content: part.Text})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return SessionTranscript{}, fmt.Errorf("parse Gemini history: %w", err)
 	}
 	return tr, nil
 }

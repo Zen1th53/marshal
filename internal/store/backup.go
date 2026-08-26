@@ -184,7 +184,7 @@ func VerifyBackup(ctx context.Context, backupPath string, expectedProjectID stri
 		SchemaVersion:  schemaVersion,
 		DatabaseSHA256: fileHash,
 		CreatedAt:      info.ModTime().UTC(),
-		MARSHALVersion: "1.0.0",
+		MARSHALVersion: "1.0.1",
 	}, nil
 }
 

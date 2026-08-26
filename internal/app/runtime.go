@@ -169,6 +169,9 @@ func Bootstrap(ctx context.Context, root string) (project.Layout, error) {
 	if err != nil {
 		return project.Layout{}, err
 	}
+	if err := ensureProjectDefaults(layout.Root); err != nil {
+		return project.Layout{}, err
+	}
 	version, err := loadPackVersion(filepath.Join(layout.Root, "PACK-VERSION.yaml"))
 	if err != nil {
 		return project.Layout{}, err
@@ -704,6 +707,10 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 			return RunResult{}, err
 		}
+		if !r.egressEnforcementAvailable() {
+			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
+			return RunResult{}, netpolicy.ErrEnforcementUnavailable
+		}
 
 		egressProxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{
 			Evaluator: evaluator,
@@ -730,11 +737,13 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		return RunResult{}, err
 	}
 	memoryPrincipal := authz.Principal{ID: request.AgentID, Role: authz.Role{Name: "developer", Authorities: []authz.Authority{authz.AuthorityTaskPlan}}}
-	fingerprintQuery := strings.Join([]string{task.ID, task.Title, branch, baseCommit, request.AgentID, request.Adapter, string(task.Risk)}, " ")
+	worktreeID := strings.Join([]string{task.ID, request.AgentID, claim.Session.ID}, ":")
+	fingerprintQuery := strings.Join([]string{task.ID, task.Title, r.layout.Branch, r.layout.HEAD, branch, worktreeState.HEAD, worktreeID, request.AgentID, request.Adapter, request.Model, string(task.Risk)}, " ")
 	recall, err := r.memoryService.Recall(ctx, memoryPrincipal, RecallRequest{
 		ProjectID: localProjectID, Query: fingerprintQuery,
 		AllowedScopeIDs: []string{localProjectID, task.ID, request.AgentID, branch},
-		CurrentHead:     baseCommit, CurrentBranch: branch, MaxRecords: 8, MaxBytes: 12 << 10,
+		CurrentHead:     worktreeState.HEAD, CanonicalHead: r.layout.HEAD, CurrentBranch: branch,
+		CurrentWorktreeID: worktreeID, MaxRecords: 8, MaxBytes: 12 << 10,
 		RunID: runID, TaskID: task.ID, Provider: request.Adapter,
 	})
 	if err != nil {
@@ -948,14 +957,19 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			}
 		}
 		errorDigest := sha256.Sum256(append([]byte(finishStatus+":"), stderr...))
-		_, captureErr = r.memoryService.CaptureOutcome(context.Background(), OutcomeCaptureRequest{
+		var capturedOutcome model.MemoryRecordV2
+		capturedOutcome, captureErr = r.memoryService.CaptureOutcome(context.Background(), OutcomeCaptureRequest{
 			ProjectID: localProjectID, TaskID: task.ID, TaskTitle: task.Title, RunID: runID, SessionID: claim.Session.ID,
 			AgentID: request.AgentID, Provider: request.Adapter, Status: finishStatus,
 			ExitStatus: result.ExitCode, BaseCommit: baseCommit, HeadCommit: resultCommit, Branch: branch,
+			WorktreeID:  worktreeID,
 			EvidenceIDs: runEvidenceIDs, ErrorSignature: "sha256:" + hex.EncodeToString(errorDigest[:]),
 			FailureReason: failureReason, RetryCondition: retryCondition,
 			Environment: map[string]string{"adapter_version": probe.Version, "isolation": fmt.Sprint(result.Isolation)},
 		})
+		if captureErr == nil {
+			_, captureErr = r.memoryService.ProposeOutcomeConsolidation(context.Background(), memoryPrincipal, capturedOutcome, task.Title)
+		}
 	}
 	currentRevision := executionRevision
 	if success && resultCommit != baseCommit {

@@ -1,10 +1,10 @@
 module github.com/Zen1th53/marshal
 
-go 1.25.0
+go 1.25.13
 
 require (
 	go.yaml.in/yaml/v3 v3.0.5
-	modernc.org/sqlite v1.56.0
+	modernc.org/sqlite v1.57.0
 )
 
 require (

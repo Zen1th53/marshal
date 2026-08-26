@@ -72,6 +72,37 @@ func TestClaudeJSONLExcludesThinkingAndTools(t *testing.T) {
 	}
 }
 
+func TestGeminiJSONLImportsPublicMessagesOnly(t *testing.T) {
+	const history = `{"sessionId":"gemini-session-1","projectHash":"abc","startTime":"2026-08-23T09:00:00Z","lastUpdated":"2026-08-23T09:01:00Z"}
+{"id":"u1","type":"user","content":"Where is the canonical store?","timestamp":"2026-08-23T09:00:01Z"}
+{"id":"g1","type":"gemini","content":"Canonical memory is stored in SQLite.","thoughts":[{"subject":"private","description":"hidden reasoning"}],"toolCalls":[{"name":"read_file","result":"tool-secret"}]}
+{"id":"i1","type":"info","content":"internal system notice"}
+`
+	imp := importer.NewSessionImporter(importer.Config{})
+	result, err := imp.ImportProviderHistory(context.Background(), "PROJECT-1", importer.FormatGeminiJSONL, []byte(history), false)
+	if err != nil {
+		t.Fatalf("ImportProviderHistory: %v", err)
+	}
+	if len(result.ImportedRecords) != 1 {
+		t.Fatalf("expected one candidate, got %+v", result)
+	}
+	rec := result.ImportedRecords[0]
+	if rec.Authority != model.AuthorityAgent || rec.Lifecycle != model.MemoryCandidate {
+		t.Fatalf("Gemini import gained authority: %+v", rec)
+	}
+	if !strings.Contains(rec.Body, "canonical store") || !strings.Contains(rec.Body, "stored in SQLite") {
+		t.Fatalf("public messages missing: %q", rec.Body)
+	}
+	for _, forbidden := range []string{"hidden reasoning", "tool-secret", "system notice"} {
+		if strings.Contains(rec.Body, forbidden) {
+			t.Fatalf("Gemini private/tool content leaked: %q", rec.Body)
+		}
+	}
+	if got := rec.ExtMeta["source_format"]; got != string(importer.FormatGeminiJSONL) {
+		t.Fatalf("source format = %v", got)
+	}
+}
+
 func TestProviderImportIsDeterministicAndSecretSafe(t *testing.T) {
 	const safe = `{"type":"user","sessionId":"claude-session-2","message":{"role":"user","content":"Document the runtime behavior"}}
 `

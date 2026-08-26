@@ -19,9 +19,31 @@ func TestCheckHealthyRuntime(t *testing.T) {
 	if report.Verdict != Pass {
 		t.Fatalf("report = %#v", report)
 	}
-	for _, required := range []string{"git", "repository", "pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
+	for _, required := range []string{"git", "repository", "pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "resources", "ollama_models", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
 		if report.Check(required) == nil {
 			t.Errorf("missing check %s", required)
+		}
+	}
+}
+
+func TestDefaultCheckDoesNotProbeOptionalProviders(t *testing.T) {
+	repo := doctorRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	report := Check(context.Background(), repo.Path(), Options{Lookup: func(name string) (string, error) {
+		if name == "git" || name == "bwrap" {
+			return availableTools(name)
+		}
+		t.Fatalf("unexpected provider lookup for %s", name)
+		return "", os.ErrNotExist
+	}, Run: successfulProbe})
+	if report.Verdict != Pass {
+		t.Fatalf("report = %#v", report)
+	}
+	for _, name := range []string{"codex", "opencode", "ollama", "gemini", "claude"} {
+		if check := report.Check(name); check == nil || check.Verdict != NotRun {
+			t.Fatalf("%s check = %#v", name, check)
 		}
 	}
 }
@@ -31,7 +53,7 @@ func TestMissingCodexAndBwrapAreDegraded(t *testing.T) {
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
 		t.Fatal(err)
 	}
-	report := Check(context.Background(), repo.Path(), Options{Run: successfulProbe, Lookup: func(name string) (string, error) {
+	report := Check(context.Background(), repo.Path(), Options{ProbeProviders: true, Run: successfulProbe, Lookup: func(name string) (string, error) {
 		if name == "codex" || name == "bwrap" {
 			return "", os.ErrNotExist
 		}

@@ -42,14 +42,18 @@ type OverviewSummaryDTO struct {
 }
 
 func (s *Server) handleGetOverview(w http.ResponseWriter, r *http.Request) {
+	if s.store != nil {
+		writeError(w, http.StatusNotImplemented, "unsupported_live_surface", "the fixture overview is unavailable when a canonical runtime is attached", "")
+		return
+	}
 	now := time.Now().UTC()
 	taskCounts := globalTaskStore.GetCounts()
 
 	dto := OverviewSummaryDTO{
 		SystemStatus: SystemStatusDTO{
 			State:          "READY",
-			Version:        "1.0.0",
-			CommitSHA:      "67816af",
+			Version:        s.config.Version,
+			CommitSHA:      s.config.Commit,
 			DatabaseSchema: fmt.Sprintf("v%d", store.LatestSchemaVersion),
 			ActiveWorkers:  taskCounts.Active,
 			PendingTasks:   taskCounts.Queued,
@@ -63,36 +67,36 @@ func (s *Server) handleGetOverview(w http.ResponseWriter, r *http.Request) {
 		},
 		Providers: []AdapterSummaryDTO{
 			{
-				Name:        "codex",
-				BinaryName:  "codex",
-				Installed:   true,
-				State:       "READY",
-				Version:     "1.0.0",
-				ProbedAt:    now,
+				Name:       "codex",
+				BinaryName: "codex",
+				Installed:  true,
+				State:      "READY",
+				Version:    "1.0.0",
+				ProbedAt:   now,
 			},
 			{
-				Name:        "claude",
-				BinaryName:  "claude",
-				Installed:   true,
-				State:       "READY",
-				Version:     "3.7.0",
-				ProbedAt:    now,
+				Name:       "claude",
+				BinaryName: "claude",
+				Installed:  true,
+				State:      "READY",
+				Version:    "3.7.0",
+				ProbedAt:   now,
 			},
 			{
-				Name:        "gemini",
-				BinaryName:  "gemini",
-				Installed:   true,
-				State:       "READY",
-				Version:     "2.5.0",
-				ProbedAt:    now,
+				Name:       "gemini",
+				BinaryName: "gemini",
+				Installed:  true,
+				State:      "READY",
+				Version:    "2.5.0",
+				ProbedAt:   now,
 			},
 			{
-				Name:        "opencode",
-				BinaryName:  "opencode",
-				Installed:   true,
-				State:       "READY",
-				Version:     "0.1.0",
-				ProbedAt:    now,
+				Name:       "opencode",
+				BinaryName: "opencode",
+				Installed:  true,
+				State:      "READY",
+				Version:    "0.1.0",
+				ProbedAt:   now,
 			},
 		},
 		MemoryHealth: "OPTIMAL",

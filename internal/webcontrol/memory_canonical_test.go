@@ -75,6 +75,65 @@ func TestWebMemoryUsesCanonicalRuntimeStore(t *testing.T) {
 	}
 }
 
+func TestLiveWebRejectsFixtureOnlyProviderSurfaces(t *testing.T) {
+	ctx := context.Background()
+	repo := testgit.New(t)
+	if _, err := app.Bootstrap(ctx, repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	rt, err := app.Open(ctx, repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rt.Close()
+
+	srv, err := webcontrol.NewServer(webcontrol.ServerConfig{Host: "127.0.0.1", Port: 8787}, rt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie, csrf := loginAndCSRF(t, srv, "operator", "admin")
+
+	for _, path := range []string{"/api/v1/system/adapters", "/api/v1/system/capabilities", "/api/v1/overview"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("%s status=%d body=%s", path, w.Code, w.Body.String())
+		}
+	}
+
+	providerReq := httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil)
+	providerReq.AddCookie(cookie)
+	providerW := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(providerW, providerReq)
+	if providerW.Code != http.StatusNotImplemented {
+		t.Fatalf("provider inventory status=%d body=%s", providerW.Code, providerW.Body.String())
+	}
+
+	for _, path := range []string{"/api/v1/tasks", "/api/v1/memory/governance/queue", "/api/v1/memory/MEM-001/usage"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(cookie)
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, req)
+		if w.Code != http.StatusNotImplemented {
+			t.Fatalf("%s status=%d body=%s", path, w.Code, w.Body.String())
+		}
+	}
+
+	overrideBody, _ := json.Marshal(webcontrol.MutationEnvelope[webcontrol.RouterOverridePayload]{
+		Payload: webcontrol.RouterOverridePayload{Intent: "planning", ModelID: "fixture-model", IsPinned: true},
+	})
+	overrideReq := httptest.NewRequest(http.MethodPost, "/api/v1/providers/router/override", bytes.NewReader(overrideBody))
+	overrideReq.Header.Set("Content-Type", "application/json")
+	overrideReq.Header.Set("X-CSRF-Token", csrf)
+	overrideReq.AddCookie(cookie)
+	overrideW := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(overrideW, overrideReq)
+	if overrideW.Code != http.StatusNotImplemented {
+		t.Fatalf("provider override status=%d body=%s", overrideW.Code, overrideW.Body.String())
+	}
+}
+
 func TestWebWorkingMemoryUsesCanonicalRuntimeService(t *testing.T) {
 	ctx := context.Background()
 	repo := testgit.New(t)

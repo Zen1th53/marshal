@@ -1,6 +1,6 @@
 # MARSHAL CLI Reference
 
-**Runtime Version**: `v1.0.0`
+**Runtime Version**: `v1.0.1`
 
 This document provides a comprehensive command reference for the `marshal` command-line executable.
 
@@ -22,7 +22,7 @@ Usage: marshal [--json] <command> [arguments]
 
 ### `marshal init`
 
-Purpose: Initializes the private `.marshal/` runtime state directory inside the current Git repository. Safe and idempotent.
+Purpose: Creates missing project policy/version defaults and initializes the private `.marshal/` runtime state directory inside the current Git repository. Existing regular defaults are preserved; symlinks in their place are rejected.
 
 ```bash
 marshal init
@@ -62,7 +62,7 @@ marshal status
 
 Output:
 ```text
-schema=2 tasks=1 agents=1
+schema=72 tasks=1 agents=1
 ```
 
 ---

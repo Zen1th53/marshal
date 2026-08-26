@@ -139,6 +139,7 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 	if query.At.IsZero() {
 		at = e.now().UTC()
 	}
+	query.At = at
 	resource, err := NormalizeResource(query.Kind, query.Resource)
 	if err != nil {
 		return e.observeDecision(Decision{}, err, started)
@@ -252,11 +253,15 @@ func (e *Engine) recordDecision(ctx context.Context, query Query, decision Decis
 	if e.eventStore == nil {
 		return decision, nil
 	}
+	decisionAt := query.At.UTC()
+	if query.At.IsZero() {
+		decisionAt = e.now().UTC()
+	}
 	eventType := events.EventType("capability.authorize.denied")
 	if decision.Outcome == OutcomeAllow {
 		eventType = events.EventType("capability.authorize.allowed")
 	}
-	key := eventKey(string(eventType), string(query.Subject), string(query.TaskID), string(query.Kind), query.Resource, query.Action)
+	key := eventKey(string(eventType), string(query.Subject), string(query.TaskID), string(query.Kind), query.Resource, query.Action, decisionAt.Format(time.RFC3339Nano))
 	data := map[string]string{"kind": string(query.Kind), "reason": string(decision.Reason)}
 	if decision.MatchedGrant != "" {
 		data["grant_id"] = string(decision.MatchedGrant)
@@ -264,7 +269,7 @@ func (e *Engine) recordDecision(ctx context.Context, query Query, decision Decis
 	_, err := e.eventStore.Append(ctx, events.Event{
 		ID: key, Type: eventType, Subject: string(query.Subject),
 		TaskID: string(query.TaskID), ResourceID: resourceReference(query.Resource),
-		At: e.now().UTC(), IdempotencyKey: key, Data: stringMapAny(data),
+		At: decisionAt, IdempotencyKey: key, Data: stringMapAny(data),
 	})
 	if err != nil {
 		return decision, safeBoundaryError(err)

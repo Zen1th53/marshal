@@ -40,7 +40,7 @@ describe('Operator Lifecycle End-to-End Simulation (T219)', () => {
     vi.spyOn(api, 'getOverview').mockResolvedValueOnce({
       system_status: {
         state: 'READY',
-        version: '0.1.0',
+        version: '1.0.1',
         commit_sha: '5e16a94',
         database_schema: 'sqlite_wal',
         active_workers: 4,

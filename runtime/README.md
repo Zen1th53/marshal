@@ -1,69 +1,40 @@
-# Runtime Plane
+# Runtime plane
 
-This directory defines the executable control-plane contracts and implementation
-for the MARSHAL agent runtime (`1.0.0`, SQLite schema `v69`).
+This directory contains the executable control-plane contracts for MARSHAL
+v1.0.1. The current database is SQLite schema v72.
 
 ## Components
 
-- `MARSHAL-CLI.md` — CLI command contract.
-- `MEMORY-SERVICE.md` — canonical state service.
-- `IDENTITY-REGISTRY.md` — agent/session identity and heartbeat.
-- `POLICY-ENGINE.md` — runtime authorization and capability broker.
-- `SANDBOX.md` — isolated worker execution.
-- `SCHEDULER.md` — task dispatch, scoring engine, and atomic leases.
-- `EVENT-BUS.md` — append-only durable event semantics.
-- `SECRETS-BROKER.md` — scoped secret leasing and redaction.
-- `ARTIFACT-STORE.md` — content-addressed immutable artifact store.
-- `WORKER-PROTOCOL.md` — worker lifecycle contract.
-- `HEALTH.md` — health and readiness diagnostics.
-- `THREAT-MODEL.md` — runtime threat model and security boundaries.
-- `SCHEMA.yaml` — canonical runtime entities.
-- `EVENTS.yaml` — stable event names and fields.
-- `IMPLEMENTATION-ROADMAP.md` — implemented milestones and build order.
-
-## Implemented Runtime Architecture (v1.0.0)
+- `MARSHAL-CLI.md` — CLI contract
+- `MEMORY-SERVICE.md` — canonical memory contract
+- `IDENTITY-REGISTRY.md` — agent/session identity and heartbeat
+- `POLICY-ENGINE.md` — authorization and capability broker
+- `SANDBOX.md` — isolated worker execution
+- `SCHEDULER.md` — task dispatch and leases
+- `EVENT-BUS.md` — durable event semantics
+- `SECRETS-BROKER.md` — scoped secrets and redaction
+- `ARTIFACT-STORE.md` — content-addressed artifacts
+- `WORKER-PROTOCOL.md` — worker lifecycle
+- `HEALTH.md` — readiness diagnostics
+- `THREAT-MODEL.md` — trust boundaries
 
 ```text
-marshal CLI / Local UI
-  |
-  +--> Mode-0600 Unix Domain Socket (Local Control Plane)
-  +--> Loopback-only Bearer-token MCP Server (2026-07-28)
-  +--> Loopback-only Bearer-token A2A Server (1.0)
-  |
-SQLite (WAL Mode, Schema v69)
-  |-- tasks (Canonical Review -> QA -> Security -> Merge Lifecycle)
-  |-- agents & sessions (Role Authorization & Heartbeats)
-  |-- leases (Multi-factor Scheduler Scoring & TTL)
-  |-- worker_runs & execution_cells
-  |-- audit_events (Append-only Audit Log)
-  |-- artifacts (Content-addressed sha256 reference tracking)
-  +-- quorum_verifications & risk_assessments
-
-Storage & Sandbox Execution
-  |-- Git Worktrees (.marshal/worktrees/ with retention GC)
-  |-- SHA-256 Content-Addressed Artifacts (.marshal/artifacts/ with GC)
-  +-- Bubblewrap Sandbox (Unprivileged mount & network namespaces)
+CLI / MCP / A2A / supported Web routes
+                  |
+                  v
+              app.Runtime
+                  |
+ capability → policy → network → sandbox → provider
+                  |
+          evidence → memory → SQLite
 ```
 
-The runtime enforces:
-- Fail-closed security boundaries across native CLI, MCP, and A2A interfaces.
-- Fine-grained token capabilities (`task:run`, `task:claim`, `mcp:read`, `a2a:send`).
-- Dynamic multi-factor scheduler scoring and profile-based model routing.
-- Real recovery state machine with failure classification and backoff.
-- Task merge gate with multi-party quorum verification.
-- Content-addressed artifact reference tracking and GC.
-- SQLite online backup, restore preflight, and startup orphan reconciliation.
-- Bubblewrap process isolation with 500MB worktree disk budget and process group timeouts.
+The runtime uses task-scoped Git worktrees, bounded worker processes,
+Bubblewrap when required, sanitized evidence, and SQLite transactions. Missing
+required isolation fails closed. Process-only fallback is disabled by default
+and limited to explicitly opted-in R0/R1 work.
 
-If bubblewrap is unavailable, only low-risk (R1) tasks with explicit network allowance
-may use the process-only fallback; high-risk (R2/R3) or network-denied tasks fail closed.
-
-Distributed multi-host clustering and cloud-native object stores remain future milestones.
-
----
-
-## V6 Protocol Boundaries
-
-- Remote agent collaboration: A2A `1.0` (loopback-bound, bearer-authorized).
-- MCP profile: `2026-07-28` (stateless, capability-token protected).
-- Multi-tenancy and remote coordination: see `runtime/REMOTE-AGENTS.md` and `runtime/MULTI-TENANCY.md`.
+Community Resource Awareness is read-only and advisory. It does not implement
+adaptive resource control, fleet placement, or automatic provider/model
+routing. Multi-host clustering and remote artifact stores remain outside the
+v1.0.1 Community runtime.

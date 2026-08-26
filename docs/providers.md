@@ -1,77 +1,51 @@
-# MARSHAL Provider Capability Model & Adapter Guide
+# Provider adapters
 
-**Runtime Milestone**: `v1.0.0`
+MARSHAL v1.0.1 implements four runtime adapters. Provider availability and
+release verification are separate facts.
 
-MARSHAL implements a vendor-neutral provider architecture where AI coding agents interact with the repository through process adapters.
+| Adapter path | Binary | Implemented | Adapter/model E2E | Canonical Runtime E2E |
+|---|---|---:|---|---|
+| Codex | `codex` | Yes | NOT_RUN | NOT_RUN |
+| OpenCode + DeepSeek V4 | `opencode` | Yes | PASS — Flash and Pro | NOT_RUN — enforcing egress unavailable |
+| OpenCode + Ollama | `opencode` | Yes | FAIL — tested local models did not complete the strict proof task | NOT_RUN — enforcing egress unavailable |
+| Gemini CLI | `gemini` | Yes | NOT_RUN | NOT_RUN |
+| Claude Code | `claude` | Yes | NOT_RUN | NOT_RUN |
 
----
+The release notes report which binaries were locally probed. A successful
+`--version` or help probe does not establish credentials, model compatibility,
+remote service access, or successful task execution.
 
-## 1. Provider Capability Data Model
-
-MARSHAL distinguishes between binary presence, protocol capability, authentication, and empirical end-to-end verification. A provider's maturity is classified into six distinct states:
-
-| Capability State | Meaning |
-|---|---|
-| `IMPLEMENTED` | Adapter code and contract execution loop exist in the Go codebase. |
-| `INSTALLED` | Provider CLI binary is discovered on `$PATH`, `~/.local/bin`, or `/usr/local/bin`. |
-| `AVAILABLE` | Binary executes basic `--version` and `--help` diagnostic probes cleanly. |
-| `AUTHENTICATED` | Provider credentials or local daemon connections pass probe verification. |
-| `CAPABILITY-PROBED` | Provider flag compatibility and non-interactive parameters are verified. |
-| `REAL-E2E-VERIFIED` | Full-chain task execution verified across Native CLI, MCP (2026-07-28), and A2A (1.0). |
-
----
-
-## 2. Provider Support Matrix
-
-| Provider Adapter | Binary | Current State | Native | MCP | A2A | Notes |
-|---|---|---|:---:|:---:|:---:|---|
-| **Codex** | `codex` | `REAL-E2E-VERIFIED` | Yes | Yes | Yes | Mandatory Release Gate |
-| **OpenCode + Ollama** | `opencode` + `ollama` | `REAL-E2E-VERIFIED` | Yes | Yes | Yes | Mandatory Release Gate (`qwythos-9b`) |
-| **Gemini CLI** | `gemini` | `CAPABILITY-PROBED` | — | — | — | API Quota Limited (429) |
-| **Claude Code** | `claude` | `CAPABILITY-PROBED` | — | — | — | OAuth Session Expired |
-| **Aider** | `aider` | `IMPLEMENTED` | — | — | — | Contract specification |
-| **Crush** | `crush` | `IMPLEMENTED` | — | — | — | Contract specification |
-
----
-
-## 3. Provider Configurations
-
-### Codex Adapter (`codex`)
-- **Binary**: `codex` (`codex-cli 0.146.0`+)
-- **Lookup Paths**: `$PATH`, `~/.local/bin/codex`, `/usr/local/bin/codex`
-- **Execution Command**: `codex exec --json --sandbox --ephemeral --ignore-user-config --cd <WORKTREE>`
-- **Verification Status**: `REAL-E2E-VERIFIED`
-- **Sandbox Requirement**: Requires `bubblewrap` for fail-closed R1-R3 execution.
-
-### OpenCode + Local Ollama Adapter (`opencode`)
-- **Binaries**: `opencode` (`1.18.16`+) and `ollama` (`0.32.6`+)
-- **Lookup Paths**: `$PATH`, `~/.local/bin/opencode`, `/usr/local/bin/opencode`
-- **Model Backend**: Local Ollama service (`http://localhost:11434`)
-- **Tested Model**: `qwythos-9b`
-- **Verification Status**: `REAL-E2E-VERIFIED`
-- **Key Note**: Text generation capabilities do not imply tool-calling capability. Models must be explicitly tool-call capable to modify repository files.
-
-### Gemini CLI Adapter (`gemini`)
-- **Binary**: `gemini` (`0.50.0`+)
-- **Verification Status**: `CAPABILITY-PROBED / UNVERIFIED`
-- **Limitation**: Unauthenticated or quota-limited (429) environments gracefully skip integration tests without blocking release gates.
-
-### Claude Code Adapter (`claude`)
-- **Binary**: `claude` (`2.1.218`+)
-- **Verification Status**: `CAPABILITY-PROBED / UNVERIFIED`
-- **Limitation**: OAuth session expiration reported truthfully without fake PASS.
-
----
-
-## 4. Probing Provider Adapters
-
-Inspect available provider binaries and adapter status using the CLI:
+Probe providers without making an E2E claim:
 
 ```bash
-# List provider adapters and binary paths
+marshal doctor --probe-providers
 marshal adapters
-
-# Perform a deep probe against a specific adapter
 marshal adapter probe codex
 marshal adapter probe opencode
+marshal adapter probe gemini
+marshal adapter probe claude
 ```
+
+Provider execution is explicit:
+
+```bash
+marshal run TASK-001 --adapter codex
+marshal run TASK-001 --adapter opencode --model MODEL
+```
+
+In v1.0.1, a provider that needs network access is rejected with
+`NET_ENFORCEMENT_UNAVAILABLE`: the available proxy is not an enforcing
+Bubblewrap network backend, so opening the namespace would broaden egress.
+The OpenCode results above are direct adapter qualification, outside the
+canonical Runtime/MCP/A2A chain; they are not represented as Runtime E2E.
+
+Adapters do not weaken MARSHAL policy or sandbox requirements. Missing
+binaries, credentials, required flags, Bubblewrap, or enforceable egress cause
+the run to fail or degrade according to the documented boundary; they are not
+converted into a false PASS.
+
+The compatibility contracts in [`adapters/MATRIX.json`](../adapters/MATRIX.json)
+also describe tools such as Aider and Crush. Those entries are interoperability
+contracts, not v1.0.1 runtime adapters.
+
+See [OpenCode and Ollama](providers/opencode-ollama.md) for local setup notes.
