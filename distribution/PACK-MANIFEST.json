@@ -3916,8 +3916,8 @@
     },
     {
       "path": "internal/store/authz_role_bindings.go",
-      "sha256": "31ae081d0a24459e2f18d4fd153d6961af123208967101f4e0873b5a4c793663",
-      "bytes": 5338
+      "sha256": "94fdd04822c75da40714a0e6bb8c9e6452e7ad3c7211464de6ba4ed162955576",
+      "bytes": 5679
     },
     {
       "path": "internal/store/backup.go",
@@ -5736,8 +5736,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
-      "sha256": "cddc917ee264db538c79ddbee80f5042474a0ad454cbae8955a109be19de244e",
-      "bytes": 4959
+      "sha256": "8c1392f74ffc34cf0c85a99ecea0ba825261ace3ef2344b7567acaee42f911f3",
+      "bytes": 5090
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",

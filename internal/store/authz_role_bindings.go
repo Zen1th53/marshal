@@ -64,6 +64,18 @@ func (s *Store) GetRoleBinding(ctx context.Context, id string) (authz.RoleBindin
 }
 
 func (s *Store) RevokeRoleBinding(ctx context.Context, id string, revokedAt time.Time) error {
+	for attempt := 0; ; attempt++ {
+		err := s.revokeRoleBindingOnce(ctx, id, revokedAt)
+		if !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
+			return err
+		}
+		if err := waitSQLiteRetry(ctx, attempt); err != nil {
+			return err
+		}
+	}
+}
+
+func (s *Store) revokeRoleBindingOnce(ctx context.Context, id string, revokedAt time.Time) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin role binding revoke: %w", err)

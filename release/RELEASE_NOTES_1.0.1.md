@@ -31,6 +31,8 @@ verifiable.
   a source checkout and rejects symlink replacements.
 - Repeated provider capability checks no longer collide in the durable audit
   stream; each decision retains fail-closed audit enforcement.
+- Concurrent role-binding revocations retry bounded SQLite lock contention and
+  converge to one durable winner plus one conflict.
 - Network-required provider runs now return `NET_ENFORCEMENT_UNAVAILABLE`
   instead of opening a Bubblewrap network namespace that could bypass the
   endpoint allowlist proxy.
