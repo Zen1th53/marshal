@@ -23,6 +23,7 @@ class CleanInstallSmokeTests(unittest.TestCase):
             [
                 "go",
                 "build",
+                "-buildvcs=false",
                 "-ldflags",
                 "-X github.com/Zen1th53/marshal/internal/cli.Version=v1.0.1",
                 "-o",

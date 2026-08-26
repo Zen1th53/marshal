@@ -5991,8 +5991,8 @@
     },
     {
       "path": "scripts/community-release-gate.sh",
-      "sha256": "3f72d0b215993cfa021079485af2f582fb65be5ad1b99d670dfc18c436dd6aed",
-      "bytes": 4044
+      "sha256": "b8e268700f90beed9810918e3613f01cf7e70801378802aab38ddfd115fcabdb",
+      "bytes": 4060
     },
     {
       "path": "standards/REFERENCES.md",
@@ -6186,8 +6186,8 @@
     },
     {
       "path": "tools/tests/test_clean_install.py",
-      "sha256": "56eb44d69cebef5828a0931fcaab7bdf98f14c54ec8f170d7a881c7d75282856",
-      "bytes": 7659
+      "sha256": "72959be75be81f1f286ad10522fc4d33cc17bd1d60ffc04a283782fbac54cd6e",
+      "bytes": 7694
     },
     {
       "path": "tools/tests/test_marshal.py",
