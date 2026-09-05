@@ -37,7 +37,7 @@ func TestTaskMemoryEventsMigrationFromSchema71PreservesCanonicalMemory(t *testin
 		DROP TRIGGER task_memory_events_after_memory_update;
 		DROP TABLE task_memory_events;
 		DROP TABLE task_memory_event_heads;
-		DELETE FROM schema_migrations WHERE version = 72;
+		DELETE FROM schema_migrations WHERE version >= 72;
 	`); err != nil {
 		t.Fatalf("prepare schema 71 fixture: %v", err)
 	}

@@ -4316,8 +4316,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "b9fb756caf600ce1b11f05e8b3c0b59af69879cd6874a21373a9d6a33a1b0528",
-      "bytes": 69139
+      "sha256": "40fe454a70ac1364aeb56fe5f1f87d2e39525af895ce395d482a0510d6499150",
+      "bytes": 71044
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
@@ -4606,8 +4606,8 @@
     },
     {
       "path": "internal/store/task_memory_events_migration_test.go",
-      "sha256": "1f421d357bab7063213ad7064674d8dc1830c89c62eb2087dfa9f82ce5838b10",
-      "bytes": 5262
+      "sha256": "71531a83eaec24d019a61efab897d837268a5fc9879cd78c51db0cd7732ecf46",
+      "bytes": 5263
     },
     {
       "path": "internal/store/tasks.go",
