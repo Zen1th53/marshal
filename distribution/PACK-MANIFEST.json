@@ -2230,6 +2230,51 @@
       "bytes": 4099
     },
     {
+      "path": "internal/epistemic/adversarial_test.go",
+      "sha256": "c8d4fc7bdcf528158c9824776a7551ea73d59c998bed0ea3512ae0fdf97cb4b2",
+      "bytes": 18492
+    },
+    {
+      "path": "internal/epistemic/contradiction.go",
+      "sha256": "ff7971c5554cd065c2607339e50175eb65a46a08d649a2987c5f4d869a9c3e2f",
+      "bytes": 4037
+    },
+    {
+      "path": "internal/epistemic/coverage.go",
+      "sha256": "825e8826dccd439e5e9f0bd985f1b3eab721fc6168a26a369ea7af97b8f24fd5",
+      "bytes": 3739
+    },
+    {
+      "path": "internal/epistemic/engine.go",
+      "sha256": "b3ed49e7361b752c80850fb395dec7b613d70f2353add5dd164ab3415c028345",
+      "bytes": 3847
+    },
+    {
+      "path": "internal/epistemic/errors.go",
+      "sha256": "d7928b78a8e719520ac4e3934dbd2b1023fccc063906fe230214709a4b9f885c",
+      "bytes": 1875
+    },
+    {
+      "path": "internal/epistemic/evidence_discipline.go",
+      "sha256": "ede54d706f30fa9732d443e34a36d6cba062b41beed65b212d0adf91d1ba1c19",
+      "bytes": 4337
+    },
+    {
+      "path": "internal/epistemic/formation.go",
+      "sha256": "58ca641207e429a8c2cfb842e8ea7bdab51d6fe926d0c5ffe890c80e8fcc8874",
+      "bytes": 4770
+    },
+    {
+      "path": "internal/epistemic/revision.go",
+      "sha256": "1a50dadd9a644ec61bc060c2bf995581e7ff4a1a2384b06cf21c1ad625fae14b",
+      "bytes": 4408
+    },
+    {
+      "path": "internal/epistemic/temporal.go",
+      "sha256": "b12da193f08cc2020a8759110460ddc704f686f5426a26e9bd056bb67beee134",
+      "bytes": 2335
+    },
+    {
       "path": "internal/events/engine.go",
       "sha256": "bbbdcdd8dc50cb31eb7927c3e32a4ccacf8856b4961a3f5dddba96721b96545e",
       "bytes": 6203
@@ -3320,6 +3365,16 @@
       "bytes": 1429
     },
     {
+      "path": "internal/model/claim.go",
+      "sha256": "cd94f89288d1662fb504a4fa07e6e3c990abb6b7310c8fa750e6e63083f5e64b",
+      "bytes": 8639
+    },
+    {
+      "path": "internal/model/claim_test.go",
+      "sha256": "5e1f9f1ccc7ff602884f1e2951cb41bd6e35ffe05ea98d8da2bb8656b0b5466c",
+      "bytes": 2799
+    },
+    {
       "path": "internal/model/entities.go",
       "sha256": "eb1f462615718b4389e671be10cc315a5cc45e57b14fb97c008f37214de5fed0",
       "bytes": 205
@@ -3626,8 +3681,8 @@
     },
     {
       "path": "internal/protocol/types.go",
-      "sha256": "2daf2ef36bba6e61ab0c34793c9a8a142bd718b3d86242a0bb71ba14f94ab757",
-      "bytes": 7804
+      "sha256": "647a7df834a010e9ec9af2ad6e65c83940bd857d9bebeffa4a42bbc51333ac67",
+      "bytes": 8684
     },
     {
       "path": "internal/provenance/adversarial_test.go",
@@ -4003,6 +4058,16 @@
       "path": "internal/store/checkpoint_persistence_a02_test.go",
       "sha256": "435e9315a2f4b95293ece8138ec82125c2357d91a7d1ddc8ea427d38b09ac1e8",
       "bytes": 236
+    },
+    {
+      "path": "internal/store/claim.go",
+      "sha256": "43eb5f31f46c7c19e1f25e2c1dd3d781cad6a1da249800759b3f7854423cf97a",
+      "bytes": 10476
+    },
+    {
+      "path": "internal/store/claim_test.go",
+      "sha256": "3bf907b6e5a46495b1811a2fe92ac162da3b256b2c63858caa6fdc21b5121335",
+      "bytes": 4709
     },
     {
       "path": "internal/store/compiler_persistence_a02_test.go",
@@ -4686,8 +4751,8 @@
     },
     {
       "path": "internal/store/typed_handoffs.go",
-      "sha256": "c54e948abf2d67fc655075881be17507ccce58681de81fd22f0d98db9e3f3ee8",
-      "bytes": 11012
+      "sha256": "9b858cd94c74599282e4b3d9c643fb2138b4e8d7acaf4224da7ced62398e5b81",
+      "bytes": 11539
     },
     {
       "path": "internal/store/typed_handoffs_a02_test.go",

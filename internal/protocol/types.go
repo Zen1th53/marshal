@@ -62,6 +62,7 @@ const (
 	maxChangedFiles  = 256
 	maxRisks         = 64
 	maxUnresolved    = 64
+	maxConstraints   = 64
 	maxTextBytes     = 4096
 	maxIdentifierLen = 256
 )
@@ -102,24 +103,36 @@ func CodeOf(err error) ErrorCode {
 	return CodeUnavailable
 }
 
+// ConstraintRef binds a handoff to an authoritative, versioned Goal constraint.
+type ConstraintRef struct {
+	ID       string `json:"id"`
+	Revision int64  `json:"revision"`
+	Digest   string `json:"digest"`
+	Scope    string `json:"scope"`
+	IsHard   bool   `json:"is_hard"`
+	IsSecret bool   `json:"is_secret,omitempty"`
+}
+
 // Handoff is bounded data and evidence references. It deliberately has no
 // capability, authority, token, or raw-secret field.
 type Handoff struct {
-	ID             HandoffID         `json:"id"`
-	Version        int               `json:"version"`
-	TaskID         TaskID            `json:"task_id"`
-	FromAgent      string            `json:"from_agent"`
-	ToRole         Role              `json:"to_role"`
-	Status         Status            `json:"status"`
-	Claims         map[string]string `json:"claims"`
-	EvidenceIDs    []EvidenceID      `json:"evidence_ids"`
-	ChangedFiles   []string          `json:"changed_files"`
-	Risks          []string          `json:"risks,omitempty"`
-	Unresolved     []string          `json:"unresolved,omitempty"`
-	ContextDigest  string            `json:"context_digest"`
-	CreatedAt      time.Time         `json:"created_at"`
-	ConsumedAt     *time.Time        `json:"consumed_at,omitempty"`
-	IdempotencyKey string            `json:"idempotency_key"`
+	ID                HandoffID         `json:"id"`
+	Version           int               `json:"version"`
+	TaskID            TaskID            `json:"task_id"`
+	FromAgent         string            `json:"from_agent"`
+	ToRole            Role              `json:"to_role"`
+	Status            Status            `json:"status"`
+	Claims            map[string]string `json:"claims"`
+	EvidenceIDs       []EvidenceID      `json:"evidence_ids"`
+	ChangedFiles      []string          `json:"changed_files"`
+	Risks             []string          `json:"risks,omitempty"`
+	Unresolved        []string          `json:"unresolved,omitempty"`
+	ConstraintRefs    []ConstraintRef   `json:"constraint_refs,omitempty"`
+	ConstraintsDigest string            `json:"constraints_digest,omitempty"`
+	ContextDigest     string            `json:"context_digest"`
+	CreatedAt         time.Time         `json:"created_at"`
+	ConsumedAt        *time.Time        `json:"consumed_at,omitempty"`
+	IdempotencyKey    string            `json:"idempotency_key"`
 }
 
 type Submission struct {
@@ -154,8 +167,16 @@ func (h Handoff) Validate() error {
 		!validRole(h.ToRole) || !validStatus(h.Status) || !validDigest(h.ContextDigest) || h.CreatedAt.IsZero() || h.CreatedAt.Location() != time.UTC {
 		return ErrInvalid
 	}
-	if len(h.Claims) > maxClaims || len(h.EvidenceIDs) > maxEvidenceIDs || len(h.ChangedFiles) > maxChangedFiles || len(h.Risks) > maxRisks || len(h.Unresolved) > maxUnresolved {
+	if len(h.Claims) > maxClaims || len(h.EvidenceIDs) > maxEvidenceIDs || len(h.ChangedFiles) > maxChangedFiles || len(h.Risks) > maxRisks || len(h.Unresolved) > maxUnresolved || len(h.ConstraintRefs) > maxConstraints {
 		return ErrTooLarge
+	}
+	if h.ConstraintsDigest != "" && !validDigest(h.ConstraintsDigest) {
+		return ErrInvalid
+	}
+	for _, c := range h.ConstraintRefs {
+		if !validID(c.ID) || !validDigest(c.Digest) || !validText(c.Scope) {
+			return ErrInvalid
+		}
 	}
 	for key, value := range h.Claims {
 		if !validText(key) || !validText(value) || sensitiveOrAuthorityField(key) {
@@ -187,6 +208,7 @@ func cloneHandoff(h Handoff) Handoff {
 	copy.ChangedFiles = append([]string(nil), h.ChangedFiles...)
 	copy.Risks = append([]string(nil), h.Risks...)
 	copy.Unresolved = append([]string(nil), h.Unresolved...)
+	copy.ConstraintRefs = append([]ConstraintRef(nil), h.ConstraintRefs...)
 	if h.ConsumedAt != nil {
 		value := *h.ConsumedAt
 		copy.ConsumedAt = &value

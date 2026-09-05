@@ -12,11 +12,13 @@ import (
 )
 
 type typedHandoffRefs struct {
-	Claims       map[string]string     `json:"claims"`
-	EvidenceIDs  []protocol.EvidenceID `json:"evidence_ids"`
-	ChangedFiles []string              `json:"changed_files"`
-	Risks        []string              `json:"risks,omitempty"`
-	Unresolved   []string              `json:"unresolved,omitempty"`
+	Claims            map[string]string        `json:"claims"`
+	EvidenceIDs       []protocol.EvidenceID    `json:"evidence_ids"`
+	ChangedFiles      []string                 `json:"changed_files"`
+	Risks             []string                 `json:"risks,omitempty"`
+	Unresolved        []string                 `json:"unresolved,omitempty"`
+	ConstraintRefs    []protocol.ConstraintRef `json:"constraint_refs,omitempty"`
+	ConstraintsDigest string                   `json:"constraints_digest,omitempty"`
 }
 
 // Create persists a typed handoff in its own canonical table. It never reads
@@ -28,6 +30,7 @@ func (s *Store) Create(ctx context.Context, handoff protocol.Handoff) (protocol.
 	refs, err := json.Marshal(typedHandoffRefs{
 		Claims: handoff.Claims, EvidenceIDs: handoff.EvidenceIDs, ChangedFiles: handoff.ChangedFiles,
 		Risks: handoff.Risks, Unresolved: handoff.Unresolved,
+		ConstraintRefs: handoff.ConstraintRefs, ConstraintsDigest: handoff.ConstraintsDigest,
 	})
 	if err != nil {
 		return protocol.Handoff{}, protocol.ErrInvalid
@@ -107,6 +110,8 @@ func scanTypedHandoff(row interface{ Scan(...any) error }) (protocol.Handoff, er
 		return protocol.Handoff{}, protocol.ErrInvalid
 	}
 	handoff.Claims, handoff.EvidenceIDs, handoff.ChangedFiles, handoff.Risks, handoff.Unresolved = refs.Claims, refs.EvidenceIDs, refs.ChangedFiles, refs.Risks, refs.Unresolved
+	handoff.ConstraintRefs = refs.ConstraintRefs
+	handoff.ConstraintsDigest = refs.ConstraintsDigest
 	handoff.CreatedAt = createdAt
 	if consumed.Valid {
 		consumedAt, err := time.Parse(time.RFC3339Nano, consumed.String)
@@ -142,6 +147,8 @@ func copyTypedHandoff(handoff protocol.Handoff) protocol.Handoff {
 	copy.ChangedFiles = append([]string(nil), handoff.ChangedFiles...)
 	copy.Risks = append([]string(nil), handoff.Risks...)
 	copy.Unresolved = append([]string(nil), handoff.Unresolved...)
+	copy.ConstraintRefs = append([]protocol.ConstraintRef(nil), handoff.ConstraintRefs...)
+	copy.ConstraintsDigest = handoff.ConstraintsDigest
 	if handoff.ConsumedAt != nil {
 		at := *handoff.ConsumedAt
 		copy.ConsumedAt = &at
