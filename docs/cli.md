@@ -386,4 +386,3 @@ Flags:
 - `--no-color`: Disable all ANSI terminal colors
 
 For keyboard shortcuts, contextual autocomplete (`Tab`, `@`, `#`), Command Palette (`Ctrl+P`), diff viewer (`d`), and full slash command reference, see [MARSHAL TUI v2 Documentation](tui.md).
-

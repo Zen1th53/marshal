@@ -20,7 +20,7 @@ MARSHAL TUI v2 is a terminal-first, interactive IDE, multi-agent team room, evid
 │ ● 0.4s elapsed                        │ └─ E-01 ✓ test-output.txt     │
 └───────────────────────────────────────┴───────────────────────────────┘
 [MARSHAL]-[marshal]-[ULTRA|READY]
->>> 
+>>>
 ```
 
 ---

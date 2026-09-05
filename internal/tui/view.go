@@ -379,4 +379,3 @@ func filterMeaningfulMessages(msgs []model.AgentMessage, limit int) []model.Agen
 	}
 	return filtered
 }
-

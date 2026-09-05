@@ -891,8 +891,8 @@
     },
     {
       "path": "docs/cli.md",
-      "sha256": "2d718e380d774ebe07a55c8f91aa4ca2ac51c9e485f80391e16fc67cb08581e2",
-      "bytes": 8095
+      "sha256": "22e3b089cb67957014e1f8dd51f9482e38bc251869c85cd8960c9c84c7d1548d",
+      "bytes": 8094
     },
     {
       "path": "docs/concepts.md",
@@ -1216,8 +1216,8 @@
     },
     {
       "path": "docs/tui.md",
-      "sha256": "aef75ce5d6f88e0d62d320ff4b2fc018b49f6bbb0c9be5f81a71ae444fef7a27",
-      "bytes": 12020
+      "sha256": "67928358e9a0bc917a386883e0b3aa07bae9e5218e6dbb15984bf6bbcf152f1e",
+      "bytes": 12019
     },
     {
       "path": "docs/verification-quorum.md",
@@ -5311,8 +5311,8 @@
     },
     {
       "path": "internal/tui/view.go",
-      "sha256": "d697d14308fc9ca728a4e123e7663cc833fc6ca653e29c8334cf19a3174a0e9b",
-      "bytes": 11817
+      "sha256": "13f1936213b27e7cbc1dc800b9f30b4ce4799b1b896c49c192a4f84eee7d50b6",
+      "bytes": 11816
     },
     {
       "path": "internal/tui/workspace.go",
