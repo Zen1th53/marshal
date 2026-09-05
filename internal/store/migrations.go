@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 78
+const LatestSchemaVersion = 79
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2047,6 +2047,30 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 78: %w", err)
 		}
 		version = 78
+	}
+	if version < 79 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS harness_profiles (
+				harness_name          TEXT PRIMARY KEY,
+				installed_version     TEXT NOT NULL,
+				binary_path           TEXT NOT NULL DEFAULT '',
+				supported_models_json TEXT NOT NULL DEFAULT '[]',
+				default_model         TEXT NOT NULL DEFAULT '',
+				feature_support_json  TEXT NOT NULL DEFAULT '{}',
+				reasoning_knobs_json  TEXT NOT NULL DEFAULT '[]',
+				native_modes_json     TEXT NOT NULL DEFAULT '[]',
+				probe_evidence_id     TEXT NOT NULL DEFAULT '',
+				probed_at             TEXT NOT NULL,
+				expires_at            TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_harness_profiles_version ON harness_profiles(harness_name, installed_version);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 79: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(79, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 79: %w", err)
+		}
+		version = 79
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

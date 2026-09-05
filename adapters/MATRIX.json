@@ -84,7 +84,20 @@
       "sandbox": "emulated",
       "hooks": "native",
       "session_resume": "native",
-      "subagents": "native"
+    },
+    "antigravity": {
+      "binary": "agy",
+      "instructions": "native",
+      "headless": "native",
+      "structured_output": "native",
+      "mcp_client": "native",
+      "native_server_or_protocol": "native",
+      "permissions": "native",
+      "sandbox": "native",
+      "hooks": "native",
+      "session_resume": "native",
+      "subagents": "native",
+      "artifacts": "native"
     }
   }
 }
