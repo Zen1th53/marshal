@@ -1955,6 +1955,26 @@
       "bytes": 1935
     },
     {
+      "path": "internal/budget/budget_test.go",
+      "sha256": "89705faaf1b448d3bc1765f2ec9323a2e5e841d940f88340d55575a60cc9b423",
+      "bytes": 9177
+    },
+    {
+      "path": "internal/budget/evaluator.go",
+      "sha256": "1d690e7563db01833f930192ad9ea615041b4cdf051148b04ba070e63f8b747d",
+      "bytes": 3424
+    },
+    {
+      "path": "internal/budget/tracker.go",
+      "sha256": "676c2301e81a91c4fbdf326c80ec23800f8ca72e44ab74ee1e162bd2c2bc13bc",
+      "bytes": 2803
+    },
+    {
+      "path": "internal/budget/types.go",
+      "sha256": "ce8afa030a593238446c1be1718bb333d77813861500cef225c4160bf04c97c3",
+      "bytes": 1566
+    },
+    {
       "path": "internal/capability/adversarial_test.go",
       "sha256": "9c4224f6960c15a75b4f4ab648c3cb7f01664d9eff0c11250823b79a268482bc",
       "bytes": 2755
@@ -3395,6 +3415,11 @@
       "bytes": 2682
     },
     {
+      "path": "internal/model/budget.go",
+      "sha256": "6e368a3029be7c30c3aa6c58a4e1cb3671ad683fa6e3afd8a51495e8cb02e810",
+      "bytes": 3988
+    },
+    {
       "path": "internal/model/capability.go",
       "sha256": "11995bfbb4f0a57fb35caa30b54723957a20e9573067e1941feda2def349e774",
       "bytes": 1429
@@ -4070,9 +4095,19 @@
       "bytes": 5703
     },
     {
+      "path": "internal/store/budget.go",
+      "sha256": "4dcbfca4902ee852f0e7093ca1ddfe32fe44319072206f8e91eb6148c0c73130",
+      "bytes": 6136
+    },
+    {
       "path": "internal/store/budget_persistence_a02_test.go",
       "sha256": "d47aaf7ad6abcde326ff292a002f211254395af9d03c69b45063e854b4d70e14",
       "bytes": 232
+    },
+    {
+      "path": "internal/store/budget_test.go",
+      "sha256": "447b067b492586f830b7985e83ce11ce447e62645e3f604ccc1ff6af2244757c",
+      "bytes": 2997
     },
     {
       "path": "internal/store/capability_adversarial_a07_test.go",
@@ -4476,8 +4511,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "eb5d204c2d51c2a3a46063a188b6f9eeb3bea20fe507a7ee8ed314d7de7ea683",
-      "bytes": 77617
+      "sha256": "4d403794d5e6ce7d40a2121d9b36714ea52401f5622f36184fd17368b11c3f30",
+      "bytes": 79676
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",

@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 76
+const LatestSchemaVersion = 77
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1962,6 +1962,52 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 76: %w", err)
 		}
 		version = 76
+	}
+	if version < 77 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS blind_interpretations (
+				interpretation_id TEXT PRIMARY KEY,
+				goal_id           TEXT NOT NULL,
+				goal_revision     INTEGER NOT NULL,
+				session_id        TEXT NOT NULL,
+				agent_id          TEXT NOT NULL,
+				harness           TEXT NOT NULL,
+				model             TEXT NOT NULL DEFAULT '',
+				desired_outcome   TEXT NOT NULL,
+				expected_artifact TEXT NOT NULL,
+				scope_json        TEXT NOT NULL DEFAULT '[]',
+				constraints_json  TEXT NOT NULL DEFAULT '[]',
+				assumptions_json  TEXT NOT NULL DEFAULT '[]',
+				is_destructive    INTEGER NOT NULL DEFAULT 0,
+				payload_json      TEXT NOT NULL DEFAULT '{}',
+				submitted_at      TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_blind_interp_goal ON blind_interpretations(goal_id, goal_revision);
+			CREATE INDEX IF NOT EXISTS idx_blind_interp_session ON blind_interpretations(session_id, submitted_at);
+
+			CREATE TABLE IF NOT EXISTS interpretation_resolutions (
+				resolution_id       TEXT PRIMARY KEY,
+				goal_id             TEXT NOT NULL,
+				goal_revision       INTEGER NOT NULL,
+				session_id          TEXT NOT NULL,
+				state               TEXT NOT NULL CHECK(state IN ('READY', 'NEEDS_INPUT')),
+				required_count      INTEGER NOT NULL DEFAULT 1,
+				collected_count     INTEGER NOT NULL DEFAULT 1,
+				consensus_confirmed INTEGER NOT NULL DEFAULT 0,
+				divergences_json    TEXT NOT NULL DEFAULT '[]',
+				questions_json      TEXT NOT NULL DEFAULT '[]',
+				message             TEXT NOT NULL DEFAULT '',
+				resolved_at         TEXT NOT NULL,
+				UNIQUE(session_id, goal_id, goal_revision)
+			);
+			CREATE INDEX IF NOT EXISTS idx_interp_res_goal ON interpretation_resolutions(goal_id, goal_revision);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 77: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(77, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 77: %w", err)
+		}
+		version = 77
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
