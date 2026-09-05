@@ -4286,8 +4286,8 @@
     },
     {
       "path": "internal/store/cell_persistence.go",
-      "sha256": "f068cbf29eb9dc8c50ada30f7c53a60a7ad9b36ae4d2396a4e289c50e59aa373",
-      "bytes": 6058
+      "sha256": "1e2741287446cb6d2670eecd7dad89307c8ffb6be8ca2b94ebd6dbf0dcaea377",
+      "bytes": 7371
     },
     {
       "path": "internal/store/cell_persistence_a02_test.go",
@@ -5161,8 +5161,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "c20d775bdad4c4580c176257b26ca43485ac8b9b599faf421bd2e494a052b268",
-      "bytes": 13802
+      "sha256": "8f771dc4afaa346982c0956119e7218b153999864d9e42233789b90d6a54e7d9",
+      "bytes": 14781
     },
     {
       "path": "internal/tui/redact.go",

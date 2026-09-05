@@ -26,9 +26,28 @@ func (s *Store) PutCell(ctx context.Context, record cell.Record) error {
 		return err
 	}
 
+	for attempt := 0; ; attempt++ {
+		err := s.putCellTx(ctx, record)
+		if !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
+			if err != nil && errors.Is(err, model.ErrConflict) {
+				return err
+			}
+			if err != nil && !errors.Is(err, model.ErrUnavailable) && !errors.Is(err, model.ErrInvalid) {
+				return fmt.Errorf("%w: execution cell persistence unavailable: %v", model.ErrUnavailable, err)
+			}
+			return err
+		}
+		s.observeContention()
+		if err := waitSQLiteRetry(ctx, attempt); err != nil {
+			return err
+		}
+	}
+}
+
+func (s *Store) putCellTx(ctx context.Context, record cell.Record) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("%w: execution cell persistence unavailable", model.ErrUnavailable)
+		return err
 	}
 	defer tx.Rollback()
 	var existing cell.Record
@@ -50,7 +69,7 @@ func (s *Store) PutCell(ctx context.Context, record cell.Record) error {
 		return nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("%w: execution cell lookup unavailable", model.ErrUnavailable)
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO execution_cells(cell_id, task_id, backend, workspace, spec_digest, state, process_ref,
@@ -60,10 +79,10 @@ func (s *Store) PutCell(ctx context.Context, record cell.Record) error {
 		string(record.SpecDigest), string(record.State), string(record.ProcessRef),
 		record.CreatedAt.Format(time.RFC3339Nano), record.UpdatedAt.Format(time.RFC3339Nano),
 		formatCellTime(record.DestroyedAt), string(record.FailureReason)); err != nil {
-		return fmt.Errorf("%w: execution cell insert failed", model.ErrUnavailable)
+		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("%w: execution cell commit failed", model.ErrUnavailable)
+		return err
 	}
 	return nil
 }
@@ -72,16 +91,32 @@ func (s *Store) ClaimCellPreparation(ctx context.Context, id cell.CellID) (bool,
 	if id == "" {
 		return false, fmt.Errorf("%w: execution cell id is required", model.ErrInvalid)
 	}
+	for attempt := 0; ; attempt++ {
+		claimed, err := s.claimCellPreparationTx(ctx, id)
+		if !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
+			if err != nil && !errors.Is(err, model.ErrUnavailable) && !errors.Is(err, model.ErrInvalid) {
+				return false, fmt.Errorf("%w: execution cell claim unavailable: %v", model.ErrUnavailable, err)
+			}
+			return claimed, err
+		}
+		s.observeContention()
+		if err := waitSQLiteRetry(ctx, attempt); err != nil {
+			return false, err
+		}
+	}
+}
+
+func (s *Store) claimCellPreparationTx(ctx context.Context, id cell.CellID) (bool, error) {
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE execution_cells SET state = 'preparing', updated_at = ?
 		WHERE cell_id = ? AND state = 'new'
 	`, utcNow(), string(id))
 	if err != nil {
-		return false, fmt.Errorf("%w: execution cell claim unavailable", model.ErrUnavailable)
+		return false, err
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
-		return false, fmt.Errorf("%w: execution cell claim unavailable", model.ErrUnavailable)
+		return false, err
 	}
 	return rows == 1, nil
 }
@@ -123,15 +158,34 @@ func (s *Store) TransitionCellState(ctx context.Context, id cell.CellID, from, t
 	if err := cell.ValidateTransition(from, to); err != nil {
 		return err
 	}
+	for attempt := 0; ; attempt++ {
+		err := s.transitionCellStateTx(ctx, id, from, to)
+		if !isSQLiteBusy(err) || attempt >= sqliteBusyRetries {
+			if err != nil && !errors.Is(err, model.ErrUnavailable) && !errors.Is(err, model.ErrConflict) && !errors.Is(err, model.ErrInvalid) {
+				return fmt.Errorf("%w: execution cell transition unavailable: %v", model.ErrUnavailable, err)
+			}
+			return err
+		}
+		s.observeContention()
+		if err := waitSQLiteRetry(ctx, attempt); err != nil {
+			return err
+		}
+	}
+}
+
+func (s *Store) transitionCellStateTx(ctx context.Context, id cell.CellID, from, to cell.State) error {
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE execution_cells SET state = ?, updated_at = ?
 		WHERE cell_id = ? AND state = ?
 	`, string(to), utcNow(), string(id), string(from))
 	if err != nil {
-		return fmt.Errorf("%w: execution cell transition unavailable", model.ErrUnavailable)
+		return err
 	}
 	rows, err := result.RowsAffected()
-	if err != nil || rows != 1 {
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
 		return model.ErrConflict
 	}
 	return nil

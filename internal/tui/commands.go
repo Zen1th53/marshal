@@ -2,10 +2,12 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/collaboration"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -275,7 +277,26 @@ func (h *CommandHandler) handleSendMessage(ctx context.Context, target, msgText 
 
 	_, err := h.ws.coord.SendMessage(ctx, msg, false, false)
 	if err != nil {
-		return "", fmt.Errorf("send message: %w", err)
+		if errors.Is(err, collaboration.ErrSessionNotFound) {
+			participants := h.ws.state.Participants
+			if len(participants) == 0 {
+				participants = []model.Participant{
+					{AgentID: "claude", Role: model.RoleArchitect, Harness: "claude-code", Model: "claude-3-7-sonnet", IsActive: true},
+					{AgentID: "codex", Role: model.RoleDeveloper, Harness: "codex", Model: "gpt-4o", IsActive: true},
+					{AgentID: "opencode", Role: model.RoleQA, Harness: "opencode", Model: "deepseek-coder", IsActive: true},
+					{AgentID: "antigravity", Role: model.RoleAppSec, Harness: "antigravity", Model: "gemini-2.5-pro", IsActive: true},
+				}
+			}
+			goalID := h.ws.state.Goal.ID
+			if goalID == "" {
+				goalID = "goal-interactive"
+			}
+			_, _ = h.ws.coord.CreateSession(ctx, h.ws.sessionID, goalID, h.ws.state.Goal.Revision, participants)
+			_, err = h.ws.coord.SendMessage(ctx, msg, false, false)
+		}
+		if err != nil {
+			return "", fmt.Errorf("send message: %w", err)
+		}
 	}
 
 	h.ws.mu.Lock()
