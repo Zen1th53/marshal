@@ -40,3 +40,26 @@ type Result struct {
 	Eligible     bool                 `json:"eligible"`
 	Reasons      []string             `json:"reasons,omitempty"`
 }
+
+// ModelTaskTrust tracks empirical trust score for a (model, task-type) pair.
+// Invariant: Requires >= 10 relevant completed tasks before routing influence; derived strictly from verified outcomes.
+type ModelTaskTrust struct {
+	Model            string  `json:"model"`
+	TaskType         string  `json:"task_type"`
+	CompletedTasks   int     `json:"completed_tasks"`
+	VerifiedCount    int     `json:"verified_count"`
+	ContestedCount   int     `json:"contested_count"`
+	Score            float64 `json:"score"`
+	HasRoutingWeight bool    `json:"has_routing_weight"` // true ONLY if CompletedTasks >= 10
+}
+
+func (m *ModelTaskTrust) RecordOutcome(verified bool) {
+	m.CompletedTasks++
+	if verified {
+		m.VerifiedCount++
+	} else {
+		m.ContestedCount++
+	}
+	m.Score = float64(m.VerifiedCount) / float64(m.CompletedTasks) * 100.0
+	m.HasRoutingWeight = m.CompletedTasks >= 10
+}
