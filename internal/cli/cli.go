@@ -27,6 +27,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/policytest"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/store"
+	"github.com/Zen1th53/marshal/internal/tui"
 )
 
 var (
@@ -63,6 +64,7 @@ Commands:
   policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
   web serve [--listen ADDR] [--port PORT]
+  tui [SESSION-ID]
   daemon
   version
 `
@@ -92,7 +94,21 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		c.json = true
 		args = args[1:]
 	}
-	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
+	if len(args) == 0 {
+		rt, err := app.Open(ctx, c.root)
+		if err == nil && rt != nil {
+			defer rt.Close()
+			ws := tui.NewWorkspace(rt.Store(), "current", "default-session")
+			if err := ws.Run(ctx, c.stdin, c.stdout); err != nil {
+				fmt.Fprintln(stderr, err)
+				return exitCode(err)
+			}
+			return 0
+		}
+		fmt.Fprint(stdout, usage)
+		return 0
+	}
+	if args[0] == "--help" || args[0] == "-h" {
 		fmt.Fprint(stdout, usage)
 		return 0
 	}
@@ -161,6 +177,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.memory(ctx, args[1:])
 	case "web":
 		err = c.web(ctx, args[1:])
+	case "tui":
+		err = c.tui(ctx, args[1:])
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}
@@ -971,6 +989,9 @@ func (c command) legal(ctx context.Context, args []string) error {
 }
 
 func exitCode(err error) int {
+	if err == nil {
+		return 0
+	}
 	if errors.Is(err, model.ErrInvalid) {
 		return 2
 	}

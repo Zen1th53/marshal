@@ -260,6 +260,11 @@
       "bytes": 66
     },
     {
+      "path": "adapters/antigravity/ADAPTER.md",
+      "sha256": "59b1589dc3d127084f9efbfc9d3061711c40b004d73d5dd214fe9eea8050c433",
+      "bytes": 1651
+    },
+    {
       "path": "adapters/claude-code/ADAPTER.md",
       "sha256": "bd3a97c5a86fe6366dddae58fc0d1dae14828ab114e54ef51975d4a528550715",
       "bytes": 1095
@@ -1320,6 +1325,16 @@
       "bytes": 2812
     },
     {
+      "path": "internal/adapter/antigravity/antigravity.go",
+      "sha256": "605f9103def7ca79658e732bd076fbe95b9a1910cd50101518ad107b97d04055",
+      "bytes": 7269
+    },
+    {
+      "path": "internal/adapter/antigravity/antigravity_test.go",
+      "sha256": "ee26390c358a42dfff8232c3bb90c808b13e4d513610d0189f75f9ef0a050676",
+      "bytes": 4388
+    },
+    {
       "path": "internal/adapter/attest_check.go",
       "sha256": "77f2e0a0adda78c2cb7dff9938493fca048ab5e144e1f775f096209c792299d6",
       "bytes": 623
@@ -2086,8 +2101,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "927886b0cdcec1ffb382b781ec82892ae72188e4050413a4e325cd66210ee5a1",
-      "bytes": 32155
+      "sha256": "8c35cddf2305a948f9505213b70d38e816899b78bb0ece511317b2628176a142",
+      "bytes": 32624
     },
     {
       "path": "internal/cli/cli_test.go",
