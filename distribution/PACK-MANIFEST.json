@@ -1990,6 +1990,16 @@
       "bytes": 1566
     },
     {
+      "path": "internal/bundle/evidence_bundle.go",
+      "sha256": "a85a3c06bb1a09728713a99a2fec6a831aee09d9562c704ac22172b2ec19391e",
+      "bytes": 3243
+    },
+    {
+      "path": "internal/bundle/evidence_bundle_test.go",
+      "sha256": "9a4688eaa7d8777f6668d92913d96db3fa668f9d40d7fe08418dba9e66c26eb4",
+      "bytes": 1791
+    },
+    {
       "path": "internal/capability/adversarial_test.go",
       "sha256": "9c4224f6960c15a75b4f4ab648c3cb7f01664d9eff0c11250823b79a268482bc",
       "bytes": 2755
@@ -2350,14 +2360,34 @@
       "bytes": 4337
     },
     {
+      "path": "internal/epistemic/fingerprint.go",
+      "sha256": "8a943f632ecd6a545766dd5d2a6e8d0cc956f723190c8e0a349b7a61247289a6",
+      "bytes": 2826
+    },
+    {
       "path": "internal/epistemic/formation.go",
       "sha256": "58ca641207e429a8c2cfb842e8ea7bdab51d6fe926d0c5ffe890c80e8fcc8874",
       "bytes": 4770
     },
     {
+      "path": "internal/epistemic/postmortem.go",
+      "sha256": "84d6f90f3a5622a3c0b1f902b226cde91f862c8003f7c748532fc88140c6fa28",
+      "bytes": 3295
+    },
+    {
+      "path": "internal/epistemic/review.go",
+      "sha256": "414d056d26ca04b3f51b69dc38fe13c212fa1c89e0fff0d7860999bd0814fde8",
+      "bytes": 2416
+    },
+    {
       "path": "internal/epistemic/revision.go",
       "sha256": "1a50dadd9a644ec61bc060c2bf995581e7ff4a1a2384b06cf21c1ad625fae14b",
       "bytes": 4408
+    },
+    {
+      "path": "internal/epistemic/secondwave_test.go",
+      "sha256": "06378027f644da17d2fbfdc4d3b6c951bd04cf48b07446a564816eb5b360538d",
+      "bytes": 4966
     },
     {
       "path": "internal/epistemic/temporal.go",
@@ -5115,6 +5145,11 @@
       "bytes": 398
     },
     {
+      "path": "internal/trustscore/secondwave_trust_test.go",
+      "sha256": "dea7f0ed25c97315c245660d4cb657e0ce8b74923445ee44ae34221cfb3d821d",
+      "bytes": 1370
+    },
+    {
       "path": "internal/trustscore/types.go",
       "sha256": "922e7afc1fd6a39df3721fd93b6f74deddb4bd3fa021eb743f10bcc8dfe51ae7",
       "bytes": 1964
@@ -6501,8 +6536,8 @@
     },
     {
       "path": "todo.md",
-      "sha256": "2aada8b4833e2eda471b405d00872c5caee0f33df0c6a8b3437e0ce5fff10fb8",
-      "bytes": 16304
+      "sha256": "ea8ee6256a7b70929adc01c33cb0b1021b82a408bb5eb3a1a15ca895fa67e744",
+      "bytes": 7330
     },
     {
       "path": "tools/build_release.sh",
