@@ -83,7 +83,7 @@
       "permissions": "native",
       "sandbox": "emulated",
       "hooks": "native",
-      "session_resume": "native",
+      "session_resume": "native"
     },
     "antigravity": {
       "binary": "agy",

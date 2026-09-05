@@ -231,8 +231,8 @@
     },
     {
       "path": "adapters/MATRIX.json",
-      "sha256": "cdd7c21958d9a18e285b7cf11e5f0d9312084e0ced11afbee560ab1992decf0f",
-      "bytes": 2831
+      "sha256": "a54b35979c5c1674e0584041eea0ddfa4e2adbc3bc11c8f78078d70c453b32d6",
+      "bytes": 2830
     },
     {
       "path": "adapters/README.md",
