@@ -3785,6 +3785,36 @@
       "bytes": 213
     },
     {
+      "path": "internal/reinjection/compiler.go",
+      "sha256": "23616ba706296718dfd18ad8c28db6b5197066e444647c10da76a8bdf8ab2586",
+      "bytes": 4405
+    },
+    {
+      "path": "internal/reinjection/digest.go",
+      "sha256": "7b966061579b611c39b046479e12c673b12f2c324af15c9c787ce51a8586d7fe",
+      "bytes": 3261
+    },
+    {
+      "path": "internal/reinjection/engine.go",
+      "sha256": "21ebf912377272ff6ef3a61bb254e4206b0461bd2a1c48690bb80817a841d4ee",
+      "bytes": 3131
+    },
+    {
+      "path": "internal/reinjection/guard.go",
+      "sha256": "d3e203b5957768883d05711a1e187a1cd3fc838e0963d8940c3395f040be654d",
+      "bytes": 3542
+    },
+    {
+      "path": "internal/reinjection/reinjection_test.go",
+      "sha256": "c54651daa3938d44358fd39cd8cf5b7711d1b6989baa0750c00a4ed90e89aa20",
+      "bytes": 11632
+    },
+    {
+      "path": "internal/reinjection/types.go",
+      "sha256": "4da362b533fddc926f4f064189810e1fb1d2e8fe99cc26d7a0f6f93aedeb925f",
+      "bytes": 1312
+    },
+    {
       "path": "internal/resources/resources.go",
       "sha256": "c2c0620a9c91fc1f7575028268745925d43b41078b046b168f81d86f880e8bcb",
       "bytes": 19729
