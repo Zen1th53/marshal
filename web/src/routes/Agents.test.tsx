@@ -36,9 +36,11 @@ const mockAgentList = {
 const mockAgentDetail = {
   id: 'agent-claude-planner',
   name: 'Claude High-Reasoning Planner',
+  role: 'architect',
   provider: 'claude',
   model: 'claude-3-7-sonnet',
   status: 'READY',
+  revision: 0,
   capabilities: ['code_edit', 'dag_plan'],
   completed_task_count: 18,
   failed_task_count: 0,
@@ -82,5 +84,16 @@ describe('Agents Route (T182)', () => {
     expect(await screen.findByText('Assigned Capabilities')).toBeInTheDocument();
     expect(screen.getByText('Canonical Memory Contributions')).toBeInTheDocument();
     expect(screen.getByText('32')).toBeInTheDocument(); // Decisions logged
+  });
+
+  it('opens registration modal when clicking Register Agent button', async () => {
+    vi.spyOn(api, 'getAgents').mockResolvedValueOnce(mockAgentList);
+
+    render(<Agents />);
+    const regBtn = await screen.findByRole('button', { name: /\+ Register Agent/i });
+    await userEvent.click(regBtn);
+
+    expect(await screen.findByText('Register Autonomous Agent')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Agent Display Name/i)).toBeInTheDocument();
   });
 });

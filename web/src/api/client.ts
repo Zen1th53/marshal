@@ -6,6 +6,17 @@ import type {
   AdapterSummaryDTO,
   PagedResponse,
   AgentSummaryDTO,
+  AgentDetailDTO,
+  CreateAgentPayload,
+  UpdateAgentPayload,
+  ProviderInventoryResponseDTO,
+  UpdateProviderPayload,
+  SetProviderSecretPayload,
+  SecretRefMetadataDTO,
+  SecurityPolicyInspectorResponseDTO,
+  PolicyDraftDTO,
+  PolicyDiffDTO,
+  PolicyValidationResultDTO,
   TaskSummaryDTO,
   TaskStatus,
 } from './types';
@@ -85,7 +96,7 @@ export class APIClient {
     let body: BodyInit | undefined;
     if (options.body !== undefined) {
       headers.set('Content-Type', 'application/json');
-      body = JSON.stringify(options.body);
+      body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
     }
 
     const timeoutMs = options.timeoutMs ?? 15000;
@@ -177,26 +188,35 @@ export class APIClient {
     return this.request<PagedResponse<AgentSummaryDTO>>('/api/v1/agents', { method: 'GET', signal });
   }
 
-  getAgentDetail(id: string, signal?: AbortSignal): Promise<{
-    id: string;
-    name: string;
-    provider: string;
-    model: string;
-    status: string;
-    capabilities: string[];
-    current_task_id?: string;
-    current_run_id?: string;
-    completed_task_count: number;
-    failed_task_count: number;
-    last_heartbeat: string;
-    created_at: string;
-    memory_contributions: {
-      episodes_extracted: number;
-      decisions_logged: number;
-      facts_asserted: number;
-    };
-  }> {
-    return this.request(`/api/v1/agents/${encodeURIComponent(id)}`, { method: 'GET', signal });
+  getAgentDetail(id: string, signal?: AbortSignal): Promise<AgentDetailDTO> {
+    return this.request<AgentDetailDTO>(`/api/v1/agents/${encodeURIComponent(id)}`, { method: 'GET', signal });
+  }
+
+  createAgent(payload: CreateAgentPayload, signal?: AbortSignal): Promise<AgentDetailDTO> {
+    return this.request<AgentDetailDTO>('/api/v1/agents', {
+      method: 'POST',
+      body: { payload },
+      signal,
+    });
+  }
+
+  updateAgent(id: string, payload: UpdateAgentPayload, expectedRevision?: number, signal?: AbortSignal): Promise<AgentDetailDTO> {
+    return this.request<AgentDetailDTO>(`/api/v1/agents/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: {
+        expected_revision: expectedRevision,
+        payload,
+      },
+      signal,
+    });
+  }
+
+  deleteAgent(id: string, expectedRevision?: number, signal?: AbortSignal): Promise<{ status: string; id: string }> {
+    const query = expectedRevision !== undefined ? `?expected_revision=${expectedRevision}` : '';
+    return this.request<{ status: string; id: string }>(`/api/v1/agents/${encodeURIComponent(id)}${query}`, {
+      method: 'DELETE',
+      signal,
+    });
   }
 
   getTasks(signal?: AbortSignal): Promise<PagedResponse<TaskSummaryDTO>> {
@@ -570,30 +590,31 @@ export class APIClient {
     return this.request(`/api/v1/provenance/trace?${sp.toString()}`, { method: 'GET', signal });
   }
 
-  getProviders(signal?: AbortSignal): Promise<{
-    providers: Array<{
-      id: string;
-      name: string;
-      class: string;
-      probe_status: string;
-      capabilities: string[];
-      models: Array<{
-        id: string;
-        context_window: number;
-        latency_p95_ms: number;
-      }>;
-      last_probed_at: string;
-    }>;
-    routing_decisions: Array<{
-      intent: string;
-      selected_model: string;
-      provider_id: string;
-      rationale: string;
-      is_pinned: boolean;
-    }>;
-    last_evaluated_at: string;
-  }> {
-    return this.request('/api/v1/providers', { method: 'GET', signal });
+  getProviders(signal?: AbortSignal): Promise<ProviderInventoryResponseDTO> {
+    return this.request<ProviderInventoryResponseDTO>('/api/v1/providers', { method: 'GET', signal });
+  }
+
+  updateProvider(id: string, payload: UpdateProviderPayload, signal?: AbortSignal): Promise<{ id: string; enabled: boolean; endpoint_url?: string; status: string }> {
+    return this.request<{ id: string; enabled: boolean; endpoint_url?: string; status: string }>(`/api/v1/providers/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: { payload },
+      signal,
+    });
+  }
+
+  setProviderSecret(id: string, payload: SetProviderSecretPayload, signal?: AbortSignal): Promise<{ provider_id: string; status: string; secret_ref: SecretRefMetadataDTO }> {
+    return this.request<{ provider_id: string; status: string; secret_ref: SecretRefMetadataDTO }>(`/api/v1/providers/${encodeURIComponent(id)}/secret`, {
+      method: 'POST',
+      body: { payload },
+      signal,
+    });
+  }
+
+  probeProvider(id: string, signal?: AbortSignal): Promise<{ id: string; probe_status: string; last_probed_at: string }> {
+    return this.request<{ id: string; probe_status: string; last_probed_at: string }>(`/api/v1/providers/${encodeURIComponent(id)}/probe`, {
+      method: 'POST',
+      signal,
+    });
   }
 
   overrideRouter(payload: {
@@ -603,33 +624,52 @@ export class APIClient {
   }, signal?: AbortSignal): Promise<{ intent: string; model_id: string; is_pinned: boolean; status: string }> {
     return this.request('/api/v1/providers/router/override', {
       method: 'POST',
-      body: JSON.stringify({ payload }),
+      body: { payload },
       signal,
     });
   }
 
-  getSecurityPolicy(signal?: AbortSignal): Promise<{
-    policy_id: string;
-    revision: number;
-    global_risk_level: string;
-    degraded_controls: string[];
-    gate_rules: Array<{
-      id: string;
-      name: string;
-      enforcement: string;
-      status: string;
-      description: string;
-      last_evaluated_at: string;
-    }>;
-    capability_rules: Array<{
-      capability_name: string;
-      required_role: string;
-      decision: string;
-      denial_reason?: string;
-    }>;
-    last_audited_at: string;
-  }> {
-    return this.request('/api/v1/security/policy', { method: 'GET', signal });
+  getSecurityPolicy(signal?: AbortSignal): Promise<SecurityPolicyInspectorResponseDTO> {
+    return this.request<SecurityPolicyInspectorResponseDTO>('/api/v1/security/policy', { method: 'GET', signal });
+  }
+
+  savePolicyDraft(payload: { yaml_content: string; policy_id?: string; version?: number }, signal?: AbortSignal): Promise<{ draft: PolicyDraftDTO; status: string }> {
+    return this.request<{ draft: PolicyDraftDTO; status: string }>('/api/v1/security/policy/draft', {
+      method: 'POST',
+      body: { payload },
+      signal,
+    });
+  }
+
+  validatePolicy(yamlContent?: string, signal?: AbortSignal): Promise<PolicyValidationResultDTO> {
+    return this.request<PolicyValidationResultDTO>('/api/v1/security/policy/validate', {
+      method: 'POST',
+      body: { payload: { yaml_content: yamlContent } },
+      signal,
+    });
+  }
+
+  getPolicyDiff(yamlContent?: string, signal?: AbortSignal): Promise<PolicyDiffDTO> {
+    return this.request<PolicyDiffDTO>('/api/v1/security/policy/diff', {
+      method: 'POST',
+      body: { payload: { yaml_content: yamlContent } },
+      signal,
+    });
+  }
+
+  applyPolicy(options?: { expected_revision?: number; draft_digest?: string }, signal?: AbortSignal): Promise<{ status: string; active_policy_id: string; version: number; revision: number; digest: string }> {
+    return this.request<{ status: string; active_policy_id: string; version: number; revision: number; digest: string }>('/api/v1/security/policy/apply', {
+      method: 'POST',
+      body: { payload: options || {} },
+      signal,
+    });
+  }
+
+  rollbackPolicy(signal?: AbortSignal): Promise<{ status: string; active_policy_id: string; version: number; revision: number; digest: string }> {
+    return this.request<{ status: string; active_policy_id: string; version: number; revision: number; digest: string }>('/api/v1/security/policy/rollback', {
+      method: 'POST',
+      signal,
+    });
   }
 
   getRunBoundary(id: string, signal?: AbortSignal): Promise<{

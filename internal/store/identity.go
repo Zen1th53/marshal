@@ -73,6 +73,160 @@ func (s *Store) RegisterAgent(ctx context.Context, agent model.Agent) error {
 	return nil
 }
 
+func (s *Store) GetAgent(ctx context.Context, agentID string) (model.Agent, error) {
+	if agentID == "" {
+		return model.Agent{}, fmt.Errorf("%w: agent ID is required", model.ErrInvalid)
+	}
+	var agent model.Agent
+	var role, status, capabilities, createdAt string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT agent_id, project_id, display_name, role, COALESCE(model_provider, ''),
+		       COALESCE(model_name, ''), capabilities_json, status, revision, created_at
+		FROM agents WHERE agent_id = ?
+	`, agentID).Scan(&agent.ID, &agent.ProjectID, &agent.DisplayName, &role,
+		&agent.ModelProvider, &agent.ModelName, &capabilities, &status,
+		&agent.Revision, &createdAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Agent{}, fmt.Errorf("%w: agent %s", model.ErrNotFound, agentID)
+	}
+	if err != nil {
+		return model.Agent{}, fmt.Errorf("read agent: %w", err)
+	}
+	agent.Role = model.Role(role)
+	agent.Status = model.AgentStatus(status)
+	if err := json.Unmarshal([]byte(capabilities), &agent.Capabilities); err != nil {
+		return model.Agent{}, fmt.Errorf("decode agent capabilities: %w", err)
+	}
+	agent.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return model.Agent{}, fmt.Errorf("parse agent creation: %w", err)
+	}
+	return agent, nil
+}
+
+func (s *Store) UpdateAgent(ctx context.Context, agent model.Agent, expectedRevision int64) (model.Agent, error) {
+	if agent.ID == "" {
+		return model.Agent{}, fmt.Errorf("%w: agent ID is required", model.ErrInvalid)
+	}
+	if agent.DisplayName == "" {
+		return model.Agent{}, fmt.Errorf("%w: display name is required", model.ErrInvalid)
+	}
+	if agent.Status != "" && agent.Status != model.AgentRegistered && agent.Status != model.AgentActive && agent.Status != model.AgentDisabled {
+		return model.Agent{}, fmt.Errorf("%w: invalid agent status %q", model.ErrInvalid, agent.Status)
+	}
+	if agent.Capabilities == nil {
+		agent.Capabilities = []string{}
+	}
+	capabilities, err := json.Marshal(agent.Capabilities)
+	if err != nil {
+		return model.Agent{}, fmt.Errorf("%w: encode agent capabilities: %v", model.ErrInvalid, err)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return model.Agent{}, fmt.Errorf("begin update agent: %w", err)
+	}
+	defer tx.Rollback()
+
+	var existingRole string
+	var currentRevision int64
+	err = tx.QueryRowContext(ctx, `
+		SELECT role, revision FROM agents WHERE agent_id = ?
+	`, agent.ID).Scan(&existingRole, &currentRevision)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Agent{}, fmt.Errorf("%w: agent %s", model.ErrNotFound, agent.ID)
+	}
+	if err != nil {
+		return model.Agent{}, fmt.Errorf("read agent for update: %w", err)
+	}
+	if expectedRevision >= 0 && currentRevision != expectedRevision {
+		return model.Agent{}, fmt.Errorf("%w: agent revision conflict (current=%d, expected=%d)", model.ErrConflict, currentRevision, expectedRevision)
+	}
+	if agent.Role != "" && agent.Role != model.Role(existingRole) {
+		return model.Agent{}, fmt.Errorf("%w: agent role is immutable", model.ErrConflict)
+	}
+
+	result, err := tx.ExecContext(ctx, `
+		UPDATE agents
+		SET display_name = ?, model_provider = ?, model_name = ?,
+		    capabilities_json = ?, status = ?, revision = revision + 1
+		WHERE agent_id = ? AND revision = ?
+	`, agent.DisplayName, nullIfEmpty(agent.ModelProvider), nullIfEmpty(agent.ModelName),
+		string(capabilities), agent.Status, agent.ID, currentRevision)
+	if err != nil {
+		return model.Agent{}, fmt.Errorf("update agent: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return model.Agent{}, fmt.Errorf("check update agent rows: %w", err)
+	}
+	if rows != 1 {
+		return model.Agent{}, fmt.Errorf("%w: agent update conflict", model.ErrConflict)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return model.Agent{}, fmt.Errorf("commit update agent: %w", err)
+	}
+
+	return s.GetAgent(ctx, agent.ID)
+}
+
+func (s *Store) DeleteAgent(ctx context.Context, agentID string, expectedRevision int64) error {
+	if agentID == "" {
+		return fmt.Errorf("%w: agent ID is required", model.ErrInvalid)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete agent: %w", err)
+	}
+	defer tx.Rollback()
+
+	var currentRevision int64
+	var activeSessions int
+	err = tx.QueryRowContext(ctx, `SELECT revision FROM agents WHERE agent_id = ?`, agentID).Scan(&currentRevision)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: agent %s", model.ErrNotFound, agentID)
+	}
+	if err != nil {
+		return fmt.Errorf("read agent for deletion: %w", err)
+	}
+	if expectedRevision >= 0 && currentRevision != expectedRevision {
+		return fmt.Errorf("%w: agent revision conflict (current=%d, expected=%d)", model.ErrConflict, currentRevision, expectedRevision)
+	}
+
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM sessions WHERE agent_id = ? AND status = 'active'`, agentID).Scan(&activeSessions); err != nil {
+		return fmt.Errorf("check active sessions: %w", err)
+	}
+	if activeSessions > 0 {
+		return fmt.Errorf("%w: cannot delete agent with %d active sessions", model.ErrConflict, activeSessions)
+	}
+
+	var activeTasks int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM tasks WHERE owner_agent_id = ? AND status IN ('claimed', 'working')`, agentID).Scan(&activeTasks); err != nil {
+		return fmt.Errorf("check active tasks: %w", err)
+	}
+	if activeTasks > 0 {
+		return fmt.Errorf("%w: cannot delete agent assigned to %d active tasks", model.ErrConflict, activeTasks)
+	}
+
+	result, err := tx.ExecContext(ctx, `DELETE FROM agents WHERE agent_id = ? AND revision = ?`, agentID, currentRevision)
+	if err != nil {
+		return fmt.Errorf("delete agent: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check delete rows: %w", err)
+	}
+	if rows != 1 {
+		return fmt.Errorf("%w: agent delete conflict", model.ErrConflict)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete agent: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) StartSession(ctx context.Context, start model.SessionStart) (model.Session, error) {
 	if start.ID == "" || start.AgentID == "" || start.ProjectID == "" {
 		return model.Session{}, fmt.Errorf("%w: incomplete session identity", model.ErrInvalid)

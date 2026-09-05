@@ -3,41 +3,17 @@ import { api } from '../api/client';
 import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState } from '../components/state';
 import { useToast } from '../components/toast';
-
-interface ActiveModel {
-  id: string;
-  context_window: number;
-  latency_p95_ms: number;
-}
-
-interface Provider {
-  id: string;
-  name: string;
-  class: string;
-  probe_status: string;
-  capabilities: string[];
-  models: ActiveModel[];
-  last_probed_at: string;
-}
-
-interface RoutingDecision {
-  intent: string;
-  selected_model: string;
-  provider_id: string;
-  rationale: string;
-  is_pinned: boolean;
-}
-
-interface ProviderData {
-  providers: Provider[];
-  routing_decisions: RoutingDecision[];
-  last_evaluated_at: string;
-}
+import { ConfigureProviderModal } from '../features/providers/forms/ConfigureProviderModal';
+import { ProviderSecretModal } from '../features/providers/forms/ProviderSecretModal';
+import type { ProviderDTO, RouterDecisionDTO, ProviderInventoryResponseDTO } from '../api/types';
 
 export function Providers() {
-  const [data, setData] = useState<ProviderData | null>(null);
+  const [data, setData] = useState<ProviderInventoryResponseDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [probingProviderId, setProbingProviderId] = useState<string | null>(null);
+  const [selectedConfigProvider, setSelectedConfigProvider] = useState<ProviderDTO | null>(null);
+  const [selectedSecretProvider, setSelectedSecretProvider] = useState<ProviderDTO | null>(null);
   const { addToast } = useToast();
 
   const fetchProviders = useCallback(async () => {
@@ -57,7 +33,26 @@ export function Providers() {
     void fetchProviders();
   }, [fetchProviders]);
 
-  const handleTogglePin = async (decision: RoutingDecision) => {
+  const handleProbeSingle = async (providerId: string) => {
+    setProbingProviderId(providerId);
+    try {
+      const res = await api.probeProvider(providerId);
+      addToast({
+        type: 'success',
+        message: `Provider ${providerId} probed: ${res.probe_status.toUpperCase()}`,
+      });
+      await fetchProviders();
+    } catch (err: unknown) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : `Failed to probe provider ${providerId}`,
+      });
+    } finally {
+      setProbingProviderId(null);
+    }
+  };
+
+  const handleTogglePin = async (decision: RouterDecisionDTO) => {
     try {
       await api.overrideRouter({
         intent: decision.intent,
@@ -79,8 +74,8 @@ export function Providers() {
     }
   };
 
-  if (loading) return <LoadingState message="Probing provider endpoints & evaluating model routing…" />;
-  if (error) return <ErrorState severity="error" message={error} onRetry={fetchProviders} />;
+  if (loading && !data) return <LoadingState message="Probing provider endpoints & evaluating model routing…" />;
+  if (error && !data) return <ErrorState severity="error" message={error} onRetry={fetchProviders} />;
   if (!data) return null;
 
   return (
@@ -93,7 +88,7 @@ export function Providers() {
           </span>
         </div>
         <Button variant="secondary" size="sm" onClick={fetchProviders}>
-          Probe Providers
+          Probe All Providers
         </Button>
       </div>
 
@@ -104,12 +99,40 @@ export function Providers() {
             <div className="provider-card-header">
               <div className="provider-name-group">
                 <h3 className="provider-name">{p.name}</h3>
-                <span className={`class-badge class-${p.class}`}>{p.class.toUpperCase()}</span>
+                <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.25rem' }}>
+                  <span className={`class-badge class-${p.class}`}>{p.class.toUpperCase()}</span>
+                  <span
+                    style={{
+                      fontSize: '0.6875rem',
+                      fontWeight: 600,
+                      padding: '0.125rem 0.375rem',
+                      borderRadius: '4px',
+                      background: p.enabled ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                      color: p.enabled ? '#10b981' : '#ef4444',
+                    }}
+                  >
+                    {p.enabled ? 'ENABLED' : 'DISABLED'}
+                  </span>
+                </div>
               </div>
               <StatusBadge
                 status={p.probe_status === 'healthy' ? 'ready' : 'degraded'}
                 label={p.probe_status.toUpperCase()}
               />
+            </div>
+
+            {p.endpoint_url && (
+              <div style={{ fontSize: '0.75rem', margin: '0.5rem 0', wordBreak: 'break-all' }}>
+                <span className="text-dim">Endpoint: </span>
+                <code className="font-mono">{p.endpoint_url}</code>
+              </div>
+            )}
+
+            <div style={{ fontSize: '0.75rem', margin: '0.5rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="text-dim">SecretRef: <code>{p.secret_ref.ref_name || 'none'}</code></span>
+              <span style={{ color: p.secret_ref.configured ? '#10b981' : '#f59e0b', fontWeight: 600 }}>
+                {p.secret_ref.configured ? '✓ Configured' : '✕ Missing'}
+              </span>
             </div>
 
             <div className="provider-caps-strip">
@@ -132,7 +155,32 @@ export function Providers() {
               ))}
             </div>
 
-            <div className="provider-footer text-xs font-mono text-dim">
+            <div className="provider-actions" style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleProbeSingle(p.id)}
+                disabled={probingProviderId === p.id}
+              >
+                {probingProviderId === p.id ? 'Probing…' : 'Probe'}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSelectedSecretProvider(p)}
+              >
+                SecretRef
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSelectedConfigProvider(p)}
+              >
+                Config
+              </Button>
+            </div>
+
+            <div className="provider-footer text-xs font-mono text-dim" style={{ marginTop: '0.5rem' }}>
               Last probe: {new Date(p.last_probed_at).toLocaleTimeString()}
             </div>
           </div>
@@ -182,6 +230,24 @@ export function Providers() {
           </table>
         </div>
       </div>
+
+      {selectedConfigProvider && (
+        <ConfigureProviderModal
+          provider={selectedConfigProvider}
+          isOpen={!!selectedConfigProvider}
+          onClose={() => setSelectedConfigProvider(null)}
+          onUpdated={fetchProviders}
+        />
+      )}
+
+      {selectedSecretProvider && (
+        <ProviderSecretModal
+          provider={selectedSecretProvider}
+          isOpen={!!selectedSecretProvider}
+          onClose={() => setSelectedSecretProvider(null)}
+          onUpdated={fetchProviders}
+        />
+      )}
     </div>
   );
 }

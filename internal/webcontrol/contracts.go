@@ -84,6 +84,7 @@ type AgentSummaryDTO struct {
 	Provider           string    `json:"provider,omitempty"`
 	Model              string    `json:"model,omitempty"`
 	Status             string    `json:"status"`
+	Revision           int64     `json:"revision"`
 	Capabilities       []string  `json:"capabilities,omitempty"`
 	CurrentTaskID      string    `json:"current_task_id,omitempty"`
 	CompletedTaskCount int       `json:"completed_task_count,omitempty"`

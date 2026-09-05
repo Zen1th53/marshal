@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../api/client';
 import { useRealtimeEvent } from '../realtime/useRealtime';
 import { StatusBadge, Button } from '../components/ui';
 import { LoadingState, ErrorState, EmptyState } from '../components/state';
 import { AgentDetail } from './AgentDetail';
+import { CreateAgentModal } from '../features/agents/forms/CreateAgentModal';
 import type { AgentSummaryDTO } from '../api/types';
 
 interface AgentsProps {
@@ -17,6 +18,7 @@ export function Agents({ onNavigateTask }: AgentsProps) {
   const [search, setSearch] = useState('');
   const [providerFilter, setProviderFilter] = useState('all');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const fetchAgents = useCallback(async () => {
     setLoading(true);
@@ -39,6 +41,18 @@ export function Agents({ onNavigateTask }: AgentsProps) {
     void fetchAgents();
   });
 
+  const availableProviders = useMemo(() => {
+    const provs = new Set<string>();
+    agents.forEach((a) => {
+      if (a.provider) {
+        provs.add(a.provider.toLowerCase());
+      }
+    });
+    // Ensure standard providers are present for clean UX
+    ['claude', 'codex', 'gemini', 'opencode'].forEach((p) => provs.add(p));
+    return ['all', ...Array.from(provs)];
+  }, [agents]);
+
   const filteredAgents = agents.filter((a) => {
     const matchesSearch =
       a.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -56,9 +70,14 @@ export function Agents({ onNavigateTask }: AgentsProps) {
           <h2 className="agents-title">Autonomous Agent Fleet</h2>
           <span className="agents-count">{agents.length} Registered Agents</span>
         </div>
-        <Button variant="secondary" size="sm" onClick={fetchAgents}>
-          Refresh Fleet
-        </Button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <Button variant="primary" size="sm" onClick={() => setIsCreateOpen(true)}>
+            + Register Agent
+          </Button>
+          <Button variant="secondary" size="sm" onClick={fetchAgents}>
+            Refresh Fleet
+          </Button>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -75,7 +94,7 @@ export function Agents({ onNavigateTask }: AgentsProps) {
         </div>
 
         <div className="filter-tabs" role="tablist" aria-label="Filter by provider">
-          {['all', 'claude', 'codex', 'gemini', 'opencode'].map((prov) => (
+          {availableProviders.map((prov) => (
             <button
               key={prov}
               type="button"
@@ -122,13 +141,16 @@ export function Agents({ onNavigateTask }: AgentsProps) {
                   <code className="agent-card-id">{agent.id}</code>
                 </div>
                 <StatusBadge
-                  status={agent.status === 'READY' ? 'ready' : 'degraded'}
-                  label={agent.status}
+                  status={agent.status === 'disabled' ? 'degraded' : 'ready'}
+                  label={agent.status.toUpperCase()}
                 />
               </div>
 
               <div className="agent-card-body">
                 <div className="agent-card-meta">
+                  <span className="meta-item">
+                    Role: <strong>{(agent.role || 'developer').toUpperCase()}</strong>
+                  </span>
                   <span className="meta-item">
                     Provider: <strong>{agent.provider?.toUpperCase() ?? 'GENERIC'}</strong>
                   </span>
@@ -163,6 +185,17 @@ export function Agents({ onNavigateTask }: AgentsProps) {
           agentId={selectedAgentId}
           onClose={() => setSelectedAgentId(null)}
           onNavigateTask={onNavigateTask}
+          onAgentMutated={fetchAgents}
+        />
+      )}
+
+      {isCreateOpen && (
+        <CreateAgentModal
+          isOpen={isCreateOpen}
+          onClose={() => setIsCreateOpen(false)}
+          onCreated={() => {
+            void fetchAgents();
+          }}
         />
       )}
     </div>
