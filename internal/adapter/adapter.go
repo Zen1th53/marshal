@@ -58,6 +58,19 @@ type ProcessResult struct {
 	Isolation       model.IsolationCapability
 }
 
+// Usage records normalized resource consumption reported by the harness.
+// Fields are pointers or have explicit Reported flags so that unknown usage
+// remains unknown, never synthesized into zero.
+type Usage struct {
+	Reported         bool     `json:"reported"`
+	PromptTokens     *int64   `json:"prompt_tokens,omitempty"`
+	CompletionTokens *int64   `json:"completion_tokens,omitempty"`
+	TotalTokens      *int64   `json:"total_tokens,omitempty"`
+	CostUSD          *float64 `json:"cost_usd,omitempty"`
+	ModelCalls       int      `json:"model_calls,omitempty"`
+	DurationMs       int64    `json:"duration_ms,omitempty"`
+}
+
 type Result struct {
 	Adapter         string
 	AdapterVersion  string
@@ -74,6 +87,7 @@ type Result struct {
 	Cancelled       bool
 	OutputTruncated bool
 	Isolation       model.IsolationCapability
+	Usage           Usage
 }
 
 type ProcessRunner interface {

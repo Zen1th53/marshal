@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 75
+const LatestSchemaVersion = 76
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1930,6 +1930,38 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 75: %w", err)
 		}
 		version = 75
+	}
+	if version < 76 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS goal_terminations (
+				session_id           TEXT NOT NULL,
+				goal_id              TEXT NOT NULL,
+				revision             INTEGER NOT NULL,
+				state                TEXT NOT NULL CHECK(state IN ('SUCCESS', 'PARTIAL', 'BLOCKED', 'BUDGET_EXHAUSTED', 'CANCELLED')),
+				reason_code          TEXT NOT NULL,
+				reason_detail        TEXT NOT NULL DEFAULT '',
+				budget_consumed_json TEXT NOT NULL DEFAULT '{}',
+				checkpoint_id        TEXT NOT NULL DEFAULT '',
+				completed_at         TEXT NOT NULL,
+				PRIMARY KEY(session_id, goal_id, revision)
+			);
+			CREATE INDEX IF NOT EXISTS idx_terminations_goal ON goal_terminations(goal_id, revision);
+
+			CREATE TABLE IF NOT EXISTS budget_trackers (
+				session_id           TEXT NOT NULL,
+				goal_id              TEXT NOT NULL,
+				revision             INTEGER NOT NULL,
+				consumed_json        TEXT NOT NULL DEFAULT '{}',
+				updated_at           TEXT NOT NULL,
+				PRIMARY KEY(session_id, goal_id, revision)
+			);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 76: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(76, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 76: %w", err)
+		}
+		version = 76
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

@@ -1316,8 +1316,8 @@
     },
     {
       "path": "internal/adapter/adapter.go",
-      "sha256": "54ff765f4b62609f250e04dd88b0a261db49fcafd48d6d35cda9617602be9dfa",
-      "bytes": 2141
+      "sha256": "c20bc0ebb57f3e60a47fef9c1022bb7e078b7968871d5bea390935c580e3a97b",
+      "bytes": 2786
     },
     {
       "path": "internal/adapter/attest_check.go",
@@ -2730,6 +2730,16 @@
       "bytes": 2385
     },
     {
+      "path": "internal/memory/checkpoint/durable_checkpoint.go",
+      "sha256": "cd83c1b46961cc82098e06ce7a5150475d7b83708964f5096bea0162d56404de",
+      "bytes": 4460
+    },
+    {
+      "path": "internal/memory/checkpoint/durable_checkpoint_test.go",
+      "sha256": "2878945d4139e4eb980912d35dcb100c01b580961e126b02d941a1554ad81d9e",
+      "bytes": 16424
+    },
+    {
       "path": "internal/memory/checkpoint/session_checkpoint.go",
       "sha256": "076e72a03455d663414f47b1d8deb83ffee6a2720ba7a674076f044084e91d13",
       "bytes": 3712
@@ -3388,6 +3398,11 @@
       "path": "internal/model/capability.go",
       "sha256": "11995bfbb4f0a57fb35caa30b54723957a20e9573067e1941feda2def349e774",
       "bytes": 1429
+    },
+    {
+      "path": "internal/model/checkpoint.go",
+      "sha256": "036d49de37f174d9a249d781cc1ce07ff1f2031905c2905e8a1041d989722c3c",
+      "bytes": 3469
     },
     {
       "path": "internal/model/claim.go",
@@ -4110,6 +4125,11 @@
       "bytes": 231
     },
     {
+      "path": "internal/store/checkpoint.go",
+      "sha256": "42a20fe78c3ab250ab1d8b3c93a3b0160f15573ed063b7f15d78529f2a37508c",
+      "bytes": 11004
+    },
+    {
       "path": "internal/store/checkpoint_persistence_a02_test.go",
       "sha256": "435e9315a2f4b95293ece8138ec82125c2357d91a7d1ddc8ea427d38b09ac1e8",
       "bytes": 236
@@ -4456,8 +4476,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "8c27d22c644a2444177775dfb23d3f2f8c891a3a39ebacf0456dc3f74f97644a",
-      "bytes": 76277
+      "sha256": "eb5d204c2d51c2a3a46063a188b6f9eeb3bea20fe507a7ee8ed314d7de7ea683",
+      "bytes": 77617
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
