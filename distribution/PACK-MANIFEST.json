@@ -1611,7 +1611,7 @@
     },
     {
       "path": "internal/app/defaults/RUNTIME-VERSION.yaml",
-      "sha256": "c0299689183f3e853ebdb676eaee748ba61055f7dac51ef4fd5c94071ad52d85",
+      "sha256": "48336e3aa5587845882278cd80a58756aff07fe7f733b853271ed801b06308f3",
       "bytes": 182
     },
     {
@@ -6145,6 +6145,11 @@
       "bytes": 5090
     },
     {
+      "path": "release/RELEASE_NOTES_1.5.0.md",
+      "sha256": "e12a3a07e131c2fe0673bc2788219786f0c8913e31fa19886fdf3084c0c159f1",
+      "bytes": 5670
+    },
+    {
       "path": "release/REPRODUCIBLE-BUILDS.md",
       "sha256": "b4fcb1b43898829e55f0863780653df9128f1ffb2c02464ce17cf529e7a4878f",
       "bytes": 703
@@ -6168,6 +6173,11 @@
       "path": "release/TRUST-STATUS.json",
       "sha256": "ff9a0d72f2067790267b4c8c464c4980347ff56fb5bbe427ea55ca19e407d29d",
       "bytes": 470
+    },
+    {
+      "path": "release_evidence_v1.5.0.md",
+      "sha256": "49f4831257fb0e1b35fa06484a970fa385dd1f140002990300cd0da3f3ac3fa1",
+      "bytes": 6757
     },
     {
       "path": "routing/CAPABILITY-SCHEMA.json",
