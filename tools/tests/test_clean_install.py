@@ -25,7 +25,7 @@ class CleanInstallSmokeTests(unittest.TestCase):
                 "build",
                 "-buildvcs=false",
                 "-ldflags",
-                "-X github.com/Zen1th53/marshal/internal/cli.Version=v1.0.1",
+                "-X github.com/Zen1th53/marshal/internal/cli.Version=v1.5.0",
                 "-o",
                 str(cls.marshal_bin),
                 "./cmd/marshal",
@@ -105,7 +105,7 @@ class CleanInstallSmokeTests(unittest.TestCase):
             )
 
             version = self.run_marshal(repo_path, "version")
-            self.assertIn("MARSHAL v1.0.1", version.stdout)
+            self.assertIn("MARSHAL v1.5.0", version.stdout)
 
             initialized = self.run_marshal(repo_path, "init")
             self.assertIn("initialized", initialized.stdout)

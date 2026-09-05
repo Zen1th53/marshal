@@ -13,7 +13,7 @@ MARSHAL release binaries support Linux on amd64 and arm64.
 3. Extract and install the binary:
 
    ```bash
-   tar -xzf marshal_1.0.1_linux_amd64.tar.gz
+   tar -xzf marshal_1.5.0_linux_amd64.tar.gz
    install -Dm755 marshal "$HOME/.local/bin/marshal"
    marshal version
    ```

@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.5.0 — Autonomous Multi-Agent Collaborative Runtime & Frozen Core Verification
+
+### Added
+
+- **Frozen 6-Core Judgment Layer**:
+  - **Core #1 (Epistemic Integrity & Claim Graph)**: Formal claim lifecycle (`UNSUPPORTED`, `SUPPORTED`, `VERIFIED`, `CONTESTED`, `STALE`, `INVALIDATED`), critical-claim gating, evidence-claim dependency DAG, and non-epistemic state rejection.
+  - **Core #2 (Alignment Guard)**: Real worktree git diff inspector, blast radius calculation, deletion-as-satisfaction prevention, and semantic drift detection.
+  - **Core #3 (Risk-Scaled Blind Interpretation)**: Independent multi-agent intent interpretation, semantic distance evaluation, and mandatory escalation upon divergence.
+  - **Core #4 (Durable Handoff Checkpoints + Rollback)**: Transactional handoff checkpoints with state snapshots and one-click rollback to restore canonical state.
+  - **Core #5 (Budget Contract + Termination)**: Multi-dimensional cost, wall-clock, turn, and token budget governance with hard termination and resource reclamation.
+  - **Core #6 (Constraint Re-injection)**: Immutable constraint preservation, digest tracking, and active re-injection across 20+ turn handoff chains.
+- **Terminal-First TUI Workspace**:
+  - Live interactive TUI (`marshal tui` or default empty-arg project invocation) over canonical SQLite state with silence-by-default chatter reduction.
+  - One-screen dashboard for Goal, active participants, claims, budget tracking, blocker management, and work ownership.
+  - Operator controls for pause, resume, cancel, approval prompt resolution, checkpoint rollback, and inspectable routes.
+- **Real Multi-Agent Collaboration Runtime**:
+  - Fixed-role collaborative sessions (`architect`, `developer`, `qa`, `appsec`) across Claude CLI, OpenAI Codex, OpenCode, and Antigravity.
+  - Peer discovery across process restarts, typed challenge/question protocols, and lease-governed work ownership.
+- **First-Class Antigravity Harness**:
+  - Dedicated `antigravity` adapter with automated capability probing, code-writing execution cells, and sandbox integration.
+- **Harness Capability Intelligence & ULTRA Native Optimization**:
+  - Probe-backed version-aware capability matrix (`adapters/MATRIX.json`) generating optimal execution routes, model selection, and reasoning effort without hallucinated flags.
+- **Second-Wave Trust Hardening**:
+  - Normalized failure fingerprinting, Review-the-Reviewer anti-rubber-stamping audits, bounded mutation testing, evidence bundle packaging, post-mortem cards, and ModelTaskTrust score gates.
+- **SQLite Migrations 73–79**:
+  - Forward migrations for goals, claims, checkpoints, budgets, blind interpretations, team sessions, and harness profiles.
+
+See [`release/RELEASE_NOTES_1.5.0.md`](release/RELEASE_NOTES_1.5.0.md) for
+detailed verification and release evidence.
+
 ## v1.0.1 — Canonical Community Consolidation and Production Hardening
 
 ### Fixed

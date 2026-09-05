@@ -279,7 +279,7 @@ func TestCLIVersionCommand(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "MARSHAL v1.0.1") {
+	if !strings.Contains(stdout.String(), "MARSHAL v1.5.0") {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 
@@ -289,7 +289,7 @@ func TestCLIVersionCommand(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), `"version": "v1.0.1"`) {
+	if !strings.Contains(stdout.String(), `"version": "v1.5.0"`) {
 		t.Fatalf("unexpected json stdout: %s", stdout.String())
 	}
 }

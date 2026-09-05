@@ -9,7 +9,7 @@ MARSHAL is a local, security-focused runtime and control plane for coding agents
 
 Raw provider CLIs can modify files and execute arbitrary commands, but they lack independent authorization boundaries, reproducible worktree isolation, verifiable evidence graphs, and governed cross-turn memory. MARSHAL wraps provider execution inside isolated execution cells, leases and records state in a canonical local SQLite database, and fails closed whenever a requested security or isolation boundary cannot be enforced.
 
-Current Community release: **v1.0.1** · SQLite schema: **v72** · Pack version: **6.0.0**.
+Current Community release: **v1.5.0** · SQLite schema: **v79** · Pack version: **6.0.0**.
 
 ---
 
@@ -22,21 +22,25 @@ Autonomous and assistive coding agents are increasingly granted direct access to
 3. **No Independent Authorization Boundary**: An LLM cannot reliably police its own actions. Security policy, capability grants, and risk evaluation must be enforced by an independent runtime before command execution.
 4. **Context Amnesia & Memory Drift**: Multi-step engineering workflows require durable memory that tracks previous task outcomes, conflicts, and architectural decisions without exceeding context budgets or ingesting unverified prompt injections.
 
-MARSHAL solves these challenges by acting as a **deterministic local control plane** between agent interfaces (CLI, Web, MCP, A2A) and provider execution backends.
+MARSHAL solves these challenges by acting as a **deterministic local control plane** between agent interfaces (TUI, CLI, Web, MCP, A2A) and provider execution backends.
 
 ---
 
 ## What MARSHAL Actually Provides
 
-| Subsystem | Current Community v1.0.1 Capability |
+| Subsystem | Current Community v1.5.0 Capability |
 |---|---|
+| **Terminal TUI Workspace** | Live terminal-first collaborative TUI (`marshal tui` or default `marshal` launch) over canonical SQLite state with silence-by-default chatter reduction, claim/evidence inspectors, pause/resume/cancel, approval prompts, and rollback controls. |
+| **Frozen 6-Core Judgment Layer** | Immutable 6-core runtime: (1) Epistemic Ledger & Claim Graph, (2) Alignment Guard, (3) Blind Interpretation, (4) Durable Handoff Checkpoints & Rollback, (5) Budget & Termination Contract, (6) Constraint Re-injection. Strictly frozen with no 7th core. |
+| **Real Multi-Agent Collaboration** | Fixed-role multi-agent team sessions (`architect`, `developer`, `qa`, `appsec`) supporting Claude CLI, OpenAI Codex, OpenCode, and Google Antigravity with typed handoffs, challenge protocols, and mutual discovery. |
+| **Harness Capability Intelligence & ULTRA** | Probe-backed version-aware capability matrix (`adapters/MATRIX.json`) dynamically generating optimal execution routes, model selection, reasoning effort, and native tool flags without hallucinated parameters. |
+| **Second-Wave Trust Hardening** | Failure fingerprinting with normalized error vectors, Review-the-Reviewer anti-rubber-stamping audits, bounded mutation testing, evidence bundle packaging, post-mortem cards, and ModelTaskTrust score gates. |
 | **Runtime Control Plane** | Project-local daemon over a mode-`0600` Unix domain socket (`.marshal/runtime.sock`), atomic task claims, 15-minute heartbeated session leases, dedicated Git worktrees (`marshal/<task>`), and model context protocol servers. |
 | **Security & Policy** | Capability broker with fine-grained time-bounded grants, role authorization (`orchestrator`, `architect`, `developer`, `qa`, `appsec`), pre-execution risk gates (`R0`..`R3`), secrets lease/redaction engine, and deny-by-default network policy. |
 | **Execution Sandboxing** | Linux Bubblewrap (`bwrap`) mount namespaces with read-only root filesystems, minimal config binds, tmpfs runtime directories, network unsharing (`--unshare-net`), 500 MiB worktree disk budget, and 8 MiB output bounds. |
-| **Canonical Memory Fabric** | SQLite-backed memory engine (schema `v72`), automatic task-start context recall (max 8 records, 12 KiB budget), post-run evidence-linked outcome capture (`CaptureOutcome`), multi-track search (exact, lexical, graph; optional vector), conflict detection, lifecycle governance, and session importers (Claude, Codex, OpenCode). |
-| **Provider Adapters** | Modular process adapters for Codex CLI, OpenCode, Gemini CLI, and Claude Code with dynamic capability probing and standardized execution contracts. |
+| **Canonical Memory Fabric** | SQLite-backed memory engine (schema `v79`), automatic task-start context recall (max 8 records, 12 KiB budget), post-run evidence-linked outcome capture (`CaptureOutcome`), multi-track search, conflict detection, lifecycle governance, and session importers. |
+| **Provider Adapters** | Modular process adapters for Codex CLI, OpenCode, Gemini CLI, Claude Code, and Antigravity with dynamic capability probing and standardized execution contracts. |
 | **Evidence & Provenance** | Content-addressed SHA-256 artifact storage (`.marshal/artifacts/sha256/<hex>`), structured command/output/environment evidence nodes, commit linkage, and immutable event ledger. |
-| **Community Resource Awareness** | Bounded, read-only host telemetry covering CPU/cgroups, RAM/swap, storage, GPUs/accelerators (with `SHARED_OR_UNKNOWN` handling), thermals, and local Ollama model inventory with conservative concurrency advice. |
 | **Operations & Web UI** | Authenticated loopback Web control plane (`127.0.0.1:8787`), single-use one-time login codes, system health diagnostics (`marshal doctor`), SQLite backup/restore verification, and legal chain-of-title compliance export. |
 
 ---
@@ -228,10 +232,10 @@ MARSHAL includes a bounded, read-only host resource inspector that gathers point
 
 | Property | Current Specification |
 |---|---|
-| **Product Release** | **`v1.0.1`** |
+| **Product Release** | **`v1.5.0`** |
 | **Pack Version** | **`6.0.0`** |
-| **Runtime Spec Version** | **`1.0.0`** |
-| **Database Schema** | **`v72`** (SQLite in WAL mode) |
+| **Runtime Spec Version** | **`1.5.0`** |
+| **Database Schema** | **`v79`** (SQLite in WAL mode) |
 | **MCP Protocol** | **`2026-07-28`** |
 | **A2A Wire Version** | **`1.0`** (Protocol `1.0.0`) |
 | **Platform Support** | Linux (`x86_64` / `amd64` and `aarch64` / `arm64`) |
@@ -243,14 +247,14 @@ MARSHAL includes a bounded, read-only host resource inspector that gathers point
 
 ### Option A: Download Official Release Binary
 
-Download the appropriate archive for your architecture from the [v1.0.1 Release](https://github.com/Zen1th53/marshal/releases/tag/v1.0.1):
+Download the appropriate archive for your architecture from the [v1.5.0 Release](https://github.com/Zen1th53/marshal/releases/tag/v1.5.0):
 
 ```bash
 # Verify checksums
 sha256sum -c checksums.txt --ignore-missing
 
 # Extract and install binary
-tar -xzf marshal_1.0.1_linux_amd64.tar.gz
+tar -xzf marshal_1.5.0_linux_amd64.tar.gz
 install -Dm755 marshal "$HOME/.local/bin/marshal"
 
 # Verify installation

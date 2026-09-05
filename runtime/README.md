@@ -1,7 +1,7 @@
 # Runtime plane
 
 This directory contains the executable control-plane contracts for MARSHAL
-v1.0.1. The current database is SQLite schema v72.
+v1.5.0. The current database is SQLite schema v79.
 
 ## Components
 
@@ -19,14 +19,16 @@ v1.0.1. The current database is SQLite schema v72.
 - `THREAT-MODEL.md` — trust boundaries
 
 ```text
-CLI / MCP / A2A / supported Web routes
+TUI / CLI / MCP / A2A / supported Web routes
                   |
                   v
               app.Runtime
                   |
  capability → policy → network → sandbox → provider
                   |
-          evidence → memory → SQLite
+  claims → alignment → budget → handoffs → checkpoints
+                  |
+           evidence → memory → SQLite (v79)
 ```
 
 The runtime uses task-scoped Git worktrees, bounded worker processes,
@@ -37,4 +39,4 @@ and limited to explicitly opted-in R0/R1 work.
 Community Resource Awareness is read-only and advisory. It does not implement
 adaptive resource control, fleet placement, or automatic provider/model
 routing. Multi-host clustering and remote artifact stores remain outside the
-v1.0.1 Community runtime.
+v1.5.0 Community runtime.

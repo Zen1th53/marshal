@@ -183,14 +183,14 @@ def main() -> int:
 
     gen_sbom = sub.add_parser("generate-sbom")
     gen_sbom.add_argument("--repo", default=".")
-    gen_sbom.add_argument("--version", default="v1.0.1")
+    gen_sbom.add_argument("--version", default="v1.5.0")
     gen_sbom.add_argument("--created")
     gen_sbom.add_argument("--output", required=True)
 
     gen_manifest = sub.add_parser("generate-manifest")
     gen_manifest.add_argument("--dist", required=True)
     gen_manifest.add_argument("--commit", required=True)
-    gen_manifest.add_argument("--version", default="v1.0.1")
+    gen_manifest.add_argument("--version", default="v1.5.0")
     gen_manifest.add_argument("--output", required=True)
 
     verify = sub.add_parser("verify")

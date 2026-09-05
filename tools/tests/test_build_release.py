@@ -9,7 +9,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "tools" / "build_release.sh"
-VERSION = "v1.0.1"
+VERSION = "v1.5.0"
 COMMIT = "0123456789abcdef"
 BUILD_DATE = "2026-08-18T12:00:00Z"
 
@@ -30,8 +30,8 @@ class BuildReleaseTests(unittest.TestCase):
             self.build(second)
 
             archive_names = [
-                "marshal_1.0.1_linux_amd64.tar.gz",
-                "marshal_1.0.1_linux_arm64.tar.gz",
+                "marshal_1.5.0_linux_amd64.tar.gz",
+                "marshal_1.5.0_linux_arm64.tar.gz",
             ]
             bundle_names = [
                 "INSTALL.md",
@@ -63,7 +63,7 @@ class BuildReleaseTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             ).stdout
-            self.assertIn("MARSHAL v1.0.1", version)
+            self.assertIn("MARSHAL v1.5.0", version)
             self.assertIn("commit: 0123456789abcdef", version)
             executable.unlink()
 
@@ -72,7 +72,7 @@ class BuildReleaseTests(unittest.TestCase):
                 digest, name = line.split("  ", 1)
                 checksums[name] = digest
             expected = archive_names + [
-                "marshal_1.0.1_sbom.spdx.json",
+                "marshal_1.5.0_sbom.spdx.json",
                 "build-metadata.json",
             ]
             for name in expected:
@@ -81,7 +81,7 @@ class BuildReleaseTests(unittest.TestCase):
                 )
 
             sbom = json.loads(
-                (first / "marshal_1.0.1_sbom.spdx.json").read_text(encoding="utf-8")
+                (first / "marshal_1.5.0_sbom.spdx.json").read_text(encoding="utf-8")
             )
             marshal_package = next(
                 package

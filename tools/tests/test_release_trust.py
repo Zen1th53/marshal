@@ -21,9 +21,9 @@ class ReleaseTrustTests(unittest.TestCase):
         trust = load_release_trust()
         with tempfile.TemporaryDirectory() as directory:
             dist = pathlib.Path(directory)
-            artifact = dist / "marshal_1.0.1_linux_amd64.tar.gz"
+            artifact = dist / "marshal_1.5.0_linux_amd64.tar.gz"
             artifact.write_bytes(b"archive")
-            sbom = dist / "marshal_1.0.1_sbom.spdx.json"
+            sbom = dist / "marshal_1.5.0_sbom.spdx.json"
             sbom.write_text("{}\n", encoding="utf-8")
             digest = trust.compute_sha256(artifact)
             sbom_digest = trust.compute_sha256(sbom)
@@ -32,7 +32,7 @@ class ReleaseTrustTests(unittest.TestCase):
                 encoding="utf-8",
             )
             manifest = trust.generate_release_manifest(
-                dist, "0123456789abcdef", "v1.0.1"
+                dist, "0123456789abcdef", "v1.5.0"
             )
             manifest_path = dist / "RELEASE-MANIFEST.json"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -52,7 +52,7 @@ class ReleaseTrustTests(unittest.TestCase):
             (dist / "checksums.txt").write_text(
                 f"{'0' * 64}  ../outside\n", encoding="utf-8"
             )
-            manifest = trust.generate_release_manifest(dist, "01234567", "v1.0.1")
+            manifest = trust.generate_release_manifest(dist, "01234567", "v1.5.0")
             manifest_path = dist / "RELEASE-MANIFEST.json"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
