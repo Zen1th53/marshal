@@ -4,6 +4,7 @@ go 1.25.13
 
 require (
 	go.yaml.in/yaml/v3 v3.0.5
+	golang.org/x/term v0.45.0
 	modernc.org/sqlite v1.57.0
 )
 

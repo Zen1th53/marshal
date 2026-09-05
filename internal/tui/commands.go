@@ -140,6 +140,63 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/cancel":
 		return h.handleCancel(ctx)
 
+	case "/doctor":
+		return h.handleDoctor(ctx)
+
+	case "/tasks", "/task":
+		return h.handleTasks(ctx, parts[1:], line)
+
+	case "/policy":
+		return h.handlePolicy(ctx, parts[1:])
+
+	case "/sandbox":
+		return h.handleSandbox(ctx)
+
+	case "/memory":
+		return h.handleMemory(ctx, parts[1:], line)
+
+	case "/provider", "/providers":
+		return h.handleProvider(ctx, parts[1:])
+
+	case "/harness":
+		return h.handleHarness(ctx, parts[1:])
+
+	case "/model":
+		return h.handleModel(ctx, parts[1:])
+
+	case "/effort":
+		return h.handleEffort(ctx, parts[1:])
+
+	case "/ultra":
+		return h.handleUltra(ctx, parts[1:])
+
+	case "/backup":
+		return h.handleBackup(ctx, parts[1:])
+
+	case "/fingerprint":
+		return h.handleFingerprint(ctx)
+
+	case "/runtime":
+		return h.handleRuntime(ctx)
+
+	case "/store":
+		return h.handleStore(ctx)
+
+	case "/export":
+		return h.handleExport(ctx, parts[1:])
+
+	case "/blind":
+		return h.handleBlind(ctx, parts[1:])
+
+	case "/reinjection":
+		return h.handleReinjection(ctx)
+
+	case "/alignment":
+		return h.handleAlignment(ctx, parts[1:])
+
+	case "/diff":
+		return h.handleDiff(ctx)
+
 	default:
 		return fmt.Sprintf("Unknown command %q. Type /help for available commands.", cmd), nil
 	}
