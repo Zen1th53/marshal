@@ -2,7 +2,7 @@
 
 **Release Date:** 2026-09-05  
 **Release Version:** v1.5.0  
-**Evidence Commit:** `c832705` — every gate below was executed against this exact tree. Results from earlier commits are not carried forward.  
+**Evidence Commit:** `cf2dd2b` — every gate below was executed against this exact tree. Results from earlier commits are not carried forward.  
 **Target Schema:** SQLite Schema v79  
 **Pack Version:** 6.0.0  
 **Architecture:** Linux x86_64, arm64  
@@ -56,7 +56,7 @@ PASS for commit `7052197`. Both were re-run against that exact commit and both
 failed: the embedded `internal/app/defaults/RUNTIME-VERSION.yaml` was still at
 v1.0.1, and `distribution/PACK-MANIFEST.json` carried a stale hash plus two
 unlisted release documents. The defects were fixed in `b984204` and `e528797`
-respectively, and the table above reflects re-execution against `c832705`. A
+respectively, and the table above reflects re-execution against `cf2dd2b`. A
 gate result is only valid for the commit it was executed against.
 
 ---
