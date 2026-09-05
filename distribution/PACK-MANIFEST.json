@@ -2605,6 +2605,36 @@
       "bytes": 6593
     },
     {
+      "path": "internal/interpretation/collector.go",
+      "sha256": "a843b282a5d17e3c5e0620fd5ab003cddeb962a7b6876cde4edf77eb2c497a25",
+      "bytes": 3099
+    },
+    {
+      "path": "internal/interpretation/comparator.go",
+      "sha256": "ac853ec6a7f859b25e70201276158a4699fd28f36f404402627847a2909cfad1",
+      "bytes": 9561
+    },
+    {
+      "path": "internal/interpretation/interpretation_test.go",
+      "sha256": "2f2e8c8180d9b18bac806e9745939e0c96da3305fa805f4261d0f9e904997bd0",
+      "bytes": 12152
+    },
+    {
+      "path": "internal/interpretation/invalidator.go",
+      "sha256": "7f6f85562eacf83e9f45f2df7310204f2cd3fad787fe4c477f4a8aab9b6b22f1",
+      "bytes": 3712
+    },
+    {
+      "path": "internal/interpretation/scaler.go",
+      "sha256": "b20046118e6d3ac4b6be32ae8234c8b885ea81164a16fddd268327ac8c778fe8",
+      "bytes": 2295
+    },
+    {
+      "path": "internal/interpretation/types.go",
+      "sha256": "62ef2a09e5b9a2ef3bda4aea0463d0ba827d8474750081fc24aec507af201a38",
+      "bytes": 591
+    },
+    {
       "path": "internal/legal/audit.go",
       "sha256": "11c0e1418a2e402d895508143d527ad9066ee7c512972f7e92dfabaf3b724b4e",
       "bytes": 2968
@@ -3473,6 +3503,11 @@
       "path": "internal/model/ids.go",
       "sha256": "8964e0ea25d086829fab963da9fa4e67dc6669908d4d45acc56703be17aaefd4",
       "bytes": 292
+    },
+    {
+      "path": "internal/model/interpretation.go",
+      "sha256": "7d793afc9c7156fac4259019eef01e760db323200414cc42a95992b94a6dc747",
+      "bytes": 4729
     },
     {
       "path": "internal/model/isolation.go",
@@ -4435,6 +4470,16 @@
       "bytes": 4138
     },
     {
+      "path": "internal/store/interpretation.go",
+      "sha256": "48d3524598a6d5c8195cf9d43e2d11d8597c5f3f28ba639e61138207ddd58d2f",
+      "bytes": 10533
+    },
+    {
+      "path": "internal/store/interpretation_test.go",
+      "sha256": "6e8c4dccc062ba749217327e197c0445ededd77b9c5d7566e331266992353f6d",
+      "bytes": 3975
+    },
+    {
       "path": "internal/store/mcp_gateway_persistence_a02_test.go",
       "sha256": "78db129d3b8fdfee36c56ed249fb34eeb42675b9e3c9f0269e939306a9a04764",
       "bytes": 236
@@ -4511,8 +4556,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "4d403794d5e6ce7d40a2121d9b36714ea52401f5622f36184fd17368b11c3f30",
-      "bytes": 79676
+      "sha256": "801db527b56f710656548ea71a1f200526f6646577375a6bb02f49103351b6f7",
+      "bytes": 81358
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",

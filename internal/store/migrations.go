@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 77
+const LatestSchemaVersion = 78
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2008,6 +2008,45 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 77: %w", err)
 		}
 		version = 77
+	}
+	if version < 78 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS team_sessions (
+				session_id        TEXT PRIMARY KEY,
+				goal_id           TEXT NOT NULL,
+				goal_revision     INTEGER NOT NULL,
+				active_turn       TEXT NOT NULL DEFAULT '',
+				turn_sequence     INTEGER NOT NULL DEFAULT 0,
+				status            TEXT NOT NULL DEFAULT 'ACTIVE',
+				participants_json TEXT NOT NULL DEFAULT '[]',
+				created_at        TEXT NOT NULL,
+				updated_at        TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_team_sessions_goal ON team_sessions(goal_id, goal_revision);
+
+			CREATE TABLE IF NOT EXISTS agent_messages (
+				message_id        TEXT PRIMARY KEY,
+				session_id        TEXT NOT NULL REFERENCES team_sessions(session_id),
+				task_id           TEXT NOT NULL DEFAULT '',
+				from_agent        TEXT NOT NULL,
+				from_harness      TEXT NOT NULL DEFAULT '',
+				from_model        TEXT NOT NULL DEFAULT '',
+				to_agent          TEXT NOT NULL DEFAULT '',
+				kind              TEXT NOT NULL,
+				content           TEXT NOT NULL,
+				claim_ids_json    TEXT NOT NULL DEFAULT '[]',
+				evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+				created_at        TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_agent_messages_sess ON agent_messages(session_id, created_at);
+			CREATE INDEX IF NOT EXISTS idx_agent_messages_task ON agent_messages(task_id, created_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 78: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(78, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 78: %w", err)
+		}
+		version = 78
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
