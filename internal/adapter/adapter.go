@@ -27,6 +27,7 @@ type Request struct {
 	TaskID            string
 	Title             string
 	Worktree          string
+	Model             string
 	BaseCommit        string
 	HeadCommit        string
 	AllowedOperations []string

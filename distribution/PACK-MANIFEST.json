@@ -1316,8 +1316,8 @@
     },
     {
       "path": "internal/adapter/adapter.go",
-      "sha256": "c20bc0ebb57f3e60a47fef9c1022bb7e078b7968871d5bea390935c580e3a97b",
-      "bytes": 2786
+      "sha256": "a747e4ea87535d059d0ec7242e6efc7b6bd576415886136bfe438d116a63646f",
+      "bytes": 2812
     },
     {
       "path": "internal/adapter/attest_check.go",
@@ -2495,6 +2495,26 @@
       "bytes": 5291
     },
     {
+      "path": "internal/harness/harness_test.go",
+      "sha256": "4701a084ae29d09af7577d9d4cbcd83ab0daabca54c486479d1be6874d382ff9",
+      "bytes": 5600
+    },
+    {
+      "path": "internal/harness/intelligence.go",
+      "sha256": "e04135f7d0ef04d82bfa0742392f0d485882084a18ff47d7bb69b4f27ae19ac5",
+      "bytes": 5498
+    },
+    {
+      "path": "internal/harness/types.go",
+      "sha256": "81173d20fe6df5f7d13fac66cfbd4c24048b2faeef0cb4fcf63c1bfb0474d7af",
+      "bytes": 439
+    },
+    {
+      "path": "internal/harness/ultra_router.go",
+      "sha256": "8151d86ace96b8b621724f3730ae1b24b1d1d37292e4a919693a11d503930066",
+      "bytes": 3701
+    },
+    {
       "path": "internal/httpsrv/server.go",
       "sha256": "510ab830548292aa382f9f8c545bff9fec9e4a66f666fe0cd94d57bfe79a4ecb",
       "bytes": 2517
@@ -3520,6 +3540,11 @@
       "bytes": 7150
     },
     {
+      "path": "internal/model/harness.go",
+      "sha256": "ed7e4287caca9fb2b2237aa15953193dad5b5cf8494c4280b797fd98c6bd067a",
+      "bytes": 3540
+    },
+    {
       "path": "internal/model/identity.go",
       "sha256": "df467ad694fa9aa401e8a0d8fca67394876dc13df9a9f0b7a62d23bfb121c10c",
       "bytes": 2057
@@ -4493,6 +4518,16 @@
       "path": "internal/store/goal_test.go",
       "sha256": "3e72de85987b93238aaaff45ae36bbf0cb8a3c7206115777678dd3a7c284634e",
       "bytes": 6628
+    },
+    {
+      "path": "internal/store/harness.go",
+      "sha256": "f38d1c84c61b4dc724e2bd0074882e8a2ee8b752d018d265deaa33da497c8d83",
+      "bytes": 5024
+    },
+    {
+      "path": "internal/store/harness_test.go",
+      "sha256": "29688a968faf15d19fb1182f7d832fd3ed3131568797f103834bae64c57f5514",
+      "bytes": 2413
     },
     {
       "path": "internal/store/identity.go",
