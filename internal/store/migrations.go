@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 74
+const LatestSchemaVersion = 75
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1877,6 +1877,59 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 74: %w", err)
 		}
 		version = 74
+	}
+	if version < 75 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS handoff_checkpoints (
+				checkpoint_id           TEXT PRIMARY KEY,
+				version                 INTEGER NOT NULL DEFAULT 1,
+				goal_id                 TEXT NOT NULL,
+				goal_revision           INTEGER NOT NULL,
+				constraints_digest      TEXT NOT NULL,
+				task_id                 TEXT NOT NULL,
+				session_id              TEXT NOT NULL,
+				handoff_id              TEXT NOT NULL DEFAULT '',
+				agent_id                TEXT NOT NULL,
+				harness                 TEXT NOT NULL,
+				model                   TEXT NOT NULL DEFAULT '',
+				role                    TEXT NOT NULL,
+				branch                  TEXT NOT NULL DEFAULT '',
+				worktree_path           TEXT NOT NULL DEFAULT '',
+				base_head               TEXT NOT NULL DEFAULT '',
+				result_head             TEXT NOT NULL DEFAULT '',
+				tree_sha                TEXT NOT NULL DEFAULT '',
+				diff_digest             TEXT NOT NULL DEFAULT '',
+				last_consumed_cursor    TEXT NOT NULL DEFAULT '',
+				task_slots_json         TEXT NOT NULL DEFAULT '{}',
+				claims_json             TEXT NOT NULL DEFAULT '[]',
+				evidence_refs_json      TEXT NOT NULL DEFAULT '[]',
+				budget_state_json       TEXT NOT NULL DEFAULT '{}',
+				pending_blockers_json   TEXT NOT NULL DEFAULT '[]',
+				state_snapshot_json     TEXT NOT NULL DEFAULT '{}',
+				reason                  TEXT NOT NULL DEFAULT '',
+				created_at              TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_checkpoints_task ON handoff_checkpoints(task_id, created_at);
+			CREATE INDEX IF NOT EXISTS idx_checkpoints_session ON handoff_checkpoints(session_id, created_at);
+			CREATE INDEX IF NOT EXISTS idx_checkpoints_handoff ON handoff_checkpoints(handoff_id);
+
+			CREATE TABLE IF NOT EXISTS checkpoint_rollbacks (
+				rollback_id                TEXT PRIMARY KEY,
+				checkpoint_id              TEXT NOT NULL REFERENCES handoff_checkpoints(checkpoint_id),
+				from_checkpoint_id         TEXT NOT NULL DEFAULT '',
+				reason                     TEXT NOT NULL,
+				actor_provenance_json      TEXT NOT NULL DEFAULT '{}',
+				invalidated_claim_ids_json TEXT NOT NULL DEFAULT '[]',
+				created_at                 TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_rollbacks_ckpt ON checkpoint_rollbacks(checkpoint_id);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 75: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(75, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 75: %w", err)
+		}
+		version = 75
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

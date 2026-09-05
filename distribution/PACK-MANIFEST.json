@@ -1525,6 +1525,31 @@
       "bytes": 438
     },
     {
+      "path": "internal/alignment/alignment_test.go",
+      "sha256": "9f0bfe2c8cad142dc8ad53f62330ee98d678c3f96332fc47258fbcb8ec55f560",
+      "bytes": 9043
+    },
+    {
+      "path": "internal/alignment/blast_radius.go",
+      "sha256": "08698971b4b8867aac0df56acda9d7117b7c7d7e0ccb389233ba00b488e73164",
+      "bytes": 2297
+    },
+    {
+      "path": "internal/alignment/diff_inspector.go",
+      "sha256": "c2b8584b000550094c8aa621f606fa9f65c3bb8c6374c1943a20746b9d64a597",
+      "bytes": 4448
+    },
+    {
+      "path": "internal/alignment/guard.go",
+      "sha256": "a7f4486be9b1b0b06f0b6406bf6438c8750ebf9c8e4ebff705865bcbf22b2b53",
+      "bytes": 4117
+    },
+    {
+      "path": "internal/alignment/types.go",
+      "sha256": "1da00f30ae3b0c72d58f3bc166ccaa83007b3a45d939f008a81b1504348dc1b8",
+      "bytes": 2079
+    },
+    {
       "path": "internal/api/capability_map_test.go",
       "sha256": "3841426a05766646f21455907af22cfda95049e35dbc23c5bb7594ac519b29b2",
       "bytes": 852
@@ -4431,8 +4456,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "c9da32be055a61163df208f1e29aaa9a9777f578a56d186512d911a9064a809f",
-      "bytes": 73663
+      "sha256": "8c27d22c644a2444177775dfb23d3f2f8c891a3a39ebacf0456dc3f74f97644a",
+      "bytes": 76277
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
