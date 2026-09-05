@@ -332,6 +332,11 @@ func (r *Runtime) DAG() dag.Graph { return r.dagGraph }
 
 func (r *Runtime) InstanceID() string { return r.runtimeInstanceID }
 
+// ProjectID returns the canonical local project identifier that runtime records
+// are written under. Callers that read project-scoped rows must use this rather
+// than assuming a label, or they will query an identifier that holds no rows.
+func (r *Runtime) ProjectID() string { return localProjectID }
+
 // SubmitHandoff is the sole runtime path for accepting typed inter-agent
 // handoff state. A2A and future CLI callers must not write typed_handoffs
 // directly.

@@ -59,6 +59,35 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 			return "Invalid mode. Supported modes: manual, auto, ultra", nil
 		}
 
+	case "/status":
+		return h.handleStatus(ctx)
+
+	case "/inspect":
+		if len(parts) < 2 {
+			return "Usage: /inspect [claim|evidence|checkpoint|task|handoff|approval] <id>", nil
+		}
+		if len(parts) >= 3 {
+			return h.handleInspect(ctx, parts[1], parts[2])
+		}
+		return h.handleInspect(ctx, "", parts[1])
+
+	case "/approve":
+		id := ""
+		if len(parts) >= 2 {
+			id = parts[1]
+		}
+		return h.handleApprove(ctx, id)
+
+	case "/reject":
+		id := ""
+		if len(parts) >= 2 {
+			id = parts[1]
+		}
+		return h.handleReject(ctx, id)
+
+	case "/route":
+		return h.handleRoute(ctx, parts[1:])
+
 	case "/agents", "/roster":
 		return h.handleAgents(ctx)
 
@@ -472,11 +501,16 @@ func (h *CommandHandler) handleCancel(ctx context.Context) (string, error) {
 
 func (h *CommandHandler) helpText() string {
 	return `MARSHAL Terminal Workspace Commands:
+  /status                  Show canonical session, goal, team, claim, budget, and termination status
   /goal [outcome]          View or update the active GoalContract
   /mode [manual|auto|ultra] Switch operating supervision mode
   /agents                  List registered participants, fixed roles, and harnesses
   /claims                  List active claims and epistemic verification states
+  /inspect [kind] <id>     Inspect a claim, evidence, checkpoint, task, handoff, or approval
   /evidence <id>           Inspect evidence item details and linked claims
+  /approve [approval_id]   Grant a pending approval through the policy approval store
+  /reject [approval_id]    Deny a pending approval and record the decision durably
+  /route [key=value ...]   Show or recompute the ULTRA route (role, harness, risk)
   /why                     Explain ULTRA routing decisions (harness, model, effort)
   /msg <agent|all> <text>  Send operator guidance to the team or a specific agent
   /handoff <role> <summary> Transfer active turn to the target role

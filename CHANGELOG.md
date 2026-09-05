@@ -15,6 +15,8 @@
   - Live interactive TUI (`marshal tui` or default empty-arg project invocation) over canonical SQLite state with silence-by-default chatter reduction.
   - One-screen dashboard for Goal, active participants, claims, budget tracking, blocker management, and work ownership.
   - Operator controls for pause, resume, cancel, approval prompt resolution, checkpoint rollback, and inspectable routes.
+  - Interactive commands: `/status`, `/goal`, `/mode`, `/agents`, `/claims`, `/inspect`, `/evidence`, `/why`, `/route`, `/msg`, `/handoff`, `/approve`, `/reject`, `/checkpoint`, `/rollback`, `/budget`, `/pause`, `/resume`, `/cancel`, `/help`, `/quit`.
+  - `/approve` and `/reject` resolve real pending records through the canonical policy approval store under compare-and-set revisions; `/route` recomputes plans through the ULTRA routing layer rather than reporting a cached string.
 - **Real Multi-Agent Collaboration Runtime**:
   - Fixed-role collaborative sessions (`architect`, `developer`, `qa`, `appsec`) across Claude CLI, OpenAI Codex, OpenCode, and Antigravity.
   - Peer discovery across process restarts, typed challenge/question protocols, and lease-governed work ownership.

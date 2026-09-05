@@ -19,6 +19,7 @@ and second-wave trust hardening.
   - Live terminal-first collaborative workspace (`marshal tui` or default empty-arg project launch) over canonical SQLite state with silence-by-default chatter reduction.
   - Real-time dashboard displaying Goal revision, active participants, claims, budget tracking, blocker management, and work ownership.
   - Interactive operator controls for pause/resume/cancel, approval decision prompts, checkpoint rollback, and inspectable routes.
+  - Interactive commands: `/status`, `/goal`, `/mode`, `/agents`, `/claims`, `/inspect`, `/evidence`, `/why`, `/route`, `/msg`, `/handoff`, `/approve`, `/reject`, `/checkpoint`, `/rollback`, `/budget`, `/pause`, `/resume`, `/cancel`, `/help`, `/quit`. Each is dispatched by `internal/tui/commands.go` and covered by tests in `internal/tui/`.
 - **Real Multi-Agent Collaboration**:
   - Fixed-role collaborative sessions across Claude CLI (Architect), OpenAI Codex (Core Developer), OpenCode (QA/Verifier), and Google Antigravity (Integration Developer).
   - Cross-restart peer discovery, typed agent-to-agent challenge/question/handoff path, and lease-governed work ownership.

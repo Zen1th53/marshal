@@ -20,6 +20,6 @@ func (c *command) tui(ctx context.Context, args []string) error {
 		sessionID = args[0]
 	}
 
-	ws := tui.NewWorkspace(rt.Store(), "current", sessionID)
+	ws := tui.NewWorkspace(rt.Store(), rt.ProjectID(), sessionID)
 	return ws.Run(ctx, c.stdin, c.stdout)
 }

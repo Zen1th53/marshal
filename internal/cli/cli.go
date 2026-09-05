@@ -98,7 +98,7 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		rt, err := app.Open(ctx, c.root)
 		if err == nil && rt != nil {
 			defer rt.Close()
-			ws := tui.NewWorkspace(rt.Store(), "current", "default-session")
+			ws := tui.NewWorkspace(rt.Store(), rt.ProjectID(), "default-session")
 			if err := ws.Run(ctx, c.stdin, c.stdout); err != nil {
 				fmt.Fprintln(stderr, err)
 				return exitCode(err)

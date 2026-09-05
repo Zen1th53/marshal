@@ -497,8 +497,8 @@ func TestE2E_13_TUIRuntimeSessionLifecycle(t *testing.T) {
 	st, ctx := setupTestStore(t)
 	ws := tui.NewWorkspace(st, "proj-13", "sess-13")
 
-	// Set goal -> Mode auto -> Intervention -> Exit
-	in := strings.NewReader("/goal Deliver release-ready v1.5.0\n/mode auto\n/msg all Proceed with QA verification\n/quit\n")
+	// Set goal -> Mode auto -> Status -> Claims -> Route -> Intervention -> Exit
+	in := strings.NewReader("/goal Deliver release-ready v1.5.0\n/mode auto\n/status\n/claims\n/route role=qa\n/msg all Proceed with QA verification\n/quit\n")
 	var out bytes.Buffer
 
 	if err := ws.Run(ctx, in, &out); err != nil {
@@ -511,5 +511,22 @@ func TestE2E_13_TUIRuntimeSessionLifecycle(t *testing.T) {
 	}
 	if len(state.RecentMessages) != 1 {
 		t.Fatalf("expected 1 operator message in recent messages, got %d", len(state.RecentMessages))
+	}
+
+	// Each command the release evidence names must actually be handled, not fall
+	// through to the unknown-command branch.
+	rendered := out.String()
+	if strings.Contains(rendered, "Unknown command") {
+		t.Fatalf("TUI rejected a documented command:\n%s", rendered)
+	}
+	for _, want := range []string{
+		"CANONICAL STATUS DETAIL",
+		"Deliver release-ready v1.5.0",
+		"No claims registered under the active goal.",
+		"ULTRA ROUTE RECOMPUTED (role=qa)",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("expected %q in TUI session output:\n%s", want, rendered)
+		}
 	}
 }
