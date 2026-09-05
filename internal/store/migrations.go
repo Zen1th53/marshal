@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 73
+const LatestSchemaVersion = 74
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -1830,6 +1830,53 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 73: %w", err)
 		}
 		version = 73
+	}
+	if version < 74 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS claims (
+				claim_id                    TEXT PRIMARY KEY,
+				goal_id                     TEXT NOT NULL,
+				goal_revision               INTEGER NOT NULL,
+				subject                     TEXT NOT NULL,
+				normalized_text             TEXT NOT NULL,
+				scope                       TEXT NOT NULL,
+				criticality                 TEXT NOT NULL CHECK(criticality IN ('CRITICAL_BLOCKER', 'CRITICAL_FEATURE', 'STANDARD', 'INFORMATIONAL')),
+				state                       TEXT NOT NULL CHECK(state IN ('UNSUPPORTED', 'SUPPORTED', 'VERIFIED', 'CONTESTED', 'STALE', 'INVALIDATED')),
+				predecessor_id              TEXT NOT NULL DEFAULT '',
+				supersedes_id               TEXT NOT NULL DEFAULT '',
+				author_provenance_json      TEXT NOT NULL DEFAULT '{}',
+				supporting_evidence_json    TEXT NOT NULL DEFAULT '[]',
+				contradicting_evidence_json TEXT NOT NULL DEFAULT '[]',
+				source_clusters_json        TEXT NOT NULL DEFAULT '[]',
+				binding_json                TEXT NOT NULL DEFAULT '{}',
+				state_reason                TEXT NOT NULL DEFAULT '',
+				created_at                  TEXT NOT NULL,
+				updated_at                  TEXT NOT NULL,
+				evaluated_at                TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_claims_goal ON claims(goal_id, goal_revision);
+			CREATE INDEX IF NOT EXISTS idx_claims_state ON claims(state);
+			CREATE INDEX IF NOT EXISTS idx_claims_criticality ON claims(criticality);
+			CREATE INDEX IF NOT EXISTS idx_claims_scope ON claims(scope);
+
+			CREATE TABLE IF NOT EXISTS claim_transitions (
+				transition_id         TEXT PRIMARY KEY,
+				claim_id              TEXT NOT NULL REFERENCES claims(claim_id) ON DELETE CASCADE,
+				from_state            TEXT NOT NULL CHECK(from_state IN ('UNSUPPORTED', 'SUPPORTED', 'VERIFIED', 'CONTESTED', 'STALE', 'INVALIDATED')),
+				to_state              TEXT NOT NULL CHECK(to_state IN ('UNSUPPORTED', 'SUPPORTED', 'VERIFIED', 'CONTESTED', 'STALE', 'INVALIDATED')),
+				reason                TEXT NOT NULL,
+				actor_provenance_json TEXT NOT NULL DEFAULT '{}',
+				evidence_ref_json     TEXT NOT NULL DEFAULT '{}',
+				timestamp             TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_claim_transitions_claim_id ON claim_transitions(claim_id, timestamp);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 74: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(74, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 74: %w", err)
+		}
+		version = 74
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

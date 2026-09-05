@@ -3335,6 +3335,16 @@
       "bytes": 2322
     },
     {
+      "path": "internal/model/goal.go",
+      "sha256": "2d9dbf3dd95195f33dc4cee02bd5e1c386fd75ec54dec36e3f7502aadab85340",
+      "bytes": 8073
+    },
+    {
+      "path": "internal/model/goal_test.go",
+      "sha256": "75f550993550aba505c812706ef9fcffbb5413dbfe0cfc8b0696982567c1b454",
+      "bytes": 7150
+    },
+    {
       "path": "internal/model/identity.go",
       "sha256": "df467ad694fa9aa401e8a0d8fca67394876dc13df9a9f0b7a62d23bfb121c10c",
       "bytes": 2057
@@ -4230,6 +4240,16 @@
       "bytes": 1915
     },
     {
+      "path": "internal/store/goal.go",
+      "sha256": "df4f726142c6c5cb6365489c3cac513a8e27c832ad0184f770cdb04b9e7b6b7a",
+      "bytes": 10601
+    },
+    {
+      "path": "internal/store/goal_test.go",
+      "sha256": "3e72de85987b93238aaaff45ae36bbf0cb8a3c7206115777678dd3a7c284634e",
+      "bytes": 6628
+    },
+    {
       "path": "internal/store/identity.go",
       "sha256": "3c017138372fde7b6137e4ce87a0784119ad5568dc626d177ab1eef9b1d1bf06",
       "bytes": 13325
@@ -4316,8 +4336,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "40fe454a70ac1364aeb56fe5f1f87d2e39525af895ce395d482a0510d6499150",
-      "bytes": 71044
+      "sha256": "c9da32be055a61163df208f1e29aaa9a9777f578a56d186512d911a9064a809f",
+      "bytes": 73663
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
