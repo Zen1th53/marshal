@@ -10,8 +10,9 @@ const mockProvidersData = {
     {
       id: 'anthropic',
       name: 'Anthropic Claude',
-      class: 'cloud',
-      probe_status: 'healthy',
+      class: 'cloud' as const,
+      enabled: true,
+      probe_status: 'healthy' as const,
       capabilities: ['reasoning', 'tool_use'],
       models: [
         {
@@ -21,6 +22,12 @@ const mockProvidersData = {
         },
       ],
       last_probed_at: '2026-08-20T00:00:00Z',
+      secret_ref: {
+        configured: true,
+        ref_name: 'sec-anthropic-auth',
+        provider: 'env',
+        version: '1',
+      },
     },
   ],
   routing_decisions: [

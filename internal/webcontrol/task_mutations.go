@@ -53,9 +53,18 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 
 	risk := strings.ToUpper(payload.Risk)
 	if risk == "" {
-		risk = "LOW"
+		risk = "R1"
 	}
-	if risk != "LOW" && risk != "MEDIUM" && risk != "HIGH" && risk != "CRITICAL" {
+	switch risk {
+	case "R0", "LOW":
+		risk = "R0"
+	case "R1", "MEDIUM":
+		risk = "R1"
+	case "R2", "HIGH":
+		risk = "R2"
+	case "R3", "CRITICAL":
+		risk = "R3"
+	default:
 		writeError(w, http.StatusBadRequest, "validation_failed", "Invalid risk level: "+payload.Risk, "")
 		return
 	}

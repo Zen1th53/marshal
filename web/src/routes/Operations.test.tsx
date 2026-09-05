@@ -37,6 +37,21 @@ const mockResources = {
 describe('Operations Route (T209)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(api, 'listBackups').mockResolvedValue({ backups: [], total_count: 0 });
+    vi.spyOn(api, 'listMaintenanceJobs').mockResolvedValue({ jobs: [], total_count: 0 });
+    vi.spyOn(api, 'getReleaseTrust').mockResolvedValue({
+      binary_commit_sha: 'abc1234',
+      source_repo: 'BlackArch/marshal',
+      pack_manifest_status: 'verified',
+      pack_manifest_digest: 'sha256:1111',
+      sbom_status: 'valid',
+      sbom_format: 'CycloneDX',
+      signing_status: 'signed',
+      signer_identity: 'Zen1th53',
+      reproducibility_status: 'bit-exact',
+      artifacts: [],
+      evaluated_at: '2026-08-20T00:00:00Z',
+    });
   });
 
   it('renders system health overview and diagnostic checks', async () => {

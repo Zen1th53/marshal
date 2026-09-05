@@ -61,3 +61,62 @@ func TestT182AgentsListAndDetail(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentCRUDLifecycleWeb(t *testing.T) {
+	client := newAuthenticatedTestClient(t, "admin")
+
+	// 1. Create Agent
+	createPayload := webcontrol.MutationEnvelope[webcontrol.CreateAgentPayload]{
+		Payload: webcontrol.CreateAgentPayload{
+			ID:           "agent-test-custom",
+			Name:         "Custom Testing Agent",
+			Role:         "developer",
+			Provider:     "claude",
+			Model:        "claude-3-7-sonnet",
+			Capabilities: []string{"code_edit", "test_execute"},
+		},
+	}
+	body, _ := json.Marshal(createPayload)
+	reqCreate := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(string(body)))
+	reqCreate.Header.Set("Content-Type", "application/json")
+	wCreate := client.Do(reqCreate)
+	if wCreate.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for agent creation, got: %d: %s", wCreate.Code, wCreate.Body.String())
+	}
+
+	var created webcontrol.AgentDetailDTO
+	_ = json.NewDecoder(wCreate.Body).Decode(&created)
+	if created.ID != "agent-test-custom" || created.Name != "Custom Testing Agent" {
+		t.Fatalf("unexpected created agent: %+v", created)
+	}
+
+	// 2. Update Agent
+	newName := "Renamed Testing Agent"
+	updatePayload := webcontrol.MutationEnvelope[webcontrol.UpdateAgentPayload]{
+		ExpectedRevision: 0,
+		Payload: webcontrol.UpdateAgentPayload{
+			Name: &newName,
+		},
+	}
+	bodyUpdate, _ := json.Marshal(updatePayload)
+	reqUpdate := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-test-custom", strings.NewReader(string(bodyUpdate)))
+	reqUpdate.Header.Set("Content-Type", "application/json")
+	wUpdate := client.Do(reqUpdate)
+	if wUpdate.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for agent update, got: %d: %s", wUpdate.Code, wUpdate.Body.String())
+	}
+
+	// 3. Delete Agent
+	reqDelete := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-test-custom?expected_revision=1", nil)
+	wDelete := client.Do(reqDelete)
+	if wDelete.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for agent deletion, got: %d: %s", wDelete.Code, wDelete.Body.String())
+	}
+
+	// 4. Verify Not Found after deletion
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-test-custom", nil)
+	wGet := client.Do(reqGet)
+	if wGet.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 Not Found after deletion, got: %d", wGet.Code)
+	}
+}

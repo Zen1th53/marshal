@@ -59,12 +59,174 @@ export interface AgentSummaryDTO {
   provider?: string;
   model?: string;
   status: string;
+  revision?: number;
   capabilities?: string[];
   current_task_id?: string;
   completed_task_count?: number;
   last_heartbeat?: string;
   created_at: string;
 }
+
+export interface AgentDetailDTO {
+  id: string;
+  name: string;
+  role: string;
+  provider: string;
+  model: string;
+  status: string;
+  revision: number;
+  capabilities: string[];
+  current_task_id?: string;
+  current_run_id?: string;
+  completed_task_count: number;
+  failed_task_count: number;
+  last_heartbeat: string;
+  created_at: string;
+  memory_contributions?: {
+    episodes_extracted: number;
+    decisions_logged: number;
+    facts_asserted: number;
+  };
+}
+
+export interface CreateAgentPayload {
+  id?: string;
+  name: string;
+  role: string;
+  provider?: string;
+  model?: string;
+  capabilities?: string[];
+  status?: string;
+}
+
+export interface UpdateAgentPayload {
+  name?: string;
+  provider?: string;
+  model?: string;
+  capabilities?: string[];
+  status?: string;
+}
+
+export interface ActiveModelDTO {
+  id: string;
+  context_window: number;
+  latency_p95_ms: number;
+}
+
+export interface SecretRefMetadataDTO {
+  configured: boolean;
+  ref_name: string;
+  provider: string;
+  version: string;
+}
+
+export interface ProviderDTO {
+  id: string;
+  name: string;
+  class: 'cloud' | 'local';
+  enabled: boolean;
+  endpoint_url?: string;
+  probe_status: 'healthy' | 'degraded' | 'unavailable' | 'not_run';
+  capabilities: string[];
+  models: ActiveModelDTO[];
+  last_probed_at: string;
+  secret_ref: SecretRefMetadataDTO;
+}
+
+export interface RouterDecisionDTO {
+  intent: string;
+  selected_model: string;
+  provider_id: string;
+  rationale: string;
+  is_pinned: boolean;
+}
+
+export interface ProviderInventoryResponseDTO {
+  providers: ProviderDTO[];
+  routing_decisions: RouterDecisionDTO[];
+  last_evaluated_at: string;
+}
+
+export interface UpdateProviderPayload {
+  enabled?: boolean;
+  endpoint_url?: string;
+  models?: string[];
+}
+
+export interface SetProviderSecretPayload {
+  secret_key?: string;
+  env_var?: string;
+  version?: string;
+}
+
+export interface PolicyDraftDTO {
+  policy_id: string;
+  version: number;
+  yaml_content: string;
+  rules_count: number;
+  digest: string;
+  status: 'draft' | 'validated';
+  updated_at: string;
+}
+
+export interface PolicyRuleDiffDTO {
+  type: 'added' | 'removed' | 'modified' | 'unchanged';
+  rule_id: string;
+  old_description?: string;
+  new_description?: string;
+  old_effect?: string;
+  new_effect?: string;
+  changes?: string[];
+}
+
+export interface PolicyDiffDTO {
+  active_policy_id: string;
+  active_version: number;
+  active_digest: string;
+  draft_version: number;
+  draft_digest: string;
+  has_changes: boolean;
+  rule_diffs: PolicyRuleDiffDTO[];
+}
+
+export interface PolicyValidationResultDTO {
+  valid: boolean;
+  digest?: string;
+  rules_count: number;
+  errors?: string[];
+  warnings?: string[];
+}
+
+export interface GateRuleDTO {
+  id: string;
+  name: string;
+  enforcement: string;
+  status: string;
+  description: string;
+  last_evaluated_at: string;
+}
+
+export interface CapabilityPolicyRuleDTO {
+  capability_name: string;
+  required_role: string;
+  decision: string;
+  denial_reason?: string;
+}
+
+export interface SecurityPolicyInspectorResponseDTO {
+  policy_id: string;
+  revision: number;
+  digest?: string;
+  global_risk_level: string;
+  degraded_controls: string[];
+  gate_rules: GateRuleDTO[];
+  capability_rules: CapabilityPolicyRuleDTO[];
+  active_draft?: PolicyDraftDTO;
+  history_count?: number;
+  last_audited_at: string;
+}
+
+export type RiskLevel = 'R0' | 'R1' | 'R2' | 'R3' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface TaskSummaryDTO {
   id: string;
