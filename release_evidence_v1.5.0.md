@@ -2,6 +2,7 @@
 
 **Release Date:** 2026-09-05  
 **Release Version:** v1.5.0  
+**Evidence Commit:** `c832705` — every gate below was executed against this exact tree. Results from earlier commits are not carried forward.  
 **Target Schema:** SQLite Schema v79  
 **Pack Version:** 6.0.0  
 **Architecture:** Linux x86_64, arm64  
@@ -39,13 +40,24 @@ MARSHAL v1.5.0 successfully delivers:
 |---|---|---|---|---|
 | GATE-GO-VET | Static analysis & linting | `go vet ./...` | Clean exit (code 0, zero warnings) | **PASS** |
 | GATE-GO-TEST | Core Go test suites | `go test ./...` | All packages passed | **PASS** |
-| GATE-GO-STORE | Store concurrency & SQLite retry | `go test ./internal/store/...` | Contention and lock retry passed (15.26s) | **PASS** |
+| GATE-GO-STORE | Store concurrency & SQLite retry | `go test ./internal/store/...` | Contention and lock retry passed | **PASS** |
 | GATE-E2E-13 | 13 Heterogeneous Scenarios | `go test -v -run TestE2E_ ./internal/integration/...` | 13/13 scenarios passed | **PASS** |
 | GATE-WEB-TEST | Web control plane test suite | `npm --prefix web run test:run` | 51 test suites, 118 tests passed | **PASS** |
-| GATE-WEB-BUILD | Web control plane build | `npm --prefix web run build` | TypeScript checked, Vite built in 518ms | **PASS** |
+| GATE-WEB-BUILD | Web control plane build | `npm --prefix web run build` | TypeScript checked, Vite bundle emitted | **PASS** |
 | GATE-PY-TOOLS | Release trust & install smoke | `python3 -m unittest discover tools/tests` | 8 tests passed (reproducible build, SBOM, install) | **PASS** |
 | GATE-MANIFEST | Pack manifest verification | `python3 tools/release_verify.py . distribution/PACK-MANIFEST.json` | Status PASS, zero errors | **PASS** |
-| GATE-CLEAN-INSTALL | Clean install from binary | `test_clean_install.py` | Init, doctor, daemon, backup, restore verified | **PASS** |
+| GATE-TUI-LIVE | Interactive TUI command surface | `marshal tui` driven from a real binary against a live SQLite project | 17 commands dispatched, zero unknown-command responses; approval decisions verified in SQLite | **PASS** |
+| GATE-CLEAN-INSTALL | Clean install from binary | `test_clean_install.py` | Covered by GATE-PY-TOOLS (init, doctor, daemon, backup, restore) | **PASS** |
+
+### Gate Correction Notice
+
+An earlier revision of this report recorded GATE-GO-TEST and GATE-MANIFEST as
+PASS for commit `7052197`. Both were re-run against that exact commit and both
+failed: the embedded `internal/app/defaults/RUNTIME-VERSION.yaml` was still at
+v1.0.1, and `distribution/PACK-MANIFEST.json` carried a stale hash plus two
+unlisted release documents. The defects were fixed in `b984204` and `e528797`
+respectively, and the table above reflects re-execution against `c832705`. A
+gate result is only valid for the commit it was executed against.
 
 ---
 
@@ -65,25 +77,87 @@ All 13 scenarios implemented in `internal/integration/v15_release_e2e_test.go` e
 10. **TestE2E_10_HarnessNativeOptimizationRoute**: ULTRA router selects optimal native flags and reasoning effort based on installed version probe.
 11. **TestE2E_11_AntigravityFirstClassExecution**: Antigravity harness executes code writing in an isolated cell and produces verified evidence.
 12. **TestE2E_12_ProviderVersionDriftFallback**: Harness intelligence detects version drift and falls back safely to baseline configuration.
-13. **TestE2E_13_TUIRuntimeSessionLifecycle**: TUI workspace boots, processes `/status`, `/claims`, `/msg`, and survives reload.
+13. **TestE2E_13_TUIRuntimeSessionLifecycle**: TUI workspace boots, processes `/goal`, `/mode`, `/status`, `/claims`, `/route` and `/msg`, asserts that no documented command falls through to the unknown-command branch, and survives reload.
 
 ---
 
 ## 4. Provider Qualification & Network Tests
 
-| Provider | Probe Status | Model / Contract Integration | Live External Network Test |
-|---|---|---|---|
-| Claude Code | PASS (Local CLI detected) | PASS | NOT_RUN (Requires live authenticated API key) |
-| OpenAI Codex | PASS (Local CLI detected) | PASS | NOT_RUN (Requires live authenticated API key) |
-| OpenCode | PASS (Local binary detected) | PASS | NOT_RUN (Local Ollama daemon not running) |
-| Antigravity | PASS (Host environment detected) | PASS | PASS (Subprocess execution cell) |
-| Gemini CLI | NOT_AVAILABLE (Binary not on PATH) | NOT_RUN | NOT_RUN |
+Probes were executed with `marshal adapter probe <name>` against the release
+binary. "Standalone live" means the provider CLI was invoked directly and
+returned a correct completion. "Live through MARSHAL" means a task was executed
+end to end via `marshal run`.
+
+| Provider | Probe Status | Version Observed | Standalone Live | Live through MARSHAL |
+|---|---|---|---|---|
+| Claude Code | PASS (local CLI detected) | 2.1.261 | PASS | BLOCKED (sandbox egress) |
+| OpenAI Codex | PASS (local CLI detected) | codex-cli 0.149.1 | PASS | BLOCKED (sandbox egress) |
+| OpenCode | PASS (local binary detected) | 1.18.22 | PASS | BLOCKED (sandbox egress) |
+| Antigravity | PASS (host IDE detected) | IDE 2.0.11; `agy` CLI absent | NOT_RUN | NOT_RUN |
+| Gemini CLI | NOT_AVAILABLE (binary not on PATH) | — | NOT_RUN | NOT_RUN |
+
+**BLOCKED (sandbox egress).** `marshal run` executes each provider inside a
+bubblewrap sandbox. Because MARSHAL cannot enforce per-endpoint egress rules,
+`egressEnforcementAvailable()` returns false and the sandbox is constructed with
+`--unshare-net`, denying network entirely rather than silently broadening to
+unrestricted host networking. A provider that needs API access therefore blocks
+inside the cell. This was observed directly: MARSHAL created the isolated
+worktree, launched a real sandboxed `codex exec` process, and the task remained
+in `working` until cancelled. This is the documented fail-closed design, not a
+regression, and `marshal cancel` reclaimed the task correctly. Live
+heterogeneous collaboration through `marshal run` therefore remains **BLOCKED**
+in this environment and is not claimed as PASS.
+
+**Antigravity NOT_RUN.** `adapters/antigravity/ADAPTER.md` specifies the `agy`
+CLI with `agy exec` headless mode. `agy` is not installed; the binary on PATH
+resolves to the Antigravity Electron IDE (v2.0.11), which opens a desktop
+window rather than serving headless execution. The previous revision of this
+report recorded Antigravity's live external network test as PASS. That claim is
+withdrawn: no headless Antigravity execution was performed.
+
+---
+
+## 4a. TUI Command Surface Verification
+
+Executed by driving the real `marshal tui` binary built from the evidence commit
+against a live SQLite project, with two pending approval records seeded into the
+canonical `approvals` table.
+
+| Command | Observed Behaviour | Status |
+|---|---|---|
+| `/status` | Rendered project, session, goal, understanding, termination, claim counts, team, budget, pending approvals; counts changed as underlying state changed | **PASS** |
+| `/goal` | Created and read back GoalContract revision 1 | **PASS** |
+| `/agents` | Listed 4 fixed-role participants with harness and model | **PASS** |
+| `/claims` | Reported claim set for the active goal | **PASS** |
+| `/inspect` | Resolved checkpoint and approval records; inferred record kind; reported absence for an unknown id | **PASS** |
+| `/evidence` | Resolved evidence against claim ledger | **PASS** |
+| `/why` | Reported ULTRA routing explanation | **PASS** |
+| `/route` | Recomputed plans through the ULTRA router: `role=qa` selected opencode/deepseek-coder, `role=appsec risk=R3` selected antigravity/gemini-2.5-pro | **PASS** |
+| `/msg` | Persisted an operator message to the collaborative session | **PASS** |
+| `/approve` | With 2 pending, refused to guess and listed both; `/approve APR-1` granted with expiry, revision 1 | **PASS** |
+| `/reject` | `/reject APR-2` denied and retained the record without expiry, revision 1 | **PASS** |
+| `/checkpoint` | Created a durable handoff checkpoint | **PASS** |
+| `/rollback` | Restored from a persisted checkpoint by id | **PASS** |
+| `/budget` | Reported token, cost, call, handoff and wall-clock consumption | **PASS** |
+| `/pause`, `/resume` | Transitioned collaborative session status | **PASS** |
+| `/cancel` | Recorded CANCELLED termination, reflected by a subsequent `/status` | **PASS** |
+
+Zero commands returned `Unknown command`. Approval outcomes were confirmed
+against SQLite ground truth rather than terminal output alone:
+
+```
+('APR-1', 'approved', 'operator', '2026-09-05T18:59:16.82440633Z', 1)
+('APR-2', 'denied',   'operator', None,                            1)
+```
+
+Both `marshal tui` and the default empty-argument project invocation were
+launched from the release binary and rendered the workspace.
 
 ---
 
 ## 5. Known Limitations & Rollback
 
-- **Network Sandboxing**: Bubblewrap enforces strict `--unshare-net` isolation. Fine-grained host allowlisting requires upstream proxy configuration.
+- **Network Sandboxing**: Bubblewrap enforces strict `--unshare-net` isolation. Fine-grained host allowlisting requires upstream proxy configuration. Consequence: a provider requiring API egress cannot complete a `marshal run` execution cell until an egress-filtering proxy is wired. This is fail-closed by design (see `egressEnforcementAvailable`), and it is why live provider execution is recorded as BLOCKED rather than PASS in section 4.
 - **Autonomy Gates**: ModelTaskTrust scores require >= 10 verified historical tasks before full automated review bypass is granted.
 - **Rollback Procedure**:
   - Roll back to v1.0.1: Restore SQLite backup from `.marshal/backups/`, switch binary to v1.0.1.
