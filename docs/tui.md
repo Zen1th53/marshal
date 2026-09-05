@@ -48,11 +48,14 @@ marshal
 
 ---
 
-## 100% Dynamic Subsystem Intelligence
+## Dynamic Subsystem Intelligence
 
-The TUI reflects live, canonical MARSHAL runtime state. It **never** fabricates or hardcodes models, agents, versions, or claim statuses:
+The TUI reflects live, canonical MARSHAL runtime state. It does not fabricate or
+hardcode models, agents, versions, or claim statuses:
 
 - **Honest Harness Probing**: Probes actual host binaries (`codex`, `claude`, `opencode`, `agy`). If a binary is missing (e.g. `agy`), it displays honest fallback: `UNAVAILABLE (agy not found)`.
+- **No Invented Models**: The probe establishes whether a harness binary exists and what version it reports. It cannot read that harness's configured model, so the model column shows `UNKNOWN` for an installed harness and `UNAVAILABLE` for an absent one. A specific model name appears only when the collaboration session actually records one. `TestNoFabricatedModelsInDiscovery` and the PTY suite enforce this.
+- **Honest Provider State**: `/provider status` reports probe results only. Presence of a binary is never reported as proof of authentication; credentials are `UNKNOWN` until an execution establishes otherwise.
 - **Live Git State**: Directly inspects the current repository worktree for branch name, commit SHA, and uncommitted modification counts.
 - **Silence-by-Default Chatter Filtering**: High-frequency tool noise and chatter are collapsed into structured summary cards rather than flooding the conversation workspace.
 - **Canonical 6-Core Integration**: Direct access to Epistemic Claim Graph, Alignment Guard, Blind Interpretation, Checkpoints & Rollback, Budgets, and Re-injection.
@@ -91,7 +94,7 @@ Autocomplete dynamically queries live runtime state:
 
 ### Universal Command Palette (`Ctrl+P`)
 
-Press `Ctrl+P` anywhere in the TUI to open the fuzzy-searchable Command Palette. All 100 MARSHAL capabilities are indexed with category badges:
+Press `Ctrl+P` anywhere in the TUI to open the fuzzy-searchable Command Palette. Every capability in the registry is indexed with category badges:
 - Type to filter actions.
 - Use `↑` and `↓` to navigate candidates.
 - Press `Enter` to execute the selected command.
@@ -106,7 +109,7 @@ Press `d` from normal navigation mode to inspect unstaged/staged working tree ch
 
 ### Safe Interrupt & Exit
 
-- `Ctrl+C`: Opens a safe interrupt dialogue if an operation or agent execution is running, preventing accidental process death and preserving durable session state.
+- `Ctrl+C`: Interrupts rather than quits. It closes an open overlay first, then clears pending composer input; only a second consecutive press with nothing left to interrupt exits, and any other key disarms that. Durable session state survives either way.
 - `/quit` or `Ctrl+D`: Cleanly exits the TUI without terminating durable background daemon tasks.
 
 ---
@@ -156,8 +159,11 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/budget [amount]` — Inspect or update token/cost/time budget limits.
 - `/checkpoint [name]` — Create durable checkpoint of worktree and epistemic state.
 - `/rollback [id]` — Roll back worktree and claims to a prior checkpoint.
+- `/approvals` — List approvals awaiting a decision; `/approvals history` shows past decisions.
+- `/approval inspect <id>` — Inspect one approval record; `/approval diff <id>` shows its commit binding and the live working tree.
 - `/approve [id]` — Approve pending high-risk action or out-of-scope write.
 - `/reject [id]` — Reject pending approval request.
+- `/termination` — Inspect the canonical termination state and reason for the active goal.
 
 ### Security, Sandbox & Providers
 - `/policy` — Inspect capability broker, network egress, and gate policies.
@@ -165,5 +171,41 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/provider [name]` — Inspect or configure LLM provider connection health.
 - `/memory` — Query durable memory fabric records and search projections.
 - `/backup` — Create SQLite database snapshot.
-- `/export` — Export structured evidence bundle and audit ledger.
+- `/export` — Write a real evidence bundle to `.marshal/evidence/`, carrying the active goal, its critical claims and evidence refs, and a deterministic digest.
+- `/context` — Show the context strategy the ULTRA router derives from the current role and risk.
 - `/help` — Display interactive help and keybinding summary.
+
+---
+
+## Verification and Known Limitations
+
+The TUI is verified by a pseudo-terminal (PTY) conformance suite in
+`internal/tui/pty_conformance_test.go`. It builds the real binary, attaches it to
+an actual terminal, writes raw key bytes, and reads what the program draws. A
+command counts as operable only when it dispatches there, and every slash command
+the capability registry advertises is driven through that suite.
+
+Honest states carried by the TUI:
+
+| State | Meaning |
+|---|---|
+| `UNKNOWN` | The value was not established (for example, an installed harness whose configured model MARSHAL cannot read). |
+| `UNAVAILABLE` | The dependency is absent (for example, `agy` not on `PATH`). |
+| `BLOCKED_BY_POLICY` | A security policy prevents the operation. |
+| `NOT_AVAILABLE` | The subsystem exposes no readable state to the TUI. |
+
+Current limitations, stated rather than hidden:
+
+- **Provider egress is blocked by design.** `marshal run` executes harnesses inside
+  a bubblewrap cell built with `--unshare-net`, because per-endpoint egress cannot
+  be enforced without a filtering proxy. A harness needing API access therefore
+  blocks inside the cell. This is fail-closed behaviour and is reported as
+  `BLOCKED_BY_POLICY`, never as availability.
+- **Antigravity headless execution is unavailable** unless the `agy` CLI is
+  installed. The Antigravity desktop IDE is not a headless harness.
+- **Failure fingerprints are not persisted.** The registry in `internal/epistemic`
+  is per-run and in-memory, so `/fingerprint` reports `NOT_AVAILABLE` rather than
+  asserting a clean result it cannot establish.
+- **Backup restore is not performed from a live session**, since it would swap the
+  database out from under an open workspace. `/backup restore` verifies the
+  artifact and directs the operator to the offline path.

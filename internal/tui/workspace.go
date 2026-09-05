@@ -34,6 +34,12 @@ type Workspace struct {
 	palette    *CommandPalette
 	diffViewer *DiffViewer
 	terminal   *Terminal
+	out        io.Writer
+
+	// interruptArmed records that a Ctrl+C arrived with nothing left to
+	// interrupt. A second consecutive press then exits; any other key disarms
+	// it, so a stray interrupt never closes the workspace on its own.
+	interruptArmed bool
 }
 
 // NewWorkspace instantiates a dynamic terminal workspace connected to the canonical store.
@@ -251,6 +257,7 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 // Supports full raw mode line editing, Tab autocomplete, Ctrl+P palette, diff viewer,
 // or clean fallback to buffered scanner if non-terminal.
 func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error {
+	w.out = out
 	_ = w.RefreshState(ctx)
 
 	// Check if running in a real interactive terminal
@@ -263,6 +270,9 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 }
 
 func (w *Workspace) runRawTerminal(ctx context.Context) error {
+	if w.out == nil {
+		w.out = os.Stdout
+	}
 	if err := w.terminal.MakeRaw(); err != nil {
 		return w.runLineScanner(ctx, os.Stdin, os.Stdout)
 	}
@@ -285,23 +295,43 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				continue
 			}
 
-			// Handle Ctrl+C safely
+			// Ctrl+C is an interrupt, not a quit. It unwinds the innermost
+			// context first: an open overlay, then pending composer input. Only
+			// when there is nothing left to interrupt does a second consecutive
+			// press exit, so a reflexive Ctrl+C never discards a session the
+			// operator is still working in.
 			if event.Type == KeyCtrlC {
 				if w.palette.IsOpen() {
 					w.palette.Close()
+					w.interruptArmed = false
 					w.renderFullView()
 					continue
 				}
 				if w.diffViewer.IsOpen() {
 					w.diffViewer.Close()
+					w.interruptArmed = false
 					w.renderFullView()
 					continue
 				}
-				// Safe exit prompt
+				if w.composer.Text() != "" {
+					w.composer.SetText("")
+					w.interruptArmed = false
+					w.renderFullView()
+					continue
+				}
+				if !w.interruptArmed {
+					w.interruptArmed = true
+					w.renderFullView()
+					fmt.Fprintln(w.out, "Press Ctrl+C again to exit, or /quit. The session stays durable either way.")
+					continue
+				}
 				w.terminal.ClearScreen()
-				fmt.Println("Exiting MARSHAL terminal workspace. Session remains durable.")
+				fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Session remains durable.")
 				return nil
 			}
+
+			// Any other key cancels a pending exit confirmation.
+			w.interruptArmed = false
 
 			// Handle Command Palette (Ctrl+P)
 			if event.Type == KeyCtrlP {

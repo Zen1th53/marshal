@@ -30,7 +30,7 @@ type Capability struct {
 	RequiresDep    string     // Optional external dependency e.g. "agy"
 }
 
-// CapabilityRegistry manages all 100 user-operable MARSHAL capabilities.
+// CapabilityRegistry manages the catalog of user-operable MARSHAL capabilities.
 type CapabilityRegistry struct {
 	capabilities map[string]Capability
 	orderedIDs   []string
@@ -101,7 +101,6 @@ type ParityAuditReport struct {
 	ReadOnlyCount     int
 	MutableCount      int
 	TUIMappedCount    int
-	TUITestedCount    int
 	CLIOnlyRemaining  int
 	WebOnlyRemaining  int
 	BlockedByDepCount int
@@ -120,9 +119,12 @@ func (r *CapabilityRegistry) AuditParity() ParityAuditReport {
 			report.MutableCount++
 		}
 
+		// Mapped means the capability names a TUI surface. It deliberately does
+		// not imply the surface was exercised: whether a command actually
+		// dispatches is established by TestEveryRegisteredCommandIsDispatched
+		// and the PTY conformance suite, not by a non-empty string here.
 		if cap.TUISurface != "" {
 			report.TUIMappedCount++
-			report.TUITestedCount++
 		} else {
 			if cap.CLISurface != "" {
 				report.CLIOnlyRemaining++
@@ -149,7 +151,6 @@ func (r *CapabilityRegistry) FormatAuditReport() string {
 	b.WriteString(fmt.Sprintf("Read-only:                     %d\n", rep.ReadOnlyCount))
 	b.WriteString(fmt.Sprintf("Mutable:                       %d\n", rep.MutableCount))
 	b.WriteString(fmt.Sprintf("TUI mapped:                    %d / %d\n", rep.TUIMappedCount, rep.TotalCapabilities))
-	b.WriteString(fmt.Sprintf("TUI tested:                    %d / %d\n", rep.TUITestedCount, rep.TotalCapabilities))
 	b.WriteString(fmt.Sprintf("CLI-only remaining:            %d\n", rep.CLIOnlyRemaining))
 	b.WriteString(fmt.Sprintf("Web-only remaining:            %d\n", rep.WebOnlyRemaining))
 	b.WriteString(fmt.Sprintf("Blocked by external dependency: %d\n", rep.BlockedByDepCount))
@@ -224,11 +225,27 @@ func registerAllCapabilities(r *CapabilityRegistry) {
 		Access: AccessRead, CLISurface: "marshal goal progress", WebSurface: "GET /api/goal/progress",
 		TUISurface: "/goal progress", KeyboardPath: "g p", PalettePath: "goal progress",
 	})
+	// Each lifecycle verb is registered separately: TUISurface names exactly one
+	// command so the palette, completion, and conformance harness can all parse
+	// it. A combined "a, b, c" surface parses as a single unknown command.
 	r.Register(Capability{
-		ID: "goal.lifecycle", Category: "GOAL", Name: "Goal Lifecycle Control",
-		Description: "Pause, resume, or cancel the active goal execution",
-		Access: AccessWrite, CLISurface: "marshal pause / resume / cancel", WebSurface: "POST /api/goal/lifecycle",
-		TUISurface: "/pause, /resume, /cancel", KeyboardPath: "g l", PalettePath: "goal pause resume cancel",
+		ID: "goal.pause", Category: "GOAL", Name: "Pause Goal",
+		Description: "Pause the active collaborative session",
+		Access: AccessWrite, CLISurface: "marshal pause", WebSurface: "POST /api/goal/pause",
+		TUISurface: "/pause", KeyboardPath: "g p", PalettePath: "goal pause",
+	})
+	r.Register(Capability{
+		ID: "goal.resume", Category: "GOAL", Name: "Resume Goal",
+		Description: "Resume a paused collaborative session",
+		Access: AccessWrite, CLISurface: "marshal resume", WebSurface: "POST /api/goal/resume",
+		TUISurface: "/resume", KeyboardPath: "g r", PalettePath: "goal resume",
+	})
+	r.Register(Capability{
+		ID: "goal.cancel", Category: "GOAL", Name: "Cancel Goal",
+		Description: "Cancel active goal execution and record termination",
+		Access: AccessWrite, CLISurface: "marshal cancel", WebSurface: "POST /api/goal/cancel",
+		TUISurface: "/cancel", KeyboardPath: "g c", PalettePath: "goal cancel",
+		IsDestructive: true,
 	})
 
 	// 2. Team & Collaboration Domain (10)

@@ -15,23 +15,40 @@ type HarnessDiscoveryResult struct {
 	BinaryPath  string
 	Installed   bool
 	Version     string
-	State       string // "AVAILABLE", "UNAVAILABLE", "NOT_CONFIGURED"
+	State       string // StateAvailable, StateUnavailable, "NOT_CONFIGURED"
 	Reason      string
 	Models      []string
 }
 
+// Honest state labels. The TUI renders these verbatim rather than inventing a
+// plausible-looking value, so an operator can always tell the difference
+// between a fact MARSHAL established and one it could not.
+const (
+	// UnknownModel is shown when a harness is present but the model it will
+	// serve has not been established from configuration or routing state.
+	UnknownModel = "UNKNOWN"
+	// UnavailableModel is shown when the harness itself is not installed.
+	UnavailableModel = "UNAVAILABLE"
+
+	StateAvailable   = "AVAILABLE"
+	StateUnavailable = "UNAVAILABLE"
+)
+
 // ProbeHarnesses performs live detection of external harnesses on the host system.
 // Absolute Non-Negotiable Rule: Never fabricate or hardcode availability or versions.
 func ProbeHarnesses() []HarnessDiscoveryResult {
+	// Only the harness identity and its binary name are known ahead of time. The
+	// model a harness will actually serve is decided by that harness's own
+	// configuration and credentials, which this probe cannot read, so no model
+	// list is asserted here. Callers render UnknownModel rather than guessing.
 	targets := []struct {
 		name       string
 		binaryName string
-		models     []string
 	}{
-		{name: "claude", binaryName: "claude", models: []string{"claude-3-7-sonnet", "claude-3-5-sonnet"}},
-		{name: "codex", binaryName: "codex", models: []string{"gpt-4o", "o3-mini", "o1"}},
-		{name: "opencode", binaryName: "opencode", models: []string{"deepseek-coder", "claude-3-7-sonnet"}},
-		{name: "antigravity", binaryName: "agy", models: []string{"gemini-2.5-pro", "gemini-2.5-flash"}},
+		{name: "claude", binaryName: "claude"},
+		{name: "codex", binaryName: "codex"},
+		{name: "opencode", binaryName: "opencode"},
+		{name: "antigravity", binaryName: "agy"},
 	}
 
 	var results []HarnessDiscoveryResult
@@ -42,8 +59,8 @@ func ProbeHarnesses() []HarnessDiscoveryResult {
 				HarnessName: tgt.name,
 				BinaryPath:  "",
 				Installed:   false,
-				Version:     "UNKNOWN",
-				State:       "UNAVAILABLE",
+				Version:     UnknownModel,
+				State:       StateUnavailable,
 				Reason:      fmt.Sprintf("Required harness executable %q not found on PATH", tgt.binaryName),
 				Models:      nil, // Do not fabricate models if binary is unavailable
 			})
@@ -57,9 +74,9 @@ func ProbeHarnesses() []HarnessDiscoveryResult {
 			BinaryPath:  path,
 			Installed:   true,
 			Version:     version,
-			State:       "AVAILABLE",
+			State:       StateAvailable,
 			Reason:      "Installed and executable",
-			Models:      tgt.models,
+			Models:      nil, // The probe cannot read the harness's configured model.
 		})
 	}
 
@@ -162,7 +179,7 @@ func DiscoverTeamParticipants(existing []model.Participant) []model.Participant 
 
 		for _, r := range roles {
 			pr, found := probeMap[r.harness]
-			modelName := "UNKNOWN"
+			modelName := UnknownModel
 			isActive := false
 			if found && pr.Installed {
 				isActive = true
@@ -187,7 +204,7 @@ func DiscoverTeamParticipants(existing []model.Participant) []model.Participant 
 		if pr, found := probeMap[strings.ToLower(p.Harness)]; found {
 			if !pr.Installed {
 				p.IsActive = false
-				p.Model = "UNAVAILABLE"
+				p.Model = UnavailableModel
 			}
 		}
 	}

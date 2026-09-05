@@ -2,14 +2,18 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/bundle"
 	"github.com/Zen1th53/marshal/internal/doctor"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/reinjection"
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
@@ -114,24 +118,34 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 
 	case "assign":
 		if len(args) < 3 {
-			return "Usage: /task assign <task_id> <owner>", nil
+			return "Usage: /task assign <task_id> <agent_id>", nil
 		}
-		taskID := args[1]
-		owner := args[2]
-		return fmt.Sprintf("Task %s assigned to %s.", taskID, owner), nil
+		// Ownership is taken by leasing the task through the canonical claim
+		// path, which enforces the lease and revision rules. Printing an
+		// assignment without taking the lease would report ownership that the
+		// runtime does not actually recognise.
+		if h.ws.store == nil {
+			return "Store unavailable", nil
+		}
+		task, err := h.ws.store.GetTask(ctx, args[1])
+		if err != nil {
+			return "", fmt.Errorf("task %s: %w", args[1], err)
+		}
+		lease, err := h.ws.store.ClaimTask(ctx, model.ClaimRequest{
+			TaskID:           task.ID,
+			AgentID:          args[2],
+			ExpectedRevision: task.Revision,
+		})
+		if err != nil {
+			return "", fmt.Errorf("assign task %s to %s: %w", task.ID, args[2], err)
+		}
+		return fmt.Sprintf("Task %s claimed by %s (lease %s).", task.ID, args[2], lease.ID), nil
 
-	case "pause", "resume", "cancel":
+	case "pause", "resume", "cancel", "retry":
 		if len(args) < 2 {
 			return fmt.Sprintf("Usage: /task %s <task_id>", sub), nil
 		}
-		taskID := args[1]
-		return fmt.Sprintf("Task %s state updated to %s.", taskID, strings.ToUpper(sub)), nil
-
-	case "retry":
-		if len(args) < 2 {
-			return "Usage: /task retry <task_id>", nil
-		}
-		return fmt.Sprintf("Task %s queued for retry with fresh context.", args[1]), nil
+		return h.transitionTask(ctx, sub, args[1])
 
 	case "ownership":
 		return h.handleTaskOwnership(ctx)
@@ -139,6 +153,52 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 	default:
 		return "Usage: /task [list|create|inspect|assign|pause|resume|cancel|retry|ownership]", nil
 	}
+}
+
+// transitionTask moves a task through the canonical state machine. The store
+// enforces which transitions are legal for the actor's role, so an illegal
+// request is reported as the refusal it is rather than as a success message.
+func (h *CommandHandler) transitionTask(ctx context.Context, verb, taskID string) (string, error) {
+	if h.ws.store == nil {
+		return "Store unavailable", nil
+	}
+
+	task, err := h.ws.store.GetTask(ctx, taskID)
+	if err != nil {
+		return "", fmt.Errorf("task %s: %w", taskID, err)
+	}
+
+	var target model.TaskStatus
+	switch verb {
+	case "pause":
+		target = model.TaskBlocked
+	case "resume", "retry":
+		target = model.TaskReady
+	case "cancel":
+		target = model.TaskCancelled
+	default:
+		return fmt.Sprintf("Unsupported task transition %q.", verb), nil
+	}
+
+	if task.Status == target {
+		return fmt.Sprintf("Task %s is already %s.", task.ID, target), nil
+	}
+
+	updated, err := h.ws.store.TransitionTask(ctx, model.TaskTransitionRequest{
+		TaskID:           task.ID,
+		FromStatus:       task.Status,
+		ToStatus:         target,
+		ActorRole:        model.RoleArchitect,
+		ActorID:          "operator",
+		Reason:           fmt.Sprintf("operator %s via TUI", verb),
+		ExpectedRevision: task.Revision,
+	})
+	if err != nil {
+		return "", fmt.Errorf("%s task %s (%s -> %s): %w", verb, task.ID, task.Status, target, err)
+	}
+
+	return fmt.Sprintf("Task %s transitioned %s -> %s (revision %d).",
+		updated.ID, task.Status, updated.Status, updated.Revision), nil
 }
 
 func (h *CommandHandler) handleTaskOwnership(ctx context.Context) (string, error) {
@@ -248,42 +308,102 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 			"  Use /memory search <query> to search knowledge items.", nil
 	}
 
+	if h.ws.store == nil {
+		return "Store unavailable", nil
+	}
+
+	h.ws.mu.RLock()
+	projectID := h.ws.state.ProjectID
+	h.ws.mu.RUnlock()
+
 	sub := strings.ToLower(args[0])
 	switch sub {
-	case "search":
-		if len(args) < 2 {
-			return "Usage: /memory search <query>", nil
+	case "list", "search":
+		records, err := h.ws.store.ListMemoryV2(ctx, store.MemoryQueryFilter{
+			ProjectID: projectID,
+			Limit:     200,
+		})
+		if err != nil {
+			return "", fmt.Errorf("list memory: %w", err)
 		}
-		query := strings.TrimSpace(line[strings.Index(line, args[0])+len(args[0]):])
-		return fmt.Sprintf("Memory search for %q:\n  (No direct contradictions or matching historical knowledge items found)", query), nil
+
+		query := ""
+		if sub == "search" {
+			if len(args) < 2 {
+				return "Usage: /memory search <query>", nil
+			}
+			query = strings.ToLower(strings.TrimSpace(line[strings.Index(line, args[0])+len(args[0]):]))
+		}
+
+		var matched []model.MemoryRecordV2
+		for _, r := range records {
+			if query == "" ||
+				strings.Contains(strings.ToLower(r.Title), query) ||
+				strings.Contains(strings.ToLower(r.Body), query) {
+				matched = append(matched, r)
+			}
+		}
+
+		if len(matched) == 0 {
+			if query == "" {
+				return "No memory records stored for this project.", nil
+			}
+			return fmt.Sprintf("No memory records match %q (searched %d record(s)).", query, len(records)), nil
+		}
+
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("MEMORY RECORDS (%d of %d):\n", len(matched), len(records)))
+		for _, r := range matched {
+			b.WriteString(fmt.Sprintf("  %s [%s/%s] %s\n",
+				r.ID, r.Kind, r.Lifecycle, RedactContent(r.Title, nil)))
+		}
+		return b.String(), nil
 
 	case "provenance":
 		if len(args) < 2 {
 			return "Usage: /memory provenance <memory_id>", nil
 		}
-		return fmt.Sprintf("Provenance for memory %s: created by canonical consensus engine at session init.", args[1]), nil
+		records, err := h.ws.store.ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: projectID, Limit: 500})
+		if err != nil {
+			return "", fmt.Errorf("list memory: %w", err)
+		}
+		for _, r := range records {
+			if r.ID == args[1] {
+				return fmt.Sprintf("MEMORY %s\n  Kind:       %s\n  Lifecycle:  %s\n  Authority:  %s\n  Confidence: %s\n  Digest:     %s\n  Title:      %s",
+					r.ID, r.Kind, r.Lifecycle, r.Authority, r.Confidence,
+					r.ContentDigest, RedactContent(r.Title, nil)), nil
+			}
+		}
+		return fmt.Sprintf("No memory record %s in this project.", args[1]), nil
 
 	default:
-		return "Usage: /memory [search|provenance] [args]", nil
+		return "Usage: /memory [list|search <query>|provenance <id>]", nil
 	}
 }
 
 // handleProvider handles provider configuration and status inspection.
 func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (string, error) {
 	if len(args) == 0 || args[0] == "status" {
+		// Report only what the host probe establishes. MARSHAL cannot read a
+		// harness's credentials, so presence of the binary is never reported as
+		// proof of authentication: an installed harness is AVAILABLE, and
+		// whether its credentials work is UNKNOWN until an execution proves it.
 		var b strings.Builder
-		b.WriteString("PROVIDER STATUS & AUTHENTICATION:\n")
-		b.WriteString("  Provider: Anthropic (Claude)\n")
-		b.WriteString("    Status: AUTHENTICATED\n")
-		b.WriteString("    Egress: BLOCKED_BY_POLICY (--unshare-net fail-closed sandbox)\n")
-		b.WriteString("  Provider: OpenAI (Codex)\n")
-		b.WriteString("    Status: AUTHENTICATED\n")
-		b.WriteString("    Egress: BLOCKED_BY_POLICY (--unshare-net fail-closed sandbox)\n")
-		b.WriteString("  Provider: OpenCode Local\n")
-		b.WriteString("    Status: LOCAL_AVAILABLE\n")
-		b.WriteString("    Egress: NOT_REQUIRED (local model)\n")
-		b.WriteString("  Provider: Antigravity\n")
-		b.WriteString("    Status: UNAVAILABLE (agy harness not found)\n")
+		b.WriteString("PROVIDER / HARNESS STATUS:\n")
+		for _, pr := range ProbeHarnesses() {
+			b.WriteString(fmt.Sprintf("  %s\n", pr.HarnessName))
+			if !pr.Installed {
+				b.WriteString(fmt.Sprintf("    State:  %s\n", StateUnavailable))
+				b.WriteString(fmt.Sprintf("    Reason: %s\n", pr.Reason))
+				b.WriteString("    Auth:   NOT_RUN (harness absent)\n")
+				continue
+			}
+			b.WriteString(fmt.Sprintf("    State:   %s (%s)\n", pr.State, pr.BinaryPath))
+			b.WriteString(fmt.Sprintf("    Version: %s\n", pr.Version))
+			b.WriteString(fmt.Sprintf("    Model:   %s (not established by probe)\n", UnknownModel))
+			b.WriteString("    Auth:    UNKNOWN (no execution performed)\n")
+			b.WriteString("    Egress:  BLOCKED_BY_POLICY (sandbox uses --unshare-net; per-endpoint egress unenforceable)\n")
+		}
 		return b.String(), nil
 	}
 
@@ -369,16 +489,37 @@ func (h *CommandHandler) handleBackup(ctx context.Context, args []string) (strin
 		return "Usage: /backup [create|restore <backup_id>]", nil
 	}
 
+	if h.ws.store == nil {
+		return "Store unavailable", nil
+	}
+
 	switch strings.ToLower(args[0]) {
 	case "create":
-		backupID := fmt.Sprintf("backup-%s", time.Now().Format("2006-01-02T15-04-05Z"))
-		return fmt.Sprintf("Snapshot %s created successfully.", backupID), nil
+		// Write a real, integrity-verified backup artifact. store.Backup writes
+		// to a temporary sibling, verifies it, and only then publishes it, so a
+		// reported path always names a file that exists and passed verification.
+		dir := filepath.Join(h.ws.workDir, ".marshal", "backups")
+		path := filepath.Join(dir, fmt.Sprintf("backup-%s.db", time.Now().UTC().Format("2006-01-02T150405Z")))
+		meta, err := h.ws.store.Backup(ctx, path)
+		if err != nil {
+			return "", fmt.Errorf("create backup: %w", err)
+		}
+		return fmt.Sprintf("Backup written and verified:\n  Path:     %s\n  Schema:   v%d\n  SHA-256:  %s\n  Created:  %s",
+			path, meta.SchemaVersion, meta.DatabaseSHA256, meta.CreatedAt.UTC().Format(time.RFC3339)), nil
 
 	case "restore":
 		if len(args) < 2 {
-			return "Usage: /backup restore <backup_id>", nil
+			return "Usage: /backup restore <backup_path>", nil
 		}
-		return fmt.Sprintf("Backup %s restored into canonical database.", args[1]), nil
+		// Restoring swaps the live database out from under an open session, so
+		// it is not performed from inside a running workspace. Verify the
+		// artifact here and direct the operator to the offline path.
+		meta, err := store.VerifyBackup(ctx, args[1], "", 0)
+		if err != nil {
+			return "", fmt.Errorf("verify backup %s: %w", args[1], err)
+		}
+		return fmt.Sprintf("Backup %s verified (schema v%d, SHA-256 %s).\nRestore is not performed from a live session: exit the TUI, stop the daemon, then restore the artifact.",
+			args[1], meta.SchemaVersion, meta.DatabaseSHA256), nil
 
 	default:
 		return "Usage: /backup [create|restore <id>]", nil
@@ -386,8 +527,17 @@ func (h *CommandHandler) handleBackup(ctx context.Context, args []string) (strin
 }
 
 // handleFingerprint shows failure fingerprints.
+// handleFingerprint reports failure-fingerprint availability honestly. The
+// registry in internal/epistemic is per-run and in-memory: it is not persisted
+// to the store, so a TUI session cannot read fingerprints recorded by an
+// execution it did not host. Reporting "none detected" would assert a clean
+// result this command cannot establish.
 func (h *CommandHandler) handleFingerprint(ctx context.Context) (string, error) {
-	return "FAILURE FINGERPRINTS:\n  No recurring failure signatures detected in current execution.", nil
+	return "FAILURE FINGERPRINTS:\n" +
+		"  State: NOT_AVAILABLE\n" +
+		"  The failure fingerprint registry (internal/epistemic) is per-run and in-memory.\n" +
+		"  It is not persisted to the canonical store, so no fingerprint history can be\n" +
+		"  read from this session. This is a reporting gap, not a clean result.", nil
 }
 
 // handleRuntime shows runtime status.
@@ -409,9 +559,59 @@ func (h *CommandHandler) handleStore(ctx context.Context) (string, error) {
 }
 
 // handleExport exports evidence bundle.
+// handleExport writes a real evidence bundle assembled from canonical state.
+// The bundle carries the active goal, its critical claims and their evidence
+// refs, and a deterministic digest over that content, so the exported artifact
+// can be verified independently of this process.
 func (h *CommandHandler) handleExport(ctx context.Context, args []string) (string, error) {
-	return fmt.Sprintf("Exported canonical evidence bundle to .marshal/evidence-bundle-%s.json",
-		time.Now().Format("2006-01-02T150405Z")), nil
+	if h.ws.store == nil {
+		return "Store unavailable", nil
+	}
+
+	h.ws.mu.RLock()
+	goal := h.ws.state.Goal
+	claims := h.ws.state.Claims
+	participants := h.ws.state.Participants
+	commit := h.ws.state.GitStatus.Commit
+	h.ws.mu.RUnlock()
+
+	if goal.ID == "" {
+		return "No active goal: set one with /goal <outcome> before exporting an evidence bundle.", nil
+	}
+
+	var evidence []model.EvidenceRef
+	var unresolved []string
+	for _, c := range claims {
+		evidence = append(evidence, c.SupportingEvidence...)
+		if c.Criticality.IsCritical() && c.State != model.ClaimStateVerified {
+			unresolved = append(unresolved, fmt.Sprintf("critical claim %s is %s", c.ID, c.State))
+		}
+	}
+
+	b, err := bundle.NewEvidenceBundle("", goal,
+		reinjection.ComputeConstraintsDigest(goal.Constraints, goal.DoNotDo), commit,
+		participants, claims, evidence, unresolved)
+	if err != nil {
+		return "", fmt.Errorf("assemble evidence bundle: %w", err)
+	}
+
+	payload, err := json.MarshalIndent(b, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("encode evidence bundle: %w", err)
+	}
+
+	dir := filepath.Join(h.ws.workDir, ".marshal", "evidence")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create evidence directory: %w", err)
+	}
+	path := filepath.Join(dir, b.BundleID+".json")
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		return "", fmt.Errorf("write evidence bundle: %w", err)
+	}
+
+	return fmt.Sprintf("Evidence bundle written:\n  Path:       %s\n  Goal:       %s [rev %d]\n  Critical:   %d claim(s)\n  Evidence:   %d ref(s)\n  Unresolved: %d\n  Digest:     %s",
+		path, b.GoalID, b.GoalRevision, len(b.CriticalClaims), len(b.EvidenceRefs),
+		len(b.UnresolvedItems), b.BundleDigest), nil
 }
 
 // handleBlind handles blind interpretation.
