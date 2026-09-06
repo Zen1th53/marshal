@@ -30,8 +30,13 @@ func TestTUICLIInvocation(t *testing.T) {
 		t.Fatalf("tui subcommand returned non-zero code %d: %s", code, stderr.String())
 	}
 	outStr := stdout.String()
-	if !strings.Contains(outStr, "MARSHAL v1.5.0 CONTROL PLANE") {
-		t.Fatalf("expected header in tui output:\n%s", outStr)
+	// The workspace identifies itself in a compact header; project, mode and
+	// runtime state live in the statusline rather than being repeated here.
+	if !strings.Contains(outStr, "MARSHAL") {
+		t.Fatalf("expected the MARSHAL header in tui output:\n%s", outStr)
+	}
+	if !strings.Contains(outStr, "ULTRA") {
+		t.Fatalf("expected the statusline in tui output:\n%s", outStr)
 	}
 	if !strings.Contains(outStr, "Exiting MARSHAL terminal workspace") {
 		t.Fatalf("expected exit in tui output:\n%s", outStr)
@@ -45,7 +50,7 @@ func TestTUICLIInvocation(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("empty-arg invocation returned non-zero code %d: %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "MARSHAL v1.5.0 CONTROL PLANE") {
+	if !strings.Contains(stdout.String(), "MARSHAL") {
 		t.Fatalf("expected empty args to open TUI in initialized project:\n%s", stdout.String())
 	}
 }

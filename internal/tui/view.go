@@ -39,6 +39,13 @@ type UIState struct {
 	GitStatus          GitStatusResult
 	ActiveToolCard     *ToolExecutionCard
 	KnownSecrets       []string
+
+	// Result of the most recent command. It is carried in state and painted as
+	// part of the frame rather than printed directly, so command output cannot
+	// scroll the workspace or leave chrome behind in the terminal's scrollback.
+	LastCommand       string
+	LastOutput        string
+	LastOutputIsError bool
 }
 
 // RenderScreen renders the workspace screen with default theme for backward compatibility.

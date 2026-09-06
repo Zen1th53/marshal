@@ -3,25 +3,38 @@
 MARSHAL TUI v2 is a terminal-first, interactive IDE, multi-agent team room, evidence console, and live command center. It operates as the complete interactive control plane over MARSHAL's canonical local runtime and SQLite store.
 
 ```text
-╭─ MARSHAL ─ marshal ─ ULTRA ─ VERIFYING ─────────────── main · clean ─╮
-│ Goal 100%   Claims 2/2   ● 4 active   Budget $0.00   Risk R0         │
-╰──────────────────────────────────────────────────────────────────────╯
-┌─ LIVE WORKSPACE ──────────────────────┬─ ACTIVE TEAM ────────────────┐
-│ CODEX · developer                     │ ● Codex       AVAILABLE      │
-│ Implemented fix for auth race         │ ● Claude      AVAILABLE      │
-│   internal/auth/session.go +18 -7     │ ● OpenCode    AVAILABLE      │
-│                                       │ ○ Antigravity UNAVAILABLE    │
-│ MARSHAL                               │   (agy not found)            │
-│ C-01 · CRITICAL · SUPPORTED           │                              │
-│   E-01 ✓ race test passed             │ Task owner: Codex            │
-├───────────────────────────────────────┼───────────────────────────────┤
-│ CURRENT TOOL                          │ EVIDENCE                      │
-│ go test -race ./...                   │ C-01 SUPPORTED                │
-│ ● 0.4s elapsed                        │ └─ E-01 ✓ test-output.txt     │
-└───────────────────────────────────────┴───────────────────────────────┘
-[MARSHAL]-[marshal]-[ULTRA|READY]
->>>
+ MARSHAL  v3 Ship dynamic TUI v2
+────────────────────────────────────────────────────────────────────────────
+ claude    finding
+   Found a routing inconsistency in harness selection.
+
+ codex     finding
+   Editing internal/harness/router.go  +14 -5
+
+ Team
+   ● claude         architect    WORKING
+   ● codex          developer    IDLE
+   ● opencode       qa           IDLE
+   ✗ antigravity    appsec       UNAVAILABLE
+
+ Claims  2
+   C-21       CONTESTED !  routing selects an unavailable harness
+────────────────────────────────────────────────────────────────────────────
+ ~/Desktop/codex/marshal │ main* │ ULTRA │ VERIFYING │ 3 ● │ C2 X1! │ $0.38
+❯ @codex minimal fix, then let opencode verify█
 ```
+
+The screen has four parts, each with one job:
+
+| Part | Responsibility |
+|---|---|
+| **Header** | Identifies MARSHAL and the active goal, once. |
+| **Body** | The live workspace: activity, team, claims, blockers. Sections collapse to a line when empty rather than reserving a pane. |
+| **Statusline** | One persistent row of live context: project, git, mode, runtime state, agents, claims, cost. |
+| **Composer** | Input only. It carries no status text. |
+
+Context appears in exactly one place. The composer does not repeat what the
+statusline already shows, and neither repeats the header.
 
 ---
 
@@ -83,8 +96,16 @@ The TUI is fully operable without a mouse.
 
 | Keybinding | Action |
 |---|---|
-| `Tab` | Trigger completion / cycle forward through suggestions |
-| `Shift+Tab` | Cycle backward through suggestions |
+| `Tab` | Open the completion popup, or advance to the next candidate |
+| `Shift+Tab` | Step backward through candidates |
+| `↑` / `↓` | Select a candidate while the popup is open |
+| `Enter` | Accept the highlighted candidate and close the popup |
+| `Esc` | Dismiss the popup, leaving the buffer as typed |
+
+**Tab never submits.** It completes and nothing else: it does not execute the
+buffer, insert a newline, reprint the prompt or touch history. A single
+unambiguous candidate is completed outright; several open the popup. Accepting a
+completion and running the command are two deliberate keystrokes.
 
 Autocomplete dynamically queries live runtime state:
 - **Slash Commands**: Typing `/` suggests all valid commands; fuzzy matching is supported (e.g. `/rb` suggests `/rollback`).
@@ -106,6 +127,21 @@ Press `d` from normal navigation mode to inspect unstaged/staged working tree ch
 - Displays colored unified diffs with secret redaction.
 - `n` / `p`: Jump to next / previous hunk.
 - `d` or `Esc`: Return to workspace.
+
+### Screen Model
+
+The workspace is a terminal application, not a print-and-reprompt loop. It runs
+on the alternate screen and repaints in place, writing only the rows that
+changed and addressing each one absolutely.
+
+Two consequences matter:
+
+- However many times state changes, exactly one statusline and one composer
+  exist. Refreshing does not append UI fragments to scrollback.
+- Exiting restores the terminal and the shell's scrollback exactly as they were.
+
+Live events and agent state changes repaint the body while preserving the input
+buffer, the cursor position and any open completion.
 
 ### Safe Interrupt & Exit
 

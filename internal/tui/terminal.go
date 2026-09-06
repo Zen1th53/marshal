@@ -147,6 +147,37 @@ func (t *Terminal) CursorMoveToCol(col int) {
 	fmt.Fprintf(t.out, "\x1b[%dG", col)
 }
 
+// CursorTo positions the cursor at a 1-indexed row and column. Absolute
+// placement is what lets the workspace repaint a frame in place instead of
+// appending each redraw to scrollback.
+func (t *Terminal) CursorTo(row, col int) {
+	if row < 1 {
+		row = 1
+	}
+	if col < 1 {
+		col = 1
+	}
+	fmt.Fprintf(t.out, "\x1b[%d;%dH", row, col)
+}
+
+// ClearToEndOfLine erases from the cursor to the end of the row, leaving
+// everything to its left untouched.
+func (t *Terminal) ClearToEndOfLine() {
+	fmt.Fprint(t.out, "\x1b[K")
+}
+
+// EnterAltScreen switches to the alternate screen buffer. The user's scrollback
+// is untouched while the workspace runs, and LeaveAltScreen restores it exactly
+// as it was, so a session leaves no UI fragments behind in the shell.
+func (t *Terminal) EnterAltScreen() {
+	fmt.Fprint(t.out, "\x1b[?1049h")
+}
+
+// LeaveAltScreen returns to the primary screen buffer.
+func (t *Terminal) LeaveAltScreen() {
+	fmt.Fprint(t.out, "\x1b[?1049l")
+}
+
 // HideCursor hides the terminal text cursor.
 func (t *Terminal) HideCursor() {
 	fmt.Fprint(t.out, "\x1b[?25l")

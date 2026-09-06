@@ -65,24 +65,32 @@ func (c *Composer) SetPrompt(info ComposerPromptInfo) {
 	c.promptInfo.Agent = info.Agent
 }
 
-// PromptString returns the formatted prompt prefix.
+// PromptString returns the composer's input marker.
+//
+// The marker is deliberately one short line with no embedded newline. Project,
+// mode and runtime state live in the persistent statusline; repeating them on
+// every keystroke both duplicated context and, because the marker spanned two
+// lines while the redraw cleared only one, appended a fresh banner to
+// scrollback on every character typed.
+//
+// When the operator is addressing a specific participant the marker names that
+// participant, since that is state the statusline does not carry.
 func (c *Composer) PromptString() string {
-	proj := c.promptInfo.Project
-	mode := c.promptInfo.Mode
-	state := c.promptInfo.State
-
-	var brand string
 	if c.promptInfo.Agent != "" {
-		brand = fmt.Sprintf("[%s]-[%s]", c.theme.Colorize(c.theme.Marshal, "MARSHAL"), c.promptInfo.Agent)
-	} else {
-		brand = fmt.Sprintf("[%s]-[%s]-[%s|%s]",
-			c.theme.Colorize(c.theme.Marshal, "MARSHAL"),
-			proj,
-			c.theme.Colorize(c.theme.Ultra, mode),
-			c.theme.Colorize(c.theme.Success, state),
-		)
+		return fmt.Sprintf("%s %s ",
+			c.theme.Colorize(c.theme.Active, "@"+c.promptInfo.Agent),
+			c.theme.Colorize(c.theme.Marshal, PromptMarker))
 	}
-	return fmt.Sprintf("%s\n>>> ", brand)
+	return c.theme.Colorize(c.theme.Marshal, PromptMarker) + " "
+}
+
+// PromptMarker is the composer's input glyph.
+const PromptMarker = "❯"
+
+// PromptVisibleWidth is the printed width of the plain marker, used to place the
+// hardware cursor at the right column within the input line.
+func (c *Composer) PromptVisibleWidth() int {
+	return VisibleLen(StripANSI(c.PromptString()))
 }
 
 // Text returns the current buffer as a string.

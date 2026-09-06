@@ -237,6 +237,29 @@ func (t *Theme) RenderBadge(state string) string {
 	}
 }
 
+// RenderBadgeText colours a state word without prefixing a glyph. The
+// statusline is width-constrained, so it carries the colour and the word while
+// leaving the glyph to the roomier panes.
+func (t *Theme) RenderBadgeText(state string) string {
+	stateUpper := strings.ToUpper(strings.TrimSpace(state))
+	switch stateUpper {
+	case "VERIFIED", "SUCCESS", "PASS", "READY", "ACTIVE", "AUTHENTICATED", "AVAILABLE", "CLEAN", "DONE":
+		return t.Colorize(t.Success, stateUpper)
+	case "SUPPORTED", "VERIFYING", "WARNING", "PENDING", "THINKING", "PLANNING", "EXECUTING", "EDITING", "RUNNING_TOOL":
+		return t.Colorize(t.Warning, stateUpper)
+	case "CONTESTED", "CHALLENGE", "HANDOFF", "WAITING_AGENT":
+		return t.Colorize(t.Accent, stateUpper)
+	case "INVALIDATED", "BLOCKED", "FAILED", "CRITICAL", "BLOCKED_BY_POLICY", "CANCELLED":
+		return t.Colorize(t.Danger, stateUpper)
+	case "STALE", "UNSUPPORTED", "IDLE", "WAITING", "PAUSED":
+		return t.Colorize(t.Muted, stateUpper)
+	case "UNAVAILABLE", "NOT_AVAILABLE", "NOT_RUN", "UNKNOWN", "UNRESOLVED":
+		return t.Colorize(t.Muted, stateUpper)
+	default:
+		return t.Colorize(t.Muted, stateUpper)
+	}
+}
+
 // Truncate ensures text fits within width, adding an ellipsis if needed.
 func Truncate(str string, width int) string {
 	if width <= 0 {
