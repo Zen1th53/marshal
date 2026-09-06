@@ -140,6 +140,75 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/cancel":
 		return h.handleCancel(ctx)
 
+	case "/doctor":
+		return h.handleDoctor(ctx)
+
+	case "/tasks", "/task":
+		return h.handleTasks(ctx, parts[1:], line)
+
+	case "/policy":
+		return h.handlePolicy(ctx, parts[1:])
+
+	case "/sandbox":
+		return h.handleSandbox(ctx)
+
+	case "/memory":
+		return h.handleMemory(ctx, parts[1:], line)
+
+	case "/provider", "/providers":
+		return h.handleProvider(ctx, parts[1:])
+
+	case "/harness":
+		return h.handleHarness(ctx, parts[1:])
+
+	case "/model":
+		return h.handleModel(ctx, parts[1:])
+
+	case "/effort":
+		return h.handleEffort(ctx, parts[1:])
+
+	case "/ultra":
+		return h.handleUltra(ctx, parts[1:])
+
+	case "/backup":
+		return h.handleBackup(ctx, parts[1:])
+
+	case "/fingerprint":
+		return h.handleFingerprint(ctx)
+
+	case "/runtime":
+		return h.handleRuntime(ctx)
+
+	case "/store":
+		return h.handleStore(ctx)
+
+	case "/export":
+		return h.handleExport(ctx, parts[1:])
+
+	case "/blind":
+		return h.handleBlind(ctx, parts[1:])
+
+	case "/reinjection":
+		return h.handleReinjection(ctx)
+
+	case "/alignment":
+		return h.handleAlignment(ctx, parts[1:])
+
+	case "/diff":
+		return h.handleDiff(ctx)
+
+	case "/approvals":
+		return h.handleApprovals(ctx, parts[1:])
+
+	case "/approval":
+		return h.handleApproval(ctx, parts[1:])
+
+	case "/termination":
+		return h.handleTermination(ctx)
+
+	case "/context":
+		return h.handleContext(ctx, parts[1:])
+
 	default:
 		return fmt.Sprintf("Unknown command %q. Type /help for available commands.", cmd), nil
 	}
@@ -307,14 +376,14 @@ func (h *CommandHandler) handleSendMessage(ctx context.Context, target, msgText 
 	_, err := h.ws.coord.SendMessage(ctx, msg, false, false)
 	if err != nil {
 		if errors.Is(err, collaboration.ErrSessionNotFound) {
+			// Seed the session from live host discovery rather than a fixed
+			// roster. DiscoverTeamParticipants reports a harness as active only
+			// when its binary is actually present, and leaves the model as
+			// UNKNOWN, so an implicitly created session never persists an
+			// invented model name into canonical state.
 			participants := h.ws.state.Participants
 			if len(participants) == 0 {
-				participants = []model.Participant{
-					{AgentID: "claude", Role: model.RoleArchitect, Harness: "claude-code", Model: "claude-3-7-sonnet", IsActive: true},
-					{AgentID: "codex", Role: model.RoleDeveloper, Harness: "codex", Model: "gpt-4o", IsActive: true},
-					{AgentID: "opencode", Role: model.RoleQA, Harness: "opencode", Model: "deepseek-coder", IsActive: true},
-					{AgentID: "antigravity", Role: model.RoleAppSec, Harness: "antigravity", Model: "gemini-2.5-pro", IsActive: true},
-				}
+				participants = DiscoverTeamParticipants(nil)
 			}
 			goalID := h.ws.state.Goal.ID
 			if goalID == "" {

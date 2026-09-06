@@ -48,6 +48,47 @@ func (s *Store) ListPendingApprovals(ctx context.Context, projectID string) ([]m
 	return approvals, nil
 }
 
+// ListResolvedApprovals returns approvals that have already been decided, newest
+// first, so an operator can audit who granted or denied what and when. Requested
+// records are excluded: those are still pending and belong to
+// ListPendingApprovals. A limit of zero or less returns every resolved record.
+func (s *Store) ListResolvedApprovals(ctx context.Context, projectID string, limit int) ([]model.Approval, error) {
+	query := `
+		SELECT approval_id, project_id, operation, scope, target, requested_by,
+		       approved_by, status, commit_hash, conditions_json, created_at,
+		       expires_at, revision
+		FROM approvals WHERE status != 'requested'`
+	args := []any{}
+	if projectID != "" {
+		query += ` AND project_id = ?`
+		args = append(args, projectID)
+	}
+	query += ` ORDER BY created_at DESC, approval_id DESC`
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list resolved approvals: %w", err)
+	}
+	defer rows.Close()
+
+	var approvals []model.Approval
+	for rows.Next() {
+		approval, err := scanApproval(rows)
+		if err != nil {
+			return nil, err
+		}
+		approvals = append(approvals, approval)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate resolved approvals: %w", err)
+	}
+	return approvals, nil
+}
+
 // GetApproval reads a single approval record by identifier.
 func (s *Store) GetApproval(ctx context.Context, approvalID string) (model.Approval, error) {
 	row := s.db.QueryRowContext(ctx, `

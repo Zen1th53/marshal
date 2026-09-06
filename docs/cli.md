@@ -362,3 +362,27 @@ Purpose: Reconciles workspace task state against file state.
 ```bash
 marshal reconcile --file-state state.json
 ```
+
+---
+
+## Interactive Terminal Command Center
+
+### `marshal tui`
+
+Purpose: Launches the MARSHAL TUI v2 interactive multi-agent command center and control plane. When executed in an interactive terminal, running `marshal` without arguments also automatically opens the TUI.
+
+```bash
+# Launch interactive TUI
+marshal tui
+
+# Launch with specific options
+marshal tui --session dev-session --theme high-contrast --no-animation
+```
+
+Flags:
+- `--session <id>`: Attach to or resume a specific session ID (default: `default`)
+- `--theme <name>`: Color theme: `default`, `monochrome`, `high-contrast`, `no-color`
+- `--no-animation`: Disable micro-animations (spinners, pulse glyphs) for reduced-motion or low-bandwidth environments
+- `--no-color`: Disable all ANSI terminal colors
+
+For keyboard shortcuts, contextual autocomplete (`Tab`, `@`, `#`), Command Palette (`Ctrl+P`), diff viewer (`d`), and full slash command reference, see [MARSHAL TUI v2 Documentation](tui.md).
