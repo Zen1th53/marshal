@@ -5211,8 +5211,8 @@
     },
     {
       "path": "internal/tui/commands_missing.go",
-      "sha256": "6eae2bf4c709665a901f27d2c2d2017b4a070acaab1b87bfe791d9e02052bb36",
-      "bytes": 6958
+      "sha256": "a1bf546ae3ccf62caa8ca2827153a177333bde44e4e0bdf71062777200c0bb79",
+      "bytes": 7224
     },
     {
       "path": "internal/tui/composer.go",

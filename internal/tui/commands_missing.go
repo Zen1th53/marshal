@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -130,11 +131,14 @@ func (h *CommandHandler) handleTermination(ctx context.Context) (string, error) 
 		return "No active goal: nothing can have terminated yet.", nil
 	}
 
+	// A goal that has not terminated has no termination row. That is the normal
+	// running state, not a failure, so ErrNotFound is reported as RUNNING rather
+	// than surfaced to the operator as an error.
 	term, err := h.ws.store.GetGoalTermination(ctx, sessionID, goal.ID, goal.Revision)
-	if err != nil {
+	if err != nil && !errors.Is(err, model.ErrNotFound) {
 		return "", fmt.Errorf("read termination: %w", err)
 	}
-	if term == nil {
+	if err != nil || term == nil {
 		return fmt.Sprintf("TERMINATION STATUS — %s [rev %d]\n  State:  RUNNING\n  No terminal state has been recorded for this goal revision.",
 			goal.ID, goal.Revision), nil
 	}
