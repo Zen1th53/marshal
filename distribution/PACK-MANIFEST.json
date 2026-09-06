@@ -5241,8 +5241,8 @@
     },
     {
       "path": "internal/tui/palette.go",
-      "sha256": "9276e76ff7dd7103b35387a39e4494b42f912cb51ed235ec1f90da5335070ad6",
-      "bytes": 6792
+      "sha256": "2e7b18e8b4b94ab8a80d0dcffb7f00c6ba8e41afae4e1c1a053ad79833440c5d",
+      "bytes": 7074
     },
     {
       "path": "internal/tui/palette_test.go",
@@ -5296,8 +5296,8 @@
     },
     {
       "path": "internal/tui/theme.go",
-      "sha256": "03ba189b08bc1c24901995b1e527299d4721dc84dfc469e24ff7a2a27922816b",
-      "bytes": 6894
+      "sha256": "f916bb087b63bfa596cd11610d5f67cc43d7fd0d512751c58d53e906ce475f40",
+      "bytes": 8658
     },
     {
       "path": "internal/tui/theme_test.go",
@@ -5311,8 +5311,8 @@
     },
     {
       "path": "internal/tui/view.go",
-      "sha256": "13f1936213b27e7cbc1dc800b9f30b4ce4799b1b896c49c192a4f84eee7d50b6",
-      "bytes": 11816
+      "sha256": "54a6e0668a5fee72ee66c612245c058faf4cb1791bee1aec5e1a19a3e8efd409",
+      "bytes": 12863
     },
     {
       "path": "internal/tui/workspace.go",

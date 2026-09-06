@@ -101,8 +101,20 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 	)
 	headerRight := fmt.Sprintf(" %s ", th.Colorize(th.Muted, gitText))
 
-	availWidth := width - VisibleLen(headerLeft) - VisibleLen(headerRight) - 2
+	// The header emits: corner + left + fill + right + one rule + corner.
+	// That is three fixed cells besides the fill, so the fill must account for
+	// all three or the top border runs one column past every other row.
+	//
+	// On a narrow terminal the two labels can exceed the width on their own. Drop
+	// the git summary first, then clip the title, so the border stays square
+	// instead of overflowing the row.
+	availWidth := width - VisibleLen(headerLeft) - VisibleLen(headerRight) - 3
 	if availWidth < 0 {
+		headerRight = ""
+		availWidth = width - VisibleLen(headerLeft) - 3
+	}
+	if availWidth < 0 {
+		headerLeft = truncateVisible(headerLeft, width-3)
 		availWidth = 0
 	}
 
@@ -148,7 +160,7 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 	)
 	b.WriteString(fmt.Sprintf("%s %s%s\n",
 		th.BoxVert,
-		PadRight(overview, width-4),
+		PadCell(overview, width-3),
 		th.BoxVert,
 	))
 
@@ -168,7 +180,7 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 		th.Colorize(th.Bold, fmt.Sprintf("GOAL [v%d]:", s.Goal.Revision)),
 		RedactContent(Truncate(outcome, width-16), s.KnownSecrets),
 	)
-	b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(goalLine, width-4), th.BoxVert))
+	b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(goalLine, width-3), th.BoxVert))
 
 	if len(s.Goal.Constraints) > 0 {
 		var cList []string
@@ -180,7 +192,7 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 			cList = append(cList, fmt.Sprintf("%s %s", th.GlyphCheck, Truncate(c.Text, 24)))
 		}
 		cLine := fmt.Sprintf("   Constraints: %s", strings.Join(cList, " │ "))
-		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(cLine, width-4), th.BoxVert))
+		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(cLine, width-3), th.BoxVert))
 	}
 
 	// Separator
@@ -192,12 +204,12 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 
 	// 3. TEAM & WORKSPACE SPLIT (Dual Pane representation)
 	teamHeader := fmt.Sprintf(" %s", th.Colorize(th.Bold, "ACTIVE TEAM ROSTER:"))
-	b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(teamHeader, width-4), th.BoxVert))
+	b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(teamHeader, width-3), th.BoxVert))
 
 	if len(s.Participants) == 0 {
 		b.WriteString(fmt.Sprintf("%s %s%s\n",
 			th.BoxVert,
-			PadRight("   (No active participants — use /agents add or /harness probe)", width-4),
+			PadCell("   (No active participants — use /agents add or /harness probe)", width-3),
 			th.BoxVert,
 		))
 	} else {
@@ -220,15 +232,18 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 				modelText = th.Colorize(th.Muted, "UNKNOWN")
 			}
 
-			agentRow := fmt.Sprintf("   %s %-12s  Role: %-10s  Harness: %-12s  Model: %-16s  [%s]",
+			// Every cell is padded by visible width. fmt's %-Ns counts ANSI
+			// escape bytes as characters, so a coloured value silently receives
+			// no padding and shifts every column to its right.
+			agentRow := fmt.Sprintf("   %s %s  Role: %s  Harness: %s  Model: %s  [%s]",
 				stateGlyph,
-				th.Colorize(th.Bold, p.AgentID),
-				p.Role,
-				p.Harness,
-				modelText,
+				PadCell(th.Colorize(th.Bold, p.AgentID), 12),
+				PadCell(string(p.Role), 10),
+				PadCell(p.Harness, 12),
+				PadCell(modelText, 16),
 				statusText,
 			)
-			b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(agentRow, width-4), th.BoxVert))
+			b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(agentRow, width-3), th.BoxVert))
 		}
 	}
 
@@ -245,14 +260,14 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 			th.Colorize(th.Warning, "⚠"),
 			RedactContent(s.ActiveQuestion, s.KnownSecrets),
 		)
-		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(notice, width-4), th.BoxVert))
+		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(notice, width-3), th.BoxVert))
 		b.WriteString(fmt.Sprintf("%s%s%s\n", th.BoxTRight, strings.Repeat(th.BoxHoriz, width-2), th.BoxTLeft))
 	} else if s.ActiveBlocker != "" {
 		notice := fmt.Sprintf(" %s BLOCKER: %s",
 			th.Colorize(th.Danger, "⛔"),
 			RedactContent(s.ActiveBlocker, s.KnownSecrets),
 		)
-		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(notice, width-4), th.BoxVert))
+		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(notice, width-3), th.BoxVert))
 		b.WriteString(fmt.Sprintf("%s%s%s\n", th.BoxTRight, strings.Repeat(th.BoxHoriz, width-2), th.BoxTLeft))
 	}
 
@@ -265,22 +280,22 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 			card.Status,
 			durationStr,
 		)
-		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(cardHeader, width-4), th.BoxVert))
+		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(cardHeader, width-3), th.BoxVert))
 		if card.Summary != "" {
 			cardSummary := fmt.Sprintf("   Command: %s", RedactContent(Truncate(card.Summary, width-16), s.KnownSecrets))
-			b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(cardSummary, width-4), th.BoxVert))
+			b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(cardSummary, width-3), th.BoxVert))
 		}
 		b.WriteString(fmt.Sprintf("%s%s%s\n", th.BoxTRight, strings.Repeat(th.BoxHoriz, width-2), th.BoxTLeft))
 	}
 
 	// 6. COLLABORATIVE ACTIVITY STREAM (Filtered, Silence-by-Default)
 	activityTitle := fmt.Sprintf(" %s", th.Colorize(th.Bold, "COLLABORATIVE ACTIVITY (Filtered Findings & Handoffs):"))
-	b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(activityTitle, width-4), th.BoxVert))
+	b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(activityTitle, width-3), th.BoxVert))
 
 	meaningfulMsgs := filterMeaningfulMessages(s.RecentMessages, 4)
 	if len(meaningfulMsgs) == 0 {
 		emptyMsg := "   (No significant findings, challenges, or handoffs recorded yet)"
-		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(emptyMsg, width-4), th.BoxVert))
+		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(emptyMsg, width-3), th.BoxVert))
 	} else {
 		for _, m := range meaningfulMsgs {
 			kindBadge := fmt.Sprintf("[%s]", m.Kind)
@@ -292,7 +307,7 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 				th.GlyphArrowR,
 				content,
 			)
-			b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(row, width-4), th.BoxVert))
+			b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(row, width-3), th.BoxVert))
 		}
 	}
 
@@ -307,13 +322,17 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 			th.Colorize(th.Ultra, "ULTRA ROUTE"),
 			RedactContent(Truncate(s.RouteExplanation, width-18), s.KnownSecrets),
 		)
-		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadRight(ultraText, width-4), th.BoxVert))
+		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(ultraText, width-3), th.BoxVert))
 	}
 
 	// 8. FOOTER: Keybindings help
 	footerShortcuts := " [Ctrl+P] Palette  [Tab] Complete  [d] Diff  [/] Commands  [@] Agents  [?] Help "
-	remFooter := width - VisibleLen(footerShortcuts) - 2
+	// corner + one rule + shortcuts + fill + corner = three fixed cells. On a
+	// narrow terminal the hint list alone can exceed the width, so clip it
+	// rather than let the bottom border overflow.
+	remFooter := width - VisibleLen(footerShortcuts) - 3
 	if remFooter < 0 {
+		footerShortcuts = truncateVisible(footerShortcuts, width-3)
 		remFooter = 0
 	}
 	b.WriteString(fmt.Sprintf("%s%s%s%s%s\n",
