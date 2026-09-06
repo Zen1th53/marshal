@@ -289,4 +289,3 @@ func TestFrameScrollOffsetAndIndicator(t *testing.T) {
 		t.Fatalf("expected scroll indicator in lines:\n%s", strings.Join(lines, "\n"))
 	}
 }
-

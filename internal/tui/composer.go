@@ -104,6 +104,19 @@ func (c *Composer) SetText(text string) {
 	c.cursor = len(c.buffer)
 }
 
+// SetCursor places the cursor, snapping it to the nearest grapheme boundary at
+// or before the requested index so callers computing an offset by other means
+// can never leave it inside a character.
+func (c *Composer) SetCursor(pos int) {
+	if pos < 0 {
+		pos = 0
+	}
+	if pos > len(c.buffer) {
+		pos = len(c.buffer)
+	}
+	c.cursor = SnapToGraphemeBoundary(c.buffer, pos)
+}
+
 // CursorPos returns the current cursor index (rune index).
 func (c *Composer) CursorPos() int {
 	return c.cursor
@@ -152,15 +165,13 @@ func (c *Composer) HandleKey(k KeyEvent) (string, bool) {
 		return "", false
 
 	case KeyLeft:
-		if c.cursor > 0 {
-			c.cursor--
-		}
+		// Move by a whole user-visible character. Stepping one rune would land
+		// the cursor inside a flag, a skin-tone sequence or a ZWJ family.
+		c.cursor = PrevGraphemeStart(c.buffer, c.cursor)
 		return "", false
 
 	case KeyRight:
-		if c.cursor < len(c.buffer) {
-			c.cursor++
-		}
+		c.cursor = NextGraphemeStart(c.buffer, c.cursor)
 		return "", false
 
 	case KeyHome, KeyCtrlA:
@@ -228,12 +239,13 @@ func (c *Composer) HandleKey(k KeyEvent) (string, bool) {
 		return "", false
 
 	case KeyEsc:
-		// Clear buffer on escape
-		if len(c.buffer) > 0 {
-			c.buffer = make([]rune, 0)
-			c.cursor = 0
-			c.historyIndex = -1
-		}
+		// Esc dismisses whatever is layered above the composer; it does not
+		// touch the draft. The workspace closes an open popup or overlay before
+		// the key reaches here, so by this point there is nothing left to
+		// dismiss and the buffer must survive untouched. Clearing it here made
+		// closing a completion list destroy work the operator had typed.
+		//
+		// Ctrl+U remains the explicit "discard this line" key.
 		return "", false
 	}
 
@@ -251,17 +263,25 @@ func (c *Composer) insertRune(r rune) {
 	c.cursor++
 }
 
+// deleteBefore removes the whole grapheme preceding the cursor. Deleting a
+// single rune would strip a combining mark from its base, halve a regional
+// indicator pair, or leave a dangling zero-width joiner.
 func (c *Composer) deleteBefore() {
-	if c.cursor > 0 && len(c.buffer) > 0 {
-		c.buffer = append(c.buffer[:c.cursor-1], c.buffer[c.cursor:]...)
-		c.cursor--
+	if c.cursor <= 0 || len(c.buffer) == 0 {
+		return
 	}
+	start := PrevGraphemeStart(c.buffer, c.cursor)
+	c.buffer = append(c.buffer[:start], c.buffer[c.cursor:]...)
+	c.cursor = start
 }
 
+// deleteAt removes the whole grapheme at the cursor.
 func (c *Composer) deleteAt() {
-	if c.cursor < len(c.buffer) {
-		c.buffer = append(c.buffer[:c.cursor], c.buffer[c.cursor+1:]...)
+	if c.cursor >= len(c.buffer) {
+		return
 	}
+	end := NextGraphemeStart(c.buffer, c.cursor)
+	c.buffer = append(c.buffer[:c.cursor], c.buffer[end:]...)
 }
 
 func (c *Composer) deleteWordBefore() {
@@ -574,4 +594,3 @@ func (c *Composer) Render() string {
 func (c *Composer) IsSearchMode() bool {
 	return c.searchMode
 }
-

@@ -322,6 +322,33 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 
 	w.renderFullView()
 
+	// Read keys on their own goroutine. ReadKey blocks on the terminal, so
+	// polling it from the select's default branch pinned the loop inside that
+	// branch and starved SIGWINCH: a resize only repainted once the operator
+	// happened to press a key. Feeding keys through a channel makes input and
+	// resize equal event sources, and the select blocks rather than spinning.
+	type keyRead struct {
+		event KeyEvent
+		err   error
+	}
+	keys := make(chan keyRead)
+	readerDone := make(chan struct{})
+	defer close(readerDone)
+
+	go func() {
+		for {
+			ev, err := w.terminal.ReadKey()
+			select {
+			case keys <- keyRead{ev, err}:
+			case <-readerDone:
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -331,8 +358,8 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			// laid out for the old geometry.
 			w.screen.Reset()
 			w.renderFullView()
-		default:
-			event, err := w.terminal.ReadKey()
+		case kr := <-keys:
+			event, err := kr.event, kr.err
 			if err != nil {
 				if err == io.EOF {
 					return nil

@@ -7,6 +7,11 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
+// maxActivityEvents bounds how many transcript entries a single frame formats.
+// Two lines are emitted per event, so this comfortably exceeds any viewport
+// while keeping repaint cost constant as history grows.
+const maxActivityEvents = 200
+
 // BuildFrame composes the workspace screen from live state.
 //
 // The layout is deliberately unequal. Live work is the primary surface and gets
@@ -99,6 +104,14 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 				th.Colorize(th.Bold, "Activity"),
 				th.Colorize(th.Muted, "none yet")), cols),
 		}
+	}
+
+	// Only the tail can be visible, so format only the tail. Rendering the whole
+	// history and letting the viewport clip afterwards made repaint cost scale
+	// with total transcript length; the live path caps the query at 30 messages,
+	// but a bound here keeps the cost independent of that caller's choice.
+	if max := maxActivityEvents; len(events) > max {
+		events = events[len(events)-max:]
 	}
 
 	var out []string
@@ -270,4 +283,3 @@ func approvalsSection(s UIState, th *Theme, cols int) []string {
 	}
 	return out
 }
-

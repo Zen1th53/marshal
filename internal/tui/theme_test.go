@@ -62,4 +62,3 @@ func TestUnicodeRuneWidth(t *testing.T) {
 		t.Errorf("truncated string %q exceeds width 5: %d", trunc, VisibleLen(trunc))
 	}
 }
-
