@@ -171,7 +171,7 @@ func (cp *CommandPalette) Render(width, height int) []string {
 	var lines []string
 	// Header: ╭─ Command Palette ─────────────────────────────────╮
 	title := " Command Palette "
-	remainingWidth := boxWidth - VisibleLen(title) - 2
+	remainingWidth := boxWidth - VisibleLen(title) - 3
 	if remainingWidth < 0 {
 		remainingWidth = 0
 	}
@@ -188,7 +188,7 @@ func (cp *CommandPalette) Render(width, height int) []string {
 	searchPrompt := fmt.Sprintf("> %s_", string(cp.query))
 	searchLine := fmt.Sprintf("%s %s%s",
 		cp.theme.BoxVert,
-		PadRight(searchPrompt, boxWidth-4),
+		PadCell(searchPrompt, boxWidth-3),
 		cp.theme.BoxVert,
 	)
 	lines = append(lines, searchLine)
@@ -223,7 +223,7 @@ func (cp *CommandPalette) Render(width, height int) []string {
 		emptyMsg := "  (No matching actions)"
 		lines = append(lines, fmt.Sprintf("%s %s%s",
 			cp.theme.BoxVert,
-			PadRight(emptyMsg, boxWidth-4),
+			PadCell(emptyMsg, boxWidth-3),
 			cp.theme.BoxVert,
 		))
 	} else {
@@ -235,25 +235,33 @@ func (cp *CommandPalette) Render(width, height int) []string {
 			title := act.Title
 			cmd := act.Command
 
-			contentWidth := boxWidth - 6
-			leftPart := fmt.Sprintf("%-10s %s", catBadge, title)
-			if VisibleLen(leftPart)+VisibleLen(cmd)+2 > contentWidth {
-				leftPart = Truncate(leftPart, contentWidth-VisibleLen(cmd)-2)
+			// Every row is the same visible width: a two-column marker followed
+			// by rowText. Padding rowText to a width that already excludes the
+			// marker keeps the selected and unselected rows identical, so the
+			// right edge stays straight.
+			contentWidth := boxWidth - 4
+			rowWidth := contentWidth - 2
+
+			leftPart := PadCell(catBadge, 10) + " " + title
+			cmdWidth := VisibleLen(cmd)
+			if VisibleLen(leftPart)+cmdWidth+2 > rowWidth {
+				leftPart = PadCell(leftPart, rowWidth-cmdWidth-2)
 			}
-			rowText := PadRight(leftPart, contentWidth-VisibleLen(cmd)) + "  " + cmd
+			rowText := PadCell(leftPart, rowWidth-cmdWidth-2) + "  " + cmd
+			rowText = PadCell(rowText, rowWidth)
 
 			var lineContent string
 			if isSel {
-				lineContent = cp.theme.Colorize(cp.theme.Reverse, "▶ "+PadRight(rowText, contentWidth-2))
+				lineContent = cp.theme.Colorize(cp.theme.Reverse, "▶ "+rowText)
 			} else if act.Disabled {
 				lineContent = "  " + cp.theme.Colorize(cp.theme.Muted, rowText)
 			} else {
 				lineContent = "  " + rowText
 			}
 
-			lines = append(lines, fmt.Sprintf("%s %s %s",
+			lines = append(lines, fmt.Sprintf("%s %s%s",
 				cp.theme.BoxVert,
-				PadRight(lineContent, boxWidth-4),
+				PadCell(lineContent, boxWidth-3),
 				cp.theme.BoxVert,
 			))
 		}
@@ -261,7 +269,7 @@ func (cp *CommandPalette) Render(width, height int) []string {
 
 	// Footer: ╰─ [Enter] Execute  [↑/↓] Navigate  [Esc] Dismiss ─╯
 	footerText := " [Enter] Run  [↑/↓] Select  [Esc] Close "
-	footerPad := boxWidth - VisibleLen(footerText) - 2
+	footerPad := boxWidth - VisibleLen(footerText) - 3
 	if footerPad < 0 {
 		footerPad = 0
 	}

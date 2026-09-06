@@ -143,6 +143,12 @@ func TestComposerSearchCtrlR(t *testing.T) {
 	}
 }
 
+// TestComposerDynamicPrompt pins the composer's prompt contract.
+//
+// Project, mode and runtime state deliberately do NOT appear here: they belong
+// to the persistent statusline. Carrying them in the prompt duplicated context
+// and, because the prompt then spanned two lines while the redraw cleared only
+// one, appended a fresh banner to scrollback on every keystroke.
 func TestComposerDynamicPrompt(t *testing.T) {
 	c := NewComposer(NewTheme(ThemeDefault, true, true))
 	c.SetPrompt(ComposerPromptInfo{
@@ -150,17 +156,28 @@ func TestComposerDynamicPrompt(t *testing.T) {
 		Mode:    "ULTRA",
 		State:   "VERIFYING",
 	})
-	prompt := c.PromptString()
-	if !strings.Contains(prompt, "codex-core") || !strings.Contains(prompt, "ULTRA") || !strings.Contains(prompt, "VERIFYING") {
-		t.Fatalf("prompt missing dynamic fields: %q", prompt)
+
+	prompt := StripANSI(c.PromptString())
+	if !strings.Contains(prompt, PromptMarker) {
+		t.Fatalf("prompt missing its input marker: %q", prompt)
+	}
+	if strings.Contains(prompt, "\n") {
+		t.Fatalf("prompt must occupy a single line: %q", prompt)
+	}
+	for _, statusField := range []string{"codex-core", "ULTRA", "VERIFYING"} {
+		if strings.Contains(prompt, statusField) {
+			t.Errorf("prompt repeats statusline field %q: %q", statusField, prompt)
+		}
 	}
 
-	// Agent directed
-	c.SetPrompt(ComposerPromptInfo{
-		Agent: "@codex",
-	})
-	prompt2 := c.PromptString()
+	// Addressing a participant is composer state the statusline does not carry,
+	// so that one target does belong in the prompt.
+	c.SetPrompt(ComposerPromptInfo{Agent: "codex"})
+	prompt2 := StripANSI(c.PromptString())
 	if !strings.Contains(prompt2, "@codex") {
-		t.Fatalf("prompt missing agent name: %q", prompt2)
+		t.Fatalf("prompt missing the addressed agent: %q", prompt2)
+	}
+	if strings.Contains(prompt2, "\n") {
+		t.Fatalf("agent prompt must occupy a single line: %q", prompt2)
 	}
 }

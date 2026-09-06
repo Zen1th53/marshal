@@ -36,6 +36,17 @@ type Workspace struct {
 	terminal   *Terminal
 	out        io.Writer
 
+	// screen owns in-place frame painting. Without it every redraw appended to
+	// scrollback, so each keystroke left another prompt banner behind.
+	screen *Screen
+
+	// Completion popup state. Tab is completion only: it opens or cycles this
+	// list and never submits, so it can never execute a partially typed command.
+	completionOpen  bool
+	completions     []string
+	completionIndex int
+	completionStem  string
+
 	// interruptArmed records that a Ctrl+C arrived with nothing left to
 	// interrupt. A second consecutive press then exits; any other key disarms
 	// it, so a stray interrupt never closes the workspace on its own.
@@ -276,7 +287,17 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	if err := w.terminal.MakeRaw(); err != nil {
 		return w.runLineScanner(ctx, os.Stdin, os.Stdout)
 	}
-	defer w.terminal.Restore()
+
+	// Run on the alternate screen so the workspace never disturbs the shell's
+	// scrollback, and unwind it in reverse on every exit path, including a
+	// panic, so a crash cannot strand the terminal in raw mode.
+	w.terminal.EnterAltScreen()
+	w.screen = NewScreen(w.terminal)
+	defer func() {
+		w.terminal.ShowCursor()
+		w.terminal.LeaveAltScreen()
+		w.terminal.Restore()
+	}()
 
 	w.renderFullView()
 
@@ -285,6 +306,9 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-w.terminal.ResizeEvents():
+			// A resize invalidates the diff baseline: the previous frame was
+			// laid out for the old geometry.
+			w.screen.Reset()
 			w.renderFullView()
 		default:
 			event, err := w.terminal.ReadKey()
@@ -335,6 +359,7 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 
 			// Handle Command Palette (Ctrl+P)
 			if event.Type == KeyCtrlP {
+				w.closeCompletion()
 				w.palette.Toggle()
 				w.renderFullView()
 				continue
@@ -343,17 +368,7 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			if w.palette.IsOpen() {
 				action, executed := w.palette.HandleKey(event)
 				if executed && action != nil {
-					w.renderFullView()
-					resp, cmdErr := w.cmd.Handle(ctx, action.Command)
-					_ = w.RefreshState(ctx)
-					w.renderFullView()
-					if cmdErr != nil {
-						fmt.Printf("\r\nError: %v\r\n", cmdErr)
-					} else if resp != "" {
-						fmt.Printf("\r\n%s\r\n", resp)
-					}
-					w.renderComposer()
-					continue
+					w.runCommand(ctx, action.Command)
 				}
 				w.renderFullView()
 				continue
@@ -361,115 +376,253 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 
 			// Handle Diff Viewer (d / Esc)
 			if w.diffViewer.IsOpen() {
-				handled := w.diffViewer.HandleKey(event)
-				if handled {
+				if w.diffViewer.HandleKey(event) {
 					w.renderFullView()
 					continue
 				}
 			}
 
-			// Handle 'd' key to open diff viewer when composer buffer is empty
+			// 'd' opens the diff viewer only when the composer is empty, so it
+			// never swallows a character the operator is typing.
 			if event.Type == KeyRune && event.Rune == 'd' && w.composer.Text() == "" {
 				_ = w.diffViewer.Open()
 				w.renderFullView()
 				continue
 			}
 
-			// Handle Tab / Shift+Tab autocomplete
-			if event.Type == KeyTab || event.Type == KeyShiftTab {
-				reverse := (event.Type == KeyShiftTab)
-				newText, newCursor, ok := w.completer.Complete(w.composer.Text(), w.composer.CursorPos(), reverse)
-				if ok {
-					w.composer.SetText(newText)
-					w.composer.cursor = newCursor
+			// While the completion popup is open it owns the arrow keys, Enter and
+			// Esc, so selection is never confused with history navigation or submit.
+			if w.completionOpen {
+				switch event.Type {
+				case KeyEsc:
+					w.closeCompletion()
 					w.renderComposer()
+					continue
+				case KeyUp:
+					w.cycleCompletion(-1)
+					w.renderComposer()
+					continue
+				case KeyDown:
+					w.cycleCompletion(1)
+					w.renderComposer()
+					continue
+				case KeyEnter:
+					// Enter accepts the highlighted candidate and closes the popup.
+					// It does not also submit: accepting a completion and running a
+					// command are two deliberate keystrokes.
+					w.acceptCompletion()
+					w.renderComposer()
+					continue
 				}
-				continue
-			} else {
-				w.completer.Reset()
 			}
+
+			// Tab is completion, never submission. It opens the popup on the first
+			// press and cycles thereafter; it never inserts a newline, never
+			// reprints the prompt and never executes the buffer.
+			if event.Type == KeyTab || event.Type == KeyShiftTab {
+				w.handleTab(event.Type == KeyShiftTab)
+				w.renderComposer()
+				continue
+			}
+
+			// Any other key invalidates a stale completion list.
+			if w.completionOpen {
+				w.closeCompletion()
+			}
+			w.completer.Reset()
 
 			// Pass key to composer line editor
 			cmd, submitted := w.composer.HandleKey(event)
 			if submitted {
 				if cmd == "/quit" || cmd == "/exit" {
-					w.terminal.ClearScreen()
-					fmt.Println("Exiting MARSHAL terminal workspace. Session remains durable.")
 					return nil
 				}
-
-				w.terminal.ClearScreen()
-				resp, cmdErr := w.cmd.Handle(ctx, cmd)
-				_ = w.RefreshState(ctx)
-				w.renderFullView()
-				if cmdErr != nil {
-					fmt.Printf("\r\nError: %v\r\n", cmdErr)
-				} else if resp != "" {
-					fmt.Printf("\r\n%s\r\n", resp)
-				}
-				w.renderComposer()
-				continue
+				w.runCommand(ctx, cmd)
 			}
-
 			w.renderComposer()
 		}
 	}
 }
 
+// runCommand executes a command and records its result as workspace activity.
+//
+// Output is stored in state and painted as part of the next frame rather than
+// printed directly, so a command response cannot scroll the screen or leave
+// chrome behind in scrollback.
+func (w *Workspace) runCommand(ctx context.Context, cmd string) {
+	resp, err := w.cmd.Handle(ctx, cmd)
+	_ = w.RefreshState(ctx)
+
+	w.mu.Lock()
+	if err != nil {
+		w.state.LastOutput = fmt.Sprintf("Error: %v", err)
+		w.state.LastOutputIsError = true
+	} else {
+		w.state.LastOutput = resp
+		w.state.LastOutputIsError = false
+	}
+	w.state.LastCommand = cmd
+	w.mu.Unlock()
+
+	w.renderFullView()
+}
+
+// handleTab opens or advances the completion popup.
+func (w *Workspace) handleTab(reverse bool) {
+	text := w.composer.Text()
+	cursor := w.composer.CursorPos()
+
+	newText, newCursor, ok := w.completer.Complete(text, cursor, reverse)
+	if !ok {
+		w.closeCompletion()
+		return
+	}
+
+	w.composer.SetText(newText)
+	w.composer.cursor = newCursor
+
+	matches := w.completer.ActiveMatches()
+	if len(matches) <= 1 {
+		// A single unambiguous candidate is simply completed; there is nothing
+		// to choose between, so no popup is shown.
+		w.closeCompletion()
+		return
+	}
+
+	w.completions = matches
+	w.completionOpen = true
+	prefix := newText[:newCursor]
+	for i, m := range matches {
+		if strings.HasSuffix(prefix, m) {
+			w.completionIndex = i
+			break
+		}
+	}
+}
+
+// cycleCompletion moves the highlight and applies that candidate to the buffer,
+// so the composer always shows exactly what accepting would produce.
+func (w *Workspace) cycleCompletion(delta int) {
+	if len(w.completions) == 0 {
+		return
+	}
+	w.completionIndex = (w.completionIndex + delta + len(w.completions)) % len(w.completions)
+
+	text := w.composer.Text()
+	cursor := w.composer.CursorPos()
+	runes := []rune(text)
+	if cursor > len(runes) {
+		cursor = len(runes)
+	}
+	wordStart := cursor
+	for wordStart > 0 && !isWordSeparator(runes[wordStart-1]) {
+		wordStart--
+	}
+
+	candidate := w.completions[w.completionIndex]
+	newRunes := append(append(append([]rune{}, runes[:wordStart]...), []rune(candidate)...), runes[cursor:]...)
+	w.composer.SetText(string(newRunes))
+	w.composer.cursor = wordStart + len([]rune(candidate))
+}
+
+// acceptCompletion keeps the highlighted candidate and dismisses the popup.
+func (w *Workspace) acceptCompletion() {
+	w.closeCompletion()
+}
+
+func (w *Workspace) closeCompletion() {
+	w.completionOpen = false
+	w.completions = nil
+	w.completionIndex = 0
+	w.completer.Reset()
+}
+
+// renderFullView repaints the whole workspace frame in place.
+//
+// Both this and renderComposer route through the same screen model, so a
+// keystroke and a state change produce the same single frame. Nothing is ever
+// appended to the terminal: the screen writes only rows that changed and
+// addresses each one absolutely.
 func (w *Workspace) renderFullView() {
-	width, height := w.terminal.Size()
-	w.terminal.ClearScreen()
+	w.paint()
+}
+
+// renderComposer repaints after an input edit. It is the same frame paint; the
+// screen diff means only the composer row actually reaches the terminal, so
+// typing stays cheap while remaining correct.
+func (w *Workspace) renderComposer() {
+	w.paint()
+}
+
+func (w *Workspace) paint() {
+	if w.screen == nil {
+		return
+	}
+	cols, rows := w.terminal.Size()
 
 	w.mu.RLock()
 	state := w.state
 	th := w.theme
+	workDir := w.workDir
 	w.mu.RUnlock()
 
-	// If diff viewer is open, render diff viewer instead of main screen
+	// The diff viewer and palette own the screen while open.
 	if w.diffViewer.IsOpen() {
-		lines := w.diffViewer.Render(width, height-4)
-		for _, l := range lines {
-			fmt.Print(l + "\r\n")
+		lines := w.diffViewer.Render(cols, rows-1)
+		for len(lines) < rows {
+			lines = append(lines, "")
 		}
+		w.screen.Render(lines, cols, rows, rows, 1)
 		return
 	}
 
-	screen := RenderStyledScreen(state, th, width)
-	lines := strings.Split(screen, "\n")
-	for _, l := range lines {
-		fmt.Print(l + "\r\n")
-	}
-
-	// Overlay Command Palette if open
+	var popup []string
 	if w.palette.IsOpen() {
-		palLines := w.palette.Render(width, height)
-		fmt.Print("\r\n")
-		for _, pl := range palLines {
-			fmt.Print(pl + "\r\n")
-		}
+		popup = w.palette.Render(cols, rows)
+	} else if w.completionOpen && len(w.completions) > 0 {
+		popup = renderCompletionPopup(w.completions, w.completionIndex, th, cols)
 	}
 
-	w.renderComposer()
+	frame := BuildFrame(state, th, workDir, w.composer, popup, cols, rows)
+	lines, cursorRow := frame.Lines(cols, rows)
+	w.screen.Render(lines, cols, rows, cursorRow, frame.CursorCol)
 }
 
-func (w *Workspace) renderComposer() {
-	w.terminal.CursorMoveToCol(1)
-	w.terminal.ClearLine()
-	fmt.Print(w.composer.Render())
+// printBatchFrame writes the workspace once for a non-interactive stream.
+//
+// It composes the same header, body and statusline the interactive path paints,
+// so piping commands into the TUI shows the same information rather than a
+// second, divergent layout.
+func (w *Workspace) printBatchFrame(out io.Writer) {
+	w.mu.RLock()
+	state := w.state
+	th := w.theme
+	workDir := w.workDir
+	w.mu.RUnlock()
+
+	const cols = 100
+	frame := BuildFrame(state, th, workDir, w.composer, nil, cols, 40)
+
+	for _, line := range frame.Header {
+		fmt.Fprintln(out, strings.TrimRight(line, " "))
+	}
+	for _, line := range frame.Body {
+		fmt.Fprintln(out, strings.TrimRight(line, " "))
+	}
+	fmt.Fprintln(out, strings.Repeat("─", cols))
+	fmt.Fprintln(out, strings.TrimRight(frame.Status, " "))
 }
 
 func (w *Workspace) runLineScanner(ctx context.Context, in io.Reader, out io.Writer) error {
-	w.mu.RLock()
-	screen := RenderStyledScreen(w.state, w.theme, 90)
-	w.mu.RUnlock()
-	fmt.Fprint(out, screen)
-	fmt.Fprint(out, "\n"+w.composer.Render())
+	// Non-interactive fallback: stdin is a pipe or file, so there is no screen
+	// to address. Output is sequential by necessity, but it renders the same
+	// frame content as the interactive path so both agree on what is shown.
+	w.printBatchFrame(out)
 
 	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
-			fmt.Fprint(out, "\n"+w.composer.Render())
 			continue
 		}
 
@@ -486,7 +639,6 @@ func (w *Workspace) runLineScanner(ctx context.Context, in io.Reader, out io.Wri
 		}
 
 		_ = w.RefreshState(ctx)
-		fmt.Fprint(out, "\n"+w.composer.Render())
 	}
 
 	if err := scanner.Err(); err != nil && err != io.EOF {

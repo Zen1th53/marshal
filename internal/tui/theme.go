@@ -237,6 +237,29 @@ func (t *Theme) RenderBadge(state string) string {
 	}
 }
 
+// RenderBadgeText colours a state word without prefixing a glyph. The
+// statusline is width-constrained, so it carries the colour and the word while
+// leaving the glyph to the roomier panes.
+func (t *Theme) RenderBadgeText(state string) string {
+	stateUpper := strings.ToUpper(strings.TrimSpace(state))
+	switch stateUpper {
+	case "VERIFIED", "SUCCESS", "PASS", "READY", "ACTIVE", "AUTHENTICATED", "AVAILABLE", "CLEAN", "DONE":
+		return t.Colorize(t.Success, stateUpper)
+	case "SUPPORTED", "VERIFYING", "WARNING", "PENDING", "THINKING", "PLANNING", "EXECUTING", "EDITING", "RUNNING_TOOL":
+		return t.Colorize(t.Warning, stateUpper)
+	case "CONTESTED", "CHALLENGE", "HANDOFF", "WAITING_AGENT":
+		return t.Colorize(t.Accent, stateUpper)
+	case "INVALIDATED", "BLOCKED", "FAILED", "CRITICAL", "BLOCKED_BY_POLICY", "CANCELLED":
+		return t.Colorize(t.Danger, stateUpper)
+	case "STALE", "UNSUPPORTED", "IDLE", "WAITING", "PAUSED":
+		return t.Colorize(t.Muted, stateUpper)
+	case "UNAVAILABLE", "NOT_AVAILABLE", "NOT_RUN", "UNKNOWN", "UNRESOLVED":
+		return t.Colorize(t.Muted, stateUpper)
+	default:
+		return t.Colorize(t.Muted, stateUpper)
+	}
+}
+
 // Truncate ensures text fits within width, adding an ellipsis if needed.
 func Truncate(str string, width int) string {
 	if width <= 0 {
@@ -259,4 +282,72 @@ func PadRight(str string, width int) string {
 		return str
 	}
 	return str + strings.Repeat(" ", width-vLen)
+}
+
+// PadCell lays a value into a fixed-width column, measuring by visible width and
+// truncating anything longer so the column can never push its neighbours out of
+// alignment.
+//
+// Use this instead of fmt's %-Ns for any value that may carry colour. A verb
+// like %-12s counts the ANSI escape bytes as characters, so a six-character
+// name wrapped in bold measures fourteen and receives no padding at all, which
+// is what shifts every column to its right.
+func PadCell(str string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if VisibleLen(str) > width {
+		return truncateVisible(str, width)
+	}
+	return PadRight(str, width)
+}
+
+// truncateVisible shortens a string to a visible width while copying escape
+// sequences through untouched. Cutting by raw index would slice through an
+// escape and leave the terminal painting the rest of the screen in a stray
+// colour, so sequences are always emitted whole.
+func truncateVisible(str string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if VisibleLen(str) <= width {
+		return str
+	}
+
+	limit := width
+	ellipsis := ""
+	if width > 1 {
+		limit = width - 1
+		ellipsis = "…"
+	}
+
+	var b strings.Builder
+	visible := 0
+	runes := []rune(str)
+	for i := 0; i < len(runes); i++ {
+		if runes[i] == '\x1b' {
+			// Copy the whole escape sequence; it occupies no visible width.
+			b.WriteRune(runes[i])
+			for i+1 < len(runes) {
+				i++
+				b.WriteRune(runes[i])
+				if runes[i] == 'm' {
+					break
+				}
+			}
+			continue
+		}
+		if visible == limit {
+			break
+		}
+		b.WriteRune(runes[i])
+		visible++
+	}
+	b.WriteString(ellipsis)
+
+	// Close any colour left open by the truncation.
+	if strings.Contains(str, "\x1b[") && !strings.HasSuffix(b.String(), "\x1b[0m") {
+		b.WriteString("\x1b[0m")
+	}
+	return b.String()
 }
