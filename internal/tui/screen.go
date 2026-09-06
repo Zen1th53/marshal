@@ -85,12 +85,15 @@ func (s *Screen) Render(lines []string, cols, rows int, cursorRow, cursorCol int
 // Frame is one composed workspace screen: a product header, a live activity
 // viewport, one statusline and one composer, plus any overlay.
 type Frame struct {
-	Header    []string
-	Body      []string
-	Status    string
-	Composer  string
-	Popup     []string
-	CursorCol int
+	Header          []string
+	Body            []string
+	Status          string
+	Composer        []string
+	Popup           []string
+	ScrollOffset    int
+	UnreadCount     int
+	CursorRowOffset int
+	CursorCol       int
 }
 
 // Lines lays the frame out for a terminal of the given size.
@@ -106,8 +109,12 @@ func (f Frame) Lines(cols, rows int) ([]string, int) {
 	var out []string
 	out = append(out, f.Header...)
 
-	// Reserve the trailing rows: separator, statusline, composer.
-	reserved := 3
+	// Reserve the trailing rows: separator, statusline, composer lines.
+	composerLines := f.Composer
+	if len(composerLines) == 0 {
+		composerLines = []string{""}
+	}
+	reserved := 2 + len(composerLines)
 	popup := f.Popup
 	if len(popup) > 0 {
 		maxPopup := rows - len(f.Header) - reserved - 1
@@ -127,8 +134,16 @@ func (f Frame) Lines(cols, rows int) ([]string, int) {
 
 	body := f.Body
 	if len(body) > bodyHeight {
-		// Keep the newest content: the activity viewport shows the tail.
-		body = body[len(body)-bodyHeight:]
+		total := len(body)
+		start := total - bodyHeight - f.ScrollOffset
+		if start < 0 {
+			start = 0
+		}
+		end := start + bodyHeight
+		if end > total {
+			end = total
+		}
+		body = body[start:end]
 	}
 	out = append(out, body...)
 	for len(out) < len(f.Header)+bodyHeight {
@@ -136,10 +151,21 @@ func (f Frame) Lines(cols, rows int) ([]string, int) {
 	}
 
 	out = append(out, popup...)
-	out = append(out, strings.Repeat("─", cols))
+	sep := strings.Repeat("─", cols)
+	if f.ScrollOffset > 0 {
+		indicator := fmt.Sprintf("──[ ↑ %d lines scrolled | %d new events ↓ (End to follow) ]─", f.ScrollOffset, f.UnreadCount)
+		if len(indicator) < cols {
+			sep = indicator + strings.Repeat("─", cols-len(indicator))
+		}
+	}
+	out = append(out, sep)
 	out = append(out, f.Status)
-	out = append(out, f.Composer)
+	composerStartRow := len(out) + 1
+	out = append(out, composerLines...)
 
-	cursorRow := len(out)
+	cursorRow := composerStartRow + f.CursorRowOffset
+	if cursorRow > len(out) {
+		cursorRow = len(out)
+	}
 	return out, cursorRow
 }

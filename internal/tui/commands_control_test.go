@@ -152,6 +152,23 @@ func TestInspectResolvesCanonicalRecords(t *testing.T) {
 		t.Fatalf("expected approval detail:\n%s", out)
 	}
 
+	// Agent inspection resolves fixed role and status
+	out, err = ws.ExecuteCommand(ctx, "/inspect agent codex")
+	if err != nil {
+		t.Fatalf("/inspect agent: %v", err)
+	}
+	if !strings.Contains(out, "AGENT codex") || !strings.Contains(out, "Fixed Role:") {
+		t.Fatalf("expected agent detail:\n%s", out)
+	}
+
+	out, err = ws.ExecuteCommand(ctx, "/inspect @claude")
+	if err != nil {
+		t.Fatalf("/inspect @claude: %v", err)
+	}
+	if !strings.Contains(out, "AGENT claude") {
+		t.Fatalf("expected inferred agent detail:\n%s", out)
+	}
+
 	// An unknown identifier must report absence, not fabricate a record.
 	out, err = ws.ExecuteCommand(ctx, "/inspect claim does-not-exist")
 	if err != nil {

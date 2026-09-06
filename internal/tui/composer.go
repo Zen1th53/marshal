@@ -109,6 +109,17 @@ func (c *Composer) CursorPos() int {
 	return c.cursor
 }
 
+// CursorVisibleWidth returns the printable column width of the text before the cursor.
+func (c *Composer) CursorVisibleWidth() int {
+	if c.cursor <= 0 {
+		return 0
+	}
+	if c.cursor > len(c.buffer) {
+		return VisibleLen(string(c.buffer))
+	}
+	return VisibleLen(string(c.buffer[:c.cursor]))
+}
+
 // HandleKey processes a parsed key and updates the buffer/cursor.
 // Returns (submitted string, wasSubmitted bool)
 func (c *Composer) HandleKey(k KeyEvent) (string, bool) {
@@ -164,6 +175,22 @@ func (c *Composer) HandleKey(k KeyEvent) (string, bool) {
 		c.deleteWordBefore()
 		return "", false
 
+	case KeyWordLeft:
+		c.wordLeft()
+		return "", false
+
+	case KeyWordRight:
+		c.wordRight()
+		return "", false
+
+	case KeyWordDeleteAfter:
+		c.deleteWordAfter()
+		return "", false
+
+	case KeyCtrlJ:
+		c.insertRune('\n')
+		return "", false
+
 	case KeyCtrlU:
 		c.buffer = c.buffer[c.cursor:]
 		c.cursor = 0
@@ -174,20 +201,23 @@ func (c *Composer) HandleKey(k KeyEvent) (string, bool) {
 		return "", false
 
 	case KeyPaste:
-		for _, r := range k.Paste {
-			if r == '\n' || r == '\r' {
-				continue
-			}
+		normalized := strings.ReplaceAll(k.Paste, "\r\n", "\n")
+		normalized = strings.ReplaceAll(normalized, "\r", "\n")
+		for _, r := range normalized {
 			c.insertRune(r)
 		}
 		return "", false
 
 	case KeyUp:
-		c.historyPrev()
+		if !c.lineUp() {
+			c.historyPrev()
+		}
 		return "", false
 
 	case KeyDown:
-		c.historyNext()
+		if !c.lineDown() {
+			c.historyNext()
+		}
 		return "", false
 
 	case KeyCtrlR:
@@ -249,6 +279,114 @@ func (c *Composer) deleteWordBefore() {
 	}
 	c.buffer = append(c.buffer[:idx], c.buffer[c.cursor:]...)
 	c.cursor = idx
+}
+
+func (c *Composer) wordLeft() {
+	if c.cursor == 0 {
+		return
+	}
+	idx := c.cursor
+	for idx > 0 && unicode.IsSpace(c.buffer[idx-1]) {
+		idx--
+	}
+	for idx > 0 && !unicode.IsSpace(c.buffer[idx-1]) {
+		idx--
+	}
+	c.cursor = idx
+}
+
+func (c *Composer) wordRight() {
+	if c.cursor >= len(c.buffer) {
+		return
+	}
+	idx := c.cursor
+	for idx < len(c.buffer) && unicode.IsSpace(c.buffer[idx]) {
+		idx++
+	}
+	for idx < len(c.buffer) && !unicode.IsSpace(c.buffer[idx]) {
+		idx++
+	}
+	c.cursor = idx
+}
+
+func (c *Composer) deleteWordAfter() {
+	if c.cursor >= len(c.buffer) {
+		return
+	}
+	idx := c.cursor
+	for idx < len(c.buffer) && unicode.IsSpace(c.buffer[idx]) {
+		idx++
+	}
+	for idx < len(c.buffer) && !unicode.IsSpace(c.buffer[idx]) {
+		idx++
+	}
+	c.buffer = append(c.buffer[:c.cursor], c.buffer[idx:]...)
+}
+
+func (c *Composer) lineUp() bool {
+	lines := strings.Split(string(c.buffer), "\n")
+	if len(lines) <= 1 {
+		return false
+	}
+	lineIdx, col := c.CursorPosition()
+	if lineIdx == 0 {
+		return false
+	}
+	targetLine := lineIdx - 1
+	targetCol := col - c.PromptVisibleWidth()
+	if targetCol < 0 {
+		targetCol = 0
+	}
+	idx := 0
+	for i := 0; i < targetLine; i++ {
+		idx += len([]rune(lines[i])) + 1
+	}
+	prevRunes := []rune(lines[targetLine])
+	currW := 0
+	targetRuneIdx := 0
+	for i, r := range prevRunes {
+		w := RuneWidth(r)
+		if currW+w > targetCol {
+			break
+		}
+		currW += w
+		targetRuneIdx = i + 1
+	}
+	c.cursor = idx + targetRuneIdx
+	return true
+}
+
+func (c *Composer) lineDown() bool {
+	lines := strings.Split(string(c.buffer), "\n")
+	if len(lines) <= 1 {
+		return false
+	}
+	lineIdx, col := c.CursorPosition()
+	if lineIdx >= len(lines)-1 {
+		return false
+	}
+	targetLine := lineIdx + 1
+	targetCol := col - c.PromptVisibleWidth()
+	if targetCol < 0 {
+		targetCol = 0
+	}
+	idx := 0
+	for i := 0; i < targetLine; i++ {
+		idx += len([]rune(lines[i])) + 1
+	}
+	nextRunes := []rune(lines[targetLine])
+	currW := 0
+	targetRuneIdx := 0
+	for i, r := range nextRunes {
+		w := RuneWidth(r)
+		if currW+w > targetCol {
+			break
+		}
+		currW += w
+		targetRuneIdx = i + 1
+	}
+	c.cursor = idx + targetRuneIdx
+	return true
 }
 
 // AddHistory appends a command to history if not duplicate of the last entry.
@@ -360,8 +498,44 @@ func (c *Composer) updateSearchMatches() {
 	}
 }
 
-// Render returns the complete composer lines to be output to the terminal.
-func (c *Composer) Render() string {
+// CursorPosition returns (lineIndex, colIndex) relative to the composer.
+// lineIndex is 0-indexed line offset within multiline buffer.
+// colIndex is 0-indexed column offset (printable columns, including prompt width).
+func (c *Composer) CursorPosition() (int, int) {
+	if c.searchMode {
+		return 0, VisibleLen(c.Render())
+	}
+	if c.cursor <= 0 {
+		return 0, c.PromptVisibleWidth()
+	}
+	sub := c.buffer
+	if c.cursor < len(c.buffer) {
+		sub = c.buffer[:c.cursor]
+	}
+
+	lineIdx := 0
+	lastNewline := -1
+	for i, r := range sub {
+		if r == '\n' {
+			lineIdx++
+			lastNewline = i
+		}
+	}
+
+	var lineBeforeCursor string
+	if lastNewline == -1 {
+		lineBeforeCursor = string(sub)
+	} else {
+		lineBeforeCursor = string(sub[lastNewline+1:])
+	}
+
+	promptW := c.PromptVisibleWidth()
+	col := promptW + VisibleLen(lineBeforeCursor)
+	return lineIdx, col
+}
+
+// RenderLines returns the composer lines to be output to the terminal.
+func (c *Composer) RenderLines() []string {
 	prompt := c.PromptString()
 	if c.searchMode {
 		query := string(c.searchQuery)
@@ -370,15 +544,34 @@ func (c *Composer) Render() string {
 		if matchCount > 0 {
 			currentMatch = c.history[c.searchMatches[c.searchIndex]]
 		}
-		return fmt.Sprintf("(bck-i-search)`%s' [%d matches]: %s", query, matchCount, currentMatch)
+		return []string{fmt.Sprintf("(bck-i-search)`%s' [%d matches]: %s", query, matchCount, currentMatch)}
 	}
 
-	beforeCursor := string(c.buffer[:c.cursor])
-	afterCursor := string(c.buffer[c.cursor:])
-	return fmt.Sprintf("%s%s%s", prompt, beforeCursor, afterCursor)
+	fullText := string(c.buffer)
+	lines := strings.Split(fullText, "\n")
+	if len(lines) <= 1 {
+		return []string{prompt + fullText}
+	}
+
+	continuationPrompt := strings.Repeat(" ", c.PromptVisibleWidth())
+	result := make([]string, len(lines))
+	for i, line := range lines {
+		if i == 0 {
+			result[i] = prompt + line
+		} else {
+			result[i] = continuationPrompt + line
+		}
+	}
+	return result
+}
+
+// Render returns the complete composer lines to be output to the terminal.
+func (c *Composer) Render() string {
+	return strings.Join(c.RenderLines(), "\n")
 }
 
 // IsSearchMode returns true if in Ctrl+R search mode.
 func (c *Composer) IsSearchMode() bool {
 	return c.searchMode
 }
+

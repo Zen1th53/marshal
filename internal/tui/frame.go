@@ -22,14 +22,17 @@ func BuildFrame(s UIState, th *Theme, workDir string, composer *Composer, popup 
 		cols = 40
 	}
 
+	composerLines := composer.RenderLines()
+	cursorLine, cursorCol := composer.CursorPosition()
 	f := Frame{
-		Header:   buildHeader(s, th, cols),
-		Body:     buildBody(s, th, cols, rows),
-		Status:   RenderStatusline(s, th, workDir, cols),
-		Popup:    popup,
-		Composer: composer.Render(),
+		Header:          buildHeader(s, th, cols),
+		Body:            buildBody(s, th, cols, rows),
+		Status:          RenderStatusline(s, th, workDir, cols),
+		Popup:           popup,
+		Composer:        composerLines,
+		CursorRowOffset: cursorLine,
+		CursorCol:       cursorCol + 1,
 	}
-	f.CursorCol = composer.PromptVisibleWidth() + composer.CursorPos() + 1
 	return f
 }
 
@@ -64,6 +67,11 @@ func buildBody(s UIState, th *Theme, cols, rows int) []string {
 	if res := outputSection(s, th, cols); len(res) > 0 {
 		out = append(out, "")
 		out = append(out, res...)
+	}
+
+	if approvals := approvalsSection(s, th, cols); len(approvals) > 0 {
+		out = append(out, "")
+		out = append(out, approvals...)
 	}
 
 	out = append(out, "")
@@ -230,3 +238,36 @@ func MeaningfulMessages(msgs []model.AgentMessage) []model.AgentMessage {
 	}
 	return out
 }
+
+func approvalsSection(s UIState, th *Theme, cols int) []string {
+	if len(s.PendingApprovals) == 0 {
+		return nil
+	}
+
+	out := []string{PadCell(fmt.Sprintf(" %s  %s",
+		th.Colorize(th.Warning, "[!] Pending Approvals"),
+		th.Colorize(th.Muted, fmt.Sprintf("%d requiring decision", len(s.PendingApprovals)))), cols)}
+
+	for i, a := range s.PendingApprovals {
+		if i >= 3 {
+			out = append(out, PadCell(th.Colorize(th.Muted,
+				fmt.Sprintf("   +%d more · /approve", len(s.PendingApprovals)-i)), cols))
+			break
+		}
+		target := a.Target
+		if target == "" {
+			target = a.Scope
+		}
+		if target == "" {
+			target = "(unspecified)"
+		}
+		out = append(out, PadCell(fmt.Sprintf("   %s %s: %s on %s",
+			th.Colorize(th.Bold, a.ID),
+			th.Colorize(th.Active, a.RequestedBy),
+			th.Colorize(th.Warning, string(a.Operation)),
+			th.Colorize(th.Muted, target)), cols))
+		out = append(out, PadCell("     "+th.Colorize(th.Bold, "/approve "+a.ID)+" · "+th.Colorize(th.Danger, "/reject "+a.ID)+" · "+th.Colorize(th.Muted, "/inspect "+a.ID), cols))
+	}
+	return out
+}
+

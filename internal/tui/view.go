@@ -39,6 +39,7 @@ type UIState struct {
 	GitStatus          GitStatusResult
 	ActiveToolCard     *ToolExecutionCard
 	KnownSecrets       []string
+	PendingApprovals   []model.Approval
 
 	// Result of the most recent command. It is carried in state and painted as
 	// part of the frame rather than printed directly, so command output cannot

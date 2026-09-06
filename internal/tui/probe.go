@@ -2,9 +2,12 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/model"
 )
@@ -34,13 +37,49 @@ const (
 	StateUnavailable = "UNAVAILABLE"
 )
 
+var (
+	probeHarnessMu   sync.RWMutex
+	cachedHarnesses  []HarnessDiscoveryResult
+	harnessCacheTime time.Time
+
+	probeGitMu      sync.RWMutex
+	cachedGitStatus = make(map[string]GitStatusResult)
+	gitCacheTime    = make(map[string]time.Time)
+)
+
+// InvalidateProbeCache forces the next probe calls to run live without using cached results.
+func InvalidateProbeCache() {
+	probeHarnessMu.Lock()
+	cachedHarnesses = nil
+	harnessCacheTime = time.Time{}
+	probeHarnessMu.Unlock()
+
+	probeGitMu.Lock()
+	cachedGitStatus = make(map[string]GitStatusResult)
+	gitCacheTime = make(map[string]time.Time)
+	probeGitMu.Unlock()
+}
+
 // ProbeHarnesses performs live detection of external harnesses on the host system.
 // Absolute Non-Negotiable Rule: Never fabricate or hardcode availability or versions.
 func ProbeHarnesses() []HarnessDiscoveryResult {
-	// Only the harness identity and its binary name are known ahead of time. The
-	// model a harness will actually serve is decided by that harness's own
-	// configuration and credentials, which this probe cannot read, so no model
-	// list is asserted here. Callers render UnknownModel rather than guessing.
+	probeHarnessMu.RLock()
+	if cachedHarnesses != nil && time.Since(harnessCacheTime) < 5*time.Second {
+		res := make([]HarnessDiscoveryResult, len(cachedHarnesses))
+		copy(res, cachedHarnesses)
+		probeHarnessMu.RUnlock()
+		return res
+	}
+	probeHarnessMu.RUnlock()
+
+	probeHarnessMu.Lock()
+	defer probeHarnessMu.Unlock()
+	if cachedHarnesses != nil && time.Since(harnessCacheTime) < 5*time.Second {
+		res := make([]HarnessDiscoveryResult, len(cachedHarnesses))
+		copy(res, cachedHarnesses)
+		return res
+	}
+
 	targets := []struct {
 		name       string
 		binaryName string
@@ -80,11 +119,17 @@ func ProbeHarnesses() []HarnessDiscoveryResult {
 		})
 	}
 
-	return results
+	cachedHarnesses = results
+	harnessCacheTime = time.Now()
+	res := make([]HarnessDiscoveryResult, len(results))
+	copy(res, results)
+	return res
 }
 
 func probeBinaryVersion(binPath string) string {
-	cmd := exec.Command(binPath, "--version")
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binPath, "--version")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err == nil {
@@ -106,14 +151,30 @@ type GitStatusResult struct {
 
 // ProbeGitStatus queries git for branch, commit, and change status.
 func ProbeGitStatus(workDir string) GitStatusResult {
+	probeGitMu.RLock()
+	if res, ok := cachedGitStatus[workDir]; ok && time.Since(gitCacheTime[workDir]) < 3*time.Second {
+		probeGitMu.RUnlock()
+		return res
+	}
+	probeGitMu.RUnlock()
+
+	probeGitMu.Lock()
+	defer probeGitMu.Unlock()
+	if res, ok := cachedGitStatus[workDir]; ok && time.Since(gitCacheTime[workDir]) < 3*time.Second {
+		return res
+	}
+
 	res := GitStatusResult{
 		Branch: "unknown",
 		Commit: "unknown",
 		Clean:  true,
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
 	// 1. Branch
-	cmdBranch := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmdBranch := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
 	if workDir != "" {
 		cmdBranch.Dir = workDir
 	}
@@ -124,7 +185,7 @@ func ProbeGitStatus(workDir string) GitStatusResult {
 	}
 
 	// 2. Commit
-	cmdCommit := exec.Command("git", "rev-parse", "--short", "HEAD")
+	cmdCommit := exec.CommandContext(ctx, "git", "rev-parse", "--short", "HEAD")
 	if workDir != "" {
 		cmdCommit.Dir = workDir
 	}
@@ -135,7 +196,7 @@ func ProbeGitStatus(workDir string) GitStatusResult {
 	}
 
 	// 3. Status
-	cmdStatus := exec.Command("git", "status", "--porcelain")
+	cmdStatus := exec.CommandContext(ctx, "git", "status", "--porcelain")
 	if workDir != "" {
 		cmdStatus.Dir = workDir
 	}
@@ -153,6 +214,8 @@ func ProbeGitStatus(workDir string) GitStatusResult {
 		res.Clean = count == 0
 	}
 
+	cachedGitStatus[workDir] = res
+	gitCacheTime[workDir] = time.Now()
 	return res
 }
 

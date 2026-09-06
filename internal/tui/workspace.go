@@ -51,6 +51,10 @@ type Workspace struct {
 	// interrupt. A second consecutive press then exits; any other key disarms
 	// it, so a stray interrupt never closes the workspace on its own.
 	interruptArmed bool
+
+	// Scroll and activity unread tracking
+	scrollOffset int
+	unreadNew    int
 }
 
 // NewWorkspace instantiates a dynamic terminal workspace connected to the canonical store.
@@ -65,6 +69,12 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	cwd, _ := os.Getwd()
 	th := NewTheme(ThemeDefault, true, true)
 
+	participants := DiscoverTeamParticipants(nil)
+	agentIDs := make([]string, 0, len(participants))
+	for _, p := range participants {
+		agentIDs = append(agentIDs, p.AgentID)
+	}
+
 	compCtx := CompletionContext{
 		Commands: []string{
 			"/status", "/goal", "/mode", "/claims", "/inspect", "/approve", "/reject",
@@ -74,7 +84,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/ultra", "/backup", "/fingerprint", "/runtime", "/store", "/export", "/blind",
 			"/reinjection", "/alignment", "/diff", "/help", "/quit",
 		},
-		Agents:      []string{"claude", "codex", "opencode", "antigravity"},
+		Agents:      agentIDs,
 		Subcommands: make(map[string][]string),
 	}
 	compCtx.Subcommands["/goal"] = []string{"create", "edit", "diff", "version", "criteria", "constraints", "add-constraint", "rm-constraint", "donotdo", "progress"}
@@ -118,7 +128,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			SessionMode:        "ULTRA",
 			UnderstandingState: model.GoalReady,
 			GitStatus:          ProbeGitStatus(cwd),
-			Participants:       DiscoverTeamParticipants(nil),
+			Participants:       participants,
 		},
 	}
 	ws.cmd = NewCommandHandler(ws)
@@ -203,7 +213,16 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 	// 8. Recover recent messages
 	msgs, err := w.store.ListAgentMessages(ctx, w.sessionID, 30)
 	if err == nil {
+		if w.scrollOffset > 0 && len(msgs) > len(w.state.RecentMessages) {
+			w.unreadNew += len(msgs) - len(w.state.RecentMessages)
+		}
 		w.state.RecentMessages = msgs
+	}
+
+	// 8b. Recover pending approvals
+	pending, err := w.store.ListPendingApprovals(ctx, w.state.ProjectID)
+	if err == nil {
+		w.state.PendingApprovals = pending
 	}
 
 	// 9. Update autocomplete context with live objects
@@ -292,8 +311,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	// scrollback, and unwind it in reverse on every exit path, including a
 	// panic, so a crash cannot strand the terminal in raw mode.
 	w.terminal.EnterAltScreen()
+	w.terminal.EnableBracketedPaste()
 	w.screen = NewScreen(w.terminal)
 	defer func() {
+		w.terminal.DisableBracketedPaste()
 		w.terminal.ShowCursor()
 		w.terminal.LeaveAltScreen()
 		w.terminal.Restore()
@@ -430,6 +451,27 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				w.closeCompletion()
 			}
 			w.completer.Reset()
+
+			// Scroll navigation for transcript activity
+			if event.Type == KeyPgUp {
+				w.scrollOffset += 5
+				w.renderFullView()
+				continue
+			}
+			if event.Type == KeyPgDn {
+				w.scrollOffset -= 5
+				if w.scrollOffset < 0 {
+					w.scrollOffset = 0
+				}
+				w.renderFullView()
+				continue
+			}
+			if event.Type == KeyEnd && w.scrollOffset > 0 {
+				w.scrollOffset = 0
+				w.unreadNew = 0
+				w.renderFullView()
+				continue
+			}
 
 			// Pass key to composer line editor
 			cmd, submitted := w.composer.HandleKey(event)
@@ -584,6 +626,8 @@ func (w *Workspace) paint() {
 	}
 
 	frame := BuildFrame(state, th, workDir, w.composer, popup, cols, rows)
+	frame.ScrollOffset = w.scrollOffset
+	frame.UnreadCount = w.unreadNew
 	lines, cursorRow := frame.Lines(cols, rows)
 	w.screen.Render(lines, cols, rows, cursorRow, frame.CursorCol)
 }

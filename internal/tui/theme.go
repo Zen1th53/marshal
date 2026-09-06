@@ -23,10 +23,41 @@ func StripANSI(str string) string {
 	return ansiRegex.ReplaceAllString(str, "")
 }
 
-// VisibleLen returns the printable rune length of a string ignoring ANSI codes.
+// RuneWidth returns the display column width of a rune on a terminal (0, 1, or 2).
+func RuneWidth(r rune) int {
+	if r == 0 || r < 32 || (r >= 0x7f && r < 0xa0) {
+		return 0 // non-printing control
+	}
+	// Combining characters and zero-width spaces
+	if (r >= 0x0300 && r <= 0x036f) || (r >= 0x1ab0 && r <= 0x1aff) ||
+		(r >= 0x1dc0 && r <= 0x1dff) || (r >= 0x20d0 && r <= 0x20ff) ||
+		(r >= 0xfe20 && r <= 0xfe2f) || r == 0x200b || r == 0x200c || r == 0x200d {
+		return 0
+	}
+	// Wide characters: CJK ideographs, Hangul, Fullwidth forms, Emojis
+	if (r >= 0x1100 && r <= 0x115f) || // Hangul Jamo
+		(r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) || // CJK Radicals, Symbols, Kangxi, Hiragana, Katakana, Bopomofo, Hangul, CJK Unified
+		(r >= 0xac00 && r <= 0xd7a3) || // Hangul Syllables
+		(r >= 0xf900 && r <= 0xfaff) || // CJK Compatibility Ideographs
+		(r >= 0xfe10 && r <= 0xfe19) || // Vertical forms
+		(r >= 0xfe30 && r <= 0xfe6f) || // CJK Compatibility Forms
+		(r >= 0xff01 && r <= 0xff60) || // Fullwidth Forms
+		(r >= 0xffe0 && r <= 0xffe6) ||
+		(r >= 0x1f300 && r <= 0x1faff) || // Misc Symbols and Pictographs, Emoticons, Transport, Supplemental Symbols
+		(r >= 0x2600 && r <= 0x27bf) {   // Misc Symbols, Dingbats
+		return 2
+	}
+	return 1
+}
+
+// VisibleLen returns the printable terminal column width of a string ignoring ANSI codes.
 func VisibleLen(str string) int {
 	clean := StripANSI(str)
-	return len([]rune(clean))
+	w := 0
+	for _, r := range clean {
+		w += RuneWidth(r)
+	}
+	return w
 }
 
 // Theme encapsulates colors and box drawing characters for the TUI.
@@ -265,14 +296,10 @@ func Truncate(str string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	runes := []rune(str)
-	if len(runes) <= width {
+	if VisibleLen(str) <= width {
 		return str
 	}
-	if width <= 1 {
-		return string(runes[:width])
-	}
-	return string(runes[:width-1]) + "…"
+	return truncateVisible(str, width)
 }
 
 // PadRight pads a string with spaces up to the requested visible width.
@@ -316,9 +343,14 @@ func truncateVisible(str string, width int) string {
 
 	limit := width
 	ellipsis := ""
+	ellipsisWidth := 0
 	if width > 1 {
-		limit = width - 1
 		ellipsis = "…"
+		ellipsisWidth = RuneWidth('…')
+		if ellipsisWidth < 1 {
+			ellipsisWidth = 1
+		}
+		limit = width - ellipsisWidth
 	}
 
 	var b strings.Builder
@@ -337,11 +369,12 @@ func truncateVisible(str string, width int) string {
 			}
 			continue
 		}
-		if visible == limit {
+		rw := RuneWidth(runes[i])
+		if visible+rw > limit {
 			break
 		}
 		b.WriteRune(runes[i])
-		visible++
+		visible += rw
 	}
 	b.WriteString(ellipsis)
 

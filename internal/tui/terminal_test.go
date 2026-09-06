@@ -28,7 +28,7 @@ func TestParseKey(t *testing.T) {
 		{"Escape", []byte("\x1b"), KeyEsc, 0},
 		{"Tab", []byte("\t"), KeyTab, 0},
 		{"Enter CR", []byte("\r"), KeyEnter, 0},
-		{"Enter LF", []byte("\n"), KeyEnter, 0},
+		{"Ctrl+J LF", []byte("\n"), KeyCtrlJ, 0},
 		{"Backspace 127", []byte("\x7f"), KeyBackspace, 0},
 		{"Backspace 8", []byte("\x08"), KeyBackspace, 0},
 		{"Ctrl+A", []byte{0x01}, KeyCtrlA, 0},
@@ -38,6 +38,11 @@ func TestParseKey(t *testing.T) {
 		{"Ctrl+R", []byte{0x12}, KeyCtrlR, 0},
 		{"Ctrl+F", []byte{0x06}, KeyCtrlF, 0},
 		{"Ctrl+C", []byte{0x03}, KeyCtrlC, 0},
+		{"Alt+B", []byte("\x1bb"), KeyWordLeft, 0},
+		{"Alt+F", []byte("\x1bf"), KeyWordRight, 0},
+		{"Alt+D", []byte("\x1bd"), KeyWordDeleteAfter, 0},
+		{"Ctrl+Left", []byte("\x1b[1;5D"), KeyWordLeft, 0},
+		{"Ctrl+Right", []byte("\x1b[1;5C"), KeyWordRight, 0},
 		{"Bracketed Paste", []byte("\x1b[200~hello world\x1b[201~"), KeyPaste, 0},
 	}
 

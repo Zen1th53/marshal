@@ -96,7 +96,7 @@ func (h *CommandHandler) handleInspect(ctx context.Context, kind, id string) (st
 	kind = strings.ToLower(strings.TrimSpace(kind))
 	// Evidence is probed last: its lookup falls back to a ledger acknowledgement
 	// for any unrecognised id, so it would otherwise shadow every other kind.
-	order := []string{"claim", "checkpoint", "task", "handoff", "approval", "evidence"}
+	order := []string{"claim", "checkpoint", "task", "handoff", "approval", "agent", "evidence"}
 	if kind != "" {
 		order = []string{kind}
 	}
@@ -179,6 +179,51 @@ func (h *CommandHandler) inspectOne(ctx context.Context, kind, id string) (strin
 			return "", err
 		}
 		return renderApproval(approval), nil
+
+	case "agent":
+		id = strings.TrimPrefix(id, "@")
+		var p *model.Participant
+		h.ws.mu.RLock()
+		for _, part := range h.ws.state.Participants {
+			if strings.EqualFold(part.AgentID, id) {
+				cp := part
+				p = &cp
+				break
+			}
+		}
+		activeTurn := h.ws.state.ActiveTurn
+		h.ws.mu.RUnlock()
+
+		if p == nil {
+			return "", fmt.Errorf("agent %q not found in active team session", id)
+		}
+
+		stateStr := "IDLE"
+		if p.AgentID == activeTurn {
+			stateStr = "WORKING"
+		} else if !p.IsActive {
+			stateStr = "UNAVAILABLE"
+		}
+
+		modelStr := p.Model
+		if modelStr == "" {
+			modelStr = "UNKNOWN"
+		}
+
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("AGENT %s\n", p.AgentID))
+		b.WriteString(fmt.Sprintf("  Fixed Role:      %s\n", p.Role))
+		b.WriteString(fmt.Sprintf("  State:           %s\n", stateStr))
+		b.WriteString(fmt.Sprintf("  Harness:         %s\n", p.Harness))
+		b.WriteString(fmt.Sprintf("  Model:           %s\n", modelStr))
+		b.WriteString(fmt.Sprintf("  Provider:        %s\n", "UNKNOWN"))
+		b.WriteString(fmt.Sprintf("  Native Mode:     %s\n", "UNKNOWN"))
+		b.WriteString(fmt.Sprintf("  Active Task:     %s\n", "UNKNOWN"))
+		b.WriteString(fmt.Sprintf("  Waiting On:      %s\n", "UNKNOWN"))
+		b.WriteString(fmt.Sprintf("  Recent Handoffs: %s\n", "NONE"))
+		b.WriteString(fmt.Sprintf("  Tokens / Cost:   %s\n", "UNKNOWN"))
+		b.WriteString(fmt.Sprintf("  Routing Reason:  %s\n", "UNKNOWN"))
+		return b.String(), nil
 	}
 
 	return "", fmt.Errorf("unsupported inspect kind %q", kind)
