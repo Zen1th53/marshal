@@ -42,3 +42,23 @@ func TestThemeRendering(t *testing.T) {
 		t.Errorf("expected 'abc  ', got %q", padded)
 	}
 }
+
+func TestUnicodeRuneWidth(t *testing.T) {
+	// ASCII
+	if VisibleLen("hello") != 5 {
+		t.Errorf("expected len 5 for 'hello', got %d", VisibleLen("hello"))
+	}
+	// CJK (each character occupies 2 columns on terminal)
+	if VisibleLen("你好") != 4 {
+		t.Errorf("expected len 4 for '你好', got %d", VisibleLen("你好"))
+	}
+	// Emoji (2 columns)
+	if VisibleLen("🚀") != 2 {
+		t.Errorf("expected len 2 for '🚀', got %d", VisibleLen("🚀"))
+	}
+	// Truncate with wide characters
+	trunc := Truncate("你好世界", 5)
+	if VisibleLen(trunc) > 5 {
+		t.Errorf("truncated string %q exceeds width 5: %d", trunc, VisibleLen(trunc))
+	}
+}

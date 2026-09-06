@@ -408,11 +408,33 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 	}
 
 	if args[0] == "config" {
-		if len(args) < 3 {
-			return "Usage: /provider config <provider_name> <api_key>", nil
+		// Credentials are deliberately not accepted here. A secret typed as a
+		// command argument lands in the composer, the command history and the
+		// activity transcript, so the TUI refuses the value and points at the
+		// harness's own credential flow, which stores it outside MARSHAL.
+		if len(args) >= 3 {
+			return "Refusing to accept a credential as a command argument: it would enter " +
+				"the transcript and command history.\n" +
+				"Configure the provider through its own harness (for example `claude`, " +
+				"`codex` or `opencode` login), then run /provider status to confirm what " +
+				"MARSHAL can see.", nil
 		}
-		provider := args[1]
-		return fmt.Sprintf("Provider %s configured with redacted secret (key length: %d).", provider, len(args[2])), nil
+		if len(args) < 2 {
+			return "Usage: /provider config <provider_name>", nil
+		}
+
+		name := strings.ToLower(args[1])
+		for _, pr := range ProbeHarnesses() {
+			if pr.HarnessName != name {
+				continue
+			}
+			if !pr.Installed {
+				return fmt.Sprintf("Provider %s: %s\n  %s", name, StateUnavailable, pr.Reason), nil
+			}
+			return fmt.Sprintf("Provider %s: %s (%s)\n  Version: %s\n  Credentials are held by the harness; MARSHAL does not store them.\n  Auth state: UNKNOWN until an execution establishes it.",
+				name, pr.State, pr.BinaryPath, pr.Version), nil
+		}
+		return fmt.Sprintf("Unknown provider %q. Run /provider status to see what this host provides.", name), nil
 	}
 
 	return "Usage: /provider [status|config <name> <key>]", nil
@@ -438,35 +460,244 @@ func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (stri
 		if len(args) < 3 {
 			return "Usage: /harness select <role> <harness_name>", nil
 		}
-		role := args[1]
-		harnessName := args[2]
-		return fmt.Sprintf("Role %s bound to harness %s.", role, harnessName), nil
+		if h.ws.store == nil {
+			return "Store unavailable", nil
+		}
+		role := strings.ToLower(args[1])
+		harnessName := strings.ToLower(args[2])
+
+		// A role binding is only meaningful for a harness MARSHAL can actually
+		// see. Binding to a name that no probe reports would record a preference
+		// the runtime can never honour.
+		known := false
+		for _, pr := range ProbeHarnesses() {
+			if pr.HarnessName == harnessName {
+				known = true
+				break
+			}
+		}
+		if !known {
+			return fmt.Sprintf("Unknown harness %q. Run /harness probe to see what this host provides.", harnessName), nil
+		}
+
+		profile, err := h.ws.store.GetHarnessProfile(ctx, harnessName)
+		if err != nil || profile == nil {
+			seeded, perr := h.seedHarnessProfile(ctx, harnessName)
+			if perr != nil {
+				return "", fmt.Errorf("no harness profile for %q: %w", harnessName, perr)
+			}
+			profile = seeded
+		}
+
+		// Record the binding on the canonical profile as a native mode entry so
+		// it survives the session and is readable by any other surface.
+		binding := "role:" + role
+		replaced := false
+		for i, mode := range profile.NativeModes {
+			if strings.HasPrefix(mode, "role:") && mode == binding {
+				replaced = true
+				_ = i
+				break
+			}
+		}
+		if !replaced {
+			profile.NativeModes = append(profile.NativeModes, binding)
+		}
+		profile.ProbedAt = time.Now().UTC()
+		if err := h.ws.store.SaveHarnessProfile(ctx, *profile); err != nil {
+			return "", fmt.Errorf("save harness binding: %w", err)
+		}
+
+		readBack, err := h.ws.store.GetHarnessProfile(ctx, harnessName)
+		if err != nil || readBack == nil {
+			return "", fmt.Errorf("harness binding did not persist for %q", harnessName)
+		}
+		found := false
+		for _, mode := range readBack.NativeModes {
+			if mode == binding {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return "", fmt.Errorf("harness binding did not persist for %q", harnessName)
+		}
+		return fmt.Sprintf("Role %s bound to harness %s (persisted).", role, harnessName), nil
 	}
 
 	return "Usage: /harness [probe|status|select <role> <harness>]", nil
 }
 
 // handleModel selects an active model for routing.
+// handleModel records a model preference on the canonical harness profile.
+//
+// A model belongs to the harness that serves it, so the preference is stored as
+// that profile's DefaultModel rather than as TUI-local state. Reporting success
+// without writing anything -- which this previously did -- makes the capability
+// unusable and the parity claim false.
 func (h *CommandHandler) handleModel(ctx context.Context, args []string) (string, error) {
-	if len(args) < 2 || args[0] != "select" {
-		return "Usage: /model select <model_name>", nil
+	if len(args) == 0 || args[0] == "show" {
+		return h.renderModelSelections(ctx)
 	}
-	modelName := args[1]
-	return fmt.Sprintf("Default model preference set to %s.", modelName), nil
+	if args[0] != "select" || len(args) < 2 {
+		return "Usage: /model select <harness> <model_name>  (or /model show)", nil
+	}
+	if h.ws.store == nil {
+		return "Store unavailable", nil
+	}
+
+	// Accept "/model select <harness> <model>", and fall back to the routed
+	// harness when only a model is given.
+	harnessName, modelName := "", ""
+	if len(args) >= 3 {
+		harnessName, modelName = strings.ToLower(args[1]), args[2]
+	} else {
+		modelName = args[1]
+		plan, err := h.currentRoutePlan(ctx)
+		if err != nil {
+			return "", err
+		}
+		harnessName = plan.Harness
+	}
+
+	profile, err := h.ws.store.GetHarnessProfile(ctx, harnessName)
+	if err != nil || profile == nil {
+		// No probe has been recorded yet. Seed the profile from a live probe so
+		// the preference lands on a real, verifiable record.
+		seeded, perr := h.seedHarnessProfile(ctx, harnessName)
+		if perr != nil {
+			return "", fmt.Errorf("no harness profile for %q and probe failed: %w", harnessName, perr)
+		}
+		profile = seeded
+	}
+
+	profile.DefaultModel = modelName
+	profile.ProbedAt = time.Now().UTC()
+	if err := h.ws.store.SaveHarnessProfile(ctx, *profile); err != nil {
+		return "", fmt.Errorf("save model preference: %w", err)
+	}
+
+	readBack, err := h.ws.store.GetHarnessProfile(ctx, harnessName)
+	if err != nil || readBack == nil || readBack.DefaultModel != modelName {
+		return "", fmt.Errorf("model preference did not persist for %q", harnessName)
+	}
+	return fmt.Sprintf("Default model for %s set to %s (persisted).", harnessName, readBack.DefaultModel), nil
+}
+
+// renderModelSelections reports the persisted model preference per harness.
+func (h *CommandHandler) renderModelSelections(ctx context.Context) (string, error) {
+	if h.ws.store == nil {
+		return "Store unavailable", nil
+	}
+	var b strings.Builder
+	b.WriteString("MODEL SELECTION (persisted per harness):\n")
+	for _, pr := range ProbeHarnesses() {
+		profile, err := h.ws.store.GetHarnessProfile(ctx, pr.HarnessName)
+		selected := UnknownModel
+		if err == nil && profile != nil && profile.DefaultModel != "" {
+			selected = profile.DefaultModel
+		}
+		b.WriteString(fmt.Sprintf("  %-12s %s\n", pr.HarnessName, selected))
+	}
+	b.WriteString("Set with /model select <harness> <model>.")
+	return b.String(), nil
+}
+
+// seedHarnessProfile writes a profile from a live probe so preferences have a
+// real record to attach to. Nothing about the harness is invented: an absent
+// binary is recorded as such.
+func (h *CommandHandler) seedHarnessProfile(ctx context.Context, harnessName string) (*model.HarnessProfile, error) {
+	for _, pr := range ProbeHarnesses() {
+		if pr.HarnessName != harnessName {
+			continue
+		}
+		version := pr.Version
+		if version == "" {
+			version = UnknownModel
+		}
+		profile := model.HarnessProfile{
+			Harness:          pr.HarnessName,
+			InstalledVersion: version,
+			BinaryPath:       pr.BinaryPath,
+			ProbedAt:         time.Now().UTC(),
+		}
+		if err := h.ws.store.SaveHarnessProfile(ctx, profile); err != nil {
+			return nil, err
+		}
+		return &profile, nil
+	}
+	return nil, fmt.Errorf("unknown harness %q", harnessName)
+}
+
+// currentRoutePlan asks the ULTRA router what it would select right now.
+func (h *CommandHandler) currentRoutePlan(ctx context.Context) (model.ULTRARoutePlan, error) {
+	if h.ws.router == nil {
+		return model.ULTRARoutePlan{}, fmt.Errorf("ULTRA router unavailable")
+	}
+	h.ws.mu.RLock()
+	goal := h.ws.state.Goal
+	h.ws.mu.RUnlock()
+
+	req := model.ULTRARouteRequest{GoalID: goal.ID, GoalRevision: goal.Revision,
+		FixedRole: model.RoleDeveloper, Risk: model.R1}
+	if goal.Risk != "" {
+		req.Risk = goal.Risk
+	}
+	return h.ws.router.Route(ctx, req)
 }
 
 // handleEffort sets reasoning effort.
+// handleEffort records the reasoning-effort preference on the canonical harness
+// profile so the setting survives the session rather than being announced and
+// discarded.
 func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (string, error) {
-	if len(args) < 1 {
-		return "Usage: /effort <low|medium|high>", nil
+	if h.ws.store == nil {
+		return "Store unavailable", nil
 	}
+
+	plan, err := h.currentRoutePlan(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if len(args) == 0 {
+		profile, perr := h.ws.store.GetHarnessProfile(ctx, plan.Harness)
+		current := plan.ReasoningEffort
+		if perr == nil && profile != nil && len(profile.ReasoningKnobs) > 0 {
+			current = profile.ReasoningKnobs[0]
+		}
+		return fmt.Sprintf("Reasoning effort for %s: %s\nSet with /effort <low|medium|high>.",
+			plan.Harness, orNone(current)), nil
+	}
+
 	effort := strings.ToLower(args[0])
 	switch effort {
 	case "low", "medium", "high":
-		return fmt.Sprintf("Reasoning effort configured to %s.", effort), nil
 	default:
 		return "Invalid effort. Options: low, medium, high", nil
 	}
+
+	profile, err := h.ws.store.GetHarnessProfile(ctx, plan.Harness)
+	if err != nil || profile == nil {
+		seeded, perr := h.seedHarnessProfile(ctx, plan.Harness)
+		if perr != nil {
+			return "", fmt.Errorf("no harness profile for %q: %w", plan.Harness, perr)
+		}
+		profile = seeded
+	}
+
+	profile.ReasoningKnobs = []string{effort}
+	profile.ProbedAt = time.Now().UTC()
+	if err := h.ws.store.SaveHarnessProfile(ctx, *profile); err != nil {
+		return "", fmt.Errorf("save reasoning effort: %w", err)
+	}
+
+	readBack, err := h.ws.store.GetHarnessProfile(ctx, plan.Harness)
+	if err != nil || readBack == nil || len(readBack.ReasoningKnobs) == 0 ||
+		readBack.ReasoningKnobs[0] != effort {
+		return "", fmt.Errorf("reasoning effort did not persist for %q", plan.Harness)
+	}
+	return fmt.Sprintf("Reasoning effort for %s set to %s (persisted).", plan.Harness, effort), nil
 }
 
 // handleUltra handles ULTRA toggling.

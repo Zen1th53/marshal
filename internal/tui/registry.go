@@ -656,11 +656,27 @@ func registerAllCapabilities(r *CapabilityRegistry) {
 		Access: AccessWrite, CLISurface: "marshal task assign", WebSurface: "PUT /api/tasks/:id/assign",
 		TUISurface: "/task assign", KeyboardPath: "t a", PalettePath: "task assign",
 	})
+	// One capability per command. A packed surface such as
+	// "/task pause / resume / cancel" parses as a single unknown command, so it
+	// advertises three controls while providing none that resolve.
 	r.Register(Capability{
-		ID: "task.lifecycle", Category: "TASKS", Name: "Task Lifecycle",
-		Description: "Pause, resume, or cancel individual task",
-		Access: AccessWrite, CLISurface: "marshal task pause/resume", WebSurface: "POST /api/tasks/:id/lifecycle",
-		TUISurface: "/task pause / resume / cancel", KeyboardPath: "t p", PalettePath: "task lifecycle",
+		ID: "task.pause", Category: "TASKS", Name: "Pause Task",
+		Description: "Pause an individual task",
+		Access: AccessWrite, CLISurface: "marshal task pause", WebSurface: "POST /api/tasks/:id/pause",
+		TUISurface: "/task pause", KeyboardPath: "t p", PalettePath: "task pause",
+	})
+	r.Register(Capability{
+		ID: "task.resume", Category: "TASKS", Name: "Resume Task",
+		Description: "Resume a paused task",
+		Access: AccessWrite, CLISurface: "marshal task resume", WebSurface: "POST /api/tasks/:id/resume",
+		TUISurface: "/task resume", KeyboardPath: "t u", PalettePath: "task resume",
+	})
+	r.Register(Capability{
+		ID: "task.cancel", Category: "TASKS", Name: "Cancel Task",
+		Description: "Cancel an individual task",
+		Access: AccessWrite, CLISurface: "marshal task cancel", WebSurface: "POST /api/tasks/:id/cancel",
+		TUISurface: "/task cancel", KeyboardPath: "t x", PalettePath: "task cancel",
+		IsDestructive: true,
 	})
 	r.Register(Capability{
 		ID: "task.retry", Category: "TASKS", Name: "Retry Task",

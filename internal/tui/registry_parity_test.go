@@ -30,6 +30,24 @@ func TestRegistrySurfacesAreWellFormed(t *testing.T) {
 			t.Errorf("capability %s surface %q packs several commands into one entry; register one capability per command",
 				cap.ID, surface)
 		}
+
+		// Packing can also hide past the first token, as in
+		// "/task pause / resume / cancel". Any separator or second slash-word
+		// in the surface means it names more than one command, so the palette,
+		// the completer and the dispatcher all see something that resolves to
+		// nothing.
+		for _, field := range strings.Fields(surface)[1:] {
+			if field == "/" || field == "|" || field == "," {
+				t.Errorf("capability %s surface %q lists alternatives; register one capability per command",
+					cap.ID, surface)
+				break
+			}
+			if strings.HasPrefix(field, "/") {
+				t.Errorf("capability %s surface %q names a second command %q; register one capability per command",
+					cap.ID, surface, field)
+				break
+			}
+		}
 	}
 }
 

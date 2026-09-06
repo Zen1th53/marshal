@@ -43,6 +43,10 @@ const (
 	KeyCtrlR
 	KeyCtrlU
 	KeyCtrlW
+	KeyWordLeft
+	KeyWordRight
+	KeyWordDeleteAfter
+	KeyCtrlJ
 	KeyPaste
 	KeyUnknown
 )
@@ -178,6 +182,16 @@ func (t *Terminal) LeaveAltScreen() {
 	fmt.Fprint(t.out, "\x1b[?1049l")
 }
 
+// EnableBracketedPaste instructs the terminal to frame pasted text in \x1b[200~ ... \x1b[201~.
+func (t *Terminal) EnableBracketedPaste() {
+	fmt.Fprint(t.out, "\x1b[?2004h")
+}
+
+// DisableBracketedPaste turns off bracketed paste mode on terminal cleanup.
+func (t *Terminal) DisableBracketedPaste() {
+	fmt.Fprint(t.out, "\x1b[?2004l")
+}
+
 // HideCursor hides the terminal text cursor.
 func (t *Terminal) HideCursor() {
 	fmt.Fprint(t.out, "\x1b[?25l")
@@ -257,6 +271,17 @@ func ParseNextKey(b []byte) (KeyEvent, int) {
 			return KeyEvent{Type: KeyEsc, Raw: b[:1]}, 1
 		}
 
+		// Alt+b, Alt+f, Alt+d
+		if b[1] == 'b' || b[1] == 'B' {
+			return KeyEvent{Type: KeyWordLeft, Raw: b[:2]}, 2
+		}
+		if b[1] == 'f' || b[1] == 'F' {
+			return KeyEvent{Type: KeyWordRight, Raw: b[:2]}, 2
+		}
+		if b[1] == 'd' || b[1] == 'D' {
+			return KeyEvent{Type: KeyWordDeleteAfter, Raw: b[:2]}, 2
+		}
+
 		// CSI sequences: \x1b[... or \x1bO...
 		if b[1] == '[' || b[1] == 'O' {
 			for i := 2; i < len(b); i++ {
@@ -275,6 +300,10 @@ func ParseNextKey(b []byte) (KeyEvent, int) {
 						return KeyEvent{Type: KeyRight, Raw: raw}, consumed
 					case "D":
 						return KeyEvent{Type: KeyLeft, Raw: raw}, consumed
+					case "1;5D", "1;3D", "5D":
+						return KeyEvent{Type: KeyWordLeft, Raw: raw}, consumed
+					case "1;5C", "1;3C", "5C":
+						return KeyEvent{Type: KeyWordRight, Raw: raw}, consumed
 					case "H", "1~":
 						return KeyEvent{Type: KeyHome, Raw: raw}, consumed
 					case "F", "4~":
@@ -285,6 +314,8 @@ func ParseNextKey(b []byte) (KeyEvent, int) {
 						return KeyEvent{Type: KeyPgDn, Raw: raw}, consumed
 					case "3~":
 						return KeyEvent{Type: KeyDelete, Raw: raw}, consumed
+					case "3;5~", "3;3~":
+						return KeyEvent{Type: KeyWordDeleteAfter, Raw: raw}, consumed
 					case "Z":
 						return KeyEvent{Type: KeyShiftTab, Raw: raw}, consumed
 					default:
@@ -313,9 +344,11 @@ func ParseNextKey(b []byte) (KeyEvent, int) {
 		return KeyEvent{Type: KeyCtrlF, Raw: b[:1]}, 1
 	case 0x09:
 		return KeyEvent{Type: KeyTab, Raw: b[:1]}, 1
+	case 0x0A:
+		return KeyEvent{Type: KeyCtrlJ, Raw: b[:1]}, 1
 	case 0x0B:
 		return KeyEvent{Type: KeyCtrlK, Raw: b[:1]}, 1
-	case 0x0D, 0x0A:
+	case 0x0D:
 		return KeyEvent{Type: KeyEnter, Raw: b[:1]}, 1
 	case 0x0E:
 		return KeyEvent{Type: KeyCtrlN, Raw: b[:1]}, 1

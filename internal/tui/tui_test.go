@@ -239,3 +239,53 @@ func TestInteractiveWorkspaceAndCommands(t *testing.T) {
 		t.Fatalf("expected exit notice in Run output:\n%s", runOutput)
 	}
 }
+
+func TestFrameApprovalsSection(t *testing.T) {
+	th := NewTheme(ThemeDefault, true, true)
+	c := NewComposer(th)
+	state := UIState{
+		ProjectID: "proj-test",
+		PendingApprovals: []model.Approval{
+			{
+				ID:          "apr-99",
+				Operation:   model.FilesystemWrite,
+				Target:      "internal/core.go",
+				RequestedBy: "codex",
+				Status:      model.ApprovalRequested,
+			},
+		},
+	}
+
+	frame := BuildFrame(state, th, "", c, nil, 80, 30)
+	joined := strings.Join(frame.Body, "\n")
+	if !strings.Contains(joined, "Pending Approvals") {
+		t.Fatalf("expected Pending Approvals in frame body:\n%s", joined)
+	}
+	if !strings.Contains(joined, "apr-99") || !strings.Contains(joined, "/approve apr-99") {
+		t.Fatalf("expected apr-99 and approval action in body:\n%s", joined)
+	}
+}
+
+func TestFrameScrollOffsetAndIndicator(t *testing.T) {
+	th := NewTheme(ThemeDefault, true, true)
+	c := NewComposer(th)
+	state := UIState{
+		ProjectID: "proj-test",
+	}
+
+	frame := BuildFrame(state, th, "", c, nil, 80, 20)
+	frame.ScrollOffset = 5
+	frame.UnreadCount = 3
+	lines, _ := frame.Lines(80, 20)
+
+	foundIndicator := false
+	for _, l := range lines {
+		if strings.Contains(l, "5 lines scrolled") && strings.Contains(l, "3 new events") {
+			foundIndicator = true
+			break
+		}
+	}
+	if !foundIndicator {
+		t.Fatalf("expected scroll indicator in lines:\n%s", strings.Join(lines, "\n"))
+	}
+}

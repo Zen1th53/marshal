@@ -42,6 +42,24 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 			return fmt.Sprintf("Active Goal [v%d]: %s (ID: %s)",
 				h.ws.state.Goal.Revision, h.ws.state.Goal.DesiredOutcome, h.ws.state.Goal.ID), nil
 		}
+		// Subcommands are routed before the free-text path. Without this any
+		// "/goal add-constraint no-net" was swallowed whole and written as the
+		// desired outcome, silently destroying the goal statement.
+		switch strings.ToLower(parts[1]) {
+		case "constraints":
+			return h.handleGoalConstraints(ctx)
+		case "add-constraint":
+			if len(parts) < 3 {
+				return "Usage: /goal add-constraint <constraint text>", nil
+			}
+			return h.handleGoalAddConstraint(ctx, strings.TrimSpace(line[strings.Index(line, parts[1])+len(parts[1]):]))
+		case "rm-constraint":
+			if len(parts) < 3 {
+				return "Usage: /goal rm-constraint <constraint_id|text>", nil
+			}
+			return h.handleGoalRemoveConstraint(ctx, strings.TrimSpace(line[strings.Index(line, parts[1])+len(parts[1]):]))
+		}
+
 		outcome := strings.TrimSpace(line[len(parts[0]):])
 		return h.handleSetGoal(ctx, outcome)
 

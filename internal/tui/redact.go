@@ -9,7 +9,12 @@ import (
 var (
 	bearerPattern = regexp.MustCompile(`(?i)Bearer\s+[a-zA-Z0-9_\-\.]{10,}`)
 	skPattern     = regexp.MustCompile(`sk-[a-zA-Z0-9_\-]{16,}`)
-	keyPattern    = regexp.MustCompile(`(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*["']?([^"'\s]{8,})["']?`)
+	// Sensitivity follows the key, not the length of the value. Requiring eight
+	// or more characters let short secrets through in cleartext -- an audit
+	// observed "password=hunter2" reaching the store unredacted. One character
+	// is enough to match, while an empty value is left alone so ordinary prose
+	// such as "token: " is not mangled.
+	keyPattern = regexp.MustCompile(`(?i)\b(api[_-]?key|secret|token|password|passwd|access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization|auth[_-]?token|private[_-]?key)\s*[:=]\s*["']?([^"'\s]+)["']?`)
 )
 
 // RedactContent scrubs sensitive tokens, keys, and patterns from text before rendering in TUI.
