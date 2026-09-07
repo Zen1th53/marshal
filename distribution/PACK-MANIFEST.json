@@ -2131,8 +2131,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "25dbc25a094b9e97b7aab401d55fcb9fc22d53d560876b21e7a5e1c4e09e84aa",
-      "bytes": 32538
+      "sha256": "ff5e82b151bdf04b167c28ead787d7a43b54485cc1921db495924992f3b1326a",
+      "bytes": 32811
     },
     {
       "path": "internal/cli/cli_test.go",
