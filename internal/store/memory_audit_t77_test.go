@@ -35,6 +35,10 @@ var derivedDecisionTables = map[string]bool{
 	"context_budget_decisions": true,
 	"model_router_decisions":   true,
 	"decisions":                true,
+	// Process 00: the audit log of constitutional gate verdicts. It records
+	// what was decided about material actions, never what the project knows,
+	// so it must stay out of the memory store.
+	"constitutional_decisions": true,
 }
 
 // TestT77MemoryTableInventory verifies that every table whose name contains

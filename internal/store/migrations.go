@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 79
+const LatestSchemaVersion = 80
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2071,6 +2071,92 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 79: %w", err)
 		}
 		version = 79
+	}
+	if version < 80 {
+		// Process 00 constitutional state. Three tables, each holding truth
+		// that cannot be reconstructed from anything else:
+		//
+		// session_constitutions binds a session to the exact constitutional
+		// semantics it started under, so a restart or a runtime upgrade cannot
+		// silently reinterpret work already done. The binding is immutable for
+		// the life of the session, which is enforced by the absence of any
+		// update path and by the primary key.
+		//
+		// constitutional_decisions is the audit record of every material
+		// decision: what was asked, what the gate answered, and the binding
+		// digest an approval must match. Keeping the digest here is what makes
+		// approval replay detectable after the fact and not only at the gate.
+		//
+		// constitutional_violations records breaches and the response they
+		// drew, so a suspended session cannot be quietly resumed.
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS session_constitutions (
+				session_id            TEXT PRIMARY KEY REFERENCES sessions(session_id),
+				project_id            TEXT NOT NULL REFERENCES projects(project_id),
+				constitution_version  TEXT NOT NULL,
+				invariant_digest      TEXT NOT NULL,
+				mode                  TEXT NOT NULL CHECK(mode IN ('standard','ultra')),
+				bound_at              TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_session_constitutions_project
+				ON session_constitutions(project_id, constitution_version);
+
+			CREATE TABLE IF NOT EXISTS constitutional_decisions (
+				decision_id           TEXT PRIMARY KEY,
+				project_id            TEXT NOT NULL REFERENCES projects(project_id),
+				session_id            TEXT NOT NULL,
+				constitution_version  TEXT NOT NULL,
+				process               INTEGER NOT NULL CHECK(process BETWEEN 1 AND 8),
+				domain                TEXT NOT NULL,
+				action                TEXT NOT NULL,
+				actor                 TEXT NOT NULL,
+				surface               TEXT NOT NULL CHECK(surface IN ('tui','cli','web','mcp','a2a','core')),
+				mode                  TEXT NOT NULL CHECK(mode IN ('standard','ultra')),
+				outcome               TEXT NOT NULL CHECK(outcome IN (
+					'ALLOW','BLOCK','REQUIRE_APPROVAL','DEGRADE','SUSPEND','REPLAN','REQUIRE_VERIFICATION'
+				)),
+				reason                TEXT NOT NULL,
+				binding_digest        TEXT NOT NULL,
+				state_digest          TEXT NOT NULL,
+				advisory_status       TEXT NOT NULL CHECK(advisory_status IN ('ACCEPTED','DISCARDED','ABSENT')),
+				findings_json         TEXT NOT NULL DEFAULT '[]',
+				evaluated_at          TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_constitutional_decisions_session
+				ON constitutional_decisions(session_id, evaluated_at);
+			CREATE INDEX IF NOT EXISTS idx_constitutional_decisions_binding
+				ON constitutional_decisions(project_id, binding_digest);
+			CREATE INDEX IF NOT EXISTS idx_constitutional_decisions_outcome
+				ON constitutional_decisions(project_id, outcome, evaluated_at);
+
+			CREATE TABLE IF NOT EXISTS constitutional_violations (
+				violation_id          TEXT PRIMARY KEY,
+				project_id            TEXT NOT NULL REFERENCES projects(project_id),
+				session_id            TEXT NOT NULL,
+				decision_id           TEXT,
+				violation_class       TEXT NOT NULL,
+				invariant_id          TEXT NOT NULL,
+				response              TEXT NOT NULL CHECK(response IN (
+					'BLOCK','REVOKE','SUSPEND','INVALIDATE','REVIEW'
+				)),
+				actor                 TEXT NOT NULL DEFAULT '',
+				surface               TEXT NOT NULL DEFAULT '',
+				constitution_version  TEXT NOT NULL,
+				detail                TEXT NOT NULL DEFAULT '',
+				detected_at           TEXT NOT NULL,
+				resolved_at           TEXT
+			);
+			CREATE INDEX IF NOT EXISTS idx_constitutional_violations_session
+				ON constitutional_violations(session_id, detected_at);
+			CREATE INDEX IF NOT EXISTS idx_constitutional_violations_open
+				ON constitutional_violations(project_id, response) WHERE resolved_at IS NULL;
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 80: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(80, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 80: %w", err)
+		}
+		version = 80
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
