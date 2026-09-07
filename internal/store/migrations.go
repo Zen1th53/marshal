@@ -2090,8 +2090,17 @@ func (s *Store) Migrate(ctx context.Context) error {
 		// constitutional_violations records breaches and the response they
 		// drew, so a suspended session cannot be quietly resumed.
 		if _, err := tx.ExecContext(ctx, `
+			-- session_id is intentionally not a foreign key to sessions.
+			-- A constitution binding is established when a session of work
+			-- begins, which is earlier and broader than an agent row in
+			-- sessions: a CLI or Web session governed by Process 00 need not
+			-- have registered an agent. Binding the constitution late, or only
+			-- for sessions that happen to have an agent row, would leave
+			-- ungoverned decisions at exactly the moment governance matters
+			-- most. project_id remains a foreign key, because project
+			-- isolation is the constraint that must hold.
 			CREATE TABLE IF NOT EXISTS session_constitutions (
-				session_id            TEXT PRIMARY KEY REFERENCES sessions(session_id),
+				session_id            TEXT PRIMARY KEY,
 				project_id            TEXT NOT NULL REFERENCES projects(project_id),
 				constitution_version  TEXT NOT NULL,
 				invariant_digest      TEXT NOT NULL,
