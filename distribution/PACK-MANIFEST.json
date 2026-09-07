@@ -2140,6 +2140,16 @@
       "bytes": 16697
     },
     {
+      "path": "internal/cli/constitution.go",
+      "sha256": "282ce9b92bd5672426989ce6334596c9bce5f38d8c7682acdc224377af320b7a",
+      "bytes": 6148
+    },
+    {
+      "path": "internal/cli/constitution_test.go",
+      "sha256": "6f0887df48e0c73335855b5bb773802bb65e082d4ac99c21e51591df85c8ea47",
+      "bytes": 7233
+    },
+    {
       "path": "internal/cli/memory_cli.go",
       "sha256": "1db09287ae7682f8bf431cbddf8f252c810daecdd599ebb794e923806f7ae92b",
       "bytes": 6885
