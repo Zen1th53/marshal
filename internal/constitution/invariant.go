@@ -326,10 +326,13 @@ func builtinInvariants() []Invariant {
 			Domains:     []Domain{DomainCompletion, DomainVerification, DomainRecommendation},
 		},
 		{
+			// Unscoped deliberately: credential material must be refused
+			// wherever it appears, not only on the domains that persist data.
+			// A secret riding along in a file write or a shell argument is the
+			// same exposure as one written to memory.
 			ID: InvSecretsNotCanonical, Article: "XXIV", Severity: SeverityHard,
 			Reason:      ReasonSecretExposure,
 			Explanation: "Credentials and hidden model reasoning are never stored as project knowledge.",
-			Domains:     []Domain{DomainMemoryPromotion, DomainCredential, DomainExport, DomainTelemetry},
 		},
 	}
 }

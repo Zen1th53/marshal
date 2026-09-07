@@ -1,6 +1,9 @@
 package constitution
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // ErrInvalidConstitution reports a malformed constitution, registry or
 // envelope. It is returned at load or validation time so that a broken
@@ -76,4 +79,9 @@ func Domains() []Domain {
 	out := make([]Domain, len(allDomains))
 	copy(out, allDomains)
 	return out
+}
+
+// errInvalidf builds an ErrInvalidConstitution-wrapped error.
+func errInvalidf(format string, args ...any) error {
+	return fmt.Errorf("%w: "+format, append([]any{ErrInvalidConstitution}, args...)...)
 }
