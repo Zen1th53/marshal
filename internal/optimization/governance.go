@@ -39,7 +39,8 @@ func Classify(c Candidate) ChangeClass {
 	e := c.Effects
 	if e.ModifiesGovernance || e.WeakensApprovals || e.WeakensSandbox ||
 		e.WeakensNetwork || e.WeakensEvidence || e.RemovesMandatoryVerification ||
-		e.ExpandsPermissions || e.ExposesSecrets || e.UncontrolledExternalEffects ||
+		e.HidesUnknown || e.ExpandsPermissions || e.ExposesSecrets ||
+		e.UncontrolledExternalEffects || e.EnablesFleetControl ||
 		e.ViolatesGoalConstraint || e.SpendsVerificationReserve {
 		return ChangeMaterial
 	}
