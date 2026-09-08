@@ -73,15 +73,12 @@ func (s *Store) AppendCompletionAttestation(ctx context.Context, a verification.
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO completion_attestations(attestation_id,verification_id,verification_version,decision,digest,attestation_json,issued_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM verification_sessions WHERE verification_id=? AND version=?)`, a.ID, a.VerificationID, a.VerificationVersion, a.Decision, a.Digest, body, a.IssuedAt.UTC().Format(timeLayout), a.VerificationID, a.VerificationVersion)
+	result, err := s.db.ExecContext(ctx, `INSERT INTO completion_attestations(attestation_id,verification_id,verification_version,decision,digest,attestation_json,issued_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM verification_sessions WHERE verification_id=? AND version=?)`, a.ID, a.VerificationID, a.VerificationVersion, a.Decision, a.Digest, body, a.IssuedAt.UTC().Format(timeLayout), a.VerificationID, a.VerificationVersion)
 	if err != nil {
 		return fmt.Errorf("append completion attestation: %w", err)
 	}
-	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM completion_attestations WHERE attestation_id=?`, a.ID).Scan(&count); err != nil {
-		return err
-	}
-	if count != 1 {
+	count, err := result.RowsAffected()
+	if err != nil || count != 1 {
 		return verification.ErrConflict
 	}
 	return nil
