@@ -102,7 +102,7 @@ func TestGoalDiff(t *testing.T) {
 		Scope:          []string{"internal/auth", "internal/tls"},
 		Constraints: []model.Constraint{
 			{ID: "c1", Text: "Must use Argon2id", IsHard: true},
-			{ID: "c2", Text: "Max 50ms response", IsHard: false}, // modified
+			{ID: "c2", Text: "Max 50ms response", IsHard: false},        // modified
 			{ID: "c3", Text: "Require mTLS client certs", IsHard: true}, // added
 		},
 		DoNotDo:         []string{"Never log passwords in plaintext", "Do not accept TLS 1.1"}, // added dnd

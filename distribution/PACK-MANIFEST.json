@@ -3881,13 +3881,13 @@
     },
     {
       "path": "internal/model/goal.go",
-      "sha256": "2d9dbf3dd95195f33dc4cee02bd5e1c386fd75ec54dec36e3f7502aadab85340",
-      "bytes": 8073
+      "sha256": "9ca257454813998b7bd4eab6416f4b5dd5fb77b863e7e39fd223a4d76d6a7ce7",
+      "bytes": 11135
     },
     {
       "path": "internal/model/goal_test.go",
-      "sha256": "75f550993550aba505c812706ef9fcffbb5413dbfe0cfc8b0696982567c1b454",
-      "bytes": 7150
+      "sha256": "2246d19e5025a498cf992cca2335616656efc0526cd15cd1349e30969e4928bc",
+      "bytes": 7157
     },
     {
       "path": "internal/model/harness.go",
@@ -3916,13 +3916,13 @@
     },
     {
       "path": "internal/model/memory.go",
-      "sha256": "b169dbb7d6072760b1d08b8163df04a1147ae6de6688209453e4e6db5c422cf5",
-      "bytes": 11121
+      "sha256": "c19bb3df3faf1de35b3b9d76dac9b366c1bed47928452d9e44f61788eb37bb9c",
+      "bytes": 11116
     },
     {
       "path": "internal/model/memory_t78_test.go",
-      "sha256": "f22ba58b450c6222e31ab835cdecc8dcb2405684c25e3f89b9f45d668be65866",
-      "bytes": 5034
+      "sha256": "5ec516fd439194b8a175f1b440dfc49978206916d462cdad38287767a0efe529",
+      "bytes": 5020
     },
     {
       "path": "internal/model/memory_t80_test.go",
@@ -4986,8 +4986,8 @@
     },
     {
       "path": "internal/store/goal.go",
-      "sha256": "df4f726142c6c5cb6365489c3cac513a8e27c832ad0184f770cdb04b9e7b6b7a",
-      "bytes": 10601
+      "sha256": "8c547747d431638d553bd9e913692d9584b4ed28303fa77395b743f8284ba868",
+      "bytes": 13184
     },
     {
       "path": "internal/store/goal_test.go",
@@ -5101,8 +5101,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "0b00059fce3f65178fe9d85210e005612b068a72bc7da6da9a039ffafcfd1cf1",
-      "bytes": 87230
+      "sha256": "36ebad3ef75b579322a91ed56dfcba91bd5e4400e43945783f7e86c58ce62b21",
+      "bytes": 89579
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",

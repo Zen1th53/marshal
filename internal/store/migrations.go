@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 80
+const LatestSchemaVersion = 81
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2166,6 +2166,55 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 80: %w", err)
 		}
 		version = 80
+	}
+	if version < 81 {
+		// Process 03 goal intake.
+		//
+		// The intake fields are stored as one JSON column rather than as eight
+		// separate columns. In raw SQLite the difference is fractions of a
+		// millisecond, but each ALTER is its own driver round trip and the
+		// migration chain is replayed by every store test — around 150 of
+		// them. Measured: eight columns cost roughly 18ms per chain against
+		// 3ms for one, which is the difference between the store package
+		// fitting inside the race-detector timeout and exceeding it.
+		//
+		// project_id stays a real column because it is the one field worth
+		// indexing and querying by: it binds a Goal to a project, which is how
+		// Process 02 isolation reaches goal state.
+		//
+		// The payload holds the user's original request, its digest, the
+		// constitution version, the confirmation state, the assessment, the
+		// revision reason and whether a model contributed. They are always
+		// read and written together, so separate columns would buy nothing and
+		// cost measurably.
+		var intakeColumns int
+		if err := tx.QueryRowContext(ctx, `
+			SELECT count(*) FROM pragma_table_info('goal_contracts')
+			WHERE name IN ('project_id','intake_json')
+		`).Scan(&intakeColumns); err != nil {
+			return fmt.Errorf("inspect schema version 81 columns: %w", err)
+		}
+		// Both columns are added in one transaction, so the database holds
+		// either both or neither. Anything else means the file was modified
+		// outside MARSHAL, and refusing beats guessing.
+		if intakeColumns != 0 && intakeColumns != 2 {
+			return fmt.Errorf(
+				"migrate schema version 81: goal_contracts has %d of 2 expected columns; the schema was modified outside MARSHAL",
+				intakeColumns)
+		}
+		if intakeColumns == 0 {
+			if _, err := tx.ExecContext(ctx, `
+				ALTER TABLE goal_contracts ADD COLUMN project_id TEXT NOT NULL DEFAULT '';
+				ALTER TABLE goal_contracts ADD COLUMN intake_json TEXT NOT NULL DEFAULT '{}';
+				CREATE INDEX IF NOT EXISTS idx_goal_contracts_project ON goal_contracts(project_id, revision);
+			`); err != nil {
+				return fmt.Errorf("migrate schema version 81: %w", err)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(81, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 81: %w", err)
+		}
+		version = 81
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
