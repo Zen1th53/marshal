@@ -106,15 +106,13 @@ func ProbeHarnesses() []HarnessDiscoveryResult {
 			continue
 		}
 
-		// Probe version if possible
-		version := probeBinaryVersion(path)
 		results = append(results, HarnessDiscoveryResult{
 			HarnessName: tgt.name,
 			BinaryPath:  path,
 			Installed:   true,
-			Version:     version,
+			Version:     "NOT_PROBED",
 			State:       StateAvailable,
-			Reason:      "Installed and executable",
+			Reason:      "Executable detected; version probe deferred to governed runtime",
 			Models:      nil, // The probe cannot read the harness's configured model.
 		})
 	}
@@ -124,21 +122,6 @@ func ProbeHarnesses() []HarnessDiscoveryResult {
 	res := make([]HarnessDiscoveryResult, len(results))
 	copy(res, results)
 	return res
-}
-
-func probeBinaryVersion(binPath string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, binPath, "--version")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err == nil {
-		firstLine := strings.TrimSpace(strings.Split(out.String(), "\n")[0])
-		if firstLine != "" {
-			return firstLine
-		}
-	}
-	return "DETECTED"
 }
 
 // GitStatusResult tracks the current working tree state.

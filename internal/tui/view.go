@@ -74,11 +74,11 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 	// ╭─ MARSHAL ─ marshal ─ ULTRA ─ VERIFYING ────────── main · 123d960 · clean ─╮
 	mode := strings.ToUpper(s.SessionMode)
 	if mode == "" {
-		mode = "ULTRA"
+		mode = "MANUAL"
 	}
 	state := string(s.UnderstandingState)
 	if state == "" {
-		state = "READY"
+		state = "NEEDS_INPUT"
 	}
 	if s.TerminationState != "" {
 		state = fmt.Sprintf("%s / %s", state, s.TerminationState)

@@ -177,13 +177,19 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 		t.Fatalf("unexpected /status output: %s", out)
 	}
 
-	// 2. Set Goal
+	// 2. TUI goal mutation fails closed; seed canonical state as test setup.
 	out, err = ws.ExecuteCommand(ctx, "/goal Complete authorization refactoring safely")
 	if err != nil {
 		t.Fatalf("/goal set failed: %v", err)
 	}
-	if !strings.Contains(out, "Active Goal updated to revision 1") {
+	if !strings.Contains(out, "unavailable") {
 		t.Fatalf("unexpected /goal response: %s", out)
+	}
+	if err := st.SaveGoalContract(ctx, model.GoalContract{ID: "goal-e2e", SessionID: sessionID, DesiredOutcome: "Complete authorization refactoring safely", Risk: model.R1, AuthoritySource: "test", UnderstandingState: model.GoalReady}, 0); err != nil {
+		t.Fatalf("seed goal: %v", err)
+	}
+	if err := ws.RefreshState(ctx); err != nil {
+		t.Fatalf("refresh seeded goal: %v", err)
 	}
 
 	// 3. Inspect Goal
@@ -204,13 +210,16 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 		t.Fatalf("expected participants in /agents output: %s", out)
 	}
 
-	// 5. Create and list tasks
+	// 5. TUI task mutation fails closed; seed canonical task as test setup.
 	out, err = ws.ExecuteCommand(ctx, "/task create Verify token expiration boundary")
 	if err != nil {
 		t.Fatalf("/task create failed: %v", err)
 	}
-	if !strings.Contains(out, "created") {
+	if !strings.Contains(out, "unavailable") {
 		t.Fatalf("unexpected /task create response: %s", out)
+	}
+	if _, err := st.ImportTasks(ctx, []model.Task{{ID: "TASK-E2E", Title: "Verify token expiration boundary", Status: model.TaskReady, Risk: model.R1}}); err != nil {
+		t.Fatalf("seed task: %v", err)
 	}
 
 	out, err = ws.ExecuteCommand(ctx, "/tasks")
@@ -226,7 +235,7 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/policy network failed: %v", err)
 	}
-	if !strings.Contains(out, "FAIL-CLOSED") || !strings.Contains(out, "--unshare-net") {
+	if !strings.Contains(out, "NOT VERIFIED") {
 		t.Fatalf("unexpected /policy network response: %s", out)
 	}
 
@@ -234,7 +243,7 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/sandbox failed: %v", err)
 	}
-	if !strings.Contains(out, "bubblewrap") {
+	if !strings.Contains(out, "NOT VERIFIED") {
 		t.Fatalf("unexpected /sandbox response: %s", out)
 	}
 
@@ -252,7 +261,7 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/checkpoint failed: %v", err)
 	}
-	if !strings.Contains(out, "Durable checkpoint created") {
+	if !strings.Contains(out, "unavailable") {
 		t.Fatalf("unexpected /checkpoint response: %s", out)
 	}
 
@@ -301,12 +310,12 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 		t.Fatalf("create approval in store: %v", err)
 	}
 
-	// Resolve approval via /approve
+	// TUI must not resolve approval without authenticated runtime identity.
 	out, err = ws.ExecuteCommand(ctx, "/approve appr-01")
 	if err != nil {
 		t.Fatalf("/approve failed: %v", err)
 	}
-	if !strings.Contains(out, "granted") {
+	if !strings.Contains(out, "unavailable") {
 		t.Fatalf("unexpected /approve output: %s", out)
 	}
 
@@ -315,8 +324,8 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get approval: %v", err)
 	}
-	if resolvedAppr.Status != model.ApprovalApproved {
-		t.Fatalf("expected approval status APPROVED, got %s", resolvedAppr.Status)
+	if resolvedAppr.Status != model.ApprovalRequested {
+		t.Fatalf("TUI mutated approval without authorization: %s", resolvedAppr.Status)
 	}
 
 	// 11. Run doctor from workspace

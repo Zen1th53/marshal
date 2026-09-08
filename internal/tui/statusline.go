@@ -33,7 +33,7 @@ func RenderStatusline(s UIState, th *Theme, workDir string, width int) string {
 	segments := []StatusSegment{
 		{Text: th.Colorize(th.Marshal, ProjectLabel(s, workDir, 32)), Priority: 1},
 		{Text: gitSegment(s, th), Priority: 2},
-		{Text: th.Colorize(th.Ultra, strings.ToUpper(orDefault(s.SessionMode, "ULTRA"))), Priority: 3},
+		{Text: th.Colorize(th.Ultra, strings.ToUpper(orDefault(s.SessionMode, "MANUAL"))), Priority: 3},
 		{Text: runtimeStateSegment(s, th), Priority: 4},
 		{Text: agentSegment(s, th), Priority: 5},
 		{Text: claimSegment(s, th), Priority: 6},

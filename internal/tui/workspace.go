@@ -100,8 +100,8 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	composer := NewComposer(th)
 	composer.SetPrompt(ComposerPromptInfo{
 		Project: projectID,
-		Mode:    "ULTRA",
-		State:   "READY",
+		Mode:    "MANUAL",
+		State:   "NO_GOAL",
 	})
 
 	paletteActions := GlobalRegistry.ToPaletteActions()
@@ -115,7 +115,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 		projectID:  projectID,
 		sessionID:  sessionID,
 		workDir:    cwd,
-		mode:       "ultra",
+		mode:       "manual",
 		theme:      th,
 		composer:   composer,
 		completer:  completer,
@@ -125,8 +125,8 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 		state: UIState{
 			ProjectID:          projectID,
 			SessionID:          sessionID,
-			SessionMode:        "ULTRA",
-			UnderstandingState: model.GoalReady,
+			SessionMode:        "MANUAL",
+			UnderstandingState: model.GoalNeedsInput,
 			GitStatus:          ProbeGitStatus(cwd),
 			Participants:       participants,
 		},
@@ -530,7 +530,7 @@ func (w *Workspace) runCommand(ctx context.Context, cmd string) {
 		w.state.LastOutput = resp
 		w.state.LastOutputIsError = false
 	}
-	w.state.LastCommand = cmd
+	w.state.LastCommand = RedactContent(cmd, w.state.KnownSecrets)
 	w.mu.Unlock()
 
 	w.renderFullView()

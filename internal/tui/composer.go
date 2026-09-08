@@ -45,8 +45,8 @@ func NewComposer(th *Theme) *Composer {
 		historyIndex: -1,
 		promptInfo: ComposerPromptInfo{
 			Project: "marshal",
-			Mode:    "ULTRA",
-			State:   "READY",
+			Mode:    "MANUAL",
+			State:   "NEEDS_INPUT",
 		},
 	}
 }
@@ -144,7 +144,7 @@ func (c *Composer) HandleKey(k KeyEvent) (string, bool) {
 	case KeyEnter:
 		text := strings.TrimSpace(string(c.buffer))
 		if text != "" {
-			c.AddHistory(text)
+			c.AddHistory(RedactContent(text, nil))
 		}
 		c.buffer = make([]rune, 0)
 		c.cursor = 0

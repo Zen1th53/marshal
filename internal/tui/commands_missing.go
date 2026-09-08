@@ -62,7 +62,7 @@ func (h *CommandHandler) handleApprovals(ctx context.Context, args []string) (st
 		b.WriteString(fmt.Sprintf("    scope %s | requested by %s | %s\n",
 			a.Scope, a.RequestedBy, a.CreatedAt.Format(time.RFC3339)))
 	}
-	b.WriteString("\nResolve with /approve <id> or /reject <id>; inspect with /approval inspect <id>.")
+	b.WriteString("\nDecision mutation is unavailable in TUI; use an authenticated runtime control surface. Inspect with /approval inspect <id>.")
 	return b.String(), nil
 }
 
@@ -156,14 +156,14 @@ func (h *CommandHandler) handleTermination(ctx context.Context) (string, error) 
 	return b.String(), nil
 }
 
-// handleContext shows or sets the context strategy the ULTRA router applies.
+// handleContext shows an advisory context strategy that Runtime does not apply.
 //
 // The strategy is not stored as free text: it is whatever the router computes
 // for the current role and risk, so a set request is validated against the
 // strategies the routing layer can actually produce.
 func (h *CommandHandler) handleContext(ctx context.Context, args []string) (string, error) {
 	if h.ws.router == nil {
-		return "ULTRA router unavailable", nil
+		return "Advisory router unavailable", nil
 	}
 
 	h.ws.mu.RLock()
@@ -189,20 +189,20 @@ func (h *CommandHandler) handleContext(ctx context.Context, args []string) (stri
 
 	plan, err := h.ws.router.Route(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("ultra route: %w", err)
+		return "", fmt.Errorf("advisory route: %w", err)
 	}
 
 	if len(args) == 0 || strings.ToLower(args[0]) == "show" {
-		return fmt.Sprintf("CONTEXT STRATEGY:\n  Current:  %s\n  Derived from role %s at risk %s (critical claims: %t)\n  The strategy is computed by the ULTRA routing layer; change the inputs with /route.",
+		return fmt.Sprintf("ADVISORY CONTEXT STRATEGY (NOT APPLIED):\n  Current:  %s\n  Derived from role %s at risk %s (critical claims: %t).",
 			orNone(plan.ContextStrategy), plan.Role, req.Risk, req.HasCriticalClaims), nil
 	}
 
 	if strings.ToLower(args[0]) == "strategy" {
 		if len(args) < 2 {
-			return fmt.Sprintf("Current context strategy: %s\nUsage: /context strategy <name> — the strategy is derived from routing inputs, so use /route role=<role> risk=<R0|R1|R2|R3> to change it.",
+			return fmt.Sprintf("Advisory context strategy: %s (NOT APPLIED TO RUNTIME).",
 				orNone(plan.ContextStrategy)), nil
 		}
-		return fmt.Sprintf("Context strategy is derived, not set directly.\n  Current: %s\n  It is computed by the ULTRA routing layer from role and risk.\n  Change it with /route role=<architect|developer|qa|appsec> risk=<R0|R1|R2|R3>.",
+		return fmt.Sprintf("Context strategy was NOT applied.\n  Advisory value: %s\n  Runtime execution-profile integration is unavailable.",
 			orNone(plan.ContextStrategy)), nil
 	}
 

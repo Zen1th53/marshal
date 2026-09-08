@@ -102,6 +102,9 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		if err != nil {
 			return model.CommandSpec{}, fmt.Errorf("%w: inspect read-only bind %s: %v", model.ErrInvalid, bind.Source, err)
 		}
+		if info.IsDir() && (isProviderStateDirectory(source) || isProviderStateDirectory(bind.Target)) {
+			return model.CommandSpec{}, fmt.Errorf("%w: provider state directory bind forbidden: %s -> %s", model.ErrInvalid, bind.Source, bind.Target)
+		}
 		targetParent := filepath.Dir(bind.Target)
 		if info.IsDir() {
 			targetParent = bind.Target
@@ -161,15 +164,11 @@ func ChooseIsolation(capability model.IsolationCapability, risk model.Risk, netw
 		capability.Network = networkAllowed
 		return capability, nil
 	}
-	// Unsandboxed process-only execution is a broad host-exposure risk. It is
-	// permitted only when the operator explicitly opts in, and only for the
-	// lowest risk classes. Without an explicit opt-in, fail closed.
-	if allowProcessOnlyFallback && (risk == model.R0 || risk == model.R1) {
-		return model.IsolationCapability{
-			Level: model.IsolationProcessOnly, Available: true, Process: true, Network: networkAllowed,
-			Reason: "operator opted in to unsandboxed process-only execution (no filesystem/process/network isolation)",
-		}, nil
-	}
+	// Process-only execution cannot enforce filesystem or network policy. The
+	// legacy opt-in is retained in the API for compatibility but deliberately
+	// cannot weaken the isolation invariant.
+	_ = risk
+	_ = allowProcessOnlyFallback
 	blocked := model.IsolationCapability{
 		Level: model.IsolationBlocked, Available: false, Network: networkAllowed,
 		Reason: "required isolation cannot be enforced (bubblewrap unavailable and process-only fallback not explicitly permitted)",
@@ -234,13 +233,29 @@ func bounded(value []byte, limit int) string {
 
 var forbiddenCredentialPatterns = []string{
 	".ssh", ".aws", ".netrc", ".gnupg", ".kube", "id_rsa", "id_ed25519",
-	".docker/config.json", ".vault-token", ".git-credentials",
+	".docker/config.json", ".vault-token", ".git-credentials", "auth.json",
+	"config.toml", "config.json", "claude.md", "agents.md",
+	"/home/marshal/.config/",
 }
 
 func isForbiddenCredentialPath(path string) bool {
 	lower := strings.ToLower(filepath.ToSlash(path))
 	for _, pattern := range forbiddenCredentialPatterns {
 		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+func isProviderStateDirectory(path string) bool {
+	lower := strings.ToLower(filepath.ToSlash(filepath.Clean(path)))
+	base := filepath.Base(lower)
+	if base == ".codex" || base == ".claude" || base == ".opencode" || base == ".gemini" {
+		return true
+	}
+	for _, provider := range []string{"codex", "claude", "opencode", "gemini"} {
+		if strings.Contains(lower, "/.config/"+provider) {
 			return true
 		}
 	}

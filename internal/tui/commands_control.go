@@ -306,13 +306,11 @@ func (h *CommandHandler) resolveApproval(ctx context.Context, approvalID string,
 		resolved.ID, resolved.Operation, orNone(resolved.Target), resolved.Revision), nil
 }
 
-// handleRoute shows or alters routing strictly through the ULTRA routing layer.
-// With no arguments it reports the plan the router computes for current state;
-// with arguments it re-routes under the operator's constraints and persists the
-// resulting explanation, so the decision is the router's and never cosmetic.
+// handleRoute calculates an advisory plan only. Runtime does not consume this
+// state, so the TUI must never present the result as an applied configuration.
 func (h *CommandHandler) handleRoute(ctx context.Context, args []string) (string, error) {
 	if h.ws.router == nil {
-		return "ULTRA router unavailable", nil
+		return "Advisory router unavailable", nil
 	}
 
 	h.ws.mu.RLock()
@@ -372,19 +370,15 @@ func (h *CommandHandler) handleRoute(ctx context.Context, args []string) (string
 
 	plan, err := h.ws.router.Route(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("ultra route: %w", err)
+		return "", fmt.Errorf("advisory route: %w", err)
 	}
 
-	// Persist the explanation so /why and the dashboard reflect this decision.
-	h.ws.mu.Lock()
-	h.ws.state.RouteExplanation = plan.Explanation
-	h.ws.mu.Unlock()
-
 	var b strings.Builder
+	b.WriteString("ADVISORY ONLY — NOT APPLIED TO RUNTIME\n")
 	if len(overrides) > 0 {
-		b.WriteString(fmt.Sprintf("ULTRA ROUTE RECOMPUTED (%s):\n", strings.Join(overrides, ", ")))
+		b.WriteString(fmt.Sprintf("ADVISORY ROUTE RECOMPUTED (%s):\n", strings.Join(overrides, ", ")))
 	} else {
-		b.WriteString("ULTRA ROUTE (current state):\n")
+		b.WriteString("ADVISORY ROUTE (current state):\n")
 	}
 	b.WriteString(fmt.Sprintf("  Role:         %s\n", plan.Role))
 	b.WriteString(fmt.Sprintf("  Harness:      %s\n", plan.Harness))

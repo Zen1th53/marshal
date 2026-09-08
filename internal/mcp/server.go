@@ -508,6 +508,9 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 		if taskID == "" || agentID == "" {
 			return "", fmt.Errorf("%w: task_id and agent_id parameters are required", model.ErrInvalid)
 		}
+		if err := authorizeTaskAgent(caller, agentID); err != nil {
+			return "", err
+		}
 		res, err := s.runtime.Claim(ctx, app.ClaimRequest{TaskID: taskID, AgentID: agentID})
 		if err != nil {
 			return "", err
@@ -519,6 +522,15 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 		taskID, _ := args["task_id"].(string)
 		if taskID == "" {
 			return "", fmt.Errorf("%w: task_id parameter is required", model.ErrInvalid)
+		}
+		if caller.Kind == auth.KindMCPClient {
+			active, err := s.runtime.Store().ActiveLease(ctx, taskID)
+			if err != nil {
+				return "", err
+			}
+			if err := authorizeTaskAgent(caller, active.AgentID); err != nil {
+				return "", err
+			}
 		}
 		if err := s.runtime.Release(ctx, app.ReleaseRequest{TaskID: taskID}); err != nil {
 			return "", err
@@ -534,6 +546,9 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 		}
 		if taskID == "" || agentID == "" {
 			return "", fmt.Errorf("%w: task_id and agent_id parameters are required", model.ErrInvalid)
+		}
+		if err := authorizeTaskAgent(caller, agentID); err != nil {
+			return "", err
 		}
 		res, err := s.runtime.Run(ctx, app.RunRequest{TaskID: taskID, AgentID: agentID, Adapter: adapterName})
 		if err != nil {
@@ -577,6 +592,16 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 	default:
 		return "", fmt.Errorf("%w: unknown tool %s", model.ErrInvalid, name)
 	}
+}
+
+// authorizeTaskAgent binds an MCP credential to the agent identity it may
+// operate as. MCP tokens must be issued with the registered agent ID as their
+// name; local-user credentials retain operator delegation authority.
+func authorizeTaskAgent(caller auth.Principal, agentID string) error {
+	if caller.Kind == auth.KindMCPClient && caller.Name != agentID {
+		return fmt.Errorf("%w: MCP principal %q is not bound to agent %q", model.ErrPolicyDenied, caller.Name, agentID)
+	}
+	return nil
 }
 
 func (s *Server) writeResult(w http.ResponseWriter, id any, result any) {

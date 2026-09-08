@@ -16,19 +16,17 @@ func TestProbeHarnesses(t *testing.T) {
 		foundMap[p.HarnessName] = p
 	}
 
-	// Antigravity MUST be UNAVAILABLE on this host because 'agy' is not installed
+	// Detection is host-dependent, but discovery must never execute the binary
+	// or invent a version/model.
 	agy, ok := foundMap["antigravity"]
 	if !ok {
 		t.Fatalf("antigravity probe missing")
 	}
-	if agy.Installed {
-		t.Errorf("expected agy to NOT be installed on host, but got installed=true")
+	if agy.Installed && (agy.State != StateAvailable || agy.Version != "NOT_PROBED") {
+		t.Errorf("installed harness must remain unexecuted: %#v", agy)
 	}
-	if agy.State != "UNAVAILABLE" {
-		t.Errorf("expected agy state UNAVAILABLE, got %s", agy.State)
-	}
-	if !strings.Contains(agy.Reason, "not found") {
-		t.Errorf("expected reason to state not found, got %s", agy.Reason)
+	if !agy.Installed && (agy.State != StateUnavailable || !strings.Contains(agy.Reason, "not found")) {
+		t.Errorf("unavailable harness result is inconsistent: %#v", agy)
 	}
 	if len(agy.Models) != 0 {
 		t.Errorf("expected 0 models for unavailable agy (never fabricate models), got %v", agy.Models)
@@ -41,8 +39,8 @@ func TestProbeHarnesses(t *testing.T) {
 	}
 	for _, p := range participants {
 		if p.AgentID == "antigravity" {
-			if p.IsActive {
-				t.Errorf("expected antigravity to be inactive when agy missing")
+			if p.IsActive != agy.Installed {
+				t.Errorf("participant activity must match non-executing discovery")
 			}
 			if p.Model != "UNKNOWN" && p.Model != "UNAVAILABLE" {
 				t.Errorf("expected antigravity model to be UNKNOWN or UNAVAILABLE, got %q", p.Model)

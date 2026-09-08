@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -230,74 +229,12 @@ func (h *CommandHandler) handleTaskOwnership(ctx context.Context) (string, error
 
 // handlePolicy inspects security, network, sandbox, and capability policies.
 func (h *CommandHandler) handlePolicy(ctx context.Context, args []string) (string, error) {
-	sub := "all"
-	if len(args) > 0 {
-		sub = strings.ToLower(args[0])
-	}
-
-	var b strings.Builder
-	switch sub {
-	case "network":
-		b.WriteString("NETWORK SECURITY POLICY:\n")
-		b.WriteString("  Mode:        FAIL-CLOSED\n")
-		b.WriteString("  Enforcement: bubblewrap (--unshare-net)\n")
-		b.WriteString("  Egress:      BLOCKED for unverified agent processes\n")
-		b.WriteString("  Policy Rule: Per-endpoint egress cannot be enforced without authenticated proxy\n")
-
-	case "sandbox":
-		return h.handleSandbox(ctx)
-
-	case "capability":
-		b.WriteString("CAPABILITY POLICY:\n")
-		b.WriteString("  Model Invocations: BOUNDED\n")
-		b.WriteString("  System Calls:      RESTRICTED (no root, no ptrace)\n")
-		b.WriteString("  Memory Limits:     ENFORCED per worker\n")
-
-	case "scope":
-		b.WriteString("SCOPE POLICY:\n")
-		b.WriteString("  Workspace: ISOLATED to project worktree\n")
-		b.WriteString("  Writes:    REQUIRING APPROVAL outside defined Goal scope\n")
-
-	case "write":
-		b.WriteString("WRITE PERMISSION POLICY:\n")
-		b.WriteString("  Protected Paths: .git/, .marshal/state.db, /etc/, /usr/\n")
-		b.WriteString("  Permitted:       Configured project root only\n")
-
-	case "audit":
-		b.WriteString("SECURITY AUDIT LOG:\n")
-		b.WriteString("  Zero security escape attempts or sandbox violations recorded.\n")
-
-	default:
-		b.WriteString("MARSHAL SECURITY & POLICY SUMMARY:\n")
-		b.WriteString("  Network:    FAIL-CLOSED (--unshare-net)\n")
-		b.WriteString("  Sandbox:    Bubblewrap isolation\n")
-		b.WriteString("  Capability: Least privilege enforced\n")
-		b.WriteString("  Scope:      Goal-bounded workspace writes\n")
-		b.WriteString("Use /policy [network|sandbox|capability|scope|write|audit] for detail.\n")
-	}
-
-	return b.String(), nil
+	return "Policy enforcement status: NOT VERIFIED. TUI is not connected to an authenticated runtime policy read-back service.", nil
 }
 
 // handleSandbox reports the bubblewrap sandbox status.
 func (h *CommandHandler) handleSandbox(ctx context.Context) (string, error) {
-	bwrapPath, err := exec.LookPath("bwrap")
-	status := "AVAILABLE"
-	if err != nil {
-		status = "UNAVAILABLE: bwrap binary not found on PATH"
-	} else {
-		status = fmt.Sprintf("AVAILABLE (%s)", bwrapPath)
-	}
-
-	var b strings.Builder
-	b.WriteString("SANDBOX ISOLATION STATUS:\n")
-	b.WriteString(fmt.Sprintf("  Backend:       bubblewrap (Linux namespaces)\n"))
-	b.WriteString(fmt.Sprintf("  Status:        %s\n", status))
-	b.WriteString(fmt.Sprintf("  Filesystem:    Read-only host root, private /tmp, bind-mounted worktree\n"))
-	b.WriteString(fmt.Sprintf("  Network:       Isolated (--unshare-net)\n"))
-	b.WriteString(fmt.Sprintf("  PID Namespace: Isolated\n"))
-	b.WriteString(fmt.Sprintf("  IPC Namespace: Isolated\n"))
-	return b.String(), nil
+	return "Sandbox status: NOT VERIFIED. Isolation is established and reported per runtime execution, not by the TUI.", nil
 }
 
 // handleMemory handles epistemic memory inspection and search.
@@ -457,84 +394,14 @@ func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (stri
 	}
 
 	if args[0] == "select" {
-		if len(args) < 3 {
-			return "Usage: /harness select <role> <harness_name>", nil
-		}
-		if h.ws.store == nil {
-			return "Store unavailable", nil
-		}
-		role := strings.ToLower(args[1])
-		harnessName := strings.ToLower(args[2])
-
-		// A role binding is only meaningful for a harness MARSHAL can actually
-		// see. Binding to a name that no probe reports would record a preference
-		// the runtime can never honour.
-		known := false
-		for _, pr := range ProbeHarnesses() {
-			if pr.HarnessName == harnessName {
-				known = true
-				break
-			}
-		}
-		if !known {
-			return fmt.Sprintf("Unknown harness %q. Run /harness probe to see what this host provides.", harnessName), nil
-		}
-
-		profile, err := h.ws.store.GetHarnessProfile(ctx, harnessName)
-		if err != nil || profile == nil {
-			seeded, perr := h.seedHarnessProfile(ctx, harnessName)
-			if perr != nil {
-				return "", fmt.Errorf("no harness profile for %q: %w", harnessName, perr)
-			}
-			profile = seeded
-		}
-
-		// Record the binding on the canonical profile as a native mode entry so
-		// it survives the session and is readable by any other surface.
-		binding := "role:" + role
-		replaced := false
-		for i, mode := range profile.NativeModes {
-			if strings.HasPrefix(mode, "role:") && mode == binding {
-				replaced = true
-				_ = i
-				break
-			}
-		}
-		if !replaced {
-			profile.NativeModes = append(profile.NativeModes, binding)
-		}
-		profile.ProbedAt = time.Now().UTC()
-		if err := h.ws.store.SaveHarnessProfile(ctx, *profile); err != nil {
-			return "", fmt.Errorf("save harness binding: %w", err)
-		}
-
-		readBack, err := h.ws.store.GetHarnessProfile(ctx, harnessName)
-		if err != nil || readBack == nil {
-			return "", fmt.Errorf("harness binding did not persist for %q", harnessName)
-		}
-		found := false
-		for _, mode := range readBack.NativeModes {
-			if mode == binding {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return "", fmt.Errorf("harness binding did not persist for %q", harnessName)
-		}
-		return fmt.Sprintf("Role %s bound to harness %s (persisted).", role, harnessName), nil
+		return "Harness selection was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
 	}
 
 	return "Usage: /harness [probe|status|select <role> <harness>]", nil
 }
 
-// handleModel selects an active model for routing.
-// handleModel records a model preference on the canonical harness profile.
-//
-// A model belongs to the harness that serves it, so the preference is stored as
-// that profile's DefaultModel rather than as TUI-local state. Reporting success
-// without writing anything -- which this previously did -- makes the capability
-// unusable and the parity claim false.
+// handleModel exposes saved preferences read-only. Mutations fail closed until
+// Runtime owns a canonical authenticated execution-profile service.
 func (h *CommandHandler) handleModel(ctx context.Context, args []string) (string, error) {
 	if len(args) == 0 || args[0] == "show" {
 		return h.renderModelSelections(ctx)
@@ -542,46 +409,7 @@ func (h *CommandHandler) handleModel(ctx context.Context, args []string) (string
 	if args[0] != "select" || len(args) < 2 {
 		return "Usage: /model select <harness> <model_name>  (or /model show)", nil
 	}
-	if h.ws.store == nil {
-		return "Store unavailable", nil
-	}
-
-	// Accept "/model select <harness> <model>", and fall back to the routed
-	// harness when only a model is given.
-	harnessName, modelName := "", ""
-	if len(args) >= 3 {
-		harnessName, modelName = strings.ToLower(args[1]), args[2]
-	} else {
-		modelName = args[1]
-		plan, err := h.currentRoutePlan(ctx)
-		if err != nil {
-			return "", err
-		}
-		harnessName = plan.Harness
-	}
-
-	profile, err := h.ws.store.GetHarnessProfile(ctx, harnessName)
-	if err != nil || profile == nil {
-		// No probe has been recorded yet. Seed the profile from a live probe so
-		// the preference lands on a real, verifiable record.
-		seeded, perr := h.seedHarnessProfile(ctx, harnessName)
-		if perr != nil {
-			return "", fmt.Errorf("no harness profile for %q and probe failed: %w", harnessName, perr)
-		}
-		profile = seeded
-	}
-
-	profile.DefaultModel = modelName
-	profile.ProbedAt = time.Now().UTC()
-	if err := h.ws.store.SaveHarnessProfile(ctx, *profile); err != nil {
-		return "", fmt.Errorf("save model preference: %w", err)
-	}
-
-	readBack, err := h.ws.store.GetHarnessProfile(ctx, harnessName)
-	if err != nil || readBack == nil || readBack.DefaultModel != modelName {
-		return "", fmt.Errorf("model preference did not persist for %q", harnessName)
-	}
-	return fmt.Sprintf("Default model for %s set to %s (persisted).", harnessName, readBack.DefaultModel), nil
+	return "Model selection was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
 }
 
 // renderModelSelections reports the persisted model preference per harness.
@@ -590,7 +418,7 @@ func (h *CommandHandler) renderModelSelections(ctx context.Context) (string, err
 		return "Store unavailable", nil
 	}
 	var b strings.Builder
-	b.WriteString("MODEL SELECTION (persisted per harness):\n")
+	b.WriteString("SAVED MODEL PREFERENCES (NOT APPLIED TO RUNTIME):\n")
 	for _, pr := range ProbeHarnesses() {
 		profile, err := h.ws.store.GetHarnessProfile(ctx, pr.HarnessName)
 		selected := UnknownModel
@@ -599,37 +427,11 @@ func (h *CommandHandler) renderModelSelections(ctx context.Context) (string, err
 		}
 		b.WriteString(fmt.Sprintf("  %-12s %s\n", pr.HarnessName, selected))
 	}
-	b.WriteString("Set with /model select <harness> <model>.")
+	b.WriteString("Runtime execution-profile integration is unavailable.")
 	return b.String(), nil
 }
 
-// seedHarnessProfile writes a profile from a live probe so preferences have a
-// real record to attach to. Nothing about the harness is invented: an absent
-// binary is recorded as such.
-func (h *CommandHandler) seedHarnessProfile(ctx context.Context, harnessName string) (*model.HarnessProfile, error) {
-	for _, pr := range ProbeHarnesses() {
-		if pr.HarnessName != harnessName {
-			continue
-		}
-		version := pr.Version
-		if version == "" {
-			version = UnknownModel
-		}
-		profile := model.HarnessProfile{
-			Harness:          pr.HarnessName,
-			InstalledVersion: version,
-			BinaryPath:       pr.BinaryPath,
-			ProbedAt:         time.Now().UTC(),
-		}
-		if err := h.ws.store.SaveHarnessProfile(ctx, profile); err != nil {
-			return nil, err
-		}
-		return &profile, nil
-	}
-	return nil, fmt.Errorf("unknown harness %q", harnessName)
-}
-
-// currentRoutePlan asks the ULTRA router what it would select right now.
+// currentRoutePlan asks the advisory router what it would select right now.
 func (h *CommandHandler) currentRoutePlan(ctx context.Context) (model.ULTRARoutePlan, error) {
 	if h.ws.router == nil {
 		return model.ULTRARoutePlan{}, fmt.Errorf("ULTRA router unavailable")
@@ -646,10 +448,8 @@ func (h *CommandHandler) currentRoutePlan(ctx context.Context) (model.ULTRARoute
 	return h.ws.router.Route(ctx, req)
 }
 
-// handleEffort sets reasoning effort.
-// handleEffort records the reasoning-effort preference on the canonical harness
-// profile so the setting survives the session rather than being announced and
-// discarded.
+// handleEffort exposes saved preferences read-only and refuses mutations that
+// Runtime cannot apply.
 func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (string, error) {
 	if h.ws.store == nil {
 		return "Store unavailable", nil
@@ -666,52 +466,15 @@ func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (strin
 		if perr == nil && profile != nil && len(profile.ReasoningKnobs) > 0 {
 			current = profile.ReasoningKnobs[0]
 		}
-		return fmt.Sprintf("Reasoning effort for %s: %s\nSet with /effort <low|medium|high>.",
+		return fmt.Sprintf("Saved reasoning preference for %s: %s (NOT APPLIED TO RUNTIME).",
 			plan.Harness, orNone(current)), nil
 	}
-
-	effort := strings.ToLower(args[0])
-	switch effort {
-	case "low", "medium", "high":
-	default:
-		return "Invalid effort. Options: low, medium, high", nil
-	}
-
-	profile, err := h.ws.store.GetHarnessProfile(ctx, plan.Harness)
-	if err != nil || profile == nil {
-		seeded, perr := h.seedHarnessProfile(ctx, plan.Harness)
-		if perr != nil {
-			return "", fmt.Errorf("no harness profile for %q: %w", plan.Harness, perr)
-		}
-		profile = seeded
-	}
-
-	profile.ReasoningKnobs = []string{effort}
-	profile.ProbedAt = time.Now().UTC()
-	if err := h.ws.store.SaveHarnessProfile(ctx, *profile); err != nil {
-		return "", fmt.Errorf("save reasoning effort: %w", err)
-	}
-
-	readBack, err := h.ws.store.GetHarnessProfile(ctx, plan.Harness)
-	if err != nil || readBack == nil || len(readBack.ReasoningKnobs) == 0 ||
-		readBack.ReasoningKnobs[0] != effort {
-		return "", fmt.Errorf("reasoning effort did not persist for %q", plan.Harness)
-	}
-	return fmt.Sprintf("Reasoning effort for %s set to %s (persisted).", plan.Harness, effort), nil
+	return "Reasoning effort was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
 }
 
 // handleUltra handles ULTRA toggling.
 func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string, error) {
-	h.ws.mu.Lock()
-	defer h.ws.mu.Unlock()
-	if h.ws.mode == "ultra" {
-		h.ws.mode = "manual"
-		h.ws.state.SessionMode = "MANUAL"
-		return "ULTRA autonomous optimization disabled (mode: MANUAL).", nil
-	}
-	h.ws.mode = "ultra"
-	h.ws.state.SessionMode = "ULTRA"
-	return "ULTRA autonomous optimization enabled (mode: ULTRA).", nil
+	return "ULTRA is unavailable: no cryptographically verified entitlement is active.", nil
 }
 
 // handleBackup handles snapshot backup creation and restoration.
@@ -773,7 +536,7 @@ func (h *CommandHandler) handleFingerprint(ctx context.Context) (string, error) 
 
 // handleRuntime shows runtime status.
 func (h *CommandHandler) handleRuntime(ctx context.Context) (string, error) {
-	return fmt.Sprintf("RUNTIME STATUS:\n  Event Loop: ACTIVE\n  Goroutines: HEALTHY\n  Session:    %s\n", h.ws.sessionID), nil
+	return fmt.Sprintf("RUNTIME STATUS:\n  Execution state: NOT VERIFIED\n  Session label:   %s\n  TUI has no authenticated runtime health channel.\n", h.ws.sessionID), nil
 }
 
 // handleStore shows store schema status.
@@ -785,7 +548,7 @@ func (h *CommandHandler) handleStore(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("STORE STATUS:\n  Backend:  SQLite (WAL mode)\n  Schema:   v%d (Latest: v%d)\n  Health:   OK\n",
+	return fmt.Sprintf("STORE STATUS:\n  Backend:  SQLite\n  Schema:   v%d (Latest: v%d)\n  Health:   NOT VERIFIED (schema read succeeded only)\n",
 		ver, store.LatestSchemaVersion), nil
 }
 
@@ -848,36 +611,22 @@ func (h *CommandHandler) handleExport(ctx context.Context, args []string) (strin
 // handleBlind handles blind interpretation.
 func (h *CommandHandler) handleBlind(ctx context.Context, args []string) (string, error) {
 	if len(args) > 0 && args[0] == "resolve" {
-		return "Operator disambiguation recorded for divergent interpretations.", nil
+		return "Blind-interpretation resolution was NOT recorded: authenticated runtime support is unavailable.", nil
 	}
-	return "BLIND INTERPRETATION:\n  Active independent interpretations: 0 (no ambiguity detected).", nil
+	return "BLIND INTERPRETATION:\n  State: NOT VERIFIED (no canonical interpretation read-back service).", nil
 }
 
 // handleReinjection handles constraint reinjection digests.
 func (h *CommandHandler) handleReinjection(ctx context.Context) (string, error) {
-	return "CONSTRAINT RE-INJECTION:\n  Digest verification: PASS\n  Active constraints cryptographically re-injected on every handoff.", nil
+	return "CONSTRAINT RE-INJECTION:\n  State: NOT VERIFIED (no execution-bound digest was read back).", nil
 }
 
 // handleAlignment handles alignment guard state.
 func (h *CommandHandler) handleAlignment(ctx context.Context, args []string) (string, error) {
-	sub := "status"
-	if len(args) > 0 {
-		sub = strings.ToLower(args[0])
+	if len(args) > 0 && strings.ToLower(args[0]) == "resolve" {
+		return "Alignment escalation was NOT resolved: authenticated runtime authorization is required.", nil
 	}
-	switch sub {
-	case "scope":
-		return "ALIGNMENT SCOPE:\n  Allowed paths: repository root\n  Restricted: .git, /etc, /usr", nil
-	case "violations":
-		return "ALIGNMENT VIOLATIONS:\n  Zero out-of-scope modifications detected.", nil
-	case "blast":
-		return "BLAST RADIUS:\n  Predicted: 2 files | Observed: 2 files (Within threshold)", nil
-	case "deletions":
-		return "DELETIONS CHECK:\n  No deletion-as-satisfaction anti-patterns detected.", nil
-	case "resolve":
-		return "Scope expansion request approved by operator.", nil
-	default:
-		return "ALIGNMENT GUARD: OK (No violations, scope respected)", nil
-	}
+	return "ALIGNMENT GUARD: NOT VERIFIED (no execution-bound alignment result was read back).", nil
 }
 
 // handleDiff toggles the interactive diff viewer.
