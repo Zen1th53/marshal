@@ -28,7 +28,16 @@ var (
 	ErrGovernanceVeto = errors.New("learning: governance veto")
 	// ErrSecretMaterial marks a candidate carrying secret or sensitive data.
 	ErrSecretMaterial = errors.New("learning: secret material")
+	// ErrNotFound marks a memory record that does not exist.
+	ErrNotFound = errors.New("learning: not found")
+	// ErrConflict marks a compare-and-swap failure: another learner wrote a
+	// newer version, so this write is refused rather than applied over it.
+	ErrConflict = errors.New("learning: conflict")
 )
+
+// InvalidatedState is the claim state used when memory is revoked. It is a
+// function so storage code does not import the model vocabulary directly.
+func InvalidatedState() model.ClaimState { return model.ClaimStateInvalidated }
 
 // Status is the Process 07 acceptance vocabulary. No other values exist.
 type Status string

@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 83
+const LatestSchemaVersion = 84
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2312,6 +2312,153 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 83: %w", err)
 		}
 		version = 83
+	}
+	if version < 84 {
+		// Process 07 learning, memory and adaptation. Memory commits are
+		// append-only and digest-protected. Memory items are mutable only
+		// through CAS on (item_id, version), so a stale writer cannot
+		// overwrite fresher evidence and an invalidation cannot be lost.
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS memory_commits (
+				memory_commit_id TEXT PRIMARY KEY,
+				version INTEGER NOT NULL CHECK(version >= 1),
+				project_id TEXT NOT NULL,
+				goal_id TEXT NOT NULL,
+				plan_id TEXT NOT NULL,
+				run_id TEXT NOT NULL,
+				verification_id TEXT NOT NULL,
+				verification_version INTEGER NOT NULL,
+				outcome TEXT NOT NULL CHECK(outcome IN ('VERIFIED_COMPLETE','PARTIAL','FAILED','BLOCKED')),
+				attestation_digest TEXT NOT NULL,
+				evidence_bundle_digest TEXT NOT NULL,
+				digest TEXT NOT NULL UNIQUE,
+				commit_json TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_memory_commits_binding
+				ON memory_commits(project_id, goal_id, plan_id, run_id);
+			CREATE INDEX IF NOT EXISTS idx_memory_commits_verification
+				ON memory_commits(verification_id, verification_version);
+			CREATE TABLE IF NOT EXISTS memory_items (
+				item_id TEXT PRIMARY KEY,
+				version INTEGER NOT NULL CHECK(version >= 1),
+				scope TEXT NOT NULL CHECK(scope IN ('PROJECT','GENERAL')),
+				project_id TEXT NOT NULL DEFAULT '',
+				state TEXT NOT NULL CHECK(state IN ('UNSUPPORTED','SUPPORTED','VERIFIED','CONTESTED','STALE','INVALIDATED')),
+				critical INTEGER NOT NULL CHECK(critical IN (0,1)),
+				memory_commit_id TEXT NOT NULL,
+				digest TEXT NOT NULL,
+				item_json TEXT NOT NULL,
+				recorded_at TEXT NOT NULL,
+				expires_at TEXT,
+				FOREIGN KEY(memory_commit_id) REFERENCES memory_commits(memory_commit_id)
+			);
+			CREATE INDEX IF NOT EXISTS idx_memory_items_scope
+				ON memory_items(scope, project_id, state);
+			CREATE TABLE IF NOT EXISTS memory_item_revisions (
+				item_id TEXT NOT NULL,
+				version INTEGER NOT NULL CHECK(version >= 1),
+				state TEXT NOT NULL,
+				memory_commit_id TEXT NOT NULL,
+				digest TEXT NOT NULL,
+				item_json TEXT NOT NULL,
+				recorded_at TEXT NOT NULL,
+				PRIMARY KEY(item_id, version)
+			);
+			CREATE TABLE IF NOT EXISTS memory_dependencies (
+				item_id TEXT NOT NULL,
+				kind TEXT NOT NULL,
+				dependency_id TEXT NOT NULL,
+				dependency_version TEXT NOT NULL,
+				PRIMARY KEY(item_id, kind, dependency_id)
+			);
+			CREATE INDEX IF NOT EXISTS idx_memory_dependencies_lookup
+				ON memory_dependencies(kind, dependency_id);
+			CREATE TABLE IF NOT EXISTS memory_evidence (
+				item_id TEXT NOT NULL,
+				evidence_id TEXT NOT NULL,
+				cluster_id TEXT NOT NULL,
+				digest TEXT NOT NULL,
+				kind TEXT NOT NULL,
+				observed_at TEXT NOT NULL,
+				PRIMARY KEY(item_id, evidence_id)
+			);
+			CREATE INDEX IF NOT EXISTS idx_memory_evidence_cluster
+				ON memory_evidence(cluster_id);
+			CREATE TABLE IF NOT EXISTS routing_observations (
+				observation_id TEXT PRIMARY KEY,
+				memory_commit_id TEXT NOT NULL,
+				task_class TEXT NOT NULL,
+				provider TEXT NOT NULL,
+				provider_version TEXT NOT NULL,
+				model TEXT NOT NULL,
+				outcome TEXT NOT NULL CHECK(outcome IN ('VERIFIED_COMPLETE','PARTIAL','FAILED','BLOCKED')),
+				selected INTEGER NOT NULL CHECK(selected IN (0,1)),
+				cluster_id TEXT NOT NULL,
+				observation_json TEXT NOT NULL,
+				observed_at TEXT NOT NULL,
+				FOREIGN KEY(memory_commit_id) REFERENCES memory_commits(memory_commit_id)
+			);
+			CREATE INDEX IF NOT EXISTS idx_routing_observations_class
+				ON routing_observations(task_class, provider, provider_version, model);
+			CREATE TABLE IF NOT EXISTS failure_fingerprints (
+				fingerprint_id TEXT PRIMARY KEY,
+				signature TEXT NOT NULL,
+				task_class TEXT NOT NULL,
+				scope TEXT NOT NULL CHECK(scope IN ('PROJECT','GENERAL')),
+				project_id TEXT NOT NULL DEFAULT '',
+				occurrences INTEGER NOT NULL CHECK(occurrences >= 1),
+				fingerprint_json TEXT NOT NULL,
+				first_seen TEXT NOT NULL,
+				last_seen TEXT NOT NULL,
+				expires_at TEXT
+			);
+			CREATE INDEX IF NOT EXISTS idx_failure_fingerprints_signature
+				ON failure_fingerprints(signature, task_class);
+			CREATE TABLE IF NOT EXISTS playbook_candidates (
+				playbook_id TEXT PRIMARY KEY,
+				memory_commit_id TEXT NOT NULL,
+				title TEXT NOT NULL,
+				scope TEXT NOT NULL CHECK(scope IN ('PROJECT','GENERAL')),
+				project_id TEXT NOT NULL DEFAULT '',
+				active INTEGER NOT NULL DEFAULT 0 CHECK(active = 0),
+				candidate_json TEXT NOT NULL,
+				created_at TEXT NOT NULL,
+				FOREIGN KEY(memory_commit_id) REFERENCES memory_commits(memory_commit_id)
+			);
+			CREATE TABLE IF NOT EXISTS replay_index (
+				replay_id TEXT PRIMARY KEY,
+				memory_commit_id TEXT NOT NULL,
+				run_id TEXT NOT NULL,
+				verification_id TEXT NOT NULL,
+				replay_class TEXT NOT NULL CHECK(replay_class IN ('EXACT','BEST_EFFORT','NON_REPLAYABLE')),
+				tree_digest TEXT NOT NULL,
+				environment_digest TEXT NOT NULL,
+				evidence_bundle_digest TEXT NOT NULL,
+				record_json TEXT NOT NULL,
+				recorded_at TEXT NOT NULL,
+				FOREIGN KEY(memory_commit_id) REFERENCES memory_commits(memory_commit_id)
+			);
+			CREATE TABLE IF NOT EXISTS benchmark_records (
+				record_id TEXT PRIMARY KEY,
+				benchmark TEXT NOT NULL,
+				benchmark_version TEXT NOT NULL,
+				task_id TEXT NOT NULL,
+				tree_digest TEXT NOT NULL,
+				mode TEXT NOT NULL,
+				resolved TEXT NOT NULL CHECK(resolved IN ('PASS','FAIL','BLOCKED','NOT_RUN','UNKNOWN')),
+				record_json TEXT NOT NULL,
+				recorded_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_benchmark_records_task
+				ON benchmark_records(benchmark, benchmark_version, task_id);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 84: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(84, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 84: %w", err)
+		}
+		version = 84
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

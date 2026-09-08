@@ -83,3 +83,27 @@ func (s *Store) AppendCompletionAttestation(ctx context.Context, a verification.
 	}
 	return nil
 }
+
+// LatestCompletionAttestation returns the most recent attestation for one
+// verification session. Process 07 binds to this record rather than to a
+// caller-supplied digest, so learning cannot be attached to an outcome that
+// was never attested.
+func (s *Store) LatestCompletionAttestation(ctx context.Context, verificationID string) (verification.CompletionAttestation, error) {
+	var body []byte
+	err := s.db.QueryRowContext(ctx, `
+		SELECT attestation_json FROM completion_attestations
+		WHERE verification_id=?
+		ORDER BY verification_version DESC, issued_at DESC LIMIT 1
+	`, verificationID).Scan(&body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return verification.CompletionAttestation{}, verification.ErrNotFound
+	}
+	if err != nil {
+		return verification.CompletionAttestation{}, err
+	}
+	var a verification.CompletionAttestation
+	if err := json.Unmarshal(body, &a); err != nil {
+		return verification.CompletionAttestation{}, fmt.Errorf("decode completion attestation: %w", err)
+	}
+	return a, nil
+}

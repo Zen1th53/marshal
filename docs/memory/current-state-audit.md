@@ -30,6 +30,27 @@ of truth.
 canonical reload. Private/operator-scoped writes do not expose record bodies
 through the cursor.
 
+## Process 07 learning memory
+
+Process 07 stores learned knowledge in its own canonical tables:
+
+| Table | Current classification |
+|---|---|
+| `memory_commits` | Append-only, digest-protected Process 07 learning commits |
+| `memory_items` | Evidence-gated claim memory; CAS on `(item_id, version)` |
+| `memory_item_revisions` | Immutable version history for every claim |
+| `memory_dependencies` | Dependency graph driving targeted staleness |
+| `memory_evidence` | Claim evidence refs and their source clusters |
+
+These are a separate canonical store rather than a convergence target for
+`memory_records_v2`. Every row is bound to an exact Process 06 completion
+attestation and reaches storage only through the Process 07 promotion gates, so
+folding them into general task memory would drop the provenance, scope and
+evidence-cluster metadata that make them admissible in the first place.
+
+Reads verify each item digest, so a claim whose text, scope or evidence mapping
+was altered in the database is reported as tampered rather than returned.
+
 ## Derived decision tables
 
 The following tables are subsystem decisions, not general memory stores:

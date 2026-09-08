@@ -315,3 +315,8 @@ func (c Commit) Verify() error {
 	}
 	return nil
 }
+
+// ItemDigest returns the canonical digest of a memory item, so a stored claim
+// whose text, evidence mapping or scope was altered in the database is
+// detectable on read.
+func ItemDigest(i Item) (string, error) { return digest(i) }
