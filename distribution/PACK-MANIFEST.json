@@ -2216,8 +2216,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "f00a2e718133acff21bc576f399fc2777e3ea7cf20bebad1786d1414fd39e0af",
-      "bytes": 32977
+      "sha256": "4ea49231c5417329d5bd64a9b703ee8f6c4f7d1a1d48cd6f7995be3fb1d2c7b6",
+      "bytes": 33063
     },
     {
       "path": "internal/cli/cli_test.go",
@@ -4151,13 +4151,13 @@
     },
     {
       "path": "internal/projectid/scope.go",
-      "sha256": "85045f9603ce2e8c91006faa3bbb43670f0695e8dc33582e63b39fa5a7cc18eb",
-      "bytes": 13072
+      "sha256": "1c6d9be87c34e6a1fc21808ba432dab5c397023a7e3781a5194afb266b064947",
+      "bytes": 14383
     },
     {
       "path": "internal/projectid/scope_test.go",
-      "sha256": "4f3b4536976f01642e4023189c6de2de2787e98f795da026cdc6ecf35fd93486",
-      "bytes": 9175
+      "sha256": "be69ac49a8415c32258de0c57878a5eb7cacf2ee6dd7925c7e47cd4b4ae479b1",
+      "bytes": 10884
     },
     {
       "path": "internal/projectmemory/assimilate.go",
@@ -4963,6 +4963,11 @@
       "path": "internal/store/goal.go",
       "sha256": "df4f726142c6c5cb6365489c3cac513a8e27c832ad0184f770cdb04b9e7b6b7a",
       "bytes": 10601
+    },
+    {
+      "path": "internal/store/goal_intake_migration_test.go",
+      "sha256": "32807220e22442834a17117701297037ea55eb78243b998271671618436f752c",
+      "bytes": 5052
     },
     {
       "path": "internal/store/goal_test.go",

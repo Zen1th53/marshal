@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/projectid"
@@ -282,5 +283,48 @@ func TestUnresolvableScopeAdmitsNothing(t *testing.T) {
 	scope := projectid.Scope{Root: string([]byte{0})}
 	if scope.Contains("/anything") {
 		t.Fatal("a scope with an unusable root admitted a path")
+	}
+}
+
+// MARSHAL's own setup files are not the user's uncommitted work. Counting them
+// made a freshly initialized project report work at risk, which would attach a
+// warning to every routine request in a new project.
+func TestMarshalOwnFilesAreNotUserWork(t *testing.T) {
+	repo := newRepo(t)
+	// Recreate what marshal init leaves behind: its state directory and the
+	// version files, none of them committed.
+	if err := os.MkdirAll(filepath.Join(repo, ".marshal", "artifacts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"CAPABILITIES.yaml", "PACK-VERSION.yaml", "RUNTIME-VERSION.yaml"} {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte("version: 1\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	qualification := qualify(t, repo)
+	if qualification.Dirty {
+		t.Fatalf("MARSHAL's own setup files were reported as the user's uncommitted work: %v",
+			qualification.DirtyPaths)
+	}
+	if !qualification.SafeToMutate() {
+		t.Fatal("a freshly initialized project was reported unsafe to work in")
+	}
+
+	// A real uncommitted file is still detected.
+	if err := os.WriteFile(filepath.Join(repo, "user-work.txt"), []byte("in progress\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withWork := qualify(t, repo)
+	if !withWork.Dirty {
+		t.Fatal("genuine uncommitted work was not detected")
+	}
+	for _, path := range withWork.DirtyPaths {
+		if strings.HasPrefix(path, ".marshal") || strings.HasSuffix(path, "-VERSION.yaml") {
+			t.Fatalf("a MARSHAL-owned file was listed as work at risk: %q", path)
+		}
+	}
+	if len(withWork.DirtyPaths) != 1 || withWork.DirtyPaths[0] != "user-work.txt" {
+		t.Fatalf("expected only the user's file to be at risk, got %v", withWork.DirtyPaths)
 	}
 }

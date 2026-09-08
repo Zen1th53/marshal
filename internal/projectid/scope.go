@@ -211,13 +211,19 @@ func QualifyGit(ctx context.Context, collector Collector, root string) GitQualif
 	// matters because this feeds a safety decision.
 	if out, err := collector.Run(ctx, root, "status", "--porcelain"); err == nil {
 		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			if strings.TrimSpace(line) == "" {
+			if strings.TrimSpace(line) == "" || len(line) <= 3 {
+				continue
+			}
+			path := strings.TrimSpace(line[3:])
+			// MARSHAL's own setup files are not the user's uncommitted work.
+			// Counting them made a freshly initialized project look like it
+			// had work at risk, which would attach a warning to every routine
+			// request in a new project and teach people to ignore it.
+			if marshalOwnedPath(path) {
 				continue
 			}
 			qualification.Dirty = true
-			if len(line) > 3 {
-				qualification.DirtyPaths = append(qualification.DirtyPaths, strings.TrimSpace(line[3:]))
-			}
+			qualification.DirtyPaths = append(qualification.DirtyPaths, path)
 		}
 		sort.Strings(qualification.DirtyPaths)
 	}
@@ -243,6 +249,30 @@ func QualifyGit(ctx context.Context, collector Collector, root string) GitQualif
 		qualification.Reason = "Changes here can be tracked and undone."
 	}
 	return qualification
+}
+
+// marshalOwnedPath reports whether a path is one MARSHAL creates for itself.
+//
+// These files belong to MARSHAL's setup rather than to the user's work in
+// progress, so they must not be reported as changes at risk. Counting them
+// made a freshly initialized project look like it had work at risk, which
+// would attach a warning to every routine request in a new project and teach
+// people to ignore it.
+//
+// The list is deliberately narrow. Anything not clearly MARSHAL's own is
+// treated as the user's, because being wrong in that direction costs a
+// redundant warning, while the other direction risks losing someone's work.
+func marshalOwnedPath(path string) bool {
+	cleaned := strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(path)), "./")
+	if cleaned == StateDirName || strings.HasPrefix(cleaned, StateDirName+"/") {
+		return true
+	}
+	switch cleaned {
+	case "CAPABILITIES.yaml", "PACK-VERSION.yaml", "RUNTIME-VERSION.yaml":
+		return true
+	default:
+		return false
+	}
 }
 
 // detectMidOperation reports an in-progress Git operation. Working in a
