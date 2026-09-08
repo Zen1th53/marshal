@@ -2820,6 +2820,16 @@
       "bytes": 10777
     },
     {
+      "path": "internal/goalintake/intelligence.go",
+      "sha256": "7974b5f47bacba329b85126399f488315ddbb33a96e3c5c77414889d4cfd71ca",
+      "bytes": 9342
+    },
+    {
+      "path": "internal/goalintake/intelligence_test.go",
+      "sha256": "76956be61debee5a23206530ac42c3434955d7b2592390d0f0ff2c0eff7f6cbe",
+      "bytes": 11560
+    },
+    {
       "path": "internal/harness/governance.go",
       "sha256": "0b3accdbfe6464cc87bd50514afa806da4ef906c8d0e4a49e54e1a75d037327e",
       "bytes": 7692
