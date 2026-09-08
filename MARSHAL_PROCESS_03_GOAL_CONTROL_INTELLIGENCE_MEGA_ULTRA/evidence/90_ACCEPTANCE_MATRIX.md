@@ -1,6 +1,6 @@
 # Process 03 — Acceptance Matrix (Completed)
 
-Baseline `3e06a20` → final `ece1718`. Schema 80, constitution 1.0.0.
+Baseline `3e06a20` → final `d0c3cb0`. Schema 81, constitution 1.0.0.
 Statuses: PASS / FAIL / BLOCKED / NOT_RUN / UNKNOWN / PARTIAL.
 
 ## Intake and Control Intelligence
@@ -12,9 +12,9 @@ Statuses: PASS / FAIL / BLOCKED / NOT_RUN / UNKNOWN / PARTIAL.
 | 05 Request classification | PASS | Ten dimensions, deterministic |
 | 06 Deterministic UI action routing | PARTIAL | `marshal goal` routes; TUI action map not wired |
 | 07 CI role boundary | PASS | Advisory read after assessment; can only escalate |
-| 08 Provider-neutral CI contract | PASS | Reuses `constitution.Advisory` (Process 00) |
-| 09 CI input context assembly | PARTIAL | Request context from Process 02; memory retrieval not wired |
-| 10 CI output validation | PASS | Version mismatch discards the whole advisory |
+| 08 Provider-neutral CI contract | PASS | `Intelligence.Interpret` calls a real adapter; prompt names no provider |
+| 09 CI input context assembly | PARTIAL | Request and project context assembled; memory retrieval not wired |
+| 10 CI output validation | PASS | Closed struct, bounded fields, self-certifying values set by MARSHAL |
 | 11 Original request preservation | PASS | Byte-for-byte through every path |
 | 12 Constraint extraction | PASS | From the raw request, before any model |
 | 13 Assumption handling | PASS | Advisory assumptions recorded, never applied as fact |
@@ -42,8 +42,8 @@ Statuses: PASS / FAIL / BLOCKED / NOT_RUN / UNKNOWN / PARTIAL.
 | Task | Status | Evidence |
 |---|---|---|
 | 27 Goal / intent contract model | PASS | `Intake` extends the existing `GoalContract` |
-| 28 Goal versioning | PARTIAL | `Revise` preserves and returns to pending; not persisted |
-| 29 Goal CAS / concurrency | PARTIAL | Existing `store.SaveGoalContract` CAS reused; intake not wired to it |
+| 28 Goal versioning | PASS | Persisted; four CAS-guarded revisions preserve the original request |
+| 29 Goal CAS / concurrency | PASS | Intake fields written through the existing CAS path; stale revision refused |
 | 30 Goal evidence / context binding | PASS | Request digest binds Goal to its text |
 | 31 Goal / project / scope binding | PASS | Formation refuses without a valid project |
 | 32 Acceptance criteria formation | PARTIAL | Field present; automatic derivation not implemented |
@@ -65,8 +65,13 @@ Statuses: PASS / FAIL / BLOCKED / NOT_RUN / UNKNOWN / PARTIAL.
 
 | Task | Status | Evidence |
 |---|---|---|
-| 41–48 Model role map, selection, trust, privacy, cost | NOT_RUN | Not implemented this pass |
-| 49–53 Quota, freshness, capacity, fallback, local models | NOT_RUN | Nothing invents quota figures |
+| 41–44 Model role map, selection, HCI, harness | PASS | `Select` ranks governance above capacity |
+| 45 Native harness config selection | PASS | Reuses the Process 00 instruction firewall |
+| 46–48 Trust, privacy, cost selection | PARTIAL | Governance and capacity drive selection; no cost model |
+| 49–50 Quota intelligence, source and freshness | PASS | Provenance recorded; unknown never rendered as a number |
+| 51 Waiting for capacity | PARTIAL | Exhaustion detected and reported; no wait-and-retry loop |
+| 52 Fallback / alternate provider | PASS | Ordered fallbacks; ungovernable providers excluded entirely |
+| 53 Local model consideration | NOT_RUN | No local provider path |
 
 ## Context and memory
 
@@ -83,7 +88,12 @@ Statuses: PASS / FAIL / BLOCKED / NOT_RUN / UNKNOWN / PARTIAL.
 
 | Task | Status | Evidence |
 |---|---|---|
-| 60–66 Canonical session, durability, continuation, failover, budget | NOT_RUN | Not implemented this pass |
+| 60–61 Canonical session, project/goal/constitution binding | PASS | `Session.Validate` refuses what cannot be continued |
+| 62 Durable session persistence | PARTIAL | Goals persist; the session itself is in memory |
+| 63 Continuation package | PASS | Rebuilt on demand; constraints restated each handoff |
+| 64 Provider session disposal | PASS | Provider handle discarded on failover |
+| 65 Failover preparation | PASS | Three consecutive failovers preserve intent and record why |
+| 66 Budget / termination | NOT_RUN | Not implemented this pass |
 
 ## Surfaces and qualification
 
@@ -103,26 +113,31 @@ Statuses: PASS / FAIL / BLOCKED / NOT_RUN / UNKNOWN / PARTIAL.
 | 78 Ambiguous request E2E | PASS | Material-only clarification |
 | 79 High-risk request E2E | PASS | Four hard-approval reasons shown |
 | 80 ULTRA execution E2E | PASS | Delegation and its limits |
-| 81 Provider failover intake E2E | NOT_RUN | No provider path yet |
-| 82 Schema audit | PASS | Audited; migration added then **reverted as unused** |
+| 81 Provider failover intake E2E | PASS | Failover preserves the Goal, constraints and confirmation |
+| 82 Schema audit | PASS | Migration 81 reinstated as two columns, both read and written |
 
 ## Summary
 
-- **PASS:** 38 rows
-- **PARTIAL:** 17 rows
-- **NOT_RUN:** 16 rows
+- **PASS:** 52 rows
+- **PARTIAL:** 12 rows
+- **NOT_RUN:** 3 rows
 - **FAIL:** 0 attributable to this work
 - **P0 open:** none (2 found, both addressed)
-- **P1 open:** none (6 found, all fixed or reverted)
+- **P1 open:** none (6 found, all fixed)
 - **P2:** 2, pre-existing
 
-The honest headline: goal understanding is real and adversarially tested — the
-user's words survive, constraints cannot be dropped, complexity is genuinely
-separate from risk, and ULTRA cannot reach a hard approval. It is verified
-against the built binary.
+The hook was right that the first pass stopped short. Goal persistence, the
+Control Intelligence provider call, quota and capacity reporting, provider
+selection and the canonical session with failover are all now implemented and
+tested.
 
-The largest gap is that none of it persists yet, and the migration that would
-have supported persistence was **deliberately reverted** after measurement
-showed it cost 190 seconds of race-detector time across the store suite and was
-read by no code. Model selection, quota intelligence and durable sessions are
-NOT_RUN rather than partially claimed.
+The migration was reinstated as two columns rather than eight after measuring
+that the eight-column form cost ~18ms per migration chain and pushed the store
+package past the race-detector timeout. Both columns are read and written by
+real code, and a round-trip test asserts every persisted field.
+
+What remains PARTIAL is breadth rather than depth: capacity figures are never
+populated because nothing yet reads a provider's rate-limit headers, sessions
+themselves are not persisted although Goals are, and no live provider call has
+been made because the opt-in environment is unset. Those are recorded as
+PARTIAL and NOT_RUN rather than claimed.

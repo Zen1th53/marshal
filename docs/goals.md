@@ -132,9 +132,38 @@ marshal goal <request>          form a Goal and see the assessment
 marshal goal explain <request>  the same, without acting
 ```
 
+## What survives a provider change
+
+Provider conversations are disposable. The MARSHAL session is the record.
+
+Everything needed to continue — your original request, the current reading,
+your constraints, the open questions, what you agreed to — is held by MARSHAL
+and restated to whichever provider picks the work up. Constraints in
+particular are repeated on every handoff, because a constraint held only in a
+previous conversation ends with that conversation.
+
+A provider change never alters the Goal, the constraints or your confirmation.
+It records why it happened, so work that moved says so rather than appearing
+to have run continuously somewhere it did not.
+
+## Capacity
+
+MARSHAL never invents a quota figure, a remaining count or a reset time. A
+provider that reports nothing is described as unknown, not as empty and not as
+plentiful — and "unknown" is printed without a number, so nothing in it can be
+read as a measurement.
+
+Capacity MARSHAL infers from its own usage is labelled a floor rather than a
+total, because it sees only its own requests.
+
+When choosing a provider, whether MARSHAL can *control* it outranks how much
+capacity it reports. A provider that cannot be governed is not used at all.
+
 ## Current limits
 
-Goal intake forms and assesses; it does not yet persist Goals to the store.
-The schema columns for that will be added when the code that reads and writes
-them exists — adding them earlier costs CI time on every test run and buys
-nothing.
+Goals persist. Sessions do not yet: a session's failover history lives in
+memory, though the Goal it carries survives a restart.
+
+Capacity reporting is implemented but nothing yet reads a provider's rate-limit
+headers, so in practice every provider currently reports unknown capacity.
+That is the correct answer, and it is not yet the full picture.

@@ -216,13 +216,13 @@
     },
     {
       "path": "MARSHAL_PROCESS_03_GOAL_CONTROL_INTELLIGENCE_MEGA_ULTRA/evidence/86_FINAL_EVIDENCE_REPORT.md",
-      "sha256": "1151376d357b149693e6e97d247207154ff885ed3d060dfdb86bc58b49c2c0d3",
-      "bytes": 9539
+      "sha256": "e87d526e33dc0ff9dbcbd0993af2d1e6e89f568c3cb58acee53bb008668c4525",
+      "bytes": 13144
     },
     {
       "path": "MARSHAL_PROCESS_03_GOAL_CONTROL_INTELLIGENCE_MEGA_ULTRA/evidence/90_ACCEPTANCE_MATRIX.md",
-      "sha256": "c8e32ca55caa569956ff2f48323b235ff1ffb0c5d37b3252d91ebdcc32af6811",
-      "bytes": 6537
+      "sha256": "cd9356942b79018181373d1f63a75d6c2e8ba9e1e8b050833dd71da35c911294",
+      "bytes": 7842
     },
     {
       "path": "MEMORY-START.md",
@@ -1021,8 +1021,8 @@
     },
     {
       "path": "docs/goals.md",
-      "sha256": "bca971318b9e3438786cf4d3bab72246e69578d5232a36b0a45a5429c6e5656e",
-      "bytes": 5356
+      "sha256": "0690824629a81177b210572db6d4750e56870e2a70835225bf7c808486deb797",
+      "bytes": 6687
     },
     {
       "path": "docs/installation.md",
@@ -2838,6 +2838,16 @@
       "path": "internal/goalintake/intelligence_test.go",
       "sha256": "76956be61debee5a23206530ac42c3434955d7b2592390d0f0ff2c0eff7f6cbe",
       "bytes": 11560
+    },
+    {
+      "path": "internal/goalintake/session.go",
+      "sha256": "ecde18ac434794b9772446028b3bd8ce4566977addcb0c69f147886c5d7100f8",
+      "bytes": 8688
+    },
+    {
+      "path": "internal/goalintake/session_test.go",
+      "sha256": "b924492a4739955ecaeb57449e5a502b6f0e4879b6795a0296589cae59f4397d",
+      "bytes": 8561
     },
     {
       "path": "internal/harness/governance.go",

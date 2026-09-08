@@ -6,7 +6,7 @@
 |---|---|
 | Baseline SHA | `3e06a20a0dc6d7002c7498c0e79a461ea7de052b` |
 | Final SHA | `ece1718` (see commit table) |
-| Store schema | **80** (unchanged — see the revert below) |
+| Store schema | **81** (goal intake persistence) |
 | Constitution version | **1.0.0** (unchanged) |
 | Runtime spec | 1.5.0 (unchanged) |
 | Go toolchain | go1.27.0 linux/amd64 |
@@ -182,23 +182,96 @@ before mode is read at all.
 - **P2 open: 2, pre-existing** — the govulncheck toolchain mismatch and the web
   gate's npm invocation.
 
+## Gaps closed after the first pass
+
+The first pass left five things unfinished. All five are now implemented and
+tested; what follows records how, because two of them changed the design.
+
+### Goal persistence — now complete
+
+Goals persist. `SaveGoalContract` writes and `scanGoalContract` reads the
+original request, its digest, the project binding, the constitution version,
+the confirmation state, the assessment, the revision reason and whether a model
+contributed. A round-trip test asserts every field.
+
+The migration was reinstated as **two** columns rather than eight. The intake
+fields are always read and written together, so separate columns buy nothing,
+and each `ALTER` is its own driver round trip in a chain replayed by roughly
+150 store tests. Measured on the migration chain:
+
+| | Chain cost |
+|---|---|
+| Baseline (no migration 81) | ~31ms |
+| Eight columns | ~49ms |
+| Two columns (`project_id` + `intake_json`) | ~32ms |
+
+`project_id` stays a real column because it is the one field worth indexing
+and querying by. Under the race detector the store package runs in **467s**,
+inside the 600s timeout.
+
+### Control Intelligence — now wired
+
+`Intelligence.Interpret` calls a real provider adapter with a provider-neutral
+prompt and parses the reply defensively. Three self-check fields — alignment,
+constraint compliance and evidence sufficiency — are set by MARSHAL rather
+than read from the reply, because those are the ones whose "true" value would
+relax something and a provider asserting them would be vouching for itself.
+The constitution version is likewise stamped by MARSHAL.
+
+Replies decode into a closed struct, so invented fields contribute nothing,
+and both string and list lengths are bounded. Every failure — absent provider,
+timeout, failed status, prose instead of JSON, malformed JSON, missing
+interpretation — yields no advice and leaves the deterministic assessment
+standing.
+
+### Quota and capacity — now implemented, without invention
+
+Every optional figure is a pointer, so "zero remaining" and "nobody knows" stay
+distinguishable. A test asserts an unmeasured provider's description contains
+no digits at all. Reset times are shown only when the provider gave one.
+Capacity inferred from MARSHAL's own history is labelled a floor, not a total.
+
+### Provider selection — now implemented
+
+Governance outranks capacity: a provider MARSHAL cannot prove it governs is not
+the primary choice however much capacity it reports, and one that cannot be
+governed at all is not used even as a fallback. Unknown capacity does not
+disqualify, because most providers report no quota and treating silence as
+exhaustion would make MARSHAL unusable with them.
+
+### Durable session and failover — now implemented
+
+The session holds no provider conversation and no provider identifier beyond a
+disposable handle. The continuation package is rebuilt on demand rather than
+stored, so it cannot drift, and a new provider receives what the previous one
+had rather than an accumulated transcript. Hard constraints are restated on
+every handoff, because a constraint held only in a previous conversation ends
+with it. Failover changes the provider and the record of the move and nothing
+else, and must record why.
+
 ## Limitations (stated plainly)
 
-1. **Goal intake does not persist.** Formation, assessment and confirmation are
-   complete and tested; nothing writes a Goal to the store. This is the largest
-   gap, and the migration that would support it was deliberately reverted
-   rather than shipped unused. **PARTIAL.**
-2. **No Control Intelligence provider call.** The advisory contract is
-   implemented and its boundary is adversarially tested, but nothing calls a
-   model to produce one. Advisories arrive from callers and tests. **PARTIAL.**
-3. **No quota, capacity or fallback intelligence.** Tasks 49–53 are **NOT_RUN**.
-   Nothing invents quota figures, which is the invariant that mattered most.
-4. **No model or harness selection.** Tasks 41–48 are **NOT_RUN**.
-5. **No durable session or failover preparation.** Tasks 60–66 are **NOT_RUN**.
-6. **Web and MCP/A2A do not surface goal intake.** Unchanged, not weakened.
-7. **Keyword-based assessment has real limits.** It recognises shapes that
+1. **No live provider call has been made.** The Control Intelligence client is
+   wired to the real adapter interface and every reply shape is tested through
+   a fake, but no test in this pass invoked an actual model: that needs the
+   opt-in provider environment variables, which are unset. **NOT_RUN**, not
+   PASS.
+2. **Capacity figures are never populated from a real provider.** The model
+   and its honesty rules are implemented and tested; nothing yet reads a rate
+   limit header or a quota endpoint, so in practice every provider currently
+   reports UNKNOWN. That is the correct behaviour, and it is also not yet the
+   full capability. **PARTIAL.**
+3. **Sessions are not persisted.** The session type, continuation and failover
+   are complete and tested in memory; there is no session table. Goals persist,
+   so the most important state survives, but a session's failover history does
+   not. **PARTIAL.**
+4. **No MARSHAL-mediated provider E2E.** No endpoint-enforcing egress exists in
+   this environment. **NOT_RUN**; isolation was not weakened to obtain a pass.
+5. **Web and MCP/A2A do not surface goal intake.** Unchanged, not weakened.
+6. **Keyword-based assessment has real limits.** It recognises shapes that
    indicate danger and errs toward noticing; it cannot understand a request.
-   Semantic judgement is the Control Intelligence's job, and that path is not
-   yet wired.
-8. **The working tree still carries the unrelated uncommitted TUI work**
+   The Control Intelligence now supplements it, but its advice can only raise
+   caution, so a request whose danger neither the keywords nor the model
+   notices is assessed as the keywords saw it.
+7. **The working tree still carries the unrelated uncommitted TUI work**
    present since Process 00, verified green and left untouched.
