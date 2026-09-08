@@ -200,6 +200,16 @@
       "bytes": 5751
     },
     {
+      "path": "MARSHAL_PROCESS_02_PROJECT_READINESS_MEMORY_BOOTSTRAP_MEGA_ULTRA/evidence/76_FINAL_EVIDENCE_REPORT.md",
+      "sha256": "621910e69bfe586e5e57c9b681613d4258ec196dcdfbf937577fe6fc9c989bb9",
+      "bytes": 10182
+    },
+    {
+      "path": "MARSHAL_PROCESS_02_PROJECT_READINESS_MEMORY_BOOTSTRAP_MEGA_ULTRA/evidence/90_ACCEPTANCE_MATRIX.md",
+      "sha256": "c0a16d32d5675105f8d1cad2f7895b71e28911671082e0bd29823e7be0cbf2cd",
+      "bytes": 6901
+    },
+    {
       "path": "MEMORY-START.md",
       "sha256": "fe3892e6c78ef0b732d53a4d76eab82388953cc774f3881d6d502fa464c11dd3",
       "bytes": 1386
