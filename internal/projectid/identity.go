@@ -199,19 +199,30 @@ func Compare(binding Binding, observed Evidence, observedRoot string) Comparison
 		return comparison
 	}
 
-	// A root commit is the strongest evidence available, so when both sides
-	// have one it decides the question outright.
+	// A differing root commit settles the question immediately: this is a
+	// different repository, whatever the binding claims.
 	boundCommit := strings.TrimSpace(binding.Evidence.RootCommit)
 	seenCommit := strings.TrimSpace(observed.RootCommit)
-	if boundCommit != "" && seenCommit != "" {
-		if boundCommit != seenCommit {
-			comparison.Verdict = VerdictDifferent
-			comparison.Reason = "A different repository is in this directory."
-			if derived, err := Derive(observed); err == nil {
-				comparison.ObservedID = derived
-			}
-			return comparison
+	if boundCommit != "" && seenCommit != "" && boundCommit != seenCommit {
+		comparison.Verdict = VerdictDifferent
+		comparison.Reason = "A different repository is in this directory."
+		if derived, err := Derive(observed); err == nil {
+			comparison.ObservedID = derived
 		}
+		return comparison
+	}
+
+	// A matching root commit means the same lineage. That is enough to
+	// recognise a project across a move, which is the case this comparison
+	// exists to serve.
+	//
+	// It is deliberately not enough on its own to decide the copied-state
+	// case, because a copied binding is internally consistent and shares the
+	// lineage it was copied from. Detecting that requires knowing whether the
+	// project the binding names is still somewhere else, which is a question
+	// about the filesystem rather than about these two values. Resolve answers
+	// it, using the recorded root; Compare stays a pure comparison.
+	if boundCommit != "" && seenCommit != "" {
 		comparison.ObservedID = binding.ID
 		if comparison.PathChanged {
 			comparison.Verdict = VerdictMoved

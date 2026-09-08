@@ -195,6 +195,23 @@ func Resolve(ctx context.Context, collector Collector, root, marshalDir string) 
 
 	resolution.Bound = true
 	resolution.Comparison = Compare(stored, observed, root)
+
+	// A binding that says the project lives somewhere else could mean one of
+	// two things: the project moved here, or this binding was copied here
+	// while the original is still in place. The comparison cannot tell those
+	// apart from its inputs alone, because a copied binding is internally
+	// consistent and shares the lineage it came from.
+	//
+	// The filesystem can: if the recorded location still holds this same
+	// binding, the project did not move — a copy was made. Treating that as a
+	// move would let the second directory adopt the first project's memory.
+	if resolution.Comparison.Verdict == VerdictMoved && stillBoundElsewhere(stored) {
+		resolution.Comparison.Verdict = VerdictDifferent
+		resolution.Comparison.Reason = "This project state was copied from a project that is still in its original location."
+		resolution.Reason = resolution.Comparison.Reason
+		return resolution
+	}
+
 	resolution.Reason = resolution.Comparison.Reason
 	resolution.AdoptExisting = resolution.Comparison.Verdict.SafeToAdopt()
 	if resolution.AdoptExisting {
@@ -203,6 +220,28 @@ func Resolve(ctx context.Context, collector Collector, root, marshalDir string) 
 	}
 	return resolution
 }
+
+// stillBoundElsewhere reports whether the location a binding records still
+// holds that same binding.
+//
+// When it does, the project did not move: it is still there, and what is in
+// front of us is a copy of its state. When the recorded location is gone, or
+// now holds a different project, the move is genuine.
+// It reconstructs the other project's state directory from its recorded root
+// using StateDirName, which must match the layout used by project.Discover. A
+// mismatch would make this check silently find nothing and report every copy
+// as a move, so the name is a named constant rather than a literal.
+func stillBoundElsewhere(binding Binding) bool {
+	if strings.TrimSpace(binding.RecordedRoot) == "" {
+		return false
+	}
+	elsewhere, found := LoadBinding(filepath.Join(binding.RecordedRoot, StateDirName))
+	return found && elsewhere.ID == binding.ID
+}
+
+// StateDirName is the project-local MARSHAL state directory. It mirrors the
+// layout in internal/project.
+const StateDirName = ".marshal"
 
 // Adopt establishes an identity for a project and records it.
 //
@@ -235,15 +274,22 @@ func Adopt(ctx context.Context, collector Collector, root, marshalDir string) (B
 		}
 	}
 
-	// A project with no repository history of its own needs a nonce to have a
-	// durable identity at all.
-	if !observed.HasDurableEvidence() {
-		nonce, err := NewNonce()
-		if err != nil {
-			return Binding{}, err
-		}
-		observed.CreatedNonce = nonce
+	// Every adoption mints a nonce, not only those with no repository history.
+	//
+	// A root commit identifies a *lineage*, and two independently created
+	// projects can genuinely share one: scaffolding two repositories from the
+	// same template in the same second produces byte-identical initial commits
+	// and therefore the same hash. Deriving identity from the root commit alone
+	// would make those two projects one, and each would see the other's memory.
+	//
+	// The nonce makes each adoption distinct while the root commit is still
+	// recorded, so clone and fork relationships remain visible through
+	// RelatedTo and through the evidence itself.
+	nonce, err := NewNonce()
+	if err != nil {
+		return Binding{}, err
 	}
+	observed.CreatedNonce = nonce
 
 	id, err := Derive(observed)
 	if err != nil {

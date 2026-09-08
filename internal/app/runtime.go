@@ -225,9 +225,18 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		database.Close()
 		return nil, fmt.Errorf("runtime is not initialized: %w", err)
 	}
-	if identity.Repository != layout.Root {
+	// Admission is decided by project identity rather than by comparing paths.
+	// A project that moved is the same project and is admitted; a directory
+	// holding a different repository's state is refused even at an unchanged
+	// path. Comparing paths got both of those backwards.
+	admission, admitErr := admitProject(ctx, layout, identity)
+	if admitErr != nil {
 		database.Close()
-		return nil, fmt.Errorf("%w: runtime repository identity differs", model.ErrConflict)
+		return nil, admitErr
+	}
+	if !admission.Admitted {
+		database.Close()
+		return nil, fmt.Errorf("%w: %s", model.ErrConflict, admission.Reason)
 	}
 	engine, err := policy.Load(filepath.Join(layout.Root, "CAPABILITIES.yaml"))
 	if err != nil {

@@ -195,6 +195,11 @@
       "bytes": 5405
     },
     {
+      "path": "MARSHAL_PROCESS_02_PROJECT_READINESS_MEMORY_BOOTSTRAP_MEGA_ULTRA/evidence/03_BASELINE_AUDIT.md",
+      "sha256": "4a35ae61f55861a507b09c81e132871c17c09f87ed166017c50f0370eadb3a12",
+      "bytes": 5751
+    },
+    {
       "path": "MEMORY-START.md",
       "sha256": "fe3892e6c78ef0b732d53a4d76eab82388953cc774f3881d6d502fa464c11dd3",
       "bytes": 1386
@@ -1815,6 +1820,11 @@
       "bytes": 2383
     },
     {
+      "path": "internal/app/project_identity_baseline_test.go",
+      "sha256": "f677e27f6e8a50bf24f43b9f12baf4fe8149b493a5e8b25a00a9708ee586a7b0",
+      "bytes": 4901
+    },
+    {
       "path": "internal/app/receipt_audit_test.go",
       "sha256": "28ce47835a0345fad016ada32bd8eb66cf8c27bdf2bbb0cf4bb1e2f6929c37ef",
       "bytes": 8026
@@ -1836,8 +1846,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "0c6a84545aa61931c044161f5e7ca1413db07e45097697565cd46b3fc9309fab",
-      "bytes": 55600
+      "sha256": "46fae1cbd281d3743453ba39887ebb34c1d6586727bbfc26dacb3bc0a91a3063",
+      "bytes": 55978
     },
     {
       "path": "internal/app/runtime_secret_commit_test.go",
@@ -4053,6 +4063,46 @@
       "path": "internal/project/layout_test.go",
       "sha256": "c2453b98fe473d26b4ebe893380ca544db8be033199643212c9b29a1ba995c3e",
       "bytes": 2445
+    },
+    {
+      "path": "internal/projectid/discover.go",
+      "sha256": "04db51901ece92fa4e3b8b036f6241cde3fbecc51c4aded6536dc94c0cafaa7d",
+      "bytes": 11853
+    },
+    {
+      "path": "internal/projectid/discover_test.go",
+      "sha256": "bc8eb205fee8a9dae2c9c93601b0bde883bc4002edcd327d64fa5dae86f629e4",
+      "bytes": 10791
+    },
+    {
+      "path": "internal/projectid/identity.go",
+      "sha256": "e374917ebda5802232527504637c2e5a38ba95f8228d60d45c906a3b614650c7",
+      "bytes": 13058
+    },
+    {
+      "path": "internal/projectid/identity_test.go",
+      "sha256": "e5ccc0dc5250b2318dcea6ad483155b4601bd5c03897ef70f9480c721802f0fb",
+      "bytes": 9642
+    },
+    {
+      "path": "internal/projectid/scope.go",
+      "sha256": "85045f9603ce2e8c91006faa3bbb43670f0695e8dc33582e63b39fa5a7cc18eb",
+      "bytes": 13072
+    },
+    {
+      "path": "internal/projectid/scope_test.go",
+      "sha256": "4f3b4536976f01642e4023189c6de2de2787e98f795da026cdc6ecf35fd93486",
+      "bytes": 9175
+    },
+    {
+      "path": "internal/projectmemory/assimilate.go",
+      "sha256": "810697aef577c424a423e71f17ae9e4c89b4b6158c11412ed353c4050118be01",
+      "bytes": 21158
+    },
+    {
+      "path": "internal/projectmemory/assimilate_test.go",
+      "sha256": "2130651675e1c06ccb646a13da9391dbbfc6716324ceb5fb1ba7930d288c3447",
+      "bytes": 14130
     },
     {
       "path": "internal/protocol/adversarial_test.go",
