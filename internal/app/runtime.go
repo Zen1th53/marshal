@@ -69,6 +69,8 @@ type Runtime struct {
 	memoryService      *MemoryService
 	quorumEngine       *quorum.Engine
 	allowProcessOnly   bool
+	execService        *ExecutionService
+	execMu             sync.Mutex
 }
 
 type Options struct {

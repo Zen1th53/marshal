@@ -64,6 +64,7 @@ Commands:
   setup [status]
   goal <request> | goal explain <request>
   plan create SESSION-ID --file INPUT.json | show PROJECT-ID | approve PROJECT-ID | cancel PROJECT-ID | handoff SESSION-ID PROJECT-ID
+  exec start --session SESSION-ID --project PROJECT-ID | run RUN-ID | status RUN-ID | approve APPROVAL-ID | rollback CHECKPOINT-ID | handoff RUN-ID
   help [TOPIC] | help why
   constitution version | invariants | decisions SESSION-ID | violations SESSION-ID
   web serve [--listen ADDR] [--port PORT]
@@ -185,6 +186,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.goal(ctx, args[1:])
 	case "plan":
 		err = c.plan(ctx, args[1:])
+	case "exec", "execution":
+		err = c.exec(ctx, args[1:])
 	case "help":
 		err = c.help(ctx, args[1:])
 	case "constitution":
