@@ -432,3 +432,58 @@ func TestConstraintNotInProviderSessionIsStillCarried(t *testing.T) {
 		t.Fatalf("a constraint added after intake was not carried: %v", built.HardConstraints)
 	}
 }
+
+// A16: budget pressure does not buy its way out of verification.
+//
+// This is the most tempting trade in the whole system: a plan that is one task
+// over budget can be made to fit by dropping the check rather than the work,
+// and the result still looks complete. It must not be available. A plan whose
+// verification is incomplete cannot become ready however well it fits, and a
+// plan that fits only by removing a check is not the cheaper plan — it is a
+// different, worse plan.
+func TestBudgetPressureCannotRemoveVerification(t *testing.T) {
+	// Two criteria; only the mutating task is kept, as if the checking task had
+	// been dropped to save budget.
+	trimmed := buildPlan(t, plan.BuildRequest{
+		Goal: confirmedGoal(), ProjectID: testProject,
+		Assessment: routineAssessment(),
+		Tasks: []plan.Task{{
+			ID: "implement", Title: "add the cache", Mutating: true, Weight: 1,
+			Criteria: []string{"responses are cached"},
+		}},
+		Candidates: governedCandidates(),
+	})
+
+	if trimmed.State == plan.StateReady || trimmed.State == plan.StateApproved {
+		t.Fatalf("dropping the checking task produced a %s plan", trimmed.State)
+	}
+	if trimmed.Verification.Complete() {
+		t.Fatal("a plan missing its checking task reported complete verification")
+	}
+	if _, err := trimmed.Approve(planTime); err == nil {
+		t.Fatal("a plan that saved budget by dropping a check was approvable")
+	}
+
+	// Under ULTRA the same trade is refused by ranking rather than by state: a
+	// proposal that fits the budget by covering less does not beat one that
+	// covers more, because coverage is compared before anything else.
+	selection := plan.SelectBest(plan.UltraRequest{
+		Proposals: []plan.Proposal{
+			{ID: "a-complete", Tasks: []plan.Task{
+				{ID: "impl", Title: "add the cache", Mutating: true, Weight: 1,
+					Criteria: []string{"responses are cached"}},
+				{ID: "check", Title: "run the security tests", Weight: 1,
+					Criteria: []string{"existing tests pass"}},
+			}},
+			{ID: "b-cheap", Tasks: []plan.Task{
+				{ID: "impl", Title: "add the cache", Mutating: true, Weight: 1,
+					Criteria: []string{"responses are cached"}},
+			}},
+		},
+		Criteria: []string{"responses are cached", "existing tests pass"},
+		MaxTasks: 2,
+	})
+	if selection.Best != "a-complete" {
+		t.Fatalf("selected %q; the cheaper plan won by checking less", selection.Best)
+	}
+}
