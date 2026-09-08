@@ -3,8 +3,10 @@ package app
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/execution"
+	"github.com/Zen1th53/marshal/internal/verification"
 )
 
 func TestExecutionService_GateRefusalIfPlanUnapproved(t *testing.T) {
@@ -77,6 +79,9 @@ func TestExecutionService_StartRunAndExecute_Success(t *testing.T) {
 	if run.State != execution.RunReady {
 		t.Fatalf("expected run state RunReady, got %s", run.State)
 	}
+	execService.Engine().EvidenceOracle().RecordEvidence(execution.ExecutionEvidence{
+		EvidenceID: "ev-readme", RunID: run.RunID, RelevantFiles: []string{"README.md"}, Status: execution.EvidenceValid,
+	})
 
 	// 5. Execute run
 	completedRun, err := execService.ExecuteRun(context.Background(), run.RunID)
@@ -116,6 +121,29 @@ func TestExecutionService_StartRunAndExecute_Success(t *testing.T) {
 	}
 	if len(bundle.Tasks) == 0 {
 		t.Fatalf("expected bundle to have tasks, got 0")
+	}
+	if bundle.FinalGitTree == "" {
+		t.Fatal("Process 06 handoff was not bound to an exact git tree")
+	}
+	// 7. Process 06 independently evaluates the handoff and persists an exact
+	// completion attestation. The execution claim alone is not used as proof.
+	binding := verification.Binding{ProjectID: string(bundle.ProjectID), GoalID: bundle.GoalID, GoalRevision: bundle.GoalRevision, PlanID: bundle.PlanID, PlanVersion: bundle.PlanVersion, RunID: bundle.RunID, RunVersion: bundle.RunVersion, TreeDigest: bundle.FinalGitTree, EnvironmentDigest: "test-env"}
+	now := time.Now().UTC()
+	session := verification.Session{ID: "verify-" + run.RunID, Version: 1, Binding: binding,
+		Criteria:       []verification.Criterion{{ID: "typo-fixed", Mandatory: true, ClaimIDs: []string{"claim-fix"}}},
+		Claims:         []verification.Claim{{ID: "claim-fix", CriterionID: "typo-fixed", SemanticScope: []string{"README.md"}, EvidenceIDs: []string{"verify-readback"}}},
+		Evidence:       []verification.Evidence{{ID: "verify-readback", ClaimID: "claim-fix", Status: verification.StatusPass, ContentDigest: "readback", TreeDigest: bundle.FinalGitTree, EnvironmentDigest: "test-env", ClusterID: "independent-readback", Attempts: 1, Passes: 1}},
+		RequiredChecks: map[string]verification.Status{"security": verification.StatusPass, "runtime_negative": verification.StatusPass}, CreatedAt: now, UpdatedAt: now}
+	if _, err := runtime.Verification().Start(context.Background(), session); err != nil {
+		t.Fatal(err)
+	}
+	verified, err := runtime.Verification().Evaluate(context.Background(), session.ID, binding)
+	if err != nil || verified.State != verification.VerifiedComplete {
+		t.Fatalf("verification = %s, %v", verified.State, err)
+	}
+	attestation, err := runtime.Verification().Attest(context.Background(), session.ID, binding, "bundle-digest", "full-chain-e2e")
+	if err != nil || attestation.Decision != verification.VerifiedComplete {
+		t.Fatalf("attestation = %s, %v", attestation.Decision, err)
 	}
 }
 
