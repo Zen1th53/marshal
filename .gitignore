@@ -21,3 +21,10 @@ bin/
 *.log
 web/node_modules/
 web/dist/
+
+# Internal process packs and their qualification evidence.
+# These are working material for a single machine: they carry local paths,
+# candidate SHAs and internal review records, and this repository is public.
+MARSHAL_PROCESS_*/
+MARSHAL_TUI_ULTIMATE_SPEC/
+MARSHAL-*-MEGA-TASK/

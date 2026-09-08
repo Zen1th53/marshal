@@ -76,8 +76,8 @@
     },
     {
       "path": ".gitignore",
-      "sha256": "85b8ff86da54a8509f4c7c64175a72b423c29f90d6a50ed97941de75d242a0de",
-      "bytes": 227
+      "sha256": "5f9ababd29ef19828a5724e068091d058ae4e825c3ea3d2e9c53f2dd940a20ff",
+      "bytes": 506
     },
     {
       "path": "AGENT-BOOTSTRAP.md",
@@ -163,96 +163,6 @@
       "path": "LICENSING.md",
       "sha256": "863485eb81c98ca412806f1dd0cd2570e4fb35f064d5c0b3eb9b6fba80ea6fe2",
       "bytes": 3373
-    },
-    {
-      "path": "MARSHAL_PROCESS_00_CONSTITUTION_MEGA_ULTRA/evidence/03_BASELINE_AUDIT.md",
-      "sha256": "bf48df396f43ea24ade326bf70b8067d09692db25b13b047ff8754d45cf45d0a",
-      "bytes": 4590
-    },
-    {
-      "path": "MARSHAL_PROCESS_00_CONSTITUTION_MEGA_ULTRA/evidence/85_FINAL_REPORT.md",
-      "sha256": "abd11fe02a74a39a255210bf2feb6c02ab72f7071c7e827de2f82d5014938e76",
-      "bytes": 12655
-    },
-    {
-      "path": "MARSHAL_PROCESS_00_CONSTITUTION_MEGA_ULTRA/evidence/90_ACCEPTANCE_MATRIX.md",
-      "sha256": "3ae93db52fa90a09d0275755720a85054558d4a16a431dabb6c0ed1e2a152cf3",
-      "bytes": 7589
-    },
-    {
-      "path": "MARSHAL_PROCESS_01_STARTUP_CONTROL_CENTER_MEGA_ULTRA/evidence/03_BASELINE_AUDIT.md",
-      "sha256": "89a4dc0ea9ed075e94ed03f53af35dba3b405ad28adc65daec0fb82b51e61d9f",
-      "bytes": 4734
-    },
-    {
-      "path": "MARSHAL_PROCESS_01_STARTUP_CONTROL_CENTER_MEGA_ULTRA/evidence/54_FINAL_EVIDENCE.md",
-      "sha256": "5695a3ad27357a00839d895749f0936915032a3d4dc54813d1c3c1e47749b2ba",
-      "bytes": 11180
-    },
-    {
-      "path": "MARSHAL_PROCESS_01_STARTUP_CONTROL_CENTER_MEGA_ULTRA/evidence/90_ACCEPTANCE_MATRIX.md",
-      "sha256": "3aa30e0e5b00d6ba49df9607b223b85088638b4b57896cb2a40fb37415870b85",
-      "bytes": 5405
-    },
-    {
-      "path": "MARSHAL_PROCESS_02_PROJECT_READINESS_MEMORY_BOOTSTRAP_MEGA_ULTRA/evidence/03_BASELINE_AUDIT.md",
-      "sha256": "4a35ae61f55861a507b09c81e132871c17c09f87ed166017c50f0370eadb3a12",
-      "bytes": 5751
-    },
-    {
-      "path": "MARSHAL_PROCESS_02_PROJECT_READINESS_MEMORY_BOOTSTRAP_MEGA_ULTRA/evidence/76_FINAL_EVIDENCE_REPORT.md",
-      "sha256": "621910e69bfe586e5e57c9b681613d4258ec196dcdfbf937577fe6fc9c989bb9",
-      "bytes": 10182
-    },
-    {
-      "path": "MARSHAL_PROCESS_02_PROJECT_READINESS_MEMORY_BOOTSTRAP_MEGA_ULTRA/evidence/90_ACCEPTANCE_MATRIX.md",
-      "sha256": "c0a16d32d5675105f8d1cad2f7895b71e28911671082e0bd29823e7be0cbf2cd",
-      "bytes": 6901
-    },
-    {
-      "path": "MARSHAL_PROCESS_03_GOAL_CONTROL_INTELLIGENCE_MEGA_ULTRA/evidence/03_BASELINE_AUDIT.md",
-      "sha256": "6db477443633bfa184249321ece1e53d8f7f021176181725ac6d82c0b6da73cf",
-      "bytes": 5256
-    },
-    {
-      "path": "MARSHAL_PROCESS_03_GOAL_CONTROL_INTELLIGENCE_MEGA_ULTRA/evidence/86_FINAL_EVIDENCE_REPORT.md",
-      "sha256": "05bbf6703ce64746086a2dd19759f801ef7288d07be73e9758f65f9cea4774ee",
-      "bytes": 13443
-    },
-    {
-      "path": "MARSHAL_PROCESS_03_GOAL_CONTROL_INTELLIGENCE_MEGA_ULTRA/evidence/90_ACCEPTANCE_MATRIX.md",
-      "sha256": "cd9356942b79018181373d1f63a75d6c2e8ba9e1e8b050833dd71da35c911294",
-      "bytes": 7842
-    },
-    {
-      "path": "MARSHAL_PROCESS_04_WORK_PLANNING_TEAM_ASSEMBLY/evidence/00_BASELINE_AUDIT.md",
-      "sha256": "7c085731acb0e0b0364e8074bb92a538988232d02f82c94dfa3713fe09832f85",
-      "bytes": 3126
-    },
-    {
-      "path": "MARSHAL_PROCESS_04_WORK_PLANNING_TEAM_ASSEMBLY/evidence/10_IMPLEMENTATION_STATE.md",
-      "sha256": "ec07751b22fd97af46687ad6716e844a6de580b80778e4c54626dc2bf622e7af",
-      "bytes": 7033
-    },
-    {
-      "path": "MARSHAL_PROCESS_04_WORK_PLANNING_TEAM_ASSEMBLY/evidence/99_FINAL_REPORT.md",
-      "sha256": "7e8002aae449e46c3f3ca0a43cf311e7dcf87b67fe5e233c8177e95624b2e294",
-      "bytes": 13669
-    },
-    {
-      "path": "MARSHAL_PROCESS_05_GOVERNED_EXECUTION_FINAL_MEGA_ULTRA_V2/evidence/00_BASELINE_AUDIT.md",
-      "sha256": "e65e3384e4cc692d963150f3cbc0dda3cfd398a48d43ca5e9282ef1e83260b24",
-      "bytes": 716
-    },
-    {
-      "path": "MARSHAL_PROCESS_05_GOVERNED_EXECUTION_FINAL_MEGA_ULTRA_V2/evidence/10_IMPLEMENTATION_STATE.md",
-      "sha256": "afb2b37f2a74bda6654c14a252df206ef35ff814ec5d6a4bc773e6e85fbc3180",
-      "bytes": 5951
-    },
-    {
-      "path": "MARSHAL_PROCESS_05_GOVERNED_EXECUTION_FINAL_MEGA_ULTRA_V2/evidence/99_FINAL_REPORT.md",
-      "sha256": "2fa06380d3918716bf47337dae7918a0a75c51fb7aa478591f18352396725bc8",
-      "bytes": 3451
     },
     {
       "path": "MEMORY-START.md",
