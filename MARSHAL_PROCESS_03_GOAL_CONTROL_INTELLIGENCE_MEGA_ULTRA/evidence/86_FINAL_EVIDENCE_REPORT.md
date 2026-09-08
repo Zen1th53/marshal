@@ -154,11 +154,16 @@ not exist yet is the wrong trade, and a slow gate is one people stop running.
 `VULNERABILITY` and `WEB CONTROL PLANE` fail identically at baseline `7ceb9a7`
 (verified during Process 00) and are not attributable to this work.
 
-`GO TEST RACE` was broken by this work and is fixed by the revert. Confirmed by
-re-running the full gate after the revert: **GO TEST RACE ... PASS**, and
-`DOCS AND MANIFEST ... PASS`, leaving only the two pre-existing failures.
-Independently confirmed by `go test -race -count=1 ./...` across every package,
-which completes clean.
+`GO TEST RACE` was broken by the eight-column migration and is fixed by the
+two-column form. Confirmed by a full gate run on a clean tree after all
+Process 03 work: **15 PASS, 2 FAIL**, the two being the pre-existing
+`VULNERABILITY` and `WEB CONTROL PLANE`. `GO TEST RACE`, `MEMORY AND
+MIGRATIONS` and `DOCS AND MANIFEST` all pass.
+
+One intermediate run showed `MEMORY AND MIGRATIONS ... FAIL`. It was run
+against a working tree mid-edit; re-running the identical command on a clean
+tree passes, as does the full gate. Recorded here rather than omitted, because
+a transient that is not written down is one that gets rediscovered.
 
 ## Process 00 / 02 integration
 
