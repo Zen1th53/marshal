@@ -25,6 +25,16 @@ var knownMemoryTables = map[string]string{
 	// rows never contain memory bodies and consumers reload memory_records_v2.
 	"task_memory_event_heads": "canonical-cursor: task-local monotonic sequence",
 	"task_memory_events":      "canonical-cursor: bounded task change notifications",
+	// Process 07: evidence-gated learning memory. These tables are a separate
+	// canonical store, not a convergence target for task memory: every row is
+	// bound to an exact Process 06 attestation and promoted through the
+	// Process 07 evidence gates, so merging them into memory_records_v2 would
+	// erase the provenance that makes them admissible.
+	"memory_commits":        "canonical-p07: append-only learning commits, Process 07",
+	"memory_items":          "canonical-p07: evidence-gated claim memory, Process 07",
+	"memory_item_revisions": "canonical-p07: immutable claim version history, Process 07",
+	"memory_dependencies":   "canonical-p07: dependency freshness graph, Process 07",
+	"memory_evidence":       "canonical-p07: claim evidence and source clusters, Process 07",
 }
 
 // derivedDecisionTables are subsystem decision logs, not canonical memory.

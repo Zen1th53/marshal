@@ -140,6 +140,9 @@ func liveRuntimePathAllowed(requestPath string) bool {
 	}
 	if strings.HasPrefix(requestPath, "/api/v1/auth/") ||
 		strings.HasPrefix(requestPath, "/api/v1/verifications/") ||
+		// Process 07 learning routes serve canonical durable memory and are
+		// read-only, so they are safe against a live runtime.
+		strings.HasPrefix(requestPath, "/api/v1/learning/") ||
 		strings.HasPrefix(requestPath, "/api/v1/operations/backups") ||
 		strings.HasPrefix(requestPath, "/api/v1/memory/working") ||
 		strings.HasPrefix(requestPath, "/api/v1/memory/mutations/") {

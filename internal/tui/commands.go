@@ -79,6 +79,56 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		}
 		return h.handleVerification(ctx, parts[1])
 
+	case "/learning":
+		if len(parts) != 2 {
+			return "Usage: /learning <memory_commit_id>", nil
+		}
+		return h.handleMemoryCommit(ctx, parts[1])
+
+	case "/memory-search":
+		if len(parts) < 2 {
+			return "Usage: /memory-search <project_id> [term ...]", nil
+		}
+		return h.handleMemorySearch(ctx, parts[1], parts[2:], false)
+
+	case "/memory-stale":
+		if len(parts) < 2 {
+			return "Usage: /memory-stale <project_id> [term ...]", nil
+		}
+		return h.handleMemorySearch(ctx, parts[1], parts[2:], true)
+
+	case "/provenance":
+		if len(parts) != 2 {
+			return "Usage: /provenance <item_id>", nil
+		}
+		return h.handleMemoryProvenance(ctx, parts[1])
+
+	case "/trust":
+		taskClass := ""
+		if len(parts) == 2 {
+			taskClass = parts[1]
+		}
+		return h.handleRoutingTrust(ctx, taskClass)
+
+	case "/fingerprints":
+		if len(parts) != 2 {
+			return "Usage: /fingerprints <project_id>", nil
+		}
+		return h.handleFingerprints(ctx, parts[1])
+
+	case "/playbooks":
+		if len(parts) != 2 {
+			return "Usage: /playbooks <project_id>", nil
+		}
+		return h.handlePlaybookCandidates(ctx, parts[1])
+
+	case "/replay-index":
+		runID := ""
+		if len(parts) == 2 {
+			runID = parts[1]
+		}
+		return h.handleReplayIndex(ctx, runID)
+
 	case "/inspect":
 		if len(parts) < 2 {
 			return "Usage: /inspect [claim|evidence|checkpoint|task|handoff|approval] <id>", nil
@@ -473,6 +523,14 @@ func (h *CommandHandler) helpText() string {
   /mode [manual|auto]       Switch operating supervision mode; ULTRA requires entitlement
   /agents                  List registered participants, fixed roles, and harnesses
   /claims                  List active claims and epistemic verification states
+  /learning <id>           Inspect a Process 07 memory commit, promotions and refusals
+  /memory-search <proj>    Search durable memory with state, freshness and contradictions
+  /memory-stale <proj>     Include stale memory, always marked unusable
+  /provenance <item>       Show one memory item's full version history
+  /trust [task-class]      Measured routing outcomes, failures and selection bias
+  /fingerprints <proj>     Bounded failure fingerprints
+  /playbooks <proj>        Playbook candidates awaiting review
+  /replay-index [run]      Replay and reproducibility index
   /inspect [kind] <id>     Inspect a claim, evidence, checkpoint, task, handoff, or approval
   /evidence <id>           Inspect evidence item details and linked claims
   /approve [approval_id]   Grant a pending approval through the policy approval store
