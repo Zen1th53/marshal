@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 81
+const LatestSchemaVersion = 80
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2167,72 +2167,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 		version = 80
 	}
-	if version < 81 {
-		// Process 03 goal intake. Four things a Goal could not previously
-		// record, each of which is load-bearing rather than decorative.
-		//
-		// original_request holds the user's own words. The Goal already stored
-		// MARSHAL's interpretation with nothing to check it against, which
-		// makes drift undetectable by construction: after a few revisions
-		// there is only a chain of interpretations. Article III requires the
-		// original to stay linked, so it is stored once and never updated.
-		//
-		// project_id binds a Goal to a project. Process 02 established project
-		// identity precisely so state could be project-bound; goals sat
-		// outside that, so cross-project isolation did not reach them.
-		//
-		// confirmation_state gives Process 04 a canonical signal to gate on,
-		// which is what makes "no planning without a confirmed Goal"
-		// enforceable rather than a convention. DELEGATED is distinct from
-		// APPROVED so a decision policy made on someone's behalf is never
-		// mistaken for one they made.
-		//
-		// assessment_json holds the ten independent dimensions. A single risk
-		// column already exists and stays; it cannot express the distinction
-		// between a large safe change and a small dangerous one.
-		//
-		// The columns are added with defaults so existing rows remain valid:
-		// a Goal written before this migration keeps working and simply has
-		// no original request recorded, which is honest.
-		// SQLite has no ADD COLUMN IF NOT EXISTS, and the repository's upgrade
-		// tests rewind the migration ledger without dropping later columns, so
-		// each column is added only when it is genuinely absent. This also
-		// makes a partially applied migration safe to re-run after a crash.
-		existingGoalColumns, err := tableColumns(ctx, tx, "goal_contracts")
-		if err != nil {
-			return fmt.Errorf("migrate schema version 81: %w", err)
-		}
-		for _, column := range []struct{ name, definition string }{
-			{"original_request", `ALTER TABLE goal_contracts ADD COLUMN original_request TEXT NOT NULL DEFAULT ''`},
-			{"project_id", `ALTER TABLE goal_contracts ADD COLUMN project_id TEXT NOT NULL DEFAULT ''`},
-			{"constitution_version", `ALTER TABLE goal_contracts ADD COLUMN constitution_version TEXT NOT NULL DEFAULT ''`},
-			{"confirmation_state", `ALTER TABLE goal_contracts ADD COLUMN confirmation_state TEXT NOT NULL DEFAULT 'PENDING'
-				CHECK(confirmation_state IN ('PENDING','APPROVED','DELEGATED','CANCELLED','NEEDS_INPUT'))`},
-			{"assessment_json", `ALTER TABLE goal_contracts ADD COLUMN assessment_json TEXT NOT NULL DEFAULT '{}'`},
-			{"request_digest", `ALTER TABLE goal_contracts ADD COLUMN request_digest TEXT NOT NULL DEFAULT ''`},
-			{"revision_reason", `ALTER TABLE goal_contracts ADD COLUMN revision_reason TEXT NOT NULL DEFAULT ''`},
-			{"advisory_used", `ALTER TABLE goal_contracts ADD COLUMN advisory_used INTEGER NOT NULL DEFAULT 0 CHECK(advisory_used IN (0,1))`},
-		} {
-			if existingGoalColumns[column.name] {
-				continue
-			}
-			if _, err := tx.ExecContext(ctx, column.definition); err != nil {
-				return fmt.Errorf("migrate schema version 81 (%s): %w", column.name, err)
-			}
-		}
-		for _, statement := range []string{
-			`CREATE INDEX IF NOT EXISTS idx_goal_contracts_project ON goal_contracts(project_id, revision)`,
-			`CREATE INDEX IF NOT EXISTS idx_goal_contracts_confirmation ON goal_contracts(project_id, confirmation_state)`,
-		} {
-			if _, err := tx.ExecContext(ctx, statement); err != nil {
-				return fmt.Errorf("migrate schema version 81 (%s): %w", statement, err)
-			}
-		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(81, ?)", utcNow()); err != nil {
-			return fmt.Errorf("record schema version 81: %w", err)
-		}
-		version = 81
-	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
 	}
@@ -2273,30 +2207,6 @@ func (s *Store) InitProject(ctx context.Context, project model.Project) error {
 		return fmt.Errorf("commit project initialization: %w", err)
 	}
 	return nil
-}
-
-// tableColumns returns the column names of a table. It supports migrations
-// that must be safe to re-run: SQLite has no ADD COLUMN IF NOT EXISTS, so a
-// migration adding columns checks first rather than failing on a replay.
-func tableColumns(ctx context.Context, tx *sql.Tx, table string) (map[string]bool, error) {
-	rows, err := tx.QueryContext(ctx, "SELECT name FROM pragma_table_info(?)", table)
-	if err != nil {
-		return nil, fmt.Errorf("read columns of %s: %w", table, err)
-	}
-	defer rows.Close()
-
-	columns := map[string]bool{}
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("scan column of %s: %w", table, err)
-		}
-		columns[name] = true
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate columns of %s: %w", table, err)
-	}
-	return columns, nil
 }
 
 func utcNow() string {
