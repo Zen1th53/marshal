@@ -1115,6 +1115,11 @@
       "bytes": 5196
     },
     {
+      "path": "docs/projects.md",
+      "sha256": "ebc416df825e41cbe01bf1e771194ac44d18205784fe766888e41eadf3fe9fb2",
+      "bytes": 6252
+    },
+    {
       "path": "docs/provenance-chain.md",
       "sha256": "159c977280d0d80946a7032cd647d91bd2451aa922a47e27a3eaaa8446a40842",
       "bytes": 485
@@ -2853,6 +2858,11 @@
       "path": "internal/integration/parallel_real_providers_test.go",
       "sha256": "cba932ed354ec3b91ebceb71ece4b527ff286f5fec49251df28393d825d47530",
       "bytes": 7776
+    },
+    {
+      "path": "internal/integration/project_adversarial_test.go",
+      "sha256": "3cf16dad9beb37b9c9bc50db8d49c78f79e8a33b5b97a164847fdc8b043f7b51",
+      "bytes": 11632
     },
     {
       "path": "internal/integration/provider_execution_e2e_test.go",
