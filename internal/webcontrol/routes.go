@@ -64,6 +64,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/runs/{id}/recover", s.RequireAuthority(authTaskPlan, s.handleRecoverRun))
 	mux.HandleFunc("GET /api/v1/artifacts/{id}/download", s.RequireAuthority(authVerifyQA, s.handleDownloadArtifact))
 	mux.HandleFunc("GET /api/v1/review/queue", s.RequireAuth(s.handleGetReviewQueue))
+	mux.HandleFunc("GET /api/v1/verifications/{id}", s.RequireAuthority(authVerifyQA, s.handleGetVerification))
 	mux.HandleFunc("GET /api/v1/tasks/{id}/quorum", s.RequireAuth(s.handleGetTaskQuorum))
 	mux.HandleFunc("POST /api/v1/tasks/{id}/quorum/decision", s.RequireAuthority(authVerifyQA, s.handleSubmitQuorumDecision))
 	mux.HandleFunc("GET /api/v1/tasks/{id}/merge/preflight", s.RequireAuth(s.handleMergePreflight))

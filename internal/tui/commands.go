@@ -73,6 +73,11 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	case "/status":
 		return h.handleStatus(ctx)
+	case "/review", "/verification":
+		if len(parts) != 2 {
+			return "Usage: /review <verification_id>", nil
+		}
+		return h.handleVerification(ctx, parts[1])
 
 	case "/inspect":
 		if len(parts) < 2 {

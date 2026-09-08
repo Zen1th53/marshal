@@ -7,6 +7,24 @@ import (
 	"time"
 )
 
+func (s *Server) handleGetVerification(w http.ResponseWriter, r *http.Request) {
+	if s.store == nil {
+		writeError(w, http.StatusServiceUnavailable, "verification_unavailable", "canonical verification store unavailable", GetCorrelationID(r.Context()))
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "invalid_verification", "verification ID is required", GetCorrelationID(r.Context()))
+		return
+	}
+	session, err := s.store.GetVerificationSession(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "verification_not_found", "canonical verification record not found", GetCorrelationID(r.Context()))
+		return
+	}
+	writeJSON(w, http.StatusOK, session)
+}
+
 type ReviewQueueItemDTO struct {
 	TaskID         string    `json:"task_id"`
 	Title          string    `json:"title"`

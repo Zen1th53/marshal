@@ -158,6 +158,7 @@ func (r *CapabilityRegistry) FormatAuditReport() string {
 }
 
 func registerAllCapabilities(r *CapabilityRegistry) {
+	r.Register(Capability{ID: "verification.status", Category: "VERIFICATION", Name: "Inspect Process 06 verification", Description: "Read canonical evidence-driven verification state", Access: AccessRead, CLISurface: "marshal review status VERIFICATION-ID", WebSurface: "GET /api/v1/verifications/:id", TUISurface: "/review <verification_id>", PalettePath: "verification status"})
 	// 1. Goal Domain (12)
 	r.Register(Capability{
 		ID: "goal.create", Category: "GOAL", Name: "Create Goal",
