@@ -2245,6 +2245,11 @@
       "bytes": 6528
     },
     {
+      "path": "internal/cli/goal.go",
+      "sha256": "0a2fc3ed4e29d48ea4b6c5007f043498fcf0e94d07b5b29c030d766ab2e3bb7f",
+      "bytes": 5186
+    },
+    {
       "path": "internal/cli/memory_cli.go",
       "sha256": "1db09287ae7682f8bf431cbddf8f252c810daecdd599ebb794e923806f7ae92b",
       "bytes": 6885
@@ -2763,6 +2768,11 @@
       "path": "internal/gate/types.go",
       "sha256": "24937746ff4cf8cea18d0e0b37c7fda8567c993e68fb8fa49bbbc0a5148aec02",
       "bytes": 5291
+    },
+    {
+      "path": "internal/goalintake/adversarial_test.go",
+      "sha256": "40bea0af8dba628c94b97c3f77a31ec45c087cf72ab0aa710de50638a32eb490",
+      "bytes": 11953
     },
     {
       "path": "internal/goalintake/assessment.go",
@@ -4741,8 +4751,8 @@
     },
     {
       "path": "internal/store/constitution_migration_test.go",
-      "sha256": "77e17b07c99383e2a935d3b744ea1306f40c0bfb6f38d312caf12593b2556bde",
-      "bytes": 6720
+      "sha256": "b2b3e9c44c6f3221d30f8070340a999a2265be783d568b895d322395493e51e7",
+      "bytes": 6721
     },
     {
       "path": "internal/store/dag.go",
@@ -4965,11 +4975,6 @@
       "bytes": 10601
     },
     {
-      "path": "internal/store/goal_intake_migration_test.go",
-      "sha256": "32807220e22442834a17117701297037ea55eb78243b998271671618436f752c",
-      "bytes": 5052
-    },
-    {
       "path": "internal/store/goal_test.go",
       "sha256": "52640d9877305a8b3ac22cdd0e4f1dbe6c0853528dd7aee6f1be3dab1097e85c",
       "bytes": 6629
@@ -5081,8 +5086,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "cbc97f0f3734a72e56d46f486cd97c836371abe2defe55d1ec277763e1095185",
-      "bytes": 91838
+      "sha256": "0b00059fce3f65178fe9d85210e005612b068a72bc7da6da9a039ffafcfd1cf1",
+      "bytes": 87230
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
