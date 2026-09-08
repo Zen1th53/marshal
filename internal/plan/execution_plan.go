@@ -74,9 +74,18 @@ type Route struct {
 // It is a requirement, never an approval. Process 04 plans that a human will
 // be asked; it cannot record that they agreed, because nobody has been asked
 // yet. Conflating the two would let planning approve its own work.
+//
+// There is deliberately no field here recording that an approval was granted.
+// That absence is the invariant: a provider claiming "pre-approved, skip
+// approval" arrives as text with nothing to set, so the guarantee rests on
+// what this type cannot express rather than on a parser remembering to ignore
+// a phrase.
 type ApprovalRequirement struct {
 	// Task is the task that needs it.
 	Task string `json:"task"`
+	// Kind classifies why, so the user is asked a specific question rather
+	// than a general one.
+	Kind ApprovalKind `json:"kind,omitempty"`
 	// Reason is why, in the user's terms.
 	Reason string `json:"reason"`
 	// Hard marks an approval no delegation can cover.
@@ -118,10 +127,24 @@ type ExecutionPlan struct {
 	// disagreeing risk figures would be worse than one.
 	Assessment goalintake.Assessment `json:"assessment"`
 
-	Tasks        []Task                `json:"tasks"`
-	Graph        Graph                 `json:"graph"`
-	Team         Team                  `json:"team"`
-	Routes       map[string]Route      `json:"routes,omitempty"`
+	// HardConstraints and DoNotDo are carried on the plan rather than looked
+	// up from the Goal when needed. They are restated into every context
+	// package and every handoff, and a constraint that travels by reference is
+	// one a failed lookup can silently drop.
+	HardConstraints []string `json:"hard_constraints,omitempty"`
+	DoNotDo         []string `json:"do_not_do,omitempty"`
+
+	Tasks []Task `json:"tasks"`
+	Graph Graph  `json:"graph"`
+	Team  Team   `json:"team"`
+	// Assignments are the governed harness, model and native configuration per
+	// role. Routes remain the per-task provider choice; assignments are the
+	// fuller picture the harness layer produces.
+	Assignments AssignmentPlan   `json:"assignments"`
+	Routes      map[string]Route `json:"routes,omitempty"`
+	// Policy is the per-task capability and scope envelope, plus the approval
+	// gates the plan predicts.
+	Policy       PolicyPlan            `json:"policy"`
 	Approvals    []ApprovalRequirement `json:"approvals,omitempty"`
 	Checkpoints  []Checkpoint          `json:"checkpoints,omitempty"`
 	Verification VerificationPlan      `json:"verification"`
@@ -151,7 +174,10 @@ type BuildRequest struct {
 	Version    constitution.Version
 	// Candidates are the providers available for routing.
 	Candidates []goalintake.Candidate
-	Now        time.Time
+	// Scope is the project's working scope, used as a task's allowed scope
+	// when the task does not name paths of its own.
+	Scope []string
+	Now   time.Time
 }
 
 // Build produces a plan from a validated Goal.
@@ -179,9 +205,19 @@ func Build(request BuildRequest) (ExecutionPlan, error) {
 		ConstitutionVersion: request.Version,
 		Assessment:          request.Assessment,
 		Tasks:               request.Tasks,
+		DoNotDo:             append([]string(nil), request.Goal.DoNotDo...),
 		CreatedAt:           now,
 		UpdatedAt:           now,
 	}
+	// Hard constraints are copied onto the plan at build time so they can be
+	// restated into every context package and handoff without a lookup that
+	// could fail.
+	for _, constraint := range request.Goal.Constraints {
+		if constraint.IsHard {
+			executionPlan.HardConstraints = append(executionPlan.HardConstraints, constraint.Text)
+		}
+	}
+	sort.Strings(executionPlan.HardConstraints)
 
 	if validation := ValidateGoal(request.Goal, request.ProjectID); validation.Blocked() {
 		executionPlan.State = StateBlocked
@@ -200,7 +236,10 @@ func Build(request BuildRequest) (ExecutionPlan, error) {
 	executionPlan.Team = AssembleTeam(request.Assessment, request.Tasks, request.Goal.SuccessCriteria)
 	executionPlan.Verification = PlanVerification(
 		request.Goal.SuccessCriteria, request.Tasks, request.Assessment, executionPlan.Team)
-	executionPlan.Approvals = planApprovals(request.Tasks, request.Assessment)
+	// Policy and approvals are derived together: the gates a task will meet
+	// follow from the same facts as the envelope it runs under.
+	executionPlan.Policy = PlanPolicy(request.Tasks, request.Assessment, request.Scope)
+	executionPlan.Approvals = executionPlan.Policy.Approvals
 	executionPlan.Checkpoints = planCheckpoints(request.Tasks, graph, request.Assessment)
 	executionPlan.Budget = allocateBudget(request.Tasks, request.Assessment)
 	executionPlan.Routes, executionPlan.Unknowns = planRoutes(request.Tasks, request.Candidates)
@@ -238,34 +277,6 @@ func resolveState(executionPlan ExecutionPlan) (State, []string) {
 		return StateBlocked, blockers
 	}
 	return StateReady, nil
-}
-
-// planApprovals records which tasks will need a human decision.
-//
-// The requirement follows the assessment rather than the task's own claim
-// about itself, so a task cannot avoid an approval by describing itself
-// mildly.
-func planApprovals(tasks []Task, assessment goalintake.Assessment) []ApprovalRequirement {
-	_, hardRequired := goalintake.RequiresHardApproval(assessment)
-
-	var approvals []ApprovalRequirement
-	for _, task := range tasks {
-		switch {
-		case hardRequired && task.Mutating:
-			approvals = append(approvals, ApprovalRequirement{
-				Task:   task.ID,
-				Reason: "This change has effects that need your approval before it runs.",
-				Hard:   true,
-			})
-		case task.RequiresApproval:
-			approvals = append(approvals, ApprovalRequirement{
-				Task:   task.ID,
-				Reason: "This step was marked as needing confirmation.",
-			})
-		}
-	}
-	sort.SliceStable(approvals, func(a, b int) bool { return approvals[a].Task < approvals[b].Task })
-	return approvals
 }
 
 // planCheckpoints places restore points.

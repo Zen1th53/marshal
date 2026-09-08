@@ -46,6 +46,15 @@ type Task struct {
 	RequiresApproval bool `json:"requires_approval,omitempty"`
 	// Checkpoint marks a task after which state should be recoverable.
 	Checkpoint bool `json:"checkpoint,omitempty"`
+	// ExpectedOutput is what this task must produce. Left empty, the context
+	// package derives a general statement from whether the task mutates.
+	ExpectedOutput string `json:"expected_output,omitempty"`
+	// NeedsNetwork marks a task that genuinely requires network access.
+	//
+	// It defaults to false and must be set deliberately, because a capability
+	// nobody asked for is one nobody weighed the risk of. Tasks without it are
+	// explicitly denied network access rather than merely not granted it.
+	NeedsNetwork bool `json:"needs_network,omitempty"`
 }
 
 // ConflictKind classifies why two tasks cannot run together.
