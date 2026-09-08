@@ -65,6 +65,18 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/artifacts/{id}/download", s.RequireAuthority(authVerifyQA, s.handleDownloadArtifact))
 	mux.HandleFunc("GET /api/v1/review/queue", s.RequireAuth(s.handleGetReviewQueue))
 	mux.HandleFunc("GET /api/v1/verifications/{id}", s.RequireAuthority(authVerifyQA, s.handleGetVerification))
+
+	// Process 07 learning memory. Every route is read-only: promotion,
+	// revision and invalidation stay behind the runtime service, so no
+	// mutation can reach durable memory over HTTP.
+	mux.HandleFunc("GET /api/v1/learning/memory-commits/{id}", s.RequireAuthority(authVerifyQA, s.handleGetMemoryCommit))
+	mux.HandleFunc("GET /api/v1/learning/memory", s.RequireAuth(s.handleSearchLearningMemory))
+	mux.HandleFunc("GET /api/v1/learning/memory/{id}/provenance", s.RequireAuth(s.handleGetMemoryProvenance))
+	mux.HandleFunc("GET /api/v1/learning/routing-trust", s.RequireAuth(s.handleGetRoutingTrust))
+	mux.HandleFunc("GET /api/v1/learning/playbook-candidates", s.RequireAuth(s.handleListPlaybookCandidates))
+	mux.HandleFunc("GET /api/v1/learning/fingerprints", s.RequireAuth(s.handleListFailureFingerprints))
+	mux.HandleFunc("GET /api/v1/learning/replay-index", s.RequireAuthority(authVerifyQA, s.handleListReplayIndex))
+	mux.HandleFunc("GET /api/v1/learning/benchmarks", s.RequireAuth(s.handleListBenchmarkRecords))
 	mux.HandleFunc("GET /api/v1/tasks/{id}/quorum", s.RequireAuth(s.handleGetTaskQuorum))
 	mux.HandleFunc("POST /api/v1/tasks/{id}/quorum/decision", s.RequireAuthority(authVerifyQA, s.handleSubmitQuorumDecision))
 	mux.HandleFunc("GET /api/v1/tasks/{id}/merge/preflight", s.RequireAuth(s.handleMergePreflight))

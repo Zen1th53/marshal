@@ -12,6 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/learning"
 	"github.com/Zen1th53/marshal/internal/memory/working"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/protocol"
@@ -279,6 +280,11 @@ func (s *Server) listTools() []Tool {
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{Name: "process06_status", Description: "Read a canonical Process 06 verification session", InputSchema: objectSchema(map[string]any{"verification_id": stringSchema()}, "verification_id")},
+		{Name: "process07_memory_commit", Description: "Read a canonical Process 07 memory commit", InputSchema: objectSchema(map[string]any{"memory_commit_id": stringSchema()}, "memory_commit_id")},
+		{Name: "process07_memory_search", Description: "Search Process 07 memory with claim state, scope, freshness and contradiction signals attached", InputSchema: objectSchema(map[string]any{"project_id": stringSchema(), "terms": stringSchema(), "include_general": map[string]any{"type": "boolean"}, "include_stale": map[string]any{"type": "boolean"}}, "project_id")},
+		{Name: "process07_memory_history", Description: "Read the full version history of one Process 07 memory item", InputSchema: objectSchema(map[string]any{"item_id": stringSchema()}, "item_id")},
+		{Name: "process07_routing_trust", Description: "Read evidence-backed routing trust, including failures, blocked runs and the selection-bias flag", InputSchema: objectSchema(map[string]any{"task_class": stringSchema()})},
+		{Name: "process07_playbooks", Description: "List Process 07 playbook candidates awaiting review; candidates are never active", InputSchema: objectSchema(map[string]any{"project_id": stringSchema()}, "project_id")},
 		{
 			Name:        "memory_status",
 			Description: "Get memory subsystem health, version, and record counts",
@@ -600,6 +606,67 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 		}
 		data, _ := json.Marshal(session)
 		return string(data), nil
+	case "process07_memory_commit":
+		id := stringArg(args, "memory_commit_id")
+		if id == "" {
+			return "", fmt.Errorf("%w: memory_commit_id is required", model.ErrInvalid)
+		}
+		record, err := s.runtime.Learning().Get(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		data, _ := json.Marshal(record)
+		return string(data), nil
+	case "process07_memory_search":
+		project := stringArg(args, "project_id")
+		if project == "" {
+			return "", fmt.Errorf("%w: project_id is required", model.ErrInvalid)
+		}
+		query := learning.Query{
+			ProjectID:      project,
+			IncludeGeneral: boolArg(args, "include_general"),
+			IncludeStale:   boolArg(args, "include_stale"),
+		}
+		if terms := stringArg(args, "terms"); terms != "" {
+			query.Terms = strings.Split(terms, ",")
+		}
+		// Results carry claim state, freshness and contradiction signals, so a
+		// caller cannot read memory as fact without also reading its limits.
+		results, err := s.runtime.Learning().Search(ctx, query)
+		if err != nil {
+			return "", err
+		}
+		data, _ := json.Marshal(results)
+		return string(data), nil
+	case "process07_memory_history":
+		id := stringArg(args, "item_id")
+		if id == "" {
+			return "", fmt.Errorf("%w: item_id is required", model.ErrInvalid)
+		}
+		history, err := s.runtime.Learning().History(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		data, _ := json.Marshal(history)
+		return string(data), nil
+	case "process07_routing_trust":
+		trust, err := s.runtime.Learning().Trust(ctx, stringArg(args, "task_class"))
+		if err != nil {
+			return "", err
+		}
+		data, _ := json.Marshal(trust)
+		return string(data), nil
+	case "process07_playbooks":
+		project := stringArg(args, "project_id")
+		if project == "" {
+			return "", fmt.Errorf("%w: project_id is required", model.ErrInvalid)
+		}
+		playbooks, err := s.runtime.Learning().Playbooks(ctx, project)
+		if err != nil {
+			return "", err
+		}
+		data, _ := json.Marshal(playbooks)
+		return string(data), nil
 
 	default:
 		return "", fmt.Errorf("%w: unknown tool %s", model.ErrInvalid, name)
@@ -656,6 +723,12 @@ func requiredCapabilityForTool(toolName string) auth.Capability {
 		return auth.CapEvidenceRead
 	case "verification_status", "process06_status":
 		return auth.CapVerifyRun
+	case "process07_memory_commit", "process07_memory_search", "process07_memory_history",
+		"process07_routing_trust", "process07_playbooks":
+		// Every Process 07 tool here is read-only, and what it returns is
+		// evidence-bound memory. Promotion, revision and invalidation stay
+		// behind the runtime service.
+		return auth.CapEvidenceRead
 	default:
 		return auth.CapAll
 	}

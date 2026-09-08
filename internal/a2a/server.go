@@ -13,6 +13,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/learning"
 	"github.com/Zen1th53/marshal/internal/memory/working"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/protocol"
@@ -62,6 +63,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/a2a/task-memory", s.handleTaskMemory)
 	mux.HandleFunc("/a2a/memory-handoffs", s.handleMemoryHandoff)
 	mux.HandleFunc("/a2a/verifications/{id}", s.handleVerification)
+	mux.HandleFunc("/a2a/memory-commits/{id}", s.handleMemoryCommit)
+	mux.HandleFunc("/a2a/learning-memory", s.handleLearningMemory)
 	return mux
 }
 
@@ -85,6 +88,62 @@ func (s *Server) handleVerification(w http.ResponseWriter, r *http.Request) {
 	}
 	session, err := s.runtime.Verification().Current(r.Context(), id)
 	writeA2AMemoryResult(w, session, err)
+}
+
+// handleMemoryCommit exposes one canonical Process 07 memory commit. It is
+// read-only: memory is promoted through the runtime service, never over the
+// wire by a peer agent.
+func (s *Server) handleMemoryCommit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	caller, ok := s.authenticateMemoryCaller(w, r)
+	if !ok {
+		return
+	}
+	if !caller.HasCapability(auth.CapEvidenceRead) {
+		writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeA2AMemoryError(w, http.StatusBadRequest, model.ErrInvalid)
+		return
+	}
+	record, err := s.runtime.Learning().Get(r.Context(), id)
+	writeA2AMemoryResult(w, record, err)
+}
+
+// handleLearningMemory searches Process 07 memory for a peer agent.
+//
+// Results keep their claim state, freshness and contradiction signals, so a
+// remote caller cannot receive a claim stripped of the uncertainty attached to
+// it. Stale memory is included only when explicitly requested, and never as
+// usable.
+func (s *Server) handleLearningMemory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	caller, ok := s.authenticateMemoryCaller(w, r)
+	if !ok {
+		return
+	}
+	if !caller.HasCapability(auth.CapEvidenceRead) {
+		writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+		return
+	}
+	query := learning.Query{
+		ProjectID:      strings.TrimSpace(r.URL.Query().Get("project_id")),
+		IncludeGeneral: r.URL.Query().Get("include_general") == "true",
+		IncludeStale:   r.URL.Query().Get("include_stale") == "true",
+	}
+	if terms := strings.TrimSpace(r.URL.Query().Get("terms")); terms != "" {
+		query.Terms = strings.Split(terms, ",")
+	}
+	results, err := s.runtime.Learning().Search(r.Context(), query)
+	writeA2AMemoryResult(w, results, err)
 }
 
 func (s *Server) handleTaskMemory(w http.ResponseWriter, r *http.Request) {
@@ -303,8 +362,9 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 		"protocolBinding": "HTTP+JSON",
 		"protocolVersion": WireVersion10,
 		"capabilities": map[string]any{
-			"taskExecution": true,
-			"verification":  true,
+			"taskExecution":  true,
+			"verification":   true,
+			"learningMemory": true,
 		},
 		"skills": []map[string]string{
 			{
