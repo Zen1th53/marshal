@@ -40,6 +40,7 @@ type Handoff struct {
 
 	PlanID              string               `json:"plan_id"`
 	PlanVersion         int64                `json:"plan_version"`
+	Mode                Mode                 `json:"mode,omitempty"`
 	ConstitutionVersion constitution.Version `json:"constitution_version"`
 
 	Tasks        []Task                `json:"tasks"`
@@ -138,6 +139,7 @@ func PrepareHandoff(executionPlan ExecutionPlan, goal model.GoalContract, projec
 		OriginalRequest:     goal.OriginalRequest,
 		PlanID:              executionPlan.ID,
 		PlanVersion:         executionPlan.Version,
+		Mode:                executionPlan.Mode,
 		ConstitutionVersion: executionPlan.ConstitutionVersion,
 		Tasks:               executionPlan.Tasks,
 		Graph:               executionPlan.Graph,
