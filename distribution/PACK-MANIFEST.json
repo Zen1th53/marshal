@@ -1155,6 +1155,11 @@
       "bytes": 2655
     },
     {
+      "path": "docs/startup.md",
+      "sha256": "41ab654b1b8d45b01d1aff815d3d268ed315852512b8a48155add1c5a5e69fa1",
+      "bytes": 5812
+    },
+    {
       "path": "docs/superpowers/plans/2026-08-11-agent-runtime-plane-plan.md",
       "sha256": "727e75ea63b9fc5b388e70e93d55e407fba77aa6ed462824dfec50f2e20fa402",
       "bytes": 3264
@@ -4403,6 +4408,11 @@
       "path": "internal/startup/health.go",
       "sha256": "a8d023c3aa022055f65ee68053d3eee95bd5ebf383f3de32a96da03edf0017b5",
       "bytes": 10659
+    },
+    {
+      "path": "internal/startup/help.go",
+      "sha256": "35f9883a7fb997451c1de2a703b3b13042247503920787daa40a2ce57348c0ee",
+      "bytes": 5311
     },
     {
       "path": "internal/startup/landing.go",
