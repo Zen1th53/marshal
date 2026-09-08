@@ -12,14 +12,14 @@ import (
 
 // RateLimitRecord records authoritative rate limit signals received from a provider.
 type RateLimitRecord struct {
-	Harness    string        `json:"harness"`
-	Model      string        `json:"model"`
-	HTTPStatus int           `json:"http_status"`
-	RetryAfter time.Duration `json:"retry_after"`
-	ResetTime  time.Time     `json:"reset_time,omitempty"`
-	ObservedAt time.Time     `json:"observed_at"`
-	Source     string        `json:"source"`
-	IsQuotaExhausted bool    `json:"is_quota_exhausted"`
+	Harness          string        `json:"harness"`
+	Model            string        `json:"model"`
+	HTTPStatus       int           `json:"http_status"`
+	RetryAfter       time.Duration `json:"retry_after"`
+	ResetTime        time.Time     `json:"reset_time,omitempty"`
+	ObservedAt       time.Time     `json:"observed_at"`
+	Source           string        `json:"source"`
+	IsQuotaExhausted bool          `json:"is_quota_exhausted"`
 }
 
 // ParseRetryAfter parses standard HTTP Retry-After headers (seconds or HTTP date).

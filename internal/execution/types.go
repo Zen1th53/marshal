@@ -350,29 +350,29 @@ type EvidenceRef struct {
 
 // ExecutionEvidence is a raw evidence record from tool execution.
 type ExecutionEvidence struct {
-	EvidenceID    string         `json:"evidence_id"`
-	RunID         string         `json:"run_id"`
-	TaskID        string         `json:"task_id"`
-	ToolName      string         `json:"tool_name"`
-	Args          []string       `json:"args,omitempty"`
-	Cwd           string         `json:"cwd"`
-	CommandDigest string         `json:"command_digest"`
-	ExitCode      int            `json:"exit_code"`
-	StdoutSummary string         `json:"stdout_summary"`
-	StderrSummary string         `json:"stderr_summary"`
-	OutputDigest  string         `json:"output_digest"`
-	RawArtifactRef string        `json:"raw_artifact_ref,omitempty"`
-	GitCommit     string         `json:"git_commit,omitempty"`
-	WorktreePath  string         `json:"worktree_path,omitempty"`
-	BinaryPath    string         `json:"binary_path,omitempty"`
-	BinaryVersion string         `json:"binary_version,omitempty"`
-	BinarySHA256  string         `json:"binary_sha256,omitempty"`
-	Status        EvidenceStatus `json:"status"`
-	DurationMs    int64          `json:"duration_ms"`
-	RelevantFiles []string       `json:"relevant_files,omitempty"`
-	CreatedAt     time.Time      `json:"created_at"`
-	StaleAt       *time.Time     `json:"stale_at,omitempty"`
-	StaleReason   string         `json:"stale_reason,omitempty"`
+	EvidenceID     string         `json:"evidence_id"`
+	RunID          string         `json:"run_id"`
+	TaskID         string         `json:"task_id"`
+	ToolName       string         `json:"tool_name"`
+	Args           []string       `json:"args,omitempty"`
+	Cwd            string         `json:"cwd"`
+	CommandDigest  string         `json:"command_digest"`
+	ExitCode       int            `json:"exit_code"`
+	StdoutSummary  string         `json:"stdout_summary"`
+	StderrSummary  string         `json:"stderr_summary"`
+	OutputDigest   string         `json:"output_digest"`
+	RawArtifactRef string         `json:"raw_artifact_ref,omitempty"`
+	GitCommit      string         `json:"git_commit,omitempty"`
+	WorktreePath   string         `json:"worktree_path,omitempty"`
+	BinaryPath     string         `json:"binary_path,omitempty"`
+	BinaryVersion  string         `json:"binary_version,omitempty"`
+	BinarySHA256   string         `json:"binary_sha256,omitempty"`
+	Status         EvidenceStatus `json:"status"`
+	DurationMs     int64          `json:"duration_ms"`
+	RelevantFiles  []string       `json:"relevant_files,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+	StaleAt        *time.Time     `json:"stale_at,omitempty"`
+	StaleReason    string         `json:"stale_reason,omitempty"`
 }
 
 // ExecutionClaim represents a claim submitted during execution.

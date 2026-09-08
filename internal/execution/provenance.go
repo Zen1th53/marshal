@@ -94,11 +94,11 @@ func ValidateAllowedBinary(resolvedPath string, blockedDirs []string) error {
 
 // GitEnvironment captures current repository and branch state to enforce integrity.
 type GitEnvironment struct {
-	RepoRoot    string `json:"repo_root"`
-	Branch      string `json:"branch"`
-	HeadCommit  string `json:"head_commit"`
-	IsDirty     bool   `json:"is_dirty"`
-	RemoteURL   string `json:"remote_url,omitempty"`
+	RepoRoot   string `json:"repo_root"`
+	Branch     string `json:"branch"`
+	HeadCommit string `json:"head_commit"`
+	IsDirty    bool   `json:"is_dirty"`
+	RemoteURL  string `json:"remote_url,omitempty"`
 }
 
 // InspectGitEnvironment inspects the repository status at dir.

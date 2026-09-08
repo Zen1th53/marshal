@@ -15,11 +15,11 @@ import (
 
 // CheckpointEngine handles durable checkpointing and atomic rollback.
 type CheckpointEngine struct {
-	mu           sync.RWMutex
-	projectRoot  string
-	backupDir    string
-	isGitRepo    bool
-	checkpoints  map[string]CheckpointRecord // checkpointID -> CheckpointRecord
+	mu          sync.RWMutex
+	projectRoot string
+	backupDir   string
+	isGitRepo   bool
+	checkpoints map[string]CheckpointRecord // checkpointID -> CheckpointRecord
 }
 
 // NewCheckpointEngine creates a new CheckpointEngine.

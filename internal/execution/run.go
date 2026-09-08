@@ -39,19 +39,19 @@ func NewRunFromHandoff(handoff plan.Handoff, now time.Time, prov RunProvenance) 
 			outputArtifacts = append(outputArtifacts, t.ExpectedOutput)
 		}
 		tasks[t.ID] = TaskExecution{
-			TaskID:            t.ID,
-			Description:       t.Title,
-			AssignedRole:      assignmentRole,
-			AssignedHarness:   route.Provider,
-			AssignedModel:     route.Model,
-			State:             TaskPending,
-			Dependencies:      append([]string(nil), t.DependsOn...),
-			Mutates:           t.Mutating,
-			TargetFiles:       append([]string(nil), t.Paths...),
-			RequiredEvidence:  reqEvidence,
-			OutputArtifacts:   outputArtifacts,
-			Attempts:          0,
-			UpdatedAt:         now,
+			TaskID:           t.ID,
+			Description:      t.Title,
+			AssignedRole:     assignmentRole,
+			AssignedHarness:  route.Provider,
+			AssignedModel:    route.Model,
+			State:            TaskPending,
+			Dependencies:     append([]string(nil), t.DependsOn...),
+			Mutates:          t.Mutating,
+			TargetFiles:      append([]string(nil), t.Paths...),
+			RequiredEvidence: reqEvidence,
+			OutputArtifacts:  outputArtifacts,
+			Attempts:         0,
+			UpdatedAt:        now,
 		}
 	}
 
