@@ -43,6 +43,41 @@ func (c *command) setup(ctx context.Context, args []string) error {
 	return nil
 }
 
+// help explains startup, health states, Setup versus Doctor, and why work may
+// be blocked. It is available in every phase short of a core failure, because
+// the moment a user most needs this explanation is when a check has failed.
+func (c *command) help(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == "why" {
+		assessment := startup.Assess(ctx, startup.NewSystemProber(), c.startupEnvironment())
+		if c.json {
+			return c.print(map[string]any{
+				"phase":       assessment.Phase,
+				"blocking":    assessment.Blocking(),
+				"explanation": startup.ExplainBlocked(assessment),
+			}, "")
+		}
+		fmt.Fprintln(c.stdout, startup.ExplainBlocked(assessment))
+		return nil
+	}
+	topics := startup.HelpTopics()
+	if len(args) > 0 {
+		topic, ok := startup.Help(args[0])
+		if !ok {
+			return fmt.Errorf("%w: unknown help topic %s", model.ErrInvalid, args[0])
+		}
+		topics = []startup.HelpTopic{topic}
+	}
+	if c.json {
+		return c.print(topics, "")
+	}
+	var b strings.Builder
+	for _, topic := range topics {
+		fmt.Fprintf(&b, "%s\n%s\n\n", topic.Title, topic.Body)
+	}
+	fmt.Fprint(c.stdout, b.String())
+	return nil
+}
+
 func joinCapabilities(capabilities []startup.Capability) string {
 	if len(capabilities) == 0 {
 		return "nothing"

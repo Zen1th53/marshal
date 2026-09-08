@@ -261,3 +261,53 @@ func TestLandingRenderIsTruthfulAndClean(t *testing.T) {
 		}
 	}
 }
+
+// Help must be complete, user-facing, and free of internal vocabulary. A user
+// reading it should not need to know what a lease or a capability grant is.
+func TestHelpIsCompleteAndUserFacing(t *testing.T) {
+	topics := startup.HelpTopics()
+	if len(topics) == 0 {
+		t.Fatal("there are no help topics")
+	}
+	required := []string{"startup", "setup-vs-doctor", "health", "blocked", "projects", "recovery", "modes", "providers", "privacy"}
+	for _, key := range required {
+		topic, ok := startup.Help(key)
+		if !ok {
+			t.Fatalf("help topic %q is missing", key)
+		}
+		if strings.TrimSpace(topic.Title) == "" || strings.TrimSpace(topic.Body) == "" {
+			t.Fatalf("help topic %q is empty", key)
+		}
+		lowered := strings.ToLower(topic.Body)
+		for _, jargon := range []string{"lease", "reconcil", "capability grant", "sqlite", "goroutine", "digest"} {
+			if strings.Contains(lowered, jargon) {
+				t.Fatalf("help topic %q uses internal vocabulary (%s): %s", key, jargon, topic.Body)
+			}
+		}
+	}
+	if _, ok := startup.Help("no-such-topic"); ok {
+		t.Fatal("an unknown help topic was found")
+	}
+}
+
+// The blocked explanation names the actual causes rather than a generic
+// message, and reassures the user which surfaces remain.
+func TestExplainBlockedNamesRealCauses(t *testing.T) {
+	blocked := startup.Summarize([]startup.Check{
+		check("env.sandbox", startup.DimensionEnvironment, startup.StatusMissing, true,
+			startup.ReasonSandboxUnavailable, startup.CapProjectExecution),
+	}, startup.SummaryOptions{})
+
+	explanation := startup.ExplainBlocked(blocked)
+	if !strings.Contains(explanation, "Work cannot run because") {
+		t.Fatalf("the explanation does not lead with the cause: %s", explanation)
+	}
+	if !strings.Contains(strings.ToLower(explanation), "doctor") {
+		t.Fatalf("the explanation does not say Doctor remains available: %s", explanation)
+	}
+
+	healthy := startup.Summarize(healthyChecks(), startup.SummaryOptions{})
+	if !strings.Contains(startup.ExplainBlocked(healthy), "Nothing is blocking") {
+		t.Fatal("a healthy assessment was described as blocked")
+	}
+}

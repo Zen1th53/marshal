@@ -1825,6 +1825,11 @@
       "bytes": 55600
     },
     {
+      "path": "internal/app/runtime_secret_commit_test.go",
+      "sha256": "dcb6a2983868190002f28f59dd1e32d3d11b9b7873300f823ef6998c99b5bbee",
+      "bytes": 1992
+    },
+    {
       "path": "internal/app/runtime_test.go",
       "sha256": "4436a026ed5df08fa4dd9c5e6f67d24e5949bb991c4b2b7113b8ba41ffd315bc",
       "bytes": 7668
@@ -1838,6 +1843,16 @@
       "path": "internal/app/session_importer_test.go",
       "sha256": "d82435b50866c8f64753d3a7e199ed8ca2db9efbaf1fa31d074ac533cb33893a",
       "bytes": 2686
+    },
+    {
+      "path": "internal/app/startup_recovery.go",
+      "sha256": "6613a5a99b21196bc055986a6b19fa8a991f80147f5049614e82465b3fc7a1e8",
+      "bytes": 2887
+    },
+    {
+      "path": "internal/app/startup_recovery_test.go",
+      "sha256": "4fad7b386ebdae747303274cd39996ded6adca298d76b6ca86c20017402b9ee7",
+      "bytes": 3691
     },
     {
       "path": "internal/app/startup_support.go",
@@ -2151,8 +2166,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "e782bece8c75e27883b66e34a3d6fa000830953495975ae4f9aa27f7ddfbcf8e",
-      "bytes": 32907
+      "sha256": "f00a2e718133acff21bc576f399fc2777e3ea7cf20bebad1786d1414fd39e0af",
+      "bytes": 32977
     },
     {
       "path": "internal/cli/cli_test.go",
@@ -2196,8 +2211,8 @@
     },
     {
       "path": "internal/cli/setup.go",
-      "sha256": "97064281ab251d57d08a4d913ecdb6572a98ef81d28160e2b28c3a844e4ba698",
-      "bytes": 1768
+      "sha256": "2bab6d80eff556d42b6dd85310f31e2eeb3db40780a0fb6a98bf95b1c6ba8310",
+      "bytes": 2901
     },
     {
       "path": "internal/cli/tui_cli.go",
@@ -4371,8 +4386,8 @@
     },
     {
       "path": "internal/startup/adversarial_test.go",
-      "sha256": "e7ab3c8e7aa8fc4b4e5fb880d0e706a29f5fe071dff42ce001de91610f458d22",
-      "bytes": 10207
+      "sha256": "36cc582edac2c7c9964075adab0efc66caba7ca50790c982c47d1c344188aa9b",
+      "bytes": 12266
     },
     {
       "path": "internal/startup/assessment.go",

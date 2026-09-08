@@ -62,6 +62,7 @@ Commands:
   policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
   setup [status]
+  help [TOPIC] | help why
   constitution version | invariants | decisions SESSION-ID | violations SESSION-ID
   web serve [--listen ADDR] [--port PORT]
   tui [SESSION-ID]
@@ -178,6 +179,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.web(ctx, args[1:])
 	case "setup":
 		err = c.setup(ctx, args[1:])
+	case "help":
+		err = c.help(ctx, args[1:])
 	case "constitution":
 		err = c.constitution(ctx, args[1:])
 	case "tui":
