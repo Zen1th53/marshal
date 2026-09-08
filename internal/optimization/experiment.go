@@ -37,6 +37,52 @@ type ExperimentResult struct {
 	// Holdout marks a result from the held-out split.
 	Holdout    bool `json:"holdout"`
 	ObservedAt time.Time
+	// Digest binds every individual attempt to its observed outcome and
+	// provenance. Promotion evidence is only as trustworthy as its smallest
+	// record; a protected cycle containing mutable experiment rows is not
+	// actually tamper-evident.
+	Digest string `json:"digest"`
+}
+
+// NewExperimentResult validates and seals one observed attempt. It never
+// fills in UNKNOWN or NOT_RUN with a more convenient outcome.
+func NewExperimentResult(r ExperimentResult, now time.Time) (ExperimentResult, error) {
+	if strings.TrimSpace(r.ID) == "" || strings.TrimSpace(r.TaskID) == "" {
+		return ExperimentResult{}, fmt.Errorf("%w: experiment result identity", ErrInvalid)
+	}
+	if !ValidStatus(r.Outcome) {
+		return ExperimentResult{}, fmt.Errorf("%w: experiment result outcome", ErrInvalid)
+	}
+	if r.Quarantined && strings.TrimSpace(r.QuarantineReason) == "" {
+		return ExperimentResult{}, fmt.Errorf("%w: quarantined result has no reason", ErrInvalid)
+	}
+	if r.ObservedAt.IsZero() {
+		r.ObservedAt = now
+	}
+	r.Digest = ""
+	d, err := digest(r)
+	if err != nil {
+		return ExperimentResult{}, err
+	}
+	r.Digest = d
+	return r, nil
+}
+
+// Verify reports whether an experiment result still matches its digest.
+func (r ExperimentResult) Verify() error {
+	want := r.Digest
+	if want == "" {
+		return fmt.Errorf("%w: experiment result missing digest", ErrInvalid)
+	}
+	r.Digest = ""
+	got, err := digest(r)
+	if err != nil {
+		return err
+	}
+	if got != want {
+		return ErrTampered
+	}
+	return nil
 }
 
 // QuarantineCause names why a result was excluded.
@@ -56,6 +102,9 @@ const (
 func Quarantine(r ExperimentResult, cause QuarantineCause) ExperimentResult {
 	r.Quarantined = true
 	r.QuarantineReason = string(cause)
+	// This changes the observation. The caller must seal it again before it
+	// can become durable evidence.
+	r.Digest = ""
 	return r
 }
 
