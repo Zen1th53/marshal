@@ -130,8 +130,12 @@ func headlineFor(assessment Assessment) (string, string) {
 	case PhaseNeedsAttention:
 		return "MARSHAL is running. Some things need attention.", describeAffected(assessment)
 	case PhaseRecoveryAvailable:
-		return "MARSHAL is ready. Earlier work was interrupted.",
-			"Review the interrupted work and choose whether to resume it. Nothing has been resumed automatically."
+		// The headline leads with the pending decision rather than with
+		// readiness. The environment is fine, but saying "ready" first invites
+		// the user to carry on and discover the interrupted work later, which
+		// is the moment it is most likely to be resumed by accident.
+		return "Earlier work was interrupted.",
+			"MARSHAL is otherwise ready. Review the interrupted work and choose whether to resume it. Nothing has been resumed automatically."
 	case PhaseExecutionBlocked:
 		// The wording matters: the user is told what still works before what
 		// does not, because the screen they are reading is the thing that

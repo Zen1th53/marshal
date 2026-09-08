@@ -61,6 +61,7 @@ Commands:
   memory status | recall | show | list | promote | tombstone | audit
   policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
+  setup [status]
   constitution version | invariants | decisions SESSION-ID | violations SESSION-ID
   web serve [--listen ADDR] [--port PORT]
   tui [SESSION-ID]
@@ -175,6 +176,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.memory(ctx, args[1:])
 	case "web":
 		err = c.web(ctx, args[1:])
+	case "setup":
+		err = c.setup(ctx, args[1:])
 	case "constitution":
 		err = c.constitution(ctx, args[1:])
 	case "tui":

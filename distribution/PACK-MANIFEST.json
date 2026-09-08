@@ -180,6 +180,11 @@
       "bytes": 7589
     },
     {
+      "path": "MARSHAL_PROCESS_01_STARTUP_CONTROL_CENTER_MEGA_ULTRA/evidence/03_BASELINE_AUDIT.md",
+      "sha256": "89a4dc0ea9ed075e94ed03f53af35dba3b405ad28adc65daec0fb82b51e61d9f",
+      "bytes": 4734
+    },
+    {
       "path": "MEMORY-START.md",
       "sha256": "fe3892e6c78ef0b732d53a4d76eab82388953cc774f3881d6d502fa464c11dd3",
       "bytes": 1386
@@ -1835,6 +1840,11 @@
       "bytes": 2686
     },
     {
+      "path": "internal/app/startup_support.go",
+      "sha256": "62f266c12f05f3f9bea4916aea8bb11d8ffd5597b77f67ba0087666d027fb0d2",
+      "bytes": 1410
+    },
+    {
       "path": "internal/app/task_blackboard_test.go",
       "sha256": "80b26ad65fa36a782fdce5134d695cf53a728b74d80099012fc2ab1d4297d6ba",
       "bytes": 7049
@@ -2141,8 +2151,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "ff5e82b151bdf04b167c28ead787d7a43b54485cc1921db495924992f3b1326a",
-      "bytes": 32811
+      "sha256": "e782bece8c75e27883b66e34a3d6fa000830953495975ae4f9aa27f7ddfbcf8e",
+      "bytes": 32907
     },
     {
       "path": "internal/cli/cli_test.go",
@@ -2158,6 +2168,11 @@
       "path": "internal/cli/constitution_test.go",
       "sha256": "6f0887df48e0c73335855b5bb773802bb65e082d4ac99c21e51591df85c8ea47",
       "bytes": 7233
+    },
+    {
+      "path": "internal/cli/control_center.go",
+      "sha256": "39f2cd4a08cbee176881ba6d99f3c6586d3177d5b4e0f9b51c1c3b0acad78577",
+      "bytes": 3112
     },
     {
       "path": "internal/cli/memory_cli.go",
@@ -2176,8 +2191,8 @@
     },
     {
       "path": "internal/cli/tui_cli.go",
-      "sha256": "8c7e3577fa3ba2cfe4be1c41f06c77f1ca88cb1f1104bf07f6f1f88597867dbb",
-      "bytes": 1030
+      "sha256": "3ee51396818bf81296e10237e619ef39aae219fbf3dc9f2ffb673fd5d76a363b",
+      "bytes": 1655
     },
     {
       "path": "internal/cli/tui_cli_test.go",
@@ -4343,6 +4358,51 @@
       "path": "internal/secrets/types_test.go",
       "sha256": "c4ea19a7ab31d4414b00f16096bcb68976939523a3fcbeebdbce7354f5ff5f0b",
       "bytes": 2574
+    },
+    {
+      "path": "internal/startup/assessment.go",
+      "sha256": "da0873e9313cd3acac15a041c2385be0b0e6f666b55d494278fae09bc8020217",
+      "bytes": 7547
+    },
+    {
+      "path": "internal/startup/assessment_test.go",
+      "sha256": "19b5f2dc2be5e19d1eb172e16a8432b1ca0857cea9b078be1c0fdf578780af28",
+      "bytes": 13155
+    },
+    {
+      "path": "internal/startup/health.go",
+      "sha256": "a8d023c3aa022055f65ee68053d3eee95bd5ebf383f3de32a96da03edf0017b5",
+      "bytes": 10659
+    },
+    {
+      "path": "internal/startup/landing.go",
+      "sha256": "41e9c407607c178745960ca7ffa1d9a2f91d933639ab912a37dedf2d2e53ea53",
+      "bytes": 7321
+    },
+    {
+      "path": "internal/startup/probe.go",
+      "sha256": "c294549a30ade6946074578529f314b62b5d18df52c4addb4051231658ec7cb7",
+      "bytes": 14584
+    },
+    {
+      "path": "internal/startup/probe_test.go",
+      "sha256": "cd3bed5eced26b5f256256b08d6d2f45ea42d1c68802fb132e177a3c185866e8",
+      "bytes": 16665
+    },
+    {
+      "path": "internal/startup/reason.go",
+      "sha256": "fbf8b8d74a1a0029fc117fd0663fe7da2ca89040c8355a1cb53c2a93b7f74953",
+      "bytes": 8849
+    },
+    {
+      "path": "internal/startup/repair.go",
+      "sha256": "5fcb8aeca2c0abb1f462313b181bffd5ef4f0d6e1bc3643658c1569c44e7b509",
+      "bytes": 7758
+    },
+    {
+      "path": "internal/startup/repair_test.go",
+      "sha256": "6c13375eddb3fb7535f324a0a8b0ce39a5910ae4fffad358587d44b0075f06cc",
+      "bytes": 7640
     },
     {
       "path": "internal/store/accounting_persistence_a02_test.go",
