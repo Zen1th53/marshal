@@ -143,6 +143,10 @@ func Evaluate(s Session, current Binding, now time.Time) Decision {
 					claimOK = false
 					break
 				}
+				if claim.Critical && (ev.Producer == "" || ev.Provider == "" || ev.Oracle == "" || ev.ClusterID == "") {
+					claimOK = false
+					break
+				}
 				cluster := ev.ClusterID
 				if cluster == "" {
 					cluster = ev.Producer + "\x00" + ev.Provider + "\x00" + ev.Oracle

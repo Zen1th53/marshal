@@ -10,8 +10,8 @@ import (
 func fixture(now time.Time) Session {
 	b := Binding{ProjectID: "p", GoalID: "g", GoalRevision: 1, PlanID: "plan", PlanVersion: 1, RunID: "run", RunVersion: 2, TreeDigest: "tree", EnvironmentDigest: "env"}
 	return Session{ID: "verify", Version: 1, Binding: b, Criteria: []Criterion{{ID: "c", Mandatory: true, ClaimIDs: []string{"claim"}}}, Claims: []Claim{{ID: "claim", CriterionID: "c", Critical: true, SemanticScope: []string{"runtime"}, EvidenceIDs: []string{"e1", "e2"}}}, Evidence: []Evidence{
-		{ID: "e1", ClaimID: "claim", Status: StatusPass, ContentDigest: "a", TreeDigest: "tree", EnvironmentDigest: "env", ClusterID: "independent-a", Attempts: 1, Passes: 1},
-		{ID: "e2", ClaimID: "claim", Status: StatusPass, ContentDigest: "b", TreeDigest: "tree", EnvironmentDigest: "env", ClusterID: "independent-b", Attempts: 1, Passes: 1},
+		{ID: "e1", ClaimID: "claim", Status: StatusPass, ContentDigest: "a", TreeDigest: "tree", EnvironmentDigest: "env", Producer: "alice", Provider: "p1", Oracle: "o1", ClusterID: "independent-a", Attempts: 1, Passes: 1},
+		{ID: "e2", ClaimID: "claim", Status: StatusPass, ContentDigest: "b", TreeDigest: "tree", EnvironmentDigest: "env", Producer: "bob", Provider: "p2", Oracle: "o2", ClusterID: "independent-b", Attempts: 1, Passes: 1},
 	}, RequiredChecks: map[string]Status{"security": StatusPass, "runtime_negative": StatusPass}, CreatedAt: now, UpdatedAt: now}
 }
 
