@@ -56,6 +56,9 @@ Restart: PASS
 Performance: PASS, 1,000-evidence decision at 729,180 ns/op
 Conformance: PASS
 Pack: PASS, 51/51 files match SHA-256 and byte size
+Python suites: PASS, 6 conformance, 8 release and 13 v6 tests
+Pack validation: PASS, `conformance/runner.py validate-pack`
+Supply chain: PASS, govulncheck clean, gitleaks clean, 0 gosec findings in new code
 
 ## Status counts
 
@@ -69,9 +72,9 @@ UNKNOWN: 0
 
 P0: none
 P1: none
-P2: two record errors in the first qualification, both corrected. Row X cited
-the wrong package for the full-chain test, and two Python suites were recorded
-as PASS although this repository contains no Python sources.
+P2: one record error in the first qualification, corrected. Row X cited the
+wrong package for the full-chain test. The evidence itself was re-run and
+passes; only the pointer was wrong.
 
 Known limitations:
 

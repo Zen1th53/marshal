@@ -57,7 +57,10 @@ canonical-main integration attestation.
 - 1,000-evidence benchmark: PASS, 924,676 ns/op on the recorded host
 - Web Vitest: PASS, 51 files / 118 tests
 - Web production build: PASS
-- Python suites: NOT_APPLICABLE, this repository contains no Python sources
+- Python conformance tests: PASS, 6 tests
+- Python release tests: PASS, 8 tests
+- Python v6 tests: PASS, 13 tests
+- `conformance/runner.py validate-pack`: PASS
 - Process 06 package manifest: PASS, 51/51 files match SHA-256 and byte size
 - gitleaks over `origin/main..candidate`: PASS, no leaks
 - `govulncheck ./...`: PASS, no vulnerabilities found
@@ -95,12 +98,19 @@ qualification run so the numbers are reproducible rather than inherited.
 | gitleaks `origin/main..HEAD` | PASS, 14 commits, no leaks |
 | `govulncheck ./...` | PASS, no vulnerabilities |
 | gofmt on candidate-touched files | PASS after formatting schema 83 |
+| `conformance/runner.py validate-pack` | PASS |
+| Python conformance / release / v6 suites | PASS, 6 / 8 / 13 tests |
 
-Two record errors from the first qualification were corrected. Row X cited
+One record error from the first qualification was corrected: row X cited
 `internal/app` rather than the integration package that actually holds the
-test, and two Python suites were recorded as PASS although this repository
-contains no Python sources. The underlying full-chain evidence was re-run and
-does pass; only the record was wrong.
+full-chain test. The underlying evidence was re-run and does pass; only the
+pointer was wrong.
+
+A second correction was attempted and then withdrawn. The Python suites were
+briefly recorded as NOT_APPLICABLE after a file search returned nothing; that
+search had run from the wrong directory. The repository does contain Python
+sources, CI runs them, and all three suites were re-run here and pass with the
+counts originally recorded.
 
 These results must be rerun where required after candidate integration. A PASS
 here does not make the branch canonical main.
