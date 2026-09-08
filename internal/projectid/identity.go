@@ -27,6 +27,12 @@ import (
 // ErrInvalidIdentity reports a malformed or unusable project identity.
 var ErrInvalidIdentity = errors.New("project identity is invalid")
 
+// ErrScopeEscape reports a requested working scope that resolves outside the
+// project root. It is refused rather than clamped, because a caller asking for
+// a path outside the project has a different idea of the boundary than MARSHAL
+// does, and silently narrowing their request would hide that disagreement.
+var ErrScopeEscape = errors.New("requested scope lies outside the project")
+
 // ID is a stable project identifier. It is independent of the filesystem path
 // and survives the project being moved, renamed or restored elsewhere.
 type ID string
