@@ -2800,6 +2800,16 @@
       "bytes": 9047
     },
     {
+      "path": "internal/goalintake/capacity.go",
+      "sha256": "42ec2733fcbb996340317c171cb37ee63d38af8676b1ad86c1f56028583c5b94",
+      "bytes": 9682
+    },
+    {
+      "path": "internal/goalintake/capacity_test.go",
+      "sha256": "05fb91c7e7a2de779c73587abd2700b0da34137df4e88e5dbadf02398aa79589",
+      "bytes": 9472
+    },
+    {
       "path": "internal/goalintake/confirmation.go",
       "sha256": "89d0f5f6580f143707eaebfaecf510c34e412accf98ed40b483446cc2751d638",
       "bytes": 8058
