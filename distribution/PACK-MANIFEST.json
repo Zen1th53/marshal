@@ -2175,6 +2175,11 @@
       "bytes": 3112
     },
     {
+      "path": "internal/cli/control_center_test.go",
+      "sha256": "96cb7c8fdc7c0c73b21d296509cf7c244b261d624914046b2f05188a3a3c18f4",
+      "bytes": 6528
+    },
+    {
       "path": "internal/cli/memory_cli.go",
       "sha256": "1db09287ae7682f8bf431cbddf8f252c810daecdd599ebb794e923806f7ae92b",
       "bytes": 6885
@@ -2188,6 +2193,11 @@
       "path": "internal/cli/policy_test_a10_release_test.go",
       "sha256": "d1610bd0f758851dd31d752d36bdac33cb67e585f4373bc1d87123e974551df4",
       "bytes": 1222
+    },
+    {
+      "path": "internal/cli/setup.go",
+      "sha256": "97064281ab251d57d08a4d913ecdb6572a98ef81d28160e2b28c3a844e4ba698",
+      "bytes": 1768
     },
     {
       "path": "internal/cli/tui_cli.go",
@@ -4358,6 +4368,11 @@
       "path": "internal/secrets/types_test.go",
       "sha256": "c4ea19a7ab31d4414b00f16096bcb68976939523a3fcbeebdbce7354f5ff5f0b",
       "bytes": 2574
+    },
+    {
+      "path": "internal/startup/adversarial_test.go",
+      "sha256": "e7ab3c8e7aa8fc4b4e5fb880d0e706a29f5fe071dff42ce001de91610f458d22",
+      "bytes": 10207
     },
     {
       "path": "internal/startup/assessment.go",
