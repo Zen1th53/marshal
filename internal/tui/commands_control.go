@@ -85,6 +85,17 @@ func (h *CommandHandler) handleStatus(ctx context.Context) (string, error) {
 	return b.String(), nil
 }
 
+func (h *CommandHandler) handleVerification(ctx context.Context, id string) (string, error) {
+	if h.ws.store == nil {
+		return "Canonical verification store unavailable.", nil
+	}
+	session, err := h.ws.store.GetVerificationSession(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("VERIFICATION %s\n  State: %s\n  Version: %d\n  Goal: %s rev %d\n  Plan: %s v%d\n  Run: %s v%d\n  Tree: %s\n  Criteria: %d | Claims: %d | Evidence: %d | Blockers: %d", session.ID, session.State, session.Version, session.Binding.GoalID, session.Binding.GoalRevision, session.Binding.PlanID, session.Binding.PlanVersion, session.Binding.RunID, session.Binding.RunVersion, session.Binding.TreeDigest, len(session.Criteria), len(session.Claims), len(session.Evidence), len(session.KnownBlockers)), nil
+}
+
 // handleInspect resolves an identifier against canonical store records. The kind
 // may be given explicitly, otherwise every supported record type is probed so the
 // operator can paste an identifier without first knowing what it refers to.

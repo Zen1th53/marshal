@@ -2,9 +2,13 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/execution"
+	"github.com/Zen1th53/marshal/internal/verification"
 )
 
 func TestExecutionService_GateRefusalIfPlanUnapproved(t *testing.T) {
@@ -77,6 +81,9 @@ func TestExecutionService_StartRunAndExecute_Success(t *testing.T) {
 	if run.State != execution.RunReady {
 		t.Fatalf("expected run state RunReady, got %s", run.State)
 	}
+	execService.Engine().EvidenceOracle().RecordEvidence(execution.ExecutionEvidence{
+		EvidenceID: "ev-readme", RunID: run.RunID, RelevantFiles: []string{"README.md"}, Status: execution.EvidenceValid,
+	})
 
 	// 5. Execute run
 	completedRun, err := execService.ExecuteRun(context.Background(), run.RunID)
@@ -116,6 +123,39 @@ func TestExecutionService_StartRunAndExecute_Success(t *testing.T) {
 	}
 	if len(bundle.Tasks) == 0 {
 		t.Fatalf("expected bundle to have tasks, got 0")
+	}
+	if bundle.FinalGitTree == "" {
+		t.Fatal("Process 06 handoff was not bound to an exact git tree")
+	}
+	// 7. Process 06 independently evaluates the handoff and persists an exact
+	// completion attestation. The execution claim alone is not used as proof.
+	binding, err := runtime.Verification().authoritativeBinding(context.Background(), bundle.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	session := verification.Session{ID: "verify-" + run.RunID, Version: 1, Binding: binding,
+		Criteria:       []verification.Criterion{{ID: "typo-fixed", Mandatory: true, ClaimIDs: []string{"claim-fix"}}},
+		Claims:         []verification.Claim{{ID: "claim-fix", CriterionID: "typo-fixed", SemanticScope: []string{"README.md"}, EvidenceIDs: []string{"verify-readback"}}},
+		Evidence:       []verification.Evidence{{ID: "verify-readback", ClaimID: "claim-fix", Status: verification.StatusPass, ContentDigest: "readback", TreeDigest: binding.TreeDigest, EnvironmentDigest: binding.EnvironmentDigest, ClusterID: "independent-readback", Attempts: 1, Passes: 1}},
+		RequiredChecks: map[string]verification.Status{"security": verification.StatusPass, "runtime_negative": verification.StatusPass}, CreatedAt: now, UpdatedAt: now}
+	if _, err := runtime.Verification().Start(context.Background(), session); err != nil {
+		t.Fatal(err)
+	}
+	verified, err := runtime.Verification().Evaluate(context.Background(), session.ID)
+	if err != nil || verified.State != verification.VerifiedComplete {
+		current, currentErr := runtime.Verification().authoritativeBinding(context.Background(), bundle.RunID)
+		t.Fatalf("verification = %+v, %v; session binding=%+v current=%+v current_err=%v", verified, err, session.Binding, current, currentErr)
+	}
+	payload := []byte("full-chain evidence")
+	digest := sha256.Sum256(payload)
+	evidenceBundle, err := verification.BuildEvidenceBundle("bundle", session.ID, binding, []verification.BundleEntry{{Path: "full-chain.txt", Digest: hex.EncodeToString(digest[:]), Size: int64(len(payload))}}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attestation, err := runtime.Verification().Attest(context.Background(), session.ID, verification.BundleEnvelope{Bundle: evidenceBundle, Payloads: map[string][]byte{"full-chain.txt": payload}}, "full-chain-e2e")
+	if err != nil || attestation.Decision != verification.VerifiedComplete {
+		t.Fatalf("attestation = %s, %v", attestation.Decision, err)
 	}
 }
 

@@ -14,17 +14,17 @@ import (
 
 // Canonical entry refusal reason codes.
 const (
-	ReasonPlanNotFound           = "PLAN_NOT_FOUND"
+	ReasonPlanNotFound            = "PLAN_NOT_FOUND"
 	ReasonPlanNotApproved         = "PLAN_NOT_APPROVED"
-	ReasonPlanStale              = "PLAN_STALE"
-	ReasonGoalVersionMismatch    = "GOAL_VERSION_MISMATCH"
-	ReasonProjectMismatch        = "PROJECT_MISMATCH"
-	ReasonPolicyInvalidated      = "POLICY_INVALIDATED"
-	ReasonAssignmentUngovernable = "ASSIGNMENT_UNGOVERNABLE"
-	ReasonContextInvalid         = "CONTEXT_INVALID"
-	ReasonApprovalPlanMissing    = "APPROVAL_PLAN_MISSING"
+	ReasonPlanStale               = "PLAN_STALE"
+	ReasonGoalVersionMismatch     = "GOAL_VERSION_MISMATCH"
+	ReasonProjectMismatch         = "PROJECT_MISMATCH"
+	ReasonPolicyInvalidated       = "POLICY_INVALIDATED"
+	ReasonAssignmentUngovernable  = "ASSIGNMENT_UNGOVERNABLE"
+	ReasonContextInvalid          = "CONTEXT_INVALID"
+	ReasonApprovalPlanMissing     = "APPROVAL_PLAN_MISSING"
 	ReasonVerificationPlanMissing = "VERIFICATION_PLAN_MISSING"
-	ReasonBudgetContractMissing  = "BUDGET_CONTRACT_MISSING"
+	ReasonBudgetContractMissing   = "BUDGET_CONTRACT_MISSING"
 )
 
 // GateRefusal represents an explicit Process 05 entry gate failure.

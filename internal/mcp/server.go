@@ -278,6 +278,7 @@ func (s *Server) listTools() []Tool {
 			Description: "Run pack and repository verification",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
+		{Name: "process06_status", Description: "Read a canonical Process 06 verification session", InputSchema: objectSchema(map[string]any{"verification_id": stringSchema()}, "verification_id")},
 		{
 			Name:        "memory_status",
 			Description: "Get memory subsystem health, version, and record counts",
@@ -588,6 +589,17 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 		}
 		data, _ := json.Marshal(ver)
 		return string(data), nil
+	case "process06_status":
+		id := stringArg(args, "verification_id")
+		if id == "" {
+			return "", fmt.Errorf("%w: verification_id is required", model.ErrInvalid)
+		}
+		session, err := s.runtime.Verification().Current(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		data, _ := json.Marshal(session)
+		return string(data), nil
 
 	default:
 		return "", fmt.Errorf("%w: unknown tool %s", model.ErrInvalid, name)
@@ -642,7 +654,7 @@ func requiredCapabilityForTool(toolName string) auth.Capability {
 		return auth.CapAgentRead
 	case "events_list", "artifacts_list":
 		return auth.CapEvidenceRead
-	case "verification_status":
+	case "verification_status", "process06_status":
 		return auth.CapVerifyRun
 	default:
 		return auth.CapAll

@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 82
+const LatestSchemaVersion = 83
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2276,6 +2276,42 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 82: %w", err)
 		}
 		version = 82
+	}
+	if version < 83 {
+		// Process 06 review, verification, and completion. Sessions are mutable
+		// only through CAS; terminal attestations are append-only records bound
+		// to their exact Goal/Plan/Run/tree/environment state.
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS verification_sessions (
+				verification_id TEXT PRIMARY KEY,
+				version INTEGER NOT NULL CHECK(version >= 1),
+				project_id TEXT NOT NULL,
+				goal_id TEXT NOT NULL,
+				plan_id TEXT NOT NULL,
+				run_id TEXT NOT NULL,
+				state TEXT NOT NULL CHECK(state IN ('VERIFIED_COMPLETE','PARTIALLY_SATISFIED','VERIFICATION_FAILED','BLOCKED','NEEDS_REEXECUTION','NEEDS_REPLAN','CANCELLED')),
+				session_json TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_verification_sessions_binding
+				ON verification_sessions(project_id, goal_id, plan_id, run_id);
+			CREATE TABLE IF NOT EXISTS completion_attestations (
+				attestation_id TEXT PRIMARY KEY,
+				verification_id TEXT NOT NULL,
+				verification_version INTEGER NOT NULL,
+				decision TEXT NOT NULL,
+				digest TEXT NOT NULL UNIQUE,
+				attestation_json TEXT NOT NULL,
+				issued_at TEXT NOT NULL,
+				FOREIGN KEY(verification_id) REFERENCES verification_sessions(verification_id)
+			);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 83: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(83, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 83: %w", err)
+		}
+		version = 83
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

@@ -690,6 +690,12 @@ func (e *Engine) AssembleProcess06Bundle(ctx context.Context, runID string) (*Pr
 
 	evidenceBundle := e.oracle.ListEvidenceForRun(runID)
 	claims := e.oracle.ListClaimsForRun(runID)
+	// Bind the handoff to the exact committed tree. An empty or guessed tree
+	// would let Process 06 certify a different checkout than Process 05 ran.
+	finalGitTree, err := WorkspaceTreeDigest(e.cfg.ProjectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("%w: resolve final workspace tree for Process 06: %v", ErrIsolationCompromised, err)
+	}
 
 	bundle := &Process06HandoffBundle{
 		ProjectID:               run.ProjectID,
@@ -700,6 +706,7 @@ func (e *Engine) AssembleProcess06Bundle(ctx context.Context, runID string) (*Pr
 		RunID:                   run.RunID,
 		RunVersion:              run.Version,
 		FinalState:              run.State,
+		FinalGitTree:            finalGitTree,
 		Tasks:                   tasksList,
 		Claims:                  claims,
 		EvidenceBundle:          evidenceBundle,

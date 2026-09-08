@@ -139,6 +139,7 @@ func liveRuntimePathAllowed(requestPath string) bool {
 		return true
 	}
 	if strings.HasPrefix(requestPath, "/api/v1/auth/") ||
+		strings.HasPrefix(requestPath, "/api/v1/verifications/") ||
 		strings.HasPrefix(requestPath, "/api/v1/operations/backups") ||
 		strings.HasPrefix(requestPath, "/api/v1/memory/working") ||
 		strings.HasPrefix(requestPath, "/api/v1/memory/mutations/") {
