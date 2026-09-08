@@ -61,7 +61,11 @@ canonical-main integration attestation.
 - Python release tests: PASS, 8 tests
 - Python v6 tests: PASS, 13 tests
 - `conformance/runner.py validate-pack`: PASS
-- Process 06 package manifest: PASS, 51/51 files match SHA-256 and byte size
+- Process 06 spec pack manifest: PASS, 51/51 files match SHA-256 and byte size
+- `distribution/PACK-MANIFEST.json`: PASS after regeneration. The first
+  candidate did not regenerate it, so CI release verification failed with
+  sixty-one unlisted and mismatched paths. The spec pack manifest and the
+  distribution manifest are different gates and both are now recorded.
 - gitleaks over `origin/main..candidate`: PASS, no leaks
 - `govulncheck ./...`: PASS, no vulnerabilities found
 - `gosec ./...`: PASS for Process 06, 0 findings in the new verification code
@@ -94,7 +98,8 @@ qualification run so the numbers are reproducible rather than inherited.
 | 1,000-evidence benchmark | PASS, 729,180 ns/op on this host |
 | Web Vitest | PASS, 51 files / 118 tests |
 | Web production build | PASS |
-| Package manifest | PASS, 51/51 SHA-256 and byte size |
+| Spec pack manifest | PASS, 51/51 SHA-256 and byte size |
+| `distribution/PACK-MANIFEST.json` | PASS after regeneration |
 | gitleaks `origin/main..HEAD` | PASS, 14 commits, no leaks |
 | `govulncheck ./...` | PASS, no vulnerabilities |
 | gofmt on candidate-touched files | PASS after formatting schema 83 |
