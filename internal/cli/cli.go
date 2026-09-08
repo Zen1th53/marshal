@@ -67,6 +67,7 @@ Commands:
   exec start --session SESSION-ID --project PROJECT-ID | run RUN-ID | status RUN-ID | approve APPROVAL-ID | rollback CHECKPOINT-ID | handoff RUN-ID
   review start SESSION.json | status VERIFICATION-ID | evaluate VERIFICATION-ID | attest VERIFICATION-ID --bundle-digest DIGEST --provenance TEXT
   learning commit INPUT.json | show MEMORY-COMMIT-ID | item ITEM-ID | history ITEM-ID | search --project ID | context --project ID | invalidate INPUT.json | trust [TASK-CLASS] | fingerprints --project ID | playbooks --project ID | replays [RUN-ID] | benchmarks [NAME] | export --project ID | restore BUNDLE.json --project ID
+  optimization start INPUT.json | show CYCLE-ID | candidates CYCLE-ID | counterfactuals CYCLE-ID | manifests CYCLE-ID | canaries CYCLE-ID
   help [TOPIC] | help why
   constitution version | invariants | decisions SESSION-ID | violations SESSION-ID
   web serve [--listen ADDR] [--port PORT]
@@ -194,6 +195,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.review(ctx, args[1:])
 	case "learning":
 		err = c.learning(ctx, args[1:])
+	case "optimization":
+		err = c.optimization(ctx, args[1:])
 	case "help":
 		err = c.help(ctx, args[1:])
 	case "constitution":
