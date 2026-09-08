@@ -63,6 +63,7 @@ Commands:
   legal audit [--json] | legal export --output PATH
   setup [status]
   goal <request> | goal explain <request>
+  plan create SESSION-ID --file INPUT.json | show PROJECT-ID | approve PROJECT-ID | cancel PROJECT-ID | handoff SESSION-ID PROJECT-ID
   help [TOPIC] | help why
   constitution version | invariants | decisions SESSION-ID | violations SESSION-ID
   web serve [--listen ADDR] [--port PORT]
@@ -182,6 +183,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.setup(ctx, args[1:])
 	case "goal":
 		err = c.goal(ctx, args[1:])
+	case "plan":
+		err = c.plan(ctx, args[1:])
 	case "help":
 		err = c.help(ctx, args[1:])
 	case "constitution":
