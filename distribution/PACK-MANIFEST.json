@@ -215,6 +215,16 @@
       "bytes": 5256
     },
     {
+      "path": "MARSHAL_PROCESS_03_GOAL_CONTROL_INTELLIGENCE_MEGA_ULTRA/evidence/86_FINAL_EVIDENCE_REPORT.md",
+      "sha256": "5b49b074de0ad4bb4a7e0898980e4c2ccbac06960c5177d4a764cccfb529436b",
+      "bytes": 9249
+    },
+    {
+      "path": "MARSHAL_PROCESS_03_GOAL_CONTROL_INTELLIGENCE_MEGA_ULTRA/evidence/90_ACCEPTANCE_MATRIX.md",
+      "sha256": "c8e32ca55caa569956ff2f48323b235ff1ffb0c5d37b3252d91ebdcc32af6811",
+      "bytes": 6537
+    },
+    {
       "path": "MEMORY-START.md",
       "sha256": "fe3892e6c78ef0b732d53a4d76eab82388953cc774f3881d6d502fa464c11dd3",
       "bytes": 1386
@@ -1008,6 +1018,11 @@
       "path": "docs/getting-started.md",
       "sha256": "4d8a1704b726c5ecea998e9c58c9edc1d52b0aa16f0c6d503e17a505996f2a34",
       "bytes": 2201
+    },
+    {
+      "path": "docs/goals.md",
+      "sha256": "bca971318b9e3438786cf4d3bab72246e69578d5232a36b0a45a5429c6e5656e",
+      "bytes": 5356
     },
     {
       "path": "docs/installation.md",
