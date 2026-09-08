@@ -147,13 +147,18 @@ not exist yet is the wrong trade, and a slow gate is one people stop running.
 | `go test ./...` | **PASS** |
 | `go test -race ./internal/store/` | **PASS** (417s, matching baseline) |
 | Manifest / evidence verification | **PASS** |
-| Community release gate | See note below |
+| Community release gate | **15 PASS, 2 FAIL** (both pre-existing) |
 | Provider qualification | **NOT_RUN** — opt-in env vars unset |
 | MARSHAL-mediated provider E2E | **NOT_RUN** — endpoint-enforcing egress unavailable |
 
 `VULNERABILITY` and `WEB CONTROL PLANE` fail identically at baseline `7ceb9a7`
 (verified during Process 00) and are not attributable to this work.
-`GO TEST RACE` was broken by this work and is fixed by the revert.
+
+`GO TEST RACE` was broken by this work and is fixed by the revert. Confirmed by
+re-running the full gate after the revert: **GO TEST RACE ... PASS**, and
+`DOCS AND MANIFEST ... PASS`, leaving only the two pre-existing failures.
+Independently confirmed by `go test -race -count=1 ./...` across every package,
+which completes clean.
 
 ## Process 00 / 02 integration
 
