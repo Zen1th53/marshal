@@ -28,6 +28,9 @@ func ValidateSession(s Session) error {
 	if err := ValidateBinding(s.Binding); err != nil {
 		return err
 	}
+	if s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() || s.UpdatedAt.Before(s.CreatedAt) {
+		return fmt.Errorf("%w: session timestamps", ErrInvalid)
+	}
 	seen := map[string]bool{}
 	for _, c := range s.Criteria {
 		if c.ID == "" || seen[c.ID] {
@@ -37,10 +40,17 @@ func ValidateSession(s Session) error {
 	}
 	seen = map[string]bool{}
 	for _, c := range s.Claims {
-		if c.ID == "" || c.CriterionID == "" || seen[c.ID] || len(c.SemanticScope) == 0 {
+		if c.ID == "" || c.CriterionID == "" || !containsCriterion(s.Criteria, c.CriterionID) || seen[c.ID] || len(c.SemanticScope) == 0 {
 			return fmt.Errorf("%w: claim", ErrInvalid)
 		}
 		seen[c.ID] = true
+	}
+	seen = map[string]bool{}
+	for _, ev := range s.Evidence {
+		if ev.ID == "" || ev.ClaimID == "" || seen[ev.ID] || !containsClaim(s.Claims, ev.ClaimID) || !validStatus(ev.Status) {
+			return fmt.Errorf("%w: evidence", ErrInvalid)
+		}
+		seen[ev.ID] = true
 	}
 	for name, status := range s.RequiredChecks {
 		if strings.TrimSpace(name) == "" || !validStatus(status) {
@@ -50,11 +60,31 @@ func ValidateSession(s Session) error {
 	return nil
 }
 
+func containsCriterion(criteria []Criterion, id string) bool {
+	for _, c := range criteria {
+		if c.ID == id {
+			return true
+		}
+	}
+	return false
+}
+func containsClaim(claims []Claim, id string) bool {
+	for _, c := range claims {
+		if c.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // Evaluate recomputes the decision from canonical inputs. It never trusts a
 // previously persisted State and treats missing/unknown facts as non-success.
 func Evaluate(s Session, current Binding, now time.Time) Decision {
 	if s.Cancelled {
 		return Cancelled
+	}
+	if ValidateSession(s) != nil {
+		return Blocked
 	}
 	if ValidateBinding(current) != nil || s.Binding.ProjectID != current.ProjectID || s.Binding.GoalID != current.GoalID || s.Binding.RunID != current.RunID {
 		return Blocked
