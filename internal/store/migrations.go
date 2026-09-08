@@ -2305,8 +2305,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 				issued_at TEXT NOT NULL,
 				FOREIGN KEY(verification_id) REFERENCES verification_sessions(verification_id)
 			);
-		`); err != nil { return fmt.Errorf("migrate schema version 83: %w", err) }
-		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(83, ?)", utcNow()); err != nil { return fmt.Errorf("record schema version 83: %w", err) }
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 83: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(83, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 83: %w", err)
+		}
 		version = 83
 	}
 	if err := tx.Commit(); err != nil {
