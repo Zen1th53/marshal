@@ -61,7 +61,30 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/a2a/handoffs", s.handleTypedHandoff)
 	mux.HandleFunc("/a2a/task-memory", s.handleTaskMemory)
 	mux.HandleFunc("/a2a/memory-handoffs", s.handleMemoryHandoff)
+	mux.HandleFunc("/a2a/verifications/{id}", s.handleVerification)
 	return mux
+}
+
+func (s *Server) handleVerification(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	caller, ok := s.authenticateMemoryCaller(w, r)
+	if !ok {
+		return
+	}
+	if !caller.HasCapability(auth.CapVerifyRun) && !caller.HasCapability(auth.CapEvidenceRead) {
+		writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeA2AMemoryError(w, http.StatusBadRequest, model.ErrInvalid)
+		return
+	}
+	session, err := s.runtime.Verification().Current(r.Context(), id)
+	writeA2AMemoryResult(w, session, err)
 }
 
 func (s *Server) handleTaskMemory(w http.ResponseWriter, r *http.Request) {
