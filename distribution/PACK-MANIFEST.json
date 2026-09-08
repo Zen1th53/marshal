@@ -2301,8 +2301,8 @@
     },
     {
       "path": "internal/cli/learning_test.go",
-      "sha256": "f9dd2e54cb3ac3fb05f6afa99e1e8bac4d2397ad644de877ccfbd71af226b4e3",
-      "bytes": 1694
+      "sha256": "0c328f61f5877f90e393234b1657534036512e52d74b9560bfda812b9611909e",
+      "bytes": 2079
     },
     {
       "path": "internal/cli/memory_cli.go",

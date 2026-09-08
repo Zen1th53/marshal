@@ -26,14 +26,22 @@ func TestLearningRejectsUnknownSubcommand(t *testing.T) {
 }
 
 // A search without a project is refused: retrieval is always bounded.
+//
+// The flag check is asserted directly rather than through Execute, because a
+// detached-HEAD checkout fails to open the runtime first and would mask this
+// with an unrelated error.
 func TestLearningSearchRequiresProject(t *testing.T) {
-	var out, errOut bytes.Buffer
-	code := Execute(context.Background(), ".", []string{"learning", "search"}, strings.NewReader(""), &out, &errOut)
-	if code == 0 {
-		t.Fatalf("unbounded search succeeded: %q", out.String())
+	if _, err := requiredFlag([]string{"--general"}, "--project"); err == nil {
+		t.Fatal("a search without a project was accepted")
+	} else if !strings.Contains(err.Error(), "--project") {
+		t.Fatalf("error did not name the missing flag: %v", err)
 	}
-	if !strings.Contains(errOut.String(), "--project") {
-		t.Fatalf("error did not name the missing flag: %q", errOut.String())
+	if _, err := requiredFlag([]string{"--project", "   "}, "--project"); err == nil {
+		t.Fatal("a blank project was accepted")
+	}
+	got, err := requiredFlag([]string{"--project", "proj-1"}, "--project")
+	if err != nil || got != "proj-1" {
+		t.Fatalf("requiredFlag = %q, %v; want proj-1", got, err)
 	}
 }
 
