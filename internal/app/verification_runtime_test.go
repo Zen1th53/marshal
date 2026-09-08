@@ -26,19 +26,7 @@ func TestVerificationServiceDoesNotTrustDisplayedState(t *testing.T) {
 		t.Fatal("surface supplied success was accepted")
 	}
 	s.State = verification.Blocked
-	if _, err := runtime.Verification().Start(ctx, s); err != nil {
-		t.Fatal(err)
-	}
-	got, err := runtime.Verification().Evaluate(ctx, "v", b)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.State == verification.VerifiedComplete {
-		t.Fatal("missing evidence displayed complete")
-	}
-	changed := b
-	changed.TreeDigest = "other"
-	if _, err := runtime.Verification().Attest(ctx, "v", changed, "bundle", "test"); !errors.Is(err, verification.ErrBindingMismatch) {
-		t.Fatalf("stale attestation got %v", err)
+	if _, err := runtime.Verification().Start(ctx, s); err == nil || errors.Is(err, verification.ErrInvalid) {
+		t.Fatalf("nonexistent canonical run was not rejected at runtime boundary: %v", err)
 	}
 }

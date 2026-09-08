@@ -127,21 +127,25 @@ func TestExecutionService_StartRunAndExecute_Success(t *testing.T) {
 	}
 	// 7. Process 06 independently evaluates the handoff and persists an exact
 	// completion attestation. The execution claim alone is not used as proof.
-	binding := verification.Binding{ProjectID: string(bundle.ProjectID), GoalID: bundle.GoalID, GoalRevision: bundle.GoalRevision, PlanID: bundle.PlanID, PlanVersion: bundle.PlanVersion, RunID: bundle.RunID, RunVersion: bundle.RunVersion, TreeDigest: bundle.FinalGitTree, EnvironmentDigest: "test-env"}
+	binding, err := runtime.Verification().authoritativeBinding(context.Background(), bundle.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	now := time.Now().UTC()
 	session := verification.Session{ID: "verify-" + run.RunID, Version: 1, Binding: binding,
 		Criteria:       []verification.Criterion{{ID: "typo-fixed", Mandatory: true, ClaimIDs: []string{"claim-fix"}}},
 		Claims:         []verification.Claim{{ID: "claim-fix", CriterionID: "typo-fixed", SemanticScope: []string{"README.md"}, EvidenceIDs: []string{"verify-readback"}}},
-		Evidence:       []verification.Evidence{{ID: "verify-readback", ClaimID: "claim-fix", Status: verification.StatusPass, ContentDigest: "readback", TreeDigest: bundle.FinalGitTree, EnvironmentDigest: "test-env", ClusterID: "independent-readback", Attempts: 1, Passes: 1}},
+		Evidence:       []verification.Evidence{{ID: "verify-readback", ClaimID: "claim-fix", Status: verification.StatusPass, ContentDigest: "readback", TreeDigest: binding.TreeDigest, EnvironmentDigest: binding.EnvironmentDigest, ClusterID: "independent-readback", Attempts: 1, Passes: 1}},
 		RequiredChecks: map[string]verification.Status{"security": verification.StatusPass, "runtime_negative": verification.StatusPass}, CreatedAt: now, UpdatedAt: now}
 	if _, err := runtime.Verification().Start(context.Background(), session); err != nil {
 		t.Fatal(err)
 	}
-	verified, err := runtime.Verification().Evaluate(context.Background(), session.ID, binding)
+	verified, err := runtime.Verification().Evaluate(context.Background(), session.ID)
 	if err != nil || verified.State != verification.VerifiedComplete {
-		t.Fatalf("verification = %s, %v", verified.State, err)
+		current, currentErr := runtime.Verification().authoritativeBinding(context.Background(), bundle.RunID)
+		t.Fatalf("verification = %+v, %v; session binding=%+v current=%+v current_err=%v", verified, err, session.Binding, current, currentErr)
 	}
-	attestation, err := runtime.Verification().Attest(context.Background(), session.ID, binding, "bundle-digest", "full-chain-e2e")
+	attestation, err := runtime.Verification().Attest(context.Background(), session.ID, "bundle-digest", "full-chain-e2e")
 	if err != nil || attestation.Decision != verification.VerifiedComplete {
 		t.Fatalf("attestation = %s, %v", attestation.Decision, err)
 	}

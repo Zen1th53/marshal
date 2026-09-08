@@ -61,10 +61,19 @@ func WorkspaceTreeDigest(root string) (string, error) {
 			if err != nil {
 				return "", err
 			}
+			opened, err := f.Stat()
+			if err != nil || !os.SameFile(info, opened) || !opened.Mode().IsRegular() {
+				_ = f.Close()
+				return "", fmt.Errorf("workspace entry changed during digest: %s", rel)
+			}
 			_, copyErr := io.Copy(h, f)
+			after, statErr := f.Stat()
 			closeErr := f.Close()
 			if copyErr != nil {
 				return "", copyErr
+			}
+			if statErr != nil || after.Size() != opened.Size() || !after.ModTime().Equal(opened.ModTime()) {
+				return "", fmt.Errorf("workspace entry mutated during digest: %s", rel)
 			}
 			if closeErr != nil {
 				return "", closeErr

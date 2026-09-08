@@ -2,9 +2,14 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	goruntime "runtime"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
@@ -31,6 +36,13 @@ func (s *VerificationService) Start(ctx context.Context, session verification.Se
 	if session.State == verification.VerifiedComplete {
 		return verification.Session{}, fmt.Errorf("%w: a new session cannot self-assert completion", verification.ErrInvalid)
 	}
+	bound, err := s.authoritativeBinding(ctx, session.Binding.RunID)
+	if err != nil {
+		return verification.Session{}, err
+	}
+	if session.Binding != bound {
+		return verification.Session{}, verification.ErrBindingMismatch
+	}
 	if session.CreatedAt.IsZero() {
 		session.CreatedAt = s.now()
 	}
@@ -49,8 +61,12 @@ func (s *VerificationService) Current(ctx context.Context, id string) (verificat
 	return s.runtime.store.GetVerificationSession(ctx, id)
 }
 
-func (s *VerificationService) Evaluate(ctx context.Context, id string, current verification.Binding) (verification.Session, error) {
+func (s *VerificationService) Evaluate(ctx context.Context, id string) (verification.Session, error) {
 	session, err := s.Current(ctx, id)
+	if err != nil {
+		return verification.Session{}, err
+	}
+	current, err := s.authoritativeBinding(ctx, session.Binding.RunID)
 	if err != nil {
 		return verification.Session{}, err
 	}
@@ -64,8 +80,12 @@ func (s *VerificationService) Evaluate(ctx context.Context, id string, current v
 	return s.Current(ctx, id)
 }
 
-func (s *VerificationService) Attest(ctx context.Context, id string, current verification.Binding, bundleDigest, provenance string) (verification.CompletionAttestation, error) {
+func (s *VerificationService) Attest(ctx context.Context, id string, bundleDigest, provenance string) (verification.CompletionAttestation, error) {
 	session, err := s.Current(ctx, id)
+	if err != nil {
+		return verification.CompletionAttestation{}, err
+	}
+	current, err := s.authoritativeBinding(ctx, session.Binding.RunID)
 	if err != nil {
 		return verification.CompletionAttestation{}, err
 	}
@@ -81,4 +101,37 @@ func (s *VerificationService) Attest(ctx context.Context, id string, current ver
 		return verification.CompletionAttestation{}, err
 	}
 	return a, nil
+}
+
+func (s *VerificationService) authoritativeBinding(ctx context.Context, runID string) (verification.Binding, error) {
+	run, err := s.runtime.Execution().GetRun(ctx, runID)
+	if err != nil {
+		return verification.Binding{}, fmt.Errorf("read canonical execution run: %w", err)
+	}
+	goalRevisions, err := s.runtime.store.ListGoalRevisions(ctx, run.GoalID)
+	if err != nil || len(goalRevisions) == 0 {
+		return verification.Binding{}, fmt.Errorf("read canonical goal: %w", err)
+	}
+	goal := goalRevisions[len(goalRevisions)-1]
+	plan, err := s.runtime.store.GetPlan(ctx, run.PlanID, run.PlanVersion)
+	if err != nil {
+		return verification.Binding{}, fmt.Errorf("read canonical plan: %w", err)
+	}
+	if goal.Revision != run.GoalRevision || plan.Goal.GoalID != run.GoalID || plan.Goal.Revision != run.GoalRevision || string(run.ProjectID) != goal.ProjectID || plan.ProjectID != run.ProjectID {
+		return verification.Binding{}, verification.ErrBindingMismatch
+	}
+	tree, err := execution.WorkspaceTreeDigest(s.runtime.layout.Root)
+	if err != nil {
+		return verification.Binding{}, err
+	}
+	environment, err := json.Marshal(struct {
+		GOOS, GOARCH string
+		Schema       int
+		Policy       RuntimePolicyConfig
+	}{goruntime.GOOS, goruntime.GOARCH, 83, s.runtime.runtimePolicy})
+	if err != nil {
+		return verification.Binding{}, err
+	}
+	h := sha256.Sum256(environment)
+	return verification.Binding{ProjectID: string(run.ProjectID), GoalID: run.GoalID, GoalRevision: run.GoalRevision, PlanID: run.PlanID, PlanVersion: run.PlanVersion, RunID: run.RunID, RunVersion: run.Version, TreeDigest: tree, EnvironmentDigest: hex.EncodeToString(h[:])}, nil
 }
