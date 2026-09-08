@@ -53,13 +53,16 @@ func TestUpgradeFromSchema79PreservesExistingState(t *testing.T) {
 	}
 
 	// Rewind to the pre-80 shape with a row already present, then upgrade.
+	// The ledger is rewound to below 80 rather than only removing row 80, so
+	// migration 80 actually re-runs: the runner advances from MAX(version),
+	// and leaving a later row in place would skip it entirely.
 	if _, err := st.db.ExecContext(ctx, `
 		INSERT INTO projects(project_id, repository, default_branch, pack_version, created_at)
 		VALUES('PRJ-UPGRADE', '/tmp/repo', 'main', '6.0.0', '2026-01-01T00:00:00Z');
 		DROP TABLE constitutional_violations;
 		DROP TABLE constitutional_decisions;
 		DROP TABLE session_constitutions;
-		DELETE FROM schema_migrations WHERE version = 80;
+		DELETE FROM schema_migrations WHERE version >= 80;
 	`); err != nil {
 		t.Fatalf("rewind to schema 79: %v", err)
 	}

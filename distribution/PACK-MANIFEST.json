@@ -210,6 +210,11 @@
       "bytes": 6901
     },
     {
+      "path": "MARSHAL_PROCESS_03_GOAL_CONTROL_INTELLIGENCE_MEGA_ULTRA/evidence/03_BASELINE_AUDIT.md",
+      "sha256": "6db477443633bfa184249321ece1e53d8f7f021176181725ac6d82c0b6da73cf",
+      "bytes": 5256
+    },
+    {
       "path": "MEMORY-START.md",
       "sha256": "fe3892e6c78ef0b732d53a4d76eab82388953cc774f3881d6d502fa464c11dd3",
       "bytes": 1386
@@ -2760,6 +2765,36 @@
       "bytes": 5291
     },
     {
+      "path": "internal/goalintake/assessment.go",
+      "sha256": "35c539c5bebf15cb397c694a69dad6d7354127f2b933e477dbd39086135497a2",
+      "bytes": 13526
+    },
+    {
+      "path": "internal/goalintake/assessment_test.go",
+      "sha256": "b3b0eed464b622d24a6dc455501674904c3f66055051a87052a80219eaf8cfe5",
+      "bytes": 9047
+    },
+    {
+      "path": "internal/goalintake/confirmation.go",
+      "sha256": "89d0f5f6580f143707eaebfaecf510c34e412accf98ed40b483446cc2751d638",
+      "bytes": 8058
+    },
+    {
+      "path": "internal/goalintake/confirmation_test.go",
+      "sha256": "bb6d3c3d7bf374b1662da768c6bc65668881835ed294d10eb657a2b2a7ce8720",
+      "bytes": 7808
+    },
+    {
+      "path": "internal/goalintake/formation.go",
+      "sha256": "ce1ed4d097a232f277cde1047b800c155843a7dca6954cc4fbed7a61d83186cf",
+      "bytes": 14489
+    },
+    {
+      "path": "internal/goalintake/formation_test.go",
+      "sha256": "dde0d64c3aaacdb8ad28386d1e9eca8be6d9c006449a3391ecfa2949ade98df9",
+      "bytes": 10777
+    },
+    {
       "path": "internal/harness/governance.go",
       "sha256": "0b3accdbfe6464cc87bd50514afa806da4ef906c8d0e4a49e54e1a75d037327e",
       "bytes": 7692
@@ -4706,8 +4741,8 @@
     },
     {
       "path": "internal/store/constitution_migration_test.go",
-      "sha256": "b6ba385da31ef02b5ed23fe8b3932752c9ca45f61ea4c6fa875f83850ada4007",
-      "bytes": 6509
+      "sha256": "77e17b07c99383e2a935d3b744ea1306f40c0bfb6f38d312caf12593b2556bde",
+      "bytes": 6720
     },
     {
       "path": "internal/store/dag.go",
@@ -5041,8 +5076,8 @@
     },
     {
       "path": "internal/store/migrations.go",
-      "sha256": "0b00059fce3f65178fe9d85210e005612b068a72bc7da6da9a039ffafcfd1cf1",
-      "bytes": 87230
+      "sha256": "cbc97f0f3734a72e56d46f486cd97c836371abe2defe55d1ec277763e1095185",
+      "bytes": 91838
     },
     {
       "path": "internal/store/netpolicy_migration_test.go",
