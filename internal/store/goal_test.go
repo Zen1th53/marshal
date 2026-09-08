@@ -43,7 +43,7 @@ func TestGoalContractPersistenceAndRestart(t *testing.T) {
 			"claim.security.fail_closed",
 			"claim.persistence.durable",
 		},
-		UnderstandingState: model.GoalReady,
+		UnderstandingState:  model.GoalReady,
 		UnresolvedDecisions: nil,
 		Assumptions: []model.Assumption{
 			{ID: "a-1", Text: "Local environment has Go 1.27 installed", Risk: "low", IsReversible: true, CreatedBy: "operator"},

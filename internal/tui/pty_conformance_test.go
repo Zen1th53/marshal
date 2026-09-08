@@ -304,13 +304,13 @@ func TestPTYKeyboardContract(t *testing.T) {
 
 	// Up recalls the previous entry; Ctrl+A jumps home, Ctrl+E to end, and
 	// Ctrl+W deletes the preceding word. Ctrl+U clears, leaving a clean line.
-	s.send("\x1b[A")  // Up
-	s.send("\x01")    // Ctrl+A
-	s.send("\x05")    // Ctrl+E
-	s.send("\x1b[D")  // Left
-	s.send("\x1b[C")  // Right
-	s.send("\x17")    // Ctrl+W
-	s.send("\x15")    // Ctrl+U (clear line)
+	s.send("\x1b[A") // Up
+	s.send("\x01")   // Ctrl+A
+	s.send("\x05")   // Ctrl+E
+	s.send("\x1b[D") // Left
+	s.send("\x1b[C") // Right
+	s.send("\x17")   // Ctrl+W
+	s.send("\x15")   // Ctrl+U (clear line)
 
 	// The session must still be alive and accepting commands after all of that.
 	s.sendLine("/status")

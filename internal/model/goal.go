@@ -8,10 +8,10 @@ import (
 )
 
 var (
-	ErrGoalNotFound         = errors.New("goal contract not found")
-	ErrGoalConflict         = errors.New("goal contract revision conflict")
-	ErrGoalHardConstraint   = errors.New("unauthorized removal or weakening of hard operator constraint")
-	ErrGoalInvalid          = errors.New("invalid goal contract")
+	ErrGoalNotFound       = errors.New("goal contract not found")
+	ErrGoalConflict       = errors.New("goal contract revision conflict")
+	ErrGoalHardConstraint = errors.New("unauthorized removal or weakening of hard operator constraint")
+	ErrGoalInvalid        = errors.New("invalid goal contract")
 )
 
 type UnderstandingState string
@@ -45,9 +45,67 @@ type UnresolvedDecision struct {
 	RequiresUser bool     `json:"requires_user"`
 }
 
+// ConfirmationState records where a Goal stands with the user.
+//
+// It exists so planning has a canonical signal to gate on rather than a
+// convention. DELEGATED is deliberately distinct from APPROVED: a decision
+// policy made on someone's behalf must never later be mistaken for one they
+// made themselves, because "you approved this" and "your settings allowed
+// this" are different claims when a result is reviewed.
+type ConfirmationState string
+
+const (
+	ConfirmationPending    ConfirmationState = "PENDING"
+	ConfirmationApproved   ConfirmationState = "APPROVED"
+	ConfirmationDelegated  ConfirmationState = "DELEGATED"
+	ConfirmationCancelled  ConfirmationState = "CANCELLED"
+	ConfirmationNeedsInput ConfirmationState = "NEEDS_INPUT"
+)
+
+// Settled reports whether planning may proceed from this Goal.
+func (c ConfirmationState) Settled() bool {
+	return c == ConfirmationApproved || c == ConfirmationDelegated
+}
+
+// ValidConfirmationState reports whether a value is one MARSHAL can produce.
+func ValidConfirmationState(state ConfirmationState) bool {
+	switch state {
+	case ConfirmationPending, ConfirmationApproved, ConfirmationDelegated,
+		ConfirmationCancelled, ConfirmationNeedsInput:
+		return true
+	default:
+		return false
+	}
+}
+
 type GoalContract struct {
-	ID                     string               `json:"id"`
-	SessionID              string               `json:"session_id"`
+	ID        string `json:"id"`
+	SessionID string `json:"session_id"`
+	// ProjectID binds the Goal to a project. Without it a Goal could be
+	// planned against any project, which is the cross-project failure that
+	// Process 02 established project identity to prevent.
+	ProjectID string `json:"project_id"`
+	// OriginalRequest is the user's own words, byte for byte. The Goal
+	// otherwise records only MARSHAL's interpretation, with nothing to check
+	// it against, and drift becomes undetectable: after a few revisions there
+	// is a chain of interpretations and no record of what was asked.
+	OriginalRequest string `json:"original_request"`
+	// RequestDigest binds the Goal to the exact text it came from, so a
+	// changed request produces a visibly different Goal.
+	RequestDigest string `json:"request_digest"`
+	// ConstitutionVersion records which rules the Goal was formed under.
+	ConstitutionVersion string `json:"constitution_version"`
+	// Confirmation is where the Goal stands with the user.
+	Confirmation ConfirmationState `json:"confirmation"`
+	// Assessment holds the independent risk dimensions. It is opaque here
+	// because the dimensions belong to Process 03; the store's job is to keep
+	// them, not to interpret them.
+	Assessment map[string]string `json:"assessment,omitempty"`
+	// RevisionReason records why a revision was made, so a Goal's history
+	// shows not only what changed but why.
+	RevisionReason string `json:"revision_reason,omitempty"`
+	// AdvisoryUsed records that a model contributed to the interpretation.
+	AdvisoryUsed           bool                 `json:"advisory_used"`
 	Revision               int64                `json:"revision"`
 	DesiredOutcome         string               `json:"desired_outcome"`
 	ExpectedArtifact       string               `json:"expected_artifact"`
@@ -107,6 +165,12 @@ func ValidateGoal(g GoalContract) error {
 	}
 	if strings.TrimSpace(g.AuthoritySource) == "" {
 		return fmt.Errorf("%w: authority source is required", ErrGoalInvalid)
+	}
+	// A confirmation state MARSHAL cannot produce is refused rather than
+	// stored, so nothing can arrive later claiming to be approved in a way the
+	// code would never have written.
+	if g.Confirmation != "" && !ValidConfirmationState(g.Confirmation) {
+		return fmt.Errorf("%w: unknown confirmation state %q", ErrGoalInvalid, g.Confirmation)
 	}
 	return nil
 }

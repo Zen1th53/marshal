@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -27,7 +26,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/policytest"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/store"
-	"github.com/Zen1th53/marshal/internal/tui"
 )
 
 var (
@@ -63,6 +61,12 @@ Commands:
   memory status | recall | show | list | promote | tombstone | audit
   policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
+  setup [status]
+  goal <request> | goal explain <request>
+  plan create SESSION-ID --file INPUT.json | show PROJECT-ID | approve PROJECT-ID | cancel PROJECT-ID | handoff SESSION-ID PROJECT-ID
+  exec start --session SESSION-ID --project PROJECT-ID | run RUN-ID | status RUN-ID | approve APPROVAL-ID | rollback CHECKPOINT-ID | handoff RUN-ID
+  help [TOPIC] | help why
+  constitution version | invariants | decisions SESSION-ID | violations SESSION-ID
   web serve [--listen ADDR] [--port PORT]
   tui [SESSION-ID]
   daemon
@@ -95,17 +99,14 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		args = args[1:]
 	}
 	if len(args) == 0 {
-		rt, err := app.Open(ctx, c.root)
-		if err == nil && rt != nil {
-			defer rt.Close()
-			ws := tui.NewWorkspace(rt.Store(), rt.ProjectID(), "default-session")
-			if err := ws.Run(ctx, c.stdin, c.stdout); err != nil {
-				fmt.Fprintln(stderr, err)
-				return exitCode(err)
-			}
-			return 0
+		// Running `marshal` with no arguments enters the control center.
+		// Previously any startup problem fell through to a usage screen, which
+		// told the user neither that something had failed nor what to do about
+		// it. The control center now opens and explains the situation itself.
+		if err := c.controlCenter(ctx, nil); err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitCode(err)
 		}
-		fmt.Fprint(stdout, usage)
 		return 0
 	}
 	if args[0] == "--help" || args[0] == "-h" {
@@ -120,11 +121,13 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 	switch args[0] {
 	case "version", "--version", "-version", "-v":
 		err = c.print(map[string]any{
-			"version":        Version,
-			"commit":         Commit,
-			"build_date":     BuildDate,
-			"schema_version": store.LatestSchemaVersion,
-		}, fmt.Sprintf("MARSHAL %s (commit: %s, build date: %s, schema: v%d)", Version, Commit, BuildDate, store.LatestSchemaVersion))
+			"version":              Version,
+			"commit":               Commit,
+			"build_date":           BuildDate,
+			"schema_version":       store.LatestSchemaVersion,
+			"constitution_version": constitutionVersionString(),
+		}, fmt.Sprintf("MARSHAL %s (commit: %s, build date: %s, schema: v%d, constitution: %s)",
+			Version, Commit, BuildDate, store.LatestSchemaVersion, constitutionVersionString()))
 	case "init":
 		err = c.init(ctx)
 	case "doctor":
@@ -177,6 +180,18 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.memory(ctx, args[1:])
 	case "web":
 		err = c.web(ctx, args[1:])
+	case "setup":
+		err = c.setup(ctx, args[1:])
+	case "goal":
+		err = c.goal(ctx, args[1:])
+	case "plan":
+		err = c.plan(ctx, args[1:])
+	case "exec", "execution":
+		err = c.exec(ctx, args[1:])
+	case "help":
+		err = c.help(ctx, args[1:])
+	case "constitution":
+		err = c.constitution(ctx, args[1:])
 	case "tui":
 		err = c.tui(ctx, args[1:])
 	default:
@@ -638,12 +653,7 @@ func (c command) adapters(ctx context.Context) error {
 	for _, name := range names {
 		binary, err := project.FindBinary(name)
 		available := err == nil
-		version := "unknown"
-		if available {
-			if out, err := exec.CommandContext(ctx, binary, "--version").Output(); err == nil {
-				version = strings.TrimSpace(string(out))
-			}
-		}
+		version := "not_probed"
 		list = append(list, map[string]any{
 			"name":      name,
 			"available": available,
@@ -680,14 +690,10 @@ func (c command) adapter(ctx context.Context, args []string) error {
 			"name": name, "available": false, "error": err.Error(),
 		}, fmt.Sprintf("adapter %s: unavailable (CLI missing)", name))
 	}
-	out, err := exec.CommandContext(ctx, binary, "--version").Output()
-	version := "unknown"
-	if err == nil {
-		version = strings.TrimSpace(string(out))
-	}
+	version := "not_probed"
 	return c.print(map[string]any{
 		"name": name, "available": true, "binary": binary, "version": version,
-	}, fmt.Sprintf("adapter %s: available (%s)", name, version))
+	}, fmt.Sprintf("adapter %s: executable detected; version probe deferred to governed runtime", name))
 }
 
 func (c command) mcp(ctx context.Context, args []string) error {
@@ -746,8 +752,8 @@ func (c command) mcp(ctx context.Context, args []string) error {
 		}
 	case "status":
 		return c.print(map[string]any{
-			"status": "ready", "protocol_version": mcp.ProtocolVersion2026,
-		}, "MCP server ready (2026-07-28)")
+			"status": "unknown", "protocol_version": mcp.ProtocolVersion2026, "reason": "no live endpoint probe performed",
+		}, "MCP server status UNKNOWN (no live endpoint probe performed)")
 	default:
 		return fmt.Errorf("%w: unknown mcp subcommand %s", model.ErrInvalid, args[0])
 	}
@@ -809,8 +815,8 @@ func (c command) a2a(ctx context.Context, args []string) error {
 		}
 	case "status":
 		return c.print(map[string]any{
-			"status": "ready", "protocol_version": a2a.ProtocolVersion100,
-		}, "A2A server ready (1.0.0)")
+			"status": "unknown", "protocol_version": a2a.ProtocolVersion100, "reason": "no live endpoint probe performed",
+		}, "A2A server status UNKNOWN (no live endpoint probe performed)")
 	default:
 		return fmt.Errorf("%w: unknown a2a subcommand %s", model.ErrInvalid, args[0])
 	}

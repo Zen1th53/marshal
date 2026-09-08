@@ -11,6 +11,21 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
+// goalIntakePayload is the Process 03 intake state, stored as one JSON column.
+//
+// These fields are always read and written together, so separate columns would
+// buy nothing and cost a measurable amount: each additional column is another
+// ALTER in the migration chain, and that chain is replayed by every store test.
+type goalIntakePayload struct {
+	OriginalRequest     string            `json:"original_request,omitempty"`
+	RequestDigest       string            `json:"request_digest,omitempty"`
+	ConstitutionVersion string            `json:"constitution_version,omitempty"`
+	Confirmation        string            `json:"confirmation,omitempty"`
+	Assessment          map[string]string `json:"assessment,omitempty"`
+	RevisionReason      string            `json:"revision_reason,omitempty"`
+	AdvisoryUsed        bool              `json:"advisory_used,omitempty"`
+}
+
 // SaveGoalContract persists a GoalContract revision under CAS concurrency control.
 // If expectedRevision == 0, it creates revision 1 as the active goal for the session.
 // If expectedRevision > 0, it ensures the current active revision matches expectedRevision,
@@ -97,6 +112,23 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 	if err != nil {
 		return fmt.Errorf("marshal assumptions: %w", err)
 	}
+	// A Goal with no explicit confirmation is pending. Defaulting to anything
+	// else would let an unconfirmed Goal read as settled.
+	if goal.Confirmation == "" {
+		goal.Confirmation = model.ConfirmationPending
+	}
+	intakeJSON, err := json.Marshal(goalIntakePayload{
+		OriginalRequest:     goal.OriginalRequest,
+		RequestDigest:       goal.RequestDigest,
+		ConstitutionVersion: goal.ConstitutionVersion,
+		Confirmation:        string(goal.Confirmation),
+		Assessment:          goal.Assessment,
+		RevisionReason:      goal.RevisionReason,
+		AdvisoryUsed:        goal.AdvisoryUsed,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal goal intake: %w", err)
+	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if goal.CreatedAt.IsZero() {
@@ -110,8 +142,8 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 			scope_json, constraints_json, do_not_do_json, success_criteria_json,
 			risk, authority_source, budget_ref, critical_claims_json,
 			understanding_state, unresolved_decisions_json, assumptions_json,
-			repo_commit, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			repo_commit, created_at, updated_at, project_id, intake_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		goal.ID,
 		goal.SessionID,
@@ -132,6 +164,8 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 		goal.RepoCommit,
 		goal.CreatedAt.Format(time.RFC3339Nano),
 		goal.UpdatedAt.Format(time.RFC3339Nano),
+		goal.ProjectID,
+		string(intakeJSON),
 	)
 	if err != nil {
 		return fmt.Errorf("insert goal contract: %w", err)
@@ -164,7 +198,7 @@ func (s *Store) GetGoalContract(ctx context.Context, goalID string, revision int
 			scope_json, constraints_json, do_not_do_json, success_criteria_json,
 			risk, authority_source, budget_ref, critical_claims_json,
 			understanding_state, unresolved_decisions_json, assumptions_json,
-			repo_commit, created_at, updated_at
+			repo_commit, created_at, updated_at, project_id, intake_json
 		FROM goal_contracts
 		WHERE goal_id = ? AND revision = ?
 	`, goalID, revision)
@@ -180,7 +214,7 @@ func (s *Store) GetActiveGoalContract(ctx context.Context, sessionID string) (mo
 			g.scope_json, g.constraints_json, g.do_not_do_json, g.success_criteria_json,
 			g.risk, g.authority_source, g.budget_ref, g.critical_claims_json,
 			g.understanding_state, g.unresolved_decisions_json, g.assumptions_json,
-			g.repo_commit, g.created_at, g.updated_at
+			g.repo_commit, g.created_at, g.updated_at, g.project_id, g.intake_json
 		FROM goal_active a
 		JOIN goal_contracts g ON a.active_goal_id = g.goal_id AND a.active_revision = g.revision
 		WHERE a.session_id = ?
@@ -197,7 +231,7 @@ func (s *Store) ListGoalRevisions(ctx context.Context, goalID string) ([]model.G
 			scope_json, constraints_json, do_not_do_json, success_criteria_json,
 			risk, authority_source, budget_ref, critical_claims_json,
 			understanding_state, unresolved_decisions_json, assumptions_json,
-			repo_commit, created_at, updated_at
+			repo_commit, created_at, updated_at, project_id, intake_json
 		FROM goal_contracts
 		WHERE goal_id = ?
 		ORDER BY revision ASC
@@ -259,6 +293,7 @@ func scanGoalContract(r rowScanner) (model.GoalContract, error) {
 		scopeJSON, constraintsJSON, doNotDoJSON, successCriteriaJSON string
 		criticalClaimsJSON, unresolvedDecisionsJSON, assumptionsJSON string
 		riskStr, stateStr, createdAtStr, updatedAtStr                string
+		intakeJSON                                                   string
 	)
 
 	err := r.Scan(
@@ -281,6 +316,8 @@ func scanGoalContract(r rowScanner) (model.GoalContract, error) {
 		&g.RepoCommit,
 		&createdAtStr,
 		&updatedAtStr,
+		&g.ProjectID,
+		&intakeJSON,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -291,6 +328,25 @@ func scanGoalContract(r rowScanner) (model.GoalContract, error) {
 
 	g.Risk = model.Risk(riskStr)
 	g.UnderstandingState = model.UnderstandingState(stateStr)
+	if intakeJSON != "" && intakeJSON != "{}" {
+		var intake goalIntakePayload
+		if err := json.Unmarshal([]byte(intakeJSON), &intake); err != nil {
+			return model.GoalContract{}, fmt.Errorf("unmarshal goal intake: %w", err)
+		}
+		g.OriginalRequest = intake.OriginalRequest
+		g.RequestDigest = intake.RequestDigest
+		g.ConstitutionVersion = intake.ConstitutionVersion
+		g.Confirmation = model.ConfirmationState(intake.Confirmation)
+		g.Assessment = intake.Assessment
+		g.RevisionReason = intake.RevisionReason
+		g.AdvisoryUsed = intake.AdvisoryUsed
+	}
+	// A Goal predating goal intake, or one whose payload omitted it, is
+	// pending. Reading an absent confirmation as anything else would let an
+	// unconfirmed Goal permit planning.
+	if g.Confirmation == "" {
+		g.Confirmation = model.ConfirmationPending
+	}
 
 	if err := json.Unmarshal([]byte(scopeJSON), &g.Scope); err != nil {
 		return model.GoalContract{}, fmt.Errorf("unmarshal scope: %w", err)

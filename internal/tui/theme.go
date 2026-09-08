@@ -44,7 +44,7 @@ func RuneWidth(r rune) int {
 		(r >= 0xff01 && r <= 0xff60) || // Fullwidth Forms
 		(r >= 0xffe0 && r <= 0xffe6) ||
 		(r >= 0x1f300 && r <= 0x1faff) || // Misc Symbols and Pictographs, Emoticons, Transport, Supplemental Symbols
-		(r >= 0x2600 && r <= 0x27bf) {   // Misc Symbols, Dingbats
+		(r >= 0x2600 && r <= 0x27bf) { // Misc Symbols, Dingbats
 		return 2
 	}
 	return 1
@@ -168,7 +168,7 @@ func NewTheme(mode ThemeMode, unicode bool, animation bool) *Theme {
 		t.Warning = "\x1b[1;93m"    // Bright yellow
 		t.Danger = "\x1b[1;91m"     // Bright red
 		t.Accent = "\x1b[1;96m"     // Bright cyan
-		t.Muted = "\x1b[97m"       // Bright white
+		t.Muted = "\x1b[97m"        // Bright white
 		t.Active = "\x1b[1;96m"     // Bright cyan
 		t.Border = "\x1b[1;97m"     // Bright white
 		t.HeaderBg = "\x1b[1;97;40m"

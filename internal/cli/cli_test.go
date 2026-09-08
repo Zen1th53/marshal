@@ -80,6 +80,14 @@ func TestPolicyTestSubcommandHasUsage(t *testing.T) {
 	}
 }
 
+func TestPlanCommandIsRegistered(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Execute(context.Background(), ".", []string{"plan"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "marshal plan create") {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+}
+
 func TestAdaptersAndProbeCLI(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), ".", []string{"--json", "adapters"}, strings.NewReader(""), &stdout, &stderr)

@@ -210,9 +210,10 @@ func outputSection(s UIState, th *Theme, cols int) []string {
 		return nil
 	}
 
-	label := th.Colorize(th.Muted, s.LastCommand)
+	command := RedactContent(s.LastCommand, s.KnownSecrets)
+	label := th.Colorize(th.Muted, command)
 	if s.LastOutputIsError {
-		label = th.Colorize(th.Danger, s.LastCommand)
+		label = th.Colorize(th.Danger, command)
 	}
 	out := []string{PadCell(" "+label, cols)}
 

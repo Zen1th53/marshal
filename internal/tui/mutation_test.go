@@ -52,7 +52,7 @@ func installedHarness(t *testing.T) string {
 
 // TestModelSelectPersists is the regression for the audit finding that
 // "/model select" reported success while writing nothing.
-func TestModelSelectPersists(t *testing.T) {
+func TestModelSelectFailsClosedWithoutRuntimeProfileService(t *testing.T) {
 	st, ws, ctx := newMutationWorkspace(t)
 	harness := installedHarness(t)
 
@@ -65,47 +65,41 @@ func TestModelSelectPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/model select: %v", err)
 	}
-	if !strings.Contains(out, "persisted") {
-		t.Errorf("expected a persistence confirmation, got %q", out)
+	if !strings.Contains(out, "NOT applied") {
+		t.Errorf("expected fail-closed response, got %q", out)
 	}
-
-	after, err := st.GetHarnessProfile(ctx, harness)
-	if err != nil || after == nil {
-		t.Fatalf("read back harness profile: %v", err)
-	}
-	if after.DefaultModel != "audit-model-XYZ" {
-		t.Errorf("model preference did not persist: DefaultModel=%q", after.DefaultModel)
+	if after, err := st.GetHarnessProfile(ctx, harness); err == nil && after != nil && after.DefaultModel == "audit-model-XYZ" {
+		t.Fatal("model selection mutated a profile despite lacking runtime integration")
 	}
 }
 
 // TestEffortPersists proves "/effort" writes to the canonical profile.
-func TestEffortPersists(t *testing.T) {
+func TestEffortFailsClosedWithoutRuntimeProfileService(t *testing.T) {
 	st, ws, ctx := newMutationWorkspace(t)
 	_ = installedHarness(t)
 
-	if _, err := ws.ExecuteCommand(ctx, "/effort high"); err != nil {
+	out, err := ws.ExecuteCommand(ctx, "/effort high")
+	if err != nil {
 		t.Fatalf("/effort: %v", err)
 	}
-
-	found := false
+	if !strings.Contains(out, "NOT applied") {
+		t.Fatalf("expected fail-closed response, got %q", out)
+	}
 	for _, pr := range ProbeHarnesses() {
 		p, err := st.GetHarnessProfile(ctx, pr.HarnessName)
 		if err == nil && p != nil {
 			for _, k := range p.ReasoningKnobs {
 				if k == "high" {
-					found = true
+					t.Fatal("reasoning effort mutated a profile despite lacking runtime integration")
 				}
 			}
 		}
-	}
-	if !found {
-		t.Error("reasoning effort was not persisted to any harness profile")
 	}
 }
 
 // TestHarnessSelectPersists proves a role binding reaches the canonical store,
 // and that an unknown harness is refused rather than silently accepted.
-func TestHarnessSelectPersists(t *testing.T) {
+func TestHarnessSelectFailsClosedWithoutRuntimeProfileService(t *testing.T) {
 	st, ws, ctx := newMutationWorkspace(t)
 	harness := installedHarness(t)
 
@@ -113,22 +107,11 @@ func TestHarnessSelectPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/harness select: %v", err)
 	}
-	if !strings.Contains(out, "persisted") {
-		t.Errorf("expected persistence confirmation, got %q", out)
+	if !strings.Contains(out, "NOT applied") {
+		t.Errorf("expected fail-closed response, got %q", out)
 	}
-
-	profile, err := st.GetHarnessProfile(ctx, harness)
-	if err != nil || profile == nil {
-		t.Fatalf("read back profile: %v", err)
-	}
-	bound := false
-	for _, m := range profile.NativeModes {
-		if m == "role:qa" {
-			bound = true
-		}
-	}
-	if !bound {
-		t.Errorf("role binding did not persist; NativeModes=%v", profile.NativeModes)
+	if profile, err := st.GetHarnessProfile(ctx, harness); err == nil && profile != nil {
+		t.Fatalf("harness selection mutated a profile: %#v", profile)
 	}
 
 	// An unknown harness must be refused, not recorded.
@@ -136,8 +119,8 @@ func TestHarnessSelectPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/harness select unknown: %v", err)
 	}
-	if !strings.Contains(out, "Unknown harness") {
-		t.Errorf("expected refusal for an unknown harness, got %q", out)
+	if !strings.Contains(out, "NOT applied") {
+		t.Errorf("expected fail-closed response for unknown harness, got %q", out)
 	}
 }
 
@@ -161,49 +144,19 @@ func TestProviderConfigRefusesInlineCredential(t *testing.T) {
 // TestGoalAddConstraintDoesNotOverwriteOutcome is the regression for the audit
 // finding that "/goal add-constraint no-net" replaced the goal statement with
 // the literal argument text.
-func TestGoalAddConstraintDoesNotOverwriteOutcome(t *testing.T) {
+func TestGoalMutationFailsClosedWithoutRuntimeIdentity(t *testing.T) {
 	st, ws, ctx := newMutationWorkspace(t)
 
 	const outcome = "Ship the qualification fix"
-	if _, err := ws.ExecuteCommand(ctx, "/goal "+outcome); err != nil {
-		t.Fatalf("/goal: %v", err)
-	}
-
-	out, err := ws.ExecuteCommand(ctx, "/goal add-constraint no-network-egress")
+	out, err := ws.ExecuteCommand(ctx, "/goal "+outcome)
 	if err != nil {
 		t.Fatalf("/goal add-constraint: %v", err)
 	}
-	if !strings.Contains(out, "added") {
-		t.Errorf("expected an add confirmation, got %q", out)
+	if !strings.Contains(out, "unavailable") {
+		t.Errorf("expected authenticated runtime requirement, got %q", out)
 	}
-
-	stored, err := st.GetActiveGoalContract(ctx, "sess-mut")
-	if err != nil {
-		t.Fatalf("read back goal: %v", err)
-	}
-	if stored.DesiredOutcome != outcome {
-		t.Errorf("the goal outcome was overwritten: %q (want %q)", stored.DesiredOutcome, outcome)
-	}
-	if len(stored.Constraints) != 1 || stored.Constraints[0].Text != "no-network-egress" {
-		t.Fatalf("constraint did not persist: %+v", stored.Constraints)
-	}
-	if stored.Revision < 2 {
-		t.Errorf("adding a constraint should advance the revision, got %d", stored.Revision)
-	}
-
-	// And removal works symmetrically.
-	if _, err := ws.ExecuteCommand(ctx, "/goal rm-constraint no-network-egress"); err != nil {
-		t.Fatalf("/goal rm-constraint: %v", err)
-	}
-	stored, err = st.GetActiveGoalContract(ctx, "sess-mut")
-	if err != nil {
-		t.Fatalf("read back after removal: %v", err)
-	}
-	if len(stored.Constraints) != 0 {
-		t.Errorf("constraint was not removed: %+v", stored.Constraints)
-	}
-	if stored.DesiredOutcome != outcome {
-		t.Errorf("removal disturbed the outcome: %q", stored.DesiredOutcome)
+	if _, err := st.GetActiveGoalContract(ctx, "sess-mut"); err == nil {
+		t.Fatal("goal mutation unexpectedly reached Store")
 	}
 }
 

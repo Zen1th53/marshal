@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -30,14 +29,16 @@ func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	version, err := commandOutput(probeCtx, c.binary, "--version")
-	if err != nil {
-		return adapter.Probe{}, fmt.Errorf("%w: probe Codex version: %v", model.ErrUnavailable, err)
+	versionResult, err := c.runner.Run(probeCtx, adapter.Command{Path: c.binary, Args: []string{"--version"}})
+	if err != nil || versionResult.ExitCode != 0 {
+		return adapter.Probe{}, fmt.Errorf("%w: probe Codex version failed: %v", model.ErrUnavailable, err)
 	}
-	help, err := commandOutput(probeCtx, c.binary, "exec", "--help")
-	if err != nil {
-		return adapter.Probe{}, fmt.Errorf("%w: probe Codex exec: %v", model.ErrUnavailable, err)
+	helpResult, err := c.runner.Run(probeCtx, adapter.Command{Path: c.binary, Args: []string{"exec", "--help"}})
+	if err != nil || helpResult.ExitCode != 0 {
+		return adapter.Probe{}, fmt.Errorf("%w: probe Codex exec failed: %v", model.ErrUnavailable, err)
 	}
+	version := string(versionResult.Stdout)
+	help := string(helpResult.Stdout)
 	for _, required := range []string{"--json", "--sandbox", "--ephemeral", "--ignore-user-config", "--cd"} {
 		if !strings.Contains(help, required) {
 			return adapter.Probe{}, fmt.Errorf("%w: Codex exec lacks required flag %s", model.ErrUnavailable, required)
@@ -170,15 +171,4 @@ func parseJSONL(output []byte, result *adapter.Result) {
 			}
 		}
 	}
-}
-
-func commandOutput(ctx context.Context, binary string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, binary, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
-	}
-	return string(output), nil
 }

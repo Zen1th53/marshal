@@ -543,6 +543,10 @@ func (s *Server) handleTaskDelegation(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unsupported A2A protocol version", http.StatusBadRequest)
 		return
 	}
+	if s.authManager != nil && caller.Kind == auth.KindA2AAgent && req.SenderID != caller.Name {
+		http.Error(w, "Forbidden: sender_id is not bound to the authenticated A2A principal", http.StatusForbidden)
+		return
+	}
 
 	role := model.Role(req.RequestedRole)
 	if role == "" {

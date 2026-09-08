@@ -46,14 +46,17 @@ func TestBwrapExecutesInsideWritableWorktree(t *testing.T) {
 func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 	worktree := t.TempDir()
 	scratch := t.TempDir()
-	auth := t.TempDir()
+	tool := filepath.Join(t.TempDir(), "provider-bin")
+	if err := os.WriteFile(tool, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	gitMetadata := t.TempDir()
 	backend := NewBwrap("/sbin/bwrap")
 	spec, err := backend.Wrap(model.SandboxRequest{
 		Worktree:     worktree,
 		WritableDirs: []string{scratch},
 		ReadOnlyBinds: []model.Bind{
-			{Source: auth, Target: "/home/marshal/.codex"},
+			{Source: tool, Target: "/home/marshal/bin/provider"},
 			{Source: gitMetadata, Target: gitMetadata},
 		},
 		NetworkAllowed: false,
@@ -66,9 +69,9 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 	}
 	for _, required := range []string{
 		"--unshare-net", "--unshare-pid", "--tmpfs", "/tmp",
-		"/home/marshal/.codex",
+		"/home/marshal/bin/provider",
 		"--bind", worktree, worktree, "--bind", scratch, scratch,
-		"--ro-bind", auth, "/home/marshal/.codex", "--", "/usr/bin/codex", "exec",
+		"--ro-bind", tool, "/home/marshal/bin/provider", "--", "/usr/bin/codex", "exec",
 		gitMetadata,
 	} {
 		if !slices.Contains(spec.Args, required) {
@@ -78,21 +81,39 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 	if slices.Contains(spec.Args, ".marshal/runtime.sock") {
 		t.Fatalf("runtime socket exposed: %#v", spec.Args)
 	}
-	authTarget := slices.Index(spec.Args, "/home/marshal/.codex")
-	if authTarget < 1 || spec.Args[authTarget-1] != "--dir" {
-		t.Fatalf("Codex auth target parent is not created before binding: %#v", spec.Args)
+	toolTarget := slices.Index(spec.Args, "/home/marshal/bin/provider")
+	if toolTarget < 2 || spec.Args[toolTarget-2] != "--ro-bind" {
+		t.Fatalf("provider executable target is not read-only bound: %#v", spec.Args)
+	}
+}
+
+func TestWrapRejectsNativeProviderCredentialsAndInstructions(t *testing.T) {
+	worktree := t.TempDir()
+	backend := NewBwrap("/sbin/bwrap")
+	for _, target := range []string{
+		"/home/marshal/.codex/auth.json",
+		"/home/marshal/.claude/CLAUDE.md",
+		"/home/marshal/.config/opencode/config.json",
+	} {
+		source := filepath.Join(t.TempDir(), filepath.Base(target))
+		if err := os.WriteFile(source, []byte("unmanaged"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := backend.Wrap(model.SandboxRequest{Worktree: worktree, ReadOnlyBinds: []model.Bind{{Source: source, Target: target}}}, []string{"/bin/true"}); err == nil {
+			t.Fatalf("credential or native instruction bind accepted: %s", target)
+		}
 	}
 }
 
 func TestChooseIsolationNeverSilentlyDropsNetworkDenialOrStrongRisk(t *testing.T) {
 	unavailable := model.IsolationCapability{Level: model.IsolationProcessOnly, Available: false, Reason: "missing"}
 	tests := []struct {
-		name                   string
-		risk                   model.Risk
-		networkAllowed         bool
-		allowProcessOnly       bool
-		wantLevel              model.IsolationLevel
-		wantErr                bool
+		name             string
+		risk             model.Risk
+		networkAllowed   bool
+		allowProcessOnly bool
+		wantLevel        model.IsolationLevel
+		wantErr          bool
 	}{
 		// Without an explicit opt-in, every unavailable-bwrap case must fail
 		// closed, regardless of risk or network.
@@ -100,10 +121,9 @@ func TestChooseIsolationNeverSilentlyDropsNetworkDenialOrStrongRisk(t *testing.T
 		{name: "low risk network denied no opt-in", risk: model.R1, networkAllowed: false, allowProcessOnly: false, wantLevel: model.IsolationBlocked, wantErr: true},
 		{name: "zero risk no opt-in", risk: model.R0, networkAllowed: false, allowProcessOnly: false, wantLevel: model.IsolationBlocked, wantErr: true},
 		{name: "high risk no opt-in", risk: model.R2, networkAllowed: true, allowProcessOnly: false, wantLevel: model.IsolationBlocked, wantErr: true},
-		// Explicit opt-in permits process-only only for low risk classes.
-		{name: "low risk opt-in", risk: model.R1, networkAllowed: true, allowProcessOnly: true, wantLevel: model.IsolationProcessOnly},
-		{name: "zero risk opt-in", risk: model.R0, networkAllowed: false, allowProcessOnly: true, wantLevel: model.IsolationProcessOnly},
-		// Explicit opt-in must never weaken high-risk handling.
+		// Legacy opt-in must not weaken any risk class.
+		{name: "low risk opt-in still blocked", risk: model.R1, networkAllowed: true, allowProcessOnly: true, wantLevel: model.IsolationBlocked, wantErr: true},
+		{name: "zero risk opt-in still blocked", risk: model.R0, networkAllowed: false, allowProcessOnly: true, wantLevel: model.IsolationBlocked, wantErr: true},
 		{name: "high risk opt-in still blocked", risk: model.R2, networkAllowed: true, allowProcessOnly: true, wantLevel: model.IsolationBlocked, wantErr: true},
 		{name: "critical risk opt-in still blocked", risk: model.R3, networkAllowed: true, allowProcessOnly: true, wantLevel: model.IsolationBlocked, wantErr: true},
 	}

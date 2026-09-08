@@ -13,18 +13,29 @@ import (
 )
 
 type capturingRunner struct {
-	command adapter.Command
-	result  adapter.ProcessResult
+	command         adapter.Command
+	result          adapter.ProcessResult
+	probeCompatible bool
 }
 
 func (r *capturingRunner) Run(_ context.Context, command adapter.Command) (adapter.ProcessResult, error) {
 	r.command = command
+	if len(command.Args) == 1 && command.Args[0] == "--version" {
+		return adapter.ProcessResult{Stdout: []byte("codex-cli 0.test.0\n")}, nil
+	}
+	if len(command.Args) == 2 && command.Args[0] == "exec" && command.Args[1] == "--help" {
+		help := "--json --sandbox --ephemeral --ignore-user-config --cd"
+		if !r.probeCompatible {
+			help = "--json"
+		}
+		return adapter.ProcessResult{Stdout: []byte(help)}, nil
+	}
 	return r.result, nil
 }
 
 func TestProbeRequiresCurrentNativeFlags(t *testing.T) {
 	binary := fakeProbeBinary(t, true)
-	client := New(binary, &capturingRunner{})
+	client := New(binary, &capturingRunner{probeCompatible: true})
 	probe, err := client.Probe(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +47,7 @@ func TestProbeRequiresCurrentNativeFlags(t *testing.T) {
 
 func TestProbeRejectsCLIWithoutRequiredFlags(t *testing.T) {
 	binary := fakeProbeBinary(t, false)
-	client := New(binary, &capturingRunner{})
+	client := New(binary, &capturingRunner{probeCompatible: false})
 	if _, err := client.Probe(context.Background()); err == nil {
 		t.Fatal("probe accepted incompatible CLI help")
 	}

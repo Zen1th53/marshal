@@ -61,10 +61,9 @@ func seedPendingApproval(t *testing.T, st *store.Store, ctx context.Context, id 
 // TestStatusCommandReportsCanonicalState proves /status reads real persisted goal,
 // termination and claim state rather than rendering a static banner.
 func TestStatusCommandReportsCanonicalState(t *testing.T) {
-	_, ws, ctx := newControlWorkspace(t)
-
-	if _, err := ws.ExecuteCommand(ctx, "/goal Harden the v1.5.0 release gates"); err != nil {
-		t.Fatalf("/goal: %v", err)
+	st, ws, ctx := newControlWorkspace(t)
+	if err := st.SaveGoalContract(ctx, model.GoalContract{ID: "goal-status", SessionID: "sess-control", DesiredOutcome: "Harden the v1.5.0 release gates", Risk: model.R1, AuthoritySource: "test", UnderstandingState: model.GoalReady}, 0); err != nil {
+		t.Fatalf("seed goal: %v", err)
 	}
 
 	out, err := ws.ExecuteCommand(ctx, "/status")
@@ -86,16 +85,21 @@ func TestStatusCommandReportsCanonicalState(t *testing.T) {
 		}
 	}
 
-	// Cancelling must change what /status reports, proving it re-reads the store.
-	if _, err := ws.ExecuteCommand(ctx, "/cancel"); err != nil {
+	// The TUI has no runtime cancellation handle and must fail closed without
+	// fabricating a terminal state.
+	cancelOut, err := ws.ExecuteCommand(ctx, "/cancel")
+	if err != nil {
 		t.Fatalf("/cancel: %v", err)
+	}
+	if !strings.Contains(cancelOut, "NOT performed") {
+		t.Fatalf("expected explicit fail-closed cancellation response: %s", cancelOut)
 	}
 	out, err = ws.ExecuteCommand(ctx, "/status")
 	if err != nil {
 		t.Fatalf("/status after cancel: %v", err)
 	}
-	if !strings.Contains(out, string(model.StateCancelled)) {
-		t.Fatalf("expected cancelled termination in /status:\n%s", out)
+	if !strings.Contains(out, "Termination:  RUNNING") {
+		t.Fatalf("cancel refusal must leave canonical termination unchanged:\n%s", out)
 	}
 }
 
@@ -113,19 +117,51 @@ func TestStatusCommandCountsPendingApprovals(t *testing.T) {
 	}
 }
 
+func TestUnknownEvidenceIsNeverReportedAsRecorded(t *testing.T) {
+	_, ws, ctx := newControlWorkspace(t)
+	out, err := ws.ExecuteCommand(ctx, "/evidence E-does-not-exist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "NOT FOUND") || strings.Contains(out, "recorded in evidence ledger") {
+		t.Fatalf("unknown evidence was misrepresented: %s", out)
+	}
+}
+
+func TestRollbackRefusalDoesNotRecordSuccess(t *testing.T) {
+	st, ws, ctx := newControlWorkspace(t)
+	cp := model.HandoffCheckpoint{ID: "cp-no-restore", Version: 1, SessionID: "sess-control", TaskID: "task-control", Role: "operator", Author: model.AuthorProvenance{AgentID: "operator", Harness: "test"}, CreatedAt: time.Now().UTC()}
+	if err := st.SaveHandoffCheckpoint(ctx, cp); err != nil {
+		t.Fatal(err)
+	}
+	out, err := ws.ExecuteCommand(ctx, "/rollback "+cp.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "NOT performed") {
+		t.Fatalf("rollback refusal is ambiguous: %s", out)
+	}
+	rows, err := st.GetCheckpointRollbacks(ctx, cp.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("rollback refusal recorded a false success: %#v", rows)
+	}
+}
+
 // TestInspectResolvesCanonicalRecords proves /inspect reads each supported record
 // type out of the canonical store, including without an explicit kind.
 func TestInspectResolvesCanonicalRecords(t *testing.T) {
 	st, ws, ctx := newControlWorkspace(t)
 
-	out, err := ws.ExecuteCommand(ctx, "/checkpoint")
-	if err != nil {
-		t.Fatalf("/checkpoint: %v", err)
+	cpID := "cp-inspect-1"
+	if err := st.SaveHandoffCheckpoint(ctx, model.HandoffCheckpoint{ID: cpID, Version: 1, SessionID: "sess-control", TaskID: "task-control", Role: "operator", Author: model.AuthorProvenance{AgentID: "operator", Harness: "test"}, CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("seed checkpoint: %v", err)
 	}
-	cpID := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out), "Durable checkpoint created: "))
 
 	// Explicit kind.
-	out, err = ws.ExecuteCommand(ctx, "/inspect checkpoint "+cpID)
+	out, err := ws.ExecuteCommand(ctx, "/inspect checkpoint "+cpID)
 	if err != nil {
 		t.Fatalf("/inspect checkpoint: %v", err)
 	}
@@ -179,9 +215,9 @@ func TestInspectResolvesCanonicalRecords(t *testing.T) {
 	}
 }
 
-// TestApproveResolvesPendingApprovalDurably proves /approve mutates the canonical
-// approval record, and that the decision survives re-reading the store.
-func TestApproveResolvesPendingApprovalDurably(t *testing.T) {
+// Approval commands must not bypass authenticated runtime authorization by
+// writing directly to Store.
+func TestApproveFailsClosedWithoutRuntimeIdentity(t *testing.T) {
 	st, ws, ctx := newControlWorkspace(t)
 	seedPendingApproval(t, st, ctx, "apr-approve-1")
 
@@ -189,49 +225,22 @@ func TestApproveResolvesPendingApprovalDurably(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/approve: %v", err)
 	}
-	if !strings.Contains(out, "granted") {
-		t.Fatalf("expected grant confirmation:\n%s", out)
+	if !strings.Contains(out, "unavailable") {
+		t.Fatalf("expected fail-closed response:\n%s", out)
 	}
 
 	stored, err := st.GetApproval(ctx, "apr-approve-1")
 	if err != nil {
 		t.Fatalf("re-read approval: %v", err)
 	}
-	if stored.Status != model.ApprovalApproved {
-		t.Fatalf("expected approved status, got %s", stored.Status)
-	}
-	if stored.ApprovedBy != "operator" {
-		t.Fatalf("expected operator decision, got %q", stored.ApprovedBy)
-	}
-	if stored.ExpiresAt == nil || !stored.ExpiresAt.After(time.Now().UTC()) {
-		t.Fatalf("expected a future expiry, got %v", stored.ExpiresAt)
-	}
-	if stored.Revision != 1 {
-		t.Fatalf("expected revision bumped to 1, got %d", stored.Revision)
-	}
-
-	// It must no longer be pending.
-	pending, err := st.ListPendingApprovals(ctx, controlProjectID)
-	if err != nil {
-		t.Fatalf("list pending: %v", err)
-	}
-	if len(pending) != 0 {
-		t.Fatalf("expected no pending approvals, got %d", len(pending))
-	}
-
-	// A resolved approval cannot be resolved twice.
-	out, err = ws.ExecuteCommand(ctx, "/approve apr-approve-1")
-	if err != nil {
-		t.Fatalf("/approve repeat: %v", err)
-	}
-	if !strings.Contains(out, "already approved") {
-		t.Fatalf("expected refusal to re-resolve:\n%s", out)
+	if stored.Status != model.ApprovalRequested || stored.Revision != 0 || stored.ApprovedBy != "" {
+		t.Fatalf("TUI mutated approval without runtime identity: %#v", stored)
 	}
 }
 
 // TestRejectRecordsDenialDurably proves /reject persists a denial rather than
 // discarding the request, keeping the rejection auditable.
-func TestRejectRecordsDenialDurably(t *testing.T) {
+func TestRejectFailsClosedWithoutRuntimeIdentity(t *testing.T) {
 	st, ws, ctx := newControlWorkspace(t)
 	seedPendingApproval(t, st, ctx, "apr-reject-1")
 
@@ -239,70 +248,31 @@ func TestRejectRecordsDenialDurably(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/reject: %v", err)
 	}
-	if !strings.Contains(out, "rejected") {
-		t.Fatalf("expected rejection confirmation:\n%s", out)
+	if !strings.Contains(out, "unavailable") {
+		t.Fatalf("expected fail-closed response:\n%s", out)
 	}
 
 	stored, err := st.GetApproval(ctx, "apr-reject-1")
 	if err != nil {
 		t.Fatalf("re-read approval: %v", err)
 	}
-	if stored.Status != model.ApprovalDenied {
-		t.Fatalf("expected denied status, got %s", stored.Status)
-	}
-	if stored.ApprovedBy != "operator" {
-		t.Fatalf("expected operator decision, got %q", stored.ApprovedBy)
-	}
-	if stored.ExpiresAt != nil {
-		t.Fatalf("a denial must not carry an expiry, got %v", stored.ExpiresAt)
+	if stored.Status != model.ApprovalRequested || stored.Revision != 0 || stored.ApprovedBy != "" {
+		t.Fatalf("TUI mutated approval without runtime identity: %#v", stored)
 	}
 }
 
 // TestApproveWithoutIDDisambiguates proves the command never silently grants one
 // of several pending approvals.
 func TestApproveWithoutIDDisambiguates(t *testing.T) {
-	st, ws, ctx := newControlWorkspace(t)
+	_, ws, ctx := newControlWorkspace(t)
 
 	// No pending approvals at all.
 	out, err := ws.ExecuteCommand(ctx, "/approve")
 	if err != nil {
 		t.Fatalf("/approve empty: %v", err)
 	}
-	if !strings.Contains(out, "No pending approvals") {
-		t.Fatalf("expected empty-queue message:\n%s", out)
-	}
-
-	// Exactly one pending approval resolves implicitly.
-	seedPendingApproval(t, st, ctx, "apr-solo")
-	out, err = ws.ExecuteCommand(ctx, "/approve")
-	if err != nil {
-		t.Fatalf("/approve solo: %v", err)
-	}
-	if !strings.Contains(out, "apr-solo") || !strings.Contains(out, "granted") {
-		t.Fatalf("expected the single approval to be granted:\n%s", out)
-	}
-
-	// Two pending approvals must force disambiguation.
-	seedPendingApproval(t, st, ctx, "apr-many-1")
-	seedPendingApproval(t, st, ctx, "apr-many-2")
-	out, err = ws.ExecuteCommand(ctx, "/approve")
-	if err != nil {
-		t.Fatalf("/approve ambiguous: %v", err)
-	}
-	if !strings.Contains(out, "2 approvals pending") {
-		t.Fatalf("expected disambiguation prompt:\n%s", out)
-	}
-	for _, id := range []string{"apr-many-1", "apr-many-2"} {
-		if !strings.Contains(out, id) {
-			t.Fatalf("expected %s listed in disambiguation:\n%s", id, out)
-		}
-		stored, err := st.GetApproval(ctx, id)
-		if err != nil {
-			t.Fatalf("re-read %s: %v", id, err)
-		}
-		if stored.Status != model.ApprovalRequested {
-			t.Fatalf("%s must remain pending, got %s", id, stored.Status)
-		}
+	if !strings.Contains(out, "unavailable") {
+		t.Fatalf("expected authenticated runtime requirement:\n%s", out)
 	}
 }
 
@@ -315,7 +285,7 @@ func TestRouteUsesRealULTRARoutingLayer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/route: %v", err)
 	}
-	if !strings.Contains(out, "ULTRA ROUTE (current state)") {
+	if !strings.Contains(out, "ADVISORY ROUTE (current state)") || !strings.Contains(out, "NOT APPLIED") {
 		t.Fatalf("expected current-state route:\n%s", out)
 	}
 	// The default fixed role is developer, which the router maps onto codex.
@@ -328,7 +298,7 @@ func TestRouteUsesRealULTRARoutingLayer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/route role=appsec: %v", err)
 	}
-	if !strings.Contains(out, "ULTRA ROUTE RECOMPUTED (role=appsec)") {
+	if !strings.Contains(out, "ADVISORY ROUTE RECOMPUTED (role=appsec)") {
 		t.Fatalf("expected recompute banner:\n%s", out)
 	}
 	if !strings.Contains(out, "Harness:      antigravity") {
@@ -370,23 +340,26 @@ func TestRouteUsesRealULTRARoutingLayer(t *testing.T) {
 	}
 }
 
-// TestRoutePersistsExplanationForWhy proves /route feeds the same routing
-// explanation the dashboard and /why read, rather than being a cosmetic printout.
-func TestRoutePersistsExplanationForWhy(t *testing.T) {
+// An advisory route must not be persisted or presented as applied runtime state.
+func TestRouteIsExplicitlyAdvisory(t *testing.T) {
 	_, ws, ctx := newControlWorkspace(t)
 
-	if _, err := ws.ExecuteCommand(ctx, "/route role=qa"); err != nil {
+	routeOut, err := ws.ExecuteCommand(ctx, "/route role=qa")
+	if err != nil {
 		t.Fatalf("/route role=qa: %v", err)
+	}
+	if !strings.Contains(routeOut, "ADVISORY ONLY") {
+		t.Fatalf("route must disclose that it is not applied: %s", routeOut)
 	}
 	out, err := ws.ExecuteCommand(ctx, "/why")
 	if err != nil {
 		t.Fatalf("/why: %v", err)
 	}
-	if !strings.Contains(out, "opencode") {
-		t.Fatalf("expected /why to reflect the qa route:\n%s", out)
+	if strings.Contains(out, "opencode selected for qa") {
+		t.Fatalf("/why presented advisory override as applied:\n%s", out)
 	}
-	if ws.GetUIState().RouteExplanation == "" {
-		t.Fatal("expected route explanation persisted into UI state")
+	if ws.GetUIState().RouteExplanation != "" {
+		t.Fatal("advisory route explanation leaked into applied UI state")
 	}
 }
 

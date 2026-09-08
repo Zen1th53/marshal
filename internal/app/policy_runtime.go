@@ -43,7 +43,25 @@ func executeWithPolicy(ctx context.Context, evaluator *policy.Evaluator, current
 
 func (r *Runtime) authorizeRuntime(ctx context.Context, subject, task, provider string, action policy.Action, resource policy.Resource) error {
 	if !r.policyConfigured {
-		return nil
+		// A missing lifecycle policy must never become an implicit allow. Runs
+		// may fall back only to the repository's mandatory CAPABILITIES policy,
+		// evaluated against a real registered agent and task. Other privileged
+		// actions require an active canonical policy snapshot.
+		if action != policy.Action("shell.execute") || task == "" {
+			return fmt.Errorf("%w: active runtime policy is not configured", model.ErrPolicyDenied)
+		}
+		agent, err := r.store.GetAgent(ctx, subject)
+		if err != nil {
+			return fmt.Errorf("%w: runtime subject is not a registered agent", model.ErrPolicyDenied)
+		}
+		if _, err := r.store.GetTask(ctx, task); err != nil {
+			return fmt.Errorf("%w: runtime task is unavailable", model.ErrPolicyDenied)
+		}
+		return policy.Enforce(r.policy, model.PolicyInput{
+			AgentID: subject, SessionID: "preflight-" + subject, Role: agent.Role,
+			TaskID: task, Operation: model.ShellExecute, Target: string(resource),
+			TaskOwned: true, TargetInScope: true, Required: true,
+		}, func() error { return nil })
 	}
 	started := time.Now()
 	var resultErr error

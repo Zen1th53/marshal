@@ -506,11 +506,8 @@ func TestE2E_13_TUIRuntimeSessionLifecycle(t *testing.T) {
 	}
 
 	state := ws.GetUIState()
-	if state.Goal.DesiredOutcome != "Deliver release-ready v1.5.0" {
-		t.Fatalf("unexpected goal in state: %+v", state.Goal)
-	}
-	if len(state.RecentMessages) != 1 {
-		t.Fatalf("expected 1 operator message in recent messages, got %d", len(state.RecentMessages))
+	if state.Goal.DesiredOutcome != "" || len(state.RecentMessages) != 0 {
+		t.Fatalf("unauthenticated TUI mutation changed canonical state: %+v", state)
 	}
 
 	// Each command the release evidence names must actually be handled, not fall
@@ -521,9 +518,9 @@ func TestE2E_13_TUIRuntimeSessionLifecycle(t *testing.T) {
 	}
 	for _, want := range []string{
 		"CANONICAL STATUS DETAIL",
-		"Deliver release-ready v1.5.0",
+		"authenticated runtime authorization is required",
 		"No claims registered under the active goal.",
-		"ULTRA ROUTE RECOMPUTED (role=qa)",
+		"ADVISORY ROUTE RECOMPUTED (role=qa)",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in TUI session output:\n%s", want, rendered)

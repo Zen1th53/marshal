@@ -162,7 +162,7 @@ func TestInteractiveWorkspaceAndCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute /goal error: %v", err)
 	}
-	if !strings.Contains(out, "Active Goal updated to revision 1") {
+	if !strings.Contains(out, "unavailable") {
 		t.Fatalf("unexpected goal output: %s", out)
 	}
 
@@ -189,17 +189,16 @@ func TestInteractiveWorkspaceAndCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute /checkpoint error: %v", err)
 	}
-	if !strings.Contains(out, "Durable checkpoint created: cp-tui-") {
+	if !strings.Contains(out, "unavailable") {
 		t.Fatalf("unexpected checkpoint output: %s", out)
 	}
-	cpID := strings.TrimSpace(strings.TrimPrefix(out, "Durable checkpoint created: "))
 
 	// Test 5: Rollback
-	out, err = ws.ExecuteCommand(ctx, "/rollback "+cpID)
+	out, err = ws.ExecuteCommand(ctx, "/rollback cp-not-created")
 	if err != nil {
 		t.Fatalf("execute /rollback error: %v", err)
 	}
-	if !strings.Contains(out, "Successfully rolled back to checkpoint") {
+	if !strings.Contains(out, "NOT performed") {
 		t.Fatalf("unexpected rollback output: %s", out)
 	}
 

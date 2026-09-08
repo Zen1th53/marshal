@@ -22,9 +22,9 @@ func TestResolveAdapterIssuesScopedShellExecGrant(t *testing.T) {
 	}
 	t.Cleanup(func() { runtime.Close() })
 
-	// Deterministic process-only fallback so this test does not depend on
-	// whether bubblewrap is installed on the host.
-	runtime.allowProcessOnly = true
+	if _, err := trustedBwrapPath(); err != nil {
+		t.Skip("trusted bubblewrap unavailable")
+	}
 
 	fakeDir := t.TempDir()
 	fakeBin := filepath.Join(fakeDir, "codex")

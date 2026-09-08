@@ -2,8 +2,6 @@ package a2a
 
 import (
 	"bytes"
-	"strings"
-	"time"
 	"context"
 	"encoding/json"
 	"io"
@@ -11,14 +9,16 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/httpsrv"
-	"github.com/Zen1th53/marshal/internal/ratelimit"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/protocol"
+	"github.com/Zen1th53/marshal/internal/ratelimit"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -394,7 +394,20 @@ func TestA2APrincipalKindIsolation(t *testing.T) {
 		t.Fatalf("expected 403 Forbidden for MCP token calling A2A, got %d", resp.StatusCode)
 	}
 
-	// 2. A2A Token -> 200 OK
+	// 2. A2A token cannot forge a different sender identity.
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/a2a/tasks", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+a2aToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 for forged sender identity, got %d", resp.StatusCode)
+	}
+	taskReq["sender_id"] = "a2a-agent"
+	body, _ = json.Marshal(taskReq)
 	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/a2a/tasks", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a2aToken)
@@ -404,7 +417,7 @@ func TestA2APrincipalKindIsolation(t *testing.T) {
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 OK for A2A token, got %d", resp.StatusCode)
+		t.Fatalf("expected 200 OK for bound A2A token, got %d", resp.StatusCode)
 	}
 
 	// 3. Local User Token -> 200 OK

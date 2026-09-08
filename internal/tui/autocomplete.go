@@ -7,14 +7,14 @@ import (
 
 // CompletionContext supplies live runtime objects for tab completion.
 type CompletionContext struct {
-	Commands     []string // slash commands e.g. ["/status", "/rollback", "/route", ...]
-	Agents       []string // real active agent names e.g. ["claude", "codex", "opencode"]
-	Claims       []string // live claim IDs e.g. ["C-01", "C-02"]
-	Evidence     []string // live evidence IDs e.g. ["E-01", "E-02"]
-	Tasks        []string // live task IDs e.g. ["T-01", "T-02"]
-	Checkpoints  []string // live checkpoint IDs e.g. ["CP-01", "CP-02"]
-	Subcommands  map[string][]string
-	Models       []string
+	Commands    []string // slash commands e.g. ["/status", "/rollback", "/route", ...]
+	Agents      []string // real active agent names e.g. ["claude", "codex", "opencode"]
+	Claims      []string // live claim IDs e.g. ["C-01", "C-02"]
+	Evidence    []string // live evidence IDs e.g. ["E-01", "E-02"]
+	Tasks       []string // live task IDs e.g. ["T-01", "T-02"]
+	Checkpoints []string // live checkpoint IDs e.g. ["CP-01", "CP-02"]
+	Subcommands map[string][]string
+	Models      []string
 }
 
 // Completer manages contextual Tab completion.

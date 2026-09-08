@@ -103,6 +103,22 @@ func TestComposerHistory(t *testing.T) {
 	}
 }
 
+func TestSubmittedSecretsAreRedactedBeforeHistory(t *testing.T) {
+	c := NewComposer(NewTheme(ThemeDefault, true, false))
+	secret := "tiny7"
+	input := "/provider config codex token=" + secret
+	for _, r := range input {
+		c.HandleKey(KeyEvent{Type: KeyRune, Rune: r})
+	}
+	submitted, ok := c.HandleKey(KeyEvent{Type: KeyEnter})
+	if !ok || !strings.Contains(submitted, secret) {
+		t.Fatalf("handler must receive original command for safe rejection: %q", submitted)
+	}
+	if len(c.history) != 1 || strings.Contains(c.history[0], secret) || !strings.Contains(c.history[0], "[REDACTED]") {
+		t.Fatalf("secret entered composer history: %#v", c.history)
+	}
+}
+
 func TestComposerPaste(t *testing.T) {
 	c := NewComposer(NewTheme(ThemeDefault, true, true))
 	c.HandleKey(KeyEvent{Type: KeyPaste, Paste: "@codex fix auth bug"})

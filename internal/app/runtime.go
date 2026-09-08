@@ -32,6 +32,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/netpolicy"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/protocol"
 	"github.com/Zen1th53/marshal/internal/risk"
 	"github.com/Zen1th53/marshal/internal/sandbox"
@@ -68,6 +69,8 @@ type Runtime struct {
 	memoryService      *MemoryService
 	quorumEngine       *quorum.Engine
 	allowProcessOnly   bool
+	execService        *ExecutionService
+	execMu             sync.Mutex
 }
 
 type Options struct {
@@ -85,9 +88,9 @@ type Options struct {
 	ProcessAuthority   authz.Authority
 	HandoffAuthorizer  protocol.Authorizer
 	QuorumEngine       *quorum.Engine
-	// AllowProcessOnlyFallback permits unsandboxed process-only execution for
-	// R0/R1 tasks when bubblewrap is unavailable. This is an explicit security
-	// opt-in and defaults to false (fail closed).
+	// AllowProcessOnlyFallback is retained for source compatibility. Process-only
+	// provider execution is no longer permitted because it cannot enforce the
+	// filesystem or network boundary.
 	AllowProcessOnlyFallback bool
 }
 
@@ -196,6 +199,15 @@ func Bootstrap(ctx context.Context, root string) (project.Layout, error) {
 	}); err != nil {
 		return project.Layout{}, err
 	}
+	// Establish the project's identity at setup rather than waiting for the
+	// first open. Setting a project up is the moment MARSHAL takes it on, so
+	// it is the honest place to record which project this is — and it means
+	// readiness can report a confirmed identity immediately rather than
+	// "not recorded yet" until something happens to open the runtime.
+	//
+	// A failure here does not fail setup: the project is usable, and the
+	// identity will be established on first open instead.
+	_, _ = projectid.Adopt(ctx, nil, layout.Root, layout.RuntimeDir)
 	return layout, nil
 }
 
@@ -225,9 +237,18 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		database.Close()
 		return nil, fmt.Errorf("runtime is not initialized: %w", err)
 	}
-	if identity.Repository != layout.Root {
+	// Admission is decided by project identity rather than by comparing paths.
+	// A project that moved is the same project and is admitted; a directory
+	// holding a different repository's state is refused even at an unchanged
+	// path. Comparing paths got both of those backwards.
+	admission, admitErr := admitProject(ctx, layout, identity)
+	if admitErr != nil {
 		database.Close()
-		return nil, fmt.Errorf("%w: runtime repository identity differs", model.ErrConflict)
+		return nil, admitErr
+	}
+	if !admission.Admitted {
+		database.Close()
+		return nil, fmt.Errorf("%w: %s", model.ErrConflict, admission.Reason)
 	}
 	engine, err := policy.Load(filepath.Join(layout.Root, "CAPABILITIES.yaml"))
 	if err != nil {
@@ -306,6 +327,9 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	}
 	if options.RuntimePolicy != nil {
 		rt.runtimePolicy = *options.RuntimePolicy
+		rt.policyConfigured = true
+	} else if active, activeErr := database.GetActivePolicy(ctx); activeErr == nil {
+		rt.runtimePolicy = RuntimePolicyConfig{PolicyID: active.Policy.ID, PolicyVersion: active.Policy.Version}
 		rt.policyConfigured = true
 	}
 	handoffAuthorizer := options.HandoffAuthorizer
@@ -463,26 +487,43 @@ func (r *Runtime) ReconcileStartup(ctx context.Context) error {
 	}
 
 	// 2. Reconcile remaining tasks
+	_, err := r.releaseStaleLeases(ctx)
+	return err
+}
+
+// releaseStaleLeases returns tasks whose lease has expired to the pool and
+// reports how many were reclaimed.
+//
+// The operation is idempotent: a task whose lease has already been released no
+// longer has an active one, so a repeated or crashed startup reclaims it once
+// and then finds nothing to do. That is what makes it safe to run on every
+// open, and what stops a restart from double-counting the recovery it reports.
+func (r *Runtime) releaseStaleLeases(ctx context.Context) (int, error) {
 	tasks, err := r.store.ListTasks(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
+	reclaimed := 0
 	for _, task := range tasks {
-		if task.Status == model.TaskWorking || task.Status == model.TaskClaimed {
-			active, activeErr := r.store.ActiveLease(ctx, task.ID)
-			if activeErr == nil && active.Lease.ExpiresAt.Before(time.Now().UTC()) {
-				_ = r.store.ReleaseTask(ctx, model.ReleaseRequest{
-					TaskID:           task.ID,
-					LeaseID:          active.Lease.ID,
-					SessionID:        active.Lease.SessionID,
-					AgentID:          active.AgentID,
-					ExpectedRevision: active.TaskRevision,
-					BlockedReason:    "reconciled stale lease from previous daemon instance",
-				})
-			}
+		if task.Status != model.TaskWorking && task.Status != model.TaskClaimed {
+			continue
+		}
+		active, activeErr := r.store.ActiveLease(ctx, task.ID)
+		if activeErr != nil || !active.Lease.ExpiresAt.Before(time.Now().UTC()) {
+			continue
+		}
+		if releaseErr := r.store.ReleaseTask(ctx, model.ReleaseRequest{
+			TaskID:           task.ID,
+			LeaseID:          active.Lease.ID,
+			SessionID:        active.Lease.SessionID,
+			AgentID:          active.AgentID,
+			ExpectedRevision: active.TaskRevision,
+			BlockedReason:    "reconciled stale lease from previous daemon instance",
+		}); releaseErr == nil {
+			reclaimed++
 		}
 	}
-	return nil
+	return reclaimed, nil
 }
 
 func (r *Runtime) CancelTask(ctx context.Context, taskID string) error {
@@ -613,8 +654,16 @@ func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResu
 	if len(request.Command) == 0 {
 		request.Command = []string{"python", "conformance/runner.py", "validate-pack"}
 	}
-	if err := r.authorizeRuntime(ctx, "verification", "", "", policy.Action("verify"), policy.Resource(request.Command[0])); err != nil {
-		return VerifyResult{}, err
+	if r.policyConfigured {
+		if err := r.authorizeRuntime(ctx, "verification", "", "", policy.Action("verify"), policy.Resource(request.Command[0])); err != nil {
+			return VerifyResult{}, err
+		}
+	} else {
+		resolved, err := resolveBaselineVerificationCommand(request.Command)
+		if err != nil {
+			return VerifyResult{}, err
+		}
+		request.Command = resolved
 	}
 	process := worker.New(15*time.Minute, 3*time.Second, 8<<20)
 	result, err := process.Run(ctx, adapter.Command{Path: request.Command[0], Args: request.Command[1:], Dir: r.layout.Root})
@@ -629,6 +678,56 @@ func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResu
 		return verification, fmt.Errorf("verification failed with exit status %d", result.ExitCode)
 	}
 	return verification, nil
+}
+
+func resolveBaselineVerificationCommand(command []string) ([]string, error) {
+	if len(command) == 0 {
+		return nil, fmt.Errorf("%w: verification command is empty", model.ErrInvalid)
+	}
+	name := filepath.Base(command[0])
+	args := command[1:]
+	var candidates []string
+	switch name {
+	case "git":
+		if len(args) > 0 {
+			switch args[0] {
+			case "status", "diff", "log", "show", "rev-parse":
+				candidates = []string{"/usr/bin/git", "/bin/git"}
+				if p, err := exec.LookPath("git"); err == nil {
+					candidates = append(candidates, p)
+				}
+			}
+		}
+	case "go":
+		if len(args) > 0 && (args[0] == "test" || args[0] == "vet") {
+			candidates = []string{"/usr/local/go/bin/go", "/usr/bin/go"}
+			if p, err := exec.LookPath("go"); err == nil {
+				candidates = append(candidates, p)
+			}
+		}
+	case "python", "python3":
+		if len(args) >= 2 && filepath.Clean(args[0]) == "conformance/runner.py" && args[1] == "validate-pack" {
+			candidates = []string{"/usr/bin/python3", "/usr/local/bin/python3", "/usr/local/bin/python"}
+			if p, err := exec.LookPath("python3"); err == nil {
+				candidates = append(candidates, p)
+			}
+			if p, err := exec.LookPath("python"); err == nil {
+				candidates = append(candidates, p)
+			}
+		}
+	}
+	for _, candidate := range candidates {
+		resolved, err := filepath.EvalSymlinks(candidate)
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(resolved)
+		if err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o022 == 0 {
+			result := append([]string{resolved}, args...)
+			return result, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: command %q requires an active runtime policy or trusted system executable", model.ErrPolicyDenied, strings.Join(command, " "))
 }
 
 func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error) {
@@ -875,6 +974,9 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			commitInput.Operation = model.GitCommit
 			commitInput.Target = worktreeState.Path
 			runErr = policy.Enforce(r.policy, commitInput, func() error {
+				if err := ensureNoSecretsInWorktree(ctx, worktreeState.Path, leasedSecrets); err != nil {
+					return err
+				}
 				return commitTaskChanges(ctx, worktreeState.Path, task.ID)
 			})
 			if runErr == nil {
@@ -1038,6 +1140,63 @@ func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {
 	return nil
 }
 
+func ensureNoSecretsInWorktree(ctx context.Context, worktreePath string, secrets []string) error {
+	var paths []string
+	for _, args := range [][]string{
+		{"-C", worktreePath, "diff", "--name-only", "-z", "HEAD"},
+		{"-C", worktreePath, "ls-files", "--others", "--exclude-standard", "-z"},
+	} {
+		output, err := exec.CommandContext(ctx, "git", args...).Output()
+		if err != nil {
+			return fmt.Errorf("%w: enumerate changed files", model.ErrUnavailable)
+		}
+		for _, item := range bytes.Split(output, []byte{0}) {
+			if len(item) > 0 {
+				paths = append(paths, string(item))
+			}
+		}
+	}
+	seen := make(map[string]struct{}, len(paths))
+	for _, relative := range paths {
+		if _, ok := seen[relative]; ok {
+			continue
+		}
+		seen[relative] = struct{}{}
+		lower := strings.ToLower(filepath.ToSlash(relative))
+		for _, forbidden := range []string{"auth.json", ".env", ".netrc", ".git-credentials", "credentials.json", "service-account.json"} {
+			if strings.Contains(lower, forbidden) {
+				return fmt.Errorf("%w: changed credential-bearing path %q", evidence.ErrSecretRejected, relative)
+			}
+		}
+		absolute := filepath.Join(worktreePath, relative)
+		resolved, err := filepath.EvalSymlinks(absolute)
+		if err != nil {
+			continue
+		}
+		within, err := filepath.Rel(worktreePath, resolved)
+		if err != nil || within == ".." || strings.HasPrefix(within, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("%w: changed path escapes worktree: %q", model.ErrInvalid, relative)
+		}
+		info, err := os.Stat(resolved)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		if info.Size() > 8<<20 {
+			return fmt.Errorf("%w: changed file %q exceeds secret-inspection limit", evidence.ErrSecretRejected, relative)
+		}
+		content, err := os.ReadFile(resolved)
+		if err != nil {
+			return fmt.Errorf("%w: inspect changed file %q", model.ErrUnavailable, relative)
+		}
+		for _, secret := range secrets {
+			if secret != "" && bytes.Contains(content, []byte(secret)) {
+				return fmt.Errorf("%w: changed file %q contains a leased secret", evidence.ErrSecretRejected, relative)
+			}
+		}
+	}
+	return nil
+}
+
 // egressEnforcementAvailable reports whether the runtime can actually restrict
 // provider egress to the task's endpoint allowlist. bubblewrap can only toggle
 // network entirely (--unshare-net) and cannot enforce host/port rules; no
@@ -1066,7 +1225,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	}
 	process := worker.New(30*time.Minute, 3*time.Second, 8<<20)
 	var runner adapter.ProcessRunner = process
-	if bwrapPath, lookupErr := exec.LookPath("bwrap"); lookupErr == nil {
+	if bwrapPath, lookupErr := trustedBwrapPath(); lookupErr == nil {
 		backend := sandbox.NewBwrap(bwrapPath)
 		capability := backend.Probe(ctx)
 		chosen, chooseErr := sandbox.ChooseIsolation(capability, task.Risk, networkAllowed, r.allowProcessOnly)
@@ -1093,30 +1252,14 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				"/home/marshal/.cache/"+name,
 			)
 
-			if home, homeErr := os.UserHomeDir(); homeErr == nil {
-				// Bind only explicit minimal config files, avoiding broad host directory traversal
-				for _, sub := range []string{
-					"auth.json", "config.toml", "config.json", "AGENTS.md",
-				} {
-					src := filepath.Join(home, "."+name, sub)
-					tgt := "/home/marshal/." + name + "/" + sub
-					if _, statErr := os.Stat(src); statErr == nil {
-						readOnlyBinds = append(readOnlyBinds, model.Bind{Source: src, Target: tgt})
-					}
-					srcConfig := filepath.Join(home, ".config", name, sub)
-					tgtConfig := "/home/marshal/.config/" + name + "/" + sub
-					if _, statErr := os.Stat(srcConfig); statErr == nil {
-						readOnlyBinds = append(readOnlyBinds, model.Bind{Source: srcConfig, Target: tgtConfig})
-					}
-				}
-
-				// Forward XDG env so apps inside sandbox find config correctly
-				extraEnv = append(extraEnv,
-					"XDG_CONFIG_HOME=/home/marshal/.config",
-					"XDG_DATA_HOME=/home/marshal/.local/share",
-					"XDG_CACHE_HOME=/home/marshal/.cache",
-				)
-			}
+			// Provider HOME/XDG trees are fresh tmpfs mounts. Host-native auth,
+			// instructions, memory, plugins and MCP configuration are deliberately
+			// not mounted across the governance boundary.
+			extraEnv = append(extraEnv,
+				"XDG_CONFIG_HOME=/home/marshal/.config",
+				"XDG_DATA_HOME=/home/marshal/.local/share",
+				"XDG_CACHE_HOME=/home/marshal/.cache",
+			)
 
 			// Forward OLLAMA_HOST; default to localhost:11434 for local Ollama
 			ollamaHost := os.Getenv("OLLAMA_HOST")
@@ -1196,6 +1339,16 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	default:
 		return nil, "", fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
 	}
+}
+
+func trustedBwrapPath() (string, error) {
+	for _, candidate := range []string{"/usr/bin/bwrap", "/bin/bwrap"} {
+		info, err := os.Stat(candidate)
+		if err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o022 == 0 {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("trusted bubblewrap binary is unavailable")
 }
 
 func loadPackVersion(path string) (string, error) {

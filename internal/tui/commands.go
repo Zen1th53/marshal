@@ -49,32 +49,26 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		case "constraints":
 			return h.handleGoalConstraints(ctx)
 		case "add-constraint":
-			if len(parts) < 3 {
-				return "Usage: /goal add-constraint <constraint text>", nil
-			}
-			return h.handleGoalAddConstraint(ctx, strings.TrimSpace(line[strings.Index(line, parts[1])+len(parts[1]):]))
+			return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
 		case "rm-constraint":
-			if len(parts) < 3 {
-				return "Usage: /goal rm-constraint <constraint_id|text>", nil
-			}
-			return h.handleGoalRemoveConstraint(ctx, strings.TrimSpace(line[strings.Index(line, parts[1])+len(parts[1]):]))
+			return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
 		}
-
-		outcome := strings.TrimSpace(line[len(parts[0]):])
-		return h.handleSetGoal(ctx, outcome)
+		return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
 
 	case "/mode":
 		if len(parts) < 2 {
-			return fmt.Sprintf("Current mode: %s (options: manual, auto, ultra)", h.ws.mode), nil
+			return fmt.Sprintf("Current mode: %s (options: manual, auto; ultra requires entitlement and is unavailable)", h.ws.mode), nil
 		}
 		mode := strings.ToLower(parts[1])
 		switch mode {
-		case "manual", "auto", "ultra":
+		case "manual", "auto":
 			h.ws.mode = mode
 			h.ws.state.SessionMode = strings.ToUpper(mode)
 			return fmt.Sprintf("Operating mode switched to %s.", strings.ToUpper(mode)), nil
+		case "ultra":
+			return "ULTRA is unavailable: no cryptographically verified entitlement is active.", nil
 		default:
-			return "Invalid mode. Supported modes: manual, auto, ultra", nil
+			return "Invalid mode. Supported modes: manual, auto", nil
 		}
 
 	case "/status":
@@ -90,18 +84,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleInspect(ctx, "", parts[1])
 
 	case "/approve":
-		id := ""
-		if len(parts) >= 2 {
-			id = parts[1]
-		}
-		return h.handleApprove(ctx, id)
+		return "Approval mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
 
 	case "/reject":
-		id := ""
-		if len(parts) >= 2 {
-			id = parts[1]
-		}
-		return h.handleReject(ctx, id)
+		return "Approval mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
 
 	case "/route":
 		return h.handleRoute(ctx, parts[1:])
@@ -122,20 +108,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleWhy(ctx)
 
 	case "/msg", "/say":
-		if len(parts) < 3 {
-			return "Usage: /msg <agent_id|all> <message text>", nil
-		}
-		target := parts[1]
-		msgText := strings.TrimSpace(line[len(parts[0])+len(parts[1])+1:])
-		return h.handleSendMessage(ctx, target, msgText)
+		return "Message mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
 
 	case "/handoff":
-		if len(parts) < 3 {
-			return "Usage: /handoff <architect|developer|qa|appsec> <summary>", nil
-		}
-		targetRole := model.Role(strings.ToLower(parts[1]))
-		summary := strings.TrimSpace(line[len(parts[0])+len(parts[1])+1:])
-		return h.handleHandoff(ctx, targetRole, summary)
+		return "Handoff mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
 
 	case "/checkpoint":
 		return h.handleCheckpoint(ctx)
@@ -162,6 +138,9 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleDoctor(ctx)
 
 	case "/tasks", "/task":
+		if len(parts) > 1 {
+			return "Task mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		}
 		return h.handleTasks(ctx, parts[1:], line)
 
 	case "/policy":
@@ -345,7 +324,7 @@ func (h *CommandHandler) handleEvidence(ctx context.Context, evidenceID string) 
 		}
 	}
 
-	return fmt.Sprintf("Evidence %s: recorded in evidence ledger (no active contradictory claims).", evidenceID), nil
+	return fmt.Sprintf("Evidence %s: NOT FOUND in the active canonical claim set.", evidenceID), nil
 }
 
 func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
@@ -353,7 +332,7 @@ func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
 	defer h.ws.mu.Unlock()
 
 	if h.ws.state.RouteExplanation != "" {
-		return fmt.Sprintf("ULTRA ROUTING EXPLANATION:\n%s", h.ws.state.RouteExplanation), nil
+		return fmt.Sprintf("ADVISORY ROUTING EXPLANATION (NOT APPLIED):\n%s", h.ws.state.RouteExplanation), nil
 	}
 
 	if h.ws.router != nil {
@@ -365,7 +344,7 @@ func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
 			HasCriticalClaims: false,
 		})
 		if err == nil {
-			return fmt.Sprintf("ULTRA ROUTING EXPLANATION:\n%s", plan.Explanation), nil
+			return fmt.Sprintf("ADVISORY ROUTING EXPLANATION (NOT APPLIED):\n%s", plan.Explanation), nil
 		}
 	}
 
@@ -445,62 +424,11 @@ func (h *CommandHandler) handleHandoff(ctx context.Context, targetRole model.Rol
 }
 
 func (h *CommandHandler) handleCheckpoint(ctx context.Context) (string, error) {
-	if h.ws.store == nil {
-		return "Store unavailable", nil
-	}
-
-	cpID := fmt.Sprintf("cp-tui-%d", time.Now().UnixNano())
-	cp := model.HandoffCheckpoint{
-		ID:           cpID,
-		Version:      1,
-		SessionID:    h.ws.sessionID,
-		TaskID:       "task-interactive",
-		GoalID:       h.ws.state.Goal.ID,
-		GoalRevision: h.ws.state.Goal.Revision,
-		Role:         "operator",
-		Author: model.AuthorProvenance{
-			AgentID: "operator",
-			Harness: "tui",
-		},
-		Reason:    "Manual operator checkpoint via TUI",
-		CreatedAt: time.Now().UTC(),
-	}
-
-	if err := h.ws.store.SaveHandoffCheckpoint(ctx, cp); err != nil {
-		return "", fmt.Errorf("save checkpoint: %w", err)
-	}
-
-	return fmt.Sprintf("Durable checkpoint created: %s", cpID), nil
+	return "Checkpoint creation is unavailable in TUI: authenticated runtime snapshot support is not implemented.", nil
 }
 
 func (h *CommandHandler) handleRollback(ctx context.Context, cpID string) (string, error) {
-	if h.ws.store == nil {
-		return "Store unavailable", nil
-	}
-
-	cp, err := h.ws.store.GetHandoffCheckpoint(ctx, cpID)
-	if err != nil {
-		return "", fmt.Errorf("checkpoint %s not found: %w", cpID, err)
-	}
-
-	now := time.Now().UTC()
-	rb := model.CheckpointRollback{
-		RollbackID:   fmt.Sprintf("rb-%d", now.UnixNano()),
-		CheckpointID: cp.ID,
-		Actor: model.AuthorProvenance{
-			AgentID: "operator",
-			Harness: "tui",
-		},
-		Reason:    "Operator requested rollback in TUI",
-		CreatedAt: now,
-	}
-
-	if err := h.ws.store.RecordCheckpointRollback(ctx, rb); err != nil {
-		return "", fmt.Errorf("record rollback: %w", err)
-	}
-
-	return fmt.Sprintf("Successfully rolled back to checkpoint %s (authored by %s at %s).",
-		cpID, cp.Author.AgentID, cp.CreatedAt.Format(time.RFC3339)), nil
+	return fmt.Sprintf("Rollback to %s was NOT performed: authenticated runtime restoration is not implemented.", cpID), nil
 }
 
 func (h *CommandHandler) handleBudget(ctx context.Context) (string, error) {
@@ -522,83 +450,30 @@ func (h *CommandHandler) handleBudget(ctx context.Context) (string, error) {
 }
 
 func (h *CommandHandler) handlePause(ctx context.Context) (string, error) {
-	if h.ws.store == nil {
-		return "Store unavailable", nil
-	}
-
-	sess, err := h.ws.store.GetTeamSession(ctx, h.ws.sessionID)
-	if err != nil {
-		return "", fmt.Errorf("get session: %w", err)
-	}
-
-	sess.Status = "PAUSED"
-	sess.UpdatedAt = time.Now().UTC()
-	if err := h.ws.store.SaveTeamSession(ctx, *sess); err != nil {
-		return "", fmt.Errorf("save session: %w", err)
-	}
-
-	return "Collaborative session paused. Use /resume to continue.", nil
+	return "Pause was NOT performed: TUI has no authenticated runtime process-control handle.", nil
 }
 
 func (h *CommandHandler) handleResume(ctx context.Context) (string, error) {
-	if h.ws.store == nil {
-		return "Store unavailable", nil
-	}
-
-	sess, err := h.ws.store.GetTeamSession(ctx, h.ws.sessionID)
-	if err != nil {
-		return "", fmt.Errorf("get session: %w", err)
-	}
-
-	sess.Status = "ACTIVE"
-	sess.UpdatedAt = time.Now().UTC()
-	if err := h.ws.store.SaveTeamSession(ctx, *sess); err != nil {
-		return "", fmt.Errorf("save session: %w", err)
-	}
-
-	return "Collaborative session resumed.", nil
+	return "Resume was NOT performed: TUI has no authenticated runtime process-control handle.", nil
 }
 
 func (h *CommandHandler) handleCancel(ctx context.Context) (string, error) {
-	if h.ws.store == nil {
-		return "Store unavailable", nil
-	}
-
-	now := time.Now().UTC()
-	term := model.GoalTermination{
-		SessionID:    h.ws.sessionID,
-		GoalID:       h.ws.state.Goal.ID,
-		GoalRevision: h.ws.state.Goal.Revision,
-		State:        model.StateCancelled,
-		ReasonCode:   model.ReasonUserCancelled,
-		ReasonDetail: "Operator initiated cancellation via TUI",
-		CompletedAt:  now,
-	}
-
-	if err := h.ws.store.SaveGoalTermination(ctx, term); err != nil {
-		return "", fmt.Errorf("record termination: %w", err)
-	}
-
-	h.ws.mu.Lock()
-	h.ws.state.TerminationState = model.StateCancelled
-	h.ws.mu.Unlock()
-
-	return "Active goal execution cancelled by operator.", nil
+	return "Cancel was NOT performed: TUI has no authenticated runtime process-control handle.", nil
 }
 
 func (h *CommandHandler) helpText() string {
 	return `MARSHAL Terminal Workspace Commands:
   /status                  Show canonical session, goal, team, claim, budget, and termination status
   /goal [outcome]          View or update the active GoalContract
-  /mode [manual|auto|ultra] Switch operating supervision mode
+  /mode [manual|auto]       Switch operating supervision mode; ULTRA requires entitlement
   /agents                  List registered participants, fixed roles, and harnesses
   /claims                  List active claims and epistemic verification states
   /inspect [kind] <id>     Inspect a claim, evidence, checkpoint, task, handoff, or approval
   /evidence <id>           Inspect evidence item details and linked claims
   /approve [approval_id]   Grant a pending approval through the policy approval store
   /reject [approval_id]    Deny a pending approval and record the decision durably
-  /route [key=value ...]   Show or recompute the ULTRA route (role, harness, risk)
-  /why                     Explain ULTRA routing decisions (harness, model, effort)
+  /route [key=value ...]   Compute an advisory route; it is not applied to Runtime
+  /why                     Explain the advisory routing calculation
   /msg <agent|all> <text>  Send operator guidance to the team or a specific agent
   /handoff <role> <summary> Transfer active turn to the target role
   /checkpoint              Create a durable handoff checkpoint

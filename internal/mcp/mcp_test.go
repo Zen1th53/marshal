@@ -2,15 +2,15 @@ package mcp
 
 import (
 	"bytes"
-	"strings"
-	"time"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
@@ -508,7 +508,7 @@ func TestMCPActionLevelCapabilityAuthorization(t *testing.T) {
 	runBody, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
 		"params": map[string]any{
-			"name": "task_run",
+			"name":      "task_run",
 			"arguments": map[string]any{"task_id": "TASK-1", "agent_id": "AGENT-1"},
 		},
 	})
@@ -541,6 +541,20 @@ func TestMCPActionLevelCapabilityAuthorization(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 OK for task.read capability, got %d", resp.StatusCode)
+	}
+}
+
+func TestMCPTaskAgentIdentityIsBoundToToken(t *testing.T) {
+	caller := auth.Principal{ID: "TOKEN-1", Name: "AGENT-1", Kind: auth.KindMCPClient}
+	if err := authorizeTaskAgent(caller, "AGENT-1"); err != nil {
+		t.Fatalf("bound identity rejected: %v", err)
+	}
+	if err := authorizeTaskAgent(caller, "AGENT-2"); err == nil {
+		t.Fatal("MCP token was allowed to impersonate another agent")
+	}
+	local := auth.Principal{ID: "TOKEN-LOCAL", Name: "operator", Kind: auth.KindLocalUser}
+	if err := authorizeTaskAgent(local, "AGENT-2"); err != nil {
+		t.Fatalf("local operator delegation rejected: %v", err)
 	}
 }
 

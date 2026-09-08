@@ -162,7 +162,7 @@ func TestPTYRepeatedTabKeepsOneComposerAndStatusline(t *testing.T) {
 	if n := countOnScreen(text, PromptMarker); n != 1 {
 		t.Errorf("after 50 Tabs expected 1 composer, found %d:\n%s", n, text)
 	}
-	if n := countOnScreen(text, "ULTRA"); n != 1 {
+	if n := countOnScreen(text, "MANUAL"); n != 1 {
 		t.Errorf("after 50 Tabs expected 1 statusline, found %d:\n%s", n, text)
 	}
 	// The legacy banner must not reappear in any form.
@@ -262,7 +262,7 @@ func TestPTYResizeWithCompletionOpen(t *testing.T) {
 	if n := countOnScreen(text, PromptMarker); n != 1 {
 		t.Errorf("after resize expected 1 composer, found %d:\n%s", n, text)
 	}
-	if n := countOnScreen(text, "ULTRA"); n != 1 {
+	if n := countOnScreen(text, "MANUAL"); n != 1 {
 		t.Errorf("after resize expected 1 statusline, found %d:\n%s", n, text)
 	}
 	if s.cmd.ProcessState != nil && s.cmd.ProcessState.Exited() {
@@ -309,7 +309,7 @@ func TestPTYManyRefreshesKeepSingleChrome(t *testing.T) {
 	if n := countOnScreen(text, PromptMarker); n != 1 {
 		t.Errorf("expected 1 composer after 80 edits, found %d:\n%s", n, text)
 	}
-	if n := countOnScreen(text, "ULTRA"); n != 1 {
+	if n := countOnScreen(text, "MANUAL"); n != 1 {
 		t.Errorf("expected 1 statusline after 80 edits, found %d:\n%s", n, text)
 	}
 }
