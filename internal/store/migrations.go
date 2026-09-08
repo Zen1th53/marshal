@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 81
+const LatestSchemaVersion = 82
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2215,6 +2215,67 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 81: %w", err)
 		}
 		version = 81
+	}
+	if version < 82 {
+		// Process 04 execution plans.
+		//
+		// A new table rather than columns on an existing one: plans have their
+		// own lifecycle and their own revision history, and every version of a
+		// plan is kept so that what was approved stays inspectable after the
+		// plan moves on. One CREATE TABLE is a single exec, so unlike the
+		// per-column ALTERs of version 81 this costs the migration chain
+		// almost nothing.
+		//
+		// (plan_id, version) is the primary key because plan versions are
+		// immutable once written: a revision inserts a new row rather than
+		// updating one, which is what makes provenance survive a restart.
+		//
+		// The plan body is JSON. Its shape belongs to internal/plan, it is
+		// always read whole, and giving each field a column would freeze the
+		// planning model into the schema — every planning change would then
+		// need a migration, which is how the chain got expensive before.
+		//
+		// goal_id and goal_revision are real columns because staleness is
+		// decided by comparing them against the live Goal, and that is a query
+		// rather than a field read. Likewise project_id: it is how Process 02
+		// isolation reaches plan state.
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS execution_plans (
+				plan_id               TEXT NOT NULL,
+				version               INTEGER NOT NULL,
+				project_id            TEXT NOT NULL,
+				goal_id               TEXT NOT NULL,
+				goal_revision         INTEGER NOT NULL,
+				state                 TEXT NOT NULL CHECK(state IN (
+					'DRAFT','NEEDS_INPUT','READY','APPROVED','STALE','BLOCKED','CANCELLED'
+				)),
+				mode                  TEXT NOT NULL CHECK(mode IN ('standard','ultra')),
+				constitution_version  TEXT NOT NULL,
+				graph_digest          TEXT NOT NULL DEFAULT '',
+				supersedes            INTEGER NOT NULL DEFAULT 0,
+				revision_reason       TEXT NOT NULL DEFAULT '',
+				plan_json             TEXT NOT NULL DEFAULT '{}',
+				created_at            TEXT NOT NULL,
+				PRIMARY KEY (plan_id, version)
+			);
+			CREATE INDEX IF NOT EXISTS idx_execution_plans_project
+				ON execution_plans(project_id, created_at);
+			CREATE INDEX IF NOT EXISTS idx_execution_plans_goal
+				ON execution_plans(goal_id, goal_revision);
+
+			CREATE TABLE IF NOT EXISTS execution_plan_active (
+				project_id            TEXT PRIMARY KEY,
+				plan_id               TEXT NOT NULL,
+				version               INTEGER NOT NULL,
+				updated_at            TEXT NOT NULL
+			);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 82: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(82, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 82: %w", err)
+		}
+		version = 82
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

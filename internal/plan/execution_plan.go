@@ -42,11 +42,16 @@ const (
 func (s State) Executable() bool { return s == StateApproved }
 
 // Mode is Standard or ULTRA planning.
+//
+// The values match constitution.Mode's spelling rather than the TUI's display
+// spelling, because these are the values that reach the database: the schema
+// constrains mode to this vocabulary, and letting two spellings of one mode
+// through would make stored plans inconsistent with stored decisions.
 type Mode string
 
 const (
-	ModeStandard Mode = "STANDARD"
-	ModeUltra    Mode = "ULTRA"
+	ModeStandard Mode = "standard"
+	ModeUltra    Mode = "ultra"
 )
 
 // Route is where a task's work will run.
