@@ -121,12 +121,12 @@ func TestProviderSecretExecutionLeaseAndRedaction(t *testing.T) {
 
 	// Attempting WithSecret on an expired/revoked lease fails
 	revokedLease := secrets.Lease{
-		ID:        "revoked-lease-id",
-		Ref:       secrets.Ref{Provider: "env", Name: "MARSHAL_PROVIDER_KEY", Version: "1"},
-		Subject:   agent.ID,
-		TaskID:    "TASK-SEC-001",
-		Purpose:   "provider_execution",
-		State:     secrets.StateRevoked,
+		ID:      "revoked-lease-id",
+		Ref:     secrets.Ref{Provider: "env", Name: "MARSHAL_PROVIDER_KEY", Version: "1"},
+		Subject: agent.ID,
+		TaskID:  "TASK-SEC-001",
+		Purpose: "provider_execution",
+		State:   secrets.StateRevoked,
 	}
 	err = broker.WithSecret(context.Background(), revokedLease, func([]byte) error {
 		t.Fatal("revoked lease callback should never be called")

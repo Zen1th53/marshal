@@ -4500,6 +4500,11 @@
       "bytes": 16665
     },
     {
+      "path": "internal/startup/project_identity.go",
+      "sha256": "ffcf0b8dd54b019d9a6ba8b93177319fa93939e93f894ffe867667d638d21822",
+      "bytes": 3648
+    },
+    {
       "path": "internal/startup/reason.go",
       "sha256": "fbf8b8d74a1a0029fc117fd0663fe7da2ca89040c8355a1cb53c2a93b7f74953",
       "bytes": 8849
