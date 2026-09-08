@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -145,7 +147,13 @@ func TestExecutionService_StartRunAndExecute_Success(t *testing.T) {
 		current, currentErr := runtime.Verification().authoritativeBinding(context.Background(), bundle.RunID)
 		t.Fatalf("verification = %+v, %v; session binding=%+v current=%+v current_err=%v", verified, err, session.Binding, current, currentErr)
 	}
-	attestation, err := runtime.Verification().Attest(context.Background(), session.ID, "bundle-digest", "full-chain-e2e")
+	payload := []byte("full-chain evidence")
+	digest := sha256.Sum256(payload)
+	evidenceBundle, err := verification.BuildEvidenceBundle("bundle", session.ID, binding, []verification.BundleEntry{{Path: "full-chain.txt", Digest: hex.EncodeToString(digest[:]), Size: int64(len(payload))}}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attestation, err := runtime.Verification().Attest(context.Background(), session.ID, verification.BundleEnvelope{Bundle: evidenceBundle, Payloads: map[string][]byte{"full-chain.txt": payload}}, "full-chain-e2e")
 	if err != nil || attestation.Decision != verification.VerifiedComplete {
 		t.Fatalf("attestation = %s, %v", attestation.Decision, err)
 	}

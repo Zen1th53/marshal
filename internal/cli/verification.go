@@ -13,7 +13,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
-const reviewUsage = "Usage: marshal review start SESSION.json | status VERIFICATION-ID | evaluate VERIFICATION-ID | attest VERIFICATION-ID --bundle-digest DIGEST --provenance TEXT\n"
+const reviewUsage = "Usage: marshal review start SESSION.json | status VERIFICATION-ID | evaluate VERIFICATION-ID | attest VERIFICATION-ID --bundle ENVELOPE.json --provenance TEXT\n"
 
 func (c command) review(ctx context.Context, args []string) error {
 	if len(args) == 0 {
@@ -79,16 +79,24 @@ func (c command) reviewAttest(ctx context.Context, service *app.VerificationServ
 	id := args[0]
 	fs := flag.NewFlagSet("review attest", flag.ContinueOnError)
 	fs.SetOutput(c.stderr)
-	var bundle, provenance string
-	fs.StringVar(&bundle, "bundle-digest", "", "evidence bundle digest")
+	var bundlePath, provenance string
+	fs.StringVar(&bundlePath, "bundle", "", "tamper-evident bundle envelope JSON")
 	fs.StringVar(&provenance, "provenance", "", "attestation provenance")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	if bundle == "" || provenance == "" {
-		return fmt.Errorf("%w: --bundle-digest and --provenance are required", model.ErrInvalid)
+	if bundlePath == "" || provenance == "" {
+		return fmt.Errorf("%w: --bundle and --provenance are required", model.ErrInvalid)
 	}
-	got, err := service.Attest(ctx, id, bundle, provenance)
+	raw, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return err
+	}
+	var envelope verification.BundleEnvelope
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return fmt.Errorf("decode evidence bundle: %w", err)
+	}
+	got, err := service.Attest(ctx, id, envelope, provenance)
 	if err != nil {
 		return err
 	}

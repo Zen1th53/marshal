@@ -21,6 +21,13 @@ type EvidenceBundle struct {
 	ManifestDigest string
 }
 
+// BundleEnvelope carries the manifest and the exact payloads needed to replay
+// its integrity check. JSON represents payload bytes as base64 strings.
+type BundleEnvelope struct {
+	Bundle   EvidenceBundle    `json:"bundle"`
+	Payloads map[string][]byte `json:"payloads"`
+}
+
 func BuildEvidenceBundle(id, verificationID string, binding Binding, entries []BundleEntry, now time.Time) (EvidenceBundle, error) {
 	if id == "" || verificationID == "" || ValidateBinding(binding) != nil {
 		return EvidenceBundle{}, fmt.Errorf("%w: evidence bundle identity", ErrInvalid)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
+	marshalstore "github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
@@ -80,7 +81,7 @@ func (s *VerificationService) Evaluate(ctx context.Context, id string) (verifica
 	return s.Current(ctx, id)
 }
 
-func (s *VerificationService) Attest(ctx context.Context, id string, bundleDigest, provenance string) (verification.CompletionAttestation, error) {
+func (s *VerificationService) Attest(ctx context.Context, id string, envelope verification.BundleEnvelope, provenance string) (verification.CompletionAttestation, error) {
 	session, err := s.Current(ctx, id)
 	if err != nil {
 		return verification.CompletionAttestation{}, err
@@ -93,7 +94,13 @@ func (s *VerificationService) Attest(ctx context.Context, id string, bundleDiges
 	if decision != session.State {
 		return verification.CompletionAttestation{}, verification.ErrBindingMismatch
 	}
-	a, err := verification.NewCompletionAttestation("completion-"+id+fmt.Sprintf("-%d", session.Version), session, bundleDigest, provenance, s.now())
+	if envelope.Bundle.VerificationID != session.ID {
+		return verification.CompletionAttestation{}, verification.ErrBindingMismatch
+	}
+	if err := envelope.Bundle.Verify(envelope.Payloads, current); err != nil {
+		return verification.CompletionAttestation{}, err
+	}
+	a, err := verification.NewCompletionAttestation("completion-"+id+fmt.Sprintf("-%d", session.Version), session, envelope.Bundle.ManifestDigest, provenance, s.now())
 	if err != nil {
 		return verification.CompletionAttestation{}, err
 	}
@@ -128,7 +135,7 @@ func (s *VerificationService) authoritativeBinding(ctx context.Context, runID st
 		GOOS, GOARCH string
 		Schema       int
 		Policy       RuntimePolicyConfig
-	}{goruntime.GOOS, goruntime.GOARCH, 83, s.runtime.runtimePolicy})
+	}{goruntime.GOOS, goruntime.GOARCH, marshalstore.LatestSchemaVersion, s.runtime.runtimePolicy})
 	if err != nil {
 		return verification.Binding{}, err
 	}
