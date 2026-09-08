@@ -156,7 +156,7 @@ func VerifyGitEnvironment(expectedRoot, expectedBranch string, env GitEnvironmen
 		}
 	}
 
-	if expectedBranch != "" && env.Branch != expectedBranch && env.Branch != "HEAD" {
+	if expectedBranch != "" && env.Branch != expectedBranch {
 		return fmt.Errorf("%w: unexpected branch switch (expected %s, got %s)",
 			ErrIsolationCompromised, expectedBranch, env.Branch)
 	}

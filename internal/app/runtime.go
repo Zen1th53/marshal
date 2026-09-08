@@ -693,15 +693,27 @@ func resolveBaselineVerificationCommand(command []string) ([]string, error) {
 			switch args[0] {
 			case "status", "diff", "log", "show", "rev-parse":
 				candidates = []string{"/usr/bin/git", "/bin/git"}
+				if p, err := exec.LookPath("git"); err == nil {
+					candidates = append(candidates, p)
+				}
 			}
 		}
 	case "go":
 		if len(args) > 0 && (args[0] == "test" || args[0] == "vet") {
 			candidates = []string{"/usr/local/go/bin/go", "/usr/bin/go"}
+			if p, err := exec.LookPath("go"); err == nil {
+				candidates = append(candidates, p)
+			}
 		}
 	case "python", "python3":
 		if len(args) >= 2 && filepath.Clean(args[0]) == "conformance/runner.py" && args[1] == "validate-pack" {
 			candidates = []string{"/usr/bin/python3", "/usr/local/bin/python3", "/usr/local/bin/python"}
+			if p, err := exec.LookPath("python3"); err == nil {
+				candidates = append(candidates, p)
+			}
+			if p, err := exec.LookPath("python"); err == nil {
+				candidates = append(candidates, p)
+			}
 		}
 	}
 	for _, candidate := range candidates {

@@ -1936,8 +1936,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "6eb78df448c16d66399bb49d5f8e11bf0347f934ca6f63172943101231b547c2",
-      "bytes": 56657
+      "sha256": "b70cc2c39e25832a905db1c6a10390544bfeeda7dede45d9ee0a4ebc3e0ab56b",
+      "bytes": 57046
     },
     {
       "path": "internal/app/runtime_secret_commit_test.go",
@@ -2886,8 +2886,8 @@
     },
     {
       "path": "internal/execution/provenance.go",
-      "sha256": "870c73e1d88820c49e22e3da63d289dc64c14e6d03fe65e478ba3e68bfd26fcb",
-      "bytes": 5009
+      "sha256": "31d47e5578be50540766d3771e702ae60d895dbb401059892531b53013c8cfc9",
+      "bytes": 4985
     },
     {
       "path": "internal/execution/provenance_test.go",
