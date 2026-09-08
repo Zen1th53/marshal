@@ -151,9 +151,19 @@ func Summarize(checks []Check, options SummaryOptions) Assessment {
 		if check.Dimension == DimensionCore && CoreFatal(check.Reason) {
 			coreFailed = true
 		}
-		if check.Blocking() {
+		switch {
+		case check.Blocking():
 			anyBlocking = true
-		} else {
+		case check.Status == StatusMissing:
+			// A capability that is simply absent on this machine is a
+			// limitation, not something demanding attention. Escalating it
+			// would train users to ignore the attention list, which is the
+			// fastest way to make a real problem invisible.
+			anyDegraded = true
+		default:
+			// BROKEN, NEEDS_ATTENTION and UNKNOWN describe something that is
+			// present but wrong, or that could not be established. Those
+			// genuinely warrant a look.
 			anyAttention = true
 		}
 	}

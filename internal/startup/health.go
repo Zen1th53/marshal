@@ -54,11 +54,20 @@ func (p Phase) ControlCenterOpens() bool {
 	return p != PhaseCoreFailed && p != PhaseBooting
 }
 
-// ExecutionPermitted reports whether work may execute in this phase. Only the
-// fully ready phase permits it; every other phase requires something first.
-// Execution authority itself remains with Process 00 and the runtime — this is
-// a startup precondition, not a grant.
-func (p Phase) ExecutionPermitted() bool { return p == PhaseReady }
+// ExecutionPermitted reports whether work may execute in this phase.
+//
+// READY and LIMITED both permit it. LIMITED means some optional capability is
+// unavailable on this machine — no policy-enforced egress, say — and refusing
+// to run local work for that reason would punish the user for a limitation
+// that does not affect what they are doing. Which specific capabilities are
+// available is answered by Assessment.Has, not by the phase.
+//
+// Every other phase requires something to change first. Execution authority
+// itself remains with Process 00 and the runtime; this is a startup
+// precondition, not a grant.
+func (p Phase) ExecutionPermitted() bool {
+	return p == PhaseReady || p == PhaseLimited
+}
 
 // Status is the human-facing state of one readiness check. The set is small on
 // purpose: a user reading a startup screen needs to know whether something

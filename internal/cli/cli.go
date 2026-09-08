@@ -26,7 +26,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/policytest"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/store"
-	"github.com/Zen1th53/marshal/internal/tui"
 )
 
 var (
@@ -95,17 +94,14 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		args = args[1:]
 	}
 	if len(args) == 0 {
-		rt, err := app.Open(ctx, c.root)
-		if err == nil && rt != nil {
-			defer rt.Close()
-			ws := tui.NewWorkspace(rt.Store(), rt.ProjectID(), "default-session")
-			if err := ws.Run(ctx, c.stdin, c.stdout); err != nil {
-				fmt.Fprintln(stderr, err)
-				return exitCode(err)
-			}
-			return 0
+		// Running `marshal` with no arguments enters the control center.
+		// Previously any startup problem fell through to a usage screen, which
+		// told the user neither that something had failed nor what to do about
+		// it. The control center now opens and explains the situation itself.
+		if err := c.controlCenter(ctx, nil); err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitCode(err)
 		}
-		fmt.Fprint(stdout, usage)
 		return 0
 	}
 	if args[0] == "--help" || args[0] == "-h" {

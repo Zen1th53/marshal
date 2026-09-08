@@ -435,3 +435,57 @@ func TestAllProbeOutputIsUserSafe(t *testing.T) {
 		})
 	}
 }
+
+// Regression: a fully set-up project on a machine without policy-enforced
+// egress must still open the workspace. Egress enforcement is unavailable on
+// most developer machines, and treating that as a reason to withhold the
+// workspace would make the common case look broken.
+func TestHealthyProjectWithoutEgressEnforcementStillOpensWorkspace(t *testing.T) {
+	root := "/work/project"
+	env := healthyEnv(root)
+	env.NetworkEnforced = false
+
+	assessment := startup.Assess(context.Background(), healthyProject(root), env)
+
+	if assessment.Phase != startup.PhaseLimited {
+		t.Fatalf("phase was %s, want LIMITED", assessment.Phase)
+	}
+	if !assessment.ExecutionPermitted() {
+		t.Fatal("local work was withheld because outbound access could not be restricted")
+	}
+	if assessment.Has(startup.CapNetworkEgress) {
+		t.Fatal("network capability was reported available with no enforcement")
+	}
+	// An absent optional capability is a limitation, not an attention item:
+	// escalating it would train users to ignore the attention list.
+	for _, check := range assessment.Attention() {
+		if check.ID == "env.network" {
+			t.Fatal("an unavailable optional capability was raised as needing attention")
+		}
+	}
+}
+
+// Something present but broken, or that could not be established, does warrant
+// attention and must not be quietly folded into "limited".
+func TestBrokenOrUnknownChecksRaiseAttention(t *testing.T) {
+	root := "/work/project"
+	for name, status := range map[string]startup.Status{
+		"broken":  startup.StatusBroken,
+		"unknown": startup.StatusUnknown,
+	} {
+		t.Run(name, func(t *testing.T) {
+			checks := []startup.Check{{
+				ID: "env.thing", Dimension: startup.DimensionEnvironment, Status: status,
+				Required: false, Reason: startup.ReasonCheckError,
+				Summary: "A component is not working.",
+			}}
+			assessment := startup.Summarize(checks, startup.SummaryOptions{ProjectPath: root})
+			if assessment.Phase != startup.PhaseNeedsAttention {
+				t.Fatalf("a %s component produced %s, want NEEDS_ATTENTION", name, assessment.Phase)
+			}
+			if len(assessment.Attention()) != 1 {
+				t.Fatalf("a %s component was not raised for attention", name)
+			}
+		})
+	}
+}
