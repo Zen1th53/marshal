@@ -105,6 +105,12 @@ func Assess(ctx context.Context, prober Prober, env Environment) Assessment {
 	gitChecks, projectRoot := probeGitAndProject(ctx, prober, env)
 	checks = append(checks, gitChecks...)
 	checks = append(checks, probeMarshalProject(prober, projectRoot)...)
+	// Identity is checked with the same evidence the runtime uses to admit a
+	// project, so readiness cannot report Ready for state the runtime would
+	// refuse to open.
+	if projectRoot != "" && marshalInitialized(prober, projectRoot) {
+		checks = append(checks, ProjectIdentityCheck(ctx, projectRoot))
+	}
 	checks = append(checks, probeIsolation(env)...)
 	checks = append(checks, probeUltra(env))
 

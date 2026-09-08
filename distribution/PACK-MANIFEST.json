@@ -1820,6 +1820,11 @@
       "bytes": 2383
     },
     {
+      "path": "internal/app/project_identity.go",
+      "sha256": "7228ae1a6f5394dada7252391c47eb5393de21e8df64b377b80d56e645ba9a72",
+      "bytes": 4195
+    },
+    {
       "path": "internal/app/project_identity_baseline_test.go",
       "sha256": "f677e27f6e8a50bf24f43b9f12baf4fe8149b493a5e8b25a00a9708ee586a7b0",
       "bytes": 4901
@@ -1846,8 +1851,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "46fae1cbd281d3743453ba39887ebb34c1d6586727bbfc26dacb3bc0a91a3063",
-      "bytes": 55978
+      "sha256": "88ee94e355f6b7ec4d1eaa4e031a172b3810371d6eb644ff4c8cfd9ba687b558",
+      "bytes": 56588
     },
     {
       "path": "internal/app/runtime_secret_commit_test.go",
@@ -4065,6 +4070,11 @@
       "bytes": 2445
     },
     {
+      "path": "internal/projectid/collision_test.go",
+      "sha256": "9146b1c09bc1ea61cfecf0a5d29512ddce69c22cfdb3510911bf141101e17eb4",
+      "bytes": 3940
+    },
+    {
       "path": "internal/projectid/discover.go",
       "sha256": "04db51901ece92fa4e3b8b036f6241cde3fbecc51c4aded6536dc94c0cafaa7d",
       "bytes": 11853
@@ -4481,8 +4491,8 @@
     },
     {
       "path": "internal/startup/probe.go",
-      "sha256": "c294549a30ade6946074578529f314b62b5d18df52c4addb4051231658ec7cb7",
-      "bytes": 14584
+      "sha256": "0d3cf333d93eec15e554b747b200f617f4bb5d7261350f91ae40c48fa5737c45",
+      "bytes": 14889
     },
     {
       "path": "internal/startup/probe_test.go",

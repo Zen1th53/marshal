@@ -32,6 +32,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/netpolicy"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/protocol"
 	"github.com/Zen1th53/marshal/internal/risk"
 	"github.com/Zen1th53/marshal/internal/sandbox"
@@ -196,6 +197,15 @@ func Bootstrap(ctx context.Context, root string) (project.Layout, error) {
 	}); err != nil {
 		return project.Layout{}, err
 	}
+	// Establish the project's identity at setup rather than waiting for the
+	// first open. Setting a project up is the moment MARSHAL takes it on, so
+	// it is the honest place to record which project this is — and it means
+	// readiness can report a confirmed identity immediately rather than
+	// "not recorded yet" until something happens to open the runtime.
+	//
+	// A failure here does not fail setup: the project is usable, and the
+	// identity will be established on first open instead.
+	_, _ = projectid.Adopt(ctx, nil, layout.Root, layout.RuntimeDir)
 	return layout, nil
 }
 
