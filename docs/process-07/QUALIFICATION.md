@@ -58,7 +58,7 @@ canonical-main integration attestation.
 | AN chaos | PASS | `internal/store/learning_chaos_test.go`: partial-commit rollback, restart, corruption, missing target, lost invalidation, duplicate commit, repeated migration |
 | AO performance/scale | PASS | 10,000 items written in 1.63s; indexed dependency fan-out in 4.09ms; bounded retrieval in 263ms |
 | AP full lifecycle E2E | PASS | `TestLearningLifecycleFromVerifiedOutcomeToStaleMemory` plus the seven other runtime tests in `internal/app/learning_runtime_test.go` |
-| AQ GitHub/exact-main integration | NOT_RUN | performed only after merge against the exact resulting `origin/main` |
+| AQ GitHub/exact-main integration | PASS | merged as PR #114; requalified on exact main `30c763505bee64ef8621466fe67e551089da9b4d`, recorded in `INTEGRATION_ATTESTATION.md` |
 
 ## Mutation qualification
 

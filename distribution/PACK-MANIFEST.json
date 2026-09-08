@@ -1101,8 +1101,8 @@
     },
     {
       "path": "docs/process-07/FINAL_REPORT.md",
-      "sha256": "86760dfd680b2da17ec58c0e3c849d86b8c13703bf3a0a4ef9fc4c10c1c161bd",
-      "bytes": 5438
+      "sha256": "7d300159422d59a8905244d0bde239dca0696c5030b25993e2722c846b899ba2",
+      "bytes": 5481
     },
     {
       "path": "docs/process-07/IMPLEMENTATION.md",
@@ -1110,9 +1110,14 @@
       "bytes": 5146
     },
     {
+      "path": "docs/process-07/INTEGRATION_ATTESTATION.md",
+      "sha256": "a257b872e0491fc955235b01b053ac6fac8f1cf6661cd50de0716aa209043eae",
+      "bytes": 2992
+    },
+    {
       "path": "docs/process-07/QUALIFICATION.md",
-      "sha256": "b9b659c6ca51fbc0ca63b02d89d70fcf89f7eeee26c078ae9be0c88b890707a2",
-      "bytes": 10373
+      "sha256": "c5ae202ba1354924ece14a7ed0c37870b7d5f43cdca137fe650ce052ad563489",
+      "bytes": 10431
     },
     {
       "path": "docs/projects.md",

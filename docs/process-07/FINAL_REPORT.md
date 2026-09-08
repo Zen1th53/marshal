@@ -76,10 +76,10 @@ Pack manifest: PASS, regenerated, every governed path matches
 
 ## Status counts
 
-PASS: 41 of 43 acceptance rows
+PASS: 42 of 43 acceptance rows
 FAIL: 0
 BLOCKED: 0
-NOT_RUN: 2, row Y counterfactual evaluation and row AQ exact-main integration
+NOT_RUN: 1, row Y counterfactual evaluation
 UNKNOWN: 0
 
 ## Findings
@@ -111,11 +111,12 @@ Known limitations:
 
 ## Final state
 
-Final completion state: candidate qualified, 41 of 43 rows PASS with two
-explicit and scoped `NOT_RUN` rows.
+Final completion state: qualified, 42 of 43 rows PASS with one explicit and
+scoped `NOT_RUN` row.
 
-Final integration state: NOT_RUN until the branch merges and the exact
-resulting `origin/main` is requalified. Canonical
-`PROCESS 07 VERIFIED AND INTEGRATED` is recorded only after that.
+Final integration state: PASS. PR #114 merged and the exact resulting
+`origin/main` `30c763505bee64ef8621466fe67e551089da9b4d` was requalified,
+including a full mutation rerun. `PROCESS 07 VERIFIED AND INTEGRATED` is
+recorded in `docs/process-07/INTEGRATION_ATTESTATION.md`.
 
 `NOT_RUN`, `BLOCKED` and `UNKNOWN` are never upgraded to PASS.
