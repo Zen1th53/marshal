@@ -3,6 +3,7 @@ package optimization
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -43,6 +44,36 @@ func TestBwrapReplayRunnerUsesOfflineSandboxAndIndependentVerifier(t *testing.T)
 	}
 	if !strings.Contains(string(args), "--unshare-net") {
 		t.Fatalf("replay did not deny network: %s", args)
+	}
+}
+
+func TestBwrapReplayRunnerExecutesWithRealBubblewrapWhenAvailable(t *testing.T) {
+	binary, err := exec.LookPath("bwrap")
+	if err != nil {
+		t.Skip("bubblewrap unavailable")
+	}
+	root := t.TempDir()
+	tree := filepath.Join(root, "tree")
+	if err := os.Mkdir(tree, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runner := BwrapReplayRunner{
+		BwrapBinary: binary,
+		ResolveTree: func(context.Context, string) (string, error) { return tree, nil },
+		CommandFor:  func(ReplayRequest) ([]string, error) { return []string{"/usr/bin/true"}, nil },
+		Verify: func(_ context.Context, _ ReplayRequest, output []byte, runErr error) (ReplayObservation, error) {
+			if runErr != nil {
+				return ReplayObservation{}, runErr
+			}
+			return ReplayObservation{Outcome: learning.OutcomeVerifiedComplete, VerifierResult: StatusPass}, nil
+		},
+	}
+	got, err := ExecuteReplay(context.Background(), runner, cfFactual(learning.OutcomeFailed, StatusFail), cfRoute("claude"), SandboxPolicy{WritableRoot: root, MaxWallMillis: 1_000, MaxMemoryBytes: 1 << 20}, "real-bwrap", "cluster", cfGovernance(), cfNow())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AlternateVerifier != StatusPass {
+		t.Fatalf("replay=%+v", got)
 	}
 }
 
