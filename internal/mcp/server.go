@@ -212,7 +212,7 @@ func (s *Server) writeErrorWithStatus(w http.ResponseWriter, id any, status, cod
 }
 
 func (s *Server) listTools() []Tool {
-	return []Tool{
+	tools := []Tool{
 		{
 			Name:        "marshal_status",
 			Description: "Get MARSHAL local runtime status and object counts",
@@ -352,6 +352,16 @@ func (s *Server) listTools() []Tool {
 			InputSchema: objectSchema(map[string]any{"handoff_id": stringSchema()}, "handoff_id"),
 		},
 	}
+	// Process 08 tools are evidence reads only. They intentionally omit
+	// promotion, rollback, and policy mutation: those remain governed app
+	// actions with lifecycle and approval requirements.
+	tools = append(tools,
+		Tool{Name: "process08_cycle", Description: "Get a digest-verified Process 08 optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+		Tool{Name: "process08_counterfactuals", Description: "List safe counterfactual evidence for one optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+		Tool{Name: "process08_manifests", Description: "List reproducible benchmark manifests for one optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+		Tool{Name: "process08_canaries", Description: "List bounded canary records for one optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
+	)
+	return tools
 }
 
 func (s *Server) callTool(ctx context.Context, caller auth.Principal, name string, args map[string]any) (string, error) {
@@ -667,6 +677,30 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 		}
 		data, _ := json.Marshal(playbooks)
 		return string(data), nil
+	case "process08_cycle":
+		id := stringArg(args, "optimization_id")
+		if id == "" {
+			return "", fmt.Errorf("%w: optimization_id is required", model.ErrInvalid)
+		}
+		return marshalToolResult(s.runtime.Optimization().Get(ctx, id))
+	case "process08_counterfactuals":
+		id := stringArg(args, "optimization_id")
+		if id == "" {
+			return "", fmt.Errorf("%w: optimization_id is required", model.ErrInvalid)
+		}
+		return marshalToolResult(s.runtime.Optimization().Counterfactuals(ctx, id))
+	case "process08_manifests":
+		id := stringArg(args, "optimization_id")
+		if id == "" {
+			return "", fmt.Errorf("%w: optimization_id is required", model.ErrInvalid)
+		}
+		return marshalToolResult(s.runtime.Optimization().Manifests(ctx, id))
+	case "process08_canaries":
+		id := stringArg(args, "optimization_id")
+		if id == "" {
+			return "", fmt.Errorf("%w: optimization_id is required", model.ErrInvalid)
+		}
+		return marshalToolResult(s.runtime.Optimization().Canaries(ctx, id))
 
 	default:
 		return "", fmt.Errorf("%w: unknown tool %s", model.ErrInvalid, name)
@@ -728,6 +762,8 @@ func requiredCapabilityForTool(toolName string) auth.Capability {
 		// Every Process 07 tool here is read-only, and what it returns is
 		// evidence-bound memory. Promotion, revision and invalidation stay
 		// behind the runtime service.
+		return auth.CapEvidenceRead
+	case "process08_cycle", "process08_counterfactuals", "process08_manifests", "process08_canaries":
 		return auth.CapEvidenceRead
 	default:
 		return auth.CapAll

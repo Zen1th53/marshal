@@ -18,7 +18,11 @@ jobs:
     name: Runtime & Pack Verification
     # Ubuntu 24.04 hosted runners restrict the user namespaces required by bwrap.
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    # The full repository-wide race suite exercises the durable SQLite
+    # migration chain.  Keep the complete gate (rather than dropping store
+    # coverage), and give it a bounded window that exceeds Go's per-package
+    # default test timeout.
+    timeout-minutes: 50
 
     steps:
       - name: Checkout repository
@@ -55,7 +59,7 @@ jobs:
 
       - name: Run Go test suite with race detector
         run: |
-          go test -race -count=1 ./...
+          go test -race -count=1 -timeout=45m ./...
 
       - name: Validate pack and run Python test suites
         run: |

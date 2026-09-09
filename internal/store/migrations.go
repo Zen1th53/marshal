@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 84
+const LatestSchemaVersion = 85
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2459,6 +2459,149 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 84: %w", err)
 		}
 		version = 84
+	}
+	if version < 85 {
+		// Process 08 governed optimization. A cycle is append-only and bound to
+		// one exact Process 07 memory commit, so an optimization can never
+		// reason about knowledge that was not actually promoted. Candidates,
+		// counterfactuals, experiment results, benchmark manifests and
+		// promotion records are each independently digest-protected: rewriting
+		// a cycle's JSON does not launder a tampered sub-record, because the
+		// sub-record's own digest is checked on read.
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS optimization_cycles (
+				optimization_id TEXT PRIMARY KEY,
+				version INTEGER NOT NULL CHECK(version >= 1),
+				project_id TEXT NOT NULL,
+				memory_commit_id TEXT NOT NULL,
+				memory_commit_version INTEGER NOT NULL,
+				outcome TEXT NOT NULL CHECK(outcome IN ('VERIFIED_COMPLETE','PARTIAL','FAILED','BLOCKED')),
+				digest TEXT NOT NULL UNIQUE,
+				cycle_json TEXT NOT NULL,
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_optimization_cycles_memory
+				ON optimization_cycles(memory_commit_id, memory_commit_version);
+			CREATE INDEX IF NOT EXISTS idx_optimization_cycles_project
+				ON optimization_cycles(project_id, created_at);
+			CREATE TABLE IF NOT EXISTS optimization_candidates (
+				candidate_id TEXT PRIMARY KEY,
+				optimization_id TEXT NOT NULL REFERENCES optimization_cycles(optimization_id),
+				dimension TEXT NOT NULL CHECK(dimension IN (
+					'ROUTING','CASCADE','VERIFIER','HARNESS','NATIVE_EFFORT','CONTEXT',
+					'FALLBACK','RETRY','BUDGET','TOOLS','PLAYBOOK','CONCURRENCY'
+				)),
+				cluster_id TEXT NOT NULL DEFAULT '',
+				effects_json TEXT NOT NULL,
+				candidate_json TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_optimization_candidates_cycle
+				ON optimization_candidates(optimization_id);
+			CREATE INDEX IF NOT EXISTS idx_optimization_candidates_cluster
+				ON optimization_candidates(cluster_id);
+			CREATE TABLE IF NOT EXISTS optimization_baselines (
+				baseline_id TEXT PRIMARY KEY,
+				optimization_id TEXT NOT NULL REFERENCES optimization_cycles(optimization_id),
+				marshal_sha TEXT NOT NULL,
+				environment_digest TEXT NOT NULL,
+				baseline_json TEXT NOT NULL,
+				recorded_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_optimization_baselines_cycle
+				ON optimization_baselines(optimization_id);
+			CREATE TABLE IF NOT EXISTS counterfactuals (
+				counterfactual_id TEXT PRIMARY KEY,
+				optimization_id TEXT NOT NULL REFERENCES optimization_cycles(optimization_id),
+				method TEXT NOT NULL CHECK(method IN ('REPLAY','BENCHMARK','SHADOW','SYNTHETIC')),
+				verdict TEXT NOT NULL CHECK(verdict IN ('ALTERNATE_BETTER','FACTUAL_BETTER','EQUIVALENT','UNKNOWN')),
+				cluster_id TEXT NOT NULL DEFAULT '',
+				digest TEXT NOT NULL UNIQUE,
+				counterfactual_json TEXT NOT NULL,
+				evaluated_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_counterfactuals_cycle
+				ON counterfactuals(optimization_id);
+			CREATE INDEX IF NOT EXISTS idx_counterfactuals_cluster
+				ON counterfactuals(cluster_id);
+			CREATE TABLE IF NOT EXISTS experiment_results (
+				result_id TEXT PRIMARY KEY,
+				optimization_id TEXT NOT NULL REFERENCES optimization_cycles(optimization_id),
+				candidate_id TEXT NOT NULL DEFAULT '',
+				task_id TEXT NOT NULL,
+				task_class TEXT NOT NULL DEFAULT '',
+				outcome TEXT NOT NULL CHECK(outcome IN ('PASS','FAIL','BLOCKED','NOT_RUN','UNKNOWN')),
+				quarantined INTEGER NOT NULL CHECK(quarantined IN (0,1)),
+				quarantine_reason TEXT NOT NULL DEFAULT '',
+			holdout INTEGER NOT NULL CHECK(holdout IN (0,1)),
+			cluster_id TEXT NOT NULL DEFAULT '',
+			digest TEXT NOT NULL UNIQUE,
+			result_json TEXT NOT NULL,
+				observed_at TEXT NOT NULL,
+				-- A quarantine must always say why: an unexplained quarantine is
+				-- indistinguishable from a dropped failure.
+				CHECK(quarantined = 0 OR quarantine_reason <> '')
+			);
+			CREATE INDEX IF NOT EXISTS idx_experiment_results_cycle
+				ON experiment_results(optimization_id, candidate_id);
+			CREATE INDEX IF NOT EXISTS idx_experiment_results_task
+				ON experiment_results(task_id, task_class);
+			CREATE TABLE IF NOT EXISTS benchmark_manifests (
+				manifest_id TEXT PRIMARY KEY,
+				optimization_id TEXT NOT NULL DEFAULT '',
+				benchmark TEXT NOT NULL CHECK(benchmark IN ('TERMINAL_BENCH','SWE_BENCH_VERIFIED','INTERNAL')),
+				official INTEGER NOT NULL CHECK(official IN (0,1)),
+				evaluator_version TEXT NOT NULL,
+				marshal_sha TEXT NOT NULL,
+				digest TEXT NOT NULL UNIQUE,
+				manifest_json TEXT NOT NULL,
+				started_at TEXT NOT NULL,
+				finished_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_benchmark_manifests_cycle
+				ON benchmark_manifests(optimization_id);
+			CREATE INDEX IF NOT EXISTS idx_benchmark_manifests_benchmark
+				ON benchmark_manifests(benchmark, evaluator_version);
+			CREATE TABLE IF NOT EXISTS promotion_records (
+				promotion_id TEXT PRIMARY KEY,
+				optimization_id TEXT NOT NULL REFERENCES optimization_cycles(optimization_id),
+				candidate_id TEXT NOT NULL,
+				baseline_id TEXT NOT NULL DEFAULT '',
+				decision TEXT NOT NULL CHECK(decision IN (
+					'PROMOTE','PROMOTE_BOUNDED','REJECT','NEEDS_MORE_EVIDENCE','BLOCKED','STALE'
+				)),
+				digest TEXT NOT NULL UNIQUE,
+				promotion_json TEXT NOT NULL,
+				decided_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_promotion_records_cycle
+				ON promotion_records(optimization_id, candidate_id);
+			CREATE INDEX IF NOT EXISTS idx_promotion_records_decision
+				ON promotion_records(decision, decided_at);
+			CREATE TABLE IF NOT EXISTS canary_rollouts (
+				canary_id TEXT PRIMARY KEY,
+				optimization_id TEXT NOT NULL REFERENCES optimization_cycles(optimization_id),
+				candidate_id TEXT NOT NULL,
+				promotion_id TEXT NOT NULL DEFAULT '',
+				status TEXT NOT NULL CHECK(status IN ('PENDING','RUNNING','COMPLETED','ROLLED_BACK','HALTED')),
+				exposure REAL NOT NULL CHECK(exposure >= 0.0 AND exposure <= 1.0),
+				rollback_reason TEXT NOT NULL DEFAULT '',
+				canary_json TEXT NOT NULL,
+				started_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_canary_rollouts_cycle
+				ON canary_rollouts(optimization_id, candidate_id);
+			CREATE INDEX IF NOT EXISTS idx_canary_rollouts_status
+				ON canary_rollouts(status, updated_at);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 85: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(85, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 85: %w", err)
+		}
+		version = 85
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

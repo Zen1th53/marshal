@@ -77,6 +77,14 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/learning/fingerprints", s.RequireAuth(s.handleListFailureFingerprints))
 	mux.HandleFunc("GET /api/v1/learning/replay-index", s.RequireAuthority(authVerifyQA, s.handleListReplayIndex))
 	mux.HandleFunc("GET /api/v1/learning/benchmarks", s.RequireAuth(s.handleListBenchmarkRecords))
+	// Process 08 optimization evidence is read-only over HTTP. Promotion,
+	// rollback and lifecycle-return requests remain application-governed
+	// actions; a rendered web control cannot authorize itself.
+	mux.HandleFunc("GET /api/v1/optimization/cycles/{id}", s.RequireAuthority(authVerifyQA, s.handleGetOptimizationCycle))
+	mux.HandleFunc("GET /api/v1/optimization/cycles/{id}/candidates", s.RequireAuth(s.handleOptimizationCandidates))
+	mux.HandleFunc("GET /api/v1/optimization/cycles/{id}/counterfactuals", s.RequireAuthority(authVerifyQA, s.handleOptimizationCounterfactuals))
+	mux.HandleFunc("GET /api/v1/optimization/cycles/{id}/manifests", s.RequireAuthority(authVerifyQA, s.handleOptimizationManifests))
+	mux.HandleFunc("GET /api/v1/optimization/cycles/{id}/canaries", s.RequireAuth(s.handleOptimizationCanaries))
 	mux.HandleFunc("GET /api/v1/tasks/{id}/quorum", s.RequireAuth(s.handleGetTaskQuorum))
 	mux.HandleFunc("POST /api/v1/tasks/{id}/quorum/decision", s.RequireAuthority(authVerifyQA, s.handleSubmitQuorumDecision))
 	mux.HandleFunc("GET /api/v1/tasks/{id}/merge/preflight", s.RequireAuth(s.handleMergePreflight))
