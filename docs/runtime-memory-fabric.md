@@ -1,6 +1,6 @@
 # Runtime memory fabric
 
-MARSHAL v1.0.1 uses SQLite schema v72. `memory_records_v2` is the canonical
+MARSHAL uses SQLite schema v85 on current `main`. `memory_records_v2` is the canonical
 durable memory store; lexical, vector, graph, and cache structures are derived
 projections.
 
@@ -30,7 +30,7 @@ memory across runtime restarts. Private/operator scopes remain isolated. Typed
 handoffs use the same SQLite runtime rather than a provider-specific memory
 database.
 
-Schema v72 adds a durable, bounded task-memory change cursor. Consumers can
+Schema v72 added a durable, bounded task-memory change cursor. Consumers can
 refresh shared task state without storing memory bodies in the event table. An
 expired cursor forces a canonical reload, and authorization is checked before
 cursor metadata is exposed.

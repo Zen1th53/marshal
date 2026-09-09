@@ -203,6 +203,117 @@ marshal run TASK-001 --adapter opencode --model qwythos-9b
 
 ---
 
+## Governed Lifecycle Commands
+
+These drive the Process 03–08 lifecycle merged on `main`. Each stage writes a
+durable, versioned record bound to an exact repository state. Every command here
+reads canonical state or asks the runtime service to act; none can mint a
+success state directly.
+
+### `marshal goal`
+
+Purpose: States a request and shows how MARSHAL understands it — intent, hard
+constraints and risk tier — before any plan or execution exists.
+
+```bash
+marshal goal <request>
+marshal goal explain <request>
+```
+
+---
+
+### `marshal plan`
+
+Purpose: Creates, inspects and approves a task plan: its DAG, team assembly and
+verification policy.
+
+```bash
+marshal plan create SESSION-ID --file INPUT.json
+marshal plan show PROJECT-ID
+marshal plan approve PROJECT-ID
+marshal plan cancel PROJECT-ID
+marshal plan handoff SESSION-ID PROJECT-ID
+```
+
+---
+
+### `marshal exec`
+
+Purpose: Drives a governed execution run, approves a pending gate, or rolls back
+to a checkpoint.
+
+```bash
+marshal exec start --session SESSION-ID --project PROJECT-ID
+marshal exec run RUN-ID
+marshal exec status RUN-ID
+marshal exec approve APPROVAL-ID
+marshal exec rollback CHECKPOINT-ID
+marshal exec handoff RUN-ID
+```
+
+---
+
+### `marshal review`
+
+Purpose: Runs independent verification and issues a digest-bound completion
+attestation. A run that exited zero is not a verified run; completion requires
+every mandatory criterion met and critical evidence from independent sources.
+
+```bash
+marshal review start SESSION.json
+marshal review status VERIFICATION-ID
+marshal review evaluate VERIFICATION-ID
+marshal review attest VERIFICATION-ID --bundle ENVELOPE.json --provenance TEXT
+```
+
+---
+
+### `marshal learning`
+
+Purpose: Queries evidence-gated durable memory. Results carry their claim state,
+freshness and contradiction signals, so a stale or contested claim is returned
+marked unusable rather than silently omitted.
+
+```bash
+marshal learning search --project ID [--general] [--terms A,B] [--stale]
+marshal learning show MEMORY-COMMIT-ID
+marshal learning history ITEM-ID
+marshal learning trust [TASK-CLASS]
+marshal learning fingerprints --project ID
+marshal learning playbooks --project ID
+marshal learning export --project ID
+```
+
+Notes:
+- `trust` reports measured routing outcomes including failures, blocked runs and
+  routes that were never selected, alongside a selection-bias flag. An unmeasured
+  cost prints as `unmeasured`, never as zero.
+- `playbooks` lists candidates only. A playbook never self-activates.
+
+---
+
+### `marshal optimization`
+
+Purpose: Inspects optimization cycles, counterfactual route evaluations,
+benchmark manifests and bounded canaries.
+
+```bash
+marshal optimization start INPUT.json
+marshal optimization show CYCLE-ID
+marshal optimization candidates CYCLE-ID
+marshal optimization counterfactuals CYCLE-ID
+marshal optimization manifests CYCLE-ID
+marshal optimization canaries CYCLE-ID
+```
+
+Notes:
+- A counterfactual is refused where the original run performed a destructive
+  external effect, because re-running it would repeat that effect.
+- Promotion, canary and rollback are runtime-service operations. This surface is
+  read-only.
+
+---
+
 ### `marshal logs`
 
 Purpose: Displays stdout/stderr execution logs, generated artifacts, and timeline events for a task.
