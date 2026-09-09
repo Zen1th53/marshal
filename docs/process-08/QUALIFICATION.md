@@ -1,8 +1,8 @@
 # Process 08 Qualification
 
 Process 07 base: `ecb7b69e245246eaf0d76eddef4d30f0b03346da`
-Exact main at requalification: `f2516f83980e3cfaa766865f172d5cd98a23cbc6`
-Pull requests: #116, #120, #121, #122 (merged)
+Exact main at requalification: `16fc8cf1d5afad7db6060e234d65ca53920e7363`
+Pull requests: #116, #120, #121, #122, #123 (merged)
 
 Statuses use only `PASS`, `FAIL`, `BLOCKED`, `NOT_RUN`, and `UNKNOWN`.
 
@@ -65,7 +65,7 @@ requirement each piece of evidence answered.
 | AV chaos | PASS | `internal/optimization/chaos_test.go` |
 | AW performance | PASS | 1,000 candidates and 10,000 results aggregated in 21.9ms |
 | AX full lifecycle E2E | PASS | `TestProcess03Through08Lifecycle` through real Process 03 to 08 services |
-| AY exact-main integration | PASS | requalified on `f2516f83980e3cfaa766865f172d5cd98a23cbc6`; see `INTEGRATION_ATTESTATION.md` |
+| AY exact-main integration | PASS | requalified on `16fc8cf1d5afad7db6060e234d65ca53920e7363`; see `INTEGRATION_ATTESTATION.md` |
 
 Counts: 49 PASS, 2 NOT_RUN, 0 FAIL, 0 BLOCKED, 0 UNKNOWN.
 
