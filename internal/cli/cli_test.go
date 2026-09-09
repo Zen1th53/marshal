@@ -126,10 +126,12 @@ func TestMCPAndA2AStatusCLI(t *testing.T) {
 }
 
 func TestCommunityRejectsRemovedEnterpriseWebCommand(t *testing.T) {
+	t.Setenv("MARSHAL_ENTERPRISE", "1")
+	t.Setenv("MARSHAL_ENTERPRISE_TIER", "enterprise")
 	var stdout, stderr bytes.Buffer
 	code := Execute(context.Background(), ".", []string{"web", "serve"}, strings.NewReader(""), &stdout, &stderr)
 	if code == 0 || !strings.Contains(stderr.String(), "unknown command web") {
-		t.Fatalf("web command remained available: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+		t.Fatalf("enterprise entitlement exposed removed web command: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
 
