@@ -82,7 +82,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/rollback", "/budget", "/pause", "/resume", "/cancel", "/doctor", "/tasks",
 			"/policy", "/sandbox", "/memory", "/provider", "/harness", "/model", "/effort",
 			"/ultra", "/backup", "/fingerprint", "/runtime", "/store", "/export", "/blind",
-			"/reinjection", "/alignment", "/diff", "/help", "/quit",
+			"/reinjection", "/alignment", "/optimization", "/diff", "/help", "/quit",
 		},
 		Agents:      agentIDs,
 		Subcommands: make(map[string][]string),

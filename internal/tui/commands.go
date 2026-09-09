@@ -85,6 +85,12 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		}
 		return h.handleMemoryCommit(ctx, parts[1])
 
+	case "/optimization":
+		if len(parts) != 2 {
+			return "Usage: /optimization <cycle_id>", nil
+		}
+		return h.handleOptimizationCycle(ctx, parts[1])
+
 	case "/memory-search":
 		if len(parts) < 2 {
 			return "Usage: /memory-search <project_id> [term ...]", nil
@@ -524,6 +530,7 @@ func (h *CommandHandler) helpText() string {
   /agents                  List registered participants, fixed roles, and harnesses
   /claims                  List active claims and epistemic verification states
   /learning <id>           Inspect a Process 07 memory commit, promotions and refusals
+	/optimization <id>       Inspect a Process 08 governed optimization cycle and refusals
   /memory-search <proj>    Search durable memory with state, freshness and contradictions
   /memory-stale <proj>     Include stale memory, always marked unusable
   /provenance <item>       Show one memory item's full version history
