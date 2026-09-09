@@ -1,6 +1,6 @@
 # Provider adapters
 
-MARSHAL v1.0.1 implements four runtime adapters. Provider availability and
+MARSHAL implements five runtime adapters (`codex`, `claude`, `opencode`, `gemini`, `antigravity`). Provider availability and
 release verification are separate facts.
 
 | Adapter path | Binary | Implemented | Adapter/model E2E | Canonical Runtime E2E |
@@ -10,6 +10,7 @@ release verification are separate facts.
 | OpenCode + Ollama | `opencode` | Yes | FAIL — tested local models did not complete the strict proof task | NOT_RUN — enforcing egress unavailable |
 | Gemini CLI | `gemini` | Yes | NOT_RUN | NOT_RUN |
 | Claude Code | `claude` | Yes | NOT_RUN | NOT_RUN |
+| Antigravity | `antigravity` | Yes | NOT_RUN | NOT_RUN |
 
 The release notes report which binaries were locally probed. A successful
 `--version` or help probe does not establish credentials, model compatibility,
@@ -24,6 +25,7 @@ marshal adapter probe codex
 marshal adapter probe opencode
 marshal adapter probe gemini
 marshal adapter probe claude
+marshal adapter probe antigravity
 ```
 
 Provider execution is explicit:
@@ -33,7 +35,7 @@ marshal run TASK-001 --adapter codex
 marshal run TASK-001 --adapter opencode --model MODEL
 ```
 
-In v1.0.1, a provider that needs network access is rejected with
+A provider that needs network access is rejected with
 `NET_ENFORCEMENT_UNAVAILABLE`: the available proxy is not an enforcing
 Bubblewrap network backend, so opening the namespace would broaden egress.
 The OpenCode results above are direct adapter qualification, outside the
@@ -46,6 +48,6 @@ converted into a false PASS.
 
 The compatibility contracts in [`adapters/MATRIX.json`](../adapters/MATRIX.json)
 also describe tools such as Aider and Crush. Those entries are interoperability
-contracts, not v1.0.1 runtime adapters.
+contracts, not runtime adapters.
 
 See [OpenCode and Ollama](providers/opencode-ollama.md) for local setup notes.
