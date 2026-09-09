@@ -169,6 +169,12 @@ func (s *ConstitutionService) Decide(ctx context.Context, request DecideRequest)
 	if state.Now.IsZero() {
 		state.Now = s.now()
 	}
+	// Entitlement is read from the runtime's ULTRA gate, never from the
+	// request. A caller that could assert its own entitlement could grant
+	// itself ULTRA by filling in a struct field, which would make the
+	// cryptographic lease decorative. With no gate attached this is false,
+	// so an unconfigured runtime evaluates ULTRA envelopes as unentitled.
+	state.EntitlementValid = s.runtime.ULTRAEntitled()
 	// A session's recorded binding outranks whatever version the caller put in
 	// the envelope, so a surface cannot shop for laxer semantics by asserting
 	// an older version.

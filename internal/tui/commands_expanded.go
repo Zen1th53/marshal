@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/bundle"
+	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/doctor"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/reinjection"
@@ -472,9 +473,30 @@ func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (strin
 	return "Reasoning effort was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
 }
 
-// handleUltra handles ULTRA toggling.
+// handleUltra reports ULTRA entitlement status.
+//
+// It reports; it does not grant. There is no argument to this command that
+// turns ULTRA on, because entitlement is not a thing the client decides — a
+// toggle here would be exactly the local flag the design refuses to rely on.
 func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string, error) {
-	return "ULTRA is unavailable: no cryptographically verified entitlement is active.", nil
+	gate, executionEnabled := h.ws.ultraGate()
+	if !gate.Entitled() {
+		return "ULTRA is unavailable: no cryptographically verified entitlement is active.", nil
+	}
+
+	expiry, _ := gate.ExpiresAt()
+	remaining := time.Until(expiry).Round(time.Second)
+	if !gate.Capability(cloud.CapabilityDelegation) {
+		return fmt.Sprintf(
+			"ULTRA is active but does not grant delegation, so confirmations are still asked for.\n  Lease expires in %s.",
+			remaining), nil
+	}
+	if !executionEnabled {
+		return fmt.Sprintf(
+			"ULTRA is entitled but Execution is off, so it behaves exactly like Standard.\n  Lease expires in %s.\n  Set %s=1 to enable it.",
+			remaining, cloud.EnvExecution), nil
+	}
+	return fmt.Sprintf("ULTRA is active with delegation.\n  Lease expires in %s.", remaining), nil
 }
 
 // handleBackup handles snapshot backup creation and restoration.

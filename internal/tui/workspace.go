@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/collaboration"
 	"github.com/Zen1th53/marshal/internal/harness"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -36,6 +37,14 @@ type Workspace struct {
 	terminal   *Terminal
 	out        io.Writer
 
+	// ultra is the canonical ULTRA authorization gate, shared with every other
+	// entry path. It is nil until a Cloud session is attached, and a nil gate
+	// answers "not entitled", so the TUI's default remains Standard.
+	ultra *cloud.Gate
+	// ultraExecution is the user's ULTRA Execution preference. It is not an
+	// authority: with no entitlement it changes nothing.
+	ultraExecution bool
+
 	// screen owns in-place frame painting. Without it every redraw appended to
 	// scrollback, so each keystroke left another prompt banner behind.
 	screen *Screen
@@ -55,6 +64,25 @@ type Workspace struct {
 	// Scroll and activity unread tracking
 	scrollOffset int
 	unreadNew    int
+}
+
+// AttachULTRA wires the canonical ULTRA gate into the workspace.
+//
+// The TUI does not decide entitlement for itself; it asks the same gate the CLI
+// asks. That is what makes "every entry path is gated" a property of the code
+// rather than a convention someone has to remember.
+func (w *Workspace) AttachULTRA(gate *cloud.Gate, executionEnabled bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ultra = gate
+	w.ultraExecution = executionEnabled
+}
+
+// ultraGate returns the gate under the workspace lock.
+func (w *Workspace) ultraGate() (*cloud.Gate, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.ultra, w.ultraExecution
 }
 
 // NewWorkspace instantiates a dynamic terminal workspace connected to the canonical store.
