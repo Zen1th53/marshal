@@ -70,7 +70,6 @@ Commands:
   optimization start INPUT.json | show CYCLE-ID | candidates CYCLE-ID | counterfactuals CYCLE-ID | manifests CYCLE-ID | canaries CYCLE-ID
   help [TOPIC] | help why
   constitution version | invariants | decisions SESSION-ID | violations SESSION-ID
-  web serve [--listen ADDR] [--port PORT]
   tui [SESSION-ID]
   daemon
   version
@@ -181,8 +180,6 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.state(ctx, args[1:])
 	case "memory":
 		err = c.memory(ctx, args[1:])
-	case "web":
-		err = c.web(ctx, args[1:])
 	case "setup":
 		err = c.setup(ctx, args[1:])
 	case "goal":

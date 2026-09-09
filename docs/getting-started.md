@@ -77,19 +77,18 @@ Execution may fail closed if policy, credentials, Bubblewrap, or enforceable
 network isolation is unavailable. A binary probe is not an authenticated E2E
 verification.
 
-## Backup and Web UI
+## Backup
 
 With the daemon running:
 
 ```bash
 marshal state backup --output ./marshal-backup.db
 marshal state verify-backup ./marshal-backup.db
-marshal web serve
 ```
 
-The Web command binds to loopback by default and prints a single-use login
-URL. A live Web server never falls back to demo data; fixture-only panels
-return `501 Not Implemented`.
+Community has no Web control plane or remote listener. Its local interfaces
+are the CLI, terminal TUI, MCP, and A2A. Remote Web and organization control
+are Enterprise capabilities.
 
 Continue with the [CLI reference](cli.md), [provider guide](providers.md), and
 [security model](security-model.md).

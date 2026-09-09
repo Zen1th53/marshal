@@ -9,7 +9,6 @@ __pycache__/
 .ruff_cache/
 /build/
 /dist/
-!internal/webcontrol/dist/
 *.swp
 *~
 .DS_Store
@@ -19,8 +18,6 @@ bin/
 *.zip
 *.db
 *.log
-web/node_modules/
-web/dist/
 
 # Internal process packs and their qualification evidence.
 # These are working material for a single machine: they carry local paths,

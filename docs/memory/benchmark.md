@@ -20,7 +20,7 @@ The MARSHAL memory benchmark evaluates retrieval precision, stale decision suppr
 | **BEAM-Compatible Architecture Suite** | Architecture decision retrieval | **Accuracy: 0.92** | 0 |
 | **Multi-Session Action Arena (T161)** | Task completion & step efficiency | **Success: 0.94** (vs 0.42 Baseline; 3.2 vs 8.5 steps) | 0 |
 | **FAMA Forgetting Evaluation** | Obsolete memory filtering | **Suppression Score: 0.98** | 0 |
-| **GateMem Multi-Tenant Isolation** | Direct-ID cross-tenant defense | **Isolation Score: 1.00** | 0 |
+| **GateMem Cross-Scope Isolation** | Direct-ID cross-scope defense | **Isolation Score: 1.00** | 0 |
 | **PASB Sycophancy Defense** | Conversational repetition defense | **Resistance: 1.00** | 0 |
 | **MemSyco Policy Dominance** | Policy vs Preference conflict | **Dominance: 1.00** | 0 |
 

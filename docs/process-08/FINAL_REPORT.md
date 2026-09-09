@@ -41,12 +41,13 @@ Resource/cost/latency/quota: PASS, verification reserve is a hard veto;
 unmeasured cost and latency stay nil; an unknown quota reset stays UNKNOWN
 Drift/explore-exploit/tier boundary: PASS, any drift makes a promotion stale;
 exploration refuses high-risk work, secret exposure and destructive effects;
-fleet control is vetoed outside the Enterprise tier
+fleet control is unconditionally vetoed in Community
 P07 feedback/playbooks: PASS, a promotion must carry its results; self-reinforcing
 evidence loops are blocked; playbooks need adversarial verification and a canary
 Poisoning/holdout/eval integrity: PASS, cluster counting, holdout regression
 rejection, and exclusions that must carry reasons
-TUI/CLI/Web/MCP/A2A: PASS, five capabilities registered, every surface read-only
+TUI/CLI/MCP/A2A: PASS, five capabilities registered, every surface read-only;
+the former Web surface moved to Enterprise
 Unit/Race/Integration/E2E/Adversarial/Mutation/Chaos/Performance/Pack: PASS
 
 ## Status counts

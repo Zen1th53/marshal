@@ -6,8 +6,8 @@ import (
 	"github.com/Zen1th53/marshal/internal/authz"
 )
 
-func TestT165WebControlPlaneCapabilityMapping(t *testing.T) {
-	// Verify that all capabilities required by the Web Control Plane map are valid in the authz catalog
+func TestT165CapabilityAuthorityMapping(t *testing.T) {
+	// Verify that local Community API capabilities map to valid authority names.
 	requiredCaps := []string{
 		"cap:system:read",
 		"cap:adapter:read",

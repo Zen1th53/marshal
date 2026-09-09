@@ -24,10 +24,6 @@ func digest(v any) (string, error) {
 type Governance struct {
 	// GovernableProviders lists providers MARSHAL can actually govern.
 	GovernableProviders map[string]bool
-	// EnterpriseTier reports whether fleet-wide adaptive control is licensed.
-	// In Community, a candidate enabling it is vetoed rather than silently
-	// downgraded.
-	EnterpriseTier bool
 	// EvidenceFreshness is how recent supporting evidence must be.
 	EvidenceFreshness time.Duration
 	// MinEvidenceClusters is the independent-cluster floor for promotion.
@@ -92,8 +88,8 @@ func Veto(c Candidate, g Governance) []string {
 	if e.ViolatesGoalConstraint {
 		reasons = append(reasons, "violates a Goal or constitutional constraint")
 	}
-	if e.EnablesFleetControl && !g.EnterpriseTier {
-		reasons = append(reasons, "enables fleet-wide control outside the Enterprise tier")
+	if e.EnablesFleetControl {
+		reasons = append(reasons, "enables fleet-wide control, which is unavailable in Community")
 	}
 	if g.RequireRollback && strings.TrimSpace(c.RollbackPlan) == "" {
 		reasons = append(reasons, "has no rollback plan")

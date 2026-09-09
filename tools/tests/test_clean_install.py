@@ -2,13 +2,10 @@ import json
 import pathlib
 import shutil
 import signal
-import socket
 import subprocess
 import tempfile
 import time
 import unittest
-import urllib.error
-import urllib.request
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -168,38 +165,6 @@ class CleanInstallSmokeTests(unittest.TestCase):
                 )
                 self.assertIn("Backup verified", verified.stdout)
 
-                with socket.socket() as port_socket:
-                    port_socket.bind(("127.0.0.1", 0))
-                    port = port_socket.getsockname()[1]
-                web = subprocess.Popen(
-                    [
-                        str(self.marshal_bin),
-                        "web",
-                        "serve",
-                        "--listen",
-                        "127.0.0.1",
-                        "--port",
-                        str(port),
-                    ],
-                    cwd=repo_path,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
-
-                def web_responds():
-                    try:
-                        with urllib.request.urlopen(
-                            f"http://127.0.0.1:{port}/", timeout=0.25
-                        ) as response:
-                            return response.status == 200 and b"MARSHAL" in response.read()
-                    except (OSError, urllib.error.URLError):
-                        return False
-
-                try:
-                    self.wait_for_process(web, web_responds, "web control plane")
-                finally:
-                    self.stop_process(web)
             finally:
                 self.stop_process(daemon)
 

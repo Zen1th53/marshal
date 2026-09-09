@@ -41,7 +41,7 @@
 | Canonical bounded outcome utility metadata | `internal/app/memory_runtime.go` | Persist downstream usefulness without event replay inflation | Utility cannot outrank authority, ACL, lifecycle, or freshness |
 | Authenticated MCP/A2A blackboard and handoff parity | `internal/mcp/server.go`, `internal/a2a/server.go`, `internal/app/memory_grants.go` | Allow provider-neutral cooperation through canonical state | Explicit policy-admin grants are revocable; exact-ID handoff reads are task-authorized |
 | Fail-closed federation boundary | `internal/memory/portable/federation_boundary.go` | Preserve a future sync boundary without insecure networking | Private/non-project export is denied; signed packs are rejected until verification exists |
-| Canonical Web working memory and projection invalidation | `internal/webcontrol/working_memory.go`, `internal/webcontrol/memory*.go`, `internal/cli/memory_cli.go` | Remove independent production state | Nil-runtime fixture behavior remains test/demo-only; non-project Web reads fail closed |
+| Historical Web working-memory migration (removed from Community) | Former Web handlers and the local memory CLI | The former Web implementation was removed from Community during the Enterprise split | This row documents the earlier baseline only; Community no longer contains Web handlers or routes |
 | Expanded deterministic secret firewall | `internal/memory/security/firewall.go` | Block more credential classes at the canonical boundary | Store write/update firewall remains the final enforcement point |
 
 ## 4. Runtime architecture after changes

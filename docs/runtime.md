@@ -10,8 +10,9 @@ sandboxing, or runtime evidence by itself.
 
 MARSHAL runs a project-local Go daemon over a mode-`0600` Unix socket.
 Canonical state is SQLite schema v85 under the mode-`0700` `.marshal/`
-directory. The same runtime services are used by CLI, MCP, A2A, and supported
-live Web handlers.
+directory. The same runtime services are used by the Community CLI, TUI, MCP,
+and A2A interfaces. The Community distribution does not include a Web control
+plane.
 
 Implemented behavior includes:
 
@@ -38,6 +39,7 @@ for R2/R3 work.
 ## Community boundary
 
 Resource measurements and recommendations are read-only. Community does not
-include an adaptive resource governor, fleet-wide placement, automatic model
-migration, or continuous dynamic concurrency/context tuning. Multi-host
-coordination and remote artifact stores are not part of v1.0.1.
+include a Web control plane, remote monitoring or control, fleet-wide
+placement, multi-user organization policy, automatic model migration, or
+continuous dynamic concurrency/context tuning. Multi-host coordination and
+remote artifact stores are not part of the Community distribution.

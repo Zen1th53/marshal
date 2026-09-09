@@ -5,7 +5,7 @@ performs work. This page describes current `main` at SQLite schema v85, which is
 ahead of the v1.5.0 tag.
 
 ```text
-CLI / Unix socket / MCP / A2A / loopback Web
+CLI / terminal TUI / Unix socket / MCP / A2A
                      |
                      v
                   Runtime
@@ -27,8 +27,8 @@ CLI / Unix socket / MCP / A2A / loopback Web
 
 The CLI can call the runtime directly or through the mode-`0600` local daemon
 socket. MCP (`2026-07-28`) and A2A (`1.0`) are authenticated protocol entry
-points into the same runtime. The Web UI is loopback-bound by default and uses
-one-time codes, sessions, CSRF checks, CSP, and route authority checks.
+points into the same runtime. Community exposes no Web UI, HTTP control-plane
+routes, or remote listener; those capabilities are Enterprise-only.
 
 ## Execution path
 

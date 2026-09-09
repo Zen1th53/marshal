@@ -45,7 +45,7 @@ rows were walked one at a time.
 | 32 | Rate limit adaptation | `CauseRateLimit` quarantine |
 | 33 | Drift detection | `DetectDrift`, `StaleAfterDrift`, `DriftKind` |
 | 34 | Explore / exploit | `AllowExploration`, `ExplorationPolicy` |
-| 35 | Product tier boundary | `EnablesFleetControl` vetoed outside `EnterpriseTier` |
+| 35 | Product tier boundary | `EnablesFleetControl` unconditionally vetoed in Community |
 | 36 | P07 feedback | `Feedback`, `ValidateFeedback`, `SelfReinforcing` |
 | 37 | Playbook promotion | `PlaybookPromotion`, `EvaluatePlaybook` |
 | 38 | Poisoning defense | cluster counting, pinned baselines |

@@ -222,8 +222,8 @@ type Effects struct {
 	// ModifiesGovernance marks a candidate that would edit hard policy. Such a
 	// change must loop back through Process 03 rather than be enacted here.
 	ModifiesGovernance bool `json:"modifies_governance"`
-	// EnablesFleetControl marks org-wide adaptive control, which stays behind
-	// the Enterprise boundary.
+	// EnablesFleetControl marks an effect that Community must reject. Enterprise
+	// fleet execution is not implemented in this module.
 	EnablesFleetControl bool `json:"enables_fleet_control"`
 	// SpendsVerificationReserve marks a candidate that would move budget
 	// reserved for verification into generation.
