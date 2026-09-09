@@ -1121,13 +1121,13 @@
     },
     {
       "path": "docs/process-08/INTEGRATION_ATTESTATION.md",
-      "sha256": "31c697e1abae645a8828df156dc5727031ff72cefafd91b848ebaacca71d320f",
-      "bytes": 7595
+      "sha256": "9103e1c1317219d1dcc4958c57a1dd2842485c7b732321d332a8d9e84cdc034c",
+      "bytes": 7915
     },
     {
       "path": "docs/process-08/QUALIFICATION.md",
-      "sha256": "e0ad4bcca8a11796509f05da0c0f1933555907b7260e2cbafe1a03de0e745742",
-      "bytes": 8190
+      "sha256": "db2b63ed60338e903398bef7c973f30631a6ff6796894bf779c84951bc767d27",
+      "bytes": 8196
     },
     {
       "path": "docs/projects.md",

@@ -6,11 +6,14 @@ This attestation was revised after a row-by-row audit against the pack's full
 51-row acceptance matrix. The first revision grouped those rows into 17 summary
 lines, which hid two genuine gaps. Both are now closed and are described below.
 
-Exact main SHA at first requalification: `a1de3f70144a51670bab02f1384e28f9d8dcb151`
-Exact main SHA after the attestation merge: `f2516f83980e3cfaa766865f172d5cd98a23cbc6`
-Exact main tree: `033e716e3eda9bf335c3b78576422ef993bcc111`
+Exact main SHA: `16fc8cf1d5afad7db6060e234d65ca53920e7363`
+Exact main tree: `238732a90bafe088ac2791b0dec17cce09f50454`
+
+Earlier requalification points, each superseded by the one after it:
+`a1de3f70144a51670bab02f1384e28f9d8dcb151` (P08 code),
+`f2516f83980e3cfaa766865f172d5cd98a23cbc6` (first attestation).
 Process 07 base: `ecb7b69e245246eaf0d76eddef4d30f0b03346da`
-Merges: PR #116, PR #120, PR #121 (#121 merged 2026-09-09T04:54:08Z)
+Merges: PR #116, #120, #121, #122, #123
 
 This attestation is bound to the exact main named above. It does not carry to
 any other tree.
@@ -24,9 +27,11 @@ Every qualified candidate is an ancestor of this main:
 | `80a5710eb025688acb161f13b6fc205925e1d3d9` | yes |
 | `099feeddf99090e351b310ece409803fb6e5779b` | yes |
 | `f2874dc` (lifecycle E2E) | yes |
-| `836f1d4dcca8f856d8bb8658ffe787b780fdecb9` (final candidate) | yes |
+| `836f1d4dcca8f856d8bb8658ffe787b780fdecb9` (lifecycle E2E) | yes |
+| `de323d8e2a6dfed7d1ceb7252564924c4ff3b102` (first attestation) | yes |
+| `2d5e50212dc6e81441fbba0d4d83b47730618880` (final candidate) | yes |
 
-The final candidate's tree is `033e716e3eda9bf335c3b78576422ef993bcc111`, which
+The final candidate's tree is `238732a90bafe088ac2791b0dec17cce09f50454`, which
 is byte-identical to the exact main tree. The requalified tree is therefore the
 tree that was reviewed, not a merge artifact of it.
 
@@ -74,6 +79,7 @@ That gap is closed by real execution, not by the substrate:
 | Optimization runtime and store | PASS | 5 tests |
 | CLI / Web / MCP / A2A / TUI conformance | PASS | 12 surface tests; every Process 08 surface is read-only |
 | Full P03→P08 lifecycle E2E | PASS | `TestProcess03Through08Lifecycle` |
+| Durability and restart | PASS | `Recover`, `ApplyRecovery`, `InterruptedNeverPasses`, `OptimizationService.Recover`; 12 tests |
 | Pack and result integrity | PASS | `tools/release_verify.py` PASS, `validate-pack` PASS |
 | Python suites | PASS | 27 tests |
 
