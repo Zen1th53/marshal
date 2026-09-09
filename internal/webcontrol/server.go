@@ -62,7 +62,9 @@ func NewServer(cfg ServerConfig, runtime any) (*Server, error) {
 		cfg.Port = 8787
 	}
 	if cfg.Version == "" {
-		cfg.Version = "1.0.1"
+		// Fallback only. The CLI supplies the real version; this keeps an
+		// embedded server from reporting a version the binary never had.
+		cfg.Version = "1.5.0"
 	}
 	if cfg.Commit == "" {
 		cfg.Commit = "unknown"
