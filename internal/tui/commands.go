@@ -66,7 +66,16 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 			h.ws.state.SessionMode = strings.ToUpper(mode)
 			return fmt.Sprintf("Operating mode switched to %s.", strings.ToUpper(mode)), nil
 		case "ultra":
-			return "ULTRA is unavailable: no cryptographically verified entitlement is active.", nil
+			// Switching to ULTRA asks the same gate every other entry path
+			// asks. Without a verified lease the mode does not change, so a
+			// user cannot talk their way into ULTRA through the TUI.
+			gate, _ := h.ws.ultraGate()
+			if !gate.Entitled() {
+				return "ULTRA is unavailable: no cryptographically verified entitlement is active.", nil
+			}
+			h.ws.mode = "ultra"
+			h.ws.state.SessionMode = "ULTRA"
+			return "Operating mode switched to ULTRA.", nil
 		default:
 			return "Invalid mode. Supported modes: manual, auto", nil
 		}
