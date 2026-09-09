@@ -1120,9 +1120,19 @@
       "bytes": 10431
     },
     {
+      "path": "docs/process-08/FINAL_REPORT.md",
+      "sha256": "e410597d11b36f37085ccc97950e7b5b59e38415859a57b83dd846c5bfdf0d02",
+      "bytes": 4871
+    },
+    {
       "path": "docs/process-08/INTEGRATION_ATTESTATION.md",
       "sha256": "9103e1c1317219d1dcc4958c57a1dd2842485c7b732321d332a8d9e84cdc034c",
       "bytes": 7915
+    },
+    {
+      "path": "docs/process-08/PACK_COVERAGE.md",
+      "sha256": "78e433feeeb34f2040a073328645a173f4009bd3f457239b0ae1617d00c04d55",
+      "bytes": 4976
     },
     {
       "path": "docs/process-08/QUALIFICATION.md",
