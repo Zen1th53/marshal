@@ -1120,9 +1120,14 @@
       "bytes": 10431
     },
     {
+      "path": "docs/process-08/INTEGRATION_ATTESTATION.md",
+      "sha256": "9c5613f4c5fdb11b619442fa2fa0e80bb5a79742b4f3d943450646a09c897068",
+      "bytes": 6070
+    },
+    {
       "path": "docs/process-08/QUALIFICATION.md",
-      "sha256": "0499303cf2ee4fb3729686c4350d70b87734c00245afcc1564058c6d09c4f947",
-      "bytes": 2423
+      "sha256": "66763d85f5d3cd3f5d28ff05b5f52e317106fa95062d36fc4761cb14916a4e45",
+      "bytes": 3328
     },
     {
       "path": "docs/projects.md",
