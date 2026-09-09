@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -61,7 +62,18 @@ func (c *command) goal(ctx context.Context, args []string) error {
 		return err
 	}
 
-	decision := goalintake.Confirm(intake, goalintake.ModeStandard, goalintake.DelegationPolicy{})
+	// ULTRA authorization is asked for here, at the one point where a Goal's
+	// confirmation is decided. The Cloud is the authority; with it unconfigured
+	// or unreachable this returns a nil gate, which answers Standard, so the
+	// offline path needs no special case and cannot accidentally grant.
+	authorization := cloud.Authorize(ctx, cloud.LoadConfig(),
+		filepath.Join(root, projectid.StateDirName), constitution.Current.String())
+	// Lease renewal, presence and telemetry run in the background for the life
+	// of the command, and Stop flushes what is queued before returning.
+	authorization.Start(ctx)
+	defer authorization.Stop()
+
+	decision := goalintake.Confirm(intake, authorization.Mode(), authorization.Policy())
 
 	if c.json {
 		return c.print(map[string]any{

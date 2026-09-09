@@ -24,6 +24,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/cell"
+	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/dag"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/evidence"
@@ -71,6 +72,31 @@ type Runtime struct {
 	allowProcessOnly   bool
 	execService        *ExecutionService
 	execMu             sync.Mutex
+
+	// ultra is the canonical ULTRA authorization gate. It is nil when no Cloud
+	// session is attached, and a nil gate answers "not entitled", so a runtime
+	// without one evaluates every ULTRA envelope as unentitled.
+	ultra *cloud.Gate
+}
+
+// AttachULTRA wires the canonical ULTRA gate into the runtime.
+//
+// The runtime derives entitlement from this gate rather than from whatever a
+// caller puts in a DecideRequest, which is what stops a surface from asserting
+// its own entitlement into a constitutional decision.
+func (r *Runtime) AttachULTRA(gate *cloud.Gate) {
+	if r == nil {
+		return
+	}
+	r.ultra = gate
+}
+
+// ULTRAEntitled reports whether the runtime currently holds ULTRA authorization.
+func (r *Runtime) ULTRAEntitled() bool {
+	if r == nil {
+		return false
+	}
+	return r.ultra.Entitled()
 }
 
 type Options struct {
