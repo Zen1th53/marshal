@@ -69,16 +69,6 @@ run_check "MEMORY AND MIGRATIONS" go test -count=1 ./internal/memory/... ./inter
 run_check "RESOURCE AWARENESS" go test -count=1 ./internal/resources/... ./internal/doctor/...
 run_check "PROVIDER ADAPTERS" go test -count=1 ./internal/adapter/... ./internal/integration/...
 run_check "BACKUP AND RECOVERY" go test -count=1 ./internal/store/... -run 'Backup|Restore|Recovery'
-run_check "WEB CONTROL PLANE" bash -c '
-  cd web
-  npm ci
-  npm run typecheck
-  npm run lint
-  npm run test:run
-  npm run build
-  cd ..
-  diff -ru web/dist internal/webcontrol/dist
-'
 run_check "RELEASE TOOLING" python3 -m unittest \
   tools/tests/test_build_release.py \
   tools/tests/test_release_trust.py

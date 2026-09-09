@@ -26,11 +26,6 @@ func TestCapabilityRegistryFullParity(t *testing.T) {
 		t.Errorf("expected 0 CLI-only remaining, got %d", report.CLIOnlyRemaining)
 	}
 
-	// Verify ZERO Web-only remaining
-	if report.WebOnlyRemaining != 0 {
-		t.Errorf("expected 0 Web-only remaining, got %d", report.WebOnlyRemaining)
-	}
-
 	// Verify all 100 mapped to TUI
 	if report.TUIMappedCount != report.TotalCapabilities {
 		t.Errorf("expected all %d capabilities mapped to TUI, got %d", report.TotalCapabilities, report.TUIMappedCount)

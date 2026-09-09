@@ -19,10 +19,10 @@ v1.5.0. The current database is SQLite schema v79.
 - `THREAT-MODEL.md` — trust boundaries
 
 ```text
-TUI / CLI / MCP / A2A / supported Web routes
-                  |
-                  v
-              app.Runtime
+TUI / CLI / MCP / A2A
+            |
+            v
+        app.Runtime
                   |
  capability → policy → network → sandbox → provider
                   |
@@ -37,6 +37,6 @@ required isolation fails closed. Process-only fallback is disabled by default
 and limited to explicitly opted-in R0/R1 work.
 
 Community Resource Awareness is read-only and advisory. It does not implement
-adaptive resource control, fleet placement, or automatic provider/model
-routing. Multi-host clustering and remote artifact stores remain outside the
-v1.5.0 Community runtime.
+a Web control plane, adaptive resource control, fleet placement, or automatic
+provider/model routing. Multi-host clustering and remote artifact stores remain
+outside the Community runtime.

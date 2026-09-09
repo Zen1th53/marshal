@@ -26,7 +26,7 @@ Autonomous and assistive coding agents are increasingly granted direct access to
 3. **No Independent Authorization Boundary**: An LLM cannot reliably police its own actions. Security policy, capability grants, and risk evaluation must be enforced by an independent runtime before command execution.
 4. **Context Amnesia & Memory Drift**: Multi-step engineering workflows require durable memory that tracks previous task outcomes, conflicts, and architectural decisions without exceeding context budgets or ingesting unverified prompt injections.
 
-MARSHAL solves these challenges by acting as a **deterministic local control plane** between agent interfaces (TUI, CLI, Web, MCP, A2A) and provider execution backends.
+MARSHAL solves these challenges by acting as a **deterministic local control plane** between Community interfaces (TUI, CLI, MCP, A2A) and provider execution backends.
 
 ---
 
@@ -45,19 +45,15 @@ MARSHAL solves these challenges by acting as a **deterministic local control pla
 | **Canonical Memory Fabric** | SQLite-backed memory engine (schema `v85`), automatic task-start context recall (max 8 records, 12 KiB budget), post-run evidence-linked outcome capture (`CaptureOutcome`), multi-track search, conflict detection, lifecycle governance, and session importers. |
 | **Provider Adapters** | Modular process adapters for Codex CLI, OpenCode, Gemini CLI, Claude Code, and Antigravity with dynamic capability probing and standardized execution contracts. |
 | **Evidence & Provenance** | Content-addressed SHA-256 artifact storage (`.marshal/artifacts/sha256/<hex>`), structured command/output/environment evidence nodes, commit linkage, and immutable event ledger. |
-| **Operations & Web UI** | Authenticated loopback Web control plane (`127.0.0.1:8787`), single-use one-time login codes, system health diagnostics (`marshal doctor`), SQLite backup/restore verification, and legal chain-of-title compliance export. |
+| **Operations** | Local system health diagnostics (`marshal doctor`), SQLite backup/restore verification, and legal chain-of-title compliance export. Web control-plane access is Enterprise-only. |
 
 ---
 
 ## Architecture
 
-The following diagram illustrates the implemented Community runtime architecture derived directly from current executable code:
-
-![MARSHAL Implemented Runtime Architecture](docs/assets/marshal-architecture.svg)
-
 ### Architecture Layers
 
-1. **Entry Points**: Operators and tools interact with MARSHAL through the native `marshal` CLI, the loopback Web Control Plane (`127.0.0.1:8787`), the MCP HTTP JSON-RPC endpoint (protocol `2026-07-28`), or the A2A HTTP/JSON endpoint (wire `1.0`, protocol `1.0.0`).
+1. **Entry Points**: Operators and tools interact with Community through the native `marshal` CLI, the terminal TUI, the MCP HTTP JSON-RPC endpoint (protocol `2026-07-28`), or the A2A HTTP/JSON endpoint (wire `1.0`, protocol `1.0.0`).
 2. **Runtime / Control Plane**: `internal/app.Runtime` coordinates operations over the local daemon socket. It orchestrates risk assessment (`internal/risk`), pre-execution security gates (`internal/gate`), capability brokering (`internal/capability`), role-based policy enforcement (`internal/policy`), and the canonical SQLite store (`internal/store`).
 3. **Execution Pipeline**: `Runtime.Run` handles task claims, prepares an isolated Git worktree, performs automatic task-start memory recall, resolves provider binaries, and executes the provider inside a Bubblewrap container. `Runtime.Verify` provides a separate, explicit command verification API.
 4. **Provider Adapters**: External provider CLIs (`codex`, `gemini`, `claude`, `opencode`) run against standardized process interfaces (`adapter.Adapter`).
@@ -225,11 +221,6 @@ MARSHAL implements defense-in-depth principles:
 - API tokens (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, etc.) are leased with short 5-minute expirations and revoked immediately after execution.
 - High-entropy secrets and leased values are automatically stripped from stdout, stderr, event payloads, and artifact reports before persistence.
 
-### 5. Web Control Plane Security
-- The Web server binds to loopback (`127.0.0.1:8787`) by default. Binding to non-loopback interfaces requires explicit opt-in.
-- Authentication uses short-lived (5-minute), single-use one-time login codes generated via `marshal web code`.
-- All state-modifying requests require valid session cookies and CSRF tokens with strict Content Security Policy (CSP) headers.
-
 ---
 
 ## Provider Adapters and Verification Status
@@ -247,23 +238,6 @@ MARSHAL includes process adapters for major agent CLIs. Adapters probe provider 
 > **Verification Policy**: "Adapter Implemented" means the codebase contains a tested process adapter. External provider tests require installed binaries, valid credentials, or running local models. Tests that are skipped or not run are never reported as verified.
 
 ---
-
-## Web Control Plane
-
-MARSHAL includes an embedded, authenticated Web control plane for monitoring and managing local agent operations.
-
-```bash
-# Start the Web Control Plane
-marshal web serve
-
-# Generate a single-use one-time login URL
-marshal web code
-```
-
-### Live-Backed Surfaces vs Unsupported Surfaces
-
-- **Live Canonical Surfaces**: System status, task lists, run details, stdout/stderr execution logs, content-addressed artifacts, evidence graphs, audit event timelines, memory search and governance, doctor diagnostics, and SQLite database backup management.
-- **Fixture-Only / Unsupported Surfaces**: Routes backed only by mock data or speculative enterprise features (such as autonomous multi-model routing or fixture overviews) return `501 Not Implemented` (`unsupported_live_surface`) when connected to a live runtime.
 
 ---
 
@@ -458,8 +432,6 @@ marshal verify -- go test ./...
 | `marshal policy test <SUITE-FILE>` | Execute security policy test suite against policy engine |
 | `marshal legal audit [--json]` | Perform IP provenance and chain-of-title compliance audit |
 | `marshal legal export --output <PATH>` | Export signed legal provenance archive |
-| `marshal web serve [--listen ADDR] [--port PORT]` | Launch authenticated loopback Web Control Plane |
-| `marshal web code` | Generate short-lived, single-use one-time login code |
 
 For comprehensive CLI documentation, see [docs/cli.md](docs/cli.md).
 
@@ -479,7 +451,6 @@ Every official release of MARSHAL undergoes automated verification:
 
 - **Endpoint-Restricted Provider Egress**: Bubblewrap cannot enforce granular host/port allowlists on its own. Because an enforcing proxy is not currently wired in the live runtime, network-required runs fail closed with `NET_ENFORCEMENT_UNAVAILABLE`.
 - **Supported Sandbox Backend**: Linux Bubblewrap (`bwrap`) is the supported production sandbox backend. There is no equivalent sandboxing backend for macOS or Windows.
-- **Web Fixture Boundaries**: Web UI panels that represent mock data or unsupported enterprise features return `501 Not Implemented` when connected to a live runtime.
 - **Vector Retrieval**: Vector similarity search requires an external or local embedding provider; exact and lexical search operate independently on canonical SQLite.
 - **Third-Party Security Audits**: Automated test suites validate core security invariants; MARSHAL does not claim an external third-party certification or audit.
 
@@ -489,10 +460,11 @@ Every official release of MARSHAL undergoes automated verification:
 
 | Feature Area | MARSHAL Community (Open Source) | MARSHAL Enterprise (Commercial) |
 |---|---|---|
-| **Architecture Model** | Local, single-node, project-scoped runtime | Multi-node distributed fleet orchestration |
+| **Architecture Model** | Local, single-node, project-scoped runtime with CLI/TUI/MCP/A2A access | Remote Web control plane and multi-node distributed fleet orchestration |
 | **Persistence Engine** | Project-local SQLite (`.marshal/state.db`) | Centralized multi-tenant database clusters |
 | **Resource Awareness** | Bounded, read-only host telemetry & advice | Adaptive resource governors & dynamic fleet placement |
 | **Agent Tuning** | Manual model selection per task run | Autonomous cross-model routing & auto-tuning |
+| **Web and Organization Control** | Not included; no Web routes or listener in the Community binary | Remote Web access, multi-user RBAC, centralized approvals/policies, and fleet operations |
 | **Licensing** | GNU AGPL-3.0-only | Commercial proprietary license (non-AGPL) |
 
 ---

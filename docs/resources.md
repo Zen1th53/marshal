@@ -12,7 +12,10 @@ MARSHAL Community can inspect the local machine and make conservative safety rec
 - best-effort thermal-zone readings; unavailable sensors are `UNKNOWN`, never zero; and
 - a fixed loopback-only Ollama `/api/tags` request, including installed-model size metadata when supplied by Ollama.
 
-`marshal doctor` reports the resource summary and Ollama model count. The authenticated Web endpoint `GET /api/v1/resources` returns the same point-in-time snapshot for the Operations page. It does not include environment variables, credentials, device serials, UUIDs, or raw vendor command output.
+`marshal doctor` reports the resource summary and Ollama model count. Community
+does not expose this snapshot through a Web endpoint. It does not include
+environment variables, credentials, device serials, UUIDs, or raw vendor command
+output.
 
 ## Health and recommendations
 

@@ -76,7 +76,7 @@ an existing database.
 
 - optional vector retrieval requires a configured local provider;
 - federation and network memory sync are not Community v1.0.1 features;
-- CLI/Web do not expose every lower-level handoff or consolidation operation;
+- Community CLI/TUI do not expose every lower-level handoff or consolidation operation;
   and
 - authenticated external-provider E2E is NOT_RUN for v1.0.1 unless the release
   notes explicitly report otherwise.
