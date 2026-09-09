@@ -1880,6 +1880,11 @@
       "bytes": 2716
     },
     {
+      "path": "internal/app/process08_full_lifecycle_test.go",
+      "sha256": "ae0ffc5ac49bf7cb4a6614fe0b251ac1a71d0675b85fa234326c718fb3f9b447",
+      "bytes": 10147
+    },
+    {
       "path": "internal/app/project_defaults.go",
       "sha256": "8726a0f938f2adaf193345d8c333ecc597b9c909e2f28ffc440fd5ba0c0b9778",
       "bytes": 1634
