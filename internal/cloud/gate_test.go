@@ -307,8 +307,13 @@ func TestGateExpiresOnItsOwn(t *testing.T) {
 	if g.Mode() != goalintake.ModeStandard {
 		t.Fatal("an expired gate did not fall back to Standard")
 	}
-	if _, err := g.Bundle(); !errors.Is(err, ErrLeaseExpired) {
-		t.Fatalf("want ErrLeaseExpired, got %v", err)
+	// An expired lease is retired rather than merely reported as expired, so
+	// the bundle is gone entirely. Either error means no ULTRA material; what
+	// matters is that none is handed out.
+	if _, err := g.Bundle(); err == nil {
+		t.Fatal("ULTRA material was available after expiry")
+	} else if !errors.Is(err, ErrNoLease) && !errors.Is(err, ErrLeaseExpired) {
+		t.Fatalf("unexpected error after expiry: %v", err)
 	}
 }
 

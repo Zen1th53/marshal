@@ -28,6 +28,12 @@ type Gate struct {
 	lease *Lease
 	ring  *KeyRing
 
+	// highWater is the latest time this gate has observed. Expiry is judged
+	// against it rather than against the raw clock, so winding the clock back
+	// cannot revive a lease that has already lapsed. Without this, a lease is
+	// kept in memory after it expires and a rollback makes it valid again.
+	highWater time.Time
+
 	installationID string
 	sessionID      string
 	now            func() time.Time
@@ -55,10 +61,21 @@ func (g *Gate) Adopt(l Lease) error {
 	if g == nil {
 		return ErrNoLease
 	}
+	// Verification uses the high-water mark rather than the raw clock, so a
+	// rolled-back clock cannot be used to re-adopt a lease that has already
+	// lapsed once. Time only ever moves forward as far as this gate is
+	// concerned.
+	g.mu.Lock()
+	if now := g.now(); now.After(g.highWater) {
+		g.highWater = now
+	}
+	at := g.highWater
+	g.mu.Unlock()
+
 	if err := VerifyLease(l, g.ring, VerifyInput{
 		InstallationID: g.installationID,
 		SessionID:      g.sessionID,
-		Now:            g.now(),
+		Now:            at,
 	}); err != nil {
 		return err
 	}
@@ -83,17 +100,29 @@ func (g *Gate) Entitled() bool {
 	if g == nil {
 		return false
 	}
-	g.mu.RLock()
-	defer g.mu.RUnlock()
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	return g.entitledLocked()
 }
 
-// entitledLocked assumes the caller holds at least a read lock.
+// entitledLocked assumes the caller holds the write lock.
+//
+// It advances the high-water mark and retires a lapsed lease outright, so a
+// later clock rollback finds nothing to revive.
 func (g *Gate) entitledLocked() bool {
 	if g.lease == nil {
 		return false
 	}
-	return g.now().Before(g.lease.Claims.ExpiresAt)
+	if now := g.now(); now.After(g.highWater) {
+		g.highWater = now
+	}
+	if !g.highWater.Before(g.lease.Claims.ExpiresAt) {
+		// Dropping it here, rather than merely answering false, is what makes
+		// expiry irreversible.
+		g.lease = nil
+		return false
+	}
+	return true
 }
 
 // Capability reports whether the held lease grants a named capability.
@@ -101,8 +130,8 @@ func (g *Gate) Capability(name string) bool {
 	if g == nil {
 		return false
 	}
-	g.mu.RLock()
-	defer g.mu.RUnlock()
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	if !g.entitledLocked() {
 		return false
 	}
@@ -118,12 +147,12 @@ func (g *Gate) Bundle() (Bundle, error) {
 	if g == nil {
 		return Bundle{}, ErrNoLease
 	}
-	g.mu.RLock()
-	defer g.mu.RUnlock()
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	if g.lease == nil {
 		return Bundle{}, ErrNoLease
 	}
-	if !g.now().Before(g.lease.Claims.ExpiresAt) {
+	if !g.entitledLocked() {
 		return Bundle{}, ErrLeaseExpired
 	}
 	return g.lease.UsableBundle()
@@ -158,9 +187,10 @@ func (g *Gate) ExpiresAt() (time.Time, bool) {
 
 // RenewAt reports when renewal should be attempted.
 //
-// Renewal is scheduled at roughly half the remaining life rather than at expiry,
-// so one failed attempt still leaves time for another before ULTRA drops. A
-// client that renewed at the last moment would degrade on every brief hiccup.
+// Renewal is scheduled at the midpoint of the lease's window rather than at
+// expiry, so one failed attempt still leaves time for another before ULTRA
+// drops. A client that renewed at the last moment would degrade on every brief
+// hiccup.
 func (g *Gate) RenewAt() (time.Time, bool) {
 	if g == nil {
 		return time.Time{}, false
