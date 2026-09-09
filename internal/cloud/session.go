@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -134,10 +135,16 @@ func (c *Client) Register(ctx context.Context, st State) error {
 	if err != nil {
 		return err
 	}
+	// Platform is sent because the server validates registration through the
+	// same rules as telemetry, and those require a recognised os and arch.
+	// These describe the build, not the machine: "linux/amd64" says nothing
+	// about who is running it.
 	return c.post(ctx, "/v1/installations/register", map[string]any{
 		"installation_id": st.InstallationID,
 		"public_key":      base64.RawURLEncoding.EncodeToString(pub),
 		"client_version":  c.version,
+		"os":              runtime.GOOS,
+		"arch":            runtime.GOARCH,
 	}, nil)
 }
 
@@ -165,7 +172,10 @@ func (c *Client) StartSession(ctx context.Context, st State, sessionID string) (
 		return Lease{}, fmt.Errorf("%w: empty challenge", ErrRefused)
 	}
 
-	proof, err := st.Sign([]byte(st.InstallationID + "|" + ch.Nonce))
+	// The signed bytes must match the server's construction exactly. The domain
+	// prefix is what stops a signature made for one purpose being replayed as a
+	// proof for another, so it is part of the contract rather than decoration.
+	proof, err := st.Sign([]byte("marshal-cloud-pop:v1:" + st.InstallationID + ":" + ch.Nonce))
 	if err != nil {
 		return Lease{}, err
 	}
@@ -222,7 +232,12 @@ func isErr(err, target error) bool { return errors.Is(err, target) }
 // keyResponse carries the server's current verification keys.
 type keyResponse struct {
 	Keys []struct {
-		KeyID     string `json:"key_id"`
+		// The field is "kid", matching both the server and the lease claims.
+		// It was "key_id" here, which no server ever sends: every key was
+		// silently discarded and the ring came back empty, so the client
+		// refused to start against a perfectly healthy service.
+		KeyID     string `json:"kid"`
+		Algorithm string `json:"algorithm"`
 		PublicKey string `json:"public_key"`
 	} `json:"keys"`
 }
@@ -251,6 +266,12 @@ func (c *Client) FetchKeys(ctx context.Context) (*KeyRing, error) {
 	}
 	ring := NewKeyRing()
 	for _, k := range body.Keys {
+		// An algorithm this client cannot verify is skipped rather than
+		// guessed at. Treating unknown material as ed25519 would mean feeding
+		// arbitrary bytes to the verifier.
+		if k.Algorithm != "" && k.Algorithm != "ed25519" {
+			continue
+		}
 		raw, err := base64.RawURLEncoding.DecodeString(k.PublicKey)
 		if err != nil {
 			// One malformed key does not invalidate the rest, but it is not

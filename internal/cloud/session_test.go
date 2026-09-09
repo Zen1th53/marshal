@@ -46,8 +46,12 @@ func newFakeServer(t *testing.T) *fakeServer {
 		}
 		pub := priv.Public().(ed25519.PublicKey)
 		json.NewEncoder(w).Encode(map[string]any{
+			// These field names mirror the real server exactly. An earlier
+			// version of this fake used "key_id", which no server sends, and
+			// the mismatch stayed invisible until the client met a real one.
 			"keys": []map[string]string{{
-				"key_id":     f.keyID,
+				"kid":        f.keyID,
+				"algorithm":  "ed25519",
 				"public_key": base64.RawURLEncoding.EncodeToString(pub),
 			}},
 		})

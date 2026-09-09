@@ -2381,18 +2381,18 @@
     },
     {
       "path": "internal/cloud/lease.go",
-      "sha256": "9df458f5d27f4c8e836ee7025572ec6ffceb69f7242208a3868e6e8e0905e70f",
-      "bytes": 11904
+      "sha256": "85459a5526d832b50ec3f4cb235e5590deb4f9fa2dfa848137a8dc75f0ed61a0",
+      "bytes": 10716
     },
     {
       "path": "internal/cloud/session.go",
-      "sha256": "5691e616dfe87837169561aa140c455d2d5af46b3a914dc9844b9d83385f6fee",
-      "bytes": 12870
+      "sha256": "30350bc0ef17f214a6376c8243e4051b4de96fa477afdbadff847bb996496018",
+      "bytes": 14013
     },
     {
       "path": "internal/cloud/session_test.go",
-      "sha256": "3f23daa817e5dc5bf78eaf11f99fa46ca2001284259578cd0929d654561a5cc7",
-      "bytes": 10729
+      "sha256": "dd641cd41abd8c7f6f14692da956fe147b3f46538622a77e25672d7f7b5fc391",
+      "bytes": 10963
     },
     {
       "path": "internal/cloud/state.go",

@@ -12,13 +12,11 @@
 package cloud
 
 import (
-	"bytes"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 )
@@ -131,56 +129,25 @@ func (c Claims) Valid(now time.Time) error {
 
 // signingInput renders the bytes that are signed.
 //
-// Claims and bundle are signed together. Signing only the claims would let a
-// bundle be swapped for another server-issued one, which is exactly the kind of
-// mix-and-match an attacker with two entitlements would try.
+// Claims and bundle are signed together, so a bundle cannot be swapped for
+// another server-issued one - the mix-and-match an attacker holding two
+// entitlements would try.
+//
+// The encoding must match the authority byte for byte, and the authority is the
+// server: this marshals the same anonymous struct it does. An independently
+// "improved" encoding here - sorted keys, integer timestamps - produces bytes
+// no server ever signed, so every genuine lease fails verification. Go emits
+// struct fields in declaration order, so matching the field order in Claims and
+// Bundle is what makes this deterministic, not any sorting done here.
 func signingInput(c Claims, b Bundle) ([]byte, error) {
-	// Routing keys are sorted so the same content always produces the same
-	// bytes. Go randomises map iteration, so without this a lease would verify
-	// or fail depending on the run.
-	keys := make([]string, 0, len(b.RoutingTable))
-	for k := range b.RoutingTable {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	routes := make([][2]string, 0, len(keys))
-	for _, k := range keys {
-		routes = append(routes, [2]string{k, b.RoutingTable[k]})
-	}
-
-	caps := append([]string(nil), c.Capabilities...)
-	sort.Strings(caps)
-
-	payload := struct {
-		JTI            string      `json:"jti"`
-		KeyID          string      `json:"kid"`
-		EntitlementID  string      `json:"entitlement_id"`
-		InstallationID string      `json:"installation_id"`
-		SessionID      string      `json:"session_id"`
-		ClientVersion  string      `json:"client_version"`
-		Capabilities   []string    `json:"capabilities"`
-		IssuedAt       int64       `json:"issued_at"`
-		ExpiresAt      int64       `json:"expires_at"`
-		PolicyDigest   string      `json:"policy_digest"`
-		Routes         [][2]string `json:"routes"`
-		IssuedFor      string      `json:"issued_for"`
-	}{
-		JTI: c.JTI, KeyID: c.KeyID, EntitlementID: c.EntitlementID,
-		InstallationID: c.InstallationID, SessionID: c.SessionID,
-		ClientVersion: c.ClientVersion, Capabilities: caps,
-		// Unix nanoseconds rather than a formatted time, so the signature does
-		// not depend on how a timestamp happens to be rendered.
-		IssuedAt: c.IssuedAt.UTC().UnixNano(), ExpiresAt: c.ExpiresAt.UTC().UnixNano(),
-		PolicyDigest: b.PolicyDigest, Routes: routes, IssuedFor: b.IssuedFor,
-	}
-
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(payload); err != nil {
+	input, err := json.Marshal(struct {
+		Claims Claims `json:"claims"`
+		Bundle Bundle `json:"bundle"`
+	}{c, b})
+	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrLeaseInvalid, err)
 	}
-	return buf.Bytes(), nil
+	return input, nil
 }
 
 // KeyRing holds the verification keys this client trusts.
