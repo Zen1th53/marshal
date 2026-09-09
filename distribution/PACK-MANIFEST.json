@@ -2241,8 +2241,8 @@
     },
     {
       "path": "internal/cli/cli_test.go",
-      "sha256": "48e27fda4e998f403627365914b0bbea40196d5288fe1657a996c14096ca250c",
-      "bytes": 17430
+      "sha256": "8de555907da2169764f61ea7ffe61ae5d207a1fabb00893b949b367353f12a2f",
+      "bytes": 17538
     },
     {
       "path": "internal/cli/constitution.go",
@@ -4356,8 +4356,8 @@
     },
     {
       "path": "internal/optimization/engine.go",
-      "sha256": "bf1c198ee5623c6ff5b543f0aa97db140847ca9a9bf8d6f0a07d2e6b43506d4f",
-      "bytes": 13461
+      "sha256": "89360931f2b5be7dae5f5c04dd47d34d91a1714f94f251786c2876fd02ba8ec1",
+      "bytes": 13261
     },
     {
       "path": "internal/optimization/experiment.go",
@@ -4411,8 +4411,8 @@
     },
     {
       "path": "internal/optimization/types.go",
-      "sha256": "d33d3dfda6d7538f23d318774027c09cf1b77d8d4e62d42c69f5361229408669",
-      "bytes": 14428
+      "sha256": "bdd5164b746b0f6b6a7ad31ef8b22177798675a59046eb9ed52af8569a13e2fe",
+      "bytes": 14457
     },
     {
       "path": "internal/plan/adversarial_test.go",
