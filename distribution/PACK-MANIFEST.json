@@ -3450,6 +3450,11 @@
       "bytes": 1430
     },
     {
+      "path": "internal/mcp/process08_test.go",
+      "sha256": "d077be9381d49541d4c9fea61b0f9b272ebbf52f9d3809f92b1b3cb157af9938",
+      "bytes": 21982
+    },
+    {
       "path": "internal/mcp/server.go",
       "sha256": "9b8b62076363202f9e93835e27169f35f01386e5f4e256b7ba34bc6c49b1bc83",
       "bytes": 32746
@@ -4356,8 +4361,8 @@
     },
     {
       "path": "internal/optimization/bench/ablation.go",
-      "sha256": "d39da6b7231849a69cc912d52985bc2062b40276abab6bc8cf5f41e953505eaf",
-      "bytes": 7254
+      "sha256": "01891ca4fb805512b2e9e5d2cc7e002a634504f83784951fa32124c86edcb6f3",
+      "bytes": 13604
     },
     {
       "path": "internal/optimization/bench/baselines.go",
@@ -4366,8 +4371,8 @@
     },
     {
       "path": "internal/optimization/bench/bench_test.go",
-      "sha256": "64d1df7730cff5d73eeff50e85212314d65834fdf6c09f591a6c5cc2b593dc23",
-      "bytes": 5388
+      "sha256": "4e6231bad801d574d1efc478981ba2dd4096572d54ff001b6724d7a371e83aa8",
+      "bytes": 8205
     },
     {
       "path": "internal/optimization/bench/swebench.go",
@@ -4388,6 +4393,11 @@
       "path": "internal/optimization/bwrap_replay_test.go",
       "sha256": "788046ec67a815930cdeb3d612f8d51c4e71feb0942b6f6115e70b9b78cb1335",
       "bytes": 3436
+    },
+    {
+      "path": "internal/optimization/chaos_test.go",
+      "sha256": "b4b7f8e444c9237b815645e99cb11cfba3a0bd681802fe2f439192189d5632b8",
+      "bytes": 2321
     },
     {
       "path": "internal/optimization/counterfactual.go",
@@ -4438,6 +4448,11 @@
       "path": "internal/optimization/rollout.go",
       "sha256": "b4a9f9af646a96fb41540d22c1d40fde37bc28420a02a0e50417b66d0cfe4c22",
       "bytes": 13917
+    },
+    {
+      "path": "internal/optimization/scale_test.go",
+      "sha256": "6fdc9738fa88ad642652262eaf42998b9521da96d1a475ed749127040c576f1c",
+      "bytes": 1912
     },
     {
       "path": "internal/optimization/types.go",
