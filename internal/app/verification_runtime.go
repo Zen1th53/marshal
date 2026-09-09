@@ -55,6 +55,27 @@ func (s *VerificationService) Start(ctx context.Context, session verification.Se
 	return s.runtime.store.GetVerificationSession(ctx, session.ID)
 }
 
+// StartForRun creates a Process 06 session bound to the canonical Process 05
+// run. Callers provide only verifier findings; the goal/plan/run/tree binding
+// is always derived here from durable runtime state.
+func (s *VerificationService) StartForRun(ctx context.Context, runID string, session verification.Session) (verification.Session, error) {
+	binding, err := s.BindingForRun(ctx, runID)
+	if err != nil {
+		return verification.Session{}, err
+	}
+	session.Binding = binding
+	return s.Start(ctx, session)
+}
+
+// BindingForRun returns the exact runtime-derived Process06 binding for a
+// Process05 run. It exposes no mutable runtime state.
+func (s *VerificationService) BindingForRun(ctx context.Context, runID string) (verification.Binding, error) {
+	if s == nil || s.runtime == nil {
+		return verification.Binding{}, fmt.Errorf("%w: verification service unavailable", model.ErrUnavailable)
+	}
+	return s.authoritativeBinding(ctx, runID)
+}
+
 func (s *VerificationService) Current(ctx context.Context, id string) (verification.Session, error) {
 	if s == nil || s.runtime == nil {
 		return verification.Session{}, model.ErrUnavailable

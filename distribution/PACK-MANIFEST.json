@@ -1951,8 +1951,8 @@
     },
     {
       "path": "internal/app/verification_runtime.go",
-      "sha256": "f5f4c68f48eca8fd58f641e27a94186e089b0d488387219c31f54159b647fa17",
-      "bytes": 5585
+      "sha256": "ad83a1b2d1c3a16adda3085ab7c2d6c0b49f5851a3a00219282f28bb00762573",
+      "bytes": 6528
     },
     {
       "path": "internal/app/verification_runtime_test.go",
@@ -6623,6 +6623,16 @@
       "path": "legal/assignment-registry.yml",
       "sha256": "89435ac4962c787656b844f8ffb3a448d4ec98c9b2dd22fe269cafd00582312a",
       "bytes": 643
+    },
+    {
+      "path": "lifecycle/adapter.go",
+      "sha256": "26e8433b9392c4a067e63e175422e665da9f0dbf9309eda8e58cff0451964ac5",
+      "bytes": 11435
+    },
+    {
+      "path": "lifecycle/adapter_test.go",
+      "sha256": "3ab9c56959ea83f362e4e72b943ca6eb4149bd80f8e1636bc6868a94c8096776",
+      "bytes": 5538
     },
     {
       "path": "memory-conformance.json",
