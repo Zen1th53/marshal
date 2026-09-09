@@ -6216,8 +6216,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "161998b1f587703ec193d43be2e3d90fcc7d6fb8e7b3290b4f5fcfc47438df01",
-      "bytes": 17048
+      "sha256": "08f1eb65e44edef3e3e7e7b030461ebb5ae7358c8b228e2d0b0ec27a480d9bd1",
+      "bytes": 17286
     },
     {
       "path": "internal/tui/commands_control.go",
@@ -6248,6 +6248,16 @@
       "path": "internal/tui/commands_missing.go",
       "sha256": "c5fee92d7d929a771b022b6b542de162ac0b4255360449c82c12133fd448b475",
       "bytes": 7003
+    },
+    {
+      "path": "internal/tui/commands_optimization.go",
+      "sha256": "65eb33e334eb26076f184fcc75c2c2ce135df64407ba1fd5bc247ad541dc4948",
+      "bytes": 1485
+    },
+    {
+      "path": "internal/tui/commands_optimization_test.go",
+      "sha256": "f871836f83524c40e889d033ea4bc76df27f89b884908d78898c40af531be4aa",
+      "bytes": 555
     },
     {
       "path": "internal/tui/completion_popup.go",
@@ -6411,8 +6421,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "49367e69922a7b438cb8acb0e7ca3842089aa72477399c79fa81d5ce8d504a29",
-      "bytes": 20350
+      "sha256": "8d5f69638a4974ca4f2809bf11b5352d3e65f2eafe2a13bb303c63ab04de6dcf",
+      "bytes": 20367
     },
     {
       "path": "internal/verification/bundle.go",
