@@ -1385,9 +1385,14 @@
       "bytes": 1065
     },
     {
+      "path": "internal/a2a/process08_test.go",
+      "sha256": "62b7e0537f729aa262d8d9cdac1079fc531592dafcfd90f682f6c14bb885cdb5",
+      "bytes": 1061
+    },
+    {
       "path": "internal/a2a/server.go",
-      "sha256": "f89fbb1a5228070c80ad4807c9297f13b1e34191ee033475fc724b0bbacb6679",
-      "bytes": 26873
+      "sha256": "8e5bcddc42c0a6db6ace5c0554450eff5f758f2e7cfd9fdccbb675bd11abc827",
+      "bytes": 29887
     },
     {
       "path": "internal/adapter/adapter.go",
