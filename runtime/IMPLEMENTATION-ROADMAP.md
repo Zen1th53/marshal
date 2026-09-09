@@ -15,7 +15,7 @@
 - Git worktrees, Bubblewrap execution cells, timeouts, and bounded artifacts;
 - Codex, OpenCode, Gemini, Claude, and Antigravity runtime adapters;
 - canonical evidence-linked memory recall/capture, governance, and receipts;
-- loopback MCP (`2026-07-28`), A2A (`1.0`), and authenticated Web entry points;
+- local MCP (`2026-07-28`) and A2A (`1.0`) entry points; Community has no Web entry point;
 - backup creation, verification, and offline recovery; and
 - read-only Community Resource Awareness.
 

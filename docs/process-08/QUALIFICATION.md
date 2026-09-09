@@ -49,7 +49,7 @@ requirement each piece of evidence answered.
 | AF quota adaptation | PASS | `CauseRateLimit` quarantine; unmeasured reset stays UNKNOWN |
 | AG drift | PASS | `DetectDrift` across model, harness, benchmark, tool, policy and environment; `StaleAfterDrift` |
 | AH explore/exploit | PASS | `AllowExploration` refuses high-risk work, secret exposure and destructive effects |
-| AI product tier | PASS | `EnablesFleetControl` is vetoed outside the Enterprise tier |
+| AI product tier | PASS | `EnablesFleetControl` is unconditionally vetoed in Community |
 | AJ P07 feedback | PASS | `ValidateFeedback` requires results behind a promotion; `SelfReinforcing` blocks evidence loops |
 | AK playbooks | PASS | `EvaluatePlaybook` requires applicability, adversarial verification, real evidence and a canary |
 | AL poisoning | PASS | cluster counting, pinned baselines and `TestAdversarialEvidenceCannotBeCherryPickedOrSelfReinforced` |

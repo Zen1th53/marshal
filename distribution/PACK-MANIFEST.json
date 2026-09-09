@@ -1011,8 +1011,8 @@
     },
     {
       "path": "docs/memory/benchmark.md",
-      "sha256": "dd794efb4bbe22d399fe36b312a51c1bc5608379ae0a932ad08afdf55b7f3bfc",
-      "bytes": 2517
+      "sha256": "f32a8fc921f967b0be964fd7604b9d2b66baa74281e523d22aa135c8ae824b14",
+      "bytes": 2515
     },
     {
       "path": "docs/memory/cli.md",
@@ -1106,8 +1106,8 @@
     },
     {
       "path": "docs/process-08/FINAL_REPORT.md",
-      "sha256": "737c77d1a8fb49cb8dd1acdfe9d1167c458b565b2aae110f65da620c34a846a6",
-      "bytes": 5286
+      "sha256": "19487b8273fe594a2ccf93ec736bb3e6f9f76e866d917cf23b6381152102648c",
+      "bytes": 5327
     },
     {
       "path": "docs/process-08/INTEGRATION_ATTESTATION.md",
@@ -1116,13 +1116,13 @@
     },
     {
       "path": "docs/process-08/PACK_COVERAGE.md",
-      "sha256": "fa8b02a4ba2d74ff4efb327d6e34d36d4a2a395ecf6540ea6e582591a2b44898",
-      "bytes": 5391
+      "sha256": "7036039d71b38507913e493eaa6b9cb203d0b4b01697aed0911c97e63dde128a",
+      "bytes": 5395
     },
     {
       "path": "docs/process-08/QUALIFICATION.md",
-      "sha256": "db2b63ed60338e903398bef7c973f30631a6ff6796894bf779c84951bc767d27",
-      "bytes": 8196
+      "sha256": "9e78b5cf905cddeeeb2ab1348547dfbef919b88f9cdfa82d24e4b9308a1b6f08",
+      "bytes": 8197
     },
     {
       "path": "docs/projects.md",
@@ -6981,8 +6981,8 @@
     },
     {
       "path": "runtime/IMPLEMENTATION-ROADMAP.md",
-      "sha256": "f6a6eb7977c09e77eebc50743342b1d898708f20b56384f294dd226eabfd85b3",
-      "bytes": 1949
+      "sha256": "b345034767b9fa64b8ab44d10f092ea58b4aa09589ff14cafd65abeebb525c45",
+      "bytes": 1960
     },
     {
       "path": "runtime/MARSHAL-CLI.md",
