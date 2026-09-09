@@ -1626,8 +1626,8 @@
     },
     {
       "path": "internal/app/constitution_runtime.go",
-      "sha256": "134f7466dcbae6cd81b491ddda8b78af22b9abdfff81cb50737256fca48421d5",
-      "bytes": 10978
+      "sha256": "7fb5ff6f38c7a534787edb9d6fd8339a5a71c6ba53a5dbfdedf75f295848dde6",
+      "bytes": 11385
     },
     {
       "path": "internal/app/constitution_runtime_test.go",
@@ -1881,8 +1881,8 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "b70cc2c39e25832a905db1c6a10390544bfeeda7dede45d9ee0a4ebc3e0ab56b",
-      "bytes": 57046
+      "sha256": "9005bfc430fc25c6dfd1de407888a8bbac0c20678a1af3e9051990065823bbc5",
+      "bytes": 57890
     },
     {
       "path": "internal/app/runtime_secret_commit_test.go",
@@ -2276,8 +2276,8 @@
     },
     {
       "path": "internal/cli/goal.go",
-      "sha256": "0a2fc3ed4e29d48ea4b6c5007f043498fcf0e94d07b5b29c030d766ab2e3bb7f",
-      "bytes": 5186
+      "sha256": "cdca8ace8093c048a196b4a56e7d703e45aaa70566bd6482410651097342875d",
+      "bytes": 5686
     },
     {
       "path": "internal/cli/learning.go",
@@ -2343,6 +2343,56 @@
       "path": "internal/cli/verification_test.go",
       "sha256": "97c9ed6dad6e643bdc7221fb13a90a78a765fa83be378a3004edbe7513653db1",
       "bytes": 401
+    },
+    {
+      "path": "internal/cloud/antibypass_test.go",
+      "sha256": "b54fa411abf18c7b40ac212ccdfd518c9fab16c3b4c17ad645cd53bae8efd719",
+      "bytes": 10640
+    },
+    {
+      "path": "internal/cloud/config.go",
+      "sha256": "c325aa3367d7923cfad6ee66f551fe1ae6fb58745feb2406886d609fba4d5404",
+      "bytes": 4704
+    },
+    {
+      "path": "internal/cloud/entrypaths_test.go",
+      "sha256": "711a2ba44c7371791c35fade550337222319d633d267578d81161a2b014d6be4",
+      "bytes": 5169
+    },
+    {
+      "path": "internal/cloud/gate.go",
+      "sha256": "02ab2209df0b71bf368bcc5af5edea22f84694ece50953ae04027a678c1723d2",
+      "bytes": 7798
+    },
+    {
+      "path": "internal/cloud/gate_test.go",
+      "sha256": "f04b034187a57dec85f15d44bacd618ba1d3adef7c9fc8eacb76e443f9dde727",
+      "bytes": 18117
+    },
+    {
+      "path": "internal/cloud/lease.go",
+      "sha256": "9df458f5d27f4c8e836ee7025572ec6ffceb69f7242208a3868e6e8e0905e70f",
+      "bytes": 11904
+    },
+    {
+      "path": "internal/cloud/session.go",
+      "sha256": "9ca4278d735837a12b05ae218118c44634ac0cbae21d4c920a1fa05dea86350a",
+      "bytes": 11592
+    },
+    {
+      "path": "internal/cloud/session_test.go",
+      "sha256": "992aa7b7deaeeaccfc834ff7636122d9ddfffd3c2e183d27ae8465e38929ce35",
+      "bytes": 10429
+    },
+    {
+      "path": "internal/cloud/state.go",
+      "sha256": "97a712c02655265253cc5057c1e96a3ff81a69fa46d67346557b208c2a1bb222",
+      "bytes": 6031
+    },
+    {
+      "path": "internal/cloud/state_test.go",
+      "sha256": "a4b3bfac67723eb7def9f9d08fdec89aaf1477d1f996f1e471b0c9e44bd6afa9",
+      "bytes": 5276
     },
     {
       "path": "internal/collaboration/collaboration_test.go",
@@ -6191,8 +6241,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "08f1eb65e44edef3e3e7e7b030461ebb5ae7358c8b228e2d0b0ec27a480d9bd1",
-      "bytes": 17286
+      "sha256": "30242dae75389c25acdd0d5bd009f05049bc38b5815a42ea7deec4175ee94d7c",
+      "bytes": 17654
     },
     {
       "path": "internal/tui/commands_control.go",
@@ -6206,8 +6256,8 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "9c3684bf0d795bcd6fb7b5e70babad0fd3a1bc44f4f3cf0957c09c959689819d",
-      "bytes": 23219
+      "sha256": "ad3caa4fb03365bd359f2e74738ad22d79982239175c4a9b3ae6313fbcd890eb",
+      "bytes": 24193
     },
     {
       "path": "internal/tui/commands_goal.go",
@@ -6396,8 +6446,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "8d5f69638a4974ca4f2809bf11b5352d3e65f2eafe2a13bb303c63ab04de6dcf",
-      "bytes": 20367
+      "sha256": "d1f01e6982727072b0da9ebdce0df49a81985dc0676d9e633dcaf512bf18e7b2",
+      "bytes": 21433
     },
     {
       "path": "internal/verification/bundle.go",
