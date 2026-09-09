@@ -352,3 +352,60 @@ func (s *OptimizationService) Rollback(ctx context.Context, canaryID, reason str
 	}
 	return s.runtime.store.GetCanary(ctx, canaryID)
 }
+
+// Recover reconciles an optimization cycle after an interrupted run.
+//
+// It reloads the cycle from durable state, revalidates that the Process 07
+// memory commit it binds to still verifies, and returns a deterministic plan
+// for the in-flight work. Nothing is applied here: the plan is returned so it
+// can be reviewed, because an interruption is exactly the situation where
+// automatically resuming is how a half-finished experiment becomes a result.
+//
+// An interrupted experiment never resolves as a pass, and a canary that was
+// live across the restart is halted rather than resumed, since nothing was
+// evaluating its rollback triggers while the process was down.
+func (s *OptimizationService) Recover(ctx context.Context, cycleID string, inFlight []string) ([]optimization.ResumePlan, error) {
+	if s == nil || s.runtime == nil {
+		return nil, model.ErrUnavailable
+	}
+	cycle, err := s.runtime.store.GetOptimizationCycle(ctx, cycleID)
+	if err != nil {
+		return nil, err
+	}
+
+	// The source memory commit is reloaded rather than trusted: a cycle whose
+	// learning has since been superseded cannot resume against it.
+	sourceFresh := true
+	if _, err := s.runtime.store.GetMemoryCommit(ctx, cycle.Binding.MemoryCommitID); err != nil {
+		sourceFresh = false
+	}
+
+	// Results are gathered across every candidate in the cycle: recovery
+	// reconciles the whole cycle, not one candidate's slice of it.
+	var results []optimization.ExperimentResult
+	for _, candidate := range cycle.Candidates {
+		got, err := s.runtime.store.ExperimentResults(ctx, cycleID, candidate.ID)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, got...)
+	}
+	canaries, err := s.runtime.store.Canaries(ctx, cycleID)
+	if err != nil {
+		return nil, err
+	}
+
+	plans, err := optimization.Recover(optimization.RecoveryInput{
+		Cycle: cycle, SourceFresh: sourceFresh,
+		Results: results, InFlight: inFlight, Canaries: canaries,
+	}, s.now())
+	if err != nil {
+		return nil, err
+	}
+	// Guard the recovery logic itself, so a future change that would let an
+	// interruption resolve as success fails here rather than in production.
+	if err := optimization.InterruptedNeverPasses(plans); err != nil {
+		return nil, err
+	}
+	return plans, nil
+}

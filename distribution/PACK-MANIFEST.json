@@ -1121,13 +1121,13 @@
     },
     {
       "path": "docs/process-08/INTEGRATION_ATTESTATION.md",
-      "sha256": "9c5613f4c5fdb11b619442fa2fa0e80bb5a79742b4f3d943450646a09c897068",
-      "bytes": 6070
+      "sha256": "31c697e1abae645a8828df156dc5727031ff72cefafd91b848ebaacca71d320f",
+      "bytes": 7595
     },
     {
       "path": "docs/process-08/QUALIFICATION.md",
-      "sha256": "66763d85f5d3cd3f5d28ff05b5f52e317106fa95062d36fc4761cb14916a4e45",
-      "bytes": 3328
+      "sha256": "e0ad4bcca8a11796509f05da0c0f1933555907b7260e2cbafe1a03de0e745742",
+      "bytes": 8190
     },
     {
       "path": "docs/projects.md",
@@ -1845,9 +1845,14 @@
       "bytes": 7086
     },
     {
+      "path": "internal/app/optimization_restart_test.go",
+      "sha256": "08b6360fabfd211e836a2784e3b992793bf41c48480d4e1365870b668c84e240",
+      "bytes": 4743
+    },
+    {
       "path": "internal/app/optimization_runtime.go",
-      "sha256": "961e8b474f594afa793761ab4fe77f21bb0938a174f73c1e1c95e395a3bbf258",
-      "bytes": 14606
+      "sha256": "89d6359d044d53f3d72d106f8c08de95f7ecdde05d4869e45e45ed4d56032123",
+      "bytes": 16832
     },
     {
       "path": "internal/app/optimization_runtime_test.go",
@@ -4455,6 +4460,16 @@
       "bytes": 2625
     },
     {
+      "path": "internal/optimization/restart.go",
+      "sha256": "db542c62f4f452da80fd567a8dd008f8275c9b23eefc4a4cf756e2faffba942b",
+      "bytes": 7310
+    },
+    {
+      "path": "internal/optimization/restart_test.go",
+      "sha256": "d115f7c7e699b6dc0ec5a4e930a5d1f4d786c1b08846844814bb8b1f9a249ba0",
+      "bytes": 6208
+    },
+    {
       "path": "internal/optimization/rollout.go",
       "sha256": "b4a9f9af646a96fb41540d22c1d40fde37bc28420a02a0e50417b66d0cfe4c22",
       "bytes": 13917
@@ -6386,8 +6401,8 @@
     },
     {
       "path": "internal/tui/registry.go",
-      "sha256": "31969e1f6d2e29168f9a80b76ec09b952a45bab51e389439de72daba345e4d4b",
-      "bytes": 47045
+      "sha256": "767735145ea0826c9997733adbf26140e56eabab5b013d2013aa9eb35ee7d08d",
+      "bytes": 49414
     },
     {
       "path": "internal/tui/registry_parity_test.go",

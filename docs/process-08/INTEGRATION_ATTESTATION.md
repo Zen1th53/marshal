@@ -2,7 +2,12 @@
 
 Status: `PROCESS 08 VERIFIED AND INTEGRATED`
 
-Exact main SHA: `a1de3f70144a51670bab02f1384e28f9d8dcb151`
+This attestation was revised after a row-by-row audit against the pack's full
+51-row acceptance matrix. The first revision grouped those rows into 17 summary
+lines, which hid two genuine gaps. Both are now closed and are described below.
+
+Exact main SHA at first requalification: `a1de3f70144a51670bab02f1384e28f9d8dcb151`
+Exact main SHA after the attestation merge: `f2516f83980e3cfaa766865f172d5cd98a23cbc6`
 Exact main tree: `033e716e3eda9bf335c3b78576422ef993bcc111`
 Process 07 base: `ecb7b69e245246eaf0d76eddef4d30f0b03346da`
 Merges: PR #116, PR #120, PR #121 (#121 merged 2026-09-09T04:54:08Z)
@@ -118,6 +123,26 @@ of them is upgraded on the strength of the adapters that would consume them.
 Every commit from the Process 07 base to this main is authored and committed by
 Zen1th53 &lt;extreme29@proton.me&gt;. No AI attribution appears in any commit
 message, trailer, branch or tag.
+
+## Gaps found by the row-by-row audit
+
+Auditing each of the 51 lettered rows individually, rather than in groups,
+surfaced two requirements that had no implementation at all. Both were real
+misses, not documentation problems:
+
+- **Row AQ, durability and restart.** Nothing reloaded an interrupted cycle or
+  reconciled in-flight work. `internal/optimization/restart.go` now does, and
+  `OptimizationService.Recover` exposes it. An experiment interrupted before a
+  durable result was written is quarantined rather than assumed to have passed,
+  and a canary that was live across a restart is halted rather than resumed,
+  because nothing was evaluating its rollback triggers while the process was
+  down. Recovery returns a plan for review instead of mutating state, and
+  `InterruptedNeverPasses` guards the recovery logic itself. 12 tests.
+- **Row AO, TUI parity.** A Process 08 TUI command existed but nothing was
+  registered in the capability registry, which is how this repository declares
+  surface parity. Processes 06 and 07 register nine entries between them;
+  Process 08 registered none. Five capabilities are now registered across CLI,
+  Web and TUI surfaces.
 
 ## Final status
 
