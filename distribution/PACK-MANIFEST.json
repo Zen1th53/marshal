@@ -6896,8 +6896,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
-      "sha256": "8c1392f74ffc34cf0c85a99ecea0ba825261ace3ef2344b7567acaee42f911f3",
-      "bytes": 5090
+      "sha256": "934fdce035add28555ef9217ddc688de66251b6573728c302cdf8bfbfbf4b9bb",
+      "bytes": 5136
     },
     {
       "path": "release/RELEASE_NOTES_1.5.0.md",
@@ -7301,8 +7301,8 @@
     },
     {
       "path": "todo.md",
-      "sha256": "ea8ee6256a7b70929adc01c33cb0b1021b82a408bb5eb3a1a15ca895fa67e744",
-      "bytes": 7330
+      "sha256": "ad74a3f66771d825417cc40107d4030ce647dd5fb8163ed9a28ea1777edb4f9d",
+      "bytes": 7386
     },
     {
       "path": "tools/build_release.sh",
