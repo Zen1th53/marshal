@@ -70,7 +70,9 @@ Every pre-existing unchecked item from the original `todo.md` snapshot has been 
   - *Rationale:* Hardware and test runner wall-clock limits during release gating. Truthful release threshold established at 100k canonical records.
 - **[DEFERRED to v1.6.0] Lexical Projection Heap Reduction**: Memory optimization for low-memory embedded hosts (<512MB RAM).
   - *Rationale:* Target host environment meets standard developer workstation profile (16GB+ RAM).
-- **[SUPERSEDED] Quality-Series Aggregation for Web**: Replaced by canonical runtime observability in `internal/webcontrol` and `internal/tui/view.go`.
+- **[SUPERSEDED] Quality-Series Aggregation for Web**: The pre-split Web
+  surface was removed from Community. Community runtime observability remains
+  in the local TUI; Enterprise Web ownership is private.
 
 ---
 

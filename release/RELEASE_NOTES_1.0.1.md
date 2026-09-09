@@ -22,9 +22,9 @@ verifiable.
 
 - `doctor` no longer executes optional provider probes unless
   `--probe-providers` is supplied.
-- `marshal web serve` no longer hides runtime-open failures by serving demo
-  state.
-- Live Web routes backed only by fixtures now return `501 Not Implemented`.
+- Historical note: the former `marshal web serve` behavior and its fixture
+  routes belonged to the pre-Community/Enterprise-split product. Community
+  no longer ships a Web command, routes, or Web runtime.
 - Legal source evidence reads `runtime_implementation_version` and
   `pack_version` from committed blobs instead of stale defaults.
 - Clean `marshal init` can create the required policy/version defaults without
