@@ -65,7 +65,99 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/a2a/verifications/{id}", s.handleVerification)
 	mux.HandleFunc("/a2a/memory-commits/{id}", s.handleMemoryCommit)
 	mux.HandleFunc("/a2a/learning-memory", s.handleLearningMemory)
+	// Process 08 evidence is observable by peer agents, but never mutable over
+	// A2A. Promotion and rollback stay behind the governed application boundary.
+	mux.HandleFunc("/a2a/optimization-cycles/{id}", s.handleOptimizationCycle)
+	mux.HandleFunc("/a2a/optimization-cycles/{id}/candidates", s.handleOptimizationCandidates)
+	mux.HandleFunc("/a2a/optimization-cycles/{id}/counterfactuals", s.handleOptimizationCounterfactuals)
+	mux.HandleFunc("/a2a/optimization-cycles/{id}/manifests", s.handleOptimizationManifests)
+	mux.HandleFunc("/a2a/optimization-cycles/{id}/canaries", s.handleOptimizationCanaries)
 	return mux
+}
+
+func (s *Server) optimizationEvidenceCaller(w http.ResponseWriter, r *http.Request) (auth.Principal, bool) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return auth.Principal{}, false
+	}
+	caller, ok := s.authenticateMemoryCaller(w, r)
+	if !ok {
+		return auth.Principal{}, false
+	}
+	if !caller.HasCapability(auth.CapEvidenceRead) {
+		writeA2AMemoryError(w, http.StatusForbidden, authz.ErrUnauthorized)
+		return auth.Principal{}, false
+	}
+	return caller, true
+}
+
+func (s *Server) optimizationCycleID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeA2AMemoryError(w, http.StatusBadRequest, model.ErrInvalid)
+		return "", false
+	}
+	return id, true
+}
+
+func (s *Server) handleOptimizationCycle(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.optimizationEvidenceCaller(w, r); !ok {
+		return
+	}
+	id, ok := s.optimizationCycleID(w, r)
+	if !ok {
+		return
+	}
+	record, err := s.runtime.Optimization().Get(r.Context(), id)
+	writeA2AMemoryResult(w, record, err)
+}
+
+func (s *Server) handleOptimizationCandidates(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.optimizationEvidenceCaller(w, r); !ok {
+		return
+	}
+	id, ok := s.optimizationCycleID(w, r)
+	if !ok {
+		return
+	}
+	records, err := s.runtime.Optimization().Candidates(r.Context(), id)
+	writeA2AMemoryResult(w, records, err)
+}
+
+func (s *Server) handleOptimizationCounterfactuals(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.optimizationEvidenceCaller(w, r); !ok {
+		return
+	}
+	id, ok := s.optimizationCycleID(w, r)
+	if !ok {
+		return
+	}
+	records, err := s.runtime.Optimization().Counterfactuals(r.Context(), id)
+	writeA2AMemoryResult(w, records, err)
+}
+
+func (s *Server) handleOptimizationManifests(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.optimizationEvidenceCaller(w, r); !ok {
+		return
+	}
+	id, ok := s.optimizationCycleID(w, r)
+	if !ok {
+		return
+	}
+	records, err := s.runtime.Optimization().Manifests(r.Context(), id)
+	writeA2AMemoryResult(w, records, err)
+}
+
+func (s *Server) handleOptimizationCanaries(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.optimizationEvidenceCaller(w, r); !ok {
+		return
+	}
+	id, ok := s.optimizationCycleID(w, r)
+	if !ok {
+		return
+	}
+	records, err := s.runtime.Optimization().Canaries(r.Context(), id)
+	writeA2AMemoryResult(w, records, err)
 }
 
 func (s *Server) handleVerification(w http.ResponseWriter, r *http.Request) {
