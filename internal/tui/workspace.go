@@ -44,6 +44,13 @@ type Workspace struct {
 	// ultraExecution is the user's ULTRA Execution preference. It is not an
 	// authority: with no entitlement it changes nothing.
 	ultraExecution bool
+	// ultraClient and ultraState are what asking for an entitlement needs: the
+	// request is signed with the installation key, so the gate alone is not
+	// enough. Nil when the Cloud is unconfigured, which is why every use
+	// checks first.
+	ultraClient  *cloud.Client
+	ultraState   cloud.State
+	ultraSession string
 
 	// screen owns in-place frame painting. Without it every redraw appended to
 	// scrollback, so each keystroke left another prompt banner behind.
@@ -76,6 +83,27 @@ func (w *Workspace) AttachULTRA(gate *cloud.Gate, executionEnabled bool) {
 	defer w.mu.Unlock()
 	w.ultra = gate
 	w.ultraExecution = executionEnabled
+}
+
+// AttachULTRARequester supplies what asking for an entitlement needs.
+//
+// Separate from AttachULTRA because a session can hold a verified gate without
+// being able to ask for anything — a client that already has ULTRA has nothing
+// to request — and because the request path needs the installation key, which
+// the gate deliberately does not carry.
+func (w *Workspace) AttachULTRARequester(client *cloud.Client, state cloud.State, sessionID string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ultraClient = client
+	w.ultraState = state
+	w.ultraSession = sessionID
+}
+
+// ultraRequester returns what is needed to ask for an entitlement.
+func (w *Workspace) ultraRequester() (*cloud.Client, cloud.State, string) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.ultraClient, w.ultraState, w.ultraSession
 }
 
 // ultraGate returns the gate under the workspace lock.

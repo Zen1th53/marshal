@@ -2351,8 +2351,8 @@
     },
     {
       "path": "internal/cloud/config.go",
-      "sha256": "5fd3c146efbe26f419ef510e3e0ebe5ddb2bfe4038a80f96cd4ac3e1aec0845d",
-      "bytes": 6678
+      "sha256": "ac26988a62a7bd939e9690541147cb7848b56ac0d98b3a6263433172cdce07df",
+      "bytes": 7095
     },
     {
       "path": "internal/cloud/entrypaths_test.go",
@@ -2385,9 +2385,14 @@
       "bytes": 10716
     },
     {
+      "path": "internal/cloud/request_test.go",
+      "sha256": "849a1bad81fc3f78d8d84b8af6945db91d5cdd643bb69866361f6316ccc94738",
+      "bytes": 4302
+    },
+    {
       "path": "internal/cloud/session.go",
-      "sha256": "30350bc0ef17f214a6376c8243e4051b4de96fa477afdbadff847bb996496018",
-      "bytes": 14013
+      "sha256": "a958b71f2e8d604cf7118dea0aca3fc6fdd7b203cf8a464ae5d55bb177c99d4f",
+      "bytes": 15471
     },
     {
       "path": "internal/cloud/session_test.go",
@@ -6276,8 +6281,8 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "ad3caa4fb03365bd359f2e74738ad22d79982239175c4a9b3ae6313fbcd890eb",
-      "bytes": 24193
+      "sha256": "2644d822ad69525412582312d4c68ca850b2207633ba15967fb22bfc1e66b89e",
+      "bytes": 25963
     },
     {
       "path": "internal/tui/commands_goal.go",
@@ -6466,8 +6471,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "d1f01e6982727072b0da9ebdce0df49a81985dc0676d9e633dcaf512bf18e7b2",
-      "bytes": 21433
+      "sha256": "31d44069218847b897342e551c9d949478ecca8f79eda5b2ad3a55faa5ad559f",
+      "bytes": 22554
     },
     {
       "path": "internal/verification/bundle.go",
