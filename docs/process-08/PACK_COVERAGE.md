@@ -73,3 +73,11 @@ rows were walked one at a time.
 Specs 01 through 50 all resolve to real implementation. Spec 51 is correctly
 not applicable. Specs 52 through 58 are process requirements, satisfied by the
 records named above.
+
+## Requalification SHA note
+
+The three records above were written at `7d10a702a70ef704acd0eb06825f8a3a0d2b472d`
+and merged as `5070439d9e7f01b66f4a141074df44cdbf8fd241`. The two trees differ
+only by these documents and their manifest entries: `git diff --name-only`
+between them reports no change outside `docs/` and `distribution/`. Every gate
+result recorded here was re-run on the merged tree and still passes.
