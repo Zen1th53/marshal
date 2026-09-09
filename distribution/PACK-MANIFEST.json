@@ -76,8 +76,8 @@
     },
     {
       "path": ".gitignore",
-      "sha256": "143551d987a7690b7831f6cff0b93aaa345e1a8b92ccb2607c50b5f2111b8a67",
-      "bytes": 451
+      "sha256": "5b52045aaa7c4e1c53caa3557c1d018a58cd056db131409de9b1a8e242b2cee3",
+      "bytes": 826
     },
     {
       "path": "AGENT-BOOTSTRAP.md",
@@ -2326,8 +2326,8 @@
     },
     {
       "path": "internal/cli/tui_cli.go",
-      "sha256": "3ee51396818bf81296e10237e619ef39aae219fbf3dc9f2ffb673fd5d76a363b",
-      "bytes": 1655
+      "sha256": "c3557ba9480d2583329077a36cabbbed5cc37649e2b8fcdeab5ba8dd329c89a5",
+      "bytes": 2806
     },
     {
       "path": "internal/cli/tui_cli_test.go",

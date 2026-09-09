@@ -25,3 +25,9 @@ bin/
 MARSHAL_PROCESS_*/
 MARSHAL_TUI_ULTIMATE_SPEC/
 MARSHAL-*-MEGA-TASK/
+
+# Task specification packs. These are working documents handed to an agent, not
+# part of MARSHAL, and some of them name the production host, its paths and its
+# admin ports. Ignoring them here means a `git add -A` cannot sweep that into a
+# public repository by accident — which it very nearly did.
+MARSHAL_COMMUNITY_CLOUD_ULTRA_ACTIVATION_TELEMETRY_FINAL_MEGA_ULTRA_V2/
