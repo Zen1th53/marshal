@@ -1,8 +1,8 @@
 # MARSHAL architecture
 
 MARSHAL separates durable engineering authority from the provider process that
-performs work. This page describes the v1.0.1 Community runtime at SQLite
-schema v72.
+performs work. This page describes current `main` at SQLite schema v85, which is
+ahead of the v1.5.0 tag.
 
 ```text
 CLI / Unix socket / MCP / A2A / loopback Web
@@ -59,3 +59,49 @@ not replace `memory_records_v2` as the source of truth.
 
 See [Runtime modes](runtime.md), [Security model](security-model.md), and
 [Runtime memory](runtime-memory-fabric.md).
+
+## Governed lifecycle
+
+Single-task execution above is one path through the runtime. `main` also
+implements a six-stage governed lifecycle, where each stage is a durable
+versioned record bound to an exact repository state.
+
+```text
+Request
+   |
+   v
+Goal            internal/goalintake   intent, hard constraints, risk tier
+   |
+   v
+Plan            internal/plan         task DAG, team, verification policy
+   |
+   v
+Execution       internal/execution    sandboxed runs, checkpoints, evidence
+   |
+   v
+Verification    internal/verification independent verdict + attestation
+   |
+   v
+Learning        internal/learning     evidence-gated durable memory
+   |
+   v
+Optimization    internal/optimization counterfactuals, bounded canaries
+   |
+   +--> proposals that touch policy re-enter as a new Goal
+
+Cross-cutting: policy, capability, sandbox, network, approvals,
+budget, checkpoints, provenance.
+```
+
+Each stage derives its binding from canonical state rather than accepting it
+from a caller. Verification reads the stored run; learning reads the stored
+completion attestation; optimization reads the stored memory commit. A caller
+cannot supply a digest, a tree hash or an outcome and have it believed.
+
+Schema v85 carries the durable stores for these stages, including append-only,
+digest-protected records for completion attestations, memory commits and
+optimization cycles. Mutable rows use compare-and-swap on their version, so a
+stale writer is refused rather than overwriting newer state.
+
+Implementation and qualification records: [process-06](process-06/),
+[process-07](process-07/), [process-08](process-08/).

@@ -111,8 +111,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "231c57dbb39d5001bf8e14529f957fb70bf86ce01bc4a70bdabe57c38307315d",
-      "bytes": 18782
+      "sha256": "f753dc5dff4bd7ca472a60567bc33aaa000488440a7792438508868560948877",
+      "bytes": 22314
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -186,8 +186,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "6cd595e071684f53268ab208092d153f12447f4fb9d67a13e99ff33d66549fcf",
-      "bytes": 31022
+      "sha256": "6b394be7e1a429916b8e851c96752328d0f1905ac9a349a91e3a82770174acac",
+      "bytes": 35457
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -196,8 +196,8 @@
     },
     {
       "path": "SECURITY.md",
-      "sha256": "8ce097931e9505fd0e7b015db90c71323ce05a0d6fc7d07a6a1ec681920dbfcc",
-      "bytes": 2341
+      "sha256": "8bb2979e4a10548fc98f29101072d9ba1f74fccca8b897e69b8cf610fdb0b3bd",
+      "bytes": 2422
     },
     {
       "path": "SUPPORT.md",
@@ -836,8 +836,8 @@
     },
     {
       "path": "docs/README.md",
-      "sha256": "daabb92cd081fbc8f9fe2468f7a500aaaa8323e7796b08cb375b5db1172da5ac",
-      "bytes": 2654
+      "sha256": "3a151cce01f6d1f5594084b406a8c8c4f246707d7329b9450444d079a8a3dbb3",
+      "bytes": 2813
     },
     {
       "path": "docs/a2a.md",
@@ -866,8 +866,8 @@
     },
     {
       "path": "docs/architecture.md",
-      "sha256": "6cb8c4313fe702dfbbd606e7ec025a1c5cdd1ef615c9a974afed510d676c85e6",
-      "bytes": 2352
+      "sha256": "df668d06866bcc795e672720fee153ac81ce8a1cd340fd0806112148fcdf6349",
+      "bytes": 3994
     },
     {
       "path": "docs/assets/marshal-architecture-graphite.svg",
@@ -885,14 +885,19 @@
       "bytes": 19308
     },
     {
+      "path": "docs/benchmarks.md",
+      "sha256": "d3ddc21070d56fcbc599c06968ab6e4e2bc4dea4a0f4f423a4dcb96f45fbfe3f",
+      "bytes": 5101
+    },
+    {
       "path": "docs/capability-broker.md",
       "sha256": "b3d8070d1c19bc75368c8486c7830331bf43b93fbb0b38d311e3e8fb99a2ae84",
       "bytes": 2464
     },
     {
       "path": "docs/cli.md",
-      "sha256": "22e3b089cb67957014e1f8dd51f9482e38bc251869c85cd8960c9c84c7d1548d",
-      "bytes": 8094
+      "sha256": "7af01ae2a979cc262beea269b5f377201b37f3a4f5fa8bb7f4bd438acee9526d",
+      "bytes": 11245
     },
     {
       "path": "docs/concepts.md",
@@ -966,8 +971,8 @@
     },
     {
       "path": "docs/installation.md",
-      "sha256": "1e68f518a13d1c9236f6725bc73864138aeb6cf04ed7d49c56dd9e7d29acaac9",
-      "bytes": 1657
+      "sha256": "9c176b0ceb2358427372379962da730c951dae960a12846d27d1c4f9fa6d251a",
+      "bytes": 1650
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -1151,13 +1156,13 @@
     },
     {
       "path": "docs/providers.md",
-      "sha256": "29810eea2890b9a25d8b05b7e9e9b098594f3a99f2d13ee366b224e60147a527",
-      "bytes": 2133
+      "sha256": "26b53558cf268ecbf1564e4983fe4b83d79f6eab98685e57ca7f9525407cfb25",
+      "bytes": 2257
     },
     {
       "path": "docs/providers/opencode-ollama.md",
-      "sha256": "5e205228411db7bde87a59e2b215e3a828e51683faa02f8394e408be8c806700",
-      "bytes": 2509
+      "sha256": "648b8c162424db08ce9aa38adbaca0e51db6f8d1dd5852ef22a38508ce1c2f15",
+      "bytes": 2502
     },
     {
       "path": "docs/remote-worker-attestation.md",
@@ -1176,13 +1181,13 @@
     },
     {
       "path": "docs/runtime-memory-fabric.md",
-      "sha256": "f4f692e7eb2c10589af0be36d28c9b0a93c9296bd10408640cd1788aa9670398",
-      "bytes": 3780
+      "sha256": "86778dd4e2a592938092e8a2f0a56e166c2f456e0bd801ddf584f49b7830d726",
+      "bytes": 3792
     },
     {
       "path": "docs/runtime.md",
-      "sha256": "d5e0650c90c607fa2f1b63dfa6f007103c419adb2ccbf8d8e83ecee1fe0ed438",
-      "bytes": 1790
+      "sha256": "58bd36d40c60afffd5cf2d3d29bf85f2b51590b4663337f41886f5894e3ba467",
+      "bytes": 1783
     },
     {
       "path": "docs/secrets.md",
@@ -5430,6 +5435,11 @@
       "bytes": 230
     },
     {
+      "path": "internal/store/docs_consistency_test.go",
+      "sha256": "9c661abba352513344dfdf13f2b3f451d282e5b2792a99c56bb7ffd0a0a419a6",
+      "bytes": 4687
+    },
+    {
       "path": "internal/store/doctor2_persistence_a02_test.go",
       "sha256": "f01768490cccc923c9989dd6987a93f70234b968c85a91b8e70a4b64c18979cd",
       "bytes": 233
@@ -6981,8 +6991,8 @@
     },
     {
       "path": "internal/webcontrol/server.go",
-      "sha256": "0658aef79c9696857d42a2f34baeaeaab09c611c6aa2ea81eb79b2dffde8b5dc",
-      "bytes": 6885
+      "sha256": "75a67b7cbc3832126124812099d10a3a639bd967d926c58b05b930c934ede7d8",
+      "bytes": 7022
     },
     {
       "path": "internal/webcontrol/server_test.go",

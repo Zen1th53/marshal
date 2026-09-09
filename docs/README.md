@@ -53,3 +53,4 @@ Welcome to the official MARSHAL documentation portal. Use this index to navigate
 
 - [Troubleshooting Guide](troubleshooting.md) — Diagnostics, common errors, and recovery steps
 - [Conformance Suite](conformance.md) — Verification runner and test suite validation
+- [Benchmarks and Evaluation](benchmarks.md) — Terminal-Bench and SWE-bench adapters, ablations, counterfactual routing, and what has actually been executed

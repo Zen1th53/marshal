@@ -1,6 +1,6 @@
 # OpenCode and model-provider qualification
 
-MARSHAL v1.0.1 implements an OpenCode CLI adapter. OpenCode may use a local
+MARSHAL implements an OpenCode CLI adapter. OpenCode may use a local
 Ollama service or a configured remote model provider, but adapter availability
 and canonical Runtime execution are separate claims.
 

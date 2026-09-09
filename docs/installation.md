@@ -1,6 +1,6 @@
 # MARSHAL installation
 
-MARSHAL v1.0.1 publishes Linux archives for amd64 and arm64. Bubblewrap is a
+MARSHAL publishes Linux archives for amd64 and arm64. Bubblewrap is a
 separately installed runtime dependency for sandboxed provider execution.
 
 ## Release archive

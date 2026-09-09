@@ -1,5 +1,69 @@
 # Changelog
 
+## Unreleased — current `main`
+
+These changes are merged on `main` and are **not** part of the v1.5.0 release
+archive. SQLite schema advanced from v79 to **v85**.
+
+### Added
+
+- **Governed lifecycle (Process 03–08).** Six stages, each writing a durable
+  versioned record bound to an exact repository state: Goal (`internal/goalintake`),
+  Plan (`internal/plan`), Execution (`internal/execution`), Verification
+  (`internal/verification`), Learning (`internal/learning`) and Optimization
+  (`internal/optimization`).
+- **Independent verification and completion attestation.** A run that exits zero
+  is not a verified run. Completion requires every mandatory criterion met,
+  critical evidence from at least two independent source clusters, and exact
+  Goal/Plan/Run/tree agreement. Attestations are digest-bound and append-only,
+  and evidence bundles are tamper-evident.
+- **Evidence-gated durable memory.** Claims carry scope, provenance, evidence
+  refs with source clusters, dependencies, contradictions and freshness.
+  Consensus, prestige and repetition promote nothing; only evidence does, counted
+  by independent cluster so one source echoed many times counts once. Secrets
+  never enter memory at any scope.
+- **Dependency-targeted staleness.** Upgrading one tool stales only the knowledge
+  that rested on that tool. A dependency reported at its current version is not a
+  change, and invalidation is terminal.
+- **Governed optimization with a hard veto.** Candidates declare their effects,
+  and the veto reads those rather than the prose. A change touching approvals,
+  sandboxing, network policy, evidence requirements or governance itself is
+  refused and must re-enter as a Process 03 Goal.
+- **Counterfactual routing evaluation.** The alternate route executes as a real
+  child process under Bubblewrap with the network disabled and production
+  credentials refused. A counterfactual against a run that performed a
+  destructive external effect is refused outright.
+- **Benchmark and evaluation adapters.** Terminal-Bench and SWE-bench Verified
+  integrations, single-agent baselines, and all six orchestration ablation modes,
+  with reproducibility manifests pinning benchmark, evaluator, dataset, tree and
+  environment. Neither external benchmark has been executed; see
+  [`docs/benchmarks.md`](docs/benchmarks.md).
+- **Durability and restart.** An interrupted optimization cycle is reconciled
+  rather than resumed blindly: work interrupted before a durable result is
+  quarantined, and a canary that was live across a restart is halted because
+  nothing was evaluating its rollback triggers.
+- **Lifecycle surfaces.** Read-only Process 06–08 state across CLI, TUI, Web, MCP
+  and A2A. Promotion, canary and rollback remain runtime-service operations, so
+  no surface can mint a success state.
+
+### Changed
+
+- SQLite schema v79 → v85, adding durable stores for verification sessions,
+  completion attestations, learning memory and optimization cycles. Mutable rows
+  use compare-and-swap on their version, so a stale writer is refused rather than
+  overwriting newer state.
+- Bindings are derived from canonical state rather than accepted from callers. A
+  caller cannot supply an attestation digest, a tree hash or an outcome and have
+  it believed.
+
+### Fixed
+
+- Process 06 handoffs bind to a deterministic digest of the actual workspace,
+  including dirty and untracked files.
+- Attestation append is bound to the exact session version.
+- A replayed evidence bundle is required before attestation.
+
+
 ## v1.5.0 — Autonomous Multi-Agent Collaborative Runtime & Frozen Core Verification
 
 ### Added

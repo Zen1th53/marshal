@@ -9,7 +9,11 @@ MARSHAL is a local, security-focused runtime and control plane for coding agents
 
 Raw provider CLIs can modify files and execute arbitrary commands, but they lack independent authorization boundaries, reproducible worktree isolation, verifiable evidence graphs, and governed cross-turn memory. MARSHAL wraps provider execution inside isolated execution cells, leases and records state in a canonical local SQLite database, and fails closed whenever a requested security or isolation boundary cannot be enforced.
 
-Current Community release: **v1.5.0** · SQLite schema: **v79** · Pack version: **6.0.0**.
+Latest tagged release: **v1.5.0** · Current `main`: schema **v85**, pack **6.0.0**, runtime spec **1.5.0**.
+
+> `main` is materially ahead of the v1.5.0 tag. The governed lifecycle described below
+> (Goal → Plan → Execution → Verification → Learning → Optimization) is merged on `main`
+> and is **not** part of the v1.5.0 release archive.
 
 ---
 
@@ -38,7 +42,7 @@ MARSHAL solves these challenges by acting as a **deterministic local control pla
 | **Runtime Control Plane** | Project-local daemon over a mode-`0600` Unix domain socket (`.marshal/runtime.sock`), atomic task claims, 15-minute heartbeated session leases, dedicated Git worktrees (`marshal/<task>`), and model context protocol servers. |
 | **Security & Policy** | Capability broker with fine-grained time-bounded grants, role authorization (`orchestrator`, `architect`, `developer`, `qa`, `appsec`), pre-execution risk gates (`R0`..`R3`), secrets lease/redaction engine, and deny-by-default network policy. |
 | **Execution Sandboxing** | Linux Bubblewrap (`bwrap`) mount namespaces with read-only root filesystems, minimal config binds, tmpfs runtime directories, network unsharing (`--unshare-net`), 500 MiB worktree disk budget, and 8 MiB output bounds. |
-| **Canonical Memory Fabric** | SQLite-backed memory engine (schema `v79`), automatic task-start context recall (max 8 records, 12 KiB budget), post-run evidence-linked outcome capture (`CaptureOutcome`), multi-track search, conflict detection, lifecycle governance, and session importers. |
+| **Canonical Memory Fabric** | SQLite-backed memory engine (schema `v85`), automatic task-start context recall (max 8 records, 12 KiB budget), post-run evidence-linked outcome capture (`CaptureOutcome`), multi-track search, conflict detection, lifecycle governance, and session importers. |
 | **Provider Adapters** | Modular process adapters for Codex CLI, OpenCode, Gemini CLI, Claude Code, and Antigravity with dynamic capability probing and standardized execution contracts. |
 | **Evidence & Provenance** | Content-addressed SHA-256 artifact storage (`.marshal/artifacts/sha256/<hex>`), structured command/output/environment evidence nodes, commit linkage, and immutable event ledger. |
 | **Operations & Web UI** | Authenticated loopback Web control plane (`127.0.0.1:8787`), single-use one-time login codes, system health diagnostics (`marshal doctor`), SQLite backup/restore verification, and legal chain-of-title compliance export. |
@@ -59,7 +63,7 @@ The following diagram illustrates the implemented Community runtime architecture
 4. **Provider Adapters**: External provider CLIs (`codex`, `gemini`, `claude`, `opencode`) run against standardized process interfaces (`adapter.Adapter`).
 5. **Result Handling & Evidence**: Provider output is sanitized and redacted; dirty worktree changes are committed under policy; stdout/stderr artifacts are stored with SHA-256 addressing; run evidence nodes are recorded; and completion outcomes are captured into memory.
 6. **Canonical Memory Fabric**: `MemoryService` (v2.0.0) maintains durable memory records, working task slots, multi-track search projections (exact, lexical, graph), access control, and cross-agent handoffs.
-7. **Operations & Persistence**: SQLite schema `v72` (`.marshal/state.db`) serves as the single source of truth for coordination state, task leases, audit ledgers, and evidence graphs.
+7. **Operations & Persistence**: SQLite schema `v85` (`.marshal/state.db`) serves as the single source of truth for coordination state, task leases, audit ledgers, and evidence graphs.
 
 ---
 
@@ -109,13 +113,61 @@ Every task executed via `marshal run <TASK-ID> --adapter <ADAPTER>` follows an e
 
 ---
 
+## Governed Lifecycle (Process 03–08)
+
+Beyond single-task execution, `main` implements a six-stage governed lifecycle. Each
+stage is a durable, versioned record bound to an exact repository state, and each
+refuses to advance on an unsupported claim.
+
+```mermaid
+flowchart TD
+    R[Request] --> G["<b>Goal</b><br/>internal/goalintake<br/>intent, constraints, risk"]
+    G --> P["<b>Plan</b><br/>internal/plan<br/>tasks, DAG, team, approvals"]
+    P --> X["<b>Execution</b><br/>internal/execution<br/>sandboxed, checkpointed"]
+    X --> V["<b>Verification</b><br/>internal/verification<br/>independent, evidence-bound"]
+    V --> L["<b>Learning</b><br/>internal/learning<br/>evidence-gated memory"]
+    L --> O["<b>Optimization</b><br/>internal/optimization<br/>counterfactual, canary"]
+    O -.->|proposals return as new Goals| G
+
+    POL[Policy · Capability · Sandbox · Network<br/>Approvals · Budget · Checkpoints · Provenance]
+    POL -.-> G & P & X & V & L & O
+```
+
+| Stage | Package | What it produces | CLI |
+|---|---|---|---|
+| **Goal** | `internal/goalintake` | A confirmed contract: intent, hard constraints, risk tier | `marshal goal <request>` |
+| **Plan** | `internal/plan` | Task DAG, team assembly, verification policy, approvals | `marshal plan create · show · approve` |
+| **Execution** | `internal/execution` | Governed runs, checkpoints, evidence, handoff bundle | `marshal exec start · run · status · rollback` |
+| **Verification** | `internal/verification` | Independent verdict and a digest-bound completion attestation | `marshal review start · evaluate · attest` |
+| **Learning** | `internal/learning` | Evidence-gated durable memory, routing trust, fingerprints | `marshal learning search · trust · history` |
+| **Optimization** | `internal/optimization` | Candidates, counterfactuals, bounded canaries, rollback | `marshal optimization start · show · candidates` |
+
+**The rules that make this more than a pipeline:**
+
+- **Agents produce claims; MARSHAL produces evidence.** A run that exits zero is not a
+  verified run. Completion requires every mandatory criterion met, critical evidence from
+  at least two independent source clusters, and exact Goal/Plan/Run/tree agreement.
+- **`UNKNOWN` and `NOT_RUN` stay that way.** No stage upgrades an unmeasured result.
+- **Repetition is not evidence.** Learning counts independent evidence clusters, so one
+  source echoed many times counts once. Consensus and provider prestige promote nothing.
+- **Optimization cannot rewrite its own constraints.** A change touching policy, approvals,
+  sandboxing or evidence requirements is refused and must re-enter as a Goal at stage one.
+- **Every surface is read-only for lifecycle state.** Promotion, canary and rollback are
+  runtime-service operations; no CLI, Web, MCP or A2A route can mint a success state.
+
+Per-stage implementation and qualification records live in
+[`docs/process-06`](docs/process-06/), [`docs/process-07`](docs/process-07/) and
+[`docs/process-08`](docs/process-08/).
+
+---
+
 ## Canonical Memory Fabric (v2.0.0)
 
 MARSHAL includes a multi-track memory fabric designed for multi-turn agent coordination and organizational learning.
 
 ```text
        ┌─────────────────────────────────────────────────────────┐
-       │                SQLite v72 (.marshal/state.db)           │
+       │                SQLite v85 (.marshal/state.db)           │
        │                   CANONICAL SOURCE OF TRUTH             │
        └────────────────────────────┬────────────────────────────┘
                                     │
@@ -140,7 +192,7 @@ MARSHAL includes a multi-track memory fabric designed for multi-turn agent coord
 
 ### Memory Capabilities
 
-- **Canonical State vs Projections**: SQLite schema `v72` is the sole canonical persistence layer. Lexical indices, graph indices, and retrieval caches are disposable in-memory projections rebuilt on demand.
+- **Canonical State vs Projections**: SQLite schema `v85` is the sole canonical persistence layer. Lexical indices, graph indices, and retrieval caches are disposable in-memory projections rebuilt on demand.
 - **Multi-Track Search**: Retrieval combines exact key matching, lexical search (BM25/FTS), and graph traversal. Vector similarity search is optional and activates only when a real local embedding provider is configured.
 - **Scope & ACL Enforcement**: Every memory record carries strict project, task, agent, or branch scopes. Agents can only recall records matching their authorized principals.
 - **Conflict Detection & Governance**: Conflicting memory updates trigger deterministic conflict records requiring operator review or policy promotion (`marshal memory promote`).
@@ -230,12 +282,18 @@ MARSHAL includes a bounded, read-only host resource inspector that gathers point
 
 ## Current Release Status
 
+Two things are tracked separately, because they differ:
+
+| Property | Latest tagged release | Current `main` |
+|---|---|---|
+| **Version** | `v1.5.0` | `1.5.0` runtime spec, unreleased changes on top |
+| **Database Schema** | `v79` | **`v85`** (SQLite in WAL mode) |
+| **Governed lifecycle** | not included | Process 03–08 merged |
+
 | Property | Current Specification |
 |---|---|
-| **Product Release** | **`v1.5.0`** |
 | **Pack Version** | **`6.0.0`** |
 | **Runtime Spec Version** | **`1.5.0`** |
-| **Database Schema** | **`v79`** (SQLite in WAL mode) |
 | **MCP Protocol** | **`2026-07-28`** |
 | **A2A Wire Version** | **`1.0`** (Protocol `1.0.0`) |
 | **Platform Support** | Linux (`x86_64` / `amd64` and `aarch64` / `arm64`) |
@@ -361,6 +419,12 @@ marshal verify -- go test ./...
 | Command | Description |
 |---|---|
 | `marshal version` | Output MARSHAL version, commit SHA, build date, and database schema version |
+| `marshal goal <request>` | State a request and see MARSHAL's understanding, constraints, and risk tier before any work starts |
+| `marshal plan create · show · approve · cancel · handoff` | Create, inspect and approve a task plan with its DAG, team and verification policy |
+| `marshal exec start · run · status · approve · rollback · handoff` | Drive a governed execution run, approve a gate, or roll back to a checkpoint |
+| `marshal review start · status · evaluate · attest` | Run independent verification and issue a digest-bound completion attestation |
+| `marshal learning search · trust · fingerprints · playbooks · history · export` | Query evidence-gated memory, routing trust and failure fingerprints |
+| `marshal optimization start · show · candidates · counterfactuals · manifests · canaries` | Inspect optimization cycles, counterfactual evaluations and bounded canaries |
 | `marshal init` | Initialize `.marshal/` runtime directory and default policy files |
 | `marshal doctor [--probe-providers]` | Run system health diagnostics and optional provider binary discovery |
 | `marshal daemon` | Launch the local control plane daemon background server |

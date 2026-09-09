@@ -8,8 +8,8 @@ sandboxing, or runtime evidence by itself.
 
 ## Local Community runtime
 
-MARSHAL v1.0.1 runs a project-local Go daemon over a mode-`0600` Unix socket.
-Canonical state is SQLite schema v72 under the mode-`0700` `.marshal/`
+MARSHAL runs a project-local Go daemon over a mode-`0600` Unix socket.
+Canonical state is SQLite schema v85 under the mode-`0700` `.marshal/`
 directory. The same runtime services are used by CLI, MCP, A2A, and supported
 live Web handlers.
 
