@@ -62,6 +62,13 @@ type Authorization struct {
 	Gate *Gate
 	// Session maintains the lease. Nil when the Cloud is not configured.
 	Session *Session
+	// Reporter queues operational telemetry. Nil when the Cloud is not
+	// configured, and a nil Reporter discards events, so callers never need to
+	// check before recording something.
+	Reporter *Reporter
+	// Heartbeat reports presence while ULTRA is live. Nil when the Cloud is not
+	// configured.
+	Heartbeat *Heartbeat
 	// ExecutionEnabled is the user's preference, carried through unchanged.
 	ExecutionEnabled bool
 	// Err records why authorization did not happen, for reporting. It is not a
@@ -77,10 +84,37 @@ func (a Authorization) Policy() goalintake.DelegationPolicy {
 	return a.Gate.Policy(a.ExecutionEnabled)
 }
 
-// Stop ends lease maintenance.
+// Start runs lease maintenance, heartbeat and telemetry in the background.
+//
+// Each is separate on purpose: a stalled telemetry flush must not delay a lease
+// renewal, and a lapsed lease must stop the heartbeat without touching the
+// telemetry queue.
+func (a Authorization) Start(ctx context.Context) {
+	if a.Session != nil {
+		go a.Session.Maintain(ctx)
+	}
+	if a.Heartbeat != nil {
+		go a.Heartbeat.Run(ctx)
+	}
+	if a.Reporter != nil {
+		go a.Reporter.Run(ctx)
+	}
+}
+
+// Stop ends lease maintenance, heartbeat and telemetry.
+//
+// Order matters. The heartbeat stops first so it cannot enqueue an event after
+// the final flush, and the reporter closes last so events recorded during
+// shutdown are still sent.
 func (a Authorization) Stop() {
+	if a.Heartbeat != nil {
+		a.Heartbeat.Stop()
+	}
 	if a.Session != nil {
 		a.Session.Stop()
+	}
+	if a.Reporter != nil {
+		a.Reporter.Close(context.Background())
 	}
 }
 
@@ -127,20 +161,36 @@ func Authorize(ctx context.Context, cfg Config, runtimeDir, clientVersion string
 
 	gate := NewGate(state.InstallationID, sessionID, ring, nil)
 	session := NewSession(client, gate, state, sessionID)
+	reporter := NewReporter(client, state.InstallationID, sessionID, clientVersion, nil)
+
+	// The reporter is attached to the result before the first call that can
+	// fail, so a failure is itself reportable. Attaching it afterwards would
+	// mean the events worth having — activation failures — were the ones the
+	// client had no way to send.
+	result.Reporter = reporter
+	session.AttachReporter(reporter)
+	reporter.Record(KindAppStart, TelemetryStandard, "")
 
 	// Registration is idempotent, and a server that already knows this
 	// installation answers success, so this is safe to repeat every run.
 	if err := client.Register(ctx, state); err != nil {
+		reporter.Record(KindErrorClass, TelemetryStandard, ClassifyError(err))
 		result.Err = err
 		return result
 	}
+	reporter.Record(KindRegistration, TelemetryStandard, "")
+
 	if err := session.Start(ctx); err != nil {
+		reporter.Record(KindActivationFail, TelemetryStandard, ClassifyError(err))
 		result.Err = err
 		return result
 	}
+	reporter.Record(KindActivationOK, TelemetryUltra, "")
+	reporter.Record(KindModeChange, TelemetryUltra, "")
 
 	result.Gate = gate
 	result.Session = session
+	result.Heartbeat = NewHeartbeat(client, gate, reporter, state, sessionID)
 	return result
 }
 

@@ -68,6 +68,9 @@ func (c *command) goal(ctx context.Context, args []string) error {
 	// offline path needs no special case and cannot accidentally grant.
 	authorization := cloud.Authorize(ctx, cloud.LoadConfig(),
 		filepath.Join(root, projectid.StateDirName), constitution.Current.String())
+	// Lease renewal, presence and telemetry run in the background for the life
+	// of the command, and Stop flushes what is queued before returning.
+	authorization.Start(ctx)
 	defer authorization.Stop()
 
 	decision := goalintake.Confirm(intake, authorization.Mode(), authorization.Policy())

@@ -2276,8 +2276,8 @@
     },
     {
       "path": "internal/cli/goal.go",
-      "sha256": "cdca8ace8093c048a196b4a56e7d703e45aaa70566bd6482410651097342875d",
-      "bytes": 5686
+      "sha256": "0717793f1c60000929c32a5bdf06868f0f10ee810f29fd51bf617261c7cbf654",
+      "bytes": 5859
     },
     {
       "path": "internal/cli/learning.go",
@@ -2351,8 +2351,8 @@
     },
     {
       "path": "internal/cloud/config.go",
-      "sha256": "c325aa3367d7923cfad6ee66f551fe1ae6fb58745feb2406886d609fba4d5404",
-      "bytes": 4704
+      "sha256": "5fd3c146efbe26f419ef510e3e0ebe5ddb2bfe4038a80f96cd4ac3e1aec0845d",
+      "bytes": 6678
     },
     {
       "path": "internal/cloud/entrypaths_test.go",
@@ -2370,19 +2370,29 @@
       "bytes": 18117
     },
     {
+      "path": "internal/cloud/heartbeat.go",
+      "sha256": "fea856608a8624237257060b6bc301f5824a160e07f7ed584c0bfbffa38887a8",
+      "bytes": 3689
+    },
+    {
+      "path": "internal/cloud/heartbeat_test.go",
+      "sha256": "0a1f3b4f17bc548ef0e0d404e66e705a507af86197cbc00454382a8bbfe5b085",
+      "bytes": 5699
+    },
+    {
       "path": "internal/cloud/lease.go",
       "sha256": "9df458f5d27f4c8e836ee7025572ec6ffceb69f7242208a3868e6e8e0905e70f",
       "bytes": 11904
     },
     {
       "path": "internal/cloud/session.go",
-      "sha256": "9ca4278d735837a12b05ae218118c44634ac0cbae21d4c920a1fa05dea86350a",
-      "bytes": 11592
+      "sha256": "5691e616dfe87837169561aa140c455d2d5af46b3a914dc9844b9d83385f6fee",
+      "bytes": 12870
     },
     {
       "path": "internal/cloud/session_test.go",
-      "sha256": "992aa7b7deaeeaccfc834ff7636122d9ddfffd3c2e183d27ae8465e38929ce35",
-      "bytes": 10429
+      "sha256": "3f23daa817e5dc5bf78eaf11f99fa46ca2001284259578cd0929d654561a5cc7",
+      "bytes": 10729
     },
     {
       "path": "internal/cloud/state.go",
@@ -2393,6 +2403,16 @@
       "path": "internal/cloud/state_test.go",
       "sha256": "a4b3bfac67723eb7def9f9d08fdec89aaf1477d1f996f1e471b0c9e44bd6afa9",
       "bytes": 5276
+    },
+    {
+      "path": "internal/cloud/telemetry.go",
+      "sha256": "3f03daf0c8edf8ac4c832dc012e87c234f2db08149feb51c0293da239f65cd5f",
+      "bytes": 9802
+    },
+    {
+      "path": "internal/cloud/telemetry_test.go",
+      "sha256": "a468fab0224c2cf05a6de55d620916b58f8df074a0df23dfc5497f2643647738",
+      "bytes": 11121
     },
     {
       "path": "internal/collaboration/collaboration_test.go",

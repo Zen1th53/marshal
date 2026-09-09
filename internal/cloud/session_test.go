@@ -27,6 +27,7 @@ type fakeServer struct {
 	down   atomic.Bool
 
 	leases atomic.Int64
+	beats  atomic.Int64
 }
 
 func newFakeServer(t *testing.T) *fakeServer {
@@ -70,7 +71,15 @@ func newFakeServer(t *testing.T) *fakeServer {
 		json.NewEncoder(w).Encode(f.mint(body.InstallationID, body.SessionID))
 	}))
 	mux.HandleFunc("/v1/ultra/heartbeat", f.guard(func(w http.ResponseWriter, r *http.Request) {
+		f.beats.Add(1)
 		w.WriteHeader(http.StatusOK)
+	}))
+	mux.HandleFunc("/v1/telemetry/events", f.guard(func(w http.ResponseWriter, r *http.Request) {
+		var batch []Event
+		json.NewDecoder(r.Body).Decode(&batch)
+		json.NewEncoder(w).Encode(map[string]any{
+			"accepted": len(batch), "submitted": len(batch),
+		})
 	}))
 
 	f.server = httptest.NewServer(mux)

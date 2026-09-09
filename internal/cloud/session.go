@@ -203,6 +203,22 @@ func (c *Client) Heartbeat(ctx context.Context, st State, sessionID string) erro
 	}, nil)
 }
 
+// SendTelemetry submits a batch of operational events.
+//
+// The server re-validates every event and drops any that fail rather than
+// sanitising them, so a client bug costs the event, not the privacy guarantee.
+// This is the one call whose failure is genuinely unimportant: losing telemetry
+// must never cost somebody their session.
+func (c *Client) SendTelemetry(ctx context.Context, events []Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+	return c.post(ctx, "/v1/telemetry/events", events, nil)
+}
+
+// isErr is errors.Is, named locally so ClassifyError reads as a table.
+func isErr(err, target error) bool { return errors.Is(err, target) }
+
 // keyResponse carries the server's current verification keys.
 type keyResponse struct {
 	Keys []struct {
@@ -256,10 +272,11 @@ func (c *Client) FetchKeys(ctx context.Context) (*KeyRing, error) {
 // It is the only thing in this package that runs on its own. Everything else is
 // synchronous and testable without a clock.
 type Session struct {
-	client *Client
-	gate   *Gate
-	state  State
-	id     string
+	client   *Client
+	gate     *Gate
+	state    State
+	id       string
+	reporter *Reporter
 
 	mu      sync.Mutex
 	stopped bool
@@ -322,8 +339,10 @@ func (s *Session) Maintain(ctx context.Context) {
 		if err != nil {
 			// A refusal is final: the entitlement is gone, so drop it now
 			// rather than holding ULTRA until the current lease runs out.
+			s.reporter.Record(KindRenewalFail, TelemetryUltra, ClassifyError(err))
 			if errors.Is(err, ErrRefused) {
 				s.gate.Degrade()
+				s.reporter.Record(KindModeChange, TelemetryStandard, "")
 				return
 			}
 			// Unreachable is transient, so the existing lease is kept and
@@ -343,11 +362,19 @@ func (s *Session) Maintain(ctx context.Context) {
 			continue
 		}
 		if err := s.gate.Adopt(lease); err != nil {
+			s.reporter.Record(KindRenewalFail, TelemetryUltra, ClassifyError(err))
 			s.gate.Degrade()
+			s.reporter.Record(KindModeChange, TelemetryStandard, "")
 			return
 		}
+		s.reporter.Record(KindRenewalOK, TelemetryUltra, "")
 	}
 }
+
+// AttachReporter wires telemetry into lease maintenance, so renewal outcomes
+// are reported. It is separate from the constructor because a session is usable
+// without telemetry and must not require it.
+func (s *Session) AttachReporter(r *Reporter) { s.reporter = r }
 
 // Stop ends maintenance and degrades to Standard.
 func (s *Session) Stop() {
