@@ -1121,18 +1121,18 @@
     },
     {
       "path": "docs/process-08/FINAL_REPORT.md",
-      "sha256": "e410597d11b36f37085ccc97950e7b5b59e38415859a57b83dd846c5bfdf0d02",
-      "bytes": 4871
+      "sha256": "737c77d1a8fb49cb8dd1acdfe9d1167c458b565b2aae110f65da620c34a846a6",
+      "bytes": 5286
     },
     {
       "path": "docs/process-08/INTEGRATION_ATTESTATION.md",
-      "sha256": "9103e1c1317219d1dcc4958c57a1dd2842485c7b732321d332a8d9e84cdc034c",
-      "bytes": 7915
+      "sha256": "f0d3d30b884c031dbbe8025cb29e45d7ed3d8bf02f6b2d47ddc95b6719318f2e",
+      "bytes": 8330
     },
     {
       "path": "docs/process-08/PACK_COVERAGE.md",
-      "sha256": "78e433feeeb34f2040a073328645a173f4009bd3f457239b0ae1617d00c04d55",
-      "bytes": 4976
+      "sha256": "fa8b02a4ba2d74ff4efb327d6e34d36d4a2a395ecf6540ea6e582591a2b44898",
+      "bytes": 5391
     },
     {
       "path": "docs/process-08/QUALIFICATION.md",

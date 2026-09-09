@@ -159,3 +159,11 @@ harnesses, absent provider credentials, and an incomplete fault matrix — and a
 recorded as such rather than upgraded.
 
 `NOT_RUN` is never upgraded to PASS.
+
+## Requalification SHA note
+
+The three records above were written at `7d10a702a70ef704acd0eb06825f8a3a0d2b472d`
+and merged as `5070439d9e7f01b66f4a141074df44cdbf8fd241`. The two trees differ
+only by these documents and their manifest entries: `git diff --name-only`
+between them reports no change outside `docs/` and `distribution/`. Every gate
+result recorded here was re-run on the merged tree and still passes.
