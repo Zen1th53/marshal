@@ -1,8 +1,8 @@
 # Process 08 Qualification
 
-Branch: `feat/process-08-governed-optimization`  
-Process 07 base: `ecb7b69e245246eaf0d76eddef4d30f0b03346da`  
-Pull request: #116  
+Branch: `feat/process-08-governed-optimization`
+Process 07 base: `ecb7b69e245246eaf0d76eddef4d30f0b03346da`
+Pull request: #116
 
 Statuses use only `PASS`, `FAIL`, `BLOCKED`, `NOT_RUN`, and `UNKNOWN`.
 
