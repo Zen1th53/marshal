@@ -122,6 +122,67 @@ func TestAblationSuiteRequiresAllSixModes(t *testing.T) {
 	}
 }
 
+func TestRunAblationSuiteExecutesEveryModeAndPreservesOutcomes(t *testing.T) {
+	suite := AblationSuite{
+		ID:               "run-all-six",
+		DatasetSnapshot:  "deterministic-fixture-v1",
+		TaskIDs:          []string{"task-a", "task-b"},
+		MarshalSHA:       "exact-main",
+		ConfigDigest:     "config-digest",
+		EnvironmentImage: "fixture",
+	}
+	called := map[optimization.AblationMode]int{}
+	runner := AblationRunnerFunc(func(_ context.Context, _ AblationSuite, mode optimization.AblationMode) ([]AblationOutcome, error) {
+		called[mode]++
+		return []AblationOutcome{
+			{Mode: mode, TaskID: "task-a", Outcome: optimization.StatusPass},
+			{Mode: mode, TaskID: "task-b", Outcome: optimization.StatusNotRun, FailureReason: "fixture harness deliberately unavailable"},
+		}, nil
+	})
+	now := time.Date(2026, time.September, 9, 0, 0, 0, 0, time.UTC)
+	completed, err := RunAblationSuite(context.Background(), runner, suite, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateAblationSuite(completed); err != nil {
+		t.Fatalf("completed suite invalid: %v", err)
+	}
+	if got, want := len(completed.Outcomes), len(optimization.RequiredAblations())*len(suite.TaskIDs); got != want {
+		t.Fatalf("outcome count=%d, want=%d", got, want)
+	}
+	for _, mode := range optimization.RequiredAblations() {
+		if called[mode] != 1 {
+			t.Errorf("mode %s calls=%d, want 1", mode, called[mode])
+		}
+	}
+	for _, outcome := range completed.Outcomes {
+		if outcome.ObservedAt != now {
+			t.Errorf("outcome %s/%s observed_at=%s, want %s", outcome.Mode, outcome.TaskID, outcome.ObservedAt, now)
+		}
+	}
+}
+
+func TestRunAblationSuiteRejectsOmittedOrDuplicateOutcome(t *testing.T) {
+	suite := AblationSuite{ID: "reject-incomplete", DatasetSnapshot: "fixture", TaskIDs: []string{"task-a", "task-b"}, MarshalSHA: "sha", ConfigDigest: "cfg", EnvironmentImage: "fixture"}
+	omit := AblationRunnerFunc(func(_ context.Context, _ AblationSuite, mode optimization.AblationMode) ([]AblationOutcome, error) {
+		return []AblationOutcome{{Mode: mode, TaskID: "task-a", Outcome: optimization.StatusPass}}, nil
+	})
+	if _, err := RunAblationSuite(context.Background(), omit, suite); !errors.Is(err, ErrMissingOutcome) {
+		t.Fatalf("omitted outcome error=%v, want ErrMissingOutcome", err)
+	}
+
+	duplicate := AblationRunnerFunc(func(_ context.Context, _ AblationSuite, mode optimization.AblationMode) ([]AblationOutcome, error) {
+		return []AblationOutcome{
+			{Mode: mode, TaskID: "task-a", Outcome: optimization.StatusPass},
+			{Mode: mode, TaskID: "task-a", Outcome: optimization.StatusPass},
+			{Mode: mode, TaskID: "task-b", Outcome: optimization.StatusPass},
+		}, nil
+	})
+	if _, err := RunAblationSuite(context.Background(), duplicate, suite); !errors.Is(err, ErrDuplicateOutcome) {
+		t.Fatalf("duplicate outcome error=%v, want ErrDuplicateOutcome", err)
+	}
+}
+
 func TestBaselineSuiteKeepsUnavailableHarnessHonest(t *testing.T) {
 	suite := BaselineSuite{ID: "b", DatasetSnapshot: "d", TaskIDs: []string{"t"}, EnvironmentImage: "img", MarshalSHA: "sha", Configs: []BaselineConfig{
 		{Harness: HarnessCodex, HarnessVersion: "1", Model: "m", ModelVersion: "1", ToolAccess: []string{"shell"}, Budget: TaskBudget{BudgetMicros: 1, WallMillis: 1}},

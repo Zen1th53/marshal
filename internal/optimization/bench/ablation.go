@@ -1,6 +1,7 @@
 package bench
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -37,11 +38,11 @@ type AblationOutcome struct {
 // verification contributed, because the missing mode is exactly the
 // counterfactual the others are measured against.
 type AblationSuite struct {
-	ID              string
-	DatasetSnapshot string
-	TaskIDs         []string
-	MarshalSHA      string
-	ConfigDigest    string
+	ID               string
+	DatasetSnapshot  string
+	TaskIDs          []string
+	MarshalSHA       string
+	ConfigDigest     string
 	EnvironmentImage string
 	// Outcomes holds every recorded task outcome across every mode run so
 	// far. A suite is complete only once RequiredAblations is fully covered.
@@ -50,6 +51,15 @@ type AblationSuite struct {
 
 // ErrIncompleteAblation marks a suite missing one of the six required modes.
 var ErrIncompleteAblation = fmt.Errorf("%w: ablation suite does not cover all six required modes", optimization.ErrInvalid)
+
+// ErrDuplicateOutcome marks multiple outcomes reported for the same mode and task.
+var ErrDuplicateOutcome = fmt.Errorf("%w: duplicate ablation outcome", optimization.ErrInvalid)
+
+// ErrMissingOutcome marks a mode or task that was not reported by the runner.
+var ErrMissingOutcome = fmt.Errorf("%w: missing ablation outcome", ErrIncompleteAblation)
+
+// ErrUnrecognizedOutcome marks an outcome with an invalid mode, task ID, or status.
+var ErrUnrecognizedOutcome = fmt.Errorf("%w: unrecognized ablation outcome", optimization.ErrInvalid)
 
 // ModesCovered returns the set of ablation modes with at least one recorded
 // outcome in the suite.
@@ -76,7 +86,8 @@ func MissingModes(s AblationSuite) []optimization.AblationMode {
 }
 
 // ValidateAblationSuite refuses an ablation suite that is missing a required mode, is
-// unbound, or names an outcome under a mode the pack does not recognize.
+// unbound, contains duplicate or missing task outcomes, or names an outcome under a mode
+// or task the pack does not recognize.
 //
 // This is the gate the task explicitly calls out: a suite covering five of
 // six modes must be rejected as incomplete, not accepted with a caveat,
@@ -92,18 +103,175 @@ func ValidateAblationSuite(s AblationSuite) error {
 	if strings.TrimSpace(s.MarshalSHA) == "" || strings.TrimSpace(s.ConfigDigest) == "" {
 		return fmt.Errorf("%w: ablation suite is not bound to an exact MARSHAL state", optimization.ErrInvalid)
 	}
+
+	validTasks := make(map[string]bool, len(s.TaskIDs))
+	for _, tid := range s.TaskIDs {
+		clean := strings.TrimSpace(tid)
+		if clean == "" {
+			return fmt.Errorf("%w: empty task ID in suite task set", optimization.ErrInvalid)
+		}
+		if validTasks[clean] {
+			return fmt.Errorf("%w: duplicate task ID %q in suite task set", optimization.ErrInvalid, clean)
+		}
+		validTasks[clean] = true
+	}
+
+	type modeTaskKey struct {
+		mode   optimization.AblationMode
+		taskID string
+	}
+	seen := make(map[modeTaskKey]bool, len(s.Outcomes))
 	for _, o := range s.Outcomes {
 		if !optimization.ValidAblation(o.Mode) {
-			return fmt.Errorf("%w: outcome names unrecognized ablation mode %q", optimization.ErrInvalid, o.Mode)
+			return fmt.Errorf("%w: outcome names unrecognized ablation mode %q", ErrUnrecognizedOutcome, o.Mode)
 		}
 		if !optimization.ValidStatus(o.Outcome) {
-			return fmt.Errorf("%w: outcome for mode %s has invalid status", optimization.ErrInvalid, o.Mode)
+			return fmt.Errorf("%w: outcome for mode %s has invalid status", ErrUnrecognizedOutcome, o.Mode)
 		}
+		if !validTasks[o.TaskID] {
+			return fmt.Errorf("%w: outcome names unrecognized task %q", ErrUnrecognizedOutcome, o.TaskID)
+		}
+		k := modeTaskKey{mode: o.Mode, taskID: o.TaskID}
+		if seen[k] {
+			return fmt.Errorf("%w: duplicate outcome for mode %s task %s", ErrDuplicateOutcome, o.Mode, o.TaskID)
+		}
+		seen[k] = true
 	}
+
 	if missing := MissingModes(s); len(missing) > 0 {
 		return fmt.Errorf("%w: missing %v", ErrIncompleteAblation, missing)
 	}
+
+	for _, m := range optimization.RequiredAblations() {
+		for _, tid := range s.TaskIDs {
+			if !seen[modeTaskKey{mode: m, taskID: tid}] {
+				return fmt.Errorf("%w: mode %s missing outcome for task %s", ErrMissingOutcome, m, tid)
+			}
+		}
+	}
+
 	return nil
+}
+
+// AblationRunner is the injectable seam for executing ablation modes across a
+// task set.
+//
+// Implementations execute one required ablation mode across the suite's task
+// set and return the observed outcomes. Tests inject a fake runner; production
+// or benchmark environments wire an adapter driving real models or harnesses.
+type AblationRunner interface {
+	RunAblation(ctx context.Context, suite AblationSuite, mode optimization.AblationMode) ([]AblationOutcome, error)
+}
+
+// AblationRunnerFunc adapts an ordinary function into an AblationRunner.
+type AblationRunnerFunc func(ctx context.Context, suite AblationSuite, mode optimization.AblationMode) ([]AblationOutcome, error)
+
+// RunAblation calls f(ctx, suite, mode).
+func (f AblationRunnerFunc) RunAblation(ctx context.Context, suite AblationSuite, mode optimization.AblationMode) ([]AblationOutcome, error) {
+	return f(ctx, suite, mode)
+}
+
+// RunAblationSuite executes every optimization.RequiredAblations() mode across
+// the supplied deterministic task set using the provided injectable runner.
+//
+// It captures exactly one outcome per (mode, task), preserves NOT_RUN and
+// UNKNOWN truthfully, rejects missing, duplicate, or unrecognized outcomes,
+// and validates the completed suite.
+func RunAblationSuite(ctx context.Context, r AblationRunner, suite AblationSuite, now ...time.Time) (AblationSuite, error) {
+	if r == nil {
+		return suite, fmt.Errorf("%w: ablation runner is required", optimization.ErrInvalid)
+	}
+	if strings.TrimSpace(suite.ID) == "" {
+		return suite, fmt.Errorf("%w: ablation suite id", optimization.ErrInvalid)
+	}
+	if strings.TrimSpace(suite.DatasetSnapshot) == "" || len(suite.TaskIDs) == 0 {
+		return suite, fmt.Errorf("%w: ablation suite names no dataset snapshot or task set", optimization.ErrInvalid)
+	}
+	if strings.TrimSpace(suite.MarshalSHA) == "" || strings.TrimSpace(suite.ConfigDigest) == "" {
+		return suite, fmt.Errorf("%w: ablation suite is not bound to an exact MARSHAL state", optimization.ErrInvalid)
+	}
+	if len(suite.Outcomes) > 0 {
+		return suite, fmt.Errorf("%w: initial ablation suite must not contain outcomes before execution", optimization.ErrInvalid)
+	}
+
+	validTasks := make(map[string]bool, len(suite.TaskIDs))
+	for _, tid := range suite.TaskIDs {
+		clean := strings.TrimSpace(tid)
+		if clean == "" {
+			return suite, fmt.Errorf("%w: empty task ID in suite task set", optimization.ErrInvalid)
+		}
+		if validTasks[clean] {
+			return suite, fmt.Errorf("%w: duplicate task ID %q in suite task set", optimization.ErrInvalid, clean)
+		}
+		validTasks[clean] = true
+	}
+
+	observedAt := time.Now()
+	if len(now) > 0 && !now[0].IsZero() {
+		observedAt = now[0]
+	}
+
+	type modeTaskKey struct {
+		mode   optimization.AblationMode
+		taskID string
+	}
+	seen := make(map[modeTaskKey]bool)
+	var allOutcomes []AblationOutcome
+
+	for _, mode := range optimization.RequiredAblations() {
+		if err := ctx.Err(); err != nil {
+			return suite, err
+		}
+
+		outcomes, err := r.RunAblation(ctx, suite, mode)
+		if err != nil {
+			return suite, fmt.Errorf("ablation run failed for mode %s: %w", mode, err)
+		}
+
+		seenForMode := make(map[string]bool, len(suite.TaskIDs))
+		for _, o := range outcomes {
+			if o.Mode != mode {
+				return suite, fmt.Errorf("%w: outcome mode %q does not match running mode %q", ErrUnrecognizedOutcome, o.Mode, mode)
+			}
+			if !optimization.ValidAblation(o.Mode) {
+				return suite, fmt.Errorf("%w: unrecognized ablation mode %q", ErrUnrecognizedOutcome, o.Mode)
+			}
+			if !validTasks[o.TaskID] {
+				return suite, fmt.Errorf("%w: unrecognized task ID %q for mode %s", ErrUnrecognizedOutcome, o.TaskID, mode)
+			}
+			k := modeTaskKey{mode: mode, taskID: o.TaskID}
+			if seen[k] || seenForMode[o.TaskID] {
+				return suite, fmt.Errorf("%w: duplicate outcome for mode %s task %s", ErrDuplicateOutcome, mode, o.TaskID)
+			}
+			if !optimization.ValidStatus(o.Outcome) {
+				return suite, fmt.Errorf("%w: invalid status %q for mode %s task %s", ErrUnrecognizedOutcome, o.Outcome, mode, o.TaskID)
+			}
+
+			// Truthfully preserve NOT_RUN, UNKNOWN, PASS, FAIL, BLOCKED as reported.
+			if o.ObservedAt.IsZero() {
+				o.ObservedAt = observedAt
+			}
+
+			seen[k] = true
+			seenForMode[o.TaskID] = true
+			allOutcomes = append(allOutcomes, o)
+		}
+
+		for _, tid := range suite.TaskIDs {
+			if !seenForMode[tid] {
+				return suite, fmt.Errorf("%w: mode %s omitted outcome for task %s", ErrMissingOutcome, mode, tid)
+			}
+		}
+	}
+
+	completed := suite
+	completed.Outcomes = allOutcomes
+
+	if err := ValidateAblationSuite(completed); err != nil {
+		return completed, fmt.Errorf("completed ablation suite validation failed: %w", err)
+	}
+
+	return completed, nil
 }
 
 // PerModeSummary aggregates outcomes for one ablation mode across the shared
