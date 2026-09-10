@@ -62,10 +62,10 @@ Supply chain: PASS, govulncheck clean, gitleaks clean, 0 gosec findings in new c
 
 ## Status counts
 
-PASS: 40 of 42 acceptance rows
+PASS: 41 of 42 acceptance rows
 FAIL: 0
 BLOCKED: 0
-NOT_RUN: 2, row P real governed provider and row AP final integration attestation
+NOT_RUN: 1, row P real governed provider
 UNKNOWN: 0
 
 ## Findings
@@ -90,8 +90,8 @@ Known limitations:
 Final completion state: candidate qualified, 40 of 42 rows PASS with two
 explicit and scoped `NOT_RUN` rows.
 
-Final integration state: NOT_RUN until PR #111 merges and the exact resulting
-`origin/main` is requalified. Canonical `PROCESS 06 VERIFIED AND INTEGRATED`
-is recorded in `INTEGRATION_ATTESTATION.md` only after that.
+Final integration state: PROCESS 06 VERIFIED AND INTEGRATED, bound to main
+`a53b4a24747f8c1cf02ea4ab99d9207cb39effe7` and recorded in
+`docs/process-06/INTEGRATION_ATTESTATION.md`.
 
 `NOT_RUN`, `BLOCKED` and `UNKNOWN` are never upgraded to PASS.

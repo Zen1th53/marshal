@@ -30,7 +30,7 @@ canonical-main integration attestation.
 | X full-chain E2E | PASS | `TestProcess05_FullChainE2E` and `TestProcess05_FailureChain_SafeReturn` in `internal/integration/process05_e2e_test.go` |
 | Y performance/scale | PASS | 1,000-evidence benchmark |
 | Z repository gates | PASS | candidate commands below |
-| AA exact-main integration | NOT_RUN | performed only after merge |
+| AA exact-main integration | PASS | `docs/process-06/INTEGRATION_ATTESTATION.md`, main `a53b4a2` |
 | AB flaky evidence | PASS | mixed outcomes become quarantined `UNKNOWN` |
 | AC oracle contamination | PASS | shared lineage is not independent |
 | AD differential verification | PASS | disagreement becomes `UNKNOWN` |
@@ -45,7 +45,7 @@ canonical-main integration attestation.
 | AM completion attestation | PASS | digest, version, bundle replay and applicability tests |
 | AN semantic scope | PASS | empty/wildcard/traversal scope rejected |
 | AO verifier sandbox | PASS | read-only/no-network/no-secret policy validation |
-| AP integration attestation | NOT_RUN | performed only against merged exact `origin/main` |
+| AP integration attestation | PASS | `docs/process-06/INTEGRATION_ATTESTATION.md` |
 
 ## Candidate gates already observed
 
