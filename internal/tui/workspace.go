@@ -51,6 +51,12 @@ type Workspace struct {
 	ultraClient  *cloud.Client
 	ultraState   cloud.State
 	ultraSession string
+	// ultraErr is why authorization did not produce ULTRA, if it did not.
+	// Without it "unavailable" covers both "you were never entitled" and "the
+	// server said 429", which are different problems with different answers —
+	// and the second one leaves a user retyping a password that was never
+	// wrong.
+	ultraErr error
 
 	// screen owns in-place frame painting. Without it every redraw appended to
 	// scrollback, so each keystroke left another prompt banner behind.
@@ -97,6 +103,20 @@ func (w *Workspace) AttachULTRARequester(client *cloud.Client, state cloud.State
 	w.ultraClient = client
 	w.ultraState = state
 	w.ultraSession = sessionID
+}
+
+// AttachULTRAError records why activation failed, so /ultra can say.
+func (w *Workspace) AttachULTRAError(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ultraErr = err
+}
+
+// ultraError returns the activation failure, if there was one.
+func (w *Workspace) ultraError() error {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.ultraErr
 }
 
 // ultraRequester returns what is needed to ask for an entitlement.

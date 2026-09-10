@@ -490,6 +490,14 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 	}
 
 	if !gate.Entitled() {
+		// Distinguish "you have not been granted this" from "we could not ask".
+		// Both leave the session in Standard, but only the first is answered by
+		// requesting one, and telling a user to request when the server is
+		// rate-limiting them sends them round a loop.
+		if err := h.ws.ultraError(); err != nil {
+			return "ULTRA could not be activated: " + err.Error() + "\n" +
+				"  The session is running as Standard. Try again shortly.", nil
+		}
 		return "ULTRA is unavailable: no cryptographically verified entitlement is active.\n" +
 			"  Use /ultra request to ask an operator for one.", nil
 	}
