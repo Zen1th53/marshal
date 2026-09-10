@@ -2326,8 +2326,8 @@
     },
     {
       "path": "internal/cli/tui_cli.go",
-      "sha256": "c3557ba9480d2583329077a36cabbbed5cc37649e2b8fcdeab5ba8dd329c89a5",
-      "bytes": 2806
+      "sha256": "060e070318b5dd0cb756112662fcc8a51fcce138a42473c98b31f5325cc9ee2c",
+      "bytes": 2999
     },
     {
       "path": "internal/cli/tui_cli_test.go",
@@ -6281,8 +6281,8 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "2644d822ad69525412582312d4c68ca850b2207633ba15967fb22bfc1e66b89e",
-      "bytes": 25963
+      "sha256": "ecf8c1410181295bfa252056b7fe4e9abebe9f64cdd3ee8a4239de2d3f9f8a26",
+      "bytes": 26414
     },
     {
       "path": "internal/tui/commands_goal.go",
@@ -6471,8 +6471,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "31d44069218847b897342e551c9d949478ecca8f79eda5b2ad3a55faa5ad559f",
-      "bytes": 22554
+      "sha256": "9acb6deb9471243374ea05c25e4468af33f654f48e1e86e32f781c950a584b19",
+      "bytes": 23217
     },
     {
       "path": "internal/verification/bundle.go",

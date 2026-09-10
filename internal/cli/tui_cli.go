@@ -42,6 +42,9 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 		// ask for.
 		workspace.AttachULTRARequester(authorization.Client, authorization.State,
 			authorization.SessionID)
+		// The reason activation failed, so /ultra can report it rather than
+		// leaving the user to guess between "not entitled" and "rate limited".
+		workspace.AttachULTRAError(authorization.Err)
 		authorization.Start(ctx)
 		defer authorization.Stop()
 	}
