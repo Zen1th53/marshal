@@ -69,6 +69,13 @@ type Authorization struct {
 	// Heartbeat reports presence while ULTRA is live. Nil when the Cloud is not
 	// configured.
 	Heartbeat *Heartbeat
+	// Client, State and SessionID are what asking for an entitlement needs.
+	// They are exposed because a session that is *not* entitled is exactly the
+	// one that has something to ask for, and the gate deliberately does not
+	// carry the installation key a request must be signed with.
+	Client    *Client
+	State     State
+	SessionID string
 	// ExecutionEnabled is the user's preference, carried through unchanged.
 	ExecutionEnabled bool
 	// Err records why authorization did not happen, for reporting. It is not a
@@ -136,6 +143,7 @@ func Authorize(ctx context.Context, cfg Config, runtimeDir, clientVersion string
 		result.Err = err
 		return result
 	}
+	result.Client = client
 
 	store := NewStore(runtimeDir)
 	state, err := store.LoadOrCreate()
@@ -143,6 +151,7 @@ func Authorize(ctx context.Context, cfg Config, runtimeDir, clientVersion string
 		result.Err = err
 		return result
 	}
+	result.State = state
 
 	// Keys come from the server rather than being compiled in, so a rotation
 	// does not require shipping a new MARSHAL. The trade is that key discovery
@@ -158,6 +167,7 @@ func Authorize(ctx context.Context, cfg Config, runtimeDir, clientVersion string
 		result.Err = err
 		return result
 	}
+	result.SessionID = sessionID
 
 	gate := NewGate(state.InstallationID, sessionID, ring, nil)
 	session := NewSession(client, gate, state, sessionID)

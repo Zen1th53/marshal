@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -480,8 +481,17 @@ func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (strin
 // toggle here would be exactly the local flag the design refuses to rely on.
 func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string, error) {
 	gate, executionEnabled := h.ws.ultraGate()
+
+	// `/ultra request` asks an operator to grant this installation ULTRA. It is
+	// still not a way to turn ULTRA on: it queues a question for a person, and
+	// the answer arrives from the server or not at all.
+	if len(args) > 0 && strings.EqualFold(args[0], "request") {
+		return h.requestUltra(ctx)
+	}
+
 	if !gate.Entitled() {
-		return "ULTRA is unavailable: no cryptographically verified entitlement is active.", nil
+		return "ULTRA is unavailable: no cryptographically verified entitlement is active.\n" +
+			"  Use /ultra request to ask an operator for one.", nil
 	}
 
 	expiry, _ := gate.ExpiresAt()
@@ -497,6 +507,40 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 			remaining, cloud.EnvExecution), nil
 	}
 	return fmt.Sprintf("ULTRA is active with delegation.\n  Lease expires in %s.", remaining), nil
+}
+
+// requestUltra asks an operator to grant this installation ULTRA.
+//
+// The reply is a status rather than a capability. "pending" means somebody has
+// been asked; nothing changes here until they answer, and the next session will
+// pick up the entitlement if they approved it.
+func (h *CommandHandler) requestUltra(ctx context.Context) (string, error) {
+	client, state, sessionID := h.ws.ultraRequester()
+	if client == nil {
+		return "The Community Cloud is not configured, so there is nobody to ask.\n" +
+			"  Set " + cloud.EnvEndpoint + " and start MARSHAL again.", nil
+	}
+
+	status, err := client.RequestEntitlement(ctx, state, sessionID)
+	if err != nil {
+		// A refusal and an outage read differently because they call for
+		// different responses: one is an answer, the other is "try later".
+		if errors.Is(err, cloud.ErrUnreachable) {
+			return "Could not reach the Community Cloud. Your request was not sent.", nil
+		}
+		return "The request was refused: " + err.Error(), nil
+	}
+
+	switch status {
+	case "pending":
+		return "Requested. An operator has been asked to approve ULTRA for this installation.\n" +
+			"  Nothing changes until they do; check back with /ultra.", nil
+	case "active":
+		return "This installation is already entitled to ULTRA.\n" +
+			"  Restart MARSHAL to pick it up if /ultra still says otherwise.", nil
+	default:
+		return "The server answered: " + status, nil
+	}
 }
 
 // handleBackup handles snapshot backup creation and restoration.

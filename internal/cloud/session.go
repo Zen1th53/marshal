@@ -201,6 +201,47 @@ func (c *Client) RenewLease(ctx context.Context, st State, sessionID string) (Le
 	return c.StartSession(ctx, st, sessionID)
 }
 
+// RequestEntitlement asks an operator to grant this installation ULTRA.
+//
+// It proves possession of the installation key, exactly as obtaining a lease
+// does. Without that, anyone who learned an installation identifier could queue
+// requests in somebody else's name, and an operator approving from a dashboard
+// would have no way to tell whose request it really was.
+//
+// The answer is a status, not a grant. "pending" means an operator has been
+// asked and has not yet decided; nothing about this client's capability changes
+// until they do.
+func (c *Client) RequestEntitlement(ctx context.Context, st State, sessionID string) (string, error) {
+	var ch challenge
+	if err := c.post(ctx, "/v1/ultra/challenge", map[string]any{
+		"installation_id": st.InstallationID,
+	}, &ch); err != nil {
+		return "", err
+	}
+	if ch.Nonce == "" {
+		return "", fmt.Errorf("%w: empty challenge", ErrRefused)
+	}
+	proof, err := st.Sign([]byte("marshal-cloud-pop:v1:" + st.InstallationID + ":" + ch.Nonce))
+	if err != nil {
+		return "", err
+	}
+
+	var reply struct {
+		Status string `json:"status"`
+		Tier   string `json:"tier"`
+	}
+	if err := c.post(ctx, "/v1/entitlements/request", map[string]any{
+		"installation_id": st.InstallationID,
+		"session_id":      sessionID,
+		"nonce":           ch.Nonce,
+		"proof":           base64.RawURLEncoding.EncodeToString(proof),
+		"tier":            "ultra",
+	}, &reply); err != nil {
+		return "", err
+	}
+	return reply.Status, nil
+}
+
 // Heartbeat reports that an ULTRA session is still live.
 //
 // A refusal here means the server has ended the session — revoked, expired or
