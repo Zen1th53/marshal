@@ -266,6 +266,7 @@ func (w *Workspace) SetTheme(mode ThemeMode, animation bool) {
 	w.composer.theme = w.theme
 	w.palette.theme = w.theme
 	w.diffViewer.theme = w.theme
+	w.navView.SetTheme(w.theme)
 }
 
 // SetCoordinator sets an explicit coordinator.

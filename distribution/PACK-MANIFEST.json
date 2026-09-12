@@ -6511,13 +6511,13 @@
     },
     {
       "path": "internal/tui/navview.go",
-      "sha256": "2de4d1ecc3089b7f1e99e9ae3d14b2d271b67720751c250f1727352f93be684d",
-      "bytes": 34836
+      "sha256": "c0960174c056b0ddd7f641107788dd5706689bb1e4eff5b0b397f74d45bf2608",
+      "bytes": 38199
     },
     {
       "path": "internal/tui/navview_test.go",
-      "sha256": "88822537a59b4d455896049a971906ae699d31fa5eae4eab2bd6074c82ca3866",
-      "bytes": 31588
+      "sha256": "cd78e1491350279421ca3d51ebb2739df27430dcb1e98ed17d4e793150cfab33",
+      "bytes": 32697
     },
     {
       "path": "internal/tui/palette.go",
@@ -6716,8 +6716,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "1a41a1fdf81c0345b185445ee78f82b5e0c0faf1b3dbc09cb57a5a4466a92cef",
-      "bytes": 34509
+      "sha256": "513716166220ef4dc99523799d699138f350e71a47a1ebc2d3bef989adcf41cb",
+      "bytes": 34538
     },
     {
       "path": "internal/tui/workspace_nav_test.go",

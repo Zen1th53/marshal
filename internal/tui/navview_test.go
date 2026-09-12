@@ -53,6 +53,33 @@ func TestViewOpensAndRendersWithNoSourceAttached(t *testing.T) {
 	}
 }
 
+// Frozen navigation is the default Community surface, so it must honour the
+// same semantic theme as the legacy workspace rather than silently rendering
+// as a no-colour terminal. Styling is applied after layout, therefore it must
+// not change visible width; explicit no-colour mode remains plain text.
+func TestNavigationHonorsThemeWithoutChangingLayoutWidth(t *testing.T) {
+	v := testView(t)
+	v.OpenAndWait(context.Background())
+	coloured := strings.Join(v.Render(100, 28), "\n")
+	if !strings.Contains(coloured, "\x1b[") {
+		t.Fatal("default navigation did not emit semantic ANSI styling")
+	}
+	for _, line := range v.Render(100, 28) {
+		if got := VisibleLen(line); got > 100 {
+			t.Fatalf("styled navigation line has visible width %d, want <= 100: %q", got, line)
+		}
+	}
+
+	plain, err := NewNavView(NewTheme(ThemeNoColor, false, false))
+	if err != nil {
+		t.Fatalf("new no-colour navigation: %v", err)
+	}
+	plain.OpenAndWait(context.Background())
+	if got := strings.Join(plain.Render(100, 28), "\n"); strings.Contains(got, "\x1b[") {
+		t.Fatalf("no-colour navigation emitted ANSI styling: %q", got)
+	}
+}
+
 // All nine frozen sections stay reachable at every width.
 //
 // Truncating the bar would hide a section behind an ellipsis, making MARSHAL

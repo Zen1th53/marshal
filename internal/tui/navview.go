@@ -99,6 +99,18 @@ func (v *NavView) AttachSource(source *StatusSource, providers ProviderReader) {
 	v.source, v.providers = source, providers
 }
 
+// SetTheme updates the navigation surface's rendering theme. Navigation is a
+// separate view from the legacy composer, so it must be updated explicitly
+// when the workspace theme changes.
+func (v *NavView) SetTheme(theme *Theme) {
+	if v == nil || theme == nil {
+		return
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.theme = theme
+}
+
 // IsOpen reports whether the view owns the screen.
 func (v *NavView) IsOpen() bool {
 	if v == nil {
@@ -593,10 +605,109 @@ func (v *NavView) Render(cols, rows int) []string {
 		lines = append(lines, "")
 	}
 	lines = append(lines, truncate(v.renderHint(nav), cols))
+	lines = v.styleLines(lines, nav, th)
 	if len(lines) > rows {
 		lines = lines[:rows]
 	}
 	return lines
+}
+
+// styleLines applies colour only after layout and truncation are complete.
+// ANSI bytes must never participate in width decisions, otherwise a narrow
+// terminal would wrap a styled frame even though its visible text fits.
+func (v *NavView) styleLines(lines []string, nav *NavState, th *Theme) []string {
+	if th == nil || th.Mode == ThemeNoColor || len(lines) == 0 {
+		return lines
+	}
+	styled := append([]string(nil), lines...)
+	styled[0] = styleTopNavigation(styled[0], nav, th)
+	if len(styled) > 1 {
+		styled[1] = th.Colorize(th.Marshal+th.Bold, styled[1])
+	}
+	if len(styled) > 2 {
+		styled[2] = th.Colorize(th.Muted, styled[2])
+	}
+	bodyStart := 3
+	if len(styled) > 3 && strings.HasPrefix(styled[3], "→ ") {
+		styled[3] = styleNavigationStatus(styled[3], th)
+		bodyStart++
+	}
+	if len(styled) > bodyStart {
+		styled[bodyStart] = th.Colorize(th.Border, styled[bodyStart])
+		bodyStart++
+	}
+	for i := bodyStart; i < len(styled)-1; i++ {
+		styled[i] = styleNavigationMenuRow(styled[i], th)
+	}
+	if len(styled) > 1 {
+		styled[len(styled)-1] = th.Colorize(th.Muted, styled[len(styled)-1])
+	}
+	return styled
+}
+
+func styleTopNavigation(line string, nav *NavState, th *Theme) string {
+	if nav == nil || th == nil {
+		return line
+	}
+	selected := "[" + fmt.Sprintf("%d %s", nav.sectionIndex()+1, nav.CurrentSection().Title) + "]"
+	if !strings.Contains(line, selected) {
+		// Tight and digit-only top bars have different labels, but their selected
+		// form still begins with the current section number inside brackets.
+		selected = fmt.Sprintf("[%d", nav.sectionIndex()+1)
+		at := strings.Index(line, selected)
+		if at < 0 {
+			return th.Colorize(th.Muted, line)
+		}
+		end := strings.Index(line[at:], "]")
+		if end < 0 {
+			return th.Colorize(th.Muted, line)
+		}
+		selected = line[at : at+end+1]
+	}
+	at := strings.Index(line, selected)
+	if at < 0 {
+		return th.Colorize(th.Muted, line)
+	}
+	return th.Colorize(th.Muted, line[:at]) +
+		th.Colorize(th.HeaderBg+th.Bold, selected) +
+		th.Colorize(th.Muted, line[at+len(selected):])
+}
+
+func styleNavigationStatus(line string, th *Theme) string {
+	lower := strings.ToLower(line)
+	colour := th.Accent
+	switch {
+	case strings.Contains(lower, "refus"), strings.Contains(lower, "fail"), strings.Contains(lower, "block"):
+		colour = th.Danger
+	case strings.Contains(lower, "complete"), strings.Contains(lower, "refreshed"):
+		colour = th.Success
+	}
+	return th.Colorize(colour, line)
+}
+
+func styleNavigationMenuRow(line string, th *Theme) string {
+	if line == "" {
+		return line
+	}
+	left, right, hasDetail := line, "", false
+	if at := strings.Index(line, " │ "); at >= 0 {
+		left, right, hasDetail = line[:at], line[at+len(" │ "):], true
+	}
+	colour := ""
+	switch {
+	case strings.HasPrefix(left, "▸ "):
+		colour = th.Active + th.Bold
+	case strings.HasPrefix(left, "· "):
+		colour = th.Accent
+	}
+	if colour == "" {
+		return line
+	}
+	left = th.Colorize(colour, left)
+	if !hasDetail {
+		return left
+	}
+	return left + th.Colorize(th.Border, " │ ") + right
 }
 
 // handleMouse provides the mouse equivalent of the visible navigation
