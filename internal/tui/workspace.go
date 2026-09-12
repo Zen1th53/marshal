@@ -10,10 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/collaboration"
 	"github.com/Zen1th53/marshal/internal/harness"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
@@ -34,8 +36,28 @@ type Workspace struct {
 	completer  *Completer
 	palette    *CommandPalette
 	diffViewer *DiffViewer
-	terminal   *Terminal
-	out        io.Writer
+	// navView is the frozen-IA navigation surface. It owns the screen while
+	// open, so MARSHAL is operable without knowing a single slash command.
+	navView *NavView
+	// navErr is why the navigation view is missing, if it is.
+	navErr error
+
+	// runtime is the canonical mutation authority Control submits through.
+	// It is nil in a store-only workspace, in which case every Control action
+	// refuses with that reason rather than writing anything locally.
+	runtime *app.Runtime
+	// projectIdentity is the canonical project id the plan and execution
+	// services are keyed by.
+	projectIdentity projectid.ID
+	// runtimeReplaced is set only after a stopped-runtime restore has reopened
+	// the canonical runtime. The input loop reattaches its read/mutation
+	// sources after the current confirmation releases NavView's lock.
+	runtimeReplaced bool
+	// ultraRequest asks the Community Cloud for an entitlement through the
+	// canonical client. Nil when no Cloud is configured.
+	ultraRequest func(ctx context.Context) error
+	terminal     *Terminal
+	out          io.Writer
 
 	// ultra is the canonical ULTRA authorization gate, shared with every other
 	// entry path. It is nil until a Cloud session is attached, and a nil gate
@@ -73,6 +95,7 @@ type Workspace struct {
 	// interrupt. A second consecutive press then exits; any other key disarms
 	// it, so a stray interrupt never closes the workspace on its own.
 	interruptArmed bool
+	exitRequested  bool
 
 	// Scroll and activity unread tracking
 	scrollOffset int
@@ -103,6 +126,18 @@ func (w *Workspace) AttachULTRARequester(client *cloud.Client, state cloud.State
 	w.ultraClient = client
 	w.ultraState = state
 	w.ultraSession = sessionID
+	if client == nil {
+		w.ultraRequest = nil
+		return
+	}
+	// Control and the slash-command surface share the same proof-of-possession
+	// client and installation state. The returned status is deliberately not
+	// converted into entitlement: only a subsequently verified signed lease
+	// can change the gate's answer.
+	w.ultraRequest = func(ctx context.Context) error {
+		_, err := client.RequestEntitlement(ctx, state, sessionID)
+		return err
+	}
 }
 
 // AttachULTRAError records why activation failed, so /ultra can say.
@@ -184,6 +219,12 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	palette := NewCommandPalette(th, paletteActions)
 	diffViewer := NewDiffViewer(th, cwd)
 
+	// The frozen-IA navigation view. If the embedded manifest will not load the
+	// workspace still opens: losing navigation must not cost somebody their
+	// session. The error is kept rather than discarded so that pressing Ctrl+N
+	// reports what actually failed instead of a bare "unavailable".
+	navView, navErr := NewNavView(th)
+
 	ws := &Workspace{
 		store:      st,
 		coord:      collaboration.NewCoordinator(st, nil),
@@ -197,6 +238,8 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 		completer:  completer,
 		palette:    palette,
 		diffViewer: diffViewer,
+		navView:    navView,
+		navErr:     navErr,
 		terminal:   NewTerminal(os.Stdin, os.Stdout),
 		state: UIState{
 			ProjectID:          projectID,
@@ -375,6 +418,16 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 	return w.runLineScanner(ctx, in, out)
 }
 
+// WaitForNavigationRefreshes drains asynchronous navigation reads. It is a
+// lifecycle boundary, not a rendering operation: callers must invoke it only
+// after cancelling the context supplied to OpenNavigation.
+func (w *Workspace) WaitForNavigationRefreshes() {
+	if w == nil || w.navView == nil {
+		return
+	}
+	w.navView.WaitForRefreshes()
+}
+
 func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	if w.out == nil {
 		w.out = os.Stdout
@@ -388,8 +441,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	// panic, so a crash cannot strand the terminal in raw mode.
 	w.terminal.EnterAltScreen()
 	w.terminal.EnableBracketedPaste()
+	w.terminal.EnableMouse()
 	w.screen = NewScreen(w.terminal)
 	defer func() {
+		w.terminal.DisableMouse()
 		w.terminal.DisableBracketedPaste()
 		w.terminal.ShowCursor()
 		w.terminal.LeaveAltScreen()
@@ -449,6 +504,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			// press exit, so a reflexive Ctrl+C never discards a session the
 			// operator is still working in.
 			if event.Type == KeyCtrlC {
+				if w.interruptNavigation() {
+					w.renderFullView()
+					continue
+				}
 				if w.palette.IsOpen() {
 					w.palette.Close()
 					w.interruptArmed = false
@@ -480,6 +539,22 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 
 			// Any other key cancels a pending exit confirmation.
 			w.interruptArmed = false
+
+			// Navigation owns every key while it is open, and Ctrl+N opens it.
+			// The dispatch lives in its own method so a test can drive exactly
+			// the branch this loop takes rather than a copy of it.
+			if w.dispatchNavigationKey(ctx, event) {
+				w.mu.RLock()
+				exitRequested := w.exitRequested
+				w.mu.RUnlock()
+				if exitRequested {
+					w.terminal.ClearScreen()
+					fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Session remains durable.")
+					return nil
+				}
+				w.renderFullView()
+				continue
+			}
 
 			// Handle Command Palette (Ctrl+P)
 			if event.Type == KeyCtrlP {
@@ -688,6 +763,249 @@ func (w *Workspace) closeCompletion() {
 // keystroke and a state change produce the same single frame. Nothing is ever
 // appended to the terminal: the screen writes only rows that changed and
 // addresses each one absolutely.
+
+// dispatchNavigationKey handles the navigation view's share of the key stream.
+//
+// It reports whether the key was consumed, so the caller repaints and moves on.
+// Extracting it means the interactive loop and the tests exercise the same
+// branch: a raw-terminal loop needs a real TTY and cannot be driven directly.
+func (w *Workspace) dispatchNavigationKey(ctx context.Context, event KeyEvent) bool {
+	// While navigation is open it owns every key, so arrow keys and Enter
+	// drive the frozen IA rather than the composer.
+	if w.navView.IsOpen() {
+		w.navView.HandleKey(ctx, event)
+		w.mu.Lock()
+		replaced := w.runtimeReplaced
+		w.runtimeReplaced = false
+		w.mu.Unlock()
+		if replaced {
+			// submitConfirmation holds NavView's lock while the destructive
+			// operation runs. Rebinding here, after HandleKey returns, avoids a
+			// lock inversion and guarantees every section reads the reopened
+			// canonical runtime rather than its closed predecessor.
+			w.openNavigation(ctx)
+			w.navView.Refresh(ctx)
+		}
+		return true
+	}
+
+	// Ctrl+N opens navigation. It is the keyboard-first entry point: from here
+	// MARSHAL is fully operable without knowing a single slash command.
+	if event.Type == KeyCtrlN {
+		w.closeCompletion()
+		if w.navView == nil {
+			if w.out != nil {
+				reason := "the frozen interface manifest did not load"
+				if w.navErr != nil {
+					reason = w.navErr.Error()
+				}
+				fmt.Fprintf(w.out, "Navigation is unavailable: %s\n", reason)
+			}
+			return true
+		}
+		w.openNavigation(ctx)
+		return true
+	}
+	return false
+}
+
+// interruptNavigation closes the navigation view for Ctrl+C.
+//
+// Ctrl+C unwinds the innermost context first, and an open navigation view is
+// the innermost thing there is. It reports whether it consumed the interrupt.
+func (w *Workspace) interruptNavigation() bool {
+	if !w.navView.IsOpen() {
+		return false
+	}
+	w.navView.Close()
+	w.interruptArmed = false
+	return true
+}
+
+// AttachRuntime wires the canonical mutation authority into the workspace.
+//
+// Control submits every mutation through this runtime. Without it the Control
+// screens still render, and every action refuses with the reason — which is
+// the truthful behaviour for a workspace that cannot reach an authority.
+func (w *Workspace) AttachRuntime(runtime *app.Runtime, identity projectid.ID) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.runtime = runtime
+	w.projectIdentity = identity
+}
+
+// AttachULTRARequest supplies the canonical entitlement request path.
+func (w *Workspace) AttachULTRARequest(request func(ctx context.Context) error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ultraRequest = request
+}
+
+// controlSource builds the Control authority from the workspace's handles.
+func (w *Workspace) controlSource() *ControlSource {
+	w.mu.RLock()
+	runtime, identity := w.runtime, w.projectIdentity
+	request, session, project := w.ultraRequest, w.sessionID, w.projectID
+	store := w.store
+	w.mu.RUnlock()
+
+	if runtime == nil {
+		// No authority is reachable. Returning nil here would make Control
+		// render nothing; returning a source with no authority makes every
+		// action refuse with the reason, which is what the user needs to see.
+		return &ControlSource{SessionID: session, ProjectID: project, ApproverID: session}
+	}
+	return &ControlSource{
+		Authority: &runtimeControlAuthority{
+			runtime: runtime,
+			store:   store,
+			// The gate is read live: the Cloud handshake finishes after the
+			// workspace is built, so a captured gate would report Standard
+			// for the rest of the session.
+			gate: func() *cloud.Gate {
+				w.mu.RLock()
+				defer w.mu.RUnlock()
+				return w.ultra
+			},
+			requestULTRA: request,
+			sessionID:    session,
+			projectID:    identity,
+			// The frozen specs make the workspace the owner of these two
+			// preferences, so they are read and written here rather than
+			// copied into the Control layer where nothing would see them.
+			setMode: func(mode string) error {
+				w.mu.Lock()
+				defer w.mu.Unlock()
+				w.mode = mode
+				w.state.SessionMode = strings.ToUpper(mode)
+				return nil
+			},
+			mode: func() string {
+				w.mu.RLock()
+				defer w.mu.RUnlock()
+				return w.mode
+			},
+			setPreference: func(enabled bool) error {
+				w.mu.Lock()
+				defer w.mu.Unlock()
+				// This is a preference, never an authority: the gate is
+				// untouched, so with no entitlement it changes nothing.
+				w.ultraExecution = enabled
+				return nil
+			},
+			preference: func() bool {
+				w.mu.RLock()
+				defer w.mu.RUnlock()
+				return w.ultraExecution
+			},
+			requestExit: func() error {
+				w.mu.Lock()
+				defer w.mu.Unlock()
+				w.exitRequested = true
+				return nil
+			},
+			exitRequested: func() bool {
+				w.mu.RLock()
+				defer w.mu.RUnlock()
+				return w.exitRequested
+			},
+			replaceRuntime: func(reopened *app.Runtime) {
+				w.mu.Lock()
+				defer w.mu.Unlock()
+				w.runtime = reopened
+				w.store = reopened.Store()
+				w.runtimeReplaced = true
+			},
+		},
+		SessionID: session,
+		ProjectID: project,
+		// The approver is the session acting. The backend records who decided;
+		// nothing here judges whether that is self-approval.
+		ApproverID: session,
+	}
+}
+
+// openNavigation enters the frozen-IA navigation view.
+//
+// The canonical readers are attached at open time rather than at construction
+// because the Cloud gate arrives after the workspace is built, and a view that
+// captured a nil gate at startup would report Standard forever.
+func (w *Workspace) openNavigation(ctx context.Context) {
+	if w.navView == nil {
+		return
+	}
+	w.mu.RLock()
+	source := &StatusSource{
+		Runtime:   w.runtimeReader(),
+		Resources: defaultResourceReader{},
+		// The Cloud handles are read afresh on every access rather than
+		// captured here: the handshake finishes after the workspace is built,
+		// and a reader holding the nil gate it saw at open time would report
+		// Standard for the rest of the session.
+		Cloud: &workspaceCloudReader{
+			live: func() (*cloud.Gate, bool, string, string, error) {
+				w.mu.RLock()
+				defer w.mu.RUnlock()
+				return w.ultra, w.ultraClient != nil,
+					w.ultraState.InstallationID, w.ultraSession, w.ultraErr
+			},
+		},
+	}
+	w.mu.RUnlock()
+	control := w.controlSource()
+	var providers ProviderReader
+	if control != nil {
+		if authority, ok := control.Authority.(*runtimeControlAuthority); ok {
+			providers = authority
+		}
+	}
+	w.navView.AttachSource(source, providers)
+	// Control is attached at open time for the same reason the Cloud reader is
+	// read live: the runtime may arrive after the workspace was built.
+	w.navView.AttachControl(control)
+	// Work reads through the same canonical handles as Control, so the two
+	// sections cannot disagree about which project and session are current.
+	if authority, ok := control.Authority.(*runtimeControlAuthority); ok && authority != nil {
+		w.navView.AttachWork(&WorkSource{
+			Reader:    authority,
+			SessionID: control.SessionID,
+			ProjectID: control.ProjectID,
+		})
+		w.navView.AttachVerify(&VerifySource{
+			Reader:    authority,
+			SessionID: control.SessionID,
+		})
+		w.navView.AttachMemory(&MemoryFeed{
+			Reader:    authority,
+			SessionID: control.SessionID,
+			ProjectID: control.ProjectID,
+		})
+		w.navView.AttachModels(&ModelsFeed{
+			Reader:    authority,
+			ProjectID: control.ProjectID,
+		})
+		w.navView.AttachSecurity(&SecurityFeed{
+			Reader:    authority,
+			ProjectID: control.ProjectID,
+		})
+		w.navView.AttachSystem(&SystemFeed{Reader: authority})
+	}
+	// A background refresh must reach the screen. Without this the frame sits
+	// on "refreshing…" until the operator presses a key.
+	w.navView.OnRepaint(func() { w.renderFullView() })
+	w.navView.Open(ctx)
+}
+
+// OpenNavigation enters MARSHAL's frozen Community navigation surface.
+//
+// The CLI calls this only after attaching the canonical runtime, project
+// identity, and optional Community Cloud handles, so the first Home frame is
+// the real flagship TUI rather than the legacy composer. Esc at the root still
+// returns to that composer for secondary slash-command use.
+func (w *Workspace) OpenNavigation(ctx context.Context) {
+	w.openNavigation(ctx)
+}
+
 func (w *Workspace) renderFullView() {
 	w.paint()
 }
@@ -710,6 +1028,16 @@ func (w *Workspace) paint() {
 	th := w.theme
 	workDir := w.workDir
 	w.mu.RUnlock()
+
+	// The navigation view owns the screen while open, as the diff viewer does.
+	if w.navView.IsOpen() {
+		lines := w.navView.Render(cols, rows-1)
+		for len(lines) < rows {
+			lines = append(lines, "")
+		}
+		w.screen.Render(lines, cols, rows, rows, 1)
+		return
+	}
 
 	// The diff viewer and palette own the screen while open.
 	if w.diffViewer.IsOpen() {

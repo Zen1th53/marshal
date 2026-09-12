@@ -39,6 +39,9 @@ type TokenRecord struct {
 	CreatedAt    time.Time     `json:"created_at"`
 	Revoked      bool          `json:"revoked"`
 	Capabilities []string      `json:"capabilities"`
+	// CreationKey binds an idempotent create request. It is not a credential
+	// and is never accepted for authentication.
+	CreationKey string `json:"creation_key,omitempty"`
 }
 
 type Manager struct {
@@ -51,12 +54,44 @@ func NewManager(runtimeDir string) *Manager {
 }
 
 func (m *Manager) CreateToken(name string, kind PrincipalKind, capabilities []string) (string, TokenRecord, error) {
+	plaintext, record, _, err := m.CreateTokenIdempotent(name, kind, capabilities, "")
+	return plaintext, record, err
+}
+
+// CreateTokenIdempotent creates one token for a stable request key. A replay
+// returns the existing metadata but never re-exposes its plaintext.
+func (m *Manager) CreateTokenIdempotent(name string, kind PrincipalKind, capabilities []string, creationKey string) (string, TokenRecord, bool, error) {
 	if name == "" {
-		return "", TokenRecord{}, errors.New("token name is required")
+		return "", TokenRecord{}, false, errors.New("token name is required")
+	}
+	if kind != KindLocalUser && kind != KindMCPClient && kind != KindA2AAgent {
+		return "", TokenRecord{}, false, fmt.Errorf("unknown principal kind: %q", kind)
+	}
+	validated, err := ValidateCapabilities(capabilities)
+	if err != nil {
+		return "", TokenRecord{}, false, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	records, err := m.loadUnlocked()
+	if err != nil {
+		return "", TokenRecord{}, false, err
+	}
+	if creationKey != "" {
+		for _, existing := range records {
+			if existing.CreationKey != creationKey {
+				continue
+			}
+			if existing.Name != name || existing.Kind != kind || !sameStrings(existing.Capabilities, validated) {
+				return "", TokenRecord{}, false, errors.New("idempotency key is already bound to a different token request")
+			}
+			return "", existing, false, nil
+		}
 	}
 	rawBytes := make([]byte, 32)
 	if _, err := rand.Read(rawBytes); err != nil {
-		return "", TokenRecord{}, fmt.Errorf("generate token entropy: %w", err)
+		return "", TokenRecord{}, false, fmt.Errorf("generate token entropy: %w", err)
 	}
 	plaintext := "marshal_token_" + hex.EncodeToString(rawBytes)
 	digest := hashToken(plaintext)
@@ -72,18 +107,26 @@ func (m *Manager) CreateToken(name string, kind PrincipalKind, capabilities []st
 		Digest:       digest,
 		CreatedAt:    time.Now().UTC(),
 		Revoked:      false,
-		Capabilities: capabilities,
+		Capabilities: validated,
+		CreationKey:  creationKey,
 	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	records, _ := m.loadUnlocked()
 	records = append(records, record)
 	if err := m.saveUnlocked(records); err != nil {
-		return "", TokenRecord{}, err
+		return "", TokenRecord{}, false, err
 	}
-	return plaintext, record, nil
+	return plaintext, record, true, nil
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *Manager) Authenticate(plaintext string) (Principal, error) {
@@ -116,6 +159,19 @@ func (m *Manager) ListTokens() ([]TokenRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.loadUnlocked()
+}
+
+// RedactTokenMetadata removes authentication and idempotency material before
+// records cross a user-facing read boundary.
+func RedactTokenMetadata(records []TokenRecord) []TokenRecord {
+	out := make([]TokenRecord, len(records))
+	for i, record := range records {
+		record.Digest = ""
+		record.CreationKey = ""
+		record.Capabilities = append([]string(nil), record.Capabilities...)
+		out[i] = record
+	}
+	return out
 }
 
 func (m *Manager) RevokeToken(id string) error {

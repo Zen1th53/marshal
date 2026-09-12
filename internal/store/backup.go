@@ -238,6 +238,34 @@ func RestoreDatabase(ctx context.Context, backupPath, targetDBPath string, expec
 	return nil
 }
 
+// RestoreDatabaseExpected first snapshots the caller-selected backup into a
+// private sibling file and verifies that snapshot against the exact digest
+// the caller confirmed.  Restoring directly from a mutable path leaves a
+// TOCTOU window: a different but valid database can replace the source after
+// the UI has inspected it.  The snapshot is opened once, hashed after copy,
+// and then becomes the only restore input.
+func RestoreDatabaseExpected(ctx context.Context, backupPath, targetDBPath, expectedProjectID string, expectedSchema int, expectedDigest string) error {
+	if expectedDigest == "" {
+		return fmt.Errorf("%w: expected backup digest cannot be empty", model.ErrInvalid)
+	}
+	snapshotPath := fmt.Sprintf("%s.restore-source-%d", targetDBPath, time.Now().UnixNano())
+	defer os.Remove(snapshotPath)
+	if err := copyFile(backupPath, snapshotPath); err != nil {
+		return fmt.Errorf("snapshot selected backup: %w", err)
+	}
+	if err := os.Chmod(snapshotPath, 0o600); err != nil {
+		return fmt.Errorf("protect restore snapshot: %w", err)
+	}
+	metadata, err := VerifyBackup(ctx, snapshotPath, expectedProjectID, expectedSchema)
+	if err != nil {
+		return fmt.Errorf("verify restore snapshot: %w", err)
+	}
+	if metadata.DatabaseSHA256 != expectedDigest {
+		return fmt.Errorf("%w: backup digest changed (expected %s, got %s)", model.ErrConflict, expectedDigest, metadata.DatabaseSHA256)
+	}
+	return RestoreDatabase(ctx, snapshotPath, targetDBPath, expectedProjectID, expectedSchema)
+}
+
 func computeFileSHA256(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {

@@ -83,6 +83,25 @@ func (s *VerificationService) Current(ctx context.Context, id string) (verificat
 	return s.runtime.store.GetVerificationSession(ctx, id)
 }
 
+// CurrentForRun returns the latest canonical Process 06 session bound to an
+// exact Process 05 run. It is a read-only bridge for TUI status; callers never
+// derive or fabricate a verification ID from the run ID.
+func (s *VerificationService) CurrentForRun(ctx context.Context, runID string) (verification.Session, error) {
+	if s == nil || s.runtime == nil {
+		return verification.Session{}, model.ErrUnavailable
+	}
+	return s.runtime.store.LatestVerificationForRun(ctx, runID)
+}
+
+// Attestation returns the most recent durable completion attestation for one
+// exact verification session.
+func (s *VerificationService) Attestation(ctx context.Context, id string) (verification.CompletionAttestation, error) {
+	if s == nil || s.runtime == nil {
+		return verification.CompletionAttestation{}, model.ErrUnavailable
+	}
+	return s.runtime.store.LatestCompletionAttestation(ctx, id)
+}
+
 func (s *VerificationService) Evaluate(ctx context.Context, id string) (verification.Session, error) {
 	session, err := s.Current(ctx, id)
 	if err != nil {

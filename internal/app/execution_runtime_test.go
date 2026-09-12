@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"testing"
 	"time"
 
@@ -190,5 +191,43 @@ func TestExecutionService_Rollback(t *testing.T) {
 	}
 	if restored.RestoredAt == nil {
 		t.Fatalf("expected RestoredAt to be set after rollback")
+	}
+}
+
+func TestExecutionService_StartRunBoundIsIdempotentAcrossRuntimeRestart(t *testing.T) {
+	ctx := context.Background()
+	runtime := runtimeForPlan(t)
+	if _, err := runtime.Plans().Create(ctx, planCreateRequest()); err != nil {
+		t.Fatal(err)
+	}
+	approved, err := runtime.Plans().Approve(ctx, runtimePlanProject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := fmt.Sprintf("%s/%s", approved.Goal.RequestDigest, approved.Goal.ConstraintDigest)
+	first, err := runtime.Execution().StartRunBound(ctx, "SESSION-plan", runtimePlanProject, approved.ID, approved.Version, digest)
+	if err != nil {
+		t.Fatalf("first bound start: %v", err)
+	}
+	second, err := runtime.Execution().StartRunBound(ctx, "SESSION-plan", runtimePlanProject, approved.ID, approved.Version, digest)
+	if err != nil {
+		t.Fatalf("replayed bound start: %v", err)
+	}
+	if second.RunID != first.RunID {
+		t.Fatalf("duplicate start created %s; want durable run %s", second.RunID, first.RunID)
+	}
+
+	// Recreate the Process 05 service from its file-backed store.  The old TUI
+	// confirmation is gone, so only canonical durable state can prevent a
+	// duplicate run after restart.
+	runtime.execMu.Lock()
+	runtime.execService = nil
+	runtime.execMu.Unlock()
+	restarted, err := runtime.Execution().StartRunBound(ctx, "SESSION-plan", runtimePlanProject, approved.ID, approved.Version, digest)
+	if err != nil {
+		t.Fatalf("restart replay: %v", err)
+	}
+	if restarted.RunID != first.RunID {
+		t.Fatalf("restart replay created %s; want durable run %s", restarted.RunID, first.RunID)
 	}
 }

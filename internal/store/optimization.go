@@ -147,6 +147,36 @@ func (s *Store) GetOptimizationCycle(ctx context.Context, id string) (optimizati
 	return c, nil
 }
 
+// ListOptimizationCycles returns every durable cycle newest first and verifies
+// each digest before exposing it. A list endpoint that skipped verification
+// would let the TUI present tampered rows that GetOptimizationCycle rejects.
+func (s *Store) ListOptimizationCycles(ctx context.Context) ([]optimization.Cycle, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT cycle_json FROM optimization_cycles
+		ORDER BY updated_at DESC, optimization_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []optimization.Cycle
+	for rows.Next() {
+		var body []byte
+		if err := rows.Scan(&body); err != nil {
+			return nil, err
+		}
+		var cycle optimization.Cycle
+		if err := json.Unmarshal(body, &cycle); err != nil {
+			return nil, fmt.Errorf("decode optimization cycle: %w", err)
+		}
+		if err := cycle.Verify(); err != nil {
+			return nil, err
+		}
+		out = append(out, cycle)
+	}
+	return out, rows.Err()
+}
+
 // UpdateOptimizationCycle applies a new version of a cycle through CAS on
 // (optimization_id, version). A caller racing against a concurrent writer
 // loses rather than silently clobbering the other write.
@@ -584,6 +614,54 @@ func (s *Store) GetCanary(ctx context.Context, id string) (optimization.Canary, 
 		return optimization.Canary{}, fmt.Errorf("decode canary rollout: %w", err)
 	}
 	return c, nil
+}
+
+// GetCanaryBinding returns the durable parent bindings together with a canary.
+// Updates must preserve these columns; replacing them with empty caller values
+// would detach the rollout from the optimization evidence that authorized it.
+func (s *Store) GetCanaryBinding(ctx context.Context, id string) (string, string, optimization.Canary, error) {
+	var cycleID, promotionID string
+	var body []byte
+	err := s.db.QueryRowContext(ctx, `
+		SELECT optimization_id, promotion_id, canary_json
+		FROM canary_rollouts WHERE canary_id=?
+	`, id).Scan(&cycleID, &promotionID, &body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", optimization.Canary{}, optimization.ErrNotFound
+	}
+	if err != nil {
+		return "", "", optimization.Canary{}, err
+	}
+	var c optimization.Canary
+	if err := json.Unmarshal(body, &c); err != nil {
+		return "", "", optimization.Canary{}, fmt.Errorf("decode canary rollout: %w", err)
+	}
+	return cycleID, promotionID, c, nil
+}
+
+// ActiveCanaries returns rollouts for which rollback remains meaningful.
+func (s *Store) ActiveCanaries(ctx context.Context) ([]optimization.Canary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT canary_json FROM canary_rollouts
+		WHERE status IN (?, ?) ORDER BY updated_at DESC, canary_id
+	`, string(optimization.CanaryPending), string(optimization.CanaryRunning))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []optimization.Canary
+	for rows.Next() {
+		var body []byte
+		if err := rows.Scan(&body); err != nil {
+			return nil, err
+		}
+		var c optimization.Canary
+		if err := json.Unmarshal(body, &c); err != nil {
+			return nil, fmt.Errorf("decode canary rollout: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // Canaries returns every canary recorded against one cycle.

@@ -207,7 +207,7 @@ func TestInteractiveWorkspaceAndCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute /why error: %v", err)
 	}
-	if !strings.Contains(out, "codex selected for developer") {
+	if !strings.Contains(out, "canonical entitlement is not active") {
 		t.Fatalf("unexpected why output: %s", out)
 	}
 

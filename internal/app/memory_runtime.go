@@ -378,6 +378,78 @@ func (s *MemoryService) Status(ctx context.Context, projectID string) (MemorySer
 	}, nil
 }
 
+// ListRecent returns canonical records visible to the caller, newest first.
+// It is a bounded read for operator surfaces; it does not synthesize a recall
+// query or bypass scope authorization.
+func (s *MemoryService) ListRecent(ctx context.Context, principal authz.Principal, projectID string, limit int) ([]model.MemoryRecordV2, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s == nil || s.store == nil {
+		return nil, fmt.Errorf("%w: memory store is unavailable", model.ErrUnavailable)
+	}
+	if strings.TrimSpace(projectID) == "" {
+		return nil, fmt.Errorf("%w: project_id is required", model.ErrInvalid)
+	}
+	if err := s.authorizer.Authorize(ctx, principal, authz.ActionMemoryRecall, projectID, model.MemoryDurable); err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	allowed, err := s.store.ListAuthorizedMemoryIDs(ctx, projectID, principal.ID, []string{projectID, principal.ID})
+	if err != nil {
+		return nil, err
+	}
+	records, err := s.store.ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: projectID, Limit: limit * 4})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.MemoryRecordV2, 0, limit)
+	for _, record := range records {
+		if _, ok := allowed[record.ID]; !ok {
+			continue
+		}
+		out = append(out, record)
+		if len(out) == limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+// Get returns one exact canonical memory record only after the same recall
+// authorization and ACL filtering used by list/search.  It closes the
+// reread-proof gap for mutation surfaces without opening an unscoped store
+// reader that could disclose another principal's memory.
+func (s *MemoryService) Get(ctx context.Context, principal authz.Principal, projectID, memoryID string) (model.MemoryRecordV2, error) {
+	if s == nil || s.store == nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("%w: memory store is unavailable", model.ErrUnavailable)
+	}
+	if err := s.authorizer.Authorize(ctx, principal, authz.ActionMemoryRecall, projectID, model.MemoryDurable); err != nil {
+		return model.MemoryRecordV2{}, err
+	}
+	record, err := s.store.GetMemoryV2(ctx, projectID, memoryID)
+	if err != nil {
+		return model.MemoryRecordV2{}, err
+	}
+	allowedScopes := []string{projectID, principal.ID}
+	if model.MemoryScopeKind(record.Scope) == model.ScopeTask {
+		if err := s.authorizeTaskScope(ctx, principal, authz.ActionMemoryRecall, record.ScopeID); err != nil {
+			return model.MemoryRecordV2{}, err
+		}
+		allowedScopes = append(allowedScopes, record.ScopeID)
+	}
+	allowed, err := s.store.ListAuthorizedMemoryIDs(ctx, projectID, principal.ID, allowedScopes)
+	if err != nil {
+		return model.MemoryRecordV2{}, err
+	}
+	if _, ok := allowed[record.ID]; !ok {
+		return model.MemoryRecordV2{}, authz.ErrUnauthorized
+	}
+	return record, nil
+}
+
 func (s *MemoryService) Remember(ctx context.Context, principal authz.Principal, req RememberRequest) (model.MemoryRecordV2, error) {
 	if err := ctx.Err(); err != nil {
 		return model.MemoryRecordV2{}, err

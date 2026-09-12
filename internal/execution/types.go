@@ -258,17 +258,20 @@ type RuntimeApproval struct {
 
 // CheckpointRecord records a durable rollback boundary.
 type CheckpointRecord struct {
-	CheckpointID string     `json:"checkpoint_id"`
-	RunID        string     `json:"run_id"`
-	TaskID       string     `json:"task_id"`
-	ProjectID    string     `json:"project_id"`
-	GitCommit    string     `json:"git_commit"`
-	WorktreePath string     `json:"worktree_path,omitempty"`
-	StateDigest  string     `json:"state_digest"`
-	Reason       string     `json:"reason"`
-	DetailsJSON  string     `json:"details_json,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	RestoredAt   *time.Time `json:"restored_at,omitempty"`
+	CheckpointID string `json:"checkpoint_id"`
+	RunID        string `json:"run_id"`
+	TaskID       string `json:"task_id"`
+	ProjectID    string `json:"project_id"`
+	GitCommit    string `json:"git_commit"`
+	WorktreePath string `json:"worktree_path,omitempty"`
+	StateDigest  string `json:"state_digest"`
+	// SnapshotDigest binds the complete captured file tree. StateDigest binds
+	// checkpoint metadata; it cannot detect bytes changed inside the snapshot.
+	SnapshotDigest string     `json:"snapshot_digest,omitempty"`
+	Reason         string     `json:"reason"`
+	DetailsJSON    string     `json:"details_json,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	RestoredAt     *time.Time `json:"restored_at,omitempty"`
 }
 
 // TypedHandoff records a structured handover between workers.

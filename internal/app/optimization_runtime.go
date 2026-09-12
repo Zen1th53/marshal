@@ -139,6 +139,14 @@ func (s *OptimizationService) Get(ctx context.Context, id string) (optimization.
 	return s.runtime.store.GetOptimizationCycle(ctx, id)
 }
 
+// List returns digest-verified durable cycles in canonical store order.
+func (s *OptimizationService) List(ctx context.Context) ([]optimization.Cycle, error) {
+	if s == nil || s.runtime == nil {
+		return nil, model.ErrUnavailable
+	}
+	return s.runtime.store.ListOptimizationCycles(ctx)
+}
+
 // Candidates returns every candidate recorded against one cycle.
 func (s *OptimizationService) Candidates(ctx context.Context, cycleID string) ([]optimization.Candidate, error) {
 	if s == nil || s.runtime == nil {
@@ -331,6 +339,14 @@ func (s *OptimizationService) Canaries(ctx context.Context, cycleID string) ([]o
 	return s.runtime.store.Canaries(ctx, cycleID)
 }
 
+// ActiveCanaries returns the durable rollouts that can still be rolled back.
+func (s *OptimizationService) ActiveCanaries(ctx context.Context) ([]optimization.Canary, error) {
+	if s == nil || s.runtime == nil {
+		return nil, model.ErrUnavailable
+	}
+	return s.runtime.store.ActiveCanaries(ctx)
+}
+
 // Rollback reverses a running canary, preserving every result it had already
 // accumulated. The evidence a rollback was built on is exactly what Process 07
 // needs to learn from the failure, so it is never discarded here.
@@ -338,7 +354,7 @@ func (s *OptimizationService) Rollback(ctx context.Context, canaryID, reason str
 	if s == nil || s.runtime == nil {
 		return optimization.Canary{}, model.ErrUnavailable
 	}
-	current, err := s.runtime.store.GetCanary(ctx, canaryID)
+	cycleID, promotionID, current, err := s.runtime.store.GetCanaryBinding(ctx, canaryID)
 	if err != nil {
 		return optimization.Canary{}, err
 	}
@@ -346,8 +362,7 @@ func (s *OptimizationService) Rollback(ctx context.Context, canaryID, reason str
 	if err != nil {
 		return optimization.Canary{}, err
 	}
-	promotionID := ""
-	if err := s.runtime.store.AppendCanary(ctx, "", promotionID, rolledBack); err != nil {
+	if err := s.runtime.store.AppendCanary(ctx, cycleID, promotionID, rolledBack); err != nil {
 		return optimization.Canary{}, err
 	}
 	return s.runtime.store.GetCanary(ctx, canaryID)

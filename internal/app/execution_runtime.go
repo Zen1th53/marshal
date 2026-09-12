@@ -19,7 +19,12 @@ import (
 // It enforces the entry gate from Process 04, bounds concurrency, coordinates worker harnesses,
 // handles runtime approvals, maintains isolated task worktrees, and compiles Process 06 handoff bundles.
 type ExecutionService struct {
-	mu      sync.RWMutex
+	mu sync.RWMutex
+	// startMu makes a StartRun request idempotent within this runtime while the
+	// durable-run lookup below provides the same convergence after a restart.
+	// It deliberately lives at the canonical Process 05 boundary rather than
+	// in the TUI confirmation state.
+	startMu sync.Mutex
 	runtime *Runtime
 	engine  *execution.Engine
 	store   execution.RunStore
@@ -97,6 +102,23 @@ func (s *ExecutionService) Engine() *execution.Engine {
 
 // StartRun creates and initializes an execution run from Process 04 handoff.
 func (s *ExecutionService) StartRun(ctx context.Context, sessionID string, projectID projectid.ID) (*execution.ExecutionRun, error) {
+	return s.startRun(ctx, sessionID, projectID, "", 0, "")
+}
+
+// StartRunBound starts only the exact approved plan revision and digest the
+// operator reviewed. The binding is checked inside the same canonical service
+// that prepares the Process 04 handoff, so a TUI-side preflight cannot race a
+// newer plan into execution.
+func (s *ExecutionService) StartRunBound(ctx context.Context, sessionID string, projectID projectid.ID, planID string, planVersion int64, planDigest string) (*execution.ExecutionRun, error) {
+	if strings.TrimSpace(planID) == "" || planVersion < 1 || strings.TrimSpace(planDigest) == "" {
+		return nil, fmt.Errorf("%w: exact plan id, version, and digest are required", model.ErrInvalid)
+	}
+	return s.startRun(ctx, sessionID, projectID, planID, planVersion, planDigest)
+}
+
+func (s *ExecutionService) startRun(ctx context.Context, sessionID string, projectID projectid.ID, expectedPlanID string, expectedPlanVersion int64, expectedPlanDigest string) (*execution.ExecutionRun, error) {
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
 	if err := s.available(); err != nil {
 		return nil, err
 	}
@@ -104,13 +126,8 @@ func (s *ExecutionService) StartRun(ctx context.Context, sessionID string, proje
 		return nil, fmt.Errorf("%w: session is required to start an execution run", model.ErrInvalid)
 	}
 
-	// 1. Prepare Process 04 handoff
-	handoff, err := s.runtime.Plans().Handoff(ctx, sessionID, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("prepare process 04 handoff: %w", err)
-	}
-
-	// 2. Load active goal and plan
+	// Load active goal and plan once, then derive the handoff from those exact
+	// values. Re-reading inside Handoff would reopen a TOCTOU window.
 	goal, err := s.runtime.store.GetActiveGoalContract(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("get active goal contract: %w", err)
@@ -119,8 +136,35 @@ func (s *ExecutionService) StartRun(ctx context.Context, sessionID string, proje
 	if err != nil {
 		return nil, fmt.Errorf("get active plan: %w", err)
 	}
+	actualDigest := fmt.Sprintf("%s/%s", p.Goal.RequestDigest, p.Goal.ConstraintDigest)
+	if expectedPlanID != "" && (p.ID != expectedPlanID || p.Version != expectedPlanVersion || actualDigest != expectedPlanDigest) {
+		return nil, fmt.Errorf("%w: approved plan binding changed (now %s v%d %s)",
+			model.ErrConflict, p.ID, p.Version, actualDigest)
+	}
+	handoff, err := plan.PrepareHandoff(p, goal, projectID, s.now())
+	if err != nil {
+		return nil, fmt.Errorf("prepare process 04 handoff: %w", err)
+	}
 
-	// 3. Initialize run in engine (enforces entry gate, snapshots, initializes DAG)
+	// Replaying the same operator action must converge on its durable Process
+	// 05 run, including after the TUI/runtime restarts.  A new plan version (or
+	// goal revision) creates a distinct handoff and is therefore not coalesced.
+	// This lookup is before initialization while startMu closes the in-process
+	// race between two confirmations arriving at once.
+	runs, err := s.engine.ListRuns(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list existing execution runs: %w", err)
+	}
+	for i := range runs {
+		run := runs[i]
+		if run.SessionID == sessionID && run.ProjectID == projectID &&
+			run.GoalID == goal.ID && run.GoalRevision == goal.Revision &&
+			run.PlanID == p.ID && run.PlanVersion == p.Version {
+			return &run, nil
+		}
+	}
+
+	// Initialize run in Process 05 (enforces entry gate, snapshots, initializes DAG).
 	run, err := s.engine.InitializeRun(ctx, handoff, goal, p)
 	if err != nil {
 		return nil, fmt.Errorf("initialize run: %w", err)
@@ -135,6 +179,24 @@ func (s *ExecutionService) ExecuteRun(ctx context.Context, runID string) (*execu
 		return nil, err
 	}
 	return s.engine.ExecuteRun(ctx, runID)
+}
+
+// ListRuns returns the canonical durable Process 05 runs. It is a read-only
+// boundary used by local status surfaces; callers must not infer mutations
+// from the returned copies.
+func (s *ExecutionService) ListRuns(ctx context.Context) ([]execution.ExecutionRun, error) {
+	if err := s.available(); err != nil {
+		return nil, err
+	}
+	return s.engine.ListRuns(ctx)
+}
+
+// ExecuteRunBound continues only the exact run revision the operator reviewed.
+func (s *ExecutionService) ExecuteRunBound(ctx context.Context, runID string, expectedVersion int64) (*execution.ExecutionRun, error) {
+	if err := s.available(); err != nil {
+		return nil, err
+	}
+	return s.engine.ExecuteRunExpected(ctx, runID, expectedVersion)
 }
 
 // GetRun retrieves the current state of an execution run.
@@ -167,6 +229,16 @@ func (s *ExecutionService) CreateCheckpoint(ctx context.Context, runID, taskID, 
 		return execution.CheckpointRecord{}, err
 	}
 	return s.engine.CaptureCheckpoint(ctx, runID, taskID, reason)
+}
+
+// Checkpoint retrieves the canonical durable checkpoint record. Callers use it
+// to bind confirmations to the exact metadata and snapshot-content digests the
+// engine will verify again before restore.
+func (s *ExecutionService) Checkpoint(_ context.Context, checkpointID string) (execution.CheckpointRecord, error) {
+	if err := s.available(); err != nil {
+		return execution.CheckpointRecord{}, err
+	}
+	return s.engine.GetCheckpoint(checkpointID)
 }
 
 // Rollback restores the project workspace to a prior checkpoint.

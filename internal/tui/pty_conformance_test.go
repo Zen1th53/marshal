@@ -79,7 +79,7 @@ type ptySession struct {
 
 // startTUI builds the marshal binary once, initialises a throwaway project, and
 // runs `marshal tui` attached to a pseudo-terminal.
-func startTUI(t *testing.T, rows, cols uint16) *ptySession {
+func startFrozenTUI(t *testing.T, rows, cols uint16) *ptySession {
 	t.Helper()
 
 	bin := buildMarshalBinary(t)
@@ -127,6 +127,33 @@ func startTUI(t *testing.T, rows, cols uint16) *ptySession {
 	// Wait for the workspace to paint before driving input.
 	s.waitFor("MARSHAL", 15*time.Second)
 	return s
+}
+
+// startTUI enters the secondary composer surface used by the historical
+// slash-command conformance tests. Production still launches into frozen
+// navigation; this helper presses Esc exactly as a power user would.
+func startTUI(t *testing.T, rows, cols uint16) *ptySession {
+	t.Helper()
+	s := startFrozenTUI(t, rows, cols)
+	s.send("\x1b") // Esc at Home returns to the composer.
+	return s
+}
+
+// startCommandTUI switches from the flagship frozen navigation to the legacy
+// composer. Slash commands remain a supported power-user surface, but they are
+// deliberately secondary to the navigation-first launch experience.
+func startCommandTUI(t *testing.T, rows, cols uint16) *ptySession {
+	return startTUI(t, rows, cols)
+}
+
+// TestPTYWorkspaceStartsInFrozenNavigation proves a real `marshal tui` launch
+// presents the Community TUI rather than the old composer/transcript screen.
+func TestPTYWorkspaceStartsInFrozenNavigation(t *testing.T) {
+	s := startFrozenTUI(t, 40, 120)
+	s.mustSee("Home")
+	s.mustSee("Control")
+	s.mustSee("Status")
+	s.mustSee("System")
 }
 
 func (s *ptySession) output() string {
@@ -236,7 +263,7 @@ func initProject(t *testing.T, bin string) string {
 // TestPTYWorkspacePaintsRealState proves the shipped binary renders a workspace
 // on a real terminal, and that the values shown come from the store.
 func TestPTYWorkspacePaintsRealState(t *testing.T) {
-	s := startTUI(t, 40, 120)
+	s := startCommandTUI(t, 40, 120)
 
 	s.mustSee("MARSHAL")
 
@@ -254,7 +281,7 @@ func TestPTYWorkspacePaintsRealState(t *testing.T) {
 // them falls through to the unknown-command branch. A registry entry that names
 // a command the binary rejects is a false capability claim.
 func TestPTYEveryRegisteredCommandDispatches(t *testing.T) {
-	s := startTUI(t, 40, 120)
+	s := startCommandTUI(t, 40, 120)
 
 	seen := map[string]bool{}
 	var commands []string
@@ -297,7 +324,7 @@ func TestPTYEveryRegisteredCommandDispatches(t *testing.T) {
 
 // TestPTYKeyboardContract drives the documented control keys as raw bytes.
 func TestPTYKeyboardContract(t *testing.T) {
-	s := startTUI(t, 40, 120)
+	s := startCommandTUI(t, 40, 120)
 
 	// Seed history so Up has something to recall.
 	s.sendLine("/status")
@@ -324,7 +351,7 @@ func TestPTYKeyboardContract(t *testing.T) {
 // TestPTYTabCompletion proves Tab completion happens inside the real terminal
 // rather than only in the in-process completer.
 func TestPTYTabCompletion(t *testing.T) {
-	s := startTUI(t, 40, 120)
+	s := startCommandTUI(t, 40, 120)
 
 	// "/doc" + Tab must resolve to /doctor and then run it.
 	s.send("/doc")
@@ -340,7 +367,7 @@ func TestPTYTabCompletion(t *testing.T) {
 // TestPTYCtrlCDoesNotKillSession proves Ctrl+C is a safe interrupt: it must not
 // terminate the durable workspace.
 func TestPTYCtrlCDoesNotKillSession(t *testing.T) {
-	s := startTUI(t, 40, 120)
+	s := startCommandTUI(t, 40, 120)
 
 	s.send("some partial input")
 	s.send("\x03") // Ctrl+C
@@ -358,7 +385,7 @@ func TestPTYCtrlCDoesNotKillSession(t *testing.T) {
 // TestPTYResizeKeepsWorkspaceUsable resizes the terminal underneath a running
 // session, including down to the 80x24 floor, and proves it still renders.
 func TestPTYResizeKeepsWorkspaceUsable(t *testing.T) {
-	s := startTUI(t, 40, 160)
+	s := startCommandTUI(t, 40, 160)
 	s.sendLine("/status")
 	s.mustSee("CANONICAL STATUS DETAIL")
 
@@ -381,7 +408,7 @@ func TestPTYResizeKeepsWorkspaceUsable(t *testing.T) {
 // no registered agents and no configured models, the terminal must not display
 // a specific model name it cannot possibly have established.
 func TestPTYNoFabricatedModelNames(t *testing.T) {
-	s := startTUI(t, 40, 140)
+	s := startCommandTUI(t, 40, 140)
 
 	s.sendLine("/agents")
 	s.sendLine("/msg all hello")

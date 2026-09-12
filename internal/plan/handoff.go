@@ -28,7 +28,11 @@ import (
 // conversation, no model output and no transcript, because Process 05 must be
 // able to start on a provider that has never seen this work.
 type Handoff struct {
-	ProjectID projectid.ID `json:"project_id"`
+	// EvidenceID identifies the durable handoff.created event appended by the
+	// application boundary. Pure PrepareHandoff callers leave it empty; a
+	// user-facing success must come through PlanService.Handoff and carry it.
+	EvidenceID string       `json:"evidence_id,omitempty"`
+	ProjectID  projectid.ID `json:"project_id"`
 	// Goal identifies exactly which Goal revision authorizes this work.
 	Goal GoalBinding `json:"goal"`
 	// OriginalRequest travels with the handoff so execution can be checked

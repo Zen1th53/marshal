@@ -207,3 +207,35 @@ func TestRestoreRejectsWrongProjectID(t *testing.T) {
 		t.Fatal("expected restore with mismatched project ID to fail")
 	}
 }
+
+func TestRestoreDatabaseExpectedRejectsDigestSwapBeforeTargetMutation(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "live.db")
+	backupPath := filepath.Join(dir, "backup.db")
+	targetPath := filepath.Join(dir, "target.db")
+	ctx := context.Background()
+
+	st, err := Open(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.InitProject(ctx, model.Project{ID: "PRJ-EXPECTED", Repository: dir, DefaultBranch: "main", PackVersion: "1.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Backup(ctx, backupPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RestoreDatabaseExpected(ctx, backupPath, targetPath, "PRJ-EXPECTED", LatestSchemaVersion, "sha256:not-the-confirmed-backup"); err == nil {
+		t.Fatal("digest-mismatched restore succeeded")
+	}
+	if _, err := os.Stat(targetPath); !os.IsNotExist(err) {
+		t.Fatalf("digest mismatch mutated target database: stat err=%v", err)
+	}
+}

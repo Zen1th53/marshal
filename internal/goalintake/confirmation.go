@@ -1,6 +1,11 @@
 package goalintake
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+
+	"github.com/Zen1th53/marshal/internal/model"
+)
 
 // This file decides who confirms a Goal.
 //
@@ -220,6 +225,21 @@ func Approve(intake Intake) Intake {
 	}
 	intake.Confirmation = ConfirmationApproved
 	return intake
+}
+
+// ApproveContract applies the Process 03 user-confirmation rule to a durable
+// GoalContract. Persistence and CAS remain the application service's job; this
+// function is the lifecycle authority for whether the transition is valid.
+func ApproveContract(goal model.GoalContract) (model.GoalContract, error) {
+	if len(goal.UnresolvedDecisions) > 0 || goal.UnderstandingState == model.GoalNeedsInput {
+		return goal, fmt.Errorf("%w: a goal with unresolved decisions cannot be approved", ErrInvalidIntake)
+	}
+	if goal.Confirmation == model.ConfirmationCancelled {
+		return goal, fmt.Errorf("%w: a cancelled goal cannot be approved", ErrInvalidIntake)
+	}
+	approved := goal
+	approved.Confirmation = model.ConfirmationApproved
+	return approved, nil
 }
 
 // Cancel records a user's refusal.
