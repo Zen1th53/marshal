@@ -262,8 +262,12 @@ func LoadIA(raw []byte) (*IA, error) {
 			return nil, fmt.Errorf("tui: %s has unknown binding status %q", s.SpecID, s.Binding)
 		}
 		n := &Node{
-			SpecID:         s.SpecID,
-			Title:          communityLabel(s.Title),
+			SpecID: s.SpecID,
+			// Keep the manifest title as the canonical identity. Navigation,
+			// cross-link resolution, and audit tests compare this hierarchy to
+			// the manifest path. Rendering applies communityLabel at the UI
+			// boundary so implementation phase names never reach the operator.
+			Title:          s.Title,
 			SpecPath:       s.Path,
 			MenuPath:       s.MenuPath,
 			ParentID:       s.Parent,

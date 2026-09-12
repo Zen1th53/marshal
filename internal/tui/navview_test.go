@@ -115,8 +115,8 @@ func TestAllNineSectionsSurviveEveryWidth(t *testing.T) {
 					cols, i+1, bar)
 			}
 		}
-		if len([]rune(bar)) > cols {
-			t.Fatalf("width %d: the top bar is %d runes", cols, len([]rune(bar)))
+		if got := VisibleLen(bar); got > cols {
+			t.Fatalf("width %d: the top bar has visible width %d", cols, got)
 		}
 	}
 }
@@ -522,8 +522,8 @@ func TestViewRendersAtNarrowWidths(t *testing.T) {
 			t.Fatalf("width %d rendered nothing", cols)
 		}
 		for i, line := range rendered {
-			if got := len([]rune(line)); got > cols {
-				t.Fatalf("width %d: line %d is %d runes and overflows:\n%q",
+			if got := VisibleLen(line); got > cols {
+				t.Fatalf("width %d: line %d has visible width %d and overflows:\n%q",
 					cols, i, got, line)
 			}
 		}

@@ -1018,15 +1018,15 @@ func abbreviate(title string) string {
 }
 
 func (v *NavView) renderBreadcrumb(nav *NavState, cols int) string {
-	crumb := strings.Join(nav.Breadcrumb(), " / ")
+	crumb := communityLabel(strings.Join(nav.Breadcrumb(), " / "))
 	if crumb == "" {
-		crumb = nav.Current().Title
+		crumb = communityLabel(nav.Current().Title)
 	}
 	// A cross-linked screen says where the user came from while the breadcrumb
 	// continues to name the canonical hierarchy, so the screen never appears to
 	// belong somewhere it does not.
 	if origin := nav.Origin(); origin != nil {
-		crumb += fmt.Sprintf("   (from %s)", origin.Title)
+		crumb += fmt.Sprintf("   (from %s)", communityLabel(origin.Title))
 	}
 	return truncate(crumb, cols)
 }
@@ -1116,7 +1116,7 @@ func (v *NavView) renderMenu(nav *NavState, width, rows int) []string {
 		} else if i == sel {
 			marker = "· "
 		}
-		label := c.Title
+		label := communityLabel(c.Title)
 		if c.Type.IsAction() {
 			// The safety class travels with the row, in text, so a no-colour
 			// terminal still shows what kind of action it is.
@@ -1195,7 +1195,7 @@ func (v *NavView) renderDetail(nav *NavState, snap Snapshot, width, rows int) []
 func (v *NavView) renderActionBar(action *Node, width int) []string {
 	av := Availability(action)
 	out := []string{
-		truncate(action.Title+" "+action.Type.SafetyLabel(), width),
+		truncate(communityLabel(action.Title)+" "+action.Type.SafetyLabel(), width),
 		"",
 	}
 	if av.Enabled {
@@ -1211,7 +1211,7 @@ func (v *NavView) renderActionBar(action *Node, width int) []string {
 }
 
 func (v *NavView) renderActionForm(form *actionForm, width, rows int) []string {
-	out := []string{truncate(form.binding.Title+" — typed input", width), ""}
+	out := []string{truncate(communityLabel(form.binding.Title)+" — typed input", width), ""}
 	for i, field := range form.binding.Inputs {
 		marker := "  "
 		if i == form.index {

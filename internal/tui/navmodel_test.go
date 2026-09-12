@@ -34,8 +34,8 @@ func TestCommunityNavigationUsesHumanLabels(t *testing.T) {
 		t.Fatalf("load IA: %v", err)
 	}
 	for id, node := range ia.byID {
-		if strings.Contains(node.Title, "Process 0") {
-			t.Fatalf("%s leaks an implementation phase into a visible title: %q", id, node.Title)
+		if got := communityLabel(node.Title); strings.Contains(got, "Process 0") {
+			t.Fatalf("%s leaks an implementation phase into a visible title: %q", id, got)
 		}
 	}
 	for id, want := range map[string]string{
@@ -44,10 +44,10 @@ func TestCommunityNavigationUsesHumanLabels(t *testing.T) {
 		"CTUI-0571": "Governed Optimization",
 	} {
 		node, ok := ia.Node(id)
-		if !ok || node.Title != want {
+		if !ok || communityLabel(node.Title) != want {
 			got := "<missing>"
 			if node != nil {
-				got = node.Title
+				got = communityLabel(node.Title)
 			}
 			t.Fatalf("%s title = %q, want %q", id, got, want)
 		}
