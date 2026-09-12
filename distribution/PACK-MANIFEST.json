@@ -6391,8 +6391,8 @@
     },
     {
       "path": "internal/tui/controlview_test.go",
-      "sha256": "cac60aaed18e3e12a48c12f9bb5a4b7ae9753e0a3a178da02c0fea4597bd16c6",
-      "bytes": 16569
+      "sha256": "cf6efc380f2a2435c2bf0e0a1974a0ca811943a92a03015fc1bdf70a5df5e6bc",
+      "bytes": 17556
     },
     {
       "path": "internal/tui/dedicatedscreen.go",
@@ -6511,8 +6511,8 @@
     },
     {
       "path": "internal/tui/navview.go",
-      "sha256": "c0960174c056b0ddd7f641107788dd5706689bb1e4eff5b0b397f74d45bf2608",
-      "bytes": 38199
+      "sha256": "5832a270f34058e602072b71e135fd8753367360906e11c1a8c6238264901533",
+      "bytes": 40239
     },
     {
       "path": "internal/tui/navview_test.go",

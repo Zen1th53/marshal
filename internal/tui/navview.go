@@ -636,6 +636,20 @@ func (v *NavView) styleLines(lines []string, nav *NavState, th *Theme) []string 
 		styled[bodyStart] = th.Colorize(th.Border, styled[bodyStart])
 		bodyStart++
 	}
+	// Confirmation controls are intentionally not ordinary menu rows: their
+	// leading space keeps the two buttons centred and handleConfirmMouse
+	// recognises their exact unstyled shape. Style them only after rendering so
+	// hit testing and the keyboard state machine continue to operate on the
+	// canonical, ANSI-free controls. A reverse-video focus is deliberately much
+	// stronger than a colour-only cue; the focused choice must remain obvious in
+	// a busy confirmation containing several binding fields.
+	if v.confirmOpen() {
+		for i := bodyStart; i < len(styled)-1; i++ {
+			if isConfirmButtonRow(styled[i]) {
+				styled[i] = styleConfirmationButtonRow(styled[i], v.control.confirm, th)
+			}
+		}
+	}
 	for i := bodyStart; i < len(styled)-1; i++ {
 		styled[i] = styleNavigationMenuRow(styled[i], th)
 	}
@@ -708,6 +722,45 @@ func styleNavigationMenuRow(line string, th *Theme) string {
 		return left
 	}
 	return left + th.Colorize(th.Border, " │ ") + right
+}
+
+// styleConfirmationButtonRow gives the focused confirmation choice a complete
+// high-contrast treatment without changing its text or width. The raw row is
+// retained by renderConfirmation for mouse hit-testing; this function runs
+// strictly after all layout work is complete.
+func styleConfirmationButtonRow(line string, c *Confirmation, th *Theme) string {
+	if c == nil || th == nil || th.Mode == ThemeNoColor || !isConfirmButtonRow(line) {
+		return line
+	}
+
+	selected := c.Selection()
+	style := func(label, colour string, focused bool) string {
+		if focused {
+			// Reverse video provides a full visual focus block even in terminal
+			// palettes where semantic colours are muted or remapped.
+			return th.Colorize(th.Reverse+th.Bold+colour, label)
+		}
+		return th.Colorize(colour, label)
+	}
+
+	cancelLabel := "Cancel"
+	cancelToken := cancelLabel
+	if selected == 0 {
+		cancelToken = "▸" + cancelLabel
+	}
+	line = strings.Replace(line, cancelToken,
+		style(cancelToken, th.Muted, selected == 0), 1)
+	proceedColour := th.Success
+	if c.Binding().Safety == SafetyDestructive {
+		proceedColour = th.Danger
+	}
+	proceedLabel := "Proceed"
+	proceedToken := proceedLabel
+	if selected == 1 {
+		proceedToken = "▸" + proceedLabel
+	}
+	return strings.Replace(line, proceedToken,
+		style(proceedToken, proceedColour, selected == 1), 1)
 }
 
 // handleMouse provides the mouse equivalent of the visible navigation

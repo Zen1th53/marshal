@@ -393,6 +393,29 @@ func TestConfirmationShowsTheExactBinding(t *testing.T) {
 	}
 }
 
+// The focused confirmation button must be visible without relying on the
+// small arrow alone. This is applied after the raw button row has been laid
+// out, preserving both terminal width and the exact mouse hit-test shape.
+func TestConfirmationButtonsUseHighContrastFocusWithoutChangingWidth(t *testing.T) {
+	raw := " ▸Cancel    Proceed  "
+	c := &Confirmation{}
+	c.binding = Binding{Safety: SafetyDestructive}
+
+	got := styleConfirmationButtonRow(raw, c, NewTheme(ThemeDefault, true, false))
+	if !strings.Contains(got, "\x1b[7m") {
+		t.Fatalf("focused Cancel has no reverse-video focus: %q", got)
+	}
+	if !strings.Contains(got, "\x1b[38;5;196mProceed") {
+		t.Fatalf("destructive Proceed is not visually distinct: %q", got)
+	}
+	if VisibleLen(got) != VisibleLen(raw) {
+		t.Fatalf("styled button width=%d, raw width=%d", VisibleLen(got), VisibleLen(raw))
+	}
+	if !isConfirmButtonRow(StripANSI(got)) {
+		t.Fatalf("styling changed the canonical button-row shape: %q", StripANSI(got))
+	}
+}
+
 // Starting an approved plan is governed by the canonical plan/Process 05 entry
 // gate. It must not consume whichever unrelated runtime approval happens to be
 // selected in the queue.
