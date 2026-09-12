@@ -6376,8 +6376,8 @@
     },
     {
       "path": "internal/tui/controlbind.go",
-      "sha256": "3d3dff90fd00bf7a8d200672eb5f15a3ac9cb5206ea37ec4b83075609d46628a",
-      "bytes": 122246
+      "sha256": "cbbb9cb6b3529b41d729557de1d4f066e679010420b4a1d8b4f6ebfafb0ce1c7",
+      "bytes": 122226
     },
     {
       "path": "internal/tui/controlscreen.go",
@@ -6386,13 +6386,13 @@
     },
     {
       "path": "internal/tui/controlview.go",
-      "sha256": "7b0966cc110e405fd268949bdbd6ad784c9a8f955413bd757b04696e2826bf5b",
-      "bytes": 29094
+      "sha256": "9c498e0b2f2240edf5e9ed6b920d0b46b751e1aa69c7eab2494356e1d2e33615",
+      "bytes": 29110
     },
     {
       "path": "internal/tui/controlview_test.go",
-      "sha256": "cac60aaed18e3e12a48c12f9bb5a4b7ae9753e0a3a178da02c0fea4597bd16c6",
-      "bytes": 16569
+      "sha256": "5fbdb52120d9fd4041ac4fde24833ad392d591d8916c269b40aef982936e1a4c",
+      "bytes": 18280
     },
     {
       "path": "internal/tui/dedicatedscreen.go",
@@ -6491,13 +6491,13 @@
     },
     {
       "path": "internal/tui/navmodel.go",
-      "sha256": "affd2856ea7ebf27859af35362cd53994f88f237374706bd85e60f2ec87f5865",
-      "bytes": 14746
+      "sha256": "022d076e53bf401a503cbe0b4f358b933deecb383f757cf039970afed632d9fa",
+      "bytes": 17192
     },
     {
       "path": "internal/tui/navmodel_test.go",
-      "sha256": "623997d5f250594556fa4ffc2147711f943f8fff40d0174accc6b3263010b03c",
-      "bytes": 14343
+      "sha256": "2a4b50e9ba954999915787464ff30d1367d2aa8fff53fc727fd978505b6b040b",
+      "bytes": 15270
     },
     {
       "path": "internal/tui/navstate.go",
@@ -6511,13 +6511,13 @@
     },
     {
       "path": "internal/tui/navview.go",
-      "sha256": "2de4d1ecc3089b7f1e99e9ae3d14b2d271b67720751c250f1727352f93be684d",
-      "bytes": 34836
+      "sha256": "3e3042c9ef8439269df16e80ba2b5a3912c39ca7760cac2289612165186a7e9f",
+      "bytes": 40698
     },
     {
       "path": "internal/tui/navview_test.go",
-      "sha256": "88822537a59b4d455896049a971906ae699d31fa5eae4eab2bd6074c82ca3866",
-      "bytes": 31588
+      "sha256": "bf8143d8a76a850fe1c4a7e89b2bbeae63b27ec74fc58e2db9c357c75e1fb8da",
+      "bytes": 33336
     },
     {
       "path": "internal/tui/palette.go",
@@ -6671,8 +6671,8 @@
     },
     {
       "path": "internal/tui/truthstate.go",
-      "sha256": "935ed95817586c2eb6b9a08b9e43c54021af8ba008c4d1ca3f0b354a9e69f0f1",
-      "bytes": 11702
+      "sha256": "0df2dcadb804288c899148860065ffbffefdb508c380c4cca469a2c29138c687",
+      "bytes": 12074
     },
     {
       "path": "internal/tui/truthstate_test.go",
@@ -6716,8 +6716,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "1a41a1fdf81c0345b185445ee78f82b5e0c0faf1b3dbc09cb57a5a4466a92cef",
-      "bytes": 34509
+      "sha256": "513716166220ef4dc99523799d699138f350e71a47a1ebc2d3bef989adcf41cb",
+      "bytes": 34538
     },
     {
       "path": "internal/tui/workspace_nav_test.go",

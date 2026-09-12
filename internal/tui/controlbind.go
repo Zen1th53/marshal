@@ -634,7 +634,7 @@ func (s *ControlSource) Bindings() map[ActionID]Binding {
 	// invented evidence would be exactly the fake the contract forbids.
 
 	for _, opt := range []struct{ id, title, needs string }{
-		{"CTUI-0573", "Start from Process 07 commit", "the memory commit to optimize from"},
+		{"CTUI-0573", "Start from learning record", "the memory record to optimize from"},
 		{"CTUI-0587", "Offline bounded replay", "the replay's route, sandbox policy and bounds"},
 		{"CTUI-0617", "Promotion decision and evidence", "the candidate and its benchmark evidence"},
 		{"CTUI-0621", "Canary creation", "the promotion and the canary's rollout policy"},
@@ -677,7 +677,7 @@ func (s *ControlSource) Bindings() map[ActionID]Binding {
 		{"CTUI-0485", "Import Codex JSONL", "the file to import"},
 		{"CTUI-0486", "Import Claude JSONL", "the file to import"},
 		{"CTUI-0487", "Import Gemini JSONL", "the file to import"},
-		{"CTUI-0489", "Export Process 07 project/general bundle", "the export destination"},
+		{"CTUI-0489", "Export learning bundle", "the export destination"},
 		{"CTUI-0491", "Local portable memory-pack import/export", "the pack path"},
 	} {
 		id, title, needs := ActionID(capture.id), capture.title, capture.needs

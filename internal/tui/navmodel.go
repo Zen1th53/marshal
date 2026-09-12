@@ -184,6 +184,49 @@ type manifestFile struct {
 	Specs           []manifestSpec `json:"specs"`
 }
 
+// communityLabel removes implementation-phase names from the Community UI.
+// Those numbers are useful in design notes and source history, but they do
+// not tell an operator what a screen does. Spec IDs and the original manifest
+// paths remain unchanged for durable bindings, cross-links, and auditability.
+func communityLabel(text string) string {
+	return strings.NewReplacer(
+		"Constitution — Process 00", "Constitution",
+		"Goal & Intent — Process 03", "Goal & Intent",
+		"Plan — Process 04", "Plan",
+		"Runs — Process 05", "Runs",
+		"Review — Process 06", "Review",
+		"Learning — Process 07", "Learning",
+		"Governed Optimization — Process 08", "Governed Optimization",
+		"Process 00→08 timeline", "Lifecycle timeline",
+		"Process 05 action approval", "Execution action approval",
+		"Process 06 verification state", "Verification state",
+		"Process 07 learning state", "Learning state",
+		"Process 08 optimization state", "Optimization state",
+		"Process 06 handoff bundle", "Verification handoff bundle",
+		"Hand off approved plan to Process 05", "Hand off approved plan",
+		"Export Process 07 project/general bundle", "Export learning bundle",
+		"Start from Process 07 commit", "Start from learning record",
+		"Policy proposal → new Process 03 goal", "Policy proposal → new goal",
+		"Process 07 Feedback", "Learning feedback",
+		"Local-only Process 03→07 contract", "Local lifecycle contract",
+		"Memory handoffs and Process 07 reads", "Memory handoffs and learning reads",
+		"Process 06 verification status", "Verification status",
+		"Process 07 memory/search", "Memory search",
+		"Read-only Process 08 evidence tools", "Read-only optimization evidence tools",
+		"Read-only Process 08 evidence", "Read-only optimization evidence",
+		"Process 01–02 / pre-lifecycle readiness", "Setup and readiness",
+		"Process 00→08", "lifecycle",
+		"Process 03→07", "lifecycle",
+		"Process 00", "constitution",
+		"Process 03", "goal service",
+		"Process 04", "planning service",
+		"Process 05", "execution service",
+		"Process 06", "verification service",
+		"Process 07", "learning service",
+		"Process 08", "optimization service",
+	).Replace(text)
+}
+
 // LoadIA parses a MANIFEST.json into the navigable tree.
 //
 // It fails rather than degrades on a malformed manifest. A partially loaded IA
@@ -219,7 +262,11 @@ func LoadIA(raw []byte) (*IA, error) {
 			return nil, fmt.Errorf("tui: %s has unknown binding status %q", s.SpecID, s.Binding)
 		}
 		n := &Node{
-			SpecID:         s.SpecID,
+			SpecID: s.SpecID,
+			// Keep the manifest title as the canonical identity. Navigation,
+			// cross-link resolution, and audit tests compare this hierarchy to
+			// the manifest path. Rendering applies communityLabel at the UI
+			// boundary so implementation phase names never reach the operator.
 			Title:          s.Title,
 			SpecPath:       s.Path,
 			MenuPath:       s.MenuPath,

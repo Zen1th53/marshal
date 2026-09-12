@@ -25,6 +25,35 @@ func TestFrozenIALoads(t *testing.T) {
 	}
 }
 
+// The manifest retains process associations for implementation traceability,
+// but phase numbers are not Community navigation labels. Every visible title
+// must explain the user's destination in ordinary language.
+func TestCommunityNavigationUsesHumanLabels(t *testing.T) {
+	ia, err := FrozenIA()
+	if err != nil {
+		t.Fatalf("load IA: %v", err)
+	}
+	for id, node := range ia.byID {
+		if got := communityLabel(node.Title); strings.Contains(got, "Process 0") {
+			t.Fatalf("%s leaks an implementation phase into a visible title: %q", id, got)
+		}
+	}
+	for id, want := range map[string]string{
+		"CTUI-0460": "Learning",
+		"CTUI-0489": "Export learning bundle",
+		"CTUI-0571": "Governed Optimization",
+	} {
+		node, ok := ia.Node(id)
+		if !ok || communityLabel(node.Title) != want {
+			got := "<missing>"
+			if node != nil {
+				got = communityLabel(node.Title)
+			}
+			t.Fatalf("%s title = %q, want %q", id, got, want)
+		}
+	}
+}
+
 // The nine sections and their order are immutable. Reordering them would change
 // what the left-most key press selects, so the order is asserted literally.
 func TestTopLevelSectionsAreFrozen(t *testing.T) {

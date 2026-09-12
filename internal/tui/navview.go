@@ -99,6 +99,18 @@ func (v *NavView) AttachSource(source *StatusSource, providers ProviderReader) {
 	v.source, v.providers = source, providers
 }
 
+// SetTheme updates the navigation surface's rendering theme. Navigation is a
+// separate view from the legacy composer, so it must be updated explicitly
+// when the workspace theme changes.
+func (v *NavView) SetTheme(theme *Theme) {
+	if v == nil || theme == nil {
+		return
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.theme = theme
+}
+
 // IsOpen reports whether the view owns the screen.
 func (v *NavView) IsOpen() bool {
 	if v == nil {
@@ -579,7 +591,7 @@ func (v *NavView) Render(cols, rows int) []string {
 	}
 	lines = append(lines, truncate(meta, cols))
 	if status != "" {
-		lines = append(lines, truncate("→ "+status, cols))
+		lines = append(lines, truncate("→ "+communityLabel(status), cols))
 	}
 	lines = append(lines, strings.Repeat("─", cols))
 
@@ -593,10 +605,166 @@ func (v *NavView) Render(cols, rows int) []string {
 		lines = append(lines, "")
 	}
 	lines = append(lines, truncate(v.renderHint(nav), cols))
+	lines = v.styleLines(lines, nav, th)
 	if len(lines) > rows {
 		lines = lines[:rows]
 	}
 	return lines
+}
+
+// styleLines applies colour only after layout and truncation are complete.
+// ANSI bytes must never participate in width decisions, otherwise a narrow
+// terminal would wrap a styled frame even though its visible text fits.
+func (v *NavView) styleLines(lines []string, nav *NavState, th *Theme) []string {
+	if th == nil || th.Mode == ThemeNoColor || len(lines) == 0 {
+		return lines
+	}
+	styled := append([]string(nil), lines...)
+	styled[0] = styleTopNavigation(styled[0], nav, th)
+	if len(styled) > 1 {
+		styled[1] = th.Colorize(th.Marshal+th.Bold, styled[1])
+	}
+	if len(styled) > 2 {
+		styled[2] = th.Colorize(th.Muted, styled[2])
+	}
+	bodyStart := 3
+	if len(styled) > 3 && strings.HasPrefix(styled[3], "→ ") {
+		styled[3] = styleNavigationStatus(styled[3], th)
+		bodyStart++
+	}
+	if len(styled) > bodyStart {
+		styled[bodyStart] = th.Colorize(th.Border, styled[bodyStart])
+		bodyStart++
+	}
+	// Confirmation controls are intentionally not ordinary menu rows: their
+	// leading space keeps the two buttons centred and handleConfirmMouse
+	// recognises their exact unstyled shape. Style them only after rendering so
+	// hit testing and the keyboard state machine continue to operate on the
+	// canonical, ANSI-free controls. A reverse-video focus is deliberately much
+	// stronger than a colour-only cue; the focused choice must remain obvious in
+	// a busy confirmation containing several binding fields.
+	if v.confirmOpen() {
+		for i := bodyStart; i < len(styled)-1; i++ {
+			if isConfirmButtonRow(styled[i]) {
+				styled[i] = styleConfirmationButtonRow(styled[i], v.control.confirm, th)
+			}
+		}
+	}
+	for i := bodyStart; i < len(styled)-1; i++ {
+		styled[i] = styleNavigationMenuRow(styled[i], th)
+	}
+	if len(styled) > 1 {
+		styled[len(styled)-1] = th.Colorize(th.Muted, styled[len(styled)-1])
+	}
+	return styled
+}
+
+func styleTopNavigation(line string, nav *NavState, th *Theme) string {
+	if nav == nil || th == nil {
+		return line
+	}
+	selected := "[" + fmt.Sprintf("%d %s", nav.sectionIndex()+1, nav.CurrentSection().Title) + "]"
+	if !strings.Contains(line, selected) {
+		// Tight and digit-only top bars have different labels, but their selected
+		// form still begins with the current section number inside brackets.
+		selected = fmt.Sprintf("[%d", nav.sectionIndex()+1)
+		at := strings.Index(line, selected)
+		if at < 0 {
+			return th.Colorize(th.Muted, line)
+		}
+		end := strings.Index(line[at:], "]")
+		if end < 0 {
+			return th.Colorize(th.Muted, line)
+		}
+		selected = line[at : at+end+1]
+	}
+	at := strings.Index(line, selected)
+	if at < 0 {
+		return th.Colorize(th.Muted, line)
+	}
+	return th.Colorize(th.Muted, line[:at]) +
+		th.Colorize(th.HeaderBg+th.Bold, selected) +
+		th.Colorize(th.Muted, line[at+len(selected):])
+}
+
+func styleNavigationStatus(line string, th *Theme) string {
+	lower := strings.ToLower(line)
+	colour := th.Accent
+	switch {
+	case strings.Contains(lower, "refus"), strings.Contains(lower, "fail"), strings.Contains(lower, "block"):
+		colour = th.Danger
+	case strings.Contains(lower, "complete"), strings.Contains(lower, "refreshed"):
+		colour = th.Success
+	}
+	return th.Colorize(colour, line)
+}
+
+func styleNavigationMenuRow(line string, th *Theme) string {
+	if line == "" {
+		return line
+	}
+	left, right, hasDetail := line, "", false
+	if at := strings.Index(line, " │ "); at >= 0 {
+		left, right, hasDetail = line[:at], line[at+len(" │ "):], true
+	}
+	colour := ""
+	switch {
+	case strings.HasPrefix(left, "▸ "):
+		// A selected row is a keyboard focus target, not merely a coloured
+		// label. Reverse video remains unmistakable when a terminal remaps or
+		// desaturates ANSI colours, and applies consistently to menus, typed
+		// form fields, and palette results.
+		colour = th.Reverse + th.Active + th.Bold
+	case strings.HasPrefix(left, "· "):
+		colour = th.Accent
+	}
+	if colour == "" {
+		return line
+	}
+	left = th.Colorize(colour, left)
+	if !hasDetail {
+		return left
+	}
+	return left + th.Colorize(th.Border, " │ ") + right
+}
+
+// styleConfirmationButtonRow gives the focused confirmation choice a complete
+// high-contrast treatment without changing its text or width. The raw row is
+// retained by renderConfirmation for mouse hit-testing; this function runs
+// strictly after all layout work is complete.
+func styleConfirmationButtonRow(line string, c *Confirmation, th *Theme) string {
+	if c == nil || th == nil || th.Mode == ThemeNoColor || !isConfirmButtonRow(line) {
+		return line
+	}
+
+	selected := c.Selection()
+	style := func(label, colour string, focused bool) string {
+		if focused {
+			// Reverse video provides a full visual focus block even in terminal
+			// palettes where semantic colours are muted or remapped.
+			return th.Colorize(th.Reverse+th.Bold+colour, label)
+		}
+		return th.Colorize(colour, label)
+	}
+
+	cancelLabel := "Cancel"
+	cancelToken := cancelLabel
+	if selected == 0 {
+		cancelToken = "▸" + cancelLabel
+	}
+	line = strings.Replace(line, cancelToken,
+		style(cancelToken, th.Muted, selected == 0), 1)
+	proceedColour := th.Success
+	if c.Binding().Safety == SafetyDestructive {
+		proceedColour = th.Danger
+	}
+	proceedLabel := "Proceed"
+	proceedToken := proceedLabel
+	if selected == 1 {
+		proceedToken = "▸" + proceedLabel
+	}
+	return strings.Replace(line, proceedToken,
+		style(proceedToken, proceedColour, selected == 1), 1)
 }
 
 // handleMouse provides the mouse equivalent of the visible navigation
@@ -850,15 +1018,15 @@ func abbreviate(title string) string {
 }
 
 func (v *NavView) renderBreadcrumb(nav *NavState, cols int) string {
-	crumb := strings.Join(nav.Breadcrumb(), " / ")
+	crumb := communityLabel(strings.Join(nav.Breadcrumb(), " / "))
 	if crumb == "" {
-		crumb = nav.Current().Title
+		crumb = communityLabel(nav.Current().Title)
 	}
 	// A cross-linked screen says where the user came from while the breadcrumb
 	// continues to name the canonical hierarchy, so the screen never appears to
 	// belong somewhere it does not.
 	if origin := nav.Origin(); origin != nil {
-		crumb += fmt.Sprintf("   (from %s)", origin.Title)
+		crumb += fmt.Sprintf("   (from %s)", communityLabel(origin.Title))
 	}
 	return truncate(crumb, cols)
 }
@@ -948,7 +1116,7 @@ func (v *NavView) renderMenu(nav *NavState, width, rows int) []string {
 		} else if i == sel {
 			marker = "· "
 		}
-		label := c.Title
+		label := communityLabel(c.Title)
 		if c.Type.IsAction() {
 			// The safety class travels with the row, in text, so a no-colour
 			// terminal still shows what kind of action it is.
@@ -982,7 +1150,7 @@ func (v *NavView) renderDetail(nav *NavState, snap Snapshot, width, rows int) []
 	out := make([]string, 0, rows)
 
 	if content.HasNotice {
-		for _, line := range wrap(content.Notice.Display(), width) {
+		for _, line := range wrap(communityLabel(content.Notice.Display()), width) {
 			out = append(out, line)
 		}
 		out = append(out, "")
@@ -1003,8 +1171,8 @@ func (v *NavView) renderDetail(nav *NavState, snap Snapshot, width, rows int) []
 		out = append(out, "")
 		out = append(out, "Corrective screens:")
 		for _, link := range content.CrossLinks {
-			out = append(out, truncate("  → "+link.Label, width))
-			for _, line := range wrap("     "+link.Reason, width) {
+			out = append(out, truncate("  → "+communityLabel(link.Label), width))
+			for _, line := range wrap("     "+communityLabel(link.Reason), width) {
 				out = append(out, line)
 			}
 		}
@@ -1027,7 +1195,7 @@ func (v *NavView) renderDetail(nav *NavState, snap Snapshot, width, rows int) []
 func (v *NavView) renderActionBar(action *Node, width int) []string {
 	av := Availability(action)
 	out := []string{
-		truncate(action.Title+" "+action.Type.SafetyLabel(), width),
+		truncate(communityLabel(action.Title)+" "+action.Type.SafetyLabel(), width),
 		"",
 	}
 	if av.Enabled {
@@ -1038,12 +1206,12 @@ func (v *NavView) renderActionBar(action *Node, width int) []string {
 		out = append(out, wrap("UNAVAILABLE: "+av.Reason, width)...)
 	}
 	out = append(out, "")
-	out = append(out, wrap("Owner: "+action.CanonicalOwner, width)...)
+	out = append(out, wrap("Owner: "+communityLabel(action.CanonicalOwner), width)...)
 	return out
 }
 
 func (v *NavView) renderActionForm(form *actionForm, width, rows int) []string {
-	out := []string{truncate(form.binding.Title+" — typed input", width), ""}
+	out := []string{truncate(communityLabel(form.binding.Title)+" — typed input", width), ""}
 	for i, field := range form.binding.Inputs {
 		marker := "  "
 		if i == form.index {
@@ -1091,7 +1259,7 @@ func (v *NavView) renderPalette(nav *NavState, cols, rows int) []string {
 		if i == nav.PaletteIndex() {
 			marker = "▸ "
 		}
-		label := strings.TrimPrefix(r.MenuPath, "MARSHAL — COMMUNITY TUI / ")
+		label := communityLabel(strings.TrimPrefix(r.MenuPath, "MARSHAL — COMMUNITY TUI / "))
 		if r.Binding == BindingGap {
 			label += " (GAP)"
 		}
