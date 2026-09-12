@@ -6376,8 +6376,8 @@
     },
     {
       "path": "internal/tui/controlbind.go",
-      "sha256": "3d3dff90fd00bf7a8d200672eb5f15a3ac9cb5206ea37ec4b83075609d46628a",
-      "bytes": 122246
+      "sha256": "cbbb9cb6b3529b41d729557de1d4f066e679010420b4a1d8b4f6ebfafb0ce1c7",
+      "bytes": 122226
     },
     {
       "path": "internal/tui/controlscreen.go",
@@ -6391,8 +6391,8 @@
     },
     {
       "path": "internal/tui/controlview_test.go",
-      "sha256": "cf6efc380f2a2435c2bf0e0a1974a0ca811943a92a03015fc1bdf70a5df5e6bc",
-      "bytes": 17556
+      "sha256": "5fbdb52120d9fd4041ac4fde24833ad392d591d8916c269b40aef982936e1a4c",
+      "bytes": 18280
     },
     {
       "path": "internal/tui/dedicatedscreen.go",
@@ -6491,13 +6491,13 @@
     },
     {
       "path": "internal/tui/navmodel.go",
-      "sha256": "affd2856ea7ebf27859af35362cd53994f88f237374706bd85e60f2ec87f5865",
-      "bytes": 14746
+      "sha256": "307e4f37ff5b60170735683513444d23620953afeaee07c73adf372114b998d5",
+      "bytes": 16937
     },
     {
       "path": "internal/tui/navmodel_test.go",
-      "sha256": "623997d5f250594556fa4ffc2147711f943f8fff40d0174accc6b3263010b03c",
-      "bytes": 14343
+      "sha256": "2741a3364ae18092e958a160d8df116f85a91a3abd2252fd4c251a991b82f5df",
+      "bytes": 15217
     },
     {
       "path": "internal/tui/navstate.go",
@@ -6511,8 +6511,8 @@
     },
     {
       "path": "internal/tui/navview.go",
-      "sha256": "ac52c3d743d305532037f247e956f09e3b5fd8ef718330a3250791574ac2ed36",
-      "bytes": 40506
+      "sha256": "4220846b357e757c8d366712d2bdbaaa4b05f08739b49b04c97f59ad256189bd",
+      "bytes": 40602
     },
     {
       "path": "internal/tui/navview_test.go",
@@ -6671,8 +6671,8 @@
     },
     {
       "path": "internal/tui/truthstate.go",
-      "sha256": "935ed95817586c2eb6b9a08b9e43c54021af8ba008c4d1ca3f0b354a9e69f0f1",
-      "bytes": 11702
+      "sha256": "0df2dcadb804288c899148860065ffbffefdb508c380c4cca469a2c29138c687",
+      "bytes": 12074
     },
     {
       "path": "internal/tui/truthstate_test.go",

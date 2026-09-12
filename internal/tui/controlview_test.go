@@ -416,6 +416,25 @@ func TestConfirmationButtonsUseHighContrastFocusWithoutChangingWidth(t *testing.
 	}
 }
 
+// Internal lifecycle phase names must not leak from a binding into an
+// operator-facing confirmation. The binding still carries its stable CTUI ID
+// and canonical authority; only its presentation is simplified.
+func TestLearningExportUsesHumanFacingConfirmationLabel(t *testing.T) {
+	v, _ := testControlView(t)
+	ctx := context.Background()
+	if err := v.Nav().DeepLink("CTUI-0489"); err != nil {
+		t.Fatalf("deep link: %v", err)
+	}
+	v.HandleKey(ctx, key(KeyEnter))
+	out := lines(v, 120, 30)
+	if !strings.Contains(out, "Export learning bundle") {
+		t.Fatalf("human-facing export label absent:\n%s", out)
+	}
+	if strings.Contains(out, "Process 07") {
+		t.Fatalf("confirmation leaked an internal phase label:\n%s", out)
+	}
+}
+
 // Starting an approved plan is governed by the canonical plan/Process 05 entry
 // gate. It must not consume whichever unrelated runtime approval happens to be
 // selected in the queue.

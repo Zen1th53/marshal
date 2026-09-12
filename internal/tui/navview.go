@@ -591,7 +591,7 @@ func (v *NavView) Render(cols, rows int) []string {
 	}
 	lines = append(lines, truncate(meta, cols))
 	if status != "" {
-		lines = append(lines, truncate("→ "+status, cols))
+		lines = append(lines, truncate("→ "+communityLabel(status), cols))
 	}
 	lines = append(lines, strings.Repeat("─", cols))
 
@@ -1150,7 +1150,7 @@ func (v *NavView) renderDetail(nav *NavState, snap Snapshot, width, rows int) []
 	out := make([]string, 0, rows)
 
 	if content.HasNotice {
-		for _, line := range wrap(content.Notice.Display(), width) {
+		for _, line := range wrap(communityLabel(content.Notice.Display()), width) {
 			out = append(out, line)
 		}
 		out = append(out, "")
@@ -1171,8 +1171,8 @@ func (v *NavView) renderDetail(nav *NavState, snap Snapshot, width, rows int) []
 		out = append(out, "")
 		out = append(out, "Corrective screens:")
 		for _, link := range content.CrossLinks {
-			out = append(out, truncate("  → "+link.Label, width))
-			for _, line := range wrap("     "+link.Reason, width) {
+			out = append(out, truncate("  → "+communityLabel(link.Label), width))
+			for _, line := range wrap("     "+communityLabel(link.Reason), width) {
 				out = append(out, line)
 			}
 		}
@@ -1206,7 +1206,7 @@ func (v *NavView) renderActionBar(action *Node, width int) []string {
 		out = append(out, wrap("UNAVAILABLE: "+av.Reason, width)...)
 	}
 	out = append(out, "")
-	out = append(out, wrap("Owner: "+action.CanonicalOwner, width)...)
+	out = append(out, wrap("Owner: "+communityLabel(action.CanonicalOwner), width)...)
 	return out
 }
 
@@ -1259,7 +1259,7 @@ func (v *NavView) renderPalette(nav *NavState, cols, rows int) []string {
 		if i == nav.PaletteIndex() {
 			marker = "▸ "
 		}
-		label := strings.TrimPrefix(r.MenuPath, "MARSHAL — COMMUNITY TUI / ")
+		label := communityLabel(strings.TrimPrefix(r.MenuPath, "MARSHAL — COMMUNITY TUI / "))
 		if r.Binding == BindingGap {
 			label += " (GAP)"
 		}
