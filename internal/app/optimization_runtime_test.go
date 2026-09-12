@@ -39,6 +39,10 @@ func TestOptimizationLifecycleFromVerifiedLearningThroughReplayAndRollback(t *te
 	if cycle.Binding.MemoryCommitID != commit.ID {
 		t.Fatalf("cycle did not bind canonical Process 07 commit: %+v", cycle.Binding)
 	}
+	listed, err := service.List(ctx)
+	if err != nil || len(listed) != 1 || listed[0].ID != cycle.ID {
+		t.Fatalf("listed optimization cycles = %+v, err=%v", listed, err)
+	}
 	factual := optimization.FactualRun{TaskID: "task", Route: optimization.Route{TaskClass: "code", Provider: "codex", ProviderVersion: "1", Model: "m", Harness: "h", HarnessVersion: "1", VerifierPolicy: "verify"}, Outcome: learning.OutcomeFailed, VerifierResult: optimization.StatusFail, ReplayClass: learning.ReplayExact, TreeDigest: "tree", EnvironmentDigest: "env"}
 	runner := &e2eReplayRunner{}
 	cf, err := service.ExecuteReplay(ctx, cycle.ID, runner, factual, optimization.Route{TaskClass: "code", Provider: "claude", ProviderVersion: "1", Model: "m", Harness: "h", HarnessVersion: "1", VerifierPolicy: "verify"}, optimization.SandboxPolicy{WritableRoot: t.TempDir(), MaxWallMillis: 1_000, MaxMemoryBytes: 1 << 20}, "e2e", "cluster-1", gov)
@@ -53,11 +57,26 @@ func TestOptimizationLifecycleFromVerifiedLearningThroughReplayAndRollback(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
+	active, err := service.ActiveCanaries(ctx)
+	if err != nil || len(active) != 1 || active[0].ID != opened.ID {
+		t.Fatalf("active canaries before rollback = %+v, err=%v", active, err)
+	}
 	rolled, err := service.Rollback(ctx, opened.ID, "e2e regression")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if rolled.State != optimization.CanaryRolledBack || rolled.RollbackReason == "" {
 		t.Fatalf("rollback=%+v", rolled)
+	}
+	// Rollback must preserve the optimization parent binding. The former
+	// update path replaced it with an empty cycle id, making the record vanish
+	// from its own evidence chain after a successful rollback.
+	bound, err := service.Canaries(ctx, cycle.ID)
+	if err != nil || len(bound) != 1 || bound[0].State != optimization.CanaryRolledBack {
+		t.Fatalf("cycle canaries after rollback = %+v, err=%v", bound, err)
+	}
+	active, err = service.ActiveCanaries(ctx)
+	if err != nil || len(active) != 0 {
+		t.Fatalf("active canaries after rollback = %+v, err=%v", active, err)
 	}
 }

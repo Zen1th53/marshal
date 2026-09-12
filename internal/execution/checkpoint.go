@@ -6,9 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -69,26 +72,29 @@ func (ce *CheckpointEngine) CaptureCheckpoint(ctx context.Context, runID, taskID
 	if err := copyDir(ce.projectRoot, cpDir, []string{".git", ".marshal"}); err != nil {
 		return CheckpointRecord{}, fmt.Errorf("%w: failed to snapshot directory: %v", ErrCheckpointFailed, err)
 	}
-
-	h := sha256.New()
-	fmt.Fprintf(h, "%s:%s:%s:%s:%d", runID, taskID, gitCommit, reason, now.UnixNano())
-	stateDigest := hex.EncodeToString(h.Sum(nil))
-
-	rec := CheckpointRecord{
-		CheckpointID: cpID,
-		RunID:        runID,
-		TaskID:       taskID,
-		ProjectID:    ce.projectRoot,
-		GitCommit:    gitCommit,
-		WorktreePath: cpDir,
-		StateDigest:  stateDigest,
-		Reason:       reason,
-		CreatedAt:    now,
+	snapshotDigest, err := digestSnapshot(cpDir)
+	if err != nil {
+		return CheckpointRecord{}, fmt.Errorf("%w: failed to digest snapshot: %v", ErrCheckpointFailed, err)
 	}
 
+	rec := CheckpointRecord{
+		CheckpointID:   cpID,
+		RunID:          runID,
+		TaskID:         taskID,
+		ProjectID:      ce.projectRoot,
+		GitCommit:      gitCommit,
+		WorktreePath:   cpDir,
+		SnapshotDigest: snapshotDigest,
+		Reason:         reason,
+		CreatedAt:      now,
+	}
+	rec.StateDigest = checkpointStateDigest(rec)
+
+	if err := ce.persistRecord(rec); err != nil {
+		_ = os.RemoveAll(cpDir)
+		return CheckpointRecord{}, fmt.Errorf("%w: persist checkpoint record: %v", ErrCheckpointFailed, err)
+	}
 	ce.checkpoints[cpID] = rec
-	recBytes, _ := json.MarshalIndent(rec, "", "  ")
-	_ = os.WriteFile(filepath.Join(ce.backupDir, cpID+".json"), recBytes, 0644)
 
 	return rec, nil
 }
@@ -100,6 +106,9 @@ func (ce *CheckpointEngine) RestoreCheckpoint(ctx context.Context, checkpointID 
 
 	rec, exists := ce.checkpoints[checkpointID]
 	if !exists {
+		if err := validCheckpointID(checkpointID); err != nil {
+			return CheckpointRecord{}, err
+		}
 		data, err := os.ReadFile(filepath.Join(ce.backupDir, checkpointID+".json"))
 		if err != nil {
 			return CheckpointRecord{}, fmt.Errorf("%w: checkpoint %s not found", ErrCheckpointFailed, checkpointID)
@@ -107,6 +116,9 @@ func (ce *CheckpointEngine) RestoreCheckpoint(ctx context.Context, checkpointID 
 		if err := json.Unmarshal(data, &rec); err != nil {
 			return CheckpointRecord{}, fmt.Errorf("%w: failed to parse checkpoint record: %v", ErrCheckpointFailed, err)
 		}
+	}
+	if err := ce.validateRecord(rec, checkpointID); err != nil {
+		return CheckpointRecord{}, err
 	}
 
 	// Restore files from snapshot
@@ -118,18 +130,134 @@ func (ce *CheckpointEngine) RestoreCheckpoint(ctx context.Context, checkpointID 
 		if !fi.IsDir() {
 			return CheckpointRecord{}, fmt.Errorf("%w: snapshot path is not a directory", ErrCheckpointFailed)
 		}
-		if err := copyDir(rec.WorktreePath, ce.projectRoot, []string{".git", ".marshal"}); err != nil {
+		if rec.SnapshotDigest == "" {
+			return CheckpointRecord{}, fmt.Errorf("%w: checkpoint has no content digest and cannot be restored safely", ErrCheckpointFailed)
+		}
+		actualDigest, err := digestSnapshot(rec.WorktreePath)
+		if err != nil {
+			return CheckpointRecord{}, fmt.Errorf("%w: failed to verify snapshot: %v", ErrCheckpointFailed, err)
+		}
+		if actualDigest != rec.SnapshotDigest {
+			return CheckpointRecord{}, fmt.Errorf("%w: snapshot digest mismatch", ErrCheckpointFailed)
+		}
+		if err := restoreSnapshot(ctx, rec.WorktreePath, ce.projectRoot, []string{".git", ".marshal"}); err != nil {
 			return CheckpointRecord{}, fmt.Errorf("%w: failed to restore snapshot: %v", ErrCheckpointFailed, err)
 		}
 	}
 
 	now := time.Now().UTC()
 	rec.RestoredAt = &now
+	if err := ce.persistRecord(rec); err != nil {
+		return CheckpointRecord{}, fmt.Errorf("%w: persist restore record: %v", ErrCheckpointFailed, err)
+	}
 	ce.checkpoints[checkpointID] = rec
-	recBytes, _ := json.MarshalIndent(rec, "", "  ")
-	_ = os.WriteFile(filepath.Join(ce.backupDir, checkpointID+".json"), recBytes, 0644)
 
 	return rec, nil
+}
+
+// restoreSnapshot makes the live, mutable project tree exactly match a
+// verified checkpoint.  copyDir alone leaves files created after the
+// checkpoint behind, which is not a rollback.  MARSHAL's own metadata and Git
+// directory are deliberately retained; both are outside the captured tree.
+func restoreSnapshot(ctx context.Context, src, dst string, skips []string) error {
+	if err := copyDir(src, dst, skips); err != nil {
+		return err
+	}
+
+	skip := make(map[string]struct{}, len(skips))
+	for _, name := range skips {
+		skip[name] = struct{}{}
+	}
+	var stale []string
+	err := filepath.Walk(dst, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(dst, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		parts := strings.Split(rel, string(filepath.Separator))
+		for _, part := range parts {
+			if _, ok := skip[part]; ok {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+		if _, err := os.Lstat(filepath.Join(src, rel)); err != nil {
+			if os.IsNotExist(err) {
+				stale = append(stale, path)
+				return nil
+			}
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	// Children must go first.  RemoveAll is safe for a path discovered below
+	// dst and checked to be absent from src; sorting also handles nested stale
+	// directories deterministically.
+	sort.Slice(stale, func(i, j int) bool { return len(stale[i]) > len(stale[j]) })
+	for _, path := range stale {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// digestSnapshot computes a stable content digest over relative paths, modes,
+// and file bytes. filepath.Walk visits entries lexically, so the same captured
+// tree yields the same digest across process restarts.
+func digestSnapshot(root string) (string, error) {
+	h := sha256.New()
+	err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if info.IsDir() {
+			_, err = fmt.Fprintf(h, "dir:%s:%o\n", rel, info.Mode().Perm())
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported snapshot entry %s (%s)", rel, info.Mode())
+		}
+		if _, err := fmt.Fprintf(h, "file:%s:%o:%d\n", rel, info.Mode().Perm(), info.Size()); err != nil {
+			return err
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(h, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
+	})
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // GetCheckpoint retrieves a checkpoint by ID.
@@ -139,6 +267,9 @@ func (ce *CheckpointEngine) GetCheckpoint(checkpointID string) (CheckpointRecord
 	ce.mu.RUnlock()
 
 	if !exists {
+		if err := validCheckpointID(checkpointID); err != nil {
+			return CheckpointRecord{}, err
+		}
 		data, err := os.ReadFile(filepath.Join(ce.backupDir, checkpointID+".json"))
 		if err != nil {
 			return CheckpointRecord{}, fmt.Errorf("%w: checkpoint %s not found", ErrCheckpointFailed, checkpointID)
@@ -150,5 +281,60 @@ func (ce *CheckpointEngine) GetCheckpoint(checkpointID string) (CheckpointRecord
 		ce.checkpoints[checkpointID] = rec
 		ce.mu.Unlock()
 	}
+	if err := ce.validateRecord(rec, checkpointID); err != nil {
+		return CheckpointRecord{}, err
+	}
 	return rec, nil
+}
+
+func checkpointStateDigest(rec CheckpointRecord) string {
+	h := sha256.New()
+	fmt.Fprintf(h, "%s:%s:%s:%s:%s:%s:%s:%d", rec.RunID, rec.TaskID,
+		rec.ProjectID, rec.WorktreePath, rec.GitCommit, rec.SnapshotDigest,
+		rec.Reason, rec.CreatedAt.UnixNano())
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func validCheckpointID(id string) error {
+	if id == "" || filepath.Base(id) != id || id == "." || id == ".." {
+		return fmt.Errorf("%w: invalid checkpoint identifier", ErrCheckpointFailed)
+	}
+	return nil
+}
+
+func (ce *CheckpointEngine) validateRecord(rec CheckpointRecord, requestedID string) error {
+	if err := validCheckpointID(requestedID); err != nil {
+		return err
+	}
+	if rec.CheckpointID != requestedID {
+		return fmt.Errorf("%w: checkpoint record identifier mismatch", ErrCheckpointFailed)
+	}
+	if rec.ProjectID != ce.projectRoot {
+		return fmt.Errorf("%w: checkpoint project binding mismatch", ErrCheckpointFailed)
+	}
+	expectedPath := filepath.Join(ce.backupDir, requestedID)
+	if filepath.Clean(rec.WorktreePath) != expectedPath {
+		return fmt.Errorf("%w: checkpoint snapshot path escaped its durable binding", ErrCheckpointFailed)
+	}
+	if rec.StateDigest == "" || rec.StateDigest != checkpointStateDigest(rec) {
+		return fmt.Errorf("%w: checkpoint metadata digest mismatch", ErrCheckpointFailed)
+	}
+	return nil
+}
+
+func (ce *CheckpointEngine) persistRecord(rec CheckpointRecord) error {
+	data, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(ce.backupDir, rec.CheckpointID+".json")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }

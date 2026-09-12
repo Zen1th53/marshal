@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"unicode/utf8"
 
@@ -48,15 +50,22 @@ const (
 	KeyWordDeleteAfter
 	KeyCtrlJ
 	KeyPaste
+	// KeyMouse carries an SGR mouse report. Mouse input is navigation-only in
+	// the frozen IA; it never bypasses the same confirmation path as a key.
+	KeyMouse
 	KeyUnknown
 )
 
 // KeyEvent represents a single keyboard interaction.
 type KeyEvent struct {
-	Type  KeyType
-	Rune  rune
-	Paste string
-	Raw   []byte
+	Type         KeyType
+	Rune         rune
+	Paste        string
+	MouseButton  int // 0 left, 1 middle, 2 right, 64/65 wheel up/down
+	MouseColumn  int // one-indexed terminal cell
+	MouseRow     int // one-indexed terminal row
+	MouseRelease bool
+	Raw          []byte
 }
 
 // Terminal handles raw mode, window sizing, resize signals, and ANSI escape sequences.
@@ -192,6 +201,19 @@ func (t *Terminal) DisableBracketedPaste() {
 	fmt.Fprint(t.out, "\x1b[?2004l")
 }
 
+// EnableMouse enables SGR mouse reporting. SGR reports full terminal
+// coordinates and release events, unlike the legacy X10 protocol, so the
+// navigation surface can offer the same focused controls to keyboard and
+// mouse users without guessing a target.
+func (t *Terminal) EnableMouse() {
+	fmt.Fprint(t.out, "\x1b[?1000h\x1b[?1006h")
+}
+
+// DisableMouse restores the terminal's ordinary mouse behaviour on cleanup.
+func (t *Terminal) DisableMouse() {
+	fmt.Fprint(t.out, "\x1b[?1006l\x1b[?1000l")
+}
+
 // HideCursor hides the terminal text cursor.
 func (t *Terminal) HideCursor() {
 	fmt.Fprint(t.out, "\x1b[?25l")
@@ -280,6 +302,35 @@ func ParseNextKey(b []byte) (KeyEvent, int) {
 		}
 		if b[1] == 'd' || b[1] == 'D' {
 			return KeyEvent{Type: KeyWordDeleteAfter, Raw: b[:2]}, 2
+		}
+
+		// SGR mouse: ESC [ < button ; column ; row M/m. Parse it before the
+		// generic CSI path because its final M/m is also an alphabetic CSI
+		// terminator.
+		if bytes.HasPrefix(b, []byte("\x1b[<")) {
+			end := -1
+			for i := 3; i < len(b); i++ {
+				if b[i] == 'M' || b[i] == 'm' {
+					end = i
+					break
+				}
+			}
+			if end == -1 {
+				return KeyEvent{Type: KeyUnknown}, 0
+			}
+			raw := b[:end+1]
+			parts := strings.Split(string(b[3:end]), ";")
+			if len(parts) != 3 {
+				return KeyEvent{Type: KeyUnknown, Raw: raw}, len(raw)
+			}
+			button, buttonErr := strconv.Atoi(parts[0])
+			column, columnErr := strconv.Atoi(parts[1])
+			row, rowErr := strconv.Atoi(parts[2])
+			if buttonErr != nil || columnErr != nil || rowErr != nil || column < 1 || row < 1 {
+				return KeyEvent{Type: KeyUnknown, Raw: raw}, len(raw)
+			}
+			return KeyEvent{Type: KeyMouse, MouseButton: button, MouseColumn: column,
+				MouseRow: row, MouseRelease: b[end] == 'm', Raw: raw}, len(raw)
 		}
 
 		// CSI sequences: \x1b[... or \x1bO...

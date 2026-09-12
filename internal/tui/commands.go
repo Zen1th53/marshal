@@ -316,8 +316,13 @@ func (h *CommandHandler) handleSetGoal(ctx context.Context, outcome string) (str
 	h.ws.state.Goal = goal
 	h.ws.state.UnderstandingState = model.GoalReady
 
-	// Trigger ULTRA route update
-	if h.ws.router != nil {
+	// A goal change must not implicitly run the ULTRA router unless the
+	// canonical Community Cloud gate still holds a verified entitlement. Clear
+	// any explanation from a prior lease first so expiry cannot leave an ULTRA
+	// label looking current in Standard mode. Explicit /route remains an
+	// advisory simulation and is labelled NOT APPLIED.
+	h.ws.state.RouteExplanation = ""
+	if h.ws.router != nil && h.ws.ultra != nil && h.ws.ultra.Entitled() {
 		plan, err := h.ws.router.Route(ctx, model.ULTRARouteRequest{
 			GoalID:            goalID,
 			FixedRole:         model.RoleDeveloper,
@@ -401,11 +406,25 @@ func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
 	h.ws.mu.Lock()
 	defer h.ws.mu.Unlock()
 
+	// Check the live gate before reading a cached explanation as leases can
+	// expire between the action that computed it and this command.  Clearing
+	// the cache prevents a later entitled session from mistaking an old route
+	// for a fresh one.
+	if h.ws.ultra == nil || !h.ws.ultra.Entitled() {
+		h.ws.state.RouteExplanation = ""
+		return "No ULTRA route explanation is available: the canonical entitlement is not active.", nil
+	}
+
 	if h.ws.state.RouteExplanation != "" {
 		return fmt.Sprintf("ADVISORY ROUTING EXPLANATION (NOT APPLIED):\n%s", h.ws.state.RouteExplanation), nil
 	}
 
-	if h.ws.router != nil {
+	// A route explanation is meaningful only while the same canonical Cloud
+	// gate that authorizes ULTRA execution still holds a verified entitlement.
+	// Calling the ULTRA router after expiry would not execute anything, but it
+	// would still expose an ULTRA-labelled recommendation in a Standard
+	// session and create a misleading authority boundary.
+	if h.ws.router != nil && h.ws.ultra != nil && h.ws.ultra.Entitled() {
 		plan, err := h.ws.router.Route(ctx, model.ULTRARouteRequest{
 			GoalID:            h.ws.state.Goal.ID,
 			FixedRole:         model.RoleDeveloper,
@@ -418,7 +437,7 @@ func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
 		}
 	}
 
-	return "No route explanation available yet.", nil
+	return "No route explanation is available yet.", nil
 }
 
 func (h *CommandHandler) handleSendMessage(ctx context.Context, target, msgText string) (string, error) {

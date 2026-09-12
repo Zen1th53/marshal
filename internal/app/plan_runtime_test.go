@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
@@ -78,6 +79,42 @@ func TestCancelledPlanCannotHandOff(t *testing.T) {
 	}
 	if _, err := service.Handoff(context.Background(), "SESSION-plan", runtimePlanProject); err == nil {
 		t.Fatal("a cancelled plan reached the handoff boundary")
+	}
+}
+
+func TestPlanHandoffIsDurablyEvidencedAndIdempotent(t *testing.T) {
+	runtime := runtimeForPlan(t)
+	service := runtime.Plans()
+	ctx := context.Background()
+	if _, err := service.Create(ctx, planCreateRequest()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Approve(ctx, runtimePlanProject); err != nil {
+		t.Fatal(err)
+	}
+	first, err := service.Handoff(ctx, "SESSION-plan", runtimePlanProject)
+	if err != nil {
+		t.Fatalf("first handoff: %v", err)
+	}
+	second, err := service.Handoff(ctx, "SESSION-plan", runtimePlanProject)
+	if err != nil {
+		t.Fatalf("idempotent handoff: %v", err)
+	}
+	if first.EvidenceID == "" || second.EvidenceID != first.EvidenceID {
+		t.Fatalf("handoff evidence ids = %q, %q", first.EvidenceID, second.EvidenceID)
+	}
+	history, err := runtime.EventsSince(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, event := range history {
+		if event.Type == events.EventTypeHandoffCreated && event.ID == first.EvidenceID {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("durable handoff evidence count = %d, want 1", count)
 	}
 }
 

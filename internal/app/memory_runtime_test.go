@@ -96,6 +96,16 @@ func TestT129RuntimeMemoryServiceAPI(t *testing.T) {
 		t.Fatalf("expected durable lifecycle after promotion, got: %s", promoted.Lifecycle)
 	}
 
+	// The operator TUI's recent-record surface is a canonical, authorized read;
+	// it must return the durable row without manufacturing a search query.
+	recent, err := svc.ListRecent(ctx, readOnlyPrincipal, projectID, 10)
+	if err != nil {
+		t.Fatalf("ListRecent: %v", err)
+	}
+	if len(recent) != 1 || recent[0].ID != promoted.ID || recent[0].Lifecycle != model.MemoryDurable {
+		t.Fatalf("recent records = %+v", recent)
+	}
+
 	// 4. Unauthorized Promotion Attempt by Read-Only Agent
 	_, err = svc.Promote(ctx, readOnlyPrincipal, app.PromoteRequest{
 		ProjectID: projectID,

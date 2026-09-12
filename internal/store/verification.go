@@ -43,6 +43,29 @@ func (s *Store) GetVerificationSession(ctx context.Context, id string) (verifica
 	return v, nil
 }
 
+// LatestVerificationForRun returns the newest canonical verification session
+// for an exact Process 05 run.  Status surfaces use this read path rather than
+// guessing that a run ID is itself a verification ID.
+func (s *Store) LatestVerificationForRun(ctx context.Context, runID string) (verification.Session, error) {
+	var body []byte
+	err := s.db.QueryRowContext(ctx, `
+		SELECT session_json FROM verification_sessions
+		WHERE run_id=?
+		ORDER BY version DESC, updated_at DESC, verification_id DESC LIMIT 1
+	`, runID).Scan(&body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return verification.Session{}, verification.ErrNotFound
+	}
+	if err != nil {
+		return verification.Session{}, err
+	}
+	var session verification.Session
+	if err := json.Unmarshal(body, &session); err != nil {
+		return verification.Session{}, fmt.Errorf("decode verification session: %w", err)
+	}
+	return session, nil
+}
+
 func (s *Store) UpdateVerificationSession(ctx context.Context, session verification.Session, expectedVersion int64) error {
 	if session.Version != expectedVersion+1 {
 		return verification.ErrConflict

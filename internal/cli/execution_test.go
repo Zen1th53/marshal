@@ -91,12 +91,12 @@ func TestExecCLI_Lifecycle(t *testing.T) {
 		HarnessCandidates: []plan.HarnessCandidate{
 			{
 				Profile: model.HarnessProfile{
-					Harness:         "mock-harness",
+					Harness:          "mock-harness",
 					InstalledVersion: "1.0.0",
-					SupportedModels: []string{"gpt-4o"},
-					DefaultModel:    "gpt-4o",
-					ProbeEvidenceID: "EV-mock",
-					ProbedAt:        now,
+					SupportedModels:  []string{"gpt-4o"},
+					DefaultModel:     "gpt-4o",
+					ProbeEvidenceID:  "EV-mock",
+					ProbedAt:         now,
 				},
 				InstalledVersion: "1.0.0",
 				Provider:         "openai",

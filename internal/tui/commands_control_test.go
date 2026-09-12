@@ -363,6 +363,41 @@ func TestRouteIsExplicitlyAdvisory(t *testing.T) {
 	}
 }
 
+func TestGoalUpdateDoesNotRunULTRARoutingWithoutEntitlement(t *testing.T) {
+	ws := NewWorkspace(nil, "PROJECT-local", "SESSION-standard")
+	ws.state.RouteExplanation = "stale ULTRA explanation"
+	handler := NewCommandHandler(ws)
+	if _, err := handler.handleSetGoal(context.Background(), "stay in Standard mode"); err != nil {
+		t.Fatalf("set goal: %v", err)
+	}
+	if got := ws.GetUIState().RouteExplanation; got != "" {
+		t.Fatalf("unentitled goal update retained/generated ULTRA route: %q", got)
+	}
+}
+
+// TestWhyDoesNotInvokeULTRARoutingWithoutEntitlement closes the read-only
+// route-explanation loophole: an expired or absent lease must not leave an
+// ULTRA recommendation visible merely because the local router is present.
+func TestWhyDoesNotInvokeULTRARoutingWithoutEntitlement(t *testing.T) {
+	_, ws, ctx := newControlWorkspace(t)
+	ws.state.RouteExplanation = "codex selected for developer: stale lease explanation"
+
+	out, err := ws.ExecuteCommand(ctx, "/why")
+	if err != nil {
+		t.Fatalf("/why: %v", err)
+	}
+	if !strings.Contains(out, "canonical entitlement is not active") {
+		t.Fatalf("unentitled /why must fail closed, got:\n%s", out)
+	}
+	if strings.Contains(out, "ADVISORY ROUTING EXPLANATION") ||
+		strings.Contains(out, "selected for") {
+		t.Fatalf("unentitled /why invoked the ULTRA router:\n%s", out)
+	}
+	if got := ws.GetUIState().RouteExplanation; got != "" {
+		t.Fatalf("unentitled /why retained stale ULTRA explanation: %q", got)
+	}
+}
+
 // TestControlCommandsAreRegistered proves each documented command is dispatched
 // rather than falling through to the unknown-command branch.
 func TestControlCommandsAreRegistered(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
@@ -96,6 +97,18 @@ func (s *PlanService) Approve(ctx context.Context, projectID projectid.ID) (plan
 	if err != nil {
 		return plan.ExecutionPlan{}, err
 	}
+	return s.ApproveVersion(ctx, projectID, p.Version)
+}
+
+// ApproveVersion approves only the exact plan revision the caller reviewed.
+func (s *PlanService) ApproveVersion(ctx context.Context, projectID projectid.ID, expectedVersion int64) (plan.ExecutionPlan, error) {
+	p, err := s.Current(ctx, projectID)
+	if err != nil {
+		return plan.ExecutionPlan{}, err
+	}
+	if p.Version != expectedVersion {
+		return plan.ExecutionPlan{}, fmt.Errorf("%w: plan moved from version %d to %d", model.ErrConflict, expectedVersion, p.Version)
+	}
 	approved, err := p.Approve(s.now())
 	if err != nil {
 		return plan.ExecutionPlan{}, err
@@ -111,6 +124,18 @@ func (s *PlanService) Cancel(ctx context.Context, projectID projectid.ID) (plan.
 	p, err := s.Current(ctx, projectID)
 	if err != nil {
 		return plan.ExecutionPlan{}, err
+	}
+	return s.CancelVersion(ctx, projectID, p.Version)
+}
+
+// CancelVersion cancels only the exact plan revision the caller reviewed.
+func (s *PlanService) CancelVersion(ctx context.Context, projectID projectid.ID, expectedVersion int64) (plan.ExecutionPlan, error) {
+	p, err := s.Current(ctx, projectID)
+	if err != nil {
+		return plan.ExecutionPlan{}, err
+	}
+	if p.Version != expectedVersion {
+		return plan.ExecutionPlan{}, fmt.Errorf("%w: plan moved from version %d to %d", model.ErrConflict, expectedVersion, p.Version)
 	}
 	cancelled := p.Cancel(s.now())
 	if err := s.runtime.store.SavePlan(ctx, cancelled, p.Version); err != nil {
@@ -132,7 +157,26 @@ func (s *PlanService) Handoff(ctx context.Context, sessionID string, projectID p
 	if err != nil {
 		return plan.Handoff{}, err
 	}
-	return plan.PrepareHandoff(p, goal, projectID, s.now())
+	handoff, err := plan.PrepareHandoff(p, goal, projectID, s.now())
+	if err != nil {
+		return plan.Handoff{}, err
+	}
+	evidenceID := fmt.Sprintf("plan-handoff:%s:v%d", handoff.PlanID, handoff.PlanVersion)
+	stored, err := s.runtime.EmitEvent(ctx, events.Event{
+		ID: evidenceID, Type: events.EventTypeHandoffCreated,
+		Subject: handoff.Goal.GoalID, ResourceID: handoff.PlanID, At: p.UpdatedAt,
+		IdempotencyKey: evidenceID,
+		Data: map[string]any{
+			"plan_version":      handoff.PlanVersion,
+			"goal_revision":     handoff.Goal.Revision,
+			"constraint_digest": handoff.Goal.ConstraintDigest,
+		},
+	})
+	if err != nil {
+		return plan.Handoff{}, fmt.Errorf("record plan handoff evidence: %w", err)
+	}
+	handoff.EvidenceID = stored.ID
+	return handoff, nil
 }
 
 func (s *PlanService) available() error {

@@ -43,6 +43,41 @@ func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	}
 }
 
+// TestRestoreStateForProjectRejectsForeignBackup proves the application
+// restore boundary carries the project binding through to Store.RestoreDatabase.
+// Without that argument a syntactically valid backup from another project
+// would pass preflight and overwrite this runtime's state.
+func TestRestoreStateForProjectRejectsForeignBackup(t *testing.T) {
+	ctx := context.Background()
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(ctx, repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := Open(ctx, repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	backupPath := filepath.Join(t.TempDir(), "state-backup.db")
+	if _, err := runtime.BackupState(ctx, backupPath); err != nil {
+		t.Fatalf("backup state: %v", err)
+	}
+	if err := runtime.Close(); err != nil {
+		t.Fatalf("close runtime: %v", err)
+	}
+	if err := RestoreStateForProject(ctx, repo.Path(), backupPath, "PROJECT-foreign"); err == nil {
+		t.Fatal("foreign backup project binding was accepted")
+	}
+	// The preflight refusal must leave the original database openable.
+	reopened, err := Open(ctx, repo.Path())
+	if err != nil {
+		t.Fatalf("open after rejected restore: %v", err)
+	}
+	defer reopened.Close()
+	if _, err := reopened.Status(ctx); err != nil {
+		t.Fatalf("status after rejected restore: %v", err)
+	}
+}
+
 func TestRuntimeAssessesToolThroughCanonicalRiskService(t *testing.T) {
 	repo := runtimeRepo(t)
 	if _, err := Bootstrap(context.Background(), repo.Path()); err != nil {
@@ -203,8 +238,37 @@ func TestRuntimeInstanceIDAndCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Status != model.TaskBlocked && task.Status != model.TaskCancelled {
-		t.Fatalf("canceled task status = %s, want %s or %s", task.Status, model.TaskBlocked, model.TaskCancelled)
+	if task.Status != model.TaskCancelled {
+		t.Fatalf("canceled task status = %s, want %s", task.Status, model.TaskCancelled)
+	}
+}
+
+func TestCancelTaskExpectedIsIdempotentAfterDurableCancellation(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := Open(context.Background(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.ImportTasks(context.Background(), []model.Task{{
+		ID: "TASK-CANCEL-RETRY", Title: "retry cancellation", Status: model.TaskReady, Risk: model.R1,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.CancelTaskExpected(context.Background(), "TASK-CANCEL-RETRY", 0); err != nil {
+		t.Fatalf("initial cancellation: %v", err)
+	}
+	if err := runtime.CancelTaskExpected(context.Background(), "TASK-CANCEL-RETRY", 0); err != nil {
+		t.Fatalf("replayed cancellation did not converge: %v", err)
+	}
+	task, err := runtime.Task(context.Background(), "TASK-CANCEL-RETRY")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Status != model.TaskCancelled {
+		t.Fatalf("task status = %s, want %s", task.Status, model.TaskCancelled)
 	}
 }
 

@@ -40,6 +40,10 @@ func TestVerificationPersistenceCASRestartAndImmutableAttestation(t *testing.T) 
 	if err != nil || got.Version != 1 {
 		t.Fatalf("restart got %#v %v", got, err)
 	}
+	byRun, err := st.LatestVerificationForRun(ctx, "run")
+	if err != nil || byRun.ID != s.ID || byRun.Version != s.Version {
+		t.Fatalf("latest verification for run = %#v, %v", byRun, err)
+	}
 	s.Version = 2
 	s.UpdatedAt = now.Add(time.Second)
 	if err := st.UpdateVerificationSession(ctx, s, 1); err != nil {
@@ -59,6 +63,10 @@ func TestVerificationPersistenceCASRestartAndImmutableAttestation(t *testing.T) 
 	s.Version = 3
 	if err := st.UpdateVerificationSession(ctx, s, 2); err != nil {
 		t.Fatal(err)
+	}
+	byRun, err = st.LatestVerificationForRun(ctx, "run")
+	if err != nil || byRun.ID != s.ID || byRun.Version != 3 {
+		t.Fatalf("latest verification after update = %#v, %v", byRun, err)
 	}
 	a, err = verification.NewCompletionAttestation("a", s, "bundle", "test", now)
 	if err != nil {

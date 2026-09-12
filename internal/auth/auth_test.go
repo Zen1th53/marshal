@@ -43,6 +43,52 @@ func TestTokenLifecycleAndConstantTimeAuth(t *testing.T) {
 	}
 }
 
+func TestTokenCreateIdempotencySurvivesManagerRestart(t *testing.T) {
+	dir := t.TempDir()
+	first := NewManager(dir)
+	plaintext, record, created, err := first.CreateTokenIdempotent(
+		"operator", KindLocalUser, []string{"all"}, "request-1")
+	if err != nil || !created || plaintext == "" {
+		t.Fatalf("first create = created %t plaintext=%t err=%v", created, plaintext != "", err)
+	}
+
+	restarted := NewManager(dir)
+	replayedPlaintext, replayed, created, err := restarted.CreateTokenIdempotent(
+		"operator", KindLocalUser, []string{"all"}, "request-1")
+	if err != nil || created {
+		t.Fatalf("replay = created %t err=%v", created, err)
+	}
+	if replayed.ID != record.ID {
+		t.Fatalf("replay created/rebound token %q, want %q", replayed.ID, record.ID)
+	}
+	if replayedPlaintext != "" {
+		t.Fatal("an idempotent replay re-exposed plaintext")
+	}
+	if _, _, _, err := restarted.CreateTokenIdempotent(
+		"different", KindLocalUser, []string{"all"}, "request-1"); err == nil {
+		t.Fatal("same idempotency key was rebound to a different request")
+	}
+}
+
+func TestTokenCreateRejectsUnknownPrincipalKind(t *testing.T) {
+	if _, _, _, err := NewManager(t.TempDir()).CreateTokenIdempotent(
+		"bad", PrincipalKind("server_admin"), []string{"all"}, "request"); err == nil {
+		t.Fatal("unknown principal kind was accepted")
+	}
+}
+
+func TestRedactTokenMetadataRemovesCredentialAndCreationDigests(t *testing.T) {
+	record := TokenRecord{ID: "TOKEN-1", Digest: "credential-digest", CreationKey: "request-digest", Capabilities: []string{"task.read"}}
+	redacted := RedactTokenMetadata([]TokenRecord{record})
+	if redacted[0].Digest != "" || redacted[0].CreationKey != "" {
+		t.Fatalf("user-facing metadata retained internal digests: %#v", redacted[0])
+	}
+	redacted[0].Capabilities[0] = "changed"
+	if record.Capabilities[0] != "task.read" {
+		t.Fatal("metadata redaction aliased the canonical capability slice")
+	}
+}
+
 func TestSecretResolverAndRedaction(t *testing.T) {
 	os.Setenv("MARSHAL_TEST_SECRET", "super-secret-key-12345")
 	t.Cleanup(func() { os.Unsetenv("MARSHAL_TEST_SECRET") })

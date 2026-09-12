@@ -3,11 +3,13 @@ package execution
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -278,6 +280,165 @@ func TestMutation_CorruptedCheckpointDetection(t *testing.T) {
 	_, err = cpEngine.RestoreCheckpoint(ctx, cp.CheckpointID)
 	if err == nil {
 		t.Fatalf("expected RestoreCheckpoint to fail on corrupted archive, got nil")
+	}
+}
+
+func TestMutation_CheckpointContentTamperingIsDetectedBeforeRestore(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "app.go")
+	if err := os.WriteFile(testFile, []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+
+	cpEngine, err := NewCheckpointEngine(tmpDir)
+	if err != nil {
+		t.Fatalf("NewCheckpointEngine failed: %v", err)
+	}
+	cp, err := cpEngine.CaptureCheckpoint(context.Background(), "run-1", "task-1", "trusted")
+	if err != nil {
+		t.Fatalf("CaptureCheckpoint failed: %v", err)
+	}
+	if cp.SnapshotDigest == "" {
+		t.Fatal("checkpoint carried no snapshot content digest")
+	}
+
+	// Replace bytes inside an otherwise valid snapshot directory. A metadata-
+	// only digest would miss this and copy the attacker-controlled content into
+	// the live workspace.
+	if err := os.WriteFile(filepath.Join(cp.WorktreePath, "app.go"),
+		[]byte("package main\n\nfunc main() { panic(\"tampered\") }\n"), 0644); err != nil {
+		t.Fatalf("tamper snapshot: %v", err)
+	}
+	if _, err := cpEngine.RestoreCheckpoint(context.Background(), cp.CheckpointID); err == nil {
+		t.Fatal("tampered snapshot content was restored")
+	}
+
+	live, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("read live source: %v", err)
+	}
+	if strings.Contains(string(live), "tampered") {
+		t.Fatal("tampered bytes reached the live workspace before integrity refusal")
+	}
+}
+
+func TestAdversarial_CheckpointRestoreRemovesPostCheckpointFiles(t *testing.T) {
+	root := t.TempDir()
+	baseline := filepath.Join(root, "app.go")
+	if err := os.WriteFile(baseline, []byte("trusted\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewCheckpointEngine(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := engine.CaptureCheckpoint(context.Background(), "run-exact", "task-exact", "trusted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(root, "generated", "after-checkpoint.txt")
+	if err := os.MkdirAll(filepath.Dir(stale), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte("must not survive rollback"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.RestoreCheckpoint(context.Background(), record.CheckpointID); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("post-checkpoint file survived restore: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".marshal", "checkpoints", record.CheckpointID)); err != nil {
+		t.Fatalf("MARSHAL checkpoint metadata was removed: %v", err)
+	}
+}
+
+func TestAdversarial_CheckpointRecordCannotRedirectRestorePath(t *testing.T) {
+	root := t.TempDir()
+	livePath := filepath.Join(root, "app.go")
+	if err := os.WriteFile(livePath, []byte("trusted\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewCheckpointEngine(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := engine.CaptureCheckpoint(context.Background(), "run-path", "task-path", "trusted")
+	if err != nil {
+		t.Fatal(err)
+	}
+	attacker := filepath.Join(root, "attacker-snapshot")
+	if err := os.MkdirAll(attacker, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(attacker, "app.go"), []byte("attacker\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	record.WorktreePath = attacker
+	record.SnapshotDigest, err = digestSnapshot(attacker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Even a record whose metadata digest has been recomputed must not redirect
+	// restore away from the engine-owned checkpoint directory.
+	record.StateDigest = checkpointStateDigest(record)
+	raw, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".marshal", "checkpoints", record.CheckpointID+".json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := NewCheckpointEngine(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.RestoreCheckpoint(context.Background(), record.CheckpointID); err == nil {
+		t.Fatal("redirected checkpoint path was restored")
+	}
+	live, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(live) != "trusted\n" {
+		t.Fatalf("redirected restore changed live content to %q", live)
+	}
+}
+
+func TestAdversarial_RollbackRefusesWhileRunIsActive(t *testing.T) {
+	tmpDir := t.TempDir()
+	store := NewMemoryRunStore()
+	engine, err := NewEngine(EngineConfig{ProjectRoot: tmpDir, MaxWorkers: 1}, store, nil)
+	if err != nil {
+		t.Fatalf("NewEngine failed: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().UTC()
+	goal, executionPlan := createTestGoalAndPlan(now)
+	handoff := createTestHandoff(t, tmpDir, goal, executionPlan)
+	run, err := engine.InitializeRun(ctx, handoff, goal, executionPlan)
+	if err != nil {
+		t.Fatalf("InitializeRun failed: %v", err)
+	}
+	cp, err := engine.CaptureCheckpoint(ctx, run.RunID, "baseline", "before active work")
+	if err != nil {
+		t.Fatalf("CaptureCheckpoint failed: %v", err)
+	}
+
+	run.State = RunRunning
+	run.CurrentPhase = PhaseExecuting
+	for id, task := range run.Tasks {
+		task.State = TaskRunning
+		run.Tasks[id] = task
+		break
+	}
+	if err := store.UpdateRun(ctx, *run); err != nil {
+		t.Fatalf("mark run active: %v", err)
+	}
+
+	if _, err := engine.RollbackToCheckpoint(ctx, cp.CheckpointID); err == nil {
+		t.Fatal("rollback proceeded while canonical run state was active")
 	}
 }
 

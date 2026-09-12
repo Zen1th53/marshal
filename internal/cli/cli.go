@@ -901,6 +901,7 @@ func (c command) auth(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+		tokens = auth.RedactTokenMetadata(tokens)
 		var lines []string
 		for _, t := range tokens {
 			lines = append(lines, fmt.Sprintf("%s\t%s\t%s\trevoked=%t", t.ID, t.Name, t.Kind, t.Revoked))

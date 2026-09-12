@@ -72,6 +72,7 @@ type Runtime struct {
 	allowProcessOnly   bool
 	execService        *ExecutionService
 	execMu             sync.Mutex
+	tokenManager       *auth.Manager
 
 	// ultra is the canonical ULTRA authorization gate. It is nil when no Cloud
 	// session is attached, and a nil gate answers "not entitled", so a runtime
@@ -149,8 +150,10 @@ type ClaimResult struct {
 }
 
 type ReleaseRequest struct {
-	TaskID        string `json:"task_id"`
-	BlockedReason string `json:"blocked_reason,omitempty"`
+	TaskID           string `json:"task_id"`
+	BlockedReason    string `json:"blocked_reason,omitempty"`
+	ExpectedRevision int64  `json:"expected_revision,omitempty"`
+	EnforceRevision  bool   `json:"enforce_revision,omitempty"`
 }
 
 type RunRequest struct {
@@ -302,6 +305,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		authorityPrincipal: options.AuthorityPrincipal,
 		processAuthority:   options.ProcessAuthority,
 		runtimeInstanceID:  instanceID,
+		tokenManager:       auth.NewManager(layout.RuntimeDir),
 		allowProcessOnly:   options.AllowProcessOnlyFallback,
 	}
 	if rt.capabilityBroker == nil {
@@ -553,25 +557,59 @@ func (r *Runtime) releaseStaleLeases(ctx context.Context) (int, error) {
 }
 
 func (r *Runtime) CancelTask(ctx context.Context, taskID string) error {
+	return r.cancelTask(ctx, taskID, -1)
+}
+
+// CancelTaskExpected cancels only the exact task revision the caller reviewed.
+func (r *Runtime) CancelTaskExpected(ctx context.Context, taskID string, expectedRevision int64) error {
+	if expectedRevision < 0 {
+		return fmt.Errorf("%w: expected task revision is required", model.ErrInvalid)
+	}
+	return r.cancelTask(ctx, taskID, expectedRevision)
+}
+
+func (r *Runtime) cancelTask(ctx context.Context, taskID string, expectedRevision int64) error {
 	task, err := r.store.GetTask(ctx, taskID)
 	if err != nil {
 		return err
 	}
+	// A retry of the same cancellation after a crash may carry the revision
+	// that existed before the first attempt completed.  A terminal cancellation
+	// is already the requested durable outcome, so acknowledge it before the
+	// freshness check.  For every non-terminal state the revision remains an
+	// exact CAS precondition.
 	if task.Status == model.TaskCancelled {
 		return nil
 	}
+	if expectedRevision >= 0 && task.Revision != expectedRevision {
+		return fmt.Errorf("%w: task %s moved from revision %d to %d",
+			model.ErrConflict, taskID, expectedRevision, task.Revision)
+	}
 	active, activeErr := r.store.ActiveLease(ctx, taskID)
 	if activeErr == nil {
-		_ = r.store.ReleaseTask(ctx, model.ReleaseRequest{
+		if err := r.store.ReleaseTask(ctx, model.ReleaseRequest{
 			TaskID:           taskID,
 			LeaseID:          active.Lease.ID,
 			SessionID:        active.Lease.SessionID,
 			AgentID:          active.AgentID,
 			ExpectedRevision: active.TaskRevision,
 			BlockedReason:    "task cancelled by supervisor",
-		})
+		}); err != nil {
+			return err
+		}
+		task, err = r.store.GetTask(ctx, taskID)
+		if err != nil {
+			return err
+		}
 	}
-	return nil
+	_, err = r.store.TransitionTask(ctx, model.TaskTransitionRequest{
+		TaskID:           task.ID,
+		FromStatus:       task.Status,
+		ToStatus:         model.TaskCancelled,
+		ExpectedRevision: task.Revision,
+		ActorRole:        model.RoleOrchestrator,
+	})
+	return err
 }
 
 func (r *Runtime) Status(ctx context.Context) (Status, error) {
@@ -654,6 +692,10 @@ func (r *Runtime) Release(ctx context.Context, request ReleaseRequest) error {
 	active, err := r.store.ActiveLease(ctx, request.TaskID)
 	if err != nil {
 		return err
+	}
+	if request.EnforceRevision && active.TaskRevision != request.ExpectedRevision {
+		return fmt.Errorf("%w: task %s moved from revision %d to %d",
+			model.ErrConflict, request.TaskID, request.ExpectedRevision, active.TaskRevision)
 	}
 	if err := r.store.ReleaseTask(ctx, model.ReleaseRequest{
 		TaskID: request.TaskID, LeaseID: active.Lease.ID, SessionID: active.Lease.SessionID,
@@ -1533,11 +1575,40 @@ func VerifyStateBackup(ctx context.Context, backupPath, expectedProjectID string
 }
 
 func RestoreState(ctx context.Context, rootDir, backupPath string) error {
+	return RestoreStateForProject(ctx, rootDir, backupPath, "")
+}
+
+// RestoreStateForProject restores a verified backup into the project runtime
+// database. Callers that already know the canonical project identity must
+// supply it: accepting a syntactically valid backup from another project is
+// not a safe restore.
+func RestoreStateForProject(ctx context.Context, rootDir, backupPath, projectID string) error {
 	layout, err := project.Discover(rootDir)
 	if err != nil {
 		return err
 	}
-	return store.RestoreDatabase(ctx, backupPath, layout.Database, "", store.LatestSchemaVersion)
+	return store.RestoreDatabase(ctx, backupPath, layout.Database, projectID, store.LatestSchemaVersion)
+}
+
+// RestoreStateForProjectExpected is the TOCTOU-safe restore boundary for
+// interactive callers. It accepts only the exact digest verified during the
+// destructive confirmation, never a mutable path alone.
+func RestoreStateForProjectExpected(ctx context.Context, rootDir, backupPath, projectID, expectedDigest string) error {
+	layout, err := project.Discover(rootDir)
+	if err != nil {
+		return err
+	}
+	return store.RestoreDatabaseExpected(ctx, backupPath, layout.Database, projectID, store.LatestSchemaVersion, expectedDigest)
+}
+
+// ProjectRoot is the canonical project root used by lifecycle operations. It
+// is deliberately an internal application boundary; callers must not render
+// it as a user-facing path.
+func (r *Runtime) ProjectRoot() string {
+	if r == nil {
+		return ""
+	}
+	return r.layout.Root
 }
 
 func (r *Runtime) Store() *store.Store { return r.store }

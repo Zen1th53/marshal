@@ -25,6 +25,25 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 	workspace := tui.NewWorkspace(runtime.Store(), runtime.ProjectID(), options.sessionID)
 	workspace.SetTheme(options.theme, options.animation)
 
+	// Control submits every mutation through this runtime. Without it the
+	// Control screens render but every action refuses, which is the truthful
+	// behaviour for a workspace that cannot reach a canonical authority.
+	//
+	// The project identity comes from the canonical binding on disk rather
+	// than being synthesised here: the plan and execution services are keyed
+	// by it, and an identity invented in the TUI would address a different
+	// project than the rest of MARSHAL.
+	if root, rootErr := c.projectRoot(ctx); rootErr == nil {
+		if binding, found := projectid.LoadBinding(
+			filepath.Join(root, projectid.StateDirName)); found {
+			workspace.AttachRuntime(runtime, binding.ID)
+		} else {
+			// Without a binding the execution service cannot be addressed, so
+			// Control refuses rather than acting on a guessed identity.
+			workspace.AttachRuntime(nil, "")
+		}
+	}
+
 	// Bring up the Community Cloud for this session, if one is configured.
 	//
 	// Every failure here is a mode, not an error: an unconfigured or unreachable
@@ -48,6 +67,13 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 		authorization.Start(ctx)
 		defer authorization.Stop()
 	}
+
+	// The frozen Community TUI is the primary interface. Open it only after
+	// every canonical runtime and Cloud handle above has been attached, so the
+	// first Home frame is useful rather than a legacy composer or a transient
+	// storeless view. Esc at the root preserves the composer for power-user
+	// slash commands.
+	workspace.OpenNavigation(ctx)
 
 	return workspace.Run(ctx, c.stdin, c.stdout)
 }

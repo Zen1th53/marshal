@@ -23,7 +23,13 @@ type EngineConfig struct {
 
 // Engine coordinates governed execution across gate, scheduler, leases, harnesses, and journal.
 type Engine struct {
-	mu            sync.RWMutex
+	mu sync.RWMutex
+	// operationMu serializes admission to workspace-affecting operations.
+	// activeRuns is process-local execution liveness; durable run/task state is
+	// checked as well before rollback. Together they prevent a second ExecuteRun
+	// and a restore racing the worker that is changing the same workspace.
+	operationMu   sync.Mutex
+	activeRuns    map[string]struct{}
 	cfg           EngineConfig
 	planReader    PlanReader
 	goalReader    GoalReader
@@ -101,6 +107,7 @@ func NewEngineWithReaders(cfg EngineConfig, store RunStore, journal JournalStore
 		cachedPlan:    make(map[string]plan.ExecutionPlan),
 		cachedGoal:    make(map[string]model.GoalContract),
 		cachedHandoff: make(map[string]plan.Handoff),
+		activeRuns:    make(map[string]struct{}),
 	}
 
 	// Register default harnesses
@@ -242,9 +249,39 @@ func (e *Engine) InitializeRun(ctx context.Context, h plan.Handoff, g model.Goal
 
 // ExecuteRun runs all tasks in DAG order under governance until completion or pause.
 func (e *Engine) ExecuteRun(ctx context.Context, runID string) (*ExecutionRun, error) {
+	return e.executeRun(ctx, runID, -1)
+}
+
+// ExecuteRunExpected executes only the exact durable run revision the caller
+// reviewed. It also shares duplicate-execution admission with ExecuteRun.
+func (e *Engine) ExecuteRunExpected(ctx context.Context, runID string, expectedVersion int64) (*ExecutionRun, error) {
+	if expectedVersion < 0 {
+		return nil, fmt.Errorf("%w: expected run version is required", ErrRunInvalid)
+	}
+	return e.executeRun(ctx, runID, expectedVersion)
+}
+
+func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion int64) (*ExecutionRun, error) {
+	e.operationMu.Lock()
+	if _, running := e.activeRuns[runID]; running {
+		e.operationMu.Unlock()
+		return nil, fmt.Errorf("%w: run %s is already executing", ErrInvalidStateTransition, runID)
+	}
+	e.activeRuns[runID] = struct{}{}
+	e.operationMu.Unlock()
+	defer func() {
+		e.operationMu.Lock()
+		delete(e.activeRuns, runID)
+		e.operationMu.Unlock()
+	}()
+
 	run, err := e.store.GetRun(ctx, runID)
 	if err != nil {
 		return nil, err
+	}
+	if expectedVersion >= 0 && run.Version != expectedVersion {
+		return nil, fmt.Errorf("%w: run %s moved from version %d to %d",
+			ErrInvalidStateTransition, runID, expectedVersion, run.Version)
 	}
 
 	if run.State.IsTerminal() {
@@ -734,7 +771,40 @@ func (e *Engine) RollbackToCheckpoint(ctx context.Context, checkpointID string) 
 	if e.checkpoints == nil {
 		return CheckpointRecord{}, fmt.Errorf("%w: checkpoint engine unavailable", ErrCheckpointFailed)
 	}
+	record, err := e.checkpoints.GetCheckpoint(checkpointID)
+	if err != nil {
+		return CheckpointRecord{}, err
+	}
+
+	e.operationMu.Lock()
+	defer e.operationMu.Unlock()
+	if _, running := e.activeRuns[record.RunID]; running {
+		return CheckpointRecord{}, fmt.Errorf("%w: run %s is actively executing", ErrCheckpointFailed, record.RunID)
+	}
+	if record.RunID != "" {
+		run, runErr := e.store.GetRun(ctx, record.RunID)
+		if runErr != nil {
+			return CheckpointRecord{}, fmt.Errorf("%w: cannot verify checkpoint run state: %v", ErrCheckpointFailed, runErr)
+		}
+		if len(run.ActiveWorkers) > 0 || run.State == RunRunning || run.State == RunCancelling {
+			return CheckpointRecord{}, fmt.Errorf("%w: run %s still has active work", ErrCheckpointFailed, record.RunID)
+		}
+		for _, task := range run.Tasks {
+			switch task.State {
+			case TaskAssigned, TaskRunning, TaskWaitingTool, TaskWaitingAgent:
+				return CheckpointRecord{}, fmt.Errorf("%w: task %s is still %s", ErrCheckpointFailed, task.TaskID, task.State)
+			}
+		}
+	}
 	return e.checkpoints.RestoreCheckpoint(ctx, checkpointID)
+}
+
+// GetCheckpoint returns the canonical durable checkpoint record.
+func (e *Engine) GetCheckpoint(checkpointID string) (CheckpointRecord, error) {
+	if e.checkpoints == nil {
+		return CheckpointRecord{}, fmt.Errorf("%w: checkpoint engine unavailable", ErrCheckpointFailed)
+	}
+	return e.checkpoints.GetCheckpoint(checkpointID)
 }
 
 // CaptureCheckpoint snapshots current workspace state.
