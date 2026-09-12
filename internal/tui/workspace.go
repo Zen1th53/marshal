@@ -418,6 +418,16 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 	return w.runLineScanner(ctx, in, out)
 }
 
+// WaitForNavigationRefreshes drains asynchronous navigation reads. It is a
+// lifecycle boundary, not a rendering operation: callers must invoke it only
+// after cancelling the context supplied to OpenNavigation.
+func (w *Workspace) WaitForNavigationRefreshes() {
+	if w == nil || w.navView == nil {
+		return
+	}
+	w.navView.WaitForRefreshes()
+}
+
 func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	if w.out == nil {
 		w.out = os.Stdout

@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 // These tests drive the view the way a user does: key events in, rendered lines
@@ -949,3 +951,60 @@ func TestStatusSurvivesUntilItHasBeenSeen(t *testing.T) {
 		t.Fatalf("the refresh status never reached a frame:\n%s", out)
 	}
 }
+
+// A workspace must be able to drain the initial asynchronous navigation read
+// before its runtime/store is closed. Otherwise a final read can recreate a
+// SQLite sidecar underneath a project that is already being cleaned up.
+func TestWaitForRefreshesDrainsCancelledNavigationRead(t *testing.T) {
+	started := make(chan struct{})
+	finished := make(chan struct{})
+	v := testView(t)
+	v.AttachSource(&StatusSource{Runtime: refreshBlockingRuntime{started: started, finished: finished}}, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	v.Open(ctx)
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("background navigation read did not start")
+	}
+
+	drained := make(chan struct{})
+	go func() {
+		v.WaitForRefreshes()
+		close(drained)
+	}()
+	select {
+	case <-drained:
+		t.Fatal("refresh drain returned while a read was still active")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	cancel()
+	select {
+	case <-drained:
+	case <-time.After(time.Second):
+		t.Fatal("refresh drain did not finish after session cancellation")
+	}
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled navigation read did not finish")
+	}
+}
+
+type refreshBlockingRuntime struct {
+	started  chan<- struct{}
+	finished chan<- struct{}
+}
+
+func (r refreshBlockingRuntime) Status(ctx context.Context) (RuntimeStatus, error) {
+	close(r.started)
+	<-ctx.Done()
+	close(r.finished)
+	return RuntimeStatus{}, ctx.Err()
+}
+
+func (refreshBlockingRuntime) Events(context.Context) ([]model.Event, error) { return nil, nil }
+func (refreshBlockingRuntime) Tasks(context.Context) ([]model.Task, error)   { return nil, nil }
+func (refreshBlockingRuntime) InstanceID() string                            { return "" }

@@ -19,10 +19,15 @@ import (
 
 // NavView is the browsable frozen-IA view.
 type NavView struct {
-	mu    sync.Mutex
-	nav   *NavState
-	open  bool
-	theme *Theme
+	mu sync.Mutex
+	// refreshWG owns asynchronous canonical-state reads started by Open and
+	// manual refresh. A workspace must drain them before it closes the runtime:
+	// otherwise a reader can race project cleanup and recreate a SQLite sidecar
+	// below .marshal after the caller has returned.
+	refreshWG sync.WaitGroup
+	nav       *NavState
+	open      bool
+	theme     *Theme
 
 	// source supplies canonical reads. It may be nil, in which case every
 	// screen renders UNKNOWN with the reason rather than failing to open.
@@ -116,7 +121,28 @@ func (v *NavView) Open(ctx context.Context) {
 	v.open = true
 	v.status, v.statusSeen = "reading canonical state…", false
 	v.mu.Unlock()
-	go v.Refresh(ctx)
+	v.refreshAsync(ctx)
+}
+
+// refreshAsync starts a tracked refresh. Keeping this in NavView rather than
+// at each call site makes shutdown independent of which keyboard path started
+// the final read.
+func (v *NavView) refreshAsync(ctx context.Context) {
+	v.refreshWG.Add(1)
+	go func() {
+		defer v.refreshWG.Done()
+		v.Refresh(ctx)
+	}()
+}
+
+// WaitForRefreshes blocks until all asynchronous canonical-state reads have
+// stopped. The workspace calls it after cancelling its session context and
+// before releasing the runtime/store.
+func (v *NavView) WaitForRefreshes() {
+	if v == nil {
+		return
+	}
+	v.refreshWG.Wait()
 }
 
 // OpenAndWait enters navigation and completes the first read before returning.
@@ -414,7 +440,7 @@ func (v *NavView) HandleKey(ctx context.Context, event KeyEvent) bool {
 		case 'r':
 			// A manual refresh, because Status is read-only and the user needs
 			// some way to ask for current data.
-			go v.Refresh(ctx)
+			v.refreshAsync(ctx)
 			v.status, v.statusSeen = "refreshing…", false
 			return true
 		case 'q':
