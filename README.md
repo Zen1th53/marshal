@@ -34,7 +34,7 @@ MARSHAL solves these challenges by acting as a **deterministic local control pla
 
 | Subsystem | Current Community v1.5.0 Capability |
 |---|---|
-| **Terminal TUI Workspace (v2)** | Premium, dynamic, terminal-first collaborative workspace (`marshal tui` or default `marshal` launch) with full line editing, contextual autocomplete (`Tab`, `@`, `#`), command palette (`Ctrl+P`), live working tree diff viewer, real probe capability intelligence, silence-by-default chatter filtering, and a capability registry whose every advertised TUI command is verified to dispatch against the canonical runtime by an on-terminal (PTY) conformance suite. See [TUI Documentation](docs/tui.md). |
+| **Terminal TUI Workspace (v3)** | Keyboard-first Community control center (`marshal tui` or default `marshal` launch). It opens the frozen navigation by default: **Home, Control, Status, Work, Verify, Memory, Models, Security, System**. Arrow keys, `Enter`, `Esc`, `Tab`/`Shift+Tab`, and the `Ctrl+K` command palette work without slash commands; `Esc` from the navigation root opens the legacy composer for power users. Control mutations bind to canonical MARSHAL authorities, while unavailable bindings remain explicitly disabled rather than simulated. See [TUI Documentation](docs/tui.md). |
 | **Frozen 6-Core Judgment Layer** | Immutable 6-core runtime: (1) Epistemic Ledger & Claim Graph, (2) Alignment Guard, (3) Blind Interpretation, (4) Durable Handoff Checkpoints & Rollback, (5) Budget & Termination Contract, (6) Constraint Re-injection. Strictly frozen with no 7th core. |
 | **Real Multi-Agent Collaboration** | Fixed-role multi-agent team sessions (`architect`, `developer`, `qa`, `appsec`) supporting Claude CLI, OpenAI Codex, OpenCode, and Google Antigravity with typed handoffs, challenge protocols, and mutual discovery. |
 | **Harness Capability Intelligence & ULTRA** | Probe-backed version-aware capability matrix (`adapters/MATRIX.json`) dynamically generating optimal execution routes, model selection, reasoning effort, and native tool flags without hallucinated parameters. |
@@ -403,7 +403,7 @@ marshal verify -- go test ./...
 | `marshal doctor [--probe-providers]` | Run system health diagnostics and optional provider binary discovery |
 | `marshal daemon` | Launch the local control plane daemon background server |
 | `marshal status` | Query active tasks, registered agents, and daemon health |
-| `marshal tui [--session ID] [--theme NAME]` | Launch interactive terminal-first command center and multi-agent workspace |
+| `marshal tui [--session ID] [--theme NAME]` | Launch the keyboard-first Community TUI. Frozen navigation opens by default; `Esc` at its root opens the legacy slash-command composer. |
 | `marshal agent register --name NAME --role ROLE` | Register an agent principal with an assigned role |
 | `marshal agents` | List all registered agents and their capability configurations |
 | `marshal tasks` | List all tasks and their current lifecycle statuses |
