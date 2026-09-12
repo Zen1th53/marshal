@@ -710,7 +710,11 @@ func styleNavigationMenuRow(line string, th *Theme) string {
 	colour := ""
 	switch {
 	case strings.HasPrefix(left, "▸ "):
-		colour = th.Active + th.Bold
+		// A selected row is a keyboard focus target, not merely a coloured
+		// label. Reverse video remains unmistakable when a terminal remaps or
+		// desaturates ANSI colours, and applies consistently to menus, typed
+		// form fields, and palette results.
+		colour = th.Reverse + th.Active + th.Bold
 	case strings.HasPrefix(left, "· "):
 		colour = th.Accent
 	}

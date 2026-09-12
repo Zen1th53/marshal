@@ -80,6 +80,20 @@ func TestNavigationHonorsThemeWithoutChangingLayoutWidth(t *testing.T) {
 	}
 }
 
+// Menus, typed forms, and palette results all use the same selected-row
+// marker. A focus target needs a high-contrast treatment, not a subtle tint
+// that disappears against a terminal's dark theme.
+func TestSelectedNavigationRowUsesHighContrastFocus(t *testing.T) {
+	raw := "▸ Selected destination │ detail"
+	got := styleNavigationMenuRow(raw, NewTheme(ThemeDefault, true, false))
+	if !strings.Contains(got, "\x1b[7m") {
+		t.Fatalf("selected row has no reverse-video focus: %q", got)
+	}
+	if VisibleLen(got) != VisibleLen(raw) {
+		t.Fatalf("styled row width=%d, raw width=%d", VisibleLen(got), VisibleLen(raw))
+	}
+}
+
 // All nine frozen sections stay reachable at every width.
 //
 // Truncating the bar would hide a section behind an ellipsis, making MARSHAL

@@ -6511,13 +6511,13 @@
     },
     {
       "path": "internal/tui/navview.go",
-      "sha256": "5832a270f34058e602072b71e135fd8753367360906e11c1a8c6238264901533",
-      "bytes": 40239
+      "sha256": "ac52c3d743d305532037f247e956f09e3b5fd8ef718330a3250791574ac2ed36",
+      "bytes": 40506
     },
     {
       "path": "internal/tui/navview_test.go",
-      "sha256": "cd78e1491350279421ca3d51ebb2739df27430dcb1e98ed17d4e793150cfab33",
-      "bytes": 32697
+      "sha256": "e8265001b2f064d0b058b0e46f803e2461cdfc52d2d53b46f1d67318cc18f997",
+      "bytes": 33321
     },
     {
       "path": "internal/tui/palette.go",
