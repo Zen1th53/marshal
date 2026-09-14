@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -78,6 +79,72 @@ func TestNativeHistoryProjectIsolationPartialWritesAndRetry(t *testing.T) {
 	if calls != 3 {
 		t.Fatalf("completed tail was missed: %d", calls)
 	}
+}
+
+// A rollout event larger than the importer's line cap must not poison the file.
+// Before the fix the oversized line produced "bufio: buffer full", sync left the
+// file out of w.seen, and every subsequent two-second poll re-read and re-failed
+// it, so the session's memory was lost permanently.
+func TestNativeHistoryOversizedLineSkipsWithoutPoisoningTheFile(t *testing.T) {
+	for _, claude := range []bool{false, true} {
+		name, build := "codex", nativeTestHistory
+		if claude {
+			name, build = "claude", nativeClaudeHistory
+		}
+		t.Run(name, func(t *testing.T) {
+			dir, root := t.TempDir(), t.TempDir()
+			path := filepath.Join(dir, "session.jsonl")
+
+			// One complete but unimportably large JSONL event, spliced between
+			// the metadata header and the real conversation entries.
+			data := build(t, root, "oversized-session")
+			header, rest, found := bytesCut(data, '\n')
+			if !found {
+				t.Fatal("history fixture has no header line")
+			}
+			huge := append([]byte(`{"type":"response_item","payload":{"pad":"`), bytes.Repeat([]byte("x"), nativeHistoryLineLimit+4096)...)
+			huge = append(huge, []byte(`"}}`+"\n")...)
+			poisoned := append(append(append([]byte(nil), header...), '\n'), huge...)
+			poisoned = append(poisoned, rest...)
+			if err := os.WriteFile(path, poisoned, 0600); err != nil {
+				t.Fatal(err)
+			}
+
+			w := newNativeHistoryWatch(dir, root)
+			w.claude = claude
+			calls, messages := 0, 0
+			w.consume = func(tr importer.SessionTranscript) error {
+				calls++
+				messages += len(tr.Messages)
+				return nil
+			}
+			if err := w.sync(); err != nil {
+				t.Fatalf("oversized line reported as a capture failure: %v", err)
+			}
+			if calls != 1 || messages != 2 {
+				t.Fatalf("surrounding messages lost: calls=%d messages=%d", calls, messages)
+			}
+			if w.seen[path] == "" {
+				t.Fatal("file left unseen, so every later poll re-reads and re-fails it")
+			}
+			// An unchanged file must not be imported a second time.
+			if err := w.sync(); err != nil {
+				t.Fatal(err)
+			}
+			if calls != 1 {
+				t.Fatalf("unchanged history re-imported: %d", calls)
+			}
+		})
+	}
+}
+
+// bytesCut splits off the first line without pulling in extra imports.
+func bytesCut(data []byte, sep byte) ([]byte, []byte, bool) {
+	i := bytes.IndexByte(data, sep)
+	if i < 0 {
+		return data, nil, false
+	}
+	return data[:i], data[i+1:], true
 }
 
 func TestNativeCodexRejectsNonTerminal(t *testing.T) {

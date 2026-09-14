@@ -342,14 +342,19 @@ type Session struct {
 
 	mu      sync.Mutex
 	stopped bool
+	running bool
 	stop    chan struct{}
+	// done closes when Maintain returns. Stop waits on it so a renewal that is
+	// already in flight cannot persist state after the caller believes the
+	// session is finished — which otherwise races directory cleanup.
+	done chan struct{}
 }
 
 // NewSession prepares a session. It does not contact the server.
 func NewSession(client *Client, gate *Gate, state State, sessionID string) *Session {
 	return &Session{
 		client: client, gate: gate, state: state, id: sessionID,
-		stop: make(chan struct{}),
+		stop: make(chan struct{}), done: make(chan struct{}),
 	}
 }
 
@@ -372,6 +377,21 @@ func (s *Session) Start(ctx context.Context) error {
 // mode change, not an error: the user keeps working, with Standard behaviour
 // and confirmation prompts they would otherwise have delegated.
 func (s *Session) Maintain(ctx context.Context) {
+	s.mu.Lock()
+	if s.stopped {
+		// Already stopped before Maintain began. Returning without closing done
+		// is correct: Stop did not wait for us, because it knew we never ran.
+		s.mu.Unlock()
+		return
+	}
+	s.running = true
+	if s.done == nil {
+		s.done = make(chan struct{})
+	}
+	done := s.done
+	s.mu.Unlock()
+	defer close(done)
+
 	for {
 		renewAt, ok := s.gate.RenewAt()
 		if !ok {
@@ -441,10 +461,18 @@ func (s *Session) AttachReporter(r *Reporter) { s.reporter = r }
 // Stop ends maintenance and degrades to Standard.
 func (s *Session) Stop() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.stopped {
+		s.mu.Unlock()
 		return
 	}
 	s.stopped = true
+	running := s.running
+	done := s.done
 	close(s.stop)
+	s.mu.Unlock()
+
+	// Wait only when Maintain actually started; otherwise done never closes.
+	if running && done != nil {
+		<-done
+	}
 }

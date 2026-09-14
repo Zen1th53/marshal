@@ -1996,11 +1996,12 @@ func (a *runtimeControlAuthority) SelectedClaudeModel(ctx context.Context) (stri
 			return preference.Model, nil
 		}
 	}
-	_, def, err := a.ClaudeModels(ctx)
-	if err != nil {
-		return "", err
-	}
-	return def, nil
+	// No stored selection. Unlike Codex, whose catalog is a cheap subcommand,
+	// Claude discovery starts a real session to read its resolved model, so
+	// probing here would bill a session and stall the caller before the one
+	// the operator actually asked for. An empty answer is correct: it means
+	// "no explicit selection", and the CLI then applies its own default.
+	return "", nil
 }
 
 // DefaultClaudeDispatchAgent returns the sole eligible, locally registered

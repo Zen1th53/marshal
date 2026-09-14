@@ -81,6 +81,25 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 				return "", err
 			}
 			tail := parsed[2:]
+			// A session ID carries no provider marker, so a Codex thread ID
+			// looks exactly like a Claude one. Refuse a foreign ID here rather
+			// than handing it to the Claude CLI, which would answer with its
+			// own "No conversation found" and leave the operator guessing
+			// which agent they had actually addressed.
+			if len(tail) > 0 && !strings.HasPrefix(tail[0], "-") {
+				if governed, homeErr := claude.EnsureGovernedClaudeHome(); homeErr == nil {
+					if !claudeSessionExists(governed, h.ws.workDir, tail[0]) {
+						if codexSessionExists(tail[0]) {
+							return fmt.Sprintf("Session %s is a Codex session, not a Claude one. "+
+								"Use /codex resume %s, or /claude sessions to list Claude sessions.",
+								tail[0], tail[0]), nil
+						}
+						return fmt.Sprintf("No Claude session %s was found for this project. "+
+							"Use /claude sessions to list them, or /claude continue for the most recent.",
+							tail[0]), nil
+					}
+				}
+			}
 			argv := []string{"--continue"}
 			if sub == "resume" || (sub == "fork" && len(tail) > 0) {
 				argv = []string{"--resume"}

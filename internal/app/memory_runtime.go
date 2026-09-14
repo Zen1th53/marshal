@@ -2195,6 +2195,17 @@ func (s *MemoryService) ImportSessionTranscript(ctx context.Context, principal a
 				result.SkippedCount++
 				continue
 			}
+			// The import ID is deterministic over project, session and body,
+			// while the digest additionally covers timestamps. The same message
+			// re-read under a different session timestamp therefore misses the
+			// digest check above and collides on the primary key. That is a
+			// duplicate of content already captured, not a capture failure, so
+			// it must be an idempotent skip -- surfacing it aborted the whole
+			// poll and reported "Memory capture incomplete" to the operator.
+			if ex, err := s.store.GetMemoryV2(ctx, projectID, rec.ID); err == nil && ex.ID != "" {
+				result.SkippedCount++
+				continue
+			}
 			if err := s.store.WriteMemoryV2(ctx, rec); err != nil {
 				return importer.ImportResult{}, fmt.Errorf("persist imported record: %w", err)
 			}

@@ -81,3 +81,86 @@ func TestNativeClaudeModelPreference(t *testing.T) {
 		t.Fatal("overrode explicit model")
 	}
 }
+
+// Claude writes cwd on every entry and moves it as the agent works inside
+// subdirectories. Treating that as "mixed project directories" aborted capture
+// and discarded the in-flight batch; on real histories from this project two
+// large sessions lost every message. A subdirectory is in scope; only a path
+// outside the root is not.
+func TestNativeClaudeCapturesEntriesFromProjectSubdirectories(t *testing.T) {
+	dir, root := t.TempDir(), t.TempDir()
+	sub := filepath.Join(root, "internal", "web")
+	if err := os.MkdirAll(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	entry := func(role, cwd string) []byte {
+		payload := map[string]any{
+			"type": role, "sessionId": "claude-subdir", "cwd": cwd,
+			"timestamp": "2026-09-14T00:00:00Z",
+			"message": map[string]any{"role": role, "content": []map[string]string{
+				{"type": "text", "text": role + " from " + cwd},
+			}},
+		}
+		line, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return append(line, '\n')
+	}
+
+	var data []byte
+	data = append(data, entry("user", root)...)
+	data = append(data, entry("assistant", sub)...)
+	data = append(data, entry("user", sub)...)
+	if err := os.WriteFile(filepath.Join(dir, "session.jsonl"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	watch := newNativeHistoryWatch(dir, root)
+	watch.claude = true
+	captured := 0
+	watch.consume = func(tr importer.SessionTranscript) error {
+		captured += len(tr.Messages)
+		return nil
+	}
+	if err := watch.syncClaudeFile(filepath.Join(dir, "session.jsonl")); err != nil {
+		t.Fatalf("subdirectory entries must not abort capture: %v", err)
+	}
+	if captured != 3 {
+		t.Fatalf("captured %d messages, want all 3 including the subdirectory entries", captured)
+	}
+}
+
+// An entry genuinely outside the project root is still refused, so the relaxed
+// check above cannot pull another project's conversation into this memory.
+func TestNativeClaudeRefusesEntriesOutsideProjectRoot(t *testing.T) {
+	dir, root, foreign := t.TempDir(), t.TempDir(), t.TempDir()
+
+	entry := func(cwd string) []byte {
+		payload := map[string]any{
+			"type": "user", "sessionId": "claude-foreign", "cwd": cwd,
+			"timestamp": "2026-09-14T00:00:00Z",
+			"message": map[string]any{"role": "user", "content": []map[string]string{
+				{"type": "text", "text": "text from " + cwd},
+			}},
+		}
+		line, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return append(line, '\n')
+	}
+
+	data := append(entry(root), entry(foreign)...)
+	if err := os.WriteFile(filepath.Join(dir, "session.jsonl"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	watch := newNativeHistoryWatch(dir, root)
+	watch.claude = true
+	watch.consume = func(importer.SessionTranscript) error { return nil }
+	if err := watch.syncClaudeFile(filepath.Join(dir, "session.jsonl")); err == nil {
+		t.Fatal("an entry outside the project root must be refused")
+	}
+}

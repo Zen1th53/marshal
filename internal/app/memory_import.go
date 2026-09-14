@@ -42,6 +42,14 @@ func (s *MemoryService) ImportProviderSessionHistory(ctx context.Context, princi
 			result.SkippedCount++
 			continue
 		}
+		// The deterministic import ID covers project, session and body only, so
+		// the same content re-read under a different timestamp misses the digest
+		// check and would collide on the primary key. Re-importing is expected
+		// during periodic capture and must be an idempotent skip.
+		if existing, findErr := s.store.GetMemoryV2(ctx, projectID, rec.ID); findErr == nil && existing.ID != "" {
+			result.SkippedCount++
+			continue
+		}
 		if err := s.store.WriteMemoryV2(ctx, rec); err != nil {
 			return importer.ImportResult{}, fmt.Errorf("persist imported record: %w", err)
 		}

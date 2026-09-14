@@ -301,6 +301,43 @@ func (w *nativeHistoryWatch) saveIndex() error {
 	return os.Rename(f.Name(), w.indexPath)
 }
 
+// nativeHistoryLineLimit matches the importer's own maxJSONLLine policy cap. A
+// JSONL event larger than this is rejected downstream no matter how large a
+// buffer is allocated here, so the reader is sized to the same limit.
+const nativeHistoryLineLimit = 1 << 20
+
+// errHistoryLineTooLong reports a JSONL event that exceeds the importer's line
+// cap. It is a skip signal, never a capture failure: real rollout files contain
+// oversized events, and treating one as an error left the file unseen so every
+// subsequent poll re-read and re-failed it, permanently losing the session.
+var errHistoryLineTooLong = errors.New("history line exceeds the importable line limit")
+
+// readHistoryLine returns one complete line. When a line overruns the reader's
+// buffer, the remainder is discarded so reading can resume at the next line,
+// and errHistoryLineTooLong is returned. A partial final line reports io.EOF so
+// a later poll retries it after the writer appends.
+func readHistoryLine(r *bufio.Reader) ([]byte, error) {
+	line, err := r.ReadSlice('\n')
+	if !errors.Is(err, bufio.ErrBufferFull) {
+		return line, err
+	}
+	for {
+		_, err := r.ReadSlice('\n')
+		if err == nil {
+			return nil, errHistoryLineTooLong
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			// The oversized line is still being written. Report EOF so the
+			// caller stops here and a later poll re-reads the file.
+			return nil, io.EOF
+		}
+		return nil, err
+	}
+}
+
 func (w *nativeHistoryWatch) syncFile(path string) error {
 	if w.claude {
 		return w.syncClaudeFile(path)
@@ -310,9 +347,14 @@ func (w *nativeHistoryWatch) syncFile(path string) error {
 		return err
 	}
 	defer f.Close()
-	r := bufio.NewReaderSize(f, 1<<20)
-	meta, err := r.ReadSlice('\n')
+	r := bufio.NewReaderSize(f, nativeHistoryLineLimit)
+	meta, err := readHistoryLine(r)
 	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	if errors.Is(err, errHistoryLineTooLong) {
+		// The metadata line itself is unusable, but the file must still be
+		// marked seen by the caller rather than re-read forever.
 		return nil
 	}
 	if err != nil {
@@ -332,10 +374,16 @@ func (w *nativeHistoryWatch) syncFile(path string) error {
 		return nil
 	}
 	for {
-		line, readErr := r.ReadSlice('\n')
+		line, readErr := readHistoryLine(r)
 		// Ignore a partial final event; a later poll retries it after append.
 		if errors.Is(readErr, io.EOF) {
 			break
+		}
+		// A single event larger than the importer's own line cap could never be
+		// imported. Skipping it keeps the rest of the session; failing here
+		// would leave the file unseen and re-fail on every poll forever.
+		if errors.Is(readErr, errHistoryLineTooLong) {
+			continue
 		}
 		if readErr != nil {
 			return readErr

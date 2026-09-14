@@ -43,3 +43,44 @@ func TestProviderSessionHistoryUsesCanonicalPersistence(t *testing.T) {
 		t.Fatalf("expected canonical restart deduplication, got %+v", second)
 	}
 }
+
+// Native capture imports each message separately and re-reads a session file on
+// every poll. The deterministic import ID covers project, session and body only,
+// while the content digest also covers timestamps, so the same message re-read
+// under a later session timestamp misses the digest check and previously
+// collided on the primary key. That surfaced to the operator as
+// "Memory capture incomplete" and aborted the whole poll.
+func TestRepeatedSessionImportIsIdempotentAcrossTimestamps(t *testing.T) {
+	ctx := context.Background()
+	_, svc := openTestMemoryService(t)
+	principal := testPrincipal("repeat-importer")
+
+	const earlier = `{"session_id":"repeat-session","provider":"codex","timestamp":"2026-08-22T10:00:00Z","messages":[{"role":"user","content":"same message body"}]}`
+	const later = `{"session_id":"repeat-session","provider":"codex","timestamp":"2026-08-22T11:00:00Z","messages":[{"role":"user","content":"same message body"}]}`
+
+	first, err := svc.ImportSessionTranscript(ctx, principal, "PROJECT-local", []byte(earlier), false)
+	if err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	if len(first.ImportedRecords) != 1 {
+		t.Fatalf("expected one committed record, got %+v", first)
+	}
+
+	// Identical payload: caught by the digest check.
+	same, err := svc.ImportSessionTranscript(ctx, principal, "PROJECT-local", []byte(earlier), false)
+	if err != nil {
+		t.Fatalf("identical repeat import: %v", err)
+	}
+	if same.SkippedCount != 1 || len(same.ImportedRecords) != 0 {
+		t.Fatalf("expected digest deduplication, got %+v", same)
+	}
+
+	// Same deterministic ID, different digest: must skip, never error.
+	shifted, err := svc.ImportSessionTranscript(ctx, principal, "PROJECT-local", []byte(later), false)
+	if err != nil {
+		t.Fatalf("duplicate import surfaced as a capture failure: %v", err)
+	}
+	if shifted.SkippedCount != 1 || len(shifted.ImportedRecords) != 0 {
+		t.Fatalf("expected idempotent skip on import-ID collision, got %+v", shifted)
+	}
+}

@@ -36,6 +36,15 @@ cp "$MARSHAL_TEST_CLAUDE_HISTORY" "$CLAUDE_CONFIG_DIR/projects/fixture/session.j
 	if err := os.WriteFile(history, nativeClaudeHistory(t, s.cmd.Dir, "claude-pty"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	// Bare `/claude`, with no subcommand, must open the native session. That is
+	// the form operators actually type, and it is the one that matches the
+	// provider's own invocation name, so it is asserted before the flag-bearing
+	// variants below.
+	s.sendLine("/claude")
+	s.mustSee("CLAUDE-NATIVE-READY")
+	s.sendLine("BARE-CLAUDE")
+	s.mustSee("CLAUDE-INPUT:<BARE-CLAUDE>")
+
 	s.sendLine(`/claude cli --marshal-native-test --add-dir "directory with spaces"`)
 	s.mustSee("CLAUDE-ARG:<directory with spaces>")
 	s.sendLine("FIRST-KEY")
