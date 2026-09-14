@@ -859,13 +859,13 @@ func (e *Engine) DecideApproval(ctx context.Context, approvalID string, approve 
 	if err != nil {
 		return err
 	}
-	// A live Codex app-server approval belongs to the still-running provider
+	// A live native provider approval belongs to the still-running provider
 	// turn. It must be consumed by its typed adapter bridge, which verifies the
-	// native thread/turn/item binding immediately before replying to Codex.
-	// Treating it as an ordinary task approval here would incorrectly put the
-	// task back in READY while that provider turn is still live.
-	if pending.OperationType == "CODEX_APP_SERVER_NATIVE" {
-		return fmt.Errorf("%w: native Codex approval requires the bound app-server bridge", ErrRunBlocked)
+	// native session/turn/tool binding immediately before replying to the
+	// provider. Treating it as an ordinary task approval here would incorrectly
+	// put the task back in READY while that provider turn is still live.
+	if IsNativeProviderApproval(pending.OperationType) {
+		return fmt.Errorf("%w: native %s approval requires its bound provider bridge", ErrRunBlocked, pending.OperationType)
 	}
 	run, err := e.store.GetRun(ctx, pending.RunID)
 	if err != nil {
@@ -915,7 +915,7 @@ func (e *Engine) ResumeNativeApproval(ctx context.Context, approvalID string) er
 	if err != nil {
 		return err
 	}
-	if app.OperationType != "CODEX_APP_SERVER_NATIVE" || app.Status != ApprovalConsumed {
+	if !IsNativeProviderApproval(app.OperationType) || app.Status != ApprovalConsumed {
 		return fmt.Errorf("%w: native approval %s is not consumed by its bound provider turn", ErrApprovalRequired, approvalID)
 	}
 	run, err := e.store.GetRun(ctx, app.RunID)
@@ -950,7 +950,7 @@ func (e *Engine) FailNativeApproval(ctx context.Context, approvalID, reason stri
 	if err != nil {
 		return err
 	}
-	if app.OperationType != "CODEX_APP_SERVER_NATIVE" {
+	if !IsNativeProviderApproval(app.OperationType) {
 		return fmt.Errorf("%w: approval %s is not a native provider approval", ErrRunInvalid, approvalID)
 	}
 	run, err := e.store.GetRun(ctx, app.RunID)
@@ -1141,4 +1141,23 @@ func (e *Engine) CaptureCheckpoint(ctx context.Context, runID, taskID, reason st
 
 func nowUTC() time.Time {
 	return time.Now().UTC()
+}
+
+// nativeProviderApprovalOperations lists every operation type that identifies a
+// provider-native approval nested inside a running Process 05 task. Such an
+// approval may only be decided through its adapter bridge, never as an ordinary
+// task approval, because the provider turn it belongs to is still live.
+//
+// A provider added here without its bridge would be refused rather than
+// mis-decided, so this list stays fail-closed as new providers land.
+var nativeProviderApprovalOperations = map[string]struct{}{
+	"CODEX_APP_SERVER_NATIVE": {},
+	"CLAUDE_STREAM_NATIVE":    {},
+}
+
+// IsNativeProviderApproval reports whether an operation type denotes a
+// provider-native approval bound to a live turn.
+func IsNativeProviderApproval(operationType string) bool {
+	_, ok := nativeProviderApprovalOperations[operationType]
+	return ok
 }

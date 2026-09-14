@@ -102,44 +102,42 @@ func (m *MockHarness) Execute(ctx context.Context, task TaskExecution, pkg Const
 // ClaudeNativeHarness adapts Anthropic Claude models under MARSHAL governance.
 type ClaudeNativeHarness struct {
 	modelName string
+	executor  func(context.Context, TaskExecution, ConstraintPackage, string) (TaskResult, error)
 }
 
 func NewClaudeNativeHarness(modelName string) *ClaudeNativeHarness {
 	if modelName == "" {
-		modelName = "claude-3-5-sonnet"
+		modelName = "sonnet"
 	}
 	return &ClaudeNativeHarness{modelName: modelName}
 }
 
+// NewClaudeNativeHarnessWithExecutor binds Process 05 to a real Claude adapter
+// owned by the application runtime, mirroring the Codex harness. The execution
+// package deliberately knows nothing about CLI invocation or provider
+// credentials, avoiding a second executor or an authority bypass.
+func NewClaudeNativeHarnessWithExecutor(modelName string, executor func(context.Context, TaskExecution, ConstraintPackage, string) (TaskResult, error)) *ClaudeNativeHarness {
+	harness := NewClaudeNativeHarness(modelName)
+	harness.executor = executor
+	return harness
+}
+
 func (c *ClaudeNativeHarness) Name() string {
-	return "claude-native"
+	// Plan routing uses the public harness identifier "claude". Returning a
+	// private implementation name here would let the engine fall back to its
+	// mock harness, manufacturing a success instead of invoking the
+	// runtime-owned adapter.
+	return "claude"
 }
 
 func (c *ClaudeNativeHarness) Execute(ctx context.Context, task TaskExecution, pkg ConstraintPackage, worktree string) (TaskResult, error) {
-	// Native adapter executing under MARSHAL boundaries
-	start := time.Now().UTC()
-	evID := fmt.Sprintf("ev-claude-%s-%d", task.TaskID, start.UnixNano())
-	evidence := ExecutionEvidence{
-		EvidenceID:    evID,
-		TaskID:        task.TaskID,
-		ToolName:      "claude_runner",
-		ExitCode:      0,
-		StdoutSummary: fmt.Sprintf("Claude [%s] executed task %s within constraints", c.modelName, task.TaskID),
-		Status:        EvidenceValid,
-		DurationMs:    50,
-		RelevantFiles: task.TargetFiles,
-		CreatedAt:     start,
+	// Without a runtime-owned executor there is no Claude process to run.
+	// Refuse rather than report a fabricated success: a harness that invents
+	// evidence would let an unexecuted task pass Process 05 verification.
+	if c == nil || c.executor == nil {
+		return TaskResult{TaskID: task.TaskID, Success: false, ErrorMessage: "IMPLEMENTATION_GAP: Claude Process 05 executor is not bound to the runtime"}, fmt.Errorf("%w: Claude native harness has no canonical runtime executor", ErrRunBlocked)
 	}
-
-	return TaskResult{
-		TaskID:        task.TaskID,
-		Success:       true,
-		EvidenceList:  []ExecutionEvidence{evidence},
-		FilesModified: task.TargetFiles,
-		InputTokens:   200,
-		OutputTokens:  120,
-		Duration:      50 * time.Millisecond,
-	}, nil
+	return c.executor(ctx, task, pkg, worktree)
 }
 
 // CodexNativeHarness adapts OpenAI Codex models under MARSHAL governance.

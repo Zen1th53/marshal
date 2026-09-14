@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
@@ -246,6 +247,16 @@ type ControlAuthority interface {
 	PreviewCodexSkill(name string) (string, error)
 	InstallCodexSkill(ctx context.Context, name, expectedDigest string) (string, error)
 	RunCodexReview(ctx context.Context) (app.VerifyResult, error)
+
+	// --- Claude Governance ---
+	ClaudeHealth(ctx context.Context) (ClaudeHealthReport, error)
+	ClaudeDoctor(ctx context.Context) (claude.DoctorReport, error)
+	ClaudeModels(ctx context.Context) ([]claude.ModelInfo, string, error)
+	ClaudeSelectModel(ctx context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error)
+	ClaudeModelPreference(ctx context.Context) (model.ExecutionModelPreference, error)
+	SelectedClaudeModel(ctx context.Context) (string, error)
+	DispatchClaudeTask(ctx context.Context, req ClaudeTaskDispatchRequest) (app.RunResult, error)
+	ClaudeSessions(ctx context.Context) ([]ClaudeSessionSummary, error)
 }
 
 // CodexHealthReport carries truthful diagnostics from the bounded native Codex
@@ -275,6 +286,42 @@ type CodexTaskDispatchRequest struct {
 
 // CodexSessionSummary carries real thread/session ID and run status from native JSONL events.
 type CodexSessionSummary struct {
+	SessionID string    `json:"session_id"`
+	TaskID    string    `json:"task_id"`
+	RunID     string    `json:"run_id"`
+	Model     string    `json:"model"`
+	Status    string    `json:"status"`
+	StartedAt time.Time `json:"started_at"`
+	EndedAt   time.Time `json:"ended_at"`
+}
+
+// ClaudeHealthReport mirrors CodexHealthReport for the Claude control plane.
+type ClaudeHealthReport struct {
+	Available  bool   `json:"available"`
+	BinaryPath string `json:"binary_path"`
+	Version    string `json:"version"`
+	// StreamStatus is a narrow configuration-boundary observation, not a claim
+	// that a provider turn has executed. Its values remain operator truthful:
+	// CONFIG_FREE, BLOCKED, or UNKNOWN.
+	StreamStatus string            `json:"stream_status"`
+	StreamReason string            `json:"stream_reason,omitempty"`
+	DefaultModel string            `json:"default_model"`
+	Checks       map[string]string `json:"checks"`
+	Verdict      string            `json:"verdict"`
+	CheckedAt    time.Time         `json:"checked_at"`
+}
+
+// ClaudeTaskDispatchRequest binds a governed dispatch to one exact task.
+type ClaudeTaskDispatchRequest struct {
+	TaskID           string `json:"task_id"`
+	AgentID          string `json:"agent_id"`
+	Model            string `json:"model,omitempty"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
+
+// ClaudeSessionSummary carries the real session ID and run status recorded for
+// a governed Claude execution.
+type ClaudeSessionSummary struct {
 	SessionID string    `json:"session_id"`
 	TaskID    string    `json:"task_id"`
 	RunID     string    `json:"run_id"`

@@ -300,6 +300,9 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/codex":
 		return h.handleCodex(ctx, parts[1:], line)
 
+	case "/claude":
+		return h.handleClaude(ctx, parts[1:], line)
+
 	case "/mcp":
 		return h.handleCodex(ctx, append([]string{"mcp"}, parts[1:]...), line)
 
@@ -654,6 +657,7 @@ func (h *CommandHandler) helpText() string {
   /doctor [codex]          Run health diagnostics and environment checks
   /search [on|off]         Toggle live web search tool
   /codex [subcommand]      Full Codex control plane (status, models, review, exec, run, cli)
+  /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
   <prompt...>              Type any prompt directly without / to command Codex!
   /help                    Show this help reference
   /quit, /exit             Exit TUI workspace (session remains durable in SQLite)

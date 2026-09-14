@@ -24,7 +24,12 @@ func TestClaudeProbeSuccess(t *testing.T) {
 			if strings.Contains(cmd.Args[0], "--version") {
 				return adapter.ProcessResult{Stdout: []byte("1.0.0\n"), ExitCode: 0}, nil
 			}
-			return adapter.ProcessResult{Stdout: []byte("--print --output-format"), ExitCode: 0}, nil
+			// Probe requires every flag the governed stream lifecycle uses, so
+			// the fixture lists the same set the real CLI reports.
+			return adapter.ProcessResult{Stdout: []byte(
+				"--print --output-format --input-format --permission-mode " +
+					"--permission-prompts --strict-mcp-config --add-dir --resume",
+			), ExitCode: 0}, nil
 		},
 	}
 	client := New("claude", runner)

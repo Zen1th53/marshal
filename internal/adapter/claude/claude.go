@@ -14,13 +14,32 @@ import (
 )
 
 type Client struct {
-	binary  string
-	runner  adapter.ProcessRunner
-	version string
+	binary       string
+	runner       adapter.ProcessRunner
+	version      string
+	models       []ModelInfo
+	defaultModel string
 }
 
 func New(binary string, runner adapter.ProcessRunner) *Client {
 	return &Client{binary: binary, runner: runner}
+}
+
+// Binary exposes the resolved executable path so the runtime can start the
+// governed stream lifecycle without re-resolving it from PATH.
+func (c *Client) Binary() string {
+	if c == nil {
+		return ""
+	}
+	return c.binary
+}
+
+// Runner exposes the sandboxed process runner bound to this client.
+func (c *Client) Runner() adapter.ProcessRunner {
+	if c == nil {
+		return nil
+	}
+	return c.runner
 }
 
 func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
@@ -34,6 +53,24 @@ func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
 	})
 	if err != nil || versionRes.ExitCode != 0 {
 		return adapter.Probe{}, fmt.Errorf("%w: probe Claude version failed: %v", model.ErrUnavailable, err)
+	}
+	helpRes, err := c.runner.Run(probeCtx, adapter.Command{
+		Path: c.binary, Args: []string{"--help"},
+	})
+	if err != nil || helpRes.ExitCode != 0 {
+		return adapter.Probe{}, fmt.Errorf("%w: probe Claude help failed: %v", model.ErrUnavailable, err)
+	}
+	// The governed stream lifecycle depends on every one of these flags. A
+	// build without them would silently fall back to a weaker surface, so
+	// refuse here rather than discover it mid-turn.
+	help := string(helpRes.Stdout) + string(helpRes.Stderr)
+	for _, required := range []string{
+		"--output-format", "--permission-mode", "--permission-prompts",
+		"--strict-mcp-config", "--add-dir", "--resume",
+	} {
+		if !strings.Contains(help, required) {
+			return adapter.Probe{}, fmt.Errorf("%w: Claude CLI lacks required flag %s", model.ErrUnavailable, required)
+		}
 	}
 	c.version = strings.TrimSpace(string(versionRes.Stdout))
 
