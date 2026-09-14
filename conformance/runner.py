@@ -88,7 +88,7 @@ def validate_markdown_references(root: Path) -> list[str]:
         except UnicodeDecodeError:
             continue
         for ref in REF_RE.findall(text):
-            if not (root / ref).exists():
+            if not (root / ref).exists() and not (path.parent / ref).exists():
                 errors.append(f"{path.relative_to(root)}: missing reference {ref}")
     return sorted(set(errors))
 

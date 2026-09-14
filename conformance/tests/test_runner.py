@@ -66,6 +66,17 @@ class ConformanceRunnerTests(unittest.TestCase):
             errors = runner.validate_markdown_references(root)
             self.assertTrue(any("protocols/MISSING.md" in e for e in errors))
 
+    def test_pack_reference_validation_accepts_file_relative_templates(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            skill = root / ".agents" / "skills" / "example"
+            (skill / "templates").mkdir(parents=True)
+            (skill / "templates" / "report.md").write_text("Report template")
+            (skill / "SKILL.md").write_text("Use `templates/report.md`")
+            self.assertEqual(runner.validate_markdown_references(root), [])
+            (skill / "SKILL.md").write_text("Use `templates/missing.md`")
+            self.assertTrue(runner.validate_markdown_references(root))
+
 
     def test_pack_reference_validation_checks_interop_paths(self):
         with tempfile.TemporaryDirectory() as td:
