@@ -20,6 +20,17 @@ func TestNativeCodexArgumentsPassThrough(t *testing.T) {
 	}
 }
 
+func TestNativeClaudeArgumentsPassThrough(t *testing.T) {
+	want := []string{"--resume", "session name", "--model", "chosen-model"}
+	options := parseWorkspaceArgs(append([]string{"--claude"}, want...))
+	if !reflect.DeepEqual(options.nativeClaude, want) {
+		t.Fatalf("native args changed: %q", options.nativeClaude)
+	}
+	if parseWorkspaceArgs([]string{"--claude"}).nativeClaude == nil {
+		t.Fatal("empty native launch lost")
+	}
+}
+
 func TestTUICLIInvocation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

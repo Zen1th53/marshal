@@ -22,6 +22,7 @@ import (
 // StartWithNativeCodex opens the native session after terminal ownership has
 // been established and before the workspace starts reading keys.
 func (w *Workspace) StartWithNativeCodex(args []string) {
+	w.nativeStartupProvider = "codex"
 	copyArgs := append([]string(nil), args...)
 	w.nativeOnStart = &copyArgs
 }
@@ -60,7 +61,7 @@ func nativeArgs(s string) ([]string, error) {
 		}
 	}
 	if escaped || quote != 0 {
-		return nil, errors.New("unfinished quote or escape in Codex arguments")
+		return nil, errors.New("unfinished quote or escape in native CLI arguments")
 	}
 	if started {
 		args = append(args, word.String())
@@ -71,10 +72,20 @@ func nativeArgs(s string) ([]string, error) {
 // Native mode intentionally uses the operator's real Codex environment. The
 // config-free task harness is a separate workflow with different guarantees.
 func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, error) {
-	if w.terminal == nil || !w.terminal.IsTerminal() {
-		return "", errors.New("native Codex requires an interactive terminal; use /codex exec for batch tasks")
+	return w.runNativeAgent(ctx, "codex", args)
+}
+
+func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string) (string, error) {
+	label, homeEnv, homeDir, historyDir := "Codex", "CODEX_HOME", ".codex", "sessions"
+	if provider == "claude" {
+		label, homeEnv, homeDir, historyDir = "Claude", "CLAUDE_CONFIG_DIR", ".claude", "projects"
+	} else if provider != "codex" {
+		return "", fmt.Errorf("unsupported native provider %q", provider)
 	}
-	binary, err := project.FindBinary("codex")
+	if w.terminal == nil || !w.terminal.IsTerminal() {
+		return "", fmt.Errorf("native %s requires an interactive terminal; use /%s exec for batch tasks", label, provider)
+	}
+	binary, err := project.FindBinary(provider)
 	if err != nil {
 		return "", err
 	}
@@ -82,25 +93,36 @@ func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, 
 	if w.runtime != nil {
 		root = w.runtime.ProjectRoot()
 	}
-	home := os.Getenv("CODEX_HOME")
+	home := os.Getenv(homeEnv)
 	if home == "" {
 		userHome, err := os.UserHomeDir()
 		if err != nil {
 			return "", err
 		}
-		home = filepath.Join(userHome, ".codex")
+		home = filepath.Join(userHome, homeDir)
 	}
-	watch := newNativeHistoryWatch(filepath.Join(home, "sessions"), root)
+	if !filepath.IsAbs(home) {
+		home = filepath.Join(root, home)
+	}
+	watch := newNativeHistoryWatch(filepath.Join(home, historyDir), root)
+	watch.claude = provider == "claude"
 	var syncErr error
-	watch.indexPath = filepath.Join(root, ".marshal", "codex", "history-index.json")
+	watch.indexPath = filepath.Join(root, ".marshal", provider, "history-index.json")
 	if err := watch.loadIndex(); err != nil {
 		syncErr = err
 	}
 	imported := 0
 	if source := w.controlSource(); source != nil {
 		if authority, ok := source.Authority.(*runtimeControlAuthority); ok {
-			if nativeUsesModelPreference(args) {
-				if selected, err := authority.SelectedCodexModel(ctx); err == nil && selected != "" {
+			if (provider == "codex" && nativeUsesModelPreference(args)) || (provider == "claude" && claudeUsesModelPreference(args)) {
+				var selected string
+				var err error
+				if provider == "claude" {
+					selected, err = authority.SelectedClaudeModel(ctx)
+				} else {
+					selected, err = authority.SelectedCodexModel(ctx)
+				}
+				if err == nil && selected != "" {
 					args = append([]string{"--model", selected}, args...)
 				}
 			}
@@ -131,21 +153,22 @@ func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, 
 		}
 	}
 	if watch.consume == nil {
-		return "", errors.New("native Codex memory capture requires an attached runtime")
+		return "", fmt.Errorf("native %s memory capture requires an attached runtime", label)
 	}
 	if w.navView != nil {
 		w.navView.Close()
 	}
 	resume := w.SuspendTerminal()
 	defer resume()
-	fmt.Fprintln(os.Stdout, "MARSHAL · native Codex · conversation autosaves to project memory · /quit returns to MARSHAL")
+	fmt.Fprintf(os.Stdout, "MARSHAL · native %s · conversation autosaves to project memory · exit to return to MARSHAL\n", label)
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Dir = root
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.Env = os.Environ()
 	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("start native Codex: %w", err)
+		return "", fmt.Errorf("start native %s: %w", label, err)
 	}
+	w.nativeProvider = provider
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	ticker := time.NewTicker(2 * time.Second)
@@ -156,7 +179,7 @@ func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, 
 			if err := watch.sync(); err != nil {
 				syncErr = err
 			}
-			result := fmt.Sprintf("Codex exited. %d conversation messages saved to MARSHAL memory.\n/codex continue resumes; /codex new starts a new session.", imported)
+			result := fmt.Sprintf("%s exited. %d conversation messages saved to MARSHAL memory.\n/%s continue resumes; /%s new starts a new session.", label, imported, provider, provider)
 			if syncErr != nil {
 				result += "\nMemory capture incomplete:\n" + syncErr.Error()
 			}
@@ -182,6 +205,7 @@ func nativeUsesModelPreference(args []string) bool {
 }
 
 type nativeHistoryWatch struct {
+	claude    bool
 	dir, root string
 	indexPath string
 	seen      map[string]string
@@ -278,6 +302,9 @@ func (w *nativeHistoryWatch) saveIndex() error {
 }
 
 func (w *nativeHistoryWatch) syncFile(path string) error {
+	if w.claude {
+		return w.syncClaudeFile(path)
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return err

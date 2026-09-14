@@ -80,6 +80,10 @@ type ptySession struct {
 // startTUI builds the marshal binary once, initialises a throwaway project, and
 // runs `marshal tui` attached to a pseudo-terminal.
 func startFrozenTUI(t *testing.T, rows, cols uint16) *ptySession {
+	return startFrozenTUICommand(t, rows, cols, "tui")
+}
+
+func startFrozenTUICommand(t *testing.T, rows, cols uint16, args ...string) *ptySession {
 	t.Helper()
 
 	bin := buildMarshalBinary(t)
@@ -88,7 +92,7 @@ func startFrozenTUI(t *testing.T, rows, cols uint16) *ptySession {
 	master, slave := openPTY(t)
 	setWinsize(master, rows, cols)
 
-	cmd := exec.Command(bin, "tui")
+	cmd := exec.Command(bin, args...)
 	cmd.Dir = project
 	cmd.Stdin = slave
 	cmd.Stdout = slave

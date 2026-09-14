@@ -72,6 +72,7 @@ Commands:
   constitution version | invariants | decisions SESSION-ID | violations SESSION-ID
   tui [SESSION-ID]
   codex [NATIVE-CODEX-ARGUMENTS...]
+  claude [NATIVE-CLAUDE-ARGUMENTS...]
   daemon
   version
 `
@@ -116,7 +117,7 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		fmt.Fprint(stdout, usage)
 		return 0
 	}
-	if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+	if len(args) > 1 && args[0] != "codex" && args[0] != "claude" && (args[1] == "--help" || args[1] == "-h") {
 		fmt.Fprint(stdout, usage)
 		return 0
 	}
@@ -203,6 +204,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.tui(ctx, args[1:])
 	case "codex":
 		err = c.tui(ctx, append([]string{"--codex"}, args[1:]...))
+	case "claude":
+		err = c.tui(ctx, append([]string{"--claude"}, args[1:]...))
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}

@@ -336,7 +336,11 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	default:
 		if !strings.HasPrefix(line, "/") {
 			if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
-				return h.ws.runNativeCodex(ctx, []string{"--", line})
+				provider := h.ws.nativeProvider
+				if provider == "" {
+					provider = "codex"
+				}
+				return h.ws.runNativeAgent(ctx, provider, []string{"--", line})
 			}
 			// Natural language prompt entered directly at composer prompt `>`
 			source := h.ws.controlSource()

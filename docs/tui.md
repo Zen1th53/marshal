@@ -2,6 +2,30 @@
 
 MARSHAL TUI v2 is a terminal-first, interactive IDE, multi-agent team room, evidence console, and live command center. It operates as the complete interactive control plane over MARSHAL's canonical local runtime and SQLite store.
 
+## Native Claude sessions
+
+Run `marshal claude` or press F8 in MARSHAL to open native Claude Code.
+`marshal claude --continue` continues its latest conversation;
+`marshal claude --resume` opens Claude's picker. Native CLI arguments are passed
+through, including `--model`, `--permission-mode`, attachments and configuration
+options. Within MARSHAL, use `/claude new`, `/claude continue`, `/claude resume`,
+`/claude fork [session]`, or `/claude cli <arguments>`. After returning, plain
+composer prompts use the last opened native provider; F7 selects Codex again.
+
+Native Claude uses the operator's existing `CLAUDE_CONFIG_DIR` (normally
+`~/.claude`), authentication, skills, MCP servers and plugins. MARSHAL imports
+visible user/assistant text from this project's Claude JSONL histories every two
+seconds and on exit. Records pass the memory secret firewall and are saved as
+agent-authority candidates in MARSHAL's database. Thinking, tool-use and tool-result
+blocks are excluded. `.marshal/claude/history-index.json` tracks completed imports
+across restarts. `/memory list` and `/memory search <query>` include both providers.
+
+The native window uses Claude's own permission controls. `/claude exec` and
+`/claude run` retain the existing governed stream-json execution path. Native
+resume still uses Claude's history storage; MARSHAL's copied conversation memory
+does not depend on retaining that original session after import. A new session
+does not automatically receive all stored MARSHAL memory.
+
 ## Native Codex sessions
 
 Run `marshal codex` to open the installed Codex inside a MARSHAL session. Native

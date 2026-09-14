@@ -398,7 +398,7 @@ func TestDeveloperAgentCockpit_Rendering(t *testing.T) {
 
 	for _, want := range []string{
 		"Activity",
-		"Codex workspace",
+		"Native agent workspace",
 		"[F1]", "[F2]", "[F3]", "[F4]", "[F5]", "[Esc]",
 		"/codex new", "/codex continue", "/resume", "/diff", "[F7]",
 	} {

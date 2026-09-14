@@ -45,6 +45,53 @@ func runGovernedClaudeCmd(ctx context.Context, args []string) (string, error) {
 // handleClaude exposes the governed Claude control plane. It mirrors the Codex
 // surface, minus the operations Claude Code has no equivalent for.
 func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line string) (string, error) {
+	if len(args) == 0 && h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
+		return h.ws.runNativeAgent(ctx, "claude", nil)
+	}
+	if len(args) > 0 {
+		sub := strings.ToLower(args[0])
+		if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
+			switch sub {
+			case "mcp", "plugin", "auth", "agents", "doctor", "login", "logout":
+				parsed, err := nativeArgs(line)
+				if err != nil {
+					return "", err
+				}
+				argv := append([]string{sub}, parsed[2:]...)
+				if sub == "login" || sub == "logout" {
+					argv = append([]string{"auth"}, argv...)
+				}
+				return h.ws.runNativeAgent(ctx, "claude", argv)
+			}
+		}
+		switch sub {
+		case "new", "cli", "interactive", "chat", "open", "tui":
+			tail := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), strings.Fields(line)[0]))
+			if tail != "" {
+				tail = strings.TrimSpace(strings.TrimPrefix(tail, strings.Fields(tail)[0]))
+			}
+			argv, err := nativeArgs(tail)
+			if err != nil {
+				return "", err
+			}
+			return h.ws.runNativeAgent(ctx, "claude", argv)
+		case "continue", "resume", "fork":
+			parsed, err := nativeArgs(line)
+			if err != nil {
+				return "", err
+			}
+			tail := parsed[2:]
+			argv := []string{"--continue"}
+			if sub == "resume" || (sub == "fork" && len(tail) > 0) {
+				argv = []string{"--resume"}
+			}
+			argv = append(argv, tail...)
+			if sub == "fork" {
+				argv = append(argv, "--fork-session")
+			}
+			return h.ws.runNativeAgent(ctx, "claude", argv)
+		}
+	}
 	source := h.ws.controlSource()
 	if source == nil || source.Authority == nil {
 		return "Claude control authority unavailable: no runtime attached to workspace.", nil
@@ -73,6 +120,10 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 		b.WriteString(fmt.Sprintf("  Stream:        %s (%s)\n", health.StreamStatus, health.StreamReason))
 		b.WriteString(fmt.Sprintf("  Active Model:  %s\n", selectedModel))
 		b.WriteString("\nAvailable subcommands:\n")
+		b.WriteString("  /claude new / continue    Start or continue native Claude with automatic memory\n")
+		b.WriteString("  /claude resume / fork     Pick a conversation or fork the latest conversation\n")
+		b.WriteString("  /claude cli <args...>     Native Claude arguments, MCP, plugins and authentication\n")
+		b.WriteString("  /claude mcp / plugin / auth / agents  Native management commands\n")
 		b.WriteString("  /claude doctor             Run native Claude doctor diagnostics\n")
 		b.WriteString("  /claude models             List eligible models and selection status\n")
 		b.WriteString("  /claude model <slug>       Select active Claude model for execution\n")
@@ -173,6 +224,10 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 		return h.handleClaudeExec(ctx, auth, prompt)
 
 	default:
+		if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
+			prompt := strings.TrimSpace(line[len(strings.Fields(line)[0]):])
+			return h.ws.runNativeAgent(ctx, "claude", []string{"--", prompt})
+		}
 		// Multiple words after /claude are treated as a direct instruction,
 		// matching how /codex behaves.
 		if len(args) > 1 {

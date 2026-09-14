@@ -95,9 +95,11 @@ type Workspace struct {
 	// interruptArmed records that a Ctrl+C arrived with nothing left to
 	// interrupt. A second consecutive press then exits; any other key disarms
 	// it, so a stray interrupt never closes the workspace on its own.
-	interruptArmed bool
-	exitRequested  bool
-	nativeOnStart  *[]string
+	interruptArmed        bool
+	exitRequested         bool
+	nativeOnStart         *[]string
+	nativeStartupProvider string
+	nativeProvider        string
 
 	// Scroll and activity unread tracking
 	scrollOffset int
@@ -206,7 +208,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/policy", "/sandbox", "/memory", "/provider", "/harness", "/model", "/models",
 			"/effort", "/ultra", "/backup", "/fingerprint", "/runtime", "/store", "/export",
 			"/blind", "/reinjection", "/alignment", "/optimization", "/diff", "/review",
-			"/codex", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
+			"/codex", "/claude", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
 		},
 		Agents:      agentIDs,
@@ -222,6 +224,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/alignment"] = []string{"scope", "violations", "blast", "deletions", "resolve", "status"}
 	compCtx.Subcommands["/codex"] = []string{"doctor", "models", "model", "review", "sessions", "mcp", "plugin", "apply", "diff", "resume", "fork", "agents", "features", "sandbox", "approval", "search", "login", "logout", "skill", "run", "exec", "cli"}
 	compCtx.Subcommands["/mcp"] = []string{"list", "add", "rm"}
+	compCtx.Subcommands["/claude"] = []string{"new", "continue", "resume", "fork", "cli", "status", "models", "model", "doctor", "sessions", "exec", "run", "mcp", "plugin", "auth", "agents", "login", "logout"}
 	compCtx.Subcommands["/plugin"] = []string{"list", "add", "rm"}
 	compCtx.Subcommands["/plugins"] = []string{"list", "add", "rm"}
 	compCtx.Subcommands["/search"] = []string{"on", "off"}
@@ -441,7 +444,7 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 
 	// Fallback for piped or non-terminal environments
 	if w.nativeOnStart != nil {
-		return fmt.Errorf("marshal codex requires an interactive terminal")
+		return fmt.Errorf("native agent requires an interactive terminal")
 	}
 	return w.runLineScanner(ctx, in, out)
 }
@@ -473,8 +476,12 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	if w.nativeOnStart != nil {
 		args := *w.nativeOnStart
 		w.nativeOnStart = nil
-		result, err := w.runNativeCodex(ctx, args)
-		w.state.LastCommand = "native Codex"
+		provider := w.nativeStartupProvider
+		if provider == "" {
+			provider = "codex"
+		}
+		result, err := w.runNativeAgent(ctx, provider, args)
+		w.state.LastCommand = "native " + provider
 		w.state.LastOutput = result
 		if err != nil {
 			w.state.LastOutput += "\n" + err.Error()
@@ -591,6 +598,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			// Navigation owns every key while it is open, and Ctrl+N opens it.
 			if event.Type == KeyF7 {
 				w.runCommand(ctx, "/codex new")
+				continue
+			}
+			if event.Type == KeyF8 {
+				w.runCommand(ctx, "/claude new")
 				continue
 			}
 			// The dispatch lives in its own method so a test can drive exactly
