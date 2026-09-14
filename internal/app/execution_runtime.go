@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -89,6 +90,7 @@ func (r *Runtime) Execution() *ExecutionService {
 	// execution keeps using the canonical policy, sandbox, capability and
 	// evidence services rather than a second provider runner.
 	engine.RegisterHarness(runtimeCodexHarness(r))
+	engine.RegisterHarness(runtimeClaudeHarness(r))
 	return r.execService
 }
 
@@ -101,6 +103,7 @@ func NewExecutionServiceWithEngine(r *Runtime, engine *execution.Engine) *Execut
 	}
 	if r != nil && engine != nil {
 		engine.RegisterHarness(runtimeCodexHarness(r))
+		engine.RegisterHarness(runtimeClaudeHarness(r))
 	}
 	return service
 }
@@ -269,6 +272,9 @@ func (s *ExecutionService) Approve(ctx context.Context, approvalID, approverID, 
 	if pending.OperationType == codexAppServerApprovalOperation {
 		return s.resolveCodexAppServerApproval(ctx, *pending, true, approverID, rationale)
 	}
+	if pending.OperationType == claudeStreamApprovalOperation {
+		return s.resolveClaudeStreamApproval(ctx, *pending, true, approverID, rationale)
+	}
 	return s.engine.DecideApproval(ctx, approvalID, true, approverID, rationale)
 }
 
@@ -284,13 +290,102 @@ func (s *ExecutionService) Reject(ctx context.Context, approvalID, approverID, r
 	if pending.OperationType == codexAppServerApprovalOperation {
 		return s.resolveCodexAppServerApproval(ctx, *pending, false, approverID, rationale)
 	}
+	if pending.OperationType == claudeStreamApprovalOperation {
+		return s.resolveClaudeStreamApproval(ctx, *pending, false, approverID, rationale)
+	}
 	return s.engine.DecideApproval(ctx, approvalID, false, approverID, rationale)
+}
+
+// resolveClaudeStreamApproval mirrors the Codex resolver: the canonical record
+// is decided first, then the exact native request is consumed through the
+// bridge before the live turn is allowed to proceed. A restart that dropped the
+// local process is a refusal, never an approval.
+func (s *ExecutionService) resolveClaudeStreamApproval(ctx context.Context, approval execution.RuntimeApproval, approve bool, operator, rationale string) error {
+	if s.runtime == nil {
+		return fmt.Errorf("%w: runtime is unavailable for native Claude approval", model.ErrUnavailable)
+	}
+	key := approval.RunID + "\x00" + approval.TaskID
+	s.runtime.claudeStreamMu.Lock()
+	live := s.runtime.claudeStreamTurns[key]
+	s.runtime.claudeStreamMu.Unlock()
+	if live == nil || live.client == nil || live.approval == nil {
+		// Restart removed the local process. Do not mark the approval approved:
+		// there is no proof that a later native turn would be the same turn.
+		return fmt.Errorf("%w: live Claude stream turn is unavailable; recovery is blocked pending operator review", model.ErrUnavailable)
+	}
+	bridge, err := s.ClaudeStreamApprovals(ctx, approval.RunID, approval.TaskID)
+	if err != nil {
+		return err
+	}
+	if approve {
+		if err := s.engine.ApprovalManager().Approve(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+			return err
+		}
+		if err := live.client.ResolveApproval(ctx, *live.approval, bridge); err != nil {
+			return err
+		}
+		// From this instant the native turn may perform precisely the action
+		// whose digest/state the bridge just consumed. The pre-approval worktree
+		// digest remains the fail-closed boundary until this line; a restart
+		// drops this live marker and refuses reattachment.
+		live.accepted = true
+		if err := s.engine.ResumeNativeApproval(ctx, approval.ApprovalID); err != nil {
+			return err
+		}
+		// Process 05, rather than the TUI, owns continuation. The background
+		// operation waits only on the existing native turn and cannot issue a
+		// second turn because the persisted binding is already present.
+		go func(runID string, turnCtx context.Context) {
+			if turnCtx == nil {
+				return
+			}
+			// The native turn owns turnCtx and its cleanup cancels it once a
+			// terminal event arrives. Process 05 still needs one final scheduler
+			// pass to durably record COMPLETED_PENDING_VERIFY; inheriting that
+			// cancellation would rewrite a completed run as PAUSED.
+			_, _ = s.engine.ExecuteRun(context.WithoutCancel(turnCtx), runID)
+		}(approval.RunID, live.runCtx)
+		return nil
+	}
+	if err := s.engine.ApprovalManager().Deny(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+		return err
+	}
+	if err := live.client.DeclineApproval(ctx, *live.approval); err != nil {
+		return err
+	}
+	s.runtime.removeLiveClaudeStreamTurn(key)
+	return s.engine.FailNativeApproval(ctx, approval.ApprovalID, fmt.Sprintf("native Claude approval rejected by %s: %s", operator, rationale))
 }
 
 // CancelCodexAppServerTurn interrupts exactly one live local native turn and
 // then persists the canonical Process 05 cancellation. It is intentionally
 // separate from generic task cancellation because a live app-server thread
 // needs its typed turn/interrupt acknowledgement first.
+// CancelClaudeStreamTurn interrupts exactly one live local Claude turn and then
+// persists the canonical Process 05 cancellation. Like its Codex counterpart it
+// is separate from generic task cancellation because a live turn owns a local
+// child process that must be stopped before the run is recorded cancelled.
+func (s *ExecutionService) CancelClaudeStreamTurn(ctx context.Context, runID, taskID, reason string) error {
+	if err := s.available(); err != nil {
+		return err
+	}
+	if s.runtime == nil {
+		return fmt.Errorf("%w: runtime is unavailable for native Claude cancellation", model.ErrUnavailable)
+	}
+	key := runID + "\x00" + taskID
+	s.runtime.claudeStreamMu.Lock()
+	live := s.runtime.claudeStreamTurns[key]
+	s.runtime.claudeStreamMu.Unlock()
+	if live == nil || live.client == nil {
+		return fmt.Errorf("%w: live Claude stream turn is unavailable; refusing unbound cancellation", model.ErrUnavailable)
+	}
+	if err := live.client.InterruptTurn(ctx, claude.StreamTurn{SessionID: live.binding.ThreadID, TurnID: live.binding.TurnID}); err != nil {
+		return err
+	}
+	s.runtime.removeLiveClaudeStreamTurn(key)
+	return s.engine.CancelNativeTurn(ctx, runID, taskID, reason)
+}
+
 func (s *ExecutionService) CancelCodexAppServerTurn(ctx context.Context, runID, taskID, reason string) error {
 	if err := s.available(); err != nil {
 		return err

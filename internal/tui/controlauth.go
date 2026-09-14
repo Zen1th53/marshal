@@ -13,12 +13,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
@@ -1867,4 +1869,230 @@ func (a *runtimeControlAuthority) RunCodexReview(ctx context.Context) (app.Verif
 		return app.VerifyResult{}, errNoRuntime
 	}
 	return a.runtime.ReviewCurrentCommitWithCodex(ctx)
+}
+
+// --- Governed Claude control plane authority methods ---
+
+func (a *runtimeControlAuthority) getClaudeClient(ctx context.Context) (*claude.Client, error) {
+	if a == nil || a.runtime == nil {
+		return nil, errNoRuntime
+	}
+	if candidate := a.runtime.Adapter("claude"); candidate != nil {
+		if client, ok := candidate.(*claude.Client); ok {
+			return client, nil
+		}
+	}
+	binary, err := project.FindBinary("claude")
+	if err != nil {
+		return nil, fmt.Errorf("%w: claude binary not found", model.ErrUnavailable)
+	}
+	// Model discovery starts a short real session, so the runner budget is
+	// wider than the Codex catalog probe, which is a plain subcommand.
+	runner := worker.New(120*time.Second, 5*time.Second, 8<<20)
+	return claude.New(binary, runner), nil
+}
+
+func (a *runtimeControlAuthority) ClaudeHealth(ctx context.Context) (ClaudeHealthReport, error) {
+	if a == nil || a.runtime == nil {
+		return ClaudeHealthReport{Verdict: "no runtime attached"}, errNoRuntime
+	}
+	checks := make(map[string]string)
+	streamStatus, streamReason := claudeStreamBoundaryStatus()
+	checks["stream_boundary"] = streamStatus
+
+	binary, err := project.FindBinary("claude")
+	if err != nil {
+		checks["binary"] = "not found"
+		return ClaudeHealthReport{
+			Available:    false,
+			StreamStatus: streamStatus,
+			StreamReason: streamReason,
+			Checks:       checks,
+			Verdict:      "Claude CLI executable not found in PATH",
+			CheckedAt:    time.Now().UTC(),
+		}, nil
+	}
+	checks["binary"] = binary
+	runner := worker.New(30*time.Second, 3*time.Second, 8<<20)
+	client := claude.New(binary, runner)
+	probe, err := client.Probe(ctx)
+	if err != nil {
+		checks["probe"] = "failed: " + err.Error()
+		return ClaudeHealthReport{
+			Available:    false,
+			BinaryPath:   binary,
+			StreamStatus: streamStatus,
+			StreamReason: streamReason,
+			Checks:       checks,
+			Verdict:      fmt.Sprintf("probe failed: %v", err),
+			CheckedAt:    time.Now().UTC(),
+		}, nil
+	}
+	checks["probe"] = "passed"
+	return ClaudeHealthReport{
+		Available:    probe.Available,
+		BinaryPath:   binary,
+		Version:      probe.Version,
+		StreamStatus: streamStatus,
+		StreamReason: streamReason,
+		Checks:       checks,
+		Verdict:      "Claude CLI ready and governed",
+		CheckedAt:    time.Now().UTC(),
+	}, nil
+}
+
+// claudeStreamBoundaryStatus reports whether the governed configuration root
+// is free of host settings. It is a configuration observation only, never a
+// claim that a provider turn has executed.
+func claudeStreamBoundaryStatus() (string, string) {
+	governed, err := claude.EnsureGovernedClaudeHome()
+	if err != nil {
+		return "UNKNOWN", "cannot verify governed CLAUDE_CONFIG_DIR"
+	}
+	if _, statErr := os.Stat(filepath.Join(governed, "settings.json")); statErr == nil {
+		return "BLOCKED", "governed CLAUDE_CONFIG_DIR still carries host settings"
+	}
+	return "CONFIG_FREE", "governed CLAUDE_CONFIG_DIR is settings-free"
+}
+
+// ClaudeDoctor is the explicit, bounded native doctor action. It returns only
+// a typed verdict, never the raw report, which carries host paths.
+func (a *runtimeControlAuthority) ClaudeDoctor(ctx context.Context) (claude.DoctorReport, error) {
+	client, err := a.getClaudeClient(ctx)
+	if err != nil {
+		return claude.DoctorReport{}, err
+	}
+	return claude.Doctor(ctx, client.Binary(), client.Runner())
+}
+
+func (a *runtimeControlAuthority) ClaudeModels(ctx context.Context) ([]claude.ModelInfo, string, error) {
+	client, err := a.getClaudeClient(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	return client.Models(ctx)
+}
+
+func (a *runtimeControlAuthority) ClaudeSelectModel(ctx context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error) {
+	if a == nil || a.runtime == nil {
+		return model.ExecutionModelPreference{}, errNoRuntime
+	}
+	return a.runtime.SetClaudeModelPreference(ctx, modelName, expectedRevision)
+}
+
+func (a *runtimeControlAuthority) ClaudeModelPreference(ctx context.Context) (model.ExecutionModelPreference, error) {
+	if a == nil || a.runtime == nil {
+		return model.ExecutionModelPreference{}, errNoRuntime
+	}
+	return a.runtime.ClaudeModelPreference(ctx)
+}
+
+func (a *runtimeControlAuthority) SelectedClaudeModel(ctx context.Context) (string, error) {
+	if a == nil || a.runtime == nil {
+		return "", errNoRuntime
+	}
+	if preference, err := a.runtime.ClaudeModelPreference(ctx); err == nil {
+		if preference.Model != "" {
+			return preference.Model, nil
+		}
+	}
+	_, def, err := a.ClaudeModels(ctx)
+	if err != nil {
+		return "", err
+	}
+	return def, nil
+}
+
+// DefaultClaudeDispatchAgent returns the sole eligible, locally registered
+// Claude worker when there is exactly one. It never guesses between several.
+func (a *runtimeControlAuthority) DefaultClaudeDispatchAgent(ctx context.Context) (string, error) {
+	if a == nil || a.runtime == nil {
+		return "", errNoRuntime
+	}
+	agents, err := a.runtime.Agents(ctx)
+	if err != nil {
+		return "", err
+	}
+	var eligible []string
+	for _, agent := range agents {
+		if agent.Status != model.AgentDisabled && agent.ModelProvider == "claude" {
+			eligible = append(eligible, agent.ID)
+		}
+	}
+	if len(eligible) == 1 {
+		return eligible[0], nil
+	}
+	if len(eligible) == 0 {
+		return "", fmt.Errorf("%w: no enabled local Claude agent is registered", model.ErrUnavailable)
+	}
+	return "", fmt.Errorf("%w: agent_id is required because %d eligible local Claude agents are registered", model.ErrInvalid, len(eligible))
+}
+
+func (a *runtimeControlAuthority) DispatchClaudeTask(ctx context.Context, req ClaudeTaskDispatchRequest) (app.RunResult, error) {
+	if a == nil || a.runtime == nil {
+		return app.RunResult{}, errNoRuntime
+	}
+	if strings.TrimSpace(req.TaskID) == "" {
+		return app.RunResult{}, fmt.Errorf("%w: task_id is required", model.ErrInvalid)
+	}
+	if _, err := a.runtime.Task(ctx, req.TaskID); err != nil {
+		return app.RunResult{}, err
+	}
+	agentID := strings.TrimSpace(req.AgentID)
+	if agentID == "" {
+		resolved, resolveErr := a.DefaultClaudeDispatchAgent(ctx)
+		if resolveErr != nil {
+			return app.RunResult{}, resolveErr
+		}
+		agentID = resolved
+	}
+	modelName := strings.TrimSpace(req.Model)
+	if modelName == "" {
+		// A selection failure must not silently downgrade to whatever the
+		// binary happens to resolve; leave it empty and let the adapter apply
+		// the governed default.
+		if selected, err := a.SelectedClaudeModel(ctx); err == nil {
+			modelName = selected
+		}
+	}
+	return a.runtime.Run(ctx, app.RunRequest{
+		TaskID:           req.TaskID,
+		AgentID:          agentID,
+		Adapter:          "claude",
+		Model:            modelName,
+		ExpectedRevision: req.ExpectedRevision,
+	})
+}
+
+func (a *runtimeControlAuthority) ClaudeSessions(ctx context.Context) ([]ClaudeSessionSummary, error) {
+	if a == nil || a.runtime == nil {
+		return nil, errNoRuntime
+	}
+	st := a.runtime.Store()
+	if st == nil {
+		return nil, errors.New("no store attached")
+	}
+	runs, err := st.WorkerRunsByAdapter(ctx, "claude", 20)
+	if err != nil {
+		return nil, err
+	}
+	summaries := make([]ClaudeSessionSummary, 0, len(runs))
+	for _, r := range runs {
+		var fin time.Time
+		if r.EndedAt != nil {
+			fin = *r.EndedAt
+		}
+		// WorkerRun carries no model column; the selected model is recorded on
+		// the run's evidence node. Report UNKNOWN rather than inventing one.
+		summaries = append(summaries, ClaudeSessionSummary{
+			SessionID: r.SessionID,
+			TaskID:    r.TaskID,
+			RunID:     r.ID,
+			Model:     "UNKNOWN",
+			Status:    string(r.Status),
+			StartedAt: r.StartedAt,
+			EndedAt:   fin,
+		})
+	}
+	return summaries, nil
 }

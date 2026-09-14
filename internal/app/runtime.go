@@ -75,6 +75,9 @@ type Runtime struct {
 	codexAppServerMu    sync.Mutex
 	codexAppServerTurns map[string]*liveCodexAppServerTurn
 	codexAppServerNew   func(string, string) codexAppServerClient
+	claudeStreamMu      sync.Mutex
+	claudeStreamTurns   map[string]*liveClaudeStreamTurn
+	claudeStreamNew     func(string, string) claudeStreamClient
 	tokenManager        *auth.Manager
 
 	// ultra is the canonical ULTRA authorization gate. It is nil when no Cloud
@@ -313,6 +316,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		runtimeInstanceID:   instanceID,
 		tokenManager:        auth.NewManager(layout.RuntimeDir),
 		codexAppServerTurns: make(map[string]*liveCodexAppServerTurn),
+		claudeStreamTurns:   make(map[string]*liveClaudeStreamTurn),
 		allowProcessOnly:    options.AllowProcessOnlyFallback,
 	}
 	if rt.capabilityBroker == nil {
@@ -452,6 +456,56 @@ func (r *Runtime) SetCodexModelPreference(ctx context.Context, modelName string,
 	return r.store.SetExecutionModelPreference(ctx, model.ExecutionModelPreference{
 		ProjectID: localProjectID,
 		Adapter:   "codex",
+		Model:     modelName,
+	}, expectedRevision)
+}
+
+// ClaudeModelPreference returns the durable operator selection for future
+// governed Claude dispatches. It is deliberately separate from a harness
+// catalog's default model and from execution evidence for completed runs.
+func (r *Runtime) ClaudeModelPreference(ctx context.Context) (model.ExecutionModelPreference, error) {
+	if r == nil || r.store == nil {
+		return model.ExecutionModelPreference{}, fmt.Errorf("runtime store is unavailable")
+	}
+	return r.store.GetExecutionModelPreference(ctx, localProjectID, "claude")
+}
+
+// SetClaudeModelPreference validates the requested model against the current
+// Claude adapter before durably applying a CAS-bound preference. This is only
+// a selection for future Process 05 runs; it cannot alter a current lease,
+// task, plan, or historical evidence.
+func (r *Runtime) SetClaudeModelPreference(ctx context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error) {
+	if r == nil || r.store == nil {
+		return model.ExecutionModelPreference{}, fmt.Errorf("runtime store is unavailable")
+	}
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return model.ExecutionModelPreference{}, fmt.Errorf("%w: claude model is required", model.ErrInvalid)
+	}
+	if err := claude.ValidateDangerousFlags([]string{modelName}); err != nil {
+		return model.ExecutionModelPreference{}, err
+	}
+	candidate := r.adapters["claude"]
+	validator, ok := candidate.(interface {
+		ValidateModel(context.Context, string) error
+	})
+	if !ok {
+		// Model discovery is read-only. A normal runtime constructs the
+		// sandboxed adapter only after a concrete task is admitted, so use a
+		// short-lived local probe rather than refusing every selection until a
+		// task has already been claimed.
+		binary, err := project.FindBinary("claude")
+		if err != nil {
+			return model.ExecutionModelPreference{}, fmt.Errorf("%w: claude CLI is missing", model.ErrUnavailable)
+		}
+		validator = claude.New(binary, worker.New(120*time.Second, 5*time.Second, 1<<20))
+	}
+	if err := validator.ValidateModel(ctx, modelName); err != nil {
+		return model.ExecutionModelPreference{}, err
+	}
+	return r.store.SetExecutionModelPreference(ctx, model.ExecutionModelPreference{
+		ProjectID: localProjectID,
+		Adapter:   "claude",
 		Model:     modelName,
 	}, expectedRevision)
 }
@@ -625,6 +679,19 @@ func (r *Runtime) Close() error {
 			delete(r.codexAppServerTurns, key)
 		}
 		r.codexAppServerMu.Unlock()
+		// A live Claude turn owns a local child process; leaving it running
+		// after the runtime closes would orphan a governed provider session.
+		r.claudeStreamMu.Lock()
+		for key, turn := range r.claudeStreamTurns {
+			if turn != nil && turn.client != nil {
+				if turn.cancel != nil {
+					turn.cancel()
+				}
+				_ = turn.client.Close()
+			}
+			delete(r.claudeStreamTurns, key)
+		}
+		r.claudeStreamMu.Unlock()
 		if r.store != nil {
 			return r.store.Close()
 		}
@@ -1016,18 +1083,30 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	// choice. It intentionally follows constitutional/gate/network admission:
 	// the earlier gates must retain their truthful refusal reason and no claim
 	// has been acquired at this point.
-	if request.Adapter == "codex" {
+	// Codex and Claude are both native CLI providers whose runs must be bound
+	// to a principal registered for that exact provider. A role label or an
+	// agent bound to a different provider is not an authority for this one.
+	switch request.Adapter {
+	case "codex", "claude":
 		agent, agentErr := r.store.GetAgent(ctx, request.AgentID)
 		if agentErr != nil {
-			return RunResult{}, fmt.Errorf("resolve Codex execution agent: %w", agentErr)
+			return RunResult{}, fmt.Errorf("resolve %s execution agent: %w", request.Adapter, agentErr)
 		}
-		if agent.Status == model.AgentDisabled || agent.ModelProvider != "codex" {
-			return RunResult{}, fmt.Errorf("%w: Codex adapter requires an enabled agent bound to provider codex", model.ErrInvalid)
+		if agent.Status == model.AgentDisabled || agent.ModelProvider != request.Adapter {
+			return RunResult{}, fmt.Errorf("%w: %s adapter requires an enabled agent bound to provider %s", model.ErrInvalid, request.Adapter, request.Adapter)
 		}
 	}
-	if request.Adapter == "codex" && request.Model != "" {
-		if err := codex.ValidateDangerousFlags([]string{request.Model}); err != nil {
-			return RunResult{}, err
+	if request.Model != "" && (request.Adapter == "codex" || request.Adapter == "claude") {
+		// Each provider spells its own bypass flags, so the refusal list is
+		// provider-specific rather than shared.
+		var flagErr error
+		if request.Adapter == "codex" {
+			flagErr = codex.ValidateDangerousFlags([]string{request.Model})
+		} else {
+			flagErr = claude.ValidateDangerousFlags([]string{request.Model})
+		}
+		if flagErr != nil {
+			return RunResult{}, flagErr
 		}
 		if candidate, ok := r.adapters[request.Adapter].(interface {
 			ValidateModel(context.Context, string) error
@@ -1038,9 +1117,18 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 		} else {
 			binary, err := project.FindBinary(request.Adapter)
 			if err != nil {
-				return RunResult{}, fmt.Errorf("%w: codex CLI is missing", model.ErrUnavailable)
+				return RunResult{}, fmt.Errorf("%w: %s CLI is missing", model.ErrUnavailable, request.Adapter)
 			}
-			validator := codex.New(binary, worker.New(10*time.Second, 2*time.Second, 1<<20))
+			var validator interface {
+				ValidateModel(context.Context, string) error
+			}
+			if request.Adapter == "codex" {
+				validator = codex.New(binary, worker.New(10*time.Second, 2*time.Second, 1<<20))
+			} else {
+				// Claude model discovery starts a short real session, so it
+				// needs a wider budget than the Codex catalog subcommand.
+				validator = claude.New(binary, worker.New(120*time.Second, 5*time.Second, 1<<20))
+			}
 			if err := validator.ValidateModel(ctx, request.Model); err != nil {
 				return RunResult{}, err
 			}

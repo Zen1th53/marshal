@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
@@ -99,6 +100,10 @@ type fakeAuthority struct {
 	selectedCodexModel string
 	codexModelRevision int64
 	codexDispatches    int32
+
+	selectedClaudeModel string
+	claudeModelRevision int64
+	claudeDispatches    int32
 
 	// onExecute lets a test change the world mid-mutation, which is how a
 	// TOCTOU race is reproduced deterministically.
@@ -827,6 +832,87 @@ func (f *fakeAuthority) CodexPlugins(_ context.Context) ([]codex.PluginInfo, []c
 		{PluginID: "plugin-1", Name: "Test Plugin", Installed: true, Enabled: true},
 	}, []codex.SkillInfo{
 		{Name: "test-skill", Description: "Test Skill", Root: "/test"},
+	}, nil
+}
+
+func (f *fakeAuthority) ClaudeHealth(_ context.Context) (ClaudeHealthReport, error) {
+	return ClaudeHealthReport{
+		BinaryPath:   "/home/Zen1th53/.local/bin/claude",
+		Version:      "claude-cli 2.0.0",
+		Available:    true,
+		StreamStatus: "CONFIG_FREE",
+		DefaultModel: "claude-sonnet-4-6",
+		Verdict:      "ready",
+		CheckedAt:    time.Now().UTC(),
+	}, nil
+}
+
+func (f *fakeAuthority) ClaudeDoctor(context.Context) (claude.DoctorReport, error) {
+	return claude.DoctorReport{OverallStatus: "ok", CheckCount: 2}, nil
+}
+
+func (f *fakeAuthority) ClaudeModels(_ context.Context) ([]claude.ModelInfo, string, error) {
+	return []claude.ModelInfo{
+		{Slug: "claude-sonnet-4-6", DisplayName: "Claude Sonnet 4.6", IsDefault: true},
+		{Slug: "claude-opus-4-3", DisplayName: "Claude Opus 4.3"},
+	}, "claude-sonnet-4-6", nil
+}
+
+func (f *fakeAuthority) ClaudeSelectModel(_ context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if expectedRevision != f.claudeModelRevision {
+		return model.ExecutionModelPreference{}, fmt.Errorf("%w: claude model revision conflict", model.ErrConflict)
+	}
+	f.selectedClaudeModel = modelName
+	f.claudeModelRevision++
+	return model.ExecutionModelPreference{ProjectID: "project", Adapter: "claude", Model: modelName, Revision: f.claudeModelRevision, UpdatedAt: time.Now().UTC()}, nil
+}
+
+func (f *fakeAuthority) ClaudeModelPreference(_ context.Context) (model.ExecutionModelPreference, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.claudeModelRevision == 0 {
+		return model.ExecutionModelPreference{}, fmt.Errorf("%w: no claude model selection", model.ErrNotFound)
+	}
+	return model.ExecutionModelPreference{ProjectID: "project", Adapter: "claude", Model: f.selectedClaudeModel, Revision: f.claudeModelRevision}, nil
+}
+
+func (f *fakeAuthority) SelectedClaudeModel(_ context.Context) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.selectedClaudeModel != "" {
+		return f.selectedClaudeModel, nil
+	}
+	return "claude-sonnet-4-6", nil
+}
+
+func (f *fakeAuthority) DispatchClaudeTask(_ context.Context, req ClaudeTaskDispatchRequest) (app.RunResult, error) {
+	atomic.AddInt32(&f.claudeDispatches, 1)
+	if err := claude.ValidateDangerousFlags([]string{req.TaskID, req.AgentID, req.Model}); err != nil {
+		return app.RunResult{}, err
+	}
+	return app.RunResult{
+		RunID:          "RUN-CLAUDE-1",
+		TaskID:         req.TaskID,
+		SessionID:      "session-claude-1",
+		Model:          "claude-sonnet-4-6",
+		RequestedModel: req.Model,
+		Status:         "COMPLETED",
+	}, nil
+}
+
+func (f *fakeAuthority) ClaudeSessions(_ context.Context) ([]ClaudeSessionSummary, error) {
+	return []ClaudeSessionSummary{
+		{
+			SessionID: "session-claude-1",
+			TaskID:    "TASK-CLAUDE-1",
+			RunID:     "RUN-CLAUDE-1",
+			Model:     "claude-sonnet-4-6",
+			Status:    "COMPLETED",
+			StartedAt: time.Now().UTC().Add(-10 * time.Minute),
+			EndedAt:   time.Now().UTC().Add(-9 * time.Minute),
+		},
 	}, nil
 }
 
