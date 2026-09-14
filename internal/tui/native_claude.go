@@ -120,3 +120,61 @@ func claudeEntryWithinRoot(cwd, root string) bool {
 	// ".." anywhere in the relative path means the entry escaped the root.
 	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
+
+// claudeSessionExists reports whether id names a session Claude can actually
+// resume for this project. Claude stores one JSONL per session under
+// <config>/projects/<slug>/, so presence of that file is the check.
+//
+// It exists because a session ID carries no provider marker: a Codex thread ID
+// looks exactly like a Claude one. Forwarding a foreign ID blind makes MARSHAL
+// hand it to the wrong CLI, which answers with its own "No conversation found"
+// rather than telling the operator they addressed the wrong agent.
+func claudeSessionExists(configHome, root, id string) bool {
+	if id == "" {
+		return false
+	}
+	projects := filepath.Join(configHome, "projects")
+	entries, err := os.ReadDir(projects)
+	if err != nil {
+		// Without a readable history we cannot disprove the ID; let the CLI
+		// decide rather than refusing a session that may well exist.
+		return true
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, statErr := os.Stat(filepath.Join(projects, entry.Name(), id+".jsonl")); statErr == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// codexSessionExists reports whether id names a Codex rollout, so a refusal can
+// tell the operator which agent the ID actually belongs to instead of leaving
+// them to guess.
+func codexSessionExists(id string) bool {
+	if id == "" {
+		return false
+	}
+	home := os.Getenv("CODEX_HOME")
+	if home == "" {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			return false
+		}
+		home = filepath.Join(userHome, ".codex")
+	}
+	found := false
+	_ = filepath.WalkDir(filepath.Join(home, "sessions"), func(path string, d os.DirEntry, err error) error {
+		if err != nil || found || d.IsDir() {
+			return nil
+		}
+		if strings.Contains(d.Name(), id) {
+			found = true
+		}
+		return nil
+	})
+	return found
+}

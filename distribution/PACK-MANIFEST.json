@@ -8341,13 +8341,13 @@
     },
     {
       "path": "internal/tui/commands_claude.go",
-      "sha256": "2caad0fbe8108a4a69efc20266bf007a6a66574f3114f2e948ae8af2b992179e",
-      "bytes": 10759
+      "sha256": "6542493ef6f7a4158138a93618e3e65d8530197471022e8e9c0ea6fa12d7134d",
+      "bytes": 11720
     },
     {
       "path": "internal/tui/commands_claude_test.go",
-      "sha256": "007d9588445edda39dca7062440fb786113544edb65cceb10027d60fb2f4b052",
-      "bytes": 4089
+      "sha256": "47a4657500d928297b21da5ccd1763b38cb8419dc1dcf35b195415576efe7885",
+      "bytes": 5865
     },
     {
       "path": "internal/tui/commands_codex.go",
@@ -8551,8 +8551,8 @@
     },
     {
       "path": "internal/tui/native_claude.go",
-      "sha256": "73b4e70950efc8a8ca41b8049067eb721da5a0ff764498babce45571fdd28c5f",
-      "bytes": 3549
+      "sha256": "1bb3ba00b1762849fc03b68d736ce1c0794d76e87b157037b4d109cd1c34e36a",
+      "bytes": 5332
     },
     {
       "path": "internal/tui/native_claude_pty_test.go",

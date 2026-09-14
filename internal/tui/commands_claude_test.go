@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -120,5 +122,48 @@ func TestQuickCommandsStayProviderNeutral(t *testing.T) {
 	}
 	if !strings.Contains(line, "/claude") {
 		t.Fatalf("quick commands omit Claude entirely: %q", line)
+	}
+}
+
+// A session ID carries no provider marker, so a Codex thread ID is
+// indistinguishable from a Claude one by shape alone. /claude resume must not
+// forward a Codex ID to the Claude CLI: the operator would get the CLI's own
+// "No conversation found" and no hint that they addressed the wrong agent.
+func TestClaudeResumeRefusesACodexSessionID(t *testing.T) {
+	config, codexHome := t.TempDir(), t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", config)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	// A real Claude session, so the lookup has something to succeed against.
+	projects := filepath.Join(config, "projects", "fixture")
+	if err := os.MkdirAll(projects, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const claudeID = "11111111-2222-3333-4444-555555555555"
+	if err := os.WriteFile(filepath.Join(projects, claudeID+".jsonl"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// A Codex rollout carrying a different ID, named the way Codex names them.
+	const codexID = "01a09de5-bb96-7ca2-a02c-4fe0913be447"
+	rollouts := filepath.Join(codexHome, "sessions", "2026", "09", "14")
+	if err := os.MkdirAll(rollouts, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rollouts, "rollout-2026-09-14T08-11-13-"+codexID+".jsonl"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if claudeSessionExists(config, "", codexID) {
+		t.Fatal("a Codex session ID must not resolve as a Claude session")
+	}
+	if !claudeSessionExists(config, "", claudeID) {
+		t.Fatal("a real Claude session must resolve")
+	}
+	if !codexSessionExists(codexID) {
+		t.Fatal("a real Codex rollout must resolve, so the refusal can name the right agent")
+	}
+	if codexSessionExists(claudeID) {
+		t.Fatal("a Claude session ID must not resolve as a Codex rollout")
 	}
 }
