@@ -179,15 +179,18 @@ func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
 		t.Fatalf("unexpected unknown subcommand response: %s", unknownOut)
 	}
 
-	// 14. Direct natural language input at composer prompt without leading slash
+	// 14. Direct natural language input at the composer, with no agent opened.
+	// It must not start Codex: choosing which provider spends a session is the
+	// operator's call, and defaulting to one is not a neutral runtime.
 	directOut, err := ws.ExecuteCommand(ctx, "implement user authentication handler")
 	if err != nil {
 		t.Fatalf("direct prompt execution: %v", err)
 	}
-	for _, want := range []string{"CODEX TASK LAUNCHED:", "implement user authentication handler"} {
-		if !strings.Contains(directOut, want) {
-			t.Fatalf("expected %q in direct prompt output, got:\n%s", want, directOut)
-		}
+	if !strings.Contains(directOut, "No agent session is open") {
+		t.Fatalf("bare prompt must refuse until an agent is opened, got:\n%s", directOut)
+	}
+	if strings.Contains(directOut, "CODEX TASK LAUNCHED:") {
+		t.Fatalf("bare prompt started Codex unasked:\n%s", directOut)
 	}
 
 	// 15. Multi-word prompt under /codex without explicit exec subcommand
@@ -400,7 +403,9 @@ func TestDeveloperAgentCockpit_Rendering(t *testing.T) {
 		"Activity",
 		"Native agent workspace",
 		"[F1]", "[F2]", "[F3]", "[F4]", "[F5]", "[Esc]",
-		"/codex new", "/codex continue", "/resume", "/diff", "[F7]",
+		// The quick-command line names both providers rather than one
+		// vendor's verbs; see TestQuickCommandsStayProviderNeutral.
+		"/claude", "/codex", "new", "continue", "/resume", "/diff", "[F7]",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in initial screen rendering, got:\n%s", want, rendered)

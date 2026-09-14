@@ -8336,8 +8336,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "625fc4c190b456c0db0499ae85f6339d7eb7cbab3ddab6350695baee11b1e881",
-      "bytes": 22240
+      "sha256": "2b0fbbb30e03404640ed8edd97a031bab9d01c626812be3ed56e036e441af007",
+      "bytes": 22709
     },
     {
       "path": "internal/tui/commands_claude.go",
@@ -8346,8 +8346,8 @@
     },
     {
       "path": "internal/tui/commands_claude_test.go",
-      "sha256": "e28b30d8e31b07259cf2d7178d08373624b82d856bd4db8581d7c26ae70f7e68",
-      "bytes": 2269
+      "sha256": "007d9588445edda39dca7062440fb786113544edb65cceb10027d60fb2f4b052",
+      "bytes": 4089
     },
     {
       "path": "internal/tui/commands_codex.go",
@@ -8356,8 +8356,8 @@
     },
     {
       "path": "internal/tui/commands_codex_test.go",
-      "sha256": "ece96bd537f07a3517422502b43ec565358958c6120086bb92ddf02bfdc00b96",
-      "bytes": 13022
+      "sha256": "65fdb9402d6e9659648c946af4d480dcb10ae456514149a894eb45574195de56",
+      "bytes": 13351
     },
     {
       "path": "internal/tui/commands_control.go",
@@ -8481,8 +8481,8 @@
     },
     {
       "path": "internal/tui/frame.go",
-      "sha256": "6ad2969708a6647ed6c7c275af98d797c2142bd012084c74d53c3d377e700345",
-      "bytes": 9945
+      "sha256": "54c6bd95aa38f185d3fdccb387be238d3af2103fd0c9f8afa1cc84ca3270f597",
+      "bytes": 10149
     },
     {
       "path": "internal/tui/grapheme.go",

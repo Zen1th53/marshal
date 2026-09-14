@@ -335,19 +335,27 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	default:
 		if !strings.HasPrefix(line, "/") {
+			// A bare prompt must not start a provider on its own. Spending a
+			// session — and choosing which vendor spends it — is the operator's
+			// call, and silently defaulting to one provider is not a neutral
+			// runtime. Continue an agent the operator already opened; otherwise
+			// say which commands open one.
+			provider := h.ws.nativeProvider
+			if provider == "" {
+				return "No agent session is open. Use /claude or /codex to start one, " +
+					"or /claude exec <prompt> to dispatch a governed task.", nil
+			}
 			if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
-				provider := h.ws.nativeProvider
-				if provider == "" {
-					provider = "codex"
-				}
 				return h.ws.runNativeAgent(ctx, provider, []string{"--", line})
 			}
-			// Natural language prompt entered directly at composer prompt `>`
 			source := h.ws.controlSource()
-			if source != nil && source.Authority != nil {
-				return h.handleCodexExec(ctx, source.Authority, line)
+			if source == nil || source.Authority == nil {
+				return "Control authority unavailable: no runtime attached to workspace.", nil
 			}
-			return "Codex control authority unavailable: no runtime attached to workspace.", nil
+			if provider == "claude" {
+				return h.handleClaudeExec(ctx, source.Authority, line)
+			}
+			return h.handleCodexExec(ctx, source.Authority, line)
 		}
 		return fmt.Sprintf("Unknown command %q. Type /help for available commands.", cmd), nil
 	}
@@ -662,7 +670,7 @@ func (h *CommandHandler) helpText() string {
   /search [on|off]         Toggle live web search tool
   /codex [subcommand]      Full Codex control plane (status, models, review, exec, run, cli)
   /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
-  <prompt...>              Type any prompt directly without / to command Codex!
+  <prompt...>              Sent to the agent you opened last; open one with /claude or /codex
   /help                    Show this help reference
   /quit, /exit             Exit TUI workspace (session remains durable in SQLite)
 
