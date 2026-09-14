@@ -8551,18 +8551,18 @@
     },
     {
       "path": "internal/tui/native_claude.go",
-      "sha256": "ee25740f9cc8bc3febb5293cb9635239c0352dfdbd317fda75510c5bcf312174",
-      "bytes": 1889
+      "sha256": "6cd377ae33d35498423eb150fc3261ace7b8629d6f4f4f6b24a96c50bab5275e",
+      "bytes": 3259
     },
     {
       "path": "internal/tui/native_claude_pty_test.go",
-      "sha256": "98b92e2c4d0a60ca4dda2ea9dc25a9281c8e6db00c61ba43450472eccb72bfbd",
-      "bytes": 2343
+      "sha256": "161abb0dafdebaeec3d3d0effc6c451c6991935ea44032c37f9cc2a8941231e0",
+      "bytes": 2718
     },
     {
       "path": "internal/tui/native_claude_test.go",
-      "sha256": "601ac629244345fb56e2564499e0cc02b0bc1c444bd073502074c6427e8087cf",
-      "bytes": 2849
+      "sha256": "eddb92eedb0d8187a7b8c96c6f9a3e0d1131a7b712bb26f06fa6e89350655793",
+      "bytes": 5698
     },
     {
       "path": "internal/tui/native_codex.go",
@@ -8601,8 +8601,8 @@
     },
     {
       "path": "internal/tui/navview.go",
-      "sha256": "c5d1558beeabaac5c1a4de459d258b2d95f21730c24695daf06a2d3f2190f4a1",
-      "bytes": 39808
+      "sha256": "7af3351fe1079c26ac853d2053dce35060a742d3fa214b84caed7796be3f951a",
+      "bytes": 40867
     },
     {
       "path": "internal/tui/navview_test.go",
@@ -8806,8 +8806,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "6e1d894de4dab72de48185a78f08bdfff1aad30739c12746684ae1885dd7c831",
-      "bytes": 38447
+      "sha256": "faaba917baa8f07a0c1e95e1ae16a7a922a65a99d572c99268264e72a566ece2",
+      "bytes": 38840
     },
     {
       "path": "internal/tui/workspace_nav_test.go",
