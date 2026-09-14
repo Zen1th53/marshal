@@ -36,12 +36,18 @@ func (w *nativeHistoryWatch) syncClaudeFile(path string) error {
 		return err
 	}
 	defer f.Close()
-	r := bufio.NewReaderSize(f, 1<<20)
+	r := bufio.NewReaderSize(f, nativeHistoryLineLimit)
 	var tr importer.SessionTranscript
 	for {
-		line, err := r.ReadSlice('\n')
+		line, err := readHistoryLine(r)
 		if errors.Is(err, io.EOF) {
 			break
+		}
+		// An entry past the importer's line cap can never be imported. Skip it
+		// and keep the rest of the session rather than failing the whole file,
+		// which would leave it unseen and re-failing on every poll.
+		if errors.Is(err, errHistoryLineTooLong) {
+			continue
 		}
 		if err != nil {
 			return err

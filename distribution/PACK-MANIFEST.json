@@ -3776,13 +3776,13 @@
     },
     {
       "path": "internal/app/memory_import.go",
-      "sha256": "dc30230225fc13a3955f885632db0e16e7e14f43d8d98651a0c22774f7b6f4ae",
-      "bytes": 2127
+      "sha256": "37fd2044e70647aba68541e6543c20dba0e8a955430d92ef7397ef8d8d9b497c",
+      "bytes": 2563
     },
     {
       "path": "internal/app/memory_import_test.go",
-      "sha256": "6822dd1cc4204ba852c0f7bdbd767e34c7b21465df3b0522a931fe9f61b98e77",
-      "bytes": 1967
+      "sha256": "fbe0b14003f5b30c1a6c621610f783f53b8e2aa79c372f18669fa1ae3c25726a",
+      "bytes": 3938
     },
     {
       "path": "internal/app/memory_recall_quality_test.go",
@@ -3791,8 +3791,8 @@
     },
     {
       "path": "internal/app/memory_runtime.go",
-      "sha256": "d9a8a0407d80ae1be14d4f11c2d1d80dc7e460fbde4208b0866992241fb3b47c",
-      "bytes": 86571
+      "sha256": "d1da67588a3717e60715afa76fa4014fb6fff560f9f0d1c7864aa89d731fe574",
+      "bytes": 87195
     },
     {
       "path": "internal/app/memory_runtime_test.go",
@@ -8551,8 +8551,8 @@
     },
     {
       "path": "internal/tui/native_claude.go",
-      "sha256": "6cd377ae33d35498423eb150fc3261ace7b8629d6f4f4f6b24a96c50bab5275e",
-      "bytes": 3259
+      "sha256": "73b4e70950efc8a8ca41b8049067eb721da5a0ff764498babce45571fdd28c5f",
+      "bytes": 3549
     },
     {
       "path": "internal/tui/native_claude_pty_test.go",
@@ -8566,8 +8566,8 @@
     },
     {
       "path": "internal/tui/native_codex.go",
-      "sha256": "ccac6590a7ba741ee2c7ac57de6aef5ad98dc7c2419e6297dbd0fa59d15e4eae",
-      "bytes": 9577
+      "sha256": "5e258916ab436722346f19d62d243cebdf29bf591688ebeb1014cb51641cceaf",
+      "bytes": 11548
     },
     {
       "path": "internal/tui/native_codex_pty_test.go",
@@ -8576,8 +8576,8 @@
     },
     {
       "path": "internal/tui/native_codex_test.go",
-      "sha256": "2b94d83edcc4d5704f55e51389967b65b5e48f6be87eff495ba1e13a8f806edc",
-      "bytes": 4434
+      "sha256": "d4624ffcab24d8988346f2bf683819e88769bd682bd6a8eaea3ebbc4b8aa9de9",
+      "bytes": 6787
     },
     {
       "path": "internal/tui/navmodel.go",
