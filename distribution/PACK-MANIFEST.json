@@ -4426,8 +4426,8 @@
     },
     {
       "path": "internal/cloud/session.go",
-      "sha256": "a958b71f2e8d604cf7118dea0aca3fc6fdd7b203cf8a464ae5d55bb177c99d4f",
-      "bytes": 15471
+      "sha256": "09c738d3ef3c466a07db1af448994eb172e7dac05a1150388c78b0f2708fe0cb",
+      "bytes": 16244
     },
     {
       "path": "internal/cloud/session_test.go",
