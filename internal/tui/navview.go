@@ -61,6 +61,38 @@ type NavView struct {
 	// different row after a resize.
 	cols int
 	rows int
+
+	// background counts the refreshes running off the input loop. A refresh
+	// reaches the canonical runtime, which creates its state directories on
+	// first use, so one still in flight when the session ends would recreate
+	// .marshal under a project that had already been torn down. Wait makes the
+	// session own those goroutines rather than abandoning them.
+	background sync.WaitGroup
+}
+
+// Wait blocks until every background refresh has finished.
+//
+// It is the counterpart to the `go v.Refresh(ctx)` calls: the session is not
+// over until the reads it started have stopped touching the project.
+func (v *NavView) Wait() {
+	if v == nil {
+		return
+	}
+	v.background.Wait()
+}
+
+// refreshInBackground runs a refresh off the input loop, tracked so Wait can
+// find it. Every background refresh goes through here; a bare `go v.Refresh`
+// would be invisible to Wait.
+func (v *NavView) refreshInBackground(ctx context.Context) {
+	if v == nil {
+		return
+	}
+	v.background.Add(1)
+	go func() {
+		defer v.background.Done()
+		v.Refresh(ctx)
+	}()
 }
 
 // OnRepaint registers the workspace's redraw hook.
@@ -128,7 +160,7 @@ func (v *NavView) Open(ctx context.Context) {
 	v.open = true
 	v.status, v.statusSeen = "reading canonical state…", false
 	v.mu.Unlock()
-	go v.Refresh(ctx)
+	v.refreshInBackground(ctx)
 }
 
 // OpenAndWait enters navigation and completes the first read before returning.
@@ -426,7 +458,7 @@ func (v *NavView) HandleKey(ctx context.Context, event KeyEvent) bool {
 		case 'r':
 			// A manual refresh, because Status is read-only and the user needs
 			// some way to ask for current data.
-			go v.Refresh(ctx)
+			v.refreshInBackground(ctx)
 			v.status, v.statusSeen = "refreshing…", false
 			return true
 		case 'q':

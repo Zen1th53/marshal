@@ -435,6 +435,14 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 // or clean fallback to buffered scanner if non-terminal.
 func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error {
 	w.out = out
+
+	// A navigation refresh runs off the input loop and reads the canonical
+	// runtime, which creates its state directories on first use. Returning
+	// while one is in flight would let it recreate .marshal after the caller
+	// had closed the runtime and removed the project, so the session waits for
+	// its own reads on every exit path, including an error or a panic.
+	defer w.navView.Wait()
+
 	_ = w.RefreshState(ctx)
 
 	// Check if running in a real interactive terminal
