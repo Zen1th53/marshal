@@ -125,7 +125,23 @@ func (a *Adapter) Submit(ctx context.Context, req Request) (Result, error) {
 	if err := a.runtime.Store().SaveGoalContract(ctx, goal, 0); err != nil {
 		return Result{Status: StatusFailed, CorrelationID: req.CorrelationID, FailureFingerprint: "process03-goal-persistence"}, err
 	}
-	planReq := app.CreatePlanRequest{SessionID: req.SessionID, ProjectID: projectid.ID(req.ProjectID), Tasks: append([]plan.Task(nil), req.Tasks...), Candidates: append([]goalintake.Candidate(nil), req.Candidates...), HarnessCandidates: append([]plan.HarnessCandidate(nil), req.HarnessCandidates...), RequiredCapabilities: []string{req.RequestedHarness}}
+	// RequestedHarness is an execution-host constraint, not a harness
+	// capability. Passing its name through RequiredCapabilities makes the
+	// planner ask whether (for example) "codex" is a native tool knob and can
+	// silently leave every task unassigned. Restrict the candidate set instead:
+	// Process 04 still performs its canonical governance/health/capacity
+	// selection, but cannot substitute a different harness for this local
+	// lifecycle request.
+	harnessCandidates := make([]plan.HarnessCandidate, 0, len(req.HarnessCandidates))
+	for _, candidate := range req.HarnessCandidates {
+		if candidate.Profile.Harness == req.RequestedHarness {
+			harnessCandidates = append(harnessCandidates, candidate)
+		}
+	}
+	if len(harnessCandidates) == 0 {
+		return Result{Status: StatusFailed, CorrelationID: req.CorrelationID, GoalID: goal.ID, FailureFingerprint: "process04-requested-harness"}, fmt.Errorf("%w: requested harness %q has no supplied qualified candidate", model.ErrInvalid, req.RequestedHarness)
+	}
+	planReq := app.CreatePlanRequest{SessionID: req.SessionID, ProjectID: projectid.ID(req.ProjectID), Tasks: append([]plan.Task(nil), req.Tasks...), Candidates: append([]goalintake.Candidate(nil), req.Candidates...), HarnessCandidates: harnessCandidates}
 	p, err := a.runtime.Plans().Create(ctx, planReq)
 	if err != nil {
 		return Result{Status: StatusFailed, CorrelationID: req.CorrelationID, GoalID: goal.ID, FailureFingerprint: "process04-plan"}, err

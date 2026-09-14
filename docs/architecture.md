@@ -1,7 +1,7 @@
 # MARSHAL architecture
 
 MARSHAL separates durable engineering authority from the provider process that
-performs work. This page describes current `main` at SQLite schema v85, which is
+performs work. This page describes current `main` at SQLite schema v86, which is
 ahead of the v1.5.0 tag.
 
 ```text
@@ -98,7 +98,7 @@ from a caller. Verification reads the stored run; learning reads the stored
 completion attestation; optimization reads the stored memory commit. A caller
 cannot supply a digest, a tree hash or an outcome and have it believed.
 
-Schema v85 carries the durable stores for these stages, including append-only,
+Schema v86 carries the durable stores for these stages, including append-only,
 digest-protected records for completion attestations, memory commits and
 optimization cycles. Mutable rows use compare-and-swap on their version, so a
 stale writer is refused rather than overwriting newer state.

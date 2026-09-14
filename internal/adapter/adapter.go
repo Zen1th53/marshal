@@ -75,6 +75,7 @@ type Usage struct {
 type Result struct {
 	Adapter         string
 	AdapterVersion  string
+	Model           string
 	SessionID       string
 	Status          Status
 	FinalText       string

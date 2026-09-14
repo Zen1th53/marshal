@@ -18,6 +18,7 @@ func NewRunFromHandoff(handoff plan.Handoff, now time.Time, prov RunProvenance) 
 
 	for _, t := range handoff.Tasks {
 		route := handoff.Routes[t.ID]
+		harnessName := assignedHarness(handoff.Assignments, t, route)
 		assignmentRole := string(t.Role)
 		if assignmentRole == "" {
 			assignmentRole = route.Provider
@@ -39,10 +40,12 @@ func NewRunFromHandoff(handoff plan.Handoff, now time.Time, prov RunProvenance) 
 			outputArtifacts = append(outputArtifacts, t.ExpectedOutput)
 		}
 		tasks[t.ID] = TaskExecution{
+			RunID:            runID,
 			TaskID:           t.ID,
+			CanonicalTaskID:  handoff.CanonicalTaskIDs[t.ID],
 			Description:      t.Title,
 			AssignedRole:     assignmentRole,
-			AssignedHarness:  route.Provider,
+			AssignedHarness:  harnessName,
 			AssignedModel:    route.Model,
 			State:            TaskPending,
 			Dependencies:     append([]string(nil), t.DependsOn...),
@@ -107,6 +110,26 @@ func NewRunFromHandoff(handoff plan.Handoff, now time.Time, prov RunProvenance) 
 	}
 
 	return run, nil
+}
+
+// assignedHarness finds the concrete governed harness selected during Process
+// 04. A provider is an account/service, not necessarily an executable. Empty
+// is deliberate: Process 05 will fail closed rather than run a mock worker.
+func assignedHarness(assignments plan.AssignmentPlan, task plan.Task, route plan.Route) string {
+	for _, assignment := range assignments.Assignments {
+		if string(assignment.Role) == task.Role && assignment.Harness != "" {
+			return assignment.Harness
+		}
+	}
+	if len(assignments.Assignments) == 1 && assignments.Assignments[0].Harness != "" {
+		return assignments.Assignments[0].Harness
+	}
+	for _, assignment := range assignments.Assignments {
+		if assignment.Provider == route.Provider && assignment.Harness != "" {
+			return assignment.Harness
+		}
+	}
+	return ""
 }
 
 // Start transitions a READY or PAUSED run to RUNNING.

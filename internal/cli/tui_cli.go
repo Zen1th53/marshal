@@ -24,16 +24,9 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 	options := parseWorkspaceArgs(args)
 	workspace := tui.NewWorkspace(runtime.Store(), runtime.ProjectID(), options.sessionID)
 	workspace.SetTheme(options.theme, options.animation)
-
-	// Navigation refreshes read canonical state in the background. Give this
-	// workspace its own cancellation boundary and drain those reads before the
-	// caller closes Runtime; without that ordering a final SQLite read can race
-	// project cleanup after `marshal tui` exits.
-	workspaceCtx, cancelWorkspace := context.WithCancel(ctx)
-	defer func() {
-		cancelWorkspace()
-		workspace.WaitForNavigationRefreshes()
-	}()
+	if options.nativeCodex != nil {
+		workspace.StartWithNativeCodex(options.nativeCodex)
+	}
 
 	// Control submits every mutation through this runtime. Without it the
 	// Control screens render but every action refuses, which is the truthful
@@ -83,15 +76,16 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 	// first Home frame is useful rather than a legacy composer or a transient
 	// storeless view. Esc at the root preserves the composer for power-user
 	// slash commands.
-	workspace.OpenNavigation(workspaceCtx)
+	workspace.OpenNavigation(ctx)
 
-	return workspace.Run(workspaceCtx, c.stdin, c.stdout)
+	return workspace.Run(ctx, c.stdin, c.stdout)
 }
 
 type workspaceOptions struct {
-	sessionID string
-	theme     tui.ThemeMode
-	animation bool
+	sessionID   string
+	theme       tui.ThemeMode
+	animation   bool
+	nativeCodex []string
 }
 
 func parseWorkspaceArgs(args []string) workspaceOptions {
@@ -103,6 +97,9 @@ func parseWorkspaceArgs(args []string) workspaceOptions {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
+		case arg == "--codex":
+			options.nativeCodex = append([]string{}, args[i+1:]...)
+			return options
 		case arg == "--no-animation":
 			options.animation = false
 		case arg == "--no-color":

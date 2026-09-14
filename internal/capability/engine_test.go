@@ -120,6 +120,33 @@ func TestEngineDenyReasonsAndIdempotentGrant(t *testing.T) {
 	}
 }
 
+func TestEngineFreshGrantIsNotShadowedByRevokedEquivalentGrant(t *testing.T) {
+	now := time.Date(2026, 8, 16, 14, 0, 0, 0, time.UTC)
+	repo := &memoryGrantRepository{grants: map[GrantID]Grant{}}
+	engine := NewAuthorizedEngine(repo, func() time.Time { return now }, testAuthority{})
+	request := GrantRequest{
+		Subject: "agent-1", TaskID: "task-1", Kind: KindShellExec,
+		Scope:     Scope{Resource: "/usr/bin/codex", Actions: []string{"execute"}},
+		ExpiresAt: now.Add(time.Hour), Issuer: "runtime", IdempotencyKey: "initial-launch",
+	}
+	first, err := engine.Grant(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.Revoke(context.Background(), RevokeRequest{GrantID: first.ID, Actor: "runtime"}); err != nil {
+		t.Fatal(err)
+	}
+	request.IdempotencyKey = "approved-continuation"
+	second, err := engine.Grant(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision, err := engine.Authorize(context.Background(), Query{Subject: "agent-1", TaskID: "task-1", Kind: KindShellExec, Resource: "/usr/bin/codex", Action: "execute", At: now})
+	if err != nil || decision.Outcome != OutcomeAllow || decision.MatchedGrant != second.ID {
+		t.Fatalf("fresh continuation grant was shadowed: decision=%#v err=%v", decision, err)
+	}
+}
+
 func TestEngineRejectsMismatchExpiryAndUnauthorizedRevoke(t *testing.T) {
 	now := time.Date(2026, 8, 16, 14, 0, 0, 0, time.UTC)
 	repo := &memoryGrantRepository{grants: map[GrantID]Grant{}}

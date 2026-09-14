@@ -151,6 +151,12 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 	}
 	sort.Slice(grants, func(i, j int) bool { return grants[i].ID < grants[j].ID })
 	var subjectMismatch, taskMismatch bool
+	// A revoked or expired historical grant must not shadow a newer valid
+	// grant with the same exact scope. This occurs when a native provider turn
+	// pauses for approval: its launch grant is revoked, then Process 05 issues
+	// a fresh, independently authorized continuation grant. Authorization is
+	// still fail-closed when no currently valid grant exists.
+	var fallback *Decision
 	for _, grant := range grants {
 		grantResource, normalizeErr := NormalizeResource(grant.Kind, grant.Scope.Resource)
 		if normalizeErr != nil || grant.Kind != query.Kind || grantResource != query.Resource || !scopeAllowsAction(grant.Scope, query.Action) {
@@ -165,18 +171,28 @@ func (e *Engine) Authorize(ctx context.Context, query Query) (Decision, error) {
 			continue
 		}
 		if grant.RevokedAt != nil {
-			decision, decisionErr := e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeRevoked, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
-			return e.observeDecision(decision, decisionErr, started)
+			if fallback == nil {
+				fallback = &Decision{Outcome: OutcomeDeny, Reason: CodeRevoked, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt}
+			}
+			continue
 		}
 		if !at.Before(grant.ExpiresAt) {
-			decision, decisionErr := e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeExpired, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
-			return e.observeDecision(decision, decisionErr, started)
+			if fallback == nil || fallback.Reason != CodeRevoked {
+				fallback = &Decision{Outcome: OutcomeDeny, Reason: CodeExpired, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt}
+			}
+			continue
 		}
 		if at.Before(grant.IssuedAt) {
-			decision, decisionErr := e.recordDecision(ctx, query, Decision{Outcome: OutcomeDeny, Reason: CodeDenied, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt})
-			return e.observeDecision(decision, decisionErr, started)
+			if fallback == nil {
+				fallback = &Decision{Outcome: OutcomeDeny, Reason: CodeDenied, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt}
+			}
+			continue
 		}
 		decision, decisionErr := e.recordDecision(ctx, query, Decision{Outcome: OutcomeAllow, MatchedGrant: grant.ID, ExpiresAt: grant.ExpiresAt, PolicyDigest: grant.PolicyDigest})
+		return e.observeDecision(decision, decisionErr, started)
+	}
+	if fallback != nil {
+		decision, decisionErr := e.recordDecision(ctx, query, *fallback)
 		return e.observeDecision(decision, decisionErr, started)
 	}
 	if subjectMismatch {

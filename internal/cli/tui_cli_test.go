@@ -3,10 +3,22 @@ package cli
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestNativeCodexArgumentsPassThrough(t *testing.T) {
+	want := []string{"resume", "--last", "-i", "picture with spaces.png", "--model", "chosen-model"}
+	options := parseWorkspaceArgs(append([]string{"--codex"}, want...))
+	if !reflect.DeepEqual(options.nativeCodex, want) {
+		t.Fatalf("native args changed: %q", options.nativeCodex)
+	}
+	if parseWorkspaceArgs([]string{"--codex"}).nativeCodex == nil {
+		t.Fatal("empty native launch lost")
+	}
+}
 
 func TestTUICLIInvocation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

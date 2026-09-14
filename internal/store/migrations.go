@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 85
+const LatestSchemaVersion = 86
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2603,6 +2603,30 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 		version = 85
 	}
+	if version < 86 {
+		// A selected model is an operator preference for future governed
+		// dispatches.  It must survive a TUI restart, but it must never be
+		// confused with either a provider's discovered default or a model that
+		// has already been recorded as execution evidence.  The CAS revision is
+		// what lets the confirmation layer refuse a selection that changed while
+		// an operator was reading its prompt.
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS execution_model_preferences (
+				project_id TEXT NOT NULL REFERENCES projects(project_id),
+				adapter TEXT NOT NULL,
+				model TEXT NOT NULL,
+				revision INTEGER NOT NULL CHECK(revision >= 1),
+				updated_at TEXT NOT NULL,
+				PRIMARY KEY(project_id, adapter)
+			);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 86: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(86, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 86: %w", err)
+		}
+		version = 86
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
 	}
@@ -2626,8 +2650,21 @@ func (s *Store) InitProject(ctx context.Context, project model.Project) error {
 	`, project.ID).Scan(&repository, &branch, &pack)
 	switch {
 	case err == nil:
-		if repository != project.Repository || branch != project.DefaultBranch || pack != project.PackVersion {
+		// Repository is the durable project identity. The checked-out default
+		// branch and pack version are observations that legitimately change as
+		// a project evolves; treating either as a foreign-project conflict
+		// strands an existing MARSHAL state after a branch rename or upgrade.
+		if repository != project.Repository {
 			return fmt.Errorf("%w: project %s has different identity", model.ErrConflict, project.ID)
+		}
+		if branch != project.DefaultBranch || pack != project.PackVersion {
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE projects
+				SET default_branch = ?, pack_version = ?
+				WHERE project_id = ?
+			`, project.DefaultBranch, project.PackVersion, project.ID); err != nil {
+				return fmt.Errorf("update project metadata: %w", err)
+			}
 		}
 	case errors.Is(err, sql.ErrNoRows):
 		if _, err := tx.ExecContext(ctx, `

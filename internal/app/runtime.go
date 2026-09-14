@@ -49,30 +49,33 @@ import (
 const localProjectID = "PROJECT-local"
 
 type Runtime struct {
-	layout             project.Layout
-	store              *store.Store
-	eventEngine        *events.Engine
-	policy             *policy.Engine
-	adapters           map[string]adapter.Adapter
-	evidenceSanitizer  evidence.Sanitizer
-	capabilityBroker   capability.Broker
-	dagGraph           *dag.Engine
-	cellManager        *cell.Manager
-	secretBroker       secrets.Broker
-	gateEngine         *gate.Engine
-	riskEngine         *risk.Engine
-	authorityPrincipal *authz.Principal
-	processAuthority   authz.Authority
-	runtimeInstanceID  string
-	runtimePolicy      RuntimePolicyConfig
-	policyConfigured   bool
-	handoffService     *protocol.Service
-	memoryService      *MemoryService
-	quorumEngine       *quorum.Engine
-	allowProcessOnly   bool
-	execService        *ExecutionService
-	execMu             sync.Mutex
-	tokenManager       *auth.Manager
+	layout              project.Layout
+	store               *store.Store
+	eventEngine         *events.Engine
+	policy              *policy.Engine
+	adapters            map[string]adapter.Adapter
+	evidenceSanitizer   evidence.Sanitizer
+	capabilityBroker    capability.Broker
+	dagGraph            *dag.Engine
+	cellManager         *cell.Manager
+	secretBroker        secrets.Broker
+	gateEngine          *gate.Engine
+	riskEngine          *risk.Engine
+	authorityPrincipal  *authz.Principal
+	processAuthority    authz.Authority
+	runtimeInstanceID   string
+	runtimePolicy       RuntimePolicyConfig
+	policyConfigured    bool
+	handoffService      *protocol.Service
+	memoryService       *MemoryService
+	quorumEngine        *quorum.Engine
+	allowProcessOnly    bool
+	execService         *ExecutionService
+	execMu              sync.Mutex
+	codexAppServerMu    sync.Mutex
+	codexAppServerTurns map[string]*liveCodexAppServerTurn
+	codexAppServerNew   func(string, string) codexAppServerClient
+	tokenManager        *auth.Manager
 
 	// ultra is the canonical ULTRA authorization gate. It is nil when no Cloud
 	// session is attached, and a nil gate answers "not entitled", so a runtime
@@ -169,6 +172,9 @@ type RunRequest struct {
 type RunResult struct {
 	RunID          string                    `json:"run_id"`
 	TaskID         string                    `json:"task_id"`
+	SessionID      string                    `json:"session_id,omitempty"`
+	Model          string                    `json:"model,omitempty"`
+	RequestedModel string                    `json:"requested_model,omitempty"`
 	Status         string                    `json:"status"`
 	BaseCommit     string                    `json:"base_commit"`
 	ResultCommit   string                    `json:"result_commit"`
@@ -290,23 +296,24 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		return nil, err
 	}
 	rt := &Runtime{
-		layout:             layout,
-		store:              database,
-		eventEngine:        events.NewEngine(database),
-		dagGraph:           func() *dag.Engine { graph, _ := dag.NewEngine(database); return graph }(),
-		policy:             engine,
-		adapters:           options.Adapters,
-		evidenceSanitizer:  sanitizer,
-		capabilityBroker:   options.CapabilityBroker,
-		cellManager:        options.CellManager,
-		secretBroker:       options.SecretBroker,
-		gateEngine:         options.GateEngine,
-		riskEngine:         options.RiskEngine,
-		authorityPrincipal: options.AuthorityPrincipal,
-		processAuthority:   options.ProcessAuthority,
-		runtimeInstanceID:  instanceID,
-		tokenManager:       auth.NewManager(layout.RuntimeDir),
-		allowProcessOnly:   options.AllowProcessOnlyFallback,
+		layout:              layout,
+		store:               database,
+		eventEngine:         events.NewEngine(database),
+		dagGraph:            func() *dag.Engine { graph, _ := dag.NewEngine(database); return graph }(),
+		policy:              engine,
+		adapters:            options.Adapters,
+		evidenceSanitizer:   sanitizer,
+		capabilityBroker:    options.CapabilityBroker,
+		cellManager:         options.CellManager,
+		secretBroker:        options.SecretBroker,
+		gateEngine:          options.GateEngine,
+		riskEngine:          options.RiskEngine,
+		authorityPrincipal:  options.AuthorityPrincipal,
+		processAuthority:    options.ProcessAuthority,
+		runtimeInstanceID:   instanceID,
+		tokenManager:        auth.NewManager(layout.RuntimeDir),
+		codexAppServerTurns: make(map[string]*liveCodexAppServerTurn),
+		allowProcessOnly:    options.AllowProcessOnlyFallback,
 	}
 	if rt.capabilityBroker == nil {
 		rt.capabilityBroker = capability.NewAuditedEngine(database, time.Now, runtimeCapabilityAuthority{}, rt.eventEngine)
@@ -386,10 +393,107 @@ func (r *Runtime) DAG() dag.Graph { return r.dagGraph }
 
 func (r *Runtime) InstanceID() string { return r.runtimeInstanceID }
 
+// Adapter returns the configured adapter for the given name, if present.
+func (r *Runtime) Adapter(name string) adapter.Adapter {
+	if r == nil || r.adapters == nil {
+		return nil
+	}
+	return r.adapters[name]
+}
+
 // ProjectID returns the canonical local project identifier that runtime records
 // are written under. Callers that read project-scoped rows must use this rather
 // than assuming a label, or they will query an identifier that holds no rows.
 func (r *Runtime) ProjectID() string { return localProjectID }
+
+// CodexModelPreference returns the durable operator selection for future
+// governed Codex dispatches.  It is deliberately separate from a harness
+// catalog's default model and from execution evidence for completed runs.
+func (r *Runtime) CodexModelPreference(ctx context.Context) (model.ExecutionModelPreference, error) {
+	if r == nil || r.store == nil {
+		return model.ExecutionModelPreference{}, fmt.Errorf("runtime store is unavailable")
+	}
+	return r.store.GetExecutionModelPreference(ctx, localProjectID, "codex")
+}
+
+// SetCodexModelPreference validates the requested model against the current
+// Codex adapter before durably applying a CAS-bound preference.  This is only
+// a selection for future Process 05 runs; it cannot alter a current lease,
+// task, plan, or historical evidence.
+func (r *Runtime) SetCodexModelPreference(ctx context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error) {
+	if r == nil || r.store == nil {
+		return model.ExecutionModelPreference{}, fmt.Errorf("runtime store is unavailable")
+	}
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return model.ExecutionModelPreference{}, fmt.Errorf("%w: codex model is required", model.ErrInvalid)
+	}
+	if err := codex.ValidateDangerousFlags([]string{modelName}); err != nil {
+		return model.ExecutionModelPreference{}, err
+	}
+	candidate := r.adapters["codex"]
+	validator, ok := candidate.(interface {
+		ValidateModel(context.Context, string) error
+	})
+	if !ok {
+		// Model catalog discovery is read-only.  A normal runtime constructs
+		// the sandboxed adapter only after a concrete task is admitted, so use a
+		// short-lived local probe here rather than pretending that no model can
+		// be selected until a task has already been claimed.
+		binary, err := project.FindBinary("codex")
+		if err != nil {
+			return model.ExecutionModelPreference{}, fmt.Errorf("%w: codex CLI is missing", model.ErrUnavailable)
+		}
+		validator = codex.New(binary, worker.New(10*time.Second, 2*time.Second, 1<<20))
+	}
+	if err := validator.ValidateModel(ctx, modelName); err != nil {
+		return model.ExecutionModelPreference{}, err
+	}
+	return r.store.SetExecutionModelPreference(ctx, model.ExecutionModelPreference{
+		ProjectID: localProjectID,
+		Adapter:   "codex",
+		Model:     modelName,
+	}, expectedRevision)
+}
+
+// InstallProjectCodexSkill installs one digest-bound skill from this exact
+// runtime project. It is intentionally local-only: the caller cannot supply a
+// URL, a filesystem source, or a command. The successful mutation is audited
+// before success is returned.
+func (r *Runtime) InstallProjectCodexSkill(ctx context.Context, name, expectedDigest string) (string, error) {
+	if r == nil || r.store == nil {
+		return "", fmt.Errorf("runtime store is unavailable")
+	}
+	digest, err := codex.InstallProjectSkill(r.layout.Root, "", name, expectedDigest)
+	if err != nil {
+		return "", err
+	}
+	eventID, err := model.NewID("EVENT-")
+	if err != nil {
+		return "", err
+	}
+	if err := r.store.AppendEvent(ctx, nil, model.Event{
+		ID: eventID, Type: "CODEX_PROJECT_SKILL_INSTALLED", ProjectID: localProjectID,
+		Timestamp: time.Now().UTC(), AggregateRevision: 0,
+		Data: map[string]any{"skill": name, "digest": digest},
+	}); err != nil {
+		// The filesystem mutation cannot be committed in the SQLite event
+		// transaction. Compensate it before returning failure so an audit outage
+		// never leaves an unaudited installed skill behind.
+		if rollbackErr := codex.RemoveInstalledProjectSkill("", name, digest); rollbackErr != nil {
+			return "", fmt.Errorf("audit Codex skill installation: %w (compensating removal failed: %v)", err, rollbackErr)
+		}
+		return "", fmt.Errorf("audit Codex skill installation: %w; installation was reverted", err)
+	}
+	return digest, nil
+}
+
+func (r *Runtime) PreviewProjectCodexSkill(name string) (string, error) {
+	if r == nil {
+		return "", fmt.Errorf("runtime is unavailable")
+	}
+	return codex.PreviewProjectSkill(r.layout.Root, name)
+}
 
 // SubmitHandoff is the sole runtime path for accepting typed inter-agent
 // handoff state. A2A and future CLI callers must not write typed_handoffs
@@ -508,7 +612,25 @@ func (r *Runtime) PrepareCell(ctx context.Context, spec cell.Spec) (cell.Record,
 	return r.cellManager.Prepare(ctx, spec)
 }
 
-func (r *Runtime) Close() error { return r.store.Close() }
+func (r *Runtime) Close() error {
+	if r != nil {
+		r.codexAppServerMu.Lock()
+		for key, turn := range r.codexAppServerTurns {
+			if turn != nil && turn.client != nil {
+				if turn.cancel != nil {
+					turn.cancel()
+				}
+				_ = turn.client.Close()
+			}
+			delete(r.codexAppServerTurns, key)
+		}
+		r.codexAppServerMu.Unlock()
+		if r.store != nil {
+			return r.store.Close()
+		}
+	}
+	return nil
+}
 
 func (r *Runtime) ReconcileStartup(ctx context.Context) error {
 	// 1. Reconcile database orphans (dead worker runs, stale sessions, expired leases)
@@ -748,6 +870,29 @@ func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResu
 	return verification, nil
 }
 
+// ReviewCurrentCommitWithCodex runs one fixed, read-only native Codex review
+// through the canonical verification authority. Unlike a generic command
+// field, callers cannot inject a prompt, path, config override, uncommitted
+// state, or apply operation: the target is the runtime's exact checked-out
+// commit.
+func (r *Runtime) ReviewCurrentCommitWithCodex(ctx context.Context) (VerifyResult, error) {
+	if r == nil {
+		return VerifyResult{}, fmt.Errorf("%w: current commit is unavailable", model.ErrUnavailable)
+	}
+	// HEAD is mutable outside a long-running daemon. Re-discover it at the
+	// canonical execution boundary instead of reviewing the daemon-start value.
+	live, err := project.Discover(r.layout.Root)
+	if err != nil || strings.TrimSpace(live.HEAD) == "" {
+		return VerifyResult{}, fmt.Errorf("%w: current commit is unavailable", model.ErrUnavailable)
+	}
+	result, err := r.Verify(ctx, VerifyRequest{Command: []string{"codex", "review", "--commit", live.HEAD}})
+	// Verify's general-purpose result retains the runtime-open commit for
+	// legacy callers. This fixed review is bound to the freshly discovered
+	// commit, so report that exact identifier instead.
+	result.Commit = live.HEAD
+	return result, err
+}
+
 func resolveBaselineVerificationCommand(command []string) ([]string, error) {
 	if len(command) == 0 {
 		return nil, fmt.Errorf("%w: verification command is empty", model.ErrInvalid)
@@ -783,6 +928,15 @@ func resolveBaselineVerificationCommand(command []string) ([]string, error) {
 				candidates = append(candidates, p)
 			}
 		}
+	case "codex":
+		// Codex review is admitted only for an exact commit. In particular do
+		// not allow --uncommitted, a custom prompt, --config, or apply-like
+		// flags through this baseline verification path.
+		if len(args) == 3 && args[0] == "review" && args[1] == "--commit" && isCommitIdentifier(args[2]) {
+			if p, err := exec.LookPath("codex"); err == nil {
+				candidates = append(candidates, p)
+			}
+		}
 	}
 	for _, candidate := range candidates {
 		resolved, err := filepath.EvalSymlinks(candidate)
@@ -796,6 +950,18 @@ func resolveBaselineVerificationCommand(command []string) ([]string, error) {
 		}
 	}
 	return nil, fmt.Errorf("%w: command %q requires an active runtime policy or trusted system executable", model.ErrPolicyDenied, strings.Join(command, " "))
+}
+
+func isCommitIdentifier(value string) bool {
+	if len(value) != 40 && len(value) != 64 {
+		return false
+	}
+	for _, r := range value {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error) {
@@ -827,6 +993,58 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	if gateErr := r.authorizeRuntime(ctx, request.AgentID, task.ID, request.Adapter,
 		policy.Action("shell.execute"), policy.Resource(r.layout.Root)); gateErr != nil {
 		return RunResult{}, gateErr
+	}
+	// Network policy is a prerequisite, not an after-claim cleanup. Evaluate
+	// its static, deny-by-default portion before adapter/provider selection so
+	// a malformed egress request cannot be masked by an unrelated provider
+	// configuration error or create a lease first.
+	if request.NetworkRequired {
+		// Session-bound authorization happens after the canonical claim below.
+		// These structural checks do not require a session and must happen before
+		// a claim, so unsupported egress cannot create a lease.
+		if len(request.EgressRules) == 0 {
+			return RunResult{}, fmt.Errorf("%w: network access requires an explicit egress allowlist", model.ErrPolicyDenied)
+		}
+		if _, err := netpolicy.NewEvaluator(request.EgressRules); err != nil {
+			return RunResult{}, fmt.Errorf("%w: invalid egress allowlist", model.ErrPolicyDenied)
+		}
+		if !r.egressEnforcementAvailable() {
+			return RunResult{}, netpolicy.ErrEnforcementUnavailable
+		}
+	}
+	// Adapter identity is part of the principal binding, not a cosmetic UI
+	// choice. It intentionally follows constitutional/gate/network admission:
+	// the earlier gates must retain their truthful refusal reason and no claim
+	// has been acquired at this point.
+	if request.Adapter == "codex" {
+		agent, agentErr := r.store.GetAgent(ctx, request.AgentID)
+		if agentErr != nil {
+			return RunResult{}, fmt.Errorf("resolve Codex execution agent: %w", agentErr)
+		}
+		if agent.Status == model.AgentDisabled || agent.ModelProvider != "codex" {
+			return RunResult{}, fmt.Errorf("%w: Codex adapter requires an enabled agent bound to provider codex", model.ErrInvalid)
+		}
+	}
+	if request.Adapter == "codex" && request.Model != "" {
+		if err := codex.ValidateDangerousFlags([]string{request.Model}); err != nil {
+			return RunResult{}, err
+		}
+		if candidate, ok := r.adapters[request.Adapter].(interface {
+			ValidateModel(context.Context, string) error
+		}); ok {
+			if err := candidate.ValidateModel(ctx, request.Model); err != nil {
+				return RunResult{}, err
+			}
+		} else {
+			binary, err := project.FindBinary(request.Adapter)
+			if err != nil {
+				return RunResult{}, fmt.Errorf("%w: codex CLI is missing", model.ErrUnavailable)
+			}
+			validator := codex.New(binary, worker.New(10*time.Second, 2*time.Second, 1<<20))
+			if err := validator.ValidateModel(ctx, request.Model); err != nil {
+				return RunResult{}, err
+			}
+		}
 	}
 	claim, err := r.Claim(ctx, ClaimRequest{TaskID: task.ID, AgentID: request.AgentID, ExpectedRevision: request.ExpectedRevision})
 	if err != nil {
@@ -1022,6 +1240,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 
 	result, runErr := agentAdapter.Run(ctx, adapter.Request{
 		TaskID: task.ID, Title: "MARSHAL task details are supplied in marked context.", Worktree: worktreeState.Path,
+		Model:      request.Model,
 		BaseCommit: baseCommit, HeadCommit: baseCommit,
 		AllowedOperations: []string{"filesystem.read", "filesystem.write", "shell.execute"},
 		EvidenceRequired:  []string{"git status --short", "git log -1 --oneline"},
@@ -1087,7 +1306,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 	}
 	var runEvidenceIDs []string
 	if ctx.Err() == nil {
-		if evidenceErr := r.recordRunEvidence(ctx, runID, task.ID, request.Adapter, probe.Version, baseCommit, resultCommit, result); evidenceErr != nil {
+		if evidenceErr := r.recordRunEvidence(ctx, runID, task.ID, request.Adapter, probe.Version, baseCommit, resultCommit, request.Model, result); evidenceErr != nil {
 			runErr = evidenceErr
 		} else {
 			runEvidenceIDs = []string{"EVIDENCE-RUN-" + runID + "-COMMAND", "EVIDENCE-RUN-" + runID + "-OUTPUT", "EVIDENCE-RUN-" + runID + "-ENV"}
@@ -1160,10 +1379,23 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			return RunResult{}, candidate
 		}
 	}
+	sessionID := result.SessionID
+	if sessionID == "" {
+		sessionID = claim.Session.ID
+	}
 	return RunResult{
-		RunID: runID, TaskID: task.ID, Status: finishStatus, BaseCommit: baseCommit,
-		ResultCommit: resultCommit, ExitStatus: result.ExitCode, Isolation: result.Isolation,
-		StdoutArtifact: stdoutArtifact, StderrArtifact: stderrArtifact,
+		RunID:          runID,
+		TaskID:         task.ID,
+		SessionID:      sessionID,
+		Model:          result.Model,
+		RequestedModel: request.Model,
+		Status:         finishStatus,
+		BaseCommit:     baseCommit,
+		ResultCommit:   resultCommit,
+		ExitStatus:     result.ExitCode,
+		Isolation:      result.Isolation,
+		StdoutArtifact: stdoutArtifact,
+		StderrArtifact: stderrArtifact,
 	}, nil
 }
 

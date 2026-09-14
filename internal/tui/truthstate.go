@@ -361,11 +361,19 @@ func RenderFields(fields []Field, width int) []string {
 
 	out := make([]string, 0, len(fields))
 	for _, f := range fields {
-		label := f.Label
+		label := communityLabel(f.Label)
 		if len([]rune(label)) > widest {
 			label = string([]rune(label)[:widest])
 		}
-		line := fmt.Sprintf("%-*s  %s", widest, label, f.Value.Display())
+		display := f.Value.Display()
+		// Reasons and truth-state notices are MARSHAL-generated guidance, not
+		// captured evidence. Make their vocabulary match the Community
+		// navigation without rewriting user content or evidence held in a known
+		// value.
+		if f.Value.Status != TruthKnown && f.Value.Status != TruthStale {
+			display = communityLabel(display)
+		}
+		line := fmt.Sprintf("%-*s  %s", widest, label, display)
 		out = append(out, line)
 	}
 	return out

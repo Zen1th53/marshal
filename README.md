@@ -9,7 +9,7 @@ MARSHAL is a local, security-focused runtime and control plane for coding agents
 
 Raw provider CLIs can modify files and execute arbitrary commands, but they lack independent authorization boundaries, reproducible worktree isolation, verifiable evidence graphs, and governed cross-turn memory. MARSHAL wraps provider execution inside isolated execution cells, leases and records state in a canonical local SQLite database, and fails closed whenever a requested security or isolation boundary cannot be enforced.
 
-Latest tagged release: **v1.5.0** · Current `main`: schema **v85**, pack **6.0.0**, runtime spec **1.5.0**.
+Latest tagged release: **v1.5.0** · Current `main`: schema **v86**, pack **6.0.0**, runtime spec **1.5.0**.
 
 > `main` is materially ahead of the v1.5.0 tag. The governed lifecycle described below
 > (Goal → Plan → Execution → Verification → Learning → Optimization) is merged on `main`
@@ -34,7 +34,7 @@ MARSHAL solves these challenges by acting as a **deterministic local control pla
 
 | Subsystem | Current Community v1.5.0 Capability |
 |---|---|
-| **Terminal TUI Workspace (v3)** | Keyboard-first Community control center (`marshal tui` or default `marshal` launch). It opens the frozen navigation by default: **Home, Control, Status, Work, Verify, Memory, Models, Security, System**. Arrow keys, `Enter`, `Esc`, `Tab`/`Shift+Tab`, and the `Ctrl+K` command palette work without slash commands; `Esc` from the navigation root opens the legacy composer for power users. Control mutations bind to canonical MARSHAL authorities, while unavailable bindings remain explicitly disabled rather than simulated. See [TUI Documentation](docs/tui.md). |
+| **Terminal TUI Workspace (v2)** | Premium, dynamic, terminal-first collaborative workspace (`marshal tui` or default `marshal` launch) with full line editing, contextual autocomplete (`Tab`, `@`, `#`), command palette (`Ctrl+P`), live working tree diff viewer, real probe capability intelligence, silence-by-default chatter filtering, and a capability registry whose every advertised TUI command is verified to dispatch against the canonical runtime by an on-terminal (PTY) conformance suite. See [TUI Documentation](docs/tui.md). |
 | **Frozen 6-Core Judgment Layer** | Immutable 6-core runtime: (1) Epistemic Ledger & Claim Graph, (2) Alignment Guard, (3) Blind Interpretation, (4) Durable Handoff Checkpoints & Rollback, (5) Budget & Termination Contract, (6) Constraint Re-injection. Strictly frozen with no 7th core. |
 | **Real Multi-Agent Collaboration** | Fixed-role multi-agent team sessions (`architect`, `developer`, `qa`, `appsec`) supporting Claude CLI, OpenAI Codex, OpenCode, and Google Antigravity with typed handoffs, challenge protocols, and mutual discovery. |
 | **Harness Capability Intelligence & ULTRA** | Probe-backed version-aware capability matrix (`adapters/MATRIX.json`) dynamically generating optimal execution routes, model selection, reasoning effort, and native tool flags without hallucinated parameters. |
@@ -42,7 +42,7 @@ MARSHAL solves these challenges by acting as a **deterministic local control pla
 | **Runtime Control Plane** | Project-local daemon over a mode-`0600` Unix domain socket (`.marshal/runtime.sock`), atomic task claims, 15-minute heartbeated session leases, dedicated Git worktrees (`marshal/<task>`), and model context protocol servers. |
 | **Security & Policy** | Capability broker with fine-grained time-bounded grants, role authorization (`orchestrator`, `architect`, `developer`, `qa`, `appsec`), pre-execution risk gates (`R0`..`R3`), secrets lease/redaction engine, and deny-by-default network policy. |
 | **Execution Sandboxing** | Linux Bubblewrap (`bwrap`) mount namespaces with read-only root filesystems, minimal config binds, tmpfs runtime directories, network unsharing (`--unshare-net`), 500 MiB worktree disk budget, and 8 MiB output bounds. |
-| **Canonical Memory Fabric** | SQLite-backed memory engine (schema `v85`), automatic task-start context recall (max 8 records, 12 KiB budget), post-run evidence-linked outcome capture (`CaptureOutcome`), multi-track search, conflict detection, lifecycle governance, and session importers. |
+| **Canonical Memory Fabric** | SQLite-backed memory engine (schema `v86`), automatic task-start context recall (max 8 records, 12 KiB budget), post-run evidence-linked outcome capture (`CaptureOutcome`), multi-track search, conflict detection, lifecycle governance, and session importers. |
 | **Provider Adapters** | Modular process adapters for Codex CLI, OpenCode, Gemini CLI, Claude Code, and Antigravity with dynamic capability probing and standardized execution contracts. |
 | **Evidence & Provenance** | Content-addressed SHA-256 artifact storage (`.marshal/artifacts/sha256/<hex>`), structured command/output/environment evidence nodes, commit linkage, and immutable event ledger. |
 | **Operations** | Local system health diagnostics (`marshal doctor`), SQLite backup/restore verification, and legal chain-of-title compliance export. Web control-plane access is Enterprise-only. |
@@ -59,7 +59,7 @@ MARSHAL solves these challenges by acting as a **deterministic local control pla
 4. **Provider Adapters**: External provider CLIs (`codex`, `gemini`, `claude`, `opencode`) run against standardized process interfaces (`adapter.Adapter`).
 5. **Result Handling & Evidence**: Provider output is sanitized and redacted; dirty worktree changes are committed under policy; stdout/stderr artifacts are stored with SHA-256 addressing; run evidence nodes are recorded; and completion outcomes are captured into memory.
 6. **Canonical Memory Fabric**: `MemoryService` (v2.0.0) maintains durable memory records, working task slots, multi-track search projections (exact, lexical, graph), access control, and cross-agent handoffs.
-7. **Operations & Persistence**: SQLite schema `v85` (`.marshal/state.db`) serves as the single source of truth for coordination state, task leases, audit ledgers, and evidence graphs.
+7. **Operations & Persistence**: SQLite schema `v86` (`.marshal/state.db`) serves as the single source of truth for coordination state, task leases, audit ledgers, and evidence graphs.
 
 ---
 
@@ -163,7 +163,7 @@ MARSHAL includes a multi-track memory fabric designed for multi-turn agent coord
 
 ```text
        ┌─────────────────────────────────────────────────────────┐
-       │                SQLite v85 (.marshal/state.db)           │
+│                SQLite v86 (.marshal/state.db)           │
        │                   CANONICAL SOURCE OF TRUTH             │
        └────────────────────────────┬────────────────────────────┘
                                     │
@@ -188,7 +188,7 @@ MARSHAL includes a multi-track memory fabric designed for multi-turn agent coord
 
 ### Memory Capabilities
 
-- **Canonical State vs Projections**: SQLite schema `v85` is the sole canonical persistence layer. Lexical indices, graph indices, and retrieval caches are disposable in-memory projections rebuilt on demand.
+- **Canonical State vs Projections**: SQLite schema `v86` is the sole canonical persistence layer. Lexical indices, graph indices, and retrieval caches are disposable in-memory projections rebuilt on demand.
 - **Multi-Track Search**: Retrieval combines exact key matching, lexical search (BM25/FTS), and graph traversal. Vector similarity search is optional and activates only when a real local embedding provider is configured.
 - **Scope & ACL Enforcement**: Every memory record carries strict project, task, agent, or branch scopes. Agents can only recall records matching their authorized principals.
 - **Conflict Detection & Governance**: Conflicting memory updates trigger deterministic conflict records requiring operator review or policy promotion (`marshal memory promote`).
@@ -261,7 +261,7 @@ Two things are tracked separately, because they differ:
 | Property | Latest tagged release | Current `main` |
 |---|---|---|
 | **Version** | `v1.5.0` | `1.5.0` runtime spec, unreleased changes on top |
-| **Database Schema** | `v79` | **`v85`** (SQLite in WAL mode) |
+| **Database Schema** | `v79` | **`v86`** (SQLite in WAL mode) |
 | **Governed lifecycle** | not included | Process 03–08 merged |
 
 | Property | Current Specification |
@@ -403,7 +403,7 @@ marshal verify -- go test ./...
 | `marshal doctor [--probe-providers]` | Run system health diagnostics and optional provider binary discovery |
 | `marshal daemon` | Launch the local control plane daemon background server |
 | `marshal status` | Query active tasks, registered agents, and daemon health |
-| `marshal tui [--session ID] [--theme NAME]` | Launch the keyboard-first Community TUI. Frozen navigation opens by default; `Esc` at its root opens the legacy slash-command composer. |
+| `marshal tui [--session ID] [--theme NAME]` | Launch interactive terminal-first command center and multi-agent workspace |
 | `marshal agent register --name NAME --role ROLE` | Register an agent principal with an assigned role |
 | `marshal agents` | List all registered agents and their capability configurations |
 | `marshal tasks` | List all tasks and their current lifecycle statuses |

@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -55,7 +56,7 @@ func createTestGoalAndPlan(now time.Time) (model.GoalContract, plan.ExecutionPla
 		{Provider: "claude", Model: "m", Governance: constitution.GovernanceVerified, Capacity: goalintake.UnknownCapacity("claude", true)},
 	}
 	harnessCandidates := []plan.HarnessCandidate{{
-		Profile:          model.HarnessProfile{Harness: "mock", InstalledVersion: "1.0.0", SupportedModels: []string{"m"}, DefaultModel: "m", ProbeEvidenceID: "EVIDENCE-plan", ProbedAt: now},
+		Profile:          model.HarnessProfile{Harness: "mock", InstalledVersion: "1.0.0", SupportedModels: []string{"m"}, DefaultModel: "m", FeatureSupport: map[string]model.FeatureStatus{"code_edit": model.StatusNative}, ProbeEvidenceID: "EVIDENCE-plan", ProbedAt: now},
 		InstalledVersion: "1.0.0", Provider: "codex", Capacity: capacity,
 	}}
 
@@ -172,6 +173,24 @@ func TestEngine_InitializeRun_EntryGateEnforcement(t *testing.T) {
 	_, err = engine.InitializeRun(ctx, staleHandoff, movedGoal, p)
 	if err == nil {
 		t.Fatal("expected EntryGate to block moved goal revision, but got success")
+	}
+}
+
+func TestNewRunFromHandoffBindsEveryTaskToOwningRun(t *testing.T) {
+	now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
+	goal, p := createTestGoalAndPlan(now)
+	handoff := createTestHandoff(t, t.TempDir(), goal, p)
+	run, err := NewRunFromHandoff(handoff, now, RunProvenance{RepoRoot: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.RunID == "" {
+		t.Fatal("run has no durable identity")
+	}
+	for id, task := range run.Tasks {
+		if task.RunID != run.RunID {
+			t.Fatalf("task %s run binding = %q, want %q", id, task.RunID, run.RunID)
+		}
 	}
 }
 
@@ -300,6 +319,134 @@ func TestEngine_RuntimeApprovalFlow(t *testing.T) {
 
 	if resumedRun.State != RunDonePendingVerification {
 		t.Fatalf("expected RunDonePendingVerification after approval, got %s", resumedRun.State)
+	}
+}
+
+func TestEngine_ProviderNativeApprovalPausesAndResumesThroughCanonicalDecision(t *testing.T) {
+	ctx := context.Background()
+	engine, err := NewEngine(EngineConfig{ProjectRoot: t.TempDir(), MaxWorkers: 1, DefaultTTL: time.Minute}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var taskTwoAttempts int
+	engine.RegisterHarness(NewMockHarness("mock", func(_ context.Context, task TaskExecution, _ ConstraintPackage, _ string) (TaskResult, error) {
+		if task.TaskID != "task-2" {
+			return TaskResult{TaskID: task.TaskID, Success: true}, nil
+		}
+		taskTwoAttempts++
+		if taskTwoAttempts == 1 {
+			return TaskResult{TaskID: task.TaskID, NeedsApproval: true, ApprovalReq: &ApprovalRequest{
+				OperationType: "PROVIDER_TOOL_NATIVE", TargetResource: "policy.go", Scope: "thread=one turn=one item=one digest=sha256:one",
+				DiffPreview: "item/commandExecution/requestApproval", Parameters: "sha256:one", CurrentState: "thread=one turn=one item=one",
+			}}, nil
+		}
+		return TaskResult{TaskID: task.TaskID, Success: true}, nil
+	}))
+	now := time.Now().UTC()
+	goal, p := createTestGoalAndPlan(now)
+	handoff := createTestHandoff(t, engine.cfg.ProjectRoot, goal, p)
+	run, err := engine.InitializeRun(ctx, handoff, goal, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paused, err := engine.ExecuteRun(ctx, run.RunID)
+	if err != nil {
+		t.Fatalf("ExecuteRun pause: %v", err)
+	}
+	two := paused.Tasks["task-2"]
+	if paused.State != RunNeedsApproval || two.State != TaskNeedsApproval || two.ApprovalID == "" {
+		t.Fatalf("provider approval must pause canonical Process 05: run=%s task=%+v", paused.State, two)
+	}
+	record, err := engine.ApprovalManager().GetApproval(two.ApprovalID)
+	if err != nil || record.RunID != run.RunID || record.TaskID != two.TaskID || record.OperationType != "PROVIDER_TOOL_NATIVE" {
+		t.Fatalf("native approval binding = %#v, %v", record, err)
+	}
+	if err := engine.DecideApproval(ctx, two.ApprovalID, true, "operator", "reviewed exact native request"); err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := engine.ExecuteRun(ctx, run.RunID)
+	if err != nil {
+		t.Fatalf("ExecuteRun resume: %v", err)
+	}
+	if resumed.State != RunDonePendingVerification || taskTwoAttempts != 2 {
+		t.Fatalf("approved task must be re-admitted exactly once: run=%s attempts=%d", resumed.State, taskTwoAttempts)
+	}
+}
+
+func TestEngine_LiveNativeTurnPersistsExactBindingAndResumesOnlyAfterConsumption(t *testing.T) {
+	ctx := context.Background()
+	engine, err := NewEngine(EngineConfig{ProjectRoot: t.TempDir(), MaxWorkers: 1, DefaultTTL: time.Minute}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var attempts int
+	var approvalID string
+	engine.RegisterHarness(NewMockHarness("mock", func(_ context.Context, task TaskExecution, pkg ConstraintPackage, worktree string) (TaskResult, error) {
+		if task.TaskID != "task-2" {
+			return TaskResult{TaskID: task.TaskID, Success: true}, nil
+		}
+		attempts++
+		if attempts == 1 {
+			record, err := engine.ApprovalManager().RequestApproval(ApprovalRequest{
+				RunID: task.RunID, TaskID: task.TaskID, OperationType: "CODEX_APP_SERVER_NATIVE", TargetResource: worktree,
+				Scope: "thread=t turn=u item=v digest=sha256:request", DiffPreview: "item/commandExecution/requestApproval", Parameters: "sha256:request",
+				CurrentState: "bound native request", Now: time.Now().UTC(),
+			})
+			if err != nil {
+				return TaskResult{}, err
+			}
+			approvalID = record.ApprovalID
+			return TaskResult{TaskID: task.TaskID, NeedsApproval: true, NativeApprovalID: record.ApprovalID,
+				ApprovalReq: &ApprovalRequest{OperationType: "CODEX_APP_SERVER_NATIVE", TargetResource: worktree, Scope: "thread=t turn=u item=v digest=sha256:request", CurrentState: "bound native request"},
+				NativeTurn:  &NativeTurnBinding{Provider: "codex-app-server", ThreadID: "t", TurnID: "u", Worktree: worktree, WorktreeDigest: "test-worktree", ConstraintDigest: pkg.Digest, RunRevision: task.RunRevision, State: "APPROVAL_REQUIRED"}}, nil
+		}
+		binding := *task.NativeTurn
+		binding.RunRevision = task.RunRevision
+		return TaskResult{TaskID: task.TaskID, Success: true, NativeTurn: &binding}, nil
+	}))
+	now := time.Now().UTC()
+	goal, p := createTestGoalAndPlan(now)
+	handoff := createTestHandoff(t, engine.cfg.ProjectRoot, goal, p)
+	run, err := engine.InitializeRun(ctx, handoff, goal, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paused, err := engine.ExecuteRun(ctx, run.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := paused.Tasks["task-2"]
+	if paused.State != RunNeedsApproval || task.NativeTurn == nil || task.NativeTurn.ThreadID != "t" || task.NativeTurn.TurnID != "u" || task.ApprovalID != approvalID {
+		t.Fatalf("native pause did not persist exact binding: run=%s task=%+v", paused.State, task)
+	}
+	stored, err := engine.GetRun(ctx, run.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Tasks["task-2"].NativeTurn == nil || stored.Tasks["task-2"].NativeTurn.RunRevision != stored.Version {
+		t.Fatalf("durable binding must be tied to persisted post-pause revision: task=%+v runVersion=%d", stored.Tasks["task-2"], stored.Version)
+	}
+	// An ordinary approval cannot release a live native turn.
+	if err := engine.DecideApproval(ctx, approvalID, true, "operator", "attempt bypass"); !errors.Is(err, ErrRunBlocked) {
+		t.Fatalf("ordinary native decision = %v, want blocked", err)
+	}
+	if err := engine.ApprovalManager().Approve(approvalID, "operator", "reviewed", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.ApprovalManager().ValidateAndConsume(approvalID,
+		ComputeActionDigest("CODEX_APP_SERVER_NATIVE", stored.Tasks["task-2"].WorktreePath, "item/commandExecution/requestApproval", "sha256:request"),
+		ComputeStateDigest("bound native request"), now); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.ResumeNativeApproval(ctx, approvalID); err != nil {
+		t.Fatalf("resume consumed native approval: %v", err)
+	}
+	resumed, err := engine.ExecuteRun(ctx, run.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 || resumed.State != RunDonePendingVerification {
+		t.Fatalf("native turn did not resume exactly once: attempts=%d state=%s", attempts, resumed.State)
 	}
 }
 

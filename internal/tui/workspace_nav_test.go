@@ -13,6 +13,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/constitution"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/store"
@@ -489,6 +490,129 @@ func TestRestoreVerificationRequiresCanonicalProjectIdentity(t *testing.T) {
 		!strings.Contains(err.Error(), "canonical project identity") {
 		t.Fatalf("restore verification without project identity = %v, want fail-closed identity error", err)
 	}
+}
+
+// Dispatching a Codex task is never a shortcut around Work.  In particular,
+// a blank form must not manufacture an unplanned task or a synthetic worker
+// agent merely because the user pressed Enter.  Both identities have to exist
+// durably before Process 05 can be asked to run anything.
+func TestCodexDispatchRefusesMissingCanonicalTaskAndAgent(t *testing.T) {
+	ctx := context.Background()
+	_, runtime := realControlWorkspace(t, "SESSION-tui-codex-dispatch-refusal")
+	authority := &runtimeControlAuthority{runtime: runtime, store: runtime.Store()}
+
+	if _, err := authority.DispatchCodexTask(ctx, CodexTaskDispatchRequest{}); !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("blank Codex dispatch error = %v, want ErrInvalid", err)
+	}
+	if got := mustCount(t, runtime.Store(), "tasks"); got != 0 {
+		t.Fatalf("blank Codex dispatch created %d tasks", got)
+	}
+	if got := mustCount(t, runtime.Store(), "agents"); got != 0 {
+		t.Fatalf("blank Codex dispatch created %d agents", got)
+	}
+	if got := mustCount(t, runtime.Store(), "sessions"); got != 0 {
+		t.Fatalf("blank Codex dispatch created %d sessions", got)
+	}
+
+	if _, err := runtime.ImportTasks(ctx, []model.Task{{
+		ID: "TASK-tui-codex-existing", Title: "preplanned Codex task", Status: model.TaskReady, Risk: model.R1,
+	}}); err != nil {
+		t.Fatalf("import planned task: %v", err)
+	}
+	if _, err := authority.DispatchCodexTask(ctx, CodexTaskDispatchRequest{TaskID: "TASK-tui-codex-existing"}); !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("dispatch without agent error = %v, want ErrInvalid", err)
+	}
+	if got := mustCount(t, runtime.Store(), "agents"); got != 0 {
+		t.Fatalf("dispatch without agent created %d agents", got)
+	}
+	if got := mustCount(t, runtime.Store(), "sessions"); got != 0 {
+		t.Fatalf("dispatch without agent created %d sessions", got)
+	}
+	wrongProvider, err := runtime.RegisterAgent(ctx, app.RegisterAgentRequest{Name: "local claude", Role: model.RoleDeveloper, ModelProvider: "claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.DispatchCodexTask(ctx, CodexTaskDispatchRequest{TaskID: "TASK-tui-codex-existing", AgentID: wrongProvider.ID}); !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("non-Codex agent must be refused before Process 05 dispatch: %v", err)
+	}
+	if got := mustCount(t, runtime.Store(), "sessions"); got != 0 {
+		t.Fatalf("wrong-provider dispatch created %d sessions", got)
+	}
+}
+
+func TestCodexDispatchUsesOnlyUniqueRegisteredCodexAgent(t *testing.T) {
+	ctx := context.Background()
+	_, runtime := realControlWorkspace(t, "SESSION-tui-codex-default-agent")
+	authority := &runtimeControlAuthority{runtime: runtime, store: runtime.Store()}
+	if _, err := runtime.ImportTasks(ctx, []model.Task{{
+		ID: "TASK-tui-codex-default", Title: "preplanned Codex task", Status: model.TaskReady, Risk: model.R1,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	agent, err := runtime.RegisterAgent(ctx, app.RegisterAgentRequest{Name: "Local Codex", Role: model.RoleDeveloper, ModelProvider: "codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := authority.DefaultCodexDispatchAgent(ctx)
+	if err != nil || got != agent.ID {
+		t.Fatalf("unique Codex agent = %q, %v; want %q", got, err, agent.ID)
+	}
+	source := &ControlSource{Authority: authority}
+	target, err := source.prepareCodexDispatch(ctx, ActionRequest{Inputs: map[string]string{"task_id": "TASK-tui-codex-default"}})
+	if err != nil || target.ActorID != agent.ID {
+		t.Fatalf("dispatch preflight did not bind unique agent: target=%#v err=%v", target, err)
+	}
+	if _, err := runtime.RegisterAgent(ctx, app.RegisterAgentRequest{Name: "Other Codex", Role: model.RoleDeveloper, ModelProvider: "codex"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authority.DefaultCodexDispatchAgent(ctx); !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("ambiguous Codex agents must require an operator choice: %v", err)
+	}
+}
+
+func TestNativeCodexApprovalAppearsInCanonicalControlQueue(t *testing.T) {
+	ctx := context.Background()
+	_, runtime := realControlWorkspace(t, "SESSION-tui-native-codex-approval")
+	authority := &runtimeControlAuthority{runtime: runtime, store: runtime.Store(), sessionID: "SESSION-tui-native-codex-approval"}
+	manager := runtime.Execution().Engine().ApprovalManager()
+	record, err := manager.RequestApproval(execution.ApprovalRequest{
+		RunID: "run-native", TaskID: "task-native", PlanID: "plan-native", PlanVersion: 1,
+		OperationType: "CODEX_APP_SERVER_NATIVE", TargetResource: "/safe/worktree",
+		Scope:       "thread=one turn=one item=one method=item/commandExecution/requestApproval digest=sha256:one",
+		DiffPreview: "item/commandExecution/requestApproval", Parameters: "sha256:one", CurrentState: "bound-native-state",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, err := authority.PendingApprovals(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, approval := range pending {
+		if approval.ApprovalID == record.ApprovalID {
+			found = true
+		}
+	}
+	if found {
+		t.Fatalf("orphan native Codex approval %s leaked into this session's Control queue: %#v", record.ApprovalID, pending)
+	}
+	if err := authority.DecideApproval(ctx, record.ApprovalID, true, "operator", "reviewed native request"); err == nil {
+		t.Fatal("orphan native approval must not be decided without its Process 05 run")
+	}
+	current, err := manager.GetApproval(record.ApprovalID)
+	if err != nil || current.Status != execution.ApprovalRequested {
+		t.Fatalf("orphan decision attempt must not mutate approval: current=%#v err=%v", current, err)
+	}
+}
+
+func mustCount(t *testing.T, st *store.Store, table string) int {
+	t.Helper()
+	count, err := st.Count(context.Background(), table)
+	if err != nil {
+		t.Fatalf("count %s: %v", table, err)
+	}
+	return count
 }
 
 // This is the mutation-bearing E2E: real Workspace key dispatch, real Control

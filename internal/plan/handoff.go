@@ -47,9 +47,17 @@ type Handoff struct {
 	Mode                Mode                 `json:"mode,omitempty"`
 	ConstitutionVersion constitution.Version `json:"constitution_version"`
 
-	Tasks        []Task                `json:"tasks"`
-	Graph        Graph                 `json:"graph"`
-	Team         Team                  `json:"team"`
+	Tasks []Task `json:"tasks"`
+	// CanonicalTaskIDs binds each plan-local graph node to its durable Runtime
+	// task identity. It is filled by the application handoff boundary; Process
+	// 05 uses it when a provider requires the canonical task/lease authority.
+	CanonicalTaskIDs map[string]string `json:"canonical_task_ids,omitempty"`
+	Graph            Graph             `json:"graph"`
+	Team             Team              `json:"team"`
+	// Assignments retain the exact governed executable selected for each role.
+	// Routes name the provider service; Process 05 needs this separate harness
+	// binding so it cannot mistake a provider label for an executable.
+	Assignments  AssignmentPlan        `json:"assignments"`
 	Routes       map[string]Route      `json:"routes"`
 	Approvals    []ApprovalRequirement `json:"approvals,omitempty"`
 	Checkpoints  []Checkpoint          `json:"checkpoints,omitempty"`
@@ -148,6 +156,7 @@ func PrepareHandoff(executionPlan ExecutionPlan, goal model.GoalContract, projec
 		Tasks:               executionPlan.Tasks,
 		Graph:               executionPlan.Graph,
 		Team:                executionPlan.Team,
+		Assignments:         executionPlan.Assignments,
 		Routes:              executionPlan.Routes,
 		Approvals:           executionPlan.Approvals,
 		Checkpoints:         executionPlan.Checkpoints,

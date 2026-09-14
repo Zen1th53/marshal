@@ -71,6 +71,7 @@ Commands:
   help [TOPIC] | help why
   constitution version | invariants | decisions SESSION-ID | violations SESSION-ID
   tui [SESSION-ID]
+  codex [NATIVE-CODEX-ARGUMENTS...]
   daemon
   version
 `
@@ -200,6 +201,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.constitution(ctx, args[1:])
 	case "tui":
 		err = c.tui(ctx, args[1:])
+	case "codex":
+		err = c.tui(ctx, append([]string{"--codex"}, args[1:]...))
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}
@@ -486,7 +489,7 @@ func (c command) run(ctx context.Context, args []string) error {
 	set := flag.NewFlagSet("run", flag.ContinueOnError)
 	set.SetOutput(c.stderr)
 	adapterName := set.String("adapter", "codex", "worker adapter")
-	modelName := set.String("model", "", "model name (OpenCode only)")
+	modelName := set.String("model", "", "model name (passed only to adapters with a verified native model selector)")
 	agent := set.String("agent", "", "agent ID")
 	revision := set.Int64("revision", 0, "expected task revision")
 	if err := set.Parse(args[1:]); err != nil {

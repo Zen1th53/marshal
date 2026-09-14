@@ -50,6 +50,19 @@ const (
 	KeyWordDeleteAfter
 	KeyCtrlJ
 	KeyPaste
+	// Function keys F1-F12
+	KeyF1
+	KeyF2
+	KeyF3
+	KeyF4
+	KeyF5
+	KeyF6
+	KeyF7
+	KeyF8
+	KeyF9
+	KeyF10
+	KeyF11
+	KeyF12
 	// KeyMouse carries an SGR mouse report. Mouse input is navigation-only in
 	// the frozen IA; it never bypasses the same confirmation path as a key.
 	KeyMouse
@@ -78,6 +91,8 @@ type Terminal struct {
 	oldState   *term.State
 	resizeChan chan struct{}
 	readBuf    []byte
+	signals    chan os.Signal
+	signalDone chan struct{}
 }
 
 // NewTerminal creates a terminal wrapper for the given reader and writer.
@@ -105,6 +120,9 @@ func (t *Terminal) MakeRaw() error {
 	if !t.isTerm || t.inFd < 0 {
 		return nil
 	}
+	if t.oldState != nil {
+		return nil
+	}
 	state, err := term.MakeRaw(t.inFd)
 	if err != nil {
 		return err
@@ -113,12 +131,19 @@ func (t *Terminal) MakeRaw() error {
 
 	// Listen for window resize signals (SIGWINCH)
 	sigChan := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	t.signals, t.signalDone = sigChan, done
 	signal.Notify(sigChan, syscall.SIGWINCH)
 	go func() {
-		for range sigChan {
+		for {
 			select {
-			case t.resizeChan <- struct{}{}:
-			default:
+			case <-done:
+				return
+			case <-sigChan:
+				select {
+				case t.resizeChan <- struct{}{}:
+				default:
+				}
 			}
 		}
 	}()
@@ -127,6 +152,11 @@ func (t *Terminal) MakeRaw() error {
 
 // Restore restores the terminal to its previous state.
 func (t *Terminal) Restore() error {
+	if t.signals != nil {
+		signal.Stop(t.signals)
+		close(t.signalDone)
+		t.signals, t.signalDone = nil, nil
+	}
 	if t.oldState != nil && t.inFd >= 0 {
 		err := term.Restore(t.inFd, t.oldState)
 		t.oldState = nil
@@ -369,6 +399,30 @@ func ParseNextKey(b []byte) (KeyEvent, int) {
 						return KeyEvent{Type: KeyWordDeleteAfter, Raw: raw}, consumed
 					case "Z":
 						return KeyEvent{Type: KeyShiftTab, Raw: raw}, consumed
+					case "P", "OP", "11~", "[A":
+						return KeyEvent{Type: KeyF1, Raw: raw}, consumed
+					case "Q", "OQ", "12~", "[B":
+						return KeyEvent{Type: KeyF2, Raw: raw}, consumed
+					case "R", "OR", "13~", "[C":
+						return KeyEvent{Type: KeyF3, Raw: raw}, consumed
+					case "S", "OS", "14~", "[D":
+						return KeyEvent{Type: KeyF4, Raw: raw}, consumed
+					case "15~", "[E":
+						return KeyEvent{Type: KeyF5, Raw: raw}, consumed
+					case "17~":
+						return KeyEvent{Type: KeyF6, Raw: raw}, consumed
+					case "18~":
+						return KeyEvent{Type: KeyF7, Raw: raw}, consumed
+					case "19~":
+						return KeyEvent{Type: KeyF8, Raw: raw}, consumed
+					case "20~":
+						return KeyEvent{Type: KeyF9, Raw: raw}, consumed
+					case "21~":
+						return KeyEvent{Type: KeyF10, Raw: raw}, consumed
+					case "23~":
+						return KeyEvent{Type: KeyF11, Raw: raw}, consumed
+					case "24~":
+						return KeyEvent{Type: KeyF12, Raw: raw}, consumed
 					default:
 						return KeyEvent{Type: KeyUnknown, Raw: raw}, consumed
 					}

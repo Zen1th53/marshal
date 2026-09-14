@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -243,8 +245,10 @@ func (am *ApprovalManager) ValidateAndConsume(approvalID, currentActionDigest, c
 		return fmt.Errorf("%w: state digest mismatch since approval was given", ErrApprovalTOCTOUViolation)
 	}
 
-	// One-shot consumption: Once validated and consumed, mark invalidated/consumed so it cannot be reused
-	app.Status = ApprovalInvalidated
+	// One-shot consumption is successful but terminal. Keep it distinct from
+	// INVALIDATED so a provider bridge can resume the exact live turn while a
+	// stale/tampered request can never be mistaken for an accepted decision.
+	app.Status = ApprovalConsumed
 	if am.dir != "" {
 		data, _ := json.MarshalIndent(app, "", "  ")
 		_ = os.WriteFile(filepath.Join(am.dir, approvalID+".json"), data, 0644)
@@ -275,4 +279,48 @@ func (am *ApprovalManager) GetApproval(approvalID string) (*RuntimeApproval, err
 		return nil, fmt.Errorf("approval %s not found", approvalID)
 	}
 	return app, nil
+}
+
+// ListApprovals returns copies of every durable approval known to this
+// manager.  It is the canonical approval queue: consumers must not infer the
+// queue solely from a run's cached approval map, because native provider
+// approvals may be raised while a task is already running.
+func (am *ApprovalManager) ListApprovals() ([]RuntimeApproval, error) {
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	if am.dir != "" {
+		entries, err := os.ReadDir(am.dir)
+		if err != nil {
+			return nil, fmt.Errorf("list durable approvals: %w", err)
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(am.dir, entry.Name()))
+			if err != nil {
+				return nil, fmt.Errorf("read durable approval %s: %w", entry.Name(), err)
+			}
+			var loaded RuntimeApproval
+			if err := json.Unmarshal(data, &loaded); err != nil {
+				return nil, fmt.Errorf("decode durable approval %s: %w", entry.Name(), err)
+			}
+			if loaded.ApprovalID != "" {
+				am.approvals[loaded.ApprovalID] = &loaded
+			}
+		}
+	}
+	result := make([]RuntimeApproval, 0, len(am.approvals))
+	for _, approval := range am.approvals {
+		if approval != nil {
+			result = append(result, *approval)
+		}
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].CreatedAt.Equal(result[j].CreatedAt) {
+			return result[i].ApprovalID < result[j].ApprovalID
+		}
+		return result[i].CreatedAt.Before(result[j].CreatedAt)
+	})
+	return result, nil
 }

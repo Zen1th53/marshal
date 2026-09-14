@@ -1,5 +1,12 @@
 package tui
 
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+)
+
 // Models screens: what each frozen Models node renders.
 //
 // Two of the seventeen frozen implementation gaps live in this section, and
@@ -33,8 +40,146 @@ func modelsScreens() map[string]func(ModelsSnapshot) ScreenContent {
 
 		"CTUI-0566": func(m ModelsSnapshot) ScreenContent { return localModelsScreen(m) },
 		"CTUI-0570": func(m ModelsSnapshot) ScreenContent { return optimizationScreen(m) },
+
+		"CTUI-0509": func(m ModelsSnapshot) ScreenContent { // Governed Codex Control Plane root
+			statusVal := m.CodexStatus
+			if statusVal.Status.IsUnset() {
+				statusVal = Unknown("codex status has not been probed", modelsBinding)
+			}
+			fields := []Field{
+				{Label: "Codex", Value: statusVal},
+			}
+			if m.CodexHealth.Available {
+				fields = append(fields,
+					Field{Label: "Version", Value: Known(safeCodexDisplay(m.CodexHealth.Version, "unknown"), modelsBinding)},
+					Field{Label: "Executable", Value: Known("available on PATH", modelsBinding)},
+				)
+			}
+			if m.CodexDefaultModel != "" {
+				fields = append(fields, Field{Label: "Default Model", Value: Known(m.CodexDefaultModel, modelsBinding)})
+			}
+			if m.CodexSelectedModel != "" {
+				fields = append(fields, Field{Label: "Selected Model", Value: Known(m.CodexSelectedModel, modelsBinding)})
+			}
+			fields = append(fields, codexAppServerStatusField(m.CodexHealth))
+			return ScreenContent{ReadOnly: true, Fields: fields}
+		},
+
+		"CTUI-0509-HEALTH": func(m ModelsSnapshot) ScreenContent {
+			val := m.CodexStatus
+			if m.CodexHealth.Available {
+				val = Known(fmt.Sprintf("PASSED (CLI: %s; executable available on PATH)", safeCodexDisplay(m.CodexHealth.Version, "unknown")), modelsBinding)
+			} else if m.CodexHealth.BinaryPath != "" {
+				val = Errored(fmt.Sprintf("FAIL: %s", m.CodexHealth.Verdict), modelsBinding)
+			} else if val.Status.IsUnset() {
+				val = Unknown("codex health probe has not run", modelsBinding)
+			}
+			fields := []Field{
+				{Label: "Health & capabilities", Value: val},
+				{Label: "Executable", Value: knownOrUnknown(boolDisplay(m.CodexHealth.BinaryPath != "", "available on PATH"), "executable not discovered", modelsBinding)},
+				{Label: "Version", Value: knownOrUnknown(safeCodexDisplay(m.CodexHealth.Version, ""), "version not discovered", modelsBinding)},
+				{Label: "Verdict", Value: knownOrUnknown(m.CodexHealth.Verdict, "no verdict recorded", modelsBinding)},
+			}
+			fields = append(fields, codexAppServerStatusField(m.CodexHealth))
+			if !m.CodexHealth.CheckedAt.IsZero() {
+				fields = append(fields, Field{Label: "Last Probe", Value: Known(m.CodexHealth.CheckedAt.Format(time.RFC3339), modelsBinding)})
+			} else {
+				fields = append(fields, Field{Label: "Last Probe", Value: Unknown("no probe recorded", modelsBinding)})
+			}
+			checkNames := make([]string, 0, len(m.CodexHealth.Checks))
+			for key := range m.CodexHealth.Checks {
+				checkNames = append(checkNames, key)
+			}
+			sort.Strings(checkNames)
+			for _, key := range checkNames {
+				if key == "binary" { // host path is intentionally never rendered.
+					continue
+				}
+				fields = append(fields, Field{Label: fmt.Sprintf("Check: %s", safeCodexDisplay(key, "unknown")), Value: Known(safeCodexDisplay(m.CodexHealth.Checks[key], "unknown"), modelsBinding)})
+			}
+			return ScreenContent{ReadOnly: true, Fields: fields}
+		},
+
+		"CTUI-0509-MODELS": func(m ModelsSnapshot) ScreenContent {
+			val := Unknown("no models discovered", modelsBinding)
+			if len(m.CodexModels) > 0 {
+				val = Known(fmt.Sprintf("%d eligible models discovered (default: %s)", len(m.CodexModels), m.CodexDefaultModel), modelsBinding)
+			}
+			fields := []Field{
+				{Label: "Models / effective selection", Value: val},
+				{Label: "Selected Model", Value: knownOrEmpty(m.CodexSelectedModel, modelsBinding)},
+				{Label: "Default Model", Value: knownOrEmpty(m.CodexDefaultModel, modelsBinding)},
+			}
+			for _, mdl := range m.CodexModels {
+				lbl := safeCodexDisplay(mdl.Slug, "unavailable model")
+				if mdl.IsDefault {
+					lbl += " (default)"
+				}
+				fields = append(fields, Field{
+					Label: lbl,
+					Value: Known(fmt.Sprintf("%s [%s]", safeCodexDisplay(mdl.DisplayName, lbl), safeCodexDisplay(mdl.Visibility, "eligible")), modelsBinding),
+				})
+			}
+			return ScreenContent{ReadOnly: false, Fields: fields}
+		},
+
+		"CTUI-0509-DISPATCH": func(m ModelsSnapshot) ScreenContent {
+			val := Known("opens the canonical Control / Execution path", modelsBinding)
+			if !m.CodexHealth.Available {
+				val = Unknown("codex CLI is not available for dispatch", modelsBinding)
+			}
+			fields := []Field{
+				{Label: "Open canonical Process 05 execution", Value: val},
+				{Label: "Active Model", Value: knownOrUnknown(m.CodexSelectedModel, "using provider default", modelsBinding)},
+				{Label: "Execution owner", Value: Known("Control / Execution / Start approved plan run", modelsBinding)},
+				{Label: "Safety Policy", Value: Known("Process 05 re-injects policy, sandbox, approval, and evidence constraints", modelsBinding)},
+			}
+			return ScreenContent{ReadOnly: true, Fields: fields}
+		},
+
+		"CTUI-0509-SESSIONS": func(m ModelsSnapshot) ScreenContent {
+			val := Unknown("no codex sessions recorded", modelsBinding)
+			if len(m.CodexSessions) > 0 {
+				val = Known(fmt.Sprintf("%d governed sessions recorded", len(m.CodexSessions)), modelsBinding)
+			}
+			fields := []Field{
+				{Label: "Sessions & active run", Value: val},
+			}
+			for _, sess := range m.CodexSessions {
+				fields = append(fields, Field{
+					Label: fmt.Sprintf("Session %s (Task %s)", safeCodexDisplay(sess.SessionID, "unknown"), safeCodexDisplay(sess.TaskID, "unknown")),
+					Value: Known(fmt.Sprintf("status=%s model=%s run=%s started=%s",
+						safeCodexDisplay(sess.Status, "unknown"), safeCodexDisplay(sess.Model, "unknown"), safeCodexDisplay(sess.RunID, "unknown"), sess.StartedAt.Format("15:04:05")), modelsBinding),
+				})
+			}
+			return ScreenContent{ReadOnly: true, Fields: fields}
+		},
+
+		"CTUI-0509-PLUGINS": func(m ModelsSnapshot) ScreenContent {
+			val := Known(fmt.Sprintf("%d plugins, %d local skills", len(m.CodexPlugins), len(m.CodexSkills)), modelsBinding)
+			fields := []Field{
+				{Label: "Plugins & skills", Value: val},
+			}
+			for _, p := range m.CodexPlugins {
+				status := "disabled"
+				if p.Enabled {
+					status = "enabled"
+				}
+				fields = append(fields, Field{
+					Label: fmt.Sprintf("Plugin: %s", safeCodexDisplay(p.Name, "untrusted plugin metadata")),
+					Value: Known(fmt.Sprintf("ver=%s market=%s (%s)", safeCodexDisplay(p.Version, "unknown"), safeCodexDisplay(p.MarketplaceName, "unavailable"), status), modelsBinding),
+				})
+			}
+			for _, s := range m.CodexSkills {
+				fields = append(fields, Field{
+					Label: fmt.Sprintf("Skill: %s", safeCodexDisplay(s.Name, "untrusted skill metadata")),
+					Value: Known("local skill discovered", modelsBinding),
+				})
+			}
+			return ScreenContent{ReadOnly: false, Fields: fields}
+		},
 	}
-	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.ProviderStatus }, "CTUI-0502", "CTUI-0503", "CTUI-0504", "CTUI-0505", "CTUI-0506", "CTUI-0507", "CTUI-0508", "CTUI-0509", "CTUI-0510", "CTUI-0511", "CTUI-0512", "CTUI-0513", "CTUI-0514", "CTUI-0515", "CTUI-0516", "CTUI-0517", "CTUI-0518", "CTUI-0519", "CTUI-0520", "CTUI-0521", "CTUI-0522")
+	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.ProviderStatus }, "CTUI-0502", "CTUI-0503", "CTUI-0504", "CTUI-0505", "CTUI-0506", "CTUI-0507", "CTUI-0508", "CTUI-0510", "CTUI-0511", "CTUI-0512", "CTUI-0513", "CTUI-0514", "CTUI-0515", "CTUI-0516", "CTUI-0517", "CTUI-0518", "CTUI-0519", "CTUI-0520", "CTUI-0521", "CTUI-0522")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.LocalStatus }, "CTUI-0524", "CTUI-0525", "CTUI-0526", "CTUI-0527", "CTUI-0528", "CTUI-0529")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.RoutingStatus }, "CTUI-0530", "CTUI-0531", "CTUI-0532", "CTUI-0533", "CTUI-0534", "CTUI-0535", "CTUI-0536", "CTUI-0538", "CTUI-0539")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.ProviderStatus }, "CTUI-0540", "CTUI-0541", "CTUI-0542", "CTUI-0543", "CTUI-0544", "CTUI-0545", "CTUI-0546")
@@ -49,6 +194,42 @@ func modelsScreens() map[string]func(ModelsSnapshot) ScreenContent {
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.FeedbackStatus }, "CTUI-0625", "CTUI-0627", "CTUI-0628", "CTUI-0629")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.EvaluationStatus }, "CTUI-0570")
 	return screens
+}
+
+func codexAppServerStatusField(health CodexHealthReport) Field {
+	status := strings.TrimSpace(health.AppServerStatus)
+	if status == "" {
+		return Field{Label: "App-server boundary", Value: Unknown("app-server configuration boundary has not been checked", modelsBinding)}
+	}
+	if status == "CONFIG_FREE" {
+		return Field{Label: "App-server boundary", Value: Known(status+": "+safeCodexDisplay(health.AppServerReason, "verified"), modelsBinding)}
+	}
+	return Field{Label: "App-server boundary (" + safeCodexDisplay(status, "BLOCKED") + ")", Value: Blocked(safeCodexDisplay(health.AppServerReason, "APP_SERVER_BOUNDARY_BLOCKED"), "operator", modelsBinding)}
+}
+
+func boolDisplay(ok bool, text string) string {
+	if ok {
+		return text
+	}
+	return ""
+}
+
+// safeCodexDisplay keeps discovered native metadata in a small identity
+// alphabet.  The adapter already normalizes CLI output, but snapshots can be
+// supplied by tests, a future reader, or a stale store; render defensively at
+// the final trust boundary as well.
+func safeCodexDisplay(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 128 {
+		return fallback
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("._@+:/-", r) {
+			continue
+		}
+		return fallback
+	}
+	return value
 }
 
 func bindModelValue(screens map[string]func(ModelsSnapshot) ScreenContent, value func(ModelsSnapshot) Value, ids ...string) {

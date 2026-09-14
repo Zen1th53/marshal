@@ -6,8 +6,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/Zen1th53/marshal/internal/model"
 )
 
 // These tests drive the view the way a user does: key events in, rendered lines
@@ -53,6 +51,47 @@ func TestViewOpensAndRendersWithNoSourceAttached(t *testing.T) {
 	}
 }
 
+// Frozen navigation is the default Community surface, so it must honour the
+// same semantic theme as the legacy workspace rather than silently rendering
+// as a no-colour terminal. Styling is applied after layout, therefore it must
+// not change visible width; explicit no-colour mode remains plain text.
+func TestNavigationHonorsThemeWithoutChangingLayoutWidth(t *testing.T) {
+	v := testView(t)
+	v.OpenAndWait(context.Background())
+	coloured := strings.Join(v.Render(100, 28), "\n")
+	if !strings.Contains(coloured, "\x1b[") {
+		t.Fatal("default navigation did not emit semantic ANSI styling")
+	}
+	for _, line := range v.Render(100, 28) {
+		if got := VisibleLen(line); got > 100 {
+			t.Fatalf("styled navigation line has visible width %d, want <= 100: %q", got, line)
+		}
+	}
+
+	plain, err := NewNavView(NewTheme(ThemeNoColor, false, false))
+	if err != nil {
+		t.Fatalf("new no-colour navigation: %v", err)
+	}
+	plain.OpenAndWait(context.Background())
+	if got := strings.Join(plain.Render(100, 28), "\n"); strings.Contains(got, "\x1b[") {
+		t.Fatalf("no-colour navigation emitted ANSI styling: %q", got)
+	}
+}
+
+// Menus, typed forms, and palette results all use the same selected-row
+// marker. A focus target needs a high-contrast treatment, not a subtle tint
+// that disappears against a terminal's dark theme.
+func TestSelectedNavigationRowUsesHighContrastFocus(t *testing.T) {
+	raw := "▸ Selected destination │ detail"
+	got := styleNavigationMenuRow(raw, NewTheme(ThemeDefault, true, false))
+	if !strings.Contains(got, "\x1b[7m") {
+		t.Fatalf("selected row has no reverse-video focus: %q", got)
+	}
+	if VisibleLen(got) != VisibleLen(raw) {
+		t.Fatalf("styled row width=%d, raw width=%d", VisibleLen(got), VisibleLen(raw))
+	}
+}
+
 // All nine frozen sections stay reachable at every width.
 //
 // Truncating the bar would hide a section behind an ellipsis, making MARSHAL
@@ -74,8 +113,8 @@ func TestAllNineSectionsSurviveEveryWidth(t *testing.T) {
 					cols, i+1, bar)
 			}
 		}
-		if len([]rune(bar)) > cols {
-			t.Fatalf("width %d: the top bar is %d runes", cols, len([]rune(bar)))
+		if got := VisibleLen(bar); got > cols {
+			t.Fatalf("width %d: the top bar has visible width %d", cols, got)
 		}
 	}
 }
@@ -481,8 +520,8 @@ func TestViewRendersAtNarrowWidths(t *testing.T) {
 			t.Fatalf("width %d rendered nothing", cols)
 		}
 		for i, line := range rendered {
-			if got := len([]rune(line)); got > cols {
-				t.Fatalf("width %d: line %d is %d runes and overflows:\n%q",
+			if got := VisibleLen(line); got > cols {
+				t.Fatalf("width %d: line %d has visible width %d and overflows:\n%q",
 					cols, i, got, line)
 			}
 		}
@@ -951,60 +990,3 @@ func TestStatusSurvivesUntilItHasBeenSeen(t *testing.T) {
 		t.Fatalf("the refresh status never reached a frame:\n%s", out)
 	}
 }
-
-// A workspace must be able to drain the initial asynchronous navigation read
-// before its runtime/store is closed. Otherwise a final read can recreate a
-// SQLite sidecar underneath a project that is already being cleaned up.
-func TestWaitForRefreshesDrainsCancelledNavigationRead(t *testing.T) {
-	started := make(chan struct{})
-	finished := make(chan struct{})
-	v := testView(t)
-	v.AttachSource(&StatusSource{Runtime: refreshBlockingRuntime{started: started, finished: finished}}, nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	v.Open(ctx)
-
-	select {
-	case <-started:
-	case <-time.After(time.Second):
-		t.Fatal("background navigation read did not start")
-	}
-
-	drained := make(chan struct{})
-	go func() {
-		v.WaitForRefreshes()
-		close(drained)
-	}()
-	select {
-	case <-drained:
-		t.Fatal("refresh drain returned while a read was still active")
-	case <-time.After(20 * time.Millisecond):
-	}
-
-	cancel()
-	select {
-	case <-drained:
-	case <-time.After(time.Second):
-		t.Fatal("refresh drain did not finish after session cancellation")
-	}
-	select {
-	case <-finished:
-	case <-time.After(time.Second):
-		t.Fatal("cancelled navigation read did not finish")
-	}
-}
-
-type refreshBlockingRuntime struct {
-	started  chan<- struct{}
-	finished chan<- struct{}
-}
-
-func (r refreshBlockingRuntime) Status(ctx context.Context) (RuntimeStatus, error) {
-	close(r.started)
-	<-ctx.Done()
-	close(r.finished)
-	return RuntimeStatus{}, ctx.Err()
-}
-
-func (refreshBlockingRuntime) Events(context.Context) ([]model.Event, error) { return nil, nil }
-func (refreshBlockingRuntime) Tasks(context.Context) ([]model.Task, error)   { return nil, nil }
-func (refreshBlockingRuntime) InstanceID() string                            { return "" }

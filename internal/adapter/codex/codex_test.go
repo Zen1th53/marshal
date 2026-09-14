@@ -30,6 +30,12 @@ func (r *capturingRunner) Run(_ context.Context, command adapter.Command) (adapt
 		}
 		return adapter.ProcessResult{Stdout: []byte(help)}, nil
 	}
+	if len(command.Args) == 2 && command.Args[0] == "debug" && command.Args[1] == "models" {
+		return adapter.ProcessResult{Stdout: []byte(`{"models":[{"slug":"gpt-5-codex","display_name":"GPT 5 Codex","visibility":"visible"},{"slug":"gpt-5.6-terra","display_name":"GPT 5.6 Terra","visibility":"visible"}]}`)}, nil
+	}
+	if len(command.Args) == 2 && command.Args[0] == "doctor" && command.Args[1] == "--json" {
+		return adapter.ProcessResult{Stdout: []byte(`{"checks":{"config.load":{"details":{"model":"gpt-5.6-terra"}}}}`)}, nil
+	}
 	return r.result, nil
 }
 
@@ -87,6 +93,20 @@ func TestRunUsesNarrowNativeSurfaceAndNormalizesJSONL(t *testing.T) {
 	if result.Status != adapter.StatusSuccess || result.SessionID != "thread-123" ||
 		result.FinalText != "done" || result.ExitCode != 0 {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestRunPassesTypedModelToNativeCLI(t *testing.T) {
+	runner := &capturingRunner{result: adapter.ProcessResult{ExitCode: 0}}
+	_, err := New("/usr/bin/codex", runner).Run(context.Background(), adapter.Request{
+		TaskID: "TASK-001", Title: "choose model", Worktree: "/repo/task", Model: "gpt-5-codex",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"exec", "--json", "-C", "/repo/task", "-s", "workspace-write", "--ephemeral", "--ignore-user-config", "--model", "gpt-5-codex", "-"}
+	if !slices.Equal(runner.command.Args, want) {
+		t.Fatalf("args = %#v, want %#v", runner.command.Args, want)
 	}
 }
 

@@ -82,6 +82,15 @@ func TestExecutionService_StartRunAndExecute_Success(t *testing.T) {
 	if run.State != execution.RunReady {
 		t.Fatalf("expected run state RunReady, got %s", run.State)
 	}
+	for planTaskID, executionTask := range run.Tasks {
+		if executionTask.CanonicalTaskID == "" {
+			t.Fatalf("plan task %s has no canonical Runtime task binding", planTaskID)
+		}
+		stored, getErr := runtime.Task(context.Background(), executionTask.CanonicalTaskID)
+		if getErr != nil || stored.ID != executionTask.CanonicalTaskID {
+			t.Fatalf("canonical task binding for %s is not durable: task=%#v err=%v", planTaskID, stored, getErr)
+		}
+	}
 	execService.Engine().EvidenceOracle().RecordEvidence(execution.ExecutionEvidence{
 		EvidenceID: "ev-readme", RunID: run.RunID, RelevantFiles: []string{"README.md"}, Status: execution.EvidenceValid,
 	})

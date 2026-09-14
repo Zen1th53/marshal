@@ -4,7 +4,7 @@ Start SHA: `ecb7b69e245246eaf0d76eddef4d30f0b03346da`
 Process07 SHA: `ecb7b69e245246eaf0d76eddef4d30f0b03346da`
 Final SHA: `7d10a702a70ef704acd0eb06825f8a3a0d2b472d`
 Branch: merged to `main` via PR #116, #120, #121, #122, #123, #124
-Schema: v85
+Schema: v86
 Commits: 36 from the Process 07 base
 Author/committer: Zen1th53 &lt;extreme29@proton.me&gt; on every commit
 AI attribution: none, in messages, trailers, branches or tags
@@ -13,7 +13,7 @@ AI attribution: none, in messages, trailers, branches or tags
 
 P07 entry: PASS, binding derived from the stored memory commit; a caller cannot
 supply the digest, source SHA or outcome
-OptimizationCycle: PASS, schema v85, append-only, digest-protected, CAS-guarded
+OptimizationCycle: PASS, schema v86, append-only, digest-protected, CAS-guarded
 Objectives/veto: PASS, the veto reads declared effects rather than prose and is
 answered before any score
 Candidates/baseline: PASS, rollback and verification plans mandatory; an

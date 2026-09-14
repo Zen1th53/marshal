@@ -50,8 +50,9 @@ func TestProviderExecutionE2EChain(t *testing.T) {
 
 	// 1. Register Developer Agent
 	agent, err := runtime.RegisterAgent(ctx, app.RegisterAgentRequest{
-		Name: "e2e-developer",
-		Role: model.RoleDeveloper,
+		Name:          "e2e-developer",
+		Role:          model.RoleDeveloper,
+		ModelProvider: "codex",
 	})
 	if err != nil {
 		t.Fatalf("RegisterAgent: %v", err)

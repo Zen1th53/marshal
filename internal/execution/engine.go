@@ -149,11 +149,10 @@ func (e *Engine) GetHarness(name string) (WorkerHarness, error) {
 	if h, ok := e.harnesses[name]; ok {
 		return h, nil
 	}
-	// Fall back to mock if unknown
-	if m, ok := e.harnesses["mock"]; ok {
-		return m, nil
-	}
-	return nil, fmt.Errorf("harness %q not found", name)
+	// A provider chosen by Process 04 must not silently become a simulated
+	// worker.  Test-only callers may request the explicit "mock" harness, but
+	// a missing production route is a fail-closed execution error.
+	return nil, fmt.Errorf("%w: harness %q is not registered", ErrRunBlocked, name)
 }
 
 // InitializeRun validates entrance gating, creates the ExecutionRun, and records the initial event.
@@ -291,7 +290,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 	run.State = RunRunning
 	run.CurrentPhase = PhaseExecuting
 	run.UpdatedAt = time.Now().UTC()
-	if err := e.store.UpdateRun(ctx, run); err != nil {
+	if err := e.persistRun(ctx, &run); err != nil {
 		return nil, err
 	}
 
@@ -360,7 +359,9 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 		select {
 		case <-ctx.Done():
 			run.State = RunPaused
-			_ = e.store.UpdateRun(ctx, run)
+			if err := e.persistRun(ctx, &run); err != nil {
+				return &run, err
+			}
 			return &run, ctx.Err()
 		default:
 		}
@@ -398,7 +399,9 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			if hasFailure {
 				run.State = RunFailed
 				run.CurrentPhase = PhaseTerminated
-				_ = e.store.UpdateRun(ctx, run)
+				if err := e.persistRun(ctx, &run); err != nil {
+					return &run, err
+				}
 				return &run, fmt.Errorf("run failed: one or more tasks failed")
 			}
 
@@ -407,7 +410,9 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				run.CurrentPhase = PhaseCompletedPending
 				now := time.Now().UTC()
 				run.EndedAt = &now
-				_ = e.store.UpdateRun(ctx, run)
+				if err := e.persistRun(ctx, &run); err != nil {
+					return &run, err
+				}
 
 				_, _ = e.journal.Append(JournalEvent{
 					RunID:       run.RunID,
@@ -454,7 +459,9 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				run.Tasks[taskID] = t
 				run.State = RunNeedsApproval
 				run.CurrentPhase = PhaseAwaitingApproval
-				_ = e.store.UpdateRun(ctx, run)
+				if err := e.persistRun(ctx, &run); err != nil {
+					return &run, err
+				}
 
 				_, _ = e.journal.Append(JournalEvent{
 					RunID:     run.RunID,
@@ -487,25 +494,38 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				if agentID == "" {
 					agentID = "worker-" + t.TaskID
 				}
-				l, err := e.leases.AcquireLease(AcquireLeaseRequest{
-					RunID:           run.RunID,
-					TaskID:          t.TaskID,
-					AgentID:         agentID,
-					Role:            agentID,
-					ScopedResources: t.TargetFiles,
-					MutationScope:   "mutate",
-					TTL:             5 * time.Minute,
-					Now:             nowUTC(),
-				})
-				if err != nil {
-					if errors.Is(err, ErrLeaseConflict) {
-						// Lease conflict: another worker is mutating overlapping resources; wait
-						continue
+				if t.NativeTurn != nil && t.LeaseID != "" {
+					// A paused live provider turn retains its exact mutation lease;
+					// reacquiring would either conflict with itself or silently steal
+					// ownership after a restart. Verify and renew only that lease.
+					if err := e.leases.VerifyOwner(t.TaskID, agentID, t.LeaseID, nowUTC()); err != nil {
+						return &run, fmt.Errorf("%w: native provider lease cannot be resumed: %v", ErrLeaseExpired, err)
 					}
-					return &run, fmt.Errorf("failed to acquire lease for task %s: %w", t.TaskID, err)
+					if err := e.leases.RenewLease(t.LeaseID, agentID, 5*time.Minute, nowUTC()); err != nil {
+						return &run, fmt.Errorf("%w: native provider lease renewal failed: %v", ErrLeaseExpired, err)
+					}
+					lease = &Lease{LeaseID: t.LeaseID, AgentID: agentID}
+				} else {
+					l, err := e.leases.AcquireLease(AcquireLeaseRequest{
+						RunID:           run.RunID,
+						TaskID:          t.TaskID,
+						AgentID:         agentID,
+						Role:            agentID,
+						ScopedResources: t.TargetFiles,
+						MutationScope:   "mutate",
+						TTL:             5 * time.Minute,
+						Now:             nowUTC(),
+					})
+					if err != nil {
+						if errors.Is(err, ErrLeaseConflict) {
+							// Lease conflict: another worker is mutating overlapping resources; wait
+							continue
+						}
+						return &run, fmt.Errorf("failed to acquire lease for task %s: %w", t.TaskID, err)
+					}
+					lease = l
+					t.LeaseID = l.LeaseID
 				}
-				lease = l
-				t.LeaseID = l.LeaseID
 			}
 
 			// Checkpoints: capture checkpoint before task if designated
@@ -542,26 +562,118 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			now := time.Now().UTC()
 			t.StartedAt = &now
 			run.Tasks[taskID] = t
-			_ = e.store.UpdateRun(ctx, run)
+			if err := e.persistRun(ctx, &run); err != nil {
+				return &run, err
+			}
 
 			// Execute using assigned harness
+			t.RunRevision = run.Version
+			run.Tasks[taskID] = t
 			harnessName := t.AssignedHarness
 			if harnessName == "" {
-				harnessName = "mock"
+				harnessName = "unbound"
 			}
-			harness, err := e.GetHarness(harnessName)
-			if err != nil {
-				harness, _ = e.GetHarness("mock")
+			harness, harnessErr := e.GetHarness(harnessName)
+			result := TaskResult{TaskID: t.TaskID}
+			execErr := harnessErr
+			if harnessErr == nil {
+				result, execErr = harness.Execute(ctx, t, pkg, wtPath)
 			}
-
-			result, execErr := harness.Execute(ctx, t, pkg, wtPath)
+			// Cancellation is a durable canonical transition. A worker can return
+			// concurrently after its typed provider interrupt has been accepted;
+			// never let that late result overwrite CANCELLED with a failure or a
+			// synthetic success.
+			if latest, latestErr := e.store.GetRun(ctx, runID); latestErr != nil {
+				return &run, latestErr
+			} else if latest.State == RunCancelled || latest.State == RunCancelling {
+				return &latest, nil
+			} else {
+				// A native provider can bind its accepted thread/turn while WaitTurn
+				// is still in progress. Refresh the local run before projecting the
+				// terminal result so the later write preserves that durable binding
+				// (and uses the store's current CAS revision).
+				run = latest
+				var exists bool
+				t, exists = run.Tasks[taskID]
+				if !exists {
+					return &run, fmt.Errorf("%w: task %s disappeared during native execution", ErrRunInvalid, taskID)
+				}
+			}
+			if result.NativeTurn != nil {
+				if err := validateNativeTurnBinding(*result.NativeTurn, run, t, wtPath); err != nil {
+					// Preserve the provider's original refusal (for example a
+					// worktree digest mismatch) instead of masking it as a less
+					// actionable binding error. A successful provider result still
+					// cannot pass this validation.
+					if execErr == nil {
+						execErr = err
+					}
+				} else {
+					binding := *result.NativeTurn
+					t.NativeTurn = &binding
+				}
+			}
 
 			// Record Budget Consumption
 			run.BudgetConsumed.ModelCalls++
 			run.BudgetConsumed.InputTokens += result.InputTokens
 			run.BudgetConsumed.OutputTokens += result.OutputTokens
 
-			if execErr != nil || !result.Success {
+			// A governed provider may discover a native approval requirement only
+			// after the task has begun (for example, an app-server tool request).
+			// It is still a Process 05 pause, not a worker failure and never an
+			// adapter-local "accept" decision. Persist the exact durable approval,
+			// release this execution attempt, and let DecideApproval re-admit the
+			// task through the normal scheduler.
+			providerApprovalPaused := false
+			if result.NeedsApproval {
+				if execErr != nil || result.ApprovalReq == nil {
+					t.State = TaskFailed
+					t.LastFailureReason = "worker reported an invalid native approval pause"
+				} else if result.NativeApprovalID != "" {
+					// A typed provider bridge has already placed the exact request
+					// in the canonical queue. Never create a second, generic record:
+					// doing so would make one operator decision ambiguously authorize
+					// two native requests.
+					app, approvalErr := e.approvals.GetApproval(result.NativeApprovalID)
+					if approvalErr != nil || app.RunID != run.RunID || app.TaskID != t.TaskID || app.OperationType == "" || app.Status != ApprovalRequested {
+						t.State = TaskFailed
+						t.LastFailureReason = "worker referenced an invalid native approval record"
+					} else {
+						t.ApprovalID = app.ApprovalID
+						t.ApprovalRequired = true
+						t.State = TaskNeedsApproval
+						run.State = RunNeedsApproval
+						run.CurrentPhase = PhaseAwaitingApproval
+						providerApprovalPaused = true
+					}
+				} else {
+					req := *result.ApprovalReq
+					req.RunID = run.RunID
+					req.TaskID = t.TaskID
+					req.PlanID = run.PlanID
+					req.PlanVersion = run.PlanVersion
+					if req.OperationType == "" || req.TargetResource == "" || req.Scope == "" || req.CurrentState == "" {
+						t.State = TaskFailed
+						t.LastFailureReason = "worker reported an incomplete native approval binding"
+					} else if app, approvalErr := e.approvals.RequestApproval(req); approvalErr != nil {
+						t.State = TaskFailed
+						t.LastFailureReason = fmt.Sprintf("native approval request failed: %v", approvalErr)
+					} else {
+						t.ApprovalID = app.ApprovalID
+						t.ApprovalRequired = true
+						t.State = TaskNeedsApproval
+						run.State = RunNeedsApproval
+						run.CurrentPhase = PhaseAwaitingApproval
+						providerApprovalPaused = true
+						_, _ = e.journal.Append(JournalEvent{
+							RunID: run.RunID, TaskID: t.TaskID, Actor: harnessName,
+							EventType: "PROVIDER_APPROVAL_REQUESTED",
+							Summary:   fmt.Sprintf("Provider-native approval requested for task %s", t.TaskID),
+						})
+					}
+				}
+			} else if execErr != nil || !result.Success {
 				failReason := "worker execution error"
 				if execErr != nil {
 					failReason = execErr.Error()
@@ -620,24 +732,51 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				}
 			}
 
-			// Cleanup worktree and lease
-			_ = e.worktrees.CleanWorktree(ctx, wtPath)
-			if t.Mutates && lease != nil {
-				_ = e.leases.ReleaseLease(lease.LeaseID, lease.AgentID, nowUTC())
+			// A live native provider turn owns its worktree and lease until the
+			// exact queued approval is resolved. Cleaning or releasing either
+			// here would permit a conflicting worker to change the target while
+			// Codex is paused. Terminal/failure paths retain the old cleanup.
+			// Only a live app-server turn retains its resources. Other native
+			// provider approvals are restartable scheduler pauses and must release
+			// their lease before re-admission.
+			retainLiveNativeTurn := providerApprovalPaused && result.NativeApprovalID != ""
+			if !retainLiveNativeTurn {
+				_ = e.worktrees.CleanWorktree(ctx, wtPath)
+				if t.Mutates && lease != nil {
+					_ = e.leases.ReleaseLease(lease.LeaseID, lease.AgentID, nowUTC())
+				}
 			}
 
+			if providerApprovalPaused && result.NativeApprovalID != "" && t.NativeTurn != nil {
+				// persistRun increments the canonical run revision. Bind the live
+				// provider turn to that post-persist revision so approval-time CAS
+				// can detect any intervening state change.
+				t.NativeTurn.RunRevision = run.Version + 1
+			}
 			run.Tasks[taskID] = t
-			_ = e.store.UpdateRun(ctx, run)
+			if err := e.persistRun(ctx, &run); err != nil {
+				return &run, err
+			}
 
+			actor := harnessName
+			if harness != nil {
+				actor = harness.Name()
+			}
 			_, _ = e.journal.Append(JournalEvent{
 				RunID:       run.RunID,
 				TaskID:      t.TaskID,
-				Actor:       harness.Name(),
+				Actor:       actor,
 				EventType:   "TASK_FINISHED",
 				StateBefore: string(TaskRunning),
 				StateAfter:  string(t.State),
 				Summary:     fmt.Sprintf("Task %s completed with state %s", t.TaskID, t.State),
 			})
+			// Admission stops at the first provider-native approval pause. In
+			// particular, another ready task must not race past a newly raised
+			// hard gate in this same scheduler pass.
+			if providerApprovalPaused {
+				return &run, nil
+			}
 
 			progressMade = true
 		}
@@ -650,15 +789,89 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 	return &run, nil
 }
 
-// DecideApproval handles a human decision on a pending approval.
-func (e *Engine) DecideApproval(ctx context.Context, approvalID string, approve bool, decider, reason string) error {
-	now := time.Now().UTC()
-	app, err := e.approvals.Decide(approvalID, approve, decider, reason, now)
+func validateNativeTurnBinding(binding NativeTurnBinding, run ExecutionRun, task TaskExecution, worktree string) error {
+	if binding.Provider == "" || binding.ThreadID == "" || binding.TurnID == "" || binding.Worktree == "" || binding.Worktree != worktree || binding.ConstraintDigest == "" || binding.RunRevision <= 0 {
+		return fmt.Errorf("%w: incomplete or mismatched native provider turn binding", ErrRunInvalid)
+	}
+	if task.RunID != run.RunID || binding.RunRevision != task.RunRevision {
+		return fmt.Errorf("%w: native provider turn is stale for Process 05 run (binding revision %d, task revision %d)", ErrRunInvalid, binding.RunRevision, task.RunRevision)
+	}
+	return nil
+}
+
+// BindNativeTurn durably records the exact native provider thread and turn
+// immediately after it has been accepted, before waiting for provider output.
+// That makes a live app-server turn cancellable and recoverable through the
+// canonical Process 05 state rather than an in-memory adapter map. The method
+// is deliberately narrow: callers cannot create or run provider work here;
+// they may only bind a turn for a task the engine has already admitted.
+func (e *Engine) BindNativeTurn(ctx context.Context, runID, taskID string, binding NativeTurnBinding) error {
+	run, err := e.store.GetRun(ctx, runID)
 	if err != nil {
 		return err
 	}
+	task, ok := run.Tasks[taskID]
+	if !ok || task.State != TaskRunning {
+		return fmt.Errorf("%w: task %s is not a running native execution", ErrRunInvalid, taskID)
+	}
+	if task.NativeTurn != nil {
+		if *task.NativeTurn == binding {
+			return nil // idempotent replay of the same accepted provider turn
+		}
+		return fmt.Errorf("%w: task %s already has a different native turn binding", ErrRunConflict, taskID)
+	}
+	// ExecuteRun assigns the current run CAS revision immediately before it
+	// calls a harness. Persist that same revision with the binding; accepting a
+	// stale provider turn after a run transition would be a TOCTOU bypass.
+	task.RunRevision = binding.RunRevision
+	if err := validateNativeTurnBinding(binding, run, task, task.WorktreePath); err != nil {
+		return err
+	}
+	bound := binding
+	task.NativeTurn = &bound
+	run.Tasks[taskID] = task
+	return e.persistRun(ctx, &run)
+}
 
-	run, err := e.store.GetRun(ctx, app.RunID)
+// persistRun keeps the caller's in-memory CAS revision aligned with the
+// canonical store. Ignoring UpdateRun errors previously let a later stale copy
+// overwrite (or merely pretend to overwrite) a provider pause, which is
+// particularly unsafe for durable native turns.
+func (e *Engine) persistRun(ctx context.Context, run *ExecutionRun) error {
+	if run == nil {
+		return fmt.Errorf("%w: cannot persist nil run", ErrRunInvalid)
+	}
+	if err := e.store.UpdateRun(ctx, *run); err != nil {
+		return err
+	}
+	run.Version++
+	run.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
+// DecideApproval handles a human decision on a pending approval.
+func (e *Engine) DecideApproval(ctx context.Context, approvalID string, approve bool, decider, reason string) error {
+	now := time.Now().UTC()
+	// Verify the owning run before mutating the approval record. Otherwise an
+	// orphaned provider approval could be marked APPROVED even though no
+	// Process 05 task exists to consume it.
+	pending, err := e.approvals.GetApproval(approvalID)
+	if err != nil {
+		return err
+	}
+	// A live Codex app-server approval belongs to the still-running provider
+	// turn. It must be consumed by its typed adapter bridge, which verifies the
+	// native thread/turn/item binding immediately before replying to Codex.
+	// Treating it as an ordinary task approval here would incorrectly put the
+	// task back in READY while that provider turn is still live.
+	if pending.OperationType == "CODEX_APP_SERVER_NATIVE" {
+		return fmt.Errorf("%w: native Codex approval requires the bound app-server bridge", ErrRunBlocked)
+	}
+	run, err := e.store.GetRun(ctx, pending.RunID)
+	if err != nil {
+		return err
+	}
+	app, err := e.approvals.Decide(approvalID, approve, decider, reason, now)
 	if err != nil {
 		return err
 	}
@@ -678,7 +891,9 @@ func (e *Engine) DecideApproval(ctx context.Context, approvalID string, approve 
 		run.CurrentPhase = PhaseExecuting
 	}
 
-	_ = e.store.UpdateRun(ctx, run)
+	if err := e.persistRun(ctx, &run); err != nil {
+		return err
+	}
 
 	_, _ = e.journal.Append(JournalEvent{
 		RunID:     app.RunID,
@@ -688,6 +903,115 @@ func (e *Engine) DecideApproval(ctx context.Context, approvalID string, approve 
 		Summary:   fmt.Sprintf("Approval %s decided: approved=%v (%s)", approvalID, approve, reason),
 	})
 
+	return nil
+}
+
+// ResumeNativeApproval admits an already consumed provider-native approval
+// back into the Process 05 scheduler. The native client consumes the exact
+// approval before this method is called; this method only changes the durable
+// run/task state and never sends a provider accept command itself.
+func (e *Engine) ResumeNativeApproval(ctx context.Context, approvalID string) error {
+	app, err := e.approvals.GetApproval(approvalID)
+	if err != nil {
+		return err
+	}
+	if app.OperationType != "CODEX_APP_SERVER_NATIVE" || app.Status != ApprovalConsumed {
+		return fmt.Errorf("%w: native approval %s is not consumed by its bound provider turn", ErrApprovalRequired, approvalID)
+	}
+	run, err := e.store.GetRun(ctx, app.RunID)
+	if err != nil {
+		return err
+	}
+	task, ok := run.Tasks[app.TaskID]
+	if !ok || task.State != TaskNeedsApproval || task.ApprovalID != app.ApprovalID || task.NativeTurn == nil {
+		return fmt.Errorf("%w: native approval no longer matches its waiting Process 05 task", ErrRunInvalid)
+	}
+	if task.NativeTurn.RunRevision != run.Version {
+		return fmt.Errorf("%w: Process 05 run revision moved while native approval was pending", ErrApprovalTOCTOUViolation)
+	}
+	task.State = TaskReady
+	task.UpdatedAt = time.Now().UTC()
+	run.Tasks[app.TaskID] = task
+	run.State = RunRunning
+	run.CurrentPhase = PhaseExecuting
+	run.UpdatedAt = task.UpdatedAt
+	if err := e.persistRun(ctx, &run); err != nil {
+		return err
+	}
+	_, _ = e.journal.Append(JournalEvent{RunID: run.RunID, TaskID: task.TaskID, Actor: "MARSHAL_ENGINE", EventType: "PROVIDER_APPROVAL_CONSUMED", Summary: "Exact native provider approval consumed; resuming existing turn"})
+	return nil
+}
+
+// FailNativeApproval records an operator rejection (or unavailable native
+// connection) as a terminal Process 05 block. It deliberately does not leave
+// a paused provider turn eligible for a later generic retry.
+func (e *Engine) FailNativeApproval(ctx context.Context, approvalID, reason string) error {
+	app, err := e.approvals.GetApproval(approvalID)
+	if err != nil {
+		return err
+	}
+	if app.OperationType != "CODEX_APP_SERVER_NATIVE" {
+		return fmt.Errorf("%w: approval %s is not a native provider approval", ErrRunInvalid, approvalID)
+	}
+	run, err := e.store.GetRun(ctx, app.RunID)
+	if err != nil {
+		return err
+	}
+	task, ok := run.Tasks[app.TaskID]
+	if !ok || task.ApprovalID != app.ApprovalID {
+		return fmt.Errorf("%w: native approval no longer matches Process 05 task", ErrRunInvalid)
+	}
+	task.State = TaskBlocked
+	task.LastFailureReason = reason
+	task.UpdatedAt = time.Now().UTC()
+	run.Tasks[task.TaskID] = task
+	if err := run.Block(reason, task.UpdatedAt); err != nil {
+		return err
+	}
+	if err := e.persistRun(ctx, &run); err != nil {
+		return err
+	}
+	_, _ = e.journal.Append(JournalEvent{RunID: run.RunID, TaskID: task.TaskID, Actor: "MARSHAL_ENGINE", EventType: "PROVIDER_APPROVAL_REJECTED", Summary: reason})
+	return nil
+}
+
+// CancelNativeTurn records cancellation only after the bound provider client
+// has accepted its typed interrupt. It never attempts a replacement turn or a
+// generic process kill.
+func (e *Engine) CancelNativeTurn(ctx context.Context, runID, taskID, reason string) error {
+	run, err := e.store.GetRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	task, ok := run.Tasks[taskID]
+	if !ok || task.NativeTurn == nil || task.State.IsTerminal() {
+		return fmt.Errorf("%w: no cancellable native provider turn for task %s", ErrRunInvalid, taskID)
+	}
+	task.State = TaskCancelled
+	task.LastFailureReason = reason
+	now := time.Now().UTC()
+	task.CompletedAt = &now
+	task.UpdatedAt = now
+	run.Tasks[taskID] = task
+	if err := run.Cancel(now); err != nil {
+		return err
+	}
+	if err := e.persistRun(ctx, &run); err != nil {
+		return err
+	}
+	if task.LeaseID != "" {
+		agent := task.AssignedRole
+		if agent == "" {
+			agent = task.AssignedHarness
+		}
+		if agent != "" {
+			_ = e.leases.ReleaseLease(task.LeaseID, agent, now)
+		}
+	}
+	if task.WorktreePath != "" {
+		_ = e.worktrees.CleanWorktree(ctx, task.WorktreePath)
+	}
+	_, _ = e.journal.Append(JournalEvent{RunID: runID, TaskID: taskID, Actor: "MARSHAL_ENGINE", EventType: "PROVIDER_TURN_INTERRUPTED", Summary: reason})
 	return nil
 }
 

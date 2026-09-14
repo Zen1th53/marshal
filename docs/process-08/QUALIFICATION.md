@@ -16,7 +16,7 @@ requirement each piece of evidence answered.
 | Row | Status | Direct evidence |
 |---|---|---|
 | A P07 entry | PASS | `OptimizationService.EntryFor` derives the binding from the stored memory commit; a caller cannot supply the digest, source SHA or outcome |
-| B OptimizationCycle durability | PASS | schema v85; `internal/store/optimization_test.go` round-trip, CAS and partial-write rollback |
+| B OptimizationCycle durability | PASS | schema v86; `internal/store/optimization_test.go` round-trip, CAS and partial-write rollback |
 | C objectives | PASS | `Objective` with explicit direction and weight; constraints outrank objectives by construction in `Promote` |
 | D governance veto | PASS | `Veto` reads declared `Effects`, not prose; `TestAdversarialHardGovernanceVetoes` covers 8 weakening classes |
 | E candidates | PASS | `ValidateCandidate` requires hypothesis, scope, rollback and verification plan |

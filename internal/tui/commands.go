@@ -82,11 +82,17 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	case "/status":
 		return h.handleStatus(ctx)
-	case "/review", "/verification":
+	case "/verification":
 		if len(parts) != 2 {
-			return "Usage: /review <verification_id>", nil
+			return "Usage: /verification <verification_id>", nil
 		}
 		return h.handleVerification(ctx, parts[1])
+
+	case "/review":
+		if len(parts) == 2 && strings.HasPrefix(parts[1], "ver-") {
+			return h.handleVerification(ctx, parts[1])
+		}
+		return h.handleCodex(ctx, append([]string{"review"}, parts[1:]...), line)
 
 	case "/learning":
 		if len(parts) != 2 {
@@ -199,12 +205,18 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handlePause(ctx)
 
 	case "/resume":
+		if len(parts) > 1 {
+			return h.handleCodex(ctx, append([]string{"resume"}, parts[1:]...), line)
+		}
 		return h.handleResume(ctx)
 
 	case "/cancel":
 		return h.handleCancel(ctx)
 
 	case "/doctor":
+		if len(parts) > 1 && (parts[1] == "codex" || parts[1] == "provider") {
+			return h.handleCodex(ctx, []string{"doctor"}, line)
+		}
 		return h.handleDoctor(ctx)
 
 	case "/tasks", "/task":
@@ -217,6 +229,9 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handlePolicy(ctx, parts[1:])
 
 	case "/sandbox":
+		if len(parts) > 1 {
+			return h.handleCodex(ctx, append([]string{"sandbox"}, parts[1:]...), line)
+		}
 		return h.handleSandbox(ctx)
 
 	case "/memory":
@@ -228,7 +243,13 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/harness":
 		return h.handleHarness(ctx, parts[1:])
 
+	case "/models":
+		return h.handleCodex(ctx, []string{"models"}, line)
+
 	case "/model":
+		if len(parts) == 2 && parts[1] != "show" && parts[1] != "select" {
+			return h.handleCodex(ctx, []string{"model", parts[1]}, line)
+		}
 		return h.handleModel(ctx, parts[1:])
 
 	case "/effort":
@@ -276,7 +297,51 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/context":
 		return h.handleContext(ctx, parts[1:])
 
+	case "/codex":
+		return h.handleCodex(ctx, parts[1:], line)
+
+	case "/mcp":
+		return h.handleCodex(ctx, append([]string{"mcp"}, parts[1:]...), line)
+
+	case "/plugin", "/plugins":
+		return h.handleCodex(ctx, append([]string{"plugin"}, parts[1:]...), line)
+
+	case "/apply":
+		return h.handleCodex(ctx, append([]string{"apply"}, parts[1:]...), line)
+
+	case "/sessions":
+		return h.handleCodex(ctx, append([]string{"sessions"}, parts[1:]...), line)
+
+	case "/fork":
+		return h.handleCodex(ctx, append([]string{"fork"}, parts[1:]...), line)
+
+	case "/search":
+		return h.handleCodex(ctx, append([]string{"search"}, parts[1:]...), line)
+
+	case "/features":
+		return h.handleCodex(ctx, append([]string{"features"}, parts[1:]...), line)
+
+	case "/skill", "/skills":
+		return h.handleCodex(ctx, append([]string{"skill"}, parts[1:]...), line)
+
+	case "/login":
+		return h.handleCodex(ctx, []string{"login"}, line)
+
+	case "/logout":
+		return h.handleCodex(ctx, []string{"logout"}, line)
+
 	default:
+		if !strings.HasPrefix(line, "/") {
+			if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
+				return h.ws.runNativeCodex(ctx, []string{"--", line})
+			}
+			// Natural language prompt entered directly at composer prompt `>`
+			source := h.ws.controlSource()
+			if source != nil && source.Authority != nil {
+				return h.handleCodexExec(ctx, source.Authority, line)
+			}
+			return "Codex control authority unavailable: no runtime attached to workspace.", nil
+		}
 		return fmt.Sprintf("Unknown command %q. Type /help for available commands.", cmd), nil
 	}
 }
@@ -576,10 +641,25 @@ func (h *CommandHandler) helpText() string {
   /handoff <role> <summary> Transfer active turn to the target role
   /checkpoint              Create a durable handoff checkpoint
   /rollback <id>           Roll back state to an eligible checkpoint
-  /budget                  Inspect token, cost, call, and time budgets
   /pause                   Pause the active collaborative session
-  /resume                  Resume a paused collaborative session
+  /resume [id|--last]      Resume collaborative or Codex session
   /cancel                  Cancel active goal execution
+  /review [instructions]   Run deep non-interactive code review of current commit
+  /diff                    Interactive diff inspector for pending changes
+  /models                  List discovered models and active selection
+  /model <slug>            Switch active Codex model (e.g. /model o3-mini)
+  /mcp [list|add|rm]       Manage Codex MCP server integrations
+  /plugins [list|add|rm]   Manage Codex plugins and extensions
+  /apply                   Apply pending diff to working tree
+  /doctor [codex]          Run health diagnostics and environment checks
+  /search [on|off]         Toggle live web search tool
+  /codex [subcommand]      Full Codex control plane (status, models, review, exec, run, cli)
+  <prompt...>              Type any prompt directly without / to command Codex!
   /help                    Show this help reference
-  /quit, /exit             Exit TUI workspace (session remains durable in SQLite)`
+  /quit, /exit             Exit TUI workspace (session remains durable in SQLite)
+
+Function Keys & Shortcuts:
+  F1: Help       F2: Review     F3: Diff viewer
+  F4: Status     F5: Models     F6: MCP servers
+  Esc: Toggle Navigation        Tab: Auto-complete / Command menu`
 }

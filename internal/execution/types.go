@@ -108,6 +108,10 @@ const (
 	ApprovalDenied      ApprovalStatus = "DENIED"
 	ApprovalExpired     ApprovalStatus = "EXPIRED"
 	ApprovalInvalidated ApprovalStatus = "INVALIDATED"
+	// ApprovalConsumed is a successful, one-shot use of an exact approval.
+	// It must remain distinct from INVALIDATED, which denotes a stale or
+	// tampered binding and must never resume provider work.
+	ApprovalConsumed ApprovalStatus = "CONSUMED"
 )
 
 // EvidenceStatus represents the freshness and validity of an evidence record.
@@ -176,7 +180,13 @@ type ExecutionRun struct {
 
 // TaskExecution tracks execution state of a task inside a run.
 type TaskExecution struct {
+	// RunID is repeated on the task deliberately: a provider-native lifecycle
+	// callback must be bound to the owning Process 05 run and may never infer
+	// that ownership from a task label.
+	RunID             string             `json:"run_id,omitempty"`
+	RunRevision       int64              `json:"run_revision,omitempty"`
 	TaskID            string             `json:"task_id"`
+	CanonicalTaskID   string             `json:"canonical_task_id,omitempty"`
 	Description       string             `json:"description"`
 	AssignedRole      string             `json:"assigned_role"`
 	AssignedAgent     string             `json:"assigned_agent"`
@@ -189,6 +199,7 @@ type TaskExecution struct {
 	TargetFiles       []string           `json:"target_files,omitempty"`
 	LeaseID           string             `json:"lease_id,omitempty"`
 	WorktreePath      string             `json:"worktree_path,omitempty"`
+	NativeTurn        *NativeTurnBinding `json:"native_turn,omitempty"`
 	RequiredEvidence  []string           `json:"required_evidence,omitempty"`
 	CollectedEvidence []string           `json:"collected_evidence,omitempty"`
 	ApprovalRequired  bool               `json:"approval_required"`
@@ -201,6 +212,26 @@ type TaskExecution struct {
 	StartedAt         *time.Time         `json:"started_at,omitempty"`
 	CompletedAt       *time.Time         `json:"completed_at,omitempty"`
 	UpdatedAt         time.Time          `json:"updated_at"`
+}
+
+// NativeTurnBinding is the durable, redacted identity of an in-flight native
+// provider turn. It contains no prompt, command, provider payload, or
+// credential material. The binding is persisted with the canonical Process 05
+// run so restart recovery can refuse a moved worktree, constraint package, or
+// run revision instead of starting an unbound replacement turn.
+type NativeTurnBinding struct {
+	Provider         string `json:"provider"`
+	ThreadID         string `json:"thread_id"`
+	TurnID           string `json:"turn_id"`
+	SessionID        string `json:"session_id,omitempty"`
+	Worktree         string `json:"worktree"`
+	WorktreeDigest   string `json:"worktree_digest"`
+	Model            string `json:"model,omitempty"`
+	ConstraintDigest string `json:"constraint_digest"`
+	RunRevision      int64  `json:"run_revision"`
+	CheckpointID     string `json:"checkpoint_id,omitempty"`
+	CheckpointDigest string `json:"checkpoint_digest,omitempty"`
+	State            string `json:"state"`
 }
 
 // WorkerDescriptor describes an active worker executing under MARSHAL governance.

@@ -403,7 +403,7 @@ func TestWhyDoesNotInvokeULTRARoutingWithoutEntitlement(t *testing.T) {
 func TestControlCommandsAreRegistered(t *testing.T) {
 	_, ws, ctx := newControlWorkspace(t)
 
-	for _, line := range []string{"/status", "/inspect", "/approve", "/reject", "/route"} {
+	for _, line := range []string{"/status", "/inspect", "/approve", "/reject", "/route", "/codex"} {
 		out, err := ws.ExecuteCommand(ctx, line)
 		if err != nil {
 			t.Fatalf("%s returned error: %v", line, err)
@@ -417,7 +417,7 @@ func TestControlCommandsAreRegistered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/help: %v", err)
 	}
-	for _, cmd := range []string{"/status", "/inspect", "/approve", "/reject", "/route"} {
+	for _, cmd := range []string{"/status", "/inspect", "/approve", "/reject", "/route", "/codex"} {
 		if !strings.Contains(help, cmd) {
 			t.Fatalf("expected %s documented in /help:\n%s", cmd, help)
 		}

@@ -12,25 +12,31 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/constitution"
+	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/optimization"
 	"github.com/Zen1th53/marshal/internal/plan"
+	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/resources"
 	"github.com/Zen1th53/marshal/internal/startup"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/verification"
+	"github.com/Zen1th53/marshal/internal/worker"
 )
 
 // runtimeControlAuthority binds Control to the canonical runtime.
@@ -261,10 +267,17 @@ func (a *runtimeControlAuthority) approvalRecords(ctx context.Context, pendingOn
 	manager := engine.ApprovalManager()
 
 	var records []*execution.RuntimeApproval
+	seen := make(map[string]struct{})
+	// The approval manager is durable for the whole local runtime, while a
+	// Control workspace is deliberately scoped to one session. Keep the
+	// authoritative provider-native records visible, but never surface an
+	// unrelated session's pending approval here.
+	allowedRunIDs := make(map[string]struct{})
 	if goal, goalErr := a.CurrentGoal(ctx); goalErr == nil && goal.Confirmation != model.ConfirmationNeedsInput {
 		record := goalApprovalRecord(goal)
 		if (record.Status == execution.ApprovalRequested) == pendingOnly {
 			records = append(records, record)
+			seen[record.ApprovalID] = struct{}{}
 		}
 	}
 	if plans, planErr := a.plans(); planErr == nil {
@@ -273,6 +286,7 @@ func (a *runtimeControlAuthority) approvalRecords(ctx context.Context, pendingOn
 			record := planApprovalRecord(current)
 			if (record.Status == execution.ApprovalRequested) == pendingOnly {
 				records = append(records, record)
+				seen[record.ApprovalID] = struct{}{}
 			}
 		}
 	}
@@ -280,6 +294,7 @@ func (a *runtimeControlAuthority) approvalRecords(ctx context.Context, pendingOn
 		if run.SessionID != a.sessionID {
 			continue
 		}
+		allowedRunIDs[run.RunID] = struct{}{}
 		ids := make([]string, 0, len(run.Approvals))
 		for id := range run.Approvals {
 			ids = append(ids, id)
@@ -292,6 +307,7 @@ func (a *runtimeControlAuthority) approvalRecords(ctx context.Context, pendingOn
 				if live, err := manager.GetApproval(id); err == nil && live != nil {
 					if (live.Status == execution.ApprovalRequested) == pendingOnly {
 						records = append(records, live)
+						seen[live.ApprovalID] = struct{}{}
 					}
 					continue
 				}
@@ -300,7 +316,29 @@ func (a *runtimeControlAuthority) approvalRecords(ctx context.Context, pendingOn
 			if (record.Status == execution.ApprovalRequested) == pendingOnly {
 				copied := record
 				records = append(records, &copied)
+				seen[copied.ApprovalID] = struct{}{}
 			}
+		}
+	}
+	// Provider-native approvals may arrive while a task is already RUNNING and
+	// therefore are not represented in run.Approvals. The manager is the
+	// canonical durable queue for those records as well.
+	if manager != nil {
+		all, listErr := manager.ListApprovals()
+		if listErr != nil {
+			return nil, listErr
+		}
+		for i := range all {
+			record := all[i]
+			if _, belongsToSession := allowedRunIDs[record.RunID]; !belongsToSession {
+				continue
+			}
+			if _, exists := seen[record.ApprovalID]; exists || (record.Status == execution.ApprovalRequested) != pendingOnly {
+				continue
+			}
+			copied := record
+			records = append(records, &copied)
+			seen[copied.ApprovalID] = struct{}{}
 		}
 	}
 	sort.SliceStable(records, func(i, j int) bool {
@@ -1464,4 +1502,369 @@ func (a *runtimeControlAuthority) GCArtifacts(ctx context.Context, dryRun bool) 
 		return 0, err
 	}
 	return len(result.CleanedFiles), nil
+}
+
+// --- Governed Codex control plane authority methods ---
+
+func (a *runtimeControlAuthority) getCodexClient(ctx context.Context) (*codex.Client, error) {
+	if a == nil || a.runtime == nil {
+		return nil, errNoRuntime
+	}
+	if candidate := a.runtime.Adapter("codex"); candidate != nil {
+		if client, ok := candidate.(*codex.Client); ok {
+			return client, nil
+		}
+	}
+	binary, err := project.FindBinary("codex")
+	if err != nil {
+		return nil, fmt.Errorf("%w: codex binary not found", model.ErrUnavailable)
+	}
+	runner := worker.New(30*time.Second, 3*time.Second, 8<<20)
+	return codex.New(binary, runner), nil
+}
+
+func (a *runtimeControlAuthority) CodexHealth(ctx context.Context) (CodexHealthReport, error) {
+	if a == nil || a.runtime == nil {
+		return CodexHealthReport{Verdict: "no runtime attached"}, errNoRuntime
+	}
+	checks := make(map[string]string)
+	checks["runtime"] = "attached"
+	appServerStatus, appServerReason := codexAppServerBoundaryStatus()
+	checks["app-server"] = appServerStatus
+
+	if candidate := a.runtime.Adapter("codex"); candidate != nil {
+		if probe, err := candidate.Probe(ctx); err == nil {
+			var bin string
+			if client, ok := candidate.(*codex.Client); ok {
+				bin = client.Binary()
+			}
+			checks["probe"] = "passed"
+			checks["capabilities"] = "governed"
+			return CodexHealthReport{
+				Available:       probe.Available,
+				BinaryPath:      bin,
+				Version:         probe.Version,
+				AppServerStatus: appServerStatus,
+				AppServerReason: appServerReason,
+				Checks:          checks,
+				Verdict:         "Codex CLI ready and governed",
+				CheckedAt:       time.Now().UTC(),
+			}, nil
+		}
+	}
+	binary, err := project.FindBinary("codex")
+	if err != nil {
+		checks["binary"] = "not found"
+		return CodexHealthReport{
+			Available:       false,
+			BinaryPath:      "",
+			AppServerStatus: appServerStatus,
+			AppServerReason: appServerReason,
+			Checks:          checks,
+			Verdict:         "Codex CLI executable not found in PATH",
+			CheckedAt:       time.Now().UTC(),
+		}, nil
+	}
+	checks["binary"] = binary
+	runner := worker.New(10*time.Second, 2*time.Second, 8<<20)
+	client := codex.New(binary, runner)
+	probe, err := client.Probe(ctx)
+	if err != nil {
+		checks["probe"] = "failed: " + err.Error()
+		return CodexHealthReport{
+			Available:       false,
+			BinaryPath:      binary,
+			AppServerStatus: appServerStatus,
+			AppServerReason: appServerReason,
+			Checks:          checks,
+			Verdict:         fmt.Sprintf("probe failed: %v", err),
+			CheckedAt:       time.Now().UTC(),
+		}, nil
+	}
+	checks["probe"] = "passed"
+	return CodexHealthReport{
+		Available:       probe.Available,
+		BinaryPath:      binary,
+		Version:         probe.Version,
+		AppServerStatus: appServerStatus,
+		AppServerReason: appServerReason,
+		Checks:          checks,
+		Verdict:         "Codex CLI ready and governed",
+		CheckedAt:       time.Now().UTC(),
+	}, nil
+}
+
+// codexAppServerBoundaryStatus distinguishes an installed CLI from an
+// app-server that is safe to start under MARSHAL's config-free contract. The
+// temporary migration override is deliberately BLOCKED, never a PASS-like
+// readiness state: it allows supervised local work without laundering host
+// configuration into a governed execution claim.
+func codexAppServerBoundaryStatus() (string, string) {
+	if os.Getenv("MARSHAL_CODEX_APP_SERVER_ALLOW_HOST_CONFIG") == "1" {
+		return "BLOCKED", "HOST_CONFIG_OVERRIDE"
+	}
+	if err := codex.RequireAppServerConfigFree(); err != nil {
+		if errors.Is(err, model.ErrPolicyDenied) {
+			return "BLOCKED", "USER_CONFIG_PRESENT"
+		}
+		return "UNKNOWN", "CONFIG_BOUNDARY_UNAVAILABLE"
+	}
+	return "CONFIG_FREE", "CONFIG_FREE_VERIFIED"
+}
+
+// CodexDoctor is the explicit, bounded native doctor action. It returns only
+// the sanitized projection defined by the adapter; raw config/auth/provider
+// details never cross into TUI state or durable MARSHAL evidence.
+func (a *runtimeControlAuthority) CodexDoctor(ctx context.Context) (codex.DoctorReport, error) {
+	client, err := a.getCodexClient(ctx)
+	if err != nil {
+		return codex.DoctorReport{}, err
+	}
+	return codex.Doctor(ctx, client.Binary(), client.Runner())
+}
+
+func (a *runtimeControlAuthority) CodexModels(ctx context.Context) ([]codex.ModelInfo, string, error) {
+	if a == nil || a.runtime == nil {
+		return nil, "", errNoRuntime
+	}
+	if candidate := a.runtime.Adapter("codex"); candidate != nil {
+		if mp, ok := candidate.(interface {
+			Models(context.Context) ([]codex.ModelInfo, string, error)
+		}); ok {
+			return mp.Models(ctx)
+		}
+	}
+	client, err := a.getCodexClient(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	return client.Models(ctx)
+}
+
+func (a *runtimeControlAuthority) CodexSelectModel(ctx context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error) {
+	if a == nil {
+		return model.ExecutionModelPreference{}, errors.New("no authority")
+	}
+	if a.runtime == nil {
+		return model.ExecutionModelPreference{}, errNoRuntime
+	}
+	return a.runtime.SetCodexModelPreference(ctx, modelName, expectedRevision)
+}
+
+func (a *runtimeControlAuthority) SelectedCodexModel(ctx context.Context) (string, error) {
+	if a == nil || a.runtime == nil {
+		return "", errors.New("no authority")
+	}
+	if preference, err := a.runtime.CodexModelPreference(ctx); err == nil {
+		return preference.Model, nil
+	} else if !errors.Is(err, model.ErrNotFound) {
+		return "", err
+	}
+	_, def, err := a.CodexModels(ctx)
+	if err != nil {
+		return "", err
+	}
+	return def, nil
+}
+
+func (a *runtimeControlAuthority) CodexModelPreference(ctx context.Context) (model.ExecutionModelPreference, error) {
+	if a == nil || a.runtime == nil {
+		return model.ExecutionModelPreference{}, errNoRuntime
+	}
+	return a.runtime.CodexModelPreference(ctx)
+}
+
+// DefaultCodexDispatchAgent returns the sole eligible, locally registered
+// Codex worker when there is exactly one. It never guesses between several
+// agents: ambiguity remains an operator choice in the dispatch form.
+func (a *runtimeControlAuthority) DefaultCodexDispatchAgent(ctx context.Context) (string, error) {
+	if a == nil || a.runtime == nil {
+		return "", errNoRuntime
+	}
+	agents, err := a.runtime.Agents(ctx)
+	if err != nil {
+		return "", err
+	}
+	var eligible []model.Agent
+	for _, agent := range agents {
+		if agent.Status != model.AgentDisabled && agent.ModelProvider == "codex" {
+			eligible = append(eligible, agent)
+		}
+	}
+	if len(eligible) != 1 {
+		return "", fmt.Errorf("%w: agent_id is required because %d eligible local Codex agents are registered", model.ErrInvalid, len(eligible))
+	}
+	return eligible[0].ID, nil
+}
+
+func (a *runtimeControlAuthority) DispatchCodexTask(ctx context.Context, req CodexTaskDispatchRequest) (app.RunResult, error) {
+	if a == nil || a.runtime == nil {
+		return app.RunResult{}, errNoRuntime
+	}
+	if err := codex.ValidateDangerousFlags([]string{req.TaskID, req.AgentID, req.Model}); err != nil {
+		return app.RunResult{}, err
+	}
+
+	// A dispatch is Process 05 work, not a task/agent creation shortcut.  The
+	// caller must name the exact plan-produced task and an already registered
+	// worker before we probe a model, claim a lease, or create a session.
+	taskID := strings.TrimSpace(req.TaskID)
+	if taskID == "" {
+		return app.RunResult{}, fmt.Errorf("%w: codex dispatch requires an existing task_id", model.ErrInvalid)
+	}
+	if _, err := a.runtime.Task(ctx, taskID); err != nil {
+		return app.RunResult{}, fmt.Errorf("codex dispatch task %q: %w", taskID, err)
+	}
+	agentID := strings.TrimSpace(req.AgentID)
+	if agentID == "" {
+		var resolveErr error
+		agentID, resolveErr = a.DefaultCodexDispatchAgent(ctx)
+		if resolveErr != nil {
+			return app.RunResult{}, resolveErr
+		}
+	}
+	agents, err := a.runtime.Agents(ctx)
+	if err != nil {
+		return app.RunResult{}, fmt.Errorf("list agents for codex dispatch: %w", err)
+	}
+	foundAgent := false
+	for _, agent := range agents {
+		if agent.ID == agentID {
+			foundAgent = true
+			if agent.Status == model.AgentDisabled {
+				return app.RunResult{}, fmt.Errorf("%w: codex dispatch agent %q is disabled", model.ErrInvalid, agentID)
+			}
+			if agent.ModelProvider != "codex" {
+				return app.RunResult{}, fmt.Errorf("%w: codex dispatch agent %q is bound to provider %q, not codex", model.ErrInvalid, agentID, agent.ModelProvider)
+			}
+			break
+		}
+	}
+	if !foundAgent {
+		return app.RunResult{}, fmt.Errorf("%w: codex dispatch agent %q is not registered", model.ErrInvalid, agentID)
+	}
+
+	modelName := strings.TrimSpace(req.Model)
+	if modelName == "" {
+		var err error
+		modelName, err = a.SelectedCodexModel(ctx)
+		if err != nil {
+			return app.RunResult{}, fmt.Errorf("resolve codex model: %w", err)
+		}
+	}
+	if modelName == "" {
+		return app.RunResult{}, fmt.Errorf("%w: no eligible codex model is selected", model.ErrInvalid)
+	}
+
+	runRes, err := a.runtime.Run(ctx, app.RunRequest{
+		TaskID:           taskID,
+		AgentID:          agentID,
+		Adapter:          "codex",
+		Model:            modelName,
+		ExpectedRevision: req.ExpectedRevision,
+	})
+	if err != nil {
+		return app.RunResult{}, err
+	}
+	a.mu.Lock()
+	a.currentRun = runRes.RunID
+	a.mu.Unlock()
+	return runRes, nil
+}
+
+func (a *runtimeControlAuthority) CodexSessions(ctx context.Context) ([]CodexSessionSummary, error) {
+	if a == nil || a.runtime == nil {
+		return nil, errNoRuntime
+	}
+	st := a.runtime.Store()
+	if st == nil {
+		return nil, errors.New("no store attached")
+	}
+	runs, err := st.WorkerRunsByAdapter(ctx, "codex", 20)
+	if err != nil {
+		return nil, err
+	}
+	summaries := make([]CodexSessionSummary, 0, len(runs))
+	for _, r := range runs {
+		var fin time.Time
+		if r.EndedAt != nil {
+			fin = *r.EndedAt
+		}
+		modelName := "UNKNOWN"
+		// A worker-run's AdapterVersion is the CLI version, not its model.
+		// The model is immutable execution evidence captured at completion.
+		if node, evidenceErr := a.runtime.Evidence(ctx, evidence.NodeID("EVIDENCE-RUN-"+r.ID+"-COMMAND")); evidenceErr == nil {
+			if effective := strings.TrimSpace(node.Metadata["effective_model"]); effective != "" {
+				modelName = effective
+			} else if requested := strings.TrimSpace(node.Metadata["requested_model"]); requested != "" {
+				modelName = requested
+			}
+		}
+		summaries = append(summaries, CodexSessionSummary{
+			SessionID: r.SessionID,
+			TaskID:    r.TaskID,
+			RunID:     r.ID,
+			Model:     modelName,
+			Status:    string(r.Status),
+			StartedAt: r.StartedAt,
+			EndedAt:   fin,
+		})
+	}
+	return summaries, nil
+}
+
+func (a *runtimeControlAuthority) CodexPlugins(ctx context.Context) ([]codex.PluginInfo, []codex.SkillInfo, error) {
+	if a == nil || a.runtime == nil {
+		return nil, nil, errNoRuntime
+	}
+	var plugins []codex.PluginInfo
+	var skills []codex.SkillInfo
+
+	var binary string
+	var runner adapter.ProcessRunner
+	if candidate := a.runtime.Adapter("codex"); candidate != nil {
+		if client, ok := candidate.(*codex.Client); ok {
+			binary = client.Binary()
+			runner = client.Runner()
+		}
+	}
+	if binary == "" {
+		if bin, err := project.FindBinary("codex"); err == nil {
+			binary = bin
+			runner = worker.New(10*time.Second, 2*time.Second, 8<<20)
+		}
+	}
+	if binary != "" && runner != nil {
+		if p, err := codex.DiscoverPlugins(ctx, binary, runner); err == nil {
+			plugins = p
+		}
+	}
+
+	root := a.runtime.ProjectRoot()
+	if s, err := codex.DiscoverLocalSkills(root); err == nil {
+		skills = s
+	}
+
+	return plugins, skills, nil
+}
+
+func (a *runtimeControlAuthority) PreviewCodexSkill(name string) (string, error) {
+	if a == nil || a.runtime == nil {
+		return "", errNoRuntime
+	}
+	return a.runtime.PreviewProjectCodexSkill(name)
+}
+
+func (a *runtimeControlAuthority) InstallCodexSkill(ctx context.Context, name, expectedDigest string) (string, error) {
+	if a == nil || a.runtime == nil {
+		return "", errNoRuntime
+	}
+	return a.runtime.InstallProjectCodexSkill(ctx, name, expectedDigest)
+}
+
+func (a *runtimeControlAuthority) RunCodexReview(ctx context.Context) (app.VerifyResult, error) {
+	if a == nil || a.runtime == nil {
+		return app.VerifyResult{}, errNoRuntime
+	}
+	return a.runtime.ReviewCurrentCommitWithCodex(ctx)
 }

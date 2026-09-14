@@ -141,7 +141,13 @@ func (ns *NavState) Overlay() Overlay {
 }
 
 // Children returns the navigable children of the current node.
-func (ns *NavState) Children() []*Node { return ns.Current().Children }
+func (ns *NavState) Children() []*Node {
+	cur := ns.Current()
+	if cur != nil && cur.SpecID == "CTUI-0509" {
+		return CodexSubscreens(cur)
+	}
+	return cur.Children
+}
 
 // SelectedChild returns the child the selection points at, if any.
 func (ns *NavState) SelectedChild() (*Node, bool) {
@@ -169,7 +175,8 @@ func (ns *NavState) MoveDown() {
 		return
 	}
 	top := &ns.stack[len(ns.stack)-1]
-	if top.selection < len(top.node.Children)-1 {
+	children := ns.Children()
+	if top.selection < len(children)-1 {
 		top.selection++
 	}
 }
@@ -309,8 +316,9 @@ func (ns *NavState) DeepLink(specID string) error {
 		origin := ns.Current()
 		ns.push(target.parent, origin)
 		ns.syncSectionTo(target)
-		for i, c := range target.parent.Children {
-			if c == target {
+		children := ns.Children()
+		for i, c := range children {
+			if c == target || c.SpecID == target.SpecID {
 				ns.stack[len(ns.stack)-1].selection = i
 				break
 			}

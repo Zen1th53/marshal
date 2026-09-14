@@ -112,12 +112,12 @@ func TestProcess05_FullChainE2E(t *testing.T) {
 		HarnessCandidates: []plan.HarnessCandidate{
 			{
 				Profile: model.HarnessProfile{
-					Harness:         "mock-harness",
+					Harness:          "mock-harness",
 					InstalledVersion: "1.0.0",
-					SupportedModels: []string{"gpt-4o"},
-					DefaultModel:    "gpt-4o",
-					ProbeEvidenceID: "EV-mock",
-					ProbedAt:        now,
+					SupportedModels:  []string{"gpt-4o"},
+					DefaultModel:     "gpt-4o",
+					ProbeEvidenceID:  "EV-mock",
+					ProbedAt:         now,
 				},
 				InstalledVersion: "1.0.0",
 				Provider:         "openai",
@@ -140,7 +140,7 @@ func TestProcess05_FullChainE2E(t *testing.T) {
 	var executedTasks []string
 	var receivedPackages []execution.ConstraintPackage
 
-	runtime.Execution().RegisterHarness(execution.NewMockHarness("openai", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+	runtime.Execution().RegisterHarness(execution.NewMockHarness("mock-harness", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
 		executedTasks = append(executedTasks, task.TaskID)
 		receivedPackages = append(receivedPackages, pkg)
 
@@ -371,12 +371,12 @@ func TestProcess05_FailureChain_SafeReturn(t *testing.T) {
 		HarnessCandidates: []plan.HarnessCandidate{
 			{
 				Profile: model.HarnessProfile{
-					Harness:         "mock-failing-harness",
+					Harness:          "mock-failing-harness",
 					InstalledVersion: "1.0.0",
-					SupportedModels: []string{"gpt-4o"},
-					DefaultModel:    "gpt-4o",
-					ProbeEvidenceID: "EV-mock-fail",
-					ProbedAt:        now,
+					SupportedModels:  []string{"gpt-4o"},
+					DefaultModel:     "gpt-4o",
+					ProbeEvidenceID:  "EV-mock-fail",
+					ProbedAt:         now,
 				},
 				InstalledVersion: "1.0.0",
 				Provider:         "openai",
@@ -392,8 +392,9 @@ func TestProcess05_FailureChain_SafeReturn(t *testing.T) {
 		t.Fatalf("Plans.Approve: %v", err)
 	}
 
-	// Register a harness that returns a task failure under the routed provider name "openai"
-	runtime.Execution().RegisterHarness(execution.NewMockHarness("openai", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+	// Register the exact governed harness selected by Process 04. Provider
+	// labels are not executable worker identifiers.
+	runtime.Execution().RegisterHarness(execution.NewMockHarness("mock-failing-harness", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
 		return execution.TaskResult{
 			TaskID:       task.TaskID,
 			Success:      false,

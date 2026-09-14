@@ -2,6 +2,52 @@
 
 MARSHAL TUI v2 is a terminal-first, interactive IDE, multi-agent team room, evidence console, and live command center. It operates as the complete interactive control plane over MARSHAL's canonical local runtime and SQLite store.
 
+## Native Codex sessions
+
+Run `marshal codex` to open the installed Codex inside a MARSHAL session. Native
+arguments pass through unchanged, for example:
+
+```bash
+marshal codex resume --last
+marshal codex -i "screenshots/error state.png" "Fix this error"
+marshal codex --model MODEL
+```
+
+In the MARSHAL TUI, F7 opens Codex from either navigation or the composer. A plain
+prompt opens a new native conversation. `/codex continue` resumes the latest
+Codex session for the current directory; `/codex resume` opens its session picker.
+`/codex cli <arguments>` passes native options and subcommands, with quoted paths
+and prompts supported. Exit Codex to return to MARSHAL. Use `/codex new` for a
+fresh conversation.
+
+The native interface provides Codex's own streaming conversation, attachments,
+model and reasoning selection, skills, MCP, plugins, approvals and other native
+controls. It uses the installed binary and the operator's existing `CODEX_HOME`,
+authentication and configuration. MARSHAL does not replace that configuration
+with its config-free task environment. Native CLI errors remain errors.
+
+MARSHAL imports user messages and final assistant answers from local Codex JSONL
+history every two seconds and on exit. Records go through the existing secret
+firewall into the project's SQLite memory as **agent-authority candidates**;
+they are not verified facts. `/memory list` and `/memory search <query>` find
+them. A private `.marshal/codex/history-index.json` records completed imports so
+reopening does not duplicate unchanged history. Changed histories for the same
+project are recovered after interruption. Hidden reasoning, tool payloads and
+credentials are not copied into memory. An import failure is reported on return.
+
+Native thread state remains in Codex's own storage, which its resume/fork commands
+use. MARSHAL's memory is a portable record of visible conversation, not a copy of
+Codex's internal process state. Remote-only histories and non-JSONL history formats
+are not captured by this watcher. A JSONL event over 1 MiB is reported as an import
+error rather than silently truncated.
+
+Native sessions use **Codex's approval and sandbox controls**. They are not
+Process 05 governed tasks and do not receive MARSHAL task attestations. Explicit
+`/codex exec` and `/codex run` retain that separate governed execution workflow.
+The PTY regression test verifies native argv, exclusive keyboard ownership,
+return to MARSHAL and memory persistence using a deterministic child process;
+it does not certify every upstream cloud or account-dependent feature.
+
 ```text
  MARSHAL  v3 Ship dynamic TUI v2
 ────────────────────────────────────────────────────────────────────────────

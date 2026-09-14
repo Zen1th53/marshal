@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter/codex"
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/execution"
@@ -93,6 +95,10 @@ type fakeAuthority struct {
 	revocations int32
 	modeWrites  int32
 	modeErr     error
+
+	selectedCodexModel string
+	codexModelRevision int64
+	codexDispatches    int32
 
 	// onExecute lets a test change the world mid-mutation, which is how a
 	// TOCTOU race is reproduced deterministically.
@@ -476,6 +482,15 @@ func (f *fakeAuthority) Verification(_ context.Context, sessionID string) (verif
 	return f.session, nil
 }
 
+func (f *fakeAuthority) CurrentVerification(_ context.Context) (verification.Session, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.session.ID == "" || f.session.Binding.RunID != f.run.RunID {
+		return verification.Session{}, fmt.Errorf("verification for run %s not found", f.run.RunID)
+	}
+	return f.session, nil
+}
+
 // The Work boundaries agy identified. Each enforces the canonical contract.
 func (f *fakeAuthority) HandoffPlan(context.Context, string) (PlanHandoff, error) {
 	atomic.AddInt32(&f.handoffs, 1)
@@ -722,6 +737,105 @@ func (f *fakeAuthority) WorkspaceExitRequested() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.exitRequested
+}
+
+func (f *fakeAuthority) CodexHealth(_ context.Context) (CodexHealthReport, error) {
+	return CodexHealthReport{
+		BinaryPath: "/home/Zen1th53/.local/bin/codex",
+		Version:    "codex-cli 0.154.0",
+		Available:  true,
+		Verdict:    "ready",
+		CheckedAt:  time.Now().UTC(),
+	}, nil
+}
+
+func (f *fakeAuthority) CodexDoctor(context.Context) (codex.DoctorReport, error) {
+	return codex.DoctorReport{OverallStatus: "ok", CheckCount: 2}, nil
+}
+
+func (f *fakeAuthority) RunCodexReview(context.Context) (app.VerifyResult, error) {
+	return app.VerifyResult{Commit: "0123456789abcdef0123456789abcdef01234567", OutputDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}, nil
+}
+
+func (f *fakeAuthority) CodexModels(_ context.Context) ([]codex.ModelInfo, string, error) {
+	return []codex.ModelInfo{
+		{Slug: "gpt-5.6-terra", DisplayName: "GPT 5.6 Terra", IsDefault: true},
+		{Slug: "gpt-6-astra", DisplayName: "GPT 6 Astra"},
+	}, "gpt-5.6-terra", nil
+}
+
+func (f *fakeAuthority) CodexSelectModel(_ context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if expectedRevision != f.codexModelRevision {
+		return model.ExecutionModelPreference{}, fmt.Errorf("%w: codex model revision conflict", model.ErrConflict)
+	}
+	f.selectedCodexModel = modelName
+	f.codexModelRevision++
+	return model.ExecutionModelPreference{ProjectID: "project", Adapter: "codex", Model: modelName, Revision: f.codexModelRevision, UpdatedAt: time.Now().UTC()}, nil
+}
+
+func (f *fakeAuthority) CodexModelPreference(_ context.Context) (model.ExecutionModelPreference, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.codexModelRevision == 0 {
+		return model.ExecutionModelPreference{}, fmt.Errorf("%w: no codex model selection", model.ErrNotFound)
+	}
+	return model.ExecutionModelPreference{ProjectID: "project", Adapter: "codex", Model: f.selectedCodexModel, Revision: f.codexModelRevision}, nil
+}
+
+func (f *fakeAuthority) SelectedCodexModel(_ context.Context) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.selectedCodexModel != "" {
+		return f.selectedCodexModel, nil
+	}
+	return "gpt-5.6-terra", nil
+}
+
+func (f *fakeAuthority) DispatchCodexTask(_ context.Context, req CodexTaskDispatchRequest) (app.RunResult, error) {
+	atomic.AddInt32(&f.codexDispatches, 1)
+	if err := codex.ValidateDangerousFlags([]string{req.TaskID, req.AgentID, req.Model}); err != nil {
+		return app.RunResult{}, err
+	}
+	return app.RunResult{
+		RunID:          "RUN-CODEX-1",
+		TaskID:         req.TaskID,
+		SessionID:      "session-codex-1",
+		Model:          "gpt-5.6-terra",
+		RequestedModel: req.Model,
+		Status:         "COMPLETED",
+	}, nil
+}
+
+func (f *fakeAuthority) CodexSessions(_ context.Context) ([]CodexSessionSummary, error) {
+	return []CodexSessionSummary{
+		{
+			SessionID: "session-codex-1",
+			TaskID:    "TASK-CODEX-1",
+			RunID:     "RUN-CODEX-1",
+			Model:     "gpt-5.6-terra",
+			Status:    "COMPLETED",
+			StartedAt: time.Now().UTC().Add(-10 * time.Minute),
+			EndedAt:   time.Now().UTC().Add(-9 * time.Minute),
+		},
+	}, nil
+}
+
+func (f *fakeAuthority) CodexPlugins(_ context.Context) ([]codex.PluginInfo, []codex.SkillInfo, error) {
+	return []codex.PluginInfo{
+		{PluginID: "plugin-1", Name: "Test Plugin", Installed: true, Enabled: true},
+	}, []codex.SkillInfo{
+		{Name: "test-skill", Description: "Test Skill", Root: "/test"},
+	}, nil
+}
+
+func (f *fakeAuthority) PreviewCodexSkill(name string) (string, error) { return "sha256:" + name, nil }
+func (f *fakeAuthority) InstallCodexSkill(_ context.Context, name, digest string) (string, error) {
+	if digest != "sha256:"+name {
+		return "", fmt.Errorf("%w: stale skill", model.ErrConflict)
+	}
+	return digest, nil
 }
 
 func testControl(t *testing.T) (*ControlSource, *fakeAuthority) {
@@ -2364,6 +2478,58 @@ func TestEvaluateReportsAFailingDecisionHonestly(t *testing.T) {
 	}
 }
 
+func TestPrepareVerificationResolvesSessionForCurrentRun(t *testing.T) {
+	source, auth := testControl(t)
+	auth.mu.Lock()
+	auth.run.RunID = "run-current"
+	auth.session = verification.Session{
+		ID: "verification-current", Version: 3, State: verification.Decision("PENDING"),
+		Binding: verification.Binding{RunID: "run-current"},
+	}
+	auth.mu.Unlock()
+
+	target, err := source.prepareVerification(context.Background())
+	if err != nil {
+		t.Fatalf("prepare verification: %v", err)
+	}
+	if target.ID != "verification-current" || target.Revision != 3 || target.Scope != "run run-current" {
+		t.Fatalf("target=%+v; expected current verification session, not run ID", target)
+	}
+}
+
+func TestCodexDoctorUsesExplicitBoundedAuthority(t *testing.T) {
+	source, _ := testControl(t)
+	target, err := source.prepareCodexDoctor(context.Background())
+	if err != nil {
+		t.Fatalf("prepare doctor: %v", err)
+	}
+	if target.Kind != "codex_doctor" || target.ID != "local" {
+		t.Fatalf("doctor target = %+v", target)
+	}
+	outcome, err := source.executeCodexDoctor(context.Background(), ActionRequest{Action: "CTUI-0509-HEALTH", Target: target})
+	if err != nil {
+		t.Fatalf("execute doctor: %v", err)
+	}
+	if outcome.Verdict != VerdictPass || !strings.Contains(outcome.Detail, "2 checks") {
+		t.Fatalf("doctor outcome = %+v", outcome)
+	}
+}
+
+func TestCodexReviewUsesCanonicalVerificationBoundary(t *testing.T) {
+	source, _ := testControl(t)
+	target, err := source.prepareCodexReview(context.Background())
+	if err != nil {
+		t.Fatalf("prepare review: %v", err)
+	}
+	outcome, err := source.executeCodexReview(context.Background(), ActionRequest{Action: "CTUI-0365", Target: target})
+	if err != nil {
+		t.Fatalf("execute review: %v", err)
+	}
+	if outcome.Verdict != VerdictPass || !strings.Contains(outcome.Detail, "0123456789abcdef") {
+		t.Fatalf("review outcome=%+v", outcome)
+	}
+}
+
 // An evaluation that did not move the session proves nothing.
 func TestEvaluationThatDoesNotMoveTheSessionIsUnknown(t *testing.T) {
 	source, auth := testControl(t)
@@ -2388,7 +2554,7 @@ func TestEvaluationThatDoesNotMoveTheSessionIsUnknown(t *testing.T) {
 func TestUnboundVerifyActionsExplainWhatIsMissing(t *testing.T) {
 	source, _ := testControl(t)
 	for _, id := range []ActionID{
-		"CTUI-0352", "CTUI-0365", "CTUI-0382", "CTUI-0395", "CTUI-0399", "CTUI-0402",
+		"CTUI-0352", "CTUI-0382", "CTUI-0395", "CTUI-0399", "CTUI-0402",
 	} {
 		binding, ok := source.Bindings()[id]
 		if !ok {
@@ -2406,14 +2572,11 @@ func TestUnboundVerifyActionsExplainWhatIsMissing(t *testing.T) {
 		}
 	}
 
-	// The governed local verification command must specifically refuse to
-	// become an arbitrary-execution surface.
+	// The governed local verification command has a canonical, bounded
+	// Process 06 binding. It must never degrade into an arbitrary runner.
 	command := source.Bindings()["CTUI-0365"]
-	if command.Bound() {
-		t.Fatal("a governed local verification command is bound to a direct runner")
-	}
-	if !strings.Contains(command.Requires, "sandbox") {
-		t.Fatalf("the refusal does not cite the sandbox: %q", command.Requires)
+	if !command.Bound() || command.Safety != SafetyGoverned {
+		t.Fatalf("governed verification binding = %+v", command)
 	}
 }
 

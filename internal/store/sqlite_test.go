@@ -450,7 +450,7 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 	}
 }
 
-func TestInitProjectIsIdempotentAndRejectsConflictingIdentity(t *testing.T) {
+func TestInitProjectIsIdempotentUpdatesMetadataAndRejectsConflictingIdentity(t *testing.T) {
 	st := openTestStore(t)
 	ctx := context.Background()
 	if err := st.Migrate(ctx); err != nil {
@@ -470,6 +470,22 @@ func TestInitProjectIsIdempotentAndRejectsConflictingIdentity(t *testing.T) {
 	}
 	if got := queryInt(t, st.db, "SELECT count(*) FROM projects"); got != 1 {
 		t.Fatalf("project rows = %d, want 1", got)
+	}
+
+	// Branch and pack version reflect the current checkout/runtime rather than
+	// the repository's identity. An explicit re-init must refresh them without
+	// discarding the durable project state.
+	project.DefaultBranch = "release/current"
+	project.PackVersion = "6.1.0"
+	if err := st.InitProject(ctx, project); err != nil {
+		t.Fatalf("metadata refresh: %v", err)
+	}
+	var branch, pack string
+	if err := st.db.QueryRowContext(ctx, `SELECT default_branch, pack_version FROM projects WHERE project_id = ?`, project.ID).Scan(&branch, &pack); err != nil {
+		t.Fatal(err)
+	}
+	if branch != project.DefaultBranch || pack != project.PackVersion {
+		t.Fatalf("metadata = branch %q pack %q, want branch %q pack %q", branch, pack, project.DefaultBranch, project.PackVersion)
 	}
 
 	project.Repository = "/other"

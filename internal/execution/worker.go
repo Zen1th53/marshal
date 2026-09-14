@@ -12,13 +12,18 @@ type TaskResult struct {
 	Success       bool
 	NeedsApproval bool
 	ApprovalReq   *ApprovalRequest
-	EvidenceList  []ExecutionEvidence
-	Claims        []ExecutionClaim
-	FilesModified []string
-	InputTokens   int64
-	OutputTokens  int64
-	Duration      time.Duration
-	ErrorMessage  string
+	// NativeApprovalID is an existing canonical approval record created by a
+	// typed provider bridge. Engine must adopt that exact record rather than
+	// manufacture a second generic approval for the same native request.
+	NativeApprovalID string
+	NativeTurn       *NativeTurnBinding
+	EvidenceList     []ExecutionEvidence
+	Claims           []ExecutionClaim
+	FilesModified    []string
+	InputTokens      int64
+	OutputTokens     int64
+	Duration         time.Duration
+	ErrorMessage     string
 }
 
 // WorkerHarness defines the interface for task execution adapters.
@@ -140,6 +145,7 @@ func (c *ClaudeNativeHarness) Execute(ctx context.Context, task TaskExecution, p
 // CodexNativeHarness adapts OpenAI Codex models under MARSHAL governance.
 type CodexNativeHarness struct {
 	modelName string
+	executor  func(context.Context, TaskExecution, ConstraintPackage, string) (TaskResult, error)
 }
 
 func NewCodexNativeHarness(modelName string) *CodexNativeHarness {
@@ -149,34 +155,29 @@ func NewCodexNativeHarness(modelName string) *CodexNativeHarness {
 	return &CodexNativeHarness{modelName: modelName}
 }
 
+// NewCodexNativeHarnessWithExecutor binds Process 05 to a real Codex adapter
+// owned by the application runtime. The execution package deliberately knows
+// nothing about CLI invocation or provider credentials, avoiding a second
+// executor or an authority bypass.
+func NewCodexNativeHarnessWithExecutor(modelName string, executor func(context.Context, TaskExecution, ConstraintPackage, string) (TaskResult, error)) *CodexNativeHarness {
+	harness := NewCodexNativeHarness(modelName)
+	harness.executor = executor
+	return harness
+}
+
 func (c *CodexNativeHarness) Name() string {
-	return "codex-native"
+	// Plan routing uses the public harness identifier "codex".  Returning a
+	// private implementation name here made the engine silently fall back to
+	// its mock harness, which could manufacture a success instead of invoking
+	// the runtime-owned adapter.
+	return "codex"
 }
 
 func (c *CodexNativeHarness) Execute(ctx context.Context, task TaskExecution, pkg ConstraintPackage, worktree string) (TaskResult, error) {
-	start := time.Now().UTC()
-	evID := fmt.Sprintf("ev-codex-%s-%d", task.TaskID, start.UnixNano())
-	evidence := ExecutionEvidence{
-		EvidenceID:    evID,
-		TaskID:        task.TaskID,
-		ToolName:      "codex_runner",
-		ExitCode:      0,
-		StdoutSummary: fmt.Sprintf("Codex [%s] executed task %s", c.modelName, task.TaskID),
-		Status:        EvidenceValid,
-		DurationMs:    40,
-		RelevantFiles: task.TargetFiles,
-		CreatedAt:     start,
+	if c == nil || c.executor == nil {
+		return TaskResult{TaskID: task.TaskID, Success: false, ErrorMessage: "IMPLEMENTATION_GAP: Codex Process 05 executor is not bound to the runtime"}, fmt.Errorf("%w: Codex native harness has no canonical runtime executor", ErrRunBlocked)
 	}
-
-	return TaskResult{
-		TaskID:        task.TaskID,
-		Success:       true,
-		EvidenceList:  []ExecutionEvidence{evidence},
-		FilesModified: task.TargetFiles,
-		InputTokens:   180,
-		OutputTokens:  90,
-		Duration:      40 * time.Millisecond,
-	}, nil
+	return c.executor(ctx, task, pkg, worktree)
 }
 
 // OpenCodeNativeHarness adapts open-weights / local models under MARSHAL governance.

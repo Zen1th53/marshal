@@ -17,7 +17,18 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/adapter/codex"
 )
+
+// CodexGovernanceReader reads live state from the governed Codex control plane.
+type CodexGovernanceReader interface {
+	CodexHealth(ctx context.Context) (CodexHealthReport, error)
+	CodexModels(ctx context.Context) ([]codex.ModelInfo, string, error)
+	SelectedCodexModel(ctx context.Context) (string, error)
+	CodexSessions(ctx context.Context) ([]CodexSessionSummary, error)
+	CodexPlugins(ctx context.Context) ([]codex.PluginInfo, []codex.SkillInfo, error)
+}
 
 // ModelsReader is the canonical Models state the section displays.
 type ModelsReader interface {
@@ -105,6 +116,16 @@ type ModelsSnapshot struct {
 	ResultsStatus        Value
 	FeedbackStatus       Value
 
+	// Governed Codex control plane.
+	CodexHealth        CodexHealthReport
+	CodexModels        []codex.ModelInfo
+	CodexDefaultModel  string
+	CodexSelectedModel string
+	CodexSessions      []CodexSessionSummary
+	CodexPlugins       []codex.PluginInfo
+	CodexSkills        []codex.SkillInfo
+	CodexStatus        Value
+
 	ObservedAt time.Time
 }
 
@@ -153,6 +174,7 @@ func (s *ModelsFeed) ReadModels(ctx context.Context) ModelsSnapshot {
 	snap.BenchmarkStatus = Unknown("no Process 08 benchmark manifest is selected", modelsBinding)
 	snap.ResultsStatus = Unknown("no Process 08 experiment result is selected", modelsBinding)
 	snap.FeedbackStatus = Unknown("no Process 08 feedback record is selected", modelsBinding)
+	snap.CodexStatus = Unknown("codex status has not been probed", modelsBinding)
 
 	if s == nil || s.Reader == nil {
 		unavailable := Unknown(
@@ -166,7 +188,41 @@ func (s *ModelsFeed) ReadModels(ctx context.Context) ModelsSnapshot {
 	s.readProviderSummary(ctx, &snap)
 	s.readCycleEvidence(ctx, &snap)
 	s.readLocalModels(ctx, &snap)
+	s.readCodexGovernance(ctx, &snap)
 	return snap
+}
+
+func (s *ModelsFeed) readCodexGovernance(ctx context.Context, snap *ModelsSnapshot) {
+	reader, ok := s.Reader.(CodexGovernanceReader)
+	if !ok {
+		snap.CodexStatus = Unknown("no codex governance reader attached", modelsBinding)
+		return
+	}
+	health, err := reader.CodexHealth(ctx)
+	if err != nil {
+		snap.CodexStatus = Errored(fmt.Sprintf("codex health check failed: %v", err), modelsBinding)
+	} else {
+		snap.CodexHealth = health
+		if health.Available {
+			snap.CodexStatus = Known(fmt.Sprintf("codex available (%s)", health.Version), modelsBinding)
+		} else {
+			snap.CodexStatus = Value{Text: "UNAVAILABLE", Status: TruthKnown, Reason: health.Verdict, Source: modelsBinding}
+		}
+	}
+	if models, def, mErr := reader.CodexModels(ctx); mErr == nil {
+		snap.CodexModels = models
+		snap.CodexDefaultModel = def
+	}
+	if sel, sErr := reader.SelectedCodexModel(ctx); sErr == nil {
+		snap.CodexSelectedModel = sel
+	}
+	if sessions, sessErr := reader.CodexSessions(ctx); sessErr == nil {
+		snap.CodexSessions = sessions
+	}
+	if plugins, skills, pErr := reader.CodexPlugins(ctx); pErr == nil {
+		snap.CodexPlugins = plugins
+		snap.CodexSkills = skills
+	}
 }
 
 func (s *ModelsFeed) readProviderSummary(ctx context.Context, snap *ModelsSnapshot) {

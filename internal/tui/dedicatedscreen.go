@@ -23,6 +23,18 @@ func frozenTitle(specID string) string {
 	if title := frozenTitles.byID[specID]; title != "" {
 		return title
 	}
+	switch specID {
+	case "CTUI-0509-HEALTH":
+		return "Health & capabilities"
+	case "CTUI-0509-MODELS":
+		return "Models / effective selection"
+	case "CTUI-0509-DISPATCH":
+		return "Open canonical Process 05 execution"
+	case "CTUI-0509-SESSIONS":
+		return "Sessions & active run"
+	case "CTUI-0509-PLUGINS":
+		return "Plugins & skills"
+	}
 	return specID
 }
 

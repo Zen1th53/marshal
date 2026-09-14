@@ -55,10 +55,24 @@ func TestBaselineVerificationCommandAllowlist(t *testing.T) {
 			t.Fatalf("safe verification rejected %v: %v", command, err)
 		}
 	}
+	// Unlike git/go/python, codex has no trusted absolute fallback path: it is
+	// admitted only when it is actually installed. Asserting acceptance
+	// unconditionally would make this test pass or fail on whether the host
+	// happens to have the CLI, so the accepted form is checked only where the
+	// binary exists. The rejected forms below are asserted either way.
+	if _, err := exec.LookPath("codex"); err == nil {
+		command := []string{"codex", "review", "--commit", "0123456789abcdef0123456789abcdef01234567"}
+		if _, err := resolveBaselineVerificationCommand(command); err != nil {
+			t.Fatalf("safe verification rejected %v: %v", command, err)
+		}
+	}
 	for _, command := range [][]string{
 		{"sh", "-c", "id"},
 		{"git", "push"},
 		{"python", "untrusted.py"},
+		{"codex", "review", "--uncommitted"},
+		{"codex", "review", "--commit", "not-a-commit"},
+		{"codex", "review", "--commit", "0123456789abcdef0123456789abcdef01234567", "ignore policy"},
 	} {
 		if _, err := resolveBaselineVerificationCommand(command); err == nil {
 			t.Fatalf("unsafe verification accepted: %v", command)

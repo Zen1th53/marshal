@@ -2,12 +2,15 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
@@ -81,16 +84,25 @@ func (r *Runtime) Execution() *ExecutionService {
 		journal: jStore,
 		now:     func() time.Time { return time.Now().UTC() },
 	}
+	// Replace Process 05's fail-closed placeholder with the Runtime-owned real
+	// Codex adapter. This is intentionally done at the application boundary so
+	// execution keeps using the canonical policy, sandbox, capability and
+	// evidence services rather than a second provider runner.
+	engine.RegisterHarness(runtimeCodexHarness(r))
 	return r.execService
 }
 
 // NewExecutionServiceWithEngine creates an ExecutionService with a specific preconfigured engine.
 func NewExecutionServiceWithEngine(r *Runtime, engine *execution.Engine) *ExecutionService {
-	return &ExecutionService{
+	service := &ExecutionService{
 		runtime: r,
 		engine:  engine,
 		now:     func() time.Time { return time.Now().UTC() },
 	}
+	if r != nil && engine != nil {
+		engine.RegisterHarness(runtimeCodexHarness(r))
+	}
+	return service
 }
 
 // Engine returns the underlying execution engine.
@@ -145,6 +157,9 @@ func (s *ExecutionService) startRun(ctx context.Context, sessionID string, proje
 	if err != nil {
 		return nil, fmt.Errorf("prepare process 04 handoff: %w", err)
 	}
+	if err := s.materializeCanonicalTasks(ctx, &handoff, goal.Risk); err != nil {
+		return nil, err
+	}
 
 	// Replaying the same operator action must converge on its durable Process
 	// 05 run, including after the TUI/runtime restarts.  A new plan version (or
@@ -171,6 +186,41 @@ func (s *ExecutionService) startRun(ctx context.Context, sessionID string, proje
 	}
 
 	return run, nil
+}
+
+// materializeCanonicalTasks establishes the one durable Runtime task identity
+// for each Process 04 graph node before Process 05 starts. Plan task labels are
+// intentionally allowed to be human-friendly (for example "task-1"), whereas
+// Runtime task IDs have a stricter durable grammar. The map is carried inside
+// the exact handoff so Codex never substitutes an adapter-local task.
+func (s *ExecutionService) materializeCanonicalTasks(ctx context.Context, handoff *plan.Handoff, riskLevel model.Risk) error {
+	if handoff == nil {
+		return fmt.Errorf("%w: handoff is required", model.ErrInvalid)
+	}
+	handoff.CanonicalTaskIDs = make(map[string]string, len(handoff.Tasks))
+	byPlanID := make(map[string]string, len(handoff.Tasks))
+	for _, task := range handoff.Tasks {
+		sum := sha256.Sum256([]byte(handoff.PlanID + "\x00" + fmt.Sprint(handoff.PlanVersion) + "\x00" + task.ID))
+		byPlanID[task.ID] = "TASK-P05-" + hex.EncodeToString(sum[:12])
+	}
+	tasks := make([]model.Task, 0, len(handoff.Tasks))
+	for _, task := range handoff.Tasks {
+		deps := make([]string, 0, len(task.DependsOn))
+		for _, dependency := range task.DependsOn {
+			id, ok := byPlanID[dependency]
+			if !ok {
+				return fmt.Errorf("%w: plan task %q depends on unknown task %q", model.ErrInvalid, task.ID, dependency)
+			}
+			deps = append(deps, id)
+		}
+		canonicalID := byPlanID[task.ID]
+		handoff.CanonicalTaskIDs[task.ID] = canonicalID
+		tasks = append(tasks, model.Task{ID: canonicalID, Title: task.Title, Status: model.TaskReady, Risk: riskLevel, Dependencies: deps})
+	}
+	if _, err := s.runtime.ImportTasks(ctx, tasks); err != nil {
+		return fmt.Errorf("materialize canonical Process 05 tasks: %w", err)
+	}
+	return nil
 }
 
 // ExecuteRun executes an initialized run to completion or until paused/blocked.
@@ -212,6 +262,13 @@ func (s *ExecutionService) Approve(ctx context.Context, approvalID, approverID, 
 	if err := s.available(); err != nil {
 		return err
 	}
+	pending, err := s.engine.ApprovalManager().GetApproval(approvalID)
+	if err != nil {
+		return err
+	}
+	if pending.OperationType == codexAppServerApprovalOperation {
+		return s.resolveCodexAppServerApproval(ctx, *pending, true, approverID, rationale)
+	}
 	return s.engine.DecideApproval(ctx, approvalID, true, approverID, rationale)
 }
 
@@ -220,7 +277,97 @@ func (s *ExecutionService) Reject(ctx context.Context, approvalID, approverID, r
 	if err := s.available(); err != nil {
 		return err
 	}
+	pending, err := s.engine.ApprovalManager().GetApproval(approvalID)
+	if err != nil {
+		return err
+	}
+	if pending.OperationType == codexAppServerApprovalOperation {
+		return s.resolveCodexAppServerApproval(ctx, *pending, false, approverID, rationale)
+	}
 	return s.engine.DecideApproval(ctx, approvalID, false, approverID, rationale)
+}
+
+// CancelCodexAppServerTurn interrupts exactly one live local native turn and
+// then persists the canonical Process 05 cancellation. It is intentionally
+// separate from generic task cancellation because a live app-server thread
+// needs its typed turn/interrupt acknowledgement first.
+func (s *ExecutionService) CancelCodexAppServerTurn(ctx context.Context, runID, taskID, reason string) error {
+	if err := s.available(); err != nil {
+		return err
+	}
+	if s.runtime == nil {
+		return fmt.Errorf("%w: runtime is unavailable for native Codex cancellation", model.ErrUnavailable)
+	}
+	key := runID + "\x00" + taskID
+	s.runtime.codexAppServerMu.Lock()
+	live := s.runtime.codexAppServerTurns[key]
+	s.runtime.codexAppServerMu.Unlock()
+	if live == nil || live.client == nil {
+		return fmt.Errorf("%w: live Codex app-server turn is unavailable; refusing unbound cancellation", model.ErrUnavailable)
+	}
+	if err := live.client.InterruptTurn(ctx, codex.AppServerTurn{ThreadID: live.binding.ThreadID, TurnID: live.binding.TurnID}); err != nil {
+		return err
+	}
+	s.runtime.removeLiveCodexAppServerTurn(key)
+	return s.engine.CancelNativeTurn(ctx, runID, taskID, reason)
+}
+
+func (s *ExecutionService) resolveCodexAppServerApproval(ctx context.Context, approval execution.RuntimeApproval, approve bool, operator, rationale string) error {
+	if s.runtime == nil {
+		return fmt.Errorf("%w: runtime is unavailable for native Codex approval", model.ErrUnavailable)
+	}
+	key := approval.RunID + "\x00" + approval.TaskID
+	s.runtime.codexAppServerMu.Lock()
+	live := s.runtime.codexAppServerTurns[key]
+	s.runtime.codexAppServerMu.Unlock()
+	if live == nil || live.client == nil || live.approval == nil {
+		// Restart removed the stdio connection. Do not mark approval approved:
+		// there is no proof that a later native turn would be the same turn.
+		return fmt.Errorf("%w: live Codex app-server turn is unavailable; recovery is blocked pending operator review", model.ErrUnavailable)
+	}
+	bridge, err := s.CodexAppServerApprovals(ctx, approval.RunID, approval.TaskID)
+	if err != nil {
+		return err
+	}
+	if approve {
+		if err := s.engine.ApprovalManager().Approve(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+			return err
+		}
+		if err := live.client.ResolveApproval(ctx, *live.approval, bridge); err != nil {
+			return err
+		}
+		// From this instant onward the native turn may perform precisely the
+		// action whose digest/state the bridge just consumed. The pre-approval
+		// worktree digest remains the fail-closed boundary until this line; a
+		// restart drops this live marker and refuses reattachment.
+		live.accepted = true
+		if err := s.engine.ResumeNativeApproval(ctx, approval.ApprovalID); err != nil {
+			return err
+		}
+		// Process 05, rather than the TUI, owns continuation. The background
+		// operation waits only on the existing native turn and cannot issue a
+		// second turn/start because the persisted binding is already present.
+		go func(runID string, turnCtx context.Context) {
+			if turnCtx == nil {
+				return
+			}
+			// The native turn owns turnCtx and its cleanup cancels it once a
+			// terminal app-server event is received. Process 05 still needs one
+			// final scheduler pass to durably record COMPLETED_PENDING_VERIFY;
+			// inheriting that provider cleanup cancellation would incorrectly
+			// rewrite an otherwise completed run as PAUSED.
+			_, _ = s.engine.ExecuteRun(context.WithoutCancel(turnCtx), runID)
+		}(approval.RunID, live.runCtx)
+		return nil
+	}
+	if err := s.engine.ApprovalManager().Deny(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+		return err
+	}
+	if err := live.client.DeclineApproval(ctx, *live.approval); err != nil {
+		return err
+	}
+	s.runtime.removeLiveCodexAppServerTurn(key)
+	return s.engine.FailNativeApproval(ctx, approval.ApprovalID, fmt.Sprintf("native Codex approval rejected by %s: %s", operator, rationale))
 }
 
 // CreateCheckpoint manually snapshots the project workspace.

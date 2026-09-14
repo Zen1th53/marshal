@@ -11,24 +11,32 @@ import (
 	"github.com/Zen1th53/marshal/internal/evidence"
 )
 
-func (r *Runtime) recordRunEvidence(ctx context.Context, runID, taskID, adapterName, adapterVersion, baseCommit, resultCommit string, result adapter.Result) error {
+func (r *Runtime) recordRunEvidence(ctx context.Context, runID, taskID, adapterName, adapterVersion, baseCommit, resultCommit, requestedModel string, result adapter.Result) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	created := time.Now().UTC()
 	stdoutDigest := digestRuntimeBytes(result.Stdout)
 	stderrDigest := digestRuntimeBytes(result.Stderr)
+	effectiveModel := result.Model
+	sessionID := result.SessionID
+	if sessionID == "" {
+		sessionID = sessionForRun(ctx, r, taskID)
+	}
 	nodes := []evidence.Node{
 		runtimeEvidenceNode(evidence.NodeID("EVIDENCE-RUN-"+runID+"-COMMAND"), evidence.NodeTypeCommand, created, map[string]string{
 			"task_id": taskID, "run_id": runID, "adapter": adapterName, "base_commit": baseCommit,
+			"requested_model": requestedModel, "effective_model": effectiveModel, "session_id": sessionID,
 		}),
 		runtimeEvidenceNode(evidence.NodeID("EVIDENCE-RUN-"+runID+"-OUTPUT"), evidence.NodeTypeOutput, created, map[string]string{
 			"task_id": taskID, "run_id": runID, "adapter": adapterName, "status": string(result.Status),
 			"exit_code": strconv.Itoa(result.ExitCode), "stdout_digest": stdoutDigest, "stderr_digest": stderrDigest,
 			"result_commit": resultCommit,
+			"requested_model": requestedModel, "effective_model": effectiveModel, "session_id": sessionID,
 		}),
 		runtimeEvidenceNode(evidence.NodeID("EVIDENCE-RUN-"+runID+"-ENV"), evidence.NodeTypeEnvironment, created, map[string]string{
 			"task_id": taskID, "run_id": runID, "adapter": adapterName, "adapter_version": adapterVersion,
+			"requested_model": requestedModel, "effective_model": effectiveModel, "session_id": sessionID,
 		}),
 	}
 	for _, node := range nodes {

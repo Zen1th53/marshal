@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter/codex"
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/execution"
@@ -185,6 +187,10 @@ type ControlAuthority interface {
 	EvaluateVerification(ctx context.Context, sessionID string) (verification.Session, error)
 	// Verification rereads a session, which is how an outcome proves itself.
 	Verification(ctx context.Context, sessionID string) (verification.Session, error)
+	// CurrentVerification resolves the latest Process 06 session for the
+	// workspace's canonical run. Callers must not guess that a run ID is also
+	// a verification-session ID.
+	CurrentVerification(ctx context.Context) (verification.Session, error)
 
 	// --- session mode ---
 	//
@@ -226,6 +232,56 @@ type ControlAuthority interface {
 	RevokeAccessToken(ctx context.Context, id string) error
 	RequestWorkspaceExit(ctx context.Context) error
 	WorkspaceExitRequested() bool
+
+	// --- Codex Governance ---
+	CodexHealth(ctx context.Context) (CodexHealthReport, error)
+	CodexDoctor(ctx context.Context) (codex.DoctorReport, error)
+	CodexModels(ctx context.Context) ([]codex.ModelInfo, string, error)
+	CodexSelectModel(ctx context.Context, modelName string, expectedRevision int64) (model.ExecutionModelPreference, error)
+	CodexModelPreference(ctx context.Context) (model.ExecutionModelPreference, error)
+	SelectedCodexModel(ctx context.Context) (string, error)
+	DispatchCodexTask(ctx context.Context, req CodexTaskDispatchRequest) (app.RunResult, error)
+	CodexSessions(ctx context.Context) ([]CodexSessionSummary, error)
+	CodexPlugins(ctx context.Context) ([]codex.PluginInfo, []codex.SkillInfo, error)
+	PreviewCodexSkill(name string) (string, error)
+	InstallCodexSkill(ctx context.Context, name, expectedDigest string) (string, error)
+	RunCodexReview(ctx context.Context) (app.VerifyResult, error)
+}
+
+// CodexHealthReport carries truthful diagnostics from the bounded native Codex
+// probe. Native doctor runs only through the explicit CodexDoctor action.
+type CodexHealthReport struct {
+	Available  bool   `json:"available"`
+	BinaryPath string `json:"binary_path"`
+	Version    string `json:"version"`
+	// AppServerStatus is a narrow configuration-boundary observation, not a
+	// claim that a provider turn has executed. Its values remain operator
+	// truthful: CONFIG_FREE, BLOCKED, or UNKNOWN.
+	AppServerStatus string            `json:"app_server_status"`
+	AppServerReason string            `json:"app_server_reason,omitempty"`
+	DefaultModel    string            `json:"default_model"`
+	Checks          map[string]string `json:"checks"`
+	Verdict         string            `json:"verdict"`
+	CheckedAt       time.Time         `json:"checked_at"`
+}
+
+// CodexTaskDispatchRequest carries typed inputs for non-interactive governed task execution.
+type CodexTaskDispatchRequest struct {
+	TaskID           string `json:"task_id"`
+	AgentID          string `json:"agent_id"`
+	Model            string `json:"model,omitempty"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
+
+// CodexSessionSummary carries real thread/session ID and run status from native JSONL events.
+type CodexSessionSummary struct {
+	SessionID string    `json:"session_id"`
+	TaskID    string    `json:"task_id"`
+	RunID     string    `json:"run_id"`
+	Model     string    `json:"model"`
+	Status    string    `json:"status"`
+	StartedAt time.Time `json:"started_at"`
+	EndedAt   time.Time `json:"ended_at"`
 }
 
 // BackupProof is what a completed backup demonstrates about itself.
@@ -634,7 +690,7 @@ func (s *ControlSource) Bindings() map[ActionID]Binding {
 	// invented evidence would be exactly the fake the contract forbids.
 
 	for _, opt := range []struct{ id, title, needs string }{
-		{"CTUI-0573", "Start from Process 07 commit", "the memory commit to optimize from"},
+		{"CTUI-0573", "Start from learning record", "the memory record to optimize from"},
 		{"CTUI-0587", "Offline bounded replay", "the replay's route, sandbox policy and bounds"},
 		{"CTUI-0617", "Promotion decision and evidence", "the candidate and its benchmark evidence"},
 		{"CTUI-0621", "Canary creation", "the promotion and the canary's rollout policy"},
@@ -677,7 +733,7 @@ func (s *ControlSource) Bindings() map[ActionID]Binding {
 		{"CTUI-0485", "Import Codex JSONL", "the file to import"},
 		{"CTUI-0486", "Import Claude JSONL", "the file to import"},
 		{"CTUI-0487", "Import Gemini JSONL", "the file to import"},
-		{"CTUI-0489", "Export Process 07 project/general bundle", "the export destination"},
+		{"CTUI-0489", "Export learning bundle", "the export destination"},
 		{"CTUI-0491", "Local portable memory-pack import/export", "the pack path"},
 	} {
 		id, title, needs := ActionID(capture.id), capture.title, capture.needs
@@ -758,12 +814,8 @@ func (s *ControlSource) Bindings() map[ActionID]Binding {
 			"its own submission path",
 	}
 	b["CTUI-0365"] = Binding{
-		Action: "CTUI-0365", Title: "Run governed local verification command",
-		Safety: SafetyGoverned,
-		Requires: "verification commands run inside a Process 05 cell under the " +
-			"sandbox and egress policy; no application-layer boundary runs one " +
-			"directly, and adding a shell here would be the arbitrary-execution " +
-			"surface the governance contract forbids",
+		Action: "CTUI-0365", Title: "Review current commit with Codex", Safety: SafetyGoverned,
+		Prepare: s.prepareCodexReview, Execute: s.executeCodexReview,
 	}
 	b["CTUI-0382"] = Binding{
 		Action: "CTUI-0382", Title: "Authorized finding closure", Safety: SafetyGoverned,
@@ -918,7 +970,202 @@ func (s *ControlSource) Bindings() map[ActionID]Binding {
 		Prepare: s.prepareWorkspaceExit, Execute: s.executeWorkspaceExit,
 	}
 
+	// --- Codex Governance ---
+	b["CTUI-0509-MODELS"] = Binding{
+		Action: "CTUI-0509-MODELS", Title: "Select Codex model", Safety: SafetyPlain,
+		Inputs: []InputSpec{
+			{Key: "model", Label: "Model Slug", Required: true},
+		},
+		Prepare: s.prepareCodexModelSelect,
+		Execute: s.executeCodexModelSelect,
+	}
+	b["CTUI-0509-HEALTH"] = Binding{
+		Action: "CTUI-0509-HEALTH", Title: "Run Codex doctor", Safety: SafetyPlain,
+		Prepare: s.prepareCodexDoctor, Execute: s.executeCodexDoctor,
+	}
+	b["CTUI-0509-PLUGINS"] = Binding{Action: "CTUI-0509-PLUGINS", Title: "Install project-local Codex skill", Safety: SafetySensitive,
+		Inputs:         []InputSpec{{Key: "skill", Label: "Project skill name", Required: true}},
+		PrepareRequest: s.prepareCodexSkillInstall, Execute: s.executeCodexSkillInstall}
+
 	return b
+}
+
+func (s *ControlSource) prepareCodexDoctor(ctx context.Context) (Target, error) {
+	if s.Authority == nil {
+		return Target{}, ErrNoBinding
+	}
+	health, err := s.Authority.CodexHealth(ctx)
+	if err != nil {
+		return Target{}, err
+	}
+	if !health.Available {
+		return Target{}, fmt.Errorf("%w: Codex CLI is unavailable", model.ErrUnavailable)
+	}
+	return Target{Kind: "codex_doctor", ID: "local", Digest: health.Version, Summary: "bounded native Codex doctor"}, nil
+}
+
+func (s *ControlSource) executeCodexDoctor(ctx context.Context, req ActionRequest) (Outcome, error) {
+	report, err := s.Authority.CodexDoctor(ctx)
+	if err != nil {
+		return refusal("Codex doctor did not complete", err, req.Target, "internal/adapter/codex/operations.go")
+	}
+	return Outcome{
+		Verdict: VerdictPass,
+		Detail:  fmt.Sprintf("Codex doctor completed: %s (%d checks)", report.OverallStatus, report.CheckCount),
+		Target:  req.Target,
+		Proof:   Known(fmt.Sprintf("native doctor status=%s; checks=%d", report.OverallStatus, report.CheckCount), "internal/adapter/codex/operations.go"),
+	}, nil
+}
+
+func (s *ControlSource) prepareCodexReview(ctx context.Context) (Target, error) {
+	if s.Authority == nil {
+		return Target{}, ErrNoBinding
+	}
+	health, err := s.Authority.CodexHealth(ctx)
+	if err != nil {
+		return Target{}, err
+	}
+	if !health.Available {
+		return Target{}, fmt.Errorf("%w: Codex CLI is unavailable", model.ErrUnavailable)
+	}
+	return Target{Kind: "codex_review", ID: "current-head", Digest: health.Version, Summary: "exact current commit only"}, nil
+}
+
+func (s *ControlSource) executeCodexReview(ctx context.Context, req ActionRequest) (Outcome, error) {
+	result, err := s.Authority.RunCodexReview(ctx)
+	if err != nil {
+		return refusal("Codex commit review failed", err, req.Target, "internal/app/runtime.go")
+	}
+	return Outcome{Verdict: VerdictPass, Detail: "Codex reviewed current commit " + result.Commit,
+		Target: req.Target, Proof: Known("review output digest "+result.OutputDigest, "internal/app/runtime.go")}, nil
+}
+
+func (s *ControlSource) prepareCodexSkillInstall(_ context.Context, req ActionRequest) (Target, error) {
+	if s.Authority == nil {
+		return Target{}, ErrNoBinding
+	}
+	name := strings.TrimSpace(req.Inputs["skill"])
+	digest, err := s.Authority.PreviewCodexSkill(name)
+	if err != nil {
+		return Target{}, fmt.Errorf("preview project Codex skill: %w", err)
+	}
+	return Target{Kind: "codex_skill", ID: name, Digest: digest, Summary: "project-local Codex skill " + name}, nil
+}
+
+func (s *ControlSource) executeCodexSkillInstall(ctx context.Context, req ActionRequest) (Outcome, error) {
+	digest, err := s.Authority.InstallCodexSkill(ctx, req.Target.ID, req.Target.Digest)
+	if err != nil {
+		return refusal("Codex skill installation refused", err, req.Target, "internal/app/runtime.go")
+	}
+	return Outcome{Verdict: VerdictPass, Detail: "Codex skill installed: " + req.Target.ID, Target: req.Target, Proof: Known("digest = "+digest, "internal/app/runtime.go")}, nil
+}
+
+func (s *ControlSource) prepareCodexModelSelect(ctx context.Context) (Target, error) {
+	if s.Authority == nil {
+		return Target{}, ErrNoBinding
+	}
+	current, _ := s.Authority.SelectedCodexModel(ctx)
+	revision := int64(0)
+	if preference, err := s.Authority.CodexModelPreference(ctx); err == nil {
+		current = preference.Model
+		revision = preference.Revision
+	} else if !errors.Is(err, model.ErrNotFound) {
+		return Target{}, fmt.Errorf("read codex model preference: %w", err)
+	}
+	if current == "" {
+		current = "default"
+	}
+	return Target{
+		Kind:     "codex_model",
+		ID:       current,
+		Summary:  fmt.Sprintf("Current effective model: %s", current),
+		Revision: revision,
+	}, nil
+}
+
+func (s *ControlSource) executeCodexModelSelect(ctx context.Context, req ActionRequest) (Outcome, error) {
+	if err := s.available(); err != nil {
+		return Outcome{}, err
+	}
+	modelSlug := strings.TrimSpace(req.Inputs["model"])
+	if modelSlug == "" {
+		return Outcome{}, errors.New("model slug is required")
+	}
+	selected, err := s.Authority.CodexSelectModel(ctx, modelSlug, req.Target.Revision)
+	if err != nil {
+		return refusal("model selection refused", err, req.Target, "internal/adapter/codex")
+	}
+	return Outcome{
+		Verdict: VerdictPass,
+		Detail:  fmt.Sprintf("Effective Codex model set to %s", modelSlug),
+		Target:  Target{Kind: "codex_model", ID: modelSlug, Summary: modelSlug, Revision: selected.Revision},
+		Proof:   Known(fmt.Sprintf("model = %s revision = %d", modelSlug, selected.Revision), "internal/adapter/codex"),
+	}, nil
+}
+
+func (s *ControlSource) prepareCodexDispatch(ctx context.Context, req ActionRequest) (Target, error) {
+	if s.Authority == nil {
+		return Target{}, ErrNoBinding
+	}
+	taskID := strings.TrimSpace(req.Inputs["task_id"])
+	if taskID == "" {
+		return Target{}, errors.New("task_id is required")
+	}
+	task, err := s.Authority.Task(ctx, taskID)
+	if err != nil {
+		return Target{}, fmt.Errorf("task %s: %w", taskID, err)
+	}
+	agentID := strings.TrimSpace(req.Inputs["agent_id"])
+	if agentID == "" {
+		if resolver, ok := s.Authority.(interface {
+			DefaultCodexDispatchAgent(context.Context) (string, error)
+		}); ok {
+			agentID, err = resolver.DefaultCodexDispatchAgent(ctx)
+			if err != nil {
+				return Target{}, err
+			}
+		} else {
+			return Target{}, errors.New("agent_id is required because this authority cannot resolve a unique local Codex agent")
+		}
+	}
+	modelName := strings.TrimSpace(req.Inputs["model"])
+	if modelName == "" {
+		modelName, _ = s.Authority.SelectedCodexModel(ctx)
+	}
+	return Target{
+		Kind:     "task",
+		ID:       task.ID,
+		ActorID:  agentID,
+		Summary:  fmt.Sprintf("%s (agent=%s model=%s)", task.Title, agentID, modelName),
+		Revision: task.Revision,
+	}, nil
+}
+
+func (s *ControlSource) executeCodexDispatch(ctx context.Context, req ActionRequest) (Outcome, error) {
+	if err := s.available(); err != nil {
+		return Outcome{}, err
+	}
+	taskID := strings.TrimSpace(req.Inputs["task_id"])
+	agentID := strings.TrimSpace(req.Inputs["agent_id"])
+	if agentID == "" {
+		agentID = req.Target.ActorID
+	}
+	modelName := strings.TrimSpace(req.Inputs["model"])
+	res, err := s.Authority.DispatchCodexTask(ctx, CodexTaskDispatchRequest{
+		TaskID:           taskID,
+		AgentID:          agentID,
+		Model:            modelName,
+		ExpectedRevision: req.Target.Revision,
+	})
+	if err != nil {
+		return refusal("codex task dispatch failed", err, req.Target, "internal/adapter/codex")
+	}
+	return Outcome{
+		Verdict: VerdictPass,
+		Detail:  fmt.Sprintf("Run %s completed with status %s (session %s, model %s)", res.RunID, res.Status, res.SessionID, res.Model),
+		Target:  Target{Kind: "run", ID: res.RunID, Revision: req.Target.Revision},
+		Proof:   Known(fmt.Sprintf("run_id = %s, commit = %s", res.RunID, res.ResultCommit), "internal/adapter/codex"),
+	}, nil
 }
 
 func validateTokenCapabilities(value string) error {
@@ -1839,7 +2086,7 @@ func (s *ControlSource) prepareVerification(ctx context.Context) (Target, error)
 	if err != nil || runID == "" {
 		return Target{}, errors.New("no run is active, so no verification applies")
 	}
-	session, err := s.Authority.Verification(ctx, runID)
+	session, err := s.Authority.CurrentVerification(ctx)
 	if err != nil {
 		return Target{}, fmt.Errorf("the verification session could not be read: %w", err)
 	}

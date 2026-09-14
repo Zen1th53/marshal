@@ -487,7 +487,7 @@ func (v *NavView) renderConfirmation(c *Confirmation, width, rows int) []string 
 	binding := c.Binding()
 
 	out := []string{
-		truncate(fmt.Sprintf("── Confirm: %s ──", binding.Title), width),
+		truncate(fmt.Sprintf("── Confirm: %s ──", communityLabel(binding.Title)), width),
 		"",
 	}
 

@@ -78,8 +78,8 @@ func (c *Composer) SetPrompt(info ComposerPromptInfo) {
 func (c *Composer) PromptString() string {
 	if c.promptInfo.Agent != "" {
 		return fmt.Sprintf("%s %s ",
-			c.theme.Colorize(c.theme.Active, "@"+c.promptInfo.Agent),
-			c.theme.Colorize(c.theme.Marshal, PromptMarker))
+			c.theme.Colorize(c.theme.Marshal, PromptMarker),
+			c.theme.Colorize(c.theme.Active, "@"+c.promptInfo.Agent))
 	}
 	return c.theme.Colorize(c.theme.Marshal, PromptMarker) + " "
 }

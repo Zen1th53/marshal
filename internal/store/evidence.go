@@ -421,3 +421,41 @@ func (s *Store) ObserveHEAD(ctx context.Context, taskID, newCommit string, expec
 	}
 	return nil
 }
+
+// WorkerRunsByAdapter returns recent runs for the given adapter name.
+func (s *Store) WorkerRunsByAdapter(ctx context.Context, adapterName string, limit int) ([]model.WorkerRun, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT run_id, task_id, session_id, adapter, adapter_version, status, started_at, ended_at, exit_status
+		FROM worker_runs
+		WHERE adapter = ?
+		ORDER BY started_at DESC
+		LIMIT ?
+	`, adapterName, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query worker runs: %w", err)
+	}
+	defer rows.Close()
+
+	var runs []model.WorkerRun
+	for rows.Next() {
+		var r model.WorkerRun
+		var startedAtStr string
+		var endedAtStr sql.NullString
+		if err := rows.Scan(&r.ID, &r.TaskID, &r.SessionID, &r.Adapter, &r.AdapterVersion, &r.Status, &startedAtStr, &endedAtStr, &r.ExitStatus); err != nil {
+			return nil, fmt.Errorf("scan worker run: %w", err)
+		}
+		if t, err := time.Parse(time.RFC3339Nano, startedAtStr); err == nil {
+			r.StartedAt = t
+		}
+		if endedAtStr.Valid {
+			if t, err := time.Parse(time.RFC3339Nano, endedAtStr.String); err == nil {
+				r.EndedAt = &t
+			}
+		}
+		runs = append(runs, r)
+	}
+	return runs, rows.Err()
+}

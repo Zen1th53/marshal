@@ -99,11 +99,27 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 	events := MeaningfulMessages(s.RecentMessages)
 
 	if len(events) == 0 && s.ActiveToolCard == nil {
-		return []string{
-			PadCell(fmt.Sprintf(" %s  %s",
-				th.Colorize(th.Bold, "Activity"),
-				th.Colorize(th.Muted, "none yet")), cols),
-		}
+		var out []string
+		out = append(out, PadCell(fmt.Sprintf(" %s  %s",
+			th.Colorize(th.Bold, "Activity"),
+			th.Colorize(th.Muted, "ready · governed workspace active")), cols))
+		out = append(out, PadCell(fmt.Sprintf("   %s %s",
+			th.Colorize(th.Success, "Codex workspace"),
+			th.Colorize(th.Muted, "— Type a prompt to open native Codex with MARSHAL memory")), cols))
+		out = append(out, PadCell(fmt.Sprintf("   %s Help   %s Review   %s Diff",
+			th.Colorize(th.Active, "[F1]"),
+			th.Colorize(th.Active, "[F2]"),
+			th.Colorize(th.Active, "[F3]")), cols))
+		out = append(out, PadCell(fmt.Sprintf("   %s Status   %s Models   %s Navigation",
+			th.Colorize(th.Active, "[F4]"),
+			th.Colorize(th.Active, "[F5]"),
+			th.Colorize(th.Active, "[Esc]")), cols))
+		out = append(out, PadCell(fmt.Sprintf("   %s %s",
+			th.Colorize(th.Active, "[F7]"), "Open Codex · native settings and approvals · automatic memory"), cols))
+		out = append(out, PadCell(fmt.Sprintf("   %s %s",
+			th.Colorize(th.Muted, "Quick Commands:"),
+			"/codex new · /codex continue · /resume · /codex cli · /memory · /diff"), cols))
+		return out
 	}
 
 	// Only the tail can be visible, so format only the tail. Rendering the whole

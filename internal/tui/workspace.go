@@ -53,6 +53,7 @@ type Workspace struct {
 	// the canonical runtime. The input loop reattaches its read/mutation
 	// sources after the current confirmation releases NavView's lock.
 	runtimeReplaced bool
+	controlOverride *ControlSource
 	// ultraRequest asks the Community Cloud for an entitlement through the
 	// canonical client. Nil when no Cloud is configured.
 	ultraRequest func(ctx context.Context) error
@@ -96,6 +97,7 @@ type Workspace struct {
 	// it, so a stray interrupt never closes the workspace on its own.
 	interruptArmed bool
 	exitRequested  bool
+	nativeOnStart  *[]string
 
 	// Scroll and activity unread tracking
 	scrollOffset int
@@ -185,15 +187,27 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	for _, p := range participants {
 		agentIDs = append(agentIDs, p.AgentID)
 	}
+	hasCodex := false
+	for _, id := range agentIDs {
+		if id == "codex" {
+			hasCodex = true
+			break
+		}
+	}
+	if !hasCodex {
+		agentIDs = append(agentIDs, "codex")
+	}
 
 	compCtx := CompletionContext{
 		Commands: []string{
 			"/status", "/goal", "/mode", "/claims", "/inspect", "/approve", "/reject",
 			"/route", "/agents", "/evidence", "/why", "/msg", "/handoff", "/checkpoint",
 			"/rollback", "/budget", "/pause", "/resume", "/cancel", "/doctor", "/tasks",
-			"/policy", "/sandbox", "/memory", "/provider", "/harness", "/model", "/effort",
-			"/ultra", "/backup", "/fingerprint", "/runtime", "/store", "/export", "/blind",
-			"/reinjection", "/alignment", "/optimization", "/diff", "/help", "/quit",
+			"/policy", "/sandbox", "/memory", "/provider", "/harness", "/model", "/models",
+			"/effort", "/ultra", "/backup", "/fingerprint", "/runtime", "/store", "/export",
+			"/blind", "/reinjection", "/alignment", "/optimization", "/diff", "/review",
+			"/codex", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
+			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
 		},
 		Agents:      agentIDs,
 		Subcommands: make(map[string][]string),
@@ -206,6 +220,14 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/harness"] = []string{"probe", "status", "select"}
 	compCtx.Subcommands["/provider"] = []string{"status", "config"}
 	compCtx.Subcommands["/alignment"] = []string{"scope", "violations", "blast", "deletions", "resolve", "status"}
+	compCtx.Subcommands["/codex"] = []string{"doctor", "models", "model", "review", "sessions", "mcp", "plugin", "apply", "diff", "resume", "fork", "agents", "features", "sandbox", "approval", "search", "login", "logout", "skill", "run", "exec", "cli"}
+	compCtx.Subcommands["/mcp"] = []string{"list", "add", "rm"}
+	compCtx.Subcommands["/plugin"] = []string{"list", "add", "rm"}
+	compCtx.Subcommands["/plugins"] = []string{"list", "add", "rm"}
+	compCtx.Subcommands["/search"] = []string{"on", "off"}
+	compCtx.Subcommands["/sandbox"] = []string{"read-only", "workspace-write"}
+	compCtx.Subcommands["/resume"] = []string{"--last"}
+	compCtx.Subcommands["/fork"] = []string{"--last"}
 
 	completer := NewCompleter(compCtx)
 	composer := NewComposer(th)
@@ -213,6 +235,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 		Project: projectID,
 		Mode:    "MANUAL",
 		State:   "NO_GOAL",
+		Agent:   "",
 	})
 
 	paletteActions := GlobalRegistry.ToPaletteActions()
@@ -266,6 +289,7 @@ func (w *Workspace) SetTheme(mode ThemeMode, animation bool) {
 	w.composer.theme = w.theme
 	w.palette.theme = w.theme
 	w.diffViewer.theme = w.theme
+	w.navView.SetTheme(w.theme)
 }
 
 // SetCoordinator sets an explicit coordinator.
@@ -380,6 +404,7 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 		Project: w.projectID,
 		Mode:    strings.ToUpper(w.mode),
 		State:   string(w.state.UnderstandingState),
+		Agent:   "",
 	})
 
 	return nil
@@ -415,17 +440,10 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 	}
 
 	// Fallback for piped or non-terminal environments
-	return w.runLineScanner(ctx, in, out)
-}
-
-// WaitForNavigationRefreshes drains asynchronous navigation reads. It is a
-// lifecycle boundary, not a rendering operation: callers must invoke it only
-// after cancelling the context supplied to OpenNavigation.
-func (w *Workspace) WaitForNavigationRefreshes() {
-	if w == nil || w.navView == nil {
-		return
+	if w.nativeOnStart != nil {
+		return fmt.Errorf("marshal codex requires an interactive terminal")
 	}
-	w.navView.WaitForRefreshes()
+	return w.runLineScanner(ctx, in, out)
 }
 
 func (w *Workspace) runRawTerminal(ctx context.Context) error {
@@ -452,6 +470,18 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	}()
 
 	w.renderFullView()
+	if w.nativeOnStart != nil {
+		args := *w.nativeOnStart
+		w.nativeOnStart = nil
+		result, err := w.runNativeCodex(ctx, args)
+		w.state.LastCommand = "native Codex"
+		w.state.LastOutput = result
+		if err != nil {
+			w.state.LastOutput += "\n" + err.Error()
+			w.state.LastOutputIsError = true
+		}
+		w.renderFullView()
+	}
 
 	// Read keys on their own goroutine. ReadKey blocks on the terminal, so
 	// polling it from the select's default branch pinned the loop inside that
@@ -463,6 +493,9 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 		err   error
 	}
 	keys := make(chan keyRead)
+	// Acknowledge processing before reading again: an interactive child must
+	// own stdin exclusively until its command handler returns.
+	readNext := make(chan struct{})
 	readerDone := make(chan struct{})
 	defer close(readerDone)
 
@@ -477,10 +510,24 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			if err != nil {
 				return
 			}
+			select {
+			case <-readNext:
+			case <-readerDone:
+				return
+			}
 		}
 	}()
 
+	keyPending := false
 	for {
+		if keyPending {
+			select {
+			case readNext <- struct{}{}:
+			case <-ctx.Done():
+				return nil
+			}
+			keyPending = false
+		}
 		select {
 		case <-ctx.Done():
 			return nil
@@ -490,6 +537,7 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			w.screen.Reset()
 			w.renderFullView()
 		case kr := <-keys:
+			keyPending = kr.err == nil
 			event, err := kr.event, kr.err
 			if err != nil {
 				if err == io.EOF {
@@ -541,6 +589,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			w.interruptArmed = false
 
 			// Navigation owns every key while it is open, and Ctrl+N opens it.
+			if event.Type == KeyF7 {
+				w.runCommand(ctx, "/codex new")
+				continue
+			}
 			// The dispatch lives in its own method so a test can drive exactly
 			// the branch this loop takes rather than a copy of it.
 			if w.dispatchNavigationKey(ctx, event) {
@@ -581,10 +633,36 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				}
 			}
 
-			// 'd' opens the diff viewer only when the composer is empty, so it
-			// never swallows a character the operator is typing.
-			if event.Type == KeyRune && event.Rune == 'd' && w.composer.Text() == "" {
-				_ = w.diffViewer.Open()
+			// Function keys (F1–F6) provide immediate one-touch actions without typing
+			switch event.Type {
+			case KeyF1:
+				w.runCommand(ctx, "/help")
+				continue
+			case KeyF2:
+				w.runCommand(ctx, "/review")
+				continue
+			case KeyF3:
+				if w.diffViewer.IsOpen() {
+					w.diffViewer.Close()
+				} else {
+					_ = w.diffViewer.Open()
+				}
+				w.renderFullView()
+				continue
+			case KeyF4:
+				w.runCommand(ctx, "/status")
+				continue
+			case KeyF5:
+				w.runCommand(ctx, "/models")
+				continue
+			case KeyF6:
+				w.runCommand(ctx, "/mcp")
+				continue
+			}
+
+			// Esc toggles navigation mode when composer is empty and no popup/overlay is active
+			if event.Type == KeyEsc && w.composer.Text() == "" && !w.completionOpen && !w.diffViewer.IsOpen() && !w.palette.IsOpen() {
+				w.openNavigation(ctx)
 				w.renderFullView()
 				continue
 			}
@@ -615,10 +693,13 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				}
 			}
 
-			// Tab is completion, never submission. It opens the popup on the first
-			// press and cycles thereafter; it never inserts a newline, never
-			// reprints the prompt and never executes the buffer.
+			// Tab is completion, never submission. When composer is empty, it opens
+			// the command list popup immediately so the user can discover commands.
 			if event.Type == KeyTab || event.Type == KeyShiftTab {
+				if w.composer.Text() == "" {
+					w.composer.SetText("/")
+					w.composer.cursor = 1
+				}
 				w.handleTab(event.Type == KeyShiftTab)
 				w.renderComposer()
 				continue
@@ -685,6 +766,32 @@ func (w *Workspace) runCommand(ctx context.Context, cmd string) {
 	w.mu.Unlock()
 
 	w.renderFullView()
+}
+
+// SuspendTerminal temporarily leaves raw terminal mode and alternate screen,
+// allowing a child interactive process to run with the actual terminal attached.
+// When the returned resume function is called, raw terminal mode and alternate screen
+// are restored and the workspace is redrawn.
+func (w *Workspace) SuspendTerminal() func() {
+	if w.terminal == nil || !w.terminal.IsTerminal() {
+		return func() {}
+	}
+	w.terminal.DisableMouse()
+	w.terminal.DisableBracketedPaste()
+	w.terminal.ShowCursor()
+	w.terminal.LeaveAltScreen()
+	_ = w.terminal.Restore()
+
+	return func() {
+		_ = w.terminal.MakeRaw()
+		w.terminal.EnterAltScreen()
+		w.terminal.EnableBracketedPaste()
+		w.terminal.EnableMouse()
+		if w.screen != nil {
+			w.screen.Reset()
+		}
+		w.renderFullView()
+	}
 }
 
 // handleTab opens or advances the completion popup.
@@ -841,9 +948,22 @@ func (w *Workspace) AttachULTRARequest(request func(ctx context.Context) error) 
 	w.ultraRequest = request
 }
 
+// AttachControlSource wires an explicit ControlSource into the workspace,
+// primarily for tests and standalone control plane scenarios.
+func (w *Workspace) AttachControlSource(source *ControlSource) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.controlOverride = source
+}
+
 // controlSource builds the Control authority from the workspace's handles.
 func (w *Workspace) controlSource() *ControlSource {
 	w.mu.RLock()
+	if w.controlOverride != nil {
+		source := w.controlOverride
+		w.mu.RUnlock()
+		return source
+	}
 	runtime, identity := w.runtime, w.projectIdentity
 	request, session, project := w.ultraRequest, w.sessionID, w.projectID
 	store := w.store
