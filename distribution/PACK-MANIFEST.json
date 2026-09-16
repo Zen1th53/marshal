@@ -8635,6 +8635,16 @@
       "bytes": 3498
     },
     {
+      "path": "internal/tui/native_switch_pty_test.go",
+      "sha256": "2cb5f6b671f3228e8615d3e39380b55226175c35c0dc598469154877fa934c55",
+      "bytes": 3813
+    },
+    {
+      "path": "internal/tui/native_twowindow_pty_test.go",
+      "sha256": "c818c216011ca5467c48246a234980c03253a91c23f3261660b53e7d183d6496",
+      "bytes": 5132
+    },
+    {
       "path": "internal/tui/navmodel.go",
       "sha256": "8bae7c179f8ff07525f50a8f3b45c32221e5c5768c59aa7fe4317f0f304815f7",
       "bytes": 19750
