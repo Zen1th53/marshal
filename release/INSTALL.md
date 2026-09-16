@@ -2,6 +2,15 @@
 
 MARSHAL release binaries support Linux on amd64 and arm64.
 
+The quickest route is the installer, which does all of the below and refuses to
+install a download whose checksum does not match:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
+```
+
+To do it by hand instead:
+
 1. Download the archive for your architecture and `checksums.txt` from the
    same GitHub release.
 2. Verify the archive:
@@ -13,7 +22,7 @@ MARSHAL release binaries support Linux on amd64 and arm64.
 3. Extract and install the binary:
 
    ```bash
-   tar -xzf marshal_1.5.0_linux_amd64.tar.gz
+   tar -xzf marshal_<version>_linux_amd64.tar.gz
    install -Dm755 marshal "$HOME/.local/bin/marshal"
    marshal version
    ```

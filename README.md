@@ -9,11 +9,13 @@ MARSHAL is a local, security-focused runtime and control plane for coding agents
 
 Raw provider CLIs can modify files and execute arbitrary commands, but they lack independent authorization boundaries, reproducible worktree isolation, verifiable evidence graphs, and governed cross-turn memory. MARSHAL wraps provider execution inside isolated execution cells, leases and records state in a canonical local SQLite database, and fails closed whenever a requested security or isolation boundary cannot be enforced.
 
-Latest tagged release: **v1.5.0** · Current `main`: schema **v86**, pack **6.0.0**, runtime spec **1.5.0**.
+Current `main`: schema **v86**, pack **6.0.0**, runtime spec **1.5.0**. The
+released binaries are listed on the [releases page](https://github.com/Zen1th53/marshal/releases).
 
-> `main` is materially ahead of the v1.5.0 tag. The governed lifecycle described below
-> (Goal → Plan → Execution → Verification → Learning → Optimization) is merged on `main`
-> and is **not** part of the v1.5.0 release archive.
+> The release tag and the runtime spec version are different things: the runtime
+> spec is **1.5.0** regardless of which binary is published. `main` carries work
+> that is not in every release archive, so check the release notes for what a
+> given tag contains.
 
 ---
 
@@ -32,7 +34,7 @@ MARSHAL solves these challenges by acting as a **deterministic local control pla
 
 ## What MARSHAL Actually Provides
 
-| Subsystem | Current Community v1.5.0 Capability |
+| Subsystem | Current Community Capability (`main`) |
 |---|---|
 | **Terminal TUI Workspace (v2)** | Premium, dynamic, terminal-first collaborative workspace (`marshal tui` or default `marshal` launch) with full line editing, contextual autocomplete (`Tab`, `@`, `#`), command palette (`Ctrl+P`), live working tree diff viewer, real probe capability intelligence, silence-by-default chatter filtering, and a capability registry whose every advertised TUI command is verified to dispatch against the canonical runtime by an on-terminal (PTY) conformance suite. See [TUI Documentation](docs/tui.md). |
 | **Frozen 6-Core Judgment Layer** | Immutable 6-core runtime: (1) Epistemic Ledger & Claim Graph, (2) Alignment Guard, (3) Blind Interpretation, (4) Durable Handoff Checkpoints & Rollback, (5) Budget & Termination Contract, (6) Constraint Re-injection. Strictly frozen with no 7th core. |
@@ -258,11 +260,14 @@ MARSHAL includes a bounded, read-only host resource inspector that gathers point
 
 Two things are tracked separately, because they differ:
 
-| Property | Latest tagged release | Current `main` |
-|---|---|---|
-| **Version** | `v1.5.0` | `1.5.0` runtime spec, unreleased changes on top |
-| **Database Schema** | `v79` | **`v86`** (SQLite in WAL mode) |
-| **Governed lifecycle** | not included | Process 03–08 merged |
+| Property | Current `main` |
+|---|---|
+| **Runtime spec** | `1.5.0` |
+| **Database Schema** | **`v86`** (SQLite in WAL mode) |
+| **Governed lifecycle** | Process 03–08 merged |
+
+Earlier release archives carry earlier schemas; the release notes for a tag state
+what that archive contains.
 
 | Property | Current Specification |
 |---|---|
@@ -277,23 +282,44 @@ Two things are tracked separately, because they differ:
 
 ## Installation
 
-### Option A: Download Official Release Binary
+### Option A: One command (Linux)
 
-Download the appropriate archive for your architecture from the [v1.5.0 Release](https://github.com/Zen1th53/marshal/releases/tag/v1.5.0):
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
+```
+
+Resolves the latest release, downloads the archive for this machine, verifies it
+against the release's published checksums and installs it to `~/.local/bin`. It
+uses no `sudo` and touches nothing outside the install directory. A download that
+fails checksum verification is not installed.
+
+```bash
+# Install somewhere else, or pin a version
+MARSHAL_INSTALL_DIR=/usr/local/bin MARSHAL_VERSION=v0.0.1 \
+  sh -c "$(curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh)"
+```
+
+Release binaries are built for Linux on amd64 and arm64. On any other platform,
+build from source.
+
+### Option B: Download the release archive yourself
+
+Download the archive for your architecture and `checksums.txt` from the
+[latest release](https://github.com/Zen1th53/marshal/releases/latest):
 
 ```bash
 # Verify checksums
 sha256sum -c checksums.txt --ignore-missing
 
 # Extract and install binary
-tar -xzf marshal_1.5.0_linux_amd64.tar.gz
+tar -xzf marshal_<version>_linux_amd64.tar.gz
 install -Dm755 marshal "$HOME/.local/bin/marshal"
 
 # Verify installation
 marshal version
 ```
 
-### Option B: Build from Source
+### Option C: Build from Source
 
 ```bash
 git clone https://github.com/Zen1th53/marshal.git
