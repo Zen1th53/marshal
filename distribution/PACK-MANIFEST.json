@@ -2126,8 +2126,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "af2a52e2be45cb60e1a587f59072200c26b2f988884fd655f7433e53a3b1d17c",
-      "bytes": 7588
+      "sha256": "f1736784a801114c7c79986b7d01c6d2018c352df1ece56261fa4c44672b52c7",
+      "bytes": 10405
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -8681,8 +8681,8 @@
     },
     {
       "path": "internal/tui/plain_prompt_test.go",
-      "sha256": "0b9c0dc663312419d5c73a1cf4d068b7ccef3b9aed80462f6bdb7f7e61b72033",
-      "bytes": 3105
+      "sha256": "495d65b61dc54837bd3a7232f082d93a9457d4490fb8853bdeda1c96d14e91f0",
+      "bytes": 3173
     },
     {
       "path": "internal/tui/probe.go",
@@ -8866,8 +8866,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "eff1582a0c0d83ed9f8392a3ab663c0d3679968cfccef83b5918e427fb1c4081",
-      "bytes": 43229
+      "sha256": "8df59bbf78762ea82f81d741b899bc07858dbe232248553990445a703fd39012",
+      "bytes": 43484
     },
     {
       "path": "internal/tui/workspace_nav_test.go",

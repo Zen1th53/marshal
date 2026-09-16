@@ -5,10 +5,10 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Zen1th53/marshal)](https://go.dev)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
 
-**A local control plane for coding agents.**
+**One workspace for every coding agent you use.**
 
-Run Claude Code, Codex and other agent CLIs inside one governed workspace: sandboxed
-execution, durable shared memory, and a record of what each agent actually did.
+Claude Code and Codex, in the same project, sharing one memory — with sandboxed
+execution and a record of everything they did.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
@@ -16,18 +16,109 @@ curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | 
 
 ---
 
-## Why
+## The problem
 
-Agent CLIs edit files and run commands with your full privileges. Each one keeps its
-own history, so they cannot see each other's work, and when a session ends its
-reasoning is scattered across terminal scrollback.
+You run Claude Code in one terminal and Codex in another. Each keeps its own history,
+so neither knows what the other changed. When a session ends its reasoning is gone —
+scattered across scrollback you will never read again. And both of them are editing
+your repository with your full privileges, with nothing between them and the disk.
 
-MARSHAL sits between you and those CLIs. It runs them in isolated execution cells,
-records what they do in a project-local database, and lets them build on each other's
-work instead of starting blind.
+MARSHAL is the layer in between: a local control plane that runs agents in sandboxed
+cells, records what they actually do, and lets them build on each other's work.
 
-Nothing runs unless you ask for it. When a security boundary cannot be enforced,
-MARSHAL fails closed rather than proceeding.
+Everything stays on your machine. Nothing is uploaded, and nothing runs unless you
+asked for it.
+
+---
+
+## What you get
+
+### One workspace, every agent
+
+```bash
+marshal tui
+```
+
+```
+/claude          open a native Claude Code session
+/codex           open a native Codex session
+F8 / F7          the same two, one keypress
+/claude continue resume where Claude left off
+/status          project, run and agent state
+```
+
+Sessions are **native**. Claude Code runs as Claude Code: your configuration, your
+authentication, your skills, MCP servers and plugins, its own permission prompts.
+MARSHAL does not proxy the provider, rewrite its prompts, or stand between the agent
+and you. Adapters also ship for OpenCode, Gemini CLI and Antigravity.
+
+Switching is one keypress once you leave the current agent. Open two terminals and
+you can run Claude and Codex **at the same time** in the same repository — they share
+one project memory and keep their own import state, so neither disturbs the other.
+
+### Memory that saves itself
+
+You do not press save. From the moment an agent starts, MARSHAL records to the
+project database every two seconds and again on exit:
+
+- **the conversation** — what you asked, what the agent answered
+- **every tool call** — the commands it ran, the files it opened
+- **the code it wrote or deleted**, as a diff, kept whole rather than summarized
+
+Then search it, across agents and across time:
+
+```bash
+/memory search watcher      # in the workspace
+marshal memory recall ...   # or from the shell
+```
+
+What is **never** stored: the model's hidden reasoning, and any credential — secrets
+are redacted before anything is written. Tool output is bounded, so one huge dump
+cannot crowd out the record, and a truncated payload always says so rather than
+passing itself off as complete.
+
+Records are kept as **observations, not verified facts**. MARSHAL tells you where
+each came from instead of presenting an agent's guess as settled truth.
+
+### Agents that build on each other
+
+This is the part you cannot get by running the CLIs yourself.
+
+When an agent starts, it receives a briefing compiled from what the **other** agents
+have already done in this project — recent sessions, what they ran, what they
+changed. Codex opens knowing what Claude just did, and the reverse.
+
+That briefing is a snapshot, so MARSHAL keeps it current: while a session runs it
+watches the other agents and appends their work to a live inbox the running agent can
+read (`.marshal/inbox/<agent>.md`). Two agents working in parallel can follow each
+other without you relaying anything by hand.
+
+Both the briefing and the inbox say plainly what they are: **untrusted data, not
+instructions**. They quote another agent's output, which may contain anything it
+happened to read, and nothing in them overrides you.
+
+### Security you do not have to configure
+
+- **Sandboxed execution.** Agent processes run in isolated cells with a read-only
+  root, private runtime directories and no network by default.
+- **Isolated worktrees.** Work happens on a dedicated Git worktree and branch. Your
+  working tree is never the experiment.
+- **Fail closed.** When a boundary cannot be enforced, the run stops. It does not
+  continue with the policy unenforced and tell you afterwards.
+- **Secrets never land.** Credentials are redacted from stored output and never enter
+  durable memory.
+- **Nothing starts by accident.** Plain text in the workspace runs nothing. A command
+  typed without its slash is answered with the command it looks like. Launching an
+  agent is always something you asked for by name.
+- **Delegation is earned, not toggled.** Letting MARSHAL act without asking each time
+  requires a cryptographically verified entitlement. A local flag cannot grant it, and
+  the test suite includes bypass attempts that must fail.
+
+### Evidence you can check later
+
+Command output and artifacts are content-addressed and linked to the commit they
+produced, so "what did this run actually change?" has an answer you can verify
+instead of a log you have to trust.
 
 ---
 
@@ -49,7 +140,7 @@ MARSHAL_INSTALL_DIR=/usr/local/bin MARSHAL_VERSION=v0.0.1 \
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh)"
 ```
 
-**From a release archive** — download the archive and `checksums.txt` from the
+**From a release archive** — the archive and `checksums.txt` are on the
 [latest release](https://github.com/Zen1th53/marshal/releases/latest):
 
 ```bash
@@ -64,76 +155,57 @@ install -Dm755 marshal "$HOME/.local/bin/marshal"
 go install github.com/Zen1th53/marshal/cmd/marshal@latest
 ```
 
-Release binaries are built for Linux on **amd64** and **arm64**. Sandboxed execution
-requires [Bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`). Provider
-CLIs and their credentials are yours: MARSHAL does not bundle or proxy them.
-
 ---
 
 ## Quick start
 
 ```bash
 cd /path/to/your/repository
+
 marshal init        # create the project runtime
-marshal doctor      # check the host, and optionally probe installed agent CLIs
+marshal doctor      # check the host, and probe the agent CLIs you have installed
 marshal tui         # open the workspace
 ```
 
----
-
-## The workspace
-
-`marshal tui` opens a terminal workspace where you drive agents by name.
+Then, in the workspace:
 
 ```
-/claude          open a native Claude Code session
-/codex           open a native Codex session
-/status          what the project and the current run look like
-/memory search   search what agents have done here
+/claude                     work with Claude Code
+                            ...exit the agent when you are done
+/codex                      hand over to Codex — it already knows what changed
+/memory search <anything>   ask the project what happened
 ```
-
-**Agents run natively.** A session uses your own configuration, authentication,
-skills, MCP servers and plugins, and its own permission prompts. MARSHAL does not
-stand between the agent and you.
-
-**Everything is recorded.** Conversation, tool calls, and the code an agent wrote or
-deleted are captured to the project database as it works. Hidden reasoning is never
-stored, and tool output is bounded so one large dump cannot crowd out the record.
-
-**Agents build on each other.** A starting session receives a briefing compiled from
-what the *other* agents have done in this project, and MARSHAL keeps it current while
-the session runs — so Codex can pick up where Claude left off, and the reverse.
-
-**Nothing starts by accident.** Plain text runs nothing, and a command typed without
-its slash is answered with the command it looks like. Launching an agent is always
-something you asked for.
 
 ---
 
-## What it does
+## Modes
 
-| | |
-|---|---|
-| **Sandboxed execution** | Agent processes run in isolated cells with a read-only root, private runtime directories and no network by default. |
-| **Isolated worktrees** | Work happens on a dedicated Git worktree and branch, so your working tree is never the experiment. |
-| **Shared memory** | A project-local record of sessions, decisions and outcomes, searchable across agents and across time. |
-| **Authorization** | Capability grants are explicit and time-bounded; risk is assessed before a command runs, not after. |
-| **Secret handling** | Credentials are redacted from stored output and never enter durable memory. |
-| **Evidence** | Command output and artifacts are content-addressed and linked to the commit they produced. |
-| **Interoperability** | Model Context Protocol and Agent-to-Agent endpoints for tools that speak them. |
+```
+/mode manual     the default working mode
+/mode auto       switch the session's working mode
+/mode ultra      refused without a verified entitlement
+/ultra           why this session is Standard, and how to ask for more
+```
 
-For the command surface see the [CLI reference](docs/cli.md); for how the workspace
-behaves see the [TUI guide](docs/tui.md).
+`manual` and `auto` are **session preferences**: they are recorded and shown in the
+status line. They do not, on their own, hand anything the right to act without you.
+
+Autonomous delegation — MARSHAL deciding instead of asking each time — is gated on a
+cryptographically verified entitlement, and that gate is consulted on every attempt
+rather than cached at startup. A local setting cannot grant it; `/mode ultra` without
+a lease is simply refused. Without an entitlement the session runs as Standard and
+keeps asking, which is the intended behaviour rather than a degraded one.
 
 ---
 
 ## Requirements
 
-- **Linux** — the supported platform for sandboxed execution. There is no equivalent
-  sandbox backend for macOS or Windows.
-- **Bubblewrap** (`bwrap`) — required for execution cells.
-- **Git** — MARSHAL operates on a Git repository.
-- **Agent CLIs** — install and authenticate the ones you want to use.
+| | |
+|---|---|
+| **Linux** | The supported platform for sandboxed execution. No equivalent backend exists for macOS or Windows. |
+| **Bubblewrap** (`bwrap`) | Required for execution cells. |
+| **Git** | MARSHAL operates on a Git repository. |
+| **Agent CLIs** | Install and authenticate the ones you want. MARSHAL bundles none of them and proxies none of them. |
 
 Run `marshal doctor` to see what is present and what is missing.
 
@@ -147,6 +219,8 @@ none:
 - **Network egress is not granularly filtered.** Runs that require network access fail
   closed rather than proceeding with unenforced policy.
 - **Linux only** for sandboxed execution.
+- **One agent per terminal.** A native session owns its terminal; running two at once
+  means two terminals.
 - **Vector search needs an embedding provider.** Exact and lexical search work without
   one.
 - **No third-party security audit.** Automated suites cover the security invariants;
@@ -159,7 +233,7 @@ none:
 | | |
 |---|---|
 | [Getting started](docs/getting-started.md) | Step-by-step tutorial |
-| [TUI guide](docs/tui.md) | The workspace, native sessions and shared memory |
+| [Workspace guide](docs/tui.md) | Native sessions, memory capture and cross-agent exchange |
 | [CLI reference](docs/cli.md) | Every command |
 | [Security model](docs/security-model.md) | Threat model and isolation boundaries |
 | [Providers](docs/providers.md) | Supported agent CLIs and configuration |
