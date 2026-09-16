@@ -27,18 +27,22 @@ type HistoryAdapter interface {
 	Decode(data []byte) (SessionTranscript, error)
 }
 
-type CodexJSONLAdapter struct{}
+// CaptureTools opts an adapter into recording tool calls and their results
+// alongside visible conversation. It is off by default: the generic import path
+// stays conversation-only, and only a native MARSHAL session, which knows the
+// history belongs to this operator and this project, turns it on.
+type CodexJSONLAdapter struct{ CaptureTools bool }
 
 func (CodexJSONLAdapter) Format() ProviderFormat { return FormatCodexJSONL }
-func (CodexJSONLAdapter) Decode(data []byte) (SessionTranscript, error) {
-	return decodeCodexJSONL(data)
+func (a CodexJSONLAdapter) Decode(data []byte) (SessionTranscript, error) {
+	return decodeCodexJSONL(data, a.CaptureTools)
 }
 
-type ClaudeJSONLAdapter struct{}
+type ClaudeJSONLAdapter struct{ CaptureTools bool }
 
 func (ClaudeJSONLAdapter) Format() ProviderFormat { return FormatClaudeJSONL }
-func (ClaudeJSONLAdapter) Decode(data []byte) (SessionTranscript, error) {
-	return decodeClaudeJSONL(data)
+func (a ClaudeJSONLAdapter) Decode(data []byte) (SessionTranscript, error) {
+	return decodeClaudeJSONL(data, a.CaptureTools)
 }
 
 type GeminiJSONLAdapter struct{}
@@ -121,7 +125,16 @@ type codexResponse struct {
 	} `json:"content"`
 }
 
-func decodeCodexJSONL(data []byte) (SessionTranscript, error) {
+type codexFunctionCall struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+type codexFunctionOutput struct {
+	Output json.RawMessage `json:"output"`
+}
+
+func decodeCodexJSONL(data []byte, captureTools bool) (SessionTranscript, error) {
 	tr := SessionTranscript{Provider: "codex"}
 	err := scanJSONL(data, func(line []byte) error {
 		var envelope codexEnvelope
@@ -147,6 +160,37 @@ func decodeCodexJSONL(data []byte) (SessionTranscript, error) {
 			if err := json.Unmarshal(envelope.Payload, &item); err != nil {
 				return err
 			}
+			// Codex reports a tool call and its output as sibling response items
+			// rather than as blocks inside a message, so they are matched here
+			// on the payload type before the message branch narrows the role.
+			if captureTools {
+				switch item.Type {
+				case "function_call", "local_shell_call", "custom_tool_call":
+					var call codexFunctionCall
+					if err := json.Unmarshal(envelope.Payload, &call); err != nil {
+						return err
+					}
+					tr.Messages = append(tr.Messages, Message{
+						Role: "assistant", Kind: MessageKindToolUse,
+						Content:   renderToolUse(call.Name, call.Arguments),
+						Timestamp: envelope.Timestamp,
+					})
+					return nil
+				case "function_call_output", "local_shell_call_output", "custom_tool_call_output":
+					var out codexFunctionOutput
+					if err := json.Unmarshal(envelope.Payload, &out); err != nil {
+						return err
+					}
+					rendered := renderToolResult(decodeScalar(out.Output), false)
+					if rendered != "" {
+						tr.Messages = append(tr.Messages, Message{
+							Role: "user", Kind: MessageKindToolResult,
+							Content: rendered, Timestamp: envelope.Timestamp,
+						})
+					}
+					return nil
+				}
+			}
 			if item.Type != "message" || (item.Role != "user" && item.Role != "assistant") {
 				return nil
 			}
@@ -161,7 +205,7 @@ func decodeCodexJSONL(data []byte) (SessionTranscript, error) {
 			}
 			for _, content := range item.Content {
 				if content.Type == wantType && strings.TrimSpace(content.Text) != "" {
-					tr.Messages = append(tr.Messages, Message{Role: item.Role, Content: content.Text})
+					tr.Messages = append(tr.Messages, Message{Role: item.Role, Content: content.Text, Timestamp: envelope.Timestamp})
 				}
 			}
 		}
@@ -185,7 +229,17 @@ type claudeEntry struct {
 	} `json:"message"`
 }
 
-func decodeClaudeJSONL(data []byte) (SessionTranscript, error) {
+type claudeContentBlock struct {
+	Type      string          `json:"type"`
+	Text      string          `json:"text"`
+	Name      string          `json:"name"`
+	Input     json.RawMessage `json:"input"`
+	ToolUseID string          `json:"tool_use_id"`
+	Content   json.RawMessage `json:"content"`
+	IsError   bool            `json:"is_error"`
+}
+
+func decodeClaudeJSONL(data []byte, captureTools bool) (SessionTranscript, error) {
 	tr := SessionTranscript{Provider: "claude"}
 	err := scanJSONL(data, func(line []byte) error {
 		var entry claudeEntry
@@ -209,21 +263,43 @@ func decodeClaudeJSONL(data []byte) (SessionTranscript, error) {
 		var plain string
 		if err := json.Unmarshal(entry.Message.Content, &plain); err == nil {
 			if strings.TrimSpace(plain) != "" {
-				tr.Messages = append(tr.Messages, Message{Role: role, Content: plain})
+				tr.Messages = append(tr.Messages, Message{Role: role, Content: plain, Timestamp: entry.Timestamp})
 			}
 			return nil
 		}
-		var blocks []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		}
+		var blocks []claudeContentBlock
 		if err := json.Unmarshal(entry.Message.Content, &blocks); err != nil {
 			return fmt.Errorf("parse Claude message content: %w", err)
 		}
 		for _, block := range blocks {
-			// Exclude thinking, tool_use and tool_result blocks by construction.
-			if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
-				tr.Messages = append(tr.Messages, Message{Role: role, Content: block.Text})
+			switch block.Type {
+			case "text":
+				if strings.TrimSpace(block.Text) != "" {
+					tr.Messages = append(tr.Messages, Message{Role: role, Content: block.Text, Timestamp: entry.Timestamp})
+				}
+			case "tool_use":
+				// Thinking blocks stay excluded by construction regardless of
+				// this setting: they are the model's private reasoning, not a
+				// record of anything it did to the project.
+				if !captureTools {
+					continue
+				}
+				tr.Messages = append(tr.Messages, Message{
+					Role: role, Kind: MessageKindToolUse,
+					Content:   renderToolUse(block.Name, block.Input),
+					Timestamp: entry.Timestamp,
+				})
+			case "tool_result":
+				if !captureTools {
+					continue
+				}
+				rendered := renderToolResult(claudeToolResultText(block.Content), block.IsError)
+				if rendered != "" {
+					tr.Messages = append(tr.Messages, Message{
+						Role: role, Kind: MessageKindToolResult,
+						Content: rendered, Timestamp: entry.Timestamp,
+					})
+				}
 			}
 		}
 		return nil

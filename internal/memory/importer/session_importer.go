@@ -20,8 +20,15 @@ type Config struct {
 }
 
 type Message struct {
-	Role    string `json:"role"`
+	Role string `json:"role"`
+	// Kind distinguishes conversation text from a captured tool call or tool
+	// result. An empty kind is plain text, so older transcripts keep decoding.
+	Kind    string `json:"kind,omitempty"`
 	Content string `json:"content"`
+	// Timestamp is the provider's own time for this message. Records are keyed
+	// on it, so a session's messages order correctly instead of collapsing onto
+	// the session's start time.
+	Timestamp time.Time `json:"timestamp,omitempty"`
 }
 
 type SessionTranscript struct {
@@ -111,20 +118,39 @@ func (s *SessionImporter) importTranscript(ctx context.Context, projectID string
 	}
 
 	var sb strings.Builder
+	var latest time.Time
 	for _, m := range tr.Messages {
 		role := strings.ToLower(strings.TrimSpace(m.Role))
 		content := strings.TrimSpace(m.Content)
 		if (role != "user" && role != "assistant") || content == "" {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("[%s]: %s\n", role, content))
+		// Only kinds this package defines may label a record. An arbitrary
+		// provider string must never reach the body as a trusted marker.
+		label := role
+		switch strings.ToLower(strings.TrimSpace(m.Kind)) {
+		case MessageKindToolUse:
+			label = role + ":" + MessageKindToolUse
+		case MessageKindToolResult:
+			label = role + ":" + MessageKindToolResult
+		}
+		if m.Timestamp.After(latest) {
+			latest = m.Timestamp
+		}
+		sb.WriteString(fmt.Sprintf("[%s]: %s\n", label, content))
 	}
 	body := strings.TrimSpace(sb.String())
 	if body == "" {
 		return ImportResult{}, errors.New("session contains no importable messages")
 	}
 
+	// Prefer the message's own time over the session's start time; a session
+	// imported in chunks would otherwise stamp every record identically and
+	// lose the order in which the work actually happened.
 	baseTime := tr.Timestamp.UTC()
+	if !latest.IsZero() {
+		baseTime = latest.UTC()
+	}
 	if baseTime.IsZero() {
 		// A fixed fallback keeps repeat imports deterministic without claiming a
 		// fabricated observation time in the current clock domain.
