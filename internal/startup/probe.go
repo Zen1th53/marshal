@@ -59,13 +59,14 @@ func (systemProber) Run(ctx context.Context, dir, name string, args ...string) (
 }
 
 func (systemProber) Writable(path string) bool {
-	probe := filepath.Join(path, ".marshal-write-probe")
-	file, err := os.OpenFile(probe, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
+	// A unique name per probe: two sessions starting in the same directory at
+	// once must not see each other's probe file and conclude it is read-only.
+	file, err := os.CreateTemp(path, ".marshal-write-probe-*")
 	if err != nil {
 		return false
 	}
 	file.Close()
-	os.Remove(probe)
+	os.Remove(file.Name())
 	return true
 }
 

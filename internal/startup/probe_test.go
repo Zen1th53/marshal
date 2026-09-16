@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -487,5 +488,39 @@ func TestBrokenOrUnknownChecksRaiseAttention(t *testing.T) {
 				t.Fatalf("a %s component was not raised for attention", name)
 			}
 		})
+	}
+}
+
+// A second session starting while the first is mid-probe must still find the
+// directory writable, so a probe cannot depend on a fixed file name.
+func TestSystemProberWritableIgnoresAnotherSessionsProbe(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".marshal-write-probe"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prober := startup.NewSystemProber()
+
+	var wg sync.WaitGroup
+	results := make([]bool, 16)
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			results[i] = prober.Writable(dir)
+		}(i)
+	}
+	wg.Wait()
+	for i, ok := range results {
+		if !ok {
+			t.Fatalf("probe %d reported a writable directory as read-only", i)
+		}
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("probes left files behind: %v", entries)
 	}
 }
