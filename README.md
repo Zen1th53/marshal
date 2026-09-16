@@ -350,7 +350,7 @@ mode.
 |---|:---:|---|
 | **Linux** | Released | Fully supported, with sandboxed execution through Bubblewrap. [Download](https://github.com/Zen1th53/marshal/releases/latest) |
 | **macOS** | Planned | On the roadmap. It needs a native sandbox backend first. |
-| **Windows** | Under consideration | No commitment yet. The Linux build may work under WSL2, but it is untested. |
+| **Windows** | Maybe, never | No commitment yet. The Linux build may work under WSL2, but it is untested. |
 
 ---
 
