@@ -71,7 +71,13 @@ func TestRosterColumnsAlign(t *testing.T) {
 
 	rendered := RenderScreen(state, 120)
 
-	for _, label := range []string{"Role:", "Harness:", "Model:"} {
+	// The role is no longer rendered; alignment is still asserted on every
+	// column the roster does show.
+	if strings.Contains(StripANSI(rendered), "Role:") {
+		t.Errorf("the roster still renders a role column:\n%s", rendered)
+	}
+
+	for _, label := range []string{"Harness:", "Model:"} {
 		var offsets []int
 		var rows []string
 		for _, line := range strings.Split(rendered, "\n") {
@@ -79,8 +85,8 @@ func TestRosterColumnsAlign(t *testing.T) {
 			if !strings.Contains(plain, label) {
 				continue
 			}
-			// Only roster rows carry all three labels.
-			if !strings.Contains(plain, "Role:") || !strings.Contains(plain, "Harness:") {
+			// Only roster rows carry both labels.
+			if !strings.Contains(plain, "Harness:") || !strings.Contains(plain, "Model:") {
 				continue
 			}
 			offsets = append(offsets, strings.Index(plain, label))

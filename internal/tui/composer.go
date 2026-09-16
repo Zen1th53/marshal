@@ -29,6 +29,11 @@ type Composer struct {
 	searchMatches []int
 	searchIndex   int
 
+	// pastes holds the text behind each placeholder in the buffer, indexed from
+	// zero for placeholder #1. A large paste is shown as one short token so the
+	// composer stays readable, and is restored verbatim on submit.
+	pastes []string
+
 	promptInfo ComposerPromptInfo
 }
 
@@ -142,7 +147,7 @@ func (c *Composer) HandleKey(k KeyEvent) (string, bool) {
 
 	switch k.Type {
 	case KeyEnter:
-		text := strings.TrimSpace(string(c.buffer))
+		text := strings.TrimSpace(c.expandPastes(string(c.buffer)))
 		if text != "" {
 			c.AddHistory(RedactContent(text, nil))
 		}
@@ -150,6 +155,7 @@ func (c *Composer) HandleKey(k KeyEvent) (string, bool) {
 		c.cursor = 0
 		c.historyIndex = -1
 		c.savedBuffer = nil
+		c.pastes = nil
 		return text, true
 
 	case KeyRune:
@@ -212,11 +218,7 @@ func (c *Composer) HandleKey(k KeyEvent) (string, bool) {
 		return "", false
 
 	case KeyPaste:
-		normalized := strings.ReplaceAll(k.Paste, "\r\n", "\n")
-		normalized = strings.ReplaceAll(normalized, "\r", "\n")
-		for _, r := range normalized {
-			c.insertRune(r)
-		}
+		c.insertPaste(k.Paste)
 		return "", false
 
 	case KeyUp:
@@ -594,3 +596,61 @@ func (c *Composer) Render() string {
 func (c *Composer) IsSearchMode() bool {
 	return c.searchMode
 }
+
+// Paste collapsing thresholds. A short paste reads fine inline; a long or
+// multi-line one turns the composer into a wall of text that hides the prompt,
+// so it is shown as a placeholder instead.
+const (
+	pasteCollapseLines = 4
+	pasteCollapseBytes = 800
+)
+
+// pastePlaceholder renders the token shown in place of a collapsed paste.
+func pastePlaceholder(index, lines int) string {
+	return fmt.Sprintf("[Pasted text #%d +%d lines]", index, lines)
+}
+
+// insertPaste puts pasted text into the buffer.
+//
+// Bracketed paste guarantees this text arrives as data, never as keystrokes, so
+// a pasted newline can never submit the buffer: it is inserted, exactly like
+// every other character here.
+func (c *Composer) insertPaste(raw string) {
+	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	if normalized == "" {
+		return
+	}
+
+	lines := strings.Count(normalized, "\n") + 1
+	if lines < pasteCollapseLines && len(normalized) <= pasteCollapseBytes {
+		for _, r := range normalized {
+			c.insertRune(r)
+		}
+		return
+	}
+
+	c.pastes = append(c.pastes, normalized)
+	for _, r := range pastePlaceholder(len(c.pastes), lines) {
+		c.insertRune(r)
+	}
+}
+
+// expandPastes restores collapsed pastes when the buffer is submitted.
+//
+// A token with no paste behind it is left exactly as typed. The operator may
+// have written those characters themselves, and inventing a substitution for
+// text MARSHAL never collapsed would corrupt their input.
+func (c *Composer) expandPastes(text string) string {
+	if len(c.pastes) == 0 {
+		return text
+	}
+	for i, paste := range c.pastes {
+		lines := strings.Count(paste, "\n") + 1
+		text = strings.ReplaceAll(text, pastePlaceholder(i+1, lines), paste)
+	}
+	return text
+}
+
+// PendingPastes reports how many collapsed pastes the current draft carries.
+func (c *Composer) PendingPastes() int { return len(c.pastes) }

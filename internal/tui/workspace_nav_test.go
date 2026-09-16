@@ -17,6 +17,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/store"
+	"github.com/Zen1th53/marshal/internal/testutil/testcloud"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -299,6 +300,7 @@ func TestLiveCloudReaderDoesNotDeadlock(t *testing.T) {
 func TestRealKeyDispatchOpensAndOwnsNavigation(t *testing.T) {
 	ws := NewWorkspace(nil, "proj", "sess-1")
 	ctx := context.Background()
+	entitleULTRA(t, ws)
 
 	// Before Ctrl+N the dispatch declines every key, so the composer keeps them.
 	if ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyRune, Rune: 'x'}) {
@@ -345,6 +347,9 @@ func TestRealKeyDispatchOpensAndOwnsNavigation(t *testing.T) {
 // itself, since a failed manifest load still has to leave a usable workspace.
 func TestRealKeyDispatchHandlesAMissingView(t *testing.T) {
 	ws := NewWorkspace(nil, "proj", "sess-1")
+	// Entitled, so the dispatch reaches the missing-view branch rather than
+	// stopping at the ULTRA gate in front of it.
+	entitleULTRA(t, ws)
 	ws.navView = nil
 
 	var out strings.Builder
@@ -368,6 +373,7 @@ func TestRealKeyDispatchHandlesAMissingView(t *testing.T) {
 func TestControlThroughTheRealWorkspaceRefusesWithoutARuntime(t *testing.T) {
 	ws := NewWorkspace(nil, "proj", "sess-1")
 	ctx := context.Background()
+	entitleULTRA(t, ws)
 
 	// Ctrl+N through the same dispatch the interactive loop calls.
 	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
@@ -426,6 +432,7 @@ func TestInterruptClosesAConfirmationWithoutSubmitting(t *testing.T) {
 	ws := NewWorkspace(nil, "proj", "sess-1")
 	ctx := context.Background()
 	source, auth := testControl(t)
+	entitleULTRA(t, ws)
 
 	ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN})
 	ws.navView.AttachControl(source)
@@ -446,6 +453,16 @@ func TestInterruptClosesAConfirmationWithoutSubmitting(t *testing.T) {
 	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
 		t.Fatalf("the interrupt caused %d mutations", n)
 	}
+}
+
+// entitleULTRA gives a test workspace a genuinely signed, verified ULTRA lease.
+//
+// Navigation is an ULTRA surface, so a test that drives it needs an entitled
+// session exactly as a user would. The lease travels cloud.Gate.Adopt, so this
+// grants entitlement rather than bypassing the check for it.
+func entitleULTRA(t *testing.T, ws *Workspace) {
+	t.Helper()
+	ws.AttachULTRA(testcloud.EntitledGate(t, testcloud.Options{}), true)
 }
 
 func realControlWorkspace(t *testing.T, sessionID string) (*Workspace, *app.Runtime) {
@@ -474,6 +491,7 @@ func realControlWorkspace(t *testing.T, sessionID string) (*Workspace, *app.Runt
 	}
 	ws := NewWorkspace(runtime.Store(), string(status.Project.ID), sessionID)
 	ws.AttachRuntime(runtime, projectid.ID(status.Project.ID))
+	entitleULTRA(t, ws)
 	if !ws.dispatchNavigationKey(context.Background(), KeyEvent{Type: KeyCtrlN}) {
 		t.Fatal("Ctrl+N did not open the real workspace navigation")
 	}
@@ -792,5 +810,38 @@ func TestControlClaimAndCancelTaskThroughRealWorkspace(t *testing.T) {
 	}
 	if cancelled.Status != model.TaskCancelled {
 		t.Fatalf("cancelled task state = %s", cancelled.Status)
+	}
+}
+
+// Navigation is an ULTRA surface. Both keyboard entry points and the exported
+// entry must refuse a Standard session rather than opening a screen it is not
+// entitled to. The entitled path is exercised by the cloud package, which owns
+// lease construction; here the gate is genuinely absent.
+func TestNavigationRefusedWithoutULTRA(t *testing.T) {
+	ws := NewWorkspace(nil, "proj", "sess-1")
+	ctx := context.Background()
+
+	if ws.navigationEntitled() {
+		t.Fatal("a workspace with no gate reported an ULTRA entitlement")
+	}
+
+	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
+		t.Fatal("Ctrl+N was not consumed")
+	}
+	if ws.navView.IsOpen() {
+		t.Fatal("Ctrl+N opened navigation without an entitlement")
+	}
+	if !strings.Contains(ws.state.LastOutput, "ULTRA") {
+		t.Errorf("the refusal did not explain itself: %q", ws.state.LastOutput)
+	}
+	if ws.state.LastOutputIsError {
+		t.Error("a missing entitlement is a mode, not an error")
+	}
+
+	if ws.OpenNavigation(ctx) {
+		t.Fatal("OpenNavigation reported success without an entitlement")
+	}
+	if ws.navView.IsOpen() {
+		t.Fatal("OpenNavigation opened navigation without an entitlement")
 	}
 }

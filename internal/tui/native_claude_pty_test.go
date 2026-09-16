@@ -14,11 +14,16 @@ func TestPTYNativeClaudeInputMemoryAndContinue(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(config, "projects", "fixture"), 0700); err != nil {
 		t.Fatal(err)
 	}
+	// The double answers the version probe and treats everything else as a
+	// session, the way the real CLI does. Keying off $1 alone made the test
+	// fail the moment MARSHAL legitimately prepended a flag, which says nothing
+	// about Claude and everything about the double.
 	script := `#!/bin/sh
-case "$1" in
-  --marshal-native-test|--continue|--resume|--|'') ;;
-  *) printf '2.0.0 (Claude Code)\n'; exit 0 ;;
-esac
+for arg do
+  case "$arg" in
+    --version|-v) printf '2.0.0 (Claude Code)\n'; exit 0 ;;
+  esac
+done
 printf 'CLAUDE-NATIVE-READY\n'
 for arg do printf 'CLAUDE-ARG:<%s>\n' "$arg"; done
 IFS= read -r answer
@@ -49,18 +54,20 @@ cp "$MARSHAL_TEST_CLAUDE_HISTORY" "$CLAUDE_CONFIG_DIR/projects/fixture/session.j
 	s.mustSee("CLAUDE-ARG:<directory with spaces>")
 	s.sendLine("FIRST-KEY")
 	s.mustSee("CLAUDE-INPUT:<FIRST-KEY>")
-	s.mustSee("Claude exited. 2 conversation messages saved")
+	s.mustSee("Claude exited. 2 message(s), including tool calls, saved")
 	s.sendLine("/claude continue")
 	s.mustSee("CLAUDE-ARG:<--continue>")
 	s.sendLine("CONTINUED")
 	s.mustSee("CLAUDE-INPUT:<CONTINUED>")
-	s.mustSee("Claude exited. 0 conversation messages saved")
+	s.mustSee("Claude exited. 0 message(s), including tool calls, saved")
 	s.sendLine("/memory search visible")
 	s.mustSee("MEMORY RECORDS (2 of 2)")
+	// Plain text must not reopen the agent, even right after one was used.
 	s.sendLine("another prompt")
-	s.mustSee("CLAUDE-ARG:<another prompt>")
-	s.sendLine("PLAIN-PROMPT-CLAUDE")
-	s.mustSee("CLAUDE-INPUT:<PLAIN-PROMPT-CLAUDE>")
+	s.mustSee("Nothing was run")
+	// A command missing its slash is answered with the command, not a session.
+	s.sendLine("status")
+	s.mustSee("Did you mean /status?")
 	s.send("\x1b")
 	s.send("\x1b[19~") // F8 from navigation opens native Claude.
 	s.sendLine("F8-CLAUDE")

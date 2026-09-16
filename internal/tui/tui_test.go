@@ -70,10 +70,16 @@ func TestOneScreenObservabilityRendering(t *testing.T) {
 		t.Fatalf("expected mode and state in screen:\n%s", rendered)
 	}
 
-	// 3. Participants & fixed roles
-	if !strings.Contains(rendered, "claude") || !strings.Contains(rendered, "architect") ||
-		!strings.Contains(rendered, "codex") || !strings.Contains(rendered, "developer") {
-		t.Fatalf("expected participants with fixed roles in screen:\n%s", rendered)
+	// 3. Participants. The role is a MARSHAL-side assignment rather than
+	// something the harness reports, so the panel names the agent and its
+	// state and leaves the role out.
+	if !strings.Contains(rendered, "claude") || !strings.Contains(rendered, "codex") {
+		t.Fatalf("expected participants in screen:\n%s", rendered)
+	}
+	for _, role := range []string{"architect", "developer"} {
+		if strings.Contains(rendered, role) {
+			t.Fatalf("role %q is still rendered in the team panel:\n%s", role, rendered)
+		}
 	}
 
 	// 4. Claims coverage

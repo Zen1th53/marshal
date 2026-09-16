@@ -105,7 +105,7 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 			th.Colorize(th.Muted, "ready · governed workspace active")), cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s %s",
 			th.Colorize(th.Success, "Native agent workspace"),
-			th.Colorize(th.Muted, "— F7 Codex · F8 Claude · prompts use the last opened agent")), cols))
+			th.Colorize(th.Muted, "— F7 Codex · F8 Claude · /codex or /claude to send a prompt")), cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s Help   %s Review   %s Diff",
 			th.Colorize(th.Active, "[F1]"),
 			th.Colorize(th.Active, "[F2]"),
@@ -177,10 +177,12 @@ func teamSection(s UIState, th *Theme, cols int) []string {
 			glyph = th.Colorize(th.Success, th.GlyphDotFull)
 		}
 
-		out = append(out, PadCell(fmt.Sprintf("   %s %s %s %s",
+		// The role is a MARSHAL-side assignment, not something the harness
+		// reports, so showing it next to a probed name invited reading it as
+		// discovered fact. The name and its state are what this panel knows.
+		out = append(out, PadCell(fmt.Sprintf("   %s %s %s",
 			glyph,
 			PadCell(p.AgentID, 14),
-			PadCell(th.Colorize(th.Muted, string(p.Role)), 12),
 			th.RenderBadgeText(state)), cols))
 	}
 	return out

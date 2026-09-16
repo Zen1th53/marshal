@@ -179,15 +179,17 @@ func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
 		t.Fatalf("unexpected unknown subcommand response: %s", unknownOut)
 	}
 
-	// 14. Direct natural language input at composer prompt without leading slash
+	// 14. Direct natural language at the composer, with no leading slash, must
+	// start nothing at all: naming the agent is what consents to spending on it.
 	directOut, err := ws.ExecuteCommand(ctx, "implement user authentication handler")
 	if err != nil {
 		t.Fatalf("direct prompt execution: %v", err)
 	}
-	for _, want := range []string{"CODEX TASK LAUNCHED:", "implement user authentication handler"} {
-		if !strings.Contains(directOut, want) {
-			t.Fatalf("expected %q in direct prompt output, got:\n%s", want, directOut)
-		}
+	if !strings.Contains(directOut, "Nothing was run") {
+		t.Fatalf("plain text started something, got:\n%s", directOut)
+	}
+	if strings.Contains(directOut, "TASK LAUNCHED") {
+		t.Fatalf("plain text launched a task, got:\n%s", directOut)
 	}
 
 	// 15. Multi-word prompt under /codex without explicit exec subcommand

@@ -3,7 +3,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"syscall"
 	"testing"
@@ -159,25 +158,31 @@ func TestPTYTabCyclesThroughCandidates(t *testing.T) {
 	s.mustSee("MARSHAL")
 
 	// "/c" matches several commands: /claims, /checkpoint, /cancel, /context...
+	// The menu opens on its own while typing; no key is pressed to summon it.
 	s.send("/c")
-	seen := map[string]bool{}
-	for i := 0; i < 6; i++ {
-		s.send("\t")
-		time.Sleep(280 * time.Millisecond)
+	s.mustSee("Tab complete")
+
+	// Arrow keys move the highlight and must leave the draft alone. The popup
+	// counter is the visible proof that the selection actually moved.
+	for _, want := range []string{" 2/", " 3/"} {
+		s.send("\x1b[B") // Down
+		if !s.waitFor(want, 4*time.Second) {
+			t.Fatalf("Down did not advance the highlight to %q.\n--- output tail ---\n%s",
+				want, tail(s.output(), 2500))
+		}
 		line := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker))
-		if line != "" {
-			seen[line] = true
+		if line != "/c" {
+			t.Fatalf("moving the highlight rewrote the draft: %q, want %q", line, "/c")
 		}
 	}
 
-	if len(seen) < 2 {
-		var got []string
-		for k := range seen {
-			got = append(got, k)
-		}
-		t.Errorf("Tab did not cycle: only reached %v", got)
+	// Tab accepts the highlighted candidate, and only then does the draft change.
+	s.send("\t")
+	time.Sleep(400 * time.Millisecond)
+	accepted := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker))
+	if !strings.HasPrefix(accepted, "/c") || accepted == "/c" {
+		t.Fatalf("Tab did not write a candidate into the draft: %q", accepted)
 	}
-	fmt.Printf("TAB CYCLE reached %d distinct candidates\n", len(seen))
 
 	if n := strings.Count(s.screenText(rows, cols), PromptMarker); n != 1 {
 		t.Errorf("cycling duplicated the composer, found %d", n)

@@ -87,7 +87,10 @@ type Workspace struct {
 
 	// Completion popup state. Tab is completion only: it opens or cycles this
 	// list and never submits, so it can never execute a partially typed command.
-	completionOpen  bool
+	completionOpen bool
+	// mouseOn tracks whether mouse reporting is currently held, so the mode is
+	// only written to the terminal when it actually changes.
+	mouseOn         bool
 	completions     []string
 	completionIndex int
 	completionStem  string
@@ -470,7 +473,7 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	// panic, so a crash cannot strand the terminal in raw mode.
 	w.terminal.EnterAltScreen()
 	w.terminal.EnableBracketedPaste()
-	w.terminal.EnableMouse()
+	w.syncMouseMode()
 	w.screen = NewScreen(w.terminal)
 	defer func() {
 		w.terminal.DisableMouse()
@@ -615,6 +618,7 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			// The dispatch lives in its own method so a test can drive exactly
 			// the branch this loop takes rather than a copy of it.
 			if w.dispatchNavigationKey(ctx, event) {
+				w.syncMouseMode()
 				w.mu.RLock()
 				exitRequested := w.exitRequested
 				w.mu.RUnlock()
@@ -681,13 +685,21 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 
 			// Esc toggles navigation mode when composer is empty and no popup/overlay is active
 			if event.Type == KeyEsc && w.composer.Text() == "" && !w.completionOpen && !w.diffViewer.IsOpen() && !w.palette.IsOpen() {
+				// Navigation is an ULTRA surface, so Esc on an empty composer
+				// must not drop a Standard session into it.
+				if !w.navigationEntitled() {
+					w.setOutput(navigationNotEntitledMessage, false)
+					continue
+				}
 				w.openNavigation(ctx)
 				w.renderFullView()
 				continue
 			}
 
-			// While the completion popup is open it owns the arrow keys, Enter and
-			// Esc, so selection is never confused with history navigation or submit.
+			// While the completion popup is open it owns the arrow keys, Tab,
+			// Enter and Esc, so selection is never confused with history
+			// navigation or submit. Moving the highlight leaves the buffer
+			// alone; only accepting writes to it.
 			if w.completionOpen {
 				switch event.Type {
 				case KeyEsc:
@@ -695,40 +707,53 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 					w.renderComposer()
 					continue
 				case KeyUp:
-					w.cycleCompletion(-1)
+					w.moveCompletion(-1)
 					w.renderComposer()
 					continue
 				case KeyDown:
-					w.cycleCompletion(1)
+					w.moveCompletion(1)
+					w.renderComposer()
+					continue
+				case KeyShiftTab:
+					w.moveCompletion(-1)
+					w.renderComposer()
+					continue
+				case KeyTab:
+					// Tab completes and nothing else. It writes the highlighted
+					// candidate into the draft and stops there, so the operator
+					// can still add arguments before running anything.
+					w.acceptCompletion()
 					w.renderComposer()
 					continue
 				case KeyEnter:
-					// Enter accepts the highlighted candidate and closes the popup.
-					// It does not also submit: accepting a completion and running a
-					// command are two deliberate keystrokes.
+					// Enter picks the highlighted command and runs it. Choosing
+					// from the menu is the decision; making it cost a second
+					// keystroke only means pressing Enter twice.
 					w.acceptCompletion()
+					cmd, submitted := w.composer.HandleKey(KeyEvent{Type: KeyEnter})
+					if submitted {
+						if cmd == "/quit" || cmd == "/exit" {
+							return nil
+						}
+						w.runCommand(ctx, cmd)
+					}
 					w.renderComposer()
 					continue
 				}
 			}
 
-			// Tab is completion, never submission. When composer is empty, it opens
-			// the command list popup immediately so the user can discover commands.
+			// Tab with no menu open offers one. An empty composer gets the full
+			// command list, which is how the surface is discovered without
+			// knowing a single command name already.
 			if event.Type == KeyTab || event.Type == KeyShiftTab {
 				if w.composer.Text() == "" {
 					w.composer.SetText("/")
 					w.composer.cursor = 1
 				}
-				w.handleTab(event.Type == KeyShiftTab)
+				w.refreshCompletion()
 				w.renderComposer()
 				continue
 			}
-
-			// Any other key invalidates a stale completion list.
-			if w.completionOpen {
-				w.closeCompletion()
-			}
-			w.completer.Reset()
 
 			// Scroll navigation for transcript activity
 			if event.Type == KeyPgUp {
@@ -753,6 +778,14 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 
 			// Pass key to composer line editor
 			cmd, submitted := w.composer.HandleKey(event)
+			// The menu follows the buffer rather than being summoned: typing a
+			// trigger opens it, typing on narrows it, and typing past it closes
+			// it, which is what makes it discoverable without pressing Tab.
+			if !submitted {
+				w.refreshCompletion()
+			} else {
+				w.closeCompletion()
+			}
 			if submitted {
 				if cmd == "/quit" || cmd == "/exit" {
 					return nil
@@ -805,7 +838,8 @@ func (w *Workspace) SuspendTerminal() func() {
 		_ = w.terminal.MakeRaw()
 		w.terminal.EnterAltScreen()
 		w.terminal.EnableBracketedPaste()
-		w.terminal.EnableMouse()
+		w.mouseOn = false
+		w.syncMouseMode()
 		if w.screen != nil {
 			w.screen.Reset()
 		}
@@ -814,49 +848,92 @@ func (w *Workspace) SuspendTerminal() func() {
 }
 
 // handleTab opens or advances the completion popup.
-func (w *Workspace) handleTab(reverse bool) {
-	text := w.composer.Text()
-	cursor := w.composer.CursorPos()
+// syncMouseMode holds mouse reporting only while the navigation view is open.
+//
+// Mouse tracking makes the terminal report button presses instead of running
+// its own selection, so holding it open on the composer takes drag-select and
+// copy away from the operator on a surface that never reads a mouse event.
+// Navigation is the only consumer, so it is the only place the mode is on.
+func (w *Workspace) syncMouseMode() {
+	if w.terminal == nil || !w.terminal.IsTerminal() {
+		return
+	}
+	want := w.navView != nil && w.navView.IsOpen()
+	if want == w.mouseOn {
+		return
+	}
+	if want {
+		w.terminal.EnableMouse()
+	} else {
+		w.terminal.DisableMouse()
+	}
+	w.mouseOn = want
+}
 
-	newText, newCursor, ok := w.completer.Complete(text, cursor, reverse)
-	if !ok {
+// completionTrigger reports whether a word is one the live menu should open on.
+//
+// Only the explicit prefixes qualify. Opening on every bare word would take the
+// arrow keys away from history for someone who is typing prose, not a command.
+func completionTrigger(word string) bool {
+	return strings.HasPrefix(word, "/") || strings.HasPrefix(word, "@") || strings.HasPrefix(word, "#")
+}
+
+// refreshCompletion recomputes the menu from what the composer currently holds.
+//
+// It never writes to the buffer. The operator is mid-word, and a menu that
+// rewrote the line underneath them would fight their typing.
+func (w *Workspace) refreshCompletion() {
+	if w.completer == nil || w.composer == nil {
+		return
+	}
+	word, matches := w.completer.Suggest(w.composer.Text(), w.composer.CursorPos())
+	if len(matches) == 0 || !completionTrigger(word) {
 		w.closeCompletion()
 		return
 	}
-
-	w.composer.SetText(newText)
-	w.composer.cursor = newCursor
-
-	matches := w.completer.ActiveMatches()
-	if len(matches) <= 1 {
-		// A single unambiguous candidate is simply completed; there is nothing
-		// to choose between, so no popup is shown.
+	// A menu offering exactly what has already been typed has nothing left to
+	// complete, and leaving it open would take Enter away from submitting the
+	// command the operator just finished writing.
+	if len(matches) == 1 && matches[0] == word {
 		w.closeCompletion()
 		return
 	}
-
+	// Keep the highlight on the same candidate across a keystroke where it
+	// survived the narrowing, so typing another letter does not silently move
+	// the selection to something else.
+	selected := ""
+	if w.completionOpen && w.completionIndex < len(w.completions) {
+		selected = w.completions[w.completionIndex]
+	}
 	w.completions = matches
-	w.completionOpen = true
-	prefix := newText[:newCursor]
+	w.completionIndex = 0
 	for i, m := range matches {
-		if strings.HasSuffix(prefix, m) {
+		if m == selected {
 			w.completionIndex = i
 			break
 		}
 	}
+	w.completionOpen = true
 }
 
-// cycleCompletion moves the highlight and applies that candidate to the buffer,
-// so the composer always shows exactly what accepting would produce.
-func (w *Workspace) cycleCompletion(delta int) {
+// moveCompletion moves the highlight only. The buffer is written on accept.
+func (w *Workspace) moveCompletion(delta int) {
 	if len(w.completions) == 0 {
 		return
 	}
 	w.completionIndex = (w.completionIndex + delta + len(w.completions)) % len(w.completions)
+}
 
-	text := w.composer.Text()
+// acceptCompletion writes the highlighted candidate over the word at the cursor.
+func (w *Workspace) acceptCompletion() {
+	if len(w.completions) == 0 || w.completionIndex >= len(w.completions) {
+		w.closeCompletion()
+		return
+	}
+	candidate := w.completions[w.completionIndex]
+
+	runes := []rune(w.composer.Text())
 	cursor := w.composer.CursorPos()
-	runes := []rune(text)
 	if cursor > len(runes) {
 		cursor = len(runes)
 	}
@@ -865,14 +942,12 @@ func (w *Workspace) cycleCompletion(delta int) {
 		wordStart--
 	}
 
-	candidate := w.completions[w.completionIndex]
-	newRunes := append(append(append([]rune{}, runes[:wordStart]...), []rune(candidate)...), runes[cursor:]...)
-	w.composer.SetText(string(newRunes))
-	w.composer.cursor = wordStart + len([]rune(candidate))
-}
-
-// acceptCompletion keeps the highlighted candidate and dismisses the popup.
-func (w *Workspace) acceptCompletion() {
+	// A completed command is followed by a space: the next thing typed is an
+	// argument, not more of the command name.
+	replacement := []rune(candidate + " ")
+	updated := append(append(append([]rune{}, runes[:wordStart]...), replacement...), runes[cursor:]...)
+	w.composer.SetText(string(updated))
+	w.composer.cursor = wordStart + len(replacement)
 	w.closeCompletion()
 }
 
@@ -919,6 +994,10 @@ func (w *Workspace) dispatchNavigationKey(ctx context.Context, event KeyEvent) b
 	// MARSHAL is fully operable without knowing a single slash command.
 	if event.Type == KeyCtrlN {
 		w.closeCompletion()
+		if !w.navigationEntitled() {
+			w.setOutput(navigationNotEntitledMessage, false)
+			return true
+		}
 		if w.navView == nil {
 			if w.out != nil {
 				reason := "the frozen interface manifest did not load"
@@ -933,6 +1012,33 @@ func (w *Workspace) dispatchNavigationKey(ctx context.Context, event KeyEvent) b
 		return true
 	}
 	return false
+}
+
+// navigationNotEntitledMessage explains the refusal without implying the
+// operator can switch it on locally: an entitlement is granted, not toggled.
+const navigationNotEntitledMessage = "The navigation surface is an ULTRA feature and this session is Standard.\n" +
+	"  Use /ultra to see why, or /ultra request to ask an operator for an entitlement.\n" +
+	"  Every MARSHAL command remains available from this composer."
+
+// navigationEntitled reports whether this session may open the navigation view.
+//
+// The gate is read live rather than captured, because the Cloud handshake
+// finishes after the workspace is built: a session that becomes entitled
+// mid-run must be able to open navigation without restarting.
+func (w *Workspace) navigationEntitled() bool {
+	gate, _ := w.ultraGate()
+	return gate.Entitled()
+}
+
+// setOutput records a workspace response for the next frame, the same way a
+// command result is recorded, so it cannot scroll the screen or leave chrome
+// behind in scrollback.
+func (w *Workspace) setOutput(text string, isError bool) {
+	w.mu.Lock()
+	w.state.LastOutput = text
+	w.state.LastOutputIsError = isError
+	w.mu.Unlock()
+	w.renderFullView()
 }
 
 // interruptNavigation closes the navigation view for Ctrl+C.
@@ -1137,12 +1243,17 @@ func (w *Workspace) openNavigation(ctx context.Context) {
 
 // OpenNavigation enters MARSHAL's frozen Community navigation surface.
 //
-// The CLI calls this only after attaching the canonical runtime, project
-// identity, and optional Community Cloud handles, so the first Home frame is
-// the real flagship TUI rather than the legacy composer. Esc at the root still
-// returns to that composer for secondary slash-command use.
-func (w *Workspace) OpenNavigation(ctx context.Context) {
+// It is never called on startup: a session opens on the composer, which every
+// user has. Navigation is an ULTRA surface, so an unentitled session is
+// refused here rather than at each section, and the refusal explains itself.
+// Esc at the root returns to the composer.
+func (w *Workspace) OpenNavigation(ctx context.Context) bool {
+	if !w.navigationEntitled() {
+		w.setOutput(navigationNotEntitledMessage, false)
+		return false
+	}
 	w.openNavigation(ctx)
+	return true
 }
 
 func (w *Workspace) renderFullView() {

@@ -114,6 +114,29 @@ func (c *Completer) Complete(text string, cursor int, reverse bool) (string, int
 	return string(newRunes), newCursor, true
 }
 
+// Suggest reports the word at the cursor and what it could complete to,
+// without touching the buffer or the cycling state.
+//
+// The live menu has to know what matches while the operator is still typing,
+// and Complete cannot answer that: it rewrites the buffer and advances the
+// cycle as a side effect, which is the right behaviour for Tab and the wrong
+// one for a keystroke the operator did not aim at the menu.
+func (c *Completer) Suggest(text string, cursor int) (string, []string) {
+	runes := []rune(text)
+	if cursor < 0 || cursor > len(runes) {
+		cursor = len(runes)
+	}
+	wordStart := cursor
+	for wordStart > 0 && !isWordSeparator(runes[wordStart-1]) {
+		wordStart--
+	}
+	word := string(runes[wordStart:cursor])
+	if word == "" {
+		return word, nil
+	}
+	return word, c.findMatches(text, cursor, wordStart, word)
+}
+
 func isWordSeparator(r rune) bool {
 	return r == ' ' || r == '\t' || r == '\n' || r == '\r'
 }

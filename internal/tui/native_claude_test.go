@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/memory/importer"
@@ -162,5 +163,58 @@ func TestNativeClaudeRefusesEntriesOutsideProjectRoot(t *testing.T) {
 	watch.consume = func(importer.SessionTranscript) error { return nil }
 	if err := watch.syncClaudeFile(filepath.Join(dir, "session.jsonl")); err == nil {
 		t.Fatal("an entry outside the project root must be refused")
+	}
+}
+
+// The watcher is the seam where tool capture is actually switched on, so the
+// default-off path above and this opt-in path are both pinned.
+func TestNativeClaudeWatchCapturesToolCalls(t *testing.T) {
+	dir, root := t.TempDir(), t.TempDir()
+	entry := map[string]any{
+		"type": "assistant", "sessionId": "tool-session", "cwd": root,
+		"timestamp": "2026-09-14T00:00:00Z",
+		"message": map[string]any{"role": "assistant", "content": []map[string]any{
+			{"type": "text", "text": "editing"},
+			{"type": "thinking", "thinking": "private reasoning"},
+			{"type": "tool_use", "name": "Write", "input": map[string]string{
+				"file_path": "main.go", "content": "package main",
+			}},
+		}},
+	}
+	line, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "session.jsonl"), append(line, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	w := newNativeHistoryWatch(dir, root)
+	w.claude, w.captureTools = true, true
+	var captured []importer.Message
+	w.consume = func(tr importer.SessionTranscript) error {
+		captured = append(captured, tr.Messages...)
+		return nil
+	}
+	if err := w.sync(); err != nil {
+		t.Fatal(err)
+	}
+
+	var toolUse *importer.Message
+	for i := range captured {
+		if captured[i].Kind == importer.MessageKindToolUse {
+			toolUse = &captured[i]
+		}
+		if strings.Contains(captured[i].Content, "private reasoning") {
+			t.Fatalf("thinking block reached memory: %q", captured[i].Content)
+		}
+	}
+	if toolUse == nil {
+		t.Fatalf("tool call was not captured: %+v", captured)
+	}
+	for _, want := range []string{"Write", "main.go", "+ package main"} {
+		if !strings.Contains(toolUse.Content, want) {
+			t.Errorf("captured call missing %q:\n%s", want, toolUse.Content)
+		}
 	}
 }

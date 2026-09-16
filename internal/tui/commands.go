@@ -335,19 +335,11 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	default:
 		if !strings.HasPrefix(line, "/") {
-			if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
-				provider := h.ws.nativeProvider
-				if provider == "" {
-					provider = "codex"
-				}
-				return h.ws.runNativeAgent(ctx, provider, []string{"--", line})
-			}
-			// Natural language prompt entered directly at composer prompt `>`
-			source := h.ws.controlSource()
-			if source != nil && source.Authority != nil {
-				return h.handleCodexExec(ctx, source.Authority, line)
-			}
-			return "Codex control authority unavailable: no runtime attached to workspace.", nil
+			// Plain text runs nothing. Launching an agent spends the operator's
+			// tokens and can touch the worktree, so it happens only when they
+			// name one: a typo, a stray paste or a command typed without its
+			// slash must never be read as consent to start a session.
+			return plainTextRunsNothing(line, h.ws.knownCommand), nil
 		}
 		return fmt.Sprintf("Unknown command %q. Type /help for available commands.", cmd), nil
 	}
@@ -631,6 +623,7 @@ func (h *CommandHandler) helpText() string {
   /claims                  List active claims and epistemic verification states
   /learning <id>           Inspect a Process 07 memory commit, promotions and refusals
 	/optimization <id>       Inspect a Process 08 governed optimization cycle and refusals
+  /memory inject [chan]    Govern how a native session receives the other agents' work
   /memory-search <proj>    Search durable memory with state, freshness and contradictions
   /memory-stale <proj>     Include stale memory, always marked unusable
   /provenance <item>       Show one memory item's full version history
@@ -662,12 +655,56 @@ func (h *CommandHandler) helpText() string {
   /search [on|off]         Toggle live web search tool
   /codex [subcommand]      Full Codex control plane (status, models, review, exec, run, cli)
   /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
-  <prompt...>              Type any prompt directly without / to command Codex!
+  <prompt...>              Plain text runs nothing; use /codex or /claude to send it
   /help                    Show this help reference
   /quit, /exit             Exit TUI workspace (session remains durable in SQLite)
 
 Function Keys & Shortcuts:
   F1: Help       F2: Review     F3: Diff viewer
   F4: Status     F5: Models     F6: MCP servers
-  Esc: Toggle Navigation        Tab: Auto-complete / Command menu`
+  F7: Codex      F8: Claude     Ctrl+N: Navigation (ULTRA)
+
+Composer:
+  /  or  @                 Opens the command menu as you type
+  Up / Down                Move the highlight; the draft is left alone
+  Tab / Shift+Tab          Move the highlight forward / back
+  Enter                    Accept the highlighted candidate (never submits)
+  Esc                      Dismiss the menu, keeping what you typed
+  Paste                    Long or multi-line pastes collapse to a placeholder
+                           and are restored in full when you submit
+  Select & copy            Works with the terminal's own selection`
+}
+
+// plainTextRunsNothing explains why a bare line did nothing, and names the ways
+// to actually run something.
+//
+// The commonest reason for landing here is a command typed without its leading
+// slash, so that case is answered with the command rather than with a lecture.
+func plainTextRunsNothing(line string, known func(string) bool) string {
+	trimmed := strings.TrimSpace(line)
+	if first := strings.Fields(trimmed); len(first) > 0 && known != nil {
+		if candidate := "/" + first[0]; known(candidate) {
+			return fmt.Sprintf("Nothing was run. Did you mean %s?\n"+
+				"  Commands need their leading slash.", candidate)
+		}
+	}
+	return "Nothing was run: plain text does not start an agent.\n" +
+		"  /codex <prompt>   Send this to Codex\n" +
+		"  /claude <prompt>  Send this to Claude\n" +
+		"  F7 / F8           Open a native Codex or Claude session\n" +
+		"  /help             List every command"
+}
+
+// knownCommand reports whether a token names a command this workspace has.
+func (w *Workspace) knownCommand(candidate string) bool {
+	if w == nil || w.completer == nil {
+		return false
+	}
+	_, matches := w.completer.Suggest(candidate, len([]rune(candidate)))
+	for _, m := range matches {
+		if m == candidate {
+			return true
+		}
+	}
+	return false
 }

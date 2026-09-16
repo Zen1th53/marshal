@@ -312,6 +312,7 @@ func integrationWorkspace(t *testing.T) (*Workspace, *fakeAuthority) {
 	t.Helper()
 	ws := NewWorkspace(nil, "integration-project", "integration-session")
 	ctx := context.Background()
+	entitleULTRA(t, ws)
 	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
 		t.Fatal("Ctrl+N did not enter navigation")
 	}

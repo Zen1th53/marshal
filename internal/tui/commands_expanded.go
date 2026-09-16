@@ -244,7 +244,9 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 	if len(args) == 0 {
 		return "SHARED EPISTEMIC MEMORY:\n" +
 			"  Shared memory stores verified claims, architecture decisions, and provenances.\n" +
-			"  Use /memory search <query> to search knowledge items.", nil
+			"  Use /memory search <query> to search knowledge items.\n" +
+			"  Use /memory inject to govern what a starting native session is told\n" +
+			"  about the work other coding agents already did in this project.", nil
 	}
 
 	if h.ws.store == nil {
@@ -315,9 +317,96 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 		}
 		return fmt.Sprintf("No memory record %s in this project.", args[1]), nil
 
+	case "inject":
+		return h.handleMemoryInject(ctx, args[1:])
+
 	default:
-		return "Usage: /memory [list|search <query>|provenance <id>]", nil
+		return "Usage: /memory [list|search <query>|provenance <id>|inject [channel]]", nil
 	}
+}
+
+// handleMemoryInject governs how a starting native session is told what the
+// other providers already did in this project.
+func (h *CommandHandler) handleMemoryInject(ctx context.Context, args []string) (string, error) {
+	h.ws.mu.RLock()
+	root := h.ws.workDir
+	runtime := h.ws.runtime
+	h.ws.mu.RUnlock()
+	if runtime != nil {
+		root = runtime.ProjectRoot()
+	}
+
+	if len(args) == 0 {
+		configured := loadInjectChannel(root)
+		claudeChannel, claudeNote := resolveInjectChannel("claude", configured)
+		codexChannel, codexNote := resolveInjectChannel("codex", configured)
+		var b strings.Builder
+		fmt.Fprintf(&b, "CROSS-AGENT MEMORY INJECTION:\n")
+		fmt.Fprintf(&b, "  Configured:  %s\n", configured)
+		fmt.Fprintf(&b, "  Claude uses: %s\n", claudeChannel)
+		if claudeNote != "" {
+			fmt.Fprintf(&b, "               %s\n", claudeNote)
+		}
+		fmt.Fprintf(&b, "  Codex uses:  %s\n", codexChannel)
+		if codexNote != "" {
+			fmt.Fprintf(&b, "               %s\n", codexNote)
+		}
+		b.WriteString("\nChannels:\n")
+		b.WriteString("  auto           Claude: system-prompt, Codex: project-doc (default)\n")
+		b.WriteString("  system-prompt  Append to the agent's system prompt; costs no turn (Claude only)\n")
+		b.WriteString("  project-doc    Write a marked block into AGENTS.md / CLAUDE.md; costs no turn\n")
+		b.WriteString("  prompt         Pass as the opening prompt; always works, consumes one turn\n")
+		b.WriteString("  off            Start native sessions with no briefing\n")
+		b.WriteString("\n  /memory inject <channel>     Change the channel\n")
+		b.WriteString("  /memory inject preview [p]   Show the briefing a provider would receive\n")
+		b.WriteString("  /memory inject clear         Remove MARSHAL blocks from the project documents\n")
+		return b.String(), nil
+	}
+
+	switch strings.ToLower(args[0]) {
+	case "clear":
+		cleared, err := clearProjectDocBlock(root)
+		if err != nil {
+			return "", fmt.Errorf("clear project document blocks: %w", err)
+		}
+		if cleared == 0 {
+			return "No MARSHAL memory block found in AGENTS.md or CLAUDE.md.", nil
+		}
+		return fmt.Sprintf("Removed the MARSHAL memory block from %d project document(s).", cleared), nil
+
+	case "preview":
+		provider := "claude"
+		if len(args) > 1 {
+			provider = strings.ToLower(args[1])
+		}
+		if provider != "claude" && provider != "codex" {
+			return "Usage: /memory inject preview [claude|codex]", nil
+		}
+		briefing, err := h.ws.crossAgentBriefing(ctx, provider)
+		if err != nil {
+			return "", fmt.Errorf("compile cross-agent briefing: %w", err)
+		}
+		if strings.TrimSpace(briefing) == "" {
+			return fmt.Sprintf("No other provider has recorded work in this project, so %s would receive no briefing.", provider), nil
+		}
+		channel, note := resolveInjectChannel(provider, loadInjectChannel(root))
+		header := fmt.Sprintf("BRIEFING FOR %s via %s (%d bytes):\n", strings.ToUpper(provider), channel, len(briefing))
+		if note != "" {
+			header += note + "\n"
+		}
+		return header + "\n" + briefing, nil
+	}
+
+	channel, err := parseInjectChannel(args[0])
+	if err != nil {
+		return err.Error(), nil
+	}
+	if err := saveInjectChannel(root, channel); err != nil {
+		return "", fmt.Errorf("save injection channel: %w", err)
+	}
+	claudeChannel, _ := resolveInjectChannel("claude", channel)
+	codexChannel, _ := resolveInjectChannel("codex", channel)
+	return fmt.Sprintf("Cross-agent injection channel set to %s (Claude: %s, Codex: %s).", channel, claudeChannel, codexChannel), nil
 }
 
 // handleProvider handles provider configuration and status inspection.

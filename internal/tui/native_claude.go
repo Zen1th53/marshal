@@ -46,7 +46,7 @@ func (w *nativeHistoryWatch) syncClaudeFile(path string) error {
 		if err != nil {
 			return err
 		}
-		item, err := (importer.ClaudeJSONLAdapter{}).Decode(line)
+		item, err := (importer.ClaudeJSONLAdapter{CaptureTools: w.captureTools}).Decode(line)
 		if err != nil {
 			return err
 		}

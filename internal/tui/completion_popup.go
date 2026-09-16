@@ -62,7 +62,7 @@ func renderCompletionPopup(matches []string, selected int, th *Theme, cols int) 
 		out = append(out, "  "+th.Colorize(th.Muted, th.BoxVert)+row+th.Colorize(th.Muted, th.BoxVert))
 	}
 
-	hint := fmt.Sprintf(" %d/%d · Tab next · ↑↓ select · Enter accept · Esc close",
+	hint := fmt.Sprintf(" %d/%d · ↑↓ select · Tab complete · Enter run · Esc close",
 		selected+1, len(matches))
 	out = append(out, "  "+th.Colorize(th.Muted,
 		th.BoxBottomLeft+strings.Repeat(th.BoxHoriz, inner)+th.BoxBottomRight))

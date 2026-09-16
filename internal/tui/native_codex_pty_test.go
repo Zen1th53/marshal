@@ -45,14 +45,14 @@ exit 0
 	s.mustSee("ARG:<picture with spaces.png>")
 	s.sendLine("FIRST-KEY-SURVIVES")
 	s.mustSee("NATIVE-INPUT:<FIRST-KEY-SURVIVES>")
-	s.mustSee("2 conversation messages saved to MARSHAL memory")
+	s.mustSee("2 message(s), including tool calls, saved to MARSHAL memory")
 	// Returning to MARSHAL must reclaim input and leave commands usable.
 	s.sendLine("/status")
 	s.mustSee("CANONICAL STATUS DETAIL")
 	s.sendLine(`/codex cli --marshal-native-test`)
 	s.sendLine("SECOND-SESSION")
 	s.mustSee("NATIVE-INPUT:<SECOND-SESSION>")
-	s.mustSee("0 conversation messages saved to MARSHAL memory")
+	s.mustSee("0 message(s), including tool calls, saved to MARSHAL memory")
 }
 
 func TestPTYInstalledNativeCodexHelp(t *testing.T) {

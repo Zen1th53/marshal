@@ -83,6 +83,16 @@ func startFrozenTUI(t *testing.T, rows, cols uint16) *ptySession {
 	return startFrozenTUICommand(t, rows, cols, "tui")
 }
 
+// mustNotSee fails if the text appears within a short settle window. It is the
+// right assertion for a surface that must stay closed, where waiting for the
+// full mustSee timeout would only slow the suite down.
+func (s *ptySession) mustNotSee(want string) {
+	s.t.Helper()
+	if s.waitFor(want, 2*time.Second) {
+		s.t.Fatalf("did not expect %q on the terminal.\n--- output tail ---\n%s", want, tail(s.output(), 3000))
+	}
+}
+
 func startFrozenTUICommand(t *testing.T, rows, cols uint16, args ...string) *ptySession {
 	t.Helper()
 
@@ -136,11 +146,12 @@ func startFrozenTUICommand(t *testing.T, rows, cols uint16, args ...string) *pty
 // startTUI enters the secondary composer surface used by the historical
 // slash-command conformance tests. Production still launches into frozen
 // navigation; this helper presses Esc exactly as a power user would.
+// startTUI launches `marshal tui`, which opens on the composer. Navigation is
+// an ULTRA surface and a test project holds no entitlement, so there is nothing
+// to back out of before the composer accepts a command.
 func startTUI(t *testing.T, rows, cols uint16) *ptySession {
 	t.Helper()
-	s := startFrozenTUI(t, rows, cols)
-	s.send("\x1b") // Esc at Home returns to the composer.
-	return s
+	return startFrozenTUI(t, rows, cols)
 }
 
 // startCommandTUI switches from the flagship frozen navigation to the legacy
@@ -150,14 +161,27 @@ func startCommandTUI(t *testing.T, rows, cols uint16) *ptySession {
 	return startTUI(t, rows, cols)
 }
 
-// TestPTYWorkspaceStartsInFrozenNavigation proves a real `marshal tui` launch
-// presents the Community TUI rather than the old composer/transcript screen.
-func TestPTYWorkspaceStartsInFrozenNavigation(t *testing.T) {
+// TestPTYWorkspaceStartsInComposerAndGatesNavigation proves a real `marshal tui`
+// launch lands on the composer, and that an unentitled session cannot reach the
+// navigation surface through either of its entry points.
+func TestPTYWorkspaceStartsInComposerAndGatesNavigation(t *testing.T) {
 	s := startFrozenTUI(t, 40, 120)
-	s.mustSee("Home")
-	s.mustSee("Control")
-	s.mustSee("Status")
-	s.mustSee("System")
+	s.mustSee("MARSHAL")
+	// Navigation's own chrome must be absent: a Standard session never lands
+	// in a screen it is not entitled to and has to back out of.
+	s.mustNotSee("Continue Work")
+
+	s.send("\x0e") // Ctrl+N
+	s.mustSee("ULTRA feature")
+	s.mustNotSee("Continue Work")
+
+	s.send("\x1b") // Esc on an empty composer is the other entry point.
+	s.mustSee("ULTRA feature")
+	s.mustNotSee("Continue Work")
+
+	// The composer itself keeps working, which is the whole point of the refusal.
+	s.sendLine("/status")
+	s.mustSee("CANONICAL STATUS DETAIL")
 }
 
 func (s *ptySession) output() string {

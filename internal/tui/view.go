@@ -243,10 +243,12 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 			// Every cell is padded by visible width. fmt's %-Ns counts ANSI
 			// escape bytes as characters, so a coloured value silently receives
 			// no padding and shifts every column to its right.
-			agentRow := fmt.Sprintf("   %s %s  Role: %s  Harness: %s  Model: %s  [%s]",
+			// The role is a MARSHAL-side assignment rather than something the
+			// harness reports, so it is left out: the panel shows what was
+			// probed — the agent, its harness, its model and its state.
+			agentRow := fmt.Sprintf("   %s %s  Harness: %s  Model: %s  [%s]",
 				stateGlyph,
 				PadCell(th.Colorize(th.Bold, p.AgentID), 12),
-				PadCell(string(p.Role), 10),
 				PadCell(p.Harness, 12),
 				PadCell(modelText, 16),
 				statusText,

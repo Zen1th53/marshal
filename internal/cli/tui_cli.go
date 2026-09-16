@@ -74,13 +74,10 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 		defer authorization.Stop()
 	}
 
-	// The frozen Community TUI is the primary interface. Open it only after
-	// every canonical runtime and Cloud handle above has been attached, so the
-	// first Home frame is useful rather than a legacy composer or a transient
-	// storeless view. Esc at the root preserves the composer for power-user
-	// slash commands.
-	workspace.OpenNavigation(ctx)
-
+	// A session opens on the composer, which every user has. The navigation
+	// surface is an ULTRA feature reached with Ctrl+N, so opening it here would
+	// put an unentitled user straight into a screen they are not entitled to
+	// and have to back out of.
 	return workspace.Run(ctx, c.stdin, c.stdout)
 }
 

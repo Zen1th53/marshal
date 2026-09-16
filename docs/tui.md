@@ -9,22 +9,101 @@ Run `marshal claude` or press F8 in MARSHAL to open native Claude Code.
 `marshal claude --resume` opens Claude's picker. Native CLI arguments are passed
 through, including `--model`, `--permission-mode`, attachments and configuration
 options. Within MARSHAL, use `/claude new`, `/claude continue`, `/claude resume`,
-`/claude fork [session]`, or `/claude cli <arguments>`. After returning, plain
-composer prompts use the last opened native provider; F7 selects Codex again.
+`/claude fork [session]`, or `/claude cli <arguments>`.
+
+Plain composer text runs nothing. Launching an agent spends tokens and can touch
+the worktree, so it happens only when the operator names one: `/codex <prompt>`,
+`/claude <prompt>`, or F7/F8 for a native session. A command typed without its
+leading slash is answered with the command it looks like, not with a session.
 
 Native Claude uses the operator's existing `CLAUDE_CONFIG_DIR` (normally
 `~/.claude`), authentication, skills, MCP servers and plugins. MARSHAL imports
 visible user/assistant text from this project's Claude JSONL histories every two
 seconds and on exit. Records pass the memory secret firewall and are saved as
-agent-authority candidates in MARSHAL's database. Thinking, tool-use and tool-result
-blocks are excluded. `.marshal/claude/history-index.json` tracks completed imports
+agent-authority candidates in MARSHAL's database. Thinking blocks are excluded by
+construction. `.marshal/claude/history-index.json` tracks completed imports
 across restarts. `/memory list` and `/memory search <query>` include both providers.
 
 The native window uses Claude's own permission controls. `/claude exec` and
 `/claude run` retain the existing governed stream-json execution path. Native
 resume still uses Claude's history storage; MARSHAL's copied conversation memory
-does not depend on retaining that original session after import. A new session
-does not automatically receive all stored MARSHAL memory.
+does not depend on retaining that original session after import.
+
+## Tool capture
+
+A native session records its tool calls alongside its conversation, because what
+an agent ran and changed is the part a later session needs and a summary of it is
+not. Each call is stored with its name, the argument that says what it acted on,
+and the source it wrote or deleted rendered as a diff. Tool results are stored
+truncated to 2 KiB with their true size stated inline, so a truncated payload is
+never mistaken for a complete one; source written or removed is kept whole up to
+64 KiB. Records are labelled `[assistant:tool_use]` and `[user:tool_result]` in
+the body. Hidden reasoning is still never stored, whatever the setting.
+
+Capture is on for native sessions only. The generic `ImportProviderHistory` path
+stays conversation-only, so importing a history MARSHAL did not supervise cannot
+pull tool payloads into memory by accident.
+
+## Cross-agent memory injection
+
+Each CLI resumes only its own history, so a starting agent knows nothing about
+what the other did in the same project. Before launching one, MARSHAL compiles
+the stored sessions of the *other* providers into a bounded briefing (8 KiB, most
+recent sessions first) and delivers it over a channel that provider supports.
+The briefing states that its contents are observations rather than verified facts.
+
+| Channel | Delivery | Cost |
+| --- | --- | --- |
+| `auto` | Claude: `system-prompt`; Codex: `project-doc` | default |
+| `system-prompt` | `--append-system-prompt` (Claude only) | no turn |
+| `project-doc` | a marked block in `AGENTS.md` / `CLAUDE.md` | no turn, touches the worktree |
+| `prompt` | the opening prompt | one turn and its tokens |
+| `off` | nothing is delivered | — |
+
+`/memory inject` shows the setting and what each provider resolves to,
+`/memory inject <channel>` changes it, `/memory inject preview [claude\|codex]`
+prints the briefing a provider would receive, and `/memory inject clear` removes
+MARSHAL's block from the project documents. The setting is stored in
+`.marshal/inject-channel`.
+
+The `project-doc` channel owns exactly the text between its
+`<!-- marshal:memory:start -->` and `<!-- marshal:memory:end -->` markers and
+leaves the rest of the file byte-identical; a file with only one of the two
+markers is refused rather than repaired by guesswork. A configured channel the
+provider cannot honour falls back and reports the fallback instead of silently
+delivering nothing. An operator's own `--append-system-prompt`, or their own
+opening prompt, is never overridden. Injection failures are reported and never
+block the session: an agent with no briefing is the earlier behaviour, not a
+broken one.
+
+### Live cross-agent exchange
+
+The launch briefing is a snapshot: it says what the other providers had done by
+the time this session started, and goes stale while the session is open.
+
+So while an agent runs, MARSHAL also watches the **other** providers' histories
+for this project. Work they do now is imported into memory as it happens and
+appended to this session's inbox at `.marshal/inbox/<provider>.md`. The inbox is
+truncated when the session opens, so it only ever carries what arrived since.
+
+A running CLI owns the terminal, so MARSHAL cannot inject anything into it.
+Delivery is a **pull**: the briefing names the inbox file and says plainly that
+nothing pushes it, so the agent reads it when it needs current context. The
+inbox carries the same untrusted-data framing the briefing does.
+
+The inbox is bounded at 64 KiB with a 1 KiB cap per entry. On reaching the
+budget it stops appending and says so in the file, so a truncated inbox is never
+mistaken for a quiet one. The count of delivered updates is reported when the
+session exits.
+
+Peer watchers keep their own index (`.marshal/<running>/peer-<other>-index.json`)
+and are primed against existing history at launch, so two MARSHAL sessions
+watching the same provider do not fight over one file and the inbox does not
+replay history the briefing already summarized.
+
+Injection delivers a compiled briefing, not the full memory store. A new session
+still does not automatically receive everything MARSHAL has stored; use
+`/memory search <query>` for the rest.
 
 ## Native Codex sessions
 
@@ -50,14 +129,15 @@ controls. It uses the installed binary and the operator's existing `CODEX_HOME`,
 authentication and configuration. MARSHAL does not replace that configuration
 with its config-free task environment. Native CLI errors remain errors.
 
-MARSHAL imports user messages and final assistant answers from local Codex JSONL
-history every two seconds and on exit. Records go through the existing secret
-firewall into the project's SQLite memory as **agent-authority candidates**;
+MARSHAL imports user messages, final assistant answers and tool calls from local
+Codex JSONL history every two seconds and on exit. Records go through the existing
+secret firewall into the project's SQLite memory as **agent-authority candidates**;
 they are not verified facts. `/memory list` and `/memory search <query>` find
 them. A private `.marshal/codex/history-index.json` records completed imports so
 reopening does not duplicate unchanged history. Changed histories for the same
-project are recovered after interruption. Hidden reasoning, tool payloads and
-credentials are not copied into memory. An import failure is reported on return.
+project are recovered after interruption. Hidden reasoning and credentials are not copied
+into memory; tool payloads are captured under the bounds described in **Tool
+capture**. An import failure is reported on return.
 
 Native thread state remains in Codex's own storage, which its resume/fork commands
 use. MARSHAL's memory is a portable record of visible conversation, not a copy of
@@ -149,6 +229,20 @@ hardcode models, agents, versions, or claim statuses:
 
 The TUI is fully operable without a mouse.
 
+### Startup surface and the navigation gate
+
+`marshal tui` opens on the **composer**, which every session has. The frozen-IA
+navigation surface (Home, Control, Status, Work, Verify, Memory, Models,
+Security, System) is an **ULTRA** feature: `Ctrl+N` and `Esc` on an empty
+composer open it only when the session holds a verified ULTRA entitlement.
+Without one, both entry points refuse and say so, and every MARSHAL command
+stays available from the composer. `/ultra` reports why a session is Standard;
+`/ultra request` asks an operator for an entitlement.
+
+The gate is read live on each attempt rather than captured at startup, because
+the Cloud handshake finishes after the workspace is built: a session that
+becomes entitled mid-run can open navigation without restarting.
+
 ### Line Editing & Composer
 
 | Keybinding | Action |
@@ -162,20 +256,43 @@ The TUI is fully operable without a mouse.
 | `Ctrl+R` | Interactive reverse history search |
 | Bracketed Paste | Safe multi-line and clipboard text paste without accidental execution |
 
+### Paste and copy
+
+Pasted text arrives as data, never as keystrokes, so a pasted newline is
+inserted rather than submitting the buffer.
+
+A paste of four or more lines, or over 800 bytes, collapses to a placeholder —
+`[Pasted text #1 +42 lines]` — and is restored verbatim when the draft is
+submitted. Shorter pastes are inserted inline. A placeholder the operator typed
+themselves has no paste behind it and is left exactly as written.
+
+Mouse reporting is held **only while the navigation view is open**, which is the
+only surface that reads a mouse event. On the composer the terminal keeps its
+own selection, so selecting and copying text works normally.
+
 ### Contextual Autocomplete
 
 | Keybinding | Action |
 |---|---|
-| `Tab` | Open the completion popup, or advance to the next candidate |
-| `Shift+Tab` | Step backward through candidates |
-| `↑` / `↓` | Select a candidate while the popup is open |
-| `Enter` | Accept the highlighted candidate and close the popup |
-| `Esc` | Dismiss the popup, leaving the buffer as typed |
+| typing `/`, `@` or `#` | Opens the menu as you type, and narrows it as you continue |
+| `↑` / `↓` | Move the highlight; the draft is left exactly as typed |
+| `Tab` | Accept the highlighted candidate into the draft |
+| `Shift+Tab` | Move the highlight backwards |
+| `Enter` | Accept the highlighted command and run it |
+| `Esc` | Dismiss the menu, leaving the buffer as typed |
+
+The menu is not summoned, it follows the buffer: typing a trigger opens it,
+typing on narrows it, and typing past every candidate closes it. A menu offering
+exactly the word already typed closes too, so a finished command stays
+submittable rather than having Enter taken away from it.
+
+Moving the highlight never writes to the draft. Only `Tab` and `Enter` do, and
+the highlight survives narrowing, so typing one more letter cannot silently
+select a different command than the one under the cursor.
 
 **Tab never submits.** It completes and nothing else: it does not execute the
-buffer, insert a newline, reprint the prompt or touch history. A single
-unambiguous candidate is completed outright; several open the popup. Accepting a
-completion and running the command are two deliberate keystrokes.
+buffer, insert a newline, reprint the prompt or touch history. `Enter` is the
+key that runs a command, whether the menu is open or not.
 
 Autocomplete dynamically queries live runtime state:
 - **Slash Commands**: Typing `/` suggests all valid commands; fuzzy matching is supported (e.g. `/rb` suggests `/rollback`).

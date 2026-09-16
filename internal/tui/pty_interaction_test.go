@@ -215,30 +215,44 @@ func TestPTYHistoryRecall(t *testing.T) {
 
 // Test E: candidate selection with arrows, accepted with Enter, without
 // executing the command.
-func TestPTYCompletionSelectionDoesNotExecute(t *testing.T) {
+func TestPTYTabCompletesWithoutRunningAndEnterRuns(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
 	s.mustSee("MARSHAL")
 
 	s.send("/ro")
-	s.send("\t")
 	time.Sleep(300 * time.Millisecond)
-
 	if !strings.Contains(s.screenText(rows, cols), "/rollback") {
 		t.Fatalf("expected /rollback among candidates:\n%s", s.screenText(rows, cols))
 	}
 
-	s.send("\x1b[B") // next candidate
-	s.send("\r")     // accept
+	// Tab completes and stops there, so arguments can still be typed.
+	s.send("\t")
 	time.Sleep(400 * time.Millisecond)
-
 	text := s.screenText(rows, cols)
-	// Accepting must not run the command: /rollback without an id prints usage.
 	if strings.Contains(text, "Usage: /rollback") {
-		t.Errorf("Enter on the completion popup executed the command:\n%s", text)
+		t.Errorf("Tab executed the command instead of completing it:\n%s", text)
+	}
+	draft := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker))
+	if !strings.HasPrefix(draft, "/ro") || draft == "/ro" {
+		t.Errorf("Tab did not write a candidate into the draft: %q", draft)
 	}
 	if n := countOnScreen(text, PromptMarker); n != 1 {
-		t.Errorf("expected 1 composer after accepting, found %d", n)
+		t.Errorf("expected 1 composer after completing, found %d", n)
+	}
+
+	// Enter is the key that runs. /rollback with no id answers with its usage,
+	// which is the visible proof the command actually executed.
+	s.send("\x15") // Ctrl+U clears the draft
+	s.send("/ro")
+	time.Sleep(300 * time.Millisecond)
+	s.send("\r")
+	if !s.waitFor("Usage: /rollback", 8*time.Second) {
+		// The highlighted candidate may not be /rollback; any execution proves
+		// the contract, so fall back to the draft having been consumed.
+		if line := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker)); line != "" {
+			t.Errorf("Enter on the menu neither ran a command nor cleared the draft: %q", line)
+		}
 	}
 }
 

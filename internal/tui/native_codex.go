@@ -106,6 +106,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	}
 	watch := newNativeHistoryWatch(filepath.Join(home, historyDir), root)
 	watch.claude = provider == "claude"
+	watch.captureTools = true
 	var syncErr error
 	watch.indexPath = filepath.Join(root, ".marshal", provider, "history-index.json")
 	if err := watch.loadIndex(); err != nil {
@@ -155,12 +156,110 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	if watch.consume == nil {
 		return "", fmt.Errorf("native %s memory capture requires an attached runtime", label)
 	}
+
+	// Live exchange: while this agent runs, watch the other providers too, so
+	// work they do now is imported and offered to this session rather than
+	// waiting until the next launch to be told about it.
+	inbox, inboxErr := newLiveInbox(root, provider)
+	if inboxErr != nil {
+		syncErr = errors.Join(syncErr, fmt.Errorf("open live inbox: %w", inboxErr))
+	}
+	var peers []*nativeHistoryWatch
+	if inbox != nil {
+		for _, peer := range peerProviders(provider) {
+			dir, err := providerHistoryDir(peer, root)
+			if err != nil {
+				syncErr = errors.Join(syncErr, err)
+				continue
+			}
+			pw := newNativeHistoryWatch(dir, root)
+			pw.claude = peer == "claude"
+			pw.captureTools = true
+			// A separate index: two MARSHAL sessions watching the same provider
+			// must not fight over one file, and this watcher's progress is not
+			// that provider's own import progress.
+			pw.indexPath = filepath.Join(root, ".marshal", provider, "peer-"+peer+"-index.json")
+			if err := pw.loadIndex(); err != nil {
+				syncErr = errors.Join(syncErr, err)
+			}
+			// Prime the index against what already exists, so the inbox carries
+			// what happens from now on rather than replaying the whole history
+			// the launch briefing has already summarized.
+			pw.consume = func(importer.SessionTranscript) error { return nil }
+			if err := pw.sync(); err != nil {
+				syncErr = errors.Join(syncErr, err)
+			}
+			peerName := peer
+			primary := watch.consume
+			pw.consume = func(tr importer.SessionTranscript) error {
+				if err := primary(tr); err != nil {
+					return err
+				}
+				for _, message := range tr.Messages {
+					if err := inbox.append(peerName, message); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			peers = append(peers, pw)
+		}
+	}
+
+	// Hand this agent what the other providers already did here. A failure to
+	// compile or deliver the briefing is reported but never blocks the session:
+	// an agent with no briefing is the previous behaviour, not a broken one.
+	var briefingNotes []string
+	channel, fallbackNote := resolveInjectChannel(provider, loadInjectChannel(root))
+	if fallbackNote != "" {
+		briefingNotes = append(briefingNotes, fallbackNote)
+	}
+	if channel != injectOff {
+		briefing, err := w.crossAgentBriefing(ctx, provider)
+		switch {
+		case err != nil:
+			briefingNotes = append(briefingNotes, "Cross-agent briefing unavailable: "+err.Error())
+		case strings.TrimSpace(briefing) == "":
+			// Nothing to summarize yet, but another agent may still start while
+			// this one runs, so the inbox pointer is delivered on its own.
+			updated, note, err := applyBriefing(provider, root, args,
+				briefingHeader+inboxBriefingNote(root, provider), channel)
+			if err != nil {
+				briefingNotes = append(briefingNotes, "Live inbox pointer not delivered: "+err.Error())
+			} else {
+				args = updated
+				briefingNotes = append(briefingNotes,
+					"No other provider has recorded work here yet; live updates will arrive in this session's inbox.")
+				_ = note
+			}
+		case channel == injectPrompt && hasOperatorPrompt(args):
+			briefingNotes = append(briefingNotes, "Cross-agent briefing skipped: this session already carries its own prompt.")
+		default:
+			// The agent only benefits from the inbox if the briefing says it
+			// exists, so the pointer travels with the snapshot it will go stale
+			// against.
+			briefing += inboxBriefingNote(root, provider)
+			updated, note, err := applyBriefing(provider, root, args, briefing, channel)
+			if err != nil {
+				briefingNotes = append(briefingNotes, "Cross-agent briefing not delivered: "+err.Error())
+			} else {
+				args = updated
+				briefingNotes = append(briefingNotes, note)
+			}
+		}
+	}
+
 	if w.navView != nil {
 		w.navView.Close()
 	}
 	resume := w.SuspendTerminal()
 	defer resume()
-	fmt.Fprintf(os.Stdout, "MARSHAL · native %s · conversation autosaves to project memory · exit to return to MARSHAL\n", label)
+	fmt.Fprintf(os.Stdout, "MARSHAL · native %s · conversation and tool calls autosave to project memory · exit to return to MARSHAL\n", label)
+	for _, note := range briefingNotes {
+		if note != "" {
+			fmt.Fprintf(os.Stdout, "MARSHAL · %s\n", note)
+		}
+	}
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Dir = root
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -179,7 +278,20 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if err := watch.sync(); err != nil {
 				syncErr = err
 			}
-			result := fmt.Sprintf("%s exited. %d conversation messages saved to MARSHAL memory.\n/%s continue resumes; /%s new starts a new session.", label, imported, provider, provider)
+			for _, pw := range peers {
+				if err := pw.sync(); err != nil {
+					syncErr = errors.Join(syncErr, err)
+				}
+			}
+			result := fmt.Sprintf("%s exited. %d message(s), including tool calls, saved to MARSHAL memory.\n/%s continue resumes; /%s new starts a new session.", label, imported, provider, provider)
+			if delivered := inbox.Count(); delivered > 0 {
+				result += fmt.Sprintf("\n%d live update(s) from another agent were delivered to this session's inbox.", delivered)
+			}
+			for _, note := range briefingNotes {
+				if note != "" {
+					result += "\n" + note
+				}
+			}
 			if syncErr != nil {
 				result += "\nMemory capture incomplete:\n" + syncErr.Error()
 			}
@@ -188,8 +300,25 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if err := watch.sync(); err != nil {
 				syncErr = err
 			}
+			for _, pw := range peers {
+				if err := pw.sync(); err != nil {
+					syncErr = errors.Join(syncErr, err)
+				}
+			}
 		}
 	}
+}
+
+// hasOperatorPrompt reports whether argv already carries the operator's own
+// opening prompt. Appending a briefing after one would hand the CLI a second
+// positional, so prompt-channel injection stands down instead.
+func hasOperatorPrompt(args []string) bool {
+	for _, arg := range args {
+		if arg == "--" {
+			return true
+		}
+	}
+	return false
 }
 
 func nativeUsesModelPreference(args []string) bool {
@@ -205,11 +334,15 @@ func nativeUsesModelPreference(args []string) bool {
 }
 
 type nativeHistoryWatch struct {
-	claude    bool
-	dir, root string
-	indexPath string
-	seen      map[string]string
-	consume   func(importer.SessionTranscript) error
+	claude bool
+	// captureTools records tool calls and their results alongside conversation,
+	// so a later session can see what the agent actually ran and changed rather
+	// than only what it said about it.
+	captureTools bool
+	dir, root    string
+	indexPath    string
+	seen         map[string]string
+	consume      func(importer.SessionTranscript) error
 }
 
 func newNativeHistoryWatch(dir, root string) *nativeHistoryWatch {
@@ -319,7 +452,7 @@ func (w *nativeHistoryWatch) syncFile(path string) error {
 		return err
 	}
 	meta = bytes.Clone(meta)
-	adapter := importer.CodexJSONLAdapter{}
+	adapter := importer.CodexJSONLAdapter{CaptureTools: w.captureTools}
 	tr, err := adapter.Decode(meta)
 	if err != nil {
 		return err
