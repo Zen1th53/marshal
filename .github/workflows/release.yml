@@ -2,14 +2,17 @@ name: Release Engineering
 
 on:
   push:
+    # Any release tag, not one literal version. Pinning a single tag here meant
+    # the workflow never woke for a later release at all, which is quieter and
+    # more confusing than a build that runs and refuses.
     tags:
-      - 'v1.0.1'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version tag (e.g. v1.0.1)'
+        description: 'Release version tag (e.g. v0.0.1)'
         required: true
-        default: 'v1.0.1'
 
 permissions:
   contents: write
