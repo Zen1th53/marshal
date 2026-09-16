@@ -31,3 +31,11 @@ MARSHAL-*-MEGA-TASK/
 # admin ports. Ignoring them here means a `git add -A` cannot sweep that into a
 # public repository by accident — which it very nearly did.
 MARSHAL_COMMUNITY_CLOUD_ULTRA_ACTIVATION_TELEMETRY_FINAL_MEGA_ULTRA_V2/
+
+# Cross-agent briefing targets. MARSHAL's project-doc injection channel writes a
+# generated block into these, quoting other agents' sessions and tool output —
+# which can include internal architecture it happened to read. They are local
+# context handed to a CLI, not part of MARSHAL, so `git add -A` must not sweep
+# them into a public repository. AGENTS.example.md stays tracked.
+/AGENTS.md
+/CLAUDE.md

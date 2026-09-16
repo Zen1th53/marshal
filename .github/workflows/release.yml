@@ -57,7 +57,11 @@ jobs:
             TAG_NAME="${GITHUB_REF#refs/tags/}"
           fi
           VERSION_NUM="${TAG_NAME#v}"
-          test "$TAG_NAME" = "v1.0.1"
+          # Validate the tag's shape rather than a literal version. Pinning one
+          # release number here meant every later tag failed this step and
+          # published nothing, which reads as a broken build rather than a
+          # refused one.
+          printf '%s' "$TAG_NAME" | grep -Eq "^v[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?$"
           test "$(git cat-file -t "$TAG_NAME")" = "tag"
           test "$(git rev-parse "$TAG_NAME^{commit}")" = "$(git rev-parse HEAD)"
           echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
