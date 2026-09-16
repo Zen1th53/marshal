@@ -150,6 +150,28 @@ func signingInput(c Claims, b Bundle) ([]byte, error) {
 	return input, nil
 }
 
+// SignLease produces the signed lease an issuer hands a client.
+//
+// It is the exact inverse of VerifyLease and shares signingInput with it, so an
+// issuer and this client cannot drift into disagreeing about which bytes are
+// covered by the signature. It signs whatever it is given: coherence of the
+// claims is the issuer's decision, and VerifyLease re-checks all of it on the
+// client side regardless.
+func SignLease(claims Claims, bundle Bundle, priv ed25519.PrivateKey) (Lease, error) {
+	if len(priv) != ed25519.PrivateKeySize {
+		return Lease{}, fmt.Errorf("%w: malformed signing key", ErrLeaseInvalid)
+	}
+	input, err := signingInput(claims, bundle)
+	if err != nil {
+		return Lease{}, err
+	}
+	return Lease{
+		Claims:    claims,
+		Bundle:    bundle,
+		Signature: base64.RawURLEncoding.EncodeToString(ed25519.Sign(priv, input)),
+	}, nil
+}
+
 // KeyRing holds the verification keys this client trusts.
 //
 // It holds more than one so rotation is not an outage: the new key starts

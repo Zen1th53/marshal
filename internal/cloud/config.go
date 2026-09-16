@@ -35,9 +35,32 @@ type Config struct {
 // absence of configuration means Standard rather than an error or a retry loop.
 func LoadConfig() Config {
 	return Config{
-		Endpoint:         strings.TrimSpace(os.Getenv(EnvEndpoint)),
+		Endpoint:         resolveEndpoint(os.Getenv(EnvEndpoint)),
 		ExecutionEnabled: truthy(os.Getenv(EnvExecution)),
 	}
+}
+
+// resolveEndpoint decides which Cloud authority to ask, if any.
+//
+// An unset variable means "the Community Cloud", not "no cloud": without the
+// default, a fresh installation has nobody to send /ultra request to, so it can
+// never obtain the entitlement it is being told to ask for. The environment
+// still overrides, and an explicit off value still disables the client
+// outright, so running fully offline remains possible and deliberate.
+//
+// Reaching the default authority grants nothing on its own. It asks; the answer
+// is a signed lease or a refusal, and every capability check still goes through
+// the gate.
+func resolveEndpoint(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return DefaultEndpoint
+	}
+	switch strings.ToLower(value) {
+	case "off", "none", "disabled", "0", "false":
+		return ""
+	}
+	return value
 }
 
 func truthy(v string) bool {
