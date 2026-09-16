@@ -2126,8 +2126,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "f1736784a801114c7c79986b7d01c6d2018c352df1ece56261fa4c44672b52c7",
-      "bytes": 10405
+      "sha256": "5ebbc1cf1271da9cc4088071c3d88f92d2dc8a194f5c4b35fc2c1a844a19ca5b",
+      "bytes": 16909
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -2803,6 +2803,11 @@
       "path": "docs/assets/marshal-architecture-graphite.svg",
       "sha256": "a8efa9785392fc53c02a59a7dbd8bc7bb61c3844d591a08ca4b505063d874da7",
       "bytes": 14181
+    },
+    {
+      "path": "docs/assets/marshal-tui.png",
+      "sha256": "3222ae5c645506008c00d0f55edebb91b3099f2c9e2cdece69ba6db324469f94",
+      "bytes": 506159
     },
     {
       "path": "docs/benchmarks.md",
@@ -7241,13 +7246,13 @@
     },
     {
       "path": "internal/startup/probe.go",
-      "sha256": "0d3cf333d93eec15e554b747b200f617f4bb5d7261350f91ae40c48fa5737c45",
-      "bytes": 14889
+      "sha256": "e594aac7c2adff3b7ce21f8c2e78466007ff781295761b32f2abbdecf5039ffe",
+      "bytes": 14978
     },
     {
       "path": "internal/startup/probe_test.go",
-      "sha256": "cd3bed5eced26b5f256256b08d6d2f45ea42d1c68802fb132e177a3c185866e8",
-      "bytes": 16665
+      "sha256": "4a35942d4118f8cf16f8e474e1f78d2a58e10802561e77503e9518c4745f0fa0",
+      "bytes": 17519
     },
     {
       "path": "internal/startup/project_identity.go",
