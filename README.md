@@ -5,530 +5,193 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Zen1th53/marshal)](https://go.dev)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
 
-MARSHAL is a local, security-focused runtime and control plane for coding agents. It coordinates tasks, sessions, and agents while enforcing capability grants, policy rules, execution sandboxing, content-addressed evidence, and durable memory inside one auditable project runtime.
+**A local control plane for coding agents.**
 
-Raw provider CLIs can modify files and execute arbitrary commands, but they lack independent authorization boundaries, reproducible worktree isolation, verifiable evidence graphs, and governed cross-turn memory. MARSHAL wraps provider execution inside isolated execution cells, leases and records state in a canonical local SQLite database, and fails closed whenever a requested security or isolation boundary cannot be enforced.
-
-Current `main`: schema **v86**, pack **6.0.0**, runtime spec **1.5.0**. The
-released binaries are listed on the [releases page](https://github.com/Zen1th53/marshal/releases).
-
-> The release tag and the runtime spec version are different things: the runtime
-> spec is **1.5.0** regardless of which binary is published. `main` carries work
-> that is not in every release archive, so check the release notes for what a
-> given tag contains.
-
----
-
-## Why MARSHAL?
-
-Autonomous and assistive coding agents are increasingly granted direct access to developer machines and repositories. Running external agent CLIs directly introduces critical security and reproducibility challenges:
-
-1. **Unbounded Shell & Filesystem Execution**: Raw agent tools run with full user privileges across the entire host filesystem and network, risking accidental file destruction or unauthorized access.
-2. **Ephemeral Coordination State**: When an agent finishes a task, its decisions, shell outputs, and error contexts are scattered across terminal scrollbacks or transient log files rather than captured in an auditable ledger.
-3. **No Independent Authorization Boundary**: An LLM cannot reliably police its own actions. Security policy, capability grants, and risk evaluation must be enforced by an independent runtime before command execution.
-4. **Context Amnesia & Memory Drift**: Multi-step engineering workflows require durable memory that tracks previous task outcomes, conflicts, and architectural decisions without exceeding context budgets or ingesting unverified prompt injections.
-
-MARSHAL solves these challenges by acting as a **deterministic local control plane** between Community interfaces (TUI, CLI, MCP, A2A) and provider execution backends.
-
----
-
-## What MARSHAL Actually Provides
-
-| Subsystem | Current Community Capability (`main`) |
-|---|---|
-| **Terminal TUI Workspace (v2)** | Premium, dynamic, terminal-first collaborative workspace (`marshal tui` or default `marshal` launch) with full line editing, contextual autocomplete (`Tab`, `@`, `#`), command palette (`Ctrl+P`), live working tree diff viewer, real probe capability intelligence, silence-by-default chatter filtering, and a capability registry whose every advertised TUI command is verified to dispatch against the canonical runtime by an on-terminal (PTY) conformance suite. See [TUI Documentation](docs/tui.md). |
-| **Frozen 6-Core Judgment Layer** | Immutable 6-core runtime: (1) Epistemic Ledger & Claim Graph, (2) Alignment Guard, (3) Blind Interpretation, (4) Durable Handoff Checkpoints & Rollback, (5) Budget & Termination Contract, (6) Constraint Re-injection. Strictly frozen with no 7th core. |
-| **Real Multi-Agent Collaboration** | Fixed-role multi-agent team sessions (`architect`, `developer`, `qa`, `appsec`) supporting Claude CLI, OpenAI Codex, OpenCode, and Google Antigravity with typed handoffs, challenge protocols, and mutual discovery. |
-| **Harness Capability Intelligence & ULTRA** | Probe-backed version-aware capability matrix (`adapters/MATRIX.json`) dynamically generating optimal execution routes, model selection, reasoning effort, and native tool flags without hallucinated parameters. |
-| **Second-Wave Trust Hardening** | Failure fingerprinting with normalized error vectors, Review-the-Reviewer anti-rubber-stamping audits, bounded mutation testing, evidence bundle packaging, post-mortem cards, and ModelTaskTrust score gates. |
-| **Runtime Control Plane** | Project-local daemon over a mode-`0600` Unix domain socket (`.marshal/runtime.sock`), atomic task claims, 15-minute heartbeated session leases, dedicated Git worktrees (`marshal/<task>`), and model context protocol servers. |
-| **Security & Policy** | Capability broker with fine-grained time-bounded grants, role authorization (`orchestrator`, `architect`, `developer`, `qa`, `appsec`), pre-execution risk gates (`R0`..`R3`), secrets lease/redaction engine, and deny-by-default network policy. |
-| **Execution Sandboxing** | Linux Bubblewrap (`bwrap`) mount namespaces with read-only root filesystems, minimal config binds, tmpfs runtime directories, network unsharing (`--unshare-net`), 500 MiB worktree disk budget, and 8 MiB output bounds. |
-| **Canonical Memory Fabric** | SQLite-backed memory engine (schema `v86`), automatic task-start context recall (max 8 records, 12 KiB budget), post-run evidence-linked outcome capture (`CaptureOutcome`), multi-track search, conflict detection, lifecycle governance, and session importers. |
-| **Provider Adapters** | Modular process adapters for Codex CLI, OpenCode, Gemini CLI, Claude Code, and Antigravity with dynamic capability probing and standardized execution contracts. |
-| **Evidence & Provenance** | Content-addressed SHA-256 artifact storage (`.marshal/artifacts/sha256/<hex>`), structured command/output/environment evidence nodes, commit linkage, and immutable event ledger. |
-| **Operations** | Local system health diagnostics (`marshal doctor`), SQLite backup/restore verification, and legal chain-of-title compliance export. Web control-plane access is Enterprise-only. |
-
----
-
-## Architecture
-
-### Architecture Layers
-
-1. **Entry Points**: Operators and tools interact with Community through the native `marshal` CLI, the terminal TUI, the MCP HTTP JSON-RPC endpoint (protocol `2026-07-28`), or the A2A HTTP/JSON endpoint (wire `1.0`, protocol `1.0.0`).
-2. **Runtime / Control Plane**: `internal/app.Runtime` coordinates operations over the local daemon socket. It orchestrates risk assessment (`internal/risk`), pre-execution security gates (`internal/gate`), capability brokering (`internal/capability`), role-based policy enforcement (`internal/policy`), and the canonical SQLite store (`internal/store`).
-3. **Execution Pipeline**: `Runtime.Run` handles task claims, prepares an isolated Git worktree, performs automatic task-start memory recall, resolves provider binaries, and executes the provider inside a Bubblewrap container. `Runtime.Verify` provides a separate, explicit command verification API.
-4. **Provider Adapters**: External provider CLIs (`codex`, `gemini`, `claude`, `opencode`) run against standardized process interfaces (`adapter.Adapter`).
-5. **Result Handling & Evidence**: Provider output is sanitized and redacted; dirty worktree changes are committed under policy; stdout/stderr artifacts are stored with SHA-256 addressing; run evidence nodes are recorded; and completion outcomes are captured into memory.
-6. **Canonical Memory Fabric**: `MemoryService` (v2.0.0) maintains durable memory records, working task slots, multi-track search projections (exact, lexical, graph), access control, and cross-agent handoffs.
-7. **Operations & Persistence**: SQLite schema `v86` (`.marshal/state.db`) serves as the single source of truth for coordination state, task leases, audit ledgers, and evidence graphs.
-
----
-
-## How a Task Actually Executes
-
-Every task executed via `marshal run <TASK-ID> --adapter <ADAPTER>` follows an explicit, fail-closed sequence implemented in `internal/app/runtime.go`:
-
-```text
-[Operator / API Request]
-          │
-          ▼
-1. Pre-Execution Authorization ────► risk.AssessTool ──► GateEngine.Evaluate ──► policy.Enforce
-          │
-          ▼
-2. Atomic Task Claim ─────────────► Store.Claim (15m lease) ──► worktree.Prepare (.marshal/worktrees/<task>)
-          │
-          ▼
-3. Automatic Memory Recall ───────► MemoryService.Recall (max 8 records, 12 KiB budget injected into context)
-          │
-          ▼
-4. Adapter Resolution & Probing ──► resolveAdapter ──► issue 30m exact-binary grant ──► Adapter.Probe
-          │
-          ▼
-5. Sandboxed Process Run ─────────► worker.NewSandboxed (bwrap: ro root, tmpfs dirs, --unshare-net)
-          │
-          ▼
-6. Output Redaction & Worktree ───► auth.RedactSecrets ──► worktree.Inspect ──► git commit under policy
-          │
-          ▼
-7. Artifact & Evidence Storage ───► artifact.Store.Put (SHA-256) ──► recordRunEvidence (command/output/env)
-          │
-          ▼
-8. Completion Memory Capture ─────► MemoryService.CaptureOutcome ──► ProposeOutcomeConsolidation
-          │
-          ▼
-9. Finalization & Coordination ───► Store.ObserveHEAD ──► Store.FinalizeExecution ──► Revoke temporary grants
-```
-
-### Key Execution Invariants
-
-- **Fail-Closed Gate Checks**: If pre-execution risk assessment or security gates fail, the run aborts immediately before any worktree preparation or binary invocation.
-- **Dedicated Git Worktree**: Execution occurs strictly inside `.marshal/worktrees/<task>` on branch `marshal/<task>`, protecting the working tree.
-- **Commit Requirement**: A successful run must produce a verifiable git commit; runs that exit zero without changes or commits are rejected.
-- **Worktree Disk Budget**: Task worktrees are bound to a strict 500 MiB disk budget; exceeding this limit fails the run.
-- **Automatic Memory Recall & Capture**: Before execution, up to 12 KiB of scope-authorized memory is recalled and injected into trusted provider context. After execution, outcome metadata (success status, error digests, files changed, and retry conditions) is captured into durable memory.
-- **Standalone Verification API**: `Runtime.Verify` (`marshal verify [-- cmd args...]`) is an explicit verification command that runs an exact argv in the repository root with a 15-minute timeout and computes SHA-256 output digests. It is not an automatic post-provider run stage.
-
----
-
-## Governed Lifecycle (Process 03–08)
-
-Beyond single-task execution, `main` implements a six-stage governed lifecycle. Each
-stage is a durable, versioned record bound to an exact repository state, and each
-refuses to advance on an unsupported claim.
-
-```mermaid
-flowchart TD
-    R[Request] --> G["<b>Goal</b><br/>internal/goalintake<br/>intent, constraints, risk"]
-    G --> P["<b>Plan</b><br/>internal/plan<br/>tasks, DAG, team, approvals"]
-    P --> X["<b>Execution</b><br/>internal/execution<br/>sandboxed, checkpointed"]
-    X --> V["<b>Verification</b><br/>internal/verification<br/>independent, evidence-bound"]
-    V --> L["<b>Learning</b><br/>internal/learning<br/>evidence-gated memory"]
-    L --> O["<b>Optimization</b><br/>internal/optimization<br/>counterfactual, canary"]
-    O -.->|proposals return as new Goals| G
-
-    POL[Policy · Capability · Sandbox · Network<br/>Approvals · Budget · Checkpoints · Provenance]
-    POL -.-> G & P & X & V & L & O
-```
-
-| Stage | Package | What it produces | CLI |
-|---|---|---|---|
-| **Goal** | `internal/goalintake` | A confirmed contract: intent, hard constraints, risk tier | `marshal goal <request>` |
-| **Plan** | `internal/plan` | Task DAG, team assembly, verification policy, approvals | `marshal plan create · show · approve` |
-| **Execution** | `internal/execution` | Governed runs, checkpoints, evidence, handoff bundle | `marshal exec start · run · status · rollback` |
-| **Verification** | `internal/verification` | Independent verdict and a digest-bound completion attestation | `marshal review start · evaluate · attest` |
-| **Learning** | `internal/learning` | Evidence-gated durable memory, routing trust, fingerprints | `marshal learning search · trust · history` |
-| **Optimization** | `internal/optimization` | Candidates, counterfactuals, bounded canaries, rollback | `marshal optimization start · show · candidates` |
-
-**The rules that make this more than a pipeline:**
-
-- **Agents produce claims; MARSHAL produces evidence.** A run that exits zero is not a
-  verified run. Completion requires every mandatory criterion met, critical evidence from
-  at least two independent source clusters, and exact Goal/Plan/Run/tree agreement.
-- **`UNKNOWN` and `NOT_RUN` stay that way.** No stage upgrades an unmeasured result.
-- **Repetition is not evidence.** Learning counts independent evidence clusters, so one
-  source echoed many times counts once. Consensus and provider prestige promote nothing.
-- **Optimization cannot rewrite its own constraints.** A change touching policy, approvals,
-  sandboxing or evidence requirements is refused and must re-enter as a Goal at stage one.
-- **Every surface is read-only for lifecycle state.** Promotion, canary and rollback are
-  runtime-service operations; no CLI, Web, MCP or A2A route can mint a success state.
-
-Per-stage implementation and qualification records live in
-[`docs/process-06`](docs/process-06/), [`docs/process-07`](docs/process-07/) and
-[`docs/process-08`](docs/process-08/).
-
----
-
-## Canonical Memory Fabric (v2.0.0)
-
-MARSHAL includes a multi-track memory fabric designed for multi-turn agent coordination and organizational learning.
-
-```text
-       ┌─────────────────────────────────────────────────────────┐
-│                SQLite v86 (.marshal/state.db)           │
-       │                   CANONICAL SOURCE OF TRUTH             │
-       └────────────────────────────┬────────────────────────────┘
-                                    │
-        ┌───────────────────────────┼───────────────────────────┐
-        ▼                           ▼                           ▼
- ┌──────────────┐            ┌──────────────┐            ┌──────────────┐
- │ Exact Match  │            │   Lexical    │            │  Code Graph  │
- │  (Key/Hash)  │            │  (BM25/FTS)  │            │ (Adjacency)  │
- └──────────────┘            └──────────────┘            └──────────────┘
-        │                           │                           │
-        └───────────────────────────┼───────────────────────────┘
-                                    ▼
-       ┌─────────────────────────────────────────────────────────┐
-       │          Scope-Authorized & ACL-Enforced Fusion         │
-       └────────────────────────────┬────────────────────────────┘
-                                    │
-               ┌────────────────────┴────────────────────┐
-               ▼                                         ▼
-   [Automatic Task-Start Recall]             [Post-Run Outcome Capture]
-   12 KiB budget / 8 max records             Evidence-linked candidates
-```
-
-### Memory Capabilities
-
-- **Canonical State vs Projections**: SQLite schema `v86` is the sole canonical persistence layer. Lexical indices, graph indices, and retrieval caches are disposable in-memory projections rebuilt on demand.
-- **Multi-Track Search**: Retrieval combines exact key matching, lexical search (BM25/FTS), and graph traversal. Vector similarity search is optional and activates only when a real local embedding provider is configured.
-- **Scope & ACL Enforcement**: Every memory record carries strict project, task, agent, or branch scopes. Agents can only recall records matching their authorized principals.
-- **Conflict Detection & Governance**: Conflicting memory updates trigger deterministic conflict records requiring operator review or policy promotion (`marshal memory promote`).
-- **Working / Task Memory**: Fast task-scoped slots with Compare-And-Swap (CAS) atomic updates for in-progress agent reasoning.
-- **Session Importers**: Built-in importers parse and structure historical sessions from Claude, Codex, and OpenCode formats into governed memory records.
-
----
-
-## Security and Isolation Model
-
-MARSHAL implements defense-in-depth principles:
-
-### 1. Unix Domain Socket & Filesystem Permissions
-- The local daemon listens on `.marshal/runtime.sock` with file mode `0600` (accessible exclusively by the owner).
-- The project runtime directory `.marshal/` is initialized with mode `0700`.
-- All mutation endpoints verify client process identity (UID/GID matching).
-
-### 2. Linux Bubblewrap (`bwrap`) Execution Cells
-- Provider CLI processes run inside unprivileged Linux user and mount namespaces.
-- The host root filesystem is mounted strictly read-only (`--ro-bind / /`).
-- Minimal required configuration files (e.g., `~/.codex/auth.json`) are explicitly bound read-only; general user home directories are not exposed.
-- Dedicated tmpfs directories are mounted for provider caches, local storage, and logs (`/home/marshal/.cache`, `/home/marshal/.local`).
-- Process-only (unsandboxed) execution is disabled by default and requires explicit opt-in (`AllowProcessOnlyFallback`), restricted strictly to low-risk `R0`/`R1` tasks.
-
-### 3. Deny-by-Default Network Policy
-- Sandboxed execution cells invoke Bubblewrap with `--unshare-net` to isolate network access completely.
-- Because Bubblewrap toggles networking entirely and cannot enforce host/port allowlists on its own, endpoint-restricted network requests fail closed with `NET_ENFORCEMENT_UNAVAILABLE` until an enforcing proxy is wired.
-
-### 4. Secrets Boundary & Automatic Redaction
-- API tokens (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, etc.) are leased with short 5-minute expirations and revoked immediately after execution.
-- High-entropy secrets and leased values are automatically stripped from stdout, stderr, event payloads, and artifact reports before persistence.
-
----
-
-## Provider Adapters and Verification Status
-
-MARSHAL includes process adapters for major agent CLIs. Adapters probe provider binaries dynamically and distinguish between implementation, availability, and end-to-end verification.
-
-| Provider Adapter | Runtime Adapter | Release Probe Status | Adapter / Model E2E | Canonical Runtime E2E |
-|---|:---:|---|---|---|
-| **Codex** (`codex`) | Yes | PASS (`codex-cli 0.149.1`) | NOT_RUN — credentialed run not enabled | NOT_RUN |
-| **OpenCode + DeepSeek V4** (`opencode`) | Yes | PASS (`opencode 1.18.16`) | PASS — Flash (7.01s) & Pro (6.64s) | NOT_RUN — enforcing egress proxy unavailable |
-| **OpenCode + Local Ollama** (`opencode`) | Yes | PASS (`ollama 0.32.9`) | FAIL — tested local models did not satisfy proof task | NOT_RUN — enforcing egress proxy unavailable |
-| **Gemini CLI** (`gemini`) | Yes | NOT_AVAILABLE — binary absent on release host | NOT_RUN — binary unavailable | NOT_RUN |
-| **Claude Code** (`claude`) | Yes | PASS (`claude 2.1.198`) | NOT_RUN — credentialed run not enabled | NOT_RUN |
-
-> **Verification Policy**: "Adapter Implemented" means the codebase contains a tested process adapter. External provider tests require installed binaries, valid credentials, or running local models. Tests that are skipped or not run are never reported as verified.
-
----
-
----
-
-## Community Resource Awareness
-
-MARSHAL includes a bounded, read-only host resource inspector that gathers point-in-time system telemetry:
-
-- **Host Metrics**: CPU model, logical and effective cores, cgroup CPU quotas, total/available RAM, swap usage, and disk storage.
-- **Accelerators & GPUs**: GPU vendor, model, total/used VRAM, temperature, and memory semantics. Shared or integrated GPU memory is accurately reported as `SHARED_OR_UNKNOWN` rather than assumed to be zero.
-- **Local Ollama Discovery**: Probes loopback Ollama instances (`http://127.0.0.1:11434`), catalogs installed models, and evaluates compatibility against available system RAM.
-- **Advisory Guidance**: Generates conservative concurrency and model fit recommendations.
-
-> **Community Boundary**: Resource awareness is strictly advisory. It never modifies scheduler limits, provider selection, or runtime concurrency dynamically. Adaptive resource governors, aggressive performance modes, fleet placement, and autonomous optimization are excluded from the Community edition.
-
----
-
-## Current Release Status
-
-Two things are tracked separately, because they differ:
-
-| Property | Current `main` |
-|---|---|
-| **Runtime spec** | `1.5.0` |
-| **Database Schema** | **`v86`** (SQLite in WAL mode) |
-| **Governed lifecycle** | Process 03–08 merged |
-
-Earlier release archives carry earlier schemas; the release notes for a tag state
-what that archive contains.
-
-| Property | Current Specification |
-|---|---|
-| **Pack Version** | **`6.0.0`** |
-| **Runtime Spec Version** | **`1.5.0`** |
-| **MCP Protocol** | **`2026-07-28`** |
-| **A2A Wire Version** | **`1.0`** (Protocol `1.0.0`) |
-| **Platform Support** | Linux (`x86_64` / `amd64` and `aarch64` / `arm64`) |
-| **Sandbox Engine** | Linux `bubblewrap` (`bwrap`) |
-
----
-
-## Installation
-
-### Option A: One command (Linux)
+Run Claude Code, Codex and other agent CLIs inside one governed workspace: sandboxed
+execution, durable shared memory, and a record of what each agent actually did.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
 ```
 
-Resolves the latest release, downloads the archive for this machine, verifies it
-against the release's published checksums and installs it to `~/.local/bin`. It
-uses no `sudo` and touches nothing outside the install directory. A download that
-fails checksum verification is not installed.
+---
+
+## Why
+
+Agent CLIs edit files and run commands with your full privileges. Each one keeps its
+own history, so they cannot see each other's work, and when a session ends its
+reasoning is scattered across terminal scrollback.
+
+MARSHAL sits between you and those CLIs. It runs them in isolated execution cells,
+records what they do in a project-local database, and lets them build on each other's
+work instead of starting blind.
+
+Nothing runs unless you ask for it. When a security boundary cannot be enforced,
+MARSHAL fails closed rather than proceeding.
+
+---
+
+## Install
+
+**Linux, one command:**
 
 ```bash
-# Install somewhere else, or pin a version
+curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
+```
+
+Resolves the latest release, verifies the download against its published checksums,
+and installs to `~/.local/bin`. No `sudo`; nothing outside the install directory is
+touched. A download that fails verification is not installed.
+
+```bash
+# Choose the location, or pin a version
 MARSHAL_INSTALL_DIR=/usr/local/bin MARSHAL_VERSION=v0.0.1 \
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh)"
 ```
 
-Release binaries are built for Linux on amd64 and arm64. On any other platform,
-build from source.
-
-### Option B: Download the release archive yourself
-
-Download the archive for your architecture and `checksums.txt` from the
+**From a release archive** — download the archive and `checksums.txt` from the
 [latest release](https://github.com/Zen1th53/marshal/releases/latest):
 
 ```bash
-# Verify checksums
 sha256sum -c checksums.txt --ignore-missing
-
-# Extract and install binary
 tar -xzf marshal_<version>_linux_amd64.tar.gz
 install -Dm755 marshal "$HOME/.local/bin/marshal"
-
-# Verify installation
-marshal version
 ```
 
-### Option C: Build from Source
+**From source** — requires Go and `git`:
 
 ```bash
-git clone https://github.com/Zen1th53/marshal.git
-cd marshal
-go build -o bin/marshal ./cmd/marshal
-sudo cp bin/marshal /usr/local/bin/
-marshal version
+go install github.com/Zen1th53/marshal/cmd/marshal@latest
 ```
 
-### Prerequisites
-- **Operating System**: Linux host (Ubuntu, Debian, Fedora, Arch, BlackArch, Alpine).
-- **Core Dependencies**: Git, Linux `bubblewrap` (`bwrap`).
-- **Build Requirements**: Go `1.25` or newer (only required when building from source).
-- **Provider CLIs**: `codex-cli`, `opencode`, `gemini`, or `claude` (only required when executing tasks with that specific provider).
+Release binaries are built for Linux on **amd64** and **arm64**. Sandboxed execution
+requires [Bubblewrap](https://github.com/containers/bubblewrap) (`bwrap`). Provider
+CLIs and their credentials are yours: MARSHAL does not bundle or proxy them.
 
 ---
 
-## 5-Minute Quick Start
-
-### 1. Initialize Repository
-Run `marshal init` inside any Git repository to create default policy files and the `.marshal/` directory:
+## Quick start
 
 ```bash
-cd /path/to/repository
-marshal init
-```
-
-### 2. Run System Health Diagnostics
-Check local environment health, file permissions, and provider binary availability:
-
-```bash
-marshal doctor --probe-providers
-```
-
-### 3. Start Local Daemon
-Launch the control plane daemon in a background terminal or service:
-
-```bash
-marshal daemon
-```
-
-Verify daemon connectivity and control plane status:
-
-```bash
-marshal status
+cd /path/to/your/repository
+marshal init        # create the project runtime
+marshal doctor      # check the host, and optionally probe installed agent CLIs
+marshal tui         # open the workspace
 ```
 
 ---
 
-## First Task Workflow
+## The workspace
 
-### 1. Define Task Schema (`tasks.json`)
-```json
-[
-  {
-    "id": "TASK-DEMO-001",
-    "title": "Implement application health check endpoint",
-    "status": "ready",
-    "risk": "R1"
-  }
-]
+`marshal tui` opens a terminal workspace where you drive agents by name.
+
+```
+/claude          open a native Claude Code session
+/codex           open a native Codex session
+/status          what the project and the current run look like
+/memory search   search what agents have done here
 ```
 
-### 2. Register Agent & Import Task
-```bash
-# Register an agent with the developer role
-marshal agent register --name local-dev --role developer
+**Agents run natively.** A session uses your own configuration, authentication,
+skills, MCP servers and plugins, and its own permission prompts. MARSHAL does not
+stand between the agent and you.
 
-# Import task into the SQLite control plane
-marshal task import tasks.json
-marshal tasks
-marshal task show TASK-DEMO-001
-```
+**Everything is recorded.** Conversation, tool calls, and the code an agent wrote or
+deleted are captured to the project database as it works. Hidden reasoning is never
+stored, and tool output is bounded so one large dump cannot crowd out the record.
 
-### 3. Execute Task with Selected Provider
-```bash
-# Execute using Codex adapter
-marshal run TASK-DEMO-001 --adapter codex
+**Agents build on each other.** A starting session receives a briefing compiled from
+what the *other* agents have done in this project, and MARSHAL keeps it current while
+the session runs — so Codex can pick up where Claude left off, and the reverse.
 
-# Or execute using OpenCode with DeepSeek V4
-marshal run TASK-DEMO-001 --adapter opencode --model deepseek-v4
-```
-
-### 4. Inspect Logs & Verify Changes
-```bash
-# View execution output, generated artifacts, and event timeline
-marshal logs TASK-DEMO-001
-
-# Run repository verification suite
-marshal verify -- go test ./...
-```
+**Nothing starts by accident.** Plain text runs nothing, and a command typed without
+its slash is answered with the command it looks like. Launching an agent is always
+something you asked for.
 
 ---
 
-## Command Reference Summary
+## What it does
 
-| Command | Description |
+| | |
 |---|---|
-| `marshal version` | Output MARSHAL version, commit SHA, build date, and database schema version |
-| `marshal goal <request>` | State a request and see MARSHAL's understanding, constraints, and risk tier before any work starts |
-| `marshal plan create · show · approve · cancel · handoff` | Create, inspect and approve a task plan with its DAG, team and verification policy |
-| `marshal exec start · run · status · approve · rollback · handoff` | Drive a governed execution run, approve a gate, or roll back to a checkpoint |
-| `marshal review start · status · evaluate · attest` | Run independent verification and issue a digest-bound completion attestation |
-| `marshal learning search · trust · fingerprints · playbooks · history · export` | Query evidence-gated memory, routing trust and failure fingerprints |
-| `marshal optimization start · show · candidates · counterfactuals · manifests · canaries` | Inspect optimization cycles, counterfactual evaluations and bounded canaries |
-| `marshal init` | Initialize `.marshal/` runtime directory and default policy files |
-| `marshal doctor [--probe-providers]` | Run system health diagnostics and optional provider binary discovery |
-| `marshal daemon` | Launch the local control plane daemon background server |
-| `marshal status` | Query active tasks, registered agents, and daemon health |
-| `marshal tui [--session ID] [--theme NAME]` | Launch interactive terminal-first command center and multi-agent workspace |
-| `marshal agent register --name NAME --role ROLE` | Register an agent principal with an assigned role |
-| `marshal agents` | List all registered agents and their capability configurations |
-| `marshal tasks` | List all tasks and their current lifecycle statuses |
-| `marshal task import <FILE> [--dry-run]` | Import tasks from a JSON specification file |
-| `marshal task show <TASK-ID>` | Display detailed metadata and revision state for a task |
-| `marshal task claim <TASK-ID> --agent <ID>` | Atomically claim a task and obtain an execution lease |
-| `marshal task release <TASK-ID>` | Release an active task lease back to the queue |
-| `marshal run <TASK-ID> --adapter <NAME>` | Execute a ready task inside an isolated Bubblewrap execution cell |
-| `marshal logs <TASK-ID>` | Display execution logs, generated artifacts, and event timeline |
-| `marshal cancel <TASK-ID>` | Gracefully cancel an active task execution |
-| `marshal adapters` | Display discovered provider CLIs and availability states |
-| `marshal adapter probe <NAME>` | Perform capability probe on a specific provider adapter |
-| `marshal mcp serve [--listen ADDR]` | Launch Model Context Protocol (2026-07-28) HTTP JSON-RPC server |
-| `marshal a2a serve [--listen ADDR]` | Launch Agent-to-Agent (1.0) HTTP/JSON server |
-| `marshal events` | Stream or list recorded runtime audit events |
-| `marshal artifacts` | List content-addressed SHA-256 artifacts in the local store |
-| `marshal verify [-- cmd args...]` | Execute standalone command verification in the repository root |
-| `marshal reconcile --file-state <FILE>` | Reconcile external file state against canonical control plane |
-| `marshal memory status` | Display memory fabric health, record count, and schema version |
-| `marshal memory recall <QUERY>` | Perform multi-track memory recall against authorized scopes |
-| `marshal memory list` | List stored durable memory records |
-| `marshal memory show <ID>` | Display detailed contents of a specific memory record |
-| `marshal memory promote <ID>` | Promote a working or candidate memory record to project scope |
-| `marshal memory tombstone <ID>` | Mark a memory record as tombstoned |
-| `marshal memory audit` | View memory access, conflict, and modification audit history |
-| `marshal policy test <SUITE-FILE>` | Execute security policy test suite against policy engine |
-| `marshal legal audit [--json]` | Perform IP provenance and chain-of-title compliance audit |
-| `marshal legal export --output <PATH>` | Export signed legal provenance archive |
+| **Sandboxed execution** | Agent processes run in isolated cells with a read-only root, private runtime directories and no network by default. |
+| **Isolated worktrees** | Work happens on a dedicated Git worktree and branch, so your working tree is never the experiment. |
+| **Shared memory** | A project-local record of sessions, decisions and outcomes, searchable across agents and across time. |
+| **Authorization** | Capability grants are explicit and time-bounded; risk is assessed before a command runs, not after. |
+| **Secret handling** | Credentials are redacted from stored output and never enter durable memory. |
+| **Evidence** | Command output and artifacts are content-addressed and linked to the commit they produced. |
+| **Interoperability** | Model Context Protocol and Agent-to-Agent endpoints for tools that speak them. |
 
-For comprehensive CLI documentation, see [docs/cli.md](docs/cli.md).
+For the command surface see the [CLI reference](docs/cli.md); for how the workspace
+behaves see the [TUI guide](docs/tui.md).
 
 ---
 
-## Verification & Release Integrity
+## Requirements
 
-Every official release of MARSHAL undergoes automated verification:
-- **Reproducible Binaries**: Linux `amd64` and `arm64` release archives built with deterministic toolchains.
-- **SHA-256 Checksums**: Cryptographic verification manifests (`checksums.txt`) published with every release.
-- **SPDX Software Bill of Materials (SBOM)**: Machine-readable dependency inventories accompanying release assets.
-- **Cryptographic Attestations**: GitHub Actions build-provenance attestations verifying artifact authenticity.
+- **Linux** — the supported platform for sandboxed execution. There is no equivalent
+  sandbox backend for macOS or Windows.
+- **Bubblewrap** (`bwrap`) — required for execution cells.
+- **Git** — MARSHAL operates on a Git repository.
+- **Agent CLIs** — install and authenticate the ones you want to use.
 
----
-
-## Known Limitations
-
-- **Endpoint-Restricted Provider Egress**: Bubblewrap cannot enforce granular host/port allowlists on its own. Because an enforcing proxy is not currently wired in the live runtime, network-required runs fail closed with `NET_ENFORCEMENT_UNAVAILABLE`.
-- **Supported Sandbox Backend**: Linux Bubblewrap (`bwrap`) is the supported production sandbox backend. There is no equivalent sandboxing backend for macOS or Windows.
-- **Vector Retrieval**: Vector similarity search requires an external or local embedding provider; exact and lexical search operate independently on canonical SQLite.
-- **Third-Party Security Audits**: Automated test suites validate core security invariants; MARSHAL does not claim an external third-party certification or audit.
+Run `marshal doctor` to see what is present and what is missing.
 
 ---
 
-## Community vs Enterprise Boundary
+## Limitations
 
-| Feature Area | MARSHAL Community (Open Source) | MARSHAL Enterprise (Commercial) |
-|---|---|---|
-| **Architecture Model** | Local, single-node, project-scoped runtime with CLI/TUI/MCP/A2A access | Remote Web control plane and multi-node distributed fleet orchestration |
-| **Persistence Engine** | Project-local SQLite (`.marshal/state.db`) | Centralized multi-tenant database clusters |
-| **Resource Awareness** | Bounded, read-only host telemetry & advice | Adaptive resource governors & dynamic fleet placement |
-| **Agent Tuning** | Manual model selection per task run | Autonomous cross-model routing & auto-tuning |
-| **Web and Organization Control** | Not included; no Web routes or listener in the Community binary | Remote Web access, multi-user RBAC, centralized approvals/policies, and fleet operations |
-| **Licensing** | GNU AGPL-3.0-only | Commercial proprietary license (non-AGPL) |
+Stated plainly, because a control plane that overstates its guarantees is worse than
+none:
+
+- **Network egress is not granularly filtered.** Runs that require network access fail
+  closed rather than proceeding with unenforced policy.
+- **Linux only** for sandboxed execution.
+- **Vector search needs an embedding provider.** Exact and lexical search work without
+  one.
+- **No third-party security audit.** Automated suites cover the security invariants;
+  that is not the same as external certification.
 
 ---
 
-## Documentation Directory
+## Documentation
 
-- [Documentation Hub](docs/README.md) — Documentation index and sitemap
-- [Getting Started Guide](docs/getting-started.md) — Step-by-step tutorial
-- [Installation Guide](docs/installation.md) — Binary and source installation instructions
-- [Architecture Specification](docs/architecture.md) — Detailed subsystem design
-- [CLI Reference](docs/cli.md) — Exhaustive command reference
-- [Security Model](docs/security-model.md) — Threat model and isolation boundaries
-- [Runtime Memory Fabric](docs/runtime-memory-fabric.md) — Memory architecture and lifecycle
-- [Provider Support Guide](docs/providers.md) — Adapter specifications and configuration
-- [Resource Awareness](docs/resources.md) — Host telemetry and local Ollama discovery
-- [Policy-as-Code](docs/policy-as-code.md) — Policy rules and capability broker
-- [MCP Protocol Guide](docs/mcp.md) — Model Context Protocol integration
-- [A2A Protocol Guide](docs/a2a.md) — Agent-to-Agent wire protocol
-- [Execution Cells](docs/execution-cells.md) — Sandboxing and process lifecycle
-- [Troubleshooting](docs/troubleshooting.md) — Diagnostics and error recovery
-- [Legal Audit Guide](docs/legal/IP-PROVENANCE-AUDIT.md) — IP provenance and compliance
+| | |
+|---|---|
+| [Getting started](docs/getting-started.md) | Step-by-step tutorial |
+| [TUI guide](docs/tui.md) | The workspace, native sessions and shared memory |
+| [CLI reference](docs/cli.md) | Every command |
+| [Security model](docs/security-model.md) | Threat model and isolation boundaries |
+| [Providers](docs/providers.md) | Supported agent CLIs and configuration |
+| [Troubleshooting](docs/troubleshooting.md) | Diagnostics and recovery |
+| [Documentation hub](docs/README.md) | Everything else |
+
+---
+
+## Community and Enterprise
+
+MARSHAL Community is a local, single-node, project-scoped runtime — the whole of this
+repository. Enterprise adds a remote web control plane, multi-node fleet
+orchestration, centralized approvals and multi-user access control under a separate
+commercial license. No web routes or listeners ship in the Community binary.
 
 ---
 
 ## Contributing
 
-We welcome community contributions! Please review our contributor documentation before submitting pull requests:
-- [CONTRIBUTING.md](CONTRIBUTING.md) — Development workflow, testing standards, and PR guidelines
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Community standards and expectations
-- [SECURITY.md](SECURITY.md) — Vulnerability reporting policy and private contact details
+Issues and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md)
+and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) first.
+
+Security vulnerabilities: follow [SECURITY.md](SECURITY.md) and report privately
+rather than opening a public issue.
 
 ---
 
-## Licensing
+## License
 
-MARSHAL is available under dual-licensing terms:
-
-- **Community Edition**: Licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`). See [LICENSE](LICENSE).
-- **Commercial Licensing**: Commercial licenses without AGPL copyleft requirements are available for enterprise organizations. See [LICENSING.md](LICENSING.md) and [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
-- **Historical Grants**: Historical releases up to `runtime-v0.4.0` remain available under their original `Apache-2.0` grants. See [docs/legal/LICENSE-HISTORY.md](docs/legal/LICENSE-HISTORY.md).
-- **Third-Party Notices**: Attributions for third-party libraries and dependencies are cataloged in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- **Community** — GNU Affero General Public License v3.0 only. See [LICENSE](LICENSE).
+- **Commercial** — licenses without AGPL copyleft are available. See
+  [LICENSING.md](LICENSING.md).
+- **Historical releases** up to `runtime-v0.4.0` remain under their original
+  Apache-2.0 grants. See [docs/legal/LICENSE-HISTORY.md](docs/legal/LICENSE-HISTORY.md).
+- **Third-party** attributions: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
