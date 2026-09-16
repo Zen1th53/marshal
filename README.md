@@ -11,7 +11,7 @@ running in sandboxed cells, with a record of everything they did.**
 [![Release](https://img.shields.io/github/v/release/Zen1th53/marshal?color=blue)](https://github.com/Zen1th53/marshal/releases)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Zen1th53/marshal)](https://go.dev)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux-informational)](#requirements)
+[![Platform](https://img.shields.io/badge/platform-Linux-informational)](#platform-support)
 [![Stars](https://img.shields.io/github/stars/Zen1th53/marshal?style=social)](https://github.com/Zen1th53/marshal/stargazers)
 
 ```bash
@@ -21,6 +21,7 @@ curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | 
 [Quick start](#quick-start) ·
 [Features](#features) ·
 [Security](#security-you-do-not-have-to-configure) ·
+[Platforms](#platform-support) ·
 [Docs](#documentation) ·
 [Limitations](#limitations)
 
@@ -50,21 +51,21 @@ others' work.
 <tr>
 <td width="33%" valign="top">
 
-### 🧠 Shared memory
+### Shared memory
 Every conversation, tool call and diff is saved automatically and can be
 searched across agents and across sessions.
 
 </td>
 <td width="33%" valign="top">
 
-### 🤝 Agents that cooperate
+### Agents that cooperate
 Codex starts out knowing what Claude just changed, and Claude knows what Codex
 changed. A live inbox keeps parallel sessions up to date.
 
 </td>
 <td width="33%" valign="top">
 
-### 🛡️ Fail-closed security
+### Fail-closed security
 Agents run in sandboxed cells on their own worktrees, and secrets are redacted.
 If a boundary can't be enforced, the run stops.
 
@@ -81,20 +82,20 @@ If a boundary can't be enforced, the run stops.
 
 | | Running agent CLIs by hand | **With MARSHAL** |
 |---|:---:|:---:|
-| Several agents in one project | separate silos | ✅ one workspace |
-| Memory across sessions and agents | ❌ | ✅ automatic, searchable |
-| Agent B knows what agent A changed | ❌ | ✅ briefing and live inbox |
-| Sandboxed execution | ❌ | ✅ Bubblewrap cells |
-| Isolated Git worktree per run | ❌ | ✅ |
-| Secrets kept out of stored history | ❌ | ✅ redacted before writing |
-| Verifiable record of what changed | ❌ | ✅ content-addressed evidence |
-| Native agent UX (your config, auth, skills, MCP) | ✅ | ✅ unchanged, not proxied |
+| Several agents in one project | Separate silos | One workspace |
+| Memory across sessions and agents | No | Yes, automatic, searchable |
+| Agent B knows what agent A changed | No | Yes, briefing and live inbox |
+| Sandboxed execution | No | Yes, Bubblewrap cells |
+| Isolated Git worktree per run | No | Yes |
+| Secrets kept out of stored history | No | Yes, redacted before writing |
+| Verifiable record of what changed | No | Yes, content-addressed evidence |
+| Native agent UX (your config, auth, skills, MCP) | Yes | Yes, unchanged and not proxied |
 
 ---
 
 ## Features
 
-### 🖥️ One workspace, every agent
+### One workspace, every agent
 
 ```bash
 marshal tui
@@ -144,7 +145,7 @@ so they don't interfere with each other.
 See the [workspace guide](docs/tui.md) for the full command reference.
 </details>
 
-### 🧠 Memory that saves itself
+### Memory that saves itself
 
 You never have to save anything. From the moment an agent starts, MARSHAL writes
 to the project database every two seconds, and again when the agent exits:
@@ -169,7 +170,7 @@ marked as truncated.
 Records are kept as **observations, not verified facts**. MARSHAL shows where
 each one came from, so an agent's guess is never presented as settled fact.
 
-### 🤝 Agents that build on each other
+### Agents that build on each other
 
 *This is what you can't get by running the CLIs yourself.*
 
@@ -186,7 +187,7 @@ The briefing and the inbox both label themselves as **untrusted data, not
 instructions**. They quote other agents' output, which can contain anything those
 agents happened to read, and nothing in them overrides you.
 
-### 🛡️ Security you do not have to configure
+### Security you do not have to configure
 
 - **Sandboxed execution.** Agent processes run in isolated cells with a read-only
   root filesystem, private runtime directories, and no network by default.
@@ -203,7 +204,7 @@ agents happened to read, and nothing in them overrides you.
   the session needs a cryptographically verified entitlement. A local flag can't
   grant it, and the test suite includes bypass attempts that must fail.
 
-### 🔍 Evidence you can check later
+### Evidence you can check later
 
 Command output and artifacts are content-addressed and linked to the commit that
 produced them. When you ask "what did this run actually change?", you get an
@@ -218,7 +219,7 @@ answer you can verify, not a log you have to take on trust.
 - **Evidence bundles**: `/export` writes a bundle with a deterministic digest to
   `.marshal/evidence/`.
 
-### 🧭 A governed lifecycle, from goal to attestation
+### A governed lifecycle, from goal to attestation
 
 For work that needs more than a chat session, MARSHAL provides a governed
 pipeline. Each stage writes a versioned record tied to an exact repository state,
@@ -235,7 +236,7 @@ marshal learning search ...                    # memory filtered by evidence
 Exiting with status zero doesn't make a run verified. Completion requires every
 mandatory criterion to be met and critical evidence from independent sources.
 
-### 🔌 Integrations
+### Integrations
 
 - **MCP server** (`marshal mcp serve`): an authenticated
   [Model Context Protocol](docs/mcp.md) endpoint for IDEs and orchestrators.
@@ -343,6 +344,16 @@ mode.
 
 ---
 
+## Platform support
+
+| Platform | Status | Notes |
+|---|:---:|---|
+| **Linux** | Released | Fully supported, with sandboxed execution through Bubblewrap. [Download](https://github.com/Zen1th53/marshal/releases/latest) |
+| **macOS** | Planned | On the roadmap. It needs a native sandbox backend first. |
+| **Windows** | Under consideration | No commitment yet. The Linux build may work under WSL2, but it is untested. |
+
+---
+
 ## Requirements
 
 | | |
@@ -407,7 +418,7 @@ first.
 To report a security vulnerability, follow [SECURITY.md](SECURITY.md) and report
 it privately rather than opening a public issue.
 
-If MARSHAL is useful to you, **a ⭐ helps other people find it.**
+If MARSHAL is useful to you, **starring the repository helps other people find it.**
 
 ---
 
