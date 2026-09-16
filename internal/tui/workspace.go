@@ -102,7 +102,11 @@ type Workspace struct {
 	exitRequested         bool
 	nativeOnStart         *[]string
 	nativeStartupProvider string
-	nativeProvider        string
+	// nativeProvider records which agent a session last opened. It is an
+	// observation of what happened, not a routing decision: nothing is dispatched
+	// to "the last provider", because launching an agent is always something the
+	// operator asked for by name.
+	nativeProvider string
 
 	// Scroll and activity unread tracking
 	scrollOffset int

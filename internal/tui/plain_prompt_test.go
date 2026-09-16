@@ -37,7 +37,8 @@ func TestPlainTextStartsNothing(t *testing.T) {
 	}
 }
 
-// Having used an agent does not make the next bare line a prompt for it.
+// Having used an agent does not make the next bare line a prompt for it. The
+// last-opened provider is recorded, but it is never routed to.
 func TestPlainTextStartsNothingAfterAnAgentWasUsed(t *testing.T) {
 	_, ws, ctx := newControlWorkspace(t)
 	ws.nativeProvider = "codex"
