@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // Exercise the compiled host and a real controlling terminal. A mock authority
@@ -49,7 +50,12 @@ exit 0
 	// Returning to MARSHAL must reclaim input and leave commands usable.
 	s.sendLine("/status")
 	s.mustSee("CANONICAL STATUS DETAIL")
+	// The first session already printed the ready marker, so wait for a second
+	// one: typing before the child reads its terminal hands the line to MARSHAL.
 	s.sendLine(`/codex cli --marshal-native-test`)
+	if !s.waitForCount("NATIVE-READY", 2, 8*time.Second) {
+		t.Fatalf("second Codex session did not start.\n--- output tail ---\n%s", tail(s.output(), 3000))
+	}
 	s.sendLine("SECOND-SESSION")
 	s.mustSee("NATIVE-INPUT:<SECOND-SESSION>")
 	s.mustSee("0 message(s), including tool calls, saved to MARSHAL memory")

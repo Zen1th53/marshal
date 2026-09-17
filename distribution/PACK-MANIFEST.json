@@ -8606,8 +8606,8 @@
     },
     {
       "path": "internal/tui/native_claude_pty_test.go",
-      "sha256": "d5612e9f67421477fe65470975d3e14e16b971c9281075c7f7d10524b7834c94",
-      "bytes": 3511
+      "sha256": "ba6cc4a65ad40bd78dd97aed22d2cc77fb10585f38c86994376ccde94e0ddcf2",
+      "bytes": 4012
     },
     {
       "path": "internal/tui/native_claude_test.go",
@@ -8621,8 +8621,8 @@
     },
     {
       "path": "internal/tui/native_codex_pty_test.go",
-      "sha256": "b34251b4bae192a5a6988b734b926f9b640e416d4b8703d26e1e14e1a4a7a5cd",
-      "bytes": 2313
+      "sha256": "b5bdf1e1b02bd7a3ee78cef943853010b228e8451e6585555d9989146e46d85b",
+      "bytes": 2635
     },
     {
       "path": "internal/tui/native_codex_test.go",

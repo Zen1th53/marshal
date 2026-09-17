@@ -47,20 +47,35 @@ cp "$MARSHAL_TEST_CLAUDE_HISTORY" "$CLAUDE_CONFIG_DIR/projects/fixture/session.j
 	// the form operators actually type, and it is the one that matches the
 	// provider's own invocation name, so it is asserted before the flag-bearing
 	// variants below.
+	// Each session must be over before the next command is typed: while the
+	// child still owns the terminal, Enter arrives as a newline and MARSHAL
+	// keeps the command in the composer instead of running it.
+	exits := 0
+	waitForExit := func() {
+		t.Helper()
+		exits++
+		if !s.waitForCount("Claude exited.", exits, 8*time.Second) {
+			t.Fatalf("Claude session %d did not return to MARSHAL.\n--- output tail ---\n%s", exits, tail(s.output(), 3000))
+		}
+	}
+
 	s.sendLine("/claude")
 	s.mustSee("CLAUDE-NATIVE-READY")
 	s.sendLine("BARE-CLAUDE")
 	s.mustSee("CLAUDE-INPUT:<BARE-CLAUDE>")
+	waitForExit()
 
 	s.sendLine(`/claude cli --marshal-native-test --add-dir "directory with spaces"`)
 	s.mustSee("CLAUDE-ARG:<directory with spaces>")
 	s.sendLine("FIRST-KEY")
 	s.mustSee("CLAUDE-INPUT:<FIRST-KEY>")
+	waitForExit()
 	s.mustSee("Claude exited. 2 message(s), including tool calls, saved")
 	s.sendLine("/claude continue")
 	s.mustSee("CLAUDE-ARG:<--continue>")
 	s.sendLine("CONTINUED")
 	s.mustSee("CLAUDE-INPUT:<CONTINUED>")
+	waitForExit()
 	s.mustSee("Claude exited. 0 message(s), including tool calls, saved")
 	s.sendLine("/memory search visible")
 	s.mustSee("MEMORY RECORDS (2 of 2)")
