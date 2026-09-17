@@ -111,7 +111,7 @@ func resolveInjectChannel(provider string, configured injectChannel) (injectChan
 		if provider == "claude" {
 			return injectSystemPrompt, ""
 		}
-		return injectProjectDoc, "Codex has no system-prompt flag; briefing delivered through " + projectDocName(provider) + " instead."
+		return injectProjectDoc, fmt.Sprintf("%s has no system-prompt flag; briefing delivered through %s instead.", providerDisplayName(provider), projectDocName(provider))
 	}
 	return configured, ""
 }
@@ -293,11 +293,27 @@ func applyBriefing(provider, root string, args []string, briefing string, channe
 
 	case injectPrompt:
 		prompt := briefing + "\n\nAcknowledge in one line, then wait for the operator."
+		if provider == "opencode" {
+			return append([]string{"--prompt", prompt}, args...), fmt.Sprintf("Cross-agent briefing passed as the opening prompt (%d bytes); it will consume one turn.", len(briefing)), nil
+		}
 		// After `--` every argument is the prompt, so the briefing appends there
 		// rather than becoming a stray positional the CLI would reject.
 		return append(args, prompt), fmt.Sprintf("Cross-agent briefing passed as the opening prompt (%d bytes); it will consume one turn.", len(briefing)), nil
 	}
 	return args, "", fmt.Errorf("unsupported injection channel %q", channel)
+}
+
+func providerDisplayName(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "codex":
+		return "Codex"
+	case "claude":
+		return "Claude"
+	case "opencode":
+		return "OpenCode"
+	default:
+		return provider
+	}
 }
 
 // writeProjectDocBlock replaces MARSHAL's marked block in the project document

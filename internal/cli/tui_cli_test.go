@@ -31,6 +31,17 @@ func TestNativeClaudeArgumentsPassThrough(t *testing.T) {
 	}
 }
 
+func TestNativeOpenCodeArgumentsPassThrough(t *testing.T) {
+	want := []string{"--session", "session name", "--model", "openai/gpt-5"}
+	options := parseWorkspaceArgs(append([]string{"--opencode"}, want...))
+	if !reflect.DeepEqual(options.nativeOpenCode, want) {
+		t.Fatalf("native args changed: %q", options.nativeOpenCode)
+	}
+	if parseWorkspaceArgs([]string{"--opencode"}).nativeOpenCode == nil {
+		t.Fatal("empty native launch lost")
+	}
+}
+
 func TestTUICLIInvocation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

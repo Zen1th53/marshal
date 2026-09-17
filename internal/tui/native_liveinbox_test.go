@@ -17,6 +17,9 @@ func TestPeerProvidersExcludesTheRunningOne(t *testing.T) {
 	if got := peerProviders("codex"); len(got) != 1 || got[0] != "claude" {
 		t.Errorf("peers of codex = %v, want [claude]", got)
 	}
+	if got := peerProviders("opencode"); len(got) != 2 || got[0] != "codex" || got[1] != "claude" {
+		t.Errorf("peers of opencode = %v, want [codex claude]", got)
+	}
 }
 
 // A stale inbox would present another session's finished work as though it were

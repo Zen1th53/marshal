@@ -153,6 +153,10 @@ func truncateInboxEntry(s string) string {
 // peerProviders lists the providers a running session should watch for updates.
 func peerProviders(running string) []string {
 	var peers []string
+	// Codex and Claude histories are append-only files and are safe to tail
+	// while another native session owns the terminal. OpenCode exposes history
+	// through a CLI export backed by its live database, so it is imported when
+	// its own process exits rather than polled from unrelated sessions.
 	for _, candidate := range []string{"codex", "claude"} {
 		if candidate != running {
 			peers = append(peers, candidate)

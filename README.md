@@ -22,6 +22,7 @@ curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | 
 [Features](#features) ·
 [Security](#security-you-do-not-have-to-configure) ·
 [Platforms](#platform-support) ·
+[Built with MARSHAL](#proudly-built-with-marshal) ·
 [Docs](#documentation) ·
 [Limitations](#limitations)
 
@@ -105,7 +106,9 @@ marshal tui
 |---|---|
 | `F8` · `/claude` | Open a native **Claude Code** session |
 | `F7` · `/codex` | Open a native **Codex** session |
-| `/claude continue` · `/codex continue` | Pick up where the agent left off |
+| `F9` · `/opencode` | Open a native **OpenCode** session |
+| `/claude continue` · `/codex continue` · `/opencode continue` | Pick up where the agent left off |
+| `/opencode resume <id>` · `/opencode fork <id>` | Resume or fork a specific OpenCode session |
 | `/codex new` · `/resume` · `/codex cli` | Start fresh, resume, or open the plain CLI |
 | `F1` Help · `F2` Review · `F3` Diff | Help, review, and the working-tree diff viewer |
 | `F4` Status · `F5` Models · `F6` MCP | Runtime state, models, MCP servers |
@@ -115,13 +118,23 @@ marshal tui
 Sessions are **native**. Claude Code runs as Claude Code, with your configuration,
 authentication, skills, MCP servers, plugins and its own permission prompts.
 MARSHAL doesn't proxy the provider, rewrite prompts, or get between you and the
-agent. Adapters also ship for **OpenCode**, **Gemini CLI** and **Antigravity**.
+agent. **Codex**, **Claude Code** and **OpenCode** run as native sessions, and
+adapters also ship for **Gemini CLI** and **Antigravity**.
+
+You can also skip the workspace and launch a native session straight from the
+shell. Any extra arguments go to the agent unchanged:
+
+```bash
+marshal codex
+marshal claude
+marshal opencode
+```
 
 The **Team** panel shows the real status of every harness. Each binary is
 actually probed, so a missing agent shows as `UNAVAILABLE` and is never faked.
 
 Once you leave an agent, switching to another takes one keypress. With two
-terminals open, Claude and Codex can run **at the same time** in the same
+terminals open, two agents can run **at the same time** in the same
 repository. They share one project memory, and each keeps its own import state,
 so they don't interfere with each other.
 
@@ -148,7 +161,8 @@ See the [workspace guide](docs/tui.md) for the full command reference.
 ### Memory that saves itself
 
 You never have to save anything. From the moment an agent starts, MARSHAL writes
-to the project database every two seconds, and again when the agent exits:
+to the project database every two seconds, and again when the agent exits.
+OpenCode sessions are imported automatically when the session closes:
 
 - **the conversation**: what you asked and what the agent answered
 - **every tool call**: the commands it ran and the files it opened
@@ -247,6 +261,35 @@ mandatory criterion to be met and critical evidence from independent sources.
 
 ---
 
+## Proudly built with MARSHAL
+
+MARSHAL is developed inside its own workspace. Its source code is written and
+reviewed in native Codex, Claude Code and OpenCode sessions opened through
+MARSHAL. Those sessions share one project memory, pick up each other's work
+through the cross-agent briefing, and run the same verification commands that
+are documented for users.
+
+```
+MARSHAL source repository
+        |
+        v
+MARSHAL workspace ---- Codex . Claude Code . OpenCode
+        |
+        |-- shared project memory (.marshal/state.db)
+        |-- source changes and tests
+        '-- release gate and tagged source commit
+                              |
+                              v
+               reproducible GitHub release artifacts
+```
+
+Self-hosting does not replace independent provenance. Release archives are
+built by the pinned GitHub Actions release workflow, and every commit, test run,
+checksum, SBOM and provenance attestation can be inspected independently.
+Commits made with an agent carry a `Co-authored-by` trailer naming it.
+
+---
+
 ## Architecture
 
 <div align="center">
@@ -273,7 +316,7 @@ outside the install directory. If verification fails, nothing is installed.
 
 ```bash
 # Choose the location, or pin a version
-MARSHAL_INSTALL_DIR=/usr/local/bin MARSHAL_VERSION=v0.0.1 \
+MARSHAL_INSTALL_DIR=/usr/local/bin MARSHAL_VERSION=v0.0.2 \
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh)"
 ```
 
@@ -317,6 +360,7 @@ Then, in the workspace:
 /claude                     work with Claude Code (or press F8)
                             ...exit the agent when you are done
 /codex                      hand over to Codex (F7); it already knows what changed
+/opencode                   or to OpenCode (F9); its session is saved when it exits
 /memory search <anything>   ask the project what happened
 /diff                       review the working tree
 ```

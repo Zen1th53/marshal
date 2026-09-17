@@ -38,11 +38,22 @@ func (s *MemoryService) ImportProviderSessionHistory(ctx context.Context, princi
 
 	committed := make([]model.MemoryRecordV2, 0, len(result.ImportedRecords))
 	for _, rec := range result.ImportedRecords {
+		// The deterministic ID is derived from project, session and visible
+		// content. Metadata such as the source CWD may change across exports and
+		// therefore change the canonical digest without changing that ID.
+		if existing, findErr := s.store.GetMemoryV2(ctx, projectID, rec.ID); findErr == nil && existing.ID != "" {
+			result.SkippedCount++
+			continue
+		}
 		if existing, findErr := s.store.FindMemoryByDigest(ctx, projectID, rec.ContentDigest); findErr == nil && existing.ID != "" {
 			result.SkippedCount++
 			continue
 		}
 		if err := s.store.WriteMemoryV2(ctx, rec); err != nil {
+			if s.importedConcurrently(ctx, projectID, rec.ID) {
+				result.SkippedCount++
+				continue
+			}
 			return importer.ImportResult{}, fmt.Errorf("persist imported record: %w", err)
 		}
 		if err := s.IndexRecord(ctx, rec); err != nil {
@@ -52,4 +63,13 @@ func (s *MemoryService) ImportProviderSessionHistory(ctx context.Context, princi
 	}
 	result.ImportedRecords = committed
 	return result, nil
+}
+
+// importedConcurrently reports whether a record that just failed to write was
+// committed by another importer in the meantime. Two MARSHAL sessions watching
+// the same provider history can both find a record absent and both try to
+// write it; the loser has nothing to do, so its import is not a failure.
+func (s *MemoryService) importedConcurrently(ctx context.Context, projectID, memoryID string) bool {
+	existing, err := s.store.GetMemoryV2(ctx, projectID, memoryID)
+	return err == nil && existing.ID != ""
 }

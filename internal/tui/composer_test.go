@@ -197,3 +197,29 @@ func TestComposerDynamicPrompt(t *testing.T) {
 		t.Fatalf("agent prompt must occupy a single line: %q", prompt2)
 	}
 }
+
+func TestComposerWordLeftPlacesCursorAtFirstInputCell(t *testing.T) {
+	c := NewComposer(NewTheme(ThemeDefault, true, true))
+	c.SetText("sadsaddsa")
+
+	if got := StripANSI(c.Render()); got != PromptMarker+" sadsaddsa" {
+		t.Fatalf("composer prompt = %q, want marker, space, and input", got)
+	}
+	if got := VisibleLen(PromptMarker); got != 1 {
+		t.Fatalf("prompt marker width = %d, want 1 terminal cell", got)
+	}
+
+	c.HandleKey(KeyEvent{Type: KeyWordLeft})
+	if got := c.CursorPos(); got != 0 {
+		t.Fatalf("word-left buffer cursor = %d, want 0", got)
+	}
+	line, col := c.CursorPosition()
+	if line != 0 || col != 2 {
+		t.Fatalf("word-left display cursor = (%d, %d), want (0, 2)", line, col)
+	}
+
+	frame := BuildFrame(UIState{}, c.theme, "", c, nil, 80, 24)
+	if frame.CursorCol != 3 {
+		t.Fatalf("hardware cursor column = %d, want 3", frame.CursorCol)
+	}
+}

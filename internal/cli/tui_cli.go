@@ -30,6 +30,9 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 	if options.nativeClaude != nil {
 		workspace.StartWithNativeClaude(options.nativeClaude)
 	}
+	if options.nativeOpenCode != nil {
+		workspace.StartWithNativeOpenCode(options.nativeOpenCode)
+	}
 
 	// Control submits every mutation through this runtime. Without it the
 	// Control screens render but every action refuses, which is the truthful
@@ -82,11 +85,12 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 }
 
 type workspaceOptions struct {
-	sessionID    string
-	theme        tui.ThemeMode
-	animation    bool
-	nativeCodex  []string
-	nativeClaude []string
+	sessionID      string
+	theme          tui.ThemeMode
+	animation      bool
+	nativeCodex    []string
+	nativeClaude   []string
+	nativeOpenCode []string
 }
 
 func parseWorkspaceArgs(args []string) workspaceOptions {
@@ -103,6 +107,9 @@ func parseWorkspaceArgs(args []string) workspaceOptions {
 			return options
 		case arg == "--codex":
 			options.nativeCodex = append([]string{}, args[i+1:]...)
+			return options
+		case arg == "--opencode":
+			options.nativeOpenCode = append([]string{}, args[i+1:]...)
 			return options
 		case arg == "--no-animation":
 			options.animation = false

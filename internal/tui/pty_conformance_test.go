@@ -217,6 +217,19 @@ func (s *ptySession) waitFor(want string, timeout time.Duration) bool {
 	return false
 }
 
+// waitForCount blocks until the substring has appeared at least n times, for
+// a marker an earlier step already printed.
+func (s *ptySession) waitForCount(want string, n int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if strings.Count(s.output(), want) >= n {
+			return true
+		}
+		time.Sleep(80 * time.Millisecond)
+	}
+	return false
+}
+
 func (s *ptySession) mustSee(want string) {
 	s.t.Helper()
 	if !s.waitFor(want, 8*time.Second) {
