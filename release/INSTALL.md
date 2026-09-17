@@ -35,6 +35,17 @@ To do it by hand instead:
    marshal doctor
    ```
 
+5. Launch a native provider session when its CLI is installed:
+
+   ```bash
+   marshal codex
+   marshal claude
+   marshal opencode
+   ```
+
+   Native OpenCode conversation and bounded tool evidence are automatically
+   captured as project candidate memory when the OpenCode process exits.
+
 Bubblewrap is required for sandboxed provider execution on Linux. Provider
 CLIs and credentials are optional and are not bundled. Use
 `marshal doctor --probe-providers` to probe installed providers.

@@ -9,6 +9,33 @@ MARSHAL is a local, security-focused runtime and control plane for coding agents
 
 Raw provider CLIs can modify files and execute arbitrary commands, but they lack independent authorization boundaries, reproducible worktree isolation, verifiable evidence graphs, and governed cross-turn memory. MARSHAL wraps provider execution inside isolated execution cells, leases and records state in a canonical local SQLite database, and fails closed whenever a requested security or isolation boundary cannot be enforced.
 
+## PROUDLY BUILT WITH MARSHAL
+
+MARSHAL is developed inside its own governed workspace. The repository uses
+MARSHAL's native Codex, Claude and OpenCode sessions for implementation and
+review, captures completed session conversations as candidate memory, and runs
+the same project-local verification surfaces documented for users. The
+reproducible release archives remain the output of the pinned GitHub Actions
+release workflow; self-hosting does not replace independent build provenance.
+
+```text
+MARSHAL source repository
+        │
+        ▼
+MARSHAL native agent workspace ── Codex · Claude · OpenCode
+        │
+        ├── governed project memory (.marshal/state.db)
+        ├── source changes and tests
+        └── release gate and tagged source commit
+                              │
+                              ▼
+                 reproducible GitHub release artifacts
+```
+
+This is deliberate dogfooding: MARSHAL helps build MARSHAL, while Git commits,
+tests, checksums, SBOMs and provenance attestations remain independently
+inspectable.
+
 Current `main`: schema **v86**, pack **6.0.0**, runtime spec **1.5.0**. The
 released binaries are listed on the [releases page](https://github.com/Zen1th53/marshal/releases).
 
@@ -195,7 +222,7 @@ MARSHAL includes a multi-track memory fabric designed for multi-turn agent coord
 - **Scope & ACL Enforcement**: Every memory record carries strict project, task, agent, or branch scopes. Agents can only recall records matching their authorized principals.
 - **Conflict Detection & Governance**: Conflicting memory updates trigger deterministic conflict records requiring operator review or policy promotion (`marshal memory promote`).
 - **Working / Task Memory**: Fast task-scoped slots with Compare-And-Swap (CAS) atomic updates for in-progress agent reasoning.
-- **Session Importers**: Built-in importers parse and structure historical sessions from Claude, Codex, and OpenCode formats into governed memory records.
+- **Session Importers**: Built-in importers parse and structure historical sessions from Claude, Codex, and OpenCode formats into governed memory records. Native OpenCode sessions automatically import visible user/assistant conversation and bounded tool evidence when the session exits; private reasoning and provider metadata are excluded.
 
 ---
 
@@ -295,7 +322,7 @@ fails checksum verification is not installed.
 
 ```bash
 # Install somewhere else, or pin a version
-MARSHAL_INSTALL_DIR=/usr/local/bin MARSHAL_VERSION=v0.0.1 \
+MARSHAL_INSTALL_DIR=/usr/local/bin MARSHAL_VERSION=v0.0.2 \
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh)"
 ```
 
@@ -354,7 +381,27 @@ Check local environment health, file permissions, and provider binary availabili
 marshal doctor --probe-providers
 ```
 
-### 3. Start Local Daemon
+### 3. Open a Native Agent Session
+
+Launch an installed provider in MARSHAL's terminal workspace:
+
+```bash
+marshal codex
+marshal claude
+marshal opencode
+```
+
+Inside the TUI, use `F7`, `F8`, or `F9`, or run `/codex`, `/claude`, or
+`/opencode`. OpenCode supports `/opencode new`, `/opencode continue`,
+`/opencode resume <session>`, `/opencode fork <session>`, and native argument
+passthrough with `/opencode cli <arguments>`.
+
+When a native OpenCode process exits, MARSHAL automatically imports its visible
+conversation and bounded tool evidence into project-scoped candidate memory.
+No manual `memory remember` step is required. Use `marshal memory list` and
+`marshal memory show <ID>` to inspect the resulting canonical records.
+
+### 4. Start Local Daemon
 Launch the control plane daemon in a background terminal or service:
 
 ```bash
@@ -430,6 +477,9 @@ marshal verify -- go test ./...
 | `marshal daemon` | Launch the local control plane daemon background server |
 | `marshal status` | Query active tasks, registered agents, and daemon health |
 | `marshal tui [--session ID] [--theme NAME]` | Launch interactive terminal-first command center and multi-agent workspace |
+| `marshal codex [NATIVE-ARGS...]` | Launch the installed Codex CLI as a native MARSHAL terminal session |
+| `marshal claude [NATIVE-ARGS...]` | Launch the installed Claude CLI as a native MARSHAL terminal session |
+| `marshal opencode [NATIVE-ARGS...]` | Launch native OpenCode with automatic conversation memory capture on exit |
 | `marshal agent register --name NAME --role ROLE` | Register an agent principal with an assigned role |
 | `marshal agents` | List all registered agents and their capability configurations |
 | `marshal tasks` | List all tasks and their current lifecycle statuses |
