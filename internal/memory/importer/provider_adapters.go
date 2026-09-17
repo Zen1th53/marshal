@@ -14,9 +14,10 @@ import (
 type ProviderFormat string
 
 const (
-	FormatCodexJSONL  ProviderFormat = "codex-jsonl"
-	FormatClaudeJSONL ProviderFormat = "claude-jsonl"
-	FormatGeminiJSONL ProviderFormat = "gemini-jsonl"
+	FormatCodexJSONL     ProviderFormat = "codex-jsonl"
+	FormatClaudeJSONL    ProviderFormat = "claude-jsonl"
+	FormatGeminiJSONL    ProviderFormat = "gemini-jsonl"
+	FormatOpenCodeExport ProviderFormat = "opencode-export"
 )
 
 // HistoryAdapter is the provider boundary. Implementations normalize only
@@ -50,6 +51,16 @@ type GeminiJSONLAdapter struct{}
 func (GeminiJSONLAdapter) Format() ProviderFormat { return FormatGeminiJSONL }
 func (GeminiJSONLAdapter) Decode(data []byte) (SessionTranscript, error) {
 	return decodeGeminiJSONL(data)
+}
+
+// OpenCodeExportAdapter decodes the sanitized JSON produced by
+// `opencode export <session> --sanitize`. Reasoning and provider metadata stay
+// excluded; native sessions opt into bounded tool capture explicitly.
+type OpenCodeExportAdapter struct{ CaptureTools bool }
+
+func (OpenCodeExportAdapter) Format() ProviderFormat { return FormatOpenCodeExport }
+func (a OpenCodeExportAdapter) Decode(data []byte) (SessionTranscript, error) {
+	return decodeOpenCodeExport(data, a.CaptureTools)
 }
 
 const (
@@ -366,6 +377,104 @@ func decodeGeminiJSONL(data []byte) (SessionTranscript, error) {
 		return SessionTranscript{}, fmt.Errorf("parse Gemini history: %w", err)
 	}
 	return tr, nil
+}
+
+type openCodeExport struct {
+	Info struct {
+		ID        string `json:"id"`
+		Directory string `json:"directory"`
+		Time      struct {
+			Created int64 `json:"created"`
+			Updated int64 `json:"updated"`
+		} `json:"time"`
+	} `json:"info"`
+	Messages []struct {
+		Info struct {
+			SessionID string `json:"sessionID"`
+			Role      string `json:"role"`
+			Time      struct {
+				Created int64 `json:"created"`
+			} `json:"time"`
+		} `json:"info"`
+		Parts []struct {
+			Type  string          `json:"type"`
+			Text  string          `json:"text"`
+			Tool  string          `json:"tool"`
+			State json.RawMessage `json:"state"`
+		} `json:"parts"`
+	} `json:"messages"`
+}
+
+type openCodeToolState struct {
+	Status string          `json:"status"`
+	Input  json.RawMessage `json:"input"`
+	Output json.RawMessage `json:"output"`
+	Error  json.RawMessage `json:"error"`
+}
+
+func decodeOpenCodeExport(data []byte, captureTools bool) (SessionTranscript, error) {
+	var exported openCodeExport
+	if err := json.Unmarshal(data, &exported); err != nil {
+		return SessionTranscript{}, fmt.Errorf("parse OpenCode export: %w", err)
+	}
+	tr := SessionTranscript{
+		SessionID: exported.Info.ID,
+		Provider:  "opencode",
+		CWD:       exported.Info.Directory,
+		Timestamp: unixMillis(exported.Info.Time.Created),
+	}
+	for _, entry := range exported.Messages {
+		role := strings.ToLower(strings.TrimSpace(entry.Info.Role))
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		if entry.Info.SessionID != "" {
+			if tr.SessionID != "" && tr.SessionID != entry.Info.SessionID {
+				return SessionTranscript{}, errors.New("OpenCode export contains multiple session IDs")
+			}
+			tr.SessionID = entry.Info.SessionID
+		}
+		stamp := unixMillis(entry.Info.Time.Created)
+		for _, part := range entry.Parts {
+			switch part.Type {
+			case "text":
+				if strings.TrimSpace(part.Text) != "" {
+					tr.Messages = append(tr.Messages, Message{Role: role, Content: part.Text, Timestamp: stamp})
+				}
+			case "tool":
+				if !captureTools {
+					continue
+				}
+				var state openCodeToolState
+				if err := json.Unmarshal(part.State, &state); err != nil {
+					return SessionTranscript{}, fmt.Errorf("parse OpenCode tool state: %w", err)
+				}
+				tr.Messages = append(tr.Messages, Message{
+					Role: "assistant", Kind: MessageKindToolUse,
+					Content: renderToolUse(part.Tool, state.Input), Timestamp: stamp,
+				})
+				output := state.Output
+				isError := strings.EqualFold(state.Status, "error")
+				if isError && len(state.Error) != 0 {
+					output = state.Error
+				}
+				if rendered := renderToolResult(decodeScalar(output), isError); rendered != "" {
+					tr.Messages = append(tr.Messages, Message{
+						Role: "user", Kind: MessageKindToolResult,
+						Content: rendered, Timestamp: stamp,
+					})
+				}
+			}
+		}
+	}
+	return tr, nil
+}
+
+func unixMillis(value int64) time.Time {
+	if value <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(value).UTC()
 }
 
 func firstNonEmpty(values ...string) string {

@@ -61,7 +61,7 @@ func NewSessionImporter(config Config) *SessionImporter {
 		firewall: fw,
 		adapters: make(map[ProviderFormat]HistoryAdapter),
 	}
-	for _, adapter := range []HistoryAdapter{CodexJSONLAdapter{}, ClaudeJSONLAdapter{}, GeminiJSONLAdapter{}} {
+	for _, adapter := range []HistoryAdapter{CodexJSONLAdapter{}, ClaudeJSONLAdapter{}, GeminiJSONLAdapter{}, OpenCodeExportAdapter{}} {
 		imp.adapters[adapter.Format()] = adapter
 	}
 	for _, adapter := range config.Adapters {

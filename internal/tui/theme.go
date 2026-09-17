@@ -28,6 +28,12 @@ func RuneWidth(r rune) int {
 	if r == 0 || r < 32 || (r >= 0x7f && r < 0xa0) {
 		return 0 // non-printing control
 	}
+	// U+276F is a text presentation character. Terminals render the composer
+	// marker in one cell, even though it sits inside the broader Dingbats block
+	// where many emoji-style symbols are double-width.
+	if r == '❯' {
+		return 1
+	}
 	// Combining characters and zero-width spaces
 	if (r >= 0x0300 && r <= 0x036f) || (r >= 0x1ab0 && r <= 0x1aff) ||
 		(r >= 0x1dc0 && r <= 0x1dff) || (r >= 0x20d0 && r <= 0x20ff) ||

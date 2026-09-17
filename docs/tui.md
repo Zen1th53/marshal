@@ -13,7 +13,7 @@ options. Within MARSHAL, use `/claude new`, `/claude continue`, `/claude resume`
 
 Plain composer text runs nothing. Launching an agent spends tokens and can touch
 the worktree, so it happens only when the operator names one: `/codex <prompt>`,
-`/claude <prompt>`, or F7/F8 for a native session. A command typed without its
+`/claude <prompt>`, `/opencode <prompt>`, or F7/F8/F9 for a native session. A command typed without its
 leading slash is answered with the command it looks like, not with a session.
 
 Native Claude uses the operator's existing `CLAUDE_CONFIG_DIR` (normally
@@ -28,6 +28,23 @@ The native window uses Claude's own permission controls. `/claude exec` and
 `/claude run` retain the existing governed stream-json execution path. Native
 resume still uses Claude's history storage; MARSHAL's copied conversation memory
 does not depend on retaining that original session after import.
+
+## Native OpenCode sessions
+
+Run `marshal opencode` or press F9 in MARSHAL to open the installed OpenCode TUI.
+Native arguments pass through unchanged. Within MARSHAL, `/opencode new` starts a
+fresh session, `/opencode continue` resumes the latest session, and `/opencode
+resume <session>` or `/opencode fork <session>` selects or forks a session.
+`/opencode cli <arguments>` exposes the remaining native CLI surface, including
+models, providers, authentication, MCP servers, agents, stats and batch runs.
+
+OpenCode uses the operator's existing configuration and authentication. MARSHAL
+imports `opencode export <session> --sanitize` output through OpenCode's public
+CLI after the native process exits. Visible conversation and bounded tool
+evidence enter project memory as agent-authority candidates; reasoning parts are
+excluded. `.marshal/opencode/history-index.json` prevents an unchanged export
+from being imported again. Cross-agent briefings use the same bounded
+`AGENTS.md` block and incoming live inbox mechanism as Codex.
 
 ## Tool capture
 

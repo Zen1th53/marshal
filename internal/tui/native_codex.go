@@ -77,9 +77,13 @@ func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, 
 
 func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string) (string, error) {
 	label, homeEnv, homeDir, historyDir := "Codex", "CODEX_HOME", ".codex", "sessions"
-	if provider == "claude" {
+	switch provider {
+	case "claude":
 		label, homeEnv, homeDir, historyDir = "Claude", "CLAUDE_CONFIG_DIR", ".claude", "projects"
-	} else if provider != "codex" {
+	case "opencode":
+		label, homeEnv, homeDir, historyDir = "OpenCode", "", "", ""
+	case "codex":
+	default:
 		return "", fmt.Errorf("unsupported native provider %q", provider)
 	}
 	if w.terminal == nil || !w.terminal.IsTerminal() {
@@ -93,19 +97,24 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	if w.runtime != nil {
 		root = w.runtime.ProjectRoot()
 	}
-	home := os.Getenv(homeEnv)
-	if home == "" {
-		userHome, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
+	var watch *nativeHistoryWatch
+	if provider == "opencode" {
+		watch = newOpenCodeHistoryWatch(binary, root)
+	} else {
+		home := os.Getenv(homeEnv)
+		if home == "" {
+			userHome, err := os.UserHomeDir()
+			if err != nil {
+				return "", err
+			}
+			home = filepath.Join(userHome, homeDir)
 		}
-		home = filepath.Join(userHome, homeDir)
+		if !filepath.IsAbs(home) {
+			home = filepath.Join(root, home)
+		}
+		watch = newNativeHistoryWatch(filepath.Join(home, historyDir), root)
+		watch.claude = provider == "claude"
 	}
-	if !filepath.IsAbs(home) {
-		home = filepath.Join(root, home)
-	}
-	watch := newNativeHistoryWatch(filepath.Join(home, historyDir), root)
-	watch.claude = provider == "claude"
 	watch.captureTools = true
 	var syncErr error
 	watch.indexPath = filepath.Join(root, ".marshal", provider, "history-index.json")
@@ -151,6 +160,11 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 				}
 				return nil
 			}
+		}
+	}
+	if provider == "opencode" && openCodeUsesModelPreference(args) {
+		if selected := strings.TrimSpace(os.Getenv("MARSHAL_OPENCODE_MODEL")); selected != "" {
+			args = append([]string{"--model", selected}, args...)
 		}
 	}
 	if watch.consume == nil {
@@ -297,8 +311,13 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			}
 			return result, runErr
 		case <-ticker.C:
-			if err := watch.sync(); err != nil {
-				syncErr = err
+			// OpenCode's public history API is a CLI export backed by the same
+			// database the child is using. Export once the child exits; polling it
+			// here can delay interactive input and contend with the live session.
+			if provider != "opencode" {
+				if err := watch.sync(); err != nil {
+					syncErr = err
+				}
 			}
 			for _, pw := range peers {
 				if err := pw.sync(); err != nil {
@@ -314,7 +333,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 // positional, so prompt-channel injection stands down instead.
 func hasOperatorPrompt(args []string) bool {
 	for _, arg := range args {
-		if arg == "--" {
+		if arg == "--" || arg == "--prompt" || strings.HasPrefix(arg, "--prompt=") {
 			return true
 		}
 	}
@@ -335,6 +354,10 @@ func nativeUsesModelPreference(args []string) bool {
 
 type nativeHistoryWatch struct {
 	claude bool
+	// openCodeRun is set for OpenCode's SQLite-backed history. Its public CLI
+	// supplies sanitized JSON exports, so MARSHAL never reads the database or
+	// depends on its private schema.
+	openCodeRun func(args ...string) ([]byte, error)
 	// captureTools records tool calls and their results alongside conversation,
 	// so a later session can see what the agent actually ran and changed rather
 	// than only what it said about it.
@@ -353,6 +376,9 @@ func newNativeHistoryWatch(dir, root string) *nativeHistoryWatch {
 }
 
 func (w *nativeHistoryWatch) sync() error {
+	if w.openCodeRun != nil {
+		return w.syncOpenCode()
+	}
 	var failures []error
 	walkErr := filepath.WalkDir(w.dir, func(path string, entry fs.DirEntry, err error) error {
 		if errors.Is(err, os.ErrNotExist) {
