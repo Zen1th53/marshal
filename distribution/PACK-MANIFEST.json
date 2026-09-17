@@ -9681,8 +9681,8 @@
     },
     {
       "path": "scripts/community-release-gate.sh",
-      "sha256": "ddc09aa43258a0d2e57a17bd126d2f0fa1bb83fb0cf4bfef490b9f167d64938f",
-      "bytes": 3999
+      "sha256": "a51fb134bb7806f49e1a0ee3da8217dcfec786c61b4f44cd213fa9557a917c68",
+      "bytes": 4164
     },
     {
       "path": "standards/REFERENCES.md",
