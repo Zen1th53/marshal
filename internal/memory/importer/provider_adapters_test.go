@@ -103,6 +103,67 @@ func TestGeminiJSONLImportsPublicMessagesOnly(t *testing.T) {
 	}
 }
 
+func TestOpenCodeExportImportsVisibleConversationOnly(t *testing.T) {
+	const history = `{
+  "info":{"id":"ses-open-1","directory":"/work/repository","time":{"created":1787205973846}},
+  "messages":[
+    {"info":{"sessionID":"ses-open-1","role":"user","time":{"created":1787205973872}},"parts":[{"type":"text","text":"Fix cursor placement"}]},
+    {"info":{"sessionID":"ses-open-1","role":"assistant","time":{"created":1787205973887}},"parts":[
+      {"type":"reasoning","text":"private reasoning"},
+      {"type":"tool","tool":"read","state":{"status":"completed","input":{"path":"secret"},"output":"tool-secret"}},
+      {"type":"text","text":"The cursor width is corrected."}
+    ]}
+  ]
+}`
+
+	imp := importer.NewSessionImporter(importer.Config{})
+	result, err := imp.ImportProviderHistory(context.Background(), "PROJECT-1", importer.FormatOpenCodeExport, []byte(history), false)
+	if err != nil {
+		t.Fatalf("ImportProviderHistory: %v", err)
+	}
+	if len(result.ImportedRecords) != 1 {
+		t.Fatalf("expected one candidate, got %+v", result)
+	}
+	rec := result.ImportedRecords[0]
+	if !strings.Contains(rec.Body, "Fix cursor placement") || !strings.Contains(rec.Body, "cursor width is corrected") {
+		t.Fatalf("visible conversation missing: %q", rec.Body)
+	}
+	for _, forbidden := range []string{"private reasoning", "tool-secret", "secret"} {
+		if strings.Contains(rec.Body, forbidden) {
+			t.Fatalf("hidden OpenCode content leaked: %q", rec.Body)
+		}
+	}
+	if got := rec.ExtMeta["source_format"]; got != string(importer.FormatOpenCodeExport) {
+		t.Fatalf("source format = %v", got)
+	}
+}
+
+func TestOpenCodeNativeExportCapturesToolsWithoutReasoning(t *testing.T) {
+	const history = `{
+  "info":{"id":"ses-open-tools","directory":"/work/repository"},
+  "messages":[{"info":{"sessionID":"ses-open-tools","role":"assistant"},"parts":[
+    {"type":"reasoning","text":"private chain"},
+    {"type":"tool","tool":"write","state":{"status":"completed","input":{"file_path":"main.go","content":"package main"},"output":"written"}}
+  ]}]
+}`
+	tr, err := (importer.OpenCodeExportAdapter{CaptureTools: true}).Decode([]byte(history))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tr.Messages) != 2 || tr.Messages[0].Kind != importer.MessageKindToolUse || tr.Messages[1].Kind != importer.MessageKindToolResult {
+		t.Fatalf("tool evidence = %+v", tr.Messages)
+	}
+	joined := tr.Messages[0].Content + tr.Messages[1].Content
+	for _, want := range []string{"write", "main.go", "+ package main", "written"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("tool evidence missing %q: %s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "private chain") {
+		t.Fatalf("reasoning leaked: %s", joined)
+	}
+}
+
 func TestProviderImportIsDeterministicAndSecretSafe(t *testing.T) {
 	const safe = `{"type":"user","sessionId":"claude-session-2","message":{"role":"user","content":"Document the runtime behavior"}}
 `

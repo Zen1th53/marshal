@@ -2191,6 +2191,10 @@ func (s *MemoryService) ImportSessionTranscript(ctx context.Context, principal a
 		var committed []model.MemoryRecordV2
 		for _, rec := range result.ImportedRecords {
 			// Check if already in SQLite
+			if existing, findErr := s.store.GetMemoryV2(ctx, projectID, rec.ID); findErr == nil && existing.ID != "" {
+				result.SkippedCount++
+				continue
+			}
 			if ex, err := s.store.FindMemoryByDigest(ctx, projectID, rec.ContentDigest); err == nil && ex.ID != "" {
 				result.SkippedCount++
 				continue

@@ -77,9 +77,13 @@ func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, 
 
 func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string) (string, error) {
 	label, homeEnv, homeDir, historyDir := "Codex", "CODEX_HOME", ".codex", "sessions"
-	if provider == "claude" {
+	switch provider {
+	case "claude":
 		label, homeEnv, homeDir, historyDir = "Claude", "CLAUDE_CONFIG_DIR", ".claude", "projects"
-	} else if provider != "codex" {
+	case "opencode":
+		label, homeEnv, homeDir, historyDir = "OpenCode", "", "", ""
+	case "codex":
+	default:
 		return "", fmt.Errorf("unsupported native provider %q", provider)
 	}
 	if w.terminal == nil || !w.terminal.IsTerminal() {
@@ -93,24 +97,37 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	if w.runtime != nil {
 		root = w.runtime.ProjectRoot()
 	}
-	home := os.Getenv(homeEnv)
-	if home == "" {
-		userHome, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
+	var watch *nativeHistoryWatch
+	if provider == "opencode" {
+		watch = newOpenCodeHistoryWatch(binary, root)
+	} else {
+		home := os.Getenv(homeEnv)
+		if home == "" {
+			userHome, err := os.UserHomeDir()
+			if err != nil {
+				return "", err
+			}
+			home = filepath.Join(userHome, homeDir)
 		}
-		home = filepath.Join(userHome, homeDir)
+		if !filepath.IsAbs(home) {
+			home = filepath.Join(root, home)
+		}
+		watch = newNativeHistoryWatch(filepath.Join(home, historyDir), root)
+		watch.claude = provider == "claude"
 	}
-	if !filepath.IsAbs(home) {
-		home = filepath.Join(root, home)
-	}
-	watch := newNativeHistoryWatch(filepath.Join(home, historyDir), root)
-	watch.claude = provider == "claude"
 	watch.captureTools = true
 	var syncErr error
 	watch.indexPath = filepath.Join(root, ".marshal", provider, "history-index.json")
 	if err := watch.loadIndex(); err != nil {
 		syncErr = err
+	}
+	if provider == "opencode" {
+		// Establish a baseline before the child runs. The exit sync then imports
+		// only the session created or updated by this launch, rather than every
+		// historical OpenCode session already present on the machine.
+		if err := watch.primeOpenCode(); err != nil {
+			syncErr = joinNativeSyncError(syncErr, err)
+		}
 	}
 	imported := 0
 	if source := w.controlSource(); source != nil {
@@ -153,6 +170,11 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			}
 		}
 	}
+	if provider == "opencode" && openCodeUsesModelPreference(args) {
+		if selected := strings.TrimSpace(os.Getenv("MARSHAL_OPENCODE_MODEL")); selected != "" {
+			args = append([]string{"--model", selected}, args...)
+		}
+	}
 	if watch.consume == nil {
 		return "", fmt.Errorf("native %s memory capture requires an attached runtime", label)
 	}
@@ -162,14 +184,14 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	// waiting until the next launch to be told about it.
 	inbox, inboxErr := newLiveInbox(root, provider)
 	if inboxErr != nil {
-		syncErr = errors.Join(syncErr, fmt.Errorf("open live inbox: %w", inboxErr))
+		syncErr = joinNativeSyncError(syncErr, fmt.Errorf("open live inbox: %w", inboxErr))
 	}
 	var peers []*nativeHistoryWatch
 	if inbox != nil {
 		for _, peer := range peerProviders(provider) {
 			dir, err := providerHistoryDir(peer, root)
 			if err != nil {
-				syncErr = errors.Join(syncErr, err)
+				syncErr = joinNativeSyncError(syncErr, err)
 				continue
 			}
 			pw := newNativeHistoryWatch(dir, root)
@@ -180,14 +202,14 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			// that provider's own import progress.
 			pw.indexPath = filepath.Join(root, ".marshal", provider, "peer-"+peer+"-index.json")
 			if err := pw.loadIndex(); err != nil {
-				syncErr = errors.Join(syncErr, err)
+				syncErr = joinNativeSyncError(syncErr, err)
 			}
 			// Prime the index against what already exists, so the inbox carries
 			// what happens from now on rather than replaying the whole history
 			// the launch briefing has already summarized.
 			pw.consume = func(importer.SessionTranscript) error { return nil }
 			if err := pw.sync(); err != nil {
-				syncErr = errors.Join(syncErr, err)
+				syncErr = joinNativeSyncError(syncErr, err)
 			}
 			peerName := peer
 			primary := watch.consume
@@ -280,7 +302,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			}
 			for _, pw := range peers {
 				if err := pw.sync(); err != nil {
-					syncErr = errors.Join(syncErr, err)
+					syncErr = joinNativeSyncError(syncErr, err)
 				}
 			}
 			result := fmt.Sprintf("%s exited. %d message(s), including tool calls, saved to MARSHAL memory.\n/%s continue resumes; /%s new starts a new session.", label, imported, provider, provider)
@@ -297,16 +319,37 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			}
 			return result, runErr
 		case <-ticker.C:
-			if err := watch.sync(); err != nil {
-				syncErr = err
+			// OpenCode's public history API is a CLI export backed by the same
+			// database the child is using. Export once the child exits; polling it
+			// here can delay interactive input and contend with the live session.
+			if provider != "opencode" {
+				if err := watch.sync(); err != nil {
+					syncErr = err
+				}
 			}
 			for _, pw := range peers {
 				if err := pw.sync(); err != nil {
-					syncErr = errors.Join(syncErr, err)
+					syncErr = joinNativeSyncError(syncErr, err)
 				}
 			}
 		}
 	}
+}
+
+// joinNativeSyncError keeps a repeated polling failure from filling the result
+// pane with the same diagnostic every two seconds. The first occurrence stays
+// visible; distinct failures are still reported.
+func joinNativeSyncError(existing, next error) error {
+	if next == nil {
+		return existing
+	}
+	if existing == nil {
+		return next
+	}
+	if strings.Contains(existing.Error(), next.Error()) {
+		return existing
+	}
+	return errors.Join(existing, next)
 }
 
 // hasOperatorPrompt reports whether argv already carries the operator's own
@@ -314,7 +357,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 // positional, so prompt-channel injection stands down instead.
 func hasOperatorPrompt(args []string) bool {
 	for _, arg := range args {
-		if arg == "--" {
+		if arg == "--" || arg == "--prompt" || strings.HasPrefix(arg, "--prompt=") {
 			return true
 		}
 	}
@@ -335,6 +378,10 @@ func nativeUsesModelPreference(args []string) bool {
 
 type nativeHistoryWatch struct {
 	claude bool
+	// openCodeRun is set for OpenCode's SQLite-backed history. Its public CLI
+	// supplies JSON exports, so MARSHAL never reads the database or depends on
+	// its private schema. The adapter selects visible conversation fields.
+	openCodeRun func(args ...string) ([]byte, error)
 	// captureTools records tool calls and their results alongside conversation,
 	// so a later session can see what the agent actually ran and changed rather
 	// than only what it said about it.
@@ -353,6 +400,9 @@ func newNativeHistoryWatch(dir, root string) *nativeHistoryWatch {
 }
 
 func (w *nativeHistoryWatch) sync() error {
+	if w.openCodeRun != nil {
+		return w.syncOpenCode()
+	}
 	var failures []error
 	walkErr := filepath.WalkDir(w.dir, func(path string, entry fs.DirEntry, err error) error {
 		if errors.Is(err, os.ErrNotExist) {
@@ -466,6 +516,17 @@ func (w *nativeHistoryWatch) syncFile(path string) error {
 	}
 	for {
 		line, readErr := r.ReadSlice('\n')
+		if errors.Is(readErr, bufio.ErrBufferFull) {
+			// Tool payloads can exceed the provider adapter's one-line bound.
+			// Drain that event and continue with later conversation instead of
+			// making the entire live history permanently unimportable.
+			for errors.Is(readErr, bufio.ErrBufferFull) {
+				_, readErr = r.ReadSlice('\n')
+			}
+			if readErr == nil {
+				continue
+			}
+		}
 		// Ignore a partial final event; a later poll retries it after append.
 		if errors.Is(readErr, io.EOF) {
 			break

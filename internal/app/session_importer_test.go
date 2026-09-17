@@ -57,6 +57,20 @@ func TestM16_RetroactiveSessionImporter(t *testing.T) {
 	if len(res2.ImportedRecords) != 0 || res2.SkippedCount != 1 {
 		t.Fatalf("expected duplicate to be skipped: %+v", res2)
 	}
+
+	// 4. Provider metadata may change while visible content stays the same.
+	// The deterministic record ID still identifies the same memory and must not
+	// turn a harmless re-import into a primary-key constraint failure.
+	withCWD := []byte(strings.Replace(string(validTranscript),
+		`"task_id": "TASK-CLI-10",`,
+		`"task_id": "TASK-CLI-10", "cwd": "/tmp/exported-later",`, 1))
+	res3, err := svc.ImportSessionTranscript(ctx, p, projectID, withCWD, false)
+	if err != nil {
+		t.Fatalf("re-import with changed metadata: %v", err)
+	}
+	if len(res3.ImportedRecords) != 0 || res3.SkippedCount != 1 {
+		t.Fatalf("expected stable-ID duplicate to be skipped: %+v", res3)
+	}
 }
 
 func TestM16_SessionImporterRejectsCredentials(t *testing.T) {

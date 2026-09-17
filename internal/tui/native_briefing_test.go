@@ -19,8 +19,10 @@ func TestResolveInjectChannelFallsBackPerProvider(t *testing.T) {
 	}{
 		{"claude auto uses system prompt", "claude", injectAuto, injectSystemPrompt, false},
 		{"codex auto uses project doc", "codex", injectAuto, injectProjectDoc, false},
+		{"opencode auto uses project doc", "opencode", injectAuto, injectProjectDoc, false},
 		{"codex cannot take a system prompt", "codex", injectSystemPrompt, injectProjectDoc, true},
 		{"claude takes a system prompt", "claude", injectSystemPrompt, injectSystemPrompt, false},
+		{"opencode cannot take a system prompt", "opencode", injectSystemPrompt, injectProjectDoc, true},
 		{"prompt channel is universal", "codex", injectPrompt, injectPrompt, false},
 		{"off stays off", "claude", injectOff, injectOff, false},
 	} {
@@ -89,6 +91,16 @@ func TestApplyBriefingPromptChannelAppends(t *testing.T) {
 	}
 }
 
+func TestApplyBriefingUsesOpenCodePromptFlag(t *testing.T) {
+	args, _, err := applyBriefing("opencode", t.TempDir(), []string{"--continue"}, "prior work", injectPrompt)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(args) != 3 || args[0] != "--prompt" || !strings.Contains(args[1], "prior work") || args[2] != "--continue" {
+		t.Fatalf("argv = %q", args)
+	}
+}
+
 // An operator prompt already occupies the positional slot, so a second one
 // would be handed to the CLI as a stray argument.
 func TestHasOperatorPrompt(t *testing.T) {
@@ -97,6 +109,9 @@ func TestHasOperatorPrompt(t *testing.T) {
 	}
 	if hasOperatorPrompt([]string{"--continue"}) {
 		t.Error("flag-only argv reported as carrying a prompt")
+	}
+	if !hasOperatorPrompt([]string{"--prompt", "do the thing"}) {
+		t.Error("OpenCode --prompt was not detected")
 	}
 }
 

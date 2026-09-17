@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version tag (e.g. v0.0.1)'
+        description: 'Release version tag (e.g. v0.0.2)'
         required: true
 
 permissions:
@@ -70,6 +70,9 @@ jobs:
           echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION_NUM}" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          RELEASE_NOTES="release/RELEASE_NOTES_${VERSION_NUM}.md"
+          test -f "$RELEASE_NOTES"
+          echo "release_notes=${RELEASE_NOTES}" >> "$GITHUB_OUTPUT"
           COMMIT_EPOCH=$(git show -s --format=%ct HEAD)
           BUILD_DATE=$(date -u -d "@${COMMIT_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)
           echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
@@ -101,6 +104,6 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag_name }}
           name: "MARSHAL ${{ steps.version.outputs.tag_name }}"
-          body_path: release/RELEASE_NOTES_1.0.1.md
+          body_path: ${{ steps.version.outputs.release_notes }}
           fail_on_unmatched_files: true
           files: 'dist/*'

@@ -72,7 +72,7 @@ func TestPlainTextNamesTheExplicitRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plain text errored: %v", err)
 	}
-	for _, want := range []string{"/codex <prompt>", "/claude <prompt>", "F7 / F8"} {
+	for _, want := range []string{"/codex <prompt>", "/claude <prompt>", "/opencode <prompt>", "F7 / F8 / F9"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("route %q missing from the answer:\n%s", want, out)
 		}
