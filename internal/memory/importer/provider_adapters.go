@@ -53,9 +53,9 @@ func (GeminiJSONLAdapter) Decode(data []byte) (SessionTranscript, error) {
 	return decodeGeminiJSONL(data)
 }
 
-// OpenCodeExportAdapter decodes the sanitized JSON produced by
-// `opencode export <session> --sanitize`. Reasoning and provider metadata stay
-// excluded; native sessions opt into bounded tool capture explicitly.
+// OpenCodeExportAdapter decodes JSON produced by `opencode export <session>`.
+// It admits only visible user/assistant text and explicitly bounded tool
+// evidence; reasoning, snapshots and provider metadata stay excluded.
 type OpenCodeExportAdapter struct{ CaptureTools bool }
 
 func (OpenCodeExportAdapter) Format() ProviderFormat { return FormatOpenCodeExport }

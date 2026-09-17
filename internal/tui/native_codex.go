@@ -355,8 +355,8 @@ func nativeUsesModelPreference(args []string) bool {
 type nativeHistoryWatch struct {
 	claude bool
 	// openCodeRun is set for OpenCode's SQLite-backed history. Its public CLI
-	// supplies sanitized JSON exports, so MARSHAL never reads the database or
-	// depends on its private schema.
+	// supplies JSON exports, so MARSHAL never reads the database or depends on
+	// its private schema. The adapter selects visible conversation fields.
 	openCodeRun func(args ...string) ([]byte, error)
 	// captureTools records tool calls and their results alongside conversation,
 	// so a later session can see what the agent actually ran and changed rather

@@ -39,12 +39,13 @@ resume <session>` or `/opencode fork <session>` selects or forks a session.
 models, providers, authentication, MCP servers, agents, stats and batch runs.
 
 OpenCode uses the operator's existing configuration and authentication. MARSHAL
-imports `opencode export <session> --sanitize` output through OpenCode's public
-CLI after the native process exits. Visible conversation and bounded tool
-evidence enter project memory as agent-authority candidates; reasoning parts are
-excluded. `.marshal/opencode/history-index.json` prevents an unchanged export
-from being imported again. Cross-agent briefings use the same bounded
-`AGENTS.md` block and incoming live inbox mechanism as Codex.
+reads `opencode export <session>` through OpenCode's public CLI after the native
+process exits, then selects only visible conversation and bounded tool evidence
+for agent-authority candidate memory. Reasoning, snapshots and provider metadata
+are excluded, and the normal memory firewall still rejects secrets.
+`.marshal/opencode/history-index.json` prevents an unchanged export from being
+imported again. Cross-agent briefings use the same bounded `AGENTS.md` block and
+incoming live inbox mechanism as Codex.
 
 ## Tool capture
 

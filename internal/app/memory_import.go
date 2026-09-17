@@ -38,6 +38,13 @@ func (s *MemoryService) ImportProviderSessionHistory(ctx context.Context, princi
 
 	committed := make([]model.MemoryRecordV2, 0, len(result.ImportedRecords))
 	for _, rec := range result.ImportedRecords {
+		// The deterministic ID is derived from project, session and visible
+		// content. Metadata such as the source CWD may change across exports and
+		// therefore change the canonical digest without changing that ID.
+		if existing, findErr := s.store.GetMemoryV2(ctx, projectID, rec.ID); findErr == nil && existing.ID != "" {
+			result.SkippedCount++
+			continue
+		}
 		if existing, findErr := s.store.FindMemoryByDigest(ctx, projectID, rec.ContentDigest); findErr == nil && existing.ID != "" {
 			result.SkippedCount++
 			continue

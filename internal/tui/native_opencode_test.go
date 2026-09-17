@@ -9,7 +9,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 )
 
-func TestNativeOpenCodeHistoryUsesSanitizedExports(t *testing.T) {
+func TestNativeOpenCodeHistoryImportsVisibleExportFields(t *testing.T) {
 	root := t.TempDir()
 	watch := newNativeHistoryWatch("", root)
 	watch.captureTools = true
@@ -33,7 +33,7 @@ func TestNativeOpenCodeHistoryUsesSanitizedExports(t *testing.T) {
 	if len(captured) != 2 || captured[0].Content != "visible request" || captured[1].Content != "visible answer" {
 		t.Fatalf("captured = %+v", captured)
 	}
-	if len(commands) != 2 || commands[1] != "export ses-1 --sanitize" {
+	if len(commands) != 2 || commands[1] != "export ses-1" {
 		t.Fatalf("commands = %q", commands)
 	}
 	commands = nil

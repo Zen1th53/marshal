@@ -79,15 +79,26 @@ func (w *nativeHistoryWatch) syncOpenCode() error {
 		if w.seen[session.ID] == stamp {
 			continue
 		}
-		exported, err := w.openCodeRun("export", session.ID, "--sanitize")
+		exported, err := w.openCodeRun("export", session.ID)
 		if err != nil {
 			failures = append(failures, fmt.Errorf("export %s: %w", session.ID, err))
 			continue
 		}
 		tr, err := (importer.OpenCodeExportAdapter{CaptureTools: w.captureTools}).Decode(exported)
 		if err != nil {
-			failures = append(failures, fmt.Errorf("decode %s: %w", session.ID, err))
-			continue
+			// OpenCode can finish replacing a large export just after the command
+			// returns. Retry once so a transient partial JSON document does not
+			// leave an otherwise healthy session permanently behind.
+			exported, retryErr := w.openCodeRun("export", session.ID)
+			if retryErr != nil {
+				failures = append(failures, fmt.Errorf("retry export %s: %w", session.ID, retryErr))
+				continue
+			}
+			tr, err = (importer.OpenCodeExportAdapter{CaptureTools: w.captureTools}).Decode(exported)
+			if err != nil {
+				failures = append(failures, fmt.Errorf("decode %s: %w", session.ID, err))
+				continue
+			}
 		}
 		for _, message := range tr.Messages {
 			one := tr
