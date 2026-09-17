@@ -8606,8 +8606,8 @@
     },
     {
       "path": "internal/tui/native_claude_pty_test.go",
-      "sha256": "fd914a316df4ec1f35dfc36ce95ebc4027b40ec4c3b455f0a884f94c0859b44a",
-      "bytes": 3110
+      "sha256": "d5612e9f67421477fe65470975d3e14e16b971c9281075c7f7d10524b7834c94",
+      "bytes": 3511
     },
     {
       "path": "internal/tui/native_claude_test.go",
@@ -8731,8 +8731,8 @@
     },
     {
       "path": "internal/tui/pty_conformance_test.go",
-      "sha256": "3c3ebcc0a570c1bf9da6bedca3a5a657b69a82c8adb3de0bde5d38fb1a833f40",
-      "bytes": 13726
+      "sha256": "ea4148b933d291f6fd386c239c17fbec10fcff05dfc5f41844e27ad4c7ec501d",
+      "bytes": 14124
     },
     {
       "path": "internal/tui/pty_interaction_test.go",

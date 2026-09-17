@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestPTYNativeClaudeInputMemoryAndContinue(t *testing.T) {
@@ -69,7 +71,13 @@ cp "$MARSHAL_TEST_CLAUDE_HISTORY" "$CLAUDE_CONFIG_DIR/projects/fixture/session.j
 	s.sendLine("status")
 	s.mustSee("Did you mean /status?")
 	s.send("\x1b")
+	// Earlier sessions already printed the ready marker, so wait for a new one:
+	// typing before the child reads its terminal would hand the line to MARSHAL.
+	ready := strings.Count(s.output(), "CLAUDE-NATIVE-READY")
 	s.send("\x1b[19~") // F8 from navigation opens native Claude.
+	if !s.waitForCount("CLAUDE-NATIVE-READY", ready+1, 8*time.Second) {
+		t.Fatalf("F8 did not open native Claude.\n--- output tail ---\n%s", tail(s.output(), 3000))
+	}
 	s.sendLine("F8-CLAUDE")
 	s.mustSee("CLAUDE-INPUT:<F8-CLAUDE>")
 }
