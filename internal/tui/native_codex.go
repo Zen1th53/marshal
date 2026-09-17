@@ -126,7 +126,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		// only the session created or updated by this launch, rather than every
 		// historical OpenCode session already present on the machine.
 		if err := watch.primeOpenCode(); err != nil {
-			syncErr = errors.Join(syncErr, err)
+			syncErr = joinNativeSyncError(syncErr, err)
 		}
 	}
 	imported := 0
@@ -184,14 +184,14 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	// waiting until the next launch to be told about it.
 	inbox, inboxErr := newLiveInbox(root, provider)
 	if inboxErr != nil {
-		syncErr = errors.Join(syncErr, fmt.Errorf("open live inbox: %w", inboxErr))
+		syncErr = joinNativeSyncError(syncErr, fmt.Errorf("open live inbox: %w", inboxErr))
 	}
 	var peers []*nativeHistoryWatch
 	if inbox != nil {
 		for _, peer := range peerProviders(provider) {
 			dir, err := providerHistoryDir(peer, root)
 			if err != nil {
-				syncErr = errors.Join(syncErr, err)
+				syncErr = joinNativeSyncError(syncErr, err)
 				continue
 			}
 			pw := newNativeHistoryWatch(dir, root)
@@ -202,14 +202,14 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			// that provider's own import progress.
 			pw.indexPath = filepath.Join(root, ".marshal", provider, "peer-"+peer+"-index.json")
 			if err := pw.loadIndex(); err != nil {
-				syncErr = errors.Join(syncErr, err)
+				syncErr = joinNativeSyncError(syncErr, err)
 			}
 			// Prime the index against what already exists, so the inbox carries
 			// what happens from now on rather than replaying the whole history
 			// the launch briefing has already summarized.
 			pw.consume = func(importer.SessionTranscript) error { return nil }
 			if err := pw.sync(); err != nil {
-				syncErr = errors.Join(syncErr, err)
+				syncErr = joinNativeSyncError(syncErr, err)
 			}
 			peerName := peer
 			primary := watch.consume
@@ -302,7 +302,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			}
 			for _, pw := range peers {
 				if err := pw.sync(); err != nil {
-					syncErr = errors.Join(syncErr, err)
+					syncErr = joinNativeSyncError(syncErr, err)
 				}
 			}
 			result := fmt.Sprintf("%s exited. %d message(s), including tool calls, saved to MARSHAL memory.\n/%s continue resumes; /%s new starts a new session.", label, imported, provider, provider)
@@ -329,11 +329,27 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			}
 			for _, pw := range peers {
 				if err := pw.sync(); err != nil {
-					syncErr = errors.Join(syncErr, err)
+					syncErr = joinNativeSyncError(syncErr, err)
 				}
 			}
 		}
 	}
+}
+
+// joinNativeSyncError keeps a repeated polling failure from filling the result
+// pane with the same diagnostic every two seconds. The first occurrence stays
+// visible; distinct failures are still reported.
+func joinNativeSyncError(existing, next error) error {
+	if next == nil {
+		return existing
+	}
+	if existing == nil {
+		return next
+	}
+	if strings.Contains(existing.Error(), next.Error()) {
+		return existing
+	}
+	return errors.Join(existing, next)
 }
 
 // hasOperatorPrompt reports whether argv already carries the operator's own

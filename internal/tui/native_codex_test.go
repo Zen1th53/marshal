@@ -25,6 +25,18 @@ func TestNativeArgsPreserveQuotesWithoutShellExpansion(t *testing.T) {
 	}
 }
 
+func TestNativeSyncErrorsAreDeduplicated(t *testing.T) {
+	first := errors.New("secret rejected")
+	got := joinNativeSyncError(first, errors.New("secret rejected"))
+	if got.Error() != "secret rejected" {
+		t.Fatalf("duplicate error was repeated: %q", got)
+	}
+	got = joinNativeSyncError(got, errors.New("partial export"))
+	if got.Error() != "secret rejected\npartial export" {
+		t.Fatalf("distinct error was lost: %q", got)
+	}
+}
+
 func nativeTestHistory(t *testing.T, root, id string) []byte {
 	t.Helper()
 	meta, _ := json.Marshal(map[string]any{"type": "session_meta", "payload": map[string]string{"id": id, "cwd": root}})
