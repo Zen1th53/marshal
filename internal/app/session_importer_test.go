@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/model"
@@ -97,5 +98,52 @@ func TestM16_SessionImporterRejectsCredentials(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "secret detected") {
 		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+// Two MARSHAL sessions watching the same provider history import the same
+// message at the same moment. Both can find the record absent before either
+// writes it; the one that loses must skip, not fail the whole capture.
+func TestM16_ConcurrentImportsOfOneMessageBothSucceed(t *testing.T) {
+	ctx := context.Background()
+	_, svc := openTestMemoryService(t)
+
+	const projectID = "PROJECT-local"
+	p := testPrincipal("operator-1")
+	transcript := []byte(`{
+		"session_id": "SES-RACE-1",
+		"provider": "codex",
+		"messages": [{"role": "user", "content": "Two watchers import this message together."}],
+		"success": true
+	}`)
+
+	const workers = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	imported := make(chan int, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res, err := svc.ImportSessionTranscript(ctx, p, projectID, transcript, false)
+			if err != nil {
+				errs <- err
+				return
+			}
+			imported <- len(res.ImportedRecords)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	close(imported)
+	for err := range errs {
+		t.Errorf("concurrent import failed: %v", err)
+	}
+	total := 0
+	for n := range imported {
+		total += n
+	}
+	if total != 1 {
+		t.Fatalf("expected exactly one import to commit the record, got %d", total)
 	}
 }

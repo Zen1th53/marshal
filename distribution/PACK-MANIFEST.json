@@ -3786,8 +3786,8 @@
     },
     {
       "path": "internal/app/memory_import.go",
-      "sha256": "bcb208711444c5701a3b2c69bce16e6fd718cb7018f335fc5623c2521a171b15",
-      "bytes": 2493
+      "sha256": "eb3281c30d57562a4db1d2c8f9005018cadca5e49518aecc8b878d1e2491c5d6",
+      "bytes": 3108
     },
     {
       "path": "internal/app/memory_import_test.go",
@@ -3801,8 +3801,8 @@
     },
     {
       "path": "internal/app/memory_runtime.go",
-      "sha256": "941587389051d663d506c3028b7e53f2df5a1583bcd21b134e1405e1e0cf5305",
-      "bytes": 86725
+      "sha256": "b7deb72f273de46a00f5666758ea129d012aa577ddb4b190eb0de31d3b844c0d",
+      "bytes": 86828
     },
     {
       "path": "internal/app/memory_runtime_test.go",
@@ -3941,8 +3941,8 @@
     },
     {
       "path": "internal/app/session_importer_test.go",
-      "sha256": "f6c17e36562b19b3ec121d1bb1ee7ab327a210d654623a98104d83fa932284ef",
-      "bytes": 3350
+      "sha256": "93a0442e0b434ea7681b8ec6432967d2899c29541fa66b06f224dda401b1f53a",
+      "bytes": 4625
     },
     {
       "path": "internal/app/startup_recovery.go",

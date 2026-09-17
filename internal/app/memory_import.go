@@ -50,6 +50,10 @@ func (s *MemoryService) ImportProviderSessionHistory(ctx context.Context, princi
 			continue
 		}
 		if err := s.store.WriteMemoryV2(ctx, rec); err != nil {
+			if s.importedConcurrently(ctx, projectID, rec.ID) {
+				result.SkippedCount++
+				continue
+			}
 			return importer.ImportResult{}, fmt.Errorf("persist imported record: %w", err)
 		}
 		if err := s.IndexRecord(ctx, rec); err != nil {
@@ -59,4 +63,13 @@ func (s *MemoryService) ImportProviderSessionHistory(ctx context.Context, princi
 	}
 	result.ImportedRecords = committed
 	return result, nil
+}
+
+// importedConcurrently reports whether a record that just failed to write was
+// committed by another importer in the meantime. Two MARSHAL sessions watching
+// the same provider history can both find a record absent and both try to
+// write it; the loser has nothing to do, so its import is not a failure.
+func (s *MemoryService) importedConcurrently(ctx context.Context, projectID, memoryID string) bool {
+	existing, err := s.store.GetMemoryV2(ctx, projectID, memoryID)
+	return err == nil && existing.ID != ""
 }

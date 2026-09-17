@@ -2200,6 +2200,10 @@ func (s *MemoryService) ImportSessionTranscript(ctx context.Context, principal a
 				continue
 			}
 			if err := s.store.WriteMemoryV2(ctx, rec); err != nil {
+				if s.importedConcurrently(ctx, projectID, rec.ID) {
+					result.SkippedCount++
+					continue
+				}
 				return importer.ImportResult{}, fmt.Errorf("persist imported record: %w", err)
 			}
 			if err := s.IndexRecord(ctx, rec); err != nil {
