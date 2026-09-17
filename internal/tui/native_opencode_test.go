@@ -45,6 +45,29 @@ func TestNativeOpenCodeHistoryImportsVisibleExportFields(t *testing.T) {
 	}
 }
 
+func TestNativeOpenCodePrimeBaselinesExistingSessionsWithoutExport(t *testing.T) {
+	root := t.TempDir()
+	watch := newNativeHistoryWatch("", root)
+	watch.indexPath = filepath.Join(root, ".marshal", "opencode", "history-index.json")
+	var commands []string
+	watch.openCodeRun = func(args ...string) ([]byte, error) {
+		commands = append(commands, strings.Join(args, " "))
+		return json.Marshal([]openCodeSession{
+			{ID: "matching", Updated: 11, Directory: root},
+			{ID: "foreign", Updated: 12, Directory: t.TempDir()},
+		})
+	}
+	if err := watch.primeOpenCode(); err != nil {
+		t.Fatal(err)
+	}
+	if watch.seen["matching"] != "11" || watch.seen["foreign"] != "" {
+		t.Fatalf("baseline = %#v", watch.seen)
+	}
+	if len(commands) != 1 || strings.HasPrefix(commands[0], "export ") {
+		t.Fatalf("prime commands = %q", commands)
+	}
+}
+
 func TestNativeOpenCodeRequiresTerminal(t *testing.T) {
 	_, ws, ctx := newControlWorkspace(t)
 	ws.terminal = NewTerminal(nil, nil)

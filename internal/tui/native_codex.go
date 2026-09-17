@@ -121,6 +121,14 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	if err := watch.loadIndex(); err != nil {
 		syncErr = err
 	}
+	if provider == "opencode" {
+		// Establish a baseline before the child runs. The exit sync then imports
+		// only the session created or updated by this launch, rather than every
+		// historical OpenCode session already present on the machine.
+		if err := watch.primeOpenCode(); err != nil {
+			syncErr = errors.Join(syncErr, err)
+		}
+	}
 	imported := 0
 	if source := w.controlSource(); source != nil {
 		if authority, ok := source.Authority.(*runtimeControlAuthority); ok {
@@ -492,6 +500,17 @@ func (w *nativeHistoryWatch) syncFile(path string) error {
 	}
 	for {
 		line, readErr := r.ReadSlice('\n')
+		if errors.Is(readErr, bufio.ErrBufferFull) {
+			// Tool payloads can exceed the provider adapter's one-line bound.
+			// Drain that event and continue with later conversation instead of
+			// making the entire live history permanently unimportable.
+			for errors.Is(readErr, bufio.ErrBufferFull) {
+				_, readErr = r.ReadSlice('\n')
+			}
+			if readErr == nil {
+				continue
+			}
+		}
 		// Ignore a partial final event; a later poll retries it after append.
 		if errors.Is(readErr, io.EOF) {
 			break

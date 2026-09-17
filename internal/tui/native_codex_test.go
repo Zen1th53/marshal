@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/memory/importer"
@@ -116,6 +117,30 @@ func TestNativeHistoryIndexSurvivesRestart(t *testing.T) {
 	info, err := os.Stat(index)
 	if err != nil || info.Mode().Perm() != 0600 {
 		t.Fatalf("index permissions: %v, %v", info, err)
+	}
+}
+
+func TestNativeHistorySkipsOversizedEventAndKeepsLaterMessages(t *testing.T) {
+	dir, root := t.TempDir(), t.TempDir()
+	meta, _ := json.Marshal(map[string]any{"type": "session_meta", "payload": map[string]string{"id": "large", "cwd": root}})
+	valid := `{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"after large tool output"}]}}`
+	data := append(meta, '\n')
+	data = append(data, strings.Repeat("x", (1<<20)+100)...)
+	data = append(data, '\n')
+	data = append(data, valid...)
+	data = append(data, '\n')
+	if err := os.WriteFile(filepath.Join(dir, "rollout.jsonl"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	w := newNativeHistoryWatch(dir, root)
+	w.consume = func(tr importer.SessionTranscript) error {
+		if len(tr.Messages) != 1 || tr.Messages[0].Content != "after large tool output" {
+			t.Fatalf("messages = %+v", tr.Messages)
+		}
+		return nil
+	}
+	if err := w.sync(); err != nil {
+		t.Fatal(err)
 	}
 }
 

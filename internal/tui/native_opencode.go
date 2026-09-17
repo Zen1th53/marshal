@@ -57,13 +57,9 @@ func newOpenCodeHistoryWatch(binary, root string) *nativeHistoryWatch {
 }
 
 func (w *nativeHistoryWatch) syncOpenCode() error {
-	list, err := w.openCodeRun("session", "list", "--format", "json", "--max-count", "100")
+	sessions, err := w.listOpenCodeSessions()
 	if err != nil {
 		return err
-	}
-	var sessions []openCodeSession
-	if err := json.Unmarshal(list, &sessions); err != nil {
-		return fmt.Errorf("decode OpenCode session list: %w", err)
 	}
 	var failures []error
 	for _, session := range sessions {
@@ -117,4 +113,33 @@ func (w *nativeHistoryWatch) syncOpenCode() error {
 		}
 	}
 	return errors.Join(append(failures, w.saveIndex())...)
+}
+
+func (w *nativeHistoryWatch) primeOpenCode() error {
+	sessions, err := w.listOpenCodeSessions()
+	if err != nil {
+		return err
+	}
+	for _, session := range sessions {
+		cwd := session.Directory
+		if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
+			cwd = resolved
+		}
+		if session.ID != "" && filepath.Clean(cwd) == w.root {
+			w.seen[session.ID] = strconv.FormatInt(session.Updated, 10)
+		}
+	}
+	return w.saveIndex()
+}
+
+func (w *nativeHistoryWatch) listOpenCodeSessions() ([]openCodeSession, error) {
+	list, err := w.openCodeRun("session", "list", "--format", "json", "--max-count", "100")
+	if err != nil {
+		return nil, err
+	}
+	var sessions []openCodeSession
+	if err := json.Unmarshal(list, &sessions); err != nil {
+		return nil, fmt.Errorf("decode OpenCode session list: %w", err)
+	}
+	return sessions, nil
 }
