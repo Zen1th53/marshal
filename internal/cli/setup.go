@@ -9,11 +9,17 @@ import (
 	"github.com/Zen1th53/marshal/internal/startup"
 )
 
-// setup reports readiness. It is strictly an assessment: it has no path that
-// writes anything, which is what distinguishes it from Doctor's repair.
+// setup reports readiness, and then offers to carry out the blocking steps it
+// just reported. `setup status` keeps the old behaviour of reporting only, and
+// so does any run whose output is not going to a terminal: nothing here acts
+// without an answer from the user.
 func (c *command) setup(ctx context.Context, args []string) error {
-	if len(args) > 0 && args[0] != "status" {
-		return fmt.Errorf("%w: unknown setup subcommand %s", model.ErrInvalid, args[0])
+	report := true
+	if len(args) > 0 {
+		if args[0] != "status" {
+			return fmt.Errorf("%w: unknown setup subcommand %s", model.ErrInvalid, args[0])
+		}
+		report = false
 	}
 	assessment := startup.Assess(ctx, startup.NewSystemProber(), c.startupEnvironment())
 
@@ -21,6 +27,24 @@ func (c *command) setup(ctx context.Context, args []string) error {
 		return c.print(assessment, "")
 	}
 
+	fmt.Fprint(c.stdout, renderAssessment(assessment))
+	if !report {
+		return nil
+	}
+
+	// One step changes what the next one is, so the assessment offering is
+	// re-run rather than reused, and what is printed at the end is what the
+	// final one found.
+	after := c.offerSetupFixes(ctx, assessment)
+	if after.Phase != assessment.Phase || len(after.Blocking()) != len(assessment.Blocking()) {
+		fmt.Fprint(c.stdout, "\n"+renderAssessment(after))
+	}
+	return nil
+}
+
+// renderAssessment writes readiness as text: every check, what is available,
+// and what still blocks work.
+func renderAssessment(assessment startup.Assessment) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Readiness: %s\n\n", assessment.Phase)
 	for _, check := range assessment.Checks {
@@ -39,8 +63,7 @@ func (c *command) setup(ctx context.Context, args []string) error {
 			fmt.Fprintf(&b, "  - %s\n    %s\n", check.Summary, check.Remedy)
 		}
 	}
-	fmt.Fprint(c.stdout, b.String())
-	return nil
+	return b.String()
 }
 
 // help explains startup, health states, Setup versus Doctor, and why work may
