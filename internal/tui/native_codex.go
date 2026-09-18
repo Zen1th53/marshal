@@ -82,6 +82,8 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		label, homeEnv, homeDir, historyDir = "Claude", "CLAUDE_CONFIG_DIR", ".claude", "projects"
 	case "opencode":
 		label, homeEnv, homeDir, historyDir = "OpenCode", "", "", ""
+	case "antigravity":
+		label, homeEnv, homeDir, historyDir = "Antigravity", "", "", ""
 	case "codex":
 	default:
 		return "", fmt.Errorf("unsupported native provider %q", provider)
@@ -89,7 +91,11 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	if w.terminal == nil || !w.terminal.IsTerminal() {
 		return "", fmt.Errorf("native %s requires an interactive terminal; use /%s exec for batch tasks", label, provider)
 	}
-	binary, err := project.FindBinary(provider)
+	binaryName := provider
+	if provider == "antigravity" {
+		binaryName = antigravityBinary
+	}
+	binary, err := project.FindBinary(binaryName)
 	if err != nil {
 		return "", err
 	}
@@ -100,6 +106,11 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	var watch *nativeHistoryWatch
 	if provider == "opencode" {
 		watch = newOpenCodeHistoryWatch(binary, root)
+	} else if provider == "antigravity" {
+		watch, err = newAntigravityHistoryWatch(root)
+		if err != nil {
+			return "", err
+		}
 	} else {
 		home := os.Getenv(homeEnv)
 		if home == "" {
@@ -126,6 +137,13 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		// only the session created or updated by this launch, rather than every
 		// historical OpenCode session already present on the machine.
 		if err := watch.primeOpenCode(); err != nil {
+			syncErr = joinNativeSyncError(syncErr, err)
+		}
+	}
+	if provider == "antigravity" {
+		// The same baseline, for the same reason: agy keeps every conversation
+		// the machine has ever held, and only this launch's belong here.
+		if err := watch.primeAntigravity(); err != nil {
 			syncErr = joinNativeSyncError(syncErr, err)
 		}
 	}
@@ -305,7 +323,13 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 					syncErr = joinNativeSyncError(syncErr, err)
 				}
 			}
-			result := fmt.Sprintf("%s exited. %d message(s), including tool calls, saved to MARSHAL memory.\n/%s continue resumes; /%s new starts a new session.", label, imported, provider, provider)
+			// The command is what the operator types, which for agy is not
+			// the provider's long name.
+			command := provider
+			if provider == "antigravity" {
+				command = antigravityBinary
+			}
+			result := fmt.Sprintf("%s exited. %d message(s), including tool calls, saved to MARSHAL memory.\n/%s continue resumes; /%s new starts a new session.", label, imported, command, command)
 			if delivered := inbox.Count(); delivered > 0 {
 				result += fmt.Sprintf("\n%d live update(s) from another agent were delivered to this session's inbox.", delivered)
 			}
@@ -322,7 +346,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			// OpenCode's public history API is a CLI export backed by the same
 			// database the child is using. Export once the child exits; polling it
 			// here can delay interactive input and contend with the live session.
-			if provider != "opencode" {
+			if provider != "opencode" && provider != "antigravity" {
 				if err := watch.sync(); err != nil {
 					syncErr = err
 				}
@@ -357,7 +381,8 @@ func joinNativeSyncError(existing, next error) error {
 // positional, so prompt-channel injection stands down instead.
 func hasOperatorPrompt(args []string) bool {
 	for _, arg := range args {
-		if arg == "--" || arg == "--prompt" || strings.HasPrefix(arg, "--prompt=") {
+		if arg == "--" || arg == "--prompt" || strings.HasPrefix(arg, "--prompt=") ||
+			arg == "--prompt-interactive" || arg == "-i" || strings.HasPrefix(arg, "--prompt-interactive=") {
 			return true
 		}
 	}
@@ -382,6 +407,12 @@ type nativeHistoryWatch struct {
 	// supplies JSON exports, so MARSHAL never reads the database or depends on
 	// its private schema. The adapter selects visible conversation fields.
 	openCodeRun func(args ...string) ([]byte, error)
+	// antigravity is set for agy's per-conversation SQLite history, which is
+	// read directly and read-only: agy has no export command. The adapter
+	// takes only fields observed to carry visible conversation and tool
+	// evidence, and never reads the model's reasoning.
+	antigravity          bool
+	antigravitySummaries string
 	// captureTools records tool calls and their results alongside conversation,
 	// so a later session can see what the agent actually ran and changed rather
 	// than only what it said about it.
@@ -402,6 +433,9 @@ func newNativeHistoryWatch(dir, root string) *nativeHistoryWatch {
 func (w *nativeHistoryWatch) sync() error {
 	if w.openCodeRun != nil {
 		return w.syncOpenCode()
+	}
+	if w.antigravity {
+		return w.syncAntigravity()
 	}
 	var failures []error
 	walkErr := filepath.WalkDir(w.dir, func(path string, entry fs.DirEntry, err error) error {

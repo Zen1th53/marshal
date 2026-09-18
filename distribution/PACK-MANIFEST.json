@@ -2126,8 +2126,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "53695462ac685f1eaeb083646366a5c0c3f2b29ff96a708fa812f341df7f98c5",
-      "bytes": 18592
+      "sha256": "91f6695e1c13638027394d682abec7c085f44e567da0e200035cb447e6f1eef5",
+      "bytes": 18948
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -2821,8 +2821,8 @@
     },
     {
       "path": "docs/cli.md",
-      "sha256": "7af01ae2a979cc262beea269b5f377201b37f3a4f5fa8bb7f4bd438acee9526d",
-      "bytes": 11245
+      "sha256": "ca8b1a66c7c0d0a88838d98958cf5f3ea53c19c464998effce127fdcfc788879",
+      "bytes": 12029
     },
     {
       "path": "docs/concepts.md",
@@ -3216,8 +3216,8 @@
     },
     {
       "path": "docs/tui.md",
-      "sha256": "345d61caa2108a2f555ab155ed8c3608cb0e44907ccb4a0da2c95a8a71e1ef3a",
-      "bytes": 24355
+      "sha256": "80b33d8b9cf2bb89805cfaeda029e8c13454158981360b1ac10adc551ad15ca2",
+      "bytes": 27239
     },
     {
       "path": "docs/verification-quorum.md",
@@ -4281,8 +4281,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "748d4822412d8209a01c0c8425c44c11957342d98cbf7c0fa59ddc6d50cefdbd",
-      "bytes": 34667
+      "sha256": "64da6179cfaf22abe16322fd2626e4e412acdde4f966bfba89e5da4440527c43",
+      "bytes": 35191
     },
     {
       "path": "internal/cli/cli_test.go",
@@ -4381,13 +4381,18 @@
     },
     {
       "path": "internal/cli/tui_cli.go",
-      "sha256": "300352dacc2f41ce50a6f102e72d0ecbee9269adc2cf172d5c2f75d755c3692c",
-      "bytes": 4820
+      "sha256": "8dc1f8555327cd6954e0e6142801e35d91491e42d5594cf41a4bb14cd0460024",
+      "bytes": 5164
     },
     {
       "path": "internal/cli/tui_cli_test.go",
       "sha256": "41c81abef15cb30a1b246eea6e08da31ba1d749ad96eeb680a382eae03dd3f7d",
       "bytes": 3070
+    },
+    {
+      "path": "internal/cli/update.go",
+      "sha256": "d1c063e00500d3ca6655d7d9affb31efaf5e55aaf51c9f6dfd1686aa3564988d",
+      "bytes": 2259
     },
     {
       "path": "internal/cli/verification.go",
@@ -5848,6 +5853,16 @@
       "path": "internal/memory/identity/dedup_test.go",
       "sha256": "17bc8169c81b229c812c6120bc24423db80af27af7eef27e532dd42f2057ceee",
       "bytes": 2998
+    },
+    {
+      "path": "internal/memory/importer/antigravity.go",
+      "sha256": "29118d8fc94591515dfebdc3dc828ec655d3285bd47bc4d112e57ccd5ca42b3c",
+      "bytes": 8245
+    },
+    {
+      "path": "internal/memory/importer/antigravity_test.go",
+      "sha256": "feed8f2ec378ae8c4924de5c1381da7902b3481002fa8d3cafea7337e006ecf9",
+      "bytes": 6704
     },
     {
       "path": "internal/memory/importer/provider_adapters.go",
@@ -7396,8 +7411,13 @@
     },
     {
       "path": "internal/store/checkpoint.go",
-      "sha256": "42a20fe78c3ab250ab1d8b3c93a3b0160f15573ed063b7f15d78529f2a37508c",
-      "bytes": 11004
+      "sha256": "9105e53dd336c75cad27d442919ef10dcae1940eb48dd3f8e96b2410360d8ddb",
+      "bytes": 11378
+    },
+    {
+      "path": "internal/store/checkpoint_order_test.go",
+      "sha256": "7187e0c67e28e72feb38e736a874007b0e4d0b852c58368beb9b502168279bb9",
+      "bytes": 1857
     },
     {
       "path": "internal/store/checkpoint_persistence_a02_test.go",
@@ -8376,8 +8396,13 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "012a2e60489c9085e9cfbd3fdb9317e8969f1fa14af8cce6cff7d7c5e22ad3dd",
-      "bytes": 24179
+      "sha256": "3b72474bb8d430544db8fbb5fc76ffd5e93b16d80d253f547790af51c3038eb2",
+      "bytes": 24596
+    },
+    {
+      "path": "internal/tui/commands_antigravity.go",
+      "sha256": "f740d8e9b8f12784469d4a3abf5e81f5c8de01ba9e5be09346bc544cd15d76cc",
+      "bytes": 2995
     },
     {
       "path": "internal/tui/commands_claude.go",
@@ -8443,6 +8468,11 @@
       "path": "internal/tui/commands_optimization_test.go",
       "sha256": "f871836f83524c40e889d033ea4bc76df27f89b884908d78898c40af531be4aa",
       "bytes": 555
+    },
+    {
+      "path": "internal/tui/commands_update.go",
+      "sha256": "9bb2d07a9200574a0be7a2f158af748170b02f51e0c7b7d79c283e7e816d83cc",
+      "bytes": 4376
     },
     {
       "path": "internal/tui/completion_popup.go",
@@ -8531,8 +8561,8 @@
     },
     {
       "path": "internal/tui/frame.go",
-      "sha256": "c9aa44cc07b799c246d0af8df99906399289656d3d62ee60280819db9dc359fb",
-      "bytes": 10129
+      "sha256": "09cf3bf2b568b20da504dc7dabcfd3b0ac170a518b416fd3ab713e7d7b41bec4",
+      "bytes": 10691
     },
     {
       "path": "internal/tui/grapheme.go",
@@ -8600,9 +8630,24 @@
       "bytes": 6975
     },
     {
+      "path": "internal/tui/native_antigravity.go",
+      "sha256": "f7520c9917531bd9d7610ae76c235623fdba069036d73226a006a84a1eb9dc5c",
+      "bytes": 7722
+    },
+    {
+      "path": "internal/tui/native_antigravity_pty_test.go",
+      "sha256": "535016ed4127d99eb37c8be74e1642ddb9d0822244130d12b6c31aff02634580",
+      "bytes": 4658
+    },
+    {
+      "path": "internal/tui/native_antigravity_test.go",
+      "sha256": "a8449c95dbba7d5dd2a974540c90542029c5bcceab6d1e152352c4eb3a39f61c",
+      "bytes": 1203
+    },
+    {
       "path": "internal/tui/native_briefing.go",
-      "sha256": "4fe2df76ce803630f954bd54309ed9f9dff019ee41d85c7ce0c530b6b7f9deb2",
-      "bytes": 13065
+      "sha256": "7ca5dddb9aa15d40182891a23f5b6941380f4e66cd78d33435e8276f4d4eac86",
+      "bytes": 13338
     },
     {
       "path": "internal/tui/native_briefing_test.go",
@@ -8626,8 +8671,8 @@
     },
     {
       "path": "internal/tui/native_codex.go",
-      "sha256": "407b866e425682ab78d73267322b18fd7fdf6300ebccf5ecaa3e354cd28a7458",
-      "bytes": 16838
+      "sha256": "7c68bc29d8812b2f6ed33ffba74c8da72c948b80b842d4f6385154b8155664b3",
+      "bytes": 18125
     },
     {
       "path": "internal/tui/native_codex_pty_test.go",
@@ -8701,8 +8746,8 @@
     },
     {
       "path": "internal/tui/navview.go",
-      "sha256": "d55cb157a034919c101376ce57ccb47708adb287fbbc3a891567219f1b01704d",
-      "bytes": 40882
+      "sha256": "0a12d78d45f086c027731dd5af6adf102935d54bf30b12beef83eadb545ff233",
+      "bytes": 40901
     },
     {
       "path": "internal/tui/navview_test.go",
@@ -8766,8 +8811,8 @@
     },
     {
       "path": "internal/tui/registry.go",
-      "sha256": "186a62330702adc74ea42ae0f8d2f26b0808a72312e745a50e49f08161e4f6b3",
-      "bytes": 44439
+      "sha256": "44c08de7fc625e8927c34b9bb66666cc4498bd5dc5913ddc3b88cdba498daea1",
+      "bytes": 44781
     },
     {
       "path": "internal/tui/registry_parity_test.go",
@@ -8880,6 +8925,11 @@
       "bytes": 9285
     },
     {
+      "path": "internal/tui/update_notice_test.go",
+      "sha256": "c77cbadefc27dc69a16e7b65a722503628d54f78f745104a289c100f2b271ce1",
+      "bytes": 3022
+    },
+    {
       "path": "internal/tui/verifydata.go",
       "sha256": "7e32f8e841e3b7b1b66e80db2ce7f4b1665a3d86fe331ec3b2115b4463ca4482",
       "bytes": 13635
@@ -8891,8 +8941,8 @@
     },
     {
       "path": "internal/tui/view.go",
-      "sha256": "eae94daaaf8ff14d6dce03a13b8538fb9a5fb5e342457cec5664a5e7f19edae7",
-      "bytes": 13376
+      "sha256": "f61e3d5bb6774c072bb56a299f38cfaf58be10c2250152cb1de9f2fbf2d50fbe",
+      "bytes": 13604
     },
     {
       "path": "internal/tui/workdata.go",
@@ -8911,13 +8961,23 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "18654de09ea0d579d3ecf20c37a42c251773a05acaee63469bfb9de43b976771",
-      "bytes": 43764
+      "sha256": "87b9e7cb1df2e135c656c53cecc48406438f55883d4b7f4e1bf2d2f3238dcb0b",
+      "bytes": 44569
     },
     {
       "path": "internal/tui/workspace_nav_test.go",
       "sha256": "d2563c618ec4ab20f821de139eef69680ed0648059464617d92514f24ac40891",
       "bytes": 33005
+    },
+    {
+      "path": "internal/update/update.go",
+      "sha256": "134c30fca50d59125ec3addb67ac366bdfc57b6435eb6a7d38af2c9c2548a4cb",
+      "bytes": 10070
+    },
+    {
+      "path": "internal/update/update_test.go",
+      "sha256": "da163322565486d86bfc646526163b2c32860045aac4ccc8ded8070b3e5e3a49",
+      "bytes": 5836
     },
     {
       "path": "internal/verification/bundle.go",
@@ -9428,6 +9488,11 @@
       "path": "release/RELEASE_NOTES_0.0.2.md",
       "sha256": "60da76751a5ad983b797e0ecae6816bdd0b60286c8d6ab508211c0a754d3bbf0",
       "bytes": 2823
+    },
+    {
+      "path": "release/RELEASE_NOTES_0.0.3.md",
+      "sha256": "57b3620ab785d140a7360d06b9cbc1eb750daefe2f46c42d1ac2c6a0593412e5",
+      "bytes": 4987
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",

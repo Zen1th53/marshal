@@ -47,6 +47,37 @@ are excluded, and the normal memory firewall still rejects secrets.
 imported again. Cross-agent briefings use the same bounded `AGENTS.md` block and
 incoming live inbox mechanism as Codex.
 
+## Native Antigravity sessions
+
+Run `marshal agy` (or `marshal antigravity`) or press F12 in MARSHAL to open the
+installed Antigravity CLI, `agy`. Native arguments pass through unchanged.
+Within MARSHAL, `/agy new` starts a fresh conversation, `/agy continue` resumes
+the most recent one, `/agy resume <conversation>` selects one by ID, and
+`/agy <prompt>` opens the session with that prompt. `/agy cli <arguments>`
+exposes the rest of the native CLI, including models, agents, MCP servers and
+plugins. `/antigravity` is the same command.
+
+agy uses the operator's existing configuration and sign-in. It keeps each
+conversation as its own SQLite database under
+`~/.gemini/antigravity-cli/conversations`, and has no export command, so MARSHAL
+reads those databases directly and read-only once the native process exits. It
+never writes to agy's files. Only fields observed to carry visible conversation
+and tool evidence are read: the user's input, the agent's visible answer, tool
+calls with their arguments, and command output or failure text. The model's
+reasoning sits in a separate field that is never read, and the normal memory
+firewall still rejects secrets.
+
+Conversations that existed before the launch are recorded first, so the exit
+sync imports only what this session created or continued. A conversation agy
+recorded against a different workspace is left to that project.
+`.marshal/antigravity/history-index.json` prevents an unchanged conversation
+from being imported again. Cross-agent briefings reach agy through the same
+`AGENTS.md` block as Codex and OpenCode; agy reads it from the workspace.
+
+agy's storage format is not published. If a later release changes it, fields
+MARSHAL cannot find are skipped rather than guessed at, so capture loses
+evidence instead of inventing it.
+
 ## Tool capture
 
 A native session records its tool calls alongside its conversation, because what
@@ -360,6 +391,7 @@ buffer, the cursor position and any open completion.
 Every user-operable MARSHAL capability has a direct command mapping:
 
 ### Session & Workspace
+- `/update [install]` — Check for a newer published release, or install it. `F10` does the same: it installs the release the notice is showing, and checks when there is none.
 - `/status` — Inspect active runtime, schema, task, and participant counts.
 - `/msg <text>` — Broadcast message to workspace or `@agent` specifically.
 - `/pause` — Pause active workflow execution.
@@ -415,6 +447,28 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/export` — Write a real evidence bundle to `.marshal/evidence/`, carrying the active goal, its critical claims and evidence refs, and a deterministic digest.
 - `/context` — Show the context strategy the ULTRA router derives from the current role and risk.
 - `/help` — Display interactive help and keybinding summary.
+
+---
+
+## Update notice
+
+When a newer release is published, the workspace says so in the activity panel
+with the key that installs it:
+
+```
+ Update  MARSHAL v0.0.3 is available  [F10] Download and install · /update
+```
+
+The check behind it reads the public release feed, runs off the input loop so a
+slow feed cannot delay the workspace, and installs nothing. A check that fails
+is not reported: a workspace that opened is not the place to explain that GitHub
+was unreachable. `MARSHAL_NO_UPDATE_CHECK=1` turns it off entirely.
+
+Installing is the user's action, never the check's. `F10` installs the release
+the notice is showing and, when there is no notice, checks for one; `/update
+install` does the same from the composer. The archive is verified against the
+release's published checksum before anything is replaced, and a session that
+updates keeps running the build it started with until it is restarted.
 
 ---
 

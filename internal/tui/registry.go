@@ -795,6 +795,12 @@ func registerAllCapabilities(r *CapabilityRegistry) {
 
 	// 13. Operations & Diagnostics Domain (6)
 	r.Register(Capability{
+		ID: "update.check", Category: "SYSTEM", Name: "Update MARSHAL",
+		Description: "Check for a newer published release and install it after verifying its checksum",
+		Access:      AccessRead, CLISurface: "marshal update",
+		TUISurface: "/update", KeyboardPath: "F10", PalettePath: "update release install version",
+	})
+	r.Register(Capability{
 		ID: "doctor.run", Category: "SYSTEM", Name: "System Diagnostics",
 		Description: "Run full doctor suite checking database, harnesses, sandbox, and git",
 		Access:      AccessRead, CLISurface: "marshal doctor",

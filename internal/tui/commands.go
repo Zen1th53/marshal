@@ -80,6 +80,9 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 			return "Invalid mode. Supported modes: manual, auto", nil
 		}
 
+	case "/update":
+		return h.handleUpdate(ctx, parts[1:])
+
 	case "/status":
 		return h.handleStatus(ctx)
 	case "/verification":
@@ -305,6 +308,8 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	case "/opencode":
 		return h.handleOpenCode(ctx, parts[1:], line)
+	case "/agy", "/antigravity":
+		return h.handleAntigravity(ctx, parts[1:], line)
 
 	case "/mcp":
 		return h.handleCodex(ctx, append([]string{"mcp"}, parts[1:]...), line)
@@ -659,14 +664,17 @@ func (h *CommandHandler) helpText() string {
   /codex [subcommand]      Full Codex control plane (status, models, review, exec, run, cli)
   /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
   /opencode [subcommand]   Native OpenCode sessions (new, continue, resume, fork, cli)
-  <prompt...>              Plain text runs nothing; choose /codex, /claude, or /opencode
+  /agy [subcommand]        Native Antigravity sessions (new, continue, resume, cli)
+  <prompt...>              Plain text runs nothing; choose /codex, /claude, /opencode, or /agy
+  /update [install]        Check for a newer MARSHAL release, or install it
   /help                    Show this help reference
   /quit, /exit             Exit TUI workspace (session remains durable in SQLite)
 
 Function Keys & Shortcuts:
   F1: Help       F2: Review     F3: Diff viewer
   F4: Status     F5: Models     F6: MCP servers
-  F7: Codex      F8: Claude     F9: OpenCode     Ctrl+N: Navigation (ULTRA)
+  F7: Codex      F8: Claude     F9: OpenCode     F12: Antigravity
+  F10: Update     Ctrl+N: Navigation (ULTRA)
 
 Composer:
   /  or  @                 Opens the command menu as you type
@@ -696,7 +704,8 @@ func plainTextRunsNothing(line string, known func(string) bool) string {
 		"  /codex <prompt>   Send this to Codex\n" +
 		"  /claude <prompt>  Send this to Claude\n" +
 		"  /opencode <prompt> Open a native OpenCode session\n" +
-		"  F7 / F8 / F9      Open Codex, Claude, or OpenCode\n" +
+		"  /agy <prompt>     Open a native Antigravity session\n" +
+		"  F7 / F8 / F9 / F12  Open Codex, Claude, OpenCode, or Antigravity\n" +
 		"  /help             List every command"
 }
 
