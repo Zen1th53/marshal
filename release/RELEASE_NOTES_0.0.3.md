@@ -34,6 +34,10 @@ MARSHAL tell you when a newer release exists and install it on request.
   - Git's "Author identity unknown" and its revision-parsing error on a
     repository with no commits are now reported in plain terms with the step
     to take.
+  - Handoff checkpoints and rollbacks are ordered by time rather than by the
+    text of their timestamps. Trimmed fractional seconds made "…:07Z" sort
+    after "…:07.5Z", which could return the wrong checkpoint as the latest and
+    made a store test fail intermittently.
 
 ## Configuration
 

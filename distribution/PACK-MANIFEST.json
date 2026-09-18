@@ -7401,8 +7401,13 @@
     },
     {
       "path": "internal/store/checkpoint.go",
-      "sha256": "42a20fe78c3ab250ab1d8b3c93a3b0160f15573ed063b7f15d78529f2a37508c",
-      "bytes": 11004
+      "sha256": "9105e53dd336c75cad27d442919ef10dcae1940eb48dd3f8e96b2410360d8ddb",
+      "bytes": 11378
+    },
+    {
+      "path": "internal/store/checkpoint_order_test.go",
+      "sha256": "7187e0c67e28e72feb38e736a874007b0e4d0b852c58368beb9b502168279bb9",
+      "bytes": 1857
     },
     {
       "path": "internal/store/checkpoint_persistence_a02_test.go",
@@ -9456,8 +9461,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.3.md",
-      "sha256": "4c27512c600eacf8d3e684e8512d903ffe3e519eac9586707e6503dc66e0ae2a",
-      "bytes": 3280
+      "sha256": "598fe0e1021247c8c9495e682e17b9789da46711ce754217e89f7a650b804a0e",
+      "bytes": 3558
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",

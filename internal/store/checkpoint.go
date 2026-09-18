@@ -144,12 +144,17 @@ func (s *Store) GetLatestHandoffCheckpoint(ctx context.Context, taskID string) (
 		       budget_state_json, pending_blockers_json, state_snapshot_json, reason, created_at
 		FROM handoff_checkpoints
 		WHERE task_id = ?
-		ORDER BY created_at DESC
+		ORDER BY julianday(created_at) DESC, rowid DESC
 		LIMIT 1
 	`
 	row := s.db.QueryRowContext(ctx, query, taskID)
 	return scanCheckpoint(row)
 }
+
+// Checkpoint and rollback times are stored as RFC 3339 text with trailing
+// fractional zeros trimmed, so their text order is not their time order:
+// "…:07Z" sorts after "…:07.5Z". Every query that orders by time therefore
+// orders by julianday(), and by insertion (rowid) where two share a moment.
 
 // ListHandoffCheckpoints returns all checkpoints for a task ordered chronologically.
 func (s *Store) ListHandoffCheckpoints(ctx context.Context, taskID string) ([]model.HandoffCheckpoint, error) {
@@ -161,7 +166,7 @@ func (s *Store) ListHandoffCheckpoints(ctx context.Context, taskID string) ([]mo
 		       budget_state_json, pending_blockers_json, state_snapshot_json, reason, created_at
 		FROM handoff_checkpoints
 		WHERE task_id = ?
-		ORDER BY created_at ASC
+		ORDER BY julianday(created_at) ASC, rowid ASC
 	`
 	rows, err := s.db.QueryContext(ctx, query, taskID)
 	if err != nil {
@@ -220,7 +225,7 @@ func (s *Store) GetCheckpointRollbacks(ctx context.Context, checkpointID string)
 		       actor_provenance_json, invalidated_claim_ids_json, created_at
 		FROM checkpoint_rollbacks
 		WHERE checkpoint_id = ?
-		ORDER BY created_at ASC
+		ORDER BY julianday(created_at) ASC, rowid ASC
 	`
 	rows, err := s.db.QueryContext(ctx, query, checkpointID)
 	if err != nil {
