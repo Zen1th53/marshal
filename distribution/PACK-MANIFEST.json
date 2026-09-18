@@ -4380,6 +4380,11 @@
       "bytes": 3070
     },
     {
+      "path": "internal/cli/update.go",
+      "sha256": "d1c063e00500d3ca6655d7d9affb31efaf5e55aaf51c9f6dfd1686aa3564988d",
+      "bytes": 2259
+    },
+    {
       "path": "internal/cli/verification.go",
       "sha256": "e35236b44486e4b16094b1a9a7a923b23d38b9e9422de0e979198f2b4cb5329c",
       "bytes": 3206
@@ -8435,6 +8440,11 @@
       "bytes": 555
     },
     {
+      "path": "internal/tui/commands_update.go",
+      "sha256": "9bb2d07a9200574a0be7a2f158af748170b02f51e0c7b7d79c283e7e816d83cc",
+      "bytes": 4376
+    },
+    {
       "path": "internal/tui/completion_popup.go",
       "sha256": "75efd9d44eb23781b585538c4e6eed476b05ca53264390c4bd63586eebb9aeaf",
       "bytes": 2589
@@ -8870,6 +8880,11 @@
       "bytes": 9285
     },
     {
+      "path": "internal/tui/update_notice_test.go",
+      "sha256": "c77cbadefc27dc69a16e7b65a722503628d54f78f745104a289c100f2b271ce1",
+      "bytes": 3022
+    },
+    {
       "path": "internal/tui/verifydata.go",
       "sha256": "7e32f8e841e3b7b1b66e80db2ce7f4b1665a3d86fe331ec3b2115b4463ca4482",
       "bytes": 13635
@@ -8908,6 +8923,16 @@
       "path": "internal/tui/workspace_nav_test.go",
       "sha256": "d2563c618ec4ab20f821de139eef69680ed0648059464617d92514f24ac40891",
       "bytes": 33005
+    },
+    {
+      "path": "internal/update/update.go",
+      "sha256": "134c30fca50d59125ec3addb67ac366bdfc57b6435eb6a7d38af2c9c2548a4cb",
+      "bytes": 10070
+    },
+    {
+      "path": "internal/update/update_test.go",
+      "sha256": "da163322565486d86bfc646526163b2c32860045aac4ccc8ded8070b3e5e3a49",
+      "bytes": 5836
     },
     {
       "path": "internal/verification/bundle.go",
