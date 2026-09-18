@@ -9491,8 +9491,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.3.md",
-      "sha256": "57b3620ab785d140a7360d06b9cbc1eb750daefe2f46c42d1ac2c6a0593412e5",
-      "bytes": 4987
+      "sha256": "0a46a568b41a7deb2b117b8cba0ec29044b3be022de24ca21db1c7f2fceac5fe",
+      "bytes": 5471
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
