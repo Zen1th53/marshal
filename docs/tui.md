@@ -47,6 +47,37 @@ are excluded, and the normal memory firewall still rejects secrets.
 imported again. Cross-agent briefings use the same bounded `AGENTS.md` block and
 incoming live inbox mechanism as Codex.
 
+## Native Antigravity sessions
+
+Run `marshal agy` (or `marshal antigravity`) or press F12 in MARSHAL to open the
+installed Antigravity CLI, `agy`. Native arguments pass through unchanged.
+Within MARSHAL, `/agy new` starts a fresh conversation, `/agy continue` resumes
+the most recent one, `/agy resume <conversation>` selects one by ID, and
+`/agy <prompt>` opens the session with that prompt. `/agy cli <arguments>`
+exposes the rest of the native CLI, including models, agents, MCP servers and
+plugins. `/antigravity` is the same command.
+
+agy uses the operator's existing configuration and sign-in. It keeps each
+conversation as its own SQLite database under
+`~/.gemini/antigravity-cli/conversations`, and has no export command, so MARSHAL
+reads those databases directly and read-only once the native process exits. It
+never writes to agy's files. Only fields observed to carry visible conversation
+and tool evidence are read: the user's input, the agent's visible answer, tool
+calls with their arguments, and command output or failure text. The model's
+reasoning sits in a separate field that is never read, and the normal memory
+firewall still rejects secrets.
+
+Conversations that existed before the launch are recorded first, so the exit
+sync imports only what this session created or continued. A conversation agy
+recorded against a different workspace is left to that project.
+`.marshal/antigravity/history-index.json` prevents an unchanged conversation
+from being imported again. Cross-agent briefings reach agy through the same
+`AGENTS.md` block as Codex and OpenCode; agy reads it from the workspace.
+
+agy's storage format is not published. If a later release changes it, fields
+MARSHAL cannot find are skipped rather than guessed at, so capture loses
+evidence instead of inventing it.
+
 ## Tool capture
 
 A native session records its tool calls alongside its conversation, because what

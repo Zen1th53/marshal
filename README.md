@@ -4,7 +4,7 @@
 
 ### One workspace for every coding agent you use.
 
-**Claude Code, Codex, OpenCode and more in the same project, sharing one memory,
+**Claude Code, Codex, OpenCode, Antigravity and more in the same project, sharing one memory,
 running in sandboxed cells, with a record of everything they did.**
 
 [![CI](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml/badge.svg)](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml)
@@ -107,7 +107,8 @@ marshal tui
 | `F8` · `/claude` | Open a native **Claude Code** session |
 | `F7` · `/codex` | Open a native **Codex** session |
 | `F9` · `/opencode` | Open a native **OpenCode** session |
-| `/claude continue` · `/codex continue` · `/opencode continue` | Pick up where the agent left off |
+| `F12` · `/agy` | Open a native **Antigravity** session (`agy`) |
+| `/claude continue` · `/codex continue` · `/opencode continue` · `/agy continue` | Pick up where the agent left off |
 | `/opencode resume <id>` · `/opencode fork <id>` | Resume or fork a specific OpenCode session |
 | `/codex new` · `/resume` · `/codex cli` | Start fresh, resume, or open the plain CLI |
 | `F1` Help · `F2` Review · `F3` Diff | Help, review, and the working-tree diff viewer |
@@ -118,8 +119,8 @@ marshal tui
 Sessions are **native**. Claude Code runs as Claude Code, with your configuration,
 authentication, skills, MCP servers, plugins and its own permission prompts.
 MARSHAL doesn't proxy the provider, rewrite prompts, or get between you and the
-agent. **Codex**, **Claude Code** and **OpenCode** run as native sessions, and
-adapters also ship for **Gemini CLI** and **Antigravity**.
+agent. **Codex**, **Claude Code**, **OpenCode** and **Antigravity** (`agy`) run
+as native sessions, and an adapter also ships for **Gemini CLI**.
 
 You can also skip the workspace and launch a native session straight from the
 shell. Any extra arguments go to the agent unchanged:
@@ -128,6 +129,7 @@ shell. Any extra arguments go to the agent unchanged:
 marshal codex
 marshal claude
 marshal opencode
+marshal agy
 ```
 
 The **Team** panel shows the real status of every harness. Each binary is
@@ -162,7 +164,8 @@ See the [workspace guide](docs/tui.md) for the full command reference.
 
 You never have to save anything. From the moment an agent starts, MARSHAL writes
 to the project database every two seconds, and again when the agent exits.
-OpenCode sessions are imported automatically when the session closes:
+OpenCode and Antigravity sessions are imported automatically when the session
+closes:
 
 - **the conversation**: what you asked and what the agent answered
 - **every tool call**: the commands it ran and the files it opened

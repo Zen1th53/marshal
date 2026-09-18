@@ -105,7 +105,7 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 			th.Colorize(th.Muted, "ready · governed workspace active")), cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s %s",
 			th.Colorize(th.Success, "Native agent workspace"),
-			th.Colorize(th.Muted, "— F7 Codex · F8 Claude · F9 OpenCode · use /<agent> to send a prompt")), cols))
+			th.Colorize(th.Muted, "— F7 Codex · F8 Claude · F9 OpenCode · F12 Antigravity · use /<agent> to send a prompt")), cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s Help   %s Review   %s Diff",
 			th.Colorize(th.Active, "[F1]"),
 			th.Colorize(th.Active, "[F2]"),
@@ -115,7 +115,7 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 			th.Colorize(th.Active, "[F5]"),
 			th.Colorize(th.Active, "[Esc]")), cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s %s",
-			th.Colorize(th.Active, "[F7] Codex · [F8] Claude · [F9] OpenCode"), "Native sessions · automatic memory"), cols))
+			th.Colorize(th.Active, "[F7] Codex · [F8] Claude · [F9] OpenCode · [F12] Antigravity"), "Native sessions · automatic memory"), cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s %s",
 			th.Colorize(th.Muted, "Quick Commands:"),
 			"/codex new · /codex continue · /resume · /codex cli · /memory · /diff"), cols))

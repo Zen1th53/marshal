@@ -215,7 +215,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/policy", "/sandbox", "/memory", "/provider", "/harness", "/model", "/models",
 			"/effort", "/ultra", "/backup", "/fingerprint", "/runtime", "/store", "/export",
 			"/blind", "/reinjection", "/alignment", "/optimization", "/diff", "/review",
-			"/codex", "/claude", "/opencode", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
+			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
 		},
 		Agents:      agentIDs,
@@ -233,6 +233,8 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/mcp"] = []string{"list", "add", "rm"}
 	compCtx.Subcommands["/claude"] = []string{"new", "continue", "resume", "fork", "cli", "status", "models", "model", "doctor", "sessions", "exec", "run", "mcp", "plugin", "auth", "agents", "login", "logout"}
 	compCtx.Subcommands["/opencode"] = []string{"new", "continue", "resume", "fork", "cli", "status", "models", "providers", "auth", "mcp", "agent", "session", "stats", "run", "debug"}
+	compCtx.Subcommands["/agy"] = []string{"new", "continue", "resume", "cli", "status", "models", "agents", "mcp", "plugin", "changelog"}
+	compCtx.Subcommands["/antigravity"] = compCtx.Subcommands["/agy"]
 	compCtx.Subcommands["/plugin"] = []string{"list", "add", "rm"}
 	compCtx.Subcommands["/plugins"] = []string{"list", "add", "rm"}
 	compCtx.Subcommands["/search"] = []string{"on", "off"}
@@ -622,6 +624,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			}
 			if event.Type == KeyF9 {
 				w.runCommand(ctx, "/opencode new")
+				continue
+			}
+			if event.Type == KeyF12 {
+				w.runCommand(ctx, "/agy new")
 				continue
 			}
 			// The dispatch lives in its own method so a test can drive exactly
