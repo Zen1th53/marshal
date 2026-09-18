@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -13,7 +14,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/update"
 )
@@ -193,4 +196,140 @@ func TestDisabledHonoursTheEnvironment(t *testing.T) {
 			t.Errorf("%s=%q: Disabled() = %v, want %v", update.DisableEnv, value, got, want)
 		}
 	}
+}
+
+// slowReleaseServer serves an archive in chunks with a pause between them, and
+// optionally stops sending partway, the way a slow or dropped link behaves.
+func slowReleaseServer(t *testing.T, tag string, binary []byte, pause time.Duration, stallAfter int) *httptest.Server {
+	t.Helper()
+	archiveName := fmt.Sprintf("marshal_%s_linux_%s.tar.gz", tag[1:], runtimeArch())
+	var packed bytes.Buffer
+	zip := gzip.NewWriter(&packed)
+	writer := tar.NewWriter(zip)
+	if err := writer.WriteHeader(&tar.Header{Name: "marshal", Mode: 0o755, Size: int64(len(binary)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write(binary); err != nil {
+		t.Fatal(err)
+	}
+	writer.Close()
+	zip.Close()
+	sum := sha256.Sum256(packed.Bytes())
+
+	release := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/"+update.Repository+"/releases/download/"+tag+"/"+archiveName, func(w http.ResponseWriter, r *http.Request) {
+		data := packed.Bytes()
+		w.Header().Set("Content-Length", fmt.Sprint(len(data)))
+		flusher := w.(http.Flusher)
+		const chunk = 64
+		for sent, i := 0, 0; sent < len(data); i++ {
+			if stallAfter > 0 && i == stallAfter {
+				select {
+				case <-release:
+				case <-r.Context().Done():
+				}
+				return
+			}
+			end := sent + chunk
+			if end > len(data) {
+				end = len(data)
+			}
+			if _, err := w.Write(data[sent:end]); err != nil {
+				return
+			}
+			flusher.Flush()
+			sent = end
+			time.Sleep(pause)
+		}
+	})
+	mux.HandleFunc("/"+update.Repository+"/releases/download/"+tag+"/checksums.txt", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "%s  %s\n", hex.EncodeToString(sum[:]), archiveName)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(func() { close(release); server.Close() })
+	return server
+}
+
+// A download that keeps delivering is not cut off by the release feed's short
+// timeout, however long it takes as a whole. Only silence is bounded.
+func TestInstallCompletesASlowButSteadyDownload(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "marshal")
+	if err := os.WriteFile(target, []byte("old binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binary := incompressible(t, 2048)
+	server := slowReleaseServer(t, "v9.9.9", binary, 40*time.Millisecond, 0)
+
+	c := checker(t, server)
+	// The whole download takes well over the feed's timeout, and every gap in
+	// it is well under the stall window.
+	c.HTTP.Timeout = 150 * time.Millisecond
+	c.StallTimeout = 2 * time.Second
+	c.Executable = func() (string, error) { return target, nil }
+	started := time.Now()
+	if _, err := c.Install(context.Background(), update.Release{Tag: "v9.9.9"}); err != nil {
+		t.Fatalf("a steady download was abandoned after %s: %v", time.Since(started).Round(time.Millisecond), err)
+	}
+	if elapsed := time.Since(started); elapsed < c.HTTP.Timeout {
+		t.Fatalf("the download finished in %s, so it did not exercise a transfer longer than the feed timeout", elapsed)
+	}
+	content, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(content, binary) {
+		t.Fatal("the binary was not replaced by the downloaded one")
+	}
+}
+
+// A connection that stops delivering is abandoned within the stall window,
+// with an error that says so, and the binary in place is untouched.
+func TestInstallAbandonsAStalledDownload(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "marshal")
+	if err := os.WriteFile(target, []byte("old binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	server := slowReleaseServer(t, "v9.9.9", incompressible(t, 2048), time.Millisecond, 3)
+
+	c := checker(t, server)
+	c.StallTimeout = 300 * time.Millisecond
+	c.Executable = func() (string, error) { return target, nil }
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.Install(context.Background(), update.Release{Tag: "v9.9.9"})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("a stalled download was installed")
+		}
+		if !strings.Contains(err.Error(), "stalled") {
+			t.Fatalf("the error should say the connection stalled: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("a stalled download was waited on indefinitely")
+	}
+	content, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "old binary" {
+		t.Fatalf("the installed binary was touched: %q", content)
+	}
+}
+
+// incompressible returns random bytes, so the archive is as large as the
+// binary and a transfer really takes as many chunks as the test intends.
+func incompressible(t *testing.T, n int) []byte {
+	t.Helper()
+	data := make([]byte, n)
+	if _, err := rand.Read(data); err != nil {
+		t.Fatal(err)
+	}
+	return data
 }

@@ -50,10 +50,19 @@ else
     die "this installer needs sha256sum or shasum to verify the download"
 fi
 
+# Every request is bounded. Without this a connection that stops delivering
+# leaves the installer waiting forever. The limits bound silence rather than
+# size: a slow link that keeps delivering is allowed to finish, and one that
+# drops below 1 KB/s for 30 seconds is abandoned and retried.
+fetch() {
+    curl -fsSL --connect-timeout 15 --speed-limit 1024 --speed-time 30 \
+        --retry 3 --retry-delay 2 "$@"
+}
+
 tag="${MARSHAL_VERSION:-}"
 if [ -z "$tag" ]; then
     info "Resolving the latest MARSHAL release..."
-    tag=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" |
+    tag=$(fetch --max-time 30 "https://api.github.com/repos/$REPO/releases/latest" |
         sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' |
         head -n 1)
     [ -n "$tag" ] || die "could not resolve the latest release; set MARSHAL_VERSION to a tag"
@@ -68,9 +77,9 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 info "Downloading MARSHAL $tag for linux/$arch..."
-curl -fsSL -o "$tmp/$archive" "$base/$archive" ||
+fetch -o "$tmp/$archive" "$base/$archive" ||
     die "could not download $archive from release $tag"
-curl -fsSL -o "$tmp/checksums.txt" "$base/checksums.txt" ||
+fetch --max-time 60 -o "$tmp/checksums.txt" "$base/checksums.txt" ||
     die "release $tag publishes no checksums.txt; refusing to install unverified"
 
 info "Verifying checksum..."
