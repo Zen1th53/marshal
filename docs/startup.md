@@ -141,12 +141,39 @@ User-facing status text is screened for the shapes internal errors take, so a
 subprocess message or a database driver string does not reach you in place of
 an explanation.
 
+## Setup offers the steps it reports
+
+`marshal setup` assesses first and prints the same report it always has. At a
+terminal it then offers the blocking steps that have one obvious action, in the
+order they have to happen:
+
+```
+Initialize a Git repository here? [y/N]
+Make an empty first commit as a baseline? [y/N]
+Set up MARSHAL for this project? [y/N]
+```
+
+Each step is asked for by itself and runs only on a yes. After one runs, the
+check that failed is re-run and the outcome is what that re-check found, not
+that a command exited zero. An empty directory can therefore reach a ready
+project without `marshal init` being typed separately.
+
+The first commit is deliberately empty. Whether the files already in the
+directory belong in the repository is the user's decision, and a baseline is
+all a project needs to exist.
+
+Nothing is offered where the output is not going to a terminal, and
+`marshal setup status` reports and nothing else, so scripts and pipelines see
+the assessment they always did. Installing Git, writing a capability policy and
+granting an entitlement are still explained and never done for you.
+
 ## Commands
 
 ```
 marshal              enter the control center
 marshal tui          the same, explicitly
-marshal setup        report readiness; changes nothing
+marshal setup        report readiness, then offer each blocking step
+marshal setup status report readiness and nothing else
 marshal doctor       diagnose; repairs only with consent
 marshal help         explain startup, health and modes
 marshal help why     explain what is blocking work right now

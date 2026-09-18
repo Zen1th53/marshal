@@ -69,7 +69,7 @@ Commands:
   memory status | recall | show | list | promote | tombstone | audit
   policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
-  setup [status]
+  setup | setup status
   update [install]
   goal <request> | goal explain <request>
   plan create SESSION-ID --file INPUT.json | show PROJECT-ID | approve PROJECT-ID | cancel PROJECT-ID | handoff SESSION-ID PROJECT-ID

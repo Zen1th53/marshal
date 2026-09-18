@@ -112,6 +112,7 @@ marshal tui
 | `/codex new` · `/resume` · `/codex cli` | Start fresh, resume, or open the plain CLI |
 | `F1` Help · `F2` Review · `F3` Diff | Help, review, and the working-tree diff viewer |
 | `F4` Status · `F5` Models · `F6` MCP | Runtime state, models, MCP servers |
+| `F10` · `/update` | Check for a newer release, and install it after verifying its checksum |
 | `Ctrl+P` | Fuzzy command palette over every capability |
 | `/goal <outcome>` | Set the session objective shown in the header |
 
@@ -316,7 +317,7 @@ outside the install directory. If verification fails, nothing is installed.
 
 ```bash
 # Choose the location, or pin a version
-MARSHAL_INSTALL_DIR=/usr/local/bin MARSHAL_VERSION=v0.0.2 \
+MARSHAL_INSTALL_DIR=/usr/local/bin MARSHAL_VERSION=v0.0.3 \
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh)"
 ```
 
@@ -346,9 +347,10 @@ go install github.com/Zen1th53/marshal/cmd/marshal@latest
 ## Quick start
 
 ```bash
-cd /path/to/your/repository
+cd /path/to/your/project   # an empty directory works too
 
-marshal init        # create the project runtime
+marshal setup       # check readiness, and offer each missing step: git init,
+                    # a baseline commit, and the project runtime
 marshal doctor      # check the host and probe the agent CLIs you have installed
 marshal tui         # open the workspace
 ```
