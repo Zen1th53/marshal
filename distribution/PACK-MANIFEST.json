@@ -3071,8 +3071,8 @@
     },
     {
       "path": "docs/projects.md",
-      "sha256": "ebc416df825e41cbe01bf1e771194ac44d18205784fe766888e41eadf3fe9fb2",
-      "bytes": 6252
+      "sha256": "57d8d1d66aa5644750265c968a0a822aa44fdf182505afef7efcc9358ce3e70d",
+      "bytes": 6315
     },
     {
       "path": "docs/provenance-chain.md",
@@ -3131,8 +3131,8 @@
     },
     {
       "path": "docs/startup.md",
-      "sha256": "41ab654b1b8d45b01d1aff815d3d268ed315852512b8a48155add1c5a5e69fa1",
-      "bytes": 5812
+      "sha256": "125c406a5409f689ed9e776a27f8ab018940a09ba9d85c7f566e78ac8b1dd03d",
+      "bytes": 7002
     },
     {
       "path": "docs/superpowers/plans/2026-08-11-agent-runtime-plane-plan.md",
@@ -4281,8 +4281,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "b4c292a812dd62ab178f81cc86e66f97381bc6576b35f9002c438cf100a5cc74",
-      "bytes": 34661
+      "sha256": "748d4822412d8209a01c0c8425c44c11957342d98cbf7c0fa59ddc6d50cefdbd",
+      "bytes": 34667
     },
     {
       "path": "internal/cli/cli_test.go",
@@ -4366,8 +4366,18 @@
     },
     {
       "path": "internal/cli/setup.go",
-      "sha256": "2bab6d80eff556d42b6dd85310f31e2eeb3db40780a0fb6a98bf95b1c6ba8310",
-      "bytes": 2901
+      "sha256": "86891cb3b0191d74114e5f78b8d459b15533fe63db571efb7de7ec6fceb1b784",
+      "bytes": 3669
+    },
+    {
+      "path": "internal/cli/setup_fix.go",
+      "sha256": "6a37102be0b85e03965a9bc3e2f598257438549c841f81fce4b1b08cea825060",
+      "bytes": 7386
+    },
+    {
+      "path": "internal/cli/setup_fix_test.go",
+      "sha256": "3dc4a21c33c1692bc37c15b8c773e88232bd673c2da54b140b0b325a57660f18",
+      "bytes": 5610
     },
     {
       "path": "internal/cli/tui_cli.go",

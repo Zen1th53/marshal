@@ -145,7 +145,8 @@ isolation between them is not relaxed.
 ## Commands
 
 ```
-marshal setup     report project and environment readiness
+marshal setup     report readiness, then offer each blocking step
+marshal setup status  report readiness and nothing else
 marshal doctor    diagnose problems; repairs only with consent
 marshal help why  explain what is blocking work right now
 ```
