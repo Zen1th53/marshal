@@ -453,6 +453,10 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 
 	_ = w.RefreshState(ctx)
 
+	// The check is a read of a public feed and installs nothing. It runs off
+	// this path so a slow or unreachable feed cannot delay the workspace.
+	w.checkForUpdateInBackground(ctx)
+
 	// Check if running in a real interactive terminal
 	if w.terminal != nil && w.terminal.IsTerminal() && in == os.Stdin && out == os.Stdout {
 		return w.runRawTerminal(ctx)
@@ -622,6 +626,14 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			}
 			if event.Type == KeyF9 {
 				w.runCommand(ctx, "/opencode new")
+				continue
+			}
+			// F10 is the update action next to the notice. With a release
+			// already found it installs that release; with none found it is
+			// the check, so the key means the same thing either way: ask
+			// about the update.
+			if event.Type == KeyF10 {
+				w.runCommand(ctx, w.updateKeyCommand())
 				continue
 			}
 			// The dispatch lives in its own method so a test can drive exactly

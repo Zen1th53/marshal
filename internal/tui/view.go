@@ -44,6 +44,11 @@ type UIState struct {
 	// Result of the most recent command. It is carried in state and painted as
 	// part of the frame rather than printed directly, so command output cannot
 	// scroll the workspace or leave chrome behind in the terminal's scrollback.
+	// UpdateAvailable is the tag of a newer published release, when the
+	// workspace's own check found one. Empty means nothing was found, which is
+	// also what a failed or disabled check leaves behind.
+	UpdateAvailable string
+
 	LastCommand       string
 	LastOutput        string
 	LastOutputIsError bool

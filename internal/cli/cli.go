@@ -26,6 +26,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/policytest"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/store"
+	"github.com/Zen1th53/marshal/internal/tui"
 )
 
 var (
@@ -33,6 +34,13 @@ var (
 	Commit    = "head"
 	BuildDate = "unknown"
 )
+
+func init() {
+	// The workspace reports and compares the same version the CLI does. It is
+	// handed over rather than imported so the TUI keeps no dependency on the
+	// CLI package.
+	tui.BuildVersion = Version
+}
 
 const usage = `Usage: marshal [--json] <command> [arguments]
 
@@ -62,6 +70,7 @@ Commands:
   policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
   setup [status]
+  update [install]
   goal <request> | goal explain <request>
   plan create SESSION-ID --file INPUT.json | show PROJECT-ID | approve PROJECT-ID | cancel PROJECT-ID | handoff SESSION-ID PROJECT-ID
   exec start --session SESSION-ID --project PROJECT-ID | run RUN-ID | status RUN-ID | approve APPROVAL-ID | rollback CHECKPOINT-ID | handoff RUN-ID
@@ -133,6 +142,8 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 			"constitution_version": constitutionVersionString(),
 		}, fmt.Sprintf("MARSHAL %s (commit: %s, build date: %s, schema: v%d, constitution: %s)",
 			Version, Commit, BuildDate, store.LatestSchemaVersion, constitutionVersionString()))
+	case "update":
+		err = c.update(ctx, args[1:])
 	case "init":
 		err = c.init(ctx)
 	case "doctor":

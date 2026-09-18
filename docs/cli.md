@@ -35,6 +35,29 @@ initialized /path/to/repo/.marshal
 
 ---
 
+### `marshal update`
+
+Purpose: Reports whether a newer release exists and, when asked, installs it.
+
+```bash
+marshal update           # check only
+marshal update install   # download, verify and replace this binary
+```
+
+The check reads the published release feed and changes nothing. The install
+takes the same verified path `install.sh` does: the archive for this machine is
+checked against the release's published SHA-256, and a download that fails that
+check is not installed, leaving the binary in place untouched. The new binary is
+put in place by a rename, so it is never half-written.
+
+Processes already running keep the build they started with. Start MARSHAL again
+to use the new one.
+
+Set `MARSHAL_NO_UPDATE_CHECK=1` to stop MARSHAL contacting the release feed at
+all.
+
+---
+
 ### `marshal doctor`
 
 Purpose: Runs system health diagnostics, checking prerequisites, Git worktree capability, database integrity, file permissions, and provider binaries.

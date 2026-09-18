@@ -98,6 +98,17 @@ func buildBody(s UIState, th *Theme, cols, rows int) []string {
 func activitySection(s UIState, th *Theme, cols int) []string {
 	events := MeaningfulMessages(s.RecentMessages)
 
+	// A newer release is stated where the operator is already looking, with
+	// the key that installs it. Nothing is downloaded until that key is
+	// pressed.
+	var notice []string
+	if s.UpdateAvailable != "" {
+		notice = append(notice, PadCell(fmt.Sprintf(" %s  %s  %s",
+			th.Colorize(th.Bold, "Update"),
+			th.Colorize(th.Success, "MARSHAL "+s.UpdateAvailable+" is available"),
+			th.Colorize(th.Active, "[F10] Download and install")+th.Colorize(th.Muted, " · /update")), cols))
+	}
+
 	if len(events) == 0 && s.ActiveToolCard == nil {
 		var out []string
 		out = append(out, PadCell(fmt.Sprintf(" %s  %s",
@@ -119,7 +130,7 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 		out = append(out, PadCell(fmt.Sprintf("   %s %s",
 			th.Colorize(th.Muted, "Quick Commands:"),
 			"/codex new · /codex continue · /resume · /codex cli · /memory · /diff"), cols))
-		return out
+		return append(notice, out...)
 	}
 
 	// Only the tail can be visible, so format only the tail. Rendering the whole
@@ -148,7 +159,7 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 			c.Command,
 			th.Colorize(th.Muted, c.Duration.Round(1e6).String())), cols))
 	}
-	return out
+	return append(notice, out...)
 }
 
 // teamSection lists participants compactly. It is a list, not a table: the

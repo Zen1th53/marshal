@@ -360,6 +360,7 @@ buffer, the cursor position and any open completion.
 Every user-operable MARSHAL capability has a direct command mapping:
 
 ### Session & Workspace
+- `/update [install]` — Check for a newer published release, or install it. `F10` does the same: it installs the release the notice is showing, and checks when there is none.
 - `/status` — Inspect active runtime, schema, task, and participant counts.
 - `/msg <text>` — Broadcast message to workspace or `@agent` specifically.
 - `/pause` — Pause active workflow execution.
@@ -415,6 +416,28 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/export` — Write a real evidence bundle to `.marshal/evidence/`, carrying the active goal, its critical claims and evidence refs, and a deterministic digest.
 - `/context` — Show the context strategy the ULTRA router derives from the current role and risk.
 - `/help` — Display interactive help and keybinding summary.
+
+---
+
+## Update notice
+
+When a newer release is published, the workspace says so in the activity panel
+with the key that installs it:
+
+```
+ Update  MARSHAL v0.0.3 is available  [F10] Download and install · /update
+```
+
+The check behind it reads the public release feed, runs off the input loop so a
+slow feed cannot delay the workspace, and installs nothing. A check that fails
+is not reported: a workspace that opened is not the place to explain that GitHub
+was unreachable. `MARSHAL_NO_UPDATE_CHECK=1` turns it off entirely.
+
+Installing is the user's action, never the check's. `F10` installs the release
+the notice is showing and, when there is no notice, checks for one; `/update
+install` does the same from the composer. The archive is verified against the
+release's published checksum before anything is replaced, and a session that
+updates keeps running the build it started with until it is restarted.
 
 ---
 
