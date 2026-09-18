@@ -296,6 +296,9 @@ func applyBriefing(provider, root string, args []string, briefing string, channe
 		if provider == "opencode" {
 			return append([]string{"--prompt", prompt}, args...), fmt.Sprintf("Cross-agent briefing passed as the opening prompt (%d bytes); it will consume one turn.", len(briefing)), nil
 		}
+		if provider == "antigravity" {
+			return append([]string{"--prompt-interactive", prompt}, args...), fmt.Sprintf("Cross-agent briefing passed as the opening prompt (%d bytes); it will consume one turn.", len(briefing)), nil
+		}
 		// After `--` every argument is the prompt, so the briefing appends there
 		// rather than becoming a stray positional the CLI would reject.
 		return append(args, prompt), fmt.Sprintf("Cross-agent briefing passed as the opening prompt (%d bytes); it will consume one turn.", len(briefing)), nil
@@ -311,6 +314,8 @@ func providerDisplayName(provider string) string {
 		return "Claude"
 	case "opencode":
 		return "OpenCode"
+	case "antigravity":
+		return "Antigravity"
 	default:
 		return provider
 	}

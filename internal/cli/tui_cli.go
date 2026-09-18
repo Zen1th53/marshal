@@ -33,6 +33,9 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 	if options.nativeOpenCode != nil {
 		workspace.StartWithNativeOpenCode(options.nativeOpenCode)
 	}
+	if options.nativeAntigravity != nil {
+		workspace.StartWithNativeAntigravity(options.nativeAntigravity)
+	}
 
 	// Control submits every mutation through this runtime. Without it the
 	// Control screens render but every action refuses, which is the truthful
@@ -91,6 +94,9 @@ type workspaceOptions struct {
 	nativeCodex    []string
 	nativeClaude   []string
 	nativeOpenCode []string
+	// nativeAntigravity carries agy's arguments when MARSHAL was launched as
+	// `marshal agy`.
+	nativeAntigravity []string
 }
 
 func parseWorkspaceArgs(args []string) workspaceOptions {
@@ -110,6 +116,9 @@ func parseWorkspaceArgs(args []string) workspaceOptions {
 			return options
 		case arg == "--opencode":
 			options.nativeOpenCode = append([]string{}, args[i+1:]...)
+			return options
+		case arg == "--antigravity":
+			options.nativeAntigravity = append([]string{}, args[i+1:]...)
 			return options
 		case arg == "--no-animation":
 			options.animation = false

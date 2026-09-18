@@ -1309,7 +1309,7 @@ func (v *NavView) renderHint(nav *NavState) string {
 	case OverlayHelp:
 		return "Esc close help"
 	}
-	return "↑↓ move · Enter open · Esc back · F7 Codex · F8 Claude · F9 OpenCode · Tab focus · / search · r refresh · ? help · q leave"
+	return "↑↓ move · Enter open · Esc back · F7 Codex · F8 Claude · F9 OpenCode · F12 Antigravity · Tab focus · / search · r refresh · ? help · q leave"
 }
 
 func focusLabel(p Pane) string { return "focus: " + p.String() }
