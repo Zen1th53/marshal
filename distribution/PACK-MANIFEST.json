@@ -4370,6 +4370,16 @@
       "bytes": 3669
     },
     {
+      "path": "internal/cli/setup_fix.go",
+      "sha256": "6a37102be0b85e03965a9bc3e2f598257438549c841f81fce4b1b08cea825060",
+      "bytes": 7386
+    },
+    {
+      "path": "internal/cli/setup_fix_test.go",
+      "sha256": "3dc4a21c33c1692bc37c15b8c773e88232bd673c2da54b140b0b325a57660f18",
+      "bytes": 5610
+    },
+    {
       "path": "internal/cli/tui_cli.go",
       "sha256": "300352dacc2f41ce50a6f102e72d0ecbee9269adc2cf172d5c2f75d755c3692c",
       "bytes": 4820
