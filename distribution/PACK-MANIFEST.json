@@ -3261,8 +3261,8 @@
     },
     {
       "path": "install.sh",
-      "sha256": "df0352ec895d9baf3c0d75463d43d281af7a01422bd0ab1a7a3d33f575b2ad93",
-      "bytes": 3769
+      "sha256": "a368ea40e91c2b7a25e3b61fb59238efe8e835383d22c6dd4256d0e7ca64d0be",
+      "bytes": 4199
     },
     {
       "path": "internal/a2a/a2a_test.go",
@@ -8971,13 +8971,13 @@
     },
     {
       "path": "internal/update/update.go",
-      "sha256": "134c30fca50d59125ec3addb67ac366bdfc57b6435eb6a7d38af2c9c2548a4cb",
-      "bytes": 10070
+      "sha256": "049ddacde679fc564a1890f8744a3ea7ba1b72394ed8194821925b7e50661eee",
+      "bytes": 12130
     },
     {
       "path": "internal/update/update_test.go",
-      "sha256": "da163322565486d86bfc646526163b2c32860045aac4ccc8ded8070b3e5e3a49",
-      "bytes": 5836
+      "sha256": "8aac924f66732af35f107888f92a70266848c6274ee8f50163c8b0888c16340b",
+      "bytes": 10484
     },
     {
       "path": "internal/verification/bundle.go",
@@ -9491,8 +9491,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.3.md",
-      "sha256": "57b3620ab785d140a7360d06b9cbc1eb750daefe2f46c42d1ac2c6a0593412e5",
-      "bytes": 4987
+      "sha256": "0a46a568b41a7deb2b117b8cba0ec29044b3be022de24ca21db1c7f2fceac5fe",
+      "bytes": 5471
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",

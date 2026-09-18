@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -48,8 +49,16 @@ type Release struct {
 
 // Checker looks up the latest release.
 type Checker struct {
-	// HTTP is the client used for both the lookup and the download.
+	// HTTP looks the release feed up. Its timeout bounds the whole request,
+	// which is right for a small JSON document and wrong for an archive.
 	HTTP *http.Client
+	// Download fetches release assets. It has no overall timeout: a slow link
+	// that is still delivering is not a failure. A link that stops delivering
+	// is, and StallTimeout decides how long "stopped" is.
+	Download *http.Client
+	// StallTimeout is how long a download may go without receiving a byte
+	// before it is abandoned.
+	StallTimeout time.Duration
 	// BaseAPI and BaseDownload exist so tests can serve their own release
 	// rather than reaching GitHub.
 	BaseAPI      string
@@ -63,7 +72,13 @@ type Checker struct {
 // check that cannot finish quickly is not worth delaying the workspace for.
 func NewChecker() *Checker {
 	return &Checker{
-		HTTP:         &http.Client{Timeout: 10 * time.Second},
+		HTTP: &http.Client{Timeout: 10 * time.Second},
+		Download: &http.Client{Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			TLSHandshakeTimeout:   15 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+		}},
+		StallTimeout: 30 * time.Second,
 		BaseAPI:      "https://api.github.com",
 		BaseDownload: "https://github.com",
 		Executable:   os.Executable,
@@ -243,19 +258,68 @@ func (c *Checker) Install(ctx context.Context, release Release) (string, error) 
 }
 
 func (c *Checker) download(ctx context.Context, url string, limit int64) ([]byte, error) {
+	client := c.Download
+	if client == nil {
+		client = http.DefaultClient
+	}
+	stall := c.StallTimeout
+	if stall <= 0 {
+		stall = 30 * time.Second
+	}
+
+	// The request is cancelled when no byte has arrived for the stall window.
+	// Each read that makes progress pushes the deadline back, so the only
+	// thing bounded is silence, never the size of the download.
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	errStalled := fmt.Errorf("no data received for %s; the connection stalled", stall)
+	watchdog := time.AfterFunc(stall, func() { cancel(errStalled) })
+	defer watchdog.Stop()
+
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	response, err := c.HTTP.Do(request)
+	response, err := client.Do(request)
 	if err != nil {
-		return nil, err
+		return nil, stalledOr(ctx, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("answered %s", response.Status)
 	}
-	return io.ReadAll(io.LimitReader(response.Body, limit))
+	watchdog.Reset(stall)
+	data, err := io.ReadAll(&progressReader{
+		reader:   io.LimitReader(response.Body, limit),
+		progress: func() { watchdog.Reset(stall) },
+	})
+	if err != nil {
+		return nil, stalledOr(ctx, err)
+	}
+	return data, nil
+}
+
+// stalledOr reports the stall rather than the context error it caused, so the
+// user reads "the connection stalled" instead of "context canceled".
+func stalledOr(ctx context.Context, err error) error {
+	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
+		return cause
+	}
+	return err
+}
+
+// progressReader calls progress after every read that returned data.
+type progressReader struct {
+	reader   io.Reader
+	progress func()
+}
+
+func (r *progressReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if n > 0 {
+		r.progress()
+	}
+	return n, err
 }
 
 // checksumFor finds one file's line in a sha256sum-format list.

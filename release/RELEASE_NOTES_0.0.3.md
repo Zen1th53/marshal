@@ -35,6 +35,11 @@ MARSHAL tell you when a newer release exists and install it on request.
     feed on its own, but installs nothing until you press `F10` or run the
     install command, and `F10` installs only the release the notice is showing.
   - The release source is fixed to this repository and cannot be redirected.
+  - Downloads are bounded by silence, not by size. `marshal update install`
+    abandons a transfer only after 30 seconds without a byte, so a slow link
+    that keeps delivering completes; `install.sh` gives every request a
+    connect timeout, abandons a transfer below 1 KB/s for 30 seconds, and
+    retries it, instead of waiting forever on a stalled connection.
   - `setup` changes nothing without an answer: where its output is not going
     to a terminal, and for `setup status`, it only reports. MARSHAL's automatic
     repair set is unchanged.
@@ -86,7 +91,8 @@ SPDX SBOM, a release manifest and GitHub build-provenance attestations.
 - Setup: real-terminal tests for each offered step, a declined step, a run with
   no terminal, and `setup status`
 - Update: verified install, refused install on a checksum mismatch, version
-  comparison, and the opt-out variable
+  comparison, the opt-out variable, a slow but steady download that outlasts
+  the feed timeout, and a stalled download abandoned with the binary untouched
 - Update against the published feed, and a real install from v0.0.1 to v0.0.2
 - Workspace notice, `F10` behaviour and command registration tests
 - Checkpoint ordering across timestamps that differ only in trimmed fractions
