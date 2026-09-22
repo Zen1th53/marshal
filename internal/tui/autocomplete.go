@@ -134,32 +134,34 @@ func (c *Completer) Suggest(text string, cursor int) (string, []string) {
 	return word, c.findMatches(text, cursor, wordStart, word)
 }
 
-// subcommandMatches completes against what the typed command accepts.
+// subcommandMatches completes against what the typed command accepts here.
 //
-// The longest registered prefix wins, so a command can complete its second
-// level too: "/memory peers " offers agent names rather than repeating the
-// subcommands of "/memory". Without that, a command taking an argument from a
-// fixed set completes the wrong thing, which is worse than completing nothing.
+// The key is everything typed before the word, exactly: "/memory " completes
+// against "/memory", and "/memory peers " against "/memory peers". A command
+// can therefore complete more than one level.
+//
+// There is deliberately no fall back to a shorter prefix. "/memory list "
+// accepts a search query, and answering it with the subcommands of "/memory"
+// would offer words that mean nothing in that position. Completing the wrong
+// thing is worse than completing nothing: the operator has to notice and undo
+// it, where silence costs them only a keystroke.
 func (c *Completer) subcommandMatches(before, word string) []string {
 	parts := strings.Fields(strings.TrimSpace(before))
 	if len(parts) == 0 || !strings.HasPrefix(parts[0], "/") {
 		return nil
 	}
-	for depth := len(parts); depth >= 1; depth-- {
-		subcmds, ok := c.ctx.Subcommands[strings.Join(parts[:depth], " ")]
-		if !ok {
-			continue
-		}
-		var candidates []string
-		for _, sc := range subcmds {
-			if strings.HasPrefix(strings.ToLower(sc), strings.ToLower(word)) {
-				candidates = append(candidates, sc)
-			}
-		}
-		sort.Strings(candidates)
-		return candidates
+	subcmds, ok := c.ctx.Subcommands[strings.Join(parts, " ")]
+	if !ok {
+		return nil
 	}
-	return nil
+	var candidates []string
+	for _, sc := range subcmds {
+		if strings.HasPrefix(strings.ToLower(sc), strings.ToLower(word)) {
+			candidates = append(candidates, sc)
+		}
+	}
+	sort.Strings(candidates)
+	return candidates
 }
 
 func isWordSeparator(r rune) bool {

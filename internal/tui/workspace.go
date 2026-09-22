@@ -760,17 +760,18 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 					w.renderComposer()
 					continue
 				case KeyEnter:
-					// Enter picks the highlighted command and runs it. Choosing
-					// from the menu is the decision; making it cost a second
-					// keystroke only means pressing Enter twice.
+					// Enter settles the choice and stops there. It used to run
+					// the command too, on the reasoning that choosing from the
+					// menu was the decision — which held while a command was
+					// all there was to complete. It is not: settling on
+					// "/memory" is where the operator reaches for Tab again to
+					// complete "peers". Running on the same keystroke took that
+					// away and ran something half-written.
+					//
+					// The second Enter runs it, through the ordinary path,
+					// because by then there is no menu open and nothing
+					// special about the line.
 					w.acceptCompletion()
-					cmd, submitted := w.composer.HandleKey(KeyEvent{Type: KeyEnter})
-					if submitted {
-						if cmd == "/quit" || cmd == "/exit" {
-							return nil
-						}
-						w.runCommand(ctx, cmd)
-					}
 					w.renderComposer()
 					continue
 				}

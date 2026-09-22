@@ -2016,8 +2016,8 @@
     },
     {
       "path": ".gitignore",
-      "sha256": "e1a42318049fa26ba6c1c14c651baa6b319e088e3d80ab291a366f084315b418",
-      "bytes": 1234
+      "sha256": "a9c5f602ec4739fe253be70f7ba8c7a11491813a4867539bbaa65f49ec4f64e0",
+      "bytes": 1565
     },
     {
       "path": "AGENT-BOOTSTRAP.md",
@@ -8381,8 +8381,8 @@
     },
     {
       "path": "internal/tui/autocomplete.go",
-      "sha256": "190392bc977bb7cf8a20c6eb814aa0dc9e5ae302c249c79c7343335827fc3a8a",
-      "bytes": 8784
+      "sha256": "6b7f443ebe523cb3a90cf88331252a2300ade0c4394cc33aaa8f091a6bb96fa6",
+      "bytes": 8963
     },
     {
       "path": "internal/tui/autocomplete_test.go",
@@ -8826,8 +8826,8 @@
     },
     {
       "path": "internal/tui/pty_interaction_test.go",
-      "sha256": "369a8c2fd159be33e13633f5b0a48a122446778f9989d4dbd421500c26a0cb94",
-      "bytes": 9958
+      "sha256": "b1cbc5c9073a4f33a5d662e3d8329234aff1b7146569c88fe6796adfbf567921",
+      "bytes": 10692
     },
     {
       "path": "internal/tui/pty_qualification_test.go",
@@ -8996,8 +8996,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "0e87c79869bd316b0397792cebf20f658180af814673e1adfa74e0313e3ab1e1",
-      "bytes": 47097
+      "sha256": "2a7440cb8b26eb66fd9fbf00b041d575f318efab97c9feb250f3ec4bc1910d1b",
+      "bytes": 47309
     },
     {
       "path": "internal/tui/workspace_nav_test.go",
