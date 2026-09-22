@@ -2011,8 +2011,8 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "c37909b9ec3d93568284e0e3e1869d583f24231c4a05d77350d132eb09ba5376",
-      "bytes": 4302
+      "sha256": "20d0f8e6479c0369cddd017d1faa1ad66d6e38ca3101e3bd21ff093c9b471dbe",
+      "bytes": 4810
     },
     {
       "path": ".gitignore",
@@ -9528,6 +9528,11 @@
       "path": "release/RELEASE_NOTES_0.0.3.md",
       "sha256": "0a46a568b41a7deb2b117b8cba0ec29044b3be022de24ca21db1c7f2fceac5fe",
       "bytes": 5471
+    },
+    {
+      "path": "release/RELEASE_NOTES_0.0.4-rc.1.md",
+      "sha256": "8c19e505bec07ca2dfc6f01617f83a97bbac079c0a8a180306087852060b8903",
+      "bytes": 5307
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
