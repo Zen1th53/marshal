@@ -7496,8 +7496,8 @@
     },
     {
       "path": "internal/store/evidence_a10_migration_test.go",
-      "sha256": "6f27b009563ea6ec77afdc4836e1895ea518b16e758ceafa7b459b9353318107",
-      "bytes": 5742
+      "sha256": "46f596c3455ea9a88641484be4ce6a7c190c833db9c81a34395dad58fd01d4e5",
+      "bytes": 5757
     },
     {
       "path": "internal/store/evidence_a10_release_test.go",
@@ -8061,8 +8061,8 @@
     },
     {
       "path": "internal/store/sqlite_test.go",
-      "sha256": "13c064d5a7f3c65a4d4f4686a2db292d2521f1cf78674dc742104ef66e0bb456",
-      "bytes": 21121
+      "sha256": "56974cb18ca95b7e0a8207036a761ae3ac3964790599b891e23ab1a0b8df8a40",
+      "bytes": 24961
     },
     {
       "path": "internal/store/task_lifecycle_test.go",
