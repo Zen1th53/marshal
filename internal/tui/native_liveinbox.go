@@ -229,3 +229,9 @@ pushes it to you: read that file when you need to know whether someone else has
 changed something since this briefing was written.
 `, relative)
 }
+
+// indexEmpty reports whether this watcher has never recorded progress, which
+// is how a first run is told from a resumed one.
+func (w *nativeHistoryWatch) indexEmpty() bool {
+	return len(w.seen) == 0
+}

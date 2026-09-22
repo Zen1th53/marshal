@@ -250,15 +250,21 @@ Distribution is solved for everyone. Capture is not yet:
 | --- | --- | --- |
 | Claude Code | append-only JSONL | as it works |
 | Codex | append-only JSONL | as it works |
+| Antigravity (`agy`) | per-conversation SQLite | as it works |
 | OpenCode | SQLite, via its CLI export | when its process exits |
-| Antigravity (`agy`) | per-conversation SQLite | when its process exits |
 
-The two delays have different reasons. **OpenCode** is deliberate: MARSHAL reads
-its history through the public CLI export rather than the database, so it does
-not depend on a private schema, and running that export every few seconds would
-contend with the session that owns it. **Antigravity** is simply not polled yet —
-its store is read directly and read-only, and whether that is sound while `agy`
-runs has not been established, so MARSHAL does not claim it.
+**Antigravity** is polled like the other two. Its conversation databases are
+opened read-only and never written to, and SQLite in WAL mode serves readers
+while a writer holds the file — measured against a copy of a real `agy`
+database: 394 reads against a live writer, none blocked, the reader within two
+rows of the writer throughout. The write-ahead log is stamped alongside each
+database, because a conversation's newest steps live there before a checkpoint.
+
+**OpenCode** is the remaining exception, and a deliberate one rather than a
+limit. MARSHAL reads its history through the public CLI export rather than the
+database, so it does not depend on a private schema, and running that export
+every few seconds would contend with the session that owns the file. Its work
+still reaches the channel — when its own process exits.
 
 Verified on 2026-09-22 against the installed CLIs — Claude Code 2.1.278, Codex
 0.155.1, OpenCode 1.18.16, `agy` 1.2.7 — by decoding their real transcripts with

@@ -271,13 +271,11 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if peer == provider || !channelCfg.joins(peer) || !capturesLive(peer) {
 				continue
 			}
-			dir, err := providerHistoryDir(peer, root)
+			pw, err := newPeerHistoryWatch(peer, root)
 			if err != nil {
 				syncErr = joinNativeSyncError(syncErr, err)
 				continue
 			}
-			pw := newNativeHistoryWatch(dir, root)
-			pw.claude = peer == "claude"
 			pw.captureTools = true
 			// A separate index: two MARSHAL sessions watching the same provider
 			// must not fight over one file, and this watcher's progress is not
@@ -285,6 +283,21 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			pw.indexPath = filepath.Join(root, ".marshal", provider, "peer-"+peer+"-index.json")
 			if err := pw.loadIndex(); err != nil {
 				syncErr = joinNativeSyncError(syncErr, err)
+			}
+			// Baseline the first run against what is already on disk. Without
+			// this a fresh index means the first poll drops the project's whole
+			// history into the channel — hundreds of messages, all of them
+			// already in durable memory and already summarised in the briefing —
+			// and every reader's view fills with them. The channel is for work
+			// happening now; the backlog it carries is the backlog it collected,
+			// not one replayed into it at startup.
+			if pw.indexEmpty() {
+				real := pw.consume
+				pw.consume = func(importer.SessionTranscript) error { return nil }
+				if err := pw.sync(); err != nil {
+					syncErr = joinNativeSyncError(syncErr, err)
+				}
+				pw.consume = real
 			}
 			peerName := peer
 			primary := watch.consume
@@ -421,7 +434,10 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			// OpenCode's public history API is a CLI export backed by the same
 			// database the child is using. Export once the child exits; polling it
 			// here can delay interactive input and contend with the live session.
-			if provider != "opencode" && provider != "antigravity" {
+			// Antigravity is different: its conversation databases are read
+			// read-only and SQLite serves readers under WAL, so polling them costs
+			// the running child nothing.
+			if capturesLive(provider) {
 				if err := watch.sync(); err != nil {
 					syncErr = err
 				}
@@ -664,4 +680,31 @@ func (w *nativeHistoryWatch) syncFile(path string) error {
 		return w.consume(tr)
 	}
 	return nil
+}
+
+// newPeerHistoryWatch builds a watcher for another agent's history.
+//
+// Each provider keeps its history its own way, and the watcher has to be built
+// for the one it is reading: Claude and Codex write files under a directory,
+// Antigravity keeps a SQLite database per conversation. A provider that cannot
+// be read while it runs has no peer watcher at all — its work reaches the
+// channel when its own session ends.
+func newPeerHistoryWatch(peer, root string) (*nativeHistoryWatch, error) {
+	if !capturesLive(peer) {
+		return nil, fmt.Errorf("%s is not read while it runs", peer)
+	}
+	if peer == "antigravity" {
+		watch, err := newAntigravityHistoryWatch(root)
+		if err != nil {
+			return nil, err
+		}
+		return watch, nil
+	}
+	dir, err := providerHistoryDir(peer, root)
+	if err != nil {
+		return nil, err
+	}
+	watch := newNativeHistoryWatch(dir, root)
+	watch.claude = peer == "claude"
+	return watch, nil
 }

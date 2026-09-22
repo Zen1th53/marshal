@@ -2126,8 +2126,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "05cb3625a9b074ff7beab65db03fb98a88ef142e20692448957c9e4835e0a607",
-      "bytes": 22633
+      "sha256": "d45c7ee265843d75d494b3e78aa5b84424d65b5d128cf067031e11cf20568d17",
+      "bytes": 22990
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -8656,8 +8656,8 @@
     },
     {
       "path": "internal/tui/native_channel_matrix_test.go",
-      "sha256": "94ec85e4f72d5995548b4ee9eb3ffec30bb4fca8be9a1caee479644718594471",
-      "bytes": 6166
+      "sha256": "f6769d2b4df12e03b62ede006ad718c485a3cc13c2c209be037c64acb8dbf5e4",
+      "bytes": 8146
     },
     {
       "path": "internal/tui/native_claude.go",
@@ -8676,8 +8676,8 @@
     },
     {
       "path": "internal/tui/native_codex.go",
-      "sha256": "7fa4011b504d4fb29d85d8ff501857707200cf0318170c203e10396521a88b06",
-      "bytes": 20551
+      "sha256": "d2d1ad233e7f3db65da0fac489a94217a2b9a42865bf47df6584560a1151569e",
+      "bytes": 22248
     },
     {
       "path": "internal/tui/native_codex_pty_test.go",
@@ -8691,8 +8691,8 @@
     },
     {
       "path": "internal/tui/native_liveinbox.go",
-      "sha256": "ac05560482866c877e17687ffa0d782d89ee3b9d5e1eec81b356d091e8b2043a",
-      "bytes": 6766
+      "sha256": "65702a01f12e7a007031b19d6f4438de0dee9ac2fab240af45596d6b7087a309",
+      "bytes": 6971
     },
     {
       "path": "internal/tui/native_liveinbox_test.go",
@@ -8701,8 +8701,8 @@
     },
     {
       "path": "internal/tui/native_livepeers.go",
-      "sha256": "de21ddfac0a98d441cb280ada09c1c199fd7819aee42f99f1376dc0c043a5d3d",
-      "bytes": 8147
+      "sha256": "105933c80ce51aa70108d5aad16c121fa5ee66f9a14583083ba128f7b5ad318f",
+      "bytes": 8652
     },
     {
       "path": "internal/tui/native_livestatus.go",

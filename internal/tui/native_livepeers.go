@@ -58,16 +58,22 @@ func canonicalProvider(name string) string {
 // are still running.
 //
 // Claude and Codex write append-only history, which MARSHAL reads as it grows.
-// OpenCode is reached through its public CLI export rather than its database,
-// so MARSHAL does not depend on a private schema and does not run that export
-// every few seconds against the session that owns it. Antigravity's store is
-// read directly and read-only, and whether reading it mid-session is sound has
-// not been established.
 //
-// Both of the latter still join the channel: their work is dropped in when
-// their own process exits. The difference is when an entry appears, not whether
-// it does.
-var liveCaptureProviders = []string{"claude", "codex"}
+// Antigravity keeps a SQLite database per conversation. MARSHAL opens those
+// read-only and never writes to them, and SQLite in WAL mode serves readers
+// while a writer holds the file — measured against a copy of a real agy
+// database: 394 reads against a live writer, none blocked, the reader within
+// two rows of the writer throughout. listAntigravityConversations already
+// stamps the write-ahead log alongside the database, because a conversation's
+// newest steps live there before a checkpoint, so a poll sees them.
+//
+// OpenCode is the remaining exception, and it is a deliberate one rather than a
+// limit: its history is reached through the public CLI export rather than its
+// database, so MARSHAL does not depend on a private schema, and running that
+// export every few seconds would contend with the session that owns the file.
+// It still joins the channel — its work is dropped in when its own process
+// exits. The difference is when an entry appears, not whether it does.
+var liveCaptureProviders = []string{"claude", "codex", "antigravity"}
 
 func isKnownProvider(p string) bool { return containsProvider(knownProviders, p) }
 func capturesLive(p string) bool    { return containsProvider(liveCaptureProviders, p) }

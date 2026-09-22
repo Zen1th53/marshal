@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -199,5 +200,60 @@ func TestChannelReportsBadLinesWithoutLosingGoodOnes(t *testing.T) {
 	}
 	if !cfg.canSee("claude", "codex") {
 		t.Error("a good line was lost with the bad ones")
+	}
+}
+
+// Antigravity reaches the channel while it runs, like claude and codex.
+//
+// Its conversation databases are opened read-only and SQLite serves readers
+// under WAL, so polling them costs the running child nothing. OpenCode remains
+// the exception, and deliberately: its history is reached through the public
+// CLI export rather than its database.
+func TestChannelAntigravityCapturesLive(t *testing.T) {
+	for _, p := range []string{"claude", "codex", "antigravity"} {
+		if !capturesLive(p) {
+			t.Errorf("%s does not reach the channel while it runs", p)
+		}
+	}
+	if capturesLive("opencode") {
+		t.Error("opencode is polled live, which would run its CLI export against a live session")
+	}
+}
+
+// A peer watcher is built for the history the provider actually keeps: files
+// under a directory for claude and codex, a database per conversation for agy.
+func TestPeerHistoryWatchMatchesTheProviderStore(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, "claude-home"))
+	t.Setenv("CODEX_HOME", filepath.Join(root, "codex-home"))
+
+	for _, peer := range []string{"claude", "codex"} {
+		w, err := newPeerHistoryWatch(peer, root)
+		if err != nil {
+			t.Fatalf("%s: %v", peer, err)
+		}
+		if w.antigravity {
+			t.Errorf("%s was given the antigravity reader", peer)
+		}
+		if (peer == "claude") != w.claude {
+			t.Errorf("%s claude flag = %v", peer, w.claude)
+		}
+	}
+
+	w, err := newPeerHistoryWatch("antigravity", root)
+	if err != nil {
+		t.Fatalf("antigravity: %v", err)
+	}
+	if !w.antigravity {
+		t.Error("antigravity was not given its own reader")
+	}
+	if w.antigravitySummaries == "" {
+		t.Error("the antigravity watcher has no summaries database")
+	}
+
+	// A provider MARSHAL does not read mid-session gets no watcher at all,
+	// rather than one that would quietly read nothing.
+	if _, err := newPeerHistoryWatch("opencode", root); err == nil {
+		t.Error("a peer watcher was built for a provider that is not read while it runs")
 	}
 }
