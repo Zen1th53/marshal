@@ -61,6 +61,28 @@ that went stale the moment it was written.
 These changes are merged on `main` and are **not** part of the v1.5.0 release
 archive. SQLite schema advanced from v79 to **v85**.
 
+### Changed
+
+- **Gemini leaves the TUI provider surface.** Three menu nodes go — Status
+  providers, Models providers and the benchmark baseline — taking the frozen IA
+  node count from 804 to 801. The adapter, the doctor probe and the runtime's
+  provider set are unchanged, so `marshal adapter probe gemini` still works and
+  `Import Gemini JSONL` still reads transcripts already on disk. This narrows
+  what the TUI offers, not what MARSHAL can run.
+- **Antigravity is presented as Agy cli**, after the command users type. The
+  adapter still reports itself as `antigravity`, so status lookups keep that key
+  while the menu reads the new label.
+
+### Removed
+
+- **Internal working material is no longer tracked.** Audit reports,
+  qualification evidence and the dated design and plan documents handed to an
+  agent described how the product is built rather than how it is used, and this
+  repository is public. They now live in a local, git-ignored `secrets/`
+  directory. `VERIFICATION.json`, `derived-index-rebuild-report.json` and
+  `memory-ultimate-conformance.json` stayed, because code reads or writes them
+  at the repository root.
+
 ### Added
 
 - **Governed lifecycle (Process 03–08).** Six stages, each writing a durable
