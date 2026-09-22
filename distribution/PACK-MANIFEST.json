@@ -2016,8 +2016,8 @@
     },
     {
       "path": ".gitignore",
-      "sha256": "e1a42318049fa26ba6c1c14c651baa6b319e088e3d80ab291a366f084315b418",
-      "bytes": 1234
+      "sha256": "a9c5f602ec4739fe253be70f7ba8c7a11491813a4867539bbaa65f49ec4f64e0",
+      "bytes": 1565
     },
     {
       "path": "AGENT-BOOTSTRAP.md",
@@ -2078,11 +2078,6 @@
       "path": "EVALS.md",
       "sha256": "d123137e43417cb23c6dc649704583df74369ef9f6561eef076aae5464cd5ed1",
       "bytes": 5810
-    },
-    {
-      "path": "FINAL-PACK.md",
-      "sha256": "30256af9a1fa31a00da0b5a741b5d7a1ef74c17661c2c637932899bbd943a9cb",
-      "bytes": 4444
     },
     {
       "path": "GOVERNANCE.md",
@@ -3133,81 +3128,6 @@
       "path": "docs/startup.md",
       "sha256": "125c406a5409f689ed9e776a27f8ab018940a09ba9d85c7f566e78ac8b1dd03d",
       "bytes": 7002
-    },
-    {
-      "path": "docs/superpowers/plans/2026-08-11-agent-runtime-plane-plan.md",
-      "sha256": "727e75ea63b9fc5b388e70e93d55e407fba77aa6ed462824dfec50f2e20fa402",
-      "bytes": 3264
-    },
-    {
-      "path": "docs/superpowers/plans/2026-08-11-local-runtime-v1.md",
-      "sha256": "baa70e4603d322f0e27923b98be97d73b4a20ff29cd7724411735c2cf7e2199a",
-      "bytes": 39374
-    },
-    {
-      "path": "docs/superpowers/plans/2026-08-11-marshal-completeness-plan.md",
-      "sha256": "41cdf62130122893b14a20f57e166b49cf2d0639f03a3fea5c1c2a991af2b4a3",
-      "bytes": 2585
-    },
-    {
-      "path": "docs/superpowers/plans/2026-08-11-marshal-v6-final-plan.md",
-      "sha256": "56d1434edbe300b737c75158e43c4413c0f7528aef14de6ee0682425c6de477e",
-      "bytes": 2232
-    },
-    {
-      "path": "docs/superpowers/plans/2026-08-11-reusable-agent-team-v2.md",
-      "sha256": "eb500ad99a3978eaad69fa3de57000f0b29fbabf965c92a4a3cccf8b00d898eb",
-      "bytes": 2759
-    },
-    {
-      "path": "docs/superpowers/plans/2026-08-14-marshal-clean-break.md",
-      "sha256": "edef31364e7b5da5dc5383116398ce175214e23ae47e1e85f648cdf647bdfb04",
-      "bytes": 11821
-    },
-    {
-      "path": "docs/superpowers/plans/2026-08-15-t49-a05-events-evidence.md",
-      "sha256": "6825bfc7f935027d3432ef0bf51fea8c8932e035251ca43e9945e6f21af55df0",
-      "bytes": 7824
-    },
-    {
-      "path": "docs/superpowers/plans/2026-08-15-t49-a06-runner.md",
-      "sha256": "6d23ce554e5f3da6e73ed49c6c2c2331003209a52709518e644c5e46db19a999",
-      "bytes": 10052
-    },
-    {
-      "path": "docs/superpowers/specs/2026-08-11-agent-runtime-plane-design.md",
-      "sha256": "7f4d2d5066535130af95a0e23e0434705035fe7845062ba731e3c725b9e41ef8",
-      "bytes": 4464
-    },
-    {
-      "path": "docs/superpowers/specs/2026-08-11-local-runtime-v1-design.md",
-      "sha256": "2b257ec41e0cae4d32bc67e16e63769b4d9172627c3cf984628b0ff12d025dca",
-      "bytes": 13603
-    },
-    {
-      "path": "docs/superpowers/specs/2026-08-11-marshal-completeness-design.md",
-      "sha256": "ba680c8f3441653c7a6f62ad3ecba73014cc8633d4a92071f1317ce2c11bd154",
-      "bytes": 7070
-    },
-    {
-      "path": "docs/superpowers/specs/2026-08-11-marshal-v6-final-design.md",
-      "sha256": "be8dce163795ff07a3e799fddf7d05cd6c65dd4e53c441d189a2efe137ca9523",
-      "bytes": 1370
-    },
-    {
-      "path": "docs/superpowers/specs/2026-08-12-runtime-v0.4.0-provider-maturity-daily-operations-design.md",
-      "sha256": "5ce46d05843ebf6ecc0249957aab65c6babac4dd5ed1af741a330fb75f49cca7",
-      "bytes": 9366
-    },
-    {
-      "path": "docs/superpowers/specs/2026-08-14-marshal-clean-break-design.md",
-      "sha256": "9a3e8b8eaeb1b041cb892536e8a8344cc9a230c7e581eb70474fb48b37674ddc",
-      "bytes": 3528
-    },
-    {
-      "path": "docs/terra-evidence/T01-A10.md",
-      "sha256": "d6dfe5db7c9597317d6387f96034e17c3711032f26b82b4139a8b6d516bb6e9b",
-      "bytes": 2038
     },
     {
       "path": "docs/troubleshooting.md",
@@ -9145,21 +9065,6 @@
       "bytes": 5722
     },
     {
-      "path": "memory-conformance.json",
-      "sha256": "b5f5fe0263e142c2ae2c36471ecd1839d108ba0cfcc4ea8bcfc37ccd9888322e",
-      "bytes": 1351
-    },
-    {
-      "path": "memory-fabric-phase2-validation.md",
-      "sha256": "17387d7b24384127c5fe69d192b6d87bcd89c39d2e21982b9d0f56edcc326efe",
-      "bytes": 8795
-    },
-    {
-      "path": "memory-fabric-validation.md",
-      "sha256": "65904e09ecb2cf2c8e8f08fb1674ced47bfeca1b0aa61c30773e5214bcabdf4a",
-      "bytes": 12815
-    },
-    {
       "path": "memory-ultimate-conformance.json",
       "sha256": "46ce2dc895b1bf607fa2577551fc8c1a364a35bacce9393cf78c4d7a2f584ea2",
       "bytes": 319
@@ -9530,11 +9435,6 @@
       "bytes": 470
     },
     {
-      "path": "release_evidence_v1.5.0.md",
-      "sha256": "ade1fdbee3df4a8b58c96b8dc27650fbf4bafaea840b35edbbeeb02c56052ba8",
-      "bytes": 11923
-    },
-    {
       "path": "routing/CAPABILITY-SCHEMA.json",
       "sha256": "d31545dd3d9f9fa5f8a2dce984987e0e4c7f0fc9f7671c7107585c544b55b278",
       "bytes": 350
@@ -9898,11 +9798,6 @@
       "path": "tenancy/TENANCY.md",
       "sha256": "bc6e7100f194fec26f98e920387a082f01b6539dc19b1d3dd7ff04edcc282f36",
       "bytes": 683
-    },
-    {
-      "path": "todo.md",
-      "sha256": "ad74a3f66771d825417cc40107d4030ce647dd5fb8163ed9a28ea1777edb4f9d",
-      "bytes": 7386
     },
     {
       "path": "tools/build_release.sh",
