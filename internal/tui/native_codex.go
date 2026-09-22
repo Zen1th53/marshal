@@ -197,23 +197,85 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		return "", fmt.Errorf("native %s memory capture requires an attached runtime", label)
 	}
 
-	// Live exchange: while this agent runs, watch the other providers too, so
-	// work they do now is imported and offered to this session rather than
-	// waiting until the next launch to be told about it.
-	inbox, inboxErr := newLiveInbox(root, provider)
-	if inboxErr != nil {
-		syncErr = joinNativeSyncError(syncErr, fmt.Errorf("open live inbox: %w", inboxErr))
+	// The shared channel. Who joins it and who each agent sees in it are the
+	// operator's decisions, made before the work starts; an unreadable file
+	// means the default, because a missing preference is not a decision.
+	channelCfg, channelProblems := loadChannelConfig(root)
+
+	chStream, streamErr := openStream(root)
+	if streamErr != nil {
+		syncErr = joinNativeSyncError(syncErr, fmt.Errorf("open channel: %w", streamErr))
 	}
+
+	// Drop what this session does into the channel as it happens. One entry,
+	// whoever ends up reading it: the readers filter when they read, so nothing
+	// here depends on who is running.
+	if chStream != nil && channelCfg.joins(provider) {
+		own := watch.consume
+		sessionID := w.sessionID
+		watch.consume = func(tr importer.SessionTranscript) error {
+			if err := own(tr); err != nil {
+				return err
+			}
+			for _, message := range tr.Messages {
+				if _, err := chStream.append(provider, sessionID, message); err != nil {
+					return err
+				}
+			}
+			return chStream.trim()
+		}
+	}
+
+	// This agent's own view of the channel, and the cursor saying how far it
+	// has already looked.
+	view, viewErr := openInboxView(root, provider, true)
+	if viewErr != nil {
+		syncErr = joinNativeSyncError(syncErr, fmt.Errorf("open channel view: %w", viewErr))
+	}
+	positions, cursorErr := loadCursors(root)
+	if cursorErr != nil {
+		syncErr = joinNativeSyncError(syncErr, cursorErr)
+	}
+	// Render whatever flowed past while this agent was closed, before it starts
+	// work. This is the difference between joining a conversation and being
+	// handed a summary of one.
+	drainChannel := func() {
+		if chStream == nil || view == nil {
+			return
+		}
+		entries, err := chStream.since(positions[provider])
+		if err != nil {
+			syncErr = joinNativeSyncError(syncErr, err)
+			return
+		}
+		if len(entries) == 0 {
+			return
+		}
+		if _, err := view.deliver(entries, channelCfg); err != nil {
+			syncErr = joinNativeSyncError(syncErr, err)
+			return
+		}
+		positions[provider] = entries[len(entries)-1].Seq
+		if err := saveCursors(root, positions); err != nil {
+			syncErr = joinNativeSyncError(syncErr, err)
+		}
+	}
+	drainChannel()
+
+	// Watch the other agents that capture live, so their work reaches the
+	// channel while they run. This also covers an agent running outside
+	// MARSHAL, which drops nothing in of its own.
 	var peers []*nativeHistoryWatch
-	if inbox != nil {
-		for _, peer := range peerProviders(provider) {
-			dir, err := providerHistoryDir(peer, root)
+	if chStream != nil {
+		for _, peer := range knownProviders {
+			if peer == provider || !channelCfg.joins(peer) || !capturesLive(peer) {
+				continue
+			}
+			pw, err := newPeerHistoryWatch(peer, root)
 			if err != nil {
 				syncErr = joinNativeSyncError(syncErr, err)
 				continue
 			}
-			pw := newNativeHistoryWatch(dir, root)
-			pw.claude = peer == "claude"
 			pw.captureTools = true
 			// A separate index: two MARSHAL sessions watching the same provider
 			// must not fight over one file, and this watcher's progress is not
@@ -222,12 +284,20 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if err := pw.loadIndex(); err != nil {
 				syncErr = joinNativeSyncError(syncErr, err)
 			}
-			// Prime the index against what already exists, so the inbox carries
-			// what happens from now on rather than replaying the whole history
-			// the launch briefing has already summarized.
-			pw.consume = func(importer.SessionTranscript) error { return nil }
-			if err := pw.sync(); err != nil {
-				syncErr = joinNativeSyncError(syncErr, err)
+			// Baseline the first run against what is already on disk. Without
+			// this a fresh index means the first poll drops the project's whole
+			// history into the channel — hundreds of messages, all of them
+			// already in durable memory and already summarised in the briefing —
+			// and every reader's view fills with them. The channel is for work
+			// happening now; the backlog it carries is the backlog it collected,
+			// not one replayed into it at startup.
+			if pw.indexEmpty() {
+				real := pw.consume
+				pw.consume = func(importer.SessionTranscript) error { return nil }
+				if err := pw.sync(); err != nil {
+					syncErr = joinNativeSyncError(syncErr, err)
+				}
+				pw.consume = real
 			}
 			peerName := peer
 			primary := watch.consume
@@ -236,7 +306,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 					return err
 				}
 				for _, message := range tr.Messages {
-					if err := inbox.append(peerName, message); err != nil {
+					if _, err := chStream.append(peerName, tr.SessionID, message); err != nil {
 						return err
 					}
 				}
@@ -250,6 +320,9 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	// compile or deliver the briefing is reported but never blocks the session:
 	// an agent with no briefing is the previous behaviour, not a broken one.
 	var briefingNotes []string
+	for _, problem := range channelProblems {
+		briefingNotes = append(briefingNotes, "live-peers: "+problem)
+	}
 	channel, fallbackNote := resolveInjectChannel(provider, loadInjectChannel(root))
 	if fallbackNote != "" {
 		briefingNotes = append(briefingNotes, fallbackNote)
@@ -300,6 +373,19 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			fmt.Fprintf(os.Stdout, "MARSHAL · %s\n", note)
 		}
 	}
+	// Published on every pass so a long session shows capture working rather
+	// than only reporting once it is over.
+	publishStatus := func() {
+		status := liveStatus{Imported: imported, Delivered: view.Count(), LastSync: time.Now().UTC()}
+		if syncErr != nil {
+			status.Error = syncErr.Error()
+		}
+		// A status file that cannot be written is not worth failing a session
+		// over, and the session's own result already reports capture errors.
+		_ = writeLiveStatus(root, provider, status)
+	}
+	publishStatus()
+
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Dir = root
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -323,6 +409,8 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 					syncErr = joinNativeSyncError(syncErr, err)
 				}
 			}
+			drainChannel()
+			publishStatus()
 			// The command is what the operator types, which for agy is not
 			// the provider's long name.
 			command := provider
@@ -330,8 +418,8 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 				command = antigravityBinary
 			}
 			result := fmt.Sprintf("%s exited. %d message(s), including tool calls, saved to MARSHAL memory.\n/%s continue resumes; /%s new starts a new session.", label, imported, command, command)
-			if delivered := inbox.Count(); delivered > 0 {
-				result += fmt.Sprintf("\n%d live update(s) from another agent were delivered to this session's inbox.", delivered)
+			if delivered := view.Count(); delivered > 0 {
+				result += fmt.Sprintf("\n%d channel entr%s from other agents were shown to this session.", delivered, plural(delivered, "y", "ies"))
 			}
 			for _, note := range briefingNotes {
 				if note != "" {
@@ -346,7 +434,10 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			// OpenCode's public history API is a CLI export backed by the same
 			// database the child is using. Export once the child exits; polling it
 			// here can delay interactive input and contend with the live session.
-			if provider != "opencode" && provider != "antigravity" {
+			// Antigravity is different: its conversation databases are read
+			// read-only and SQLite serves readers under WAL, so polling them costs
+			// the running child nothing.
+			if capturesLive(provider) {
 				if err := watch.sync(); err != nil {
 					syncErr = err
 				}
@@ -356,6 +447,8 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 					syncErr = joinNativeSyncError(syncErr, err)
 				}
 			}
+			drainChannel()
+			publishStatus()
 		}
 	}
 }
@@ -407,6 +500,9 @@ type nativeHistoryWatch struct {
 	// supplies JSON exports, so MARSHAL never reads the database or depends on
 	// its private schema. The adapter selects visible conversation fields.
 	openCodeRun func(args ...string) ([]byte, error)
+	// openCodeDB is the store read while a session is open. The CLI export
+	// above remains what runs at exit and stays the source of record.
+	openCodeDB string
 	// antigravity is set for agy's per-conversation SQLite history, which is
 	// read directly and read-only: agy has no export command. The adapter
 	// takes only fields observed to carry visible conversation and tool
@@ -431,6 +527,18 @@ func newNativeHistoryWatch(dir, root string) *nativeHistoryWatch {
 }
 
 func (w *nativeHistoryWatch) sync() error {
+	if w.openCodeDB != "" {
+		err := w.syncOpenCodeLive()
+		// A store that is not the shape MARSHAL reads is not a failure, it is a
+		// reason to use the supported interface instead. The export is slower
+		// and cannot run mid-session, so the work arrives at exit rather than as
+		// it happens — late, but never wrong and never missing.
+		if errors.Is(err, errOpenCodeSchemaMoved) && w.openCodeRun != nil {
+			w.openCodeDB = ""
+			return w.syncOpenCode()
+		}
+		return err
+	}
 	if w.openCodeRun != nil {
 		return w.syncOpenCode()
 	}
@@ -587,4 +695,36 @@ func (w *nativeHistoryWatch) syncFile(path string) error {
 		return w.consume(tr)
 	}
 	return nil
+}
+
+// newPeerHistoryWatch builds a watcher for another agent's history.
+//
+// Each provider keeps its history its own way, and the watcher has to be built
+// for the one it is reading: Claude and Codex write files under a directory,
+// Antigravity keeps a SQLite database per conversation. A provider that cannot
+// be read while it runs has no peer watcher at all — its work reaches the
+// channel when its own session ends.
+func newPeerHistoryWatch(peer, root string) (*nativeHistoryWatch, error) {
+	if !capturesLive(peer) {
+		return nil, fmt.Errorf("%s is not read while it runs", peer)
+	}
+	switch peer {
+	case "antigravity":
+		return newAntigravityHistoryWatch(root)
+	case "opencode":
+		dbPath, err := openCodeDBPath()
+		if err != nil {
+			return nil, err
+		}
+		watch := newNativeHistoryWatch(filepath.Dir(dbPath), root)
+		watch.openCodeDB = dbPath
+		return watch, nil
+	}
+	dir, err := providerHistoryDir(peer, root)
+	if err != nil {
+		return nil, err
+	}
+	watch := newNativeHistoryWatch(dir, root)
+	watch.claude = peer == "claude"
+	return watch, nil
 }

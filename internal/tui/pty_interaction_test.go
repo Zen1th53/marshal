@@ -213,8 +213,12 @@ func TestPTYHistoryRecall(t *testing.T) {
 	}
 }
 
-// Test E: candidate selection with arrows, accepted with Enter, without
-// executing the command.
+// Test E: Tab never runs anything, and running takes an Enter of its own.
+//
+// The first Enter settles the highlighted candidate and stops. That is where
+// the operator reaches for Tab again to complete the next level, so running on
+// the same keystroke ran something half-written. The second Enter runs it,
+// through the ordinary path, with no menu open.
 func TestPTYTabCompletesWithoutRunningAndEnterRuns(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
@@ -241,17 +245,29 @@ func TestPTYTabCompletesWithoutRunningAndEnterRuns(t *testing.T) {
 		t.Errorf("expected 1 composer after completing, found %d", n)
 	}
 
-	// Enter is the key that runs. /rollback with no id answers with its usage,
-	// which is the visible proof the command actually executed.
+	// Enter is the key that runs, and with a menu open it takes two: the first
+	// settles the choice, the second runs it. /rollback with no id answers with
+	// its usage, which is the visible proof the command actually executed.
 	s.send("\x15") // Ctrl+U clears the draft
 	s.send("/ro")
 	time.Sleep(300 * time.Millisecond)
+
+	s.send("\r")
+	time.Sleep(400 * time.Millisecond)
+	settled := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker))
+	if settled == "" {
+		t.Fatalf("the first Enter cleared the draft instead of settling a candidate")
+	}
+	if strings.Contains(s.screenText(rows, cols), "Usage: /rollback") {
+		t.Errorf("the first Enter ran the command instead of settling it")
+	}
+
 	s.send("\r")
 	if !s.waitFor("Usage: /rollback", 8*time.Second) {
-		// The highlighted candidate may not be /rollback; any execution proves
-		// the contract, so fall back to the draft having been consumed.
+		// The settled candidate may not be /rollback; any execution proves the
+		// contract, so fall back to the draft having been consumed.
 		if line := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker)); line != "" {
-			t.Errorf("Enter on the menu neither ran a command nor cleared the draft: %q", line)
+			t.Errorf("the second Enter neither ran a command nor cleared the draft: %q", line)
 		}
 	}
 }
