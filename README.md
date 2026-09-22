@@ -197,13 +197,64 @@ have already done in the project: recent sessions, the commands they ran, and th
 changes they made. Codex starts out knowing what Claude just did, and vice versa.
 
 A briefing is only a snapshot, so MARSHAL keeps it current. While a session runs,
-MARSHAL watches the other agents and appends their work to a **live inbox** that
-the running agent can read (`.marshal/inbox/<agent>.md`). Two agents working in
-parallel can keep up with each other without you passing messages between them.
+MARSHAL appends the other agents' work to a **live inbox** that the running agent
+can read (`.marshal/inbox/<agent>.md`). Two agents working in parallel can keep up
+with each other without you passing messages between them.
+
+**An agent that was closed still catches up.** A running session writes into the
+inboxes of the agents configured to hear from it, whether or not they are running,
+so Codex comes back to what Claude did while Codex was shut — a backlog, not a
+summary. Entries are stamped and a boundary marks where each session begins, so
+older work never reads as though it just arrived. A full inbox drops its oldest
+entries rather than sealing itself, because the recent work is the part a
+returning agent needs.
 
 The briefing and the inbox both label themselves as **untrusted data, not
 instructions**. They quote other agents' output, which can contain anything those
 agents happened to read, and nothing in them overrides you.
+
+#### Choosing who hears whom
+
+Delivery is per receiver, set with `/memory peers` and stored in
+`.marshal/live-peers`:
+
+```
+claude: codex
+codex: none
+opencode: codex, claude
+```
+
+The two directions are independent — a reviewer can read the implementer without
+the implementer reading the reviewer.
+
+**Sending and receiving are not the same capability.** An inbox is a file, so any
+agent can be told things. Being *heard* live requires a history MARSHAL can read
+while the agent is running, and only two of the four have one:
+
+| Agent | History | Can be heard live | Can be told live |
+| --- | --- | :---: | :---: |
+| Claude Code | append-only JSONL | yes | yes |
+| Codex | append-only JSONL | yes | yes |
+| OpenCode | SQLite, written by the running process | no | yes |
+| Antigravity (`agy`) | per-conversation SQLite, held open | no | yes |
+
+OpenCode and Antigravity are imported into memory when their own process exits,
+so their work reaches the others at that point rather than as it happens.
+Configuring one as a live sender is refused with that reason rather than accepted
+and quietly ignored.
+
+Verified on 2026-09-22 against the installed CLIs — Claude Code 2.1.278, Codex
+0.155.1, OpenCode 1.18.16, `agy` 1.2.7 — by decoding their real transcripts with
+the same watcher the runtime uses: a 4.2 MB Claude session yielded 888 messages
+and a 224 KB Codex session 18, while the same Claude file grew between two runs
+minutes apart, which is what live capture looks like from the outside. All
+sixteen sender/receiver pairs are asserted in
+`internal/tui/native_livematrix_test.go`; six deliver.
+
+Capture also reports itself while it runs. The native CLI owns the terminal for
+the whole session, so MARSHAL cannot draw a counter — it writes one instead, to
+`.marshal/<agent>/live-status.json`: records imported, entries delivered, last
+sync, and any capture error.
 
 ### Security you do not have to configure
 
