@@ -131,10 +131,35 @@ func (c *Completer) Suggest(text string, cursor int) (string, []string) {
 		wordStart--
 	}
 	word := string(runes[wordStart:cursor])
-	if word == "" {
-		return word, nil
-	}
 	return word, c.findMatches(text, cursor, wordStart, word)
+}
+
+// subcommandMatches completes against what the typed command accepts.
+//
+// The longest registered prefix wins, so a command can complete its second
+// level too: "/memory peers " offers agent names rather than repeating the
+// subcommands of "/memory". Without that, a command taking an argument from a
+// fixed set completes the wrong thing, which is worse than completing nothing.
+func (c *Completer) subcommandMatches(before, word string) []string {
+	parts := strings.Fields(strings.TrimSpace(before))
+	if len(parts) == 0 || !strings.HasPrefix(parts[0], "/") {
+		return nil
+	}
+	for depth := len(parts); depth >= 1; depth-- {
+		subcmds, ok := c.ctx.Subcommands[strings.Join(parts[:depth], " ")]
+		if !ok {
+			continue
+		}
+		var candidates []string
+		for _, sc := range subcmds {
+			if strings.HasPrefix(strings.ToLower(sc), strings.ToLower(word)) {
+				candidates = append(candidates, sc)
+			}
+		}
+		sort.Strings(candidates)
+		return candidates
+	}
+	return nil
 }
 
 func isWordSeparator(r rune) bool {
@@ -142,11 +167,14 @@ func isWordSeparator(r rune) bool {
 }
 
 func (c *Completer) findMatches(fullText string, cursor, wordStart int, word string) []string {
-	if word == "" {
-		return nil
-	}
-
 	var candidates []string
+
+	// An empty word offers the subcommands of whatever was typed, and nothing
+	// else. Listing every slash command the moment a space is pressed would be
+	// noise; listing what this command accepts is the answer to "and now what".
+	if word == "" {
+		return c.subcommandMatches(fullText[:wordStart], "")
+	}
 
 	// 1. Agent mention: starts with @
 	if strings.HasPrefix(word, "@") {
@@ -214,22 +242,9 @@ func (c *Completer) findMatches(fullText string, cursor, wordStart int, word str
 		return candidates
 	}
 
-	// 3. Subcommands if we have a preceding command
-	beforeWord := strings.TrimSpace(fullText[:wordStart])
-	parts := strings.Fields(beforeWord)
-	if len(parts) >= 1 && strings.HasPrefix(parts[0], "/") {
-		cmd := parts[0]
-		if subcmds, ok := c.ctx.Subcommands[cmd]; ok {
-			for _, sc := range subcmds {
-				if strings.HasPrefix(strings.ToLower(sc), strings.ToLower(word)) {
-					candidates = append(candidates, sc)
-				}
-			}
-			if len(candidates) > 0 {
-				sort.Strings(candidates)
-				return candidates
-			}
-		}
+	// 3. Subcommands if we have a preceding command.
+	if matches := c.subcommandMatches(fullText[:wordStart], word); len(matches) > 0 {
+		return matches
 	}
 
 	// 4. Slash commands: starts with /

@@ -430,43 +430,7 @@ func (h *CommandHandler) handleMemoryPeers(args []string) (string, error) {
 
 	cfg, problems := loadChannelConfig(root)
 	if len(args) == 0 {
-		var b strings.Builder
-		b.WriteString("SHARED CHANNEL:\n")
-		b.WriteString("  in the channel:  ")
-		var joined []string
-		for _, p := range knownProviders {
-			if cfg.joins(p) {
-				mark := p
-				if !capturesLive(p) {
-					mark += " (on exit)"
-				}
-				joined = append(joined, mark)
-			}
-		}
-		if len(joined) == 0 {
-			b.WriteString("nobody")
-		} else {
-			b.WriteString(strings.Join(joined, ", "))
-		}
-		b.WriteString("\n\n")
-		for _, reader := range knownProviders {
-			authors := cfg.visibleTo(reader)
-			list := "nothing"
-			if len(authors) > 0 {
-				list = strings.Join(authors, ", ")
-			}
-			fmt.Fprintf(&b, "  %-12s sees %s\n", reader, list)
-		}
-		b.WriteString("\nAn agent marked (on exit) joins the channel when its own process\n")
-		b.WriteString("ends rather than as it works: MARSHAL reads OpenCode through its\n")
-		b.WriteString("public CLI export, and has not established that reading agy's store\n")
-		b.WriteString("mid-session is sound.\n")
-		for _, problem := range problems {
-			fmt.Fprintf(&b, "\n%s: %s", livePeerPath(root), problem)
-		}
-		b.WriteString("\nUsage: /memory peers <agent> <agents|all|none>")
-		b.WriteString("\n       /memory peers participants <agents|all>")
-		return b.String(), nil
+		return h.renderChannel(root, cfg, problems, ""), nil
 	}
 
 	name := canonicalProvider(args[0])
@@ -485,10 +449,7 @@ func (h *CommandHandler) handleMemoryPeers(args []string) (string, error) {
 		if err := saveChannelConfig(root, cfg); err != nil {
 			return "", fmt.Errorf("save channel configuration: %w", err)
 		}
-		if len(joined) == 0 {
-			return "Nobody joins the channel; no agent's work is shared.", nil
-		}
-		return fmt.Sprintf("In the channel: %s.", strings.Join(joined, ", ")), nil
+		return h.renderChannel(root, cfg, nil, ""), nil
 	}
 
 	if !isKnownProvider(name) {
@@ -504,10 +465,85 @@ func (h *CommandHandler) handleMemoryPeers(args []string) (string, error) {
 	if err := saveChannelConfig(root, cfg); err != nil {
 		return "", fmt.Errorf("save channel configuration: %w", err)
 	}
-	if len(authors) == 0 {
-		return fmt.Sprintf("%s now sees nothing in the channel.", name), nil
+	return h.renderChannel(root, cfg, nil, name), nil
+}
+
+// renderChannel draws the arrangement.
+//
+// Colour carries state and nothing else. Every agent name is the same colour,
+// because the name is not the information — whether it contributes, and who it
+// is given, is. Colouring each agent differently would make the report look
+// like it means more than it says.
+func (h *CommandHandler) renderChannel(root string, cfg channelConfig, problems []string, changed string) string {
+	th := h.ws.theme
+	if th == nil {
+		th = NewTheme(ThemeDefault, true, true)
 	}
-	return fmt.Sprintf("%s now sees %s.", name, strings.Join(authors, ", ")), nil
+	const nameWidth = 13
+	// Padding is computed on the visible text: %-14s counts escape bytes and
+	// would leave every coloured column ragged.
+	pad := func(text string) string {
+		if gap := nameWidth - len(StripANSI(text)); gap > 0 {
+			return text + strings.Repeat(" ", gap)
+		}
+		return text
+	}
+	name := func(n string) string { return pad(th.Colorize(th.Active, n)) }
+	// The row that just changed is marked, because a command that alters state
+	// and answers with one line leaves the operator to trust that it worked.
+	// The whole arrangement is reprinted so the change is read in context, and
+	// the marker says which part of it moved.
+	edge := func(agent string) string {
+		if agent == changed {
+			return th.Colorize(th.Warning, th.GlyphArrowR)
+		}
+		return th.BoxVert
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s SHARED CHANNEL\n", th.Colorize(th.Marshal, "╭─"))
+	fmt.Fprintf(&b, "%s%s\n", th.BoxTRight, strings.Repeat(th.BoxHoriz, 58))
+
+	for _, agent := range knownProviders {
+		mark, note := th.Colorize(th.Success, th.GlyphDotFull), "contributes as it works"
+		switch {
+		case !cfg.joins(agent):
+			mark, note = th.Colorize(th.Muted, th.GlyphDotEmpty), "not in the channel"
+		case !capturesLive(agent):
+			mark, note = th.Colorize(th.Warning, th.GlyphDotHalf), "contributes when it exits"
+		}
+		fmt.Fprintf(&b, "%s %s %s %s\n", edge(agent), mark, name(agent), th.Colorize(th.Muted, note))
+	}
+
+	fmt.Fprintf(&b, "%s%s\n", th.BoxTRight, strings.Repeat(th.BoxHoriz, 58))
+	for _, reader := range knownProviders {
+		// Only authors actually in the channel are listed. A reader configured
+		// for an agent that never joined would otherwise be shown a name that
+		// can never appear in its view.
+		var authors []string
+		for _, author := range cfg.visibleTo(reader) {
+			if cfg.joins(author) {
+				authors = append(authors, author)
+			}
+		}
+		list := th.Colorize(th.Muted, "nothing")
+		if len(authors) > 0 {
+			list = th.Colorize(th.Active, strings.Join(authors, ", "))
+		}
+		fmt.Fprintf(&b, "%s %s %s %s\n", edge(reader), name(reader),
+			th.Colorize(th.Muted, "sees"), list)
+	}
+	fmt.Fprintf(&b, "%s%s\n", th.BoxBottomLeft, strings.Repeat(th.BoxHoriz, 58))
+
+	b.WriteString(th.Colorize(th.Muted,
+		"An agent is never shown its own work: it already knows what it did.\n"))
+	for _, problem := range problems {
+		fmt.Fprintf(&b, "%s %s: %s\n",
+			th.Colorize(th.Warning, th.GlyphCross), livePeerPath(root), problem)
+	}
+	b.WriteString(th.Colorize(th.Muted,
+		"\n/memory peers <agent> <agents|all|none>\n/memory peers participants <agents|all>"))
+	return b.String()
 }
 
 // handleProvider handles provider configuration and status inspection.

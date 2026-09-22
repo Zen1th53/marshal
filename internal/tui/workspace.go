@@ -225,7 +225,11 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/task"] = []string{"create", "inspect", "assign", "pause", "resume", "cancel", "retry", "ownership"}
 	compCtx.Subcommands["/policy"] = []string{"network", "sandbox", "capability", "scope", "write", "audit"}
 	compCtx.Subcommands["/checkpoint"] = []string{"list", "create", "inspect", "diff"}
-	compCtx.Subcommands["/memory"] = []string{"search", "provenance"}
+	compCtx.Subcommands["/memory"] = []string{"list", "search", "provenance", "inject", "peers"}
+	// Second level: the agents a channel line can name, plus the keywords.
+	// "agy" is offered rather than "antigravity" because agy is what the
+	// operator types everywhere else.
+	compCtx.Subcommands["/memory peers"] = []string{"participants", "claude", "codex", "opencode", "agy"}
 	compCtx.Subcommands["/harness"] = []string{"probe", "status", "select"}
 	compCtx.Subcommands["/provider"] = []string{"status", "config"}
 	compCtx.Subcommands["/alignment"] = []string{"scope", "violations", "blast", "deletions", "resolve", "status"}
