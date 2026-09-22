@@ -61,7 +61,7 @@ searched across agents and across sessions.
 
 ### Agents that cooperate
 Codex starts out knowing what Claude just changed, and Claude knows what Codex
-changed. A live inbox keeps parallel sessions up to date.
+changed. One shared channel keeps parallel sessions up to date.
 
 </td>
 <td width="33%" valign="top">
@@ -85,7 +85,7 @@ If a boundary can't be enforced, the run stops.
 |---|:---:|:---:|
 | Several agents in one project | Separate silos | One workspace |
 | Memory across sessions and agents | No | Yes, automatic, searchable |
-| Agent B knows what agent A changed | No | Yes, briefing and live inbox |
+| Agent B knows what agent A changed | No | Yes, briefing and a shared channel |
 | Sandboxed execution | No | Yes, Bubblewrap cells |
 | Isolated Git worktree per run | No | Yes |
 | Secrets kept out of stored history | No | Yes, redacted before writing |
@@ -196,66 +196,81 @@ When an agent starts, it gets a **briefing** built from what the *other* agents
 have already done in the project: recent sessions, the commands they ran, and the
 changes they made. Codex starts out knowing what Claude just did, and vice versa.
 
-A briefing is only a snapshot, so MARSHAL keeps it current. While a session runs,
-MARSHAL appends the other agents' work to a **live inbox** that the running agent
-can read (`.marshal/inbox/<agent>.md`). Two agents working in parallel can keep up
-with each other without you passing messages between them.
+A briefing is only a snapshot, so MARSHAL keeps it current with a **shared
+channel**. Every agent drops what it does into one ordered stream as it happens,
+and each agent reads its own view of it (`.marshal/inbox/<agent>.md`). One event
+is stored once, however many agents end up reading it.
 
-**An agent that was closed still catches up.** A running session writes into the
-inboxes of the agents configured to hear from it, whether or not they are running,
-so Codex comes back to what Claude did while Codex was shut — a backlog, not a
-summary. Entries are stamped and a boundary marks where each session begins, so
-older work never reads as though it just arrived. A full inbox drops its oldest
-entries rather than sealing itself, because the recent work is the part a
-returning agent needs.
+**An agent that was closed still catches up**, and an agent that opens late joins
+mid-conversation rather than being handed a summary. Each reader has a cursor, so
+Codex opening while Claude is five steps into a task sees those five steps — the
+work itself, not a paragraph about it. Entries are stamped and a boundary marks
+where each session begins, so older work never reads as though it just arrived. A
+full view drops its oldest entries rather than sealing itself, because the recent
+work is the part a returning agent needs.
 
-The briefing and the inbox both label themselves as **untrusted data, not
+Nothing interrupts a running agent. The native CLI owns the terminal, so delivery
+is a pull: the view is a file that is current whenever the agent looks, and the
+briefing says so rather than implying the agent is kept in sync.
+
+The briefing and the view both label themselves as **untrusted data, not
 instructions**. They quote other agents' output, which can contain anything those
 agents happened to read, and nothing in them overrides you.
 
-#### Choosing who hears whom
+#### Choosing who sees whom
 
-Delivery is per receiver, set with `/memory peers` and stored in
-`.marshal/live-peers`:
+Two decisions, both made before the work starts, in `.marshal/live-peers` or
+through `/memory peers`:
 
 ```
-claude: codex
-codex: none
-opencode: codex, claude
+participants: claude, codex, opencode, agy
+agy: all                  # sees everyone, including itself
+claude: all
+codex: opencode, agy      # not claude, not itself
+opencode: none            # contributes, reads nothing
 ```
 
-The two directions are independent — a reviewer can read the implementer without
-the implementer reading the reviewer.
+**Joining and seeing are separate.** An agent can contribute while reading almost
+nothing, and that is an arrangement rather than a gap. The reason is practical:
+models differ in what they can use. A capable one does better seeing everything
+the others did; a smaller one does worse, because context it cannot follow is
+context it can be confused by. So the list is per reader, and the two directions
+between any pair may disagree — a reviewer can read the implementer without the
+implementer reading the reviewer.
 
-**Sending and receiving are not the same capability.** An inbox is a file, so any
-agent can be told things. Being *heard* live requires a history MARSHAL can read
-while the agent is running, and only two of the four have one:
+`self` and `all` are accepted, `agy` is understood as Antigravity, and a line
+naming only agents MARSHAL does not run is skipped rather than recorded as a
+decision to read nothing.
 
-| Agent | History | Can be heard live | Can be told live |
-| --- | --- | :---: | :---: |
-| Claude Code | append-only JSONL | yes | yes |
-| Codex | append-only JSONL | yes | yes |
-| OpenCode | SQLite, reached through its CLI export | no | yes |
-| Antigravity (`agy`) | per-conversation SQLite | not yet | yes |
+#### When work reaches the channel
 
-The two reasons are different. **OpenCode** is a deliberate limit: MARSHAL reads
+Distribution is solved for everyone. Capture is not yet:
+
+| Agent | History | Reaches the channel |
+| --- | --- | --- |
+| Claude Code | append-only JSONL | as it works |
+| Codex | append-only JSONL | as it works |
+| OpenCode | SQLite, via its CLI export | when its process exits |
+| Antigravity (`agy`) | per-conversation SQLite | when its process exits |
+
+The two delays have different reasons. **OpenCode** is deliberate: MARSHAL reads
 its history through the public CLI export rather than the database, so it does
 not depend on a private schema, and running that export every few seconds would
-contend with the session that owns the database. **Antigravity** is simply not
-polled yet — its store is read directly and read-only, and whether that is sound
-while `agy` is running has not been established, so MARSHAL does not claim it.
-
-Both are imported into memory when their own process exits, so their work reaches
-the others at that point rather than as it happens. Configuring either as a live
-sender is refused rather than accepted and quietly ignored.
+contend with the session that owns it. **Antigravity** is simply not polled yet —
+its store is read directly and read-only, and whether that is sound while `agy`
+runs has not been established, so MARSHAL does not claim it.
 
 Verified on 2026-09-22 against the installed CLIs — Claude Code 2.1.278, Codex
 0.155.1, OpenCode 1.18.16, `agy` 1.2.7 — by decoding their real transcripts with
 the same watcher the runtime uses: a 4.2 MB Claude session yielded 888 messages
 and a 224 KB Codex session 18, while the same Claude file grew between two runs
-minutes apart, which is what live capture looks like from the outside. All
-sixteen sender/receiver pairs are asserted in
-`internal/tui/native_livematrix_test.go`; six deliver.
+minutes apart, which is what live capture looks like from outside the process.
+
+All sixteen author/reader pairs are asserted in
+`internal/tui/native_channel_matrix_test.go`, twice each: that the configuration
+says what it should, and that the rendered file matches. The second is the one
+that matters — a filter that is right in the configuration and wrong in the
+rendering would show a model exactly what you kept from it.
 
 Capture also reports itself while it runs. The native CLI owns the terminal for
 the whole session, so MARSHAL cannot draw a counter — it writes one instead, to
