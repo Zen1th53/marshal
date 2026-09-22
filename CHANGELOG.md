@@ -1,5 +1,61 @@
 # Changelog
 
+## v0.0.4 — One shared channel
+
+Agents in a project work from one ordered channel instead of from a briefing
+that went stale the moment it was written.
+
+### Added
+
+- **A shared channel.** Every agent drops what it does into one ordered,
+  append-only stream as it works, and each reads its own view of it. One event
+  is stored once, however many agents read it. Cross-agent exchange used to be
+  point to point — a running session copied what it did into every other
+  agent's mailbox, so four agents meant four copies, a guard against writing one
+  twice, and a table of who posts to whom.
+- **An agent joining late joins the conversation.** A reader resumes from its
+  own cursor, so an agent opening while another is mid-task sees the steps
+  already taken rather than a summary of them. An agent that was closed finds
+  a backlog waiting.
+- **Per-agent visibility.** `/memory peers`, stored in `.marshal/live-peers`,
+  decides who joins the channel and who each agent sees in it. The two are
+  separate, and the two directions between any pair may disagree: models differ
+  in what they can use, and context an agent cannot follow is context it can be
+  confused by. An agent is never shown its own work.
+- **Live capture for every agent.** OpenCode and Antigravity reach the channel
+  while they run, like Claude Code and Codex. Their SQLite stores are opened
+  read-only and never written to. OpenCode's shape is checked before each read;
+  a schema that has moved hands back to the supported CLI export, which delivers
+  at exit instead — later, never wrong.
+- **`.marshal/<agent>/live-status.json`.** Records imported, entries shown, last
+  sync and any capture error. Capture was always live; nothing said so, because
+  the only report came after the agent exited.
+
+### Changed
+
+- **Antigravity is presented as `Agy cli`**, after the command operators type.
+  The adapter still reports itself as `antigravity`.
+- **Gemini leaves the TUI provider surface.** Its adapter, doctor probe and
+  `Import Gemini JSONL` are unchanged: this narrows what the TUI offers, not
+  what MARSHAL can run. Frozen IA node count 804 → 801.
+- **Completion works on a command's arguments**, and Tab steps through
+  candidates instead of taking the first and closing. The first Enter settles
+  the choice; a second runs it.
+- The CI gate no longer runs the whole suite twice and is split by cost. The
+  store suite migrates once into a template rather than 311 times, taking it
+  from 400 seconds to 184 under the race detector. PTY waits scale with the race
+  detector.
+
+### Fixed
+
+- A command that changed the channel answered with one line, leaving the
+  arrangement it had just altered off screen. It now reprints it and marks the
+  row that moved.
+- The channel report listed authors that had not joined, which is a promise the
+  channel cannot keep.
+- A remark after a value in `.marshal/live-peers` was read as a list of agents.
+- Internal working material is no longer tracked in this public repository.
+
 ## Unreleased — current `main`
 
 These changes are merged on `main` and are **not** part of the v1.5.0 release

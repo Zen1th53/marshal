@@ -93,7 +93,10 @@ type Workspace struct {
 	mouseOn         bool
 	completions     []string
 	completionIndex int
-	completionStem  string
+	// completionCycled records that Tab has already put a candidate on the
+	// line, so the first press takes the highlighted one instead of the next.
+	completionCycled bool
+	completionStem   string
 
 	// interruptArmed records that a Ctrl+C arrived with nothing left to
 	// interrupt. A second consecutive press then exits; any other key disarms
@@ -225,7 +228,11 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/task"] = []string{"create", "inspect", "assign", "pause", "resume", "cancel", "retry", "ownership"}
 	compCtx.Subcommands["/policy"] = []string{"network", "sandbox", "capability", "scope", "write", "audit"}
 	compCtx.Subcommands["/checkpoint"] = []string{"list", "create", "inspect", "diff"}
-	compCtx.Subcommands["/memory"] = []string{"search", "provenance"}
+	compCtx.Subcommands["/memory"] = []string{"list", "search", "provenance", "inject", "peers"}
+	// Second level: the agents a channel line can name, plus the keywords.
+	// "agy" is offered rather than "antigravity" because agy is what the
+	// operator types everywhere else.
+	compCtx.Subcommands["/memory peers"] = []string{"participants", "claude", "codex", "opencode", "agy"}
 	compCtx.Subcommands["/harness"] = []string{"probe", "status", "select"}
 	compCtx.Subcommands["/provider"] = []string{"status", "config"}
 	compCtx.Subcommands["/alignment"] = []string{"scope", "violations", "blast", "deletions", "resolve", "status"}
@@ -742,28 +749,29 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 					w.renderComposer()
 					continue
 				case KeyShiftTab:
-					w.moveCompletion(-1)
+					w.cycleCompletion(-1)
 					w.renderComposer()
 					continue
 				case KeyTab:
-					// Tab completes and nothing else. It writes the highlighted
-					// candidate into the draft and stops there, so the operator
-					// can still add arguments before running anything.
-					w.acceptCompletion()
+					// Tab steps to the next candidate and leaves the menu open,
+					// the way a shell does. It never submits: Enter settles the
+					// choice, and the operator can still add arguments first.
+					w.cycleCompletion(1)
 					w.renderComposer()
 					continue
 				case KeyEnter:
-					// Enter picks the highlighted command and runs it. Choosing
-					// from the menu is the decision; making it cost a second
-					// keystroke only means pressing Enter twice.
+					// Enter settles the choice and stops there. It used to run
+					// the command too, on the reasoning that choosing from the
+					// menu was the decision — which held while a command was
+					// all there was to complete. It is not: settling on
+					// "/memory" is where the operator reaches for Tab again to
+					// complete "peers". Running on the same keystroke took that
+					// away and ran something half-written.
+					//
+					// The second Enter runs it, through the ordinary path,
+					// because by then there is no menu open and nothing
+					// special about the line.
 					w.acceptCompletion()
-					cmd, submitted := w.composer.HandleKey(KeyEvent{Type: KeyEnter})
-					if submitted {
-						if cmd == "/quit" || cmd == "/exit" {
-							return nil
-						}
-						w.runCommand(ctx, cmd)
-					}
 					w.renderComposer()
 					continue
 				}
@@ -901,8 +909,18 @@ func (w *Workspace) syncMouseMode() {
 //
 // Only the explicit prefixes qualify. Opening on every bare word would take the
 // arrow keys away from history for someone who is typing prose, not a command.
-func completionTrigger(word string) bool {
-	return strings.HasPrefix(word, "/") || strings.HasPrefix(word, "@") || strings.HasPrefix(word, "#")
+// completionTrigger reports whether what is being typed asks for the menu.
+//
+// A sigil asks for it outright. So does an argument of a slash command, which
+// the word alone cannot tell you: after "/memory " the word is empty, and
+// judging by the word closed the menu exactly where the operator had most
+// reason to expect it. The line is consulted too, so completing a command's
+// argument opens the same menu as completing the command.
+func completionTrigger(line, word string) bool {
+	if strings.HasPrefix(word, "/") || strings.HasPrefix(word, "@") || strings.HasPrefix(word, "#") {
+		return true
+	}
+	return strings.HasPrefix(strings.TrimLeft(line, " \t"), "/")
 }
 
 // refreshCompletion recomputes the menu from what the composer currently holds.
@@ -914,7 +932,7 @@ func (w *Workspace) refreshCompletion() {
 		return
 	}
 	word, matches := w.completer.Suggest(w.composer.Text(), w.composer.CursorPos())
-	if len(matches) == 0 || !completionTrigger(word) {
+	if len(matches) == 0 || !completionTrigger(w.composer.Text(), word) {
 		w.closeCompletion()
 		return
 	}
@@ -951,14 +969,52 @@ func (w *Workspace) moveCompletion(delta int) {
 	w.completionIndex = (w.completionIndex + delta + len(w.completions)) % len(w.completions)
 }
 
-// acceptCompletion writes the highlighted candidate over the word at the cursor.
+// cycleCompletion steps to the next candidate and shows it in the draft.
+//
+// This is what Tab does with a menu open, because it is what Tab does in a
+// shell: each press puts the next candidate on the line and leaves the menu up,
+// so the operator reads the real thing rather than a highlight and keeps
+// pressing until it is the one they meant. Tab used to take the first candidate
+// and close, which answers a question the operator had not finished asking.
+//
+// One candidate is not a cycle: there is nothing to step through, so it is
+// simply completed.
+func (w *Workspace) cycleCompletion(delta int) {
+	if len(w.completions) == 0 {
+		return
+	}
+	if len(w.completions) == 1 {
+		w.acceptCompletion()
+		return
+	}
+	// The first Tab takes the candidate already highlighted rather than the one
+	// after it. Moving first would skip the head of the list, which is the one
+	// the menu was pointing at and the one the operator was looking at.
+	if w.completionCycled {
+		w.moveCompletion(delta)
+	}
+	w.completionCycled = true
+	w.writeCompletion(w.completions[w.completionIndex], false)
+}
+
+// acceptCompletion writes the highlighted candidate over the word at the cursor
+// and closes the menu.
 func (w *Workspace) acceptCompletion() {
 	if len(w.completions) == 0 || w.completionIndex >= len(w.completions) {
 		w.closeCompletion()
 		return
 	}
-	candidate := w.completions[w.completionIndex]
+	w.writeCompletion(w.completions[w.completionIndex], true)
+	w.closeCompletion()
+}
 
+// writeCompletion puts a candidate over the word at the cursor.
+//
+// A settled candidate is followed by a space, because the next thing typed is
+// an argument rather than more of the name. One being cycled through is not:
+// the trailing space would end the word and the following Tab would complete
+// the next level instead of the rest of this one.
+func (w *Workspace) writeCompletion(candidate string, settled bool) {
 	runes := []rune(w.composer.Text())
 	cursor := w.composer.CursorPos()
 	if cursor > len(runes) {
@@ -969,19 +1025,20 @@ func (w *Workspace) acceptCompletion() {
 		wordStart--
 	}
 
-	// A completed command is followed by a space: the next thing typed is an
-	// argument, not more of the command name.
-	replacement := []rune(candidate + " ")
+	if settled {
+		candidate += " "
+	}
+	replacement := []rune(candidate)
 	updated := append(append(append([]rune{}, runes[:wordStart]...), replacement...), runes[cursor:]...)
 	w.composer.SetText(string(updated))
 	w.composer.cursor = wordStart + len(replacement)
-	w.closeCompletion()
 }
 
 func (w *Workspace) closeCompletion() {
 	w.completionOpen = false
 	w.completions = nil
 	w.completionIndex = 0
+	w.completionCycled = false
 	w.completer.Reset()
 }
 

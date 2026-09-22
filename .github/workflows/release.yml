@@ -76,6 +76,14 @@ jobs:
           COMMIT_EPOCH=$(git show -s --format=%ct HEAD)
           BUILD_DATE=$(date -u -d "@${COMMIT_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)
           echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
+          # A tag carrying a prerelease suffix is published as one. Marking it
+          # is what keeps install.sh and /update from offering a candidate to
+          # someone who asked for a release: both follow the latest release,
+          # and a prerelease is not it.
+          case "$TAG_NAME" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
 
       - name: Run Community release gates
         run: scripts/community-release-gate.sh
@@ -105,5 +113,6 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag_name }}
           name: "MARSHAL ${{ steps.version.outputs.tag_name }}"
           body_path: ${{ steps.version.outputs.release_notes }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
           fail_on_unmatched_files: true
           files: 'dist/*'
