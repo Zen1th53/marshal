@@ -205,9 +205,17 @@ func (s *ptySession) sendLine(line string) {
 	time.Sleep(350 * time.Millisecond)
 }
 
+// ptyWait scales a wait by ptyPatience, so every deadline in this suite moves
+// together when the race detector slows the processes it is waiting on.
+func ptyWait(d time.Duration) time.Duration { return d * ptyPatience }
+
 // waitFor blocks until the substring appears in the terminal output.
+//
+// The timeout is scaled by ptyWait, so callers pass the duration the wait
+// should take on an unloaded machine and do not each have to remember the
+// instrumented case.
 func (s *ptySession) waitFor(want string, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(ptyWait(timeout))
 	for time.Now().Before(deadline) {
 		if strings.Contains(s.output(), want) {
 			return true
@@ -220,7 +228,7 @@ func (s *ptySession) waitFor(want string, timeout time.Duration) bool {
 // waitForCount blocks until the substring has appeared at least n times, for
 // a marker an earlier step already printed.
 func (s *ptySession) waitForCount(want string, n int, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(ptyWait(timeout))
 	for time.Now().Before(deadline) {
 		if strings.Count(s.output(), want) >= n {
 			return true
@@ -232,8 +240,10 @@ func (s *ptySession) waitForCount(want string, n int, timeout time.Duration) boo
 
 func (s *ptySession) mustSee(want string) {
 	s.t.Helper()
-	if !s.waitFor(want, 8*time.Second) {
-		s.t.Fatalf("expected %q on the terminal.\n--- output tail ---\n%s", want, tail(s.output(), 3000))
+	const patient = 8 * time.Second
+	if !s.waitFor(want, patient) {
+		s.t.Fatalf("expected %q on the terminal after %s.\n--- output tail ---\n%s",
+			want, ptyWait(patient), tail(s.output(), 3000))
 	}
 }
 
