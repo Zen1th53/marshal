@@ -760,17 +760,30 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 					w.renderComposer()
 					continue
 				case KeyEnter:
-					// Enter settles the choice and stops there. It used to run
-					// the command too, on the reasoning that choosing from the
-					// menu was the decision — which held while a command was
-					// all there was to complete. It is not: settling on
-					// "/memory" is where the operator reaches for Tab again to
-					// complete "peers". Running on the same keystroke took that
-					// away and ran something half-written.
+					// Enter settles the candidate being completed and stops
+					// there, so the operator can Tab again for the next level
+					// rather than running something half-written. The second
+					// Enter runs it through the ordinary path, because by then
+					// no menu is open.
 					//
-					// The second Enter runs it, through the ordinary path,
-					// because by then there is no menu open and nothing
-					// special about the line.
+					// Nothing is being completed when the word at the cursor is
+					// empty: the menu is only offering what could come next.
+					// There is no choice to settle, so Enter means what it
+					// always means. Without this, "/goal " — a finished command
+					// with a trailing space — would take a subcommand instead
+					// of running, and the operator would watch Enter not work.
+					if w.completingWord() == "" {
+						w.closeCompletion()
+						cmd, submitted := w.composer.HandleKey(KeyEvent{Type: KeyEnter})
+						if submitted {
+							if cmd == "/quit" || cmd == "/exit" {
+								return nil
+							}
+							w.runCommand(ctx, cmd)
+						}
+						w.renderComposer()
+						continue
+					}
 					w.acceptCompletion()
 					w.renderComposer()
 					continue
@@ -967,6 +980,21 @@ func (w *Workspace) moveCompletion(delta int) {
 		return
 	}
 	w.completionIndex = (w.completionIndex + delta + len(w.completions)) % len(w.completions)
+}
+
+// completingWord returns the word the cursor sits in, which is what a
+// completion would replace. Empty means nothing is being completed.
+func (w *Workspace) completingWord() string {
+	runes := []rune(w.composer.Text())
+	cursor := w.composer.CursorPos()
+	if cursor > len(runes) {
+		cursor = len(runes)
+	}
+	start := cursor
+	for start > 0 && !isWordSeparator(runes[start-1]) {
+		start--
+	}
+	return string(runes[start:cursor])
 }
 
 // cycleCompletion steps to the next candidate and shows it in the draft.

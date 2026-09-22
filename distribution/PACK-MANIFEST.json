@@ -9006,8 +9006,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "2a7440cb8b26eb66fd9fbf00b041d575f318efab97c9feb250f3ec4bc1910d1b",
-      "bytes": 47309
+      "sha256": "731b2ccda84d1732f8a0b778dd03c3fbe85f99d521f55c27f06993759312b1b7",
+      "bytes": 48137
     },
     {
       "path": "internal/tui/workspace_nav_test.go",
