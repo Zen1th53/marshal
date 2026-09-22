@@ -104,7 +104,7 @@ func TestViewShowsOnlyConfiguredAuthors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, problems := parseChannelConfig("codex: claude, self\n")
+	cfg, problems := parseChannelConfig("codex: claude\n")
 	if len(problems) != 0 {
 		t.Fatalf("problems: %v", problems)
 	}
@@ -116,20 +116,18 @@ func TestViewShowsOnlyConfiguredAuthors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if shown != 2 {
-		t.Errorf("codex was shown %d entries, want 2", shown)
+	if shown != 1 {
+		t.Errorf("codex was shown %d entries, want 1", shown)
 	}
 	data, err := os.ReadFile(inboxPath(root, "codex"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	content := string(data)
-	for _, want := range []string{"claude did a thing", "codex did a thing"} {
-		if !strings.Contains(content, want) {
-			t.Errorf("view is missing %q", want)
-		}
+	if !strings.Contains(content, "claude did a thing") {
+		t.Error("view is missing the author it was configured for")
 	}
-	for _, unwanted := range []string{"opencode did a thing", "antigravity did a thing"} {
+	for _, unwanted := range []string{"codex did a thing", "opencode did a thing", "antigravity did a thing"} {
 		if strings.Contains(content, unwanted) {
 			t.Errorf("view leaked %q to a reader that may not see it", unwanted)
 		}

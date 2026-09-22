@@ -27,13 +27,18 @@ import (
 // The file, one line per agent:
 //
 //	participants: claude, codex, opencode, antigravity
-//	agy: all                  # sees everyone, including itself
+//	agy: all                  # every other agent
 //	claude: all
-//	codex: claude, self       # only claude's work and its own
+//	codex: claude             # only claude's work
 //	opencode: none            # joins the channel, reads nothing from it
 //
-// An agent with no line reads everyone. With no participants line, every agent
-// MARSHAL runs joins.
+// An agent with no line reads every other agent. With no participants line,
+// every agent MARSHAL runs joins.
+//
+// An agent is never shown its own entries, and that is not configurable. It
+// already knows what it did — the work is its own conversation — so returning
+// it would be noise at best, and at worst a model reading its own output back
+// as though another agent had reported it.
 
 func livePeerPath(root string) string {
 	return filepath.Join(root, ".marshal", "live-peers")
@@ -116,13 +121,15 @@ func (c channelConfig) joins(provider string) bool {
 }
 
 // visibleTo returns the authors a reader takes from the channel, sorted.
+//
+// Never itself: see the note at the top of this file.
 func (c channelConfig) visibleTo(reader string) []string {
 	if configured, ok := c.sees[reader]; ok {
 		return configured
 	}
 	var all []string
 	for _, candidate := range knownProviders {
-		if c.joins(candidate) {
+		if candidate != reader && c.joins(candidate) {
 			all = append(all, candidate)
 		}
 	}
@@ -131,7 +138,7 @@ func (c channelConfig) visibleTo(reader string) []string {
 
 // canSee reports whether a reader takes entries written by an author.
 func (c channelConfig) canSee(reader, author string) bool {
-	if !c.joins(author) {
+	if reader == author || !c.joins(author) {
 		return false
 	}
 	return containsProvider(c.visibleTo(reader), author)
@@ -160,7 +167,7 @@ func parseChannelConfig(text string) (channelConfig, []string) {
 			continue
 		}
 		if name == "participants" {
-			joined, bad := parseProviderList("", list, false)
+			joined, bad := parseProviderList("", list)
 			for _, unknown := range bad {
 				problems = append(problems, fmt.Sprintf("line %d: %q is not an agent MARSHAL runs", i+1, unknown))
 			}
@@ -171,7 +178,7 @@ func parseChannelConfig(text string) (channelConfig, []string) {
 			problems = append(problems, fmt.Sprintf("line %d: %q is not an agent MARSHAL runs", i+1, name))
 			continue
 		}
-		authors, bad := parseProviderList(name, list, true)
+		authors, bad := parseProviderList(name, list)
 		for _, unknown := range bad {
 			problems = append(problems, fmt.Sprintf("line %d: %q is not an agent MARSHAL runs", i+1, unknown))
 		}
@@ -186,8 +193,12 @@ func parseChannelConfig(text string) (channelConfig, []string) {
 	return cfg, problems
 }
 
-// parseProviderList reads "all", "none", "self" and agent names.
-func parseProviderList(self, list string, allowSelf bool) ([]string, []string) {
+// parseProviderList reads "all", "none" and agent names.
+//
+// The reader's own name is accepted and dropped rather than rejected: writing
+// it is a harmless misunderstanding of what the channel carries, not a mistake
+// worth refusing a line over. visibleTo would exclude it anyway.
+func parseProviderList(self, list string) ([]string, []string) {
 	var names, bad []string
 	for _, raw := range splitList(list) {
 		field := canonicalProvider(raw)
@@ -195,9 +206,13 @@ func parseProviderList(self, list string, allowSelf bool) ([]string, []string) {
 		case field == "none":
 			return nil, bad
 		case field == "all":
-			names = append(names, knownProviders...)
-		case field == "self" && allowSelf && self != "":
-			names = append(names, self)
+			for _, candidate := range knownProviders {
+				if candidate != self {
+					names = append(names, candidate)
+				}
+			}
+		case field == self:
+			// dropped, see above
 		case !isKnownProvider(field):
 			bad = append(bad, raw)
 		default:
@@ -236,14 +251,23 @@ func dedupeSorted(names []string) []string {
 	return out
 }
 
-// saveChannelConfig writes every agent's line, so the file shows the whole
-// arrangement rather than the part that differs from a default the reader has
-// to know about.
+// saveChannelConfig writes the arrangement to the project.
 func saveChannelConfig(root string, cfg channelConfig) error {
 	path := livePeerPath(root)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
+	return os.WriteFile(path, []byte(formatChannelConfig(cfg)), 0600)
+}
+
+// formatChannelConfig renders every agent's line, so the file shows the whole
+// arrangement rather than the part that differs from a default the reader has
+// to know about.
+//
+// Separate from the write so the round trip can be exercised without a disk:
+// what parseChannelConfig reads back has to mean exactly what was written, for
+// every arrangement rather than the ones someone thought to try.
+func formatChannelConfig(cfg channelConfig) string {
 	var b strings.Builder
 	b.WriteString("# The shared channel: who joins it, and who each agent sees in it.\n")
 	b.WriteString("# participants: the agents whose work is dropped into the channel.\n")
@@ -261,5 +285,5 @@ func saveChannelConfig(root string, cfg channelConfig) error {
 		}
 		fmt.Fprintf(&b, "%s: %s\n", reader, strings.Join(authors, ", "))
 	}
-	return os.WriteFile(path, []byte(b.String()), 0600)
+	return b.String()
 }

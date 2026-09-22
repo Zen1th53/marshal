@@ -324,7 +324,7 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 		return h.handleMemoryPeers(args[1:])
 
 	default:
-		return "Usage: /memory [list|search <query>|provenance <id>|inject [channel]|peers [receiver senders…]]", nil
+		return "Usage: /memory [list|search <query>|provenance <id>|inject [channel]|peers [agent authors…]]", nil
 	}
 }
 
@@ -464,19 +464,19 @@ func (h *CommandHandler) handleMemoryPeers(args []string) (string, error) {
 		for _, problem := range problems {
 			fmt.Fprintf(&b, "\n%s: %s", livePeerPath(root), problem)
 		}
-		b.WriteString("\nUsage: /memory peers <agent> <agents|self|all|none>")
+		b.WriteString("\nUsage: /memory peers <agent> <agents|all|none>")
 		b.WriteString("\n       /memory peers participants <agents|all>")
 		return b.String(), nil
 	}
 
 	name := canonicalProvider(args[0])
 	if len(args) == 1 {
-		return "Usage: /memory peers <agent> <agents|self|all|none>", nil
+		return "Usage: /memory peers <agent> <agents|all|none>", nil
 	}
 	list := strings.Join(args[1:], " ")
 
 	if name == "participants" {
-		joined, bad := parseProviderList("", list, false)
+		joined, bad := parseProviderList("", list)
 		if len(bad) > 0 {
 			return fmt.Sprintf("%s: not an agent MARSHAL runs. Agents: %s.",
 				strings.Join(bad, ", "), strings.Join(knownProviders, ", ")), nil
@@ -495,7 +495,7 @@ func (h *CommandHandler) handleMemoryPeers(args []string) (string, error) {
 		return fmt.Sprintf("%q is not an agent MARSHAL runs. Agents: %s.",
 			args[0], strings.Join(knownProviders, ", ")), nil
 	}
-	authors, bad := parseProviderList(name, list, true)
+	authors, bad := parseProviderList(name, list)
 	if len(bad) > 0 {
 		return fmt.Sprintf("%s: not an agent MARSHAL runs. Agents: %s.",
 			strings.Join(bad, ", "), strings.Join(knownProviders, ", ")), nil

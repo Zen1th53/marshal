@@ -224,11 +224,16 @@ through `/memory peers`:
 
 ```
 participants: claude, codex, opencode, agy
-agy: all                  # sees everyone, including itself
+agy: all                  # every other agent
 claude: all
-codex: opencode, agy      # not claude, not itself
+codex: opencode, agy      # not claude
 opencode: none            # contributes, reads nothing
 ```
+
+An agent is **never shown its own work**, and that is not a setting. It already
+knows what it did — the work is its own conversation — so handing it back would
+be noise at best, and at worst a model reading its own output as though another
+agent had reported it.
 
 **Joining and seeing are separate.** An agent can contribute while reading almost
 nothing, and that is an arrangement rather than a gap. The reason is practical:
@@ -238,7 +243,7 @@ context it can be confused by. So the list is per reader, and the two directions
 between any pair may disagree — a reviewer can read the implementer without the
 implementer reading the reviewer.
 
-`self` and `all` are accepted, `agy` is understood as Antigravity, and a line
+`all` and `none` are accepted, `agy` is understood as Antigravity, and a line
 naming only agents MARSHAL does not run is skipped rather than recorded as a
 decision to read nothing.
 
@@ -274,11 +279,14 @@ the same watcher the runtime uses: a 4.2 MB Claude session yielded 888 messages
 and a 224 KB Codex session 18, while the same Claude file grew between two runs
 minutes apart, which is what live capture looks like from outside the process.
 
-All sixteen author/reader pairs are asserted in
-`internal/tui/native_channel_matrix_test.go`, twice each: that the configuration
-says what it should, and that the rendered file matches. The second is the one
-that matters — a filter that is right in the configuration and wrong in the
-rendering would show a model exactly what you kept from it.
+The arrangement space is tested exhaustively rather than by example. Each
+reader takes any subset of the three other agents, which with the participant
+subsets is **65,536 configurations**; every one is written, read back, and
+checked to still mean the same thing for all sixteen author/reader pairs. Every
+filter a reader can have is then rendered to a real file and read back, because
+a filter that is right in the configuration and wrong in the rendering would
+show a model exactly what you kept from it. See
+`internal/tui/native_channel_exhaustive_test.go`.
 
 Capture also reports itself while it runs. The native CLI owns the terminal for
 the whole session, so MARSHAL cannot draw a counter — it writes one instead, to

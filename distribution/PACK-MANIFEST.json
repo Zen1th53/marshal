@@ -2126,8 +2126,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "d1e9ffc74af8ee6e0d5eb7a25d877c8ca6fb63bccb8e557424413b401ac7b64c",
-      "bytes": 23126
+      "sha256": "ad982048b95e8da4904711d553cad11155f5da9599994b07be3b53d4469bf83e",
+      "bytes": 23584
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -8436,8 +8436,8 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "6de1cdb67717497a9b74b8f3f82df0d0bb2c2b9ec45b3608078f141bad2455de",
-      "bytes": 33519
+      "sha256": "841e884f43038ee7fa1559af7d3a94f1d622bbf3a3f299ecb3022ed0ebf85196",
+      "bytes": 33493
     },
     {
       "path": "internal/tui/commands_goal.go",
@@ -8655,9 +8655,14 @@
       "bytes": 8198
     },
     {
+      "path": "internal/tui/native_channel_exhaustive_test.go",
+      "sha256": "d4eced79e5f5fd509f9cce7a6308680f242251bf5e8bd6c89e1354205057bc7d",
+      "bytes": 8083
+    },
+    {
       "path": "internal/tui/native_channel_matrix_test.go",
-      "sha256": "6d6da3fc7f23a95d999f0aea9f29d48177fd1c8a532c68b7571b06332199e402",
-      "bytes": 8188
+      "sha256": "974b5938a24b814ed120068a7ccea0c7e14068713f52051c07f7bd39c30a5e3d",
+      "bytes": 8303
     },
     {
       "path": "internal/tui/native_claude.go",
@@ -8696,13 +8701,13 @@
     },
     {
       "path": "internal/tui/native_liveinbox_test.go",
-      "sha256": "af569ddf7d3ad002c8da378b80ac19f72f6fe6c17b5a764a62d4d70f31bf4a3c",
-      "bytes": 7669
+      "sha256": "c57478359a3592e5a25b891bc4c73c342cdfd91f691041bec2ad26e4ee0bd03a",
+      "bytes": 7641
     },
     {
       "path": "internal/tui/native_livepeers.go",
-      "sha256": "d65f6fa1d6726d7c2b69467eaeb2040bbc9d04d1f639d583fb0d041b78317bf3",
-      "bytes": 8848
+      "sha256": "2d8df7ca939bac07d0b5c11a6cd38c147a40a3748e3d470343d765d2845c52f6",
+      "bytes": 9831
     },
     {
       "path": "internal/tui/native_livestatus.go",

@@ -100,15 +100,17 @@ opencode: none
 		t.Fatalf("problems: %v", problems)
 	}
 
-	// agy and claude see everybody.
+	// agy and claude see every other agent. Never themselves: an agent already
+	// knows what it did, so the channel does not hand it back.
 	for _, reader := range []string{"antigravity", "claude"} {
 		for _, author := range knownProviders {
-			if !cfg.canSee(reader, author) {
-				t.Errorf("%s cannot see %s, but was configured for all", reader, author)
+			want := author != reader
+			if got := cfg.canSee(reader, author); got != want {
+				t.Errorf("%s sees %s = %v, want %v", reader, author, got, want)
 			}
 		}
 	}
-	// codex sees only opencode and agy — not claude, not itself.
+	// codex sees only opencode and agy.
 	for author, want := range map[string]bool{
 		"opencode": true, "antigravity": true, "claude": false, "codex": false,
 	} {
@@ -137,7 +139,7 @@ opencode: none
 	entries, _ := s.since(-1)
 
 	for reader, wantCount := range map[string]int{
-		"antigravity": 4, "claude": 4, "codex": 2, "opencode": 0,
+		"antigravity": 3, "claude": 3, "codex": 2, "opencode": 0,
 	} {
 		view, err := openInboxView(root, reader, true)
 		if err != nil {
