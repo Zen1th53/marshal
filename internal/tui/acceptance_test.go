@@ -638,8 +638,8 @@ func TestAcceptanceInventoryAndCoverageReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ia.Count(); got != 804 {
-		t.Fatalf("navigable node count = %d, want 804", got)
+	if got := ia.Count(); got != 801 {
+		t.Fatalf("navigable node count = %d, want 801", got)
 	}
 	if gaps := ia.Gaps(); len(gaps) != 17 {
 		t.Fatalf("implementation gaps = %d, want 17", len(gaps))
@@ -649,8 +649,8 @@ func TestAcceptanceInventoryAndCoverageReport(t *testing.T) {
 	if err := json.Unmarshal(frozenManifest, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if manifest.FrozenNodeCount != 804 {
-		t.Fatalf("manifest frozen node count = %d, want 804", manifest.FrozenNodeCount)
+	if manifest.FrozenNodeCount != 801 {
+		t.Fatalf("manifest frozen node count = %d, want 801", manifest.FrozenNodeCount)
 	}
 	// The traceability matrix ships only with the spec pack. Where it exists
 	// every row must still resolve to a frozen IA node; where it does not, the
@@ -659,8 +659,8 @@ func TestAcceptanceInventoryAndCoverageReport(t *testing.T) {
 	switch {
 	case matrixErr == nil:
 		ids := regexp.MustCompile(`(?m)^\| (CTUI-[0-9]{4}) \|`).FindAllStringSubmatch(string(matrix), -1)
-		if len(ids) != 804 {
-			t.Fatalf("traceability rows = %d, want 804", len(ids))
+		if len(ids) != 801 {
+			t.Fatalf("traceability rows = %d, want 801", len(ids))
 		}
 		for _, match := range ids {
 			if _, ok := ia.Node(match[1]); !ok {

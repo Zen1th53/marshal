@@ -8286,7 +8286,7 @@
     },
     {
       "path": "internal/tui/acceptance_test.go",
-      "sha256": "5676d04abf01354cd262d8d3c8cff66e8dbc1f7d790e1ea0e7c7289f76e39a8a",
+      "sha256": "50928b13897325a0d1cbd75b97552dffc9e4a321367856b6d832005f3e41ac39",
       "bytes": 43839
     },
     {
@@ -8311,7 +8311,7 @@
     },
     {
       "path": "internal/tui/codex_control_test.go",
-      "sha256": "045a6e14ff19953b29a211bcdb3af44567b5fe15706f6c7ba07429a09e0ad5a1",
+      "sha256": "d07091e480cc167418d0a946730228fd978c02d2ffdc28304ac247c3c19b95e1",
       "bytes": 9128
     },
     {
@@ -8506,8 +8506,8 @@
     },
     {
       "path": "internal/tui/manifest.json",
-      "sha256": "45c4ebf5fe8c8ff89f6e9d360a70e7d9bfed2ed5985d22b846b7417547348592",
-      "bytes": 745380
+      "sha256": "395d112fca3ae4d0b5fbf901120be401631252d3232a38e239e779fecf172e27",
+      "bytes": 738348
     },
     {
       "path": "internal/tui/memorydata.go",
@@ -8541,8 +8541,8 @@
     },
     {
       "path": "internal/tui/modelsscreen.go",
-      "sha256": "c301079383373639954263a7bd6f3448db79ed24206a819d52062e8fb14bbef0",
-      "bytes": 16228
+      "sha256": "1b489e6ab61ae1364641d57e1cbace8b89fa07e6594730732937d597426841df",
+      "bytes": 16202
     },
     {
       "path": "internal/tui/mutation_test.go",
@@ -8791,8 +8791,8 @@
     },
     {
       "path": "internal/tui/statusscreen.go",
-      "sha256": "4e487dbc908f2d510a9529dd9a5ac85f6917f069a29ee45889721ce5fb8b4649",
-      "bytes": 32936
+      "sha256": "a7d8f9652f023341c415b9c56fd98156067c562c6435aed0442724c1c875beb5",
+      "bytes": 32987
     },
     {
       "path": "internal/tui/systemdata.go",

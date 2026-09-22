@@ -179,7 +179,7 @@ func modelsScreens() map[string]func(ModelsSnapshot) ScreenContent {
 			return ScreenContent{ReadOnly: false, Fields: fields}
 		},
 	}
-	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.ProviderStatus }, "CTUI-0502", "CTUI-0503", "CTUI-0504", "CTUI-0505", "CTUI-0506", "CTUI-0507", "CTUI-0508", "CTUI-0510", "CTUI-0511", "CTUI-0512", "CTUI-0513", "CTUI-0514", "CTUI-0515", "CTUI-0516", "CTUI-0517", "CTUI-0518", "CTUI-0519", "CTUI-0520", "CTUI-0521", "CTUI-0522")
+	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.ProviderStatus }, "CTUI-0502", "CTUI-0503", "CTUI-0504", "CTUI-0505", "CTUI-0506", "CTUI-0507", "CTUI-0508", "CTUI-0510", "CTUI-0512", "CTUI-0513", "CTUI-0514", "CTUI-0515", "CTUI-0516", "CTUI-0517", "CTUI-0518", "CTUI-0519", "CTUI-0520", "CTUI-0521", "CTUI-0522")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.LocalStatus }, "CTUI-0524", "CTUI-0525", "CTUI-0526", "CTUI-0527", "CTUI-0528", "CTUI-0529")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.RoutingStatus }, "CTUI-0530", "CTUI-0531", "CTUI-0532", "CTUI-0533", "CTUI-0534", "CTUI-0535", "CTUI-0536", "CTUI-0538", "CTUI-0539")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.ProviderStatus }, "CTUI-0540", "CTUI-0541", "CTUI-0542", "CTUI-0543", "CTUI-0544", "CTUI-0545", "CTUI-0546")
@@ -188,7 +188,7 @@ func modelsScreens() map[string]func(ModelsSnapshot) ScreenContent {
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.EvaluationStatus }, "CTUI-0564", "CTUI-0565", "CTUI-0566", "CTUI-0567", "CTUI-0568", "CTUI-0569")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.CyclesStatus }, "CTUI-0571", "CTUI-0572", "CTUI-0574", "CTUI-0575", "CTUI-0576", "CTUI-0577", "CTUI-0578", "CTUI-0579", "CTUI-0580", "CTUI-0581", "CTUI-0582")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.CounterfactualStatus }, "CTUI-0584", "CTUI-0585", "CTUI-0586", "CTUI-0588", "CTUI-0589", "CTUI-0590")
-	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.BenchmarkStatus }, "CTUI-0591", "CTUI-0592", "CTUI-0593", "CTUI-0594", "CTUI-0595", "CTUI-0596", "CTUI-0597", "CTUI-0598", "CTUI-0599", "CTUI-0600", "CTUI-0601", "CTUI-0602", "CTUI-0603", "CTUI-0604", "CTUI-0605", "CTUI-0606", "CTUI-0607")
+	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.BenchmarkStatus }, "CTUI-0591", "CTUI-0592", "CTUI-0593", "CTUI-0594", "CTUI-0596", "CTUI-0597", "CTUI-0598", "CTUI-0599", "CTUI-0600", "CTUI-0601", "CTUI-0602", "CTUI-0603", "CTUI-0604", "CTUI-0605", "CTUI-0606", "CTUI-0607")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.ResultsStatus }, "CTUI-0608", "CTUI-0609", "CTUI-0610", "CTUI-0611", "CTUI-0612", "CTUI-0613", "CTUI-0614", "CTUI-0615")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.CanaryStatus }, "CTUI-0616", "CTUI-0618", "CTUI-0619", "CTUI-0620", "CTUI-0622")
 	bindModelValue(screens, func(m ModelsSnapshot) Value { return m.FeedbackStatus }, "CTUI-0625", "CTUI-0627", "CTUI-0628", "CTUI-0629")

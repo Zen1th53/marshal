@@ -162,8 +162,8 @@ func TestCodexScreenContentRendering(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ia.Count() != 804 {
-		t.Fatalf("IA count = %d, want 804", ia.Count())
+	if ia.Count() != 801 {
+		t.Fatalf("IA count = %d, want 801", ia.Count())
 	}
 
 	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)

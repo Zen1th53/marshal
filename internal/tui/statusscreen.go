@@ -126,11 +126,11 @@ func exactHomeStatusValue(specID string, s Snapshot) (Value, bool) {
 		return providerAvailability(s.Providers, "Claude"), true
 	case "CTUI-0138":
 		return providerAvailability(s.Providers, "Codex"), true
-	case "CTUI-0139":
-		return providerAvailability(s.Providers, "Gemini"), true
 	case "CTUI-0140":
 		return providerAvailability(s.Providers, "OpenCode"), true
 	case "CTUI-0141":
+		// The adapter still reports itself as "antigravity"; only the menu
+		// label changed, so the lookup key stays what the runtime publishes.
 		return providerAvailability(s.Providers, "Antigravity"), true
 	case "CTUI-0143", "CTUI-0145", "CTUI-0146", "CTUI-0147", "CTUI-0150", "CTUI-0152":
 		return s.Providers.Status, true
@@ -514,7 +514,7 @@ func init() {
 	bindStatusScreens(sessionStatusScreen, "CTUI-0110", "CTUI-0111", "CTUI-0112", "CTUI-0113", "CTUI-0114", "CTUI-0115")
 	bindStatusScreens(blockerScreenAll, "CTUI-0118", "CTUI-0120", "CTUI-0122", "CTUI-0123", "CTUI-0124")
 	bindStatusScreens(schedulingStatusScreen, "CTUI-0126", "CTUI-0127", "CTUI-0128", "CTUI-0129", "CTUI-0130", "CTUI-0131", "CTUI-0132", "CTUI-0133", "CTUI-0134")
-	bindStatusScreens(providerScreenAll, "CTUI-0136", "CTUI-0137", "CTUI-0138", "CTUI-0139", "CTUI-0140", "CTUI-0141", "CTUI-0145", "CTUI-0146", "CTUI-0147", "CTUI-0150")
+	bindStatusScreens(providerScreenAll, "CTUI-0136", "CTUI-0137", "CTUI-0138", "CTUI-0140", "CTUI-0141", "CTUI-0145", "CTUI-0146", "CTUI-0147", "CTUI-0150")
 	bindStatusScreens(runtimeScreenAll, "CTUI-0165", "CTUI-0169", "CTUI-0170")
 	bindStatusScreens(alertScreen, "CTUI-0178", "CTUI-0179", "CTUI-0180", "CTUI-0181", "CTUI-0182", "CTUI-0183", "CTUI-0184")
 	bindStatusScreens(versionScreen, "CTUI-0185", "CTUI-0186", "CTUI-0187", "CTUI-0188", "CTUI-0189", "CTUI-0190", "CTUI-0191")
