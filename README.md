@@ -146,7 +146,10 @@ so they don't interfere with each other.
 
 - **Contextual autocomplete**: `/` for commands (fuzzy, e.g. `/rb` → `/rollback`),
   `@` for live agents, `#` for claim, evidence, task and checkpoint IDs.
-- **`Tab` never submits.** It only completes. `Enter` runs the command.
+- **`Tab` never submits.** It steps through the candidates, putting each on the
+  line and leaving the menu up, the way a shell does. `Enter` runs the command —
+  and while a candidate is being completed, the first `Enter` settles the choice
+  so you can `Tab` again for the next level, and a second runs it.
 - **Safe paste**: pasted newlines never execute anything. Large pastes collapse to
   `[Pasted text #1 +42 lines]` and are restored exactly when you submit.
 - **Diff viewer**: colored unified diffs with secret redaction. Use `n`/`p` to
