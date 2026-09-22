@@ -60,8 +60,8 @@ printf 'CLAUDE-INPUT:<%s>\n' "$answer"
 	s.sendLine("/claude cli --marshal-native-test")
 	s.mustSee("CLAUDE-NATIVE-READY")
 
-	// The peer watcher primes itself against existing history at launch, so this
-	// file — written afterwards — is new work by a parallel agent.
+	// Written after the session opened, so this is a parallel agent's new work
+	// arriving in the channel rather than backlog the session already drained.
 	codexHistory := nativeTestHistory(t, project, "parallel-codex-thread")
 	if err := os.WriteFile(filepath.Join(codexSessions, "rollout-parallel.jsonl"), codexHistory, 0600); err != nil {
 		t.Fatal(err)
@@ -101,5 +101,5 @@ printf 'CLAUDE-INPUT:<%s>\n' "$answer"
 	// Close the agent and confirm the delivery is reported rather than silent.
 	s.sendLine("done")
 	s.mustSee("CLAUDE-INPUT:<done>")
-	s.mustSee("live update(s) from another agent")
+	s.mustSee("channel entr")
 }

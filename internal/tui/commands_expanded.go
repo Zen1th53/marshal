@@ -328,65 +328,6 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 	}
 }
 
-// handleMemoryPeers shows or sets which providers' work reaches which inbox.
-//
-// Delivery is per receiver because that is the question an operator actually
-// has: not "should these two talk" but "what should this agent be told". The
-// two directions are set separately and can disagree.
-func (h *CommandHandler) handleMemoryPeers(args []string) (string, error) {
-	h.ws.mu.RLock()
-	root := h.ws.workDir
-	runtime := h.ws.runtime
-	h.ws.mu.RUnlock()
-	if runtime != nil {
-		root = runtime.ProjectRoot()
-	}
-
-	matrix, problems := loadLivePeers(root)
-	if len(args) == 0 {
-		var b strings.Builder
-		b.WriteString("LIVE CROSS-AGENT DELIVERY:\n")
-		for _, receiver := range liveReceivers {
-			senders := matrix.sendersFor(receiver)
-			list := "none"
-			if len(senders) > 0 {
-				list = strings.Join(senders, ", ")
-			}
-			fmt.Fprintf(&b, "  %-12s receives from %s\n", receiver, list)
-		}
-		b.WriteString("\nOnly codex and claude can send: their history is an append-only\n")
-		b.WriteString("file another session can read while they run. OpenCode and\n")
-		b.WriteString("Antigravity are imported when their own process exits.\n")
-		for _, problem := range problems {
-			fmt.Fprintf(&b, "\n%s: %s", livePeerPath(root), problem)
-		}
-		b.WriteString("\nUsage: /memory peers <receiver> <sender…|all|none>")
-		return b.String(), nil
-	}
-
-	receiver := strings.ToLower(args[0])
-	if !isLiveReceiver(receiver) {
-		return fmt.Sprintf("%q cannot receive live updates. Receivers: %s.",
-			receiver, strings.Join(liveReceivers, ", ")), nil
-	}
-	if len(args) == 1 {
-		return "Usage: /memory peers <receiver> <sender…|all|none>", nil
-	}
-	senders, bad := parseLiveSenders(receiver, strings.Join(args[1:], " "))
-	if len(bad) > 0 {
-		return fmt.Sprintf("%s cannot send live updates. Senders: %s.",
-			strings.Join(bad, ", "), strings.Join(liveSenders, ", ")), nil
-	}
-	matrix[receiver] = senders
-	if err := saveLivePeers(root, matrix); err != nil {
-		return "", fmt.Errorf("save live peers: %w", err)
-	}
-	if len(senders) == 0 {
-		return fmt.Sprintf("%s now receives nothing live.", receiver), nil
-	}
-	return fmt.Sprintf("%s now receives live updates from %s.", receiver, strings.Join(senders, ", ")), nil
-}
-
 // handleMemoryInject governs how a starting native session is told what the
 // other providers already did in this project.
 func (h *CommandHandler) handleMemoryInject(ctx context.Context, args []string) (string, error) {
@@ -469,6 +410,104 @@ func (h *CommandHandler) handleMemoryInject(ctx context.Context, args []string) 
 	claudeChannel, _ := resolveInjectChannel("claude", channel)
 	codexChannel, _ := resolveInjectChannel("codex", channel)
 	return fmt.Sprintf("Cross-agent injection channel set to %s (Claude: %s, Codex: %s).", channel, claudeChannel, codexChannel), nil
+}
+
+// handleMemoryPeers shows or sets the shared channel: who joins it, and who
+// each agent sees in it.
+//
+// Visibility is per reader because that is the question an operator actually
+// has. Models differ in what they can use — a strong one does better seeing
+// everything the others did, a weaker one does worse — so the two directions
+// between any pair are set separately and are allowed to disagree.
+func (h *CommandHandler) handleMemoryPeers(args []string) (string, error) {
+	h.ws.mu.RLock()
+	root := h.ws.workDir
+	runtime := h.ws.runtime
+	h.ws.mu.RUnlock()
+	if runtime != nil {
+		root = runtime.ProjectRoot()
+	}
+
+	cfg, problems := loadChannelConfig(root)
+	if len(args) == 0 {
+		var b strings.Builder
+		b.WriteString("SHARED CHANNEL:\n")
+		b.WriteString("  in the channel:  ")
+		var joined []string
+		for _, p := range knownProviders {
+			if cfg.joins(p) {
+				mark := p
+				if !capturesLive(p) {
+					mark += " (on exit)"
+				}
+				joined = append(joined, mark)
+			}
+		}
+		if len(joined) == 0 {
+			b.WriteString("nobody")
+		} else {
+			b.WriteString(strings.Join(joined, ", "))
+		}
+		b.WriteString("\n\n")
+		for _, reader := range knownProviders {
+			authors := cfg.visibleTo(reader)
+			list := "nothing"
+			if len(authors) > 0 {
+				list = strings.Join(authors, ", ")
+			}
+			fmt.Fprintf(&b, "  %-12s sees %s\n", reader, list)
+		}
+		b.WriteString("\nAn agent marked (on exit) joins the channel when its own process\n")
+		b.WriteString("ends rather than as it works: MARSHAL reads OpenCode through its\n")
+		b.WriteString("public CLI export, and has not established that reading agy's store\n")
+		b.WriteString("mid-session is sound.\n")
+		for _, problem := range problems {
+			fmt.Fprintf(&b, "\n%s: %s", livePeerPath(root), problem)
+		}
+		b.WriteString("\nUsage: /memory peers <agent> <agents|self|all|none>")
+		b.WriteString("\n       /memory peers participants <agents|all>")
+		return b.String(), nil
+	}
+
+	name := canonicalProvider(args[0])
+	if len(args) == 1 {
+		return "Usage: /memory peers <agent> <agents|self|all|none>", nil
+	}
+	list := strings.Join(args[1:], " ")
+
+	if name == "participants" {
+		joined, bad := parseProviderList("", list, false)
+		if len(bad) > 0 {
+			return fmt.Sprintf("%s: not an agent MARSHAL runs. Agents: %s.",
+				strings.Join(bad, ", "), strings.Join(knownProviders, ", ")), nil
+		}
+		cfg.participants = joined
+		if err := saveChannelConfig(root, cfg); err != nil {
+			return "", fmt.Errorf("save channel configuration: %w", err)
+		}
+		if len(joined) == 0 {
+			return "Nobody joins the channel; no agent's work is shared.", nil
+		}
+		return fmt.Sprintf("In the channel: %s.", strings.Join(joined, ", ")), nil
+	}
+
+	if !isKnownProvider(name) {
+		return fmt.Sprintf("%q is not an agent MARSHAL runs. Agents: %s.",
+			args[0], strings.Join(knownProviders, ", ")), nil
+	}
+	authors, bad := parseProviderList(name, list, true)
+	if len(bad) > 0 {
+		return fmt.Sprintf("%s: not an agent MARSHAL runs. Agents: %s.",
+			strings.Join(bad, ", "), strings.Join(knownProviders, ", ")), nil
+	}
+	cfg.sees[name] = authors
+	if err := saveChannelConfig(root, cfg); err != nil {
+		return "", fmt.Errorf("save channel configuration: %w", err)
+	}
+	if len(authors) == 0 {
+		return fmt.Sprintf("%s now sees nothing in the channel.", name), nil
+	}
+	return fmt.Sprintf("%s now sees %s.", name, strings.Join(authors, ", ")), nil
 }
 
 // handleProvider handles provider configuration and status inspection.

@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,231 +10,258 @@ import (
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 )
 
-// The backlog is the point: a recipient that was closed while another agent
-// worked must find that work waiting, not discarded. Opening a session marks
-// the boundary instead of wiping what came before it.
-func TestNewLiveInboxKeepsTheBacklogAndMarksTheBoundary(t *testing.T) {
-	root := t.TempDir()
-	path := inboxPath(root, "codex")
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("## claude · earlier · assistant\n\ndelivered while codex was closed\n\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
+var baseTime = time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)
 
-	box, err := newLiveInbox(root, "codex")
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	data, err := os.ReadFile(path)
+func msg(text string, at time.Time) importer.Message {
+	return importer.Message{Role: "assistant", Content: text, Timestamp: at}
+}
+
+// One event goes into the channel once, whoever reads it. The point-to-point
+// design wrote a copy per recipient; this asserts the channel does not.
+func TestChannelStoresOneEntryPerEvent(t *testing.T) {
+	root := t.TempDir()
+	s, err := openStream(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	content := string(data)
-	if !strings.Contains(content, "delivered while codex was closed") {
-		t.Errorf("the backlog was discarded:\n%s", content)
+	added, err := s.append("claude", "sess-1", msg("edited sqlite.go", baseTime))
+	if err != nil || !added {
+		t.Fatalf("first append: added=%v err=%v", added, err)
 	}
-	if !strings.Contains(content, "session opened") {
-		t.Errorf("no boundary marks where this session starts:\n%s", content)
+	// The same event reaching the channel by a second path, as it does when a
+	// peer watcher reads history the producing session already dropped in.
+	added, err = s.append("claude", "sess-1", msg("edited sqlite.go", baseTime))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(content, "arrived before this session started") {
-		t.Errorf("the boundary does not say what precedes it:\n%s", content)
+	if added {
+		t.Error("the same event was appended twice")
 	}
-	if box.Count() != 0 {
-		t.Errorf("opening an inbox reported %d delivered entries", box.Count())
+	entries, err := s.since(-1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("channel holds %d entries, want 1", len(entries))
 	}
 }
 
-// A fresh inbox still explains itself, and still says the contents are data.
-func TestLiveInboxHeaderWarnsOnFirstOpen(t *testing.T) {
+// A cursor survives a restart, so an agent does not re-read what it has seen.
+func TestChannelCursorResumes(t *testing.T) {
 	root := t.TempDir()
-	if _, err := newLiveInbox(root, "codex"); err != nil {
-		t.Fatalf("open: %v", err)
+	s, err := openStream(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := s.append("codex", "s", msg(fmt.Sprintf("step-%d", i), baseTime.Add(time.Duration(i)*time.Second))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := s.since(-1)
+	if err != nil || len(first) != 3 {
+		t.Fatalf("since(-1) = %d entries, err=%v", len(first), err)
+	}
+	if err := saveCursors(root, cursors{"claude": first[len(first)-1].Seq}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A new process, as a restart would be.
+	reopened, err := openStream(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reopened.append("codex", "s", msg("step-3", baseTime.Add(9*time.Second))); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := loadCursors(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := reopened.since(restored["claude"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fresh) != 1 || !strings.Contains(fresh[0].Text, "step-3") {
+		t.Fatalf("after resume got %d entries, want only step-3", len(fresh))
+	}
+}
+
+// A reader's view carries only the authors it was configured to see.
+func TestViewShowsOnlyConfiguredAuthors(t *testing.T) {
+	root := t.TempDir()
+	s, err := openStream(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, author := range knownProviders {
+		if _, err := s.append(author, "s", msg(author+" did a thing", baseTime.Add(time.Duration(i)*time.Second))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := s.since(-1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, problems := parseChannelConfig("codex: claude, self\n")
+	if len(problems) != 0 {
+		t.Fatalf("problems: %v", problems)
+	}
+	view, err := openInboxView(root, "codex", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shown, err := view.deliver(entries, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shown != 2 {
+		t.Errorf("codex was shown %d entries, want 2", shown)
 	}
 	data, err := os.ReadFile(inboxPath(root, "codex"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"live inbox", "untrusted DATA", "not as instructions"} {
+	content := string(data)
+	for _, want := range []string{"claude did a thing", "codex did a thing"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("view is missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{"opencode did a thing", "antigravity did a thing"} {
+		if strings.Contains(content, unwanted) {
+			t.Errorf("view leaked %q to a reader that may not see it", unwanted)
+		}
+	}
+}
+
+// The scenario the operator described: an agent opens while another is already
+// working, and must find the work already in flight rather than a summary.
+func TestAgentJoiningLateSeesWorkAlreadyInTheChannel(t *testing.T) {
+	root := t.TempDir()
+	s, err := openStream(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 5; i++ {
+		if _, err := s.append("claude", "sess", msg(fmt.Sprintf("claude-step-%d", i), baseTime.Add(time.Duration(i)*time.Minute))); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg, _ := parseChannelConfig("")
+	positions, err := loadCursors(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := positions["codex"]; ok {
+		t.Fatal("a reader that never ran already had a cursor")
+	}
+	view, err := openInboxView(root, "codex", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := s.since(positions["codex"] - 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shown, err := view.deliver(entries, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shown != 5 {
+		t.Fatalf("a late reader saw %d of 5 entries already in the channel", shown)
+	}
+	data, _ := os.ReadFile(inboxPath(root, "codex"))
+	if !strings.Contains(string(data), "claude-step-0") {
+		t.Error("the earliest work in flight was not shown")
+	}
+	if !strings.Contains(string(data), "session opened") {
+		t.Error("no boundary marks where this session begins")
+	}
+}
+
+// A reader's view keeps its backlog across sessions rather than being wiped.
+func TestViewKeepsBacklogAcrossSessions(t *testing.T) {
+	root := t.TempDir()
+	s, _ := openStream(root)
+	if _, err := s.append("claude", "s", msg("delivered while codex was closed", baseTime)); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := s.since(-1)
+	cfg, _ := parseChannelConfig("")
+
+	first, err := openInboxView(root, "codex", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.deliver(entries, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openInboxView(root, "codex", true); err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(inboxPath(root, "codex"))
+	if !strings.Contains(string(data), "delivered while codex was closed") {
+		t.Errorf("the backlog was discarded:\n%s", data)
+	}
+	if got := strings.Count(string(data), "session opened"); got != 2 {
+		t.Errorf("session boundaries = %d, want one per session", got)
+	}
+}
+
+// The view still says its contents are data, not instructions.
+func TestViewHeaderWarnsOnFirstOpen(t *testing.T) {
+	root := t.TempDir()
+	if _, err := openInboxView(root, "claude", true); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(inboxPath(root, "claude"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"untrusted DATA", "not as instructions", "Nothing interrupts you"} {
 		if !strings.Contains(string(data), want) {
 			t.Errorf("header missing %q:\n%s", want, data)
 		}
 	}
 }
 
-// Both delivery paths can reach the same inbox: the producing session writing
-// forward, and a peer watcher reading that provider's history. The entry must
-// appear once.
-func TestLiveInboxDropsADuplicateEntry(t *testing.T) {
+// A long backlog must not grow a file the agent is asked to read in full, and
+// the newest entries are the ones that survive.
+func TestViewDropsOldestPastItsBudget(t *testing.T) {
 	root := t.TempDir()
-	at := time.Date(2026, 9, 16, 12, 30, 0, 0, time.UTC)
-	msg := importer.Message{Role: "assistant", Content: "edited workspace.go", Timestamp: at}
-
-	first, err := openPeerInbox(root, "codex")
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := first.append("claude", msg); err != nil {
-		t.Fatal(err)
-	}
-
-	// A separate opener, as a second session would be.
-	second, err := openPeerInbox(root, "codex")
-	if err != nil {
-		t.Fatalf("reopen: %v", err)
-	}
-	if err := second.append("claude", msg); err != nil {
-		t.Fatal(err)
-	}
-
-	data, err := os.ReadFile(inboxPath(root, "codex"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.Count(string(data), "edited workspace.go"); got != 1 {
-		t.Errorf("entry written %d times, want 1:\n%s", got, data)
-	}
-	if second.Count() != 0 {
-		t.Errorf("the duplicate was counted as delivered")
-	}
-}
-
-// Delivering to a provider that is not running must not claim it opened a
-// session, because it did not.
-func TestOpenPeerInboxWritesNoSessionBoundary(t *testing.T) {
-	root := t.TempDir()
-	if _, err := openPeerInbox(root, "opencode"); err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	data, err := os.ReadFile(inboxPath(root, "opencode"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(data), "session opened") {
-		t.Errorf("delivery to a closed provider claimed a session:\n%s", data)
-	}
-}
-
-func TestLiveInboxAppendsLabelledEntries(t *testing.T) {
-	root := t.TempDir()
-	box, err := newLiveInbox(root, "codex")
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-
-	at := time.Date(2026, 9, 16, 12, 30, 0, 0, time.UTC)
-	if err := box.append("claude", importer.Message{
-		Role: "assistant", Kind: importer.MessageKindToolUse,
-		Content: "Edit internal/tui/workspace.go", Timestamp: at,
-	}); err != nil {
-		t.Fatalf("append: %v", err)
-	}
-	// Empty content is not an event and must not produce an entry.
-	if err := box.append("claude", importer.Message{Role: "user", Content: "   "}); err != nil {
-		t.Fatalf("append blank: %v", err)
-	}
-
-	if box.Count() != 1 {
-		t.Errorf("entries = %d, want 1", box.Count())
-	}
-	data, err := os.ReadFile(inboxPath(root, "codex"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	content := string(data)
-	for _, want := range []string{"claude", "12:30:00Z", "assistant:tool_use", "Edit internal/tui/workspace.go"} {
-		if !strings.Contains(content, want) {
-			t.Errorf("entry missing %q:\n%s", want, content)
-		}
-	}
-}
-
-// A long backlog must not grow a file the agent is asked to read in full. The
-// oldest entries give way, not the newest: a file that sealed itself at the
-// first busy hour would hide exactly the recent work a returning agent needs.
-func TestLiveInboxDropsOldestPastItsBudget(t *testing.T) {
-	root := t.TempDir()
-	box, err := newLiveInbox(root, "claude")
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	big := strings.Repeat("x", inboxLineBytes)
-	at := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+	s, _ := openStream(root)
+	big := strings.Repeat("x", streamEntryBytes)
 	for i := 0; i < 200; i++ {
-		if err := box.append("codex", importer.Message{
-			Role: "assistant", Content: fmt.Sprintf("entry-%03d %s", i, big),
-			Timestamp: at.Add(time.Duration(i) * time.Second),
-		}); err != nil {
-			t.Fatalf("append %d: %v", i, err)
+		if _, err := s.append("claude", "s", msg(fmt.Sprintf("entry-%03d %s", i, big), baseTime.Add(time.Duration(i)*time.Second))); err != nil {
+			t.Fatal(err)
 		}
 	}
-	data, err := os.ReadFile(inboxPath(root, "claude"))
+	entries, _ := s.since(-1)
+	cfg, _ := parseChannelConfig("")
+	view, err := openInboxView(root, "codex", true)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := view.deliver(entries, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := os.ReadFile(inboxPath(root, "codex"))
 	content := string(data)
-	if len(data) > inboxMaxBytes+inboxLineBytes {
-		t.Errorf("inbox grew to %d bytes, past its %d budget", len(data), inboxMaxBytes)
+	if len(data) > viewMaxBytes+streamEntryBytes {
+		t.Errorf("view grew to %d bytes, past its %d budget", len(data), viewMaxBytes)
 	}
 	if !strings.Contains(content, "older entries dropped") {
-		t.Errorf("dropping was not disclosed:\n%s", tail(content, 400))
+		t.Error("dropping was not disclosed")
 	}
 	if !strings.Contains(content, "entry-199") {
-		t.Errorf("the newest entry was dropped:\n%s", tail(content, 400))
+		t.Error("the newest entry was dropped")
 	}
 	if strings.Contains(content, "entry-000") {
-		t.Errorf("the oldest entry survived a full inbox")
-	}
-}
-
-// One oversized message must not crowd out everything after it.
-func TestLiveInboxTruncatesOneEntry(t *testing.T) {
-	root := t.TempDir()
-	box, err := newLiveInbox(root, "codex")
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := box.append("claude", importer.Message{
-		Role: "user", Content: strings.Repeat("y", inboxLineBytes*4),
-	}); err != nil {
-		t.Fatalf("append: %v", err)
-	}
-	data, _ := os.ReadFile(inboxPath(root, "codex"))
-	if !strings.Contains(string(data), "truncated") {
-		t.Errorf("a long entry was not truncated:\n%s", tail(string(data), 300))
-	}
-}
-
-// The agent only benefits from the inbox if it is told the file exists, and
-// told that nothing pushes it.
-func TestInboxBriefingNoteStatesThePull(t *testing.T) {
-	note := inboxBriefingNote("/project", "codex")
-	if !strings.Contains(note, filepath.Join(".marshal", "inbox", "codex.md")) {
-		t.Errorf("note does not name the inbox path:\n%s", note)
-	}
-	if !strings.Contains(note, "Nothing pushes it to you") {
-		t.Errorf("note does not say delivery is a pull:\n%s", note)
-	}
-}
-
-func TestProviderHistoryDirHonoursHomeOverride(t *testing.T) {
-	t.Setenv("CODEX_HOME", "/custom/codex")
-	dir, err := providerHistoryDir("codex", "/project")
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
-	}
-	if dir != filepath.Join("/custom/codex", "sessions") {
-		t.Errorf("codex history dir = %q", dir)
-	}
-	t.Setenv("CLAUDE_CONFIG_DIR", "/custom/claude")
-	if dir, err = providerHistoryDir("claude", "/project"); err != nil {
-		t.Fatalf("resolve: %v", err)
-	}
-	if dir != filepath.Join("/custom/claude", "projects") {
-		t.Errorf("claude history dir = %q", dir)
-	}
-	if _, err := providerHistoryDir("gemini", "/project"); err == nil {
-		t.Error("an unsupported provider resolved a history directory")
+		t.Error("the oldest entry survived a full view")
 	}
 }

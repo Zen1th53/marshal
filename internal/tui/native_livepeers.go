@@ -8,46 +8,69 @@ import (
 	"strings"
 )
 
-// Who sees whom, live.
+// Who joins the channel, and who each of them can see in it.
 //
-// Cross-agent delivery used to be fixed: every provider whose history can be
-// tailed fed every other one. That is the right default and the wrong rule —
-// an operator running a reviewer alongside an implementer may not want the
-// implementer's every tool call arriving in the reviewer's inbox, and the
-// reverse is a different decision again.
+// Two separate decisions, both made before the work starts.
 //
-// The matrix is stored per project as one line per receiver:
+// Joining is about capture: an agent that joins has what it does dropped into
+// the shared channel. Seeing is about reading: each agent takes only the
+// entries whose author is in its own list.
 //
-//	claude: codex
-//	codex: none
+// They are separate because the reason for each is different. An agent might
+// join and be read by everyone while itself reading almost nothing, and that is
+// a deliberate arrangement rather than a gap. Models differ in what they can
+// use: a strong one is better for seeing everything the others did, and a
+// weaker one is worse, because context it cannot follow is context it can be
+// confused by. The operator decides per agent, which is why the list is per
+// reader rather than a single switch.
 //
-// A receiver with no line takes the default, which is every eligible sender.
-// "none" is written explicitly, so silence in the file never has to be read as
-// a decision someone made.
+// The file, one line per agent:
+//
+//	participants: claude, codex, opencode, antigravity
+//	agy: all                  # sees everyone, including itself
+//	claude: all
+//	codex: claude, self       # only claude's work and its own
+//	opencode: none            # joins the channel, reads nothing from it
+//
+// An agent with no line reads everyone. With no participants line, every agent
+// MARSHAL runs joins.
 
-// livePeerPath is the per-project matrix.
 func livePeerPath(root string) string {
 	return filepath.Join(root, ".marshal", "live-peers")
 }
 
-// liveSenders lists the providers whose work can be delivered as it happens.
-//
-// Codex and Claude write append-only history files, which are safe to read
-// while the process owning them runs. OpenCode exposes history through a CLI
-// export backed by its live database, and Antigravity holds per-conversation
-// SQLite open, so both are imported when their own process exits. Until that
-// changes there is nothing to deliver from them mid-session.
-var liveSenders = []string{"codex", "claude"}
+// knownProviders is every agent MARSHAL can run in a project.
+var knownProviders = []string{"claude", "codex", "opencode", "antigravity"}
 
-// liveReceivers lists the providers that can be given an inbox.
-//
-// Receiving is the easier half: an inbox is a file the agent reads, and every
-// provider can read a file. The asymmetry with liveSenders is real rather than
-// an oversight — opencode hears about the others without being heard.
-var liveReceivers = []string{"codex", "claude", "opencode", "antigravity"}
+// providerAliases maps what an operator types to the name MARSHAL records.
+// "agy" is the command; "antigravity" is the provider.
+var providerAliases = map[string]string{"agy": "antigravity"}
 
-func isLiveSender(provider string) bool   { return containsProvider(liveSenders, provider) }
-func isLiveReceiver(provider string) bool { return containsProvider(liveReceivers, provider) }
+func canonicalProvider(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if canonical, ok := providerAliases[name]; ok {
+		return canonical
+	}
+	return name
+}
+
+// liveCaptureProviders are the agents whose work reaches the channel while they
+// are still running.
+//
+// Claude and Codex write append-only history, which MARSHAL reads as it grows.
+// OpenCode is reached through its public CLI export rather than its database,
+// so MARSHAL does not depend on a private schema and does not run that export
+// every few seconds against the session that owns it. Antigravity's store is
+// read directly and read-only, and whether reading it mid-session is sound has
+// not been established.
+//
+// Both of the latter still join the channel: their work is dropped in when
+// their own process exits. The difference is when an entry appears, not whether
+// it does.
+var liveCaptureProviders = []string{"claude", "codex"}
+
+func isKnownProvider(p string) bool { return containsProvider(knownProviders, p) }
+func capturesLive(p string) bool    { return containsProvider(liveCaptureProviders, p) }
 
 func containsProvider(list []string, provider string) bool {
 	for _, candidate := range list {
@@ -58,106 +81,124 @@ func containsProvider(list []string, provider string) bool {
 	return false
 }
 
-// livePeerMatrix maps a receiving provider to the senders it accepts.
-type livePeerMatrix map[string][]string
-
-// sendersFor returns the providers whose work reaches this receiver.
-//
-// An absent receiver takes the default: every eligible provider but itself.
-func (m livePeerMatrix) sendersFor(receiver string) []string {
-	if configured, ok := m[receiver]; ok {
-		return configured
-	}
-	var senders []string
-	for _, candidate := range liveSenders {
-		if candidate != receiver {
-			senders = append(senders, candidate)
-		}
-	}
-	return senders
+// channelConfig is who joins the channel and who each reader sees in it.
+type channelConfig struct {
+	// participants is the set that joins. Empty means every agent MARSHAL runs.
+	participants []string
+	// sees maps a reader to the authors it takes. A reader absent from the map
+	// takes everyone.
+	sees map[string][]string
 }
 
-// delivers reports whether sender's work should reach receiver.
-func (m livePeerMatrix) delivers(sender, receiver string) bool {
-	if sender == receiver || !isLiveSender(sender) || !isLiveReceiver(receiver) {
+func newChannelConfig() channelConfig {
+	return channelConfig{sees: map[string][]string{}}
+}
+
+// joins reports whether an agent's work reaches the channel at all.
+func (c channelConfig) joins(provider string) bool {
+	if !isKnownProvider(provider) {
 		return false
 	}
-	for _, candidate := range m.sendersFor(receiver) {
-		if candidate == sender {
-			return true
-		}
+	if len(c.participants) == 0 {
+		return true
 	}
-	return false
+	return containsProvider(c.participants, provider)
 }
 
-// receiversFor returns the providers that should be told about sender's work.
-//
-// This is the direction the running session needs: it knows what it did and
-// has to decide whose inbox to write it to, including inboxes belonging to
-// providers that are not running.
-func (m livePeerMatrix) receiversFor(sender string) []string {
-	var receivers []string
-	for _, candidate := range liveReceivers {
-		if m.delivers(sender, candidate) {
-			receivers = append(receivers, candidate)
+// visibleTo returns the authors a reader takes from the channel, sorted.
+func (c channelConfig) visibleTo(reader string) []string {
+	if configured, ok := c.sees[reader]; ok {
+		return configured
+	}
+	var all []string
+	for _, candidate := range knownProviders {
+		if c.joins(candidate) {
+			all = append(all, candidate)
 		}
 	}
-	sort.Strings(receivers)
-	return receivers
+	return all
 }
 
-// loadLivePeers reads the matrix, falling back to the default on any problem.
-//
-// A malformed line is skipped rather than failing the session: cross-agent
-// delivery is an addition to a working session, and a typo in a config file is
-// not a reason to refuse to start an agent. parseLivePeers reports what it
-// skipped so the caller can say so.
-func loadLivePeers(root string) (livePeerMatrix, []string) {
+// canSee reports whether a reader takes entries written by an author.
+func (c channelConfig) canSee(reader, author string) bool {
+	if !c.joins(author) {
+		return false
+	}
+	return containsProvider(c.visibleTo(reader), author)
+}
+
+func loadChannelConfig(root string) (channelConfig, []string) {
 	data, err := os.ReadFile(livePeerPath(root))
 	if err != nil {
-		return livePeerMatrix{}, nil
+		return newChannelConfig(), nil
 	}
-	return parseLivePeers(string(data))
+	return parseChannelConfig(string(data))
 }
 
-func parseLivePeers(text string) (livePeerMatrix, []string) {
-	matrix := livePeerMatrix{}
+func parseChannelConfig(text string) (channelConfig, []string) {
+	cfg := newChannelConfig()
 	var problems []string
 	for i, raw := range strings.Split(text, "\n") {
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		receiver, list, found := strings.Cut(line, ":")
-		receiver = strings.ToLower(strings.TrimSpace(receiver))
-		if !found || receiver == "" {
-			problems = append(problems, fmt.Sprintf("line %d: expected \"receiver: senders\"", i+1))
+		name, list, found := strings.Cut(line, ":")
+		name = canonicalProvider(name)
+		if !found || name == "" {
+			problems = append(problems, fmt.Sprintf("line %d: expected \"agent: agents\"", i+1))
 			continue
 		}
-		if !isLiveReceiver(receiver) {
-			problems = append(problems, fmt.Sprintf("line %d: %q cannot receive live updates", i+1, receiver))
+		if name == "participants" {
+			joined, bad := parseProviderList("", list, false)
+			for _, unknown := range bad {
+				problems = append(problems, fmt.Sprintf("line %d: %q is not an agent MARSHAL runs", i+1, unknown))
+			}
+			cfg.participants = joined
 			continue
 		}
-		senders, bad := parseLiveSenders(receiver, list)
-		for _, name := range bad {
-			problems = append(problems, fmt.Sprintf("line %d: %q cannot send live updates", i+1, name))
-		}
-		// A line that named only senders that cannot send is a typo, not a
-		// request for silence. Recording it as an empty list would turn the
-		// mistake into a decision to stop delivering, and would quietly undo
-		// whatever an earlier line said. Skip it instead.
-		if len(senders) == 0 && len(bad) > 0 && !mentionsNone(list) {
+		if !isKnownProvider(name) {
+			problems = append(problems, fmt.Sprintf("line %d: %q is not an agent MARSHAL runs", i+1, name))
 			continue
 		}
-		matrix[receiver] = senders
+		authors, bad := parseProviderList(name, list, true)
+		for _, unknown := range bad {
+			problems = append(problems, fmt.Sprintf("line %d: %q is not an agent MARSHAL runs", i+1, unknown))
+		}
+		// A line naming only unknown agents is a typo, not a request to read
+		// nothing. Recording it as an empty list would turn the mistake into a
+		// decision, and would quietly undo whatever an earlier line said.
+		if len(authors) == 0 && len(bad) > 0 && !mentionsNone(list) {
+			continue
+		}
+		cfg.sees[name] = authors
 	}
-	return matrix, problems
+	return cfg, problems
 }
 
-// mentionsNone reports whether the operator asked for silence outright, as
-// opposed to a list that happened to contain nothing usable.
+// parseProviderList reads "all", "none", "self" and agent names.
+func parseProviderList(self, list string, allowSelf bool) ([]string, []string) {
+	var names, bad []string
+	for _, raw := range splitList(list) {
+		field := canonicalProvider(raw)
+		switch {
+		case field == "none":
+			return nil, bad
+		case field == "all":
+			names = append(names, knownProviders...)
+		case field == "self" && allowSelf && self != "":
+			names = append(names, self)
+		case !isKnownProvider(field):
+			bad = append(bad, raw)
+		default:
+			names = append(names, field)
+		}
+	}
+	return dedupeSorted(names), bad
+}
+
 func mentionsNone(list string) bool {
-	for _, field := range splitSenderList(list) {
+	for _, field := range splitList(list) {
 		if field == "none" {
 			return true
 		}
@@ -165,53 +206,50 @@ func mentionsNone(list string) bool {
 	return false
 }
 
-func splitSenderList(list string) []string {
+func splitList(list string) []string {
 	return strings.FieldsFunc(strings.ToLower(list), func(r rune) bool {
 		return r == ',' || r == ' ' || r == '\t'
 	})
 }
 
-func parseLiveSenders(receiver, list string) ([]string, []string) {
-	fields := splitSenderList(list)
-	var senders, bad []string
-	for _, name := range fields {
-		switch {
-		case name == "none":
-			return nil, bad
-		case name == "all":
-			for _, candidate := range liveSenders {
-				if candidate != receiver {
-					senders = append(senders, candidate)
-				}
-			}
-		case !isLiveSender(name) || name == receiver:
-			bad = append(bad, name)
-		default:
-			senders = append(senders, name)
+func dedupeSorted(names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	sort.Strings(names)
+	out := names[:1]
+	for _, name := range names[1:] {
+		if name != out[len(out)-1] {
+			out = append(out, name)
 		}
 	}
-	sort.Strings(senders)
-	return senders, bad
+	return out
 }
 
-// saveLivePeers writes the matrix with every eligible receiver spelled out, so
-// the file shows the whole decision rather than the part that differs from a
-// default the reader has to know.
-func saveLivePeers(root string, matrix livePeerMatrix) error {
+// saveChannelConfig writes every agent's line, so the file shows the whole
+// arrangement rather than the part that differs from a default the reader has
+// to know about.
+func saveChannelConfig(root string, cfg channelConfig) error {
 	path := livePeerPath(root)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
 	var b strings.Builder
-	b.WriteString("# Which providers' work reaches which inbox, live.\n")
-	b.WriteString("# One line per receiver: \"receiver: sender, sender\", or \"none\".\n\n")
-	for _, receiver := range liveReceivers {
-		senders := matrix.sendersFor(receiver)
-		if len(senders) == 0 {
-			fmt.Fprintf(&b, "%s: none\n", receiver)
+	b.WriteString("# The shared channel: who joins it, and who each agent sees in it.\n")
+	b.WriteString("# participants: the agents whose work is dropped into the channel.\n")
+	b.WriteString("# <agent>: the authors that agent takes — names, self, all, or none.\n\n")
+	participants := cfg.participants
+	if len(participants) == 0 {
+		participants = knownProviders
+	}
+	fmt.Fprintf(&b, "participants: %s\n\n", strings.Join(participants, ", "))
+	for _, reader := range knownProviders {
+		authors := cfg.visibleTo(reader)
+		if len(authors) == 0 {
+			fmt.Fprintf(&b, "%s: none\n", reader)
 			continue
 		}
-		fmt.Fprintf(&b, "%s: %s\n", receiver, strings.Join(senders, ", "))
+		fmt.Fprintf(&b, "%s: %s\n", reader, strings.Join(authors, ", "))
 	}
 	return os.WriteFile(path, []byte(b.String()), 0600)
 }

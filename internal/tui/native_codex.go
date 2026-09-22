@@ -197,53 +197,80 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		return "", fmt.Errorf("native %s memory capture requires an attached runtime", label)
 	}
 
-	// Who sees whom. An absent or unreadable matrix means the default, every
-	// eligible provider, because a missing preference is not a decision to
-	// stop delivering.
-	livePeers, peerProblems := loadLivePeers(root)
+	// The shared channel. Who joins it and who each agent sees in it are the
+	// operator's decisions, made before the work starts; an unreadable file
+	// means the default, because a missing preference is not a decision.
+	channelCfg, channelProblems := loadChannelConfig(root)
 
-	// Deliver forward. This session knows what it is doing as it does it, so it
-	// writes into the inboxes of the providers configured to hear from it —
-	// including providers that are not running. That is what makes the exchange
-	// survive a closed recipient: codex reads what claude did while codex was
-	// shut, instead of only what a briefing summarised at its next launch.
-	var forward []*liveInbox
-	for _, receiver := range livePeers.receiversFor(provider) {
-		out, err := openPeerInbox(root, receiver)
-		if err != nil {
-			syncErr = joinNativeSyncError(syncErr, fmt.Errorf("open %s inbox: %w", receiver, err))
-			continue
-		}
-		forward = append(forward, out)
+	chStream, streamErr := openStream(root)
+	if streamErr != nil {
+		syncErr = joinNativeSyncError(syncErr, fmt.Errorf("open channel: %w", streamErr))
 	}
-	if len(forward) > 0 {
+
+	// Drop what this session does into the channel as it happens. One entry,
+	// whoever ends up reading it: the readers filter when they read, so nothing
+	// here depends on who is running.
+	if chStream != nil && channelCfg.joins(provider) {
 		own := watch.consume
+		sessionID := w.sessionID
 		watch.consume = func(tr importer.SessionTranscript) error {
 			if err := own(tr); err != nil {
 				return err
 			}
-			for _, out := range forward {
-				for _, message := range tr.Messages {
-					if err := out.append(provider, message); err != nil {
-						return err
-					}
+			for _, message := range tr.Messages {
+				if _, err := chStream.append(provider, sessionID, message); err != nil {
+					return err
 				}
 			}
-			return nil
+			return chStream.trim()
 		}
 	}
 
-	// Receive. While this agent runs, watch the providers it accepts updates
-	// from, so work they do now is imported and offered to this session rather
-	// than waiting until the next launch. This covers an agent running outside
-	// MARSHAL, which delivers nothing forward of its own.
-	inbox, inboxErr := newLiveInbox(root, provider)
-	if inboxErr != nil {
-		syncErr = joinNativeSyncError(syncErr, fmt.Errorf("open live inbox: %w", inboxErr))
+	// This agent's own view of the channel, and the cursor saying how far it
+	// has already looked.
+	view, viewErr := openInboxView(root, provider, true)
+	if viewErr != nil {
+		syncErr = joinNativeSyncError(syncErr, fmt.Errorf("open channel view: %w", viewErr))
 	}
+	positions, cursorErr := loadCursors(root)
+	if cursorErr != nil {
+		syncErr = joinNativeSyncError(syncErr, cursorErr)
+	}
+	// Render whatever flowed past while this agent was closed, before it starts
+	// work. This is the difference between joining a conversation and being
+	// handed a summary of one.
+	drainChannel := func() {
+		if chStream == nil || view == nil {
+			return
+		}
+		entries, err := chStream.since(positions[provider])
+		if err != nil {
+			syncErr = joinNativeSyncError(syncErr, err)
+			return
+		}
+		if len(entries) == 0 {
+			return
+		}
+		if _, err := view.deliver(entries, channelCfg); err != nil {
+			syncErr = joinNativeSyncError(syncErr, err)
+			return
+		}
+		positions[provider] = entries[len(entries)-1].Seq
+		if err := saveCursors(root, positions); err != nil {
+			syncErr = joinNativeSyncError(syncErr, err)
+		}
+	}
+	drainChannel()
+
+	// Watch the other agents that capture live, so their work reaches the
+	// channel while they run. This also covers an agent running outside
+	// MARSHAL, which drops nothing in of its own.
 	var peers []*nativeHistoryWatch
-	if inbox != nil {
-		for _, peer := range livePeers.sendersFor(provider) {
+	if chStream != nil {
+		for _, peer := range knownProviders {
+			if peer == provider || !channelCfg.joins(peer) || !capturesLive(peer) {
+				continue
+			}
 			dir, err := providerHistoryDir(peer, root)
 			if err != nil {
 				syncErr = joinNativeSyncError(syncErr, err)
@@ -259,13 +286,6 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if err := pw.loadIndex(); err != nil {
 				syncErr = joinNativeSyncError(syncErr, err)
 			}
-			// Prime the index against what already exists, so the inbox carries
-			// what happens from now on rather than replaying the whole history
-			// the launch briefing has already summarized.
-			pw.consume = func(importer.SessionTranscript) error { return nil }
-			if err := pw.sync(); err != nil {
-				syncErr = joinNativeSyncError(syncErr, err)
-			}
 			peerName := peer
 			primary := watch.consume
 			pw.consume = func(tr importer.SessionTranscript) error {
@@ -273,7 +293,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 					return err
 				}
 				for _, message := range tr.Messages {
-					if err := inbox.append(peerName, message); err != nil {
+					if _, err := chStream.append(peerName, tr.SessionID, message); err != nil {
 						return err
 					}
 				}
@@ -287,7 +307,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	// compile or deliver the briefing is reported but never blocks the session:
 	// an agent with no briefing is the previous behaviour, not a broken one.
 	var briefingNotes []string
-	for _, problem := range peerProblems {
+	for _, problem := range channelProblems {
 		briefingNotes = append(briefingNotes, "live-peers: "+problem)
 	}
 	channel, fallbackNote := resolveInjectChannel(provider, loadInjectChannel(root))
@@ -343,11 +363,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	// Published on every pass so a long session shows capture working rather
 	// than only reporting once it is over.
 	publishStatus := func() {
-		delivered := 0
-		for _, out := range forward {
-			delivered += out.Count()
-		}
-		status := liveStatus{Imported: imported, Delivered: delivered, LastSync: time.Now().UTC()}
+		status := liveStatus{Imported: imported, Delivered: view.Count(), LastSync: time.Now().UTC()}
 		if syncErr != nil {
 			status.Error = syncErr.Error()
 		}
@@ -380,6 +396,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 					syncErr = joinNativeSyncError(syncErr, err)
 				}
 			}
+			drainChannel()
 			publishStatus()
 			// The command is what the operator types, which for agy is not
 			// the provider's long name.
@@ -388,8 +405,8 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 				command = antigravityBinary
 			}
 			result := fmt.Sprintf("%s exited. %d message(s), including tool calls, saved to MARSHAL memory.\n/%s continue resumes; /%s new starts a new session.", label, imported, command, command)
-			if delivered := inbox.Count(); delivered > 0 {
-				result += fmt.Sprintf("\n%d live update(s) from another agent were delivered to this session's inbox.", delivered)
+			if delivered := view.Count(); delivered > 0 {
+				result += fmt.Sprintf("\n%d channel entr%s from other agents were shown to this session.", delivered, plural(delivered, "y", "ies"))
 			}
 			for _, note := range briefingNotes {
 				if note != "" {
@@ -414,6 +431,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 					syncErr = joinNativeSyncError(syncErr, err)
 				}
 			}
+			drainChannel()
 			publishStatus()
 		}
 	}

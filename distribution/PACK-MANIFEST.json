@@ -8436,8 +8436,8 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "7004a7dba15ee6361f6fbf720cd8f670c1cb244f280f06136112c9f2a6e58f15",
-      "bytes": 32353
+      "sha256": "6de1cdb67717497a9b74b8f3f82df0d0bb2c2b9ec45b3608078f141bad2455de",
+      "bytes": 33519
     },
     {
       "path": "internal/tui/commands_goal.go",
@@ -8655,6 +8655,11 @@
       "bytes": 8198
     },
     {
+      "path": "internal/tui/native_channel_matrix_test.go",
+      "sha256": "94ec85e4f72d5995548b4ee9eb3ffec30bb4fca8be9a1caee479644718594471",
+      "bytes": 6166
+    },
+    {
       "path": "internal/tui/native_claude.go",
       "sha256": "434895703dfd466860104fddc34c7bff5519b589133923b25b7dc3587ed49d5e",
       "bytes": 3287
@@ -8671,8 +8676,8 @@
     },
     {
       "path": "internal/tui/native_codex.go",
-      "sha256": "4d4c7890b9f5bfca26d0b1dedbf09c74865f4535d8796a5f77d1bc47155f2ffc",
-      "bytes": 20191
+      "sha256": "7fa4011b504d4fb29d85d8ff501857707200cf0318170c203e10396521a88b06",
+      "bytes": 20551
     },
     {
       "path": "internal/tui/native_codex_pty_test.go",
@@ -8686,28 +8691,18 @@
     },
     {
       "path": "internal/tui/native_liveinbox.go",
-      "sha256": "870e96c2ba0559b68a384d9403af3576356a199813118feefa02fb78645aa09b",
-      "bytes": 11216
+      "sha256": "ac05560482866c877e17687ffa0d782d89ee3b9d5e1eec81b356d091e8b2043a",
+      "bytes": 6766
     },
     {
       "path": "internal/tui/native_liveinbox_test.go",
-      "sha256": "24f97d82019a8bb3e359241e86cb5212bade8e88383b59f8c209642b0f5a4ce2",
-      "bytes": 7671
-    },
-    {
-      "path": "internal/tui/native_livematrix_test.go",
-      "sha256": "6197256e13b2bd12953cc38cfe0274ddd0c38a6869ad67ddcd3b10ad94e50685",
-      "bytes": 5087
+      "sha256": "af569ddf7d3ad002c8da378b80ac19f72f6fe6c17b5a764a62d4d70f31bf4a3c",
+      "bytes": 7669
     },
     {
       "path": "internal/tui/native_livepeers.go",
-      "sha256": "d9d7cef7ceef11ec5cbacbf183fc2d4824ab2c2198687e4f41ca7bc3d21b5dd8",
-      "bytes": 7156
-    },
-    {
-      "path": "internal/tui/native_livepeers_test.go",
-      "sha256": "32534541395723507fd93648914f69eb3f55b92f470baedd88a652a33f66f3ed",
-      "bytes": 3797
+      "sha256": "de21ddfac0a98d441cb280ada09c1c199fd7819aee42f99f1376dc0c043a5d3d",
+      "bytes": 8147
     },
     {
       "path": "internal/tui/native_livestatus.go",
@@ -8731,8 +8726,13 @@
     },
     {
       "path": "internal/tui/native_parallel_pty_test.go",
-      "sha256": "e9e9930e485dfab1bf46f2e4b8c40d500e330ca88691a2ae224269bf3a1a5fbd",
-      "bytes": 3498
+      "sha256": "cbe24b803e5f9b407d3d656cdcdf01e762d1d701b0c54ea08ba53b810da53772",
+      "bytes": 3483
+    },
+    {
+      "path": "internal/tui/native_stream.go",
+      "sha256": "135c3241b9793d12d9a1c3a1c036bdd5e2d4a3d985a1bb783277aac3307bb3fb",
+      "bytes": 8631
     },
     {
       "path": "internal/tui/native_switch_pty_test.go",
