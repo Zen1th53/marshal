@@ -8786,13 +8786,23 @@
     },
     {
       "path": "internal/tui/pty_conformance_test.go",
-      "sha256": "ea4148b933d291f6fd386c239c17fbec10fcff05dfc5f41844e27ad4c7ec501d",
-      "bytes": 14124
+      "sha256": "9d7e1b54d0dad5bdb8f46ba4e6383580385d2e0872bccda4284e28d9ce0669a6",
+      "bytes": 14598
     },
     {
       "path": "internal/tui/pty_interaction_test.go",
       "sha256": "369a8c2fd159be33e13633f5b0a48a122446778f9989d4dbd421500c26a0cb94",
       "bytes": 9958
+    },
+    {
+      "path": "internal/tui/pty_patience_race_test.go",
+      "sha256": "31110bbcc86c6383274a6c66cf184000cd71e256497a8243d95fb068e9441cc4",
+      "bytes": 717
+    },
+    {
+      "path": "internal/tui/pty_patience_test.go",
+      "sha256": "4fc489cdf72a29c328395acc25e63d776cacd2bb53748d193b13cc09c1deb354",
+      "bytes": 248
     },
     {
       "path": "internal/tui/pty_qualification_test.go",
