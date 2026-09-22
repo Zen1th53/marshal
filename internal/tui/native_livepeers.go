@@ -157,7 +157,13 @@ func parseChannelConfig(text string) (channelConfig, []string) {
 	var problems []string
 	for i, raw := range strings.Split(text, "\n") {
 		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
+		// A comment ends the line wherever it starts. Only whole-line comments
+		// used to be understood, so "claude: codex   # only codex" read the
+		// remark as a list of agents and answered with a complaint per word.
+		if hash := strings.Index(line, "#"); hash >= 0 {
+			line = strings.TrimSpace(line[:hash])
+		}
+		if line == "" {
 			continue
 		}
 		name, list, found := strings.Cut(line, ":")

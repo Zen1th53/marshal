@@ -380,3 +380,36 @@ func TestChannelCommandParticipantsReachTheStream(t *testing.T) {
 		}
 	}
 }
+
+// A remark after a value is a remark, not a list of agents.
+//
+// Only whole-line comments were understood, so "claude: codex  # only codex"
+// read the note as agent names and answered with a complaint per word. The
+// line still worked, because one real name survived the noise — but a line
+// whose every word after the value was prose would have been dropped as a
+// typo, silently withholding what the operator had just granted.
+func TestChannelUnderstandsAnInlineComment(t *testing.T) {
+	cfg, problems := parseChannelConfig(`
+# a whole-line comment
+participants: claude, codex   # everyone else stays out
+claude: codex                 # only codex — not opencode or agy
+codex: none                   # nothing at all
+`)
+	if len(problems) != 0 {
+		t.Fatalf("an inline comment was read as configuration: %v", problems)
+	}
+	if !cfg.canSee("claude", "codex") {
+		t.Error("the commented line did not take effect")
+	}
+	for _, author := range []string{"opencode", "antigravity"} {
+		if cfg.canSee("claude", author) {
+			t.Errorf("claude sees %s, which the line withheld", author)
+		}
+		if cfg.joins(author) {
+			t.Errorf("%s joined despite a commented participants line", author)
+		}
+	}
+	if len(cfg.visibleTo("codex")) != 0 {
+		t.Errorf("codex sees %v after being set to none", cfg.visibleTo("codex"))
+	}
+}

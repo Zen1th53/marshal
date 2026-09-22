@@ -8661,8 +8661,8 @@
     },
     {
       "path": "internal/tui/native_channel_matrix_test.go",
-      "sha256": "b3a64f8ea616ab7319c405c979d47372c98834b4db33d07d73e30eede13da718",
-      "bytes": 12082
+      "sha256": "b3f2219dec0b042164e0b79f02482c537fd877b5f426df8a53e4b5e33c6ed50a",
+      "bytes": 13394
     },
     {
       "path": "internal/tui/native_claude.go",
@@ -8706,8 +8706,8 @@
     },
     {
       "path": "internal/tui/native_livepeers.go",
-      "sha256": "2d8df7ca939bac07d0b5c11a6cd38c147a40a3748e3d470343d765d2845c52f6",
-      "bytes": 9831
+      "sha256": "d5c2cf7996b0d58aa9353d894c17ef5d8279ba41fea208804bbaa9bdd5d2e06f",
+      "bytes": 10112
     },
     {
       "path": "internal/tui/native_livestatus.go",
