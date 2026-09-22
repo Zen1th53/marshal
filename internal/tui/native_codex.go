@@ -500,6 +500,9 @@ type nativeHistoryWatch struct {
 	// supplies JSON exports, so MARSHAL never reads the database or depends on
 	// its private schema. The adapter selects visible conversation fields.
 	openCodeRun func(args ...string) ([]byte, error)
+	// openCodeDB is the store read while a session is open. The CLI export
+	// above remains what runs at exit and stays the source of record.
+	openCodeDB string
 	// antigravity is set for agy's per-conversation SQLite history, which is
 	// read directly and read-only: agy has no export command. The adapter
 	// takes only fields observed to carry visible conversation and tool
@@ -524,6 +527,18 @@ func newNativeHistoryWatch(dir, root string) *nativeHistoryWatch {
 }
 
 func (w *nativeHistoryWatch) sync() error {
+	if w.openCodeDB != "" {
+		err := w.syncOpenCodeLive()
+		// A store that is not the shape MARSHAL reads is not a failure, it is a
+		// reason to use the supported interface instead. The export is slower
+		// and cannot run mid-session, so the work arrives at exit rather than as
+		// it happens — late, but never wrong and never missing.
+		if errors.Is(err, errOpenCodeSchemaMoved) && w.openCodeRun != nil {
+			w.openCodeDB = ""
+			return w.syncOpenCode()
+		}
+		return err
+	}
 	if w.openCodeRun != nil {
 		return w.syncOpenCode()
 	}
@@ -693,11 +708,16 @@ func newPeerHistoryWatch(peer, root string) (*nativeHistoryWatch, error) {
 	if !capturesLive(peer) {
 		return nil, fmt.Errorf("%s is not read while it runs", peer)
 	}
-	if peer == "antigravity" {
-		watch, err := newAntigravityHistoryWatch(root)
+	switch peer {
+	case "antigravity":
+		return newAntigravityHistoryWatch(root)
+	case "opencode":
+		dbPath, err := openCodeDBPath()
 		if err != nil {
 			return nil, err
 		}
+		watch := newNativeHistoryWatch(filepath.Dir(dbPath), root)
+		watch.openCodeDB = dbPath
 		return watch, nil
 	}
 	dir, err := providerHistoryDir(peer, root)

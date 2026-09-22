@@ -244,27 +244,29 @@ decision to read nothing.
 
 #### When work reaches the channel
 
-Distribution is solved for everyone. Capture is not yet:
+Every agent reaches it **as it works**. There is no exempt provider.
 
-| Agent | History | Reaches the channel |
+| Agent | History | Read while it runs |
 | --- | --- | --- |
-| Claude Code | append-only JSONL | as it works |
-| Codex | append-only JSONL | as it works |
-| Antigravity (`agy`) | per-conversation SQLite | as it works |
-| OpenCode | SQLite, via its CLI export | when its process exits |
+| Claude Code | append-only JSONL | as it grows |
+| Codex | append-only JSONL | as it grows |
+| Antigravity (`agy`) | per-conversation SQLite | read-only, under WAL |
+| OpenCode | SQLite | read-only, under WAL |
 
-**Antigravity** is polled like the other two. Its conversation databases are
-opened read-only and never written to, and SQLite in WAL mode serves readers
-while a writer holds the file — measured against a copy of a real `agy`
-database: 394 reads against a live writer, none blocked, the reader within two
-rows of the writer throughout. The write-ahead log is stamped alongside each
-database, because a conversation's newest steps live there before a checkpoint.
+The two SQLite stores are opened read-only and never written to, and SQLite in
+WAL mode serves readers while a writer holds the file — measured against a copy
+of a real store: 394 reads against a live writer, none blocked, the reader within
+two rows of the writer throughout 958 concurrent inserts.
 
-**OpenCode** is the remaining exception, and a deliberate one rather than a
-limit. MARSHAL reads its history through the public CLI export rather than the
-database, so it does not depend on a private schema, and running that export
-every few seconds would contend with the session that owns the file. Its work
-still reaches the channel — when its own process exits.
+Reading a store MARSHAL does not own is a coupling, and it is guarded rather than
+assumed. OpenCode's shape is checked before each read; if it has moved, that path
+stands down and the supported CLI export takes over, which cannot run mid-session
+and so delivers at exit — later than it should be, never wrong and never missing.
+What is read is assembled into the same document the CLI export produces and
+handed to the same decoder, so the live path cannot select different fields from
+the export path. In particular **the model's hidden reasoning is excluded there,
+once, for both** — checked against 199 real reasoning blocks, none of which
+reached a transcript.
 
 Verified on 2026-09-22 against the installed CLIs — Claude Code 2.1.278, Codex
 0.155.1, OpenCode 1.18.16, `agy` 1.2.7 — by decoding their real transcripts with

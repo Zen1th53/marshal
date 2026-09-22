@@ -38,6 +38,12 @@ type openCodeSession struct {
 func newOpenCodeHistoryWatch(binary, root string) *nativeHistoryWatch {
 	watch := newNativeHistoryWatch("", root)
 	watch.captureTools = true
+	// The store is read while the session runs; the export below is the
+	// fallback for a store whose shape has moved. Both are set, and sync picks
+	// between them.
+	if dbPath, err := openCodeDBPath(); err == nil {
+		watch.openCodeDB = dbPath
+	}
 	watch.openCodeRun = func(args ...string) ([]byte, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

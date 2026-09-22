@@ -67,13 +67,17 @@ func canonicalProvider(name string) string {
 // stamps the write-ahead log alongside the database, because a conversation's
 // newest steps live there before a checkpoint, so a poll sees them.
 //
-// OpenCode is the remaining exception, and it is a deliberate one rather than a
-// limit: its history is reached through the public CLI export rather than its
-// database, so MARSHAL does not depend on a private schema, and running that
-// export every few seconds would contend with the session that owns the file.
-// It still joins the channel — its work is dropped in when its own process
-// exits. The difference is when an entry appears, not whether it does.
-var liveCaptureProviders = []string{"claude", "codex", "antigravity"}
+// OpenCode keeps a SQLite store of its own, read the same way and under the
+// same guard. Its public CLI export remains what runs at exit and stays the
+// source of record; the live read exists so its work reaches the channel while
+// it is still working. If the store is not the shape MARSHAL reads, the live
+// path stands down and says so, and the export at exit still runs.
+//
+// Every agent MARSHAL runs now reaches the channel as it works. The list is
+// kept as a list rather than collapsed into "all", because whether a provider
+// can be read mid-session is a property of that provider and the next one added
+// has to earn its place here.
+var liveCaptureProviders = []string{"claude", "codex", "antigravity", "opencode"}
 
 func isKnownProvider(p string) bool { return containsProvider(knownProviders, p) }
 func capturesLive(p string) bool    { return containsProvider(liveCaptureProviders, p) }

@@ -203,20 +203,17 @@ func TestChannelReportsBadLinesWithoutLosingGoodOnes(t *testing.T) {
 	}
 }
 
-// Antigravity reaches the channel while it runs, like claude and codex.
+// Every agent MARSHAL runs reaches the channel while it works.
 //
-// Its conversation databases are opened read-only and SQLite serves readers
-// under WAL, so polling them costs the running child nothing. OpenCode remains
-// the exception, and deliberately: its history is reached through the public
-// CLI export rather than its database.
-func TestChannelAntigravityCapturesLive(t *testing.T) {
-	for _, p := range []string{"claude", "codex", "antigravity"} {
+// There is no exempt provider left. Claude and Codex write append-only history;
+// Antigravity and OpenCode keep SQLite, opened read-only and served to readers
+// under WAL. Holding one of them to a rule the others are exempt from was an
+// inconsistency, and the cost of it fell on the operator.
+func TestChannelEveryAgentCapturesLive(t *testing.T) {
+	for _, p := range knownProviders {
 		if !capturesLive(p) {
 			t.Errorf("%s does not reach the channel while it runs", p)
 		}
-	}
-	if capturesLive("opencode") {
-		t.Error("opencode is polled live, which would run its CLI export against a live session")
 	}
 }
 
@@ -251,9 +248,17 @@ func TestPeerHistoryWatchMatchesTheProviderStore(t *testing.T) {
 		t.Error("the antigravity watcher has no summaries database")
 	}
 
-	// A provider MARSHAL does not read mid-session gets no watcher at all,
-	// rather than one that would quietly read nothing.
-	if _, err := newPeerHistoryWatch("opencode", root); err == nil {
+	oc, err := newPeerHistoryWatch("opencode", root)
+	if err != nil {
+		t.Fatalf("opencode: %v", err)
+	}
+	if oc.openCodeDB == "" {
+		t.Error("the opencode watcher has no store to read")
+	}
+
+	// A provider MARSHAL cannot read mid-session gets no watcher at all, rather
+	// than one that would quietly read nothing.
+	if _, err := newPeerHistoryWatch("gemini", root); err == nil {
 		t.Error("a peer watcher was built for a provider that is not read while it runs")
 	}
 }

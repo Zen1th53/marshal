@@ -2126,8 +2126,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "d45c7ee265843d75d494b3e78aa5b84424d65b5d128cf067031e11cf20568d17",
-      "bytes": 22990
+      "sha256": "d1e9ffc74af8ee6e0d5eb7a25d877c8ca6fb63bccb8e557424413b401ac7b64c",
+      "bytes": 23126
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -8656,8 +8656,8 @@
     },
     {
       "path": "internal/tui/native_channel_matrix_test.go",
-      "sha256": "f6769d2b4df12e03b62ede006ad718c485a3cc13c2c209be037c64acb8dbf5e4",
-      "bytes": 8146
+      "sha256": "6d6da3fc7f23a95d999f0aea9f29d48177fd1c8a532c68b7571b06332199e402",
+      "bytes": 8188
     },
     {
       "path": "internal/tui/native_claude.go",
@@ -8676,8 +8676,8 @@
     },
     {
       "path": "internal/tui/native_codex.go",
-      "sha256": "d2d1ad233e7f3db65da0fac489a94217a2b9a42865bf47df6584560a1151569e",
-      "bytes": 22248
+      "sha256": "6824713a668cf7c3f820977b6b23403c555a1e0622742e3168d725580b8dade9",
+      "bytes": 23028
     },
     {
       "path": "internal/tui/native_codex_pty_test.go",
@@ -8701,8 +8701,8 @@
     },
     {
       "path": "internal/tui/native_livepeers.go",
-      "sha256": "105933c80ce51aa70108d5aad16c121fa5ee66f9a14583083ba128f7b5ad318f",
-      "bytes": 8652
+      "sha256": "d65f6fa1d6726d7c2b69467eaeb2040bbc9d04d1f639d583fb0d041b78317bf3",
+      "bytes": 8848
     },
     {
       "path": "internal/tui/native_livestatus.go",
@@ -8711,8 +8711,18 @@
     },
     {
       "path": "internal/tui/native_opencode.go",
-      "sha256": "ccd4e653adda44e6e4c00c94e30d8b3ee4c59a167058396f61131c830d21e7f3",
-      "bytes": 4040
+      "sha256": "3d87c07c40c33df8df47b45c091dbf32b789227cd7d614619a5411f8904f25f8",
+      "bytes": 4286
+    },
+    {
+      "path": "internal/tui/native_opencode_live.go",
+      "sha256": "104d22574b909db0489c79e39961a025a5e7c64e1576cf8347aaf07545ebfd7d",
+      "bytes": 10015
+    },
+    {
+      "path": "internal/tui/native_opencode_live_test.go",
+      "sha256": "0db64c58bc0b37108e41eaa0619c38cbeebb0db07ab930eed9bd865a4bbdb40e",
+      "bytes": 7309
     },
     {
       "path": "internal/tui/native_opencode_pty_test.go",
