@@ -7,7 +7,7 @@ import (
 
 func TestA10MigrationFromSchemaV2PreservesCanonicalRows(t *testing.T) {
 	ctx := context.Background()
-	st := openTestStore(t)
+	st := openEmptyTestStore(t)
 	if _, err := st.db.ExecContext(ctx, schemaV1); err != nil {
 		t.Fatalf("create v1 schema: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestA10MigrationFromSchemaV2PreservesCanonicalRows(t *testing.T) {
 
 func TestA10MigrationFromSchemaV3PreservesEvidenceAndAddsState(t *testing.T) {
 	ctx := context.Background()
-	st := openTestStore(t)
+	st := openEmptyTestStore(t)
 	if _, err := st.db.ExecContext(ctx, schemaV1); err != nil {
 		t.Fatalf("create v1 schema: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestA10MigrationFromSchemaV3PreservesEvidenceAndAddsState(t *testing.T) {
 
 func TestA10MigrationRejectsNewerSchemaWithoutMutation(t *testing.T) {
 	ctx := context.Background()
-	st := openTestStore(t)
+	st := openEmptyTestStore(t)
 	if _, err := st.db.ExecContext(ctx, `CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); INSERT INTO schema_migrations(version, applied_at) VALUES(?, '2026-01-01T00:00:00Z')`, LatestSchemaVersion+1); err != nil {
 		t.Fatal(err)
 	}

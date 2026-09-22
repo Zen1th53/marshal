@@ -3,14 +3,20 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
 func TestMigrateCreatesCanonicalSchemaWithForeignKeys(t *testing.T) {
-	st := openTestStore(t)
+	// Deliberately the empty store: this is the test that drives the whole
+	// migration chain from nothing and checks what it produced, so it must not
+	// receive the template that chain already built.
+	st := openEmptyTestStore(t)
 	ctx := context.Background()
 
 	if err := st.Migrate(ctx); err != nil {
@@ -494,9 +500,41 @@ func TestInitProjectIsIdempotentUpdatesMetadataAndRejectsConflictingIdentity(t *
 	}
 }
 
+// openEmptyTestStore opens a store on an empty database, with no schema.
+//
+// Use it when the test is about the migration chain itself: one that drives it
+// from nothing, or one that seeds a historical schema version and migrates
+// forward from there. Everything else wants openTestStore.
+func openEmptyTestStore(t *testing.T) *Store {
+	t.Helper()
+	return openStoreFile(t, filepath.Join(t.TempDir(), "state.db"))
+}
+
+// openTestStore opens a store already migrated to the current schema.
+//
+// The chain costs about a second per call under the race detector, and the
+// suite opened a store three hundred times, which was most of the package's
+// runtime. It runs once now, into a template that each test receives its own
+// copy of.
+//
+// This is a copy and not a shared handle: a test that writes to its store must
+// not be visible to the next one. Tests that call Migrate afterwards still
+// work and still cost nothing — Migrate reads the ledger, finds the schema
+// already current, and returns.
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
-	st, err := Open(context.Background(), filepath.Join(t.TempDir(), "state.db"))
+	path := filepath.Join(t.TempDir(), "state.db")
+	if err := os.WriteFile(path, migratedTemplate(t), 0o600); err != nil {
+		t.Fatalf("seed store from template: %v", err)
+	}
+	return openStoreFile(t, path)
+}
+
+// openStoreFile opens a store and reports a failing Close, which the shared
+// openStoreAt in the concurrency tests deliberately ignores.
+func openStoreFile(t *testing.T, path string) *Store {
+	t.Helper()
+	st, err := Open(context.Background(), path)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -506,6 +544,76 @@ func openTestStore(t *testing.T) *Store {
 		}
 	})
 	return st
+}
+
+var (
+	templateOnce  sync.Once
+	templateBytes []byte
+	templateErr   error
+)
+
+// migratedTemplate returns the bytes of a database at the current schema,
+// built once per test binary by the real migration chain.
+//
+// It is built by Migrate rather than by a checked-in fixture on purpose: a
+// fixture would drift from the chain silently, and the point of the template
+// is to be what the chain produces. The schema version is asserted before the
+// bytes are handed out, so a chain that stops short fails every test that asks
+// for a store rather than leaving them to fail obscurely one by one.
+func migratedTemplate(t *testing.T) []byte {
+	t.Helper()
+	templateOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "marshal-store-template-")
+		if err != nil {
+			templateErr = fmt.Errorf("template dir: %w", err)
+			return
+		}
+		defer os.RemoveAll(dir)
+
+		path := filepath.Join(dir, "template.db")
+		ctx := context.Background()
+		st, err := Open(ctx, path)
+		if err != nil {
+			templateErr = fmt.Errorf("open template: %w", err)
+			return
+		}
+		if err := st.Migrate(ctx); err != nil {
+			st.Close()
+			templateErr = fmt.Errorf("migrate template: %w", err)
+			return
+		}
+		var version int
+		if err := st.db.QueryRowContext(ctx,
+			"SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
+			st.Close()
+			templateErr = fmt.Errorf("read template schema version: %w", err)
+			return
+		}
+		if version != LatestSchemaVersion {
+			st.Close()
+			templateErr = fmt.Errorf("template schema version = %d, want %d", version, LatestSchemaVersion)
+			return
+		}
+		// Fold the write-ahead log back into the main file, so the copy each
+		// test receives is complete on its own and carries no -wal sidecar.
+		if _, err := st.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+			st.Close()
+			templateErr = fmt.Errorf("checkpoint template: %w", err)
+			return
+		}
+		if err := st.Close(); err != nil {
+			templateErr = fmt.Errorf("close template: %w", err)
+			return
+		}
+		templateBytes, err = os.ReadFile(path)
+		if err != nil {
+			templateErr = fmt.Errorf("read template: %w", err)
+		}
+	})
+	if templateErr != nil {
+		t.Fatalf("build migrated template: %v", templateErr)
+	}
+	return templateBytes
 }
 
 func queryInt(t *testing.T, db *sql.DB, query string, args ...any) int {
