@@ -8661,8 +8661,8 @@
     },
     {
       "path": "internal/tui/native_channel_matrix_test.go",
-      "sha256": "974b5938a24b814ed120068a7ccea0c7e14068713f52051c07f7bd39c30a5e3d",
-      "bytes": 8303
+      "sha256": "b3a64f8ea616ab7319c405c979d47372c98834b4db33d07d73e30eede13da718",
+      "bytes": 12082
     },
     {
       "path": "internal/tui/native_claude.go",
@@ -8996,8 +8996,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "7dec7b0e52e8bcab3151721393e16ea2d612b14f08105da91d7486bf0f60004d",
-      "bytes": 44879
+      "sha256": "0e87c79869bd316b0397792cebf20f658180af814673e1adfa74e0313e3ab1e1",
+      "bytes": 47097
     },
     {
       "path": "internal/tui/workspace_nav_test.go",

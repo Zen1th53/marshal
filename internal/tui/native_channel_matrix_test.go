@@ -264,3 +264,119 @@ func TestPeerHistoryWatchMatchesTheProviderStore(t *testing.T) {
 		t.Error("a peer watcher was built for a provider that is not read while it runs")
 	}
 }
+
+// The whole path, from the command to what the agent reads.
+//
+// The pieces were each covered — the configuration, the file, the rendering —
+// and the wiring between them was not. That is the part an operator actually
+// relies on: they type a restriction and expect the next session to honour it.
+// A filter correct in every unit and never loaded by the session would pass
+// every other test in this package and withhold nothing.
+func TestChannelCommandRestrictionReachesTheAgentsView(t *testing.T) {
+	root := t.TempDir()
+	h := &CommandHandler{ws: &Workspace{workDir: root, theme: NewTheme(ThemeNoColor, false, false)}}
+
+	// 1. The operator restricts codex through the TUI.
+	out, err := h.handleMemoryPeers([]string{"codex", "claude"})
+	if err != nil {
+		t.Fatalf("command: %v", err)
+	}
+	if !strings.Contains(out, "codex") {
+		t.Errorf("the command did not report the arrangement back:\n%s", out)
+	}
+
+	// 2. It reached the project file.
+	saved, err := os.ReadFile(livePeerPath(root))
+	if err != nil {
+		t.Fatalf("the command wrote no configuration: %v", err)
+	}
+	if !strings.Contains(string(saved), "codex: claude") {
+		t.Fatalf("the file does not carry the restriction:\n%s", saved)
+	}
+
+	// 3. A session loads it the way runNativeAgent does.
+	cfg, problems := loadChannelConfig(root)
+	if len(problems) != 0 {
+		t.Fatalf("a session loading the saved file reported %v", problems)
+	}
+
+	// 4. Work from every agent flows through the channel.
+	s, err := openStream(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, author := range knownProviders {
+		if _, err := s.append(author, "sess",
+			msg("WORK-"+author, baseTime.Add(time.Duration(i)*time.Second))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := s.since(-1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 5. What codex actually reads honours what was typed.
+	view, err := openInboxView(root, "codex", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := view.deliver(entries, cfg); err != nil {
+		t.Fatal(err)
+	}
+	seen, err := os.ReadFile(inboxPath(root, "codex"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(seen), "WORK-claude") {
+		t.Error("codex was not shown the author it was given")
+	}
+	for _, withheld := range []string{"WORK-opencode", "WORK-antigravity", "WORK-codex"} {
+		if strings.Contains(string(seen), withheld) {
+			t.Errorf("codex was shown %s, which the command withheld", withheld)
+		}
+	}
+
+	// 6. Nobody else was narrowed by a command aimed at codex.
+	view2, err := openInboxView(root, "claude", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shown, err := view2.deliver(entries, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shown != 3 {
+		t.Errorf("claude was shown %d entries after codex was restricted, want 3", shown)
+	}
+}
+
+// Leaving the channel through the command stops the work being shared.
+func TestChannelCommandParticipantsReachTheStream(t *testing.T) {
+	root := t.TempDir()
+	h := &CommandHandler{ws: &Workspace{workDir: root, theme: NewTheme(ThemeNoColor, false, false)}}
+
+	if _, err := h.handleMemoryPeers([]string{"participants", "claude,", "codex"}); err != nil {
+		t.Fatalf("command: %v", err)
+	}
+	cfg, problems := loadChannelConfig(root)
+	if len(problems) != 0 {
+		t.Fatalf("problems: %v", problems)
+	}
+	for _, inside := range []string{"claude", "codex"} {
+		if !cfg.joins(inside) {
+			t.Errorf("%s was dropped from the channel it was named in", inside)
+		}
+	}
+	for _, outside := range []string{"opencode", "antigravity"} {
+		if cfg.joins(outside) {
+			t.Errorf("%s still contributes after being left out", outside)
+		}
+		// And nothing of theirs can be seen, whatever a reader's own line says.
+		for _, reader := range knownProviders {
+			if cfg.canSee(reader, outside) {
+				t.Errorf("%s can see %s, which is not in the channel", reader, outside)
+			}
+		}
+	}
+}
