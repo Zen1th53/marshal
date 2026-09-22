@@ -8436,8 +8436,8 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "82f4e3a6d519dab82f19a3a57add66de76b6bcaa40411abcdf029c8535ea9539",
-      "bytes": 30084
+      "sha256": "7004a7dba15ee6361f6fbf720cd8f670c1cb244f280f06136112c9f2a6e58f15",
+      "bytes": 32353
     },
     {
       "path": "internal/tui/commands_goal.go",
@@ -8671,8 +8671,8 @@
     },
     {
       "path": "internal/tui/native_codex.go",
-      "sha256": "7c68bc29d8812b2f6ed33ffba74c8da72c948b80b842d4f6385154b8155664b3",
-      "bytes": 18125
+      "sha256": "4d4c7890b9f5bfca26d0b1dedbf09c74865f4535d8796a5f77d1bc47155f2ffc",
+      "bytes": 20191
     },
     {
       "path": "internal/tui/native_codex_pty_test.go",
@@ -8686,13 +8686,28 @@
     },
     {
       "path": "internal/tui/native_liveinbox.go",
-      "sha256": "31bab3ed9ee28df09416b447d19c4b65344c427dac76dd30f26a98275073c613",
-      "bytes": 6730
+      "sha256": "870e96c2ba0559b68a384d9403af3576356a199813118feefa02fb78645aa09b",
+      "bytes": 11216
     },
     {
       "path": "internal/tui/native_liveinbox_test.go",
-      "sha256": "992513cfb3048bbf5d1f7855c5fc04dde36e1a3f66fff385f30390cdb27e236b",
-      "bytes": 5298
+      "sha256": "24f97d82019a8bb3e359241e86cb5212bade8e88383b59f8c209642b0f5a4ce2",
+      "bytes": 7671
+    },
+    {
+      "path": "internal/tui/native_livepeers.go",
+      "sha256": "d9d7cef7ceef11ec5cbacbf183fc2d4824ab2c2198687e4f41ca7bc3d21b5dd8",
+      "bytes": 7156
+    },
+    {
+      "path": "internal/tui/native_livepeers_test.go",
+      "sha256": "32534541395723507fd93648914f69eb3f55b92f470baedd88a652a33f66f3ed",
+      "bytes": 3797
+    },
+    {
+      "path": "internal/tui/native_livestatus.go",
+      "sha256": "abe563221a34c19a18456ed49e185a1283853c78206cc9ac2cc0c9c3993316f5",
+      "bytes": 2840
     },
     {
       "path": "internal/tui/native_opencode.go",

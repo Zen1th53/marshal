@@ -320,9 +320,71 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 	case "inject":
 		return h.handleMemoryInject(ctx, args[1:])
 
+	case "peers":
+		return h.handleMemoryPeers(args[1:])
+
 	default:
-		return "Usage: /memory [list|search <query>|provenance <id>|inject [channel]]", nil
+		return "Usage: /memory [list|search <query>|provenance <id>|inject [channel]|peers [receiver senders…]]", nil
 	}
+}
+
+// handleMemoryPeers shows or sets which providers' work reaches which inbox.
+//
+// Delivery is per receiver because that is the question an operator actually
+// has: not "should these two talk" but "what should this agent be told". The
+// two directions are set separately and can disagree.
+func (h *CommandHandler) handleMemoryPeers(args []string) (string, error) {
+	h.ws.mu.RLock()
+	root := h.ws.workDir
+	runtime := h.ws.runtime
+	h.ws.mu.RUnlock()
+	if runtime != nil {
+		root = runtime.ProjectRoot()
+	}
+
+	matrix, problems := loadLivePeers(root)
+	if len(args) == 0 {
+		var b strings.Builder
+		b.WriteString("LIVE CROSS-AGENT DELIVERY:\n")
+		for _, receiver := range liveReceivers {
+			senders := matrix.sendersFor(receiver)
+			list := "none"
+			if len(senders) > 0 {
+				list = strings.Join(senders, ", ")
+			}
+			fmt.Fprintf(&b, "  %-12s receives from %s\n", receiver, list)
+		}
+		b.WriteString("\nOnly codex and claude can send: their history is an append-only\n")
+		b.WriteString("file another session can read while they run. OpenCode and\n")
+		b.WriteString("Antigravity are imported when their own process exits.\n")
+		for _, problem := range problems {
+			fmt.Fprintf(&b, "\n%s: %s", livePeerPath(root), problem)
+		}
+		b.WriteString("\nUsage: /memory peers <receiver> <sender…|all|none>")
+		return b.String(), nil
+	}
+
+	receiver := strings.ToLower(args[0])
+	if !isLiveReceiver(receiver) {
+		return fmt.Sprintf("%q cannot receive live updates. Receivers: %s.",
+			receiver, strings.Join(liveReceivers, ", ")), nil
+	}
+	if len(args) == 1 {
+		return "Usage: /memory peers <receiver> <sender…|all|none>", nil
+	}
+	senders, bad := parseLiveSenders(receiver, strings.Join(args[1:], " "))
+	if len(bad) > 0 {
+		return fmt.Sprintf("%s cannot send live updates. Senders: %s.",
+			strings.Join(bad, ", "), strings.Join(liveSenders, ", ")), nil
+	}
+	matrix[receiver] = senders
+	if err := saveLivePeers(root, matrix); err != nil {
+		return "", fmt.Errorf("save live peers: %w", err)
+	}
+	if len(senders) == 0 {
+		return fmt.Sprintf("%s now receives nothing live.", receiver), nil
+	}
+	return fmt.Sprintf("%s now receives live updates from %s.", receiver, strings.Join(senders, ", ")), nil
 }
 
 // handleMemoryInject governs how a starting native session is told what the

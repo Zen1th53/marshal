@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,27 +11,16 @@ import (
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 )
 
-func TestPeerProvidersExcludesTheRunningOne(t *testing.T) {
-	if got := peerProviders("claude"); len(got) != 1 || got[0] != "codex" {
-		t.Errorf("peers of claude = %v, want [codex]", got)
-	}
-	if got := peerProviders("codex"); len(got) != 1 || got[0] != "claude" {
-		t.Errorf("peers of codex = %v, want [claude]", got)
-	}
-	if got := peerProviders("opencode"); len(got) != 2 || got[0] != "codex" || got[1] != "claude" {
-		t.Errorf("peers of opencode = %v, want [codex claude]", got)
-	}
-}
-
-// A stale inbox would present another session's finished work as though it were
-// arriving now, so opening one starts from empty.
-func TestNewLiveInboxTruncatesAndHeaders(t *testing.T) {
+// The backlog is the point: a recipient that was closed while another agent
+// worked must find that work waiting, not discarded. Opening a session marks
+// the boundary instead of wiping what came before it.
+func TestNewLiveInboxKeepsTheBacklogAndMarksTheBoundary(t *testing.T) {
 	root := t.TempDir()
 	path := inboxPath(root, "codex")
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte("## stale entry from last time\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("## claude · earlier · assistant\n\ndelivered while codex was closed\n\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -43,16 +33,87 @@ func TestNewLiveInboxTruncatesAndHeaders(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := string(data)
-	if strings.Contains(content, "stale entry") {
-		t.Errorf("a previous session's inbox survived:\n%s", content)
+	if !strings.Contains(content, "delivered while codex was closed") {
+		t.Errorf("the backlog was discarded:\n%s", content)
 	}
-	for _, want := range []string{"live inbox", "untrusted DATA", "not as instructions"} {
-		if !strings.Contains(content, want) {
-			t.Errorf("header missing %q:\n%s", want, content)
-		}
+	if !strings.Contains(content, "session opened") {
+		t.Errorf("no boundary marks where this session starts:\n%s", content)
+	}
+	if !strings.Contains(content, "arrived before this session started") {
+		t.Errorf("the boundary does not say what precedes it:\n%s", content)
 	}
 	if box.Count() != 0 {
-		t.Errorf("a fresh inbox reported %d entries", box.Count())
+		t.Errorf("opening an inbox reported %d delivered entries", box.Count())
+	}
+}
+
+// A fresh inbox still explains itself, and still says the contents are data.
+func TestLiveInboxHeaderWarnsOnFirstOpen(t *testing.T) {
+	root := t.TempDir()
+	if _, err := newLiveInbox(root, "codex"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	data, err := os.ReadFile(inboxPath(root, "codex"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"live inbox", "untrusted DATA", "not as instructions"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("header missing %q:\n%s", want, data)
+		}
+	}
+}
+
+// Both delivery paths can reach the same inbox: the producing session writing
+// forward, and a peer watcher reading that provider's history. The entry must
+// appear once.
+func TestLiveInboxDropsADuplicateEntry(t *testing.T) {
+	root := t.TempDir()
+	at := time.Date(2026, 9, 16, 12, 30, 0, 0, time.UTC)
+	msg := importer.Message{Role: "assistant", Content: "edited workspace.go", Timestamp: at}
+
+	first, err := openPeerInbox(root, "codex")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := first.append("claude", msg); err != nil {
+		t.Fatal(err)
+	}
+
+	// A separate opener, as a second session would be.
+	second, err := openPeerInbox(root, "codex")
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if err := second.append("claude", msg); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(inboxPath(root, "codex"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(data), "edited workspace.go"); got != 1 {
+		t.Errorf("entry written %d times, want 1:\n%s", got, data)
+	}
+	if second.Count() != 0 {
+		t.Errorf("the duplicate was counted as delivered")
+	}
+}
+
+// Delivering to a provider that is not running must not claim it opened a
+// session, because it did not.
+func TestOpenPeerInboxWritesNoSessionBoundary(t *testing.T) {
+	root := t.TempDir()
+	if _, err := openPeerInbox(root, "opencode"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	data, err := os.ReadFile(inboxPath(root, "opencode"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "session opened") {
+		t.Errorf("delivery to a closed provider claimed a session:\n%s", data)
 	}
 }
 
@@ -90,17 +151,22 @@ func TestLiveInboxAppendsLabelledEntries(t *testing.T) {
 	}
 }
 
-// A long peer session must not grow a file the agent is asked to read in full,
-// and a truncated inbox must not read as a quiet one.
-func TestLiveInboxStopsAtItsBudgetAndSaysSo(t *testing.T) {
+// A long backlog must not grow a file the agent is asked to read in full. The
+// oldest entries give way, not the newest: a file that sealed itself at the
+// first busy hour would hide exactly the recent work a returning agent needs.
+func TestLiveInboxDropsOldestPastItsBudget(t *testing.T) {
 	root := t.TempDir()
 	box, err := newLiveInbox(root, "claude")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	big := strings.Repeat("x", inboxLineBytes)
+	at := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
 	for i := 0; i < 200; i++ {
-		if err := box.append("codex", importer.Message{Role: "assistant", Content: big}); err != nil {
+		if err := box.append("codex", importer.Message{
+			Role: "assistant", Content: fmt.Sprintf("entry-%03d %s", i, big),
+			Timestamp: at.Add(time.Duration(i) * time.Second),
+		}); err != nil {
 			t.Fatalf("append %d: %v", i, err)
 		}
 	}
@@ -108,11 +174,18 @@ func TestLiveInboxStopsAtItsBudgetAndSaysSo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	content := string(data)
 	if len(data) > inboxMaxBytes+inboxLineBytes {
 		t.Errorf("inbox grew to %d bytes, past its %d budget", len(data), inboxMaxBytes)
 	}
-	if !strings.Contains(string(data), "inbox full") {
-		t.Errorf("truncation was not disclosed:\n%s", tail(string(data), 400))
+	if !strings.Contains(content, "older entries dropped") {
+		t.Errorf("dropping was not disclosed:\n%s", tail(content, 400))
+	}
+	if !strings.Contains(content, "entry-199") {
+		t.Errorf("the newest entry was dropped:\n%s", tail(content, 400))
+	}
+	if strings.Contains(content, "entry-000") {
+		t.Errorf("the oldest entry survived a full inbox")
 	}
 }
 

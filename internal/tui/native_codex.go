@@ -197,16 +197,53 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		return "", fmt.Errorf("native %s memory capture requires an attached runtime", label)
 	}
 
-	// Live exchange: while this agent runs, watch the other providers too, so
-	// work they do now is imported and offered to this session rather than
-	// waiting until the next launch to be told about it.
+	// Who sees whom. An absent or unreadable matrix means the default, every
+	// eligible provider, because a missing preference is not a decision to
+	// stop delivering.
+	livePeers, peerProblems := loadLivePeers(root)
+
+	// Deliver forward. This session knows what it is doing as it does it, so it
+	// writes into the inboxes of the providers configured to hear from it —
+	// including providers that are not running. That is what makes the exchange
+	// survive a closed recipient: codex reads what claude did while codex was
+	// shut, instead of only what a briefing summarised at its next launch.
+	var forward []*liveInbox
+	for _, receiver := range livePeers.receiversFor(provider) {
+		out, err := openPeerInbox(root, receiver)
+		if err != nil {
+			syncErr = joinNativeSyncError(syncErr, fmt.Errorf("open %s inbox: %w", receiver, err))
+			continue
+		}
+		forward = append(forward, out)
+	}
+	if len(forward) > 0 {
+		own := watch.consume
+		watch.consume = func(tr importer.SessionTranscript) error {
+			if err := own(tr); err != nil {
+				return err
+			}
+			for _, out := range forward {
+				for _, message := range tr.Messages {
+					if err := out.append(provider, message); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		}
+	}
+
+	// Receive. While this agent runs, watch the providers it accepts updates
+	// from, so work they do now is imported and offered to this session rather
+	// than waiting until the next launch. This covers an agent running outside
+	// MARSHAL, which delivers nothing forward of its own.
 	inbox, inboxErr := newLiveInbox(root, provider)
 	if inboxErr != nil {
 		syncErr = joinNativeSyncError(syncErr, fmt.Errorf("open live inbox: %w", inboxErr))
 	}
 	var peers []*nativeHistoryWatch
 	if inbox != nil {
-		for _, peer := range peerProviders(provider) {
+		for _, peer := range livePeers.sendersFor(provider) {
 			dir, err := providerHistoryDir(peer, root)
 			if err != nil {
 				syncErr = joinNativeSyncError(syncErr, err)
@@ -250,6 +287,9 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	// compile or deliver the briefing is reported but never blocks the session:
 	// an agent with no briefing is the previous behaviour, not a broken one.
 	var briefingNotes []string
+	for _, problem := range peerProblems {
+		briefingNotes = append(briefingNotes, "live-peers: "+problem)
+	}
 	channel, fallbackNote := resolveInjectChannel(provider, loadInjectChannel(root))
 	if fallbackNote != "" {
 		briefingNotes = append(briefingNotes, fallbackNote)
@@ -300,6 +340,23 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			fmt.Fprintf(os.Stdout, "MARSHAL · %s\n", note)
 		}
 	}
+	// Published on every pass so a long session shows capture working rather
+	// than only reporting once it is over.
+	publishStatus := func() {
+		delivered := 0
+		for _, out := range forward {
+			delivered += out.Count()
+		}
+		status := liveStatus{Imported: imported, Delivered: delivered, LastSync: time.Now().UTC()}
+		if syncErr != nil {
+			status.Error = syncErr.Error()
+		}
+		// A status file that cannot be written is not worth failing a session
+		// over, and the session's own result already reports capture errors.
+		_ = writeLiveStatus(root, provider, status)
+	}
+	publishStatus()
+
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Dir = root
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
@@ -323,6 +380,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 					syncErr = joinNativeSyncError(syncErr, err)
 				}
 			}
+			publishStatus()
 			// The command is what the operator types, which for agy is not
 			// the provider's long name.
 			command := provider
@@ -356,6 +414,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 					syncErr = joinNativeSyncError(syncErr, err)
 				}
 			}
+			publishStatus()
 		}
 	}
 }
