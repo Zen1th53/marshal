@@ -2126,8 +2126,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "e83f88eeb92c2c9355c5e9b68879410000f9eb65033e32c9d4c2fab3ac89e10f",
-      "bytes": 21308
+      "sha256": "5a8d946956318297937d48b6ac16ef57ccaa56211335ded177af2ac985bbbd53",
+      "bytes": 21750
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -8696,8 +8696,8 @@
     },
     {
       "path": "internal/tui/native_livematrix_test.go",
-      "sha256": "2badc918d03e8b499b133e1e2eb82eccf6a22d37990a347e98fba77b72f97340",
-      "bytes": 4722
+      "sha256": "6197256e13b2bd12953cc38cfe0274ddd0c38a6869ad67ddcd3b10ad94e50685",
+      "bytes": 5087
     },
     {
       "path": "internal/tui/native_livepeers.go",

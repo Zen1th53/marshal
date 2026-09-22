@@ -235,13 +235,19 @@ while the agent is running, and only two of the four have one:
 | --- | --- | :---: | :---: |
 | Claude Code | append-only JSONL | yes | yes |
 | Codex | append-only JSONL | yes | yes |
-| OpenCode | SQLite, written by the running process | no | yes |
-| Antigravity (`agy`) | per-conversation SQLite, held open | no | yes |
+| OpenCode | SQLite, reached through its CLI export | no | yes |
+| Antigravity (`agy`) | per-conversation SQLite | not yet | yes |
 
-OpenCode and Antigravity are imported into memory when their own process exits,
-so their work reaches the others at that point rather than as it happens.
-Configuring one as a live sender is refused with that reason rather than accepted
-and quietly ignored.
+The two reasons are different. **OpenCode** is a deliberate limit: MARSHAL reads
+its history through the public CLI export rather than the database, so it does
+not depend on a private schema, and running that export every few seconds would
+contend with the session that owns the database. **Antigravity** is simply not
+polled yet — its store is read directly and read-only, and whether that is sound
+while `agy` is running has not been established, so MARSHAL does not claim it.
+
+Both are imported into memory when their own process exits, so their work reaches
+the others at that point rather than as it happens. Configuring either as a live
+sender is refused rather than accepted and quietly ignored.
 
 Verified on 2026-09-22 against the installed CLIs — Claude Code 2.1.278, Codex
 0.155.1, OpenCode 1.18.16, `agy` 1.2.7 — by decoding their real transcripts with

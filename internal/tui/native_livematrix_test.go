@@ -13,12 +13,15 @@ import (
 
 // Every sender/receiver pair, exercised end to end.
 //
-// The pairs that cannot work are as interesting as the ones that can, and both
-// are asserted here rather than described in a comment somewhere: a provider
-// whose history is a database it holds open cannot be read mid-session, and no
-// amount of configuration changes that. The test fails if a future change
-// quietly makes one of those pairs appear to deliver, because that would mean
-// delivering something MARSHAL cannot actually observe.
+// The pairs that do not deliver are as interesting as the ones that do, and both
+// are asserted here rather than described in a comment somewhere. The test fails
+// if a future change quietly makes one of them appear to deliver, because that
+// would mean delivering something MARSHAL never observed.
+//
+// Why a pair does not deliver differs by provider, and deliveryReason says which
+// it is. OpenCode is a deliberate limit — its history is reached through the
+// public CLI export rather than its database. Antigravity is simply not polled
+// yet. Neither is a claim that the store could never be read.
 func TestLiveDeliveryAcrossEveryProviderPair(t *testing.T) {
 	providers := []string{"claude", "codex", "opencode", "antigravity"}
 
@@ -90,8 +93,12 @@ func deliveryReason(sender, receiver string, delivered bool) string {
 	switch {
 	case sender == receiver:
 		return "same provider; an agent is not told its own work"
+	case sender == "opencode":
+		return "history is reached through its CLI export, not its database; imported on exit"
+	case sender == "antigravity":
+		return "not polled while it runs; imported on exit"
 	case !isLiveSender(sender):
-		return "history is a database the provider holds open; imported on exit"
+		return "history cannot be read while the provider runs; imported on exit"
 	case !isLiveReceiver(receiver):
 		return "no inbox is written for this provider"
 	case delivered:
