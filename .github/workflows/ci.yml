@@ -13,16 +13,26 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# The gate used to be one serial job that ran the whole suite twice — once
+# plain, once under the race detector — and took about eighteen minutes. The
+# race run is a superset: no test is skipped under `-race`, and nothing is
+# guarded by a build tag that excludes it, so the plain run repeated work the
+# race run already covered while doubling the exposure of the timing-sensitive
+# PTY tests to a slow runner.
+#
+# What remains is split by cost rather than by topic. internal/store is its own
+# job because it alone accounts for roughly 650 seconds of race time: its tests
+# are individually fast, and the time goes on opening a fresh SQLite database
+# and replaying the full migration chain 180-odd times under instrumentation.
+# It sets the floor for the whole gate, so it starts at the same moment as
+# everything else instead of waiting behind it.
+
 jobs:
-  verify:
-    name: Runtime & Pack Verification
+  checks:
+    name: Build, vet & pack
     # Ubuntu 24.04 hosted runners restrict the user namespaces required by bwrap.
     runs-on: ubuntu-22.04
-    # The full repository-wide race suite exercises the durable SQLite
-    # migration chain.  Keep the complete gate (rather than dropping store
-    # coverage), and give it a bounded window that exceeds Go's per-package
-    # default test timeout.
-    timeout-minutes: 50
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository
@@ -46,20 +56,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install cryptography==49.0.0
 
+      # tools/tests runs the clean-install smoke test, which asserts doctor
+      # reports PASS. Without bwrap doctor degrades the sandbox check and exits
+      # non-zero, so this job needs it as much as the execution tests do.
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y bubblewrap
           bwrap --version
 
-      - name: Run Go tests and static analysis
+      # The race jobs test the instrumented build; this proves the ordinary one
+      # still compiles, which no test run here would otherwise check.
+      - name: Build and vet
         run: |
-          go test ./...
+          go build ./...
           go vet ./...
-
-      - name: Run Go test suite with race detector
-        run: |
-          go test -race -count=1 -timeout=45m ./...
 
       - name: Validate pack and run Python test suites
         run: |
@@ -75,4 +86,97 @@ jobs:
             git diff --check origin/${{ github.base_ref }}...HEAD
           else
             git diff --check HEAD~1...HEAD || true
+          fi
+
+  race-store:
+    name: Race — store
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+
+      # setup-go caches modules and the build cache keyed on go.sum, which does
+      # not distinguish an instrumented build from an ordinary one. Keying this
+      # one separately keeps each job's -race objects from evicting the other's.
+      - name: Cache race build objects
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ~/.cache/go-build
+          key: go-race-store-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-race-store-${{ runner.os }}-
+
+      - name: Run the store suite with the race detector
+        run: go test -race -count=1 -timeout=30m ./internal/store/...
+
+  race-rest:
+    name: Race — everything else
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Cache race build objects
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ~/.cache/go-build
+          key: go-race-rest-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-race-rest-${{ runner.os }}-
+
+      # Sandboxed execution is exercised outside internal/store, so bwrap is
+      # needed here; the store job is the one that can do without it.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          bwrap --version
+
+      - name: Run the remaining suites with the race detector
+        run: |
+          packages=$(go list ./... | grep -v '/internal/store$')
+          go test -race -count=1 -timeout=30m $packages
+
+  verify:
+    # The name branch protection requires. It carries no work of its own: it
+    # fails if any job above failed, so the required check still means "the
+    # whole gate passed" after the split.
+    name: Runtime & Pack Verification
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    needs: [checks, race-store, race-rest]
+    if: always()
+
+    steps:
+      # Bracket notation, because a hyphen inside a property path is the
+      # subtraction operator to the expression parser.
+      - name: Report the gate
+        env:
+          CHECKS: ${{ needs.checks.result }}
+          RACE_STORE: ${{ needs['race-store'].result }}
+          RACE_REST: ${{ needs['race-rest'].result }}
+        run: |
+          echo "checks:     $CHECKS"
+          echo "race-store: $RACE_STORE"
+          echo "race-rest:  $RACE_REST"
+          if [ "$CHECKS" != "success" ] || [ "$RACE_STORE" != "success" ] \
+            || [ "$RACE_REST" != "success" ]; then
+            echo "::error::one or more verification jobs did not pass"
+            exit 1
           fi
