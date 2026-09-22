@@ -2051,8 +2051,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "sha256": "f753dc5dff4bd7ca472a60567bc33aaa000488440a7792438508868560948877",
-      "bytes": 22314
+      "sha256": "c8ebb232ba57a6feeba70fb3b92693acfde40a5b9a0ab7bf50846dc8f33f3711",
+      "bytes": 25322
     },
     {
       "path": "CODE_OF_CONDUCT.md",
@@ -9543,6 +9543,11 @@
       "path": "release/RELEASE_NOTES_0.0.4-rc.1.md",
       "sha256": "8c19e505bec07ca2dfc6f01617f83a97bbac079c0a8a180306087852060b8903",
       "bytes": 5307
+    },
+    {
+      "path": "release/RELEASE_NOTES_0.0.4.md",
+      "sha256": "784bb2ca805da0e4dc93c1d6a2f0fcbccf8d51328402f46d6b041a6e4c8da055",
+      "bytes": 5234
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
