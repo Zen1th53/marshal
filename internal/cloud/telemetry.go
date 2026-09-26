@@ -314,6 +314,8 @@ func ClassifyError(err error) ErrorClass {
 		return ""
 	case isErr(err, ErrUnreachable):
 		return ErrorNetwork
+	case isErr(err, ErrRateLimited):
+		return ErrorRateLimited
 	case isErr(err, ErrRefused):
 		return ErrorAuth
 	case isErr(err, ErrLeaseExpired):

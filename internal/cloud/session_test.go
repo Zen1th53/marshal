@@ -26,8 +26,12 @@ type fakeServer struct {
 	refuse atomic.Bool
 	down   atomic.Bool
 
-	leases atomic.Int64
-	beats  atomic.Int64
+	leases                atomic.Int64
+	beats                 atomic.Int64
+	registrations         atomic.Int64
+	unknownChallenge      atomic.Int64
+	unknownSession        atomic.Int64
+	rateLimitRegistration atomic.Bool
 }
 
 func newFakeServer(t *testing.T) *fakeServer {
@@ -57,15 +61,30 @@ func newFakeServer(t *testing.T) *fakeServer {
 		})
 	})
 	mux.HandleFunc("/v1/installations/register", f.guard(func(w http.ResponseWriter, r *http.Request) {
+		f.registrations.Add(1)
+		if f.rateLimitRegistration.Load() {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	mux.HandleFunc("/v1/ultra/challenge", f.guard(func(w http.ResponseWriter, r *http.Request) {
+		if f.unknownChallenge.Load() > 0 {
+			f.unknownChallenge.Add(-1)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		now := time.Now().UTC()
 		json.NewEncoder(w).Encode(challenge{
 			Nonce: "nonce-fixed", IssuedAt: now, ExpiresAt: now.Add(time.Minute),
 		})
 	}))
 	mux.HandleFunc("/v1/ultra/sessions", f.guard(func(w http.ResponseWriter, r *http.Request) {
+		if f.unknownSession.Load() > 0 {
+			f.unknownSession.Add(-1)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		var body struct {
 			InstallationID string `json:"installation_id"`
 			SessionID      string `json:"session_id"`

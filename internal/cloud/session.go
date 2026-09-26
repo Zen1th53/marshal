@@ -22,7 +22,9 @@ var (
 	// means the answer is no.
 	ErrUnreachable = errors.New("cloud: unreachable")
 	// ErrRefused marks a Cloud that answered and said no.
-	ErrRefused = errors.New("cloud: refused")
+	ErrRefused             = errors.New("cloud: refused")
+	ErrRateLimited         = errors.New("cloud: registration rate limited")
+	ErrUnknownInstallation = errors.New("cloud: unknown installation")
 	// ErrInsecureEndpoint marks an endpoint that is not HTTPS.
 	ErrInsecureEndpoint = errors.New("cloud: endpoint must be https")
 )
@@ -48,9 +50,11 @@ const retryInterval = 15 * time.Second
 // separation is what keeps "what the server said" and "what we are allowed to
 // do" from drifting into the same mutable object.
 type Client struct {
-	endpoint string
-	http     *http.Client
-	version  string
+	endpoint       string
+	http           *http.Client
+	version        string
+	store          *Store
+	registrationMu sync.Mutex
 }
 
 // NewClient builds a Cloud client for an endpoint.
@@ -113,6 +117,10 @@ func (c *Client) post(ctx context.Context, path string, in, out any) error {
 
 	switch {
 	case resp.StatusCode == http.StatusOK:
+	case resp.StatusCode == http.StatusNotFound && (path == "/v1/ultra/challenge" || path == "/v1/ultra/sessions"):
+		return fmt.Errorf("%w: server returned 404", ErrUnknownInstallation)
+	case resp.StatusCode == http.StatusTooManyRequests && path == "/v1/installations/register":
+		return fmt.Errorf("%w: server returned 429; try again later", ErrRateLimited)
 	case resp.StatusCode >= 500:
 		// A server error is the Cloud failing, not the client being refused,
 		// so it degrades and retries rather than dropping the entitlement.
@@ -127,6 +135,38 @@ func (c *Client) post(ctx context.Context, path string, in, out any) error {
 		return fmt.Errorf("%w: malformed response: %s", ErrRefused, err)
 	}
 	return nil
+}
+
+// ensureRegistered enrolls only when this identity is not known at this endpoint.
+func (c *Client) ensureRegistered(ctx context.Context, st State, force bool) (bool, error) {
+	c.registrationMu.Lock()
+	defer c.registrationMu.Unlock()
+	if c.store == nil {
+		return false, nil
+	}
+	current, err := c.store.Load()
+	if err != nil {
+		return false, err
+	}
+	if !force && current.RegisteredInstallationID == st.InstallationID && current.RegisteredEndpoint == c.endpoint {
+		return false, nil
+	}
+	if force {
+		current.RegisteredInstallationID = ""
+		current.RegisteredEndpoint = ""
+		if err := c.store.Save(current); err != nil {
+			return false, err
+		}
+	}
+	if err := c.Register(ctx, st); err != nil {
+		return false, err
+	}
+	current.RegisteredInstallationID = st.InstallationID
+	current.RegisteredEndpoint = c.endpoint
+	if err := c.store.Save(current); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // Register enrolls this installation and returns the server's view of it.
@@ -162,6 +202,17 @@ type challenge struct {
 // it; with it, they would also need the private key, which never leaves the
 // machine that generated it.
 func (c *Client) StartSession(ctx context.Context, st State, sessionID string) (Lease, error) {
+	lease, err := c.startSession(ctx, st, sessionID)
+	if errors.Is(err, ErrUnknownInstallation) && c.store != nil {
+		if _, registerErr := c.ensureRegistered(ctx, st, true); registerErr != nil {
+			return Lease{}, registerErr
+		}
+		return c.startSession(ctx, st, sessionID)
+	}
+	return lease, err
+}
+
+func (c *Client) startSession(ctx context.Context, st State, sessionID string) (Lease, error) {
 	var ch challenge
 	if err := c.post(ctx, "/v1/ultra/challenge", map[string]any{
 		"installation_id": st.InstallationID,
@@ -212,6 +263,17 @@ func (c *Client) RenewLease(ctx context.Context, st State, sessionID string) (Le
 // asked and has not yet decided; nothing about this client's capability changes
 // until they do.
 func (c *Client) RequestEntitlement(ctx context.Context, st State, sessionID string) (string, error) {
+	status, err := c.requestEntitlement(ctx, st, sessionID)
+	if errors.Is(err, ErrUnknownInstallation) && c.store != nil {
+		if _, registerErr := c.ensureRegistered(ctx, st, true); registerErr != nil {
+			return "", registerErr
+		}
+		return c.requestEntitlement(ctx, st, sessionID)
+	}
+	return status, err
+}
+
+func (c *Client) requestEntitlement(ctx context.Context, st State, sessionID string) (string, error) {
 	var ch challenge
 	if err := c.post(ctx, "/v1/ultra/challenge", map[string]any{
 		"installation_id": st.InstallationID,

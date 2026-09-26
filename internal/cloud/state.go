@@ -29,6 +29,9 @@ type State struct {
 	// arrives. It is never an authority: the server re-decides entitlement on
 	// every lease request regardless of what this says.
 	CachedEntitlement string `json:"cached_entitlement,omitempty"`
+	// Registration is a cache of the last successful enrollment.
+	RegisteredInstallationID string `json:"registered_installation_id,omitempty"`
+	RegisteredEndpoint       string `json:"registered_endpoint,omitempty"`
 }
 
 // Public returns the installation's public key.

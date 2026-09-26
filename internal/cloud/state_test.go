@@ -102,6 +102,8 @@ func TestStoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new installation: %v", err)
 	}
+	fresh.RegisteredInstallationID = fresh.InstallationID
+	fresh.RegisteredEndpoint = "https://cloud.example.test"
 	if err := s.Save(fresh); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -114,6 +116,9 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if string(loaded.PrivateKey) != string(fresh.PrivateKey) {
 		t.Fatal("private key did not survive the round trip")
+	}
+	if loaded.RegisteredInstallationID != fresh.RegisteredInstallationID || loaded.RegisteredEndpoint != fresh.RegisteredEndpoint {
+		t.Fatal("registration did not survive the round trip")
 	}
 }
 
