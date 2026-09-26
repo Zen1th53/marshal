@@ -74,6 +74,11 @@ func buildBody(s UIState, th *Theme, cols, rows int) []string {
 		out = append(out, res...)
 	}
 
+	if m := marshalSection(s, th, cols); len(m) > 0 {
+		out = append(out, "")
+		out = append(out, m...)
+	}
+
 	if approvals := approvalsSection(s, th, cols); len(approvals) > 0 {
 		out = append(out, "")
 		out = append(out, approvals...)

@@ -64,6 +64,9 @@ type Workspace struct {
 	// entry path. It is nil until a Cloud session is attached, and a nil gate
 	// answers "not entitled", so the TUI's default remains Standard.
 	ultra *cloud.Gate
+	// marshal holds the active Marshal run and the approvals the person gave
+	// for it in this session. Guarded by mu for creation.
+	marshal *marshalSession
 	// ultraExecution is the user's ULTRA Execution preference. It is not an
 	// authority: with no entitlement it changes nothing.
 	ultraExecution bool
@@ -216,7 +219,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/route", "/agents", "/evidence", "/why", "/msg", "/handoff", "/checkpoint",
 			"/rollback", "/budget", "/pause", "/resume", "/cancel", "/doctor", "/tasks",
 			"/policy", "/sandbox", "/memory", "/provider", "/harness", "/model", "/models",
-			"/effort", "/ultra", "/backup", "/fingerprint", "/runtime", "/store", "/export",
+			"/effort", "/ultra", "/marshal", "/backup", "/fingerprint", "/runtime", "/store", "/export",
 			"/blind", "/reinjection", "/alignment", "/optimization", "/diff", "/review",
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
@@ -242,6 +245,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/opencode"] = []string{"new", "continue", "resume", "fork", "cli", "status", "models", "providers", "auth", "mcp", "agent", "session", "stats", "run", "debug"}
 	compCtx.Subcommands["/agy"] = []string{"new", "continue", "resume", "cli", "status", "models", "agents", "mcp", "plugin", "changelog"}
 	compCtx.Subcommands["/antigravity"] = compCtx.Subcommands["/agy"]
+	compCtx.Subcommands["/marshal"] = []string{"approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help"}
 	compCtx.Subcommands["/plugin"] = []string{"list", "add", "rm"}
 	compCtx.Subcommands["/plugins"] = []string{"list", "add", "rm"}
 	compCtx.Subcommands["/search"] = []string{"on", "off"}

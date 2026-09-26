@@ -49,6 +49,9 @@ type UIState struct {
 	// also what a failed or disabled check leaves behind.
 	UpdateAvailable string
 
+	// Marshal is the live snapshot of the active Marshal run; nil when none.
+	Marshal *MarshalPanel
+
 	LastCommand       string
 	LastOutput        string
 	LastOutputIsError bool
