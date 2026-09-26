@@ -28,6 +28,36 @@ func TestMarshalWiredUltraHasIndependentVerifier(t *testing.T) {
 	}
 }
 
+func TestInstalledCLIVersionUsesClaudeBinaryForProcess05Harness(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\nprintf 'claude-test 1.0\\n'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if got := installedCLIVersion(t.Context(), "claude-code"); got != "claude-test 1.0" {
+		t.Fatalf("claude-code harness version = %q", got)
+	}
+}
+
+func TestMarshalWiredOffersOnlyRealProcess05Harnesses(t *testing.T) {
+	fixture, _ := marshalFixture(t, 1)
+	runtime := &Runtime{store: fixture.Store, layout: project.Layout{Root: fixture.Repository, Worktrees: fixture.Worktrees}}
+	service, err := runtime.MarshalWired(MarshalWiring{Provider: "codex", Approver: func(context.Context, string, string) (string, error) { return "operator", nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"codex", "claude-code"} {
+		if service.GovernedDrivers[name] == nil {
+			t.Fatalf("real Process 05 harness %s is unavailable", name)
+		}
+	}
+	for _, name := range []string{"antigravity", "opencode"} {
+		if service.GovernedDrivers[name] != nil {
+			t.Fatalf("placeholder Process 05 harness %s was offered", name)
+		}
+	}
+}
+
 // wire replaces the fixture's gate state and verifier with the production
 // ones, so the run is judged only by what the runtime observes. The fixture
 // worker's harness is recorded as probed, with evidence, at the installed

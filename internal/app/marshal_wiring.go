@@ -98,8 +98,6 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	s.GovernedDrivers = map[string]driver.Driver{
 		"codex":       driver.Governed{Provider: "codex", Run: governedRun},
 		"claude-code": driver.Governed{Provider: "claude", Run: governedRun},
-		"antigravity": driver.Governed{Provider: "agy", Run: governedRun},
-		"opencode":    driver.Governed{Provider: "opencode", Run: governedRun},
 	}
 	s.GateState = s.observedGateState
 	s.Verify = s.verifyByChecks
@@ -169,6 +167,9 @@ func marshalHarnessName(worker string) string {
 // installedCLIVersion asks a worker's CLI for its version. `--version` is
 // answered locally by every supported CLI and opens no provider session.
 func installedCLIVersion(ctx context.Context, worker string) string {
+	if worker == "claude-code" {
+		worker = "claude"
+	}
 	versionCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(versionCtx, worker, "--version").Output()
