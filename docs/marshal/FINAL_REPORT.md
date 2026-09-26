@@ -19,9 +19,11 @@ M11 review found missing real-model PTY evidence, incomplete proof of repaint an
 ## What is not done
 
 - The governed Process 05 worker path is not wired into Marshal mode.
-- Budget charges are recorded under the `marshal.task.dispatched` event type instead of distinct decision-stage charge events.
-- A rejected ULTRA cross-review stops the run instead of returning the task for rework.
 - No real-model end-to-end run was completed. In particular, M11's PTY start, approval and completed-task criterion is NOT_RUN.
 - The M11 review's amendment approval and user task-approval surface concerns are not established as resolved by the named acceptance tests. The repaint and complete Standard-session claims also lack direct proving tests.
 
 The documentation and local tests do not claim that these gaps are closed. No implementation code was changed for M12.
+
+## Integration follow-up
+
+Later changes on `marshal/integration-final` added interactive `/marshal` planning and cached Cloud registration. The wired Marshal model now resolves its provider CLI when no binary override is set, so headless drafting can actually start. A rejected, evidence-backed ULTRA cross-review now returns its task for rework, stores its reasons with the hand-in review and records its verdict with the task decision. Usage charges now have their own `marshal.usage.charged` event. Draft validation compares every scope and check entry with its multiplicity, so duplicate entries cannot conceal a missing approved value. Dispatch checks the driver mode before creating a worktree or starting a worker; a governed task cannot silently launch a native CLI. Process 05 still needs a real governed runner wired into Marshal mode.

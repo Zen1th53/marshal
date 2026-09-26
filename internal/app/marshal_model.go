@@ -38,8 +38,12 @@ const marshalDraftSchema = `{"type":"object","properties":{"plan":{"type":"objec
 const marshalReviewSchema = `{"type":"object","properties":{"Verdict":{"type":"string"},"Reviewer":{"type":"string"},"Reasons":{"type":"array"},"EvidenceRefs":{"type":"array"}},"required":["Verdict","Reviewer"]}`
 
 func (m *MarshalCLI) turn(ctx context.Context, prompt, schema string, out any) error {
-	if m == nil || m.Binary == "" {
+	if m == nil {
 		return errors.New("Marshal CLI is unavailable")
+	}
+	binary := m.Binary
+	if binary == "" {
+		binary = m.Provider
 	}
 	var args []string
 	switch m.Provider {
@@ -74,7 +78,7 @@ func (m *MarshalCLI) turn(ctx context.Context, prompt, schema string, out any) e
 	default:
 		return fmt.Errorf("unsupported Marshal provider %q", m.Provider)
 	}
-	cmd := exec.CommandContext(ctx, m.Binary, args...)
+	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Dir = m.Dir
 	data, err := cmd.Output()
 	if err != nil {

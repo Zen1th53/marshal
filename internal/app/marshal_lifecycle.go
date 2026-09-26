@@ -62,6 +62,9 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if d == nil {
 		return MarshalDispatch{}, fmt.Errorf("no driver for %s", t.Worker)
 	}
+	if d.Mode() != t.Mode {
+		return MarshalDispatch{}, fmt.Errorf("worker %s has %s driver, task requires %s", t.Worker, d.Mode(), t.Mode)
+	}
 	wt := worktree.New(s.Repository, s.Worktrees)
 	request := model.WorktreeRequest{TaskID: worktreeTaskID(runID, taskID), Branch: t.Branch, BaseCommit: t.BaseCommit}
 	var tree model.Worktree
@@ -201,6 +204,8 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if err != nil {
 		return "", err
 	}
+	// Only the runtime may attach an independent review. Model output is a claim.
+	proposal.Independent = nil
 	if proposal.Verdict != marshal.VerdictAccept && proposal.Verdict != marshal.VerdictReturn && proposal.Verdict != marshal.VerdictReassign && proposal.Verdict != marshal.VerdictEscalate {
 		return "", errors.New("invalid model review verdict")
 	}
@@ -213,6 +218,8 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	}
 	policy := marshal.DispatchPolicy{Tier: tier, CrossReviewRequired: tier == marshal.Ultra, VerifierRequired: tier == marshal.Ultra}
 	crossReviewerProvider := ""
+	crossReviewAccepted := false
+	crossReviewData := map[string]any{}
 	if policy.CrossReviewRequired {
 		if s.CrossReview == nil {
 			return "", errors.New("cross-review is unavailable")
@@ -221,13 +228,18 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		if reviewErr != nil {
 			return "", reviewErr
 		}
-		if crossReview.Verdict != marshal.VerdictAccept || crossReview.Reviewer == "" || crossReview.Reviewer == h.Worker || crossReview.Reviewer == s.Reviewer || len(crossReview.EvidenceRefs) == 0 {
+		if (crossReview.Verdict != marshal.VerdictAccept && crossReview.Verdict != marshal.VerdictReturn && crossReview.Verdict != marshal.VerdictReassign && crossReview.Verdict != marshal.VerdictEscalate) || crossReview.Reviewer == "" || crossReview.Reviewer == h.Worker || crossReview.Reviewer == s.Reviewer || len(crossReview.EvidenceRefs) == 0 {
 			return "", errors.New("independent cross-review is incomplete")
 		}
 		crossReviewerProvider = provider
 		if err = marshal.CheckCrossReviewProvider(policy, h.Provider, crossReviewerProvider); err != nil {
 			return "", err
 		}
+		crossReviewAccepted = crossReview.Verdict == marshal.VerdictAccept
+		crossReviewData["cross_review_verdict"] = string(crossReview.Verdict)
+		crossReviewData["cross_review_reviewer"] = crossReview.Reviewer
+		crossReviewData["cross_review_provider"] = crossReviewerProvider
+		proposal.Independent = &marshal.IndependentReview{Verdict: crossReview.Verdict, Reviewer: crossReview.Reviewer, Provider: crossReviewerProvider, Reasons: crossReview.Reasons, EvidenceRefs: crossReview.EvidenceRefs}
 	}
 	met, total, _ := marshal.CriteriaMet(*t, h)
 	envelope, state, err := s.gateInputs(ctx, runID, taskID, run, constitution.DomainCompletion)
@@ -248,7 +260,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 			return "", err
 		}
 	}
-	verdict := constitution.EvaluateTaskAcceptance(constitution.Default(), envelope, state, constitution.TaskAcceptance{Mode: run.Settings.AcceptanceMode, MarshalVerdictAccept: proposal.Verdict == marshal.VerdictAccept, UserApprovalActor: userApproval, Executor: h.Worker, Reviewer: s.Reviewer, ResultCommit: h.ResultCommit, EvidenceCommit: h.ResultCommit, CriteriaMet: met, CriteriaTotal: total, IndependentReviewDone: !policy.CrossReviewRequired || crossReviewerProvider != ""})
+	verdict := constitution.EvaluateTaskAcceptance(constitution.Default(), envelope, state, constitution.TaskAcceptance{Mode: run.Settings.AcceptanceMode, MarshalVerdictAccept: proposal.Verdict == marshal.VerdictAccept, UserApprovalActor: userApproval, Executor: h.Worker, Reviewer: s.Reviewer, ResultCommit: h.ResultCommit, EvidenceCommit: h.ResultCommit, CriteriaMet: met, CriteriaTotal: total, IndependentReviewDone: !policy.CrossReviewRequired || crossReviewAccepted})
 	proposal.Reviewer = s.Reviewer
 	if _, err = s.Store.SetMarshalReview(ctx, runID, taskID, attempt, proposal); err != nil {
 		return "", err
@@ -304,7 +316,11 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	} else if result == marshal.VerdictEscalate {
 		kind = events.EventTypeMarshalEscalated
 	}
-	if err = s.record(ctx, runID, taskID, kind, map[string]any{"gate": string(verdict.Outcome), "reason": string(verdict.Reason)}); err != nil {
+	eventData := map[string]any{"gate": string(verdict.Outcome), "reason": string(verdict.Reason)}
+	for key, value := range crossReviewData {
+		eventData[key] = value
+	}
+	if err = s.record(ctx, runID, taskID, kind, eventData); err != nil {
 		return result, err
 	}
 	if result == marshal.VerdictReturn {
@@ -334,7 +350,7 @@ func (s *MarshalService) Charge(ctx context.Context, runID, taskID, phase string
 	if phase == "" {
 		return marshal.BudgetResult{}, errors.New("charge phase is required")
 	}
-	if err = s.record(ctx, runID, taskID, events.EventTypeMarshalTaskDispatched, map[string]any{"charge_phase": phase, "usage_units": charge.Tokens.Value, "usage_known": charge.Tokens.Known, "wall_ns": charge.WallTime.Nanoseconds(), "money": charge.Money.Value, "money_known": charge.Money.Known}); err != nil {
+	if err = s.record(ctx, runID, taskID, events.EventTypeMarshalUsageCharged, map[string]any{"charge_phase": phase, "usage_units": charge.Tokens.Value, "usage_known": charge.Tokens.Known, "wall_ns": charge.WallTime.Nanoseconds(), "money": charge.Money.Value, "money_known": charge.Money.Known}); err != nil {
 		return marshal.BudgetResult{}, err
 	}
 	history, err := s.Store.MarshalDecisions(ctx, runID)

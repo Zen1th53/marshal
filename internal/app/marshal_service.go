@@ -160,17 +160,15 @@ func sameStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
 	}
+	counts := make(map[string]int, len(b))
+	for _, value := range b {
+		counts[value]++
+	}
 	for _, x := range a {
-		found := false
-		for _, y := range b {
-			if x == y {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if counts[x] == 0 {
 			return false
 		}
+		counts[x]--
 	}
 	return true
 }

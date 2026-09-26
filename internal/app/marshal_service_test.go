@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -58,6 +59,34 @@ func TestStartPlanningFromDraftUsesModelValidation(t *testing.T) {
 	}
 	if _, _, err := s2.load(t.Context(), "invalid"); err == nil {
 		t.Fatal("invalid draft started a run")
+	}
+}
+
+func TestMarshalDraftCannotReplaceApprovedScopeWithDuplicate(t *testing.T) {
+	if sameStrings([]string{"a", "a"}, []string{"a", "b"}) {
+		t.Fatal("duplicate entries masked a missing approved value")
+	}
+	if !sameStrings([]string{"b", "a", "a"}, []string{"a", "b", "a"}) {
+		t.Fatal("equivalent scopes were rejected")
+	}
+}
+
+func TestMarshalGovernedTaskDoesNotLaunchNativeDriver(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 1)
+	s.Drivers["worker"] = driver.Codex("false")
+	if _, err := s.StartPlanning(ctx, "run", "write", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Dispatch(ctx, "run", "a", "write"); err == nil || !strings.Contains(err.Error(), "task requires governed") {
+		t.Fatalf("governed task was not refused before launch: %v", err)
+	}
+	run, _, err := s.load(ctx, "run")
+	if err != nil || run.Tasks[0].State != marshal.Queued {
+		t.Fatalf("failed dispatch changed task state: %+v %v", run.Tasks[0], err)
 	}
 }
 
@@ -425,7 +454,7 @@ func TestM09NativeUnknownUsageNotZero(t *testing.T) {
 	}
 	found := false
 	for _, event := range history {
-		if event.Data["charge_phase"] == "dispatch" && event.Data["usage_known"] == false {
+		if event.Type == events.EventTypeMarshalUsageCharged && event.Data["charge_phase"] == "dispatch" && event.Data["usage_known"] == false {
 			found = true
 		}
 	}
@@ -607,5 +636,52 @@ func TestM09UltraDispatchRequiresCrossReviewAndVerifier(t *testing.T) {
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "verifier", nil }
 	if v, err := s.VerifyMerged(ctx, "run", knownCharge()); err != nil || v != verification.VerifiedComplete {
 		t.Fatalf("verify %s %v", v, err)
+	}
+}
+
+func TestM09UltraRejectedCrossReviewReturnsTask(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 1)
+	s.Gate = marshalTestGate(true)
+	s.ModelProvider = "model"
+	if _, err := s.StartPlanning(ctx, "run", "write", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.Dispatch(ctx, "run", "a", "write")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CollectHandIn(ctx, "run", d); err != nil {
+		t.Fatal(err)
+	}
+	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn) (marshal.Review, string, error) {
+		return marshal.Review{Verdict: marshal.VerdictReturn, Reviewer: "second", Reasons: []string{"check failed"}, EvidenceRefs: []string{"check"}}, "other", nil
+	}
+	if verdict, err := s.Review(ctx, "run", "a", knownCharge()); err != nil || verdict != marshal.VerdictReturn {
+		t.Fatalf("rejected cross-review: verdict=%s err=%v", verdict, err)
+	}
+	run, _, err := s.load(ctx, "run")
+	if err != nil || run.Tasks[0].State != marshal.Returned || run.Tasks[0].ReturnsByAgent[run.Tasks[0].Worker] != 1 {
+		t.Fatalf("task did not enter rework: run=%+v err=%v", run, err)
+	}
+	storedReview, err := s.Store.GetMarshalReview(ctx, "run", "a", 1)
+	if err != nil || storedReview.Value.Independent == nil || storedReview.Value.Independent.Verdict != marshal.VerdictReturn || len(storedReview.Value.Independent.Reasons) != 1 {
+		t.Fatalf("independent reasons were not retained with the review: %+v %v", storedReview.Value, err)
+	}
+	history, err := s.Store.MarshalDecisions(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, event := range history {
+		if event.Type == events.EventTypeMarshalTaskReturned && event.TaskID == "a" {
+			found = event.Data["cross_review_verdict"] == string(marshal.VerdictReturn) && event.Data["cross_review_provider"] == "other"
+		}
+	}
+	if !found {
+		t.Fatal("cross-review rejection was not recorded with the task return")
 	}
 }

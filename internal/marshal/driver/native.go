@@ -32,6 +32,8 @@ type Native struct {
 	CheckTimeout time.Duration
 }
 
+func (Native) Mode() marshal.WorkerMode { return marshal.Native }
+
 // Codex runs `codex exec --json` confined to the worktree.
 func Codex(binary string) Native {
 	return Native{Provider: "codex", Binary: orDefault(binary, "codex"), Parse: parseCodex, Args: func(r Request) []string {

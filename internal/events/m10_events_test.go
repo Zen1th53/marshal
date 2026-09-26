@@ -3,7 +3,7 @@ package events
 import "testing"
 
 var marshalTypes = []EventType{
-	EventTypeMarshalRecommended, EventTypeMarshalPlanApproved, EventTypeMarshalTaskDispatched,
+	EventTypeMarshalRecommended, EventTypeMarshalPlanApproved, EventTypeMarshalTaskDispatched, EventTypeMarshalUsageCharged,
 	EventTypeMarshalTaskHandedIn, EventTypeMarshalTaskAccepted, EventTypeMarshalTaskReturned,
 	EventTypeMarshalTaskReassigned, EventTypeMarshalPlanAmended, EventTypeMarshalEscalated,
 	EventTypeMarshalTaskMerged, EventTypeMarshalRunClosed,

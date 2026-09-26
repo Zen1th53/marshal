@@ -88,3 +88,14 @@ Candidate: `marshal/m12-docs`, implementation base `6f681df6ce64211cda305948354f
 | Close requires a real checkpoint and fresh integrated evidence | PASS | `TestM07CloseRequiresCheckpointOrIrreversibilityStatement`, `TestM07CloseRequiresFreshIntegratedEvidence`, `TestM09WiredVerificationFailsWhenCheckMovesHead` |
 
 The custom merge-driver test proves rejection at hand-in validation. It is not a direct test of a driver configured on the integration repository during the merge itself.
+
+## Integration follow-up checks
+
+| Behavior | Status | Proving test |
+| --- | --- | --- |
+| Rejected ULTRA cross-review returns a task and records its verdict | PASS | `TestM09UltraRejectedCrossReviewReturnsTask` |
+| A duplicate draft entry cannot hide a missing scope or check entry | PASS | `TestMarshalDraftCannotReplaceApprovedScopeWithDuplicate` |
+| A governed task cannot launch a native driver | PASS | `TestMarshalGovernedTaskDoesNotLaunchNativeDriver` |
+| Usage charges have a distinct event type | PASS | `TestM10MarshalEventVocabulary`, `TestM09NativeUnknownUsageNotZero` |
+| Wired Marshal model resolves its provider CLI | PASS | `TestMarshalCLIDefaultBinaryRunsSelectedProvider` |
+| Process 05 governed runner wired into Marshal mode | NOT_RUN | No runner is wired in `MarshalWired`; mode mismatch is refused before launch |

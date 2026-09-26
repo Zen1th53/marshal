@@ -195,6 +195,17 @@ type Review struct {
 	Reviewer     string
 	Reasons      []string
 	EvidenceRefs []string
+	Independent  *IndependentReview
+}
+
+// IndependentReview keeps the ULTRA cross-review beside the Marshal's
+// recommendation for the same hand-in attempt.
+type IndependentReview struct {
+	Verdict      Verdict
+	Reviewer     string
+	Provider     string
+	Reasons      []string
+	EvidenceRefs []string
 }
 
 // CommandRecord captures a command's observed or reported result.

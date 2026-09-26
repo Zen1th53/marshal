@@ -81,6 +81,7 @@ type Handle struct {
 
 // Driver runs tasks on one kind of worker.
 type Driver interface {
+	Mode() marshal.WorkerMode
 	// Launch starts the task and returns at once.
 	Launch(ctx context.Context, req Request) (*Handle, error)
 	// Wait blocks until the worker exits, then assembles the hand-in.
@@ -307,6 +308,8 @@ type Governed struct {
 	Provider     string
 	CheckTimeout time.Duration
 }
+
+func (Governed) Mode() marshal.WorkerMode { return marshal.Governed }
 
 // Launch starts the governed run.
 func (g Governed) Launch(ctx context.Context, req Request) (*Handle, error) {
