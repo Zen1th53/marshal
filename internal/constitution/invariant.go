@@ -52,6 +52,7 @@ const (
 	InvNoInventedConfidence InvariantID = "CI-019-NO-INVENTED-CONFIDENCE"
 	// Article XXIV — secrets and hidden reasoning never become canonical.
 	InvSecretsNotCanonical InvariantID = "CI-020-SECRETS-NOT-CANONICAL"
+	InvNoSelfAcceptance    InvariantID = "CI-021-NO-SELF-ACCEPTANCE"
 )
 
 // Severity determines how a violated invariant is handled. It is not advisory:
@@ -234,6 +235,12 @@ func builtinInvariants() []Invariant {
 			Reason:      ReasonSelfApproval,
 			Explanation: "The requester of an action cannot also approve it.",
 			Domains:     []Domain{DomainApproval, DomainCompletion, DomainVerification, DomainMemoryPromotion},
+		},
+		{
+			ID: InvNoSelfAcceptance, Article: "XV", Severity: SeverityHard,
+			Reason:      ReasonSelfAcceptance,
+			Explanation: "A task must be reviewed by someone other than its executor.",
+			Domains:     []Domain{DomainCompletion},
 		},
 		{
 			ID: InvAuthorityPrecedence, Article: "II", Severity: SeverityHard,
