@@ -13,9 +13,12 @@ import (
 
 func TestM11MarshalUsageAndEmptyStatus(t *testing.T) {
 	_, ws, ctx := acceptanceWorkspace(t)
-	out, err := ws.ExecuteCommand(ctx, "/marshal")
+	out, err := ws.ExecuteCommand(ctx, "/marshal help")
 	if err != nil || !strings.Contains(out, "/marshal approve") {
 		t.Fatalf("usage: %q %v", out, err)
+	}
+	if _, err := ws.ExecuteCommand(ctx, "/marshal"); err == nil || !strings.Contains(err.Error(), "requires an interactive terminal") {
+		t.Fatalf("bare /marshal should launch a native session: %v", err)
 	}
 	out, err = ws.ExecuteCommand(ctx, "/marshal status")
 	if err != nil || !strings.Contains(out, "No Marshal run") {

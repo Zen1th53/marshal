@@ -198,7 +198,18 @@ func (s *MarshalService) StartPlanning(ctx context.Context, runID, goal string, 
 	if err != nil {
 		return marshal.Run{}, err
 	}
-	if err = validateDraft(d); err != nil {
+	return s.StartPlanningFromDraft(ctx, runID, goal, d, budget)
+}
+
+// StartPlanningFromDraft treats an interactive CLI draft as model output.
+func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal string, d MarshalDraft, budget marshal.Budget) (marshal.Run, error) {
+	if err := s.ready(); err != nil {
+		return marshal.Run{}, err
+	}
+	if runID == "" || goal == "" {
+		return marshal.Run{}, errors.New("missing planning input")
+	}
+	if err := validateDraft(d); err != nil {
 		return marshal.Run{}, err
 	}
 	if string(d.Plan.ProjectID) != s.ProjectID {

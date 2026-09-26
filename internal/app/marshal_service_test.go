@@ -43,6 +43,24 @@ func marshalGit(t *testing.T, dir string, args ...string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+func TestStartPlanningFromDraftUsesModelValidation(t *testing.T) {
+	s, _ := marshalFixture(t, 1)
+	draft := s.Model.(marshalFakeModel).draft
+	run, err := s.StartPlanningFromDraft(t.Context(), "interactive", "goal", draft, marshal.Budget{})
+	if err != nil || run.State != marshal.Drafting {
+		t.Fatalf("valid draft: state=%s err=%v", run.State, err)
+	}
+	s2, _ := marshalFixture(t, 1)
+	bad := s2.Model.(marshalFakeModel).draft
+	bad.Tasks[0].Worker = ""
+	if _, err := s2.StartPlanningFromDraft(t.Context(), "invalid", "goal", bad, marshal.Budget{}); err == nil {
+		t.Fatal("invalid draft accepted")
+	}
+	if _, _, err := s2.load(t.Context(), "invalid"); err == nil {
+		t.Fatal("invalid draft started a run")
+	}
+}
+
 func marshalFixture(t *testing.T, n int) (*MarshalService, string) {
 	t.Helper()
 	ctx := context.Background()

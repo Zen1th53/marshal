@@ -2,9 +2,12 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,6 +18,8 @@ import (
 )
 
 const marshalUsage = `Marshal mode — one model plans with you, then marshals the work to other agents.
+  /marshal                         Open a conversation with the Marshal
+  /marshal chat                    Open a conversation with the Marshal
   /marshal <goal>                  Draft a plan for the goal with the Marshal model
   /marshal approve                 Approve the drafted plan and start running it
   /marshal status                  Show the run, its tasks and what it is waiting for
@@ -101,9 +106,14 @@ func (w *Workspace) marshalPanel() *MarshalPanel {
 func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (string, error) {
 	w := h.ws
 	if len(args) == 0 {
-		return marshalUsage, nil
+		return w.marshalChat(ctx)
 	}
 	switch strings.ToLower(args[0]) {
+	case "chat":
+		if len(args) != 1 {
+			return "", errors.New("usage: /marshal chat")
+		}
+		return w.marshalChat(ctx)
 	case "help":
 		return marshalUsage, nil
 	case "status":
@@ -133,6 +143,97 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 	default:
 		return w.marshalStart(ctx, strings.Join(args, " "))
 	}
+}
+
+const marshalDraftRelativePath = ".marshal/marshal/plan-draft.json"
+
+func marshalChatProvider(provider string) string {
+	if provider == "agy" {
+		return "antigravity"
+	}
+	return provider
+}
+
+func marshalRoleBriefing(projectID string) string {
+	return "You are the Marshal. Plan the work with the person in this conversation. " +
+		"Do not edit project files. When the person agrees, write the plan as JSON matching the MarshalDraft schema " +
+		"(plan: ExecutionPlan; tasks: Marshal tasks) to " + marshalDraftRelativePath + ". " +
+		"Set plan.project_id to " + projectID + ". Tell the person when the draft is written. " +
+		"Only the person can approve the plan, in the MARSHAL window, with /marshal approve. " +
+		"You cannot approve it from this CLI."
+}
+
+func consumeMarshalDraft(root string) (app.MarshalDraft, bool, error) {
+	path := filepath.Join(root, marshalDraftRelativePath)
+	var draft app.MarshalDraft
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return draft, false, nil
+	} else if err != nil {
+		return draft, false, err
+	}
+	consumed := path + ".consumed"
+	if err := os.Rename(path, consumed); err != nil {
+		return draft, false, err
+	}
+	data, err := os.ReadFile(consumed)
+	if err != nil {
+		return draft, true, err
+	}
+	if err := json.Unmarshal(data, &draft); err != nil {
+		return draft, true, fmt.Errorf("invalid Marshal draft JSON: %w", err)
+	}
+	return draft, true, nil
+}
+
+func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
+	m := w.marshalSession()
+	m.mu.Lock()
+	if m.busy {
+		m.mu.Unlock()
+		return "", errors.New("a Marshal operation is already running")
+	}
+	provider := m.provider
+	m.mu.Unlock()
+	runID := fmt.Sprintf("RUN-%d", time.Now().UTC().UnixNano())
+	service, selected, note, err := w.marshalService(ctx, runID)
+	if err != nil {
+		return "", err
+	}
+	if provider == "" {
+		provider = selected
+	}
+	root := service.Repository
+	draftPath := filepath.Join(root, marshalDraftRelativePath)
+	if _, err := os.Stat(draftPath); err == nil {
+		return "", fmt.Errorf("existing Marshal draft at %s must be handled first", draftPath)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	result, sessionErr := w.runNativeAgent(ctx, marshalChatProvider(provider), nil, marshalRoleBriefing(service.ProjectID))
+	if sessionErr != nil {
+		return result, sessionErr
+	}
+	draft, exists, err := consumeMarshalDraft(root)
+	if err != nil {
+		return result, err
+	}
+	if !exists {
+		return result, nil
+	}
+	goal := draft.Plan.Goal.GoalID
+	if goal == "" {
+		goal = draft.Plan.ID
+	}
+	run, err := service.StartPlanningFromDraft(ctx, runID, goal, draft, marshal.Budget{})
+	if err != nil {
+		return result, fmt.Errorf("Marshal draft rejected: %w", err)
+	}
+	m.mu.Lock()
+	m.runID, m.service, m.provider, m.amended, m.denied = runID, service, provider, false, false
+	m.approvals = nil
+	m.mu.Unlock()
+	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan drafted: %d tasks · /marshal approve to run it", len(run.Tasks))))
+	return result + "\nMarshal plan drafted. " + note + " Use /marshal approve in MARSHAL to run it.", nil
 }
 
 func (w *Workspace) marshalSetModel(args []string) (string, error) {
