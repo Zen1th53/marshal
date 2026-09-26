@@ -86,6 +86,40 @@ func (m *Manager) Prepare(ctx context.Context, request model.WorktreeRequest) (m
 	return model.Worktree{TaskID: request.TaskID, Path: state.Path, Branch: state.Branch, HEAD: state.HEAD, Dirty: state.Dirty}, nil
 }
 
+// Resume attaches a task branch only when it still points at the recorded result.
+func (m *Manager) Resume(ctx context.Context, request model.WorktreeRequest) (model.Worktree, error) {
+	if !taskIDPattern.MatchString(request.TaskID) || request.Branch == "" || request.BaseCommit == "" {
+		return model.Worktree{}, fmt.Errorf("%w: incomplete resume request", model.ErrInvalid)
+	}
+	repository, err := canonicalPath(m.repository)
+	if err != nil {
+		return model.Worktree{}, err
+	}
+	branchHead, err := m.git(ctx, repository, "rev-parse", "--verify", "refs/heads/"+request.Branch+"^{commit}")
+	if err != nil || branchHead != request.BaseCommit {
+		return model.Worktree{}, fmt.Errorf("%w: task branch moved from recorded commit", model.ErrConflict)
+	}
+	target := filepath.Join(m.root, request.TaskID)
+	if _, err := os.Lstat(target); errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(m.root, 0o700); err != nil {
+			return model.Worktree{}, err
+		}
+		if _, err := m.git(ctx, repository, "worktree", "add", target, request.Branch); err != nil {
+			return model.Worktree{}, fmt.Errorf("reattach task worktree: %w", err)
+		}
+	} else if err != nil {
+		return model.Worktree{}, err
+	}
+	state, err := m.Inspect(ctx, target)
+	if err != nil {
+		return model.Worktree{}, err
+	}
+	if state.Branch != request.Branch || state.HEAD != request.BaseCommit || state.Dirty {
+		return model.Worktree{}, fmt.Errorf("%w: task worktree differs from recorded result", model.ErrConflict)
+	}
+	return model.Worktree{TaskID: request.TaskID, Path: state.Path, Branch: state.Branch, HEAD: state.HEAD}, nil
+}
+
 func (m *Manager) Inspect(ctx context.Context, path string) (model.WorktreeState, error) {
 	canonical, err := canonicalPath(path)
 	if err != nil {
@@ -137,8 +171,11 @@ func (m *Manager) Remove(ctx context.Context, worktree model.Worktree) error {
 	return nil
 }
 
+// git runs the manager's git commands with repository hooks disabled. Task
+// worktrees hold worker-written content; creating or reattaching one must
+// not run a post-checkout hook a worker could have configured.
 func (m *Manager) git(ctx context.Context, directory string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", directory}, args...)...)
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "core.hooksPath=/dev/null", "-C", directory}, args...)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()

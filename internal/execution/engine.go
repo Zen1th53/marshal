@@ -246,6 +246,20 @@ func (e *Engine) InitializeRun(ctx context.Context, h plan.Handoff, g model.Goal
 	return &run, nil
 }
 
+// SetPreserveBranch enables branch delivery for one run before execution.
+func (e *Engine) SetPreserveBranch(ctx context.Context, runID, baseCommit string) error {
+	run, err := e.store.GetRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if run.State != RunReady || baseCommit == "" {
+		return fmt.Errorf("%w: branch delivery requires a ready run and base commit", ErrRunInvalid)
+	}
+	run.Delivery = DeliveryPreserveBranch
+	run.BaseCommit = baseCommit
+	return e.persistRun(ctx, &run)
+}
+
 // ExecuteRun runs all tasks in DAG order under governance until completion or pause.
 func (e *Engine) ExecuteRun(ctx context.Context, runID string) (*ExecutionRun, error) {
 	return e.executeRun(ctx, runID, -1)
@@ -537,7 +551,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			}
 
 			// Prepare worktree
-			wtPath, err := e.worktrees.PrepareWorktree(ctx, t.TaskID, run.RunID)
+			wtPath, err := e.prepareTaskWorktree(ctx, run, t)
 			if err != nil {
 				if t.Mutates && lease != nil {
 					_ = e.leases.ReleaseLease(lease.LeaseID, lease.AgentID, nowUTC())
@@ -545,11 +559,16 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				return &run, fmt.Errorf("failed to prepare worktree: %w", err)
 			}
 			t.WorktreePath = wtPath
+			if run.Delivery == DeliveryPreserveBranch && t.BaseCommit == "" {
+				t.BaseCommit = run.BaseCommit
+			}
 
 			// Synthesize constraint package
 			pkg, err := BuildConstraintPackage(g, t, p)
 			if err != nil {
-				_ = e.worktrees.CleanWorktree(ctx, wtPath)
+				if run.Delivery != DeliveryPreserveBranch {
+					_ = e.worktrees.CleanWorktree(ctx, wtPath)
+				}
 				if t.Mutates && lease != nil {
 					_ = e.leases.ReleaseLease(lease.LeaseID, lease.AgentID, nowUTC())
 				}
@@ -691,7 +710,15 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				})
 			} else {
 				// Success: reconcile changes to project root
-				if t.Mutates {
+				if run.Delivery == DeliveryPreserveBranch {
+					commit, err := commitTaskWorktree(ctx, wtPath, run.RunID, t.TaskID)
+					if err != nil {
+						t.State = TaskFailed
+						t.LastFailureReason = err.Error()
+					} else {
+						t.ResultCommit = commit
+					}
+				} else if t.Mutates {
 					modifiedFiles, err := e.worktrees.ReconcileChanges(wtPath, t.TargetFiles)
 					if err != nil {
 						t.State = TaskFailed
@@ -741,7 +768,9 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			// their lease before re-admission.
 			retainLiveNativeTurn := providerApprovalPaused && result.NativeApprovalID != ""
 			if !retainLiveNativeTurn {
-				_ = e.worktrees.CleanWorktree(ctx, wtPath)
+				if run.Delivery != DeliveryPreserveBranch {
+					_ = e.worktrees.CleanWorktree(ctx, wtPath)
+				}
 				if t.Mutates && lease != nil {
 					_ = e.leases.ReleaseLease(lease.LeaseID, lease.AgentID, nowUTC())
 				}
@@ -1009,7 +1038,9 @@ func (e *Engine) CancelNativeTurn(ctx context.Context, runID, taskID, reason str
 		}
 	}
 	if task.WorktreePath != "" {
-		_ = e.worktrees.CleanWorktree(ctx, task.WorktreePath)
+		if run.Delivery != DeliveryPreserveBranch {
+			_ = e.worktrees.CleanWorktree(ctx, task.WorktreePath)
+		}
 	}
 	_, _ = e.journal.Append(JournalEvent{RunID: runID, TaskID: taskID, Actor: "MARSHAL_ENGINE", EventType: "PROVIDER_TURN_INTERRUPTED", Summary: reason})
 	return nil
