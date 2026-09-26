@@ -59,6 +59,9 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		return MarshalDispatch{}, errors.New("dispatch concurrency reached")
 	}
 	d := s.Drivers[t.Worker]
+	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
+		d = s.GovernedDrivers[t.Worker]
+	}
 	if d == nil {
 		return MarshalDispatch{}, fmt.Errorf("no driver for %s", t.Worker)
 	}

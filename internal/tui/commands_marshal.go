@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
@@ -21,6 +22,8 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal                         Open a conversation with the Marshal
   /marshal chat                    Open a conversation with the Marshal
   /marshal <goal>                  Draft a plan for the goal with the Marshal model
+  /marshal use-plan                Run the current approved one-task Process 04 plan through Process 05
+  /marshal approve-task <approval-id>  Approve a Process 05 task paused for your decision
   /marshal approve                 Approve the drafted plan and start running it
   /marshal status                  Show the run, its tasks and what it is waiting for
   /marshal close                   Close a verified run (moves the target branch)
@@ -128,6 +131,13 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 		return w.marshalSetModel(args[1:])
 	case "approve":
 		return w.marshalApprove(ctx)
+	case "use-plan":
+		if len(args) != 1 {
+			return "", errors.New("usage: /marshal use-plan")
+		}
+		return w.marshalUsePlan(ctx)
+	case "approve-task":
+		return w.marshalApproveProcess05Task(ctx, args[1:])
 	case "accept":
 		return w.marshalAccept(args[1:])
 	case "close":
@@ -430,6 +440,90 @@ func (w *Workspace) marshalActive() (*marshalSession, *app.MarshalService, strin
 		return m, nil, "", "", errors.New("no Marshal run; start one with /marshal <goal>")
 	}
 	return m, m.service, m.runID, m.provider, nil
+}
+
+func (w *Workspace) marshalUsePlan(ctx context.Context) (string, error) {
+	m := w.marshalSession()
+	runCtx, cancel, err := m.reserve()
+	if err != nil {
+		return "", err
+	}
+	started := false
+	defer func() {
+		if !started {
+			m.finish(cancel)
+		}
+	}()
+	runID := fmt.Sprintf("RUN-%d", time.Now().UTC().UnixNano())
+	service, provider, _, err := w.marshalService(ctx, runID)
+	if err != nil {
+		return "", err
+	}
+	run, err := service.BindApprovedPlan(ctx, runID)
+	if err != nil {
+		return "", err
+	}
+	m.mu.Lock()
+	m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
+	m.approvals = nil
+	m.mu.Unlock()
+	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approved Process 04 plan · running through Process 05"))
+	started = true
+	go func() {
+		defer m.finish(cancel)
+		w.marshalExecute(runCtx, m, service, runID, provider)
+	}()
+	return "Marshal is executing the approved Process 04 plan through Process 05.", nil
+}
+
+func (w *Workspace) marshalApproveProcess05Task(ctx context.Context, args []string) (string, error) {
+	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
+		return "", errors.New("usage: /marshal approve-task <approval-id>")
+	}
+	_, service, runID, _, err := w.marshalActive()
+	if err != nil {
+		return "", err
+	}
+	run, err := service.Snapshot(ctx, runID)
+	if err != nil {
+		return "", err
+	}
+	if w.runtime == nil {
+		return "", errors.New("Process 05 runtime is unavailable")
+	}
+	execService := w.runtime.Execution()
+	runs, err := execService.ListRuns(ctx)
+	if err != nil {
+		return "", err
+	}
+	bound := false
+	for _, p05 := range runs {
+		bound = bound || marshalProcess05ApprovalBound(run, p05, service.ProjectID, args[0])
+	}
+	if !bound {
+		return "", errors.New("approval does not belong to the active Marshal plan")
+	}
+	if err := execService.Approve(ctx, args[0], marshalOperator(), "approved in Marshal TUI"); err != nil {
+		return "", err
+	}
+	return "Process 05 task approved. Use /marshal resume to continue.", nil
+}
+
+func marshalProcess05ApprovalBound(run marshal.Run, p05 execution.ExecutionRun, projectID, approvalID string) bool {
+	if p05.PlanID != run.PlanID || p05.PlanVersion != run.PlanVersion || string(p05.ProjectID) != projectID || p05.Delivery != execution.DeliveryPreserveBranch || p05.BaseCommit != run.BaseCommit || p05.State != execution.RunNeedsApproval || len(p05.Tasks) != len(run.Tasks) {
+		return false
+	}
+	found := false
+	for _, task := range run.Tasks {
+		p05task, ok := p05.Tasks[task.PlanTaskID]
+		if !ok || task.Mode != marshal.Governed || task.Worker != p05task.AssignedHarness {
+			return false
+		}
+		if p05task.State == execution.TaskNeedsApproval && p05task.ApprovalID == approvalID {
+			found = true
+		}
+	}
+	return found
 }
 
 func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {

@@ -98,6 +98,6 @@ The custom merge-driver test proves rejection at hand-in validation. It is not a
 | A governed task cannot launch a native driver | PASS | `TestMarshalGovernedTaskDoesNotLaunchNativeDriver` |
 | Usage charges have a distinct event type | PASS | `TestM10MarshalEventVocabulary`, `TestM09NativeUnknownUsageNotZero` |
 | Wired Marshal model resolves its provider CLI | PASS | `TestMarshalCLIDefaultBinaryRunsSelectedProvider` |
-| Process 05 governed runner wired into Marshal mode | NOT_RUN | No runner is wired in `MarshalWired`; mode mismatch is refused before launch |
+| Process 05 governed runner wired into Marshal mode | NOT_RUN | `TestMarshalGovernedTaskUsesProcess05AndImportsExactCommit` passed with a canonical one-task plan and mock harness; multi-task plans are refused. Real provider and PTY completion remain unproved. |
 | ULTRA refuses to call runtime check reruns an independent agent | PASS | `TestMarshalWiredUltraNeedsRealIndependentVerifier` |
 | Real independent ULTRA verifier agent | NOT_RUN | `MarshalWired` now invokes a separate provider at the integrated commit. `TestMarshalWiredUltraHasIndependentVerifier`, `TestMarshalCLIIndependentVerifierBindsVerdictToHead`, and the live `TestMarshalCLIRealModelVerifier` passed; a complete ULTRA run has not. |

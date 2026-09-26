@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/projectid"
 )
 
 func TestM11MarshalUsageAndEmptyStatus(t *testing.T) {
@@ -23,6 +25,22 @@ func TestM11MarshalUsageAndEmptyStatus(t *testing.T) {
 	out, err = ws.ExecuteCommand(ctx, "/marshal status")
 	if err != nil || !strings.Contains(out, "No Marshal run") {
 		t.Fatalf("status: %q %v", out, err)
+	}
+}
+
+func TestMarshalProcess05ApprovalMustMatchActiveRun(t *testing.T) {
+	run := marshal.Run{PlanID: "PLAN-1", PlanVersion: 2, BaseCommit: "base", Tasks: []marshal.Task{{PlanTaskID: "fix", Worker: "codex", Mode: marshal.Governed}}}
+	p05 := execution.ExecutionRun{PlanID: "PLAN-1", PlanVersion: 2, ProjectID: projectid.ID("PROJECT-0123456789abcdef0123456789abcdef"), BaseCommit: "base", Delivery: execution.DeliveryPreserveBranch, State: execution.RunNeedsApproval, Tasks: map[string]execution.TaskExecution{"fix": {TaskID: "fix", AssignedHarness: "codex", State: execution.TaskNeedsApproval, ApprovalID: "approval-1"}}}
+	project := string(p05.ProjectID)
+	if !marshalProcess05ApprovalBound(run, p05, project, "approval-1") {
+		t.Fatal("bound approval was refused")
+	}
+	if marshalProcess05ApprovalBound(run, p05, project, "other") {
+		t.Fatal("unrelated approval was accepted")
+	}
+	p05.BaseCommit = "different"
+	if marshalProcess05ApprovalBound(run, p05, project, "approval-1") {
+		t.Fatal("approval for another base commit was accepted")
 	}
 }
 

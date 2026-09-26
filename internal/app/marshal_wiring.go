@@ -94,6 +94,13 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 		"agy":      driver.Agy(""),
 		"opencode": driver.OpenCode(""),
 	}
+	governedRun := r.marshalProcess05Run(s)
+	s.GovernedDrivers = map[string]driver.Driver{
+		"codex":       driver.Governed{Provider: "codex", Run: governedRun},
+		"claude-code": driver.Governed{Provider: "claude", Run: governedRun},
+		"antigravity": driver.Governed{Provider: "agy", Run: governedRun},
+		"opencode":    driver.Governed{Provider: "opencode", Run: governedRun},
+	}
 	s.GateState = s.observedGateState
 	s.Verify = s.verifyByChecks
 	return s, nil

@@ -402,6 +402,20 @@ func TestM05GovernedHandIn(t *testing.T) {
 	}
 }
 
+func TestGovernedRunnerFailureDoesNotCreateHandIn(t *testing.T) {
+	task, wt := newTask(t)
+	g := Governed{Provider: "codex", Run: func(context.Context, Request) ([]marshal.CommandRecord, error) {
+		return nil, errors.New("Process 05 requires approval")
+	}}
+	h, err := g.Launch(t.Context(), Request{Task: task, Worktree: wt, Brief: "edit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Wait(t.Context(), h); err == nil || !strings.Contains(err.Error(), "requires approval") {
+		t.Fatalf("governed failure became a hand-in: %v", err)
+	}
+}
+
 func TestM05InvalidRequestRejected(t *testing.T) {
 	_, err := Codex("").Launch(context.Background(), Request{Brief: "x"})
 	if !errors.Is(err, ErrInvalidRequest) {

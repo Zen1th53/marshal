@@ -338,6 +338,9 @@ func (g Governed) Wait(ctx context.Context, h *Handle) (marshal.HandIn, error) {
 	if err := wait(ctx, h); err != nil {
 		return marshal.HandIn{}, err
 	}
+	if h.runErr != nil {
+		return marshal.HandIn{}, h.runErr
+	}
 	id := identity{worker: h.req.Task.Worker, provider: g.Provider, model: h.req.Model, mode: marshal.Governed}
 	return assemble(ctx, h.req, id, []marshal.CommandRecord{h.observed}, h.reported, g.CheckTimeout)
 }

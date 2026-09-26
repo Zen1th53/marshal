@@ -48,6 +48,7 @@ type MarshalService struct {
 	GateState                        func(context.Context, string, string) (constitution.RuntimeState, error)
 	ApprovalActor                    func(context.Context, string, string) (string, error)
 	Drivers                          map[string]driver.Driver
+	GovernedDrivers                  map[string]driver.Driver
 	Gate                             marshal.CapabilityGate
 	Verify                           func(context.Context, marshal.Run, string) (verification.Session, verification.Binding, error)
 	// InstalledVersion reports the installed version of a worker's CLI, for
