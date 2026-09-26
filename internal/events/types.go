@@ -111,6 +111,17 @@ const (
 	EventTypeHandoffAccepted                EventType = "handoff.accepted"
 	EventTypeHandoffRejected                EventType = "handoff.rejected"
 	EventTypeHandoffConsumed                EventType = "handoff.consumed"
+	EventTypeMarshalRecommended             EventType = "marshal.recommended"
+	EventTypeMarshalPlanApproved            EventType = "marshal.plan.approved"
+	EventTypeMarshalTaskDispatched          EventType = "marshal.task.dispatched"
+	EventTypeMarshalTaskHandedIn            EventType = "marshal.task.handed_in"
+	EventTypeMarshalTaskAccepted            EventType = "marshal.task.accepted"
+	EventTypeMarshalTaskReturned            EventType = "marshal.task.returned"
+	EventTypeMarshalTaskReassigned          EventType = "marshal.task.reassigned"
+	EventTypeMarshalPlanAmended             EventType = "marshal.plan.amended"
+	EventTypeMarshalEscalated               EventType = "marshal.escalated"
+	EventTypeMarshalTaskMerged              EventType = "marshal.task.merged"
+	EventTypeMarshalRunClosed               EventType = "marshal.run.closed"
 
 	EventTypeAppended          EventType = "events.appended"
 	EventTypeSubscriberDropped EventType = "events.subscriber.dropped"
@@ -144,6 +155,11 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeTrustContentZoneAssigned: {}, EventTypeTrustContentInjectionSuspected: {},
 	EventTypeHandoffCreated: {}, EventTypeHandoffAccepted: {},
 	EventTypeHandoffRejected: {}, EventTypeHandoffConsumed: {},
+	EventTypeMarshalRecommended: {}, EventTypeMarshalPlanApproved: {},
+	EventTypeMarshalTaskDispatched: {}, EventTypeMarshalTaskHandedIn: {},
+	EventTypeMarshalTaskAccepted: {}, EventTypeMarshalTaskReturned: {},
+	EventTypeMarshalTaskReassigned: {}, EventTypeMarshalPlanAmended: {},
+	EventTypeMarshalEscalated: {}, EventTypeMarshalTaskMerged: {}, EventTypeMarshalRunClosed: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 
