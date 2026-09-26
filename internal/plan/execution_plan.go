@@ -135,8 +135,14 @@ type ExecutionPlan struct {
 	DoNotDo         []string `json:"do_not_do,omitempty"`
 
 	Tasks []Task `json:"tasks"`
-	Graph Graph  `json:"graph"`
-	Team  Team   `json:"team"`
+	// Checks are approved commands for each task. Split children inherit their parent's checks.
+	Checks map[string][]string `json:"checks,omitempty"`
+	// ParentTaskIDs identifies the original task for each split child.
+	ParentTaskIDs       map[string]string `json:"parent_task_ids,omitempty"`
+	ApprovalScopeDigest string            `json:"approval_scope_digest,omitempty"`
+	ApprovedScope       *ApprovalScope    `json:"approved_scope,omitempty"`
+	Graph               Graph             `json:"graph"`
+	Team                Team              `json:"team"`
 	// Assignments are the governed harness, model and native configuration per
 	// role. Routes remain the per-task provider choice; assignments are the
 	// fuller picture the harness layer produces.
@@ -393,6 +399,8 @@ func (p ExecutionPlan) Approve(now time.Time) (ExecutionPlan, error) {
 	}
 	approved := p
 	approved.State = StateApproved
+	approved.ApprovedScope = approvalScopeFor(p)
+	approved.ApprovalScopeDigest = approved.ApprovedScope.Digest()
 	approved.UpdatedAt = timeOrNow(now)
 	return approved, nil
 }
