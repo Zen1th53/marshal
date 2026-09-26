@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/events"
@@ -11,6 +12,15 @@ import (
 	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/projectid"
 )
+
+// canonicalPlanProjectID is the Process 03–05 project identity. Marshal's
+// local run records can still use the legacy project row in the same store.
+func (s *MarshalService) CanonicalPlanProjectID() projectid.ID {
+	if binding, found := projectid.LoadBinding(filepath.Join(s.Repository, projectid.StateDirName)); found {
+		return binding.ID
+	}
+	return projectid.ID(s.ProjectID)
+}
 
 // BindApprovedPlan starts Marshal orchestration from the exact current
 // Process 04 plan. The initial bridge handles one task; this restriction keeps
@@ -22,7 +32,8 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 	if !marshalIdentifier(runID) {
 		return marshal.Run{}, errors.New("invalid Marshal run ID")
 	}
-	p, err := s.Store.GetActivePlan(ctx, projectid.ID(s.ProjectID))
+	planProjectID := s.CanonicalPlanProjectID()
+	p, err := s.Store.GetActivePlan(ctx, planProjectID)
 	if err != nil {
 		return marshal.Run{}, err
 	}
@@ -37,7 +48,7 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 	if err != nil || active.ID != goal.ID || active.Revision != goal.Revision || !active.Confirmation.Settled() {
 		return marshal.Run{}, errors.New("Process 05 binding requires the current confirmed goal")
 	}
-	handoff, err := plan.PrepareHandoff(p, goal, projectid.ID(s.ProjectID), s.clock())
+	handoff, err := plan.PrepareHandoff(p, goal, planProjectID, s.clock())
 	if err != nil {
 		return marshal.Run{}, err
 	}

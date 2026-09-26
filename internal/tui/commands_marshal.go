@@ -498,7 +498,7 @@ func (w *Workspace) marshalApproveProcess05Task(ctx context.Context, args []stri
 	}
 	bound := false
 	for _, p05 := range runs {
-		bound = bound || marshalProcess05ApprovalBound(run, p05, service.ProjectID, args[0])
+		bound = bound || marshalProcess05ApprovalBound(run, p05, string(service.CanonicalPlanProjectID()), args[0])
 	}
 	if !bound {
 		return "", errors.New("approval does not belong to the active Marshal plan")

@@ -11,7 +11,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/plan"
-	"github.com/Zen1th53/marshal/internal/projectid"
 )
 
 // marshalProcess05Run executes one Marshal task only when it is exactly the
@@ -62,7 +61,8 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		if !sameStrings(p.Checks[req.Task.PlanTaskID], commands) {
 			return nil, errors.New("process 05: checks differ from the approved Process 04 plan")
 		}
-		active, err := s.Store.GetActivePlan(ctx, projectid.ID(s.ProjectID))
+		planProjectID := s.CanonicalPlanProjectID()
+		active, err := s.Store.GetActivePlan(ctx, planProjectID)
 		if err != nil || active.ID != p.ID || active.Version != p.Version {
 			return nil, errors.New("process 05: approved plan is no longer active")
 		}
@@ -79,7 +79,7 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 			return nil, errors.New("process 05: execution service is unavailable")
 		}
 		digest := fmt.Sprintf("%s/%s", p.Goal.RequestDigest, p.Goal.ConstraintDigest)
-		p05, err := service.StartRunBound(ctx, goal.SessionID, projectid.ID(s.ProjectID), p.ID, p.Version, digest)
+		p05, err := service.StartRunBound(ctx, goal.SessionID, planProjectID, p.ID, p.Version, digest)
 		if err != nil {
 			return nil, err
 		}
