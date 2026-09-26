@@ -9,8 +9,21 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
+
+func TestMarshalWiredUltraNeedsRealIndependentVerifier(t *testing.T) {
+	fixture, _ := marshalFixture(t, 1)
+	runtime := &Runtime{store: fixture.Store, layout: project.Layout{Root: fixture.Repository, Worktrees: fixture.Worktrees}}
+	service, err := runtime.MarshalWired(MarshalWiring{Provider: "codex", Approver: func(context.Context, string, string) (string, error) { return "operator", nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.requireIndependentVerifier(t.Context(), marshal.Run{Tier: marshal.Ultra}); err == nil {
+		t.Fatal("production wiring treated runtime check reruns as an independent agent")
+	}
+}
 
 // wire replaces the fixture's gate state and verifier with the production
 // ones, so the run is judged only by what the runtime observes. The fixture

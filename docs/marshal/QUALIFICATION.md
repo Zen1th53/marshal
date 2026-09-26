@@ -99,3 +99,5 @@ The custom merge-driver test proves rejection at hand-in validation. It is not a
 | Usage charges have a distinct event type | PASS | `TestM10MarshalEventVocabulary`, `TestM09NativeUnknownUsageNotZero` |
 | Wired Marshal model resolves its provider CLI | PASS | `TestMarshalCLIDefaultBinaryRunsSelectedProvider` |
 | Process 05 governed runner wired into Marshal mode | NOT_RUN | No runner is wired in `MarshalWired`; mode mismatch is refused before launch |
+| ULTRA refuses to call runtime check reruns an independent agent | PASS | `TestMarshalWiredUltraNeedsRealIndependentVerifier` |
+| Real independent ULTRA verifier agent | NOT_RUN | No verifier agent is wired in `MarshalWired` |

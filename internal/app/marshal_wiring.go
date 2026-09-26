@@ -68,9 +68,9 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 		review.Reviewer = "cross-review:" + provider
 		return review, provider, err
 	}
-	// The independent verifier is the runtime itself: verification re-runs
-	// the approved checks on the integrated result and consults no model.
-	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "marshal-runtime", nil }
+	// Runtime check reruns are mandatory, but they are not an independent
+	// verifier agent. Until one is wired, ULTRA verification fails closed.
+	s.VerifierProvider = nil
 	s.Drivers = map[string]driver.Driver{
 		"codex":    driver.Codex(""),
 		"claude":   driver.Claude(""),

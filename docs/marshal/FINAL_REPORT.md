@@ -19,6 +19,7 @@ M11 review found missing real-model PTY evidence, incomplete proof of repaint an
 ## What is not done
 
 - The governed Process 05 worker path is not wired into Marshal mode.
+- ULTRA has no independent verifier agent wired into the production service. Runtime check reruns remain mandatory and ULTRA close refuses without an agent.
 - No real-model end-to-end run was completed. In particular, M11's PTY start, approval and completed-task criterion is NOT_RUN.
 - The M11 review's amendment approval and user task-approval surface concerns are not established as resolved by the named acceptance tests. The repaint and complete Standard-session claims also lack direct proving tests.
 
