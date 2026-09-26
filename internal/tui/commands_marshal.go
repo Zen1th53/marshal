@@ -42,8 +42,14 @@ type marshalSession struct {
 	cancel    context.CancelFunc
 	busy      bool
 	amended   bool
-	denied    bool
+	pending   *marshalAmendment
 	approvals map[string]bool
+}
+
+type marshalAmendment struct {
+	draft       app.MarshalDraft
+	reason      string
+	planVersion int64
 }
 
 // grant records that the person just approved purpose for runID. An approval
@@ -229,7 +235,7 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		return result, fmt.Errorf("Marshal draft rejected: %w", err)
 	}
 	m.mu.Lock()
-	m.runID, m.service, m.provider, m.amended, m.denied = runID, service, provider, false, false
+	m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
 	m.approvals = nil
 	m.mu.Unlock()
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan drafted: %d tasks · /marshal approve to run it", len(run.Tasks))))
@@ -383,7 +389,7 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 	}
 	runID := fmt.Sprintf("RUN-%d", time.Now().UTC().UnixNano())
 	m.mu.Lock()
-	m.runID, m.service, m.amended, m.denied = runID, nil, false, false
+	m.runID, m.service, m.amended, m.pending = runID, nil, false, nil
 	provider := m.provider
 	m.approvals = nil
 	m.mu.Unlock()
@@ -431,12 +437,6 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	m.mu.Lock()
-	denied := m.denied
-	m.mu.Unlock()
-	if denied {
-		return "", errors.New("amendment was denied; enter a new goal or amendment")
-	}
 	runCtx, cancel, err := m.reserve()
 	if err != nil {
 		return "", err
@@ -444,6 +444,18 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 	w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: provider, State: marshal.Drafting, Note: "approving plan…"})
 	go func() {
 		defer m.finish(cancel)
+		m.mu.Lock()
+		pending := m.pending
+		m.mu.Unlock()
+		if pending != nil {
+			if _, err := service.ApplyAmendDraftBound(runCtx, runID, pending.reason, pending.draft, pending.planVersion); err != nil {
+				w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: provider, State: marshal.Drafting, Note: "amendment failed: " + err.Error()})
+				return
+			}
+			m.mu.Lock()
+			m.pending = nil
+			m.mu.Unlock()
+		}
 		m.grant(runID, "plan")
 		run, err := service.Approve(runCtx, runID)
 		if err != nil {
@@ -516,6 +528,12 @@ func (w *Workspace) marshalClose(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	m.mu.Lock()
+	pending := m.pending != nil
+	m.mu.Unlock()
+	if pending {
+		return "", errors.New("decide the proposed amendment before closing")
+	}
 	runCtx, cancel, err := m.reserve()
 	if err != nil {
 		return "", err
@@ -551,6 +569,12 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	m.mu.Lock()
+	pending := m.pending != nil
+	m.mu.Unlock()
+	if pending {
+		return "", errors.New("decide the proposed amendment before resuming")
+	}
 	runCtx, cancel, err := m.reserve()
 	if err != nil {
 		return "", err
@@ -582,18 +606,33 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 	}
 	go func() {
 		defer m.finish(cancel)
-		run, err := service.Amend(runCtx, runID, reason)
+		draft, major, err := service.ProposeAmend(runCtx, runID, reason)
 		if err != nil {
-			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "amendment failed: "+err.Error()))
+			w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: provider, Note: "amendment failed: " + err.Error()})
 			return
 		}
 		note := "amended in scope"
-		if run.State == marshal.Drafting {
+		if major {
+			run, err := service.Resume(runCtx, runID)
+			if err != nil {
+				w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: provider, Note: "amendment failed: " + err.Error()})
+				return
+			}
 			m.mu.Lock()
 			m.amended = true
-			m.denied = false
+			m.pending = &marshalAmendment{draft: draft, reason: reason, planVersion: run.PlanVersion}
 			m.mu.Unlock()
-			note = "major amendment drafted · /marshal amend approve or deny"
+			note = "major amendment proposed · /marshal amend approve or deny"
+			preview := run
+			preview.Tasks = draft.Tasks
+			preview.State = marshal.Drafting
+			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, preview, note))
+			return
+		}
+		run, err := service.ApplyAmendDraft(runCtx, runID, reason, draft)
+		if err != nil {
+			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "amendment failed: "+err.Error()))
+			return
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, note))
 	}()
@@ -619,16 +658,23 @@ func (w *Workspace) marshalAmendDeny() (string, error) {
 		return "", errors.New("no major amendment awaits a decision")
 	}
 	m.amended = false
-	m.denied = true
+	m.pending = nil
 	runID := m.runID
+	service, provider := m.service, m.provider
 	m.mu.Unlock()
+	if service != nil {
+		if run, err := service.Snapshot(context.Background(), runID); err == nil {
+			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "amendment denied · original plan remains active"))
+			return "Amendment denied. The original plan remains active.", nil
+		}
+	}
 	p := w.marshalPanel()
 	if p != nil && p.RunID == runID {
 		copy := *p
-		copy.Note = "amendment denied · run waits for a new goal or amendment"
+		copy.Note = "amendment denied"
 		w.marshalPublish(m, runID, &copy)
 	}
-	return "Amendment denied. The run waits for a new goal or amendment.", nil
+	return "Amendment denied.", nil
 }
 
 func (w *Workspace) marshalAccept(args []string) (string, error) {

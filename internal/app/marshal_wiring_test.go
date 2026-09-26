@@ -13,15 +13,18 @@ import (
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
-func TestMarshalWiredUltraNeedsRealIndependentVerifier(t *testing.T) {
+func TestMarshalWiredUltraHasIndependentVerifier(t *testing.T) {
 	fixture, _ := marshalFixture(t, 1)
 	runtime := &Runtime{store: fixture.Store, layout: project.Layout{Root: fixture.Repository, Worktrees: fixture.Worktrees}}
 	service, err := runtime.MarshalWired(MarshalWiring{Provider: "codex", Approver: func(context.Context, string, string) (string, error) { return "operator", nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.requireIndependentVerifier(t.Context(), marshal.Run{Tier: marshal.Ultra}); err == nil {
-		t.Fatal("production wiring treated runtime check reruns as an independent agent")
+	if err := service.requireIndependentVerifier(t.Context(), marshal.Run{Tier: marshal.Ultra}); err != nil {
+		t.Fatal(err)
+	}
+	if service.IndependentVerify == nil {
+		t.Fatal("independent verifier is not wired")
 	}
 }
 

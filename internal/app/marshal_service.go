@@ -44,6 +44,7 @@ type MarshalService struct {
 	ModelProvider                    string
 	CrossReview                      func(context.Context, marshal.Task, marshal.HandIn) (marshal.Review, string, error)
 	VerifierProvider                 func(context.Context, marshal.Run) (string, error)
+	IndependentVerify                func(context.Context, marshal.Run, string, verification.Session) error
 	GateState                        func(context.Context, string, string) (constitution.RuntimeState, error)
 	ApprovalActor                    func(context.Context, string, string) (string, error)
 	Drivers                          map[string]driver.Driver
@@ -105,6 +106,12 @@ func (s *MarshalService) load(ctx context.Context, runID string) (marshal.Run, i
 	}
 	r, err := s.Store.GetMarshalRun(ctx, s.ProjectID, runID)
 	return r.Value, r.Revision, err
+}
+
+// Snapshot reads a Marshal run without changing worker or plan state.
+func (s *MarshalService) Snapshot(ctx context.Context, runID string) (marshal.Run, error) {
+	run, _, err := s.load(ctx, runID)
+	return run, err
 }
 func taskIndex(run marshal.Run, id string) int {
 	for i := range run.Tasks {

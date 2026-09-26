@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -289,6 +290,37 @@ func TestM09MajorAmendmentPausesDispatch(t *testing.T) {
 	}
 	if _, err = s.Dispatch(ctx, "run", "a", "write"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMajorAmendmentProposalDoesNotMutateBeforeApproval(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 1)
+	if _, err := s.StartPlanning(ctx, "run", "write file", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	approved, err := s.Approve(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := s.Model.(marshalFakeModel).draft
+	changed := original
+	changed.Plan.Budget.MaxTasks = 2
+	s.Model = marshalFakeModel{draft: original, amend: changed}
+	draft, major, err := s.ProposeAmend(ctx, "run", "increase budget")
+	if err != nil || !major {
+		t.Fatalf("proposal major=%v err=%v", major, err)
+	}
+	current, _, err := s.load(ctx, "run")
+	if err != nil || current.PlanVersion != approved.PlanVersion || current.State != marshal.Approved {
+		t.Fatalf("proposal changed the run: %+v %v", current, err)
+	}
+	if _, err := s.ApplyAmendDraftBound(ctx, "run", "increase budget", draft, approved.PlanVersion+1); err == nil {
+		t.Fatal("stale proposal was applied")
+	}
+	current, err = s.ApplyAmendDraftBound(ctx, "run", "increase budget", draft, approved.PlanVersion)
+	if err != nil || current.State != marshal.Drafting {
+		t.Fatalf("approved proposal not staged for plan approval: %+v %v", current, err)
 	}
 }
 
@@ -634,6 +666,12 @@ func TestM09UltraDispatchRequiresCrossReviewAndVerifier(t *testing.T) {
 		t.Fatal("ULTRA verified without independent verifier")
 	}
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "verifier", nil }
+	s.IndependentVerify = func(_ context.Context, _ marshal.Run, head string, session verification.Session) error {
+		if session.Binding.TreeDigest != head {
+			return errors.New("verifier saw a different commit")
+		}
+		return nil
+	}
 	if v, err := s.VerifyMerged(ctx, "run", knownCharge()); err != nil || v != verification.VerifiedComplete {
 		t.Fatalf("verify %s %v", v, err)
 	}

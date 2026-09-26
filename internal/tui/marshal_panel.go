@@ -24,10 +24,13 @@ type MarshalPanel struct {
 
 // MarshalTaskRow is one task as the panel shows it.
 type MarshalTaskRow struct {
-	ID      string
-	Worker  string
-	State   marshal.TaskState
-	Returns int
+	ID       string
+	Worker   string
+	State    marshal.TaskState
+	Returns  int
+	Criteria []string
+	Files    []string
+	Checks   []string
 }
 
 // newMarshalPanel snapshots a run for the panel.
@@ -38,7 +41,11 @@ func newMarshalPanel(runID, provider string, run marshal.Run, note string) *Mars
 		for _, n := range t.ReturnsByAgent {
 			returns += n
 		}
-		p.Tasks = append(p.Tasks, MarshalTaskRow{ID: t.PlanTaskID, Worker: t.Worker, State: t.State, Returns: returns})
+		row := MarshalTaskRow{ID: t.PlanTaskID, Worker: t.Worker, State: t.State, Returns: returns, Criteria: append([]string(nil), t.Criteria...), Files: append([]string(nil), t.Files...)}
+		for _, check := range t.Checks {
+			row.Checks = append(row.Checks, check.Command)
+		}
+		p.Tasks = append(p.Tasks, row)
 	}
 	return p
 }
@@ -110,6 +117,15 @@ func marshalStatusText(p *MarshalPanel) string {
 			fmt.Fprintf(&b, " (returned %d)", t.Returns)
 		}
 		b.WriteString("\n")
+		if len(t.Criteria) > 0 {
+			fmt.Fprintf(&b, "    criteria: %s\n", strings.Join(t.Criteria, "; "))
+		}
+		if len(t.Files) > 0 {
+			fmt.Fprintf(&b, "    files: %s\n", strings.Join(t.Files, ", "))
+		}
+		if len(t.Checks) > 0 {
+			fmt.Fprintf(&b, "    checks: %s\n", strings.Join(t.Checks, "; "))
+		}
 	}
 	b.WriteString(marshalBudgetText(p) + "\n")
 	if p.Note != "" {

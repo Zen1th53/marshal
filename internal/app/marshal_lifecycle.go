@@ -523,6 +523,11 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 		return verification.Blocked, err
 	}
 	result := verification.Evaluate(session, binding, s.clock())
+	if run.Tier == marshal.Ultra && result == verification.VerifiedComplete {
+		if err = s.IndependentVerify(ctx, run, head, session); err != nil {
+			return verification.Blocked, err
+		}
+	}
 	budget, err := s.Charge(ctx, runID, "", "verification", charge)
 	if err != nil {
 		return result, err
@@ -565,6 +570,11 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	session, binding, err := s.Verify(ctx, run, head)
 	if err != nil || verification.Evaluate(session, binding, s.clock()) != verification.VerifiedComplete {
 		return errors.New("integrated result is not verified")
+	}
+	if run.Tier == marshal.Ultra {
+		if err = s.IndependentVerify(ctx, run, head, session); err != nil {
+			return err
+		}
 	}
 	// What moves the target must be exactly the commit that was verified.
 	if after, err := gitMarshal(ctx, dir, "rev-parse", "HEAD"); err != nil || after != head {
@@ -627,16 +637,53 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 }
 
 func (s *MarshalService) Amend(ctx context.Context, runID, reason string) (marshal.Run, error) {
+	d, _, err := s.ProposeAmend(ctx, runID, reason)
+	if err != nil {
+		return marshal.Run{}, err
+	}
+	return s.ApplyAmendDraft(ctx, runID, reason, d)
+}
+
+// ProposeAmend computes and validates an amendment without changing the run.
+// The UI can show a major proposal and discard it when the user denies it.
+func (s *MarshalService) ProposeAmend(ctx context.Context, runID, reason string) (MarshalDraft, bool, error) {
+	run, _, err := s.load(ctx, runID)
+	if err != nil {
+		return MarshalDraft{}, false, err
+	}
+	if s.Model == nil || strings.TrimSpace(reason) == "" {
+		return MarshalDraft{}, false, errors.New("missing amendment input")
+	}
+	d, err := s.Model.Amend(ctx, run, reason)
+	if err != nil {
+		return MarshalDraft{}, false, err
+	}
+	if err = validateDraft(d); err != nil {
+		return MarshalDraft{}, false, err
+	}
+	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
+	if err != nil {
+		return MarshalDraft{}, false, err
+	}
+	_, err = p.AmendScoped(p.Version, reason, d.Plan)
+	return d, err != nil, nil
+}
+
+// ApplyAmendDraft rechecks the proposal against the current plan revision.
+func (s *MarshalService) ApplyAmendDraft(ctx context.Context, runID, reason string, d MarshalDraft) (marshal.Run, error) {
+	return s.ApplyAmendDraftBound(ctx, runID, reason, d, 0)
+}
+
+func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason string, d MarshalDraft, expectedPlanVersion int64) (marshal.Run, error) {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return run, err
 	}
-	if s.Model == nil || reason == "" {
-		return run, errors.New("missing amendment input")
+	if expectedPlanVersion != 0 && run.PlanVersion != expectedPlanVersion {
+		return run, errors.New("amendment proposal is stale")
 	}
-	d, err := s.Model.Amend(ctx, run, reason)
-	if err != nil {
-		return run, err
+	if strings.TrimSpace(reason) == "" {
+		return run, errors.New("missing amendment input")
 	}
 	if err = validateDraft(d); err != nil {
 		return run, err
@@ -848,7 +895,7 @@ func (s *MarshalService) requireIndependentVerifier(ctx context.Context, run mar
 	if run.Tier != marshal.Ultra {
 		return nil
 	}
-	if s.VerifierProvider == nil || s.ModelProvider == "" {
+	if s.VerifierProvider == nil || s.IndependentVerify == nil || s.ModelProvider == "" {
 		return errors.New("independent verifier is unavailable")
 	}
 	provider, err := s.VerifierProvider(ctx, run)

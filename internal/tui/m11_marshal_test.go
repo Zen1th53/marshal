@@ -107,6 +107,16 @@ func TestM11PanelShowsTasks(t *testing.T) {
 	}
 }
 
+func TestM11StatusShowsProposedTaskScope(t *testing.T) {
+	run := marshal.Run{State: marshal.Drafting, Tasks: []marshal.Task{{PlanTaskID: "write", Worker: "codex", Criteria: []string{"file exists"}, Files: []string{"hello.txt"}, Checks: []marshal.Check{{Command: "test -f hello.txt"}}}}}
+	status := marshalStatusText(newMarshalPanel("RUN-1", "claude", run, "review before approval"))
+	for _, want := range []string{"file exists", "hello.txt", "test -f hello.txt"} {
+		if !strings.Contains(status, want) {
+			t.Fatalf("proposal scope missing %q: %s", want, status)
+		}
+	}
+}
+
 func TestM11SettingsRoundTrip(t *testing.T) {
 	_, ws, ctx := acceptanceWorkspace(t)
 	if _, err := ws.ExecuteCommand(ctx, "/marshal settings acceptance-mode marshal"); err != nil {
@@ -152,6 +162,7 @@ func TestM11StandardDecisionCommands(t *testing.T) {
 	m.mu.Lock()
 	m.runID = "RUN-1"
 	m.amended = true
+	m.pending = &marshalAmendment{reason: "proposal"}
 	m.mu.Unlock()
 	ws.setMarshalPanel(&MarshalPanel{RunID: "RUN-1", State: marshal.Drafting, Tasks: []MarshalTaskRow{{ID: "task-1"}}})
 	if _, err := ws.ExecuteCommand(ctx, "/marshal accept missing"); err == nil {
@@ -171,6 +182,12 @@ func TestM11StandardDecisionCommands(t *testing.T) {
 	}
 	if p := ws.marshalPanel(); p == nil || !strings.Contains(p.Note, "amendment denied") {
 		t.Fatalf("denial not shown: %+v", p)
+	}
+	m.mu.Lock()
+	pending := m.pending
+	m.mu.Unlock()
+	if pending != nil {
+		t.Fatal("denied amendment remains pending")
 	}
 	if _, err := ws.ExecuteCommand(ctx, "/marshal amend approve"); err == nil {
 		t.Fatal("denied amendment was approved")

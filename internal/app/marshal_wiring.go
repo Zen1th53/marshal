@@ -51,7 +51,7 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	if w.Approver == nil {
 		return nil, errors.New("marshal: an approval source is required")
 	}
-	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository}
+	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository, ProjectID: s.ProjectID}
 	s.ModelProvider = w.Provider
 	s.Reviewer = "marshal:" + w.Provider
 	s.Gate = w.Gate
@@ -68,9 +68,26 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 		review.Reviewer = "cross-review:" + provider
 		return review, provider, err
 	}
-	// Runtime check reruns are mandatory, but they are not an independent
-	// verifier agent. Until one is wired, ULTRA verification fails closed.
-	s.VerifierProvider = nil
+	// Runtime checks and an independent model must both accept the integrated
+	// commit. A new model session is used for each verification decision.
+	s.VerifierProvider = func(_ context.Context, run marshal.Run) (string, error) {
+		exclude := []string{w.Provider}
+		for _, task := range run.Tasks {
+			exclude = append(exclude, task.Worker)
+		}
+		provider := otherMarshalProvider(exclude...)
+		if provider == "" {
+			return "", errors.New("marshal: no independent verifier provider")
+		}
+		return provider, nil
+	}
+	s.IndependentVerify = func(ctx context.Context, run marshal.Run, head string, session verification.Session) error {
+		provider, err := s.VerifierProvider(ctx, run)
+		if err != nil || provider == "" || provider == w.Provider {
+			return errors.New("marshal: independent verifier provider is unavailable")
+		}
+		return (&MarshalCLI{Provider: provider, Dir: filepath.Join(s.Worktrees, "TASK-"+marshalRunID(run)+"-integration")}).Verify(ctx, run, head, session)
+	}
 	s.Drivers = map[string]driver.Driver{
 		"codex":    driver.Codex(""),
 		"claude":   driver.Claude(""),
