@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -170,35 +169,35 @@ func marshalChatProvider(provider string) string {
 	return provider
 }
 
-func marshalRoleBriefing(projectID string) string {
+// marshalRoleBriefing asks for the task list only. The runtime builds the
+// plan around it, so the model never has to reproduce plan identity, the
+// constitution binding or the graph digest.
+func marshalRoleBriefing(workers []string) string {
 	return "You are the Marshal. Plan the work with the person in this conversation. " +
-		"Do not edit project files. When the person agrees, write the plan as JSON matching the MarshalDraft schema " +
-		"(plan: ExecutionPlan; tasks: Marshal tasks) to " + marshalDraftRelativePath + ". " +
-		"Set plan.project_id to " + projectID + ". Tell the person when the draft is written. " +
+		"Do not edit project files. When the person agrees, write the plan to " + marshalDraftRelativePath + " as JSON of the form " +
+		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","checks":["executable commands"]}]}` +
+		" and nothing else. Every field is required; use an empty list for no dependencies. " +
+		"Assign each task to one of these workers: " + strings.Join(workers, ", ") + ". " +
+		"Criteria must be checkable and every task needs at least one check command. Tell the person when the draft is written. " +
 		"Only the person can approve the plan, in the MARSHAL window, with /marshal approve. " +
 		"You cannot approve it from this CLI."
 }
 
-func consumeMarshalDraft(root string) (app.MarshalDraft, bool, error) {
+// consumeMarshalDraft takes the draft file out of the way before reading it,
+// so a rejected draft is never picked up twice.
+func consumeMarshalDraft(root string) ([]byte, bool, error) {
 	path := filepath.Join(root, marshalDraftRelativePath)
-	var draft app.MarshalDraft
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return draft, false, nil
+		return nil, false, nil
 	} else if err != nil {
-		return draft, false, err
+		return nil, false, err
 	}
 	consumed := path + ".consumed"
 	if err := os.Rename(path, consumed); err != nil {
-		return draft, false, err
+		return nil, false, err
 	}
 	data, err := os.ReadFile(consumed)
-	if err != nil {
-		return draft, true, err
-	}
-	if err := json.Unmarshal(data, &draft); err != nil {
-		return draft, true, fmt.Errorf("invalid Marshal draft JSON: %w", err)
-	}
-	return draft, true, nil
+	return data, true, err
 }
 
 func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
@@ -225,16 +224,20 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
-	result, sessionErr := w.runNativeAgent(ctx, marshalChatProvider(provider), nil, marshalRoleBriefing(service.ProjectID))
+	result, sessionErr := w.runNativeAgent(ctx, marshalChatProvider(provider), nil, marshalRoleBriefing(app.MarshalWorkers(provider)))
 	if sessionErr != nil {
 		return result, sessionErr
 	}
-	draft, exists, err := consumeMarshalDraft(root)
+	data, exists, err := consumeMarshalDraft(root)
 	if err != nil {
 		return result, err
 	}
 	if !exists {
 		return result, nil
+	}
+	draft, err := service.DraftFromProposal(data, provider)
+	if err != nil {
+		return result, fmt.Errorf("Marshal draft rejected: %w", err)
 	}
 	goal := draft.Plan.Goal.GoalID
 	if goal == "" {
