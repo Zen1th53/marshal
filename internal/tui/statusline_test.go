@@ -66,6 +66,8 @@ func TestStatuslineIsExactlyOneRow(t *testing.T) {
 	state := UIState{
 		ProjectID:          "PROJECT-local",
 		SessionMode:        "ULTRA",
+		UltraEntitled:      true,
+		UltraExecution:     true,
 		UnderstandingState: model.GoalReady,
 		GitStatus:          GitStatusResult{Branch: "feat/a-very-long-branch-name", Clean: false, ChangedCount: 7},
 		Participants: []model.Participant{
@@ -99,6 +101,8 @@ func TestStatuslineDropsByPriority(t *testing.T) {
 	state := UIState{
 		ProjectID:          "PROJECT-local",
 		SessionMode:        "ULTRA",
+		UltraEntitled:      true,
+		UltraExecution:     true,
 		UnderstandingState: model.GoalReady,
 		GitStatus:          GitStatusResult{Branch: "main", Clean: true},
 		Participants:       []model.Participant{{AgentID: "codex", IsActive: true}},

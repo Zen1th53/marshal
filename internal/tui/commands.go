@@ -631,6 +631,7 @@ func (h *CommandHandler) helpText() string {
   /goal [outcome]          View or update the active GoalContract
   /marshal <goal>          Plan with a Marshal model, then marshal the work to agents (/marshal help)
   /mode [manual|auto]       Switch operating supervision mode; ULTRA requires entitlement
+  /ultra [status|request]  Show verified ULTRA status or request entitlement
   /agents                  List registered participants, fixed roles, and harnesses
   /claims                  List active claims and epistemic verification states
   /learning <id>           Inspect a Process 07 memory commit, promotions and refusals

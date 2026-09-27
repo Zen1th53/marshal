@@ -19,6 +19,8 @@ func TestOneScreenObservabilityRendering(t *testing.T) {
 		ProjectID:          "test-proj",
 		SessionID:          "sess-12345",
 		SessionMode:        "ULTRA",
+		UltraEntitled:      true,
+		UltraExecution:     true,
 		UnderstandingState: model.GoalReady,
 		TerminationState:   model.StateSuccess,
 		Goal: model.GoalContract{

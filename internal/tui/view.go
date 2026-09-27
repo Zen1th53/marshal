@@ -24,6 +24,8 @@ type UIState struct {
 	ProjectID          string
 	SessionID          string
 	SessionMode        string // "manual", "auto", "ULTRA"
+	UltraEntitled      bool
+	UltraExecution     bool
 	Goal               model.GoalContract
 	UnderstandingState model.UnderstandingState
 	TerminationState   model.TerminationState
@@ -57,6 +59,20 @@ type UIState struct {
 	LastOutputIsError bool
 }
 
+func ultraActive(s UIState) bool {
+	return s.UltraEntitled && s.UltraExecution
+}
+
+func ultraBadge(s UIState) string {
+	if ultraActive(s) {
+		return "ULTRA ACTIVE"
+	}
+	if s.UltraEntitled {
+		return "ULTRA EXEC OFF"
+	}
+	return ""
+}
+
 // RenderScreen renders the workspace screen with default theme for backward compatibility.
 func RenderScreen(s UIState, width int) string {
 	return RenderStyledScreen(s, NewTheme(ThemeDefault, true, true), width)
@@ -83,6 +99,9 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 	mode := strings.ToUpper(s.SessionMode)
 	if mode == "" {
 		mode = "MANUAL"
+	}
+	if mode == "ULTRA" && !ultraActive(s) {
+		mode = "STANDARD"
 	}
 	state := string(s.UnderstandingState)
 	if state == "" {
@@ -115,6 +134,9 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 		th.BoxHoriz,
 		th.Colorize(th.Success, state),
 	)
+	if badge := ultraBadge(s); badge != "" {
+		headerLeft += th.Colorize(th.Ultra, " "+badge+" ")
+	}
 	headerRight := fmt.Sprintf(" %s ", th.Colorize(th.Muted, gitText))
 
 	// The header emits: corner + left + fill + right + one rule + corner.
