@@ -35,7 +35,7 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 			return nil, errors.New("process 05: task does not match the approved Marshal run")
 		}
 		stored := run.Tasks[storedIndex]
-		if stored.Worker != req.Task.Worker || stored.Branch != req.Task.Branch || !sameStrings(stored.Files, req.Task.Files) || !sameStrings(stored.Criteria, req.Task.Criteria) || len(stored.Checks) != len(req.Task.Checks) {
+		if stored.Title != req.Task.Title || stored.Worker != req.Task.Worker || stored.Branch != req.Task.Branch || !sameStrings(stored.Files, req.Task.Files) || !sameStrings(stored.Criteria, req.Task.Criteria) || len(stored.Checks) != len(req.Task.Checks) {
 			return nil, errors.New("process 05: dispatch differs from the stored Marshal task")
 		}
 		for i, check := range stored.Checks {
@@ -65,7 +65,7 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 				approvedTask = &p.Tasks[i]
 			}
 		}
-		if approvedTask == nil || !sameStrings(approvedTask.Paths, req.Task.Files) || !sameStrings(approvedTask.Criteria, req.Task.Criteria) || !sameStrings(approvedTask.DependsOn, req.Task.DependsOn) {
+		if approvedTask == nil || approvedTask.Title != req.Task.Title || !sameStrings(approvedTask.Paths, req.Task.Files) || !sameStrings(approvedTask.Criteria, req.Task.Criteria) || !sameStrings(approvedTask.DependsOn, req.Task.DependsOn) {
 			return nil, errors.New("process 05: Marshal task differs from the approved Process 04 plan")
 		}
 		commands := make([]string, 0, len(req.Task.Checks))

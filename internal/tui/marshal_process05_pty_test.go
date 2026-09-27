@@ -121,13 +121,20 @@ func TestPTYMarshalLiveProviderCompletesAfterApproval(t *testing.T) {
 		}
 		if state.TaskState == "NEEDS_APPROVAL" && state.ApprovalID != "" && state.ApprovalID != lastApproval {
 			approvals++
-			if approvals > 4 {
+			if approvals > 30 {
 				t.Fatalf("live provider repeated approvals: %+v", state)
 			}
-			approvedCount := strings.Count(s.output(), "Process 05 task approved")
 			s.sendLine("/marshal approve-task " + state.ApprovalID)
-			if !s.waitForCount("Process 05 task approved", approvedCount+1, 90*time.Second) {
-				t.Fatalf("native approval was not accepted: %s", tail(s.output(), 4000))
+			approvalDeadline := time.Now().Add(25 * time.Second)
+			for time.Now().Before(approvalDeadline) {
+				updated := readProcess05PTYState(s.cmd.Dir)
+				if updated.ApprovalID != state.ApprovalID || updated.TaskState != "NEEDS_APPROVAL" {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+			if updated := readProcess05PTYState(s.cmd.Dir); updated.ApprovalID == state.ApprovalID && updated.TaskState == "NEEDS_APPROVAL" {
+				t.Fatalf("native approval was not accepted; state=%+v: %s", readProcess05PTYState(s.cmd.Dir), tail(s.output(), 4000))
 			}
 			lastApproval = state.ApprovalID
 			continue

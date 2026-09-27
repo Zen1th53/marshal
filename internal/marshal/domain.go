@@ -138,6 +138,7 @@ type Check struct {
 // Task binds an approved plan task to its worker, branch, and checks.
 type Task struct {
 	PlanTaskID     string
+	Title          string
 	ParentID       string
 	Worker         string
 	Mode           WorkerMode

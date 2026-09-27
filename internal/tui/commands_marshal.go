@@ -626,6 +626,9 @@ func marshalOutcomeNote(run marshal.Run, err error) string {
 func marshalTaskBrief(t marshal.Task) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You are a worker on MARSHAL task %s.\n", t.PlanTaskID)
+	if t.Title != "" {
+		fmt.Fprintf(&b, "Task: %s\n", t.Title)
+	}
 	if len(t.Criteria) > 0 {
 		b.WriteString("Acceptance criteria:\n")
 		for _, c := range t.Criteria {
