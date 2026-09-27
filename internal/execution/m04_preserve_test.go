@@ -18,6 +18,37 @@ func TestM04DefaultDeliveryExistingProcess05(t *testing.T) {
 	}
 }
 
+func TestM04LiveNativeTurnReusesOnlyBoundDirtyWorktree(t *testing.T) {
+	repo := testgit.New(t)
+	ctx := context.Background()
+	engine, err := NewEngine(EngineConfig{ProjectRoot: repo.Path()}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := ExecutionRun{RunID: "native-resume", Delivery: DeliveryPreserveBranch, BaseCommit: repo.HEAD(t)}
+	task := TaskExecution{TaskID: "task-1", BaseCommit: run.BaseCommit}
+	path, err := engine.prepareTaskWorktree(ctx, run, task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "approved.txt"), []byte("provider changed this"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.prepareTaskWorktree(ctx, run, task); err == nil {
+		t.Fatal("ordinary admission accepted a dirty worktree")
+	}
+	task.WorktreePath = path
+	task.NativeTurn = &NativeTurnBinding{Provider: "codex-app-server", ThreadID: "thread", TurnID: "turn", Worktree: path}
+	reused, err := engine.prepareTaskWorktree(ctx, run, task)
+	if err != nil || reused != path {
+		t.Fatalf("bound live turn could not reuse dirty worktree: %q, %v", reused, err)
+	}
+	task.NativeTurn.Worktree = repo.Path()
+	if _, err := engine.prepareTaskWorktree(ctx, run, task); err == nil {
+		t.Fatal("different native worktree was accepted")
+	}
+}
+
 func TestM04ExecuteTaskBoundLeavesSiblingPending(t *testing.T) {
 	repo := testgit.New(t)
 	ctx := context.Background()

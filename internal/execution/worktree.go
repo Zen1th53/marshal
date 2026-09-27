@@ -35,6 +35,35 @@ func (e *Engine) prepareTaskWorktree(ctx context.Context, run ExecutionRun, task
 		baseCommit = task.BaseCommit
 	}
 	request := model.WorktreeRequest{TaskID: branchTaskID(task.TaskID), Branch: "marshal/" + run.RunID + "/" + task.TaskID, BaseCommit: baseCommit}
+	if task.NativeTurn != nil {
+		// The live provider may already have changed its worktree after approval.
+		// Reuse only the exact persisted path, branch, and base commit; Prepare
+		// intentionally rejects dirty worktrees for every other admission.
+		expected := filepath.Join(e.cfg.ProjectRoot, ".marshal", "branches", request.TaskID)
+		expectedAbs, err := filepath.Abs(expected)
+		if err != nil {
+			return "", err
+		}
+		boundAbs, err := filepath.Abs(task.WorktreePath)
+		if err != nil {
+			return "", err
+		}
+		nativeAbs, err := filepath.Abs(task.NativeTurn.Worktree)
+		if err != nil {
+			return "", err
+		}
+		if task.WorktreePath == "" || task.NativeTurn.Worktree == "" || boundAbs != expectedAbs || nativeAbs != expectedAbs || task.ResultCommit != "" {
+			return "", fmt.Errorf("%w: native turn worktree binding differs", model.ErrConflict)
+		}
+		state, err := e.branchManager().Inspect(ctx, expectedAbs)
+		if err != nil {
+			return "", err
+		}
+		if state.Path != expectedAbs || state.Branch != request.Branch || state.HEAD != request.BaseCommit {
+			return "", fmt.Errorf("%w: native turn worktree identity differs", model.ErrConflict)
+		}
+		return state.Path, nil
+	}
 	if task.ResultCommit != "" {
 		request.BaseCommit = task.ResultCommit
 		wt, err := e.branchManager().Resume(ctx, request)

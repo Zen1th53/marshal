@@ -657,6 +657,16 @@ func (c *appServerConnection) waitTurn(ctx context.Context, expected AppServerTu
 		err  error
 	}
 	for {
+		if line, ok := c.stream.popPending(); ok {
+			result, err := c.handleTurnLine(line, expected)
+			if err != nil || result != nil {
+				if result != nil {
+					return *result, err
+				}
+				return AppServerTurnResult{}, err
+			}
+			continue
+		}
 		done := make(chan readResult, 1)
 		go func() {
 			line, err := c.stream.out.ReadBytes('\n')
@@ -669,66 +679,76 @@ func (c *appServerConnection) waitTurn(ctx context.Context, expected AppServerTu
 			if read.err != nil {
 				return AppServerTurnResult{}, read.err
 			}
-			var envelope struct {
-				ID     json.RawMessage `json:"id"`
-				Method string          `json:"method"`
-				Params json.RawMessage `json:"params"`
-			}
-			if err := json.Unmarshal(bytes.TrimSpace(read.line), &envelope); err != nil {
-				return AppServerTurnResult{}, fmt.Errorf("decode app-server notification: %w", err)
-			}
-			if len(envelope.ID) > 0 && envelope.Method != "" {
-				approval, err := appServerApprovalFromRequest(envelope)
-				if err != nil {
-					return AppServerTurnResult{}, err
+			result, err := c.handleTurnLine(read.line, expected)
+			if err != nil || result != nil {
+				if result != nil {
+					return *result, err
 				}
-				if c.pending == nil {
-					c.pending = make(map[string]AppServerApprovalRequest)
-				}
-				c.pending[approval.RequestID] = approval
-				return AppServerTurnResult{}, &AppServerApprovalRequiredError{Request: approval}
+				return AppServerTurnResult{}, err
 			}
-			if envelope.Method != "turn/completed" {
-				continue
-			}
-			var complete struct {
-				ThreadID string `json:"threadId"`
-				Turn     struct {
-					ID     string `json:"id"`
-					Status string `json:"status"`
-					Error  *struct {
-						Message string `json:"message"`
-					} `json:"error"`
-					Items []struct {
-						Type string `json:"type"`
-						Text string `json:"text"`
-					} `json:"items"`
-				} `json:"turn"`
-			}
-			if err := json.Unmarshal(envelope.Params, &complete); err != nil {
-				return AppServerTurnResult{}, fmt.Errorf("decode completed turn: %w", err)
-			}
-			// The app-server protocol defines turn/completed as {turn}; unlike
-			// approval requests, threadId is optional here.  The turn ID is the
-			// durable correlation key returned by turn/start.  Require a supplied
-			// thread ID to match, but do not discard a protocol-valid terminal
-			// event merely because it omits that redundant field.
-			if (complete.ThreadID != "" && complete.ThreadID != expected.ThreadID) || complete.Turn.ID != expected.TurnID {
-				continue
-			}
-			var finalText string
-			for _, item := range complete.Turn.Items {
-				if item.Type == "agentMessage" && item.Text != "" {
-					finalText = item.Text
-				}
-			}
-			var errMsg string
-			if complete.Turn.Error != nil && complete.Turn.Error.Message != "" {
-				errMsg = complete.Turn.Error.Message
-			}
-			return AppServerTurnResult{ThreadID: expected.ThreadID, TurnID: complete.Turn.ID, Status: complete.Turn.Status, FinalText: finalText, ErrorMessage: errMsg}, nil
 		}
 	}
+}
+
+func (c *appServerConnection) handleTurnLine(line []byte, expected AppServerTurn) (*AppServerTurnResult, error) {
+	var envelope struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+		Params json.RawMessage `json:"params"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(line), &envelope); err != nil {
+		return nil, fmt.Errorf("decode app-server notification: %w", err)
+	}
+	if len(envelope.ID) > 0 && envelope.Method != "" {
+		approval, err := appServerApprovalFromRequest(envelope)
+		if err != nil {
+			return nil, err
+		}
+		if c.pending == nil {
+			c.pending = make(map[string]AppServerApprovalRequest)
+		}
+		c.pending[approval.RequestID] = approval
+		return nil, &AppServerApprovalRequiredError{Request: approval}
+	}
+	if envelope.Method != "turn/completed" {
+		return nil, nil
+	}
+	var complete struct {
+		ThreadID string `json:"threadId"`
+		Turn     struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+			Error  *struct {
+				Message string `json:"message"`
+			} `json:"error"`
+			Items []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"items"`
+		} `json:"turn"`
+	}
+	if err := json.Unmarshal(envelope.Params, &complete); err != nil {
+		return nil, fmt.Errorf("decode completed turn: %w", err)
+	}
+	// The app-server protocol defines turn/completed as {turn}; unlike
+	// approval requests, threadId is optional here.  The turn ID is the
+	// durable correlation key returned by turn/start.  Require a supplied
+	// thread ID to match, but do not discard a protocol-valid terminal
+	// event merely because it omits that redundant field.
+	if (complete.ThreadID != "" && complete.ThreadID != expected.ThreadID) || complete.Turn.ID != expected.TurnID {
+		return nil, nil
+	}
+	var finalText string
+	for _, item := range complete.Turn.Items {
+		if item.Type == "agentMessage" && item.Text != "" {
+			finalText = item.Text
+		}
+	}
+	var errMsg string
+	if complete.Turn.Error != nil && complete.Turn.Error.Message != "" {
+		errMsg = complete.Turn.Error.Message
+	}
+	return &AppServerTurnResult{ThreadID: expected.ThreadID, TurnID: complete.Turn.ID, Status: complete.Turn.Status, FinalText: finalText, ErrorMessage: errMsg}, nil
 }
 
 func appServerApprovalFromRequest(envelope struct {
@@ -810,11 +830,22 @@ func appServerApprovalDigest(approval AppServerApprovalRequest) (string, error) 
 }
 
 type appServerStream struct {
-	in  io.Writer
-	out *bufio.Reader
+	in      io.Writer
+	out     *bufio.Reader
+	pending [][]byte
 }
 
-func (s appServerStream) call(id int, method string, params any) (json.RawMessage, error) {
+func (s *appServerStream) popPending() ([]byte, bool) {
+	if len(s.pending) == 0 {
+		return nil, false
+	}
+	line := s.pending[0]
+	s.pending[0] = nil
+	s.pending = s.pending[1:]
+	return line, true
+}
+
+func (s *appServerStream) call(id int, method string, params any) (json.RawMessage, error) {
 	request := map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params}
 	encoded, err := json.Marshal(request)
 	if err != nil {
@@ -840,9 +871,9 @@ func (s appServerStream) call(id int, method string, params any) (json.RawMessag
 		}
 		var responseID int
 		if len(envelope.ID) == 0 || json.Unmarshal(envelope.ID, &responseID) != nil || responseID != id {
-			// Notifications and server-initiated requests cannot be treated as
-			// implicit approval.  This narrow session-only client never starts a
-			// turn, so it simply ignores notifications here.
+			// Turn notifications and server requests can arrive before the
+			// turn/start response. Preserve them for WaitTurn in wire order.
+			s.pending = append(s.pending, line)
 			continue
 		}
 		if envelope.Error != nil {

@@ -359,16 +359,19 @@ func (s *ExecutionService) resolveClaudeStreamApproval(ctx context.Context, appr
 		// Process 05, rather than the TUI, owns continuation. The background
 		// operation waits only on the existing native turn and cannot issue a
 		// second turn because the persisted binding is already present.
-		go func(runID string, turnCtx context.Context) {
+		go func(runID, approvalID string, turnCtx context.Context) {
 			if turnCtx == nil {
+				_ = s.engine.FailNativeResume(context.Background(), approvalID, "native provider continuation has no live turn context")
 				return
 			}
 			// The native turn owns turnCtx and its cleanup cancels it once a
 			// terminal event arrives. Process 05 still needs one final scheduler
 			// pass to durably record COMPLETED_PENDING_VERIFY; inheriting that
 			// cancellation would rewrite a completed run as PAUSED.
-			_, _ = s.resumeNativeRun(context.WithoutCancel(turnCtx), runID)
-		}(approval.RunID, live.runCtx)
+			if _, err := s.resumeNativeRun(context.WithoutCancel(turnCtx), runID); err != nil {
+				_ = s.engine.FailNativeResume(context.Background(), approvalID, "native provider continuation failed: "+err.Error())
+			}
+		}(approval.RunID, approval.ApprovalID, live.runCtx)
 		return nil
 	}
 	if err := s.engine.ApprovalManager().Deny(approval.ApprovalID, operator, rationale, s.now()); err != nil {
@@ -466,8 +469,9 @@ func (s *ExecutionService) resolveCodexAppServerApproval(ctx context.Context, ap
 		// Process 05, rather than the TUI, owns continuation. The background
 		// operation waits only on the existing native turn and cannot issue a
 		// second turn/start because the persisted binding is already present.
-		go func(runID string, turnCtx context.Context) {
+		go func(runID, approvalID string, turnCtx context.Context) {
 			if turnCtx == nil {
+				_ = s.engine.FailNativeResume(context.Background(), approvalID, "native provider continuation has no live turn context")
 				return
 			}
 			// The native turn owns turnCtx and its cleanup cancels it once a
@@ -475,8 +479,10 @@ func (s *ExecutionService) resolveCodexAppServerApproval(ctx context.Context, ap
 			// final scheduler pass to durably record COMPLETED_PENDING_VERIFY;
 			// inheriting that provider cleanup cancellation would incorrectly
 			// rewrite an otherwise completed run as PAUSED.
-			_, _ = s.resumeNativeRun(context.WithoutCancel(turnCtx), runID)
-		}(approval.RunID, live.runCtx)
+			if _, err := s.resumeNativeRun(context.WithoutCancel(turnCtx), runID); err != nil {
+				_ = s.engine.FailNativeResume(context.Background(), approvalID, "native provider continuation failed: "+err.Error())
+			}
+		}(approval.RunID, approval.ApprovalID, live.runCtx)
 		return nil
 	}
 	if err := s.engine.ApprovalManager().Deny(approval.ApprovalID, operator, rationale, s.now()); err != nil {

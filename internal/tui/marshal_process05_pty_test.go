@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,7 +76,7 @@ func startApprovedProcess05PTY(t *testing.T, modelName, reviewer string) *ptySes
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Checks = map[string][]string{"fix": {"grep -q fixed README.md"}}
+	p.Checks = map[string][]string{"fix": {"printf 'fixed\\n' | cmp - README.md"}}
 	if err := runtime.Store().SavePlan(ctx, p, p.Version); err != nil {
 		t.Fatal(err)
 	}
@@ -97,8 +98,11 @@ func startApprovedProcess05PTY(t *testing.T, modelName, reviewer string) *ptySes
 	if len(match) != 2 {
 		t.Fatalf("approval ID not shown: %s", tail(s.output(), 3000))
 	}
+	approvedCount := strings.Count(s.output(), "Process 05 task approved")
 	s.sendLine("/marshal approve-task " + match[1])
-	s.mustSee("Process 05 task approved")
+	if !s.waitForCount("Process 05 task approved", approvedCount+1, 8*time.Second) {
+		t.Fatalf("Process 05 approval was not acknowledged: %s", tail(s.output(), 3000))
+	}
 	return s
 }
 
@@ -111,12 +115,20 @@ func TestPTYMarshalLiveProviderCompletesAfterApproval(t *testing.T) {
 	deadline := time.Now().Add(4 * time.Minute)
 	approvals := 0
 	lastApproval := ""
+	lastState := ""
+	lastProgress := time.Now()
 	for time.Now().Before(deadline) {
-		state := readProcess05PTYState(s.cmd.Dir)
+		state, err := readProcess05PTYState(s.cmd.Dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if marker := state.State + "/" + state.TaskState + "/" + state.ApprovalID; marker != lastState {
+			lastState, lastProgress = marker, time.Now()
+		}
 		if state.TaskState == "COMPLETED_PENDING_VERIFY" {
 			break
 		}
-		if state.TaskState == "FAILED" || state.State == "FAILED" {
+		if state.TaskState == "FAILED" || state.State == "FAILED" || state.TaskState == "BLOCKED" || state.State == "BLOCKED" {
 			t.Fatalf("live worker failed: %s", state.Reason)
 		}
 		if state.TaskState == "NEEDS_APPROVAL" && state.ApprovalID != "" && state.ApprovalID != lastApproval {
@@ -124,60 +136,96 @@ func TestPTYMarshalLiveProviderCompletesAfterApproval(t *testing.T) {
 			if approvals > 30 {
 				t.Fatalf("live provider repeated approvals: %+v", state)
 			}
+			if !state.NativeTurn {
+				t.Fatalf("unexpected non-native approval after initial approval: %+v", state)
+			}
 			s.sendLine("/marshal approve-task " + state.ApprovalID)
 			approvalDeadline := time.Now().Add(25 * time.Second)
 			for time.Now().Before(approvalDeadline) {
-				updated := readProcess05PTYState(s.cmd.Dir)
+				updated, err := readProcess05PTYState(s.cmd.Dir)
+				if err != nil {
+					t.Fatal(err)
+				}
 				if updated.ApprovalID != state.ApprovalID || updated.TaskState != "NEEDS_APPROVAL" {
 					break
 				}
 				time.Sleep(100 * time.Millisecond)
 			}
-			if updated := readProcess05PTYState(s.cmd.Dir); updated.ApprovalID == state.ApprovalID && updated.TaskState == "NEEDS_APPROVAL" {
-				t.Fatalf("native approval was not accepted; state=%+v: %s", readProcess05PTYState(s.cmd.Dir), tail(s.output(), 4000))
+			if updated, err := readProcess05PTYState(s.cmd.Dir); err != nil {
+				t.Fatal(err)
+			} else if updated.ApprovalID == state.ApprovalID && updated.TaskState == "NEEDS_APPROVAL" {
+				t.Fatalf("native approval was not consumed; state=%+v: %s", updated, tail(s.output(), 4000))
 			}
 			lastApproval = state.ApprovalID
 			continue
 		}
+		if time.Since(lastProgress) > 2*time.Minute {
+			t.Fatalf("live task made no durable progress for two minutes: %+v %s", state, tail(s.output(), 4000))
+		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	state := readProcess05PTYState(s.cmd.Dir)
+	state, err := readProcess05PTYState(s.cmd.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if state.TaskState != "COMPLETED_PENDING_VERIFY" {
 		t.Fatalf("live provider did not complete: %+v %s", state, tail(s.output(), 1200))
 	}
+	// The fixture starts with "conformance\n"; require the intended edit itself,
+	// not merely a successful provider turn or a substring match.
+	result, err := os.ReadFile(filepath.Join(state.WorktreePath, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(result) != "fixed\n" {
+		t.Fatalf("unexpected README.md in result worktree: %q", result)
+	}
 	s.sendLine("/marshal resume")
-	if !s.waitFor("verified · /marshal close", 30*time.Second) {
-		t.Fatalf("completed live task was not verified: %+v %s", state, tail(s.output(), 2000))
+	if !s.waitFor("verified · /marshal close", 90*time.Second) {
+		t.Fatalf("completed live task was not verified: %+v %s", state, tail(s.output(), 10000))
 	}
 }
 
 type process05PTYState struct {
-	State      string
-	TaskState  string
-	ApprovalID string
-	Reason     string
+	State        string
+	TaskState    string
+	ApprovalID   string
+	Reason       string
+	NativeTurn   bool
+	WorktreePath string
 }
 
-func readProcess05PTYState(project string) process05PTYState {
-	paths, _ := filepath.Glob(filepath.Join(project, ".marshal", "execution", "runs", "*.json"))
+func readProcess05PTYState(project string) (process05PTYState, error) {
+	paths, err := filepath.Glob(filepath.Join(project, ".marshal", "execution", "runs", "*.json"))
+	if err != nil {
+		return process05PTYState{}, err
+	}
 	if len(paths) == 0 {
-		return process05PTYState{}
+		return process05PTYState{}, nil
+	}
+	if len(paths) != 1 {
+		return process05PTYState{}, fmt.Errorf("expected one Process 05 run, found %d", len(paths))
 	}
 	data, err := os.ReadFile(paths[0])
 	if err != nil {
-		return process05PTYState{Reason: err.Error()}
+		return process05PTYState{}, err
 	}
 	var run struct {
 		State string `json:"state"`
 		Tasks map[string]struct {
-			State      string `json:"state"`
-			ApprovalID string `json:"approval_id"`
-			Reason     string `json:"last_failure_reason"`
+			State        string          `json:"state"`
+			ApprovalID   string          `json:"approval_id"`
+			Reason       string          `json:"last_failure_reason"`
+			NativeTurn   json.RawMessage `json:"native_turn"`
+			WorktreePath string          `json:"worktree_path"`
 		} `json:"tasks"`
 	}
 	if err := json.Unmarshal(data, &run); err != nil {
-		return process05PTYState{Reason: err.Error()}
+		return process05PTYState{}, err
 	}
-	task := run.Tasks["fix"]
-	return process05PTYState{State: run.State, TaskState: task.State, ApprovalID: task.ApprovalID, Reason: task.Reason}
+	task, ok := run.Tasks["fix"]
+	if !ok {
+		return process05PTYState{}, fmt.Errorf("Process 05 run has no fix task: %s", paths[0])
+	}
+	return process05PTYState{State: run.State, TaskState: task.State, ApprovalID: task.ApprovalID, Reason: task.Reason, NativeTurn: len(task.NativeTurn) > 0 && string(task.NativeTurn) != "null", WorktreePath: task.WorktreePath}, nil
 }

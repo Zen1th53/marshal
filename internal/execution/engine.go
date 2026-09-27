@@ -1032,6 +1032,46 @@ func (e *Engine) ResumeNativeApproval(ctx context.Context, approvalID string) er
 	return nil
 }
 
+// FailNativeResume records a continuation failure only if the exact consumed
+// approval still owns an unfinished task and no executor is active for the run.
+// The store update supplies the final CAS against concurrent state changes.
+func (e *Engine) FailNativeResume(ctx context.Context, approvalID, reason string) error {
+	app, err := e.approvals.GetApproval(approvalID)
+	if err != nil {
+		return err
+	}
+	if !IsNativeProviderApproval(app.OperationType) || app.Status != ApprovalConsumed {
+		return fmt.Errorf("%w: native approval is not consumed", ErrApprovalRequired)
+	}
+	e.operationMu.Lock()
+	defer e.operationMu.Unlock()
+	if _, running := e.activeRuns[app.RunID]; running {
+		return nil // Another executor owns the continuation.
+	}
+	run, err := e.store.GetRun(ctx, app.RunID)
+	if err != nil {
+		return err
+	}
+	task, ok := run.Tasks[app.TaskID]
+	if run.State != RunRunning || !ok || task.ApprovalID != approvalID || task.NativeTurn == nil || (task.State != TaskReady && task.State != TaskRunning) {
+		return nil // The continuation has already moved or been decided.
+	}
+	now := time.Now().UTC()
+	task.State = TaskBlocked
+	task.LastFailureReason = reason
+	task.UpdatedAt = now
+	run.Tasks[app.TaskID] = task
+	run.State = RunBlocked
+	run.CurrentPhase = PhaseTerminated
+	run.UpdatedAt = now
+	run.Failures = append(run.Failures, RunFailure{TaskID: app.TaskID, Stage: "NATIVE_RESUME", Reason: reason, Recoverable: false, Timestamp: now})
+	if err := e.persistRun(ctx, &run); err != nil {
+		return err
+	}
+	_, _ = e.journal.Append(JournalEvent{RunID: run.RunID, TaskID: task.TaskID, Actor: "MARSHAL_ENGINE", EventType: "PROVIDER_RESUME_FAILED", Summary: reason})
+	return nil
+}
+
 // FailNativeApproval records an operator rejection (or unavailable native
 // connection) as a terminal Process 05 block. It deliberately does not leave
 // a paused provider turn eligible for a later generic retry.
