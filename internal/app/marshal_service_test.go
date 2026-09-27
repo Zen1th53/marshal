@@ -328,10 +328,14 @@ func TestM09MergeConflictReturnsAtIntegrationHead(t *testing.T) {
 	ctx := context.Background()
 	s, repo := marshalFixture(t, 2)
 	draft := s.Model.(marshalFakeModel).draft
+	// Independent tasks that change the same file: a dependent task starts
+	// from the integration head and could not conflict with its dependency.
 	for i := range draft.Tasks {
 		draft.Tasks[i].Files = []string{"README.md"}
 		draft.Tasks[i].Checks = []marshal.Check{{Command: "test -f README.md", Criteria: draft.Tasks[i].Criteria}}
+		draft.Tasks[i].DependsOn = nil
 		draft.Plan.Tasks[i].Paths = []string{"README.md"}
+		draft.Plan.Tasks[i].DependsOn = nil
 		draft.Plan.Checks[draft.Tasks[i].PlanTaskID] = []string{"test -f README.md"}
 	}
 	draft.Plan.Graph, _ = plan.BuildGraph(draft.Plan.Tasks)
