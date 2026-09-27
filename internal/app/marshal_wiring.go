@@ -59,12 +59,12 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	s.InstalledVersion = installedCLIVersion
 	// ULTRA cross-review comes from a model of a provider other than both the
 	// worker's and the Marshal's, so no model family reviews its own work.
-	s.CrossReview = func(ctx context.Context, task marshal.Task, handin marshal.HandIn) (marshal.Review, string, error) {
+	s.CrossReview = func(ctx context.Context, task marshal.Task, handin marshal.HandIn, control marshal.Control) (marshal.Review, string, error) {
 		provider := otherMarshalProvider(w.Provider, handin.Provider)
 		if provider == "" {
 			return marshal.Review{}, "", errors.New("marshal: no independent provider is available for cross-review")
 		}
-		review, err := (&MarshalCLI{Provider: provider, Dir: s.Repository}).Review(ctx, task, handin)
+		review, err := (&MarshalCLI{Provider: provider, Dir: s.Repository}).Review(ctx, task, handin, control)
 		review.Reviewer = "cross-review:" + provider
 		return review, provider, err
 	}

@@ -90,6 +90,9 @@ func (p ExecutionPlan) AmendScoped(expectedVersion int64, reason string, next Ex
 				!sameStrings(next.Checks[child.ID], p.ApprovedScope.Checks[id]) {
 				return refuse("a task changed its approved criteria, files, permissions or checks")
 			}
+			if child.Instructions != old.Instructions {
+				return refuse("a task changed its approved instructions")
+			}
 			for _, value := range child.Criteria {
 				criteria[value] = true
 			}

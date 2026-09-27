@@ -5,10 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
 func TestMarshalChatBriefingAndLaunchDecision(t *testing.T) {
-	brief := marshalRoleBriefing([]string{"codex", "agy"})
+	brief := marshalRoleBriefing([]string{"codex", "agy"}, marshal.ControlFree)
 	for _, phrase := range []string{"You are the Marshal", marshalDraftRelativePath, "Do not edit project files", "Only the person can approve", "/marshal approve", `{"tasks":[`, "codex, agy"} {
 		if !strings.Contains(brief, phrase) {
 			t.Errorf("briefing lacks %q", phrase)
