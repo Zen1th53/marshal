@@ -8,14 +8,48 @@ import (
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 // MarshalObserver receives the run after every step, so a surface can show
 // progress without polling the store.
 type MarshalObserver func(marshal.Run)
 
+// BriefContext is what a worker's brief needs beyond its approved task.
+type BriefContext struct {
+	// Control is the run's approved control level.
+	Control marshal.Control
+	// Returned lists why earlier attempts at the task were sent back, oldest
+	// first, so rework starts from the reasons instead of repeating them.
+	Returned []string
+}
+
 // MarshalBrief produces the instruction a worker receives for a task.
-type MarshalBrief func(marshal.Task) string
+type MarshalBrief func(marshal.Task, BriefContext) string
+
+// briefContext gathers the reviews of a task's earlier attempts. An attempt
+// with no stored review, such as one interrupted by a restart, adds nothing.
+func (s *MarshalService) briefContext(ctx context.Context, runID string, run marshal.Run, t marshal.Task) (BriefContext, error) {
+	bc := BriefContext{Control: run.Settings.EffectiveControl()}
+	attempts := 0
+	for _, n := range t.ReturnsByAgent {
+		attempts += n
+	}
+	for attempt := 1; attempt <= attempts; attempt++ {
+		review, err := s.Store.GetMarshalReview(ctx, runID, t.PlanTaskID, attempt)
+		if errors.Is(err, model.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return bc, err
+		}
+		bc.Returned = append(bc.Returned, review.Value.Reasons...)
+		if review.Value.Independent != nil {
+			bc.Returned = append(bc.Returned, review.Value.Independent.Reasons...)
+		}
+	}
+	return bc, nil
+}
 
 // Execute drives an approved run to the next point that needs a person:
 // merge accepted work in plan order, review hand-ins, dispatch ready tasks
@@ -189,7 +223,11 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 				return launched, s.Escalate(ctx, runID, t.PlanTaskID, fmt.Sprintf("worker %s is not governed (%s): %s", t.Worker, g.State, strings.Join(g.Reasons, " ")))
 			}
 		}
-		d, err := s.Dispatch(ctx, runID, t.PlanTaskID, brief(t))
+		bc, err := s.briefContext(ctx, runID, run, t)
+		if err != nil {
+			return launched, err
+		}
+		d, err := s.Dispatch(ctx, runID, t.PlanTaskID, brief(t, bc))
 		if err != nil {
 			return launched, err
 		}

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/projectid"
@@ -152,7 +153,7 @@ func TestM11SettingsRoundTrip(t *testing.T) {
 // The worker brief names the files it may change and the checks it will be
 // judged by.
 func TestM11TaskBriefNamesScopeAndChecks(t *testing.T) {
-	brief := marshalTaskBrief(marshal.Task{PlanTaskID: "T1", Title: "Fix the build", Files: []string{"a.go"}, Criteria: []string{"builds"}, Checks: []marshal.Check{{Command: "go build ./..."}}})
+	brief := marshalTaskBrief(marshal.Task{PlanTaskID: "T1", Title: "Fix the build", Files: []string{"a.go"}, Criteria: []string{"builds"}, Checks: []marshal.Check{{Command: "go build ./..."}}}, app.BriefContext{})
 	for _, want := range []string{"T1", "Fix the build", "a.go", "builds", "go build ./...", "Do not push"} {
 		if !strings.Contains(brief, want) {
 			t.Fatalf("brief is missing %q:\n%s", want, brief)

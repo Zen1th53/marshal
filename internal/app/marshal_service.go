@@ -27,7 +27,9 @@ import (
 // MarshalModel supplies proposals; the service validates them before changing state.
 type MarshalModel interface {
 	Draft(context.Context, string) (MarshalDraft, error)
-	Review(context.Context, marshal.Task, marshal.HandIn) (marshal.Review, error)
+	// Review judges a hand-in; control says whether departing from the
+	// task's instructions is itself a reason to return it.
+	Review(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, error)
 	Amend(context.Context, marshal.Run, string) (MarshalDraft, error)
 }
 
@@ -42,7 +44,7 @@ type MarshalService struct {
 	Model                            MarshalModel
 	Reviewer                         string
 	ModelProvider                    string
-	CrossReview                      func(context.Context, marshal.Task, marshal.HandIn) (marshal.Review, string, error)
+	CrossReview                      func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error)
 	VerifierProvider                 func(context.Context, marshal.Run) (string, error)
 	IndependentVerify                func(context.Context, marshal.Run, string, verification.Session) error
 	GateState                        func(context.Context, string, string) (constitution.RuntimeState, error)
@@ -148,7 +150,8 @@ func validateDraft(d MarshalDraft) error {
 		if p == nil || t.Worker == "" || (t.Mode != marshal.Native && t.Mode != marshal.Governed) || len(t.Checks) == 0 || len(t.Criteria) == 0 {
 			return fmt.Errorf("invalid Marshal task %s", t.PlanTaskID)
 		}
-		if !sameStrings(t.Criteria, p.Criteria) || !sameStrings(t.Files, p.Paths) || !sameStrings(t.DependsOn, p.DependsOn) {
+		if !sameStrings(t.Criteria, p.Criteria) || !sameStrings(t.Files, p.Paths) || !sameStrings(t.DependsOn, p.DependsOn) ||
+			t.Instructions != p.Instructions || t.ExpectedOutput != p.ExpectedOutput {
 			return fmt.Errorf("task %s exceeds plan", t.PlanTaskID)
 		}
 		commands := make([]string, 0, len(t.Checks))
@@ -164,6 +167,21 @@ func validateDraft(d MarshalDraft) error {
 	}
 	return nil
 }
+
+// instructionsPresent enforces strict control: every task must carry the
+// instructions its worker will be held to.
+func instructionsPresent(settings marshal.Settings, tasks []marshal.Task) error {
+	if settings.EffectiveControl() != marshal.ControlStrict {
+		return nil
+	}
+	for _, t := range tasks {
+		if strings.TrimSpace(t.Instructions) == "" {
+			return fmt.Errorf("strict control needs instructions for task %s", t.PlanTaskID)
+		}
+	}
+	return nil
+}
+
 func sameStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -236,6 +254,9 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	if err != nil {
 		return marshal.Run{}, err
 	}
+	if err := instructionsPresent(settings.Value, d.Tasks); err != nil {
+		return marshal.Run{}, err
+	}
 	base, err := gitMarshal(ctx, s.Repository, "rev-parse", "HEAD")
 	if err != nil {
 		return marshal.Run{}, err
@@ -279,7 +300,7 @@ func (s *MarshalService) Approve(ctx context.Context, runID string) (marshal.Run
 		return run, err
 	}
 	run.PlanVersion = p.Version + 1
-	run.ApprovalScopeDigest = marshalApprovalDigest(approved.ApprovalScopeDigest, run.Budget)
+	run.ApprovalScopeDigest = marshalApprovalDigest(approved.ApprovalScopeDigest, run.Budget, run.Settings.EffectiveControl())
 	run.State = marshal.Approved
 	if run.Settings.AcceptanceMode == marshal.AcceptMarshal {
 		run.CloseAuthorization = &marshal.CloseAuthorization{User: user, ApprovalScopeDigest: run.ApprovalScopeDigest}
@@ -308,11 +329,18 @@ func gitMarshal(ctx context.Context, dir string, args ...string) (string, error)
 	return strings.TrimSpace(string(out)), nil
 }
 
-func marshalApprovalDigest(planDigest string, budget marshal.Budget) string {
+// marshalApprovalDigest binds the plan scope, the budget and the control
+// level the person approved. Free control is left out of the encoding, so a
+// run approved before control levels existed keeps its digest.
+func marshalApprovalDigest(planDigest string, budget marshal.Budget, control marshal.Control) string {
+	if control == marshal.ControlFree {
+		control = ""
+	}
 	data, _ := json.Marshal(struct {
-		Plan   string
-		Budget marshal.Budget
-	}{planDigest, budget})
+		Plan    string
+		Budget  marshal.Budget
+		Control marshal.Control `json:",omitempty"`
+	}{planDigest, budget, control})
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }

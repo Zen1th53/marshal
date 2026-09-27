@@ -46,6 +46,10 @@ type Task struct {
 	RequiresApproval bool `json:"requires_approval,omitempty"`
 	// Checkpoint marks a task after which state should be recoverable.
 	Checkpoint bool `json:"checkpoint,omitempty"`
+	// Instructions tell the worker how to carry the task out: its purpose, the
+	// approach and what to leave alone. They are part of the approved scope,
+	// so a scoped amendment may not rewrite them.
+	Instructions string `json:"instructions,omitempty"`
 	// ExpectedOutput is what this task must produce. Left empty, the context
 	// package derives a general statement from whether the task mutates.
 	ExpectedOutput string `json:"expected_output,omitempty"`
