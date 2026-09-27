@@ -22,7 +22,7 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal                         Open a conversation with the Marshal
   /marshal chat                    Open a conversation with the Marshal
   /marshal <goal>                  Draft a plan for the goal with the Marshal model
-  /marshal use-plan                Run the current approved one-task Process 04 plan through Process 05
+  /marshal use-plan                Run the current approved Process 04 plan through Process 05
   /marshal approve-task <approval-id>  Approve a Process 05 task paused for your decision
   /marshal approve                 Approve the drafted plan and start running it
   /marshal status                  Show the run, its tasks and what it is waiting for
@@ -326,10 +326,16 @@ func (m *marshalSession) reserve() (context.Context, context.CancelFunc, error) 
 }
 
 func (m *marshalSession) finish(cancel context.CancelFunc) {
+	m.finishWithNativeTurn(cancel, false)
+}
+
+func (m *marshalSession) finishWithNativeTurn(cancel context.CancelFunc, nativeTurnWaiting bool) {
 	m.mu.Lock()
 	m.busy, m.cancel = false, nil
 	m.mu.Unlock()
-	cancel()
+	if !nativeTurnWaiting {
+		cancel()
+	}
 }
 
 func (w *Workspace) marshalPublish(m *marshalSession, runID string, p *MarshalPanel) {
@@ -470,8 +476,9 @@ func (w *Workspace) marshalUsePlan(ctx context.Context) (string, error) {
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approved Process 04 plan · running through Process 05"))
 	started = true
 	go func() {
-		defer m.finish(cancel)
-		w.marshalExecute(runCtx, m, service, runID, provider)
+		keepNativeTurn := false
+		defer func() { m.finishWithNativeTurn(cancel, keepNativeTurn) }()
+		keepNativeTurn = w.marshalExecute(runCtx, m, service, runID, provider)
 	}()
 	return "Marshal is executing the approved Process 04 plan through Process 05.", nil
 }
@@ -560,19 +567,41 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 		m.amended = false
 		m.mu.Unlock()
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approved · running"))
-		w.marshalExecute(runCtx, m, service, runID, provider)
+		_ = w.marshalExecute(runCtx, m, service, runID, provider)
 	}()
 	return "Plan approval started; the panel will show the result.", nil
 }
 
 // marshalExecute runs while the caller owns the reserved operation.
-func (w *Workspace) marshalExecute(ctx context.Context, m *marshalSession, service *app.MarshalService, runID, provider string) {
+func (w *Workspace) marshalExecute(ctx context.Context, m *marshalSession, service *app.MarshalService, runID, provider string) bool {
 	run, err := service.Execute(ctx, runID, marshalTaskBrief, func(r marshal.Run) {
 		if ctx.Err() == nil {
 			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, r, "running"))
 		}
 	})
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, marshalOutcomeNote(run, err)))
+	return w.marshalNativeApprovalWaiting(service, run)
+}
+
+func (w *Workspace) marshalNativeApprovalWaiting(service *app.MarshalService, run marshal.Run) bool {
+	if w.runtime == nil || len(run.Tasks) == 0 {
+		return false
+	}
+	runs, err := w.runtime.Execution().ListRuns(context.Background())
+	if err != nil {
+		return false
+	}
+	for _, p05 := range runs {
+		if p05.PlanID != run.PlanID || p05.PlanVersion != run.PlanVersion || string(p05.ProjectID) != string(service.CanonicalPlanProjectID()) || p05.State != execution.RunNeedsApproval {
+			continue
+		}
+		for _, task := range p05.Tasks {
+			if task.State == execution.TaskNeedsApproval && task.NativeTurn != nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // marshalOutcomeNote says what the run is waiting for once Execute returns.
@@ -674,14 +703,15 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 		return "", err
 	}
 	go func() {
-		defer m.finish(cancel)
+		keepNativeTurn := false
+		defer func() { m.finishWithNativeTurn(cancel, keepNativeTurn) }()
 		run, err := service.Resume(runCtx, runID)
 		if err != nil {
 			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "resume failed: "+err.Error()))
 			return
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "resuming"))
-		w.marshalExecute(runCtx, m, service, runID, provider)
+		keepNativeTurn = w.marshalExecute(runCtx, m, service, runID, provider)
 	}()
 	return "Resuming Marshal run " + runID + ".", nil
 }

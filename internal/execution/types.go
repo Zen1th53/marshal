@@ -157,6 +157,7 @@ const (
 type ExecutionRun struct {
 	Delivery            DeliveryMode                `json:"delivery,omitempty"`
 	BaseCommit          string                      `json:"base_commit,omitempty"`
+	SelectedTask        string                      `json:"selected_task,omitempty"`
 	RunID               string                      `json:"run_id"`
 	Version             int64                       `json:"version"` // CAS concurrency version
 	ProjectID           projectid.ID                `json:"project_id"`

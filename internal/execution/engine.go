@@ -262,7 +262,17 @@ func (e *Engine) SetPreserveBranch(ctx context.Context, runID, baseCommit string
 
 // ExecuteRun runs all tasks in DAG order under governance until completion or pause.
 func (e *Engine) ExecuteRun(ctx context.Context, runID string) (*ExecutionRun, error) {
-	return e.executeRun(ctx, runID, -1)
+	return e.executeRun(ctx, runID, -1, "", "")
+}
+
+// ExecuteTaskBound runs one approved plan task under the same Process 05
+// governance as ExecuteRun. The base is the exact commit the caller will
+// review; sibling tasks remain untouched until separately admitted.
+func (e *Engine) ExecuteTaskBound(ctx context.Context, runID, taskID, baseCommit string) (*ExecutionRun, error) {
+	if taskID == "" || baseCommit == "" {
+		return nil, fmt.Errorf("%w: task and base commit are required", ErrRunInvalid)
+	}
+	return e.executeRun(ctx, runID, -1, taskID, baseCommit)
 }
 
 // ExecuteRunExpected executes only the exact durable run revision the caller
@@ -271,10 +281,10 @@ func (e *Engine) ExecuteRunExpected(ctx context.Context, runID string, expectedV
 	if expectedVersion < 0 {
 		return nil, fmt.Errorf("%w: expected run version is required", ErrRunInvalid)
 	}
-	return e.executeRun(ctx, runID, expectedVersion)
+	return e.executeRun(ctx, runID, expectedVersion, "", "")
 }
 
-func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion int64) (*ExecutionRun, error) {
+func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion int64, selectedTask, taskBase string) (*ExecutionRun, error) {
 	e.operationMu.Lock()
 	if _, running := e.activeRuns[runID]; running {
 		e.operationMu.Unlock()
@@ -295,6 +305,29 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 	if expectedVersion >= 0 && run.Version != expectedVersion {
 		return nil, fmt.Errorf("%w: run %s moved from version %d to %d",
 			ErrInvalidStateTransition, runID, expectedVersion, run.Version)
+	}
+	if selectedTask != "" {
+		if run.Delivery != DeliveryPreserveBranch || run.BaseCommit == "" {
+			return &run, fmt.Errorf("%w: selected task requires preserve-branch delivery", ErrRunInvalid)
+		}
+		task, ok := run.Tasks[selectedTask]
+		if !ok || (task.BaseCommit != "" && task.BaseCommit != taskBase) {
+			return &run, fmt.Errorf("%w: selected task or base commit differs", ErrRunInvalid)
+		}
+		if task.State == TaskCompletedPendingVerify {
+			return &run, nil
+		}
+		if task.State.IsTerminal() {
+			return &run, fmt.Errorf("%w: selected task is %s", ErrInvalidStateTransition, task.State)
+		}
+		if task.BaseCommit == "" || run.SelectedTask != selectedTask {
+			task.BaseCommit = taskBase
+			run.Tasks[selectedTask] = task
+			run.SelectedTask = selectedTask
+			if err := e.persistRun(ctx, &run); err != nil {
+				return &run, err
+			}
+		}
 	}
 
 	if run.State.IsTerminal() {
@@ -390,11 +423,38 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 		if run.State != RunRunning {
 			return &run, nil
 		}
+		if selectedTask != "" && run.Tasks[selectedTask].State == TaskCompletedPendingVerify {
+			allComplete := true
+			for _, task := range run.Tasks {
+				if task.State != TaskCompletedPendingVerify {
+					allComplete = false
+					break
+				}
+			}
+			if !allComplete {
+				run.State = RunPaused
+				run.CurrentPhase = PhasePaused
+				run.SelectedTask = ""
+				if err := e.persistRun(ctx, &run); err != nil {
+					return &run, err
+				}
+				return &run, nil
+			}
+		}
 
 		// 1. Identify ready tasks via scheduler
 		schedTasks, err := e.scheduler.NextSchedulableTasks(&run, time.Now().UTC())
 		if err != nil {
 			return &run, err
+		}
+		if selectedTask != "" {
+			selected := schedTasks[:0]
+			for _, task := range schedTasks {
+				if task.TaskID == selectedTask {
+					selected = append(selected, task)
+				}
+			}
+			schedTasks = selected
 		}
 		if len(schedTasks) == 0 {
 			// Check if all tasks are complete
@@ -422,6 +482,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			if allComplete {
 				run.State = RunDonePendingVerification
 				run.CurrentPhase = PhaseCompletedPending
+				run.SelectedTask = ""
 				now := time.Now().UTC()
 				run.EndedAt = &now
 				if err := e.persistRun(ctx, &run); err != nil {
@@ -766,7 +827,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			// Only a live app-server turn retains its resources. Other native
 			// provider approvals are restartable scheduler pauses and must release
 			// their lease before re-admission.
-			retainLiveNativeTurn := providerApprovalPaused && result.NativeApprovalID != ""
+			retainLiveNativeTurn := providerApprovalPaused && t.NativeTurn != nil
 			if !retainLiveNativeTurn {
 				if run.Delivery != DeliveryPreserveBranch {
 					_ = e.worktrees.CleanWorktree(ctx, wtPath)

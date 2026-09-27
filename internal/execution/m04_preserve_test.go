@@ -18,6 +18,31 @@ func TestM04DefaultDeliveryExistingProcess05(t *testing.T) {
 	}
 }
 
+func TestM04ExecuteTaskBoundLeavesSiblingPending(t *testing.T) {
+	repo := testgit.New(t)
+	ctx := context.Background()
+	engine, err := NewEngine(EngineConfig{ProjectRoot: repo.Path()}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	goal, p := createTestGoalAndPlan(time.Now().UTC())
+	run, err := engine.InitializeRun(ctx, createTestHandoff(t, repo.Path(), goal, p), goal, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := repo.HEAD(t)
+	if err := engine.SetPreserveBranch(ctx, run.RunID, base); err != nil {
+		t.Fatal(err)
+	}
+	selected, err := engine.ExecuteTaskBound(ctx, run.RunID, "task-1", base)
+	if err != nil || selected.State != RunPaused || selected.Tasks["task-1"].State != TaskCompletedPendingVerify {
+		t.Fatalf("selected task: %+v %v", selected, err)
+	}
+	if selected.Tasks["task-2"].State == TaskCompletedPendingVerify || selected.Tasks["task-3"].State == TaskCompletedPendingVerify {
+		t.Fatal("a sibling task ran without selection")
+	}
+}
+
 func TestM04DefaultDeliveryReleasesLease(t *testing.T) {
 	root := t.TempDir()
 	engine, err := NewEngine(EngineConfig{ProjectRoot: root}, nil, nil)

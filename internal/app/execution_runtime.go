@@ -234,6 +234,30 @@ func (s *ExecutionService) ExecuteRun(ctx context.Context, runID string) (*execu
 	return s.engine.ExecuteRun(ctx, runID)
 }
 
+// ExecuteTaskBound admits one plan task against the exact Marshal-reviewed
+// base while keeping the other Process 05 tasks pending.
+func (s *ExecutionService) ExecuteTaskBound(ctx context.Context, runID, taskID, baseCommit string) (*execution.ExecutionRun, error) {
+	if err := s.available(); err != nil {
+		return nil, err
+	}
+	return s.engine.ExecuteTaskBound(ctx, runID, taskID, baseCommit)
+}
+
+func (s *ExecutionService) resumeNativeRun(ctx context.Context, runID string) (*execution.ExecutionRun, error) {
+	run, err := s.engine.GetRun(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if run.SelectedTask != "" {
+		task, ok := run.Tasks[run.SelectedTask]
+		if !ok || task.BaseCommit == "" {
+			return nil, fmt.Errorf("%w: selected native task lost its base", execution.ErrRunInvalid)
+		}
+		return s.engine.ExecuteTaskBound(ctx, runID, run.SelectedTask, task.BaseCommit)
+	}
+	return s.engine.ExecuteRun(ctx, runID)
+}
+
 // ListRuns returns the canonical durable Process 05 runs. It is a read-only
 // boundary used by local status surfaces; callers must not infer mutations
 // from the returned copies.
@@ -343,7 +367,7 @@ func (s *ExecutionService) resolveClaudeStreamApproval(ctx context.Context, appr
 			// terminal event arrives. Process 05 still needs one final scheduler
 			// pass to durably record COMPLETED_PENDING_VERIFY; inheriting that
 			// cancellation would rewrite a completed run as PAUSED.
-			_, _ = s.engine.ExecuteRun(context.WithoutCancel(turnCtx), runID)
+			_, _ = s.resumeNativeRun(context.WithoutCancel(turnCtx), runID)
 		}(approval.RunID, live.runCtx)
 		return nil
 	}
@@ -451,7 +475,7 @@ func (s *ExecutionService) resolveCodexAppServerApproval(ctx context.Context, ap
 			// final scheduler pass to durably record COMPLETED_PENDING_VERIFY;
 			// inheriting that provider cleanup cancellation would incorrectly
 			// rewrite an otherwise completed run as PAUSED.
-			_, _ = s.engine.ExecuteRun(context.WithoutCancel(turnCtx), runID)
+			_, _ = s.resumeNativeRun(context.WithoutCancel(turnCtx), runID)
 		}(approval.RunID, live.runCtx)
 		return nil
 	}

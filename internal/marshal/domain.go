@@ -162,6 +162,7 @@ type CloseAuthorization struct {
 // Run binds plan approval, settings, tasks, and close authority.
 type Run struct {
 	PlanID              string
+	Process05Bound      bool
 	PlanVersion         int64
 	ApprovalScopeDigest string
 	BaseCommit          string

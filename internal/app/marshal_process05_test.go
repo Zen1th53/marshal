@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,21 +111,87 @@ func TestMarshalGovernedTaskUsesProcess05AndImportsExactCommit(t *testing.T) {
 	}
 }
 
-func TestMarshalBindApprovedPlanRefusesMultipleTasks(t *testing.T) {
+func TestMarshalGovernedMultiTaskPlanRunsInOrder(t *testing.T) {
 	ctx := context.Background()
 	fixture, _ := marshalFixture(t, 2)
-	if _, err := fixture.StartPlanning(ctx, "original", "write files", marshal.Budget{}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fixture.Approve(ctx, "original"); err != nil {
-		t.Fatal(err)
-	}
 	runtime := &Runtime{store: fixture.Store, layout: project.Layout{Root: fixture.Repository, Worktrees: fixture.Worktrees}}
+	projectRecord, err := runtime.Store().Project(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	goal := planGoal()
+	goal.ID, goal.SessionID, goal.ProjectID = "GOAL-multi", "SESSION-multi", projectRecord.ID
+	if err := runtime.Store().SaveGoalContract(ctx, goal, 0); err != nil {
+		t.Fatal(err)
+	}
+	request := planCreateRequest()
+	request.SessionID, request.ProjectID = goal.SessionID, projectid.ID(projectRecord.ID)
+	request.Tasks = append(request.Tasks, plan.Task{ID: "follow", Title: "write follow-up", Mutating: true, Weight: 1, Paths: []string{"FOLLOW.txt"}, Criteria: []string{"follow-up exists"}, DependsOn: []string{"fix"}})
+	p, err := runtime.Plans().Create(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Checks = map[string][]string{"fix": {"grep -q fixed README.md"}, "follow": {"test -f FOLLOW.txt"}}
+	if err := runtime.Store().SavePlan(ctx, p, p.Version); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Plans().Approve(ctx, projectid.ID(projectRecord.ID)); err != nil {
+		t.Fatal(err)
+	}
+	execService := runtime.Execution()
+	execService.RegisterHarness(execution.NewMockHarness("test-harness", func(_ context.Context, task execution.TaskExecution, _ execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+		switch task.TaskID {
+		case "fix":
+			if err := os.WriteFile(filepath.Join(worktree, "README.md"), []byte("fixed\n"), 0600); err != nil {
+				return execution.TaskResult{}, err
+			}
+		case "follow":
+			data, err := os.ReadFile(filepath.Join(worktree, "README.md"))
+			if err != nil || string(data) != "fixed\n" {
+				return execution.TaskResult{}, errors.New("dependent task did not receive the merged base")
+			}
+			if err := os.WriteFile(filepath.Join(worktree, "FOLLOW.txt"), []byte("done\n"), 0600); err != nil {
+				return execution.TaskResult{}, err
+			}
+		}
+		return execution.TaskResult{TaskID: task.TaskID, Success: true}, nil
+	}))
 	s, err := runtime.MarshalWired(MarshalWiring{Provider: "codex", Approver: func(context.Context, string, string) (string, error) { return "operator", nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BindApprovedPlan(ctx, "run"); err == nil || !strings.Contains(err.Error(), "one-task") {
-		t.Fatalf("multi-task plan was bound: %v", err)
+	s.Model = marshalFakeModel{review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
+	s.InstalledVersion = func(context.Context, string) string { return "1.0" }
+	if err := s.Store.SaveHarnessProfile(ctx, model.HarnessProfile{Harness: "test-harness", InstalledVersion: "1.0", ProbeEvidenceID: "multi-probe", ProbedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	s.GovernedDrivers["test-harness"] = driver.Governed{Provider: "test", Run: runtime.marshalProcess05Run(s)}
+	run, err := s.BindApprovedPlan(ctx, "run")
+	if err != nil || len(run.Tasks) != 2 || run.Tasks[0].PlanTaskID != "fix" || run.Tasks[1].PlanTaskID != "follow" {
+		t.Fatalf("multi-task plan binding: %+v %v", run.Tasks, err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := s.Execute(ctx, "run", func(marshal.Task) string { return "execute approved task" }, nil); err == nil || !strings.Contains(err.Error(), "approval") {
+			t.Fatalf("task %d did not pause for approval: %v", i, err)
+		}
+		runs, err := execService.ListRuns(ctx)
+		if err != nil || len(runs) != 1 {
+			t.Fatalf("Process 05 run: %+v %v", runs, err)
+		}
+		id := run.Tasks[i].PlanTaskID
+		approvalID := runs[0].Tasks[id].ApprovalID
+		if approvalID == "" {
+			t.Fatalf("task %s has no approval", id)
+		}
+		if err := execService.Approve(ctx, approvalID, "operator", "approve governed task"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Resume(ctx, "run"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	finished, err := s.Execute(ctx, "run", func(marshal.Task) string { return "execute approved task" }, nil)
+	if err != nil || finished.State != marshal.Verifying || finished.Tasks[0].State != marshal.Merged || finished.Tasks[1].State != marshal.Merged {
+		t.Fatalf("multi-task completion: %+v %v", finished, err)
 	}
 }

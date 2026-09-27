@@ -58,6 +58,16 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if active >= policy.Concurrency {
 		return MarshalDispatch{}, errors.New("dispatch concurrency reached")
 	}
+	if run.Process05Bound && t.Mode == marshal.Governed && active > 0 {
+		return MarshalDispatch{}, errors.New("governed plan tasks dispatch one at a time")
+	}
+	if run.Process05Bound && t.Mode == marshal.Governed {
+		for j := 0; j < i; j++ {
+			if run.Tasks[j].State != marshal.Merged {
+				return MarshalDispatch{}, errors.New("earlier governed task must be merged before dispatch")
+			}
+		}
+	}
 	d := s.Drivers[t.Worker]
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
 		d = s.GovernedDrivers[t.Worker]
@@ -67,6 +77,14 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	}
 	if d.Mode() != t.Mode {
 		return MarshalDispatch{}, fmt.Errorf("worker %s has %s driver, task requires %s", t.Worker, d.Mode(), t.Mode)
+	}
+	if run.Process05Bound && t.Mode == marshal.Governed && t.ResultCommit == "" && i > 0 {
+		integration := filepath.Join(s.Worktrees, "TASK-"+runID+"-integration")
+		if head, headErr := gitMarshal(ctx, integration, "rev-parse", "HEAD"); headErr == nil {
+			t.BaseCommit = head
+		} else if run.Tasks[i-1].State == marshal.Merged {
+			return MarshalDispatch{}, fmt.Errorf("governed task base is unavailable: %w", headErr)
+		}
 	}
 	wt := worktree.New(s.Repository, s.Worktrees)
 	request := model.WorktreeRequest{TaskID: worktreeTaskID(runID, taskID), Branch: t.Branch, BaseCommit: t.BaseCommit}

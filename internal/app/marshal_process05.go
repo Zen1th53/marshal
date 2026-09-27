@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
@@ -26,10 +27,14 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		if err != nil {
 			return nil, err
 		}
-		if run.BaseCommit != req.Task.BaseCommit || len(run.Tasks) != 1 || run.Tasks[0].PlanTaskID != req.Task.PlanTaskID || run.Tasks[0].Mode != marshal.Governed {
+		if len(run.Tasks) == 0 {
 			return nil, errors.New("process 05: task does not match the approved Marshal run")
 		}
-		stored := run.Tasks[0]
+		storedIndex := taskIndex(run, req.Task.PlanTaskID)
+		if storedIndex < 0 || run.Tasks[storedIndex].Mode != marshal.Governed {
+			return nil, errors.New("process 05: task does not match the approved Marshal run")
+		}
+		stored := run.Tasks[storedIndex]
 		if stored.Worker != req.Task.Worker || stored.Branch != req.Task.Branch || !sameStrings(stored.Files, req.Task.Files) || !sameStrings(stored.Criteria, req.Task.Criteria) || len(stored.Checks) != len(req.Task.Checks) {
 			return nil, errors.New("process 05: dispatch differs from the stored Marshal task")
 		}
@@ -51,7 +56,16 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		if err != nil {
 			return nil, err
 		}
-		if p.State != plan.StateApproved || len(p.Tasks) != 1 || p.Tasks[0].ID != req.Task.PlanTaskID || !sameStrings(p.Tasks[0].Paths, req.Task.Files) || !sameStrings(p.Tasks[0].Criteria, req.Task.Criteria) || !sameStrings(p.Tasks[0].DependsOn, req.Task.DependsOn) {
+		if p.State != plan.StateApproved || len(p.Tasks) != len(run.Tasks) {
+			return nil, errors.New("process 05: Marshal task differs from the approved Process 04 plan")
+		}
+		var approvedTask *plan.Task
+		for i := range p.Tasks {
+			if p.Tasks[i].ID == req.Task.PlanTaskID {
+				approvedTask = &p.Tasks[i]
+			}
+		}
+		if approvedTask == nil || !sameStrings(approvedTask.Paths, req.Task.Files) || !sameStrings(approvedTask.Criteria, req.Task.Criteria) || !sameStrings(approvedTask.DependsOn, req.Task.DependsOn) {
 			return nil, errors.New("process 05: Marshal task differs from the approved Process 04 plan")
 		}
 		commands := make([]string, 0, len(req.Task.Checks))
@@ -88,13 +102,31 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 			return nil, errors.New("process 05: governed harness differs from the Marshal worker")
 		}
 		if p05.State == execution.RunReady {
-			if err := service.SetPreserveBranch(ctx, p05.RunID, req.Task.BaseCommit); err != nil {
+			if err := service.SetPreserveBranch(ctx, p05.RunID, run.BaseCommit); err != nil {
 				return nil, err
 			}
-		} else if p05.Delivery != execution.DeliveryPreserveBranch || p05.BaseCommit != req.Task.BaseCommit {
+		} else if p05.Delivery != execution.DeliveryPreserveBranch || p05.BaseCommit != run.BaseCommit {
 			return nil, errors.New("process 05: resumed run has a different branch binding")
 		}
-		completed, err := service.ExecuteRun(ctx, p05.RunID)
+		completed, err := service.ExecuteTaskBound(ctx, p05.RunID, req.Task.PlanTaskID, req.Task.BaseCommit)
+		if errors.Is(err, execution.ErrInvalidStateTransition) && strings.Contains(err.Error(), "already executing") {
+			// A provider-native approval resumes its bound turn in the background.
+			// The Marshal resume command waits for that same task's durable result.
+			ticker := time.NewTicker(250 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				observed, getErr := service.GetRun(ctx, p05.RunID)
+				completed, err = &observed, getErr
+				if err != nil || completed.State == execution.RunPaused || completed.State == execution.RunDonePendingVerification || completed.State == execution.RunNeedsApproval || completed.State.IsTerminal() {
+					break
+				}
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-ticker.C:
+				}
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -102,7 +134,7 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		if completed.State == execution.RunNeedsApproval && result.ApprovalID != "" {
 			return nil, fmt.Errorf("process 05: approval %s required; use /marshal approve-task %s, then /marshal resume", result.ApprovalID, result.ApprovalID)
 		}
-		if completed.State != execution.RunDonePendingVerification || result.State != execution.TaskCompletedPendingVerify || result.ResultCommit == "" || result.WorktreePath == "" {
+		if (completed.State != execution.RunDonePendingVerification && completed.State != execution.RunPaused) || result.State != execution.TaskCompletedPendingVerify || result.ResultCommit == "" || result.WorktreePath == "" {
 			return nil, fmt.Errorf("process 05: task did not complete (run=%s task=%s)", completed.State, result.State)
 		}
 		if head, err := gitMarshal(ctx, result.WorktreePath, "rev-parse", "HEAD"); err != nil || head != result.ResultCommit {

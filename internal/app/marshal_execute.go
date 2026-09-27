@@ -194,6 +194,9 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 			return launched, err
 		}
 		launched = append(launched, d)
+		if run.Process05Bound && t.Mode == marshal.Governed {
+			break
+		}
 	}
 	return launched, nil
 }

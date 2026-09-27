@@ -30,7 +30,11 @@ func (e *Engine) prepareTaskWorktree(ctx context.Context, run ExecutionRun, task
 	if run.Delivery != DeliveryPreserveBranch {
 		return e.worktrees.PrepareWorktree(ctx, task.TaskID, run.RunID)
 	}
-	request := model.WorktreeRequest{TaskID: branchTaskID(task.TaskID), Branch: "marshal/" + run.RunID + "/" + task.TaskID, BaseCommit: run.BaseCommit}
+	baseCommit := run.BaseCommit
+	if task.BaseCommit != "" {
+		baseCommit = task.BaseCommit
+	}
+	request := model.WorktreeRequest{TaskID: branchTaskID(task.TaskID), Branch: "marshal/" + run.RunID + "/" + task.TaskID, BaseCommit: baseCommit}
 	if task.ResultCommit != "" {
 		request.BaseCommit = task.ResultCommit
 		wt, err := e.branchManager().Resume(ctx, request)
