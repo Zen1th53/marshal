@@ -230,7 +230,11 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if proposal.Verdict != marshal.VerdictAccept && proposal.Verdict != marshal.VerdictReturn && proposal.Verdict != marshal.VerdictReassign && proposal.Verdict != marshal.VerdictEscalate {
 		return "", errors.New("invalid model review verdict")
 	}
-	if s.Reviewer == "" || s.Reviewer == h.Worker {
+	executor, reviewer := marshalFamily(h.Worker), s.reviewerFamily()
+	if h.Provider != "" {
+		executor = marshalFamily(h.Provider)
+	}
+	if s.Reviewer == "" || reviewer == executor || reviewer == marshalFamily(h.Worker) {
 		return "", errors.New("reviewer must differ from executor")
 	}
 	tier, err := s.dispatchedTier(ctx, runID, taskID)
@@ -281,7 +285,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 			return "", err
 		}
 	}
-	verdict := constitution.EvaluateTaskAcceptance(constitution.Default(), envelope, state, constitution.TaskAcceptance{Mode: run.Settings.AcceptanceMode, MarshalVerdictAccept: proposal.Verdict == marshal.VerdictAccept, UserApprovalActor: userApproval, Executor: h.Worker, Reviewer: s.Reviewer, ResultCommit: h.ResultCommit, EvidenceCommit: h.ResultCommit, CriteriaMet: met, CriteriaTotal: total, IndependentReviewDone: !policy.CrossReviewRequired || crossReviewAccepted})
+	verdict := constitution.EvaluateTaskAcceptance(constitution.Default(), envelope, state, constitution.TaskAcceptance{Mode: run.Settings.AcceptanceMode, MarshalVerdictAccept: proposal.Verdict == marshal.VerdictAccept, UserApprovalActor: userApproval, Executor: executor, Reviewer: reviewer, ResultCommit: h.ResultCommit, EvidenceCommit: h.ResultCommit, CriteriaMet: met, CriteriaTotal: total, IndependentReviewDone: !policy.CrossReviewRequired || crossReviewAccepted})
 	proposal.Reviewer = s.Reviewer
 	if _, err = s.Store.SetMarshalReview(ctx, runID, taskID, attempt, proposal); err != nil {
 		return "", err
@@ -682,6 +686,9 @@ func (s *MarshalService) ProposeAmend(ctx context.Context, runID, reason string)
 	if err = validateDraft(d); err != nil {
 		return MarshalDraft{}, false, err
 	}
+	if err = s.workersIndependent(d.Tasks); err != nil {
+		return MarshalDraft{}, false, err
+	}
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
 	if err != nil {
 		return MarshalDraft{}, false, err
@@ -707,6 +714,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		return run, errors.New("missing amendment input")
 	}
 	if err = validateDraft(d); err != nil {
+		return run, err
+	}
+	if err = s.workersIndependent(d.Tasks); err != nil {
 		return run, err
 	}
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)

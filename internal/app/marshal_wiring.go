@@ -152,6 +152,46 @@ func (s *MarshalService) workerGovernance(ctx context.Context, worker string) ha
 	return harness.AssessGovernance(*profile, installed, s.clock())
 }
 
+// marshalFamily names the model family behind a worker, a driver provider or
+// a reviewer identity. One family goes by several names ("claude",
+// "claude-code", "marshal:claude"), and self-review must be refused across
+// all of them, not only when two identity strings happen to be equal.
+func marshalFamily(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if i := strings.LastIndex(name, ":"); i >= 0 {
+		name = name[i+1:]
+	}
+	switch name {
+	case "claude-code":
+		return "claude"
+	case "antigravity":
+		return "agy"
+	default:
+		return name
+	}
+}
+
+// reviewerFamily is the family of the Marshal model that reviews hand-ins.
+func (s *MarshalService) reviewerFamily() string {
+	if s.ModelProvider != "" {
+		return marshalFamily(s.ModelProvider)
+	}
+	return marshalFamily(s.Reviewer)
+}
+
+// workersIndependent refuses a plan in which the Marshal model would review
+// work done by its own family. Refusing at planning time means no budget is
+// spent on work whose acceptance the review would have to refuse.
+func (s *MarshalService) workersIndependent(tasks []marshal.Task) error {
+	reviewer := s.reviewerFamily()
+	for _, t := range tasks {
+		if reviewer != "" && marshalFamily(t.Worker) == reviewer {
+			return fmt.Errorf("Marshal model %s would review its own work on task %s; assign another worker or choose another Marshal with /marshal model", reviewer, t.PlanTaskID)
+		}
+	}
+	return nil
+}
+
 // marshalHarnessName maps a worker to its harness profile name.
 func marshalHarnessName(worker string) string {
 	switch worker {
