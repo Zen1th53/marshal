@@ -226,6 +226,28 @@ type marshalTaskProposal struct {
 	} `json:"tasks"`
 }
 
+// MarshalWorkers lists the worker CLIs a Marshal of the given provider may
+// assign tasks to.
+func MarshalWorkers(provider string) []string {
+	return (&MarshalCLI{Provider: provider}).availableWorkers()
+}
+
+// DraftFromProposal turns the task list an interactive Marshal session wrote
+// into a draft. The model supplies only the tasks, in the same form a
+// headless draft turn returns; the runtime builds the plan around them. Plan
+// identity, version, constitution binding and the graph digest are computed
+// here, because a model cannot be relied on to reproduce them.
+func (s *MarshalService) DraftFromProposal(data []byte, provider string) (MarshalDraft, error) {
+	var proposal marshalTaskProposal
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&proposal); err != nil {
+		return MarshalDraft{}, fmt.Errorf("invalid Marshal draft JSON: %w", err)
+	}
+	m := &MarshalCLI{Provider: provider, ProjectID: s.ProjectID}
+	return m.materialize(proposal, "", 1, m.availableWorkers())
+}
+
 func (m *MarshalCLI) availableWorkers() []string {
 	var workers []string
 	for _, provider := range []string{"codex", "claude", "agy", "opencode"} {
