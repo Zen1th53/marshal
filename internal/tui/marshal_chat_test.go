@@ -10,8 +10,11 @@ import (
 )
 
 func TestMarshalChatBriefingAndLaunchDecision(t *testing.T) {
-	brief := marshalRoleBriefing([]string{"codex", "agy"}, marshal.ControlFree)
-	for _, phrase := range []string{"You are the Marshal", marshalDraftRelativePath, "Do not edit project files", "Only the person can approve", "/marshal approve", `{"tasks":[`, "codex, agy"} {
+	brief, err := marshalRoleBriefing([]string{"codex", "agy"}, marshal.DefaultSettings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, phrase := range []string{"You are the Marshal", marshalDraftRelativePath, "Do not edit project files", "Only the person approves the plan", "/marshal approve", `{"tasks":[`, "codex, agy", "acceptance mode marshal-then-user", "Current control level: free"} {
 		if !strings.Contains(brief, phrase) {
 			t.Errorf("briefing lacks %q", phrase)
 		}
