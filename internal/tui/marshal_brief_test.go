@@ -42,8 +42,16 @@ func TestTaskBriefNamesWhyEarlierAttemptsWereReturned(t *testing.T) {
 }
 
 func TestMarshalBriefingFollowsControlLevel(t *testing.T) {
-	strict := marshalRoleBriefing([]string{"codex"}, marshal.ControlStrict)
-	free := marshalRoleBriefing([]string{"codex"}, marshal.ControlFree)
+	settings := marshal.DefaultSettings()
+	free, err := marshalRoleBriefing([]string{"codex"}, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Control = marshal.ControlStrict
+	strict, err := marshalRoleBriefing([]string{"codex"}, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(strict, `every task must add "instructions"`) || strings.Contains(free, "must add") || !strings.Contains(free, `may add "instructions"`) {
 		t.Fatalf("briefings do not follow the control level:\nstrict: %s\nfree: %s", strict, free)
 	}
