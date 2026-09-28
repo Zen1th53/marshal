@@ -37,14 +37,18 @@ func TestTierPolicyExpiryAffectsNextDispatchOnly(t *testing.T) {
 	}
 }
 
-func TestCrossReviewRequiresDifferentProvider(t *testing.T) {
+// A cross-review needs a reviewer, which may be the worker's own provider:
+// independence comes from each role running in a session of its own.
+func TestCrossReviewNeedsAReviewerNotAnotherProvider(t *testing.T) {
 	p := DispatchPolicy{CrossReviewRequired: true}
-	for _, providers := range [][2]string{{"codex", "codex"}, {"codex", "CODEX"}, {" codex ", "codex"}, {"", "claude"}, {"codex", ""}} {
-		if err := CheckCrossReviewProvider(p, providers[0], providers[1]); err == nil {
-			t.Fatalf("accepted providers %q", providers)
+	for _, providers := range [][2]string{{"codex", "codex"}, {"codex", "claude"}, {"", "claude"}} {
+		if err := CheckCrossReviewProvider(p, providers[0], providers[1]); err != nil {
+			t.Fatalf("refused providers %q: %v", providers, err)
 		}
 	}
-	if err := CheckCrossReviewProvider(p, "codex", "claude"); err != nil {
-		t.Fatal(err)
+	for _, reviewer := range []string{"", "  "} {
+		if err := CheckCrossReviewProvider(p, "codex", reviewer); err == nil {
+			t.Fatalf("accepted a cross-review without a reviewer %q", reviewer)
+		}
 	}
 }

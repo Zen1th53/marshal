@@ -231,13 +231,11 @@ func marshalDepsMerged(run marshal.Run, t marshal.Task) bool {
 	return true
 }
 
-// otherWorker picks a configured worker of another family than current, in a
-// stable order. The Marshal model's own family is never picked: the Marshal
-// reviews the reassigned work, and must not review its own family's.
+// otherWorker picks a configured worker other than current, in a stable order.
 func (s *MarshalService) otherWorker(current string) string {
 	names := make([]string, 0, len(s.Drivers))
 	for name := range s.Drivers {
-		if f := marshalFamily(name); f != marshalFamily(current) && f != s.reviewerFamily() {
+		if name != current {
 			names = append(names, name)
 		}
 	}
