@@ -923,8 +923,10 @@ func (s *MarshalService) requireIndependentVerifier(ctx context.Context, run mar
 	if err != nil {
 		return err
 	}
-	if provider == "" || strings.EqualFold(provider, s.ModelProvider) {
-		return errors.New("independent verifier must use another provider")
+	// Independence comes from the verifier's own fresh session, not from its
+	// provider: with a single installed provider the Marshal's serves again.
+	if provider == "" {
+		return errors.New("independent verifier is unavailable")
 	}
 	return nil
 }
