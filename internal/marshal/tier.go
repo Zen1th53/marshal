@@ -33,14 +33,17 @@ func TierPolicy(gate CapabilityGate, settings Settings) DispatchPolicy {
 }
 
 // CheckCrossReviewProvider enforces provider independence when cross-review is required.
+//
+// The reviewer may be the worker's own provider. Independence comes from the
+// rule that every role runs in a session of its own, so a reviewer never sees
+// the worker's conversation; it does not come from a different model family,
+// which a developer who uses only one provider could never supply.
 func CheckCrossReviewProvider(policy DispatchPolicy, workerProvider, reviewerProvider string) error {
 	if !policy.CrossReviewRequired {
 		return nil
 	}
-	workerProvider = strings.TrimSpace(workerProvider)
-	reviewerProvider = strings.TrimSpace(reviewerProvider)
-	if workerProvider == "" || reviewerProvider == "" || strings.EqualFold(workerProvider, reviewerProvider) {
-		return errors.New("cross-review requires a different provider")
+	if strings.TrimSpace(reviewerProvider) == "" {
+		return errors.New("cross-review has no reviewer")
 	}
 	return nil
 }

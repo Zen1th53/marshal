@@ -57,36 +57,32 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	s.Gate = w.Gate
 	s.ApprovalActor = w.Approver
 	s.InstalledVersion = installedCLIVersion
-	// ULTRA cross-review comes from a model of a provider other than both the
-	// worker's and the Marshal's, so no model family reviews its own work.
+	// Every role runs in a session of its own. The ULTRA cross-reviewer and
+	// the verifier are started fresh, never resumed from the Marshal's or a
+	// worker's conversation, so none of them judges work it saw being made.
+	// Another installed provider is preferred; with a single provider the same
+	// one serves again, in a new session.
 	s.CrossReview = func(ctx context.Context, task marshal.Task, handin marshal.HandIn) (marshal.Review, string, error) {
-		provider := otherMarshalProvider(w.Provider, handin.Provider)
-		if provider == "" {
-			return marshal.Review{}, "", errors.New("marshal: no independent provider is available for cross-review")
-		}
-		review, err := (&MarshalCLI{Provider: provider, Dir: s.Repository}).Review(ctx, task, handin)
+		provider := roleProvider(installedMarshalProviders(), w.Provider, handin.Provider)
+		review, err := freshRoleCLI(provider, s.Repository).Review(ctx, task, handin)
 		review.Reviewer = "cross-review:" + provider
 		return review, provider, err
 	}
 	// Runtime checks and an independent model must both accept the integrated
 	// commit. A new model session is used for each verification decision.
 	s.VerifierProvider = func(_ context.Context, run marshal.Run) (string, error) {
-		exclude := []string{w.Provider}
+		avoid := []string{w.Provider}
 		for _, task := range run.Tasks {
-			exclude = append(exclude, task.Worker)
+			avoid = append(avoid, task.Worker)
 		}
-		provider := otherMarshalProvider(exclude...)
-		if provider == "" {
-			return "", errors.New("marshal: no independent verifier provider")
-		}
-		return provider, nil
+		return roleProvider(installedMarshalProviders(), avoid...), nil
 	}
 	s.IndependentVerify = func(ctx context.Context, run marshal.Run, head string, session verification.Session) error {
 		provider, err := s.VerifierProvider(ctx, run)
-		if err != nil || provider == "" || provider == w.Provider {
+		if err != nil || provider == "" {
 			return errors.New("marshal: independent verifier provider is unavailable")
 		}
-		return (&MarshalCLI{Provider: provider, Dir: filepath.Join(s.Worktrees, "TASK-"+marshalRunID(run)+"-integration")}).Verify(ctx, run, head, session)
+		return freshRoleCLI(provider, filepath.Join(s.Worktrees, "TASK-"+marshalRunID(run)+"-integration")).Verify(ctx, run, head, session)
 	}
 	s.Drivers = map[string]driver.Driver{
 		"codex":    driver.Codex(""),
@@ -179,18 +175,40 @@ func installedCLIVersion(ctx context.Context, worker string) string {
 	return strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
 }
 
-// otherMarshalProvider picks a model provider different from every one given.
-func otherMarshalProvider(exclude ...string) string {
-	for _, candidate := range []string{"codex", "claude", "agy"} {
+// freshRoleCLI starts a role in a new model session. It carries no
+// conversation to resume, which is what keeps the role from seeing any other
+// role's work in progress.
+func freshRoleCLI(provider, dir string) *MarshalCLI {
+	return &MarshalCLI{Provider: provider, Dir: dir}
+}
+
+// installedMarshalProviders lists the model CLIs that can take a Marshal role
+// on this machine.
+func installedMarshalProviders() []string {
+	var out []string
+	for _, provider := range []string{"codex", "claude", "agy"} {
+		if _, err := exec.LookPath(provider); err == nil {
+			out = append(out, provider)
+		}
+	}
+	return out
+}
+
+// roleProvider picks the provider for a role: the first installed one not in
+// avoid, or failing that the first of avoid, which is the Marshal's own
+// provider and so known to run here. Either way the role gets a fresh session.
+func roleProvider(installed []string, avoid ...string) string {
+	for _, candidate := range installed {
 		taken := false
-		for _, e := range exclude {
-			if strings.EqualFold(candidate, e) {
-				taken = true
-			}
+		for _, a := range avoid {
+			taken = taken || strings.EqualFold(candidate, a)
 		}
 		if !taken {
 			return candidate
 		}
+	}
+	if len(avoid) > 0 {
+		return avoid[0]
 	}
 	return ""
 }
