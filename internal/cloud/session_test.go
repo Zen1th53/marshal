@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -369,5 +370,33 @@ func TestMaintainDegradesOnRefusal(t *testing.T) {
 	}
 	if gate.Entitled() {
 		t.Fatal("entitlement survived a revocation")
+	}
+}
+
+// A refusal carries the server's reason, so the person can tell a revoked
+// entitlement from any other "no" without reading the server's logs.
+func TestRefusalCarriesTheServerReason(t *testing.T) {
+	for name, body := range map[string]string{
+		"with a reason":    `{"code":"entitlement_revoked","message":"entitlement is revoked"}`,
+		"without a reason": `not json`,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(body))
+		}))
+		client, err := NewClient(server.URL, "1.0.0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		state, _ := NewInstallation()
+		_, err = client.StartSession(context.Background(), state, "sess-x")
+		server.Close()
+		if !errors.Is(err, ErrRefused) {
+			t.Fatalf("%s: want ErrRefused, got %v", name, err)
+		}
+		hasReason := strings.Contains(err.Error(), "entitlement_revoked: entitlement is revoked")
+		if hasReason != (name == "with a reason") {
+			t.Fatalf("%s: %v", name, err)
+		}
 	}
 }
