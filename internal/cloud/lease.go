@@ -93,6 +93,9 @@ type Lease struct {
 	Claims    Claims `json:"claims"`
 	Bundle    Bundle `json:"bundle"`
 	Signature string `json:"signature"`
+	// EntitlementExpiresAt is server-reported display metadata. It does not
+	// grant capability; only the verified signed lease does that.
+	EntitlementExpiresAt *time.Time `json:"entitlement_expires_at,omitempty"`
 }
 
 // Valid checks a lease's internal consistency against a reference time.
