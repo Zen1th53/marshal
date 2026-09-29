@@ -105,7 +105,7 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 		return marshal.Run{}, err
 	}
 	run := marshal.Run{PlanID: p.ID, Process05Bound: true, PlanVersion: p.Version, BaseCommit: base, GoalBinding: goal.OriginalRequest, Tasks: tasks, State: marshal.Approved, Settings: settings.Value}
-	run.ApprovalScopeDigest = marshalApprovalDigest(p.ApprovalScopeDigest, run.Budget, run.Settings.EffectiveControl())
+	run.ApprovalScopeDigest = marshalApprovalDigest(p.ApprovalScopeDigest, run)
 	if err := s.save(ctx, runID, run, 0); err != nil {
 		return marshal.Run{}, err
 	}

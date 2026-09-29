@@ -58,10 +58,12 @@ func TestApprovalDigestBindsControlLevel(t *testing.T) {
 	}{"sha256:plan", budget})
 	sum := sha256.Sum256(data)
 	before := "sha256:" + hex.EncodeToString(sum[:])
-	if got := marshalApprovalDigest("sha256:plan", budget, marshal.ControlFree); got != before {
+	run := marshal.Run{Budget: budget, Settings: marshal.Settings{Control: marshal.ControlFree}}
+	if got := marshalApprovalDigest("sha256:plan", run); got != before {
 		t.Fatalf("free digest changed: %s, was %s", got, before)
 	}
-	if marshalApprovalDigest("sha256:plan", budget, marshal.ControlStrict) == before {
+	run.Settings.Control = marshal.ControlStrict
+	if marshalApprovalDigest("sha256:plan", run) == before {
 		t.Fatal("strict control is not bound into the approval digest")
 	}
 }

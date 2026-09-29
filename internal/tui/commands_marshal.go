@@ -190,7 +190,8 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings) (string, e
 		"- Workers you may assign tasks to: " + strings.Join(workers, ", ") + ".\n" +
 		"- Current working mode: acceptance mode " + string(settings.AcceptanceMode) + ". The person changes it before approval with /marshal settings acceptance-mode marshal|marshal-then-user|user.\n" +
 		"- Current control level: " + string(settings.EffectiveControl()) + ". The person changes it before approval with /marshal settings control strict|free.\n" +
-		"- Write the draft to " + marshalDraftRelativePath + " as JSON of the form " +
+		"- Write the plan pack to " + app.MarshalPackRelativePath + "/: REQUIREMENTS.md, 00_INDEX.md and tasks/<id>.md for every task id, each a non-empty Markdown file of at most 64 KiB. The runtime refuses a draft whose pack is missing a note or has a note for no task.\n" +
+		"- Write the task list to " + marshalDraftRelativePath + " as JSON of the form " +
 		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","checks":["executable commands"]}]}` +
 		" and nothing else. Every field shown is required; use an empty list for no dependencies. " + instructions + "\n", nil
 }
@@ -230,11 +231,13 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		provider = selected
 	}
 	root := service.Repository
-	draftPath := filepath.Join(root, marshalDraftRelativePath)
-	if _, err := os.Stat(draftPath); err == nil {
-		return "", fmt.Errorf("existing Marshal draft at %s must be handled first", draftPath)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return "", err
+	for _, leftover := range []string{marshalDraftRelativePath, app.MarshalPackRelativePath} {
+		path := filepath.Join(root, leftover)
+		if _, err := os.Lstat(path); err == nil {
+			return "", fmt.Errorf("existing Marshal draft at %s must be handled first", path)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
 	}
 	settings, err := service.Store.GetMarshalSettings(ctx, service.ProjectID)
 	if err != nil {
@@ -255,10 +258,25 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	if !exists {
 		return result, nil
 	}
+	// The pack is moved with the task list, before either is judged, so a
+	// rejected draft never blocks the next Marshal session.
+	packDir, packErr := service.TakePlanPack(runID)
 	draft, err := service.DraftFromProposal(data, provider)
 	if err != nil {
 		return result, fmt.Errorf("Marshal draft rejected: %w", err)
 	}
+	if packErr != nil {
+		return result, fmt.Errorf("Marshal draft rejected: %w", packErr)
+	}
+	ids := make([]string, 0, len(draft.Tasks))
+	for _, task := range draft.Tasks {
+		ids = append(ids, task.PlanTaskID)
+	}
+	pack, err := app.ReadPlanPack(packDir, ids)
+	if err != nil {
+		return result, fmt.Errorf("Marshal draft rejected: %w", err)
+	}
+	draft.Pack = &pack
 	goal := draft.Plan.Goal.GoalID
 	if goal == "" {
 		goal = draft.Plan.ID
@@ -271,8 +289,8 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
 	m.approvals = nil
 	m.mu.Unlock()
-	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan drafted: %d tasks · /marshal approve to run it", len(run.Tasks))))
-	return result + "\nMarshal plan drafted. " + note + " Use /marshal approve in MARSHAL to run it.", nil
+	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan drafted: %d tasks · read %s · /marshal approve to run it", len(run.Tasks), packDir)))
+	return result + "\nMarshal plan drafted. " + note + " Read the plan in " + packDir + ", then use /marshal approve in MARSHAL to run it.", nil
 }
 
 func (w *Workspace) marshalSetModel(args []string) (string, error) {
@@ -644,10 +662,10 @@ func marshalOutcomeNote(run marshal.Run, err error) string {
 	}
 }
 
-// marshalTaskBrief is the instruction a worker receives: its approved task,
-// the files it may change, the checks its work will be judged by, how closely
-// it must follow the approved instructions, and why earlier attempts were
-// returned.
+// marshalTaskBrief is the instruction a worker receives: its approved task
+// and note, the files it may change, the checks its work will be judged by,
+// how closely it must follow the approved instructions, why earlier attempts
+// were returned, and the approved requirements and task index.
 func marshalTaskBrief(t marshal.Task, bc app.BriefContext) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You are a worker on MARSHAL task %s.\n", t.PlanTaskID)
@@ -656,6 +674,9 @@ func marshalTaskBrief(t marshal.Task, bc app.BriefContext) string {
 	}
 	if t.ExpectedOutput != "" {
 		fmt.Fprintf(&b, "Expected output: %s\n", t.ExpectedOutput)
+	}
+	if bc.Note != "" {
+		b.WriteString("Task note from the approved plan:\n" + bc.Note + "\n")
 	}
 	if strings.TrimSpace(t.Instructions) != "" {
 		b.WriteString("Instructions:\n" + strings.TrimSpace(t.Instructions) + "\n")
@@ -685,6 +706,12 @@ func marshalTaskBrief(t marshal.Task, bc app.BriefContext) string {
 		for _, reason := range bc.Returned {
 			b.WriteString("- " + reason + "\n")
 		}
+	}
+	if bc.Requirements != "" {
+		b.WriteString("The requirements the person approved, for context; your task above is what you do:\n" + bc.Requirements + "\n")
+	}
+	if bc.Index != "" {
+		b.WriteString("How the tasks of the approved plan fit together:\n" + bc.Index + "\n")
 	}
 	b.WriteString("Make the change in this directory. Do not push and do not commit; MARSHAL records your work.")
 	return b.String()

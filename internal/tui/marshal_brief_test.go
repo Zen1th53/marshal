@@ -41,6 +41,19 @@ func TestTaskBriefNamesWhyEarlierAttemptsWereReturned(t *testing.T) {
 	}
 }
 
+func TestTaskBriefCarriesTheApprovedPlanPack(t *testing.T) {
+	brief := marshalTaskBrief(briefTask(), app.BriefContext{Control: marshal.ControlFree, Requirements: "keep the API stable", Index: "T1 then T2", Note: "the store is shared with T2"})
+	for _, want := range []string{"Task note from the approved plan:\nthe store is shared with T2", "requirements the person approved", "keep the API stable", "T1 then T2"} {
+		if !strings.Contains(brief, want) {
+			t.Errorf("brief lacks %q:\n%s", want, brief)
+		}
+	}
+	plain := marshalTaskBrief(briefTask(), app.BriefContext{Control: marshal.ControlFree})
+	if strings.Contains(plain, "approved plan") || strings.Contains(plain, "requirements the person approved") {
+		t.Errorf("a run without a pack speaks of one:\n%s", plain)
+	}
+}
+
 func TestMarshalBriefingFollowsControlLevel(t *testing.T) {
 	settings := marshal.DefaultSettings()
 	free, err := marshalRoleBriefing([]string{"codex"}, settings)
