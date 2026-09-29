@@ -29,6 +29,7 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal amend <reason>          Ask the Marshal to amend the plan; major changes need re-approval
   /marshal amend approve|deny      Approve or deny a major amended plan
   /marshal accept <task>           Approve one task for user acceptance mode
+  /marshal return <task> <reason>  Send a task awaiting your decision back to its worker
   /marshal resume                  Continue a run that stopped or was interrupted
   /marshal stop                    Stop the running run; its state is kept
   /marshal model <codex|claude|agy>  Choose the Marshal model for the next run
@@ -139,6 +140,8 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 		return w.marshalApproveProcess05Task(ctx, args[1:])
 	case "accept":
 		return w.marshalAccept(args[1:])
+	case "return":
+		return w.marshalReturn(ctx, args[1:])
 	case "close":
 		return w.marshalClose(ctx)
 	case "stop":
@@ -826,6 +829,35 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("task %q is not in the active run", args[0])
+}
+
+// marshalReturn is the person's decision to send a handed-in task back with
+// a reason. It is refused while the run is executing, so the decision never
+// races the runtime's own review of the same task.
+func (w *Workspace) marshalReturn(ctx context.Context, args []string) (string, error) {
+	if len(args) < 2 || strings.TrimSpace(strings.Join(args[1:], " ")) == "" {
+		return "", errors.New("usage: /marshal return <task> <reason>")
+	}
+	m, service, runID, provider, err := w.marshalActive()
+	if err != nil {
+		return "", err
+	}
+	m.mu.Lock()
+	busy := m.busy
+	m.mu.Unlock()
+	if busy {
+		return "", errors.New("a Marshal operation is already running; /marshal stop first")
+	}
+	task := args[0]
+	m.grant(runID, "return:"+task)
+	verdict, err := service.ReturnByUser(ctx, runID, task, strings.Join(args[1:], " "))
+	if err != nil {
+		return "", err
+	}
+	if run, loadErr := service.Snapshot(ctx, runID); loadErr == nil {
+		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "task "+task+" returned by you"))
+	}
+	return fmt.Sprintf("Task %s returned (%s); /marshal resume to continue.", task, verdict), nil
 }
 
 // marshalSettings shows or changes the project's Marshal settings.

@@ -293,23 +293,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if result == marshal.VerdictAccept {
 		t.State = marshal.Accepted
 	} else {
-		if t.ReturnsByAgent == nil {
-			t.ReturnsByAgent = map[string]int{}
-		}
-		t.ReturnsByAgent[t.Worker]++
-		result = marshal.NextAfterReturn(*t, run.Settings.ReworkLimit)
-		if len(t.ReturnsByAgent) == 1 && t.ReturnsByAgent[t.Worker] >= run.Settings.ReworkLimit {
-			result = marshal.VerdictReassign
-		}
-		switch result {
-		case marshal.VerdictReturn:
-			t.State = marshal.Returned
-		case marshal.VerdictReassign:
-			t.State = marshal.Reassigned
-		case marshal.VerdictEscalate:
-			t.State = marshal.Escalated
-			run.State = marshal.AwaitingUser
-		}
+		result = applyMarshalReturn(&run, t)
 	}
 	budget, err := s.Charge(ctx, runID, taskID, "review", charge)
 	if err != nil {
@@ -348,6 +332,75 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		_, err = s.Charge(ctx, runID, taskID, "return", zeroMarshalCharge())
 	}
 	return result, err
+}
+
+// applyMarshalReturn counts a return against the task's worker and moves the
+// task on: back to the same worker, to another worker once the rework limit
+// is reached, or to the user when another worker has failed it too.
+func applyMarshalReturn(run *marshal.Run, t *marshal.Task) marshal.Verdict {
+	if t.ReturnsByAgent == nil {
+		t.ReturnsByAgent = map[string]int{}
+	}
+	t.ReturnsByAgent[t.Worker]++
+	result := marshal.NextAfterReturn(*t, run.Settings.ReworkLimit)
+	if len(t.ReturnsByAgent) == 1 && t.ReturnsByAgent[t.Worker] >= run.Settings.ReworkLimit {
+		result = marshal.VerdictReassign
+	}
+	switch result {
+	case marshal.VerdictReturn:
+		t.State = marshal.Returned
+	case marshal.VerdictReassign:
+		t.State = marshal.Reassigned
+	case marshal.VerdictEscalate:
+		t.State = marshal.Escalated
+		run.State = marshal.AwaitingUser
+	}
+	return result
+}
+
+// ReturnByUser sends a handed-in task back on the person's decision, with
+// their reason. It takes the same rework path as a returned review, so the
+// rework limit, reassignment and escalation apply unchanged. The reason is
+// stored as the attempt's review, where the task's next brief can read it.
+func (s *MarshalService) ReturnByUser(ctx context.Context, runID, taskID, reason string) (marshal.Verdict, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "", errors.New("a reason is required to return a task")
+	}
+	run, rev, err := s.load(ctx, runID)
+	if err != nil {
+		return "", err
+	}
+	i := taskIndex(run, taskID)
+	if i < 0 || run.Tasks[i].State != marshal.HandedIn {
+		return "", errors.New("task is not awaiting a decision")
+	}
+	if s.ApprovalActor == nil {
+		return "", errors.New("user approval source is unavailable")
+	}
+	user, err := s.ApprovalActor(ctx, runID, "return:"+taskID)
+	if err != nil || user == "" {
+		return "", errors.New("the return was not given by the person")
+	}
+	t := &run.Tasks[i]
+	attempt := 1
+	for _, n := range t.ReturnsByAgent {
+		attempt += n
+	}
+	if _, err = s.Store.SetMarshalReview(ctx, runID, taskID, attempt, marshal.Review{Verdict: marshal.VerdictReturn, Reviewer: user, Reasons: []string{reason}}); err != nil {
+		return "", err
+	}
+	result := applyMarshalReturn(&run, t)
+	if err = s.save(ctx, runID, run, rev); err != nil {
+		return "", err
+	}
+	kind := events.EventTypeMarshalTaskReturned
+	if result == marshal.VerdictReassign {
+		kind = events.EventTypeMarshalTaskReassigned
+	} else if result == marshal.VerdictEscalate {
+		kind = events.EventTypeMarshalEscalated
+	}
+	return result, s.record(ctx, runID, taskID, kind, map[string]any{"returned_by": user, "reason": reason})
 }
 
 func (s *MarshalService) gateInputs(ctx context.Context, runID, taskID string, run marshal.Run, domain constitution.Domain) (constitution.Envelope, constitution.RuntimeState, error) {
