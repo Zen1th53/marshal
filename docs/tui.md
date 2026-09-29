@@ -282,10 +282,12 @@ The TUI is fully operable without a mouse.
 
 `marshal tui` opens on the **composer**, which every session has. The frozen-IA
 navigation surface (Home, Control, Status, Work, Verify, Memory, Models,
-Security, System) is an **ULTRA** feature: `Ctrl+N` and `Esc` on an empty
-composer open it only when the session holds a verified ULTRA entitlement.
-Without one, both entry points refuse and say so, and every MARSHAL command
-stays available from the composer. `/ultra status` reports whether verified ULTRA
+Security, System) is **not available yet**: it has declared screens with no
+capability behind them and has not been verified end to end, so `Ctrl+N` and
+`Esc` on an empty composer refuse for every session, entitled or not, and say
+so. Every MARSHAL command stays available from the composer. Once it is
+verified it becomes an **ULTRA** feature, opened only when the session holds a
+verified ULTRA entitlement. `/ultra status` reports whether verified ULTRA
 execution is active, entitled but switched off, or unavailable. It shows the
 Cloud grant's end in local time separately from the short, renewable session
 lease; older Cloud servers report the grant end as unavailable. The header and

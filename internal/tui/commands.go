@@ -684,7 +684,7 @@ Function Keys & Shortcuts:
   F1: Help       F2: Review     F3: Diff viewer
   F4: Status     F5: Models     F6: MCP servers
   F7: Codex      F8: Claude     F9: OpenCode     F12: Antigravity
-  F10: Update     Ctrl+N: Navigation (ULTRA)
+  F10: Update     Ctrl+N: Navigation (not available yet)
 
 Composer:
   /  or  @                 Opens the command menu as you type
