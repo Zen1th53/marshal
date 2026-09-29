@@ -189,6 +189,33 @@ func (s *Store) LoadOrCreate() (State, error) {
 	return fresh, nil
 }
 
+// MachineStateDir returns the directory that holds this user's installation
+// identity, adopting a project-level state file left by an earlier version.
+//
+// The identity belongs to the installation, this user on this machine, not to
+// a project. Kept per project, every repository, worktree and scratch
+// directory registered as a separate installation, and an entitlement granted
+// to one of them was missing in all the others. The first project-level file
+// found is adopted so an installation that already holds an entitlement keeps
+// it; later ones are left alone rather than replacing the adopted identity.
+func MachineStateDir(projectStateDir string) (string, error) {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("%w: %s", ErrState, err)
+	}
+	dir := filepath.Join(base, "marshal")
+	machine := NewStore(dir)
+	if fileExists(machine.Path()) {
+		return dir, nil
+	}
+	if legacy, err := NewStore(projectStateDir).Load(); err == nil {
+		if err := machine.Save(legacy); err != nil {
+			return "", err
+		}
+	}
+	return dir, nil
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
