@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
-func marshalBrief(t marshal.Task) string { return "complete task " + t.PlanTaskID }
+func marshalBrief(t marshal.Task, _ BriefContext) string { return "complete task " + t.PlanTaskID }
 
 // Execute drives an approved plan through dispatch, review, merge and
 // verification, and stops where the default acceptance mode needs the user

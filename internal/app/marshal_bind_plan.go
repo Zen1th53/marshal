@@ -92,7 +92,7 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 		if s.ModelProvider != "" && s.ModelProvider == workerProvider {
 			return marshal.Run{}, fmt.Errorf("Marshal model %s would review its own Process 05 work; choose another with /marshal model", s.ModelProvider)
 		}
-		task := marshal.Task{PlanTaskID: pt.ID, Title: pt.Title, Worker: worker, Mode: marshal.Governed, State: marshal.Queued, BaseCommit: base, Branch: "marshal/" + runID + "/" + pt.ID, Files: append([]string(nil), pt.Paths...), Criteria: append([]string(nil), pt.Criteria...), DependsOn: append([]string(nil), pt.DependsOn...)}
+		task := marshal.Task{PlanTaskID: pt.ID, Title: pt.Title, Worker: worker, Mode: marshal.Governed, State: marshal.Queued, BaseCommit: base, Branch: "marshal/" + runID + "/" + pt.ID, Files: append([]string(nil), pt.Paths...), Criteria: append([]string(nil), pt.Criteria...), DependsOn: append([]string(nil), pt.DependsOn...), Instructions: pt.Instructions, ExpectedOutput: pt.ExpectedOutput}
 		for _, command := range p.Checks[pt.ID] {
 			if strings.TrimSpace(command) == "" {
 				return marshal.Run{}, errors.New("approved plan contains an empty check")
@@ -101,8 +101,11 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 		}
 		tasks = append(tasks, task)
 	}
+	if err := instructionsPresent(settings.Value, tasks); err != nil {
+		return marshal.Run{}, err
+	}
 	run := marshal.Run{PlanID: p.ID, Process05Bound: true, PlanVersion: p.Version, BaseCommit: base, GoalBinding: goal.OriginalRequest, Tasks: tasks, State: marshal.Approved, Settings: settings.Value}
-	run.ApprovalScopeDigest = marshalApprovalDigest(p.ApprovalScopeDigest, run.Budget)
+	run.ApprovalScopeDigest = marshalApprovalDigest(p.ApprovalScopeDigest, run.Budget, run.Settings.EffectiveControl())
 	if err := s.save(ctx, runID, run, 0); err != nil {
 		return marshal.Run{}, err
 	}

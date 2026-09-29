@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -125,7 +127,10 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
 	}
-	if err = s.record(ctx, runID, taskID, events.EventTypeMarshalTaskDispatched, map[string]any{"tier": string(policy.Tier), "worker": t.Worker}); err != nil {
+	// The brief is recorded as sent, so what a worker was told can be read
+	// back beside what it handed in.
+	briefSum := sha256.Sum256([]byte(brief))
+	if err = s.record(ctx, runID, taskID, events.EventTypeMarshalTaskDispatched, map[string]any{"tier": string(policy.Tier), "worker": t.Worker, "brief": brief, "brief_sha256": hex.EncodeToString(briefSum[:])}); err != nil {
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
 	}
@@ -257,7 +262,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if s.Model == nil {
 		return "", errors.New("Marshal model is unavailable")
 	}
-	proposal, err := s.Model.Review(ctx, *t, h)
+	proposal, err := s.Model.Review(ctx, *t, h, run.Settings.EffectiveControl())
 	if err != nil {
 		return "", err
 	}
@@ -281,7 +286,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		if s.CrossReview == nil {
 			return "", errors.New("cross-review is unavailable")
 		}
-		crossReview, provider, reviewErr := s.CrossReview(ctx, *t, h)
+		crossReview, provider, reviewErr := s.CrossReview(ctx, *t, h, run.Settings.EffectiveControl())
 		if reviewErr != nil {
 			return "", reviewErr
 		}
@@ -771,6 +776,9 @@ func (s *MarshalService) ProposeAmend(ctx context.Context, runID, reason string)
 	if err = validateDraft(d); err != nil {
 		return MarshalDraft{}, false, err
 	}
+	if err = instructionsPresent(run.Settings, d.Tasks); err != nil {
+		return MarshalDraft{}, false, err
+	}
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
 	if err != nil {
 		return MarshalDraft{}, false, err
@@ -796,6 +804,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		return run, errors.New("missing amendment input")
 	}
 	if err = validateDraft(d); err != nil {
+		return run, err
+	}
+	if err = instructionsPresent(run.Settings, d.Tasks); err != nil {
 		return run, err
 	}
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
@@ -833,7 +844,7 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	}
 	run.PlanVersion = amended.Version
 	if !major {
-		run.ApprovalScopeDigest = marshalApprovalDigest(amended.ApprovalScopeDigest, run.Budget)
+		run.ApprovalScopeDigest = marshalApprovalDigest(amended.ApprovalScopeDigest, run.Budget, run.Settings.EffectiveControl())
 		previous := run.Tasks
 		run.Tasks = d.Tasks
 		for i := range run.Tasks {

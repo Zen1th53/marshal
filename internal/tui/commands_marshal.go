@@ -33,7 +33,7 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal resume                  Continue a run that stopped or was interrupted
   /marshal stop                    Stop the running run; its state is kept
   /marshal model <codex|claude|agy>  Choose the Marshal model for the next run
-  /marshal settings [key value]    Show or change execution-rights, acceptance-mode, rework-limit, ultra-concurrency`
+  /marshal settings [key value]    Show or change execution-rights, acceptance-mode, rework-limit, ultra-concurrency, control (free|strict)`
 
 // marshalSession is the workspace's Marshal state: the service, the active
 // run, and the approvals the person has given in this session.
@@ -175,13 +175,17 @@ func marshalChatProvider(provider string) string {
 // marshalRoleBriefing asks for the task list only. The runtime builds the
 // plan around it, so the model never has to reproduce plan identity, the
 // constitution binding or the graph digest.
-func marshalRoleBriefing(workers []string) string {
+func marshalRoleBriefing(workers []string, control marshal.Control) string {
+	instructions := "Each task may add \"instructions\" (purpose, approach, what to leave alone) and \"expected_output\"; workers choose their own approach within the task's files. "
+	if control == marshal.ControlStrict {
+		instructions = "Control is strict: every task must add \"instructions\" (purpose, approach, steps, what to leave alone) and may add \"expected_output\"; workers are held to the instructions exactly. "
+	}
 	return "You are the Marshal. Plan the work with the person in this conversation. " +
 		"Do not edit project files. When the person agrees, write the plan to " + marshalDraftRelativePath + " as JSON of the form " +
 		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","checks":["executable commands"]}]}` +
 		" and nothing else. Every field is required; use an empty list for no dependencies. " +
 		"Assign each task to one of these workers: " + strings.Join(workers, ", ") + ". " +
-		"Criteria must be checkable and every task needs at least one check command. Tell the person when the draft is written. " +
+		"Criteria must be checkable and every task needs at least one check command. " + instructions + "Tell the person when the draft is written. " +
 		"Only the person can approve the plan, in the MARSHAL window, with /marshal approve. " +
 		"You cannot approve it from this CLI."
 }
@@ -227,7 +231,11 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
-	result, sessionErr := w.runNativeAgent(ctx, marshalChatProvider(provider), nil, marshalRoleBriefing(app.MarshalWorkers(provider)))
+	settings, err := service.Store.GetMarshalSettings(ctx, service.ProjectID)
+	if err != nil {
+		return "", err
+	}
+	result, sessionErr := w.runNativeAgent(ctx, marshalChatProvider(provider), nil, marshalRoleBriefing(app.MarshalWorkers(provider), settings.Value.EffectiveControl()))
 	if sessionErr != nil {
 		return result, sessionErr
 	}
@@ -627,13 +635,21 @@ func marshalOutcomeNote(run marshal.Run, err error) string {
 	}
 }
 
-// marshalTaskBrief is the instruction a worker receives: its task, the files
-// it may change and the checks its work will be judged by.
-func marshalTaskBrief(t marshal.Task) string {
+// marshalTaskBrief is the instruction a worker receives: its approved task,
+// the files it may change, the checks its work will be judged by, how closely
+// it must follow the approved instructions, and why earlier attempts were
+// returned.
+func marshalTaskBrief(t marshal.Task, bc app.BriefContext) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You are a worker on MARSHAL task %s.\n", t.PlanTaskID)
 	if t.Title != "" {
 		fmt.Fprintf(&b, "Task: %s\n", t.Title)
+	}
+	if t.ExpectedOutput != "" {
+		fmt.Fprintf(&b, "Expected output: %s\n", t.ExpectedOutput)
+	}
+	if strings.TrimSpace(t.Instructions) != "" {
+		b.WriteString("Instructions:\n" + strings.TrimSpace(t.Instructions) + "\n")
 	}
 	if len(t.Criteria) > 0 {
 		b.WriteString("Acceptance criteria:\n")
@@ -642,12 +658,23 @@ func marshalTaskBrief(t marshal.Task) string {
 		}
 	}
 	if len(t.Files) > 0 {
-		b.WriteString("You may change only these files: " + strings.Join(t.Files, ", ") + "\n")
+		b.WriteString("You may change only these files: " + strings.Join(t.Files, ", ") + ". A change to any other file gets your work returned.\n")
 	}
 	if len(t.Checks) > 0 {
 		b.WriteString("Your work will be judged by these commands, run by MARSHAL:\n")
 		for _, c := range t.Checks {
 			b.WriteString("- " + c.Command + "\n")
+		}
+	}
+	if bc.Control == marshal.ControlStrict {
+		b.WriteString("Follow the instructions exactly. If they cannot be followed, stop and explain why instead of choosing another approach; a departure from them gets your work returned.\n")
+	} else {
+		b.WriteString("Choose how to do the task yourself, within the files above. The acceptance criteria and checks are binding.\n")
+	}
+	if len(bc.Returned) > 0 {
+		b.WriteString("Earlier attempts at this task were returned for these reasons. Address each one:\n")
+		for _, reason := range bc.Returned {
+			b.WriteString("- " + reason + "\n")
 		}
 	}
 	b.WriteString("Make the change in this directory. Do not push and do not commit; MARSHAL records your work.")
@@ -875,8 +902,8 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 	}
 	s := record.Value
 	if len(args) == 0 {
-		return fmt.Sprintf("execution-rights %s\nacceptance-mode %s\nrework-limit %d\nultra-concurrency %d",
-			s.ExecutionRights, s.AcceptanceMode, s.ReworkLimit, s.UltraConcurrency), nil
+		return fmt.Sprintf("execution-rights %s\nacceptance-mode %s\nrework-limit %d\nultra-concurrency %d\ncontrol %s",
+			s.ExecutionRights, s.AcceptanceMode, s.ReworkLimit, s.UltraConcurrency, s.EffectiveControl()), nil
 	}
 	if len(args) != 2 {
 		return "", errors.New("usage: /marshal settings <key> <value>")
@@ -886,6 +913,8 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 		s.ExecutionRights = marshal.ExecutionRights(args[1])
 	case "acceptance-mode":
 		s.AcceptanceMode = marshal.AcceptanceMode(args[1])
+	case "control":
+		s.Control = marshal.Control(args[1])
 	case "rework-limit", "ultra-concurrency":
 		n, err := strconv.Atoi(args[1])
 		if err != nil {

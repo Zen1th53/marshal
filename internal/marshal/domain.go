@@ -40,16 +40,42 @@ const (
 	Native   WorkerMode = "native"
 )
 
+// Control sets how closely the Marshal directs its workers. It governs only
+// how a task is done: what is done, where, and how it is accepted always come
+// from the approved plan.
+type Control string
+
+const (
+	// ControlFree lets a worker choose its approach within the task's files.
+	ControlFree Control = "free"
+	// ControlStrict requires approved instructions for every task, which the
+	// worker follows and the review holds it to.
+	ControlStrict Control = "strict"
+)
+
 // Settings captures the policy approved for a run.
 type Settings struct {
 	ExecutionRights  ExecutionRights
 	AcceptanceMode   AcceptanceMode
 	ReworkLimit      int
 	UltraConcurrency int
+	// Control is empty in settings stored before it existed; that reads as
+	// ControlFree.
+	Control Control `json:",omitempty"`
 }
 
 // DefaultSettings returns the Marshal role's agreed defaults.
-func DefaultSettings() Settings { return Settings{RightsReadOnly, AcceptMarshalThenUser, 2, 3} }
+func DefaultSettings() Settings {
+	return Settings{ExecutionRights: RightsReadOnly, AcceptanceMode: AcceptMarshalThenUser, ReworkLimit: 2, UltraConcurrency: 3, Control: ControlFree}
+}
+
+// EffectiveControl is the control level in force, reading an unset one as free.
+func (s Settings) EffectiveControl() Control {
+	if s.Control == "" {
+		return ControlFree
+	}
+	return s.Control
+}
 
 // Validate rejects settings that the runtime cannot enforce.
 func (s Settings) Validate() error {
@@ -61,6 +87,9 @@ func (s Settings) Validate() error {
 	}
 	if s.ReworkLimit < 0 || s.UltraConcurrency < 1 {
 		return errors.New("invalid settings limit")
+	}
+	if c := s.EffectiveControl(); c != ControlFree && c != ControlStrict {
+		return errors.New("invalid control level")
 	}
 	return nil
 }
@@ -151,6 +180,10 @@ type Task struct {
 	Files          []string
 	Criteria       []string
 	DependsOn      []string
+	// Instructions and ExpectedOutput are copied from the approved plan task;
+	// the worker's brief carries them.
+	Instructions   string `json:",omitempty"`
+	ExpectedOutput string `json:",omitempty"`
 }
 
 // CloseAuthorization records the user's digest-bound standing consent to close.

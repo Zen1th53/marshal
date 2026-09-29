@@ -29,7 +29,7 @@ type marshalFakeModel struct {
 }
 
 func (m marshalFakeModel) Draft(context.Context, string) (MarshalDraft, error) { return m.draft, nil }
-func (m marshalFakeModel) Review(context.Context, marshal.Task, marshal.HandIn) (marshal.Review, error) {
+func (m marshalFakeModel) Review(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, error) {
 	return m.review, nil
 }
 func (m marshalFakeModel) Amend(context.Context, marshal.Run, string) (MarshalDraft, error) {
@@ -657,7 +657,7 @@ func TestM09UltraDispatchRequiresCrossReviewAndVerifier(t *testing.T) {
 	if _, err = s.Review(ctx, "run", "a", knownCharge()); err == nil {
 		t.Fatal("ULTRA review without cross-review passed")
 	}
-	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn) (marshal.Review, string, error) {
+	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error) {
 		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check"}}, "other", nil
 	}
 	if v, err := s.Review(ctx, "run", "a", knownCharge()); err != nil || v != marshal.VerdictAccept {
@@ -699,7 +699,7 @@ func TestM09UltraRejectedCrossReviewReturnsTask(t *testing.T) {
 	if _, err := s.CollectHandIn(ctx, "run", d); err != nil {
 		t.Fatal(err)
 	}
-	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn) (marshal.Review, string, error) {
+	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error) {
 		return marshal.Review{Verdict: marshal.VerdictReturn, Reviewer: "second", Reasons: []string{"check failed"}, EvidenceRefs: []string{"check"}}, "other", nil
 	}
 	if verdict, err := s.Review(ctx, "run", "a", knownCharge()); err != nil || verdict != marshal.VerdictReturn {

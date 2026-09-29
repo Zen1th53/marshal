@@ -129,7 +129,7 @@ func TestMarshalCLIRealModelReview(t *testing.T) {
 	cli := &MarshalCLI{Provider: "codex", Dir: root}
 	task := marshal.Task{PlanTaskID: "hello", Criteria: []string{"hello.txt contains hello"}, Files: []string{"hello.txt"}, Checks: []marshal.Check{{Command: "grep -qx hello hello.txt", Criteria: []string{"hello.txt contains hello"}}}}
 	handin := marshal.HandIn{Diff: "diff --git a/hello.txt b/hello.txt\nnew file mode 100644\n+hello\n", FilesTouched: []string{"hello.txt"}, CheckResults: []marshal.CheckResult{{Command: "grep -qx hello hello.txt", Criteria: task.Criteria, Passed: true}}}
-	review, err := cli.Review(t.Context(), task, handin)
+	review, err := cli.Review(t.Context(), task, handin, marshal.ControlFree)
 	if err != nil {
 		t.Fatal(err)
 	}

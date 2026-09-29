@@ -79,7 +79,7 @@ func TestMarshalGovernedTaskUsesProcess05AndImportsExactCommit(t *testing.T) {
 	if _, err := runtime.marshalProcess05Run(s)(ctx, driver.Request{Task: tampered}); err == nil || !strings.Contains(err.Error(), "checks differ") {
 		t.Fatalf("changed check reached Process 05: %v", err)
 	}
-	_, err = s.Execute(ctx, "run", func(marshal.Task) string { return "fix the typo" }, nil)
+	_, err = s.Execute(ctx, "run", func(marshal.Task, BriefContext) string { return "fix the typo" }, nil)
 	if err == nil || !strings.Contains(err.Error(), "approval") {
 		t.Fatalf("Process 05 approval pause was not reported: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestMarshalGovernedTaskUsesProcess05AndImportsExactCommit(t *testing.T) {
 	if _, err := s.Resume(ctx, "run"); err != nil {
 		t.Fatal(err)
 	}
-	finished, err := s.Execute(ctx, "run", func(marshal.Task) string { return "fix the typo" }, nil)
+	finished, err := s.Execute(ctx, "run", func(marshal.Task, BriefContext) string { return "fix the typo" }, nil)
 	if err != nil {
 		t.Fatalf("resume governed task: %v (Marshal state %s)", err, finished.State)
 	}
@@ -171,7 +171,7 @@ func TestMarshalGovernedMultiTaskPlanRunsInOrder(t *testing.T) {
 		t.Fatalf("multi-task plan binding: %+v %v", run.Tasks, err)
 	}
 	for i := 0; i < 2; i++ {
-		if _, err := s.Execute(ctx, "run", func(marshal.Task) string { return "execute approved task" }, nil); err == nil || !strings.Contains(err.Error(), "approval") {
+		if _, err := s.Execute(ctx, "run", func(marshal.Task, BriefContext) string { return "execute approved task" }, nil); err == nil || !strings.Contains(err.Error(), "approval") {
 			t.Fatalf("task %d did not pause for approval: %v", i, err)
 		}
 		runs, err := execService.ListRuns(ctx)
@@ -190,7 +190,7 @@ func TestMarshalGovernedMultiTaskPlanRunsInOrder(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	finished, err := s.Execute(ctx, "run", func(marshal.Task) string { return "execute approved task" }, nil)
+	finished, err := s.Execute(ctx, "run", func(marshal.Task, BriefContext) string { return "execute approved task" }, nil)
 	if err != nil || finished.State != marshal.Verifying || finished.Tasks[0].State != marshal.Merged || finished.Tasks[1].State != marshal.Merged {
 		t.Fatalf("multi-task completion: %+v %v", finished, err)
 	}

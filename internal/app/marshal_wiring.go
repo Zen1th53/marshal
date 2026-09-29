@@ -62,9 +62,9 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	// worker's conversation, so none of them judges work it saw being made.
 	// Another installed provider is preferred; with a single provider the same
 	// one serves again, in a new session.
-	s.CrossReview = func(ctx context.Context, task marshal.Task, handin marshal.HandIn) (marshal.Review, string, error) {
+	s.CrossReview = func(ctx context.Context, task marshal.Task, handin marshal.HandIn, control marshal.Control) (marshal.Review, string, error) {
 		provider := roleProvider(installedMarshalProviders(), w.Provider, handin.Provider)
-		review, err := freshRoleCLI(provider, s.Repository).Review(ctx, task, handin)
+		review, err := freshRoleCLI(provider, s.Repository).Review(ctx, task, handin, control)
 		review.Reviewer = "cross-review:" + provider
 		return review, provider, err
 	}

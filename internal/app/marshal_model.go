@@ -40,7 +40,7 @@ func (m *MarshalCLI) SetMarshalConversationID(id string) {
 	}
 }
 
-const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"checks":{"type":"array","items":{"type":"string"}}},"required":["id","title","criteria","paths","depends_on","worker","checks"]}}},"required":["tasks"]}`
+const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"checks":{"type":"array","items":{"type":"string"}},"instructions":{"type":"string"},"expected_output":{"type":"string"}},"required":["id","title","criteria","paths","depends_on","worker","checks"]}}},"required":["tasks"]}`
 const marshalReviewSchema = `{"type":"object","additionalProperties":false,"properties":{"Verdict":{"type":"string","enum":["accept","return","reassign","escalate"]},"Reviewer":{"type":"string"},"Reasons":{"type":"array","items":{"type":"string"}},"EvidenceRefs":{"type":"array","items":{"type":"string"}}},"required":["Verdict","Reviewer","Reasons","EvidenceRefs"]}`
 const marshalVerifySchema = `{"type":"object","additionalProperties":false,"properties":{"head":{"type":"string"},"verdict":{"type":"string","enum":["pass","fail"]},"findings":{"type":"array","items":{"type":"string"}}},"required":["head","verdict","findings"]}`
 
@@ -188,19 +188,23 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 		return MarshalDraft{}, errors.New("no separate worker CLI is available")
 	}
 	var proposal marshalTaskProposal
-	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
+	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks, and may carry instructions (purpose, approach, what to leave alone) and an expected output. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
 	return m.materialize(proposal, "", 1, workers)
 }
-func (m *MarshalCLI) Review(ctx context.Context, task marshal.Task, handin marshal.HandIn) (marshal.Review, error) {
+func (m *MarshalCLI) Review(ctx context.Context, task marshal.Task, handin marshal.HandIn, control marshal.Control) (marshal.Review, error) {
 	var out marshal.Review
 	input, _ := json.Marshal(struct {
 		Task   marshal.Task
 		HandIn marshal.HandIn
 	}{task, handin})
-	err := m.turn(ctx, "Review this hand-in and return a JSON verdict: "+string(input), marshalReviewSchema, &out)
+	rule := "Judge it by the task's acceptance criteria, checks and files. The worker chose its own approach; that choice is not a reason to return it. "
+	if control == marshal.ControlStrict {
+		rule = "Control is strict: the worker had to follow the task's instructions exactly. Judge it by the acceptance criteria, checks and files, and return it for any departure from the instructions, naming the departure. "
+	}
+	err := m.turn(ctx, "Review this hand-in and return a JSON verdict. "+rule+string(input), marshalReviewSchema, &out)
 	return out, err
 }
 func (m *MarshalCLI) Amend(ctx context.Context, run marshal.Run, reason string) (MarshalDraft, error) {
@@ -223,6 +227,10 @@ type marshalTaskProposal struct {
 		DependsOn []string `json:"depends_on"`
 		Worker    string   `json:"worker"`
 		Checks    []string `json:"checks"`
+		// Instructions and ExpectedOutput become part of the approved plan
+		// task. Strict control requires instructions for every task.
+		Instructions   string `json:"instructions,omitempty"`
+		ExpectedOutput string `json:"expected_output,omitempty"`
 	} `json:"tasks"`
 }
 
@@ -282,8 +290,8 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 		if !allowed || item.ID == "" || item.Title == "" || len(item.Criteria) == 0 || len(item.Paths) == 0 || len(item.Checks) == 0 {
 			return MarshalDraft{}, fmt.Errorf("invalid proposed task %q", item.ID)
 		}
-		draft.Plan.Tasks = append(draft.Plan.Tasks, plan.Task{ID: item.ID, Title: item.Title, Criteria: item.Criteria, Paths: item.Paths, DependsOn: item.DependsOn, Mutating: true, Weight: 1})
-		task := marshal.Task{PlanTaskID: item.ID, Worker: item.Worker, Mode: marshal.Native, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn}
+		draft.Plan.Tasks = append(draft.Plan.Tasks, plan.Task{ID: item.ID, Title: item.Title, Criteria: item.Criteria, Paths: item.Paths, DependsOn: item.DependsOn, Mutating: true, Weight: 1, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput})
+		task := marshal.Task{PlanTaskID: item.ID, Title: item.Title, Worker: item.Worker, Mode: marshal.Native, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput}
 		for _, command := range item.Checks {
 			task.Checks = append(task.Checks, marshal.Check{Command: command, Criteria: item.Criteria})
 		}
