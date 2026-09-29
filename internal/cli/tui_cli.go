@@ -64,7 +64,9 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 	root, err := c.projectRoot(ctx)
 	if err == nil {
 		authorization := cloudAuthorize(ctx, root)
-		workspace.AttachULTRA(authorization.Gate, authorization.ExecutionEnabled)
+		// Execution starts off in every session; the person turns it on with
+		// /ultra start once the TUI is open.
+		workspace.AttachULTRA(authorization.Gate, false)
 		// The requester is attached even when the gate is nil, because a
 		// session that is *not* entitled is exactly the one with something to
 		// ask for.

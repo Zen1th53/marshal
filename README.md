@@ -467,6 +467,8 @@ Then, in the workspace:
 /mode auto       switch the session's working mode
 /mode ultra      refused without a verified entitlement
 /ultra           why this session is Standard, and how to ask for more
+/ultra start     switch ULTRA Execution on, once entitled
+/ultra stop      switch it off again, after you confirm
 ```
 
 `manual` and `auto` are **session preferences**. They are recorded and shown in

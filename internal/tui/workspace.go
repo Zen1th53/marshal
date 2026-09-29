@@ -70,6 +70,9 @@ type Workspace struct {
 	// ultraExecution is the user's ULTRA Execution preference. It is not an
 	// authority: with no entitlement it changes nothing.
 	ultraExecution bool
+	// ultraStopAsked records that /ultra stop asked the person to confirm;
+	// only /ultra stop confirm straight after it turns execution off.
+	ultraStopAsked bool
 	// ultraClient and ultraState are what asking for an entitlement needs: the
 	// request is signed with the installation key, so the gate alone is not
 	// enough. Nil when the Cloud is unconfigured, which is why every use
@@ -187,6 +190,32 @@ func (w *Workspace) ultraGate() (*cloud.Gate, bool) {
 	return w.ultra, w.ultraExecution
 }
 
+// setUltraExecution records the person's ULTRA Execution preference and
+// withdraws any pending stop question.
+func (w *Workspace) setUltraExecution(enabled bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ultraExecution = enabled
+	w.ultraStopAsked = false
+}
+
+// askUltraStop records that the person was asked to confirm /ultra stop.
+func (w *Workspace) askUltraStop(asked bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ultraStopAsked = asked
+}
+
+// takeUltraStop reports whether a stop question is pending and withdraws it,
+// so one question allows one confirmation.
+func (w *Workspace) takeUltraStop() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	asked := w.ultraStopAsked
+	w.ultraStopAsked = false
+	return asked
+}
+
 // NewWorkspace instantiates a dynamic terminal workspace connected to the canonical store.
 func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	if sessionID == "" {
@@ -239,7 +268,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	// operator types everywhere else.
 	compCtx.Subcommands["/memory peers"] = []string{"participants", "claude", "codex", "opencode", "agy"}
 	compCtx.Subcommands["/harness"] = []string{"probe", "status", "select"}
-	compCtx.Subcommands["/ultra"] = []string{"status", "request"}
+	compCtx.Subcommands["/ultra"] = []string{"status", "start", "stop", "request"}
 	compCtx.Subcommands["/provider"] = []string{"status", "config"}
 	compCtx.Subcommands["/alignment"] = []string{"scope", "violations", "blast", "deletions", "resolve", "status"}
 	compCtx.Subcommands["/codex"] = []string{"doctor", "models", "model", "review", "sessions", "mcp", "plugin", "apply", "diff", "resume", "fork", "agents", "features", "sandbox", "approval", "search", "login", "logout", "skill", "run", "exec", "cli"}

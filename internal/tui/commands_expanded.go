@@ -700,20 +700,38 @@ func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (strin
 	return "Reasoning effort was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
 }
 
-// handleUltra reports ULTRA entitlement status.
+// handleUltra reports ULTRA status and switches ULTRA Execution.
 //
-// It reports; it does not grant. There is no argument to this command that
-// turns ULTRA on, because entitlement is not a thing the client decides — a
-// toggle here would be exactly the local flag the design refuses to rely on.
+// No argument grants anything: entitlement is not a thing the client decides.
+// /ultra start and /ultra stop change only the person's preference for this
+// session, which does nothing without a verified entitlement. Every session
+// starts with execution off.
 func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string, error) {
-	// `/ultra request` asks an operator to grant this installation ULTRA. It is
-	// still not a way to turn ULTRA on: it queues a question for a person, and
-	// the answer arrives from the server or not at all.
-	if len(args) == 1 && strings.EqualFold(args[0], "request") {
-		return h.requestUltra(ctx)
+	sub := ""
+	if len(args) > 0 {
+		sub = strings.ToLower(args[0])
 	}
-	if len(args) > 0 && (len(args) != 1 || !strings.EqualFold(args[0], "status")) {
-		return "Usage: /ultra [status|request]", nil
+	confirming := len(args) == 2 && sub == "stop" && strings.EqualFold(args[1], "confirm")
+	asked := h.ws.takeUltraStop()
+	switch {
+	case len(args) == 1 && sub == "request":
+		// `/ultra request` asks an operator to grant this installation ULTRA.
+		// It queues a question for a person, and the answer arrives from the
+		// server or not at all.
+		return h.requestUltra(ctx)
+	case len(args) == 1 && sub == "start":
+		return h.startUltra(), nil
+	case len(args) == 1 && sub == "stop":
+		return h.askStopUltra(), nil
+	case confirming:
+		if !asked {
+			return h.askStopUltra(), nil
+		}
+		h.ws.setUltraExecution(false)
+		return "ULTRA Execution is off. The session behaves like Standard; /ultra start turns it on again.", nil
+	case len(args) == 0 || (len(args) == 1 && sub == "status"):
+	default:
+		return "Usage: /ultra [status|start|stop|request]", nil
 	}
 	gate, executionEnabled := h.ws.ultraGate()
 
@@ -738,13 +756,43 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 	}
 	if !executionEnabled {
 		return fmt.Sprintf(
-			"ULTRA status: ENTITLED, EXECUTION OFF — the session behaves like Standard.\n  %s\n  Lease expires in %s.\n  Set %s=1 and restart MARSHAL to enable execution.",
-			grantExpiryLine, remaining, cloud.EnvExecution), nil
+			"ULTRA status: ENTITLED, EXECUTION OFF — the session behaves like Standard.\n  %s\n  Lease expires in %s.\n  Use /ultra start to enable execution.",
+			grantExpiryLine, remaining), nil
 	}
 	if !gate.Capability(cloud.CapabilityDelegation) {
 		return fmt.Sprintf("ULTRA status: ACTIVE — delegation is unavailable; confirmations are still required.\n  %s\n  Lease expires in %s.", grantExpiryLine, remaining), nil
 	}
 	return fmt.Sprintf("ULTRA status: ACTIVE — delegation is enabled.\n  %s\n  Lease expires in %s.", grantExpiryLine, remaining), nil
+}
+
+// startUltra turns ULTRA Execution on for this session. Without a verified
+// entitlement it changes nothing and says how to get one.
+func (h *CommandHandler) startUltra() string {
+	gate, _ := h.ws.ultraGate()
+	if !gate.Entitled() {
+		if err := h.ws.ultraError(); err != nil {
+			return "ULTRA was not started: activation failed: " + err.Error() + "\n" +
+				"  The session is running as Standard. Try again shortly."
+		}
+		return "ULTRA was not started: no cryptographically verified entitlement is active.\n" +
+			"  Use /ultra request to ask an operator for one."
+	}
+	h.ws.setUltraExecution(true)
+	if !gate.Capability(cloud.CapabilityDelegation) {
+		return "ULTRA Execution is on. Delegation is unavailable, so confirmations are still required."
+	}
+	return "ULTRA Execution is on — delegation is enabled. /ultra stop turns it off."
+}
+
+// askStopUltra asks the person to confirm before execution is switched off:
+// stopping it mid-session changes how every later task is confirmed.
+func (h *CommandHandler) askStopUltra() string {
+	if _, executionEnabled := h.ws.ultraGate(); !executionEnabled {
+		return "ULTRA Execution is already off."
+	}
+	h.ws.askUltraStop(true)
+	return "Do you really want to turn ULTRA Execution off?\n" +
+		"  Type /ultra stop confirm to turn it off; any other command keeps it on."
 }
 
 // requestUltra asks an operator to grant this installation ULTRA.

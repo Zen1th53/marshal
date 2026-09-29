@@ -42,9 +42,8 @@ func TestBypassLocalFlagAchievesNothing(t *testing.T) {
 	g := gateAt(ring, &now)
 
 	// Every local switch turned on, no lease held.
-	cfg := Config{Endpoint: "https://marshal.blackhat.uz", ExecutionEnabled: true}
-	if !cfg.Enabled() || !cfg.ExecutionEnabled {
-		t.Fatal("test setup did not enable the local preference")
+	if g.Policy(true).Entitled {
+		t.Fatal("the local execution preference produced an entitlement")
 	}
 	assertNoULTRA(t, g, "local flag patched on")
 }
@@ -269,10 +268,6 @@ func TestBypassUnconfiguredCloudFailsClosed(t *testing.T) {
 		t.Fatal("an unconfigured Cloud produced a gate")
 	}
 	assertNoULTRA(t, result.Gate, "unconfigured cloud")
-
-	// And with the preference on but no endpoint, still nothing.
-	result = Authorize(context.Background(), Config{ExecutionEnabled: true}, t.TempDir(), "1.0.0")
-	assertNoULTRA(t, result.Gate, "unconfigured cloud with preference on")
 }
 
 // Attack: point at a real endpoint that cannot be reached, hoping failure is
@@ -280,8 +275,7 @@ func TestBypassUnconfiguredCloudFailsClosed(t *testing.T) {
 func TestBypassUnreachableCloudFailsClosed(t *testing.T) {
 	cfg := Config{
 		// A port nothing is listening on, over loopback so no DNS is involved.
-		Endpoint:         "http://127.0.0.1:1",
-		ExecutionEnabled: true,
+		Endpoint: "http://127.0.0.1:1",
 	}
 	result := Authorize(context.Background(), cfg, t.TempDir(), "1.0.0")
 	if result.Err == nil {

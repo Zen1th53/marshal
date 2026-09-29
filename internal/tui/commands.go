@@ -29,6 +29,11 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	parts := strings.Fields(line)
 	cmd := strings.ToLower(parts[0])
+	// A question /ultra stop asked is answered by the next command or not at
+	// all, so a confirmation typed later cannot switch execution off.
+	if cmd != "/ultra" && h.ws != nil {
+		h.ws.askUltraStop(false)
+	}
 
 	switch cmd {
 	case "/help", "/?":
@@ -631,7 +636,7 @@ func (h *CommandHandler) helpText() string {
   /goal [outcome]          View or update the active GoalContract
   /marshal <goal>          Plan with a Marshal model, then marshal the work to agents (/marshal help)
   /mode [manual|auto]       Switch operating supervision mode; ULTRA requires entitlement
-  /ultra [status|request]  Show verified ULTRA status or request entitlement
+  /ultra [status|start|stop|request]  Show ULTRA status, switch execution on or off, or request entitlement
   /agents                  List registered participants, fixed roles, and harnesses
   /claims                  List active claims and epistemic verification states
   /learning <id>           Inspect a Process 07 memory commit, promotions and refusals
