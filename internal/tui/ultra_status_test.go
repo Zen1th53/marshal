@@ -43,3 +43,40 @@ func TestUltraStatusAndVisibleActiveBadge(t *testing.T) {
 		t.Fatalf("execution-off badge is inaccurate: %s", header)
 	}
 }
+
+// A session starts with execution off; /ultra start turns it on only with a
+// verified entitlement, and /ultra stop asks before turning it off.
+func TestUltraStartAndConfirmedStop(t *testing.T) {
+	ws := NewWorkspace(nil, "proj", "sess-ultra-start")
+	ctx := context.Background()
+	run := func(line string) string {
+		t.Helper()
+		out, err := ws.ExecuteCommand(ctx, line)
+		if err != nil {
+			t.Fatalf("%s: %v", line, err)
+		}
+		return out
+	}
+	if out := run("/ultra start"); !strings.Contains(out, "ULTRA was not started") || ultraActive(ws.GetUIState()) {
+		t.Fatalf("start without entitlement: %q", out)
+	}
+
+	ws.AttachULTRA(testcloud.EntitledGate(t, testcloud.Options{}), false)
+	if out := run("/ultra start"); !strings.Contains(out, "ULTRA Execution is on") || !ultraActive(ws.GetUIState()) {
+		t.Fatalf("start with entitlement: %q", out)
+	}
+
+	if out := run("/ultra stop"); !strings.Contains(out, "Do you really want to turn ULTRA Execution off?") || !ultraActive(ws.GetUIState()) {
+		t.Fatalf("stop did not ask first: %q", out)
+	}
+	run("/status")
+	if out := run("/ultra stop confirm"); !strings.Contains(out, "Do you really want") || !ultraActive(ws.GetUIState()) {
+		t.Fatalf("a confirmation after another command switched execution off: %q", out)
+	}
+	if out := run("/ultra stop confirm"); !strings.Contains(out, "ULTRA Execution is off") || ultraActive(ws.GetUIState()) {
+		t.Fatalf("confirmed stop: %q", out)
+	}
+	if out := run("/ultra stop"); !strings.Contains(out, "already off") {
+		t.Fatalf("stop when off: %q", out)
+	}
+}

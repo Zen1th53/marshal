@@ -45,12 +45,20 @@ func TestEndpointResolution(t *testing.T) {
 // asking, not being granted.
 func TestDefaultEndpointGrantsNothing(t *testing.T) {
 	t.Setenv(EnvEndpoint, "")
-	t.Setenv(EnvExecution, "1")
 	cfg := LoadConfig()
-	if !cfg.Enabled() || !cfg.ExecutionEnabled {
-		t.Fatal("test setup did not enable the local preference")
+	if !cfg.Enabled() {
+		t.Fatal("the default endpoint is not configured")
 	}
 	// A nil gate is what an unauthorized session holds, and it must refuse.
 	var gate *Gate
-	assertNoULTRA(t, gate, "defaulted endpoint with execution preference on")
+	assertNoULTRA(t, gate, "defaulted endpoint")
+}
+
+// The environment no longer switches ULTRA Execution on: the variable that
+// once did is ignored, and a command outside the TUI always asks the person.
+func TestEnvironmentDoesNotSwitchExecutionOn(t *testing.T) {
+	t.Setenv("MARSHAL_ULTRA_EXECUTION", "1")
+	if (Authorization{}).Policy().ExecutionEnabled {
+		t.Fatal("execution is on outside the TUI")
+	}
 }

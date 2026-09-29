@@ -294,6 +294,12 @@ enabled; an entitled session with execution off shows `ULTRA EXEC OFF`. `/ultra`
 is a short alias for the same status.
 `/ultra request` asks an operator for an entitlement.
 
+Every session starts with execution off. `/ultra start` turns it on for the
+session when a verified entitlement is held, and says how to request one when
+it is not. `/ultra stop` asks first; `/ultra stop confirm`, typed as the very
+next command, turns execution off. No environment variable switches execution
+on.
+
 The gate is read live on each attempt rather than captured at startup, because
 the Cloud handshake finishes after the workspace is built: a session that
 becomes entitled mid-run can open navigation without restarting.
@@ -428,7 +434,7 @@ Every user-operable MARSHAL capability has a direct command mapping:
 
 ### Routing, ULTRA & Harnesses
 - `/route` — Inspect harness selection rationale and capability match.
-- `/ultra [on|off]` — Toggle ULTRA intelligent dynamic routing.
+- `/ultra [status|start|stop|request]` — Show ULTRA status, switch execution on or off for the session, or request an entitlement.
 - `/harness [name]` — Inspect or select preferred harness.
 - `/model [name]` — Set model selection for active harness.
 - `/effort [low|medium|high]` — Configure native reasoning effort.

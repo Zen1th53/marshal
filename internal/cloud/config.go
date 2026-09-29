@@ -8,14 +8,11 @@ import (
 	"github.com/Zen1th53/marshal/internal/goalintake"
 )
 
-// Environment variables that configure the Community Cloud client.
-const (
-	// EnvEndpoint names the Cloud authority. Unset means Standard, offline.
-	EnvEndpoint = "MARSHAL_CLOUD_ENDPOINT"
-	// EnvExecution switches ULTRA Execution on. This is a preference, not an
-	// authority: with no entitlement it changes nothing at all.
-	EnvExecution = "MARSHAL_ULTRA_EXECUTION"
-)
+// EnvEndpoint names the Cloud authority. Unset means Standard, offline.
+//
+// There is no variable that switches ULTRA Execution on: a session starts in
+// Standard and the person turns execution on inside the TUI with /ultra start.
+const EnvEndpoint = "MARSHAL_CLOUD_ENDPOINT"
 
 // DefaultEndpoint is the Community Cloud authority.
 const DefaultEndpoint = "https://marshal.blackhat.uz"
@@ -24,8 +21,6 @@ const DefaultEndpoint = "https://marshal.blackhat.uz"
 type Config struct {
 	// Endpoint is the Cloud authority. Empty disables the client entirely.
 	Endpoint string
-	// ExecutionEnabled reflects the user's preference for ULTRA Execution.
-	ExecutionEnabled bool
 }
 
 // LoadConfig resolves configuration from the environment.
@@ -34,10 +29,7 @@ type Config struct {
 // Community Cloud, on a machine with no network, and that is only true if
 // absence of configuration means Standard rather than an error or a retry loop.
 func LoadConfig() Config {
-	return Config{
-		Endpoint:         resolveEndpoint(os.Getenv(EnvEndpoint)),
-		ExecutionEnabled: truthy(os.Getenv(EnvExecution)),
-	}
+	return Config{Endpoint: resolveEndpoint(os.Getenv(EnvEndpoint))}
 }
 
 // resolveEndpoint decides which Cloud authority to ask, if any.
@@ -61,14 +53,6 @@ func resolveEndpoint(value string) string {
 		return ""
 	}
 	return value
-}
-
-func truthy(v string) bool {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "1", "true", "yes", "on":
-		return true
-	}
-	return false
 }
 
 // Enabled reports whether a Cloud endpoint is configured.
@@ -99,8 +83,6 @@ type Authorization struct {
 	Client    *Client
 	State     State
 	SessionID string
-	// ExecutionEnabled is the user's preference, carried through unchanged.
-	ExecutionEnabled bool
 	// Err records why authorization did not happen, for reporting. It is not a
 	// failure of MARSHAL: an unconfigured or unreachable Cloud means Standard.
 	Err error
@@ -109,9 +91,10 @@ type Authorization struct {
 // Mode reports the operating mode this authorization permits.
 func (a Authorization) Mode() goalintake.Mode { return a.Gate.Mode() }
 
-// Policy builds the delegation policy for Goal confirmation.
+// Policy builds the delegation policy for Goal confirmation. Outside the TUI
+// there is nowhere to turn ULTRA Execution on, so the person is always asked.
 func (a Authorization) Policy() goalintake.DelegationPolicy {
-	return a.Gate.Policy(a.ExecutionEnabled)
+	return a.Gate.Policy(false)
 }
 
 // Start runs lease maintenance, heartbeat and telemetry in the background.
@@ -156,7 +139,7 @@ func (a Authorization) Stop() {
 // work, and the cost of it going wrong should be a lost capability, never a
 // lost session.
 func Authorize(ctx context.Context, cfg Config, runtimeDir, clientVersion string) Authorization {
-	result := Authorization{ExecutionEnabled: cfg.ExecutionEnabled}
+	result := Authorization{}
 	if !cfg.Enabled() {
 		return result
 	}
