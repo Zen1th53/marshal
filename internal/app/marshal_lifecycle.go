@@ -78,6 +78,19 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if d.Mode() != t.Mode {
 		return MarshalDispatch{}, fmt.Errorf("worker %s has %s driver, task requires %s", t.Worker, d.Mode(), t.Mode)
 	}
+	// A reassigned worker starts from the task's base, not from the work the
+	// previous worker had returned twice.
+	fresh := t.State == marshal.Reassigned && t.ResultCommit != ""
+	if (t.ResultCommit == "" || fresh) && len(t.DependsOn) > 0 {
+		// A task builds on its dependencies' merged work: it starts from the
+		// integration head, where every dependency has been merged.
+		integration := filepath.Join(s.Worktrees, "TASK-"+runID+"-integration")
+		head, headErr := gitMarshal(ctx, integration, "rev-parse", "HEAD")
+		if headErr != nil {
+			return MarshalDispatch{}, fmt.Errorf("task base is unavailable: %w", headErr)
+		}
+		t.BaseCommit = strings.TrimSpace(head)
+	}
 	if run.Process05Bound && t.Mode == marshal.Governed && t.ResultCommit == "" && i > 0 {
 		integration := filepath.Join(s.Worktrees, "TASK-"+runID+"-integration")
 		if head, headErr := gitMarshal(ctx, integration, "rev-parse", "HEAD"); headErr == nil {
@@ -92,6 +105,9 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if t.ResultCommit != "" {
 		request.BaseCommit = t.ResultCommit
 		tree, err = wt.Resume(ctx, request)
+		if err == nil && fresh {
+			err = restartTaskBranch(ctx, s.Repository, runID, t, tree.Path)
+		}
 	} else {
 		tree, err = wt.Prepare(ctx, request)
 	}
@@ -119,6 +135,26 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	}
 	return MarshalDispatch{d, handle, taskID, s.clock()}, nil
 }
+// restartTaskBranch sets a task's branch and worktree back to its base for a
+// new worker. The returned attempt stays reachable under
+// refs/marshal/<run>/returned/<task>/attempt-<n>, because its hand-ins and
+// reviews name that commit as evidence.
+func restartTaskBranch(ctx context.Context, repository, runID string, t *marshal.Task, dir string) error {
+	attempt := 0
+	for _, n := range t.ReturnsByAgent {
+		attempt += n
+	}
+	ref := fmt.Sprintf("refs/marshal/%s/returned/%s/attempt-%d", runID, t.PlanTaskID, attempt)
+	if _, err := gitMarshal(ctx, repository, "update-ref", ref, t.ResultCommit); err != nil {
+		return fmt.Errorf("preserve returned attempt: %w", err)
+	}
+	if _, err := gitMarshal(ctx, dir, "reset", "--hard", t.BaseCommit); err != nil {
+		return fmt.Errorf("restart task branch: %w", err)
+	}
+	t.ResultCommit = ""
+	return nil
+}
+
 func worktreeTaskID(runID, taskID string) string {
 	return "TASK-" + strings.NewReplacer("/", "-", " ", "-").Replace(runID+"-"+taskID)
 }
