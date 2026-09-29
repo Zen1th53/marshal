@@ -845,3 +845,25 @@ func TestNavigationRefusedWithoutULTRA(t *testing.T) {
 		t.Fatal("OpenNavigation opened navigation without an entitlement")
 	}
 }
+
+// Until the navigation surface is verified it is closed to every session,
+// including one holding a verified ULTRA entitlement.
+func TestNavigationClosedUntilReleasedEvenWithULTRA(t *testing.T) {
+	ws := NewWorkspace(nil, "proj", "sess-closed")
+	ws.navReleased = false
+	ws.AttachULTRA(testcloud.EntitledGate(t, testcloud.Options{}), true)
+	ctx := context.Background()
+
+	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
+		t.Fatal("Ctrl+N was not consumed")
+	}
+	if ws.navView.IsOpen() || !strings.Contains(ws.state.LastOutput, "not available yet") {
+		t.Fatalf("Ctrl+N opened an unreleased navigation surface: %q", ws.state.LastOutput)
+	}
+	if ws.OpenNavigation(ctx) || ws.navView.IsOpen() {
+		t.Fatal("OpenNavigation opened an unreleased navigation surface")
+	}
+	if navigationReleased != true {
+		t.Fatal("the tests no longer exercise the navigation surface")
+	}
+}
