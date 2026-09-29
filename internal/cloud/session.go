@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -126,6 +127,13 @@ func (c *Client) post(ctx context.Context, path string, in, out any) error {
 		// so it degrades and retries rather than dropping the entitlement.
 		return fmt.Errorf("%w: server returned %d", ErrUnreachable, resp.StatusCode)
 	default:
+		var reason struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 2048)).Decode(&reason); err == nil && reason.Code != "" {
+			return fmt.Errorf("%w: server returned %d (%s: %s)", ErrRefused, resp.StatusCode, reason.Code, reason.Message)
+		}
 		return fmt.Errorf("%w: server returned %d", ErrRefused, resp.StatusCode)
 	}
 	if out == nil {
