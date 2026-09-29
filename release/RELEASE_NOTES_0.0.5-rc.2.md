@@ -1,8 +1,13 @@
-# MARSHAL v0.0.5-rc.1 — Marshal mode
+# MARSHAL v0.0.5-rc.2 — Marshal mode
 
 A release candidate. It is cut from an integration branch, not from `main`: the
 branch merges the open pull requests #24–#31 and #35–#39 onto v0.0.4, in their
 stack order, and none of them is merged into `main` yet.
+
+`v0.0.5-rc.1` was tagged but never published. Its release gate failed on
+`TestMarshalWiredUltraHasIndependentVerifier`: the ULTRA verifier check still
+refused the Marshal's own provider, so ULTRA verification failed on a machine
+with a single provider. #25 now fixes that, and this candidate includes the fix.
 
 Install it deliberately. `install.sh` and `/update` follow the latest release,
 and a candidate is not that.

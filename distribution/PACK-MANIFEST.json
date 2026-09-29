@@ -3731,8 +3731,8 @@
     },
     {
       "path": "internal/app/marshal_lifecycle.go",
-      "sha256": "71f4e7c3d138be372f36c92a68fcffa9c4a54ceecd2277a93aae1966794df5b4",
-      "bytes": 37319
+      "sha256": "a54a62e6a4793b307a452172d2f6fe68da65404a7de3b6f98ff3209bc627a044",
+      "bytes": 37410
     },
     {
       "path": "internal/app/marshal_model.go",
@@ -3781,8 +3781,8 @@
     },
     {
       "path": "internal/app/marshal_session_rule_test.go",
-      "sha256": "23e176df58d8739663e972b80993c7a4fee95229780ea1e2f23975e81a10a08f",
-      "bytes": 1202
+      "sha256": "042e19a112a9d243e6aac2215ac79e24a640653867892333e8aa7b0451e4cacc",
+      "bytes": 2189
     },
     {
       "path": "internal/app/marshal_task_base_test.go",
@@ -9815,9 +9815,9 @@
       "bytes": 5234
     },
     {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.1.md",
-      "sha256": "78d27275fb3d358a94c209f82315bbdfb5e89f8f1108a877656ceb01874794fe",
-      "bytes": 3894
+      "path": "release/RELEASE_NOTES_0.0.5-rc.2.md",
+      "sha256": "12444b1a27c498d55329a018fb7478813aaef5a4cbdf1a5b51f610eedde34e96",
+      "bytes": 4205
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
