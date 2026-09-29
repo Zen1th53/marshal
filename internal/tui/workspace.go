@@ -70,6 +70,9 @@ type Workspace struct {
 	// ultraExecution is the user's ULTRA Execution preference. It is not an
 	// authority: with no entitlement it changes nothing.
 	ultraExecution bool
+	// navReleased reports whether the navigation surface may be opened at
+	// all; it is taken from navigationReleased when the workspace is built.
+	navReleased bool
 	// ultraStopAsked records that /ultra stop asked the person to confirm;
 	// only /ultra stop confirm straight after it turns execution off.
 	ultraStopAsked bool
@@ -329,6 +332,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			Participants:       participants,
 		},
 	}
+	ws.navReleased = navigationReleased
 	ws.cmd = NewCommandHandler(ws)
 	return ws
 }
@@ -760,10 +764,11 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 
 			// Esc toggles navigation mode when composer is empty and no popup/overlay is active
 			if event.Type == KeyEsc && w.composer.Text() == "" && !w.completionOpen && !w.diffViewer.IsOpen() && !w.palette.IsOpen() {
-				// Navigation is an ULTRA surface, so Esc on an empty composer
-				// must not drop a Standard session into it.
-				if !w.navigationEntitled() {
-					w.setOutput(navigationNotEntitledMessage, false)
+				// Navigation is closed until verified, and an ULTRA surface
+				// after that, so Esc on an empty composer must not drop a
+				// session into it.
+				if refusal := w.navigationRefusal(); refusal != "" {
+					w.setOutput(refusal, false)
 					continue
 				}
 				w.openNavigation(ctx)
@@ -1147,8 +1152,8 @@ func (w *Workspace) dispatchNavigationKey(ctx context.Context, event KeyEvent) b
 	// MARSHAL is fully operable without knowing a single slash command.
 	if event.Type == KeyCtrlN {
 		w.closeCompletion()
-		if !w.navigationEntitled() {
-			w.setOutput(navigationNotEntitledMessage, false)
+		if refusal := w.navigationRefusal(); refusal != "" {
+			w.setOutput(refusal, false)
 			return true
 		}
 		if w.navView == nil {
@@ -1165,6 +1170,30 @@ func (w *Workspace) dispatchNavigationKey(ctx context.Context, event KeyEvent) b
 		return true
 	}
 	return false
+}
+
+// navigationReleased is false while the navigation surface is incomplete and
+// unverified: it has declared nodes with no capability behind them, and no
+// end-to-end run has shown that it works. Until that is proven every entry
+// point refuses, whatever the session's entitlement. Its own tests switch it
+// on to keep exercising the code.
+var navigationReleased = false
+
+// navigationNotReleasedMessage says the surface is not offered yet, so nobody
+// takes an unfinished screen for a working one.
+const navigationNotReleasedMessage = "The navigation surface is not available yet: it is incomplete and has not been verified.\n" +
+	"  Every MARSHAL command remains available from this composer."
+
+// navigationRefusal says why this session may not open navigation, or ""
+// when it may.
+func (w *Workspace) navigationRefusal() string {
+	if !w.navReleased {
+		return navigationNotReleasedMessage
+	}
+	if !w.navigationEntitled() {
+		return navigationNotEntitledMessage
+	}
+	return ""
 }
 
 // navigationNotEntitledMessage explains the refusal without implying the
@@ -1401,8 +1430,8 @@ func (w *Workspace) openNavigation(ctx context.Context) {
 // refused here rather than at each section, and the refusal explains itself.
 // Esc at the root returns to the composer.
 func (w *Workspace) OpenNavigation(ctx context.Context) bool {
-	if !w.navigationEntitled() {
-		w.setOutput(navigationNotEntitledMessage, false)
+	if refusal := w.navigationRefusal(); refusal != "" {
+		w.setOutput(refusal, false)
 		return false
 	}
 	w.openNavigation(ctx)

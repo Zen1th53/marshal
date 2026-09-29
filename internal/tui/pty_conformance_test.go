@@ -167,8 +167,8 @@ func startCommandTUI(t *testing.T, rows, cols uint16) *ptySession {
 }
 
 // TestPTYWorkspaceStartsInComposerAndGatesNavigation proves a real `marshal tui`
-// launch lands on the composer, and that an unentitled session cannot reach the
-// navigation surface through either of its entry points.
+// launch lands on the composer, and that the navigation surface, closed until
+// it is verified, cannot be reached through either of its entry points.
 func TestPTYWorkspaceStartsInComposerAndGatesNavigation(t *testing.T) {
 	s := startFrozenTUI(t, 40, 120)
 	s.mustSee("MARSHAL")
@@ -177,11 +177,11 @@ func TestPTYWorkspaceStartsInComposerAndGatesNavigation(t *testing.T) {
 	s.mustNotSee("Continue Work")
 
 	s.send("\x0e") // Ctrl+N
-	s.mustSee("ULTRA feature")
+	s.mustSee("not available yet")
 	s.mustNotSee("Continue Work")
 
 	s.send("\x1b") // Esc on an empty composer is the other entry point.
-	s.mustSee("ULTRA feature")
+	s.mustSee("not available yet")
 	s.mustNotSee("Continue Work")
 
 	// The composer itself keeps working, which is the whole point of the refusal.
