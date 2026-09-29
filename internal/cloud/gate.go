@@ -185,6 +185,20 @@ func (g *Gate) ExpiresAt() (time.Time, bool) {
 	return g.lease.Claims.ExpiresAt, true
 }
 
+// EntitlementExpiresAt reports the server's grant end for display only.
+// Older servers omit it; access still depends on the signed lease.
+func (g *Gate) EntitlementExpiresAt() (time.Time, bool) {
+	if g == nil {
+		return time.Time{}, false
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.entitledLocked() || g.lease.EntitlementExpiresAt == nil || g.lease.EntitlementExpiresAt.IsZero() {
+		return time.Time{}, false
+	}
+	return *g.lease.EntitlementExpiresAt, true
+}
+
 // RenewAt reports when renewal should be attempted.
 //
 // Renewal is scheduled at the midpoint of the lease's window rather than at

@@ -100,6 +100,29 @@ func TestGateStartsUnentitled(t *testing.T) {
 	}
 }
 
+func TestGrantExpiryIsDisplayOnlyAndOlderLeasesRemainValid(t *testing.T) {
+	now := time.Now().UTC()
+	signer, ring := newSigner(t, "k1")
+	gate := gateAt(ring, &now)
+	grantExpiry := now.Add(7 * 24 * time.Hour)
+	current := signer.issue(t, validClaims(now), validBundle())
+	current.EntitlementExpiresAt = &grantExpiry
+	if err := gate.Adopt(current); err != nil {
+		t.Fatalf("adopt lease with expiry metadata: %v", err)
+	}
+	if got, ok := gate.EntitlementExpiresAt(); !ok || !got.Equal(grantExpiry) {
+		t.Fatalf("grant expiry = %v, %t; want %v", got, ok, grantExpiry)
+	}
+
+	older := signer.issue(t, validClaims(now), validBundle())
+	if err := gate.Adopt(older); err != nil {
+		t.Fatalf("adopt older lease without expiry metadata: %v", err)
+	}
+	if _, ok := gate.EntitlementExpiresAt(); ok {
+		t.Fatal("older lease invented a grant expiry")
+	}
+}
+
 // A nil gate must behave exactly like an unentitled one. This is what lets every
 // call site skip a nil check, and a missing nil check is how an offline path
 // would otherwise panic instead of degrading.

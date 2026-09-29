@@ -23,7 +23,8 @@ type Options struct {
 	SessionID      string
 	Capabilities   []string
 	// Lifetime defaults to five minutes, which is inside cloud.MaxLeaseLifetime.
-	Lifetime time.Duration
+	Lifetime             time.Duration
+	EntitlementExpiresAt time.Time
 }
 
 // EntitledGate returns a gate holding a verified, unexpired ULTRA lease.
@@ -70,6 +71,10 @@ func EntitledGate(t *testing.T, options Options) *cloud.Gate {
 	}, priv)
 	if err != nil {
 		t.Fatalf("sign test lease: %v", err)
+	}
+	if !options.EntitlementExpiresAt.IsZero() {
+		grantExpiry := options.EntitlementExpiresAt
+		lease.EntitlementExpiresAt = &grantExpiry
 	}
 
 	gate := cloud.NewGate(options.InstallationID, options.SessionID, ring, nil)
