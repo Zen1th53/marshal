@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
@@ -175,19 +176,26 @@ func marshalChatProvider(provider string) string {
 // marshalRoleBriefing asks for the task list only. The runtime builds the
 // plan around it, so the model never has to reproduce plan identity, the
 // constitution binding or the graph digest.
-func marshalRoleBriefing(workers []string, control marshal.Control) string {
-	instructions := "Each task may add \"instructions\" (purpose, approach, what to leave alone) and \"expected_output\"; workers choose their own approach within the task's files. "
-	if control == marshal.ControlStrict {
-		instructions = "Control is strict: every task must add \"instructions\" (purpose, approach, steps, what to leave alone) and may add \"expected_output\"; workers are held to the instructions exactly. "
+//
+// The steps and questions come from the constitution's Marshal protocol,
+// which is refused if it does not match its digest; what follows it is only
+// what this run needs: the workers, the current settings and the draft form.
+func marshalRoleBriefing(workers []string, settings marshal.Settings) (string, error) {
+	protocol, err := constitution.MarshalProtocol()
+	if err != nil {
+		return "", err
 	}
-	return "You are the Marshal. Plan the work with the person in this conversation. " +
-		"Do not edit project files. When the person agrees, write the plan to " + marshalDraftRelativePath + " as JSON of the form " +
+	instructions := "Each task may add \"instructions\" (purpose, approach, what to leave alone) and \"expected_output\"; workers choose their own approach within the task's files."
+	if settings.EffectiveControl() == marshal.ControlStrict {
+		instructions = "Control is strict: every task must add \"instructions\" (purpose, approach, steps, what to leave alone) and may add \"expected_output\"; workers are held to the instructions exactly."
+	}
+	return protocol + "\nThis run:\n" +
+		"- Workers you may assign tasks to: " + strings.Join(workers, ", ") + ".\n" +
+		"- Current working mode: acceptance mode " + string(settings.AcceptanceMode) + ". The person changes it before approval with /marshal settings acceptance-mode marshal|marshal-then-user|user.\n" +
+		"- Current control level: " + string(settings.EffectiveControl()) + ". The person changes it before approval with /marshal settings control strict|free.\n" +
+		"- Write the draft to " + marshalDraftRelativePath + " as JSON of the form " +
 		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","checks":["executable commands"]}]}` +
-		" and nothing else. Every field is required; use an empty list for no dependencies. " +
-		"Assign each task to one of these workers: " + strings.Join(workers, ", ") + ". " +
-		"Criteria must be checkable and every task needs at least one check command. " + instructions + "Tell the person when the draft is written. " +
-		"Only the person can approve the plan, in the MARSHAL window, with /marshal approve. " +
-		"You cannot approve it from this CLI."
+		" and nothing else. Every field shown is required; use an empty list for no dependencies. " + instructions + "\n", nil
 }
 
 // consumeMarshalDraft takes the draft file out of the way before reading it,
@@ -235,7 +243,11 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	result, sessionErr := w.runNativeAgent(ctx, marshalChatProvider(provider), nil, marshalRoleBriefing(app.MarshalWorkers(provider), settings.Value.EffectiveControl()))
+	briefing, err := marshalRoleBriefing(app.MarshalWorkers(provider), settings.Value)
+	if err != nil {
+		return "", err
+	}
+	result, sessionErr := w.runNativeAgent(ctx, marshalChatProvider(provider), nil, briefing)
 	if sessionErr != nil {
 		return result, sessionErr
 	}
