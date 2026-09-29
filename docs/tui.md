@@ -286,7 +286,9 @@ Security, System) is an **ULTRA** feature: `Ctrl+N` and `Esc` on an empty
 composer open it only when the session holds a verified ULTRA entitlement.
 Without one, both entry points refuse and say so, and every MARSHAL command
 stays available from the composer. `/ultra status` reports whether verified ULTRA
-execution is active, entitled but switched off, or unavailable. The header and
+execution is active, entitled but switched off, or unavailable. It shows the
+Cloud grant's end in local time separately from the short, renewable session
+lease; older Cloud servers report the grant end as unavailable. The header and
 statusline show `ULTRA ACTIVE` only while entitlement and execution are both
 enabled; an entitled session with execution off shows `ULTRA EXEC OFF`. `/ultra`
 is a short alias for the same status.

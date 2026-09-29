@@ -732,15 +732,19 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 
 	expiry, _ := gate.ExpiresAt()
 	remaining := time.Until(expiry).Round(time.Second)
+	grantExpiryLine := "Grant expiry: unavailable from Community Cloud."
+	if grantExpiry, ok := gate.EntitlementExpiresAt(); ok {
+		grantExpiryLine = "Grant expires: " + grantExpiry.Local().Format("2006-01-02 15:04 -07:00") + "."
+	}
 	if !executionEnabled {
 		return fmt.Sprintf(
-			"ULTRA status: ENTITLED, EXECUTION OFF — the session behaves like Standard.\n  Lease expires in %s.\n  Set %s=1 and restart MARSHAL to enable execution.",
-			remaining, cloud.EnvExecution), nil
+			"ULTRA status: ENTITLED, EXECUTION OFF — the session behaves like Standard.\n  %s\n  Lease expires in %s.\n  Set %s=1 and restart MARSHAL to enable execution.",
+			grantExpiryLine, remaining, cloud.EnvExecution), nil
 	}
 	if !gate.Capability(cloud.CapabilityDelegation) {
-		return fmt.Sprintf("ULTRA status: ACTIVE — delegation is unavailable; confirmations are still required.\n  Lease expires in %s.", remaining), nil
+		return fmt.Sprintf("ULTRA status: ACTIVE — delegation is unavailable; confirmations are still required.\n  %s\n  Lease expires in %s.", grantExpiryLine, remaining), nil
 	}
-	return fmt.Sprintf("ULTRA status: ACTIVE — delegation is enabled.\n  Lease expires in %s.", remaining), nil
+	return fmt.Sprintf("ULTRA status: ACTIVE — delegation is enabled.\n  %s\n  Lease expires in %s.", grantExpiryLine, remaining), nil
 }
 
 // requestUltra asks an operator to grant this installation ULTRA.
