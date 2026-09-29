@@ -22,6 +22,10 @@ type BriefContext struct {
 	// Returned lists why earlier attempts at the task were sent back, oldest
 	// first, so rework starts from the reasons instead of repeating them.
 	Returned []string
+	// Requirements, Index and Note come from the approved plan pack: what
+	// the person asked for, how the tasks fit together, and this task's own
+	// note. They are empty for a run drafted without a pack.
+	Requirements, Index, Note string
 }
 
 // MarshalBrief produces the instruction a worker receives for a task.
@@ -31,6 +35,9 @@ type MarshalBrief func(marshal.Task, BriefContext) string
 // with no stored review, such as one interrupted by a restart, adds nothing.
 func (s *MarshalService) briefContext(ctx context.Context, runID string, run marshal.Run, t marshal.Task) (BriefContext, error) {
 	bc := BriefContext{Control: run.Settings.EffectiveControl()}
+	if run.Pack != nil {
+		bc.Requirements, bc.Index, bc.Note = run.Pack.Requirements, run.Pack.Index, run.Pack.Tasks[t.PlanTaskID]
+	}
 	attempts := 0
 	for _, n := range t.ReturnsByAgent {
 		attempts += n

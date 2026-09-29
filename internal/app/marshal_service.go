@@ -36,6 +36,9 @@ type MarshalModel interface {
 type MarshalDraft struct {
 	Plan  plan.ExecutionPlan `json:"plan"`
 	Tasks []marshal.Task     `json:"tasks"`
+	// Pack is the Markdown plan an interactive Marshal wrote beside the task
+	// list; a headless draft has none.
+	Pack *marshal.PlanPack `json:"pack,omitempty"`
 }
 
 type MarshalService struct {
@@ -261,7 +264,7 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	if err != nil {
 		return marshal.Run{}, err
 	}
-	run := marshal.Run{PlanID: d.Plan.ID, PlanVersion: d.Plan.Version, BaseCommit: strings.TrimSpace(base), Settings: settings.Value, GoalBinding: goal, Budget: budget, Tasks: d.Tasks, State: marshal.Drafting}
+	run := marshal.Run{PlanID: d.Plan.ID, PlanVersion: d.Plan.Version, BaseCommit: strings.TrimSpace(base), Settings: settings.Value, GoalBinding: goal, Budget: budget, Tasks: d.Tasks, State: marshal.Drafting, Pack: d.Pack}
 	for i := range run.Tasks {
 		run.Tasks[i].State = marshal.Queued
 		run.Tasks[i].BaseCommit = run.BaseCommit
@@ -288,6 +291,11 @@ func (s *MarshalService) Approve(ctx context.Context, runID string) (marshal.Run
 	if err != nil || user == "" {
 		return run, errors.New("plan approval is unavailable")
 	}
+	pack, err := s.refreshPlanPack(runID, run)
+	if err != nil {
+		return run, err
+	}
+	run.Pack = pack
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
 	if err != nil {
 		return run, err
@@ -300,7 +308,7 @@ func (s *MarshalService) Approve(ctx context.Context, runID string) (marshal.Run
 		return run, err
 	}
 	run.PlanVersion = p.Version + 1
-	run.ApprovalScopeDigest = marshalApprovalDigest(approved.ApprovalScopeDigest, run.Budget, run.Settings.EffectiveControl())
+	run.ApprovalScopeDigest = marshalApprovalDigest(approved.ApprovalScopeDigest, run)
 	run.State = marshal.Approved
 	if run.Settings.AcceptanceMode == marshal.AcceptMarshal {
 		run.CloseAuthorization = &marshal.CloseAuthorization{User: user, ApprovalScopeDigest: run.ApprovalScopeDigest}
@@ -329,18 +337,25 @@ func gitMarshal(ctx context.Context, dir string, args ...string) (string, error)
 	return strings.TrimSpace(string(out)), nil
 }
 
-// marshalApprovalDigest binds the plan scope, the budget and the control
-// level the person approved. Free control is left out of the encoding, so a
-// run approved before control levels existed keeps its digest.
-func marshalApprovalDigest(planDigest string, budget marshal.Budget, control marshal.Control) string {
+// marshalApprovalDigest binds the plan scope, the budget, the control level
+// and the plan pack the person approved. Free control and a missing pack are
+// left out of the encoding, so a run approved before either existed keeps its
+// digest.
+func marshalApprovalDigest(planDigest string, run marshal.Run) string {
+	control := run.Settings.EffectiveControl()
 	if control == marshal.ControlFree {
 		control = ""
+	}
+	pack := ""
+	if run.Pack != nil {
+		pack = run.Pack.Digest
 	}
 	data, _ := json.Marshal(struct {
 		Plan    string
 		Budget  marshal.Budget
 		Control marshal.Control `json:",omitempty"`
-	}{planDigest, budget, control})
+		Pack    string          `json:",omitempty"`
+	}{planDigest, run.Budget, control, pack})
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }

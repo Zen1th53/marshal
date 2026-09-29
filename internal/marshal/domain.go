@@ -207,6 +207,22 @@ type Run struct {
 	Tasks               []Task
 	State               RunState
 	CloseAuthorization  *CloseAuthorization
+	// Pack is the plan as the person read it before approving; runs drafted
+	// without one, such as headless drafts, leave it nil.
+	Pack *PlanPack `json:",omitempty"`
+}
+
+// PlanPack is what the Marshal gathered from the person, written as
+// Markdown: the requirements, the task index and one note per task. The
+// approval digest binds it, and every worker's brief carries the parts that
+// concern its task.
+type PlanPack struct {
+	Requirements string
+	Index        string
+	// Tasks maps a plan task ID to that task's note. A task added by a later
+	// amendment has none.
+	Tasks  map[string]string `json:",omitempty"`
+	Digest string
 }
 
 // ValidCloseAuthorization requires current, unvoided user consent.
