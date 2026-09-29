@@ -64,6 +64,9 @@ type Workspace struct {
 	// entry path. It is nil until a Cloud session is attached, and a nil gate
 	// answers "not entitled", so the TUI's default remains Standard.
 	ultra *cloud.Gate
+	// marshal holds the active Marshal run and the approvals the person gave
+	// for it in this session. Guarded by mu for creation.
+	marshal *marshalSession
 	// ultraExecution is the user's ULTRA Execution preference. It is not an
 	// authority: with no entitlement it changes nothing.
 	ultraExecution bool
@@ -126,6 +129,8 @@ func (w *Workspace) AttachULTRA(gate *cloud.Gate, executionEnabled bool) {
 	defer w.mu.Unlock()
 	w.ultra = gate
 	w.ultraExecution = executionEnabled
+	w.state.UltraEntitled = gate.Entitled()
+	w.state.UltraExecution = executionEnabled
 }
 
 // AttachULTRARequester supplies what asking for an entitlement needs.
@@ -216,7 +221,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/route", "/agents", "/evidence", "/why", "/msg", "/handoff", "/checkpoint",
 			"/rollback", "/budget", "/pause", "/resume", "/cancel", "/doctor", "/tasks",
 			"/policy", "/sandbox", "/memory", "/provider", "/harness", "/model", "/models",
-			"/effort", "/ultra", "/backup", "/fingerprint", "/runtime", "/store", "/export",
+			"/effort", "/ultra", "/marshal", "/backup", "/fingerprint", "/runtime", "/store", "/export",
 			"/blind", "/reinjection", "/alignment", "/optimization", "/diff", "/review",
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
@@ -234,6 +239,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	// operator types everywhere else.
 	compCtx.Subcommands["/memory peers"] = []string{"participants", "claude", "codex", "opencode", "agy"}
 	compCtx.Subcommands["/harness"] = []string{"probe", "status", "select"}
+	compCtx.Subcommands["/ultra"] = []string{"status", "request"}
 	compCtx.Subcommands["/provider"] = []string{"status", "config"}
 	compCtx.Subcommands["/alignment"] = []string{"scope", "violations", "blast", "deletions", "resolve", "status"}
 	compCtx.Subcommands["/codex"] = []string{"doctor", "models", "model", "review", "sessions", "mcp", "plugin", "apply", "diff", "resume", "fork", "agents", "features", "sandbox", "approval", "search", "login", "logout", "skill", "run", "exec", "cli"}
@@ -242,6 +248,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/opencode"] = []string{"new", "continue", "resume", "fork", "cli", "status", "models", "providers", "auth", "mcp", "agent", "session", "stats", "run", "debug"}
 	compCtx.Subcommands["/agy"] = []string{"new", "continue", "resume", "cli", "status", "models", "agents", "mcp", "plugin", "changelog"}
 	compCtx.Subcommands["/antigravity"] = compCtx.Subcommands["/agy"]
+	compCtx.Subcommands["/marshal"] = []string{"approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help"}
 	compCtx.Subcommands["/plugin"] = []string{"list", "add", "rm"}
 	compCtx.Subcommands["/plugins"] = []string{"list", "add", "rm"}
 	compCtx.Subcommands["/search"] = []string{"on", "off"}
@@ -330,6 +337,8 @@ func (w *Workspace) SetRouter(r *harness.ULTRARouter) {
 func (w *Workspace) RefreshState(ctx context.Context) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.state.UltraEntitled = w.ultra.Entitled()
+	w.state.UltraExecution = w.ultraExecution
 
 	// 1. Live Git status
 	w.state.GitStatus = ProbeGitStatus(w.workDir)
@@ -434,7 +443,10 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 func (w *Workspace) GetUIState() UIState {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.state
+	state := w.state
+	state.UltraEntitled = w.ultra.Entitled()
+	state.UltraExecution = w.ultraExecution
+	return state
 }
 
 // ExecuteCommand executes an interactive slash command.
@@ -1387,6 +1399,8 @@ func (w *Workspace) paint() {
 
 	w.mu.RLock()
 	state := w.state
+	state.UltraEntitled = w.ultra.Entitled()
+	state.UltraExecution = w.ultraExecution
 	th := w.theme
 	workDir := w.workDir
 	w.mu.RUnlock()
@@ -1433,6 +1447,8 @@ func (w *Workspace) paint() {
 func (w *Workspace) printBatchFrame(out io.Writer) {
 	w.mu.RLock()
 	state := w.state
+	state.UltraEntitled = w.ultra.Entitled()
+	state.UltraExecution = w.ultraExecution
 	th := w.theme
 	workDir := w.workDir
 	w.mu.RUnlock()

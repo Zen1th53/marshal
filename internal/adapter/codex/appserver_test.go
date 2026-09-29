@@ -233,6 +233,35 @@ func TestAppServerWaitTurnAcceptsProtocolTerminalWithoutThreadID(t *testing.T) {
 	}
 }
 
+func TestAppServerCallPreservesEarlyTurnEvents(t *testing.T) {
+	tests := []struct {
+		name     string
+		event    string
+		approval bool
+	}{
+		{"approval", `{"jsonrpc":"2.0","id":42,"method":"item/commandExecution/requestApproval","params":{"kind":"command","threadId":"thread-123","turnId":"turn-123","itemId":"item-123","approvalId":"callback-123","command":"git status --short","cwd":"/worktree"}}`, true},
+		{"completion", `{"method":"turn/completed","params":{"turn":{"id":"turn-123","status":"completed","items":[{"type":"agentMessage","text":"done"}]}}}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wire := tt.event + "\n" + `{"jsonrpc":"2.0","id":1,"result":{"turn":{"id":"turn-123"}}}` + "\n"
+			conn := &appServerConnection{stream: appServerStream{in: &strings.Builder{}, out: bufio.NewReader(strings.NewReader(wire))}}
+			if _, err := conn.stream.call(1, "turn/start", map[string]any{"threadId": "thread-123"}); err != nil {
+				t.Fatalf("turn/start: %v", err)
+			}
+			result, err := conn.waitTurn(context.Background(), AppServerTurn{ThreadID: "thread-123", TurnID: "turn-123"})
+			if tt.approval {
+				var required *AppServerApprovalRequiredError
+				if !errors.As(err, &required) || required.Request.RequestID != "42" {
+					t.Fatalf("early approval lost: result=%#v err=%v", result, err)
+				}
+			} else if err != nil || result.Status != "completed" || result.FinalText != "done" {
+				t.Fatalf("early completion lost: result=%#v err=%v", result, err)
+			}
+		})
+	}
+}
+
 func TestAppServerApprovalResponsePreservesNumericJSONRPCID(t *testing.T) {
 	requestLine := `{"jsonrpc":"2.0","id":42,"method":"item/commandExecution/requestApproval","params":{"kind":"command","threadId":"thread-123","turnId":"turn-123","itemId":"item-123","approvalId":"callback-123","command":"git status --short","cwd":"/worktree"}}` + "\n"
 	output := &strings.Builder{}

@@ -1936,3 +1936,15 @@ func (r *Runtime) Store() *store.Store { return r.store }
 // Memory exposes the single canonical product-facing memory service to local
 // interfaces. Callers must use its authorization and governance boundaries.
 func (r *Runtime) Memory() *MemoryService { return r.memoryService }
+
+// Marshal exposes the project Marshal service.
+func (r *Runtime) Marshal() *MarshalService {
+	if r == nil {
+		return nil
+	}
+	project, err := r.store.Project(context.Background())
+	if err != nil {
+		return nil
+	}
+	return &MarshalService{Store: r.store, ProjectID: project.ID, Repository: r.layout.Root, Worktrees: r.layout.Worktrees}
+}

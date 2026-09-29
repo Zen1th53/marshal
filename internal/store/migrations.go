@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 86
+const LatestSchemaVersion = 87
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2626,6 +2626,22 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("record schema version 86: %w", err)
 		}
 		version = 86
+	}
+	if version < 87 {
+		if _, err := tx.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS marshal_runs (run_id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(project_id), revision INTEGER NOT NULL CHECK(revision >= 1), data_json TEXT NOT NULL);
+			CREATE INDEX IF NOT EXISTS marshal_runs_project ON marshal_runs(project_id);
+			CREATE TABLE IF NOT EXISTS marshal_tasks (run_id TEXT NOT NULL REFERENCES marshal_runs(run_id) ON DELETE CASCADE, task_id TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision >= 1), data_json TEXT NOT NULL, PRIMARY KEY(run_id, task_id));
+			CREATE TABLE IF NOT EXISTS marshal_handins (run_id TEXT NOT NULL, task_id TEXT NOT NULL, attempt INTEGER NOT NULL CHECK(attempt >= 1), revision INTEGER NOT NULL CHECK(revision >= 1), data_json TEXT NOT NULL, PRIMARY KEY(run_id, task_id, attempt), FOREIGN KEY(run_id, task_id) REFERENCES marshal_tasks(run_id, task_id) ON DELETE CASCADE);
+			CREATE TABLE IF NOT EXISTS marshal_reviews (run_id TEXT NOT NULL, task_id TEXT NOT NULL, attempt INTEGER NOT NULL CHECK(attempt >= 1), revision INTEGER NOT NULL CHECK(revision >= 1), data_json TEXT NOT NULL, PRIMARY KEY(run_id, task_id, attempt), FOREIGN KEY(run_id, task_id) REFERENCES marshal_tasks(run_id, task_id) ON DELETE CASCADE);
+			CREATE TABLE IF NOT EXISTS marshal_settings (project_id TEXT PRIMARY KEY REFERENCES projects(project_id), revision INTEGER NOT NULL CHECK(revision >= 1), data_json TEXT NOT NULL);
+		`); err != nil {
+			return fmt.Errorf("migrate schema version 87: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at) VALUES(87, ?)", utcNow()); err != nil {
+			return fmt.Errorf("record schema version 87: %w", err)
+		}
+		version = 87
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)

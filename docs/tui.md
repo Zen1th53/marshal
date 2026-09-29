@@ -285,7 +285,11 @@ navigation surface (Home, Control, Status, Work, Verify, Memory, Models,
 Security, System) is an **ULTRA** feature: `Ctrl+N` and `Esc` on an empty
 composer open it only when the session holds a verified ULTRA entitlement.
 Without one, both entry points refuse and say so, and every MARSHAL command
-stays available from the composer. `/ultra` reports why a session is Standard;
+stays available from the composer. `/ultra status` reports whether verified ULTRA
+execution is active, entitled but switched off, or unavailable. The header and
+statusline show `ULTRA ACTIVE` only while entitlement and execution are both
+enabled; an entitled session with execution off shows `ULTRA EXEC OFF`. `/ultra`
+is a short alias for the same status.
 `/ultra request` asks an operator for an entitlement.
 
 The gate is read live on each attempt rather than captured at startup, because

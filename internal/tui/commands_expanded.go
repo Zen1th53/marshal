@@ -706,14 +706,16 @@ func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (strin
 // turns ULTRA on, because entitlement is not a thing the client decides — a
 // toggle here would be exactly the local flag the design refuses to rely on.
 func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string, error) {
-	gate, executionEnabled := h.ws.ultraGate()
-
 	// `/ultra request` asks an operator to grant this installation ULTRA. It is
 	// still not a way to turn ULTRA on: it queues a question for a person, and
 	// the answer arrives from the server or not at all.
-	if len(args) > 0 && strings.EqualFold(args[0], "request") {
+	if len(args) == 1 && strings.EqualFold(args[0], "request") {
 		return h.requestUltra(ctx)
 	}
+	if len(args) > 0 && (len(args) != 1 || !strings.EqualFold(args[0], "status")) {
+		return "Usage: /ultra [status|request]", nil
+	}
+	gate, executionEnabled := h.ws.ultraGate()
 
 	if !gate.Entitled() {
 		// Distinguish "you have not been granted this" from "we could not ask".
@@ -721,26 +723,24 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 		// requesting one, and telling a user to request when the server is
 		// rate-limiting them sends them round a loop.
 		if err := h.ws.ultraError(); err != nil {
-			return "ULTRA could not be activated: " + err.Error() + "\n" +
+			return "ULTRA status: INACTIVE — activation failed: " + err.Error() + "\n" +
 				"  The session is running as Standard. Try again shortly.", nil
 		}
-		return "ULTRA is unavailable: no cryptographically verified entitlement is active.\n" +
+		return "ULTRA status: INACTIVE — no cryptographically verified entitlement is active.\n" +
 			"  Use /ultra request to ask an operator for one.", nil
 	}
 
 	expiry, _ := gate.ExpiresAt()
 	remaining := time.Until(expiry).Round(time.Second)
-	if !gate.Capability(cloud.CapabilityDelegation) {
-		return fmt.Sprintf(
-			"ULTRA is active but does not grant delegation, so confirmations are still asked for.\n  Lease expires in %s.",
-			remaining), nil
-	}
 	if !executionEnabled {
 		return fmt.Sprintf(
-			"ULTRA is entitled but Execution is off, so it behaves exactly like Standard.\n  Lease expires in %s.\n  Set %s=1 to enable it.",
+			"ULTRA status: ENTITLED, EXECUTION OFF — the session behaves like Standard.\n  Lease expires in %s.\n  Set %s=1 and restart MARSHAL to enable execution.",
 			remaining, cloud.EnvExecution), nil
 	}
-	return fmt.Sprintf("ULTRA is active with delegation.\n  Lease expires in %s.", remaining), nil
+	if !gate.Capability(cloud.CapabilityDelegation) {
+		return fmt.Sprintf("ULTRA status: ACTIVE — delegation is unavailable; confirmations are still required.\n  Lease expires in %s.", remaining), nil
+	}
+	return fmt.Sprintf("ULTRA status: ACTIVE — delegation is enabled.\n  Lease expires in %s.", remaining), nil
 }
 
 // requestUltra asks an operator to grant this installation ULTRA.

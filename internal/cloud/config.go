@@ -169,6 +169,7 @@ func Authorize(ctx context.Context, cfg Config, runtimeDir, clientVersion string
 	result.Client = client
 
 	store := NewStore(runtimeDir)
+	client.store = store
 	state, err := store.LoadOrCreate()
 	if err != nil {
 		result.Err = err
@@ -204,14 +205,15 @@ func Authorize(ctx context.Context, cfg Config, runtimeDir, clientVersion string
 	session.AttachReporter(reporter)
 	reporter.Record(KindAppStart, TelemetryStandard, "")
 
-	// Registration is idempotent, and a server that already knows this
-	// installation answers success, so this is safe to repeat every run.
-	if err := client.Register(ctx, state); err != nil {
+	registered, err := client.ensureRegistered(ctx, state, false)
+	if err != nil {
 		reporter.Record(KindErrorClass, TelemetryStandard, ClassifyError(err))
 		result.Err = err
 		return result
 	}
-	reporter.Record(KindRegistration, TelemetryStandard, "")
+	if registered {
+		reporter.Record(KindRegistration, TelemetryStandard, "")
+	}
 
 	if err := session.Start(ctx); err != nil {
 		reporter.Record(KindActivationFail, TelemetryStandard, ClassifyError(err))

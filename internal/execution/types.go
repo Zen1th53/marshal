@@ -145,8 +145,19 @@ const (
 	IntentCommitted      IntentStage = "COMMITTED"
 )
 
+// DeliveryMode controls how a completed task hands in its changes.
+type DeliveryMode string
+
+const (
+	DeliveryReconcile      DeliveryMode = ""
+	DeliveryPreserveBranch DeliveryMode = "preserve_branch"
+)
+
 // ExecutionRun represents the durable canonical run entity in Process 05.
 type ExecutionRun struct {
+	Delivery            DeliveryMode                `json:"delivery,omitempty"`
+	BaseCommit          string                      `json:"base_commit,omitempty"`
+	SelectedTask        string                      `json:"selected_task,omitempty"`
 	RunID               string                      `json:"run_id"`
 	Version             int64                       `json:"version"` // CAS concurrency version
 	ProjectID           projectid.ID                `json:"project_id"`
@@ -199,6 +210,8 @@ type TaskExecution struct {
 	TargetFiles       []string           `json:"target_files,omitempty"`
 	LeaseID           string             `json:"lease_id,omitempty"`
 	WorktreePath      string             `json:"worktree_path,omitempty"`
+	BaseCommit        string             `json:"base_commit,omitempty"`
+	ResultCommit      string             `json:"result_commit,omitempty"`
 	NativeTurn        *NativeTurnBinding `json:"native_turn,omitempty"`
 	RequiredEvidence  []string           `json:"required_evidence,omitempty"`
 	CollectedEvidence []string           `json:"collected_evidence,omitempty"`

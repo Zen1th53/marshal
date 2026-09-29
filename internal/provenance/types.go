@@ -16,6 +16,8 @@ const (
 	CodePatchMismatch   Code = "PROV_PATCH_MISMATCH"
 	CodeForeignEvidence Code = "PROV_FOREIGN_EVIDENCE"
 	CodeInvalidCommit   Code = "PROV_INVALID_COMMIT"
+	CodeInvalidSeal     Code = "PROV_INVALID_SEAL"
+	CodeChainMismatch   Code = "PROV_CHAIN_MISMATCH"
 )
 
 type Error struct {
@@ -37,6 +39,8 @@ var (
 	ErrPatchMismatch   = &Error{Code: CodePatchMismatch, Message: "patch digest mismatch for change record"}
 	ErrForeignEvidence = &Error{Code: CodeForeignEvidence, Message: "evidence does not belong to change context"}
 	ErrInvalidCommit   = &Error{Code: CodeInvalidCommit, Message: "commit SHA format is invalid"}
+	ErrInvalidSeal     = &Error{Code: CodeInvalidSeal, Message: "accepted change is missing patch or evidence"}
+	ErrChainMismatch   = &Error{Code: CodeChainMismatch, Message: "provenance chain hash mismatch"}
 )
 
 type ChangeRecord struct {
@@ -53,6 +57,7 @@ type ChangeRecord struct {
 	Sealed        bool
 	CreatedAt     time.Time
 	SealedAt      time.Time
+	ChainHash     string
 }
 
 type ChainCustodyView struct {
@@ -74,12 +79,13 @@ func ValidateSHA(sha string) bool {
 }
 
 func (r *ChangeRecord) ComputeChainHash() string {
-	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%v|%d",
+	payload := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%v|%d|%d",
 		r.ChangeID, r.TaskID, r.AgentID, r.Provider,
 		r.ContextDigest, r.PatchDigest, r.CommitSHA,
 		strings.Join(r.ToolCallIDs, ","),
 		strings.Join(r.EvidenceIDs, ","),
-		r.Sealed, r.CreatedAt.UnixNano(),
+		strings.Join(r.ApprovalIDs, ","),
+		r.Sealed, r.CreatedAt.UnixNano(), r.SealedAt.UnixNano(),
 	)
 	return CalculateDigest(payload)
 }

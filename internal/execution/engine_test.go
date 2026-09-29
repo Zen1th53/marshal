@@ -450,6 +450,50 @@ func TestEngine_LiveNativeTurnPersistsExactBindingAndResumesOnlyAfterConsumption
 	}
 }
 
+func TestEngine_FailNativeResumeRecordsUnfinishedConsumedTurn(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryRunStore()
+	engine, err := NewEngine(EngineConfig{ProjectRoot: t.TempDir()}, store, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	request := ApprovalRequest{RunID: "run-native-resume", TaskID: "task-native-resume", OperationType: "CODEX_APP_SERVER_NATIVE", TargetResource: "/worktree", DiffPreview: "method", Parameters: "digest", CurrentState: "state", Now: now}
+	approval, err := engine.ApprovalManager().RequestApproval(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.ApprovalManager().Approve(approval.ApprovalID, "operator", "approved", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.ApprovalManager().ValidateAndConsume(approval.ApprovalID, ComputeActionDigest(request.OperationType, request.TargetResource, request.DiffPreview, request.Parameters), ComputeStateDigest(request.CurrentState), now); err != nil {
+		t.Fatal(err)
+	}
+	run := ExecutionRun{RunID: request.RunID, State: RunRunning, CurrentPhase: PhaseExecuting, Tasks: map[string]TaskExecution{
+		request.TaskID: {TaskID: request.TaskID, State: TaskReady, ApprovalID: approval.ApprovalID, NativeTurn: &NativeTurnBinding{Provider: "codex-app-server", ThreadID: "thread", TurnID: "turn"}},
+	}}
+	if err := store.CreateRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.FailNativeResume(ctx, approval.ApprovalID, "lease expired"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.GetRun(ctx, run.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != RunBlocked || got.Tasks[request.TaskID].State != TaskBlocked || got.Tasks[request.TaskID].LastFailureReason != "lease expired" || len(got.Failures) != 1 || got.Failures[0].Stage != "NATIVE_RESUME" {
+		t.Fatalf("continuation failure was not durably recorded: %+v", got)
+	}
+	if err := engine.FailNativeResume(ctx, approval.ApprovalID, "late duplicate"); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := store.GetRun(ctx, run.RunID)
+	if again.Version != got.Version {
+		t.Fatalf("late continuation changed decided run: %d -> %d", got.Version, again.Version)
+	}
+}
+
 func TestEngine_Process06HandoffBundleAssembly(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()

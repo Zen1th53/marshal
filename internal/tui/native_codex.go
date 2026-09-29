@@ -75,7 +75,7 @@ func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, 
 	return w.runNativeAgent(ctx, "codex", args)
 }
 
-func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string) (string, error) {
+func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string, marshalBrief ...string) (string, error) {
 	label, homeEnv, homeDir, historyDir := "Codex", "CODEX_HOME", ".codex", "sessions"
 	switch provider {
 	case "claude":
@@ -360,6 +360,18 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 				briefingNotes = append(briefingNotes, note)
 			}
 		}
+	}
+	if len(marshalBrief) > 0 {
+		roleChannel := injectPrompt
+		if provider == "claude" {
+			roleChannel = injectSystemPrompt
+		}
+		updated, note, err := applyBriefing(provider, root, args, marshalBrief[0], roleChannel)
+		if err != nil {
+			return "", fmt.Errorf("deliver Marshal briefing: %w", err)
+		}
+		args = updated
+		briefingNotes = append(briefingNotes, note)
 	}
 
 	if w.navView != nil {

@@ -66,6 +66,14 @@ func (r *Router) Route(ctx context.Context, requiredCaps []string, minContext in
 }
 
 func (r *Router) RouteAdvanced(ctx context.Context, req RouteRequest) (*RouteDecision, error) {
+	ranked, err := r.RankAdvanced(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &ranked[0], nil
+}
+
+func (r *Router) RankAdvanced(ctx context.Context, req RouteRequest) ([]RouteDecision, error) {
 	r.mu.RLock()
 	profiles := r.profiles
 	r.mu.RUnlock()
@@ -138,13 +146,11 @@ func (r *Router) RouteAdvanced(ctx context.Context, req RouteRequest) (*RouteDec
 		return eligible[i].profile.Model < eligible[j].profile.Model
 	})
 
-	best := eligible[0]
-	return &RouteDecision{
-		Provider: best.profile.Provider,
-		Model:    best.profile.Model,
-		Score:    math.Round(best.score*1000) / 1000,
-		Reasons:  best.reasons,
-	}, nil
+	ranked := make([]RouteDecision, 0, len(eligible))
+	for _, item := range eligible {
+		ranked = append(ranked, RouteDecision{Provider: item.profile.Provider, Model: item.profile.Model, Score: math.Round(item.score*1000) / 1000, Reasons: item.reasons})
+	}
+	return ranked, nil
 }
 
 func hasAllCapabilities(candidateCaps, requiredCaps []string) bool {

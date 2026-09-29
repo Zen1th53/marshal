@@ -261,6 +261,9 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/ultra":
 		return h.handleUltra(ctx, parts[1:])
 
+	case "/marshal":
+		return h.handleMarshal(ctx, parts[1:])
+
 	case "/backup":
 		return h.handleBackup(ctx, parts[1:])
 
@@ -626,7 +629,9 @@ func (h *CommandHandler) helpText() string {
 	return `MARSHAL Terminal Workspace Commands:
   /status                  Show canonical session, goal, team, claim, budget, and termination status
   /goal [outcome]          View or update the active GoalContract
+  /marshal <goal>          Plan with a Marshal model, then marshal the work to agents (/marshal help)
   /mode [manual|auto]       Switch operating supervision mode; ULTRA requires entitlement
+  /ultra [status|request]  Show verified ULTRA status or request entitlement
   /agents                  List registered participants, fixed roles, and harnesses
   /claims                  List active claims and epistemic verification states
   /learning <id>           Inspect a Process 07 memory commit, promotions and refusals

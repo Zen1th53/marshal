@@ -98,6 +98,11 @@ func startFrozenTUICommand(t *testing.T, rows, cols uint16, args ...string) *pty
 
 	bin := buildMarshalBinary(t)
 	project := initProject(t, bin)
+	return startFrozenTUIInProject(t, rows, cols, bin, project, args...)
+}
+
+func startFrozenTUIInProject(t *testing.T, rows, cols uint16, bin, project string, args ...string) *ptySession {
+	t.Helper()
 
 	master, slave := openPTY(t)
 	setWinsize(master, rows, cols)

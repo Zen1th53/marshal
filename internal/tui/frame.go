@@ -45,6 +45,9 @@ func BuildFrame(s UIState, th *Theme, workDir string, composer *Composer, popup 
 // state, git and cost are not repeated here: they belong to the statusline.
 func buildHeader(s UIState, th *Theme, cols int) []string {
 	title := th.Colorize(th.Marshal, "MARSHAL")
+	if badge := ultraBadge(s); badge != "" {
+		title += " " + th.Colorize(th.Ultra, "["+badge+"]")
+	}
 
 	goal := s.Goal.DesiredOutcome
 	if goal == "" {
@@ -72,6 +75,11 @@ func buildBody(s UIState, th *Theme, cols, rows int) []string {
 	if res := outputSection(s, th, cols); len(res) > 0 {
 		out = append(out, "")
 		out = append(out, res...)
+	}
+
+	if m := marshalSection(s, th, cols); len(m) > 0 {
+		out = append(out, "")
+		out = append(out, m...)
 	}
 
 	if approvals := approvalsSection(s, th, cols); len(approvals) > 0 {
