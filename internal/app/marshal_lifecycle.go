@@ -844,7 +844,7 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	}
 	run.PlanVersion = amended.Version
 	if !major {
-		run.ApprovalScopeDigest = marshalApprovalDigest(amended.ApprovalScopeDigest, run.Budget, run.Settings.EffectiveControl())
+		run.ApprovalScopeDigest = marshalApprovalDigest(amended.ApprovalScopeDigest, run)
 		previous := run.Tasks
 		run.Tasks = d.Tasks
 		for i := range run.Tasks {
