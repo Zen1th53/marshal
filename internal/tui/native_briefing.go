@@ -34,9 +34,51 @@ const (
 	// injectPrompt passes the briefing as the opening prompt. Always available,
 	// but the agent answers it, which spends a turn and tokens.
 	injectPrompt injectChannel = "prompt"
+	// injectDeveloperInstructions passes the briefing to Codex as developer
+	// instructions (`-c developer_instructions=...`), the counterpart of
+	// Claude's --append-system-prompt: Codex follows them without printing
+	// them as a conversation turn. A short kickoff turn starts the session.
+	injectDeveloperInstructions injectChannel = "developer-instructions"
+	// injectMarshalDir writes the briefing into a directory of MARSHAL's own
+	// under .marshal/briefing/, never into the project's AGENTS.md, and points
+	// the agent at it: OpenCode through its instructions configuration,
+	// Antigravity by adding the directory to its workspace. The directory lives
+	// only as long as the session.
+	injectMarshalDir injectChannel = "marshal-dir"
 	// injectOff restores the pre-injection behaviour.
 	injectOff injectChannel = "off"
 )
+
+// marshalKickoff is the one conversation turn that starts a Marshal whose
+// protocol was delivered outside the conversation.
+const marshalKickoff = "Begin."
+
+// marshalKickoffArgs are the arguments that give each CLI its opening turn in
+// an interactive session.
+func marshalKickoffArgs(provider string) []string {
+	switch provider {
+	case "opencode":
+		return []string{"--prompt", marshalKickoff}
+	case "antigravity":
+		return []string{"--prompt-interactive", marshalKickoff}
+	default:
+		return []string{marshalKickoff}
+	}
+}
+
+// hiddenChannel is the channel each provider reads instructions from without
+// showing them as a conversation turn, so a briefing costs no turn and never
+// lands in the project's own files.
+func hiddenChannel(provider string) injectChannel {
+	switch provider {
+	case "claude":
+		return injectSystemPrompt
+	case "codex":
+		return injectDeveloperInstructions
+	default:
+		return injectMarshalDir
+	}
+}
 
 const (
 	briefingScanLimit = 400
@@ -103,15 +145,13 @@ func resolveInjectChannel(provider string, configured injectChannel) (injectChan
 	case injectOff:
 		return injectOff, ""
 	case injectAuto:
-		if provider == "claude" {
-			return injectSystemPrompt, ""
-		}
-		return injectProjectDoc, ""
+		return hiddenChannel(provider), ""
 	case injectSystemPrompt:
 		if provider == "claude" {
 			return injectSystemPrompt, ""
 		}
-		return injectProjectDoc, fmt.Sprintf("%s has no system-prompt flag; briefing delivered through %s instead.", providerDisplayName(provider), projectDocName(provider))
+		channel := hiddenChannel(provider)
+		return channel, fmt.Sprintf("%s has no system-prompt flag; briefing delivered through %s instead.", providerDisplayName(provider), channel)
 	}
 	return configured, ""
 }
@@ -274,15 +314,26 @@ func applyBriefing(provider, root string, args []string, briefing string, channe
 	}
 	switch channel {
 	case injectSystemPrompt:
-		// An operator's own --append-system-prompt wins; MARSHAL does not
-		// silently stack a second one on top of it.
-		for _, arg := range args {
-			if arg == "--append-system-prompt" || strings.HasPrefix(arg, "--append-system-prompt=") {
-				return args, "Briefing skipped: this session already passes --append-system-prompt.", nil
+		// Claude takes one --append-system-prompt. When the session already
+		// carries one, the operator's or an earlier briefing of this launch,
+		// the briefing joins it: skipping would silently drop the Marshal
+		// protocol behind the cross-agent memory, and replacing would drop the
+		// operator's own text.
+		const flag = "--append-system-prompt"
+		for i, arg := range args {
+			switch {
+			case arg == flag && i+1 < len(args):
+				updated := append([]string(nil), args...)
+				updated[i+1] = args[i+1] + "\n\n" + briefing
+				return updated, fmt.Sprintf("Briefing added to the system prompt (%d bytes).", len(briefing)), nil
+			case strings.HasPrefix(arg, flag+"="):
+				updated := append([]string(nil), args...)
+				updated[i] = arg + "\n\n" + briefing
+				return updated, fmt.Sprintf("Briefing added to the system prompt (%d bytes).", len(briefing)), nil
 			}
 		}
-		return append([]string{"--append-system-prompt", briefing}, args...),
-			fmt.Sprintf("Cross-agent briefing injected into the system prompt (%d bytes).", len(briefing)), nil
+		return append([]string{flag, briefing}, args...),
+			fmt.Sprintf("Briefing injected into the system prompt (%d bytes).", len(briefing)), nil
 
 	case injectProjectDoc:
 		path := filepath.Join(root, projectDocName(provider))
@@ -292,7 +343,15 @@ func applyBriefing(provider, root string, args []string, briefing string, channe
 		return args, fmt.Sprintf("Cross-agent briefing written to %s (%d bytes).", projectDocName(provider), len(briefing)), nil
 
 	case injectPrompt:
-		prompt := briefing + "\n\nAcknowledge in one line, then wait for the operator."
+		// A cross-agent briefing only needs acknowledging. The Marshal's
+		// protocol, which always opens with its pinned header, says itself how
+		// the session opens, so a one-line acknowledgement would cut its
+		// introduction short.
+		closing := "Acknowledge in one line, then wait for the operator."
+		if strings.HasPrefix(briefing, "MARSHAL PROTOCOL") {
+			closing = "Begin now with step 1."
+		}
+		prompt := briefing + "\n\n" + closing
 		if provider == "opencode" {
 			return append([]string{"--prompt", prompt}, args...), fmt.Sprintf("Cross-agent briefing passed as the opening prompt (%d bytes); it will consume one turn.", len(briefing)), nil
 		}
@@ -302,6 +361,24 @@ func applyBriefing(provider, root string, args []string, briefing string, channe
 		// After `--` every argument is the prompt, so the briefing appends there
 		// rather than becoming a stray positional the CLI would reject.
 		return append(args, prompt), fmt.Sprintf("Cross-agent briefing passed as the opening prompt (%d bytes); it will consume one turn.", len(briefing)), nil
+
+	case injectDeveloperInstructions:
+		// Codex keeps only the last developer_instructions override, so a
+		// second briefing in the same launch joins the first rather than
+		// replacing it.
+		const key = "developer_instructions="
+		for i := 0; i+1 < len(args); i++ {
+			if args[i] == "-c" && strings.HasPrefix(args[i+1], key) {
+				updated := append([]string(nil), args...)
+				updated[i+1] = args[i+1] + "\n\n" + briefing
+				return updated, fmt.Sprintf("Briefing added to the developer instructions (%d bytes).", len(briefing)), nil
+			}
+		}
+		return append([]string{"-c", key + briefing}, args...),
+			fmt.Sprintf("Briefing passed as developer instructions (%d bytes).", len(briefing)), nil
+
+	case injectMarshalDir:
+		return args, "", fmt.Errorf("the %s channel is delivered through a briefing directory", channel)
 	}
 	return args, "", fmt.Errorf("unsupported injection channel %q", channel)
 }

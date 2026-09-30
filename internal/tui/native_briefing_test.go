@@ -18,11 +18,13 @@ func TestResolveInjectChannelFallsBackPerProvider(t *testing.T) {
 		wantNote   bool
 	}{
 		{"claude auto uses system prompt", "claude", injectAuto, injectSystemPrompt, false},
-		{"codex auto uses project doc", "codex", injectAuto, injectProjectDoc, false},
-		{"opencode auto uses project doc", "opencode", injectAuto, injectProjectDoc, false},
-		{"codex cannot take a system prompt", "codex", injectSystemPrompt, injectProjectDoc, true},
+		{"codex auto uses developer instructions", "codex", injectAuto, injectDeveloperInstructions, false},
+		{"opencode auto uses MARSHAL's directory", "opencode", injectAuto, injectMarshalDir, false},
+		{"antigravity auto uses MARSHAL's directory", "antigravity", injectAuto, injectMarshalDir, false},
+		{"codex cannot take a system prompt", "codex", injectSystemPrompt, injectDeveloperInstructions, true},
 		{"claude takes a system prompt", "claude", injectSystemPrompt, injectSystemPrompt, false},
-		{"opencode cannot take a system prompt", "opencode", injectSystemPrompt, injectProjectDoc, true},
+		{"opencode cannot take a system prompt", "opencode", injectSystemPrompt, injectMarshalDir, true},
+		{"project doc stays available when chosen", "codex", injectProjectDoc, injectProjectDoc, false},
 		{"prompt channel is universal", "codex", injectPrompt, injectPrompt, false},
 		{"off stays off", "claude", injectOff, injectOff, false},
 	} {
@@ -67,17 +69,37 @@ func TestApplyBriefingSystemPromptChannel(t *testing.T) {
 		t.Error("operator was not told the briefing was injected")
 	}
 
-	// The operator's own system prompt wins; MARSHAL does not stack a second.
+	// The operator's own system prompt is kept, and the briefing joins it
+	// rather than replacing it or being dropped.
 	operator := []string{"--append-system-prompt", "mine"}
-	args, note, err = applyBriefing("claude", root, operator, "prior work", injectSystemPrompt)
+	args, _, err = applyBriefing("claude", root, operator, "prior work", injectSystemPrompt)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if len(args) != 2 {
-		t.Errorf("operator's own flag was overridden: %q", args)
+	if len(args) != 2 || args[1] != "mine\n\nprior work" {
+		t.Errorf("briefing did not join the operator's system prompt: %q", args)
 	}
-	if !strings.Contains(note, "skipped") {
-		t.Errorf("skip not reported: %q", note)
+	args, _, err = applyBriefing("claude", root, []string{"--append-system-prompt=mine"}, "prior work", injectSystemPrompt)
+	if err != nil || len(args) != 1 || args[0] != "--append-system-prompt=mine\n\nprior work" {
+		t.Errorf("briefing did not join the = form: %q %v", args, err)
+	}
+}
+
+// The Marshal protocol reaches Claude even when the cross-agent memory was
+// delivered first on the same system prompt; skipping it left Claude with the
+// memory and no protocol.
+func TestClaudeMarshalProtocolFollowsTheMemory(t *testing.T) {
+	root := t.TempDir()
+	args, _, err := applyBriefing("claude", root, nil, "What other agents did.", injectSystemPrompt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args, _, err = applyBriefing("claude", root, args, "MARSHAL PROTOCOL", injectSystemPrompt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(args) != 2 || !strings.Contains(args[1], "What other agents did.") || !strings.Contains(args[1], "MARSHAL PROTOCOL") {
+		t.Fatalf("args = %q", args)
 	}
 }
 
@@ -238,5 +260,55 @@ func TestBriefingRequiresStore(t *testing.T) {
 	}
 	if briefing != "" {
 		t.Fatalf("a workspace with no store must produce no briefing, got %q", briefing)
+	}
+}
+
+// The Marshal's protocol opens with its own introduction, so the prompt does
+// not end with the one-line acknowledgement other briefings get.
+func TestMarshalPromptStartsStepOneInsteadOfAcknowledging(t *testing.T) {
+	args, _, err := applyBriefing("codex", t.TempDir(), nil, "MARSHAL PROTOCOL\n\n1. Introduce yourself.", injectPrompt)
+	if err != nil || len(args) == 0 {
+		t.Fatalf("args=%v err=%v", args, err)
+	}
+	if last := args[len(args)-1]; !strings.HasSuffix(last, "Begin now with step 1.") || strings.Contains(last, "Acknowledge in one line") {
+		t.Fatalf("Marshal prompt ends wrongly: %q", last)
+	}
+	args, _, _ = applyBriefing("codex", t.TempDir(), nil, "What other agents did.", injectPrompt)
+	if last := args[len(args)-1]; !strings.HasSuffix(last, "Acknowledge in one line, then wait for the operator.") {
+		t.Fatalf("cross-agent prompt lost its acknowledgement: %q", last)
+	}
+}
+
+// Codex receives briefings as developer instructions, which it follows
+// without printing as a conversation turn. Codex keeps only the last
+// developer_instructions override, so a second briefing joins the first.
+func TestCodexBriefingsJoinInOneDeveloperInstruction(t *testing.T) {
+	memory := "What other agents did."
+	protocol := "MARSHAL PROTOCOL\n\n1. Introduce yourself."
+	args, _, err := applyBriefing("codex", t.TempDir(), nil, memory, injectDeveloperInstructions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args, _, err = applyBriefing("codex", t.TempDir(), args, protocol, injectDeveloperInstructions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"-c", "developer_instructions=" + memory + "\n\n" + protocol}
+	if strings.Join(args, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("args = %q, want %q", args, want)
+	}
+}
+
+// Each CLI gets its opening turn in the form it accepts.
+func TestMarshalKickoffArgsPerProvider(t *testing.T) {
+	for provider, want := range map[string][]string{
+		"codex":       {marshalKickoff},
+		"claude":      {marshalKickoff},
+		"opencode":    {"--prompt", marshalKickoff},
+		"antigravity": {"--prompt-interactive", marshalKickoff},
+	} {
+		if got := marshalKickoffArgs(provider); strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+			t.Errorf("%s kickoff = %q, want %q", provider, got, want)
+		}
 	}
 }
