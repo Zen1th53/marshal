@@ -32,7 +32,7 @@ func TestMarshalMigrationFreshAndCurrentHead(t *testing.T) {
 			if err := s.Migrate(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			if got := queryInt(t, s.db, "SELECT MAX(version) FROM schema_migrations"); got != 87 {
+			if got := queryInt(t, s.db, "SELECT MAX(version) FROM schema_migrations"); got != LatestSchemaVersion {
 				t.Fatalf("version %d", got)
 			}
 			for _, table := range []string{"marshal_runs", "marshal_tasks", "marshal_handins", "marshal_reviews", "marshal_settings"} {

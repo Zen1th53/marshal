@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -43,7 +44,7 @@ func (r *Runtime) ApproveGoal(ctx context.Context, sessionID string, expectedRev
 // GoalContract revision.  The caller provides only the new interpretation and
 // its reason; the original request and every hard constraint are reconstructed
 // from canonical state and cannot be weakened by the surface.
-func (r *Runtime) ReviseGoal(ctx context.Context, sessionID string, expectedRevision int64, interpretation, reason string) (model.GoalContract, error) {
+func (r *Runtime) reviseGoal(ctx context.Context, sessionID string, expectedRevision int64, interpretation, reason string) (model.GoalContract, error) {
 	if r == nil || r.store == nil {
 		return model.GoalContract{}, fmt.Errorf("%w: goal service is unavailable", model.ErrUnavailable)
 	}
@@ -88,5 +89,11 @@ func (r *Runtime) ReviseGoal(ctx context.Context, sessionID string, expectedRevi
 	if err := r.store.SaveGoalContract(ctx, next, goal.Revision); err != nil {
 		return model.GoalContract{}, err
 	}
-	return r.store.GetActiveGoalContract(ctx, sessionID)
+	return r.store.GetGoalContract(ctx, next.ID, next.Revision)
+}
+
+// ReviseGoal requires an exact command envelope. Trusted surfaces call
+// CommandReviseGoal; agent-facing legacy calls cannot mint operator authority.
+func (r *Runtime) ReviseGoal(ctx context.Context, sessionID string, expectedRevision int64, interpretation, reason string) (model.GoalContract, error) {
+	return model.GoalContract{}, authz.ErrDenied
 }

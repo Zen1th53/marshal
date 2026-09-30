@@ -1363,10 +1363,13 @@ func (w *Workspace) controlSource() *ControlSource {
 		// action refuse with the reason, which is what the user needs to see.
 		return &ControlSource{SessionID: session, ProjectID: project, ApproverID: session}
 	}
+	localControl, localControlErr := runtime.OpenLocalControl(context.Background())
 	return &ControlSource{
 		Authority: &runtimeControlAuthority{
-			runtime: runtime,
-			store:   store,
+			runtime:         runtime,
+			store:           store,
+			localControl:    localControl,
+			localControlErr: localControlErr,
 			// The gate is read live: the Cloud handshake finishes after the
 			// workspace is built, so a captured gate would report Standard
 			// for the rest of the session.

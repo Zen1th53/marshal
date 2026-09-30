@@ -43,8 +43,10 @@ import (
 
 // runtimeControlAuthority binds Control to the canonical runtime.
 type runtimeControlAuthority struct {
-	runtime *app.Runtime
-	store   *store.Store
+	runtime         *app.Runtime
+	store           *store.Store
+	localControl    *app.LocalControl
+	localControlErr error
 	// gate is the canonical ULTRA authority. It is read live rather than
 	// captured, because the Cloud handshake completes after the workspace is
 	// built.
@@ -651,11 +653,16 @@ func (a *runtimeControlAuthority) ApproveGoal(ctx context.Context, sessionID str
 	return a.runtime.ApproveGoal(ctx, sessionID, expectedRevision)
 }
 
-func (a *runtimeControlAuthority) ReviseGoal(ctx context.Context, sessionID string, expectedRevision int64, interpretation, reason string) (model.GoalContract, error) {
+// ReviseGoal forwards the reviewed envelope with the workspace-owned
+// identity. Neither the command text nor the request supplies a principal.
+func (a *runtimeControlAuthority) ReviseGoal(ctx context.Context, envelope app.CommandEnvelope, interpretation, reason string) (model.GoalContract, error) {
 	if a.runtime == nil {
 		return model.GoalContract{}, errNoRuntime
 	}
-	return a.runtime.ReviseGoal(ctx, sessionID, expectedRevision, interpretation, reason)
+	if a.localControlErr != nil {
+		return model.GoalContract{}, a.localControlErr
+	}
+	return a.runtime.CommandReviseGoal(a.localControl.Context(ctx), envelope, interpretation, reason)
 }
 
 // CreatePlan builds a Process 04 plan from the confirmed goal.

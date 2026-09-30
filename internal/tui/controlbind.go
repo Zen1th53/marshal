@@ -123,7 +123,7 @@ type ControlAuthority interface {
 	ApproveGoal(ctx context.Context, sessionID string, expectedRevision int64) (model.GoalContract, error)
 	// ReviseGoal creates the next Process 03 revision from typed operator
 	// intent. The runtime preserves original request and hard constraints.
-	ReviseGoal(ctx context.Context, sessionID string, expectedRevision int64, interpretation, reason string) (model.GoalContract, error)
+	ReviseGoal(ctx context.Context, envelope app.CommandEnvelope, interpretation, reason string) (model.GoalContract, error)
 	// CreatePlan builds a Process 04 plan from the confirmed goal.
 	CreatePlan(ctx context.Context, sessionID string) (PlanState, error)
 	// RegisterAgent adds an agent to the team through the canonical runtime.
@@ -2023,8 +2023,8 @@ func (s *ControlSource) executeReviseGoal(ctx context.Context, req ActionRequest
 	if err := s.available(); err != nil {
 		return Outcome{}, err
 	}
-	revised, err := s.Authority.ReviseGoal(ctx, s.SessionID, req.Target.Revision,
-		req.Inputs["interpretation"], req.Inputs["reason"])
+	revised, err := s.Authority.ReviseGoal(ctx, app.CommandEnvelope{ProjectID: s.ProjectID, SessionID: s.SessionID, TargetID: req.Target.ID, ExpectedVersion: req.Target.Revision, IdempotencyKey: req.IdempotencyKey}, req.Inputs["interpretation"], req.Inputs["reason"])
+
 	if err != nil {
 		return refusal("the goal could not be revised", err, req.Target, "internal/app/goal_runtime.go")
 	}

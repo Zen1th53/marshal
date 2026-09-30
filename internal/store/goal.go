@@ -184,6 +184,9 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 		return fmt.Errorf("update active goal: %w", err)
 	}
 
+	if err := writeCommand(ctx, tx, goal); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit save goal: %w", err)
 	}
