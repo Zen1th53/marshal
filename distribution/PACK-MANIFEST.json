@@ -9860,6 +9860,11 @@
       "bytes": 5720
     },
     {
+      "path": "release/RELEASE_NOTES_0.0.5-rc.4.md",
+      "sha256": "205f6c2dafed0fc3188929c488e3271b31c4ba9bbe463a3c91e9d494c9f05cf5",
+      "bytes": 7040
+    },
+    {
       "path": "release/RELEASE_NOTES_1.0.1.md",
       "sha256": "934fdce035add28555ef9217ddc688de66251b6573728c302cdf8bfbfbf4b9bb",
       "bytes": 5136
