@@ -355,7 +355,7 @@ func (h *CommandHandler) handleMemoryInject(ctx context.Context, args []string) 
 			fmt.Fprintf(&b, "               %s\n", codexNote)
 		}
 		b.WriteString("\nChannels:\n")
-		b.WriteString("  auto           Claude: system-prompt, Codex: project-doc (default)\n")
+		b.WriteString("  auto           Claude: system prompt, Codex: developer instructions, OpenCode/Agy: MARSHAL's briefing directory (default)\n")
 		b.WriteString("  system-prompt  Append to the agent's system prompt; costs no turn (Claude only)\n")
 		b.WriteString("  project-doc    Write a marked block into AGENTS.md / CLAUDE.md; costs no turn\n")
 		b.WriteString("  prompt         Pass as the opening prompt; always works, consumes one turn\n")

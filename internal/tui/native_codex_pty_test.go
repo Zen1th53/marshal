@@ -17,12 +17,18 @@ func TestPTYNativeCodexOwnsInputAndSavesMemory(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(home, "sessions"), 0700); err != nil {
 		t.Fatal(err)
 	}
+	// The double answers the version probe and treats anything carrying the
+	// test marker as a session, wherever the marker sits: MARSHAL legitimately
+	// puts a developer_instructions override ahead of the operator's own
+	// arguments, as the real CLI accepts.
 	script := `#!/bin/sh
-case "$1" in
-  --marshal-native-test) ;;
-  *) printf 'codex-cli 0.1.0\n'; exit 0 ;;
-esac
-shift
+session=
+for arg do
+  case "$arg" in
+    --marshal-native-test) session=1 ;;
+  esac
+done
+if [ -z "$session" ]; then printf 'codex-cli 0.1.0\n'; exit 0; fi
 printf 'NATIVE-READY\n'
 for arg do printf 'ARG:<%s>\n' "$arg"; done
 IFS= read -r answer
