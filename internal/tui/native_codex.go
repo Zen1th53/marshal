@@ -323,9 +323,41 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	for _, problem := range channelProblems {
 		briefingNotes = append(briefingNotes, "live-peers: "+problem)
 	}
+	// A provider that reads instructions from files gets a directory of
+	// MARSHAL's own for this launch, created only when a briefing needs it and
+	// removed when the session ends.
+	var dir *briefingDir
+	defer func() { dir.remove() }()
+	deliver := func(briefing string, channel injectChannel) (string, error) {
+		if channel != injectMarshalDir {
+			updated, note, err := applyBriefing(provider, root, args, briefing, channel)
+			if err == nil {
+				args = updated
+			}
+			return note, err
+		}
+		if dir == nil {
+			created, err := newBriefingDir(root, provider)
+			if err != nil {
+				return "", err
+			}
+			dir = created
+		}
+		return dir.add(briefing)
+	}
 	channel, fallbackNote := resolveInjectChannel(provider, loadInjectChannel(root))
 	if fallbackNote != "" {
 		briefingNotes = append(briefingNotes, fallbackNote)
+	}
+	// Briefings no longer go into the project's AGENTS.md or CLAUDE.md unless
+	// the person chose that channel, so a block an earlier version left there
+	// is removed rather than going stale in their repository.
+	if channel != injectProjectDoc {
+		if cleared, err := clearProjectDocBlock(root); err != nil {
+			briefingNotes = append(briefingNotes, "Old MARSHAL memory block not removed: "+err.Error())
+		} else if cleared > 0 {
+			briefingNotes = append(briefingNotes, "Removed MARSHAL's old memory block from the project documents.")
+		}
 	}
 	if channel != injectOff {
 		briefing, err := w.crossAgentBriefing(ctx, provider)
@@ -335,15 +367,11 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		case strings.TrimSpace(briefing) == "":
 			// Nothing to summarize yet, but another agent may still start while
 			// this one runs, so the inbox pointer is delivered on its own.
-			updated, note, err := applyBriefing(provider, root, args,
-				briefingHeader+inboxBriefingNote(root, provider), channel)
-			if err != nil {
+			if _, err := deliver(briefingHeader+inboxBriefingNote(root, provider), channel); err != nil {
 				briefingNotes = append(briefingNotes, "Live inbox pointer not delivered: "+err.Error())
 			} else {
-				args = updated
 				briefingNotes = append(briefingNotes,
 					"No other provider has recorded work here yet; live updates will arrive in this session's inbox.")
-				_ = note
 			}
 		case channel == injectPrompt && hasOperatorPrompt(args):
 			briefingNotes = append(briefingNotes, "Cross-agent briefing skipped: this session already carries its own prompt.")
@@ -352,26 +380,26 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			// exists, so the pointer travels with the snapshot it will go stale
 			// against.
 			briefing += inboxBriefingNote(root, provider)
-			updated, note, err := applyBriefing(provider, root, args, briefing, channel)
-			if err != nil {
+			if note, err := deliver(briefing, channel); err != nil {
 				briefingNotes = append(briefingNotes, "Cross-agent briefing not delivered: "+err.Error())
 			} else {
-				args = updated
 				briefingNotes = append(briefingNotes, note)
 			}
 		}
 	}
 	if len(marshalBrief) > 0 {
-		roleChannel := injectPrompt
-		if provider == "claude" {
-			roleChannel = injectSystemPrompt
-		}
-		updated, note, err := applyBriefing(provider, root, args, marshalBrief[0], roleChannel)
+		// The protocol travels on the provider's hidden channel, and one short
+		// kickoff turn starts the Marshal's introduction.
+		note, err := deliver(marshalBrief[0], hiddenChannel(provider))
 		if err != nil {
 			return "", fmt.Errorf("deliver Marshal briefing: %w", err)
 		}
-		args = updated
 		briefingNotes = append(briefingNotes, note)
+		args = append(args, marshalKickoffArgs(provider)...)
+	}
+	args, briefingEnv, err := dir.launch(args)
+	if err != nil {
+		return "", fmt.Errorf("deliver briefing: %w", err)
 	}
 
 	if w.navView != nil {
@@ -379,7 +407,20 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	}
 	resume := w.SuspendTerminal()
 	defer resume()
-	fmt.Fprintf(os.Stdout, "MARSHAL · native %s · conversation and tool calls autosave to project memory · exit to return to MARSHAL\n", label)
+	// The Marshal model takes a moment to start under its briefing. Show the
+	// MARSHAL wordmark while it does, so the person sees MARSHAL taking the
+	// helm rather than a pause. It plays only for the Marshal launch, which is
+	// the one that carries a briefing.
+	if len(marshalBrief) > 0 {
+		animate := w.theme.AnimationEnabled && w.terminal != nil && w.terminal.IsTerminal()
+		playMarshalSplash(os.Stdout, w.theme, animate)
+		// The Marshal is presented as MARSHAL, never as the model behind it, so
+		// this line does not name the provider the way a plain native session
+		// does.
+		fmt.Fprintln(os.Stdout, "MARSHAL · the Marshal is planning with you · conversation and tool calls autosave to project memory · exit to return to MARSHAL")
+	} else {
+		fmt.Fprintf(os.Stdout, "MARSHAL · native %s · conversation and tool calls autosave to project memory · exit to return to MARSHAL\n", label)
+	}
 	for _, note := range briefingNotes {
 		if note != "" {
 			fmt.Fprintf(os.Stdout, "MARSHAL · %s\n", note)
@@ -401,7 +442,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	cmd := exec.CommandContext(ctx, binary, args...)
 	cmd.Dir = root
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	cmd.Env = os.Environ()
+	cmd.Env = append(os.Environ(), briefingEnv...)
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("start native %s: %w", label, err)
 	}

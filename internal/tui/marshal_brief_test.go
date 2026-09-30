@@ -56,16 +56,37 @@ func TestTaskBriefCarriesTheApprovedPlanPack(t *testing.T) {
 
 func TestMarshalBriefingFollowsControlLevel(t *testing.T) {
 	settings := marshal.DefaultSettings()
-	free, err := marshalRoleBriefing([]string{"codex"}, settings)
+	free, err := marshalRoleBriefing([]string{"codex"}, settings, marshal.Standard)
 	if err != nil {
 		t.Fatal(err)
 	}
 	settings.Control = marshal.ControlStrict
-	strict, err := marshalRoleBriefing([]string{"codex"}, settings)
+	strict, err := marshalRoleBriefing([]string{"codex"}, settings, marshal.Standard)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(strict, `every task must add "instructions"`) || strings.Contains(free, "must add") || !strings.Contains(free, `may add "instructions"`) {
 		t.Fatalf("briefings do not follow the control level:\nstrict: %s\nfree: %s", strict, free)
+	}
+}
+
+func TestMarshalBriefingStatesTier(t *testing.T) {
+	for _, tt := range []struct {
+		tier marshal.Tier
+		want string
+	}{
+		{marshal.Standard, "- Tier: Standard."},
+		{marshal.Ultra, "- Tier: ULTRA (independent cross-review and verification)."},
+	} {
+		t.Run(string(tt.tier), func(t *testing.T) {
+			brief, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), tt.tier)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, run, found := strings.Cut(brief, "\nThis run:\n")
+			if !found || !strings.Contains(run, tt.want+"\n") || strings.Count(run, "- Tier:") != 1 {
+				t.Fatalf("briefing does not state tier %s:\n%s", tt.tier, brief)
+			}
+		})
 	}
 }
