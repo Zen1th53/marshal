@@ -63,7 +63,7 @@ func marshalSection(s UIState, th *Theme, cols int) []string {
 	}
 	out := []string{PadCell(fmt.Sprintf(" %s  %s",
 		th.Colorize(th.Bold, "Marshal"),
-		th.Colorize(th.Muted, fmt.Sprintf("%s · %s · %s · %s", p.RunID, p.Provider, tier, p.State))), cols)}
+		th.Colorize(th.Muted, fmt.Sprintf("%s · %s · %s", p.RunID, tier, p.State))), cols)}
 	out = append(out, PadCell("   "+marshalBudgetText(p), cols))
 	for _, t := range p.Tasks {
 		glyph, color := marshalTaskGlyph(th, t.State)
@@ -110,7 +110,7 @@ func marshalStatusText(p *MarshalPanel) string {
 		return "No Marshal run. Start one with /marshal <goal>."
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Marshal run %s — %s (Marshal model: %s)\n", p.RunID, p.State, p.Provider)
+	fmt.Fprintf(&b, "Marshal run %s — %s\n", p.RunID, p.State)
 	for _, t := range p.Tasks {
 		fmt.Fprintf(&b, "  %-12s %-10s %s", t.ID, t.Worker, t.State)
 		if t.Returns > 0 {
