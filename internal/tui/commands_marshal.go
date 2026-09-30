@@ -180,7 +180,7 @@ func marshalChatProvider(provider string) string {
 // The steps and questions come from the constitution's Marshal protocol,
 // which is refused if it does not match its digest; what follows it is only
 // what this run needs: the workers, the current settings and the draft form.
-func marshalRoleBriefing(workers []string, settings marshal.Settings) (string, error) {
+func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marshal.Tier) (string, error) {
 	protocol, err := constitution.MarshalProtocol()
 	if err != nil {
 		return "", err
@@ -189,7 +189,12 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings) (string, e
 	if settings.EffectiveControl() == marshal.ControlStrict {
 		instructions = "Control is strict: every task must add \"instructions\" (purpose, approach, steps, what to leave alone) and may add \"expected_output\"; workers are held to the instructions exactly."
 	}
+	tierLine := "- Tier: Standard.\n"
+	if tier == marshal.Ultra {
+		tierLine = "- Tier: ULTRA (independent cross-review and verification).\n"
+	}
 	return protocol + "\nThis run:\n" +
+		tierLine +
 		"- Workers you may assign tasks to: " + strings.Join(workers, ", ") + ".\n" +
 		"- Current working mode: acceptance mode " + string(settings.AcceptanceMode) + ". The person changes it before approval with /marshal settings acceptance-mode marshal|marshal-then-user|user.\n" +
 		"- Current control level: " + string(settings.EffectiveControl()) + ". The person changes it before approval with /marshal settings control strict|free.\n" +
@@ -246,7 +251,7 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	briefing, err := marshalRoleBriefing(app.MarshalWorkers(provider), settings.Value)
+	briefing, err := marshalRoleBriefing(app.MarshalWorkers(provider), settings.Value, marshal.TierPolicy(service.Gate, settings.Value).Tier)
 	if err != nil {
 		return "", err
 	}
