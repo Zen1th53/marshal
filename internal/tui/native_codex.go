@@ -379,7 +379,20 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	}
 	resume := w.SuspendTerminal()
 	defer resume()
-	fmt.Fprintf(os.Stdout, "MARSHAL · native %s · conversation and tool calls autosave to project memory · exit to return to MARSHAL\n", label)
+	// The Marshal model takes a moment to start under its briefing. Show the
+	// MARSHAL wordmark while it does, so the person sees MARSHAL taking the
+	// helm rather than a pause. It plays only for the Marshal launch, which is
+	// the one that carries a briefing.
+	if len(marshalBrief) > 0 {
+		animate := w.theme.AnimationEnabled && w.terminal != nil && w.terminal.IsTerminal()
+		playMarshalSplash(os.Stdout, w.theme, animate)
+		// The Marshal is presented as MARSHAL, never as the model behind it, so
+		// this line does not name the provider the way a plain native session
+		// does.
+		fmt.Fprintln(os.Stdout, "MARSHAL · the Marshal is planning with you · conversation and tool calls autosave to project memory · exit to return to MARSHAL")
+	} else {
+		fmt.Fprintf(os.Stdout, "MARSHAL · native %s · conversation and tool calls autosave to project memory · exit to return to MARSHAL\n", label)
+	}
 	for _, note := range briefingNotes {
 		if note != "" {
 			fmt.Fprintf(os.Stdout, "MARSHAL · %s\n", note)
