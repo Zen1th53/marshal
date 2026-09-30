@@ -195,52 +195,23 @@ func (c *Completer) findMatches(fullText string, cursor, wordStart int, word str
 		return candidates
 	}
 
-	// 2. Object reference: starts with # or direct ID prefixes (C-, E-, T-, CP-)
-	trimmedRef := strings.TrimPrefix(word, "#")
-	hasHash := strings.HasPrefix(word, "#")
-
-	if strings.HasPrefix(strings.ToUpper(trimmedRef), "C-") {
-		for _, id := range c.ctx.Claims {
-			if strings.HasPrefix(strings.ToUpper(id), strings.ToUpper(trimmedRef)) {
-				if hasHash {
-					candidates = append(candidates, "#"+id)
-				} else {
-					candidates = append(candidates, id)
+	// Complete actual canonical IDs, including the long CLAIM-/TASK- forms.
+	// Hash-prefixed suggestions must resolve to the same object in dispatch.
+	ref := strings.TrimPrefix(word, "#")
+	seen := make(map[string]bool)
+	for _, ids := range [][]string{c.ctx.Claims, c.ctx.Evidence, c.ctx.Tasks, c.ctx.Checkpoints} {
+		for _, id := range ids {
+			if strings.HasPrefix(strings.ToUpper(id), strings.ToUpper(ref)) {
+				if strings.HasPrefix(word, "#") {
+					id = "#" + id
 				}
-			}
-		}
-	} else if strings.HasPrefix(strings.ToUpper(trimmedRef), "E-") {
-		for _, id := range c.ctx.Evidence {
-			if strings.HasPrefix(strings.ToUpper(id), strings.ToUpper(trimmedRef)) {
-				if hasHash {
-					candidates = append(candidates, "#"+id)
-				} else {
+				if !seen[id] {
 					candidates = append(candidates, id)
-				}
-			}
-		}
-	} else if strings.HasPrefix(strings.ToUpper(trimmedRef), "T-") {
-		for _, id := range c.ctx.Tasks {
-			if strings.HasPrefix(strings.ToUpper(id), strings.ToUpper(trimmedRef)) {
-				if hasHash {
-					candidates = append(candidates, "#"+id)
-				} else {
-					candidates = append(candidates, id)
-				}
-			}
-		}
-	} else if strings.HasPrefix(strings.ToUpper(trimmedRef), "CP-") {
-		for _, id := range c.ctx.Checkpoints {
-			if strings.HasPrefix(strings.ToUpper(id), strings.ToUpper(trimmedRef)) {
-				if hasHash {
-					candidates = append(candidates, "#"+id)
-				} else {
-					candidates = append(candidates, id)
+					seen[id] = true
 				}
 			}
 		}
 	}
-
 	if len(candidates) > 0 {
 		sort.Strings(candidates)
 		return candidates

@@ -50,8 +50,12 @@ func (dv *DiffViewer) IsOpen() bool {
 
 // Open loads the latest git diff from the working directory and opens the viewer.
 func (dv *DiffViewer) Open() error {
+	if err := dv.Refresh(); err != nil {
+		dv.active = false
+		return err
+	}
 	dv.active = true
-	return dv.Refresh()
+	return nil
 }
 
 // Close closes the diff viewer.

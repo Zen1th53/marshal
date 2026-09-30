@@ -53,21 +53,24 @@ func (h *CommandHandler) handleDoctor(ctx context.Context) (string, error) {
 	}
 	b.WriteString(fmt.Sprintf("%s%s\n", th.BoxBottomLeft, strings.Repeat(th.BoxHoriz, 50)))
 
+	if report.Verdict != doctor.Pass {
+		b.WriteString("Run marshal doctor from the project root for detailed checks; use marshal init if the project is not initialized.\n")
+	}
 	return b.String(), nil
 }
 
 // handleTasks handles /tasks and /task subcommands.
 func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line string) (string, error) {
-	if len(args) == 0 || args[0] == "list" {
+	if len(args) == 0 || strings.EqualFold(args[0], "list") {
 		if h.ws.store == nil {
-			return "Store unavailable to list tasks.", nil
+			return "Store unavailable to list tasks. Open the TUI in an initialized MARSHAL project (marshal init).", nil
 		}
 		tasks, err := h.ws.store.ListTasks(ctx)
 		if err != nil {
 			return "", fmt.Errorf("list tasks: %w", err)
 		}
 		if len(tasks) == 0 {
-			return "No active tasks in store. Use /task create <title> to define one.", nil
+			return "No tasks in store. Task creation is unavailable in TUI; authenticated runtime authorization is required.", nil
 		}
 
 		th := h.ws.theme
@@ -204,7 +207,7 @@ func (h *CommandHandler) transitionTask(ctx context.Context, verb, taskID string
 
 func (h *CommandHandler) handleTaskOwnership(ctx context.Context) (string, error) {
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return "Store unavailable. Open the TUI in an initialized MARSHAL project (marshal init).", nil
 	}
 	tasks, err := h.ws.store.ListTasks(ctx)
 	if err != nil {
@@ -243,8 +246,9 @@ func (h *CommandHandler) handleSandbox(ctx context.Context) (string, error) {
 func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line string) (string, error) {
 	if len(args) == 0 {
 		return "SHARED EPISTEMIC MEMORY:\n" +
-			"  Shared memory stores verified claims, architecture decisions, and provenances.\n" +
-			"  Use /memory search <query> to search knowledge items.\n" +
+			"  Shared memory stores verified records and agent-authority candidates; candidates are not verified facts.\n" +
+			"  Use /memory list, /memory search <query>, or /memory provenance <id> to inspect records.\n" +
+			"  Use /memory peers to show or change cross-agent visibility.\n" +
 			"  Use /memory inject to govern what a starting native session is told\n" +
 			"  about the work other coding agents already did in this project.", nil
 	}
@@ -256,15 +260,31 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 		return h.handleMemoryPeers(args[1:])
 	}
 
+	sub := strings.ToLower(args[0])
+	switch sub {
+	case "list":
+		if len(args) != 1 {
+			return "Usage: /memory list", nil
+		}
+	case "search":
+		if len(args) < 2 {
+			return "Usage: /memory search <query>", nil
+		}
+	case "provenance":
+		if len(args) != 2 {
+			return "Usage: /memory provenance <memory_id>", nil
+		}
+	default:
+		return "Usage: /memory [list|search <query>|provenance <id>|inject [channel]|peers [agent authors…]]", nil
+	}
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return "Store unavailable; reopen the TUI with a project store to read durable memory.", nil
 	}
 
 	h.ws.mu.RLock()
 	projectID := h.ws.state.ProjectID
 	h.ws.mu.RUnlock()
 
-	sub := strings.ToLower(args[0])
 	switch sub {
 	case "list", "search":
 		records, err := h.ws.store.ListMemoryV2(ctx, store.MemoryQueryFilter{
@@ -280,7 +300,7 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 			if len(args) < 2 {
 				return "Usage: /memory search <query>", nil
 			}
-			query = strings.ToLower(strings.TrimSpace(line[strings.Index(line, args[0])+len(args[0]):]))
+			query = strings.ToLower(strings.Join(args[1:], " "))
 		}
 
 		var matched []model.MemoryRecordV2
@@ -308,21 +328,16 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 		return b.String(), nil
 
 	case "provenance":
-		if len(args) < 2 {
-			return "Usage: /memory provenance <memory_id>", nil
+		r, err := h.ws.store.GetMemoryV2(ctx, projectID, args[1])
+		if errors.Is(err, model.ErrNotFound) {
+			return fmt.Sprintf("No memory record %s in this project.", args[1]), nil
 		}
-		records, err := h.ws.store.ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: projectID, Limit: 500})
 		if err != nil {
-			return "", fmt.Errorf("list memory: %w", err)
+			return "", fmt.Errorf("read memory provenance: %w", err)
 		}
-		for _, r := range records {
-			if r.ID == args[1] {
-				return fmt.Sprintf("MEMORY %s\n  Kind:       %s\n  Lifecycle:  %s\n  Authority:  %s\n  Confidence: %s\n  Digest:     %s\n  Title:      %s",
-					r.ID, r.Kind, r.Lifecycle, r.Authority, r.Confidence,
-					r.ContentDigest, RedactContent(r.Title, nil)), nil
-			}
-		}
-		return fmt.Sprintf("No memory record %s in this project.", args[1]), nil
+		return fmt.Sprintf("MEMORY %s\n  Kind:       %s\n  Lifecycle:  %s\n  Authority:  %s\n  Confidence: %s\n  Digest:     %s\n  Title:      %s",
+			r.ID, r.Kind, r.Lifecycle, r.Authority, r.Confidence,
+			r.ContentDigest, RedactContent(r.Title, nil)), nil
 
 	default:
 		return "Usage: /memory [list|search <query>|provenance <id>|inject [channel]|peers [agent authors…]]", nil
@@ -454,8 +469,15 @@ func (h *CommandHandler) handleMemoryPeers(args []string) (string, error) {
 		return "Usage: /memory peers <agent> <agents|all|none>", nil
 	}
 	list := strings.Join(args[1:], " ")
+	fields := splitList(list)
+	if len(fields) == 0 || (mentionsNone(list) && len(fields) != 1) {
+		return "Usage: /memory peers <agent|participants> <agents|all|none> (none must be used alone)", nil
+	}
 
 	if name == "participants" {
+		if mentionsNone(list) {
+			return "Usage: /memory peers participants <agents|all> (an empty participant list means all agents)", nil
+		}
 		joined, bad := parseProviderList("", list)
 		if len(bad) > 0 {
 			return fmt.Sprintf("%s: not an agent MARSHAL runs. Agents: %s.",
@@ -564,7 +586,7 @@ func (h *CommandHandler) renderChannel(root string, cfg channelConfig, problems 
 
 // handleProvider handles provider configuration and status inspection.
 func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (string, error) {
-	if len(args) == 0 || args[0] == "status" {
+	if len(args) == 0 || strings.EqualFold(args[0], "status") {
 		// Report only what the host probe establishes. MARSHAL cannot read a
 		// harness's credentials, so presence of the binary is never reported as
 		// proof of authentication: an installed harness is AVAILABLE, and
@@ -588,7 +610,7 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 		return b.String(), nil
 	}
 
-	if args[0] == "config" {
+	if strings.EqualFold(args[0], "config") {
 		// Credentials are deliberately not accepted here. A secret typed as a
 		// command argument lands in the composer, the command history and the
 		// activity transcript, so the TUI refuses the value and points at the
@@ -618,12 +640,12 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 		return fmt.Sprintf("Unknown provider %q. Run /provider status to see what this host provides.", name), nil
 	}
 
-	return "Usage: /provider [status|config <name> <key>]", nil
+	return "Usage: /provider [status|config <name>]", nil
 }
 
 // handleHarness handles harness probe and selection.
 func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (string, error) {
-	if len(args) == 0 || args[0] == "status" || args[0] == "probe" {
+	if len(args) == 0 || strings.EqualFold(args[0], "status") || strings.EqualFold(args[0], "probe") {
 		probes := ProbeHarnesses()
 		var b strings.Builder
 		b.WriteString(fmt.Sprintf("HARNESS CAPABILITY PROBE (%d harnesses):\n", len(probes)))
@@ -637,7 +659,7 @@ func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (stri
 		return b.String(), nil
 	}
 
-	if args[0] == "select" {
+	if strings.EqualFold(args[0], "select") {
 		return "Harness selection was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
 	}
 
@@ -647,10 +669,10 @@ func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (stri
 // handleModel exposes saved preferences read-only. Mutations fail closed until
 // Runtime owns a canonical authenticated execution-profile service.
 func (h *CommandHandler) handleModel(ctx context.Context, args []string) (string, error) {
-	if len(args) == 0 || args[0] == "show" {
+	if len(args) == 0 || strings.EqualFold(args[0], "show") {
 		return h.renderModelSelections(ctx)
 	}
-	if args[0] != "select" || len(args) < 2 {
+	if !strings.EqualFold(args[0], "select") || len(args) < 2 {
 		return "Usage: /model select <harness> <model_name>  (or /model show)", nil
 	}
 	return "Model selection was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
@@ -659,12 +681,15 @@ func (h *CommandHandler) handleModel(ctx context.Context, args []string) (string
 // renderModelSelections reports the persisted model preference per harness.
 func (h *CommandHandler) renderModelSelections(ctx context.Context) (string, error) {
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return configStoreUnavailable, nil
 	}
 	var b strings.Builder
 	b.WriteString("SAVED MODEL PREFERENCES (NOT APPLIED TO RUNTIME):\n")
 	for _, pr := range ProbeHarnesses() {
 		profile, err := h.ws.store.GetHarnessProfile(ctx, pr.HarnessName)
+		if err != nil && !errors.Is(err, model.ErrNotFound) {
+			return "", fmt.Errorf("read model preferences: %w; reopen the TUI and check /store", err)
+		}
 		selected := UnknownModel
 		if err == nil && profile != nil && profile.DefaultModel != "" {
 			selected = profile.DefaultModel
@@ -692,28 +717,28 @@ func (h *CommandHandler) currentRoutePlan(ctx context.Context) (model.ULTRARoute
 	return h.ws.router.Route(ctx, req)
 }
 
-// handleEffort exposes saved preferences read-only and refuses mutations that
-// Runtime cannot apply.
+// handleEffort distinguishes probed capabilities and advisory defaults from
+// an execution-bound selection, and refuses mutations Runtime cannot apply.
 func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (string, error) {
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return configStoreUnavailable, nil
 	}
-
+	if len(args) > 0 {
+		return "Reasoning effort was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
+	}
 	plan, err := h.currentRoutePlan(ctx)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read reasoning preference: %w; the advisory router is unavailable, reopen the TUI", err)
 	}
-
-	if len(args) == 0 {
-		profile, perr := h.ws.store.GetHarnessProfile(ctx, plan.Harness)
-		current := plan.ReasoningEffort
-		if perr == nil && profile != nil && len(profile.ReasoningKnobs) > 0 {
-			current = profile.ReasoningKnobs[0]
-		}
-		return fmt.Sprintf("Saved reasoning preference for %s: %s (NOT APPLIED TO RUNTIME).",
-			plan.Harness, orNone(current)), nil
+	profile, err := h.ws.store.GetHarnessProfile(ctx, plan.Harness)
+	if err != nil && !errors.Is(err, model.ErrNotFound) {
+		return "", fmt.Errorf("read reasoning preference: %w; reopen the TUI and check /store", err)
 	}
-	return "Reasoning effort was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
+	knobs := "UNKNOWN (no probed capability metadata)"
+	if profile != nil && len(profile.ReasoningKnobs) > 0 {
+		knobs = strings.Join(profile.ReasoningKnobs, ", ")
+	}
+	return fmt.Sprintf("REASONING EFFORT (NOT APPLIED TO RUNTIME):\n  Harness (advisory route): %s\n  Selected effort: UNKNOWN (no canonical preference read-back)\n  Advisory route default: %s\n  Probed reasoning knobs: %s", plan.Harness, orNone(plan.ReasoningEffort), knobs), nil
 }
 
 // handleUltra reports ULTRA status and switches ULTRA Execution.
@@ -848,11 +873,11 @@ func (h *CommandHandler) requestUltra(ctx context.Context) (string, error) {
 // handleBackup handles snapshot backup creation and restoration.
 func (h *CommandHandler) handleBackup(ctx context.Context, args []string) (string, error) {
 	if len(args) == 0 {
-		return "Usage: /backup [create|restore <backup_id>]", nil
+		return "Usage: /backup [create|restore <backup_path>]", nil
 	}
 
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return configStoreUnavailable, nil
 	}
 
 	switch strings.ToLower(args[0]) {
@@ -861,10 +886,10 @@ func (h *CommandHandler) handleBackup(ctx context.Context, args []string) (strin
 		// to a temporary sibling, verifies it, and only then publishes it, so a
 		// reported path always names a file that exists and passed verification.
 		dir := filepath.Join(h.ws.workDir, ".marshal", "backups")
-		path := filepath.Join(dir, fmt.Sprintf("backup-%s.db", time.Now().UTC().Format("2006-01-02T150405Z")))
+		path := filepath.Join(dir, fmt.Sprintf("backup-%s.db", time.Now().UTC().Format("2006-01-02T150405.000000000Z")))
 		meta, err := h.ws.store.Backup(ctx, path)
 		if err != nil {
-			return "", fmt.Errorf("create backup: %w", err)
+			return "", fmt.Errorf("create backup: %w; check that the project backup directory is writable, reopen the TUI and check /store", err)
 		}
 		return fmt.Sprintf("Backup written and verified:\n  Path:     %s\n  Schema:   v%d\n  SHA-256:  %s\n  Created:  %s",
 			path, meta.SchemaVersion, meta.DatabaseSHA256, meta.CreatedAt.UTC().Format(time.RFC3339)), nil
@@ -878,13 +903,13 @@ func (h *CommandHandler) handleBackup(ctx context.Context, args []string) (strin
 		// artifact here and direct the operator to the offline path.
 		meta, err := store.VerifyBackup(ctx, args[1], "", 0)
 		if err != nil {
-			return "", fmt.Errorf("verify backup %s: %w", args[1], err)
+			return "", fmt.Errorf("verify backup %s: %w; use /backup restore <backup_path> with an existing verified backup file", args[1], err)
 		}
-		return fmt.Sprintf("Backup %s verified (schema v%d, SHA-256 %s).\nRestore is not performed from a live session: exit the TUI, stop the daemon, then restore the artifact.",
+		return fmt.Sprintf("Backup %s verified (schema v%d, SHA-256 %s).\nRestore is not performed from a live session: exit the TUI, stop the daemon, then run marshal state restore <backup_path>.",
 			args[1], meta.SchemaVersion, meta.DatabaseSHA256), nil
 
 	default:
-		return "Usage: /backup [create|restore <id>]", nil
+		return "Usage: /backup [create|restore <backup_path>]", nil
 	}
 }
 
@@ -910,11 +935,11 @@ func (h *CommandHandler) handleRuntime(ctx context.Context) (string, error) {
 // handleStore shows store schema status.
 func (h *CommandHandler) handleStore(ctx context.Context) (string, error) {
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return configStoreUnavailable, nil
 	}
 	ver, err := h.ws.store.SchemaVersion(ctx)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read schema: %w; reopen the TUI and check the project database", err)
 	}
 	return fmt.Sprintf("STORE STATUS:\n  Backend:  SQLite\n  Schema:   v%d (Latest: v%d)\n  Health:   NOT VERIFIED (schema read succeeded only)\n",
 		ver, store.LatestSchemaVersion), nil
@@ -927,7 +952,7 @@ func (h *CommandHandler) handleStore(ctx context.Context) (string, error) {
 // can be verified independently of this process.
 func (h *CommandHandler) handleExport(ctx context.Context, args []string) (string, error) {
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return configStoreUnavailable, nil
 	}
 
 	h.ws.mu.RLock()
@@ -938,7 +963,7 @@ func (h *CommandHandler) handleExport(ctx context.Context, args []string) (strin
 	h.ws.mu.RUnlock()
 
 	if goal.ID == "" {
-		return "No active goal: set one with /goal <outcome> before exporting an evidence bundle.", nil
+		return "No active goal: open a session with a canonical goal before exporting. Goal creation in TUI is unavailable; authenticated runtime authorization is required.", nil
 	}
 
 	var evidence []model.EvidenceRef
@@ -964,11 +989,11 @@ func (h *CommandHandler) handleExport(ctx context.Context, args []string) (strin
 
 	dir := filepath.Join(h.ws.workDir, ".marshal", "evidence")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("create evidence directory: %w", err)
+		return "", fmt.Errorf("create evidence directory: %w; check that .marshal/evidence is a writable directory", err)
 	}
 	path := filepath.Join(dir, b.BundleID+".json")
 	if err := os.WriteFile(path, payload, 0o600); err != nil {
-		return "", fmt.Errorf("write evidence bundle: %w", err)
+		return "", fmt.Errorf("write evidence bundle: %w; check that .marshal/evidence is a writable directory", err)
 	}
 
 	return fmt.Sprintf("Evidence bundle written:\n  Path:       %s\n  Goal:       %s [rev %d]\n  Critical:   %d claim(s)\n  Evidence:   %d ref(s)\n  Unresolved: %d\n  Digest:     %s",
@@ -978,7 +1003,7 @@ func (h *CommandHandler) handleExport(ctx context.Context, args []string) (strin
 
 // handleBlind handles blind interpretation.
 func (h *CommandHandler) handleBlind(ctx context.Context, args []string) (string, error) {
-	if len(args) > 0 && args[0] == "resolve" {
+	if len(args) > 0 && strings.EqualFold(args[0], "resolve") {
 		return "Blind-interpretation resolution was NOT recorded: authenticated runtime support is unavailable.", nil
 	}
 	return "BLIND INTERPRETATION:\n  State: NOT VERIFIED (no canonical interpretation read-back service).", nil
@@ -1001,12 +1026,12 @@ func (h *CommandHandler) handleAlignment(ctx context.Context, args []string) (st
 func (h *CommandHandler) handleDiff(ctx context.Context) (string, error) {
 	if h.ws.diffViewer != nil {
 		if err := h.ws.diffViewer.Toggle(); err != nil {
-			return fmt.Sprintf("Diff error: %v", err), nil
+			return fmt.Sprintf("Diff error: %v. Check that the project is a Git worktree, then retry /diff.", err), nil
 		}
 		if h.ws.diffViewer.IsOpen() {
 			return "Diff viewer opened (press Esc or q to close, n/p for hunks).", nil
 		}
 		return "Diff viewer closed.", nil
 	}
-	return "Diff viewer unavailable.", nil
+	return "Diff viewer unavailable. Open marshal tui in an initialized Git project (marshal init), then retry /diff.", nil
 }

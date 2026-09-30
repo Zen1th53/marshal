@@ -1821,6 +1821,7 @@ func (a *runtimeControlAuthority) CodexPlugins(ctx context.Context) ([]codex.Plu
 	}
 	var plugins []codex.PluginInfo
 	var skills []codex.SkillInfo
+	var discoveryErr error
 
 	var binary string
 	var runner adapter.ProcessRunner
@@ -1839,15 +1840,21 @@ func (a *runtimeControlAuthority) CodexPlugins(ctx context.Context) ([]codex.Plu
 	if binary != "" && runner != nil {
 		if p, err := codex.DiscoverPlugins(ctx, binary, runner); err == nil {
 			plugins = p
+		} else {
+			discoveryErr = fmt.Errorf("plugin discovery failed: %w; use /codex cli plugin list to inspect native support", err)
 		}
+	} else {
+		discoveryErr = errors.New("plugin discovery unavailable: install Codex and make codex available on PATH, then retry")
 	}
 
 	root := a.runtime.ProjectRoot()
 	if s, err := codex.DiscoverLocalSkills(root); err == nil {
 		skills = s
+	} else {
+		discoveryErr = errors.Join(discoveryErr, fmt.Errorf("local skill discovery failed: %w; check local SKILL.md files", err))
 	}
 
-	return plugins, skills, nil
+	return plugins, skills, discoveryErr
 }
 
 func (a *runtimeControlAuthority) PreviewCodexSkill(name string) (string, error) {

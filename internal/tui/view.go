@@ -171,11 +171,11 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 	verifiedCount, contestedCount, _, _ := countClaims(s.Claims)
 	claimsDetailed := fmt.Sprintf("Claims (%d total) │ Verified: %d │ Contested: %d", len(s.Claims), verifiedCount, contestedCount)
 
-	tokStr := "0"
+	tokStr := "UNKNOWN"
 	if s.BudgetConsumed.TotalTokens != nil {
 		tokStr = fmt.Sprintf("%d", *s.BudgetConsumed.TotalTokens)
 	}
-	budgetCost := "$0.00"
+	budgetCost := "UNKNOWN"
 	if s.BudgetConsumed.CostUSD != nil {
 		budgetCost = fmt.Sprintf("$%.4f", *s.BudgetConsumed.CostUSD)
 	}

@@ -12,6 +12,9 @@ import (
 
 // handleAntigravity implements /agy and its long form /antigravity.
 func (h *CommandHandler) handleAntigravity(ctx context.Context, args []string, line string) (string, error) {
+	if usage := nativeSessionUsage("agy", args); usage != "" {
+		return usage, nil
+	}
 	interactive := h.ws.terminal != nil && h.ws.terminal.IsTerminal()
 	if len(args) == 0 && interactive {
 		return h.ws.runNativeAgent(ctx, "antigravity", nil)
@@ -26,8 +29,11 @@ func (h *CommandHandler) handleAntigravity(ctx context.Context, args []string, l
 	case "continue":
 		return h.ws.runNativeAgent(ctx, "antigravity", []string{"--continue"})
 	case "resume":
-		if len(args) == 1 || args[1] == "--last" {
+		if len(args) == 1 {
 			return h.ws.runNativeAgent(ctx, "antigravity", []string{"--continue"})
+		}
+		if args[1] == "--last" {
+			return h.ws.runNativeAgent(ctx, "antigravity", append([]string{"--continue"}, args[2:]...))
 		}
 		return h.ws.runNativeAgent(ctx, "antigravity", append([]string{"--conversation", args[1]}, args[2:]...))
 	case "cli":

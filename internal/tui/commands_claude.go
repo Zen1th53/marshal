@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,7 +21,7 @@ import (
 func runGovernedClaudeCmd(ctx context.Context, args []string) (string, error) {
 	binary, err := project.FindBinary("claude")
 	if err != nil {
-		return "", fmt.Errorf("claude binary not found on PATH: %w", err)
+		return "", fmt.Errorf("claude binary not found on PATH: %w; install Claude and make claude available on PATH, then retry", err)
 	}
 	if err := claude.ValidateDangerousFlags(args); err != nil {
 		return "", err
@@ -45,6 +46,13 @@ func runGovernedClaudeCmd(ctx context.Context, args []string) (string, error) {
 // handleClaude exposes the governed Claude control plane. It mirrors the Codex
 // surface, minus the operations Claude Code has no equivalent for.
 func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line string) (string, error) {
+	interactive := h.ws.terminal != nil && h.ws.terminal.IsTerminal()
+	if usage := governedAgentUsage("claude", args, interactive); usage != "" {
+		return usage, nil
+	}
+	if len(args) > 0 {
+		args[0] = strings.ToLower(args[0])
+	}
 	if len(args) == 0 && h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
 		return h.ws.runNativeAgent(ctx, "claude", nil)
 	}
@@ -92,9 +100,12 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 			return h.ws.runNativeAgent(ctx, "claude", argv)
 		}
 	}
+	if len(args) > 0 && oneOf(args[0], "mcp", "plugin", "auth", "agents", "login", "logout") {
+		return "Native Claude management requires an interactive terminal. Open marshal tui in a terminal with the Claude CLI on PATH, then retry /claude " + args[0] + ".", nil
+	}
 	source := h.ws.controlSource()
 	if source == nil || source.Authority == nil {
-		return "Claude control authority unavailable: no runtime attached to workspace.", nil
+		return "Claude control authority unavailable: no runtime attached to workspace. Open the TUI in an initialized MARSHAL project (marshal init); native Claude commands require an interactive terminal and the Claude CLI on PATH.", nil
 	}
 	auth := source.Authority
 
@@ -178,7 +189,14 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 			return fmt.Sprintf("Current selected Claude model: %s\nUsage: /claude model <slug> to change", selected), nil
 		}
 		targetModel := args[1]
-		pref, err := auth.ClaudeSelectModel(ctx, targetModel, 0)
+		if strings.HasPrefix(targetModel, "-") {
+			return fmt.Sprintf("Failed to select Claude model %q: expected a model slug, not a CLI flag. Use /claude models to see eligible models.", targetModel), nil
+		}
+		current, err := auth.ClaudeModelPreference(ctx)
+		if err != nil && !errors.Is(err, model.ErrNotFound) {
+			return fmt.Sprintf("Failed to read Claude model preference: %v; reopen the TUI and retry /claude model <slug>.", err), nil
+		}
+		pref, err := auth.ClaudeSelectModel(ctx, targetModel, current.Revision)
 		if err != nil {
 			return fmt.Sprintf("Failed to select Claude model %q: %v", targetModel, err), nil
 		}
@@ -219,8 +237,7 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 		if len(args) < 2 {
 			return "Usage: /claude exec <task prompt/instruction>", nil
 		}
-		cmdIdx := strings.Index(line, args[0])
-		prompt := strings.TrimSpace(line[cmdIdx+len(args[0]):])
+		prompt := agentPrompt(line)
 		return h.handleClaudeExec(ctx, auth, prompt)
 
 	default:

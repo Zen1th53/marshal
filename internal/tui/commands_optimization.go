@@ -2,8 +2,11 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/Zen1th53/marshal/internal/optimization"
 )
 
 // handleOptimizationCycle is intentionally evidence-only. The TUI may reveal
@@ -11,11 +14,14 @@ import (
 // roll back a cycle outside the governed runtime boundary.
 func (h *CommandHandler) handleOptimizationCycle(ctx context.Context, id string) (string, error) {
 	if h.ws.store == nil {
-		return "Canonical optimization store unavailable.", nil
+		return "Canonical optimization store unavailable. Open the TUI in an initialized MARSHAL project (marshal init).", nil
 	}
 	cycle, err := h.ws.store.GetOptimizationCycle(ctx, id)
+	if errors.Is(err, optimization.ErrNotFound) {
+		return fmt.Sprintf("Optimization cycle %q not found. Use /optimization <cycle_id> with an existing canonical cycle ID.", id), nil
+	}
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read optimization cycle: %w; reopen the TUI and check /store", err)
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "OPTIMIZATION CYCLE %s v%d\n", cycle.ID, cycle.Version)

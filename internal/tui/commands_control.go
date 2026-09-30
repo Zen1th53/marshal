@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -32,6 +33,9 @@ func (h *CommandHandler) handleStatus(ctx context.Context) (string, error) {
 	var b strings.Builder
 	b.WriteString(RenderScreen(state, 90))
 	b.WriteString("\nCANONICAL STATUS DETAIL:\n")
+	if h.ws.store == nil {
+		b.WriteString("  Store:        UNAVAILABLE (initialize a project with marshal init, then reopen TUI)\n")
+	}
 	b.WriteString(fmt.Sprintf("  Project:      %s\n", orNone(state.ProjectID)))
 	b.WriteString(fmt.Sprintf("  Session:      %s\n", orNone(state.SessionID)))
 	b.WriteString(fmt.Sprintf("  Runtime mode: %s\n", strings.ToUpper(mode)))
@@ -47,6 +51,9 @@ func (h *CommandHandler) handleStatus(ctx context.Context) (string, error) {
 	termination := string(state.TerminationState)
 	if termination == "" {
 		termination = "RUNNING (no terminal state recorded)"
+		if state.Goal.ID == "" {
+			termination = "NO ACTIVE GOAL (execution not verified)"
+		}
 	}
 	b.WriteString(fmt.Sprintf("  Termination:  %s\n", termination))
 
@@ -64,11 +71,11 @@ func (h *CommandHandler) handleStatus(ctx context.Context) (string, error) {
 	b.WriteString(fmt.Sprintf("  Team:         %d participants | active turn: %s\n",
 		len(state.Participants), orNone(state.ActiveTurn)))
 
-	tokens := "0"
+	tokens := "UNKNOWN"
 	if state.BudgetConsumed.TotalTokens != nil {
 		tokens = fmt.Sprintf("%d", *state.BudgetConsumed.TotalTokens)
 	}
-	cost := "$0.00"
+	cost := "UNKNOWN"
 	if state.BudgetConsumed.CostUSD != nil {
 		cost = fmt.Sprintf("$%.4f", *state.BudgetConsumed.CostUSD)
 	}
@@ -101,12 +108,13 @@ func (h *CommandHandler) handleVerification(ctx context.Context, id string) (str
 // operator can paste an identifier without first knowing what it refers to.
 func (h *CommandHandler) handleInspect(ctx context.Context, kind, id string) (string, error) {
 	if h.ws.store == nil {
-		return "Store unavailable", nil
+		return "Store unavailable. Open the TUI in an initialized MARSHAL project (marshal init).", nil
 	}
 
+	id = strings.TrimPrefix(id, "#")
 	kind = strings.ToLower(strings.TrimSpace(kind))
-	// Evidence is probed last: its lookup falls back to a ledger acknowledgement
-	// for any unrecognised id, so it would otherwise shadow every other kind.
+	// Evidence is probed last because it searches the active claim set rather
+	// than a standalone evidence table. A missing link is not a resolved record.
 	order := []string{"claim", "checkpoint", "task", "handoff", "approval", "agent", "evidence"}
 	if kind != "" {
 		order = []string{kind}
@@ -115,8 +123,11 @@ func (h *CommandHandler) handleInspect(ctx context.Context, kind, id string) (st
 	var attempts []string
 	for _, k := range order {
 		out, err := h.inspectOne(ctx, k, id)
-		if err == nil && out != "" {
+		if err == nil && out != "" && !(k == "evidence" && strings.Contains(out, ": NOT FOUND")) {
 			return out, nil
+		}
+		if err != nil && !errors.Is(err, model.ErrNotFound) && !errors.Is(err, protocol.ErrHandoffNotFound) {
+			return "", fmt.Errorf("inspect %s %s: %w; reopen the TUI and check /store", k, id, err)
 		}
 		attempts = append(attempts, k)
 	}
@@ -206,14 +217,14 @@ func (h *CommandHandler) inspectOne(ctx context.Context, kind, id string) (strin
 		h.ws.mu.RUnlock()
 
 		if p == nil {
-			return "", fmt.Errorf("agent %q not found in active team session", id)
+			return "", fmt.Errorf("%w: agent %q not found in active team session", model.ErrNotFound, id)
 		}
 
-		stateStr := "IDLE"
-		if p.AgentID == activeTurn {
-			stateStr = "WORKING"
-		} else if !p.IsActive {
+		stateStr := "AVAILABLE (execution not verified)"
+		if !p.IsActive {
 			stateStr = "UNAVAILABLE"
+		} else if p.AgentID == activeTurn {
+			stateStr = "ACTIVE TURN (execution not verified)"
 		}
 
 		modelStr := p.Model
@@ -231,7 +242,7 @@ func (h *CommandHandler) inspectOne(ctx context.Context, kind, id string) (strin
 		b.WriteString(fmt.Sprintf("  Native Mode:     %s\n", "UNKNOWN"))
 		b.WriteString(fmt.Sprintf("  Active Task:     %s\n", "UNKNOWN"))
 		b.WriteString(fmt.Sprintf("  Waiting On:      %s\n", "UNKNOWN"))
-		b.WriteString(fmt.Sprintf("  Recent Handoffs: %s\n", "NONE"))
+		b.WriteString(fmt.Sprintf("  Recent Handoffs: %s\n", "UNKNOWN"))
 		b.WriteString(fmt.Sprintf("  Tokens / Cost:   %s\n", "UNKNOWN"))
 		b.WriteString(fmt.Sprintf("  Routing Reason:  %s\n", "UNKNOWN"))
 		return b.String(), nil
