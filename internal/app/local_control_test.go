@@ -10,6 +10,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -102,10 +103,19 @@ func TestLocalControlBoundary(t *testing.T) {
 		t.Fatalf("restart replay: %+v %v", replay, err)
 	}
 	grants, err := reopened.Store().ListCapabilityGrants(ctx)
-	if err != nil || len(grants) != 1 {
+	if err != nil || len(grants) != 5 {
 		t.Fatalf("grants: %+v %v", grants, err)
 	}
-	if err := reopened.Store().RevokeCapabilityGrant(ctx, grants[0].ID, time.Now().UTC()); err != nil {
+	var reviseGrant capability.GrantID
+	for _, grant := range grants {
+		if len(grant.Scope.Actions) == 1 && grant.Scope.Actions[0] == "goal.revise" {
+			reviseGrant = grant.ID
+		}
+	}
+	if reviseGrant == "" {
+		t.Fatal("goal.revise grant missing")
+	}
+	if err := reopened.Store().RevokeCapabilityGrant(ctx, reviseGrant, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := reopened.CommandReviseGoal(ctx, e, "fixed wording", "owner revision"); !errors.Is(err, authz.ErrDenied) {
@@ -187,8 +197,13 @@ func TestLocalControlCanonicalBoundGoal(t *testing.T) {
 		t.Fatal("principal is not canonically scoped")
 	}
 	grants, err := r.Store().ListCapabilityGrants(ctx)
-	if err != nil || len(grants) != 1 || string(grants[0].TaskID) != string(binding.ID) {
+	if err != nil || len(grants) != 5 || string(grants[0].TaskID) != string(binding.ID) {
 		t.Fatalf("canonical grant: %+v %v", grants, err)
+	}
+	for _, grant := range grants {
+		if string(grant.TaskID) != string(binding.ID) {
+			t.Fatalf("noncanonical grant: %+v", grant)
+		}
 	}
 	e := CommandEnvelope{ProjectID: string(binding.ID), SessionID: g.SessionID, TargetID: g.ID, ExpectedVersion: 1, IdempotencyKey: "bound-proof"}
 	next, err := r.CommandReviseGoal(ctx, e, "Fix only the README typo.", "owner clarification")

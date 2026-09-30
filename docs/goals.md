@@ -57,7 +57,9 @@ a constraint a model never had a chance to drop cannot be dropped by it.
 
 Both limits become hard constraints attributed to you. They survive advisories
 that argue against them, they survive revisions, and an agent cannot remove or
-weaken them.
+weaken them. Only an explicit authenticated owner edit may change a hard
+constraint; that decision is audited as a new revision, preserving the original
+request and historical constraints.
 
 ## What a model can and cannot do
 
@@ -131,6 +133,29 @@ because you agreed to the previous wording, not this one.
 marshal goal <request>          form a Goal and see the assessment
 marshal goal explain <request>  the same, without acting
 ```
+
+The terminal composer supports:
+
+```
+/goal create <request>
+/goal edit <outcome>
+/goal constraints
+/goal add-constraint <text>
+/goal rm-constraint <id|exact text>
+```
+
+These commands use the local owner context and project-scoped grants. Creation
+preserves your request verbatim through canonical intake. Outcome edits preserve
+constraints; adding or explicitly removing a constraint creates a new `PENDING`
+revision. The original request, request digest and owner provenance stay intact.
+The output reports the revision and state read back from storage. Old revisions
+remain readable. Dependent plans, run approvals and further task dispatch reject
+superseded goal bindings; old approval records remain historical evidence.
+Creation may return `NEEDS_INPUT` when canonical formation finds open questions.
+Unknown verbs and free text never mutate and show usage.
+
+Application revision services also support success criteria and do-not-do items;
+the corresponding terminal reporting/editing forms are not released here.
 
 ## What survives a provider change
 

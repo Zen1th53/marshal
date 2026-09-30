@@ -2,11 +2,14 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
-	"time"
+	"unicode"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/google/uuid"
 )
 
 // Goal constraint operations.
@@ -24,10 +27,10 @@ func (h *CommandHandler) handleGoalConstraints(ctx context.Context) (string, err
 	h.ws.mu.RUnlock()
 
 	if goal.ID == "" {
-		return "No active goal. Goal creation and constraint edits are unavailable in TUI; authenticated runtime authorization is required.", nil
+		return "No active goal. Use /goal create <request>.", nil
 	}
 	if len(goal.Constraints) == 0 {
-		return fmt.Sprintf("Goal %s [rev %d] has no constraints.\nConstraint edits are unavailable in TUI; authenticated runtime authorization is required.",
+		return fmt.Sprintf("Goal %s [rev %d] has no constraints.",
 			goal.ID, goal.Revision), nil
 	}
 
@@ -43,109 +46,60 @@ func (h *CommandHandler) handleGoalConstraints(ctx context.Context) (string, err
 	return b.String(), nil
 }
 
-// handleGoalAddConstraint appends a constraint and saves a new goal revision.
-func (h *CommandHandler) handleGoalAddConstraint(ctx context.Context, text string) (string, error) {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return "Usage: /goal add-constraint <constraint text>", nil
+const goalUsage = "Usage: /goal create <request> | edit <outcome> | constraints | add-constraint <text> | rm-constraint <id|text>"
+
+// The adapter supplies only the exact envelope and input. Formation, provenance,
+// constraint revisions, receipts and read-back belong to the application.
+func (h *CommandHandler) handleGoalMutation(ctx context.Context, verb, text string) (string, error) {
+	if strings.TrimSpace(text) == "" {
+		return goalUsage, nil
 	}
-	if h.ws.store == nil {
-		return "Store unavailable", nil
+	source := h.ws.controlSource()
+	authority, ok := source.Authority.(*runtimeControlAuthority)
+	if !ok || authority == nil || authority.runtime == nil {
+		return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.\n" + goalUsage, nil
 	}
-
-	h.ws.mu.Lock()
-	defer h.ws.mu.Unlock()
-
-	goal := h.ws.state.Goal
-	if goal.ID == "" {
-		return "No active goal. Goal creation and constraint edits are unavailable in TUI; authenticated runtime authorization is required.", nil
+	if authority.localControlErr != nil {
+		return "", authority.localControlErr
 	}
-
-	for _, existing := range goal.Constraints {
-		if strings.EqualFold(strings.TrimSpace(existing.Text), text) {
-			return fmt.Sprintf("Constraint already present on %s [rev %d]: %s",
-				goal.ID, goal.Revision, existing.ID), nil
-		}
+	goal, err := authority.CurrentGoal(ctx)
+	if err != nil && !errors.Is(err, model.ErrGoalNotFound) {
+		return "", err
 	}
-
-	expectedRev := goal.Revision
-	constraint := model.Constraint{
-		ID:     fmt.Sprintf("c-%d", time.Now().UnixNano()),
-		Text:   text,
-		Source: "operator",
-		IsHard: true,
+	key := uuid.NewString()
+	envelope := app.CommandEnvelope{ProjectID: authority.runtime.ProjectIdentity(), SessionID: h.ws.sessionID, TargetID: goal.ID, ExpectedVersion: goal.Revision, IdempotencyKey: key}
+	if verb == "create" {
+		envelope.TargetID = "GOAL-" + uuid.NewString()
+		envelope.ExpectedVersion = 0
 	}
-
-	updated := goal
-	updated.Constraints = append(append([]model.Constraint{}, goal.Constraints...), constraint)
-	updated.Revision = expectedRev + 1
-	updated.UpdatedAt = time.Now().UTC()
-
-	if err := h.ws.store.SaveGoalContract(ctx, updated, expectedRev); err != nil {
-		return "", fmt.Errorf("add constraint: %w", err)
-	}
-
-	// Read back so the reported revision is the stored one, not an assumption.
-	stored, err := h.ws.store.GetActiveGoalContract(ctx, h.ws.sessionID)
+	stored, err := authority.GoalMutation(ctx, envelope, verb, text)
 	if err != nil {
-		return "", fmt.Errorf("read back goal: %w", err)
+		return "", err
 	}
+	h.ws.mu.Lock()
 	h.ws.state.Goal = stored
-
-	return fmt.Sprintf("Constraint %s added to %s [rev %d]: %s\nOutcome unchanged: %s",
-		constraint.ID, stored.ID, stored.Revision,
-		RedactContent(text, h.ws.state.KnownSecrets),
-		RedactContent(stored.DesiredOutcome, h.ws.state.KnownSecrets)), nil
+	secrets := append([]string{}, h.ws.state.KnownSecrets...)
+	h.ws.mu.Unlock()
+	return fmt.Sprintf("Goal %s [rev %d] %s: %s", stored.ID, stored.Revision, stored.Confirmation, RedactContent(stored.DesiredOutcome, secrets)), nil
 }
 
-// handleGoalRemoveConstraint drops a constraint by id or exact text.
-func (h *CommandHandler) handleGoalRemoveConstraint(ctx context.Context, target string) (string, error) {
-	target = strings.TrimSpace(target)
-	if target == "" {
-		return "Usage: /goal rm-constraint <constraint_id|text>", nil
-	}
-	if h.ws.store == nil {
-		return "Store unavailable", nil
-	}
+func (h *CommandHandler) handleGoalAddConstraint(ctx context.Context, text string) (string, error) {
+	return h.handleGoalMutation(ctx, "add-constraint", text)
+}
+func (h *CommandHandler) handleGoalRemoveConstraint(ctx context.Context, text string) (string, error) {
+	return h.handleGoalMutation(ctx, "rm-constraint", text)
+}
 
-	h.ws.mu.Lock()
-	defer h.ws.mu.Unlock()
-
-	goal := h.ws.state.Goal
-	if goal.ID == "" {
-		return "No active goal.", nil
-	}
-
-	var kept []model.Constraint
-	var removed *model.Constraint
-	for _, c := range goal.Constraints {
-		if removed == nil && (c.ID == target || strings.EqualFold(strings.TrimSpace(c.Text), target)) {
-			copyC := c
-			removed = &copyC
-			continue
+// goalCommandText removes the command and verb, preserving the argument's
+// interior whitespace rather than reconstructing the original request from fields.
+func goalCommandText(line string) string {
+	for i := 0; i < 2; i++ {
+		line = strings.TrimLeftFunc(line, unicode.IsSpace)
+		index := strings.IndexFunc(line, unicode.IsSpace)
+		if index < 0 {
+			return ""
 		}
-		kept = append(kept, c)
+		line = line[index:]
 	}
-	if removed == nil {
-		return fmt.Sprintf("No constraint matching %q on %s [rev %d].", target, goal.ID, goal.Revision), nil
-	}
-
-	expectedRev := goal.Revision
-	updated := goal
-	updated.Constraints = kept
-	updated.Revision = expectedRev + 1
-	updated.UpdatedAt = time.Now().UTC()
-
-	if err := h.ws.store.SaveGoalContract(ctx, updated, expectedRev); err != nil {
-		return "", fmt.Errorf("remove constraint: %w", err)
-	}
-
-	stored, err := h.ws.store.GetActiveGoalContract(ctx, h.ws.sessionID)
-	if err != nil {
-		return "", fmt.Errorf("read back goal: %w", err)
-	}
-	h.ws.state.Goal = stored
-
-	return fmt.Sprintf("Constraint %s removed from %s [rev %d]. %d remaining.",
-		removed.ID, stored.ID, stored.Revision, len(stored.Constraints)), nil
+	return strings.TrimLeftFunc(line, unicode.IsSpace)
 }

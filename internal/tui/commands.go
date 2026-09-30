@@ -22,6 +22,7 @@ func NewCommandHandler(ws *Workspace) *CommandHandler {
 
 // Handle processes an interactive slash command line.
 func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error) {
+	rawLine := line
 	line = strings.TrimSpace(line)
 	if line == "" {
 		return "", nil
@@ -85,7 +86,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/goal":
 		if len(parts) < 2 {
 			if h.ws.state.Goal.ID == "" {
-				return "No active goal set. Goal creation is unavailable in TUI; authenticated runtime authorization is required.", nil
+				return "No active goal set. Use /goal create <request>.", nil
 			}
 			return fmt.Sprintf("Active Goal [v%d]: %s (ID: %s)",
 				h.ws.state.Goal.Revision, h.ws.state.Goal.DesiredOutcome, h.ws.state.Goal.ID), nil
@@ -95,15 +96,16 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		// desired outcome, silently destroying the goal statement.
 		switch strings.ToLower(parts[1]) {
 		case "constraints":
+			if len(parts) != 2 {
+				return goalUsage, nil
+			}
 			return h.handleGoalConstraints(ctx)
 		case "diff", "version", "criteria", "donotdo", "progress":
 			return "Goal " + strings.ToLower(parts[1]) + " reporting is unavailable in TUI: canonical goal reporting support is not implemented.", nil
-		case "add-constraint":
-			return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
-		case "rm-constraint":
-			return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		case "create", "edit", "add-constraint", "rm-constraint":
+			return h.handleGoalMutation(ctx, strings.ToLower(parts[1]), goalCommandText(rawLine))
 		}
-		return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return "Goal mutation is unavailable in TUI for unknown verbs.\n" + goalUsage, nil
 
 	case "/mode":
 		if len(parts) < 2 {
@@ -696,7 +698,7 @@ func (h *CommandHandler) helpText() string {
   /status                  Show canonical session, goal, team, claim, budget, and termination status
   /goal [outcome]          View active goal; edits unavailable (runtime authorization required)
   /goal constraints        List bound constraints
-  /goal create|edit|add-constraint|rm-constraint  Edits unavailable (runtime authorization required)
+  /goal create|edit|add-constraint|rm-constraint  Create or revise the goal as the local owner
   /goal diff|version|criteria|donotdo|progress  Reporting unavailable (not implemented)
   /marshal <goal>          Plan with a Marshal model, then marshal the work to agents (/marshal help)
   /mode [manual|auto|ultra] Switch session supervision mode label; ULTRA requires entitlement

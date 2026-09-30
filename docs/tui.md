@@ -472,7 +472,7 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/agents` — List registered team participants, assigned roles, and harness statuses.
 
 ### Goal, Alignment & Constraints
-- `/goal` — View the active goal. `/goal constraints` lists its constraints. Goal edits require authenticated runtime authorization and are unavailable. Reporting for `diff`, `version`, `criteria`, `donotdo`, and `progress` is not implemented. Free text does not update the goal.
+- `/goal` — View the active goal. `/goal create <request>` forms it through canonical intake; `/goal edit <outcome>` revises its interpretation. `/goal constraints` lists constraints; `/goal add-constraint <text>` adds a hard constraint and `/goal rm-constraint <id|text>` explicitly removes one as the authenticated local owner. Mutations report the stored revision and confirmation state. Revisions return to `PENDING` and stale dependent approvals and execution bindings cannot authorize continuation. Reporting for `diff`, `version`, `criteria`, `donotdo`, and `progress` is not implemented. Unknown verbs show usage and never mutate; free text does not update the goal.
 - `/mode [manual|auto|ultra]` — Inspect or switch the session supervision mode label; ULTRA requires a verified entitlement.
 - `/handoff <architect|developer|qa|appsec> <summary>` — Unavailable without authenticated runtime authorization.
 - `/alignment [scope|violations|blast|deletions|status|resolve [reason ...]]` — Report alignment NOT VERIFIED. Resolution is unavailable without authenticated runtime authorization; malformed inspection arguments return usage.

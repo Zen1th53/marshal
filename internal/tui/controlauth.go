@@ -2111,3 +2111,27 @@ func (a *runtimeControlAuthority) ClaudeSessions(ctx context.Context) ([]ClaudeS
 	}
 	return summaries, nil
 }
+
+// GoalMutation forwards explicit composer operations through the workspace's
+// local control context. Canonical app services own all mutation semantics.
+func (a *runtimeControlAuthority) GoalMutation(ctx context.Context, e app.CommandEnvelope, verb, text string) (model.GoalContract, error) {
+	if a.runtime == nil {
+		return model.GoalContract{}, errNoRuntime
+	}
+	if a.localControlErr != nil {
+		return model.GoalContract{}, a.localControlErr
+	}
+	ctx = a.localControl.Context(ctx)
+	switch verb {
+	case "create":
+		return a.runtime.CommandCreateGoal(ctx, e, text)
+	case "edit":
+		return a.runtime.CommandEditGoal(ctx, e, app.GoalEdit{DesiredOutcome: text, Reason: "owner edited outcome"})
+	case "add-constraint":
+		return a.runtime.CommandAddGoalConstraint(ctx, e, text)
+	case "rm-constraint":
+		return a.runtime.CommandRemoveGoalConstraint(ctx, e, text)
+	default:
+		return model.GoalContract{}, model.ErrInvalid
+	}
+}

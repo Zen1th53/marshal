@@ -274,7 +274,7 @@ func CanModifyGoal(callerRole string, oldGoal, newGoal GoalContract) error {
 				if !newC.IsHard {
 					return fmt.Errorf("%w: agent %s cannot demote hard constraint %s to soft", ErrGoalHardConstraint, callerRole, oldC.ID)
 				}
-				if newC.Text != oldC.Text {
+				if newC.Text != oldC.Text || newC.Scope != oldC.Scope || newC.Source != oldC.Source {
 					return fmt.Errorf("%w: agent %s cannot alter hard constraint %s", ErrGoalHardConstraint, callerRole, oldC.ID)
 				}
 			}

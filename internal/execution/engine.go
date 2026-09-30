@@ -302,6 +302,9 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 	if err != nil {
 		return nil, err
 	}
+	if err := e.ValidateRunGoal(ctx, run); err != nil {
+		return &run, err
+	}
 	if expectedVersion >= 0 && run.Version != expectedVersion {
 		return nil, fmt.Errorf("%w: run %s moved from version %d to %d",
 			ErrInvalidStateTransition, runID, expectedVersion, run.Version)
@@ -420,6 +423,9 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 		}
 		run = currentRun
 
+		if err := e.ValidateRunGoal(ctx, run); err != nil {
+			return &run, err
+		}
 		if run.State != RunRunning {
 			return &run, nil
 		}
@@ -961,6 +967,11 @@ func (e *Engine) DecideApproval(ctx context.Context, approvalID string, approve 
 	if err != nil {
 		return err
 	}
+	if approve {
+		if err := e.ValidateRunGoal(ctx, run); err != nil {
+			return err
+		}
+	}
 	app, err := e.approvals.Decide(approvalID, approve, decider, reason, now)
 	if err != nil {
 		return err
@@ -1149,6 +1160,9 @@ func (e *Engine) CancelNativeTurn(ctx context.Context, runID, taskID, reason str
 
 // SetRunContext explicitly sets the cached goal and plan for a run (e.g. after crash recovery).
 func (e *Engine) SetRunContext(runID string, goal model.GoalContract, p plan.ExecutionPlan) {
+	if reader, ok := e.goalReader.(*MemoryGoalReader); ok {
+		reader.AddGoal(goal)
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.cachedGoal[runID] = goal
@@ -1292,4 +1306,26 @@ var nativeProviderApprovalOperations = map[string]struct{}{
 func IsNativeProviderApproval(operationType string) bool {
 	_, ok := nativeProviderApprovalOperations[operationType]
 	return ok
+}
+
+// ValidateRunGoal rejects authority bound to a superseded goal revision. The
+// revision change itself durably invalidates bindings; historical runs and
+// approvals remain readable without granting permission to continue.
+func (e *Engine) ValidateRunGoal(ctx context.Context, run ExecutionRun) error {
+	// Native sessions without a goal binding do not depend on a goal revision.
+	if run.GoalID == "" {
+		return nil
+	}
+	target := run.SessionID
+	if target == "" {
+		target = run.GoalID
+	}
+	goal, err := e.goalReader.GetActiveGoalContract(ctx, target)
+	if err != nil {
+		return fmt.Errorf("%w: read current goal: %v", ErrRunBlocked, err)
+	}
+	if goal.ID != run.GoalID || goal.Revision != run.GoalRevision || goal.ProjectID != string(run.ProjectID) {
+		return fmt.Errorf("%w: run goal binding is stale (goal %s revision %d, run revision %d)", ErrRunBlocked, goal.ID, goal.Revision, run.GoalRevision)
+	}
+	return nil
 }

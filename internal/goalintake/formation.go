@@ -345,13 +345,14 @@ func Revise(previous Intake, newInterpretation string, reason string) (Intake, e
 // earlier Goal survives in a later one. It is the check that makes constraint
 // preservation verifiable rather than assumed.
 func HardConstraintsPreserved(before, after Intake) ([]string, bool) {
-	present := make(map[string]bool, len(after.Constraints))
+	present := make(map[string]model.Constraint, len(after.Constraints))
 	for _, constraint := range after.Constraints {
-		present[constraint.ID] = true
+		present[constraint.ID] = constraint
 	}
 	var dropped []string
 	for _, constraint := range before.Constraints {
-		if constraint.IsHard && !present[constraint.ID] {
+		next, exists := present[constraint.ID]
+		if constraint.IsHard && (!exists || !next.IsHard || next.Text != constraint.Text || next.Scope != constraint.Scope || next.Source != constraint.Source) {
 			dropped = append(dropped, constraint.Text)
 		}
 	}

@@ -293,6 +293,13 @@ func (s *ExecutionService) Approve(ctx context.Context, approvalID, approverID, 
 	if err != nil {
 		return err
 	}
+	run, err := s.engine.GetRun(ctx, pending.RunID)
+	if err != nil {
+		return err
+	}
+	if err := s.engine.ValidateRunGoal(ctx, run); err != nil {
+		return err
+	}
 	if pending.OperationType == codexAppServerApprovalOperation {
 		return s.resolveCodexAppServerApproval(ctx, *pending, true, approverID, rationale)
 	}
