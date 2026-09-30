@@ -20,8 +20,12 @@ func TestM11MarshalUsageAndEmptyStatus(t *testing.T) {
 	if err != nil || !strings.Contains(out, "/marshal approve") {
 		t.Fatalf("usage: %q %v", out, err)
 	}
-	if _, err := ws.ExecuteCommand(ctx, "/marshal"); err == nil || !strings.Contains(err.Error(), "requires an interactive terminal") {
-		t.Fatalf("bare /marshal should launch a native session: %v", err)
+	out, err = ws.ExecuteCommand(ctx, "/marshal")
+	if err != nil || !strings.Contains(out, "No Marshal run") || !strings.Contains(out, marshalUsage) {
+		t.Fatalf("bare /marshal status and usage: %q %v", out, err)
+	}
+	if _, err := ws.ExecuteCommand(ctx, "/marshal chat"); err == nil || !strings.Contains(err.Error(), "requires an interactive terminal") {
+		t.Fatalf("/marshal chat should launch a native session: %v", err)
 	}
 	out, err = ws.ExecuteCommand(ctx, "/marshal status")
 	if err != nil || !strings.Contains(out, "No Marshal run") {

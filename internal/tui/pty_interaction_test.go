@@ -357,3 +357,36 @@ func TestPTYStatuslineShowsRealProject(t *testing.T) {
 		t.Errorf("statusline shows the runtime placeholder:\n%s", text)
 	}
 }
+
+func TestPTYMarshalCompletionSelectionAndFinishedGoal(t *testing.T) {
+	t.Setenv("MARSHAL_NO_UPDATE_CHECK", "1")
+	const rows, cols = 40, 140
+	s := startFrozenTUI(t, rows, cols)
+	s.mustSee("MARSHAL")
+	s.send("/marshal ")
+	time.Sleep(300 * time.Millisecond)
+	s.send("\x1b[A") // Up selects the last candidate without changing the draft.
+	s.send("\r")
+	time.Sleep(400 * time.Millisecond)
+	if got := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker)); got != "/marshal approve-task" {
+		t.Fatalf("Enter ignored explicit selection: %q", got)
+	}
+	s.send("\x15")
+	s.send("/marshal ")
+	time.Sleep(300 * time.Millisecond)
+	// chat is first; nine Tabs reach settings in the declared order.
+	s.send(strings.Repeat("\t", 9))
+	s.send("\r")
+	time.Sleep(400 * time.Millisecond)
+	if got := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker)); got != "/marshal settings" {
+		t.Fatalf("Enter did not settle Tab selection: %q", got)
+	}
+	s.send("\x15")
+	s.sendLine("/goal ")
+	s.mustSee("No active goal set")
+	if got := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker)); got != "" {
+		t.Fatalf("finished /goal was not submitted: %q", got)
+	}
+	s.sendLine("/marshal")
+	s.mustSee("Show status and usage")
+}
