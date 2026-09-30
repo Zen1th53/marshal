@@ -1429,7 +1429,7 @@ func (w *Workspace) controlSource() *ControlSource {
 			},
 		},
 		SessionID: session,
-		ProjectID: project,
+		ProjectID: string(identity),
 		// The approver is the session acting. The backend records who decided;
 		// nothing here judges whether that is self-approval.
 		ApproverID: session,

@@ -46,22 +46,19 @@ func (r *Runtime) OpenLocalControl(ctx context.Context) (*LocalControl, error) {
 	if r == nil || r.store == nil {
 		return nil, model.ErrUnavailable
 	}
-	project, err := r.store.Project(ctx)
-	if err != nil {
-		return nil, err
-	}
-	p, err := auth.LocalOwner(r.layout.RuntimeDir, project.ID)
+	projectID := r.ProjectIdentity()
+	p, err := auth.LocalOwner(r.layout.RuntimeDir, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: local owner unavailable", authz.ErrDenied)
 	}
-	key := "local-goal-revise:" + project.ID + ":" + p.ID()
+	key := "local-goal-revise:" + projectID + ":" + p.ID()
 	// Provision once. Restart must never resurrect a revoked scoped grant.
 	if _, found, err := r.store.FindCapabilityGrantByIdempotencyKey(ctx, key); err != nil {
 		return nil, err
 	} else if !found {
 		sum := sha256.Sum256([]byte(key))
 		now := time.Now().UTC()
-		grant := capability.Grant{ID: capability.GrantID("cap-local-" + hex.EncodeToString(sum[:])), Subject: capability.SubjectID(p.ID()), TaskID: capability.TaskID(project.ID), Kind: capability.KindFilesystemWrite, Scope: capability.Scope{Resource: r.layout.Database, Actions: []string{"goal.revise"}}, IssuedAt: now, ExpiresAt: now.AddDate(100, 0, 0), Issuer: capability.SubjectID(p.ID()), IdempotencyKey: key}
+		grant := capability.Grant{ID: capability.GrantID("cap-local-" + hex.EncodeToString(sum[:])), Subject: capability.SubjectID(p.ID()), TaskID: capability.TaskID(projectID), Kind: capability.KindFilesystemWrite, Scope: capability.Scope{Resource: r.layout.Database, Actions: []string{"goal.revise"}}, IssuedAt: now, ExpiresAt: now.AddDate(100, 0, 0), Issuer: capability.SubjectID(p.ID()), IdempotencyKey: key}
 		if err := r.store.PutCapabilityGrant(ctx, grant); err != nil {
 			return nil, err
 		}
@@ -74,18 +71,15 @@ func (r *Runtime) CommandReviseGoal(ctx context.Context, e CommandEnvelope, inte
 	if r == nil || r.store == nil || !ok || ctx.Value(localControlKey{}) != r || p.ProjectID() != e.ProjectID {
 		return model.GoalContract{}, authz.ErrDenied
 	}
-	project, err := r.store.Project(ctx)
-	if err != nil {
-		return model.GoalContract{}, err
-	}
-	if project.ID != e.ProjectID {
+	projectID := r.ProjectIdentity()
+	if projectID != e.ProjectID {
 		return model.GoalContract{}, authz.ErrDenied
 	}
 	if e.SessionID == "" || e.TargetID == "" || e.ExpectedVersion < 1 || strings.TrimSpace(e.IdempotencyKey) == "" || len(e.IdempotencyKey) > 256 {
 		return model.GoalContract{}, model.ErrInvalid
 	}
 	subject := authz.Principal{ID: p.ID(), Role: authz.Role{Name: "orchestrator", Authorities: []authz.Authority{authz.AuthorityTaskPlan}}}
-	query := capability.Query{Subject: capability.SubjectID(p.ID()), TaskID: capability.TaskID(project.ID), Kind: capability.KindFilesystemWrite, Resource: r.layout.Database, Action: "goal.revise"}
+	query := capability.Query{Subject: capability.SubjectID(p.ID()), TaskID: capability.TaskID(projectID), Kind: capability.KindFilesystemWrite, Resource: r.layout.Database, Action: "goal.revise"}
 	decision, err := authz.CanWithCapability(ctx, subject, authz.AuthorityTaskPlan, r.layout.Database, query, capability.NewEngine(r.store, nil))
 	if err != nil {
 		return model.GoalContract{}, err
@@ -96,7 +90,7 @@ func (r *Runtime) CommandReviseGoal(ctx context.Context, e CommandEnvelope, inte
 	}{e, interpretation, reason})
 	sum := sha256.Sum256(payload)
 	keyDigest := sha256.Sum256([]byte(e.IdempotencyKey))
-	record := store.CommandRecord{ProjectID: project.ID, Actor: p.ID(), Key: hex.EncodeToString(keyDigest[:]), Operation: "goal.revise", SessionID: e.SessionID, TargetID: e.TargetID, ExpectedVersion: e.ExpectedVersion, Digest: hex.EncodeToString(sum[:])}
+	record := store.CommandRecord{ProjectID: projectID, Actor: p.ID(), Key: hex.EncodeToString(keyDigest[:]), Operation: "goal.revise", SessionID: e.SessionID, TargetID: e.TargetID, ExpectedVersion: e.ExpectedVersion, Digest: hex.EncodeToString(sum[:])}
 	record.CapabilityGrantID = decision.CapabilityGrantID
 	if version, found, err := r.store.CommandResult(ctx, record); err != nil {
 		return model.GoalContract{}, err
@@ -107,7 +101,7 @@ func (r *Runtime) CommandReviseGoal(ctx context.Context, e CommandEnvelope, inte
 	if err != nil {
 		return model.GoalContract{}, err
 	}
-	if goal.ProjectID != project.ID || goal.ID != e.TargetID {
+	if goal.ProjectID != projectID || goal.ID != e.TargetID {
 		return model.GoalContract{}, authz.ErrDenied
 	}
 	result, err := r.reviseGoal(store.WithCommand(ctx, record), e.SessionID, e.ExpectedVersion, interpretation, reason)

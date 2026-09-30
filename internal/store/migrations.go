@@ -2645,14 +2645,16 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	if version < 88 {
 		if _, err := tx.ExecContext(ctx, `
+-- Command identities follow the canonical binding, which is not the legacy
+-- projects metadata row. writeCommand validates goal and grant project scope.
 CREATE TABLE IF NOT EXISTS command_results (
- project_id TEXT NOT NULL REFERENCES projects(project_id), actor TEXT NOT NULL,
+ project_id TEXT NOT NULL, actor TEXT NOT NULL,
  command_key TEXT NOT NULL, operation TEXT NOT NULL, session_id TEXT NOT NULL,
  target_id TEXT NOT NULL, expected_version INTEGER NOT NULL, digest TEXT NOT NULL,
  result_version INTEGER NOT NULL, PRIMARY KEY(project_id,actor,command_key)
 );
 CREATE TABLE IF NOT EXISTS command_audit (
- revision INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL REFERENCES projects(project_id),
+ revision INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL,
  actor TEXT NOT NULL, operation TEXT NOT NULL, target_id TEXT NOT NULL,
  result_version INTEGER NOT NULL, result TEXT NOT NULL, created_at TEXT NOT NULL
 );

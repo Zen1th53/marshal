@@ -27,17 +27,17 @@ func TestPTYLocalControlProofReadbackAndSlashRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { runtime.Close() })
-	identity, err := runtime.Store().Project(ctx)
-	if err != nil {
-		t.Fatal(err)
+	projectID := runtime.ProjectIdentity()
+	if !projectid.ID(projectID).Valid() {
+		t.Fatal("project has no canonical binding")
 	}
 	const session = "SESSION-pty-local-control"
-	goal := model.GoalContract{ID: "GOAL-pty-local-control", SessionID: session, ProjectID: identity.ID, Revision: 1, OriginalRequest: "fix README typo", DesiredOutcome: "fix README typo", ConstitutionVersion: constitution.Current.String(), Confirmation: model.ConfirmationApproved, Risk: model.R1, AuthoritySource: "owner", SuccessCriteria: []string{"typo fixed"}}
+	goal := model.GoalContract{ID: "GOAL-pty-local-control", SessionID: session, ProjectID: projectID, Revision: 1, OriginalRequest: "fix README typo", DesiredOutcome: "fix README typo", ConstitutionVersion: constitution.Current.String(), Confirmation: model.ConfirmationApproved, Risk: model.R1, AuthoritySource: "owner", SuccessCriteria: []string{"typo fixed"}}
 	if err := runtime.Store().SaveGoalContract(ctx, goal, 0); err != nil {
 		t.Fatal(err)
 	}
-	workspace := NewWorkspace(runtime.Store(), identity.ID, session)
-	workspace.AttachRuntime(runtime, projectid.ID(identity.ID))
+	workspace := NewWorkspace(runtime.Store(), projectID, session)
+	workspace.AttachRuntime(runtime, projectid.ID(projectID))
 	request := ActionRequest{Target: Target{Kind: "goal", ID: goal.ID, Revision: 1}, IdempotencyKey: "pty-local-proof", Inputs: map[string]string{"interpretation": "PTY canonical local proof wording", "reason": "owner clarified wording"}}
 	outcome, err := workspace.controlSource().executeReviseGoal(ctx, request)
 	if err != nil || outcome.Verdict != VerdictPass {

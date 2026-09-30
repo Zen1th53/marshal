@@ -14,14 +14,14 @@ import (
 func TestWorkspaceGoalRevisionAuthenticatedReadback(t *testing.T) {
 	ctx := context.Background()
 	_, runtime := realControlWorkspace(t, "SESSION-local-control")
-	project, err := runtime.Store().Project(ctx)
-	if err != nil {
-		t.Fatal(err)
+	projectID := runtime.ProjectIdentity()
+	if !projectid.ID(projectID).Valid() {
+		t.Fatal("project has no canonical binding")
 	}
 	// A fresh workspace has no entitlement. Operator authorization is separate.
-	workspace := NewWorkspace(runtime.Store(), project.ID, "SESSION-local-control")
-	workspace.AttachRuntime(runtime, projectid.ID(project.ID))
-	goal := model.GoalContract{ID: "GOAL-local-control", SessionID: "SESSION-local-control", ProjectID: project.ID, Revision: 1, OriginalRequest: "fix the typo", DesiredOutcome: "fix the typo", ConstitutionVersion: constitution.Current.String(), Confirmation: model.ConfirmationApproved, Risk: model.R1, AuthoritySource: "owner", SuccessCriteria: []string{"typo fixed"}, Constraints: []model.Constraint{{ID: "hard", Text: "keep the API", IsHard: true, Source: "owner"}}}
+	workspace := NewWorkspace(runtime.Store(), projectID, "SESSION-local-control")
+	workspace.AttachRuntime(runtime, projectid.ID(projectID))
+	goal := model.GoalContract{ID: "GOAL-local-control", SessionID: "SESSION-local-control", ProjectID: projectID, Revision: 1, OriginalRequest: "fix the typo", DesiredOutcome: "fix the typo", ConstitutionVersion: constitution.Current.String(), Confirmation: model.ConfirmationApproved, Risk: model.R1, AuthoritySource: "owner", SuccessCriteria: []string{"typo fixed"}, Constraints: []model.Constraint{{ID: "hard", Text: "keep the API", IsHard: true, Source: "owner"}}}
 	if err := runtime.Store().SaveGoalContract(ctx, goal, 0); err != nil {
 		t.Fatal(err)
 	}

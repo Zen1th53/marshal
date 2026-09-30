@@ -13,11 +13,8 @@ func TestReviseGoalUsesCanonicalCASAndPreservesConstraints(t *testing.T) {
 	ctx := context.Background()
 	runtime := runtimeForPlan(t)
 	goal := planGoal()
-	project, err := runtime.Store().Project(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	goal.ProjectID = project.ID
+	projectID := runtime.ProjectIdentity()
+	goal.ProjectID = projectID
 	goal.ConstitutionVersion = constitution.Current.String()
 	goal.Constraints = []model.Constraint{{ID: "hard-no-api", Text: "do not change the API", IsHard: true, Source: "operator"}}
 	if err := runtime.Store().SaveGoalContract(ctx, goal, 1); err != nil {
@@ -28,7 +25,7 @@ func TestReviseGoalUsesCanonicalCASAndPreservesConstraints(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx = local.Context(ctx)
-	envelope := CommandEnvelope{ProjectID: project.ID, SessionID: goal.SessionID, TargetID: goal.ID, ExpectedVersion: 2, IdempotencyKey: "preserve-constraints"}
+	envelope := CommandEnvelope{ProjectID: projectID, SessionID: goal.SessionID, TargetID: goal.ID, ExpectedVersion: 2, IdempotencyKey: "preserve-constraints"}
 	revised, err := runtime.CommandReviseGoal(ctx, envelope, "correct the typo only", "operator narrowed wording")
 	if err != nil {
 		t.Fatal(err)

@@ -3,27 +3,29 @@ package app
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/auth"
 	"github.com/Zen1th53/marshal/internal/authz"
+	"github.com/Zen1th53/marshal/internal/constitution"
+	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/projectid"
 )
 
 func TestLocalControlBoundary(t *testing.T) {
 	r := runtimeForPlan(t)
 	ctx := context.Background()
-	p, err := r.Store().Project(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	projectID := r.ProjectIdentity()
 	g := planGoal()
-	g.ProjectID = p.ID
+	g.ProjectID = projectID
 	if err := r.Store().SaveGoalContract(ctx, g, 1); err != nil {
 		t.Fatal(err)
 	}
-	e := CommandEnvelope{ProjectID: p.ID, SessionID: g.SessionID, TargetID: g.ID, ExpectedVersion: 2, IdempotencyKey: "proof-1"}
+	e := CommandEnvelope{ProjectID: projectID, SessionID: g.SessionID, TargetID: g.ID, ExpectedVersion: 2, IdempotencyKey: "proof-1"}
 	if _, err := r.CommandReviseGoal(ctx, e, "fixed wording", "owner revision"); !errors.Is(err, authz.ErrDenied) {
 		t.Fatalf("anonymous: %v", err)
 	}
@@ -120,14 +122,11 @@ func TestLocalControlBoundary(t *testing.T) {
 
 func TestWorkerAndLegacyPathsCannotMintOperator(t *testing.T) {
 	r := runtimeForPlan(t)
-	project, err := r.Store().Project(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	e := CommandEnvelope{ProjectID: project.ID, SessionID: "SESSION-plan", TargetID: "GOAL-plan", ExpectedVersion: 1, IdempotencyKey: "worker"}
+	projectID := r.ProjectIdentity()
+	e := CommandEnvelope{ProjectID: projectID, SessionID: "SESSION-plan", TargetID: "GOAL-plan", ExpectedVersion: 1, IdempotencyKey: "worker"}
 	// Even an account identity is insufficient without the runtime's trusted
 	// workspace handle. Worker protocol inputs cannot deserialize that handle.
-	p, err := auth.LocalOwner(r.layout.RuntimeDir, project.ID)
+	p, err := auth.LocalOwner(r.layout.RuntimeDir, projectID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,5 +140,102 @@ func TestWorkerAndLegacyPathsCannotMintOperator(t *testing.T) {
 	}
 	if _, err := r.ReviseGoal(context.Background(), e.SessionID, 1, "worker change", "operator"); !errors.Is(err, authz.ErrDenied) {
 		t.Fatalf("legacy bypass: %v", err)
+	}
+}
+
+func TestLocalControlCanonicalBoundGoal(t *testing.T) {
+	ctx := context.Background()
+	repo := runtimeRepo(t)
+	layout, err := Bootstrap(ctx, repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, found := projectid.LoadBinding(layout.RuntimeDir)
+	if !found {
+		t.Fatal("bootstrap did not establish a binding")
+	}
+	r, err := Open(ctx, repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	legacy, err := r.Store().Project(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.ProjectIdentity() != string(binding.ID) || legacy.ID == string(binding.ID) {
+		t.Fatal("fixture does not distinguish canonical and legacy identity")
+	}
+	intake, err := goalintake.Form(goalintake.FormationRequest{Request: "Fix the documented typo.", ProjectID: binding.ID, SessionID: "SESSION-bound-local", Version: constitution.Current, Context: goalintake.RequestContext{Recoverable: true, ScopeKnown: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	intake = goalintake.Approve(intake)
+	g := planGoal()
+	g.ID, g.SessionID, g.ProjectID = "GOAL-bound-local", intake.SessionID, string(intake.ProjectID)
+	g.OriginalRequest, g.RequestDigest, g.ConstitutionVersion = intake.OriginalRequest, intake.RequestDigest, intake.Version.String()
+	g.Constraints = intake.Constraints
+	if err := r.Store().SaveGoalContract(ctx, g, 0); err != nil {
+		t.Fatal(err)
+	}
+	local, err := r.OpenLocalControl(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx = local.Context(ctx)
+	if local.principal.ProjectID() != string(binding.ID) {
+		t.Fatal("principal is not canonically scoped")
+	}
+	grants, err := r.Store().ListCapabilityGrants(ctx)
+	if err != nil || len(grants) != 1 || string(grants[0].TaskID) != string(binding.ID) {
+		t.Fatalf("canonical grant: %+v %v", grants, err)
+	}
+	e := CommandEnvelope{ProjectID: string(binding.ID), SessionID: g.SessionID, TargetID: g.ID, ExpectedVersion: 1, IdempotencyKey: "bound-proof"}
+	next, err := r.CommandReviseGoal(ctx, e, "Fix only the README typo.", "owner clarification")
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, err := r.Store().GetActiveGoalContract(ctx, g.SessionID)
+	if err != nil || read.ProjectID != string(binding.ID) || read.Revision != 2 || read.DesiredOutcome != next.DesiredOutcome || read.Confirmation != model.ConfirmationPending {
+		t.Fatalf("readback: %+v %v", read, err)
+	}
+	later := e
+	later.ExpectedVersion, later.IdempotencyKey = 2, "bound-later"
+	if _, err := r.CommandReviseGoal(ctx, later, "Later wording", "later clarification"); err != nil {
+		t.Fatal(err)
+	}
+	replay, err := r.CommandReviseGoal(ctx, e, "Fix only the README typo.", "owner clarification")
+	if err != nil || replay.Revision != next.Revision || replay.DesiredOutcome != next.DesiredOutcome {
+		t.Fatalf("stored replay: %+v %v", replay, err)
+	}
+	wrong := e
+	wrong.ProjectID = legacy.ID
+	if _, err := r.CommandReviseGoal(ctx, wrong, "Fix only the README typo.", "owner clarification"); !errors.Is(err, authz.ErrDenied) {
+		t.Fatalf("legacy envelope: %v", err)
+	}
+}
+
+func TestLocalControlUnboundLegacyFallback(t *testing.T) {
+	r := runtimeForPlan(t)
+	if err := os.Remove(filepath.Join(r.layout.RuntimeDir, projectid.BindingFileName)); err != nil {
+		t.Fatal(err)
+	}
+	if r.ProjectIdentity() != localProjectID {
+		t.Fatal("legacy fallback changed")
+	}
+	ctx := context.Background()
+	g := planGoal()
+	g.ProjectID = r.ProjectIdentity()
+	if err := r.Store().SaveGoalContract(ctx, g, 1); err != nil {
+		t.Fatal(err)
+	}
+	local, err := r.OpenLocalControl(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := CommandEnvelope{ProjectID: g.ProjectID, SessionID: g.SessionID, TargetID: g.ID, ExpectedVersion: 2, IdempotencyKey: "legacy-fallback"}
+	result, err := r.CommandReviseGoal(local.Context(ctx), e, "Legacy wording", "owner clarification")
+	if err != nil || result.Revision != 3 || result.ProjectID != localProjectID {
+		t.Fatalf("legacy revision: %+v %v", result, err)
 	}
 }
