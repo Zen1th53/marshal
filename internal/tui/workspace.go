@@ -372,6 +372,7 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 	defer w.mu.Unlock()
 	w.state.UltraEntitled = w.ultra.Entitled()
 	w.state.UltraExecution = w.ultraExecution
+	w.state.NavigationAvailable = w.navReleased && w.state.UltraEntitled
 
 	// 1. Live Git status
 	w.state.GitStatus = ProbeGitStatus(w.workDir)
@@ -479,6 +480,7 @@ func (w *Workspace) GetUIState() UIState {
 	state := w.state
 	state.UltraEntitled = w.ultra.Entitled()
 	state.UltraExecution = w.ultraExecution
+	state.NavigationAvailable = w.navReleased && state.UltraEntitled
 	return state
 }
 
@@ -1459,6 +1461,7 @@ func (w *Workspace) paint() {
 	state := w.state
 	state.UltraEntitled = w.ultra.Entitled()
 	state.UltraExecution = w.ultraExecution
+	state.NavigationAvailable = w.navReleased && state.UltraEntitled
 	th := w.theme
 	workDir := w.workDir
 	w.mu.RUnlock()
@@ -1507,6 +1510,7 @@ func (w *Workspace) printBatchFrame(out io.Writer) {
 	state := w.state
 	state.UltraEntitled = w.ultra.Entitled()
 	state.UltraExecution = w.ultraExecution
+	state.NavigationAvailable = w.navReleased && state.UltraEntitled
 	th := w.theme
 	workDir := w.workDir
 	w.mu.RUnlock()
