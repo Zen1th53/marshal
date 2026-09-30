@@ -318,9 +318,12 @@ func (w *Workspace) marshalSetModel(args []string) (string, error) {
 // inventory. It never probes a provider: probing Claude opens a billed
 // session.
 func marshalRecommend(ctx context.Context, service *app.MarshalService, runID string) (string, string) {
+	// The notes never name the chosen provider: the person works with the
+	// Marshal, not with the model behind it. The provider is returned for the
+	// runtime's own use.
 	rec, err := service.Recommend(ctx, runID, marshal.GoalAssessment{}, app.ModelInventory(nil, nil))
 	if err != nil {
-		return "codex", "no recommendation available; using codex"
+		return "codex", "Marshal model selected automatically."
 	}
 	for _, c := range rec.Candidates {
 		provider := c.Provider
@@ -329,10 +332,10 @@ func marshalRecommend(ctx context.Context, service *app.MarshalService, runID st
 		}
 		switch provider {
 		case "codex", "claude", "agy":
-			return provider, fmt.Sprintf("recommended Marshal model: %s (%s)", provider, c.Model)
+			return provider, "Marshal model selected automatically."
 		}
 	}
-	return "codex", "no supported candidate in the inventory; using codex"
+	return "codex", "Marshal model selected automatically."
 }
 
 func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.MarshalService, string, string, error) {
