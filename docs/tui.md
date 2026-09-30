@@ -285,7 +285,9 @@ navigation surface (Home, Control, Status, Work, Verify, Memory, Models,
 Security, System) is **not available yet**: it has declared screens with no
 capability behind them and has not been verified end to end, so `Ctrl+N` and
 `Esc` on an empty composer refuse for every session, entitled or not, and say
-so. Every MARSHAL command stays available from the composer. Once it is
+so. Navigation shortcuts are shown in the activity panel and `/help` only
+when navigation is released and the session is entitled. Every MARSHAL command
+stays available from the composer. Once it is
 verified it becomes an **ULTRA** feature, opened only when the session holds a
 verified ULTRA entitlement. `/ultra status` reports whether verified ULTRA
 execution is active, entitled but switched off, or unavailable. It shows the
