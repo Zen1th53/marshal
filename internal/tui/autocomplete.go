@@ -160,7 +160,9 @@ func (c *Completer) subcommandMatches(before, word string) []string {
 			candidates = append(candidates, sc)
 		}
 	}
-	sort.Strings(candidates)
+	if strings.Join(parts, " ") != "/marshal" {
+		sort.Strings(candidates)
+	}
 	return candidates
 }
 

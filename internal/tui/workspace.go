@@ -96,7 +96,9 @@ type Workspace struct {
 
 	// Completion popup state. Tab is completion only: it opens or cycles this
 	// list and never submits, so it can never execute a partially typed command.
-	completionOpen bool
+	completionOpen     bool
+	completionSelected bool
+	completionText     string
 	// mouseOn tracks whether mouse reporting is currently held, so the mode is
 	// only written to the terminal when it actually changes.
 	mouseOn         bool
@@ -280,7 +282,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/opencode"] = []string{"new", "continue", "resume", "fork", "cli", "status", "models", "providers", "auth", "mcp", "agent", "session", "stats", "run", "debug"}
 	compCtx.Subcommands["/agy"] = []string{"new", "continue", "resume", "cli", "status", "models", "agents", "mcp", "plugin", "changelog"}
 	compCtx.Subcommands["/antigravity"] = compCtx.Subcommands["/agy"]
-	compCtx.Subcommands["/marshal"] = []string{"approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help"}
+	compCtx.Subcommands["/marshal"] = marshalSubcommands
 	compCtx.Subcommands["/plugin"] = []string{"list", "add", "rm"}
 	compCtx.Subcommands["/plugins"] = []string{"list", "add", "rm"}
 	compCtx.Subcommands["/search"] = []string{"on", "off"}
@@ -814,11 +816,11 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 					//
 					// Nothing is being completed when the word at the cursor is
 					// empty: the menu is only offering what could come next.
-					// There is no choice to settle, so Enter means what it
+					// Without an explicit selection, Enter means what it
 					// always means. Without this, "/goal " — a finished command
 					// with a trailing space — would take a subcommand instead
 					// of running, and the operator would watch Enter not work.
-					if w.completingWord() == "" {
+					if w.completionShouldSubmit() {
 						w.closeCompletion()
 						cmd, submitted := w.composer.HandleKey(KeyEvent{Type: KeyEnter})
 						if submitted {
@@ -990,6 +992,11 @@ func (w *Workspace) refreshCompletion() {
 	if w.completer == nil || w.composer == nil {
 		return
 	}
+	if text := w.composer.Text(); text != w.completionText {
+		w.completionSelected = false
+		w.completionCycled = false
+		w.completionText = text
+	}
 	word, matches := w.completer.Suggest(w.composer.Text(), w.composer.CursorPos())
 	if len(matches) == 0 || !completionTrigger(w.composer.Text(), word) {
 		w.closeCompletion()
@@ -1025,7 +1032,12 @@ func (w *Workspace) moveCompletion(delta int) {
 	if len(w.completions) == 0 {
 		return
 	}
+	w.completionSelected = true
 	w.completionIndex = (w.completionIndex + delta + len(w.completions)) % len(w.completions)
+}
+
+func (w *Workspace) completionShouldSubmit() bool {
+	return w.completingWord() == "" && !w.completionSelected
 }
 
 // completingWord returns the word the cursor sits in, which is what a
@@ -1067,6 +1079,7 @@ func (w *Workspace) cycleCompletion(delta int) {
 	if w.completionCycled {
 		w.moveCompletion(delta)
 	}
+	w.completionSelected = true
 	w.completionCycled = true
 	w.writeCompletion(w.completions[w.completionIndex], false)
 }
@@ -1106,10 +1119,13 @@ func (w *Workspace) writeCompletion(candidate string, settled bool) {
 	updated := append(append(append([]rune{}, runes[:wordStart]...), replacement...), runes[cursor:]...)
 	w.composer.SetText(string(updated))
 	w.composer.cursor = wordStart + len(replacement)
+	w.completionText = w.composer.Text()
 }
 
 func (w *Workspace) closeCompletion() {
 	w.completionOpen = false
+	w.completionSelected = false
+	w.completionText = ""
 	w.completions = nil
 	w.completionIndex = 0
 	w.completionCycled = false

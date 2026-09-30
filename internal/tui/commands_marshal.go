@@ -19,7 +19,7 @@ import (
 )
 
 const marshalUsage = `Marshal mode — one model plans with you, then marshals the work to other agents.
-  /marshal                         Open a conversation with the Marshal
+  /marshal                         Show status and usage
   /marshal chat                    Open a conversation with the Marshal
   /marshal <goal>                  Draft a plan for the goal with the Marshal model
   /marshal use-plan                Run the current approved Process 04 plan through Process 05
@@ -113,12 +113,79 @@ func (w *Workspace) marshalPanel() *MarshalPanel {
 	return w.state.Marshal
 }
 
+var marshalSubcommands = []string{"chat", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task"}
+
+// marshalTypoSuggestion prefers a unique prefix, then the closest spelling.
+func marshalTypoSuggestion(word string) string {
+	word = strings.ToLower(word)
+	prefix, prefixes := "", 0
+	closest, best := "", 3
+	for _, sub := range marshalSubcommands {
+		if word == sub {
+			return ""
+		}
+		if len([]rune(word)) >= 3 && strings.HasPrefix(sub, word) {
+			prefix, prefixes = sub, prefixes+1
+		}
+		if distance := marshalEditDistance(word, sub); distance < best {
+			closest, best = sub, distance
+		}
+	}
+	if prefixes == 1 {
+		return prefix
+	}
+	return closest
+}
+
+// marshalEditDistance computes Damerau-Levenshtein distance, including transpositions.
+func marshalEditDistance(a, b string) int {
+	x, y := []rune(a), []rune(b)
+	limit := len(x) + len(y)
+	d := make([][]int, len(x)+2)
+	for i := range d {
+		d[i] = make([]int, len(y)+2)
+		d[i][0] = limit
+		if i > 0 {
+			d[i][1] = i - 1
+		}
+	}
+	for j := range d[0] {
+		d[0][j] = limit
+		if j > 0 {
+			d[1][j] = j - 1
+		}
+	}
+	last := make(map[rune]int)
+	for i := 1; i <= len(x); i++ {
+		match := 0
+		for j := 1; j <= len(y); j++ {
+			previousRow, previousColumn := last[y[j-1]], match
+			cost := 1
+			if x[i-1] == y[j-1] {
+				cost, match = 0, j
+			}
+			d[i+1][j+1] = min(d[i][j]+cost, d[i+1][j]+1, d[i][j+1]+1,
+				d[previousRow][previousColumn]+i-previousRow-1+1+j-previousColumn-1)
+		}
+		last[x[i-1]] = i
+	}
+	return d[len(x)+1][len(y)+1]
+}
+
 func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (string, error) {
 	w := h.ws
 	if len(args) == 0 {
-		return w.marshalChat(ctx)
+		return marshalStatusText(w.marshalPanel()) + "\n\n" + marshalUsage, nil
 	}
-	switch strings.ToLower(args[0]) {
+	sub := strings.ToLower(args[0])
+	switch sub {
+	case "help", "status", "approve", "close", "stop", "resume":
+		if len(args) != 1 {
+			return "", fmt.Errorf("usage: /marshal %s", sub)
+		}
+	}
+
+	switch sub {
 	case "chat":
 		if len(args) != 1 {
 			return "", errors.New("usage: /marshal chat")
@@ -160,6 +227,11 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 	case "settings":
 		return w.marshalSettings(ctx, args[1:])
 	default:
+		if len(args) == 1 {
+			if suggestion := marshalTypoSuggestion(sub); suggestion != "" {
+				return "Nothing was run. Did you mean /marshal " + suggestion + "?\n  Type a goal of more than one word to start planning, or /marshal help.", nil
+			}
+		}
 		return w.marshalStart(ctx, strings.Join(args, " "))
 	}
 }
