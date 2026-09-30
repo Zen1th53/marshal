@@ -684,8 +684,8 @@ Function Keys & Shortcuts:
 Composer:
   /  or  @                 Opens the command menu as you type
   Up / Down                Move the highlight; the draft is left alone
-  Tab / Shift+Tab          Move the highlight forward / back
-  Enter                    Accept the highlighted candidate (never submits)
+  Tab / Shift+Tab          Cycle candidates into the draft; never submit
+  Enter                    Accept a candidate; run a finished command with no explicit selection
   Esc                      Dismiss the menu, keeping what you typed
   Paste                    Long or multi-line pastes collapse to a placeholder
                            and are restored in full when you submit
