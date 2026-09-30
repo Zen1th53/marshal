@@ -206,3 +206,53 @@ func TestMenuClosesOnAnExactCompleteCommand(t *testing.T) {
 		t.Fatalf("Enter did not submit the finished command: %q, ok=%v", submitted, ok)
 	}
 }
+
+func TestCompletionEnterRespectsExplicitSelection(t *testing.T) {
+	for _, move := range []string{"none", "down", "up", "tab", "shift-tab"} {
+		t.Run(move, func(t *testing.T) {
+			ws := NewWorkspace(nil, "proj", "sess-1")
+			ws.composer.SetText("/marshal ")
+			ws.composer.cursor = len("/marshal ")
+			ws.refreshCompletion()
+			switch move {
+			case "down":
+				ws.moveCompletion(1)
+			case "up":
+				ws.moveCompletion(-1)
+			case "tab":
+				ws.cycleCompletion(1)
+			case "shift-tab":
+				ws.cycleCompletion(-1)
+			}
+			if got := ws.completionShouldSubmit(); got != (move == "none") {
+				t.Fatalf("submit = %v for %s", got, move)
+			}
+			if move != "none" {
+				want := "/marshal " + ws.completions[ws.completionIndex] + " "
+				ws.acceptCompletion()
+				if got := ws.composer.Text(); got != want {
+					t.Fatalf("draft = %q, want %q", got, want)
+				}
+			}
+		})
+	}
+	ws := NewWorkspace(nil, "proj", "sess-1")
+	ws.composer.SetText("/goal ")
+	ws.composer.cursor = len("/goal ")
+	ws.refreshCompletion()
+	if !ws.completionShouldSubmit() {
+		t.Fatal("finished /goal did not submit")
+	}
+	ws.moveCompletion(1)
+	ws.composer.HandleKey(KeyEvent{Type: KeyRune, Rune: ' '})
+	ws.refreshCompletion()
+	if !ws.completionShouldSubmit() {
+		t.Fatal("editing did not reset explicit selection")
+	}
+	ws.moveCompletion(1)
+	ws.closeCompletion()
+	ws.refreshCompletion()
+	if !ws.completionShouldSubmit() {
+		t.Fatal("closing did not reset explicit selection")
+	}
+}

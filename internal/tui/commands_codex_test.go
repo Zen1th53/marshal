@@ -401,11 +401,14 @@ func TestDeveloperAgentCockpit_Rendering(t *testing.T) {
 	for _, want := range []string{
 		"Activity",
 		"Native agent workspace",
-		"[F1]", "[F2]", "[F3]", "[F4]", "[F5]", "[Esc]",
+		"[F1]", "[F2]", "[F3]", "[F4]", "[F5]",
 		"/codex new", "/codex continue", "/resume", "/diff", "[F7]",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in initial screen rendering, got:\n%s", want, rendered)
 		}
+	}
+	if strings.Contains(rendered, "[Esc]") {
+		t.Fatal("unavailable navigation shortcut shown in initial screen")
 	}
 }

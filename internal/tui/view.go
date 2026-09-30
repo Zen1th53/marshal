@@ -43,6 +43,8 @@ type UIState struct {
 	KnownSecrets       []string
 	PendingApprovals   []model.Approval
 
+	NavigationAvailable bool
+
 	// Result of the most recent command. It is carried in state and painted as
 	// part of the frame rather than printed directly, so command output cannot
 	// scroll the workspace or leave chrome behind in the terminal's scrollback.

@@ -249,6 +249,13 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 			"  about the work other coding agents already did in this project.", nil
 	}
 
+	switch strings.ToLower(args[0]) {
+	case "inject":
+		return h.handleMemoryInject(ctx, args[1:])
+	case "peers":
+		return h.handleMemoryPeers(args[1:])
+	}
+
 	if h.ws.store == nil {
 		return "Store unavailable", nil
 	}
@@ -317,12 +324,6 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 		}
 		return fmt.Sprintf("No memory record %s in this project.", args[1]), nil
 
-	case "inject":
-		return h.handleMemoryInject(ctx, args[1:])
-
-	case "peers":
-		return h.handleMemoryPeers(args[1:])
-
 	default:
 		return "Usage: /memory [list|search <query>|provenance <id>|inject [channel]|peers [agent authors…]]", nil
 	}
@@ -341,18 +342,15 @@ func (h *CommandHandler) handleMemoryInject(ctx context.Context, args []string) 
 
 	if len(args) == 0 {
 		configured := loadInjectChannel(root)
-		claudeChannel, claudeNote := resolveInjectChannel("claude", configured)
-		codexChannel, codexNote := resolveInjectChannel("codex", configured)
 		var b strings.Builder
 		fmt.Fprintf(&b, "CROSS-AGENT MEMORY INJECTION:\n")
 		fmt.Fprintf(&b, "  Configured:  %s\n", configured)
-		fmt.Fprintf(&b, "  Claude uses: %s\n", claudeChannel)
-		if claudeNote != "" {
-			fmt.Fprintf(&b, "               %s\n", claudeNote)
-		}
-		fmt.Fprintf(&b, "  Codex uses:  %s\n", codexChannel)
-		if codexNote != "" {
-			fmt.Fprintf(&b, "               %s\n", codexNote)
+		for _, provider := range []string{"claude", "codex", "opencode", "antigravity"} {
+			channel, note := resolveInjectChannel(provider, configured)
+			fmt.Fprintf(&b, "  %-17s %s\n", providerDisplayName(provider)+" uses:", channel)
+			if note != "" {
+				fmt.Fprintf(&b, "                    %s\n", note)
+			}
 		}
 		b.WriteString("\nChannels:\n")
 		b.WriteString("  auto           Claude: system prompt, Codex: developer instructions, OpenCode/Agy: MARSHAL's briefing directory (default)\n")
@@ -361,9 +359,14 @@ func (h *CommandHandler) handleMemoryInject(ctx context.Context, args []string) 
 		b.WriteString("  prompt         Pass as the opening prompt; always works, consumes one turn\n")
 		b.WriteString("  off            Start native sessions with no briefing\n")
 		b.WriteString("\n  /memory inject <channel>     Change the channel\n")
-		b.WriteString("  /memory inject preview [p]   Show the briefing a provider would receive\n")
+		b.WriteString("  /memory inject preview [claude|codex|opencode|agy|antigravity]   Show the briefing a provider would receive\n")
 		b.WriteString("  /memory inject clear         Remove MARSHAL blocks from the project documents\n")
 		return b.String(), nil
+	}
+
+	if (strings.EqualFold(args[0], "preview") && len(args) > 2) ||
+		(!strings.EqualFold(args[0], "preview") && len(args) != 1) {
+		return "Usage: /memory inject <channel>|preview [claude|codex|opencode|agy|antigravity]|clear", nil
 	}
 
 	switch strings.ToLower(args[0]) {
@@ -382,8 +385,11 @@ func (h *CommandHandler) handleMemoryInject(ctx context.Context, args []string) 
 		if len(args) > 1 {
 			provider = strings.ToLower(args[1])
 		}
-		if provider != "claude" && provider != "codex" {
-			return "Usage: /memory inject preview [claude|codex]", nil
+		if provider == "agy" {
+			provider = "antigravity"
+		}
+		if provider != "claude" && provider != "codex" && provider != "opencode" && provider != "antigravity" {
+			return "Usage: /memory inject preview [claude|codex|opencode|agy|antigravity]", nil
 		}
 		briefing, err := h.ws.crossAgentBriefing(ctx, provider)
 		if err != nil {
@@ -407,9 +413,19 @@ func (h *CommandHandler) handleMemoryInject(ctx context.Context, args []string) 
 	if err := saveInjectChannel(root, channel); err != nil {
 		return "", fmt.Errorf("save injection channel: %w", err)
 	}
-	claudeChannel, _ := resolveInjectChannel("claude", channel)
-	codexChannel, _ := resolveInjectChannel("codex", channel)
-	return fmt.Sprintf("Cross-agent injection channel set to %s (Claude: %s, Codex: %s).", channel, claudeChannel, codexChannel), nil
+	var providers, notes []string
+	for _, provider := range []string{"claude", "codex", "opencode", "antigravity"} {
+		resolved, note := resolveInjectChannel(provider, channel)
+		providers = append(providers, fmt.Sprintf("%s: %s", providerDisplayName(provider), resolved))
+		if note != "" {
+			notes = append(notes, note)
+		}
+	}
+	confirmation := fmt.Sprintf("Cross-agent injection channel set to %s (%s).", channel, strings.Join(providers, ", "))
+	if len(notes) > 0 {
+		confirmation += "\n" + strings.Join(notes, "\n")
+	}
+	return confirmation, nil
 }
 
 // handleMemoryPeers shows or sets the shared channel: who joins it, and who

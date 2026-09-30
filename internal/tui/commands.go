@@ -631,6 +631,10 @@ func (h *CommandHandler) handleCancel(ctx context.Context) (string, error) {
 }
 
 func (h *CommandHandler) helpText() string {
+	navigationHint := ""
+	if h.ws.navigationRefusal() == "" {
+		navigationHint = "     Ctrl+N: Navigation · Esc: Navigation (empty composer)"
+	}
 	return `MARSHAL Terminal Workspace Commands:
   /status                  Show canonical session, goal, team, claim, budget, and termination status
   /goal [outcome]          View or update the active GoalContract
@@ -684,13 +688,13 @@ Function Keys & Shortcuts:
   F1: Help       F2: Review     F3: Diff viewer
   F4: Status     F5: Models     F6: MCP servers
   F7: Codex      F8: Claude     F9: OpenCode     F12: Antigravity
-  F10: Update     Ctrl+N: Navigation (not available yet)
+  F10: Update` + navigationHint + `
 
 Composer:
   /  or  @                 Opens the command menu as you type
   Up / Down                Move the highlight; the draft is left alone
-  Tab / Shift+Tab          Move the highlight forward / back
-  Enter                    Accept the highlighted candidate (never submits)
+  Tab / Shift+Tab          Cycle candidates into the draft; never submit
+  Enter                    Accept a candidate; run a finished command with no explicit selection
   Esc                      Dismiss the menu, keeping what you typed
   Paste                    Long or multi-line pastes collapse to a placeholder
                            and are restored in full when you submit

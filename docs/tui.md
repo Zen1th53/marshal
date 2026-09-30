@@ -285,7 +285,9 @@ navigation surface (Home, Control, Status, Work, Verify, Memory, Models,
 Security, System) is **not available yet**: it has declared screens with no
 capability behind them and has not been verified end to end, so `Ctrl+N` and
 `Esc` on an empty composer refuse for every session, entitled or not, and say
-so. Every MARSHAL command stays available from the composer. Once it is
+so. Navigation shortcuts are shown in the activity panel and `/help` only
+when navigation is released and the session is entitled. Every MARSHAL command
+stays available from the composer. Once it is
 verified it becomes an **ULTRA** feature, opened only when the session holds a
 verified ULTRA entitlement. `/ultra status` reports whether verified ULTRA
 execution is active, entitled but switched off, or unavailable. It shows the
@@ -339,9 +341,8 @@ own selection, so selecting and copying text works normally.
 |---|---|
 | typing `/`, `@` or `#` | Opens the menu as you type, and narrows it as you continue |
 | `↑` / `↓` | Move the highlight; the draft is left exactly as typed |
-| `Tab` | Accept the highlighted candidate into the draft |
-| `Shift+Tab` | Move the highlight backwards |
-| `Enter` | Accept the highlighted command and run it |
+| `Tab` / `Shift+Tab` | Cycle candidates forward / backward into the draft; never submit |
+| `Enter` | Accept the highlighted candidate without running; submit a finished command when no selection was made |
 | `Esc` | Dismiss the menu, leaving the buffer as typed |
 
 The menu is not summoned, it follows the buffer: typing a trigger opens it,
@@ -349,13 +350,29 @@ typing on narrows it, and typing past every candidate closes it. A menu offering
 exactly the word already typed closes too, so a finished command stays
 submittable rather than having Enter taken away from it.
 
-Moving the highlight never writes to the draft. Only `Tab` and `Enter` do, and
-the highlight survives narrowing, so typing one more letter cannot silently
+Moving the highlight with arrows never writes to the draft. `Tab`, `Shift+Tab`
+and accepting with `Enter` do. The highlight survives narrowing, so typing one more letter cannot silently
 select a different command than the one under the cursor.
 
 **Tab never submits.** It completes and nothing else: it does not execute the
 buffer, insert a newline, reprint the prompt or touch history. `Enter` is the
-key that runs a command, whether the menu is open or not.
+key that runs a command when the menu is closed. With the menu open, it accepts
+and closes the menu; a second Enter runs the command. A finished command with
+a trailing space (for example `/goal `) runs immediately if no candidate was
+explicitly selected. After arrows or Tab select a candidate, Enter accepts it
+instead. Editing the text or closing the menu resets that explicit selection.
+
+Bare `/marshal` shows the current Marshal panel status and command usage.
+`/marshal chat` explicitly opens a Marshal conversation; `/marshal <goal>`
+drafts a plan using the Marshal model. Completion lists every Marshal
+subcommand, with `chat` first. Fixed-form actions (`help`, `status`, `approve`,
+`close`, `stop`, `resume`, `chat`, `use-plan`) reject extra arguments before
+acting.
+
+`/memory inject` and `/memory peers` use local project configuration and remain
+available even when the workspace has no database store. `/memory inject`
+rejects extra arguments instead of silently changing the channel or clearing
+project document blocks.
 
 Autocomplete dynamically queries live runtime state:
 - **Slash Commands**: Typing `/` suggests all valid commands; fuzzy matching is supported (e.g. `/rb` suggests `/rollback`).
