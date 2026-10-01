@@ -8111,8 +8111,8 @@
     },
     {
       "path": "internal/store/evidence_adversarial_test.go",
-      "sha256": "d0d0810ec4ab7a401f43a9c21dd79d8b4b3e04ae2feb7815df0ef5f8216cb856",
-      "bytes": 4397
+      "sha256": "c5ede700907eaf7012eb921d6b2e2d7a74367cc983c2b3a4fb3c938848cbf95e",
+      "bytes": 4872
     },
     {
       "path": "internal/store/evidence_audit.go",
