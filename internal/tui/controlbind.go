@@ -3050,7 +3050,15 @@ func (s *ControlSource) decideApproval(ctx context.Context, req ActionRequest, a
 	if rationale == "" {
 		rationale = "decided from the Control screen"
 	}
-	if err := s.Authority.DecideApproval(ctx, approvalID, approve, s.ApproverID, rationale); err != nil {
+	var decisionErr error
+	if bound, ok := s.Authority.(interface {
+		DecideApprovalTarget(context.Context, Target, bool, string) error
+	}); ok {
+		decisionErr = bound.DecideApprovalTarget(ctx, req.Target, approve, rationale)
+	} else {
+		decisionErr = s.Authority.DecideApproval(ctx, approvalID, approve, s.ApproverID, rationale)
+	}
+	if err := decisionErr; err != nil {
 		return refusal("the decision was not recorded", err, req.Target, "internal/execution/approvals.go")
 	}
 
@@ -3063,7 +3071,7 @@ func (s *ControlSource) decideApproval(ctx context.Context, req ActionRequest, a
 	if !approve {
 		want = execution.ApprovalDenied
 	}
-	if after.Status != want {
+	if after.Status != want && !(approve && after.Status == execution.ApprovalConsumed) {
 		reason := fmt.Sprintf(
 			"the decision was submitted but approval %s reads as %s rather than %s",
 			approvalID, after.Status, want)

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/authz"
@@ -15,6 +16,9 @@ import (
 type CommandRecord struct {
 	ProjectID, Actor, Key, Operation, SessionID, TargetID, Digest string
 	CapabilityGrantID                                             string
+	Result                                                        string
+	TargetProjectID                                               string
+	ExpectedStateDigest                                           string
 	ExpectedVersion, ResultVersion                                int64
 }
 type commandKey struct{}
@@ -40,11 +44,16 @@ func (s *Store) CommandResult(ctx context.Context, r CommandRecord) (int64, bool
 }
 
 func writeCommand(ctx context.Context, tx *sql.Tx, goal model.GoalContract) error {
+	return writeDecisionCommand(ctx, tx, goal.ProjectID, goal.SessionID, goal.ID, goal.Revision)
+}
+
+func writeDecisionCommand(ctx context.Context, tx *sql.Tx, project, session, target string, version int64) error {
 	r, ok := ctx.Value(commandKey{}).(CommandRecord)
 	if !ok {
 		return nil
 	}
-	if r.ProjectID != goal.ProjectID || r.TargetID != goal.ID || r.SessionID != goal.SessionID || r.ExpectedVersion+1 != goal.Revision {
+	match := r.TargetID == target || r.TargetID == fmt.Sprintf("goal:%s@%d", target, r.ExpectedVersion) || r.TargetID == fmt.Sprintf("plan:%s@%d", target, r.ExpectedVersion) || r.TargetID == "approval:"+target || r.TargetID == "execution:"+target
+	if (r.ProjectID != project && r.TargetProjectID != project) || r.SessionID != session || !match || (r.ExpectedVersion+1 != version && !(strings.HasPrefix(r.TargetID, "execution:") && version > r.ExpectedVersion)) {
 		return model.ErrConflict
 	}
 	// Recheck revocation/expiry in the mutation transaction: a grant revoked
@@ -63,13 +72,41 @@ func writeCommand(ctx context.Context, tx *sql.Tx, goal model.GoalContract) erro
 			return authz.ErrDenied
 		}
 	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO command_results(project_id,actor,command_key,operation,session_id,target_id,expected_version,digest,result_version) VALUES(?,?,?,?,?,?,?,?,?)`, r.ProjectID, r.Actor, r.Key, r.Operation, r.SessionID, r.TargetID, r.ExpectedVersion, r.Digest, goal.Revision)
+	_, err := tx.ExecContext(ctx, `INSERT INTO command_results(project_id,actor,command_key,operation,session_id,target_id,expected_version,digest,result_version) VALUES(?,?,?,?,?,?,?,?,?)`, r.ProjectID, r.Actor, r.Key, r.Operation, r.SessionID, r.TargetID, r.ExpectedVersion, r.Digest, version)
 	if err != nil {
 		return fmt.Errorf("persist command result: %w", err)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO command_audit(project_id,actor,operation,target_id,result_version,result,created_at) VALUES(?,?,?,?,?,'applied',?)`, r.ProjectID, r.Actor, r.Operation, r.TargetID, goal.Revision, utcNow())
+	_, err = tx.ExecContext(ctx, `INSERT INTO command_audit(project_id,actor,operation,target_id,result_version,result,created_at) VALUES(?,?,?,?,?,?,?)`, r.ProjectID, r.Actor, r.Operation, r.TargetID, version, commandOutcome(r), utcNow())
 	if err != nil {
 		return fmt.Errorf("persist command audit: %w", err)
 	}
 	return nil
+}
+
+// PersistDecisionCommand commits a durable execution decision intent or result.
+// File-backed execution decisions use the intent as their recovery/outbox key.
+func (s *Store) PersistDecisionCommand(ctx context.Context, r CommandRecord, result string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	r.Result = result
+	ctx = WithCommand(ctx, r)
+	version := r.ResultVersion
+	if version == 0 {
+		version = r.ExpectedVersion + 1
+	}
+	if err := writeDecisionCommand(ctx, tx, r.ProjectID, r.SessionID, strings.TrimPrefix(r.TargetID, "execution:"), version); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func commandOutcome(r CommandRecord) string {
+	if r.Result != "" {
+		return r.Result
+	}
+	return "applied"
 }

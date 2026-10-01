@@ -647,14 +647,15 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			t.Attempts++
 			now := time.Now().UTC()
 			t.StartedAt = &now
+			// Persist the revision the harness will receive. A store snapshot
+			// must not depend on a later mutation of the executor's task map.
+			t.RunRevision = run.Version + 1
 			run.Tasks[taskID] = t
 			if err := e.persistRun(ctx, &run); err != nil {
 				return &run, err
 			}
 
 			// Execute using assigned harness
-			t.RunRevision = run.Version
-			run.Tasks[taskID] = t
 			harnessName := t.AssignedHarness
 			if harnessName == "" {
 				harnessName = "unbound"
@@ -972,7 +973,7 @@ func (e *Engine) DecideApproval(ctx context.Context, approvalID string, approve 
 			return err
 		}
 	}
-	app, err := e.approvals.Decide(approvalID, approve, decider, reason, now)
+	app, err := e.approvals.DecideContext(ctx, approvalID, approve, decider, reason, now)
 	if err != nil {
 		return err
 	}
@@ -1226,13 +1227,19 @@ func (e *Engine) AssembleProcess06Bundle(ctx context.Context, runID string) (*Pr
 	return bundle, nil
 }
 
-// GetRun retrieves a run from the underlying run store.
+// GetRun retrieves an owned snapshot under the engine's admission lock.
+// The store also copies mutable state under its lock: callers must never
+// receive maps that a running executor or native continuation can mutate.
 func (e *Engine) GetRun(ctx context.Context, runID string) (ExecutionRun, error) {
+	e.operationMu.Lock()
+	defer e.operationMu.Unlock()
 	return e.store.GetRun(ctx, runID)
 }
 
 // ListRuns retrieves all runs from the store.
 func (e *Engine) ListRuns(ctx context.Context) ([]ExecutionRun, error) {
+	e.operationMu.Lock()
+	defer e.operationMu.Unlock()
 	return e.store.ListRuns(ctx)
 }
 

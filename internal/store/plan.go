@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/projectid"
 )
@@ -118,6 +119,20 @@ func (s *Store) SavePlan(ctx context.Context, executionPlan plan.ExecutionPlan, 
 		return fmt.Errorf("update active plan: %w", err)
 	}
 
+	if record, ok := ctx.Value(commandKey{}).(CommandRecord); ok {
+		var activeGoal string
+		var activeRevision int64
+		if err := tx.QueryRowContext(ctx, `SELECT active_goal_id,active_revision FROM goal_active WHERE session_id=?`, record.SessionID).Scan(&activeGoal, &activeRevision); err != nil {
+			return err
+		}
+		if activeGoal != executionPlan.Goal.GoalID || activeRevision != executionPlan.Goal.Revision {
+			return model.ErrGoalConflict
+		}
+
+		if err := writeDecisionCommand(ctx, tx, string(executionPlan.ProjectID), record.SessionID, executionPlan.ID, executionPlan.Version); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit save plan: %w", err)
 	}

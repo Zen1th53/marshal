@@ -280,24 +280,28 @@ type Lease struct {
 
 // RuntimeApproval records a hard gated action requiring explicit human decision.
 type RuntimeApproval struct {
-	ApprovalID     string         `json:"approval_id"`
-	RunID          string         `json:"run_id"`
-	TaskID         string         `json:"task_id"`
-	PlanID         string         `json:"plan_id"`
-	PlanVersion    int64          `json:"plan_version"`
-	OperationType  string         `json:"operation_type"`
-	TargetResource string         `json:"target_resource"`
-	RiskLevel      model.Risk     `json:"risk_level"`
-	Scope          string         `json:"scope"`
-	DiffPreview    string         `json:"diff_preview,omitempty"`
-	ActionDigest   string         `json:"action_digest"`
-	StateDigest    string         `json:"state_digest"`
-	Status         ApprovalStatus `json:"status"`
-	ApprovedBy     string         `json:"approved_by,omitempty"`
-	DecisionReason string         `json:"decision_reason,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	ResolvedAt     *time.Time     `json:"resolved_at,omitempty"`
-	ExpiresAt      *time.Time     `json:"expires_at,omitempty"`
+	Revision           int64          `json:"revision,omitempty"`
+	RequestedBy        string         `json:"requested_by,omitempty"`
+	HardViolation      bool           `json:"hard_violation,omitempty"`
+	DecisionCommandKey string         `json:"decision_command_key,omitempty"`
+	ApprovalID         string         `json:"approval_id"`
+	RunID              string         `json:"run_id"`
+	TaskID             string         `json:"task_id"`
+	PlanID             string         `json:"plan_id"`
+	PlanVersion        int64          `json:"plan_version"`
+	OperationType      string         `json:"operation_type"`
+	TargetResource     string         `json:"target_resource"`
+	RiskLevel          model.Risk     `json:"risk_level"`
+	Scope              string         `json:"scope"`
+	DiffPreview        string         `json:"diff_preview,omitempty"`
+	ActionDigest       string         `json:"action_digest"`
+	StateDigest        string         `json:"state_digest"`
+	Status             ApprovalStatus `json:"status"`
+	ApprovedBy         string         `json:"approved_by,omitempty"`
+	DecisionReason     string         `json:"decision_reason,omitempty"`
+	CreatedAt          time.Time      `json:"created_at"`
+	ResolvedAt         *time.Time     `json:"resolved_at,omitempty"`
+	ExpiresAt          *time.Time     `json:"expires_at,omitempty"`
 }
 
 // CheckpointRecord records a durable rollback boundary.

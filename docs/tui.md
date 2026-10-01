@@ -493,10 +493,10 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/budget` — Inspect consumed budget; missing token and cost measurements are UNKNOWN. Does not update limits.
 - `/checkpoint [list|create|inspect|diff]` — Recognized but unavailable: authenticated runtime snapshot support is not implemented.
 - `/rollback <id>` — Reports that rollback was NOT performed; authenticated runtime restoration is not implemented.
-- `/approvals` — List approvals awaiting a decision; `/approvals history` shows past decisions.
+- `/approvals` — List pending goal, plan, execution and SQLite approvals with typed IDs; `/approvals history` shows durable action decisions and the current goal/plan decisions.
 - `/approval inspect <id>` — Inspect one approval record; `/approval diff <id>` shows its commit binding and the live working tree.
-- `/approve [id]` — Unavailable without authenticated runtime authorization; does not grant approval.
-- `/reject [id]` — Unavailable without authenticated runtime authorization; does not deny approval.
+- `/approve <id>` — Confirm the exact pending record through authenticated in-process LocalControl. IDs are `goal:<id>@<revision>`, `plan:<id>@<version>`, `execution:<id>` or `approval:<id>` (SQLite). An unambiguous bare ID is accepted; an ambiguous ID is refused with its typed candidates.
+- `/reject <id> [reason]` — Reject an action approval, cancel a pending goal revision or cancel a ready plan through the same canonical boundary. Decisions require a scoped `approval.decide` grant, bind the displayed version/state digest, persist receipts and audit, and report the re-read result. Expired, consumed or stale approvals cannot be decided.
 - `/termination` — Inspect the canonical termination state and reason for the active goal.
 
 ### Security, Sandbox & Providers

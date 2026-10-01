@@ -39,6 +39,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/verification"
 	"github.com/Zen1th53/marshal/internal/worker"
+	"github.com/google/uuid"
 )
 
 // runtimeControlAuthority binds Control to the canonical runtime.
@@ -393,41 +394,51 @@ func (a *runtimeControlAuthority) Approval(ctx context.Context, approvalID strin
 // The service delegates to the approval manager, which enforces expiry, the
 // one-shot transition and the digest binding. Nothing here decides anything.
 func (a *runtimeControlAuthority) DecideApproval(ctx context.Context, approvalID string, approve bool, approver, rationale string) error {
-	if strings.HasPrefix(approvalID, "goal-confirm:") {
-		current, err := a.Approval(ctx, approvalID)
-		if err != nil {
-			return err
-		}
-		if !approve {
-			return errors.New("goal rejection is blocked: the canonical application-layer goal cancellation boundary is an IMPLEMENTATION GAP (CTUI-0048)")
-		}
-		_, err = a.runtime.ApproveGoal(ctx, a.sessionID, current.PlanVersion)
-		return err
-	}
-	if strings.HasPrefix(approvalID, "plan-approve:") {
-		current, err := a.Approval(ctx, approvalID)
-		if err != nil {
-			return err
-		}
-		service, err := a.plans()
-		if err != nil {
-			return err
-		}
-		if approve {
-			_, err = service.ApproveVersion(ctx, a.projectID, current.PlanVersion)
-		} else {
-			_, err = service.CancelVersion(ctx, a.projectID, current.PlanVersion)
-		}
-		return err
-	}
-	service, err := a.execution()
+	current, err := a.Approval(ctx, approvalID)
 	if err != nil {
 		return err
 	}
-	if approve {
-		return service.Approve(ctx, approvalID, approver, rationale)
+	return a.DecideApprovalTarget(ctx, approvalTarget(current), approve, rationale)
+}
+
+func (a *runtimeControlAuthority) DecideApprovalTarget(ctx context.Context, target Target, approve bool, rationale string) error {
+	approvalID := target.ID
+	current, err := a.Approval(ctx, approvalID)
+	if err != nil {
+		return err
 	}
-	return service.Reject(ctx, approvalID, approver, rationale)
+	if approvalDigest(current) != target.Digest || current.PlanVersion != target.Revision {
+		return ErrStaleTarget
+	}
+
+	if a.localControlErr != nil {
+		return a.localControlErr
+	}
+	if a.localControl == nil || a.runtime == nil {
+		return authz.ErrDenied
+	}
+	id := approvalID
+	if strings.HasPrefix(id, "goal-confirm:") {
+		_, err := a.CurrentGoal(ctx)
+		if err != nil {
+			return err
+		}
+		id = fmt.Sprintf("goal:%s@%d", strings.TrimPrefix(id, "goal-confirm:"), target.Revision)
+	} else if strings.HasPrefix(id, "plan-approve:") {
+		_, err := a.runtime.Plans().Current(ctx, a.projectID)
+		if err != nil {
+			return err
+		}
+		id = fmt.Sprintf("plan:%s@%d", strings.TrimPrefix(id, "plan-approve:"), target.Revision)
+	} else {
+		id = "execution:" + id
+	}
+	record, err := a.runtime.ResolveDecision(ctx, a.sessionID, id)
+	if err != nil {
+		return err
+	}
+	_, err = a.runtime.CommandDecideApproval(a.localControl.Context(ctx), app.ApprovalDecision{Envelope: app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: record.ID, ExpectedVersion: record.Version, IdempotencyKey: uuid.NewString()}, Digest: record.Digest, Approve: approve, Reason: rationale})
+	return err
 }
 
 func goalApprovalRecord(goal model.GoalContract) *execution.RuntimeApproval {

@@ -13,8 +13,10 @@ func workCommandUsage(parts []string) string {
 		usage, valid = cmd, len(args) == 0
 	case "/mode":
 		usage, valid = "/mode [manual|auto|ultra]", len(args) <= 1
-	case "/approve", "/reject":
-		usage, valid = cmd+" [approval_id]", len(args) <= 1
+	case "/approve":
+		usage, valid = cmd+" <typed-id|id>", len(args) <= 1
+	case "/reject":
+		usage, valid = cmd+" <typed-id|id> [reason]", true
 	case "/evidence", "/rollback":
 		usage, valid = cmd+" <id>", len(args) == 1
 	case "/inspect":

@@ -349,7 +349,7 @@ func (s *ExecutionService) resolveClaudeStreamApproval(ctx context.Context, appr
 		return err
 	}
 	if approve {
-		if err := s.engine.ApprovalManager().Approve(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+		if err := s.engine.ApprovalManager().ApproveContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
 			return err
 		}
 		if err := live.client.ResolveApproval(ctx, *live.approval, bridge); err != nil {
@@ -381,7 +381,7 @@ func (s *ExecutionService) resolveClaudeStreamApproval(ctx context.Context, appr
 		}(approval.RunID, approval.ApprovalID, live.runCtx)
 		return nil
 	}
-	if err := s.engine.ApprovalManager().Deny(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+	if err := s.engine.ApprovalManager().DenyContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
 		return err
 	}
 	if err := live.client.DeclineApproval(ctx, *live.approval); err != nil {
@@ -459,7 +459,7 @@ func (s *ExecutionService) resolveCodexAppServerApproval(ctx context.Context, ap
 		return err
 	}
 	if approve {
-		if err := s.engine.ApprovalManager().Approve(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+		if err := s.engine.ApprovalManager().ApproveContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
 			return err
 		}
 		if err := live.client.ResolveApproval(ctx, *live.approval, bridge); err != nil {
@@ -492,7 +492,7 @@ func (s *ExecutionService) resolveCodexAppServerApproval(ctx context.Context, ap
 		}(approval.RunID, approval.ApprovalID, live.runCtx)
 		return nil
 	}
-	if err := s.engine.ApprovalManager().Deny(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+	if err := s.engine.ApprovalManager().DenyContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
 		return err
 	}
 	if err := live.client.DeclineApproval(ctx, *live.approval); err != nil {

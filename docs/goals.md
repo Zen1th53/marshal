@@ -127,6 +127,22 @@ A Goal with open questions cannot be approved: approving it would approve
 whatever MARSHAL happened to guess. A revised Goal returns to `PENDING`,
 because you agreed to the previous wording, not this one.
 
+The local owner confirms MARSHAL's formed interpretation with
+`/approve goal:<id>@<revision>` or refuses it with
+`/reject goal:<id>@<revision> [reason]`. Each decision creates the next immutable
+revision: confirmation is stored as `APPROVED` (displayed as `CONFIRMED` by the
+composer), and rejection as `CANCELLED`. An older, superseded revision cannot be
+decided. Replaying the same authenticated command returns its recorded result.
+
+CI-003 distinguishes confirmation from action approval. The owner may confirm
+or reject a Goal they created, and may confirm MARSHAL's ready plan with
+`/approve plan:<id>@<version>`. A planning agent/model cannot confirm its own
+plan: confirmation requires the authenticated local owner. For execution and
+SQLite action approvals, the principal that requested the action (including the
+local owner when they are the requester) cannot decide it. A run identity is the
+requester for older execution records without explicit requester provenance.
+Hard constitutional violations can never be approved away.
+
 ## Commands
 
 ```

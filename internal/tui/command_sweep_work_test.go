@@ -72,7 +72,7 @@ func TestCommandSweepWorkRoots(t *testing.T) {
 		{"/claims", "No claims", "/claims", "No claims", "/claims extra"},
 		{"/inspect", "Usage:", "/inspect task missing", "", "/inspect typo id"},
 		{"/approve", "unavailable", "/approve approval", "unavailable", "/approve id extra"},
-		{"/reject", "unavailable", "/reject approval", "unavailable", "/reject id extra"},
+		{"/reject", "unavailable", "/reject approval reason", "unavailable", ""},
 		{"/route", "ADVISORY", "/route role=qa risk=R2 harness=codex", "ADVISORY", "/route typo"},
 		{"/agents", "TEAM ROSTER", "/agents", "unavailable", "/agents extra"},
 		{"/evidence", "Usage:", "/evidence missing", "NOT FOUND", "/evidence id extra"},
@@ -270,8 +270,8 @@ func TestCommandSweepWorkPTY(t *testing.T) {
 
 	cases := []struct{ line, want string }{
 		{"/status", "CANONICAL STATUS DETAIL"}, {"/goal", "No active goal"}, {"/mode auto", "Operating mode switched"},
-		{"/claims", "No claims"}, {"/inspect task missing", "No task found"}, {"/approve apr", "Approval mutation is unavailable"},
-		{"/reject apr", "Approval mutation is unavailable"}, {"/route role=qa", "ADVISORY ONLY"}, {"/agents", "TEAM ROSTER"},
+		{"/claims", "No claims"}, {"/inspect task missing", "No task found"}, {"/approve apr", "Error: not found"},
+		{"/reject apr", "Error: not found"}, {"/route role=qa", "ADVISORY ONLY"}, {"/agents", "TEAM ROSTER"},
 		{"/evidence missing", "NOT FOUND"}, {"/why", "No ULTRA route explanation"}, {"/msg all guidance", "Message mutation is unavailable"},
 		{"/handoff qa review", "Handoff mutation is unavailable"}, {"/checkpoint list", "Checkpoint list is unavailable"},
 		{"/rollback cp", "NOT performed"}, {"/budget", "BUDGET CONSUMED"}, {"/pause", "Pause was NOT performed"},

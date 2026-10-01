@@ -40,6 +40,32 @@ func (r *Runtime) ApproveGoal(ctx context.Context, sessionID string, expectedRev
 	return r.store.GetActiveGoalContract(ctx, sessionID)
 }
 
+// RejectGoal records an owner's refusal as a new immutable, CAS guarded
+// revision. Cancellation retains the original request and constraints.
+func (r *Runtime) RejectGoal(ctx context.Context, sessionID string, expectedRevision int64, reason string) (model.GoalContract, error) {
+	if r == nil || r.store == nil {
+		return model.GoalContract{}, model.ErrUnavailable
+	}
+	g, err := r.store.GetActiveGoalContract(ctx, sessionID)
+	if err != nil {
+		return model.GoalContract{}, err
+	}
+	if g.Revision != expectedRevision {
+		return model.GoalContract{}, model.ErrGoalConflict
+	}
+	if g.Confirmation != model.ConfirmationPending {
+		return model.GoalContract{}, model.ErrConflict
+	}
+	g.Confirmation = model.ConfirmationCancelled
+	g.Revision++
+	g.RevisionReason = "owner rejected goal: " + reason
+	g.UpdatedAt = time.Now().UTC()
+	if err := r.store.SaveGoalContract(ctx, g, expectedRevision); err != nil {
+		return model.GoalContract{}, err
+	}
+	return r.store.GetGoalContract(ctx, g.ID, g.Revision)
+}
+
 // ReviseGoal applies Process 03's canonical revision rule to an exact durable
 // GoalContract revision.  The caller provides only the new interpretation and
 // its reason; the original request and every hard constraint are reconstructed

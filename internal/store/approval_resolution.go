@@ -2,12 +2,15 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -130,7 +133,37 @@ func (s *Store) ResolveApproval(ctx context.Context, approvalID, decidedBy strin
 		expiry = expiresAt.UTC().Format(time.RFC3339Nano)
 	}
 
-	result, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return model.Approval{}, err
+	}
+	defer tx.Rollback()
+	if command, ok := ctx.Value(commandKey{}).(CommandRecord); ok {
+		row := tx.QueryRowContext(ctx, `SELECT approval_id, project_id, operation, scope, target, requested_by, approved_by, status, commit_hash, conditions_json, created_at, expires_at, revision FROM approvals WHERE approval_id=?`, approvalID)
+		current, err := scanApproval(row)
+		if err != nil {
+			return model.Approval{}, err
+		}
+		raw, _ := json.Marshal(current)
+		sum := sha256.Sum256(raw)
+		if hex.EncodeToString(sum[:]) != command.ExpectedStateDigest || current.Revision != expectedRevision {
+			return model.Approval{}, model.ErrConflict
+		}
+		if current.RequestedBy == decidedBy {
+			return model.Approval{}, fmt.Errorf("%w: requester cannot decide its own action", model.ErrApprovalRequired)
+		}
+		if current.ExpiresAt != nil && !time.Now().UTC().Before(*current.ExpiresAt) {
+			return model.Approval{}, model.ErrApprovalRequired
+		}
+		if approve {
+			for _, condition := range current.Conditions {
+				if inv, ok := constitution.Default().Lookup(constitution.InvariantID(condition)); ok && inv.Severity == constitution.SeverityHard {
+					return model.Approval{}, model.ErrApprovalRequired
+				}
+			}
+		}
+	}
+	result, err := tx.ExecContext(ctx, `
 		UPDATE approvals
 		SET status = ?, approved_by = ?, expires_at = ?, revision = revision + 1
 		WHERE approval_id = ? AND status = 'requested' AND revision = ?
@@ -139,6 +172,14 @@ func (s *Store) ResolveApproval(ctx context.Context, approvalID, decidedBy strin
 		return model.Approval{}, fmt.Errorf("resolve approval: %w", err)
 	}
 	if err := requireOne(result, "resolve approval"); err != nil {
+		return model.Approval{}, err
+	}
+	if record, ok := ctx.Value(commandKey{}).(CommandRecord); ok {
+		if err := writeDecisionCommand(ctx, tx, record.TargetProjectID, record.SessionID, approvalID, expectedRevision+1); err != nil {
+			return model.Approval{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return model.Approval{}, err
 	}
 	return s.GetApproval(ctx, approvalID)

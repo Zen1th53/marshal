@@ -216,10 +216,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleInspect(ctx, "", parts[1])
 
 	case "/approve":
-		return "Approval mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return h.handleApprovalDecision(ctx, parts[1:], true)
 
 	case "/reject":
-		return "Approval mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return h.handleApprovalDecision(ctx, parts[1:], false)
 
 	case "/route":
 		return h.handleRoute(ctx, parts[1:])
