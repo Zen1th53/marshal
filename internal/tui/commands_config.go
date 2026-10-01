@@ -34,8 +34,8 @@ func configCommandUsage(parts []string) string {
 		usage = "/effort [minimal|low|medium|high|xhigh|default]"
 		valid = len(args) == 0 || len(args) == 1 && oneOf(sub, "minimal", "low", "medium", "high", "xhigh", "default")
 	case "/backup":
-		usage = "/backup [create|restore <backup_path>]"
-		valid = len(args) == 0 || sub == "create" && len(args) == 1 || sub == "restore" && len(args) == 2 && args[1] != ""
+		usage = "/backup [create|restore <backup_path> [confirm <digest>]]"
+		valid = len(args) == 0 || sub == "create" && len(args) == 1 || sub == "restore" && (len(args) == 2 || len(args) == 4 && strings.EqualFold(args[2], "confirm")) && args[1] != ""
 	case "/blind":
 		usage = "/blind [resolve [reason ...]]"
 		valid = len(args) == 0 || sub == "resolve"

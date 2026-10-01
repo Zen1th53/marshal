@@ -518,7 +518,7 @@ Task mutations go through the workspace's in-process `app.LocalControl` with ind
 - `/sandbox` — Report runtime isolation NOT VERIFIED. `/sandbox <read-only|workspace-write>` opens native Codex with that sandbox mode and the saved Codex model preference in an interactive terminal; it does not persist a policy.
 - `/provider [status|config <harness|provider>]` — Inspect harness availability, with authentication UNKNOWN until established by execution. MARSHAL reaches providers through harnesses, so `config` accepts a harness (`claude`, `codex`, `opencode`, `antigravity`) or a provider name that maps to one (`anthropic`, `openai`, `google`). It inspects and changes no configuration; it names the real controls (`/model select`, `/effort`, the harness's own login). For Codex and Claude the model shown is the execution preference future runs read. Inline credentials are explicitly refused. `/providers` is an alias.
 - `/memory` — Query durable memory fabric records and search projections.
-- `/backup create` — Write and verify a SQLite snapshot under `.marshal/backups/`, retaining distinct files for rapid repeated calls. `/backup restore <backup_path>` verifies an artifact and directs you to offline `marshal state restore`; quote paths containing spaces. Bare `/backup` shows usage.
+- `/backup create` — Write and verify a SQLite snapshot under `.marshal/backups/`, retaining distinct files for rapid repeated calls. `/backup restore <backup_path>` verifies an artifact and says what a restore would do; nothing changes. `/backup restore <backup_path> confirm <digest>` restores it from the live session as the authenticated local owner (Linux): the current state is first backed up to `.marshal/backups/pre-restore-*.db`, the restore is refused while any process (another MARSHAL window, the daemon, or this one) still has the database or its WAL open, and the restored file must match the confirmed digest before the runtime is reopened on it. Elsewhere, or as an alternative, the offline `marshal state restore` remains; it now also refuses while the database is open. Quote paths containing spaces. Bare `/backup` shows usage.
 - `/export` — Refresh canonical state, then write an evidence bundle for the current goal revision to `.marshal/evidence/`, with critical claims, evidence refs, and a deterministic digest. Without a goal, it explains the required canonical session rather than recommending an unavailable TUI edit. Extra arguments return usage.
 - `/optimization <cycle_id>` — Read a canonical optimization cycle and its decisions, vetoes, blocked actions, and digest. Missing records and store failures include a recovery hint.
 - `/features [list|enable <feature>|disable <feature>]` — List or toggle native Codex feature flags. Bare `/features` lists; malformed arguments return usage.
@@ -581,6 +581,7 @@ Current limitations, stated rather than hidden:
 - **Failure fingerprints are recomputed, not stored.** The retry registry in
   `internal/epistemic` is per-run and in-memory; `/fingerprint` recomputes the
   same signatures from the failure reasons each run recorded durably.
-- **Backup restore is not performed from a live session**, since it would swap the
-  database out from under an open workspace. `/backup restore` verifies the
-  artifact and directs the operator to the offline path.
+- **Live backup restore is coordinated, and Linux-only.** Swapping a database
+  under open connections would discard their uncheckpointed WAL, so a restore
+  is refused while any process holds the database. Detecting that needs
+  open-file inspection, available on Linux; elsewhere use the offline path.

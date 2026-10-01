@@ -1436,7 +1436,13 @@ func (a *runtimeControlAuthority) VerifyStateBackup(ctx context.Context, backupP
 	if err != nil {
 		return BackupProof{}, err
 	}
-	metadata, err := app.VerifyStateBackup(ctx, backupPath, string(a.projectID), schema)
+	// A backup carries the store's project row, which is what verification
+	// compares, not the canonical binding identity.
+	row, err := a.runtime.Store().Project(ctx)
+	if err != nil {
+		return BackupProof{}, err
+	}
+	metadata, err := app.VerifyStateBackup(ctx, backupPath, row.ID, schema)
 	if err != nil {
 		return BackupProof{}, err
 	}
@@ -1467,38 +1473,27 @@ func (a *runtimeControlAuthority) RestoreState(ctx context.Context, backupPath s
 		verified.Digest != expected.Digest || verified.SchemaVersion != expected.SchemaVersion {
 		return BackupProof{}, fmt.Errorf("%w: selected backup no longer matches the confirmed digest/schema", ErrStaleTarget)
 	}
-	old := a.runtime
-	root := old.ProjectRoot()
-	if root == "" {
-		return BackupProof{}, errors.New("runtime has no project root")
-	}
-	if err := old.Close(); err != nil {
-		return BackupProof{}, fmt.Errorf("stop runtime for restore: %w", err)
-	}
-	if err := app.RestoreStateForProjectExpected(ctx, root, backupPath, string(a.projectID), verified.Digest); err != nil {
-		// RestoreDatabase keeps the old database intact on preflight/copy
-		// failures. Reopen it so this workspace remains usable after refusal.
-		if reopened, reopenErr := app.Open(ctx, root); reopenErr == nil {
-			if a.replaceRuntime != nil {
-				a.replaceRuntime(reopened)
-			}
-		}
-		return BackupProof{}, fmt.Errorf("restore verified backup: %w", err)
-	}
-	reopened, err := app.Open(ctx, root)
+	row, err := a.runtime.Store().Project(ctx)
 	if err != nil {
-		return BackupProof{}, fmt.Errorf("reopen runtime after restore: %w", err)
+		return BackupProof{}, err
 	}
-	if a.replaceRuntime != nil {
-		a.replaceRuntime(reopened)
+	// The coordinated restore backs up the current state, refuses while any
+	// process holds the database, and checks the restored file's digest.
+	result, err := app.CoordinatedRestore(ctx, a.runtime, backupPath, row.ID, verified.Digest)
+	if result.Runtime != nil && a.replaceRuntime != nil {
+		a.replaceRuntime(result.Runtime)
 	}
+	if err != nil {
+		return BackupProof{}, err
+	}
+	reopened := result.Runtime
 	// Re-verify after reopening so success means the durable replacement is
 	// both valid and readable through the new canonical runtime.
 	schema, err := reopened.Store().SchemaVersion(ctx)
 	if err != nil {
 		return BackupProof{}, fmt.Errorf("read reopened runtime schema: %w", err)
 	}
-	metadata, err := app.VerifyStateBackup(ctx, backupPath, string(a.projectID), schema)
+	metadata, err := app.VerifyStateBackup(ctx, backupPath, row.ID, schema)
 	if err != nil {
 		return BackupProof{}, fmt.Errorf("verify restored runtime: %w", err)
 	}

@@ -983,8 +983,18 @@ func (h *CommandHandler) handleBackup(ctx context.Context, args []string) (strin
 		if err != nil {
 			return "", fmt.Errorf("verify backup %s: %w; use /backup restore <backup_path> with an existing verified backup file", args[1], err)
 		}
-		return fmt.Sprintf("Backup %s verified (schema v%d, SHA-256 %s).\nRestore is not performed from a live session: exit the TUI, stop the daemon, then run marshal state restore <backup_path>.",
-			args[1], meta.SchemaVersion, meta.DatabaseSHA256), nil
+		offline := "Offline: exit the TUI, stop the daemon, then run marshal state restore <backup_path>."
+		if len(args) == 2 {
+			if !store.DatabaseInUseCheckSupported() {
+				return fmt.Sprintf("Backup %s verified (schema v%d, SHA-256 %s).\nRestore from a live session needs open-file inspection (Linux). %s",
+					args[1], meta.SchemaVersion, meta.DatabaseSHA256, offline), nil
+			}
+			digest := strings.TrimPrefix(meta.DatabaseSHA256, "sha256:")
+			return fmt.Sprintf("Backup %s verified (schema v%d, SHA-256 %s).\n"+
+				"Nothing has changed yet. Restoring replaces the whole project state. The current state is backed up first, and the restore is refused while any MARSHAL window or the daemon has the database open.\n"+
+				"To restore now: /backup restore %s confirm %s\n%s", args[1], meta.SchemaVersion, meta.DatabaseSHA256, args[1], digest[:12], offline), nil
+		}
+		return h.restoreBackup(ctx, args[1], meta.DatabaseSHA256, args[3])
 
 	default:
 		return "Usage: /backup [create|restore <backup_path>]", nil
@@ -1237,4 +1247,30 @@ func (h *CommandHandler) providerModelLine(ctx context.Context, harnessName stri
 		}
 	}
 	return UnknownModel + " (harness default; not established by probe)"
+}
+
+// restoreBackup performs a coordinated restore once the operator confirmed
+// the backup's digest, and swaps the workspace onto the reopened runtime.
+func (h *CommandHandler) restoreBackup(ctx context.Context, path, digest, confirmed string) (string, error) {
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
+		return "Restore was NOT performed: authenticated runtime authorization is required.", nil
+	}
+	if len(confirmed) < 12 || !strings.HasPrefix(strings.TrimPrefix(digest, "sha256:"), confirmed) {
+		return fmt.Sprintf("Restore was NOT performed: %q does not match the backup's digest; run /backup restore %s to see it again.", confirmed, path), nil
+	}
+	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: "state:" + path, IdempotencyKey: uuid.NewString()}
+	result, err := a.runtime.CommandRestoreState(a.localControl.Context(ctx), e, path, digest)
+	if result.Runtime != nil && result.Runtime != a.runtime && a.replaceRuntime != nil {
+		a.replaceRuntime(result.Runtime)
+	}
+	if err != nil {
+		recovery := ""
+		if result.RecoveryPath != "" {
+			recovery = " The state before the attempt is backed up at " + result.RecoveryPath + "."
+		}
+		return fmt.Sprintf("Restore was NOT performed: %v.%s", err, recovery), nil
+	}
+	return fmt.Sprintf("Project state restored from %s; the restored database matches the confirmed digest and has been reopened.\nThe previous state is backed up at %s (restore it the same way to undo).",
+		path, result.RecoveryPath), nil
 }

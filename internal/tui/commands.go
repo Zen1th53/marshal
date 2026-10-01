@@ -686,7 +686,7 @@ func (h *CommandHandler) helpText() string {
   /provider [status|config <name>]  Probe availability; credentials stay in the harness (/providers alias)
   /policy [network|sandbox|capability|scope|write|audit]  Enforcement NOT VERIFIED
   /sandbox [read-only|workspace-write]  No args: NOT VERIFIED; mode: open native Codex
-  /backup [create|restore <backup_path>]  Create verified snapshot; restore only verifies
+  /backup [create|restore <backup_path> [confirm <digest>]]  Create a verified snapshot; preview, then restore one
   /fingerprint             Report per-run fingerprint history unavailable
   /runtime                 Report runtime execution health NOT VERIFIED
   /store                   Read SQLite schema version (integrity NOT VERIFIED)
