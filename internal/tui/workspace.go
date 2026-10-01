@@ -97,6 +97,10 @@ type Workspace struct {
 
 	// Completion popup state. Tab is completion only: it opens or cycles this
 	// list and never submits, so it can never execute a partially typed command.
+	// lastRoute is the most recent /route request and result, bound to the
+	// goal revision it was computed for, so /why explains exactly that route.
+	lastRoute *routeRecord
+
 	completionOpen     bool
 	completionSelected bool
 	completionText     string

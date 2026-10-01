@@ -564,31 +564,37 @@ func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
 		return "No ULTRA route explanation is available: the canonical entitlement is not active.", nil
 	}
 
+	// Explain the exact route /route last computed, while it still describes
+	// the current goal revision. A route for another revision is stale.
+	if last := h.ws.lastRoute; last != nil {
+		goal := h.ws.state.Goal
+		if last.goalID == goal.ID && last.goalRevision == goal.Revision {
+			return "ADVISORY ROUTING EXPLANATION (NOT APPLIED):\n" + last.explanation, nil
+		}
+		h.ws.lastRoute = nil
+		return fmt.Sprintf("The last route (%s) was computed for goal %s revision %d, and the goal has changed since. Run /route again.",
+			last.request, orNone(last.goalID), last.goalRevision), nil
+	}
+
 	if h.ws.state.RouteExplanation != "" {
 		return fmt.Sprintf("ADVISORY ROUTING EXPLANATION (NOT APPLIED):\n%s", h.ws.state.RouteExplanation), nil
 	}
 
 	// A route explanation is meaningful only while the same canonical Cloud
 	// gate that authorizes ULTRA execution still holds a verified entitlement.
-	// Calling the ULTRA router after expiry would not execute anything, but it
-	// would still expose an ULTRA-labelled recommendation in a Standard
-	// session and create a misleading authority boundary.
-	if h.ws.router != nil && h.ws.ultra != nil && h.ws.ultra.Entitled() {
+	if h.ws.router != nil {
 		plan, err := h.ws.router.Route(ctx, model.ULTRARouteRequest{
-			GoalID:            h.ws.state.Goal.ID,
-			FixedRole:         model.RoleDeveloper,
-			PreferredHarness:  "codex",
-			Risk:              model.R1,
-			HasCriticalClaims: false,
+			GoalID:    h.ws.state.Goal.ID,
+			FixedRole: model.RoleDeveloper,
+			Risk:      model.R1,
 		})
 		if err == nil {
-			return fmt.Sprintf("ADVISORY ROUTING EXPLANATION (NOT APPLIED):\n%s", plan.Explanation), nil
+			return fmt.Sprintf("ADVISORY ROUTING EXPLANATION (NOT APPLIED):\nNo /route request yet; default developer route at R1.\n%s", plan.Explanation), nil
 		}
 	}
 
 	return "No route explanation is available yet.", nil
 }
-
 func (h *CommandHandler) handleCheckpoint(ctx context.Context) (string, error) {
 	return "Checkpoint creation is unavailable in TUI: authenticated runtime snapshot support is not implemented.", nil
 }
