@@ -3151,8 +3151,8 @@
     },
     {
       "path": "docs/tui.md",
-      "sha256": "69d3221e1f98824f78e1569bc5f7982c7c373c355ec8ebf31e717b350aa72cfe",
-      "bytes": 41798
+      "sha256": "3309e8986a127c24e3dc789ad135b9c68e5b311e7a7b602206b3a8367739dfc5",
+      "bytes": 42138
     },
     {
       "path": "docs/verification-quorum.md",
@@ -8826,8 +8826,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "cb93999ef5881b6a6eb2c3182c94690e21a1128c506fc0622be0c03c30b19286",
-      "bytes": 27679
+      "sha256": "d8b6cf1840f0e8b0f97f990fa8b621147d7fc0cb7a7e52ef482ca5438cfaa687",
+      "bytes": 28363
     },
     {
       "path": "internal/tui/commands_antigravity.go",
@@ -8876,8 +8876,8 @@
     },
     {
       "path": "internal/tui/commands_control.go",
-      "sha256": "f1add4260b8d5804df162989857a3f24cc09f9e7d1f0a160b94838ebefb32fe6",
-      "bytes": 16653
+      "sha256": "384af5531550d601c06cf439b29c404a7d0d36d7cdc202fcddfafcef56c7d82f",
+      "bytes": 16642
     },
     {
       "path": "internal/tui/commands_control_test.go",
@@ -9153,6 +9153,16 @@
       "path": "internal/tui/memoryscreen.go",
       "sha256": "200117abc413be74dff0ff4551c1e4d467e5270b30f946cd76d8f8f2ff3e3c96",
       "bytes": 6603
+    },
+    {
+      "path": "internal/tui/mode_policy_pty_test.go",
+      "sha256": "9b2a560d6c9519f42b7da00ec21b90d30cacc70a100718a36943749123c6261a",
+      "bytes": 720
+    },
+    {
+      "path": "internal/tui/mode_policy_test.go",
+      "sha256": "ba52b9208621e17b4779d56a835efebfb24385d971fdd5eb54c1b89b5b99e929",
+      "bytes": 1669
     },
     {
       "path": "internal/tui/modelsdata.go",
@@ -9586,8 +9596,8 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "88ae7ff06b102600bc80ee1f97758e6cbf67a1e70ddb681fd7870e284d940ee7",
-      "bytes": 56765
+      "sha256": "d8551c6f53e17226fe81504c31bb02a6fc76d4bc8f7a6cdcfa5541debec0d6e8",
+      "bytes": 57453
     },
     {
       "path": "internal/tui/workspace_nav_test.go",
