@@ -183,7 +183,6 @@ func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
 		{"/plugin add local-plugin", "plugin\nadd\nlocal-plugin\n"}, {"/plugin install local-plugin", "plugin\nadd\nlocal-plugin\n"},
 		{"/plugins rm local-plugin", "plugin\nremove\nlocal-plugin\n"}, {"/plugin remove local-plugin", "plugin\nremove\nlocal-plugin\n"}, {"/plugin uninstall local-plugin", "plugin\nremove\nlocal-plugin\n"},
 		{"/plugin marketplace list", "plugin\nmarketplace\nlist\n"},
-		{"/apply task", "apply\ntask\n"}, {"/apply", "apply\nTASK-CODEX-1\n"},
 		{`/resume --last "prompt with spaces"`, "exec\nresume\n--last\nprompt with spaces\n"},
 		{`/codex resume "session with spaces"`, "exec\nresume\nsession with spaces\n"},
 		{`/fork "session with spaces"`, "exec\nfork\nsession with spaces\n"}, {"/fork --last", "exec\nfork\n--last\n"},
@@ -240,7 +239,7 @@ func TestCommandSweepAgentsEmptyAndMissingProvider(t *testing.T) {
 			t.Fatal(out)
 		}
 	}
-	for _, line := range []string{"/mcp list", "/mcp add local -- command", "/mcp rm local", "/plugin add local", "/plugins rm local", "/apply task", "/resume --last", "/fork --last", "/codex features"} {
+	for _, line := range []string{"/mcp list", "/mcp add local -- command", "/mcp rm local", "/plugin add local", "/plugins rm local", "/resume --last", "/fork --last", "/codex features"} {
 		if out := sweepAgentExecute(t, ws, line); !strings.Contains(out, "Install Codex") {
 			t.Fatalf("missing CLI recovery: %s", out)
 		}
@@ -322,7 +321,7 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 		{"/agy modle slug", "Antigravity exited.", "--prompt-interactive\nmodle slug\n"},
 		{"/skill install nonexistent-sweep-skill", "Preview skill", ""},
 		{"/skills", "LOCAL CODEX SKILLS", ""},
-		{"/apply task", "changes applied to working tree", "apply\ntask\n"},
+		{"/apply task", "no project file changed", "apply\ntask\n"},
 		{"/sessions", "No governed Codex sessions", ""},
 		{"/resume --last", "Codex exited.", "resume\n--last\n"},
 		{"/fork --last", "Codex exited.", "fork\n--last\n"},
@@ -388,7 +387,7 @@ func TestCommandSweepAgentsFailuresAndDecisions(t *testing.T) {
 	failed := &sweepAgentsEmptyAuthority{fakeAuthority: auth, fail: true}
 	source.Authority = failed
 	ws.AttachControlSource(source)
-	if out := sweepAgentExecute(t, ws, "/apply"); !strings.Contains(out, "session storage unavailable") || !strings.Contains(out, "/sessions") {
+	if out := sweepAgentExecute(t, ws, "/apply"); !strings.Contains(out, "MARSHAL does not guess one") {
 		t.Fatal(out)
 	}
 	for _, line := range []string{"/review instructions", "/codex review instructions"} {
@@ -425,22 +424,23 @@ func (a *sweepAgentsHistoryAuthority) CodexSessions(context.Context) ([]CodexSes
 	return a.sessions, nil
 }
 
+// /apply never infers a Codex task ID from MARSHAL's own run history.
 func TestCommandSweepAgentsApplyLatest(t *testing.T) {
 	sweepWorkEnvironment(t)
 	_, ws, _ := newControlWorkspace(t)
 	source, auth := testControl(t)
 	recent := CodexSessionSummary{TaskID: "newest-task", StartedAt: time.Now()}
-	old := CodexSessionSummary{TaskID: "old-task", StartedAt: recent.StartedAt.Add(-time.Hour)}
-	history := &sweepAgentsHistoryAuthority{fakeAuthority: auth}
+	history := &sweepAgentsHistoryAuthority{fakeAuthority: auth, sessions: []CodexSessionSummary{recent}}
 	source.Authority = history
 	ws.AttachControlSource(source)
 	log := sweepAgentCodexDouble(t)
-	for _, sessions := range [][]CodexSessionSummary{{recent, old}, {old, recent}} {
-		history.sessions = sessions
-		sweepAgentExecute(t, ws, "/apply")
-		data, err := os.ReadFile(log)
-		if err != nil || string(data) != "apply\nnewest-task\n" {
-			t.Fatalf("applied wrong task: %q %v", data, err)
+	for _, line := range []string{"/apply", "/apply TASK-CODEX-1", "/apply task"} {
+		out := sweepAgentExecute(t, ws, line)
+		if !strings.Contains(out, "NOT performed") && !strings.Contains(out, "does not guess") {
+			t.Fatalf("%s: %s", line, out)
+		}
+		if data, err := os.ReadFile(log); err == nil && len(data) > 0 {
+			t.Fatalf("%s ran codex: %q", line, data)
 		}
 	}
 }

@@ -699,7 +699,7 @@ func (h *CommandHandler) helpText() string {
   /logout                  Open native Codex logout in an interactive terminal
   /mcp [list|add|rm]       Manage Codex MCP server integrations
   /plugin /plugins [list|add|rm]   Manage Codex plugins and extensions
-  /apply [task_id]         Apply a Codex task diff to working tree
+  /apply <codex_task_id>   Apply a Codex task diff (snapshot first; changed files reported)
   /skills                  List local Codex skills
   /skill install <name>    Install a project-local Codex skill
   /sessions               List governed Codex sessions

@@ -342,7 +342,7 @@ func TestTopLevelCodexCommands_DirectRouting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/apply: %v", err)
 	}
-	if !strings.Contains(applyOut, "Codex apply failed") || strings.Contains(applyOut, "changes applied") {
+	if !strings.Contains(applyOut, "Usage: /apply <codex_task_id>") || strings.Contains(applyOut, "changes applied") {
 		t.Fatalf("unexpected /apply output: %s", applyOut)
 	}
 

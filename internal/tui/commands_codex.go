@@ -422,32 +422,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		return fmt.Sprintf("Successfully installed project-local Codex skill %q\n  Immutable Digest: %s", name, installedDigest), nil
 
 	case "apply":
-		var taskID string
-		if len(args) >= 2 {
-			taskID = args[1]
-		} else {
-			sessions, err := auth.CodexSessions(ctx)
-			if err != nil {
-				return fmt.Sprintf("Cannot select a diff to apply: %v. Retry /sessions before /apply <task_id>.", err), nil
-			}
-			if len(sessions) > 0 {
-				latest := sessions[0]
-				for _, session := range sessions[1:] {
-					if session.StartedAt.After(latest.StartedAt) {
-						latest = session
-					}
-				}
-				taskID = latest.TaskID
-			}
-		}
-		if taskID == "" {
-			return "Usage: /codex apply <task_id> (or execute a task with /codex first)", nil
-		}
-		out, err := runGovernedCodexCmd(ctx, []string{"apply", taskID})
-		if err != nil {
-			return fmt.Sprintf("Codex apply failed: %v", err), nil
-		}
-		return fmt.Sprintf("CODEX APPLY DIFF:\n%s\nTask %s changes applied to working tree.", out, taskID), nil
+		return h.applyCodexCloudTask(ctx, args[1:])
 
 	case "diff":
 		return h.handleDiff(ctx)
