@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/google/uuid"
 	"os"
 	"path/filepath"
 	"strings"
@@ -638,16 +640,34 @@ func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (stri
 	return "Usage: /harness [probe|status|select <role> <harness>]", nil
 }
 
-// handleModel exposes saved preferences read-only. Mutations fail closed until
-// Runtime owns a canonical authenticated execution-profile service.
+// handleModel shows model preferences and selects the model future governed
+// runs of an adapter use, through the authenticated operator boundary.
 func (h *CommandHandler) handleModel(ctx context.Context, args []string) (string, error) {
 	if len(args) == 0 || strings.EqualFold(args[0], "show") {
 		return h.renderModelSelections(ctx)
 	}
-	if !strings.EqualFold(args[0], "select") || len(args) < 2 {
-		return "Usage: /model select <harness> <model_name>  (or /model show)", nil
+	if !strings.EqualFold(args[0], "select") || len(args) != 3 {
+		return "Usage: /model select <codex|claude> <model_name>  (or /model show)", nil
 	}
-	return "Model selection was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
+		return "Model selection was NOT applied: authenticated runtime authorization is required.", nil
+	}
+	adapter := strings.ToLower(args[1])
+	if adapter != "codex" && adapter != "claude" {
+		return fmt.Sprintf("Model selection was NOT applied: %s runs do not read a model preference. Supported: codex, claude.", args[1]), nil
+	}
+	revision, _, err := a.runtime.ModelPreferenceRevision(ctx, adapter)
+	if err != nil {
+		return "", fmt.Errorf("read model preference: %w", err)
+	}
+	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: "model:" + adapter,
+		ExpectedVersion: revision, IdempotencyKey: uuid.NewString()}
+	preference, err := a.runtime.CommandSetModel(a.localControl.Context(ctx), e, adapter, args[2])
+	if err != nil {
+		return fmt.Sprintf("Model selection was NOT applied: %v", err), nil
+	}
+	return fmt.Sprintf("Future governed %s runs will use %s (preference revision %d). Runs already started keep their model.", adapter, preference.Model, preference.Revision), nil
 }
 
 // renderModelSelections reports the persisted model preference per harness.
@@ -656,6 +676,21 @@ func (h *CommandHandler) renderModelSelections(ctx context.Context) (string, err
 		return configStoreUnavailable, nil
 	}
 	var b strings.Builder
+	if a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority); ok && a != nil && a.runtime != nil {
+		b.WriteString("EXECUTION MODEL PREFERENCES (read by future governed runs):\n")
+		for _, adapter := range app.ModelPreferenceAdapters {
+			revision, current, err := a.runtime.ModelPreferenceRevision(ctx, adapter)
+			if err != nil {
+				return "", fmt.Errorf("read model preference: %w", err)
+			}
+			if current == "" {
+				current = "(none; the adapter's own default applies)"
+			} else {
+				current = fmt.Sprintf("%s (revision %d)", current, revision)
+			}
+			b.WriteString(fmt.Sprintf("  %-12s %s\n", adapter, current))
+		}
+	}
 	b.WriteString("SAVED MODEL PREFERENCES (NOT APPLIED TO RUNTIME):\n")
 	for _, pr := range ProbeHarnesses() {
 		profile, err := h.ws.store.GetHarnessProfile(ctx, pr.HarnessName)

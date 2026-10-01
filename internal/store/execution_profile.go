@@ -100,6 +100,12 @@ func (s *Store) SetExecutionModelPreference(ctx context.Context, preference mode
 	if err != nil {
 		return model.ExecutionModelPreference{}, fmt.Errorf("write execution model preference: %w", err)
 	}
+	// An operator command commits its receipt and audit with the preference.
+	if r, ok := ctx.Value(commandKey{}).(CommandRecord); ok {
+		if err := insertCommandReceipt(ctx, tx, r, preference.Revision); err != nil {
+			return model.ExecutionModelPreference{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return model.ExecutionModelPreference{}, fmt.Errorf("commit execution model preference: %w", err)
 	}

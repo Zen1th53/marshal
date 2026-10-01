@@ -680,9 +680,9 @@ func (h *CommandHandler) helpText() string {
   /context                 Inspect context and drift
   /diff                    Interactive diff inspector for pending changes
   /models                  List discovered models and active selection
-  /model [show]            Read saved harness model preferences (not applied to Runtime)
+  /model [show]            Show execution model preferences and saved harness defaults
   /model <slug>            Select a Codex execution model through its control authority
-  /model select <harness> <model>  Unavailable: runtime execution-profile integration required
+  /model select <codex|claude> <model>  Set the model future governed runs use
   /harness [probe|status|select <role> <harness>]  Probe availability; selection unavailable
   /effort [low|medium|high] Read probed knobs/advisory default; selection UNKNOWN, changes unavailable
   /provider [status|config <name>]  Probe availability; credentials stay in the harness (/providers alias)
