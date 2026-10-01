@@ -115,6 +115,36 @@ func (c *Client) ValidateModel(ctx context.Context, modelName string) error {
 	return fmt.Errorf("%w: model %q is not an eligible Codex model", model.ErrInvalid, modelName)
 }
 
+// ValidateEffort checks that the catalog advertises effort for the model, or
+// for the catalog default when modelName is empty.
+func (c *Client) ValidateEffort(ctx context.Context, modelName, effort string) error {
+	if effort == "" {
+		return nil
+	}
+	if err := ValidateDangerousFlags([]string{modelName, effort}); err != nil {
+		return err
+	}
+	models, def, err := c.Models(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: cannot query codex reasoning efforts: %v", model.ErrUnavailable, err)
+	}
+	if modelName == "" {
+		modelName = def
+	}
+	for _, m := range models {
+		if m.Slug != modelName {
+			continue
+		}
+		for _, advertised := range m.ReasoningEfforts {
+			if advertised == effort {
+				return nil
+			}
+		}
+		return fmt.Errorf("%w: model %q does not advertise reasoning effort %q (advertised: %s)", model.ErrInvalid, modelName, effort, strings.Join(m.ReasoningEfforts, ", "))
+	}
+	return fmt.Errorf("%w: model %q is not an eligible Codex model", model.ErrInvalid, modelName)
+}
+
 func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Result, error) {
 	if c.runner == nil || c.binary == "" || request.TaskID == "" ||
 		request.Title == "" || request.Worktree == "" {
@@ -135,6 +165,9 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 	} else if _, def, err := c.Models(ctx); err == nil && def != "" {
 		effectiveModel = def
 	}
+	if err := c.ValidateEffort(ctx, effectiveModel, request.Effort); err != nil {
+		return adapter.Result{}, err
+	}
 
 	prompt, err := buildPrompt(request)
 	if err != nil {
@@ -146,6 +179,9 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 	}
 	if request.Model != "" {
 		args = append(args, "--model", request.Model)
+	}
+	if request.Effort != "" {
+		args = append(args, "-c", `model_reasoning_effort="`+request.Effort+`"`)
 	}
 	args = append(args, "-")
 	if err := ValidateDangerousFlags(args); err != nil {

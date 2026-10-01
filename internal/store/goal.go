@@ -24,6 +24,8 @@ type goalIntakePayload struct {
 	Assessment          map[string]string `json:"assessment,omitempty"`
 	RevisionReason      string            `json:"revision_reason,omitempty"`
 	AdvisoryUsed        bool              `json:"advisory_used,omitempty"`
+	// BudgetLimits travel with the revision they were confirmed in.
+	BudgetLimits *model.BudgetLimit `json:"budget_limits,omitempty"`
 }
 
 // SaveGoalContract persists a GoalContract revision under CAS concurrency control.
@@ -125,6 +127,7 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 		Assessment:          goal.Assessment,
 		RevisionReason:      goal.RevisionReason,
 		AdvisoryUsed:        goal.AdvisoryUsed,
+		BudgetLimits:        goal.BudgetLimits,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal goal intake: %w", err)
@@ -184,6 +187,9 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 		return fmt.Errorf("update active goal: %w", err)
 	}
 
+	if err := writeCommand(ctx, tx, goal); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit save goal: %w", err)
 	}
@@ -192,7 +198,14 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 
 // GetGoalContract fetches a specific revision of a GoalContract.
 func (s *Store) GetGoalContract(ctx context.Context, goalID string, revision int64) (model.GoalContract, error) {
-	row := s.db.QueryRowContext(ctx, `
+	return readGoalContract(ctx, s.db, goalID, revision)
+}
+
+// readGoalContract shares canonical decoding with transaction-bound checks.
+func readGoalContract(ctx context.Context, reader interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, goalID string, revision int64) (model.GoalContract, error) {
+	row := reader.QueryRowContext(ctx, `
 		SELECT
 			goal_id, session_id, revision, desired_outcome, expected_artifact,
 			scope_json, constraints_json, do_not_do_json, success_criteria_json,
@@ -340,6 +353,7 @@ func scanGoalContract(r rowScanner) (model.GoalContract, error) {
 		g.Assessment = intake.Assessment
 		g.RevisionReason = intake.RevisionReason
 		g.AdvisoryUsed = intake.AdvisoryUsed
+		g.BudgetLimits = intake.BudgetLimits
 	}
 	// A Goal predating goal intake, or one whose payload omitted it, is
 	// pending. Reading an absent confirmation as anything else would let an

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMarshalTypoGuard(t *testing.T) {
@@ -28,7 +29,11 @@ func TestMarshalTypoGuard(t *testing.T) {
 func TestMarshalGoalsStillStartPlanning(t *testing.T) {
 	for _, goal := range []string{"add a remove command", "refactor", "setings please"} {
 		t.Run(goal, func(t *testing.T) {
-			ws := NewWorkspace(nil, "proj", "sess-1")
+			// Planning needs a real project runtime; provider execution stays isolated.
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			_, ws, _ := acceptanceWorkspace(t)
+			t.Setenv("PATH", t.TempDir())
 			got, err := (&CommandHandler{ws: ws}).handleMarshal(context.Background(), strings.Fields(goal))
 			if err != nil || got != "Marshal is preparing and drafting a plan for: "+goal {
 				t.Fatalf("goal = %q, %v", got, err)
@@ -37,6 +42,19 @@ func TestMarshalGoalsStillStartPlanning(t *testing.T) {
 				t.Fatal("goal did not start a Marshal run")
 			}
 			ws.marshalStop()
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				ws.marshal.mu.Lock()
+				busy := ws.marshal.busy
+				ws.marshal.mu.Unlock()
+				if !busy {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("planning did not stop")
+				}
+				time.Sleep(time.Millisecond)
+			}
 		})
 	}
 }

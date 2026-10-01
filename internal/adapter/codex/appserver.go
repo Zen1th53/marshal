@@ -109,7 +109,10 @@ func appServerThreadStartParams(request adapter.Request) (map[string]any, error)
 	if !filepath.IsAbs(request.Worktree) || filepath.Clean(request.Worktree) != request.Worktree {
 		return nil, fmt.Errorf("%w: Codex app-server worktree must be a clean absolute path", model.ErrInvalid)
 	}
-	if err := ValidateDangerousFlags([]string{request.TaskID, request.Title, request.Worktree, request.Model}); err != nil {
+	if request.Effort != "" && !isNativeIdentifier(request.Effort) {
+		return nil, fmt.Errorf("%w: invalid reasoning effort", model.ErrInvalid)
+	}
+	if err := ValidateDangerousFlags([]string{request.TaskID, request.Title, request.Worktree, request.Model, request.Effort}); err != nil {
 		return nil, err
 	}
 	prompt, err := buildPrompt(request)
@@ -156,6 +159,7 @@ func appServerTurnStartParams(threadID string, request adapter.Request) (map[str
 		"threadId":          threadID,
 		"cwd":               request.Worktree,
 		"model":             nullableString(request.Model),
+		"effort":            nullableString(request.Effort),
 		"approvalPolicy":    "untrusted",
 		"approvalsReviewer": "user",
 		// The app-server schema requires an explicit turn-level policy for

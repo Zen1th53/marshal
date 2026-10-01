@@ -375,6 +375,9 @@ func TestDiscoverLocalSkills(t *testing.T) {
 			if s.Path != "" || s.Root != "" {
 				t.Errorf("host-local skill paths escaped discovery: %+v", s)
 			}
+			if s.SourceType != "project-agents" {
+				t.Errorf("source type = %q, want project-agents", s.SourceType)
+			}
 		}
 	}
 	if !found {

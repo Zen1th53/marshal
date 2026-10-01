@@ -120,7 +120,7 @@ func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/codex sessions: %v", err)
 	}
-	if !strings.Contains(sessOut, "RECORDED CODEX SESSIONS") || !strings.Contains(sessOut, "session-codex-1") {
+	if !strings.Contains(sessOut, "GOVERNED runs") || !strings.Contains(sessOut, "session-codex-1") {
 		t.Fatalf("unexpected /codex sessions output:\n%s", sessOut)
 	}
 
@@ -175,7 +175,7 @@ func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/codex nonexistent: %v", err)
 	}
-	if !strings.Contains(unknownOut, `Unknown Codex subcommand "nonexistent"`) {
+	if !strings.Contains(unknownOut, `Unknown subcommand. To send a prompt use /codex exec <text>`) {
 		t.Fatalf("unexpected unknown subcommand response: %s", unknownOut)
 	}
 
@@ -192,8 +192,8 @@ func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
 		t.Fatalf("plain text launched a task, got:\n%s", directOut)
 	}
 
-	// 15. Multi-word prompt under /codex without explicit exec subcommand
-	multiOut, err := ws.ExecuteCommand(ctx, "/codex refactor authentication module")
+	// 15. Explicit quoted multi-word prompt shortcut under /codex
+	multiOut, err := ws.ExecuteCommand(ctx, `/codex "refactor authentication module"`)
 	if err != nil {
 		t.Fatalf("/codex multi-word prompt: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestTopLevelCodexCommands_DirectRouting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/apply: %v", err)
 	}
-	if !strings.Contains(applyOut, "Codex apply failed") || strings.Contains(applyOut, "changes applied") {
+	if !strings.Contains(applyOut, "Usage: /apply <codex_task_id>") || strings.Contains(applyOut, "changes applied") {
 		t.Fatalf("unexpected /apply output: %s", applyOut)
 	}
 
@@ -351,7 +351,7 @@ func TestTopLevelCodexCommands_DirectRouting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/sessions: %v", err)
 	}
-	if !strings.Contains(sessOut, "RECORDED CODEX SESSIONS") {
+	if !strings.Contains(sessOut, "GOVERNED runs") {
 		t.Fatalf("unexpected /sessions output: %s", sessOut)
 	}
 

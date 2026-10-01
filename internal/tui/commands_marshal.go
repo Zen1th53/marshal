@@ -113,14 +113,38 @@ func (w *Workspace) marshalPanel() *MarshalPanel {
 	return w.state.Marshal
 }
 
+// marshalPanelWithNote retains the last task snapshot when an operation fails
+// before it can return a new canonical run.
+func (w *Workspace) marshalPanelWithNote(runID, provider, note string) *MarshalPanel {
+	if p := w.marshalPanel(); p != nil && p.RunID == runID {
+		copy := *p
+		copy.Provider, copy.Note = provider, note
+		return &copy
+	}
+	return &MarshalPanel{RunID: runID, Provider: provider, Note: note}
+}
+
+func (w *Workspace) marshalFailurePanel(runID, provider string, run marshal.Run, note string) *MarshalPanel {
+	if run.PlanID != "" {
+		return newMarshalPanel(runID, provider, run, note)
+	}
+	return w.marshalPanelWithNote(runID, provider, note)
+}
+
 var marshalSubcommands = []string{"chat", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task"}
 
 // marshalTypoSuggestion prefers a unique prefix, then the closest spelling.
 func marshalTypoSuggestion(word string) string {
+	return commandTypoSuggestion(word, marshalSubcommands, true)
+}
+
+// commandTypoSuggestion shares the distance-two typo policy. Marshal also
+// accepts unique prefixes; provider grammar deliberately requires exact verbs.
+func commandTypoSuggestion(word string, subcommands []string, allowPrefix bool) string {
 	word = strings.ToLower(word)
 	prefix, prefixes := "", 0
 	closest, best := "", 3
-	for _, sub := range marshalSubcommands {
+	for _, sub := range subcommands {
 		if word == sub {
 			return ""
 		}
@@ -131,7 +155,7 @@ func marshalTypoSuggestion(word string) string {
 			closest, best = sub, distance
 		}
 	}
-	if prefixes == 1 {
+	if allowPrefix && prefixes == 1 {
 		return prefix
 	}
 	return closest
@@ -415,7 +439,7 @@ func marshalRecommend(ctx context.Context, service *app.MarshalService, runID st
 
 func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.MarshalService, string, string, error) {
 	if w.runtime == nil {
-		return nil, "", "", errors.New("the MARSHAL runtime is not attached to this workspace")
+		return nil, "", "", errors.New("the MARSHAL runtime is not attached to this workspace; reopen MARSHAL in an initialized project")
 	}
 	m := w.marshalSession()
 	m.mu.Lock()
@@ -521,6 +545,9 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 	goal = strings.TrimSpace(goal)
 	if goal == "" {
 		return marshalUsage, nil
+	}
+	if w.runtime == nil || w.runtime.Marshal() == nil {
+		return "", errors.New("Marshal planning requires an attached project runtime; reopen MARSHAL in an initialized project")
 	}
 	m := w.marshalSession()
 	runCtx, cancel, err := m.reserve()
@@ -666,7 +693,7 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: provider, State: marshal.Drafting, Note: "approving plan…"})
+	w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "approving plan…"))
 	go func() {
 		defer m.finish(cancel)
 		m.mu.Lock()
@@ -674,7 +701,7 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 		m.mu.Unlock()
 		if pending != nil {
 			if _, err := service.ApplyAmendDraftBound(runCtx, runID, pending.reason, pending.draft, pending.planVersion); err != nil {
-				w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: provider, State: marshal.Drafting, Note: "amendment failed: " + err.Error()})
+				w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "amendment failed: "+err.Error()))
 				return
 			}
 			m.mu.Lock()
@@ -684,7 +711,7 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 		m.grant(runID, "plan")
 		run, err := service.Approve(runCtx, runID)
 		if err != nil {
-			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approval failed: "+err.Error()))
+			w.marshalPublish(m, runID, w.marshalFailurePanel(runID, provider, run, "approval failed: "+err.Error()))
 			return
 		}
 		m.mu.Lock()
@@ -820,7 +847,7 @@ func (w *Workspace) marshalClose(ctx context.Context) (string, error) {
 		defer m.finish(cancel)
 		m.grant(runID, "close")
 		if err := service.Close(runCtx, runID); err != nil {
-			w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: provider, Note: "close failed: " + err.Error()})
+			w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "close failed: "+err.Error()))
 			return
 		}
 		if run, err := service.Resume(runCtx, runID); err == nil {
@@ -862,7 +889,7 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 		defer func() { m.finishWithNativeTurn(cancel, keepNativeTurn) }()
 		run, err := service.Resume(runCtx, runID)
 		if err != nil {
-			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "resume failed: "+err.Error()))
+			w.marshalPublish(m, runID, w.marshalFailurePanel(runID, provider, run, "resume failed: "+err.Error()))
 			return
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "resuming"))
@@ -887,14 +914,14 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 		defer m.finish(cancel)
 		draft, major, err := service.ProposeAmend(runCtx, runID, reason)
 		if err != nil {
-			w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: provider, Note: "amendment failed: " + err.Error()})
+			w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "amendment failed: "+err.Error()))
 			return
 		}
 		note := "amended in scope"
 		if major {
 			run, err := service.Resume(runCtx, runID)
 			if err != nil {
-				w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: provider, Note: "amendment failed: " + err.Error()})
+				w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "amendment failed: "+err.Error()))
 				return
 			}
 			m.mu.Lock()
@@ -910,7 +937,7 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 		}
 		run, err := service.ApplyAmendDraft(runCtx, runID, reason, draft)
 		if err != nil {
-			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "amendment failed: "+err.Error()))
+			w.marshalPublish(m, runID, w.marshalFailurePanel(runID, provider, run, "amendment failed: "+err.Error()))
 			return
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, note))
@@ -966,7 +993,7 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 	m.mu.Unlock()
 	p := w.marshalPanel()
 	if runID == "" || p == nil || p.RunID != runID {
-		return "", errors.New("no Marshal run")
+		return "", errors.New("no Marshal run; start one with /marshal <goal>")
 	}
 	for _, task := range p.Tasks {
 		if task.ID == args[0] {
@@ -1008,8 +1035,11 @@ func (w *Workspace) marshalReturn(ctx context.Context, args []string) (string, e
 
 // marshalSettings shows or changes the project's Marshal settings.
 func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string, error) {
+	if len(args) != 0 && len(args) != 2 {
+		return "", errors.New("usage: /marshal settings <key> <value>")
+	}
 	if w.runtime == nil {
-		return "", errors.New("the MARSHAL runtime is not attached to this workspace")
+		return "", errors.New("the MARSHAL runtime is not attached to this workspace; reopen MARSHAL in an initialized project")
 	}
 	service := w.runtime.Marshal()
 	if service == nil {
@@ -1023,9 +1053,6 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 	if len(args) == 0 {
 		return fmt.Sprintf("execution-rights %s\nacceptance-mode %s\nrework-limit %d\nultra-concurrency %d\ncontrol %s",
 			s.ExecutionRights, s.AcceptanceMode, s.ReworkLimit, s.UltraConcurrency, s.EffectiveControl()), nil
-	}
-	if len(args) != 2 {
-		return "", errors.New("usage: /marshal settings <key> <value>")
 	}
 	switch args[0] {
 	case "execution-rights":

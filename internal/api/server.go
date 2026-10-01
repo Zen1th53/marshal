@@ -16,12 +16,15 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/projectid"
 )
 
 const maxRequestBody = 1 << 20
 
 type Server struct {
 	runtime *app.Runtime
+	// peerUID is an internal test seam, never configurable by a request.
+	peerUID func(net.Conn) (uint32, error)
 }
 
 func NewServer(runtime *app.Runtime) *Server { return &Server{runtime: runtime} }
@@ -42,8 +45,27 @@ func (s *Server) Serve(ctx context.Context, socketPath string) error {
 		os.Remove(socketPath)
 		return fmt.Errorf("secure runtime socket: %w", err)
 	}
+	owner, err := socketOwner(filepath.Join(s.runtime.ProjectRoot(), projectid.StateDirName))
+	if err != nil {
+		listener.Close()
+		os.Remove(socketPath)
+		return err
+	}
+	if socketUID, socketErr := socketOwner(filepath.Dir(socketPath)); socketErr != nil || socketUID != owner {
+		listener.Close()
+		os.Remove(socketPath)
+		return fmt.Errorf("local socket directory does not match project state owner")
+	}
+	peerUID := s.peerUID
+	if peerUID == nil {
+		peerUID = kernelPeerUID
+	}
 	server := &http.Server{
-		Handler:           s.routes(),
+		Handler: s.localTransport(owner, s.routes()),
+		ConnContext: func(ctx context.Context, conn net.Conn) context.Context {
+			uid, err := peerUID(conn)
+			return context.WithValue(ctx, peerKey{}, peerIdentity{uid: uid, valid: err == nil})
+		},
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

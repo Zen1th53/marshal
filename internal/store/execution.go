@@ -25,7 +25,7 @@ func (s *Store) BeginExecution(ctx context.Context, taskID, sessionID, agentID, 
 		JOIN leases l ON l.task_id=t.task_id AND l.status='active'
 		JOIN sessions s ON s.session_id=l.session_id
 		WHERE t.task_id=? AND t.status='claimed' AND t.revision=? AND t.owner_agent_id=?
-		  AND s.session_id=? AND s.status='active'
+		  AND s.session_id=? AND s.status='active' AND NOT EXISTS (SELECT 1 FROM task_controls c WHERE c.task_id=t.task_id AND c.state<>'')
 	`, taskID, expectedRevision, agentID, sessionID).Scan(&count); err != nil {
 		return err
 	}
@@ -51,6 +51,15 @@ func (s *Store) FinalizeExecution(ctx context.Context, taskID, sessionID string,
 		return err
 	}
 	defer tx.Rollback()
+	// Operator control has already changed the revision. Preserve worker run
+	// evidence; the supervisor settles pause after all worker cleanup returns.
+	var state string
+	if err := tx.QueryRowContext(ctx, `SELECT state FROM task_controls WHERE task_id=?`, taskID).Scan(&state); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if state == "pause-requested" || state == "cancelled" {
+		return nil
+	}
 	var leaseID, projectID, agentID, sessionStatus string
 	err = tx.QueryRowContext(ctx, `
 		SELECT l.lease_id, t.project_id, s.agent_id, s.status

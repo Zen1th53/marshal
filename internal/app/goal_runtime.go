@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -39,11 +40,37 @@ func (r *Runtime) ApproveGoal(ctx context.Context, sessionID string, expectedRev
 	return r.store.GetActiveGoalContract(ctx, sessionID)
 }
 
+// RejectGoal records an owner's refusal as a new immutable, CAS guarded
+// revision. Cancellation retains the original request and constraints.
+func (r *Runtime) RejectGoal(ctx context.Context, sessionID string, expectedRevision int64, reason string) (model.GoalContract, error) {
+	if r == nil || r.store == nil {
+		return model.GoalContract{}, model.ErrUnavailable
+	}
+	g, err := r.store.GetActiveGoalContract(ctx, sessionID)
+	if err != nil {
+		return model.GoalContract{}, err
+	}
+	if g.Revision != expectedRevision {
+		return model.GoalContract{}, model.ErrGoalConflict
+	}
+	if g.Confirmation != model.ConfirmationPending {
+		return model.GoalContract{}, model.ErrConflict
+	}
+	g.Confirmation = model.ConfirmationCancelled
+	g.Revision++
+	g.RevisionReason = "owner rejected goal: " + reason
+	g.UpdatedAt = time.Now().UTC()
+	if err := r.store.SaveGoalContract(ctx, g, expectedRevision); err != nil {
+		return model.GoalContract{}, err
+	}
+	return r.store.GetGoalContract(ctx, g.ID, g.Revision)
+}
+
 // ReviseGoal applies Process 03's canonical revision rule to an exact durable
 // GoalContract revision.  The caller provides only the new interpretation and
 // its reason; the original request and every hard constraint are reconstructed
 // from canonical state and cannot be weakened by the surface.
-func (r *Runtime) ReviseGoal(ctx context.Context, sessionID string, expectedRevision int64, interpretation, reason string) (model.GoalContract, error) {
+func (r *Runtime) reviseGoal(ctx context.Context, sessionID string, expectedRevision int64, interpretation, reason string) (model.GoalContract, error) {
 	if r == nil || r.store == nil {
 		return model.GoalContract{}, fmt.Errorf("%w: goal service is unavailable", model.ErrUnavailable)
 	}
@@ -88,5 +115,11 @@ func (r *Runtime) ReviseGoal(ctx context.Context, sessionID string, expectedRevi
 	if err := r.store.SaveGoalContract(ctx, next, goal.Revision); err != nil {
 		return model.GoalContract{}, err
 	}
-	return r.store.GetActiveGoalContract(ctx, sessionID)
+	return r.store.GetGoalContract(ctx, next.ID, next.Revision)
+}
+
+// ReviseGoal requires an exact command envelope. Trusted surfaces call
+// CommandReviseGoal; agent-facing legacy calls cannot mint operator authority.
+func (r *Runtime) ReviseGoal(ctx context.Context, sessionID string, expectedRevision int64, interpretation, reason string) (model.GoalContract, error) {
+	return model.GoalContract{}, authz.ErrDenied
 }

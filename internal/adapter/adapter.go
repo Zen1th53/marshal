@@ -24,10 +24,13 @@ type Probe struct {
 }
 
 type Request struct {
-	TaskID            string
-	Title             string
-	Worktree          string
-	Model             string
+	TaskID   string
+	Title    string
+	Worktree string
+	Model    string
+	// Effort is a reasoning effort the model's catalog advertises, or empty
+	// for the model's own default.
+	Effort            string
 	BaseCommit        string
 	HeadCommit        string
 	AllowedOperations []string

@@ -9,11 +9,11 @@ Run `marshal claude` or press F8 in MARSHAL to open native Claude Code.
 `marshal claude --resume` opens Claude's picker. Native CLI arguments are passed
 through, including `--model`, `--permission-mode`, attachments and configuration
 options. Within MARSHAL, use `/claude new`, `/claude continue`, `/claude resume`,
-`/claude fork [session]`, or `/claude cli <arguments>`.
+`/claude fork [session]`, or `/claude cli <arguments>`. Bare resume and continue select the latest recorded native conversation for this project; `/claude cli --resume` retains the provider picker.
 
 Plain composer text runs nothing. Launching an agent spends tokens and can touch
-the worktree, so it happens only when the operator names one: `/codex <prompt>`,
-`/claude <prompt>`, `/opencode <prompt>`, or F7/F8/F9 for a native session. A command typed without its
+the worktree, so it happens only when the operator names one: `/codex exec <prompt>`,
+`/claude exec <prompt>`, `/opencode run <prompt>`, or F7/F8/F9 for a native session. A command typed without its
 leading slash is answered with the command it looks like, not with a session.
 
 Native Claude uses the operator's existing `CLAUDE_CONFIG_DIR` (normally
@@ -53,7 +53,7 @@ Run `marshal agy` (or `marshal antigravity`) or press F12 in MARSHAL to open the
 installed Antigravity CLI, `agy`. Native arguments pass through unchanged.
 Within MARSHAL, `/agy new` starts a fresh conversation, `/agy continue` resumes
 the most recent one, `/agy resume <conversation>` selects one by ID, and
-`/agy <prompt>` opens the session with that prompt. `/agy cli <arguments>`
+`/agy prompt <prompt>` opens the session with that prompt. `/agy cli <arguments>`
 exposes the rest of the native CLI, including models, agents, MCP servers and
 plugins. `/antigravity` is the same command.
 
@@ -165,9 +165,9 @@ marshal codex -i "screenshots/error state.png" "Fix this error"
 marshal codex --model MODEL
 ```
 
-In the MARSHAL TUI, F7 opens Codex from either navigation or the composer. A plain
-prompt opens a new native conversation. `/codex continue` resumes the latest
-Codex session for the current directory; `/codex resume` opens its session picker.
+In the MARSHAL TUI, F7 opens Codex from either navigation or the composer. A quoted
+prompt such as `/codex "fix the bug"` opens a new native conversation. `/codex continue` resumes the latest
+Codex session for the current directory; `/codex resume` selects the latest recorded native conversation in this project. The provider picker remains available through `/codex cli resume`.
 `/codex cli <arguments>` passes native options and subcommands, with quoted paths
 and prompts supported. Exit Codex to return to MARSHAL. Use `/codex new` for a
 fresh conversation.
@@ -321,6 +321,9 @@ becomes entitled mid-run can open navigation without restarting.
 | `Ctrl+R` | Interactive reverse history search |
 | Bracketed Paste | Safe multi-line and clipboard text paste without accidental execution |
 
+Function keys F1–F10 and F12 have the actions shown in `/help`; F11 is unassigned.
+F3 uses the same diff action as `/diff`, including a recovery hint when Git fails.
+
 ### Paste and copy
 
 Pasted text arrives as data, never as keystrokes, so a pasted newline is
@@ -367,18 +370,25 @@ Bare `/marshal` shows the current Marshal panel status and command usage.
 drafts a plan using the Marshal model. Completion lists every Marshal
 subcommand, with `chat` first. Fixed-form actions (`help`, `status`, `approve`,
 `close`, `stop`, `resume`, `chat`, `use-plan`) reject extra arguments before
-acting.
+acting. Marshal model choices, amendment decisions, settings keys and enum values
+also complete at their argument positions. Planning without an attached project
+runtime is refused before a run is created. Failed closure, amendment, approval and resume
+operations retain the last task snapshot when no new canonical run is available.
 
 `/memory inject` and `/memory peers` use local project configuration and remain
 available even when the workspace has no database store. `/memory inject`
 rejects extra arguments instead of silently changing the channel or clearing
-project document blocks.
+project document blocks. Peer author lists reject empty lists and `none` mixed
+with other names. `/memory peers participants none` is refused: the channel
+format currently treats an empty participant set as all agents.
+`/memory provenance <id>` looks up the project record directly, including records
+older than the list window.
 
 Autocomplete dynamically queries live runtime state:
 - **Slash Commands**: Typing `/` suggests all valid commands; fuzzy matching is supported (e.g. `/rb` suggests `/rollback`).
 - **Team Agent Mentions**: Typing `@` autocompletes real active session participants (`@codex`, `@claude`, `@opencode`, etc.).
 - **Object References**: Typing `#` autocompletes live canonical entity IDs (`#C-...` claims, `#E-...` evidence, `#T-...` tasks, `#CP-...` checkpoints).
-- **Subcommands**: Suggests valid subcommands for `/goal`, `/budget`, `/policy`, `/provider`, etc.
+- **Subcommands**: Suggests valid subcommands for `/goal`, `/task`, `/checkpoint`, `/policy`, `/provider`, etc.
 
 ### Universal Command Palette (`Ctrl+P`)
 
@@ -390,7 +400,19 @@ Press `Ctrl+P` anywhere in the TUI to open the fuzzy-searchable Command Palette.
 
 ### Working Tree Diff Viewer (`d`)
 
-Press `d` from normal navigation mode to inspect unstaged/staged working tree changes:
+Press `d` from normal navigation mode or use `/diff` to inspect staged, unstaged
+and untracked changes. Section headers show each scope’s file count; use
+`/diff staged`, `/diff unstaged`, or `/diff untracked` to select one scope.
+The inventory is limited to 100 entries, 64 KiB per preview and 1 MiB of total
+preview bytes. Omitted entries and truncated previews are labelled. Reads are
+sequential observations, not an atomic snapshot.
+
+Untracked previews read files directly without staging them. Binary files and
+symlinks have labelled placeholders; previews never follow symlinks outside the
+project. Git external diff, textconv, hooks and fsmonitor helpers are disabled.
+The existing secret redaction applies to previews. A failed inspection closes
+the viewer and reports an error with a recovery hint, never a clean tree.
+
 - Displays colored unified diffs with secret redaction.
 - `n` / `p`: Jump to next / previous hunk.
 - `d` or `Esc`: Return to workspace.
@@ -407,13 +429,15 @@ Two consequences matter:
   exist. Refreshing does not append UI fragments to scrollback.
 - Exiting restores the terminal and the shell's scrollback exactly as they were.
 
+Failed commands retain any handler output and recovery hints alongside the error.
+
 Live events and agent state changes repaint the body while preserving the input
 buffer, the cursor position and any open completion.
 
 ### Safe Interrupt & Exit
 
 - `Ctrl+C`: Interrupts rather than quits. It closes an open overlay first, then clears pending composer input; only a second consecutive press with nothing left to interrupt exits, and any other key disarms that. Durable session state survives either way.
-- `/quit` or `Ctrl+D`: Cleanly exits the TUI without terminating durable background daemon tasks.
+- `/quit` or `Ctrl+D`: Cleanly exits the TUI without terminating durable background daemon tasks. Accepted command names are case insensitive, including `/QUIT` and `/EXIT`; malformed quit commands show usage and keep the workspace open. Exit preserves any already-durable data and does not claim that a workspace without a store has a durable session.
 
 ---
 
@@ -423,61 +447,99 @@ Every user-operable MARSHAL capability has a direct command mapping:
 
 ### Session & Workspace
 - `/update [install]` — Check for a newer published release, or install it. `F10` does the same: it installs the release the notice is showing, and checks when there is none.
-- `/status` — Inspect active runtime, schema, task, and participant counts.
-- `/msg <text>` — Broadcast message to workspace or `@agent` specifically.
-- `/pause` — Pause active workflow execution.
-- `/resume` — Resume paused workflow.
-- `/cancel` — Cancel active workflow.
-- `/doctor` — Run system health diagnostics across SQLite, runtime socket, and harnesses.
-- `/runtime` — Inspect local daemon socket and active execution leases.
-- `/store` — Inspect SQLite database schema version, tables, and integrity.
-- `/diff` — Open interactive working tree diff viewer.
+- `/status` — Show canonical session, goal, team, claim, budget, and termination status. Runtime execution is not verified by this command.
+- `/msg <agent|all> <text>` (`/say`) — Post a message in this workspace's existing team session as the authenticated local owner. The recipient must be a participant; `all` addresses the team. Content is redacted before it is stored. Without a team session nothing is sent and no session is created.
+- `/pause [run:<id>]` — Pause a run of this session as the authenticated local owner, bound to the run version shown. New tasks stop being dispatched at the next task boundary; a task already in a provider turn finishes it, and the reply says when the run is still settling. Without an ID it acts only when exactly one run qualifies, and otherwise lists them.
+- `/resume [run:<id>]` — Resume a paused run of this session: the goal binding is re-validated (a run bound to a superseded goal revision is refused), the run returns to RUNNING and canonical execution restarts. `/resume <id|--last> [native arguments...]` without the `run:` prefix opens native Codex resume when its CLI is installed.
+- `/cancel [run:<id>]` — Cancel a run of this session: the run becomes CANCELLED, no further task is dispatched, and the supervised provider turns of its tasks are cancelled. Without an ID it acts only when exactly one non-terminal run qualifies.
+- `/doctor [codex|provider]` — Run system diagnostics, or native Codex diagnostics in an interactive terminal. Failed project checks include an initialization/diagnostic hint; optional provider probes are not run by bare `/doctor`.
+- `/runtime` — Read back the runtime from the canonical store: instance, schema, agent/session/task/lease counts, and this session's runs with their state, goal binding, task count and policy snapshot. Process liveness is not probed.
+- `/store` — Read the SQLite schema version, run `PRAGMA quick_check`, and show allowlisted inventory counts. `/store check quick` and `/store check full` run only the named check; a pass names that check. Full `PRAGMA integrity_check` can take long. `/store counts` reports agents, sessions, tasks, leases, findings, approvals, artifacts, and audit_events; counts are inventory, not proof of health. Other table names are refused. Diagnostics are read-only, cancel with the command context, and time out after five seconds. Unavailable or failed stores include a recovery hint.
+- `/diff [staged|unstaged|untracked]` — Open the bounded diff inventory (default: all three scopes). Invalid scopes or extra arguments are rejected; failed Git inspection includes a worktree recovery hint.
 - `/quit` — Exit the TUI workspace.
 
+### Agents & Integrations
+
+- `/codex`, `/claude`, `/opencode`, and `/agy` (`/antigravity`) open their native session in an interactive terminal. `status` and `help` inspect availability; `cli <arguments...>` passes native arguments with quoted paths and IDs supported.
+- `/opencode resume [id|--last]` and `/opencode fork [id|--last]`, and `/agy resume [id|--last]`, preserve native options supplied after the session selector. `new` and `continue` reject extra arguments instead of discarding them.
+- `/codex <prompt...>` opens native Codex in the TUI. `/codex exec <prompt...>` and `/codex run <task_id> [model]` retain governed task execution; Claude exposes the same governed operations.
+- `/claude model <slug>` selects the governed model and supports repeated changes. CLI flags are rejected as model names.
+- `/mcp [list|add <name> -- <command> [args...]|get <name>|remove <name>]` manages Codex MCP servers. `rm` and `delete` alias `remove`.
+- `/plugin` and `/plugins` expose Codex plugin listing and native management. Governed `add`/`install` and `remove`/`rm`/`uninstall` require one plugin name; `marketplace <arguments...>` passes through to Codex.
+- `/skills` (or `/codex skills`) lists local Codex skills. Incomplete plugin discovery is reported with a recovery hint while successfully discovered local skills remain visible. Each skill shows its source category (`project-agents`, `home-codex`, `home-gemini` or `home-marketplace`) and installability, without local paths; duplicate names retain every source. HOME catalogs are not installable. `/skill install <name>` (or `/codex skill install <name>`) installs only canonical project skills with digest verification; changed sources and ambiguous names are refused. Completion suggests only currently installable project candidates. Catalog read failures retain partial listings but suppress install suggestions until discovery succeeds.
+- `/sessions` aggregates two labelled inventories: **NATIVE conversations** and **GOVERNED runs**. Provider `sessions`, `runs`, and `history` wrappers show the same two inventories filtered by provider. `/apply <codex_task_id>` runs native `codex apply` with a task ID from Codex itself. MARSHAL never infers that ID: without one, or with a MARSHAL task ID (`TASK-…`), nothing runs, and governed work is delivered with `/diff` and `/marshal accept` instead. The project is snapshotted first, and the result is read back from the files that actually changed (an apply that changes nothing says so); undo with the `/rollback` it names. A runtime must be attached.
+- `/fork [id|--last]` opens native Codex fork in the TUI. `/resume --last` opens native Codex resume; bare `/resume` and `/resume run:<id>` control MARSHAL runs as described above.
+- `/review [instructions]` opens native Codex review in the TUI. Without an interactive terminal, governed commit review supports no instructions and explicitly reports that limitation when instructions are supplied.
+- Native management requires the provider CLI and an interactive terminal. In particular, Claude MCP/plugin/auth/agents/login/logout commands report that requirement in headless use; they do not create governed tasks.
+
 ### Epistemic Claims & Evidence
-- `/claims` — List all claims in the canonical epistemic ledger.
+- `/claims` — List claims for the active goal revision with epistemic verification states.
 - `/claim <id> [UNSUPPORTED|SUPPORTED|VERIFIED|CONTESTED|STALE|INVALIDATED]` — Inspect or update claim status.
-- `/evidence` — List evidence artifacts with provenance and verification hashes.
-- `/inspect <id>` — Inspect claim or evidence detail with contradiction checks.
+- `/evidence <id>` — For a stored artifact, show its kind, digest, size, commit, tasks and producer, and re-read its bytes: `VERIFIED` only when they are inside the content-addressed store, not a symlink, and match the digest; `MISSING`, `DIGEST_MISMATCH`, `OUTSIDE_STORE`, `UNREADABLE` or `NOT_CHECKED_TOO_LARGE` otherwise, never usable as verified evidence. Every claim in the active set that links the artifact (by ID or digest) or the evidence reference is listed as supporting or contradicting. A reference with no stored artifact is labelled reference only. Unknown IDs report NOT FOUND. Inspection never changes or promotes evidence.
+- `/evidence list` — List stored artifacts, newest first (at most 50), and the number of distinct claim evidence references. Payloads are checked only by `/evidence <id>`.
+- `/inspect [claim|evidence|checkpoint|task|handoff|approval|agent] <id>` — Inspect a canonical record, or infer its kind from the identifier.
 
 ### Tasks & Team Management
 - `/tasks` — List coordination tasks, owners, and states.
-- `/task <id> [state]` — Inspect or update task coordination state.
+- `/task [list|inspect <id>|ownership] [--scope project|active]` — Read coordination tasks. `/tasks` accepts the same subcommands. The default scope is the whole project, and every list says so. `--scope active` shows only the tasks of the current plan, matched by their canonical task IDs; without an active plan it says the scope is unavailable instead of falling back to the project.
+- `/task create <title>` — Create a ready coordination task as the authenticated local owner.
+- `/task assign <id> <agent>` — Claim ownership for an existing enabled agent, using a real active session and lease. Dependencies and competing leases must permit the claim.
+- `/task pause <id>` — Stop new dispatch and request supervisor cancellation. A live worker shows `pause-requested` until its turn and cleanup return, then `paused`. Without a live worker, pause settles immediately. A working task with no available supervisor stays `pause-requested`; it is never reported stopped from its stored status alone.
+- `/task resume <id>` — Return a settled paused task to ready after checking its original Goal revision, confirmed Goal, active approved plan and current approval bindings. It does not start a provider turn itself; normal dispatch still applies isolation, policy and approval gates.
+- `/task cancel <id>` — Make the task terminal and release its leases and session ownership. A running supervisor is asked to cancel; terminal cancellation records intent, not proof that the provider process has exited.
+- `/task retry <id>` — Create the next attempt of a blocked task, preserving previous worker runs, failure artifacts and command results. Cancelled tasks cannot be retried.
+
+Task mutations go through the workspace's in-process `app.LocalControl` with independent project-scoped `task.create`, `task.assign` and `task.control` capabilities. Every command binds the exact task, expected revision and idempotency key. The task/lease effects, immutable result snapshot and authenticated actor audit commit together. Replays return the original result revision; current inventory shows observed settlement separately. Task read-back includes `control_state` and `attempt`; worker status remains in its established field. Process 05 task materialization retains its exact Goal and plan bindings. Historical worker-imported tasks acquire a binding on their first operator control. The Unix socket remains the worker protocol, and unattached or unauthorized composers still refuse mutations.
 - `/agents` — List registered team participants, assigned roles, and harness statuses.
 
 ### Goal, Alignment & Constraints
-- `/goal [text]` — View or update session objective and success criteria.
-- `/alignment` — Inspect Alignment Guard scope boundaries and blast radius.
-- `/reinjection` — Inspect constraint re-injection integrity and handoff hashes.
-- `/blind` — Inspect blind interpretation state and divergence checks.
+- `/goal` — View the active goal. `/goal create <request>` forms it through canonical intake; `/goal edit <outcome>` revises its interpretation. `/goal constraints` lists constraints; `/goal add-constraint <text>` adds a hard constraint and `/goal rm-constraint <id|text>` explicitly removes one as the authenticated local owner. Mutations report the stored revision and confirmation state. Revisions return to `PENDING` and stale dependent approvals and execution bindings cannot authorize continuation. `/goal version [revision]` reads an exact revision (default current); `/goal diff [from to]` compares revisions (default previous to current). `/goal criteria` and `/goal donotdo` list current items read-only. `/goal progress` shows canonical criterion statuses and evidence references; missing evidence, unknown/not-run status and stale bindings never count as verified. No completion percentage is synthesized. Unknown verbs show usage and never mutate; free text does not update the goal.
+- `/mode [manual|auto|ultra]` — Inspect or switch the session supervision preference. It grants no authority: hard approvals always stay with you, and ULTRA execution is switched separately with `/ultra start|stop` (`/mode ultra` never turns it on). ULTRA requires a verified entitlement. The label is derived from the live gate on every render, so after an entitlement is withdrawn or expires it shows `ULTRA (INACTIVE: no verified entitlement)` instead of ULTRA.
+- `/handoff <architect|developer|qa|appsec> <summary>` — Hand the session turn to the active participant holding that role, recording a handoff proposal from the local owner. The handoff is bound to the session's current turn: if the turn moved on, nothing changes. A role nobody holds is refused.
+- `/alignment [scope|violations|blast|deletions|status]` — When a governed task finishes, the alignment guard compares the files it changed (and deleted) with the task's predicted files and the goal's scope, and checks goal-revision drift. It runs in advisory mode: violations are recorded on the task and shown here, and never block the run. `status` summarises each evaluated task; the other forms list violations, filtered by type.
+- `/alignment resolve run:<run>/<task>#<n> <acknowledged|goal-amendment-needed> <reason>` — Record the authenticated local owner's decision against one violation, bound to the run version shown. The violation itself is never removed or downgraded; a scope change still needs a goal revision.
+- `/reinjection` — For each run of this session, show the goal revision it is bound to (CURRENT, or STALE against the current goal), how many hard constraints it carries, and the constraint package digest each native turn actually received; a run with no native turn has injected nothing yet. Extra arguments return usage.
+- `/blind` — Not available in this build: no blind interpretations are collected, so there is nothing to read back or resolve. It is omitted from `/help` and completion and answers that it is unavailable.
 
 ### Routing, ULTRA & Harnesses
-- `/route` — Inspect harness selection rationale and capability match.
+- `/route [role=<architect|developer|qa|appsec>] [harness=<name>] [risk=<R0|R1|R2|R3>]` — Compute an advisory route; never applies it to Runtime. It shows whether the routed harness is installed, and the model a run would actually use: the `/model select` execution preference for Codex and Claude, otherwise the provider default resolved at dispatch. The router never names a model itself. An unknown harness is refused, and a preference the role does not run on is reported, not silently ignored. The effort shown is a suggestion; `/effort` sets what Codex runs request.
+- `/why` — With a verified ULTRA entitlement, explain the exact route `/route` last computed, including its request, harness status and model; if the goal has changed since, say the route is stale. Without a `/route` request it explains the default developer route.
 - `/ultra [status|start|stop|request]` — Show ULTRA status, switch execution on or off for the session, or request an entitlement.
-- `/harness [name]` — Inspect or select preferred harness.
-- `/model [name]` — Set model selection for active harness.
-- `/effort [low|medium|high]` — Configure native reasoning effort.
-- `/fingerprint` — Inspect failure fingerprinting and normalized error vectors.
+- `/harness [probe|status|select <role> <harness>]` — Probe CLI availability. Selection is recognized but NOT applied because authenticated runtime execution-profile integration is unavailable.
+- `/model [show]` — Show the execution model preferences that future governed Codex and Claude runs read, with their revisions, then the saved harness model defaults, which are not applied. `/model <codex_slug>` selects a Codex execution model through its control authority. `/model select <codex|claude> <model_name>` records the model future governed runs of that adapter use, as the authenticated local owner: the model must be in the adapter's catalog, the change is bound to the revision shown, and runs already started keep their model. Other harnesses read no model preference, so a selection for them is refused.
+- `/models` — List discovered Codex models and selection through the control authority; extra arguments return usage.
+- `/effort [minimal|low|medium|high|xhigh|default]` — Without an argument, show the reasoning effort future governed Codex runs request (with the selected model and preference revision), then the probed knobs and advisory route default, which are not applied. With a level, record it as the authenticated local owner: a Codex model must be selected first, the level must be one that model's catalog advertises, the change is bound to the preference revision, and `default` returns to the model's own default. Governed runs pass it to Codex (`turn/start` effort, or `model_reasoning_effort` for the exec path) only when they run the preferred model. Selecting another model keeps the effort only if the new model advertises it. Claude runs read no reasoning effort.
+- `/fingerprint` — Group the failures every run durably recorded by their normalized signature (the same derivation the retry registry uses), with occurrence, task and run counts and when each was last seen; a signature seen twice or more is flagged as one where blind retry should stop. Signatures are redacted and shortened before display. Without a runtime it reports `NOT_AVAILABLE`.
 
 ### Governance, Budgets & Approvals
-- `/budget [amount]` — Inspect or update token/cost/time budget limits.
-- `/checkpoint [name]` — Create durable checkpoint of worktree and epistemic state.
-- `/rollback [id]` — Roll back worktree and claims to a prior checkpoint.
-- `/approvals` — List approvals awaiting a decision; `/approvals history` shows past decisions.
+- `/budget` — Inspect consumed budget (missing token and cost measurements are UNKNOWN), the active goal revision's limits, and each run's engine-counted consumption.
+- `/budget set [calls=<n>] [duration=<go duration>]` / `/budget clear` — Change the limits by revising the goal as the authenticated local owner; like every contract edit the new revision is PENDING until confirmed. The engine checks each run against its goal revision's limits before dispatching another task and blocks the run with `BUDGET_EXHAUSTED_CALLS` or `BUDGET_EXHAUSTED_WALLCLOCK` when one is reached. Token and cost limits are refused: not every provider reports them, and an unreported value is never read as 0.
+- `/checkpoint list` (or bare `/checkpoint`) — List the project's execution snapshots, newest first, including those the operator captured. A snapshot holds the project's files, excluding `.git` and `.marshal`. Collaboration handoff checkpoints are separate records (`/inspect checkpoint <id>`) with no files to restore.
+- `/checkpoint inspect <id>` — Show a snapshot's run, task, commit and reason, and re-read its files: `INTACT` only when they match the digest bound at capture; `TAMPERED`, `MISSING`, `NO_SNAPSHOT_DIGEST` or `UNREADABLE` otherwise.
+- `/checkpoint diff <from> <to>` — List files added, removed and changed between two intact snapshots (at most 200 paths). A snapshot that is not intact is refused, and no external diff program runs.
+- `/checkpoint create <reason>` — Snapshot the project's files (not `.git` or `.marshal`) as the authenticated local owner. Inspection never captures, restores or repairs anything.
+- `/rollback <id>` — Preview a restore: which files would be restored, deleted and overwritten, and the snapshot's digest. Nothing changes.
+- `/rollback <id> confirm <digest>` — Restore, bound to the digest the preview showed. It is refused while any run of the project is executing or holds active work, and when the snapshot is no longer intact. A recovery checkpoint of the current state is captured first; after restoring, every project file is re-read and must match the snapshot, or the restore is reported as failed with the recovery point to use. `.git` and `.marshal` are never touched.
+- `/approvals` — List pending goal, plan, execution and SQLite approvals with typed IDs; `/approvals history` shows durable action decisions and the current goal/plan decisions.
 - `/approval inspect <id>` — Inspect one approval record; `/approval diff <id>` shows its commit binding and the live working tree.
-- `/approve [id]` — Approve pending high-risk action or out-of-scope write.
-- `/reject [id]` — Reject pending approval request.
+- `/approve <id>` — Confirm the exact pending record through authenticated in-process LocalControl. IDs are `goal:<id>@<revision>`, `plan:<id>@<version>`, `execution:<id>` or `approval:<id>` (SQLite). An unambiguous bare ID is accepted; an ambiguous ID is refused with its typed candidates.
+- `/reject <id> [reason]` — Reject an action approval, cancel a pending goal revision or cancel a ready plan through the same canonical boundary. Decisions require a scoped `approval.decide` grant, bind the displayed version/state digest, persist receipts and audit, and report the re-read result. Expired, consumed or stale approvals cannot be decided.
 - `/termination` — Inspect the canonical termination state and reason for the active goal.
 
 ### Security, Sandbox & Providers
-- `/policy` — Inspect capability broker, network egress, and gate policies.
-- `/sandbox` — Inspect Bubblewrap isolation status and worktree disk budget.
-- `/provider [name]` — Inspect or configure LLM provider connection health.
+- `/policy [network|sandbox|capability|scope|write|audit]` — Separate configured from observed: the active runtime policy (or NONE), whether the gate engine is configured or the built-in placeholder whose only check always passes (a hook, not enforcement), and the gate decisions actually recorded. Each aspect is still reported as NOT VERIFIED, since no execution-bound observation of it is recorded. No policy is changed; unknown or extra arguments return usage.
+- `/sandbox` — Report runtime isolation NOT VERIFIED. `/sandbox <read-only|workspace-write>` opens native Codex with that sandbox mode and the saved Codex model preference in an interactive terminal; it does not persist a policy.
+- `/provider [status|config <harness|provider>]` — Inspect harness availability, with authentication UNKNOWN until established by execution. MARSHAL reaches providers through harnesses, so `config` accepts a harness (`claude`, `codex`, `opencode`, `antigravity`) or a provider name that maps to one (`anthropic`, `openai`, `google`). It inspects and changes no configuration; it names the real controls (`/model select`, `/effort`, the harness's own login). For Codex and Claude the model shown is the execution preference future runs read. Inline credentials are explicitly refused. `/providers` is an alias.
 - `/memory` — Query durable memory fabric records and search projections.
-- `/backup` — Create SQLite database snapshot.
-- `/export` — Write a real evidence bundle to `.marshal/evidence/`, carrying the active goal, its critical claims and evidence refs, and a deterministic digest.
+- `/backup create` — Write and verify a SQLite snapshot under `.marshal/backups/`, retaining distinct files for rapid repeated calls. `/backup restore <backup_path>` verifies an artifact and says what a restore would do; nothing changes. `/backup restore <backup_path> confirm <digest>` restores it from the live session as the authenticated local owner (Linux): the current state is first backed up to `.marshal/backups/pre-restore-*.db`, the restore is refused while any process (another MARSHAL window, the daemon, or this one) still has the database or its WAL open, and the restored file must match the confirmed digest before the runtime is reopened on it. Elsewhere, or as an alternative, the offline `marshal state restore` remains; it now also refuses while the database is open. Quote paths containing spaces. Bare `/backup` shows usage.
+- `/export` — Refresh canonical state, then write an evidence bundle for the current goal revision to `.marshal/evidence/`, with critical claims, evidence refs, and a deterministic digest. Without a goal, it explains the required canonical session rather than recommending an unavailable TUI edit. Extra arguments return usage.
+- `/optimization <cycle_id>` — Read a canonical optimization cycle and its decisions, vetoes, blocked actions, and digest. Missing records and store failures include a recovery hint.
+- `/features [list|enable <feature>|disable <feature>]` — List or toggle native Codex feature flags. Bare `/features` lists; malformed arguments return usage.
+- `/search [on|off]` — Open native Codex with the requested search setting and saved Codex model preference in an interactive terminal. Accepted aliases are `enable`/`true` and `disable`/`false`; no setting is persisted by this command.
+- `/login`, `/logout` — Open native Codex authentication commands in an interactive terminal. Without a terminal, authentication stays unchanged. Extra arguments return usage.
 - `/context` — Show the context strategy the ULTRA router derives from the current role and risk.
-- `/help` — Display interactive help and keybinding summary.
+- `/verification <id>` — Inspect a canonical verification run.
+- `/help` (alias `/?`) — Display interactive help and keybinding summary.
 
 ---
 
@@ -529,9 +591,87 @@ Current limitations, stated rather than hidden:
   `BLOCKED_BY_POLICY`, never as availability.
 - **Antigravity headless execution is unavailable** unless the `agy` CLI is
   installed. The Antigravity desktop IDE is not a headless harness.
-- **Failure fingerprints are not persisted.** The registry in `internal/epistemic`
-  is per-run and in-memory, so `/fingerprint` reports `NOT_AVAILABLE` rather than
-  asserting a clean result it cannot establish.
-- **Backup restore is not performed from a live session**, since it would swap the
-  database out from under an open workspace. `/backup restore` verifies the
-  artifact and directs the operator to the offline path.
+- **Failure fingerprints are recomputed, not stored.** The retry registry in
+  `internal/epistemic` is per-run and in-memory; `/fingerprint` recomputes the
+  same signatures from the failure reasons each run recorded durably.
+- **Live backup restore is coordinated, and Linux-only.** Swapping a database
+  under open connections would discard their uncheckpointed WAL, so a restore
+  is refused while any process holds the database. Detecting that needs
+  open-file inspection, available on Linux; elsewhere use the offline path.
+
+Provider slash commands use an explicit grammar. Bare `/codex`, `/claude`,
+`/opencode`, and `/agy` (also `/antigravity`) still open their native sessions
+in a terminal. Send work with `/codex exec <text>`, `/claude exec <text>`,
+`/opencode run <text>`, or `/agy prompt <text>`. A quoted first argument,
+for example `/codex "fix the bug"`, opens a native session with that prompt
+(Codex and Claude use governed execution when no terminal is attached).
+Unknown first words run nothing. Typos within edit distance two suggest a
+known subcommand and explain the prompt syntax. `/agy fork` is unsupported;
+use `/agy cli <native arguments>` for vendor-owned syntax. All providers'
+`cli` escape hatches preserve native argument values and ordering. Command
+aliases are normalized by the same application table in terminal and batch
+launches: Codex plugin `install` becomes `add`, while Claude and agy plugin
+`remove`/`rm` become `uninstall`; MCP `rm`/`delete` become `remove` where
+that provider has a removal verb. OpenCode `auth` becomes `providers`.
+
+Provider completion and `/help` use a version-qualified dialect record.
+The offline CLI help currently qualifies only Codex **0.159.2**, Claude
+**2.1.286**, OpenCode **1.18.16**, and agy **1.2.7** (singleton version
+ranges). Other versions and unlisted operations stay **UNKNOWN**. Help labels
+them **unqualified pass-through via cli**; completion still offers them, with
+that label, so a CLI version MARSHAL has not qualified keeps its commands.
+Operations shown not to exist for the qualified version are withheld. The `cli` completion itself identifies its arguments as
+unqualified pass-through. Explicit unqualified commands retain their existing
+execution paths and display that qualification status. Known **UNSUPPORTED**
+operations are refused before launch, including through `cli` and after
+fixed-arity global options. An unknown vendor operation is never treated as
+a prompt by MARSHAL's provider-command parser.
+Raw CLI positional values are checked only at recognized native command
+positions: Claude's prompt `review`, OpenCode's project directory `review`,
+and agy's positional `fork` remain UNKNOWN pass-through values.
+
+Codex uses `resume`/`fork` in a terminal and `exec resume`/`exec fork` in
+headless wrappers. Named headless forks require a session ID. Latest-session
+`fork --last` is terminal-only: the qualified version has no `exec fork
+--last` flag. Resume supports `--last` in both modes. These forms, and
+`exec review`, are backed by the qualified Codex version's help. Governed `/review` still reviews the current commit and
+does not accept custom instructions. Claude session/management wrappers and
+OpenCode/agy native wrappers remain **terminal-only in MARSHAL**, even when
+the vendor has a separate batch grammar. Help and completion mark that
+boundary. MARSHAL's local model, task, and history services are identified
+separately from vendor grammar.
+
+Qualification observes only bounded `--version` probes (two seconds, 64 KiB,
+no stdin); help evidence is checked in, never discovered by running a session.
+Completion refresh invalidates cached qualification when the executable's
+identity, modification time, size, or mode changes. This record establishes
+grammar support, not authentication, session success, or sandbox/network
+enforcement. Existing execution authorization and isolation checks remain
+in force. `MARSHAL_PROVIDER_PATH_ONLY=1` opts into PATH-only discovery for
+isolated runs; normal discovery retains its existing fallback directories.
+See [qualification evidence](testing/provider-dialects/README.md).
+
+## Native conversation identities and selection
+
+Native inventory IDs have the form `native:<provider>:<project fingerprint>:<escaped source ID>`.
+The fingerprint binds the canonical project directory; moving the project changes the qualified
+ID without changing the provider's original source ID or imported memory ownership. Inventory
+rows identify their source: imported transcript, provider history index, or provider listing.
+No conversation text, hidden reasoning, credentials, or provider home paths are displayed.
+
+`/resume <id|--last>` and `/fork <id|--last>` select native Codex conversations.
+Provider resume/fork/continue wrappers select only that provider's native conversations in the
+current project. A known raw provider ID is also accepted after the same validation; use the
+qualified inventory ID to make ownership explicit. Governed run, task, and worker session IDs,
+IDs qualified for another provider or project, and unknown IDs are refused with a reason.
+`--last` (and a bare provider resume/fork/continue) selects the newest recorded native conversation
+for this provider and project, then passes its original source ID to the provider. Trailing native
+options are retained. Bare `/resume` retains its governed runtime-control meaning.
+
+An imported transcript or on-disk history index is **resumability unverified**. Only an entry
+present in the provider's own listing is labelled provider-listed (currently OpenCode's public
+JSON listing); even that operation remains subject to the installed provider dialect. Imports
+alone do not manufacture provider state. Missing or unreadable history is shown as unavailable,
+and no history cursor migration is needed. Explicit `/provider cli ...` remains vendor-owned
+pass-through, including pickers. Headless Codex resume/fork uses the same native home as the
+inventory; governed task execution continues to use its isolated home.

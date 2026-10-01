@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/model"
@@ -19,15 +20,50 @@ func (s *Store) SchemaVersion(ctx context.Context) (int, error) {
 	return version, nil
 }
 
+// DiagnosticTimeout bounds read-only diagnostics, including connection acquisition.
+const DiagnosticTimeout = 5 * time.Second
+
 func (s *Store) Integrity(ctx context.Context) error {
-	var result string
-	if err := s.db.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&result); err != nil {
-		return fmt.Errorf("SQLite integrity check: %w", err)
+	return s.integrityCheck(ctx, "integrity_check")
+}
+
+// QuickCheck is the bounded TUI diagnostic; it applies DiagnosticTimeout itself.
+func (s *Store) QuickCheck(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, DiagnosticTimeout)
+	defer cancel()
+	return s.integrityCheck(ctx, "quick_check")
+}
+
+// integrityCheck honours the caller's context only: Integrity serves marshal
+// doctor, which must be able to finish a full check on a large database.
+func (s *Store) integrityCheck(ctx context.Context, check string) error {
+	rows, err := s.db.QueryContext(ctx, "PRAGMA "+check)
+	if err != nil {
+		return fmt.Errorf("SQLite %s: %w", check, err)
 	}
-	if result != "ok" {
-		return fmt.Errorf("SQLite integrity check: %s", result)
+	defer rows.Close()
+	var failures []string
+	for rows.Next() {
+		var result string
+		if err := rows.Scan(&result); err != nil {
+			return fmt.Errorf("SQLite %s: %w", check, err)
+		}
+		if result != "ok" {
+			failures = append(failures, result)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("SQLite %s: %w", check, err)
+	}
+	if len(failures) > 0 {
+		return fmt.Errorf("SQLite %s: %s", check, strings.Join(failures, "; "))
 	}
 	return nil
+}
+
+// CountTables returns the fixed inventory allowlist in display order.
+func CountTables() []string {
+	return []string{"agents", "sessions", "tasks", "leases", "findings", "approvals", "artifacts", "audit_events"}
 }
 
 func (s *Store) Project(ctx context.Context) (model.Project, error) {
@@ -46,13 +82,18 @@ func (s *Store) Project(ctx context.Context) (model.Project, error) {
 }
 
 func (s *Store) Count(ctx context.Context, table string) (int, error) {
-	allowed := map[string]bool{
-		"agents": true, "sessions": true, "tasks": true, "leases": true,
-		"findings": true, "approvals": true, "artifacts": true, "audit_events": true,
+	allowed := false
+	for _, name := range CountTables() {
+		if name == table {
+			allowed = true
+			break
+		}
 	}
-	if !allowed[table] {
+	if !allowed {
 		return 0, fmt.Errorf("%w: unsupported count table", model.ErrInvalid)
 	}
+	ctx, cancel := context.WithTimeout(ctx, DiagnosticTimeout)
+	defer cancel()
 	var count int
 	if err := s.db.QueryRowContext(ctx, "SELECT count(*) FROM "+table).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count %s: %w", table, err)
@@ -119,6 +160,9 @@ func (s *Store) ListTasks(ctx context.Context) ([]model.Task, error) {
 		return nil, fmt.Errorf("close task rows: %w", err)
 	}
 	for i := range tasks {
+		if err = s.taskControl(ctx, &tasks[i]); err != nil {
+			return nil, err
+		}
 		tasks[i].Dependencies, err = s.taskDependencies(ctx, tasks[i].ID)
 		if err != nil {
 			return nil, err
@@ -139,6 +183,9 @@ func (s *Store) GetTask(ctx context.Context, taskID string) (model.Task, error) 
 	}
 	if err != nil {
 		return model.Task{}, fmt.Errorf("read task: %w", err)
+	}
+	if err = s.taskControl(ctx, &task); err != nil {
+		return model.Task{}, err
 	}
 	task.Dependencies, err = s.taskDependencies(ctx, task.ID)
 	if err != nil {

@@ -13,6 +13,9 @@ func FindBinary(name string) (string, error) {
 	if path, err := exec.LookPath(name); err == nil {
 		return path, nil
 	}
+	if os.Getenv("MARSHAL_PROVIDER_PATH_ONLY") == "1" {
+		return "", fmt.Errorf("%s binary missing from PATH", name)
+	}
 	if home, err := os.UserHomeDir(); err == nil {
 		for _, dir := range []string{
 			filepath.Join(home, ".local", "bin"),

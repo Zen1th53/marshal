@@ -3,6 +3,7 @@ package tui
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/collaboration"
@@ -96,6 +98,10 @@ type Workspace struct {
 
 	// Completion popup state. Tab is completion only: it opens or cycles this
 	// list and never submits, so it can never execute a partially typed command.
+	// lastRoute is the most recent /route request and result, bound to the
+	// goal revision it was computed for, so /why explains exactly that route.
+	lastRoute *routeRecord
+
 	completionOpen     bool
 	completionSelected bool
 	completionText     string
@@ -253,43 +259,82 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 		Commands: []string{
 			"/status", "/goal", "/mode", "/claims", "/inspect", "/approve", "/reject",
 			"/route", "/agents", "/evidence", "/why", "/msg", "/handoff", "/checkpoint",
-			"/rollback", "/budget", "/pause", "/resume", "/cancel", "/doctor", "/tasks",
-			"/policy", "/sandbox", "/memory", "/provider", "/harness", "/model", "/models",
+			"/rollback", "/budget", "/pause", "/resume", "/cancel", "/doctor", "/tasks", "/task",
+			"/policy", "/sandbox", "/memory", "/provider", "/providers", "/harness", "/model", "/models",
 			"/effort", "/ultra", "/marshal", "/backup", "/fingerprint", "/runtime", "/store", "/export",
-			"/blind", "/reinjection", "/alignment", "/optimization", "/diff", "/review",
+			"/reinjection", "/alignment", "/optimization", "/verification", "/diff", "/review",
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
+			"/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
 		},
 		Agents:      agentIDs,
 		Subcommands: make(map[string][]string),
 	}
+	compCtx.Subcommands["/store"] = []string{"check", "counts"}
+	compCtx.Subcommands["/store check"] = []string{"quick", "full"}
+	compCtx.Subcommands["/mode"] = []string{"manual", "auto", "ultra"}
+	compCtx.Subcommands["/inspect"] = []string{"claim", "evidence", "checkpoint", "task", "handoff", "approval", "agent"}
+	compCtx.Subcommands["/diff"] = []string{"staged", "unstaged", "untracked"}
 	compCtx.Subcommands["/goal"] = []string{"create", "edit", "diff", "version", "criteria", "constraints", "add-constraint", "rm-constraint", "donotdo", "progress"}
-	compCtx.Subcommands["/task"] = []string{"create", "inspect", "assign", "pause", "resume", "cancel", "retry", "ownership"}
+	compCtx.Subcommands["/tasks"] = []string{"list", "create", "inspect", "assign", "pause", "resume", "cancel", "retry", "ownership"}
+	compCtx.Subcommands["/task"] = []string{"list", "create", "inspect", "assign", "pause", "resume", "cancel", "retry", "ownership"}
 	compCtx.Subcommands["/policy"] = []string{"network", "sandbox", "capability", "scope", "write", "audit"}
 	compCtx.Subcommands["/checkpoint"] = []string{"list", "create", "inspect", "diff"}
 	compCtx.Subcommands["/memory"] = []string{"list", "search", "provenance", "inject", "peers"}
 	// Second level: the agents a channel line can name, plus the keywords.
-	// "agy" is offered rather than "antigravity" because agy is what the
-	// operator types everywhere else.
-	compCtx.Subcommands["/memory peers"] = []string{"participants", "claude", "codex", "opencode", "agy"}
+	// Offer both the short agent command and the canonical provider name.
+	compCtx.Subcommands["/memory peers"] = []string{"participants", "claude", "codex", "opencode", "agy", "antigravity"}
+	compCtx.Subcommands["/memory inject"] = []string{"auto", "system-prompt", "project-doc", "prompt", "off", "preview", "clear"}
+	compCtx.Subcommands["/memory inject preview"] = []string{"claude", "codex", "opencode", "agy", "antigravity"}
+	compCtx.Subcommands["/ultra stop"] = []string{"confirm"}
 	compCtx.Subcommands["/harness"] = []string{"probe", "status", "select"}
 	compCtx.Subcommands["/ultra"] = []string{"status", "start", "stop", "request"}
 	compCtx.Subcommands["/provider"] = []string{"status", "config"}
+	compCtx.Subcommands["/providers"] = compCtx.Subcommands["/provider"]
 	compCtx.Subcommands["/alignment"] = []string{"scope", "violations", "blast", "deletions", "resolve", "status"}
-	compCtx.Subcommands["/codex"] = []string{"doctor", "models", "model", "review", "sessions", "mcp", "plugin", "apply", "diff", "resume", "fork", "agents", "features", "sandbox", "approval", "search", "login", "logout", "skill", "run", "exec", "cli"}
-	compCtx.Subcommands["/mcp"] = []string{"list", "add", "rm"}
-	compCtx.Subcommands["/claude"] = []string{"new", "continue", "resume", "fork", "cli", "status", "models", "model", "doctor", "sessions", "exec", "run", "mcp", "plugin", "auth", "agents", "login", "logout"}
-	compCtx.Subcommands["/opencode"] = []string{"new", "continue", "resume", "fork", "cli", "status", "models", "providers", "auth", "mcp", "agent", "session", "stats", "run", "debug"}
-	compCtx.Subcommands["/agy"] = []string{"new", "continue", "resume", "cli", "status", "models", "agents", "mcp", "plugin", "changelog"}
+	compCtx.Subcommands["/codex"] = providerSubcommands["codex"]
+	compCtx.Subcommands["/mcp"] = []string{"list", "add", "get", "remove", "rm", "delete"}
+	compCtx.Subcommands["/claude"] = providerSubcommands["claude"]
+	compCtx.Subcommands["/opencode"] = providerSubcommands["opencode"]
+	compCtx.Subcommands["/agy"] = providerSubcommands["agy"]
 	compCtx.Subcommands["/antigravity"] = compCtx.Subcommands["/agy"]
 	compCtx.Subcommands["/marshal"] = marshalSubcommands
-	compCtx.Subcommands["/plugin"] = []string{"list", "add", "rm"}
-	compCtx.Subcommands["/plugins"] = []string{"list", "add", "rm"}
-	compCtx.Subcommands["/search"] = []string{"on", "off"}
+	compCtx.Subcommands["/marshal model"] = []string{"codex", "claude", "agy"}
+	compCtx.Subcommands["/marshal amend"] = []string{"approve", "deny"}
+	compCtx.Subcommands["/marshal settings"] = []string{"execution-rights", "acceptance-mode", "rework-limit", "ultra-concurrency", "control"}
+	compCtx.Subcommands["/marshal settings execution-rights"] = []string{"none", "read-only", "small-tasks"}
+	compCtx.Subcommands["/marshal settings acceptance-mode"] = []string{"marshal", "marshal-then-user", "user"}
+	compCtx.Subcommands["/marshal settings control"] = []string{"free", "strict"}
+	for _, reader := range []string{"participants", "claude", "codex", "opencode", "agy", "antigravity"} {
+		compCtx.Subcommands["/memory peers "+reader] = []string{"all", "none", "claude", "codex", "opencode", "agy", "antigravity"}
+		if reader == "participants" {
+			compCtx.Subcommands["/memory peers "+reader] = []string{"all", "claude", "codex", "opencode", "agy", "antigravity"}
+		}
+	}
+	compCtx.Subcommands["/plugin"] = []string{"list", "add", "install", "remove", "rm", "uninstall", "marketplace"}
+	compCtx.Subcommands["/plugins"] = []string{"list", "add", "install", "remove", "rm", "uninstall", "marketplace"}
+	compCtx.Subcommands["/codex mcp"] = compCtx.Subcommands["/mcp"]
+	compCtx.Subcommands["/codex plugin"] = compCtx.Subcommands["/plugin"]
+	compCtx.Subcommands["/codex plugins"] = compCtx.Subcommands["/plugin"]
+	compCtx.Subcommands["/skill"] = []string{"install"}
+	compCtx.Subcommands["/codex skill"] = compCtx.Subcommands["/skill"]
+	compCtx.Subcommands["/codex features"] = []string{"list", "enable", "disable"}
+	compCtx.Subcommands["/backup"] = []string{"create", "restore"}
+	compCtx.Subcommands["/model"] = []string{"show", "select"}
+	compCtx.Subcommands["/effort"] = []string{"minimal", "low", "medium", "high", "xhigh", "default"}
+	compCtx.Subcommands["/features"] = []string{"list", "enable", "disable"}
+	compCtx.Subcommands["/doctor"] = []string{"codex", "provider"}
+	compCtx.Subcommands["/search"] = []string{"on", "off", "enable", "disable", "true", "false"}
 	compCtx.Subcommands["/sandbox"] = []string{"read-only", "workspace-write"}
 	compCtx.Subcommands["/resume"] = []string{"--last"}
 	compCtx.Subcommands["/fork"] = []string{"--last"}
+	compCtx.Subcommands["/codex resume"] = compCtx.Subcommands["/resume"]
+	compCtx.Subcommands["/codex fork"] = compCtx.Subcommands["/fork"]
+	compCtx.Subcommands["/codex sandbox"] = compCtx.Subcommands["/sandbox"]
+	compCtx.Subcommands["/codex approval"] = []string{"on-request", "never"}
+	compCtx.Subcommands["/codex search"] = compCtx.Subcommands["/search"]
 
+	qualifyProviderCompletions(context.Background(), &compCtx, false)
 	completer := NewCompleter(compCtx)
 	composer := NewComposer(th)
 	composer.SetPrompt(ComposerPromptInfo{
@@ -333,6 +378,29 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			GitStatus:          ProbeGitStatus(cwd),
 			Participants:       participants,
 		},
+	}
+	ws.completer.ctx.InstallableSkills = func() []string {
+		source := ws.controlSource()
+		if source == nil {
+			return nil
+		}
+		reader, ok := source.Authority.(interface {
+			LocalCodexSkills() ([]codex.SkillInfo, error)
+		})
+		if !ok {
+			return nil
+		}
+		skills, err := reader.LocalCodexSkills()
+		if err != nil {
+			return nil
+		}
+		var names []string
+		for _, skill := range skills {
+			if skill.Installable {
+				names = append(names, skill.Name)
+			}
+		}
+		return names
 	}
 	ws.navReleased = navigationReleased
 	ws.cmd = NewCommandHandler(ws)
@@ -388,6 +456,9 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 
 	// 3. Recover active GoalContract for this session
 	goal, err := w.store.GetActiveGoalContract(ctx, w.sessionID)
+	if err != nil && !errors.Is(err, model.ErrGoalNotFound) {
+		return fmt.Errorf("read active goal: %w; reopen the TUI and check /store", err)
+	}
 	if err == nil {
 		w.state.Goal = goal
 		w.state.UnderstandingState = goal.UnderstandingState
@@ -402,12 +473,16 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 		budget, err := w.store.GetBudgetTracker(ctx, w.sessionID, goal.ID, goal.Revision)
 		if err == nil && budget != nil {
 			w.state.BudgetConsumed = *budget
+		} else if errors.Is(err, model.ErrNotFound) {
+			w.state.BudgetConsumed = model.ConsumedBudget{}
 		}
 
 		// 6. Recover Termination status if any
 		term, err := w.store.GetGoalTermination(ctx, w.sessionID, goal.ID, goal.Revision)
 		if err == nil && term != nil {
 			w.state.TerminationState = term.State
+		} else if errors.Is(err, model.ErrNotFound) {
+			w.state.TerminationState = ""
 		}
 	}
 
@@ -435,8 +510,12 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 
 	// 9. Update autocomplete context with live objects
 	var claimIDs []string
+	var evidenceIDs []string
 	for _, c := range w.state.Claims {
 		claimIDs = append(claimIDs, c.ID)
+		for _, ev := range append(append([]model.EvidenceRef{}, c.SupportingEvidence...), c.ContradictingEvidence...) {
+			evidenceIDs = append(evidenceIDs, ev.EvidenceID)
+		}
 	}
 	var agentIDs []string
 	for _, p := range w.state.Participants {
@@ -459,6 +538,7 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 
 	compCtx := w.completer.ctx
 	compCtx.Claims = claimIDs
+	compCtx.Evidence = evidenceIDs
 	compCtx.Agents = agentIDs
 	compCtx.Tasks = taskIDs
 	compCtx.Checkpoints = cpIDs
@@ -476,13 +556,37 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 }
 
 // GetUIState returns a snapshot copy of current UI state.
-func (w *Workspace) GetUIState() UIState {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+// liveStateLocked overlays the live ULTRA gate on the cached state, so every
+// surface derives entitlement, navigation and the effective mode label from
+// the gate at render time rather than from a value captured earlier. Callers
+// hold w.mu.
+func (w *Workspace) liveStateLocked() UIState {
 	state := w.state
 	state.UltraEntitled = w.ultra.Entitled()
 	state.UltraExecution = w.ultraExecution
 	state.NavigationAvailable = w.navReleased && state.UltraEntitled
+	state.SessionMode = effectiveModeLabel(w.mode, state.UltraEntitled)
+	return state
+}
+
+// effectiveModeLabel names the supervision mode as it currently applies. An
+// ULTRA preference without a live entitlement is shown as inactive instead of
+// as ULTRA, so a withdrawn or expired lease never leaves an ULTRA label behind.
+func effectiveModeLabel(mode string, entitled bool) string {
+	label := strings.ToUpper(mode)
+	if label == "" {
+		label = "MANUAL"
+	}
+	if label == "ULTRA" && !entitled {
+		return "ULTRA (INACTIVE: no verified entitlement)"
+	}
+	return label
+}
+
+func (w *Workspace) GetUIState() UIState {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	state := w.liveStateLocked()
 	return state
 }
 
@@ -490,7 +594,7 @@ func (w *Workspace) GetUIState() UIState {
 func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, error) {
 	res, err := w.cmd.Handle(ctx, line)
 	if err != nil {
-		return "", err
+		return res, err
 	}
 	_ = w.RefreshState(ctx)
 	return res, nil
@@ -662,11 +766,11 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				if !w.interruptArmed {
 					w.interruptArmed = true
 					w.renderFullView()
-					fmt.Fprintln(w.out, "Press Ctrl+C again to exit, or /quit. The session stays durable either way.")
+					fmt.Fprintln(w.out, "Press Ctrl+C again to exit, or /quit. Any durable session data is preserved either way.")
 					continue
 				}
 				w.terminal.ClearScreen()
-				fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Session remains durable.")
+				fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 				return nil
 			}
 
@@ -707,7 +811,7 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				w.mu.RUnlock()
 				if exitRequested {
 					w.terminal.ClearScreen()
-					fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Session remains durable.")
+					fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 					return nil
 				}
 				w.renderFullView()
@@ -748,12 +852,7 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				w.runCommand(ctx, "/review")
 				continue
 			case KeyF3:
-				if w.diffViewer.IsOpen() {
-					w.diffViewer.Close()
-				} else {
-					_ = w.diffViewer.Open()
-				}
-				w.renderFullView()
+				w.runCommand(ctx, "/diff")
 				continue
 			case KeyF4:
 				w.runCommand(ctx, "/status")
@@ -830,6 +929,11 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 								return nil
 							}
 							w.runCommand(ctx, cmd)
+							if w.commandExitRequested() {
+								w.terminal.ClearScreen()
+								fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
+								return nil
+							}
 						}
 						w.renderComposer()
 						continue
@@ -889,10 +993,21 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 					return nil
 				}
 				w.runCommand(ctx, cmd)
+				if w.commandExitRequested() {
+					w.terminal.ClearScreen()
+					fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
+					return nil
+				}
 			}
 			w.renderComposer()
 		}
 	}
+}
+
+func (w *Workspace) commandExitRequested() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.exitRequested
 }
 
 // runCommand executes a command and records its result as workspace activity.
@@ -907,6 +1022,9 @@ func (w *Workspace) runCommand(ctx context.Context, cmd string) {
 	w.mu.Lock()
 	if err != nil {
 		w.state.LastOutput = fmt.Sprintf("Error: %v", err)
+		if strings.TrimSpace(resp) != "" {
+			w.state.LastOutput = resp + "\n" + w.state.LastOutput
+		}
 		w.state.LastOutputIsError = true
 	} else {
 		w.state.LastOutput = resp
@@ -994,6 +1112,7 @@ func (w *Workspace) refreshCompletion() {
 	if w.completer == nil || w.composer == nil {
 		return
 	}
+	qualifyProviderCompletions(context.Background(), &w.completer.ctx, w.terminal != nil && w.terminal.IsTerminal())
 	if text := w.composer.Text(); text != w.completionText {
 		w.completionSelected = false
 		w.completionCycled = false
@@ -1007,7 +1126,7 @@ func (w *Workspace) refreshCompletion() {
 	// A menu offering exactly what has already been typed has nothing left to
 	// complete, and leaving it open would take Enter away from submitting the
 	// command the operator just finished writing.
-	if len(matches) == 1 && matches[0] == word {
+	if len(matches) == 1 && (matches[0] == word || strings.HasPrefix(word, "/") && strings.EqualFold(matches[0], word)) {
 		w.closeCompletion()
 		return
 	}
@@ -1300,10 +1419,13 @@ func (w *Workspace) controlSource() *ControlSource {
 		// action refuse with the reason, which is what the user needs to see.
 		return &ControlSource{SessionID: session, ProjectID: project, ApproverID: session}
 	}
+	localControl, localControlErr := runtime.OpenLocalControl(context.Background())
 	return &ControlSource{
 		Authority: &runtimeControlAuthority{
-			runtime: runtime,
-			store:   store,
+			runtime:         runtime,
+			store:           store,
+			localControl:    localControl,
+			localControlErr: localControlErr,
 			// The gate is read live: the Cloud handshake finishes after the
 			// workspace is built, so a captured gate would report Standard
 			// for the rest of the session.
@@ -1363,7 +1485,7 @@ func (w *Workspace) controlSource() *ControlSource {
 			},
 		},
 		SessionID: session,
-		ProjectID: project,
+		ProjectID: string(identity),
 		// The approver is the session acting. The backend records who decided;
 		// nothing here judges whether that is self-approval.
 		ApproverID: session,
@@ -1474,10 +1596,7 @@ func (w *Workspace) paint() {
 	cols, rows := w.terminal.Size()
 
 	w.mu.RLock()
-	state := w.state
-	state.UltraEntitled = w.ultra.Entitled()
-	state.UltraExecution = w.ultraExecution
-	state.NavigationAvailable = w.navReleased && state.UltraEntitled
+	state := w.liveStateLocked()
 	th := w.theme
 	workDir := w.workDir
 	w.mu.RUnlock()
@@ -1506,7 +1625,7 @@ func (w *Workspace) paint() {
 	if w.palette.IsOpen() {
 		popup = w.palette.Render(cols, rows)
 	} else if w.completionOpen && len(w.completions) > 0 {
-		popup = renderCompletionPopup(w.completions, w.completionIndex, th, cols)
+		popup = renderCompletionPopup(w.completions, w.completionIndex, th, cols, w.completer.descriptionsFor(w.composer.Text(), w.composer.CursorPos()))
 	}
 
 	frame := BuildFrame(state, th, workDir, w.composer, popup, cols, rows)
@@ -1523,10 +1642,7 @@ func (w *Workspace) paint() {
 // second, divergent layout.
 func (w *Workspace) printBatchFrame(out io.Writer) {
 	w.mu.RLock()
-	state := w.state
-	state.UltraEntitled = w.ultra.Entitled()
-	state.UltraExecution = w.ultraExecution
-	state.NavigationAvailable = w.navReleased && state.UltraEntitled
+	state := w.liveStateLocked()
 	th := w.theme
 	workDir := w.workDir
 	w.mu.RUnlock()
@@ -1558,17 +1674,21 @@ func (w *Workspace) runLineScanner(ctx context.Context, in io.Reader, out io.Wri
 		}
 
 		if line == "/quit" || line == "/exit" {
-			fmt.Fprintln(out, "Exiting MARSHAL terminal workspace. Session remains durable.")
+			fmt.Fprintln(out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 			return nil
 		}
 
 		response, err := w.cmd.Handle(ctx, line)
-		if err != nil {
-			fmt.Fprintf(out, "Error: %v\n", err)
-		} else if response != "" {
+		if response != "" {
 			fmt.Fprintln(out, response)
 		}
+		if err != nil {
+			fmt.Fprintf(out, "Error: %v\n", err)
+		}
 
+		if w.commandExitRequested() {
+			return nil
+		}
 		_ = w.RefreshState(ctx)
 	}
 
@@ -1576,4 +1696,11 @@ func (w *Workspace) runLineScanner(ctx context.Context, in io.Reader, out io.Wri
 		return err
 	}
 	return nil
+}
+
+func onOff(on bool) string {
+	if on {
+		return "ON"
+	}
+	return "OFF"
 }

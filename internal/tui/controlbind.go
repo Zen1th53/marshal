@@ -123,7 +123,7 @@ type ControlAuthority interface {
 	ApproveGoal(ctx context.Context, sessionID string, expectedRevision int64) (model.GoalContract, error)
 	// ReviseGoal creates the next Process 03 revision from typed operator
 	// intent. The runtime preserves original request and hard constraints.
-	ReviseGoal(ctx context.Context, sessionID string, expectedRevision int64, interpretation, reason string) (model.GoalContract, error)
+	ReviseGoal(ctx context.Context, envelope app.CommandEnvelope, interpretation, reason string) (model.GoalContract, error)
 	// CreatePlan builds a Process 04 plan from the confirmed goal.
 	CreatePlan(ctx context.Context, sessionID string) (PlanState, error)
 	// RegisterAgent adds an agent to the team through the canonical runtime.
@@ -2023,8 +2023,8 @@ func (s *ControlSource) executeReviseGoal(ctx context.Context, req ActionRequest
 	if err := s.available(); err != nil {
 		return Outcome{}, err
 	}
-	revised, err := s.Authority.ReviseGoal(ctx, s.SessionID, req.Target.Revision,
-		req.Inputs["interpretation"], req.Inputs["reason"])
+	revised, err := s.Authority.ReviseGoal(ctx, app.CommandEnvelope{ProjectID: s.ProjectID, SessionID: s.SessionID, TargetID: req.Target.ID, ExpectedVersion: req.Target.Revision, IdempotencyKey: req.IdempotencyKey}, req.Inputs["interpretation"], req.Inputs["reason"])
+
 	if err != nil {
 		return refusal("the goal could not be revised", err, req.Target, "internal/app/goal_runtime.go")
 	}
@@ -3050,7 +3050,15 @@ func (s *ControlSource) decideApproval(ctx context.Context, req ActionRequest, a
 	if rationale == "" {
 		rationale = "decided from the Control screen"
 	}
-	if err := s.Authority.DecideApproval(ctx, approvalID, approve, s.ApproverID, rationale); err != nil {
+	var decisionErr error
+	if bound, ok := s.Authority.(interface {
+		DecideApprovalTarget(context.Context, Target, bool, string) error
+	}); ok {
+		decisionErr = bound.DecideApprovalTarget(ctx, req.Target, approve, rationale)
+	} else {
+		decisionErr = s.Authority.DecideApproval(ctx, approvalID, approve, s.ApproverID, rationale)
+	}
+	if err := decisionErr; err != nil {
 		return refusal("the decision was not recorded", err, req.Target, "internal/execution/approvals.go")
 	}
 
@@ -3063,7 +3071,7 @@ func (s *ControlSource) decideApproval(ctx context.Context, req ActionRequest, a
 	if !approve {
 		want = execution.ApprovalDenied
 	}
-	if after.Status != want {
+	if after.Status != want && !(approve && after.Status == execution.ApprovalConsumed) {
 		reason := fmt.Sprintf(
 			"the decision was submitted but approval %s reads as %s rather than %s",
 			approvalID, after.Status, want)

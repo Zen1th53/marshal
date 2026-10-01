@@ -302,6 +302,9 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 	if err != nil {
 		return nil, err
 	}
+	if err := e.ValidateRunGoal(ctx, run); err != nil {
+		return &run, err
+	}
 	if expectedVersion >= 0 && run.Version != expectedVersion {
 		return nil, fmt.Errorf("%w: run %s moved from version %d to %d",
 			ErrInvalidStateTransition, runID, expectedVersion, run.Version)
@@ -420,7 +423,19 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 		}
 		run = currentRun
 
+		if err := e.ValidateRunGoal(ctx, run); err != nil {
+			return &run, err
+		}
 		if run.State != RunRunning {
+			return &run, nil
+		}
+		if reason := e.budgetExhausted(ctx, run, time.Now().UTC()); reason != "" {
+			if err := run.Block(reason, time.Now().UTC()); err != nil {
+				return &run, err
+			}
+			if err := e.persistRun(ctx, &run); err != nil {
+				return &run, err
+			}
 			return &run, nil
 		}
 		if selectedTask != "" && run.Tasks[selectedTask].State == TaskCompletedPendingVerify {
@@ -641,14 +656,15 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			t.Attempts++
 			now := time.Now().UTC()
 			t.StartedAt = &now
+			// Persist the revision the harness will receive. A store snapshot
+			// must not depend on a later mutation of the executor's task map.
+			t.RunRevision = run.Version + 1
 			run.Tasks[taskID] = t
 			if err := e.persistRun(ctx, &run); err != nil {
 				return &run, err
 			}
 
 			// Execute using assigned harness
-			t.RunRevision = run.Version
-			run.Tasks[taskID] = t
 			harnessName := t.AssignedHarness
 			if harnessName == "" {
 				harnessName = "unbound"
@@ -770,6 +786,14 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 					Recoverable: false,
 				})
 			} else {
+				// Advisory alignment check of the task's changes against its goal,
+				// taken before the worktree is committed or reconciled.
+				e.mu.RLock()
+				goal, haveGoal := e.cachedGoal[run.RunID]
+				e.mu.RUnlock()
+				if haveGoal {
+					t.Alignment = checkAlignment(ctx, goal, run, t, wtPath)
+				}
 				// Success: reconcile changes to project root
 				if run.Delivery == DeliveryPreserveBranch {
 					commit, err := commitTaskWorktree(ctx, wtPath, run.RunID, t.TaskID)
@@ -961,7 +985,12 @@ func (e *Engine) DecideApproval(ctx context.Context, approvalID string, approve 
 	if err != nil {
 		return err
 	}
-	app, err := e.approvals.Decide(approvalID, approve, decider, reason, now)
+	if approve {
+		if err := e.ValidateRunGoal(ctx, run); err != nil {
+			return err
+		}
+	}
+	app, err := e.approvals.DecideContext(ctx, approvalID, approve, decider, reason, now)
 	if err != nil {
 		return err
 	}
@@ -1149,6 +1178,9 @@ func (e *Engine) CancelNativeTurn(ctx context.Context, runID, taskID, reason str
 
 // SetRunContext explicitly sets the cached goal and plan for a run (e.g. after crash recovery).
 func (e *Engine) SetRunContext(runID string, goal model.GoalContract, p plan.ExecutionPlan) {
+	if reader, ok := e.goalReader.(*MemoryGoalReader); ok {
+		reader.AddGoal(goal)
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.cachedGoal[runID] = goal
@@ -1212,13 +1244,19 @@ func (e *Engine) AssembleProcess06Bundle(ctx context.Context, runID string) (*Pr
 	return bundle, nil
 }
 
-// GetRun retrieves a run from the underlying run store.
+// GetRun retrieves an owned snapshot under the engine's admission lock.
+// The store also copies mutable state under its lock: callers must never
+// receive maps that a running executor or native continuation can mutate.
 func (e *Engine) GetRun(ctx context.Context, runID string) (ExecutionRun, error) {
+	e.operationMu.Lock()
+	defer e.operationMu.Unlock()
 	return e.store.GetRun(ctx, runID)
 }
 
 // ListRuns retrieves all runs from the store.
 func (e *Engine) ListRuns(ctx context.Context) ([]ExecutionRun, error) {
+	e.operationMu.Lock()
+	defer e.operationMu.Unlock()
 	return e.store.ListRuns(ctx)
 }
 
@@ -1263,6 +1301,22 @@ func (e *Engine) GetCheckpoint(checkpointID string) (CheckpointRecord, error) {
 	return e.checkpoints.GetCheckpoint(checkpointID)
 }
 
+// VerifyCheckpoint re-reads a checkpoint's snapshot without restoring it.
+func (e *Engine) VerifyCheckpoint(checkpointID string) (SnapshotCheck, error) {
+	if e.checkpoints == nil {
+		return SnapshotCheck{}, fmt.Errorf("%w: checkpoint engine unavailable", ErrCheckpointFailed)
+	}
+	return e.checkpoints.VerifySnapshot(checkpointID)
+}
+
+// DiffCheckpoints compares two intact snapshots without restoring either.
+func (e *Engine) DiffCheckpoints(fromID, toID string, limit int) (SnapshotDiff, error) {
+	if e.checkpoints == nil {
+		return SnapshotDiff{}, fmt.Errorf("%w: checkpoint engine unavailable", ErrCheckpointFailed)
+	}
+	return e.checkpoints.DiffSnapshots(fromID, toID, limit)
+}
+
 // CaptureCheckpoint snapshots current workspace state.
 func (e *Engine) CaptureCheckpoint(ctx context.Context, runID, taskID, reason string) (CheckpointRecord, error) {
 	if e.checkpoints == nil {
@@ -1292,4 +1346,52 @@ var nativeProviderApprovalOperations = map[string]struct{}{
 func IsNativeProviderApproval(operationType string) bool {
 	_, ok := nativeProviderApprovalOperations[operationType]
 	return ok
+}
+
+// ValidateRunGoal rejects authority bound to a superseded goal revision. The
+// revision change itself durably invalidates bindings; historical runs and
+// approvals remain readable without granting permission to continue.
+func (e *Engine) ValidateRunGoal(ctx context.Context, run ExecutionRun) error {
+	// Native sessions without a goal binding do not depend on a goal revision.
+	if run.GoalID == "" {
+		return nil
+	}
+	target := run.SessionID
+	if target == "" {
+		target = run.GoalID
+	}
+	goal, err := e.goalReader.GetActiveGoalContract(ctx, target)
+	if err != nil {
+		return fmt.Errorf("%w: read current goal: %v", ErrRunBlocked, err)
+	}
+	if goal.ID != run.GoalID || goal.Revision != run.GoalRevision || goal.ProjectID != string(run.ProjectID) {
+		return fmt.Errorf("%w: run goal binding is stale (goal %s revision %d, run revision %d)", ErrRunBlocked, goal.ID, goal.Revision, run.GoalRevision)
+	}
+	return nil
+}
+
+// budgetExhausted checks the run against its goal revision's budget limits
+// before another task is dispatched. Only model calls (counted by this engine
+// for every provider turn) and run duration are limited: tokens and cost are
+// not reported by every provider, and an unreported value is never read as 0.
+func (e *Engine) budgetExhausted(ctx context.Context, run ExecutionRun, now time.Time) string {
+	if run.GoalID == "" {
+		return ""
+	}
+	target := run.SessionID
+	if target == "" {
+		target = run.GoalID
+	}
+	goal, err := e.goalReader.GetActiveGoalContract(ctx, target)
+	if err != nil || goal.ID != run.GoalID || goal.BudgetLimits == nil {
+		return ""
+	}
+	limits := goal.BudgetLimits
+	if limits.MaxModelCalls > 0 && run.BudgetConsumed.ModelCalls >= limits.MaxModelCalls {
+		return fmt.Sprintf("%s: %d of %d model calls used", model.ReasonBudgetExhaustedCalls, run.BudgetConsumed.ModelCalls, limits.MaxModelCalls)
+	}
+	if limits.MaxDuration > 0 && !run.StartedAt.IsZero() && now.Sub(run.StartedAt) >= limits.MaxDuration {
+		return fmt.Sprintf("%s: run has lasted %s of %s", model.ReasonBudgetExhaustedWallClock, now.Sub(run.StartedAt).Round(time.Second), limits.MaxDuration)
+	}
+	return ""
 }

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 	"github.com/Zen1th53/marshal/internal/project"
 )
@@ -75,7 +76,9 @@ func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, 
 	return w.runNativeAgent(ctx, "codex", args)
 }
 
-func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string, marshalBrief ...string) (string, error) {
+func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string, marshalBrief ...string) (result string, resultErr error) {
+	args = app.NormalizeProviderArgs(provider, args)
+
 	label, homeEnv, homeDir, historyDir := "Codex", "CODEX_HOME", ".codex", "sessions"
 	switch provider {
 	case "claude":
@@ -89,7 +92,11 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		return "", fmt.Errorf("unsupported native provider %q", provider)
 	}
 	if w.terminal == nil || !w.terminal.IsTerminal() {
-		return "", fmt.Errorf("native %s requires an interactive terminal; use /%s exec for batch tasks", label, provider)
+		hint := fmt.Sprintf("use /%s exec for batch tasks", provider)
+		if provider == "opencode" || provider == "antigravity" {
+			hint = fmt.Sprintf("open marshal tui in a terminal, then retry /%s", map[string]string{"opencode": "opencode", "antigravity": "agy"}[provider])
+		}
+		return "", fmt.Errorf("native %s requires an interactive terminal; %s", label, hint)
 	}
 	binaryName := provider
 	if provider == "antigravity" {
@@ -97,6 +104,19 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	}
 	binary, err := project.FindBinary(binaryName)
 	if err != nil {
+		return "", fmt.Errorf("%w; Install %s and make %s available on PATH, then retry", err, label, binaryName)
+	}
+	dialect := app.ObserveProviderDialect(ctx, provider)
+	if dialect.Operation(app.ProviderArgOperation(provider, args)).Status == app.ProviderUnknown {
+		defer func() {
+			label := "UNKNOWN — unqualified pass-through: " + dialect.Provider + " " + app.ProviderArgOperation(provider, args)
+			result = label + "\n" + result
+			if resultErr != nil {
+				resultErr = fmt.Errorf("%s: %w", label, resultErr)
+			}
+		}()
+	}
+	if err := dialect.Check(app.ProviderArgOperation(provider, args), true); err != nil {
 		return "", err
 	}
 	root := w.workDir
@@ -194,7 +214,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 	}
 	if watch.consume == nil {
-		return "", fmt.Errorf("native %s memory capture requires an attached runtime", label)
+		return "", fmt.Errorf("native %s memory capture requires an attached runtime; open marshal tui in an initialized project (marshal init), then retry", label)
 	}
 
 	// The shared channel. Who joins it and who each agent sees in it are the
@@ -544,7 +564,12 @@ func nativeUsesModelPreference(args []string) bool {
 			return false
 		}
 	}
-	return len(args) == 0 || args[0] == "--" || args[0] == "resume" || args[0] == "fork"
+	// These configuration aliases open sessions too, so they inherit the
+	// project model preference just like a bare /codex session.
+	if len(args) == 2 && (args[0] == "--sandbox" || args[0] == "-c" && args[1] == `web_search="disabled"`) {
+		return true
+	}
+	return len(args) == 0 || oneOf(args[0], "--", "resume", "fork", "--search")
 }
 
 type nativeHistoryWatch struct {
