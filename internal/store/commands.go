@@ -117,3 +117,19 @@ func commandOutcome(r CommandRecord) string {
 	}
 	return "applied"
 }
+
+// RecordCommandReceipt writes the result and audit record of a command whose
+// mutation lives outside SQLite (the file-backed run store). It is written
+// after the mutation succeeds; replay of the same key then returns the stored
+// result instead of acting again.
+func (s *Store) RecordCommandReceipt(ctx context.Context, r CommandRecord, version int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := insertCommandReceipt(ctx, tx, r, version); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

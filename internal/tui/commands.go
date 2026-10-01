@@ -272,16 +272,21 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleBudget(ctx)
 
 	case "/pause":
-		return h.handlePause(ctx)
+		return h.handleRunControl(ctx, "pause", parts[1:])
 
 	case "/resume":
-		if len(parts) > 1 {
+		// "run:<id>" or no argument controls a MARSHAL run; anything else is
+		// native Codex resume syntax such as --last.
+		if len(parts) > 1 && !strings.HasPrefix(parts[1], "run:") {
 			return h.handleCodex(ctx, append([]string{"resume"}, parts[1:]...), line)
 		}
-		return h.handleResume(ctx)
+		if len(parts) > 2 {
+			return "Usage: /resume [run:<id>]  (native Codex: /resume --last)", nil
+		}
+		return h.handleRunControl(ctx, "resume", parts[1:])
 
 	case "/cancel":
-		return h.handleCancel(ctx)
+		return h.handleRunControl(ctx, "cancel", parts[1:])
 
 	case "/doctor":
 		if len(parts) > 1 && (strings.EqualFold(parts[1], "codex") || strings.EqualFold(parts[1], "provider")) {
@@ -622,18 +627,6 @@ func (h *CommandHandler) handleBudget(ctx context.Context) (string, error) {
 		h.ws.state.BudgetConsumed.Duration.Round(time.Millisecond)), nil
 }
 
-func (h *CommandHandler) handlePause(ctx context.Context) (string, error) {
-	return "Pause was NOT performed: TUI has no authenticated runtime process-control handle.", nil
-}
-
-func (h *CommandHandler) handleResume(ctx context.Context) (string, error) {
-	return "Resume was NOT performed: TUI has no authenticated runtime process-control handle.", nil
-}
-
-func (h *CommandHandler) handleCancel(ctx context.Context) (string, error) {
-	return "Cancel was NOT performed: TUI has no authenticated runtime process-control handle.", nil
-}
-
 func (h *CommandHandler) helpText() string {
 	navigationHint := ""
 	if h.ws.navigationRefusal() == "" {
@@ -676,9 +669,9 @@ func (h *CommandHandler) helpText() string {
   /checkpoint list | inspect <id> | diff <from> <to>  Read this session's snapshots; files re-checked
   /checkpoint create       Unavailable: authenticated snapshot capture is not implemented
   /rollback <id>           Unavailable: runtime restoration support required
-  /pause                   Unavailable: authenticated runtime process control required
-  /resume [id|--last]      No args: runtime control unavailable; args: native Codex resume
-  /cancel                  Unavailable: authenticated runtime process control required
+  /pause [run:<id>]        Pause a run of this session (stops new dispatch)
+  /resume [run:<id>]       Resume a paused run; /resume --last: native Codex resume
+  /cancel [run:<id>]       Cancel a run of this session and its provider turns
   /review [instructions]   Native Codex review; governed commit review takes no instructions
   /approvals               List pending approvals
   /approval                Show native Codex approval policy

@@ -90,6 +90,9 @@ type Runtime struct {
 	// gateEngineDefault marks the built-in engine whose only check always
 	// passes; it is an enforcement hook, not enforcement.
 	gateEngineDefault bool
+	// resumeRun restarts canonical execution of a resumed run; nil means
+	// ExecuteRun. Tests replace it to observe the restart without executing.
+	resumeRun func(runID string)
 }
 
 // AttachULTRA wires the canonical ULTRA gate into the runtime.

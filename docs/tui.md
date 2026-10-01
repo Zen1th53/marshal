@@ -437,9 +437,9 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/update [install]` — Check for a newer published release, or install it. `F10` does the same: it installs the release the notice is showing, and checks when there is none.
 - `/status` — Show canonical session, goal, team, claim, budget, and termination status. Runtime execution is not verified by this command.
 - `/msg <agent|all> <text>` (`/say`) — Post a message in this workspace's existing team session as the authenticated local owner. The recipient must be a participant; `all` addresses the team. Content is redacted before it is stored. Without a team session nothing is sent and no session is created.
-- `/pause` — Reports unavailable authenticated runtime process control; does not pause execution.
-- `/resume` — Reports unavailable runtime process control. `/resume <id|--last> [native arguments...]` opens native Codex resume when its CLI is installed.
-- `/cancel` — Reports unavailable authenticated runtime process control; does not cancel execution.
+- `/pause [run:<id>]` — Pause a run of this session as the authenticated local owner, bound to the run version shown. New tasks stop being dispatched at the next task boundary; a task already in a provider turn finishes it, and the reply says when the run is still settling. Without an ID it acts only when exactly one run qualifies, and otherwise lists them.
+- `/resume [run:<id>]` — Resume a paused run of this session: the goal binding is re-validated (a run bound to a superseded goal revision is refused), the run returns to RUNNING and canonical execution restarts. `/resume <id|--last> [native arguments...]` without the `run:` prefix opens native Codex resume when its CLI is installed.
+- `/cancel [run:<id>]` — Cancel a run of this session: the run becomes CANCELLED, no further task is dispatched, and the supervised provider turns of its tasks are cancelled. Without an ID it acts only when exactly one non-terminal run qualifies.
 - `/doctor [codex|provider]` — Run system diagnostics, or native Codex diagnostics in an interactive terminal. Failed project checks include an initialization/diagnostic hint; optional provider probes are not run by bare `/doctor`.
 - `/runtime` — Read back the runtime from the canonical store: instance, schema, agent/session/task/lease counts, and this session's runs with their state, goal binding, task count and policy snapshot. Process liveness is not probed.
 - `/store` — Read the SQLite schema version. Integrity is NOT VERIFIED by a schema read; unavailable or failed stores include a recovery hint.
@@ -456,7 +456,7 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/plugin` and `/plugins` expose Codex plugin listing and native management. Governed `add`/`install` and `remove`/`rm`/`uninstall` require one plugin name; `marketplace <arguments...>` passes through to Codex.
 - `/skills` (or `/codex skills`) lists local Codex skills. Incomplete plugin discovery is reported with a recovery hint while successfully discovered local skills remain visible. `/skill install <name>` (or `/codex skill install <name>`) installs a local skill with digest verification.
 - `/sessions` lists governed Codex session records. `/apply [task_id]` invokes Codex apply; without an ID it selects a task from governed session history and reports history failures before proceeding.
-- `/fork [id|--last]` opens native Codex fork in the TUI. `/resume --last` opens native Codex resume; bare `/resume` retains the unavailable runtime-control meaning described above.
+- `/fork [id|--last]` opens native Codex fork in the TUI. `/resume --last` opens native Codex resume; bare `/resume` and `/resume run:<id>` control MARSHAL runs as described above.
 - `/review [instructions]` opens native Codex review in the TUI. Without an interactive terminal, governed commit review supports no instructions and explicitly reports that limitation when instructions are supplied.
 - Native management requires the provider CLI and an interactive terminal. In particular, Claude MCP/plugin/auth/agents/login/logout commands report that requirement in headless use; they do not create governed tasks.
 

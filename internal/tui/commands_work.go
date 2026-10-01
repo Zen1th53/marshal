@@ -9,8 +9,11 @@ func workCommandUsage(parts []string) string {
 	usage := ""
 	valid := true
 	switch cmd {
-	case "/status", "/claims", "/agents", "/roster", "/why", "/budget", "/pause", "/cancel":
+	case "/status", "/claims", "/agents", "/roster", "/why", "/budget":
 		usage, valid = cmd, len(args) == 0
+	case "/pause", "/cancel":
+		usage = cmd + " [run:<id>]"
+		valid = len(args) == 0 || len(args) == 1 && strings.HasPrefix(args[0], "run:")
 	case "/mode":
 		usage, valid = "/mode [manual|auto|ultra]", len(args) <= 1
 	case "/approve":
