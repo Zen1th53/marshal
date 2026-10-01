@@ -1869,14 +1869,20 @@ func (a *runtimeControlAuthority) CodexPlugins(ctx context.Context) ([]codex.Plu
 		discoveryErr = errors.New("plugin discovery unavailable: install Codex and make codex available on PATH, then retry")
 	}
 
-	root := a.runtime.ProjectRoot()
-	if s, err := codex.DiscoverLocalSkills(root); err == nil {
-		skills = s
-	} else {
+	s, err := a.LocalCodexSkills()
+	skills = s
+	if err != nil {
 		discoveryErr = errors.Join(discoveryErr, fmt.Errorf("local skill discovery failed: %w; check local SKILL.md files", err))
 	}
 
 	return plugins, skills, discoveryErr
+}
+
+func (a *runtimeControlAuthority) LocalCodexSkills() ([]codex.SkillInfo, error) {
+	if a == nil || a.runtime == nil {
+		return nil, errNoRuntime
+	}
+	return a.runtime.ProjectCodexSkills()
 }
 
 func (a *runtimeControlAuthority) PreviewCodexSkill(name string) (string, error) {

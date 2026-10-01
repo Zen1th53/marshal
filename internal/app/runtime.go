@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -582,13 +583,16 @@ func (r *Runtime) InstallProjectCodexSkill(ctx context.Context, name, expectedDi
 	if r == nil || r.store == nil {
 		return "", fmt.Errorf("runtime store is unavailable")
 	}
+	if err := r.checkCodexSkillName(name); err != nil {
+		return "", publicSkillError(err)
+	}
 	digest, err := codex.InstallProjectSkill(r.layout.Root, "", name, expectedDigest)
 	if err != nil {
-		return "", err
+		return "", publicSkillError(err)
 	}
 	eventID, err := model.NewID("EVENT-")
 	if err != nil {
-		return "", err
+		return "", publicSkillError(err)
 	}
 	if err := r.store.AppendEvent(ctx, nil, model.Event{
 		ID: eventID, Type: "CODEX_PROJECT_SKILL_INSTALLED", ProjectID: localProjectID,
@@ -599,9 +603,9 @@ func (r *Runtime) InstallProjectCodexSkill(ctx context.Context, name, expectedDi
 		// transaction. Compensate it before returning failure so an audit outage
 		// never leaves an unaudited installed skill behind.
 		if rollbackErr := codex.RemoveInstalledProjectSkill("", name, digest); rollbackErr != nil {
-			return "", fmt.Errorf("audit Codex skill installation: %w (compensating removal failed: %v)", err, rollbackErr)
+			return "", fmt.Errorf("audit Codex skill installation: %w (compensating removal failed: %v)", publicSkillError(err), publicSkillError(rollbackErr))
 		}
-		return "", fmt.Errorf("audit Codex skill installation: %w; installation was reverted", err)
+		return "", fmt.Errorf("audit Codex skill installation: %w; installation was reverted", publicSkillError(err))
 	}
 	return digest, nil
 }
@@ -610,7 +614,70 @@ func (r *Runtime) PreviewProjectCodexSkill(name string) (string, error) {
 	if r == nil {
 		return "", fmt.Errorf("runtime is unavailable")
 	}
-	return codex.PreviewProjectSkill(r.layout.Root, name)
+	if err := r.checkCodexSkillName(name); err != nil {
+		return "", publicSkillError(err)
+	}
+	digest, err := codex.PreviewProjectSkill(r.layout.Root, name)
+	if err != nil {
+		return "", publicSkillError(err)
+	}
+	if err := codex.CheckProjectSkillInstallDestination("", name); err != nil {
+		return "", publicSkillError(err)
+	}
+	return digest, nil
+}
+
+// ProjectCodexSkills retains every discovered source. Only an exact project
+// candidate accepted by the canonical preview service is installable.
+func (r *Runtime) ProjectCodexSkills() ([]codex.SkillInfo, error) {
+	if r == nil {
+		return nil, fmt.Errorf("runtime is unavailable")
+	}
+	skills, err := codex.DiscoverLocalSkills(r.layout.Root)
+	if err != nil {
+		return skills, err
+	}
+	for i := range skills {
+		skill := &skills[i]
+		if skill.SourceType == "project-agents" {
+			_, previewErr := r.PreviewProjectCodexSkill(skill.Name)
+			skill.Installable = previewErr == nil
+		}
+	}
+	return skills, nil
+}
+
+func (r *Runtime) checkCodexSkillName(name string) error {
+	skills, err := codex.DiscoverLocalSkills(r.layout.Root)
+	if err != nil {
+		return err
+	}
+	var sources []string
+	for _, skill := range skills {
+		if skill.Name == name {
+			sources = append(sources, skill.SourceType)
+		}
+	}
+	if len(sources) > 1 {
+		return fmt.Errorf("%w: ambiguous skill %q; sources: %s", model.ErrConflict, name, strings.Join(sources, ", "))
+	}
+	if len(sources) == 1 && sources[0] != "project-agents" {
+		return fmt.Errorf("%w: skill %q from %s is not installable", model.ErrInvalid, name, sources[0])
+	}
+	return nil
+}
+
+// publicSkillError preserves admission semantics without exporting local paths.
+func publicSkillError(err error) error {
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		return fmt.Errorf("project-agents skill %s failed: %w", pathErr.Op, pathErr.Err)
+	}
+	var linkErr *os.LinkError
+	if errors.As(err, &linkErr) {
+		return fmt.Errorf("project-agents skill %s failed: %w", linkErr.Op, linkErr.Err)
+	}
+	return err
 }
 
 // SubmitHandoff is the sole runtime path for accepting typed inter-agent
