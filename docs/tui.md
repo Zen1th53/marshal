@@ -442,7 +442,7 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/cancel` — Reports unavailable authenticated runtime process control; does not cancel execution.
 - `/doctor [codex|provider]` — Run system diagnostics, or native Codex diagnostics in an interactive terminal. Failed project checks include an initialization/diagnostic hint; optional provider probes are not run by bare `/doctor`.
 - `/runtime` — Report the session label and that runtime execution health is NOT VERIFIED; the TUI has no authenticated health channel.
-- `/store` — Read the SQLite schema version. Integrity is NOT VERIFIED by a schema read; unavailable or failed stores include a recovery hint.
+- `/store` — Read the SQLite schema version, run `PRAGMA quick_check`, and show allowlisted inventory counts. `/store check quick` and `/store check full` run only the named check; a pass names that check. Full `PRAGMA integrity_check` can take long. `/store counts` reports agents, sessions, tasks, leases, findings, approvals, artifacts, and audit_events; counts are inventory, not proof of health. Other table names are refused. Diagnostics are read-only, cancel with the command context, and time out after five seconds. Unavailable or failed stores include a recovery hint.
 - `/diff` — Open the interactive working tree diff viewer. Extra arguments are rejected; failed Git inspection includes a worktree recovery hint.
 - `/quit` — Exit the TUI workspace.
 

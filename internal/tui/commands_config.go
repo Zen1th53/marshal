@@ -48,7 +48,10 @@ func configCommandUsage(parts []string) string {
 	case "/search":
 		usage = "/search [on|off]"
 		valid = len(args) == 0 || len(args) == 1 && oneOf(sub, "on", "off", "enable", "disable", "true", "false")
-	case "/models", "/fingerprint", "/runtime", "/store", "/export", "/reinjection", "/login", "/logout":
+	case "/store":
+		usage = "/store [check quick|check full|counts] (full can take long; 5s timeout)"
+		valid = len(args) == 0 || len(args) == 1 && sub == "counts" || len(args) == 2 && sub == "check" && oneOf(strings.ToLower(args[1]), "quick", "full")
+	case "/models", "/fingerprint", "/runtime", "/export", "/reinjection", "/login", "/logout":
 		usage, valid = cmd, len(args) == 0
 	}
 	if !valid {

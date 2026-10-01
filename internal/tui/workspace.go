@@ -265,6 +265,8 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 		Agents:      agentIDs,
 		Subcommands: make(map[string][]string),
 	}
+	compCtx.Subcommands["/store"] = []string{"check", "counts"}
+	compCtx.Subcommands["/store check"] = []string{"quick", "full"}
 	compCtx.Subcommands["/mode"] = []string{"manual", "auto", "ultra"}
 	compCtx.Subcommands["/inspect"] = []string{"claim", "evidence", "checkpoint", "task", "handoff", "approval", "agent"}
 	compCtx.Subcommands["/goal"] = []string{"create", "edit", "diff", "version", "criteria", "constraints", "add-constraint", "rm-constraint", "donotdo", "progress"}

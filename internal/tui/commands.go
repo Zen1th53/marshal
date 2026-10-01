@@ -328,7 +328,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleRuntime(ctx)
 
 	case "/store":
-		return h.handleStore(ctx)
+		return h.handleStore(ctx, parts[1:])
 
 	case "/export":
 		return h.handleExport(ctx, parts[1:])
@@ -749,7 +749,7 @@ func (h *CommandHandler) helpText() string {
   /backup [create|restore <backup_path>]  Create verified snapshot; restore only verifies
   /fingerprint             Report per-run fingerprint history unavailable
   /runtime                 Report runtime execution health NOT VERIFIED
-  /store                   Read SQLite schema version (integrity NOT VERIFIED)
+  /store [check quick|check full|counts]  Schema, quick check and inventory; full can take long (5s timeout)
   /export                  Write evidence bundle for the current canonical goal revision
   /blind [resolve [reason ...]]  Interpretation NOT VERIFIED; resolution unavailable
   /reinjection             Report execution-bound constraint digest NOT VERIFIED

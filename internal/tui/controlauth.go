@@ -1338,7 +1338,16 @@ func (a *runtimeControlAuthority) StoreIntegrity(ctx context.Context) error {
 	if a == nil || a.store == nil {
 		return errors.New("no store is attached")
 	}
+	ctx, cancel := context.WithTimeout(ctx, store.DiagnosticTimeout)
+	defer cancel()
 	return a.store.Integrity(ctx)
+}
+
+func (a *runtimeControlAuthority) StoreQuickCheck(ctx context.Context) error {
+	if a == nil || a.store == nil {
+		return errors.New("no store is attached")
+	}
+	return a.store.QuickCheck(ctx)
 }
 
 func (a *runtimeControlAuthority) ObjectCount(ctx context.Context, table string) (int, error) {
