@@ -58,7 +58,7 @@ func runtimeCodexHarness(runtime *Runtime) execution.WorkerHarness {
 	})
 }
 
-func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (finalResult execution.TaskResult, finalErr error) {
 	if r == nil || r.store == nil {
 		return execution.TaskResult{TaskID: task.TaskID}, fmt.Errorf("%w: runtime is unavailable", model.ErrUnavailable)
 	}
@@ -68,6 +68,17 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 	if task.CanonicalTaskID == "" {
 		return execution.TaskResult{TaskID: task.TaskID}, fmt.Errorf("%w: Process 05 Codex task %q has no canonical Runtime task binding", model.ErrConflict, task.TaskID)
 	}
+	var settle func() error
+	var admissionErr error
+	ctx, settle, admissionErr = r.superviseTask(ctx, task.CanonicalTaskID)
+	if admissionErr != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, admissionErr
+	}
+	defer func() {
+		if err := settle(); err != nil && finalErr == nil {
+			finalErr = err
+		}
+	}()
 	canonicalTask, err := r.store.GetTask(ctx, task.CanonicalTaskID)
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, fmt.Errorf("get canonical Process 05 task: %w", err)

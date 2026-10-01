@@ -468,7 +468,15 @@ Every user-operable MARSHAL capability has a direct command mapping:
 
 ### Tasks & Team Management
 - `/tasks` — List coordination tasks, owners, and states.
-- `/task [list|inspect <id>|ownership]` — Read coordination tasks. `/tasks` accepts the same subcommands. `create`, `assign`, `pause`, `resume`, `cancel`, and `retry` are recognized but mutations are unavailable without authenticated runtime authorization.
+- `/task [list|inspect <id>|ownership]` — Read coordination tasks. `/tasks` accepts the same subcommands.
+- `/task create <title>` — Create a ready coordination task as the authenticated local owner.
+- `/task assign <id> <agent>` — Claim ownership for an existing enabled agent, using a real active session and lease. Dependencies and competing leases must permit the claim.
+- `/task pause <id>` — Stop new dispatch and request supervisor cancellation. A live worker shows `pause-requested` until its turn and cleanup return, then `paused`. Without a live worker, pause settles immediately. A working task with no available supervisor stays `pause-requested`; it is never reported stopped from its stored status alone.
+- `/task resume <id>` — Return a settled paused task to ready after checking its original Goal revision, confirmed Goal, active approved plan and current approval bindings. It does not start a provider turn itself; normal dispatch still applies isolation, policy and approval gates.
+- `/task cancel <id>` — Make the task terminal and release its leases and session ownership. A running supervisor is asked to cancel; terminal cancellation records intent, not proof that the provider process has exited.
+- `/task retry <id>` — Create the next attempt of a blocked task, preserving previous worker runs, failure artifacts and command results. Cancelled tasks cannot be retried.
+
+Task mutations go through the workspace's in-process `app.LocalControl` with independent project-scoped `task.create`, `task.assign` and `task.control` capabilities. Every command binds the exact task, expected revision and idempotency key. The task/lease effects, immutable result snapshot and authenticated actor audit commit together. Replays return the original result revision; current inventory shows observed settlement separately. Task read-back includes `control_state` and `attempt`; worker status remains in its established field. Process 05 task materialization retains its exact Goal and plan bindings. Historical worker-imported tasks acquire a binding on their first operator control. The Unix socket remains the worker protocol, and unattached or unauthorized composers still refuse mutations.
 - `/agents` — List registered team participants, assigned roles, and harness statuses.
 
 ### Goal, Alignment & Constraints

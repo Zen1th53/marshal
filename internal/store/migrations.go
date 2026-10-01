@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 88
+const LatestSchemaVersion = 89
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2666,6 +2666,21 @@ CREATE TRIGGER IF NOT EXISTS command_audit_no_delete BEFORE DELETE ON command_au
 			return fmt.Errorf("migrate schema version 88: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version,applied_at) VALUES(88,?)", utcNow()); err != nil {
+			return err
+		}
+	}
+
+	if version < 89 {
+		if _, err := tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS task_controls (task_id TEXT PRIMARY KEY REFERENCES tasks(task_id), state TEXT NOT NULL DEFAULT '', attempt INTEGER NOT NULL DEFAULT 1, session_id TEXT NOT NULL, goal_id TEXT NOT NULL DEFAULT '', goal_revision INTEGER NOT NULL DEFAULT 0, plan_id TEXT NOT NULL DEFAULT '', plan_version INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS task_supervisions (task_id TEXT PRIMARY KEY REFERENCES tasks(task_id), token TEXT NOT NULL, state TEXT NOT NULL, process_id INTEGER NOT NULL, process_stamp TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS task_command_snapshots (task_id TEXT NOT NULL REFERENCES tasks(task_id), revision INTEGER NOT NULL, data_json TEXT NOT NULL, PRIMARY KEY(task_id,revision));
+CREATE TRIGGER IF NOT EXISTS task_snapshots_no_update BEFORE UPDATE ON task_command_snapshots BEGIN SELECT RAISE(ABORT,'immutable task snapshot'); END;
+CREATE TRIGGER IF NOT EXISTS task_snapshots_no_delete BEFORE DELETE ON task_command_snapshots BEGIN SELECT RAISE(ABORT,'immutable task snapshot'); END;
+`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version,applied_at) VALUES(89,?)", utcNow()); err != nil {
 			return err
 		}
 	}

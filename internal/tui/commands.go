@@ -280,7 +280,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	case "/tasks", "/task":
 		if len(parts) > 1 && !strings.EqualFold(parts[1], "list") && !strings.EqualFold(parts[1], "inspect") && !strings.EqualFold(parts[1], "ownership") {
-			return "Task mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+			return h.handleTaskMutation(ctx, parts[1:])
 		}
 		return h.handleTasks(ctx, parts[1:], line)
 
@@ -705,8 +705,8 @@ func (h *CommandHandler) helpText() string {
   /ultra [status|start|stop|request]  Show ULTRA status, switch execution on or off, or request entitlement
   /agents, /roster         List registered participants, fixed roles, and harnesses
   /claims                  List active claims and epistemic verification states
-  /tasks, /task [list|inspect <id>|ownership]  Read tasks; mutations unavailable
-  /task create|assign|pause|resume|cancel|retry  Mutations unavailable (runtime authorization required)
+  /tasks, /task [list|inspect <id>|ownership]  Read tasks
+  /task create|assign|pause|resume|cancel|retry  Authenticated task controls
   /budget                  Show consumed budget (unknown tokens/cost stay UNKNOWN)
   /learning <id>           Inspect a Process 07 memory commit, promotions and refusals
   /optimization <id>       Inspect a Process 08 governed optimization cycle and refusals

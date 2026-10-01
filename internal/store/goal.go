@@ -195,7 +195,14 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 
 // GetGoalContract fetches a specific revision of a GoalContract.
 func (s *Store) GetGoalContract(ctx context.Context, goalID string, revision int64) (model.GoalContract, error) {
-	row := s.db.QueryRowContext(ctx, `
+	return readGoalContract(ctx, s.db, goalID, revision)
+}
+
+// readGoalContract shares canonical decoding with transaction-bound checks.
+func readGoalContract(ctx context.Context, reader interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, goalID string, revision int64) (model.GoalContract, error) {
+	row := reader.QueryRowContext(ctx, `
 		SELECT
 			goal_id, session_id, revision, desired_outcome, expected_artifact,
 			scope_json, constraints_json, do_not_do_json, success_criteria_json,

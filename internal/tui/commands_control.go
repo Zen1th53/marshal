@@ -183,8 +183,11 @@ func (h *CommandHandler) inspectOne(ctx context.Context, kind, id string) (strin
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("TASK %s\n  Title:    %s\n  Status:   %s\n  Risk:     %s\n  Revision: %d\n",
-			task.ID, RedactContent(task.Title, nil), task.Status, task.Risk, task.Revision), nil
+		status := string(task.Status)
+		if task.ControlState != "" {
+			status = task.ControlState
+		}
+		return fmt.Sprintf("TASK %s\n  Title:    %s\n  Status:   %s\n  Risk:     %s\n  Revision: %d\n  Attempt:  %d\n", task.ID, RedactContent(task.Title, nil), status, task.Risk, task.Revision, task.Attempt), nil
 
 	case "handoff":
 		ho, err := h.ws.store.GetHandoff(ctx, protocol.HandoffID(id))

@@ -71,6 +71,8 @@ type Runtime struct {
 	quorumEngine        *quorum.Engine
 	allowProcessOnly    bool
 	execService         *ExecutionService
+	taskMu              sync.Mutex
+	taskRuns            map[string]context.CancelFunc
 	execMu              sync.Mutex
 	codexAppServerMu    sync.Mutex
 	codexAppServerTurns map[string]*liveCodexAppServerTurn
@@ -1031,7 +1033,19 @@ func isCommitIdentifier(value string) bool {
 	return true
 }
 
-func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error) {
+func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunResult, finalErr error) {
+	var settle func() error
+	var admissionErr error
+	ctx, settle, admissionErr = r.superviseTask(ctx, request.TaskID)
+	if admissionErr != nil {
+		return RunResult{}, admissionErr
+	}
+	defer func() {
+		if err := settle(); err != nil && finalErr == nil {
+			finalErr = err
+		}
+	}()
+
 	if request.Adapter == "" {
 		request.Adapter = "codex"
 	}
@@ -1134,11 +1148,14 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			}
 		}
 	}
-	claim, err := r.Claim(ctx, ClaimRequest{TaskID: task.ID, AgentID: request.AgentID, ExpectedRevision: request.ExpectedRevision})
+	claim, err := r.claimForRun(ctx, task, request)
 	if err != nil {
 		return RunResult{}, err
 	}
-	claimedRevision := request.ExpectedRevision + 1
+	claimedRevision := task.Revision + 1
+	if task.Status == model.TaskClaimed {
+		claimedRevision = task.Revision
+	}
 	releasePreparationFailure := func() {
 		active, activeErr := r.store.ActiveLease(context.Background(), task.ID)
 		if activeErr == nil {

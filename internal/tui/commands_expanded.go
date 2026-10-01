@@ -70,7 +70,7 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 			return "", fmt.Errorf("list tasks: %w", err)
 		}
 		if len(tasks) == 0 {
-			return "No tasks in store. Task creation is unavailable in TUI; authenticated runtime authorization is required.", nil
+			return "No tasks in store. Use /task create <title> in an authenticated workspace.", nil
 		}
 
 		th := h.ws.theme
@@ -85,7 +85,11 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 			if t.OwnerAgentID != nil {
 				owner = *t.OwnerAgentID
 			}
-			badge := th.RenderBadge(string(t.Status))
+			status := string(t.Status)
+			if t.ControlState != "" {
+				status = t.ControlState
+			}
+			badge := th.RenderBadge(status)
 			b.WriteString(fmt.Sprintf("  %-8s %s %-20s [Owner: %s | Risk: %s]\n",
 				t.ID, badge, t.Title, owner, t.Risk))
 		}
@@ -94,62 +98,10 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 
 	sub := strings.ToLower(args[0])
 	switch sub {
-	case "create":
-		if len(args) < 2 {
-			return "Usage: /task create <task title>", nil
-		}
-		title := strings.TrimSpace(line[strings.Index(line, args[0])+len(args[0]):])
-		taskID := fmt.Sprintf("TASK-%d", time.Now().UnixNano()%10000)
-		newTask := model.Task{
-			ID:       taskID,
-			Title:    title,
-			Status:   model.TaskReady,
-			Risk:     model.R1,
-			Revision: 1,
-		}
-		if h.ws.store != nil {
-			if _, err := h.ws.store.ImportTasks(ctx, []model.Task{newTask}); err != nil {
-				return "", fmt.Errorf("import task: %w", err)
-			}
-		}
-		return fmt.Sprintf("Task %s created: %s", taskID, title), nil
-
+	case "create", "assign", "pause", "resume", "cancel", "retry":
+		return h.handleTaskMutation(ctx, args)
 	case "inspect":
-		if len(args) < 2 {
-			return "Usage: /task inspect <task_id>", nil
-		}
 		return h.handleInspect(ctx, "task", args[1])
-
-	case "assign":
-		if len(args) < 3 {
-			return "Usage: /task assign <task_id> <agent_id>", nil
-		}
-		// Ownership is taken by leasing the task through the canonical claim
-		// path, which enforces the lease and revision rules. Printing an
-		// assignment without taking the lease would report ownership that the
-		// runtime does not actually recognise.
-		if h.ws.store == nil {
-			return "Store unavailable", nil
-		}
-		task, err := h.ws.store.GetTask(ctx, args[1])
-		if err != nil {
-			return "", fmt.Errorf("task %s: %w", args[1], err)
-		}
-		lease, err := h.ws.store.ClaimTask(ctx, model.ClaimRequest{
-			TaskID:           task.ID,
-			AgentID:          args[2],
-			ExpectedRevision: task.Revision,
-		})
-		if err != nil {
-			return "", fmt.Errorf("assign task %s to %s: %w", task.ID, args[2], err)
-		}
-		return fmt.Sprintf("Task %s claimed by %s (lease %s).", task.ID, args[2], lease.ID), nil
-
-	case "pause", "resume", "cancel", "retry":
-		if len(args) < 2 {
-			return fmt.Sprintf("Usage: /task %s <task_id>", sub), nil
-		}
-		return h.transitionTask(ctx, sub, args[1])
 
 	case "ownership":
 		return h.handleTaskOwnership(ctx)
@@ -157,52 +109,6 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 	default:
 		return "Usage: /task [list|create|inspect|assign|pause|resume|cancel|retry|ownership]", nil
 	}
-}
-
-// transitionTask moves a task through the canonical state machine. The store
-// enforces which transitions are legal for the actor's role, so an illegal
-// request is reported as the refusal it is rather than as a success message.
-func (h *CommandHandler) transitionTask(ctx context.Context, verb, taskID string) (string, error) {
-	if h.ws.store == nil {
-		return "Store unavailable", nil
-	}
-
-	task, err := h.ws.store.GetTask(ctx, taskID)
-	if err != nil {
-		return "", fmt.Errorf("task %s: %w", taskID, err)
-	}
-
-	var target model.TaskStatus
-	switch verb {
-	case "pause":
-		target = model.TaskBlocked
-	case "resume", "retry":
-		target = model.TaskReady
-	case "cancel":
-		target = model.TaskCancelled
-	default:
-		return fmt.Sprintf("Unsupported task transition %q.", verb), nil
-	}
-
-	if task.Status == target {
-		return fmt.Sprintf("Task %s is already %s.", task.ID, target), nil
-	}
-
-	updated, err := h.ws.store.TransitionTask(ctx, model.TaskTransitionRequest{
-		TaskID:           task.ID,
-		FromStatus:       task.Status,
-		ToStatus:         target,
-		ActorRole:        model.RoleArchitect,
-		ActorID:          "operator",
-		Reason:           fmt.Sprintf("operator %s via TUI", verb),
-		ExpectedRevision: task.Revision,
-	})
-	if err != nil {
-		return "", fmt.Errorf("%s task %s (%s -> %s): %w", verb, task.ID, task.Status, target, err)
-	}
-
-	return fmt.Sprintf("Task %s transitioned %s -> %s (revision %d).",
-		updated.ID, task.Status, updated.Status, updated.Revision), nil
 }
 
 func (h *CommandHandler) handleTaskOwnership(ctx context.Context) (string, error) {

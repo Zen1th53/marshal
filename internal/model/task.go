@@ -37,6 +37,8 @@ const (
 )
 
 type Task struct {
+	ControlState string     `json:"control_state,omitempty"`
+	Attempt      int        `json:"attempt,omitempty"`
 	ID           string     `json:"id"`
 	Title        string     `json:"title"`
 	Status       TaskStatus `json:"status"`
