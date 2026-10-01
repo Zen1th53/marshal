@@ -103,7 +103,7 @@ func TestLocalControlBoundary(t *testing.T) {
 		t.Fatalf("restart replay: %+v %v", replay, err)
 	}
 	grants, err := reopened.Store().ListCapabilityGrants(ctx)
-	if err != nil || len(grants) != 15 {
+	if err != nil || len(grants) != 17 {
 		t.Fatalf("grants: %+v %v", grants, err)
 	}
 	var reviseGrant capability.GrantID
@@ -197,7 +197,7 @@ func TestLocalControlCanonicalBoundGoal(t *testing.T) {
 		t.Fatal("principal is not canonically scoped")
 	}
 	grants, err := r.Store().ListCapabilityGrants(ctx)
-	if err != nil || len(grants) != 15 || string(grants[0].TaskID) != string(binding.ID) {
+	if err != nil || len(grants) != 17 || string(grants[0].TaskID) != string(binding.ID) {
 		t.Fatalf("canonical grant: %+v %v", grants, err)
 	}
 	for _, grant := range grants {

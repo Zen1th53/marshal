@@ -24,8 +24,11 @@ func workCommandUsage(parts []string) string {
 		usage, valid = cmd+" <typed-id|id>", len(args) <= 1
 	case "/reject":
 		usage, valid = cmd+" <typed-id|id> [reason]", true
-	case "/evidence", "/rollback":
+	case "/evidence":
 		usage, valid = cmd+" <id>", len(args) == 1
+	case "/rollback":
+		usage = "/rollback <checkpoint_id> [confirm <digest>]"
+		valid = len(args) == 1 || len(args) == 3 && strings.EqualFold(args[1], "confirm")
 	case "/inspect":
 		usage = "/inspect [claim|evidence|checkpoint|task|handoff|approval|agent] <id>"
 		valid = (len(args) == 1 && !workInspectKind(args[0])) || len(args) == 2
@@ -55,7 +58,7 @@ func workCommandUsage(parts []string) string {
 			}
 		}
 	case "/checkpoint":
-		usage = "/checkpoint list | inspect <id> | diff <from> <to> | create"
+		usage = "/checkpoint list | inspect <id> | diff <from> <to> | create <reason>"
 		if len(args) > 0 {
 			switch strings.ToLower(args[0]) {
 			case "list":
@@ -65,7 +68,7 @@ func workCommandUsage(parts []string) string {
 			case "diff":
 				valid = len(args) == 3
 			case "create":
-				// Capture is not implemented; keep its explicit refusal.
+				valid = len(args) >= 2
 			default:
 				valid = false
 			}

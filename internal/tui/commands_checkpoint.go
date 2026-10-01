@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/execution"
+	"github.com/google/uuid"
 )
 
 // checkpointDiffLimit bounds the paths a snapshot comparison reports.
@@ -25,15 +27,15 @@ func (h *CommandHandler) handleCheckpointRead(ctx context.Context, args []string
 	}
 	switch strings.ToLower(args[0]) {
 	case "list":
-		records, err := a.Checkpoints(ctx)
+		records, err := service.Engine().ListCheckpoints()
 		if err != nil {
 			return "", fmt.Errorf("list checkpoints: %w", err)
 		}
 		if len(records) == 0 {
-			return "No execution snapshots in this session.", nil
+			return "No execution snapshots in this project.", nil
 		}
 		var b strings.Builder
-		fmt.Fprintf(&b, "EXECUTION SNAPSHOTS (%d, newest first; project files, excluding .git and .marshal):\n", len(records))
+		fmt.Fprintf(&b, "EXECUTION SNAPSHOTS (%d in this project, newest first; project files, excluding .git and .marshal):\n", len(records))
 		for _, r := range records {
 			restored := ""
 			if r.RestoredAt != nil {
@@ -98,4 +100,73 @@ func (h *CommandHandler) handleCheckpointRead(ctx context.Context, args []string
 		return strings.TrimRight(b.String(), "\n"), nil
 	}
 	return "Usage: /checkpoint list | inspect <id> | diff <from> <to>", nil
+}
+
+// handleCheckpointCreate snapshots the project's files as the local owner.
+func (h *CommandHandler) handleCheckpointCreate(ctx context.Context, reason string) (string, error) {
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
+		return "Checkpoint creation is unavailable in TUI: authenticated runtime authorization is required.", nil
+	}
+	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: "checkpoint:new", IdempotencyKey: uuid.NewString()}
+	cp, err := a.runtime.CommandCaptureCheckpoint(a.localControl.Context(ctx), e, reason)
+	if err != nil {
+		return fmt.Sprintf("Checkpoint was NOT created: %v", err), nil
+	}
+	return fmt.Sprintf("Snapshot %s captured (digest %s). Restore it with /rollback %s.", cp.CheckpointID, cp.SnapshotDigest[:12], cp.CheckpointID), nil
+}
+
+// handleRollback previews a restore, or performs it once the operator
+// confirms the snapshot's digest. Restoring rewrites project files, so the
+// preview says exactly what would change and nothing happens without the
+// confirmation.
+func (h *CommandHandler) handleRollback(ctx context.Context, args []string) (string, error) {
+	id := strings.TrimPrefix(args[0], "#")
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
+		return fmt.Sprintf("Rollback to %s was NOT performed: authenticated runtime authorization is required.", id), nil
+	}
+	engine := a.runtime.Execution().Engine()
+	check, diff, err := engine.PreviewRestore(ctx, id)
+	if err != nil {
+		return fmt.Sprintf("Rollback to %s was NOT performed: %v", id, err), nil
+	}
+	if check.State != execution.SnapshotIntact {
+		return fmt.Sprintf("Rollback to %s was NOT performed: the snapshot is %s.", id, check.State), nil
+	}
+	if len(args) == 1 {
+		var b strings.Builder
+		fmt.Fprintf(&b, "ROLLBACK PREVIEW for %s (nothing has changed yet):\n", id)
+		fmt.Fprintf(&b, "  Restores project files (not .git or .marshal) to %s, captured %s.\n", id, check.Record.CreatedAt.Format("2006-01-02 15:04:05"))
+		fmt.Fprintf(&b, "  %d files would be restored, %d deleted, %d overwritten:\n", len(diff.Added), len(diff.Removed), len(diff.Changed))
+		for _, group := range []struct {
+			mark  string
+			paths []string
+		}{{"restore", diff.Added}, {"delete", diff.Removed}, {"overwrite", diff.Changed}} {
+			for _, p := range group.paths {
+				fmt.Fprintf(&b, "    %s %s\n", group.mark, p)
+			}
+		}
+		if diff.Truncated {
+			b.WriteString("    ... more than 200 paths differ\n")
+		}
+		fmt.Fprintf(&b, "  A recovery checkpoint of the current state is captured first, and no run may be active.\n")
+		fmt.Fprintf(&b, "  To restore: /rollback %s confirm %s", id, check.Record.SnapshotDigest[:12])
+		return b.String(), nil
+	}
+	confirmed := args[2]
+	if len(confirmed) < 12 || !strings.HasPrefix(check.Record.SnapshotDigest, confirmed) {
+		return fmt.Sprintf("Rollback to %s was NOT performed: %q does not match the snapshot's digest; run /rollback %s to see it again.", id, confirmed, id), nil
+	}
+	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: "checkpoint:" + id, IdempotencyKey: uuid.NewString()}
+	result, err := a.runtime.CommandRestoreCheckpoint(a.localControl.Context(ctx), e, check.Record.SnapshotDigest)
+	if err != nil {
+		recovery := ""
+		if result.Recovery.CheckpointID != "" {
+			recovery = fmt.Sprintf(" A recovery point was captured: /rollback %s.", result.Recovery.CheckpointID)
+		}
+		return fmt.Sprintf("Rollback to %s was NOT completed: %v.%s", id, err, recovery), nil
+	}
+	return fmt.Sprintf("Rolled back to %s; every restored file was re-read and matches the snapshot. To undo: /rollback %s (recovery point).",
+		id, result.Recovery.CheckpointID), nil
 }

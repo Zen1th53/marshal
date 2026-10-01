@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // Snapshot states reported by VerifySnapshot. Only SnapshotIntact means the
@@ -88,7 +89,15 @@ func (ce *CheckpointEngine) DiffSnapshots(fromID, toID string, limit int) (Snaps
 	if err != nil {
 		return SnapshotDiff{}, err
 	}
-	diff := SnapshotDiff{From: fromID, To: toID}
+	diff := diffFileMaps(a, b, limit)
+	diff.From, diff.To = fromID, toID
+	return diff, nil
+}
+
+// diffFileMaps lists paths added, removed and changed going from a to b, at
+// most limit of them.
+func diffFileMaps(a, b map[string]string, limit int) SnapshotDiff {
+	var diff SnapshotDiff
 	add := func(list *[]string, path string) {
 		if len(diff.Added)+len(diff.Removed)+len(diff.Changed) >= limit {
 			diff.Truncated = true
@@ -108,7 +117,7 @@ func (ce *CheckpointEngine) DiffSnapshots(fromID, toID string, limit int) (Snaps
 			add(&diff.Removed, path)
 		}
 	}
-	return diff, nil
+	return diff
 }
 
 // snapshotFiles maps each regular file's relative path to its mode, size and
@@ -152,4 +161,74 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// projectFiles maps the project's regular files to mode, size and digest,
+// skipping the directories a snapshot never captures. It is the destination
+// side of a restore check, comparable with snapshotFiles of the snapshot.
+func projectFiles(root string, skips []string) (map[string]string, error) {
+	skip := map[string]bool{}
+	for _, s := range skips {
+		skip[s] = true
+	}
+	files := map[string]string{}
+	err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if rel != "." && skip[strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]] {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported project entry %s", rel)
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		h := sha256.New()
+		_, copyErr := io.Copy(h, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		files[filepath.ToSlash(rel)] = fmt.Sprintf("%o:%d:%s", info.Mode().Perm(), info.Size(), hex.EncodeToString(h.Sum(nil)))
+		return nil
+	})
+	return files, err
+}
+
+// ListCheckpoints returns every snapshot record of the project, newest first.
+func (ce *CheckpointEngine) ListCheckpoints() ([]CheckpointRecord, error) {
+	entries, err := os.ReadDir(ce.backupDir)
+	if err != nil {
+		return nil, err
+	}
+	var records []CheckpointRecord
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		rec, err := ce.GetCheckpoint(strings.TrimSuffix(name, ".json"))
+		if err != nil {
+			continue // a record that fails validation is never offered
+		}
+		records = append(records, rec)
+	}
+	sort.Slice(records, func(i, j int) bool { return records[i].CreatedAt.After(records[j].CreatedAt) })
+	return records, nil
 }

@@ -276,7 +276,7 @@ func TestCommandSweepWorkPTY(t *testing.T) {
 		{"/claims", "No claims"}, {"/inspect task missing", "No task found"}, {"/approve apr", "Error: not found"},
 		{"/reject apr", "Error: not found"}, {"/route role=qa", "ADVISORY ONLY"}, {"/agents", "TEAM ROSTER"},
 		{"/evidence missing", "NOT FOUND"}, {"/why", "No ULTRA route explanation"}, {"/msg all guidance", "nothing was sent"},
-		{"/handoff qa review", "nothing was sent"}, {"/checkpoint list", "No execution snapshots in this session"},
+		{"/handoff qa review", "nothing was sent"}, {"/checkpoint list", "No execution snapshots in this project"},
 		{"/rollback cp", "NOT performed"}, {"/budget", "BUDGET CONSUMED"}, {"/pause", "Pause was NOT performed"},
 		{"/resume --last", "Install Codex"}, {"/cancel", "Cancel was NOT performed"}, {"/tasks", "No tasks in store"},
 		{"/task ownership", "WORK OWNERSHIP TABLE"},

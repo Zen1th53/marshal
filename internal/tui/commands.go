@@ -257,16 +257,16 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleCollaboration(ctx, "handoff", parts[1:])
 
 	case "/checkpoint":
-		if len(parts) > 1 && !strings.EqualFold(parts[1], "create") {
+		if len(parts) == 1 {
+			return h.handleCheckpointRead(ctx, []string{"list"})
+		}
+		if !strings.EqualFold(parts[1], "create") {
 			return h.handleCheckpointRead(ctx, parts[1:])
 		}
-		return h.handleCheckpoint(ctx)
+		return h.handleCheckpointCreate(ctx, strings.Join(parts[2:], " "))
 
 	case "/rollback":
-		if len(parts) < 2 {
-			return "Usage: /rollback <checkpoint_id>", nil
-		}
-		return h.handleRollback(ctx, parts[1])
+		return h.handleRollback(ctx, parts[1:])
 
 	case "/budget":
 		if len(parts) > 1 {
@@ -607,14 +607,6 @@ func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
 
 	return "No route explanation is available yet.", nil
 }
-func (h *CommandHandler) handleCheckpoint(ctx context.Context) (string, error) {
-	return "Checkpoint creation is unavailable in TUI: authenticated runtime snapshot support is not implemented.", nil
-}
-
-func (h *CommandHandler) handleRollback(ctx context.Context, cpID string) (string, error) {
-	cpID = strings.TrimPrefix(cpID, "#")
-	return fmt.Sprintf("Rollback to %s was NOT performed: authenticated runtime restoration is not implemented.", cpID), nil
-}
 
 func (h *CommandHandler) handleBudget(ctx context.Context) (string, error) {
 	h.ws.mu.Lock()
@@ -673,9 +665,9 @@ func (h *CommandHandler) helpText() string {
   /why                     Explain advisory routing; verified ULTRA entitlement required
   /msg, /say <agent|all> <text>  Message the team session as the local owner
   /handoff <role> <summary> Hand the session turn to the active participant of a role
-  /checkpoint list | inspect <id> | diff <from> <to>  Read this session's snapshots; files re-checked
-  /checkpoint create       Unavailable: authenticated snapshot capture is not implemented
-  /rollback <id>           Unavailable: runtime restoration support required
+  /checkpoint list | inspect <id> | diff <from> <to>  Read the project's snapshots; files re-checked
+  /checkpoint create <reason>  Snapshot the project's files
+  /rollback <id> [confirm <digest>]  Preview, then restore a snapshot (recovery point kept)
   /pause [run:<id>]        Pause a run of this session (stops new dispatch)
   /resume [run:<id>]       Resume a paused run; /resume --last: native Codex resume
   /cancel [run:<id>]       Cancel a run of this session and its provider turns
