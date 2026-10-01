@@ -52,7 +52,13 @@ func TestProviderDialectObservationAndReplacement(t *testing.T) {
 		t.Setenv("PROBE_LOG", log)
 		write := func(version string) {
 			script := "#!/bin/sh\n[ \"$#\" = 1 ] && [ \"$1\" = --version ] || exit 9\nprintf '%s\\n' \"$1\" >> \"$PROBE_LOG\"\nprintf '%s\\n' '" + version + "'\n"
-			if err := os.WriteFile(path, []byte(script), 0700); err != nil {
+			// Replace by rename: rewriting the file in place can race a fork in
+			// another test that inherited the write descriptor, and exec then
+			// fails with ETXTBSY.
+			if err := os.WriteFile(path+".new", []byte(script), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(path+".new", path); err != nil {
 				t.Fatal(err)
 			}
 		}

@@ -130,7 +130,10 @@ func TestConcurrentClaimAndReadContention(t *testing.T) {
 	}
 
 	// PRAGMA integrity_check to verify zero corruption
-	meta, err := VerifyBackup(ctx, dbPath, "PRJ-CONCURRENCY", LatestSchemaVersion)
+	// Verification gets a full deadline independent of the contention phase.
+	verifyCtx, verifyCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer verifyCancel()
+	meta, err := VerifyBackup(verifyCtx, dbPath, "PRJ-CONCURRENCY", LatestSchemaVersion)
 	if err != nil {
 		t.Fatalf("post-concurrency integrity verification failed: %v", err)
 	}
