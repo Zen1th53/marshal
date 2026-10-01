@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -84,6 +85,7 @@ type claudeStreamApprovalFixture struct {
 	service *ExecutionService
 	runtime *Runtime
 	engine  *execution.Engine
+	journal execution.JournalStore
 	record  *execution.RuntimeApproval
 	request claude.StreamApprovalRequest
 	task    execution.TaskExecution
@@ -93,7 +95,12 @@ type claudeStreamApprovalFixture struct {
 func newClaudeStreamApprovalFixture(t *testing.T) *claudeStreamApprovalFixture {
 	t.Helper()
 	ctx := context.Background()
-	engine, err := execution.NewEngine(execution.EngineConfig{ProjectRoot: t.TempDir()}, nil, nil)
+	projectRoot := t.TempDir()
+	journal, err := execution.NewFileJournalStore(filepath.Join(projectRoot, ".marshal", "journal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := execution.NewEngine(execution.EngineConfig{ProjectRoot: projectRoot}, nil, journal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +139,7 @@ func newClaudeStreamApprovalFixture(t *testing.T) *claudeStreamApprovalFixture {
 		t.Fatal(err)
 	}
 	return &claudeStreamApprovalFixture{
-		service: service, runtime: serviceRuntime, engine: engine,
+		service: service, runtime: serviceRuntime, engine: engine, journal: journal,
 		record: record, request: request, task: task,
 		key: run.RunID + "\x00" + task.TaskID,
 	}
@@ -151,6 +158,33 @@ func (f *claudeStreamApprovalFixture) status(t *testing.T) execution.ApprovalSta
 		t.Fatalf("read canonical approval: %v", err)
 	}
 	return current.Status
+}
+
+func (f *claudeStreamApprovalFixture) waitForContinuation(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		events, err := f.journal.GetEvents(f.record.RunID)
+		if err != nil {
+			t.Fatalf("read native approval continuation: %v", err)
+		}
+		// The fixture has no live run context. FailNativeResume appends this
+		// durable event after all approval and run storage operations. The file
+		// journal's read lock also waits for the append and file close to finish.
+		for _, event := range events {
+			if event.TaskID == f.record.TaskID && event.EventType == "PROVIDER_RESUME_FAILED" {
+				return
+			}
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("native approval continuation did not finish: %v", ctx.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
 // Property 1 (the security contract): a restart that dropped the local Claude
@@ -208,6 +242,8 @@ func TestNativeClaudeApprovalDecidesRecordBeforeReleasingProvider(t *testing.T) 
 	if err := f.service.Approve(ctx, f.record.ApprovalID, "operator", "reviewed exact request"); err != nil {
 		t.Fatalf("approve live native Claude request: %v", err)
 	}
+	// Register before assertions so even a failure waits before TempDir cleanup.
+	t.Cleanup(func() { f.waitForContinuation(t) })
 	if client.resolved != 1 || client.declined != 0 {
 		t.Fatalf("native decision = resolved:%d declined:%d, want 1/0", client.resolved, client.declined)
 	}
