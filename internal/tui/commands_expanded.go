@@ -577,7 +577,7 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 			}
 			b.WriteString(fmt.Sprintf("    State:   %s (%s)\n", pr.State, pr.BinaryPath))
 			b.WriteString(fmt.Sprintf("    Version: %s\n", pr.Version))
-			b.WriteString(fmt.Sprintf("    Model:   %s (not established by probe)\n", UnknownModel))
+			b.WriteString(fmt.Sprintf("    Model:   %s\n", h.providerModelLine(ctx, pr.HarnessName)))
 			b.WriteString("    Auth:    UNKNOWN (no execution performed)\n")
 			b.WriteString("    Egress:  BLOCKED_BY_POLICY (sandbox uses --unshare-net; per-endpoint egress unenforceable)\n")
 		}
@@ -597,21 +597,33 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 				"MARSHAL can see.", nil
 		}
 		if len(args) < 2 {
-			return "Usage: /provider config <provider_name>", nil
+			return "Usage: /provider config <harness|provider>", nil
 		}
 
-		name := strings.ToLower(args[1])
+		// MARSHAL reaches providers through harnesses, so an API provider name
+		// resolves to the harness that serves it. This command inspects; it
+		// changes no configuration.
+		requested := strings.ToLower(args[1])
+		name := map[string]string{"anthropic": "claude", "claude-code": "claude", "openai": "codex", "agy": "antigravity", "google": "antigravity", "gemini": "antigravity"}[requested]
+		if name == "" {
+			name = requested
+		}
+		via := ""
+		if name != requested {
+			via = fmt.Sprintf(" (provider %s is reached through the %s harness)", requested, name)
+		}
+		const configure = "\n  This inspects the harness; it changes no configuration.\n  Configure: model with /model select <codex|claude> <model>, Codex reasoning effort with /effort, credentials with the harness's own login."
 		for _, pr := range ProbeHarnesses() {
 			if pr.HarnessName != name {
 				continue
 			}
 			if !pr.Installed {
-				return fmt.Sprintf("Provider %s: %s\n  %s", name, StateUnavailable, pr.Reason), nil
+				return fmt.Sprintf("Harness %s%s: %s\n  %s%s", name, via, StateUnavailable, pr.Reason, configure), nil
 			}
-			return fmt.Sprintf("Provider %s: %s (%s)\n  Version: %s\n  Credentials are held by the harness; MARSHAL does not store them.\n  Auth state: UNKNOWN until an execution establishes it.",
-				name, pr.State, pr.BinaryPath, pr.Version), nil
+			return fmt.Sprintf("Harness %s%s: %s (%s)\n  Version: %s\n  Model:   %s\n  Credentials are held by the harness; MARSHAL does not store them.\n  Auth state: UNKNOWN until an execution establishes it.%s",
+				name, via, pr.State, pr.BinaryPath, pr.Version, h.providerModelLine(ctx, name), configure), nil
 		}
-		return fmt.Sprintf("Unknown provider %q. Run /provider status to see what this host provides.", name), nil
+		return fmt.Sprintf("Unknown harness or provider %q. Known harnesses: claude, codex, opencode, antigravity (providers anthropic, openai, google map to them). Run /provider status to see what this host provides.", requested), nil
 	}
 
 	return "Usage: /provider [status|config <name>]", nil
@@ -1089,4 +1101,18 @@ func (h *CommandHandler) setCodexEffort(ctx context.Context, level string) (stri
 		effort = "the model's default effort"
 	}
 	return fmt.Sprintf("Future governed Codex runs of %s will request %s (preference revision %d). Runs already started keep theirs.", preference.Model, effort, preference.Revision), nil
+}
+
+// providerModelLine names the model a harness's governed runs would use: the
+// execution preference for Codex and Claude, otherwise the harness default,
+// which the probe does not establish.
+func (h *CommandHandler) providerModelLine(ctx context.Context, harnessName string) string {
+	if harnessName == "codex" || harnessName == "claude" {
+		if a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority); ok && a != nil && a.runtime != nil {
+			if revision, current, err := a.runtime.ModelPreferenceRevision(ctx, harnessName); err == nil && current != "" {
+				return fmt.Sprintf("%s (execution preference, revision %d)", current, revision)
+			}
+		}
+	}
+	return UnknownModel + " (harness default; not established by probe)"
 }
