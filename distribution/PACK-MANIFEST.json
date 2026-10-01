@@ -3151,8 +3151,8 @@
     },
     {
       "path": "docs/tui.md",
-      "sha256": "76cbf865952c75a59f2c7aa303297715421edac6e52ec3adeac5582a13668672",
-      "bytes": 43593
+      "sha256": "bc54d0ae8001c55008c9d15a7426801c46855a33a7f2ce226a56d3ae4fd67f3c",
+      "bytes": 44005
     },
     {
       "path": "docs/verification-quorum.md",
@@ -8911,8 +8911,8 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "44173cd996e82935f6a20c356822ad43ab75859e9f767f999c4dfd273f2a7d1d",
-      "bytes": 43802
+      "sha256": "0af55a79ade7b85c11563c3b6cbf738161d709e1c1c3da9b0347caa37f1761f0",
+      "bytes": 45505
     },
     {
       "path": "internal/tui/commands_goal.go",
@@ -9408,6 +9408,16 @@
       "path": "internal/tui/probe_test.go",
       "sha256": "07e0c3750c5f48e04bccc9a947b98bfd9d5b1a7b14091230483e78979076201d",
       "bytes": 1975
+    },
+    {
+      "path": "internal/tui/provider_config_pty_test.go",
+      "sha256": "80e78bfc0d02b1baed7f59c63379ca13283bc15ca64be1243a3452e9659f6fc1",
+      "bytes": 659
+    },
+    {
+      "path": "internal/tui/provider_config_test.go",
+      "sha256": "919c3156730b5f1c7f24cf0cf093e96ab1be8fdaf53959e3849170e984e50834",
+      "bytes": 1148
     },
     {
       "path": "internal/tui/pty_conformance_test.go",
