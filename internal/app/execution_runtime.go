@@ -519,6 +519,22 @@ func (s *ExecutionService) Checkpoint(_ context.Context, checkpointID string) (e
 	return s.engine.GetCheckpoint(checkpointID)
 }
 
+// VerifyCheckpoint re-reads a checkpoint snapshot; it never restores it.
+func (s *ExecutionService) VerifyCheckpoint(_ context.Context, checkpointID string) (execution.SnapshotCheck, error) {
+	if err := s.available(); err != nil {
+		return execution.SnapshotCheck{}, err
+	}
+	return s.engine.VerifyCheckpoint(checkpointID)
+}
+
+// DiffCheckpoints lists files that differ between two intact snapshots.
+func (s *ExecutionService) DiffCheckpoints(_ context.Context, fromID, toID string, limit int) (execution.SnapshotDiff, error) {
+	if err := s.available(); err != nil {
+		return execution.SnapshotDiff{}, err
+	}
+	return s.engine.DiffCheckpoints(fromID, toID, limit)
+}
+
 // Rollback restores the project workspace to a prior checkpoint.
 func (s *ExecutionService) Rollback(ctx context.Context, checkpointID string) (execution.CheckpointRecord, error) {
 	if err := s.available(); err != nil {

@@ -499,7 +499,10 @@ Task mutations go through the workspace's in-process `app.LocalControl` with ind
 
 ### Governance, Budgets & Approvals
 - `/budget` — Inspect consumed budget; missing token and cost measurements are UNKNOWN. Does not update limits.
-- `/checkpoint [list|create|inspect|diff]` — Recognized but unavailable: authenticated runtime snapshot support is not implemented.
+- `/checkpoint list` — List this session's execution snapshots, newest first. A snapshot holds the project's files, excluding `.git` and `.marshal`. Collaboration handoff checkpoints are separate records (`/inspect checkpoint <id>`) with no files to restore.
+- `/checkpoint inspect <id>` — Show a snapshot's run, task, commit and reason, and re-read its files: `INTACT` only when they match the digest bound at capture; `TAMPERED`, `MISSING`, `NO_SNAPSHOT_DIGEST` or `UNREADABLE` otherwise.
+- `/checkpoint diff <from> <to>` — List files added, removed and changed between two intact snapshots (at most 200 paths). A snapshot that is not intact is refused, and no external diff program runs.
+- `/checkpoint create` — Unavailable: authenticated snapshot capture is not implemented in the TUI. Inspection never captures, restores or repairs anything.
 - `/rollback <id>` — Reports that rollback was NOT performed; authenticated runtime restoration is not implemented.
 - `/approvals` — List pending goal, plan, execution and SQLite approvals with typed IDs; `/approvals history` shows durable action decisions and the current goal/plan decisions.
 - `/approval inspect <id>` — Inspect one approval record; `/approval diff <id>` shows its commit binding and the live working tree.

@@ -48,12 +48,17 @@ func workCommandUsage(parts []string) string {
 			}
 		}
 	case "/checkpoint":
-		usage = "/checkpoint [list|create|inspect|diff] (currently unavailable)"
+		usage = "/checkpoint list | inspect <id> | diff <from> <to> | create"
 		if len(args) > 0 {
 			switch strings.ToLower(args[0]) {
-			case "list", "create", "inspect", "diff":
-				// The advertised operations have no implemented argument contract.
-				// Preserve their explicit refusal without inventing one here.
+			case "list":
+				valid = len(args) == 1
+			case "inspect":
+				valid = len(args) == 2
+			case "diff":
+				valid = len(args) == 3
+			case "create":
+				// Capture is not implemented; keep its explicit refusal.
 			default:
 				valid = false
 			}

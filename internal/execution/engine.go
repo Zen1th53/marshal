@@ -1284,6 +1284,22 @@ func (e *Engine) GetCheckpoint(checkpointID string) (CheckpointRecord, error) {
 	return e.checkpoints.GetCheckpoint(checkpointID)
 }
 
+// VerifyCheckpoint re-reads a checkpoint's snapshot without restoring it.
+func (e *Engine) VerifyCheckpoint(checkpointID string) (SnapshotCheck, error) {
+	if e.checkpoints == nil {
+		return SnapshotCheck{}, fmt.Errorf("%w: checkpoint engine unavailable", ErrCheckpointFailed)
+	}
+	return e.checkpoints.VerifySnapshot(checkpointID)
+}
+
+// DiffCheckpoints compares two intact snapshots without restoring either.
+func (e *Engine) DiffCheckpoints(fromID, toID string, limit int) (SnapshotDiff, error) {
+	if e.checkpoints == nil {
+		return SnapshotDiff{}, fmt.Errorf("%w: checkpoint engine unavailable", ErrCheckpointFailed)
+	}
+	return e.checkpoints.DiffSnapshots(fromID, toID, limit)
+}
+
 // CaptureCheckpoint snapshots current workspace state.
 func (e *Engine) CaptureCheckpoint(ctx context.Context, runID, taskID, reason string) (CheckpointRecord, error) {
 	if e.checkpoints == nil {

@@ -245,7 +245,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	case "/checkpoint":
 		if len(parts) > 1 && !strings.EqualFold(parts[1], "create") {
-			return "Checkpoint " + strings.ToLower(parts[1]) + " is unavailable in TUI: authenticated runtime snapshot support is not implemented.", nil
+			return h.handleCheckpointRead(ctx, parts[1:])
 		}
 		return h.handleCheckpoint(ctx)
 
@@ -654,7 +654,8 @@ func (h *CommandHandler) helpText() string {
   /why                     Explain advisory routing; verified ULTRA entitlement required
   /msg, /say <agent|all> <text>  Message the team session as the local owner
   /handoff <role> <summary> Hand the session turn to the active participant of a role
-  /checkpoint [list|create|inspect|diff]  Unavailable: runtime snapshot support required
+  /checkpoint list | inspect <id> | diff <from> <to>  Read this session's snapshots; files re-checked
+  /checkpoint create       Unavailable: authenticated snapshot capture is not implemented
   /rollback <id>           Unavailable: runtime restoration support required
   /pause                   Unavailable: authenticated runtime process control required
   /resume [id|--last]      No args: runtime control unavailable; args: native Codex resume
