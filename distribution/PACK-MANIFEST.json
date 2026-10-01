@@ -3151,8 +3151,8 @@
     },
     {
       "path": "docs/tui.md",
-      "sha256": "b5073b30f889f96ef49681401a488fce7292f48004ef47b98f85dbc7069c458c",
-      "bytes": 47215
+      "sha256": "7b4f85689bd2bc63527fb27af0443cd18a5419567b24373815d39400282c132f",
+      "bytes": 47853
     },
     {
       "path": "docs/verification-quorum.md",
@@ -3796,12 +3796,12 @@
     },
     {
       "path": "internal/app/local_control.go",
-      "sha256": "5baf945015ab82bd14689a35c15ba46e933b16299a4a5a61512290fd0bb40214",
-      "bytes": 6485
+      "sha256": "0cb6274d346bd44bd4be1bdac40180441ce014687734604e3fb75b6bf8bc8b7e",
+      "bytes": 6502
     },
     {
       "path": "internal/app/local_control_test.go",
-      "sha256": "99d78f1204befcc97a9ae4352e0a0d7617e0ff9c1d4ea40dd8a8c3b1e678f7dc",
+      "sha256": "400db2129348d182226effdcddd2d82c28ffc36577439397546a109a3737d7f6",
       "bytes": 10033
     },
     {
@@ -4138,6 +4138,16 @@
       "path": "internal/app/startup_support.go",
       "sha256": "62f266c12f05f3f9bea4916aea8bb11d8ffd5597b77f67ba0087666d027fb0d2",
       "bytes": 1410
+    },
+    {
+      "path": "internal/app/state_restore.go",
+      "sha256": "b95733ce229e1ed1ee8c1ff5f660d94f0603f468e67f0a0f89c3251596772bf4",
+      "bytes": 5524
+    },
+    {
+      "path": "internal/app/state_restore_test.go",
+      "sha256": "681c3b5224ee8687031a97ec697215579c00fc87048a29e9860f7dea84476bfc",
+      "bytes": 2746
     },
     {
       "path": "internal/app/task_blackboard_test.go",
@@ -7756,8 +7766,8 @@
     },
     {
       "path": "internal/store/backup.go",
-      "sha256": "281f62c836d8c4ee2cc91fc06cd0fa834666cda7c03ba3b4b01ffc8dc7a6d240",
-      "bytes": 10420
+      "sha256": "32c76e461b008715404e50daacd1145f7bafc33133d28d057304400da177d3b2",
+      "bytes": 11453
     },
     {
       "path": "internal/store/backup_test.go",
@@ -8193,6 +8203,16 @@
       "path": "internal/store/interpretation_test.go",
       "sha256": "6e8c4dccc062ba749217327e197c0445ededd77b9c5d7566e331266992353f6d",
       "bytes": 3975
+    },
+    {
+      "path": "internal/store/inuse_linux.go",
+      "sha256": "e5cbfeb4ade4bdf9c48a64a96593c9606e34d632b9a375eee5c02a020e187b01",
+      "bytes": 1123
+    },
+    {
+      "path": "internal/store/inuse_other.go",
+      "sha256": "28137716e97803c0e80518f33887f2c6256d1fc2ac7ea1baf1a5cc2675607e13",
+      "bytes": 219
     },
     {
       "path": "internal/store/learning.go",
@@ -8926,8 +8946,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "a35ca0a7ec71d307ab3f0fe526c9c933dd942766d82d3f24117c34ab820fb5d7",
-      "bytes": 28174
+      "sha256": "b10a1f4e655b0cb074fdd1d63818d3953fdfa827f86601ccd322197f2db6b02e",
+      "bytes": 28199
     },
     {
       "path": "internal/tui/commands_alignment.go",
@@ -8981,8 +9001,8 @@
     },
     {
       "path": "internal/tui/commands_config.go",
-      "sha256": "7b424d1fa1e69103edd460ec5dac4e465e2cd9cfb9e6755b583680375ffaa4d5",
-      "bytes": 3214
+      "sha256": "25e269de5ed2032ee4fa51c8bdd9c6f38e4d7ab9f91db8b19d889c5d165afe0e",
+      "bytes": 3294
     },
     {
       "path": "internal/tui/commands_control.go",
@@ -8996,8 +9016,8 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "02a5de069e74bcd97cc1050aeadc916ed1ca1e3d944c8b377f596149304ba280",
-      "bytes": 50055
+      "sha256": "e2b0e0296e68155fde35834a92c6765baa856a9a7e5690c1b67360c7fd4d33b6",
+      "bytes": 52335
     },
     {
       "path": "internal/tui/commands_fingerprint.go",
@@ -9106,8 +9126,8 @@
     },
     {
       "path": "internal/tui/controlauth.go",
-      "sha256": "ca7cb2b87b832d6e6190877beaa89e7a12f42760f0ef8c772ec7df3c27fecad9",
-      "bytes": 74741
+      "sha256": "93bbf758e2db3dfa97d61fefaae7eb95189e535d042fef6f1b609cea6b0a7c1a",
+      "bytes": 74512
     },
     {
       "path": "internal/tui/controlbind.go",
@@ -9618,6 +9638,11 @@
       "path": "internal/tui/securityscreen.go",
       "sha256": "82bf32b370bcd798706ff776f45de1c585f15a3fcf764d133f87b0cda95059f3",
       "bytes": 7040
+    },
+    {
+      "path": "internal/tui/state_restore_pty_test.go",
+      "sha256": "c67e703597fc020a7e65e7fb927883936b5c592f627f6a1e558c9ace4773f044",
+      "bytes": 1840
     },
     {
       "path": "internal/tui/statusbind.go",
