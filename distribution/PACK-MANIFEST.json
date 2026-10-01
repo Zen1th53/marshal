@@ -3616,8 +3616,8 @@
     },
     {
       "path": "internal/app/claude_stream_approval_test.go",
-      "sha256": "af66722951317a37a203599c29cb2ae03ea14f3b44d86b9997b1324be82704eb",
-      "bytes": 15799
+      "sha256": "f29df695ffd5ae6eeeeeb4b388c4bda6e9df8e0bcfa25bc89a8416860e2c24ac",
+      "bytes": 17038
     },
     {
       "path": "internal/app/codex_appserver_approval.go",
@@ -7966,8 +7966,8 @@
     },
     {
       "path": "internal/store/concurrency_hardening_test.go",
-      "sha256": "091285ab6d7a7ea67278dc19585e6c63aa850ccbd41835d8c4c07983b6c6ed4e",
-      "bytes": 4998
+      "sha256": "3f7d271b7ead1f86c3dc95e4a58ed5829f9135bc56fb166a228dd9510ce63806",
+      "bytes": 5187
     },
     {
       "path": "internal/store/confidence_persistence_a02_test.go",
