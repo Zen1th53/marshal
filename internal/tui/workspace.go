@@ -525,13 +525,37 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 }
 
 // GetUIState returns a snapshot copy of current UI state.
-func (w *Workspace) GetUIState() UIState {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+// liveStateLocked overlays the live ULTRA gate on the cached state, so every
+// surface derives entitlement, navigation and the effective mode label from
+// the gate at render time rather than from a value captured earlier. Callers
+// hold w.mu.
+func (w *Workspace) liveStateLocked() UIState {
 	state := w.state
 	state.UltraEntitled = w.ultra.Entitled()
 	state.UltraExecution = w.ultraExecution
 	state.NavigationAvailable = w.navReleased && state.UltraEntitled
+	state.SessionMode = effectiveModeLabel(w.mode, state.UltraEntitled)
+	return state
+}
+
+// effectiveModeLabel names the supervision mode as it currently applies. An
+// ULTRA preference without a live entitlement is shown as inactive instead of
+// as ULTRA, so a withdrawn or expired lease never leaves an ULTRA label behind.
+func effectiveModeLabel(mode string, entitled bool) string {
+	label := strings.ToUpper(mode)
+	if label == "" {
+		label = "MANUAL"
+	}
+	if label == "ULTRA" && !entitled {
+		return "ULTRA (INACTIVE: no verified entitlement)"
+	}
+	return label
+}
+
+func (w *Workspace) GetUIState() UIState {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	state := w.liveStateLocked()
 	return state
 }
 
@@ -1540,10 +1564,7 @@ func (w *Workspace) paint() {
 	cols, rows := w.terminal.Size()
 
 	w.mu.RLock()
-	state := w.state
-	state.UltraEntitled = w.ultra.Entitled()
-	state.UltraExecution = w.ultraExecution
-	state.NavigationAvailable = w.navReleased && state.UltraEntitled
+	state := w.liveStateLocked()
 	th := w.theme
 	workDir := w.workDir
 	w.mu.RUnlock()
@@ -1589,10 +1610,7 @@ func (w *Workspace) paint() {
 // second, divergent layout.
 func (w *Workspace) printBatchFrame(out io.Writer) {
 	w.mu.RLock()
-	state := w.state
-	state.UltraEntitled = w.ultra.Entitled()
-	state.UltraExecution = w.ultraExecution
-	state.NavigationAvailable = w.navReleased && state.UltraEntitled
+	state := w.liveStateLocked()
 	th := w.theme
 	workDir := w.workDir
 	w.mu.RUnlock()
@@ -1646,4 +1664,11 @@ func (w *Workspace) runLineScanner(ctx context.Context, in io.Reader, out io.Wri
 		return err
 	}
 	return nil
+}
+
+func onOff(on bool) string {
+	if on {
+		return "ON"
+	}
+	return "OFF"
 }

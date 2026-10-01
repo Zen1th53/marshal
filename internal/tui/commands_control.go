@@ -26,8 +26,7 @@ func (h *CommandHandler) handleStatus(ctx context.Context) (string, error) {
 	}
 
 	h.ws.mu.RLock()
-	state := h.ws.state
-	mode := h.ws.mode
+	state := h.ws.liveStateLocked()
 	h.ws.mu.RUnlock()
 
 	var b strings.Builder
@@ -38,7 +37,7 @@ func (h *CommandHandler) handleStatus(ctx context.Context) (string, error) {
 	}
 	b.WriteString(fmt.Sprintf("  Project:      %s\n", orNone(state.ProjectID)))
 	b.WriteString(fmt.Sprintf("  Session:      %s\n", orNone(state.SessionID)))
-	b.WriteString(fmt.Sprintf("  Runtime mode: %s\n", strings.ToUpper(mode)))
+	b.WriteString(fmt.Sprintf("  Runtime mode: %s\n", state.SessionMode))
 
 	if state.Goal.ID == "" {
 		b.WriteString("  Goal:         (none set)\n")

@@ -106,29 +106,42 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return "Goal mutation is unavailable in TUI for unknown verbs.\n" + goalUsage, nil
 
 	case "/mode":
+		const modeMeaning = "The mode is a supervision preference: it grants no authority, hard approvals always stay with you, and ULTRA execution is switched separately with /ultra start|stop."
 		if len(parts) < 2 {
-			gate, _ := h.ws.ultraGate()
-			return fmt.Sprintf("Current mode: %s (options: manual, auto, ultra; ULTRA entitled: %t)", h.ws.mode, gate.Entitled()), nil
+			gate, execution := h.ws.ultraGate()
+			h.ws.mu.RLock()
+			mode := h.ws.mode
+			h.ws.mu.RUnlock()
+			return fmt.Sprintf("Current mode: %s (options: manual, auto, ultra; ULTRA entitled: %t; ULTRA execution: %s)\n%s",
+				effectiveModeLabel(mode, gate.Entitled()), gate.Entitled(), onOff(execution && gate.Entitled()), modeMeaning), nil
 		}
 		mode := strings.ToLower(parts[1])
 		switch mode {
 		case "manual", "auto":
+			h.ws.mu.Lock()
 			h.ws.mode = mode
 			h.ws.state.SessionMode = strings.ToUpper(mode)
-			return fmt.Sprintf("Operating mode switched to %s.", strings.ToUpper(mode)), nil
+			h.ws.mu.Unlock()
+			return fmt.Sprintf("Operating mode switched to %s. %s", strings.ToUpper(mode), modeMeaning), nil
 		case "ultra":
 			// Switching to ULTRA asks the same gate every other entry path
 			// asks. Without a verified lease the mode does not change, so a
-			// user cannot talk their way into ULTRA through the TUI.
-			gate, _ := h.ws.ultraGate()
+			// user cannot talk their way into ULTRA through the TUI. The label
+			// never turns ULTRA execution on.
+			gate, execution := h.ws.ultraGate()
 			if !gate.Entitled() {
 				return "ULTRA is unavailable: no cryptographically verified entitlement is active.", nil
 			}
+			h.ws.mu.Lock()
 			h.ws.mode = "ultra"
 			h.ws.state.SessionMode = "ULTRA"
-			return "Operating mode switched to ULTRA.", nil
+			h.ws.mu.Unlock()
+			if !execution {
+				return "Operating mode switched to ULTRA. ULTRA execution is still OFF; turn it on with /ultra start.", nil
+			}
+			return "Operating mode switched to ULTRA. ULTRA execution is ON.", nil
 		default:
-			return "Invalid mode. Supported modes: manual, auto", nil
+			return "Invalid mode. Supported modes: manual, auto, ultra", nil
 		}
 
 	case "/update":
