@@ -135,10 +135,16 @@ var marshalSubcommands = []string{"chat", "approve", "status", "close", "amend",
 
 // marshalTypoSuggestion prefers a unique prefix, then the closest spelling.
 func marshalTypoSuggestion(word string) string {
+	return commandTypoSuggestion(word, marshalSubcommands, true)
+}
+
+// commandTypoSuggestion shares the distance-two typo policy. Marshal also
+// accepts unique prefixes; provider grammar deliberately requires exact verbs.
+func commandTypoSuggestion(word string, subcommands []string, allowPrefix bool) string {
 	word = strings.ToLower(word)
 	prefix, prefixes := "", 0
 	closest, best := "", 3
-	for _, sub := range marshalSubcommands {
+	for _, sub := range subcommands {
 		if word == sub {
 			return ""
 		}
@@ -149,7 +155,7 @@ func marshalTypoSuggestion(word string) string {
 			closest, best = sub, distance
 		}
 	}
-	if prefixes == 1 {
+	if allowPrefix && prefixes == 1 {
 		return prefix
 	}
 	return closest

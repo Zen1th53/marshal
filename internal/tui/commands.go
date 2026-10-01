@@ -768,9 +768,10 @@ func (h *CommandHandler) helpText() string {
   /search [on|off]         Open a native Codex session with that search setting
   /codex [subcommand]      Full Codex control plane (status, models, review, exec, run, cli)
   /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
-  /opencode [subcommand]   Native OpenCode sessions (new, continue, resume, fork, cli)
-  /agy /antigravity [subcommand] Native Antigravity sessions (new, continue, resume, cli)
-  <prompt...>              Plain text runs nothing; choose /codex, /claude, /opencode, or /agy
+  /opencode [subcommand]   Native OpenCode sessions (new, continue, resume, fork, cli, run)
+  /agy /antigravity [subcommand] Native Antigravity sessions (new, continue, resume, cli, prompt)
+  <prompt...>              Plain text runs nothing; use provider exec/run/prompt or a quoted prompt
+  Unknown provider subcommands run nothing; /<provider> cli passes native arguments
   /update [install]        Check for a newer MARSHAL release, or install it
   /verification <id>       Inspect a canonical verification run
   /help, /?                Show this help reference
@@ -807,10 +808,10 @@ func plainTextRunsNothing(line string, known func(string) bool) string {
 		}
 	}
 	return "Nothing was run: plain text does not start an agent.\n" +
-		"  /codex <prompt>   Send this to Codex\n" +
-		"  /claude <prompt>  Send this to Claude\n" +
-		"  /opencode <prompt> Open a native OpenCode session\n" +
-		"  /agy <prompt>     Open a native Antigravity session\n" +
+		"  /codex exec <prompt>   Send this to Codex\n" +
+		"  /claude exec <prompt>  Send this to Claude\n" +
+		"  /opencode run <prompt> Open a native OpenCode session\n" +
+		"  /agy prompt <prompt>     Open a native Antigravity session\n" +
 		"  F7 / F8 / F9 / F12  Open Codex, Claude, OpenCode, or Antigravity\n" +
 		"  /help             List every command"
 }

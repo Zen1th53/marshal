@@ -175,7 +175,7 @@ func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/codex nonexistent: %v", err)
 	}
-	if !strings.Contains(unknownOut, `Unknown Codex subcommand "nonexistent"`) {
+	if !strings.Contains(unknownOut, `Unknown subcommand. To send a prompt use /codex exec <text>`) {
 		t.Fatalf("unexpected unknown subcommand response: %s", unknownOut)
 	}
 
@@ -192,8 +192,8 @@ func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
 		t.Fatalf("plain text launched a task, got:\n%s", directOut)
 	}
 
-	// 15. Multi-word prompt under /codex without explicit exec subcommand
-	multiOut, err := ws.ExecuteCommand(ctx, "/codex refactor authentication module")
+	// 15. Explicit quoted multi-word prompt shortcut under /codex
+	multiOut, err := ws.ExecuteCommand(ctx, `/codex "refactor authentication module"`)
 	if err != nil {
 		t.Fatalf("/codex multi-word prompt: %v", err)
 	}

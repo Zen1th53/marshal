@@ -70,7 +70,7 @@ func TestClaudeSlashCommands_ModelsAndSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/claude notasubcommand returned error: %v", err)
 	}
-	if !strings.Contains(out, "Unknown Claude subcommand") {
+	if !strings.Contains(out, "Unknown subcommand.") {
 		t.Fatalf("expected unknown-subcommand refusal, got:\n%s", out)
 	}
 }

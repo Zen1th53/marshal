@@ -301,7 +301,7 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 	root := initProject(t, bin)
 	cases := []struct{ line, want, argv string }{
 		{"/codex cli --help", "Codex exited.", "--help\n"},
-		{"/codex fix this bug", "Codex exited.", "--\nfix this bug\n"},
+		{`/codex "fix this bug"`, "Codex exited.", "--\nfix this bug\n"},
 		{`/codex resume "session with spaces"`, "Codex exited.", "resume\nsession with spaces\n"},
 		{`/opencode resume "session with spaces"`, "OpenCode exited.", "--session\nsession with spaces\n"},
 		{`/agy resume "conversation with spaces"`, "Antigravity exited.", "--conversation\nconversation with spaces\n"},
@@ -316,10 +316,10 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 		{"/plugin list", "Codex exited.", "plugin\nlist\n"},
 		{"/plugins list", "Codex exited.", "plugin\nlist\n"},
 		{"/codex plugins list", "Codex exited.", "plugin\nlist\n"},
-		{"/codex modle slug", "Codex exited.", "--\nmodle slug\n"},
-		{"/claude modle slug", "Claude exited.", "--\nmodle slug\n"},
-		{"/opencode modle slug", "OpenCode exited.", "--prompt\nmodle slug\n"},
-		{"/agy modle slug", "Antigravity exited.", "--prompt-interactive\nmodle slug\n"},
+		{"/codex modle slug", "Nothing was run. Did you mean", ""},
+		{"/claude modle slug", "Nothing was run. Did you mean", ""},
+		{"/opencode modle slug", "Nothing was run. Did you mean", ""},
+		{"/agy modle slug", "Nothing was run. Did you mean", ""},
 		{"/skill install nonexistent-sweep-skill", "Preview skill", ""},
 		{"/skills", "LOCAL CODEX SKILLS", ""},
 		{"/apply task", "changes applied to working tree", "apply\ntask\n"},
@@ -329,13 +329,38 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 		{"/diff", "Git Diff", ""},
 		{"/review", "Codex exited.", "review\n"},
 	}
+	for _, provider := range []struct{ root, exit, flag, verb string }{
+		{"codex", "Codex exited.", "--", "exec"},
+		{"claude", "Claude exited.", "--", "exec"},
+		{"opencode", "OpenCode exited.", "--prompt", "run"},
+		{"agy", "Antigravity exited.", "--prompt-interactive", "prompt"},
+		{"antigravity", "Antigravity exited.", "--prompt-interactive", "prompt"},
+	} {
+		root := "/" + provider.root
+		cases = append(cases, struct{ line, want, argv string }{root, provider.exit, ""},
+			struct{ line, want, argv string }{root + ` "fix the bug"`, provider.exit, provider.flag + "\nfix the bug\n"},
+			struct{ line, want, argv string }{root + " zzzzzz slug", "Unknown subcommand.", ""})
+		if provider.root == "agy" || provider.root == "antigravity" {
+			cases = append(cases, struct{ line, want, argv string }{root + " fork session", "Unknown subcommand.", ""},
+				struct{ line, want, argv string }{root + " prompt fix the bug", provider.exit, provider.flag + "\nfix the bug\n"})
+		} else if provider.root == "opencode" {
+			cases = append(cases, struct{ line, want, argv string }{root + " run fix the bug", provider.exit, "run\nfix\nthe\nbug\n"})
+		}
+	}
 	for _, tc := range cases {
 		t.Run(tc.line, func(t *testing.T) {
 			s := startFrozenTUIInProject(t, 50, 200, bin, root, "tui")
+			// Remove startup probes so rejected commands prove zero provider calls.
+			_ = os.Remove(logPath)
 			s.send(tc.line)
 			s.send("\x1b") // dismiss suggestions without accepting a completion
 			s.send("\r")
 			s.mustSee(tc.want)
+			if strings.Contains(tc.want, "Nothing was run") || tc.want == "Unknown subcommand." {
+				if data, err := os.ReadFile(logPath); !os.IsNotExist(err) {
+					t.Fatalf("rejected command invoked provider: %q (%v)", data, err)
+				}
+			}
 			if tc.argv != "" {
 				data, err := os.ReadFile(logPath)
 				if err != nil || !strings.HasSuffix(string(data), tc.argv) {
@@ -396,16 +421,15 @@ func TestCommandSweepAgentsFailuresAndDecisions(t *testing.T) {
 			t.Fatal(out)
 		}
 	}
-	// Free-text fallbacks can execute misspelled management commands. Record the
-	// observed contract as a product decision rather than redesigning the grammar.
+	// Stage 23 rejects ambiguous management typos before governed dispatch.
 	source.Authority = auth
 	for _, line := range []string{"/codex modle slug", "/claude modle slug"} {
-		if out := sweepAgentExecute(t, ws, line); !strings.Contains(out, "TASK LAUNCHED") {
+		if out := sweepAgentExecute(t, ws, line); !strings.Contains(out, "Nothing was run") {
 			t.Fatal(out)
 		}
 	}
-	if atomic.LoadInt32(&auth.codexDispatches) != 1 || atomic.LoadInt32(&auth.claudeDispatches) != 1 {
-		t.Fatal("free text contract changed")
+	if atomic.LoadInt32(&auth.codexDispatches) != 0 || atomic.LoadInt32(&auth.claudeDispatches) != 0 {
+		t.Fatal("rejected typo dispatched work")
 	}
 	if out := sweepAgentExecute(t, ws, "/codex agents"); !strings.Contains(out, "COMPLETED") || !strings.Contains(out, "worker-run history") {
 		t.Fatal(out)

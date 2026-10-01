@@ -11,6 +11,14 @@ import (
 )
 
 func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line string) (string, error) {
+	prompt, rejection := parseProviderCommand("opencode", line, args)
+	if rejection != "" {
+		return rejection, nil
+	}
+	if prompt != "" {
+		return h.ws.runNativeAgent(ctx, "opencode", []string{"--prompt", prompt})
+	}
+
 	if usage := nativeSessionUsage("opencode", args); usage != "" {
 		return usage, nil
 	}
@@ -58,8 +66,7 @@ func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line
 		}
 		return h.ws.runNativeAgent(ctx, "opencode", argv)
 	default:
-		prompt := strings.TrimSpace(line[len(strings.Fields(line)[0]):])
-		return h.ws.runNativeAgent(ctx, "opencode", []string{"--prompt", prompt})
+		return "Unknown subcommand. To send a prompt use /opencode run <text>", nil
 	}
 }
 
@@ -77,7 +84,7 @@ func openCodeCLIArgs(line string) ([]string, error) {
 func openCodeHelp(ctx context.Context) (string, error) {
 	binary, err := project.FindBinary("opencode")
 	if err != nil {
-		return "OPENCODE NATIVE SESSION:\n  Available: false\n  Install OpenCode and ensure `opencode` is on PATH.", nil
+		return "OPENCODE NATIVE SESSION:\n  Available: false\n  Install OpenCode and ensure `opencode` is on PATH.\n  Send a prompt: /opencode run <text> or /opencode \"<text>\".\n  Unknown subcommands run nothing.", nil
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -101,7 +108,7 @@ Available subcommands:
   /opencode mcp / agent         Manage MCP servers or agents
   /opencode session / stats     Inspect sessions or usage
   /opencode run <prompt...>     Run OpenCode in batch mode
-  /opencode <prompt...>         Open the TUI with an initial prompt
+  /opencode "<prompt...>"         Open the TUI with an initial prompt
 
 Top-level launch: marshal opencode [native arguments...]`, version), nil
 }

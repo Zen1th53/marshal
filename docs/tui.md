@@ -12,8 +12,8 @@ options. Within MARSHAL, use `/claude new`, `/claude continue`, `/claude resume`
 `/claude fork [session]`, or `/claude cli <arguments>`.
 
 Plain composer text runs nothing. Launching an agent spends tokens and can touch
-the worktree, so it happens only when the operator names one: `/codex <prompt>`,
-`/claude <prompt>`, `/opencode <prompt>`, or F7/F8/F9 for a native session. A command typed without its
+the worktree, so it happens only when the operator names one: `/codex exec <prompt>`,
+`/claude exec <prompt>`, `/opencode run <prompt>`, or F7/F8/F9 for a native session. A command typed without its
 leading slash is answered with the command it looks like, not with a session.
 
 Native Claude uses the operator's existing `CLAUDE_CONFIG_DIR` (normally
@@ -53,7 +53,7 @@ Run `marshal agy` (or `marshal antigravity`) or press F12 in MARSHAL to open the
 installed Antigravity CLI, `agy`. Native arguments pass through unchanged.
 Within MARSHAL, `/agy new` starts a fresh conversation, `/agy continue` resumes
 the most recent one, `/agy resume <conversation>` selects one by ID, and
-`/agy <prompt>` opens the session with that prompt. `/agy cli <arguments>`
+`/agy prompt <prompt>` opens the session with that prompt. `/agy cli <arguments>`
 exposes the rest of the native CLI, including models, agents, MCP servers and
 plugins. `/antigravity` is the same command.
 
@@ -165,8 +165,8 @@ marshal codex -i "screenshots/error state.png" "Fix this error"
 marshal codex --model MODEL
 ```
 
-In the MARSHAL TUI, F7 opens Codex from either navigation or the composer. A plain
-prompt opens a new native conversation. `/codex continue` resumes the latest
+In the MARSHAL TUI, F7 opens Codex from either navigation or the composer. A quoted
+prompt such as `/codex "fix the bug"` opens a new native conversation. `/codex continue` resumes the latest
 Codex session for the current directory; `/codex resume` opens its session picker.
 `/codex cli <arguments>` passes native options and subcommands, with quoted paths
 and prompts supported. Exit Codex to return to MARSHAL. Use `/codex new` for a
@@ -570,3 +570,14 @@ Current limitations, stated rather than hidden:
 - **Backup restore is not performed from a live session**, since it would swap the
   database out from under an open workspace. `/backup restore` verifies the
   artifact and directs the operator to the offline path.
+
+Provider slash commands use an explicit grammar. Bare `/codex`, `/claude`,
+`/opencode`, and `/agy` (also `/antigravity`) still open their native sessions
+in a terminal. Send work with `/codex exec <text>`, `/claude exec <text>`,
+`/opencode run <text>`, or `/agy prompt <text>`. A quoted first argument,
+for example `/codex "fix the bug"`, opens a native session with that prompt
+(Codex and Claude use governed execution when no terminal is attached).
+Unknown first words run nothing. Typos within edit distance two suggest a
+known subcommand and explain the prompt syntax. `/agy fork` is unsupported;
+use `/agy cli <native arguments>` for vendor-owned syntax. All providers'
+`cli` escape hatches preserve native argument values and ordering.

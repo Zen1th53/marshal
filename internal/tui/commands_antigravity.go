@@ -12,6 +12,14 @@ import (
 
 // handleAntigravity implements /agy and its long form /antigravity.
 func (h *CommandHandler) handleAntigravity(ctx context.Context, args []string, line string) (string, error) {
+	prompt, rejection := parseProviderCommand("agy", line, args)
+	if rejection != "" {
+		return rejection, nil
+	}
+	if prompt != "" {
+		return h.ws.runNativeAgent(ctx, "antigravity", []string{"--prompt-interactive", prompt})
+	}
+
 	if usage := nativeSessionUsage("agy", args); usage != "" {
 		return usage, nil
 	}
@@ -48,18 +56,22 @@ func (h *CommandHandler) handleAntigravity(ctx context.Context, args []string, l
 			return "", err
 		}
 		return h.ws.runNativeAgent(ctx, "antigravity", argv)
-	default:
+	case "prompt":
+		if len(args) < 2 {
+			return "Usage: /agy prompt <text>", nil
+		}
 		// agy's own flag for "start interactively with this prompt", so the
 		// session stays open for the operator after the first answer.
-		prompt := strings.TrimSpace(line[len(strings.Fields(line)[0]):])
+		prompt := agentPrompt(line)
 		return h.ws.runNativeAgent(ctx, "antigravity", []string{"--prompt-interactive", prompt})
 	}
+	return "Usage: /agy prompt <text>", nil
 }
 
 func antigravityHelp(ctx context.Context) (string, error) {
 	binary, err := project.FindBinary(antigravityBinary)
 	if err != nil {
-		return "ANTIGRAVITY NATIVE SESSION:\n  Available: false\n  Install the Antigravity CLI and ensure `agy` is on PATH.", nil
+		return "ANTIGRAVITY NATIVE SESSION:\n  Available: false\n  Install the Antigravity CLI and ensure `agy` is on PATH.\n  Send a prompt: /agy prompt <text> or /agy \"<text>\".\n  Unknown subcommands run nothing.", nil
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -79,7 +91,7 @@ Available subcommands:
   /agy cli <args...>            Pass native agy arguments unchanged
   /agy models / agents          List models or agents
   /agy mcp / plugin             Manage MCP servers or plugins
-  /agy <prompt...>              Open the session with an initial prompt
+  /agy prompt <text>              Open the session with an initial prompt
 
 /antigravity is the same command.
 Top-level launch: marshal agy [native arguments...]`, version), nil

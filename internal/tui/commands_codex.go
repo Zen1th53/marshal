@@ -42,6 +42,18 @@ func runGovernedCodexCmd(ctx context.Context, args []string) (string, error) {
 
 // handleCodex exposes native interactive sessions and governed task operations.
 func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line string) (string, error) {
+	prompt, rejection := parseProviderCommand("codex", line, args)
+	if rejection != "" {
+		return rejection, nil
+	}
+	if prompt != "" {
+		if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
+			return h.ws.runNativeCodex(ctx, []string{"--", prompt})
+		}
+		args = []string{"exec", prompt}
+		line = "/codex exec " + prompt
+	}
+
 	interactive := h.ws.terminal != nil && h.ws.terminal.IsTerminal()
 	if usage := governedAgentUsage("codex", args, interactive); usage != "" {
 		return usage, nil
@@ -187,7 +199,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		b.WriteString("  /codex cli [prompt...]     Launch native interactive Codex session\n")
 		b.WriteString("  /codex new / continue    Start fresh or resume the latest project session\n")
 		b.WriteString("  /codex cli <args...>      Pass native CLI arguments, including quoted paths\n")
-		b.WriteString("  /codex <prompt...>         Any instruction runs directly with Codex!\n")
+		b.WriteString("  /codex \"<prompt...>\"       Open with an explicit quoted prompt\n")
 		return b.String(), nil
 	}
 
@@ -612,18 +624,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		return h.handleCodexExec(ctx, auth, prompt)
 
 	default:
-		if interactive {
-			prompt := strings.TrimSpace(line[len(strings.Fields(line)[0]):])
-			return h.ws.runNativeCodex(ctx, []string{"--", prompt})
-		}
-		// If multiple words were supplied, treat the whole line after `/codex` as a direct prompt!
-		// e.g. `/codex create a rest api endpoint` or `/codex test this package`
-		if len(args) > 1 {
-			cmdIdx := strings.Index(strings.ToLower(line), "/codex")
-			prompt := strings.TrimSpace(line[cmdIdx+6:])
-			return h.handleCodexExec(ctx, auth, prompt)
-		}
-		return fmt.Sprintf("Unknown Codex subcommand %q. Run `/codex` for help.", args[0]), nil
+		return "Unknown subcommand. To send a prompt use /codex exec <text>", nil
 	}
 }
 

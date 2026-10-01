@@ -46,6 +46,18 @@ func runGovernedClaudeCmd(ctx context.Context, args []string) (string, error) {
 // handleClaude exposes the governed Claude control plane. It mirrors the Codex
 // surface, minus the operations Claude Code has no equivalent for.
 func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line string) (string, error) {
+	prompt, rejection := parseProviderCommand("claude", line, args)
+	if rejection != "" {
+		return rejection, nil
+	}
+	if prompt != "" {
+		if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
+			return h.ws.runNativeAgent(ctx, "claude", []string{"--", prompt})
+		}
+		args = []string{"exec", prompt}
+		line = "/claude exec " + prompt
+	}
+
 	interactive := h.ws.terminal != nil && h.ws.terminal.IsTerminal()
 	if usage := governedAgentUsage("claude", args, interactive); usage != "" {
 		return usage, nil
@@ -141,7 +153,7 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 		b.WriteString("  /claude sessions           List recorded governed sessions and run history\n")
 		b.WriteString("  /claude run <task_id>      Dispatch an approved plan task to Claude\n")
 		b.WriteString("  /claude exec <prompt...>   Directly create and launch a task with Claude\n")
-		b.WriteString("  /claude <prompt...>        Any instruction runs directly with Claude\n")
+		b.WriteString("  /claude \"<prompt...>\"      Open with an explicit quoted prompt\n")
 		return b.String(), nil
 	}
 
@@ -241,18 +253,7 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 		return h.handleClaudeExec(ctx, auth, prompt)
 
 	default:
-		if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
-			prompt := strings.TrimSpace(line[len(strings.Fields(line)[0]):])
-			return h.ws.runNativeAgent(ctx, "claude", []string{"--", prompt})
-		}
-		// Multiple words after /claude are treated as a direct instruction,
-		// matching how /codex behaves.
-		if len(args) > 1 {
-			cmdIdx := strings.Index(strings.ToLower(line), "/claude")
-			prompt := strings.TrimSpace(line[cmdIdx+7:])
-			return h.handleClaudeExec(ctx, auth, prompt)
-		}
-		return fmt.Sprintf("Unknown Claude subcommand %q. Run `/claude` for help.", args[0]), nil
+		return "Unknown subcommand. To send a prompt use /claude exec <text>", nil
 	}
 }
 
