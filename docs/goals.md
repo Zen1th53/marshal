@@ -155,7 +155,16 @@ Creation may return `NEEDS_INPUT` when canonical formation finds open questions.
 Unknown verbs and free text never mutate and show usage.
 
 Application revision services also support success criteria and do-not-do items;
-the corresponding terminal reporting/editing forms are not released here.
+terminal `/goal criteria` and `/goal donotdo` list them read-only.
+`/goal version [revision]` reads an exact historical revision (default current).
+`/goal diff [from to]` uses the model comparison (default previous to current).
+`/goal progress` reads the latest project-and-goal verification record, matches
+verification criterion IDs to exact success criterion
+strings and displays canonical statuses with evidence references. Missing evidence,
+`NOT_RUN`, `UNKNOWN`, expired evidence and stale goal/plan/run/tree/environment
+bindings are never verified. Unavailable bindings remain unknown. No percentage
+is fabricated. All five reports are read-only; no prior revision means the default
+diff has nothing to compare.
 
 ## What survives a provider change
 

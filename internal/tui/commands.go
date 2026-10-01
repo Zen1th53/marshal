@@ -101,7 +101,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 			}
 			return h.handleGoalConstraints(ctx)
 		case "diff", "version", "criteria", "donotdo", "progress":
-			return "Goal " + strings.ToLower(parts[1]) + " reporting is unavailable in TUI: canonical goal reporting support is not implemented.", nil
+			return h.handleGoalReport(ctx, strings.ToLower(parts[1]), parts[2:])
 		case "create", "edit", "add-constraint", "rm-constraint":
 			return h.handleGoalMutation(ctx, strings.ToLower(parts[1]), goalCommandText(rawLine))
 		}
@@ -699,7 +699,7 @@ func (h *CommandHandler) helpText() string {
   /goal [outcome]          View active goal; edits unavailable (runtime authorization required)
   /goal constraints        List bound constraints
   /goal create|edit|add-constraint|rm-constraint  Create or revise the goal as the local owner
-  /goal diff|version|criteria|donotdo|progress  Reporting unavailable (not implemented)
+  /goal version [revision] | diff [from to] | criteria | donotdo | progress  Read canonical reports
   /marshal <goal>          Plan with a Marshal model, then marshal the work to agents (/marshal help)
   /mode [manual|auto|ultra] Switch session supervision mode label; ULTRA requires entitlement
   /ultra [status|start|stop|request]  Show ULTRA status, switch execution on or off, or request entitlement

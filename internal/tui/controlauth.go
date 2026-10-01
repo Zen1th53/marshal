@@ -2135,3 +2135,16 @@ func (a *runtimeControlAuthority) GoalMutation(ctx context.Context, e app.Comman
 		return model.GoalContract{}, model.ErrInvalid
 	}
 }
+
+func (a *runtimeControlAuthority) GoalRevision(ctx context.Context, goalID string, revision int64) (model.GoalContract, error) {
+	if a.store == nil {
+		return model.GoalContract{}, errors.New("no store is attached")
+	}
+	return a.store.GetGoalContract(ctx, goalID, revision)
+}
+func (a *runtimeControlAuthority) GoalProgress(ctx context.Context) (app.GoalProgress, error) {
+	if a.runtime == nil {
+		return app.GoalProgress{}, errNoRuntime
+	}
+	return a.runtime.GoalProgress(ctx, a.sessionID)
+}

@@ -2886,8 +2886,8 @@
     },
     {
       "path": "docs/goals.md",
-      "sha256": "0628832600cdf2ed290b7ec3c98b8df3c1e2bc9fbc4c307e4d9ebbc3daab2c56",
-      "bytes": 7883
+      "sha256": "4fefd59db1428837c5507d761b74bc6be13e6dd3ca0c56f78d24bbbbf078de41",
+      "bytes": 8527
     },
     {
       "path": "docs/installation.md",
@@ -3151,8 +3151,8 @@
     },
     {
       "path": "docs/tui.md",
-      "sha256": "24d433032f040fb72c9e47f49c0c5453892856841110f3f8265d60fef22a55a2",
-      "bytes": 37615
+      "sha256": "ab1125c950544b586fbdb3f3d4303e883c0bbb30457b1698a35e0d4a90b0b250",
+      "bytes": 37937
     },
     {
       "path": "docs/verification-quorum.md",
@@ -3693,6 +3693,16 @@
       "path": "internal/app/goal_editing_test.go",
       "sha256": "6b6932b0ee37ff914ac94375d24ce0c0371b5484af78f01af435dd066c52f9da",
       "bytes": 12973
+    },
+    {
+      "path": "internal/app/goal_reporting.go",
+      "sha256": "605306c3992b24fb9af264182de478b4b851ab3a8541d19bccfd331aed366b29",
+      "bytes": 1085
+    },
+    {
+      "path": "internal/app/goal_reporting_test.go",
+      "sha256": "e145ab829664d0c00f12979d82e7171321032355f642d3a63c7acd55a1b45ed0",
+      "bytes": 3402
     },
     {
       "path": "internal/app/goal_runtime.go",
@@ -8526,8 +8536,8 @@
     },
     {
       "path": "internal/store/verification.go",
-      "sha256": "34e4b281c28e4964be70d7db03f36a3389fd05f72d319fcb0bac406beca70f09",
-      "bytes": 5006
+      "sha256": "9b8ee623a89926b1ba1737647e871ea85d87e4f463b3017d3a8fa9919b08b67c",
+      "bytes": 5811
     },
     {
       "path": "internal/store/verification_concurrency_test.go",
@@ -8726,8 +8736,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "d265b20f1806ab3d85ff866c4c5f50df635e913c55cd48b05ef7128fc1af3cea",
-      "bytes": 30342
+      "sha256": "d2175e550b4f7df31361f42e8d23950b0d5923134eaf91cdecc97146cc505430",
+      "bytes": 30284
     },
     {
       "path": "internal/tui/commands_antigravity.go",
@@ -8776,8 +8786,8 @@
     },
     {
       "path": "internal/tui/commands_goal.go",
-      "sha256": "5fad044905939080d8aff5ad9b77fc9fe6f13cf15853a4f66cd74a897ba35043",
-      "bytes": 3782
+      "sha256": "bd37aa4e924c32d89f2f9f5fa88472aacdcab53deffe6d2fb851160861af3f05",
+      "bytes": 6561
     },
     {
       "path": "internal/tui/commands_integrations.go",
@@ -8866,8 +8876,8 @@
     },
     {
       "path": "internal/tui/controlauth.go",
-      "sha256": "2239f7a2dbc096c58459dc518162a9f30776be16f57527a1c55ad0c952f41cba",
-      "bytes": 73621
+      "sha256": "5a06288590ff61035679e1063fbc19158f6eb7e66cb1124654fb2d00cf6c7df2",
+      "bytes": 74113
     },
     {
       "path": "internal/tui/controlbind.go",
@@ -8928,6 +8938,16 @@
       "path": "internal/tui/goal_editing_test.go",
       "sha256": "65eb8fc25f8962a438e654596b28a58fbbf42cfdbb282ef7926543cbc27b2291",
       "bytes": 1924
+    },
+    {
+      "path": "internal/tui/goal_reporting_pty_test.go",
+      "sha256": "eee621b4b7b602d3ab6e5df031179330ac614900ec2d43f0702347f74d9c6da0",
+      "bytes": 879
+    },
+    {
+      "path": "internal/tui/goal_reporting_test.go",
+      "sha256": "8d079d3aad1245c221db2be99de74cea0f8402dd743156bf01595508fe69b11e",
+      "bytes": 4086
     },
     {
       "path": "internal/tui/grapheme.go",
@@ -9498,6 +9518,16 @@
       "path": "internal/verification/lifecycle_test.go",
       "sha256": "c93fab1d80ee8bad88d540fbda50f6ff4b8c74aa0ee1398308d66404b6e1974e",
       "bytes": 2149
+    },
+    {
+      "path": "internal/verification/progress.go",
+      "sha256": "86354d89a953efbfc388a05b0b4b97b4fa72f8042dd258c40c9dc3f3988cc6b4",
+      "bytes": 2771
+    },
+    {
+      "path": "internal/verification/progress_test.go",
+      "sha256": "2e907e58fb7019e2e12512fd5629ec6ae68f574ae20ab4ae49b7681a00e9bfb1",
+      "bytes": 3237
     },
     {
       "path": "internal/verification/types.go",

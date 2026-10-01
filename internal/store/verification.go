@@ -130,3 +130,21 @@ func (s *Store) LatestCompletionAttestation(ctx context.Context, verificationID 
 	}
 	return a, nil
 }
+
+// LatestVerificationForGoal reads the newest goal-scoped record, including older
+// revisions so reporting can expose stale evidence instead of hiding it.
+func (s *Store) LatestVerificationForGoal(ctx context.Context, projectID, goalID string) (verification.Session, error) {
+	var body []byte
+	err := s.db.QueryRowContext(ctx, `SELECT session_json FROM verification_sessions WHERE project_id=? AND goal_id=? ORDER BY updated_at DESC, verification_id DESC LIMIT 1`, projectID, goalID).Scan(&body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return verification.Session{}, verification.ErrNotFound
+	}
+	if err != nil {
+		return verification.Session{}, err
+	}
+	var session verification.Session
+	if err := json.Unmarshal(body, &session); err != nil {
+		return verification.Session{}, err
+	}
+	return session, nil
+}

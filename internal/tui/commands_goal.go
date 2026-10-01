@@ -2,8 +2,10 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -46,7 +48,7 @@ func (h *CommandHandler) handleGoalConstraints(ctx context.Context) (string, err
 	return b.String(), nil
 }
 
-const goalUsage = "Usage: /goal create <request> | edit <outcome> | constraints | add-constraint <text> | rm-constraint <id|text>"
+const goalUsage = "Usage: /goal create <request> | edit <outcome> | constraints | add-constraint <text> | rm-constraint <id|text> | version [revision] | diff [from to] | criteria | donotdo | progress"
 
 // The adapter supplies only the exact envelope and input. Formation, provenance,
 // constraint revisions, receipts and read-back belong to the application.
@@ -102,4 +104,99 @@ func goalCommandText(line string) string {
 		line = line[index:]
 	}
 	return strings.TrimLeftFunc(line, unicode.IsSpace)
+}
+
+func (h *CommandHandler) handleGoalReport(ctx context.Context, verb string, args []string) (string, error) {
+	revisions := []int64{}
+	expected := 0
+	if verb == "version" {
+		expected = 1
+	}
+	if verb == "diff" {
+		expected = 2
+	}
+	if len(args) != 0 && len(args) != expected {
+		return goalUsage, nil
+	}
+	for _, arg := range args {
+		revision, err := strconv.ParseInt(arg, 10, 64)
+		if err != nil || revision < 1 {
+			return "Revision must be a positive integer.\n" + goalUsage, nil
+		}
+		revisions = append(revisions, revision)
+	}
+	authority, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || authority == nil {
+		return "Canonical goal reporting is unavailable: no runtime authority.", nil
+	}
+	goal, err := authority.CurrentGoal(ctx)
+	if errors.Is(err, model.ErrGoalNotFound) {
+		return "No active goal. Use /goal create <request>.", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	h.ws.mu.RLock()
+	secrets := append([]string{}, h.ws.state.KnownSecrets...)
+	h.ws.mu.RUnlock()
+	render := func(v any) (string, error) {
+		data, err := json.MarshalIndent(v, "", "  ")
+		return RedactContent(string(data), secrets), err
+	}
+	read := func(rev int64) (model.GoalContract, error) {
+		g, err := authority.GoalRevision(ctx, goal.ID, rev)
+		if err != nil {
+			return g, fmt.Errorf("goal revision %d: %w", rev, err)
+		}
+		return g, nil
+	}
+	switch verb {
+	case "version":
+		if len(revisions) > 0 {
+			goal, err = read(revisions[0])
+			if err != nil {
+				return "", err
+			}
+		}
+		return render(goal)
+	case "diff":
+		if len(revisions) == 0 {
+			if goal.Revision == 1 {
+				return "No previous goal revision to compare. Use /goal diff <from> <to>.", nil
+			}
+			revisions = []int64{goal.Revision - 1, goal.Revision}
+		}
+		from, err := read(revisions[0])
+		if err != nil {
+			return "", err
+		}
+		to, err := read(revisions[1])
+		if err != nil {
+			return "", err
+		}
+		diff := model.ComputeGoalDiff(from, to)
+		return render(struct {
+			Diff                   model.GoalDiff
+			FromOutcome, ToOutcome string
+		}{diff, from.DesiredOutcome, to.DesiredOutcome})
+	case "criteria":
+		return render(goal.SuccessCriteria)
+	case "donotdo":
+		return render(goal.DoNotDo)
+	case "progress":
+		progress, err := authority.GoalProgress(ctx)
+		if err != nil {
+			return "", err
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "GOAL PROGRESS [rev %d]\n", progress.Goal.Revision)
+		if len(progress.Criteria) == 0 {
+			b.WriteString("No success criteria.\n")
+		}
+		for _, row := range progress.Criteria {
+			fmt.Fprintf(&b, "%s: %s — %s; evidence: %v\n", row.Criterion, row.Status, row.Detail, row.EvidenceIDs)
+		}
+		return RedactContent(b.String(), secrets), nil
+	}
+	return goalUsage, nil
 }
