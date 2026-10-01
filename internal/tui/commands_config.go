@@ -40,8 +40,8 @@ func configCommandUsage(parts []string) string {
 		usage = "/blind [resolve [reason ...]]"
 		valid = len(args) == 0 || sub == "resolve"
 	case "/alignment":
-		usage = "/alignment [scope|violations|blast|deletions|status|resolve [reason ...]]"
-		valid = len(args) == 0 || sub == "resolve" || len(args) == 1 && oneOf(sub, "scope", "violations", "blast", "deletions", "status")
+		usage = "/alignment [scope|violations|blast|deletions|status] | /alignment resolve run:<run>/<task>#<n> <acknowledged|goal-amendment-needed> <reason>"
+		valid = len(args) == 0 || sub == "resolve" && len(args) >= 4 || len(args) == 1 && oneOf(sub, "scope", "violations", "blast", "deletions", "status")
 	case "/features":
 		usage = "/features [list|enable <feature>|disable <feature>]"
 		valid = len(args) == 0 || sub == "list" && len(args) == 1 || oneOf(sub, "enable", "disable") && len(args) == 2

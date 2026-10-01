@@ -51,7 +51,7 @@ func (r *Runtime) OpenLocalControl(ctx context.Context) (*LocalControl, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: local owner unavailable", authz.ErrDenied)
 	}
-	for _, action := range []string{"goal.revise", "goal.create", "goal.edit", "goal.add-constraint", "goal.rm-constraint", "approval.decide", "task.create", "task.assign", "task.control", "collab.message", "collab.handoff", "profile.model", "profile.effort", "run.control"} {
+	for _, action := range []string{"goal.revise", "goal.create", "goal.edit", "goal.add-constraint", "goal.rm-constraint", "approval.decide", "task.create", "task.assign", "task.control", "collab.message", "collab.handoff", "profile.model", "profile.effort", "run.control", "alignment.decide"} {
 		key := "local-" + strings.ReplaceAll(action, ".", "-") + ":" + projectID + ":" + p.ID()
 		// Provision once. Restart must never resurrect a revoked scoped grant.
 		if _, found, err := r.store.FindCapabilityGrantByIdempotencyKey(ctx, key); err != nil {

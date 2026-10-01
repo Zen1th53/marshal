@@ -94,7 +94,16 @@ func TestCommandSweepCrosscutCatalog(t *testing.T) {
 			t.Errorf("root command is unhandled or silent: %s: %q", c, out)
 		}
 	}
+	// Commands deliberately hidden from help and completion because their
+	// subsystem is not available in this build; dispatch still answers them.
+	hidden := map[string]bool{"/blind": true}
 	for c := range dispatch {
+		if hidden[c] {
+			if out, _ := w.cmd.Handle(context.Background(), c); !strings.Contains(out, "not available") {
+				t.Errorf("hidden command does not say it is unavailable: %s: %q", c, out)
+			}
+			continue
+		}
 		if !listed[c] {
 			t.Errorf("dispatch lacks completion: %s", c)
 		}

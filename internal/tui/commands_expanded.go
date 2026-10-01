@@ -1123,11 +1123,13 @@ func (h *CommandHandler) handleExport(ctx context.Context, args []string) (strin
 }
 
 // handleBlind handles blind interpretation.
+// handleBlind answers plainly: no blind interpretations are collected in
+// this build, so there is nothing to read back or resolve.
 func (h *CommandHandler) handleBlind(ctx context.Context, args []string) (string, error) {
 	if len(args) > 0 && strings.EqualFold(args[0], "resolve") {
-		return "Blind-interpretation resolution was NOT recorded: authenticated runtime support is unavailable.", nil
+		return "Blind-interpretation resolution was NOT recorded: blind interpretation is not available in this build.", nil
 	}
-	return "BLIND INTERPRETATION:\n  State: NOT VERIFIED (no canonical interpretation read-back service).", nil
+	return "BLIND INTERPRETATION: not available in this build. No interpretations are collected, so state is NOT VERIFIED and there is nothing to resolve.", nil
 }
 
 // handleReinjection handles constraint reinjection digests.
@@ -1176,12 +1178,6 @@ func (h *CommandHandler) handleReinjection(ctx context.Context) (string, error) 
 }
 
 // handleAlignment handles alignment guard state.
-func (h *CommandHandler) handleAlignment(ctx context.Context, args []string) (string, error) {
-	if len(args) > 0 && strings.ToLower(args[0]) == "resolve" {
-		return "Alignment escalation was NOT resolved: authenticated runtime authorization is required.", nil
-	}
-	return "ALIGNMENT GUARD: NOT VERIFIED (no execution-bound alignment result was read back).", nil
-}
 
 // handleDiff toggles the interactive diff viewer.
 func (h *CommandHandler) handleDiff(ctx context.Context) (string, error) {

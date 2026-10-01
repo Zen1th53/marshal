@@ -261,7 +261,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/rollback", "/budget", "/pause", "/resume", "/cancel", "/doctor", "/tasks", "/task",
 			"/policy", "/sandbox", "/memory", "/provider", "/providers", "/harness", "/model", "/models",
 			"/effort", "/ultra", "/marshal", "/backup", "/fingerprint", "/runtime", "/store", "/export",
-			"/blind", "/reinjection", "/alignment", "/optimization", "/verification", "/diff", "/review",
+			"/reinjection", "/alignment", "/optimization", "/verification", "/diff", "/review",
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
@@ -320,7 +320,6 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/effort"] = []string{"minimal", "low", "medium", "high", "xhigh", "default"}
 	compCtx.Subcommands["/features"] = []string{"list", "enable", "disable"}
 	compCtx.Subcommands["/doctor"] = []string{"codex", "provider"}
-	compCtx.Subcommands["/blind"] = []string{"resolve"}
 	compCtx.Subcommands["/search"] = []string{"on", "off", "enable", "disable", "true", "false"}
 	compCtx.Subcommands["/sandbox"] = []string{"read-only", "workspace-write"}
 	compCtx.Subcommands["/resume"] = []string{"--last"}

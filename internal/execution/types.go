@@ -213,6 +213,7 @@ type TaskExecution struct {
 	BaseCommit        string             `json:"base_commit,omitempty"`
 	ResultCommit      string             `json:"result_commit,omitempty"`
 	NativeTurn        *NativeTurnBinding `json:"native_turn,omitempty"`
+	Alignment         *AlignmentRecord   `json:"alignment,omitempty"`
 	RequiredEvidence  []string           `json:"required_evidence,omitempty"`
 	CollectedEvidence []string           `json:"collected_evidence,omitempty"`
 	ApprovalRequired  bool               `json:"approval_required"`

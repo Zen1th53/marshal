@@ -699,9 +699,9 @@ func (h *CommandHandler) helpText() string {
   /runtime                 Report runtime execution health NOT VERIFIED
   /store                   Read SQLite schema version (integrity NOT VERIFIED)
   /export                  Write evidence bundle for the current canonical goal revision
-  /blind [resolve [reason ...]]  Interpretation NOT VERIFIED; resolution unavailable
   /reinjection             Report execution-bound constraint digest NOT VERIFIED
-  /alignment [scope|violations|blast|deletions|status|resolve [reason ...]]  NOT VERIFIED; resolution unavailable
+  /alignment [scope|violations|blast|deletions|status]  Advisory alignment results for this session's tasks
+  /alignment resolve run:<run>/<task>#<n> <acknowledged|goal-amendment-needed> <reason>  Record a decision
   /features [list|enable <feature>|disable <feature>]  Native Codex feature flags
   /login                   Open native Codex login in an interactive terminal
   /logout                  Open native Codex logout in an interactive terminal
