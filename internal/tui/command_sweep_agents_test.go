@@ -149,23 +149,7 @@ func TestCommandSweepAgentsSkillsAndModel(t *testing.T) {
 // transformed into success. No shell expansion of user arguments is possible.
 func sweepAgentCodexDouble(t *testing.T) string {
 	t.Helper()
-	logPath := filepath.Join(t.TempDir(), "argv")
-	t.Setenv("MARSHAL_SWEEP_ARGV", logPath)
-	script := `#!/bin/sh
-printf '%s\n' "$@" > "$MARSHAL_SWEEP_ARGV"
-case "$1:$2" in
- --version:*) printf 'sweep-provider\n';;
- session:list) printf '[]\n';;
- mcp:typo|plugin:typo) printf 'Unknown command. Use --help.\n'; exit 2;;
- *) printf 'SWEEP-PROVIDER-RAN\n';;
-esac
-`
-	for _, name := range []string{"codex", "claude", "opencode", "agy"} {
-		if err := os.WriteFile(filepath.Join(os.Getenv("PATH"), name), []byte(script), 0700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return logPath
+	return installProviderDialectDoubles(t, "MARSHAL_SWEEP_ARGV", "SWEEP-PROVIDER-RAN", false)
 }
 
 func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
@@ -186,7 +170,7 @@ func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
 		{"/apply task", "apply\ntask\n"}, {"/apply", "apply\nTASK-CODEX-1\n"},
 		{`/resume --last "prompt with spaces"`, "exec\nresume\n--last\nprompt with spaces\n"},
 		{`/codex resume "session with spaces"`, "exec\nresume\nsession with spaces\n"},
-		{`/fork "session with spaces"`, "exec\nfork\nsession with spaces\n"}, {"/fork --last", "exec\nfork\n--last\n"},
+		{`/fork "session with spaces"`, "exec\nfork\nsession with spaces\n"},
 		{"/codex features", "features\nlist\n"}, {"/codex features list", "features\nlist\n"},
 		{"/codex features enable feature", "features\nenable\nfeature\n"}, {"/codex features disable feature", "features\ndisable\nfeature\n"},
 	}
@@ -201,6 +185,13 @@ func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
 				t.Fatalf("argv=%q, want %q (%v)", data, tc.argv, err)
 			}
 		})
+	}
+	_ = os.Remove(logPath)
+	if out := sweepAgentExecute(t, ws, "/fork --last"); !strings.Contains(out, "terminal-only") {
+		t.Fatal(out)
+	}
+	if data, err := os.ReadFile(logPath); !os.IsNotExist(err) {
+		t.Fatalf("unsupported exec fork --last launched: %q %v", data, err)
 	}
 	for _, line := range []string{"/mcp typo", "/plugin typo"} {
 		if out := sweepAgentExecute(t, ws, line); !strings.Contains(out, "failed") || !strings.Contains(out, "Unknown command. Use --help.") {
@@ -259,6 +250,7 @@ func TestCommandSweepAgentsEmptyAndMissingProvider(t *testing.T) {
 
 func TestCommandSweepAgentsHelpCompletion(t *testing.T) {
 	sweepWorkEnvironment(t)
+	installDialectDoubles(t)
 	ws := NewWorkspace(nil, "sweep", "sweep")
 	help := sweepAgentExecute(t, ws, "/help")
 	for _, root := range sweepAgentRoots {

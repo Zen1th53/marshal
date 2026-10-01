@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 	"github.com/Zen1th53/marshal/internal/project"
 )
@@ -75,7 +76,9 @@ func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, 
 	return w.runNativeAgent(ctx, "codex", args)
 }
 
-func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string, marshalBrief ...string) (string, error) {
+func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string, marshalBrief ...string) (result string, resultErr error) {
+	args = app.NormalizeProviderArgs(provider, args)
+
 	label, homeEnv, homeDir, historyDir := "Codex", "CODEX_HOME", ".codex", "sessions"
 	switch provider {
 	case "claude":
@@ -102,6 +105,19 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	binary, err := project.FindBinary(binaryName)
 	if err != nil {
 		return "", fmt.Errorf("%w; Install %s and make %s available on PATH, then retry", err, label, binaryName)
+	}
+	dialect := app.ObserveProviderDialect(ctx, provider)
+	if dialect.Operation(app.ProviderArgOperation(provider, args)).Status == app.ProviderUnknown {
+		defer func() {
+			label := "UNKNOWN — unqualified pass-through: " + dialect.Provider + " " + app.ProviderArgOperation(provider, args)
+			result = label + "\n" + result
+			if resultErr != nil {
+				resultErr = fmt.Errorf("%s: %w", label, resultErr)
+			}
+		}()
+	}
+	if err := dialect.Check(app.ProviderArgOperation(provider, args), true); err != nil {
+		return "", err
 	}
 	root := w.workDir
 	if w.runtime != nil {

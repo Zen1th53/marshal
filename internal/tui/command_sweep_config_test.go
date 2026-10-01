@@ -48,6 +48,7 @@ func TestCommandSweepConfigMalformed(t *testing.T) {
 
 func TestCommandSweepConfigDiscovery(t *testing.T) {
 	sweepWorkEnvironment(t)
+	installDialectDoubles(t)
 	ws := NewWorkspace(nil, "sweep", "sweep")
 	help := sweepWorkRun(t, ws, "/help", "")
 	for _, cmd := range []string{"/policy", "/sandbox", "/doctor", "/provider", "/harness", "/model", "/models", "/effort", "/backup", "/fingerprint", "/runtime", "/store", "/export", "/blind", "/reinjection", "/alignment", "/optimization", "/features", "/search", "/login", "/logout"} {
@@ -71,6 +72,14 @@ func TestCommandSweepConfigDiscovery(t *testing.T) {
 			}
 		}
 	}
+	// The remainder still verifies the missing-provider state. Qualification
+	// fixtures are needed only for the completion inventory above.
+	for _, name := range []string{"codex", "claude", "opencode", "agy"} {
+		if err := os.Remove(filepath.Join(os.Getenv("PATH"), name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	InvalidateProbeCache()
 	sweepWorkRun(t, ws, "/provider typo", "config <name>")
 	sweepWorkRun(t, ws, "/providers", "PROVIDER / HARNESS STATUS")
 	sweepWorkRun(t, ws, "/providers config codex", "UNAVAILABLE")

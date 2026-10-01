@@ -327,6 +327,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/codex approval"] = []string{"on-request", "never"}
 	compCtx.Subcommands["/codex search"] = compCtx.Subcommands["/search"]
 
+	qualifyProviderCompletions(context.Background(), &compCtx, false)
 	completer := NewCompleter(compCtx)
 	composer := NewComposer(th)
 	composer.SetPrompt(ComposerPromptInfo{
@@ -1057,6 +1058,7 @@ func (w *Workspace) refreshCompletion() {
 	if w.completer == nil || w.composer == nil {
 		return
 	}
+	qualifyProviderCompletions(context.Background(), &w.completer.ctx, w.terminal != nil && w.terminal.IsTerminal())
 	if text := w.composer.Text(); text != w.completionText {
 		w.completionSelected = false
 		w.completionCycled = false
@@ -1569,7 +1571,7 @@ func (w *Workspace) paint() {
 	if w.palette.IsOpen() {
 		popup = w.palette.Render(cols, rows)
 	} else if w.completionOpen && len(w.completions) > 0 {
-		popup = renderCompletionPopup(w.completions, w.completionIndex, th, cols)
+		popup = renderCompletionPopup(w.completions, w.completionIndex, th, cols, w.completer.descriptionsFor(w.composer.Text(), w.composer.CursorPos()))
 	}
 
 	frame := BuildFrame(state, th, workDir, w.composer, popup, cols, rows)

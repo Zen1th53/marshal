@@ -64,6 +64,7 @@ func TestCommandSweepCrosscutCatalog(t *testing.T) {
 		return true
 	})
 	sweepCrosscutEnvironment(t)
+	installDialectDoubles(t)
 	w := NewWorkspace(nil, "sweep", "sweep")
 	help, err := w.cmd.Handle(context.Background(), "/help")
 	if err != nil {

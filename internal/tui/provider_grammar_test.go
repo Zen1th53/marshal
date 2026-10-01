@@ -4,7 +4,6 @@ package tui
 
 import (
 	"os"
-	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -100,8 +99,10 @@ func TestProviderGrammarParser(t *testing.T) {
 			key = "agy"
 		}
 		ws := NewWorkspace(nil, "grammar", "grammar")
-		if !reflect.DeepEqual(ws.completer.ctx.Subcommands[root], providerSubcommands[key]) {
-			t.Errorf("%s completion differs from grammar", root)
+		for _, op := range ws.completer.ctx.Subcommands[root] {
+			if !oneOf(op, providerSubcommands[key]...) {
+				t.Errorf("%s completion is outside wrapper grammar: %s", root, op)
+			}
 		}
 	}
 }

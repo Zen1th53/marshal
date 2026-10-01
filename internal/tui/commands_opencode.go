@@ -3,11 +3,9 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
-	"time"
 
-	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/app"
 )
 
 func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line string) (string, error) {
@@ -82,33 +80,7 @@ func openCodeCLIArgs(line string) ([]string, error) {
 }
 
 func openCodeHelp(ctx context.Context) (string, error) {
-	binary, err := project.FindBinary("opencode")
-	if err != nil {
-		return "OPENCODE NATIVE SESSION:\n  Available: false\n  Install OpenCode and ensure `opencode` is on PATH.\n  Send a prompt: /opencode run <text> or /opencode \"<text>\".\n  Unknown subcommands run nothing.", nil
-	}
-	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	out, probeErr := exec.CommandContext(probeCtx, binary, "--version").CombinedOutput()
-	version := strings.TrimSpace(string(out))
-	if probeErr != nil {
-		version = "probe failed: " + probeErr.Error()
-	}
-	return fmt.Sprintf(`OPENCODE NATIVE SESSION:
-  Available: true
-  Version:   %s
-
-Available subcommands:
-  /opencode new                 Start a new native OpenCode TUI
-  /opencode continue            Continue the latest session
-  /opencode resume [session]    Resume the latest or selected session
-  /opencode fork [session]      Fork the latest or selected session
-  /opencode cli <args...>       Pass native OpenCode arguments unchanged
-  /opencode models [provider]   List OpenCode models
-  /opencode auth / providers    Manage provider authentication
-  /opencode mcp / agent         Manage MCP servers or agents
-  /opencode session / stats     Inspect sessions or usage
-  /opencode run <prompt...>     Run OpenCode in batch mode
-  /opencode "<prompt...>"         Open the TUI with an initial prompt
-
-Top-level launch: marshal opencode [native arguments...]`, version), nil
+	d := app.ObserveProviderDialect(ctx, "opencode")
+	available := d.Binary != ""
+	return fmt.Sprintf("OPENCODE NATIVE SESSION:\n  Available: %t\n%s", available, d.Help(providerHelpOperations("opencode"), true)), nil
 }

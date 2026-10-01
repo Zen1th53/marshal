@@ -3,11 +3,9 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
-	"time"
 
-	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/app"
 )
 
 // handleAntigravity implements /agy and its long form /antigravity.
@@ -69,30 +67,7 @@ func (h *CommandHandler) handleAntigravity(ctx context.Context, args []string, l
 }
 
 func antigravityHelp(ctx context.Context) (string, error) {
-	binary, err := project.FindBinary(antigravityBinary)
-	if err != nil {
-		return "ANTIGRAVITY NATIVE SESSION:\n  Available: false\n  Install the Antigravity CLI and ensure `agy` is on PATH.\n  Send a prompt: /agy prompt <text> or /agy \"<text>\".\n  Unknown subcommands run nothing.", nil
-	}
-	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	out, probeErr := exec.CommandContext(probeCtx, binary, "--version").CombinedOutput()
-	version := strings.TrimSpace(string(out))
-	if probeErr != nil {
-		version = "probe failed: " + probeErr.Error()
-	}
-	return fmt.Sprintf(`ANTIGRAVITY NATIVE SESSION:
-  Available: true
-  Version:   %s
-
-Available subcommands:
-  /agy new                      Start a new native Antigravity session
-  /agy continue                 Continue the most recent conversation
-  /agy resume [conversation]    Resume the latest or a selected conversation
-  /agy cli <args...>            Pass native agy arguments unchanged
-  /agy models / agents          List models or agents
-  /agy mcp / plugin             Manage MCP servers or plugins
-  /agy prompt <text>              Open the session with an initial prompt
-
-/antigravity is the same command.
-Top-level launch: marshal agy [native arguments...]`, version), nil
+	d := app.ObserveProviderDialect(ctx, "agy")
+	available := d.Binary != ""
+	return fmt.Sprintf("ANTIGRAVITY NATIVE SESSION:\n  Available: %t\n%s", available, d.Help(providerHelpOperations("agy"), true)), nil
 }

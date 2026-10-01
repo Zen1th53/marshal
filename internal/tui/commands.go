@@ -71,7 +71,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		if len(parts) != 1 {
 			return "Usage: /help", nil
 		}
-		return h.helpText(), nil
+		return h.qualifiedHelp(ctx, h.helpText()), nil
 
 	case "/quit", "/exit":
 		if len(parts) != 1 {

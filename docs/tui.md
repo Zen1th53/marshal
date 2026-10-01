@@ -580,4 +580,45 @@ for example `/codex "fix the bug"`, opens a native session with that prompt
 Unknown first words run nothing. Typos within edit distance two suggest a
 known subcommand and explain the prompt syntax. `/agy fork` is unsupported;
 use `/agy cli <native arguments>` for vendor-owned syntax. All providers'
-`cli` escape hatches preserve native argument values and ordering.
+`cli` escape hatches preserve native argument values and ordering. Command
+aliases are normalized by the same application table in terminal and batch
+launches: Codex plugin `install` becomes `add`, while Claude and agy plugin
+`remove`/`rm` become `uninstall`; MCP `rm`/`delete` become `remove` where
+that provider has a removal verb. OpenCode `auth` becomes `providers`.
+
+Provider completion and `/help` use a version-qualified dialect record.
+The offline CLI help currently qualifies only Codex **0.159.2**, Claude
+**2.1.286**, OpenCode **1.18.16**, and agy **1.2.7** (singleton version
+ranges). Other versions and unlisted operations stay **UNKNOWN**. Help labels
+them **unqualified pass-through via cli**; completion still offers them, with
+that label, so a CLI version MARSHAL has not qualified keeps its commands.
+Operations shown not to exist for the qualified version are withheld. The `cli` completion itself identifies its arguments as
+unqualified pass-through. Explicit unqualified commands retain their existing
+execution paths and display that qualification status. Known **UNSUPPORTED**
+operations are refused before launch, including through `cli` and after
+fixed-arity global options. An unknown vendor operation is never treated as
+a prompt by MARSHAL's provider-command parser.
+Raw CLI positional values are checked only at recognized native command
+positions: Claude's prompt `review`, OpenCode's project directory `review`,
+and agy's positional `fork` remain UNKNOWN pass-through values.
+
+Codex uses `resume`/`fork` in a terminal and `exec resume`/`exec fork` in
+headless wrappers. Named headless forks require a session ID. Latest-session
+`fork --last` is terminal-only: the qualified version has no `exec fork
+--last` flag. Resume supports `--last` in both modes. These forms, and
+`exec review`, are backed by the qualified Codex version's help. Governed `/review` still reviews the current commit and
+does not accept custom instructions. Claude session/management wrappers and
+OpenCode/agy native wrappers remain **terminal-only in MARSHAL**, even when
+the vendor has a separate batch grammar. Help and completion mark that
+boundary. MARSHAL's local model, task, and history services are identified
+separately from vendor grammar.
+
+Qualification observes only bounded `--version` probes (two seconds, 64 KiB,
+no stdin); help evidence is checked in, never discovered by running a session.
+Completion refresh invalidates cached qualification when the executable's
+identity, modification time, size, or mode changes. This record establishes
+grammar support, not authentication, session success, or sandbox/network
+enforcement. Existing execution authorization and isolation checks remain
+in force. `MARSHAL_PROVIDER_PATH_ONLY=1` opts into PATH-only discovery for
+isolated runs; normal discovery retains its existing fallback directories.
+See [qualification evidence](testing/provider-dialects/README.md).

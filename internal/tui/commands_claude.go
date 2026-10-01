@@ -18,12 +18,26 @@ import (
 // runGovernedClaudeCmd executes a native Claude CLI command inside MARSHAL's
 // isolated CLAUDE_CONFIG_DIR so the operator's own Claude Code state and
 // credentials are never modified by a governed inspection.
-func runGovernedClaudeCmd(ctx context.Context, args []string) (string, error) {
+func runGovernedClaudeCmd(ctx context.Context, args []string) (result string, resultErr error) {
+	args = app.NormalizeProviderArgs("claude", args)
+
 	binary, err := project.FindBinary("claude")
 	if err != nil {
 		return "", fmt.Errorf("claude binary not found on PATH: %w; install Claude and make claude available on PATH, then retry", err)
 	}
 	if err := claude.ValidateDangerousFlags(args); err != nil {
+		return "", err
+	}
+	dialect := app.ObserveProviderDialect(ctx, "claude")
+	if dialect.Operation(app.ProviderArgOperation("claude", args)).Status == app.ProviderUnknown {
+		defer func() {
+			label := "UNKNOWN — unqualified pass-through: " + dialect.Provider + " " + app.ProviderArgOperation("claude", args)
+			if resultErr != nil {
+				resultErr = fmt.Errorf("%s: %w", label, resultErr)
+			}
+		}()
+	}
+	if err := dialect.Check(app.ProviderArgOperation("claude", args), false); err != nil {
 		return "", err
 	}
 	govHome, err := claude.EnsureGovernedClaudeHome()
@@ -45,7 +59,7 @@ func runGovernedClaudeCmd(ctx context.Context, args []string) (string, error) {
 
 // handleClaude exposes the governed Claude control plane. It mirrors the Codex
 // surface, minus the operations Claude Code has no equivalent for.
-func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line string) (string, error) {
+func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line string) (result string, resultErr error) {
 	prompt, rejection := parseProviderCommand("claude", line, args)
 	if rejection != "" {
 		return rejection, nil
@@ -61,6 +75,11 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 	interactive := h.ws.terminal != nil && h.ws.terminal.IsTerminal()
 	if usage := governedAgentUsage("claude", args, interactive); usage != "" {
 		return usage, nil
+	}
+	if len(args) > 0 && app.ObserveProviderDialect(ctx, "claude").WrapperOperation(strings.ToLower(args[0]), interactive).Status == app.ProviderUnknown {
+		defer func() {
+			result = "UNKNOWN — unqualified pass-through: claude " + strings.ToLower(args[0]) + "\n" + result
+		}()
 	}
 	if len(args) > 0 {
 		args[0] = strings.ToLower(args[0])
@@ -142,18 +161,7 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 		}
 		b.WriteString(fmt.Sprintf("  Stream:        %s (%s)\n", health.StreamStatus, health.StreamReason))
 		b.WriteString(fmt.Sprintf("  Active Model:  %s\n", selectedModel))
-		b.WriteString("\nAvailable subcommands:\n")
-		b.WriteString("  /claude new / continue    Start or continue native Claude with automatic memory\n")
-		b.WriteString("  /claude resume / fork     Pick a conversation or fork the latest conversation\n")
-		b.WriteString("  /claude cli <args...>     Native Claude arguments, MCP, plugins and authentication\n")
-		b.WriteString("  /claude mcp / plugin / auth / agents  Native management commands\n")
-		b.WriteString("  /claude doctor             Run native Claude doctor diagnostics\n")
-		b.WriteString("  /claude models             List eligible models and selection status\n")
-		b.WriteString("  /claude model <slug>       Select active Claude model for execution\n")
-		b.WriteString("  /claude sessions           List recorded governed sessions and run history\n")
-		b.WriteString("  /claude run <task_id>      Dispatch an approved plan task to Claude\n")
-		b.WriteString("  /claude exec <prompt...>   Directly create and launch a task with Claude\n")
-		b.WriteString("  /claude \"<prompt...>\"      Open with an explicit quoted prompt\n")
+		b.WriteString("\n" + app.ObserveProviderDialect(ctx, "claude").Help(providerHelpOperations("claude"), interactive))
 		return b.String(), nil
 	}
 

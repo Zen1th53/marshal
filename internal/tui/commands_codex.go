@@ -18,10 +18,24 @@ import (
 
 // runGovernedCodexCmd executes a native Codex CLI command within MARSHAL's isolated,
 // governed CODEX_HOME environment so no host config or credentials are ever corrupted.
-func runGovernedCodexCmd(ctx context.Context, args []string) (string, error) {
+func runGovernedCodexCmd(ctx context.Context, args []string) (result string, resultErr error) {
+	args = app.NormalizeProviderArgs("codex", args)
+
 	binary, err := project.FindBinary("codex")
 	if err != nil {
 		return "", fmt.Errorf("codex binary not found on PATH: %w; Install Codex and make codex available on PATH, then retry", err)
+	}
+	dialect := app.ObserveProviderDialect(ctx, "codex")
+	if dialect.Operation(app.ProviderArgOperation("codex", args)).Status == app.ProviderUnknown {
+		defer func() {
+			label := "UNKNOWN — unqualified pass-through: " + dialect.Provider + " " + app.ProviderArgOperation("codex", args)
+			if resultErr != nil {
+				resultErr = fmt.Errorf("%s: %w", label, resultErr)
+			}
+		}()
+	}
+	if err := dialect.Check(app.ProviderArgOperation("codex", args), false); err != nil {
+		return "", err
 	}
 	govHome, err := codex.EnsureGovernedCodexHome()
 	if err != nil {
@@ -41,7 +55,7 @@ func runGovernedCodexCmd(ctx context.Context, args []string) (string, error) {
 }
 
 // handleCodex exposes native interactive sessions and governed task operations.
-func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line string) (string, error) {
+func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line string) (result string, resultErr error) {
 	prompt, rejection := parseProviderCommand("codex", line, args)
 	if rejection != "" {
 		return rejection, nil
@@ -58,14 +72,14 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 	if usage := governedAgentUsage("codex", args, interactive); usage != "" {
 		return usage, nil
 	}
+	if len(args) > 0 && app.ObserveProviderDialect(ctx, "codex").WrapperOperation(strings.ToLower(args[0]), interactive).Status == app.ProviderUnknown {
+		defer func() {
+			result = "UNKNOWN — unqualified pass-through: codex " + strings.ToLower(args[0]) + "\n" + result
+		}()
+	}
+	args = app.NormalizeProviderArgs("codex", args)
 	if len(args) > 0 {
 		args[0] = strings.ToLower(args[0])
-		if args[0] == "plugins" {
-			args[0] = "plugin"
-		}
-	}
-	if len(args) > 1 && oneOf(args[0], "mcp", "plugin", "plugins", "features", "skill") {
-		args[1] = strings.ToLower(args[1])
 	}
 	if len(args) == 0 && h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
 		return h.ws.runNativeCodex(ctx, nil)
@@ -175,31 +189,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 				b.WriteString(fmt.Sprintf("    %-14s %s\n", k+":", health.Checks[k]))
 			}
 		}
-		b.WriteString("\nAvailable subcommands:\n")
-		b.WriteString("  /codex doctor              Run native Codex doctor diagnostics\n")
-		b.WriteString("  /codex models              List available models and selection status\n")
-		b.WriteString("  /codex model <slug>        Select active Codex model for execution\n")
-		b.WriteString("  /codex review              Native review; headless: governed commit review\n")
-		b.WriteString("  /codex sessions            List recorded governed sessions and run history\n")
-		b.WriteString("  /codex mcp <list|add|rm>   Manage external MCP servers for Codex\n")
-		b.WriteString("  /codex plugin <list|add|rm> Manage plugins and marketplaces\n")
-		b.WriteString("  /codex apply [task_id]     Apply latest diff produced by Codex to working tree\n")
-		b.WriteString("  /codex diff                Inspect pending diff from Codex tasks\n")
-		b.WriteString("  /codex resume [id|--last]  Resume a previous Codex session\n")
-		b.WriteString("  /codex fork [id|--last]    Fork a previous Codex session\n")
-		b.WriteString("  /codex agents              Native agents; headless: recorded worker runs\n")
-		b.WriteString("  /codex features            Inspect and toggle feature flags\n")
-		b.WriteString("  /codex sandbox [mode]      Inspect or set sandbox policy (read-only/workspace-write)\n")
-		b.WriteString("  /codex approval [policy]   Inspect or set approval policy (on-request/never)\n")
-		b.WriteString("  /codex search [on|off]     Toggle web search tool for Codex\n")
-		b.WriteString("  /codex login / /codex logout Native authentication (interactive terminal required)\n")
-		b.WriteString("  /codex skill install <name> Install a local skill with digest verification\n")
-		b.WriteString("  /codex run <task_id>       Dispatch an approved plan task to Codex\n")
-		b.WriteString("  /codex exec <prompt...>    Directly create and launch a task with Codex\n")
-		b.WriteString("  /codex cli [prompt...]     Launch native interactive Codex session\n")
-		b.WriteString("  /codex new / continue    Start fresh or resume the latest project session\n")
-		b.WriteString("  /codex cli <args...>      Pass native CLI arguments, including quoted paths\n")
-		b.WriteString("  /codex \"<prompt...>\"       Open with an explicit quoted prompt\n")
+		b.WriteString("\n" + app.ObserveProviderDialect(ctx, "codex").Help(providerHelpOperations("codex"), interactive))
 		return b.String(), nil
 	}
 
@@ -315,7 +305,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 				return fmt.Sprintf("Codex MCP add failed: %v", err), nil
 			}
 			return fmt.Sprintf("Codex MCP server added:\n%s", out), nil
-		case "remove", "rm", "delete":
+		case "remove":
 			if len(args) < 3 {
 				return "Usage: /codex mcp remove <name>", nil
 			}
@@ -372,7 +362,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		}
 		pSub := strings.ToLower(args[1])
 		switch pSub {
-		case "add", "install":
+		case "add":
 			if len(args) < 3 {
 				return "Usage: /codex plugin add <plugin_name>", nil
 			}
@@ -381,7 +371,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 				return fmt.Sprintf("Codex plugin add failed: %v", err), nil
 			}
 			return fmt.Sprintf("Plugin added:\n%s", out), nil
-		case "remove", "rm", "uninstall":
+		case "remove":
 			if len(args) < 3 {
 				return "Usage: /codex plugin remove <plugin_name>", nil
 			}
