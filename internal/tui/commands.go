@@ -371,10 +371,14 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleAlignment(ctx, parts[1:])
 
 	case "/diff":
-		if len(parts) != 1 {
-			return "Usage: /diff", nil
+		if len(parts) > 2 || (len(parts) == 2 && parts[1] != "staged" && parts[1] != "unstaged" && parts[1] != "untracked") {
+			return "Usage: /diff [staged|unstaged|untracked]", nil
 		}
-		return h.handleDiff(ctx)
+		scope := ""
+		if len(parts) == 2 {
+			scope = parts[1]
+		}
+		return h.handleDiffScope(ctx, scope)
 
 	case "/approvals":
 		return h.handleApprovals(ctx, parts[1:])
@@ -657,7 +661,7 @@ func (h *CommandHandler) helpText() string {
   /approval                Show native Codex approval policy
   /termination             Inspect termination state
   /context                 Inspect context and drift
-  /diff                    Interactive diff inspector for pending changes
+  /diff [staged|unstaged|untracked]  Bounded diff inventory (default: combined)
   /models                  List discovered models and active selection
   /model [show]            Show execution model preferences and saved harness defaults
   /model <slug>            Select a Codex execution model through its control authority

@@ -1226,7 +1226,12 @@ func (h *CommandHandler) handleReinjection(ctx context.Context) (string, error) 
 
 // handleDiff toggles the interactive diff viewer.
 func (h *CommandHandler) handleDiff(ctx context.Context) (string, error) {
+	return h.handleDiffScope(ctx, "")
+}
+
+func (h *CommandHandler) handleDiffScope(ctx context.Context, scope string) (string, error) {
 	if h.ws.diffViewer != nil {
+		h.ws.diffViewer.scope = scope
 		if err := h.ws.diffViewer.Toggle(); err != nil {
 			return fmt.Sprintf("Diff error: %v. Check that the project is a Git worktree, then retry /diff.", err), nil
 		}
