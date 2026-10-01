@@ -441,7 +441,7 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/resume` — Reports unavailable runtime process control. `/resume <id|--last> [native arguments...]` opens native Codex resume when its CLI is installed.
 - `/cancel` — Reports unavailable authenticated runtime process control; does not cancel execution.
 - `/doctor [codex|provider]` — Run system diagnostics, or native Codex diagnostics in an interactive terminal. Failed project checks include an initialization/diagnostic hint; optional provider probes are not run by bare `/doctor`.
-- `/runtime` — Report the session label and that runtime execution health is NOT VERIFIED; the TUI has no authenticated health channel.
+- `/runtime` — Read back the runtime from the canonical store: instance, schema, agent/session/task/lease counts, and this session's runs with their state, goal binding, task count and policy snapshot. Process liveness is not probed.
 - `/store` — Read the SQLite schema version. Integrity is NOT VERIFIED by a schema read; unavailable or failed stores include a recovery hint.
 - `/diff` — Open the interactive working tree diff viewer. Extra arguments are rejected; failed Git inspection includes a worktree recovery hint.
 - `/quit` — Exit the TUI workspace.
@@ -484,7 +484,7 @@ Task mutations go through the workspace's in-process `app.LocalControl` with ind
 - `/mode [manual|auto|ultra]` — Inspect or switch the session supervision preference. It grants no authority: hard approvals always stay with you, and ULTRA execution is switched separately with `/ultra start|stop` (`/mode ultra` never turns it on). ULTRA requires a verified entitlement. The label is derived from the live gate on every render, so after an entitlement is withdrawn or expires it shows `ULTRA (INACTIVE: no verified entitlement)` instead of ULTRA.
 - `/handoff <architect|developer|qa|appsec> <summary>` — Hand the session turn to the active participant holding that role, recording a handoff proposal from the local owner. The handoff is bound to the session's current turn: if the turn moved on, nothing changes. A role nobody holds is refused.
 - `/alignment [scope|violations|blast|deletions|status|resolve [reason ...]]` — Report alignment NOT VERIFIED. Resolution is unavailable without authenticated runtime authorization; malformed inspection arguments return usage.
-- `/reinjection` — Report the execution-bound constraint digest NOT VERIFIED; extra arguments return usage.
+- `/reinjection` — For each run of this session, show the goal revision it is bound to (CURRENT, or STALE against the current goal), how many hard constraints it carries, and the constraint package digest each native turn actually received; a run with no native turn has injected nothing yet. Extra arguments return usage.
 - `/blind [resolve [reason ...]]` — Report interpretation NOT VERIFIED; resolution is unavailable. Unknown subcommands return usage.
 
 ### Routing, ULTRA & Harnesses
@@ -511,7 +511,7 @@ Task mutations go through the workspace's in-process `app.LocalControl` with ind
 - `/termination` — Inspect the canonical termination state and reason for the active goal.
 
 ### Security, Sandbox & Providers
-- `/policy [network|sandbox|capability|scope|write|audit]` — Report policy enforcement NOT VERIFIED. No policy is changed; unknown or extra arguments return usage.
+- `/policy [network|sandbox|capability|scope|write|audit]` — Separate configured from observed: the active runtime policy (or NONE), whether the gate engine is configured or the built-in placeholder whose only check always passes (a hook, not enforcement), and the gate decisions actually recorded. Each aspect is still reported as NOT VERIFIED, since no execution-bound observation of it is recorded. No policy is changed; unknown or extra arguments return usage.
 - `/sandbox` — Report runtime isolation NOT VERIFIED. `/sandbox <read-only|workspace-write>` opens native Codex with that sandbox mode and the saved Codex model preference in an interactive terminal; it does not persist a policy.
 - `/provider [status|config <harness|provider>]` — Inspect harness availability, with authentication UNKNOWN until established by execution. MARSHAL reaches providers through harnesses, so `config` accepts a harness (`claude`, `codex`, `opencode`, `antigravity`) or a provider name that maps to one (`anthropic`, `openai`, `google`). It inspects and changes no configuration; it names the real controls (`/model select`, `/effort`, the harness's own login). For Codex and Claude the model shown is the execution preference future runs read. Inline credentials are explicitly refused. `/providers` is an alias.
 - `/memory` — Query durable memory fabric records and search projections.

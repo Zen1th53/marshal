@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/google/uuid"
 	"os"
 	"path/filepath"
@@ -207,8 +208,50 @@ func (h *CommandHandler) handleTaskOwnership(ctx context.Context, scope string) 
 }
 
 // handlePolicy inspects security, network, sandbox, and capability policies.
+// handlePolicy separates configured policy from observed gate decisions, and
+// never reports an aspect as enforced without execution-bound evidence of it.
 func (h *CommandHandler) handlePolicy(ctx context.Context, args []string) (string, error) {
-	return "Policy enforcement status: NOT VERIFIED. TUI is not connected to an authenticated runtime policy read-back service.", nil
+	aspect := "network, sandbox, capability, scope, write and audit"
+	if len(args) > 0 {
+		aspect = strings.ToLower(args[0])
+	}
+	verdict := fmt.Sprintf("Policy enforcement status: NOT VERIFIED for %s; no execution-bound observation of it is recorded.", aspect)
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil {
+		return verdict + " TUI is not connected to a runtime.", nil
+	}
+	readback, err := a.runtime.PolicyReadback(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read runtime policy: %w; reopen the TUI and check /store", err)
+	}
+	var b strings.Builder
+	b.WriteString("RUNTIME POLICY (configured; not proof of enforcement):\n")
+	if readback.RuntimePolicy == "" {
+		b.WriteString("  Runtime policy: NONE (no active policy governs runs)\n")
+	} else {
+		fmt.Fprintf(&b, "  Runtime policy: %s (active)\n", readback.RuntimePolicy)
+	}
+	switch readback.GateEngine {
+	case "default placeholder":
+		b.WriteString("  Gate engine:    DEFAULT PLACEHOLDER; its only check always passes, so it is a hook, not enforcement\n")
+	case "configured":
+		b.WriteString("  Gate engine:    CONFIGURED\n")
+	default:
+		b.WriteString("  Gate engine:    NONE\n")
+	}
+	b.WriteString("GATE DECISIONS (observed):\n")
+	g := readback.Gates
+	if g.Allowed+g.Denied == 0 {
+		b.WriteString("  None recorded.\n")
+	} else {
+		digest := g.LastDigest
+		if len(digest) > 19 {
+			digest = digest[:19]
+		}
+		fmt.Fprintf(&b, "  %d allowed, %d denied; latest %s at %s (policy %s)\n", g.Allowed, g.Denied, g.LastPoint, g.LastAt, digest)
+	}
+	b.WriteString(verdict)
+	return b.String(), nil
 }
 
 // handleSandbox reports the bubblewrap sandbox status.
@@ -579,7 +622,7 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 			b.WriteString(fmt.Sprintf("    Version: %s\n", pr.Version))
 			b.WriteString(fmt.Sprintf("    Model:   %s\n", h.providerModelLine(ctx, pr.HarnessName)))
 			b.WriteString("    Auth:    UNKNOWN (no execution performed)\n")
-			b.WriteString("    Egress:  BLOCKED_BY_POLICY (sandbox uses --unshare-net; per-endpoint egress unenforceable)\n")
+			b.WriteString("    Egress:  governed cells BLOCKED_BY_POLICY (sandbox uses --unshare-net; per-endpoint egress unenforceable); native sessions UNKNOWN (they run in the provider's own environment; not observed)\n")
 		}
 		return b.String(), nil
 	}
@@ -963,8 +1006,58 @@ func (h *CommandHandler) handleFingerprint(ctx context.Context) (string, error) 
 }
 
 // handleRuntime shows runtime status.
+// sessionRuns reads this session's execution runs from the canonical engine.
+func (h *CommandHandler) sessionRuns(ctx context.Context) (*runtimeControlAuthority, []execution.ExecutionRun, error) {
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil {
+		return nil, nil, nil
+	}
+	service, err := a.execution()
+	if err != nil {
+		return a, nil, nil
+	}
+	runs, err := service.Engine().ListRuns(ctx)
+	if err != nil {
+		return a, nil, err
+	}
+	var mine []execution.ExecutionRun
+	for _, run := range runs {
+		if run.SessionID == a.sessionID {
+			mine = append(mine, run)
+		}
+	}
+	return a, mine, nil
+}
+
 func (h *CommandHandler) handleRuntime(ctx context.Context) (string, error) {
-	return fmt.Sprintf("RUNTIME STATUS:\n  Execution state: NOT VERIFIED\n  Session label:   %s\n  TUI has no authenticated runtime health channel.\n", h.ws.sessionID), nil
+	a, runs, err := h.sessionRuns(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read runs: %w; reopen the TUI and check /store", err)
+	}
+	if a == nil {
+		return fmt.Sprintf("RUNTIME STATUS:\n  Execution state: NOT VERIFIED\n  Session label:   %s\n  TUI is not connected to a runtime.\n", h.ws.sessionID), nil
+	}
+	status, err := a.RuntimeStatus(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read runtime status: %w; reopen the TUI and check /store", err)
+	}
+	var b strings.Builder
+	b.WriteString("RUNTIME STATUS (canonical store read-back; process liveness is not probed):\n")
+	fmt.Fprintf(&b, "  Instance:  %s\n", orNone(a.RuntimeInstanceID()))
+	fmt.Fprintf(&b, "  Schema:    v%d\n", status.SchemaVersion)
+	fmt.Fprintf(&b, "  Records:   %d agents, %d sessions, %d tasks, %d leases\n", status.AgentCount, status.SessionCount, status.TaskCount, status.LeaseCount)
+	fmt.Fprintf(&b, "  Session:   %s\n", h.ws.sessionID)
+	if len(runs) == 0 {
+		b.WriteString("  Runs:      none in this session\n")
+	}
+	for _, run := range runs {
+		policy := run.PolicySnapshot
+		if policy == "" {
+			policy = "none recorded"
+		}
+		fmt.Fprintf(&b, "  Run %s: %s (goal %s rev %d, %d tasks, policy snapshot %s)\n", run.RunID, run.State, orNone(run.GoalID), run.GoalRevision, len(run.Tasks), policy)
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
 }
 
 // handleStore shows store schema status.
@@ -1045,8 +1138,48 @@ func (h *CommandHandler) handleBlind(ctx context.Context, args []string) (string
 }
 
 // handleReinjection handles constraint reinjection digests.
+// handleReinjection reads back, per run of this session, the goal revision
+// and hard constraints the run is bound to and the constraint package digest
+// each native turn actually received.
 func (h *CommandHandler) handleReinjection(ctx context.Context) (string, error) {
-	return "CONSTRAINT RE-INJECTION:\n  State: NOT VERIFIED (no execution-bound digest was read back).", nil
+	a, runs, err := h.sessionRuns(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read runs: %w; reopen the TUI and check /store", err)
+	}
+	if a == nil {
+		return "CONSTRAINT RE-INJECTION:\n  State: NOT VERIFIED (TUI is not connected to a runtime).", nil
+	}
+	if len(runs) == 0 {
+		return "CONSTRAINT RE-INJECTION:\n  No runs in this session, so no constraint package has been injected.", nil
+	}
+	h.ws.mu.RLock()
+	goal := h.ws.state.Goal
+	h.ws.mu.RUnlock()
+	var b strings.Builder
+	b.WriteString("CONSTRAINT RE-INJECTION (execution-bound read-back):\n")
+	for _, run := range runs {
+		binding := "CURRENT"
+		if run.GoalID != goal.ID || run.GoalRevision != goal.Revision {
+			binding = fmt.Sprintf("STALE (current goal %s rev %d)", orNone(goal.ID), goal.Revision)
+		}
+		fmt.Fprintf(&b, "  Run %s: goal %s rev %d, %s; %d hard constraints bound\n", run.RunID, orNone(run.GoalID), run.GoalRevision, binding, len(run.HardConstraints))
+		injected := 0
+		for id, task := range run.Tasks {
+			if task.NativeTurn == nil {
+				continue
+			}
+			injected++
+			digest := task.NativeTurn.ConstraintDigest
+			if len(digest) > 19 {
+				digest = digest[:19]
+			}
+			fmt.Fprintf(&b, "    task %s: %s turn %s received constraint package %s\n", id, task.NativeTurn.Provider, orNone(task.NativeTurn.TurnID), orNone(digest))
+		}
+		if injected == 0 {
+			b.WriteString("    No native turn has started, so nothing has been injected yet.\n")
+		}
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
 }
 
 // handleAlignment handles alignment guard state.

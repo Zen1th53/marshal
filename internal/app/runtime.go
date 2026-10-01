@@ -86,6 +86,10 @@ type Runtime struct {
 	// session is attached, and a nil gate answers "not entitled", so a runtime
 	// without one evaluates every ULTRA envelope as unentitled.
 	ultra *cloud.Gate
+
+	// gateEngineDefault marks the built-in engine whose only check always
+	// passes; it is an enforcement hook, not enforcement.
+	gateEngineDefault bool
 }
 
 // AttachULTRA wires the canonical ULTRA gate into the runtime.
@@ -363,6 +367,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		})
 		if err == nil {
 			rt.gateEngine = gateEng
+			rt.gateEngineDefault = true
 		}
 	}
 	if rt.riskEngine == nil {
