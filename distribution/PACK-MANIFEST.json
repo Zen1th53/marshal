@@ -2896,8 +2896,8 @@
     },
     {
       "path": "docs/index.md",
-      "sha256": "57d6ecbfd241caa25549eaf4b691298204359e3ac56b7284da19e393a9654a0c",
-      "bytes": 897
+      "sha256": "3083d140a7178b8366b8c21ccbfcbd4e3e71191ac70b97151429bef892f5ce82",
+      "bytes": 2031
     },
     {
       "path": "docs/installation.md",
@@ -3110,74 +3110,74 @@
       "bytes": 2502
     },
     {
+      "path": "docs/public/agents.md",
+      "sha256": "4699834115d5068521186e1ff1ffa081073cada3e3729040aa70b6e0ddb54890",
+      "bytes": 2128
+    },
+    {
       "path": "docs/public/cli.md",
-      "sha256": "a3b85b4e6907b4acb103fe4834b552630504aa23c4dcd1f6fb17144400a3187a",
-      "bytes": 2587
+      "sha256": "b53fd1a2b7eaf83aeec7f92e8f5cffeb0ca2b38da4fe6f1ec38b45c05eaab467",
+      "bytes": 1339
     },
     {
-      "path": "docs/public/concepts.md",
-      "sha256": "39ff35a6f064fa69b81bb657287dea4180ceaca5d90c6c55d2359badb7b8f2e3",
-      "bytes": 2121
+      "path": "docs/public/commands.md",
+      "sha256": "12c47d2f99b773d7e398c4d8387cafb245e6a7a227730509d5fadb8189c95cf6",
+      "bytes": 5528
     },
     {
-      "path": "docs/public/configuration.md",
-      "sha256": "b8e837f0f7711aee4934a1406fd63b740d2892ecd5c1a7269a35999620509e9a",
-      "bytes": 1869
+      "path": "docs/public/control.md",
+      "sha256": "300b038cba5e6046c8ddec15b52af26464482b537fc15c90fbf01a26b0a394a1",
+      "bytes": 1812
     },
     {
-      "path": "docs/public/getting-started.md",
-      "sha256": "34d9ed580934343cbfd007ff74abc99905815795026a0ebfa9428dcfa764bd37",
-      "bytes": 1406
+      "path": "docs/public/first-project.md",
+      "sha256": "ba77ce7acd145aac457e5cfd0717ec21a0d1c30acee5efa881dc33548bcb4f2a",
+      "bytes": 3354
     },
     {
-      "path": "docs/public/installation.md",
-      "sha256": "d66b8fbf8a528e8f10a65deeb98f7529caad65864df9ecad6b4f4f45d5489f5d",
-      "bytes": 1652
+      "path": "docs/public/how-it-works.md",
+      "sha256": "51c6b407a8b8fa23ddd37695422f663de1b73b5249cf338fccbfbc33715f6b90",
+      "bytes": 2667
     },
     {
-      "path": "docs/public/marshal.md",
-      "sha256": "b36a0c4e8d704dbcba3dd8176efcf8420c24c41e91312b965e88964189fb5c54",
-      "bytes": 2809
+      "path": "docs/public/install.md",
+      "sha256": "4804669099c2c29131af85f31ffc17087b5f5780276d51b50a4282b6cf39ea28",
+      "bytes": 2866
     },
     {
-      "path": "docs/public/providers.md",
-      "sha256": "b4b5be7bfb19d64b2dc53978561c8f8b54bec770ced97cd957ff7714ddd05614",
-      "bytes": 2323
-    },
-    {
-      "path": "docs/public/recovery.md",
-      "sha256": "34fa7ece80da9d6f1acc83dab9062e414dc09ac4f9ab04973b817b9ae66f2ba4",
-      "bytes": 1880
+      "path": "docs/public/limits.md",
+      "sha256": "53f126a42c2e5f19c1749045f5c168bae4ffdbb2f82f8a4e02fa105012427c0b",
+      "bytes": 1550
     },
     {
       "path": "docs/public/release-notes.md",
-      "sha256": "345b2fda0ce29e3c71957473bdc7b6b62e4c07ec0eb0738b54ad0d614ed160b4",
-      "bytes": 2233
-    },
-    {
-      "path": "docs/public/run-control.md",
-      "sha256": "5d64291b2531bc6b377fb6a8be67ba46b27b4787054d8e74fbd4f9244f6297f6",
-      "bytes": 1481
+      "sha256": "c67a378ae5136692abe14fa8ce3a55f471c2fe10b0820b418a3096eca13791a5",
+      "bytes": 1592
     },
     {
       "path": "docs/public/sessions.md",
-      "sha256": "af1e5e8a14709ad9ad2aad961fb3dee4a98462c01c25d52f5510a51ce1b7e17d",
-      "bytes": 1601
+      "sha256": "c1b469ed5af2a1bb022ab7313ca3470d2da8395bd773f3e2fe5bf208577759b1",
+      "bytes": 1548
+    },
+    {
+      "path": "docs/public/settings.md",
+      "sha256": "c509d699f14c05dd7ac5018dfe889953b34d0f5eaed18db2172f3eaa1c56dda6",
+      "bytes": 2043
     },
     {
       "path": "docs/public/troubleshooting.md",
-      "sha256": "e3e81fead6ede3374bf84cd90f29b5b848abf311fa6348e7a373d9d55e647100",
-      "bytes": 2609
-    },
-    {
-      "path": "docs/public/tui.md",
-      "sha256": "9c468d542ac4ee4fa7e754aa288a90800c85bb6ea16da13ba5c36b95e1f65b89",
-      "bytes": 13306
+      "sha256": "4a85dd7a7c0ac1448d7de14fb858164313b7c9466c62cccd0b1eca7b614794f0",
+      "bytes": 3953
     },
     {
       "path": "docs/public/ultra.md",
-      "sha256": "dd255a742eda5612c7aa833c811ab4c02efac324e3c4179b737d989e56d79a37",
-      "bytes": 1034
+      "sha256": "6f5d87bd91fa9d4d48658b6fb112534feab55ff862bdfc2117e624d69515a790",
+      "bytes": 864
+    },
+    {
+      "path": "docs/public/undo.md",
+      "sha256": "c60ec208dcff59620439f263ab31509d1eaaf286c34e20539d83833762d40bf2",
+      "bytes": 2076
     },
     {
       "path": "docs/remote-worker-attestation.md",
@@ -3228,6 +3228,11 @@
       "path": "docs/startup.md",
       "sha256": "125c406a5409f689ed9e776a27f8ab018940a09ba9d85c7f566e78ac8b1dd03d",
       "bytes": 7002
+    },
+    {
+      "path": "docs/stylesheets/marshal.css",
+      "sha256": "0069df82a342dcdbcdf98f3c2aaabfb5087e328ee1ec2e35009a42c7d4932055",
+      "bytes": 1040
     },
     {
       "path": "docs/troubleshooting.md",
@@ -10346,8 +10351,8 @@
     },
     {
       "path": "mkdocs.yml",
-      "sha256": "abfeab7f1cdf9d0dc564d3d2e43a981dc92e9102aa184490dda06d52d494b222",
-      "bytes": 1689
+      "sha256": "d91499f6b82cef95b03233eb80b4b3aeb225084ac018b120d943e480aca1301c",
+      "bytes": 2398
     },
     {
       "path": "plugins/COMPATIBILITY.md",
@@ -10876,8 +10881,8 @@
     },
     {
       "path": "scripts/docs-audit.py",
-      "sha256": "ffdca022c6348e747f5a3cf942e29f72787d32c3188d7cfb83c9c2145d219586",
-      "bytes": 6377
+      "sha256": "02616ca27323ed42a3f881e28e4cb5fe290d728f4ee749f3d15097d84b79d3aa",
+      "bytes": 6485
     },
     {
       "path": "scripts/docs-check.sh",
