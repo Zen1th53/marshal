@@ -60,11 +60,13 @@ func workCommandUsage(parts []string) string {
 		}
 
 	case "/tasks", "/task":
-		usage = cmd + " [list|create <title>|inspect <id>|assign <id> <agent>|pause <id>|resume <id>|cancel <id>|retry <id>|ownership]"
+		usage = cmd + " [list|ownership] [--scope project|active] | create <title> | inspect <id> | assign <id> <agent> | pause|resume|cancel|retry <id>"
 		if len(args) > 0 {
 			switch strings.ToLower(args[0]) {
+			case "--scope":
+				valid = len(args) == 2
 			case "list", "ownership":
-				valid = len(args) == 1
+				valid = len(args) == 1 || (len(args) == 3 && strings.EqualFold(args[1], "--scope"))
 			case "create":
 				valid = len(args) >= 2
 			case "inspect", "pause", "resume", "cancel", "retry":

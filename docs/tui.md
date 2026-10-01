@@ -468,7 +468,7 @@ Every user-operable MARSHAL capability has a direct command mapping:
 
 ### Tasks & Team Management
 - `/tasks` — List coordination tasks, owners, and states.
-- `/task [list|inspect <id>|ownership]` — Read coordination tasks. `/tasks` accepts the same subcommands.
+- `/task [list|inspect <id>|ownership] [--scope project|active]` — Read coordination tasks. `/tasks` accepts the same subcommands. The default scope is the whole project, and every list says so. `--scope active` shows only the tasks of the current plan, matched by their canonical task IDs; without an active plan it says the scope is unavailable instead of falling back to the project.
 - `/task create <title>` — Create a ready coordination task as the authenticated local owner.
 - `/task assign <id> <agent>` — Claim ownership for an existing enabled agent, using a real active session and lease. Dependencies and competing leases must permit the claim.
 - `/task pause <id>` — Stop new dispatch and request supervisor cancellation. A live worker shows `pause-requested` until its turn and cleanup return, then `paused`. Without a live worker, pause settles immediately. A working task with no available supervisor stays `pause-requested`; it is never reported stopped from its stored status alone.

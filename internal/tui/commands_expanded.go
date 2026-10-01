@@ -60,16 +60,76 @@ func (h *CommandHandler) handleDoctor(ctx context.Context) (string, error) {
 }
 
 // handleTasks handles /tasks and /task subcommands.
+// taskScopeFlag strips a trailing "--scope project|active" and reports the
+// requested scope. Project scope is the default; it is always labelled.
+func taskScopeFlag(args []string) ([]string, string, bool) {
+	for i, arg := range args {
+		if !strings.EqualFold(arg, "--scope") {
+			continue
+		}
+		if i != len(args)-2 {
+			return nil, "", false
+		}
+		scope := strings.ToLower(args[i+1])
+		if scope != "project" && scope != "active" {
+			return nil, "", false
+		}
+		return args[:i], scope, true
+	}
+	return args, "project", true
+}
+
+// scopedTasks lists the project's tasks, or only those of the active plan.
+// The returned label says which, so a session-oriented screen never shows
+// project-wide work without saying so.
+func (h *CommandHandler) scopedTasks(ctx context.Context, scope string) ([]model.Task, string, error) {
+	tasks, err := h.ws.store.ListTasks(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("list tasks: %w", err)
+	}
+	if scope == "project" {
+		return tasks, "scope: project, all tasks in this project", nil
+	}
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil {
+		return nil, "", errNoActiveScope
+	}
+	rt := a.runtime
+	active, err := rt.ActivePlanScope(ctx)
+	if err != nil {
+		return nil, "", errNoActiveScope
+	}
+	filtered := tasks[:0:0]
+	for _, t := range tasks {
+		if active.TaskIDs[t.ID] {
+			filtered = append(filtered, t)
+		}
+	}
+	return filtered, fmt.Sprintf("scope: active plan %s v%d", active.PlanID, active.PlanVersion), nil
+}
+
+var errNoActiveScope = errors.New("no active plan: the active scope is unavailable; use --scope project")
+
 func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line string) (string, error) {
+	args, scope, ok := taskScopeFlag(args)
+	if !ok {
+		return "Usage: /tasks [list|ownership] [--scope project|active]", nil
+	}
 	if len(args) == 0 || strings.EqualFold(args[0], "list") {
 		if h.ws.store == nil {
 			return "Store unavailable to list tasks. Open the TUI in an initialized MARSHAL project (marshal init).", nil
 		}
-		tasks, err := h.ws.store.ListTasks(ctx)
+		tasks, label, err := h.scopedTasks(ctx, scope)
+		if errors.Is(err, errNoActiveScope) {
+			return "Tasks: " + err.Error(), nil
+		}
 		if err != nil {
-			return "", fmt.Errorf("list tasks: %w", err)
+			return "", err
 		}
 		if len(tasks) == 0 {
+			if scope == "active" {
+				return "No tasks in the active plan (" + label + ").", nil
+			}
 			return "No tasks in store. Use /task create <title> in an authenticated workspace.", nil
 		}
 
@@ -79,7 +139,7 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 		}
 
 		var b strings.Builder
-		b.WriteString(fmt.Sprintf("TASKS (%d total):\n", len(tasks)))
+		b.WriteString(fmt.Sprintf("TASKS (%d total; %s):\n", len(tasks), label))
 		for _, t := range tasks {
 			owner := "(none)"
 			if t.OwnerAgentID != nil {
@@ -104,23 +164,29 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 		return h.handleInspect(ctx, "task", args[1])
 
 	case "ownership":
-		return h.handleTaskOwnership(ctx)
+		if len(args) != 1 {
+			return "Usage: /tasks ownership [--scope project|active]", nil
+		}
+		return h.handleTaskOwnership(ctx, scope)
 
 	default:
 		return "Usage: /task [list|create|inspect|assign|pause|resume|cancel|retry|ownership]", nil
 	}
 }
 
-func (h *CommandHandler) handleTaskOwnership(ctx context.Context) (string, error) {
+func (h *CommandHandler) handleTaskOwnership(ctx context.Context, scope string) (string, error) {
 	if h.ws.store == nil {
 		return "Store unavailable. Open the TUI in an initialized MARSHAL project (marshal init).", nil
 	}
-	tasks, err := h.ws.store.ListTasks(ctx)
+	tasks, label, err := h.scopedTasks(ctx, scope)
+	if errors.Is(err, errNoActiveScope) {
+		return "Ownership: " + err.Error(), nil
+	}
 	if err != nil {
 		return "", err
 	}
 	var b strings.Builder
-	b.WriteString("WORK OWNERSHIP TABLE:\n")
+	b.WriteString("WORK OWNERSHIP TABLE (" + label + "):\n")
 	b.WriteString(fmt.Sprintf("%-8s %-16s %-12s %-8s %s\n", "TASK", "OWNER", "STATUS", "RISK", "BLOCKED BY"))
 	b.WriteString(strings.Repeat("─", 60) + "\n")
 	for _, t := range tasks {
