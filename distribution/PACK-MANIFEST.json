@@ -3151,8 +3151,8 @@
     },
     {
       "path": "docs/tui.md",
-      "sha256": "3e88bf0bea907084fadc6005c5e28517dd7e96bc00fb362920f6a6be173d3720",
-      "bytes": 40423
+      "sha256": "cde1a518de99d7123c124fb54284b478cf6e660504bdfa21e10bc01d542996e8",
+      "bytes": 40704
     },
     {
       "path": "docs/verification-quorum.md",
@@ -4098,6 +4098,16 @@
       "path": "internal/app/task_memory_parallel_scale_test.go",
       "sha256": "0c13929aa2ed9e4ab7be3ea04df0a748438aa6ac6dae1ed4579985310ae1ff5e",
       "bytes": 3170
+    },
+    {
+      "path": "internal/app/task_scope.go",
+      "sha256": "19946a60f700683b6332f3cbab0431b0dec033491ad2bc9bd39f6f214b485ab6",
+      "bytes": 1112
+    },
+    {
+      "path": "internal/app/task_scope_test.go",
+      "sha256": "05981708849fc819276aea0eb751109d5e93a6f37c674faf1b17730b37c03c15",
+      "bytes": 853
     },
     {
       "path": "internal/app/token_runtime.go",
@@ -8781,8 +8791,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "f126718c786da5b4ae567785fb0f2addee695f8b441b219204ecf71e5d520bd6",
-      "bytes": 30079
+      "sha256": "21e6286199bcd235f8717d44fa28f4acc43c99d2f972c3d84f41d03a7cd48384",
+      "bytes": 30147
     },
     {
       "path": "internal/tui/commands_antigravity.go",
@@ -8831,8 +8841,8 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "8709bf4386722bcc01fb9fc54c23671795605e00da7126cbd8d930a0634ed441",
-      "bytes": 37562
+      "sha256": "ab6fbae13785ea6c4ac1ed0481e32c4132d413d528c6f8e31fb19b494c01ce2a",
+      "bytes": 39693
     },
     {
       "path": "internal/tui/commands_goal.go",
@@ -8891,8 +8901,8 @@
     },
     {
       "path": "internal/tui/commands_work.go",
-      "sha256": "c7890b26066e767703ccca6b1c981f188ec8bdce63fbbb1162517e96a06d1e78",
-      "bytes": 2695
+      "sha256": "91837c9804acc72967bebe497f31817d7805ed69a7954d36a40b7092bee5d73e",
+      "bytes": 2820
     },
     {
       "path": "internal/tui/completion_popup.go",
@@ -9438,6 +9448,16 @@
       "path": "internal/tui/task_commands_usage_test.go",
       "sha256": "32d3ecf2088d0a7cb8aaca414519d6781dfe80ebad1dda20e2caf195edf00b94",
       "bytes": 772
+    },
+    {
+      "path": "internal/tui/task_scope_pty_test.go",
+      "sha256": "be2625bc93b3085f63d374d46df21c6cc501692fa437f97616d9b8b43f4908a3",
+      "bytes": 785
+    },
+    {
+      "path": "internal/tui/task_scope_test.go",
+      "sha256": "b961592981a11e076761f40a1d71afd84f1077a9d02327f3154d0b4e8cf2e074",
+      "bytes": 1206
     },
     {
       "path": "internal/tui/terminal.go",
