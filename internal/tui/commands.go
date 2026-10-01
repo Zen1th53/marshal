@@ -230,7 +230,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	case "/evidence":
 		if len(parts) < 2 {
-			return "Usage: /evidence <evidence_id>", nil
+			return "Usage: /evidence <evidence_id> | /evidence list", nil
+		}
+		if strings.EqualFold(parts[1], "list") {
+			return h.handleEvidenceList(ctx)
 		}
 		return h.handleEvidence(ctx, parts[1])
 
@@ -515,29 +518,6 @@ func (h *CommandHandler) handleClaims(ctx context.Context) (string, error) {
 	return sb.String(), nil
 }
 
-func (h *CommandHandler) handleEvidence(ctx context.Context, evidenceID string) (string, error) {
-	evidenceID = strings.TrimPrefix(evidenceID, "#")
-	h.ws.mu.RLock()
-	defer h.ws.mu.RUnlock()
-
-	for _, cl := range h.ws.state.Claims {
-		for _, ev := range cl.SupportingEvidence {
-			if ev.EvidenceID == evidenceID {
-				return fmt.Sprintf("Evidence %s supports Claim %s [%s]: %s (tool: %s)",
-					evidenceID, cl.ID, cl.State, RedactContent(cl.NormalizedText, nil), ev.Tool), nil
-			}
-		}
-		for _, ev := range cl.ContradictingEvidence {
-			if ev.EvidenceID == evidenceID {
-				return fmt.Sprintf("Evidence %s contradicts Claim %s [%s]: %s (tool: %s)",
-					evidenceID, cl.ID, cl.State, RedactContent(cl.NormalizedText, nil), ev.Tool), nil
-			}
-		}
-	}
-
-	return fmt.Sprintf("Evidence %s: NOT FOUND in the active canonical claim set.", evidenceID), nil
-}
-
 func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
 	h.ws.mu.Lock()
 	defer h.ws.mu.Unlock()
@@ -719,7 +699,8 @@ func (h *CommandHandler) helpText() string {
   /playbooks <proj>        Playbook candidates awaiting review
   /replay-index [run]      Replay and reproducibility index
   /inspect [kind] <id>     Inspect a claim, evidence, checkpoint, task, handoff, approval, or agent
-  /evidence <id>           Show supporting/contradicting evidence links in active claims
+  /evidence <id>           Show an artifact (bytes re-checked) or evidence reference, with every linked claim
+  /evidence list           List stored artifacts and claim evidence references
   /approve [approval_id]   Unavailable: authenticated runtime authorization required
   /reject [approval_id]    Unavailable: authenticated runtime authorization required
   /route [key=value ...]   Compute an advisory route; it is not applied to Runtime

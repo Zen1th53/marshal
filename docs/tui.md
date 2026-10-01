@@ -463,7 +463,8 @@ Every user-operable MARSHAL capability has a direct command mapping:
 ### Epistemic Claims & Evidence
 - `/claims` — List claims for the active goal revision with epistemic verification states.
 - `/claim <id> [UNSUPPORTED|SUPPORTED|VERIFIED|CONTESTED|STALE|INVALIDATED]` — Inspect or update claim status.
-- `/evidence <id>` — Show the evidence link and supporting or contradicting claim in the active claim set; reports NOT FOUND for unknown evidence.
+- `/evidence <id>` — For a stored artifact, show its kind, digest, size, commit, tasks and producer, and re-read its bytes: `VERIFIED` only when they are inside the content-addressed store, not a symlink, and match the digest; `MISSING`, `DIGEST_MISMATCH`, `OUTSIDE_STORE`, `UNREADABLE` or `NOT_CHECKED_TOO_LARGE` otherwise, never usable as verified evidence. Every claim in the active set that links the artifact (by ID or digest) or the evidence reference is listed as supporting or contradicting. A reference with no stored artifact is labelled reference only. Unknown IDs report NOT FOUND. Inspection never changes or promotes evidence.
+- `/evidence list` — List stored artifacts, newest first (at most 50), and the number of distinct claim evidence references. Payloads are checked only by `/evidence <id>`.
 - `/inspect [claim|evidence|checkpoint|task|handoff|approval|agent] <id>` — Inspect a canonical record, or infer its kind from the identifier.
 
 ### Tasks & Team Management
