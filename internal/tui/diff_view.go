@@ -1,14 +1,16 @@
 package tui
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-	"os/exec"
 	"strings"
+
+	"github.com/Zen1th53/marshal/internal/app"
 )
 
 // DiffFile represents changes to a single file in the diff.
 type DiffFile struct {
+	Scope     string
 	Path      string
 	Additions int
 	Deletions int
@@ -25,6 +27,8 @@ type DiffViewer struct {
 	currentHunk  int
 	rawDiff      string
 	knownSecrets []string
+	scope        string
+	truncated    bool
 }
 
 // NewDiffViewer creates a new DiffViewer instance for workDir.
@@ -74,21 +78,37 @@ func (dv *DiffViewer) Toggle() error {
 
 // Refresh re-runs git diff to update files and hunks.
 func (dv *DiffViewer) Refresh() error {
-	cmd := exec.Command("git", "diff")
-	if dv.workDir != "" {
-		cmd.Dir = dv.workDir
-	}
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
-		// Even if error or no git repo, don't crash, set empty
-		dv.rawDiff = ""
+	inventory, err := app.LoadDiffInventory(context.Background(), dv.workDir, dv.scope)
+	if err != nil {
+		dv.active = false
 		dv.files = nil
+		dv.rawDiff = ""
 		return err
 	}
+	dv.files = nil
+	dv.currentFile = 0
+	dv.currentHunk = 0
+	dv.truncated = inventory.Truncated
+	files := make([]DiffFile, 0, len(inventory.Entries))
+	for _, entry := range inventory.Entries {
+		file := DiffFile{Scope: entry.Scope, Path: entry.Path, Hunks: []string{entry.Preview}}
+		if entry.Scope != "untracked" {
+			dv.parseDiff(entry.Preview)
+			if len(dv.files) == 1 {
+				file = dv.files[0]
+				file.Scope = entry.Scope
+				file.Path = entry.Path
+				if len(file.Hunks) == 0 {
+					file.Hunks = []string{entry.Preview}
+				}
+			}
+		}
+		files = append(files, file)
+	}
+	dv.files = files
+	dv.currentFile = 0
+	dv.currentHunk = 0
 
-	dv.rawDiff = out.String()
-	dv.parseDiff(dv.rawDiff)
 	return nil
 }
 
@@ -257,8 +277,14 @@ func (dv *DiffViewer) Render(width, height int) []string {
 	// Header: ╭─ Git Diff (File X of Y) ─────────────────────────╮
 	fileCount := len(dv.files)
 	title := " Git Diff "
+	if dv.scope != "" {
+		title += "(" + dv.scope + ") "
+	}
 	if fileCount > 0 {
 		title = fmt.Sprintf(" Git Diff [%d/%d files] ", dv.currentFile+1, fileCount)
+	}
+	if dv.truncated {
+		title += "[inventory truncated] "
 	}
 	remWidth := boxWidth - VisibleLen(title) - 2
 	if remWidth < 0 {
@@ -273,8 +299,28 @@ func (dv *DiffViewer) Render(width, height int) []string {
 	)
 	lines = append(lines, header)
 
+	sections := "staged | unstaged | untracked"
+	if dv.scope != "" {
+		sections = dv.scope
+	}
+	lines = append(lines, dv.theme.BoxVert+" Sections: "+sections)
+	for _, section := range []string{"staged", "unstaged", "untracked"} {
+		if dv.scope != "" && dv.scope != section {
+			continue
+		}
+		count := 0
+		for _, file := range dv.files {
+			if file.Scope == section {
+				count++
+			}
+		}
+		lines = append(lines, fmt.Sprintf("%s %s: %d files", dv.theme.BoxVert, section, count))
+	}
 	if len(dv.files) == 0 {
 		cleanMsg := "  Working tree is clean (no uncommitted changes)"
+		if dv.scope != "" {
+			cleanMsg = "  No changes in " + dv.scope + " scope"
+		}
 		lines = append(lines, fmt.Sprintf("%s %s%s",
 			dv.theme.BoxVert,
 			PadRight(cleanMsg, boxWidth-4),
@@ -283,7 +329,7 @@ func (dv *DiffViewer) Render(width, height int) []string {
 	} else {
 		curr := dv.files[dv.currentFile]
 		fileSummary := fmt.Sprintf("%s  %s  %s",
-			dv.theme.Colorize(dv.theme.Bold, curr.Path),
+			dv.theme.Colorize(dv.theme.Bold, curr.Scope+" — "+curr.Path),
 			dv.theme.Colorize(dv.theme.Success, fmt.Sprintf("+%d", curr.Additions)),
 			dv.theme.Colorize(dv.theme.Danger, fmt.Sprintf("-%d", curr.Deletions)),
 		)
@@ -304,7 +350,7 @@ func (dv *DiffViewer) Render(width, height int) []string {
 		if len(curr.Hunks) > 0 && dv.currentHunk < len(curr.Hunks) {
 			hunkText := RedactContent(curr.Hunks[dv.currentHunk], dv.knownSecrets)
 			hunkLines := strings.Split(hunkText, "\n")
-			maxHunkLines := height - 7
+			maxHunkLines := height - 11
 			if maxHunkLines < 5 {
 				maxHunkLines = 5
 			}

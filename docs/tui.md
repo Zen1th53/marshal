@@ -400,7 +400,19 @@ Press `Ctrl+P` anywhere in the TUI to open the fuzzy-searchable Command Palette.
 
 ### Working Tree Diff Viewer (`d`)
 
-Press `d` from normal navigation mode to inspect unstaged/staged working tree changes:
+Press `d` from normal navigation mode or use `/diff` to inspect staged, unstaged
+and untracked changes. Section headers show each scope’s file count; use
+`/diff staged`, `/diff unstaged`, or `/diff untracked` to select one scope.
+The inventory is limited to 100 entries, 64 KiB per preview and 1 MiB of total
+preview bytes. Omitted entries and truncated previews are labelled. Reads are
+sequential observations, not an atomic snapshot.
+
+Untracked previews read files directly without staging them. Binary files and
+symlinks have labelled placeholders; previews never follow symlinks outside the
+project. Git external diff, textconv, hooks and fsmonitor helpers are disabled.
+The existing secret redaction applies to previews. A failed inspection closes
+the viewer and reports an error with a recovery hint, never a clean tree.
+
 - Displays colored unified diffs with secret redaction.
 - `n` / `p`: Jump to next / previous hunk.
 - `d` or `Esc`: Return to workspace.
@@ -443,7 +455,7 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/doctor [codex|provider]` — Run system diagnostics, or native Codex diagnostics in an interactive terminal. Failed project checks include an initialization/diagnostic hint; optional provider probes are not run by bare `/doctor`.
 - `/runtime` — Report the session label and that runtime execution health is NOT VERIFIED; the TUI has no authenticated health channel.
 - `/store` — Read the SQLite schema version. Integrity is NOT VERIFIED by a schema read; unavailable or failed stores include a recovery hint.
-- `/diff` — Open the interactive working tree diff viewer. Extra arguments are rejected; failed Git inspection includes a worktree recovery hint.
+- `/diff [staged|unstaged|untracked]` — Open the bounded diff inventory (default: all three scopes). Invalid scopes or extra arguments are rejected; failed Git inspection includes a worktree recovery hint.
 - `/quit` — Exit the TUI workspace.
 
 ### Agents & Integrations

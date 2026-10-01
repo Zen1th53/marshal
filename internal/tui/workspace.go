@@ -267,6 +267,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	}
 	compCtx.Subcommands["/mode"] = []string{"manual", "auto", "ultra"}
 	compCtx.Subcommands["/inspect"] = []string{"claim", "evidence", "checkpoint", "task", "handoff", "approval", "agent"}
+	compCtx.Subcommands["/diff"] = []string{"staged", "unstaged", "untracked"}
 	compCtx.Subcommands["/goal"] = []string{"create", "edit", "diff", "version", "criteria", "constraints", "add-constraint", "rm-constraint", "donotdo", "progress"}
 	compCtx.Subcommands["/tasks"] = []string{"list", "create", "inspect", "assign", "pause", "resume", "cancel", "retry", "ownership"}
 	compCtx.Subcommands["/task"] = []string{"list", "create", "inspect", "assign", "pause", "resume", "cancel", "retry", "ownership"}

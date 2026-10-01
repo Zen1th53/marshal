@@ -440,7 +440,7 @@ func TestCommandSweepCrosscutF3ErrorPTY(t *testing.T) {
 	if err := os.Remove(gitPath); err != nil {
 		t.Fatal(err)
 	}
-	script := "#!/bin/sh\nif [ \"$1\" = diff ]; then exit 1; fi\nexec '" + realGit + "' \"$@\"\n"
+	script := "#!/bin/sh\nfor arg do if [ \"$arg\" = diff ]; then exit 1; fi; done\nexec '" + realGit + "' \"$@\"\n"
 	if err := os.WriteFile(gitPath, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
