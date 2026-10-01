@@ -9,7 +9,7 @@ Run `marshal claude` or press F8 in MARSHAL to open native Claude Code.
 `marshal claude --resume` opens Claude's picker. Native CLI arguments are passed
 through, including `--model`, `--permission-mode`, attachments and configuration
 options. Within MARSHAL, use `/claude new`, `/claude continue`, `/claude resume`,
-`/claude fork [session]`, or `/claude cli <arguments>`.
+`/claude fork [session]`, or `/claude cli <arguments>`. Bare resume and continue select the latest recorded native conversation for this project; `/claude cli --resume` retains the provider picker.
 
 Plain composer text runs nothing. Launching an agent spends tokens and can touch
 the worktree, so it happens only when the operator names one: `/codex exec <prompt>`,
@@ -167,7 +167,7 @@ marshal codex --model MODEL
 
 In the MARSHAL TUI, F7 opens Codex from either navigation or the composer. A quoted
 prompt such as `/codex "fix the bug"` opens a new native conversation. `/codex continue` resumes the latest
-Codex session for the current directory; `/codex resume` opens its session picker.
+Codex session for the current directory; `/codex resume` selects the latest recorded native conversation in this project. The provider picker remains available through `/codex cli resume`.
 `/codex cli <arguments>` passes native options and subcommands, with quoted paths
 and prompts supported. Exit Codex to return to MARSHAL. Use `/codex new` for a
 fresh conversation.
@@ -455,7 +455,7 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/mcp [list|add <name> -- <command> [args...]|get <name>|remove <name>]` manages Codex MCP servers. `rm` and `delete` alias `remove`.
 - `/plugin` and `/plugins` expose Codex plugin listing and native management. Governed `add`/`install` and `remove`/`rm`/`uninstall` require one plugin name; `marketplace <arguments...>` passes through to Codex.
 - `/skills` (or `/codex skills`) lists local Codex skills. Incomplete plugin discovery is reported with a recovery hint while successfully discovered local skills remain visible. `/skill install <name>` (or `/codex skill install <name>`) installs a local skill with digest verification.
-- `/sessions` lists governed Codex session records. `/apply [task_id]` invokes Codex apply; without an ID it selects a task from governed session history and reports history failures before proceeding.
+- `/sessions` aggregates two labelled inventories: **NATIVE conversations** and **GOVERNED runs**. Provider `sessions`, `runs`, and `history` wrappers show the same two inventories filtered by provider. `/apply [task_id]` invokes Codex apply; without an ID it selects a task from governed session history and reports history failures before proceeding.
 - `/fork [id|--last]` opens native Codex fork in the TUI. `/resume --last` opens native Codex resume; bare `/resume` retains the unavailable runtime-control meaning described above.
 - `/review [instructions]` opens native Codex review in the TUI. Without an interactive terminal, governed commit review supports no instructions and explicitly reports that limitation when instructions are supplied.
 - Native management requires the provider CLI and an interactive terminal. In particular, Claude MCP/plugin/auth/agents/login/logout commands report that requirement in headless use; they do not create governed tasks.
@@ -622,3 +622,28 @@ enforcement. Existing execution authorization and isolation checks remain
 in force. `MARSHAL_PROVIDER_PATH_ONLY=1` opts into PATH-only discovery for
 isolated runs; normal discovery retains its existing fallback directories.
 See [qualification evidence](testing/provider-dialects/README.md).
+
+## Native conversation identities and selection
+
+Native inventory IDs have the form `native:<provider>:<project fingerprint>:<escaped source ID>`.
+The fingerprint binds the canonical project directory; moving the project changes the qualified
+ID without changing the provider's original source ID or imported memory ownership. Inventory
+rows identify their source: imported transcript, provider history index, or provider listing.
+No conversation text, hidden reasoning, credentials, or provider home paths are displayed.
+
+`/resume <id|--last>` and `/fork <id|--last>` select native Codex conversations.
+Provider resume/fork/continue wrappers select only that provider's native conversations in the
+current project. A known raw provider ID is also accepted after the same validation; use the
+qualified inventory ID to make ownership explicit. Governed run, task, and worker session IDs,
+IDs qualified for another provider or project, and unknown IDs are refused with a reason.
+`--last` (and a bare provider resume/fork/continue) selects the newest recorded native conversation
+for this provider and project, then passes its original source ID to the provider. Trailing native
+options are retained. Bare `/resume` retains its governed runtime-control meaning.
+
+An imported transcript or on-disk history index is **resumability unverified**. Only an entry
+present in the provider's own listing is labelled provider-listed (currently OpenCode's public
+JSON listing); even that operation remains subject to the installed provider dialect. Imports
+alone do not manufacture provider state. Missing or unreadable history is shown as unavailable,
+and no history cursor migration is needed. Explicit `/provider cli ...` remains vendor-owned
+pass-through, including pickers. Headless Codex resume/fork uses the same native home as the
+inventory; governed task execution continues to use its isolated home.

@@ -21,6 +21,17 @@ func (h *CommandHandler) handleAntigravity(ctx context.Context, args []string, l
 	if usage := nativeSessionUsage("agy", args); usage != "" {
 		return usage, nil
 	}
+	if len(args) > 0 {
+		switch strings.ToLower(args[0]) {
+		case "sessions", "runs", "history":
+			if len(args) != 1 {
+				return "Usage: /antigravity sessions", nil
+			}
+			return h.handleSessionInventory(ctx, "antigravity")
+		case "resume", "fork", "continue":
+			return h.handleNativeSelection(ctx, "antigravity", args)
+		}
+	}
 	interactive := h.ws.terminal != nil && h.ws.terminal.IsTerminal()
 	if len(args) == 0 && interactive {
 		return h.ws.runNativeAgent(ctx, "antigravity", nil)
@@ -32,16 +43,6 @@ func (h *CommandHandler) handleAntigravity(ctx context.Context, args []string, l
 	switch strings.ToLower(args[0]) {
 	case "new", "open", "interactive", "chat":
 		return h.ws.runNativeAgent(ctx, "antigravity", nil)
-	case "continue":
-		return h.ws.runNativeAgent(ctx, "antigravity", []string{"--continue"})
-	case "resume":
-		if len(args) == 1 {
-			return h.ws.runNativeAgent(ctx, "antigravity", []string{"--continue"})
-		}
-		if args[1] == "--last" {
-			return h.ws.runNativeAgent(ctx, "antigravity", append([]string{"--continue"}, args[2:]...))
-		}
-		return h.ws.runNativeAgent(ctx, "antigravity", append([]string{"--conversation", args[1]}, args[2:]...))
 	case "cli":
 		argv, err := openCodeCLIArgs(line)
 		if err != nil {

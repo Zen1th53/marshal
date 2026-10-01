@@ -100,9 +100,9 @@ func (d ProviderDialect) Operation(op string) ProviderOperation {
 func (d ProviderDialect) WrapperOperation(op string, terminal bool) ProviderOperation {
 	args := NormalizeProviderArgs(d.Provider, strings.Fields(op))
 	op = strings.Join(args, " ")
-	local := "status,info,health,help"
+	local := "status,info,health,help,sessions,runs,history"
 	if d.Provider == "codex" || d.Provider == "claude" {
-		local += ",models,model,select,sessions,runs,history,run,dispatch"
+		local += ",models,model,select,run,dispatch"
 	}
 	if d.Provider == "codex" {
 		local += ",skills,skill,diff"

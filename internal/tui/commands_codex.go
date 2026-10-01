@@ -72,6 +72,17 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 	if usage := governedAgentUsage("codex", args, interactive); usage != "" {
 		return usage, nil
 	}
+	if len(args) > 0 {
+		switch strings.ToLower(args[0]) {
+		case "sessions", "runs", "history":
+			if len(args) != 1 {
+				return "Usage: /codex sessions", nil
+			}
+			return h.handleSessionInventory(ctx, "codex")
+		case "resume", "fork", "continue":
+			return h.handleNativeSelection(ctx, "codex", args)
+		}
+	}
 	if len(args) > 0 && app.ObserveProviderDialect(ctx, "codex").WrapperOperation(strings.ToLower(args[0]), interactive).Status == app.ProviderUnknown {
 		defer func() {
 			result = "UNKNOWN — unqualified pass-through: codex " + strings.ToLower(args[0]) + "\n" + result
@@ -127,10 +138,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 			}
 		}
 		switch sub {
-		case "cli", "interactive", "chat", "open", "tui", "new", "continue":
-			if sub == "continue" {
-				return h.ws.runNativeCodex(ctx, []string{"resume", "--last"})
-			}
+		case "cli", "interactive", "chat", "open", "tui", "new":
 			if sub == "new" {
 				return h.ws.runNativeCodex(ctx, nil)
 			}
@@ -143,10 +151,6 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 				return "", err
 			}
 			return h.ws.runNativeCodex(ctx, argv)
-		case "resume", "fork":
-			if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
-				return h.ws.runNativeCodex(ctx, append([]string{sub}, args[1:]...))
-			}
 		}
 	}
 	source := h.ws.controlSource()
@@ -265,22 +269,6 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		}
 		return fmt.Sprintf("CODEX COMMIT REVIEW:\n  Commit:        %s\n  Verified:      %t\n  Output Digest: %s\n  Detail:        %s",
 			res.Commit, verified, res.OutputDigest, detail), nil
-
-	case "sessions", "runs", "history":
-		sessions, err := auth.CodexSessions(ctx)
-		if err != nil {
-			return fmt.Sprintf("Failed to list Codex sessions: %v", err), nil
-		}
-		if len(sessions) == 0 {
-			return "No governed Codex sessions recorded yet.", nil
-		}
-		var b strings.Builder
-		b.WriteString(fmt.Sprintf("RECORDED CODEX SESSIONS (%d total):\n", len(sessions)))
-		for _, s := range sessions {
-			b.WriteString(fmt.Sprintf("  %-16s Task: %-14s Run: %-16s Model: %-16s Status: %-10s Started: %s\n",
-				s.SessionID, s.TaskID, s.RunID, s.Model, s.Status, s.StartedAt.Format("2006-01-02 15:04:05")))
-		}
-		return b.String(), nil
 
 	case "mcp":
 		if len(args) < 2 || args[1] == "list" {
@@ -453,48 +441,6 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 
 	case "diff":
 		return h.handleDiff(ctx)
-
-	case "resume":
-		target := "--last"
-		if len(args) >= 2 {
-			target = args[1]
-		}
-		var execArgs []string
-		if target == "--last" {
-			execArgs = []string{"exec", "resume", "--last"}
-		} else {
-			execArgs = []string{"exec", "resume", target}
-		}
-		if len(args) >= 3 {
-			prompt := strings.Join(args[2:], " ")
-			execArgs = append(execArgs, prompt)
-		}
-		out, err := runGovernedCodexCmd(ctx, execArgs)
-		if err != nil {
-			return fmt.Sprintf("Codex resume failed: %v", err), nil
-		}
-		return fmt.Sprintf("CODEX SESSION RESUMED (%s):\n%s", target, out), nil
-
-	case "fork":
-		target := "--last"
-		if len(args) >= 2 {
-			target = args[1]
-		}
-		var execArgs []string
-		if target == "--last" {
-			execArgs = []string{"exec", "fork", "--last"}
-		} else {
-			execArgs = []string{"exec", "fork", target}
-		}
-		if len(args) >= 3 {
-			prompt := strings.Join(args[2:], " ")
-			execArgs = append(execArgs, prompt)
-		}
-		out, err := runGovernedCodexCmd(ctx, execArgs)
-		if err != nil {
-			return fmt.Sprintf("Codex fork failed: %v", err), nil
-		}
-		return fmt.Sprintf("CODEX SESSION FORKED (%s):\n%s", target, out), nil
 
 	case "agents":
 		sessions, err := auth.CodexSessions(ctx)

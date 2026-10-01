@@ -308,10 +308,11 @@ func TestProviderDialectPTY(t *testing.T) {
 	sweepWorkEnvironment(t)
 	log := installDialectDoubles(t)
 	root := initProject(t, bin)
+	seedNativeInventory(t, root, map[string]string{"codex": "codex-session", "claude": "session-id", "opencode": "opencode-session", "antigravity": "conversation-id"})
 	for _, tc := range []struct{ line, exit, argv string }{
-		{"/codex fork --last", "Codex exited.", "codex\nfork\n--last\n"},
+		{"/codex fork --last", "Codex exited.", "codex\nfork\ncodex-session\n"},
 		{"/claude resume session-id", "Claude exited.", "claude\n--resume\nsession-id\n"},
-		{"/opencode fork --last", "OpenCode exited.", "opencode\n--continue\n--fork\n"},
+		{"/opencode fork --last", "OpenCode exited.", "opencode\n--session\nopencode-session\n--fork\n"},
 		{"/agy resume conversation-id", "Antigravity exited.", "agy\n--conversation\nconversation-id\n"},
 		{"/codex cli mcp enable name", "UNSUPPORTED", ""},
 		{"/codex cli exec fork --last", "terminal-only", ""},

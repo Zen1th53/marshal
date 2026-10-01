@@ -156,7 +156,8 @@ func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
 	sweepWorkEnvironment(t)
 	_, ws, _ := newControlWorkspace(t)
 	ws.workDir = t.TempDir()
-	source, _ := testControl(t)
+	source, nativeAuth := testControl(t)
+	source.Authority = &seededNativeAuthority{fakeAuthority: nativeAuth, root: ws.workDir, sourceID: "session with spaces"}
 	ws.AttachControlSource(source)
 	logPath := sweepAgentCodexDouble(t)
 	cases := []struct{ line, argv string }{
@@ -168,7 +169,7 @@ func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
 		{"/plugins rm local-plugin", "plugin\nremove\nlocal-plugin\n"}, {"/plugin remove local-plugin", "plugin\nremove\nlocal-plugin\n"}, {"/plugin uninstall local-plugin", "plugin\nremove\nlocal-plugin\n"},
 		{"/plugin marketplace list", "plugin\nmarketplace\nlist\n"},
 		{"/apply task", "apply\ntask\n"}, {"/apply", "apply\nTASK-CODEX-1\n"},
-		{`/resume --last "prompt with spaces"`, "exec\nresume\n--last\nprompt with spaces\n"},
+		{`/resume --last "prompt with spaces"`, "exec\nresume\nsession with spaces\nprompt with spaces\n"},
 		{`/codex resume "session with spaces"`, "exec\nresume\nsession with spaces\n"},
 		{`/fork "session with spaces"`, "exec\nfork\nsession with spaces\n"},
 		{"/codex features", "features\nlist\n"}, {"/codex features list", "features\nlist\n"},
@@ -291,6 +292,7 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 	sweepWorkEnvironment(t)
 	logPath := sweepAgentCodexDouble(t)
 	root := initProject(t, bin)
+	seedNativeInventory(t, root, map[string]string{"codex": "session with spaces", "claude": "claude-session", "opencode": "session with spaces", "antigravity": "conversation with spaces"})
 	cases := []struct{ line, want, argv string }{
 		{"/codex cli --help", "Codex exited.", "--help\n"},
 		{`/codex "fix this bug"`, "Codex exited.", "--\nfix this bug\n"},
@@ -299,9 +301,9 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 		{`/agy resume "conversation with spaces"`, "Antigravity exited.", "--conversation\nconversation with spaces\n"},
 		{"/claude cli --help", "Claude exited.", "--help\n"},
 		{"/opencode cli --help", "OpenCode exited.", "--help\n"},
-		{"/opencode resume --last --model sweep", "OpenCode exited.", "--continue\n--model\nsweep\n"},
-		{"/opencode fork --last --model sweep", "OpenCode exited.", "--continue\n--fork\n--model\nsweep\n"},
-		{"/agy resume --last --model sweep", "Antigravity exited.", "--continue\n--model\nsweep\n"},
+		{"/opencode resume --last --model sweep", "OpenCode exited.", "--session\nsession with spaces\n--model\nsweep\n"},
+		{"/opencode fork --last --model sweep", "OpenCode exited.", "--session\nsession with spaces\n--fork\n--model\nsweep\n"},
+		{"/agy resume --last --model sweep", "Antigravity exited.", "--conversation\nconversation with spaces\n--model\nsweep\n"},
 		{"/agy cli --help", "Antigravity exited.", "--help\n"},
 		{"/antigravity cli --help", "Antigravity exited.", "--help\n"},
 		{"/mcp list", "Codex exited.", "mcp\nlist\n"},
@@ -315,9 +317,9 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 		{"/skill install nonexistent-sweep-skill", "Preview skill", ""},
 		{"/skills", "LOCAL CODEX SKILLS", ""},
 		{"/apply task", "changes applied to working tree", "apply\ntask\n"},
-		{"/sessions", "No governed Codex sessions", ""},
-		{"/resume --last", "Codex exited.", "resume\n--last\n"},
-		{"/fork --last", "Codex exited.", "fork\n--last\n"},
+		{"/sessions", "GOVERNED runs (0)", ""},
+		{"/resume --last", "Codex exited.", "resume\nsession with spaces\n"},
+		{"/fork --last", "Codex exited.", "fork\nsession with spaces\n"},
 		{"/diff", "Git Diff", ""},
 		{"/review", "Codex exited.", "review\n"},
 	}

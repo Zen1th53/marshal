@@ -76,6 +76,17 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 	if usage := governedAgentUsage("claude", args, interactive); usage != "" {
 		return usage, nil
 	}
+	if len(args) > 0 {
+		switch strings.ToLower(args[0]) {
+		case "sessions", "runs", "history":
+			if len(args) != 1 {
+				return "Usage: /claude sessions", nil
+			}
+			return h.handleSessionInventory(ctx, "claude")
+		case "resume", "fork", "continue":
+			return h.handleNativeSelection(ctx, "claude", args)
+		}
+	}
 	if len(args) > 0 && app.ObserveProviderDialect(ctx, "claude").WrapperOperation(strings.ToLower(args[0]), interactive).Status == app.ProviderUnknown {
 		defer func() {
 			result = "UNKNOWN — unqualified pass-through: claude " + strings.ToLower(args[0]) + "\n" + result
@@ -112,21 +123,6 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 			argv, err := nativeArgs(tail)
 			if err != nil {
 				return "", err
-			}
-			return h.ws.runNativeAgent(ctx, "claude", argv)
-		case "continue", "resume", "fork":
-			parsed, err := nativeArgs(line)
-			if err != nil {
-				return "", err
-			}
-			tail := parsed[2:]
-			argv := []string{"--continue"}
-			if sub == "resume" || (sub == "fork" && len(tail) > 0) {
-				argv = []string{"--resume"}
-			}
-			argv = append(argv, tail...)
-			if sub == "fork" {
-				argv = append(argv, "--fork-session")
 			}
 			return h.ws.runNativeAgent(ctx, "claude", argv)
 		}
@@ -221,22 +217,6 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 			return fmt.Sprintf("Failed to select Claude model %q: %v", targetModel, err), nil
 		}
 		return fmt.Sprintf("Selected Claude model successfully switched to %q (revision: %d).", pref.Model, pref.Revision), nil
-
-	case "sessions", "runs", "history":
-		sessions, err := auth.ClaudeSessions(ctx)
-		if err != nil {
-			return fmt.Sprintf("Failed to list Claude sessions: %v", err), nil
-		}
-		if len(sessions) == 0 {
-			return "No governed Claude sessions recorded yet.", nil
-		}
-		var b strings.Builder
-		b.WriteString(fmt.Sprintf("RECORDED CLAUDE SESSIONS (%d total):\n", len(sessions)))
-		for _, s := range sessions {
-			b.WriteString(fmt.Sprintf("  %-16s Task: %-14s Run: %-16s Model: %-16s Status: %-10s Started: %s\n",
-				s.SessionID, s.TaskID, s.RunID, s.Model, s.Status, s.StartedAt.Format("2006-01-02 15:04:05")))
-		}
-		return b.String(), nil
 
 	case "run", "dispatch":
 		if len(args) < 2 {

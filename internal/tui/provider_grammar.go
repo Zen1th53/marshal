@@ -7,8 +7,8 @@ import "strings"
 var providerSubcommands = map[string][]string{
 	"codex":    []string{"status", "info", "health", "help", "doctor", "models", "model", "select", "review", "sessions", "runs", "history", "mcp", "plugin", "plugins", "skills", "apply", "diff", "resume", "fork", "agents", "features", "sandbox", "approval", "search", "login", "logout", "skill", "run", "dispatch", "exec", "cli", "interactive", "chat", "open", "tui", "new", "continue"},
 	"claude":   []string{"new", "continue", "resume", "fork", "cli", "status", "models", "model", "doctor", "sessions", "exec", "run", "mcp", "plugin", "auth", "agents", "login", "logout", "info", "health", "help", "select", "runs", "history", "dispatch", "interactive", "chat", "open", "tui"},
-	"opencode": []string{"new", "continue", "resume", "fork", "cli", "status", "models", "providers", "auth", "mcp", "agent", "session", "stats", "run", "debug", "help", "open", "tui", "interactive", "chat", "github", "pr", "attach", "acp", "serve", "web"},
-	"agy":      []string{"new", "continue", "resume", "cli", "status", "models", "agents", "mcp", "plugin", "changelog", "help", "open", "interactive", "chat", "agent", "plugins", "prompt"},
+	"opencode": []string{"sessions", "runs", "history", "new", "continue", "resume", "fork", "cli", "status", "models", "providers", "auth", "mcp", "agent", "session", "stats", "run", "debug", "help", "open", "tui", "interactive", "chat", "github", "pr", "attach", "acp", "serve", "web"},
+	"agy":      []string{"sessions", "runs", "history", "new", "continue", "resume", "cli", "status", "models", "agents", "mcp", "plugin", "changelog", "help", "open", "interactive", "chat", "agent", "plugins", "prompt"},
 }
 
 // parseProviderCommand gates work before provider discovery or control calls.

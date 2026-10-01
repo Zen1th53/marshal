@@ -20,6 +20,17 @@ func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line
 	if usage := nativeSessionUsage("opencode", args); usage != "" {
 		return usage, nil
 	}
+	if len(args) > 0 {
+		switch strings.ToLower(args[0]) {
+		case "sessions", "runs", "history":
+			if len(args) != 1 {
+				return "Usage: /opencode sessions", nil
+			}
+			return h.handleSessionInventory(ctx, "opencode")
+		case "resume", "fork", "continue":
+			return h.handleNativeSelection(ctx, "opencode", args)
+		}
+	}
 	interactive := h.ws.terminal != nil && h.ws.terminal.IsTerminal()
 	if len(args) == 0 && interactive {
 		return h.ws.runNativeAgent(ctx, "opencode", nil)
@@ -32,25 +43,6 @@ func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line
 	switch sub {
 	case "new", "open", "tui", "interactive", "chat":
 		return h.ws.runNativeAgent(ctx, "opencode", nil)
-	case "continue":
-		return h.ws.runNativeAgent(ctx, "opencode", []string{"--continue"})
-	case "resume":
-		if len(args) == 1 {
-			return h.ws.runNativeAgent(ctx, "opencode", []string{"--continue"})
-		}
-		if args[1] == "--last" {
-			return h.ws.runNativeAgent(ctx, "opencode", append([]string{"--continue"}, args[2:]...))
-		}
-		return h.ws.runNativeAgent(ctx, "opencode", append([]string{"--session", args[1]}, args[2:]...))
-	case "fork":
-		if len(args) == 1 {
-			return h.ws.runNativeAgent(ctx, "opencode", []string{"--continue", "--fork"})
-		}
-		if args[1] == "--last" {
-			return h.ws.runNativeAgent(ctx, "opencode", append([]string{"--continue", "--fork"}, args[2:]...))
-		}
-		argv := []string{"--session", args[1], "--fork"}
-		return h.ws.runNativeAgent(ctx, "opencode", append(argv, args[2:]...))
 	case "cli":
 		argv, err := openCodeCLIArgs(line)
 		if err != nil {

@@ -381,7 +381,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleCodex(ctx, append([]string{"apply"}, parts[1:]...), line)
 
 	case "/sessions":
-		return h.handleCodex(ctx, append([]string{"sessions"}, parts[1:]...), line)
+		if len(parts) != 1 {
+			return "Usage: /sessions", nil
+		}
+		return h.handleSessionInventory(ctx, "")
 
 	case "/fork":
 		return h.handleCodex(ctx, append([]string{"fork"}, parts[1:]...), line)
@@ -762,7 +765,7 @@ func (h *CommandHandler) helpText() string {
   /apply [task_id]         Apply a Codex task diff to working tree
   /skills                  List local Codex skills
   /skill install <name>    Install a project-local Codex skill
-  /sessions               List governed Codex sessions
+  /sessions               List NATIVE conversations and GOVERNED runs
   /fork [id|--last]        Fork a native Codex session
   /doctor [codex|provider] Run system diagnostics, or native Codex doctor
   /search [on|off]         Open a native Codex session with that search setting

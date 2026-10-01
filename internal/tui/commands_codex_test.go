@@ -120,7 +120,7 @@ func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/codex sessions: %v", err)
 	}
-	if !strings.Contains(sessOut, "RECORDED CODEX SESSIONS") || !strings.Contains(sessOut, "session-codex-1") {
+	if !strings.Contains(sessOut, "GOVERNED runs") || !strings.Contains(sessOut, "session-codex-1") {
 		t.Fatalf("unexpected /codex sessions output:\n%s", sessOut)
 	}
 
@@ -351,7 +351,7 @@ func TestTopLevelCodexCommands_DirectRouting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/sessions: %v", err)
 	}
-	if !strings.Contains(sessOut, "RECORDED CODEX SESSIONS") {
+	if !strings.Contains(sessOut, "GOVERNED runs") {
 		t.Fatalf("unexpected /sessions output: %s", sessOut)
 	}
 
