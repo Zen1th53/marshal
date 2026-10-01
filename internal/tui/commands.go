@@ -269,7 +269,14 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleRollback(ctx, parts[1])
 
 	case "/budget":
-		return h.handleBudget(ctx)
+		if len(parts) > 1 {
+			return h.handleBudgetSet(ctx, parts[1:])
+		}
+		out, err := h.handleBudget(ctx)
+		if err != nil {
+			return out, err
+		}
+		return out + h.budgetLimitsAndRuns(ctx), nil
 
 	case "/pause":
 		return h.handleRunControl(ctx, "pause", parts[1:])
@@ -645,7 +652,7 @@ func (h *CommandHandler) helpText() string {
   /claims                  List active claims and epistemic verification states
   /tasks, /task [list|inspect <id>|ownership] [--scope project|active]  Read tasks
   /task create|assign|pause|resume|cancel|retry  Authenticated task controls
-  /budget                  Show consumed budget (unknown tokens/cost stay UNKNOWN)
+  /budget [set calls=<n> duration=<d>|clear]  Show consumption and limits; set limits via a goal revision
   /learning <id>           Inspect a Process 07 memory commit, promotions and refusals
   /optimization <id>       Inspect a Process 08 governed optimization cycle and refusals
   /memory [list|search <query>|provenance <id>]  Read project memory records

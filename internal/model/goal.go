@@ -123,6 +123,10 @@ type GoalContract struct {
 	RepoCommit             string               `json:"repo_commit"`
 	CreatedAt              time.Time            `json:"created_at"`
 	UpdatedAt              time.Time            `json:"updated_at"`
+
+	// BudgetLimits are the ceilings this revision binds each of its runs to.
+	// Only dimensions the engine measures for every provider are accepted.
+	BudgetLimits *BudgetLimit `json:"budget_limits,omitempty"`
 }
 
 // EvaluateUnderstanding determines the user-visible understanding state:

@@ -24,6 +24,8 @@ type goalIntakePayload struct {
 	Assessment          map[string]string `json:"assessment,omitempty"`
 	RevisionReason      string            `json:"revision_reason,omitempty"`
 	AdvisoryUsed        bool              `json:"advisory_used,omitempty"`
+	// BudgetLimits travel with the revision they were confirmed in.
+	BudgetLimits *model.BudgetLimit `json:"budget_limits,omitempty"`
 }
 
 // SaveGoalContract persists a GoalContract revision under CAS concurrency control.
@@ -125,6 +127,7 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 		Assessment:          goal.Assessment,
 		RevisionReason:      goal.RevisionReason,
 		AdvisoryUsed:        goal.AdvisoryUsed,
+		BudgetLimits:        goal.BudgetLimits,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal goal intake: %w", err)
@@ -350,6 +353,7 @@ func scanGoalContract(r rowScanner) (model.GoalContract, error) {
 		g.Assessment = intake.Assessment
 		g.RevisionReason = intake.RevisionReason
 		g.AdvisoryUsed = intake.AdvisoryUsed
+		g.BudgetLimits = intake.BudgetLimits
 	}
 	// A Goal predating goal intake, or one whose payload omitted it, is
 	// pending. Reading an absent confirmation as anything else would let an

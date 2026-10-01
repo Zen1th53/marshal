@@ -429,6 +429,15 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 		if run.State != RunRunning {
 			return &run, nil
 		}
+		if reason := e.budgetExhausted(ctx, run, time.Now().UTC()); reason != "" {
+			if err := run.Block(reason, time.Now().UTC()); err != nil {
+				return &run, err
+			}
+			if err := e.persistRun(ctx, &run); err != nil {
+				return &run, err
+			}
+			return &run, nil
+		}
 		if selectedTask != "" && run.Tasks[selectedTask].State == TaskCompletedPendingVerify {
 			allComplete := true
 			for _, task := range run.Tasks {
@@ -1351,4 +1360,30 @@ func (e *Engine) ValidateRunGoal(ctx context.Context, run ExecutionRun) error {
 		return fmt.Errorf("%w: run goal binding is stale (goal %s revision %d, run revision %d)", ErrRunBlocked, goal.ID, goal.Revision, run.GoalRevision)
 	}
 	return nil
+}
+
+// budgetExhausted checks the run against its goal revision's budget limits
+// before another task is dispatched. Only model calls (counted by this engine
+// for every provider turn) and run duration are limited: tokens and cost are
+// not reported by every provider, and an unreported value is never read as 0.
+func (e *Engine) budgetExhausted(ctx context.Context, run ExecutionRun, now time.Time) string {
+	if run.GoalID == "" {
+		return ""
+	}
+	target := run.SessionID
+	if target == "" {
+		target = run.GoalID
+	}
+	goal, err := e.goalReader.GetActiveGoalContract(ctx, target)
+	if err != nil || goal.ID != run.GoalID || goal.BudgetLimits == nil {
+		return ""
+	}
+	limits := goal.BudgetLimits
+	if limits.MaxModelCalls > 0 && run.BudgetConsumed.ModelCalls >= limits.MaxModelCalls {
+		return fmt.Sprintf("%s: %d of %d model calls used", model.ReasonBudgetExhaustedCalls, run.BudgetConsumed.ModelCalls, limits.MaxModelCalls)
+	}
+	if limits.MaxDuration > 0 && !run.StartedAt.IsZero() && now.Sub(run.StartedAt) >= limits.MaxDuration {
+		return fmt.Sprintf("%s: run has lasted %s of %s", model.ReasonBudgetExhaustedWallClock, now.Sub(run.StartedAt).Round(time.Second), limits.MaxDuration)
+	}
+	return ""
 }

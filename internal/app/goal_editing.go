@@ -23,6 +23,9 @@ type GoalEdit struct {
 	DoNotDo         []string
 	Constraints     []model.Constraint
 	Reason          string
+	// BudgetLimits, when set, replaces the revision's limits; an all-zero
+	// value removes them.
+	BudgetLimits *model.BudgetLimit
 }
 
 func (r *Runtime) CommandCreateGoal(ctx context.Context, e CommandEnvelope, request string) (model.GoalContract, error) {
@@ -93,6 +96,20 @@ func (r *Runtime) editGoal(ctx context.Context, e CommandEnvelope, edit GoalEdit
 			}
 		}
 	}
+	if edit.BudgetLimits != nil {
+		limits := *edit.BudgetLimits
+		if limits.MaxTotalTokens != nil || limits.MaxCostUSD != nil || limits.MaxHandoffs != 0 || limits.MaxRetries != 0 {
+			return model.GoalContract{}, fmt.Errorf("%w: only model-call and duration limits are enforced; tokens and cost are not reported by every provider", model.ErrGoalInvalid)
+		}
+		if limits.MaxModelCalls < 0 || limits.MaxDuration < 0 {
+			return model.GoalContract{}, fmt.Errorf("%w: budget limits cannot be negative", model.ErrGoalInvalid)
+		}
+		if limits.MaxModelCalls == 0 && limits.MaxDuration == 0 {
+			g.BudgetLimits = nil
+		} else {
+			g.BudgetLimits = &limits
+		}
+	}
 	g.Confirmation = model.ConfirmationPending
 	g.Revision++
 	g.RevisionReason = edit.Reason
@@ -143,5 +160,14 @@ func (r *Runtime) CommandRemoveGoalConstraint(ctx context.Context, e CommandEnve
 			return model.GoalContract{}, fmt.Errorf("%w: constraint not found", model.ErrNotFound)
 		}
 		return r.editGoal(ctx, e, GoalEdit{Constraints: kept, Reason: "owner explicitly removed constraint"})
+	})
+}
+
+// CommandSetGoalBudget revises the goal with new budget limits. Like every
+// contract edit it is a new revision that returns to PENDING; consumption is
+// recorded per run and is not reset by the revision.
+func (r *Runtime) CommandSetGoalBudget(ctx context.Context, e CommandEnvelope, limits model.BudgetLimit) (model.GoalContract, error) {
+	return r.commandGoal(ctx, e, "goal.edit", limits, func(ctx context.Context, actor string) (model.GoalContract, error) {
+		return r.editGoal(ctx, e, GoalEdit{BudgetLimits: &limits, Reason: "owner changed budget limits"})
 	})
 }
