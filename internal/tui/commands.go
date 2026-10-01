@@ -2,12 +2,10 @@ package tui
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/collaboration"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -240,10 +238,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleWhy(ctx)
 
 	case "/msg", "/say":
-		return "Message mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return h.handleCollaboration(ctx, "message", parts[1:])
 
 	case "/handoff":
-		return "Handoff mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return h.handleCollaboration(ctx, "handoff", parts[1:])
 
 	case "/checkpoint":
 		if len(parts) > 1 && !strings.EqualFold(parts[1], "create") {
@@ -578,78 +576,6 @@ func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
 	return "No route explanation is available yet.", nil
 }
 
-func (h *CommandHandler) handleSendMessage(ctx context.Context, target, msgText string) (string, error) {
-	if h.ws.coord == nil {
-		return "Collaboration coordinator unavailable", nil
-	}
-
-	now := time.Now().UTC()
-	msg := model.AgentMessage{
-		ID:        fmt.Sprintf("msg-user-%d", now.UnixNano()),
-		SessionID: h.ws.sessionID,
-		From: model.AuthorProvenance{
-			AgentID: "operator",
-			Harness: "tui",
-		},
-		To:        target,
-		Kind:      model.MessageQuestion,
-		Content:   RedactContent(msgText, nil),
-		CreatedAt: now,
-	}
-
-	_, err := h.ws.coord.SendMessage(ctx, msg, false, false)
-	if err != nil {
-		if errors.Is(err, collaboration.ErrSessionNotFound) {
-			// Seed the session from live host discovery rather than a fixed
-			// roster. DiscoverTeamParticipants reports a harness as active only
-			// when its binary is actually present, and leaves the model as
-			// UNKNOWN, so an implicitly created session never persists an
-			// invented model name into canonical state.
-			participants := h.ws.state.Participants
-			if len(participants) == 0 {
-				participants = DiscoverTeamParticipants(nil)
-			}
-			goalID := h.ws.state.Goal.ID
-			if goalID == "" {
-				goalID = "goal-interactive"
-			}
-			_, _ = h.ws.coord.CreateSession(ctx, h.ws.sessionID, goalID, h.ws.state.Goal.Revision, participants)
-			_, err = h.ws.coord.SendMessage(ctx, msg, false, false)
-		}
-		if err != nil {
-			return "", fmt.Errorf("send message: %w", err)
-		}
-	}
-
-	h.ws.mu.Lock()
-	h.ws.state.RecentMessages = append(h.ws.state.RecentMessages, msg)
-	h.ws.mu.Unlock()
-
-	return fmt.Sprintf("Message sent to %s.", target), nil
-}
-
-func (h *CommandHandler) handleHandoff(ctx context.Context, targetRole model.Role, summary string) (string, error) {
-	if h.ws.coord == nil {
-		return "Collaboration coordinator unavailable", nil
-	}
-
-	prov := model.AuthorProvenance{
-		AgentID: "operator",
-		Harness: "tui",
-	}
-
-	sess, err := h.ws.coord.HandOffOwnership(ctx, h.ws.sessionID, prov, targetRole, RedactContent(summary, nil), nil, nil)
-	if err != nil {
-		return "", fmt.Errorf("handoff failed: %w", err)
-	}
-
-	h.ws.mu.Lock()
-	h.ws.state.ActiveTurn = sess.ActiveTurn
-	h.ws.mu.Unlock()
-
-	return fmt.Sprintf("Turn successfully handed off to %s (Agent: %s).", targetRole, sess.ActiveTurn), nil
-}
-
 func (h *CommandHandler) handleCheckpoint(ctx context.Context) (string, error) {
 	return "Checkpoint creation is unavailable in TUI: authenticated runtime snapshot support is not implemented.", nil
 }
@@ -696,7 +622,7 @@ func (h *CommandHandler) helpText() string {
 	}
 	return `MARSHAL Terminal Workspace Commands:
   /status                  Show canonical session, goal, team, claim, budget, and termination status
-  /goal [outcome]          View active goal; edits unavailable (runtime authorization required)
+  /goal                    View the active goal
   /goal constraints        List bound constraints
   /goal create|edit|add-constraint|rm-constraint  Create or revise the goal as the local owner
   /goal version [revision] | diff [from to] | criteria | donotdo | progress  Read canonical reports
@@ -726,8 +652,8 @@ func (h *CommandHandler) helpText() string {
   /reject [approval_id]    Unavailable: authenticated runtime authorization required
   /route [key=value ...]   Compute an advisory route; it is not applied to Runtime
   /why                     Explain advisory routing; verified ULTRA entitlement required
-  /msg, /say <agent|all> <text>  Unavailable: authenticated runtime authorization required
-  /handoff <role> <summary> Unavailable: authenticated runtime authorization required
+  /msg, /say <agent|all> <text>  Message the team session as the local owner
+  /handoff <role> <summary> Hand the session turn to the active participant of a role
   /checkpoint [list|create|inspect|diff]  Unavailable: runtime snapshot support required
   /rollback <id>           Unavailable: runtime restoration support required
   /pause                   Unavailable: authenticated runtime process control required

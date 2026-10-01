@@ -56,6 +56,13 @@ func writeDecisionCommand(ctx context.Context, tx *sql.Tx, project, session, tar
 	if (r.ProjectID != project && r.TargetProjectID != project) || r.SessionID != session || !match || (r.ExpectedVersion+1 != version && !(strings.HasPrefix(r.TargetID, "execution:") && version > r.ExpectedVersion)) {
 		return model.ErrConflict
 	}
+	return insertCommandReceipt(ctx, tx, r, version)
+}
+
+// insertCommandReceipt rechecks the grant inside the mutation transaction and
+// writes the command result and audit record there, so a mutation and its
+// receipt commit or roll back together.
+func insertCommandReceipt(ctx context.Context, tx *sql.Tx, r CommandRecord, version int64) error {
 	// Recheck revocation/expiry in the mutation transaction: a grant revoked
 	// after application authorization must not permit a later commit.
 	if r.CapabilityGrantID != "" {

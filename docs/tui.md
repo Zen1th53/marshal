@@ -436,7 +436,7 @@ Every user-operable MARSHAL capability has a direct command mapping:
 ### Session & Workspace
 - `/update [install]` — Check for a newer published release, or install it. `F10` does the same: it installs the release the notice is showing, and checks when there is none.
 - `/status` — Show canonical session, goal, team, claim, budget, and termination status. Runtime execution is not verified by this command.
-- `/msg <agent|all> <text>` — Messaging is unavailable in TUI; authenticated runtime authorization is required.
+- `/msg <agent|all> <text>` (`/say`) — Post a message in this workspace's existing team session as the authenticated local owner. The recipient must be a participant; `all` addresses the team. Content is redacted before it is stored. Without a team session nothing is sent and no session is created.
 - `/pause` — Reports unavailable authenticated runtime process control; does not pause execution.
 - `/resume` — Reports unavailable runtime process control. `/resume <id|--last> [native arguments...]` opens native Codex resume when its CLI is installed.
 - `/cancel` — Reports unavailable authenticated runtime process control; does not cancel execution.
@@ -482,7 +482,7 @@ Task mutations go through the workspace's in-process `app.LocalControl` with ind
 ### Goal, Alignment & Constraints
 - `/goal` — View the active goal. `/goal create <request>` forms it through canonical intake; `/goal edit <outcome>` revises its interpretation. `/goal constraints` lists constraints; `/goal add-constraint <text>` adds a hard constraint and `/goal rm-constraint <id|text>` explicitly removes one as the authenticated local owner. Mutations report the stored revision and confirmation state. Revisions return to `PENDING` and stale dependent approvals and execution bindings cannot authorize continuation. `/goal version [revision]` reads an exact revision (default current); `/goal diff [from to]` compares revisions (default previous to current). `/goal criteria` and `/goal donotdo` list current items read-only. `/goal progress` shows canonical criterion statuses and evidence references; missing evidence, unknown/not-run status and stale bindings never count as verified. No completion percentage is synthesized. Unknown verbs show usage and never mutate; free text does not update the goal.
 - `/mode [manual|auto|ultra]` — Inspect or switch the session supervision mode label; ULTRA requires a verified entitlement.
-- `/handoff <architect|developer|qa|appsec> <summary>` — Unavailable without authenticated runtime authorization.
+- `/handoff <architect|developer|qa|appsec> <summary>` — Hand the session turn to the active participant holding that role, recording a handoff proposal from the local owner. The handoff is bound to the session's current turn: if the turn moved on, nothing changes. A role nobody holds is refused.
 - `/alignment [scope|violations|blast|deletions|status|resolve [reason ...]]` — Report alignment NOT VERIFIED. Resolution is unavailable without authenticated runtime authorization; malformed inspection arguments return usage.
 - `/reinjection` — Report the execution-bound constraint digest NOT VERIFIED; extra arguments return usage.
 - `/blind [resolve [reason ...]]` — Report interpretation NOT VERIFIED; resolution is unavailable. Unknown subcommands return usage.

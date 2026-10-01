@@ -182,10 +182,16 @@ func TestAcceptanceCollaboration(t *testing.T) {
 		acceptanceScreen(t, ws, id)
 	}
 	out, err := ws.ExecuteCommand(ctx, "/msg codex acceptance-message")
-	if err != nil || !strings.Contains(out, "unavailable") {
-		t.Fatalf("collaboration without runtime must fail closed: out=%q err=%v", out, err)
+	if err != nil || !strings.Contains(out, "nothing was sent") {
+		t.Fatalf("collaboration without a session must fail closed: out=%q err=%v", out, err)
 	}
-	t.Log("PASS: collaboration surfaces render; no message is fabricated without a runtime authority")
+	if messages, err := ws.store.ListAgentMessages(ctx, ws.sessionID, 10); err != nil || len(messages) != 0 {
+		t.Fatalf("a message was fabricated without a session: %+v %v", messages, err)
+	}
+	if _, err := ws.store.GetTeamSession(ctx, ws.sessionID); err == nil {
+		t.Fatal("a collaboration session was fabricated on the operator's behalf")
+	}
+	t.Log("PASS: collaboration surfaces render; no session or message is fabricated without a real session")
 }
 
 func TestAcceptanceBoundProcess05Approval(t *testing.T) {
