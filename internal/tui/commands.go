@@ -35,14 +35,57 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		h.ws.askUltraStop(false)
 	}
 
+	// Backup paths may contain spaces; parse argv rather than splitting them.
+	if cmd == "/backup" {
+		var err error
+		parts, err = nativeArgs(line)
+		if err != nil {
+			return "Usage: /backup [create|restore <backup_path>] (quote paths with spaces): " + err.Error(), nil
+		}
+	}
+	if integrationCommand(cmd) {
+		var err error
+		parts, err = nativeArgs(line)
+		if err != nil {
+			return "Usage: " + cmd + " (quote complete arguments): " + err.Error(), nil
+		}
+	}
+	if usage := configCommandUsage(parts); usage != "" {
+		return usage, nil
+	}
+	if usage := workCommandUsage(parts); usage != "" {
+		return usage, nil
+	}
+
+	// Read commands must render the current canonical revision, rather than
+	// the cache from before a runtime update.
+	switch cmd {
+	case "/goal", "/claims", "/agents", "/roster", "/evidence", "/why", "/budget", "/route", "/inspect", "/export":
+		if err := h.ws.RefreshState(ctx); err != nil {
+			return "", fmt.Errorf("refresh command state: %w", err)
+		}
+	}
+
 	switch cmd {
 	case "/help", "/?":
+		if len(parts) != 1 {
+			return "Usage: /help", nil
+		}
 		return h.helpText(), nil
+
+	case "/quit", "/exit":
+		if len(parts) != 1 {
+			return "Usage: /quit or /exit", nil
+		}
+		h.ws.mu.Lock()
+		h.ws.exitRequested = true
+		h.ws.mu.Unlock()
+		return "Exiting MARSHAL terminal workspace. Any durable session data is preserved.", nil
 
 	case "/goal":
 		if len(parts) < 2 {
 			if h.ws.state.Goal.ID == "" {
-				return "No active goal set. Use /goal <desired outcome> to define one.", nil
+				return "No active goal set. Goal creation is unavailable in TUI; authenticated runtime authorization is required.", nil
 			}
 			return fmt.Sprintf("Active Goal [v%d]: %s (ID: %s)",
 				h.ws.state.Goal.Revision, h.ws.state.Goal.DesiredOutcome, h.ws.state.Goal.ID), nil
@@ -53,6 +96,8 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		switch strings.ToLower(parts[1]) {
 		case "constraints":
 			return h.handleGoalConstraints(ctx)
+		case "diff", "version", "criteria", "donotdo", "progress":
+			return "Goal " + strings.ToLower(parts[1]) + " reporting is unavailable in TUI: canonical goal reporting support is not implemented.", nil
 		case "add-constraint":
 			return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
 		case "rm-constraint":
@@ -62,7 +107,8 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	case "/mode":
 		if len(parts) < 2 {
-			return fmt.Sprintf("Current mode: %s (options: manual, auto; ultra requires entitlement and is unavailable)", h.ws.mode), nil
+			gate, _ := h.ws.ultraGate()
+			return fmt.Sprintf("Current mode: %s (options: manual, auto, ultra; ULTRA entitled: %t)", h.ws.mode, gate.Entitled()), nil
 		}
 		mode := strings.ToLower(parts[1])
 		switch mode {
@@ -198,6 +244,9 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return "Handoff mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
 
 	case "/checkpoint":
+		if len(parts) > 1 && !strings.EqualFold(parts[1], "create") {
+			return "Checkpoint " + strings.ToLower(parts[1]) + " is unavailable in TUI: authenticated runtime snapshot support is not implemented.", nil
+		}
 		return h.handleCheckpoint(ctx)
 
 	case "/rollback":
@@ -222,13 +271,13 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleCancel(ctx)
 
 	case "/doctor":
-		if len(parts) > 1 && (parts[1] == "codex" || parts[1] == "provider") {
+		if len(parts) > 1 && (strings.EqualFold(parts[1], "codex") || strings.EqualFold(parts[1], "provider")) {
 			return h.handleCodex(ctx, []string{"doctor"}, line)
 		}
 		return h.handleDoctor(ctx)
 
 	case "/tasks", "/task":
-		if len(parts) > 1 {
+		if len(parts) > 1 && !strings.EqualFold(parts[1], "list") && !strings.EqualFold(parts[1], "inspect") && !strings.EqualFold(parts[1], "ownership") {
 			return "Task mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
 		}
 		return h.handleTasks(ctx, parts[1:], line)
@@ -255,7 +304,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleCodex(ctx, []string{"models"}, line)
 
 	case "/model":
-		if len(parts) == 2 && parts[1] != "show" && parts[1] != "select" {
+		if len(parts) == 2 && !strings.EqualFold(parts[1], "show") && !strings.EqualFold(parts[1], "select") {
 			return h.handleCodex(ctx, []string{"model", parts[1]}, line)
 		}
 		return h.handleModel(ctx, parts[1:])
@@ -294,6 +343,9 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleAlignment(ctx, parts[1:])
 
 	case "/diff":
+		if len(parts) != 1 {
+			return "Usage: /diff", nil
+		}
 		return h.handleDiff(ctx)
 
 	case "/approvals":
@@ -340,7 +392,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/features":
 		return h.handleCodex(ctx, append([]string{"features"}, parts[1:]...), line)
 
-	case "/skill", "/skills":
+	case "/skills":
+		return h.handleCodex(ctx, append([]string{"skills"}, parts[1:]...), line)
+
+	case "/skill":
 		return h.handleCodex(ctx, append([]string{"skill"}, parts[1:]...), line)
 
 	case "/login":
@@ -423,15 +478,15 @@ func (h *CommandHandler) handleAgents(ctx context.Context) (string, error) {
 	defer h.ws.mu.Unlock()
 
 	if len(h.ws.state.Participants) == 0 {
-		return "No active team participants. Default team: Claude (Architect), Codex (Developer), OpenCode (QA), Antigravity (AppSec/Integration).", nil
+		return "No registered team participants. Harness availability is discovered when the workspace refreshes.", nil
 	}
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("TEAM ROSTER (%d agents):\n", len(h.ws.state.Participants)))
 	for _, p := range h.ws.state.Participants {
-		active := "inactive"
+		active := "unavailable"
 		if p.IsActive {
-			active = "active"
+			active = "available"
 		}
 		sb.WriteString(fmt.Sprintf("  • %-14s | Role: %-10s | Harness: %-12s | Model: %-18s | %s\n",
 			p.AgentID, p.Role, p.Harness, p.Model, active))
@@ -461,6 +516,7 @@ func (h *CommandHandler) handleClaims(ctx context.Context) (string, error) {
 }
 
 func (h *CommandHandler) handleEvidence(ctx context.Context, evidenceID string) (string, error) {
+	evidenceID = strings.TrimPrefix(evidenceID, "#")
 	h.ws.mu.RLock()
 	defer h.ws.mu.RUnlock()
 
@@ -597,6 +653,7 @@ func (h *CommandHandler) handleCheckpoint(ctx context.Context) (string, error) {
 }
 
 func (h *CommandHandler) handleRollback(ctx context.Context, cpID string) (string, error) {
+	cpID = strings.TrimPrefix(cpID, "#")
 	return fmt.Sprintf("Rollback to %s was NOT performed: authenticated runtime restoration is not implemented.", cpID), nil
 }
 
@@ -604,11 +661,11 @@ func (h *CommandHandler) handleBudget(ctx context.Context) (string, error) {
 	h.ws.mu.Lock()
 	defer h.ws.mu.Unlock()
 
-	tokStr := "0"
+	tokStr := "UNKNOWN"
 	if h.ws.state.BudgetConsumed.TotalTokens != nil {
 		tokStr = fmt.Sprintf("%d", *h.ws.state.BudgetConsumed.TotalTokens)
 	}
-	costStr := "$0.00"
+	costStr := "UNKNOWN"
 	if h.ws.state.BudgetConsumed.CostUSD != nil {
 		costStr = fmt.Sprintf("$%.4f", *h.ws.state.BudgetConsumed.CostUSD)
 	}
@@ -637,14 +694,22 @@ func (h *CommandHandler) helpText() string {
 	}
 	return `MARSHAL Terminal Workspace Commands:
   /status                  Show canonical session, goal, team, claim, budget, and termination status
-  /goal [outcome]          View or update the active GoalContract
+  /goal [outcome]          View active goal; edits unavailable (runtime authorization required)
+  /goal constraints        List bound constraints
+  /goal create|edit|add-constraint|rm-constraint  Edits unavailable (runtime authorization required)
+  /goal diff|version|criteria|donotdo|progress  Reporting unavailable (not implemented)
   /marshal <goal>          Plan with a Marshal model, then marshal the work to agents (/marshal help)
-  /mode [manual|auto]       Switch operating supervision mode; ULTRA requires entitlement
+  /mode [manual|auto|ultra] Switch session supervision mode label; ULTRA requires entitlement
   /ultra [status|start|stop|request]  Show ULTRA status, switch execution on or off, or request entitlement
-  /agents                  List registered participants, fixed roles, and harnesses
+  /agents, /roster         List registered participants, fixed roles, and harnesses
   /claims                  List active claims and epistemic verification states
+  /tasks, /task [list|inspect <id>|ownership]  Read tasks; mutations unavailable
+  /task create|assign|pause|resume|cancel|retry  Mutations unavailable (runtime authorization required)
+  /budget                  Show consumed budget (unknown tokens/cost stay UNKNOWN)
   /learning <id>           Inspect a Process 07 memory commit, promotions and refusals
-	/optimization <id>       Inspect a Process 08 governed optimization cycle and refusals
+  /optimization <id>       Inspect a Process 08 governed optimization cycle and refusals
+  /memory [list|search <query>|provenance <id>]  Read project memory records
+  /memory peers [agent authors…]  Show or set cross-agent visibility
   /memory inject [chan]    Govern how a native session receives the other agents' work
   /memory-search <proj>    Search durable memory with state, freshness and contradictions
   /memory-stale <proj>     Include stale memory, always marked unusable
@@ -653,42 +718,69 @@ func (h *CommandHandler) helpText() string {
   /fingerprints <proj>     Bounded failure fingerprints
   /playbooks <proj>        Playbook candidates awaiting review
   /replay-index [run]      Replay and reproducibility index
-  /inspect [kind] <id>     Inspect a claim, evidence, checkpoint, task, handoff, or approval
-  /evidence <id>           Inspect evidence item details and linked claims
-  /approve [approval_id]   Grant a pending approval through the policy approval store
-  /reject [approval_id]    Deny a pending approval and record the decision durably
+  /inspect [kind] <id>     Inspect a claim, evidence, checkpoint, task, handoff, approval, or agent
+  /evidence <id>           Show supporting/contradicting evidence links in active claims
+  /approve [approval_id]   Unavailable: authenticated runtime authorization required
+  /reject [approval_id]    Unavailable: authenticated runtime authorization required
   /route [key=value ...]   Compute an advisory route; it is not applied to Runtime
-  /why                     Explain the advisory routing calculation
-  /msg <agent|all> <text>  Send operator guidance to the team or a specific agent
-  /handoff <role> <summary> Transfer active turn to the target role
-  /checkpoint              Create a durable handoff checkpoint
-  /rollback <id>           Roll back state to an eligible checkpoint
-  /pause                   Pause the active collaborative session
-  /resume [id|--last]      Resume collaborative or Codex session
-  /cancel                  Cancel active goal execution
-  /review [instructions]   Run deep non-interactive code review of current commit
+  /why                     Explain advisory routing; verified ULTRA entitlement required
+  /msg, /say <agent|all> <text>  Unavailable: authenticated runtime authorization required
+  /handoff <role> <summary> Unavailable: authenticated runtime authorization required
+  /checkpoint [list|create|inspect|diff]  Unavailable: runtime snapshot support required
+  /rollback <id>           Unavailable: runtime restoration support required
+  /pause                   Unavailable: authenticated runtime process control required
+  /resume [id|--last]      No args: runtime control unavailable; args: native Codex resume
+  /cancel                  Unavailable: authenticated runtime process control required
+  /review [instructions]   Native Codex review; governed commit review takes no instructions
+  /approvals               List pending approvals
+  /approval                Show native Codex approval policy
+  /termination             Inspect termination state
+  /context                 Inspect context and drift
   /diff                    Interactive diff inspector for pending changes
   /models                  List discovered models and active selection
-  /model <slug>            Switch active Codex model (e.g. /model o3-mini)
+  /model [show]            Read saved harness model preferences (not applied to Runtime)
+  /model <slug>            Select a Codex execution model through its control authority
+  /model select <harness> <model>  Unavailable: runtime execution-profile integration required
+  /harness [probe|status|select <role> <harness>]  Probe availability; selection unavailable
+  /effort [low|medium|high] Read probed knobs/advisory default; selection UNKNOWN, changes unavailable
+  /provider [status|config <name>]  Probe availability; credentials stay in the harness (/providers alias)
+  /policy [network|sandbox|capability|scope|write|audit]  Enforcement NOT VERIFIED
+  /sandbox [read-only|workspace-write]  No args: NOT VERIFIED; mode: open native Codex
+  /backup [create|restore <backup_path>]  Create verified snapshot; restore only verifies
+  /fingerprint             Report per-run fingerprint history unavailable
+  /runtime                 Report runtime execution health NOT VERIFIED
+  /store                   Read SQLite schema version (integrity NOT VERIFIED)
+  /export                  Write evidence bundle for the current canonical goal revision
+  /blind [resolve [reason ...]]  Interpretation NOT VERIFIED; resolution unavailable
+  /reinjection             Report execution-bound constraint digest NOT VERIFIED
+  /alignment [scope|violations|blast|deletions|status|resolve [reason ...]]  NOT VERIFIED; resolution unavailable
+  /features [list|enable <feature>|disable <feature>]  Native Codex feature flags
+  /login                   Open native Codex login in an interactive terminal
+  /logout                  Open native Codex logout in an interactive terminal
   /mcp [list|add|rm]       Manage Codex MCP server integrations
-  /plugins [list|add|rm]   Manage Codex plugins and extensions
-  /apply                   Apply pending diff to working tree
-  /doctor [codex]          Run health diagnostics and environment checks
-  /search [on|off]         Toggle live web search tool
+  /plugin /plugins [list|add|rm]   Manage Codex plugins and extensions
+  /apply [task_id]         Apply a Codex task diff to working tree
+  /skills                  List local Codex skills
+  /skill install <name>    Install a project-local Codex skill
+  /sessions               List governed Codex sessions
+  /fork [id|--last]        Fork a native Codex session
+  /doctor [codex|provider] Run system diagnostics, or native Codex doctor
+  /search [on|off]         Open a native Codex session with that search setting
   /codex [subcommand]      Full Codex control plane (status, models, review, exec, run, cli)
   /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
   /opencode [subcommand]   Native OpenCode sessions (new, continue, resume, fork, cli)
-  /agy [subcommand]        Native Antigravity sessions (new, continue, resume, cli)
+  /agy /antigravity [subcommand] Native Antigravity sessions (new, continue, resume, cli)
   <prompt...>              Plain text runs nothing; choose /codex, /claude, /opencode, or /agy
   /update [install]        Check for a newer MARSHAL release, or install it
-  /help                    Show this help reference
+  /verification <id>       Inspect a canonical verification run
+  /help, /?                Show this help reference
   /quit, /exit             Exit TUI workspace (session remains durable in SQLite)
 
 Function Keys & Shortcuts:
   F1: Help       F2: Review     F3: Diff viewer
   F4: Status     F5: Models     F6: MCP servers
   F7: Codex      F8: Claude     F9: OpenCode     F12: Antigravity
-  F10: Update` + navigationHint + `
+  F10: Update    F11: Unassigned` + navigationHint + `
 
 Composer:
   /  or  @                 Opens the command menu as you type

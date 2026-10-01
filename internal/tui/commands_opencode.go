@@ -11,6 +11,9 @@ import (
 )
 
 func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line string) (string, error) {
+	if usage := nativeSessionUsage("opencode", args); usage != "" {
+		return usage, nil
+	}
 	interactive := h.ws.terminal != nil && h.ws.terminal.IsTerminal()
 	if len(args) == 0 && interactive {
 		return h.ws.runNativeAgent(ctx, "opencode", nil)
@@ -26,13 +29,19 @@ func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line
 	case "continue":
 		return h.ws.runNativeAgent(ctx, "opencode", []string{"--continue"})
 	case "resume":
-		if len(args) == 1 || args[1] == "--last" {
+		if len(args) == 1 {
 			return h.ws.runNativeAgent(ctx, "opencode", []string{"--continue"})
+		}
+		if args[1] == "--last" {
+			return h.ws.runNativeAgent(ctx, "opencode", append([]string{"--continue"}, args[2:]...))
 		}
 		return h.ws.runNativeAgent(ctx, "opencode", append([]string{"--session", args[1]}, args[2:]...))
 	case "fork":
-		if len(args) == 1 || args[1] == "--last" {
+		if len(args) == 1 {
 			return h.ws.runNativeAgent(ctx, "opencode", []string{"--continue", "--fork"})
+		}
+		if args[1] == "--last" {
+			return h.ws.runNativeAgent(ctx, "opencode", append([]string{"--continue", "--fork"}, args[2:]...))
 		}
 		argv := []string{"--session", args[1], "--fork"}
 		return h.ws.runNativeAgent(ctx, "opencode", append(argv, args[2:]...))

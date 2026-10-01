@@ -24,10 +24,10 @@ func (h *CommandHandler) handleGoalConstraints(ctx context.Context) (string, err
 	h.ws.mu.RUnlock()
 
 	if goal.ID == "" {
-		return "No active goal. Set one with /goal <outcome> before adding constraints.", nil
+		return "No active goal. Goal creation and constraint edits are unavailable in TUI; authenticated runtime authorization is required.", nil
 	}
 	if len(goal.Constraints) == 0 {
-		return fmt.Sprintf("Goal %s [rev %d] has no constraints.\nAdd one with /goal add-constraint <text>.",
+		return fmt.Sprintf("Goal %s [rev %d] has no constraints.\nConstraint edits are unavailable in TUI; authenticated runtime authorization is required.",
 			goal.ID, goal.Revision), nil
 	}
 
@@ -58,7 +58,7 @@ func (h *CommandHandler) handleGoalAddConstraint(ctx context.Context, text strin
 
 	goal := h.ws.state.Goal
 	if goal.ID == "" {
-		return "No active goal. Set one with /goal <outcome> before adding constraints.", nil
+		return "No active goal. Goal creation and constraint edits are unavailable in TUI; authenticated runtime authorization is required.", nil
 	}
 
 	for _, existing := range goal.Constraints {

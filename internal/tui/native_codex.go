@@ -89,7 +89,11 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		return "", fmt.Errorf("unsupported native provider %q", provider)
 	}
 	if w.terminal == nil || !w.terminal.IsTerminal() {
-		return "", fmt.Errorf("native %s requires an interactive terminal; use /%s exec for batch tasks", label, provider)
+		hint := fmt.Sprintf("use /%s exec for batch tasks", provider)
+		if provider == "opencode" || provider == "antigravity" {
+			hint = fmt.Sprintf("open marshal tui in a terminal, then retry /%s", map[string]string{"opencode": "opencode", "antigravity": "agy"}[provider])
+		}
+		return "", fmt.Errorf("native %s requires an interactive terminal; %s", label, hint)
 	}
 	binaryName := provider
 	if provider == "antigravity" {
@@ -97,7 +101,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	}
 	binary, err := project.FindBinary(binaryName)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w; Install %s and make %s available on PATH, then retry", err, label, binaryName)
 	}
 	root := w.workDir
 	if w.runtime != nil {
@@ -194,7 +198,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 	}
 	if watch.consume == nil {
-		return "", fmt.Errorf("native %s memory capture requires an attached runtime", label)
+		return "", fmt.Errorf("native %s memory capture requires an attached runtime; open marshal tui in an initialized project (marshal init), then retry", label)
 	}
 
 	// The shared channel. Who joins it and who each agent sees in it are the
@@ -544,7 +548,12 @@ func nativeUsesModelPreference(args []string) bool {
 			return false
 		}
 	}
-	return len(args) == 0 || args[0] == "--" || args[0] == "resume" || args[0] == "fork"
+	// These configuration aliases open sessions too, so they inherit the
+	// project model preference just like a bare /codex session.
+	if len(args) == 2 && (args[0] == "--sandbox" || args[0] == "-c" && args[1] == `web_search="disabled"`) {
+		return true
+	}
+	return len(args) == 0 || oneOf(args[0], "--", "resume", "fork", "--search")
 }
 
 type nativeHistoryWatch struct {
