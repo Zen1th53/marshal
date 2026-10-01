@@ -119,6 +119,9 @@ func (s *Store) ListTasks(ctx context.Context) ([]model.Task, error) {
 		return nil, fmt.Errorf("close task rows: %w", err)
 	}
 	for i := range tasks {
+		if err = s.taskControl(ctx, &tasks[i]); err != nil {
+			return nil, err
+		}
 		tasks[i].Dependencies, err = s.taskDependencies(ctx, tasks[i].ID)
 		if err != nil {
 			return nil, err
@@ -139,6 +142,9 @@ func (s *Store) GetTask(ctx context.Context, taskID string) (model.Task, error) 
 	}
 	if err != nil {
 		return model.Task{}, fmt.Errorf("read task: %w", err)
+	}
+	if err = s.taskControl(ctx, &task); err != nil {
+		return model.Task{}, err
 	}
 	task.Dependencies, err = s.taskDependencies(ctx, task.ID)
 	if err != nil {

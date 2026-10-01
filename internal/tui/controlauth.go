@@ -39,12 +39,15 @@ import (
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/verification"
 	"github.com/Zen1th53/marshal/internal/worker"
+	"github.com/google/uuid"
 )
 
 // runtimeControlAuthority binds Control to the canonical runtime.
 type runtimeControlAuthority struct {
-	runtime *app.Runtime
-	store   *store.Store
+	runtime         *app.Runtime
+	store           *store.Store
+	localControl    *app.LocalControl
+	localControlErr error
 	// gate is the canonical ULTRA authority. It is read live rather than
 	// captured, because the Cloud handshake completes after the workspace is
 	// built.
@@ -391,41 +394,51 @@ func (a *runtimeControlAuthority) Approval(ctx context.Context, approvalID strin
 // The service delegates to the approval manager, which enforces expiry, the
 // one-shot transition and the digest binding. Nothing here decides anything.
 func (a *runtimeControlAuthority) DecideApproval(ctx context.Context, approvalID string, approve bool, approver, rationale string) error {
-	if strings.HasPrefix(approvalID, "goal-confirm:") {
-		current, err := a.Approval(ctx, approvalID)
-		if err != nil {
-			return err
-		}
-		if !approve {
-			return errors.New("goal rejection is blocked: the canonical application-layer goal cancellation boundary is an IMPLEMENTATION GAP (CTUI-0048)")
-		}
-		_, err = a.runtime.ApproveGoal(ctx, a.sessionID, current.PlanVersion)
-		return err
-	}
-	if strings.HasPrefix(approvalID, "plan-approve:") {
-		current, err := a.Approval(ctx, approvalID)
-		if err != nil {
-			return err
-		}
-		service, err := a.plans()
-		if err != nil {
-			return err
-		}
-		if approve {
-			_, err = service.ApproveVersion(ctx, a.projectID, current.PlanVersion)
-		} else {
-			_, err = service.CancelVersion(ctx, a.projectID, current.PlanVersion)
-		}
-		return err
-	}
-	service, err := a.execution()
+	current, err := a.Approval(ctx, approvalID)
 	if err != nil {
 		return err
 	}
-	if approve {
-		return service.Approve(ctx, approvalID, approver, rationale)
+	return a.DecideApprovalTarget(ctx, approvalTarget(current), approve, rationale)
+}
+
+func (a *runtimeControlAuthority) DecideApprovalTarget(ctx context.Context, target Target, approve bool, rationale string) error {
+	approvalID := target.ID
+	current, err := a.Approval(ctx, approvalID)
+	if err != nil {
+		return err
 	}
-	return service.Reject(ctx, approvalID, approver, rationale)
+	if approvalDigest(current) != target.Digest || current.PlanVersion != target.Revision {
+		return ErrStaleTarget
+	}
+
+	if a.localControlErr != nil {
+		return a.localControlErr
+	}
+	if a.localControl == nil || a.runtime == nil {
+		return authz.ErrDenied
+	}
+	id := approvalID
+	if strings.HasPrefix(id, "goal-confirm:") {
+		_, err := a.CurrentGoal(ctx)
+		if err != nil {
+			return err
+		}
+		id = fmt.Sprintf("goal:%s@%d", strings.TrimPrefix(id, "goal-confirm:"), target.Revision)
+	} else if strings.HasPrefix(id, "plan-approve:") {
+		_, err := a.runtime.Plans().Current(ctx, a.projectID)
+		if err != nil {
+			return err
+		}
+		id = fmt.Sprintf("plan:%s@%d", strings.TrimPrefix(id, "plan-approve:"), target.Revision)
+	} else {
+		id = "execution:" + id
+	}
+	record, err := a.runtime.ResolveDecision(ctx, a.sessionID, id)
+	if err != nil {
+		return err
+	}
+	_, err = a.runtime.CommandDecideApproval(a.localControl.Context(ctx), app.ApprovalDecision{Envelope: app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: record.ID, ExpectedVersion: record.Version, IdempotencyKey: uuid.NewString()}, Digest: record.Digest, Approve: approve, Reason: rationale})
+	return err
 }
 
 func goalApprovalRecord(goal model.GoalContract) *execution.RuntimeApproval {
@@ -651,11 +664,16 @@ func (a *runtimeControlAuthority) ApproveGoal(ctx context.Context, sessionID str
 	return a.runtime.ApproveGoal(ctx, sessionID, expectedRevision)
 }
 
-func (a *runtimeControlAuthority) ReviseGoal(ctx context.Context, sessionID string, expectedRevision int64, interpretation, reason string) (model.GoalContract, error) {
+// ReviseGoal forwards the reviewed envelope with the workspace-owned
+// identity. Neither the command text nor the request supplies a principal.
+func (a *runtimeControlAuthority) ReviseGoal(ctx context.Context, envelope app.CommandEnvelope, interpretation, reason string) (model.GoalContract, error) {
 	if a.runtime == nil {
 		return model.GoalContract{}, errNoRuntime
 	}
-	return a.runtime.ReviseGoal(ctx, sessionID, expectedRevision, interpretation, reason)
+	if a.localControlErr != nil {
+		return model.GoalContract{}, a.localControlErr
+	}
+	return a.runtime.CommandReviseGoal(a.localControl.Context(ctx), envelope, interpretation, reason)
 }
 
 // CreatePlan builds a Process 04 plan from the confirmed goal.
@@ -1418,7 +1436,13 @@ func (a *runtimeControlAuthority) VerifyStateBackup(ctx context.Context, backupP
 	if err != nil {
 		return BackupProof{}, err
 	}
-	metadata, err := app.VerifyStateBackup(ctx, backupPath, string(a.projectID), schema)
+	// A backup carries the store's project row, which is what verification
+	// compares, not the canonical binding identity.
+	row, err := a.runtime.Store().Project(ctx)
+	if err != nil {
+		return BackupProof{}, err
+	}
+	metadata, err := app.VerifyStateBackup(ctx, backupPath, row.ID, schema)
 	if err != nil {
 		return BackupProof{}, err
 	}
@@ -1449,38 +1473,27 @@ func (a *runtimeControlAuthority) RestoreState(ctx context.Context, backupPath s
 		verified.Digest != expected.Digest || verified.SchemaVersion != expected.SchemaVersion {
 		return BackupProof{}, fmt.Errorf("%w: selected backup no longer matches the confirmed digest/schema", ErrStaleTarget)
 	}
-	old := a.runtime
-	root := old.ProjectRoot()
-	if root == "" {
-		return BackupProof{}, errors.New("runtime has no project root")
-	}
-	if err := old.Close(); err != nil {
-		return BackupProof{}, fmt.Errorf("stop runtime for restore: %w", err)
-	}
-	if err := app.RestoreStateForProjectExpected(ctx, root, backupPath, string(a.projectID), verified.Digest); err != nil {
-		// RestoreDatabase keeps the old database intact on preflight/copy
-		// failures. Reopen it so this workspace remains usable after refusal.
-		if reopened, reopenErr := app.Open(ctx, root); reopenErr == nil {
-			if a.replaceRuntime != nil {
-				a.replaceRuntime(reopened)
-			}
-		}
-		return BackupProof{}, fmt.Errorf("restore verified backup: %w", err)
-	}
-	reopened, err := app.Open(ctx, root)
+	row, err := a.runtime.Store().Project(ctx)
 	if err != nil {
-		return BackupProof{}, fmt.Errorf("reopen runtime after restore: %w", err)
+		return BackupProof{}, err
 	}
-	if a.replaceRuntime != nil {
-		a.replaceRuntime(reopened)
+	// The coordinated restore backs up the current state, refuses while any
+	// process holds the database, and checks the restored file's digest.
+	result, err := app.CoordinatedRestore(ctx, a.runtime, backupPath, row.ID, verified.Digest)
+	if result.Runtime != nil && a.replaceRuntime != nil {
+		a.replaceRuntime(result.Runtime)
 	}
+	if err != nil {
+		return BackupProof{}, err
+	}
+	reopened := result.Runtime
 	// Re-verify after reopening so success means the durable replacement is
 	// both valid and readable through the new canonical runtime.
 	schema, err := reopened.Store().SchemaVersion(ctx)
 	if err != nil {
 		return BackupProof{}, fmt.Errorf("read reopened runtime schema: %w", err)
 	}
-	metadata, err := app.VerifyStateBackup(ctx, backupPath, string(a.projectID), schema)
+	metadata, err := app.VerifyStateBackup(ctx, backupPath, row.ID, schema)
 	if err != nil {
 		return BackupProof{}, fmt.Errorf("verify restored runtime: %w", err)
 	}
@@ -2103,4 +2116,41 @@ func (a *runtimeControlAuthority) ClaudeSessions(ctx context.Context) ([]ClaudeS
 		})
 	}
 	return summaries, nil
+}
+
+// GoalMutation forwards explicit composer operations through the workspace's
+// local control context. Canonical app services own all mutation semantics.
+func (a *runtimeControlAuthority) GoalMutation(ctx context.Context, e app.CommandEnvelope, verb, text string) (model.GoalContract, error) {
+	if a.runtime == nil {
+		return model.GoalContract{}, errNoRuntime
+	}
+	if a.localControlErr != nil {
+		return model.GoalContract{}, a.localControlErr
+	}
+	ctx = a.localControl.Context(ctx)
+	switch verb {
+	case "create":
+		return a.runtime.CommandCreateGoal(ctx, e, text)
+	case "edit":
+		return a.runtime.CommandEditGoal(ctx, e, app.GoalEdit{DesiredOutcome: text, Reason: "owner edited outcome"})
+	case "add-constraint":
+		return a.runtime.CommandAddGoalConstraint(ctx, e, text)
+	case "rm-constraint":
+		return a.runtime.CommandRemoveGoalConstraint(ctx, e, text)
+	default:
+		return model.GoalContract{}, model.ErrInvalid
+	}
+}
+
+func (a *runtimeControlAuthority) GoalRevision(ctx context.Context, goalID string, revision int64) (model.GoalContract, error) {
+	if a.store == nil {
+		return model.GoalContract{}, errors.New("no store is attached")
+	}
+	return a.store.GetGoalContract(ctx, goalID, revision)
+}
+func (a *runtimeControlAuthority) GoalProgress(ctx context.Context) (app.GoalProgress, error) {
+	if a.runtime == nil {
+		return app.GoalProgress{}, errNoRuntime
+	}
+	return a.runtime.GoalProgress(ctx, a.sessionID)
 }

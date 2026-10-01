@@ -55,7 +55,7 @@ func TestSameRoleDifferentHarnessRouting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("route codex failed: %v", err)
 	}
-	if plan1.Role != model.RoleDeveloper || plan1.Harness != "codex" || plan1.Model != "gpt-4o" {
+	if plan1.Role != model.RoleDeveloper || plan1.Harness != "codex" || plan1.Model != "" {
 		t.Fatalf("unexpected plan1: %+v", plan1)
 	}
 
@@ -71,7 +71,7 @@ func TestSameRoleDifferentHarnessRouting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("route antigravity failed: %v", err)
 	}
-	if plan2.Role != model.RoleDeveloper || plan2.Harness != "antigravity" || plan2.Model != "gemini-2.5-pro" {
+	if plan2.Role != model.RoleDeveloper || plan2.Harness != "antigravity" || plan2.Model != "" {
 		t.Fatalf("unexpected plan2: %+v", plan2)
 	}
 }

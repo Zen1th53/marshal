@@ -97,6 +97,10 @@ type Workspace struct {
 
 	// Completion popup state. Tab is completion only: it opens or cycles this
 	// list and never submits, so it can never execute a partially typed command.
+	// lastRoute is the most recent /route request and result, bound to the
+	// goal revision it was computed for, so /why explains exactly that route.
+	lastRoute *routeRecord
+
 	completionOpen     bool
 	completionSelected bool
 	completionText     string
@@ -257,7 +261,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/rollback", "/budget", "/pause", "/resume", "/cancel", "/doctor", "/tasks", "/task",
 			"/policy", "/sandbox", "/memory", "/provider", "/providers", "/harness", "/model", "/models",
 			"/effort", "/ultra", "/marshal", "/backup", "/fingerprint", "/runtime", "/store", "/export",
-			"/blind", "/reinjection", "/alignment", "/optimization", "/verification", "/diff", "/review",
+			"/reinjection", "/alignment", "/optimization", "/verification", "/diff", "/review",
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
@@ -313,10 +317,9 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/codex features"] = []string{"list", "enable", "disable"}
 	compCtx.Subcommands["/backup"] = []string{"create", "restore"}
 	compCtx.Subcommands["/model"] = []string{"show", "select"}
-	compCtx.Subcommands["/effort"] = []string{"low", "medium", "high"}
+	compCtx.Subcommands["/effort"] = []string{"minimal", "low", "medium", "high", "xhigh", "default"}
 	compCtx.Subcommands["/features"] = []string{"list", "enable", "disable"}
 	compCtx.Subcommands["/doctor"] = []string{"codex", "provider"}
-	compCtx.Subcommands["/blind"] = []string{"resolve"}
 	compCtx.Subcommands["/search"] = []string{"on", "off", "enable", "disable", "true", "false"}
 	compCtx.Subcommands["/sandbox"] = []string{"read-only", "workspace-write"}
 	compCtx.Subcommands["/resume"] = []string{"--last"}
@@ -525,13 +528,37 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 }
 
 // GetUIState returns a snapshot copy of current UI state.
-func (w *Workspace) GetUIState() UIState {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
+// liveStateLocked overlays the live ULTRA gate on the cached state, so every
+// surface derives entitlement, navigation and the effective mode label from
+// the gate at render time rather than from a value captured earlier. Callers
+// hold w.mu.
+func (w *Workspace) liveStateLocked() UIState {
 	state := w.state
 	state.UltraEntitled = w.ultra.Entitled()
 	state.UltraExecution = w.ultraExecution
 	state.NavigationAvailable = w.navReleased && state.UltraEntitled
+	state.SessionMode = effectiveModeLabel(w.mode, state.UltraEntitled)
+	return state
+}
+
+// effectiveModeLabel names the supervision mode as it currently applies. An
+// ULTRA preference without a live entitlement is shown as inactive instead of
+// as ULTRA, so a withdrawn or expired lease never leaves an ULTRA label behind.
+func effectiveModeLabel(mode string, entitled bool) string {
+	label := strings.ToUpper(mode)
+	if label == "" {
+		label = "MANUAL"
+	}
+	if label == "ULTRA" && !entitled {
+		return "ULTRA (INACTIVE: no verified entitlement)"
+	}
+	return label
+}
+
+func (w *Workspace) GetUIState() UIState {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	state := w.liveStateLocked()
 	return state
 }
 
@@ -1363,10 +1390,13 @@ func (w *Workspace) controlSource() *ControlSource {
 		// action refuse with the reason, which is what the user needs to see.
 		return &ControlSource{SessionID: session, ProjectID: project, ApproverID: session}
 	}
+	localControl, localControlErr := runtime.OpenLocalControl(context.Background())
 	return &ControlSource{
 		Authority: &runtimeControlAuthority{
-			runtime: runtime,
-			store:   store,
+			runtime:         runtime,
+			store:           store,
+			localControl:    localControl,
+			localControlErr: localControlErr,
 			// The gate is read live: the Cloud handshake finishes after the
 			// workspace is built, so a captured gate would report Standard
 			// for the rest of the session.
@@ -1426,7 +1456,7 @@ func (w *Workspace) controlSource() *ControlSource {
 			},
 		},
 		SessionID: session,
-		ProjectID: project,
+		ProjectID: string(identity),
 		// The approver is the session acting. The backend records who decided;
 		// nothing here judges whether that is self-approval.
 		ApproverID: session,
@@ -1537,10 +1567,7 @@ func (w *Workspace) paint() {
 	cols, rows := w.terminal.Size()
 
 	w.mu.RLock()
-	state := w.state
-	state.UltraEntitled = w.ultra.Entitled()
-	state.UltraExecution = w.ultraExecution
-	state.NavigationAvailable = w.navReleased && state.UltraEntitled
+	state := w.liveStateLocked()
 	th := w.theme
 	workDir := w.workDir
 	w.mu.RUnlock()
@@ -1586,10 +1613,7 @@ func (w *Workspace) paint() {
 // second, divergent layout.
 func (w *Workspace) printBatchFrame(out io.Writer) {
 	w.mu.RLock()
-	state := w.state
-	state.UltraEntitled = w.ultra.Entitled()
-	state.UltraExecution = w.ultraExecution
-	state.NavigationAvailable = w.navReleased && state.UltraEntitled
+	state := w.liveStateLocked()
 	th := w.theme
 	workDir := w.workDir
 	w.mu.RUnlock()
@@ -1643,4 +1667,11 @@ func (w *Workspace) runLineScanner(ctx context.Context, in io.Reader, out io.Wri
 		return err
 	}
 	return nil
+}
+
+func onOff(on bool) string {
+	if on {
+		return "ON"
+	}
+	return "OFF"
 }

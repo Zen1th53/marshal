@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/execution"
+	"github.com/google/uuid"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,17 +63,77 @@ func (h *CommandHandler) handleDoctor(ctx context.Context) (string, error) {
 }
 
 // handleTasks handles /tasks and /task subcommands.
+// taskScopeFlag strips a trailing "--scope project|active" and reports the
+// requested scope. Project scope is the default; it is always labelled.
+func taskScopeFlag(args []string) ([]string, string, bool) {
+	for i, arg := range args {
+		if !strings.EqualFold(arg, "--scope") {
+			continue
+		}
+		if i != len(args)-2 {
+			return nil, "", false
+		}
+		scope := strings.ToLower(args[i+1])
+		if scope != "project" && scope != "active" {
+			return nil, "", false
+		}
+		return args[:i], scope, true
+	}
+	return args, "project", true
+}
+
+// scopedTasks lists the project's tasks, or only those of the active plan.
+// The returned label says which, so a session-oriented screen never shows
+// project-wide work without saying so.
+func (h *CommandHandler) scopedTasks(ctx context.Context, scope string) ([]model.Task, string, error) {
+	tasks, err := h.ws.store.ListTasks(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("list tasks: %w", err)
+	}
+	if scope == "project" {
+		return tasks, "scope: project, all tasks in this project", nil
+	}
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil {
+		return nil, "", errNoActiveScope
+	}
+	rt := a.runtime
+	active, err := rt.ActivePlanScope(ctx)
+	if err != nil {
+		return nil, "", errNoActiveScope
+	}
+	filtered := tasks[:0:0]
+	for _, t := range tasks {
+		if active.TaskIDs[t.ID] {
+			filtered = append(filtered, t)
+		}
+	}
+	return filtered, fmt.Sprintf("scope: active plan %s v%d", active.PlanID, active.PlanVersion), nil
+}
+
+var errNoActiveScope = errors.New("no active plan: the active scope is unavailable; use --scope project")
+
 func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line string) (string, error) {
+	args, scope, ok := taskScopeFlag(args)
+	if !ok {
+		return "Usage: /tasks [list|ownership] [--scope project|active]", nil
+	}
 	if len(args) == 0 || strings.EqualFold(args[0], "list") {
 		if h.ws.store == nil {
 			return "Store unavailable to list tasks. Open the TUI in an initialized MARSHAL project (marshal init).", nil
 		}
-		tasks, err := h.ws.store.ListTasks(ctx)
+		tasks, label, err := h.scopedTasks(ctx, scope)
+		if errors.Is(err, errNoActiveScope) {
+			return "Tasks: " + err.Error(), nil
+		}
 		if err != nil {
-			return "", fmt.Errorf("list tasks: %w", err)
+			return "", err
 		}
 		if len(tasks) == 0 {
-			return "No tasks in store. Task creation is unavailable in TUI; authenticated runtime authorization is required.", nil
+			if scope == "active" {
+				return "No tasks in the active plan (" + label + ").", nil
+			}
+			return "No tasks in store. Use /task create <title> in an authenticated workspace.", nil
 		}
 
 		th := h.ws.theme
@@ -79,13 +142,17 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 		}
 
 		var b strings.Builder
-		b.WriteString(fmt.Sprintf("TASKS (%d total):\n", len(tasks)))
+		b.WriteString(fmt.Sprintf("TASKS (%d total; %s):\n", len(tasks), label))
 		for _, t := range tasks {
 			owner := "(none)"
 			if t.OwnerAgentID != nil {
 				owner = *t.OwnerAgentID
 			}
-			badge := th.RenderBadge(string(t.Status))
+			status := string(t.Status)
+			if t.ControlState != "" {
+				status = t.ControlState
+			}
+			badge := th.RenderBadge(status)
 			b.WriteString(fmt.Sprintf("  %-8s %s %-20s [Owner: %s | Risk: %s]\n",
 				t.ID, badge, t.Title, owner, t.Risk))
 		}
@@ -94,127 +161,35 @@ func (h *CommandHandler) handleTasks(ctx context.Context, args []string, line st
 
 	sub := strings.ToLower(args[0])
 	switch sub {
-	case "create":
-		if len(args) < 2 {
-			return "Usage: /task create <task title>", nil
-		}
-		title := strings.TrimSpace(line[strings.Index(line, args[0])+len(args[0]):])
-		taskID := fmt.Sprintf("TASK-%d", time.Now().UnixNano()%10000)
-		newTask := model.Task{
-			ID:       taskID,
-			Title:    title,
-			Status:   model.TaskReady,
-			Risk:     model.R1,
-			Revision: 1,
-		}
-		if h.ws.store != nil {
-			if _, err := h.ws.store.ImportTasks(ctx, []model.Task{newTask}); err != nil {
-				return "", fmt.Errorf("import task: %w", err)
-			}
-		}
-		return fmt.Sprintf("Task %s created: %s", taskID, title), nil
-
+	case "create", "assign", "pause", "resume", "cancel", "retry":
+		return h.handleTaskMutation(ctx, args)
 	case "inspect":
-		if len(args) < 2 {
-			return "Usage: /task inspect <task_id>", nil
-		}
 		return h.handleInspect(ctx, "task", args[1])
 
-	case "assign":
-		if len(args) < 3 {
-			return "Usage: /task assign <task_id> <agent_id>", nil
-		}
-		// Ownership is taken by leasing the task through the canonical claim
-		// path, which enforces the lease and revision rules. Printing an
-		// assignment without taking the lease would report ownership that the
-		// runtime does not actually recognise.
-		if h.ws.store == nil {
-			return "Store unavailable", nil
-		}
-		task, err := h.ws.store.GetTask(ctx, args[1])
-		if err != nil {
-			return "", fmt.Errorf("task %s: %w", args[1], err)
-		}
-		lease, err := h.ws.store.ClaimTask(ctx, model.ClaimRequest{
-			TaskID:           task.ID,
-			AgentID:          args[2],
-			ExpectedRevision: task.Revision,
-		})
-		if err != nil {
-			return "", fmt.Errorf("assign task %s to %s: %w", task.ID, args[2], err)
-		}
-		return fmt.Sprintf("Task %s claimed by %s (lease %s).", task.ID, args[2], lease.ID), nil
-
-	case "pause", "resume", "cancel", "retry":
-		if len(args) < 2 {
-			return fmt.Sprintf("Usage: /task %s <task_id>", sub), nil
-		}
-		return h.transitionTask(ctx, sub, args[1])
-
 	case "ownership":
-		return h.handleTaskOwnership(ctx)
+		if len(args) != 1 {
+			return "Usage: /tasks ownership [--scope project|active]", nil
+		}
+		return h.handleTaskOwnership(ctx, scope)
 
 	default:
 		return "Usage: /task [list|create|inspect|assign|pause|resume|cancel|retry|ownership]", nil
 	}
 }
 
-// transitionTask moves a task through the canonical state machine. The store
-// enforces which transitions are legal for the actor's role, so an illegal
-// request is reported as the refusal it is rather than as a success message.
-func (h *CommandHandler) transitionTask(ctx context.Context, verb, taskID string) (string, error) {
-	if h.ws.store == nil {
-		return "Store unavailable", nil
-	}
-
-	task, err := h.ws.store.GetTask(ctx, taskID)
-	if err != nil {
-		return "", fmt.Errorf("task %s: %w", taskID, err)
-	}
-
-	var target model.TaskStatus
-	switch verb {
-	case "pause":
-		target = model.TaskBlocked
-	case "resume", "retry":
-		target = model.TaskReady
-	case "cancel":
-		target = model.TaskCancelled
-	default:
-		return fmt.Sprintf("Unsupported task transition %q.", verb), nil
-	}
-
-	if task.Status == target {
-		return fmt.Sprintf("Task %s is already %s.", task.ID, target), nil
-	}
-
-	updated, err := h.ws.store.TransitionTask(ctx, model.TaskTransitionRequest{
-		TaskID:           task.ID,
-		FromStatus:       task.Status,
-		ToStatus:         target,
-		ActorRole:        model.RoleArchitect,
-		ActorID:          "operator",
-		Reason:           fmt.Sprintf("operator %s via TUI", verb),
-		ExpectedRevision: task.Revision,
-	})
-	if err != nil {
-		return "", fmt.Errorf("%s task %s (%s -> %s): %w", verb, task.ID, task.Status, target, err)
-	}
-
-	return fmt.Sprintf("Task %s transitioned %s -> %s (revision %d).",
-		updated.ID, task.Status, updated.Status, updated.Revision), nil
-}
-
-func (h *CommandHandler) handleTaskOwnership(ctx context.Context) (string, error) {
+func (h *CommandHandler) handleTaskOwnership(ctx context.Context, scope string) (string, error) {
 	if h.ws.store == nil {
 		return "Store unavailable. Open the TUI in an initialized MARSHAL project (marshal init).", nil
 	}
-	tasks, err := h.ws.store.ListTasks(ctx)
+	tasks, label, err := h.scopedTasks(ctx, scope)
+	if errors.Is(err, errNoActiveScope) {
+		return "Ownership: " + err.Error(), nil
+	}
 	if err != nil {
 		return "", err
 	}
 	var b strings.Builder
-	b.WriteString("WORK OWNERSHIP TABLE:\n")
+	b.WriteString("WORK OWNERSHIP TABLE (" + label + "):\n")
 	b.WriteString(fmt.Sprintf("%-8s %-16s %-12s %-8s %s\n", "TASK", "OWNER", "STATUS", "RISK", "BLOCKED BY"))
 	b.WriteString(strings.Repeat("─", 60) + "\n")
 	for _, t := range tasks {
@@ -233,8 +208,50 @@ func (h *CommandHandler) handleTaskOwnership(ctx context.Context) (string, error
 }
 
 // handlePolicy inspects security, network, sandbox, and capability policies.
+// handlePolicy separates configured policy from observed gate decisions, and
+// never reports an aspect as enforced without execution-bound evidence of it.
 func (h *CommandHandler) handlePolicy(ctx context.Context, args []string) (string, error) {
-	return "Policy enforcement status: NOT VERIFIED. TUI is not connected to an authenticated runtime policy read-back service.", nil
+	aspect := "network, sandbox, capability, scope, write and audit"
+	if len(args) > 0 {
+		aspect = strings.ToLower(args[0])
+	}
+	verdict := fmt.Sprintf("Policy enforcement status: NOT VERIFIED for %s; no execution-bound observation of it is recorded.", aspect)
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil {
+		return verdict + " TUI is not connected to a runtime.", nil
+	}
+	readback, err := a.runtime.PolicyReadback(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read runtime policy: %w; reopen the TUI and check /store", err)
+	}
+	var b strings.Builder
+	b.WriteString("RUNTIME POLICY (configured; not proof of enforcement):\n")
+	if readback.RuntimePolicy == "" {
+		b.WriteString("  Runtime policy: NONE (no active policy governs runs)\n")
+	} else {
+		fmt.Fprintf(&b, "  Runtime policy: %s (active)\n", readback.RuntimePolicy)
+	}
+	switch readback.GateEngine {
+	case "default placeholder":
+		b.WriteString("  Gate engine:    DEFAULT PLACEHOLDER; its only check always passes, so it is a hook, not enforcement\n")
+	case "configured":
+		b.WriteString("  Gate engine:    CONFIGURED\n")
+	default:
+		b.WriteString("  Gate engine:    NONE\n")
+	}
+	b.WriteString("GATE DECISIONS (observed):\n")
+	g := readback.Gates
+	if g.Allowed+g.Denied == 0 {
+		b.WriteString("  None recorded.\n")
+	} else {
+		digest := g.LastDigest
+		if len(digest) > 19 {
+			digest = digest[:19]
+		}
+		fmt.Fprintf(&b, "  %d allowed, %d denied; latest %s at %s (policy %s)\n", g.Allowed, g.Denied, g.LastPoint, g.LastAt, digest)
+	}
+	b.WriteString(verdict)
+	return b.String(), nil
 }
 
 // handleSandbox reports the bubblewrap sandbox status.
@@ -603,9 +620,9 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 			}
 			b.WriteString(fmt.Sprintf("    State:   %s (%s)\n", pr.State, pr.BinaryPath))
 			b.WriteString(fmt.Sprintf("    Version: %s\n", pr.Version))
-			b.WriteString(fmt.Sprintf("    Model:   %s (not established by probe)\n", UnknownModel))
+			b.WriteString(fmt.Sprintf("    Model:   %s\n", h.providerModelLine(ctx, pr.HarnessName)))
 			b.WriteString("    Auth:    UNKNOWN (no execution performed)\n")
-			b.WriteString("    Egress:  BLOCKED_BY_POLICY (sandbox uses --unshare-net; per-endpoint egress unenforceable)\n")
+			b.WriteString("    Egress:  governed cells BLOCKED_BY_POLICY (sandbox uses --unshare-net; per-endpoint egress unenforceable); native sessions UNKNOWN (they run in the provider's own environment; not observed)\n")
 		}
 		return b.String(), nil
 	}
@@ -623,21 +640,33 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 				"MARSHAL can see.", nil
 		}
 		if len(args) < 2 {
-			return "Usage: /provider config <provider_name>", nil
+			return "Usage: /provider config <harness|provider>", nil
 		}
 
-		name := strings.ToLower(args[1])
+		// MARSHAL reaches providers through harnesses, so an API provider name
+		// resolves to the harness that serves it. This command inspects; it
+		// changes no configuration.
+		requested := strings.ToLower(args[1])
+		name := map[string]string{"anthropic": "claude", "claude-code": "claude", "openai": "codex", "agy": "antigravity", "google": "antigravity", "gemini": "antigravity"}[requested]
+		if name == "" {
+			name = requested
+		}
+		via := ""
+		if name != requested {
+			via = fmt.Sprintf(" (provider %s is reached through the %s harness)", requested, name)
+		}
+		const configure = "\n  This inspects the harness; it changes no configuration.\n  Configure: model with /model select <codex|claude> <model>, Codex reasoning effort with /effort, credentials with the harness's own login."
 		for _, pr := range ProbeHarnesses() {
 			if pr.HarnessName != name {
 				continue
 			}
 			if !pr.Installed {
-				return fmt.Sprintf("Provider %s: %s\n  %s", name, StateUnavailable, pr.Reason), nil
+				return fmt.Sprintf("Harness %s%s: %s\n  %s%s", name, via, StateUnavailable, pr.Reason, configure), nil
 			}
-			return fmt.Sprintf("Provider %s: %s (%s)\n  Version: %s\n  Credentials are held by the harness; MARSHAL does not store them.\n  Auth state: UNKNOWN until an execution establishes it.",
-				name, pr.State, pr.BinaryPath, pr.Version), nil
+			return fmt.Sprintf("Harness %s%s: %s (%s)\n  Version: %s\n  Model:   %s\n  Credentials are held by the harness; MARSHAL does not store them.\n  Auth state: UNKNOWN until an execution establishes it.%s",
+				name, via, pr.State, pr.BinaryPath, pr.Version, h.providerModelLine(ctx, name), configure), nil
 		}
-		return fmt.Sprintf("Unknown provider %q. Run /provider status to see what this host provides.", name), nil
+		return fmt.Sprintf("Unknown harness or provider %q. Known harnesses: claude, codex, opencode, antigravity (providers anthropic, openai, google map to them). Run /provider status to see what this host provides.", requested), nil
 	}
 
 	return "Usage: /provider [status|config <name>]", nil
@@ -666,16 +695,34 @@ func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (stri
 	return "Usage: /harness [probe|status|select <role> <harness>]", nil
 }
 
-// handleModel exposes saved preferences read-only. Mutations fail closed until
-// Runtime owns a canonical authenticated execution-profile service.
+// handleModel shows model preferences and selects the model future governed
+// runs of an adapter use, through the authenticated operator boundary.
 func (h *CommandHandler) handleModel(ctx context.Context, args []string) (string, error) {
 	if len(args) == 0 || strings.EqualFold(args[0], "show") {
 		return h.renderModelSelections(ctx)
 	}
-	if !strings.EqualFold(args[0], "select") || len(args) < 2 {
-		return "Usage: /model select <harness> <model_name>  (or /model show)", nil
+	if !strings.EqualFold(args[0], "select") || len(args) != 3 {
+		return "Usage: /model select <codex|claude> <model_name>  (or /model show)", nil
 	}
-	return "Model selection was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
+		return "Model selection was NOT applied: authenticated runtime authorization is required.", nil
+	}
+	adapter := strings.ToLower(args[1])
+	if adapter != "codex" && adapter != "claude" {
+		return fmt.Sprintf("Model selection was NOT applied: %s runs do not read a model preference. Supported: codex, claude.", args[1]), nil
+	}
+	revision, _, err := a.runtime.ModelPreferenceRevision(ctx, adapter)
+	if err != nil {
+		return "", fmt.Errorf("read model preference: %w", err)
+	}
+	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: "model:" + adapter,
+		ExpectedVersion: revision, IdempotencyKey: uuid.NewString()}
+	preference, err := a.runtime.CommandSetModel(a.localControl.Context(ctx), e, adapter, args[2])
+	if err != nil {
+		return fmt.Sprintf("Model selection was NOT applied: %v", err), nil
+	}
+	return fmt.Sprintf("Future governed %s runs will use %s (preference revision %d). Runs already started keep their model.", adapter, preference.Model, preference.Revision), nil
 }
 
 // renderModelSelections reports the persisted model preference per harness.
@@ -684,6 +731,21 @@ func (h *CommandHandler) renderModelSelections(ctx context.Context) (string, err
 		return configStoreUnavailable, nil
 	}
 	var b strings.Builder
+	if a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority); ok && a != nil && a.runtime != nil {
+		b.WriteString("EXECUTION MODEL PREFERENCES (read by future governed runs):\n")
+		for _, adapter := range app.ModelPreferenceAdapters {
+			revision, current, err := a.runtime.ModelPreferenceRevision(ctx, adapter)
+			if err != nil {
+				return "", fmt.Errorf("read model preference: %w", err)
+			}
+			if current == "" {
+				current = "(none; the adapter's own default applies)"
+			} else {
+				current = fmt.Sprintf("%s (revision %d)", current, revision)
+			}
+			b.WriteString(fmt.Sprintf("  %-12s %s\n", adapter, current))
+		}
+	}
 	b.WriteString("SAVED MODEL PREFERENCES (NOT APPLIED TO RUNTIME):\n")
 	for _, pr := range ProbeHarnesses() {
 		profile, err := h.ws.store.GetHarnessProfile(ctx, pr.HarnessName)
@@ -724,7 +786,23 @@ func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (strin
 		return configStoreUnavailable, nil
 	}
 	if len(args) > 0 {
-		return "Reasoning effort was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
+		return h.setCodexEffort(ctx, args[0])
+	}
+	var applied string
+	if a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority); ok && a != nil && a.runtime != nil {
+		preference, err := a.runtime.CodexModelPreference(ctx)
+		switch {
+		case errors.Is(err, model.ErrNotFound):
+			applied = "CODEX EXECUTION EFFORT (read by future governed Codex runs):\n  No Codex model is selected; runs use the model's own default effort.\n"
+		case err != nil:
+			return "", fmt.Errorf("read reasoning preference: %w; reopen the TUI and check /store", err)
+		default:
+			effort := preference.Effort
+			if effort == "" {
+				effort = "model default"
+			}
+			applied = fmt.Sprintf("CODEX EXECUTION EFFORT (read by future governed Codex runs):\n  Model %s, effort %s (preference revision %d)\n  Claude runs read no reasoning effort.\n", preference.Model, effort, preference.Revision)
+		}
 	}
 	plan, err := h.currentRoutePlan(ctx)
 	if err != nil {
@@ -738,7 +816,7 @@ func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (strin
 	if profile != nil && len(profile.ReasoningKnobs) > 0 {
 		knobs = strings.Join(profile.ReasoningKnobs, ", ")
 	}
-	return fmt.Sprintf("REASONING EFFORT (NOT APPLIED TO RUNTIME):\n  Harness (advisory route): %s\n  Selected effort: UNKNOWN (no canonical preference read-back)\n  Advisory route default: %s\n  Probed reasoning knobs: %s", plan.Harness, orNone(plan.ReasoningEffort), knobs), nil
+	return applied + fmt.Sprintf("REASONING EFFORT (NOT APPLIED TO RUNTIME):\n  Harness (advisory route): %s\n  Selected effort: UNKNOWN (no canonical preference read-back)\n  Advisory route default: %s\n  Probed reasoning knobs: %s", plan.Harness, orNone(plan.ReasoningEffort), knobs), nil
 }
 
 // handleUltra reports ULTRA status and switches ULTRA Execution.
@@ -905,8 +983,18 @@ func (h *CommandHandler) handleBackup(ctx context.Context, args []string) (strin
 		if err != nil {
 			return "", fmt.Errorf("verify backup %s: %w; use /backup restore <backup_path> with an existing verified backup file", args[1], err)
 		}
-		return fmt.Sprintf("Backup %s verified (schema v%d, SHA-256 %s).\nRestore is not performed from a live session: exit the TUI, stop the daemon, then run marshal state restore <backup_path>.",
-			args[1], meta.SchemaVersion, meta.DatabaseSHA256), nil
+		offline := "Offline: exit the TUI, stop the daemon, then run marshal state restore <backup_path>."
+		if len(args) == 2 {
+			if !store.DatabaseInUseCheckSupported() {
+				return fmt.Sprintf("Backup %s verified (schema v%d, SHA-256 %s).\nRestore from a live session needs open-file inspection (Linux). %s",
+					args[1], meta.SchemaVersion, meta.DatabaseSHA256, offline), nil
+			}
+			digest := strings.TrimPrefix(meta.DatabaseSHA256, "sha256:")
+			return fmt.Sprintf("Backup %s verified (schema v%d, SHA-256 %s).\n"+
+				"Nothing has changed yet. Restoring replaces the whole project state. The current state is backed up first, and the restore is refused while any MARSHAL window or the daemon has the database open.\n"+
+				"To restore now: /backup restore %s confirm %s\n%s", args[1], meta.SchemaVersion, meta.DatabaseSHA256, args[1], digest[:12], offline), nil
+		}
+		return h.restoreBackup(ctx, args[1], meta.DatabaseSHA256, args[3])
 
 	default:
 		return "Usage: /backup [create|restore <backup_path>]", nil
@@ -919,17 +1007,60 @@ func (h *CommandHandler) handleBackup(ctx context.Context, args []string) (strin
 // to the store, so a TUI session cannot read fingerprints recorded by an
 // execution it did not host. Reporting "none detected" would assert a clean
 // result this command cannot establish.
-func (h *CommandHandler) handleFingerprint(ctx context.Context) (string, error) {
-	return "FAILURE FINGERPRINTS:\n" +
-		"  State: NOT_AVAILABLE\n" +
-		"  The failure fingerprint registry (internal/epistemic) is per-run and in-memory.\n" +
-		"  It is not persisted to the canonical store, so no fingerprint history can be\n" +
-		"  read from this session. This is a reporting gap, not a clean result.", nil
-}
 
 // handleRuntime shows runtime status.
+// sessionRuns reads this session's execution runs from the canonical engine.
+func (h *CommandHandler) sessionRuns(ctx context.Context) (*runtimeControlAuthority, []execution.ExecutionRun, error) {
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil {
+		return nil, nil, nil
+	}
+	service, err := a.execution()
+	if err != nil {
+		return a, nil, nil
+	}
+	runs, err := service.Engine().ListRuns(ctx)
+	if err != nil {
+		return a, nil, err
+	}
+	var mine []execution.ExecutionRun
+	for _, run := range runs {
+		if run.SessionID == a.sessionID {
+			mine = append(mine, run)
+		}
+	}
+	return a, mine, nil
+}
+
 func (h *CommandHandler) handleRuntime(ctx context.Context) (string, error) {
-	return fmt.Sprintf("RUNTIME STATUS:\n  Execution state: NOT VERIFIED\n  Session label:   %s\n  TUI has no authenticated runtime health channel.\n", h.ws.sessionID), nil
+	a, runs, err := h.sessionRuns(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read runs: %w; reopen the TUI and check /store", err)
+	}
+	if a == nil {
+		return fmt.Sprintf("RUNTIME STATUS:\n  Execution state: NOT VERIFIED\n  Session label:   %s\n  TUI is not connected to a runtime.\n", h.ws.sessionID), nil
+	}
+	status, err := a.RuntimeStatus(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read runtime status: %w; reopen the TUI and check /store", err)
+	}
+	var b strings.Builder
+	b.WriteString("RUNTIME STATUS (canonical store read-back; process liveness is not probed):\n")
+	fmt.Fprintf(&b, "  Instance:  %s\n", orNone(a.RuntimeInstanceID()))
+	fmt.Fprintf(&b, "  Schema:    v%d\n", status.SchemaVersion)
+	fmt.Fprintf(&b, "  Records:   %d agents, %d sessions, %d tasks, %d leases\n", status.AgentCount, status.SessionCount, status.TaskCount, status.LeaseCount)
+	fmt.Fprintf(&b, "  Session:   %s\n", h.ws.sessionID)
+	if len(runs) == 0 {
+		b.WriteString("  Runs:      none in this session\n")
+	}
+	for _, run := range runs {
+		policy := run.PolicySnapshot
+		if policy == "" {
+			policy = "none recorded"
+		}
+		fmt.Fprintf(&b, "  Run %s: %s (goal %s rev %d, %d tasks, policy snapshot %s)\n", run.RunID, run.State, orNone(run.GoalID), run.GoalRevision, len(run.Tasks), policy)
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
 }
 
 // handleStore shows store schema status.
@@ -1002,25 +1133,61 @@ func (h *CommandHandler) handleExport(ctx context.Context, args []string) (strin
 }
 
 // handleBlind handles blind interpretation.
+// handleBlind answers plainly: no blind interpretations are collected in
+// this build, so there is nothing to read back or resolve.
 func (h *CommandHandler) handleBlind(ctx context.Context, args []string) (string, error) {
 	if len(args) > 0 && strings.EqualFold(args[0], "resolve") {
-		return "Blind-interpretation resolution was NOT recorded: authenticated runtime support is unavailable.", nil
+		return "Blind-interpretation resolution was NOT recorded: blind interpretation is not available in this build.", nil
 	}
-	return "BLIND INTERPRETATION:\n  State: NOT VERIFIED (no canonical interpretation read-back service).", nil
+	return "BLIND INTERPRETATION: not available in this build. No interpretations are collected, so state is NOT VERIFIED and there is nothing to resolve.", nil
 }
 
 // handleReinjection handles constraint reinjection digests.
+// handleReinjection reads back, per run of this session, the goal revision
+// and hard constraints the run is bound to and the constraint package digest
+// each native turn actually received.
 func (h *CommandHandler) handleReinjection(ctx context.Context) (string, error) {
-	return "CONSTRAINT RE-INJECTION:\n  State: NOT VERIFIED (no execution-bound digest was read back).", nil
+	a, runs, err := h.sessionRuns(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read runs: %w; reopen the TUI and check /store", err)
+	}
+	if a == nil {
+		return "CONSTRAINT RE-INJECTION:\n  State: NOT VERIFIED (TUI is not connected to a runtime).", nil
+	}
+	if len(runs) == 0 {
+		return "CONSTRAINT RE-INJECTION:\n  No runs in this session, so no constraint package has been injected.", nil
+	}
+	h.ws.mu.RLock()
+	goal := h.ws.state.Goal
+	h.ws.mu.RUnlock()
+	var b strings.Builder
+	b.WriteString("CONSTRAINT RE-INJECTION (execution-bound read-back):\n")
+	for _, run := range runs {
+		binding := "CURRENT"
+		if run.GoalID != goal.ID || run.GoalRevision != goal.Revision {
+			binding = fmt.Sprintf("STALE (current goal %s rev %d)", orNone(goal.ID), goal.Revision)
+		}
+		fmt.Fprintf(&b, "  Run %s: goal %s rev %d, %s; %d hard constraints bound\n", run.RunID, orNone(run.GoalID), run.GoalRevision, binding, len(run.HardConstraints))
+		injected := 0
+		for id, task := range run.Tasks {
+			if task.NativeTurn == nil {
+				continue
+			}
+			injected++
+			digest := task.NativeTurn.ConstraintDigest
+			if len(digest) > 19 {
+				digest = digest[:19]
+			}
+			fmt.Fprintf(&b, "    task %s: %s turn %s received constraint package %s\n", id, task.NativeTurn.Provider, orNone(task.NativeTurn.TurnID), orNone(digest))
+		}
+		if injected == 0 {
+			b.WriteString("    No native turn has started, so nothing has been injected yet.\n")
+		}
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
 }
 
 // handleAlignment handles alignment guard state.
-func (h *CommandHandler) handleAlignment(ctx context.Context, args []string) (string, error) {
-	if len(args) > 0 && strings.ToLower(args[0]) == "resolve" {
-		return "Alignment escalation was NOT resolved: authenticated runtime authorization is required.", nil
-	}
-	return "ALIGNMENT GUARD: NOT VERIFIED (no execution-bound alignment result was read back).", nil
-}
 
 // handleDiff toggles the interactive diff viewer.
 func (h *CommandHandler) handleDiff(ctx context.Context) (string, error) {
@@ -1034,4 +1201,76 @@ func (h *CommandHandler) handleDiff(ctx context.Context) (string, error) {
 		return "Diff viewer closed.", nil
 	}
 	return "Diff viewer unavailable. Open marshal tui in an initialized Git project (marshal init), then retry /diff.", nil
+}
+
+// setCodexEffort records the reasoning effort future governed Codex runs
+// request for the selected model, through the authenticated operator
+// boundary. "default" returns to the model's own default.
+func (h *CommandHandler) setCodexEffort(ctx context.Context, level string) (string, error) {
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
+		return "Reasoning effort was NOT applied: authenticated runtime authorization is required.", nil
+	}
+	level = strings.ToLower(level)
+	if level == "default" {
+		level = ""
+	}
+	revision, current, err := a.runtime.ModelPreferenceRevision(ctx, "codex")
+	if err != nil {
+		return "", fmt.Errorf("read reasoning preference: %w", err)
+	}
+	if current == "" {
+		return "Reasoning effort was NOT applied: select a Codex model first with /model select codex <model>; the effort is validated against that model.", nil
+	}
+	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: "effort:codex",
+		ExpectedVersion: revision, IdempotencyKey: uuid.NewString()}
+	preference, err := a.runtime.CommandSetEffort(a.localControl.Context(ctx), e, "codex", level)
+	if err != nil {
+		return fmt.Sprintf("Reasoning effort was NOT applied: %v", err), nil
+	}
+	effort := preference.Effort
+	if effort == "" {
+		effort = "the model's default effort"
+	}
+	return fmt.Sprintf("Future governed Codex runs of %s will request %s (preference revision %d). Runs already started keep theirs.", preference.Model, effort, preference.Revision), nil
+}
+
+// providerModelLine names the model a harness's governed runs would use: the
+// execution preference for Codex and Claude, otherwise the harness default,
+// which the probe does not establish.
+func (h *CommandHandler) providerModelLine(ctx context.Context, harnessName string) string {
+	if harnessName == "codex" || harnessName == "claude" {
+		if a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority); ok && a != nil && a.runtime != nil {
+			if revision, current, err := a.runtime.ModelPreferenceRevision(ctx, harnessName); err == nil && current != "" {
+				return fmt.Sprintf("%s (execution preference, revision %d)", current, revision)
+			}
+		}
+	}
+	return UnknownModel + " (harness default; not established by probe)"
+}
+
+// restoreBackup performs a coordinated restore once the operator confirmed
+// the backup's digest, and swaps the workspace onto the reopened runtime.
+func (h *CommandHandler) restoreBackup(ctx context.Context, path, digest, confirmed string) (string, error) {
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
+		return "Restore was NOT performed: authenticated runtime authorization is required.", nil
+	}
+	if len(confirmed) < 12 || !strings.HasPrefix(strings.TrimPrefix(digest, "sha256:"), confirmed) {
+		return fmt.Sprintf("Restore was NOT performed: %q does not match the backup's digest; run /backup restore %s to see it again.", confirmed, path), nil
+	}
+	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: "state:" + path, IdempotencyKey: uuid.NewString()}
+	result, err := a.runtime.CommandRestoreState(a.localControl.Context(ctx), e, path, digest)
+	if result.Runtime != nil && result.Runtime != a.runtime && a.replaceRuntime != nil {
+		a.replaceRuntime(result.Runtime)
+	}
+	if err != nil {
+		recovery := ""
+		if result.RecoveryPath != "" {
+			recovery = " The state before the attempt is backed up at " + result.RecoveryPath + "."
+		}
+		return fmt.Sprintf("Restore was NOT performed: %v.%s", err, recovery), nil
+	}
+	return fmt.Sprintf("Project state restored from %s; the restored database matches the confirmed digest and has been reopened.\nThe previous state is backed up at %s (restore it the same way to undo).",
+		path, result.RecoveryPath), nil
 }

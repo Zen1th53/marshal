@@ -57,7 +57,9 @@ a constraint a model never had a chance to drop cannot be dropped by it.
 
 Both limits become hard constraints attributed to you. They survive advisories
 that argue against them, they survive revisions, and an agent cannot remove or
-weaken them.
+weaken them. Only an explicit authenticated owner edit may change a hard
+constraint; that decision is audited as a new revision, preserving the original
+request and historical constraints.
 
 ## What a model can and cannot do
 
@@ -125,12 +127,60 @@ A Goal with open questions cannot be approved: approving it would approve
 whatever MARSHAL happened to guess. A revised Goal returns to `PENDING`,
 because you agreed to the previous wording, not this one.
 
+The local owner confirms MARSHAL's formed interpretation with
+`/approve goal:<id>@<revision>` or refuses it with
+`/reject goal:<id>@<revision> [reason]`. Each decision creates the next immutable
+revision: confirmation is stored as `APPROVED` (displayed as `CONFIRMED` by the
+composer), and rejection as `CANCELLED`. An older, superseded revision cannot be
+decided. Replaying the same authenticated command returns its recorded result.
+
+CI-003 distinguishes confirmation from action approval. The owner may confirm
+or reject a Goal they created, and may confirm MARSHAL's ready plan with
+`/approve plan:<id>@<version>`. A planning agent/model cannot confirm its own
+plan: confirmation requires the authenticated local owner. For execution and
+SQLite action approvals, the principal that requested the action (including the
+local owner when they are the requester) cannot decide it. A run identity is the
+requester for older execution records without explicit requester provenance.
+Hard constitutional violations can never be approved away.
+
 ## Commands
 
 ```
 marshal goal <request>          form a Goal and see the assessment
 marshal goal explain <request>  the same, without acting
 ```
+
+The terminal composer supports:
+
+```
+/goal create <request>
+/goal edit <outcome>
+/goal constraints
+/goal add-constraint <text>
+/goal rm-constraint <id|exact text>
+```
+
+These commands use the local owner context and project-scoped grants. Creation
+preserves your request verbatim through canonical intake. Outcome edits preserve
+constraints; adding or explicitly removing a constraint creates a new `PENDING`
+revision. The original request, request digest and owner provenance stay intact.
+The output reports the revision and state read back from storage. Old revisions
+remain readable. Dependent plans, run approvals and further task dispatch reject
+superseded goal bindings; old approval records remain historical evidence.
+Creation may return `NEEDS_INPUT` when canonical formation finds open questions.
+Unknown verbs and free text never mutate and show usage.
+
+Application revision services also support success criteria and do-not-do items;
+terminal `/goal criteria` and `/goal donotdo` list them read-only.
+`/goal version [revision]` reads an exact historical revision (default current).
+`/goal diff [from to]` uses the model comparison (default previous to current).
+`/goal progress` reads the latest project-and-goal verification record, matches
+verification criterion IDs to exact success criterion
+strings and displays canonical statuses with evidence references. Missing evidence,
+`NOT_RUN`, `UNKNOWN`, expired evidence and stale goal/plan/run/tree/environment
+bindings are never verified. Unavailable bindings remain unknown. No percentage
+is fabricated. All five reports are read-only; no prior revision means the default
+diff has nothing to compare.
 
 ## What survives a provider change
 

@@ -41,9 +41,7 @@ func (r *FingerprintRegistry) RecordFailure(taskID, rawError string) FailureFing
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	norm := normalizeError(rawError)
-	h := sha256.Sum256([]byte(norm))
-	fpHash := hex.EncodeToString(h[:16])
+	fpHash, norm := FingerprintOf(rawError)
 
 	entry, exists := r.fingerprints[fpHash]
 	if !exists {
@@ -72,9 +70,7 @@ func (r *FingerprintRegistry) ShouldCutRetry(rawError string) (bool, string) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	norm := normalizeError(rawError)
-	h := sha256.Sum256([]byte(norm))
-	fpHash := hex.EncodeToString(h[:16])
+	fpHash, _ := FingerprintOf(rawError)
 
 	if entry, exists := r.fingerprints[fpHash]; exists && entry.Occurrences >= 2 {
 		return true, fmt.Sprintf("repeated failure fingerprint %s observed %d times; cutting blind retry and requesting route escalation",
@@ -82,6 +78,15 @@ func (r *FingerprintRegistry) ShouldCutRetry(rawError string) (bool, string) {
 	}
 
 	return false, ""
+}
+
+// FingerprintOf returns the fingerprint and normalized text of a failure. It
+// is a pure function of the failure text, so a fingerprint can be recomputed
+// from any durably recorded failure reason.
+func FingerprintOf(rawError string) (string, string) {
+	norm := normalizeError(rawError)
+	h := sha256.Sum256([]byte(norm))
+	return hex.EncodeToString(h[:16]), norm
 }
 
 func normalizeError(raw string) string {

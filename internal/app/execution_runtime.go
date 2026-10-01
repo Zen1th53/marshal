@@ -160,7 +160,7 @@ func (s *ExecutionService) startRun(ctx context.Context, sessionID string, proje
 	if err != nil {
 		return nil, fmt.Errorf("prepare process 04 handoff: %w", err)
 	}
-	if err := s.materializeCanonicalTasks(ctx, &handoff, goal.Risk); err != nil {
+	if err := s.materializeCanonicalTasks(ctx, &handoff, goal.Risk, goal.SessionID); err != nil {
 		return nil, err
 	}
 
@@ -196,15 +196,14 @@ func (s *ExecutionService) startRun(ctx context.Context, sessionID string, proje
 // intentionally allowed to be human-friendly (for example "task-1"), whereas
 // Runtime task IDs have a stricter durable grammar. The map is carried inside
 // the exact handoff so Codex never substitutes an adapter-local task.
-func (s *ExecutionService) materializeCanonicalTasks(ctx context.Context, handoff *plan.Handoff, riskLevel model.Risk) error {
+func (s *ExecutionService) materializeCanonicalTasks(ctx context.Context, handoff *plan.Handoff, riskLevel model.Risk, sessionID string) error {
 	if handoff == nil {
 		return fmt.Errorf("%w: handoff is required", model.ErrInvalid)
 	}
 	handoff.CanonicalTaskIDs = make(map[string]string, len(handoff.Tasks))
 	byPlanID := make(map[string]string, len(handoff.Tasks))
 	for _, task := range handoff.Tasks {
-		sum := sha256.Sum256([]byte(handoff.PlanID + "\x00" + fmt.Sprint(handoff.PlanVersion) + "\x00" + task.ID))
-		byPlanID[task.ID] = "TASK-P05-" + hex.EncodeToString(sum[:12])
+		byPlanID[task.ID] = canonicalPlanTaskID(handoff.PlanID, handoff.PlanVersion, task.ID)
 	}
 	tasks := make([]model.Task, 0, len(handoff.Tasks))
 	for _, task := range handoff.Tasks {
@@ -220,7 +219,7 @@ func (s *ExecutionService) materializeCanonicalTasks(ctx context.Context, handof
 		handoff.CanonicalTaskIDs[task.ID] = canonicalID
 		tasks = append(tasks, model.Task{ID: canonicalID, Title: task.Title, Status: model.TaskReady, Risk: riskLevel, Dependencies: deps})
 	}
-	if _, err := s.runtime.ImportTasks(ctx, tasks); err != nil {
+	if _, err := s.runtime.ImportTasks(store.WithTaskBinding(ctx, store.TaskBinding{SessionID: sessionID, GoalID: handoff.Goal.GoalID, GoalRevision: handoff.Goal.Revision, PlanID: handoff.PlanID, PlanVersion: handoff.PlanVersion}), tasks); err != nil {
 		return fmt.Errorf("materialize canonical Process 05 tasks: %w", err)
 	}
 	return nil
@@ -293,6 +292,13 @@ func (s *ExecutionService) Approve(ctx context.Context, approvalID, approverID, 
 	if err != nil {
 		return err
 	}
+	run, err := s.engine.GetRun(ctx, pending.RunID)
+	if err != nil {
+		return err
+	}
+	if err := s.engine.ValidateRunGoal(ctx, run); err != nil {
+		return err
+	}
 	if pending.OperationType == codexAppServerApprovalOperation {
 		return s.resolveCodexAppServerApproval(ctx, *pending, true, approverID, rationale)
 	}
@@ -342,7 +348,7 @@ func (s *ExecutionService) resolveClaudeStreamApproval(ctx context.Context, appr
 		return err
 	}
 	if approve {
-		if err := s.engine.ApprovalManager().Approve(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+		if err := s.engine.ApprovalManager().ApproveContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
 			return err
 		}
 		if err := live.client.ResolveApproval(ctx, *live.approval, bridge); err != nil {
@@ -374,7 +380,7 @@ func (s *ExecutionService) resolveClaudeStreamApproval(ctx context.Context, appr
 		}(approval.RunID, approval.ApprovalID, live.runCtx)
 		return nil
 	}
-	if err := s.engine.ApprovalManager().Deny(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+	if err := s.engine.ApprovalManager().DenyContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
 		return err
 	}
 	if err := live.client.DeclineApproval(ctx, *live.approval); err != nil {
@@ -452,7 +458,7 @@ func (s *ExecutionService) resolveCodexAppServerApproval(ctx context.Context, ap
 		return err
 	}
 	if approve {
-		if err := s.engine.ApprovalManager().Approve(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+		if err := s.engine.ApprovalManager().ApproveContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
 			return err
 		}
 		if err := live.client.ResolveApproval(ctx, *live.approval, bridge); err != nil {
@@ -485,7 +491,7 @@ func (s *ExecutionService) resolveCodexAppServerApproval(ctx context.Context, ap
 		}(approval.RunID, approval.ApprovalID, live.runCtx)
 		return nil
 	}
-	if err := s.engine.ApprovalManager().Deny(approval.ApprovalID, operator, rationale, s.now()); err != nil {
+	if err := s.engine.ApprovalManager().DenyContext(ctx, approval.ApprovalID, operator, rationale, s.now()); err != nil {
 		return err
 	}
 	if err := live.client.DeclineApproval(ctx, *live.approval); err != nil {
@@ -513,6 +519,22 @@ func (s *ExecutionService) Checkpoint(_ context.Context, checkpointID string) (e
 	return s.engine.GetCheckpoint(checkpointID)
 }
 
+// VerifyCheckpoint re-reads a checkpoint snapshot; it never restores it.
+func (s *ExecutionService) VerifyCheckpoint(_ context.Context, checkpointID string) (execution.SnapshotCheck, error) {
+	if err := s.available(); err != nil {
+		return execution.SnapshotCheck{}, err
+	}
+	return s.engine.VerifyCheckpoint(checkpointID)
+}
+
+// DiffCheckpoints lists files that differ between two intact snapshots.
+func (s *ExecutionService) DiffCheckpoints(_ context.Context, fromID, toID string, limit int) (execution.SnapshotDiff, error) {
+	if err := s.available(); err != nil {
+		return execution.SnapshotDiff{}, err
+	}
+	return s.engine.DiffCheckpoints(fromID, toID, limit)
+}
+
 // Rollback restores the project workspace to a prior checkpoint.
 func (s *ExecutionService) Rollback(ctx context.Context, checkpointID string) (execution.CheckpointRecord, error) {
 	if err := s.available(); err != nil {
@@ -533,7 +555,7 @@ func (s *ExecutionService) AssembleHandoffBundle(ctx context.Context, runID stri
 func (s *ExecutionService) RegisterHarness(harness execution.WorkerHarness) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.engine.RegisterHarness(harness)
+	s.engine.RegisterHarness(&taskSupervisedHarness{runtime: s.runtime, inner: harness})
 }
 
 func (s *ExecutionService) available() error {
@@ -566,4 +588,11 @@ func (r *storePlanGoalReader) GetActiveGoalContract(ctx context.Context, session
 		return revs[len(revs)-1], nil
 	}
 	return model.GoalContract{}, err
+}
+
+// canonicalPlanTaskID is the store task ID for a planned task. Dispatch and the
+// task-control approval check must derive it identically.
+func canonicalPlanTaskID(planID string, planVersion int64, taskID string) string {
+	sum := sha256.Sum256([]byte(planID + "\x00" + fmt.Sprint(planVersion) + "\x00" + taskID))
+	return "TASK-P05-" + hex.EncodeToString(sum[:12])
 }

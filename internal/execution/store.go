@@ -11,6 +11,8 @@ import (
 )
 
 // RunStore defines storage and retrieval for canonical ExecutionRuns.
+// Implementations own their stored state and return independent snapshots;
+// callers may mutate a retrieved run before submitting a CAS update.
 type RunStore interface {
 	CreateRun(ctx context.Context, run ExecutionRun) error
 	GetRun(ctx context.Context, runID string) (ExecutionRun, error)
@@ -52,7 +54,11 @@ func (s *MemoryRunStore) CreateRun(ctx context.Context, run ExecutionRun) error 
 	if run.Version == 0 {
 		run.Version = 1
 	}
-	s.runs[run.RunID] = run
+	owned, err := cloneExecutionRun(run)
+	if err != nil {
+		return err
+	}
+	s.runs[run.RunID] = owned
 	return nil
 }
 
@@ -64,7 +70,7 @@ func (s *MemoryRunStore) GetRun(ctx context.Context, runID string) (ExecutionRun
 	if !exists {
 		return ExecutionRun{}, fmt.Errorf("%w: %s", ErrRunNotFound, runID)
 	}
-	return run, nil
+	return cloneExecutionRun(run)
 }
 
 func (s *MemoryRunStore) UpdateRun(ctx context.Context, run ExecutionRun) error {
@@ -84,7 +90,11 @@ func (s *MemoryRunStore) UpdateRun(ctx context.Context, run ExecutionRun) error 
 
 	run.Version++
 	run.UpdatedAt = time.Now().UTC()
-	s.runs[run.RunID] = run
+	owned, err := cloneExecutionRun(run)
+	if err != nil {
+		return err
+	}
+	s.runs[run.RunID] = owned
 	return nil
 }
 
@@ -94,9 +104,28 @@ func (s *MemoryRunStore) ListRuns(ctx context.Context) ([]ExecutionRun, error) {
 
 	result := make([]ExecutionRun, 0, len(s.runs))
 	for _, r := range s.runs {
-		result = append(result, r)
+		snapshot, err := cloneExecutionRun(r)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, snapshot)
 	}
 	return result, nil
+}
+
+// Clone the complete durable value, including nested task slices and pointers,
+// using the same representation as FileRunStore. The caller holds the store
+// lock when cloning stored state, so no mutable map escapes that lock.
+func cloneExecutionRun(run ExecutionRun) (ExecutionRun, error) {
+	data, err := json.Marshal(run)
+	if err != nil {
+		return ExecutionRun{}, err
+	}
+	var snapshot ExecutionRun
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		return ExecutionRun{}, err
+	}
+	return snapshot, nil
 }
 
 // FileRunStore implements durable disk persistence for ExecutionRuns.

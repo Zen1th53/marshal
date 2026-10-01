@@ -709,9 +709,15 @@ func TestControlStaleGoalApprovalIsRefusedThroughRealWorkspace(t *testing.T) {
 func TestControlGoalRevisionThroughRealWorkspaceAndCanonicalAuthority(t *testing.T) {
 	ctx := context.Background()
 	const sessionID = "SESSION-tui-control-revise"
-	ws, runtime := realControlWorkspace(t, sessionID)
+	_, runtime := realControlWorkspace(t, sessionID)
+	ws := NewWorkspace(runtime.Store(), runtime.ProjectID(), sessionID)
+	ws.AttachRuntime(runtime, projectid.ID(runtime.ProjectIdentity()))
+	entitleULTRA(t, ws)
+	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
+		t.Fatal("navigation did not open")
+	}
 	now := time.Now().UTC()
-	goal := model.GoalContract{ID: "GOAL-tui-revise", SessionID: sessionID, ProjectID: ws.projectID,
+	goal := model.GoalContract{ID: "GOAL-tui-revise", SessionID: sessionID, ProjectID: runtime.ProjectIdentity(),
 		OriginalRequest: "correct the documented wording", RequestDigest: "sha256:revise-v1", ConstitutionVersion: constitution.Current.String(),
 		Confirmation: model.ConfirmationApproved, Revision: 1, DesiredOutcome: "old interpretation", Risk: model.R1,
 		AuthoritySource: "operator", UnderstandingState: model.GoalReady, CreatedAt: now, UpdatedAt: now,

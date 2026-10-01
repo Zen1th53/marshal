@@ -9,14 +9,26 @@ func workCommandUsage(parts []string) string {
 	usage := ""
 	valid := true
 	switch cmd {
-	case "/status", "/claims", "/agents", "/roster", "/why", "/budget", "/pause", "/cancel":
+	case "/status", "/claims", "/agents", "/roster", "/why":
 		usage, valid = cmd, len(args) == 0
+	case "/budget":
+		usage = "/budget | /budget set [calls=<n>] [duration=<go duration>] | /budget clear"
+		valid = len(args) == 0 || len(args) == 1 && strings.EqualFold(args[0], "clear") ||
+			len(args) >= 2 && len(args) <= 3 && strings.EqualFold(args[0], "set")
+	case "/pause", "/cancel":
+		usage = cmd + " [run:<id>]"
+		valid = len(args) == 0 || len(args) == 1 && strings.HasPrefix(args[0], "run:")
 	case "/mode":
 		usage, valid = "/mode [manual|auto|ultra]", len(args) <= 1
-	case "/approve", "/reject":
-		usage, valid = cmd+" [approval_id]", len(args) <= 1
-	case "/evidence", "/rollback":
+	case "/approve":
+		usage, valid = cmd+" <typed-id|id>", len(args) <= 1
+	case "/reject":
+		usage, valid = cmd+" <typed-id|id> [reason]", true
+	case "/evidence":
 		usage, valid = cmd+" <id>", len(args) == 1
+	case "/rollback":
+		usage = "/rollback <checkpoint_id> [confirm <digest>]"
+		valid = len(args) == 1 || len(args) == 3 && strings.EqualFold(args[1], "confirm")
 	case "/inspect":
 		usage = "/inspect [claim|evidence|checkpoint|task|handoff|approval|agent] <id>"
 		valid = (len(args) == 1 && !workInspectKind(args[0])) || len(args) == 2
@@ -46,23 +58,30 @@ func workCommandUsage(parts []string) string {
 			}
 		}
 	case "/checkpoint":
-		usage = "/checkpoint [list|create|inspect|diff] (currently unavailable)"
+		usage = "/checkpoint list | inspect <id> | diff <from> <to> | create <reason>"
 		if len(args) > 0 {
 			switch strings.ToLower(args[0]) {
-			case "list", "create", "inspect", "diff":
-				// The advertised operations have no implemented argument contract.
-				// Preserve their explicit refusal without inventing one here.
+			case "list":
+				valid = len(args) == 1
+			case "inspect":
+				valid = len(args) == 2
+			case "diff":
+				valid = len(args) == 3
+			case "create":
+				valid = len(args) >= 2
 			default:
 				valid = false
 			}
 		}
 
 	case "/tasks", "/task":
-		usage = cmd + " [list|create <title>|inspect <id>|assign <id> <agent>|pause <id>|resume <id>|cancel <id>|retry <id>|ownership]"
+		usage = cmd + " [list|ownership] [--scope project|active] | create <title> | inspect <id> | assign <id> <agent> | pause|resume|cancel|retry <id>"
 		if len(args) > 0 {
 			switch strings.ToLower(args[0]) {
+			case "--scope":
+				valid = len(args) == 2
 			case "list", "ownership":
-				valid = len(args) == 1
+				valid = len(args) == 1 || (len(args) == 3 && strings.EqualFold(args[1], "--scope"))
 			case "create":
 				valid = len(args) >= 2
 			case "inspect", "pause", "resume", "cancel", "retry":

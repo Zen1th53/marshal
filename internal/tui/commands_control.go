@@ -26,8 +26,7 @@ func (h *CommandHandler) handleStatus(ctx context.Context) (string, error) {
 	}
 
 	h.ws.mu.RLock()
-	state := h.ws.state
-	mode := h.ws.mode
+	state := h.ws.liveStateLocked()
 	h.ws.mu.RUnlock()
 
 	var b strings.Builder
@@ -38,7 +37,7 @@ func (h *CommandHandler) handleStatus(ctx context.Context) (string, error) {
 	}
 	b.WriteString(fmt.Sprintf("  Project:      %s\n", orNone(state.ProjectID)))
 	b.WriteString(fmt.Sprintf("  Session:      %s\n", orNone(state.SessionID)))
-	b.WriteString(fmt.Sprintf("  Runtime mode: %s\n", strings.ToUpper(mode)))
+	b.WriteString(fmt.Sprintf("  Runtime mode: %s\n", state.SessionMode))
 
 	if state.Goal.ID == "" {
 		b.WriteString("  Goal:         (none set)\n")
@@ -183,8 +182,11 @@ func (h *CommandHandler) inspectOne(ctx context.Context, kind, id string) (strin
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("TASK %s\n  Title:    %s\n  Status:   %s\n  Risk:     %s\n  Revision: %d\n",
-			task.ID, RedactContent(task.Title, nil), task.Status, task.Risk, task.Revision), nil
+		status := string(task.Status)
+		if task.ControlState != "" {
+			status = task.ControlState
+		}
+		return fmt.Sprintf("TASK %s\n  Title:    %s\n  Status:   %s\n  Risk:     %s\n  Revision: %d\n  Attempt:  %d\n", task.ID, RedactContent(task.Title, nil), status, task.Risk, task.Revision, task.Attempt), nil
 
 	case "handoff":
 		ho, err := h.ws.store.GetHandoff(ctx, protocol.HandoffID(id))
@@ -391,9 +393,13 @@ func (h *CommandHandler) handleRoute(ctx context.Context, args []string) (string
 	}
 
 	plan, err := h.ws.router.Route(ctx, req)
+	if errors.Is(err, model.ErrInvalid) {
+		return fmt.Sprintf("Route not computed: %v.", err), nil
+	}
 	if err != nil {
 		return "", fmt.Errorf("advisory route: %w", err)
 	}
+	modelLine, installedLine := h.routeResolution(ctx, plan.Harness)
 
 	var b strings.Builder
 	b.WriteString("ADVISORY ONLY — NOT APPLIED TO RUNTIME\n")
@@ -403,10 +409,13 @@ func (h *CommandHandler) handleRoute(ctx context.Context, args []string) (string
 		b.WriteString("ADVISORY ROUTE (current state):\n")
 	}
 	b.WriteString(fmt.Sprintf("  Role:         %s\n", plan.Role))
-	b.WriteString(fmt.Sprintf("  Harness:      %s\n", plan.Harness))
-	b.WriteString(fmt.Sprintf("  Model:        %s\n", plan.Model))
+	b.WriteString(fmt.Sprintf("  Harness:      %s (%s)\n", plan.Harness, installedLine))
+	if plan.PreferenceNote != "" {
+		b.WriteString(fmt.Sprintf("  Preference:   %s\n", plan.PreferenceNote))
+	}
+	b.WriteString(fmt.Sprintf("  Model:        %s\n", modelLine))
 	b.WriteString(fmt.Sprintf("  Native mode:  %s\n", orNone(plan.NativeMode)))
-	b.WriteString(fmt.Sprintf("  Effort:       %s\n", orNone(plan.ReasoningEffort)))
+	b.WriteString(fmt.Sprintf("  Effort:       suggested %s (advisory; /effort sets what Codex runs request)\n", orNone(plan.ReasoningEffort)))
 	b.WriteString(fmt.Sprintf("  Subagents:    %t\n", plan.UseSubagents))
 	b.WriteString(fmt.Sprintf("  Tool policy:  %s\n", orNone(plan.ToolPolicy)))
 	b.WriteString(fmt.Sprintf("  Context:      %s\n", orNone(plan.ContextStrategy)))
@@ -415,7 +424,51 @@ func (h *CommandHandler) handleRoute(ctx context.Context, args []string) (string
 	if plan.Explanation != "" {
 		b.WriteString(fmt.Sprintf("  Explanation:  %s\n", plan.Explanation))
 	}
+	request := "current state"
+	if len(overrides) > 0 {
+		request = strings.Join(overrides, ", ")
+	}
+	h.ws.mu.Lock()
+	h.ws.lastRoute = &routeRecord{goalID: goal.ID, goalRevision: goal.Revision, request: request,
+		explanation: fmt.Sprintf("Request: %s (risk %s, critical claims %t)\n%s\nHarness status: %s. Model: %s.",
+			request, req.Risk, req.HasCriticalClaims, plan.Explanation, installedLine, modelLine)}
+	h.ws.mu.Unlock()
 	return b.String(), nil
+}
+
+// routeRecord is the last advisory route and the goal revision it describes.
+type routeRecord struct {
+	goalID       string
+	goalRevision int64
+	request      string
+	explanation  string
+}
+
+// routeResolution says which model the routed harness would actually run and
+// whether it is installed. The router never names a model; the model comes
+// from the execution preference future runs read, or the provider default.
+func (h *CommandHandler) routeResolution(ctx context.Context, harnessName string) (string, string) {
+	probe := map[string]string{"claude-code": "claude"}[harnessName]
+	if probe == "" {
+		probe = harnessName
+	}
+	installed := "NOT INSTALLED: dispatch to it would fail"
+	for _, p := range ProbeHarnesses() {
+		if p.HarnessName == probe && p.Installed {
+			installed = "installed"
+		}
+	}
+	modelLine := "provider default, resolved at dispatch"
+	if probe == "codex" || probe == "claude" {
+		if a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority); ok && a != nil && a.runtime != nil {
+			if _, current, err := a.runtime.ModelPreferenceRevision(ctx, probe); err == nil && current != "" {
+				modelLine = current + " (execution preference)"
+			} else if err == nil {
+				modelLine = "adapter default, resolved at dispatch (no /model select preference)"
+			}
+		}
+	}
+	return modelLine, installed
 }
 
 func routeUsage() string {

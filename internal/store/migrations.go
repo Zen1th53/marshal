@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 87
+const LatestSchemaVersion = 90
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2643,6 +2643,64 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 		version = 87
 	}
+	if version < 88 {
+		if _, err := tx.ExecContext(ctx, `
+-- Command identities follow the canonical binding, which is not the legacy
+-- projects metadata row. writeCommand validates goal and grant project scope.
+CREATE TABLE IF NOT EXISTS command_results (
+ project_id TEXT NOT NULL, actor TEXT NOT NULL,
+ command_key TEXT NOT NULL, operation TEXT NOT NULL, session_id TEXT NOT NULL,
+ target_id TEXT NOT NULL, expected_version INTEGER NOT NULL, digest TEXT NOT NULL,
+ result_version INTEGER NOT NULL, PRIMARY KEY(project_id,actor,command_key)
+);
+CREATE TABLE IF NOT EXISTS command_audit (
+ revision INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL,
+ actor TEXT NOT NULL, operation TEXT NOT NULL, target_id TEXT NOT NULL,
+ result_version INTEGER NOT NULL, result TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS command_results_no_update BEFORE UPDATE ON command_results BEGIN SELECT RAISE(ABORT,'immutable command result'); END;
+CREATE TRIGGER IF NOT EXISTS command_results_no_delete BEFORE DELETE ON command_results BEGIN SELECT RAISE(ABORT,'immutable command result'); END;
+CREATE TRIGGER IF NOT EXISTS command_audit_no_update BEFORE UPDATE ON command_audit BEGIN SELECT RAISE(ABORT,'immutable command audit'); END;
+CREATE TRIGGER IF NOT EXISTS command_audit_no_delete BEFORE DELETE ON command_audit BEGIN SELECT RAISE(ABORT,'immutable command audit'); END;
+`); err != nil {
+			return fmt.Errorf("migrate schema version 88: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version,applied_at) VALUES(88,?)", utcNow()); err != nil {
+			return err
+		}
+	}
+
+	if version < 89 {
+		if _, err := tx.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS task_controls (task_id TEXT PRIMARY KEY REFERENCES tasks(task_id), state TEXT NOT NULL DEFAULT '', attempt INTEGER NOT NULL DEFAULT 1, session_id TEXT NOT NULL, goal_id TEXT NOT NULL DEFAULT '', goal_revision INTEGER NOT NULL DEFAULT 0, plan_id TEXT NOT NULL DEFAULT '', plan_version INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS task_supervisions (task_id TEXT PRIMARY KEY REFERENCES tasks(task_id), token TEXT NOT NULL, state TEXT NOT NULL, process_id INTEGER NOT NULL, process_stamp TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS task_command_snapshots (task_id TEXT NOT NULL REFERENCES tasks(task_id), revision INTEGER NOT NULL, data_json TEXT NOT NULL, PRIMARY KEY(task_id,revision));
+CREATE TRIGGER IF NOT EXISTS task_snapshots_no_update BEFORE UPDATE ON task_command_snapshots BEGIN SELECT RAISE(ABORT,'immutable task snapshot'); END;
+CREATE TRIGGER IF NOT EXISTS task_snapshots_no_delete BEFORE DELETE ON task_command_snapshots BEGIN SELECT RAISE(ABORT,'immutable task snapshot'); END;
+`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version,applied_at) VALUES(89,?)", utcNow()); err != nil {
+			return err
+		}
+	}
+	if version < 90 {
+		// The reasoning effort future runs request is part of the same CAS-bound
+		// execution preference as the model it was validated against.
+		var hasEffort int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM pragma_table_info('execution_model_preferences') WHERE name = 'effort'`).Scan(&hasEffort); err != nil {
+			return err
+		}
+		if hasEffort == 0 {
+			if _, err := tx.ExecContext(ctx, `ALTER TABLE execution_model_preferences ADD COLUMN effort TEXT NOT NULL DEFAULT ''`); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version,applied_at) VALUES(90,?)", utcNow()); err != nil {
+			return err
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
 	}

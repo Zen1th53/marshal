@@ -50,14 +50,14 @@ func TestCommandSweepConfigDiscovery(t *testing.T) {
 	sweepWorkEnvironment(t)
 	ws := NewWorkspace(nil, "sweep", "sweep")
 	help := sweepWorkRun(t, ws, "/help", "")
-	for _, cmd := range []string{"/policy", "/sandbox", "/doctor", "/provider", "/harness", "/model", "/models", "/effort", "/backup", "/fingerprint", "/runtime", "/store", "/export", "/blind", "/reinjection", "/alignment", "/optimization", "/features", "/search", "/login", "/logout"} {
+	for _, cmd := range []string{"/policy", "/sandbox", "/doctor", "/provider", "/harness", "/model", "/models", "/effort", "/backup", "/fingerprint", "/runtime", "/store", "/export", "/reinjection", "/alignment", "/optimization", "/features", "/search", "/login", "/logout"} {
 		if !strings.Contains(help, "  "+cmd+" ") || !ws.knownCommand(cmd) {
 			t.Errorf("missing help/completion: %s", cmd)
 		}
 	}
 	for cmd, subs := range map[string][]string{
 		"/backup": {"create", "restore"}, "/model": {"show", "select"}, "/features": {"list", "enable", "disable"},
-		"/effort": {"low", "medium", "high"}, "/doctor": {"codex", "provider"}, "/blind": {"resolve"},
+		"/effort": {"minimal", "low", "medium", "high", "xhigh", "default"}, "/doctor": {"codex", "provider"},
 	} {
 		for _, sub := range subs {
 			found := false
@@ -235,7 +235,7 @@ func TestCommandSweepConfigRootsAndSubcommands(t *testing.T) {
 		{"/export", "", "/export", ""},
 		{"/blind", "NOT VERIFIED", "/blind resolve reason text", "NOT recorded"},
 		{"/reinjection", "NOT VERIFIED", "/reinjection", "NOT VERIFIED"},
-		{"/alignment", "NOT VERIFIED", "/alignment resolve reason text", "NOT resolved"},
+		{"/alignment", "NOT VERIFIED", "/alignment resolve run:R/T#0 acknowledged reason text", "NOT resolved"},
 		{"/optimization", "Usage:", "/optimization missing", ""},
 		{"/features", "authority unavailable", "/features list", "authority unavailable"},
 		{"/search", "authority unavailable", "/search on", "authority unavailable"},
@@ -254,7 +254,7 @@ func TestCommandSweepConfigRootsAndSubcommands(t *testing.T) {
 					sweepWorkRun(t, v.ws, c.cmd+"typo", "Unknown command")
 				})
 			}
-			for _, cmd := range []string{"/policy", "/provider", "/harness", "/model", "/effort", "/backup", "/blind", "/alignment", "/features", "/doctor", "/search", "/sandbox"} {
+			for _, cmd := range []string{"/policy", "/provider", "/harness", "/model", "/effort", "/backup", "/alignment", "/features", "/doctor", "/search", "/sandbox"} {
 				for _, sub := range v.ws.completer.ctx.Subcommands[cmd] {
 					t.Run(cmd+"/"+sub, func(t *testing.T) {
 						line := cmd + " " + sub
@@ -271,6 +271,8 @@ func TestCommandSweepConfigRootsAndSubcommands(t *testing.T) {
 							valid += " missing.db"
 						case "/features enable", "/features disable":
 							valid += " test_feature"
+						case "/alignment resolve":
+							valid += " run:R/T#0 acknowledged reviewed"
 						}
 						out, err := v.ws.ExecuteCommand(context.Background(), valid)
 						if err != nil {
@@ -374,10 +376,10 @@ func TestCommandSweepConfigPTY(t *testing.T) {
 		{"/doctor codex", "Install Codex"}, {"/provider status", "PROVIDER / HARNESS STATUS"},
 		{"/harness probe", "HARNESS CAPABILITY PROBE"}, {"/model show", "SAVED MODEL PREFERENCES"},
 		{"/models", "Check Codex installation"}, {"/effort high", "NOT applied"},
-		{"/backup create", "Backup written and verified"}, {"/fingerprint", "NOT_AVAILABLE"},
-		{"/runtime", "Execution state: NOT VERIFIED"}, {"/store", "STORE STATUS"},
+		{"/backup create", "Backup written and verified"}, {"/fingerprint", "FAILURE FINGERPRINTS (from"},
+		{"/runtime", "RUNTIME STATUS (canonical store read-back"}, {"/store", "STORE STATUS"},
 		{"/export", "No active goal"}, {"/blind resolve reason", "NOT recorded"},
-		{"/reinjection", "CONSTRAINT RE-INJECTION"}, {"/alignment scope", "ALIGNMENT GUARD: NOT VERIFIED"},
+		{"/reinjection", "CONSTRAINT RE-INJECTION"}, {"/alignment scope", "ALIGNMENT GUARD (advisory"},
 		{"/optimization missing", "not found"}, {"/features list", "Install Codex"},
 		{"/search on", "Install Codex"}, {"/login", "Install Codex"}, {"/logout", "Install Codex"},
 	}

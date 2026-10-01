@@ -72,7 +72,7 @@ func TestCommandSweepWorkRoots(t *testing.T) {
 		{"/claims", "No claims", "/claims", "No claims", "/claims extra"},
 		{"/inspect", "Usage:", "/inspect task missing", "", "/inspect typo id"},
 		{"/approve", "unavailable", "/approve approval", "unavailable", "/approve id extra"},
-		{"/reject", "unavailable", "/reject approval", "unavailable", "/reject id extra"},
+		{"/reject", "unavailable", "/reject approval reason", "unavailable", ""},
 		{"/route", "ADVISORY", "/route role=qa risk=R2 harness=codex", "ADVISORY", "/route typo"},
 		{"/agents", "TEAM ROSTER", "/agents", "unavailable", "/agents extra"},
 		{"/evidence", "Usage:", "/evidence missing", "NOT FOUND", "/evidence id extra"},
@@ -154,8 +154,11 @@ func TestCommandSweepWorkSubcommands(t *testing.T) {
 		t.Run("checkpoint/"+sub, func(t *testing.T) {
 			sweepWorkRun(t, ws, "/checkpoint "+sub, "")
 			arg := ""
-			if sub != "list" {
+			switch sub {
+			case "inspect", "create":
 				arg = " cp-sweep"
+			case "diff":
+				arg = " cp-sweep cp-other"
 			}
 			sweepWorkRun(t, ws, "/checkpoint "+sub+arg, "unavailable")
 			sweepWorkRun(t, ws, "/checkpoint "+sub+" id extra", "")
@@ -270,10 +273,10 @@ func TestCommandSweepWorkPTY(t *testing.T) {
 
 	cases := []struct{ line, want string }{
 		{"/status", "CANONICAL STATUS DETAIL"}, {"/goal", "No active goal"}, {"/mode auto", "Operating mode switched"},
-		{"/claims", "No claims"}, {"/inspect task missing", "No task found"}, {"/approve apr", "Approval mutation is unavailable"},
-		{"/reject apr", "Approval mutation is unavailable"}, {"/route role=qa", "ADVISORY ONLY"}, {"/agents", "TEAM ROSTER"},
-		{"/evidence missing", "NOT FOUND"}, {"/why", "No ULTRA route explanation"}, {"/msg all guidance", "Message mutation is unavailable"},
-		{"/handoff qa review", "Handoff mutation is unavailable"}, {"/checkpoint list", "Checkpoint list is unavailable"},
+		{"/claims", "No claims"}, {"/inspect task missing", "No task found"}, {"/approve apr", "Error: not found"},
+		{"/reject apr", "Error: not found"}, {"/route role=qa", "ADVISORY ONLY"}, {"/agents", "TEAM ROSTER"},
+		{"/evidence missing", "NOT FOUND"}, {"/why", "No ULTRA route explanation"}, {"/msg all guidance", "nothing was sent"},
+		{"/handoff qa review", "nothing was sent"}, {"/checkpoint list", "No execution snapshots in this project"},
 		{"/rollback cp", "NOT performed"}, {"/budget", "BUDGET CONSUMED"}, {"/pause", "Pause was NOT performed"},
 		{"/resume --last", "Install Codex"}, {"/cancel", "Cancel was NOT performed"}, {"/tasks", "No tasks in store"},
 		{"/task ownership", "WORK OWNERSHIP TABLE"},

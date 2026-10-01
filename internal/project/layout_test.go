@@ -56,6 +56,7 @@ func TestCompareSemver(t *testing.T) {
 }
 
 func TestFindCodexBinarySemverFallback(t *testing.T) {
+	t.Setenv("MARSHAL_PROVIDER_PATH_ONLY", "") // discovery-only test; fixture binaries are never executed.
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 	t.Setenv("PATH", t.TempDir()) // Ensure PATH has no codex

@@ -2,12 +2,10 @@ package tui
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/collaboration"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -22,6 +20,7 @@ func NewCommandHandler(ws *Workspace) *CommandHandler {
 
 // Handle processes an interactive slash command line.
 func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error) {
+	rawLine := line
 	line = strings.TrimSpace(line)
 	if line == "" {
 		return "", nil
@@ -85,7 +84,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/goal":
 		if len(parts) < 2 {
 			if h.ws.state.Goal.ID == "" {
-				return "No active goal set. Goal creation is unavailable in TUI; authenticated runtime authorization is required.", nil
+				return "No active goal set. Use /goal create <request>.", nil
 			}
 			return fmt.Sprintf("Active Goal [v%d]: %s (ID: %s)",
 				h.ws.state.Goal.Revision, h.ws.state.Goal.DesiredOutcome, h.ws.state.Goal.ID), nil
@@ -95,40 +94,54 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		// desired outcome, silently destroying the goal statement.
 		switch strings.ToLower(parts[1]) {
 		case "constraints":
+			if len(parts) != 2 {
+				return goalUsage, nil
+			}
 			return h.handleGoalConstraints(ctx)
 		case "diff", "version", "criteria", "donotdo", "progress":
-			return "Goal " + strings.ToLower(parts[1]) + " reporting is unavailable in TUI: canonical goal reporting support is not implemented.", nil
-		case "add-constraint":
-			return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
-		case "rm-constraint":
-			return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+			return h.handleGoalReport(ctx, strings.ToLower(parts[1]), parts[2:])
+		case "create", "edit", "add-constraint", "rm-constraint":
+			return h.handleGoalMutation(ctx, strings.ToLower(parts[1]), goalCommandText(rawLine))
 		}
-		return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return "Goal mutation is unavailable in TUI for unknown verbs.\n" + goalUsage, nil
 
 	case "/mode":
+		const modeMeaning = "The mode is a supervision preference: it grants no authority, hard approvals always stay with you, and ULTRA execution is switched separately with /ultra start|stop."
 		if len(parts) < 2 {
-			gate, _ := h.ws.ultraGate()
-			return fmt.Sprintf("Current mode: %s (options: manual, auto, ultra; ULTRA entitled: %t)", h.ws.mode, gate.Entitled()), nil
+			gate, execution := h.ws.ultraGate()
+			h.ws.mu.RLock()
+			mode := h.ws.mode
+			h.ws.mu.RUnlock()
+			return fmt.Sprintf("Current mode: %s (options: manual, auto, ultra; ULTRA entitled: %t; ULTRA execution: %s)\n%s",
+				effectiveModeLabel(mode, gate.Entitled()), gate.Entitled(), onOff(execution && gate.Entitled()), modeMeaning), nil
 		}
 		mode := strings.ToLower(parts[1])
 		switch mode {
 		case "manual", "auto":
+			h.ws.mu.Lock()
 			h.ws.mode = mode
 			h.ws.state.SessionMode = strings.ToUpper(mode)
-			return fmt.Sprintf("Operating mode switched to %s.", strings.ToUpper(mode)), nil
+			h.ws.mu.Unlock()
+			return fmt.Sprintf("Operating mode switched to %s. %s", strings.ToUpper(mode), modeMeaning), nil
 		case "ultra":
 			// Switching to ULTRA asks the same gate every other entry path
 			// asks. Without a verified lease the mode does not change, so a
-			// user cannot talk their way into ULTRA through the TUI.
-			gate, _ := h.ws.ultraGate()
+			// user cannot talk their way into ULTRA through the TUI. The label
+			// never turns ULTRA execution on.
+			gate, execution := h.ws.ultraGate()
 			if !gate.Entitled() {
 				return "ULTRA is unavailable: no cryptographically verified entitlement is active.", nil
 			}
+			h.ws.mu.Lock()
 			h.ws.mode = "ultra"
 			h.ws.state.SessionMode = "ULTRA"
-			return "Operating mode switched to ULTRA.", nil
+			h.ws.mu.Unlock()
+			if !execution {
+				return "Operating mode switched to ULTRA. ULTRA execution is still OFF; turn it on with /ultra start.", nil
+			}
+			return "Operating mode switched to ULTRA. ULTRA execution is ON.", nil
 		default:
-			return "Invalid mode. Supported modes: manual, auto", nil
+			return "Invalid mode. Supported modes: manual, auto, ultra", nil
 		}
 
 	case "/update":
@@ -214,10 +227,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleInspect(ctx, "", parts[1])
 
 	case "/approve":
-		return "Approval mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return h.handleApprovalDecision(ctx, parts[1:], true)
 
 	case "/reject":
-		return "Approval mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return h.handleApprovalDecision(ctx, parts[1:], false)
 
 	case "/route":
 		return h.handleRoute(ctx, parts[1:])
@@ -238,37 +251,49 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleWhy(ctx)
 
 	case "/msg", "/say":
-		return "Message mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return h.handleCollaboration(ctx, "message", parts[1:])
 
 	case "/handoff":
-		return "Handoff mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		return h.handleCollaboration(ctx, "handoff", parts[1:])
 
 	case "/checkpoint":
-		if len(parts) > 1 && !strings.EqualFold(parts[1], "create") {
-			return "Checkpoint " + strings.ToLower(parts[1]) + " is unavailable in TUI: authenticated runtime snapshot support is not implemented.", nil
+		if len(parts) == 1 {
+			return h.handleCheckpointRead(ctx, []string{"list"})
 		}
-		return h.handleCheckpoint(ctx)
+		if !strings.EqualFold(parts[1], "create") {
+			return h.handleCheckpointRead(ctx, parts[1:])
+		}
+		return h.handleCheckpointCreate(ctx, strings.Join(parts[2:], " "))
 
 	case "/rollback":
-		if len(parts) < 2 {
-			return "Usage: /rollback <checkpoint_id>", nil
-		}
-		return h.handleRollback(ctx, parts[1])
+		return h.handleRollback(ctx, parts[1:])
 
 	case "/budget":
-		return h.handleBudget(ctx)
+		if len(parts) > 1 {
+			return h.handleBudgetSet(ctx, parts[1:])
+		}
+		out, err := h.handleBudget(ctx)
+		if err != nil {
+			return out, err
+		}
+		return out + h.budgetLimitsAndRuns(ctx), nil
 
 	case "/pause":
-		return h.handlePause(ctx)
+		return h.handleRunControl(ctx, "pause", parts[1:])
 
 	case "/resume":
-		if len(parts) > 1 {
+		// "run:<id>" or no argument controls a MARSHAL run; anything else is
+		// native Codex resume syntax such as --last.
+		if len(parts) > 1 && !strings.HasPrefix(parts[1], "run:") {
 			return h.handleCodex(ctx, append([]string{"resume"}, parts[1:]...), line)
 		}
-		return h.handleResume(ctx)
+		if len(parts) > 2 {
+			return "Usage: /resume [run:<id>]  (native Codex: /resume --last)", nil
+		}
+		return h.handleRunControl(ctx, "resume", parts[1:])
 
 	case "/cancel":
-		return h.handleCancel(ctx)
+		return h.handleRunControl(ctx, "cancel", parts[1:])
 
 	case "/doctor":
 		if len(parts) > 1 && (strings.EqualFold(parts[1], "codex") || strings.EqualFold(parts[1], "provider")) {
@@ -277,8 +302,8 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleDoctor(ctx)
 
 	case "/tasks", "/task":
-		if len(parts) > 1 && !strings.EqualFold(parts[1], "list") && !strings.EqualFold(parts[1], "inspect") && !strings.EqualFold(parts[1], "ownership") {
-			return "Task mutation is unavailable in TUI: authenticated runtime authorization is required.", nil
+		if len(parts) > 1 && !strings.EqualFold(parts[1], "list") && !strings.EqualFold(parts[1], "inspect") && !strings.EqualFold(parts[1], "ownership") && !strings.EqualFold(parts[1], "--scope") {
+			return h.handleTaskMutation(ctx, parts[1:])
 		}
 		return h.handleTasks(ctx, parts[1:], line)
 
@@ -551,110 +576,36 @@ func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
 		return "No ULTRA route explanation is available: the canonical entitlement is not active.", nil
 	}
 
+	// Explain the exact route /route last computed, while it still describes
+	// the current goal revision. A route for another revision is stale.
+	if last := h.ws.lastRoute; last != nil {
+		goal := h.ws.state.Goal
+		if last.goalID == goal.ID && last.goalRevision == goal.Revision {
+			return "ADVISORY ROUTING EXPLANATION (NOT APPLIED):\n" + last.explanation, nil
+		}
+		h.ws.lastRoute = nil
+		return fmt.Sprintf("The last route (%s) was computed for goal %s revision %d, and the goal has changed since. Run /route again.",
+			last.request, orNone(last.goalID), last.goalRevision), nil
+	}
+
 	if h.ws.state.RouteExplanation != "" {
 		return fmt.Sprintf("ADVISORY ROUTING EXPLANATION (NOT APPLIED):\n%s", h.ws.state.RouteExplanation), nil
 	}
 
 	// A route explanation is meaningful only while the same canonical Cloud
 	// gate that authorizes ULTRA execution still holds a verified entitlement.
-	// Calling the ULTRA router after expiry would not execute anything, but it
-	// would still expose an ULTRA-labelled recommendation in a Standard
-	// session and create a misleading authority boundary.
-	if h.ws.router != nil && h.ws.ultra != nil && h.ws.ultra.Entitled() {
+	if h.ws.router != nil {
 		plan, err := h.ws.router.Route(ctx, model.ULTRARouteRequest{
-			GoalID:            h.ws.state.Goal.ID,
-			FixedRole:         model.RoleDeveloper,
-			PreferredHarness:  "codex",
-			Risk:              model.R1,
-			HasCriticalClaims: false,
+			GoalID:    h.ws.state.Goal.ID,
+			FixedRole: model.RoleDeveloper,
+			Risk:      model.R1,
 		})
 		if err == nil {
-			return fmt.Sprintf("ADVISORY ROUTING EXPLANATION (NOT APPLIED):\n%s", plan.Explanation), nil
+			return fmt.Sprintf("ADVISORY ROUTING EXPLANATION (NOT APPLIED):\nNo /route request yet; default developer route at R1.\n%s", plan.Explanation), nil
 		}
 	}
 
 	return "No route explanation is available yet.", nil
-}
-
-func (h *CommandHandler) handleSendMessage(ctx context.Context, target, msgText string) (string, error) {
-	if h.ws.coord == nil {
-		return "Collaboration coordinator unavailable", nil
-	}
-
-	now := time.Now().UTC()
-	msg := model.AgentMessage{
-		ID:        fmt.Sprintf("msg-user-%d", now.UnixNano()),
-		SessionID: h.ws.sessionID,
-		From: model.AuthorProvenance{
-			AgentID: "operator",
-			Harness: "tui",
-		},
-		To:        target,
-		Kind:      model.MessageQuestion,
-		Content:   RedactContent(msgText, nil),
-		CreatedAt: now,
-	}
-
-	_, err := h.ws.coord.SendMessage(ctx, msg, false, false)
-	if err != nil {
-		if errors.Is(err, collaboration.ErrSessionNotFound) {
-			// Seed the session from live host discovery rather than a fixed
-			// roster. DiscoverTeamParticipants reports a harness as active only
-			// when its binary is actually present, and leaves the model as
-			// UNKNOWN, so an implicitly created session never persists an
-			// invented model name into canonical state.
-			participants := h.ws.state.Participants
-			if len(participants) == 0 {
-				participants = DiscoverTeamParticipants(nil)
-			}
-			goalID := h.ws.state.Goal.ID
-			if goalID == "" {
-				goalID = "goal-interactive"
-			}
-			_, _ = h.ws.coord.CreateSession(ctx, h.ws.sessionID, goalID, h.ws.state.Goal.Revision, participants)
-			_, err = h.ws.coord.SendMessage(ctx, msg, false, false)
-		}
-		if err != nil {
-			return "", fmt.Errorf("send message: %w", err)
-		}
-	}
-
-	h.ws.mu.Lock()
-	h.ws.state.RecentMessages = append(h.ws.state.RecentMessages, msg)
-	h.ws.mu.Unlock()
-
-	return fmt.Sprintf("Message sent to %s.", target), nil
-}
-
-func (h *CommandHandler) handleHandoff(ctx context.Context, targetRole model.Role, summary string) (string, error) {
-	if h.ws.coord == nil {
-		return "Collaboration coordinator unavailable", nil
-	}
-
-	prov := model.AuthorProvenance{
-		AgentID: "operator",
-		Harness: "tui",
-	}
-
-	sess, err := h.ws.coord.HandOffOwnership(ctx, h.ws.sessionID, prov, targetRole, RedactContent(summary, nil), nil, nil)
-	if err != nil {
-		return "", fmt.Errorf("handoff failed: %w", err)
-	}
-
-	h.ws.mu.Lock()
-	h.ws.state.ActiveTurn = sess.ActiveTurn
-	h.ws.mu.Unlock()
-
-	return fmt.Sprintf("Turn successfully handed off to %s (Agent: %s).", targetRole, sess.ActiveTurn), nil
-}
-
-func (h *CommandHandler) handleCheckpoint(ctx context.Context) (string, error) {
-	return "Checkpoint creation is unavailable in TUI: authenticated runtime snapshot support is not implemented.", nil
-}
-
-func (h *CommandHandler) handleRollback(ctx context.Context, cpID string) (string, error) {
-	cpID = strings.TrimPrefix(cpID, "#")
-	return fmt.Sprintf("Rollback to %s was NOT performed: authenticated runtime restoration is not implemented.", cpID), nil
 }
 
 func (h *CommandHandler) handleBudget(ctx context.Context) (string, error) {
@@ -675,18 +626,6 @@ func (h *CommandHandler) handleBudget(ctx context.Context) (string, error) {
 		h.ws.state.BudgetConsumed.Duration.Round(time.Millisecond)), nil
 }
 
-func (h *CommandHandler) handlePause(ctx context.Context) (string, error) {
-	return "Pause was NOT performed: TUI has no authenticated runtime process-control handle.", nil
-}
-
-func (h *CommandHandler) handleResume(ctx context.Context) (string, error) {
-	return "Resume was NOT performed: TUI has no authenticated runtime process-control handle.", nil
-}
-
-func (h *CommandHandler) handleCancel(ctx context.Context) (string, error) {
-	return "Cancel was NOT performed: TUI has no authenticated runtime process-control handle.", nil
-}
-
 func (h *CommandHandler) helpText() string {
 	navigationHint := ""
 	if h.ws.navigationRefusal() == "" {
@@ -694,18 +633,18 @@ func (h *CommandHandler) helpText() string {
 	}
 	return `MARSHAL Terminal Workspace Commands:
   /status                  Show canonical session, goal, team, claim, budget, and termination status
-  /goal [outcome]          View active goal; edits unavailable (runtime authorization required)
+  /goal                    View the active goal
   /goal constraints        List bound constraints
-  /goal create|edit|add-constraint|rm-constraint  Edits unavailable (runtime authorization required)
-  /goal diff|version|criteria|donotdo|progress  Reporting unavailable (not implemented)
+  /goal create|edit|add-constraint|rm-constraint  Create or revise the goal as the local owner
+  /goal version [revision] | diff [from to] | criteria | donotdo | progress  Read canonical reports
   /marshal <goal>          Plan with a Marshal model, then marshal the work to agents (/marshal help)
   /mode [manual|auto|ultra] Switch session supervision mode label; ULTRA requires entitlement
   /ultra [status|start|stop|request]  Show ULTRA status, switch execution on or off, or request entitlement
   /agents, /roster         List registered participants, fixed roles, and harnesses
   /claims                  List active claims and epistemic verification states
-  /tasks, /task [list|inspect <id>|ownership]  Read tasks; mutations unavailable
-  /task create|assign|pause|resume|cancel|retry  Mutations unavailable (runtime authorization required)
-  /budget                  Show consumed budget (unknown tokens/cost stay UNKNOWN)
+  /tasks, /task [list|inspect <id>|ownership] [--scope project|active]  Read tasks
+  /task create|assign|pause|resume|cancel|retry  Authenticated task controls
+  /budget [set calls=<n> duration=<d>|clear]  Show consumption and limits; set limits via a goal revision
   /learning <id>           Inspect a Process 07 memory commit, promotions and refusals
   /optimization <id>       Inspect a Process 08 governed optimization cycle and refusals
   /memory [list|search <query>|provenance <id>]  Read project memory records
@@ -724,13 +663,14 @@ func (h *CommandHandler) helpText() string {
   /reject [approval_id]    Unavailable: authenticated runtime authorization required
   /route [key=value ...]   Compute an advisory route; it is not applied to Runtime
   /why                     Explain advisory routing; verified ULTRA entitlement required
-  /msg, /say <agent|all> <text>  Unavailable: authenticated runtime authorization required
-  /handoff <role> <summary> Unavailable: authenticated runtime authorization required
-  /checkpoint [list|create|inspect|diff]  Unavailable: runtime snapshot support required
-  /rollback <id>           Unavailable: runtime restoration support required
-  /pause                   Unavailable: authenticated runtime process control required
-  /resume [id|--last]      No args: runtime control unavailable; args: native Codex resume
-  /cancel                  Unavailable: authenticated runtime process control required
+  /msg, /say <agent|all> <text>  Message the team session as the local owner
+  /handoff <role> <summary> Hand the session turn to the active participant of a role
+  /checkpoint list | inspect <id> | diff <from> <to>  Read the project's snapshots; files re-checked
+  /checkpoint create <reason>  Snapshot the project's files
+  /rollback <id> [confirm <digest>]  Preview, then restore a snapshot (recovery point kept)
+  /pause [run:<id>]        Pause a run of this session (stops new dispatch)
+  /resume [run:<id>]       Resume a paused run; /resume --last: native Codex resume
+  /cancel [run:<id>]       Cancel a run of this session and its provider turns
   /review [instructions]   Native Codex review; governed commit review takes no instructions
   /approvals               List pending approvals
   /approval                Show native Codex approval policy
@@ -738,28 +678,28 @@ func (h *CommandHandler) helpText() string {
   /context                 Inspect context and drift
   /diff                    Interactive diff inspector for pending changes
   /models                  List discovered models and active selection
-  /model [show]            Read saved harness model preferences (not applied to Runtime)
+  /model [show]            Show execution model preferences and saved harness defaults
   /model <slug>            Select a Codex execution model through its control authority
-  /model select <harness> <model>  Unavailable: runtime execution-profile integration required
+  /model select <codex|claude> <model>  Set the model future governed runs use
   /harness [probe|status|select <role> <harness>]  Probe availability; selection unavailable
-  /effort [low|medium|high] Read probed knobs/advisory default; selection UNKNOWN, changes unavailable
+  /effort [<level>|default]  Show or set the reasoning effort future Codex runs request
   /provider [status|config <name>]  Probe availability; credentials stay in the harness (/providers alias)
   /policy [network|sandbox|capability|scope|write|audit]  Enforcement NOT VERIFIED
   /sandbox [read-only|workspace-write]  No args: NOT VERIFIED; mode: open native Codex
-  /backup [create|restore <backup_path>]  Create verified snapshot; restore only verifies
+  /backup [create|restore <backup_path> [confirm <digest>]]  Create a verified snapshot; preview, then restore one
   /fingerprint             Report per-run fingerprint history unavailable
   /runtime                 Report runtime execution health NOT VERIFIED
   /store                   Read SQLite schema version (integrity NOT VERIFIED)
   /export                  Write evidence bundle for the current canonical goal revision
-  /blind [resolve [reason ...]]  Interpretation NOT VERIFIED; resolution unavailable
   /reinjection             Report execution-bound constraint digest NOT VERIFIED
-  /alignment [scope|violations|blast|deletions|status|resolve [reason ...]]  NOT VERIFIED; resolution unavailable
+  /alignment [scope|violations|blast|deletions|status]  Advisory alignment results for this session's tasks
+  /alignment resolve run:<run>/<task>#<n> <acknowledged|goal-amendment-needed> <reason>  Record a decision
   /features [list|enable <feature>|disable <feature>]  Native Codex feature flags
   /login                   Open native Codex login in an interactive terminal
   /logout                  Open native Codex logout in an interactive terminal
   /mcp [list|add|rm]       Manage Codex MCP server integrations
   /plugin /plugins [list|add|rm]   Manage Codex plugins and extensions
-  /apply [task_id]         Apply a Codex task diff to working tree
+  /apply <codex_task_id>   Apply a Codex task diff (snapshot first; changed files reported)
   /skills                  List local Codex skills
   /skill install <name>    Install a project-local Codex skill
   /sessions               List governed Codex sessions
