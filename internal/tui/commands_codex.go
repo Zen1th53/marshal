@@ -352,9 +352,9 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 			if len(skills) > 0 {
 				b.WriteString("  Local Skills:\n")
 				for _, s := range skills {
-					b.WriteString(fmt.Sprintf("    %-24s %s\n", s.Name, s.Description))
+					b.WriteString(skillSourceLine(s))
 				}
-				b.WriteString("\nInstall a local skill with: /codex skill install <name>\n")
+				writeSkillInstallHint(&b, skills)
 			}
 			return b.String(), nil
 		}
@@ -401,9 +401,9 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		}
 		b.WriteString(fmt.Sprintf("LOCAL CODEX SKILLS (%d total):\n", len(skills)))
 		for _, s := range skills {
-			b.WriteString(fmt.Sprintf("  • %-24s %s\n", s.Name, s.Description))
+			b.WriteString(skillSourceLine(s))
 		}
-		b.WriteString("\nInstall a local skill with: /codex skill install <name>\n")
+		writeSkillInstallHint(&b, skills)
 		return b.String(), nil
 
 	case "skill":
@@ -690,4 +690,21 @@ func (h *CommandHandler) handleCodexExec(ctx context.Context, auth ControlAuthor
 
 	return fmt.Sprintf("CODEX TASK LAUNCHED:\n  Task ID:   %s\n  Run ID:    %s\n  Prompt:    %s\n  Model:     %s\n  Status:    %s\n\nExecution is running under MARSHAL governance. Track live in TUI or check /status.",
 		taskID, runRes.RunID, prompt, modelName, runRes.Status), nil
+}
+
+func skillSourceLine(skill codex.SkillInfo) string {
+	status := "not installable"
+	if skill.Installable {
+		status = "installable"
+	}
+	return fmt.Sprintf("  %s source=%s (%s)\n", safeCodexDisplay(skill.Name, "unknown"), safeCodexDisplay(skill.SourceType, "unknown"), status)
+}
+
+func writeSkillInstallHint(b *strings.Builder, skills []codex.SkillInfo) {
+	for _, skill := range skills {
+		if skill.Installable {
+			b.WriteString("\nInstall an installable project skill with: /codex skill install <name>\n")
+			return
+		}
+	}
 }

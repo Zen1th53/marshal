@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -290,8 +291,11 @@ type MarketplaceInfo struct {
 }
 
 // SkillInfo carries metadata about a locally discoverable skill.
+// Host-local discovery leaves Path, Root and Description empty.
 type SkillInfo struct {
 	Name        string    `json:"name"`
+	SourceType  string    `json:"source_type"`
+	Installable bool      `json:"installable"`
 	Path        string    `json:"path"`
 	Root        string    `json:"root"`
 	Description string    `json:"description"`
@@ -552,57 +556,56 @@ func DiscoverMarketplaces(ctx context.Context, binary string, runner adapter.Pro
 
 // DiscoverLocalSkills scans known local roots for SKILL.md definitions.
 func DiscoverLocalSkills(projectRoot string) ([]SkillInfo, error) {
-	var roots []string
+	type catalog struct{ root, sourceType string }
+	var roots []catalog
 	if projectRoot != "" {
-		roots = append(roots, filepath.Join(projectRoot, ".agents", "skills"))
+		roots = append(roots, catalog{filepath.Join(projectRoot, ".agents", "skills"), "project-agents"})
 	}
 	home, err := os.UserHomeDir()
 	if err == nil {
 		roots = append(roots,
-			filepath.Join(home, ".codex", "skills"),
-			filepath.Join(home, ".gemini", "config", "skills"),
-			filepath.Join(home, ".codex", ".tmp", "marketplaces", "ecc", ".agents", "skills"),
+			catalog{filepath.Join(home, ".codex", "skills"), "home-codex"},
+			catalog{filepath.Join(home, ".gemini", "config", "skills"), "home-gemini"},
+			catalog{filepath.Join(home, ".codex", ".tmp", "marketplaces", "ecc", ".agents", "skills"), "home-marketplace"},
 		)
 	}
 
 	var skills []SkillInfo
-	seen := make(map[string]bool)
-
-	for _, root := range roots {
+	var discoveryErr error
+	if err != nil {
+		discoveryErr = fmt.Errorf("HOME skill catalogs unavailable")
+	}
+	for _, catalog := range roots {
+		root, sourceType := catalog.root, catalog.sourceType
 		info, statErr := os.Stat(root)
-		if statErr != nil || !info.IsDir() {
+		if os.IsNotExist(statErr) {
 			continue
 		}
-
-		_ = filepath.Walk(root, func(path string, fileInfo os.FileInfo, walkErr error) error {
-			if walkErr != nil || fileInfo == nil || fileInfo.IsDir() {
+		if statErr != nil || !info.IsDir() {
+			discoveryErr = errors.Join(discoveryErr, fmt.Errorf("skill catalog %s unavailable", sourceType))
+			continue
+		}
+		walkErr := filepath.Walk(root, func(path string, fileInfo os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if fileInfo == nil || fileInfo.IsDir() || fileInfo.Name() != "SKILL.md" {
 				return nil
 			}
-			if fileInfo.Name() == "SKILL.md" {
-				dir := filepath.Dir(path)
-				skillName := filepath.Base(dir)
-				if !isNativeIdentifier(skillName) {
-					return nil
-				}
-				if seen[skillName] {
-					return nil
-				}
-				seen[skillName] = true
-
-				skills = append(skills, SkillInfo{
-					Name: skillName,
-					Path: "",
-					Root: "",
-					// SKILL.md front matter is user/project content. Discovery is
-					// identity-only so it cannot inject instructions into MARSHAL.
-					Description: "",
-					Freshness:   fileInfo.ModTime().UTC(),
-				})
+			dir := filepath.Dir(path)
+			name := filepath.Base(dir)
+			if !isNativeIdentifier(name) {
+				return nil
 			}
+			// Identity and category only: local paths and untrusted content stay private.
+			skills = append(skills, SkillInfo{Name: name, SourceType: sourceType, Freshness: fileInfo.ModTime().UTC()})
 			return nil
 		})
+		if walkErr != nil {
+			discoveryErr = errors.Join(discoveryErr, fmt.Errorf("skill catalog %s could not be fully read", sourceType))
+		}
 	}
-	return skills, nil
+	return skills, discoveryErr
 }
 
 // ValidateDangerousFlags verifies that no dangerous bypass flags appear in the command args.
@@ -628,11 +631,10 @@ func InstallProjectSkill(projectRoot, codexHome, name, expectedDigest string) (s
 	}
 	skillsRoot := filepath.Join(codexHome, "skills")
 	destination := filepath.Join(skillsRoot, name)
-	if _, err := os.Lstat(destination); err == nil {
-		return "", fmt.Errorf("%w: Codex skill %q already exists; overwrite is refused", model.ErrConflict, name)
-	} else if !os.IsNotExist(err) {
+	if err := CheckProjectSkillInstallDestination(codexHome, name); err != nil {
 		return "", err
 	}
+
 	// Never copy directly from the mutable project tree into CODEX_HOME.  Make
 	// a private snapshot first and digest that snapshot before creating the
 	// final destination. This closes the preview-to-copy TOCTOU window: a file
@@ -698,6 +700,23 @@ func RemoveInstalledProjectSkill(codexHome, name, expectedDigest string) error {
 		return fmt.Errorf("%w: installed skill digest no longer matches audit binding", model.ErrConflict)
 	}
 	return os.RemoveAll(destination)
+}
+
+// CheckProjectSkillInstallDestination is the installer's no-overwrite preflight.
+// It is also used by the canonical runtime preview so inventory does not offer
+// a project candidate that is already installed.
+func CheckProjectSkillInstallDestination(codexHome, name string) error {
+	codexHome, err := resolvedCodexHome(codexHome)
+	if err != nil {
+		return err
+	}
+	destination := filepath.Join(codexHome, "skills", name)
+	if _, err := os.Lstat(destination); err == nil {
+		return fmt.Errorf("%w: Codex skill %q already exists; overwrite is refused", model.ErrConflict, name)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func resolvedCodexHome(codexHome string) (string, error) {

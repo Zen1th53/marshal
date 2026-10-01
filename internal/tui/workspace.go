@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/collaboration"
@@ -370,6 +371,29 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			GitStatus:          ProbeGitStatus(cwd),
 			Participants:       participants,
 		},
+	}
+	ws.completer.ctx.InstallableSkills = func() []string {
+		source := ws.controlSource()
+		if source == nil {
+			return nil
+		}
+		reader, ok := source.Authority.(interface {
+			LocalCodexSkills() ([]codex.SkillInfo, error)
+		})
+		if !ok {
+			return nil
+		}
+		skills, err := reader.LocalCodexSkills()
+		if err != nil {
+			return nil
+		}
+		var names []string
+		for _, skill := range skills {
+			if skill.Installable {
+				names = append(names, skill.Name)
+			}
+		}
+		return names
 	}
 	ws.navReleased = navigationReleased
 	ws.cmd = NewCommandHandler(ws)
