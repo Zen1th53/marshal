@@ -292,11 +292,11 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/provider"] = []string{"status", "config"}
 	compCtx.Subcommands["/providers"] = compCtx.Subcommands["/provider"]
 	compCtx.Subcommands["/alignment"] = []string{"scope", "violations", "blast", "deletions", "resolve", "status"}
-	compCtx.Subcommands["/codex"] = []string{"status", "info", "health", "help", "doctor", "models", "model", "select", "review", "sessions", "runs", "history", "mcp", "plugin", "plugins", "skills", "apply", "diff", "resume", "fork", "agents", "features", "sandbox", "approval", "search", "login", "logout", "skill", "run", "dispatch", "exec", "cli", "interactive", "chat", "open", "tui", "new", "continue"}
+	compCtx.Subcommands["/codex"] = providerSubcommands["codex"]
 	compCtx.Subcommands["/mcp"] = []string{"list", "add", "get", "remove", "rm", "delete"}
-	compCtx.Subcommands["/claude"] = []string{"new", "continue", "resume", "fork", "cli", "status", "models", "model", "doctor", "sessions", "exec", "run", "mcp", "plugin", "auth", "agents", "login", "logout", "info", "health", "help", "select", "runs", "history", "dispatch", "interactive", "chat", "open", "tui"}
-	compCtx.Subcommands["/opencode"] = []string{"new", "continue", "resume", "fork", "cli", "status", "models", "providers", "auth", "mcp", "agent", "session", "stats", "run", "debug", "help", "open", "tui", "interactive", "chat", "github", "pr", "attach", "acp", "serve", "web"}
-	compCtx.Subcommands["/agy"] = []string{"new", "continue", "resume", "cli", "status", "models", "agents", "mcp", "plugin", "changelog", "help", "open", "interactive", "chat", "agent", "plugins"}
+	compCtx.Subcommands["/claude"] = providerSubcommands["claude"]
+	compCtx.Subcommands["/opencode"] = providerSubcommands["opencode"]
+	compCtx.Subcommands["/agy"] = providerSubcommands["agy"]
 	compCtx.Subcommands["/antigravity"] = compCtx.Subcommands["/agy"]
 	compCtx.Subcommands["/marshal"] = marshalSubcommands
 	compCtx.Subcommands["/marshal model"] = []string{"codex", "claude", "agy"}
@@ -334,6 +334,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/codex approval"] = []string{"on-request", "never"}
 	compCtx.Subcommands["/codex search"] = compCtx.Subcommands["/search"]
 
+	qualifyProviderCompletions(context.Background(), &compCtx, false)
 	completer := NewCompleter(compCtx)
 	composer := NewComposer(th)
 	composer.SetPrompt(ComposerPromptInfo{
@@ -1111,6 +1112,7 @@ func (w *Workspace) refreshCompletion() {
 	if w.completer == nil || w.composer == nil {
 		return
 	}
+	qualifyProviderCompletions(context.Background(), &w.completer.ctx, w.terminal != nil && w.terminal.IsTerminal())
 	if text := w.composer.Text(); text != w.completionText {
 		w.completionSelected = false
 		w.completionCycled = false
@@ -1623,7 +1625,7 @@ func (w *Workspace) paint() {
 	if w.palette.IsOpen() {
 		popup = w.palette.Render(cols, rows)
 	} else if w.completionOpen && len(w.completions) > 0 {
-		popup = renderCompletionPopup(w.completions, w.completionIndex, th, cols)
+		popup = renderCompletionPopup(w.completions, w.completionIndex, th, cols, w.completer.descriptionsFor(w.composer.Text(), w.composer.CursorPos()))
 	}
 
 	frame := BuildFrame(state, th, workDir, w.composer, popup, cols, rows)

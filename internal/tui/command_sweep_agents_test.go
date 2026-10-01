@@ -149,30 +149,15 @@ func TestCommandSweepAgentsSkillsAndModel(t *testing.T) {
 // transformed into success. No shell expansion of user arguments is possible.
 func sweepAgentCodexDouble(t *testing.T) string {
 	t.Helper()
-	logPath := filepath.Join(t.TempDir(), "argv")
-	t.Setenv("MARSHAL_SWEEP_ARGV", logPath)
-	script := `#!/bin/sh
-printf '%s\n' "$@" > "$MARSHAL_SWEEP_ARGV"
-case "$1:$2" in
- --version:*) printf 'sweep-provider\n';;
- session:list) printf '[]\n';;
- mcp:typo|plugin:typo) printf 'Unknown command. Use --help.\n'; exit 2;;
- *) printf 'SWEEP-PROVIDER-RAN\n';;
-esac
-`
-	for _, name := range []string{"codex", "claude", "opencode", "agy"} {
-		if err := os.WriteFile(filepath.Join(os.Getenv("PATH"), name), []byte(script), 0700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return logPath
+	return installProviderDialectDoubles(t, "MARSHAL_SWEEP_ARGV", "SWEEP-PROVIDER-RAN", false)
 }
 
 func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
 	sweepWorkEnvironment(t)
 	_, ws, _ := newControlWorkspace(t)
 	ws.workDir = t.TempDir()
-	source, _ := testControl(t)
+	source, nativeAuth := testControl(t)
+	source.Authority = &seededNativeAuthority{fakeAuthority: nativeAuth, root: ws.workDir, sourceID: "session with spaces"}
 	ws.AttachControlSource(source)
 	logPath := sweepAgentCodexDouble(t)
 	cases := []struct{ line, argv string }{
@@ -183,9 +168,9 @@ func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
 		{"/plugin add local-plugin", "plugin\nadd\nlocal-plugin\n"}, {"/plugin install local-plugin", "plugin\nadd\nlocal-plugin\n"},
 		{"/plugins rm local-plugin", "plugin\nremove\nlocal-plugin\n"}, {"/plugin remove local-plugin", "plugin\nremove\nlocal-plugin\n"}, {"/plugin uninstall local-plugin", "plugin\nremove\nlocal-plugin\n"},
 		{"/plugin marketplace list", "plugin\nmarketplace\nlist\n"},
-		{`/resume --last "prompt with spaces"`, "exec\nresume\n--last\nprompt with spaces\n"},
+		{`/resume --last "prompt with spaces"`, "exec\nresume\nsession with spaces\nprompt with spaces\n"},
 		{`/codex resume "session with spaces"`, "exec\nresume\nsession with spaces\n"},
-		{`/fork "session with spaces"`, "exec\nfork\nsession with spaces\n"}, {"/fork --last", "exec\nfork\n--last\n"},
+		{`/fork "session with spaces"`, "exec\nfork\nsession with spaces\n"},
 		{"/codex features", "features\nlist\n"}, {"/codex features list", "features\nlist\n"},
 		{"/codex features enable feature", "features\nenable\nfeature\n"}, {"/codex features disable feature", "features\ndisable\nfeature\n"},
 	}
@@ -200,6 +185,13 @@ func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
 				t.Fatalf("argv=%q, want %q (%v)", data, tc.argv, err)
 			}
 		})
+	}
+	_ = os.Remove(logPath)
+	if out := sweepAgentExecute(t, ws, "/fork --last"); !strings.Contains(out, "terminal-only") {
+		t.Fatal(out)
+	}
+	if data, err := os.ReadFile(logPath); !os.IsNotExist(err) {
+		t.Fatalf("unsupported exec fork --last launched: %q %v", data, err)
 	}
 	for _, line := range []string{"/mcp typo", "/plugin typo"} {
 		if out := sweepAgentExecute(t, ws, line); !strings.Contains(out, "failed") || !strings.Contains(out, "Unknown command. Use --help.") {
@@ -258,6 +250,7 @@ func TestCommandSweepAgentsEmptyAndMissingProvider(t *testing.T) {
 
 func TestCommandSweepAgentsHelpCompletion(t *testing.T) {
 	sweepWorkEnvironment(t)
+	installDialectDoubles(t)
 	ws := NewWorkspace(nil, "sweep", "sweep")
 	help := sweepAgentExecute(t, ws, "/help")
 	for _, root := range sweepAgentRoots {
@@ -298,43 +291,69 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 	sweepWorkEnvironment(t)
 	logPath := sweepAgentCodexDouble(t)
 	root := initProject(t, bin)
+	seedNativeInventory(t, root, map[string]string{"codex": "session with spaces", "claude": "claude-session", "opencode": "session with spaces", "antigravity": "conversation with spaces"})
 	cases := []struct{ line, want, argv string }{
 		{"/codex cli --help", "Codex exited.", "--help\n"},
-		{"/codex fix this bug", "Codex exited.", "--\nfix this bug\n"},
+		{`/codex "fix this bug"`, "Codex exited.", "--\nfix this bug\n"},
 		{`/codex resume "session with spaces"`, "Codex exited.", "resume\nsession with spaces\n"},
 		{`/opencode resume "session with spaces"`, "OpenCode exited.", "--session\nsession with spaces\n"},
 		{`/agy resume "conversation with spaces"`, "Antigravity exited.", "--conversation\nconversation with spaces\n"},
 		{"/claude cli --help", "Claude exited.", "--help\n"},
 		{"/opencode cli --help", "OpenCode exited.", "--help\n"},
-		{"/opencode resume --last --model sweep", "OpenCode exited.", "--continue\n--model\nsweep\n"},
-		{"/opencode fork --last --model sweep", "OpenCode exited.", "--continue\n--fork\n--model\nsweep\n"},
-		{"/agy resume --last --model sweep", "Antigravity exited.", "--continue\n--model\nsweep\n"},
+		{"/opencode resume --last --model sweep", "OpenCode exited.", "--session\nsession with spaces\n--model\nsweep\n"},
+		{"/opencode fork --last --model sweep", "OpenCode exited.", "--session\nsession with spaces\n--fork\n--model\nsweep\n"},
+		{"/agy resume --last --model sweep", "Antigravity exited.", "--conversation\nconversation with spaces\n--model\nsweep\n"},
 		{"/agy cli --help", "Antigravity exited.", "--help\n"},
 		{"/antigravity cli --help", "Antigravity exited.", "--help\n"},
 		{"/mcp list", "Codex exited.", "mcp\nlist\n"},
 		{"/plugin list", "Codex exited.", "plugin\nlist\n"},
 		{"/plugins list", "Codex exited.", "plugin\nlist\n"},
 		{"/codex plugins list", "Codex exited.", "plugin\nlist\n"},
-		{"/codex modle slug", "Codex exited.", "--\nmodle slug\n"},
-		{"/claude modle slug", "Claude exited.", "--\nmodle slug\n"},
-		{"/opencode modle slug", "OpenCode exited.", "--prompt\nmodle slug\n"},
-		{"/agy modle slug", "Antigravity exited.", "--prompt-interactive\nmodle slug\n"},
+		{"/codex modle slug", "Nothing was run. Did you mean", ""},
+		{"/claude modle slug", "Nothing was run. Did you mean", ""},
+		{"/opencode modle slug", "Nothing was run. Did you mean", ""},
+		{"/agy modle slug", "Nothing was run. Did you mean", ""},
 		{"/skill install nonexistent-sweep-skill", "Preview skill", ""},
 		{"/skills", "LOCAL CODEX SKILLS", ""},
 		{"/apply task", "no project file changed", "apply\ntask\n"},
-		{"/sessions", "No governed Codex sessions", ""},
-		{"/resume --last", "Codex exited.", "resume\n--last\n"},
-		{"/fork --last", "Codex exited.", "fork\n--last\n"},
+		{"/sessions", "GOVERNED runs (0)", ""},
+		{"/resume --last", "Codex exited.", "resume\nsession with spaces\n"},
+		{"/fork --last", "Codex exited.", "fork\nsession with spaces\n"},
 		{"/diff", "Git Diff", ""},
 		{"/review", "Codex exited.", "review\n"},
+	}
+	for _, provider := range []struct{ root, exit, flag, verb string }{
+		{"codex", "Codex exited.", "--", "exec"},
+		{"claude", "Claude exited.", "--", "exec"},
+		{"opencode", "OpenCode exited.", "--prompt", "run"},
+		{"agy", "Antigravity exited.", "--prompt-interactive", "prompt"},
+		{"antigravity", "Antigravity exited.", "--prompt-interactive", "prompt"},
+	} {
+		root := "/" + provider.root
+		cases = append(cases, struct{ line, want, argv string }{root, provider.exit, ""},
+			struct{ line, want, argv string }{root + ` "fix the bug"`, provider.exit, provider.flag + "\nfix the bug\n"},
+			struct{ line, want, argv string }{root + " zzzzzz slug", "Unknown subcommand.", ""})
+		if provider.root == "agy" || provider.root == "antigravity" {
+			cases = append(cases, struct{ line, want, argv string }{root + " fork session", "Unknown subcommand.", ""},
+				struct{ line, want, argv string }{root + " prompt fix the bug", provider.exit, provider.flag + "\nfix the bug\n"})
+		} else if provider.root == "opencode" {
+			cases = append(cases, struct{ line, want, argv string }{root + " run fix the bug", provider.exit, "run\nfix\nthe\nbug\n"})
+		}
 	}
 	for _, tc := range cases {
 		t.Run(tc.line, func(t *testing.T) {
 			s := startFrozenTUIInProject(t, 50, 200, bin, root, "tui")
+			// Remove startup probes so rejected commands prove zero provider calls.
+			_ = os.Remove(logPath)
 			s.send(tc.line)
 			s.send("\x1b") // dismiss suggestions without accepting a completion
 			s.send("\r")
 			s.mustSee(tc.want)
+			if strings.Contains(tc.want, "Nothing was run") || tc.want == "Unknown subcommand." {
+				if data, err := os.ReadFile(logPath); !os.IsNotExist(err) {
+					t.Fatalf("rejected command invoked provider: %q (%v)", data, err)
+				}
+			}
 			if tc.argv != "" {
 				data, err := os.ReadFile(logPath)
 				if err != nil || !strings.HasSuffix(string(data), tc.argv) {
@@ -395,16 +414,15 @@ func TestCommandSweepAgentsFailuresAndDecisions(t *testing.T) {
 			t.Fatal(out)
 		}
 	}
-	// Free-text fallbacks can execute misspelled management commands. Record the
-	// observed contract as a product decision rather than redesigning the grammar.
+	// Stage 23 rejects ambiguous management typos before governed dispatch.
 	source.Authority = auth
 	for _, line := range []string{"/codex modle slug", "/claude modle slug"} {
-		if out := sweepAgentExecute(t, ws, line); !strings.Contains(out, "TASK LAUNCHED") {
+		if out := sweepAgentExecute(t, ws, line); !strings.Contains(out, "Nothing was run") {
 			t.Fatal(out)
 		}
 	}
-	if atomic.LoadInt32(&auth.codexDispatches) != 1 || atomic.LoadInt32(&auth.claudeDispatches) != 1 {
-		t.Fatal("free text contract changed")
+	if atomic.LoadInt32(&auth.codexDispatches) != 0 || atomic.LoadInt32(&auth.claudeDispatches) != 0 {
+		t.Fatal("rejected typo dispatched work")
 	}
 	if out := sweepAgentExecute(t, ws, "/codex agents"); !strings.Contains(out, "COMPLETED") || !strings.Contains(out, "worker-run history") {
 		t.Fatal(out)

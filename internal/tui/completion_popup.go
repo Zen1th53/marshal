@@ -13,7 +13,7 @@ const maxPopupRows = 8
 // It returns lines, not terminal output. The screen model places them, so
 // opening, cycling and closing the popup all repaint in place and never add to
 // scrollback — which is what pressing Tab repeatedly used to do.
-func renderCompletionPopup(matches []string, selected int, th *Theme, cols int) []string {
+func renderCompletionPopup(matches []string, selected int, th *Theme, cols int, descriptions ...map[string]string) []string {
 	if len(matches) == 0 {
 		return nil
 	}
@@ -31,9 +31,15 @@ func renderCompletionPopup(matches []string, selected int, th *Theme, cols int) 
 		end = len(matches)
 	}
 
+	description := func(label string) string {
+		if len(descriptions) > 0 && descriptions[0][label] != "" {
+			return descriptions[0][label]
+		}
+		return describeCompletion(label)
+	}
 	widest := 0
 	for _, m := range matches[start:end] {
-		if l := VisibleLen(m) + describeWidth(m); l > widest {
+		if l := VisibleLen(m) + VisibleLen(description(m)) + 2; l > widest {
 			widest = l
 		}
 	}
@@ -52,7 +58,7 @@ func renderCompletionPopup(matches []string, selected int, th *Theme, cols int) 
 
 	for i := start; i < end; i++ {
 		label := matches[i]
-		desc := describeCompletion(label)
+		desc := description(label)
 
 		row := fmt.Sprintf(" %s %s", PadCell(label, 14), th.Colorize(th.Muted, desc))
 		row = PadCell(row, inner)

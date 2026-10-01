@@ -70,7 +70,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		if len(parts) != 1 {
 			return "Usage: /help", nil
 		}
-		return h.helpText(), nil
+		return h.qualifiedHelp(ctx, h.helpText()), nil
 
 	case "/quit", "/exit":
 		if len(parts) != 1 {
@@ -413,7 +413,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleCodex(ctx, append([]string{"apply"}, parts[1:]...), line)
 
 	case "/sessions":
-		return h.handleCodex(ctx, append([]string{"sessions"}, parts[1:]...), line)
+		if len(parts) != 1 {
+			return "Usage: /sessions", nil
+		}
+		return h.handleSessionInventory(ctx, "")
 
 	case "/fork":
 		return h.handleCodex(ctx, append([]string{"fork"}, parts[1:]...), line)
@@ -687,15 +690,16 @@ func (h *CommandHandler) helpText() string {
   /apply <codex_task_id>   Apply a Codex task diff (snapshot first; changed files reported)
   /skills                  List local Codex skills
   /skill install <name>    Install a project-local Codex skill
-  /sessions               List governed Codex sessions
+  /sessions               List NATIVE conversations and GOVERNED runs
   /fork [id|--last]        Fork a native Codex session
   /doctor [codex|provider] Run system diagnostics, or native Codex doctor
   /search [on|off]         Open a native Codex session with that search setting
   /codex [subcommand]      Full Codex control plane (status, models, review, exec, run, cli)
   /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
-  /opencode [subcommand]   Native OpenCode sessions (new, continue, resume, fork, cli)
-  /agy /antigravity [subcommand] Native Antigravity sessions (new, continue, resume, cli)
-  <prompt...>              Plain text runs nothing; choose /codex, /claude, /opencode, or /agy
+  /opencode [subcommand]   Native OpenCode sessions (new, continue, resume, fork, cli, run)
+  /agy /antigravity [subcommand] Native Antigravity sessions (new, continue, resume, cli, prompt)
+  <prompt...>              Plain text runs nothing; use provider exec/run/prompt or a quoted prompt
+  Unknown provider subcommands run nothing; /<provider> cli passes native arguments
   /update [install]        Check for a newer MARSHAL release, or install it
   /verification <id>       Inspect a canonical verification run
   /help, /?                Show this help reference
@@ -732,10 +736,10 @@ func plainTextRunsNothing(line string, known func(string) bool) string {
 		}
 	}
 	return "Nothing was run: plain text does not start an agent.\n" +
-		"  /codex <prompt>   Send this to Codex\n" +
-		"  /claude <prompt>  Send this to Claude\n" +
-		"  /opencode <prompt> Open a native OpenCode session\n" +
-		"  /agy <prompt>     Open a native Antigravity session\n" +
+		"  /codex exec <prompt>   Send this to Codex\n" +
+		"  /claude exec <prompt>  Send this to Claude\n" +
+		"  /opencode run <prompt> Open a native OpenCode session\n" +
+		"  /agy prompt <prompt>     Open a native Antigravity session\n" +
 		"  F7 / F8 / F9 / F12  Open Codex, Claude, OpenCode, or Antigravity\n" +
 		"  /help             List every command"
 }

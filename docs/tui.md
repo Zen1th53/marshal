@@ -9,11 +9,11 @@ Run `marshal claude` or press F8 in MARSHAL to open native Claude Code.
 `marshal claude --resume` opens Claude's picker. Native CLI arguments are passed
 through, including `--model`, `--permission-mode`, attachments and configuration
 options. Within MARSHAL, use `/claude new`, `/claude continue`, `/claude resume`,
-`/claude fork [session]`, or `/claude cli <arguments>`.
+`/claude fork [session]`, or `/claude cli <arguments>`. Bare resume and continue select the latest recorded native conversation for this project; `/claude cli --resume` retains the provider picker.
 
 Plain composer text runs nothing. Launching an agent spends tokens and can touch
-the worktree, so it happens only when the operator names one: `/codex <prompt>`,
-`/claude <prompt>`, `/opencode <prompt>`, or F7/F8/F9 for a native session. A command typed without its
+the worktree, so it happens only when the operator names one: `/codex exec <prompt>`,
+`/claude exec <prompt>`, `/opencode run <prompt>`, or F7/F8/F9 for a native session. A command typed without its
 leading slash is answered with the command it looks like, not with a session.
 
 Native Claude uses the operator's existing `CLAUDE_CONFIG_DIR` (normally
@@ -53,7 +53,7 @@ Run `marshal agy` (or `marshal antigravity`) or press F12 in MARSHAL to open the
 installed Antigravity CLI, `agy`. Native arguments pass through unchanged.
 Within MARSHAL, `/agy new` starts a fresh conversation, `/agy continue` resumes
 the most recent one, `/agy resume <conversation>` selects one by ID, and
-`/agy <prompt>` opens the session with that prompt. `/agy cli <arguments>`
+`/agy prompt <prompt>` opens the session with that prompt. `/agy cli <arguments>`
 exposes the rest of the native CLI, including models, agents, MCP servers and
 plugins. `/antigravity` is the same command.
 
@@ -165,9 +165,9 @@ marshal codex -i "screenshots/error state.png" "Fix this error"
 marshal codex --model MODEL
 ```
 
-In the MARSHAL TUI, F7 opens Codex from either navigation or the composer. A plain
-prompt opens a new native conversation. `/codex continue` resumes the latest
-Codex session for the current directory; `/codex resume` opens its session picker.
+In the MARSHAL TUI, F7 opens Codex from either navigation or the composer. A quoted
+prompt such as `/codex "fix the bug"` opens a new native conversation. `/codex continue` resumes the latest
+Codex session for the current directory; `/codex resume` selects the latest recorded native conversation in this project. The provider picker remains available through `/codex cli resume`.
 `/codex cli <arguments>` passes native options and subcommands, with quoted paths
 and prompts supported. Exit Codex to return to MARSHAL. Use `/codex new` for a
 fresh conversation.
@@ -467,7 +467,7 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/mcp [list|add <name> -- <command> [args...]|get <name>|remove <name>]` manages Codex MCP servers. `rm` and `delete` alias `remove`.
 - `/plugin` and `/plugins` expose Codex plugin listing and native management. Governed `add`/`install` and `remove`/`rm`/`uninstall` require one plugin name; `marketplace <arguments...>` passes through to Codex.
 - `/skills` (or `/codex skills`) lists local Codex skills. Incomplete plugin discovery is reported with a recovery hint while successfully discovered local skills remain visible. Each skill shows its source category (`project-agents`, `home-codex`, `home-gemini` or `home-marketplace`) and installability, without local paths; duplicate names retain every source. HOME catalogs are not installable. `/skill install <name>` (or `/codex skill install <name>`) installs only canonical project skills with digest verification; changed sources and ambiguous names are refused. Completion suggests only currently installable project candidates. Catalog read failures retain partial listings but suppress install suggestions until discovery succeeds.
-- `/sessions` lists governed Codex session records. `/apply <codex_task_id>` runs native `codex apply` with a task ID from Codex itself. MARSHAL never infers that ID: without one, or with a MARSHAL task ID (`TASK-…`), nothing runs, and governed work is delivered with `/diff` and `/marshal accept` instead. The project is snapshotted first, and the result is read back from the files that actually changed (an apply that changes nothing says so); undo with the `/rollback` it names. A runtime must be attached.
+- `/sessions` aggregates two labelled inventories: **NATIVE conversations** and **GOVERNED runs**. Provider `sessions`, `runs`, and `history` wrappers show the same two inventories filtered by provider. `/apply <codex_task_id>` runs native `codex apply` with a task ID from Codex itself. MARSHAL never infers that ID: without one, or with a MARSHAL task ID (`TASK-…`), nothing runs, and governed work is delivered with `/diff` and `/marshal accept` instead. The project is snapshotted first, and the result is read back from the files that actually changed (an apply that changes nothing says so); undo with the `/rollback` it names. A runtime must be attached.
 - `/fork [id|--last]` opens native Codex fork in the TUI. `/resume --last` opens native Codex resume; bare `/resume` and `/resume run:<id>` control MARSHAL runs as described above.
 - `/review [instructions]` opens native Codex review in the TUI. Without an interactive terminal, governed commit review supports no instructions and explicitly reports that limitation when instructions are supplied.
 - Native management requires the provider CLI and an interactive terminal. In particular, Claude MCP/plugin/auth/agents/login/logout commands report that requirement in headless use; they do not create governed tasks.
@@ -598,3 +598,80 @@ Current limitations, stated rather than hidden:
   under open connections would discard their uncheckpointed WAL, so a restore
   is refused while any process holds the database. Detecting that needs
   open-file inspection, available on Linux; elsewhere use the offline path.
+
+Provider slash commands use an explicit grammar. Bare `/codex`, `/claude`,
+`/opencode`, and `/agy` (also `/antigravity`) still open their native sessions
+in a terminal. Send work with `/codex exec <text>`, `/claude exec <text>`,
+`/opencode run <text>`, or `/agy prompt <text>`. A quoted first argument,
+for example `/codex "fix the bug"`, opens a native session with that prompt
+(Codex and Claude use governed execution when no terminal is attached).
+Unknown first words run nothing. Typos within edit distance two suggest a
+known subcommand and explain the prompt syntax. `/agy fork` is unsupported;
+use `/agy cli <native arguments>` for vendor-owned syntax. All providers'
+`cli` escape hatches preserve native argument values and ordering. Command
+aliases are normalized by the same application table in terminal and batch
+launches: Codex plugin `install` becomes `add`, while Claude and agy plugin
+`remove`/`rm` become `uninstall`; MCP `rm`/`delete` become `remove` where
+that provider has a removal verb. OpenCode `auth` becomes `providers`.
+
+Provider completion and `/help` use a version-qualified dialect record.
+The offline CLI help currently qualifies only Codex **0.159.2**, Claude
+**2.1.286**, OpenCode **1.18.16**, and agy **1.2.7** (singleton version
+ranges). Other versions and unlisted operations stay **UNKNOWN**. Help labels
+them **unqualified pass-through via cli**; completion still offers them, with
+that label, so a CLI version MARSHAL has not qualified keeps its commands.
+Operations shown not to exist for the qualified version are withheld. The `cli` completion itself identifies its arguments as
+unqualified pass-through. Explicit unqualified commands retain their existing
+execution paths and display that qualification status. Known **UNSUPPORTED**
+operations are refused before launch, including through `cli` and after
+fixed-arity global options. An unknown vendor operation is never treated as
+a prompt by MARSHAL's provider-command parser.
+Raw CLI positional values are checked only at recognized native command
+positions: Claude's prompt `review`, OpenCode's project directory `review`,
+and agy's positional `fork` remain UNKNOWN pass-through values.
+
+Codex uses `resume`/`fork` in a terminal and `exec resume`/`exec fork` in
+headless wrappers. Named headless forks require a session ID. Latest-session
+`fork --last` is terminal-only: the qualified version has no `exec fork
+--last` flag. Resume supports `--last` in both modes. These forms, and
+`exec review`, are backed by the qualified Codex version's help. Governed `/review` still reviews the current commit and
+does not accept custom instructions. Claude session/management wrappers and
+OpenCode/agy native wrappers remain **terminal-only in MARSHAL**, even when
+the vendor has a separate batch grammar. Help and completion mark that
+boundary. MARSHAL's local model, task, and history services are identified
+separately from vendor grammar.
+
+Qualification observes only bounded `--version` probes (two seconds, 64 KiB,
+no stdin); help evidence is checked in, never discovered by running a session.
+Completion refresh invalidates cached qualification when the executable's
+identity, modification time, size, or mode changes. This record establishes
+grammar support, not authentication, session success, or sandbox/network
+enforcement. Existing execution authorization and isolation checks remain
+in force. `MARSHAL_PROVIDER_PATH_ONLY=1` opts into PATH-only discovery for
+isolated runs; normal discovery retains its existing fallback directories.
+See [qualification evidence](testing/provider-dialects/README.md).
+
+## Native conversation identities and selection
+
+Native inventory IDs have the form `native:<provider>:<project fingerprint>:<escaped source ID>`.
+The fingerprint binds the canonical project directory; moving the project changes the qualified
+ID without changing the provider's original source ID or imported memory ownership. Inventory
+rows identify their source: imported transcript, provider history index, or provider listing.
+No conversation text, hidden reasoning, credentials, or provider home paths are displayed.
+
+`/resume <id|--last>` and `/fork <id|--last>` select native Codex conversations.
+Provider resume/fork/continue wrappers select only that provider's native conversations in the
+current project. A known raw provider ID is also accepted after the same validation; use the
+qualified inventory ID to make ownership explicit. Governed run, task, and worker session IDs,
+IDs qualified for another provider or project, and unknown IDs are refused with a reason.
+`--last` (and a bare provider resume/fork/continue) selects the newest recorded native conversation
+for this provider and project, then passes its original source ID to the provider. Trailing native
+options are retained. Bare `/resume` retains its governed runtime-control meaning.
+
+An imported transcript or on-disk history index is **resumability unverified**. Only an entry
+present in the provider's own listing is labelled provider-listed (currently OpenCode's public
+JSON listing); even that operation remains subject to the installed provider dialect. Imports
+alone do not manufacture provider state. Missing or unreadable history is shown as unavailable,
+and no history cursor migration is needed. Explicit `/provider cli ...` remains vendor-owned
+pass-through, including pickers. Headless Codex resume/fork uses the same native home as the
+inventory; governed task execution continues to use its isolated home.

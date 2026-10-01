@@ -15,6 +15,8 @@ type CompletionContext struct {
 	Checkpoints       []string // live checkpoint IDs e.g. ["CP-01", "CP-02"]
 	Subcommands       map[string][]string
 	InstallableSkills func() []string
+	Descriptions      map[string]string
+	allCommands       []string
 	Models            []string
 }
 
