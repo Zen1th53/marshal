@@ -3151,8 +3151,8 @@
     },
     {
       "path": "docs/tui.md",
-      "sha256": "a3da826e08fadb55e32ae54757c176ffacb95f5600d9241be46b94cfb5436e9b",
-      "bytes": 44619
+      "sha256": "afc60967d404190894d6fc818485c49bd22b6d803dbaff440669fb551a1fcd26",
+      "bytes": 44905
     },
     {
       "path": "docs/verification-quorum.md",
@@ -4996,8 +4996,8 @@
     },
     {
       "path": "internal/epistemic/fingerprint.go",
-      "sha256": "8a943f632ecd6a545766dd5d2a6e8d0cc956f723190c8e0a349b7a61247289a6",
-      "bytes": 2826
+      "sha256": "24041236138bee9f4766006553387bb486d569186b3b6ba6bd4487162617a0a4",
+      "bytes": 3061
     },
     {
       "path": "internal/epistemic/formation.go",
@@ -8851,8 +8851,8 @@
     },
     {
       "path": "internal/tui/command_sweep_config_test.go",
-      "sha256": "59df4472c3b631f2224b46e0c056d616d02208a36f697d137162ff9726dcb8e0",
-      "bytes": 26401
+      "sha256": "4519672a4e39002c16a2cb53dc61e2753987e64f65e6fa5028850e0f1b45c504",
+      "bytes": 26414
     },
     {
       "path": "internal/tui/command_sweep_crosscut_test.go",
@@ -8926,8 +8926,13 @@
     },
     {
       "path": "internal/tui/commands_expanded.go",
-      "sha256": "7316bb33da1dffe53c5dd09c250c514cbbe8a7ff20cd148811f34a0292467074",
-      "bytes": 50636
+      "sha256": "12d687d1d72d73dd4668af759d8e8dd3f14e276b6703fca8c02952c9fbbc8023",
+      "bytes": 50228
+    },
+    {
+      "path": "internal/tui/commands_fingerprint.go",
+      "sha256": "b5421690c260f0765af71b98746f7642a5e136bf8a402fbd0ee7bd0ac56924be",
+      "bytes": 3381
     },
     {
       "path": "internal/tui/commands_goal.go",
@@ -9073,6 +9078,11 @@
       "path": "internal/tui/dynamic_e2e_test.go",
       "sha256": "db486c68131ae3ba317370ab60ae44e5c62ec782c06d3933f0783fe876431470",
       "bytes": 10344
+    },
+    {
+      "path": "internal/tui/fingerprint_history_test.go",
+      "sha256": "fa5cebef1dce0a79285d6da25ea8b376cf94bf63f9013eed3b0977a309cca8a2",
+      "bytes": 2299
     },
     {
       "path": "internal/tui/frame.go",
