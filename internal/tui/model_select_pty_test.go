@@ -10,13 +10,13 @@ import (
 
 // The real binary selects a Codex model through the operator boundary,
 // validated against a catalog from a provider double, and reads it back.
-func TestPTYModelSelectAppliesToFutureRuns(t *testing.T) {
+func TestPTYModelAndEffortApplyToFutureRuns(t *testing.T) {
 	bin := buildMarshalBinary(t)
 	sweepWorkEnvironment(t)
 	t.Setenv("MARSHAL_PROVIDER_PATH_ONLY", "1")
 	doubles := t.TempDir()
 	script := "#!/bin/sh\nif [ \"$1\" = debug ] && [ \"$2\" = models ]; then\n" +
-		"  printf '%s' '{\"models\":[{\"slug\":\"gpt-test\",\"display_name\":\"Test\",\"visibility\":\"list\",\"is_default\":true}]}'\n" +
+		"  printf '%s' '{\"models\":[{\"slug\":\"gpt-test\",\"display_name\":\"Test\",\"visibility\":\"list\",\"is_default\":true,\"supported_reasoning_levels\":[{\"effort\":\"low\"},{\"effort\":\"high\"}]}]}'\n" +
 		"  exit 0\nfi\nexit 1\n"
 	if err := os.WriteFile(filepath.Join(doubles, "codex"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -35,4 +35,10 @@ func TestPTYModelSelectAppliesToFutureRuns(t *testing.T) {
 	terminal.mustSee("gpt-test (revision 1)")
 	terminal.sendLine("/model select opencode some-model")
 	terminal.mustSee("do not read a model preference")
+	terminal.sendLine("/effort xhigh")
+	terminal.mustSee("does not advertise reasoning effort")
+	terminal.sendLine("/effort high")
+	terminal.mustSee("Future governed Codex runs of gpt-test will request high (preference revision 2)")
+	terminal.sendLine("/effort")
+	terminal.mustSee("Model gpt-test, effort high (preference revision 2)")
 }

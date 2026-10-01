@@ -31,8 +31,8 @@ func configCommandUsage(parts []string) string {
 		usage = "/model [show|select <harness> <model_name>|<codex_slug>]"
 		valid = len(args) == 0 || sub == "show" && len(args) == 1 || sub == "select" && len(args) == 3 || !oneOf(sub, "show", "select") && len(args) == 1
 	case "/effort":
-		usage = "/effort [low|medium|high]"
-		valid = len(args) == 0 || len(args) == 1 && oneOf(sub, "low", "medium", "high")
+		usage = "/effort [minimal|low|medium|high|xhigh|default]"
+		valid = len(args) == 0 || len(args) == 1 && oneOf(sub, "minimal", "low", "medium", "high", "xhigh", "default")
 	case "/backup":
 		usage = "/backup [create|restore <backup_path>]"
 		valid = len(args) == 0 || sub == "create" && len(args) == 1 || sub == "restore" && len(args) == 2 && args[1] != ""

@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 89
+const LatestSchemaVersion = 90
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2681,6 +2681,22 @@ CREATE TRIGGER IF NOT EXISTS task_snapshots_no_delete BEFORE DELETE ON task_comm
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version,applied_at) VALUES(89,?)", utcNow()); err != nil {
+			return err
+		}
+	}
+	if version < 90 {
+		// The reasoning effort future runs request is part of the same CAS-bound
+		// execution preference as the model it was validated against.
+		var hasEffort int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM pragma_table_info('execution_model_preferences') WHERE name = 'effort'`).Scan(&hasEffort); err != nil {
+			return err
+		}
+		if hasEffort == 0 {
+			if _, err := tx.ExecContext(ctx, `ALTER TABLE execution_model_preferences ADD COLUMN effort TEXT NOT NULL DEFAULT ''`); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version,applied_at) VALUES(90,?)", utcNow()); err != nil {
 			return err
 		}
 	}

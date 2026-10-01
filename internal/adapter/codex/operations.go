@@ -269,6 +269,9 @@ type ModelInfo struct {
 	Description string `json:"description"`
 	Visibility  string `json:"visibility"`
 	IsDefault   bool   `json:"is_default"`
+	// ReasoningEfforts are the effort values the catalog advertises for this
+	// model; only these may be requested for it.
+	ReasoningEfforts []string `json:"reasoning_efforts,omitempty"`
 }
 
 // PluginInfo carries evidenced metadata about an installed Codex plugin.
@@ -326,6 +329,9 @@ func DiscoverModels(ctx context.Context, binary string, runner adapter.ProcessRu
 			Visibility  string `json:"visibility"`
 			Priority    int    `json:"priority"`
 			IsDefault   bool   `json:"is_default"`
+			Levels      []struct {
+				Effort string `json:"effort"`
+			} `json:"supported_reasoning_levels"`
 		} `json:"models"`
 	}
 
@@ -385,7 +391,14 @@ func DiscoverModels(ctx context.Context, binary string, runner adapter.ProcessRu
 		}
 		// List visible models
 		isDef := slug == defaultModel
+		var efforts []string
+		for _, level := range m.Levels {
+			if effort := strings.TrimSpace(level.Effort); isNativeIdentifier(effort) {
+				efforts = append(efforts, effort)
+			}
+		}
 		models = append(models, ModelInfo{
+			ReasoningEfforts: efforts,
 			Slug: slug,
 			// The native slug is the validated selector. Do not render an
 			// arbitrary catalog display name alongside it.

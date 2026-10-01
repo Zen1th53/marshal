@@ -92,3 +92,52 @@ func (r *Runtime) ModelPreferenceRevision(ctx context.Context, adapter string) (
 	}
 	return preference.Revision, preference.Model, nil
 }
+
+// CommandSetEffort records the reasoning effort future governed Codex runs
+// request, through the operator boundary with the profile.effort capability.
+// Only Codex runs read an effort; the value must be one the selected model's
+// catalog advertises, and an empty effort returns to the model's default.
+func (r *Runtime) CommandSetEffort(ctx context.Context, e CommandEnvelope, adapter, effort string) (model.ExecutionModelPreference, error) {
+	p, ok := auth.LocalFromContext(ctx)
+	if r == nil || r.store == nil || !ok || ctx.Value(localControlKey{}) != r || p.ProjectID() != e.ProjectID || e.ProjectID != r.ProjectIdentity() {
+		return model.ExecutionModelPreference{}, authz.ErrDenied
+	}
+	adapter = strings.ToLower(strings.TrimSpace(adapter))
+	if adapter != "codex" {
+		return model.ExecutionModelPreference{}, fmt.Errorf("%w: %s runs do not read a reasoning effort; supported: codex", model.ErrInvalid, adapter)
+	}
+	if e.TargetID != "effort:"+adapter || e.ExpectedVersion < 1 || strings.TrimSpace(e.IdempotencyKey) == "" || len(e.IdempotencyKey) > 256 {
+		return model.ExecutionModelPreference{}, model.ErrInvalid
+	}
+	principal := authz.Principal{ID: p.ID(), Role: authz.Role{Name: "orchestrator", Authorities: []authz.Authority{authz.AuthorityTaskPlan}}}
+	query := capability.Query{Subject: capability.SubjectID(p.ID()), TaskID: capability.TaskID(e.ProjectID), Kind: capability.KindFilesystemWrite, Resource: r.layout.Database, Action: "profile.effort"}
+	decision, err := authz.CanWithCapability(ctx, principal, authz.AuthorityTaskPlan, r.layout.Database, query, capability.NewEngine(r.store, nil))
+	if err != nil {
+		return model.ExecutionModelPreference{}, err
+	}
+	payload, err := json.Marshal(struct {
+		Envelope        CommandEnvelope
+		Adapter, Effort string
+	}{e, adapter, effort})
+	if err != nil {
+		return model.ExecutionModelPreference{}, err
+	}
+	digest := sha256.Sum256(payload)
+	key := sha256.Sum256([]byte(e.IdempotencyKey))
+	record := store.CommandRecord{ProjectID: e.ProjectID, Actor: p.ID(), Key: hex.EncodeToString(key[:]), Operation: "profile.effort",
+		SessionID: e.SessionID, TargetID: e.TargetID, ExpectedVersion: e.ExpectedVersion, Digest: hex.EncodeToString(digest[:]),
+		CapabilityGrantID: decision.CapabilityGrantID}
+	if _, found, err := r.store.CommandResult(ctx, record); err != nil {
+		return model.ExecutionModelPreference{}, err
+	} else if found {
+		return r.CodexModelPreference(ctx)
+	}
+	preference, err := r.SetCodexEffortPreference(store.WithCommand(ctx, record), effort, e.ExpectedVersion)
+	if err != nil {
+		if _, found, replayErr := r.store.CommandResult(ctx, record); replayErr == nil && found {
+			return r.CodexModelPreference(ctx)
+		}
+		return model.ExecutionModelPreference{}, err
+	}
+	return preference, nil
+}

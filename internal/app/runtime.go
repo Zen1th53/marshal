@@ -455,11 +455,65 @@ func (r *Runtime) SetCodexModelPreference(ctx context.Context, modelName string,
 	if err := validator.ValidateModel(ctx, modelName); err != nil {
 		return model.ExecutionModelPreference{}, err
 	}
+	// A reasoning effort chosen for the previous model is kept only when the
+	// new model's catalog advertises it too; otherwise it is cleared, never
+	// carried onto a model that would reject it.
+	effort := ""
+	if current, err := r.CodexModelPreference(ctx); err == nil && current.Effort != "" {
+		if effortValidator, err := r.codexEffortValidator(); err == nil && effortValidator.ValidateEffort(ctx, modelName, current.Effort) == nil {
+			effort = current.Effort
+		}
+	}
 	return r.store.SetExecutionModelPreference(ctx, model.ExecutionModelPreference{
 		ProjectID: localProjectID,
 		Adapter:   "codex",
 		Model:     modelName,
+		Effort:    effort,
 	}, expectedRevision)
+}
+
+type codexEffortValidator interface {
+	ValidateEffort(ctx context.Context, modelName, effort string) error
+}
+
+// codexEffortValidator reads reasoning efforts from the same catalog the model
+// is validated against: the attached adapter, or a short-lived local probe.
+func (r *Runtime) codexEffortValidator() (codexEffortValidator, error) {
+	if validator, ok := r.adapters["codex"].(codexEffortValidator); ok {
+		return validator, nil
+	}
+	binary, err := project.FindBinary("codex")
+	if err != nil {
+		return nil, fmt.Errorf("%w: codex CLI is missing", model.ErrUnavailable)
+	}
+	return codex.New(binary, worker.New(10*time.Second, 2*time.Second, 1<<20)), nil
+}
+
+// SetCodexEffortPreference records the reasoning effort future governed Codex
+// runs request for the selected model. A model must be selected first, the
+// effort must be one that model's catalog advertises, and the write is
+// CAS-bound to the preference revision. An empty effort returns to the
+// model's own default.
+func (r *Runtime) SetCodexEffortPreference(ctx context.Context, effort string, expectedRevision int64) (model.ExecutionModelPreference, error) {
+	if r == nil || r.store == nil {
+		return model.ExecutionModelPreference{}, fmt.Errorf("runtime store is unavailable")
+	}
+	current, err := r.CodexModelPreference(ctx)
+	if err != nil {
+		return model.ExecutionModelPreference{}, fmt.Errorf("%w: select a Codex model with /model select codex <model> before setting its reasoning effort", model.ErrInvalid)
+	}
+	effort = strings.ToLower(strings.TrimSpace(effort))
+	if effort != "" {
+		validator, err := r.codexEffortValidator()
+		if err != nil {
+			return model.ExecutionModelPreference{}, err
+		}
+		if err := validator.ValidateEffort(ctx, current.Model, effort); err != nil {
+			return model.ExecutionModelPreference{}, err
+		}
+	}
+	current.Effort = effort
+	return r.store.SetExecutionModelPreference(ctx, current, expectedRevision)
 }
 
 // ClaudeModelPreference returns the durable operator selection for future

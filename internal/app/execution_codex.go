@@ -97,9 +97,15 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
 	modelName := task.AssignedModel
-	if modelName == "" {
-		if preference, prefErr := r.CodexModelPreference(ctx); prefErr == nil {
+	effort := ""
+	if preference, prefErr := r.CodexModelPreference(ctx); prefErr == nil {
+		if modelName == "" {
 			modelName = preference.Model
+		}
+		// The effort was validated for the preferred model only, so it travels
+		// only with that model.
+		if modelName == preference.Model {
+			effort = preference.Effort
 		}
 	}
 	provider, grantID, err := r.resolveAdapter(ctx, "codex", canonicalTask, worktree, agentID, false, modelName, "")
@@ -120,6 +126,7 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 		Title:             pkg.TaskDescription,
 		Worktree:          worktree,
 		Model:             modelName,
+		Effort:            effort,
 		AllowedOperations: []string{"filesystem.read", "filesystem.write", "shell.execute"},
 		EvidenceRequired:  append([]string(nil), pkg.VerificationObligations...),
 		TrustedContext:    pkg.FormatPromptHeader(),

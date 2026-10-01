@@ -684,7 +684,7 @@ func (h *CommandHandler) helpText() string {
   /model <slug>            Select a Codex execution model through its control authority
   /model select <codex|claude> <model>  Set the model future governed runs use
   /harness [probe|status|select <role> <harness>]  Probe availability; selection unavailable
-  /effort [low|medium|high] Read probed knobs/advisory default; selection UNKNOWN, changes unavailable
+  /effort [<level>|default]  Show or set the reasoning effort future Codex runs request
   /provider [status|config <name>]  Probe availability; credentials stay in the harness (/providers alias)
   /policy [network|sandbox|capability|scope|write|audit]  Enforcement NOT VERIFIED
   /sandbox [read-only|workspace-write]  No args: NOT VERIFIED; mode: open native Codex

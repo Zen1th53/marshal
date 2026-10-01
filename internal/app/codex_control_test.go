@@ -62,6 +62,18 @@ func (f *fakeGovernedCodexAdapter) ValidateModel(_ context.Context, modelName st
 	return fmt.Errorf("%w: model %q not eligible", model.ErrInvalid, modelName)
 }
 
+// ValidateEffort mirrors a catalog that advertises low and high for terra and
+// only low for astra.
+func (f *fakeGovernedCodexAdapter) ValidateEffort(_ context.Context, modelName, effort string) error {
+	advertised := map[string][]string{"gpt-5.6-terra": {"low", "high"}, "gpt-6-astra": {"low"}}[modelName]
+	for _, e := range advertised {
+		if e == effort {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s does not advertise effort %q", model.ErrInvalid, modelName, effort)
+}
+
 func (f *fakeGovernedCodexAdapter) Run(ctx context.Context, req adapter.Request) (adapter.Result, error) {
 	f.runs++
 	f.lastReq = req

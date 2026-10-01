@@ -1,6 +1,6 @@
 # Runtime memory fabric
 
-MARSHAL uses SQLite schema v89 on current `main`. `memory_records_v2` is the canonical
+MARSHAL uses SQLite schema v90 on current `main`. `memory_records_v2` is the canonical
 durable memory store; lexical, vector, graph, and cache structures are derived
 projections.
 

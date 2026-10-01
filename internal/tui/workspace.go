@@ -313,7 +313,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/codex features"] = []string{"list", "enable", "disable"}
 	compCtx.Subcommands["/backup"] = []string{"create", "restore"}
 	compCtx.Subcommands["/model"] = []string{"show", "select"}
-	compCtx.Subcommands["/effort"] = []string{"low", "medium", "high"}
+	compCtx.Subcommands["/effort"] = []string{"minimal", "low", "medium", "high", "xhigh", "default"}
 	compCtx.Subcommands["/features"] = []string{"list", "enable", "disable"}
 	compCtx.Subcommands["/doctor"] = []string{"codex", "provider"}
 	compCtx.Subcommands["/blind"] = []string{"resolve"}

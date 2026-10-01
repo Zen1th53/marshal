@@ -57,7 +57,7 @@ func TestCommandSweepConfigDiscovery(t *testing.T) {
 	}
 	for cmd, subs := range map[string][]string{
 		"/backup": {"create", "restore"}, "/model": {"show", "select"}, "/features": {"list", "enable", "disable"},
-		"/effort": {"low", "medium", "high"}, "/doctor": {"codex", "provider"}, "/blind": {"resolve"},
+		"/effort": {"minimal", "low", "medium", "high", "xhigh", "default"}, "/doctor": {"codex", "provider"}, "/blind": {"resolve"},
 	} {
 		for _, sub := range subs {
 			found := false

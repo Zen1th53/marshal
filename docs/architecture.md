@@ -1,7 +1,7 @@
 # MARSHAL architecture
 
 MARSHAL separates durable engineering authority from the provider process that
-performs work. This page describes current `main` at SQLite schema v89, which is
+performs work. This page describes current `main` at SQLite schema v90, which is
 ahead of the v1.5.0 tag.
 
 ```text
@@ -103,7 +103,7 @@ from a caller. Verification reads the stored run; learning reads the stored
 completion attestation; optimization reads the stored memory commit. A caller
 cannot supply a digest, a tree hash or an outcome and have it believed.
 
-Schema v89 carries the durable stores for these stages, including append-only,
+Schema v90 carries the durable stores for these stages, including append-only,
 digest-protected records for completion attestations, memory commits and
 optimization cycles. Mutable rows use compare-and-swap on their version, so a
 stale writer is refused rather than overwriting newer state.
@@ -124,7 +124,7 @@ Revoked grants are not recreated when a workspace or runtime restarts.
 Goal revision is the first command boundary. Its envelope names the exact
 project, session, goal, expected revision and idempotency key. The canonical
 revision service reconstructs the original request and hard constraints and
-resets confirmation to `PENDING`. Schema v89 includes `command_results` and
+resets confirmation to `PENDING`. Schema v90 includes `command_results` and
 `command_audit`; the goal revision, receipt and audit insert commit together.
 Immutable receipts bind the actor and hashed key to the envelope/payload digest
 and resulting canonical revision. Replay returns that revision, even after the
@@ -138,7 +138,9 @@ human presence or a sandbox against unrestricted same-UID host processes:
 process-only workers retain host-account privileges. Operator socket mutations
 remain disabled, and no new slash command or navigation release is enabled.
 
-Schema v89 adds task control intents and immutable task command snapshots.
+Migration 89 added task control intents and immutable task command snapshots.
+Migration 90 adds the reasoning effort to the execution model preference, bound
+to the same revision as the model it was validated against.
 Operator task mutations use `task.create`, `task.assign` and `task.control`;
 assignment shares the worker claim transaction's lease and dependency checks.
 Pause settlement follows supervisor acknowledgement, and resume rechecks the

@@ -731,7 +731,23 @@ func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (strin
 		return configStoreUnavailable, nil
 	}
 	if len(args) > 0 {
-		return "Reasoning effort was NOT applied: Runtime has no authenticated canonical execution-profile service.", nil
+		return h.setCodexEffort(ctx, args[0])
+	}
+	var applied string
+	if a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority); ok && a != nil && a.runtime != nil {
+		preference, err := a.runtime.CodexModelPreference(ctx)
+		switch {
+		case errors.Is(err, model.ErrNotFound):
+			applied = "CODEX EXECUTION EFFORT (read by future governed Codex runs):\n  No Codex model is selected; runs use the model's own default effort.\n"
+		case err != nil:
+			return "", fmt.Errorf("read reasoning preference: %w; reopen the TUI and check /store", err)
+		default:
+			effort := preference.Effort
+			if effort == "" {
+				effort = "model default"
+			}
+			applied = fmt.Sprintf("CODEX EXECUTION EFFORT (read by future governed Codex runs):\n  Model %s, effort %s (preference revision %d)\n  Claude runs read no reasoning effort.\n", preference.Model, effort, preference.Revision)
+		}
 	}
 	plan, err := h.currentRoutePlan(ctx)
 	if err != nil {
@@ -745,7 +761,7 @@ func (h *CommandHandler) handleEffort(ctx context.Context, args []string) (strin
 	if profile != nil && len(profile.ReasoningKnobs) > 0 {
 		knobs = strings.Join(profile.ReasoningKnobs, ", ")
 	}
-	return fmt.Sprintf("REASONING EFFORT (NOT APPLIED TO RUNTIME):\n  Harness (advisory route): %s\n  Selected effort: UNKNOWN (no canonical preference read-back)\n  Advisory route default: %s\n  Probed reasoning knobs: %s", plan.Harness, orNone(plan.ReasoningEffort), knobs), nil
+	return applied + fmt.Sprintf("REASONING EFFORT (NOT APPLIED TO RUNTIME):\n  Harness (advisory route): %s\n  Selected effort: UNKNOWN (no canonical preference read-back)\n  Advisory route default: %s\n  Probed reasoning knobs: %s", plan.Harness, orNone(plan.ReasoningEffort), knobs), nil
 }
 
 // handleUltra reports ULTRA status and switches ULTRA Execution.
@@ -1041,4 +1057,36 @@ func (h *CommandHandler) handleDiff(ctx context.Context) (string, error) {
 		return "Diff viewer closed.", nil
 	}
 	return "Diff viewer unavailable. Open marshal tui in an initialized Git project (marshal init), then retry /diff.", nil
+}
+
+// setCodexEffort records the reasoning effort future governed Codex runs
+// request for the selected model, through the authenticated operator
+// boundary. "default" returns to the model's own default.
+func (h *CommandHandler) setCodexEffort(ctx context.Context, level string) (string, error) {
+	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
+		return "Reasoning effort was NOT applied: authenticated runtime authorization is required.", nil
+	}
+	level = strings.ToLower(level)
+	if level == "default" {
+		level = ""
+	}
+	revision, current, err := a.runtime.ModelPreferenceRevision(ctx, "codex")
+	if err != nil {
+		return "", fmt.Errorf("read reasoning preference: %w", err)
+	}
+	if current == "" {
+		return "Reasoning effort was NOT applied: select a Codex model first with /model select codex <model>; the effort is validated against that model.", nil
+	}
+	e := app.CommandEnvelope{ProjectID: a.runtime.ProjectIdentity(), SessionID: a.sessionID, TargetID: "effort:codex",
+		ExpectedVersion: revision, IdempotencyKey: uuid.NewString()}
+	preference, err := a.runtime.CommandSetEffort(a.localControl.Context(ctx), e, "codex", level)
+	if err != nil {
+		return fmt.Sprintf("Reasoning effort was NOT applied: %v", err), nil
+	}
+	effort := preference.Effort
+	if effort == "" {
+		effort = "the model's default effort"
+	}
+	return fmt.Sprintf("Future governed Codex runs of %s will request %s (preference revision %d). Runs already started keep theirs.", preference.Model, effort, preference.Revision), nil
 }
