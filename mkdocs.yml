@@ -1,0 +1,62 @@
+site_name: MARSHAL
+site_description: Installing, using and troubleshooting MARSHAL 0.0.5
+repo_url: https://github.com/Zen1th53/marshal
+strict: true
+docs_dir: docs
+site_dir: site
+# Public publication boundary: new files are excluded until explicitly reviewed.
+exclude_docs: |
+  /**
+  !/index.md
+  !/public/installation.md
+  !/public/getting-started.md
+  !/public/marshal.md
+  !/public/providers.md
+  !/public/run-control.md
+  !/public/recovery.md
+  !/public/sessions.md
+  !/public/ultra.md
+  !/public/tui.md
+  !/public/cli.md
+  !/public/configuration.md
+  !/public/troubleshooting.md
+  !/public/concepts.md
+  !/public/release-notes.md
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+hooks:
+  - scripts/docs-theme.py
+plugins:
+  - search
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: public/installation.md
+      - First run: public/getting-started.md
+  - Guides:
+      - Marshal mode: public/marshal.md
+      - Providers: public/providers.md
+      - Run control and budgets: public/run-control.md
+      - Checkpoints and recovery: public/recovery.md
+      - Sessions and apply: public/sessions.md
+      - ULTRA: public/ultra.md
+  - Reference:
+      - TUI commands: public/tui.md
+      - CLI: public/cli.md
+      - Configuration: public/configuration.md
+      - Troubleshooting and FAQ: public/troubleshooting.md
+  - Concepts: public/concepts.md
+  - Release notes: public/release-notes.md

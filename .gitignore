@@ -45,3 +45,6 @@ MARSHAL_COMMUNITY_CLOUD_ULTRA_ACTIVATION_TELEMETRY_FINAL_MEGA_ULTRA_V2/
 # an agent. This repository is public, so everything of that kind is collected
 # here and kept out of it. Nothing MARSHAL ships at runtime belongs in secrets/.
 /secrets/
+
+# Generated public documentation.
+/site/
