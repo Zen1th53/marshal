@@ -442,7 +442,7 @@ Every user-operable MARSHAL capability has a direct command mapping:
 - `/cancel [run:<id>]` — Cancel a run of this session: the run becomes CANCELLED, no further task is dispatched, and the supervised provider turns of its tasks are cancelled. Without an ID it acts only when exactly one non-terminal run qualifies.
 - `/doctor [codex|provider]` — Run system diagnostics, or native Codex diagnostics in an interactive terminal. Failed project checks include an initialization/diagnostic hint; optional provider probes are not run by bare `/doctor`.
 - `/runtime` — Read back the runtime from the canonical store: instance, schema, agent/session/task/lease counts, and this session's runs with their state, goal binding, task count and policy snapshot. Process liveness is not probed.
-- `/store` — Read the SQLite schema version. Integrity is NOT VERIFIED by a schema read; unavailable or failed stores include a recovery hint.
+- `/store` — Read the SQLite schema version, run `PRAGMA quick_check`, and show allowlisted inventory counts. `/store check quick` and `/store check full` run only the named check; a pass names that check. Full `PRAGMA integrity_check` can take long. `/store counts` reports agents, sessions, tasks, leases, findings, approvals, artifacts, and audit_events; counts are inventory, not proof of health. Other table names are refused. Diagnostics are read-only, cancel with the command context, and time out after five seconds. Unavailable or failed stores include a recovery hint.
 - `/diff` — Open the interactive working tree diff viewer. Extra arguments are rejected; failed Git inspection includes a worktree recovery hint.
 - `/quit` — Exit the TUI workspace.
 

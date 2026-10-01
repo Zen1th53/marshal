@@ -1063,17 +1063,52 @@ func (h *CommandHandler) handleRuntime(ctx context.Context) (string, error) {
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 
-// handleStore shows store schema status.
-func (h *CommandHandler) handleStore(ctx context.Context) (string, error) {
+// handleStore renders bounded, read-only canonical store diagnostics.
+func (h *CommandHandler) handleStore(ctx context.Context, args []string) (string, error) {
 	if h.ws.store == nil {
 		return configStoreUnavailable, nil
 	}
-	ver, err := h.ws.store.SchemaVersion(ctx)
-	if err != nil {
-		return "", fmt.Errorf("read schema: %w; reopen the TUI and check the project database", err)
+	authority := &runtimeControlAuthority{store: h.ws.store}
+	ctx, cancel := context.WithTimeout(ctx, store.DiagnosticTimeout)
+	defer cancel()
+	fail := func(err error) (string, error) {
+		return "", fmt.Errorf("store diagnostics: %w; reopen the TUI and check the project database", err)
 	}
-	return fmt.Sprintf("STORE STATUS:\n  Backend:  SQLite\n  Schema:   v%d (Latest: v%d)\n  Health:   NOT VERIFIED (schema read succeeded only)\n",
-		ver, store.LatestSchemaVersion), nil
+	var out strings.Builder
+	out.WriteString("STORE STATUS:\n  Backend: SQLite\n")
+	if len(args) == 0 {
+		ver, err := authority.StoreSchemaVersion(ctx)
+		if err != nil {
+			return fail(err)
+		}
+		fmt.Fprintf(&out, "  Schema: v%d (Latest: v%d)\n", ver, store.LatestSchemaVersion)
+	}
+	if len(args) == 0 || strings.EqualFold(args[0], "check") {
+		check := "quick_check"
+		var err error
+		if len(args) == 2 && strings.EqualFold(args[1], "full") {
+			check = "integrity_check"
+			out.WriteString("  Full integrity_check can take long; timeout: 5s.\n")
+			err = authority.StoreIntegrity(ctx)
+		} else {
+			err = authority.StoreQuickCheck(ctx)
+		}
+		if err != nil {
+			return fail(err)
+		}
+		fmt.Fprintf(&out, "  SQLite %s passed.\n", check)
+	}
+	if len(args) == 0 || strings.EqualFold(args[0], "counts") {
+		out.WriteString("  Inventory counts (not proof of health):\n")
+		for _, table := range store.CountTables() {
+			count, err := authority.ObjectCount(ctx, table)
+			if err != nil {
+				return fail(err)
+			}
+			fmt.Fprintf(&out, "    %s: %d\n", table, count)
+		}
+	}
+	return out.String(), nil
 }
 
 // handleExport exports evidence bundle.
