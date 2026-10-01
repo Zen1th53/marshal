@@ -1,5 +1,5 @@
 site_name: MARSHAL
-site_description: Installing, using and troubleshooting MARSHAL 0.0.5
+site_description: Plan work with one AI, let other AI agents do it, and stay in charge.
 repo_url: https://github.com/Zen1th53/marshal
 strict: true
 docs_dir: docs
@@ -8,55 +8,85 @@ site_dir: site
 exclude_docs: |
   /**
   !/index.md
-  !/public/installation.md
-  !/public/getting-started.md
-  !/public/marshal.md
-  !/public/providers.md
-  !/public/run-control.md
-  !/public/recovery.md
+  !/stylesheets/marshal.css
+  !/public/how-it-works.md
+  !/public/install.md
+  !/public/first-project.md
+  !/public/agents.md
+  !/public/undo.md
+  !/public/control.md
   !/public/sessions.md
   !/public/ultra.md
-  !/public/tui.md
-  !/public/cli.md
-  !/public/configuration.md
   !/public/troubleshooting.md
-  !/public/concepts.md
+  !/public/limits.md
+  !/public/settings.md
+  !/public/commands.md
+  !/public/cli.md
   !/public/release-notes.md
 theme:
   name: material
   features:
-    - navigation.tabs
     - navigation.sections
+    - navigation.expand
+    - navigation.footer
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
     - content.code.copy
+    - content.tabs.link
   palette:
-    - scheme: default
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
-    - scheme: slate
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
+extra_css:
+  - stylesheets/marshal.css
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
 hooks:
   - scripts/docs-theme.py
 plugins:
   - search
 nav:
   - Home: index.md
-  - Getting started:
-      - Installation: public/installation.md
-      - First run: public/getting-started.md
-  - Guides:
-      - Marshal mode: public/marshal.md
-      - Providers: public/providers.md
-      - Run control and budgets: public/run-control.md
-      - Checkpoints and recovery: public/recovery.md
-      - Sessions and apply: public/sessions.md
+  - Get started:
+      - How MARSHAL works: public/how-it-works.md
+      - Install: public/install.md
+      - Your first project: public/first-project.md
+  - Everyday tasks:
+      - Connect your AI agents: public/agents.md
+      - Undo changes and keep backups: public/undo.md
+      - Pause, stop and set limits: public/control.md
+      - Continue past conversations: public/sessions.md
       - ULTRA: public/ultra.md
+  - Help:
+      - Problems and fixes: public/troubleshooting.md
+      - What MARSHAL cannot do yet: public/limits.md
   - Reference:
-      - TUI commands: public/tui.md
-      - CLI: public/cli.md
-      - Configuration: public/configuration.md
-      - Troubleshooting and FAQ: public/troubleshooting.md
-  - Concepts: public/concepts.md
-  - Release notes: public/release-notes.md
+      - Commands: public/commands.md
+      - Terminal commands: public/cli.md
+      - Settings: public/settings.md
+  - What's new in 0.0.5: public/release-notes.md

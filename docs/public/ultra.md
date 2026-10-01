@@ -1,30 +1,46 @@
-# ULTRA from the terminal
+# ULTRA
 
-Every session starts with ULTRA execution off. Inspect availability first:
+ULTRA is an optional extra mode of MARSHAL that runs on the MARSHAL Cloud.
+You need access to use it.
+
+## Check whether you have access
 
 ```text
 /ultra status
+```
+
+MARSHAL shows one of three states:
+
+- ULTRA is running in this session,
+- you have access, but ULTRA is switched off,
+- you do not have access.
+
+If you do not have access, you can ask for it:
+
+```text
+/ultra request
+```
+
+## Switch it on
+
+ULTRA is always off when you start MARSHAL. To switch it on for this session:
+
+```text
 /ultra start
 ```
 
-Start enables execution for this session only when ULTRA is available to you.
-If it is unavailable, follow the message shown; `/ultra request` requests access.
-`/ultra` is also a status command.
+While it is on, the top of the window shows `ULTRA ACTIVE`.
 
-Status distinguishes active execution, available access with execution off,
-and unavailable access. It may show an access expiry separately from the current
-session expiry; older services may not report an access end time. The header and
-statusline show `ULTRA ACTIVE` only when access and execution are both enabled.
-
-To stop:
+## Switch it off
 
 ```text
 /ultra stop
 /ultra stop confirm
 ```
 
-Type the confirmation as the very next command. `/mode ultra` changes a
-supervision preference; it does not enable execution or confer access.
-No environment variable enables ULTRA execution. Hard approvals remain yours.
-The navigation surface is closed in this build even when ULTRA is available;
-use composer commands.
+Type the second line straight after the first. MARSHAL asks for the
+confirmation so that ULTRA is not switched off by accident.
+
+!!! note
+    You stay in charge with ULTRA too: it never approves anything on your
+    behalf.

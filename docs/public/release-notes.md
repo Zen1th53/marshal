@@ -1,41 +1,40 @@
-# 0.0.5 release notes
+# What's new in 0.0.5
 
-This page summarizes the user-facing changes in the 0.0.5-rc.5 release notes.
-The candidate comes from the 0.0.5 integration branch. Install candidates
-deliberately; automatic updates follow the latest release.
+## Plan with the Marshal
 
-## Planning and delivery
+- `/marshal chat` opens a conversation with the Marshal. It asks about your
+  goal, reads your project, and writes a plan you can read and edit.
+- Agents follow the approved plan. Each task runs in its own copy of your
+  project, and tasks that depend on others start from their finished work.
+- You choose how strictly agents follow the plan, and who accepts the work.
+- Send a task back with `/marshal return` and a note on what to fix.
+- One installed agent is enough. MARSHAL gives each role its own session.
 
-- `/marshal chat` opens a planning conversation; bare `/marshal` displays status.
-- The Marshal asks about language, goal and project needs, then writes a plan pack.
-- Review the requirements, index and task notes before `/marshal approve`.
-- Workers use isolated worktrees and receive their approved task notes.
-- Choose `free` or `strict` control and the acceptance mode before a run.
-- Return work for changes with `/marshal return <task> <reason>` and resume it.
-- Separate review sessions allow one installed provider to fill multiple roles.
+## Commands that now work
 
-## Commands and recovery
+Many commands that only printed "not available" in earlier versions now work:
 
-- Completion accepts the chosen candidate before executing a command.
-- Mistyped subcommands and malformed arguments are refused.
-- Goal edits expose revision history and require a fresh confirmation.
-- Pause, resume and cancel act on session runs; call and duration budgets stop dispatch.
-- Model and effort choices apply to future governed work.
-- Checkpoints can be listed, verified, compared and restored with a preview.
-- Database backup restore is coordinated on Linux; offline restore remains available.
-- `/sessions` separates native conversations from governed runs and selects latest
-  conversations within the current project.
-- `/apply` requires a Codex task ID, snapshots first and reports actual changed files.
-- `/diff` supports staged, unstaged and untracked changes.
+- edit your goal and see its history,
+- approve or reject requests,
+- pause, resume and cancel runs, and set limits on calls and time,
+- choose the model and, for Codex, how hard it thinks,
+- save, compare and restore checkpoints,
+- restore a backup without leaving MARSHAL (Linux),
+- see past conversations per project with `/sessions`,
+- apply a Codex cloud task and see exactly what changed,
+- see staged, unstaged and untracked changes with `/diff`.
 
-## ULTRA and limits
+## Easier to use
 
-ULTRA execution starts off in every session. `/ultra start` enables it when
-available; stopping requires `/ultra stop` followed immediately by
-`/ultra stop confirm`. Status reports availability and execution separately.
+- A typo in a command now does nothing and suggests the right command.
+- Enter accepts the highlighted suggestion first.
+- `/marshal` on its own shows the status instead of starting a session.
 
-Alignment is advisory, navigation is closed, OpenCode is a worker rather than a
-Marshal model, live database restore is Linux-only, and provider qualification
-is limited to [specific versions](providers.md). Keep the window open during a run.
-The release record does not establish real-model completion of the full workflow.
-See [concepts and known limits](concepts.md).
+## ULTRA
+
+- ULTRA is switched on and off from inside MARSHAL with `/ultra start` and
+  `/ultra stop`.
+- `/ultra` shows when your access ends and, if access is refused, why.
+
+See [What MARSHAL cannot do yet](limits.md) for the known limits of this
+version.

@@ -1,61 +1,106 @@
-# Troubleshooting and FAQ
+# Problems and fixes
 
-## MARSHAL cannot open the project
+Start with `/help` inside MARSHAL, or `marshal doctor` in the terminal. Most
+problems are explained there. If not, find your problem below.
 
-Enter a Git project, run `marshal init`, then `marshal doctor`. Check directory
-permissions. In an attached TUI, `/store check quick` verifies the state database;
-`/store check full` performs a fuller integrity check with a five-second timeout.
-A timeout is not a successful check.
+## Installing and starting
 
-## The provider is unavailable or authentication is unknown
+??? question "`marshal: command not found`"
+    The installer put MARSHAL in `~/.local/bin`, and your terminal does not
+    look there yet. Add this line to `~/.bashrc` (or `~/.zshrc`), then open a
+    new terminal:
 
-Check its binary is installed and discoverable, then run
-`marshal doctor --probe-providers`. Sign in through the provider's own interface.
-An availability probe is not an authenticated execution test. Other CLI versions
-can show unqualified operations; see [provider setup](providers.md).
+    ```bash
+    export PATH="$HOME/.local/bin:$PATH"
+    ```
 
-## A command does nothing
+??? question "MARSHAL cannot open my project"
+    MARSHAL needs a Git project. In your project folder, run:
 
-Use `/help`. Plain composer text does not launch work. Bare `/marshal` shows
-status; `/marshal chat` starts the conversation. Subcommand typos are refused.
-When completion is selected, Enter accepts that choice first; submit the
-finished command afterwards. Native operations need an interactive terminal.
+    ```bash
+    git status        # if this fails, run: git init
+    marshal init
+    marshal doctor
+    ```
 
-## Why is execution blocked?
+    `marshal doctor` tells you what is missing.
 
-Read the reported policy or approval reason. Governed providers that need network
-access can be blocked when policy cannot enforce it. Do not treat installed
-binaries as proof that a run can execute. `/approvals` lists pending decisions;
-inspect them before approval. Goal changes invalidate stale bindings.
+??? question "The installer says my system is not supported"
+    Release builds are for Linux on 64-bit Intel/AMD or ARM. On other systems
+    you can try building from source (see the end of
+    [Install MARSHAL](install.md)), but this is not supported yet.
 
-## Why does the budget show UNKNOWN?
+## Commands
 
-Some providers do not report cost or tokens. Enforced limits use model calls and
-duration, checked before the next task. See [budgets](run-control.md).
+??? question "I typed something and nothing happened"
+    Text without a `/` at the start does not do anything. Every action is a
+    command, such as `/marshal chat`. Type `/help` to see them.
 
-## Why cannot I open navigation?
+??? question "`/marshal` only shows status"
+    That is expected. `/marshal` on its own shows the current state. To start
+    planning, use `/marshal chat`.
 
-Navigation is closed in this build. Use composer commands, including with ULTRA.
+??? question "MARSHAL says \"Did you mean ...?\""
+    You made a typo in a command. MARSHAL does nothing rather than guess.
+    Type the suggested command.
 
-## How do I recover from a bad apply or restore?
+??? question "Enter picked a suggestion instead of running my command"
+    When a suggestion is highlighted, Enter accepts it first. Press Enter
+    again to run the command.
 
-Read the checkpoint reported by `/apply` or rollback. Preview with `/rollback
-<id>` before confirming. For state restore, stop other windows and the daemon;
-use the [recovery guide](recovery.md). A file rollback does not restore the database.
+## Agents
 
-## Is imported conversation memory verified?
+??? question "MARSHAL cannot find my agent, or it does not respond"
+    1. Run the agent on its own (for example `codex`) and make sure you are
+       signed in.
+    2. Run `marshal doctor --probe-providers` to see what MARSHAL finds.
 
-No. It is candidate information. Search it with `/memory search <query>` and
-verify important claims against project files and evidence.
+    Finding the agent does not prove you are signed in. Sign-in always
+    happens in the agent's own interface.
 
-## Can I close the window during a Marshal run?
+??? question "A command for my agent is marked as not checked"
+    Your agent's version is different from the one MARSHAL was tested with.
+    The command may still work. See [Connect your AI agents](agents.md).
 
-Keep it open. After an interruption, inspect `/marshal status` and use
-`/marshal resume` when the run can continue. Do not assume a stored run is still
-executing.
+## Running work
 
-## Does updating change the current process?
+??? question "The work does not start, or MARSHAL says it is blocked"
+    Read the reason MARSHAL shows. Common causes:
 
-No. `/update install` verifies the downloaded archive checksum and installs the
-latest release; restart to use it. Select candidates deliberately as described
-in [installation](installation.md).
+    - Something is waiting for your approval. Check `/approvals`.
+    - You changed the goal, so earlier approvals no longer apply.
+    - A limit you set has been reached. Check `/budget`.
+    - Bubblewrap is not installed. See [Install MARSHAL](install.md).
+
+??? question "The budget shows UNKNOWN"
+    Some agents do not report tokens or cost. MARSHAL shows `UNKNOWN` instead
+    of guessing. Limits by number of calls and time still work.
+    See [Pause, stop and set limits](control.md).
+
+??? question "I closed the window during a run"
+    Open MARSHAL again, check `/marshal status`, and use `/marshal resume`.
+
+??? question "Ctrl+N does nothing"
+    The navigation screens are switched off in this version. Use commands in
+    the composer instead.
+
+## Undoing things
+
+??? question "An agent changed something I did not want"
+    Go back to a checkpoint. `/checkpoint list` shows them, and
+    `/rollback CHECKPOINT-ID` shows a preview before anything changes.
+    See [Undo changes](undo.md).
+
+??? question "Does rolling back also restore MARSHAL's records?"
+    No. A rollback restores your project files. Restoring MARSHAL's records
+    is a separate step: see [Restore a backup](undo.md#restore-a-backup).
+
+## Other questions
+
+??? question "Is what MARSHAL remembers from conversations reliable?"
+    Treat it as notes, not facts. Check important details against your
+    project.
+
+??? question "Does `/update install` restart MARSHAL?"
+    No. It downloads and checks the new version. Close MARSHAL and open it
+    again to use it.

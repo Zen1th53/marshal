@@ -1,8 +1,16 @@
-# Sessions and applying changes
+# Continue past conversations
 
-`/sessions` separates **NATIVE conversations** from **GOVERNED runs**.
-Provider session commands filter that inventory by provider. Imported conversation
-memory is not proof that a provider can resume the original session.
+MARSHAL keeps track of two kinds of past work in this project. To see both:
+
+```text
+/sessions
+```
+
+- **Native conversations** are chats you had with an agent directly, for
+  example through `/codex` or `/claude`.
+- **Governed runs** are work MARSHAL ran for you, for example from a plan.
+
+## Continue the latest conversation
 
 ```text
 /codex resume --last
@@ -11,25 +19,43 @@ memory is not proof that a provider can resume the original session.
 /agy resume --last
 ```
 
-Latest-session selection is scoped to the current project and provider.
-Copy an inventory ID to choose an explicit conversation. A conversation belonging
-to another project or provider is refused. Native provider pickers remain
-available through the provider's `cli` command.
+"Latest" means the latest conversation **in this project** with that agent.
+MARSHAL never picks up a conversation from a different project.
 
-MARSHAL captures visible conversation and bounded tool evidence from supported
-local native histories. Hidden reasoning is excluded and imported records pass
-secret redaction/filtering. Imported memory is candidate information, not verified
-fact. `/memory list` and `/memory search <query>` find it. A new session does not
-receive the entire memory store automatically.
+## Continue a specific conversation
 
-## Apply a Codex task
+Copy the conversation's ID from `/sessions` and use it:
 
-`/apply <codex_task_id>` requires a task ID supplied by Codex itself. For example,
-`/apply CODEX_TASK_ID` uses that value after you replace it with your Codex ID.
-It never guesses an ID from a MARSHAL run; MARSHAL task IDs are refused.
+```text
+/codex resume CONVERSATION-ID
+```
 
-An attached runtime snapshots the project before invoking Codex apply. The result
-lists files that actually changed; a successful provider exit with no changed
-files is reported as such. Use the reported `/rollback` checkpoint to undo changes.
-For governed Marshal tasks, review with `/diff` and decide with
-`/marshal accept <task>` instead.
+## Search what was said before
+
+MARSHAL remembers what was said in your agent conversations, without the
+agents' hidden reasoning, and with secrets filtered out. You can search it:
+
+```text
+/memory search error handling
+/memory list
+```
+
+Treat these memories as notes, not facts. Check important details against
+your project.
+
+## Apply a Codex cloud task
+
+If you used Codex's cloud tasks, you can bring a task's changes into your
+project:
+
+```text
+/apply CODEX-TASK-ID
+```
+
+Use the task ID that Codex gives you. MARSHAL saves a checkpoint first, then
+shows exactly which files changed. If you do not like the result, roll back to
+the checkpoint it names. See [Undo changes](undo.md).
+
+!!! note
+    `/apply` is only for Codex's own task IDs. For work from a MARSHAL plan,
+    use `/diff` and `/marshal accept` instead.

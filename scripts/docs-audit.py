@@ -21,8 +21,9 @@ if not patterns or str(patterns[0].pattern).strip() != '/**':
 allowlist = []
 for pattern in patterns[1:]:
     entry = str(pattern.pattern).strip()
-    if not re.fullmatch(r'!/[A-Za-z0-9_/-]+\.md', entry):
-        errors.append('exclude_docs entries must be explicit Markdown paths')
+    # Pages, plus the site's own stylesheets; never a glob.
+    if not re.fullmatch(r'!/[A-Za-z0-9_/-]+\.md|!/stylesheets/[A-Za-z0-9_-]+\.css', entry):
+        errors.append('exclude_docs entries must be explicit Markdown or stylesheet paths')
     else:
         allowlist.append(entry[2:])
 if not allowlist or len(set(allowlist)) != len(allowlist):
