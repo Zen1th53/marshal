@@ -3151,8 +3151,8 @@
     },
     {
       "path": "docs/tui.md",
-      "sha256": "b27961bf11c4dcdd6282bf2941c7484ae57eb06d9f4a74171259502e7afc473d",
-      "bytes": 45492
+      "sha256": "ee9c3b7a1c09ea3fd44548524254a60c99869ccb7fd6bdfd8b1df6b6ac7f782f",
+      "bytes": 46073
     },
     {
       "path": "docs/verification-quorum.md",
@@ -3575,6 +3575,11 @@
       "bytes": 20204
     },
     {
+      "path": "internal/app/budget_limits_test.go",
+      "sha256": "0031107b880a4f4e4236d12cbf23cd1970fd019486c483c2ff75d1cc9f197074",
+      "bytes": 3330
+    },
+    {
       "path": "internal/app/capability_grant_test.go",
       "sha256": "2c48c18ef5f05d66c83021e8e52fc7a7bfe5daad26cf5fb5bd4f50bc6fea704c",
       "bytes": 2517
@@ -3716,8 +3721,8 @@
     },
     {
       "path": "internal/app/goal_editing.go",
-      "sha256": "e30dab110796428685d182165f15ac5245e3d4a68899732f8dbe8b298023a4a8",
-      "bytes": 6218
+      "sha256": "dd2df7c05a280a4dd9fee1ed960ac86c5e50b8d40bd17a4d6bc942754afcf8c9",
+      "bytes": 7571
     },
     {
       "path": "internal/app/goal_editing_test.go",
@@ -5216,8 +5221,8 @@
     },
     {
       "path": "internal/execution/engine.go",
-      "sha256": "8c3edf78f2e87cee414f120f2485b6c58f6dbb09abda4b10abf513e82f33d438",
-      "bytes": 46583
+      "sha256": "257a469b98ec8fd1564d4c1c364edc12e56c85ea0879f94cf9446c4ee9667ede",
+      "bytes": 48047
     },
     {
       "path": "internal/execution/engine_test.go",
@@ -6711,8 +6716,8 @@
     },
     {
       "path": "internal/model/goal.go",
-      "sha256": "e0366e3ffd221eccbdb02f6e9733d85aef04a729481f2537e14ba7bad6e5b13d",
-      "bytes": 11193
+      "sha256": "dd21a9b41e744731cd774989db520efe351b0f751821fe00aa685089c7aa78c2",
+      "bytes": 11402
     },
     {
       "path": "internal/model/goal_constraint_preservation_test.go",
@@ -8116,8 +8121,8 @@
     },
     {
       "path": "internal/store/goal.go",
-      "sha256": "d63305a52a331bf9f59cc16cc8885d65d15efd9241b561e7cc364d3d6f364c73",
-      "bytes": 13574
+      "sha256": "e27518d2eb5f913e7a972808fdf5e38684c0300654fa14cb2964dfe06efd8893",
+      "bytes": 13787
     },
     {
       "path": "internal/store/goal_intake_test.go",
@@ -8845,6 +8850,11 @@
       "bytes": 3666
     },
     {
+      "path": "internal/tui/budget_pty_test.go",
+      "sha256": "c0221e49a5c2f213b0a70227aaa81bd7ddebe4b10542aea05ca479637b5f2d35",
+      "bytes": 953
+    },
+    {
       "path": "internal/tui/checkpoint_read_pty_test.go",
       "sha256": "e66dc745e44aca74c70e6edc09f27c11bb98f9623d23ecaec314fcda6b309ac2",
       "bytes": 1609
@@ -8881,8 +8891,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "b76d0cf90d0a66415bb69bbbd33f786d8c7688a8927a7393cb5c91678f519b67",
-      "bytes": 28417
+      "sha256": "6f4bd78d5683014262857baa26d805e7961d54bcfc4b5ab476359cc95b71e36d",
+      "bytes": 28603
     },
     {
       "path": "internal/tui/commands_antigravity.go",
@@ -8893,6 +8903,11 @@
       "path": "internal/tui/commands_approvals.go",
       "sha256": "d11ca8223e5f9710635ac8b2c6446bef204c34e36067b862c3c43ace4938c891",
       "bytes": 2525
+    },
+    {
+      "path": "internal/tui/commands_budget.go",
+      "sha256": "ac89529d92b8b82ac92f355b33a9ec2d45a92a232b44ebfb5da07cbf485ee1ee",
+      "bytes": 3617
     },
     {
       "path": "internal/tui/commands_checkpoint.go",
@@ -9011,8 +9026,8 @@
     },
     {
       "path": "internal/tui/commands_work.go",
-      "sha256": "7b5c9ae96db7ed242cdfdd83943b8d60d7be12c6a9d946eb6543e345d68db1d6",
-      "bytes": 2962
+      "sha256": "95636c6fba40cc47636008d28e46bde87ce75876b45bbde8e5b246c818dfde56",
+      "bytes": 3213
     },
     {
       "path": "internal/tui/completion_popup.go",
