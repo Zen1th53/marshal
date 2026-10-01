@@ -162,20 +162,28 @@ func (f *claudeStreamApprovalFixture) status(t *testing.T) execution.ApprovalSta
 
 func (f *claudeStreamApprovalFixture) waitForContinuation(t *testing.T) {
 	t.Helper()
+	waitForNativeContinuation(t, f.journal, f.record.RunID, f.record.TaskID)
+}
+
+// waitForNativeContinuation waits for the background continuation that an
+// approved live native turn starts. The fixtures have no live run context, so
+// the continuation ends with FailNativeResume, whose journal event is appended
+// after all approval and run storage writes. The file journal's read lock also
+// waits for that append and its file close to finish, so TempDir cleanup that
+// follows cannot race the continuation.
+func waitForNativeContinuation(t *testing.T, journal execution.JournalStore, runID, taskID string) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	ticker := time.NewTicker(time.Millisecond)
 	defer ticker.Stop()
 	for {
-		events, err := f.journal.GetEvents(f.record.RunID)
+		events, err := journal.GetEvents(runID)
 		if err != nil {
 			t.Fatalf("read native approval continuation: %v", err)
 		}
-		// The fixture has no live run context. FailNativeResume appends this
-		// durable event after all approval and run storage operations. The file
-		// journal's read lock also waits for the append and file close to finish.
 		for _, event := range events {
-			if event.TaskID == f.record.TaskID && event.EventType == "PROVIDER_RESUME_FAILED" {
+			if event.TaskID == taskID && event.EventType == "PROVIDER_RESUME_FAILED" {
 				return
 			}
 		}
