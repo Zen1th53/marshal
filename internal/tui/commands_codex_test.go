@@ -285,6 +285,8 @@ func TestTopLevelCodexCommands_DirectRouting(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	_, ws, ctx := newControlWorkspace(t)
+	ws.workDir = t.TempDir()
+	useCodexByDefault(t, ws.workDir)
 	source, auth := testControl(t)
 	ws.AttachControlSource(source)
 
