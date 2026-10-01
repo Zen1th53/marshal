@@ -374,7 +374,7 @@ func TestCommandSweepConfigPTY(t *testing.T) {
 		{"/doctor codex", "Install Codex"}, {"/provider status", "PROVIDER / HARNESS STATUS"},
 		{"/harness probe", "HARNESS CAPABILITY PROBE"}, {"/model show", "SAVED MODEL PREFERENCES"},
 		{"/models", "Check Codex installation"}, {"/effort high", "NOT applied"},
-		{"/backup create", "Backup written and verified"}, {"/fingerprint", "NOT_AVAILABLE"},
+		{"/backup create", "Backup written and verified"}, {"/fingerprint", "FAILURE FINGERPRINTS (from"},
 		{"/runtime", "RUNTIME STATUS (canonical store read-back"}, {"/store", "STORE STATUS"},
 		{"/export", "No active goal"}, {"/blind resolve reason", "NOT recorded"},
 		{"/reinjection", "CONSTRAINT RE-INJECTION"}, {"/alignment scope", "ALIGNMENT GUARD: NOT VERIFIED"},

@@ -495,7 +495,7 @@ Task mutations go through the workspace's in-process `app.LocalControl` with ind
 - `/model [show]` — Show the execution model preferences that future governed Codex and Claude runs read, with their revisions, then the saved harness model defaults, which are not applied. `/model <codex_slug>` selects a Codex execution model through its control authority. `/model select <codex|claude> <model_name>` records the model future governed runs of that adapter use, as the authenticated local owner: the model must be in the adapter's catalog, the change is bound to the revision shown, and runs already started keep their model. Other harnesses read no model preference, so a selection for them is refused.
 - `/models` — List discovered Codex models and selection through the control authority; extra arguments return usage.
 - `/effort [minimal|low|medium|high|xhigh|default]` — Without an argument, show the reasoning effort future governed Codex runs request (with the selected model and preference revision), then the probed knobs and advisory route default, which are not applied. With a level, record it as the authenticated local owner: a Codex model must be selected first, the level must be one that model's catalog advertises, the change is bound to the preference revision, and `default` returns to the model's own default. Governed runs pass it to Codex (`turn/start` effort, or `model_reasoning_effort` for the exec path) only when they run the preferred model. Selecting another model keeps the effort only if the new model advertises it. Claude runs read no reasoning effort.
-- `/fingerprint` — Report per-run failure fingerprint history NOT_AVAILABLE; it is not persisted for this session.
+- `/fingerprint` — Group the failures every run durably recorded by their normalized signature (the same derivation the retry registry uses), with occurrence, task and run counts and when each was last seen; a signature seen twice or more is flagged as one where blind retry should stop. Signatures are redacted and shortened before display. Without a runtime it reports `NOT_AVAILABLE`.
 
 ### Governance, Budgets & Approvals
 - `/budget` — Inspect consumed budget; missing token and cost measurements are UNKNOWN. Does not update limits.
@@ -575,9 +575,9 @@ Current limitations, stated rather than hidden:
   `BLOCKED_BY_POLICY`, never as availability.
 - **Antigravity headless execution is unavailable** unless the `agy` CLI is
   installed. The Antigravity desktop IDE is not a headless harness.
-- **Failure fingerprints are not persisted.** The registry in `internal/epistemic`
-  is per-run and in-memory, so `/fingerprint` reports `NOT_AVAILABLE` rather than
-  asserting a clean result it cannot establish.
+- **Failure fingerprints are recomputed, not stored.** The retry registry in
+  `internal/epistemic` is per-run and in-memory; `/fingerprint` recomputes the
+  same signatures from the failure reasons each run recorded durably.
 - **Backup restore is not performed from a live session**, since it would swap the
   database out from under an open workspace. `/backup restore` verifies the
   artifact and directs the operator to the offline path.

@@ -997,13 +997,6 @@ func (h *CommandHandler) handleBackup(ctx context.Context, args []string) (strin
 // to the store, so a TUI session cannot read fingerprints recorded by an
 // execution it did not host. Reporting "none detected" would assert a clean
 // result this command cannot establish.
-func (h *CommandHandler) handleFingerprint(ctx context.Context) (string, error) {
-	return "FAILURE FINGERPRINTS:\n" +
-		"  State: NOT_AVAILABLE\n" +
-		"  The failure fingerprint registry (internal/epistemic) is per-run and in-memory.\n" +
-		"  It is not persisted to the canonical store, so no fingerprint history can be\n" +
-		"  read from this session. This is a reporting gap, not a clean result.", nil
-}
 
 // handleRuntime shows runtime status.
 // sessionRuns reads this session's execution runs from the canonical engine.
