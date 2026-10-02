@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"time"
@@ -1744,6 +1745,9 @@ func (r *Runtime) egressEnforcementAvailable() bool {
 func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string, networkAllowed bool, modelName string, proxyURL string) (adapter.Adapter, capability.GrantID, error) {
 	if candidate := r.adapters[name]; candidate != nil {
 		return candidate, "", nil
+	}
+	if reason := sandbox.PlatformUnavailableReason(goruntime.GOOS); reason != "" {
+		return nil, "", fmt.Errorf("%w: %s", model.ErrUnavailable, reason)
 	}
 	switch name {
 	case "codex", "gemini", "claude", "opencode":

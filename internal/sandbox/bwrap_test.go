@@ -51,8 +51,16 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	gitMetadata := t.TempDir()
+	// The envelope uses canonical host paths.
+	for _, path := range []*string{&worktree, &scratch, &tool, &gitMetadata} {
+		resolved, err := filepath.EvalSymlinks(*path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		*path = resolved
+	}
 	backend := NewBwrap("/sbin/bwrap")
-	spec, err := backend.Wrap(model.SandboxRequest{
+	spec, err := backend.wrapForOS("linux", model.SandboxRequest{
 		Worktree:     worktree,
 		WritableDirs: []string{scratch},
 		ReadOnlyBinds: []model.Bind{
@@ -99,7 +107,7 @@ func TestWrapRejectsNativeProviderCredentialsAndInstructions(t *testing.T) {
 		if err := os.WriteFile(source, []byte("unmanaged"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := backend.Wrap(model.SandboxRequest{Worktree: worktree, ReadOnlyBinds: []model.Bind{{Source: source, Target: target}}}, []string{"/bin/true"}); err == nil {
+		if _, err := backend.wrapForOS("linux", model.SandboxRequest{Worktree: worktree, ReadOnlyBinds: []model.Bind{{Source: source, Target: target}}}, []string{"/bin/true"}); err == nil {
 			t.Fatalf("credential or native instruction bind accepted: %s", target)
 		}
 	}
@@ -148,7 +156,7 @@ func TestProbeExecutesNamespaceShapeNotOnlyVersion(t *testing.T) {
 	backend := NewBwrap(fake)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	capability := backend.Probe(ctx)
+	capability := backend.probeForOS(ctx, "linux")
 	if !capability.Available || capability.Level != model.IsolationBwrap {
 		t.Fatalf("capability = %#v", capability)
 	}
@@ -166,10 +174,10 @@ func TestProbeExecutesNamespaceShapeNotOnlyVersion(t *testing.T) {
 
 func TestWrapRejectsMissingPathsAndCommand(t *testing.T) {
 	backend := NewBwrap("/sbin/bwrap")
-	if _, err := backend.Wrap(model.SandboxRequest{Worktree: "/missing"}, []string{"true"}); !errors.Is(err, model.ErrInvalid) {
+	if _, err := backend.wrapForOS("linux", model.SandboxRequest{Worktree: "/missing"}, []string{"true"}); !errors.Is(err, model.ErrInvalid) {
 		t.Fatalf("missing worktree error = %v", err)
 	}
-	if _, err := backend.Wrap(model.SandboxRequest{Worktree: t.TempDir()}, nil); !errors.Is(err, model.ErrInvalid) {
+	if _, err := backend.wrapForOS("linux", model.SandboxRequest{Worktree: t.TempDir()}, nil); !errors.Is(err, model.ErrInvalid) {
 		t.Fatalf("empty command error = %v", err)
 	}
 }
@@ -187,7 +195,7 @@ func TestWrapRejectsForbiddenCredentialBinds(t *testing.T) {
 		"/home/user/.vault-token",
 		"/home/user/.git-credentials",
 	} {
-		_, err := backend.Wrap(model.SandboxRequest{
+		_, err := backend.wrapForOS("linux", model.SandboxRequest{
 			Worktree: worktree,
 			ReadOnlyBinds: []model.Bind{
 				{Source: forbidden, Target: "/home/marshal/stolen"},

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -35,6 +36,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/resources"
+	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/startup"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/verification"
@@ -1290,6 +1292,9 @@ func (a *runtimeControlAuthority) RoleBindings(ctx context.Context) ([]authz.Rol
 
 // SandboxState reports whether isolation is enforceable here.
 func (a *runtimeControlAuthority) SandboxState(ctx context.Context) (SandboxState, error) {
+	if reason := sandbox.PlatformUnavailableReason(goruntime.GOOS); reason != "" {
+		return SandboxState{Reason: reason}, nil
+	}
 	if a.runtime == nil {
 		return SandboxState{}, errNoRuntime
 	}

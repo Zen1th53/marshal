@@ -50,3 +50,38 @@ func TestReconciliationIsReadOnlyAndReportsSplitBrain(t *testing.T) {
 		t.Fatalf("reconciliation modified runtime state: %#v", task)
 	}
 }
+
+func TestReconciliationThroughSymlinkRootRejectsEscape(t *testing.T) {
+	repo := runtimeIntegrationRepo(t)
+	alias := filepath.Join(t.TempDir(), "project")
+	if err := os.Symlink(repo.Path(), alias); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := app.Bootstrap(ctx, alias); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := app.Open(ctx, alias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	inside := filepath.Join(alias, "state.json")
+	if err := os.WriteFile(inside, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Reconcile(ctx, app.ReconcileRequest{FileState: inside}); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(outside, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	escape := filepath.Join(alias, "escape.json")
+	if err := os.Symlink(outside, escape); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Reconcile(ctx, app.ReconcileRequest{FileState: escape}); err == nil {
+		t.Fatal("accepted file state outside repository")
+	}
+}

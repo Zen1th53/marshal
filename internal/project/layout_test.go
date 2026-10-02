@@ -27,6 +27,10 @@ func TestDiscoverUsesMarshalRuntimeDirectory(t *testing.T) {
 		}
 	}
 
+	repo, err := filepath.EvalSymlinks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
 	layout, err := Discover(repo)
 	if err != nil {
 		t.Fatal(err)

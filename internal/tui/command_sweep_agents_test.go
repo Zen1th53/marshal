@@ -19,18 +19,6 @@ import (
 
 var sweepAgentRoots = []string{"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/skill", "/skills", "/apply", "/sessions", "/resume", "/fork", "/diff", "/review"}
 
-func sweepAgentExecute(t *testing.T, ws *Workspace, line string) string {
-	t.Helper()
-	out, err := ws.ExecuteCommand(context.Background(), line)
-	if err != nil {
-		out += " " + err.Error()
-	}
-	if strings.TrimSpace(out) == "" {
-		t.Fatalf("%s silently did nothing", line)
-	}
-	return out
-}
-
 // The completion surface is the exhaustive first-level inventory. Exercise all
 // listed operations and aliases in both degraded workspaces and with a fake
 // authority; never attach a real provider or execution runtime here.
@@ -552,14 +540,5 @@ func TestCommandSweepAgentsPluginDiscoveryFailure(t *testing.T) {
 	out := sweepAgentExecute(t, ws, "/plugins")
 	if !strings.Contains(out, "plugin discovery failed") || !strings.Contains(out, "local-sweep-skill") {
 		t.Fatal(out)
-	}
-}
-
-// useCodexByDefault pins the default provider these sweep cases exercise.
-// Without it, provider-neutral commands ask which installed provider to use.
-func useCodexByDefault(t *testing.T, root string) {
-	t.Helper()
-	if err := saveDefaultProvider(root, "codex"); err != nil {
-		t.Fatal(err)
 	}
 }

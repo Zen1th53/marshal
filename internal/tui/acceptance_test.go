@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	goruntime "runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -606,6 +607,12 @@ func TestAcceptanceSystemMaintenance(t *testing.T) {
 	ws.dispatchNavigationKey(ctx, key(KeyRight))
 	ws.dispatchNavigationKey(ctx, key(KeyEnter))
 	restored := ws.navView.Confirmation().Outcome()
+	if goruntime.GOOS != "linux" {
+		if restored.Succeeded() || !strings.Contains(restored.Detail, "available on Linux only") {
+			t.Fatalf("live restore must fail closed: %#v", restored)
+		}
+		return
+	}
 	if !restored.Succeeded() || restored.Target.Digest != meta.DatabaseSHA256 {
 		t.Fatalf("restore outcome = %#v", restored)
 	}

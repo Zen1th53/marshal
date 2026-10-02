@@ -18,7 +18,12 @@ import (
 )
 
 func TestDaemonCLIEndToEnd(t *testing.T) {
-	repo := runtimeIntegrationRepo(t)
+	short, err := os.MkdirTemp("/tmp", "md-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(short) })
+	repo := runtimeIntegrationRepoAt(t, short)
 	layout, err := app.Bootstrap(context.Background(), repo.Path())
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +39,7 @@ func TestDaemonCLIEndToEnd(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() { done <- api.NewServer(runtime).Serve(ctx, layout.Socket) }()
-	waitRuntimeSocket(t, layout.Socket)
+	waitRuntimeSocketResult(t, layout.Socket, done)
 
 	agentOutput := runCLI(t, repo.Path(), "--json", "agent", "register", "--name", "fake", "--role", "developer")
 	var agent model.Agent
@@ -164,7 +169,12 @@ func waitRuntimeSocket(t *testing.T, path string) {
 
 func runtimeIntegrationRepo(t *testing.T) *testgit.Repository {
 	t.Helper()
-	repo := testgit.New(t)
+	return runtimeIntegrationRepoAt(t, t.TempDir())
+}
+
+func runtimeIntegrationRepoAt(t *testing.T, path string) *testgit.Repository {
+	t.Helper()
+	repo := testgit.NewAt(t, path)
 	for _, name := range []string{"CAPABILITIES.yaml", "PACK-VERSION.yaml", "RUNTIME-VERSION.yaml"} {
 		data, err := os.ReadFile(filepath.Join("..", "..", name))
 		if err != nil {
@@ -175,4 +185,24 @@ func runtimeIntegrationRepo(t *testing.T) *testgit.Repository {
 		}
 	}
 	return repo
+}
+
+func waitRuntimeSocketResult(t *testing.T, path string, done <-chan error) {
+	t.Helper()
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case err := <-done:
+			t.Fatalf("runtime server stopped before listening: %v", err)
+		case <-deadline.C:
+			t.Fatalf("runtime socket did not appear: %s", path)
+		case <-ticker.C:
+			if _, err := os.Stat(path); err == nil {
+				return
+			}
+		}
+	}
 }

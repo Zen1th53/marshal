@@ -25,7 +25,7 @@ func TestPrepareCreatesTaskBranchAtExactBase(t *testing.T) {
 	if got.TaskID != request.TaskID || got.Branch != request.Branch || got.HEAD != request.BaseCommit {
 		t.Fatalf("worktree = %#v", got)
 	}
-	if got.Path != filepath.Join(root, "TASK-001") {
+	if got.Path != testgit.Canonical(t, filepath.Join(root, "TASK-001")) {
 		t.Fatalf("path = %q", got.Path)
 	}
 	again, err := manager.Prepare(context.Background(), request)
@@ -97,5 +97,35 @@ func TestPreparePreservesUnexpectedTargetDirectory(t *testing.T) {
 	}
 	if data, readErr := os.ReadFile(marker); readErr != nil || string(data) != "preserve" {
 		t.Fatalf("unexpected target changed: data=%q err=%v", data, readErr)
+	}
+}
+
+func TestPrepareThroughSymlinkRootRejectsEscape(t *testing.T) {
+	repo := testgit.New(t)
+	realRoot := t.TempDir()
+	root := filepath.Join(t.TempDir(), "worktrees")
+	if err := os.Symlink(realRoot, root); err != nil {
+		t.Fatal(err)
+	}
+	manager := New(repo.Path(), root)
+	request := model.WorktreeRequest{TaskID: "TASK-inside", Branch: "agent/inside", BaseCommit: repo.HEAD(t)}
+	got, err := manager.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Path != filepath.Join(testgit.Canonical(t, realRoot), request.TaskID) {
+		t.Fatalf("unexpected worktree: %#v", got)
+	}
+	outside := t.TempDir()
+	escape := filepath.Join(root, "TASK-escape")
+	if err := os.Symlink(outside, escape); err != nil {
+		t.Fatal(err)
+	}
+	request.TaskID, request.Branch = "TASK-escape", "agent/escape"
+	if _, err := manager.Prepare(context.Background(), request); err == nil {
+		t.Fatal("accepted symlink escape")
+	}
+	if _, err := manager.Inspect(context.Background(), escape); err == nil {
+		t.Fatal("inspected symlink escape")
 	}
 }

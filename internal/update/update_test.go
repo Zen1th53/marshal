@@ -119,6 +119,9 @@ func TestAvailableReportsThePublishedRelease(t *testing.T) {
 }
 
 func TestInstallReplacesTheBinaryAfterVerifying(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("self-update installs Linux release binaries only")
+	}
 	dir := t.TempDir()
 	target := filepath.Join(dir, "marshal")
 	if err := os.WriteFile(target, []byte("old binary"), 0o755); err != nil {
@@ -254,6 +257,9 @@ func slowReleaseServer(t *testing.T, tag string, binary []byte, pause time.Durat
 // A download that keeps delivering is not cut off by the release feed's short
 // timeout, however long it takes as a whole. Only silence is bounded.
 func TestInstallCompletesASlowButSteadyDownload(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("self-update installs Linux release binaries only")
+	}
 	dir := t.TempDir()
 	target := filepath.Join(dir, "marshal")
 	if err := os.WriteFile(target, []byte("old binary"), 0o755); err != nil {
@@ -287,6 +293,9 @@ func TestInstallCompletesASlowButSteadyDownload(t *testing.T) {
 // A connection that stops delivering is abandoned within the stall window,
 // with an error that says so, and the binary in place is untouched.
 func TestInstallAbandonsAStalledDownload(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("self-update installs Linux release binaries only")
+	}
 	dir := t.TempDir()
 	target := filepath.Join(dir, "marshal")
 	if err := os.WriteFile(target, []byte("old binary"), 0o755); err != nil {

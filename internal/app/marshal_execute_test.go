@@ -67,7 +67,11 @@ func TestM09CloseRefusesCheckedOutTargetWithoutChangingRefOrWorktree(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Close(ctx, "run"); err == nil || !strings.Contains(err.Error(), "checked out at "+repo) || !strings.Contains(err.Error(), "switch it away") {
+	checkedOut, err := filepath.EvalSymlinks(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(ctx, "run"); err == nil || !strings.Contains(err.Error(), "checked out at "+checkedOut) || !strings.Contains(err.Error(), "switch it away") {
 		t.Fatalf("close error = %v", err)
 	}
 	if got := marshalGit(t, repo, "rev-parse", "refs/heads/main"); got != before {

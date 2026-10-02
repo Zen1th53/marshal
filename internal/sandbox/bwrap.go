@@ -22,8 +22,12 @@ func NewBwrap(binary string) *Bwrap {
 }
 
 func (b *Bwrap) Probe(ctx context.Context) model.IsolationCapability {
-	if runtime.GOOS != "linux" {
-		return model.IsolationCapability{Level: model.IsolationProcessOnly, Reason: "bubblewrap is supported only on Linux"}
+	return b.probeForOS(ctx, runtime.GOOS)
+}
+
+func (b *Bwrap) probeForOS(ctx context.Context, goos string) model.IsolationCapability {
+	if reason := PlatformUnavailableReason(goos); reason != "" {
+		return model.IsolationCapability{Level: model.IsolationProcessOnly, Reason: reason}
 	}
 	if b.binary == "" {
 		return model.IsolationCapability{Level: model.IsolationProcessOnly, Reason: "bubblewrap path is empty"}
@@ -52,6 +56,13 @@ func (b *Bwrap) Probe(ctx context.Context) model.IsolationCapability {
 }
 
 func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.CommandSpec, error) {
+	return b.wrapForOS(runtime.GOOS, request, command)
+}
+
+func (b *Bwrap) wrapForOS(goos string, request model.SandboxRequest, command []string) (model.CommandSpec, error) {
+	if reason := PlatformUnavailableReason(goos); reason != "" {
+		return model.CommandSpec{}, fmt.Errorf("%w: %s", model.ErrUnavailable, reason)
+	}
 	if len(command) == 0 {
 		return model.CommandSpec{}, fmt.Errorf("%w: sandbox command is empty", model.ErrInvalid)
 	}
@@ -173,6 +184,9 @@ func ChooseIsolation(capability model.IsolationCapability, risk model.Risk, netw
 		Level: model.IsolationBlocked, Available: false, Network: networkAllowed,
 		Reason: "required isolation cannot be enforced (bubblewrap unavailable and process-only fallback not explicitly permitted)",
 	}
+	if strings.HasPrefix(capability.Reason, "sandboxed execution unavailable") {
+		blocked.Reason = capability.Reason
+	}
 	return blocked, fmt.Errorf("%w: %s", model.ErrUnavailable, blocked.Reason)
 }
 
@@ -260,4 +274,16 @@ func isProviderStateDirectory(path string) bool {
 		}
 	}
 	return false
+}
+
+// PlatformUnavailableReason reports platforms without an isolation backend.
+func PlatformUnavailableReason(goos string) string {
+	switch goos {
+	case "linux":
+		return ""
+	case "darwin":
+		return "sandboxed execution unavailable: no macOS sandbox backend exists yet; governed execution is blocked"
+	default:
+		return "sandboxed execution unavailable on this platform; governed execution is blocked"
+	}
 }

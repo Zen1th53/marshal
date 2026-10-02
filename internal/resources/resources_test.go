@@ -126,7 +126,10 @@ func TestCollectCPUOnlyFixtureUsesCgroupAndNeverNeedsVendorTools(t *testing.T) {
 }
 
 func TestCollectDRMFixturesInventoryIntelAMDAndNVIDIA(t *testing.T) {
-	root := t.TempDir()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	proc, sys := fixtureRoots(t, root)
 	writeDRMCard(t, sys, "card0", "0x8086", "0x56a0", "", "") // Arc iGPU-like shared-memory fixture.
 	writeDRMCard(t, sys, "card1", "0x1002", "0x73bf", "AMD Radeon RX 6800 XT", "8589934592")

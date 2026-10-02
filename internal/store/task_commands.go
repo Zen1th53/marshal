@@ -7,9 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"runtime"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -453,26 +450,4 @@ func (s *Store) EndTaskSupervision(ctx context.Context, id, token string) error 
 		return err
 	}
 	return requireOne(result, "settle task supervisor")
-}
-func supervisorProcessStamp(pid int) (string, error) {
-	if runtime.GOOS != "linux" {
-		if err := syscall.Kill(pid, 0); err != nil {
-			return "", err
-		}
-		return "live-process-unverified-birth", nil
-	}
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	if err != nil {
-		return "", err
-	}
-	// comm is parenthesized and may contain spaces or closing parentheses.
-	end := strings.LastIndexByte(string(data), ')')
-	if end < 0 {
-		return "", model.ErrInvalid
-	}
-	fields := strings.Fields(string(data[end+1:]))
-	if len(fields) < 20 {
-		return "", model.ErrInvalid
-	}
-	return fields[19], nil // /proc stat field 22: process start time, not PID alone.
 }

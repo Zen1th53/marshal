@@ -33,7 +33,15 @@ func (r *Runtime) Reconcile(ctx context.Context, request ReconcileRequest) (Reco
 	if err != nil {
 		return ReconciliationReport{}, err
 	}
-	relative, err := filepath.Rel(r.layout.Root, path)
+	path, err = filepath.EvalSymlinks(path)
+	if err != nil {
+		return ReconciliationReport{}, fmt.Errorf("resolve file state: %w", err)
+	}
+	root, err := filepath.EvalSymlinks(r.layout.Root)
+	if err != nil {
+		return ReconciliationReport{}, err
+	}
+	relative, err := filepath.Rel(root, path)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return ReconciliationReport{}, fmt.Errorf("%w: file state is outside repository", model.ErrInvalid)
 	}

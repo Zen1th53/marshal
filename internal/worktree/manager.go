@@ -198,11 +198,19 @@ func canonicalPath(path string) (string, error) {
 }
 
 func pathWithin(root, candidate string) bool {
-	rootAbsolute, err := filepath.Abs(root)
+	rootAbsolute, err := canonicalPath(root)
 	if err != nil {
 		return false
 	}
-	candidateAbsolute, err := filepath.Abs(candidate)
+	candidateAbsolute, err := canonicalPath(candidate)
+	if errors.Is(err, os.ErrNotExist) {
+		// A new task directory has no leaf yet; resolve its existing parent.
+		if _, statErr := os.Lstat(candidate); errors.Is(statErr, os.ErrNotExist) {
+			var parent string
+			parent, err = canonicalPath(filepath.Dir(candidate))
+			candidateAbsolute = filepath.Join(parent, filepath.Base(candidate))
+		}
+	}
 	if err != nil {
 		return false
 	}
@@ -260,6 +268,12 @@ func (m *Manager) GC(ctx context.Context, req GCRequest) (GCResult, error) {
 		return result, fmt.Errorf("read worktrees root: %w", err)
 	}
 
+	// Report the same canonical paths that Prepare returns.
+	root, err := canonicalPath(m.root)
+	if err != nil {
+		return result, err
+	}
+
 	activeLeaseMap := make(map[string]bool, len(req.ActiveLeases))
 	for _, l := range req.ActiveLeases {
 		activeLeaseMap[l] = true
@@ -277,7 +291,7 @@ func (m *Manager) GC(ctx context.Context, req GCRequest) (GCResult, error) {
 		}
 		result.InspectedCount++
 		taskID := entry.Name()
-		targetPath := filepath.Join(m.root, taskID)
+		targetPath := filepath.Join(root, taskID)
 
 		// 1. Active lease must never be removed
 		if activeLeaseMap[taskID] {
