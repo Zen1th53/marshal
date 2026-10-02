@@ -289,7 +289,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/ultra stop"] = []string{"confirm"}
 	compCtx.Subcommands["/harness"] = []string{"probe", "status", "select"}
 	compCtx.Subcommands["/ultra"] = []string{"status", "start", "stop", "request"}
-	compCtx.Subcommands["/provider"] = []string{"status", "config"}
+	compCtx.Subcommands["/provider"] = []string{"status", "use", "config"}
 	compCtx.Subcommands["/providers"] = compCtx.Subcommands["/provider"]
 	compCtx.Subcommands["/alignment"] = []string{"scope", "violations", "blast", "deletions", "resolve", "status"}
 	compCtx.Subcommands["/codex"] = providerSubcommands["codex"]
@@ -321,6 +321,8 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/codex features"] = []string{"list", "enable", "disable"}
 	compCtx.Subcommands["/backup"] = []string{"create", "restore"}
 	compCtx.Subcommands["/model"] = []string{"show", "select"}
+	compCtx.Subcommands["/provider use"] = []string{"codex", "claude", "opencode", "agy"}
+	compCtx.Subcommands["/models"] = compCtx.Subcommands["/provider use"]
 	compCtx.Subcommands["/effort"] = []string{"minimal", "low", "medium", "high", "xhigh", "default"}
 	compCtx.Subcommands["/features"] = []string{"list", "enable", "disable"}
 	compCtx.Subcommands["/doctor"] = []string{"codex", "provider"}

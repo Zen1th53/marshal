@@ -420,19 +420,39 @@ func marshalRecommend(ctx context.Context, service *app.MarshalService, runID st
 	// The notes never name the chosen provider: the person works with the
 	// Marshal, not with the model behind it. The provider is returned for the
 	// runtime's own use.
-	rec, err := service.Recommend(ctx, runID, marshal.GoalAssessment{}, app.ModelInventory(nil, nil))
-	if err != nil {
-		return "codex", "Marshal model selected automatically."
+	// Only an installed provider can be the Marshal. The recommendation comes
+	// from a static inventory, so it is narrowed to what this host has; no
+	// provider is preferred when the inventory cannot decide.
+	var installed []string
+	for _, p := range installedNeutralProviders(ctx) {
+		if p != "opencode" {
+			installed = append(installed, p)
+		}
 	}
-	for _, c := range rec.Candidates {
-		provider := c.Provider
-		if provider == "gemini" {
-			provider = "agy"
+	isInstalled := func(p string) bool {
+		for _, i := range installed {
+			if i == p {
+				return true
+			}
 		}
-		switch provider {
-		case "codex", "claude", "agy":
-			return provider, "Marshal model selected automatically."
+		return len(installed) == 0
+	}
+	if rec, err := service.Recommend(ctx, runID, marshal.GoalAssessment{}, app.ModelInventory(nil, nil)); err == nil {
+		for _, c := range rec.Candidates {
+			provider := c.Provider
+			if provider == "gemini" {
+				provider = "agy"
+			}
+			switch provider {
+			case "codex", "claude", "agy":
+				if isInstalled(provider) {
+					return provider, "Marshal model selected automatically."
+				}
+			}
 		}
+	}
+	if len(installed) > 0 {
+		return installed[0], "Marshal model selected automatically."
 	}
 	return "codex", "Marshal model selected automatically."
 }
@@ -451,7 +471,12 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 		if bare == nil {
 			return nil, "", "", errors.New("no project is open")
 		}
-		provider, note = marshalRecommend(ctx, bare, runID)
+		switch p := loadDefaultProvider(w.providerRoot()); p {
+		case "codex", "claude", "agy":
+			provider, note = p, "Marshal model: the default provider."
+		default:
+			provider, note = marshalRecommend(ctx, bare, runID)
+		}
 	}
 	var gate marshal.CapabilityGate
 	if w.ultra != nil {

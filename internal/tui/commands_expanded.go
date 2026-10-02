@@ -603,6 +603,9 @@ func (h *CommandHandler) renderChannel(root string, cfg channelConfig, problems 
 
 // handleProvider handles provider configuration and status inspection.
 func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (string, error) {
+	if len(args) > 0 && strings.EqualFold(args[0], "use") {
+		return h.handleProviderUse(ctx, args[1:])
+	}
 	if len(args) == 0 || strings.EqualFold(args[0], "status") {
 		// Report only what the host probe establishes. MARSHAL cannot read a
 		// harness's credentials, so presence of the binary is never reported as
@@ -610,6 +613,11 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 		// whether its credentials work is UNKNOWN until an execution proves it.
 		var b strings.Builder
 		b.WriteString("PROVIDER / HARNESS STATUS:\n")
+		if p, note := h.defaultProvider(ctx); p != "" {
+			b.WriteString(fmt.Sprintf("  Default: %s (change with /provider use <name>)\n", neutralProviderNames[p]))
+		} else {
+			b.WriteString("  Default: none. " + note + "\n")
+		}
 		for _, pr := range ProbeHarnesses() {
 			b.WriteString(fmt.Sprintf("  %s\n", pr.HarnessName))
 			if !pr.Installed {
@@ -669,7 +677,7 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 		return fmt.Sprintf("Unknown harness or provider %q. Known harnesses: claude, codex, opencode, antigravity (providers anthropic, openai, google map to them). Run /provider status to see what this host provides.", requested), nil
 	}
 
-	return "Usage: /provider [status|config <name>]", nil
+	return "Usage: /provider [status|use <name>|config <name>]", nil
 }
 
 // handleHarness handles harness probe and selection.

@@ -63,8 +63,10 @@ func TestCommandSweepWorkRoots(t *testing.T) {
 	sweepWorkEnvironment(t)
 	_, stored, _ := newControlWorkspace(t)
 	stored.workDir = t.TempDir()
+	useCodexByDefault(t, stored.workDir)
 	empty := NewWorkspace(nil, "sweep", "sweep")
 	empty.workDir = t.TempDir()
+	useCodexByDefault(t, empty.workDir)
 	cases := []struct{ command, bare, valid, want, bad string }{
 		{"/status", "CANONICAL STATUS DETAIL", "/status", "NO ACTIVE GOAL", "/status extra"},
 		{"/goal", "No active goal", "/goal desired outcome", "unavailable", "/goal constraints extra"},
@@ -270,6 +272,7 @@ func TestCommandSweepWorkPTY(t *testing.T) {
 	bin := buildMarshalBinary(t)
 	sweepWorkEnvironment(t)
 	project := initProject(t, bin)
+	useCodexByDefault(t, project)
 
 	cases := []struct{ line, want string }{
 		{"/status", "CANONICAL STATUS DETAIL"}, {"/goal", "No active goal"}, {"/mode auto", "Operating mode switched"},

@@ -248,6 +248,7 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	bin := buildMarshalBinary(t)
 	sweepCrosscutEnvironment(t)
 	project := initProject(t, bin)
+	useCodexByDefault(t, project)
 	t.Setenv("HTTPS_PROXY", "http://[invalid")
 	s := startFrozenTUIInProject(t, 50, 140, bin, project, "tui")
 	for _, c := range []struct{ line, want string }{{"/help", "Function Keys & Shortcuts"}, {"/memory peers", "SHARED CHANNEL"}, {"/ultra status", "ULTRA status: INACTIVE"}, {"/marshal status", "No Marshal"}, {"plain prompt", "Nothing was run"}, {"/unknown", "Unknown command"}} {
