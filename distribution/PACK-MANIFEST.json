@@ -3946,8 +3946,8 @@
     },
     {
       "path": "internal/app/marshal_execute_test.go",
-      "sha256": "b8cf2ac2190bd46cb90b678096e399d8d95cf5c1982294b3b487558c93e25ff1",
-      "bytes": 5583
+      "sha256": "70e9a6bc6c1950e773b055b5ec3744c846165d4576907c4e98a0f89fe0944fbb",
+      "bytes": 5672
     },
     {
       "path": "internal/app/marshal_lifecycle.go",
@@ -5576,8 +5576,8 @@
     },
     {
       "path": "internal/execution/worktree.go",
-      "sha256": "f49c9d51e24ed0315d43acee9b9212a051ca83009aad3f9e690b9f365e60a9cd",
-      "bytes": 10419
+      "sha256": "5878974b654f572648160b44b352b14d5789b81647be5142a40dca5d7e13280e",
+      "bytes": 10686
     },
     {
       "path": "internal/execution/worktree_test.go",
@@ -10261,8 +10261,8 @@
     },
     {
       "path": "internal/worktree/manager.go",
-      "sha256": "4327e8751d7c81c2536554b70b0e050ced65c94b4c164ad0ef3327f483dad6f2",
-      "bytes": 12006
+      "sha256": "b9fc32d57ca1b75a7ec085f10d94d40dc6b4d7873c4898a175fa8c4a90d8a99e",
+      "bytes": 12140
     },
     {
       "path": "internal/worktree/manager_test.go",
