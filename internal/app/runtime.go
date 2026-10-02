@@ -88,9 +88,6 @@ type Runtime struct {
 	// without one evaluates every ULTRA envelope as unentitled.
 	ultra *cloud.Gate
 
-	// gateEngineDefault marks the built-in engine whose only check always
-	// passes; it is an enforcement hook, not enforcement.
-	gateEngineDefault bool
 	// resumeRun restarts canonical execution of a resumed run; nil means
 	// ExecuteRun. Tests replace it to observe the restart without executing.
 	resumeRun func(runID string)
@@ -348,31 +345,6 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	}
 	if rt.cellManager == nil {
 		rt.cellManager = cell.NewAuditedManager(database, nil, nil, rt.eventEngine)
-	}
-	if rt.gateEngine == nil {
-		policyData, _ := os.ReadFile(filepath.Join(layout.Root, "CAPABILITIES.yaml"))
-		sum := sha256.Sum256(policyData)
-		digest := policy.PolicyDigest("sha256:" + hex.EncodeToString(sum[:]))
-		defaultCheckID := gate.CheckID("policy-compliance")
-		gateEng, err := gate.NewEngine(gate.EngineConfig{
-			PolicyDigest: digest,
-			Checks: map[gate.CheckID]gate.CheckFunc{
-				defaultCheckID: func(ctx context.Context, req gate.CheckRequest) (gate.CheckResult, error) {
-					return gate.CheckResult{
-						Status: gate.CheckStatusPass,
-					}, nil
-				},
-			},
-			RequiredChecks: map[gate.GatePoint][]gate.CheckID{
-				gate.GatePointPreExecution: {defaultCheckID},
-				gate.GatePointPrePush:      {defaultCheckID},
-			},
-			Clock: func() time.Time { return time.Now().UTC() },
-		})
-		if err == nil {
-			rt.gateEngine = gateEng
-			rt.gateEngineDefault = true
-		}
 	}
 	if rt.riskEngine == nil {
 		rt.riskEngine = risk.NewObservedEngine(database, nil, options.Metrics)

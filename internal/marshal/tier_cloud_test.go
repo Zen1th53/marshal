@@ -8,6 +8,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/testutil/testcloud"
 )
 
 func TestTierPolicyCloudGateLease(t *testing.T) {
@@ -23,10 +24,7 @@ func TestTierPolicyCloudGateLease(t *testing.T) {
 	}
 	gate := cloud.NewGate("installation", "session", ring, func() time.Time { return now })
 	claims := cloud.Claims{JTI: "tier-test", KeyID: "tier-key", EntitlementID: "entitlement", InstallationID: "installation", SessionID: "session", Capabilities: []string{marshal.CapabilityMarshal}, IssuedAt: now, ExpiresAt: now.Add(time.Minute)}
-	lease, err := cloud.SignLease(claims, cloud.Bundle{PolicyDigest: "digest", RoutingTable: map[string]string{"primary": "route"}, IssuedFor: "installation"}, priv)
-	if err != nil {
-		t.Fatal(err)
-	}
+	lease := testcloud.IssueLease(t, claims, cloud.Bundle{PolicyDigest: "digest", RoutingTable: map[string]string{"primary": "route"}, IssuedFor: "installation"}, priv)
 	if err := gate.Adopt(lease); err != nil {
 		t.Fatal(err)
 	}

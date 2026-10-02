@@ -12,6 +12,8 @@ into one agent and hoping for the best, you go through five steps.
 2.  **The Marshal plans with you.**
     It reads your project, asks questions one at a time, and writes a plan:
     what to build, split into small tasks, each with a way to check it.
+    Each check names the acceptance criteria it proves. A task cannot be
+    accepted while any criterion lacks passing evidence.
 
 3.  **You approve the plan.**
     You read the plan and correct anything that is wrong. Nothing happens to
@@ -21,10 +23,13 @@ into one agent and hoping for the best, you go through five steps.
     Each task goes to an AI agent, which works in its own separate copy of
     your project. MARSHAL runs each task's checks again when the agent says
     it is done.
+    A task's scope can name files or directories, including files inside them.
 
 5.  **You review and accept.**
     You look at the changes and accept them, or send a task back with a note
     saying what to fix.
+    MARSHAL integrates the accepted version. Rejected results and merge failures
+    go back with reasons and count toward the rework limit.
 
 </div>
 

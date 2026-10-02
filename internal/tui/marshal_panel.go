@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
@@ -16,6 +17,7 @@ type MarshalPanel struct {
 	Tier     marshal.Tier
 	Budget   marshal.Budget
 	Usage    marshal.Charge
+	Report   *app.MarshalCompletionReport
 	Tasks    []MarshalTaskRow
 	// Note is the latest thing the operator should know: what is happening,
 	// or what the run is waiting for.
@@ -130,6 +132,18 @@ func marshalStatusText(p *MarshalPanel) string {
 	b.WriteString(marshalBudgetText(p) + "\n")
 	if p.Note != "" {
 		b.WriteString(p.Note)
+	}
+	if p.Report != nil {
+		b.WriteString("\ncompletion report:\n")
+		for _, criterion := range p.Report.Criteria {
+			fmt.Fprintf(&b, "  %s / %s: %s\n", criterion.TaskID, criterion.Criterion, criterion.Status)
+		}
+		if len(p.Report.Untested) > 0 {
+			b.WriteString("  not tested: " + strings.Join(p.Report.Untested, "; ") + "\n")
+		}
+		if len(p.Report.Risks) > 0 {
+			b.WriteString("  risks: " + strings.Join(p.Report.Risks, "; ") + "\n")
+		}
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

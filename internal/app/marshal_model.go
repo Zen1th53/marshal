@@ -40,7 +40,7 @@ func (m *MarshalCLI) SetMarshalConversationID(id string) {
 	}
 }
 
-const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"checks":{"type":"array","items":{"type":"string"}},"instructions":{"type":"string"},"expected_output":{"type":"string"}},"required":["id","title","criteria","paths","depends_on","worker","checks"]}}},"required":["tasks"]}`
+const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"checks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}}},"required":["command","criteria"]}},"instructions":{"type":"string"},"expected_output":{"type":"string"}},"required":["id","title","criteria","paths","depends_on","worker","checks"]}}},"required":["tasks"]}`
 const marshalReviewSchema = `{"type":"object","additionalProperties":false,"properties":{"Verdict":{"type":"string","enum":["accept","return","reassign","escalate"]},"Reviewer":{"type":"string"},"Reasons":{"type":"array","items":{"type":"string"}},"EvidenceRefs":{"type":"array","items":{"type":"string"}}},"required":["Verdict","Reviewer","Reasons","EvidenceRefs"]}`
 const marshalVerifySchema = `{"type":"object","additionalProperties":false,"properties":{"head":{"type":"string"},"verdict":{"type":"string","enum":["pass","fail"]},"findings":{"type":"array","items":{"type":"string"}}},"required":["head","verdict","findings"]}`
 
@@ -185,10 +185,10 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 	}
 	workers := m.availableWorkers()
 	if len(workers) == 0 {
-		return MarshalDraft{}, errors.New("no separate worker CLI is available")
+		return MarshalDraft{}, errors.New("no worker CLI is available")
 	}
 	var proposal marshalTaskProposal
-	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks, and may carry instructions (purpose, approach, what to leave alone) and an expected output. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
+	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields naming only the criteria each check proves, and may carry instructions (purpose, approach, what to leave alone) and an expected output. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -226,7 +226,10 @@ type marshalTaskProposal struct {
 		Paths     []string `json:"paths"`
 		DependsOn []string `json:"depends_on"`
 		Worker    string   `json:"worker"`
-		Checks    []string `json:"checks"`
+		Checks    []struct {
+			Command  string   `json:"command"`
+			Criteria []string `json:"criteria"`
+		} `json:"checks"`
 		// Instructions and ExpectedOutput become part of the approved plan
 		// task. Strict control requires instructions for every task.
 		Instructions   string `json:"instructions,omitempty"`
@@ -259,9 +262,6 @@ func (s *MarshalService) DraftFromProposal(data []byte, provider string) (Marsha
 func (m *MarshalCLI) availableWorkers() []string {
 	var workers []string
 	for _, provider := range []string{"codex", "claude", "agy", "opencode"} {
-		if provider == m.Provider {
-			continue
-		}
 		if _, err := exec.LookPath(provider); err == nil {
 			workers = append(workers, provider)
 		}
@@ -292,11 +292,11 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 		}
 		draft.Plan.Tasks = append(draft.Plan.Tasks, plan.Task{ID: item.ID, Title: item.Title, Criteria: item.Criteria, Paths: item.Paths, DependsOn: item.DependsOn, Mutating: true, Weight: 1, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput})
 		task := marshal.Task{PlanTaskID: item.ID, Title: item.Title, Worker: item.Worker, Mode: marshal.Native, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput}
-		for _, command := range item.Checks {
-			task.Checks = append(task.Checks, marshal.Check{Command: command, Criteria: item.Criteria})
+		for _, check := range item.Checks {
+			task.Checks = append(task.Checks, marshal.Check{Command: check.Command, Criteria: check.Criteria})
+			draft.Plan.Checks[item.ID] = append(draft.Plan.Checks[item.ID], check.Command)
 		}
 		draft.Tasks = append(draft.Tasks, task)
-		draft.Plan.Checks[item.ID] = item.Checks
 	}
 	graph, err := plan.BuildGraph(draft.Plan.Tasks)
 	if err != nil {

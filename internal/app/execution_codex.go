@@ -68,6 +68,9 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 	if task.CanonicalTaskID == "" {
 		return execution.TaskResult{TaskID: task.TaskID}, fmt.Errorf("%w: Process 05 Codex task %q has no canonical Runtime task binding", model.ErrConflict, task.TaskID)
 	}
+	if task.NativeTurn != nil {
+		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: task.NativeTurn}, fmt.Errorf("%w: governed Codex execution cannot continue a native turn; inspect recovery before retrying", model.ErrUnavailable)
+	}
 	var settle func() error
 	var admissionErr error
 	ctx, settle, admissionErr = r.superviseTask(ctx, task.CanonicalTaskID)
@@ -131,18 +134,8 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 		EvidenceRequired:  append([]string(nil), pkg.VerificationObligations...),
 		TrustedContext:    pkg.FormatPromptHeader(),
 	}
-	// App-server is the preferred native lifecycle path. A fallback to
-	// `codex exec` is permitted only before a native thread/turn exists; after
-	// a turn starts, retrying through exec could run the governed task twice.
-	if client, ok := provider.(*codex.Client); ok {
-		appResult, handled, appErr := r.executeProcess05CodexAppServer(ctx, task, pkg, worktree, client, request, probe.Version)
-		if handled {
-			return appResult, appErr
-		}
-		if appErr != nil && !errors.Is(appErr, model.ErrUnavailable) && !errors.Is(appErr, model.ErrPolicyDenied) {
-			return execution.TaskResult{TaskID: task.TaskID}, appErr
-		}
-	}
+	// The prepared adapter retains the isolation and capability runner for
+	// every provider invocation, including probes and task execution.
 	started := time.Now().UTC()
 	result, runErr := provider.Run(ctx, request)
 	if runErr != nil {

@@ -24,13 +24,13 @@ commands available in your version.
 | `/marshal model codex` | Choose the AI that plans: `codex`, `claude` or `agy`. |
 | `/marshal settings` | Show or change [settings](settings.md). |
 | `/marshal approve` | Approve the plan and start the work. |
-| `/marshal status` | Show the plan's progress. |
+| `/marshal status` | Show the plan's progress, stored criterion evidence, risks, and budget used. |
 | `/marshal approve-task APPROVAL-ID` | Allow a step an agent asked permission for. |
 | `/marshal accept TASK-ID` | Accept a finished task. |
 | `/marshal return TASK-ID NOTE` | Send a task back with a note on what to fix. |
 | `/marshal resume` | Continue after a decision, a stop or a restart. |
 | `/marshal stop` | Stop the run and keep its state. |
-| `/marshal amend REASON` | Ask to change the plan. Big changes need `/marshal amend approve` or `/marshal amend deny`. |
+| `/marshal amend REASON` | Ask to change the plan. Big changes need `/marshal amend approve` or `/marshal amend deny`. Scoped splits require tasks that have not started. Changing an existing task's native/governed mode requires a new plan. |
 | `/marshal close` | Finish a completed run and bring the work into your project. |
 
 ## Goals and approvals

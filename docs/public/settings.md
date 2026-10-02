@@ -18,11 +18,18 @@ Changes apply to the **next** plan, not the one already running.
 
 | Setting | What it does | Choices | Default |
 | --- | --- | --- | --- |
-| `control` | How closely agents follow the task notes. `strict`: exactly as written. `free`: agents choose their own approach, within the task's files. | `free`, `strict` | `free` |
+| `control` | How closely agents follow the task notes. `strict`: exactly as written. `free`: agents choose their own approach, within the task's files or directories. | `free`, `strict` | `free` |
 | `acceptance-mode` | Who decides that a task is finished. | `marshal`, `user`, `marshal-then-user` | `marshal-then-user` |
 | `execution-rights` | What the Marshal may do itself, apart from the agents. | `none`, `read-only`, `small-tasks` | `read-only` |
 | `rework-limit` | How many times a task can be sent back to the same agent. After that, MARSHAL gives the task to a different agent, or brings it to you if another agent has already tried. | a number | `2` |
 | `ultra-concurrency` | How many agents can work at once with ULTRA. | a number | `3` |
+| `task-tokens`, `plan-tokens` | Token ceilings for each task or the whole plan. | a non-negative number; `0` means unlimited | `0` |
+| `task-money`, `plan-money` | Money ceilings in the configured minor currency unit. | a non-negative number; `0` means unlimited | `0` |
+| `task-wall-seconds`, `plan-wall-seconds` | Wall-time ceilings for each task or the whole plan. | a non-negative number of seconds; `0` means unlimited | `0` |
+
+Unknown token or money usage is shown as `unknown`. If a configured ceiling
+cannot be evaluated, the run pauses for you rather than treating the usage as
+zero.
 
 **Acceptance modes in plain words:**
 

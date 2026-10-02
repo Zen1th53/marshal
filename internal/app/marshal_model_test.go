@@ -53,7 +53,7 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{
 func TestMarshalCLIMaterializesGraphFromTaskProposal(t *testing.T) {
 	m := &MarshalCLI{ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
 	var proposal marshalTaskProposal
-	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"write a","criteria":["a exists"],"paths":["a.txt"],"depends_on":[],"worker":"codex","checks":["test -f a.txt"]}]}`), &proposal); err != nil {
+	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"write a","criteria":["a exists"],"paths":["a.txt"],"depends_on":[],"worker":"codex","checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`), &proposal); err != nil {
 		t.Fatal(err)
 	}
 	draft, err := m.materialize(proposal, "", 1, []string{"codex"})

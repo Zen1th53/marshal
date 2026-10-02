@@ -1,6 +1,9 @@
 package marshal
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Ceiling sets task and plan limits in the enclosing Budget field's unit:
 // Tokens are token counts, WallTime is whole seconds, and Money is minor
@@ -15,6 +18,14 @@ type Budget struct {
 	Tokens   Ceiling
 	WallTime Ceiling
 	Money    Ceiling
+}
+
+// Validate rejects ceilings the runtime cannot represent.
+func (b Budget) Validate() error {
+	if b.Tokens.Task < 0 || b.Tokens.Plan < 0 || b.WallTime.Task < 0 || b.WallTime.Plan < 0 || b.Money.Task < 0 || b.Money.Plan < 0 {
+		return fmt.Errorf("negative budget ceiling")
+	}
+	return nil
 }
 
 // Amount distinguishes an unknown charge from a known zero charge.
