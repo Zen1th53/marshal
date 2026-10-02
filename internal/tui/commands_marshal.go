@@ -34,7 +34,7 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal resume                  Continue a run that stopped or was interrupted
   /marshal stop                    Stop the running run; its state is kept
   /marshal model <codex|claude|agy>  Choose the Marshal model for the next run
-  /marshal settings [key value]    Show or change execution-rights, acceptance-mode, rework-limit, ultra-concurrency, control (free|strict)`
+  /marshal settings [key value]    Show or change execution-rights, acceptance-mode, rework-limit, ultra-concurrency, control (free|strict), or budget ceilings`
 
 // marshalSession is the workspace's Marshal state: the service, the active
 // run, and the approvals the person has given in this session.
@@ -544,6 +544,10 @@ func (w *Workspace) marshalPublish(m *marshalSession, runID string, p *MarshalPa
 				p.Usage.Tokens.Known = false
 				p.Usage.Money.Known = false
 			}
+			if report, reportErr := service.CompletionReport(context.Background(), runID); reportErr == nil {
+				p.Usage = report.Usage
+				p.Report = &report
+			}
 		}
 	}
 	m.mu.Lock()
@@ -601,7 +605,12 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 		m.service, m.provider = service, selected
 		m.mu.Unlock()
 		w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: selected, State: marshal.Drafting, Note: "drafting a plan… " + note})
-		run, err := service.StartPlanning(runCtx, runID, goal, marshal.Budget{})
+		settings, settingsErr := service.Store.GetMarshalSettings(runCtx, service.ProjectID)
+		if settingsErr != nil {
+			w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: selected, State: marshal.Drafting, Note: "planning failed: " + settingsErr.Error()})
+			return
+		}
+		run, err := service.StartPlanning(runCtx, runID, goal, settings.Value.Budget)
 		if runCtx.Err() != nil {
 			return
 		}
@@ -614,14 +623,38 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 	return "Marshal is preparing and drafting a plan for: " + goal, nil
 }
 
-func (w *Workspace) marshalActive() (*marshalSession, *app.MarshalService, string, string, error) {
+func (w *Workspace) marshalActive(ctx context.Context) (*marshalSession, *app.MarshalService, string, string, error) {
 	m := w.marshalSession()
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.service == nil || m.runID == "" {
+	service, runID, provider := m.service, m.runID, m.provider
+	m.mu.Unlock()
+	if service != nil && runID != "" {
+		return m, service, runID, provider, nil
+	}
+	if w.runtime == nil || w.runtime.Store() == nil {
 		return m, nil, "", "", errors.New("no Marshal run; start one with /marshal <goal>")
 	}
-	return m, m.service, m.runID, m.provider, nil
+	projectID := w.projectID
+	if projectID == "" && w.runtime.Marshal() != nil {
+		projectID = w.runtime.Marshal().ProjectID
+	}
+	recoveredID, _, err := w.runtime.Store().LatestMarshalRun(ctx, projectID)
+	if err != nil {
+		return m, nil, "", "", errors.New("no Marshal run; start one with /marshal <goal>")
+	}
+	service, provider, _, err = w.marshalService(ctx, recoveredID)
+	if err != nil {
+		return m, nil, "", "", err
+	}
+	run, err := service.Snapshot(ctx, recoveredID)
+	if err != nil {
+		return m, nil, "", "", err
+	}
+	m.mu.Lock()
+	m.service, m.runID, m.provider = service, recoveredID, provider
+	m.mu.Unlock()
+	w.marshalPublish(m, recoveredID, newMarshalPanel(recoveredID, provider, run, "stored Marshal run recovered"))
+	return m, service, recoveredID, provider, nil
 }
 
 func (w *Workspace) marshalUsePlan(ctx context.Context) (string, error) {
@@ -663,7 +696,7 @@ func (w *Workspace) marshalApproveProcess05Task(ctx context.Context, args []stri
 	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
 		return "", errors.New("usage: /marshal approve-task <approval-id>")
 	}
-	_, service, runID, _, err := w.marshalActive()
+	_, service, runID, _, err := w.marshalActive(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -710,7 +743,7 @@ func marshalProcess05ApprovalBound(run marshal.Run, p05 execution.ExecutionRun, 
 }
 
 func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
-	m, service, runID, provider, err := w.marshalActive()
+	m, service, runID, provider, err := w.marshalActive(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -854,7 +887,7 @@ func marshalTaskBrief(t marshal.Task, bc app.BriefContext) string {
 
 // marshalClose is the person's approval to move the target branch.
 func (w *Workspace) marshalClose(ctx context.Context) (string, error) {
-	m, service, runID, provider, err := w.marshalActive()
+	m, service, runID, provider, err := w.marshalActive(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -895,7 +928,7 @@ func (w *Workspace) marshalStop() string {
 }
 
 func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
-	m, service, runID, provider, err := w.marshalActive()
+	m, service, runID, provider, err := w.marshalActive(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -927,7 +960,7 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 	if strings.TrimSpace(reason) == "" {
 		return "", errors.New("usage: /marshal amend <reason>")
 	}
-	m, service, runID, provider, err := w.marshalActive()
+	m, service, runID, provider, err := w.marshalActive(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -1036,7 +1069,7 @@ func (w *Workspace) marshalReturn(ctx context.Context, args []string) (string, e
 	if len(args) < 2 || strings.TrimSpace(strings.Join(args[1:], " ")) == "" {
 		return "", errors.New("usage: /marshal return <task> <reason>")
 	}
-	m, service, runID, provider, err := w.marshalActive()
+	m, service, runID, provider, err := w.marshalActive(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -1076,8 +1109,9 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 	}
 	s := record.Value
 	if len(args) == 0 {
-		return fmt.Sprintf("execution-rights %s\nacceptance-mode %s\nrework-limit %d\nultra-concurrency %d\ncontrol %s",
-			s.ExecutionRights, s.AcceptanceMode, s.ReworkLimit, s.UltraConcurrency, s.EffectiveControl()), nil
+		return fmt.Sprintf("execution-rights %s\nacceptance-mode %s\nrework-limit %d\nultra-concurrency %d\ncontrol %s\ntask-tokens %d\nplan-tokens %d\ntask-money %d\nplan-money %d\ntask-wall-seconds %d\nplan-wall-seconds %d",
+			s.ExecutionRights, s.AcceptanceMode, s.ReworkLimit, s.UltraConcurrency, s.EffectiveControl(),
+			s.Budget.Tokens.Task, s.Budget.Tokens.Plan, s.Budget.Money.Task, s.Budget.Money.Plan, s.Budget.WallTime.Task, s.Budget.WallTime.Plan), nil
 	}
 	switch args[0] {
 	case "execution-rights":
@@ -1095,6 +1129,25 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 			s.ReworkLimit = n
 		} else {
 			s.UltraConcurrency = n
+		}
+	case "task-tokens", "plan-tokens", "task-money", "plan-money", "task-wall-seconds", "plan-wall-seconds":
+		n, err := strconv.ParseInt(args[1], 10, 64)
+		if err != nil || n < 0 {
+			return "", fmt.Errorf("%s needs a non-negative number", args[0])
+		}
+		switch args[0] {
+		case "task-tokens":
+			s.Budget.Tokens.Task = n
+		case "plan-tokens":
+			s.Budget.Tokens.Plan = n
+		case "task-money":
+			s.Budget.Money.Task = n
+		case "plan-money":
+			s.Budget.Money.Plan = n
+		case "task-wall-seconds":
+			s.Budget.WallTime.Task = n
+		case "plan-wall-seconds":
+			s.Budget.WallTime.Plan = n
 		}
 	default:
 		return "", fmt.Errorf("unknown setting %q", args[0])

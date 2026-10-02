@@ -133,6 +133,41 @@ func (s *Store) GetMarshalRun(ctx context.Context, projectID, runID string) (Mar
 	return marshalRead[marshal.Run](ctx, s, "marshal_runs", []string{"run_id", "project_id"}, []any{runID, projectID})
 }
 
+// LatestMarshalRun returns the newest non-closed run for a project, falling
+// back to the newest stored run when all runs are closed.
+func (s *Store) LatestMarshalRun(ctx context.Context, projectID string) (string, MarshalRecord[marshal.Run], error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT run_id, revision, data_json FROM marshal_runs WHERE project_id = ? ORDER BY rowid DESC", projectID)
+	if err != nil {
+		return "", MarshalRecord[marshal.Run]{}, err
+	}
+	defer rows.Close()
+	var closedID string
+	var closed MarshalRecord[marshal.Run]
+	for rows.Next() {
+		var runID, data string
+		var record MarshalRecord[marshal.Run]
+		if err := rows.Scan(&runID, &record.Revision, &data); err != nil {
+			return "", MarshalRecord[marshal.Run]{}, err
+		}
+		if err := json.Unmarshal([]byte(data), &record.Value); err != nil {
+			return "", MarshalRecord[marshal.Run]{}, fmt.Errorf("decode marshal run: %w", err)
+		}
+		if record.Value.State != marshal.Closed {
+			return runID, record, nil
+		}
+		if closedID == "" {
+			closedID, closed = runID, record
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", MarshalRecord[marshal.Run]{}, err
+	}
+	if closedID == "" {
+		return "", MarshalRecord[marshal.Run]{}, fmt.Errorf("%w: marshal_runs", model.ErrNotFound)
+	}
+	return closedID, closed, nil
+}
+
 // SetMarshalTask guards task updates against stale run workers.
 func (s *Store) SetMarshalTask(ctx context.Context, runID string, task marshal.Task, expected int64) (int64, error) {
 	if runID == "" || task.PlanTaskID == "" {

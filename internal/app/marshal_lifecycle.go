@@ -22,10 +22,11 @@ import (
 )
 
 type MarshalDispatch struct {
-	Driver  driver.Driver
-	Handle  *driver.Handle
-	TaskID  string
-	Started time.Time
+	Driver   driver.Driver
+	Handle   *driver.Handle
+	TaskID   string
+	Started  time.Time
+	Deadline time.Time
 }
 
 func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief string) (MarshalDispatch, error) {
@@ -49,6 +50,17 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		if j < 0 || run.Tasks[j].State != marshal.Merged {
 			return MarshalDispatch{}, errors.New("dependency is not merged")
 		}
+	}
+	taskUsage, planUsage, err := s.marshalUsage(ctx, runID, taskID)
+	if err != nil {
+		return MarshalDispatch{}, err
+	}
+	if blocked, reason := budgetBlocksDispatch(run.Budget, taskUsage, planUsage); blocked {
+		run.State = marshal.AwaitingUser
+		if err := s.save(ctx, runID, run, rev); err != nil {
+			return MarshalDispatch{}, err
+		}
+		return MarshalDispatch{}, fmt.Errorf("dispatch paused at budget boundary: %s", reason)
 	}
 	policy := marshal.TierPolicy(s.Gate, run.Settings)
 	active := 0
@@ -116,7 +128,15 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
-	handle, err := d.Launch(ctx, driver.Request{Task: *t, Worktree: tree.Path, Brief: brief})
+	dispatchCtx := ctx
+	deadline := time.Time{}
+	if remaining := wallBudgetRemaining(run.Budget, taskUsage, planUsage); remaining > 0 {
+		deadline = time.Now().Add(remaining)
+		var cancel context.CancelFunc
+		dispatchCtx, cancel = context.WithDeadline(ctx, deadline)
+		_ = cancel
+	}
+	handle, err := d.Launch(dispatchCtx, driver.Request{Task: *t, Worktree: tree.Path, Brief: brief})
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
@@ -140,7 +160,7 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
 	}
-	return MarshalDispatch{d, handle, taskID, s.clock()}, nil
+	return MarshalDispatch{Driver: d, Handle: handle, TaskID: taskID, Started: s.clock(), Deadline: deadline}, nil
 }
 
 // restartTaskBranch sets a task's branch and worktree back to its base for a
@@ -173,6 +193,24 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	}
 	handin, err := dispatch.Driver.Wait(ctx, dispatch.Handle)
 	if err != nil {
+		if !dispatch.Deadline.IsZero() && time.Now().After(dispatch.Deadline) {
+			run, rev, loadErr := s.load(ctx, runID)
+			if loadErr != nil {
+				return handin, loadErr
+			}
+			i := taskIndex(run, dispatch.TaskID)
+			if i < 0 || run.Tasks[i].State != marshal.Dispatched {
+				return handin, errors.New("task is not dispatched")
+			}
+			run.State = marshal.Reviewing
+			_, returnErr := s.finishMarshalReturn(ctx, runID, run, rev, i, marshal.Review{Reviewer: "marshal-runtime", Reasons: []string{"worker stopped at the wall-time ceiling"}}, nil)
+			elapsed := s.clock().Sub(dispatch.Started)
+			if elapsed < 0 {
+				elapsed = 0
+			}
+			_, chargeErr := s.Charge(ctx, runID, dispatch.TaskID, "dispatch_timeout", marshal.Charge{Tokens: marshal.Amount{Known: false}, Money: marshal.Amount{Known: false}, WallTime: elapsed})
+			return marshal.HandIn{}, errors.Join(returnErr, chargeErr)
+		}
 		return handin, err
 	}
 	run, rev, err := s.load(ctx, runID)
@@ -213,6 +251,17 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	budget, err := s.Charge(ctx, runID, dispatch.TaskID, "dispatch_wall", marshal.Charge{Tokens: marshal.Amount{Known: true}, Money: marshal.Amount{Known: true}, WallTime: elapsed})
 	if err != nil {
 		return handin, err
+	}
+	if len(budget.PlanExceeded) > 0 || budgetNeedsOperator(run.Budget, budget) {
+		run, rev, err = s.load(ctx, runID)
+		if err != nil {
+			return handin, err
+		}
+		run.State = marshal.AwaitingUser
+		if err = s.save(ctx, runID, run, rev); err != nil {
+			return handin, err
+		}
+		return handin, nil
 	}
 	if validationErr != nil || len(budget.PlanExceeded) > 0 || len(budget.TaskExceeded) > 0 {
 		run, rev, err = s.load(ctx, runID)
@@ -345,12 +394,20 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if err != nil {
 		return "", err
 	}
-	if len(budget.PlanExceeded) > 0 {
-		run.State = marshal.AwaitingUser
+	if len(budget.PlanExceeded) > 0 || budgetNeedsOperator(run.Budget, budget) {
+		paused, pausedRev, loadErr := s.load(ctx, runID)
+		if loadErr != nil {
+			return "", loadErr
+		}
+		paused.State = marshal.AwaitingUser
+		if loadErr = s.save(ctx, runID, paused, pausedRev); loadErr != nil {
+			return "", loadErr
+		}
+		return proposal.Verdict, nil
 	}
-	if (len(budget.TaskExceeded) > 0 || (run.Budget.Tokens.Task > 0 && containsMarshal(budget.Unknown, "tokens"))) && result == marshal.VerdictAccept {
+	if len(budget.TaskExceeded) > 0 && result == marshal.VerdictAccept {
 		result = marshal.VerdictReturn
-		proposal.Reasons = append(proposal.Reasons, "task budget exceeded or token usage is unknown")
+		proposal.Reasons = append(proposal.Reasons, "task budget exceeded")
 	}
 	eventData := map[string]any{"gate": string(verdict.Outcome), "reason": string(verdict.Reason)}
 	for key, value := range crossReviewData {
@@ -482,7 +539,7 @@ func (s *MarshalService) gateInputs(ctx context.Context, runID, taskID string, r
 
 // Charge records known and unknown usage in the durable decision stream.
 func (s *MarshalService) Charge(ctx context.Context, runID, taskID, phase string, charge marshal.Charge) (marshal.BudgetResult, error) {
-	run, _, err := s.load(ctx, runID)
+	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return marshal.BudgetResult{}, err
 	}
@@ -492,9 +549,24 @@ func (s *MarshalService) Charge(ctx context.Context, runID, taskID, phase string
 	if err = s.record(ctx, runID, taskID, events.EventTypeMarshalUsageCharged, map[string]any{"charge_phase": phase, "usage_units": charge.Tokens.Value, "usage_known": charge.Tokens.Known, "wall_ns": charge.WallTime.Nanoseconds(), "money": charge.Money.Value, "money_known": charge.Money.Known}); err != nil {
 		return marshal.BudgetResult{}, err
 	}
-	history, err := s.Store.MarshalDecisions(ctx, runID)
+	task, planTotal, err := s.marshalUsage(ctx, runID, taskID)
 	if err != nil {
 		return marshal.BudgetResult{}, err
+	}
+	result := marshal.CheckBudget(run.Budget, task, planTotal)
+	if len(result.PlanExceeded) > 0 || budgetNeedsOperator(run.Budget, result) {
+		run.State = marshal.AwaitingUser
+		if err := s.save(ctx, runID, run, rev); err != nil {
+			return marshal.BudgetResult{}, err
+		}
+	}
+	return result, nil
+}
+
+func (s *MarshalService) marshalUsage(ctx context.Context, runID, taskID string) (marshal.Charge, marshal.Charge, error) {
+	history, err := s.Store.MarshalDecisions(ctx, runID)
+	if err != nil {
+		return marshal.Charge{}, marshal.Charge{}, err
 	}
 	task, planTotal := marshal.Charge{Tokens: marshal.Amount{Known: true}, Money: marshal.Amount{Known: true}}, marshal.Charge{Tokens: marshal.Amount{Known: true}, Money: marshal.Amount{Known: true}}
 	add := func(to *marshal.Charge, e events.Event) {
@@ -502,36 +574,89 @@ func (s *MarshalService) Charge(ctx context.Context, runID, taskID, phase string
 		if data["charge_phase"] == nil {
 			return
 		}
-		if k, _ := data["usage_known"].(bool); k {
+		if known, _ := data["usage_known"].(bool); known {
 			to.Tokens.Value += int64Number(data["usage_units"])
 		} else {
 			to.Tokens.Known = false
 		}
-		if k, _ := data["money_known"].(bool); k {
+		if known, _ := data["money_known"].(bool); known {
 			to.Money.Value += int64Number(data["money"])
 		} else {
 			to.Money.Known = false
 		}
 		to.WallTime += time.Duration(int64Number(data["wall_ns"]))
 	}
-	for _, e := range history {
-		add(&planTotal, e)
-		if e.TaskID == taskID {
-			add(&task, e)
+	for _, event := range history {
+		add(&planTotal, event)
+		if event.TaskID == taskID {
+			add(&task, event)
 		}
 	}
-	result := marshal.CheckBudget(run.Budget, task, planTotal)
-	addExceeded := func(dst *[]string, name string, value, ceiling int64) {
-		if ceiling <= 0 || value <= ceiling || containsMarshal(*dst, name) {
-			return
+	return task, planTotal, nil
+}
+
+func budgetNeedsOperator(b marshal.Budget, result marshal.BudgetResult) bool {
+	for _, name := range result.Unknown {
+		switch name {
+		case "tokens":
+			if b.Tokens.Task > 0 || b.Tokens.Plan > 0 {
+				return true
+			}
+		case "money":
+			if b.Money.Task > 0 || b.Money.Plan > 0 {
+				return true
+			}
 		}
-		*dst = append(*dst, name)
 	}
-	addExceeded(&result.TaskExceeded, "tokens", task.Tokens.Value, run.Budget.Tokens.Task)
-	addExceeded(&result.PlanExceeded, "tokens", planTotal.Tokens.Value, run.Budget.Tokens.Plan)
-	addExceeded(&result.TaskExceeded, "money", task.Money.Value, run.Budget.Money.Task)
-	addExceeded(&result.PlanExceeded, "money", planTotal.Money.Value, run.Budget.Money.Plan)
-	return result, nil
+	return false
+}
+
+func budgetBlocksDispatch(b marshal.Budget, task, plan marshal.Charge) (bool, string) {
+	if budgetNeedsOperator(b, marshal.CheckBudget(b, task, plan)) {
+		return true, "configured token or money ceiling cannot be evaluated because usage is unknown"
+	}
+	checks := []struct {
+		name                 string
+		task, plan           int64
+		taskLimit, planLimit int64
+		taskKnown, planKnown bool
+	}{
+		{"tokens", task.Tokens.Value, plan.Tokens.Value, b.Tokens.Task, b.Tokens.Plan, task.Tokens.Known, plan.Tokens.Known},
+		{"money", task.Money.Value, plan.Money.Value, b.Money.Task, b.Money.Plan, task.Money.Known, plan.Money.Known},
+		{"wall time", int64(task.WallTime / time.Second), int64(plan.WallTime / time.Second), b.WallTime.Task, b.WallTime.Plan, true, true},
+	}
+	for _, check := range checks {
+		if check.taskLimit > 0 && check.taskKnown && check.task >= check.taskLimit {
+			return true, "task " + check.name + " ceiling reached"
+		}
+		if check.planLimit > 0 && check.planKnown && check.plan >= check.planLimit {
+			return true, "plan " + check.name + " ceiling reached"
+		}
+	}
+	return false, ""
+}
+
+func wallBudgetRemaining(b marshal.Budget, task, plan marshal.Charge) time.Duration {
+	remaining := time.Duration(0)
+	for _, limit := range []struct {
+		ceiling int64
+		used    time.Duration
+	}{
+		{b.WallTime.Task, task.WallTime},
+		{b.WallTime.Plan, plan.WallTime},
+	} {
+		if limit.ceiling <= 0 {
+			continue
+		}
+		left := time.Duration(limit.ceiling)*time.Second - limit.used
+		if remaining == 0 || left < remaining {
+			remaining = left
+		}
+	}
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
 func containsMarshal(values []string, target string) bool {
 	for _, v := range values {
@@ -677,6 +802,17 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 	if err != nil {
 		return result, err
 	}
+	if len(budget.PlanExceeded) > 0 || budgetNeedsOperator(run.Budget, budget) {
+		paused, pausedRev, loadErr := s.load(ctx, runID)
+		if loadErr != nil {
+			return result, loadErr
+		}
+		paused.State = marshal.AwaitingUser
+		if loadErr = s.save(ctx, runID, paused, pausedRev); loadErr != nil {
+			return result, loadErr
+		}
+		return result, nil
+	}
 	if result != verification.VerifiedComplete || len(budget.PlanExceeded) > 0 {
 		run.State = marshal.AwaitingUser
 	}
@@ -766,7 +902,7 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 		return err
 	}
 	if checkedOut != "" {
-		return fmt.Errorf("target branch %s is checked out at %s; switch it away or fast-forward it before the run can close", project.DefaultBranch, checkedOut)
+		return fmt.Errorf("target branch %s is checked out at %s; run `git switch --detach` from that worktree to switch it away before the run can close", project.DefaultBranch, checkedOut)
 	}
 	// The target moves in one compare-and-swap: update-ref succeeds only if
 	// the target is still at the checkpointed commit, so no concurrent

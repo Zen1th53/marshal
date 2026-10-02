@@ -8,8 +8,9 @@ from the first conversation to accepted work has not been completed with real
 models yet. Try it on a small, unimportant change first.
 
 **The window must stay open while work runs.**
-MARSHAL has no background service. If you close the window, the work stops.
-Use `/marshal resume` to continue.
+MARSHAL has no background service. If you close the window, the work stops,
+but its stored run remains recoverable. Reopen MARSHAL and use `/marshal
+resume` to continue.
 
 **It runs on Linux only.**
 macOS is not supported yet. On Windows you can try WSL 2, which has not been

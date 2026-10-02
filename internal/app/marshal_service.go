@@ -255,8 +255,8 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 			return marshal.Run{}, errors.New("invalid task ID")
 		}
 	}
-	if budget.Tokens.Task < 0 || budget.Tokens.Plan < 0 || budget.WallTime.Task < 0 || budget.WallTime.Plan < 0 || budget.Money.Task < 0 || budget.Money.Plan < 0 {
-		return marshal.Run{}, errors.New("negative budget ceiling")
+	if err := budget.Validate(); err != nil {
+		return marshal.Run{}, err
 	}
 	settings, err := s.Store.GetMarshalSettings(ctx, s.ProjectID)
 	if err != nil {

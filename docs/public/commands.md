@@ -24,7 +24,7 @@ commands available in your version.
 | `/marshal model codex` | Choose the AI that plans: `codex`, `claude` or `agy`. |
 | `/marshal settings` | Show or change [settings](settings.md). |
 | `/marshal approve` | Approve the plan and start the work. |
-| `/marshal status` | Show the plan's progress. |
+| `/marshal status` | Show the plan's progress, stored criterion evidence, risks, and budget used. |
 | `/marshal approve-task APPROVAL-ID` | Allow a step an agent asked permission for. |
 | `/marshal accept TASK-ID` | Accept a finished task. |
 | `/marshal return TASK-ID NOTE` | Send a task back with a note on what to fix. |

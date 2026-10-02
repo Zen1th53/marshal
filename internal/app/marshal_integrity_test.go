@@ -440,7 +440,7 @@ func TestMarshalScopedAmendmentCannotExpandCheckMapping(t *testing.T) {
 	}
 }
 
-func TestMarshalBudgetReturnsReachReworkLimit(t *testing.T) {
+func TestMarshalBudgetStopsBeforeRetryAfterTaskCeiling(t *testing.T) {
 	for _, phase := range []string{"collection", "review"} {
 		t.Run(phase, func(t *testing.T) {
 			s, _ := marshalFixture(t, 1)
@@ -448,6 +448,16 @@ func TestMarshalBudgetReturnsReachReworkLimit(t *testing.T) {
 			s.now = func() time.Time { return now }
 			startIntegrityRun(t, s, marshal.Budget{WallTime: marshal.Ceiling{Task: 1}})
 			for attempt := 1; attempt <= 2; attempt++ {
+				if attempt == 2 {
+					if _, err := s.Dispatch(t.Context(), "run", "a", "write"); err == nil {
+						t.Fatal("dispatch crossed the task wall-time ceiling")
+					}
+					run, err := s.Snapshot(t.Context(), "run")
+					if err != nil || run.State != marshal.AwaitingUser {
+						t.Fatalf("budget pause %+v %v", run, err)
+					}
+					return
+				}
 				d, err := s.Dispatch(t.Context(), "run", "a", "write")
 				if err != nil {
 					t.Fatal(err)

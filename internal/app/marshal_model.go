@@ -185,7 +185,7 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 	}
 	workers := m.availableWorkers()
 	if len(workers) == 0 {
-		return MarshalDraft{}, errors.New("no separate worker CLI is available")
+		return MarshalDraft{}, errors.New("no worker CLI is available")
 	}
 	var proposal marshalTaskProposal
 	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields naming only the criteria each check proves, and may carry instructions (purpose, approach, what to leave alone) and an expected output. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
@@ -262,9 +262,6 @@ func (s *MarshalService) DraftFromProposal(data []byte, provider string) (Marsha
 func (m *MarshalCLI) availableWorkers() []string {
 	var workers []string
 	for _, provider := range []string{"codex", "claude", "agy", "opencode"} {
-		if provider == m.Provider {
-			continue
-		}
 		if _, err := exec.LookPath(provider); err == nil {
 			workers = append(workers, provider)
 		}

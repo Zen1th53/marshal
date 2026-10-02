@@ -530,7 +530,7 @@ func TestM09TaskBudgetReturnsAndRunContinues(t *testing.T) {
 		t.Fatalf("state %+v", run)
 	}
 }
-func TestM09NativeUnknownUsageNotZero(t *testing.T) {
+func TestM09NativeUnknownUsagePausesWithUnknownUsage(t *testing.T) {
 	ctx := context.Background()
 	s, _ := marshalFixture(t, 1)
 	draft := s.Model.(marshalFakeModel).draft
@@ -551,8 +551,12 @@ func TestM09NativeUnknownUsageNotZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	verdict, err := s.Review(ctx, "run", "a", marshal.Charge{Tokens: marshal.Amount{Known: true}, Money: marshal.Amount{Known: true}})
-	if err != nil || verdict != marshal.VerdictReturn {
-		t.Fatalf("unknown usage accepted: %s %v", verdict, err)
+	if err != nil || verdict != marshal.VerdictAccept {
+		t.Fatalf("unknown usage changed the verdict: %s %v", verdict, err)
+	}
+	run, err := s.Snapshot(ctx, "run")
+	if err != nil || run.State != marshal.AwaitingUser || run.Tasks[0].State != marshal.HandedIn {
+		t.Fatalf("unknown usage did not pause without returning the task: %+v %v", run, err)
 	}
 	history, err := s.Store.MarshalDecisions(ctx, "run")
 	if err != nil {

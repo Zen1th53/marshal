@@ -61,6 +61,7 @@ type Settings struct {
 	AcceptanceMode   AcceptanceMode
 	ReworkLimit      int
 	UltraConcurrency int
+	Budget           Budget `json:",omitempty"`
 	// Control is empty in settings stored before it existed; that reads as
 	// ControlFree.
 	Control Control `json:",omitempty"`
@@ -92,6 +93,9 @@ func (s Settings) Validate() error {
 	}
 	if c := s.EffectiveControl(); c != ControlFree && c != ControlStrict {
 		return errors.New("invalid control level")
+	}
+	if err := s.Budget.Validate(); err != nil {
+		return err
 	}
 	return nil
 }
