@@ -7786,8 +7786,8 @@
     },
     {
       "path": "internal/sandbox/seatbelt.go",
-      "sha256": "b16b93fb41d27e683e76fe46223b077a1fa9b6373a422a5d5466297ae40d50b3",
-      "bytes": 12587
+      "sha256": "b66ca12c6c2a6d7bf7ee375b0f48ae0196fc1704ca138700a8680772e488e542",
+      "bytes": 12712
     },
     {
       "path": "internal/sandbox/seatbelt_darwin_test.go",
@@ -7796,8 +7796,8 @@
     },
     {
       "path": "internal/sandbox/seatbelt_profile.go",
-      "sha256": "b7f15900267842b8827298e7c6b329a07c4c27a7ee1964bd8b06a09ec67ee201",
-      "bytes": 6761
+      "sha256": "52f3c2b3010a21023574426a188a1e967d124788ceb71af994d538ae537982eb",
+      "bytes": 7873
     },
     {
       "path": "internal/sandbox/seatbelt_profile_test.go",
@@ -7806,13 +7806,13 @@
     },
     {
       "path": "internal/sandbox/testdata/seatbelt-allowed.golden",
-      "sha256": "cddd631086fb4cf066f1762136f5b28a1f184cb934fa5331f5796752405e66d9",
-      "bytes": 4291
+      "sha256": "249292a784eefe9a9028e4e2c99ce8f4abb86a970715a46ce8cd67582eb993e5",
+      "bytes": 5343
     },
     {
       "path": "internal/sandbox/testdata/seatbelt-denied.golden",
-      "sha256": "f6409fbbb57ae17f7a07522b0c01fab83c200b541ec4442b6fa73de42337ba6a",
-      "bytes": 2587
+      "sha256": "eefe2d474a08221aab1d92b0087a561435aa240cc2e8fa74bd22b0fe2ec99faa",
+      "bytes": 3639
     },
     {
       "path": "internal/scheduler/adversarial_test.go",
