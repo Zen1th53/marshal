@@ -25,6 +25,18 @@
 (allow process-exec (literal (param "READ_0")))
 (allow file-read* (subpath (param "READ_1")))
 (allow process-exec (subpath (param "READ_1")))
+(allow file-read-metadata (literal (param "ANCESTOR_0")))
+(allow file-read-metadata (literal (param "ANCESTOR_1")))
+(allow file-read-metadata (literal (param "ANCESTOR_2")))
+(allow file-read-metadata (literal (param "ANCESTOR_3")))
+(allow file-read-metadata (literal (param "ANCESTOR_4")))
+(allow file-read-metadata (literal (param "ANCESTOR_5")))
+(allow file-read-metadata (literal (param "ANCESTOR_6")))
+(allow file-read-metadata (literal (param "ANCESTOR_7")))
+(allow file-read-metadata (literal (param "ANCESTOR_8")))
+(allow file-read-metadata (literal (param "ANCESTOR_9")))
+(allow file-read* (literal "/") (literal "/private/var/select/sh"))
+(allow file-read-metadata (literal "/tmp") (literal "/var") (literal "/etc") (literal "/private") (literal "/private/var") (literal "/private/var/select"))
 (deny file-read* file-write* process-exec (require-all (subpath (param "RUNTIME")) (require-not (subpath (param "WORKTREE")))))
 (deny file-read* file-write* process-exec (require-all (regex #"(^|/)([.]codex|[.]claude|[.]opencode|[.]gemini|[.]ssh|[.]aws|[.]gnupg|[.]kube)(/|$)|/[.]config/(codex|claude|opencode|gemini)(/|$)|/[.](local/share|cache)/(codex|claude|opencode|gemini)(/|$)|/[.]docker/config[.]json$|/(auth[.]json|[.]netrc|[.]git-credentials|[.]vault-token|id_rsa|id_ed25519)$") (require-not (subpath (param "SCRATCH")))))
 (deny file-read* file-write* process-exec (require-all (regex #"/[.]marshal(/|$)") (require-not (subpath (param "WORKTREE")))))
@@ -48,4 +60,14 @@ SYSTEM_4=/Library/Apple/System/Library
 SYSTEM_5=/private/etc
 READ_0=/tools/provider
 READ_1=/project/.git
+ANCESTOR_0=/project/.marshal/worktrees
+ANCESTOR_1=/project/.marshal
+ANCESTOR_2=/project
+ANCESTOR_3=/private/tmp
+ANCESTOR_4=/private
+ANCESTOR_5=/System
+ANCESTOR_6=/Library/Apple/System
+ANCESTOR_7=/Library/Apple
+ANCESTOR_8=/Library
+ANCESTOR_9=/tools
 RUNTIME=/project/.marshal

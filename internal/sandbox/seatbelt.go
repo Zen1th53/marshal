@@ -94,9 +94,11 @@ func (s *Seatbelt) ProbeRequest(ctx context.Context, request model.SandboxReques
 	}
 	defer unixListener.Close()
 	port := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
+	// nc -z does not work with Unix sockets on macOS, so those checks connect
+	// with an empty input instead.
 	// Successful allowed connections establish that nc and both listeners work;
 	// a missing helper or a broken listener cannot masquerade as denial.
-	allowed, err := s.envelope(model.SandboxRequest{Worktree: root, NetworkAllowed: true}, []string{"/bin/sh", "-c", `/usr/bin/nc -z -w 1 127.0.0.1 "$1" && /usr/bin/nc -z -w 1 -U "$2"`, "probe", port, socket})
+	allowed, err := s.envelope(model.SandboxRequest{Worktree: root, NetworkAllowed: true}, []string{"/bin/sh", "-c", `/usr/bin/nc -z -w 1 127.0.0.1 "$1" && /usr/bin/nc -w 1 -U "$2" </dev/null`, "probe", port, socket})
 	if err != nil {
 		return s.unavailable(err.Error())
 	}
@@ -115,7 +117,7 @@ if /bin/cat "$PWD/.codex/sentinel"; then exit 28; fi
 if /bin/sh -c '/bin/cat "$1"' child "$1"; then exit 24; fi
 if /bin/kill -CONT "$3"; then exit 25; fi
 if /usr/bin/nc -z -w 1 127.0.0.1 "$4"; then exit 26; fi
-if /usr/bin/nc -z -w 1 -U "$5"; then exit 27; fi
+if /usr/bin/nc -w 1 -U "$5" </dev/null; then exit 27; fi
 printf seatbelt-denial-verified
 `
 	denied, err := s.envelope(model.SandboxRequest{Worktree: worktree}, []string{"/bin/sh", "-c", script, "probe", sentinel, outside, strconv.Itoa(os.Getpid()), port, socket})

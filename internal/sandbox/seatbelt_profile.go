@@ -35,9 +35,18 @@ func seatbeltProfile(input seatbeltProfileRequest) (string, []string, error) {
 		parameters = append(parameters, key+"="+path)
 		return nil
 	}
+	// Processes resolve their working directory and executables through the
+	// parents of every allowed path, so those directories need metadata access
+	// (never their contents).
+	var ancestors []string
+	seenAncestor := map[string]bool{}
 	allow := func(key, path, filter string, writable bool) error {
 		if err := addPath(key, path); err != nil {
 			return err
+		}
+		for parent := filepath.Dir(path); parent != "/" && !seenAncestor[parent]; parent = filepath.Dir(parent) {
+			seenAncestor[parent] = true
+			ancestors = append(ancestors, parent)
 		}
 		fmt.Fprintf(&profile, "(allow file-read* (%s (param %q)))\n", filter, key)
 		fmt.Fprintf(&profile, "(allow process-exec (%s (param %q)))\n", filter, key)
@@ -77,6 +86,19 @@ func seatbeltProfile(input seatbeltProfileRequest) (string, []string, error) {
 			return "", nil, err
 		}
 	}
+	for i, path := range ancestors {
+		key := fmt.Sprintf("ANCESTOR_%d", i)
+		if err := addPath(key, path); err != nil {
+			return "", nil, err
+		}
+		fmt.Fprintf(&profile, "(allow file-read-metadata (literal (param %q)))\n", key)
+	}
+	// The dynamic loader reads the root directory before any program starts,
+	// and the standard shells are selected through /private/var/select. The
+	// remaining literals are the system symlinks into /private.
+	profile.WriteString(`(allow file-read* (literal "/") (literal "/private/var/select/sh"))
+(allow file-read-metadata (literal "/tmp") (literal "/var") (literal "/etc") (literal "/private") (literal "/private/var") (literal "/private/var/select"))
+`)
 	runtimeFilter := ""
 	if input.Request.RuntimeDir != "" {
 		if err := addPath("RUNTIME", input.Request.RuntimeDir); err != nil {
