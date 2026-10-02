@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,15 @@ func apiRuntime(t *testing.T) (*app.Runtime, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { runtime.Close() })
+	if goruntime.GOOS == "darwin" {
+		// Darwin Unix socket paths are limited to 104 bytes.
+		dir, err := os.MkdirTemp("/tmp", "marshal-api-")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.RemoveAll(dir) })
+		return runtime, filepath.Join(dir, "runtime.sock")
+	}
 	return runtime, layout.Socket
 }
 

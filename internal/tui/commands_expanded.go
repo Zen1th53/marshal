@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/doctor"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/reinjection"
+	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
@@ -256,7 +258,14 @@ func (h *CommandHandler) handlePolicy(ctx context.Context, args []string) (strin
 
 // handleSandbox reports the bubblewrap sandbox status.
 func (h *CommandHandler) handleSandbox(ctx context.Context) (string, error) {
-	return "Sandbox status: NOT VERIFIED. Isolation is established and reported per runtime execution, not by the TUI.", nil
+	return sandboxStatusForOS(runtime.GOOS), nil
+}
+
+func sandboxStatusForOS(goos string) string {
+	if reason := sandbox.PlatformUnavailableReason(goos); reason != "" {
+		return "Sandbox status: BLOCKED. " + reason
+	}
+	return "Sandbox status: NOT VERIFIED. Isolation is established and reported per runtime execution, not by the TUI."
 }
 
 // handleMemory handles epistemic memory inspection and search.
@@ -630,7 +639,11 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 			b.WriteString(fmt.Sprintf("    Version: %s\n", pr.Version))
 			b.WriteString(fmt.Sprintf("    Model:   %s\n", h.providerModelLine(ctx, pr.HarnessName)))
 			b.WriteString("    Auth:    UNKNOWN (no execution performed)\n")
-			b.WriteString("    Egress:  governed cells BLOCKED_BY_POLICY (sandbox uses --unshare-net; per-endpoint egress unenforceable); native sessions UNKNOWN (they run in the provider's own environment; not observed)\n")
+			if reason := sandbox.PlatformUnavailableReason(runtime.GOOS); reason != "" {
+				b.WriteString("    Egress:  governed cells BLOCKED (" + reason + "); native sessions UNKNOWN (not observed)\n")
+			} else {
+				b.WriteString("    Egress:  governed cells BLOCKED_BY_POLICY (sandbox uses --unshare-net; per-endpoint egress unenforceable); native sessions UNKNOWN (they run in the provider's own environment; not observed)\n")
+			}
 		}
 		return b.String(), nil
 	}

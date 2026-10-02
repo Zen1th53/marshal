@@ -4,9 +4,6 @@ package tui
 
 import (
 	"context"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,34 +12,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/protocol"
 	"github.com/Zen1th53/marshal/internal/testutil/testcloud"
 )
-
-// Install only the tools the PTY harness needs. Provider discovery can never
-// find an operator's CLI, even on a machine where all four are installed.
-func sweepWorkEnvironment(t *testing.T) {
-	t.Helper()
-	dir := t.TempDir()
-	for _, name := range []string{"git", "go"} {
-		path, err := exec.LookPath(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Symlink(path, filepath.Join(dir, name)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("CODEX_HOME", t.TempDir())
-	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
-	t.Setenv("PATH", dir)
-	t.Chdir(t.TempDir())
-	t.Setenv("MARSHAL_NO_UPDATE_CHECK", "1")
-	t.Setenv("GOPROXY", "off")
-	t.Setenv("GOSUMDB", "off")
-	t.Setenv("MARSHAL_CLOUD_ENDPOINT", "off")
-	InvalidateProbeCache()
-	t.Cleanup(InvalidateProbeCache)
-}
 
 func sweepWorkRun(t *testing.T, ws *Workspace, line, want string) string {
 	t.Helper()

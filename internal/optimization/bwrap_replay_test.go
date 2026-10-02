@@ -2,13 +2,17 @@ package optimization
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/learning"
+	marshalmodel "github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/sandbox"
 )
 
 func TestBwrapReplayRunnerUsesOfflineSandboxAndIndependentVerifier(t *testing.T) {
@@ -35,6 +39,15 @@ func TestBwrapReplayRunnerUsesOfflineSandboxAndIndependentVerifier(t *testing.T)
 		},
 	}
 	_, err := ExecuteReplay(context.Background(), runner, cfFactual(learning.OutcomeFailed, StatusFail), cfRoute("claude"), SandboxPolicy{WritableRoot: root, MaxWallMillis: 1000, MaxMemoryBytes: 1 << 20}, "test", "cluster", cfGovernance(), cfNow())
+	if reason := sandbox.PlatformUnavailableReason(runtime.GOOS); reason != "" {
+		if !errors.Is(err, marshalmodel.ErrUnavailable) || !strings.Contains(err.Error(), reason) {
+			t.Fatalf("refusal: %v", err)
+		}
+		if _, statErr := os.Stat(argsFile); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("sandbox executable ran: %v", statErr)
+		}
+		return
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,6 +61,9 @@ func TestBwrapReplayRunnerUsesOfflineSandboxAndIndependentVerifier(t *testing.T)
 }
 
 func TestBwrapReplayRunnerExecutesWithRealBubblewrapWhenAvailable(t *testing.T) {
+	if reason := sandbox.PlatformUnavailableReason(runtime.GOOS); reason != "" {
+		t.Skip(reason)
+	}
 	binary, err := exec.LookPath("bwrap")
 	if err != nil {
 		t.Skip("bubblewrap unavailable")

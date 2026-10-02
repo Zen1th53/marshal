@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
@@ -16,7 +18,11 @@ func TestCheckHealthyRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
-	if report.Verdict != Pass {
+	want := Pass
+	if sandbox.PlatformUnavailableReason(runtime.GOOS) != "" {
+		want = Degraded
+	}
+	if report.Verdict != want {
 		t.Fatalf("report = %#v", report)
 	}
 	for _, required := range []string{"git", "repository", "pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "resources", "ollama_models", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
@@ -38,7 +44,11 @@ func TestDefaultCheckDoesNotProbeOptionalProviders(t *testing.T) {
 		t.Fatalf("unexpected provider lookup for %s", name)
 		return "", os.ErrNotExist
 	}, Run: successfulProbe})
-	if report.Verdict != Pass {
+	want := Pass
+	if sandbox.PlatformUnavailableReason(runtime.GOOS) != "" {
+		want = Degraded
+	}
+	if report.Verdict != want {
 		t.Fatalf("report = %#v", report)
 	}
 	for _, name := range []string{"codex", "opencode", "ollama", "gemini", "claude"} {
@@ -62,7 +72,11 @@ func TestMissingCodexAndBwrapAreDegraded(t *testing.T) {
 	if report.Verdict != Degraded || report.Check("codex").Verdict != Degraded || report.Check("bwrap").Verdict != Degraded {
 		t.Fatalf("report = %#v", report)
 	}
-	if report.Check("bwrap").Capability != "R2/R3 execution blocked" {
+	want := "R2/R3 execution blocked"
+	if sandbox.PlatformUnavailableReason(runtime.GOOS) != "" {
+		want = "governed execution blocked"
+	}
+	if report.Check("bwrap").Capability != want {
 		t.Fatalf("bwrap = %#v", report.Check("bwrap"))
 	}
 }

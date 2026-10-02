@@ -8,12 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/resources"
+	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/store"
 	"go.yaml.in/yaml/v3"
 )
@@ -152,7 +154,7 @@ func Check(ctx context.Context, root string, options Options) Report {
 		add(success("worktree", "git worktree list --porcelain", "Git worktrees are supported"))
 	}
 	resourceSnapshot := resources.NewCollector().Collect(ctx, layout.RuntimeDir)
-	resourceDetail := fmt.Sprintf("%d effective CPUs, %s RAM available, %s disk free; safe concurrency %d", resourceSnapshot.CPU.Effective, formatBytes(resourceSnapshot.Memory.AvailableBytes), formatBytes(resourceSnapshot.Storage.FreeBytes), resourceSnapshot.Recommendation.Concurrency)
+	resourceDetail := resourceDetailForOS(resourceSnapshot, runtime.GOOS)
 	if len(resourceSnapshot.Accelerators) == 0 {
 		resourceDetail += "; accelerators: none detected"
 	} else {
@@ -297,6 +299,14 @@ func probeClaude(ctx context.Context, lookup func(string) (string, error), run f
 }
 
 func probeBwrap(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
+	probeBwrapForOS(ctx, runtime.GOOS, lookup, run, add)
+}
+
+func probeBwrapForOS(ctx context.Context, goos string, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
+	if reason := sandbox.PlatformUnavailableReason(goos); reason != "" {
+		add(Result{Name: "bwrap", Verdict: Degraded, Method: "platform capability", Capability: "governed execution blocked", Detail: reason})
+		return
+	}
 	binary, err := lookup("bwrap")
 	if err != nil {
 		add(Result{Name: "bwrap", Verdict: Degraded, Method: "PATH lookup", Capability: "R2/R3 execution blocked", Detail: "bubblewrap is missing; isolation is process_only"})
@@ -369,4 +379,11 @@ func formatBytes(value uint64) string {
 		return fmt.Sprintf("%.1f GiB", float64(value)/float64(gib))
 	}
 	return fmt.Sprintf("%d MiB", value>>20)
+}
+
+func resourceDetailForOS(snapshot resources.Snapshot, goos string) string {
+	if goos == "darwin" && snapshot.Memory.TotalBytes == 0 {
+		return fmt.Sprintf("%d logical CPUs; memory inventory unavailable on this platform; %s disk free; concurrency recommendation %d", snapshot.CPU.Logical, formatBytes(snapshot.Storage.FreeBytes), snapshot.Recommendation.Concurrency)
+	}
+	return fmt.Sprintf("%d effective CPUs, %s RAM available, %s disk free; safe concurrency %d", snapshot.CPU.Effective, formatBytes(snapshot.Memory.AvailableBytes), formatBytes(snapshot.Storage.FreeBytes), snapshot.Recommendation.Concurrency)
 }
