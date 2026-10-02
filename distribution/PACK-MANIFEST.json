@@ -7416,13 +7416,13 @@
     },
     {
       "path": "internal/project/layout.go",
-      "sha256": "8363a52b868de76b34d3207e377ac2ffafd33c675d8a68b688754f00c5a7d819",
-      "bytes": 4219
+      "sha256": "365d4f9b9ec8d3ea8f45a8a87e0d428dfeb6b25c0facb7813d17646fa28753e4",
+      "bytes": 4515
     },
     {
       "path": "internal/project/layout_test.go",
-      "sha256": "faa818f7ab0495400af7d348d2dd03fcfefbd875a8d2e477f02d96b93dbf342b",
-      "bytes": 2550
+      "sha256": "353d00c626172d7879dca57572baf945b78da11496d4a17bd5c244565e991631",
+      "bytes": 3166
     },
     {
       "path": "internal/projectid/collision_test.go",

@@ -81,3 +81,22 @@ func TestFindCodexBinarySemverFallback(t *testing.T) {
 		t.Fatalf("expected %s, got %s", expected, found)
 	}
 }
+
+func TestFindBinaryRefusesNamesWithDirectoryParts(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	outside := filepath.Join(home, "outside")
+	if err := os.WriteFile(outside, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".local", "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", filepath.Join(home, ".local", "bin"))
+
+	for _, name := range []string{"", ".", "..", "../../outside", outside, "bin/codex"} {
+		if found, err := FindBinary(name); err == nil {
+			t.Errorf("FindBinary(%q) = %s, want an error", name, found)
+		}
+	}
+}
