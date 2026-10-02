@@ -268,6 +268,12 @@ func (m *Manager) GC(ctx context.Context, req GCRequest) (GCResult, error) {
 		return result, fmt.Errorf("read worktrees root: %w", err)
 	}
 
+	// Report the same canonical paths that Prepare returns.
+	root, err := canonicalPath(m.root)
+	if err != nil {
+		return result, err
+	}
+
 	activeLeaseMap := make(map[string]bool, len(req.ActiveLeases))
 	for _, l := range req.ActiveLeases {
 		activeLeaseMap[l] = true
@@ -285,7 +291,7 @@ func (m *Manager) GC(ctx context.Context, req GCRequest) (GCResult, error) {
 		}
 		result.InspectedCount++
 		taskID := entry.Name()
-		targetPath := filepath.Join(m.root, taskID)
+		targetPath := filepath.Join(root, taskID)
 
 		// 1. Active lease must never be removed
 		if activeLeaseMap[taskID] {

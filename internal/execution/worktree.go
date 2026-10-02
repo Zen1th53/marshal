@@ -40,19 +40,12 @@ func (e *Engine) prepareTaskWorktree(ctx context.Context, run ExecutionRun, task
 		// Reuse only the exact persisted path, branch, and base commit; Prepare
 		// intentionally rejects dirty worktrees for every other admission.
 		expected := filepath.Join(e.cfg.ProjectRoot, ".marshal", "branches", request.TaskID)
-		expectedAbs, err := filepath.Abs(expected)
-		if err != nil {
-			return "", err
-		}
-		boundAbs, err := filepath.Abs(task.WorktreePath)
-		if err != nil {
-			return "", err
-		}
-		nativeAbs, err := filepath.Abs(task.NativeTurn.Worktree)
-		if err != nil {
-			return "", err
-		}
-		if task.WorktreePath == "" || task.NativeTurn.Worktree == "" || boundAbs != expectedAbs || nativeAbs != expectedAbs || task.ResultCommit != "" {
+		// Compare resolved paths: the project root may be reached through a
+		// symlink while git and the stored binding hold the resolved path.
+		expectedAbs, expectedErr := resolvedPath(expected)
+		boundAbs, boundErr := resolvedPath(task.WorktreePath)
+		nativeAbs, nativeErr := resolvedPath(task.NativeTurn.Worktree)
+		if expectedErr != nil || boundErr != nil || nativeErr != nil || task.WorktreePath == "" || task.NativeTurn.Worktree == "" || boundAbs != expectedAbs || nativeAbs != expectedAbs || task.ResultCommit != "" {
 			return "", fmt.Errorf("%w: native turn worktree binding differs", model.ErrConflict)
 		}
 		state, err := e.branchManager().Inspect(ctx, expectedAbs)
@@ -368,4 +361,12 @@ func copyDir(src, dst string, skips []string) error {
 
 		return copyFile(path, target)
 	})
+}
+
+func resolvedPath(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(absolute)
 }
