@@ -4181,12 +4181,12 @@
     },
     {
       "path": "internal/app/provider_dialect.go",
-      "sha256": "aaf59a1adc6f0b2ea7a1a47e8ef42fd8030b8bb7ed4c3cc1e6af89db4c2cf97e",
+      "sha256": "28096cb51bc753e5a61c1b0f9b3d47c5a95bc345618629f4ab1361b4c258d4f5",
       "bytes": 15466
     },
     {
       "path": "internal/app/provider_dialect_test.go",
-      "sha256": "735c65502594de176a2fa858d836b6de435ad2b6a398a55b70b698b2aa7c2b27",
+      "sha256": "bdf5f1267fd01db59554c5b594b60df5faa4081d83c1c30296f5a05add755d56",
       "bytes": 7306
     },
     {
@@ -4791,8 +4791,8 @@
     },
     {
       "path": "internal/cli/tui_cli_test.go",
-      "sha256": "3ae211f51cf8ebe9f6de07f6b67595b064693c1db9afb25f4fcca18aa54506e9",
-      "bytes": 3335
+      "sha256": "41c81abef15cb30a1b246eea6e08da31ba1d749ad96eeb680a382eae03dd3f7d",
+      "bytes": 3070
     },
     {
       "path": "internal/cli/update.go",
@@ -7776,8 +7776,8 @@
     },
     {
       "path": "internal/sandbox/bwrap_test.go",
-      "sha256": "a1216377dd92a76478c1eb5b00337901d30000c128d6509cccb5b8c4a69a3af2",
-      "bytes": 7734
+      "sha256": "0e7a8fea1f43f121231d5aa6b4f4330dafc333fee3e60ee308501fa8f1a72890",
+      "bytes": 7736
     },
     {
       "path": "internal/sandbox/platform_test.go",
@@ -7786,8 +7786,13 @@
     },
     {
       "path": "internal/sandbox/seatbelt.go",
-      "sha256": "b66ca12c6c2a6d7bf7ee375b0f48ae0196fc1704ca138700a8680772e488e542",
-      "bytes": 12712
+      "sha256": "2a6c9471f6912c89e68ac4b4ac1b92dd41a0042e2067809dda8e3b8d10f3e0e4",
+      "bytes": 15360
+    },
+    {
+      "path": "internal/sandbox/seatbelt_cache_darwin_test.go",
+      "sha256": "98e02bc35b1533488f7bbf05632c45657861ec371330ab7c5d11556571063ad8",
+      "bytes": 5546
     },
     {
       "path": "internal/sandbox/seatbelt_darwin_test.go",
@@ -9446,8 +9451,8 @@
     },
     {
       "path": "internal/tui/dynamic_e2e_test.go",
-      "sha256": "528e606da306d371cf6ea9b8950d92d5f2a4ecfbe34b2d3c91bf5813a663c140",
-      "bytes": 10529
+      "sha256": "0f287e8adbb4ff89d266014b8f740e17c2e5f3b5aaee4deef857c0da5da3f2fc",
+      "bytes": 10472
     },
     {
       "path": "internal/tui/evidence_detail_pty_test.go",
