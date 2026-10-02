@@ -58,6 +58,14 @@ problems are explained there. If not, find your problem below.
     Finding the agent does not prove you are signed in. Sign-in always
     happens in the agent's own interface.
 
+??? question "MARSHAL asks which agent to use"
+    You have more than one agent installed and have not chosen your main
+    one. Choose it once for this project:
+
+    ```text
+    /provider use claude
+    ```
+
 ??? question "A command for my agent is marked as not checked"
     Your agent's version is different from the one MARSHAL was tested with.
     The command may still work. See [Connect your AI agents](agents.md).

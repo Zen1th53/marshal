@@ -63,16 +63,18 @@ commands available in your version.
 
 | Command | What it does |
 | --- | --- |
-| `/codex`, `/claude`, `/opencode`, `/agy` | Open the agent's own interface. |
+| `/codex`, `/claude`, `/opencode`, `/agy` | Open that agent's own interface. |
 | `/codex resume --last` | Continue the latest Codex conversation in this project. |
 | `/claude continue` | Continue the latest Claude conversation. |
 | `/codex exec TEXT` | Ask Codex to do a task under MARSHAL's control. `/claude exec` works the same way. |
 | `/sessions` | List past conversations and runs. |
-| `/provider status` | Show which agents MARSHAL found. |
-| `/models` | List Codex models. |
+| `/provider status` | Show which agents MARSHAL found, and your main agent. |
+| `/provider use claude` | Choose your main agent for `/models`, `/mcp`, `/resume` and similar commands. |
+| `/models` | List your main agent's models. Add a name, such as `/models opencode`, for another agent. |
+| `/login`, `/logout` | Sign your main agent in or out. |
 | `/model select codex MODEL` | Choose the model for future work. |
-| `/effort high` | Choose how hard Codex thinks. |
-| `/apply CODEX-TASK-ID` | Bring a Codex cloud task's changes into your project. |
+| `/effort high` | Choose how hard Codex thinks (Codex only). |
+| `/apply CODEX-TASK-ID` | Bring a Codex cloud task's changes into your project (Codex only). |
 | `/codex cli ARGUMENTS` | Pass options straight to the agent. Every agent supports `cli`. |
 
 ## Undo and backups
@@ -121,4 +123,5 @@ commands available in your version.
     | `/skills` | List agent skills and where they come from. |
     | `/export` | Save a private bundle of evidence for the goal. |
     | `/route` | Show which agent MARSHAL would suggest for a task. |
-    | `/mcp`, `/plugin`, `/features` | Manage Codex add-ons. |
+    | `/mcp`, `/plugin` | Manage your main agent's add-ons. OpenCode has no plugins. |
+    | `/features` | Turn Codex features on or off (Codex only). |

@@ -17,6 +17,22 @@ the versions above, and labels commands for other versions as not checked.
     The Antigravity desktop app alone is not enough. MARSHAL needs its
     command-line tool, `agy`.
 
+## Choose your main agent
+
+If you have more than one agent installed, tell MARSHAL which one to use for
+everyday commands such as `/models`, `/mcp` and `/resume`:
+
+```text
+/provider use claude
+```
+
+You can use `codex`, `claude`, `opencode` or `agy`. MARSHAL remembers your
+choice for this project. If only one agent is installed, MARSHAL uses it
+without asking.
+
+When your main agent does not have a command, MARSHAL tells you which agents
+do. It never quietly uses a different agent instead.
+
 ## Check that MARSHAL can see your agents
 
 In a terminal:
@@ -31,9 +47,9 @@ Or inside MARSHAL:
 /provider status
 ```
 
-This shows which agents MARSHAL found. It cannot tell whether you are signed
-in. If an agent does not work, open it on its own (for example run `codex`)
-and sign in there.
+This shows which agents MARSHAL found and which one is your main agent. It
+cannot tell whether you are signed in. To sign in, use `/login`, or open the
+agent on its own (for example run `claude`) and sign in there.
 
 ## Use an agent directly
 
@@ -60,11 +76,14 @@ See [Continue past conversations](sessions.md) for more.
 
 ## Choose a model
 
-To see the Codex models MARSHAL found:
+To see your main agent's models:
 
 ```text
 /models
 ```
+
+To see another agent's models, name it, for example `/models opencode`. If
+you have not chosen a main agent yet, `/models` shows every installed agent.
 
 To choose the model for future planned work:
 
