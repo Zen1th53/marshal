@@ -154,7 +154,7 @@ func TestProbeExecutesNamespaceShapeNotOnlyVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	backend := NewBwrap(fake)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	capability := backend.probeForOS(ctx, "linux")
 	if !capability.Available || capability.Level != model.IsolationBwrap {

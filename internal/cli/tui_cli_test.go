@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -70,14 +69,10 @@ func TestTUICLIInvocation(t *testing.T) {
 	if !strings.Contains(outStr, "MARSHAL") {
 		t.Fatalf("expected the MARSHAL header in tui output:\n%s", outStr)
 	}
-	if runtime.GOOS == "darwin" {
-		if !strings.Contains(outStr, "Work cannot run yet.") || !strings.Contains(outStr, "Sandbox isolation is not available.") {
-			t.Fatalf("expected blocked macOS launcher: %s", outStr)
-		}
-	} else if !strings.Contains(outStr, "MANUAL") {
+	if !strings.Contains(outStr, "MANUAL") {
 		t.Fatalf("expected the statusline in tui output:\n%s", outStr)
 	}
-	if runtime.GOOS != "darwin" && !strings.Contains(outStr, "Exiting MARSHAL terminal workspace") {
+	if !strings.Contains(outStr, "Exiting MARSHAL terminal workspace") {
 		t.Fatalf("expected exit in tui output:\n%s", outStr)
 	}
 

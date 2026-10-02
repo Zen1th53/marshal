@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/model"
@@ -47,12 +48,100 @@ func (s *Seatbelt) Probe(ctx context.Context) model.IsolationCapability {
 	return s.ProbeRequest(ctx, model.SandboxRequest{})
 }
 
+type seatbeltProbeCacheRow struct {
+	info       os.FileInfo
+	cachedAt   time.Time
+	capability model.IsolationCapability
+}
+
+var (
+	seatbeltProbeTTL   = 15 * time.Second
+	seatbeltProbeCache = struct {
+		sync.Mutex
+		rows map[string]seatbeltProbeCacheRow
+	}{rows: make(map[string]seatbeltProbeCacheRow)}
+)
+
+// resetSeatbeltProbeCache clears the in-memory probe cache.
+func resetSeatbeltProbeCache() {
+	seatbeltProbeCache.Lock()
+	defer seatbeltProbeCache.Unlock()
+	seatbeltProbeCache.rows = make(map[string]seatbeltProbeCacheRow)
+}
+
+// setSeatbeltProbeTTL overrides the probe cache TTL during tests.
+func setSeatbeltProbeTTL(ttl time.Duration) func() {
+	seatbeltProbeCache.Lock()
+	old := seatbeltProbeTTL
+	seatbeltProbeTTL = ttl
+	seatbeltProbeCache.Unlock()
+	return func() {
+		seatbeltProbeCache.Lock()
+		seatbeltProbeTTL = old
+		seatbeltProbeCache.Unlock()
+	}
+}
+
 // ProbeRequest verifies the backend's deny-default policy. Network describes
 // the requested mode, not endpoint filtering; process namespaces never exist.
+// Successful denial proofs may be safely reused within the process for the
+// same binary identity and policy shape for a short bounded duration.
 func (s *Seatbelt) ProbeRequest(ctx context.Context, request model.SandboxRequest) model.IsolationCapability {
 	if err := s.checkBinary(); err != nil {
 		return s.unavailable(err.Error())
 	}
+	info, err := os.Stat(s.binary)
+	if err != nil {
+		return s.unavailable("stat sandbox-exec: " + err.Error())
+	}
+
+	key := s.binary + "\x00net=" + strconv.FormatBool(request.NetworkAllowed)
+	now := time.Now()
+
+	seatbeltProbeCache.Lock()
+	if cached, ok := seatbeltProbeCache.rows[key]; ok {
+		if now.Sub(cached.cachedAt) < seatbeltProbeTTL &&
+			os.SameFile(info, cached.info) &&
+			info.ModTime().Equal(cached.info.ModTime()) &&
+			info.Size() == cached.info.Size() &&
+			info.Mode() == cached.info.Mode() {
+			seatbeltProbeCache.Unlock()
+			return cached.capability
+		}
+	}
+	seatbeltProbeCache.Unlock()
+
+	capability := s.runLiveProbe(ctx, request)
+	if !capability.Available || capability.Level != model.IsolationSeatbelt {
+		// Failure must never be cached as success. Purge any stale entry.
+		seatbeltProbeCache.Lock()
+		delete(seatbeltProbeCache.rows, key)
+		seatbeltProbeCache.Unlock()
+		return capability
+	}
+
+	// Verify binary was not replaced or modified during the live probe execution.
+	if after, statErr := os.Stat(s.binary); statErr == nil &&
+		os.SameFile(info, after) &&
+		info.ModTime().Equal(after.ModTime()) &&
+		info.Size() == after.Size() &&
+		info.Mode() == after.Mode() {
+		seatbeltProbeCache.Lock()
+		if len(seatbeltProbeCache.rows) >= 64 {
+			seatbeltProbeCache.rows = make(map[string]seatbeltProbeCacheRow)
+		}
+		seatbeltProbeCache.rows[key] = seatbeltProbeCacheRow{
+			info:       after,
+			cachedAt:   time.Now(),
+			capability: capability,
+		}
+		seatbeltProbeCache.Unlock()
+	}
+
+	return capability
+}
+
+func (s *Seatbelt) runLiveProbe(ctx context.Context, request model.SandboxRequest) model.IsolationCapability {
 	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	root, err := os.MkdirTemp("/tmp", "marshal-seatbelt-probe-")
