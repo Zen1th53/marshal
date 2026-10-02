@@ -246,7 +246,7 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	}
 	wantSandbox := "NOT VERIFIED"
 	if runtime.GOOS == "darwin" {
-		wantSandbox = "Sandbox status: BLOCKED. sandboxed execution unavailable: no macOS sandbox backend exists yet"
+		wantSandbox = "Sandbox status: AVAILABLE (seatbelt)"
 	}
 	if !strings.Contains(out, wantSandbox) {
 		t.Fatalf("unexpected /sandbox response: %s", out)

@@ -19,13 +19,16 @@ func TestCheckHealthyRuntime(t *testing.T) {
 	}
 	report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
 	want := Pass
-	if sandbox.PlatformUnavailableReason(runtime.GOOS) != "" {
+	if sandbox.PlatformUnavailableReason(runtime.GOOS) != "" || (runtime.GOOS == "darwin" && report.Check("seatbelt").Verdict != Pass) {
 		want = Degraded
 	}
 	if report.Verdict != want {
 		t.Fatalf("report = %#v", report)
 	}
 	for _, required := range []string{"git", "repository", "pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "resources", "ollama_models", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
+		if required == "bwrap" && runtime.GOOS == "darwin" {
+			required = "seatbelt"
+		}
 		if report.Check(required) == nil {
 			t.Errorf("missing check %s", required)
 		}
@@ -45,7 +48,7 @@ func TestDefaultCheckDoesNotProbeOptionalProviders(t *testing.T) {
 		return "", os.ErrNotExist
 	}, Run: successfulProbe})
 	want := Pass
-	if sandbox.PlatformUnavailableReason(runtime.GOOS) != "" {
+	if sandbox.PlatformUnavailableReason(runtime.GOOS) != "" || (runtime.GOOS == "darwin" && report.Check("seatbelt").Verdict != Pass) {
 		want = Degraded
 	}
 	if report.Verdict != want {
@@ -69,6 +72,12 @@ func TestMissingCodexAndBwrapAreDegraded(t *testing.T) {
 		}
 		return availableTools(name)
 	}})
+	if runtime.GOOS == "darwin" {
+		if report.Verdict != Degraded || report.Check("codex").Verdict != Degraded || report.Check("seatbelt") == nil {
+			t.Fatalf("report = %#v", report)
+		}
+		return
+	}
 	if report.Verdict != Degraded || report.Check("codex").Verdict != Degraded || report.Check("bwrap").Verdict != Degraded {
 		t.Fatalf("report = %#v", report)
 	}

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/resources"
@@ -303,6 +304,10 @@ func probeBwrap(ctx context.Context, lookup func(string) (string, error), run fu
 }
 
 func probeBwrapForOS(ctx context.Context, goos string, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
+	if goos == "darwin" {
+		add(seatbeltResult(sandbox.ProbeForOS(ctx, goos)))
+		return
+	}
 	if reason := sandbox.PlatformUnavailableReason(goos); reason != "" {
 		add(Result{Name: "bwrap", Verdict: Degraded, Method: "platform capability", Capability: "governed execution blocked", Detail: reason})
 		return
@@ -367,6 +372,9 @@ func failure(name, method, detail string) Result {
 
 func finalizeMissing(report Report) Report {
 	for _, name := range []string{"pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "resources", "ollama_models", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
+		if name == "bwrap" && runtime.GOOS == "darwin" {
+			name = "seatbelt"
+		}
 		report.Results = append(report.Results, failure(name, "repository prerequisite", "not checked because repository discovery failed"))
 	}
 	report.Verdict = Fail
@@ -386,4 +394,11 @@ func resourceDetailForOS(snapshot resources.Snapshot, goos string) string {
 		return fmt.Sprintf("%d logical CPUs; memory inventory unavailable on this platform; %s disk free; concurrency recommendation %d", snapshot.CPU.Logical, formatBytes(snapshot.Storage.FreeBytes), snapshot.Recommendation.Concurrency)
 	}
 	return fmt.Sprintf("%d effective CPUs, %s RAM available, %s disk free; safe concurrency %d", snapshot.CPU.Effective, formatBytes(snapshot.Memory.AvailableBytes), formatBytes(snapshot.Storage.FreeBytes), snapshot.Recommendation.Concurrency)
+}
+
+func seatbeltResult(capability model.IsolationCapability) Result {
+	if !capability.Available {
+		return Result{Name: "seatbelt", Verdict: Degraded, Method: "live denial probe", Capability: "governed execution blocked", Detail: capability.Reason}
+	}
+	return Result{Name: "seatbelt", Verdict: Pass, Method: "live denial probe", Capability: "filesystem and network policy; no process namespace", Detail: capability.Reason}
 }

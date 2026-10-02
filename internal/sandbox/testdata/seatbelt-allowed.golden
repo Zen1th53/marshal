@@ -1,0 +1,86 @@
+(version 1)
+(deny default)
+(allow file-read* (subpath (param "WORKTREE")))
+(allow process-exec (subpath (param "WORKTREE")))
+(allow file-write* (subpath (param "WORKTREE")))
+(allow file-read* (subpath (param "SCRATCH")))
+(allow process-exec (subpath (param "SCRATCH")))
+(allow file-write* (subpath (param "SCRATCH")))
+(allow file-read* (subpath (param "WRITE_0")))
+(allow process-exec (subpath (param "WRITE_0")))
+(allow file-write* (subpath (param "WRITE_0")))
+(allow file-read* (subpath (param "SYSTEM_0")))
+(allow process-exec (subpath (param "SYSTEM_0")))
+(allow file-read* (subpath (param "SYSTEM_1")))
+(allow process-exec (subpath (param "SYSTEM_1")))
+(allow file-read* (subpath (param "SYSTEM_2")))
+(allow process-exec (subpath (param "SYSTEM_2")))
+(allow file-read* (subpath (param "SYSTEM_3")))
+(allow process-exec (subpath (param "SYSTEM_3")))
+(allow file-read* (subpath (param "SYSTEM_4")))
+(allow process-exec (subpath (param "SYSTEM_4")))
+(allow file-read* (subpath (param "SYSTEM_5")))
+(allow process-exec (subpath (param "SYSTEM_5")))
+(allow file-read* (literal (param "READ_0")))
+(allow process-exec (literal (param "READ_0")))
+(allow file-read* (subpath (param "READ_1")))
+(allow process-exec (subpath (param "READ_1")))
+(allow file-read-metadata (literal (param "ANCESTOR_0")))
+(allow file-read-metadata (literal (param "ANCESTOR_1")))
+(allow file-read-metadata (literal (param "ANCESTOR_2")))
+(allow file-read-metadata (literal (param "ANCESTOR_3")))
+(allow file-read-metadata (literal (param "ANCESTOR_4")))
+(allow file-read-metadata (literal (param "ANCESTOR_5")))
+(allow file-read-metadata (literal (param "ANCESTOR_6")))
+(allow file-read-metadata (literal (param "ANCESTOR_7")))
+(allow file-read-metadata (literal (param "ANCESTOR_8")))
+(allow file-read-metadata (literal (param "ANCESTOR_9")))
+(allow file-read* (literal "/") (literal "/private/var/select/sh"))
+(allow file-read-metadata (literal "/tmp") (literal "/var") (literal "/etc") (literal "/private") (literal "/private/var") (literal "/private/var/select"))
+(deny file-read* file-write* process-exec (require-all (subpath (param "RUNTIME")) (require-not (subpath (param "WORKTREE")))))
+(deny file-read* file-write* process-exec (require-all (regex #"(^|/)([.]codex|[.]claude|[.]opencode|[.]gemini|[.]ssh|[.]aws|[.]gnupg|[.]kube)(/|$)|/[.]config/(codex|claude|opencode|gemini)(/|$)|/[.](local/share|cache)/(codex|claude|opencode|gemini)(/|$)|/[.]docker/config[.]json$|/(auth[.]json|[.]netrc|[.]git-credentials|[.]vault-token|id_rsa|id_ed25519)$") (require-not (subpath (param "SCRATCH")))))
+(deny file-read* file-write* process-exec (require-all (regex #"/[.]marshal(/|$)") (require-not (subpath (param "WORKTREE")))))
+(allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom") (literal "/dev/tty") (regex #"^/dev/ttys[0-9]+$"))
+(allow file-write* (literal "/dev/null") (literal "/dev/tty") (regex #"^/dev/ttys[0-9]+$"))
+(allow process-fork)
+(allow signal (target same-sandbox))
+(allow sysctl-read)
+(allow pseudo-tty)
+(allow system-socket (socket-domain AF_INET) (socket-domain AF_INET6) (socket-domain AF_UNIX))
+(allow network-bind (local ip "*:*"))
+(allow network-inbound (local ip "*:*"))
+(allow network-outbound (remote ip "*:*"))
+(allow network-bind (local unix-socket (subpath (param "WORKTREE"))))
+(allow network-outbound (remote unix-socket (subpath (param "WORKTREE"))))
+(allow network-bind (local unix-socket (subpath (param "SCRATCH"))))
+(allow network-outbound (remote unix-socket (subpath (param "SCRATCH"))))
+(allow network-bind (local unix-socket (subpath (param "WRITE_0"))))
+(allow network-outbound (remote unix-socket (subpath (param "WRITE_0"))))
+(deny network-bind (local unix-socket (require-all (subpath (param "RUNTIME")) (require-not (subpath (param "WORKTREE"))))))
+(deny network-outbound (remote unix-socket (require-all (subpath (param "RUNTIME")) (require-not (subpath (param "WORKTREE"))))))
+(deny network-bind (local unix-socket (require-all (path-regex #"(^|/)([.]codex|[.]claude|[.]opencode|[.]gemini|[.]ssh|[.]aws|[.]gnupg|[.]kube)(/|$)|/[.]config/(codex|claude|opencode|gemini)(/|$)|/[.](local/share|cache)/(codex|claude|opencode|gemini)(/|$)|/[.]docker/config[.]json$|/(auth[.]json|[.]netrc|[.]git-credentials|[.]vault-token|id_rsa|id_ed25519)$") (require-not (subpath (param "SCRATCH"))))))
+(deny network-outbound (remote unix-socket (require-all (path-regex #"(^|/)([.]codex|[.]claude|[.]opencode|[.]gemini|[.]ssh|[.]aws|[.]gnupg|[.]kube)(/|$)|/[.]config/(codex|claude|opencode|gemini)(/|$)|/[.](local/share|cache)/(codex|claude|opencode|gemini)(/|$)|/[.]docker/config[.]json$|/(auth[.]json|[.]netrc|[.]git-credentials|[.]vault-token|id_rsa|id_ed25519)$") (require-not (subpath (param "SCRATCH"))))))
+
+Parameters:
+WORKTREE=/project/.marshal/worktrees/task
+SCRATCH=/private/tmp/marshal-seatbelt-example
+WRITE_0=/build-output
+SYSTEM_0=/usr
+SYSTEM_1=/bin
+SYSTEM_2=/sbin
+SYSTEM_3=/System/Library
+SYSTEM_4=/Library/Apple/System/Library
+SYSTEM_5=/private/etc
+READ_0=/tools/provider
+READ_1=/project/.git
+ANCESTOR_0=/project/.marshal/worktrees
+ANCESTOR_1=/project/.marshal
+ANCESTOR_2=/project
+ANCESTOR_3=/private/tmp
+ANCESTOR_4=/private
+ANCESTOR_5=/System
+ANCESTOR_6=/Library/Apple/System
+ANCESTOR_7=/Library/Apple
+ANCESTOR_8=/Library
+ANCESTOR_9=/tools
+RUNTIME=/project/.marshal

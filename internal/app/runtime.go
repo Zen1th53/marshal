@@ -1749,6 +1749,12 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	if reason := sandbox.PlatformUnavailableReason(goruntime.GOOS); reason != "" {
 		return nil, "", fmt.Errorf("%w: %s", model.ErrUnavailable, reason)
 	}
+	if goruntime.GOOS == "darwin" {
+		capability := sandbox.ProbeForOS(ctx, goruntime.GOOS)
+		if _, err := sandbox.ChooseIsolation(capability, task.Risk, networkAllowed, r.allowProcessOnly); err != nil {
+			return nil, "", err
+		}
+	}
 	switch name {
 	case "codex", "gemini", "claude", "opencode":
 	default:
@@ -1763,14 +1769,13 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	}
 	process := worker.New(30*time.Minute, 3*time.Second, 8<<20)
 	var runner adapter.ProcessRunner = process
-	if bwrapPath, lookupErr := trustedBwrapPath(); lookupErr == nil {
-		backend := sandbox.NewBwrap(bwrapPath)
+	if backend, lookupErr := sandbox.NewBackend(); lookupErr == nil {
 		capability := backend.Probe(ctx)
 		chosen, chooseErr := sandbox.ChooseIsolation(capability, task.Risk, networkAllowed, r.allowProcessOnly)
 		if chooseErr != nil {
 			return nil, "", chooseErr
 		}
-		if chosen.Level == model.IsolationBwrap {
+		if chosen.Available {
 			readOnlyBinds := []model.Bind{{Source: binary, Target: binary}}
 			gitMetadata := filepath.Join(r.layout.Root, ".git")
 			if info, statErr := os.Stat(gitMetadata); statErr == nil && info.IsDir() {
@@ -1780,7 +1785,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			var extraEnv []string
 			var writableTmpfs []string
 
-			// Adapter runtime storage (.codex, .opencode, etc.) must be writable tmpfs for sqlite DBs / logs
+			// Adapter runtime storage must be ephemeral and writable for sqlite DBs and logs.
 			writableTmpfs = append(writableTmpfs,
 				"/home/marshal/."+name,
 				"/home/marshal/.local",
@@ -1790,7 +1795,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				"/home/marshal/.cache/"+name,
 			)
 
-			// Provider HOME/XDG trees are fresh tmpfs mounts. Host-native auth,
+			// Provider HOME/XDG trees use fresh ephemeral storage. Host-native auth,
 			// instructions, memory, plugins and MCP configuration are deliberately
 			// not mounted across the governance boundary.
 			extraEnv = append(extraEnv,
@@ -1824,7 +1829,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			}
 
 			runner = worker.NewSandboxed(process, backend, model.SandboxRequest{
-				Worktree: worktreePath, NetworkAllowed: networkAllowed,
+				Worktree: worktreePath, NetworkAllowed: networkAllowed, RuntimeDir: r.layout.RuntimeDir,
 				ReadOnlyBinds: readOnlyBinds,
 				WritableTmpfs: writableTmpfs,
 				ExtraEnv:      extraEnv,
@@ -1880,13 +1885,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 }
 
 func trustedBwrapPath() (string, error) {
-	for _, candidate := range []string{"/usr/bin/bwrap", "/bin/bwrap"} {
-		info, err := os.Stat(candidate)
-		if err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o022 == 0 {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("trusted bubblewrap binary is unavailable")
+	return sandbox.TrustedBwrapPath()
 }
 
 func loadPackVersion(path string) (string, error) {

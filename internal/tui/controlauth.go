@@ -1292,6 +1292,10 @@ func (a *runtimeControlAuthority) RoleBindings(ctx context.Context) ([]authz.Rol
 
 // SandboxState reports whether isolation is enforceable here.
 func (a *runtimeControlAuthority) SandboxState(ctx context.Context) (SandboxState, error) {
+	if goruntime.GOOS == "darwin" {
+		capability := sandbox.ProbeForOS(ctx, goruntime.GOOS)
+		return SandboxState{Available: capability.Available, Backend: string(capability.Level), Reason: capability.Reason}, nil
+	}
 	if reason := sandbox.PlatformUnavailableReason(goruntime.GOOS); reason != "" {
 		return SandboxState{Reason: reason}, nil
 	}

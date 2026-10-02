@@ -95,7 +95,7 @@ func TestProviderDialectProbeBoundedAndCancelled(t *testing.T) {
 	}
 	start := time.Now()
 	d := ObserveProviderDialect(context.Background(), "codex")
-	if d.Version != "UNKNOWN" || d.QualifiedVersion != "" || time.Since(start) > 4*time.Second {
+	if d.Version != "UNKNOWN" || d.QualifiedVersion != "" || time.Since(start) > 8*time.Second {
 		t.Fatalf("unbounded/qualified failed probe: %+v %v", d, time.Since(start))
 	}
 	ctx, cancel := context.WithCancel(context.Background())

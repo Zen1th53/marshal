@@ -334,7 +334,7 @@ func ObserveProviderDialect(ctx context.Context, provider string) ProviderDialec
 	if cached, ok := providerDialectCache.rows[key]; ok && os.SameFile(info, cached.info) && info.ModTime() == cached.info.ModTime() && info.Size() == cached.info.Size() && info.Mode() == cached.info.Mode() {
 		return cached.dialect
 	}
-	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(probeCtx, path, "--version")
 	cmd.WaitDelay = 100 * time.Millisecond
