@@ -1,0 +1,92 @@
+site_name: MARSHAL
+site_description: Plan work with one AI, let other AI agents do it, and stay in charge.
+repo_url: https://github.com/Zen1th53/marshal
+strict: true
+docs_dir: docs
+site_dir: site
+# Public publication boundary: new files are excluded until explicitly reviewed.
+exclude_docs: |
+  /**
+  !/index.md
+  !/stylesheets/marshal.css
+  !/public/how-it-works.md
+  !/public/install.md
+  !/public/first-project.md
+  !/public/agents.md
+  !/public/undo.md
+  !/public/control.md
+  !/public/sessions.md
+  !/public/ultra.md
+  !/public/troubleshooting.md
+  !/public/limits.md
+  !/public/settings.md
+  !/public/commands.md
+  !/public/cli.md
+  !/public/release-notes.md
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.footer
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+extra_css:
+  - stylesheets/marshal.css
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+hooks:
+  - scripts/docs-theme.py
+plugins:
+  - search
+nav:
+  - Home: index.md
+  - Get started:
+      - How MARSHAL works: public/how-it-works.md
+      - Install: public/install.md
+      - Your first project: public/first-project.md
+  - Everyday tasks:
+      - Connect your AI agents: public/agents.md
+      - Undo changes and keep backups: public/undo.md
+      - Pause, stop and set limits: public/control.md
+      - Continue past conversations: public/sessions.md
+      - ULTRA: public/ultra.md
+  - Help:
+      - Problems and fixes: public/troubleshooting.md
+      - What MARSHAL cannot do yet: public/limits.md
+  - Reference:
+      - Commands: public/commands.md
+      - Terminal commands: public/cli.md
+      - Settings: public/settings.md
+  - What's new in 0.0.5: public/release-notes.md

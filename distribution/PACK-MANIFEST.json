@@ -2010,14 +2010,19 @@
       "bytes": 405
     },
     {
+      "path": ".github/workflows/docs.yml",
+      "sha256": "7c9bd9e07136bea695d6a10b4a5b715cb6c4e7535be522da9afcb3db7d1c9e0d",
+      "bytes": 2275
+    },
+    {
       "path": ".github/workflows/release.yml",
       "sha256": "20d0f8e6479c0369cddd017d1faa1ad66d6e38ca3101e3bd21ff093c9b471dbe",
       "bytes": 4810
     },
     {
       "path": ".gitignore",
-      "sha256": "a9c5f602ec4739fe253be70f7ba8c7a11491813a4867539bbaa65f49ec4f64e0",
-      "bytes": 1565
+      "sha256": "9165f59412902c1bf692536c81eeb079c6ccaaa621091d130e88465591db1783",
+      "bytes": 1607
     },
     {
       "path": "AGENT-BOOTSTRAP.md",
@@ -2890,6 +2895,11 @@
       "bytes": 9567
     },
     {
+      "path": "docs/index.md",
+      "sha256": "3083d140a7178b8366b8c21ccbfcbd4e3e71191ac70b97151429bef892f5ce82",
+      "bytes": 2031
+    },
+    {
       "path": "docs/installation.md",
       "sha256": "9c176b0ceb2358427372379962da730c951dae960a12846d27d1c4f9fa6d251a",
       "bytes": 1650
@@ -3100,9 +3110,84 @@
       "bytes": 2502
     },
     {
+      "path": "docs/public/agents.md",
+      "sha256": "a331dd0d28c2b4d54a316de5ed0fe10e046d162fd867a2d09d5c36d6996d8e8d",
+      "bytes": 2812
+    },
+    {
+      "path": "docs/public/cli.md",
+      "sha256": "b53fd1a2b7eaf83aeec7f92e8f5cffeb0ca2b38da4fe6f1ec38b45c05eaab467",
+      "bytes": 1339
+    },
+    {
+      "path": "docs/public/commands.md",
+      "sha256": "43affbf0b3fbae38164ed84ddcb8cd1da72d11619052287ac8b58b2d4f64bcc6",
+      "bytes": 5902
+    },
+    {
+      "path": "docs/public/control.md",
+      "sha256": "300b038cba5e6046c8ddec15b52af26464482b537fc15c90fbf01a26b0a394a1",
+      "bytes": 1812
+    },
+    {
+      "path": "docs/public/first-project.md",
+      "sha256": "ba77ce7acd145aac457e5cfd0717ec21a0d1c30acee5efa881dc33548bcb4f2a",
+      "bytes": 3354
+    },
+    {
+      "path": "docs/public/how-it-works.md",
+      "sha256": "51c6b407a8b8fa23ddd37695422f663de1b73b5249cf338fccbfbc33715f6b90",
+      "bytes": 2667
+    },
+    {
+      "path": "docs/public/install.md",
+      "sha256": "4804669099c2c29131af85f31ffc17087b5f5780276d51b50a4282b6cf39ea28",
+      "bytes": 2866
+    },
+    {
+      "path": "docs/public/limits.md",
+      "sha256": "53f126a42c2e5f19c1749045f5c168bae4ffdbb2f82f8a4e02fa105012427c0b",
+      "bytes": 1550
+    },
+    {
+      "path": "docs/public/release-notes.md",
+      "sha256": "c67a378ae5136692abe14fa8ce3a55f471c2fe10b0820b418a3096eca13791a5",
+      "bytes": 1592
+    },
+    {
+      "path": "docs/public/sessions.md",
+      "sha256": "c1b469ed5af2a1bb022ab7313ca3470d2da8395bd773f3e2fe5bf208577759b1",
+      "bytes": 1548
+    },
+    {
+      "path": "docs/public/settings.md",
+      "sha256": "c509d699f14c05dd7ac5018dfe889953b34d0f5eaed18db2172f3eaa1c56dda6",
+      "bytes": 2043
+    },
+    {
+      "path": "docs/public/troubleshooting.md",
+      "sha256": "607aefdea1f16ec5b5c8e4d2b5109a37502bfbf18bf2fa91d4ac36e09d18be3e",
+      "bytes": 4162
+    },
+    {
+      "path": "docs/public/ultra.md",
+      "sha256": "6f5d87bd91fa9d4d48658b6fb112534feab55ff862bdfc2117e624d69515a790",
+      "bytes": 864
+    },
+    {
+      "path": "docs/public/undo.md",
+      "sha256": "c60ec208dcff59620439f263ab31509d1eaaf286c34e20539d83833762d40bf2",
+      "bytes": 2076
+    },
+    {
       "path": "docs/remote-worker-attestation.md",
       "sha256": "004e50af88f8797b744c65a71e40c21074d357f83457d809d09600f6169f0201",
       "bytes": 201
+    },
+    {
+      "path": "docs/requirements.txt",
+      "sha256": "1a7bb96ceecf77fdd2396d81aa08f0b090d085b88689776df32585e156ca3de7",
+      "bytes": 37
     },
     {
       "path": "docs/resources.md",
@@ -3143,6 +3228,11 @@
       "path": "docs/startup.md",
       "sha256": "125c406a5409f689ed9e776a27f8ab018940a09ba9d85c7f566e78ac8b1dd03d",
       "bytes": 7002
+    },
+    {
+      "path": "docs/stylesheets/marshal.css",
+      "sha256": "0069df82a342dcdbcdf98f3c2aaabfb5087e328ee1ec2e35009a42c7d4932055",
+      "bytes": 1040
     },
     {
       "path": "docs/troubleshooting.md",
@@ -10275,6 +10365,11 @@
       "bytes": 754
     },
     {
+      "path": "mkdocs.yml",
+      "sha256": "d91499f6b82cef95b03233eb80b4b3aeb225084ac018b120d943e480aca1301c",
+      "bytes": 2398
+    },
+    {
       "path": "plugins/COMPATIBILITY.md",
       "sha256": "3901a91b5f5ed5283da4db94fd10b483e5cc86e2ca8b1642df005affea5eee99",
       "bytes": 495
@@ -10798,6 +10893,21 @@
       "path": "scripts/community-release-gate.sh",
       "sha256": "a51fb134bb7806f49e1a0ee3da8217dcfec786c61b4f44cd213fa9557a917c68",
       "bytes": 4164
+    },
+    {
+      "path": "scripts/docs-audit.py",
+      "sha256": "02616ca27323ed42a3f881e28e4cb5fe290d728f4ee749f3d15097d84b79d3aa",
+      "bytes": 6485
+    },
+    {
+      "path": "scripts/docs-check.sh",
+      "sha256": "f6c20845c59b1850622a121d76c51a45b49250d82415ca80ed82eeccd5e350bb",
+      "bytes": 411
+    },
+    {
+      "path": "scripts/docs-theme.py",
+      "sha256": "dbf9da337719c7fc937f0f765c6a3b1c406ac3810f999ac09e2a83bdd64111ec",
+      "bytes": 1247
     },
     {
       "path": "standards/REFERENCES.md",

@@ -1,0 +1,80 @@
+# Pause, stop and set limits
+
+## See what is running
+
+```text
+/marshal status
+/status
+```
+
+`/marshal status` shows the current plan and its tasks. `/status` shows the
+whole session.
+
+## Stop and continue a planned run
+
+```text
+/marshal stop
+/marshal resume
+```
+
+`/marshal stop` stops the run and keeps everything as it is. `/marshal resume`
+continues from where it stopped, including after you closed and reopened
+MARSHAL.
+
+## Pause, resume or cancel other runs
+
+Work started outside a plan, for example with `/codex exec`, is a **run** with
+its own ID.
+
+```text
+/pause run:RUN-ID
+/resume run:RUN-ID
+/cancel run:RUN-ID
+```
+
+- **Pause** stops new tasks from starting. A task that is already running
+  finishes its current step first.
+- **Resume** continues a paused run.
+- **Cancel** stops the run for good.
+
+You can leave out the ID. If exactly one run fits, MARSHAL acts on it. If
+there are several, it lists them with their IDs so you can choose.
+
+After pausing or cancelling, check `/status` again: an agent can take a moment
+to finish what it was doing.
+
+## Set limits
+
+You can limit how many AI calls a run may make and how long it may take.
+Limits belong to your current goal:
+
+```text
+/budget set calls=20 duration=30m
+```
+
+MARSHAL asks you to confirm the change. It shows a confirmation ID; approve it
+with:
+
+```text
+/approve CONFIRMATION-ID
+```
+
+To see your limits and how much has been used:
+
+```text
+/budget
+```
+
+To remove the limits:
+
+```text
+/budget clear
+```
+
+When a limit is reached, MARSHAL does not start the next task. It does not cut
+off a task in the middle.
+
+!!! note "Why does it say UNKNOWN?"
+    Not every agent reports how many tokens it used or what it cost, so
+    MARSHAL cannot limit tokens or money. When a number is not available,
+    MARSHAL shows `UNKNOWN` rather than guessing.

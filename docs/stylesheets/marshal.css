@@ -1,0 +1,59 @@
+/* Home page and step list. Colours come from the theme's own variables so
+   both the light and the dark scheme stay readable. */
+
+.hero {
+  padding: 1.5rem 0 1rem;
+  max-width: 44rem;
+}
+
+.hero h1 {
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 1rem;
+  color: var(--md-default-fg-color);
+}
+
+.hero p {
+  font-size: 1.05rem;
+}
+
+.hero .md-button {
+  margin: 0.5rem 0.5rem 0 0;
+}
+
+.steps > ol {
+  counter-reset: step;
+  list-style: none;
+  padding-left: 0;
+}
+
+.steps > ol > li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 2.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.steps > ol > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  background: var(--md-primary-fg-color);
+  color: var(--md-primary-bg-color);
+}
+
+@media screen and (max-width: 44.9375em) {
+  .hero h1 {
+    font-size: 1.6rem;
+  }
+}
