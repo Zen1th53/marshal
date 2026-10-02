@@ -140,6 +140,7 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	}
 	return MarshalDispatch{d, handle, taskID, s.clock()}, nil
 }
+
 // restartTaskBranch sets a task's branch and worktree back to its base for a
 // new worker. The returned attempt stays reachable under
 // refs/marshal/<run>/returned/<task>/attempt-<n>, because its hand-ins and
@@ -783,6 +784,9 @@ func (s *MarshalService) ProposeAmend(ctx context.Context, runID, reason string)
 	if err != nil {
 		return MarshalDraft{}, false, err
 	}
+	if err = validateAmendModes(run, p, d); err != nil {
+		return MarshalDraft{}, false, err
+	}
 	_, err = p.AmendScoped(p.Version, reason, d.Plan)
 	return d, err != nil, nil
 }
@@ -811,6 +815,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	}
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
 	if err != nil {
+		return run, err
+	}
+	if err = validateAmendModes(run, p, d); err != nil {
 		return run, err
 	}
 	amended, err := p.AmendScoped(p.Version, reason, d.Plan)
@@ -844,7 +851,6 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	}
 	run.PlanVersion = amended.Version
 	if !major {
-		run.ApprovalScopeDigest = marshalApprovalDigest(amended.ApprovalScopeDigest, run)
 		previous := run.Tasks
 		run.Tasks = d.Tasks
 		for i := range run.Tasks {
@@ -859,11 +865,38 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 				}
 			}
 		}
+		run.ApprovalScopeDigest = marshalApprovalDigest(amended.ApprovalScopeDigest, run)
 	}
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return run, err
 	}
 	return run, s.record(ctx, runID, "", events.EventTypeMarshalPlanAmended, map[string]any{"major": major})
+}
+
+// A replacement worker or split child must keep the approved execution mode.
+func validateAmendModes(run marshal.Run, current plan.ExecutionPlan, next MarshalDraft) error {
+	modes := map[string]marshal.WorkerMode{}
+	for _, task := range run.Tasks {
+		modes[task.PlanTaskID] = task.Mode
+	}
+	for _, task := range run.Tasks {
+		if parent := current.ParentTaskIDs[task.PlanTaskID]; parent != "" {
+			if mode, ok := modes[parent]; ok && mode != task.Mode {
+				return errors.New("approved children have inconsistent execution modes")
+			}
+			modes[parent] = task.Mode
+		}
+	}
+	for _, task := range next.Tasks {
+		id := task.PlanTaskID
+		if _, ok := modes[id]; !ok {
+			id = next.Plan.ParentTaskIDs[id]
+		}
+		if mode, ok := modes[id]; ok && mode != task.Mode {
+			return errors.New("amendment changes an approved execution mode; create a new plan")
+		}
+	}
+	return nil
 }
 
 func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, reason string) error {

@@ -6,7 +6,7 @@ import (
 )
 
 // /policy reports the configured state and observed gate decisions, labels
-// the built-in gate engine as a placeholder, and never claims enforcement.
+// the absence of a configured gate engine, and never claims enforcement.
 func TestPolicyReadbackIsHonest(t *testing.T) {
 	_, ws, ctx := acceptanceWorkspace(t)
 	h := &CommandHandler{ws: ws}
@@ -17,7 +17,7 @@ func TestPolicyReadbackIsHonest(t *testing.T) {
 	for _, want := range []string{
 		"RUNTIME POLICY (configured; not proof of enforcement)",
 		"Runtime policy: NONE",
-		"DEFAULT PLACEHOLDER; its only check always passes",
+		"Gate engine:    NONE",
 		"GATE DECISIONS (observed)",
 		"Policy enforcement status: NOT VERIFIED for network, sandbox, capability, scope, write and audit",
 	} {

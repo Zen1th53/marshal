@@ -319,8 +319,8 @@ func TestDefaultRuntimeWiredSecuritySubsystems(t *testing.T) {
 	if runtime.CellManager() == nil {
 		t.Fatal("expected non-nil CellManager in default runtime")
 	}
-	if runtime.GateEngine() == nil {
-		t.Fatal("expected non-nil GateEngine in default runtime")
+	if runtime.GateEngine() != nil {
+		t.Fatal("default runtime must not install an unevaluated compliance check")
 	}
 	if runtime.RiskEngine() == nil {
 		t.Fatal("expected non-nil RiskEngine in default runtime")

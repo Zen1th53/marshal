@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -321,6 +322,75 @@ func TestMajorAmendmentProposalDoesNotMutateBeforeApproval(t *testing.T) {
 	current, err = s.ApplyAmendDraftBound(ctx, "run", "increase budget", draft, approved.PlanVersion)
 	if err != nil || current.State != marshal.Drafting {
 		t.Fatalf("approved proposal not staged for plan approval: %+v %v", current, err)
+	}
+}
+
+func TestMarshalAmendmentRefusesExecutionModeChange(t *testing.T) {
+	for _, mode := range []marshal.WorkerMode{marshal.Native, marshal.Governed} {
+		for _, split := range []bool{false, true} {
+			t.Run(string(mode)+fmt.Sprint(split), func(t *testing.T) {
+				ctx := t.Context()
+				s, _ := marshalFixture(t, 1)
+				original := s.Model.(marshalFakeModel).draft
+				original.Tasks[0].Mode = mode
+				s.Model = marshalFakeModel{draft: original}
+				if _, err := s.StartPlanning(ctx, "run", "write", marshal.Budget{}); err != nil {
+					t.Fatal(err)
+				}
+				approved, err := s.Approve(ctx, "run")
+				if err != nil {
+					t.Fatal(err)
+				}
+				changed := original
+				changed.Tasks = append([]marshal.Task(nil), original.Tasks...)
+				changed.Plan.Routes = map[string]plan.Route{"a": {Provider: "test", Governance: constitution.GovernanceVerified}}
+				changed.Tasks[0].Mode = marshal.Native
+				if mode == marshal.Native {
+					changed.Tasks[0].Mode = marshal.Governed
+				}
+				if split {
+					changed.Tasks[0].PlanTaskID = "child"
+					changed.Plan.Tasks = append([]plan.Task(nil), original.Plan.Tasks...)
+					changed.Plan.Tasks[0].ID = "child"
+					changed.Plan.Checks = map[string][]string{"child": original.Plan.Checks["a"]}
+					changed.Plan.ParentTaskIDs = map[string]string{"child": "a"}
+					changed.Plan.Routes = map[string]plan.Route{"child": {Provider: "test", Governance: constitution.GovernanceVerified}}
+					changed.Plan.Assignments = plan.AssignmentPlan{Assignments: []plan.Assignment{{Tasks: []string{"child"}, Harness: "test"}}}
+					changed.Plan.Graph, err = plan.BuildGraph(changed.Plan.Tasks)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				currentPlan, err := s.Store.GetPlan(ctx, approved.PlanID, approved.PlanVersion)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := currentPlan.AmendScoped(currentPlan.Version, "replace worker", changed.Plan); err != nil {
+					t.Fatalf("plan amendment must preserve the other approved boundaries: %v", err)
+				}
+				s.Model = marshalFakeModel{draft: original, amend: changed}
+				if _, _, err := s.ProposeAmend(ctx, "run", "change worker mode"); err == nil {
+					t.Fatal("mode change proposal accepted")
+				}
+				if _, err := s.ApplyAmendDraftBound(ctx, "run", "change worker mode", changed, approved.PlanVersion); err == nil {
+					t.Fatal("mode change applied with existing approval")
+				}
+				current, err := s.Snapshot(ctx, "run")
+				if err != nil || current.PlanVersion != approved.PlanVersion || current.ApprovalScopeDigest != approved.ApprovalScopeDigest || current.Tasks[0].Mode != mode {
+					t.Fatalf("refused amendment changed run: %+v err=%v", current, err)
+				}
+				changedRun := approved
+				changedRun.Tasks = changed.Tasks
+				if marshalApprovalDigest("plan", approved) == marshalApprovalDigest("plan", changedRun) {
+					t.Fatal("approval digest does not bind worker mode")
+				}
+				changed.Tasks[0].Mode = mode
+				s.Model = marshalFakeModel{amend: changed}
+				if _, major, err := s.ProposeAmend(ctx, "run", "replace worker"); err != nil || major {
+					t.Fatalf("amendment preserving mode refused: major=%v err=%v", major, err)
+				}
+			})
+		}
 	}
 }
 
