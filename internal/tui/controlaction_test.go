@@ -412,7 +412,8 @@ func (f *fakeAuthority) ApproveGoal(_ context.Context, _ string, expectedRevisio
 	return f.goal, nil
 }
 
-func (f *fakeAuthority) ReviseGoal(_ context.Context, _ string, expectedRevision int64, interpretation, reason string) (model.GoalContract, error) {
+func (f *fakeAuthority) ReviseGoal(_ context.Context, envelope app.CommandEnvelope, interpretation, reason string) (model.GoalContract, error) {
+	expectedRevision := envelope.ExpectedVersion
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.goal.Revision != expectedRevision {

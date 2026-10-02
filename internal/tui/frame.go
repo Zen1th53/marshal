@@ -45,6 +45,9 @@ func BuildFrame(s UIState, th *Theme, workDir string, composer *Composer, popup 
 // state, git and cost are not repeated here: they belong to the statusline.
 func buildHeader(s UIState, th *Theme, cols int) []string {
 	title := th.Colorize(th.Marshal, "MARSHAL")
+	if badge := ultraBadge(s); badge != "" {
+		title += " " + th.Colorize(th.Ultra, "["+badge+"]")
+	}
 
 	goal := s.Goal.DesiredOutcome
 	if goal == "" {
@@ -72,6 +75,11 @@ func buildBody(s UIState, th *Theme, cols, rows int) []string {
 	if res := outputSection(s, th, cols); len(res) > 0 {
 		out = append(out, "")
 		out = append(out, res...)
+	}
+
+	if m := marshalSection(s, th, cols); len(m) > 0 {
+		out = append(out, "")
+		out = append(out, m...)
 	}
 
 	if approvals := approvalsSection(s, th, cols); len(approvals) > 0 {
@@ -121,10 +129,12 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 			th.Colorize(th.Active, "[F1]"),
 			th.Colorize(th.Active, "[F2]"),
 			th.Colorize(th.Active, "[F3]")), cols))
-		out = append(out, PadCell(fmt.Sprintf("   %s Status   %s Models   %s Navigation",
-			th.Colorize(th.Active, "[F4]"),
-			th.Colorize(th.Active, "[F5]"),
-			th.Colorize(th.Active, "[Esc]")), cols))
+		shortcuts := fmt.Sprintf("   %s Status   %s Models",
+			th.Colorize(th.Active, "[F4]"), th.Colorize(th.Active, "[F5]"))
+		if s.NavigationAvailable {
+			shortcuts += "   " + th.Colorize(th.Active, "[Esc]") + " Navigation"
+		}
+		out = append(out, PadCell(shortcuts, cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s %s",
 			th.Colorize(th.Active, "[F7] Codex · [F8] Claude · [F9] OpenCode · [F12] Antigravity"), "Native sessions · automatic memory"), cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s %s",

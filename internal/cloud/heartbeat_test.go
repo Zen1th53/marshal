@@ -105,7 +105,7 @@ func TestAuthorizationStopIsOrderly(t *testing.T) {
 	f := newFakeServer(t)
 	ctx := context.Background()
 
-	auth := Authorize(ctx, Config{Endpoint: f.server.URL, ExecutionEnabled: true},
+	auth := Authorize(ctx, Config{Endpoint: f.server.URL},
 		t.TempDir(), "1.0.0")
 	if auth.Err != nil {
 		t.Fatalf("authorize: %v", auth.Err)

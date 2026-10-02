@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -26,8 +27,12 @@ type fakeServer struct {
 	refuse atomic.Bool
 	down   atomic.Bool
 
-	leases atomic.Int64
-	beats  atomic.Int64
+	leases                atomic.Int64
+	beats                 atomic.Int64
+	registrations         atomic.Int64
+	unknownChallenge      atomic.Int64
+	unknownSession        atomic.Int64
+	rateLimitRegistration atomic.Bool
 }
 
 func newFakeServer(t *testing.T) *fakeServer {
@@ -57,15 +62,30 @@ func newFakeServer(t *testing.T) *fakeServer {
 		})
 	})
 	mux.HandleFunc("/v1/installations/register", f.guard(func(w http.ResponseWriter, r *http.Request) {
+		f.registrations.Add(1)
+		if f.rateLimitRegistration.Load() {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	mux.HandleFunc("/v1/ultra/challenge", f.guard(func(w http.ResponseWriter, r *http.Request) {
+		if f.unknownChallenge.Load() > 0 {
+			f.unknownChallenge.Add(-1)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		now := time.Now().UTC()
 		json.NewEncoder(w).Encode(challenge{
 			Nonce: "nonce-fixed", IssuedAt: now, ExpiresAt: now.Add(time.Minute),
 		})
 	}))
 	mux.HandleFunc("/v1/ultra/sessions", f.guard(func(w http.ResponseWriter, r *http.Request) {
+		if f.unknownSession.Load() > 0 {
+			f.unknownSession.Add(-1)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		var body struct {
 			InstallationID string `json:"installation_id"`
 			SessionID      string `json:"session_id"`
@@ -350,5 +370,33 @@ func TestMaintainDegradesOnRefusal(t *testing.T) {
 	}
 	if gate.Entitled() {
 		t.Fatal("entitlement survived a revocation")
+	}
+}
+
+// A refusal carries the server's reason, so the person can tell a revoked
+// entitlement from any other "no" without reading the server's logs.
+func TestRefusalCarriesTheServerReason(t *testing.T) {
+	for name, body := range map[string]string{
+		"with a reason":    `{"code":"entitlement_revoked","message":"entitlement is revoked"}`,
+		"without a reason": `not json`,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(body))
+		}))
+		client, err := NewClient(server.URL, "1.0.0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		state, _ := NewInstallation()
+		_, err = client.StartSession(context.Background(), state, "sess-x")
+		server.Close()
+		if !errors.Is(err, ErrRefused) {
+			t.Fatalf("%s: want ErrRefused, got %v", name, err)
+		}
+		hasReason := strings.Contains(err.Error(), "entitlement_revoked: entitlement is revoked")
+		if hasReason != (name == "with a reason") {
+			t.Fatalf("%s: %v", name, err)
+		}
 	}
 }

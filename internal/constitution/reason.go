@@ -13,6 +13,7 @@ const (
 	ReasonApprovalRequired            ReasonCode = "CONST_APPROVAL_REQUIRED"
 	ReasonApprovalStale               ReasonCode = "CONST_APPROVAL_STALE"
 	ReasonSelfApproval                ReasonCode = "CONST_SELF_APPROVAL"
+	ReasonSelfAcceptance              ReasonCode = "CONST_SELF_ACCEPTANCE"
 	ReasonAuthorityPrecedenceViolated ReasonCode = "CONST_AUTHORITY_PRECEDENCE_VIOLATED"
 	ReasonAuthorizationDenied         ReasonCode = "CONST_AUTHORIZATION_DENIED"
 	ReasonSandboxUnavailable          ReasonCode = "CONST_SANDBOX_UNAVAILABLE"
@@ -56,6 +57,7 @@ var reasonCatalog = map[ReasonCode]ReasonInfo{
 	ReasonApprovalRequired:            {Code: ReasonApprovalRequired, Retryable: false, Recovery: "Obtain an approval bound to this exact action."},
 	ReasonApprovalStale:               {Code: ReasonApprovalStale, Retryable: false, Recovery: "Request a fresh approval for the changed action."},
 	ReasonSelfApproval:                {Code: ReasonSelfApproval, Retryable: false, Recovery: "Have a different principal approve or review the action."},
+	ReasonSelfAcceptance:              {Code: ReasonSelfAcceptance, Retryable: false, Recovery: "Assign a reviewer other than the task executor."},
 	ReasonAuthorityPrecedenceViolated: {Code: ReasonAuthorityPrecedenceViolated, Retryable: false, Recovery: "Change the higher-authority rule through its own governed path, or drop the conflicting request."},
 	ReasonAuthorizationDenied:         {Code: ReasonAuthorizationDenied, Retryable: false, Recovery: "Use a principal holding the required authority."},
 	ReasonSandboxUnavailable:          {Code: ReasonSandboxUnavailable, Retryable: false, Recovery: "Restore sandbox isolation. Do not disable isolation to proceed."},

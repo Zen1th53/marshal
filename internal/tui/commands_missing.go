@@ -16,6 +16,9 @@ import (
 // must resolve to real canonical reads rather than to the unknown-command
 // branch.
 func (h *CommandHandler) handleApprovals(ctx context.Context, args []string) (string, error) {
+	if authority, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority); ok && authority != nil && authority.runtime != nil {
+		return h.handleCanonicalApprovals(ctx, authority, args)
+	}
 	if h.ws.store == nil {
 		return "Store unavailable", nil
 	}

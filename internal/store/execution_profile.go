@@ -21,10 +21,10 @@ func (s *Store) GetExecutionModelPreference(ctx context.Context, projectID, adap
 	var preference model.ExecutionModelPreference
 	var updatedAt string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT project_id, adapter, model, revision, updated_at
+		SELECT project_id, adapter, model, effort, revision, updated_at
 		FROM execution_model_preferences
 		WHERE project_id = ? AND adapter = ?
-	`, projectID, adapterName).Scan(&preference.ProjectID, &preference.Adapter, &preference.Model, &preference.Revision, &updatedAt)
+	`, projectID, adapterName).Scan(&preference.ProjectID, &preference.Adapter, &preference.Model, &preference.Effort, &preference.Revision, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.ExecutionModelPreference{}, fmt.Errorf("%w: execution model preference for %s", model.ErrNotFound, adapterName)
 	}
@@ -77,15 +77,15 @@ func (s *Store) SetExecutionModelPreference(ctx context.Context, preference mode
 	preference.UpdatedAt = time.Now().UTC()
 	if currentRevision == 0 {
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO execution_model_preferences(project_id, adapter, model, revision, updated_at)
-			VALUES(?, ?, ?, ?, ?)
-		`, preference.ProjectID, preference.Adapter, preference.Model, preference.Revision, preference.UpdatedAt.Format(time.RFC3339Nano))
+			INSERT INTO execution_model_preferences(project_id, adapter, model, effort, revision, updated_at)
+			VALUES(?, ?, ?, ?, ?, ?)
+		`, preference.ProjectID, preference.Adapter, preference.Model, preference.Effort, preference.Revision, preference.UpdatedAt.Format(time.RFC3339Nano))
 	} else {
 		result, updateErr := tx.ExecContext(ctx, `
 			UPDATE execution_model_preferences
-			SET model = ?, revision = ?, updated_at = ?
+			SET model = ?, effort = ?, revision = ?, updated_at = ?
 			WHERE project_id = ? AND adapter = ? AND revision = ?
-		`, preference.Model, preference.Revision, preference.UpdatedAt.Format(time.RFC3339Nano), preference.ProjectID, preference.Adapter, currentRevision)
+		`, preference.Model, preference.Effort, preference.Revision, preference.UpdatedAt.Format(time.RFC3339Nano), preference.ProjectID, preference.Adapter, currentRevision)
 		if updateErr == nil {
 			rows, rowsErr := result.RowsAffected()
 			if rowsErr != nil {
@@ -99,6 +99,12 @@ func (s *Store) SetExecutionModelPreference(ctx context.Context, preference mode
 	}
 	if err != nil {
 		return model.ExecutionModelPreference{}, fmt.Errorf("write execution model preference: %w", err)
+	}
+	// An operator command commits its receipt and audit with the preference.
+	if r, ok := ctx.Value(commandKey{}).(CommandRecord); ok {
+		if err := insertCommandReceipt(ctx, tx, r, preference.Revision); err != nil {
+			return model.ExecutionModelPreference{}, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return model.ExecutionModelPreference{}, fmt.Errorf("commit execution model preference: %w", err)

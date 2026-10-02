@@ -1,15 +1,18 @@
 package execution
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/model"
@@ -17,6 +20,8 @@ import (
 
 // ApprovalRequest holds data needed to request a runtime approval.
 type ApprovalRequest struct {
+	RequestedBy    string
+	HardViolation  bool
 	RunID          string
 	TaskID         string
 	PlanID         string
@@ -77,6 +82,11 @@ func (am *ApprovalManager) RequestApproval(req ApprovalRequest) (*RuntimeApprova
 
 	am.mu.Lock()
 	defer am.mu.Unlock()
+	unlock, err := am.lockStorage()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 
 	now := req.Now
 	if now.IsZero() {
@@ -89,11 +99,16 @@ func (am *ApprovalManager) RequestApproval(req ApprovalRequest) (*RuntimeApprova
 	}
 	expiresAt := now.Add(ttl)
 
-	approvalID := fmt.Sprintf("app-%s-%s-%d", req.RunID, req.TaskID, now.UnixNano())
+	approvalID := "app-" + uuid.NewString()
 	actionDigest := ComputeActionDigest(req.OperationType, req.TargetResource, req.DiffPreview, req.Parameters)
 	stateDigest := ComputeStateDigest(req.CurrentState)
 
+	requester := req.RequestedBy
+	if requester == "" {
+		requester = req.RunID
+	}
 	approval := &RuntimeApproval{
+		RequestedBy: requester, HardViolation: req.HardViolation, Revision: 1,
 		ApprovalID:     approvalID,
 		RunID:          req.RunID,
 		TaskID:         req.TaskID,
@@ -111,31 +126,41 @@ func (am *ApprovalManager) RequestApproval(req ApprovalRequest) (*RuntimeApprova
 		ExpiresAt:      &expiresAt,
 	}
 
-	am.approvals[approvalID] = approval
 	if am.dir != "" {
-		data, _ := json.MarshalIndent(approval, "", "  ")
-		_ = os.WriteFile(filepath.Join(am.dir, approvalID+".json"), data, 0644)
+		if err := am.persist(approval); err != nil {
+			return nil, err
+		}
 	}
-	return approval, nil
+	am.approvals[approvalID] = approval
+	copy := *approval
+	return &copy, nil
 }
 
 // Decide processes a human decision (Approve or Deny).
+type approvalDecisionBinding struct{ Digest, Key string }
+type approvalDecisionKey struct{}
+
+func WithApprovalDecision(ctx context.Context, digest, key string) context.Context {
+	return context.WithValue(ctx, approvalDecisionKey{}, approvalDecisionBinding{digest, key})
+}
+
 func (am *ApprovalManager) Decide(approvalID string, approve bool, decider, reason string, now time.Time) (*RuntimeApproval, error) {
+	return am.DecideContext(context.Background(), approvalID, approve, decider, reason, now)
+}
+func (am *ApprovalManager) DecideContext(ctx context.Context, approvalID string, approve bool, decider, reason string, now time.Time) (*RuntimeApproval, error) {
 	am.mu.Lock()
 	defer am.mu.Unlock()
-
-	app, exists := am.approvals[approvalID]
-	if !exists && am.dir != "" {
-		data, err := os.ReadFile(filepath.Join(am.dir, approvalID+".json"))
-		if err == nil {
-			var loaded RuntimeApproval
-			if err := json.Unmarshal(data, &loaded); err == nil {
-				app = &loaded
-				am.approvals[approvalID] = app
-				exists = true
-			}
-		}
+	unlock, err := am.lockStorage()
+	if err != nil {
+		return nil, err
 	}
+	defer unlock()
+
+	if err := am.refresh(approvalID); err != nil {
+		return nil, err
+	}
+	app, exists := am.approvals[approvalID]
+
 	if !exists {
 		return nil, fmt.Errorf("approval %s not found", approvalID)
 	}
@@ -144,15 +169,47 @@ func (am *ApprovalManager) Decide(approvalID string, approve bool, decider, reas
 		now = time.Now().UTC()
 	}
 
-	if app.ExpiresAt != nil && now.After(*app.ExpiresAt) {
+	if app.ExpiresAt != nil && !now.Before(*app.ExpiresAt) {
+		previous := *app
 		app.Status = ApprovalExpired
-		return app, fmt.Errorf("%w: approval expired", ErrApprovalTOCTOUViolation)
+		app.Revision++
+		if am.dir != "" {
+			if err := am.persist(app); err != nil {
+				*app = previous
+				return nil, err
+			}
+		}
+		copy := *app
+		return &copy, fmt.Errorf("%w: approval expired", ErrApprovalTOCTOUViolation)
 	}
 
 	if app.Status != ApprovalRequested {
 		return app, fmt.Errorf("%w: cannot decide on approval in state %s", ErrInvalidStateTransition, app.Status)
 	}
 
+	requester := app.RequestedBy
+	if requester == "" {
+		requester = app.RunID
+	}
+	if decider == "" || requester == decider {
+		return nil, fmt.Errorf("%w: requester cannot approve its own action", ErrApprovalDenied)
+	}
+	if approve && app.HardViolation {
+		return nil, fmt.Errorf("%w: hard violation cannot be approved", ErrConstraintViolation)
+	}
+	binding, bound := ctx.Value(approvalDecisionKey{}).(approvalDecisionBinding)
+	if bound {
+		raw, _ := json.Marshal(app)
+		sum := sha256.Sum256(raw)
+		if hex.EncodeToString(sum[:]) != binding.Digest {
+			return nil, ErrApprovalTOCTOUViolation
+		}
+	}
+	previous := *app
+	if bound {
+		app.DecisionCommandKey = binding.Key
+	}
+	app.Revision++
 	app.ResolvedAt = &now
 	app.ApprovedBy = decider
 	app.DecisionReason = reason
@@ -164,11 +221,13 @@ func (am *ApprovalManager) Decide(approvalID string, approve bool, decider, reas
 	}
 
 	if am.dir != "" {
-		data, _ := json.MarshalIndent(app, "", "  ")
-		_ = os.WriteFile(filepath.Join(am.dir, approvalID+".json"), data, 0644)
+		if err := am.persist(app); err != nil {
+			*app = previous
+			return nil, err
+		}
 	}
-
-	return app, nil
+	copy := *app
+	return &copy, nil
 }
 
 // Approve records an approval decision.
@@ -187,32 +246,34 @@ func (am *ApprovalManager) Deny(approvalID, decider, reason string, now time.Tim
 func (am *ApprovalManager) ValidateAndConsume(approvalID, currentActionDigest, currentStateDigest string, now time.Time) error {
 	am.mu.Lock()
 	defer am.mu.Unlock()
-
-	app, exists := am.approvals[approvalID]
-	if !exists && am.dir != "" {
-		data, err := os.ReadFile(filepath.Join(am.dir, approvalID+".json"))
-		if err == nil {
-			var loaded RuntimeApproval
-			if err := json.Unmarshal(data, &loaded); err == nil {
-				app = &loaded
-				am.approvals[approvalID] = app
-				exists = true
-			}
-		}
+	unlock, err := am.lockStorage()
+	if err != nil {
+		return err
 	}
+	defer unlock()
+
+	if err := am.refresh(approvalID); err != nil {
+		return err
+	}
+	app, exists := am.approvals[approvalID]
+
 	if !exists {
 		return fmt.Errorf("approval %s not found", approvalID)
 	}
 
+	previous := *app
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 
-	if app.ExpiresAt != nil && now.After(*app.ExpiresAt) {
+	if app.ExpiresAt != nil && !now.Before(*app.ExpiresAt) {
 		app.Status = ApprovalExpired
+		app.Revision++
 		if am.dir != "" {
-			data, _ := json.MarshalIndent(app, "", "  ")
-			_ = os.WriteFile(filepath.Join(am.dir, approvalID+".json"), data, 0644)
+			if err := am.persist(app); err != nil {
+				*app = previous
+				return err
+			}
 		}
 		return fmt.Errorf("%w: approval expired at %s", ErrApprovalTOCTOUViolation, app.ExpiresAt)
 	}
@@ -227,9 +288,12 @@ func (am *ApprovalManager) ValidateAndConsume(approvalID, currentActionDigest, c
 	// Exact action check: prevents TOCTOU mutation of approved action
 	if app.ActionDigest != currentActionDigest {
 		app.Status = ApprovalInvalidated
+		app.Revision++
 		if am.dir != "" {
-			data, _ := json.MarshalIndent(app, "", "  ")
-			_ = os.WriteFile(filepath.Join(am.dir, approvalID+".json"), data, 0644)
+			if err := am.persist(app); err != nil {
+				*app = previous
+				return err
+			}
 		}
 		return fmt.Errorf("%w: action digest mismatch (approved %s, current %s)",
 			ErrApprovalTOCTOUViolation, app.ActionDigest, currentActionDigest)
@@ -238,9 +302,12 @@ func (am *ApprovalManager) ValidateAndConsume(approvalID, currentActionDigest, c
 	// State check if provided
 	if currentStateDigest != "" && app.StateDigest != "" && app.StateDigest != currentStateDigest {
 		app.Status = ApprovalInvalidated
+		app.Revision++
 		if am.dir != "" {
-			data, _ := json.MarshalIndent(app, "", "  ")
-			_ = os.WriteFile(filepath.Join(am.dir, approvalID+".json"), data, 0644)
+			if err := am.persist(app); err != nil {
+				*app = previous
+				return err
+			}
 		}
 		return fmt.Errorf("%w: state digest mismatch since approval was given", ErrApprovalTOCTOUViolation)
 	}
@@ -249,36 +316,36 @@ func (am *ApprovalManager) ValidateAndConsume(approvalID, currentActionDigest, c
 	// INVALIDATED so a provider bridge can resume the exact live turn while a
 	// stale/tampered request can never be mistaken for an accepted decision.
 	app.Status = ApprovalConsumed
+	app.Revision++
 	if am.dir != "" {
-		data, _ := json.MarshalIndent(app, "", "  ")
-		_ = os.WriteFile(filepath.Join(am.dir, approvalID+".json"), data, 0644)
+		if err := am.persist(app); err != nil {
+			*app = previous
+			return err
+		}
 	}
 	return nil
 }
 
 // GetApproval retrieves an approval by ID.
 func (am *ApprovalManager) GetApproval(approvalID string) (*RuntimeApproval, error) {
-	am.mu.RLock()
-	app, exists := am.approvals[approvalID]
-	am.mu.RUnlock()
-
-	if !exists && am.dir != "" {
-		data, err := os.ReadFile(filepath.Join(am.dir, approvalID+".json"))
-		if err == nil {
-			var loaded RuntimeApproval
-			if err := json.Unmarshal(data, &loaded); err == nil {
-				am.mu.Lock()
-				am.approvals[approvalID] = &loaded
-				app = &loaded
-				exists = true
-				am.mu.Unlock()
-			}
-		}
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	unlock, err := am.lockStorage()
+	if err != nil {
+		return nil, err
 	}
+	defer unlock()
+
+	if err := am.refresh(approvalID); err != nil {
+		return nil, err
+	}
+	app, exists := am.approvals[approvalID]
+
 	if !exists {
 		return nil, fmt.Errorf("approval %s not found", approvalID)
 	}
-	return app, nil
+	copy := *app
+	return &copy, nil
 }
 
 // ListApprovals returns copies of every durable approval known to this
@@ -288,6 +355,12 @@ func (am *ApprovalManager) GetApproval(approvalID string) (*RuntimeApproval, err
 func (am *ApprovalManager) ListApprovals() ([]RuntimeApproval, error) {
 	am.mu.Lock()
 	defer am.mu.Unlock()
+	unlock, err := am.lockStorage()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+
 	if am.dir != "" {
 		entries, err := os.ReadDir(am.dir)
 		if err != nil {
@@ -323,4 +396,87 @@ func (am *ApprovalManager) ListApprovals() ([]RuntimeApproval, error) {
 		return result[i].CreatedAt.Before(result[j].CreatedAt)
 	})
 	return result, nil
+}
+
+func (am *ApprovalManager) persist(app *RuntimeApproval) error {
+	raw, err := json.MarshalIndent(app, "", "  ")
+	if err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(am.dir, ".approval-*")
+	if err != nil {
+		return err
+	}
+	name := temporary.Name()
+	defer os.Remove(name)
+	if _, err = temporary.Write(raw); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err = temporary.Sync(); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err = temporary.Close(); err != nil {
+		return err
+	}
+	if err = os.Rename(name, filepath.Join(am.dir, app.ApprovalID+".json")); err != nil {
+		return err
+	}
+	directory, err := os.Open(am.dir)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
+}
+func (am *ApprovalManager) ApproveContext(ctx context.Context, id, actor, reason string, now time.Time) error {
+	_, err := am.DecideContext(ctx, id, true, actor, reason, now)
+	return err
+}
+func (am *ApprovalManager) DenyContext(ctx context.Context, id, actor, reason string, now time.Time) error {
+	_, err := am.DecideContext(ctx, id, false, actor, reason, now)
+	return err
+}
+
+// Serialize file decisions across Runtime instances, then refresh under the
+// lock so a second process cannot decide or consume a cached pending record.
+func (am *ApprovalManager) lockStorage() (func(), error) {
+	if am.dir == "" {
+		return func() {}, nil
+	}
+	file, err := os.OpenFile(filepath.Join(am.dir, ".approval.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN); _ = file.Close() }, nil
+}
+func (am *ApprovalManager) refresh(id string) error {
+	if am.dir == "" {
+		return nil
+	}
+	if id == "" || filepath.Base(id) != id {
+		return ErrRunInvalid
+	}
+	raw, err := os.ReadFile(filepath.Join(am.dir, id+".json"))
+	if os.IsNotExist(err) {
+		delete(am.approvals, id)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var loaded RuntimeApproval
+	if err := json.Unmarshal(raw, &loaded); err != nil {
+		return err
+	}
+	if loaded.ApprovalID != id {
+		return ErrRunInvalid
+	}
+	am.approvals[id] = &loaded
+	return nil
 }

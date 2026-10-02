@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -71,6 +72,8 @@ type Runtime struct {
 	quorumEngine        *quorum.Engine
 	allowProcessOnly    bool
 	execService         *ExecutionService
+	taskMu              sync.Mutex
+	taskRuns            map[string]context.CancelFunc
 	execMu              sync.Mutex
 	codexAppServerMu    sync.Mutex
 	codexAppServerTurns map[string]*liveCodexAppServerTurn
@@ -84,6 +87,13 @@ type Runtime struct {
 	// session is attached, and a nil gate answers "not entitled", so a runtime
 	// without one evaluates every ULTRA envelope as unentitled.
 	ultra *cloud.Gate
+
+	// gateEngineDefault marks the built-in engine whose only check always
+	// passes; it is an enforcement hook, not enforcement.
+	gateEngineDefault bool
+	// resumeRun restarts canonical execution of a resumed run; nil means
+	// ExecuteRun. Tests replace it to observe the restart without executing.
+	resumeRun func(runID string)
 }
 
 // AttachULTRA wires the canonical ULTRA gate into the runtime.
@@ -361,6 +371,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		})
 		if err == nil {
 			rt.gateEngine = gateEng
+			rt.gateEngineDefault = true
 		}
 	}
 	if rt.riskEngine == nil {
@@ -453,11 +464,65 @@ func (r *Runtime) SetCodexModelPreference(ctx context.Context, modelName string,
 	if err := validator.ValidateModel(ctx, modelName); err != nil {
 		return model.ExecutionModelPreference{}, err
 	}
+	// A reasoning effort chosen for the previous model is kept only when the
+	// new model's catalog advertises it too; otherwise it is cleared, never
+	// carried onto a model that would reject it.
+	effort := ""
+	if current, err := r.CodexModelPreference(ctx); err == nil && current.Effort != "" {
+		if effortValidator, err := r.codexEffortValidator(); err == nil && effortValidator.ValidateEffort(ctx, modelName, current.Effort) == nil {
+			effort = current.Effort
+		}
+	}
 	return r.store.SetExecutionModelPreference(ctx, model.ExecutionModelPreference{
 		ProjectID: localProjectID,
 		Adapter:   "codex",
 		Model:     modelName,
+		Effort:    effort,
 	}, expectedRevision)
+}
+
+type codexEffortValidator interface {
+	ValidateEffort(ctx context.Context, modelName, effort string) error
+}
+
+// codexEffortValidator reads reasoning efforts from the same catalog the model
+// is validated against: the attached adapter, or a short-lived local probe.
+func (r *Runtime) codexEffortValidator() (codexEffortValidator, error) {
+	if validator, ok := r.adapters["codex"].(codexEffortValidator); ok {
+		return validator, nil
+	}
+	binary, err := project.FindBinary("codex")
+	if err != nil {
+		return nil, fmt.Errorf("%w: codex CLI is missing", model.ErrUnavailable)
+	}
+	return codex.New(binary, worker.New(10*time.Second, 2*time.Second, 1<<20)), nil
+}
+
+// SetCodexEffortPreference records the reasoning effort future governed Codex
+// runs request for the selected model. A model must be selected first, the
+// effort must be one that model's catalog advertises, and the write is
+// CAS-bound to the preference revision. An empty effort returns to the
+// model's own default.
+func (r *Runtime) SetCodexEffortPreference(ctx context.Context, effort string, expectedRevision int64) (model.ExecutionModelPreference, error) {
+	if r == nil || r.store == nil {
+		return model.ExecutionModelPreference{}, fmt.Errorf("runtime store is unavailable")
+	}
+	current, err := r.CodexModelPreference(ctx)
+	if err != nil {
+		return model.ExecutionModelPreference{}, fmt.Errorf("%w: select a Codex model with /model select codex <model> before setting its reasoning effort", model.ErrInvalid)
+	}
+	effort = strings.ToLower(strings.TrimSpace(effort))
+	if effort != "" {
+		validator, err := r.codexEffortValidator()
+		if err != nil {
+			return model.ExecutionModelPreference{}, err
+		}
+		if err := validator.ValidateEffort(ctx, current.Model, effort); err != nil {
+			return model.ExecutionModelPreference{}, err
+		}
+	}
+	current.Effort = effort
+	return r.store.SetExecutionModelPreference(ctx, current, expectedRevision)
 }
 
 // ClaudeModelPreference returns the durable operator selection for future
@@ -518,13 +583,16 @@ func (r *Runtime) InstallProjectCodexSkill(ctx context.Context, name, expectedDi
 	if r == nil || r.store == nil {
 		return "", fmt.Errorf("runtime store is unavailable")
 	}
+	if err := r.checkCodexSkillName(name); err != nil {
+		return "", publicSkillError(err)
+	}
 	digest, err := codex.InstallProjectSkill(r.layout.Root, "", name, expectedDigest)
 	if err != nil {
-		return "", err
+		return "", publicSkillError(err)
 	}
 	eventID, err := model.NewID("EVENT-")
 	if err != nil {
-		return "", err
+		return "", publicSkillError(err)
 	}
 	if err := r.store.AppendEvent(ctx, nil, model.Event{
 		ID: eventID, Type: "CODEX_PROJECT_SKILL_INSTALLED", ProjectID: localProjectID,
@@ -535,9 +603,9 @@ func (r *Runtime) InstallProjectCodexSkill(ctx context.Context, name, expectedDi
 		// transaction. Compensate it before returning failure so an audit outage
 		// never leaves an unaudited installed skill behind.
 		if rollbackErr := codex.RemoveInstalledProjectSkill("", name, digest); rollbackErr != nil {
-			return "", fmt.Errorf("audit Codex skill installation: %w (compensating removal failed: %v)", err, rollbackErr)
+			return "", fmt.Errorf("audit Codex skill installation: %w (compensating removal failed: %v)", publicSkillError(err), publicSkillError(rollbackErr))
 		}
-		return "", fmt.Errorf("audit Codex skill installation: %w; installation was reverted", err)
+		return "", fmt.Errorf("audit Codex skill installation: %w; installation was reverted", publicSkillError(err))
 	}
 	return digest, nil
 }
@@ -546,7 +614,70 @@ func (r *Runtime) PreviewProjectCodexSkill(name string) (string, error) {
 	if r == nil {
 		return "", fmt.Errorf("runtime is unavailable")
 	}
-	return codex.PreviewProjectSkill(r.layout.Root, name)
+	if err := r.checkCodexSkillName(name); err != nil {
+		return "", publicSkillError(err)
+	}
+	digest, err := codex.PreviewProjectSkill(r.layout.Root, name)
+	if err != nil {
+		return "", publicSkillError(err)
+	}
+	if err := codex.CheckProjectSkillInstallDestination("", name); err != nil {
+		return "", publicSkillError(err)
+	}
+	return digest, nil
+}
+
+// ProjectCodexSkills retains every discovered source. Only an exact project
+// candidate accepted by the canonical preview service is installable.
+func (r *Runtime) ProjectCodexSkills() ([]codex.SkillInfo, error) {
+	if r == nil {
+		return nil, fmt.Errorf("runtime is unavailable")
+	}
+	skills, err := codex.DiscoverLocalSkills(r.layout.Root)
+	if err != nil {
+		return skills, err
+	}
+	for i := range skills {
+		skill := &skills[i]
+		if skill.SourceType == "project-agents" {
+			_, previewErr := r.PreviewProjectCodexSkill(skill.Name)
+			skill.Installable = previewErr == nil
+		}
+	}
+	return skills, nil
+}
+
+func (r *Runtime) checkCodexSkillName(name string) error {
+	skills, err := codex.DiscoverLocalSkills(r.layout.Root)
+	if err != nil {
+		return err
+	}
+	var sources []string
+	for _, skill := range skills {
+		if skill.Name == name {
+			sources = append(sources, skill.SourceType)
+		}
+	}
+	if len(sources) > 1 {
+		return fmt.Errorf("%w: ambiguous skill %q; sources: %s", model.ErrConflict, name, strings.Join(sources, ", "))
+	}
+	if len(sources) == 1 && sources[0] != "project-agents" {
+		return fmt.Errorf("%w: skill %q from %s is not installable", model.ErrInvalid, name, sources[0])
+	}
+	return nil
+}
+
+// publicSkillError preserves admission semantics without exporting local paths.
+func publicSkillError(err error) error {
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		return fmt.Errorf("project-agents skill %s failed: %w", pathErr.Op, pathErr.Err)
+	}
+	var linkErr *os.LinkError
+	if errors.As(err, &linkErr) {
+		return fmt.Errorf("project-agents skill %s failed: %w", linkErr.Op, linkErr.Err)
+	}
+	return err
 }
 
 // SubmitHandoff is the sole runtime path for accepting typed inter-agent
@@ -1031,7 +1162,19 @@ func isCommitIdentifier(value string) bool {
 	return true
 }
 
-func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error) {
+func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunResult, finalErr error) {
+	var settle func() error
+	var admissionErr error
+	ctx, settle, admissionErr = r.superviseTask(ctx, request.TaskID)
+	if admissionErr != nil {
+		return RunResult{}, admissionErr
+	}
+	defer func() {
+		if err := settle(); err != nil && finalErr == nil {
+			finalErr = err
+		}
+	}()
+
 	if request.Adapter == "" {
 		request.Adapter = "codex"
 	}
@@ -1134,11 +1277,14 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (RunResult, error
 			}
 		}
 	}
-	claim, err := r.Claim(ctx, ClaimRequest{TaskID: task.ID, AgentID: request.AgentID, ExpectedRevision: request.ExpectedRevision})
+	claim, err := r.claimForRun(ctx, task, request)
 	if err != nil {
 		return RunResult{}, err
 	}
-	claimedRevision := request.ExpectedRevision + 1
+	claimedRevision := task.Revision + 1
+	if task.Status == model.TaskClaimed {
+		claimedRevision = task.Revision
+	}
 	releasePreparationFailure := func() {
 		active, activeErr := r.store.ActiveLease(context.Background(), task.ID)
 		if activeErr == nil {
@@ -1936,3 +2082,15 @@ func (r *Runtime) Store() *store.Store { return r.store }
 // Memory exposes the single canonical product-facing memory service to local
 // interfaces. Callers must use its authorization and governance boundaries.
 func (r *Runtime) Memory() *MemoryService { return r.memoryService }
+
+// Marshal exposes the project Marshal service.
+func (r *Runtime) Marshal() *MarshalService {
+	if r == nil {
+		return nil
+	}
+	project, err := r.store.Project(context.Background())
+	if err != nil {
+		return nil
+	}
+	return &MarshalService{Store: r.store, ProjectID: project.ID, Repository: r.layout.Root, Worktrees: r.layout.Worktrees}
+}

@@ -2,11 +2,16 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
-	"time"
+	"unicode"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/google/uuid"
 )
 
 // Goal constraint operations.
@@ -24,10 +29,10 @@ func (h *CommandHandler) handleGoalConstraints(ctx context.Context) (string, err
 	h.ws.mu.RUnlock()
 
 	if goal.ID == "" {
-		return "No active goal. Set one with /goal <outcome> before adding constraints.", nil
+		return "No active goal. Use /goal create <request>.", nil
 	}
 	if len(goal.Constraints) == 0 {
-		return fmt.Sprintf("Goal %s [rev %d] has no constraints.\nAdd one with /goal add-constraint <text>.",
+		return fmt.Sprintf("Goal %s [rev %d] has no constraints.",
 			goal.ID, goal.Revision), nil
 	}
 
@@ -43,109 +48,155 @@ func (h *CommandHandler) handleGoalConstraints(ctx context.Context) (string, err
 	return b.String(), nil
 }
 
-// handleGoalAddConstraint appends a constraint and saves a new goal revision.
-func (h *CommandHandler) handleGoalAddConstraint(ctx context.Context, text string) (string, error) {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return "Usage: /goal add-constraint <constraint text>", nil
+const goalUsage = "Usage: /goal create <request> | edit <outcome> | constraints | add-constraint <text> | rm-constraint <id|text> | version [revision] | diff [from to] | criteria | donotdo | progress"
+
+// The adapter supplies only the exact envelope and input. Formation, provenance,
+// constraint revisions, receipts and read-back belong to the application.
+func (h *CommandHandler) handleGoalMutation(ctx context.Context, verb, text string) (string, error) {
+	if strings.TrimSpace(text) == "" {
+		return goalUsage, nil
 	}
-	if h.ws.store == nil {
-		return "Store unavailable", nil
+	source := h.ws.controlSource()
+	authority, ok := source.Authority.(*runtimeControlAuthority)
+	if !ok || authority == nil || authority.runtime == nil {
+		return "Goal mutation is unavailable in TUI: authenticated runtime authorization is required.\n" + goalUsage, nil
 	}
-
-	h.ws.mu.Lock()
-	defer h.ws.mu.Unlock()
-
-	goal := h.ws.state.Goal
-	if goal.ID == "" {
-		return "No active goal. Set one with /goal <outcome> before adding constraints.", nil
+	if authority.localControlErr != nil {
+		return "", authority.localControlErr
 	}
-
-	for _, existing := range goal.Constraints {
-		if strings.EqualFold(strings.TrimSpace(existing.Text), text) {
-			return fmt.Sprintf("Constraint already present on %s [rev %d]: %s",
-				goal.ID, goal.Revision, existing.ID), nil
-		}
+	goal, err := authority.CurrentGoal(ctx)
+	if err != nil && !errors.Is(err, model.ErrGoalNotFound) {
+		return "", err
 	}
-
-	expectedRev := goal.Revision
-	constraint := model.Constraint{
-		ID:     fmt.Sprintf("c-%d", time.Now().UnixNano()),
-		Text:   text,
-		Source: "operator",
-		IsHard: true,
+	key := uuid.NewString()
+	envelope := app.CommandEnvelope{ProjectID: authority.runtime.ProjectIdentity(), SessionID: h.ws.sessionID, TargetID: goal.ID, ExpectedVersion: goal.Revision, IdempotencyKey: key}
+	if verb == "create" {
+		envelope.TargetID = "GOAL-" + uuid.NewString()
+		envelope.ExpectedVersion = 0
 	}
-
-	updated := goal
-	updated.Constraints = append(append([]model.Constraint{}, goal.Constraints...), constraint)
-	updated.Revision = expectedRev + 1
-	updated.UpdatedAt = time.Now().UTC()
-
-	if err := h.ws.store.SaveGoalContract(ctx, updated, expectedRev); err != nil {
-		return "", fmt.Errorf("add constraint: %w", err)
-	}
-
-	// Read back so the reported revision is the stored one, not an assumption.
-	stored, err := h.ws.store.GetActiveGoalContract(ctx, h.ws.sessionID)
+	stored, err := authority.GoalMutation(ctx, envelope, verb, text)
 	if err != nil {
-		return "", fmt.Errorf("read back goal: %w", err)
+		return "", err
 	}
+	h.ws.mu.Lock()
 	h.ws.state.Goal = stored
-
-	return fmt.Sprintf("Constraint %s added to %s [rev %d]: %s\nOutcome unchanged: %s",
-		constraint.ID, stored.ID, stored.Revision,
-		RedactContent(text, h.ws.state.KnownSecrets),
-		RedactContent(stored.DesiredOutcome, h.ws.state.KnownSecrets)), nil
+	secrets := append([]string{}, h.ws.state.KnownSecrets...)
+	h.ws.mu.Unlock()
+	return fmt.Sprintf("Goal %s [rev %d] %s: %s", stored.ID, stored.Revision, stored.Confirmation, RedactContent(stored.DesiredOutcome, secrets)), nil
 }
 
-// handleGoalRemoveConstraint drops a constraint by id or exact text.
-func (h *CommandHandler) handleGoalRemoveConstraint(ctx context.Context, target string) (string, error) {
-	target = strings.TrimSpace(target)
-	if target == "" {
-		return "Usage: /goal rm-constraint <constraint_id|text>", nil
-	}
-	if h.ws.store == nil {
-		return "Store unavailable", nil
-	}
+func (h *CommandHandler) handleGoalAddConstraint(ctx context.Context, text string) (string, error) {
+	return h.handleGoalMutation(ctx, "add-constraint", text)
+}
+func (h *CommandHandler) handleGoalRemoveConstraint(ctx context.Context, text string) (string, error) {
+	return h.handleGoalMutation(ctx, "rm-constraint", text)
+}
 
-	h.ws.mu.Lock()
-	defer h.ws.mu.Unlock()
-
-	goal := h.ws.state.Goal
-	if goal.ID == "" {
-		return "No active goal.", nil
-	}
-
-	var kept []model.Constraint
-	var removed *model.Constraint
-	for _, c := range goal.Constraints {
-		if removed == nil && (c.ID == target || strings.EqualFold(strings.TrimSpace(c.Text), target)) {
-			copyC := c
-			removed = &copyC
-			continue
+// goalCommandText removes the command and verb, preserving the argument's
+// interior whitespace rather than reconstructing the original request from fields.
+func goalCommandText(line string) string {
+	for i := 0; i < 2; i++ {
+		line = strings.TrimLeftFunc(line, unicode.IsSpace)
+		index := strings.IndexFunc(line, unicode.IsSpace)
+		if index < 0 {
+			return ""
 		}
-		kept = append(kept, c)
+		line = line[index:]
 	}
-	if removed == nil {
-		return fmt.Sprintf("No constraint matching %q on %s [rev %d].", target, goal.ID, goal.Revision), nil
+	return strings.TrimLeftFunc(line, unicode.IsSpace)
+}
+
+func (h *CommandHandler) handleGoalReport(ctx context.Context, verb string, args []string) (string, error) {
+	revisions := []int64{}
+	expected := 0
+	if verb == "version" {
+		expected = 1
 	}
-
-	expectedRev := goal.Revision
-	updated := goal
-	updated.Constraints = kept
-	updated.Revision = expectedRev + 1
-	updated.UpdatedAt = time.Now().UTC()
-
-	if err := h.ws.store.SaveGoalContract(ctx, updated, expectedRev); err != nil {
-		return "", fmt.Errorf("remove constraint: %w", err)
+	if verb == "diff" {
+		expected = 2
 	}
-
-	stored, err := h.ws.store.GetActiveGoalContract(ctx, h.ws.sessionID)
+	if len(args) != 0 && len(args) != expected {
+		return goalUsage, nil
+	}
+	for _, arg := range args {
+		revision, err := strconv.ParseInt(arg, 10, 64)
+		if err != nil || revision < 1 {
+			return "Revision must be a positive integer.\n" + goalUsage, nil
+		}
+		revisions = append(revisions, revision)
+	}
+	authority, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
+	if !ok || authority == nil {
+		return "Canonical goal reporting is unavailable: no runtime authority.", nil
+	}
+	goal, err := authority.CurrentGoal(ctx)
+	if errors.Is(err, model.ErrGoalNotFound) {
+		return "No active goal. Use /goal create <request>.", nil
+	}
 	if err != nil {
-		return "", fmt.Errorf("read back goal: %w", err)
+		return "", err
 	}
-	h.ws.state.Goal = stored
-
-	return fmt.Sprintf("Constraint %s removed from %s [rev %d]. %d remaining.",
-		removed.ID, stored.ID, stored.Revision, len(stored.Constraints)), nil
+	h.ws.mu.RLock()
+	secrets := append([]string{}, h.ws.state.KnownSecrets...)
+	h.ws.mu.RUnlock()
+	render := func(v any) (string, error) {
+		data, err := json.MarshalIndent(v, "", "  ")
+		return RedactContent(string(data), secrets), err
+	}
+	read := func(rev int64) (model.GoalContract, error) {
+		g, err := authority.GoalRevision(ctx, goal.ID, rev)
+		if err != nil {
+			return g, fmt.Errorf("goal revision %d: %w", rev, err)
+		}
+		return g, nil
+	}
+	switch verb {
+	case "version":
+		if len(revisions) > 0 {
+			goal, err = read(revisions[0])
+			if err != nil {
+				return "", err
+			}
+		}
+		return render(goal)
+	case "diff":
+		if len(revisions) == 0 {
+			if goal.Revision == 1 {
+				return "No previous goal revision to compare. Use /goal diff <from> <to>.", nil
+			}
+			revisions = []int64{goal.Revision - 1, goal.Revision}
+		}
+		from, err := read(revisions[0])
+		if err != nil {
+			return "", err
+		}
+		to, err := read(revisions[1])
+		if err != nil {
+			return "", err
+		}
+		diff := model.ComputeGoalDiff(from, to)
+		return render(struct {
+			Diff                   model.GoalDiff
+			FromOutcome, ToOutcome string
+		}{diff, from.DesiredOutcome, to.DesiredOutcome})
+	case "criteria":
+		return render(goal.SuccessCriteria)
+	case "donotdo":
+		return render(goal.DoNotDo)
+	case "progress":
+		progress, err := authority.GoalProgress(ctx)
+		if err != nil {
+			return "", err
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "GOAL PROGRESS [rev %d]\n", progress.Goal.Revision)
+		if len(progress.Criteria) == 0 {
+			b.WriteString("No success criteria.\n")
+		}
+		for _, row := range progress.Criteria {
+			fmt.Fprintf(&b, "%s: %s — %s; evidence: %v\n", row.Criterion, row.Status, row.Detail, row.EvidenceIDs)
+		}
+		return RedactContent(b.String(), secrets), nil
+	}
+	return goalUsage, nil
 }

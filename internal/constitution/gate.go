@@ -114,6 +114,14 @@ type RuntimeState struct {
 	ApprovalDigest  string
 	ApprovalActor   string
 	ApprovalExpiry  time.Time
+	// TaskExecutor and TaskReviewer are filled by the runtime from the driver
+	// and store, never from model output.
+	TaskExecutor string
+	TaskReviewer string
+	// ResultCommit and EvidenceCommit are filled by the runtime from the
+	// driver and store, never from model output.
+	ResultCommit   string
+	EvidenceCommit string
 
 	// AuthorizedActor reports whether authz cleared this actor for this action.
 	AuthorizedActor bool
@@ -323,6 +331,12 @@ func deterministicFindings(registry *Registry, envelope Envelope, state RuntimeS
 	// CI-012: completion is policy. Every acceptance criterion must be met and
 	// any required independent review must have happened.
 	if envelope.Domain == DomainCompletion {
+		if state.TaskExecutor != "" && state.TaskExecutor == state.TaskReviewer {
+			add(InvNoSelfAcceptance, "the task executor is also its reviewer")
+		}
+		if state.ResultCommit != "" && state.EvidenceCommit != state.ResultCommit {
+			add(InvEvidenceFreshness, "acceptance evidence is not bound to the result commit")
+		}
 		if state.AcceptanceCriteriaTotal == 0 {
 			add(InvCompletionIsPolicy, "no acceptance criteria are defined to verify against")
 		} else if state.AcceptanceCriteriaMet < state.AcceptanceCriteriaTotal {

@@ -1,7 +1,7 @@
 # MARSHAL architecture
 
 MARSHAL separates durable engineering authority from the provider process that
-performs work. This page describes current `main` at SQLite schema v86, which is
+performs work. This page describes current `main` at SQLite schema v90, which is
 ahead of the v1.5.0 tag.
 
 ```text
@@ -27,8 +27,13 @@ CLI / terminal TUI / Unix socket / MCP / A2A
 
 The CLI can call the runtime directly or through the mode-`0600` local daemon
 socket. MCP (`2026-07-28`) and A2A (`1.0`) are authenticated protocol entry
-points into the same runtime. Community exposes no Web UI, HTTP control-plane
-routes, or remote listener; those capabilities are Enterprise-only.
+points into the same runtime. Community permits HTTP encoding over the project-local Unix socket. It exposes
+no Web UI, TCP/Web control-plane routes, or remote listener; those capabilities
+are Enterprise-only. Socket reads require kernel peer credentials matching the
+state-directory owner. A matching UID cannot distinguish an operator from an
+agent running under the same account, so the socket carries only the worker
+protocol (agents, tasks, verify, reconcile); operator commands are never routed
+there.
 
 ## Execution path
 
@@ -98,10 +103,45 @@ from a caller. Verification reads the stored run; learning reads the stored
 completion attestation; optimization reads the stored memory commit. A caller
 cannot supply a digest, a tree hash or an outcome and have it believed.
 
-Schema v86 carries the durable stores for these stages, including append-only,
+Schema v90 carries the durable stores for these stages, including append-only,
 digest-protected records for completion attestations, memory commits and
 optimization cycles. Mutable rows use compare-and-swap on their version, so a
 stale writer is refused rather than overwriting newer state.
 
 Implementation and qualification records: [process-06](process-06/),
 [process-07](process-07/), [process-08](process-08/).
+
+## Authenticated local application commands
+
+The trusted in-process workspace obtains an immutable local principal from the
+owner of the mode-`0700` state directory. A private context key binds the local
+control session to its Runtime; command text supplies neither identity nor role.
+The server composes its owner role authority with a durable concrete capability:
+`fs.write`, scoped to the canonical database path, project, and `goal.revise`
+action. Entitlement and executable discovery do not participate in this check.
+Revoked grants are not recreated when a workspace or runtime restarts.
+
+Goal revision is the first command boundary. Its envelope names the exact
+project, session, goal, expected revision and idempotency key. The canonical
+revision service reconstructs the original request and hard constraints and
+resets confirmation to `PENDING`. Schema v90 includes `command_results` and
+`command_audit`; the goal revision, receipt and audit insert commit together.
+Immutable receipts bind the actor and hashed key to the envelope/payload digest
+and resulting canonical revision. Replay returns that revision, even after the
+active goal advances. Audit records contain identifiers and outcomes, not prose
+or credentials. Insert-only triggers protect both new tables.
+
+Worker subprocesses receive serialized task envelopes, not Go contexts or local
+control handles. Agent registration, MCP, A2A and socket handlers cannot obtain
+this workspace handle. This is an application entry-path boundary, not proof of
+human presence or a sandbox against unrestricted same-UID host processes:
+process-only workers retain host-account privileges. Operator socket mutations
+remain disabled, and no new slash command or navigation release is enabled.
+
+Migration 89 added task control intents and immutable task command snapshots.
+Migration 90 adds the reasoning effort to the execution model preference, bound
+to the same revision as the model it was validated against.
+Operator task mutations use `task.create`, `task.assign` and `task.control`;
+assignment shares the worker claim transaction's lease and dependency checks.
+Pause settlement follows supervisor acknowledgement, and resume rechecks the
+bound Goal and plan through the canonical handoff validation.

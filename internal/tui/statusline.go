@@ -30,14 +30,21 @@ func RenderStatusline(s UIState, th *Theme, workDir string, width int) string {
 		width = 20
 	}
 
+	mode := strings.ToUpper(orDefault(s.SessionMode, "MANUAL"))
+	if mode == "ULTRA" && !ultraActive(s) {
+		mode = "STANDARD"
+	}
 	segments := []StatusSegment{
 		{Text: th.Colorize(th.Marshal, ProjectLabel(s, workDir, 32)), Priority: 1},
 		{Text: gitSegment(s, th), Priority: 2},
-		{Text: th.Colorize(th.Ultra, strings.ToUpper(orDefault(s.SessionMode, "MANUAL"))), Priority: 3},
+		{Text: th.Colorize(th.Ultra, mode), Priority: 3},
 		{Text: runtimeStateSegment(s, th), Priority: 4},
 		{Text: agentSegment(s, th), Priority: 5},
 		{Text: claimSegment(s, th), Priority: 6},
 		{Text: budgetSegment(s, th), Priority: 7},
+	}
+	if badge := ultraBadge(s); badge != "" {
+		segments = append(segments, StatusSegment{Text: th.Colorize(th.Ultra, badge), Priority: 3})
 	}
 
 	// Drop the lowest-priority field until the row fits.

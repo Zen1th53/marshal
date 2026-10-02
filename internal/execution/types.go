@@ -145,8 +145,19 @@ const (
 	IntentCommitted      IntentStage = "COMMITTED"
 )
 
+// DeliveryMode controls how a completed task hands in its changes.
+type DeliveryMode string
+
+const (
+	DeliveryReconcile      DeliveryMode = ""
+	DeliveryPreserveBranch DeliveryMode = "preserve_branch"
+)
+
 // ExecutionRun represents the durable canonical run entity in Process 05.
 type ExecutionRun struct {
+	Delivery            DeliveryMode                `json:"delivery,omitempty"`
+	BaseCommit          string                      `json:"base_commit,omitempty"`
+	SelectedTask        string                      `json:"selected_task,omitempty"`
 	RunID               string                      `json:"run_id"`
 	Version             int64                       `json:"version"` // CAS concurrency version
 	ProjectID           projectid.ID                `json:"project_id"`
@@ -199,7 +210,10 @@ type TaskExecution struct {
 	TargetFiles       []string           `json:"target_files,omitempty"`
 	LeaseID           string             `json:"lease_id,omitempty"`
 	WorktreePath      string             `json:"worktree_path,omitempty"`
+	BaseCommit        string             `json:"base_commit,omitempty"`
+	ResultCommit      string             `json:"result_commit,omitempty"`
 	NativeTurn        *NativeTurnBinding `json:"native_turn,omitempty"`
+	Alignment         *AlignmentRecord   `json:"alignment,omitempty"`
 	RequiredEvidence  []string           `json:"required_evidence,omitempty"`
 	CollectedEvidence []string           `json:"collected_evidence,omitempty"`
 	ApprovalRequired  bool               `json:"approval_required"`
@@ -267,24 +281,28 @@ type Lease struct {
 
 // RuntimeApproval records a hard gated action requiring explicit human decision.
 type RuntimeApproval struct {
-	ApprovalID     string         `json:"approval_id"`
-	RunID          string         `json:"run_id"`
-	TaskID         string         `json:"task_id"`
-	PlanID         string         `json:"plan_id"`
-	PlanVersion    int64          `json:"plan_version"`
-	OperationType  string         `json:"operation_type"`
-	TargetResource string         `json:"target_resource"`
-	RiskLevel      model.Risk     `json:"risk_level"`
-	Scope          string         `json:"scope"`
-	DiffPreview    string         `json:"diff_preview,omitempty"`
-	ActionDigest   string         `json:"action_digest"`
-	StateDigest    string         `json:"state_digest"`
-	Status         ApprovalStatus `json:"status"`
-	ApprovedBy     string         `json:"approved_by,omitempty"`
-	DecisionReason string         `json:"decision_reason,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	ResolvedAt     *time.Time     `json:"resolved_at,omitempty"`
-	ExpiresAt      *time.Time     `json:"expires_at,omitempty"`
+	Revision           int64          `json:"revision,omitempty"`
+	RequestedBy        string         `json:"requested_by,omitempty"`
+	HardViolation      bool           `json:"hard_violation,omitempty"`
+	DecisionCommandKey string         `json:"decision_command_key,omitempty"`
+	ApprovalID         string         `json:"approval_id"`
+	RunID              string         `json:"run_id"`
+	TaskID             string         `json:"task_id"`
+	PlanID             string         `json:"plan_id"`
+	PlanVersion        int64          `json:"plan_version"`
+	OperationType      string         `json:"operation_type"`
+	TargetResource     string         `json:"target_resource"`
+	RiskLevel          model.Risk     `json:"risk_level"`
+	Scope              string         `json:"scope"`
+	DiffPreview        string         `json:"diff_preview,omitempty"`
+	ActionDigest       string         `json:"action_digest"`
+	StateDigest        string         `json:"state_digest"`
+	Status             ApprovalStatus `json:"status"`
+	ApprovedBy         string         `json:"approved_by,omitempty"`
+	DecisionReason     string         `json:"decision_reason,omitempty"`
+	CreatedAt          time.Time      `json:"created_at"`
+	ResolvedAt         *time.Time     `json:"resolved_at,omitempty"`
+	ExpiresAt          *time.Time     `json:"expires_at,omitempty"`
 }
 
 // CheckpointRecord records a durable rollback boundary.

@@ -7,11 +7,20 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 func FindBinary(name string) (string, error) {
+	// A binary is looked up by bare name only. A name carrying a directory
+	// part would let the caller pick the file instead of the search path.
+	if name == "" || name != filepath.Base(name) || strings.Contains(name, "..") {
+		return "", fmt.Errorf("%q is not a binary name", name)
+	}
 	if path, err := exec.LookPath(name); err == nil {
 		return path, nil
+	}
+	if os.Getenv("MARSHAL_PROVIDER_PATH_ONLY") == "1" {
+		return "", fmt.Errorf("%s binary missing from PATH", name)
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		for _, dir := range []string{

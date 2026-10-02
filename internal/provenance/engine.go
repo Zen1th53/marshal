@@ -130,6 +130,41 @@ func (e *Engine) Seal(ctx context.Context, changeID, commitSHA string) (*ChangeR
 	rec.CommitSHA = commitSHA
 	rec.Sealed = true
 	rec.SealedAt = time.Now().UTC()
+	rec.ChainHash = rec.ComputeChainHash()
+	return rec, nil
+}
+
+// SealAccepted binds the accepted patch, result commit, and runtime evidence.
+func (e *Engine) SealAccepted(ctx context.Context, changeID, patchDigest, commitSHA string, evidenceIDs []string) (*ChangeRecord, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	rec, ok := e.records[changeID]
+	if !ok {
+		return nil, ErrChangeNotFound
+	}
+	if rec.Sealed {
+		return nil, ErrAlreadySealed
+	}
+	if patchDigest == "" || len(evidenceIDs) == 0 {
+		return nil, ErrInvalidSeal
+	}
+	if rec.PatchDigest != "" && rec.PatchDigest != patchDigest {
+		return nil, ErrPatchMismatch
+	}
+	if !ValidateSHA(commitSHA) {
+		return nil, ErrInvalidCommit
+	}
+	for _, id := range evidenceIDs {
+		if id == "" {
+			return nil, ErrInvalidSeal
+		}
+	}
+	rec.PatchDigest = patchDigest
+	rec.CommitSHA = commitSHA
+	rec.EvidenceIDs = append(rec.EvidenceIDs, evidenceIDs...)
+	rec.Sealed = true
+	rec.SealedAt = time.Now().UTC()
+	rec.ChainHash = rec.ComputeChainHash()
 	return rec, nil
 }
 
@@ -141,8 +176,15 @@ func (e *Engine) Trace(ctx context.Context, changeID string) (*ChainCustodyView,
 	if !exists {
 		return nil, ErrChangeNotFound
 	}
+	if rec.Sealed && rec.ChainHash != rec.ComputeChainHash() {
+		return nil, ErrChainMismatch
+	}
+	copy := *rec
+	copy.ToolCallIDs = append([]string(nil), rec.ToolCallIDs...)
+	copy.EvidenceIDs = append([]string(nil), rec.EvidenceIDs...)
+	copy.ApprovalIDs = append([]string(nil), rec.ApprovalIDs...)
 	return &ChainCustodyView{
-		Record:    *rec,
+		Record:    copy,
 		ChainHash: rec.ComputeChainHash(),
 	}, nil
 }

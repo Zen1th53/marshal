@@ -3,6 +3,8 @@ package harness
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/Zen1th53/marshal/internal/model"
 )
@@ -21,57 +23,49 @@ func NewULTRARouter(intel *Intelligence) *ULTRARouter {
 	}
 }
 
-// Route builds the optimal execution plan across the entire pipeline:
-// Goal/task -> fixed role -> harness -> model -> native mode/settings -> tool policy -> context strategy -> verification policy
-func (r *ULTRARouter) Route(ctx context.Context, req model.ULTRARouteRequest) (model.ULTRARoutePlan, error) {
-	profiles := r.intelligence.DefaultProfiles()
+// routerHarnesses are the harness names the router understands, with aliases.
+var routerHarnesses = map[string]string{
+	"codex": "codex", "claude": "claude-code", "claude-code": "claude-code",
+	"opencode": "opencode", "antigravity": "antigravity", "agy": "antigravity",
+}
 
+// roleHarnesses lists, per role, the harnesses the router will place it on;
+// the first is the role's default.
+var roleHarnesses = map[model.Role][]string{
+	model.RoleArchitect: {"claude-code", "antigravity"},
+	model.RoleDeveloper: {"codex", "antigravity"},
+	model.RoleQA:        {"opencode", "codex"},
+	model.RoleAppSec:    {"antigravity", "claude-code"},
+}
+
+// Route builds an advisory execution plan: goal/task -> fixed role -> harness
+// -> native mode -> effort -> tool policy -> context strategy -> verification
+// policy. It never names a model: the model is resolved at dispatch from the
+// operator's execution preference or the provider's own default, and a router
+// that invented one would present a guess as a selection.
+func (r *ULTRARouter) Route(ctx context.Context, req model.ULTRARouteRequest) (model.ULTRARoutePlan, error) {
 	plan := model.ULTRARoutePlan{
 		TaskID: req.TaskID,
 		Role:   req.FixedRole,
 	}
 
 	// 1. Select harness based on fixed role and preference
-	switch req.FixedRole {
-	case model.RoleArchitect:
-		if req.PreferredHarness == "antigravity" {
-			plan.Harness = "antigravity"
-			plan.Model = "gemini-2.5-pro"
-		} else {
-			plan.Harness = "claude-code"
-			plan.Model = "claude-3-7-sonnet"
+	candidates, ok := roleHarnesses[req.FixedRole]
+	if !ok {
+		candidates = []string{"codex"}
+	}
+	plan.Harness = candidates[0]
+	if req.PreferredHarness != "" {
+		preferred, known := routerHarnesses[strings.ToLower(req.PreferredHarness)]
+		if !known {
+			return model.ULTRARoutePlan{}, fmt.Errorf("%w: unknown harness %q (known: codex, claude, opencode, antigravity)", model.ErrInvalid, req.PreferredHarness)
 		}
-	case model.RoleDeveloper:
-		if req.PreferredHarness == "antigravity" {
-			plan.Harness = "antigravity"
-			plan.Model = "gemini-2.5-pro"
+		if slices.Contains(candidates, preferred) {
+			plan.Harness = preferred
 		} else {
-			plan.Harness = "codex"
-			if (req.Risk == model.R2 || req.Risk == model.R3 || req.HasCriticalClaims) && contains(profiles["codex"].SupportedModels, "o1") {
-				plan.Model = "o1"
-			} else {
-				plan.Model = "gpt-4o"
-			}
+			plan.PreferenceNote = fmt.Sprintf("preference %s is not used for role %s, which runs on %s; routed to %s",
+				req.PreferredHarness, req.FixedRole, strings.Join(candidates, " or "), plan.Harness)
 		}
-	case model.RoleQA:
-		if req.PreferredHarness == "codex" {
-			plan.Harness = "codex"
-			plan.Model = "gpt-4o"
-		} else {
-			plan.Harness = "opencode"
-			plan.Model = "deepseek-coder"
-		}
-	case model.RoleAppSec:
-		if req.PreferredHarness == "claude-code" {
-			plan.Harness = "claude-code"
-			plan.Model = "claude-3-7-sonnet"
-		} else {
-			plan.Harness = "antigravity"
-			plan.Model = "gemini-2.5-pro"
-		}
-	default:
-		plan.Harness = "codex"
-		plan.Model = "gpt-4o"
 	}
 
 	// 2. Select native mode based on selected harness
@@ -103,11 +97,7 @@ func (r *ULTRARouter) Route(ctx context.Context, req model.ULTRARouteRequest) (m
 	}
 
 	// 4. Subagents used only when task structure benefits
-	if req.MultipleDecoupled {
-		plan.UseSubagents = true
-	} else {
-		plan.UseSubagents = false
-	}
+	plan.UseSubagents = req.MultipleDecoupled
 
 	// 5. Tool policy
 	if req.Risk == model.R0 {
@@ -121,9 +111,11 @@ func (r *ULTRARouter) Route(ctx context.Context, req model.ULTRARouteRequest) (m
 	if req.HasCriticalClaims {
 		riskDetail += " with critical claims"
 	}
-	plan.Explanation = fmt.Sprintf("%s selected for %s: %s model + native %s; effort=%s due to %s.",
-		plan.Harness, plan.Role, plan.Model, plan.NativeMode, plan.ReasoningEffort, riskDetail)
-
+	plan.Explanation = fmt.Sprintf("%s selected for %s (native %s); suggested effort %s due to %s; the model is resolved at dispatch.",
+		plan.Harness, plan.Role, plan.NativeMode, plan.ReasoningEffort, riskDetail)
+	if plan.PreferenceNote != "" {
+		plan.Explanation += " Note: " + plan.PreferenceNote + "."
+	}
 	return plan, nil
 }
 

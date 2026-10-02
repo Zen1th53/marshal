@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -9,7 +10,100 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/Zen1th53/marshal/internal/model"
+	branchworktree "github.com/Zen1th53/marshal/internal/worktree"
 )
+
+func (e *Engine) branchManager() *branchworktree.Manager {
+	return branchworktree.New(e.cfg.ProjectRoot, filepath.Join(e.cfg.ProjectRoot, ".marshal", "branches"))
+}
+
+func branchTaskID(taskID string) string {
+	if strings.HasPrefix(taskID, "TASK-") {
+		return taskID
+	}
+	return "TASK-" + taskID
+}
+
+func (e *Engine) prepareTaskWorktree(ctx context.Context, run ExecutionRun, task TaskExecution) (string, error) {
+	if run.Delivery != DeliveryPreserveBranch {
+		return e.worktrees.PrepareWorktree(ctx, task.TaskID, run.RunID)
+	}
+	baseCommit := run.BaseCommit
+	if task.BaseCommit != "" {
+		baseCommit = task.BaseCommit
+	}
+	request := model.WorktreeRequest{TaskID: branchTaskID(task.TaskID), Branch: "marshal/" + run.RunID + "/" + task.TaskID, BaseCommit: baseCommit}
+	if task.NativeTurn != nil {
+		// The live provider may already have changed its worktree after approval.
+		// Reuse only the exact persisted path, branch, and base commit; Prepare
+		// intentionally rejects dirty worktrees for every other admission.
+		expected := filepath.Join(e.cfg.ProjectRoot, ".marshal", "branches", request.TaskID)
+		expectedAbs, err := filepath.Abs(expected)
+		if err != nil {
+			return "", err
+		}
+		boundAbs, err := filepath.Abs(task.WorktreePath)
+		if err != nil {
+			return "", err
+		}
+		nativeAbs, err := filepath.Abs(task.NativeTurn.Worktree)
+		if err != nil {
+			return "", err
+		}
+		if task.WorktreePath == "" || task.NativeTurn.Worktree == "" || boundAbs != expectedAbs || nativeAbs != expectedAbs || task.ResultCommit != "" {
+			return "", fmt.Errorf("%w: native turn worktree binding differs", model.ErrConflict)
+		}
+		state, err := e.branchManager().Inspect(ctx, expectedAbs)
+		if err != nil {
+			return "", err
+		}
+		if state.Path != expectedAbs || state.Branch != request.Branch || state.HEAD != request.BaseCommit {
+			return "", fmt.Errorf("%w: native turn worktree identity differs", model.ErrConflict)
+		}
+		return state.Path, nil
+	}
+	if task.ResultCommit != "" {
+		request.BaseCommit = task.ResultCommit
+		wt, err := e.branchManager().Resume(ctx, request)
+		return wt.Path, err
+	}
+	wt, err := e.branchManager().Prepare(ctx, request)
+	return wt.Path, err
+}
+
+func commitTaskWorktree(ctx context.Context, path, runID, taskID string) (string, error) {
+	git := func(args ...string) (string, error) {
+		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", path}, args...)...)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		out, err := cmd.Output()
+		if err != nil {
+			return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+	status, err := git("status", "--porcelain=v1", "--untracked-files=normal")
+	if err != nil {
+		return "", err
+	}
+	if status != "" {
+		if _, err := git("-c", "core.hooksPath=/dev/null", "add", "-A"); err != nil {
+			return "", err
+		}
+		for _, key := range []string{"user.name", "user.email"} {
+			value, err := git("config", "--get", key)
+			if err != nil || value == "" {
+				return "", fmt.Errorf("git commit requires %s; configure it in the repository or git configuration", key)
+			}
+		}
+		if _, err := git("-c", "core.hooksPath=/dev/null", "commit", "--no-verify", "-m", fmt.Sprintf("marshal: hand-in for %s (run %s)", taskID, runID)); err != nil {
+			return "", err
+		}
+	}
+	return git("rev-parse", "HEAD")
+}
 
 // WorktreeManager manages isolated working directories and git worktrees for tasks.
 type WorktreeManager struct {

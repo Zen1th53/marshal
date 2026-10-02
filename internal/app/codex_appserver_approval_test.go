@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -215,7 +216,12 @@ func TestNativeCodexApprovalCannotBeDecidedAsOrdinaryTaskApproval(t *testing.T) 
 
 func TestExecutionServiceNativeCodexApprovalConsumesExactLiveTurn(t *testing.T) {
 	ctx := context.Background()
-	engine, err := execution.NewEngine(execution.EngineConfig{ProjectRoot: t.TempDir()}, nil, nil)
+	projectRoot := t.TempDir()
+	journal, err := execution.NewFileJournalStore(filepath.Join(projectRoot, ".marshal", "journal"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := execution.NewEngine(execution.EngineConfig{ProjectRoot: projectRoot}, nil, journal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,6 +267,8 @@ func TestExecutionServiceNativeCodexApprovalConsumesExactLiveTurn(t *testing.T) 
 	if err := service.Approve(ctx, record.ApprovalID, "operator", "reviewed exact request"); err != nil {
 		t.Fatalf("approve live native request: %v", err)
 	}
+	// Register before assertions so even a failure waits before TempDir cleanup.
+	t.Cleanup(func() { waitForNativeContinuation(t, journal, run.RunID, task.TaskID) })
 	if live.resolved != 1 || live.declined != 0 {
 		t.Fatalf("native decision = resolved:%d declined:%d, want 1/0", live.resolved, live.declined)
 	}

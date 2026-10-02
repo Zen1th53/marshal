@@ -58,7 +58,7 @@ func runtimeCodexHarness(runtime *Runtime) execution.WorkerHarness {
 	})
 }
 
-func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (finalResult execution.TaskResult, finalErr error) {
 	if r == nil || r.store == nil {
 		return execution.TaskResult{TaskID: task.TaskID}, fmt.Errorf("%w: runtime is unavailable", model.ErrUnavailable)
 	}
@@ -68,6 +68,17 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 	if task.CanonicalTaskID == "" {
 		return execution.TaskResult{TaskID: task.TaskID}, fmt.Errorf("%w: Process 05 Codex task %q has no canonical Runtime task binding", model.ErrConflict, task.TaskID)
 	}
+	var settle func() error
+	var admissionErr error
+	ctx, settle, admissionErr = r.superviseTask(ctx, task.CanonicalTaskID)
+	if admissionErr != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, admissionErr
+	}
+	defer func() {
+		if err := settle(); err != nil && finalErr == nil {
+			finalErr = err
+		}
+	}()
 	canonicalTask, err := r.store.GetTask(ctx, task.CanonicalTaskID)
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, fmt.Errorf("get canonical Process 05 task: %w", err)
@@ -86,9 +97,15 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
 	modelName := task.AssignedModel
-	if modelName == "" {
-		if preference, prefErr := r.CodexModelPreference(ctx); prefErr == nil {
+	effort := ""
+	if preference, prefErr := r.CodexModelPreference(ctx); prefErr == nil {
+		if modelName == "" {
 			modelName = preference.Model
+		}
+		// The effort was validated for the preferred model only, so it travels
+		// only with that model.
+		if modelName == preference.Model {
+			effort = preference.Effort
 		}
 	}
 	provider, grantID, err := r.resolveAdapter(ctx, "codex", canonicalTask, worktree, agentID, false, modelName, "")
@@ -109,6 +126,7 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 		Title:             pkg.TaskDescription,
 		Worktree:          worktree,
 		Model:             modelName,
+		Effort:            effort,
 		AllowedOperations: []string{"filesystem.read", "filesystem.write", "shell.execute"},
 		EvidenceRequired:  append([]string(nil), pkg.VerificationObligations...),
 		TrustedContext:    pkg.FormatPromptHeader(),

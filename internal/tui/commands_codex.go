@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,10 +18,24 @@ import (
 
 // runGovernedCodexCmd executes a native Codex CLI command within MARSHAL's isolated,
 // governed CODEX_HOME environment so no host config or credentials are ever corrupted.
-func runGovernedCodexCmd(ctx context.Context, args []string) (string, error) {
+func runGovernedCodexCmd(ctx context.Context, args []string) (result string, resultErr error) {
+	args = app.NormalizeProviderArgs("codex", args)
+
 	binary, err := project.FindBinary("codex")
 	if err != nil {
-		return "", fmt.Errorf("codex binary not found on PATH: %w", err)
+		return "", fmt.Errorf("codex binary not found on PATH: %w; Install Codex and make codex available on PATH, then retry", err)
+	}
+	dialect := app.ObserveProviderDialect(ctx, "codex")
+	if dialect.Operation(app.ProviderArgOperation("codex", args)).Status == app.ProviderUnknown {
+		defer func() {
+			label := "UNKNOWN — unqualified pass-through: " + dialect.Provider + " " + app.ProviderArgOperation("codex", args)
+			if resultErr != nil {
+				resultErr = fmt.Errorf("%s: %w", label, resultErr)
+			}
+		}()
+	}
+	if err := dialect.Check(app.ProviderArgOperation("codex", args), false); err != nil {
+		return "", err
 	}
 	govHome, err := codex.EnsureGovernedCodexHome()
 	if err != nil {
@@ -34,13 +49,49 @@ func runGovernedCodexCmd(ctx context.Context, args []string) (string, error) {
 	out, err := cmd.CombinedOutput()
 	outStr := strings.TrimSpace(string(out))
 	if err != nil {
-		return outStr, fmt.Errorf("codex %s failed: %w", strings.Join(args, " "), err)
+		return outStr, fmt.Errorf("codex %s failed: %w\n%s\nUse /codex cli %s --help to check native usage", strings.Join(args, " "), err, outStr, args[0])
 	}
 	return outStr, nil
 }
 
 // handleCodex exposes native interactive sessions and governed task operations.
-func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line string) (string, error) {
+func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line string) (result string, resultErr error) {
+	prompt, rejection := parseProviderCommand("codex", line, args)
+	if rejection != "" {
+		return rejection, nil
+	}
+	if prompt != "" {
+		if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
+			return h.ws.runNativeCodex(ctx, []string{"--", prompt})
+		}
+		args = []string{"exec", prompt}
+		line = "/codex exec " + prompt
+	}
+
+	interactive := h.ws.terminal != nil && h.ws.terminal.IsTerminal()
+	if usage := governedAgentUsage("codex", args, interactive); usage != "" {
+		return usage, nil
+	}
+	if len(args) > 0 {
+		switch strings.ToLower(args[0]) {
+		case "sessions", "runs", "history":
+			if len(args) != 1 {
+				return "Usage: /codex sessions", nil
+			}
+			return h.handleSessionInventory(ctx, "codex")
+		case "resume", "fork", "continue":
+			return h.handleNativeSelection(ctx, "codex", args)
+		}
+	}
+	if len(args) > 0 && app.ObserveProviderDialect(ctx, "codex").WrapperOperation(strings.ToLower(args[0]), interactive).Status == app.ProviderUnknown {
+		defer func() {
+			result = "UNKNOWN — unqualified pass-through: codex " + strings.ToLower(args[0]) + "\n" + result
+		}()
+	}
+	args = app.NormalizeProviderArgs("codex", args)
+	if len(args) > 0 {
+		args[0] = strings.ToLower(args[0])
+	}
 	if len(args) == 0 && h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
 		return h.ws.runNativeCodex(ctx, nil)
 	}
@@ -55,32 +106,39 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 				}
 				if strings.EqualFold(argv[0], "/codex") {
 					argv = argv[2:]
+				} else if strings.EqualFold(argv[0], "/doctor") {
+					// codex/provider selects the diagnostic target, not a native argument.
+					argv = nil
 				} else {
 					argv = argv[1:]
 				}
+				if sub == "features" {
+					if len(argv) == 0 {
+						argv = []string{"list"}
+					} else if oneOf(strings.ToLower(argv[0]), "list", "enable", "disable") {
+						argv[0] = strings.ToLower(argv[0])
+					}
+				}
 				return h.ws.runNativeCodex(ctx, append([]string{sub}, argv...))
 			case "sandbox":
-				if len(args) == 2 && (args[1] == "read-only" || args[1] == "workspace-write") {
-					return h.ws.runNativeCodex(ctx, []string{"--sandbox", args[1]})
+				if len(args) == 2 && oneOf(strings.ToLower(args[1]), "read-only", "workspace-write") {
+					return h.ws.runNativeCodex(ctx, []string{"--sandbox", strings.ToLower(args[1])})
 				}
 			case "approval":
 				if len(args) == 2 && (args[1] == "on-request" || args[1] == "never") {
 					return h.ws.runNativeCodex(ctx, []string{"--ask-for-approval", args[1]})
 				}
 			case "search":
-				if len(args) == 2 && args[1] == "on" {
+				if len(args) == 2 && oneOf(strings.ToLower(args[1]), "on", "enable", "true") {
 					return h.ws.runNativeCodex(ctx, []string{"--search"})
 				}
-				if len(args) == 2 && args[1] == "off" {
+				if len(args) == 2 && oneOf(strings.ToLower(args[1]), "off", "disable", "false") {
 					return h.ws.runNativeCodex(ctx, []string{"-c", `web_search="disabled"`})
 				}
 			}
 		}
 		switch sub {
-		case "cli", "interactive", "chat", "open", "tui", "new", "continue":
-			if sub == "continue" {
-				return h.ws.runNativeCodex(ctx, []string{"resume", "--last"})
-			}
+		case "cli", "interactive", "chat", "open", "tui", "new":
 			if sub == "new" {
 				return h.ws.runNativeCodex(ctx, nil)
 			}
@@ -93,15 +151,11 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 				return "", err
 			}
 			return h.ws.runNativeCodex(ctx, argv)
-		case "resume", "fork":
-			if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
-				return h.ws.runNativeCodex(ctx, append([]string{sub}, args[1:]...))
-			}
 		}
 	}
 	source := h.ws.controlSource()
 	if source == nil || source.Authority == nil {
-		return "Codex control authority unavailable: no runtime attached to workspace.", nil
+		return "Codex control authority unavailable: no runtime attached to workspace. Open the TUI in an initialized MARSHAL project (marshal init); native Codex commands also require an interactive terminal and the Codex CLI on PATH.", nil
 	}
 	auth := source.Authority
 
@@ -139,31 +193,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 				b.WriteString(fmt.Sprintf("    %-14s %s\n", k+":", health.Checks[k]))
 			}
 		}
-		b.WriteString("\nAvailable subcommands:\n")
-		b.WriteString("  /codex doctor              Run native Codex doctor diagnostics\n")
-		b.WriteString("  /codex models              List available models and selection status\n")
-		b.WriteString("  /codex model <slug>        Select active Codex model for execution\n")
-		b.WriteString("  /codex review              Run non-interactive code review of current commit\n")
-		b.WriteString("  /codex sessions            List recorded governed sessions and run history\n")
-		b.WriteString("  /codex mcp <list|add|rm>   Manage external MCP servers for Codex\n")
-		b.WriteString("  /codex plugin <list|add|rm> Manage plugins and marketplaces\n")
-		b.WriteString("  /codex apply [task_id]     Apply latest diff produced by Codex to working tree\n")
-		b.WriteString("  /codex diff                Inspect pending diff from Codex tasks\n")
-		b.WriteString("  /codex resume [id|--last]  Resume a previous Codex session\n")
-		b.WriteString("  /codex fork [id|--last]    Fork a previous Codex session\n")
-		b.WriteString("  /codex agents              List agent sessions on the shared daemon\n")
-		b.WriteString("  /codex features            Inspect and toggle feature flags\n")
-		b.WriteString("  /codex sandbox [mode]      Inspect or set sandbox policy (read-only/workspace-write)\n")
-		b.WriteString("  /codex approval [policy]   Inspect or set approval policy (on-request/never)\n")
-		b.WriteString("  /codex search [on|off]     Toggle web search tool for Codex\n")
-		b.WriteString("  /codex login / /codex logout Check Codex authentication status\n")
-		b.WriteString("  /codex skill install <name> Install a local skill with digest verification\n")
-		b.WriteString("  /codex run <task_id>       Dispatch an approved plan task to Codex\n")
-		b.WriteString("  /codex exec <prompt...>    Directly create and launch a task with Codex\n")
-		b.WriteString("  /codex cli [prompt...]     Launch native interactive Codex session\n")
-		b.WriteString("  /codex new / continue    Start fresh or resume the latest project session\n")
-		b.WriteString("  /codex cli <args...>      Pass native CLI arguments, including quoted paths\n")
-		b.WriteString("  /codex <prompt...>         Any instruction runs directly with Codex!\n")
+		b.WriteString("\n" + app.ObserveProviderDialect(ctx, "codex").Help(providerHelpOperations("codex"), interactive))
 		return b.String(), nil
 	}
 
@@ -174,13 +204,13 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		if err != nil {
 			return fmt.Sprintf("Codex doctor failed: %v", err), nil
 		}
-		return fmt.Sprintf("CODEX DOCTOR DIAGNOSTICS:\n  Overall Status: %s\n  Total Checks:   %d checks passed\n  Inspection:     Bounded and sanitized (no host credentials leaked)",
+		return fmt.Sprintf("CODEX DOCTOR DIAGNOSTICS:\n  Overall Status: %s\n  Total Checks:   %d checks reported\n  Inspection:     Bounded and sanitized (no host credentials leaked)",
 			strings.ToUpper(report.OverallStatus), report.CheckCount), nil
 
 	case "models":
 		models, def, err := auth.CodexModels(ctx)
 		if err != nil {
-			return fmt.Sprintf("Discover models failed: %v", err), nil
+			return fmt.Sprintf("Discover models failed: %v. Check Codex installation and authentication, then retry /models.", err), nil
 		}
 		selected, _ := auth.SelectedCodexModel(ctx)
 		if selected == "" {
@@ -211,9 +241,16 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 			return fmt.Sprintf("Current selected Codex model: %s\nUsage: /codex model <slug> to change", selected), nil
 		}
 		targetModel := args[1]
-		pref, err := auth.CodexSelectModel(ctx, targetModel, 0)
+		if strings.HasPrefix(targetModel, "-") {
+			return fmt.Sprintf("Failed to select Codex model %q: expected a model slug, not a CLI flag. Use /models to see eligible models.", targetModel), nil
+		}
+		current, err := auth.CodexModelPreference(ctx)
+		if err != nil && !errors.Is(err, model.ErrNotFound) {
+			return fmt.Sprintf("Failed to read Codex model preference: %v; reopen the TUI and retry /model <slug>.", err), nil
+		}
+		pref, err := auth.CodexSelectModel(ctx, targetModel, current.Revision)
 		if err != nil {
-			return fmt.Sprintf("Failed to select Codex model %q: %v", targetModel, err), nil
+			return fmt.Sprintf("Failed to select Codex model %q: %v. Use /models to check eligible models, then retry /model <slug>.", targetModel, err), nil
 		}
 		return fmt.Sprintf("Selected Codex model successfully switched to %q (revision: %d).", pref.Model, pref.Revision), nil
 
@@ -232,22 +269,6 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		}
 		return fmt.Sprintf("CODEX COMMIT REVIEW:\n  Commit:        %s\n  Verified:      %t\n  Output Digest: %s\n  Detail:        %s",
 			res.Commit, verified, res.OutputDigest, detail), nil
-
-	case "sessions", "runs", "history":
-		sessions, err := auth.CodexSessions(ctx)
-		if err != nil {
-			return fmt.Sprintf("Failed to list Codex sessions: %v", err), nil
-		}
-		if len(sessions) == 0 {
-			return "No governed Codex sessions recorded yet.", nil
-		}
-		var b strings.Builder
-		b.WriteString(fmt.Sprintf("RECORDED CODEX SESSIONS (%d total):\n", len(sessions)))
-		for _, s := range sessions {
-			b.WriteString(fmt.Sprintf("  %-16s Task: %-14s Run: %-16s Model: %-16s Status: %-10s Started: %s\n",
-				s.SessionID, s.TaskID, s.RunID, s.Model, s.Status, s.StartedAt.Format("2006-01-02 15:04:05")))
-		}
-		return b.String(), nil
 
 	case "mcp":
 		if len(args) < 2 || args[1] == "list" {
@@ -272,7 +293,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 				return fmt.Sprintf("Codex MCP add failed: %v", err), nil
 			}
 			return fmt.Sprintf("Codex MCP server added:\n%s", out), nil
-		case "remove", "rm", "delete":
+		case "remove":
 			if len(args) < 3 {
 				return "Usage: /codex mcp remove <name>", nil
 			}
@@ -303,10 +324,10 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 	case "plugin", "plugins":
 		if len(args) < 2 || args[1] == "list" {
 			plugins, skills, err := auth.CodexPlugins(ctx)
-			if err != nil {
-				return fmt.Sprintf("Failed to discover plugins: %v", err), nil
-			}
 			var b strings.Builder
+			if err != nil {
+				b.WriteString(fmt.Sprintf("Discovery incomplete: %v\n", err))
+			}
 			b.WriteString(fmt.Sprintf("CODEX PLUGINS (%d) & LOCAL SKILLS (%d):\n", len(plugins), len(skills)))
 			if len(plugins) > 0 {
 				b.WriteString("  Plugins:\n")
@@ -321,15 +342,15 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 			if len(skills) > 0 {
 				b.WriteString("  Local Skills:\n")
 				for _, s := range skills {
-					b.WriteString(fmt.Sprintf("    %-24s %s\n", s.Name, s.Description))
+					b.WriteString(skillSourceLine(s))
 				}
-				b.WriteString("\nInstall a local skill with: /codex skill install <name>\n")
+				writeSkillInstallHint(&b, skills)
 			}
 			return b.String(), nil
 		}
 		pSub := strings.ToLower(args[1])
 		switch pSub {
-		case "add", "install":
+		case "add":
 			if len(args) < 3 {
 				return "Usage: /codex plugin add <plugin_name>", nil
 			}
@@ -338,7 +359,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 				return fmt.Sprintf("Codex plugin add failed: %v", err), nil
 			}
 			return fmt.Sprintf("Plugin added:\n%s", out), nil
-		case "remove", "rm", "uninstall":
+		case "remove":
 			if len(args) < 3 {
 				return "Usage: /codex plugin remove <plugin_name>", nil
 			}
@@ -364,19 +385,19 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 
 	case "skills":
 		_, skills, err := auth.CodexPlugins(ctx)
-		if err != nil {
-			return fmt.Sprintf("Failed to discover skills: %v", err), nil
-		}
 		var b strings.Builder
+		if err != nil {
+			b.WriteString(fmt.Sprintf("Discovery incomplete: %v\n", err))
+		}
 		b.WriteString(fmt.Sprintf("LOCAL CODEX SKILLS (%d total):\n", len(skills)))
 		for _, s := range skills {
-			b.WriteString(fmt.Sprintf("  • %-24s %s\n", s.Name, s.Description))
+			b.WriteString(skillSourceLine(s))
 		}
-		b.WriteString("\nInstall a local skill with: /codex skill install <name>\n")
+		writeSkillInstallHint(&b, skills)
 		return b.String(), nil
 
 	case "skill":
-		if len(args) < 3 || args[1] != "install" {
+		if len(args) != 3 || !strings.EqualFold(args[1], "install") {
 			return "Usage: /codex skill install <skill_name>", nil
 		}
 		name := args[2]
@@ -391,68 +412,10 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		return fmt.Sprintf("Successfully installed project-local Codex skill %q\n  Immutable Digest: %s", name, installedDigest), nil
 
 	case "apply":
-		var taskID string
-		if len(args) >= 2 {
-			taskID = args[1]
-		} else {
-			sessions, _ := auth.CodexSessions(ctx)
-			if len(sessions) > 0 {
-				taskID = sessions[len(sessions)-1].TaskID
-			}
-		}
-		if taskID == "" {
-			return "Usage: /codex apply <task_id> (or execute a task with /codex first)", nil
-		}
-		out, err := runGovernedCodexCmd(ctx, []string{"apply", taskID})
-		if err != nil {
-			return fmt.Sprintf("Codex apply failed: %v\nOutput: %s", err, out), nil
-		}
-		return fmt.Sprintf("CODEX APPLY DIFF:\n%s\nTask %s changes applied to working tree.", out, taskID), nil
+		return h.applyCodexCloudTask(ctx, args[1:])
 
 	case "diff":
 		return h.handleDiff(ctx)
-
-	case "resume":
-		target := "--last"
-		if len(args) >= 2 {
-			target = args[1]
-		}
-		var execArgs []string
-		if target == "--last" {
-			execArgs = []string{"exec", "resume", "--last"}
-		} else {
-			execArgs = []string{"exec", "resume", target}
-		}
-		if len(args) >= 3 {
-			prompt := strings.Join(args[2:], " ")
-			execArgs = append(execArgs, prompt)
-		}
-		out, err := runGovernedCodexCmd(ctx, execArgs)
-		if err != nil {
-			return fmt.Sprintf("Codex resume failed: %v\nOutput: %s", err, out), nil
-		}
-		return fmt.Sprintf("CODEX SESSION RESUMED (%s):\n%s", target, out), nil
-
-	case "fork":
-		target := "--last"
-		if len(args) >= 2 {
-			target = args[1]
-		}
-		var execArgs []string
-		if target == "--last" {
-			execArgs = []string{"exec", "fork", "--last"}
-		} else {
-			execArgs = []string{"exec", "fork", target}
-		}
-		if len(args) >= 3 {
-			prompt := strings.Join(args[2:], " ")
-			execArgs = append(execArgs, prompt)
-		}
-		out, err := runGovernedCodexCmd(ctx, execArgs)
-		if err != nil {
-			return fmt.Sprintf("Codex fork failed: %v\nOutput: %s", err, out), nil
-		}
-		return fmt.Sprintf("CODEX SESSION FORKED (%s):\n%s", target, out), nil
 
 	case "agents":
 		sessions, err := auth.CodexSessions(ctx)
@@ -460,9 +423,10 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 			return fmt.Sprintf("Failed to list Codex sessions: %v", err), nil
 		}
 		var b strings.Builder
-		b.WriteString(fmt.Sprintf("CODEX APP-SERVER AGENTS & SESSIONS (%d total):\n", len(sessions)))
+		b.WriteString(fmt.Sprintf("CODEX APP-SERVER AGENTS & SESSIONS (%d recorded runs):\n", len(sessions)))
+		b.WriteString("  Source: governed worker-run history, not a live daemon inventory.\n")
 		if len(sessions) == 0 {
-			b.WriteString("  No active agent sessions on the governed app-server daemon.\n")
+			b.WriteString("  No governed agent runs recorded yet.\n")
 		} else {
 			for _, s := range sessions {
 				b.WriteString(fmt.Sprintf("  • Session: %-16s | Task: %-14s | Run: %-16s | Status: %-10s\n",
@@ -472,10 +436,13 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		return b.String(), nil
 
 	case "features":
-		if len(args) < 2 || args[1] == "list" {
+		if len(args) < 2 || strings.EqualFold(args[1], "list") {
 			out, err := runGovernedCodexCmd(ctx, []string{"features", "list"})
 			if err != nil {
 				return fmt.Sprintf("Codex features failed: %v", err), nil
+			}
+			if strings.TrimSpace(out) == "" {
+				return "Codex reported no feature flags. Use /codex cli features --help to inspect native support.", nil
 			}
 			lines := strings.Split(out, "\n")
 			var b strings.Builder
@@ -564,19 +531,11 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		if len(args) < 2 {
 			return "Usage: /codex exec <task prompt/instruction>", nil
 		}
-		cmdIdx := strings.Index(line, args[0])
-		prompt := strings.TrimSpace(line[cmdIdx+len(args[0]):])
+		prompt := agentPrompt(line)
 		return h.handleCodexExec(ctx, auth, prompt)
 
 	default:
-		// If multiple words were supplied, treat the whole line after `/codex` as a direct prompt!
-		// e.g. `/codex create a rest api endpoint` or `/codex test this package`
-		if len(args) > 1 {
-			cmdIdx := strings.Index(strings.ToLower(line), "/codex")
-			prompt := strings.TrimSpace(line[cmdIdx+6:])
-			return h.handleCodexExec(ctx, auth, prompt)
-		}
-		return fmt.Sprintf("Unknown Codex subcommand %q. Run `/codex` for help.", args[0]), nil
+		return "Unknown subcommand. To send a prompt use /codex exec <text>", nil
 	}
 }
 
@@ -643,4 +602,21 @@ func (h *CommandHandler) handleCodexExec(ctx context.Context, auth ControlAuthor
 
 	return fmt.Sprintf("CODEX TASK LAUNCHED:\n  Task ID:   %s\n  Run ID:    %s\n  Prompt:    %s\n  Model:     %s\n  Status:    %s\n\nExecution is running under MARSHAL governance. Track live in TUI or check /status.",
 		taskID, runRes.RunID, prompt, modelName, runRes.Status), nil
+}
+
+func skillSourceLine(skill codex.SkillInfo) string {
+	status := "not installable"
+	if skill.Installable {
+		status = "installable"
+	}
+	return fmt.Sprintf("  %s source=%s (%s)\n", safeCodexDisplay(skill.Name, "unknown"), safeCodexDisplay(skill.SourceType, "unknown"), status)
+}
+
+func writeSkillInstallHint(b *strings.Builder, skills []codex.SkillInfo) {
+	for _, skill := range skills {
+		if skill.Installable {
+			b.WriteString("\nInstall an installable project skill with: /codex skill install <name>\n")
+			return
+		}
+	}
 }

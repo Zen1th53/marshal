@@ -92,4 +92,6 @@ type ULTRARoutePlan struct {
 	VerificationPolicy string            `json:"verification_policy"`
 	Explanation        string            `json:"explanation"`
 	SelectedKnobs      map[string]string `json:"selected_knobs,omitempty"`
+	// PreferenceNote says why a requested harness preference was not used.
+	PreferenceNote string `json:"preference_note,omitempty"`
 }

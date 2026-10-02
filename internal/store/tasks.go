@@ -88,6 +88,11 @@ func (s *Store) ImportTasks(ctx context.Context, tasks []model.Task) (model.Impo
 			}
 		}
 	}
+	for _, task := range tasks {
+		if err := writeTaskBinding(ctx, tx, task.ID); err != nil {
+			return model.ImportResult{}, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return model.ImportResult{}, fmt.Errorf("commit task import: %w", err)
 	}
@@ -99,7 +104,7 @@ func (s *Store) ReadyTasks(ctx context.Context) ([]model.Task, error) {
 		SELECT t.task_id, t.title, t.status, t.risk, t.owner_agent_id, t.branch,
 		       t.worktree, t.base_commit, t.head_commit, t.revision
 		FROM tasks t
-		WHERE t.status = 'ready'
+		WHERE t.status = 'ready' AND NOT EXISTS (SELECT 1 FROM task_controls c WHERE c.task_id=t.task_id AND c.state<>'')
 		  AND NOT EXISTS (
 		    SELECT 1 FROM task_dependencies d
 		    JOIN tasks required ON required.task_id = d.depends_on_task_id
@@ -146,6 +151,25 @@ func (s *Store) ClaimTask(ctx context.Context, request model.ClaimRequest) (mode
 	}
 	defer tx.Rollback()
 
+	lease, err := claimTaskTx(ctx, tx, request)
+	if err != nil {
+		return model.Lease{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return model.Lease{}, fmt.Errorf("commit task claim: %w", err)
+	}
+	return lease, nil
+}
+
+// claimTaskTx is shared by worker claims and authenticated operator assignment.
+func claimTaskTx(ctx context.Context, tx *sql.Tx, request model.ClaimRequest) (model.Lease, error) {
+	var controlState string
+	if err := tx.QueryRowContext(ctx, `SELECT state FROM task_controls WHERE task_id=?`, request.TaskID).Scan(&controlState); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return model.Lease{}, err
+	}
+	if controlState != "" {
+		return model.Lease{}, model.ErrConflict
+	}
 	var sessionAgent, sessionProject, sessionStatus string
 	if err := tx.QueryRowContext(ctx, `
 		SELECT agent_id, project_id, status FROM sessions WHERE session_id = ?
@@ -232,9 +256,6 @@ func (s *Store) ClaimTask(ctx context.Context, request model.ClaimRequest) (mode
 	`, eventID, projectID, request.TaskID, request.AgentID, request.SessionID,
 		revision+1, acquiredAt.Format(time.RFC3339Nano)); err != nil {
 		return model.Lease{}, fmt.Errorf("record task claim event: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return model.Lease{}, fmt.Errorf("commit task claim: %w", err)
 	}
 	return model.Lease{
 		ID: leaseID, TaskID: request.TaskID, SessionID: request.SessionID,
@@ -489,6 +510,15 @@ func (s *Store) TransitionTask(ctx context.Context, req model.TaskTransitionRequ
 		) VALUES(?, 'TASK_TRANSITIONED', ?, ?, ?, ?, ?, '{}')
 	`, eventID, projectID, req.TaskID, actorAgent, newRevision, now); err != nil {
 		return model.Task{}, fmt.Errorf("record task transition event: %w", err)
+	}
+
+	if req.ToStatus == model.TaskCancelled {
+		if err := releaseTaskLeases(ctx, tx, req.TaskID); err != nil {
+			return model.Task{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE task_controls SET state='cancelled' WHERE task_id=?`, req.TaskID); err != nil {
+			return model.Task{}, err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {

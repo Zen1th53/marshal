@@ -195,6 +195,13 @@ func RestoreDatabase(ctx context.Context, backupPath, targetDBPath string, expec
 		return fmt.Errorf("backup preflight check failed: %w", err)
 	}
 
+	// Replacing a database another process has open would discard its
+	// uncheckpointed WAL and leave it reading a file that changed underneath
+	// it. Where open files can be inspected, refuse while anyone holds it.
+	if err := EnsureDatabaseClosed(targetDBPath); err != nil {
+		return err
+	}
+
 	// 2. Create safety pre-restore backup if target DB currently exists
 	var safetyPath string
 	if _, err := os.Stat(targetDBPath); err == nil {
@@ -297,3 +304,18 @@ func copyFile(src, dst string) error {
 	}
 	return out.Sync()
 }
+
+// EnsureDatabaseClosed refuses when any process, this one included, has the
+// database or its WAL/SHM files open. Where open files cannot be inspected it
+// returns nil and the caller relies on the documented offline procedure.
+func EnsureDatabaseClosed(dbPath string) error {
+	holders, err := processesHolding(dbPath, dbPath+"-wal", dbPath+"-shm")
+	if err != nil || len(holders) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%w: the database is open in process(es) %v; close every MARSHAL window and stop the daemon first", model.ErrConflict, holders)
+}
+
+// DatabaseInUseCheckSupported reports whether EnsureDatabaseClosed can see
+// other processes on this platform.
+func DatabaseInUseCheckSupported() bool { return inUseCheckSupported }
