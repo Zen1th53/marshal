@@ -3111,8 +3111,8 @@
     },
     {
       "path": "docs/public/agents.md",
-      "sha256": "4699834115d5068521186e1ff1ffa081073cada3e3729040aa70b6e0ddb54890",
-      "bytes": 2128
+      "sha256": "a331dd0d28c2b4d54a316de5ed0fe10e046d162fd867a2d09d5c36d6996d8e8d",
+      "bytes": 2812
     },
     {
       "path": "docs/public/cli.md",
@@ -3121,8 +3121,8 @@
     },
     {
       "path": "docs/public/commands.md",
-      "sha256": "12c47d2f99b773d7e398c4d8387cafb245e6a7a227730509d5fadb8189c95cf6",
-      "bytes": 5528
+      "sha256": "43affbf0b3fbae38164ed84ddcb8cd1da72d11619052287ac8b58b2d4f64bcc6",
+      "bytes": 5902
     },
     {
       "path": "docs/public/control.md",
@@ -3166,8 +3166,8 @@
     },
     {
       "path": "docs/public/troubleshooting.md",
-      "sha256": "4a85dd7a7c0ac1448d7de14fb858164313b7c9466c62cccd0b1eca7b614794f0",
-      "bytes": 3953
+      "sha256": "607aefdea1f16ec5b5c8e4d2b5109a37502bfbf18bf2fa91d4ac36e09d18be3e",
+      "bytes": 4162
     },
     {
       "path": "docs/public/ultra.md",
