@@ -30,7 +30,7 @@ commands available in your version.
 | `/marshal return TASK-ID NOTE` | Send a task back with a note on what to fix. |
 | `/marshal resume` | Continue after a decision, a stop or a restart. |
 | `/marshal stop` | Stop the run and keep its state. |
-| `/marshal amend REASON` | Ask to change the plan. Big changes need `/marshal amend approve` or `/marshal amend deny`. Changing an existing task's native/governed mode requires a new plan. |
+| `/marshal amend REASON` | Ask to change the plan. Big changes need `/marshal amend approve` or `/marshal amend deny`. Scoped splits require tasks that have not started. Changing an existing task's native/governed mode requires a new plan. |
 | `/marshal close` | Finish a completed run and bring the work into your project. |
 
 ## Goals and approvals

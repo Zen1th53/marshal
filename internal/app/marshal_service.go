@@ -162,6 +162,11 @@ func validateDraft(d MarshalDraft) error {
 			if strings.TrimSpace(c.Command) == "" || len(c.Criteria) == 0 {
 				return errors.New("empty check")
 			}
+			for _, criterion := range c.Criteria {
+				if strings.TrimSpace(criterion) == "" || !containsMarshal(t.Criteria, criterion) {
+					return fmt.Errorf("check criterion differs for %s", t.PlanTaskID)
+				}
+			}
 			commands = append(commands, c.Command)
 		}
 		if !sameStrings(commands, d.Plan.Checks[t.PlanTaskID]) {
@@ -337,7 +342,7 @@ func gitMarshal(ctx context.Context, dir string, args ...string) (string, error)
 	return strings.TrimSpace(string(out)), nil
 }
 
-// marshalApprovalDigest binds the plan scope, the worker modes, the budget,
+// marshalApprovalDigest binds the plan scope, check mappings, worker modes and budget,
 // the control level and the plan pack the person approved. Optional fields
 // without a value are omitted from the encoding.
 func marshalApprovalDigest(planDigest string, run marshal.Run) string {
@@ -350,8 +355,10 @@ func marshalApprovalDigest(planDigest string, run marshal.Run) string {
 		pack = run.Pack.Digest
 	}
 	modes := map[string]marshal.WorkerMode{}
+	checks := map[string][]marshal.Check{}
 	for _, task := range run.Tasks {
 		modes[task.PlanTaskID] = task.Mode
+		checks[task.PlanTaskID] = task.Checks
 	}
 	data, _ := json.Marshal(struct {
 		Plan    string
@@ -359,7 +366,8 @@ func marshalApprovalDigest(planDigest string, run marshal.Run) string {
 		Control marshal.Control               `json:",omitempty"`
 		Pack    string                        `json:",omitempty"`
 		Modes   map[string]marshal.WorkerMode `json:",omitempty"`
-	}{planDigest, run.Budget, control, pack, modes})
+		Checks  map[string][]marshal.Check    `json:",omitempty"`
+	}{planDigest, run.Budget, control, pack, modes, checks})
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }

@@ -375,6 +375,16 @@ also complete at their argument positions. Planning without an attached project
 runtime is refused before a run is created. Failed closure, amendment, approval and resume
 operations retain the last task snapshot when no new canonical run is available.
 
+Each drafted check names the acceptance criteria it proves. A criterion without
+its own passing evidence prevents acceptance. Task scopes may name files or
+directories; directory scopes include their descendants. Rejected hand-ins and
+merge failures count toward the rework limit, and the next worker brief carries
+the reasons. Integration uses the accepted commit, even if the task branch later
+moves. A run that dispatched any ULTRA work keeps its independent final
+verification requirement. Scoped splits require queued parents. `/marshal use-plan`
+refuses tasks with multiple criteria when the approved plan has no explicit check
+mapping; use `/marshal chat` to draft those mappings.
+
 `/memory inject` and `/memory peers` use local project configuration and remain
 available even when the workspace has no database store. `/memory inject`
 rejects extra arguments instead of silently changing the channel or clearing

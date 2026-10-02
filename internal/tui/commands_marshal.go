@@ -296,8 +296,8 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 		"- Current control level: " + string(settings.EffectiveControl()) + ". The person changes it before approval with /marshal settings control strict|free.\n" +
 		"- Write the plan pack to " + app.MarshalPackRelativePath + "/: REQUIREMENTS.md, 00_INDEX.md and tasks/<id>.md for every task id, each a non-empty Markdown file of at most 64 KiB. The runtime refuses a draft whose pack is missing a note or has a note for no task.\n" +
 		"- Write the task list to " + marshalDraftRelativePath + " as JSON of the form " +
-		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","checks":["executable commands"]}]}` +
-		" and nothing else. Every field shown is required; use an empty list for no dependencies. " + instructions + "\n", nil
+		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","checks":[{"command":"executable command","criteria":["criterion this command proves"]}]}]}` +
+		" and nothing else. Every field shown is required; use an empty list for no dependencies. Map each check only to the criteria it proves; a criterion without passing evidence cannot be accepted. " + instructions + "\n", nil
 }
 
 // consumeMarshalDraft takes the draft file out of the way before reading it,

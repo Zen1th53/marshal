@@ -3,7 +3,9 @@ package marshal
 import (
 	"errors"
 	"fmt"
+	"path"
 	"slices"
+	"strings"
 )
 
 // Tier selects the run's worker and review policy.
@@ -295,12 +297,24 @@ func ValidateHandIn(task Task, h HandIn) error {
 	if h.ResultCommit == "" {
 		return errors.New("missing result commit")
 	}
-	allowed := make(map[string]bool, len(task.Files))
+	allowed := make([]string, 0, len(task.Files))
 	for _, f := range task.Files {
-		allowed[f] = true
+		if !validScopePath(strings.TrimSuffix(f, "/")) {
+			return fmt.Errorf("invalid file scope: %s", f)
+		}
+		allowed = append(allowed, strings.TrimSuffix(f, "/"))
 	}
 	for _, f := range h.FilesTouched {
-		if !allowed[f] {
+		inScope := false
+		if validScopePath(f) {
+			for _, scope := range allowed {
+				if f == scope || strings.HasPrefix(f, scope+"/") {
+					inScope = true
+					break
+				}
+			}
+		}
+		if !inScope {
 			return fmt.Errorf("out of scope file: %s", f)
 		}
 	}
@@ -317,6 +331,20 @@ func ValidateHandIn(task Task, h HandIn) error {
 		}
 	}
 	return nil
+}
+
+// Scopes and changed paths must stay relative to the repository, with no
+// parent traversal or alternate path separators.
+func validScopePath(name string) bool {
+	if name == "" || name == "." || path.IsAbs(name) || strings.ContainsAny(name, "\\:") || path.Clean(name) != name {
+		return false
+	}
+	for _, part := range strings.Split(name, "/") {
+		if part == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 // CriteriaMet counts criteria proved by passing re-runs for the result commit.

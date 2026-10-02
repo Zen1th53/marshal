@@ -18,7 +18,7 @@ Changes apply to the **next** plan, not the one already running.
 
 | Setting | What it does | Choices | Default |
 | --- | --- | --- | --- |
-| `control` | How closely agents follow the task notes. `strict`: exactly as written. `free`: agents choose their own approach, within the task's files. | `free`, `strict` | `free` |
+| `control` | How closely agents follow the task notes. `strict`: exactly as written. `free`: agents choose their own approach, within the task's files or directories. | `free`, `strict` | `free` |
 | `acceptance-mode` | Who decides that a task is finished. | `marshal`, `user`, `marshal-then-user` | `marshal-then-user` |
 | `execution-rights` | What the Marshal may do itself, apart from the agents. | `none`, `read-only`, `small-tasks` | `read-only` |
 | `rework-limit` | How many times a task can be sent back to the same agent. After that, MARSHAL gives the task to a different agent, or brings it to you if another agent has already tried. | a number | `2` |
