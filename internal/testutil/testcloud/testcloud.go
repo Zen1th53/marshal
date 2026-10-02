@@ -10,6 +10,8 @@ package testcloud
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -25,6 +27,27 @@ type Options struct {
 	// Lifetime defaults to five minutes, which is inside cloud.MaxLeaseLifetime.
 	Lifetime             time.Duration
 	EntitlementExpiresAt time.Time
+}
+
+// IssueLease creates a signed lease fixture for tests.
+func IssueLease(t *testing.T, claims cloud.Claims, bundle cloud.Bundle, priv ed25519.PrivateKey) cloud.Lease {
+	t.Helper()
+
+	if len(priv) != ed25519.PrivateKeySize {
+		t.Fatalf("malformed test signing key")
+	}
+	input, err := json.Marshal(struct {
+		Claims cloud.Claims `json:"claims"`
+		Bundle cloud.Bundle `json:"bundle"`
+	}{claims, bundle})
+	if err != nil {
+		t.Fatalf("marshal test lease: %v", err)
+	}
+	return cloud.Lease{
+		Claims:    claims,
+		Bundle:    bundle,
+		Signature: base64.RawURLEncoding.EncodeToString(ed25519.Sign(priv, input)),
+	}
 }
 
 // EntitledGate returns a gate holding a verified, unexpired ULTRA lease.
@@ -55,7 +78,7 @@ func EntitledGate(t *testing.T, options Options) *cloud.Gate {
 	}
 
 	now := time.Now().UTC()
-	lease, err := cloud.SignLease(cloud.Claims{
+	lease := IssueLease(t, cloud.Claims{
 		JTI:            "test-lease",
 		KeyID:          keyID,
 		EntitlementID:  "test-entitlement",
@@ -69,9 +92,6 @@ func EntitledGate(t *testing.T, options Options) *cloud.Gate {
 		RoutingTable: map[string]string{"default": "test-route"},
 		IssuedFor:    options.InstallationID,
 	}, priv)
-	if err != nil {
-		t.Fatalf("sign test lease: %v", err)
-	}
 	if !options.EntitlementExpiresAt.IsZero() {
 		grantExpiry := options.EntitlementExpiresAt
 		lease.EntitlementExpiresAt = &grantExpiry
