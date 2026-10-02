@@ -159,7 +159,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		if len(parts) == 2 && strings.HasPrefix(parts[1], "ver-") {
 			return h.handleVerification(ctx, parts[1])
 		}
-		return h.handleCodex(ctx, append([]string{"review"}, parts[1:]...), line)
+		return h.handleNeutral(ctx, "review", parts[1:], line)
 
 	case "/learning":
 		if len(parts) != 2 {
@@ -286,12 +286,12 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 
 	case "/resume":
 		// "run:<id>" or no argument controls a MARSHAL run; anything else is
-		// native Codex resume syntax such as --last.
+		// native resume syntax such as --last for the default provider.
 		if len(parts) > 1 && !strings.HasPrefix(parts[1], "run:") {
-			return h.handleCodex(ctx, append([]string{"resume"}, parts[1:]...), line)
+			return h.handleNeutral(ctx, "resume", parts[1:], line)
 		}
 		if len(parts) > 2 {
-			return "Usage: /resume [run:<id>]  (native Codex: /resume --last)", nil
+			return "Usage: /resume [run:<id>]  (native session: /resume --last)", nil
 		}
 		return h.handleRunControl(ctx, "resume", parts[1:])
 
@@ -329,11 +329,11 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleHarness(ctx, parts[1:])
 
 	case "/models":
-		return h.handleCodex(ctx, []string{"models"}, line)
+		return h.handleNeutral(ctx, "models", parts[1:], line)
 
 	case "/model":
 		if len(parts) == 2 && !strings.EqualFold(parts[1], "show") && !strings.EqualFold(parts[1], "select") {
-			return h.handleCodex(ctx, []string{"model", parts[1]}, line)
+			return h.handleNeutral(ctx, "model", parts[1:], line)
 		}
 		return h.handleModel(ctx, parts[1:])
 
@@ -404,13 +404,13 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleAntigravity(ctx, parts[1:], line)
 
 	case "/mcp":
-		return h.handleCodex(ctx, append([]string{"mcp"}, parts[1:]...), line)
+		return h.handleNeutral(ctx, "mcp", parts[1:], line)
 
 	case "/plugin", "/plugins":
-		return h.handleCodex(ctx, append([]string{"plugin"}, parts[1:]...), line)
+		return h.handleNeutral(ctx, "plugin", parts[1:], line)
 
 	case "/apply":
-		return h.handleCodex(ctx, append([]string{"apply"}, parts[1:]...), line)
+		return h.handleNeutral(ctx, "apply", parts[1:], line)
 
 	case "/sessions":
 		if len(parts) != 1 {
@@ -419,25 +419,25 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleSessionInventory(ctx, "")
 
 	case "/fork":
-		return h.handleCodex(ctx, append([]string{"fork"}, parts[1:]...), line)
+		return h.handleNeutral(ctx, "fork", parts[1:], line)
 
 	case "/search":
-		return h.handleCodex(ctx, append([]string{"search"}, parts[1:]...), line)
+		return h.handleNeutral(ctx, "search", parts[1:], line)
 
 	case "/features":
-		return h.handleCodex(ctx, append([]string{"features"}, parts[1:]...), line)
+		return h.handleNeutral(ctx, "features", parts[1:], line)
 
 	case "/skills":
-		return h.handleCodex(ctx, append([]string{"skills"}, parts[1:]...), line)
+		return h.handleNeutral(ctx, "skills", parts[1:], line)
 
 	case "/skill":
-		return h.handleCodex(ctx, append([]string{"skill"}, parts[1:]...), line)
+		return h.handleNeutral(ctx, "skill", parts[1:], line)
 
 	case "/login":
-		return h.handleCodex(ctx, []string{"login"}, line)
+		return h.handleNeutral(ctx, "login", parts[1:], line)
 
 	case "/logout":
-		return h.handleCodex(ctx, []string{"logout"}, line)
+		return h.handleNeutral(ctx, "logout", parts[1:], line)
 
 	default:
 		if !strings.HasPrefix(line, "/") {
@@ -657,21 +657,21 @@ func (h *CommandHandler) helpText() string {
   /checkpoint create <reason>  Snapshot the project's files
   /rollback <id> [confirm <digest>]  Preview, then restore a snapshot (recovery point kept)
   /pause [run:<id>]        Pause a run of this session (stops new dispatch)
-  /resume [run:<id>]       Resume a paused run; /resume --last: native Codex resume
+  /resume [run:<id>]       Resume a paused run; /resume --last: native resume (default provider)
   /cancel [run:<id>]       Cancel a run of this session and its provider turns
-  /review [instructions]   Native Codex review; governed commit review takes no instructions
+  /review [instructions]   Native review (Codex only); governed commit review takes no instructions
   /approvals               List pending approvals
   /approval                Show native Codex approval policy
   /termination             Inspect termination state
   /context                 Inspect context and drift
   /diff [staged|unstaged|untracked]  Bounded diff inventory (default: combined)
-  /models                  List discovered models and active selection
+  /models [provider]       List models of the default provider, or of each installed provider
   /model [show]            Show execution model preferences and saved harness defaults
-  /model <slug>            Select a Codex execution model through its control authority
+  /model <slug>            Select a model of the default provider (Codex, Claude)
   /model select <codex|claude> <model>  Set the model future governed runs use
   /harness [probe|status|select <role> <harness>]  Probe availability; selection unavailable
   /effort [<level>|default]  Show or set the reasoning effort future Codex runs request
-  /provider [status|config <name>]  Probe availability; credentials stay in the harness (/providers alias)
+  /provider [status|use <name>|config <name>]  Probe availability, choose the default provider (/providers alias)
   /policy [network|sandbox|capability|scope|write|audit]  Enforcement NOT VERIFIED
   /sandbox [read-only|workspace-write]  No args: NOT VERIFIED; mode: open native Codex
   /backup [create|restore <backup_path> [confirm <digest>]]  Create a verified snapshot; preview, then restore one
@@ -682,18 +682,18 @@ func (h *CommandHandler) helpText() string {
   /reinjection             Report execution-bound constraint digest NOT VERIFIED
   /alignment [scope|violations|blast|deletions|status]  Advisory alignment results for this session's tasks
   /alignment resolve run:<run>/<task>#<n> <acknowledged|goal-amendment-needed> <reason>  Record a decision
-  /features [list|enable <feature>|disable <feature>]  Native Codex feature flags
-  /login                   Open native Codex login in an interactive terminal
-  /logout                  Open native Codex logout in an interactive terminal
-  /mcp [list|add|rm]       Manage Codex MCP server integrations
-  /plugin /plugins [list|add|rm]   Manage Codex plugins and extensions
-  /apply <codex_task_id>   Apply a Codex task diff (snapshot first; changed files reported)
-  /skills                  List local Codex skills
-  /skill install <name>    Install a project-local Codex skill
+  /features [list|enable <feature>|disable <feature>]  Native feature flags (Codex only)
+  /login [provider]        Open the default provider's own login
+  /logout [provider]       Open the default provider's own logout
+  /mcp [list|add|rm]       Manage MCP servers of the default provider
+  /plugin /plugins [list|add|rm]   Manage plugins of the default provider (not OpenCode)
+  /apply <codex_task_id>   Apply a Codex cloud task diff (Codex only; snapshot first)
+  /skills                  List local Codex skills (Codex only)
+  /skill install <name>    Install a project-local Codex skill (Codex only)
   /sessions               List NATIVE conversations and GOVERNED runs
-  /fork [id|--last]        Fork a native Codex session
+  /fork [id|--last]        Fork a native session of the default provider
   /doctor [codex|provider] Run system diagnostics, or native Codex doctor
-  /search [on|off]         Open a native Codex session with that search setting
+  /search [on|off]         Open a native session with that search setting (Codex only)
   /codex [subcommand]      Full Codex control plane (status, models, review, exec, run, cli)
   /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
   /opencode [subcommand]   Native OpenCode sessions (new, continue, resume, fork, cli, run)

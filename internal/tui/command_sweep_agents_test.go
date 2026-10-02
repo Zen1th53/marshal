@@ -68,6 +68,7 @@ func TestCommandSweepAgentsMalformedDoesNotAct(t *testing.T) {
 	sweepWorkEnvironment(t)
 	_, ws, _ := newControlWorkspace(t)
 	ws.workDir = t.TempDir()
+	useCodexByDefault(t, ws.workDir)
 	source, auth := testControl(t)
 	ws.AttachControlSource(source)
 	lines := []string{
@@ -116,6 +117,7 @@ func TestCommandSweepAgentsSkillsAndModel(t *testing.T) {
 	_, ws, _ := newControlWorkspace(t)
 	source, auth := testControl(t)
 	ws.AttachControlSource(source)
+	useCodexByDefault(t, ws.workDir)
 	for _, line := range []string{"/skills", "/codex skills"} {
 		if out := sweepAgentExecute(t, ws, line); !strings.Contains(out, "LOCAL CODEX SKILLS") || !strings.Contains(out, "test-skill") {
 			t.Fatalf("%s: %s", line, out)
@@ -156,6 +158,7 @@ func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
 	sweepWorkEnvironment(t)
 	_, ws, _ := newControlWorkspace(t)
 	ws.workDir = t.TempDir()
+	useCodexByDefault(t, ws.workDir)
 	source, nativeAuth := testControl(t)
 	source.Authority = &seededNativeAuthority{fakeAuthority: nativeAuth, root: ws.workDir, sourceID: "session with spaces"}
 	ws.AttachControlSource(source)
@@ -222,6 +225,7 @@ func TestCommandSweepAgentsEmptyAndMissingProvider(t *testing.T) {
 	sweepWorkEnvironment(t)
 	_, ws, _ := newControlWorkspace(t)
 	ws.workDir = t.TempDir()
+	useCodexByDefault(t, ws.workDir)
 	source, auth := testControl(t)
 	source.Authority = &sweepAgentsEmptyAuthority{fakeAuthority: auth}
 	ws.AttachControlSource(source)
@@ -291,6 +295,7 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 	sweepWorkEnvironment(t)
 	logPath := sweepAgentCodexDouble(t)
 	root := initProject(t, bin)
+	useCodexByDefault(t, root)
 	seedNativeInventory(t, root, map[string]string{"codex": "session with spaces", "claude": "claude-session", "opencode": "session with spaces", "antigravity": "conversation with spaces"})
 	cases := []struct{ line, want, argv string }{
 		{"/codex cli --help", "Codex exited.", "--help\n"},
@@ -382,6 +387,7 @@ func TestCommandSweepAgentsTerminalMissingProvider(t *testing.T) {
 			_, ws, _ = newControlWorkspace(t)
 		}
 		ws.workDir = t.TempDir()
+		useCodexByDefault(t, ws.workDir)
 		ws.terminal = &Terminal{isTerm: true}
 		for _, root := range []string{"/codex", "/claude", "/opencode", "/agy", "/antigravity"} {
 			for _, sub := range append([]string{""}, ws.completer.ctx.Subcommands[root]...) {
@@ -402,6 +408,7 @@ func TestCommandSweepAgentsFailuresAndDecisions(t *testing.T) {
 	sweepWorkEnvironment(t)
 	_, ws, _ := newControlWorkspace(t)
 	ws.workDir = t.TempDir()
+	useCodexByDefault(t, ws.workDir)
 	source, auth := testControl(t)
 	failed := &sweepAgentsEmptyAuthority{fakeAuthority: auth, fail: true}
 	source.Authority = failed
@@ -516,6 +523,7 @@ func TestCommandSweepAgentsPluginDiscoveryFailure(t *testing.T) {
 	bin := buildMarshalBinary(t)
 	sweepWorkEnvironment(t)
 	root := initProject(t, bin)
+	useCodexByDefault(t, root)
 	// A local skill still lists when the provider's plugin inventory is unavailable.
 	dir := filepath.Join(root, ".agents", "skills", "local-sweep-skill")
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -544,5 +552,14 @@ func TestCommandSweepAgentsPluginDiscoveryFailure(t *testing.T) {
 	out := sweepAgentExecute(t, ws, "/plugins")
 	if !strings.Contains(out, "plugin discovery failed") || !strings.Contains(out, "local-sweep-skill") {
 		t.Fatal(out)
+	}
+}
+
+// useCodexByDefault pins the default provider these sweep cases exercise.
+// Without it, provider-neutral commands ask which installed provider to use.
+func useCodexByDefault(t *testing.T, root string) {
+	t.Helper()
+	if err := saveDefaultProvider(root, "codex"); err != nil {
+		t.Fatal(err)
 	}
 }

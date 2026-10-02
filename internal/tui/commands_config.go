@@ -22,13 +22,13 @@ func configCommandUsage(parts []string) string {
 		usage = "/doctor [codex|provider]"
 		valid = len(args) == 0 || len(args) == 1 && oneOf(sub, "codex", "provider")
 	case "/provider", "/providers":
-		usage = "/provider [status|config <name>] (credentials must stay in the provider's own login flow)"
-		valid = len(args) == 0 || sub == "status" && len(args) == 1 || sub == "config" && len(args) >= 2 // The handler explicitly refuses inline credentials.
+		usage = "/provider [status|use <name>|config <name>] (credentials must stay in the provider's own login flow)"
+		valid = len(args) == 0 || sub == "status" && len(args) == 1 || sub == "use" && len(args) <= 2 || sub == "config" && len(args) >= 2 // The handler explicitly refuses inline credentials.
 	case "/harness":
 		usage = "/harness [probe|status|select <role> <harness>]"
 		valid = len(args) == 0 || oneOf(sub, "probe", "status") && len(args) == 1 || sub == "select" && len(args) == 3
 	case "/model":
-		usage = "/model [show|select <harness> <model_name>|<codex_slug>]"
+		usage = "/model [show|select <harness> <model_name>|<model_slug>]"
 		valid = len(args) == 0 || sub == "show" && len(args) == 1 || sub == "select" && len(args) == 3 || !oneOf(sub, "show", "select") && len(args) == 1
 	case "/effort":
 		usage = "/effort [minimal|low|medium|high|xhigh|default]"
@@ -51,7 +51,9 @@ func configCommandUsage(parts []string) string {
 	case "/store":
 		usage = "/store [check quick|check full|counts] (full can take long; 5s timeout)"
 		valid = len(args) == 0 || len(args) == 1 && sub == "counts" || len(args) == 2 && sub == "check" && oneOf(strings.ToLower(args[1]), "quick", "full")
-	case "/models", "/fingerprint", "/runtime", "/export", "/reinjection", "/login", "/logout":
+	case "/models", "/login", "/logout":
+		usage, valid = cmd+" [codex|claude|opencode|agy]", len(args) <= 1
+	case "/fingerprint", "/runtime", "/export", "/reinjection":
 		usage, valid = cmd, len(args) == 0
 	}
 	if !valid {

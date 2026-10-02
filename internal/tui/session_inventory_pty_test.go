@@ -68,6 +68,7 @@ func TestSessionInventoriesPTY(t *testing.T) {
 	sweepCrosscutEnvironment(t)
 	log := sweepAgentCodexDouble(t)
 	root := initProject(t, bin)
+	useCodexByDefault(t, root)
 	seedNativeInventory(t, root, map[string]string{"codex": "old-native"})
 	seedNativeInventory(t, root, map[string]string{"codex": "latest-native", "claude": "claude-native"})
 	seedGovernedInventory(t, root)

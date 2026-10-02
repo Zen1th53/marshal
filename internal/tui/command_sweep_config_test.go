@@ -23,8 +23,10 @@ func TestCommandSweepConfigMalformed(t *testing.T) {
 	sweepWorkEnvironment(t)
 	_, stored, _ := newControlWorkspace(t)
 	stored.workDir = t.TempDir()
+	useCodexByDefault(t, stored.workDir)
 	absent := NewWorkspace(nil, "sweep", "sweep")
 	absent.workDir = t.TempDir()
+	useCodexByDefault(t, absent.workDir)
 	lines := []string{
 		"/policy typo", "/policy network extra", "/sandbox typo", "/sandbox read-only extra",
 		"/doctor typo", "/doctor codex extra", "/provider status extra", "/provider typo", "/provider config",
@@ -226,8 +228,10 @@ func TestCommandSweepConfigRootsAndSubcommands(t *testing.T) {
 	sweepWorkEnvironment(t)
 	_, stored, _ := newControlWorkspace(t)
 	stored.workDir = t.TempDir()
+	useCodexByDefault(t, stored.workDir)
 	absent := NewWorkspace(nil, "sweep", "sweep")
 	absent.workDir = t.TempDir()
+	useCodexByDefault(t, absent.workDir)
 	cases := []struct{ cmd, bare, valid, result string }{
 		{"/policy", "NOT VERIFIED", "/policy network", "NOT VERIFIED"},
 		{"/sandbox", "NOT VERIFIED", "/sandbox read-only", "authority unavailable"},
@@ -320,6 +324,7 @@ func TestCommandSweepConfigAuthority(t *testing.T) {
 	sweepWorkEnvironment(t)
 	_, ws, ctx := newControlWorkspace(t)
 	ws.workDir = t.TempDir()
+	useCodexByDefault(t, ws.workDir)
 	source, auth := testControl(t)
 	ws.AttachControlSource(source)
 	sweepWorkRun(t, ws, "/models", "CODEX MODELS")
@@ -380,6 +385,7 @@ func TestCommandSweepConfigPTY(t *testing.T) {
 	bin := buildMarshalBinary(t)
 	sweepWorkEnvironment(t)
 	project := initProject(t, bin)
+	useCodexByDefault(t, project)
 	cases := []struct{ line, want string }{
 		{"/policy network", "Policy enforcement status: NOT VERIFIED"}, {"/sandbox read-only", "Install Codex"},
 		{"/doctor codex", "Install Codex"}, {"/provider status", "PROVIDER / HARNESS STATUS"},
@@ -424,6 +430,7 @@ printf 'CONFIG-NATIVE-RAN\n'
 		t.Fatal(err)
 	}
 	project := initProject(t, bin)
+	useCodexByDefault(t, project)
 	for _, c := range []struct{ line, tail string }{
 		{"/features", "features\nlist"}, {"/features list", "features\nlist"}, {"/features enable test_flag", "features\nenable\ntest_flag"}, {"/features disable test_flag", "features\ndisable\ntest_flag"},
 		{"/login", "login"}, {"/logout", "logout"}, {"/search on", "--search"}, {"/search enable", "--search"}, {"/search true", "--search"},
@@ -506,6 +513,8 @@ func TestCommandSweepConfigOptimizationRecord(t *testing.T) {
 func TestCommandSweepConfigDegradedHints(t *testing.T) {
 	sweepWorkEnvironment(t)
 	ws := NewWorkspace(nil, "sweep", "sweep")
+	ws.workDir = t.TempDir()
+	useCodexByDefault(t, ws.workDir)
 	for _, line := range []string{"/models", "/model test-model", "/features", "/search", "/sandbox read-only", "/login", "/logout"} {
 		t.Run(line, func(t *testing.T) { sweepWorkRun(t, ws, line, "Open the TUI") })
 	}
@@ -565,6 +574,7 @@ func TestCommandSweepConfigModelRepeatedSelection(t *testing.T) {
 	_, ws, _ := newControlWorkspace(t)
 	source, auth := testControl(t)
 	ws.AttachControlSource(source)
+	useCodexByDefault(t, ws.workDir)
 	for _, slug := range []string{"gpt-6-astra", "gpt-5.6-terra", "gpt-6-astra"} {
 		sweepWorkRun(t, ws, "/model "+slug, "successfully switched")
 		if auth.selectedCodexModel != slug {
