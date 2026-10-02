@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -21,13 +23,20 @@ func NewSandboxed(process adapter.ProcessRunner, wrapper commandWrapper, request
 	return &sandboxedRunner{process: process, wrapper: wrapper, request: request}
 }
 
-func (r *sandboxedRunner) Run(ctx context.Context, command adapter.Command) (adapter.ProcessResult, error) {
+func (r *sandboxedRunner) Run(ctx context.Context, command adapter.Command) (result adapter.ProcessResult, err error) {
 	argv := append([]string{command.Path}, command.Args...)
 	spec, err := r.wrapper.Wrap(r.request, argv)
 	if err != nil {
 		return adapter.ProcessResult{}, err
 	}
-	result, err := r.process.Run(ctx, adapter.Command{
+	if spec.Cleanup != nil {
+		defer func() {
+			if cleanupErr := spec.Cleanup(); cleanupErr != nil {
+				err = errors.Join(err, fmt.Errorf("remove sandbox scratch: %w", cleanupErr))
+			}
+		}()
+	}
+	result, err = r.process.Run(ctx, adapter.Command{
 		Path: spec.Path, Args: spec.Args, Env: spec.Env, Dir: spec.Dir,
 		Stdin: command.Stdin, Heartbeat: command.Heartbeat,
 		HeartbeatInterval: command.HeartbeatInterval,

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	goruntime "runtime"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
@@ -211,6 +212,11 @@ func (r *Runtime) executeProcess05CodexAppServer(ctx context.Context, task execu
 		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: task.NativeTurn}, true, fmt.Errorf("%w: Codex app-server turn %s cannot be reattached after restart; inspect recovery before retrying", model.ErrUnavailable, task.NativeTurn.TurnID)
 	}
 	if live == nil {
+		// This native launcher bypasses the command wrapper. Preserve the
+		// sandboxed runner path until native stdio launch applies the same policy.
+		if goruntime.GOOS == "darwin" && r.codexAppServerNew == nil {
+			return execution.TaskResult{TaskID: task.TaskID}, false, fmt.Errorf("%w: native Codex app-server launcher does not apply the platform sandbox", model.ErrUnavailable)
+		}
 		runCtx, runCancel := context.WithCancel(ctx)
 		factory := r.codexAppServerNew
 		if factory == nil {

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	goruntime "runtime"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
@@ -202,6 +203,11 @@ func (r *Runtime) executeProcess05ClaudeStream(ctx context.Context, task executi
 		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: task.NativeTurn}, true, fmt.Errorf("%w: Claude turn %s cannot be reattached after restart; inspect recovery before retrying", model.ErrUnavailable, task.NativeTurn.TurnID)
 	}
 	if live == nil {
+		// This native launcher bypasses the command wrapper. Preserve the
+		// sandboxed runner path until native stdio launch applies the same policy.
+		if goruntime.GOOS == "darwin" && r.claudeStreamNew == nil {
+			return execution.TaskResult{TaskID: task.TaskID}, false, fmt.Errorf("%w: native Claude stream launcher does not apply the platform sandbox", model.ErrUnavailable)
+		}
 		runCtx, runCancel := context.WithCancel(ctx)
 		factory := r.claudeStreamNew
 		if factory == nil {

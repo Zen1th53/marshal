@@ -212,7 +212,11 @@ func (s *SecurityFeed) readSandbox(ctx context.Context, snap *SecuritySnapshot) 
 	}
 
 	if state.Available {
-		snap.Sandbox = Known(knownOrDefault(state.Backend, "an isolation backend"),
+		backend := knownOrDefault(state.Backend, "an isolation backend")
+		if state.Backend == "seatbelt" {
+			backend += " (no process namespace)"
+		}
+		snap.Sandbox = Known(backend,
 			securityBinding)
 	} else {
 		reason := state.Reason

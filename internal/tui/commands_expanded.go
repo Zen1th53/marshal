@@ -256,12 +256,15 @@ func (h *CommandHandler) handlePolicy(ctx context.Context, args []string) (strin
 	return b.String(), nil
 }
 
-// handleSandbox reports the bubblewrap sandbox status.
+// handleSandbox reports the platform sandbox status.
 func (h *CommandHandler) handleSandbox(ctx context.Context) (string, error) {
 	return sandboxStatusForOS(runtime.GOOS), nil
 }
 
 func sandboxStatusForOS(goos string) string {
+	if goos == "darwin" {
+		return seatbeltStatus(sandbox.ProbeForOS(context.Background(), goos))
+	}
 	if reason := sandbox.PlatformUnavailableReason(goos); reason != "" {
 		return "Sandbox status: BLOCKED. " + reason
 	}
@@ -641,6 +644,8 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 			b.WriteString("    Auth:    UNKNOWN (no execution performed)\n")
 			if reason := sandbox.PlatformUnavailableReason(runtime.GOOS); reason != "" {
 				b.WriteString("    Egress:  governed cells BLOCKED (" + reason + "); native sessions UNKNOWN (not observed)\n")
+			} else if runtime.GOOS == "darwin" {
+				b.WriteString("    Egress:  governed cells BLOCKED_BY_POLICY (seatbelt network policy; no process namespace; per-endpoint egress unenforceable); native sessions UNKNOWN (not observed)\n")
 			} else {
 				b.WriteString("    Egress:  governed cells BLOCKED_BY_POLICY (sandbox uses --unshare-net; per-endpoint egress unenforceable); native sessions UNKNOWN (they run in the provider's own environment; not observed)\n")
 			}
@@ -1334,4 +1339,11 @@ func (h *CommandHandler) restoreBackup(ctx context.Context, path, digest, confir
 	}
 	return fmt.Sprintf("Project state restored from %s; the restored database matches the confirmed digest and has been reopened.\nThe previous state is backed up at %s (restore it the same way to undo).",
 		path, result.RecoveryPath), nil
+}
+
+func seatbeltStatus(capability model.IsolationCapability) string {
+	if !capability.Available {
+		return "Sandbox status: BLOCKED. " + capability.Reason
+	}
+	return "Sandbox status: AVAILABLE (seatbelt). " + capability.Reason
 }

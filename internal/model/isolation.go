@@ -25,6 +25,7 @@ type IsolationLevel string
 
 const (
 	IsolationBwrap       IsolationLevel = "bwrap"
+	IsolationSeatbelt    IsolationLevel = "seatbelt"
 	IsolationProcessOnly IsolationLevel = "process_only"
 	IsolationBlocked     IsolationLevel = "blocked"
 )
@@ -45,8 +46,9 @@ type Bind struct {
 
 type SandboxRequest struct {
 	Worktree       string
+	RuntimeDir     string // host runtime state excluded by policy backends
 	WritableDirs   []string
-	WritableTmpfs  []string // sandbox-internal paths mounted as ephemeral tmpfs
+	WritableTmpfs  []string // ephemeral paths: tmpfs mounts or private scratch on policy backends
 	ReadOnlyBinds  []Bind
 	NetworkAllowed bool
 	ExtraEnv       []string // KEY=VALUE pairs forwarded into sandbox
@@ -58,4 +60,5 @@ type CommandSpec struct {
 	Env       []string
 	Dir       string
 	Isolation IsolationCapability
+	Cleanup   func() error // releases per-run storage after the process exits
 }

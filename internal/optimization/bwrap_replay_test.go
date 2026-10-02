@@ -12,7 +12,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/learning"
 	marshalmodel "github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/sandbox"
 )
 
 func TestBwrapReplayRunnerUsesOfflineSandboxAndIndependentVerifier(t *testing.T) {
@@ -39,8 +38,8 @@ func TestBwrapReplayRunnerUsesOfflineSandboxAndIndependentVerifier(t *testing.T)
 		},
 	}
 	_, err := ExecuteReplay(context.Background(), runner, cfFactual(learning.OutcomeFailed, StatusFail), cfRoute("claude"), SandboxPolicy{WritableRoot: root, MaxWallMillis: 1000, MaxMemoryBytes: 1 << 20}, "test", "cluster", cfGovernance(), cfNow())
-	if reason := sandbox.PlatformUnavailableReason(runtime.GOOS); reason != "" {
-		if !errors.Is(err, marshalmodel.ErrUnavailable) || !strings.Contains(err.Error(), reason) {
+	if runtime.GOOS != "linux" {
+		if !errors.Is(err, marshalmodel.ErrUnavailable) {
 			t.Fatalf("refusal: %v", err)
 		}
 		if _, statErr := os.Stat(argsFile); !errors.Is(statErr, os.ErrNotExist) {
@@ -61,8 +60,8 @@ func TestBwrapReplayRunnerUsesOfflineSandboxAndIndependentVerifier(t *testing.T)
 }
 
 func TestBwrapReplayRunnerExecutesWithRealBubblewrapWhenAvailable(t *testing.T) {
-	if reason := sandbox.PlatformUnavailableReason(runtime.GOOS); reason != "" {
-		t.Skip(reason)
+	if runtime.GOOS != "linux" {
+		t.Skip("bubblewrap replay requires Linux namespaces")
 	}
 	binary, err := exec.LookPath("bwrap")
 	if err != nil {

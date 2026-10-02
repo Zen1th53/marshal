@@ -1,0 +1,51 @@
+(version 1)
+(deny default)
+(allow file-read* (subpath (param "WORKTREE")))
+(allow process-exec (subpath (param "WORKTREE")))
+(allow file-write* (subpath (param "WORKTREE")))
+(allow file-read* (subpath (param "SCRATCH")))
+(allow process-exec (subpath (param "SCRATCH")))
+(allow file-write* (subpath (param "SCRATCH")))
+(allow file-read* (subpath (param "WRITE_0")))
+(allow process-exec (subpath (param "WRITE_0")))
+(allow file-write* (subpath (param "WRITE_0")))
+(allow file-read* (subpath (param "SYSTEM_0")))
+(allow process-exec (subpath (param "SYSTEM_0")))
+(allow file-read* (subpath (param "SYSTEM_1")))
+(allow process-exec (subpath (param "SYSTEM_1")))
+(allow file-read* (subpath (param "SYSTEM_2")))
+(allow process-exec (subpath (param "SYSTEM_2")))
+(allow file-read* (subpath (param "SYSTEM_3")))
+(allow process-exec (subpath (param "SYSTEM_3")))
+(allow file-read* (subpath (param "SYSTEM_4")))
+(allow process-exec (subpath (param "SYSTEM_4")))
+(allow file-read* (subpath (param "SYSTEM_5")))
+(allow process-exec (subpath (param "SYSTEM_5")))
+(allow file-read* (literal (param "READ_0")))
+(allow process-exec (literal (param "READ_0")))
+(allow file-read* (subpath (param "READ_1")))
+(allow process-exec (subpath (param "READ_1")))
+(deny file-read* file-write* process-exec (require-all (subpath (param "RUNTIME")) (require-not (subpath (param "WORKTREE")))))
+(deny file-read* file-write* process-exec (require-all (regex #"(^|/)([.]codex|[.]claude|[.]opencode|[.]gemini|[.]ssh|[.]aws|[.]gnupg|[.]kube)(/|$)|/[.]config/(codex|claude|opencode|gemini)(/|$)|/[.](local/share|cache)/(codex|claude|opencode|gemini)(/|$)|/[.]docker/config[.]json$|/(auth[.]json|[.]netrc|[.]git-credentials|[.]vault-token|id_rsa|id_ed25519)$") (require-not (subpath (param "SCRATCH")))))
+(deny file-read* file-write* process-exec (require-all (regex #"/[.]marshal(/|$)") (require-not (subpath (param "WORKTREE")))))
+(allow file-read* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom") (literal "/dev/tty") (regex #"^/dev/ttys[0-9]+$"))
+(allow file-write* (literal "/dev/null") (literal "/dev/tty") (regex #"^/dev/ttys[0-9]+$"))
+(allow process-fork)
+(allow signal (target same-sandbox))
+(allow sysctl-read)
+(allow pseudo-tty)
+(deny network*)
+
+Parameters:
+WORKTREE=/project/.marshal/worktrees/task
+SCRATCH=/private/tmp/marshal-seatbelt-example
+WRITE_0=/build-output
+SYSTEM_0=/usr
+SYSTEM_1=/bin
+SYSTEM_2=/sbin
+SYSTEM_3=/System/Library
+SYSTEM_4=/Library/Apple/System/Library
+SYSTEM_5=/private/etc
+READ_0=/tools/provider
+READ_1=/project/.git
+RUNTIME=/project/.marshal

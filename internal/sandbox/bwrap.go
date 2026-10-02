@@ -26,7 +26,7 @@ func (b *Bwrap) Probe(ctx context.Context) model.IsolationCapability {
 }
 
 func (b *Bwrap) probeForOS(ctx context.Context, goos string) model.IsolationCapability {
-	if reason := PlatformUnavailableReason(goos); reason != "" {
+	if reason := bwrapUnavailableReason(goos); reason != "" {
 		return model.IsolationCapability{Level: model.IsolationProcessOnly, Reason: reason}
 	}
 	if b.binary == "" {
@@ -60,7 +60,7 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 }
 
 func (b *Bwrap) wrapForOS(goos string, request model.SandboxRequest, command []string) (model.CommandSpec, error) {
-	if reason := PlatformUnavailableReason(goos); reason != "" {
+	if reason := bwrapUnavailableReason(goos); reason != "" {
 		return model.CommandSpec{}, fmt.Errorf("%w: %s", model.ErrUnavailable, reason)
 	}
 	if len(command) == 0 {
@@ -171,7 +171,7 @@ func pathWithin(root, candidate string) bool {
 }
 
 func ChooseIsolation(capability model.IsolationCapability, risk model.Risk, networkAllowed bool, allowProcessOnlyFallback bool) (model.IsolationCapability, error) {
-	if capability.Available && capability.Level == model.IsolationBwrap {
+	if capability.Available && (capability.Level == model.IsolationBwrap || (capability.Level == model.IsolationSeatbelt && capability.Filesystem && !capability.Process)) {
 		capability.Network = networkAllowed
 		return capability, nil
 	}
@@ -184,7 +184,7 @@ func ChooseIsolation(capability model.IsolationCapability, risk model.Risk, netw
 		Level: model.IsolationBlocked, Available: false, Network: networkAllowed,
 		Reason: "required isolation cannot be enforced (bubblewrap unavailable and process-only fallback not explicitly permitted)",
 	}
-	if strings.HasPrefix(capability.Reason, "sandboxed execution unavailable") {
+	if capability.Level == model.IsolationSeatbelt || strings.HasPrefix(capability.Reason, "sandboxed execution unavailable") {
 		blocked.Reason = capability.Reason
 	}
 	return blocked, fmt.Errorf("%w: %s", model.ErrUnavailable, blocked.Reason)
@@ -279,11 +279,16 @@ func isProviderStateDirectory(path string) bool {
 // PlatformUnavailableReason reports platforms without an isolation backend.
 func PlatformUnavailableReason(goos string) string {
 	switch goos {
-	case "linux":
+	case "linux", "darwin":
 		return ""
-	case "darwin":
-		return "sandboxed execution unavailable: no macOS sandbox backend exists yet; governed execution is blocked"
 	default:
 		return "sandboxed execution unavailable on this platform; governed execution is blocked"
 	}
+}
+
+func bwrapUnavailableReason(goos string) string {
+	if goos == "darwin" {
+		return "sandboxed execution unavailable: bubblewrap requires Linux process namespaces; use the verified seatbelt backend"
+	}
+	return PlatformUnavailableReason(goos)
 }

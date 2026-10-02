@@ -1,5 +1,11 @@
 package app
 
+import (
+	"context"
+	"github.com/Zen1th53/marshal/internal/sandbox"
+	"runtime"
+)
+
 // This file exposes, for Process 01 startup assessment, the same enforcement
 // facts the runtime uses when it decides whether work may execute.
 //
@@ -16,6 +22,9 @@ package app
 // writable isolation binary is not isolation, because anything able to modify
 // it can choose what the sandbox does.
 func SandboxEnforcementAvailable() bool {
+	if runtime.GOOS == "darwin" {
+		return sandbox.ProbeForOS(context.Background(), runtime.GOOS).Available
+	}
 	_, err := trustedBwrapPath()
 	return err == nil
 }
