@@ -115,6 +115,10 @@ func TestProvenance_SymlinkDetection(t *testing.T) {
 	if !prov.IsSymlink {
 		t.Errorf("expected IsSymlink = true")
 	}
+	origBin, err = filepath.EvalSymlinks(origBin)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if prov.TargetFile != origBin {
 		t.Errorf("expected TargetFile %s, got %s", origBin, prov.TargetFile)
 	}

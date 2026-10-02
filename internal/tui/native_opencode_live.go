@@ -161,6 +161,10 @@ func readOpenCodeLive(dbPath, root string) ([]openCodeLiveSession, error) {
 		return nil, err
 	}
 
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+	root = filepath.Clean(root)
 	var out []openCodeLiveSession
 	for _, candidate := range candidates {
 		directory := candidate.directory

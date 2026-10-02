@@ -14,7 +14,12 @@ type Repository struct {
 func New(t testing.TB) *Repository {
 	t.Helper()
 
-	path := t.TempDir()
+	return NewAt(t, t.TempDir())
+}
+
+// NewAt initializes a repository at an existing fixture directory.
+func NewAt(t testing.TB, path string) *Repository {
+	t.Helper()
 	run(t, path, "git", "init", "-b", "main")
 	run(t, path, "git", "config", "user.name", "MARSHAL Test")
 	run(t, path, "git", "config", "user.email", "marshal-test@example.invalid")

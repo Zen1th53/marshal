@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -243,7 +244,11 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/sandbox failed: %v", err)
 	}
-	if !strings.Contains(out, "NOT VERIFIED") {
+	wantSandbox := "NOT VERIFIED"
+	if runtime.GOOS == "darwin" {
+		wantSandbox = "Sandbox status: BLOCKED. sandboxed execution unavailable: no macOS sandbox backend exists yet"
+	}
+	if !strings.Contains(out, wantSandbox) {
 		t.Fatalf("unexpected /sandbox response: %s", out)
 	}
 

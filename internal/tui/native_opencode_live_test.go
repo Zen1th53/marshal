@@ -230,3 +230,16 @@ func TestOpenCodeDBPathHonoursOverrides(t *testing.T) {
 	}
 	_ = os.Unsetenv("XDG_DATA_HOME")
 }
+
+func TestOpenCodeLiveMatchesSymlinkedProject(t *testing.T) {
+	root := t.TempDir()
+	alias := filepath.Join(t.TempDir(), "project")
+	if err := os.Symlink(root, alias); err != nil {
+		t.Fatal(err)
+	}
+	path := writeOpenCodeStore(t, t.TempDir(), alias)
+	sessions, err := readOpenCodeLive(path, alias)
+	if err != nil || len(sessions) != 1 {
+		t.Fatalf("symlinked project: sessions=%d err=%v", len(sessions), err)
+	}
+}

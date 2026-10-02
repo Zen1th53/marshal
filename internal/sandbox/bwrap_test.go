@@ -51,6 +51,14 @@ func TestWrapBindsOnlyDeclaredWritablePathsAndDeniesNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	gitMetadata := t.TempDir()
+	// The envelope uses canonical host paths.
+	for _, path := range []*string{&worktree, &scratch, &tool, &gitMetadata} {
+		resolved, err := filepath.EvalSymlinks(*path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		*path = resolved
+	}
 	backend := NewBwrap("/sbin/bwrap")
 	spec, err := backend.wrapForOS("linux", model.SandboxRequest{
 		Worktree:     worktree,

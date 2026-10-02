@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -258,6 +259,10 @@ func errorStatus(err error) (int, string) {
 }
 
 func prepareSocket(path string) error {
+	// Darwin sun_path has 104 bytes, including the terminating NUL.
+	if runtime.GOOS == "darwin" && len(path) >= 104 {
+		return fmt.Errorf("%w: runtime socket path is %d bytes; macOS requires fewer than 104 bytes", model.ErrInvalid, len(path))
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create socket directory: %w", err)
 	}

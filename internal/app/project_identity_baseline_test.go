@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/projectid"
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
 // These tests cover the Process 02 defect and its fix. At baseline a project
@@ -58,7 +59,7 @@ func TestMovedProjectOpensAndKeepsItsIdentity(t *testing.T) {
 	if !found {
 		t.Fatal("the moved project has no identity binding")
 	}
-	if binding.RecordedRoot != moved {
+	if binding.RecordedRoot != testgit.Canonical(t, moved) {
 		t.Fatalf("the binding still records the old location: %q", binding.RecordedRoot)
 	}
 

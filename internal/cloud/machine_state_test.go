@@ -23,13 +23,18 @@ func savedInstallation(t *testing.T, dir string) State {
 func TestMachineStateDirKeepsOneIdentityPerInstallation(t *testing.T) {
 	config := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", config)
+	t.Setenv("HOME", config)
 	first := savedInstallation(t, t.TempDir())
 	projectA := t.TempDir()
 	if err := NewStore(projectA).Save(first); err != nil {
 		t.Fatal(err)
 	}
+	configBase, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
 	dir, err := MachineStateDir(projectA)
-	if err != nil || dir != filepath.Join(config, "marshal") {
+	if err != nil || dir != filepath.Join(configBase, "marshal") {
 		t.Fatalf("machine dir = %q %v", dir, err)
 	}
 	projectB := t.TempDir()
@@ -51,6 +56,7 @@ func TestMachineStateDirKeepsOneIdentityPerInstallation(t *testing.T) {
 func TestMachineStateDirWithoutProjectIdentity(t *testing.T) {
 	config := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", config)
+	t.Setenv("HOME", config)
 	dir, err := MachineStateDir(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

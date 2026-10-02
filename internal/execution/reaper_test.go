@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"bufio"
 	"context"
 	"os/exec"
 	"syscall"
@@ -39,19 +40,35 @@ func TestReaper_EscalationToSigkill(t *testing.T) {
 	ctx := context.Background()
 
 	// Launch a python process that explicitly ignores SIGTERM
-	cmd := exec.Command("python3", "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(10)")
+	cmd := exec.Command("python3", "-c", "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); print('ready', flush=True); time.sleep(10)")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("failed to start python process: %v", err)
 	}
 
 	reaper.Register("run-reap-2", "task-stubborn", cmd)
 
-	// Allow python to start and register SIG_IGN
-	time.Sleep(150 * time.Millisecond)
+	// Wait until the child has installed SIG_IGN before sending SIGTERM.
+	ready := make(chan bool, 1)
+	go func() { scanner := bufio.NewScanner(stdout); ready <- scanner.Scan() && scanner.Text() == "ready" }()
+	select {
+	case ok := <-ready:
+		if !ok {
+			t.Fatal("child did not signal readiness")
+		}
+	case <-time.After(5 * time.Second):
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatal("child readiness timed out")
+	}
 
 	// Terminate with short grace period -> must escalate to SIGKILL
-	err := reaper.TerminateProcess(ctx, "run-reap-2", "task-stubborn", 300*time.Millisecond)
+	err = reaper.TerminateProcess(ctx, "run-reap-2", "task-stubborn", 300*time.Millisecond)
 	if err == nil {
 		t.Fatalf("expected error indicating SIGKILL escalation, got nil")
 	}
