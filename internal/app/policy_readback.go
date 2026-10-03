@@ -13,7 +13,7 @@ import (
 type PolicyReadback struct {
 	// RuntimePolicy is "<id> v<version>" when a policy governs runs, or empty.
 	RuntimePolicy string
-	// GateEngine is "configured", "default placeholder" or "none".
+	// GateEngine is "configured" or "none".
 	GateEngine string
 	Gates      store.GateDecisionSummary
 }
@@ -29,8 +29,6 @@ func (r *Runtime) PolicyReadback(ctx context.Context) (PolicyReadback, error) {
 	switch {
 	case r.gateEngine == nil:
 		out.GateEngine = "none"
-	case r.gateEngineDefault:
-		out.GateEngine = "default placeholder"
 	default:
 		out.GateEngine = "configured"
 	}

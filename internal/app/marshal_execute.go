@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -31,8 +32,8 @@ type BriefContext struct {
 // MarshalBrief produces the instruction a worker receives for a task.
 type MarshalBrief func(marshal.Task, BriefContext) string
 
-// briefContext gathers the reviews of a task's earlier attempts. An attempt
-// with no stored review, such as one interrupted by a restart, adds nothing.
+// briefContext gathers durable return reasons, falling back to reviews for
+// attempts recorded before return events carried their own reasons.
 func (s *MarshalService) briefContext(ctx context.Context, runID string, run marshal.Run, t marshal.Task) (BriefContext, error) {
 	bc := BriefContext{Control: run.Settings.EffectiveControl()}
 	if run.Pack != nil {
@@ -42,7 +43,30 @@ func (s *MarshalService) briefContext(ctx context.Context, runID string, run mar
 	for _, n := range t.ReturnsByAgent {
 		attempts += n
 	}
+	history, err := s.Store.MarshalDecisions(ctx, runID)
+	if err != nil {
+		return bc, err
+	}
+	returns := map[string][]string{}
+	for _, event := range history {
+		if event.TaskID != t.PlanTaskID || event.Data["return_attempt"] == nil {
+			continue
+		}
+		data, err := json.Marshal(event.Data["return_reasons"])
+		if err != nil {
+			return bc, err
+		}
+		var reasons []string
+		if err := json.Unmarshal(data, &reasons); err != nil {
+			return bc, err
+		}
+		returns[fmt.Sprint(event.Data["return_attempt"])] = reasons
+	}
 	for attempt := 1; attempt <= attempts; attempt++ {
+		if reasons, ok := returns[fmt.Sprint(attempt)]; ok {
+			bc.Returned = append(bc.Returned, reasons...)
+			continue
+		}
 		review, err := s.Store.GetMarshalReview(ctx, runID, t.PlanTaskID, attempt)
 		if errors.Is(err, model.ErrNotFound) {
 			continue

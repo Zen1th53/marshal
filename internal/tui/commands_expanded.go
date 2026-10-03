@@ -232,8 +232,6 @@ func (h *CommandHandler) handlePolicy(ctx context.Context, args []string) (strin
 		fmt.Fprintf(&b, "  Runtime policy: %s (active)\n", readback.RuntimePolicy)
 	}
 	switch readback.GateEngine {
-	case "default placeholder":
-		b.WriteString("  Gate engine:    DEFAULT PLACEHOLDER; its only check always passes, so it is a hook, not enforcement\n")
 	case "configured":
 		b.WriteString("  Gate engine:    CONFIGURED\n")
 	default:

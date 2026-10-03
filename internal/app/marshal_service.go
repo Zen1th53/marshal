@@ -162,6 +162,11 @@ func validateDraft(d MarshalDraft) error {
 			if strings.TrimSpace(c.Command) == "" || len(c.Criteria) == 0 {
 				return errors.New("empty check")
 			}
+			for _, criterion := range c.Criteria {
+				if strings.TrimSpace(criterion) == "" || !containsMarshal(t.Criteria, criterion) {
+					return fmt.Errorf("check criterion differs for %s", t.PlanTaskID)
+				}
+			}
 			commands = append(commands, c.Command)
 		}
 		if !sameStrings(commands, d.Plan.Checks[t.PlanTaskID]) {
@@ -250,8 +255,8 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 			return marshal.Run{}, errors.New("invalid task ID")
 		}
 	}
-	if budget.Tokens.Task < 0 || budget.Tokens.Plan < 0 || budget.WallTime.Task < 0 || budget.WallTime.Plan < 0 || budget.Money.Task < 0 || budget.Money.Plan < 0 {
-		return marshal.Run{}, errors.New("negative budget ceiling")
+	if err := budget.Validate(); err != nil {
+		return marshal.Run{}, err
 	}
 	settings, err := s.Store.GetMarshalSettings(ctx, s.ProjectID)
 	if err != nil {
@@ -337,10 +342,9 @@ func gitMarshal(ctx context.Context, dir string, args ...string) (string, error)
 	return strings.TrimSpace(string(out)), nil
 }
 
-// marshalApprovalDigest binds the plan scope, the budget, the control level
-// and the plan pack the person approved. Free control and a missing pack are
-// left out of the encoding, so a run approved before either existed keeps its
-// digest.
+// marshalApprovalDigest binds the plan scope, check mappings, worker modes and budget,
+// the control level and the plan pack the person approved. Optional fields
+// without a value are omitted from the encoding.
 func marshalApprovalDigest(planDigest string, run marshal.Run) string {
 	control := run.Settings.EffectiveControl()
 	if control == marshal.ControlFree {
@@ -350,12 +354,20 @@ func marshalApprovalDigest(planDigest string, run marshal.Run) string {
 	if run.Pack != nil {
 		pack = run.Pack.Digest
 	}
+	modes := map[string]marshal.WorkerMode{}
+	checks := map[string][]marshal.Check{}
+	for _, task := range run.Tasks {
+		modes[task.PlanTaskID] = task.Mode
+		checks[task.PlanTaskID] = task.Checks
+	}
 	data, _ := json.Marshal(struct {
 		Plan    string
 		Budget  marshal.Budget
-		Control marshal.Control `json:",omitempty"`
-		Pack    string          `json:",omitempty"`
-	}{planDigest, run.Budget, control, pack})
+		Control marshal.Control               `json:",omitempty"`
+		Pack    string                        `json:",omitempty"`
+		Modes   map[string]marshal.WorkerMode `json:",omitempty"`
+		Checks  map[string][]marshal.Check    `json:",omitempty"`
+	}{planDigest, run.Budget, control, pack, modes, checks})
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }

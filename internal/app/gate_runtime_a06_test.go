@@ -50,6 +50,37 @@ func TestRuntimeRunAppliesConfiguredGateBeforeClaimOrAdapter(t *testing.T) {
 	}
 }
 
+func TestDefaultRuntimeDoesNotRecordPlaceholderCompliance(t *testing.T) {
+	ctx := t.Context()
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(ctx, repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	fake := newFakeCodexAdapter()
+	runtime, err := OpenWithOptions(ctx, repo.Path(), Options{Adapters: map[string]adapter.Adapter{"codex": fake}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = runtime.Close() })
+	agent, err := runtime.RegisterAgent(ctx, RegisterAgentRequest{Name: "worker", Role: model.RoleDeveloper, ModelProvider: "codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.ImportTasks(ctx, []model.Task{{ID: "TASK-POLICY", Title: "write output", Status: model.TaskReady, Risk: model.R1}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Run(ctx, RunRequest{TaskID: "TASK-POLICY", AgentID: agent.ID, Adapter: "codex"}); err != nil {
+		t.Fatal(err)
+	}
+	readback, err := runtime.PolicyReadback(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if readback.GateEngine != "none" || readback.Gates.Allowed != 0 || readback.Gates.Denied != 0 {
+		t.Fatalf("placeholder produced compliance readback: %+v", readback)
+	}
+}
+
 type gateRuntimeAdapter struct{ calls int }
 
 func (a *gateRuntimeAdapter) Probe(context.Context) (adapter.Probe, error) {

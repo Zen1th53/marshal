@@ -75,6 +75,9 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 		if !marshalIdentifier(pt.ID) || len(pt.Criteria) == 0 || len(pt.Paths) == 0 || len(p.Checks[pt.ID]) == 0 {
 			return marshal.Run{}, fmt.Errorf("approved task %s lacks Marshal scope or executable checks", pt.ID)
 		}
+		if len(pt.Criteria) != 1 {
+			return marshal.Run{}, fmt.Errorf("approved task %s needs explicit check criterion mapping; draft it with /marshal chat", pt.ID)
+		}
 		worker, err := marshalPlanTaskWorker(p, pt)
 		if err != nil {
 			return marshal.Run{}, err

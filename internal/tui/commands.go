@@ -647,8 +647,8 @@ func (h *CommandHandler) helpText() string {
   /inspect [kind] <id>     Inspect a claim, evidence, checkpoint, task, handoff, approval, or agent
   /evidence <id>           Show an artifact (bytes re-checked) or evidence reference, with every linked claim
   /evidence list           List stored artifacts and claim evidence references
-  /approve [approval_id]   Unavailable: authenticated runtime authorization required
-  /reject [approval_id]    Unavailable: authenticated runtime authorization required
+  /approve [approval_id]    Approve a pending authenticated decision
+  /reject [approval_id]     Reject a pending authenticated decision
   /route [key=value ...]   Compute an advisory route; it is not applied to Runtime
   /why                     Explain advisory routing; verified ULTRA entitlement required
   /msg, /say <agent|all> <text>  Message the team session as the local owner

@@ -66,6 +66,9 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 	if task.CanonicalTaskID == "" {
 		return execution.TaskResult{TaskID: task.TaskID}, fmt.Errorf("%w: Process 05 Claude task %q has no canonical Runtime task binding", model.ErrConflict, task.TaskID)
 	}
+	if task.NativeTurn != nil {
+		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: task.NativeTurn}, fmt.Errorf("%w: governed Claude execution cannot continue a native turn; inspect recovery before retrying", model.ErrUnavailable)
+	}
 	var settle func() error
 	var admissionErr error
 	ctx, settle, admissionErr = r.superviseTask(ctx, task.CanonicalTaskID)
@@ -122,18 +125,8 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 		EvidenceRequired:  append([]string(nil), pkg.VerificationObligations...),
 		TrustedContext:    pkg.FormatPromptHeader(),
 	}
-	// The stream session is the preferred native lifecycle. A fallback to the
-	// one-shot `claude -p` path is permitted only before a native session or
-	// turn exists; after a turn starts, retrying could run the task twice.
-	if cli, ok := provider.(*claude.Client); ok {
-		streamResult, handled, streamErr := r.executeProcess05ClaudeStream(ctx, task, pkg, worktree, cli, request, probe.Version)
-		if handled {
-			return streamResult, streamErr
-		}
-		if streamErr != nil && !errors.Is(streamErr, model.ErrUnavailable) && !errors.Is(streamErr, model.ErrPolicyDenied) {
-			return execution.TaskResult{TaskID: task.TaskID}, streamErr
-		}
-	}
+	// The prepared adapter retains the isolation and capability runner for
+	// every provider invocation, including probes and task execution.
 	started := time.Now().UTC()
 	result, runErr := provider.Run(ctx, request)
 	if runErr != nil {

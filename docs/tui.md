@@ -25,7 +25,7 @@ construction. `.marshal/claude/history-index.json` tracks completed imports
 across restarts. `/memory list` and `/memory search <query>` include both providers.
 
 The native window uses Claude's own permission controls. `/claude exec` and
-`/claude run` retain the existing governed stream-json execution path. Native
+`/claude run` execute through the sandboxed adapter. Native
 resume still uses Claude's history storage; MARSHAL's copied conversation memory
 does not depend on retaining that original session after import.
 
@@ -375,6 +375,16 @@ also complete at their argument positions. Planning without an attached project
 runtime is refused before a run is created. Failed closure, amendment, approval and resume
 operations retain the last task snapshot when no new canonical run is available.
 
+Each drafted check names the acceptance criteria it proves. A criterion without
+its own passing evidence prevents acceptance. Task scopes may name files or
+directories; directory scopes include their descendants. Rejected hand-ins and
+merge failures count toward the rework limit, and the next worker brief carries
+the reasons. Integration uses the accepted commit, even if the task branch later
+moves. A run that dispatched any ULTRA work keeps its independent final
+verification requirement. Scoped splits require queued parents. `/marshal use-plan`
+refuses tasks with multiple criteria when the approved plan has no explicit check
+mapping; use `/marshal chat` to draft those mappings.
+
 `/memory inject` and `/memory peers` use local project configuration and remain
 available even when the workspace has no database store. `/memory inject`
 rejects extra arguments instead of silently changing the channel or clearing
@@ -528,7 +538,7 @@ Task mutations go through the workspace's in-process `app.LocalControl` with ind
 - `/termination` — Inspect the canonical termination state and reason for the active goal.
 
 ### Security, Sandbox & Providers
-- `/policy [network|sandbox|capability|scope|write|audit]` — Separate configured from observed: the active runtime policy (or NONE), whether the gate engine is configured or the built-in placeholder whose only check always passes (a hook, not enforcement), and the gate decisions actually recorded. Each aspect is still reported as NOT VERIFIED, since no execution-bound observation of it is recorded. No policy is changed; unknown or extra arguments return usage.
+- `/policy [network|sandbox|capability|scope|write|audit]` — Separate configured from observed: the active runtime policy (or NONE), whether a gate engine is configured (or NONE), and the gate decisions actually recorded. An unconfigured gate engine produces no compliance result. Each aspect is still reported as NOT VERIFIED, since no execution-bound observation of it is recorded. No policy is changed; unknown or extra arguments return usage.
 - `/sandbox` — Report runtime isolation NOT VERIFIED. `/sandbox <read-only|workspace-write>` opens native Codex with that sandbox mode and the saved Codex model preference in an interactive terminal; it does not persist a policy.
 - `/provider [status|use <provider>|config <harness|provider>]` — Inspect harness availability and the default provider, or choose the default with `use`; with authentication UNKNOWN until established by execution. MARSHAL reaches providers through harnesses, so `config` accepts a harness (`claude`, `codex`, `opencode`, `antigravity`) or a provider name that maps to one (`anthropic`, `openai`, `google`). It inspects and changes no configuration; it names the real controls (`/model select`, `/effort`, the harness's own login). For Codex and Claude the model shown is the execution preference future runs read. Inline credentials are explicitly refused. `/providers` is an alias.
 - `/memory` — Query durable memory fabric records and search projections.

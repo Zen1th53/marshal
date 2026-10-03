@@ -26,8 +26,8 @@ func TestMarshalChatProposalStartsPlanning(t *testing.T) {
 	fakeWorkerOnPath(t, "codex")
 	s, _ := marshalFixture(t, 1)
 	proposal := `{"tasks":[
-		{"id":"a","title":"write a.txt","criteria":["file a exists"],"paths":["a.txt"],"depends_on":[],"worker":"codex","checks":["test -f a.txt"]},
-		{"id":"b","title":"write b.txt","criteria":["file b exists"],"paths":["b.txt"],"depends_on":["a"],"worker":"codex","checks":["test -f b.txt"]}
+		{"id":"a","title":"write a.txt","criteria":["file a exists"],"paths":["a.txt"],"depends_on":[],"worker":"codex","checks":[{"command":"test -f a.txt","criteria":["file a exists"]}]},
+		{"id":"b","title":"write b.txt","criteria":["file b exists"],"paths":["b.txt"],"depends_on":["a"],"worker":"codex","checks":[{"command":"test -f b.txt","criteria":["file b exists"]}]}
 	]}`
 	draft, err := s.DraftFromProposal([]byte(proposal), "claude")
 	if err != nil {
@@ -42,14 +42,24 @@ func TestMarshalChatProposalStartsPlanning(t *testing.T) {
 	}
 }
 
+// A worker of the Marshal's own provider runs in a fresh session, so one
+// installed provider is enough to plan.
+func TestMarshalChatProposalAcceptsTheMarshalsOwnProvider(t *testing.T) {
+	fakeWorkerOnPath(t, "claude")
+	s, _ := marshalFixture(t, 1)
+	proposal := `{"tasks":[{"id":"a","title":"t","criteria":["c"],"paths":["a.txt"],"depends_on":[],"worker":"claude","checks":[{"command":"true","criteria":["c"]}]}]}`
+	if _, err := s.DraftFromProposal([]byte(proposal), "claude"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMarshalChatProposalRefusesWhatTheBriefingDidNotAskFor(t *testing.T) {
 	fakeWorkerOnPath(t, "codex")
 	s, _ := marshalFixture(t, 1)
 	for name, proposal := range map[string]string{
 		"old full-plan format": `{"plan":{"id":"PLAN-x"},"tasks":[]}`,
-		"unlisted worker":      `{"tasks":[{"id":"a","title":"t","criteria":["c"],"paths":["a.txt"],"depends_on":[],"worker":"someone","checks":["true"]}]}`,
+		"unlisted worker":      `{"tasks":[{"id":"a","title":"t","criteria":["c"],"paths":["a.txt"],"depends_on":[],"worker":"someone","checks":[{"command":"true","criteria":["c"]}]}]}`,
 		"task without checks":  `{"tasks":[{"id":"a","title":"t","criteria":["c"],"paths":["a.txt"],"depends_on":[],"worker":"codex","checks":[]}]}`,
-		"Marshal's own family": `{"tasks":[{"id":"a","title":"t","criteria":["c"],"paths":["a.txt"],"depends_on":[],"worker":"claude","checks":["true"]}]}`,
 		"not JSON":             `tasks: a`,
 	} {
 		if _, err := s.DraftFromProposal([]byte(proposal), "claude"); err == nil {
