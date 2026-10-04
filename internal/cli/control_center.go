@@ -40,7 +40,7 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 	// If MARSHAL is not started inside tmux, it creates (or re-attaches to) a dedicated
 	// per-project tmux session and runs itself inside it. If it is already inside tmux,
 	// it uses the current session (never nest tmux).
-	if !tmux.IsInsideTmux() && (c.isInteractiveTerminal() || os.Getenv("MARSHAL_TEST_FORCE_TMUX_LAUNCH") == "1") {
+	if !directPTYTest && !tmux.IsInsideTmux() && (c.isInteractiveTerminal() || os.Getenv("MARSHAL_TEST_FORCE_TMUX_LAUNCH") == "1") {
 		return c.launchOrAttachTmux(ctx, canonicalRoot, args)
 	}
 

@@ -275,7 +275,7 @@ func buildMarshalBinary(t *testing.T) string {
 			return
 		}
 		out := filepath.Join(dir, "marshal")
-		cmd := exec.Command("go", "build", "-o", out, "../../cmd/marshal")
+		cmd := exec.Command("go", "build", "-tags=marshal_pty_test", "-o", out, "../../cmd/marshal")
 		if combined, err := cmd.CombinedOutput(); err != nil {
 			buildErr = fmt.Errorf("build marshal: %v: %s", err, combined)
 			return
