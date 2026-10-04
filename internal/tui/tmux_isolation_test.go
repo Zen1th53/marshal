@@ -130,35 +130,54 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if _, err := w.handleTakeoverCommand(ctx); err != nil {
+	takeoverAndType := func(line string) {
+		t.Helper()
+		if _, err := w.handleTakeoverCommand(ctx); err != nil {
+			t.Fatal(err)
+		}
+		// A successful take-over must leave the attached client ready immediately.
+		state, err := tmux.RunCommand(ctx, "list-clients", "-t", w.tmuxSession, "-F", "#{pane_id} #{pane_input_off} #{pane_in_mode} #{client_key_table}")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := a.paneID + " 0 0 marshal-keys-" + tmux.ProjectHash(w.workDir)
+		if strings.TrimSpace(string(state)) != want {
+			t.Fatalf("take over returned before client input was ready: got %q, want %q", state, want)
+		}
+		if _, err := master.Write([]byte(line + "\r")); err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(time.Second)
+		for {
+			out, _ := tmux.CapturePane(ctx, a.paneID)
+			if strings.Contains(out, "received:"+line) {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("private table lost worker input: %q", out)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	takeoverAndType("hello")
+	// An already focused joined pane does not fire after-select-pane. A
+	// pending prefix table must not survive a successful take-over.
+	if err := tmux.JoinPane(ctx, a.paneID, w.tmuxMarshalPaneID, true); err != nil {
 		t.Fatal(err)
 	}
-	// Take over switches the client to the worker pane and enables its input
-	// asynchronously; type only once tmux reports both, or the first keys can
-	// reach the previous pane on a loaded machine.
-	deadline = time.Now().Add(2 * time.Second)
-	for {
-		state, _ := tmux.RunCommand(ctx, "display-message", "-p", "-t", w.tmuxSession, "#{pane_id} #{pane_input_off}")
-		if strings.TrimSpace(string(state)) == a.paneID+" 0" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("take over did not focus the worker with input enabled: %q", state)
-		}
-		time.Sleep(10 * time.Millisecond)
+	w.tmuxMu.Lock()
+	w.tmuxActiveWins["test"].isJoined = true
+	w.tmuxMu.Unlock()
+	if err := tmux.SelectPane(ctx, a.paneID); err != nil {
+		t.Fatal(err)
 	}
-	master.Write([]byte("hello\r"))
-	deadline = time.Now().Add(time.Second)
-	for {
-		out, _ := tmux.CapturePane(ctx, a.paneID)
-		if strings.Contains(out, "received:hello") {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("private table lost worker input: %q", out)
-		}
-		time.Sleep(10 * time.Millisecond)
+	if _, err := tmux.RunCommand(ctx, "copy-mode", "-t", a.paneID); err != nil {
+		t.Fatal(err)
 	}
+	if _, err := tmux.RunCommand(ctx, "switch-client", "-T", "prefix"); err != nil {
+		t.Fatal(err)
+	}
+	takeoverAndType("hello-again")
 }
 
 func TestStatusProjectionDoesNotInitializeChat(t *testing.T) {

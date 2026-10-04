@@ -1085,13 +1085,39 @@ func (w *Workspace) handleTakeoverCommand(ctx context.Context) (string, error) {
 	if active == nil {
 		return "No active worker session to take over.", nil
 	}
+	// Copy mode consumes input even when pane_input_off is clear.
+	if _, err := tmux.RunCommand(ctx, "if-shell", "-F", "-t", active.paneID, "#{pane_in_mode}", "send-keys -X -t "+active.paneID+" cancel"); err != nil {
+		return "", err
+	}
 	if err := tmux.SetPaneReadOnly(ctx, active.paneID, false); err != nil {
 		return "", err
 	}
+	var err error
 	if active.isJoined {
-		_ = tmux.SelectPane(ctx, active.paneID)
+		err = tmux.SelectPane(ctx, active.paneID)
 	} else {
-		_ = tmux.SelectWindow(ctx, active.paneID)
+		err = tmux.SelectWindow(ctx, active.paneID)
+	}
+	if err != nil {
+		return "", err
+	}
+	// Selection hooks are not an input-readiness barrier: select-pane skips
+	// its hook when this pane is already active. Restore each attached
+	// client's table explicitly, and wait for those commands to complete.
+	clients, err := tmux.RunCommand(ctx, "list-clients", "-t", w.tmuxSession, "-F", "#{client_name}")
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(string(clients)) != "" {
+		table, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", active.paneID, "#{@marshal_key_table}")
+		if err != nil {
+			return "", err
+		}
+		for _, client := range strings.Split(strings.TrimSpace(string(clients)), "\n") {
+			if _, err := tmux.RunCommand(ctx, "switch-client", "-c", client, "-T", strings.TrimSpace(string(table))); err != nil {
+				return "", err
+			}
+		}
 	}
 	w.tmuxMu.Lock()
 	if current := w.tmuxActiveWins[active.id]; current != nil {
