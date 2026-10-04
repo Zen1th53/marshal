@@ -133,6 +133,20 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 	if _, err := w.handleTakeoverCommand(ctx); err != nil {
 		t.Fatal(err)
 	}
+	// Take over switches the client to the worker pane and enables its input
+	// asynchronously; type only once tmux reports both, or the first keys can
+	// reach the previous pane on a loaded machine.
+	deadline = time.Now().Add(2 * time.Second)
+	for {
+		state, _ := tmux.RunCommand(ctx, "display-message", "-p", "-t", w.tmuxSession, "#{pane_id} #{pane_input_off}")
+		if strings.TrimSpace(string(state)) == a.paneID+" 0" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("take over did not focus the worker with input enabled: %q", state)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	master.Write([]byte("hello\r"))
 	deadline = time.Now().Add(time.Second)
 	for {
