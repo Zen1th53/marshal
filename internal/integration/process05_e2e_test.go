@@ -253,7 +253,7 @@ func TestProcess05_FullChainE2E(t *testing.T) {
 
 	// PROVE: Final execution state
 	if execRun.State != execution.RunDonePendingVerification {
-		t.Fatalf("expected RunDonePendingVerification, got %s", execRun.State)
+		t.Fatalf("expected RunDonePendingVerification, got %s: failures=%+v tasks=%+v", execRun.State, execRun.Failures, execRun.Tasks)
 	}
 
 	// PROVE: Worker assignment follows plan

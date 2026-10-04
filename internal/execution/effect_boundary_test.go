@@ -416,3 +416,49 @@ func TestDeliveryRefusesDestinationChangesAfterStaging(t *testing.T) {
 		})
 	}
 }
+
+func TestGitWorktreePreservesProjectSnapshot(t *testing.T) {
+	repo := testgit.New(t)
+	protected := filepath.Join(repo.Path(), "policy.yaml")
+	if err := os.WriteFile(protected, []byte("baseline"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", repo.Path(), "add", "policy.yaml").CombinedOutput(); err != nil {
+		t.Fatalf("add: %v %s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", repo.Path(), "commit", "-m", "baseline").CombinedOutput(); err != nil {
+		t.Fatalf("commit: %v %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(repo.Path(), "private.env"), []byte("private baseline"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	wm, err := NewWorktreeManager(repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree, err := wm.PrepareWorktree(t.Context(), "task", "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer wm.CleanWorktree(t.Context(), tree)
+	if _, err := os.Stat(filepath.Join(tree, "private.env")); !os.IsNotExist(err) {
+		t.Fatalf("untracked private file entered Git checkout: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tree, "result.txt"), []byte("result"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := wm.ReconcileChanges(tree, []string{"result.txt"})
+	if err != nil || len(changed) != 1 || changed[0] != "result.txt" {
+		t.Fatalf("unchanged baseline affected delivery: %v %v", changed, err)
+	}
+	info, err := os.Stat(protected)
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("baseline mode changed: %v %v", info, err)
+	}
+	if err := os.Chmod(filepath.Join(tree, "policy.yaml"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wm.ReconcileChanges(tree, []string{"result.txt"}); err == nil {
+		t.Fatal("accepted out-of-scope permission change")
+	}
+}

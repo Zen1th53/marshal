@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -217,15 +218,14 @@ func (wm *WorktreeManager) PrepareWorktree(ctx context.Context, taskID, runID st
 	}
 	wtPath := filepath.Join(wm.worktreesDir, wtName)
 	wm.owned[wtPath] = info
+	gitCheckout := false
 	if wm.isGitRepo {
 		cmd, err := hostgit.Command(ctx, wm.projectRoot, "worktree", "add", "--detach", wtPath, "HEAD")
 		if err != nil {
 			return "", err
 		}
-		if _, err := cmd.CombinedOutput(); err == nil {
-			wm.workspaces[key] = wtPath
-			return wtPath, nil
-		}
+		_, gitErr := cmd.CombinedOutput()
+		gitCheckout = gitErr == nil
 	}
 	source, err := os.OpenRoot(wm.projectRoot)
 	if err != nil {
@@ -241,7 +241,13 @@ func (wm *WorktreeManager) PrepareWorktree(ctx context.Context, taskID, runID st
 		return "", err
 	}
 	defer target.Close()
-	if _, err := reconcileFiles(source, target, nil, []string{".git", ".marshal"}); err != nil {
+	if gitCheckout {
+		// Git records only executable bits. Preserve project permissions on
+		// checked-out files without importing untracked files or project bytes.
+		if err := preserveCheckoutModes(source, target); err != nil {
+			return "", err
+		}
+	} else if _, err := reconcileFiles(source, target, nil, []string{".git", ".marshal"}); err != nil {
 		return "", fmt.Errorf("failed to create fallback workspace copy: %w", err)
 	}
 	wm.workspaces[key] = wtPath
@@ -376,4 +382,32 @@ func copyDir(src, dst string, skips []string) error {
 	defer target.Close()
 	_, err = reconcileFiles(source, target, nil, skips)
 	return err
+}
+
+func preserveCheckoutModes(source, target *os.Root) error {
+	return fs.WalkDir(target.FS(), ".", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if name == ".git" || name == ".marshal" {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		info, err := source.Lstat(name)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		return target.Chmod(name, info.Mode().Perm())
+	})
 }
