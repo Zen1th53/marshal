@@ -80,7 +80,8 @@ for arg do
     --version|-v) printf '1.0.0\n'; exit 0 ;;
   esac
 done
-exit 0
+echo session-started
+while :; do sleep 1; done
 `
 
 	if err := os.WriteFile(filepath.Join(binDir, "tmux"), []byte(fakeTmux), 0o755); err != nil {

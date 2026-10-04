@@ -143,7 +143,7 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		dispatchCtx, cancel = context.WithDeadline(ctx, deadline)
 		_ = cancel
 	}
-	handle, err := d.Launch(dispatchCtx, driver.Request{Task: *t, Worktree: tree.Path, Brief: brief})
+	handle, err := d.Launch(dispatchCtx, driver.Request{RunID: runID, Task: *t, Worktree: tree.Path, Brief: brief})
 	if err != nil {
 		return MarshalDispatch{}, err
 	}

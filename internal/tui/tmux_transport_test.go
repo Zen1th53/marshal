@@ -106,3 +106,125 @@ func TestTaskTerminalShowsDriverOutputAndAcceptsTakeover(t *testing.T) {
 		t.Fatalf("worker did not receive terminal input: %+v", result.RuntimeObserved)
 	}
 }
+
+func TestStopAllUsesTaskIdentityAfterRenameAndJoin(t *testing.T) {
+	w := realTmuxWorkspace(t)
+	ctx := context.Background()
+	d := &tmuxTaskDriver{w: w, inner: driver.Native{Provider: "test", Binary: "/bin/sh", Args: func(driver.Request) []string { return []string{"-c", "echo TASK_EVIDENCE; sleep 30"} }, Parse: func([]byte) []marshal.CommandRecord { return nil }}}
+	h, err := d.Launch(ctx, realTaskRequest(t, w, "immutable"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Cancel(h)
+	w.tmuxMu.Lock()
+	a := w.tmuxActiveWins["task-immutable"]
+	w.tmuxMu.Unlock()
+	if _, err := tmux.RunCommand(ctx, "rename-window", "-t", a.paneID, "user-renamed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmux.JoinPane(ctx, a.paneID, w.tmuxMarshalWin, true); err != nil {
+		t.Fatal(err)
+	}
+	// A fresh workspace must recover task identity without inspecting names/titles.
+	recovered := NewWorkspace(nil, "project", "session")
+	recovered.workDir = w.workDir
+	recovered.tmuxPath = w.tmuxPath
+	recovered.tmuxSession = w.tmuxSession
+	recovered.tmuxMarshalWin = w.tmuxMarshalWin
+	panes, _ := tmux.ListPanes(ctx, w.tmuxSession)
+	for _, p := range panes {
+		if p.WindowName == "marshal" && p.PaneID != a.paneID {
+			recovered.tmuxMarshalPaneID = p.PaneID
+		}
+	}
+	recovered.tmuxMu.Lock()
+	recovered.adoptSurvivingWorkersLocked(w.workDir)
+	adopted := recovered.tmuxActiveWins["task-immutable"]
+	recovered.tmuxMu.Unlock()
+	if adopted == nil || adopted.taskID != "immutable" {
+		t.Fatal("renamed/joined task was not recovered by immutable metadata")
+	}
+	response := recovered.StopAllWorkers(ctx)
+	if !strings.Contains(response, "Stopped all") {
+		t.Fatal(response)
+	}
+	panes, err = tmux.ListPanes(ctx, w.tmuxSession)
+	if err != nil {
+		t.Fatal("stop-all destroyed Marshal session:", err)
+	}
+	for _, p := range panes {
+		if p.PaneID == a.paneID {
+			t.Fatal("task terminal survives stop-all")
+		}
+	}
+	evidence, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "evidence", "task-immutable-latest.txt"))
+	if err != nil || !strings.Contains(string(evidence), "TASK_EVIDENCE") {
+		t.Fatalf("task evidence lost: %q %v", evidence, err)
+	}
+}
+
+func TestEvidenceFailureRetainsStoppedTaskPane(t *testing.T) {
+	w := realTmuxWorkspace(t)
+	d := &tmuxTaskDriver{w: w, inner: driver.Native{Provider: "test", Binary: "/bin/sh", Args: func(driver.Request) []string { return []string{"-c", "echo task; read answer"} }, Parse: func([]byte) []marshal.CommandRecord { return nil }}}
+	h, err := d.Launch(context.Background(), realTaskRequest(t, w, "evidence-failure"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Cancel(h)
+	path := filepath.Join(w.workDir, ".marshal", "evidence")
+	os.MkdirAll(filepath.Dir(path), 0700)
+	if err := os.WriteFile(path, []byte("occupied"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	response := w.StopAllWorkers(context.Background())
+	if !strings.Contains(response, "evidence") {
+		t.Fatalf("capture error was discarded: %s", response)
+	}
+	w.tmuxMu.Lock()
+	a := w.tmuxActiveWins["task-evidence-failure"]
+	w.tmuxMu.Unlock()
+	if a == nil {
+		t.Fatal("pane discarded after evidence failure")
+	}
+	panes, _ := tmux.ListPanes(context.Background(), w.tmuxSession)
+	for _, p := range panes {
+		if p.PaneID == a.paneID {
+			return
+		}
+	}
+	t.Fatal("evidence failure destroyed terminal")
+}
+
+func TestConcurrentRunsKeepSameTaskIDsSeparate(t *testing.T) {
+	w := realTmuxWorkspace(t)
+	d := &tmuxTaskDriver{w: w, inner: driver.Native{Provider: "test", Binary: "/bin/sh", Args: func(driver.Request) []string { return []string{"-c", "echo evidence; read answer"} }, Parse: func([]byte) []marshal.CommandRecord { return nil }}}
+	for _, run := range []string{"first", "second"} {
+		req := realTaskRequest(t, w, "same")
+		req.RunID = run
+		h, err := d.Launch(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer d.Cancel(h)
+	}
+	w.tmuxMu.Lock()
+	var workers int
+	for _, a := range w.tmuxActiveWins {
+		if a.role == "task" {
+			workers++
+		}
+	}
+	w.tmuxMu.Unlock()
+	if workers != 2 {
+		t.Fatalf("concurrent task identities collided: %d workers", workers)
+	}
+	if response := w.StopAllWorkers(context.Background()); !strings.Contains(response, "Stopped all") {
+		t.Fatal(response)
+	}
+	for _, run := range []string{"first", "second"} {
+		data, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "evidence", "task-"+run+"-same-latest.txt"))
+		if err != nil || !strings.Contains(string(data), "evidence") {
+			t.Fatalf("run %s evidence is not bound to task identity: %q %v", run, data, err)
+		}
+	}
+}

@@ -272,8 +272,10 @@ func TestStopAllWorkersPreservesMarshal(t *testing.T) {
 	_, _ = ws.runNativeAgentInTmux(ctx, "codex", "Codex", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
 	_, _ = ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
 
-	codexWin := tmux.WindowName("codex", workDir)
-	claudeWin := tmux.WindowName("claude", workDir)
+	ws.tmuxMu.Lock()
+	codexPane := ws.tmuxActiveWins["codex"].paneID
+	claudePane := ws.tmuxActiveWins["claude"].paneID
+	ws.tmuxMu.Unlock()
 
 	// Stop all workers
 	resp := ws.StopAllWorkers(ctx)
@@ -291,10 +293,10 @@ func TestStopAllWorkersPreservesMarshal(t *testing.T) {
 	logStr := string(logBytes)
 
 	// Both worker windows must be killed
-	if !strings.Contains(logStr, "kill-window -t "+codexWin) {
+	if !strings.Contains(logStr, "kill-pane -t "+codexPane) {
 		t.Fatalf("codex window was not killed:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "kill-window -t "+claudeWin) {
+	if !strings.Contains(logStr, "kill-pane -t "+claudePane) {
 		t.Fatalf("claude window was not killed:\n%s", logStr)
 	}
 	// Marshal window MUST NOT be killed!
@@ -330,7 +332,9 @@ func TestStopAllWorkersPreservesMarshalChat(t *testing.T) {
 
 	// 1. Launch a regular worker (isChat = false)
 	_, _ = ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil, false)
-	claudeWin := tmux.WindowName("claude", workDir)
+	ws.tmuxMu.Lock()
+	claudePane := ws.tmuxActiveWins["claude"].paneID
+	ws.tmuxMu.Unlock()
 
 	// 2. Launch Marshal planning chat (isChat = true)
 	_, _ = ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"planning"}, nil, nil, nil, nil, nil, nil, nil, true)
@@ -373,7 +377,7 @@ func TestStopAllWorkersPreservesMarshalChat(t *testing.T) {
 	logStr := string(logBytes)
 
 	// Worker window killed
-	if !strings.Contains(logStr, "kill-window -t "+claudeWin) {
+	if !strings.Contains(logStr, "kill-pane -t "+claudePane) {
 		t.Fatalf("claude window was not killed:\n%s", logStr)
 	}
 	// Marshal chat window MUST NOT be killed!
@@ -512,6 +516,12 @@ esac
 
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
+	if err := saveAgentRecord(workDir, "test-session", &activeTmuxAgent{id: "claude", role: "worker", provider: "claude", window: claudeWin, paneID: "%1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveAgentRecord(workDir, "test-session", &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", window: chatWin, paneID: "%2"}); err != nil {
+		t.Fatal(err)
+	}
 	ws.InitTmux(workDir)
 
 	ws.tmuxMu.Lock()
@@ -542,7 +552,10 @@ func (m *testMockDriver) Mode() marshal.WorkerMode {
 }
 
 func (m *testMockDriver) Launch(ctx context.Context, req driver.Request) (*driver.Handle, error) {
-	return driver.NewHandle(req), nil
+	req.Brief = "task"
+	req.Task.BaseCommit = "base"
+	n := driver.Native{Binary: "/bin/sh", Args: func(driver.Request) []string { return []string{"-c", "echo test; sleep 30"} }, Parse: func([]byte) []marshal.CommandRecord { return nil }}
+	return n.Launch(ctx, req)
 }
 
 func (m *testMockDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.HandIn, error) {
@@ -550,7 +563,7 @@ func (m *testMockDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.Ha
 }
 
 func (m *testMockDriver) Cancel(h *driver.Handle) error {
-	return nil
+	return (driver.Native{}).Cancel(h)
 }
 
 func TestDispatchedTaskWorkersTrackedAndStopped(t *testing.T) {
@@ -596,7 +609,7 @@ func TestDispatchedTaskWorkersTrackedAndStopped(t *testing.T) {
 	if agent.taskID != "task-99" {
 		t.Fatalf("expected taskID 'task-99', got %q", agent.taskID)
 	}
-	winName := agent.window
+	paneID := agent.paneID
 	ws.tmuxMu.Unlock()
 
 	// Stopping all workers should kill task workers as well
@@ -617,7 +630,7 @@ func TestDispatchedTaskWorkersTrackedAndStopped(t *testing.T) {
 	}
 	logStr := string(logBytes)
 
-	if !strings.Contains(logStr, "kill-window -t "+winName) {
+	if !strings.Contains(logStr, "kill-pane -t "+paneID) {
 		t.Fatalf("task window was not killed:\n%s", logStr)
 	}
 }

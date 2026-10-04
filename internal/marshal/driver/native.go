@@ -155,6 +155,13 @@ func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle,
 		cancel()
 		return nil, fmt.Errorf("start %s: %w", n.Provider, err)
 	}
+	if err := workerterminal.Started(runCtx, cmd); err != nil {
+		_ = processgroup.Stop(cmd)
+		_ = cmd.Wait()
+		closeTerminal()
+		cancel()
+		return nil, err
+	}
 	h := &Handle{req: req, cancel: cancel, done: make(chan struct{})}
 	command := n.Binary + " " + strings.Join(argv, " ")
 	go func() {

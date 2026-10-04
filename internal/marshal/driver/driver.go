@@ -45,7 +45,8 @@ var ErrHandInTooLarge = errors.New("hand-in too large")
 
 // Request is one task dispatched to one worker in one worktree.
 type Request struct {
-	Task marshal.Task
+	RunID string
+	Task  marshal.Task
 	// Worktree is the task's git worktree; the worker runs there and nowhere else.
 	Worktree string
 	// Brief is the instruction the worker receives.
