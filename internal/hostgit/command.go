@@ -7,11 +7,16 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
 // Command disables repository-selected programs, preserving the configured identity.
 func Command(ctx context.Context, dir string, args ...string) (*exec.Cmd, error) {
+	worktree, gitdir, err := repositoryPaths(dir, false)
+	if err != nil {
+		return nil, err
+	}
 	binary := "/usr/bin/git"
 	if _, err := os.Stat(binary); err != nil {
 		binary = "/bin/git"
@@ -24,7 +29,7 @@ func Command(ctx context.Context, dir string, args ...string) (*exec.Cmd, error)
 		}
 	}
 	env = append(env, "GIT_CONFIG_NOSYSTEM=1", "GIT_TERMINAL_PROMPT=0", "GIT_ATTR_NOSYSTEM=1", "GIT_PAGER=cat", "GIT_ALLOW_PROTOCOL=", "GIT_NO_LAZY_FETCH=1")
-	flags := []string{"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.alternateRefsCommand=", "-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "core.pager=cat", "-c", "diff.external=", "-c", "log.diffMerges=separate", "-c", "commit.gpgSign=false", "-c", "tag.gpgSign=false", "-c", "core.attributesFile=/dev/null", "-c", "submodule.recurse=false", "-C", dir}
+	flags := []string{"--work-tree=" + worktree, "--git-dir=" + gitdir, "-c", "core.worktree=" + worktree, "-c", "core.bare=false", "-c", "core.sparseCheckout=false", "-c", "core.sparseCheckoutCone=false", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.alternateRefsCommand=", "-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "core.pager=cat", "-c", "diff.external=", "-c", "log.diffMerges=separate", "-c", "commit.gpgSign=false", "-c", "tag.gpgSign=false", "-c", "core.attributesFile=/dev/null", "-c", "core.excludesFile=/dev/null", "-c", "submodule.recurse=false", "-c", "diff.ignoreSubmodules=all", "-C", worktree}
 	if len(args) > 0 && args[0] == "merge" {
 		for _, arg := range args[1:] {
 			if arg == "--" {
@@ -95,4 +100,70 @@ func Command(ctx context.Context, dir string, args ...string) (*exec.Cmd, error)
 	cmd := exec.CommandContext(ctx, binary, append(flags, args...)...)
 	cmd.Env = env
 	return cmd, nil
+}
+
+// Discover metadata from the filesystem, never from repository configuration.
+// Linked worktrees use a gitdir file; explicit command-line paths then take
+// precedence over both config and config.worktree settings.
+func repositoryPaths(dir string, discover bool) (string, string, error) {
+	if dir == "" {
+		dir = "."
+	}
+	absolute, err := filepath.Abs(dir)
+	if err != nil {
+		return "", "", err
+	}
+	root, err := filepath.EvalSymlinks(absolute)
+	if err != nil {
+		return "", "", err
+	}
+	for {
+		metadata := filepath.Join(root, ".git")
+		info, err := os.Lstat(metadata)
+		if err == nil {
+			if info.Mode().IsRegular() {
+				data, err := os.ReadFile(metadata)
+				if err != nil {
+					return "", "", err
+				}
+				pointer, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir: ")
+				if !ok || pointer == "" {
+					return "", "", fmt.Errorf("invalid Git metadata pointer")
+				}
+				metadata = pointer
+				if !filepath.IsAbs(metadata) {
+					metadata = filepath.Join(root, metadata)
+				}
+			}
+			metadata, err = filepath.EvalSymlinks(metadata)
+			if err != nil {
+				return "", "", err
+			}
+			info, err = os.Stat(metadata)
+			if err != nil || !info.IsDir() {
+				return "", "", fmt.Errorf("Git metadata is not a directory")
+			}
+			return root, metadata, nil
+		}
+		if !os.IsNotExist(err) {
+			return "", "", err
+		}
+		// A missing worker .git remains pinned here. Git may initialize it or
+		// report a missing repository, but cannot search a parent repository.
+		if !discover {
+			return root, metadata, nil
+		}
+		parent := filepath.Dir(root)
+		if parent == root {
+			return "", "", fmt.Errorf("not a git repository: %s", dir)
+		}
+		root = parent
+	}
+}
+
+// Root discovers a project from a subdirectory without consulting Git settings.
+// Worker bookkeeping uses Command directly and never falls back to a parent.
+func Root(dir string) (string, error) {
+	root, _, err := repositoryPaths(dir, true)
+	return root, err
 }

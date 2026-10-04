@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Zen1th53/marshal/internal/gitguard"
+	"github.com/Zen1th53/marshal/internal/hostgit"
 )
 
 // BinaryProvenance records supply-chain metadata for an executable tool.
@@ -110,7 +110,14 @@ func InspectGitEnvironment(ctx context.Context, dir string) (GitEnvironment, err
 		return GitEnvironment{}, err
 	}
 
-	rootCmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
+	absDir, err = hostgit.Root(absDir)
+	if err != nil {
+		return GitEnvironment{}, err
+	}
+	rootCmd, err := hostgit.Command(ctx, absDir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return GitEnvironment{}, err
+	}
 	rootCmd.Dir = absDir
 	rootOut, err := rootCmd.Output()
 	if err != nil {
@@ -118,26 +125,33 @@ func InspectGitEnvironment(ctx context.Context, dir string) (GitEnvironment, err
 	}
 	repoRoot := strings.TrimSpace(string(rootOut))
 
-	branchCmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd, err := hostgit.Command(ctx, repoRoot, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return GitEnvironment{}, err
+	}
 	branchCmd.Dir = repoRoot
 	branchOut, _ := branchCmd.Output()
 	branch := strings.TrimSpace(string(branchOut))
 
-	headCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+	headCmd, err := hostgit.Command(ctx, repoRoot, "rev-parse", "HEAD")
+	if err != nil {
+		return GitEnvironment{}, err
+	}
 	headCmd.Dir = repoRoot
 	headOut, _ := headCmd.Output()
 	headCommit := strings.TrimSpace(string(headOut))
 
-	options, err := gitguard.Options(ctx, repoRoot)
+	statusCmd, err := hostgit.Command(ctx, repoRoot, "status", "--porcelain")
 	if err != nil {
 		return GitEnvironment{}, err
 	}
-	statusCmd := exec.CommandContext(ctx, "git", append(options, "status", "--porcelain")...)
-	statusCmd.Dir = repoRoot
 	statusOut, _ := statusCmd.Output()
 	isDirty := len(strings.TrimSpace(string(statusOut))) > 0
 
-	remoteCmd := exec.CommandContext(ctx, "git", "remote", "get-url", "origin")
+	remoteCmd, err := hostgit.Command(ctx, repoRoot, "remote", "get-url", "origin")
+	if err != nil {
+		return GitEnvironment{}, err
+	}
 	remoteCmd.Dir = repoRoot
 	remoteOut, _ := remoteCmd.Output()
 	remoteURL := strings.TrimSpace(string(remoteOut))

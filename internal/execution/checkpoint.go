@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/hostgit"
 )
 
 // CheckpointEngine handles durable checkpointing and atomic rollback.
@@ -37,9 +38,8 @@ func NewCheckpointEngine(projectRoot string) (*CheckpointEngine, error) {
 		return nil, fmt.Errorf("failed to create checkpoints dir: %w", err)
 	}
 
-	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
-	cmd.Dir = absRoot
-	isGitRepo := cmd.Run() == nil
+	cmd, gitErr := hostgit.Command(context.Background(), absRoot, "rev-parse", "--is-inside-work-tree")
+	isGitRepo := gitErr == nil && cmd.Run() == nil
 
 	return &CheckpointEngine{
 		projectRoot: absRoot,
@@ -59,7 +59,10 @@ func (ce *CheckpointEngine) CaptureCheckpoint(ctx context.Context, runID, taskID
 
 	var gitCommit string
 	if ce.isGitRepo {
-		cmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+		cmd, err := hostgit.Command(ctx, ce.projectRoot, "rev-parse", "HEAD")
+		if err != nil {
+			return CheckpointRecord{}, err
+		}
 		cmd.Dir = ce.projectRoot
 		out, err := cmd.Output()
 		if err == nil {

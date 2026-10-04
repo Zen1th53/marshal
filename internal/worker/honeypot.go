@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/Zen1th53/marshal/internal/hostgit"
 )
 
 var ErrHoneypot = errors.New("honeypot token detected; task stopped and must not be merged")
@@ -97,17 +99,18 @@ func (h *Honeypot) Contains(data []byte) bool {
 	return false
 }
 
-func (h *Honeypot) gitCommand(ctx context.Context, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "core.hooksPath=/dev/null", "-c", "diff.external=", "-c", "core.pager=cat", "-C", h.worktree}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_PAGER=cat")
-	return cmd
+func (h *Honeypot) gitCommand(ctx context.Context, args ...string) (*exec.Cmd, error) {
+	return hostgit.Command(ctx, h.worktree, args...)
 }
 
 func (h *Honeypot) git(ctx context.Context, args ...string) ([]byte, error) {
-	cmd := h.gitCommand(ctx, args...)
+	cmd, err := h.gitCommand(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
 	out := &limitedBuffer{limit: 16 << 20}
 	cmd.Stdout = out
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		return nil, fmt.Errorf("honeypot cannot inspect hand-in: %w", err)
 	}
@@ -193,7 +196,10 @@ func (h *Honeypot) Check(ctx context.Context, stdout, stderr []byte) error {
 		if strings.TrimSpace(string(kind)) != "blob" {
 			continue
 		}
-		command := h.gitCommand(ctx, "cat-file", "blob", oid)
+		command, err := h.gitCommand(ctx, "cat-file", "blob", oid)
+		if err != nil {
+			return err
+		}
 		output, err := command.StdoutPipe()
 		if err != nil {
 			return err

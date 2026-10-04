@@ -7,13 +7,22 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/Zen1th53/marshal/internal/hostgit"
 )
 
 func Options(ctx context.Context, dir string) ([]string, error) {
-	options := []string{"--no-lazy-fetch", "-c", "protocol.allow=never", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "diff.external=", "-c", "core.pager=cat", "-c", "submodule.recurse=false", "-c", "diff.ignoreSubmodules=all"}
+	base, err := hostgit.Command(ctx, dir, "status")
+	if err != nil {
+		return nil, err
+	}
+	options := append(append([]string(nil), base.Args[1:len(base.Args)-1]...), []string{"--no-lazy-fetch", "-c", "protocol.allow=never", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "diff.external=", "-c", "core.pager=cat", "-c", "submodule.recurse=false", "-c", "diff.ignoreSubmodules=all"}...)
 	// Read keys only: configuration values may contain credentials. Config
 	// inspection executes no hooks, filters or worker code.
-	cmd := exec.CommandContext(ctx, "git", "-C", dir, "config", "--null", "--name-only", "--get-regexp", `^(filter|diff|merge)\.`)
+	cmd, err := hostgit.Command(ctx, dir, "config", "--null", "--name-only", "--get-regexp", `^(filter|diff|merge)\.`)
+	if err != nil {
+		return nil, err
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 1 {

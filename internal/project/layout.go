@@ -2,12 +2,15 @@ package project
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Zen1th53/marshal/internal/hostgit"
 )
 
 func FindBinary(name string) (string, error) {
@@ -124,7 +127,7 @@ type Layout struct {
 }
 
 func Discover(start string) (Layout, error) {
-	root, err := gitOutput(start, "rev-parse", "--show-toplevel")
+	root, err := hostgit.Root(start)
 	if err != nil {
 		return Layout{}, fmt.Errorf("discover repository root: %w", err)
 	}
@@ -168,7 +171,10 @@ func (l Layout) Ensure() error {
 }
 
 func gitOutput(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd, err := hostgit.Command(context.Background(), dir, args...)
+	if err != nil {
+		return "", err
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()

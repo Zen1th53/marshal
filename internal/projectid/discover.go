@@ -8,10 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/hostgit"
 )
 
 // This file gathers identity evidence from a real repository and persists the
@@ -41,8 +42,17 @@ func (gitCollector) Run(ctx context.Context, dir string, args ...string) ([]byte
 	// should degrade one piece of evidence, not stall project opening.
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
+	if len(args) == 2 && args[0] == "rev-parse" && args[1] == "--show-toplevel" {
+		root, err := hostgit.Root(dir)
+		if err != nil {
+			return nil, err
+		}
+		dir = root
+	}
+	cmd, err := hostgit.Command(ctx, dir, args...)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Stdin = nil
 	return cmd.Output()
 }

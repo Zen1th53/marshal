@@ -443,19 +443,11 @@ func TestCommandSweepCrosscutF3ErrorPTY(t *testing.T) {
 	bin := buildMarshalBinary(t)
 	sweepCrosscutEnvironment(t)
 	project := initProject(t, bin)
-	gitPath := filepath.Join(os.Getenv("PATH"), "git")
-	realGit, err := os.Readlink(gitPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(gitPath); err != nil {
-		t.Fatal(err)
-	}
-	script := "#!/bin/sh\nfor arg do if [ \"$arg\" = diff ]; then exit 1; fi; done\nexec '" + realGit + "' \"$@\"\n"
-	if err := os.WriteFile(gitPath, []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
 	s := startFrozenTUIInProject(t, 40, 120, bin, project, "tui")
+	// Corrupt the real Git index after startup so the trusted inspection fails.
+	if err := os.WriteFile(filepath.Join(project, ".git", "index"), []byte("invalid index"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	s.send("\x1bOR")
 	s.mustSee("Diff error:")
 	s.mustSee("retry /diff")

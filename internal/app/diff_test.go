@@ -154,11 +154,11 @@ func TestDiffInventoryGitFailure(t *testing.T) {
 		t.Fatalf("%+v %v", inv, e)
 	}
 	dir := diffTestRepo(t)
-	fake := t.TempDir()
-	if e := os.WriteFile(filepath.Join(fake, "git"), []byte("#!/bin/sh\nexit 42\n"), 0700); e != nil {
+	// Fail the trusted Git binary with invalid repository metadata rather than
+	// substituting an executable through PATH.
+	if e := os.WriteFile(filepath.Join(dir, ".git", "index"), []byte("invalid index"), 0600); e != nil {
 		t.Fatal(e)
 	}
-	t.Setenv("PATH", fake)
 	if _, e := LoadDiffInventory(context.Background(), dir, ""); e == nil {
 		t.Fatal("false clean inventory")
 	}
