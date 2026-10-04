@@ -41,6 +41,10 @@ func TestBwrapRunEgress(t *testing.T) {
 	if err != nil {
 		t.Skip("curl unavailable")
 	}
+	curl, err = filepath.EvalSymlinks(curl)
+	if err != nil {
+		t.Fatal(err)
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("allowed-server")) }))
 	defer server.Close()
 	host, port, _ := net.SplitHostPort(strings.TrimPrefix(server.URL, "http://"))
@@ -101,5 +105,38 @@ func TestBwrapRunEgress(t *testing.T) {
 	}
 	if out, err := run(curl, "--fail", "--max-time", "2", "--noproxy", "*", server.URL); err == nil {
 		t.Fatalf("direct succeeded: %s", out)
+	}
+}
+
+func TestEgressBridgeUsesResolvedPrivateMount(t *testing.T) {
+	bridge, err := TrustedBridgePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(bridge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", filepath.Join(t.TempDir(), "proxy.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	args, argv, err := egressEnvelope(ln.Addr().String(), bridge, []string{"/bin/true"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const target = "/run/marshal-egress/socat"
+	if !slices.Contains(argv, target) {
+		t.Fatalf("bridge executable not private: %v", argv)
+	}
+	found := false
+	for i := 0; i+2 < len(args); i++ {
+		if args[i] == "--ro-bind" && args[i+1] == resolved && args[i+2] == target {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("resolved private bridge mount absent: %v", args)
 	}
 }

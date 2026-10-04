@@ -41,7 +41,12 @@ func egressEnvelope(socket, bridge string, command []string) ([]string, []string
 	if err != nil || info.Mode()&os.ModeSocket == 0 {
 		return nil, nil, fmt.Errorf("egress socket unavailable")
 	}
-	args := []string{"--dir", "/run/marshal-egress", "--ro-bind", socket, sandboxEgressSocket, "--ro-bind", bridge, bridge}
+	resolved, err := filepath.EvalSymlinks(bridge)
+	if err != nil {
+		return nil, nil, err
+	}
+	const bridgeTarget = "/run/marshal-egress/socat"
+	args := []string{"--dir", "/run/marshal-egress", "--ro-bind", socket, sandboxEgressSocket, "--ro-bind", resolved, bridgeTarget}
 	// Positional parameters preserve the worker argv and stdin. Both the Unix
 	// connection and local TCP listener must work before the worker starts.
 	script := `bridge=$1; shift
@@ -58,7 +63,7 @@ done
 "$@"
 status=$?
 exit "$status"`
-	argv := append([]string{"/bin/sh", "-c", script, "marshal-egress", bridge}, command...)
+	argv := append([]string{"/bin/sh", "-c", script, "marshal-egress", bridgeTarget}, command...)
 	return args, argv, nil
 }
 
