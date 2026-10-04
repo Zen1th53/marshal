@@ -41,8 +41,16 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 		cmd.Env = command.Env
 	}
 	cmd.Stdin = bytes.NewReader(command.Stdin)
-	stdout := &limitedBuffer{limit: m.outputLimit}
-	stderr := &limitedBuffer{limit: m.outputLimit}
+	stdout := &limitedBuffer{limit: m.outputLimit, observe: func(p []byte) {
+		if command.OutputObserver != nil {
+			command.OutputObserver("stdout", p)
+		}
+	}}
+	stderr := &limitedBuffer{limit: m.outputLimit, observe: func(p []byte) {
+		if command.OutputObserver != nil {
+			command.OutputObserver("stderr", p)
+		}
+	}}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -128,9 +136,13 @@ type limitedBuffer struct {
 	data      []byte
 	limit     int
 	truncated bool
+	observe   func([]byte)
 }
 
 func (b *limitedBuffer) Write(value []byte) (int, error) {
+	if b.observe != nil {
+		b.observe(value)
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	remaining := b.limit - len(b.data)

@@ -354,7 +354,7 @@ func (c command) status(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.print(value, fmt.Sprintf("schema=%d tasks=%d agents=%d", value.SchemaVersion, value.TaskCount, value.AgentCount))
+	return c.print(value, fmt.Sprintf("schema=%d tasks=%d agents=%d honeypot=%s", value.SchemaVersion, value.TaskCount, value.AgentCount, value.Honeypot))
 }
 
 func (c command) agent(ctx context.Context, args []string) error {

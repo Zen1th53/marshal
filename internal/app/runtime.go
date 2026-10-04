@@ -73,6 +73,8 @@ type Runtime struct {
 	quorumEngine        *quorum.Engine
 	allowProcessOnly    bool
 	execService         *ExecutionService
+	honeypotMu          sync.Mutex
+	honeypots           map[string]*worker.Honeypot
 	taskMu              sync.Mutex
 	taskRuns            map[string]context.CancelFunc
 	execMu              sync.Mutex
@@ -142,6 +144,7 @@ type Status struct {
 	SessionCount  int           `json:"session_count"`
 	TaskCount     int           `json:"task_count"`
 	LeaseCount    int           `json:"lease_count"`
+	Honeypot      string        `json:"honeypot"`
 }
 
 type RegisterAgentRequest struct {
@@ -796,6 +799,11 @@ func (r *Runtime) Close() error {
 			delete(r.claudeStreamTurns, key)
 		}
 		r.claudeStreamMu.Unlock()
+		r.honeypotMu.Lock()
+		for _, trap := range r.honeypots {
+			_ = trap.Close()
+		}
+		r.honeypotMu.Unlock()
 		if r.store != nil {
 			return r.store.Close()
 		}
@@ -914,7 +922,7 @@ func (r *Runtime) Status(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	status := Status{Project: projectIdentity, SchemaVersion: version}
+	status := Status{Project: projectIdentity, SchemaVersion: version, Honeypot: r.honeypotStatus()}
 	counts := []struct {
 		table string
 		value *int
@@ -1830,11 +1838,22 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				)
 			}
 
-			runner = worker.NewSandboxed(process, backend, model.SandboxRequest{
-				Worktree: worktreePath, NetworkAllowed: networkAllowed,
+			trap, err := r.armHoneypot(worktreePath)
+			if err != nil {
+				return nil, "", err
+			}
+			extraEnv = append(extraEnv, trap.Env...)
+			runner = worker.NewGuardedSandboxed(process, backend, model.SandboxRequest{
+				ScratchHome: trap.Home,
+				Worktree:    worktreePath, NetworkAllowed: networkAllowed,
 				ReadOnlyBinds: readOnlyBinds,
 				WritableTmpfs: writableTmpfs,
 				ExtraEnv:      extraEnv,
+			}, trap.Observe, func(ctx context.Context, result *adapter.ProcessResult) error {
+				err := r.checkHoneypot(ctx, task.ID, trap, result.Stdout, result.Stderr)
+				result.Stdout = trap.Redact(result.Stdout)
+				result.Stderr = trap.Redact(result.Stderr)
+				return err
 			})
 		}
 	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed, r.allowProcessOnly); err != nil {

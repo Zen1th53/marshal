@@ -45,6 +45,7 @@ type Bind struct {
 
 type SandboxRequest struct {
 	Worktree       string
+	ScratchHome    string // private runtime-owned HOME outside the repository
 	WritableDirs   []string
 	WritableTmpfs  []string // sandbox-internal paths mounted as ephemeral tmpfs
 	ReadOnlyBinds  []Bind

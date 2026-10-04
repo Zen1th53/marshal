@@ -76,6 +76,13 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		"--setenv", "PATH", "/usr/bin:/bin",
 		"--bind", worktree, worktree,
 	)
+	if request.ScratchHome != "" {
+		home, err := existingDirectory(request.ScratchHome)
+		if err != nil || home == worktree || pathWithin(worktree, home) || pathWithin(home, worktree) {
+			return model.CommandSpec{}, fmt.Errorf("%w: scratch HOME must be outside the worktree", model.ErrInvalid)
+		}
+		args = append(args, "--bind", home, "/home/marshal")
+	}
 	for _, path := range request.WritableDirs {
 		resolved, err := existingDirectory(path)
 		if err != nil {

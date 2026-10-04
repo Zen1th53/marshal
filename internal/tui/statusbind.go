@@ -29,6 +29,7 @@ type storeRuntimeReader struct {
 	store     *store.Store
 	projectID string
 	sessionID string
+	honeypot  func(context.Context) (string, error)
 }
 
 // runtimeReader returns a reader over the workspace's store, or nil when there
@@ -37,7 +38,14 @@ func (w *Workspace) runtimeReader() RuntimeReader {
 	if w.store == nil {
 		return nil
 	}
-	return storeRuntimeReader{store: w.store, projectID: w.projectID, sessionID: w.sessionID}
+	reader := storeRuntimeReader{store: w.store, projectID: w.projectID, sessionID: w.sessionID}
+	if w.runtime != nil {
+		reader.honeypot = func(ctx context.Context) (string, error) {
+			status, err := w.runtime.Status(ctx)
+			return status.Honeypot, err
+		}
+	}
+	return reader
 }
 
 func (r storeRuntimeReader) Status(ctx context.Context) (RuntimeStatus, error) {
@@ -74,6 +82,12 @@ func (r storeRuntimeReader) Status(ctx context.Context) (RuntimeStatus, error) {
 			return RuntimeStatus{}, err
 		}
 		*count.into = n
+	}
+	if r.honeypot != nil {
+		status.Honeypot, err = r.honeypot(ctx)
+		if err != nil {
+			return RuntimeStatus{}, err
+		}
 	}
 	return status, nil
 }

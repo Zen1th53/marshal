@@ -58,6 +58,7 @@ type MarshalService struct {
 	// InstalledVersion reports the installed version of a worker's CLI, for
 	// the evidence-derived harness governance assessment. Nil means unknown.
 	InstalledVersion func(ctx context.Context, worker string) string
+	HandInGuard      func(context.Context, string, string, marshal.HandIn) error
 	now              func() time.Time
 }
 

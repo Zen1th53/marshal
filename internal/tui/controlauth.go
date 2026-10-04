@@ -1328,7 +1328,7 @@ func (a *runtimeControlAuthority) RuntimeStatus(ctx context.Context) (RuntimeSta
 	return RuntimeStatus{ProjectID: status.Project.ID, ProjectName: status.Project.Repository,
 		SchemaVersion: status.SchemaVersion, AgentCount: status.AgentCount,
 		SessionCount: status.SessionCount, TaskCount: status.TaskCount,
-		LeaseCount: status.LeaseCount}, nil
+		LeaseCount: status.LeaseCount, Honeypot: status.Honeypot}, nil
 }
 
 func (a *runtimeControlAuthority) RuntimeInstanceID() string {

@@ -80,6 +80,8 @@ type Handle struct {
 	runErr   error
 }
 
+func (h *Handle) Worktree() string { return h.req.Worktree }
+
 // Driver runs tasks on one kind of worker.
 type Driver interface {
 	Mode() marshal.WorkerMode

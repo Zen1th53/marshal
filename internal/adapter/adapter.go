@@ -41,6 +41,8 @@ type Request struct {
 }
 
 type Command struct {
+	// OutputObserver receives bytes before capture limits are applied.
+	OutputObserver    func(string, []byte)
 	Path              string
 	Args              []string
 	Env               []string

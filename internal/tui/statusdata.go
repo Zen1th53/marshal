@@ -47,6 +47,7 @@ type RuntimeStatus struct {
 	SessionCount  int
 	TaskCount     int
 	LeaseCount    int
+	Honeypot      string
 }
 
 // AssessmentReader supplies the startup health assessment behind blockers,
@@ -118,6 +119,7 @@ type RuntimeSnapshot struct {
 	Sessions      Value
 	Tasks         Value
 	Leases        Value
+	Honeypot      Value
 	// Verdict summarises whether the runtime could be read at all.
 	Verdict Verdict
 }
@@ -138,7 +140,7 @@ func (s *StatusSource) ReadRuntime(ctx context.Context) RuntimeSnapshot {
 		}
 		return RuntimeSnapshot{
 			InstanceID: v, ProjectName: v, ProjectID: v, SchemaVersion: v,
-			Agents: v, Sessions: v, Tasks: v, Leases: v, Verdict: verdict,
+			Agents: v, Sessions: v, Tasks: v, Leases: v, Honeypot: v, Verdict: verdict,
 		}
 	}
 
@@ -172,6 +174,10 @@ func (s *StatusSource) ReadRuntime(ctx context.Context) RuntimeSnapshot {
 		Verdict:       VerdictPass,
 	}
 
+	snapshot.Honeypot = Unknown("honeypot state is unavailable", runtimeSource)
+	if status.Honeypot != "" {
+		snapshot.Honeypot = known(status.Honeypot)
+	}
 	if id := s.Runtime.InstanceID(); id != "" {
 		snapshot.InstanceID = known(id)
 	} else {
