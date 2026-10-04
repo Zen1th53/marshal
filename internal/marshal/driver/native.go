@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/processgroup"
 )
 
 // Native runs a worker's own CLI headlessly in the task worktree, under the
@@ -111,6 +112,10 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	setProcessGroup(cmd)
+	if err := processgroup.Wrap(cmd); err != nil {
+		cancel()
+		return nil, err
+	}
 	if err := cmd.Start(); err != nil {
 		cancel()
 		return nil, fmt.Errorf("start %s: %w", n.Provider, err)
@@ -120,6 +125,7 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 	go func() {
 		defer close(h.done)
 		err := cmd.Wait()
+		cancel()
 		code := 0
 		if err != nil {
 			code = -1

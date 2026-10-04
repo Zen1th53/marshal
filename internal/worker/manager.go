@@ -12,6 +12,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/processgroup"
 	"github.com/Zen1th53/marshal/internal/sandbox"
 )
 
@@ -55,6 +56,9 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := processgroup.Wrap(cmd); err != nil {
+		return adapter.ProcessResult{}, err
+	}
 
 	result := adapter.ProcessResult{StartedAt: time.Now().UTC(), Isolation: model.IsolationCapability{
 		Level: model.IsolationProcessOnly, Available: true, Process: true,
@@ -82,7 +86,7 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 		go func() {
 			err := observe()
 			if err != nil && observerCtx.Err() == nil {
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				_ = processgroup.Stop(cmd)
 			}
 			observerDone <- err
 		}()
@@ -111,7 +115,7 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 		case <-runCtx.Done():
 			result.TimedOut = errors.Is(runCtx.Err(), context.DeadlineExceeded)
 			result.Cancelled = !result.TimedOut
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			_ = processgroup.Stop(cmd)
 			timer := time.NewTimer(m.grace)
 			select {
 			case waitErr = <-wait:
@@ -119,7 +123,8 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 					<-timer.C
 				}
 			case <-timer.C:
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				// Keep the subreaper alive until all descendants are reaped.
+				_ = processgroup.Stop(cmd)
 				waitErr = <-wait
 			}
 			finished = true
