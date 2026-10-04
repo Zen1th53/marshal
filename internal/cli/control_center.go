@@ -32,6 +32,14 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 		return errCoreFailure
 	}
 
+	// Offer first-run Git setup before trying to open a workspace. Reuse setup's
+	// separate confirmations and re-assessment, including project initialization.
+	if check, found := assessment.Check("project.repository"); found &&
+		(check.Reason == startup.ReasonNotAGitRepository || check.Reason == startup.ReasonRepositoryEmpty) &&
+		!c.json && c.confirmer() != nil {
+		assessment = c.offerSetupFixes(ctx, assessment)
+	}
+
 	// A ready project gets the full workspace. This is the only path that
 	// opens the execution runtime, and it is reached only when the assessment
 	// already established that the project is usable.

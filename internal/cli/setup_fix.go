@@ -81,7 +81,7 @@ func setupFixes(assessment startup.Assessment) []setupFix {
 				checkID: check.ID, reason: check.Reason,
 				question: "Make an empty first commit as a baseline",
 				apply: func(ctx context.Context, root string) error {
-					err := runGit(ctx, root, "commit", "--allow-empty", "-m", "Initial commit")
+					err := runGit(ctx, root, "commit", "--allow-empty", "--only", "-m", "Initial commit")
 					if err != nil && strings.Contains(err.Error(), "Author identity unknown") {
 						// Git's own answer to this runs to a dozen lines. Who
 						// the user is, is theirs to say, so the instruction is
@@ -201,5 +201,50 @@ func (c command) confirmer() func(question string) (bool, error) {
 		}
 		answer := strings.ToLower(strings.TrimSpace(line))
 		return answer == "y" || answer == "yes", nil
+	}
+}
+
+// ensureGitBaseline prepares only the Git prerequisites for init. Project
+// initialization is already requested by the command, but Git changes still
+// need a separate confirmation.
+func (c command) ensureGitBaseline(ctx context.Context) error {
+	assessment := startup.Assess(ctx, startup.NewSystemProber(), c.startupEnvironment())
+	var confirm func(string) (bool, error)
+	if !c.json {
+		confirm = c.confirmer()
+	}
+	for {
+		check, found := assessment.Check("project.repository")
+		if !found {
+			return fmt.Errorf("Git is required to initialize this project. Install Git, then run marshal init")
+		}
+		if check.Status.Healthy() {
+			return nil
+		}
+		instructions := "This repository has no commits yet. Run:\n    git commit --allow-empty --only -m \"Initial commit\"\n    marshal init"
+		if check.Reason == startup.ReasonNotAGitRepository {
+			instructions = "This directory is not part of a Git repository. Run:\n    git init\n    git commit --allow-empty --only -m \"Initial commit\"\n    marshal init"
+		}
+		if confirm == nil {
+			return fmt.Errorf("%s", instructions)
+		}
+		var next *setupFix
+		for _, fix := range setupFixes(assessment) {
+			if fix.reason == check.Reason {
+				next = &fix
+				break
+			}
+		}
+		if next == nil {
+			return fmt.Errorf("%s", instructions)
+		}
+		yes, err := confirm(next.question)
+		if err != nil || !yes {
+			return fmt.Errorf("%s", instructions)
+		}
+		if err := next.apply(ctx, c.root); err != nil {
+			return err
+		}
+		assessment = startup.Assess(ctx, startup.NewSystemProber(), c.startupEnvironment())
 	}
 }

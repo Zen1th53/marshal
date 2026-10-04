@@ -269,6 +269,9 @@ func (c command) policy(ctx context.Context, args []string) error {
 }
 
 func (c command) init(ctx context.Context) error {
+	if err := c.ensureGitBaseline(ctx); err != nil {
+		return err
+	}
 	layout, err := app.Bootstrap(ctx, c.root)
 	if err != nil {
 		return err
