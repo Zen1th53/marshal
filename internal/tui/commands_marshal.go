@@ -321,6 +321,7 @@ func consumeMarshalDraft(root string) ([]byte, bool, error) {
 }
 
 func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
+	saved := loadChatBinding(w.workDir)
 	m := w.marshalSession()
 	m.mu.Lock()
 	if m.busy {
@@ -328,8 +329,18 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		return "", errors.New("a Marshal operation is already running")
 	}
 	provider := m.provider
+	if provider == "" && saved.Provider != "" {
+		provider = saved.Provider
+		if provider == "antigravity" {
+			provider = "agy"
+		}
+		m.provider = provider
+	}
 	m.mu.Unlock()
-	runID := fmt.Sprintf("RUN-%d", time.Now().UTC().UnixNano())
+	runID := saved.RunID
+	if runID == "" {
+		runID = fmt.Sprintf("RUN-%d", time.Now().UTC().UnixNano())
+	}
 	service, selected, note, err := w.marshalService(ctx, runID)
 	if err != nil {
 		return "", err
@@ -339,6 +350,9 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	}
 	root := service.Repository
 	for _, leftover := range []string{marshalDraftRelativePath, app.MarshalPackRelativePath} {
+		if saved.RunID != "" {
+			break
+		}
 		path := filepath.Join(root, leftover)
 		if _, err := os.Lstat(path); err == nil {
 			return "", fmt.Errorf("existing Marshal draft at %s must be handled first", path)
@@ -357,6 +371,24 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	result, sessionErr := w.runNativeAgent(ctx, marshalChatProvider(provider), nil, briefing)
 	if sessionErr != nil {
 		return result, sessionErr
+	}
+	m.mu.Lock()
+	m.runID, m.service, m.provider = runID, service, provider
+	m.mu.Unlock()
+	w.tmuxMu.Lock()
+	if a := w.tmuxActiveWins["marshal-chat"]; a != nil {
+		a.runID = runID
+		if err := w.saveChatBindingLocked(root, a); err != nil {
+			w.tmuxMu.Unlock()
+			return result, err
+		}
+	}
+	w.tmuxMu.Unlock()
+	if saved.RunID != "" {
+		if run, err := service.Snapshot(ctx, runID); err == nil {
+			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "resumed"))
+			return result, nil
+		}
 	}
 	data, exists, err := consumeMarshalDraft(root)
 	if err != nil {

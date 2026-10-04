@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
 // StartWithNativeCodex opens the native session after terminal ownership has
@@ -91,7 +92,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	default:
 		return "", fmt.Errorf("unsupported native provider %q", provider)
 	}
-	if w.terminal == nil || !w.terminal.IsTerminal() {
+	if (w.terminal == nil || !w.terminal.IsTerminal()) && !tmux.IsInsideTmux() {
 		hint := fmt.Sprintf("use /%s exec for batch tasks", provider)
 		if provider == "opencode" || provider == "antigravity" {
 			hint = fmt.Sprintf("open marshal tui in a terminal, then retry /%s", map[string]string{"opencode": "opencode", "antigravity": "agy"}[provider])
@@ -431,22 +432,18 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			w.navView.Close()
 		}
 		isChat := len(marshalBrief) > 0
-		if watch != nil && watch.consume != nil {
-			prevConsume := watch.consume
-			agentID := provider
-			if isChat {
-				agentID = "marshal-chat"
+		if isChat && watch != nil {
+			if err := w.prepareChatHistoryWatch(root, watch, loadChatBinding(root).SessionID); err != nil {
+				return "", err
 			}
+		}
+		if !isChat && watch != nil && watch.consume != nil {
+			prevConsume := watch.consume
 			watch.consume = func(tr importer.SessionTranscript) error {
 				if tr.SessionID != "" {
 					w.tmuxMu.Lock()
-					if a, ok := w.tmuxActiveWins[agentID]; ok && a != nil {
+					if a := w.tmuxActiveWins[provider]; a != nil {
 						a.sessionID = tr.SessionID
-					}
-					if isChat {
-						if m := w.marshalSession(); m != nil {
-							m.conversationID = tr.SessionID
-						}
 					}
 					w.tmuxMu.Unlock()
 				}
@@ -624,11 +621,12 @@ type nativeHistoryWatch struct {
 	// captureTools records tool calls and their results alongside conversation,
 	// so a later session can see what the agent actually ran and changed rather
 	// than only what it said about it.
-	captureTools bool
-	dir, root    string
-	indexPath    string
-	seen         map[string]string
-	consume      func(importer.SessionTranscript) error
+	captureTools   bool
+	dir, root      string
+	indexPath      string
+	seen           map[string]string
+	consume        func(importer.SessionTranscript) error
+	observeSession func(importer.SessionTranscript) error
 }
 
 func newNativeHistoryWatch(dir, root string) *nativeHistoryWatch {
@@ -767,6 +765,11 @@ func (w *nativeHistoryWatch) syncFile(path string) error {
 	}
 	if tr.SessionID == "" || filepath.Clean(cwd) != w.root {
 		return nil
+	}
+	if w.observeSession != nil {
+		if err := w.observeSession(tr); err != nil {
+			return err
+		}
 	}
 	for {
 		line, readErr := r.ReadSlice('\n')

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/tmux"
 	"io"
 	"os"
 	"strings"
@@ -622,6 +623,9 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 // or clean fallback to buffered scanner if non-terminal.
 func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error {
 	w.out = out
+	if tmux.IsInsideTmux() {
+		w.InitTmux()
+	}
 
 	// A navigation refresh runs off the input loop and reads the canonical
 	// runtime, which creates its state directories on first use. Returning
