@@ -5580,6 +5580,11 @@
       "bytes": 8283
     },
     {
+      "path": "internal/execution/metadata_identity_test.go",
+      "sha256": "e5cb8ab7fe2c3f26b8dfc9b80ebf07e36f62aa3506acc64b4e048881ef18d463",
+      "bytes": 2605
+    },
+    {
       "path": "internal/execution/provenance.go",
       "sha256": "f26f501bdf30ade35f910546577d39059a31bf78cc6130489887143f8f6e521f",
       "bytes": 5363
@@ -5691,8 +5696,8 @@
     },
     {
       "path": "internal/execution/worktree.go",
-      "sha256": "a370e62050a6a71cc88c71ec4dc78325af2871239ae7c3768e7d78b884139409",
-      "bytes": 12784
+      "sha256": "88140bacd9fa944c5dd334d481c273cab207234404838b1ce3fabc220e16a57c",
+      "bytes": 12881
     },
     {
       "path": "internal/execution/worktree_test.go",
@@ -5841,13 +5846,18 @@
     },
     {
       "path": "internal/hostgit/command.go",
-      "sha256": "db3cc140f3e3527c314c2ccd435e377ff439392777ca5c6b202a4628d62f9f9b",
-      "bytes": 6745
+      "sha256": "7b520faa58c341af0fd8dae5ebf63e0f3de601de78abebc5770a429a431bf85f",
+      "bytes": 6827
     },
     {
       "path": "internal/hostgit/command_test.go",
       "sha256": "b2c4b9f7a47408322b2806d1c396bd1a0167c5ac990164130c1047c18bacd994",
       "bytes": 3778
+    },
+    {
+      "path": "internal/hostgit/identity.go",
+      "sha256": "117446f209f21e4115996aa83d38eb72b015c05d5f3ff97985970593e347ad41",
+      "bytes": 4367
     },
     {
       "path": "internal/hostgit/redirect_test.go",
@@ -6165,6 +6175,11 @@
       "bytes": 6631
     },
     {
+      "path": "internal/marshal/driver/completion_test.go",
+      "sha256": "c5ccd843156faf1a205febf68e49f2be1de983f8d227bda39ec29520e469e5f1",
+      "bytes": 796
+    },
+    {
       "path": "internal/marshal/driver/driver.go",
       "sha256": "43c77a7d2906570913a141242b1dd4d06af91abfc3ca30151ebbf446fdfa49d8",
       "bytes": 13194
@@ -6186,8 +6201,8 @@
     },
     {
       "path": "internal/marshal/driver/native.go",
-      "sha256": "7b508b32f0727469ce7ab16f83863423e63ffe9a3fc310d38f2cee82069785fa",
-      "bytes": 8523
+      "sha256": "5a6778c38d51c137401104964752104728c036b3594ababd809c831c27a6bc0d",
+      "bytes": 8667
     },
     {
       "path": "internal/marshal/driver/proc_other.go",
@@ -7608,6 +7623,16 @@
       "path": "internal/policytest/types.go",
       "sha256": "aa0f159a1110c3408317ad9492036e8f0f0f2c6c0ed73902fea0da357d4f699c",
       "bytes": 6726
+    },
+    {
+      "path": "internal/processgroup/process_linux.go",
+      "sha256": "d751ba55ff5cbcc4b02bd96ce066628913d2ce8bb3348cfcfbce9830e7b153c9",
+      "bytes": 3252
+    },
+    {
+      "path": "internal/processgroup/process_other.go",
+      "sha256": "7c7c02ca8e8713a250b05bef3ea18eb727ec7439473e2d7bd405e69cfe2f8ca8",
+      "bytes": 245
     },
     {
       "path": "internal/project/layout.go",
@@ -9140,6 +9165,11 @@
       "bytes": 233
     },
     {
+      "path": "internal/testutil/processcheck/process.go",
+      "sha256": "a0cd5233396782f661d0e50e101ba5fe27289845acc39e09110e411d17b0d213",
+      "bytes": 1828
+    },
+    {
       "path": "internal/testutil/testcloud/testcloud.go",
       "sha256": "f53fb2e2c99992c82c15000d6d3b9a8709379e1b2356a48c6d90c9ea9ae1d493",
       "bytes": 3244
@@ -10445,6 +10475,11 @@
       "bytes": 2529
     },
     {
+      "path": "internal/worker/completion_test.go",
+      "sha256": "1305f727612d42913cf8250e0a905f3289de47e053e2a0442abc127706a86f38",
+      "bytes": 621
+    },
+    {
       "path": "internal/worker/honeypot.go",
       "sha256": "cf62fa9bb694a03607db17fa5f43048e488e1782e3030fa0e5e00c16c84e96f6",
       "bytes": 8816
@@ -10466,8 +10501,8 @@
     },
     {
       "path": "internal/worker/manager.go",
-      "sha256": "ad0d597249f8b5fb467f59de91ca3699b0bf4500b9048cd479aaee03f511d9e9",
-      "bytes": 4994
+      "sha256": "8e5be33864ab8b9170136c4ccc0bf140e43cd04fbc14b59df28db4cb3ea3c437",
+      "bytes": 5127
     },
     {
       "path": "internal/worker/manager_test.go",
@@ -10516,8 +10551,8 @@
     },
     {
       "path": "internal/worktree/manager.go",
-      "sha256": "5d309f9ef45656c43ec12329404268b862d419a9191b23803ab4e3fc089b3943",
-      "bytes": 11670
+      "sha256": "b19e1f3d0fd8ecb7acfa53a9ba9bd7e88e1965994b95ad459d0c13b561113498",
+      "bytes": 11991
     },
     {
       "path": "internal/worktree/manager_test.go",
@@ -11406,8 +11441,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "052b710e64da72d0a87a58fb0e01ab1cf12cd6a86d684a78291a4068e0d0a710",
-      "bytes": 171356
+      "sha256": "560237c21bab912f97fe3cb8c327e19ad304e60a6aa7b73d1cac15df24a862b1",
+      "bytes": 171457
     },
     {
       "path": "tools/marshal.py",
