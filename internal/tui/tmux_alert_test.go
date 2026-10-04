@@ -40,14 +40,14 @@ func TestTaskAlertsDriveStatusChatAndFollowActive(t *testing.T) {
 	if strings.TrimSpace(string(selected)) != "worker" {
 		t.Fatalf("follow-active did not follow task: %q", selected)
 	}
-	status, _ := tmux.RunCommand(ctx, "show-options", "-v", "-t", w.tmuxSession, "status-right")
+	status, _ := tmux.RunCommand(ctx, "show-options", "-w", "-v", "-t", w.tmuxMarshalWin, "@marshal_status")
 	if !strings.Contains(string(status), "waiting") {
 		t.Fatalf("no task waiting status: %q", status)
 	}
 	if err := w.deliverEgressAlert(app.EgressAlert{RunID: "process05", TaskID: "canonical-one", Worker: "worker", State: "failed", Kind: "honeypot", Message: "worker stopped; do not merge"}); err != nil {
 		t.Fatal(err)
 	}
-	status, _ = tmux.RunCommand(ctx, "show-options", "-v", "-t", w.tmuxSession, "status-right")
+	status, _ = tmux.RunCommand(ctx, "show-options", "-w", "-v", "-t", w.tmuxMarshalWin, "@marshal_status")
 	if !strings.Contains(string(status), "honeypot") {
 		t.Fatalf("incident missing from status: %q", status)
 	}

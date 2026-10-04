@@ -78,6 +78,9 @@ func saveAgentRecord(root, session string, a *activeTmuxAgent) error {
 	return os.Rename(file.Name(), path)
 }
 func (w *Workspace) stopAgent(a *activeTmuxAgent) error {
+	w.tmuxMu.Lock()
+	a = copyAgentLocked(a)
+	w.tmuxMu.Unlock()
 	if a.role == "marshal-chat" {
 		return fmt.Errorf("Marshal chat cannot be stopped as a worker")
 	}

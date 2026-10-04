@@ -166,12 +166,9 @@ esac
 		t.Fatalf("SetStatusText failed: %v", err)
 	}
 
-	// 12. BindGlobalKey & UnbindGlobalKey
-	if err := BindGlobalKey(ctx, "F11", "select-window -t marshal"); err != nil {
-		t.Fatalf("BindGlobalKey failed: %v", err)
-	}
-	if err := UnbindGlobalKey(ctx, "F11"); err != nil {
-		t.Fatalf("UnbindGlobalKey failed: %v", err)
+	// 12. Private window key table
+	if err := BindWindowKey(ctx, "%1", "marshal-keys-test", "F11", "select-window", "-t", "@0"); err != nil {
+		t.Fatal(err)
 	}
 
 	// 13. SetWindowOption & IsPaneDead
@@ -203,12 +200,15 @@ esac
 		"join-pane -h -s marshal-codex-12345678 -t marshal",
 		"break-pane -s marshal-codex-12345678",
 		"set-option -t test-session status-right status-text",
-		"bind-key -n F11 select-window -t marshal",
-		"unbind-key -n F11",
+		"bind-key -T marshal-keys-test F11 if-shell -F",
+		"set-hook -w -t %1 after-select-window[805]",
 		"set-option -w -t marshal-codex-12345678 remain-on-exit on",
 		"display-message -p -t marshal-codex-12345678 #{pane_dead}",
 	}
 
+	if strings.Contains(logStr, "bind-key -n") || strings.Contains(logStr, "unbind-key") {
+		t.Fatal("server-global key mutation")
+	}
 	for _, exp := range expectedCommands {
 		if !strings.Contains(logStr, exp) {
 			t.Errorf("argv log missing expected command %q\nFull log:\n%s", exp, logStr)

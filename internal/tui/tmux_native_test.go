@@ -145,16 +145,16 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	if !strings.Contains(logStr, "new-window -t test-session -n "+codexWin) {
 		t.Fatalf("missing new-window call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "select-pane -t "+codexWin+" -d") {
+	if !strings.Contains(logStr, "select-pane -t test-session:"+codexWin+" -d") {
 		t.Fatalf("missing view-only select-pane -d call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "select-window -t "+codexWin) {
+	if !strings.Contains(logStr, "select-window -t test-session:"+codexWin) {
 		t.Fatalf("missing select-window call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "bind-key -n F7 select-window -t "+codexWin) {
+	if !strings.Contains(logStr, "bind-key -T marshal-keys-"+tmux.ProjectHash(workDir)+" F7 if-shell -F") {
 		t.Fatalf("missing F7 bind-key call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "bind-key -n F11 select-window -t marshal") {
+	if !strings.Contains(logStr, "bind-key -T marshal-keys-"+tmux.ProjectHash(workDir)+" F11 if-shell -F") {
 		t.Fatalf("missing F11 bind-key call:\n%s", logStr)
 	}
 
@@ -243,7 +243,7 @@ func TestTmuxViewCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	logStr := string(logBytes)
-	if !strings.Contains(logStr, "select-window -t "+claudeWin) {
+	if !strings.Contains(logStr, "select-window -t test-session:"+claudeWin) {
 		t.Fatalf("missing select-window in log:\n%s", logStr)
 	}
 	if !strings.Contains(logStr, "join-pane -h -s ") {
@@ -735,11 +735,11 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 	if !strings.Contains(logStr, "new-window -t test-session -n "+chatWin) {
 		t.Fatalf("missing chat new-window call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "select-pane -t "+chatWin+" -e") {
+	if !strings.Contains(logStr, "select-pane -t test-session:"+chatWin+" -e") {
 		t.Fatalf("chat pane was not given operator input (-e):\n%s", logStr)
 	}
 	// Verify main MARSHAL window remains focused
-	if !strings.Contains(logStr, "select-window -t marshal") {
+	if !strings.Contains(logStr, "select-window -t %0") {
 		t.Fatalf("marshal workspace was not re-selected after opening chat:\n%s", logStr)
 	}
 
@@ -792,13 +792,13 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 	restartStr := string(restartLogs)
 
 	// Verify respawn-window was called with resume command and conversation ID (F3)
-	expectedRespawn := "respawn-window -k -t " + chatWin + " env codex resume session-test-resume-456"
+	expectedRespawn := "respawn-window -k -t " + chatAgent.paneID + " env codex resume session-test-resume-456"
 	if !strings.Contains(restartStr, expectedRespawn) {
 		t.Fatalf("expected respawn with resume arguments %q, got:\n%s", expectedRespawn, restartStr)
 	}
 
 	// Verify input was re-enabled on the respawned window
-	if !strings.Contains(restartStr, "select-pane -t "+chatWin+" -e") {
+	if !strings.Contains(restartStr, "select-pane -t "+chatAgent.paneID+" -e") {
 		t.Fatalf("input was not enabled (-e) on respawned window:\n%s", restartStr)
 	}
 }

@@ -51,8 +51,10 @@ case "$1" in
   list-panes)
     printf '%%%%0\t@0\tmarshal\t100\t0\t0\n'
     if [ -f "$winFile" ]; then
+      idx=1
       while read -r w; do
-        printf '%%%%1\t@1\t%%%%s\t101\t0\t0\n' "$w"
+        echo "%%%%$idx	@$idx	$w	$((100 + idx))	0	0	"
+        idx=$((idx + 1))
       done < "$winFile"
     fi
     exit 0
@@ -144,10 +146,10 @@ while :; do sleep 1; done
 	}
 
 	// Verify select-window was called for switching
-	if !strings.Contains(logStr, "select-window -t marshal-claude-") {
+	if !strings.Contains(logStr, "select-window -t test-session:marshal-claude-") {
 		t.Errorf("expected select-window for claude in log:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "select-window -t marshal-codex-") {
+	if !strings.Contains(logStr, "select-window -t test-session:marshal-codex-") {
 		t.Errorf("expected select-window for codex in log:\n%s", logStr)
 	}
 }

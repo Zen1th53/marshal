@@ -518,23 +518,28 @@ func SetStatusText(ctx context.Context, session, statusText string) error {
 	return err
 }
 
-// BindGlobalKey binds a key without prefix across all windows in the session.
-// Uses structured argv to avoid whitespace splitting hazards.
-func BindGlobalKey(ctx context.Context, key string, actionArgs ...string) error {
-	args := []string{"bind-key", "-n", key}
-	if len(actionArgs) == 1 && strings.Contains(actionArgs[0], " ") {
-		args = append(args, strings.Fields(actionArgs[0])...)
-	} else {
-		args = append(args, actionArgs...)
+// BindWindowKey installs a key in a private project table. Window/pane hooks
+// activate it only when a MARSHAL terminal is selected; root is untouched.
+func BindWindowKey(ctx context.Context, target, table, key string, actionArgs ...string) error {
+	if _, err := RunCommand(ctx, "set-option", "-p", "-t", target, "@marshal_key_table", table); err != nil {
+		return err
 	}
-	_, err := RunCommand(ctx, args...)
-	return err
-}
-
-// UnbindGlobalKey unbinds a global key.
-func UnbindGlobalKey(ctx context.Context, key string) error {
-	_, err := RunCommand(ctx, "unbind-key", "-n", key)
-	return err
+	body := strings.Join(actionArgs, " ") + " ; switch-client -T " + table
+	condition := "#{==:#{@marshal_key_table}," + table + "}"
+	fallback := "switch-client -T root ; send-keys -K " + key
+	if _, err := RunCommand(ctx, "bind-key", "-T", table, key, "if-shell", "-F", condition, body, fallback); err != nil {
+		return err
+	}
+	if _, err := RunCommand(ctx, "bind-key", "-T", table, "Any", "if-shell", "-F", condition, "send-keys ; switch-client -T "+table, "switch-client -T root ; send-keys -K"); err != nil {
+		return err
+	}
+	for _, hook := range []string{"after-select-window[805]", "after-select-pane[805]"} {
+		if _, err := RunCommand(ctx, "set-hook", "-w", "-t", target, hook, "switch-client -T "+table); err != nil {
+			return err
+		}
+	}
+	_, _ = RunCommand(ctx, "switch-client", "-T", table)
+	return nil
 }
 
 // SetWindowOption sets a window-level option in tmux.
@@ -656,4 +661,17 @@ func ListPanes(ctx context.Context, session string) ([]PaneInfo, error) {
 		}
 	}
 	return res, nil
+}
+
+// SetWindowStatus changes only the workspace's own window in a shared session.
+func SetWindowStatus(ctx context.Context, target, text string) error {
+	if _, err := RunCommand(ctx, "set-option", "-w", "-t", target, "@marshal_status", text); err != nil {
+		return err
+	}
+	for _, option := range []string{"window-status-format", "window-status-current-format"} {
+		if err := SetWindowOption(ctx, target, option, "#{window_index}:#{window_name} #{@marshal_status}"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
