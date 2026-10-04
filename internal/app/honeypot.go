@@ -38,11 +38,16 @@ func (r *Runtime) honeypotStatus() string {
 	return "armed"
 }
 
-func (r *Runtime) checkHoneypot(ctx context.Context, taskID string, trap *worker.Honeypot, stdout, stderr []byte) error {
+func (r *Runtime) checkHoneypot(ctx context.Context, taskID string, trap *worker.Honeypot, stdout, stderr []byte, identity ...EgressAlert) error {
 	err := trap.Check(ctx, stdout, stderr)
 	if !errors.Is(err, worker.ErrHoneypot) {
 		return err
 	}
+	alert := EgressAlert{TaskID: taskID}
+	if len(identity) > 0 {
+		alert = identity[0]
+	}
+	alert.Kind, alert.State, alert.Message = "honeypot", "failed", taskID+": honeypot hit; task stopped; do not merge"
 	// The durable alert is visible in the operator's event feed. The returned
 	// failure also reaches the Marshal instead of an accepted worker result.
 	id, idErr := model.NewID("EVENT-")
@@ -60,14 +65,14 @@ func (r *Runtime) checkHoneypot(ctx context.Context, taskID string, trap *worker
 		}
 		alertErr := r.store.AppendEvent(ctx, nil, model.Event{
 			ID: id, Type: "HONEYPOT_HIT", ProjectID: project.ID, TaskID: canonicalTaskID, Timestamp: time.Now().UTC(),
-			Data: map[string]any{"task_id": taskID, "reason": err.Error(), "action": "task stopped; do not merge", "operator_alert": true, "marshal_alert": true},
+			Data: map[string]any{"run_id": alert.RunID, "task_id": alert.TaskID, "parent_run_id": alert.ParentRunID, "reason": err.Error(), "action": "task stopped; do not merge", "operator_alert": true, "marshal_alert": true},
 		})
 		if alertErr == nil {
 			r.egressMu.Lock()
 			sink := r.egressAlert
 			r.egressMu.Unlock()
 			if sink != nil {
-				alertErr = sink(EgressAlert{TaskID: taskID, Kind: "honeypot", State: "failed", Message: taskID + ": honeypot hit; task stopped; do not merge"})
+				alertErr = sink(alert)
 			}
 		}
 		return errors.Join(err, alertErr)

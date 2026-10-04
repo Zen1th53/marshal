@@ -39,16 +39,16 @@ func (w *Workspace) monitorTaskState(a *activeTmuxAgent, h *driver.Handle) {
 			}
 			w.tmuxMu.Lock()
 			a.state = state
-			taskID, runID, provider, canonical := a.taskID, a.runID, a.provider, a.canonicalTaskID
+			taskID, runID, provider := a.taskID, a.runID, a.provider
 			for key, value := range w.tmuxAlerts {
-				if strings.HasSuffix(key, ":"+taskID) || (canonical != "" && strings.HasSuffix(key, ":"+canonical)) {
+				if agentAlertKey(a, key) {
 					if strings.HasSuffix(value, ": waiting") {
 						w.tmuxAlerts[key] = strings.TrimSuffix(value, ": waiting") + ": " + state
 					}
 				}
 			}
 			w.tmuxMu.Unlock()
-			_ = w.deliverEgressAlert(app.EgressAlert{RunID: runID, TaskID: taskID, Worker: provider, Kind: "worker " + state, State: state, Message: "Task " + taskID + " worker " + state + "."})
+			_ = w.deliverEgressAlert(app.EgressAlert{RunID: runID, ParentRunID: runID, TaskID: taskID, Worker: provider, Kind: "worker " + state, State: state, Message: "Task " + taskID + " worker " + state + "."})
 			return
 		case <-ticker.C:
 			m := w.marshalSession()
@@ -81,7 +81,7 @@ func (w *Workspace) monitorTaskState(a *activeTmuxAgent, h *driver.Handle) {
 				a.state = "working"
 				delete(w.tmuxDelivered, runID+":"+taskID+":task waiting:Task "+taskID+" is waiting for your input.")
 				for key, value := range w.tmuxAlerts {
-					if strings.HasSuffix(key, ":"+taskID) || strings.HasSuffix(key, ":"+canonicalTaskID) {
+					if agentAlertKey(a, key) {
 						if strings.HasSuffix(value, ": waiting") {
 							w.tmuxAlerts[key] = strings.TrimSuffix(value, ": waiting") + ": working"
 						}
@@ -90,7 +90,7 @@ func (w *Workspace) monitorTaskState(a *activeTmuxAgent, h *driver.Handle) {
 			}
 			w.tmuxMu.Unlock()
 			if waiting && previous != "waiting" {
-				_ = w.deliverEgressAlert(app.EgressAlert{RunID: runID, TaskID: taskID, Worker: a.provider, Kind: "task waiting", State: "waiting", Message: "Task " + taskID + " is waiting for your input."})
+				_ = w.deliverEgressAlert(app.EgressAlert{RunID: runID, ParentRunID: runID, TaskID: taskID, Worker: a.provider, Kind: "task waiting", State: "waiting", Message: "Task " + taskID + " is waiting for your input."})
 			} else if !waiting && previous == "waiting" {
 				w.updateTmuxStatusLine(context.Background())
 			}
@@ -100,13 +100,12 @@ func (w *Workspace) monitorTaskState(a *activeTmuxAgent, h *driver.Handle) {
 
 // Replay durable incidents independently of whether their panes still exist.
 func (w *Workspace) replayWorkerAlerts(ctx context.Context) {
-	if w.runtime == nil {
-		return
-	}
-	alerts, err := w.runtime.EgressNotifications(ctx)
-	if err == nil {
-		for _, alert := range alerts {
-			_ = w.deliverEgressAlert(alert)
+	if w.runtime != nil {
+		alerts, err := w.runtime.EgressNotifications(ctx)
+		if err == nil {
+			for _, alert := range alerts {
+				_ = w.deliverEgressAlert(alert)
+			}
 		}
 	}
 	if w.store == nil {
@@ -119,7 +118,16 @@ func (w *Workspace) replayWorkerAlerts(ctx context.Context) {
 	for _, event := range history {
 		if event.Type == "HONEYPOT_HIT" {
 			taskID, _ := event.Data["task_id"].(string)
-			_ = w.deliverEgressAlert(app.EgressAlert{TaskID: taskID, Kind: "honeypot", State: "failed", Message: taskID + ": honeypot hit; task stopped; do not merge"})
+			_ = w.deliverEgressAlert(app.EgressAlert{RunID: stringEventData(event.Data, "run_id"), ParentRunID: stringEventData(event.Data, "parent_run_id"), TaskID: taskID, Kind: "honeypot", State: "failed", Message: taskID + ": honeypot hit; task stopped; do not merge"})
 		}
 	}
+}
+
+// Caller holds tmuxMu; clear only the two identities owned by this agent.
+func agentAlertKey(a *activeTmuxAgent, key string) bool {
+	return (a.taskID != "" && key == a.runID+":"+a.taskID) || (a.canonicalTaskID != "" && key == a.executionRunID+":"+a.canonicalTaskID)
+}
+func stringEventData(data map[string]any, key string) string {
+	value, _ := data[key].(string)
+	return value
 }

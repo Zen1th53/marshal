@@ -135,3 +135,36 @@ func TestMarshalHoneypotWorkerFailurePausesRun(t *testing.T) {
 		t.Fatal("stopped task merged")
 	}
 }
+
+func TestHoneypotIncidentRetainsRunIdentity(t *testing.T) {
+	s, repo := marshalFixture(t, 1)
+	r := &Runtime{store: s.Store}
+	trap, err := r.armHoneypot(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer trap.Close()
+	var got EgressAlert
+	r.SetEgressAlertSink(func(alert EgressAlert) error { got = alert; return nil })
+	token := strings.SplitN(trap.Env[0], "=", 2)[1]
+	err = r.checkHoneypot(t.Context(), "a", trap, []byte(token), nil, EgressAlert{RunID: "child", ParentRunID: "execution", TaskID: "canonical", Worker: "worker"})
+	if !errors.Is(err, worker.ErrHoneypot) {
+		t.Fatalf("honeypot not enforced: %v", err)
+	}
+	if got.RunID != "child" || got.ParentRunID != "execution" || got.TaskID != "canonical" {
+		t.Fatalf("live identity = %#v", got)
+	}
+	events, err := s.Store.ListEvents(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if event.Type == "HONEYPOT_HIT" {
+			if event.Data["run_id"] != "child" || event.Data["parent_run_id"] != "execution" || event.Data["task_id"] != "canonical" {
+				t.Fatalf("durable identity = %#v", event.Data)
+			}
+			return
+		}
+	}
+	t.Fatal("durable incident missing")
+}

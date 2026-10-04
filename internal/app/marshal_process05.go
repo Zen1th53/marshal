@@ -139,7 +139,7 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		trap := r.honeypots[result.WorktreePath]
 		r.honeypotMu.Unlock()
 		if trap != nil {
-			if err := r.checkHoneypot(ctx, req.Task.PlanTaskID, trap, nil, nil); err != nil {
+			if err := r.checkHoneypot(ctx, req.Task.PlanTaskID, trap, nil, nil, EgressAlert{RunID: p05.RunID, TaskID: result.CanonicalTaskID, Worker: req.Task.Worker}); err != nil {
 				return nil, err
 			}
 		}

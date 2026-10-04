@@ -638,6 +638,7 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 	defer w.navView.Wait()
 
 	_ = w.RefreshState(ctx)
+	w.replayWorkerAlerts(ctx)
 
 	// The check is a read of a public feed and installs nothing. It runs off
 	// this path so a slow or unreachable feed cannot delay the workspace.

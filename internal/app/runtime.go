@@ -1848,7 +1848,16 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				WritableTmpfs: writableTmpfs,
 				ExtraEnv:      extraEnv,
 			}, trap.Observe, func(ctx context.Context, result *adapter.ProcessResult) error {
-				err := r.checkHoneypot(ctx, task.ID, trap, result.Stdout, result.Stderr)
+				r.egressMu.Lock()
+				identity := EgressAlert{TaskID: task.ID}
+				for _, scope := range r.egressRuns {
+					if scope.socket == proxySocket {
+						identity = EgressAlert{RunID: scope.id, ParentRunID: scope.parent, TaskID: scope.task, Worker: scope.worker}
+						break
+					}
+				}
+				r.egressMu.Unlock()
+				err := r.checkHoneypot(ctx, task.ID, trap, result.Stdout, result.Stderr, identity)
 				result.Stdout = trap.Redact(result.Stdout)
 				result.Stderr = trap.Redact(result.Stderr)
 				return err

@@ -753,7 +753,7 @@ func (w *Workspace) monitorAgent(
 					if exitCode != 0 {
 						state = "failed"
 					}
-					if err := w.deliverEgressAlert(app.EgressAlert{RunID: snapshot.runID, TaskID: snapshot.taskID, Worker: snapshot.provider, Kind: "worker " + state, State: state, Message: snapshot.label + " worker " + state + "."}); err != nil {
+					if err := w.deliverEgressAlert(app.EgressAlert{RunID: snapshot.runID, ParentRunID: snapshot.runID, TaskID: snapshot.taskID, Worker: snapshot.provider, Kind: "worker " + state, State: state, Message: snapshot.label + " worker " + state + "."}); err != nil {
 						w.RecordActivity(err.Error())
 					}
 					if err := w.retainAndCloseAgent(context.Background(), agent, root, state); err != nil {
@@ -1308,7 +1308,7 @@ func (t *tmuxTaskDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.Ha
 				}
 			}
 		}
-		if alertErr := t.w.deliverEgressAlert(app.EgressAlert{RunID: h.Request().RunID, TaskID: taskID, Worker: h.Request().Task.Worker, Kind: "task " + state, State: state, Message: message}); alertErr != nil {
+		if alertErr := t.w.deliverEgressAlert(app.EgressAlert{RunID: h.Request().RunID, ParentRunID: h.Request().RunID, TaskID: taskID, Worker: h.Request().Task.Worker, Kind: "task " + state, State: state, Message: message}); alertErr != nil {
 			err = errors.Join(err, alertErr)
 		}
 	}

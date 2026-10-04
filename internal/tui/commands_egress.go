@@ -103,13 +103,13 @@ func (w *Workspace) deliverEgressAlert(alert app.EgressAlert) error {
 	if w.tmuxAlerts == nil {
 		w.tmuxAlerts = make(map[string]string)
 	}
-	w.tmuxAlerts[alert.RunID+":"+alert.TaskID] = alert.Kind + ": " + alert.State
+	w.tmuxAlerts[alertScope(alert)+":"+alert.TaskID] = alert.Kind + ": " + alert.State
 	var focus string
 	for _, a := range w.tmuxActiveWins {
 		if a.role == "marshal-chat" {
 			continue
 		}
-		if ((alert.TaskID != "" && a.taskID == alert.TaskID && (alert.ParentRunID == "" || a.runID == alert.ParentRunID)) || (alert.TaskID != "" && a.canonicalTaskID == alert.TaskID && (alert.ParentRunID == "" || a.executionRunID == alert.ParentRunID))) || (alert.TaskID == "" && a.role == "worker" && a.provider == alert.Worker) {
+		if alertMatchesAgent(alert, a) {
 			a.state = alert.State
 			if w.tmuxFollowActive && alert.State == "waiting" {
 				focus = a.paneID
@@ -131,4 +131,18 @@ func (w *Workspace) deliverEgressAlert(alert app.EgressAlert) error {
 	w.mu.Unlock()
 	w.renderFullView()
 	return nil
+}
+
+func alertScope(alert app.EgressAlert) string {
+	if alert.ParentRunID != "" {
+		return alert.ParentRunID
+	}
+	return alert.RunID
+}
+func alertMatchesAgent(alert app.EgressAlert, a *activeTmuxAgent) bool {
+	scope := alertScope(alert)
+	if alert.TaskID != "" {
+		return (a.taskID == alert.TaskID && a.runID == scope) || (a.canonicalTaskID == alert.TaskID && a.executionRunID == scope)
+	}
+	return a.role == "worker" && a.provider == alert.Worker && a.runID == scope
 }

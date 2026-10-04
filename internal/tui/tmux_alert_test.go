@@ -12,8 +12,10 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/execution"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/tmux"
+	"io"
 )
 
 func TestTaskAlertsDriveStatusChatAndFollowActive(t *testing.T) {
@@ -93,5 +95,64 @@ func TestTerminalCompletionAlertUsesDriverExitStatus(t *testing.T) {
 			t.Fatalf("completed worker did not publish its real failure: %q", status)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestAlertsAndClearingStayWithinRun(t *testing.T) {
+	for _, kind := range []string{"worker done", "task waiting", "honeypot"} {
+		t.Run(kind, func(t *testing.T) {
+			w := NewWorkspace(nil, "project", "session")
+			w.workDir = t.TempDir()
+			first := &activeTmuxAgent{id: "first", role: "task", taskID: "same", runID: "first", canonicalTaskID: "canonical", executionRunID: "exec-first", state: "working"}
+			second := &activeTmuxAgent{id: "second", role: "task", taskID: "same", runID: "second", canonicalTaskID: "canonical", executionRunID: "exec-second", state: "working"}
+			w.tmuxActiveWins = map[string]*activeTmuxAgent{"first": first, "second": second}
+			alert := app.EgressAlert{RunID: "first", TaskID: "same", Kind: kind, State: "waiting", Message: "first run only"}
+			if kind == "honeypot" {
+				alert.RunID, alert.ParentRunID, alert.TaskID = "child", "exec-first", "canonical"
+			}
+			if err := w.deliverEgressAlert(alert); err != nil {
+				t.Fatal(err)
+			}
+			if first.state != "waiting" || second.state != "working" {
+				t.Fatalf("cross-run delivery: %s / %s", first.state, second.state)
+			}
+			w.tmuxAlerts["second:same"], w.tmuxAlerts["exec-second:canonical"] = "task waiting: waiting", "egress refused: waiting"
+			d := driver.Governed{Run: func(context.Context, driver.Request) ([]marshal.CommandRecord, error) { return nil, nil }}
+			h, err := d.Launch(context.Background(), driver.Request{RunID: "first", Task: marshal.Task{PlanTaskID: "same", BaseCommit: "base"}, Worktree: w.workDir, Brief: "approved"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer d.Cancel(h)
+			w.monitorTaskState(first, h)
+			if first.state != "done" || second.state != "working" || w.tmuxAlerts["second:same"] != "task waiting: waiting" || w.tmuxAlerts["exec-second:canonical"] != "egress refused: waiting" {
+				t.Fatalf("cross-run completion/clearing: %s / %s %v", first.state, second.state, w.tmuxAlerts)
+			}
+			if w.tmuxAlerts["first:same"] != "worker done: done" {
+				t.Fatal("completion omitted owning run")
+			}
+		})
+	}
+}
+
+func TestStartupReplaysIncidentWithRunIdentity(t *testing.T) {
+	t.Setenv("MARSHAL_NO_UPDATE_CHECK", "1")
+	st, w, ctx := newMutationWorkspace(t)
+	w.workDir = t.TempDir()
+	w.tmuxActiveWins = map[string]*activeTmuxAgent{
+		"first":  {role: "task", taskID: "same", runID: "first", state: "working"},
+		"second": {role: "task", taskID: "same", runID: "second", state: "working"},
+	}
+	if err := st.AppendEvent(ctx, nil, model.Event{ID: "EVENT-incident", Type: "HONEYPOT_HIT", ProjectID: "PROJECT-mut", Timestamp: time.Now().UTC(), Data: map[string]any{"task_id": "same", "run_id": "first", "parent_run_id": "first"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Run(ctx, strings.NewReader(""), io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if w.tmuxActiveWins["first"].state != "failed" || w.tmuxActiveWins["second"].state != "working" {
+		t.Fatal("startup incident replay lost run identity")
+	}
+	data, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "inbox", "marshal.md"))
+	if err != nil || !strings.Contains(string(data), "honeypot hit") {
+		t.Fatalf("startup incident missing from inbox: %s %v", data, err)
 	}
 }
