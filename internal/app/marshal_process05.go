@@ -12,6 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/plan"
+	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
 
 // marshalProcess05Run executes one Marshal task only when it is exactly the
@@ -100,6 +101,9 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		task, ok := p05.Tasks[req.Task.PlanTaskID]
 		if !ok || task.AssignedHarness != req.Task.Worker {
 			return nil, errors.New("process 05: governed harness differs from the Marshal worker")
+		}
+		if err := workerterminal.ReportIdentity(ctx, workerterminal.Identity{ExecutionRunID: p05.RunID, CanonicalTaskID: task.CanonicalTaskID}); err != nil {
+			return nil, err
 		}
 		if p05.State == execution.RunReady {
 			if err := service.SetPreserveBranch(ctx, p05.RunID, run.BaseCommit); err != nil {

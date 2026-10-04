@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -132,7 +133,7 @@ func (w *Workspace) adoptSurvivingWorkersLocked(projectRoot string) {
 		if _, exists := w.tmuxActiveWins[record.ID]; exists {
 			continue
 		}
-		agent := &activeTmuxAgent{id: record.ID, role: record.Role, taskID: record.TaskID, provider: record.Provider, label: record.Label, window: record.Window, windowID: p.WindowID, paneID: p.PaneID, state: "working", readOnly: record.Role != "marshal-chat", supervisor: record.Supervisor, isJoined: p.WindowID == w.tmuxMarshalWinID}
+		agent := &activeTmuxAgent{id: record.ID, role: record.Role, taskID: record.TaskID, runID: record.RunID, executionRunID: record.ExecutionRunID, canonicalTaskID: record.CanonicalTaskID, provider: record.Provider, label: record.Label, window: record.Window, windowID: p.WindowID, paneID: p.PaneID, state: "working", readOnly: record.Role != "marshal-chat", supervisor: record.Supervisor, isJoined: p.WindowID == w.tmuxMarshalWinID}
 		if record.Role == "marshal-chat" {
 			saved := loadChatBinding(projectRoot)
 			agent.binary = saved.Binary
@@ -751,6 +752,10 @@ func (w *Workspace) updateTmuxStatusLine(ctx context.Context) {
 		}
 		parts = append(parts, fmt.Sprintf("%s: %s", agent.label, agent.state))
 	}
+	for _, state := range w.tmuxAlerts {
+		parts = append(parts, state)
+	}
+	sort.Strings(parts)
 	session := w.tmuxSession
 	w.tmuxMu.Unlock()
 
@@ -1168,6 +1173,13 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 		return saveAgentRecord(root, t.w.tmuxSession, agent)
 	}
 	launchCtx := workerterminal.WithLifecycle(workerterminal.WithHost(ctx, host), observer)
+	launchCtx = workerterminal.WithIdentity(launchCtx, func(id workerterminal.Identity) error {
+		t.w.tmuxMu.Lock()
+		defer t.w.tmuxMu.Unlock()
+		agent.executionRunID = id.ExecutionRunID
+		agent.canonicalTaskID = id.CanonicalTaskID
+		return saveAgentRecord(root, t.w.tmuxSession, agent)
+	})
 	t.w.tmuxMu.Lock()
 	t.w.tmuxActiveWins[agentID] = agent
 	t.w.tmuxMu.Unlock()
@@ -1186,6 +1198,7 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 	t.w.tmuxActiveWins[agentID] = agent
 	t.w.tmuxMu.Unlock()
 	t.w.updateTmuxStatusLine(ctx)
+	go t.w.monitorTaskState(agent, h)
 	return h, nil
 }
 
@@ -1208,7 +1221,23 @@ func (t *tmuxTaskDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.Ha
 			err = errors.Join(err, closeErr)
 		}
 		t.w.updateTmuxStatusLine(context.Background())
-		t.w.RecordActivity(fmt.Sprintf("Task %s completed.", taskID))
+		state := "done"
+		message := "Task " + taskID + " completed."
+		if err != nil {
+			state = "failed"
+			message = "Task " + taskID + " failed: " + err.Error()
+		} else {
+			for _, record := range handin.RuntimeObserved {
+				if record.ExitCode != 0 {
+					state = "failed"
+					message = "Task " + taskID + " failed."
+					break
+				}
+			}
+		}
+		if alertErr := t.w.deliverEgressAlert(app.EgressAlert{RunID: h.Request().RunID, TaskID: taskID, Worker: h.Request().Task.Worker, Kind: "task " + state, State: state, Message: message}); alertErr != nil {
+			err = errors.Join(err, alertErr)
+		}
 	}
 
 	return handin, err

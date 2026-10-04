@@ -35,7 +35,7 @@ type EgressStatus struct {
 }
 
 type EgressAlert struct {
-	RunID, Worker, Endpoint, Message string
+	RunID, ParentRunID, TaskID, Worker, Endpoint, Message, Kind, State string
 }
 
 // SetEgressAlertSink is trusted workspace composition, with no grant authority.
@@ -209,7 +209,7 @@ func (r *Runtime) notifyEgressRefusal(ctx context.Context, scope *runEgress, end
 		return err
 	}
 	if sink != nil {
-		return sink(EgressAlert{RunID: scope.id, Worker: scope.worker, Endpoint: endpoint, Message: message})
+		return sink(EgressAlert{RunID: scope.id, ParentRunID: scope.parent, TaskID: scope.task, Worker: scope.worker, Endpoint: endpoint, Message: message, Kind: "egress refused", State: "waiting"})
 	}
 
 	return nil
@@ -318,7 +318,8 @@ func (r *Runtime) EgressNotifications(ctx context.Context) ([]EgressAlert, error
 			endpoint, _ := event.Data["endpoint"].(string)
 			worker, _ := event.Data["worker"].(string)
 			message, _ := event.Data["message"].(string)
-			alerts = append(alerts, EgressAlert{RunID: event.RunID, Worker: worker, Endpoint: endpoint, Message: message})
+			parent, _ := event.Data["parent_run_id"].(string)
+			alerts = append(alerts, EgressAlert{RunID: event.RunID, ParentRunID: parent, TaskID: event.TaskID, Worker: worker, Endpoint: endpoint, Message: message, Kind: "egress refused", State: "waiting"})
 		}
 	}
 	return alerts, nil

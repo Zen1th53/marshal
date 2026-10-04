@@ -62,6 +62,14 @@ func (r *Runtime) checkHoneypot(ctx context.Context, taskID string, trap *worker
 			ID: id, Type: "HONEYPOT_HIT", ProjectID: project.ID, TaskID: canonicalTaskID, Timestamp: time.Now().UTC(),
 			Data: map[string]any{"task_id": taskID, "reason": err.Error(), "action": "task stopped; do not merge", "operator_alert": true, "marshal_alert": true},
 		})
+		if alertErr == nil {
+			r.egressMu.Lock()
+			sink := r.egressAlert
+			r.egressMu.Unlock()
+			if sink != nil {
+				alertErr = sink(EgressAlert{TaskID: taskID, Kind: "honeypot", State: "failed", Message: taskID + ": honeypot hit; task stopped; do not merge"})
+			}
+		}
 		return errors.Join(err, alertErr)
 	}
 	return err

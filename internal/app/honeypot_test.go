@@ -22,6 +22,13 @@ func TestMarshalHoneypotHandInNeverMerged(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s, repo := marshalFixture(t, 1)
 			r := &Runtime{store: s.Store}
+			notified := false
+			r.SetEgressAlertSink(func(alert EgressAlert) error {
+				if alert.TaskID == "a" && alert.Kind == "honeypot" && alert.State == "failed" {
+					notified = true
+				}
+				return nil
+			})
 			defer func() {
 				r.honeypotMu.Lock()
 				defer r.honeypotMu.Unlock()
@@ -83,6 +90,9 @@ func TestMarshalHoneypotHandInNeverMerged(t *testing.T) {
 				}
 				if !found {
 					t.Fatal("operator alert missing")
+				}
+				if !notified {
+					t.Fatal("honeypot incident was not delivered to the workspace/chat sink")
 				}
 				handin, err := s.Store.GetMarshalHandIn(t.Context(), "run", "a", 1)
 				if err != nil || handin.Value.ResultCommit == "" {

@@ -14,17 +14,20 @@ import (
 )
 
 type agentRecord struct {
-	Project    string                 `json:"project"`
-	Session    string                 `json:"session"`
-	ID         string                 `json:"id"`
-	Role       string                 `json:"role"`
-	TaskID     string                 `json:"task_id"`
-	Provider   string                 `json:"provider"`
-	Label      string                 `json:"label"`
-	Window     string                 `json:"window"`
-	Pane       string                 `json:"pane"`
-	Supervisor processgroup.Reference `json:"supervisor"`
-	Outcome    string                 `json:"outcome,omitempty"`
+	ExecutionRunID  string                 `json:"execution_run_id"`
+	CanonicalTaskID string                 `json:"canonical_task_id"`
+	RunID           string                 `json:"run_id"`
+	Project         string                 `json:"project"`
+	Session         string                 `json:"session"`
+	ID              string                 `json:"id"`
+	Role            string                 `json:"role"`
+	TaskID          string                 `json:"task_id"`
+	Provider        string                 `json:"provider"`
+	Label           string                 `json:"label"`
+	Window          string                 `json:"window"`
+	Pane            string                 `json:"pane"`
+	Supervisor      processgroup.Reference `json:"supervisor"`
+	Outcome         string                 `json:"outcome,omitempty"`
 }
 
 func agentRecordPath(root, pane string) string {
@@ -46,7 +49,7 @@ func saveAgentRecord(root, session string, a *activeTmuxAgent) error {
 	if a.paneID == "" {
 		return nil
 	}
-	record := agentRecord{Project: tmux.ProjectHash(root), Session: session, ID: a.id, Role: a.role, TaskID: a.taskID, Provider: a.provider, Label: a.label, Window: a.window, Pane: a.paneID, Supervisor: a.supervisor, Outcome: a.state}
+	record := agentRecord{ExecutionRunID: a.executionRunID, CanonicalTaskID: a.canonicalTaskID, RunID: a.runID, Project: tmux.ProjectHash(root), Session: session, ID: a.id, Role: a.role, TaskID: a.taskID, Provider: a.provider, Label: a.label, Window: a.window, Pane: a.paneID, Supervisor: a.supervisor, Outcome: a.state}
 	data, err := json.Marshal(record)
 	if err != nil {
 		return err

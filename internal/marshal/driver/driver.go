@@ -127,6 +127,17 @@ func (h *Handle) Done() <-chan struct{} {
 	return h.done
 }
 
+// Outcome exposes only a completed driver's observation. Closing done orders
+// these reads after process cleanup and output collection.
+func (h *Handle) Outcome() (marshal.CommandRecord, error, bool) {
+	select {
+	case <-h.done:
+		return h.observed, h.runErr, true
+	default:
+		return marshal.CommandRecord{}, nil, false
+	}
+}
+
 // WorkerCommander is an optional interface implemented by drivers that can
 // describe the worker command line, arguments, and environment.
 type WorkerCommander interface {

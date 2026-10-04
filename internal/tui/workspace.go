@@ -136,6 +136,8 @@ type Workspace struct {
 	tmuxMarshalWinID  string
 	tmuxMarshalPaneID string
 	tmuxFollowActive  bool
+	tmuxAlerts        map[string]string
+	tmuxDelivered     map[string]bool
 	tmuxActiveWins    map[string]*activeTmuxAgent
 	tmuxMu            sync.Mutex
 
@@ -615,6 +617,7 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 		return res, err
 	}
 	_ = w.RefreshState(ctx)
+	w.replayWorkerAlerts(ctx)
 	return res, nil
 }
 
