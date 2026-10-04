@@ -236,3 +236,11 @@ func TestEveryTaskIsScheduledExactlyOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestTaskIdentifiersAreSafeNames(t *testing.T) {
+	for _, id := range []string{"../task", "a/b", `a\b`, ".", "..", "task\nname", " task"} {
+		if _, err := plan.BuildGraph([]plan.Task{task(id)}); err == nil {
+			t.Errorf("accepted unsafe task identifier %q", id)
+		}
+	}
+}

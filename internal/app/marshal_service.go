@@ -7,14 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -329,12 +328,10 @@ func (s *MarshalService) Approve(ctx context.Context, runID string) (marshal.Run
 // external diff drivers and pagers are disabled; otherwise merging a hand-in
 // could run commands the worker chose, outside any worker sandbox.
 func gitMarshal(ctx context.Context, dir string, args ...string) (string, error) {
-	hardened := []string{"-c", "core.hooksPath=/dev/null", "-c", "diff.external=", "-c", "core.pager=cat", "-C", dir}
-	if len(args) > 1 && args[0] == "merge" && args[1] != "--abort" {
-		args = append([]string{"merge", "--no-verify"}, args[1:]...)
+	cmd, err := hostgit.Command(ctx, dir, args...)
+	if err != nil {
+		return "", err
 	}
-	cmd := exec.CommandContext(ctx, "git", append(hardened, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_PAGER=cat")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))

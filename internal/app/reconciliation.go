@@ -37,7 +37,21 @@ func (r *Runtime) Reconcile(ctx context.Context, request ReconcileRequest) (Reco
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return ReconciliationReport{}, fmt.Errorf("%w: file state is outside repository", model.ErrInvalid)
 	}
-	file, err := os.Open(path)
+	path, err = filepath.EvalSymlinks(path)
+	if err != nil {
+		return ReconciliationReport{}, fmt.Errorf("open file state: %w", err)
+	}
+	relative, err = filepath.Rel(r.layout.Root, path)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return ReconciliationReport{}, fmt.Errorf("%w: file state is outside repository", model.ErrInvalid)
+	}
+	root, err := os.OpenRoot(r.layout.Root)
+	if err != nil {
+		return ReconciliationReport{}, fmt.Errorf("open repository root: %w", err)
+	}
+	defer root.Close()
+	// Keep containment enforced even if a symlink changes after resolution.
+	file, err := root.Open(relative)
 	if err != nil {
 		return ReconciliationReport{}, fmt.Errorf("open file state: %w", err)
 	}

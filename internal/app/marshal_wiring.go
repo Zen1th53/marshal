@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/verification"
+	"github.com/Zen1th53/marshal/internal/worker"
 )
 
 // MarshalWiring is what a surface supplies to run a real Marshal plan.
@@ -253,15 +253,12 @@ func marshalRunID(run marshal.Run) string {
 // tree, fails: later checks and the close would otherwise judge a commit
 // that is not the one verified.
 func runIntegrationCheck(ctx context.Context, dir, head, command string) error {
-	checkCtx, cancel := context.WithTimeout(ctx, driver.DefaultCheckTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(checkCtx, "sh", "-c", command)
-	cmd.Dir = dir
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
+	result, err := worker.RunVerification(ctx, dir, []string{"/bin/sh", "-c", command}, driver.DefaultCheckTimeout, 64<<10)
+	if err != nil {
 		return err
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("check failed with exit status %d: %s", result.ExitCode, result.Stderr)
 	}
 	status, err := gitMarshal(ctx, dir, "status", "--porcelain")
 	if err != nil {

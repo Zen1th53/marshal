@@ -14,12 +14,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/worker"
 )
 
 // maxOutput bounds each captured output. A worker or a check can print
@@ -200,28 +201,16 @@ func runCheck(ctx context.Context, wt, result, command string, timeout time.Dura
 	}
 	defer func() { _, _ = git(context.WithoutCancel(ctx), wt, "worktree", "remove", "--force", checkout) }()
 
-	checkCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	cmd := exec.CommandContext(checkCtx, "sh", "-c", command)
-	cmd.Dir = checkout
-	out := &capBuffer{limit: maxOutput}
-	cmd.Stdout = out
-	cmd.Stderr = out
-	setProcessGroup(cmd)
-	err = cmd.Run()
-	code := 0
+	process, err := worker.RunVerification(ctx, checkout, []string{"/bin/sh", "-c", command}, timeout, maxOutput)
+	code := process.ExitCode
 	if err != nil {
 		code = -1
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			code = exitErr.ExitCode()
-		}
-		if checkCtx.Err() != nil {
-			code = -1
-			return marshal.CommandRecord{Command: command, ExitCode: code, Output: out.String() + "\n[check stopped: " + checkCtx.Err().Error() + "]"}
-		}
 	}
-	return marshal.CommandRecord{Command: command, ExitCode: code, Output: out.String()}
+	output := string(process.Stdout) + string(process.Stderr)
+	if err != nil {
+		output += "\ncheck failed: " + err.Error()
+	}
+	return marshal.CommandRecord{Command: command, ExitCode: code, Output: output}
 }
 
 // capBuffer keeps the first limit bytes written to it and counts the rest.
@@ -262,9 +251,10 @@ func (b *capBuffer) String() string {
 // past the limit is an error rather than a silently shortened diff, because
 // a hand-in whose evidence was cut would misstate what the worker changed.
 func git(ctx context.Context, dir string, args ...string) (string, error) {
-	gitArgs := []string{"-c", "core.hooksPath=/dev/null", "-c", "diff.external=", "-c", "core.pager=cat", "-C", dir}
-	cmd := exec.CommandContext(ctx, "git", append(gitArgs, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_PAGER=cat")
+	cmd, err := hostgit.Command(ctx, dir, args...)
+	if err != nil {
+		return "", err
+	}
 	stdout := &capBuffer{limit: maxGitOutput}
 	stderr := &capBuffer{limit: maxOutput}
 	cmd.Stdout = stdout

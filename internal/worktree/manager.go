@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -175,7 +175,10 @@ func (m *Manager) Remove(ctx context.Context, worktree model.Worktree) error {
 // worktrees hold worker-written content; creating or reattaching one must
 // not run a post-checkout hook a worker could have configured.
 func (m *Manager) git(ctx context.Context, directory string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "core.hooksPath=/dev/null", "-C", directory}, args...)...)
+	cmd, err := hostgit.Command(ctx, directory, args...)
+	if err != nil {
+		return "", err
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()

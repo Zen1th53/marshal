@@ -422,3 +422,16 @@ func TestM05InvalidRequestRejected(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestHandInChecksConfineCommands(t *testing.T) {
+	task, wt := newTask(t)
+	marker := filepath.Join(t.TempDir(), "marker")
+	task.Checks = []marshal.Check{{Command: "printf ran > '" + marker + "'"}}
+	out := handIn(t, Governed{Run: func(context.Context, Request) ([]marshal.CommandRecord, error) { return nil, nil }}, Request{Task: task, Worktree: wt, Brief: "check"})
+	if len(out.CheckResults) != 1 || out.CheckResults[0].Passed {
+		t.Fatalf("unconfined check accepted: %+v", out.CheckResults)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("check escaped: %v", err)
+	}
+}

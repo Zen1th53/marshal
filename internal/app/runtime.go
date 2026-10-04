@@ -30,6 +30,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/gate"
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/netpolicy"
 	"github.com/Zen1th53/marshal/internal/policy"
@@ -1025,8 +1026,7 @@ func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResu
 		}
 		request.Command = resolved
 	}
-	process := worker.New(15*time.Minute, 3*time.Second, 8<<20)
-	result, err := process.Run(ctx, adapter.Command{Path: request.Command[0], Args: request.Command[1:], Dir: r.layout.Root})
+	result, err := worker.RunVerification(ctx, r.layout.Root, request.Command, 15*time.Minute, 8<<20)
 	if err != nil {
 		return VerifyResult{}, err
 	}
@@ -1075,6 +1075,26 @@ func resolveBaselineVerificationCommand(command []string) ([]string, error) {
 		if len(args) > 0 {
 			switch args[0] {
 			case "status", "diff", "log", "show", "rev-parse":
+				// Repository configuration must not launch external helpers.
+				if args[0] == "diff" || args[0] == "log" || args[0] == "show" {
+					safeFlags := []string{"--no-ext-diff", "--no-textconv"}
+					if args[0] != "diff" {
+						safeFlags = append(safeFlags, "--no-show-signature")
+					}
+					end := len(args)
+					for i, arg := range args {
+						if arg == "--" {
+							end = i
+							break
+						}
+						if arg == "--remerge-diff" || arg == "--diff-merges=remerge" || arg == "--diff-merges=r" ||
+							(arg == "--diff-merges" && i+1 < len(args) && (args[i+1] == "remerge" || args[i+1] == "r")) {
+							return nil, fmt.Errorf("%w: external merge drivers require an active runtime policy", model.ErrPolicyDenied)
+						}
+					}
+					args = append(append(append([]string(nil), args[:end]...), safeFlags...), args[end:]...)
+				}
+				args = append([]string{"-c", "core.fsmonitor=false", "-c", "log.diffMerges=separate"}, args...)
 				candidates = []string{"/usr/bin/git", "/bin/git"}
 				if p, err := exec.LookPath("git"); err == nil {
 					candidates = append(candidates, p)
@@ -1083,6 +1103,18 @@ func resolveBaselineVerificationCommand(command []string) ([]string, error) {
 		}
 	case "go":
 		if len(args) > 0 && (args[0] == "test" || args[0] == "vet") {
+			for _, arg := range args[1:] {
+				if arg == "-args" || arg == "--args" {
+					break
+				}
+				if !strings.HasPrefix(arg, "-") {
+					continue
+				}
+				flag := strings.SplitN(strings.TrimLeft(arg, "-"), "=", 2)[0]
+				if flag == "exec" || flag == "toolexec" || flag == "vettool" {
+					return nil, fmt.Errorf("%w: external verification tools require an active runtime policy", model.ErrPolicyDenied)
+				}
+			}
 			candidates = []string{"/usr/local/go/bin/go", "/usr/bin/go"}
 			if p, err := exec.LookPath("go"); err == nil {
 				candidates = append(candidates, p)
@@ -1632,10 +1664,13 @@ func (r *Runtime) renderTaskContext(ctx context.Context, task model.Task) (strin
 
 func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {
 	for _, args := range [][]string{
-		{"-C", worktreePath, "add", "--all"},
-		{"-C", worktreePath, "commit", "-m", "chore(task): complete " + taskID},
+		{"add", "--all"},
+		{"commit", "-m", "chore(task): complete " + taskID},
 	} {
-		command := exec.CommandContext(ctx, "git", args...)
+		command, err := hostgit.Command(ctx, worktreePath, args...)
+		if err != nil {
+			return err
+		}
 		if output, err := command.CombinedOutput(); err != nil {
 			if len(output) > 4096 {
 				output = output[:4096]
@@ -1649,10 +1684,14 @@ func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {
 func ensureNoSecretsInWorktree(ctx context.Context, worktreePath string, secrets []string) error {
 	var paths []string
 	for _, args := range [][]string{
-		{"-C", worktreePath, "diff", "--name-only", "-z", "HEAD"},
-		{"-C", worktreePath, "ls-files", "--others", "--exclude-standard", "-z"},
+		{"diff", "--name-only", "-z", "HEAD"},
+		{"ls-files", "--others", "--exclude-standard", "-z"},
 	} {
-		output, err := exec.CommandContext(ctx, "git", args...).Output()
+		command, err := hostgit.Command(ctx, worktreePath, args...)
+		if err != nil {
+			return err
+		}
+		output, err := command.Output()
 		if err != nil {
 			return fmt.Errorf("%w: enumerate changed files", model.ErrUnavailable)
 		}
