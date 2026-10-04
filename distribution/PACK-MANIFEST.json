@@ -10331,8 +10331,8 @@
     },
     {
       "path": "internal/tui/tmux_isolation_test.go",
-      "sha256": "22c0e384f734feba015fd3ed3f058a69e20b8d55a0aabe5bce22d5a23aa4bd92",
-      "bytes": 5729
+      "sha256": "2e6357378c41edfe021895675bc161604b314dc2e5d4f640295dba24b54efbb4",
+      "bytes": 6320
     },
     {
       "path": "internal/tui/tmux_keys.go",
@@ -11531,8 +11531,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "4a340f47afeeff8152e4b662d5dc815022aa0c51c67a76d868f80136463e9b7e",
-      "bytes": 177257
+      "sha256": "91109d538f26bdd37c0cf6334581b744284a495d506404dddd53aa60928734a1",
+      "bytes": 176596
     },
     {
       "path": "tools/marshal.py",
