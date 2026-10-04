@@ -10,6 +10,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 // MarshalObserver receives the run after every step, so a surface can show
@@ -27,6 +28,8 @@ type BriefContext struct {
 	// the person asked for, how the tasks fit together, and this task's own
 	// note. They are empty for a run drafted without a pack.
 	Requirements, Index, Note string
+	// Memory holds bounded project-memory recall relevant to the task.
+	Memory []model.MemoryRecordV2
 }
 
 // MarshalBrief produces the instruction a worker receives for a task.
@@ -38,6 +41,21 @@ func (s *MarshalService) briefContext(ctx context.Context, runID string, run mar
 	bc := BriefContext{Control: run.Settings.EffectiveControl()}
 	if run.Pack != nil {
 		bc.Requirements, bc.Index, bc.Note = run.Pack.Requirements, run.Pack.Index, run.Pack.Tasks[t.PlanTaskID]
+	}
+	if s.Store != nil && s.ProjectID != "" {
+		records, err := s.Store.ListMemoryV2(ctx, store.MemoryQueryFilter{
+			ProjectID: s.ProjectID,
+			Scope:     model.ScopeProject,
+			Limit:     10,
+		})
+		if err == nil {
+			for _, rec := range records {
+				if rec.Scope == string(model.ScopeSession) || rec.Source.Kind == "shared_channel" {
+					continue
+				}
+				bc.Memory = append(bc.Memory, rec)
+			}
+		}
 	}
 	attempts := 0
 	for _, n := range t.ReturnsByAgent {

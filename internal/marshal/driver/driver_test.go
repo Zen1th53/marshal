@@ -435,3 +435,36 @@ func TestHandInChecksConfineCommands(t *testing.T) {
 		t.Fatalf("check escaped: %v", err)
 	}
 }
+
+func TestCleanWorkerEnvStripsBriefingAndSharedChannelVariables(t *testing.T) {
+	inputEnv := []string{
+		"PATH=/usr/bin:/bin",
+		"HOME=/home/user",
+		"OPENCODE_CONFIG_CONTENT={\"instructions\":[\"do this\"]}",
+		"MARSHAL_SHARED_CHANNEL=1",
+		"MARSHAL_LIVE_PEERS=codex claude",
+		"MARSHAL_CHANNEL_STREAM=.marshal/channel-stream.json",
+		"MARSHAL_INBOX=.marshal/inbox/codex.md",
+		"USER=alice",
+	}
+	cleaned := cleanWorkerEnv(inputEnv)
+	joined := strings.Join(cleaned, "\n")
+
+	for _, stripped := range []string{
+		"OPENCODE_CONFIG_CONTENT",
+		"MARSHAL_SHARED_CHANNEL",
+		"MARSHAL_LIVE_PEERS",
+		"MARSHAL_CHANNEL_STREAM",
+		"MARSHAL_INBOX",
+	} {
+		if strings.Contains(joined, stripped) {
+			t.Errorf("cleanWorkerEnv failed to strip %s:\n%s", stripped, joined)
+		}
+	}
+
+	for _, kept := range []string{"PATH=/usr/bin:/bin", "HOME=/home/user", "USER=alice"} {
+		if !strings.Contains(joined, kept) {
+			t.Errorf("cleanWorkerEnv stripped required variable %s:\n%s", kept, joined)
+		}
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -102,6 +103,7 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 	runCtx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(runCtx, n.Binary, argv...)
 	cmd.Dir = req.Worktree
+	cmd.Env = cleanWorkerEnv(os.Environ())
 	// A nil Stdin reads from the null device: never a terminal.
 	cmd.Stdin = nil
 	stdout := &capBuffer{limit: maxStream}
@@ -235,3 +237,22 @@ func parseAgy(stream []byte) []marshal.CommandRecord {
 // parseNone is used where no stream format has been captured to parse
 // against. Reporting nothing is honest; guessing a format would not be.
 func parseNone([]byte) []marshal.CommandRecord { return nil }
+
+// cleanWorkerEnv removes environment variables that could inject peer history,
+// shared channel context, or prior briefing configurations into a worker.
+func cleanWorkerEnv(env []string) []string {
+	var out []string
+	for _, e := range env {
+		key, _, _ := strings.Cut(e, "=")
+		switch key {
+		case "OPENCODE_CONFIG_CONTENT",
+			"MARSHAL_SHARED_CHANNEL",
+			"MARSHAL_LIVE_PEERS",
+			"MARSHAL_CHANNEL_STREAM",
+			"MARSHAL_INBOX":
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
