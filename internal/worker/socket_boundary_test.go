@@ -35,6 +35,10 @@ func TestGovernedHostRelaySocketsAndRawAttempts(t *testing.T) {
 	if err != nil {
 		t.Skip("python3 unavailable")
 	}
+	python, err = filepath.EvalSymlinks(python)
+	if err != nil {
+		t.Fatal(err)
+	}
 	worktree := t.TempDir()
 	metadata := filepath.Join(worktree, ".git")
 	if err := os.Mkdir(metadata, 0700); err != nil {
