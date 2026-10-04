@@ -167,8 +167,6 @@ func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle,
 	go func() {
 		defer close(h.done)
 		err := cmd.Wait()
-		closeTerminal()
-		cancel()
 		code := 0
 		if err != nil {
 			code = -1
@@ -177,6 +175,9 @@ func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle,
 				code = exitErr.ExitCode()
 			}
 		}
+		err = errors.Join(err, workerterminal.Completed(runCtx, code))
+		closeTerminal()
+		cancel()
 		h.runErr = err
 		h.observed = marshal.CommandRecord{Command: command, ExitCode: code, Output: bound(stdout.String()) + stderr.String()}
 		h.reported = n.Parse(stdout.Bytes())

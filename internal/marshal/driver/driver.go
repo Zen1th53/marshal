@@ -21,6 +21,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/worker"
+	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
 
 // maxOutput bounds each captured output. A worker or a check can print
@@ -437,6 +438,7 @@ func (g Governed) Launch(ctx context.Context, req Request) (*Handle, error) {
 			h.observed.ExitCode = 1
 			h.observed.Output = bound(h.runErr.Error())
 		}
+		h.runErr = errors.Join(h.runErr, workerterminal.Completed(runCtx, h.observed.ExitCode))
 	}()
 	return h, nil
 }

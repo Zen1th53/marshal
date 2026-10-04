@@ -81,3 +81,10 @@ func StopReference(ref Reference) error {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// RunningReference checks the pinned supervisor without granting authority to
+// an unrelated process that reused its PID.
+func RunningReference(ref Reference) (bool, error) {
+	start, alive, err := processIdentity(ref.PID)
+	return alive && start == ref.Start, err
+}

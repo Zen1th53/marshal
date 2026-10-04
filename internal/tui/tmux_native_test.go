@@ -269,8 +269,12 @@ func TestStopAllWorkersPreservesMarshal(t *testing.T) {
 	ctx := context.Background()
 
 	// Launch two workers
-	_, _ = ws.runNativeAgentInTmux(ctx, "codex", "Codex", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
-	_, _ = ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
+	if _, err := ws.runNativeAgentInTmux(ctx, "codex", "Codex", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	ws.tmuxMu.Lock()
 	codexPane := ws.tmuxActiveWins["codex"].paneID

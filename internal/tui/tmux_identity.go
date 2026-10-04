@@ -121,3 +121,46 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 	w.tmuxMu.Unlock()
 	return nil
 }
+
+// The relay exit status is not the worker result. Keep the driver result durable
+// so a replacement workspace can finish observing a hosted worker.
+func agentOutcomePath(root, id string) string {
+	return filepath.Join(root, ".marshal", "tmux-outcomes", id+".json")
+}
+func agentCompletion(root, id string) func(int) error {
+	return func(code int) error {
+		path := agentOutcomePath(root, id)
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			return err
+		}
+		f, err := os.CreateTemp(filepath.Dir(path), ".outcome-")
+		if err != nil {
+			return err
+		}
+		defer os.Remove(f.Name())
+		data, _ := json.Marshal(code)
+		_, err = f.Write(data)
+		if err == nil {
+			err = f.Sync()
+		}
+		closeErr := f.Close()
+		if err != nil {
+			return err
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		return os.Rename(f.Name(), path)
+	}
+}
+
+func resetAgentOutcome(root, id string) error {
+	if id == "" || strings.ContainsAny(id, "/\\") {
+		return fmt.Errorf("invalid outcome identity")
+	}
+	err := os.Remove(agentOutcomePath(root, id))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}

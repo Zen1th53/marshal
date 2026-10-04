@@ -16,3 +16,7 @@ func Identify(cmd *exec.Cmd) (Reference, error) { return Reference{}, nil }
 func StopReference(ref Reference) error {
 	return fmt.Errorf("recovered worker supervision unavailable")
 }
+
+func RunningReference(ref Reference) (bool, error) {
+	return false, fmt.Errorf("recovered worker supervision unavailable")
+}

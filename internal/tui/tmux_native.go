@@ -134,6 +134,10 @@ func (w *Workspace) adoptSurvivingWorkersLocked(projectRoot string) {
 			continue
 		}
 		agent := &activeTmuxAgent{id: record.ID, role: record.Role, taskID: record.TaskID, runID: record.RunID, executionRunID: record.ExecutionRunID, canonicalTaskID: record.CanonicalTaskID, provider: record.Provider, label: record.Label, window: record.Window, windowID: p.WindowID, paneID: p.PaneID, state: "working", readOnly: record.Role != "marshal-chat", supervisor: record.Supervisor, isJoined: p.WindowID == w.tmuxMarshalWinID}
+		agentCtx, cancel := context.WithCancel(context.Background())
+		agent.cancel = cancel
+		agent.doneChan = make(chan struct{})
+		var watch *nativeHistoryWatch
 		if record.Role == "marshal-chat" {
 			saved := loadChatBinding(projectRoot)
 			agent.binary = saved.Binary
@@ -141,9 +145,7 @@ func (w *Workspace) adoptSurvivingWorkersLocked(projectRoot string) {
 			agent.env = saved.Env
 			agent.sessionID = saved.SessionID
 			agent.historyBaseline = saved.HistoryBaseline
-			agentCtx, cancel := context.WithCancel(context.Background())
-			agent.cancel = cancel
-			watch := w.chatHistoryWatch(projectRoot, agent.provider, agent.binary)
+			watch = w.chatHistoryWatch(projectRoot, agent.provider, agent.binary)
 			baseline, err := w.prepareChatHistoryWatch(projectRoot, watch, saved.SessionID, saved.HistoryBaseline)
 			if err == nil {
 				agent.historyBaseline = baseline
@@ -154,9 +156,9 @@ func (w *Workspace) adoptSurvivingWorkersLocked(projectRoot string) {
 				w.RecordActivity(err.Error())
 				continue
 			}
-			w.monitorAgent(agentCtx, agent, projectRoot, nil, watch, nil, nil, nil)
 		}
 		w.tmuxActiveWins[record.ID] = agent
+		w.monitorAgent(agentCtx, agent, projectRoot, nil, watch, nil, nil, nil)
 	}
 }
 
@@ -521,24 +523,44 @@ func (w *Workspace) runNativeAgentInTmux(
 			if err != nil {
 				return err
 			}
-			return tmux.NewWindow(ctx, w.tmuxSession, winName, root, nil, []string{relay, "STDIO,raw,echo=0", "UNIX-CONNECT:" + socket})
+			target := w.tmuxSession + ":" + winName
+			if err := tmux.NewWindow(ctx, w.tmuxSession, winName, root, nil, []string{relay, "STDIO,raw,echo=0", "UNIX-CONNECT:" + socket}); err != nil {
+				return err
+			}
+			if err := tmux.SetWindowOption(ctx, target, "remain-on-exit", "on"); err != nil {
+				_ = tmux.KillPane(context.Background(), target)
+				return err
+			}
+			if err := tmux.SetPaneReadOnly(ctx, target, true); err != nil {
+				_ = tmux.KillPane(context.Background(), target)
+				return err
+			}
+			return nil
+		}
+		if err := resetAgentOutcome(root, agentID); err != nil {
+			return "", err
 		}
 		var err error
-		sessionCtx := workerterminal.WithLifecycle(workerterminal.WithHost(context.Background(), host), func(ref processgroup.Reference) error { sessionReference = ref; return nil })
+		sessionCtx := workerterminal.WithLifecycle(workerterminal.WithCompletion(workerterminal.WithHost(context.Background(), host), agentCompletion(root, agentID)), func(ref processgroup.Reference) error { sessionReference = ref; return nil })
 		workerHandle, err = driver.LaunchSession(sessionCtx, provider, binary, root, args, briefingEnv)
 		if err != nil {
 			return "", fmt.Errorf("launch %s in tmux: %w", agentLabel, err)
 		}
 	}
 
-	// Set remain-on-exit on so dead pane can be inspected and captured before cleanup
-	_ = tmux.SetWindowOption(ctx, w.tmuxSession+":"+winName, "remain-on-exit", "on")
-
-	// Set pane view-only by default (Decision 4), but NOT for marshal-chat (F3)
-	if !isChat {
-		_ = tmux.SetPaneReadOnly(ctx, w.tmuxSession+":"+winName, true)
-	} else {
-		_ = tmux.SetPaneReadOnly(ctx, w.tmuxSession+":"+winName, false)
+	// Hosting guarantees must hold before publishing a managed terminal.
+	failHost := func(err error) (string, error) {
+		if workerHandle != nil {
+			_ = (driver.Native{}).Cancel(workerHandle)
+		}
+		_ = tmux.KillPane(context.Background(), w.tmuxSession+":"+winName)
+		return "", err
+	}
+	if err := tmux.SetWindowOption(ctx, w.tmuxSession+":"+winName, "remain-on-exit", "on"); err != nil {
+		return failHost(err)
+	}
+	if err := tmux.SetPaneReadOnly(ctx, w.tmuxSession+":"+winName, !isChat); err != nil {
+		return failHost(err)
 	}
 
 	// Switch to the newly opened window
@@ -643,6 +665,7 @@ func (w *Workspace) monitorAgent(
 	view *inboxView,
 ) {
 	go func() {
+		defer close(agent.doneChan)
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -694,6 +717,17 @@ func (w *Workspace) monitorAgent(
 						dead = false
 					}
 				}
+				if snapshot.handle == nil && snapshot.role != "marshal-chat" {
+					if data, readErr := os.ReadFile(agentOutcomePath(root, snapshot.id)); readErr == nil && json.Unmarshal(data, &exitCode) == nil {
+						dead = true
+					} else if snapshot.supervisor.PID > 0 {
+						// A relay exit cannot certify worker success. If the pinned
+						// supervisor vanished without a result, retain an unknown failure.
+						alive, identityErr := processgroup.RunningReference(snapshot.supervisor)
+						dead = identityErr == nil && !alive
+						exitCode = -1
+					}
+				}
 				if dead {
 					// Final sync
 					if watch != nil {
@@ -722,7 +756,7 @@ func (w *Workspace) monitorAgent(
 					if err := w.deliverEgressAlert(app.EgressAlert{RunID: snapshot.runID, TaskID: snapshot.taskID, Worker: snapshot.provider, Kind: "worker " + state, State: state, Message: snapshot.label + " worker " + state + "."}); err != nil {
 						w.RecordActivity(err.Error())
 					}
-					if err := w.retainAndCloseAgent(context.Background(), agent, root, "completed"); err != nil {
+					if err := w.retainAndCloseAgent(context.Background(), agent, root, state); err != nil {
 						w.RecordActivity(err.Error())
 						continue
 					}
@@ -837,6 +871,9 @@ func (w *Workspace) StopAllWorkers(ctx context.Context) string {
 		}
 		if agent.cancel != nil {
 			agent.cancel()
+			if agent.doneChan != nil {
+				<-agent.doneChan
+			}
 		}
 		if agent.briefingDir != nil {
 			agent.briefingDir.remove()
@@ -1165,6 +1202,9 @@ func (t *tmuxTaskDriver) Mode() marshal.WorkerMode {
 func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*driver.Handle, error) {
 	root := t.w.workDir
 	agentID := taskAgentID(req)
+	if err := resetAgentOutcome(root, agentID); err != nil {
+		return nil, err
+	}
 	agent := &activeTmuxAgent{id: agentID, role: "task", taskID: req.Task.PlanTaskID, provider: req.Task.Worker, runID: req.RunID, label: "Task " + req.Task.PlanTaskID + " (" + req.Task.Worker + ")", state: "working", readOnly: true, driver: t.inner}
 	host := func(ctx context.Context, socket string) error {
 		relay, err := exec.LookPath("socat")
@@ -1205,6 +1245,7 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 		return saveAgentRecord(root, t.w.tmuxSession, agent)
 	}
 	launchCtx := workerterminal.WithLifecycle(workerterminal.WithHost(ctx, host), observer)
+	launchCtx = workerterminal.WithCompletion(launchCtx, agentCompletion(root, agentID))
 	launchCtx = workerterminal.WithIdentity(launchCtx, func(id workerterminal.Identity) error {
 		t.w.tmuxMu.Lock()
 		defer t.w.tmuxMu.Unlock()
