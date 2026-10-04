@@ -41,6 +41,7 @@ type MarshalDraft struct {
 }
 
 type MarshalService struct {
+	GovernedCheck                    func(context.Context, string, string, string, string, string) marshal.CommandRecord
 	Store                            *store.Store
 	ProjectID, Repository, Worktrees string
 	Model                            MarshalModel

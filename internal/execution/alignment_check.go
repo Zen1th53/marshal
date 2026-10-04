@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/alignment"
+	"github.com/Zen1th53/marshal/internal/gitguard"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -34,7 +35,11 @@ type AlignmentDecision struct {
 func worktreeChanges(ctx context.Context, wtPath string) (changed, deleted []string, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-c", "core.hooksPath=/dev/null", "status", "--porcelain=v1", "--untracked-files=all", "-z")
+	options, err := gitguard.Options(ctx, wtPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	cmd := exec.CommandContext(ctx, "git", append(options, "status", "--porcelain=v1", "--untracked-files=all", "-z")...)
 	cmd.Dir = wtPath
 	out, err := cmd.Output()
 	if err != nil {

@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/Zen1th53/marshal/internal/gitguard"
 )
 
 // BinaryProvenance records supply-chain metadata for an executable tool.
@@ -126,7 +128,11 @@ func InspectGitEnvironment(ctx context.Context, dir string) (GitEnvironment, err
 	headOut, _ := headCmd.Output()
 	headCommit := strings.TrimSpace(string(headOut))
 
-	statusCmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
+	options, err := gitguard.Options(ctx, repoRoot)
+	if err != nil {
+		return GitEnvironment{}, err
+	}
+	statusCmd := exec.CommandContext(ctx, "git", append(options, "status", "--porcelain")...)
 	statusCmd.Dir = repoRoot
 	statusOut, _ := statusCmd.Output()
 	isDirty := len(strings.TrimSpace(string(statusOut))) > 0

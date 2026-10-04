@@ -225,7 +225,7 @@ func (s *SecurityFeed) readSandbox(ctx context.Context, snap *SecuritySnapshot) 
 	}
 
 	if state.NetworkEnforced {
-		snap.Network = Known("egress decisions are typed and enforced", securityBinding)
+		snap.Network = Known("governed egress uses a per-run Unix proxy and exact operator grants (/egress); native sessions opened directly are out of scope", securityBinding)
 	} else {
 		snap.Network = Blocked(
 			"egress cannot be typed and enforced here, so network access fails "+

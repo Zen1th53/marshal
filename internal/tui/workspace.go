@@ -23,6 +23,7 @@ import (
 
 // Workspace encapsulates the live Terminal TUI Control Plane over canonical runtime state.
 type Workspace struct {
+	egressMu   sync.Mutex
 	mu         sync.RWMutex
 	store      *store.Store
 	coord      *collaboration.Coordinator
@@ -264,7 +265,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/effort", "/ultra", "/marshal", "/backup", "/fingerprint", "/runtime", "/store", "/export",
 			"/reinjection", "/alignment", "/optimization", "/verification", "/diff", "/review",
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
-			"/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
+			"/egress", "/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
 		},
 		Agents:      agentIDs,
@@ -1385,6 +1386,9 @@ func (w *Workspace) AttachRuntime(runtime *app.Runtime, identity projectid.ID) {
 	defer w.mu.Unlock()
 	w.runtime = runtime
 	w.projectIdentity = identity
+	if runtime != nil {
+		runtime.SetEgressAlertSink(w.deliverEgressAlert)
+	}
 }
 
 // AttachULTRARequest supplies the canonical entitlement request path.
@@ -1482,6 +1486,7 @@ func (w *Workspace) controlSource() *ControlSource {
 				w.mu.Lock()
 				defer w.mu.Unlock()
 				w.runtime = reopened
+				reopened.SetEgressAlertSink(w.deliverEgressAlert)
 				w.store = reopened.Store()
 				w.runtimeReplaced = true
 			},

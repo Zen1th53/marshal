@@ -103,8 +103,17 @@ func TestLocalControlBoundary(t *testing.T) {
 		t.Fatalf("restart replay: %+v %v", replay, err)
 	}
 	grants, err := reopened.Store().ListCapabilityGrants(ctx)
-	if err != nil || len(grants) != 18 {
+	if err != nil || len(grants) != 19 {
 		t.Fatalf("grants: %+v %v", grants, err)
+	}
+	var egressGrant bool
+	for _, grant := range grants {
+		if len(grant.Scope.Actions) == 1 && grant.Scope.Actions[0] == "egress.decide" {
+			egressGrant = string(grant.Subject) == local.principal.ID() && string(grant.TaskID) == reopened.ProjectIdentity() && grant.Scope.Resource == reopened.layout.Database
+		}
+	}
+	if !egressGrant {
+		t.Fatal("missing exact local-owner egress decision capability")
 	}
 	var reviseGrant capability.GrantID
 	for _, grant := range grants {
@@ -197,7 +206,7 @@ func TestLocalControlCanonicalBoundGoal(t *testing.T) {
 		t.Fatal("principal is not canonically scoped")
 	}
 	grants, err := r.Store().ListCapabilityGrants(ctx)
-	if err != nil || len(grants) != 18 || string(grants[0].TaskID) != string(binding.ID) {
+	if err != nil || len(grants) != 19 || string(grants[0].TaskID) != string(binding.ID) {
 		t.Fatalf("canonical grant: %+v %v", grants, err)
 	}
 	for _, grant := range grants {

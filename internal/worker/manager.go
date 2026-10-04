@@ -12,6 +12,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/sandbox"
 )
 
 type Manager struct {
@@ -59,8 +60,32 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 		Level: model.IsolationProcessOnly, Available: true, Process: true,
 		Reason: "task-scoped process without strong filesystem or network isolation",
 	}}
+	observerCtx, stopObserver := context.WithCancel(runCtx)
+	defer stopObserver()
+	var observe func() error
+	if command.Supervised {
+		var err error
+		observe, err = sandbox.AttachSupervisor(observerCtx, cmd, command.SupervisorSocket, command.Refusal)
+		if err != nil {
+			return adapter.ProcessResult{}, err
+		}
+	}
 	if err := cmd.Start(); err != nil {
+		if observe != nil {
+			stopObserver()
+			_ = observe()
+		}
 		return adapter.ProcessResult{}, fmt.Errorf("start worker process: %w", err)
+	}
+	observerDone := make(chan error, 1)
+	if observe != nil {
+		go func() {
+			err := observe()
+			if err != nil && observerCtx.Err() == nil {
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			}
+			observerDone <- err
+		}()
 	}
 	wait := make(chan error, 1)
 	go func() {
@@ -98,6 +123,12 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 				waitErr = <-wait
 			}
 			finished = true
+		}
+	}
+	stopObserver()
+	if observe != nil {
+		if err := <-observerDone; err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			return adapter.ProcessResult{}, err
 		}
 	}
 	result.EndedAt = time.Now().UTC()

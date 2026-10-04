@@ -3,7 +3,9 @@ package worker
 import (
 	"context"
 	"errors"
+	"net"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,6 +23,25 @@ func TestHoneypotSandboxOutputStopsWorker(t *testing.T) {
 	if capability := backend.Probe(t.Context()); !capability.Available {
 		t.Skip(capability.Reason)
 	}
+	bridge, err := sandbox.TrustedBridgePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	socket := filepath.Join(t.TempDir(), "proxy.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			conn.Close()
+		}
+	}()
 	repo := t.TempDir()
 	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "initial"}} {
 		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
@@ -32,9 +53,9 @@ func TestHoneypotSandboxOutputStopsWorker(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer trap.Close()
-	runner := NewGuardedSandboxed(New(5*time.Second, 100*time.Millisecond, 4), backend, model.SandboxRequest{Worktree: repo, ScratchHome: trap.Home, ExtraEnv: trap.Env, NetworkAllowed: true}, trap.Observe, func(ctx context.Context, result *adapter.ProcessResult) error {
+	runner := NewGuardedSandboxed(New(5*time.Second, 100*time.Millisecond, 4), backend, model.SandboxRequest{Worktree: repo, ScratchHome: trap.Home, ExtraEnv: trap.Env, NetworkAllowed: true, EgressSocket: socket, BridgeBinary: bridge}, trap.Observe, func(ctx context.Context, result *adapter.ProcessResult) error {
 		return trap.Check(ctx, result.Stdout, result.Stderr)
-	})
+	}, func(_ context.Context, refusal sandbox.Refusal) error { return errors.New("unexpected socket refusal") })
 	result, err := runner.Run(t.Context(), adapter.Command{Path: "/bin/sh", Args: []string{"-c", "test -f \"$HOME/.aws/credentials\" && test -f \"$HOME/.config/gh/hosts.yml\" && test -f \"$HOME/.env\" && printf 'clean prefix'; printf '%s' \"$GITHUB_TOKEN\"; sleep 30"}})
 	if !errors.Is(err, ErrHoneypot) {
 		t.Fatalf("worker not refused: %v", err)

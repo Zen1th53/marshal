@@ -33,7 +33,7 @@ func (b *Bwrap) Probe(ctx context.Context) model.IsolationCapability {
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	args := namespaceArgs()
+	args := append(namespaceArgs(), "--unshare-net")
 	for _, path := range systemPaths() {
 		args = append(args, "--ro-bind", path, path)
 	}
@@ -60,8 +60,10 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		return model.CommandSpec{}, fmt.Errorf("%w: worktree: %v", model.ErrInvalid, err)
 	}
 	args := namespaceArgs()
-	if !request.NetworkAllowed {
-		args = append(args, "--unshare-net")
+	args = append(args, "--unshare-net")
+	if request.Supervised {
+		// A nested PID namespace hides the unfiltered bridge and bootstrap shell.
+		command = append([]string{"/run/marshal-nested-bwrap", "--die-with-parent", "--unshare-pid", "--bind", "/", "/", "--proc", "/proc", "--"}, command...)
 	}
 	for _, path := range systemPaths() {
 		args = append(args, "--ro-bind", path, path)
@@ -119,6 +121,21 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		args = append(args, "--dir", targetParent)
 		args = append(args, "--ro-bind", source, bind.Target)
 	}
+	isolationReason := "bubblewrap command envelope"
+	if request.NetworkAllowed {
+		isolationReason += "; isolated network with per-run Unix egress proxy"
+		bridgeArgs, argv, err := egressEnvelope(request.EgressSocket, request.BridgeBinary, command)
+		if err != nil {
+			return model.CommandSpec{}, fmt.Errorf("%w: egress bridge: %v", model.ErrUnavailable, err)
+		}
+		args = append(args, bridgeArgs...)
+		command = argv
+		request.ExtraEnv = append(append([]string(nil), request.ExtraEnv...), proxyEnvironment()...)
+	}
+	if request.Supervised {
+		// Apply reserved executable/observer mounts after caller-supplied mounts.
+		args = append(args, "--ro-bind", b.binary, "/run/marshal-nested-bwrap", "--ro-bind", request.SupervisorBinary, supervisorPath, "--ro-bind", request.SupervisorSocket, "/run/marshal-observer.sock")
+	}
 	args = append(args, "--chdir", worktree, "--")
 	args = append(args, command...)
 	baseEnv := []string{"HOME=/home/marshal", "PATH=/usr/bin:/bin"}
@@ -156,7 +173,7 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		Dir:  worktree,
 		Isolation: model.IsolationCapability{
 			Level: model.IsolationBwrap, Available: true, Filesystem: true, Process: true,
-			Network: request.NetworkAllowed, Reason: "bubblewrap command envelope",
+			Network: request.NetworkAllowed, Reason: isolationReason,
 		},
 	}, nil
 }

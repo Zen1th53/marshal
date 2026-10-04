@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -75,6 +77,9 @@ type Runtime struct {
 	execService         *ExecutionService
 	honeypotMu          sync.Mutex
 	honeypots           map[string]*worker.Honeypot
+	egressMu            sync.Mutex
+	egressRuns          map[string]*runEgress
+	egressAlert         func(EgressAlert) error
 	taskMu              sync.Mutex
 	taskRuns            map[string]context.CancelFunc
 	execMu              sync.Mutex
@@ -775,6 +780,17 @@ func (r *Runtime) PrepareCell(ctx context.Context, spec cell.Spec) (cell.Record,
 
 func (r *Runtime) Close() error {
 	if r != nil {
+		r.egressMu.Lock()
+		for id, scope := range r.egressRuns {
+			if scope.proxy != nil {
+				_ = scope.proxy.Close()
+			}
+			if scope.socket != "" {
+				_ = os.RemoveAll(filepath.Dir(scope.socket))
+			}
+			delete(r.egressRuns, id)
+		}
+		r.egressMu.Unlock()
 		r.codexAppServerMu.Lock()
 		for key, turn := range r.codexAppServerTurns {
 			if turn != nil && turn.client != nil {
@@ -1221,19 +1237,37 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 	// a malformed egress request cannot be masked by an unrelated provider
 	// configuration error or create a lease first.
 	if request.NetworkRequired {
-		// Session-bound authorization happens after the canonical claim below.
-		// These structural checks do not require a session and must happen before
-		// a claim, so unsupported egress cannot create a lease.
 		if len(request.EgressRules) == 0 {
+			agent, err := r.store.GetAgent(ctx, request.AgentID)
+			if err != nil || agent.Status == model.AgentDisabled || agent.ModelProvider != request.Adapter {
+				return RunResult{}, fmt.Errorf("%w: provider default requires an enabled agent bound to the selected provider", model.ErrPolicyDenied)
+			}
+		}
+		if len(request.EgressRules) == 0 && r.adapters[request.Adapter] != nil {
 			return RunResult{}, fmt.Errorf("%w: network access requires an explicit egress allowlist", model.ErrPolicyDenied)
 		}
-		if _, err := netpolicy.NewEvaluator(request.EgressRules); err != nil {
-			return RunResult{}, fmt.Errorf("%w: invalid egress allowlist", model.ErrPolicyDenied)
-		}
-		if !r.egressEnforcementAvailable() {
+		if r.adapters[request.Adapter] != nil {
 			return RunResult{}, netpolicy.ErrEnforcementUnavailable
 		}
+		endpoint, err := providerEndpoint(request.Adapter, request.Model)
+		if err != nil {
+			return RunResult{}, err
+		}
+		// Caller/model-supplied rules are never grants. Only the default API
+		// endpoint can be admitted before a live operator-controlled run exists.
+		for _, rule := range request.EgressRules {
+			if err := rule.Validate(); err != nil {
+				return RunResult{}, model.ErrPolicyDenied
+			}
+			for _, port := range rule.Ports {
+				exact, err := netpolicy.Endpoint(net.JoinHostPort(rule.HostPattern, strconv.Itoa(port)))
+				if err != nil || exact != endpoint || rule.Protocol != netpolicy.ProtocolTCP || rule.Action != netpolicy.ActionAllow {
+					return RunResult{}, model.ErrPolicyDenied
+				}
+			}
+		}
 	}
+
 	// Adapter identity is part of the principal binding, not a cosmetic UI
 	// choice. It intentionally follows constitutional/gate/network admission:
 	// the earlier gates must retain their truthful refusal reason and no claim
@@ -1269,24 +1303,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 			if err := candidate.ValidateModel(ctx, request.Model); err != nil {
 				return RunResult{}, err
 			}
-		} else {
-			binary, err := project.FindBinary(request.Adapter)
-			if err != nil {
-				return RunResult{}, fmt.Errorf("%w: %s CLI is missing", model.ErrUnavailable, request.Adapter)
-			}
-			var validator interface {
-				ValidateModel(context.Context, string) error
-			}
-			if request.Adapter == "codex" {
-				validator = codex.New(binary, worker.New(10*time.Second, 2*time.Second, 1<<20))
-			} else {
-				// Claude model discovery starts a short real session, so it
-				// needs a wider budget than the Codex catalog subcommand.
-				validator = claude.New(binary, worker.New(120*time.Second, 5*time.Second, 1<<20))
-			}
-			if err := validator.ValidateModel(ctx, request.Model); err != nil {
-				return RunResult{}, err
-			}
+
 		}
 	}
 	claim, err := r.claimForRun(ctx, task, request)
@@ -1335,43 +1352,22 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		return RunResult{}, err
 	}
 	executionRevision := claimedRevision + 1
-	networkAllowed := false
-	var proxyURL string
-	if request.NetworkRequired {
-		evaluator, err := authorizeNetworkEgress(r.policy, request.AgentID, claim.Session.ID, task.ID, claim.Session.Role, task.Risk, request.EgressRules)
-		if err != nil {
-			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
-			return RunResult{}, err
-		}
-		if !r.egressEnforcementAvailable() {
-			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
-			return RunResult{}, netpolicy.ErrEnforcementUnavailable
-		}
-
-		egressProxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{
-			Evaluator: evaluator,
-			Store:     r.store,
-			SubjectID: request.AgentID,
-			TaskID:    task.ID,
-		})
-		if err != nil {
-			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
-			return RunResult{}, fmt.Errorf("%w: failed to start egress proxy: %v", netpolicy.ErrEnforcementUnavailable, err)
-		}
-		egressProxy.Start()
-		defer egressProxy.Close()
-		proxyURL = egressProxy.URL()
-		networkAllowed = true
+	runID, err := model.NewID("RUN-")
+	if err != nil {
+		return RunResult{}, err
 	}
+	proxySocket, closeEgress, err := r.startProviderEgress(ctx, runID, "", request.Adapter, request.Model, task, request.AgentID, claim.Session.ID, claim.Session.Role)
+	if err != nil {
+		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
+		return RunResult{}, err
+	}
+	defer closeEgress()
 	trustedContext, err := r.renderTaskContext(ctx, task)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
 	}
-	runID, err := model.NewID("RUN-")
-	if err != nil {
-		return RunResult{}, err
-	}
+
 	memoryPrincipal := authz.Principal{ID: request.AgentID, Role: authz.Role{Name: "developer", Authorities: []authz.Authority{authz.AuthorityTaskPlan}}}
 	worktreeID := strings.Join([]string{task.ID, request.AgentID, claim.Session.ID}, ":")
 	fingerprintQuery := strings.Join([]string{task.ID, task.Title, r.layout.Branch, r.layout.HEAD, branch, worktreeState.HEAD, worktreeID, request.AgentID, request.Adapter, request.Model, string(task.Risk)}, " ")
@@ -1387,7 +1383,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		return RunResult{}, fmt.Errorf("automatic memory recall: %w", err)
 	}
 	trustedContext += "\n" + recall.Context
-	agentAdapter, shellExecGrant, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, networkAllowed, request.Model, proxyURL)
+	agentAdapter, shellExecGrant, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, proxySocket != "", request.Model, proxySocket)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
@@ -1750,17 +1746,22 @@ func ensureNoSecretsInWorktree(ctx context.Context, worktreePath string, secrets
 	return nil
 }
 
-// egressEnforcementAvailable reports whether the runtime can actually restrict
-// provider egress to the task's endpoint allowlist. bubblewrap can only toggle
-// network entirely (--unshare-net) and cannot enforce host/port rules; no
-// egress-filtering proxy is wired today. Until such a mechanism exists, this
-// returns false so endpoint-restricted network requests fail closed rather than
-// being silently broadened to unrestricted host networking.
+// egressEnforcementAvailable requires the actual network namespace and a trusted
+// Unix-to-loopback bridge. Every provider invocation rechecks its envelope.
 func (r *Runtime) egressEnforcementAvailable() bool {
-	return false
+	path, err := trustedBwrapPath()
+	if err != nil {
+		return false
+	}
+	if _, err := sandbox.TrustedBridgePath(); err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return sandbox.NewBwrap(path).Probe(ctx).Available
 }
 
-func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string, networkAllowed bool, modelName string, proxyURL string) (adapter.Adapter, capability.GrantID, error) {
+func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string, networkAllowed bool, modelName string, proxySocket string) (adapter.Adapter, capability.GrantID, error) {
 	if candidate := r.adapters[name]; candidate != nil {
 		return candidate, "", nil
 	}
@@ -1814,10 +1815,10 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				"XDG_CACHE_HOME=/home/marshal/.cache",
 			)
 
-			// Forward OLLAMA_HOST; default to localhost:11434 for local Ollama
+			// Forward OLLAMA_HOST; default to the exact allowed IP for local Ollama
 			ollamaHost := os.Getenv("OLLAMA_HOST")
 			if ollamaHost == "" {
-				ollamaHost = "http://localhost:11434"
+				ollamaHost = "http://127.0.0.1:11434"
 			}
 			extraEnv = append(extraEnv, "OLLAMA_HOST="+ollamaHost)
 
@@ -1826,16 +1827,12 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				extraEnv = append(extraEnv, "MARSHAL_OPENCODE_MODEL="+m)
 			}
 
-			// Forward egress proxy settings into sandboxed runner environment
-			if proxyURL != "" {
-				extraEnv = append(extraEnv,
-					"HTTP_PROXY="+proxyURL,
-					"HTTPS_PROXY="+proxyURL,
-					"ALL_PROXY="+proxyURL,
-					"http_proxy="+proxyURL,
-					"https_proxy="+proxyURL,
-					"all_proxy="+proxyURL,
-				)
+			var bridge string
+			if networkAllowed {
+				bridge, err = sandbox.TrustedBridgePath()
+				if err != nil || proxySocket == "" {
+					return nil, "", netpolicy.ErrEnforcementUnavailable
+				}
 			}
 
 			trap, err := r.armHoneypot(worktreePath)
@@ -1846,6 +1843,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			runner = worker.NewGuardedSandboxed(process, backend, model.SandboxRequest{
 				ScratchHome: trap.Home,
 				Worktree:    worktreePath, NetworkAllowed: networkAllowed,
+				EgressSocket: proxySocket, BridgeBinary: bridge,
 				ReadOnlyBinds: readOnlyBinds,
 				WritableTmpfs: writableTmpfs,
 				ExtraEnv:      extraEnv,
@@ -1854,7 +1852,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				result.Stdout = trap.Redact(result.Stdout)
 				result.Stderr = trap.Redact(result.Stderr)
 				return err
-			})
+			}, r.socketObserver(proxySocket))
 		}
 	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed, r.allowProcessOnly); err != nil {
 		return nil, "", err

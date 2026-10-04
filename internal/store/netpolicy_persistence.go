@@ -104,6 +104,7 @@ func (s *Store) appendEgressEvents(ctx context.Context, record netpolicy.Decisio
 	base := events.Event{
 		Subject:    record.Request.SubjectID,
 		TaskID:     record.Request.TaskID,
+		RunID:      record.Request.RunID,
 		ResourceID: "egress-" + record.ID,
 		At:         at,
 		Data:       map[string]any{"change_id": record.Request.ChangeID, "decision_id": record.ID, "protocol": string(record.Request.Protocol), "port": strconv.Itoa(record.Request.Port)},

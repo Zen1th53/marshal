@@ -49,10 +49,12 @@ there.
 8. sanitize and persist evidence and Git observations; and
 9. finalize runtime state and capture evidence-linked candidate memory.
 
-Bubblewrap provides the strong Linux filesystem/process boundary. Endpoint
-host/port rules are evaluated by policy, but Bubblewrap alone cannot enforce
-them. Until an enforcing proxy is configured, endpoint-restricted egress is
-rejected instead of broadened.
+Bubblewrap provides the strong Linux filesystem/process boundary. Governed
+workers always use `--unshare-net`. A runtime-owned per-run Unix proxy, bridged
+to sandbox loopback by trusted socat, enforces exact host/port grants. Only the
+provider API is allowed by default; `/egress` accepts operator grants and
+revocations. Missing proxy/bridge/isolation refuses network work. Native
+sessions opened directly are out of scope.
 
 ## Canonical state
 

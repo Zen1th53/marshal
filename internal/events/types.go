@@ -103,6 +103,10 @@ const (
 	EventTypeNetworkEgressRequested         EventType = "network.egress.requested"
 	EventTypeNetworkEgressAllowed           EventType = "network.egress.allowed"
 	EventTypeNetworkEgressDenied            EventType = "network.egress.denied"
+	EventTypeNetworkEgressGranted           EventType = "network.egress.granted"
+	EventTypeNetworkEgressRevoked           EventType = "network.egress.revoked"
+	EventTypeNetworkEgressNotification      EventType = "network.egress.notification"
+	EventTypeNetworkEgressAttempt           EventType = "network.egress.attempt"
 	EventTypeTrustContentRendered           EventType = "trustcontent.rendered"
 	EventTypeTrustContentSegmentIngested    EventType = "trustcontent.segment.ingested"
 	EventTypeTrustContentZoneAssigned       EventType = "trustcontent.zone.assigned"
@@ -152,6 +156,7 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeRiskAssessmentCreated: {}, EventTypeRiskLevelHigh: {}, EventTypeRiskLevelCritical: {},
 	EventTypeRiskOverrideDenied:     {},
 	EventTypeNetworkEgressRequested: {}, EventTypeNetworkEgressAllowed: {}, EventTypeNetworkEgressDenied: {},
+	EventTypeNetworkEgressGranted: {}, EventTypeNetworkEgressRevoked: {}, EventTypeNetworkEgressAttempt: {}, EventTypeNetworkEgressNotification: {},
 	EventTypeTrustContentRendered: {}, EventTypeTrustContentSegmentIngested: {},
 	EventTypeTrustContentZoneAssigned: {}, EventTypeTrustContentInjectionSuspected: {},
 	EventTypeHandoffCreated: {}, EventTypeHandoffAccepted: {},

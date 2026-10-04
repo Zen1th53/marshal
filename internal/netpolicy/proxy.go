@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -84,20 +85,26 @@ type ProxyConfig struct {
 	Resolver  *net.Resolver
 	Dialer    *net.Dialer
 	Listener  net.Listener
+	RunID     string
+	Attempt   func(context.Context, string, int, Decision) error
 }
 
 type EgressProxy struct {
-	evaluator Evaluator
-	store     DecisionStore
-	subjectID string
-	taskID    string
-	changeID  string
-	resolver  *net.Resolver
-	dialer    *net.Dialer
-	listener  net.Listener
-	server    *http.Server
-	addr      string
-	mu        sync.Mutex
+	evaluator   Evaluator
+	store       DecisionStore
+	subjectID   string
+	taskID      string
+	changeID    string
+	resolver    *net.Resolver
+	dialer      *net.Dialer
+	listener    net.Listener
+	server      *http.Server
+	addr        string
+	mu          sync.Mutex
+	runID       string
+	attempt     func(context.Context, string, int, Decision) error
+	connections map[net.Conn]string
+	closed      bool
 }
 
 func NewEgressProxy(cfg ProxyConfig) (*EgressProxy, error) {
@@ -126,24 +133,32 @@ func NewEgressProxy(cfg ProxyConfig) (*EgressProxy, error) {
 	}
 
 	p := &EgressProxy{
-		evaluator: cfg.Evaluator,
-		store:     cfg.Store,
-		subjectID: cfg.SubjectID,
-		taskID:    cfg.TaskID,
-		changeID:  cfg.ChangeID,
-		resolver:  resolver,
-		dialer:    dialer,
-		listener:  ln,
-		addr:      ln.Addr().String(),
+		evaluator:   cfg.Evaluator,
+		store:       cfg.Store,
+		subjectID:   cfg.SubjectID,
+		taskID:      cfg.TaskID,
+		changeID:    cfg.ChangeID,
+		runID:       cfg.RunID,
+		attempt:     cfg.Attempt,
+		connections: map[net.Conn]string{},
+		resolver:    resolver,
+		dialer:      dialer,
+		listener:    ln,
+		addr:        ln.Addr().String(),
 	}
 
+	p.listener = &observedListener{Listener: ln, proxy: p}
 	p.server = &http.Server{
+		ConnContext: func(ctx context.Context, conn net.Conn) context.Context {
+			return context.WithValue(ctx, ingressConnectionKey{}, conn)
+		},
 		Handler:      p,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
+	p.server.SetKeepAlivesEnabled(false)
 	return p, nil
 }
 
@@ -162,10 +177,19 @@ func (p *EgressProxy) URL() string {
 }
 
 func (p *EgressProxy) Close() error {
+	p.mu.Lock()
+	p.closed = true
+	for conn := range p.connections {
+		_ = conn.Close()
+	}
+	p.mu.Unlock()
 	return p.server.Close()
 }
 
 func (p *EgressProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if c, ok := r.Context().Value(ingressConnectionKey{}).(*observedConnection); ok {
+		c.active.Store(true)
+	}
 	if r.Method == http.MethodConnect {
 		p.handleConnect(w, r)
 		return
@@ -177,17 +201,22 @@ func (p *EgressProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	host, portStr, err := net.SplitHostPort(r.Host)
 	if err != nil {
+		p.recordInvalid(ctx, r.Host, 0)
 		http.Error(w, "invalid CONNECT host", http.StatusBadRequest)
 		return
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil || port < 1 || port > 65535 {
+		p.recordInvalid(ctx, host, port)
 		http.Error(w, "invalid CONNECT port", http.StatusBadRequest)
 		return
 	}
 
 	validatedIP, decision, err := p.evaluateAndResolve(ctx, host, port, ProtocolTCP)
-	p.recordDecision(ctx, host, port, validatedIP, decision)
+	if recordErr := p.recordDecision(ctx, host, port, validatedIP, decision); recordErr != nil {
+		http.Error(w, "egress evidence unavailable", http.StatusServiceUnavailable)
+		return
+	}
 
 	if err != nil || !decision.Allowed {
 		http.Error(w, "egress denied by policy: "+string(decision.Reason), http.StatusForbidden)
@@ -195,12 +224,12 @@ func (p *EgressProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Dial directly to the validated IP address to prevent TOCTOU DNS rebinding
-	targetConn, err := p.dialer.DialContext(ctx, "tcp", net.JoinHostPort(validatedIP.String(), portStr))
+	targetConn, err := p.connect(ctx, host, port, validatedIP)
 	if err != nil {
 		http.Error(w, "connection failure: "+err.Error(), http.StatusBadGateway)
 		return
 	}
-	defer targetConn.Close()
+	defer p.disconnect(targetConn)
 
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
@@ -208,12 +237,14 @@ func (p *EgressProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientConn, _, err := hijacker.Hijack()
+	clientConn, buffered, err := hijacker.Hijack()
 	if err != nil {
 		http.Error(w, "hijacking failed", http.StatusInternalServerError)
 		return
 	}
 	defer clientConn.Close()
+	// Hijacked CONNECT streams outlive the HTTP header deadline.
+	_ = clientConn.SetDeadline(time.Time{})
 
 	// Notify client that CONNECT tunnel is established
 	_, _ = clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
@@ -221,7 +252,7 @@ func (p *EgressProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// Bidirectional splice
 	errc := make(chan error, 2)
 	go func() {
-		_, err := io.Copy(targetConn, clientConn)
+		_, err := io.Copy(targetConn, buffered)
 		errc <- err
 	}()
 	go func() {
@@ -233,6 +264,11 @@ func (p *EgressProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 func (p *EgressProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	if r.URL.Scheme != "http" || r.URL.Host == "" || r.URL.User != nil || r.Host != r.URL.Host {
+		p.recordInvalid(ctx, r.Host, 0)
+		http.Error(w, "absolute HTTP proxy URL required", http.StatusBadRequest)
+		return
+	}
 	host := r.URL.Hostname()
 	if host == "" {
 		host = r.Host
@@ -246,12 +282,16 @@ func (p *EgressProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil || port < 1 || port > 65535 {
+		p.recordInvalid(ctx, host, port)
 		http.Error(w, "invalid destination port", http.StatusBadRequest)
 		return
 	}
 
 	validatedIP, decision, err := p.evaluateAndResolve(ctx, host, port, ProtocolTCP)
-	p.recordDecision(ctx, host, port, validatedIP, decision)
+	if recordErr := p.recordDecision(ctx, host, port, validatedIP, decision); recordErr != nil {
+		http.Error(w, "egress evidence unavailable", http.StatusServiceUnavailable)
+		return
+	}
 
 	if err != nil || !decision.Allowed {
 		http.Error(w, "egress denied by policy: "+string(decision.Reason), http.StatusForbidden)
@@ -259,12 +299,12 @@ func (p *EgressProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Dial directly to the validated IP address
-	targetConn, err := p.dialer.DialContext(ctx, "tcp", net.JoinHostPort(validatedIP.String(), portStr))
+	targetConn, err := p.connect(ctx, host, port, validatedIP)
 	if err != nil {
 		http.Error(w, "connection failure: "+err.Error(), http.StatusBadGateway)
 		return
 	}
-	defer targetConn.Close()
+	defer p.disconnect(targetConn)
 
 	outReq := r.Clone(ctx)
 	outReq.RequestURI = ""
@@ -304,6 +344,7 @@ func (p *EgressProxy) evaluateAndResolve(ctx context.Context, host string, port 
 			SubjectID: p.subjectID,
 			TaskID:    p.taskID,
 			ChangeID:  p.changeID,
+			RunID:     p.runID,
 			Host:      ip.String(),
 			IP:        ip.String(),
 			Protocol:  proto,
@@ -318,6 +359,7 @@ func (p *EgressProxy) evaluateAndResolve(ctx context.Context, host string, port 
 		SubjectID: p.subjectID,
 		TaskID:    p.taskID,
 		ChangeID:  p.changeID,
+		RunID:     p.runID,
 		Host:      host,
 		Protocol:  proto,
 		Port:      port,
@@ -360,10 +402,7 @@ func (p *EgressProxy) evaluateAndResolve(ctx context.Context, host string, port 
 	return chosenIP, hostDecision, nil
 }
 
-func (p *EgressProxy) recordDecision(ctx context.Context, host string, port int, ip net.IP, decision Decision) {
-	if p.store == nil {
-		return
-	}
+func (p *EgressProxy) recordDecision(ctx context.Context, host string, port int, ip net.IP, decision Decision) error {
 	var ipStr string
 	if ip != nil {
 		ipStr = ip.String()
@@ -380,6 +419,7 @@ func (p *EgressProxy) recordDecision(ctx context.Context, host string, port int,
 			SubjectID: p.subjectID,
 			TaskID:    p.taskID,
 			ChangeID:  p.changeID,
+			RunID:     p.runID,
 			Host:      host,
 			IP:        ipStr,
 			Protocol:  ProtocolTCP,
@@ -396,5 +436,101 @@ func (p *EgressProxy) recordDecision(ctx context.Context, host string, port int,
 		CreatedAt: time.Now().UTC(),
 	}
 
-	_ = p.store.PutEgressDecision(ctx, record)
+	if p.store != nil && record.Validate() == nil {
+		if err := p.store.PutEgressDecision(ctx, record); err != nil {
+			return err
+		}
+	}
+	if p.attempt != nil {
+		return p.attempt(ctx, host, port, decision)
+	}
+	return nil
+}
+
+// CloseEndpoint ends live tunnels and forwards after an operator revocation.
+func (p *EgressProxy) CloseEndpoint(endpoint string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for conn, destination := range p.connections {
+		if destination == endpoint {
+			_ = conn.Close()
+		}
+	}
+}
+
+func (p *EgressProxy) connect(ctx context.Context, host string, port int, ip net.IP) (net.Conn, error) {
+	// Registration and revocation share this lock. Recheck authority after DNS
+	// and evidence persistence so a concurrent revoke cannot leave a live tunnel.
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil, ErrEnforcementUnavailable
+	}
+	d, err := p.evaluator.Evaluate(ctx, Request{SubjectID: p.subjectID, TaskID: p.taskID, Host: host, Port: port, Protocol: ProtocolTCP})
+	if err != nil || !d.Allowed {
+		return nil, ErrDenied
+	}
+	conn, err := p.dialer.DialContext(ctx, "tcp", net.JoinHostPort(ip.String(), strconv.Itoa(port)))
+	if err != nil {
+		return nil, err
+	}
+	endpoint, err := Endpoint(net.JoinHostPort(host, strconv.Itoa(port)))
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	p.connections[conn] = endpoint
+	return conn, nil
+}
+
+func (p *EgressProxy) disconnect(conn net.Conn) {
+	_ = conn.Close()
+	p.mu.Lock()
+	delete(p.connections, conn)
+	p.mu.Unlock()
+}
+
+func (p *EgressProxy) recordInvalid(ctx context.Context, host string, port int) {
+	if p.attempt != nil {
+		_ = p.attempt(ctx, host, port, Decision{Host: host, Port: port, Reason: ReasonRuleInvalid})
+	}
+}
+
+// Each ingress connection carries one request. Parser failures occur before
+// ServeHTTP, so the connection records bytes and whether a handler ran.
+// Empty bridge readiness probes are not requests.
+type ingressConnectionKey struct{}
+type observedListener struct {
+	net.Listener
+	proxy *EgressProxy
+}
+
+func (l *observedListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &observedConnection{Conn: c, proxy: l.proxy}, nil
+}
+
+type observedConnection struct {
+	net.Conn
+	proxy  *EgressProxy
+	bytes  atomic.Int64
+	active atomic.Bool
+	once   sync.Once
+}
+
+func (c *observedConnection) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	c.bytes.Add(int64(n))
+	return n, err
+}
+func (c *observedConnection) Close() error {
+	c.once.Do(func() {
+		if c.bytes.Load() > 0 && !c.active.Load() {
+			c.proxy.recordInvalid(context.Background(), "invalid-request", 0)
+		}
+	})
+	return c.Conn.Close()
 }

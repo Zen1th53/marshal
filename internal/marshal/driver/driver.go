@@ -186,12 +186,26 @@ func recordResult(ctx context.Context, wt, taskID string) (string, error) {
 	return strings.TrimSpace(head), err
 }
 
+// CheckRunner receives the detached checkout and approved command. Runtime
+// composition supplies a sandboxed runner; native sessions retain their runner.
+type CheckRunner func(context.Context, string, string) marshal.CommandRecord
+type checkRunnerKey struct{}
+type checkRunnerBinding struct{ run CheckRunner }
+
+func WithCheckRunner(ctx context.Context, run CheckRunner) context.Context {
+	return context.WithValue(ctx, checkRunnerKey{}, checkRunnerBinding{run})
+}
+
 // runCheck runs one approved check against the result commit and records it.
 //
 // Each check gets its own clean, detached checkout of the result, removed
 // afterwards. Running in the task worktree would let one check change what
 // the next one sees while both results still claim the same commit.
 func runCheck(ctx context.Context, wt, result, command string, timeout time.Duration) marshal.CommandRecord {
+	binding, governed := ctx.Value(checkRunnerKey{}).(checkRunnerBinding)
+	if governed && binding.run == nil {
+		return marshal.CommandRecord{Command: command, ExitCode: -1, Output: "governed check sandbox runner unavailable"}
+	}
 	dir, err := os.MkdirTemp("", "marshal-check-")
 	if err != nil {
 		return marshal.CommandRecord{Command: command, ExitCode: -1, Output: "prepare check checkout: " + err.Error()}
@@ -203,6 +217,11 @@ func runCheck(ctx context.Context, wt, result, command string, timeout time.Dura
 	}
 	defer func() { _, _ = git(context.WithoutCancel(ctx), wt, "worktree", "remove", "--force", checkout) }()
 
+	if governed {
+		checkCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return binding.run(checkCtx, checkout, command)
+	}
 	process, err := worker.RunVerification(ctx, checkout, []string{"/bin/sh", "-c", command}, timeout, maxOutput)
 	code := process.ExitCode
 	if err != nil {
@@ -296,6 +315,7 @@ type GovernedRunner func(ctx context.Context, req Request) ([]marshal.CommandRec
 // Governed runs tasks through Process 05, where every action already passes
 // MARSHAL policy. Its hand-in is assembled exactly like a native one.
 type Governed struct {
+	Check        func(context.Context, Request, string, string) marshal.CommandRecord
 	Run          GovernedRunner
 	Provider     string
 	CheckTimeout time.Duration
@@ -334,7 +354,13 @@ func (g Governed) Wait(ctx context.Context, h *Handle) (marshal.HandIn, error) {
 		return marshal.HandIn{}, h.runErr
 	}
 	id := identity{worker: h.req.Task.Worker, provider: g.Provider, model: h.req.Model, mode: marshal.Governed}
-	return assemble(ctx, h.req, id, []marshal.CommandRecord{h.observed}, h.reported, g.CheckTimeout)
+	var checks CheckRunner
+	if g.Check != nil {
+		checks = func(ctx context.Context, dir, command string) marshal.CommandRecord {
+			return g.Check(ctx, h.req, dir, command)
+		}
+	}
+	return assemble(WithCheckRunner(ctx, checks), h.req, id, []marshal.CommandRecord{h.observed}, h.reported, g.CheckTimeout)
 }
 
 // Cancel stops the governed run; the worktree is left as it is.

@@ -595,11 +595,12 @@ Honest states carried by the TUI:
 
 Current limitations, stated rather than hidden:
 
-- **Provider egress is blocked by design.** `marshal run` executes harnesses inside
-  a bubblewrap cell built with `--unshare-net`, because per-endpoint egress cannot
-  be enforced without a filtering proxy. A harness needing API access therefore
-  blocks inside the cell. This is fail-closed behaviour and is reported as
-  `BLOCKED_BY_POLICY`, never as availability.
+- **Governed egress needs working bubblewrap and trusted socat.** Provider workers
+  keep `--unshare-net` and use a per-run Unix proxy. `/egress status` lists exact
+  endpoints and refused requests; `/egress allow|revoke <run-id> <host[:port]>`
+  records operator-only decisions (omitted port means 443). Refusals also reach
+  the Marshal chat inbox; model text cannot grant. Native sessions opened
+  directly are out of scope. See [egress enforcement](network-egress-firewall.md).
 - **Antigravity headless execution is unavailable** unless the `agy` CLI is
   installed. The Antigravity desktop IDE is not a headless harness.
 - **Failure fingerprints are recomputed, not stored.** The retry registry in

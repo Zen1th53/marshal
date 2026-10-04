@@ -87,6 +87,12 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
 		d = s.GovernedDrivers[t.Worker]
 	}
+	if governed, ok := d.(driver.Governed); ok && governed.Check == nil && s.GovernedCheck != nil {
+		governed.Check = func(ctx context.Context, req driver.Request, dir, command string) marshal.CommandRecord {
+			return s.GovernedCheck(ctx, runID, req.Task.PlanTaskID, req.Task.Worker, dir, command)
+		}
+		d = governed
+	}
 	if d == nil {
 		return MarshalDispatch{}, fmt.Errorf("no driver for %s", t.Worker)
 	}

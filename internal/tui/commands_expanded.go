@@ -249,6 +249,13 @@ func (h *CommandHandler) handlePolicy(ctx context.Context, args []string) (strin
 		fmt.Fprintf(&b, "  %d allowed, %d denied; latest %s at %s (policy %s)\n", g.Allowed, g.Denied, g.LastPoint, g.LastAt, digest)
 	}
 	b.WriteString(verdict)
+	if aspect == "network" {
+		status, err := h.handleEgress(ctx, nil)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString("\n" + status)
+	}
 	return b.String(), nil
 }
 
@@ -628,7 +635,7 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 			b.WriteString(fmt.Sprintf("    Version: %s\n", pr.Version))
 			b.WriteString(fmt.Sprintf("    Model:   %s\n", h.providerModelLine(ctx, pr.HarnessName)))
 			b.WriteString("    Auth:    UNKNOWN (no execution performed)\n")
-			b.WriteString("    Egress:  governed cells BLOCKED_BY_POLICY (sandbox uses --unshare-net; per-endpoint egress unenforceable); native sessions UNKNOWN (they run in the provider's own environment; not observed)\n")
+			b.WriteString("    Egress:  governed cells use --unshare-net and a per-run Unix proxy (requires working bubblewrap and trusted socat); unapproved endpoints BLOCKED_BY_POLICY (/egress); native sessions opened directly by the operator OUT_OF_SCOPE\n")
 		}
 		return b.String(), nil
 	}

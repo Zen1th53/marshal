@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/startup"
 
 	"golang.org/x/term"
@@ -114,7 +114,10 @@ func setupFixes(assessment startup.Assessment) []setupFix {
 }
 
 func runGit(ctx context.Context, root string, args ...string) error {
-	command := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...)
+	command, err := hostgit.Command(ctx, root, args...)
+	if err != nil {
+		return err
+	}
 	// Git never inherits stdin here: a prompt the user cannot see would hang
 	// setup waiting for input.
 	command.Stdin = nil

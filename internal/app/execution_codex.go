@@ -111,7 +111,16 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 			effort = preference.Effort
 		}
 	}
-	provider, grantID, err := r.resolveAdapter(ctx, "codex", canonicalTask, worktree, agentID, false, modelName, "")
+	egressRunID, err := model.NewID("RUN-EGRESS-")
+	if err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
+	proxySocket, closeEgress, err := r.startProviderEgress(ctx, egressRunID, task.RunID, "codex", modelName, canonicalTask, agentID, task.RunID, model.RoleDeveloper)
+	if err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
+	defer closeEgress()
+	provider, grantID, err := r.resolveAdapter(ctx, "codex", canonicalTask, worktree, agentID, proxySocket != "", modelName, proxySocket)
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}

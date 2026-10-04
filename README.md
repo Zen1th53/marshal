@@ -511,8 +511,9 @@ Run `marshal doctor` to see what is installed and what is missing.
 These are stated plainly, because a control plane that overstates its guarantees
 is worse than none:
 
-- **Network egress isn't filtered per destination.** Runs that need network
-  access stop instead of proceeding without the policy.
+- **Governed egress requires working bubblewrap and trusted socat.** Workers use
+  a per-run proxy with exact endpoint grants (`/egress`); missing enforcement
+  refuses network work. Native sessions opened directly are out of scope.
 - **Sandboxed execution is Linux only.**
 - **One agent per terminal.** A native session takes over its terminal, so
   running two agents at once needs two terminals.

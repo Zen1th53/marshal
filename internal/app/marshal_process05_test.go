@@ -59,6 +59,7 @@ func TestMarshalGovernedTaskUsesProcess05AndImportsExactCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.GovernedCheck = fixtureCheckRunner
 	s.Model = marshalFakeModel{review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
 	s.InstalledVersion = func(context.Context, string) string { return "1.0" }
 	if err := s.Store.SaveHarnessProfile(ctx, model.HarnessProfile{Harness: "test-harness", InstalledVersion: "1.0", ProbeEvidenceID: "process05-probe", ProbedAt: time.Now().UTC()}); err != nil {
@@ -160,6 +161,7 @@ func TestMarshalGovernedMultiTaskPlanRunsInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.GovernedCheck = fixtureCheckRunner
 	s.Model = marshalFakeModel{review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
 	s.InstalledVersion = func(context.Context, string) string { return "1.0" }
 	if err := s.Store.SaveHarnessProfile(ctx, model.HarnessProfile{Harness: "test-harness", InstalledVersion: "1.0", ProbeEvidenceID: "multi-probe", ProbedAt: time.Now().UTC()}); err != nil {

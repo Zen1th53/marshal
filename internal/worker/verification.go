@@ -36,6 +36,22 @@ func runVerification(ctx context.Context, backend *sandbox.Bwrap, dir string, co
 	if len(command) == 0 {
 		return adapter.ProcessResult{}, fmt.Errorf("%w: empty verification command", model.ErrInvalid)
 	}
+	request, err := VerificationSandboxRequest(ctx, dir)
+	if err != nil {
+		return adapter.ProcessResult{}, err
+	}
+	result, err := NewObservedSandboxed(New(timeout, 3*time.Second, limit), backend, request, func(_ context.Context, refusal sandbox.Refusal) error {
+		return fmt.Errorf("verification socket refused: %+v", refusal)
+	}).Run(ctx, adapter.Command{Path: command[0], Args: command[1:], Dir: dir})
+	if err == nil {
+		err = VerificationResultError(result)
+	}
+	return result, err
+}
+
+// VerificationSandboxRequest preserves read-only metadata and dependency inputs
+// for both local verification and run-bound governed checks.
+func VerificationSandboxRequest(ctx context.Context, dir string) (model.SandboxRequest, error) {
 	request := model.SandboxRequest{Worktree: dir, ExtraEnv: []string{"GOPROXY=off", "GOSUMDB=off", "GOCACHE=/tmp/go-build", "GOMODCACHE=/home/marshal/go/pkg/mod", "GOTOOLCHAIN=local"}}
 	// Dependencies are read-only inputs; build caches stay inside the sandbox.
 	cache := os.Getenv("GOMODCACHE")
@@ -52,7 +68,7 @@ func runVerification(ctx context.Context, backend *sandbox.Bwrap, dir string, co
 	for _, arg := range []string{"--absolute-git-dir", "--git-common-dir"} {
 		cmd, err := hostgit.Command(ctx, dir, "rev-parse", arg)
 		if err != nil {
-			return adapter.ProcessResult{}, err
+			return model.SandboxRequest{}, err
 		}
 		if out, err := cmd.Output(); err == nil {
 			path := strings.TrimSpace(string(out))
@@ -61,14 +77,18 @@ func runVerification(ctx context.Context, backend *sandbox.Bwrap, dir string, co
 			}
 			path, err = filepath.EvalSymlinks(path)
 			if err != nil {
-				return adapter.ProcessResult{}, err
+				return model.SandboxRequest{}, err
 			}
 			request.ReadOnlyBinds = append(request.ReadOnlyBinds, model.Bind{Source: path, Target: path})
 		}
 	}
-	result, err := NewSandboxed(New(timeout, 3*time.Second, limit), backend, request).Run(ctx, adapter.Command{Path: command[0], Args: command[1:], Dir: dir})
-	if err == nil && (result.Isolation.Level != model.IsolationBwrap || !result.Isolation.Available || result.TimedOut || result.Cancelled || result.OutputTruncated) {
-		return result, fmt.Errorf("%w: verification did not complete confined", model.ErrUnavailable)
+	return request, nil
+}
+
+// VerificationResultError prevents partial evidence from becoming a passing check.
+func VerificationResultError(result adapter.ProcessResult) error {
+	if result.Isolation.Level != model.IsolationBwrap || !result.Isolation.Available || result.TimedOut || result.Cancelled || result.OutputTruncated {
+		return fmt.Errorf("%w: verification did not complete confined", model.ErrUnavailable)
 	}
-	return result, err
+	return nil
 }
