@@ -97,3 +97,65 @@ while read line; do echo input:$line; done
 		t.Fatal("stop-all removed chat")
 	}
 }
+
+func TestRecoveredChatPreservesHistoryProvenance(t *testing.T) {
+	for _, durableBaseline := range []bool{false, true} {
+		t.Run(strconv.FormatBool(durableBaseline), func(t *testing.T) {
+			w := realTmuxWorkspace(t)
+			home := t.TempDir()
+			t.Setenv("CODEX_HOME", home)
+			dir := filepath.Join(home, "sessions")
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			write := func(id string) {
+				data := `{"type":"session_meta","payload":{"id":` + strconv.Quote(id) + `,"cwd":` + strconv.Quote(w.workDir) + `}}` + "\n"
+				if err := os.WriteFile(filepath.Join(dir, id+".jsonl"), []byte(data), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write("old")
+			binding := chatBinding{Provider: "codex", Binary: "/bin/true"}
+			if durableBaseline {
+				binding.HistoryBaseline = []string{"old"}
+				write("new")
+			}
+			if err := saveChatBinding(w.workDir, binding); err != nil {
+				t.Fatal(err)
+			}
+			panes, err := tmux.ListPanes(context.Background(), w.tmuxSession)
+			if err != nil {
+				t.Fatal(err)
+			}
+			a := &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", provider: "codex", paneID: panes[0].PaneID, window: "marshal"}
+			if err := saveAgentRecord(w.workDir, w.tmuxSession, a); err != nil {
+				t.Fatal(err)
+			}
+			w.tmuxMu.Lock()
+			w.adoptSurvivingWorkersLocked(w.workDir)
+			a = w.tmuxActiveWins["marshal-chat"]
+			w.tmuxMu.Unlock()
+			if a == nil {
+				t.Fatal("chat was not adopted")
+			}
+			if got := loadChatBinding(w.workDir).HistoryBaseline; len(got) != 1 || got[0] != "old" {
+				t.Fatalf("recovered provenance was not retained: %v", got)
+			}
+			defer a.cancel()
+			if !durableBaseline {
+				time.Sleep(1100 * time.Millisecond)
+				if got := loadChatBinding(w.workDir).SessionID; got != "" {
+					t.Fatalf("adopted historical conversation %q", got)
+				}
+				write("new")
+			}
+			deadline := time.Now().Add(3 * time.Second)
+			for loadChatBinding(w.workDir).SessionID != "new" {
+				if time.Now().After(deadline) {
+					t.Fatalf("recovered binding = %#v", loadChatBinding(w.workDir))
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+		})
+	}
+}

@@ -44,6 +44,7 @@ type activeTmuxAgent struct {
 	binary          string
 	args            []string
 	env             []string
+	historyBaseline []string
 	sessionID       string
 	runID           string
 	driver          driver.Driver
@@ -139,10 +140,20 @@ func (w *Workspace) adoptSurvivingWorkersLocked(projectRoot string) {
 			agent.args = saved.Args
 			agent.env = saved.Env
 			agent.sessionID = saved.SessionID
+			agent.historyBaseline = saved.HistoryBaseline
 			agentCtx, cancel := context.WithCancel(context.Background())
 			agent.cancel = cancel
 			watch := w.chatHistoryWatch(projectRoot, agent.provider, agent.binary)
-			watch.consume = func(tr importer.SessionTranscript) error { return w.captureChatConversation(projectRoot, tr.SessionID) }
+			baseline, err := w.prepareChatHistoryWatch(projectRoot, watch, saved.SessionID, saved.HistoryBaseline)
+			if err == nil {
+				agent.historyBaseline = baseline
+				err = w.saveChatBindingLocked(projectRoot, agent)
+			}
+			if err != nil {
+				cancel()
+				w.RecordActivity(err.Error())
+				continue
+			}
 			w.monitorAgent(agentCtx, agent, projectRoot, nil, watch, nil, nil, nil)
 		}
 		w.tmuxActiveWins[record.ID] = agent
@@ -222,7 +233,12 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 		}
 	}
 	watch := w.chatHistoryWatch(projectRoot, provider, binary)
-	if err := w.prepareChatHistoryWatch(projectRoot, watch, saved.SessionID); err != nil {
+	baseline, err := w.prepareChatHistoryWatch(projectRoot, watch, saved.SessionID)
+	if err != nil {
+		return
+	}
+	// Persist the prelaunch history even if the process crashes before binding.
+	if err := saveChatBinding(projectRoot, chatBinding{Provider: provider, Binary: binary, Args: args, Env: env, SessionID: saved.SessionID, RunID: runID, HistoryBaseline: baseline}); err != nil {
 		return
 	}
 	cmd := append([]string{binary}, args...)
@@ -260,25 +276,26 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 
 	agentCtx, cancel := context.WithCancel(context.Background())
 	agent := &activeTmuxAgent{
-		id:          "marshal-chat",
-		role:        "marshal-chat",
-		provider:    provider,
-		label:       "Marshal Chat",
-		window:      winName,
-		windowID:    windowID,
-		paneID:      paneID,
-		pid:         pid,
-		pgid:        pgid,
-		state:       "working",
-		readOnly:    false,
-		cancel:      cancel,
-		doneChan:    make(chan struct{}),
-		binary:      binary,
-		args:        args,
-		env:         env,
-		briefingDir: dir,
-		sessionID:   saved.SessionID,
-		runID:       runID,
+		id:              "marshal-chat",
+		role:            "marshal-chat",
+		provider:        provider,
+		label:           "Marshal Chat",
+		window:          winName,
+		windowID:        windowID,
+		paneID:          paneID,
+		pid:             pid,
+		pgid:            pgid,
+		state:           "working",
+		readOnly:        false,
+		cancel:          cancel,
+		doneChan:        make(chan struct{}),
+		binary:          binary,
+		args:            args,
+		env:             env,
+		briefingDir:     dir,
+		sessionID:       saved.SessionID,
+		historyBaseline: baseline,
+		runID:           runID,
 	}
 
 	w.tmuxActiveWins["marshal-chat"] = agent
@@ -597,6 +614,7 @@ func (w *Workspace) runNativeAgentInTmux(
 	if isChat {
 		saved := loadChatBinding(root)
 		agent.sessionID = saved.SessionID
+		agent.historyBaseline = saved.HistoryBaseline
 		_ = w.saveChatBindingLocked(root, agent)
 	}
 	if !isChat {
@@ -1263,12 +1281,13 @@ func (t *tmuxTaskDriver) Cancel(h *driver.Handle) error {
 
 // chatBinding pins restart to the conversation observed for this project.
 type chatBinding struct {
-	Provider  string   `json:"provider"`
-	Binary    string   `json:"binary"`
-	Args      []string `json:"args"`
-	Env       []string `json:"env"`
-	SessionID string   `json:"session_id"`
-	RunID     string   `json:"run_id"`
+	HistoryBaseline []string `json:"history_baseline"`
+	Provider        string   `json:"provider"`
+	Binary          string   `json:"binary"`
+	Args            []string `json:"args"`
+	Env             []string `json:"env"`
+	SessionID       string   `json:"session_id"`
+	RunID           string   `json:"run_id"`
 }
 
 func loadChatBinding(root string) chatBinding {
@@ -1280,7 +1299,13 @@ func loadChatBinding(root string) chatBinding {
 	return binding
 }
 func (w *Workspace) saveChatBindingLocked(root string, a *activeTmuxAgent) error {
-	data, err := json.Marshal(chatBinding{a.provider, a.binary, a.args, a.env, a.sessionID, a.runID})
+	if err := saveChatBinding(root, chatBinding{Provider: a.provider, Binary: a.binary, Args: a.args, Env: a.env, SessionID: a.sessionID, RunID: a.runID, HistoryBaseline: a.historyBaseline}); err != nil {
+		return err
+	}
+	return saveAgentRecord(root, w.tmuxSession, a)
+}
+func saveChatBinding(root string, binding chatBinding) error {
+	data, err := json.Marshal(binding)
 	if err != nil {
 		return err
 	}
@@ -1307,7 +1332,7 @@ func (w *Workspace) saveChatBindingLocked(root string, a *activeTmuxAgent) error
 	if err := os.Rename(file.Name(), filepath.Join(dir, "tmux-chat.json")); err != nil {
 		return err
 	}
-	return saveAgentRecord(root, w.tmuxSession, a)
+	return nil
 }
 func (w *Workspace) captureChatConversation(root, id string) error {
 	if id == "" {
@@ -1336,8 +1361,13 @@ func (w *Workspace) captureChatConversation(root, id string) error {
 
 // Establish the existing history before launch so another conversation in the
 // same directory cannot become this chat's durable resume identity.
-func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWatch, savedID string) error {
+func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWatch, savedID string, recovered ...[]string) ([]string, error) {
 	baseline := make(map[string]bool)
+	if len(recovered) > 0 {
+		for _, id := range recovered[0] {
+			baseline[id] = true
+		}
+	}
 	previous := watch.consume
 	if previous == nil {
 		previous = func(importer.SessionTranscript) error { return nil }
@@ -1347,8 +1377,11 @@ func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWat
 		baseline[tr.SessionID] = true
 		return previous(tr)
 	}
-	if err := watch.sync(); err != nil {
-		return err
+	// Legacy unbound records have no provenance: baseline all existing history.
+	if len(recovered) == 0 || recovered[0] == nil {
+		if err := watch.sync(); err != nil {
+			return nil, err
+		}
 	}
 	observe := func(tr importer.SessionTranscript) error {
 		if savedID != "" && tr.SessionID != savedID || savedID == "" && baseline[tr.SessionID] {
@@ -1363,7 +1396,12 @@ func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWat
 		}
 		return previous(tr)
 	}
-	return nil
+	ids := make([]string, 0, len(baseline))
+	for id := range baseline {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids, nil
 }
 
 func (w *Workspace) chatHistoryWatch(root, provider, binary string) *nativeHistoryWatch {
