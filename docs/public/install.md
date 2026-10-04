@@ -5,9 +5,9 @@ This page takes you from nothing to a working `marshal` command.
 ## What you need
 
 - [x] A computer running **Linux** (64-bit Intel/AMD or ARM).
-- [x] A **project folder that uses Git**. If you are not sure, open a terminal
-      in the folder and run `git status`. If it prints an error, run
-      `git init` first.
+- [x] A **project folder**, including an empty folder. `marshal init` can
+      initialise Git for you.
+- [x] **tmux** for the TUI, and **socat** for governed work with network access.
 - [x] At least one **AI coding agent** installed and signed in:
       [Codex](https://github.com/openai/codex),
       [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
@@ -32,7 +32,7 @@ change anything else on your computer.
     version, such as a release candidate, name it:
 
     ```bash
-    curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | MARSHAL_VERSION=v0.0.5-rc.5 sh
+    curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | MARSHAL_VERSION=v0.0.5-rc.6 sh
     ```
 
 ## Step 2: Check that it works
@@ -50,7 +50,26 @@ open a new terminal:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-## Step 3: Install Bubblewrap
+## Step 3: Install runtime tools
+
+The TUI requires **tmux**. Governed work with network access requires **socat**;
+without socat, that work is refused. After installation, the installer prints
+one line for each missing tool with the command for the package manager it
+finds. It does not install these tools automatically, and missing tools do not
+make the installation fail.
+
+| Package manager | tmux | socat |
+| --- | --- | --- |
+| Arch | `sudo pacman -S tmux` | `sudo pacman -S socat` |
+| Ubuntu / Debian | `sudo apt install tmux` | `sudo apt install socat` |
+| Fedora | `sudo dnf install tmux` | `sudo dnf install socat` |
+| openSUSE | `sudo zypper install tmux` | `sudo zypper install socat` |
+| Homebrew | `brew install tmux` | `brew install socat` |
+
+Homebrew commands are shown when that manager is detected; this release still
+supports Linux only.
+
+### Bubblewrap
 
 MARSHAL uses a small tool called Bubblewrap to keep agents inside their own
 working copy. Install it with your system's package manager:

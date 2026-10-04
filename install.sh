@@ -114,7 +114,29 @@ info "  marshal version"
 info "  cd /path/to/your/repository && marshal init && marshal doctor"
 info "  marshal opencode   # native OpenCode; conversation memory saves on exit"
 
-if ! command -v tmux >/dev/null 2>&1; then
-    info ""
-    info "Warning: tmux is not installed. MARSHAL TUI requires tmux."
-fi
+# Dependencies are reported after a successful install; never installed here.
+package_manager=""
+for manager in pacman apt apt-get dnf zypper brew; do
+    if command -v "$manager" >/dev/null 2>&1; then
+        package_manager="$manager"
+        break
+    fi
+done
+for tool in tmux socat; do
+    if command -v "$tool" >/dev/null 2>&1; then
+        continue
+    fi
+    case "$package_manager" in
+        pacman) command="sudo pacman -S $tool" ;;
+        apt | apt-get) command="sudo $package_manager install $tool" ;;
+        dnf) command="sudo dnf install $tool" ;;
+        zypper) command="sudo zypper install $tool" ;;
+        brew) command="brew install $tool" ;;
+        *) command="install $tool with your system's package manager" ;;
+    esac
+    case "$tool" in
+        tmux) reason="the MARSHAL TUI requires it" ;;
+        socat) reason="governed work with network access is refused without it" ;;
+    esac
+    info "Missing $tool: $reason; $command"
+done

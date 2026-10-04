@@ -30,6 +30,12 @@ problems are explained there. If not, find your problem below.
     you can try building from source (see the end of
     [Install MARSHAL](install.md)), but this is not supported yet.
 
+??? question "The TUI says tmux is missing"
+    The TUI requires tmux. The installer reports missing tmux and socat after
+    installation, with one install command per tool for the detected package
+    manager. It does not install them or fail the installation. See
+    [Install runtime tools](install.md#step-3-install-runtime-tools).
+
 ## Commands
 
 ??? question "I typed something and nothing happened"
@@ -78,6 +84,7 @@ problems are explained there. If not, find your problem below.
     - Something is waiting for your approval. Check `/approvals`.
     - You changed the goal, so earlier approvals no longer apply.
     - A limit you set has been reached. Check `/budget`.
+    - socat is missing: governed work with network access is refused without it.
     - Bubblewrap is not installed. See [Install MARSHAL](install.md).
 
 ??? question "The budget shows UNKNOWN"
