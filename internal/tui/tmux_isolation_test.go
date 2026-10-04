@@ -26,6 +26,7 @@ func TestProjectsKeepRootBindingsAndTargetOwnWindows(t *testing.T) {
 	}
 	second := NewWorkspace(nil, "second", "session")
 	second.workDir = t.TempDir()
+	cleanupTmuxWorkspace(t, second)
 	second.tmuxSession = w.tmuxSession
 	second.tmuxPath = w.tmuxPath
 	if err := tmux.NewWindow(ctx, w.tmuxSession, "second-marshal", second.workDir, nil, []string{"sleep", "30"}); err != nil {
@@ -67,8 +68,14 @@ func TestProjectsKeepRootBindingsAndTargetOwnWindows(t *testing.T) {
 	second.tmuxMu.Unlock()
 	w.updateTmuxStatusLine(ctx)
 	second.updateTmuxStatusLine(ctx)
-	firstStatus, _ := tmux.RunCommand(ctx, "show-options", "-w", "-v", "-t", w.tmuxMarshalWin, "@marshal_status")
-	secondStatus, _ := tmux.RunCommand(ctx, "show-options", "-w", "-v", "-t", w.tmuxSession+":second-marshal", "@marshal_status")
+	firstStatus, err := tmux.RunCommand(ctx, "show-options", "-w", "-v", "-t", w.tmuxMarshalWin, "@marshal_status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondStatus, err := tmux.RunCommand(ctx, "show-options", "-w", "-v", "-t", w.tmuxSession+":second-marshal", "@marshal_status")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(firstStatus), "first-project-alert") || strings.Contains(string(firstStatus), "second-project-alert") || !strings.Contains(string(secondStatus), "second-project-alert") {
 		t.Fatal("project status projections collided")
 	}
@@ -137,5 +144,22 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 			t.Fatalf("private table lost worker input: %q", out)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestStatusProjectionDoesNotInitializeChat(t *testing.T) {
+	_, log := setupFakeTmux(t)
+	w := NewWorkspace(nil, "project", "session")
+	w.workDir = t.TempDir()
+	w.updateTmuxStatusLine(context.Background())
+	if len(w.tmuxActiveWins) != 0 {
+		t.Fatal("status projection started an unowned monitor")
+	}
+	data, err := os.ReadFile(log)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if len(data) != 0 {
+		t.Fatalf("status projection initialized tmux: %s", data)
 	}
 }

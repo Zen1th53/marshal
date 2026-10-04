@@ -140,6 +140,8 @@ type Workspace struct {
 	tmuxDelivered     map[string]bool
 	tmuxActiveWins    map[string]*activeTmuxAgent
 	tmuxMu            sync.Mutex
+	tmuxStatusMu      sync.Mutex
+	tmuxMonitors      sync.WaitGroup
 
 	// Scroll and activity unread tracking
 	scrollOffset int

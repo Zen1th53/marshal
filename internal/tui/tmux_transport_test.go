@@ -35,6 +35,7 @@ func realTmuxWorkspace(t *testing.T) *Workspace {
 	}
 	w := NewWorkspace(nil, "project", "session")
 	w.workDir = t.TempDir()
+	cleanupTmuxWorkspace(t, w)
 	w.tmuxPath = wrapper
 	w.tmuxSession = "test"
 	w.tmuxMarshalWin = "test:marshal"

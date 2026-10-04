@@ -664,7 +664,9 @@ func (w *Workspace) monitorAgent(
 	chStream *stream,
 	view *inboxView,
 ) {
+	w.tmuxMonitors.Add(1)
 	go func() {
+		defer w.tmuxMonitors.Done()
 		defer close(agent.doneChan)
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -790,10 +792,15 @@ func (w *Workspace) RecordActivity(msg string) {
 
 // updateTmuxStatusLine updates the tmux status bar with the states of all active agents.
 func (w *Workspace) updateTmuxStatusLine(ctx context.Context) {
-	if !w.isTmuxActive() {
+	// Serialize before taking the snapshot: an older projection must not
+	// finish after a newer one. Status reads never initialize another chat.
+	w.tmuxStatusMu.Lock()
+	defer w.tmuxStatusMu.Unlock()
+	w.tmuxMu.Lock()
+	if w.tmuxPath == "" || w.tmuxSession == "" {
+		w.tmuxMu.Unlock()
 		return
 	}
-	w.tmuxMu.Lock()
 	var parts []string
 	for _, agent := range w.tmuxActiveWins {
 		if agent.role == "marshal-chat" {
@@ -1273,7 +1280,8 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 	t.w.tmuxMu.Unlock()
 	t.w.updateTmuxStatusLine(ctx)
 	t.monitors.Store(h, agent.doneChan)
-	go func() { defer close(agent.doneChan); t.w.monitorTaskState(agent, h) }()
+	t.w.tmuxMonitors.Add(1)
+	go func() { defer t.w.tmuxMonitors.Done(); defer close(agent.doneChan); t.w.monitorTaskState(agent, h) }()
 	return h, nil
 }
 

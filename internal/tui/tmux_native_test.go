@@ -117,6 +117,7 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	workDir := t.TempDir()
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
+	cleanupTmuxWorkspace(t, ws)
 	ws.InitTmux(workDir)
 
 	ctx := context.Background()
@@ -179,6 +180,7 @@ func TestTmuxViewCommands(t *testing.T) {
 	workDir := t.TempDir()
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
+	cleanupTmuxWorkspace(t, ws)
 	ws.InitTmux(workDir)
 	ctx := context.Background()
 
@@ -265,6 +267,7 @@ func TestStopAllWorkersPreservesMarshal(t *testing.T) {
 	workDir := t.TempDir()
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
+	cleanupTmuxWorkspace(t, ws)
 	ws.InitTmux(workDir)
 	ctx := context.Background()
 
@@ -331,6 +334,7 @@ func TestStopAllWorkersPreservesMarshalChat(t *testing.T) {
 	workDir := t.TempDir()
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
+	cleanupTmuxWorkspace(t, ws)
 	ws.InitTmux(workDir)
 	ctx := context.Background()
 
@@ -398,6 +402,7 @@ func TestJoinPanePreservesWorkerIdentityAndMonitoring(t *testing.T) {
 	workDir := t.TempDir()
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
+	cleanupTmuxWorkspace(t, ws)
 	ws.InitTmux(workDir)
 	ctx := context.Background()
 
@@ -526,6 +531,7 @@ esac
 	if err := saveAgentRecord(workDir, "test-session", &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", window: chatWin, paneID: "%2"}); err != nil {
 		t.Fatal(err)
 	}
+	cleanupTmuxWorkspace(t, ws)
 	ws.InitTmux(workDir)
 
 	ws.tmuxMu.Lock()
@@ -578,6 +584,7 @@ func TestDispatchedTaskWorkersTrackedAndStopped(t *testing.T) {
 	workDir := t.TempDir()
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
+	cleanupTmuxWorkspace(t, ws)
 	ws.InitTmux(workDir)
 	ctx := context.Background()
 
@@ -712,6 +719,7 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 	ws.workDir = workDir
 
 	// 1. Initialize tmux: Marshal Chat MUST start automatically (F3)
+	cleanupTmuxWorkspace(t, ws)
 	ws.InitTmux(workDir)
 
 	ws.tmuxMu.Lock()
@@ -805,4 +813,27 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 	if !strings.Contains(restartStr, "select-pane -t "+chatAgent.paneID+" -e") {
 		t.Fatalf("input was not enabled (-e) on respawned window:\n%s", restartStr)
 	}
+}
+
+// Monitors must finish before temporary files and the process-global fake tmux
+// binary are removed or replaced by the next test's private server.
+func cleanupTmuxWorkspace(t *testing.T, w *Workspace) {
+	t.Helper()
+	t.Cleanup(func() {
+		w.tmuxMu.Lock()
+		agents := make([]*activeTmuxAgent, 0, len(w.tmuxActiveWins))
+		for _, a := range w.tmuxActiveWins {
+			agents = append(agents, copyAgentLocked(a))
+		}
+		w.tmuxMu.Unlock()
+		for _, a := range agents {
+			if a.cancel != nil {
+				a.cancel()
+			}
+			if a.handle != nil && a.driver != nil {
+				_ = a.driver.Cancel(a.handle)
+			}
+		}
+		w.tmuxMonitors.Wait()
+	})
 }
