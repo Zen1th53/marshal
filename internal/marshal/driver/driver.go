@@ -82,6 +82,16 @@ type Handle struct {
 
 func (h *Handle) Worktree() string { return h.req.Worktree }
 
+// Request returns the original request for this handle.
+func (h *Handle) Request() Request {
+	return h.req
+}
+
+// NewHandle creates a handle for a given request.
+func NewHandle(req Request) *Handle {
+	return &Handle{req: req, done: make(chan struct{})}
+}
+
 // Driver runs tasks on one kind of worker.
 type Driver interface {
 	Mode() marshal.WorkerMode

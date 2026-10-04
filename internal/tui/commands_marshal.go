@@ -361,6 +361,9 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		return result, err
 	}
 	if !exists {
+		if w.isTmuxActive() {
+			w.watchMarshalDraft(m, runID, root, provider, note)
+		}
 		return result, nil
 	}
 	// The pack is moved with the task list, before either is judged, so a
@@ -484,7 +487,13 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 		gate = w.ultra
 	}
 	service, err := w.runtime.MarshalWired(app.MarshalWiring{Provider: provider, Gate: gate, Approver: m.approver})
-	return service, provider, note, err
+	if err != nil {
+		return nil, "", "", err
+	}
+	if w.isTmuxActive() {
+		w.wrapServiceDriversForTmux(service)
+	}
+	return service, provider, note, nil
 }
 
 // marshalReserve owns the session until the background operation finishes.

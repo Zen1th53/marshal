@@ -113,3 +113,8 @@ info "Next:"
 info "  marshal version"
 info "  cd /path/to/your/repository && marshal init && marshal doctor"
 info "  marshal opencode   # native OpenCode; conversation memory saves on exit"
+
+if ! command -v tmux >/dev/null 2>&1; then
+    info ""
+    info "Warning: tmux is not installed. MARSHAL TUI requires tmux."
+fi

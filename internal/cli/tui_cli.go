@@ -79,10 +79,9 @@ func (c *command) runWorkspace(ctx context.Context, runtime *app.Runtime, args [
 		defer authorization.Stop()
 	}
 
-	// A session opens on the composer, which every user has. The navigation
-	// surface is an ULTRA feature reached with Ctrl+N, so opening it here would
-	// put an unentitled user straight into a screen they are not entitled to
-	// and have to back out of.
+	tmuxRoot := c.canonicalRoot(ctx)
+	workspace.InitTmux(tmuxRoot)
+
 	return workspace.Run(ctx, c.stdin, c.stdout)
 }
 

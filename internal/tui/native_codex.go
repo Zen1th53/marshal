@@ -347,7 +347,11 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	// MARSHAL's own for this launch, created only when a briefing needs it and
 	// removed when the session ends.
 	var dir *briefingDir
-	defer func() { dir.remove() }()
+	defer func() {
+		if !w.isTmuxActive() {
+			dir.remove()
+		}
+	}()
 	deliver := func(briefing string, channel injectChannel) (string, error) {
 		if channel != injectMarshalDir {
 			updated, note, err := applyBriefing(provider, root, args, briefing, channel)
@@ -420,6 +424,13 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	args, briefingEnv, err := dir.launch(args)
 	if err != nil {
 		return "", fmt.Errorf("deliver briefing: %w", err)
+	}
+
+	if w.isTmuxActive() {
+		if w.navView != nil {
+			w.navView.Close()
+		}
+		return w.runNativeAgentInTmux(ctx, provider, label, root, binary, args, briefingEnv, dir, watch, peers, chStream, view, briefingNotes, len(marshalBrief) > 0)
 	}
 
 	if w.navView != nil {

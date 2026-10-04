@@ -45,6 +45,7 @@ const (
 	KeyCtrlR
 	KeyCtrlU
 	KeyCtrlW
+	KeyCtrlX
 	KeyWordLeft
 	KeyWordRight
 	KeyWordDeleteAfter
@@ -465,6 +466,8 @@ func ParseNextKey(b []byte) (KeyEvent, int) {
 		return KeyEvent{Type: KeyCtrlU, Raw: b[:1]}, 1
 	case 0x17:
 		return KeyEvent{Type: KeyCtrlW, Raw: b[:1]}, 1
+	case 0x18:
+		return KeyEvent{Type: KeyCtrlX, Raw: b[:1]}, 1
 	case 0x7F, 0x08:
 		return KeyEvent{Type: KeyBackspace, Raw: b[:1]}, 1
 	}

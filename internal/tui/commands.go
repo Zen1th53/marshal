@@ -406,6 +406,21 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/agy", "/antigravity":
 		return h.handleAntigravity(ctx, parts[1:], line)
 
+	case "/view":
+		return h.ws.handleViewCommand(ctx, parts[1:])
+
+	case "/focus":
+		return h.ws.handleViewCommand(ctx, []string{"focus"})
+
+	case "/takeover", "/take-over":
+		return h.ws.handleTakeoverCommand(ctx)
+
+	case "/stop":
+		if len(parts) > 1 && (parts[1] == "all" || parts[1] == "workers") {
+			return h.ws.StopAllWorkers(ctx), nil
+		}
+		return "Usage: /stop all (stops all background worker sessions while keeping MARSHAL active)", nil
+
 	case "/mcp":
 		return h.handleNeutral(ctx, "mcp", parts[1:], line)
 
@@ -702,6 +717,9 @@ func (h *CommandHandler) helpText() string {
   /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
   /opencode [subcommand]   Native OpenCode sessions (new, continue, resume, fork, cli, run)
   /agy /antigravity [subcommand] Native Antigravity sessions (new, continue, resume, cli, prompt)
+  /view [focus|side-by-side|worker|show <agent>|hide|follow|readonly|takeover] Manage worker layouts and views (/focus alias)
+  /takeover, /take-over    Enable interactive typing in the active worker pane
+  /stop all                Stop all worker sessions while keeping MARSHAL active
   <prompt...>              Plain text runs nothing; use provider exec/run/prompt or a quoted prompt
   Unknown provider subcommands run nothing; /<provider> cli passes native arguments
   /update [install]        Check for a newer MARSHAL release, or install it
@@ -713,7 +731,7 @@ Function Keys & Shortcuts:
   F1: Help       F2: Review     F3: Diff viewer
   F4: Status     F5: Models     F6: MCP servers
   F7: Codex      F8: Claude     F9: OpenCode     F12: Antigravity
-  F10: Update    F11: Unassigned` + navigationHint + `
+  F10: Update    F11: Return to MARSHAL    Ctrl+X: Stop all workers` + navigationHint + `
 
 Composer:
   /  or  @                 Opens the command menu as you type

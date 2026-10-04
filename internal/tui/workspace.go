@@ -129,6 +129,15 @@ type Workspace struct {
 	// operator asked for by name.
 	nativeProvider string
 
+	tmuxPath          string
+	tmuxSession       string
+	tmuxMarshalWin    string
+	tmuxMarshalWinID  string
+	tmuxMarshalPaneID string
+	tmuxFollowActive  bool
+	tmuxActiveWins    map[string]*activeTmuxAgent
+	tmuxMu            sync.Mutex
+
 	// Scroll and activity unread tracking
 	scrollOffset int
 	unreadNew    int
@@ -267,10 +276,14 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/egress", "/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
+			"/view", "/focus", "/takeover", "/take-over", "/stop",
 		},
 		Agents:      agentIDs,
 		Subcommands: make(map[string][]string),
 	}
+	compCtx.Subcommands["/view"] = []string{"focus", "side-by-side", "worker", "show", "hide", "follow", "readonly", "takeover"}
+	compCtx.Subcommands["/view show"] = []string{"codex", "claude", "opencode", "agy", "marshal"}
+	compCtx.Subcommands["/stop"] = []string{"all", "workers"}
 	compCtx.Subcommands["/store"] = []string{"check", "counts"}
 	compCtx.Subcommands["/store check"] = []string{"quick", "full"}
 	compCtx.Subcommands["/mode"] = []string{"manual", "auto", "ultra"}
@@ -407,6 +420,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	}
 	ws.navReleased = navigationReleased
 	ws.cmd = NewCommandHandler(ws)
+	ws.tmuxActiveWins = make(map[string]*activeTmuxAgent)
 	return ws
 }
 
@@ -655,6 +669,8 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 		w.terminal.ShowCursor()
 		w.terminal.LeaveAltScreen()
 		w.terminal.Restore()
+		w.reportActiveTmuxSessions()
+		fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 	}()
 
 	w.renderFullView()
@@ -773,7 +789,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 					continue
 				}
 				w.terminal.ClearScreen()
-				fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 				return nil
 			}
 
@@ -782,15 +797,15 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 
 			// Navigation owns every key while it is open, and Ctrl+N opens it.
 			if event.Type == KeyF7 {
-				w.runCommand(ctx, "/codex new")
+				w.runCommand(ctx, "/codex")
 				continue
 			}
 			if event.Type == KeyF8 {
-				w.runCommand(ctx, "/claude new")
+				w.runCommand(ctx, "/claude")
 				continue
 			}
 			if event.Type == KeyF9 {
-				w.runCommand(ctx, "/opencode new")
+				w.runCommand(ctx, "/opencode")
 				continue
 			}
 			// F10 is the update action next to the notice. With a release
@@ -801,8 +816,18 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				w.runCommand(ctx, w.updateKeyCommand())
 				continue
 			}
+			if event.Type == KeyF11 {
+				// F11 returns to MARSHAL from tmux agent windows; inside MARSHAL
+				// it leaves the workspace and any in-progress composer draft alone.
+				continue
+			}
 			if event.Type == KeyF12 {
-				w.runCommand(ctx, "/agy new")
+				w.runCommand(ctx, "/agy")
+				continue
+			}
+			if event.Type == KeyCtrlX {
+				// One key stops all workers but never the Marshal (Decision 9)
+				w.runCommand(ctx, "/stop all")
 				continue
 			}
 			// The dispatch lives in its own method so a test can drive exactly
@@ -814,7 +839,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				w.mu.RUnlock()
 				if exitRequested {
 					w.terminal.ClearScreen()
-					fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 					return nil
 				}
 				w.renderFullView()
@@ -934,7 +958,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 							w.runCommand(ctx, cmd)
 							if w.commandExitRequested() {
 								w.terminal.ClearScreen()
-								fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 								return nil
 							}
 						}
@@ -998,7 +1021,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				w.runCommand(ctx, cmd)
 				if w.commandExitRequested() {
 					w.terminal.ClearScreen()
-					fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 					return nil
 				}
 			}
@@ -1668,6 +1690,10 @@ func (w *Workspace) printBatchFrame(out io.Writer) {
 }
 
 func (w *Workspace) runLineScanner(ctx context.Context, in io.Reader, out io.Writer) error {
+	defer func() {
+		w.reportActiveTmuxSessions()
+	}()
+
 	// Non-interactive fallback: stdin is a pipe or file, so there is no screen
 	// to address. Output is sequential by necessity, but it renders the same
 	// frame content as the interactive path so both agree on what is shown.
