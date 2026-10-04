@@ -14,6 +14,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/processgroup"
+	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
 
 // Native runs a worker's own CLI headlessly in the task worktree, under the
@@ -133,7 +134,13 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 		cancel()
 		return nil, err
 	}
+	closeTerminal, err := workerterminal.Attach(runCtx, cmd)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
 	if err := cmd.Start(); err != nil {
+		closeTerminal()
 		cancel()
 		return nil, fmt.Errorf("start %s: %w", n.Provider, err)
 	}
@@ -142,6 +149,7 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 	go func() {
 		defer close(h.done)
 		err := cmd.Wait()
+		closeTerminal()
 		cancel()
 		code := 0
 		if err != nil {

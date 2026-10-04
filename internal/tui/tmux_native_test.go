@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
@@ -623,174 +623,63 @@ func TestDispatchedTaskWorkersTrackedAndStopped(t *testing.T) {
 }
 
 func TestF2TaskWindowRunsRealWorker(t *testing.T) {
-	_, logFile, deadFile := setupFakeTmuxWithDeadFile(t)
-	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
-	t.Setenv("MARSHAL_TEST_FORCE_TMUX", "1")
-
-	workDir := t.TempDir()
-	runGit := func(args ...string) {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = workDir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v failed: %s (%v)", args, out, err)
-		}
-	}
-	runGit("init", "-q", ".")
-	runGit("config", "user.name", "tester")
-	runGit("config", "user.email", "tester@example.com")
-	runGit("commit", "--allow-empty", "-qm", "init")
-
-	ctx := context.Background()
-	ws := NewWorkspace(nil, "test-proj", "test-session")
-	ws.workDir = workDir
-	ws.InitTmux(workDir)
-
-	// Create fake agent executable
-	fakeAgentDir := t.TempDir()
-	fakeAgentPath := filepath.Join(fakeAgentDir, "fake-worker-agent")
-	fakeScript := "#!/bin/sh\necho 'Agent executed with args: $@'\nexit 0\n"
-	if err := os.WriteFile(fakeAgentPath, []byte(fakeScript), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Native driver configured with the real fake agent
-	natDrv := driver.Native{
-		Provider: "fake-provider",
-		Binary:   fakeAgentPath,
-		Args: func(req driver.Request) []string {
-			return []string{"--task-id", req.Task.PlanTaskID, "--action", "run"}
-		},
-		Parse: func(stream []byte) []marshal.CommandRecord {
-			return []marshal.CommandRecord{
-				{Command: "fake-action", Output: "success"},
-			}
-		},
-	}
-
-	taskDrv := &tmuxTaskDriver{
-		inner: natDrv,
-		w:     ws,
-		name:  "fake-provider",
-	}
-
-	headCmd := exec.Command("git", "rev-parse", "HEAD")
-	headCmd.Dir = workDir
-	headOut, _ := headCmd.Output()
-	head := strings.TrimSpace(string(headOut))
-
-	req := driver.Request{
-		Task: marshal.Task{
-			PlanTaskID: "task-f2",
-			Worker:     "fake-provider",
-			BaseCommit: head,
-		},
-		Worktree: workDir,
-	}
-
-	h, err := taskDrv.Launch(ctx, req)
-	if err != nil {
-		t.Fatalf("Launch failed: %v", err)
-	}
-	if h == nil {
-		t.Fatal("expected non-nil Handle")
-	}
-
-	// 1. Verify tmux window was opened with REAL agent command, NEVER sleep 3600 (F2)
-	logBytes, err := os.ReadFile(logFile)
+	w := realTmuxWorkspace(t)
+	d := &tmuxTaskDriver{w: w, inner: driver.Native{Provider: "test", Binary: "/bin/sh", Args: func(driver.Request) []string {
+		return []string{"-c", "echo Recorded agent output evidence; read answer; echo fake-action:$answer"}
+	}, Parse: func(data []byte) []marshal.CommandRecord {
+		return []marshal.CommandRecord{{Command: "fake-action", Output: string(data)}}
+	}}}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	h, err := d.Launch(ctx, realTaskRequest(t, w, "task-f2"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	logStr := string(logBytes)
-
-	if strings.Contains(logStr, "sleep 3600") {
-		t.Fatalf("tmux window contains placeholder 'sleep 3600':\n%s", logStr)
+	defer d.Cancel(h)
+	w.tmuxMu.Lock()
+	agent := w.tmuxActiveWins["task-task-f2"]
+	w.tmuxMu.Unlock()
+	if agent == nil || agent.role != "task" || !agent.readOnly || agent.paneID == "" {
+		t.Fatalf("invalid task terminal: %+v", agent)
 	}
-	expectedCmd := fakeAgentPath + " --task-id task-f2 --action run"
-	if !strings.Contains(logStr, expectedCmd) {
-		t.Fatalf("tmux window did not run real worker command %q:\n%s", expectedCmd, logStr)
-	}
-
-	// 2. Verify agent is tracked with real PID, PGID, role, and view-only state (F2)
-	ws.tmuxMu.Lock()
-	agent, ok := ws.tmuxActiveWins["task-task-f2"]
-	if !ok || agent == nil {
-		ws.tmuxMu.Unlock()
-		t.Fatal("task agent not tracked in tmuxActiveWins")
-	}
-	if agent.role != "task" {
-		t.Fatalf("expected role 'task', got %q", agent.role)
-	}
-	if agent.pid != 100 || agent.pgid != 100 {
-		t.Fatalf("expected real PID/PGID 100, got pid=%d, pgid=%d", agent.pid, agent.pgid)
-	}
-	if !agent.readOnly {
-		t.Fatal("task agent should be view-only (readOnly=true) by default")
-	}
-	winName := agent.window
-	paneID := agent.paneID
-	ws.tmuxMu.Unlock()
-
-	// 3. Verify takeover enables input on the real worker pane (F2)
-	takeoverMsg, err := ws.handleTakeoverCommand(ctx)
+	_, err = w.handleTakeoverCommand(ctx)
 	if err != nil {
-		t.Fatalf("handleTakeoverCommand failed: %v", err)
+		t.Fatal(err)
 	}
-	if !strings.Contains(takeoverMsg, "input enabled for Task task-f2") {
-		t.Fatalf("unexpected takeover message: %s", takeoverMsg)
-	}
-	ws.tmuxMu.Lock()
 	if agent.readOnly {
-		t.Fatal("agent should have readOnly=false after takeover")
+		t.Fatal("takeover did not enable input")
 	}
-	ws.tmuxMu.Unlock()
-
-	logBytes, _ = os.ReadFile(logFile)
-	if !strings.Contains(string(logBytes), "select-pane -t "+paneID+" -e") {
-		t.Fatalf("takeover did not call select-pane -e on pane %s:\n%s", paneID, string(logBytes))
-	}
-
-	// 4. Mark pane dead to simulate worker completion
-	if err := os.WriteFile(deadFile, []byte("dead"), 0o600); err != nil {
+	if _, err = tmux.RunCommand(ctx, "send-keys", "-t", agent.paneID, "success", "Enter"); err != nil {
 		t.Fatal(err)
 	}
-
-	// Wait for completion via taskDrv.Wait
-	handin, waitErr := taskDrv.Wait(ctx, h)
-	if waitErr != nil {
-		t.Fatalf("Wait failed: %v", waitErr)
+	handin, err := d.Wait(ctx, h)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	// 5. Verify captured evidence and observed/reported records belong to the real task (F2)
-	if len(handin.RuntimeObserved) == 0 {
-		t.Fatal("expected observed runtime records from real worker")
+	if len(handin.RuntimeObserved) == 0 || !strings.Contains(handin.RuntimeObserved[0].Command, "/bin/sh") || !strings.Contains(handin.RuntimeObserved[0].Output, "Recorded agent output evidence") {
+		t.Fatalf("missing real worker observations: %+v", handin)
 	}
-	observed := handin.RuntimeObserved[0]
-	if !strings.Contains(observed.Command, fakeAgentPath) {
-		t.Fatalf("observed command does not match real worker: %s", observed.Command)
+	if len(handin.WorkerReported) == 0 || handin.WorkerReported[0].Command != "fake-action" || !strings.Contains(handin.WorkerReported[0].Output, "fake-action:success") {
+		t.Fatalf("missing parsed real worker output: %+v", handin)
 	}
-	if !strings.Contains(observed.Output, "Recorded agent output evidence") {
-		t.Fatalf("observed output missing captured pane output: %s", observed.Output)
+	evidence, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "evidence", "task-task-f2-latest.txt"))
+	if err != nil || !strings.Contains(string(evidence), "Recorded agent output evidence") {
+		t.Fatalf("missing terminal evidence: %q %v", evidence, err)
 	}
-	if len(handin.WorkerReported) == 0 || handin.WorkerReported[0].Command != "fake-action" {
-		t.Fatalf("reported actions missing parsed worker output: %+v", handin.WorkerReported)
+	w.tmuxMu.Lock()
+	_, exists := w.tmuxActiveWins["task-task-f2"]
+	w.tmuxMu.Unlock()
+	if exists {
+		t.Fatal("completed task remains registered")
 	}
-
-	// 6. Verify evidence file saved in .marshal/evidence
-	evidencePath := filepath.Join(workDir, ".marshal", "evidence", "task-task-f2-latest.txt")
-	if _, err := os.Stat(evidencePath); err != nil {
-		t.Fatalf("evidence file not saved at %s: %v", evidencePath, err)
+	panes, err := tmux.ListPanes(ctx, w.tmuxSession)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	// 7. Verify window and pane were cleaned up
-	ws.tmuxMu.Lock()
-	if _, ok := ws.tmuxActiveWins["task-task-f2"]; ok {
-		t.Fatal("task agent should be removed from tmuxActiveWins after Wait")
-	}
-	ws.tmuxMu.Unlock()
-
-	finalLogs, _ := os.ReadFile(logFile)
-	if !strings.Contains(string(finalLogs), "kill-window -t "+winName) {
-		t.Fatalf("task window %s was not killed after Wait:\n%s", winName, string(finalLogs))
+	for _, p := range panes {
+		if p.PaneID == agent.paneID {
+			t.Fatal("completed terminal was not removed")
+		}
 	}
 }
 

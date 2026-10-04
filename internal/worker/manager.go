@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/processgroup"
 	"github.com/Zen1th53/marshal/internal/sandbox"
+	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
 
 type Manager struct {
@@ -42,7 +43,9 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 	if command.Env != nil {
 		cmd.Env = command.Env
 	}
-	cmd.Stdin = bytes.NewReader(command.Stdin)
+	if len(command.Stdin) > 0 {
+		cmd.Stdin = bytes.NewReader(command.Stdin)
+	}
 	stdout := &limitedBuffer{limit: m.outputLimit, observe: func(p []byte) {
 		if command.OutputObserver != nil {
 			command.OutputObserver("stdout", p)
@@ -60,6 +63,11 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 		return adapter.ProcessResult{}, err
 	}
 
+	closeTerminal, err := workerterminal.Attach(runCtx, cmd)
+	if err != nil {
+		return adapter.ProcessResult{}, err
+	}
+	defer closeTerminal()
 	result := adapter.ProcessResult{StartedAt: time.Now().UTC(), Isolation: model.IsolationCapability{
 		Level: model.IsolationProcessOnly, Available: true, Process: true,
 		Reason: "task-scoped process without strong filesystem or network isolation",

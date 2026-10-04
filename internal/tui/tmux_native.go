@@ -13,6 +13,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/tmux"
+	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
 
 type activeTmuxAgent struct {
@@ -37,6 +38,8 @@ type activeTmuxAgent struct {
 	env         []string
 	sessionID   string
 	runID       string
+	driver      driver.Driver
+	handle      *driver.Handle
 }
 
 // InitTmux initializes tmux session and window awareness for the workspace.
@@ -1132,7 +1135,49 @@ func (t *tmuxTaskDriver) Mode() marshal.WorkerMode {
 }
 
 func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*driver.Handle, error) {
-	return t.inner.Launch(ctx, req)
+	root := t.w.workDir
+	agentID := "task-" + req.Task.PlanTaskID
+	agent := &activeTmuxAgent{id: agentID, role: "task", taskID: req.Task.PlanTaskID, provider: req.Task.Worker, label: "Task " + req.Task.PlanTaskID + " (" + req.Task.Worker + ")", state: "working", readOnly: true, driver: t.inner}
+	host := func(ctx context.Context, socket string) error {
+		relay, err := exec.LookPath("socat")
+		if err != nil {
+			return err
+		}
+		name := tmux.TaskWindowName(req.Task.PlanTaskID, root)
+		if err := tmux.NewWindow(ctx, t.w.tmuxSession, name, req.Worktree, nil, []string{relay, "STDIO,raw,echo=0", "UNIX-CONNECT:" + socket}); err != nil {
+			return err
+		}
+		agent.window = name
+		agent.paneID = t.w.tmuxSession + ":" + name
+		panes, err := tmux.ListPanes(ctx, t.w.tmuxSession)
+		if err != nil {
+			return err
+		}
+		for _, p := range panes {
+			if p.WindowName == name {
+				agent.paneID = p.PaneID
+				agent.windowID = p.WindowID
+				break
+			}
+		}
+		if err := tmux.SetWindowOption(ctx, agent.paneID, "remain-on-exit", "on"); err != nil {
+			return err
+		}
+		return tmux.SetPaneReadOnly(ctx, agent.paneID, true)
+	}
+	h, err := t.inner.Launch(workerterminal.WithHost(ctx, host), req)
+	if err != nil {
+		if agent.paneID != "" {
+			_ = tmux.KillPane(context.Background(), agent.paneID)
+		}
+		return nil, err
+	}
+	agent.handle = h
+	t.w.tmuxMu.Lock()
+	t.w.tmuxActiveWins[agentID] = agent
+	t.w.tmuxMu.Unlock()
+	t.w.updateTmuxStatusLine(ctx)
+	return h, nil
 }
 
 func (t *tmuxTaskDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.HandIn, error) {
@@ -1154,9 +1199,7 @@ func (t *tmuxTaskDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.Ha
 		if evidence != "" {
 			_ = saveAgentEvidence(root, agentID, evidence)
 		}
-		tmux.KillProcessGroup(agent.pid, agent.pgid)
 		_ = tmux.KillPane(context.Background(), agent.paneID)
-		_ = tmux.KillWindow(context.Background(), agent.window)
 
 		t.w.tmuxMu.Lock()
 		delete(t.w.tmuxActiveWins, agentID)
@@ -1169,31 +1212,5 @@ func (t *tmuxTaskDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.Ha
 }
 
 func (t *tmuxTaskDriver) Cancel(h *driver.Handle) error {
-	taskID := h.Request().Task.PlanTaskID
-	agentID := "task-" + taskID
-	root := t.w.workDir
-	if t.w.runtime != nil && t.w.runtime.ProjectRoot() != "" {
-		root = t.w.runtime.ProjectRoot()
-	}
-
-	t.w.tmuxMu.Lock()
-	agent, ok := t.w.tmuxActiveWins[agentID]
-	delete(t.w.tmuxActiveWins, agentID)
-	t.w.tmuxMu.Unlock()
-
-	if ok && agent != nil {
-		if agent.cancel != nil {
-			agent.cancel()
-		}
-		evidence, _ := tmux.CapturePane(context.Background(), agent.paneID)
-		if evidence != "" {
-			_ = saveAgentEvidence(root, agentID, evidence)
-		}
-		tmux.KillProcessGroup(agent.pid, agent.pgid)
-		_ = tmux.KillPane(context.Background(), agent.paneID)
-		_ = tmux.KillWindow(context.Background(), agent.window)
-		t.w.updateTmuxStatusLine(context.Background())
-	}
-
 	return t.inner.Cancel(h)
 }
