@@ -30,6 +30,7 @@ type ExecutionService struct {
 	// in the TUI confirmation state.
 	startMu sync.Mutex
 	runtime *Runtime
+	initErr error
 	engine  *execution.Engine
 	store   execution.RunStore
 	journal execution.JournalStore
@@ -48,21 +49,19 @@ func (r *Runtime) Execution() *ExecutionService {
 	}
 
 	execRoot := filepath.Join(r.layout.Root, ".marshal", "execution")
-	var rStore execution.RunStore
-	var jStore execution.JournalStore
-
-	fs, err := execution.NewFileRunStore(filepath.Join(execRoot, "runs"))
-	if err == nil {
-		rStore = fs
-	} else {
-		rStore = execution.NewMemoryRunStore()
+	// Keep a failed service available only to report the initialization error.
+	// Never expose a partial engine or substitute non-durable stores.
+	fail := func(err error) *ExecutionService {
+		r.execService = &ExecutionService{runtime: r, initErr: err}
+		return r.execService
 	}
-
-	js, err := execution.NewFileJournalStore(filepath.Join(execRoot, "journal"))
-	if err == nil {
-		jStore = js
-	} else {
-		jStore = execution.NewMemoryJournalStore()
+	rStore, err := execution.NewFileRunStore(filepath.Join(execRoot, "runs"))
+	if err != nil {
+		return fail(fmt.Errorf("initialize durable execution run store: %w", err))
+	}
+	jStore, err := execution.NewFileJournalStore(filepath.Join(execRoot, "journal"))
+	if err != nil {
+		return fail(fmt.Errorf("initialize durable execution journal: %w", err))
 	}
 
 	cfg := execution.EngineConfig{
@@ -74,8 +73,7 @@ func (r *Runtime) Execution() *ExecutionService {
 	reader := &storePlanGoalReader{store: r.store}
 	engine, err := execution.NewEngineWithReaders(cfg, rStore, jStore, reader, reader)
 	if err != nil {
-		// Fallback to in-memory if directory is not accessible
-		engine, _ = execution.NewEngineWithReaders(cfg, execution.NewMemoryRunStore(), execution.NewMemoryJournalStore(), reader, reader)
+		return fail(fmt.Errorf("initialize durable execution engine: %w", err))
 	}
 
 	r.execService = &ExecutionService{
@@ -555,10 +553,16 @@ func (s *ExecutionService) AssembleHandoffBundle(ctx context.Context, runID stri
 func (s *ExecutionService) RegisterHarness(harness execution.WorkerHarness) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.engine == nil {
+		return
+	}
 	s.engine.RegisterHarness(&taskSupervisedHarness{runtime: s.runtime, inner: harness})
 }
 
 func (s *ExecutionService) available() error {
+	if s != nil && s.initErr != nil {
+		return fmt.Errorf("%w: %w", model.ErrUnavailable, s.initErr)
+	}
 	if s == nil || s.engine == nil {
 		return fmt.Errorf("%w: execution service is unavailable", model.ErrUnavailable)
 	}
