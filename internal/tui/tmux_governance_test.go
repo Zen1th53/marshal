@@ -24,10 +24,19 @@ func TestGovernedTmuxInvokesCanonicalRunner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.inner.Cancel(h)
+	defer d.Cancel(h)
 	select {
 	case <-called:
 	case <-time.After(time.Second):
 		t.Fatal("canonical governed runner was bypassed")
+	}
+	if err := d.Cancel(h); err != nil {
+		t.Fatal(err)
+	}
+	w.tmuxMu.Lock()
+	state := w.tmuxAlerts[":governed"]
+	w.tmuxMu.Unlock()
+	if state != "worker done: done" {
+		t.Fatalf("cancel returned before notification delivery: %q", state)
 	}
 }

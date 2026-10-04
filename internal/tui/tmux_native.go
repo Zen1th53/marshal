@@ -871,9 +871,9 @@ func (w *Workspace) StopAllWorkers(ctx context.Context) string {
 		}
 		if agent.cancel != nil {
 			agent.cancel()
-			if agent.doneChan != nil {
-				<-agent.doneChan
-			}
+		}
+		if agent.doneChan != nil {
+			<-agent.doneChan
 		}
 		if agent.briefingDir != nil {
 			agent.briefingDir.remove()
@@ -1190,9 +1190,10 @@ func (w *Workspace) wrapServiceDriversForTmux(service *app.MarshalService) {
 }
 
 type tmuxTaskDriver struct {
-	inner driver.Driver
-	w     *Workspace
-	name  string
+	inner    driver.Driver
+	w        *Workspace
+	name     string
+	monitors sync.Map // driver handles to notification completion channels
 }
 
 func (t *tmuxTaskDriver) Mode() marshal.WorkerMode {
@@ -1205,7 +1206,7 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 	if err := resetAgentOutcome(root, agentID); err != nil {
 		return nil, err
 	}
-	agent := &activeTmuxAgent{id: agentID, role: "task", taskID: req.Task.PlanTaskID, provider: req.Task.Worker, runID: req.RunID, label: "Task " + req.Task.PlanTaskID + " (" + req.Task.Worker + ")", state: "working", readOnly: true, driver: t.inner}
+	agent := &activeTmuxAgent{id: agentID, role: "task", taskID: req.Task.PlanTaskID, provider: req.Task.Worker, runID: req.RunID, label: "Task " + req.Task.PlanTaskID + " (" + req.Task.Worker + ")", state: "working", readOnly: true, driver: t.inner, doneChan: make(chan struct{})}
 	host := func(ctx context.Context, socket string) error {
 		relay, err := exec.LookPath("socat")
 		if err != nil {
@@ -1271,12 +1272,14 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 	t.w.tmuxActiveWins[agentID] = agent
 	t.w.tmuxMu.Unlock()
 	t.w.updateTmuxStatusLine(ctx)
-	go t.w.monitorTaskState(agent, h)
+	t.monitors.Store(h, agent.doneChan)
+	go func() { defer close(agent.doneChan); t.w.monitorTaskState(agent, h) }()
 	return h, nil
 }
 
 func (t *tmuxTaskDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.HandIn, error) {
 	handin, err := t.inner.Wait(ctx, h)
+	t.joinMonitor(h)
 
 	taskID := h.Request().Task.PlanTaskID
 	agentID := taskAgentID(h.Request())
@@ -1317,7 +1320,16 @@ func (t *tmuxTaskDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.Ha
 }
 
 func (t *tmuxTaskDriver) Cancel(h *driver.Handle) error {
-	return t.inner.Cancel(h)
+	err := t.inner.Cancel(h)
+	t.joinMonitor(h)
+	return err
+}
+
+func (t *tmuxTaskDriver) joinMonitor(h *driver.Handle) {
+	if done, ok := t.monitors.Load(h); ok {
+		<-done.(chan struct{})
+		t.monitors.Delete(h)
+	}
 }
 
 // chatBinding pins restart to the conversation observed for this project.
