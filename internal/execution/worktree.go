@@ -242,6 +242,9 @@ func (wm *WorktreeManager) PrepareWorktree(ctx context.Context, taskID, runID st
 	}
 	defer target.Close()
 	if gitCheckout {
+		if err := hostgit.RecordRepository(wm.projectRoot, wtPath); err != nil {
+			return "", err
+		}
 		// Git records only executable bits. Preserve project permissions on
 		// checked-out files without importing untracked files or project bytes.
 		if err := preserveCheckoutModes(source, target); err != nil {

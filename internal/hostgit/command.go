@@ -13,7 +13,10 @@ import (
 
 // Command disables repository-selected programs, preserving the configured identity.
 func Command(ctx context.Context, dir string, args ...string) (*exec.Cmd, error) {
-	worktree, gitdir, err := repositoryPaths(dir, false)
+	worktree, gitdir, pinned, err := pinnedPaths(dir)
+	if !pinned && err == nil {
+		worktree, gitdir, err = repositoryPaths(dir, false)
+	}
 	if err != nil {
 		return nil, err
 	}
