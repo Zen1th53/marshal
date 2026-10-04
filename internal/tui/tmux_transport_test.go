@@ -47,6 +47,9 @@ func realTmuxWorkspace(t *testing.T) *Workspace {
 			t.Fatalf("%s %v", out, err)
 		}
 	}
+	if err := os.WriteFile(filepath.Join(w.workDir, ".git", "info", "exclude"), []byte(".marshal/\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	return w
 }
 

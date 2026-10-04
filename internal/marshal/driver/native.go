@@ -118,11 +118,22 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 	if n.Args == nil || n.Parse == nil {
 		return nil, fmt.Errorf("%w: %s driver is incomplete", ErrInvalidRequest, n.Provider)
 	}
+	return n.launch(ctx, req, cleanWorkerEnv(os.Environ()))
+}
+
+// LaunchSession runs an interactive native session with the same supervisor as
+// task workers. The caller supplies settings; the driver owns execution.
+func LaunchSession(ctx context.Context, provider, binary, root string, args, env []string) (*Handle, error) {
+	n := Native{Provider: provider, Binary: binary, Args: func(Request) []string { return args }, Parse: parseNone}
+	return n.launch(ctx, Request{Worktree: root}, append(os.Environ(), env...))
+}
+
+func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle, error) {
 	argv := n.Args(req)
 	runCtx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(runCtx, n.Binary, argv...)
 	cmd.Dir = req.Worktree
-	cmd.Env = cleanWorkerEnv(os.Environ())
+	cmd.Env = env
 	// A nil Stdin reads from the null device: never a terminal.
 	cmd.Stdin = nil
 	stdout := &capBuffer{limit: maxStream}

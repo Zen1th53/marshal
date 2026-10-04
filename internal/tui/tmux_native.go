@@ -560,10 +560,25 @@ func (w *Workspace) runNativeAgentInTmux(
 			args = append(resumeArgsForProvider(provider, saved.SessionID), args...)
 		}
 	}
-	// Create new window using direct argv execution with safe env launcher
-	cmd := append([]string{binary}, args...)
-	if err := tmux.NewWindow(ctx, w.tmuxSession, winName, root, briefingEnv, cmd); err != nil {
-		return "", fmt.Errorf("launch %s in tmux: %w", agentLabel, err)
+	// The driver owns native worker execution; tmux hosts its terminal relay.
+	var workerHandle *driver.Handle
+	if isChat {
+		if err := tmux.NewWindow(ctx, w.tmuxSession, winName, root, briefingEnv, append([]string{binary}, args...)); err != nil {
+			return "", err
+		}
+	} else {
+		host := func(ctx context.Context, socket string) error {
+			relay, err := exec.LookPath("socat")
+			if err != nil {
+				return err
+			}
+			return tmux.NewWindow(ctx, w.tmuxSession, winName, root, nil, []string{relay, "STDIO,raw,echo=0", "UNIX-CONNECT:" + socket})
+		}
+		var err error
+		workerHandle, err = driver.LaunchSession(workerterminal.WithHost(context.Background(), host), provider, binary, root, args, briefingEnv)
+		if err != nil {
+			return "", fmt.Errorf("launch %s in tmux: %w", agentLabel, err)
+		}
 	}
 
 	// Set remain-on-exit on so dead pane can be inspected and captured before cleanup
@@ -630,6 +645,8 @@ func (w *Workspace) runNativeAgentInTmux(
 		binary:      binary,
 		args:        args,
 		env:         briefingEnv,
+		handle:      workerHandle,
+		driver:      driver.Native{},
 	}
 
 	w.tmuxMu.Lock()
@@ -703,6 +720,14 @@ func (w *Workspace) monitorAgent(
 					}
 				}
 
+				if agent.handle != nil {
+					select {
+					case <-agent.handle.Done():
+						dead = true
+					default:
+						dead = false
+					}
+				}
 				if dead {
 					// Final sync
 					if watch != nil {
@@ -737,8 +762,7 @@ func (w *Workspace) monitorAgent(
 						dir.remove()
 					}
 
-					// Terminate process group if lingering
-					tmux.KillProcessGroup(agent.pid, agent.pgid)
+					// Driver completion includes descendant termination and reaping.
 
 					// Explicitly close the finished pane / window
 					_ = tmux.KillPane(context.Background(), agent.paneID)
