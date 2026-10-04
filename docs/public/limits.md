@@ -25,6 +25,24 @@ MARSHAL notices when an agent changes files outside its task or drifts from
 the goal, and records it, but it does not stop the task. You see the warning
 when you review.
 
+**The Marshal can read and write the whole project.**
+Protection is at approval and merge. A task's file list does not restrict the
+Marshal's project access.
+
+**Applying a task needs stable project directories.**
+MARSHAL cannot protect delivery of a task's changes if another process on the
+same machine moves or replaces project directories at the same time. Do not
+run other tools that rearrange the project while MARSHAL is applying a task.
+
+**Native workers run with your user account's rights.**
+They are trusted and use the agent's own permission controls. Governed workers
+are sandboxed; a separate working copy alone does not provide that protection.
+
+**Shared text can reach another provider.**
+Sharing in the agents' shared channel sends one provider's text to another
+provider when the receiving agent uses it. Local records do not make that
+exchange local-only.
+
 **Some agent versions are not checked.**
 MARSHAL has checked its commands only against specific versions. See
 [Connect your AI agents](agents.md).

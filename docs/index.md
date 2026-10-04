@@ -23,7 +23,7 @@ project. Nothing is final until you accept it.
 
 <div class="grid cards" markdown>
 
--   **A plan before any code changes**
+-   **A plan before workers start**
 
     ---
 
@@ -35,7 +35,8 @@ project. Nothing is final until you accept it.
     ---
 
     Each task runs in a separate working copy of your project, so unfinished
-    work does not mix with your files.
+    work stays separate until merge. Governed workers are sandboxed; native
+    workers are trusted and run with your user account's rights.
 
 -   **You decide what is finished**
 
@@ -51,6 +52,11 @@ project. Nothing is final until you accept it.
     Save a snapshot of your project at any time and go back to it later.
 
 </div>
+
+The Marshal can read and write the whole project. Protection is at approval
+and merge. Sharing through the agents' shared channel sends one provider's
+text to another provider when the receiving agent uses it. Read
+[How MARSHAL works](public/how-it-works.md) before starting work.
 
 ## Where to start
 

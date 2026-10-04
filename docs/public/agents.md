@@ -64,6 +64,9 @@ You can open any agent's own interface from inside MARSHAL:
 
 Leave the agent the usual way to come back to MARSHAL. When used like this,
 the agent works exactly as it does on its own, with its own settings.
+These native workers are trusted and run with your user account's rights.
+MARSHAL does not sandbox them. Governed workers are sandboxed; opening an
+agent's native interface does not give it that protection.
 
 To continue your most recent conversation in this project:
 
