@@ -41,7 +41,7 @@ func TestVerificationExecutesInsideDetachedWorktreeEnvelope(t *testing.T) {
 	outside := filepath.Join(t.TempDir(), "host-marker")
 	// All three writes must be refused, while a regular worktree write and
 	// Git reads must execute successfully. Admission failure cannot pass this test.
-	script := "set -eu; test \"$(git rev-parse HEAD)\" = '" + head + "'; printf executed > inside-marker; if (printf escaped > '" + outside + "') 2>/dev/null; then exit 21; fi; if (printf corrupt > '" + filepath.Join(repo.Path(), ".git", "config") + "') 2>/dev/null; then exit 22; fi; if (printf corrupt > '" + filepath.Join(strings.TrimSpace(string(private)), "HEAD") + "') 2>/dev/null; then exit 23; fi; printf confined"
+	script := "set -eu; test -c /dev/null; printf discarded > /dev/null; test \"$(git rev-parse HEAD)\" = '" + head + "'; printf executed > inside-marker; if (printf escaped > '" + outside + "') 2>/dev/null; then exit 21; fi; if (printf corrupt > '" + filepath.Join(repo.Path(), ".git", "config") + "') 2>/dev/null; then exit 22; fi; if (printf corrupt > '" + filepath.Join(strings.TrimSpace(string(private)), "HEAD") + "') 2>/dev/null; then exit 23; fi; printf confined"
 	result, err := RunVerification(t.Context(), wt, []string{"/bin/sh", "-c", script}, 10*time.Second, 4096)
 	if err != nil || result.ExitCode != 0 || string(result.Stdout) != "confined" || result.Isolation.Level != model.IsolationBwrap || !result.Isolation.Available {
 		t.Fatalf("positive verification: %+v %v", result, err)

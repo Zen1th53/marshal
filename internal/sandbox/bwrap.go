@@ -63,7 +63,7 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 	args = append(args, "--unshare-net")
 	if request.Supervised {
 		// A nested PID namespace hides the unfiltered bridge and bootstrap shell.
-		command = append([]string{"/run/marshal-nested-bwrap", "--die-with-parent", "--unshare-pid", "--bind", "/", "/", "--proc", "/proc", "--"}, command...)
+		command = append([]string{"/run/marshal-nested-bwrap", "--die-with-parent", "--unshare-pid", "--bind", "/", "/", "--dev-bind", "/dev", "/dev", "--proc", "/proc", "--"}, command...)
 	}
 	for _, path := range systemPaths() {
 		args = append(args, "--ro-bind", path, path)
