@@ -568,6 +568,12 @@ func PaneDeadStatus(ctx context.Context, target string) (dead bool, exitCode int
 	return false, 0, nil
 }
 
+// SetPaneTitle sets the title of a pane.
+func SetPaneTitle(ctx context.Context, target, title string) error {
+	_, err := RunCommand(ctx, "select-pane", "-t", target, "-T", title)
+	return err
+}
+
 // PanePIDAndPGID returns the PID and PGID of the process running in the pane.
 func PanePIDAndPGID(ctx context.Context, target string) (pid, pgid int, err error) {
 	out, err := RunCommand(ctx, "display-message", "-p", "-t", target, "#{pane_pid}")
@@ -577,6 +583,9 @@ func PanePIDAndPGID(ctx context.Context, target string) (pid, pgid int, err erro
 	pStr := strings.TrimSpace(string(out))
 	if p, err := strconv.Atoi(pStr); err == nil && p > 0 {
 		pg, _ := syscall.Getpgid(p)
+		if pg <= 0 {
+			pg = p
+		}
 		return p, pg, nil
 	}
 	return 0, 0, fmt.Errorf("invalid pane PID %q", pStr)
@@ -603,6 +612,7 @@ type PaneInfo struct {
 	PID        int
 	Dead       bool
 	ExitCode   int
+	Title      string
 }
 
 // ListPanes lists all panes in the session with their details.
@@ -613,7 +623,7 @@ func ListPanes(ctx context.Context, session string) ([]PaneInfo, error) {
 	} else {
 		args = append(args, "-a")
 	}
-	args = append(args, "-F", "#{pane_id}\t#{window_id}\t#{window_name}\t#{pane_pid}\t#{pane_dead}\t#{pane_dead_status}")
+	args = append(args, "-F", "#{pane_id}\t#{window_id}\t#{window_name}\t#{pane_pid}\t#{pane_dead}\t#{pane_dead_status}\t#{pane_title}")
 	out, err := RunCommand(ctx, args...)
 	if err != nil {
 		return nil, err
@@ -630,6 +640,10 @@ func ListPanes(ctx context.Context, session string) ([]PaneInfo, error) {
 			pid, _ := strconv.Atoi(parts[3])
 			dead := parts[4] == "1"
 			code, _ := strconv.Atoi(parts[5])
+			title := ""
+			if len(parts) >= 7 {
+				title = parts[6]
+			}
 			res = append(res, PaneInfo{
 				PaneID:     parts[0],
 				WindowID:   parts[1],
@@ -637,6 +651,7 @@ func ListPanes(ctx context.Context, session string) ([]PaneInfo, error) {
 				PID:        pid,
 				Dead:       dead,
 				ExitCode:   code,
+				Title:      title,
 			})
 		}
 	}

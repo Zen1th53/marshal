@@ -430,7 +430,30 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		if w.navView != nil {
 			w.navView.Close()
 		}
-		return w.runNativeAgentInTmux(ctx, provider, label, root, binary, args, briefingEnv, dir, watch, peers, chStream, view, briefingNotes, len(marshalBrief) > 0)
+		isChat := len(marshalBrief) > 0
+		if watch != nil && watch.consume != nil {
+			prevConsume := watch.consume
+			agentID := provider
+			if isChat {
+				agentID = "marshal-chat"
+			}
+			watch.consume = func(tr importer.SessionTranscript) error {
+				if tr.SessionID != "" {
+					w.tmuxMu.Lock()
+					if a, ok := w.tmuxActiveWins[agentID]; ok && a != nil {
+						a.sessionID = tr.SessionID
+					}
+					if isChat {
+						if m := w.marshalSession(); m != nil {
+							m.conversationID = tr.SessionID
+						}
+					}
+					w.tmuxMu.Unlock()
+				}
+				return prevConsume(tr)
+			}
+		}
+		return w.runNativeAgentInTmux(ctx, provider, label, root, binary, args, briefingEnv, dir, watch, peers, chStream, view, briefingNotes, isChat)
 	}
 
 	if w.navView != nil {

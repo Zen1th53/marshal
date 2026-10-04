@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -31,6 +32,11 @@ type activeTmuxAgent struct {
 	cancel      context.CancelFunc
 	briefingDir *briefingDir
 	doneChan    chan struct{}
+	binary      string
+	args        []string
+	env         []string
+	sessionID   string
+	runID       string
 }
 
 // InitTmux initializes tmux session and window awareness for the workspace.
@@ -83,6 +89,9 @@ func (w *Workspace) InitTmux(root ...string) {
 
 	// Adopt surviving windows from existing session if re-attaching
 	w.adoptSurvivingWorkersLocked(projectRoot)
+
+	// Ensure Marshal Chat is automatically open (F3)
+	w.ensureMarshalChatAutoLocked(projectRoot)
 }
 
 func (w *Workspace) adoptSurvivingWorkersLocked(projectRoot string) {
@@ -95,78 +104,302 @@ func (w *Workspace) adoptSurvivingWorkersLocked(projectRoot string) {
 	}
 	hash := tmux.ProjectHash(projectRoot)
 	for _, p := range panes {
-		if p.Dead || p.WindowName == w.tmuxMarshalWin {
+		if p.Dead {
 			continue
 		}
-		// Match marshal-chat-<hash>
-		if p.WindowName == fmt.Sprintf("marshal-chat-%s", hash) {
-			if _, ok := w.tmuxActiveWins["marshal-chat"]; !ok {
+		if p.WindowName == w.tmuxMarshalWin {
+			if p.PaneID == w.tmuxMarshalPaneID || w.tmuxMarshalPaneID == "" {
+				continue
+			}
+			if p.Title != "" {
+				w.adoptPaneLocked(p, projectRoot, hash, true)
+			}
+			continue
+		}
+		w.adoptPaneLocked(p, projectRoot, hash, false)
+	}
+}
+
+func (w *Workspace) adoptPaneLocked(p tmux.PaneInfo, projectRoot, hash string, isJoined bool) {
+	name := p.WindowName
+	if isJoined && p.Title != "" {
+		name = p.Title
+	}
+
+	pid := p.PID
+	pgid := p.PID
+	pidVal, pgidVal, err := tmux.PanePIDAndPGID(context.Background(), p.PaneID)
+	if err == nil && pidVal > 0 {
+		pid = pidVal
+		pgid = pgidVal
+	}
+
+	// Match marshal-chat-<hash>
+	if name == fmt.Sprintf("marshal-chat-%s", hash) {
+		if _, ok := w.tmuxActiveWins["marshal-chat"]; !ok {
+			agentCtx, cancel := context.WithCancel(context.Background())
+			agent := &activeTmuxAgent{
+				id:       "marshal-chat",
+				role:     "marshal-chat",
+				label:    "Marshal Chat",
+				window:   p.WindowName,
+				windowID: p.WindowID,
+				paneID:   p.PaneID,
+				pid:      pid,
+				pgid:     pgid,
+				state:    "working",
+				readOnly: false, // F3: Marshal chat receives operator input normally
+				isJoined: isJoined,
+				cancel:   cancel,
+			}
+			w.tmuxActiveWins["marshal-chat"] = agent
+			w.monitorAgent(agentCtx, agent, projectRoot, nil, nil, nil, nil, nil)
+		}
+		return
+	}
+
+	// Match marshal-<provider>-<hash> or marshal-task-<taskID>-<hash>
+	prefix := "marshal-"
+	suffix := "-" + hash
+	if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix) {
+		targetPart := strings.TrimSuffix(strings.TrimPrefix(name, prefix), suffix)
+		if strings.HasPrefix(targetPart, "task-") {
+			taskID := strings.TrimPrefix(targetPart, "task-")
+			agentID := "task-" + taskID
+			if _, ok := w.tmuxActiveWins[agentID]; !ok {
 				agentCtx, cancel := context.WithCancel(context.Background())
 				agent := &activeTmuxAgent{
-					id:       "marshal-chat",
-					role:     "marshal-chat",
-					label:    "Marshal Chat",
+					id:       agentID,
+					role:     "task",
+					taskID:   taskID,
+					label:    fmt.Sprintf("Task %s", taskID),
 					window:   p.WindowName,
 					windowID: p.WindowID,
 					paneID:   p.PaneID,
-					pid:      p.PID,
+					pid:      pid,
+					pgid:     pgid,
 					state:    "working",
 					readOnly: true,
+					isJoined: isJoined,
 					cancel:   cancel,
 				}
-				w.tmuxActiveWins["marshal-chat"] = agent
+				w.tmuxActiveWins[agentID] = agent
 				w.monitorAgent(agentCtx, agent, projectRoot, nil, nil, nil, nil, nil)
 			}
-			continue
-		}
-		// Match marshal-<provider>-<hash> or marshal-task-<taskID>-<hash>
-		prefix := "marshal-"
-		suffix := "-" + hash
-		if strings.HasPrefix(p.WindowName, prefix) && strings.HasSuffix(p.WindowName, suffix) {
-			targetPart := strings.TrimSuffix(strings.TrimPrefix(p.WindowName, prefix), suffix)
-			if strings.HasPrefix(targetPart, "task-") {
-				taskID := strings.TrimPrefix(targetPart, "task-")
-				agentID := "task-" + taskID
-				if _, ok := w.tmuxActiveWins[agentID]; !ok {
-					agentCtx, cancel := context.WithCancel(context.Background())
-					agent := &activeTmuxAgent{
-						id:       agentID,
-						role:     "task",
-						taskID:   taskID,
-						label:    fmt.Sprintf("Task %s", taskID),
-						window:   p.WindowName,
-						windowID: p.WindowID,
-						paneID:   p.PaneID,
-						pid:      p.PID,
-						state:    "working",
-						readOnly: true,
-						cancel:   cancel,
-					}
-					w.tmuxActiveWins[agentID] = agent
-					w.monitorAgent(agentCtx, agent, projectRoot, nil, nil, nil, nil, nil)
+		} else if targetPart != "" {
+			provider := targetPart
+			if _, ok := w.tmuxActiveWins[provider]; !ok {
+				agentCtx, cancel := context.WithCancel(context.Background())
+				agent := &activeTmuxAgent{
+					id:       provider,
+					role:     "worker",
+					provider: provider,
+					label:    strings.Title(provider),
+					window:   p.WindowName,
+					windowID: p.WindowID,
+					paneID:   p.PaneID,
+					pid:      pid,
+					pgid:     pgid,
+					state:    "working",
+					readOnly: true,
+					isJoined: isJoined,
+					cancel:   cancel,
 				}
-			} else if targetPart != "" {
-				provider := targetPart
-				if _, ok := w.tmuxActiveWins[provider]; !ok {
-					agentCtx, cancel := context.WithCancel(context.Background())
-					agent := &activeTmuxAgent{
-						id:       provider,
-						role:     "worker",
-						provider: provider,
-						label:    strings.Title(provider),
-						window:   p.WindowName,
-						windowID: p.WindowID,
-						paneID:   p.PaneID,
-						pid:      p.PID,
-						state:    "working",
-						readOnly: true,
-						cancel:   cancel,
-					}
-					w.tmuxActiveWins[provider] = agent
-					w.monitorAgent(agentCtx, agent, projectRoot, nil, nil, nil, nil, nil)
-				}
+				w.tmuxActiveWins[provider] = agent
+				w.monitorAgent(agentCtx, agent, projectRoot, nil, nil, nil, nil, nil)
 			}
 		}
+	}
+}
+
+// ensureMarshalChatAutoLocked opens the Marshal chat pane automatically if not already active (F3).
+func (w *Workspace) ensureMarshalChatAutoLocked(projectRoot string) {
+	if w.tmuxSession == "" {
+		return
+	}
+	if _, ok := w.tmuxActiveWins["marshal-chat"]; ok {
+		return
+	}
+	chatWin := tmux.ChatWindowName(projectRoot)
+	ctx := context.Background()
+	exists, _ := tmux.WindowExists(ctx, w.tmuxSession, chatWin)
+	if exists {
+		w.adoptSurvivingWorkersLocked(projectRoot)
+		if _, ok := w.tmuxActiveWins["marshal-chat"]; ok {
+			return
+		}
+	}
+	w.startMarshalChatLocked(ctx, projectRoot)
+}
+
+func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot string) {
+	provider := loadDefaultProvider(w.providerRoot())
+	if provider == "" {
+		provider = "codex"
+	}
+	binaryName := provider
+	if provider == "antigravity" {
+		binaryName = "agy"
+	}
+	binary, err := exec.LookPath(binaryName)
+	if err != nil {
+		binary = binaryName
+	}
+
+	winName := tmux.ChatWindowName(projectRoot)
+	cmd := []string{binary}
+
+	_ = tmux.NewWindow(ctx, w.tmuxSession, winName, projectRoot, nil, cmd)
+	_ = tmux.SetWindowOption(ctx, winName, "remain-on-exit", "on")
+	_ = tmux.SetPaneReadOnly(ctx, winName, false) // F3: normal operator input
+
+	// Keep the main MARSHAL workspace window focused
+	if w.tmuxMarshalWin != "" {
+		_ = tmux.SelectWindow(ctx, w.tmuxMarshalWin)
+	}
+
+	paneID := winName
+	windowID := ""
+	pid := 0
+	pgid := 0
+
+	panes, _ := tmux.ListPanes(ctx, w.tmuxSession)
+	for _, p := range panes {
+		if p.WindowName == winName {
+			paneID = p.PaneID
+			windowID = p.WindowID
+			pidVal, pgidVal, err := tmux.PanePIDAndPGID(ctx, paneID)
+			if err == nil && pidVal > 0 {
+				pid = pidVal
+				pgid = pgidVal
+			} else {
+				pid = p.PID
+				pgid = p.PID
+			}
+			break
+		}
+	}
+
+	agentCtx, cancel := context.WithCancel(context.Background())
+	agent := &activeTmuxAgent{
+		id:       "marshal-chat",
+		role:     "marshal-chat",
+		provider: provider,
+		label:    "Marshal Chat",
+		window:   winName,
+		windowID: windowID,
+		paneID:   paneID,
+		pid:      pid,
+		pgid:     pgid,
+		state:    "working",
+		readOnly: false,
+		cancel:   cancel,
+		doneChan: make(chan struct{}),
+		binary:   binary,
+		args:     nil,
+		env:      nil,
+	}
+
+	w.tmuxActiveWins["marshal-chat"] = agent
+	w.monitorAgent(agentCtx, agent, projectRoot, nil, nil, nil, nil, nil)
+}
+
+func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAgent, root string) {
+	w.tmuxMu.Lock()
+	defer w.tmuxMu.Unlock()
+
+	tmux.KillProcessGroup(agent.pid, agent.pgid)
+
+	provider := agent.provider
+	if provider == "" {
+		provider = loadDefaultProvider(w.providerRoot())
+	}
+	if provider == "" {
+		provider = "codex"
+	}
+
+	sessionID := agent.sessionID
+	if sessionID == "" {
+		if m := w.marshalSession(); m != nil {
+			m.mu.Lock()
+			sessionID = m.conversationID
+			m.mu.Unlock()
+		}
+	}
+
+	bin := agent.binary
+	if bin == "" {
+		binaryName := provider
+		if provider == "antigravity" {
+			binaryName = "agy"
+		}
+		if resolved, err := exec.LookPath(binaryName); err == nil {
+			bin = resolved
+		} else {
+			bin = binaryName
+		}
+		agent.binary = bin
+	}
+
+	resumeArgs := resumeArgsForProvider(provider, sessionID)
+	cmd := append([]string{bin}, resumeArgs...)
+
+	err := tmux.RespawnWindow(ctx, agent.window, cmd)
+	if err != nil {
+		_ = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, agent.env, cmd)
+	}
+
+	_ = tmux.SetWindowOption(ctx, agent.window, "remain-on-exit", "on")
+	_ = tmux.SetPaneReadOnly(ctx, agent.window, false) // F3: normal operator input
+
+	panes, _ := tmux.ListPanes(ctx, w.tmuxSession)
+	for _, p := range panes {
+		if p.WindowName == agent.window {
+			agent.paneID = p.PaneID
+			agent.windowID = p.WindowID
+			pidVal, pgidVal, err := tmux.PanePIDAndPGID(ctx, p.PaneID)
+			if err == nil && pidVal > 0 {
+				agent.pid = pidVal
+				agent.pgid = pgidVal
+			} else {
+				agent.pid = p.PID
+				agent.pgid = p.PID
+			}
+			break
+		}
+	}
+
+	agent.state = "working"
+	agent.readOnly = false
+}
+
+func resumeArgsForProvider(provider, sessionID string) []string {
+	switch provider {
+	case "codex":
+		if sessionID != "" {
+			return []string{"resume", sessionID}
+		}
+		return []string{"resume", "--last"}
+	case "claude":
+		if sessionID != "" {
+			return []string{"--resume", sessionID}
+		}
+		return []string{"--continue"}
+	case "opencode":
+		if sessionID != "" {
+			return []string{"session", "resume", sessionID}
+		}
+		return []string{"continue"}
+	case "antigravity", "agy":
+		if sessionID != "" {
+			return []string{"--conversation", sessionID}
+		}
+		return []string{"resume"}
+	default:
+		if sessionID != "" {
+			return []string{"resume", sessionID}
+		}
+		return []string{"resume"}
 	}
 }
 
@@ -258,8 +491,12 @@ func (w *Workspace) runNativeAgentInTmux(
 	// Set remain-on-exit on so dead pane can be inspected and captured before cleanup
 	_ = tmux.SetWindowOption(ctx, winName, "remain-on-exit", "on")
 
-	// Set pane view-only by default (Decision 4)
-	_ = tmux.SetPaneReadOnly(ctx, winName, true)
+	// Set pane view-only by default (Decision 4), but NOT for marshal-chat (F3)
+	if !isChat {
+		_ = tmux.SetPaneReadOnly(ctx, winName, true)
+	} else {
+		_ = tmux.SetPaneReadOnly(ctx, winName, false)
+	}
 
 	// Switch to the newly opened window
 	_ = tmux.SelectWindow(ctx, winName)
@@ -279,6 +516,8 @@ func (w *Workspace) runNativeAgentInTmux(
 				pidVal, pgidVal, err := tmux.PanePIDAndPGID(ctx, paneID)
 				if err == nil {
 					pid, pgid = pidVal, pgidVal
+				} else {
+					pgid = pid
 				}
 			}
 			break
@@ -306,10 +545,13 @@ func (w *Workspace) runNativeAgentInTmux(
 		pid:         pid,
 		pgid:        pgid,
 		state:       "working",
-		readOnly:    true,
+		readOnly:    !isChat,
 		cancel:      cancel,
 		briefingDir: dir,
 		doneChan:    make(chan struct{}),
+		binary:      binary,
+		args:        args,
+		env:         briefingEnv,
 	}
 
 	w.tmuxMu.Lock()
@@ -323,6 +565,9 @@ func (w *Workspace) runNativeAgentInTmux(
 	w.monitorAgent(agentCtx, agent, root, dir, watch, peers, chStream, view)
 
 	msg := fmt.Sprintf("Opened native %s in tmux window %s (view-only mode). Press F11 to return to MARSHAL. Use /takeover to enable typing.", agentLabel, winName)
+	if isChat {
+		msg = fmt.Sprintf("Opened native %s in tmux window %s. Press F11 to return to MARSHAL.", agentLabel, winName)
+	}
 	return msg, nil
 }
 
@@ -392,6 +637,19 @@ func (w *Workspace) monitorAgent(
 					if evidence != "" {
 						_ = saveAgentEvidence(root, agent.id, evidence)
 					}
+
+					if agent.role == "marshal-chat" {
+						// F3: The Marshal chat is never killed by the worker monitor.
+						// If it exits unexpectedly, it is restarted automatically and resumes
+						// the stored run / conversation.
+						if agentCtx.Err() == nil {
+							w.RecordActivity(fmt.Sprintf("%s exited unexpectedly; restarting and resuming conversation...", agent.label))
+							w.restartMarshalChat(context.Background(), agent, root)
+							w.updateTmuxStatusLine(context.Background())
+							continue
+						}
+					}
+
 					if dir != nil {
 						dir.remove()
 					}
@@ -421,19 +679,34 @@ func (w *Workspace) monitorAgent(
 				// Check if agent is waiting for user input
 				isWaiting := false
 				if agent.role == "worker" {
-					if w.marshalNativeApprovalWaiting(nil, marshal.Run{}) {
-						isWaiting = true
+					m := w.marshalSession()
+					if m != nil {
+						m.mu.Lock()
+						service := m.service
+						runID := m.runID
+						m.mu.Unlock()
+						if service != nil && runID != "" {
+							if run, err := service.Snapshot(context.Background(), runID); err == nil {
+								if w.marshalNativeApprovalWaiting(service, run) {
+									isWaiting = true
+								}
+							}
+						}
 					}
 				}
 				if isWaiting && agent.state != "waiting" {
+					w.tmuxMu.Lock()
 					agent.state = "waiting"
+					w.tmuxMu.Unlock()
 					w.updateTmuxStatusLine(context.Background())
 					w.RecordActivity(fmt.Sprintf("%s is waiting for your input.", agent.label))
 					if w.tmuxFollowActive {
 						_ = tmux.SelectWindow(context.Background(), agent.window)
 					}
 				} else if !isWaiting && agent.state == "waiting" {
+					w.tmuxMu.Lock()
 					agent.state = "working"
+					w.tmuxMu.Unlock()
 					w.updateTmuxStatusLine(context.Background())
 				}
 			}
@@ -837,10 +1110,14 @@ func (w *Workspace) wrapServiceDriversForTmux(service *app.MarshalService) {
 		return
 	}
 	for name, d := range service.Drivers {
-		service.Drivers[name] = &tmuxTaskDriver{inner: d, w: w, name: name}
+		if _, ok := d.(*tmuxTaskDriver); !ok {
+			service.Drivers[name] = &tmuxTaskDriver{inner: d, w: w, name: name}
+		}
 	}
 	for name, d := range service.GovernedDrivers {
-		service.GovernedDrivers[name] = &tmuxTaskDriver{inner: d, w: w, name: name}
+		if _, ok := d.(*tmuxTaskDriver); !ok {
+			service.GovernedDrivers[name] = &tmuxTaskDriver{inner: d, w: w, name: name}
+		}
 	}
 }
 
@@ -854,6 +1131,35 @@ func (t *tmuxTaskDriver) Mode() marshal.WorkerMode {
 	return t.inner.Mode()
 }
 
+func (t *tmuxTaskDriver) commandForRequest(req driver.Request) (string, []string, []string) {
+	if wc, ok := t.inner.(driver.WorkerCommander); ok {
+		bin, args, env := wc.WorkerCommand(req)
+		if bin != "" {
+			return bin, args, env
+		}
+	}
+	worker := req.Task.Worker
+	if worker == "" {
+		worker = t.name
+	}
+	switch worker {
+	case "codex":
+		d := driver.Codex("")
+		return d.Binary, d.Args(req), driver.CleanWorkerEnv(os.Environ())
+	case "claude", "claude-code":
+		d := driver.Claude("")
+		return d.Binary, d.Args(req), driver.CleanWorkerEnv(os.Environ())
+	case "agy", "antigravity":
+		d := driver.Agy("")
+		return d.Binary, d.Args(req), driver.CleanWorkerEnv(os.Environ())
+	case "opencode":
+		d := driver.OpenCode("")
+		return d.Binary, d.Args(req), driver.CleanWorkerEnv(os.Environ())
+	default:
+		return worker, nil, driver.CleanWorkerEnv(os.Environ())
+	}
+}
+
 func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*driver.Handle, error) {
 	taskID := req.Task.PlanTaskID
 	worker := req.Task.Worker
@@ -863,28 +1169,40 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 	}
 	winName := tmux.TaskWindowName(taskID, root)
 
-	_ = tmux.NewWindow(ctx, t.w.tmuxSession, winName, req.Worktree, nil, []string{"sleep", "3600"})
+	bin, args, env := t.commandForRequest(req)
+	cmd := append([]string{bin}, args...)
+
+	if err := tmux.NewWindow(ctx, t.w.tmuxSession, winName, req.Worktree, env, cmd); err != nil {
+		return nil, fmt.Errorf("launch task worker %s in tmux: %w", winName, err)
+	}
 	_ = tmux.SetWindowOption(ctx, winName, "remain-on-exit", "on")
 	_ = tmux.SetPaneReadOnly(ctx, winName, true)
 
 	paneID := winName
+	windowID := ""
+	pid := 0
+	pgid := 0
+
 	panes, _ := tmux.ListPanes(ctx, t.w.tmuxSession)
 	for _, p := range panes {
 		if p.WindowName == winName {
 			paneID = p.PaneID
+			windowID = p.WindowID
+			pidVal, pgidVal, err := tmux.PanePIDAndPGID(ctx, paneID)
+			if err == nil && pidVal > 0 {
+				pid = pidVal
+				pgid = pgidVal
+			} else {
+				pid = p.PID
+				pgid = p.PID
+			}
 			break
 		}
 	}
 
 	taskCtx, cancel := context.WithCancel(ctx)
-	h, err := t.inner.Launch(taskCtx, req)
-	if err != nil {
-		cancel()
-		_ = tmux.KillWindow(ctx, winName)
-		return nil, err
-	}
-
-	pid, pgid, _ := tmux.PanePIDAndPGID(ctx, paneID)
+	h := driver.NewHandle(req)
+	h.SetCancel(cancel)
 
 	agentID := "task-" + taskID
 	agent := &activeTmuxAgent{
@@ -894,6 +1212,7 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 		provider: worker,
 		label:    fmt.Sprintf("Task %s (%s)", taskID, worker),
 		window:   winName,
+		windowID: windowID,
 		paneID:   paneID,
 		pid:      pid,
 		pgid:     pgid,
@@ -901,6 +1220,9 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 		readOnly: true,
 		cancel:   cancel,
 		doneChan: make(chan struct{}),
+		binary:   bin,
+		args:     args,
+		env:      env,
 	}
 
 	t.w.tmuxMu.Lock()
@@ -908,6 +1230,50 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 	t.w.tmuxMu.Unlock()
 	t.w.updateTmuxStatusLine(ctx)
 	t.w.RecordActivity(fmt.Sprintf("Dispatched task %s to %s (tmux window %s).", taskID, worker, winName))
+
+	go func() {
+		defer h.Complete()
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-taskCtx.Done():
+				h.SetRunErr(taskCtx.Err())
+				return
+			case <-ticker.C:
+				dead, exitCode, err := tmux.PaneDeadStatus(context.Background(), paneID)
+				if err != nil {
+					exists, _ := tmux.WindowExists(context.Background(), t.w.tmuxSession, winName)
+					if !exists {
+						dead = true
+						exitCode = 0
+					}
+				}
+				if dead {
+					output, _ := tmux.CapturePane(context.Background(), paneID)
+					if output == "" {
+						output, _ = tmux.CapturePane(context.Background(), winName)
+					}
+					cmdStr := bin
+					if len(args) > 0 {
+						cmdStr += " " + strings.Join(args, " ")
+					}
+					h.SetObserved(marshal.CommandRecord{
+						Command:  cmdStr,
+						ExitCode: exitCode,
+						Output:   driver.Bound(output),
+					})
+					if op, ok := t.inner.(driver.OutputParser); ok {
+						h.SetReported(op.ParseOutput([]byte(output)))
+					}
+					if exitCode != 0 {
+						h.SetRunErr(fmt.Errorf("worker process exited with code %d", exitCode))
+					}
+					return
+				}
+			}
+		}
+	}()
 
 	return h, nil
 }
@@ -959,6 +1325,9 @@ func (t *tmuxTaskDriver) Cancel(h *driver.Handle) error {
 	t.w.tmuxMu.Unlock()
 
 	if ok && agent != nil {
+		if agent.cancel != nil {
+			agent.cancel()
+		}
 		evidence, _ := tmux.CapturePane(context.Background(), agent.paneID)
 		if evidence != "" {
 			_ = saveAgentEvidence(root, agentID, evidence)

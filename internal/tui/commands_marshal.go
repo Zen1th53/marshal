@@ -40,15 +40,16 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
 // marshalSession is the workspace's Marshal state: the service, the active
 // run, and the approvals the person has given in this session.
 type marshalSession struct {
-	mu        sync.Mutex
-	service   *app.MarshalService
-	runID     string
-	provider  string
-	cancel    context.CancelFunc
-	busy      bool
-	amended   bool
-	pending   *marshalAmendment
-	approvals map[string]bool
+	mu             sync.Mutex
+	service        *app.MarshalService
+	runID          string
+	provider       string
+	conversationID string
+	cancel         context.CancelFunc
+	busy           bool
+	amended        bool
+	pending        *marshalAmendment
+	approvals      map[string]bool
 }
 
 type marshalAmendment struct {

@@ -92,6 +92,52 @@ func NewHandle(req Request) *Handle {
 	return &Handle{req: req, done: make(chan struct{})}
 }
 
+// SetObserved records the runtime-observed command record on the handle.
+func (h *Handle) SetObserved(rec marshal.CommandRecord) {
+	h.observed = rec
+}
+
+// SetReported records the worker-reported actions on the handle.
+func (h *Handle) SetReported(recs []marshal.CommandRecord) {
+	h.reported = recs
+}
+
+// SetRunErr records the execution error on the handle.
+func (h *Handle) SetRunErr(err error) {
+	h.runErr = err
+}
+
+// SetCancel binds the cancellation function to the handle.
+func (h *Handle) SetCancel(cancel context.CancelFunc) {
+	h.cancel = cancel
+}
+
+// Complete marks the handle as done by closing its done channel.
+func (h *Handle) Complete() {
+	select {
+	case <-h.done:
+	default:
+		close(h.done)
+	}
+}
+
+// Done returns the channel that closes when the handle finishes.
+func (h *Handle) Done() <-chan struct{} {
+	return h.done
+}
+
+// WorkerCommander is an optional interface implemented by drivers that can
+// describe the worker command line, arguments, and environment.
+type WorkerCommander interface {
+	WorkerCommand(req Request) (binary string, args []string, env []string)
+}
+
+// OutputParser is an optional interface implemented by drivers that can parse
+// worker-reported actions from output.
+type OutputParser interface {
+	ParseOutput(stream []byte) []marshal.CommandRecord
+}
+
 // Driver runs tasks on one kind of worker.
 type Driver interface {
 	Mode() marshal.WorkerMode
@@ -309,6 +355,11 @@ func lines(s string) []string {
 	return out
 }
 
+// Bound keeps the head of an output and says how much was dropped.
+func Bound(s string) string {
+	return bound(s)
+}
+
 // bound keeps the head of an output and says how much was dropped.
 func bound(s string) string {
 	if len(s) <= maxOutput {
@@ -332,6 +383,29 @@ type Governed struct {
 }
 
 func (Governed) Mode() marshal.WorkerMode { return marshal.Governed }
+
+func (g Governed) WorkerCommand(req Request) (string, []string, []string) {
+	provider := g.Provider
+	if provider == "" {
+		provider = req.Task.Worker
+	}
+	switch provider {
+	case "codex":
+		d := Codex("")
+		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
+	case "claude", "claude-code":
+		d := Claude("")
+		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
+	case "agy", "antigravity":
+		d := Agy("")
+		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
+	case "opencode":
+		d := OpenCode("")
+		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
+	default:
+		return provider, nil, cleanWorkerEnv(os.Environ())
+	}
+}
 
 // Launch starts the governed run.
 func (g Governed) Launch(ctx context.Context, req Request) (*Handle, error) {

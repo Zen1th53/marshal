@@ -92,6 +92,23 @@ func orDefault(value, fallback string) string {
 	return value
 }
 
+// WorkerCommand returns the command binary, args, and clean environment for a request.
+func (n Native) WorkerCommand(req Request) (string, []string, []string) {
+	var args []string
+	if n.Args != nil {
+		args = n.Args(req)
+	}
+	return n.Binary, args, cleanWorkerEnv(os.Environ())
+}
+
+// ParseOutput parses worker-reported actions from output bytes.
+func (n Native) ParseOutput(stream []byte) []marshal.CommandRecord {
+	if n.Parse != nil {
+		return n.Parse(stream)
+	}
+	return nil
+}
+
 // Launch starts the CLI in the worktree with no terminal attached.
 func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 	if err := req.validate(); err != nil {
@@ -243,6 +260,12 @@ func parseAgy(stream []byte) []marshal.CommandRecord {
 // parseNone is used where no stream format has been captured to parse
 // against. Reporting nothing is honest; guessing a format would not be.
 func parseNone([]byte) []marshal.CommandRecord { return nil }
+
+// CleanWorkerEnv removes environment variables that could inject peer history,
+// shared channel context, or prior briefing configurations into a worker.
+func CleanWorkerEnv(env []string) []string {
+	return cleanWorkerEnv(env)
+}
 
 // cleanWorkerEnv removes environment variables that could inject peer history,
 // shared channel context, or prior briefing configurations into a worker.
