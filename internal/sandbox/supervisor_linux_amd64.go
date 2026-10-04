@@ -207,7 +207,7 @@ func AttachSupervisor(ctx context.Context, cmd *exec.Cmd, socketPath string, obs
 				return err
 			}
 			refusal := Refusal{Host: "socket-operation", Operation: strconv.Itoa(int(req.Nr))}
-			allow := false
+			allow := connectedSend(req)
 			if req.Arch == unix.AUDIT_ARCH_X86_64 && req.Nr == unix.SYS_CONNECT {
 				var addr [128]byte
 				size := req.Args[2]
@@ -238,4 +238,11 @@ func AttachSupervisor(ctx context.Context, cmd *exec.Cmd, socketPath string, obs
 			}
 		}
 	}, nil
+}
+
+// A destination-free send cannot open a connection. Workers inherit no socket
+// descriptors and can create only TCP streams; connect confines those streams
+// to the proxy. Explicit destinations and Fast Open still require refusal.
+func connectedSend(req notification) bool {
+	return req.Arch == unix.AUDIT_ARCH_X86_64 && req.Nr == unix.SYS_SENDTO && req.Args[4] == 0 && req.Args[3]&unix.MSG_FASTOPEN == 0
 }

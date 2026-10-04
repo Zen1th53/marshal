@@ -72,3 +72,20 @@ func TestSocketFilterFastOpenAndCompatCannotBypass(t *testing.T) {
 		t.Fatal("compat syscall bypass")
 	}
 }
+
+func TestConnectedSendPreservesDestinationBoundary(t *testing.T) {
+	if !connectedSend(notification{Arch: unix.AUDIT_ARCH_X86_64, Nr: unix.SYS_SENDTO}) {
+		t.Fatal("connected proxy send refused")
+	}
+	for _, req := range []notification{
+		{Arch: unix.AUDIT_ARCH_X86_64, Nr: unix.SYS_SENDTO, Args: [6]uint64{0, 0, 0, 0, 1}},
+		{Arch: unix.AUDIT_ARCH_X86_64, Nr: unix.SYS_SENDTO, Args: [6]uint64{0, 0, 0, 0, 1 << 32}},
+		{Arch: unix.AUDIT_ARCH_X86_64, Nr: unix.SYS_SENDTO, Args: [6]uint64{0, 0, 0, unix.MSG_FASTOPEN}},
+		{Arch: unix.AUDIT_ARCH_I386, Nr: unix.SYS_SENDTO},
+		{Arch: unix.AUDIT_ARCH_X86_64, Nr: unix.SYS_SENDMSG},
+	} {
+		if connectedSend(req) {
+			t.Fatalf("destination boundary bypass: %+v", req)
+		}
+	}
+}

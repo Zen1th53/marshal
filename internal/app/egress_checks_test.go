@@ -77,13 +77,13 @@ func TestGovernedCheckRefusalEvidenceAndOperatorGrantRevoke(t *testing.T) {
 s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 try: s.connect(("127.0.0.1",%s));raise RuntimeError("direct reached")
 except PermissionError: pass' || exit 10
-if curl --silent --fail --max-time 2 --noproxy '' --proxy http://127.0.0.1:18080 %s; then exit 11; fi
+if curl --silent --show-error --fail --max-time 2 --noproxy '' --proxy http://127.0.0.1:18080 %s; then exit 11; fi
 touch refused
 while [ ! -f grant ]; do sleep .02; done
-curl --silent --fail --max-time 2 --noproxy '' --proxy http://127.0.0.1:18080 %s || exit 12
+curl --silent --show-error --fail --max-time 2 --noproxy '' --proxy http://127.0.0.1:18080 %s || exit 12
 touch allowed
 while [ ! -f revoke ]; do sleep .02; done
-if curl --silent --fail --max-time 2 --noproxy '' --proxy http://127.0.0.1:18080 %s; then exit 13; fi
+if curl --silent --show-error --fail --max-time 2 --noproxy '' --proxy http://127.0.0.1:18080 %s; then exit 13; fi
 `, port, server.URL, server.URL, server.URL)
 	done := make(chan marshal.CommandRecord, 1)
 	go func() { done <- r.runGovernedCheck(ctx, "RUN-plan", "TASK-check", "checker", dir, command) }()
