@@ -238,7 +238,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if err := own(tr); err != nil {
 				return err
 			}
-			return publishNativeTranscript(chStream, tr)
+			return publishNativeTranscript(chStream, provider, tr)
 		}
 	}
 
@@ -315,12 +315,13 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 				}
 				pw.consume = real
 			}
+			peerName := peer
 			primary := captureTranscript
 			pw.consume = func(tr importer.SessionTranscript) error {
 				if err := primary(tr); err != nil {
 					return err
 				}
-				return publishNativeTranscript(chStream, tr)
+				return publishNativeTranscript(chStream, peerName, tr)
 			}
 			peers = append(peers, pw)
 		}

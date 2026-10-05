@@ -16,10 +16,10 @@ func TestNativeTranscriptPublicationUsesProducer(t *testing.T) {
 		t.Fatal(err)
 	}
 	transcript := importer.SessionTranscript{Provider: "openai", SessionID: "producer-session", Messages: []importer.Message{{Role: "assistant", Content: "OWN_WORK", Timestamp: time.Now()}}}
-	if err := publishNativeTranscript(stream, transcript); err != nil {
+	if err := publishNativeTranscript(stream, "opencode", transcript); err != nil {
 		t.Fatal(err)
 	}
-	if err := publishNativeTranscript(stream, transcript); err != nil {
+	if err := publishNativeTranscript(stream, "opencode", transcript); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := stream.since(-1)
@@ -57,10 +57,10 @@ func TestConcurrentChannelObserversDeduplicateProducer(t *testing.T) {
 	a, _ := openStream(root)
 	b, _ := openStream(root)
 	tr := importer.SessionTranscript{Provider: "codex", SessionID: "same", Messages: []importer.Message{{Role: "assistant", Content: "one", Timestamp: time.Now()}}}
-	if err := publishNativeTranscript(a, tr); err != nil {
+	if err := publishNativeTranscript(a, "codex", tr); err != nil {
 		t.Fatal(err)
 	}
-	if err := publishNativeTranscript(b, tr); err != nil {
+	if err := publishNativeTranscript(b, "codex", tr); err != nil {
 		t.Fatal(err)
 	}
 	entries, _ := a.since(-1)
