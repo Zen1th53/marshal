@@ -6971,8 +6971,8 @@
     },
     {
       "path": "internal/memory/security/firewall_test.go",
-      "sha256": "6d84c86c0cdf0ffe815303a5418b0ef66fbbaaa5a3139a8b1e13117b993c28a6",
-      "bytes": 10999
+      "sha256": "1cb5458a9a059ec28da32d51184fdcb1c6bcd53dfec2a52afd0aa3b55022e165",
+      "bytes": 11975
     },
     {
       "path": "internal/memory/security/poisoning/detector.go",
@@ -7916,8 +7916,8 @@
     },
     {
       "path": "internal/redaction/detector_test.go",
-      "sha256": "23fd3c39653107061b36a3b46eaeb039c20817980dda4a8a8af9062bbf8c2027",
-      "bytes": 5957
+      "sha256": "4d906b087c0346d58587095cd152c7acbca5012d0428b2350dffd1f8dad34091",
+      "bytes": 7091
     },
     {
       "path": "internal/reinjection/compiler.go",
@@ -8801,8 +8801,8 @@
     },
     {
       "path": "internal/store/memory_security_t86_test.go",
-      "sha256": "8a52d4898ab9114071f04a41477ffb8a8a3933a052cf5749e192a1334c502931",
-      "bytes": 14982
+      "sha256": "7796d58ee714040d67463169294e0bfaf0fa2ebb96feced730f8a86d864dfe5f",
+      "bytes": 16436
     },
     {
       "path": "internal/store/memory_t79_test.go",
