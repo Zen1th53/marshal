@@ -3,6 +3,7 @@
 package processgroup
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,7 +21,7 @@ type Reference struct {
 
 func processIdentity(pid int) (string, bool, error) {
 	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
-	if os.IsNotExist(err) {
+	if os.IsNotExist(err) || errors.Is(err, syscall.ESRCH) {
 		return "", false, nil
 	}
 	if err != nil {

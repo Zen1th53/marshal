@@ -71,11 +71,7 @@ while read line; do echo input:$line; done
 	if _, err := tmux.RunCommand(context.Background(), "send-keys", "-t", a.paneID, "hello", "Enter"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(50 * time.Millisecond)
-	out, _ := tmux.CapturePane(context.Background(), a.paneID)
-	if !strings.Contains(out, "input:hello") {
-		t.Fatalf("chat input missing: %s", out)
-	}
+	waitForTmuxOutput(t, a.paneID, "input:hello")
 	// Use the captured binding, rather than injecting a synthetic ID in the pane.
 	w.restartMarshalChat(context.Background(), a, w.workDir)
 	w.tmuxMu.Lock()

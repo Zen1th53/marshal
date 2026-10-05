@@ -64,6 +64,30 @@ func realTaskRequest(t *testing.T, w *Workspace, id string) driver.Request {
 	return driver.Request{Task: marshal.Task{PlanTaskID: id, Worker: "test", BaseCommit: strings.TrimSpace(string(out))}, Worktree: w.workDir, Brief: "task instruction"}
 }
 
+// Launch returns before a worker necessarily produces output. Evidence tests
+// must observe the fixture's output before asking StopAll to cancel it.
+func waitForTmuxOutput(t *testing.T, pane, want string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		out, err := tmux.CapturePane(ctx, pane)
+		if err != nil {
+			t.Fatalf("capture %s waiting for %q: %v", pane, want, err)
+		}
+		if strings.Contains(out, want) {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("pane %s missing %q: %q", pane, want, out)
+		case <-ticker.C:
+		}
+	}
+}
+
 func TestTaskTerminalShowsDriverOutputAndAcceptsTakeover(t *testing.T) {
 	w := realTmuxWorkspace(t)
 	d := &tmuxTaskDriver{w: w, inner: driver.Native{Provider: "test", Binary: "/bin/sh", Args: func(driver.Request) []string {
@@ -120,6 +144,7 @@ func TestStopAllUsesTaskIdentityAfterRenameAndJoin(t *testing.T) {
 	w.tmuxMu.Lock()
 	a := w.tmuxActiveWins["task-immutable"]
 	w.tmuxMu.Unlock()
+	waitForTmuxOutput(t, a.paneID, "TASK_EVIDENCE")
 	if _, err := tmux.RunCommand(ctx, "rename-window", "-t", a.paneID, "user-renamed"); err != nil {
 		t.Fatal(err)
 	}
@@ -128,6 +153,7 @@ func TestStopAllUsesTaskIdentityAfterRenameAndJoin(t *testing.T) {
 	}
 	// A fresh workspace must recover task identity without inspecting names/titles.
 	recovered := NewWorkspace(nil, "project", "session")
+	cleanupTmuxWorkspace(t, recovered)
 	recovered.workDir = w.workDir
 	recovered.tmuxPath = w.tmuxPath
 	recovered.tmuxSession = w.tmuxSession
@@ -198,7 +224,9 @@ func TestEvidenceFailureRetainsStoppedTaskPane(t *testing.T) {
 
 func TestConcurrentRunsKeepSameTaskIDsSeparate(t *testing.T) {
 	w := realTmuxWorkspace(t)
-	d := &tmuxTaskDriver{w: w, inner: driver.Native{Provider: "test", Binary: "/bin/sh", Args: func(driver.Request) []string { return []string{"-c", "echo evidence; read answer"} }, Parse: func([]byte) []marshal.CommandRecord { return nil }}}
+	d := &tmuxTaskDriver{w: w, inner: driver.Native{Provider: "test", Binary: "/bin/sh", Args: func(req driver.Request) []string {
+		return []string{"-c", "echo evidence:$1; read answer", "fixture", req.RunID}
+	}, Parse: func([]byte) []marshal.CommandRecord { return nil }}}
 	for _, run := range []string{"first", "second"} {
 		req := realTaskRequest(t, w, "same")
 		req.RunID = run
@@ -210,21 +238,26 @@ func TestConcurrentRunsKeepSameTaskIDsSeparate(t *testing.T) {
 	}
 	w.tmuxMu.Lock()
 	var workers int
+	panes := make(map[string]string)
 	for _, a := range w.tmuxActiveWins {
 		if a.role == "task" {
 			workers++
+			panes[a.runID] = a.paneID
 		}
 	}
 	w.tmuxMu.Unlock()
 	if workers != 2 {
 		t.Fatalf("concurrent task identities collided: %d workers", workers)
 	}
+	for _, run := range []string{"first", "second"} {
+		waitForTmuxOutput(t, panes[run], "evidence:"+run)
+	}
 	if response := w.StopAllWorkers(context.Background()); !strings.Contains(response, "Stopped all") {
 		t.Fatal(response)
 	}
 	for _, run := range []string{"first", "second"} {
 		data, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "evidence", "task-"+run+"-same-latest.txt"))
-		if err != nil || !strings.Contains(string(data), "evidence") {
+		if err != nil || !strings.Contains(string(data), "evidence:"+run) {
 			t.Fatalf("run %s evidence is not bound to task identity: %q %v", run, data, err)
 		}
 	}

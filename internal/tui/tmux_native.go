@@ -411,6 +411,9 @@ func resumeArgsForProvider(provider, sessionID string) []string {
 
 // isTmuxActive reports whether tmux is available and MARSHAL is connected to it.
 func (w *Workspace) isTmuxActive() bool {
+	if !tmux.IsInsideTmux() && os.Getenv("MARSHAL_TEST_FORCE_TMUX") != "1" {
+		return false
+	}
 	w.tmuxMu.Lock()
 	path := w.tmuxPath
 	w.tmuxMu.Unlock()
@@ -726,7 +729,9 @@ func (w *Workspace) monitorAgent(
 						// A relay exit cannot certify worker success. If the pinned
 						// supervisor vanished without a result, retain an unknown failure.
 						alive, identityErr := processgroup.RunningReference(snapshot.supervisor)
-						dead = identityErr == nil && !alive
+						// Completion publishes the outcome before closing the relay.
+						// A reaped supervisor alone does not mean publication failed.
+						dead = dead && identityErr == nil && !alive
 						exitCode = -1
 					}
 				}

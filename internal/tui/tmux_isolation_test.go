@@ -118,7 +118,21 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 	}
 	defer func() { client.Process.Kill(); client.Wait(); w.StopAllWorkers(ctx) }()
 	go io.Copy(io.Discard, master)
-	time.Sleep(100 * time.Millisecond)
+	// Wait for attachment, then assert the initial input state immediately.
+	attachedDeadline := time.Now().Add(time.Second)
+	for {
+		clients, err := tmux.RunCommand(ctx, "list-clients", "-t", w.tmuxSession, "-F", "#{client_name}")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.TrimSpace(string(clients)) != "" {
+			break
+		}
+		if time.Now().After(attachedDeadline) {
+			t.Fatal("tmux client did not attach")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	state, err := tmux.RunCommand(ctx, "list-clients", "-t", w.tmuxSession, "-F", "#{pane_input_off} #{client_key_table}")
 	if err != nil {
 		t.Fatal(err)
@@ -242,5 +256,27 @@ func TestStatusProjectionDoesNotInitializeChat(t *testing.T) {
 	}
 	if len(data) != 0 {
 		t.Fatalf("status projection initialized tmux: %s", data)
+	}
+}
+
+func TestInactiveTmuxDoesNotInitializeChat(t *testing.T) {
+	_, log := setupFakeTmux(t)
+	t.Setenv("TMUX", "")
+	t.Setenv("MARSHAL_TEST_FORCE_TMUX", "")
+	w := NewWorkspace(nil, "project", "session")
+	w.workDir = t.TempDir()
+	cleanupTmuxWorkspace(t, w)
+	if w.isTmuxActive() {
+		t.Fatal("reported an active tmux connection outside tmux")
+	}
+	w.tmuxMu.Lock()
+	agents := len(w.tmuxActiveWins)
+	w.tmuxMu.Unlock()
+	data, err := os.ReadFile(log)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if agents != 0 || len(data) != 0 {
+		t.Fatalf("inactive check initialized tmux: agents=%d commands=%s", agents, data)
 	}
 }

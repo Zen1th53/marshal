@@ -5,11 +5,13 @@ package tui
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/processgroup"
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
@@ -110,5 +112,65 @@ func TestNativeHostOptionFailuresAbortLaunch(t *testing.T) {
 				t.Fatalf("failed host was not removed: %s %v", data, err)
 			}
 		})
+	}
+}
+
+// The supervisor can be reaped before the driver publishes its durable result.
+// Its terminal relay stays alive until that publication has finished.
+func TestRecoveredWorkerWaitsForOutcomeWhileRelayIsAlive(t *testing.T) {
+	bin, log, _ := setupFakeTmuxWithDeadFile(t)
+	w := NewWorkspace(nil, "project", "session")
+	w.workDir, w.tmuxSession, w.tmuxPath = t.TempDir(), "test-session", bin
+	cleanupTmuxWorkspace(t, w)
+	supervisor := exec.Command("sleep", "30")
+	if err := supervisor.Start(); err != nil {
+		t.Fatal(err)
+	}
+	ref, err := processgroup.Identify(supervisor)
+	_ = supervisor.Process.Kill()
+	_ = supervisor.Wait()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	a := &activeTmuxAgent{id: "test", role: "worker", paneID: "%0", supervisor: ref, state: "working", cancel: cancel, doneChan: make(chan struct{})}
+	w.tmuxActiveWins[a.id] = a
+	if err := saveAgentRecord(w.workDir, w.tmuxSession, a); err != nil {
+		t.Fatal(err)
+	}
+	w.monitorAgent(ctx, a, w.workDir, nil, nil, nil, nil, nil)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-a.doneChan:
+			t.Fatal("recovered worker closed before the driver published its outcome")
+		case <-ctx.Done():
+			t.Fatal("monitor did not poll the live relay twice")
+		case <-ticker.C:
+		}
+		data, _ := os.ReadFile(log)
+		if strings.Count(string(data), "#{pane_dead}") >= 2 {
+			break
+		}
+	}
+	w.tmuxMu.Lock()
+	state := a.state
+	w.tmuxMu.Unlock()
+	if state != "working" {
+		t.Fatalf("unpublished outcome classified as %s", state)
+	}
+	if err := agentCompletion(w.workDir, a.id)(0); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-a.doneChan:
+	case <-ctx.Done():
+		t.Fatal("published completion was not retained")
+	}
+	record, err := loadAgentRecord(w.workDir, a.paneID)
+	if err != nil || record.Outcome != "done" {
+		t.Fatalf("outcome = %q, %v; want done", record.Outcome, err)
 	}
 }
