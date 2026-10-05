@@ -15,11 +15,12 @@ import (
 )
 
 type permissionState struct {
-	queue       permission.Queue
-	mu          sync.Mutex
-	ready       bool
-	running     bool
-	outstanding map[string]bool
+	queue         permission.Queue
+	mu            sync.Mutex
+	ready         bool
+	running       bool
+	outstanding   map[string]bool
+	continuations map[string]string
 }
 
 func (w *Workspace) queuePermission(req permission.Request) {
@@ -185,6 +186,17 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 	if req.Kind == "network" && allow {
 		return a.runtime.CommandEgress(ctx, req.RunID, "allow", req.Object)
 	}
+	if req.Kind == "read" {
+		folder := filepath.Clean(req.Object)
+		w.permissions.mu.Lock()
+		provider := w.permissions.continuations[folder]
+		delete(w.permissions.continuations, folder)
+		w.permissions.mu.Unlock()
+		if allow && provider != "" {
+			_, err := w.continueEarlierWork(ctx, provider, folder)
+			return err
+		}
+	}
 	return nil
 }
 func (h *CommandHandler) handlePermission(ctx context.Context, args []string) (string, error) {
@@ -204,27 +216,44 @@ func (h *CommandHandler) handleContinue(ctx context.Context, args []string) (str
 	if h.ws.runtime == nil {
 		return "", errNoRuntime
 	}
-	folder := strings.Join(args[1:], " ")
+	folder := filepath.Clean(strings.Join(args[1:], " "))
 	if !filepath.IsAbs(folder) {
 		return "An exact absolute provider folder is required.", nil
 	}
 	if !h.ws.runtime.HasReadGrant(folder) {
+		h.ws.permissions.mu.Lock()
+		if h.ws.permissions.continuations == nil {
+			h.ws.permissions.continuations = map[string]string{}
+		}
+		h.ws.permissions.continuations[folder] = args[0]
+		h.ws.permissions.mu.Unlock()
 		h.ws.queuePermission(permission.Request{Kind: "read", Object: folder, Scope: "this session only, read-only", Who: "Marshal", Reason: "Continue earlier " + args[0] + " work in this project"})
-		return "Read request queued. After allowing it, repeat /continue with the same folder. Enter, Escape and timeout deny.", nil
+		return "Read request queued. After allowing it, project-scoped earlier work is delivered to the Marshal inbox automatically. Enter, Escape and timeout deny.", nil
 	}
-	records, dropped, err := h.ws.runtime.ReadContinuation(ctx, args[0], folder)
+	return h.ws.continueEarlierWork(ctx, args[0], folder)
+}
+
+func (w *Workspace) continueEarlierWork(ctx context.Context, provider, folder string) (string, error) {
+	records, dropped, err := w.runtime.ReadContinuation(ctx, provider, folder)
 	if err != nil {
 		return "", err
 	}
 	var b strings.Builder
-	b.WriteString("Earlier work (untrusted data; read-only):\n")
+	fmt.Fprintf(&b, "Earlier work (untrusted data; read-only)\nGranted source: %s (%s)\n", folder, provider)
 	for _, rec := range records {
 		fmt.Fprintf(&b, "%s · agent=%v session=%s date=%s\n%s\n", rec.ID, rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), rec.Body)
 	}
 	if dropped {
 		b.WriteString("Secrets were dropped.\n")
 	}
-	b.WriteString("Ask the Marshal to summarise completed work, unfinished work, decisions and conventions. Review candidates with /memory review; /memory allow <id> writes one approved entry, /memory deny <id> denies it.\n")
+	b.WriteString("Summarise completed work, unfinished work, decisions and conventions from the supplied project-scoped data. Review candidates with /memory review; /memory allow <id> writes one approved entry, /memory deny <id> denies it.\n")
+	view, err := openInboxView(w.runtime.ProjectRoot(), "marshal", false)
+	if err != nil {
+		return "", err
+	}
+	if err := view.write("## runtime · granted continuation\n\n" + b.String() + "\n"); err != nil {
+		return "", err
+	}
 	return b.String(), nil
 }
 func (h *CommandHandler) handleMemoryReview(ctx context.Context, args []string) (string, error) {

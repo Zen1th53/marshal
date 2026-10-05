@@ -1216,6 +1216,47 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 	if err != nil {
 		return RunResult{}, err
 	}
+	// Supervision excludes another live dispatch. On failure, release only this
+	// dispatch's lease, including an assignment made before Run was called.
+	var dispatchSession string
+	if task.Status == model.TaskClaimed {
+		active, err := r.store.ActiveLease(ctx, task.ID)
+		if err != nil {
+			return RunResult{}, err
+		}
+		if active.AgentID == request.AgentID {
+			dispatchSession = active.Lease.SessionID
+		}
+	}
+	defer func() {
+		if finalErr == nil || dispatchSession == "" {
+			return
+		}
+		cleanup := context.Background()
+		active, err := r.store.ActiveLease(cleanup, task.ID)
+		if errors.Is(err, model.ErrNotFound) {
+			return // execution finalization already released it
+		}
+		if err != nil {
+			finalErr = errors.Join(finalErr, err)
+			return
+		}
+		if active.Lease.SessionID != dispatchSession || active.AgentID != request.AgentID {
+			return
+		}
+		current, err := r.store.GetTask(cleanup, task.ID)
+		if err != nil {
+			finalErr = errors.Join(finalErr, err)
+			return
+		}
+		if current.ControlState != "" {
+			return // operator control is settled by the supervisor
+		}
+		finalErr = errors.Join(finalErr, r.Release(cleanup, ReleaseRequest{
+			TaskID: task.ID, ExpectedRevision: active.TaskRevision, EnforceRevision: true,
+		}))
+	}()
+
 	if _, err := r.AssessTool(ctx, risk.AssessmentRequest{
 		ID: risk.AssessmentID("run-risk-" + task.ID + "-" + request.Adapter),
 		Descriptor: risk.ToolDescriptor{
@@ -1320,23 +1361,14 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 	if task.Status == model.TaskClaimed {
 		claimedRevision = task.Revision
 	}
-	releasePreparationFailure := func() {
-		active, activeErr := r.store.ActiveLease(context.Background(), task.ID)
-		if activeErr == nil {
-			_ = r.store.ReleaseTask(context.Background(), model.ReleaseRequest{
-				TaskID: task.ID, LeaseID: active.Lease.ID, SessionID: active.Lease.SessionID,
-				AgentID: active.AgentID, ExpectedRevision: active.TaskRevision,
-				BlockedReason: "worker preparation failed",
-			})
-		}
-	}
+	dispatchSession = claim.Session.ID
+
 	input := model.PolicyInput{
 		AgentID: request.AgentID, SessionID: claim.Session.ID, Role: claim.Session.Role,
 		TaskID: task.ID, Risk: task.Risk, Operation: model.ShellExecute,
 		Target: r.layout.Root, TaskOwned: true, TargetInScope: true, Required: true,
 	}
 	if err := policy.Enforce(r.policy, input, func() error { return nil }); err != nil {
-		releasePreparationFailure()
 		return RunResult{}, err
 	}
 	baseCommit := r.layout.HEAD
@@ -1349,12 +1381,10 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		TaskID: task.ID, Branch: branch, BaseCommit: baseCommit,
 	})
 	if err != nil {
-		releasePreparationFailure()
 		return RunResult{}, err
 	}
 	if err := r.store.BeginExecution(ctx, task.ID, claim.Session.ID, request.AgentID,
 		branch, worktreeState.Path, baseCommit, claimedRevision); err != nil {
-		releasePreparationFailure()
 		return RunResult{}, err
 	}
 	executionRevision := claimedRevision + 1
