@@ -687,6 +687,21 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 
 // handleHarness handles harness probe and selection.
 func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (string, error) {
+	if len(args) >= 2 && strings.EqualFold(args[0], "verify") {
+		if len(args) > 3 || h.ws.runtime == nil {
+			return "Usage: /harness verify opencode <model>", nil
+		}
+		modelName := ""
+		if len(args) == 3 {
+			modelName = args[2]
+		}
+		profile, err := h.ws.runtime.VerifyMarshalWorker(ctx, args[1], modelName)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Verified %s %s in sandbox through proxy; evidence %s", profile.Harness, profile.InstalledVersion, profile.ProbeEvidenceID), nil
+	}
+
 	if len(args) == 0 || strings.EqualFold(args[0], "status") || strings.EqualFold(args[0], "probe") {
 		probes := ProbeHarnesses()
 		var b strings.Builder

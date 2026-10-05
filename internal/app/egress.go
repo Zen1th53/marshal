@@ -59,6 +59,8 @@ func providerEndpoint(provider, modelName string) (string, error) {
 			modelName = strings.TrimSpace(os.Getenv("MARSHAL_OPENCODE_MODEL"))
 		}
 		switch strings.SplitN(modelName, "/", 2)[0] {
+		case "opencode":
+			return "opencode.ai:443", nil
 		case "openai":
 			return "api.openai.com:443", nil
 		case "anthropic":

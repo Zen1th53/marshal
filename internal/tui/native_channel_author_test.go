@@ -68,3 +68,14 @@ func TestConcurrentChannelObserversDeduplicateProducer(t *testing.T) {
 		t.Fatalf("same producer duplicated by observers: %+v", entries)
 	}
 }
+
+func TestHarnessVerifyCommandSyntax(t *testing.T) {
+	if usage := configCommandUsage([]string{"/harness", "verify", "opencode", "opencode/nemotron-3-ultra-free"}); usage != "" {
+		t.Fatal(usage)
+	}
+	for _, args := range [][]string{{"/harness", "verify"}, {"/harness", "verify", "opencode", "model", "extra"}} {
+		if configCommandUsage(args) == "" {
+			t.Fatalf("invalid verify syntax accepted: %v", args)
+		}
+	}
+}
