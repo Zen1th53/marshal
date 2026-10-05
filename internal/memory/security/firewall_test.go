@@ -289,3 +289,28 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		})
 	}
 }
+
+func TestFirewallAllowsRuntimeIdentifiersAndDigests(t *testing.T) {
+	fw := security.NewFirewall(security.FirewallConfig{})
+	digest := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	rec := model.MemoryRecordV2{
+		Title: "Rootless Execution", Body: "Use the approved worktree",
+		WorktreeID: "WT-runtime-secret:" + digest, ScopeID: "PROJECT-secret:" + digest,
+		EvidenceIDs: []string{"EVENT-token:" + digest}, ContentDigest: digest,
+		ExtMeta: map[string]any{"provider_secret_digest": digest, "token_hash": digest},
+	}
+	if err := fw.ScanRecord(context.Background(), rec); err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"WT-runtime-secret:" + digest, "provider_secret_digest: " + digest, "token_hash=" + digest, "secret_id=" + digest, "worktree_key_digest=" + digest, "monkey=" + digest} {
+		if err := fw.ScanText(text); err != nil {
+			t.Fatalf("identifier %q rejected: %v", text, err)
+		}
+	}
+	// Hexadecimal credentials remain credentials when assigned to credential names.
+	for _, text := range []string{"secret=" + digest, "custom_app_token: " + digest, "password=hunter2"} {
+		if !errors.Is(fw.ScanText(text), security.ErrSecretDetected) {
+			t.Fatal("credential accepted")
+		}
+	}
+}

@@ -30,7 +30,7 @@ func NewFirewall(config FirewallConfig) *Firewall {
 	return &Firewall{config: config}
 }
 
-// ScanRecord inspects all fields of a MemoryRecordV2 for secret material.
+// ScanRecord inspects supplied content fields of a MemoryRecordV2 for secret material.
 // Returns ErrSecretDetected without echoing the secret content if detected.
 func (f *Firewall) ScanRecord(ctx context.Context, rec model.MemoryRecordV2) error {
 	if err := ctx.Err(); err != nil {
@@ -52,25 +52,12 @@ func (f *Firewall) ScanRecord(ctx context.Context, rec model.MemoryRecordV2) err
 		return fmt.Errorf("%w: secret detected in source reference (%s)", ErrSecretDetected, reason)
 	}
 
-	// 4. Scan evidence IDs
-	for _, id := range rec.EvidenceIDs {
-		if reason := f.detectSecret(id); reason != "" {
-			return fmt.Errorf("%w: secret detected in evidence id (%s)", ErrSecretDetected, reason)
+	// Runtime identifiers are structured data, not assignments supplied in prose.
+	// Retain credential-shape checks for malformed/imported identifiers.
+	for _, id := range append([]string{rec.ScopeID, rec.BranchName, rec.WorktreeID, rec.ACLScope}, rec.EvidenceIDs...) {
+		if reason := redaction.DetectCredentialShape(id); reason != "" {
+			return fmt.Errorf("%w: credential in identifier (%s)", ErrSecretDetected, reason)
 		}
-	}
-
-	// 5. Scan scope ID, branch name, worktree ID, acl scope
-	if reason := f.detectSecret(rec.ScopeID); reason != "" {
-		return fmt.Errorf("%w: secret detected in scope id (%s)", ErrSecretDetected, reason)
-	}
-	if reason := f.detectSecret(rec.BranchName); reason != "" {
-		return fmt.Errorf("%w: secret detected in branch name (%s)", ErrSecretDetected, reason)
-	}
-	if reason := f.detectSecret(rec.WorktreeID); reason != "" {
-		return fmt.Errorf("%w: secret detected in worktree id (%s)", ErrSecretDetected, reason)
-	}
-	if reason := f.detectSecret(rec.ACLScope); reason != "" {
-		return fmt.Errorf("%w: secret detected in acl scope (%s)", ErrSecretDetected, reason)
 	}
 
 	// 6. Scan ExtMeta

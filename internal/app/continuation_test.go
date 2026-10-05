@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/store"
 	"os"
@@ -116,5 +117,34 @@ func TestReadContinuationOnlyProjectDataAndProvenance(t *testing.T) {
 	}
 	if records[0].SessionID != "local" || records[0].ExtMeta["provider"] != "codex" || records[0].ObservedAt.Format("2006-01-02") != "2026-10-01" {
 		t.Fatalf("provenance lost: %+v", records[0])
+	}
+}
+
+func TestApprovedImportedMemoryIsActiveAndRecallable(t *testing.T) {
+	r := openNetpolRuntime(t)
+	ctx := context.Background()
+	records, _, err := r.ProposeContinuation(ctx, importer.SessionTranscript{SessionID: "prior-session", Provider: "claude", CWD: r.ProjectRoot(), Branch: "original-branch", Messages: []importer.Message{{Role: "assistant", Content: "Handoff: keep functions small"}}})
+	if err != nil || len(records) != 1 {
+		t.Fatalf("propose: %v %v", records, err)
+	}
+	control, err := r.OpenLocalControl(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.CommandPermission(control.Context(ctx), permission.Request{Kind: "memory", Object: records[0].ID}, true, "operator memory review"); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := r.store.GetMemoryV2(ctx, r.ProjectID(), records[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Lifecycle != model.MemoryDurable || rec.ScopeID != r.ProjectID() || rec.SessionID != "prior-session" || rec.ExtMeta["provider"] != "claude" || rec.BranchName != records[0].BranchName || rec.Source != records[0].Source || rec.ContentDigest != rec.CanonicalDigest() {
+		t.Fatalf("approval/provenance: %+v", rec)
+	}
+	for _, query := range []string{"", "handoff"} {
+		response, err := r.Memory().Recall(ctx, testPrincipal("marshal"), RecallRequest{ProjectID: r.ProjectID(), Query: query})
+		if err != nil || len(response.Results) != 1 || response.Results[0].ID != rec.ID {
+			t.Fatalf("recall %q: %+v %v", query, response, err)
+		}
 	}
 }

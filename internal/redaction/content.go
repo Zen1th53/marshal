@@ -15,7 +15,7 @@ var (
 	awsKeyPattern         = regexp.MustCompile(`(?i)\b(?:AKIA|ABIA|ACCA|ASIA|AKIA0)[0-9A-Z]{15,}\b`)
 	slackTokenPattern     = regexp.MustCompile(`(?i)\bxox[baprs]-[0-9a-zA-Z-]{10,}\b`)
 	privateKeyPattern     = regexp.MustCompile(`(?i)-----BEGIN(?: [A-Z0-9_-]+)? PRIVATE KEY-----`)
-	passwordPattern       = regexp.MustCompile(`(?i)\b(?:password|passwd)\s*[:=]\s*["']?([^"'\s]+)["']?`)
+	passwordPattern       = regexp.MustCompile(`(?i)(?:^|[^a-zA-Z0-9_-])(?:password|passwd)\s*[:=]\s*["']?([^"'\s]+)["']?`)
 	netrcPattern          = regexp.MustCompile(`(?i)\b(?:machine\s+\S+|default)[\s\S]{0,100}?\bpassword\s+\S+`)
 	credentialFilePattern = regexp.MustCompile(`(?i)(\[(?:default|[a-zA-Z0-9_.-]+)\][\s\S]{0,200}?(?:aws_access_key_id|aws_secret_access_key)\s*=|\baws_secret_access_key\s*=\s*\S+|\boauth_token:\s*["']?[a-zA-Z0-9_]{16,}|\bhttps?:\/\/[^:\s]+:[^@\s]+@)`)
 	googleApiKeyPattern   = regexp.MustCompile(`(?i)\bAIza[0-9A-Za-z\-_]{35}\b`)
@@ -29,14 +29,24 @@ var (
 	// observed "password=hunter2" reaching the store unredacted. One character
 	// is enough to match, while an empty value is left alone so ordinary prose
 	// such as "token: " is not mangled.
-	keyPattern        = regexp.MustCompile(`(?i)\b(api[_-]?key|secret|token|password|passwd|access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization|auth[_-]?token|private[_-]?key|aws_secret_access_key|aws_access_key_id|oauth_token|github_token|openai_api_key|secret_key|secret_access_key|api_token|credential|credentials|app_secret|master_key|private_token|deploy_token)\s*[:=]\s*["']?([^"'\s]+)["']?`)
-	genericKeyPattern = regexp.MustCompile(`(?i)\b([a-zA-Z0-9_-]*(?:secret|token|key|credential|passwd|password|auth)[a-zA-Z0-9_-]*)\s*[:=]\s*["']?([a-zA-Z0-9_\-\.\/+=]{16,})["']?`)
+	keyPattern        = regexp.MustCompile(`(?i)(?:^|[^a-zA-Z0-9_-])(api[_-]?key|secret|token|password|passwd|access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization|auth[_-]?token|private[_-]?key|aws_secret_access_key|aws_access_key_id|oauth_token|github_token|openai_api_key|secret_key|secret_access_key|api_token|credential|credentials|app_secret|master_key|private_token|deploy_token)\s*[:=]\s*["']?([^"'\s]+)["']?`)
+	genericKeyPattern = regexp.MustCompile(`(?i)\b((?:[a-zA-Z0-9]+[_-])*(?:secret|token|key|credential|passwd|password|auth)(?:[_-][a-zA-Z0-9]+)*)\s*[:=]\s*["']?([a-zA-Z0-9_\-\.\/+=]{16,})["']?`)
 )
 
 // DetectSecret checks if input contains any credential or secret pattern.
 // It returns a safe, descriptive string naming the kind of secret detected,
 // or empty string if no secret was detected. It never echoes the secret value.
 func DetectSecret(input string) string {
+	return detectSecret(input, true)
+}
+
+// DetectCredentialShape checks typed identifiers for credential formats without
+// interpreting identifier components as free-text assignments.
+func DetectCredentialShape(input string) string {
+	return detectSecret(input, false)
+}
+
+func detectSecret(input string, assignments bool) string {
 	if strings.TrimSpace(input) == "" {
 		return ""
 	}
@@ -97,6 +107,9 @@ func DetectSecret(input string) string {
 	if credentialFilePattern.MatchString(input) {
 		return "credential file content"
 	}
+	if !assignments {
+		return ""
+	}
 	if passwordPattern.MatchString(input) {
 		return "explicit secret/password assignment"
 	}
@@ -105,13 +118,28 @@ func DetectSecret(input string) string {
 	}
 	if matches := genericKeyPattern.FindAllStringSubmatch(input, -1); len(matches) > 0 {
 		for _, m := range matches {
-			if len(m) > 2 && isHighEntropyToken(m[2]) {
+			if len(m) > 2 && !isIdentifierName(m[1]) && isHighEntropyToken(m[2]) {
 				return "high-entropy token next to key-like name"
 			}
 		}
 	}
 
 	return ""
+}
+
+func isIdentifierName(name string) bool {
+	name = strings.ToLower(name)
+	for _, prefix := range []string{"wt-", "mem-", "run-", "task-", "event-", "rcpt-"} {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	for _, suffix := range []string{"_id", "-id", "_hash", "-hash", "_digest", "-digest"} {
+		if strings.HasSuffix(name, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func isHighEntropyToken(s string) bool {
@@ -194,7 +222,11 @@ func RedactContent(input string, knownSecrets []string) string {
 	input = githubTokenPattern.ReplaceAllString(input, "[REDACTED]")
 	input = awsKeyPattern.ReplaceAllString(input, "[REDACTED]")
 	input = slackTokenPattern.ReplaceAllString(input, "[REDACTED]")
-	input = keyPattern.ReplaceAllString(input, "$1: [REDACTED]")
+	input = keyPattern.ReplaceAllStringFunc(input, func(m string) string {
+		parts := keyPattern.FindStringSubmatch(m)
+		prefix := m[:strings.Index(strings.ToLower(m), strings.ToLower(parts[1]))]
+		return prefix + parts[1] + ": [REDACTED]"
+	})
 
 	return input
 }

@@ -1211,7 +1211,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 	// directly. Use a bounded SQL fallback only when no derived candidate was
 	// found. The store applies project/scope/ACL predicates before returning
 	// IDs, so this does not restore the old full-content production scan.
-	if query != "" && len(matchedTrackMap) == 0 {
+	if len(matchedTrackMap) == 0 {
 		fallbackIDs, fallbackErr := s.store.SearchAuthorizedMemoryIDs(ctx, req.ProjectID, principal.ID, req.AllowedScopeIDs, query, lexicalCandidateLimit)
 		if fallbackErr != nil {
 			return RecallResponse{}, fallbackErr

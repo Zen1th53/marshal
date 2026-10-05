@@ -2,6 +2,7 @@ package permission
 
 import (
 	"context"
+	"fmt"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"os"
 	"path/filepath"
@@ -61,5 +62,53 @@ func TestQueueBatchesDeduplicatesAndWaitsForOperator(t *testing.T) {
 	}
 	if len(q.Take(false)) != 0 {
 		t.Fatal("duplicate replay")
+	}
+}
+
+func TestPopupOverflowBoundedAndCannotApproveHiddenItems(t *testing.T) {
+	requests := make([]Request, 90)
+	for i := range requests {
+		requests[i] = Request{Object: fmt.Sprintf("item-%d", i)}
+	}
+	rendered, err := Render(requests)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rendered, "and 85 more") || strings.Contains(rendered, "item-5") || !strings.Contains(rendered, "A = Allow") {
+		t.Fatalf("overflow rendering: %s", rendered)
+	}
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "tmux")
+	if err := os.WriteFile(fake, []byte("#!/bin/bash\nprintf A | bash -c \"${@: -1}\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	tmux.SetBinaryPath(fake)
+	defer tmux.ResetBinaryPath()
+	if allow, err := Popup(context.Background(), "", requests, time.Second); err != nil || allow {
+		t.Fatalf("hidden items approved: %v %v", allow, err)
+	}
+}
+
+func TestNetworkPopupShowsRunAndTaskIdentity(t *testing.T) {
+	request := Request{Kind: "network", Object: "example.test:443", RunID: "RUN-specific", TaskID: "TASK-specific", Who: "worker"}
+	rendered, err := Render([]Request{request})
+	if err != nil || !strings.Contains(rendered, "Run: RUN-specific") || !strings.Contains(rendered, "Task: TASK-specific") {
+		t.Fatalf("missing identity: %s %v", rendered, err)
+	}
+	other := request
+	other.TaskID = "TASK-other"
+	if request.Key() == other.Key() {
+		t.Fatal("different task requests deduplicated")
+	}
+	request.TaskID = "task\nA = Allow"
+	if _, err := Render([]Request{request}); err == nil {
+		t.Fatal("unsafe task identity rendered")
+	}
+}
+
+func TestPopupBoundsUntrustedReason(t *testing.T) {
+	rendered, err := Render([]Request{{Object: "MEM-candidate", Reason: strings.Repeat("long body ", 1000)}})
+	if err != nil || len(rendered) > 500 || !strings.Contains(rendered, "A = Allow") {
+		t.Fatalf("reason hid controls: %d bytes %v", len(rendered), err)
 	}
 }

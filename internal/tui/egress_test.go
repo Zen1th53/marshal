@@ -50,3 +50,16 @@ func TestEgressCommandsRequireRuntimeOperator(t *testing.T) {
 		t.Fatalf("bad argv: %s %v", out, err)
 	}
 }
+
+func TestNetworkPermissionRetainsRunAndTaskFromAlert(t *testing.T) {
+	w := NewWorkspace(nil, "project", "session")
+	w.workDir = t.TempDir()
+	w.permissions.running = true // Hold the queue for inspection.
+	if err := w.deliverEgressAlert(app.EgressAlert{RunID: "RUN-specific", TaskID: "TASK-specific", Worker: "worker", Endpoint: "example.test:443", Message: "worker requests network"}); err != nil {
+		t.Fatal(err)
+	}
+	requests := w.permissions.queue.Take(false)
+	if len(requests) != 1 || requests[0].RunID != "RUN-specific" || requests[0].TaskID != "TASK-specific" {
+		t.Fatalf("lost network identity: %+v", requests)
+	}
+}

@@ -158,6 +158,7 @@ func (w *Workspace) adoptSurvivingWorkersLocked(projectRoot string) {
 			}
 		}
 		w.tmuxActiveWins[record.ID] = agent
+		_ = w.bindWorkspaceKeysLocked(context.Background(), agent.paneID, projectRoot)
 		w.monitorAgent(agentCtx, agent, projectRoot, nil, watch, nil, nil, nil)
 	}
 }

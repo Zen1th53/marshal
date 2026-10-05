@@ -8,6 +8,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -76,6 +77,25 @@ func (w *Workspace) runPermissionQueue() {
 			w.permissions.mu.Unlock()
 			continue
 		}
+		batch, review := partitionPermissionBatch(batch)
+		for _, req := range review {
+			w.permissions.mu.Lock()
+			delete(w.permissions.outstanding, req.Key())
+			w.permissions.mu.Unlock()
+		}
+		if len(review) > 0 {
+			w.runCommand(context.Background(), "/memory review")
+		}
+		if len(batch) == 0 {
+			continue
+		}
+		// Every popup decision covers only the visible items. Keep overflow queued.
+		if len(batch) > permission.MaxPopupItems {
+			for _, req := range batch[permission.MaxPopupItems:] {
+				w.permissions.queue.Add(req)
+			}
+			batch = batch[:permission.MaxPopupItems]
+		}
 		w.tmuxMu.Lock()
 		target := w.tmuxSession
 		path := w.tmuxPath
@@ -96,6 +116,26 @@ func (w *Workspace) runPermissionQueue() {
 		}
 	}
 }
+
+// Large memory batches stay pending for per-entry operator review. They never
+// share one blanket popup decision with unrelated filesystem or network grants.
+func partitionPermissionBatch(batch []permission.Request) (popup, review []permission.Request) {
+	memoryCount := 0
+	for _, req := range batch {
+		if req.Kind == "memory" {
+			memoryCount++
+		}
+	}
+	for _, req := range batch {
+		if req.Kind == "memory" && memoryCount > permission.MaxPopupItems {
+			review = append(review, req)
+		} else {
+			popup = append(popup, req)
+		}
+	}
+	return
+}
+
 func (w *Workspace) decidePermission(ctx context.Context, req permission.Request, allow bool, source string) error {
 	control := w.controlSource()
 	if control == nil {
@@ -159,14 +199,36 @@ func (h *CommandHandler) handleMemoryReview(ctx context.Context, args []string) 
 		return "", errNoRuntime
 	}
 	candidates := h.ws.runtime.ContinuationCandidates()
-	if len(args) == 1 && args[0] == "review" {
-		var b strings.Builder
-		for _, rec := range candidates {
-			fmt.Fprintf(&b, "%s · agent=%v session=%s date=%s\n%s\n", rec.ID, rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), rec.Body)
+	if len(args) >= 1 && len(args) <= 2 && args[0] == "review" {
+		page := 1
+		if len(args) == 2 {
+			var err error
+			page, err = strconv.Atoi(args[1])
+			if err != nil || page < 1 {
+				return "Usage: /memory review [page]", nil
+			}
 		}
 		if len(candidates) == 0 {
 			return "No pending memory candidates.", nil
 		}
+		pages := (len(candidates) + permission.MaxPopupItems - 1) / permission.MaxPopupItems
+		if page > pages {
+			return fmt.Sprintf("Memory review has %d page(s).", pages), nil
+		}
+		start := (page - 1) * permission.MaxPopupItems
+		end := start + permission.MaxPopupItems
+		if end > len(candidates) {
+			end = len(candidates)
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "Memory review · page %d of %d · %d pending\n", page, pages, len(candidates))
+		for _, rec := range candidates[start:end] {
+			fmt.Fprintf(&b, "%s · agent=%v session=%s date=%s\n%s\n", rec.ID, rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), rec.Body)
+		}
+		if end < len(candidates) {
+			fmt.Fprintf(&b, "and %d more · /memory review %d\n", len(candidates)-end, page+1)
+		}
+		b.WriteString("Each entry requires /memory allow <id> or /memory deny <id>; pending entries are not stored.\n")
 		return b.String(), nil
 	}
 	if len(args) == 2 && (args[0] == "allow" || args[0] == "deny" || args[0] == "request") {

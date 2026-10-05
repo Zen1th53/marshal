@@ -13,19 +13,25 @@ import (
 	"unicode"
 )
 
-type Request struct{ Kind, Object, Scope, Who, Reason, RunID string }
+type Request struct{ Kind, Object, Scope, Who, Reason, RunID, TaskID string }
 
 func (r Request) Key() string {
-	return r.Kind + "\x00" + r.Object + "\x00" + r.Scope + "\x00" + r.Who + "\x00" + r.RunID
+	return r.Kind + "\x00" + r.Object + "\x00" + r.Scope + "\x00" + r.Who + "\x00" + r.RunID + "\x00" + r.TaskID
 }
+
+const MaxPopupItems = 5
+
 func Render(requests []Request) (string, error) {
 	var b strings.Builder
 	b.WriteString("Permission request\n\n")
 	for i, r := range requests {
-		for _, s := range []string{r.Object, r.Scope, r.Who} {
+		for _, s := range []string{r.Object, r.Scope, r.Who, r.RunID, r.TaskID} {
 			if strings.ContainsFunc(s, unicode.IsControl) {
 				return "", fmt.Errorf("unsafe permission metadata")
 			}
+		}
+		if i >= MaxPopupItems {
+			continue
 		}
 		// Control characters in untrusted reasons cannot change the terminal layout.
 		reason := strings.Map(func(c rune) rune {
@@ -34,7 +40,16 @@ func Render(requests []Request) (string, error) {
 			}
 			return c
 		}, r.Reason)
-		fmt.Fprintf(&b, "%d. %s\nScope and duration: %s\nWho asks: %s\nThe Marshal says: \"%s\"\n\n", i+1, r.Object, r.Scope, r.Who, reason)
+		if runes := []rune(reason); len(runes) > 100 {
+			reason = string(runes[:100]) + "…"
+		}
+		if r.Kind == "network" {
+			fmt.Fprintf(&b, "Run: %s · Task: %s\n", r.RunID, r.TaskID)
+		}
+		fmt.Fprintf(&b, "%d. %s\nScope and duration: %s\nWho asks: %s · The Marshal says: \"%s\"\n", i+1, r.Object, r.Scope, r.Who, reason)
+	}
+	if len(requests) > MaxPopupItems {
+		fmt.Fprintf(&b, "and %d more (require separate decisions)\n\n", len(requests)-MaxPopupItems)
 	}
 	b.WriteString("A = Allow   D = Deny\nEnter, Esc, any other key or timeout = Deny\n")
 	return b.String(), nil
@@ -85,7 +100,7 @@ func Popup(ctx context.Context, target string, requests []Request, timeout time.
 	if os.IsNotExist(err) {
 		return false, nil
 	}
-	return string(data) == "allow", err
+	return string(data) == "allow" && len(requests) <= MaxPopupItems, err
 }
 
 // Queue deduplicates pending requests, preserving their order for batch display.

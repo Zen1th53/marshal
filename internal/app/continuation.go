@@ -55,7 +55,7 @@ func (r *Runtime) CommandPermission(ctx context.Context, req permission.Request,
 	if err != nil {
 		return err
 	}
-	if err = r.store.AppendEvent(ctx, nil, model.Event{ID: id, Type: "PERMISSION_DECIDED", ProjectID: r.ProjectID(), Timestamp: time.Now().UTC(), Data: map[string]any{"kind": req.Kind, "object": req.Object, "scope": req.Scope, "requester": req.Who, "reason": req.Reason, "allow": allow, "actor": p.ID(), "source": source, "runtime_instance": r.runtimeInstanceID, "run_id": req.RunID}}); err != nil {
+	if err = r.store.AppendEvent(ctx, nil, model.Event{ID: id, Type: "PERMISSION_DECIDED", ProjectID: r.ProjectID(), Timestamp: time.Now().UTC(), Data: map[string]any{"kind": req.Kind, "object": req.Object, "scope": req.Scope, "requester": req.Who, "reason": req.Reason, "allow": allow, "actor": p.ID(), "source": source, "runtime_instance": r.runtimeInstanceID, "run_id": req.RunID, "task_id": req.TaskID}}); err != nil {
 		return err
 	}
 	if req.Kind == "read" {
@@ -75,6 +75,14 @@ func (r *Runtime) CommandPermission(ctx context.Context, req permission.Request,
 		if err = security.NewFirewall(security.FirewallConfig{}).ScanRecord(ctx, rec); err != nil {
 			return err
 		}
+		// Operator-approved session imports become project memory; source/session
+		// fields retain their original provenance.
+		if rec.Scope == string(model.ScopeSession) {
+			rec.Scope = string(model.ScopeProject)
+			rec.ScopeID = r.ProjectID()
+			rec.Lifecycle = model.MemoryDurable
+		}
+		rec.ContentDigest = rec.CanonicalDigest()
 		if err = r.store.WriteMemoryV2(ctx, rec); err != nil {
 			return err
 		}

@@ -28,7 +28,10 @@ func (w *Workspace) bindWorkspaceKeysLocked(ctx context.Context, pane, root stri
 	if err := tmux.BindWindowKey(ctx, pane, table, "F11", "select-window", "-t", target); err != nil {
 		return err
 	}
-	return tmux.BindWindowKey(ctx, pane, table, "M-x", "send-keys", "-t", target, "\"/stop all\"", "Enter")
+	if err := tmux.BindWindowKey(ctx, pane, table, "C-x", "send-keys", "-t", target, "C-x"); err != nil {
+		return err
+	}
+	return tmux.BindWindowKey(ctx, pane, table, "M-x", "send-keys", "-t", target, "C-x")
 }
 
 // A snapshot has its own zero mutex; mutable fields are read under tmuxMu.
