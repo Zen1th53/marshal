@@ -79,3 +79,28 @@ func TestHarnessVerifyCommandSyntax(t *testing.T) {
 		}
 	}
 }
+
+func TestNoneRemovesPreviouslyVisiblePeerWork(t *testing.T) {
+	root := t.TempDir()
+	s, _ := openStream(root)
+	if _, err := s.append("codex", "s", msg("OLD_PEER_WORK", baseTime)); err != nil {
+		t.Fatal(err)
+	}
+	view, _ := openInboxView(root, "claude", false)
+	entries, _ := s.since(-1)
+	if _, err := view.deliver(entries, newChannelConfig()); err != nil {
+		t.Fatal(err)
+	}
+	cfg := newChannelConfig()
+	cfg.sees["claude"] = nil
+	if err := saveChannelConfig(root, cfg); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(view.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "OLD_PEER_WORK") {
+		t.Fatal("none leaves previously visible peer work in the inbox")
+	}
+}
