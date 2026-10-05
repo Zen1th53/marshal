@@ -468,3 +468,17 @@ func TestCleanWorkerEnvStripsBriefingAndSharedChannelVariables(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenCodeWorkerPinsAssignedDirectory(t *testing.T) {
+	d := OpenCode("opencode")
+	args := d.Args(Request{Worktree: "/assigned/task", Brief: "tiny"})
+	found := false
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--dir" && args[i+1] == "/assigned/task" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("OpenCode can choose parent checkout instead of task worktree: %v", args)
+	}
+}
