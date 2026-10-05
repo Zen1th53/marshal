@@ -24,6 +24,7 @@ func TestProviderSessionHistoryUsesCanonicalPersistence(t *testing.T) {
 	if len(result.ImportedRecords) != 1 {
 		t.Fatalf("expected one committed record, got %+v", result)
 	}
+	approveTestCandidates(t, rt)
 	rec, err := rt.Store().GetMemoryV2ByID(ctx, result.ImportedRecords[0].ID)
 	if err != nil {
 		t.Fatalf("canonical record lookup: %v", err)

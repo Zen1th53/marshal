@@ -24,6 +24,7 @@ import (
 
 // Workspace encapsulates the live Terminal TUI Control Plane over canonical runtime state.
 type Workspace struct {
+	permissions        permissionState
 	governedDispatches map[string]context.CancelFunc
 	governedDispatchWG sync.WaitGroup
 
@@ -282,7 +283,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/effort", "/ultra", "/marshal", "/backup", "/fingerprint", "/runtime", "/store", "/export",
 			"/reinjection", "/alignment", "/optimization", "/verification", "/diff", "/review",
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
-			"/egress", "/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
+			"/permission", "/continue", "/egress", "/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
 			"/view", "/focus", "/takeover", "/take-over", "/stop",
 		},
@@ -302,7 +303,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/task"] = []string{"list", "create", "inspect", "assign", "pause", "resume", "cancel", "retry", "ownership"}
 	compCtx.Subcommands["/policy"] = []string{"network", "sandbox", "capability", "scope", "write", "audit"}
 	compCtx.Subcommands["/checkpoint"] = []string{"list", "create", "inspect", "diff"}
-	compCtx.Subcommands["/memory"] = []string{"list", "search", "provenance", "inject", "peers"}
+	compCtx.Subcommands["/memory"] = []string{"list", "search", "provenance", "inject", "peers", "review", "request", "allow", "deny"}
 	// Second level: the agents a channel line can name, plus the keywords.
 	// Offer both the short agent command and the canonical provider name.
 	compCtx.Subcommands["/memory peers"] = []string{"participants", "claude", "codex", "opencode", "agy", "antigravity"}
@@ -1424,6 +1425,7 @@ func (w *Workspace) AttachRuntime(runtime *app.Runtime, identity projectid.ID) {
 	w.projectIdentity = identity
 	if runtime != nil {
 		runtime.SetEgressAlertSink(w.deliverEgressAlert)
+		runtime.SetPermissionSink(w.queuePermission)
 	}
 }
 
@@ -1523,6 +1525,7 @@ func (w *Workspace) controlSource() *ControlSource {
 				defer w.mu.Unlock()
 				w.runtime = reopened
 				reopened.SetEgressAlertSink(w.deliverEgressAlert)
+				reopened.SetPermissionSink(w.queuePermission)
 				w.store = reopened.Store()
 				w.runtimeReplaced = true
 			},

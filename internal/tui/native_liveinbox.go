@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -191,6 +192,9 @@ func providerHistoryDir(provider, root string) (string, error) {
 	}
 	if !filepath.IsAbs(home) {
 		home = filepath.Join(root, home)
+	}
+	if provider == "claude" {
+		return filepath.Join(home, historyDir, regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(filepath.Clean(root), "-")), nil
 	}
 	return filepath.Join(home, historyDir), nil
 }

@@ -276,6 +276,8 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 	}
 
 	switch strings.ToLower(args[0]) {
+	case "review", "request", "allow", "deny":
+		return h.handleMemoryReview(ctx, args)
 	case "inject":
 		return h.handleMemoryInject(ctx, args[1:])
 	case "peers":

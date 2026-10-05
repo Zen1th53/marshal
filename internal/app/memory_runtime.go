@@ -169,6 +169,7 @@ type RetrievalReceipt struct {
 // separate in-memory source of truth. Lexical, vector, and graph indexes
 // remain disposable derived projections.
 type MemoryService struct {
+	propose          func(context.Context, model.MemoryRecordV2) error
 	store            *store.Store
 	authorizer       *authz.MemoryAuthorizer
 	lexicalIndex     *lexical.LexicalIndex
@@ -513,6 +514,12 @@ func (s *MemoryService) Remember(ctx context.Context, principal authz.Principal,
 			Kind:      "runtime_service",
 			Reference: principal.ID,
 		},
+	}
+	if s.propose != nil {
+		if err := s.propose(ctx, rec); err != nil {
+			return model.MemoryRecordV2{}, err
+		}
+		return rec, nil
 	}
 	if err := s.store.WriteMemoryV2(ctx, rec); err != nil {
 		return model.MemoryRecordV2{}, err
@@ -2197,6 +2204,13 @@ func (s *MemoryService) ImportSessionTranscript(ctx context.Context, principal a
 			}
 			if ex, err := s.store.FindMemoryByDigest(ctx, projectID, rec.ContentDigest); err == nil && ex.ID != "" {
 				result.SkippedCount++
+				continue
+			}
+			if s.propose != nil {
+				if err := s.propose(ctx, rec); err != nil {
+					return importer.ImportResult{}, err
+				}
+				committed = append(committed, rec)
 				continue
 			}
 			if err := s.store.WriteMemoryV2(ctx, rec); err != nil {

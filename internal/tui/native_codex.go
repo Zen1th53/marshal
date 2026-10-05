@@ -144,8 +144,18 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		if !filepath.IsAbs(home) {
 			home = filepath.Join(root, home)
 		}
-		watch = newNativeHistoryWatch(filepath.Join(home, historyDir), root)
+		historyPath := filepath.Join(home, historyDir)
+		if provider == "claude" {
+			historyPath, err = providerHistoryDir(provider, root)
+			if err != nil {
+				return "", err
+			}
+		}
+		watch = newNativeHistoryWatch(historyPath, root)
 		watch.claude = provider == "claude"
+	}
+	if w.runtime != nil {
+		w.guardHistoryWatch(watch, provider)
 	}
 	watch.captureTools = true
 	var syncErr error
@@ -184,26 +194,21 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 				}
 			}
 			watch.consume = func(tr importer.SessionTranscript) error {
-				captureCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-				defer cancel()
-				service, err := authority.memory()
+				records, dropped, err := authority.runtime.ProposeContinuation(context.WithoutCancel(ctx), tr)
 				if err != nil {
 					return err
 				}
-				// Import each visible message independently for stable deduplication
-				// across periodic saves and process restarts.
-				for _, message := range tr.Messages {
-					one := tr
-					one.Messages = []importer.Message{message}
-					data, err := json.Marshal(one)
-					if err != nil {
-						return err
+				for _, rec := range records {
+					// Existing approved records do not need another write.
+					if _, err := authority.runtime.Store().GetMemoryV2(ctx, authority.runtime.ProjectID(), rec.ID); err == nil {
+						continue
 					}
-					result, err := service.ImportSessionTranscript(captureCtx, authority.memoryPrincipal(), authority.runtime.ProjectID(), data, false)
-					if err != nil {
-						return err
-					}
-					imported += len(result.ImportedRecords)
+					imported++
+				}
+				if dropped {
+					w.mu.Lock()
+					w.state.LastOutput = "Secrets were dropped from captured history."
+					w.mu.Unlock()
 				}
 				return nil
 			}
@@ -291,6 +296,9 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if err != nil {
 				syncErr = joinNativeSyncError(syncErr, err)
 				continue
+			}
+			if w.runtime != nil {
+				w.guardHistoryWatch(pw, peer)
 			}
 			pw.captureTools = true
 			// A separate index: two MARSHAL sessions watching the same provider
@@ -464,9 +472,9 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		// The Marshal is presented as MARSHAL, never as the model behind it, so
 		// this line does not name the provider the way a plain native session
 		// does.
-		fmt.Fprintln(os.Stdout, "MARSHAL · the Marshal is planning with you · conversation and tool calls autosave to project memory · exit to return to MARSHAL")
+		fmt.Fprintln(os.Stdout, "MARSHAL · the Marshal is planning with you · conversation and tool calls become candidates for operator memory review · exit to return to MARSHAL")
 	} else {
-		fmt.Fprintf(os.Stdout, "MARSHAL · native %s · conversation and tool calls autosave to project memory · exit to return to MARSHAL\n", label)
+		fmt.Fprintf(os.Stdout, "MARSHAL · native %s · conversation and tool calls become candidates for operator memory review · exit to return to MARSHAL\n", label)
 	}
 	for _, note := range briefingNotes {
 		if note != "" {
@@ -517,7 +525,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if provider == "antigravity" {
 				command = antigravityBinary
 			}
-			result := fmt.Sprintf("%s exited. %d message(s), including tool calls, saved to MARSHAL memory.\n/%s continue resumes; /%s new starts a new session.", label, imported, command, command)
+			result := fmt.Sprintf("%s exited. %d message(s), including tool calls, proposed for operator memory review.\n/%s continue resumes; /%s new starts a new session.", label, imported, command, command)
 			if delivered := view.Count(); delivered > 0 {
 				result += fmt.Sprintf("\n%d channel entr%s from other agents were shown to this session.", delivered, plural(delivered, "y", "ies"))
 			}
@@ -600,7 +608,8 @@ func nativeUsesModelPreference(args []string) bool {
 }
 
 type nativeHistoryWatch struct {
-	claude bool
+	authorized func(string) bool
+	claude     bool
 	// openCodeRun is set for OpenCode's SQLite-backed history. Its public CLI
 	// supplies JSON exports, so MARSHAL never reads the database or depends on
 	// its private schema. The adapter selects visible conversation fields.
@@ -633,6 +642,9 @@ func newNativeHistoryWatch(dir, root string) *nativeHistoryWatch {
 }
 
 func (w *nativeHistoryWatch) sync() error {
+	if w.authorized != nil && !w.authorized(w.dir) {
+		return nil
+	}
 	if w.openCodeDB != "" {
 		err := w.syncOpenCodeLive()
 		// A store that is not the shape MARSHAL reads is not a failure, it is a
@@ -733,6 +745,9 @@ func (w *nativeHistoryWatch) saveIndex() error {
 }
 
 func (w *nativeHistoryWatch) syncFile(path string) error {
+	if w.authorized != nil && !w.authorized(path) {
+		return nil
+	}
 	if w.claude {
 		return w.syncClaudeFile(path)
 	}
@@ -755,6 +770,7 @@ func (w *nativeHistoryWatch) syncFile(path string) error {
 	if err != nil {
 		return err
 	}
+	tr.Provider = "codex"
 	cwd := tr.CWD
 	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
 		cwd = resolved

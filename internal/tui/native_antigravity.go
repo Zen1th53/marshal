@@ -95,6 +95,9 @@ func (w *nativeHistoryWatch) listAntigravityConversations() ([]antigravityConver
 // sync imports only what this launch created or continued rather than every
 // agy conversation ever held on the machine.
 func (w *nativeHistoryWatch) primeAntigravity() error {
+	if w.authorized != nil && !w.authorized(w.dir) {
+		return nil
+	}
 	conversations, err := w.listAntigravityConversations()
 	if err != nil {
 		return err

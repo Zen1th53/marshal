@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/memory/security"
 )
 
 // One channel, flowing one way.
@@ -326,6 +327,9 @@ func publishNativeTranscript(s *stream, producer string, tr importer.SessionTran
 		return fmt.Errorf("channel transcript has no producer identity")
 	}
 	for _, message := range tr.Messages {
+		if security.NewFirewall(security.FirewallConfig{}).ScanText(message.Content) != nil {
+			continue
+		}
 		if _, err := s.append(producer, tr.SessionID, message); err != nil {
 			return err
 		}

@@ -587,3 +587,7 @@ If MARSHAL is useful to you, **starring the repository helps other people find i
 - **Historical releases** up to `runtime-v0.4.0` remain under their original
   Apache-2.0 grants. See [docs/legal/LICENSE-HISTORY.md](docs/legal/LICENSE-HISTORY.md).
 - **Third-party** attributions: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Operator grants and continuation of earlier agent work are described in
+[Operator permissions](docs/operator-permissions.md), including the limits of
+read enforcement in a native Marshal session.

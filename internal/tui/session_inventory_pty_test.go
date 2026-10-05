@@ -15,6 +15,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/permission"
 )
 
 func seedNativeInventory(t *testing.T, root string, fixtures map[string]string) {
@@ -31,6 +32,15 @@ func seedNativeInventory(t *testing.T, root string, fixtures map[string]string) 
 		}
 		principal := authz.Principal{ID: "inventory-fixture", Role: authz.Role{Name: "developer", Authorities: []authz.Authority{authz.AuthorityTaskPlan}}}
 		if _, err := rt.Memory().ImportSessionTranscript(context.Background(), principal, rt.ProjectID(), data, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	control, err := rt.OpenLocalControl(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rec := range rt.ContinuationCandidates() {
+		if err := rt.CommandPermission(control.Context(context.Background()), permission.Request{Kind: "memory", Object: rec.ID, Scope: "project memory, persistent", Who: "test operator", Reason: "approve inventory fixture"}, true, "operator memory review"); err != nil {
 			t.Fatal(err)
 		}
 	}

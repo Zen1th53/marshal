@@ -28,13 +28,14 @@ func TestMarshalProtocolOrder(t *testing.T) {
 	steps := []string{
 		"1. Introduce yourself",
 		"2. Ask which language the person wants to work in",
-		"3. Ask one open question: what does the person want to achieve",
-		"4. Read the current state",
-		"5. Clarify the goal",
-		"6. Ask how the person wants to work",
-		"7. Ask for the control level",
-		"8. Plan the tasks",
-		"9. Write the draft",
+		"3. Ask whether the person has worked on this project before",
+		"4. Ask one open question: what does the person want to achieve",
+		"5. Read the current state",
+		"6. Clarify the goal",
+		"7. Ask how the person wants to work",
+		"8. Ask for the control level",
+		"9. Plan the tasks",
+		"10. Write the draft",
 		"/marshal approve",
 		"After approval",
 	}
@@ -87,8 +88,8 @@ func TestMarshalProtocolPlanAndFinalReport(t *testing.T) {
 		rules []string
 	}{
 		{
-			start: "8. Plan the tasks",
-			end:   "9. Write the draft",
+			start: "9. Plan the tasks",
+			end:   "10. Write the draft",
 			rules: []string{
 				"the worker and why that worker",
 				"the expected output",
@@ -121,6 +122,14 @@ func TestMarshalProtocolPlanAndFinalReport(t *testing.T) {
 			if !strings.Contains(text, rule) {
 				t.Errorf("protocol section %q lacks %q", section.start, rule)
 			}
+		}
+	}
+}
+
+func TestContinuationProtocolSafety(t *testing.T) {
+	for _, rule := range []string{"each with provenance", "exact provider folders", "recorded grant", "Never copy secrets", "memory review", "recommend continuing"} {
+		if !strings.Contains(marshalProtocol, rule) {
+			t.Errorf("protocol lacks %q", rule)
 		}
 	}
 }

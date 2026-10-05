@@ -35,6 +35,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/netpolicy"
+	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/projectid"
@@ -53,43 +54,47 @@ import (
 const localProjectID = "PROJECT-local"
 
 type Runtime struct {
-	layout              project.Layout
-	store               *store.Store
-	eventEngine         *events.Engine
-	policy              *policy.Engine
-	adapters            map[string]adapter.Adapter
-	evidenceSanitizer   evidence.Sanitizer
-	capabilityBroker    capability.Broker
-	dagGraph            *dag.Engine
-	cellManager         *cell.Manager
-	secretBroker        secrets.Broker
-	gateEngine          *gate.Engine
-	riskEngine          *risk.Engine
-	authorityPrincipal  *authz.Principal
-	processAuthority    authz.Authority
-	runtimeInstanceID   string
-	runtimePolicy       RuntimePolicyConfig
-	policyConfigured    bool
-	handoffService      *protocol.Service
-	memoryService       *MemoryService
-	quorumEngine        *quorum.Engine
-	allowProcessOnly    bool
-	execService         *ExecutionService
-	honeypotMu          sync.Mutex
-	honeypots           map[string]*worker.Honeypot
-	egressMu            sync.Mutex
-	egressRuns          map[string]*runEgress
-	egressAlert         func(EgressAlert) error
-	taskMu              sync.Mutex
-	taskRuns            map[string]context.CancelFunc
-	execMu              sync.Mutex
-	codexAppServerMu    sync.Mutex
-	codexAppServerTurns map[string]*liveCodexAppServerTurn
-	codexAppServerNew   func(string, string) codexAppServerClient
-	claudeStreamMu      sync.Mutex
-	claudeStreamTurns   map[string]*liveClaudeStreamTurn
-	claudeStreamNew     func(string, string) claudeStreamClient
-	tokenManager        *auth.Manager
+	permissionMu           sync.Mutex
+	readGrants             map[string]bool
+	continuationCandidates map[string]model.MemoryRecordV2
+	permissionSink         func(permission.Request)
+	layout                 project.Layout
+	store                  *store.Store
+	eventEngine            *events.Engine
+	policy                 *policy.Engine
+	adapters               map[string]adapter.Adapter
+	evidenceSanitizer      evidence.Sanitizer
+	capabilityBroker       capability.Broker
+	dagGraph               *dag.Engine
+	cellManager            *cell.Manager
+	secretBroker           secrets.Broker
+	gateEngine             *gate.Engine
+	riskEngine             *risk.Engine
+	authorityPrincipal     *authz.Principal
+	processAuthority       authz.Authority
+	runtimeInstanceID      string
+	runtimePolicy          RuntimePolicyConfig
+	policyConfigured       bool
+	handoffService         *protocol.Service
+	memoryService          *MemoryService
+	quorumEngine           *quorum.Engine
+	allowProcessOnly       bool
+	execService            *ExecutionService
+	honeypotMu             sync.Mutex
+	honeypots              map[string]*worker.Honeypot
+	egressMu               sync.Mutex
+	egressRuns             map[string]*runEgress
+	egressAlert            func(EgressAlert) error
+	taskMu                 sync.Mutex
+	taskRuns               map[string]context.CancelFunc
+	execMu                 sync.Mutex
+	codexAppServerMu       sync.Mutex
+	codexAppServerTurns    map[string]*liveCodexAppServerTurn
+	codexAppServerNew      func(string, string) codexAppServerClient
+	claudeStreamMu         sync.Mutex
+	claudeStreamTurns      map[string]*liveClaudeStreamTurn
+	claudeStreamNew        func(string, string) claudeStreamClient
+	tokenManager           *auth.Manager
 
 	// ultra is the canonical ULTRA authorization gate. It is nil when no Cloud
 	// session is attached, and a nil gate answers "not entitled", so a runtime
@@ -376,6 +381,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	}
 	rt.handoffService = protocol.NewService(protocol.Config{RepositoryRoot: layout.Root}, database, handoffAuthorizer)
 	rt.memoryService = NewMemoryService(database)
+	rt.memoryService.propose = rt.proposeMemory
 	if err := rt.memoryService.RebuildProjections(ctx, localProjectID); err != nil {
 		return nil, err
 	}

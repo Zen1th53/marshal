@@ -346,6 +346,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/ultra":
 		return h.handleUltra(ctx, parts[1:])
 
+	case "/permission":
+		return h.handlePermission(ctx, parts[1:])
+	case "/continue":
+		return h.handleContinue(ctx, parts[1:])
 	case "/marshal":
 		return h.handleMarshal(ctx, parts[1:])
 
@@ -665,6 +669,8 @@ func (h *CommandHandler) helpText() string {
   /inspect [kind] <id>     Inspect a claim, evidence, checkpoint, task, handoff, approval, or agent
   /evidence <id>           Show an artifact (bytes re-checked) or evidence reference, with every linked claim
   /evidence list           List stored artifacts and claim evidence references
+  /permission read <allow|deny> <path>  Record a session-only read decision
+  /continue <claude|codex> <path>  Continue project-scoped earlier work after a read grant
   /egress [status|allow|revoke]  Inspect per-run endpoints; operator-only allow/revoke <run-id> <host[:port]>
   /approve [approval_id]    Approve a pending authenticated decision
   /reject [approval_id]     Reject a pending authenticated decision

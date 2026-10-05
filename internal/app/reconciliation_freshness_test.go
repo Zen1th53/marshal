@@ -10,7 +10,7 @@ import (
 
 func TestM13_ReconciliationAndFreshnessGrading(t *testing.T) {
 	ctx := context.Background()
-	_, svc := openTestMemoryService(t)
+	rt, svc := openTestMemoryService(t)
 
 	const projectID = "PROJECT-local"
 	p := testPrincipal("developer-1")
@@ -26,6 +26,7 @@ func TestM13_ReconciliationAndFreshnessGrading(t *testing.T) {
 	if err != nil {
 		t.Fatalf("remember arch decision: %v", err)
 	}
+	approveTestCandidates(t, rt)
 
 	// 2. Memory grounded in a specific source file
 	fileGroundedRec, err := svc.ExtractCandidate(ctx, p, ExtractCandidateRequest{

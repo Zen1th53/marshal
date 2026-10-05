@@ -49,6 +49,13 @@ func (s *MemoryService) ImportProviderSessionHistory(ctx context.Context, princi
 			result.SkippedCount++
 			continue
 		}
+		if s.propose != nil {
+			if err := s.propose(ctx, rec); err != nil {
+				return importer.ImportResult{}, err
+			}
+			committed = append(committed, rec)
+			continue
+		}
 		if err := s.store.WriteMemoryV2(ctx, rec); err != nil {
 			if s.importedConcurrently(ctx, projectID, rec.ID) {
 				result.SkippedCount++

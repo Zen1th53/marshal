@@ -8,6 +8,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/netpolicy"
+	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
@@ -90,6 +91,7 @@ func (w *Workspace) deliverEgressAlert(alert app.EgressAlert) error {
 	}
 	text := fmt.Sprintf("%s\nRun: %s\n", alert.Message, alert.RunID)
 	if _, err := netpolicy.Endpoint(alert.Endpoint); err == nil {
+		w.queuePermission(permission.Request{Kind: "network", Object: alert.Endpoint, Scope: "this worker run only, network access", Who: alert.Worker, Reason: alert.Message, RunID: alert.RunID})
 		text += fmt.Sprintf("Operator action: /egress allow %s %s\nModels may relay this request; only the operator may grant.\n", alert.RunID, alert.Endpoint)
 	}
 	if err := view.write(fmt.Sprintf("## runtime · %s · %s\n\n%s\n", time.Now().UTC().Format(time.RFC3339), alert.Kind, text)); err != nil {
