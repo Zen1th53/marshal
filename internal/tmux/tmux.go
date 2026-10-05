@@ -410,13 +410,9 @@ func AttachSession(session string, stdin io.Reader, stdout, stderr io.Writer) er
 func RespawnWindow(ctx context.Context, target string, command []string) error {
 	args := []string{"respawn-window", "-k", "-t", target}
 	if len(command) > 0 {
-		args = append(args, "env")
-		for _, a := range command {
-			args = append(args, EscapeTmuxArg(a))
-		}
+		command = append([]string{"env"}, command...)
 	}
-	_, err := RunCommand(ctx, args...)
-	return err
+	return runWindowCommand(ctx, args, command)
 }
 
 // ListWindows lists window names in the given session (or current session if empty).
@@ -476,8 +472,7 @@ func SelectPane(ctx context.Context, target string) error {
 }
 
 // NewWindow creates a new window in the specified session or current session.
-// It executes the command directly using the POSIX env launcher, preventing
-// tmux from running single arguments through sh -c, and escaping semicolons.
+// Command arguments remain literal, including in the launcher for large commands.
 func NewWindow(ctx context.Context, targetSession, windowName, workDir string, env []string, command []string) error {
 	args := []string{"new-window"}
 	if targetSession != "" {
@@ -494,10 +489,44 @@ func NewWindow(ctx context.Context, targetSession, windowName, workDir string, e
 			args = append(args, "-e", e)
 		}
 	}
-	for _, a := range command {
-		args = append(args, EscapeTmuxArg(a))
+	return runWindowCommand(ctx, args, command)
+}
+
+// tmux 3.2a bounds command messages at 16 KiB. Keep large prompts out of
+// that transport without changing the provider's argv or interpreting it.
+func runWindowCommand(ctx context.Context, args, command []string) error {
+	size := 0
+	for _, arg := range append(append([]string(nil), args...), command...) {
+		size += len(arg) + 1
 	}
+	var launchPath string
+	if size > 8<<10 {
+		file, err := os.CreateTemp("", "marshal-tmux-launch-*")
+		if err != nil {
+			return err
+		}
+		launchPath = file.Name()
+		var script strings.Builder
+		script.WriteString("#!/bin/sh\nrm -f -- \"$0\"\nexec")
+		for _, arg := range command {
+			script.WriteString(" '")
+			script.WriteString(strings.ReplaceAll(arg, "'", "'\"'\"'"))
+			script.WriteString("'")
+		}
+		script.WriteByte('\n')
+		_, writeErr := file.WriteString(script.String())
+		closeErr := file.Close()
+		if err := errors.Join(writeErr, closeErr); err != nil {
+			_ = os.Remove(launchPath)
+			return err
+		}
+		command = []string{"/bin/sh", launchPath}
+	}
+	args = append(args, EscapeTmuxArgs(command)...)
 	_, err := RunCommand(ctx, args...)
+	if err != nil && launchPath != "" {
+		_ = os.Remove(launchPath)
+	}
 	return err
 }
 
