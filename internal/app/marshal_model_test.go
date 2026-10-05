@@ -183,3 +183,20 @@ func TestMarshalWiredDraftUsesCanonicalProjectBinding(t *testing.T) {
 		t.Fatalf("model bound to %s instead of %s", cli.ProjectID, service.CanonicalPlanProjectID())
 	}
 }
+
+func TestMarshalDraftBriefBindsExactCriteriaAndRuntimeWorktree(t *testing.T) {
+	root := t.TempDir()
+	binary := filepath.Join(root, "codex")
+	script := `#!/bin/sh
+for prompt; do :; done
+case "$prompt" in *"copy each criterion string verbatim"*"runtime-assigned worktree"*) ;; *) exit 99 ;; esac
+printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{\"tasks\":[{\"id\":\"a\",\"title\":\"write a\",\"criteria\":[\"a exists\"],\"paths\":[\"a.txt\"],\"depends_on\":[],\"worker\":\"codex\",\"checks\":[{\"command\":\"test -f a.txt\",\"criteria\":[\"a exists\"]}],\"instructions\":\"Use assigned worktree\",\"expected_output\":\"a.txt\"}]}"}}'
+`
+	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	m := MarshalCLI{Provider: "codex", Binary: binary, Dir: root, ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
+	if _, err := m.Draft(t.Context(), "write a.txt"); err != nil {
+		t.Fatal(err)
+	}
+}
