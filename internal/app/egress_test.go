@@ -179,3 +179,13 @@ func TestSocketRefusalPersistsEvidenceAndHeadlessInbox(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenCodeZenDefaultIsOneExactEndpoint(t *testing.T) {
+	endpoint, err := providerEndpoint("opencode", "opencode/nemotron-3-ultra-free")
+	if err != nil || endpoint != "opencode.ai:443" {
+		t.Fatalf("Zen endpoint: %q %v", endpoint, err)
+	}
+	if _, err := providerEndpoint("opencode", "opencode.evil/nemotron-3-ultra-free"); err == nil {
+		t.Fatal("lookalike provider accepted")
+	}
+}
