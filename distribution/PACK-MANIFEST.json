@@ -9270,9 +9270,14 @@
       "bytes": 2027
     },
     {
+      "path": "internal/tmux/launch_test.go",
+      "sha256": "0ff0fd7129a6ddb01fdbb787fabd05c9adb8bcc7d129024c797b895e4eb49ed9",
+      "bytes": 2515
+    },
+    {
       "path": "internal/tmux/tmux.go",
-      "sha256": "f35498d390d6fd42ce16e588bc7540b4005de68aaa35c5a32f5dd8c711873e23",
-      "bytes": 23668
+      "sha256": "76695590b658205fee6db9618c319014cd7aea39682bac6dc7983df0a81f5b15",
+      "bytes": 24623
     },
     {
       "path": "internal/tmux/tmux_test.go",
@@ -11651,8 +11656,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "95f6769f7a68174fb4c25d0b5bc6e3dbd9305d657711df74e3b63192c91c21bc",
-      "bytes": 183875
+      "sha256": "4e1bfe7b2f41482372202bb1cfc4ff048534081ebcbded7cef192467a6510307",
+      "bytes": 184747
     },
     {
       "path": "tools/marshal.py",
