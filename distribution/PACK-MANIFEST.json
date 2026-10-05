@@ -4016,8 +4016,8 @@
     },
     {
       "path": "internal/app/marshal_model_test.go",
-      "sha256": "5b67b59b892b9f6669a392a61f6c56076df8428fe00ee60ccea047f6081af340",
-      "bytes": 8110
+      "sha256": "79e1638eb98d9d01c9f97ab802acffcb99446d1d000a365f2fb94f2ab267f881",
+      "bytes": 8223
     },
     {
       "path": "internal/app/marshal_operator_test.go",
