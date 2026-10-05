@@ -304,6 +304,24 @@ func (r *Runtime) socketObserver(socket string) func(context.Context, sandbox.Re
 	}
 }
 
+// EgressRequestPending is true only while the live run still awaits this exact
+// endpoint. Durable refusal notifications are evidence, not grant requests.
+func (r *Runtime) EgressRequestPending(runID, endpoint string) bool {
+	normalized, err := netpolicy.Endpoint(endpoint)
+	if err != nil {
+		return false
+	}
+	r.egressMu.Lock()
+	defer r.egressMu.Unlock()
+	scope := r.egressRuns[runID]
+	if scope == nil {
+		return false
+	}
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+	return scope.pending[normalized]
+}
+
 // EgressNotifications is the durable operator inbox, including completed runs.
 // Attaching a live sink does not consume this queue or confer grant authority.
 func (r *Runtime) EgressNotifications(ctx context.Context) ([]EgressAlert, error) {
@@ -321,7 +339,11 @@ func (r *Runtime) EgressNotifications(ctx context.Context) ([]EgressAlert, error
 			worker, _ := event.Data["worker"].(string)
 			message, _ := event.Data["message"].(string)
 			parent, _ := event.Data["parent_run_id"].(string)
-			alerts = append(alerts, EgressAlert{RunID: event.RunID, ParentRunID: parent, TaskID: event.TaskID, Worker: worker, Endpoint: endpoint, Message: message, Kind: "egress refused", State: "waiting"})
+			state := "expired"
+			if r.EgressRequestPending(event.RunID, endpoint) {
+				state = "waiting"
+			}
+			alerts = append(alerts, EgressAlert{RunID: event.RunID, ParentRunID: parent, TaskID: event.TaskID, Worker: worker, Endpoint: endpoint, Message: message, Kind: "egress refused", State: state})
 		}
 	}
 	return alerts, nil

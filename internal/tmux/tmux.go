@@ -124,9 +124,13 @@ func IsInsideTmux() bool {
 // It supports tab-delimited formatting to safely handle session or window names with spaces,
 // while falling back to whitespace splitting for mock compatibility.
 func CurrentSessionAndWindow(ctx context.Context) (session, winName, winID string, err error) {
-	out, err := RunCommand(ctx, "display-message", "-p", "#{session_name}\t#{window_name}\t#{window_id}")
+	args := []string{"display-message", "-p"}
+	if pane := os.Getenv("TMUX_PANE"); strings.HasPrefix(pane, "%") {
+		args = append(args, "-t", pane)
+	}
+	out, err := RunCommand(ctx, append(args, "#{session_name}\t#{window_name}\t#{window_id}")...)
 	if err != nil || strings.TrimSpace(string(out)) == "" {
-		out, err = RunCommand(ctx, "display-message", "-p", "#{session_name} #{window_name} #{window_id}")
+		out, err = RunCommand(ctx, append(args, "#{session_name} #{window_name} #{window_id}")...)
 		if err != nil {
 			return "", "", "", err
 		}
@@ -157,8 +161,12 @@ func CurrentSessionAndWindow(ctx context.Context) (session, winName, winID strin
 	return "", "", "", errors.New("empty display-message output")
 }
 
-// CurrentPaneID returns the unique tmux pane identifier (e.g. %0) for the active pane.
+// CurrentPaneID returns the calling terminal's immutable pane identifier.
+// Without TMUX_PANE it falls back to querying the selected pane.
 func CurrentPaneID(ctx context.Context) (string, error) {
+	if pane := os.Getenv("TMUX_PANE"); strings.HasPrefix(pane, "%") {
+		return pane, nil
+	}
 	out, err := RunCommand(ctx, "display-message", "-p", "#{pane_id}")
 	if err != nil {
 		return "", err
@@ -592,7 +600,15 @@ func BindWindowKey(ctx context.Context, target, table, key string, actionArgs ..
 	condition = "#{!=:#{key-table}," + tableFormat + "}"
 	setDefault := "set-option -F key-table '" + tableFormat + "'"
 	activate := "if-shell -F -t '" + sessionName + "' \"" + condition + "\" \"" + setDefault + "\""
-	for _, hook := range []string{"after-select-window[805]", "after-select-pane[805]", "after-new-window[805]", "after-split-window[805]", "after-kill-pane[805]", "session-window-changed[805]", "client-session-changed[805]"} {
+	// Remove creation-time handlers left by an earlier runtime. Replacing
+	// client key tables inside pane creation is unnecessary: selection hooks
+	// and the explicit activation below run after the pane exists.
+	for _, hook := range []string{"after-new-window[805]", "after-split-window[805]", "after-kill-pane[805]"} {
+		if _, err := RunCommand(ctx, "set-hook", "-u", "-t", sessionName, hook); err != nil {
+			return err
+		}
+	}
+	for _, hook := range []string{"after-select-window[805]", "after-select-pane[805]", "session-window-changed[805]", "client-session-changed[805]"} {
 		if _, err := RunCommand(ctx, "set-hook", "-t", sessionName, hook, activate); err != nil {
 			return err
 		}

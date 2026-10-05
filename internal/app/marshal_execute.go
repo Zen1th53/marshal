@@ -50,7 +50,7 @@ func (s *MarshalService) briefContext(ctx context.Context, runID string, run mar
 		})
 		if err == nil {
 			for _, rec := range records {
-				if rec.Scope == string(model.ScopeSession) || rec.Source.Kind == "shared_channel" {
+				if rec.Scope == string(model.ScopeSession) || rec.Source.Kind == "shared_channel" || rec.IsSessionHistory() {
 					continue
 				}
 				bc.Memory = append(bc.Memory, rec)

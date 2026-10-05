@@ -771,7 +771,7 @@ func (s *MemoryService) CaptureOutcome(ctx context.Context, req OutcomeCaptureRe
 		kind = model.MemoryKindFailure
 	}
 	metadata := map[string]any{
-		"outcome_status": req.Status, "exit_status": req.ExitStatus,
+		"record_class": "system_record", "outcome_status": req.Status, "exit_status": req.ExitStatus,
 		"files_changed":   boundedStrings(req.FilesChanged, 256, 1024),
 		"tests_run":       boundedStrings(req.TestsRun, 128, 2048),
 		"error_signature": truncateMemoryField(req.ErrorSignature, 512),
@@ -789,8 +789,8 @@ func (s *MemoryService) CaptureOutcome(ctx context.Context, req OutcomeCaptureRe
 		Kind:       kind,
 		Lifecycle:  model.MemoryCandidate,
 		Confidence: model.ConfidenceObserved,
-		Authority:  model.AuthorityAgent,
-		Title:      fmt.Sprintf("Run %s outcome: %s", req.Status, req.TaskTitle),
+		Authority:  model.AuthorityPolicy,
+		Title:      fmt.Sprintf("System record · Run %s outcome: %s", req.Status, req.TaskTitle),
 		Body:       body,
 		Scope:      string(model.ScopeTask),
 		ScopeID:    req.TaskID,
@@ -1450,7 +1450,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		rec := candidate.record
 		rendered := fmt.Sprintf("  <memory id=\"%s\" kind=\"%s\" authority=\"%s\" lifecycle=\"%s\"><title>%s</title><body>%s</body></memory>\n",
 			html.EscapeString(rec.ID), html.EscapeString(string(rec.Kind)), html.EscapeString(string(rec.Authority)),
-			html.EscapeString(string(rec.Lifecycle)), html.EscapeString(rec.Title), html.EscapeString(rec.Body))
+			html.EscapeString(string(rec.Lifecycle)), html.EscapeString(rec.DisplayTitle()), html.EscapeString(rec.Body))
 		decision := RetrievalDecision{
 			MemoryID:      rec.ID,
 			Authority:     string(rec.Authority),
@@ -1468,7 +1468,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		receipt.ConsumedBytes += len(rendered)
 		receipt.Decisions = append(receipt.Decisions, decision)
 		contextBuilder.WriteString(rendered)
-		results = append(results, RecallItem{ID: rec.ID, Title: rec.Title, Kind: rec.Kind, Lifecycle: rec.Lifecycle})
+		results = append(results, RecallItem{ID: rec.ID, Title: rec.DisplayTitle(), Kind: rec.Kind, Lifecycle: rec.Lifecycle})
 		cacheRecords = append(cacheRecords, rec)
 	}
 	contextBuilder.WriteString("</marshal_memory_context>")

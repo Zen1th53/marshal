@@ -56,8 +56,8 @@ func Render(requests []Request) (string, error) {
 }
 func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 
-// Popup uses only tmux 3.2a's display-popup options. No model-generated shell
-// or text is interpreted as an answer; the popup reads one literal key.
+// Popup reads one literal operator key. On tmux 3.2a it uses a dedicated
+// window: display-popup -E was observed crashing during native window creation.
 func Popup(ctx context.Context, target string, requests []Request, timeout time.Duration) (bool, error) {
 	text, err := Render(requests)
 	if err != nil {
@@ -88,6 +88,11 @@ func Popup(ctx context.Context, target string, requests []Request, timeout time.
 	}
 	child, cancel := context.WithTimeout(ctx, timeout+time.Second)
 	defer cancel()
+	// Query the server, which may differ from the client executable.
+	version, versionErr := tmux.RunCommand(child, "display-message", "-p", "#{version}")
+	if versionErr == nil && strings.TrimSpace(string(version)) == "3.2a" {
+		return windowDecision(child, target, script, result, len(requests))
+	}
 	args := []string{"display-popup", "-E", "-w", "90%", "-h", "80%"}
 	if target != "" {
 		args = append(args, "-t", target)
@@ -101,6 +106,47 @@ func Popup(ctx context.Context, target string, requests []Request, timeout time.
 		return false, nil
 	}
 	return string(data) == "allow" && len(requests) <= MaxPopupItems, err
+}
+
+// Create detached, then select only after tmux has finished creating the pane.
+// Closing the window, EOF, or timeout all deny, just as closing a popup does.
+func windowDecision(ctx context.Context, target, script, result string, count int) (bool, error) {
+	args := []string{"new-window", "-d", "-P", "-F", "#{pane_id}", "-n", "marshal-permission"}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+	args = append(args, "/bin/bash", script)
+	out, err := tmux.RunCommand(ctx, args...)
+	if err != nil {
+		return false, err
+	}
+	pane := strings.TrimSpace(string(out))
+	if !strings.HasPrefix(pane, "%") {
+		return false, fmt.Errorf("permission window has no pane identity")
+	}
+	defer tmux.RunCommand(context.Background(), "kill-window", "-t", pane)
+	if _, err := tmux.RunCommand(ctx, "select-window", "-t", pane); err != nil {
+		return false, err
+	}
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		data, err := os.ReadFile(result)
+		if err == nil {
+			return string(data) == "allow" && count <= MaxPopupItems, nil
+		}
+		if !os.IsNotExist(err) {
+			return false, err
+		}
+		if _, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", pane, "#{pane_id}"); err != nil {
+			return false, nil
+		}
+		select {
+		case <-ctx.Done():
+			return false, nil
+		case <-ticker.C:
+		}
+	}
 }
 
 // Queue deduplicates pending requests, preserving their order for batch display.

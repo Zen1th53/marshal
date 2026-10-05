@@ -17,6 +17,7 @@ import (
 type permissionState struct {
 	queue       permission.Queue
 	mu          sync.Mutex
+	ready       bool
 	running     bool
 	outstanding map[string]bool
 }
@@ -36,9 +37,26 @@ func (w *Workspace) queuePermission(req permission.Request) {
 	if w.permissions.running {
 		return
 	}
-	w.permissions.running = true
-	go w.runPermissionQueue()
+	// Without a terminal there is no decision surface. Keep requests pending;
+	// InitTmux starts the queue after publishing the terminal identity.
+	if w.permissions.ready {
+		w.permissions.running = true
+		go w.runPermissionQueue()
+	}
 }
+
+// startPermissionQueue is called only after terminal initialization. Requests
+// submitted by a headless runtime must not launch readers of terminal state.
+func (w *Workspace) startPermissionQueue() {
+	w.permissions.mu.Lock()
+	defer w.permissions.mu.Unlock()
+	w.permissions.ready = true
+	if !w.permissions.running && !w.permissions.queue.Empty() {
+		w.permissions.running = true
+		go w.runPermissionQueue()
+	}
+}
+
 func (w *Workspace) permissionBusy() bool {
 	w.tmuxMu.Lock()
 	session := w.tmuxSession
@@ -77,7 +95,18 @@ func (w *Workspace) runPermissionQueue() {
 			w.permissions.mu.Unlock()
 			continue
 		}
-		batch, review := partitionPermissionBatch(batch)
+		var live []permission.Request
+		for _, req := range batch {
+			if req.Kind == "network" && w.runtime != nil && !w.runtime.EgressRequestPending(req.RunID, req.Object) {
+				_ = w.decidePermission(context.Background(), req, false, "expired run request")
+				w.permissions.mu.Lock()
+				delete(w.permissions.outstanding, req.Key())
+				w.permissions.mu.Unlock()
+				continue
+			}
+			live = append(live, req)
+		}
+		batch, review := partitionPermissionBatch(live)
 		for _, req := range review {
 			w.permissions.mu.Lock()
 			delete(w.permissions.outstanding, req.Key())
@@ -144,6 +173,10 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 	a, _ := control.Authority.(*runtimeControlAuthority)
 	if a == nil || a.runtime == nil || a.localControl == nil {
 		return errNoRuntime
+	}
+	if req.Kind == "network" && !a.runtime.EgressRequestPending(req.RunID, req.Object) {
+		allow = false
+		source = "expired run request"
 	}
 	ctx = a.localControl.Context(ctx)
 	if err := a.runtime.CommandPermission(ctx, req, allow, source); err != nil {

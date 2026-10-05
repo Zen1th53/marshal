@@ -203,6 +203,16 @@ func TestMarshalBriefContextRecallsProjectMemoryWithProvenanceAndExcludesSharedC
 		t.Fatalf("WriteMemoryV2 session: %v", err)
 	}
 
+	// Approval promotes imported history to project scope, but workers must
+	// still receive only task context. Keep the original exact count check.
+	imported := projectRec
+	imported.ID = "MEM-IMPORT-approved"
+	imported.Source = model.MemorySource{Kind: "external", Reference: "earlier-session"}
+	imported.Body = "private earlier conversation"
+	if err := s.Store.WriteMemoryV2(ctx, imported); err != nil {
+		t.Fatal(err)
+	}
+
 	run, err := s.StartPlanning(ctx, "run", "write file", marshal.Budget{})
 	if err != nil {
 		t.Fatal(err)

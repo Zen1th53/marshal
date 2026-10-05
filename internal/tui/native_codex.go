@@ -411,14 +411,14 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 	}
 	if len(marshalBrief) > 0 {
-		// The protocol travels on the provider's hidden channel, and one short
-		// kickoff turn starts the Marshal's introduction.
+		// Deliver the compiled protocol through both the instruction channel
+		// and opening turn so native startup cannot silently skip its order.
 		note, err := deliver(marshalBrief[0], hiddenChannel(provider))
 		if err != nil {
 			return "", fmt.Errorf("deliver Marshal briefing: %w", err)
 		}
 		briefingNotes = append(briefingNotes, note)
-		args = append(args, marshalKickoffArgs(provider)...)
+		args = append(args, marshalProtocolKickoffArgs(provider, marshalBrief[0])...)
 	}
 	args, briefingEnv, err := dir.launch(args)
 	if err != nil {

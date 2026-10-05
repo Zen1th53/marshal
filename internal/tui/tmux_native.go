@@ -58,7 +58,11 @@ type activeTmuxAgent struct {
 func (w *Workspace) InitTmux(root ...string) {
 	w.tmuxMu.Lock()
 	defer func() {
+		ready := w.tmuxPath != "" && w.tmuxSession != ""
 		w.tmuxMu.Unlock()
+		if ready {
+			w.startPermissionQueue()
+		}
 		if w.runtime != nil && tmux.IsInsideTmux() {
 			if _, err := w.marshalChat(context.Background()); err != nil {
 				w.RecordActivity("Marshal chat: " + err.Error())
@@ -211,10 +215,10 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 			_, err = dir.add(brief)
 		}
 		if err == nil {
-			args, env, err = dir.launch(marshalKickoffArgs(provider))
+			args, env, err = dir.launch(marshalProtocolKickoffArgs(provider, brief))
 		}
 	} else {
-		args, _, err = applyBriefing(provider, projectRoot, marshalKickoffArgs(provider), brief, hiddenChannel(provider))
+		args, _, err = applyBriefing(provider, projectRoot, marshalProtocolKickoffArgs(provider, brief), brief, hiddenChannel(provider))
 	}
 	if err != nil {
 		return

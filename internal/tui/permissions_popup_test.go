@@ -27,6 +27,7 @@ func TestPermissionPopupRecordsBatchedDecisions(t *testing.T) {
 	tmux.SetBinaryPath(fake)
 	defer tmux.ResetBinaryPath()
 	w.tmuxPath, w.tmuxSession = fake, "session"
+	w.startPermissionQueue()
 	first, second := t.TempDir(), t.TempDir()
 	req := permission.Request{Kind: "read", Object: first, Scope: "this session only, read-only", Who: "Marshal", Reason: "Continue earlier work"}
 	w.queuePermission(req)

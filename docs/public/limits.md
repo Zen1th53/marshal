@@ -57,3 +57,10 @@ On other systems, restore from the terminal instead.
 **Some screens are not available yet.**
 The navigation screens (Ctrl+N) are switched off in this version. Everything
 is available through commands in the composer.
+
+An agent's shared inbox excludes messages authored by that agent. Another
+agent may quote or copy those messages in its own output, including tool
+output. The original agent can then see its own words inside that peer's
+message. MARSHAL does not remove nested quotes; author filtering applies to
+the outer message, not every piece of text inside it. Channel history also
+requires the relevant read grants before messages can be delivered.

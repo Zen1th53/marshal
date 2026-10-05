@@ -49,3 +49,22 @@ host process from reading files or changing MARSHAL storage, or guarantee that
 a native model follows its read-only instructions. These are not filesystem
 sandbox guarantees. Governed worker network isolation remains separate and
 does not govern native provider traffic.
+
+MARSHAL automatically stores deterministic run outcomes as **System records**.
+These are runtime evidence (run status, exit code, commits and check results),
+not model facts. They have `runtime_outcome` provenance and a `system_record`
+classification, and need no permission popup. Memory lists and recall label
+these records, including older run records. Model proposals and imported or
+continued session entries still require a separate operator approval for each
+entry. Approved session history is for the Marshal only and is excluded from
+worker launch briefs.
+
+On tmux 3.2a, permission review opens a dedicated `marshal-permission` window
+instead of a popup. Uppercase A allows; D, Enter, Escape, any other key,
+closure and timeout deny. This avoids the observed popup/window-creation
+server crashes. Ctrl+X from any MARSHAL window routes to the control pane and
+stops workers while preserving the Marshal chat.
+
+Restarted runtimes show old network refusals as expired evidence. Only pending
+requests of live runs may open permission review; completed or stopped runs
+cannot receive a new grant.
