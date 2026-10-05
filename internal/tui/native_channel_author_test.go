@@ -15,7 +15,7 @@ func TestNativeTranscriptPublicationUsesProducer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	transcript := importer.SessionTranscript{Provider: "opencode", SessionID: "producer-session", Messages: []importer.Message{{Role: "assistant", Content: "OWN_WORK", Timestamp: time.Now()}}}
+	transcript := importer.SessionTranscript{Provider: "openai", SessionID: "producer-session", Messages: []importer.Message{{Role: "assistant", Content: "OWN_WORK", Timestamp: time.Now()}}}
 	if err := publishNativeTranscript(stream, transcript); err != nil {
 		t.Fatal(err)
 	}
@@ -49,5 +49,22 @@ func TestNativeTranscriptPublicationUsesProducer(t *testing.T) {
 		if strings.Contains(string(data), "OWN_WORK") != want {
 			t.Fatalf("reader %s visibility wrong: %s", reader, data)
 		}
+	}
+}
+
+func TestConcurrentChannelObserversDeduplicateProducer(t *testing.T) {
+	root := t.TempDir()
+	a, _ := openStream(root)
+	b, _ := openStream(root)
+	tr := importer.SessionTranscript{Provider: "codex", SessionID: "same", Messages: []importer.Message{{Role: "assistant", Content: "one", Timestamp: time.Now()}}}
+	if err := publishNativeTranscript(a, tr); err != nil {
+		t.Fatal(err)
+	}
+	if err := publishNativeTranscript(b, tr); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := a.since(-1)
+	if len(entries) != 1 {
+		t.Fatalf("same producer duplicated by observers: %+v", entries)
 	}
 }
