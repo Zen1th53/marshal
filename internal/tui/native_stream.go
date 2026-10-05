@@ -304,3 +304,17 @@ func (c cursors) readerNames() []string {
 	sort.Strings(names)
 	return names
 }
+
+// publishNativeTranscript binds authorship to the decoded producer, independently
+// of which agent's watcher observed its history.
+func publishNativeTranscript(s *stream, tr importer.SessionTranscript) error {
+	if tr.Provider == "" || tr.SessionID == "" {
+		return fmt.Errorf("channel transcript has no producer identity")
+	}
+	for _, message := range tr.Messages {
+		if _, err := s.append(tr.Provider, tr.SessionID, message); err != nil {
+			return err
+		}
+	}
+	return s.trim()
+}

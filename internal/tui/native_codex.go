@@ -231,19 +231,14 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	// Drop what this session does into the channel as it happens. One entry,
 	// whoever ends up reading it: the readers filter when they read, so nothing
 	// here depends on who is running.
+	captureTranscript := watch.consume
 	if chStream != nil && channelCfg.joins(provider) {
-		own := watch.consume
-		sessionID := w.sessionID
+		own := captureTranscript
 		watch.consume = func(tr importer.SessionTranscript) error {
 			if err := own(tr); err != nil {
 				return err
 			}
-			for _, message := range tr.Messages {
-				if _, err := chStream.append(provider, sessionID, message); err != nil {
-					return err
-				}
-			}
-			return chStream.trim()
+			return publishNativeTranscript(chStream, tr)
 		}
 	}
 
@@ -320,18 +315,12 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 				}
 				pw.consume = real
 			}
-			peerName := peer
-			primary := watch.consume
+			primary := captureTranscript
 			pw.consume = func(tr importer.SessionTranscript) error {
 				if err := primary(tr); err != nil {
 					return err
 				}
-				for _, message := range tr.Messages {
-					if _, err := chStream.append(peerName, tr.SessionID, message); err != nil {
-						return err
-					}
-				}
-				return nil
+				return publishNativeTranscript(chStream, tr)
 			}
 			peers = append(peers, pw)
 		}
