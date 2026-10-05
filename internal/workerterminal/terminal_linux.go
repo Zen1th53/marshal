@@ -19,6 +19,12 @@ import (
 
 type Host func(context.Context, string) error
 type contextKey struct{}
+type interactiveKey struct{}
+
+// WithInteractive connects all native session descriptors directly to the PTY.
+func WithInteractive(ctx context.Context) context.Context {
+	return context.WithValue(ctx, interactiveKey{}, true)
+}
 
 func WithHost(ctx context.Context, host Host) context.Context {
 	return context.WithValue(ctx, contextKey{}, host)
@@ -62,6 +68,7 @@ func Attach(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 	listener.SetDeadline(time.Now().Add(5 * time.Second))
 	var mu sync.Mutex
 	var connection net.Conn
+	observer := cmd.Stdout
 	drained := make(chan struct{})
 	go func() {
 		defer close(drained)
@@ -74,7 +81,11 @@ func Attach(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 		mu.Unlock()
 		defer c.Close()
 		go io.Copy(master, c)
-		io.Copy(c, master)
+		output := io.Writer(c)
+		if interactive, _ := ctx.Value(interactiveKey{}).(bool); interactive && observer != nil {
+			output = io.MultiWriter(c, observer)
+		}
+		io.Copy(output, master)
 	}()
 	var once sync.Once
 	cleanup := func() {
@@ -97,6 +108,12 @@ func Attach(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 	if err := host(ctx, filepath.Join(dir, "terminal.sock")); err != nil {
 		cleanup()
 		return nil, err
+	}
+	if interactive, _ := ctx.Value(interactiveKey{}).(bool); interactive {
+		// os/exec must pass the file itself, not a writer that creates a pipe.
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
+		_ = unix.IoctlSetWinsize(fd, unix.TIOCSWINSZ, &unix.Winsize{Row: 40, Col: 120})
+		return cleanup, nil
 	}
 	// Keep explicit provider stdin (a request document) unchanged.
 	if cmd.Stdin == nil {

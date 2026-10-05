@@ -125,7 +125,7 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 // task workers. The caller supplies settings; the driver owns execution.
 func LaunchSession(ctx context.Context, provider, binary, root string, args, env []string) (*Handle, error) {
 	n := Native{Provider: provider, Binary: binary, Args: func(Request) []string { return args }, Parse: parseNone}
-	return n.launch(ctx, Request{Worktree: root}, append(os.Environ(), env...))
+	return n.launch(workerterminal.WithInteractive(ctx), Request{Worktree: root}, append(os.Environ(), env...))
 }
 
 func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle, error) {
