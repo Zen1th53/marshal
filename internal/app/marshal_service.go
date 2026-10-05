@@ -245,7 +245,7 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	if err := validateDraft(d); err != nil {
 		return marshal.Run{}, err
 	}
-	if string(d.Plan.ProjectID) != s.ProjectID {
+	if d.Plan.ProjectID != s.CanonicalPlanProjectID() {
 		return marshal.Run{}, errors.New("plan belongs to another project")
 	}
 	if !marshalIdentifier(runID) {

@@ -51,7 +51,7 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	if w.Approver == nil {
 		return nil, errors.New("marshal: an approval source is required")
 	}
-	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository, ProjectID: s.ProjectID}
+	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository, ProjectID: string(s.CanonicalPlanProjectID())}
 	s.ModelProvider = w.Provider
 	s.Reviewer = "marshal:" + w.Provider
 	s.Gate = w.Gate

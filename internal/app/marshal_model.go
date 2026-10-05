@@ -40,7 +40,7 @@ func (m *MarshalCLI) SetMarshalConversationID(id string) {
 	}
 }
 
-const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"checks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}}},"required":["command","criteria"]}},"instructions":{"type":"string"},"expected_output":{"type":"string"}},"required":["id","title","criteria","paths","depends_on","worker","checks"]}}},"required":["tasks"]}`
+const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"checks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}}},"required":["command","criteria"]}},"instructions":{"type":"string"},"expected_output":{"type":"string"}},"required":["id","title","criteria","paths","depends_on","worker","checks","instructions","expected_output"]}}},"required":["tasks"]}`
 const marshalReviewSchema = `{"type":"object","additionalProperties":false,"properties":{"Verdict":{"type":"string","enum":["accept","return","reassign","escalate"]},"Reviewer":{"type":"string"},"Reasons":{"type":"array","items":{"type":"string"}},"EvidenceRefs":{"type":"array","items":{"type":"string"}}},"required":["Verdict","Reviewer","Reasons","EvidenceRefs"]}`
 const marshalVerifySchema = `{"type":"object","additionalProperties":false,"properties":{"head":{"type":"string"},"verdict":{"type":"string","enum":["pass","fail"]},"findings":{"type":"array","items":{"type":"string"}}},"required":["head","verdict","findings"]}`
 
@@ -188,7 +188,7 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 		return MarshalDraft{}, errors.New("no worker CLI is available")
 	}
 	var proposal marshalTaskProposal
-	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields naming only the criteria each check proves, and may carry instructions (purpose, approach, what to leave alone) and an expected output. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
+	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields naming only the criteria each check proves, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -255,7 +255,7 @@ func (s *MarshalService) DraftFromProposal(data []byte, provider string) (Marsha
 	if err := decoder.Decode(&proposal); err != nil {
 		return MarshalDraft{}, fmt.Errorf("invalid Marshal draft JSON: %w", err)
 	}
-	m := &MarshalCLI{Provider: provider, ProjectID: s.ProjectID}
+	m := &MarshalCLI{Provider: provider, ProjectID: string(s.CanonicalPlanProjectID())}
 	return m.materialize(proposal, "", 1, m.availableWorkers())
 }
 
