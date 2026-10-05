@@ -96,6 +96,10 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Detached takeover selects the worker for the next client to attach.
+	if _, err := w.handleTakeoverCommand(ctx); err != nil {
+		t.Fatal(err)
+	}
 	master, slave := openPTY(t)
 	setWinsize(slave, 30, 100)
 	client := exec.Command(w.tmuxPath, "attach-session", "-t", w.tmuxSession)
@@ -108,6 +112,13 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 	defer func() { client.Process.Kill(); client.Wait(); w.StopAllWorkers(ctx) }()
 	go io.Copy(io.Discard, master)
 	time.Sleep(100 * time.Millisecond)
+	state, err := tmux.RunCommand(ctx, "list-clients", "-t", w.tmuxSession, "-F", "#{pane_input_off} #{client_key_table}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "0 marshal-keys-" + tmux.ProjectHash(w.workDir); strings.TrimSpace(string(state)) != want {
+		t.Fatalf("client attached after takeover with wrong input state: got %q, want %q", state, want)
+	}
 	w.tmuxMu.Lock()
 	a := copyAgentLocked(w.tmuxActiveWins["test"])
 	w.tmuxMu.Unlock()

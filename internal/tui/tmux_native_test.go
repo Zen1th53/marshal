@@ -42,8 +42,16 @@ case "$1" in
     ;;
   display-message)
     case "$*" in
+      *"#{session_name}:#{window_id}"*)
+        printf 'test-session:@0\n'
+        exit 0
+        ;;
       *"#{session_name}"*"#{window_name}"*"#{window_id}"*)
         printf 'test-session\tmarshal\t@0\n'
+        exit 0
+        ;;
+      *"#{session_name}"*)
+        printf 'test-session\n'
         exit 0
         ;;
       *"#{pane_id}"*)
@@ -486,6 +494,10 @@ case "$1" in
         printf 'test-session\tmarshal\t@0\n'
         exit 0
         ;;
+      *"#{session_name}"*)
+        printf 'test-session\n'
+        exit 0
+        ;;
       *"#{pane_id}"*)
         printf '%%%%0\n'
         exit 0
@@ -751,7 +763,7 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 		t.Fatalf("chat pane was not given operator input (-e):\n%s", logStr)
 	}
 	// Verify main MARSHAL window remains focused
-	if !strings.Contains(logStr, "select-window -t %0") {
+	if !strings.Contains(logStr, "select-window -t test-session:@0") {
 		t.Fatalf("marshal workspace was not re-selected after opening chat:\n%s", logStr)
 	}
 

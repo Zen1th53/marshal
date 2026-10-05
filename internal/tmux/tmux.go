@@ -420,6 +420,14 @@ func WindowExists(ctx context.Context, session, windowName string) (bool, error)
 
 // SelectWindow selects the target window in tmux.
 func SelectWindow(ctx context.Context, target string) error {
+	// A pane ID alone leaves tmux needing a current client to find the session.
+	if strings.HasPrefix(target, "%") {
+		out, err := RunCommand(ctx, "display-message", "-p", "-t", target, "#{session_name}:#{window_id}")
+		if err != nil {
+			return err
+		}
+		target = strings.TrimSpace(string(out))
+	}
 	_, err := RunCommand(ctx, "select-window", "-t", target)
 	return err
 }
@@ -524,6 +532,13 @@ func BindWindowKey(ctx context.Context, target, table, key string, actionArgs ..
 	if _, err := RunCommand(ctx, "set-option", "-p", "-t", target, "@marshal_key_table", table); err != nil {
 		return err
 	}
+	if len(actionArgs) == 3 && actionArgs[0] == "select-window" && actionArgs[1] == "-t" && strings.HasPrefix(actionArgs[2], "%") {
+		out, err := RunCommand(ctx, "display-message", "-p", "-t", actionArgs[2], "#{session_name}:#{window_id}")
+		if err != nil {
+			return err
+		}
+		actionArgs[2] = strings.TrimSpace(string(out))
+	}
 	body := strings.Join(actionArgs, " ") + " ; switch-client -T " + table
 	condition := "#{==:#{@marshal_key_table}," + table + "}"
 	fallback := "switch-client -T root ; send-keys -K " + key
@@ -534,11 +549,31 @@ func BindWindowKey(ctx context.Context, target, table, key string, actionArgs ..
 		return err
 	}
 	for _, hook := range []string{"after-select-window[805]", "after-select-pane[805]"} {
-		if _, err := RunCommand(ctx, "set-hook", "-w", "-t", target, hook, "switch-client -T "+table); err != nil {
+		if _, err := RunCommand(ctx, "set-hook", "-w", "-t", target, hook, `if-shell -F "#{&&:#{client_name},#{==:#{client_session},#{session_name}}}" "switch-client -T `+table+`"`); err != nil {
 			return err
 		}
 	}
-	_, _ = RunCommand(ctx, "switch-client", "-T", table)
+	// Session hooks initialize future clients from their selected pane's table.
+	session, err := RunCommand(ctx, "display-message", "-p", "-t", target, "#{session_name}")
+	if err != nil {
+		return err
+	}
+	// Keep hooks for projects sharing a session in separate slots.
+	index, _ := strconv.ParseUint(ProjectHash(table), 16, 32)
+	hook := fmt.Sprintf("client-session-changed[%d]", index&0x7fffffff)
+	_, err = RunCommand(ctx, "set-hook", "-t", strings.TrimSpace(string(session)), hook, `if-shell -F "`+condition+`" "switch-client -T `+table+`"`)
+	if err != nil {
+		return err
+	}
+	clients, err := RunCommand(ctx, "list-clients", "-t", strings.TrimSpace(string(session)), "-F", "#{?"+condition+",#{client_name},}")
+	if err != nil {
+		return err
+	}
+	for _, client := range strings.Fields(string(clients)) {
+		if _, err := RunCommand(ctx, "switch-client", "-c", client, "-T", table); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
