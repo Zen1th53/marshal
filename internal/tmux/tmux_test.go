@@ -324,9 +324,11 @@ func TestFindBinaryRejectsUnsupportedVersions(t *testing.T) {
 		wantErr bool
 	}{
 		{"3.1c", false, true}, {"3.2", false, true},
-		{"3.2a", false, false}, {"3.7b", false, false},
+		{"3.2a", false, true}, {"3.3", false, true},
+		{"3.3a", false, false}, {"3.7b", false, false},
 		{"next-3.8", false, false}, {"unknown", false, true},
-		{"3.1c", true, true}, {"3.2a", true, false},
+		{"3.1c", true, true}, {"3.2a", true, true},
+		{"3.3", true, true}, {"3.3a", true, false},
 	} {
 		t.Run(fmt.Sprintf("%s/inside=%t", tc.version, tc.inside), func(t *testing.T) {
 			ResetBinaryPath()
@@ -349,8 +351,14 @@ func TestFindBinaryRejectsUnsupportedVersions(t *testing.T) {
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("FindBinary error = %v, want error %t", err, tc.wantErr)
 			}
-			if err != nil && !strings.Contains(err.Error(), "requires tmux 3.2a or newer") {
+			if err != nil && !strings.Contains(err.Error(), "requires tmux 3.3a or newer") {
 				t.Fatalf("missing actionable version error: %v", err)
+			}
+			if err != nil && !strings.Contains(err.Error(), tc.version) {
+				t.Fatalf("expected error to contain version %q: %v", tc.version, err)
+			}
+			if err != nil && !strings.Contains(err.Error(), "Ubuntu 22.04 ships 3.2a - use Ubuntu 24.04+, Debian 12+, or build tmux from source") {
+				t.Fatalf("expected error to contain upgrade instructions: %v", err)
 			}
 		})
 	}

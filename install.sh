@@ -135,7 +135,7 @@ for tool in tmux socat; do
         *) command="install $tool with your system's package manager" ;;
     esac
     case "$tool" in
-        tmux) reason="the MARSHAL TUI requires it" ;;
+        tmux) reason="the MARSHAL TUI requires it (minimum 3.3a; Ubuntu 22.04 ships 3.2a - use Ubuntu 24.04+, Debian 12+, or build tmux from source)" ;;
         socat) reason="governed work with network access is refused without it" ;;
     esac
     info "Missing $tool: $reason; $command"

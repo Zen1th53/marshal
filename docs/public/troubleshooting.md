@@ -30,10 +30,14 @@ problems are explained there. If not, find your problem below.
     you can try building from source (see the end of
     [Install MARSHAL](install.md)), but this is not supported yet.
 
-??? question "The TUI says tmux is missing"
-    The TUI requires tmux. The installer reports missing tmux and socat after
-    installation, with one install command per tool for the detected package
-    manager. It does not install them or fail the installation. See
+??? question "The TUI says tmux is missing or unsupported"
+    The TUI requires tmux 3.3a or newer. Older versions (including tmux 3.2a
+    shipped on Ubuntu 22.04) and unrecognized versions are refused before the
+    TUI starts because tmux 3.2a's server crashes during popup and native-window
+    use. Upgrade to Ubuntu 24.04+, Debian 12+, or build tmux from source.
+    The installer reports missing tmux and socat after installation, with one
+    install command per tool for the detected package manager. It does not
+    install them or fail the installation. See
     [Install runtime tools](install.md#step-3-install-runtime-tools).
 
 ## Commands

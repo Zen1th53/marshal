@@ -328,17 +328,32 @@ esac
 }
 
 func TestTUIRefusesOldTmuxBeforeStartup(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte("#!/bin/sh\necho 'tmux 3.1c'\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	tmux.ResetBinaryPath()
-	t.Cleanup(tmux.ResetBinaryPath)
-	t.Setenv("PATH", dir)
-	t.Setenv("TMUX", "")
-	var stdout, stderr bytes.Buffer
-	code := Execute(context.Background(), dir, []string{"tui"}, strings.NewReader(""), &stdout, &stderr)
-	if code == 0 || !strings.Contains(stderr.String(), "requires tmux 3.2a or newer") || !strings.Contains(stderr.String(), "3.1c") {
-		t.Fatalf("old tmux refusal: code=%d stderr=%q", code, stderr.String())
+	for _, oldVer := range []string{"3.1c", "3.2", "3.2a"} {
+		t.Run(oldVer, func(t *testing.T) {
+			dir := t.TempDir()
+			script := fmt.Sprintf("#!/bin/sh\necho 'tmux %s'\n", oldVer)
+			if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0700); err != nil {
+				t.Fatal(err)
+			}
+			tmux.ResetBinaryPath()
+			t.Cleanup(tmux.ResetBinaryPath)
+			t.Setenv("PATH", dir)
+			t.Setenv("TMUX", "")
+			var stdout, stderr bytes.Buffer
+			code := Execute(context.Background(), dir, []string{"tui"}, strings.NewReader(""), &stdout, &stderr)
+			if code == 0 || !strings.Contains(stderr.String(), "requires tmux 3.3a or newer") || !strings.Contains(stderr.String(), oldVer) {
+				t.Fatalf("old tmux refusal: code=%d stderr=%q", code, stderr.String())
+			}
+			if !strings.Contains(stderr.String(), "Ubuntu 22.04 ships 3.2a - use Ubuntu 24.04+, Debian 12+, or build tmux from source") {
+				t.Fatalf("missing upgrade instructions in stderr: %q", stderr.String())
+			}
+
+			// CLI subcommands keep working without a compatible tmux.
+			stdout.Reset()
+			stderr.Reset()
+			if vCode := Execute(context.Background(), dir, []string{"version"}, strings.NewReader(""), &stdout, &stderr); vCode != 0 {
+				t.Fatalf("cli subcommand 'version' failed with old tmux: code=%d stderr=%q", vCode, stderr.String())
+			}
+		})
 	}
 }

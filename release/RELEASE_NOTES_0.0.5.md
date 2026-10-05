@@ -40,7 +40,7 @@ sessions retain the rights of your user account.
 
 - **Linux only**, on 64-bit Intel/AMD or ARM. macOS is unsupported; WSL 2 has
   not been tested.
-- **tmux** is required for the TUI.
+- **tmux 3.3a or newer** is required for the TUI.
 - **socat** is required for governed work with network access. That work is
   refused without it.
 - **Bubblewrap** provides governed worker isolation. Missing isolation can

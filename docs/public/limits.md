@@ -12,6 +12,11 @@ MARSHAL has no background service. If you close the window, the work stops,
 but its stored run remains recoverable. Reopen MARSHAL and use `/marshal
 resume` to continue.
 
+**tmux 3.3a or newer is required for the TUI.**
+tmux 3.2a and older (including tmux 3.2a shipped with Ubuntu 22.04) are refused
+because tmux 3.2a's server crashes during MARSHAL's popup and native-window use.
+Use Ubuntu 24.04+, Debian 12+, or build tmux from source.
+
 **It runs on Linux only.**
 macOS is not supported yet. On Windows you can try WSL 2, which has not been
 tested.

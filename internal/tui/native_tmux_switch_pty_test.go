@@ -22,7 +22,7 @@ echo "$@" >> %q
 winFile=%q
 case "$1" in
   -V)
-    printf 'tmux 3.2a\n'
+    printf 'tmux 3.3a\n'
     exit 0
     ;;
   new-window)
@@ -38,7 +38,7 @@ case "$1" in
   display-message)
     case "$*" in
       *"#{version}"*)
-        printf '3.2a\n'
+        printf '3.3a\n'
         exit 0
         ;;
       *"#{session_id}"*)

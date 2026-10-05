@@ -108,11 +108,11 @@ func checkVersion(binary string, args ...string) error {
 	if len(parts) == 4 {
 		major, _ := strconv.Atoi(parts[1])
 		minor, _ := strconv.Atoi(parts[2])
-		if major > 3 || major == 3 && (minor > 2 || minor == 2 && parts[3] >= "a") {
+		if major > 3 || major == 3 && (minor > 3 || minor == 3 && parts[3] >= "a") {
 			return nil
 		}
 	}
-	return fmt.Errorf("MARSHAL requires tmux 3.2a or newer (found %q); upgrade tmux", version)
+	return fmt.Errorf("MARSHAL requires tmux 3.3a or newer (found %q); Ubuntu 22.04 ships 3.2a - use Ubuntu 24.04+, Debian 12+, or build tmux from source", version)
 }
 
 // IsInsideTmux reports whether the current process is running inside tmux ($TMUX is set).

@@ -7,7 +7,7 @@ This page takes you from nothing to a working `marshal` command.
 - [x] A computer running **Linux** (64-bit Intel/AMD or ARM).
 - [x] A **project folder**, including an empty folder. `marshal init` can
       initialise Git for you.
-- [x] **tmux** for the TUI, and **socat** for governed work with network access.
+- [x] **tmux 3.3a or newer** for the TUI, and **socat** for governed work with network access.
 - [x] At least one **AI coding agent** installed and signed in:
       [Codex](https://github.com/openai/codex),
       [Claude Code](https://docs.anthropic.com/en/docs/claude-code),
@@ -52,11 +52,13 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ## Step 3: Install runtime tools
 
-The TUI requires **tmux**. Governed work with network access requires **socat**;
-without socat, that work is refused. After installation, the installer prints
-one line for each missing tool with the command for the package manager it
-finds. It does not install these tools automatically, and missing tools do not
-make the installation fail.
+The TUI requires **tmux 3.3a or newer**. Older versions (including tmux 3.2a on
+Ubuntu 22.04) are refused because of server crashes during popup and native-window
+use; use Ubuntu 24.04+, Debian 12+, or build tmux from source. Governed work with
+network access requires **socat**; without socat, that work is refused. After
+installation, the installer prints one line for each missing tool with the
+command for the package manager it finds. It does not install these tools
+automatically, and missing tools do not make the installation fail.
 
 | Package manager | tmux | socat |
 | --- | --- | --- |
