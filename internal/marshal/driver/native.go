@@ -78,7 +78,7 @@ func Agy(binary string) Native {
 // Ollama execution adapter.
 func OpenCode(binary string) Native {
 	return Native{Provider: "opencode", Binary: orDefault(binary, "opencode"), Parse: parseNone, Args: func(r Request) []string {
-		args := []string{"run", "--format", "json"}
+		args := []string{"run", "--format", "json", "--dir", r.Worktree}
 		if r.Model != "" {
 			args = append(args, "-m", r.Model)
 		}
