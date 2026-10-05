@@ -326,3 +326,19 @@ esac
 		t.Fatalf("expected attach-session:\n%s", logStr)
 	}
 }
+
+func TestTUIRefusesOldTmuxBeforeStartup(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte("#!/bin/sh\necho 'tmux 3.1c'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	tmux.ResetBinaryPath()
+	t.Cleanup(tmux.ResetBinaryPath)
+	t.Setenv("PATH", dir)
+	t.Setenv("TMUX", "")
+	var stdout, stderr bytes.Buffer
+	code := Execute(context.Background(), dir, []string{"tui"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 || !strings.Contains(stderr.String(), "requires tmux 3.2a or newer") || !strings.Contains(stderr.String(), "3.1c") {
+		t.Fatalf("old tmux refusal: code=%d stderr=%q", code, stderr.String())
+	}
+}

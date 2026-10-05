@@ -67,8 +67,12 @@ case "$1" in
     ;;
   display-message)
     case "$*" in
-      *"#{session_name} #{window_name} #{window_id}"*)
+      *"#{session_name}"*"#{window_name}"*"#{window_id}"*)
         printf 'test-session test-win @0\n'
+        exit 0
+        ;;
+      *"#{session_name}"*|*"#{session_id}"*)
+        printf 'test-session\n'
         exit 0
         ;;
       *"#{pane_dead}"*)
@@ -190,7 +194,7 @@ esac
 	expectedCommands := []string{
 		"has-session -t my-session",
 		"new-session -d -s my-session -c /tmp -n marshal marshal tui",
-		"display-message -p #{session_name} #{window_name} #{window_id}",
+		"display-message -p #{session_name}\t#{window_name}\t#{window_id}",
 		"list-windows -t test-session -F #{window_name}",
 		"select-window -t marshal-codex-12345678",
 		"new-window -t test-session -n marshal-claude -c /tmp -e FOO=bar claude",
@@ -201,12 +205,12 @@ esac
 		"break-pane -s marshal-codex-12345678",
 		"set-option -t test-session status-right status-text",
 		"bind-key -T marshal-keys-test F11 if-shell -F",
-		"set-hook -w -t %1 after-select-window[805]",
+		"set-hook -t test-session after-select-window[805]",
 		"set-option -w -t marshal-codex-12345678 remain-on-exit on",
 		"display-message -p -t marshal-codex-12345678 #{pane_dead}",
 	}
 
-	if strings.Contains(logStr, "bind-key -n") || strings.Contains(logStr, "unbind-key") {
+	if strings.Contains(logStr, "bind-key -n") || strings.Contains(logStr, "unbind-key -T root") {
 		t.Fatal("server-global key mutation")
 	}
 	for _, exp := range expectedCommands {
@@ -310,5 +314,44 @@ exit 0
 	pid, _, err := PanePIDAndPGID(ctx, "%1")
 	if err != nil || pid != 12345 {
 		t.Errorf("PanePIDAndPGID: pid=%d err=%v", pid, err)
+	}
+}
+
+func TestFindBinaryRejectsUnsupportedVersions(t *testing.T) {
+	for _, tc := range []struct {
+		version string
+		inside  bool
+		wantErr bool
+	}{
+		{"3.1c", false, true}, {"3.2", false, true},
+		{"3.2a", false, false}, {"3.7b", false, false},
+		{"next-3.8", false, false}, {"unknown", false, true},
+		{"3.1c", true, true}, {"3.2a", true, false},
+	} {
+		t.Run(fmt.Sprintf("%s/inside=%t", tc.version, tc.inside), func(t *testing.T) {
+			ResetBinaryPath()
+			t.Cleanup(ResetBinaryPath)
+			dir := t.TempDir()
+			script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = -V ]; then echo 'tmux %s'; else echo '%s'; fi\n", tc.version, tc.version)
+			if tc.inside {
+				// A modern executable can still connect to an older server.
+				script = fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = -V ]; then echo 'tmux 3.7b'; else echo '%s'; fi\n", tc.version)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", dir)
+			t.Setenv("TMUX", "")
+			if tc.inside {
+				t.Setenv("TMUX", "/tmp/test,1,0")
+			}
+			_, err := FindBinary()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("FindBinary error = %v, want error %t", err, tc.wantErr)
+			}
+			if err != nil && !strings.Contains(err.Error(), "requires tmux 3.2a or newer") {
+				t.Fatalf("missing actionable version error: %v", err)
+			}
+		})
 	}
 }

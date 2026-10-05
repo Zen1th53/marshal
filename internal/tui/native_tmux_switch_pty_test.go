@@ -21,6 +21,10 @@ func TestPTYSwitchTmuxAgentsWithoutRestart(t *testing.T) {
 echo "$@" >> %q
 winFile=%q
 case "$1" in
+  -V)
+    printf 'tmux 3.2a\n'
+    exit 0
+    ;;
   new-window)
     prev=""
     for a in "$@"; do
@@ -33,6 +37,14 @@ case "$1" in
     ;;
   display-message)
     case "$*" in
+      *"#{version}"*)
+        printf '3.2a\n'
+        exit 0
+        ;;
+      *"#{session_id}"*)
+        printf '$0\n'
+        exit 0
+        ;;
       *"#{session_name}"*"#{window_name}"*"#{window_id}"*)
         printf 'test-session\tmarshal\t@0\n'
         exit 0

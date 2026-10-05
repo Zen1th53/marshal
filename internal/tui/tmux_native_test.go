@@ -42,6 +42,10 @@ case "$1" in
     ;;
   display-message)
     case "$*" in
+      *"#{session_id}"*)
+        printf '$0\n'
+        exit 0
+        ;;
       *"#{session_name}:#{window_id}"*)
         printf 'test-session:@0\n'
         exit 0

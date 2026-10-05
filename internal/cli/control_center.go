@@ -29,6 +29,9 @@ import (
 // can see anything at all.
 func (c *command) controlCenter(ctx context.Context, args []string) error {
 	if _, err := tmux.FindBinary(); err != nil {
+		if err != tmux.ErrTmuxMissing {
+			return err
+		}
 		hint := tmux.DetectInstallCommand()
 		fmt.Fprintf(c.stderr, "tmux is required to run the MARSHAL TUI.\nInstall tmux with:\n  %s\n", hint)
 		return fmt.Errorf("tmux is required to run the MARSHAL TUI; install with: %s", hint)

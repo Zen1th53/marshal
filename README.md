@@ -408,6 +408,11 @@ For details, see [architecture](docs/architecture.md),
 
 ## Install
 
+The TUI requires **tmux 3.2a or newer**. MARSHAL checks both the executable
+and, when started inside tmux, the running server; older or unrecognized
+versions are refused with an upgrade message. tmux 3.2a and 3.7b are verified
+with real terminal input tests.
+
 **Linux, one command:**
 
 ```bash

@@ -89,6 +89,13 @@ func TestProjectsKeepRootBindingsAndTargetOwnWindows(t *testing.T) {
 func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 	w := realTmuxWorkspace(t)
 	ctx := context.Background()
+	// Preserve a user's nonstandard default table outside MARSHAL panes.
+	if _, err := tmux.RunCommand(ctx, "bind-key", "-T", "user-root", "F12", "send-keys", "user-key"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tmux.RunCommand(ctx, "set-option", "-t", w.tmuxSession, "key-table", "user-root"); err != nil {
+		t.Fatal(err)
+	}
 	// The TUI owns this terminal, but no other window in the user's session.
 	panes, _ := tmux.ListPanes(ctx, w.tmuxSession)
 	w.tmuxMarshalPaneID = panes[0].PaneID
@@ -188,7 +195,37 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 	if _, err := tmux.RunCommand(ctx, "switch-client", "-T", "prefix"); err != nil {
 		t.Fatal(err)
 	}
+	// Also exercise every byte through key dispatch, without paste detection.
+	if _, err := tmux.RunCommand(ctx, "set-option", "-t", w.tmuxSession, "assume-paste-time", "0"); err != nil {
+		t.Fatal(err)
+	}
 	takeoverAndType("hello-again")
+	takeoverAndType("héllo-世界")
+	// Leaving an owned pane must restore the original table and all input.
+	if err := tmux.NewWindow(ctx, w.tmuxSession, "unrelated", w.workDir, nil, []string{"/bin/sh", "-c", "while read line; do echo unrelated:$line; done"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmux.SelectWindow(ctx, w.tmuxSession+":unrelated"); err != nil {
+		t.Fatal(err)
+	}
+	state, err = tmux.RunCommand(ctx, "list-clients", "-t", w.tmuxSession, "-F", "#{client_key_table}")
+	if err != nil || strings.TrimSpace(string(state)) != "user-root" {
+		t.Fatalf("unrelated window lost user table: %q, %v", state, err)
+	}
+	if _, err := master.Write([]byte("hello\r\x1b[24~\r")); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(time.Second)
+	for {
+		out, _ := tmux.CapturePane(ctx, w.tmuxSession+":unrelated")
+		if strings.Contains(out, "unrelated:hello") && strings.Contains(out, "unrelated:user-key") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("unrelated window lost input: %q", out)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func TestStatusProjectionDoesNotInitializeChat(t *testing.T) {

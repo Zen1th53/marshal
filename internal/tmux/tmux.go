@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -78,12 +79,40 @@ func FindBinary() (string, error) {
 	if err != nil {
 		return "", ErrTmuxMissing
 	}
+	if err := checkVersion(p, "-V"); err != nil {
+		return "", err
+	}
+	if IsInsideTmux() {
+		if err := checkVersion(p, "display-message", "-p", "#{version}"); err != nil {
+			return "", err
+		}
+	}
 	abs, err := filepath.Abs(p)
 	if err != nil {
 		return p, nil
 	}
 	cachedPath = abs
 	return abs, nil
+}
+
+// checkVersion checks both executables and attached servers before using them.
+func checkVersion(binary string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, binary, args...).Output()
+	if err != nil {
+		return fmt.Errorf("cannot determine tmux version: %w", err)
+	}
+	version := strings.TrimSpace(strings.TrimPrefix(string(out), "tmux "))
+	parts := regexp.MustCompile(`^(?:next-)?([0-9]+)\.([0-9]+)([a-z]*)$`).FindStringSubmatch(version)
+	if len(parts) == 4 {
+		major, _ := strconv.Atoi(parts[1])
+		minor, _ := strconv.Atoi(parts[2])
+		if major > 3 || major == 3 && (minor > 2 || minor == 2 && parts[3] >= "a") {
+			return nil
+		}
+	}
+	return fmt.Errorf("MARSHAL requires tmux 3.2a or newer (found %q); upgrade tmux", version)
 }
 
 // IsInsideTmux reports whether the current process is running inside tmux ($TMUX is set).
@@ -526,7 +555,7 @@ func SetStatusText(ctx context.Context, session, statusText string) error {
 	return err
 }
 
-// BindWindowKey installs a key in a private project table. Window/pane hooks
+// BindWindowKey installs a key in a private project table. Session hooks
 // activate it only when a MARSHAL terminal is selected; root is untouched.
 func BindWindowKey(ctx context.Context, target, table, key string, actionArgs ...string) error {
 	if _, err := RunCommand(ctx, "set-option", "-p", "-t", target, "@marshal_key_table", table); err != nil {
@@ -539,40 +568,38 @@ func BindWindowKey(ctx context.Context, target, table, key string, actionArgs ..
 		}
 		actionArgs[2] = strings.TrimSpace(string(out))
 	}
-	body := strings.Join(actionArgs, " ") + " ; switch-client -T " + table
+	// Remove the old catch-all when reusing a table from an earlier run.
+	if _, err := RunCommand(ctx, "unbind-key", "-q", "-T", table, "Any"); err != nil {
+		return err
+	}
 	condition := "#{==:#{@marshal_key_table}," + table + "}"
-	fallback := "switch-client -T root ; send-keys -K " + key
-	if _, err := RunCommand(ctx, "bind-key", "-T", table, key, "if-shell", "-F", condition, body, fallback); err != nil {
+	if _, err := RunCommand(ctx, "bind-key", "-T", table, key, "if-shell", "-F", condition, strings.Join(actionArgs, " "), "send-keys "+key); err != nil {
 		return err
 	}
-	if _, err := RunCommand(ctx, "bind-key", "-T", table, "Any", "if-shell", "-F", condition, "send-keys ; switch-client -T "+table, "switch-client -T root ; send-keys -K"); err != nil {
+	session, err := RunCommand(ctx, "display-message", "-p", "-t", target, "#{session_id}")
+	if err != nil {
 		return err
 	}
-	for _, hook := range []string{"after-select-window[805]", "after-select-pane[805]"} {
-		if _, err := RunCommand(ctx, "set-hook", "-w", "-t", target, hook, `if-shell -F "#{&&:#{client_name},#{==:#{client_session},#{session_name}}}" "switch-client -T `+table+`"`); err != nil {
+	sessionName := strings.TrimSpace(string(session))
+	// Save the user's default once, including when projects share a session.
+	if _, err := RunCommand(ctx, "set-option", "-oqF", "-t", sessionName, "@marshal_default_key_table", "#{key-table}"); err != nil {
+		return err
+	}
+	// Unbound keys are forwarded only from the default table. In tmux 3.2a,
+	// an Any binding with argument-less send-keys silently discards the key.
+	// Let tmux forward input, handle prefixes and enter copy mode natively.
+	tableFormat := "#{?@marshal_key_table,#{@marshal_key_table},#{@marshal_default_key_table}}"
+	condition = "#{!=:#{key-table}," + tableFormat + "}"
+	setDefault := "set-option -F key-table '" + tableFormat + "'"
+	activate := "if-shell -F -t '" + sessionName + "' \"" + condition + "\" \"" + setDefault + "\""
+	for _, hook := range []string{"after-select-window[805]", "after-select-pane[805]", "after-new-window[805]", "after-split-window[805]", "after-kill-pane[805]", "session-window-changed[805]", "client-session-changed[805]"} {
+		if _, err := RunCommand(ctx, "set-hook", "-t", sessionName, hook, activate); err != nil {
 			return err
 		}
 	}
-	// Session hooks initialize future clients from their selected pane's table.
-	session, err := RunCommand(ctx, "display-message", "-p", "-t", target, "#{session_name}")
+	_, err = RunCommand(ctx, "if-shell", "-F", "-t", sessionName, condition, setDefault)
 	if err != nil {
 		return err
-	}
-	// Keep hooks for projects sharing a session in separate slots.
-	index, _ := strconv.ParseUint(ProjectHash(table), 16, 32)
-	hook := fmt.Sprintf("client-session-changed[%d]", index&0x7fffffff)
-	_, err = RunCommand(ctx, "set-hook", "-t", strings.TrimSpace(string(session)), hook, `if-shell -F "`+condition+`" "switch-client -T `+table+`"`)
-	if err != nil {
-		return err
-	}
-	clients, err := RunCommand(ctx, "list-clients", "-t", strings.TrimSpace(string(session)), "-F", "#{?"+condition+",#{client_name},}")
-	if err != nil {
-		return err
-	}
-	for _, client := range strings.Fields(string(clients)) {
-		if _, err := RunCommand(ctx, "switch-client", "-c", client, "-T", table); err != nil {
-			return err
-		}
 	}
 	return nil
 }
