@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -86,24 +85,6 @@ func (r *Runtime) VerifyMarshalWorker(ctx context.Context, provider, modelName s
 	result, err := client.Run(ctx, adapter.Request{TaskID: id, Title: task.Title, Worktree: dir, Model: modelName, AllowedOperations: []string{"read"}})
 	if err != nil {
 		return profile, err
-	}
-	// OpenCode's current CLI emits text in part.text, while older versions used result.
-	if provider == "opencode" {
-		var text strings.Builder
-		for _, line := range strings.Split(string(result.Stdout), "\n") {
-			var event struct {
-				Type string `json:"type"`
-				Part struct {
-					Text string `json:"text"`
-				} `json:"part"`
-			}
-			if json.Unmarshal([]byte(line), &event) == nil && event.Type == "text" {
-				text.WriteString(event.Part.Text)
-			}
-		}
-		if text.Len() > 0 {
-			result.FinalText = text.String()
-		}
 	}
 	if err := validateHarnessProbe(result); err != nil {
 		return profile, fmt.Errorf("%w: %s", err, string(result.Stderr))
