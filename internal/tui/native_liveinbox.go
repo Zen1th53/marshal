@@ -93,27 +93,11 @@ func (v *inboxView) deliver(entries []streamEntry, cfg channelConfig) (int, erro
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	var b strings.Builder
-	shown := 0
-	for _, e := range entries {
-		if !cfg.canSee(v.reader, e.Provider) {
-			continue
-		}
-		label := e.Role
-		switch e.Kind {
-		case "tool_use":
-			label += ":tool_use"
-		case "tool_result":
-			label += ":tool_result"
-		}
-		fmt.Fprintf(&b, "## %s · %s · %s\n\n%s\n\n",
-			e.Provider, e.At.UTC().Format("2006-01-02 15:04:05Z"), label, e.Text)
-		shown++
-	}
+	text, shown := renderInboxEntries(v.reader, entries, cfg)
 	if shown == 0 {
 		return 0, nil
 	}
-	if err := v.write(b.String()); err != nil {
+	if err := v.write(text); err != nil {
 		return 0, err
 	}
 	v.rendered += shown
@@ -234,4 +218,57 @@ changed something since this briefing was written.
 // is how a first run is told from a resumed one.
 func (w *nativeHistoryWatch) indexEmpty() bool {
 	return len(w.seen) == 0
+}
+
+var inboxRenderMu sync.Mutex
+
+func renderInboxEntries(reader string, entries []streamEntry, cfg channelConfig) (string, int) {
+	var b strings.Builder
+	shown := 0
+	for _, e := range entries {
+		if !cfg.canSee(reader, e.Provider) {
+			continue
+		}
+		label := e.Role
+		switch e.Kind {
+		case "tool_use":
+			label += ":tool_use"
+		case "tool_result":
+			label += ":tool_result"
+		}
+		fmt.Fprintf(&b, "## %s · %s · %s\n\n%s\n\n",
+			e.Provider, e.At.UTC().Format("2006-01-02 15:04:05Z"), label, e.Text)
+		shown++
+	}
+	return b.String(), shown
+}
+
+func (v *inboxView) replace(entries []streamEntry, cfg channelConfig) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	text, count := renderInboxEntries(v.reader, entries, cfg)
+	text = viewHeader(v.reader) + text
+	tmp := v.path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(text), 0600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, v.path); err != nil {
+		return err
+	}
+	v.written = len(text)
+	v.rendered = count
+	return v.trim()
+}
+
+// Rebuild from the current policy, even when no new entry arrived. Narrowing
+// a reader's visibility removes earlier entries from its on-disk view too.
+func refreshInboxView(root string, v *inboxView, s *stream) error {
+	inboxRenderMu.Lock()
+	defer inboxRenderMu.Unlock()
+	cfg, _ := loadChannelConfig(root)
+	entries, err := s.since(-1)
+	if err != nil {
+		return err
+	}
+	return v.replace(entries, cfg)
 }

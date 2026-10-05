@@ -689,13 +689,7 @@ func (w *Workspace) monitorAgent(
 					_ = pw.sync()
 				}
 				if chStream != nil && view != nil {
-					positions, _ := loadCursors(root)
-					channelCfg, _ := loadChannelConfig(root)
-					if entries, err := chStream.since(positions[snapshot.provider]); err == nil && len(entries) > 0 {
-						_, _ = view.deliver(entries, channelCfg)
-						positions[snapshot.provider] = entries[len(entries)-1].Seq
-						_ = saveCursors(root, positions)
-					}
+					_ = refreshInboxView(root, view, chStream)
 				}
 				if view != nil {
 					status := liveStatus{Delivered: view.Count(), LastSync: time.Now().UTC()}

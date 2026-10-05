@@ -267,7 +267,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		if len(entries) == 0 {
 			return
 		}
-		if _, err := view.deliver(entries, channelCfg); err != nil {
+		if err := refreshInboxView(root, view, chStream); err != nil {
 			syncErr = joinNativeSyncError(syncErr, err)
 			return
 		}
