@@ -195,6 +195,8 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
+	// Drafting lists installed worker CLIs; make the result independent of the host.
+	fakeWorkerOnPath(t, "codex")
 	m := MarshalCLI{Provider: "codex", Binary: binary, Dir: root, ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
 	if _, err := m.Draft(t.Context(), "write a.txt"); err != nil {
 		t.Fatal(err)
