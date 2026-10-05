@@ -12,6 +12,12 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
+// fixtureText assembles synthetic credentials at runtime so no complete
+// credential-shaped value is present in the test source.
+func fixtureText(parts ...string) string {
+	return strings.Join(parts, "")
+}
+
 func TestT86StoreRejectsSecretsOnWrite(t *testing.T) {
 	st := openTestStore(t)
 	ctx := context.Background()
@@ -36,7 +42,7 @@ func TestT86StoreRejectsSecretsOnWrite(t *testing.T) {
 		Lifecycle:  model.MemoryCandidate,
 		Authority:  model.AuthorityAgent,
 		Title:      "Secret dump",
-		Body:       "Here is an API key: ghp_1234567890abcdefghijklmnopqrstuvwxyzAB",
+		Body:       fixtureText("Here is an API key: ", "ghp_", "12345678", "90abcdef", "ghijklmn", "opqrstuv", "wxyzAB"),
 		Scope:      string(model.ScopeProject),
 		ScopeID:    projID,
 		ObservedAt: now,
@@ -77,7 +83,7 @@ func TestT86StoreRejectsSecretsOnWrite(t *testing.T) {
 			if !strings.Contains(reason, "github token pattern") {
 				t.Fatalf("expected reason to name github token pattern, got: %s", reason)
 			}
-			if strings.Contains(reason, "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB") {
+			if strings.Contains(reason, fixtureText("ghp_", "12345678", "90abcdef", "ghijklmn", "opqrstuv", "wxyzAB")) {
 				t.Fatalf("reason leaked secret: %s", reason)
 			}
 		}
@@ -114,128 +120,128 @@ func TestStoreRejectsAllCredentialShapesOnWrite(t *testing.T) {
 		{
 			name:       "sk- openai key",
 			memID:      "MEM-SK-01",
-			secretVal:  "sk-proj-0123456789abcdef0123456789abcdef",
-			body:       "Here is an openai key: sk-proj-0123456789abcdef0123456789abcdef",
+			secretVal:  fixtureText("sk-proj-", "01234567", "89abcdef", "01234567", "89abcdef"),
+			body:       fixtureText("Here is an openai key: ", "sk-proj-", "01234567", "89abcdef", "01234567", "89abcdef"),
 			title:      "OpenAI key dump",
 			expectKind: "openai api key pattern",
 		},
 		{
 			name:       "anthropic sk-ant- key",
 			memID:      "MEM-SK-02",
-			secretVal:  "sk-ant-api03-abcdef1234567890abcdef1234567890",
-			body:       "Use anthropic key sk-ant-api03-abcdef1234567890abcdef1234567890",
+			secretVal:  fixtureText("sk-ant-api03-", "abcdef12", "34567890", "abcdef12", "34567890"),
+			body:       fixtureText("Use anthropic key ", "sk-ant-api03-", "abcdef12", "34567890", "abcdef12", "34567890"),
 			title:      "Anthropic config",
 			expectKind: "openai api key pattern",
 		},
 		{
 			name:       "ghp_ github token",
 			memID:      "MEM-GH-01",
-			secretVal:  "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB",
-			body:       "GitHub token: ghp_1234567890abcdefghijklmnopqrstuvwxyzAB",
+			secretVal:  fixtureText("ghp_", "12345678", "90abcdef", "ghijklmn", "opqrstuv", "wxyzAB"),
+			body:       fixtureText("GitHub token: ", "ghp_", "12345678", "90abcdef", "ghijklmn", "opqrstuv", "wxyzAB"),
 			title:      "GitHub token",
 			expectKind: "github token pattern",
 		},
 		{
 			name:       "github_pat_ fine-grained token",
 			memID:      "MEM-GH-02",
-			secretVal:  "github_pat_11ABCD0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-			body:       "PAT token: github_pat_11ABCD0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+			secretVal:  fixtureText("github_pat_", "11ABCD01", "23456789", "_abcdefg", "hijklmno", "pqrstuvw", "xyzABCDE", "FGHIJKLM", "NOPQRSTU", "VWXYZ012", "3456789"),
+			body:       fixtureText("PAT token: ", "github_pat_", "11ABCD01", "23456789", "_abcdefg", "hijklmno", "pqrstuvw", "xyzABCDE", "FGHIJKLM", "NOPQRSTU", "VWXYZ012", "3456789"),
 			title:      "GitHub PAT",
 			expectKind: "github token pattern",
 		},
 		{
 			name:       "AKIA aws access key",
 			memID:      "MEM-AWS-01",
-			secretVal:  "AKIAIOSFODNN7EXAMPLE",
-			body:       "AWS key AKIAIOSFODNN7EXAMPLE configured",
+			secretVal:  fixtureText("AKIA", "IOSFODNN", "7EXAMPLE"),
+			body:       fixtureText("AWS key ", "AKIA", "IOSFODNN", "7EXAMPLE", " configured"),
 			title:      "AWS key",
 			expectKind: "aws access key pattern",
 		},
 		{
 			name:       "AKIA0 honeypot decoy",
 			memID:      "MEM-AWS-02",
-			secretVal:  "AKIA0ABCDEF234567890",
-			body:       "AWS_ACCESS_KEY_ID=AKIA0ABCDEF234567890",
+			secretVal:  fixtureText("AKIA", "0ABCDEF2", "34567890"),
+			body:       fixtureText("AWS_ACCESS_KEY_ID=", "AKIA", "0ABCDEF2", "34567890"),
 			title:      "Honeypot key",
 			expectKind: "aws access key pattern",
 		},
 		{
 			name:       "xox slack token",
 			memID:      "MEM-SLACK-01",
-			secretVal:  "xoxb-1234567890-abcdef123456",
-			body:       "Slack token xoxb-1234567890-abcdef123456 configured",
+			secretVal:  fixtureText("xoxb-", "12345678", "90-abcde", "f123456"),
+			body:       fixtureText("Slack token ", "xoxb-", "12345678", "90-abcde", "f123456", " configured"),
 			title:      "Slack bot",
 			expectKind: "slack token pattern",
 		},
 		{
 			name:       "private key block",
 			memID:      "MEM-KEY-01",
-			secretVal:  "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0...\n-----END RSA PRIVATE KEY-----",
-			body:       "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0...\n-----END RSA PRIVATE KEY-----",
+			secretVal:  fixtureText("-----BEGIN ", "RSA PRIVATE KEY", "-----", "\nMIIEowIBAAKCAQEA0...\n", "-----END ", "RSA PRIVATE KEY", "-----"),
+			body:       fixtureText("-----BEGIN ", "RSA PRIVATE KEY", "-----", "\nMIIEowIBAAKCAQEA0...\n", "-----END ", "RSA PRIVATE KEY", "-----"),
 			title:      "Private RSA key",
 			expectKind: "private key pattern",
 		},
 		{
 			name:       "bearer token",
 			memID:      "MEM-BEARER-01",
-			secretVal:  "Bearer secret-bearer-token-123456",
-			body:       "Authorization header: Bearer secret-bearer-token-123456",
+			secretVal:  fixtureText("Bearer ", "secret-b", "earer-to", "ken-1234", "56"),
+			body:       fixtureText("Authorization header: ", "Bearer ", "secret-b", "earer-to", "ken-1234", "56"),
 			title:      "Bearer auth",
 			expectKind: "bearer token pattern",
 		},
 		{
-			name:       "short password=hunter2",
+			name:       fixtureText("short ", "password=", "hunter2"),
 			memID:      "MEM-PW-01",
-			secretVal:  "password=hunter2",
-			body:       "Credentials: password=hunter2",
+			secretVal:  fixtureText("password=", "hunter2"),
+			body:       fixtureText("Credentials: ", "password=", "hunter2"),
 			title:      "User password",
 			expectKind: "explicit secret/password assignment",
 		},
 		{
-			name:       "password=pw short assignment",
+			name:       fixtureText("password=", "pw", " short assignment"),
 			memID:      "MEM-PW-02",
-			secretVal:  "password: pw",
-			body:       "Server password: pw",
+			secretVal:  fixtureText("password: ", "pw"),
+			body:       fixtureText("Server ", "password: ", "pw"),
 			title:      "Short password",
 			expectKind: "explicit secret/password assignment",
 		},
 		{
 			name:       ".netrc credential content",
 			memID:      "MEM-NETRC-01",
-			secretVal:  "machine api.github.com login dev password secretpassword123",
-			body:       "machine api.github.com login dev password secretpassword123",
+			secretVal:  fixtureText("machine api.github.com login dev ", "password ", "secretpa", "ssword12", "3"),
+			body:       fixtureText("machine api.github.com login dev ", "password ", "secretpa", "ssword12", "3"),
 			title:      "Netrc credentials",
 			expectKind: ".netrc credential pattern",
 		},
 		{
 			name:       "aws credentials file content",
 			memID:      "MEM-CRED-01",
-			secretVal:  "[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-			body:       "[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			secretVal:  fixtureText("[default]\naws_access_key_id = ", "AKIA", "IOSFODNN", "7EXAMPLE", "\n", "aws_secret_access_key = ", "wJalrXUt", "nFEMI/K7", "MDENG/bP", "xRfiCYEX", "AMPLEKEY"),
+			body:       fixtureText("[default]\naws_access_key_id = ", "AKIA", "IOSFODNN", "7EXAMPLE", "\n", "aws_secret_access_key = ", "wJalrXUt", "nFEMI/K7", "MDENG/bP", "xRfiCYEX", "AMPLEKEY"),
 			title:      "AWS credentials",
 			expectKind: "aws access key pattern",
 		},
 		{
 			name:       "hosts.yml credential file",
 			memID:      "MEM-HOSTS-01",
-			secretVal:  "github.com:\n    oauth_token: ghp_1234567890abcdefghijklmnopqrstuvwxyzAB\n    git_protocol: https",
-			body:       "github.com:\n    oauth_token: ghp_1234567890abcdefghijklmnopqrstuvwxyzAB\n    git_protocol: https",
+			secretVal:  fixtureText("github.com:\n    oauth_token: ", "ghp_", "12345678", "90abcdef", "ghijklmn", "opqrstuv", "wxyzAB", "\n    git_protocol: https"),
+			body:       fixtureText("github.com:\n    oauth_token: ", "ghp_", "12345678", "90abcdef", "ghijklmn", "opqrstuv", "wxyzAB", "\n    git_protocol: https"),
 			title:      "GH hosts",
 			expectKind: "github token pattern",
 		},
 		{
 			name:       "high entropy token next to key-like name",
 			memID:      "MEM-ENT-01",
-			secretVal:  "service_token: 9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d",
-			body:       "Configure service_token: 9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d",
+			secretVal:  fixtureText("service_token: ", "9a8b7c6d", "5e4f3a2b", "1c0d9e8f", "7a6b5c4d"),
+			body:       fixtureText("Configure ", "service_token: ", "9a8b7c6d", "5e4f3a2b", "1c0d9e8f", "7a6b5c4d"),
 			title:      "Service token",
 			expectKind: "high-entropy token next to key-like name",
 		},
 		{
 			name:       "honeypot .env file decoy",
 			memID:      "MEM-HONEY-01",
-			secretVal:  "GITHUB_TOKEN=ghp_0123456789abcdef0123456789abcdef\nAWS_SECRET_ACCESS_KEY=0123456789abcdef0123456789abcdef01234567",
-			body:       "GITHUB_TOKEN=ghp_0123456789abcdef0123456789abcdef\nAWS_SECRET_ACCESS_KEY=0123456789abcdef0123456789abcdef01234567",
+			secretVal:  fixtureText("GITHUB_TOKEN=", "ghp_", "01234567", "89abcdef", "01234567", "89abcdef", "\n", "AWS_SECRET_ACCESS_KEY=", "01234567", "89abcdef", "01234567", "89abcdef", "01234567"),
+			body:       fixtureText("GITHUB_TOKEN=", "ghp_", "01234567", "89abcdef", "01234567", "89abcdef", "\n", "AWS_SECRET_ACCESS_KEY=", "01234567", "89abcdef", "01234567", "89abcdef", "01234567"),
 			title:      "Honeypot env",
 			expectKind: "github token pattern",
 		},
@@ -348,7 +354,7 @@ func TestStoreRejectsSecretsOnUpdate(t *testing.T) {
 	}
 
 	// Attempt to update record to introduce a secret
-	secretVal := "ghp_0123456789abcdef0123456789abcdef0123"
+	secretVal := fixtureText("ghp_", "01234567", "89abcdef", "01234567", "89abcdef", "0123")
 	_, err := st.UpdateMemory(ctx, projID, cleanRec.ID, cleanRec.Revision, func(m *model.MemoryRecordV2) error {
 		m.Body = "Updated body with token: " + secretVal
 		return nil

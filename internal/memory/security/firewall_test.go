@@ -10,6 +10,12 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
+// fixtureText assembles synthetic credentials at runtime so no complete
+// credential-shaped value is present in the test source.
+func fixtureText(parts ...string) string {
+	return strings.Join(parts, "")
+}
+
 func TestT86FirewallDetectsSecretsInBodyAndMetadata(t *testing.T) {
 	fw := security.NewFirewall(security.FirewallConfig{
 		CanarySecrets: []string{"canary-super-secret-token-xyz"},
@@ -23,7 +29,7 @@ func TestT86FirewallDetectsSecretsInBodyAndMetadata(t *testing.T) {
 		Kind:      model.MemoryKindSemantic,
 		Lifecycle: model.MemoryCandidate,
 		Title:     "Deployment Notes",
-		Body:      "Here is the key: -----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0...",
+		Body:      fixtureText("Here is the key: ", "-----BEGIN ", "RSA PRIVATE KEY", "-----", "\nMIIEowIBAAKCAQEA0..."),
 		Scope:     string(model.ScopeProject),
 		ScopeID:   "PROJ-1",
 	}
@@ -44,7 +50,7 @@ func TestT86FirewallDetectsSecretsInBodyAndMetadata(t *testing.T) {
 		ProjectID: "PROJ-1",
 		Kind:      model.MemoryKindSemantic,
 		Lifecycle: model.MemoryCandidate,
-		Title:     "Run with token ghp_1234567890abcdefghijklmnopqrstuvwxyzAB",
+		Title:     fixtureText("Run with token ", "ghp_", "12345678", "90abcdef", "ghijklmn", "opqrstuv", "wxyzAB"),
 		Body:      "Clean body",
 		Scope:     string(model.ScopeProject),
 		ScopeID:   "PROJ-1",
@@ -80,7 +86,7 @@ func TestT86FirewallDetectsSecretsInBodyAndMetadata(t *testing.T) {
 		Kind:      model.MemoryKindSemantic,
 		Lifecycle: model.MemoryCandidate,
 		Title:     "Database configuration",
-		Body:      "Connect using postgres://dbadmin:P@ssw0rd123!@db.internal:5432/prod",
+		Body:      fixtureText("Connect using ", "postgres://", "dbadmin:", "P@ssw0rd", "123!@db.", "internal", ":5432/pr", "od"),
 		Scope:     string(model.ScopeProject),
 		ScopeID:   "PROJ-1",
 	}
@@ -108,10 +114,10 @@ func TestT86FirewallDetectsSecretsInBodyAndMetadata(t *testing.T) {
 func TestFirewallRejectsRuntimeCredentialFormats(t *testing.T) {
 	fw := security.NewFirewall(security.FirewallConfig{})
 	for name, value := range map[string]string{
-		"jwt":           "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEyMyJ9.c2lnbmF0dXJlMTIzNDU2",
-		"authorization": "Authorization: Bearer credential-value-1234567890",
-		"cookie":        "Cookie: session_id=credential-value-1234567890",
-		"oauth":         "ya29.A0ARrdaMcredentialvalue1234567890",
+		"jwt":           fixtureText("eyJhbGci", "OiJIUzI1", "NiJ9.eyJ", "zdWIiOiJ", "1c2VyLTE", "yMyJ9.c2", "lnbmF0dX", "JlMTIzND", "U2"),
+		"authorization": fixtureText("Authorization: ", "Bearer ", "credenti", "al-value", "-1234567", "890"),
+		"cookie":        fixtureText("Cookie: session_id=", "credenti", "al-value", "-1234567", "890"),
+		"oauth":         fixtureText("ya29.", "A0ARrdaM", "credenti", "alvalue1", "23456789", "0"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := fw.ScanText(value); !errors.Is(err, security.ErrSecretDetected) {
@@ -132,7 +138,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 	}{
 		{
 			name:      "sk- api key in body",
-			secretVal: "sk-proj-abc1234567890def1234567890",
+			secretVal: fixtureText("sk-proj-", "abc12345", "67890def", "12345678", "90"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-1", ProjectID: "P-1", Title: "Title", Body: "key: " + s,
@@ -142,7 +148,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      "ghp_ github token in title",
-			secretVal: "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+			secretVal: fixtureText("ghp_", "01234567", "89abcdef", "ghijklmn", "opqrstuv", "wxyz"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-2", ProjectID: "P-1", Title: "token " + s, Body: "clean",
@@ -152,7 +158,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      "github_pat_ fine-grained token in source reference",
-			secretVal: "github_pat_11ABCD0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+			secretVal: fixtureText("github_pat_", "11ABCD01", "23456789", "_abcdefg", "hijklmno", "pqrstuvw", "xyzABCDE", "FGHIJKLM", "NOPQRSTU", "VWXYZ012", "3456789"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-3", ProjectID: "P-1", Title: "Title", Body: "clean",
@@ -163,7 +169,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      "AKIA aws key in evidence ID",
-			secretVal: "AKIAIOSFODNN7EXAMPLE",
+			secretVal: fixtureText("AKIA", "IOSFODNN", "7EXAMPLE"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-4", ProjectID: "P-1", Title: "Title", Body: "clean",
@@ -174,7 +180,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      "AKIA0 honeypot decoy in body",
-			secretVal: "AKIA0ABCDEF234567890",
+			secretVal: fixtureText("AKIA", "0ABCDEF2", "34567890"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-5", ProjectID: "P-1", Title: "Title", Body: "AWS_ACCESS_KEY_ID=" + s,
@@ -184,7 +190,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      "xox slack token in metadata",
-			secretVal: "xoxb-1234567890-abcdef123456",
+			secretVal: fixtureText("xoxb-", "12345678", "90-abcde", "f123456"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-6", ProjectID: "P-1", Title: "Title", Body: "clean",
@@ -195,7 +201,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      "private key block in body",
-			secretVal: "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNza...\n-----END OPENSSH PRIVATE KEY-----",
+			secretVal: fixtureText("-----BEGIN ", "OPENSSH PRIVATE KEY", "-----", "\nb3BlbnNza...\n", "-----END ", "OPENSSH PRIVATE KEY", "-----"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-7", ProjectID: "P-1", Title: "Title", Body: s,
@@ -205,7 +211,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      "bearer token in body",
-			secretVal: "Bearer secret_bearer_token_12345",
+			secretVal: fixtureText("Bearer ", "secret_b", "earer_to", "ken_1234", "5"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-8", ProjectID: "P-1", Title: "Title", Body: "auth: " + s,
@@ -214,8 +220,8 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 			},
 		},
 		{
-			name:      "short password=hunter2 in body",
-			secretVal: "password=hunter2",
+			name:      fixtureText("short ", "password=", "hunter2", " in body"),
+			secretVal: fixtureText("password=", "hunter2"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-9", ProjectID: "P-1", Title: "Title", Body: s,
@@ -225,7 +231,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      ".netrc content in body",
-			secretVal: "machine api.github.com login dev password mysecretnetrcpass",
+			secretVal: fixtureText("machine api.github.com login dev ", "password ", "mysecret", "netrcpas", "s"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-10", ProjectID: "P-1", Title: "Title", Body: s,
@@ -235,7 +241,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      "aws credentials file content in body",
-			secretVal: "[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			secretVal: fixtureText("[default]\naws_access_key_id = ", "AKIA", "IOSFODNN", "7EXAMPLE", "\n", "aws_secret_access_key = ", "wJalrXUt", "nFEMI/K7", "MDENG/bP", "xRfiCYEX", "AMPLEKEY"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-11", ProjectID: "P-1", Title: "Title", Body: s,
@@ -245,7 +251,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      "hosts.yml content in body",
-			secretVal: "github.com:\n    oauth_token: ghp_1234567890abcdefghijklmnopqrstuvwxyzAB\n    git_protocol: https",
+			secretVal: fixtureText("github.com:\n    oauth_token: ", "ghp_", "12345678", "90abcdef", "ghijklmn", "opqrstuv", "wxyzAB", "\n    git_protocol: https"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-12", ProjectID: "P-1", Title: "Title", Body: s,
@@ -255,7 +261,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      "high entropy token next to key-like name",
-			secretVal: "custom_app_token: a1b2c3d4e5f67890abcdef1234567890",
+			secretVal: fixtureText("custom_app_token: ", "a1b2c3d4", "e5f67890", "abcdef12", "34567890"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-13", ProjectID: "P-1", Title: "Title", Body: s,
@@ -265,7 +271,7 @@ func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
 		},
 		{
 			name:      "honeypot .env file decoy",
-			secretVal: "GITHUB_TOKEN=ghp_0123456789abcdef0123456789abcdef\nAWS_SECRET_ACCESS_KEY=0123456789abcdef0123456789abcdef01234567",
+			secretVal: fixtureText("GITHUB_TOKEN=", "ghp_", "01234567", "89abcdef", "01234567", "89abcdef", "\n", "AWS_SECRET_ACCESS_KEY=", "01234567", "89abcdef", "01234567", "89abcdef", "01234567"),
 			setupRecord: func(s string) model.MemoryRecordV2 {
 				return model.MemoryRecordV2{
 					ID: "M-14", ProjectID: "P-1", Title: "Title", Body: s,
@@ -308,7 +314,7 @@ func TestFirewallAllowsRuntimeIdentifiersAndDigests(t *testing.T) {
 		}
 	}
 	// Hexadecimal credentials remain credentials when assigned to credential names.
-	for _, text := range []string{"secret=" + digest, "custom_app_token: " + digest, "password=hunter2"} {
+	for _, text := range []string{"secret=" + digest, "custom_app_token: " + digest, fixtureText("password=", "hunter2")} {
 		if !errors.Is(fw.ScanText(text), security.ErrSecretDetected) {
 			t.Fatal("credential accepted")
 		}

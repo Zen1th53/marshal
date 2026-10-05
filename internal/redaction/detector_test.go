@@ -1,10 +1,17 @@
 package redaction_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/redaction"
 )
+
+// fixtureText assembles synthetic credentials at runtime so no complete
+// credential-shaped value is present in the test source.
+func fixtureText(parts ...string) string {
+	return strings.Join(parts, "")
+}
 
 func TestDetectSecretShapes(t *testing.T) {
 	cases := []struct {
@@ -15,155 +22,155 @@ func TestDetectSecretShapes(t *testing.T) {
 		// 1. sk- API keys
 		{
 			name:     "openai standard sk-",
-			input:    "sk-1234567890abcdef1234567890",
+			input:    fixtureText("sk-", "12345678", "90abcdef", "12345678", "90"),
 			wantKind: "openai api key pattern",
 		},
 		{
 			name:     "openai proj sk-",
-			input:    "sk-proj-abcdef1234567890abcdef1234567890",
+			input:    fixtureText("sk-proj-", "abcdef12", "34567890", "abcdef12", "34567890"),
 			wantKind: "openai api key pattern",
 		},
 		{
 			name:     "anthropic sk-ant-",
-			input:    "sk-ant-api03-abcdef1234567890abcdef1234567890",
+			input:    fixtureText("sk-ant-api03-", "abcdef12", "34567890", "abcdef12", "34567890"),
 			wantKind: "openai api key pattern",
 		},
 
 		// 2. ghp_ / github_pat_
 		{
 			name:     "github personal access token ghp_",
-			input:    "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB",
+			input:    fixtureText("ghp_", "12345678", "90abcdef", "ghijklmn", "opqrstuv", "wxyzAB"),
 			wantKind: "github token pattern",
 		},
 		{
 			name:     "github fine-grained token github_pat_",
-			input:    "github_pat_11ABCDEF0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+			input:    fixtureText("github_pat_", "11ABCDEF", "01234567", "89_abcde", "fghijklm", "nopqrstu", "vwxyzABC", "DEFGHIJK", "LMNOPQRS", "TUVWXYZ0", "12345678", "9"),
 			wantKind: "github token pattern",
 		},
 		{
 			name:     "github oauth token gho_",
-			input:    "gho_1234567890abcdefghijklmnopqrstuvwxyzAB",
+			input:    fixtureText("gho_", "12345678", "90abcdef", "ghijklmn", "opqrstuv", "wxyzAB"),
 			wantKind: "github token pattern",
 		},
 
 		// 3. AKIA... AWS access keys
 		{
 			name:     "aws standard access key AKIA",
-			input:    "AKIAIOSFODNN7EXAMPLE",
+			input:    fixtureText("AKIA", "IOSFODNN", "7EXAMPLE"),
 			wantKind: "aws access key pattern",
 		},
 		{
 			name:     "aws temp access key ASIA",
-			input:    "ASIAIOSFODNN7EXAMPLE",
+			input:    fixtureText("ASIA", "IOSFODNN", "7EXAMPLE"),
 			wantKind: "aws access key pattern",
 		},
 		{
 			name:     "aws synthetic honeypot AKIA0",
-			input:    "AKIA0ABCDEF234567890",
+			input:    fixtureText("AKIA", "0ABCDEF2", "34567890"),
 			wantKind: "aws access key pattern",
 		},
 
 		// 4. xox... Slack tokens
 		{
 			name:     "slack bot token xoxb",
-			input:    "xoxb-1234567890-abcdef123456",
+			input:    fixtureText("xoxb-", "12345678", "90-abcde", "f123456"),
 			wantKind: "slack token pattern",
 		},
 		{
 			name:     "slack user token xoxp",
-			input:    "xoxp-1234567890-1234567890-abcdef123456",
+			input:    fixtureText("xoxp-", "12345678", "90-12345", "67890-ab", "cdef1234", "56"),
 			wantKind: "slack token pattern",
 		},
 
 		// 5. Private key blocks
 		{
 			name:     "rsa private key block",
-			input:    "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0...",
+			input:    fixtureText("-----BEGIN ", "RSA PRIVATE KEY", "-----", "\nMIIEowIBAAKCAQEA0..."),
 			wantKind: "private key pattern",
 		},
 		{
 			name:     "generic private key block",
-			input:    "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkq...",
+			input:    fixtureText("-----BEGIN ", "PRIVATE KEY", "-----", "\nMIIEvgIBADANBgkq..."),
 			wantKind: "private key pattern",
 		},
 		{
 			name:     "openssh private key block",
-			input:    "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNza...",
+			input:    fixtureText("-----BEGIN ", "OPENSSH PRIVATE KEY", "-----", "\nb3BlbnNza..."),
 			wantKind: "private key pattern",
 		},
 
 		// 6. Bearer tokens
 		{
 			name:     "bearer token standalone",
-			input:    "Bearer secret-token-value-123456",
+			input:    fixtureText("Bearer ", "secret-t", "oken-val", "ue-12345", "6"),
 			wantKind: "bearer token pattern",
 		},
 		{
 			name:     "authorization header bearer",
-			input:    "Authorization: Bearer my-access-token-123456",
+			input:    fixtureText("Authorization: ", "Bearer ", "my-acces", "s-token-", "123456"),
 			wantKind: "bearer token pattern",
 		},
 
 		// 7. password=...
 		{
-			name:     "password=hunter2 short password",
-			input:    "password=hunter2",
+			name:     fixtureText("password=", "hunter2", " short password"),
+			input:    fixtureText("password=", "hunter2"),
 			wantKind: "explicit secret/password assignment",
 		},
 		{
-			name:     "password: short",
-			input:    "password: pw",
+			name:     fixtureText("password: ", "short"),
+			input:    fixtureText("password: ", "pw"),
 			wantKind: "explicit secret/password assignment",
 		},
 		{
-			name:     "passwd=x",
-			input:    "passwd=x",
+			name:     fixtureText("passwd=", "x"),
+			input:    fixtureText("passwd=", "x"),
 			wantKind: "explicit secret/password assignment",
 		},
 
 		// 8. .netrc / credential files
 		{
 			name:     ".netrc single line",
-			input:    "machine api.github.com login dev password secretpassword123",
+			input:    fixtureText("machine api.github.com login dev ", "password ", "secretpa", "ssword12", "3"),
 			wantKind: ".netrc credential pattern",
 		},
 		{
 			name:     ".netrc multi line",
-			input:    "machine example.com\n  login test\n  password pass123",
+			input:    fixtureText("machine example.com\n  login test\n  ", "password ", "pass123"),
 			wantKind: ".netrc credential pattern",
 		},
 		{
 			name:     "aws credentials file",
-			input:    "[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n",
+			input:    fixtureText("[default]\naws_access_key_id = ", "AKIA", "IOSFODNN", "7EXAMPLE", "\n", "aws_secret_access_key = ", "wJalrXUt", "nFEMI/K7", "MDENG/bP", "xRfiCYEX", "AMPLEKEY", "\n"),
 			wantKind: "aws access key pattern",
 		},
 		{
 			name:     "gh config hosts.yml",
-			input:    "github.com:\n    oauth_token: ghp_1234567890abcdefghijklmnopqrstuvwxyzAB\n    git_protocol: https\n",
+			input:    fixtureText("github.com:\n    oauth_token: ", "ghp_", "12345678", "90abcdef", "ghijklmn", "opqrstuv", "wxyzAB", "\n    git_protocol: https\n"),
 			wantKind: "github token pattern",
 		},
 
 		// 9. High-entropy token next to key-like name
 		{
 			name:     "api_key high entropy",
-			input:    "api_key = a8f9c0b1d2e3f4a5b6c7d8e9f0a1b2c3",
+			input:    fixtureText("api_key = ", "a8f9c0b1", "d2e3f4a5", "b6c7d8e9", "f0a1b2c3"),
 			wantKind: "explicit secret/key assignment",
 		},
 		{
 			name:     "custom token assignment",
-			input:    "service_token: 9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d",
+			input:    fixtureText("service_token: ", "9a8b7c6d", "5e4f3a2b", "1c0d9e8f", "7a6b5c4d"),
 			wantKind: "high-entropy token next to key-like name",
 		},
 
 		// 10. Honeypot decoy formats
 		{
 			name:     "honeypot .env file",
-			input:    "GITHUB_TOKEN=ghp_0123456789abcdef0123456789abcdef\nOPENAI_API_KEY=sk-proj-0123456789abcdef0123456789abcdef\nAWS_ACCESS_KEY_ID=AKIA0ABCDEF234567890\nAWS_SECRET_ACCESS_KEY=0123456789abcdef0123456789abcdef01234567\n",
+			input:    fixtureText("GITHUB_TOKEN=", "ghp_", "01234567", "89abcdef", "01234567", "89abcdef", "\nOPENAI_API_KEY=", "sk-proj-", "01234567", "89abcdef", "01234567", "89abcdef", "\nAWS_ACCESS_KEY_ID=", "AKIA", "0ABCDEF2", "34567890", "\n", "AWS_SECRET_ACCESS_KEY=", "01234567", "89abcdef", "01234567", "89abcdef", "01234567", "\n"),
 			wantKind: "github token pattern",
 		},
 		{
 			name:     "honeypot aws_secret_access_key",
-			input:    "aws_secret_access_key = 0123456789abcdef0123456789abcdef01234567",
+			input:    fixtureText("aws_secret_access_key = ", "01234567", "89abcdef", "01234567", "89abcdef", "01234567"),
 			wantKind: "credential file content",
 		},
 	}
