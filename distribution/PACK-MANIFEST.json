@@ -7641,8 +7641,8 @@
     },
     {
       "path": "internal/processgroup/reference_linux.go",
-      "sha256": "e700f45fb086daf9016fcd6a03fc587434dd3534127ad68632aa071031b36299",
-      "bytes": 2242
+      "sha256": "aae23b97f2ede0f865badecaa1938c37071a624f7c329af6e7e8e9ca94502ae0",
+      "bytes": 2285
     },
     {
       "path": "internal/processgroup/reference_other.go",
@@ -10311,8 +10311,8 @@
     },
     {
       "path": "internal/tui/tmux_chat_test.go",
-      "sha256": "95f9df2d83e2e5c55fe908f9ca1d0d80f69245c72270d9509ad78d98fec69df1",
-      "bytes": 5598
+      "sha256": "8dae9c7c15b0d83b8d6e2d5526c4677546b13a7bda4599a349c6ddc6470bc189",
+      "bytes": 5461
     },
     {
       "path": "internal/tui/tmux_completion_test.go",
@@ -10331,8 +10331,8 @@
     },
     {
       "path": "internal/tui/tmux_isolation_test.go",
-      "sha256": "e900408ddf35f25822704614e0753270d5e744530585829f122da6e55583a4e6",
-      "bytes": 9071
+      "sha256": "fd4dd9e5e17606af0e7218453ade914a9af74a3dc31168fe17fe9b2ba016fb24",
+      "bytes": 10109
     },
     {
       "path": "internal/tui/tmux_keys.go",
@@ -10341,8 +10341,8 @@
     },
     {
       "path": "internal/tui/tmux_native.go",
-      "sha256": "9c3d032f93286132cfde4d4b2f2b534881a2e8c2d90b05f31d595af001071f84",
-      "bytes": 45231
+      "sha256": "0b53ccfc937e3e49853d3a8e2afeed2b3de3813765492bb3a290a255c308e811",
+      "bytes": 45468
     },
     {
       "path": "internal/tui/tmux_native_test.go",
@@ -10351,8 +10351,8 @@
     },
     {
       "path": "internal/tui/tmux_recovery_test.go",
-      "sha256": "ef94ed8c701eb767484414acd0c23177609e8726c9ad621182eb7f7bb8452bad",
-      "bytes": 3744
+      "sha256": "11ccccb3a93e1b324e76533a593823b390a20f7279e5c00f69d701ecb99e2acf",
+      "bytes": 5756
     },
     {
       "path": "internal/tui/tmux_sandbox_test.go",
@@ -10366,8 +10366,8 @@
     },
     {
       "path": "internal/tui/tmux_transport_test.go",
-      "sha256": "b5495f3c3225d1df31d5cf02d5c784c19a12e6048630ce78d71b7fc91a677f85",
-      "bytes": 7912
+      "sha256": "2dee763ef6ef24593463d54ccbfe91fa6b377e3248b75ba173f7a1d05dc78800",
+      "bytes": 8881
     },
     {
       "path": "internal/tui/truthstate.go",
