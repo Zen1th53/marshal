@@ -137,3 +137,49 @@ func TestMarshalCLIRealModelReview(t *testing.T) {
 		t.Fatalf("incomplete real review: %+v", review)
 	}
 }
+
+func TestMarshalDraftSchemaRequiresEveryProperty(t *testing.T) {
+	var schema map[string]any
+	if err := json.Unmarshal([]byte(marshalDraftSchema), &schema); err != nil {
+		t.Fatal(err)
+	}
+	var check func(map[string]any)
+	check = func(node map[string]any) {
+		if props, ok := node["properties"].(map[string]any); ok {
+			required := map[string]bool{}
+			for _, key := range node["required"].([]any) {
+				required[key.(string)] = true
+			}
+			for key, prop := range props {
+				if !required[key] {
+					t.Errorf("property %s missing from required", key)
+				}
+				check(prop.(map[string]any))
+			}
+		}
+		if items, ok := node["items"].(map[string]any); ok {
+			check(items)
+		}
+	}
+	check(schema)
+}
+
+func TestMarshalWiredDraftUsesCanonicalProjectBinding(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(t.Context(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := Open(t.Context(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	service, err := runtime.MarshalWired(MarshalWiring{Provider: "codex", Approver: func(context.Context, string, string) (string, error) { return "operator", nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli := service.Model.(*MarshalCLI)
+	if cli.ProjectID != string(service.CanonicalPlanProjectID()) {
+		t.Fatalf("model bound to %s instead of %s", cli.ProjectID, service.CanonicalPlanProjectID())
+	}
+}
