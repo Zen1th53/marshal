@@ -365,6 +365,8 @@ func (c command) agent(ctx context.Context, args []string) error {
 	set.SetOutput(c.stderr)
 	name := set.String("name", "", "agent display name")
 	role := set.String("role", "", "agent role")
+	provider := set.String("provider", "", "agent model provider")
+	modelName := set.String("model", "", "agent model")
 	if err := set.Parse(args[1:]); err != nil {
 		return fmt.Errorf("%w: %v", model.ErrInvalid, err)
 	}
@@ -372,7 +374,7 @@ func (c command) agent(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	value, _, err := client.RegisterAgent(ctx, app.RegisterAgentRequest{Name: *name, Role: model.Role(*role)})
+	value, _, err := client.RegisterAgent(ctx, app.RegisterAgentRequest{Name: *name, Role: model.Role(*role), ModelProvider: *provider, ModelName: *modelName})
 	if err != nil {
 		return err
 	}

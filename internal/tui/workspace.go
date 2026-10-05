@@ -24,6 +24,9 @@ import (
 
 // Workspace encapsulates the live Terminal TUI Control Plane over canonical runtime state.
 type Workspace struct {
+	governedDispatches map[string]context.CancelFunc
+	governedDispatchWG sync.WaitGroup
+
 	egressMu   sync.Mutex
 	mu         sync.RWMutex
 	store      *store.Store
@@ -638,6 +641,7 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 	// had closed the runtime and removed the project, so the session waits for
 	// its own reads on every exit path, including an error or a panic.
 	defer w.navView.Wait()
+	defer func() { w.cancelGovernedDispatches(); w.governedDispatchWG.Wait() }()
 
 	_ = w.RefreshState(ctx)
 	w.replayWorkerAlerts(ctx)

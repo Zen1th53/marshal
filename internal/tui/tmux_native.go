@@ -848,6 +848,8 @@ func (w *Workspace) reportActiveTmuxSessions() {
 // StopAllWorkers terminates all worker agent windows and process groups while keeping MARSHAL intact.
 // Decision 9: One key stops all workers but never the Marshal (and never the Marshal planning chat).
 func (w *Workspace) StopAllWorkers(ctx context.Context) string {
+	w.cancelGovernedDispatches()
+	w.governedDispatchWG.Wait()
 	if !w.isTmuxActive() {
 		return "No active tmux session."
 	}
