@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/memory/security"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/redaction"
 )
 
 var (
@@ -210,7 +212,36 @@ func (s *Store) Remember(ctx context.Context, record model.MemoryRecord) error {
 		return fmt.Errorf("%w: incomplete memory record", model.ErrInvalid)
 	}
 	if containsSecretMaterial(record.Body) {
-		return fmt.Errorf("%w: general memory rejects secret-like content", model.ErrSecretMaterial)
+		reason := "sensitive material or secret credential detected"
+		fw := security.NewFirewall(security.FirewallConfig{})
+		if err := fw.ScanText(record.Body); err != nil {
+			reason = err.Error()
+		}
+		reason = redaction.RedactContent(reason, nil)
+		if len(reason) > 250 {
+			reason = reason[:250]
+		}
+		memID := record.ID
+		if redaction.DetectSecret(memID) != "" {
+			memID = "[REDACTED]"
+		}
+		if len(memID) > maxEvidenceAuditValue {
+			memID = memID[:maxEvidenceAuditValue]
+		}
+		projID := record.ProjectID
+		if redaction.DetectSecret(projID) != "" {
+			projID = "[REDACTED]"
+		}
+		if len(projID) > maxEvidenceAuditValue {
+			projID = projID[:maxEvidenceAuditValue]
+		}
+		_ = s.recordEvidenceEventWithDetails(ctx, "memory.secret.refused", projID, "", "", map[string]any{
+			"action":            "memory.refused",
+			"memory_id":         memID,
+			"reason":            reason,
+			"target_project_id": projID,
+		})
+		return fmt.Errorf("%w: general memory rejects secret-like content: %s", model.ErrSecretMaterial, reason)
 	}
 	provenance, err := json.Marshal(record.Provenance)
 	if err != nil {
@@ -236,7 +267,8 @@ func (s *Store) Remember(ctx context.Context, record model.MemoryRecord) error {
 }
 
 func containsSecretMaterial(body string) bool {
-	return privateKeyPattern.MatchString(body) || secretAssignmentPattern.MatchString(body)
+	fw := security.NewFirewall(security.FirewallConfig{})
+	return fw.ScanText(body) != nil
 }
 
 func nonNilStrings(values []string) []string {

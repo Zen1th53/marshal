@@ -120,3 +120,172 @@ func TestFirewallRejectsRuntimeCredentialFormats(t *testing.T) {
 		})
 	}
 }
+
+func TestFirewallRejectsAllCredentialShapes(t *testing.T) {
+	fw := security.NewFirewall(security.FirewallConfig{})
+	ctx := context.Background()
+
+	cases := []struct {
+		name        string
+		secretVal   string
+		setupRecord func(secret string) model.MemoryRecordV2
+	}{
+		{
+			name:      "sk- api key in body",
+			secretVal: "sk-proj-abc1234567890def1234567890",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-1", ProjectID: "P-1", Title: "Title", Body: "key: " + s,
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+				}
+			},
+		},
+		{
+			name:      "ghp_ github token in title",
+			secretVal: "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-2", ProjectID: "P-1", Title: "token " + s, Body: "clean",
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+				}
+			},
+		},
+		{
+			name:      "github_pat_ fine-grained token in source reference",
+			secretVal: "github_pat_11ABCD0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-3", ProjectID: "P-1", Title: "Title", Body: "clean",
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+					Source: model.MemorySource{Kind: "commit", Reference: "ref-" + s},
+				}
+			},
+		},
+		{
+			name:      "AKIA aws key in evidence ID",
+			secretVal: "AKIAIOSFODNN7EXAMPLE",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-4", ProjectID: "P-1", Title: "Title", Body: "clean",
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+					EvidenceIDs: []string{"ev-1", s},
+				}
+			},
+		},
+		{
+			name:      "AKIA0 honeypot decoy in body",
+			secretVal: "AKIA0ABCDEF234567890",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-5", ProjectID: "P-1", Title: "Title", Body: "AWS_ACCESS_KEY_ID=" + s,
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+				}
+			},
+		},
+		{
+			name:      "xox slack token in metadata",
+			secretVal: "xoxb-1234567890-abcdef123456",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-6", ProjectID: "P-1", Title: "Title", Body: "clean",
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+					ExtMeta: map[string]any{"token": s},
+				}
+			},
+		},
+		{
+			name:      "private key block in body",
+			secretVal: "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNza...\n-----END OPENSSH PRIVATE KEY-----",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-7", ProjectID: "P-1", Title: "Title", Body: s,
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+				}
+			},
+		},
+		{
+			name:      "bearer token in body",
+			secretVal: "Bearer secret_bearer_token_12345",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-8", ProjectID: "P-1", Title: "Title", Body: "auth: " + s,
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+				}
+			},
+		},
+		{
+			name:      "short password=hunter2 in body",
+			secretVal: "password=hunter2",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-9", ProjectID: "P-1", Title: "Title", Body: s,
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+				}
+			},
+		},
+		{
+			name:      ".netrc content in body",
+			secretVal: "machine api.github.com login dev password mysecretnetrcpass",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-10", ProjectID: "P-1", Title: "Title", Body: s,
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+				}
+			},
+		},
+		{
+			name:      "aws credentials file content in body",
+			secretVal: "[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-11", ProjectID: "P-1", Title: "Title", Body: s,
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+				}
+			},
+		},
+		{
+			name:      "hosts.yml content in body",
+			secretVal: "github.com:\n    oauth_token: ghp_1234567890abcdefghijklmnopqrstuvwxyzAB\n    git_protocol: https",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-12", ProjectID: "P-1", Title: "Title", Body: s,
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+				}
+			},
+		},
+		{
+			name:      "high entropy token next to key-like name",
+			secretVal: "custom_app_token: a1b2c3d4e5f67890abcdef1234567890",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-13", ProjectID: "P-1", Title: "Title", Body: s,
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+				}
+			},
+		},
+		{
+			name:      "honeypot .env file decoy",
+			secretVal: "GITHUB_TOKEN=ghp_0123456789abcdef0123456789abcdef\nAWS_SECRET_ACCESS_KEY=0123456789abcdef0123456789abcdef01234567",
+			setupRecord: func(s string) model.MemoryRecordV2 {
+				return model.MemoryRecordV2{
+					ID: "M-14", ProjectID: "P-1", Title: "Title", Body: s,
+					Scope: string(model.ScopeProject), ScopeID: "P-1",
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := tc.setupRecord(tc.secretVal)
+			err := fw.ScanRecord(ctx, rec)
+			if !errors.Is(err, security.ErrSecretDetected) {
+				t.Fatalf("expected ErrSecretDetected for %s, got: %v", tc.name, err)
+			}
+			// Crucial check: verify raw secret text never echoes in the error message
+			if strings.Contains(err.Error(), tc.secretVal) {
+				t.Fatalf("error echoed secret value %q: %v", tc.secretVal, err)
+			}
+		})
+	}
+}

@@ -11,19 +11,25 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/memory/security"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/redaction"
 )
 
 // WriteMemoryV2 writes a canonical MemoryRecordV2 to memory_records_v2.
 // The record is validated before write. The ContentDigest is computed and
 // stored by this method — callers must not set it themselves.
 func (s *Store) WriteMemoryV2(ctx context.Context, rec model.MemoryRecordV2) error {
-	if err := rec.Validate(); err != nil {
-		return fmt.Errorf("memory write rejected: %w", err)
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	fw := security.NewFirewall(security.FirewallConfig{})
 	if err := fw.ScanRecord(ctx, rec); err != nil {
+		_ = s.recordMemoryRefusalEvidence(ctx, rec, err)
 		return fmt.Errorf("memory write firewall rejected: %w", err)
+	}
+
+	if err := rec.Validate(); err != nil {
+		return fmt.Errorf("memory write rejected: %w", err)
 	}
 
 	// Compute and assign content digest.
@@ -717,6 +723,8 @@ func (s *Store) UpdateMemory(ctx context.Context, projectID, memoryID string, ex
 
 	fw := security.NewFirewall(security.FirewallConfig{})
 	if err := fw.ScanRecord(ctx, rec); err != nil {
+		_ = tx.Rollback()
+		_ = s.recordMemoryRefusalEvidence(ctx, rec, err)
 		return model.MemoryRecordV2{}, fmt.Errorf("updated record firewall rejected: %w", err)
 	}
 
@@ -950,4 +958,48 @@ func (s *Store) PruneRetrievalReceipts(ctx context.Context, projectID string, be
 		return 0, fmt.Errorf("read pruned receipt count: %w", err)
 	}
 	return count, nil
+}
+
+func (s *Store) recordMemoryRefusalEvidence(ctx context.Context, rec model.MemoryRecordV2, refusalErr error) error {
+	projectID := rec.ProjectID
+	if redaction.DetectSecret(projectID) != "" {
+		projectID = "[REDACTED]"
+	}
+	if len(projectID) > maxEvidenceAuditValue {
+		projectID = projectID[:maxEvidenceAuditValue]
+	}
+
+	memID := rec.ID
+	if redaction.DetectSecret(memID) != "" {
+		memID = "[REDACTED]"
+	}
+	if len(memID) > maxEvidenceAuditValue {
+		memID = memID[:maxEvidenceAuditValue]
+	}
+
+	taskID := ""
+	if rec.Scope == "task" && redaction.DetectSecret(rec.ScopeID) == "" && len(rec.ScopeID) <= maxEvidenceAuditValue {
+		taskID = rec.ScopeID
+	}
+
+	reason := refusalErr.Error()
+	reason = redaction.RedactContent(reason, nil)
+	if len(reason) > 250 {
+		reason = reason[:250]
+	}
+
+	data := map[string]any{
+		"action":            "memory.refused",
+		"memory_id":         memID,
+		"reason":            reason,
+		"target_project_id": projectID,
+	}
+	if rec.Kind != "" {
+		data["kind"] = string(rec.Kind)
+	}
+	if rec.Lifecycle != "" {
+		data["lifecycle"] = string(rec.Lifecycle)
+	}
+
+	return s.recordEvidenceEventWithDetails(ctx, "memory.secret.refused", projectID, taskID, "", data)
 }
