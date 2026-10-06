@@ -26,6 +26,8 @@ type runEgress struct {
 	id, parent, task, worker, provider, socket string
 	allowlist                                  *netpolicy.RunAllowlist
 	proxy                                      *netpolicy.EgressProxy
+	stopWatch                                  context.CancelFunc
+	watchDone                                  chan struct{}
 	mu                                         sync.Mutex
 	pending                                    map[string]bool
 }
@@ -109,6 +111,13 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 	if r.store == nil {
 		return "", nil, model.ErrUnavailable
 	}
+	// Serialize publication in this owner: a rejected duplicate must never
+	// publish a new incarnation that invalidates the already-running proxy.
+	r.egressMu.Lock()
+	defer r.egressMu.Unlock()
+	if r.egressRuns[id] != nil {
+		return "", nil, model.ErrConflict
+	}
 	var broker *netpolicy.CredentialBroker
 	if len(brokers) > 0 {
 		broker = brokers[0]
@@ -133,7 +142,7 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 		return "", nil, err
 	}
 	scope := &runEgress{broker: broker, id: id, parent: parent, task: taskID, worker: worker, provider: provider, socket: socket, allowlist: allowlist, pending: map[string]bool{}}
-	proxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{Broker: broker, CredentialAllowed: func(ctx context.Context) bool { return r.HasCredentialGrant(ctx, provider) }, Evaluator: allowlist, Store: r.store, SubjectID: worker, TaskID: taskID, RunID: id, Listener: listener, Attempt: func(ctx context.Context, host string, port int, d netpolicy.Decision) error {
+	proxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{Broker: broker, CredentialAllowed: func(ctx context.Context) bool { return r.HasCredentialGrant(ctx, provider) }, Evaluator: &storedRunEgress{runtime: r, scope: scope}, Store: r.store, SubjectID: worker, TaskID: taskID, RunID: id, Listener: listener, Attempt: func(ctx context.Context, host string, port int, d netpolicy.Decision) error {
 		return r.recordEgressAttempt(ctx, scope, host, port, d)
 	}})
 	if err != nil {
@@ -142,7 +151,7 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 		return "", nil, err
 	}
 	scope.proxy = proxy
-	if err := r.recordEgress(ctx, scope, events.EventTypeNetworkEgressRequested, map[string]any{"source": "run scope", "allowed_endpoints": endpoints}); err != nil {
+	if err := r.recordEgress(ctx, scope, events.EventTypeNetworkEgressRequested, map[string]any{"source": "run scope", "allowed_endpoints": endpoints, "scope_socket": socket}); err != nil {
 		proxy.Close()
 		os.RemoveAll(dir)
 		return "", nil, err
@@ -154,25 +163,29 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 			return "", nil, err
 		}
 	}
-	r.egressMu.Lock()
+	watchCtx, stopWatch := context.WithCancel(context.Background())
+	scope.stopWatch = stopWatch
+	scope.watchDone = make(chan struct{})
 	if r.egressRuns == nil {
 		r.egressRuns = map[string]*runEgress{}
 	}
-	if r.egressRuns[id] != nil {
-		r.egressMu.Unlock()
-		proxy.Close()
-		os.RemoveAll(dir)
-		return "", nil, model.ErrConflict
-	}
 	r.egressRuns[id] = scope
-	r.egressMu.Unlock()
+	go func() {
+		defer close(scope.watchDone)
+		r.watchEgressRevocations(watchCtx, scope)
+	}()
 	proxy.Start()
+	var once sync.Once
 	cleanup := func() {
-		r.egressMu.Lock()
-		delete(r.egressRuns, id)
-		r.egressMu.Unlock()
-		_ = proxy.Close()
-		_ = os.RemoveAll(dir)
+		once.Do(func() {
+			stopWatch()
+			<-scope.watchDone
+			r.egressMu.Lock()
+			delete(r.egressRuns, id)
+			r.egressMu.Unlock()
+			_ = proxy.Close()
+			_ = os.RemoveAll(dir)
+		})
 	}
 	return socket, cleanup, nil
 }
@@ -185,6 +198,7 @@ func (r *Runtime) recordEgress(ctx context.Context, scope *runEgress, kind event
 	if err != nil {
 		return err
 	}
+	data["scope_socket"] = scope.socket
 	data["provider"] = scope.provider
 	data["worker"] = scope.worker
 	data["parent_run_id"] = scope.parent
@@ -270,7 +284,11 @@ func (r *Runtime) CommandEgress(ctx context.Context, runID, operation, endpoint 
 	defer r.egressMu.Unlock()
 	scope := r.egressRuns[runID]
 	if scope == nil {
-		return fmt.Errorf("%w: no active egress run %s", model.ErrNotFound, runID)
+		var err error
+		scope, err = r.sharedEgressRun(ctx, runID)
+		if err != nil {
+			return err
+		}
 	}
 	allow := operation == "allow"
 	kind := events.EventTypeNetworkEgressRevoked
@@ -329,7 +347,20 @@ func (r *Runtime) EgressRequestPending(runID, endpoint string) bool {
 	r.egressMu.Lock()
 	defer r.egressMu.Unlock()
 	scope := r.egressRuns[runID]
-	if scope == nil {
+	if scope == nil || scope.socket != "" {
+		rows, err := r.sharedEgressStatus(context.Background())
+		if err != nil {
+			return false
+		}
+		for _, row := range rows {
+			if row.RunID == runID {
+				for _, pending := range row.Pending {
+					if pending == normalized {
+						return true
+					}
+				}
+			}
+		}
 		return false
 	}
 	scope.mu.Lock()

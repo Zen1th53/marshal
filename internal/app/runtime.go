@@ -788,6 +788,10 @@ func (r *Runtime) Close() error {
 	if r != nil {
 		r.egressMu.Lock()
 		for id, scope := range r.egressRuns {
+			if scope.stopWatch != nil {
+				scope.stopWatch()
+				<-scope.watchDone
+			}
 			if scope.proxy != nil {
 				_ = scope.proxy.Close()
 			}

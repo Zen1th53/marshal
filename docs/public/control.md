@@ -78,3 +78,27 @@ off a task in the middle.
     Not every agent reports how many tokens it used or what it cost, so
     MARSHAL cannot limit tokens or money. When a number is not available,
     MARSHAL shows `UNKNOWN` rather than guessing.
+
+## Allow or revoke a worker's network destination
+
+A governed worker starts with access to its provider endpoint only. When another
+destination is refused, review the permission request and press uppercase **A**
+to allow it. Every other key, closing the request, or timeout denies it.
+
+You can also use:
+
+```text
+/egress status
+/egress allow RUN-ID example.com:443
+/egress revoke RUN-ID example.com:443
+```
+
+Status lists active runs started by the TUI and by `marshal run` through the
+local daemon. A grant reaches the runtime running that worker. It applies only
+to that run and exact host and port; omitting the port means 443. The worker must
+retry a refused request. A model cannot grant access. Grants expire when the run
+ends; completed runs appear only in the refusal evidence inbox.
+
+Revoking denies the next request and closes existing connections. For a worker
+owned by another runtime, closing existing connections happens on the next
+100 ms poll, subject to scheduling and storage latency.
