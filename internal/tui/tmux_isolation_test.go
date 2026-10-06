@@ -219,7 +219,7 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.tmuxMu.Lock()
-	w.tmuxActiveWins["test"].isJoined = true
+	w.tmuxActiveWins["codex"].isJoined = true
 	w.tmuxMu.Unlock()
 	if err := tmux.SelectPane(ctx, a.paneID); err != nil {
 		t.Fatal(err)
