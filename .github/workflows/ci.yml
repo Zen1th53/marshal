@@ -62,8 +62,9 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap socat
           bwrap --version
+          command -v socat
 
       # The race jobs test the instrumented build; this proves the ordinary one
       # still compiles, which no test run here would otherwise check.
@@ -145,8 +146,14 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap socat libevent-dev ncurses-dev build-essential bison pkg-config
+          curl -fsSL https://github.com/tmux/tmux/releases/download/3.4/tmux-3.4.tar.gz -o /tmp/tmux-3.4.tar.gz
+          tar -xzf /tmp/tmux-3.4.tar.gz -C /tmp
+          (cd /tmp/tmux-3.4 && ./configure && make && sudo make install)
+          tmux -V
+          tmux -V | grep -q '3.4'
           bwrap --version
+          command -v socat
 
       - name: Run the remaining suites with the race detector
         run: |

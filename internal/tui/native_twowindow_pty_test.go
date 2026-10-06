@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"testing"
@@ -105,12 +106,19 @@ func TestPTYTwoWindowsShareOneProjectMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	claudeDir := filepath.Join(claudeHome, "projects", regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(resolved, "-"))
+	os.MkdirAll(claudeDir, 0700)
+	double("claude", "CLAUDE", "MARSHAL_TEST_CLAUDE_HISTORY", filepath.Join(claudeDir, "session.jsonl"))
 	// Neither window passes --session, so both take the default identity.
 	first := startInProject(t, project, 40, 160)
 	second := startInProject(t, project, 40, 160)
 	first.mustSee("MARSHAL")
 	second.mustSee("MARSHAL")
 
+	grantPTYRead(t, first, claudeDir)
+	grantPTYRead(t, first, filepath.Join(codexHome, "sessions"))
+	grantPTYRead(t, second, claudeDir)
+	grantPTYRead(t, second, filepath.Join(codexHome, "sessions"))
 	first.sendLine("/claude")
 	first.mustSee("CLAUDE-READY")
 	second.sendLine("/codex")
@@ -131,6 +139,8 @@ func TestPTYTwoWindowsShareOneProjectMemory(t *testing.T) {
 	second.send("\r")
 	first.mustSee("Claude exited.")
 
+	approvePTYMemory(t, first)
+	// Either terminal reads the records approved by the operator in the first.
 	first.sendLine("/memory search visible")
 	first.mustSee("MEMORY RECORDS")
 	second.sendLine("/memory search fixed")

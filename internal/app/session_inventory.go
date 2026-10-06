@@ -131,7 +131,12 @@ func (r *Runtime) Sessions(ctx context.Context, provider string) (SessionInvento
 		if provider != "" && p != provider {
 			continue
 		}
-		if err := readNativeHistory(ctx, p, r.ProjectRoot(), add); err != nil {
+		folder := nativeInventoryFolder(p, r.ProjectRoot())
+		if folder == "" || !r.HasReadGrant(folder) {
+			inv.Warnings = append(inv.Warnings, p+" native history needs an operator read grant")
+			continue
+		}
+		if err := readNativeHistory(ctx, p, r.ProjectRoot(), add, r.HasReadGrant); err != nil {
 			inv.Warnings = append(inv.Warnings, p+" native history unavailable")
 		}
 	}
@@ -220,8 +225,15 @@ type nativeHistoryEntry struct {
 	} `json:"payload"`
 }
 
-func readNativeHistory(ctx context.Context, provider, root string, add func(string, string, string, time.Time, bool)) error {
+func readNativeHistory(ctx context.Context, provider, root string, add func(string, string, string, time.Time, bool), authorized func(string) bool) error {
 	if provider == "opencode" {
+		dbPath := os.Getenv("MARSHAL_OPENCODE_DB")
+		if dbPath == "" {
+			dbPath = filepath.Join(nativeInventoryFolder(provider, root), "opencode.db")
+		}
+		if _, err := os.Lstat(dbPath); !errors.Is(err, os.ErrNotExist) && !authorized(dbPath) {
+			return fmt.Errorf("native database needs an operator read grant")
+		}
 		indexErr := readOpenCodeInventory(ctx, root, add)
 		// Only this provider has a qualified public JSON listing here. Do not
 		// infer resumability from imported transcripts or private database rows.
@@ -252,6 +264,10 @@ func readNativeHistory(ctx context.Context, provider, root string, add func(stri
 		return indexErr
 	}
 	if provider == "antigravity" {
+		summaries := filepath.Join(nativeInventoryFolder(provider, root), "conversation_summaries.db")
+		if _, err := os.Lstat(summaries); !errors.Is(err, os.ErrNotExist) && !authorized(summaries) {
+			return fmt.Errorf("native summaries need an operator read grant")
+		}
 		return readAntigravityInventory(ctx, root, add)
 	}
 	env, base, dir := "CODEX_HOME", ".codex", "sessions"
@@ -269,7 +285,11 @@ func readNativeHistory(ctx context.Context, provider, root string, add func(stri
 	if !filepath.IsAbs(home) {
 		home = filepath.Join(root, home)
 	}
-	return filepath.WalkDir(filepath.Join(home, dir), func(path string, entry fs.DirEntry, err error) error {
+	historyRoot := filepath.Join(home, dir)
+	if provider == "claude" {
+		historyRoot = nativeInventoryFolder(provider, root)
+	}
+	return filepath.WalkDir(historyRoot, func(path string, entry fs.DirEntry, err error) error {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
@@ -280,6 +300,12 @@ func readNativeHistory(ctx context.Context, provider, root string, add func(stri
 			return ctx.Err()
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		if !authorized(path) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if entry.IsDir() || !strings.HasSuffix(path, ".jsonl") {

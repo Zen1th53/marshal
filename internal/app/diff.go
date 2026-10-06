@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/redaction"
 )
 
@@ -47,10 +47,11 @@ func (b *cappedDiffOutput) Write(p []byte) (int, error) {
 func diffGit(ctx context.Context, dir string, limit int, args ...string) (string, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	argv := append([]string{"-c", "core.pager=cat", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "--no-pager"}, args...)
-	cmd := exec.CommandContext(ctx, "git", argv...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_LITERAL_PATHSPECS=1")
+	cmd, err := hostgit.Command(ctx, dir, args...)
+	if err != nil {
+		return "", false, err
+	}
+	cmd.Env = append(cmd.Env, "GIT_LITERAL_PATHSPECS=1")
 	out := &cappedDiffOutput{limit: limit}
 	cmd.Stdout = out
 	// Diagnostics may contain project content; never forward raw Git stderr.

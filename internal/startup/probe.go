@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/hostgit"
 )
 
 // This file observes the environment. Every probe here is read-only: it looks,
@@ -50,7 +52,22 @@ func (systemProber) Run(ctx context.Context, dir, name string, args ...string) (
 	// rather than preventing the control center from opening at all.
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
+	var cmd *exec.Cmd
+	if name == "git" {
+		var err error
+		if len(args) == 2 && args[0] == "rev-parse" && args[1] == "--show-toplevel" {
+			dir, err = hostgit.Root(dir)
+			if err != nil {
+				return nil, err
+			}
+		}
+		cmd, err = hostgit.Command(ctx, dir, args...)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		cmd = exec.CommandContext(ctx, name, args...)
+	}
 	cmd.Dir = dir
 	// Probes never inherit stdin: a tool that decides to prompt would
 	// otherwise hang startup waiting for input the user cannot see.

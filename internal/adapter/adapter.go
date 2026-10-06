@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/sandbox"
 )
 
 type Status string
@@ -41,6 +42,11 @@ type Request struct {
 }
 
 type Command struct {
+	// OutputObserver receives bytes before capture limits are applied.
+	OutputObserver    func(string, []byte)
+	Supervised        bool
+	SupervisorSocket  string
+	Refusal           func(context.Context, sandbox.Refusal) error
 	Path              string
 	Args              []string
 	Env               []string

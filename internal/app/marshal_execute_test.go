@@ -6,8 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/model"
 )
 
 func marshalBrief(t marshal.Task, _ BriefContext) string { return "complete task " + t.PlanTaskID }
@@ -153,5 +155,86 @@ func TestM09ExecuteNeedsBrief(t *testing.T) {
 	s, _ := marshalFixture(t, 1)
 	if _, err := s.Execute(context.Background(), "run", nil, nil); err == nil {
 		t.Fatal("Execute without a brief must fail")
+	}
+}
+
+func TestMarshalBriefContextRecallsProjectMemoryWithProvenanceAndExcludesSharedChannel(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 1)
+	now := time.Now().UTC()
+
+	// 1. Write a project-scoped memory record.
+	projectRec := model.MemoryRecordV2{
+		ID:         "MEM-project-1",
+		ProjectID:  s.ProjectID,
+		Kind:       model.MemoryKindSemantic,
+		Lifecycle:  model.MemoryDurable,
+		Authority:  model.AuthorityVerified,
+		Title:      "Architecture Decision",
+		Body:       "bounded project memory content",
+		Scope:      string(model.ScopeProject),
+		ScopeID:    s.ProjectID,
+		Source:     model.MemorySource{Kind: "git", Reference: "abc1234", AgentID: "codex", SessionID: "sess-1"},
+		ObservedAt: now,
+		ValidFrom:  now,
+		CreatedAt:  now,
+	}
+	if err := s.Store.WriteMemoryV2(ctx, projectRec); err != nil {
+		t.Fatalf("WriteMemoryV2 project: %v", err)
+	}
+
+	// 2. Write a session-scoped record and a shared_channel record.
+	sessionRec := model.MemoryRecordV2{
+		ID:         "MEM-session-1",
+		ProjectID:  s.ProjectID,
+		Kind:       model.MemoryKindSemantic,
+		Lifecycle:  model.MemoryDurable,
+		Authority:  model.AuthorityAgent,
+		Title:      "Session Discussion",
+		Body:       "cross-agent shared channel chat",
+		Scope:      string(model.ScopeSession),
+		ScopeID:    "sess-peer",
+		Source:     model.MemorySource{Kind: "shared_channel", AgentID: "claude", SessionID: "sess-peer"},
+		ObservedAt: now,
+		ValidFrom:  now,
+		CreatedAt:  now,
+	}
+	if err := s.Store.WriteMemoryV2(ctx, sessionRec); err != nil {
+		t.Fatalf("WriteMemoryV2 session: %v", err)
+	}
+
+	// Approval promotes imported history to project scope, but workers must
+	// still receive only task context. Keep the original exact count check.
+	imported := projectRec
+	imported.ID = "MEM-IMPORT-approved"
+	imported.Source = model.MemorySource{Kind: "external", Reference: "earlier-session"}
+	imported.Body = "private earlier conversation"
+	if err := s.Store.WriteMemoryV2(ctx, imported); err != nil {
+		t.Fatal(err)
+	}
+
+	run, err := s.StartPlanning(ctx, "run", "write file", marshal.Budget{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bc, err := s.briefContext(ctx, "run", run, run.Tasks[0])
+	if err != nil {
+		t.Fatalf("briefContext: %v", err)
+	}
+
+	if len(bc.Memory) != 1 {
+		t.Fatalf("expected 1 project memory record in BriefContext, got %d", len(bc.Memory))
+	}
+	if bc.Memory[0].ID != "MEM-project-1" {
+		t.Fatalf("expected MEM-project-1, got %s", bc.Memory[0].ID)
+	}
+	if bc.Memory[0].Body != "bounded project memory content" {
+		t.Fatalf("expected project body, got %q", bc.Memory[0].Body)
+	}
+	for _, m := range bc.Memory {
+		if m.Scope == string(model.ScopeSession) || m.Source.Kind == "shared_channel" {
+			t.Fatalf("BriefContext contains session or shared_channel memory: %+v", m)
+		}
 	}
 }

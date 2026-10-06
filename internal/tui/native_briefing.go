@@ -66,6 +66,14 @@ func marshalKickoffArgs(provider string) []string {
 	}
 }
 
+// The compiled protocol is also the opening turn: provider configuration or
+// resume behavior must not turn a fresh Marshal into an ordinary provider chat.
+func marshalProtocolKickoffArgs(provider, protocol string) []string {
+	args := marshalKickoffArgs(provider)
+	args[len(args)-1] = protocol + "\nBegin at step 1. Ask the language question and wait; ask about earlier work only after the language is chosen."
+	return args
+}
+
 // hiddenChannel is the channel each provider reads instructions from without
 // showing them as a conversation turn, so a briefing costs no turn and never
 // lands in the project's own files.

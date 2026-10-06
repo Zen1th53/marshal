@@ -11,7 +11,7 @@ import (
 
 func TestM16_RetroactiveSessionImporter(t *testing.T) {
 	ctx := context.Background()
-	_, svc := openTestMemoryService(t)
+	rt, svc := openTestMemoryService(t)
 
 	const projectID = "PROJECT-local"
 	p := testPrincipal("operator-1")
@@ -50,6 +50,7 @@ func TestM16_RetroactiveSessionImporter(t *testing.T) {
 		t.Fatalf("unexpected import result: %+v", res1)
 	}
 
+	approveTestCandidates(t, rt)
 	// 3. Re-importing identical transcript must produce zero new records and skip
 	res2, err := svc.ImportSessionTranscript(ctx, p, projectID, validTranscript, false)
 	if err != nil {
@@ -106,7 +107,8 @@ func TestM16_SessionImporterRejectsCredentials(t *testing.T) {
 // writes it; the one that loses must skip, not fail the whole capture.
 func TestM16_ConcurrentImportsOfOneMessageBothSucceed(t *testing.T) {
 	ctx := context.Background()
-	_, svc := openTestMemoryService(t)
+	rt, _ := openTestMemoryService(t)
+	svc := NewMemoryService(rt.Store())
 
 	const projectID = "PROJECT-local"
 	p := testPrincipal("operator-1")

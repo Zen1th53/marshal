@@ -9,6 +9,10 @@ import (
 )
 
 func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line string) (string, error) {
+	if len(args) > 0 && strings.EqualFold(args[0], "dispatch") {
+		return h.ws.startOpenCodeDispatch(ctx, args)
+	}
+
 	prompt, rejection := parseProviderCommand("opencode", line, args)
 	if rejection != "" {
 		return rejection, nil

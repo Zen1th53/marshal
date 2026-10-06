@@ -78,6 +78,22 @@ agy's storage format is not published. If a later release changes it, fields
 MARSHAL cannot find are skipped rather than guessed at, so capture loses
 evidence instead of inventing it.
 
+## Tmux native sessions and background switching
+
+The MARSHAL TUI always runs inside tmux. If started outside tmux, it creates (or re-attaches to) a dedicated per-project session (`marshal-<project>-<hash>`) and attaches to it. If started inside tmux, it uses the current session without nesting.
+
+When tmux is missing, the TUI refuses to launch and prints a one-line install command for the detected distribution (`pacman`, `apt`, `dnf`, `zypper`, `brew`). Non-interactive CLI subcommands (`status`, `doctor`, `tasks`, etc.) do not require tmux.
+
+### Session switching and layout
+- **Dedicated windows**: Every native agent (Codex, Claude, OpenCode, Antigravity) runs in its own collision-free tmux window (`marshal-<provider>-<hash>`).
+- **One-key switching**: Pressing **F7** (Codex), **F8** (Claude), **F9** (OpenCode), or **F12** (Antigravity) switches to that agent's window or opens it if not yet running. The agent continues executing in the background when switched away.
+- **Return to MARSHAL**: Press **F11** from any tmux window to immediately return to the central MARSHAL window.
+- **View-only by default**: Worker panes open in view-only mode to prevent accidental keystroke injection. Run `/takeover` to enable direct interactive typing.
+- **Layout controls**: Use `/view [focus | side-by-side | worker | show <agent> | hide | follow]` to manage pane views.
+- **Stop workers**: Press **Ctrl+X** or type `/stop all` to terminate all worker windows while keeping MARSHAL running.
+- **Evidence preservation**: When a worker finishes or is stopped, its terminal screen output is preserved under `.marshal/evidence/`.
+- **Re-attach on reconnect**: After network or SSH disconnection, running `marshal` again automatically re-attaches to the existing layout.
+
 ## Tool capture
 
 A native session records its tool calls alongside its conversation, because what
@@ -321,7 +337,7 @@ becomes entitled mid-run can open navigation without restarting.
 | `Ctrl+R` | Interactive reverse history search |
 | Bracketed Paste | Safe multi-line and clipboard text paste without accidental execution |
 
-Function keys F1–F10 and F12 have the actions shown in `/help`; F11 is unassigned.
+Function keys F1–F10 and F12 have the actions shown in `/help`; F11 returns to the MARSHAL window from any tmux agent window, and Ctrl+X stops all worker sessions while keeping MARSHAL active.
 F3 uses the same diff action as `/diff`, including a recovery hint when Git fails.
 
 ### Paste and copy
@@ -595,11 +611,12 @@ Honest states carried by the TUI:
 
 Current limitations, stated rather than hidden:
 
-- **Provider egress is blocked by design.** `marshal run` executes harnesses inside
-  a bubblewrap cell built with `--unshare-net`, because per-endpoint egress cannot
-  be enforced without a filtering proxy. A harness needing API access therefore
-  blocks inside the cell. This is fail-closed behaviour and is reported as
-  `BLOCKED_BY_POLICY`, never as availability.
+- **Governed egress needs working bubblewrap and trusted socat.** Provider workers
+  keep `--unshare-net` and use a per-run Unix proxy. `/egress status` lists exact
+  endpoints and refused requests; `/egress allow|revoke <run-id> <host[:port]>`
+  records operator-only decisions (omitted port means 443). Refusals also reach
+  the Marshal chat inbox; model text cannot grant. Native sessions opened
+  directly are out of scope. See [egress enforcement](network-egress-firewall.md).
 - **Antigravity headless execution is unavailable** unless the `agy` CLI is
   installed. The Antigravity desktop IDE is not a headless harness.
 - **Failure fingerprints are recomputed, not stored.** The retry registry in

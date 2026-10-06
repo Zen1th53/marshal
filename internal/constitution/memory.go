@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/redaction"
 )
 
 // This file implements the governed memory pipeline required by Article XVI:
@@ -133,7 +135,7 @@ func ValidateCandidate(candidate MemoryCandidate, projectID string) PromotionDec
 			Blockers: []string{"The candidate belongs to a different project."},
 		}
 	}
-	if candidate.ContainsSecret {
+	if candidate.ContainsSecret || redaction.DetectSecret(candidate.Fact) != "" {
 		return PromotionDecision{
 			Stage: StageRejected, Reason: ReasonSecretExposure,
 			Blockers: []string{"The candidate contains credential material."},

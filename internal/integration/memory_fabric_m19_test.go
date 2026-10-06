@@ -14,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/memory/security"
 	"github.com/Zen1th53/marshal/internal/memory/working"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/store"
 )
 
@@ -98,6 +99,18 @@ func TestM19_MultiAgentPersistenceAndSecurityScenario(t *testing.T) {
 			t.Fatalf("T2 create constraint: %v", err)
 		}
 		constraintID = cons.ID
+		// Remember proposes volatile memory; explicit local approval must precede
+		// persistence and restart recall, even for an admin principal.
+		if _, err := rt.Store().GetMemoryV2(ctx, projectID, cons.ID); !errors.Is(err, model.ErrNotFound) {
+			t.Fatalf("T2 constraint persisted before operator approval: %v", err)
+		}
+		control, err := rt.OpenLocalControl(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := rt.CommandPermission(control.Context(ctx), permission.Request{Kind: "memory", Object: cons.ID, Scope: "project memory, persistent", Who: "operator-admin"}, true, "operator memory review"); err != nil {
+			t.Fatalf("T2 approve constraint: %v", err)
+		}
 
 		// T5: Claude sets private working slot
 		if err := svc.SetPrivateTaskSlot(ctx, pClaude, projectID, taskID, "claude_private_scratch", "private scratch calculation"); err != nil {

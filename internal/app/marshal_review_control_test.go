@@ -22,8 +22,13 @@ func reviewPrompt(t *testing.T, control marshal.Control) string {
 		t.Fatal(err)
 	}
 	cli := &MarshalCLI{Provider: "claude", Binary: binary, Dir: dir}
-	task := marshal.Task{PlanTaskID: "a", Instructions: "wrap the handler"}
-	if _, err := cli.Review(t.Context(), task, marshal.HandIn{}, control); err != nil {
+	task := marshal.Task{PlanTaskID: "a", Instructions: "wrap the handler", Criteria: []string{"output exists"}, Files: []string{"output.txt"}}
+	handin := marshal.HandIn{
+		FilesTouched:    []string{"output.txt"},
+		RuntimeObserved: []marshal.CommandRecord{{Command: "worker CLI", Output: `{"result":"output written"}`}},
+		CheckResults:    []marshal.CheckResult{{Command: "test -f output.txt", Criteria: task.Criteria, Passed: true}},
+	}
+	if _, err := cli.Review(t.Context(), task, handin, control); err != nil {
 		t.Fatal(err)
 	}
 	prompt, err := os.ReadFile(promptFile)
@@ -41,5 +46,16 @@ func TestMarshalReviewPromptFollowsControlLevel(t *testing.T) {
 	free := reviewPrompt(t, marshal.ControlFree)
 	if !strings.Contains(free, "that choice is not a reason to return it") || strings.Contains(free, "departure from the instructions") {
 		t.Fatalf("free review prompt: %s", free)
+	}
+}
+
+func TestMarshalReviewBriefNamesHandInAndAcceptanceBasis(t *testing.T) {
+	for _, control := range []marshal.Control{marshal.ControlFree, marshal.ControlStrict} {
+		prompt := reviewPrompt(t, control)
+		for _, want := range []string{"worker's own output is hand-in evidence", "not native history", "passing checks plus met acceptance criteria", "missing narrative", `\"result\":\"output written\"`, `"Passed":true`, "output exists"} {
+			if !strings.Contains(prompt, want) {
+				t.Errorf("%s brief missing %q: %s", control, want, prompt)
+			}
+		}
 	}
 }

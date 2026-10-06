@@ -520,7 +520,14 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		if len(args) >= 3 {
 			modelName = args[2]
 		}
-		req := CodexTaskDispatchRequest{TaskID: taskID, Model: modelName}
+		task, err := auth.Task(ctx, taskID)
+		if err != nil {
+			return fmt.Sprintf("Codex dispatch failed: %v", err), nil
+		}
+		req := CodexTaskDispatchRequest{TaskID: taskID, Model: modelName, ExpectedRevision: task.Revision}
+		if task.OwnerAgentID != nil {
+			req.AgentID = *task.OwnerAgentID
+		}
 		res, err := auth.DispatchCodexTask(ctx, req)
 		if err != nil {
 			return fmt.Sprintf("Codex dispatch failed: %v", err), nil

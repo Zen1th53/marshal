@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -156,10 +157,15 @@ func ProbeGitStatus(workDir string) GitStatusResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	repositoryRoot, err := hostgit.Root(workDir)
+	if err != nil {
+		return res
+	}
+
 	// 1. Branch
-	cmdBranch := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
-	if workDir != "" {
-		cmdBranch.Dir = workDir
+	cmdBranch, err := hostgit.Command(ctx, repositoryRoot, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return res
 	}
 	var outBranch bytes.Buffer
 	cmdBranch.Stdout = &outBranch
@@ -168,9 +174,9 @@ func ProbeGitStatus(workDir string) GitStatusResult {
 	}
 
 	// 2. Commit
-	cmdCommit := exec.CommandContext(ctx, "git", "rev-parse", "--short", "HEAD")
-	if workDir != "" {
-		cmdCommit.Dir = workDir
+	cmdCommit, err := hostgit.Command(ctx, repositoryRoot, "rev-parse", "--short", "HEAD")
+	if err != nil {
+		return res
 	}
 	var outCommit bytes.Buffer
 	cmdCommit.Stdout = &outCommit
@@ -179,9 +185,9 @@ func ProbeGitStatus(workDir string) GitStatusResult {
 	}
 
 	// 3. Status
-	cmdStatus := exec.CommandContext(ctx, "git", "status", "--porcelain")
-	if workDir != "" {
-		cmdStatus.Dir = workDir
+	cmdStatus, err := hostgit.Command(ctx, repositoryRoot, "status", "--porcelain")
+	if err != nil {
+		return res
 	}
 	var outStatus bytes.Buffer
 	cmdStatus.Stdout = &outStatus

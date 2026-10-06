@@ -283,6 +283,7 @@ func TestAcceptanceMemoryRecall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	approveAcceptanceMemory(t, ws, record.ID)
 	ws.navView.Refresh(ctx)
 	for _, id := range []string{"CTUI-0410", "CTUI-0411", "CTUI-0415", "CTUI-0418", "CTUI-0420"} {
 		out := acceptanceScreen(t, ws, id)
@@ -305,6 +306,7 @@ func TestAcceptanceMemoryGovernance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	approveAcceptanceMemory(t, ws, candidate.ID)
 	promoted, err := runtime.Memory().Promote(ctx, principal, app.PromoteRequest{
 		ProjectID: string(ws.projectIdentity), MemoryID: candidate.ID,
 		ScopeID: string(ws.projectIdentity), Rationale: "acceptance operator review",
@@ -333,6 +335,9 @@ func TestAcceptanceTranscriptImport(t *testing.T) {
 	committed, err := runtime.Memory().ImportSessionTranscript(ctx, acceptancePrincipal(ws), string(ws.projectIdentity), transcript, false)
 	if err != nil || len(committed.ImportedRecords) != 1 {
 		t.Fatalf("canonical transcript commit = %+v, err=%v", committed, err)
+	}
+	for _, rec := range committed.ImportedRecords {
+		approveAcceptanceMemory(t, ws, rec.ID)
 	}
 	duplicate, err := runtime.Memory().ImportSessionTranscript(ctx, acceptancePrincipal(ws), string(ws.projectIdentity), transcript, false)
 	if err != nil || len(duplicate.ImportedRecords) != 0 || duplicate.SkippedCount != 1 {
@@ -955,4 +960,18 @@ type acceptanceReplayRunner struct{ called bool }
 func (r *acceptanceReplayRunner) Replay(_ context.Context, _ optimization.ReplayRequest) (optimization.ReplayObservation, error) {
 	r.called = true
 	return optimization.ReplayObservation{Outcome: learning.OutcomeVerifiedComplete, VerifierResult: optimization.StatusPass}, nil
+}
+
+// Persistence assertions below exercise the same authenticated operator review
+// as the application, after checking that a proposal alone is not durable.
+func approveAcceptanceMemory(t *testing.T, ws *Workspace, id string) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := ws.runtime.Store().GetMemoryV2(ctx, ws.runtime.ProjectID(), id); err == nil {
+		t.Fatal("memory persisted before operator review")
+	}
+	handler := NewCommandHandler(ws)
+	if _, err := handler.handleMemoryReview(ctx, []string{"allow", id}); err != nil {
+		t.Fatal(err)
+	}
 }

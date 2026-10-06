@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/tmux"
 	"io"
 	"os"
 	"strings"
@@ -23,6 +24,11 @@ import (
 
 // Workspace encapsulates the live Terminal TUI Control Plane over canonical runtime state.
 type Workspace struct {
+	permissions        permissionState
+	governedDispatches map[string]context.CancelFunc
+	governedDispatchWG sync.WaitGroup
+
+	egressMu   sync.Mutex
 	mu         sync.RWMutex
 	store      *store.Store
 	coord      *collaboration.Coordinator
@@ -127,6 +133,19 @@ type Workspace struct {
 	// to "the last provider", because launching an agent is always something the
 	// operator asked for by name.
 	nativeProvider string
+
+	tmuxPath          string
+	tmuxSession       string
+	tmuxMarshalWin    string
+	tmuxMarshalWinID  string
+	tmuxMarshalPaneID string
+	tmuxFollowActive  bool
+	tmuxAlerts        map[string]string
+	tmuxDelivered     map[string]bool
+	tmuxActiveWins    map[string]*activeTmuxAgent
+	tmuxMu            sync.Mutex
+	tmuxStatusMu      sync.Mutex
+	tmuxMonitors      sync.WaitGroup
 
 	// Scroll and activity unread tracking
 	scrollOffset int
@@ -264,12 +283,16 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/effort", "/ultra", "/marshal", "/backup", "/fingerprint", "/runtime", "/store", "/export",
 			"/reinjection", "/alignment", "/optimization", "/verification", "/diff", "/review",
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
-			"/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
+			"/permission", "/continue", "/egress", "/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
+			"/view", "/focus", "/takeover", "/take-over", "/stop",
 		},
 		Agents:      agentIDs,
 		Subcommands: make(map[string][]string),
 	}
+	compCtx.Subcommands["/view"] = []string{"focus", "side-by-side", "worker", "show", "hide", "follow", "readonly", "takeover"}
+	compCtx.Subcommands["/view show"] = []string{"codex", "claude", "opencode", "agy", "marshal"}
+	compCtx.Subcommands["/stop"] = []string{"all", "workers"}
 	compCtx.Subcommands["/store"] = []string{"check", "counts"}
 	compCtx.Subcommands["/store check"] = []string{"quick", "full"}
 	compCtx.Subcommands["/mode"] = []string{"manual", "auto", "ultra"}
@@ -280,7 +303,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/task"] = []string{"list", "create", "inspect", "assign", "pause", "resume", "cancel", "retry", "ownership"}
 	compCtx.Subcommands["/policy"] = []string{"network", "sandbox", "capability", "scope", "write", "audit"}
 	compCtx.Subcommands["/checkpoint"] = []string{"list", "create", "inspect", "diff"}
-	compCtx.Subcommands["/memory"] = []string{"list", "search", "provenance", "inject", "peers"}
+	compCtx.Subcommands["/memory"] = []string{"list", "search", "provenance", "inject", "peers", "review", "request", "allow", "deny"}
 	// Second level: the agents a channel line can name, plus the keywords.
 	// Offer both the short agent command and the canonical provider name.
 	compCtx.Subcommands["/memory peers"] = []string{"participants", "claude", "codex", "opencode", "agy", "antigravity"}
@@ -406,6 +429,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	}
 	ws.navReleased = navigationReleased
 	ws.cmd = NewCommandHandler(ws)
+	ws.tmuxActiveWins = make(map[string]*activeTmuxAgent)
 	return ws
 }
 
@@ -599,6 +623,7 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 		return res, err
 	}
 	_ = w.RefreshState(ctx)
+	w.replayWorkerAlerts(ctx)
 	return res, nil
 }
 
@@ -607,6 +632,9 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 // or clean fallback to buffered scanner if non-terminal.
 func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error {
 	w.out = out
+	if tmux.IsInsideTmux() {
+		w.InitTmux()
+	}
 
 	// A navigation refresh runs off the input loop and reads the canonical
 	// runtime, which creates its state directories on first use. Returning
@@ -614,8 +642,10 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 	// had closed the runtime and removed the project, so the session waits for
 	// its own reads on every exit path, including an error or a panic.
 	defer w.navView.Wait()
+	defer func() { w.cancelGovernedDispatches(); w.governedDispatchWG.Wait() }()
 
 	_ = w.RefreshState(ctx)
+	w.replayWorkerAlerts(ctx)
 
 	// The check is a read of a public feed and installs nothing. It runs off
 	// this path so a slow or unreachable feed cannot delay the workspace.
@@ -654,6 +684,8 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 		w.terminal.ShowCursor()
 		w.terminal.LeaveAltScreen()
 		w.terminal.Restore()
+		w.reportActiveTmuxSessions()
+		fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 	}()
 
 	w.renderFullView()
@@ -772,7 +804,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 					continue
 				}
 				w.terminal.ClearScreen()
-				fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 				return nil
 			}
 
@@ -781,15 +812,15 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 
 			// Navigation owns every key while it is open, and Ctrl+N opens it.
 			if event.Type == KeyF7 {
-				w.runCommand(ctx, "/codex new")
+				w.runCommand(ctx, "/codex")
 				continue
 			}
 			if event.Type == KeyF8 {
-				w.runCommand(ctx, "/claude new")
+				w.runCommand(ctx, "/claude")
 				continue
 			}
 			if event.Type == KeyF9 {
-				w.runCommand(ctx, "/opencode new")
+				w.runCommand(ctx, "/opencode")
 				continue
 			}
 			// F10 is the update action next to the notice. With a release
@@ -800,8 +831,18 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				w.runCommand(ctx, w.updateKeyCommand())
 				continue
 			}
+			if event.Type == KeyF11 {
+				// F11 returns to MARSHAL from tmux agent windows; inside MARSHAL
+				// it leaves the workspace and any in-progress composer draft alone.
+				continue
+			}
 			if event.Type == KeyF12 {
-				w.runCommand(ctx, "/agy new")
+				w.runCommand(ctx, "/agy")
+				continue
+			}
+			if event.Type == KeyCtrlX {
+				// One key stops all workers but never the Marshal (Decision 9)
+				w.runCommand(ctx, "/stop all")
 				continue
 			}
 			// The dispatch lives in its own method so a test can drive exactly
@@ -813,7 +854,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				w.mu.RUnlock()
 				if exitRequested {
 					w.terminal.ClearScreen()
-					fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 					return nil
 				}
 				w.renderFullView()
@@ -933,7 +973,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 							w.runCommand(ctx, cmd)
 							if w.commandExitRequested() {
 								w.terminal.ClearScreen()
-								fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 								return nil
 							}
 						}
@@ -997,7 +1036,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				w.runCommand(ctx, cmd)
 				if w.commandExitRequested() {
 					w.terminal.ClearScreen()
-					fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 					return nil
 				}
 			}
@@ -1385,6 +1423,10 @@ func (w *Workspace) AttachRuntime(runtime *app.Runtime, identity projectid.ID) {
 	defer w.mu.Unlock()
 	w.runtime = runtime
 	w.projectIdentity = identity
+	if runtime != nil {
+		runtime.SetEgressAlertSink(w.deliverEgressAlert)
+		runtime.SetPermissionSink(w.queuePermission)
+	}
 }
 
 // AttachULTRARequest supplies the canonical entitlement request path.
@@ -1482,6 +1524,8 @@ func (w *Workspace) controlSource() *ControlSource {
 				w.mu.Lock()
 				defer w.mu.Unlock()
 				w.runtime = reopened
+				reopened.SetEgressAlertSink(w.deliverEgressAlert)
+				reopened.SetPermissionSink(w.queuePermission)
 				w.store = reopened.Store()
 				w.runtimeReplaced = true
 			},
@@ -1663,6 +1707,10 @@ func (w *Workspace) printBatchFrame(out io.Writer) {
 }
 
 func (w *Workspace) runLineScanner(ctx context.Context, in io.Reader, out io.Writer) error {
+	defer func() {
+		w.reportActiveTmuxSessions()
+	}()
+
 	// Non-interactive fallback: stdin is a pipe or file, so there is no screen
 	// to address. Output is sequential by necessity, but it renders the same
 	// frame content as the interactive path so both agree on what is shown.

@@ -44,12 +44,18 @@ type Bind struct {
 }
 
 type SandboxRequest struct {
-	Worktree       string
-	WritableDirs   []string
-	WritableTmpfs  []string // sandbox-internal paths mounted as ephemeral tmpfs
-	ReadOnlyBinds  []Bind
-	NetworkAllowed bool
-	ExtraEnv       []string // KEY=VALUE pairs forwarded into sandbox
+	Supervised       bool
+	SupervisorBinary string
+	SupervisorSocket string
+	ScratchHome      string // private runtime-owned HOME outside the repository
+	Worktree         string
+	WritableDirs     []string
+	WritableTmpfs    []string // sandbox-internal paths mounted as ephemeral tmpfs
+	ReadOnlyBinds    []Bind
+	NetworkAllowed   bool
+	EgressSocket     string // runtime-owned Unix proxy socket; never a host TCP listener
+	BridgeBinary     string
+	ExtraEnv         []string // KEY=VALUE pairs forwarded into sandbox
 }
 
 type CommandSpec struct {

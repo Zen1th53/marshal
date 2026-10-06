@@ -25,8 +25,8 @@ func configCommandUsage(parts []string) string {
 		usage = "/provider [status|use <name>|config <name>] (credentials must stay in the provider's own login flow)"
 		valid = len(args) == 0 || sub == "status" && len(args) == 1 || sub == "use" && len(args) <= 2 || sub == "config" && len(args) >= 2 // The handler explicitly refuses inline credentials.
 	case "/harness":
-		usage = "/harness [probe|status|select <role> <harness>]"
-		valid = len(args) == 0 || oneOf(sub, "probe", "status") && len(args) == 1 || sub == "select" && len(args) == 3
+		usage = "/harness [probe|status|verify opencode [model]|select <role> <harness>]"
+		valid = len(args) == 0 || oneOf(sub, "probe", "status") && len(args) == 1 || sub == "select" && len(args) == 3 || sub == "verify" && (len(args) == 2 || len(args) == 3)
 	case "/model":
 		usage = "/model [show|select <harness> <model_name>|<model_slug>]"
 		valid = len(args) == 0 || sub == "show" && len(args) == 1 || sub == "select" && len(args) == 3 || !oneOf(sub, "show", "select") && len(args) == 1

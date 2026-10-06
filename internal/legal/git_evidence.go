@@ -7,18 +7,21 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/hostgit"
 )
 
 func execGit(ctx context.Context, repoDir string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = repoDir
-	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	cmd, err := hostgit.Command(ctx, repoDir, args...)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Env = append(cmd.Env, "LC_ALL=C")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

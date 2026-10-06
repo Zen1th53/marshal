@@ -217,6 +217,9 @@ func memoryStanding(record model.MemoryRecordV2) Value {
 // A record with no provenance cannot be checked against anything, which is
 // worth saying rather than leaving blank.
 func memoryProvenance(record model.MemoryRecordV2) Value {
+	if record.IsSystemRecord() {
+		return Known("System record · deterministic run evidence", memoryBinding)
+	}
 	var parts []string
 	if record.Source.Kind != "" {
 		parts = append(parts, record.Source.Kind)
@@ -243,7 +246,7 @@ func memoryProvenance(record model.MemoryRecordV2) Value {
 // provider echoed, and a terminal that copies it puts it somewhere MARSHAL no
 // longer governs.
 func memoryExcerpt(record model.MemoryRecordV2) Value {
-	content := strings.TrimSpace(record.Title)
+	content := strings.TrimSpace(record.DisplayTitle())
 	if body := strings.TrimSpace(record.Body); body != "" {
 		if content != "" {
 			content += " — "

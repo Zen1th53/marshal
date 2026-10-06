@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
+	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/plan"
 	branchworktree "github.com/Zen1th53/marshal/internal/worktree"
 )
 
@@ -75,7 +76,10 @@ func (e *Engine) prepareTaskWorktree(ctx context.Context, run ExecutionRun, task
 
 func commitTaskWorktree(ctx context.Context, path, runID, taskID string) (string, error) {
 	git := func(args ...string) (string, error) {
-		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", path}, args...)...)
+		cmd, err := hostgit.Command(ctx, path, args...)
+		if err != nil {
+			return "", err
+		}
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		out, err := cmd.Output()
@@ -89,7 +93,7 @@ func commitTaskWorktree(ctx context.Context, path, runID, taskID string) (string
 		return "", err
 	}
 	if status != "" {
-		if _, err := git("-c", "core.hooksPath=/dev/null", "add", "-A"); err != nil {
+		if _, err := git("add", "-A"); err != nil {
 			return "", err
 		}
 		for _, key := range []string{"user.name", "user.email"} {
@@ -98,7 +102,7 @@ func commitTaskWorktree(ctx context.Context, path, runID, taskID string) (string
 				return "", fmt.Errorf("git commit requires %s; configure it in the repository or git configuration", key)
 			}
 		}
-		if _, err := git("-c", "core.hooksPath=/dev/null", "commit", "--no-verify", "-m", fmt.Sprintf("marshal: hand-in for %s (run %s)", taskID, runID)); err != nil {
+		if _, err := git("commit", "--no-verify", "-m", fmt.Sprintf("marshal: hand-in for %s (run %s)", taskID, runID)); err != nil {
 			return "", err
 		}
 	}
@@ -107,10 +111,14 @@ func commitTaskWorktree(ctx context.Context, path, runID, taskID string) (string
 
 // WorktreeManager manages isolated working directories and git worktrees for tasks.
 type WorktreeManager struct {
-	mu           sync.Mutex
-	projectRoot  string
-	worktreesDir string
-	isGitRepo    bool
+	mu            sync.Mutex
+	projectRoot   string
+	worktreesDir  string
+	isGitRepo     bool
+	projectInfo   os.FileInfo
+	worktreesInfo os.FileInfo
+	owned         map[string]os.FileInfo
+	workspaces    map[string]string
 }
 
 // NewWorktreeManager creates a new WorktreeManager for the project root.
@@ -126,21 +134,33 @@ func NewWorktreeManager(projectRoot string) (*WorktreeManager, error) {
 		return nil, fmt.Errorf("project root %s does not exist or is not a directory", absRoot)
 	}
 
-	worktreesDir := filepath.Join(absRoot, ".marshal", "worktrees")
-	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create marshal worktrees directory: %w", err)
+	absRoot, err = filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		return nil, err
 	}
-
-	// Check if projectRoot is inside a git repository
-	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
-	cmd.Dir = absRoot
-	isGitRepo := cmd.Run() == nil
-
-	return &WorktreeManager{
-		projectRoot:  absRoot,
-		worktreesDir: worktreesDir,
-		isGitRepo:    isGitRepo,
-	}, nil
+	root, err := os.OpenRoot(absRoot)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	projectInfo, err := root.Stat(".")
+	if err != nil {
+		return nil, err
+	}
+	trees, err := openDirectory(root, filepath.Join(".marshal", "worktrees"), true, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer trees.Close()
+	treesInfo, err := trees.Stat(".")
+	if err != nil {
+		return nil, err
+	}
+	cmd, err := hostgit.Command(context.Background(), absRoot, "rev-parse", "--is-inside-work-tree")
+	if err != nil {
+		return nil, err
+	}
+	return &WorktreeManager{projectRoot: absRoot, worktreesDir: filepath.Join(absRoot, ".marshal", "worktrees"), isGitRepo: cmd.Run() == nil, projectInfo: projectInfo, worktreesInfo: treesInfo, owned: make(map[string]os.FileInfo), workspaces: make(map[string]string)}, nil
 }
 
 // ValidateTargetPaths ensures that target files do not escape the project boundary.
@@ -169,47 +189,141 @@ func (wm *WorktreeManager) PrepareWorktree(ctx context.Context, taskID, runID st
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 
-	wtName := fmt.Sprintf("wt-%s-%s", runID, taskID)
-	wtPath := filepath.Join(wm.worktreesDir, wtName)
-
-	_ = os.RemoveAll(wtPath)
-
-	if wm.isGitRepo {
-		// Attempt to create git worktree
-		cmd := exec.CommandContext(ctx, "git", "worktree", "add", "--detach", wtPath, "HEAD")
-		cmd.Dir = wm.projectRoot
-		output, err := cmd.CombinedOutput()
-		if err == nil {
-			return wtPath, nil
-		}
-		// Fallback to directory copy if git worktree fails (e.g. detached HEAD or unborn branch)
-		_ = output
+	if !plan.SafeTaskID(taskID) || !plan.SafeTaskID(runID) {
+		return "", fmt.Errorf("%w: unsafe workspace identifier", ErrIsolationCompromised)
 	}
-
-	// Filesystem isolation fallback
-	if err := copyDir(wm.projectRoot, wtPath, []string{".git", ".marshal"}); err != nil {
+	root, err := wm.openWorktrees()
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	key := runID + "\x00" + taskID
+	if path, ok := wm.workspaces[key]; ok {
+		info, err := root.Lstat(filepath.Base(path))
+		if err != nil || !info.IsDir() || !os.SameFile(wm.owned[path], info) {
+			return "", fmt.Errorf("%w: workspace identity changed", ErrIsolationCompromised)
+		}
+		return path, nil
+	}
+	wtName, err := model.NewID("wt-")
+	if err != nil {
+		return "", err
+	}
+	if err := root.Mkdir(wtName, 0700); err != nil {
+		return "", err
+	}
+	info, err := root.Lstat(wtName)
+	if err != nil {
+		return "", err
+	}
+	wtPath := filepath.Join(wm.worktreesDir, wtName)
+	wm.owned[wtPath] = info
+	gitCheckout := false
+	if wm.isGitRepo {
+		cmd, err := hostgit.Command(ctx, wm.projectRoot, "worktree", "add", "--detach", wtPath, "HEAD")
+		if err != nil {
+			return "", err
+		}
+		_, gitErr := cmd.CombinedOutput()
+		gitCheckout = gitErr == nil
+	}
+	source, err := os.OpenRoot(wm.projectRoot)
+	if err != nil {
+		return "", err
+	}
+	defer source.Close()
+	sourceInfo, err := source.Stat(".")
+	if err != nil || !os.SameFile(wm.projectInfo, sourceInfo) {
+		return "", fmt.Errorf("%w: project root changed", ErrIsolationCompromised)
+	}
+	target, err := openDirectory(root, wtName, false, nil)
+	if err != nil {
+		return "", err
+	}
+	defer target.Close()
+	if gitCheckout {
+		if err := hostgit.RecordRepository(wm.projectRoot, wtPath); err != nil {
+			return "", err
+		}
+		// Git records only executable bits. Preserve project permissions on
+		// checked-out files without importing untracked files or project bytes.
+		if err := preserveCheckoutModes(source, target); err != nil {
+			return "", err
+		}
+	} else if _, err := reconcileFiles(source, target, nil, []string{".git", ".marshal"}); err != nil {
 		return "", fmt.Errorf("failed to create fallback workspace copy: %w", err)
 	}
-
+	wm.workspaces[key] = wtPath
 	return wtPath, nil
 }
 
-// CleanWorktree removes an isolated worktree when the task finishes.
+func (wm *WorktreeManager) openWorktrees() (*os.Root, error) {
+	root, err := os.OpenRoot(wm.projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	info, err := root.Stat(".")
+	if err != nil || !os.SameFile(wm.projectInfo, info) {
+		return nil, fmt.Errorf("%w: project root changed", ErrIsolationCompromised)
+	}
+	trees, err := openDirectory(root, filepath.Join(".marshal", "worktrees"), false, nil)
+	if err != nil {
+		return nil, err
+	}
+	info, err = trees.Stat(".")
+	if err != nil || !os.SameFile(wm.worktreesInfo, info) {
+		trees.Close()
+		return nil, fmt.Errorf("%w: worktree root changed", ErrIsolationCompromised)
+	}
+	return trees, nil
+}
+
+// CleanWorktree removes only a workspace created and recorded by this manager.
 func (wm *WorktreeManager) CleanWorktree(ctx context.Context, wtPath string) error {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
-
-	if wtPath == "" || wtPath == wm.projectRoot {
+	if wtPath == "" {
 		return nil
 	}
-
-	if wm.isGitRepo {
-		cmd := exec.CommandContext(ctx, "git", "worktree", "remove", "--force", wtPath)
-		cmd.Dir = wm.projectRoot
-		_ = cmd.Run()
+	root, err := wm.openWorktrees()
+	if err != nil {
+		return err
 	}
-
-	return os.RemoveAll(wtPath)
+	defer root.Close()
+	recorded, ok := wm.owned[wtPath]
+	name, err := filepath.Rel(wm.worktreesDir, wtPath)
+	if !ok || err != nil || !safeRelative(name) || filepath.Base(name) != name {
+		return fmt.Errorf("%w: workspace is not owned by this runtime", ErrIsolationCompromised)
+	}
+	info, err := root.Lstat(name)
+	if err != nil || !info.IsDir() || !os.SameFile(recorded, info) {
+		return fmt.Errorf("%w: workspace identity changed", ErrIsolationCompromised)
+	}
+	resolved, err := filepath.EvalSymlinks(wtPath)
+	if err != nil || resolved != wtPath {
+		return fmt.Errorf("%w: workspace containment changed", ErrIsolationCompromised)
+	}
+	if err := root.RemoveAll(name); err != nil {
+		return err
+	}
+	delete(wm.owned, wtPath)
+	for key, path := range wm.workspaces {
+		if path == wtPath {
+			delete(wm.workspaces, key)
+		}
+	}
+	// Prune the registration after rooted removal; Git never receives a deletion path.
+	if wm.isGitRepo {
+		cmd, err := hostgit.Command(ctx, wm.projectRoot, "worktree", "prune", "--expire=now")
+		if err != nil {
+			return err
+		}
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("prune worktree registration: %w: %s", err, out)
+		}
+	}
+	return nil
 }
 
 // ReconcileChanges applies changes from the worktree back to the project root,
@@ -217,155 +331,86 @@ func (wm *WorktreeManager) CleanWorktree(ctx context.Context, wtPath string) err
 func (wm *WorktreeManager) ReconcileChanges(wtPath string, permittedFiles []string) ([]string, error) {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
-
-	if wtPath == "" || wtPath == wm.projectRoot {
-		return nil, nil
-	}
-
-	// Collect list of changed files between worktree and projectRoot
-	var modified []string
-
-	permittedMap := make(map[string]bool)
-	for _, pf := range permittedFiles {
-		clean := filepath.Clean(pf)
-		if filepath.IsAbs(clean) {
-			rel, err := filepath.Rel(wm.projectRoot, clean)
-			if err == nil {
-				clean = rel
-			}
-		}
-		permittedMap[clean] = true
-	}
-
-	err := filepath.Walk(wtPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		name := info.Name()
-		if name == ".git" || name == ".marshal" {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if info.IsDir() {
-			return nil
-		}
-
-		relPath, err := filepath.Rel(wtPath, path)
-		if err != nil {
-			return err
-		}
-
-		targetPath := filepath.Join(wm.projectRoot, relPath)
-		targetInfo, statErr := os.Stat(targetPath)
-
-		isDifferent := false
-		if statErr != nil {
-			// New file created
-			isDifferent = true
-		} else if info.Size() != targetInfo.Size() || info.ModTime() != targetInfo.ModTime() {
-			// Compare contents
-			wtContent, err1 := os.ReadFile(path)
-			tgtContent, err2 := os.ReadFile(targetPath)
-			if err1 != nil || err2 != nil || string(wtContent) != string(tgtContent) {
-				isDifferent = true
-			}
-		}
-
-		if isDifferent {
-			// Isolation rule: If permittedFiles is specified, reject any mutations outside permitted scope
-			if len(permittedFiles) > 0 && !permittedMap[relPath] {
-				// Check if directory prefix matches
-				matchedDir := false
-				for pf := range permittedMap {
-					if strings.HasPrefix(relPath, pf+"/") || strings.HasPrefix(pf, relPath+"/") {
-						matchedDir = true
-						break
-					}
-				}
-				if !matchedDir {
-					return fmt.Errorf("%w: task attempted to mutate unpermitted file %s (permitted: %v)",
-						ErrIsolationCompromised, relPath, permittedFiles)
-				}
-			}
-
-			// Copy the modified file to projectRoot
-			if err := copyFile(path, targetPath); err != nil {
-				return fmt.Errorf("failed to reconcile %s: %w", relPath, err)
-			}
-			modified = append(modified, relPath)
-		}
-
-		return nil
-	})
-
+	trees, err := wm.openWorktrees()
 	if err != nil {
 		return nil, err
 	}
-
-	return modified, nil
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
+	defer trees.Close()
+	recorded, ok := wm.owned[wtPath]
+	name, err := filepath.Rel(wm.worktreesDir, wtPath)
+	if !ok || err != nil || !safeRelative(name) || filepath.Base(name) != name {
+		return nil, fmt.Errorf("%w: unowned delivery workspace", ErrIsolationCompromised)
+	}
+	source, err := openDirectory(trees, name, false, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer in.Close()
-
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return err
+	defer source.Close()
+	info, err := source.Stat(".")
+	if err != nil || !os.SameFile(recorded, info) {
+		return nil, fmt.Errorf("%w: delivery workspace changed", ErrIsolationCompromised)
 	}
-
-	out, err := os.Create(dst)
+	target, err := os.OpenRoot(wm.projectRoot)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return err
+	defer target.Close()
+	targetInfo, err := target.Stat(".")
+	if err != nil || !os.SameFile(wm.projectInfo, targetInfo) {
+		return nil, fmt.Errorf("%w: project root changed", ErrIsolationCompromised)
 	}
-
-	si, err := os.Stat(src)
-	if err == nil {
-		_ = os.Chmod(dst, si.Mode())
-	}
-	return nil
+	return reconcileFiles(source, target, permittedFiles, []string{".git", ".marshal"})
 }
 
 func copyDir(src, dst string, skips []string) error {
-	skipMap := make(map[string]bool)
-	for _, s := range skips {
-		skipMap[s] = true
+	source, err := os.OpenRoot(src)
+	if err != nil {
+		return err
 	}
+	defer source.Close()
+	parent, err := os.OpenRoot(filepath.Dir(dst))
+	if err != nil {
+		return err
+	}
+	defer parent.Close()
+	if _, err := parent.Lstat(filepath.Base(dst)); os.IsNotExist(err) {
+		if err := parent.Mkdir(filepath.Base(dst), 0755); err != nil {
+			return err
+		}
+	}
+	target, err := openDirectory(parent, filepath.Base(dst), false, nil)
+	if err != nil {
+		return err
+	}
+	defer target.Close()
+	_, err = reconcileFiles(source, target, nil, skips)
+	return err
+}
 
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+func preserveCheckoutModes(source, target *os.Root) error {
+	return fs.WalkDir(target.FS(), ".", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-
-		parts := strings.Split(rel, string(filepath.Separator))
-		for _, p := range parts {
-			if skipMap[p] {
-				if info.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
+		if name == ".git" || name == ".marshal" {
+			if entry.IsDir() {
+				return fs.SkipDir
 			}
+			return nil
 		}
-
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, info.Mode())
+		if !entry.Type().IsRegular() {
+			return nil
 		}
-
-		return copyFile(path, target)
+		info, err := source.Lstat(name)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		return target.Chmod(name, info.Mode().Perm())
 	})
 }

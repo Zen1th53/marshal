@@ -3,10 +3,11 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/hostgit"
 )
 
 // applyCodexCloudTask applies a Codex task diff to the project through the
@@ -68,7 +69,10 @@ func (h *CommandHandler) applyCodexCloudTask(ctx context.Context, args []string)
 func gitChanges(ctx context.Context, root string) (map[string]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-c", "core.hooksPath=/dev/null", "status", "--porcelain=v1", "--untracked-files=all", "-z")
+	cmd, err := hostgit.Command(ctx, root, "status", "--porcelain=v1", "--untracked-files=all", "-z")
+	if err != nil {
+		return nil, err
+	}
 	cmd.Dir = root
 	out, err := cmd.Output()
 	if err != nil {
@@ -89,7 +93,10 @@ func gitChanges(ctx context.Context, root string) (map[string]string, error) {
 			continue
 		}
 		stamp := status
-		hash := exec.CommandContext(ctx, "git", "hash-object", "--", path)
+		hash, err := hostgit.Command(ctx, root, "hash-object", "--", path)
+		if err != nil {
+			return nil, err
+		}
 		hash.Dir = root
 		if digest, err := hash.Output(); err == nil {
 			stamp += ":" + strings.TrimSpace(string(digest))

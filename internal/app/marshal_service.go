@@ -7,14 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/events"
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -42,6 +41,7 @@ type MarshalDraft struct {
 }
 
 type MarshalService struct {
+	GovernedCheck                    func(context.Context, string, string, string, string, string) marshal.CommandRecord
 	Store                            *store.Store
 	ProjectID, Repository, Worktrees string
 	Model                            MarshalModel
@@ -59,6 +59,7 @@ type MarshalService struct {
 	// InstalledVersion reports the installed version of a worker's CLI, for
 	// the evidence-derived harness governance assessment. Nil means unknown.
 	InstalledVersion func(ctx context.Context, worker string) string
+	HandInGuard      func(context.Context, string, string, marshal.HandIn) error
 	now              func() time.Time
 }
 
@@ -244,7 +245,7 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	if err := validateDraft(d); err != nil {
 		return marshal.Run{}, err
 	}
-	if string(d.Plan.ProjectID) != s.ProjectID {
+	if d.Plan.ProjectID != s.CanonicalPlanProjectID() {
 		return marshal.Run{}, errors.New("plan belongs to another project")
 	}
 	if !marshalIdentifier(runID) {
@@ -329,12 +330,10 @@ func (s *MarshalService) Approve(ctx context.Context, runID string) (marshal.Run
 // external diff drivers and pagers are disabled; otherwise merging a hand-in
 // could run commands the worker chose, outside any worker sandbox.
 func gitMarshal(ctx context.Context, dir string, args ...string) (string, error) {
-	hardened := []string{"-c", "core.hooksPath=/dev/null", "-c", "diff.external=", "-c", "core.pager=cat", "-C", dir}
-	if len(args) > 1 && args[0] == "merge" && args[1] != "--abort" {
-		args = append([]string{"merge", "--no-verify"}, args[1:]...)
+	cmd, err := hostgit.Command(ctx, dir, args...)
+	if err != nil {
+		return "", err
 	}
-	cmd := exec.CommandContext(ctx, "git", append(hardened, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_PAGER=cat")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))

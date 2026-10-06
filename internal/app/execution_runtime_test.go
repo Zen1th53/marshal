@@ -4,11 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/execution"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
@@ -238,5 +243,44 @@ func TestExecutionService_StartRunBoundIsIdempotentAcrossRuntimeRestart(t *testi
 	}
 	if restarted.RunID != first.RunID {
 		t.Fatalf("restart replay created %s; want durable run %s", restarted.RunID, first.RunID)
+	}
+}
+
+func TestExecutionServiceRefusesDurableInitializationFailure(t *testing.T) {
+	for _, tc := range []struct{ name, path, message string }{
+		{"runs", "execution/runs", "run store"},
+		{"journal", "execution/journal", "journal"},
+		{"engine", "checkpoints", "engine"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runtime := runtimeForPlan(t)
+			blocked := filepath.Join(runtime.layout.Root, ".marshal", tc.path)
+			if err := os.MkdirAll(filepath.Dir(blocked), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(blocked, []byte("not a directory"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			service := runtime.Execution()
+			if service == nil {
+				t.Fatal("missing service for reporting initialization failure")
+			}
+			_, err := service.StartRun(t.Context(), "SESSION-plan", runtimePlanProject)
+			if !errors.Is(err, model.ErrUnavailable) || !strings.Contains(err.Error(), tc.message) || !strings.Contains(err.Error(), blocked) {
+				t.Fatalf("StartRun error = %v; want unavailable with %s failure and path %s", err, tc.message, blocked)
+			}
+			if service.Engine() != nil {
+				t.Fatal("durability failure left an executable engine")
+			}
+			if service.store != nil || service.journal != nil {
+				t.Fatal("durability failure retained partial or memory stores")
+			}
+			if _, err := service.ListRuns(t.Context()); !errors.Is(err, model.ErrUnavailable) {
+				t.Fatalf("ListRuns error = %v", err)
+			}
+			if _, err := service.ExecuteRun(t.Context(), "run"); !errors.Is(err, model.ErrUnavailable) {
+				t.Fatalf("ExecuteRun error = %v", err)
+			}
+		})
 	}
 }

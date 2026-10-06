@@ -838,6 +838,7 @@ func runtimeScreen(r RuntimeSnapshot) ScreenContent {
 			{Label: "Agents", Value: r.Agents},
 			{Label: "Sessions", Value: r.Sessions},
 			{Label: "Leases", Value: r.Leases},
+			{Label: "Honeypot", Value: r.Honeypot},
 		},
 	}
 }

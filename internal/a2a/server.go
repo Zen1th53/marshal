@@ -500,7 +500,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "FORBIDDEN", "detail": fmt.Sprintf("Forbidden: principal kind %q is not authorized for A2A", caller.Kind)})
 			return
 		}
-		if !caller.HasCapability(auth.CapTaskExecute) && !caller.HasCapability(auth.CapTaskRead) {
+		if !caller.HasCapability(auth.CapTaskExecute) {
 			w.Header().Set("Content-Type", "application/a2a+json")
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": "FORBIDDEN", "detail": "Missing required capability: task.execute"})
@@ -688,8 +688,8 @@ func (s *Server) handleTaskDelegation(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Forbidden: principal kind %q is not authorized for A2A", caller.Kind), http.StatusForbidden)
 			return
 		}
-		if !caller.HasCapability(auth.CapTaskCreate) && !caller.HasCapability(auth.CapTaskExecute) {
-			http.Error(w, "Forbidden: missing required capability: task.create", http.StatusForbidden)
+		if !caller.HasCapability(auth.CapTaskExecute) {
+			http.Error(w, "Forbidden: missing required capability: task.execute", http.StatusForbidden)
 			return
 		}
 	}

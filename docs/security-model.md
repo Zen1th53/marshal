@@ -1,7 +1,15 @@
 # Security Model
 
-MARSHAL coordinates privileged engineering operations. Its specifications and
-runtime enforce strict, fail-closed isolation across local CLI, MCP, and A2A interfaces.
+MARSHAL coordinates privileged engineering operations. Governed workers use
+sandbox isolation; native workers are trusted and run with your user account's
+rights, using the agent's own permission controls.
+
+The Marshal can read and write the whole project. Protection is at approval
+and merge, rather than a restriction on which project files it can access.
+
+Sharing in the agents' shared channel sends one provider's text to another
+provider when the receiving agent uses it. Keeping records locally does not
+keep shared text from reaching providers.
 
 ## Trust and Authority
 
@@ -19,7 +27,7 @@ See [INSTRUCTION-TRUST.md](../protocols/INSTRUCTION-TRUST.md),
 
 ## Execution and Isolation
 
-- **Process Sandboxing**: Tasks run inside Linux `bubblewrap` mount and network namespaces with read-only root filesystems and isolated temporary mounts.
+- **Process Sandboxing**: Sandboxed governed workers run inside Linux `bubblewrap` mount and network namespaces with read-only root filesystems and isolated temporary mounts. MARSHAL does not sandbox native workers.
 - **Resource Governance**: Enforcement of CPU limits, memory quotas, process count bounds, and a maximum 500MB worktree disk budget.
 - **Process Group Escalation**: Worker processes that exceed deadlines are terminated via process group `SIGTERM` followed by `SIGKILL`.
 - **Fail-Closed Fallback**: If bubblewrap is unavailable, only low-risk (R1) tasks with explicit network access may use process-only mode; high-risk (R2/R3) or network-denied tasks fail closed.

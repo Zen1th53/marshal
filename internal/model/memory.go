@@ -326,3 +326,23 @@ func (r *MemoryRecordV2) CanonicalDigest() string {
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+// IsSystemRecord identifies deterministic runtime evidence, including records
+// written before explicit labelling was introduced. Model metadata cannot
+// turn an imported or proposed fact into runtime evidence.
+func (r MemoryRecordV2) IsSystemRecord() bool {
+	return r.Source.Kind == "runtime_outcome"
+}
+
+func (r MemoryRecordV2) DisplayTitle() string {
+	if r.IsSystemRecord() && !strings.HasPrefix(r.Title, "System record · ") {
+		return "System record · " + r.Title
+	}
+	return r.Title
+}
+
+// IsSessionHistory retains its meaning after operator approval promotes the
+// record from session scope to project scope. Such history is Marshal-only.
+func (r MemoryRecordV2) IsSessionHistory() bool {
+	return r.Source.Kind == "external" || strings.HasPrefix(r.Source.Reference, "external:") || strings.HasPrefix(r.ID, "MEM-IMPORT-")
+}

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/verification"
+	"github.com/Zen1th53/marshal/internal/worker"
 )
 
 // MarshalWiring is what a surface supplies to run a real Marshal plan.
@@ -51,12 +51,13 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	if w.Approver == nil {
 		return nil, errors.New("marshal: an approval source is required")
 	}
-	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository, ProjectID: s.ProjectID}
+	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository, ProjectID: string(s.CanonicalPlanProjectID())}
 	s.ModelProvider = w.Provider
 	s.Reviewer = "marshal:" + w.Provider
 	s.Gate = w.Gate
 	s.ApprovalActor = w.Approver
 	s.InstalledVersion = installedCLIVersion
+	s.HandInGuard = r.guardHoneypotHandIn
 	// Every role runs in a session of its own. The ULTRA cross-reviewer and
 	// the verifier are started fresh, never resumed from the Marshal's or a
 	// worker's conversation, so none of them judges work it saw being made.
@@ -92,10 +93,11 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	}
 	governedRun := r.marshalProcess05Run(s)
 	s.GovernedDrivers = map[string]driver.Driver{
-		"codex":       driver.Governed{Provider: "codex", Run: governedRun},
-		"claude-code": driver.Governed{Provider: "claude", Run: governedRun},
+		"codex":       driver.Governed{Provider: "codex", Run: governedRun, Check: r.governedHandInCheck},
+		"claude-code": driver.Governed{Provider: "claude", Run: governedRun, Check: r.governedHandInCheck},
 	}
 	s.GateState = s.observedGateState
+	s.GovernedCheck = r.runGovernedCheck
 	s.Verify = s.verifyByChecks
 	return s, nil
 }
@@ -220,11 +222,29 @@ func (s *MarshalService) verifyByChecks(ctx context.Context, run marshal.Run, he
 	runID := marshalRunID(run)
 	dir := filepath.Join(s.Worktrees, "TASK-"+runID+"-integration")
 	binding := verification.Binding{ProjectID: s.ProjectID, GoalID: run.GoalBinding, PlanID: run.PlanID, RunID: runID, GoalRevision: 1, PlanVersion: run.PlanVersion, RunVersion: 1, TreeDigest: head, EnvironmentDigest: "marshal-local"}
+	governed := false
+	for _, task := range run.Tasks {
+		if task.Mode == marshal.Governed {
+			governed = true
+		}
+	}
 	checks := map[string]verification.Status{}
 	for _, t := range run.Tasks {
 		for i, c := range t.Checks {
 			status := verification.StatusPass
-			if err := runIntegrationCheck(ctx, dir, head, c.Command); err != nil {
+			var checkErr error
+			if governed {
+				if s.GovernedCheck == nil {
+					checkErr = errors.New("governed integration sandbox runner unavailable")
+				} else {
+					checkErr = runIntegrationCheckWithRunner(ctx, dir, head, c.Command, func(ctx context.Context, dir, command string) marshal.CommandRecord {
+						return s.GovernedCheck(ctx, runID, t.PlanTaskID, t.Worker, dir, command)
+					})
+				}
+			} else {
+				checkErr = runIntegrationCheck(ctx, dir, head, c.Command)
+			}
+			if checkErr != nil {
 				status = verification.StatusFail
 			}
 			checks[fmt.Sprintf("%s#%d", t.PlanTaskID, i)] = status
@@ -253,15 +273,24 @@ func marshalRunID(run marshal.Run) string {
 // tree, fails: later checks and the close would otherwise judge a commit
 // that is not the one verified.
 func runIntegrationCheck(ctx context.Context, dir, head, command string) error {
-	checkCtx, cancel := context.WithTimeout(ctx, driver.DefaultCheckTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(checkCtx, "sh", "-c", command)
-	cmd.Dir = dir
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
-		return err
+	return runIntegrationCheckWithRunner(ctx, dir, head, command, nil)
+}
+func runIntegrationCheckWithRunner(ctx context.Context, dir, head, command string, runner driver.CheckRunner) error {
+	if runner != nil {
+		checkCtx, cancel := context.WithTimeout(ctx, driver.DefaultCheckTimeout)
+		defer cancel()
+		result := runner(checkCtx, dir, command)
+		if result.ExitCode != 0 {
+			return fmt.Errorf("integration check failed: %s", result.Output)
+		}
+	} else {
+		result, err := worker.RunVerification(ctx, dir, []string{"/bin/sh", "-c", command}, driver.DefaultCheckTimeout, 64<<10)
+		if err != nil {
+			return err
+		}
+		if result.ExitCode != 0 {
+			return fmt.Errorf("check failed with exit status %d: %s", result.ExitCode, result.Stderr)
+		}
 	}
 	status, err := gitMarshal(ctx, dir, "status", "--porcelain")
 	if err != nil {

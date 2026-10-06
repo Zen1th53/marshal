@@ -249,6 +249,13 @@ func (h *CommandHandler) handlePolicy(ctx context.Context, args []string) (strin
 		fmt.Fprintf(&b, "  %d allowed, %d denied; latest %s at %s (policy %s)\n", g.Allowed, g.Denied, g.LastPoint, g.LastAt, digest)
 	}
 	b.WriteString(verdict)
+	if aspect == "network" {
+		status, err := h.handleEgress(ctx, nil)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString("\n" + status)
+	}
 	return b.String(), nil
 }
 
@@ -269,6 +276,8 @@ func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line s
 	}
 
 	switch strings.ToLower(args[0]) {
+	case "review", "request", "allow", "deny":
+		return h.handleMemoryReview(ctx, args)
 	case "inject":
 		return h.handleMemoryInject(ctx, args[1:])
 	case "peers":
@@ -628,7 +637,7 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 			b.WriteString(fmt.Sprintf("    Version: %s\n", pr.Version))
 			b.WriteString(fmt.Sprintf("    Model:   %s\n", h.providerModelLine(ctx, pr.HarnessName)))
 			b.WriteString("    Auth:    UNKNOWN (no execution performed)\n")
-			b.WriteString("    Egress:  governed cells BLOCKED_BY_POLICY (sandbox uses --unshare-net; per-endpoint egress unenforceable); native sessions UNKNOWN (they run in the provider's own environment; not observed)\n")
+			b.WriteString("    Egress:  governed cells use --unshare-net and a per-run Unix proxy (requires working bubblewrap and trusted socat); unapproved endpoints BLOCKED_BY_POLICY (/egress); native sessions opened directly by the operator OUT_OF_SCOPE\n")
 		}
 		return b.String(), nil
 	}
@@ -680,6 +689,21 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 
 // handleHarness handles harness probe and selection.
 func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (string, error) {
+	if len(args) >= 2 && strings.EqualFold(args[0], "verify") {
+		if len(args) > 3 || h.ws.runtime == nil {
+			return "Usage: /harness verify opencode <model>", nil
+		}
+		modelName := ""
+		if len(args) == 3 {
+			modelName = args[2]
+		}
+		profile, err := h.ws.runtime.VerifyMarshalWorker(ctx, args[1], modelName)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Verified %s %s in sandbox through proxy; evidence %s", profile.Harness, profile.InstalledVersion, profile.ProbeEvidenceID), nil
+	}
+
 	if len(args) == 0 || strings.EqualFold(args[0], "status") || strings.EqualFold(args[0], "probe") {
 		probes := ProbeHarnesses()
 		var b strings.Builder

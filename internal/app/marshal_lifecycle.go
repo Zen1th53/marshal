@@ -18,6 +18,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/verification"
+	"github.com/Zen1th53/marshal/internal/worker"
 	"github.com/Zen1th53/marshal/internal/worktree"
 )
 
@@ -86,6 +87,12 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
 		d = s.GovernedDrivers[t.Worker]
 	}
+	if governed, ok := d.(driver.Governed); ok && governed.Check == nil && s.GovernedCheck != nil {
+		governed.Check = func(ctx context.Context, req driver.Request, dir, command string) marshal.CommandRecord {
+			return s.GovernedCheck(ctx, runID, req.Task.PlanTaskID, req.Task.Worker, dir, command)
+		}
+		d = governed
+	}
 	if d == nil {
 		return MarshalDispatch{}, fmt.Errorf("no driver for %s", t.Worker)
 	}
@@ -136,7 +143,7 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		dispatchCtx, cancel = context.WithDeadline(ctx, deadline)
 		_ = cancel
 	}
-	handle, err := d.Launch(dispatchCtx, driver.Request{Task: *t, Worktree: tree.Path, Brief: brief})
+	handle, err := d.Launch(dispatchCtx, driver.Request{RunID: runID, Task: *t, Worktree: tree.Path, Brief: brief})
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
@@ -192,6 +199,23 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		return marshal.HandIn{}, errors.New("missing dispatch handle")
 	}
 	handin, err := dispatch.Driver.Wait(ctx, dispatch.Handle)
+	if errors.Is(err, worker.ErrHoneypot) {
+		run, rev, loadErr := s.load(context.WithoutCancel(ctx), runID)
+		if loadErr != nil {
+			return handin, errors.Join(err, loadErr)
+		}
+		i := taskIndex(run, dispatch.TaskID)
+		if i < 0 {
+			return handin, errors.Join(err, model.ErrNotFound)
+		}
+		run.Tasks[i].State = marshal.Escalated
+		run.State = marshal.AwaitingUser
+		if saveErr := s.save(context.WithoutCancel(ctx), runID, run, rev); saveErr != nil {
+			return handin, errors.Join(err, saveErr)
+		}
+		alertErr := s.record(context.WithoutCancel(ctx), runID, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": err.Error()})
+		return handin, errors.Join(err, alertErr)
+	}
 	if err != nil {
 		if !dispatch.Deadline.IsZero() && time.Now().After(dispatch.Deadline) {
 			run, rev, loadErr := s.load(ctx, runID)
@@ -226,6 +250,9 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		return handin, errors.New("hand-in identity differs from dispatch")
 	}
 	validationErr := marshal.ValidateHandIn(*t, handin)
+	if t.Mode == marshal.Governed && s.HandInGuard != nil {
+		validationErr = errors.Join(validationErr, s.HandInGuard(ctx, dispatch.TaskID, dispatch.Handle.Worktree(), handin))
+	}
 	attempt := 1
 	for _, n := range t.ReturnsByAgent {
 		attempt += n

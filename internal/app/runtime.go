@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,8 +32,10 @@ import (
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/gate"
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/netpolicy"
+	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/projectid"
@@ -50,38 +54,47 @@ import (
 const localProjectID = "PROJECT-local"
 
 type Runtime struct {
-	layout              project.Layout
-	store               *store.Store
-	eventEngine         *events.Engine
-	policy              *policy.Engine
-	adapters            map[string]adapter.Adapter
-	evidenceSanitizer   evidence.Sanitizer
-	capabilityBroker    capability.Broker
-	dagGraph            *dag.Engine
-	cellManager         *cell.Manager
-	secretBroker        secrets.Broker
-	gateEngine          *gate.Engine
-	riskEngine          *risk.Engine
-	authorityPrincipal  *authz.Principal
-	processAuthority    authz.Authority
-	runtimeInstanceID   string
-	runtimePolicy       RuntimePolicyConfig
-	policyConfigured    bool
-	handoffService      *protocol.Service
-	memoryService       *MemoryService
-	quorumEngine        *quorum.Engine
-	allowProcessOnly    bool
-	execService         *ExecutionService
-	taskMu              sync.Mutex
-	taskRuns            map[string]context.CancelFunc
-	execMu              sync.Mutex
-	codexAppServerMu    sync.Mutex
-	codexAppServerTurns map[string]*liveCodexAppServerTurn
-	codexAppServerNew   func(string, string) codexAppServerClient
-	claudeStreamMu      sync.Mutex
-	claudeStreamTurns   map[string]*liveClaudeStreamTurn
-	claudeStreamNew     func(string, string) claudeStreamClient
-	tokenManager        *auth.Manager
+	permissionMu           sync.Mutex
+	readGrants             map[string]bool
+	continuationCandidates map[string]model.MemoryRecordV2
+	permissionSink         func(permission.Request)
+	layout                 project.Layout
+	store                  *store.Store
+	eventEngine            *events.Engine
+	policy                 *policy.Engine
+	adapters               map[string]adapter.Adapter
+	evidenceSanitizer      evidence.Sanitizer
+	capabilityBroker       capability.Broker
+	dagGraph               *dag.Engine
+	cellManager            *cell.Manager
+	secretBroker           secrets.Broker
+	gateEngine             *gate.Engine
+	riskEngine             *risk.Engine
+	authorityPrincipal     *authz.Principal
+	processAuthority       authz.Authority
+	runtimeInstanceID      string
+	runtimePolicy          RuntimePolicyConfig
+	policyConfigured       bool
+	handoffService         *protocol.Service
+	memoryService          *MemoryService
+	quorumEngine           *quorum.Engine
+	allowProcessOnly       bool
+	execService            *ExecutionService
+	honeypotMu             sync.Mutex
+	honeypots              map[string]*worker.Honeypot
+	egressMu               sync.Mutex
+	egressRuns             map[string]*runEgress
+	egressAlert            func(EgressAlert) error
+	taskMu                 sync.Mutex
+	taskRuns               map[string]context.CancelFunc
+	execMu                 sync.Mutex
+	codexAppServerMu       sync.Mutex
+	codexAppServerTurns    map[string]*liveCodexAppServerTurn
+	codexAppServerNew      func(string, string) codexAppServerClient
+	claudeStreamMu         sync.Mutex
+	claudeStreamTurns      map[string]*liveClaudeStreamTurn
+	claudeStreamNew        func(string, string) claudeStreamClient
+	tokenManager           *auth.Manager
 
 	// ultra is the canonical ULTRA authorization gate. It is nil when no Cloud
 	// session is attached, and a nil gate answers "not entitled", so a runtime
@@ -141,6 +154,7 @@ type Status struct {
 	SessionCount  int           `json:"session_count"`
 	TaskCount     int           `json:"task_count"`
 	LeaseCount    int           `json:"lease_count"`
+	Honeypot      string        `json:"honeypot"`
 }
 
 type RegisterAgentRequest struct {
@@ -367,6 +381,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	}
 	rt.handoffService = protocol.NewService(protocol.Config{RepositoryRoot: layout.Root}, database, handoffAuthorizer)
 	rt.memoryService = NewMemoryService(database)
+	rt.memoryService.propose = rt.proposeMemory
 	if err := rt.memoryService.RebuildProjections(ctx, localProjectID); err != nil {
 		return nil, err
 	}
@@ -771,6 +786,17 @@ func (r *Runtime) PrepareCell(ctx context.Context, spec cell.Spec) (cell.Record,
 
 func (r *Runtime) Close() error {
 	if r != nil {
+		r.egressMu.Lock()
+		for id, scope := range r.egressRuns {
+			if scope.proxy != nil {
+				_ = scope.proxy.Close()
+			}
+			if scope.socket != "" {
+				_ = os.RemoveAll(filepath.Dir(scope.socket))
+			}
+			delete(r.egressRuns, id)
+		}
+		r.egressMu.Unlock()
 		r.codexAppServerMu.Lock()
 		for key, turn := range r.codexAppServerTurns {
 			if turn != nil && turn.client != nil {
@@ -795,6 +821,11 @@ func (r *Runtime) Close() error {
 			delete(r.claudeStreamTurns, key)
 		}
 		r.claudeStreamMu.Unlock()
+		r.honeypotMu.Lock()
+		for _, trap := range r.honeypots {
+			_ = trap.Close()
+		}
+		r.honeypotMu.Unlock()
 		if r.store != nil {
 			return r.store.Close()
 		}
@@ -913,7 +944,7 @@ func (r *Runtime) Status(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	status := Status{Project: projectIdentity, SchemaVersion: version}
+	status := Status{Project: projectIdentity, SchemaVersion: version, Honeypot: r.honeypotStatus()}
 	counts := []struct {
 		table string
 		value *int
@@ -1025,8 +1056,7 @@ func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResu
 		}
 		request.Command = resolved
 	}
-	process := worker.New(15*time.Minute, 3*time.Second, 8<<20)
-	result, err := process.Run(ctx, adapter.Command{Path: request.Command[0], Args: request.Command[1:], Dir: r.layout.Root})
+	result, err := worker.RunVerification(ctx, r.layout.Root, request.Command, 15*time.Minute, 8<<20)
 	if err != nil {
 		return VerifyResult{}, err
 	}
@@ -1075,6 +1105,26 @@ func resolveBaselineVerificationCommand(command []string) ([]string, error) {
 		if len(args) > 0 {
 			switch args[0] {
 			case "status", "diff", "log", "show", "rev-parse":
+				// Repository configuration must not launch external helpers.
+				if args[0] == "diff" || args[0] == "log" || args[0] == "show" {
+					safeFlags := []string{"--no-ext-diff", "--no-textconv"}
+					if args[0] != "diff" {
+						safeFlags = append(safeFlags, "--no-show-signature")
+					}
+					end := len(args)
+					for i, arg := range args {
+						if arg == "--" {
+							end = i
+							break
+						}
+						if arg == "--remerge-diff" || arg == "--diff-merges=remerge" || arg == "--diff-merges=r" ||
+							(arg == "--diff-merges" && i+1 < len(args) && (args[i+1] == "remerge" || args[i+1] == "r")) {
+							return nil, fmt.Errorf("%w: external merge drivers require an active runtime policy", model.ErrPolicyDenied)
+						}
+					}
+					args = append(append(append([]string(nil), args[:end]...), safeFlags...), args[end:]...)
+				}
+				args = append([]string{"-c", "core.fsmonitor=false", "-c", "log.diffMerges=separate"}, args...)
 				candidates = []string{"/usr/bin/git", "/bin/git"}
 				if p, err := exec.LookPath("git"); err == nil {
 					candidates = append(candidates, p)
@@ -1083,6 +1133,18 @@ func resolveBaselineVerificationCommand(command []string) ([]string, error) {
 		}
 	case "go":
 		if len(args) > 0 && (args[0] == "test" || args[0] == "vet") {
+			for _, arg := range args[1:] {
+				if arg == "-args" || arg == "--args" {
+					break
+				}
+				if !strings.HasPrefix(arg, "-") {
+					continue
+				}
+				flag := strings.SplitN(strings.TrimLeft(arg, "-"), "=", 2)[0]
+				if flag == "exec" || flag == "toolexec" || flag == "vettool" {
+					return nil, fmt.Errorf("%w: external verification tools require an active runtime policy", model.ErrPolicyDenied)
+				}
+			}
 			candidates = []string{"/usr/local/go/bin/go", "/usr/bin/go"}
 			if p, err := exec.LookPath("go"); err == nil {
 				candidates = append(candidates, p)
@@ -1154,6 +1216,47 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 	if err != nil {
 		return RunResult{}, err
 	}
+	// Supervision excludes another live dispatch. On failure, release only this
+	// dispatch's lease, including an assignment made before Run was called.
+	var dispatchSession string
+	if task.Status == model.TaskClaimed {
+		active, err := r.store.ActiveLease(ctx, task.ID)
+		if err != nil {
+			return RunResult{}, err
+		}
+		if active.AgentID == request.AgentID {
+			dispatchSession = active.Lease.SessionID
+		}
+	}
+	defer func() {
+		if finalErr == nil || dispatchSession == "" {
+			return
+		}
+		cleanup := context.Background()
+		active, err := r.store.ActiveLease(cleanup, task.ID)
+		if errors.Is(err, model.ErrNotFound) {
+			return // execution finalization already released it
+		}
+		if err != nil {
+			finalErr = errors.Join(finalErr, err)
+			return
+		}
+		if active.Lease.SessionID != dispatchSession || active.AgentID != request.AgentID {
+			return
+		}
+		current, err := r.store.GetTask(cleanup, task.ID)
+		if err != nil {
+			finalErr = errors.Join(finalErr, err)
+			return
+		}
+		if current.ControlState != "" {
+			return // operator control is settled by the supervisor
+		}
+		finalErr = errors.Join(finalErr, r.Release(cleanup, ReleaseRequest{
+			TaskID: task.ID, ExpectedRevision: active.TaskRevision, EnforceRevision: true,
+		}))
+	}()
+
 	if _, err := r.AssessTool(ctx, risk.AssessmentRequest{
 		ID: risk.AssessmentID("run-risk-" + task.ID + "-" + request.Adapter),
 		Descriptor: risk.ToolDescriptor{
@@ -1181,19 +1284,37 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 	// a malformed egress request cannot be masked by an unrelated provider
 	// configuration error or create a lease first.
 	if request.NetworkRequired {
-		// Session-bound authorization happens after the canonical claim below.
-		// These structural checks do not require a session and must happen before
-		// a claim, so unsupported egress cannot create a lease.
 		if len(request.EgressRules) == 0 {
+			agent, err := r.store.GetAgent(ctx, request.AgentID)
+			if err != nil || agent.Status == model.AgentDisabled || agent.ModelProvider != request.Adapter {
+				return RunResult{}, fmt.Errorf("%w: provider default requires an enabled agent bound to the selected provider", model.ErrPolicyDenied)
+			}
+		}
+		if len(request.EgressRules) == 0 && r.adapters[request.Adapter] != nil {
 			return RunResult{}, fmt.Errorf("%w: network access requires an explicit egress allowlist", model.ErrPolicyDenied)
 		}
-		if _, err := netpolicy.NewEvaluator(request.EgressRules); err != nil {
-			return RunResult{}, fmt.Errorf("%w: invalid egress allowlist", model.ErrPolicyDenied)
-		}
-		if !r.egressEnforcementAvailable() {
+		if r.adapters[request.Adapter] != nil {
 			return RunResult{}, netpolicy.ErrEnforcementUnavailable
 		}
+		endpoint, err := providerEndpoint(request.Adapter, request.Model)
+		if err != nil {
+			return RunResult{}, err
+		}
+		// Caller/model-supplied rules are never grants. Only the default API
+		// endpoint can be admitted before a live operator-controlled run exists.
+		for _, rule := range request.EgressRules {
+			if err := rule.Validate(); err != nil {
+				return RunResult{}, model.ErrPolicyDenied
+			}
+			for _, port := range rule.Ports {
+				exact, err := netpolicy.Endpoint(net.JoinHostPort(rule.HostPattern, strconv.Itoa(port)))
+				if err != nil || exact != endpoint || rule.Protocol != netpolicy.ProtocolTCP || rule.Action != netpolicy.ActionAllow {
+					return RunResult{}, model.ErrPolicyDenied
+				}
+			}
+		}
 	}
+
 	// Adapter identity is part of the principal binding, not a cosmetic UI
 	// choice. It intentionally follows constitutional/gate/network admission:
 	// the earlier gates must retain their truthful refusal reason and no claim
@@ -1229,24 +1350,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 			if err := candidate.ValidateModel(ctx, request.Model); err != nil {
 				return RunResult{}, err
 			}
-		} else {
-			binary, err := project.FindBinary(request.Adapter)
-			if err != nil {
-				return RunResult{}, fmt.Errorf("%w: %s CLI is missing", model.ErrUnavailable, request.Adapter)
-			}
-			var validator interface {
-				ValidateModel(context.Context, string) error
-			}
-			if request.Adapter == "codex" {
-				validator = codex.New(binary, worker.New(10*time.Second, 2*time.Second, 1<<20))
-			} else {
-				// Claude model discovery starts a short real session, so it
-				// needs a wider budget than the Codex catalog subcommand.
-				validator = claude.New(binary, worker.New(120*time.Second, 5*time.Second, 1<<20))
-			}
-			if err := validator.ValidateModel(ctx, request.Model); err != nil {
-				return RunResult{}, err
-			}
+
 		}
 	}
 	claim, err := r.claimForRun(ctx, task, request)
@@ -1257,23 +1361,14 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 	if task.Status == model.TaskClaimed {
 		claimedRevision = task.Revision
 	}
-	releasePreparationFailure := func() {
-		active, activeErr := r.store.ActiveLease(context.Background(), task.ID)
-		if activeErr == nil {
-			_ = r.store.ReleaseTask(context.Background(), model.ReleaseRequest{
-				TaskID: task.ID, LeaseID: active.Lease.ID, SessionID: active.Lease.SessionID,
-				AgentID: active.AgentID, ExpectedRevision: active.TaskRevision,
-				BlockedReason: "worker preparation failed",
-			})
-		}
-	}
+	dispatchSession = claim.Session.ID
+
 	input := model.PolicyInput{
 		AgentID: request.AgentID, SessionID: claim.Session.ID, Role: claim.Session.Role,
 		TaskID: task.ID, Risk: task.Risk, Operation: model.ShellExecute,
 		Target: r.layout.Root, TaskOwned: true, TargetInScope: true, Required: true,
 	}
 	if err := policy.Enforce(r.policy, input, func() error { return nil }); err != nil {
-		releasePreparationFailure()
 		return RunResult{}, err
 	}
 	baseCommit := r.layout.HEAD
@@ -1286,52 +1381,29 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		TaskID: task.ID, Branch: branch, BaseCommit: baseCommit,
 	})
 	if err != nil {
-		releasePreparationFailure()
 		return RunResult{}, err
 	}
 	if err := r.store.BeginExecution(ctx, task.ID, claim.Session.ID, request.AgentID,
 		branch, worktreeState.Path, baseCommit, claimedRevision); err != nil {
-		releasePreparationFailure()
 		return RunResult{}, err
 	}
 	executionRevision := claimedRevision + 1
-	networkAllowed := false
-	var proxyURL string
-	if request.NetworkRequired {
-		evaluator, err := authorizeNetworkEgress(r.policy, request.AgentID, claim.Session.ID, task.ID, claim.Session.Role, task.Risk, request.EgressRules)
-		if err != nil {
-			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
-			return RunResult{}, err
-		}
-		if !r.egressEnforcementAvailable() {
-			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
-			return RunResult{}, netpolicy.ErrEnforcementUnavailable
-		}
-
-		egressProxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{
-			Evaluator: evaluator,
-			Store:     r.store,
-			SubjectID: request.AgentID,
-			TaskID:    task.ID,
-		})
-		if err != nil {
-			_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
-			return RunResult{}, fmt.Errorf("%w: failed to start egress proxy: %v", netpolicy.ErrEnforcementUnavailable, err)
-		}
-		egressProxy.Start()
-		defer egressProxy.Close()
-		proxyURL = egressProxy.URL()
-		networkAllowed = true
+	runID, err := model.NewID("RUN-")
+	if err != nil {
+		return RunResult{}, err
 	}
+	proxySocket, closeEgress, err := r.startProviderEgress(ctx, runID, "", request.Adapter, request.Model, task, request.AgentID, claim.Session.ID, claim.Session.Role)
+	if err != nil {
+		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
+		return RunResult{}, err
+	}
+	defer closeEgress()
 	trustedContext, err := r.renderTaskContext(ctx, task)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
 	}
-	runID, err := model.NewID("RUN-")
-	if err != nil {
-		return RunResult{}, err
-	}
+
 	memoryPrincipal := authz.Principal{ID: request.AgentID, Role: authz.Role{Name: "developer", Authorities: []authz.Authority{authz.AuthorityTaskPlan}}}
 	worktreeID := strings.Join([]string{task.ID, request.AgentID, claim.Session.ID}, ":")
 	fingerprintQuery := strings.Join([]string{task.ID, task.Title, r.layout.Branch, r.layout.HEAD, branch, worktreeState.HEAD, worktreeID, request.AgentID, request.Adapter, request.Model, string(task.Risk)}, " ")
@@ -1347,7 +1419,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		return RunResult{}, fmt.Errorf("automatic memory recall: %w", err)
 	}
 	trustedContext += "\n" + recall.Context
-	agentAdapter, shellExecGrant, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, networkAllowed, request.Model, proxyURL)
+	agentAdapter, shellExecGrant, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, proxySocket != "", request.Model, proxySocket)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
@@ -1632,10 +1704,13 @@ func (r *Runtime) renderTaskContext(ctx context.Context, task model.Task) (strin
 
 func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {
 	for _, args := range [][]string{
-		{"-C", worktreePath, "add", "--all"},
-		{"-C", worktreePath, "commit", "-m", "chore(task): complete " + taskID},
+		{"add", "--all"},
+		{"commit", "-m", "chore(task): complete " + taskID},
 	} {
-		command := exec.CommandContext(ctx, "git", args...)
+		command, err := hostgit.Command(ctx, worktreePath, args...)
+		if err != nil {
+			return err
+		}
 		if output, err := command.CombinedOutput(); err != nil {
 			if len(output) > 4096 {
 				output = output[:4096]
@@ -1649,10 +1724,14 @@ func commitTaskChanges(ctx context.Context, worktreePath, taskID string) error {
 func ensureNoSecretsInWorktree(ctx context.Context, worktreePath string, secrets []string) error {
 	var paths []string
 	for _, args := range [][]string{
-		{"-C", worktreePath, "diff", "--name-only", "-z", "HEAD"},
-		{"-C", worktreePath, "ls-files", "--others", "--exclude-standard", "-z"},
+		{"diff", "--name-only", "-z", "HEAD"},
+		{"ls-files", "--others", "--exclude-standard", "-z"},
 	} {
-		output, err := exec.CommandContext(ctx, "git", args...).Output()
+		command, err := hostgit.Command(ctx, worktreePath, args...)
+		if err != nil {
+			return err
+		}
+		output, err := command.Output()
 		if err != nil {
 			return fmt.Errorf("%w: enumerate changed files", model.ErrUnavailable)
 		}
@@ -1703,17 +1782,22 @@ func ensureNoSecretsInWorktree(ctx context.Context, worktreePath string, secrets
 	return nil
 }
 
-// egressEnforcementAvailable reports whether the runtime can actually restrict
-// provider egress to the task's endpoint allowlist. bubblewrap can only toggle
-// network entirely (--unshare-net) and cannot enforce host/port rules; no
-// egress-filtering proxy is wired today. Until such a mechanism exists, this
-// returns false so endpoint-restricted network requests fail closed rather than
-// being silently broadened to unrestricted host networking.
+// egressEnforcementAvailable requires the actual network namespace and a trusted
+// Unix-to-loopback bridge. Every provider invocation rechecks its envelope.
 func (r *Runtime) egressEnforcementAvailable() bool {
-	return false
+	path, err := trustedBwrapPath()
+	if err != nil {
+		return false
+	}
+	if _, err := sandbox.TrustedBridgePath(); err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return sandbox.NewBwrap(path).Probe(ctx).Available
 }
 
-func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string, networkAllowed bool, modelName string, proxyURL string) (adapter.Adapter, capability.GrantID, error) {
+func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string, networkAllowed bool, modelName string, proxySocket string) (adapter.Adapter, capability.GrantID, error) {
 	if candidate := r.adapters[name]; candidate != nil {
 		return candidate, "", nil
 	}
@@ -1767,10 +1851,10 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				"XDG_CACHE_HOME=/home/marshal/.cache",
 			)
 
-			// Forward OLLAMA_HOST; default to localhost:11434 for local Ollama
+			// Forward OLLAMA_HOST; default to the exact allowed IP for local Ollama
 			ollamaHost := os.Getenv("OLLAMA_HOST")
 			if ollamaHost == "" {
-				ollamaHost = "http://localhost:11434"
+				ollamaHost = "http://127.0.0.1:11434"
 			}
 			extraEnv = append(extraEnv, "OLLAMA_HOST="+ollamaHost)
 
@@ -1779,24 +1863,41 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				extraEnv = append(extraEnv, "MARSHAL_OPENCODE_MODEL="+m)
 			}
 
-			// Forward egress proxy settings into sandboxed runner environment
-			if proxyURL != "" {
-				extraEnv = append(extraEnv,
-					"HTTP_PROXY="+proxyURL,
-					"HTTPS_PROXY="+proxyURL,
-					"ALL_PROXY="+proxyURL,
-					"http_proxy="+proxyURL,
-					"https_proxy="+proxyURL,
-					"all_proxy="+proxyURL,
-				)
+			var bridge string
+			if networkAllowed {
+				bridge, err = sandbox.TrustedBridgePath()
+				if err != nil || proxySocket == "" {
+					return nil, "", netpolicy.ErrEnforcementUnavailable
+				}
 			}
 
-			runner = worker.NewSandboxed(process, backend, model.SandboxRequest{
-				Worktree: worktreePath, NetworkAllowed: networkAllowed,
+			trap, err := r.armHoneypot(worktreePath)
+			if err != nil {
+				return nil, "", err
+			}
+			extraEnv = append(extraEnv, trap.Env...)
+			runner = worker.NewGuardedSandboxed(process, backend, model.SandboxRequest{
+				ScratchHome: trap.Home,
+				Worktree:    worktreePath, NetworkAllowed: networkAllowed,
+				EgressSocket: proxySocket, BridgeBinary: bridge,
 				ReadOnlyBinds: readOnlyBinds,
 				WritableTmpfs: writableTmpfs,
 				ExtraEnv:      extraEnv,
-			})
+			}, trap.Observe, func(ctx context.Context, result *adapter.ProcessResult) error {
+				r.egressMu.Lock()
+				identity := EgressAlert{TaskID: task.ID}
+				for _, scope := range r.egressRuns {
+					if scope.socket == proxySocket {
+						identity = EgressAlert{RunID: scope.id, ParentRunID: scope.parent, TaskID: scope.task, Worker: scope.worker}
+						break
+					}
+				}
+				r.egressMu.Unlock()
+				err := r.checkHoneypot(ctx, task.ID, trap, result.Stdout, result.Stderr, identity)
+				result.Stdout = trap.Redact(result.Stdout)
+				result.Stderr = trap.Redact(result.Stderr)
+				return err
+			}, r.socketObserver(proxySocket))
 		}
 	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed, r.allowProcessOnly); err != nil {
 		return nil, "", err

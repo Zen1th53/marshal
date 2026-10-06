@@ -259,11 +259,36 @@ func dedupeSorted(names []string) []string {
 
 // saveChannelConfig writes the arrangement to the project.
 func saveChannelConfig(root string, cfg channelConfig) error {
+	inboxRenderMu.Lock()
+	defer inboxRenderMu.Unlock()
 	path := livePeerPath(root)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(formatChannelConfig(cfg)), 0600)
+	if err := os.WriteFile(path, []byte(formatChannelConfig(cfg)), 0600); err != nil {
+		return err
+	}
+	s, err := openStream(root)
+	if err != nil {
+		return err
+	}
+	entries, err := s.since(-1)
+	if err != nil {
+		return err
+	}
+	for _, reader := range knownProviders {
+		path := inboxPath(root, reader)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		v := &inboxView{reader: reader, path: path}
+		if err := v.replace(entries, cfg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // formatChannelConfig renders every agent's line, so the file shows the whole

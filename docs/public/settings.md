@@ -31,6 +31,10 @@ Unknown token or money usage is shown as `unknown`. If a configured ceiling
 cannot be evaluated, the run pauses for you rather than treating the usage as
 zero.
 
+The Marshal can read and write the whole project. `execution-rights` describes
+what you ask it to do; it does not restrict which project files it can access.
+Protection is at approval and merge, so review the plan and results.
+
 **Acceptance modes in plain words:**
 
 - `marshal`: the Marshal reviews and accepts tasks.

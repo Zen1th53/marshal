@@ -24,12 +24,16 @@ func TestProviderSessionHistoryUsesCanonicalPersistence(t *testing.T) {
 	if len(result.ImportedRecords) != 1 {
 		t.Fatalf("expected one committed record, got %+v", result)
 	}
+	if result.ImportedRecords[0].Authority != model.AuthorityAgent || result.ImportedRecords[0].Lifecycle != model.MemoryCandidate {
+		t.Fatalf("native import escaped candidate policy: %+v", result.ImportedRecords[0])
+	}
+	approveTestCandidates(t, rt)
 	rec, err := rt.Store().GetMemoryV2ByID(ctx, result.ImportedRecords[0].ID)
 	if err != nil {
 		t.Fatalf("canonical record lookup: %v", err)
 	}
-	if rec.Authority != model.AuthorityAgent || rec.Lifecycle != model.MemoryCandidate {
-		t.Fatalf("native import escaped candidate policy: %+v", rec)
+	if rec.Authority != model.AuthorityAgent || rec.Lifecycle != model.MemoryDurable || rec.Scope != string(model.ScopeProject) || rec.ScopeID != "PROJECT-local" {
+		t.Fatalf("approved import did not become active project memory: %+v", rec)
 	}
 
 	// A fresh service instance has no process-local digest cache. Canonical

@@ -88,6 +88,7 @@ func (r Rule) Validate() error {
 
 type Request struct {
 	SubjectID string   `json:"subject_id,omitempty"`
+	RunID     string   `json:"run_id,omitempty"`
 	TaskID    string   `json:"task_id,omitempty"`
 	ChangeID  string   `json:"change_id,omitempty"`
 	Host      string   `json:"host"`

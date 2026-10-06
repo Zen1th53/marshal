@@ -62,6 +62,11 @@ func (w *nativeHistoryWatch) syncClaudeFile(path string) error {
 				return nil
 			}
 			tr = item
+			if w.observeSession != nil {
+				if err := w.observeSession(tr); err != nil {
+					return err
+				}
+			}
 		} else {
 			if item.SessionID != tr.SessionID {
 				return errors.New("mixed Claude session IDs")

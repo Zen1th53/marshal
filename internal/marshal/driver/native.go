@@ -7,11 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/processgroup"
+	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
 
 // Native runs a worker's own CLI headlessly in the task worktree, under the
@@ -75,7 +78,7 @@ func Agy(binary string) Native {
 // Ollama execution adapter.
 func OpenCode(binary string) Native {
 	return Native{Provider: "opencode", Binary: orDefault(binary, "opencode"), Parse: parseNone, Args: func(r Request) []string {
-		args := []string{"run", "--format", "json"}
+		args := []string{"run", "--format", "json", "--dir", r.Worktree}
 		if r.Model != "" {
 			args = append(args, "-m", r.Model)
 		}
@@ -90,6 +93,23 @@ func orDefault(value, fallback string) string {
 	return value
 }
 
+// WorkerCommand returns the command binary, args, and clean environment for a request.
+func (n Native) WorkerCommand(req Request) (string, []string, []string) {
+	var args []string
+	if n.Args != nil {
+		args = n.Args(req)
+	}
+	return n.Binary, args, cleanWorkerEnv(os.Environ())
+}
+
+// ParseOutput parses worker-reported actions from output bytes.
+func (n Native) ParseOutput(stream []byte) []marshal.CommandRecord {
+	if n.Parse != nil {
+		return n.Parse(stream)
+	}
+	return nil
+}
+
 // Launch starts the CLI in the worktree with no terminal attached.
 func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 	if err := req.validate(); err != nil {
@@ -98,10 +118,22 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 	if n.Args == nil || n.Parse == nil {
 		return nil, fmt.Errorf("%w: %s driver is incomplete", ErrInvalidRequest, n.Provider)
 	}
+	return n.launch(ctx, req, cleanWorkerEnv(os.Environ()))
+}
+
+// LaunchSession runs an interactive native session with the same supervisor as
+// task workers. The caller supplies settings; the driver owns execution.
+func LaunchSession(ctx context.Context, provider, binary, root string, args, env []string) (*Handle, error) {
+	n := Native{Provider: provider, Binary: binary, Args: func(Request) []string { return args }, Parse: parseNone}
+	return n.launch(workerterminal.WithInteractive(ctx), Request{Worktree: root}, append(os.Environ(), env...))
+}
+
+func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle, error) {
 	argv := n.Args(req)
 	runCtx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(runCtx, n.Binary, argv...)
 	cmd.Dir = req.Worktree
+	cmd.Env = env
 	// A nil Stdin reads from the null device: never a terminal.
 	cmd.Stdin = nil
 	stdout := &capBuffer{limit: maxStream}
@@ -109,9 +141,26 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	setProcessGroup(cmd)
+	if err := processgroup.Wrap(cmd); err != nil {
+		cancel()
+		return nil, err
+	}
+	closeTerminal, err := workerterminal.Attach(runCtx, cmd)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
 	if err := cmd.Start(); err != nil {
+		closeTerminal()
 		cancel()
 		return nil, fmt.Errorf("start %s: %w", n.Provider, err)
+	}
+	if err := workerterminal.Started(runCtx, cmd); err != nil {
+		_ = processgroup.Stop(cmd)
+		_ = cmd.Wait()
+		closeTerminal()
+		cancel()
+		return nil, err
 	}
 	h := &Handle{req: req, cancel: cancel, done: make(chan struct{})}
 	command := n.Binary + " " + strings.Join(argv, " ")
@@ -126,6 +175,9 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 				code = exitErr.ExitCode()
 			}
 		}
+		err = errors.Join(err, workerterminal.Completed(runCtx, code))
+		closeTerminal()
+		cancel()
 		h.runErr = err
 		h.observed = marshal.CommandRecord{Command: command, ExitCode: code, Output: bound(stdout.String()) + stderr.String()}
 		h.reported = n.Parse(stdout.Bytes())
@@ -235,3 +287,28 @@ func parseAgy(stream []byte) []marshal.CommandRecord {
 // parseNone is used where no stream format has been captured to parse
 // against. Reporting nothing is honest; guessing a format would not be.
 func parseNone([]byte) []marshal.CommandRecord { return nil }
+
+// CleanWorkerEnv removes environment variables that could inject peer history,
+// shared channel context, or prior briefing configurations into a worker.
+func CleanWorkerEnv(env []string) []string {
+	return cleanWorkerEnv(env)
+}
+
+// cleanWorkerEnv removes environment variables that could inject peer history,
+// shared channel context, or prior briefing configurations into a worker.
+func cleanWorkerEnv(env []string) []string {
+	var out []string
+	for _, e := range env {
+		key, _, _ := strings.Cut(e, "=")
+		switch key {
+		case "OPENCODE_CONFIG_CONTENT",
+			"MARSHAL_SHARED_CHANNEL",
+			"MARSHAL_LIVE_PEERS",
+			"MARSHAL_CHANNEL_STREAM",
+			"MARSHAL_INBOX":
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
