@@ -59,8 +59,31 @@ case "$1" in
         exit 0
         ;;
       *"#{pane_id}"*)
-        printf '%%%%0\n'
-        exit 0
+        # A targeted query must resolve that pane, not default to Marshal.
+        target=""
+        prev=""
+        for a in "$@"; do
+          if [ "$prev" = "-t" ]; then target="$a"; fi
+          prev="$a"
+        done
+        case "$target" in
+          "") printf '%%%%0\n'; exit 0 ;;
+          %%) exit 1 ;;
+          %%*[!0-9]*) exit 1 ;;
+          %%*) printf '%%s\n' "$target"; exit 0 ;;
+          marshal|*:marshal) printf '%%%%0\n'; exit 0 ;;
+        esac
+        if [ -f "$winFile" ]; then
+          idx=1
+          while read -r w; do
+            if [ "$target" = "$w" ] || [ "${target#*:}" = "$w" ]; then
+              printf '%%%%%%s\n' "$idx"
+              exit 0
+            fi
+            idx=$((idx + 1))
+          done < "$winFile"
+        fi
+        exit 1
         ;;
       *"#{pane_pid}"*)
         printf '100\n'
@@ -82,7 +105,7 @@ case "$1" in
     if [ -f "$winFile" ]; then
       idx=1
       while read -r w; do
-        echo "%%%%$idx	@$idx	$w	$((100 + idx))	0	0	"
+        printf '%%%%%%s\t@%%s\t%%s\t%%s\t0\t0\t\n' "$idx" "$idx" "$w" "$((100 + idx))"
         idx=$((idx + 1))
       done < "$winFile"
     fi

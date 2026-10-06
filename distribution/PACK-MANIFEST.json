@@ -10516,8 +10516,8 @@
     },
     {
       "path": "internal/tui/stop_all_keys_test.go",
-      "sha256": "16978fc1bf2f93e49ac61a3dca9b49e5083f05a385495c7b99cff49173908acb",
-      "bytes": 2031
+      "sha256": "4a3b9f53eae52da79a9436375fc72ed23618670401d78d65a22ad9d0215eabc5",
+      "bytes": 2030
     },
     {
       "path": "internal/tui/store_diagnostics_pty_test.go",
@@ -10631,8 +10631,8 @@
     },
     {
       "path": "internal/tui/tmux_native_test.go",
-      "sha256": "c8e87641735f750ea57be3246d2cf6889f8b2bef21f86113d8fdbbbc2a11a60a",
-      "bytes": 25620
+      "sha256": "e4db8ae1903cd9dae720fc18cf9eabf177692df74d3f1a0b9180568f35045154",
+      "bytes": 26392
     },
     {
       "path": "internal/tui/tmux_recovery_test.go",
