@@ -7301,8 +7301,8 @@
     },
     {
       "path": "internal/netpolicy/broker_proxy.go",
-      "sha256": "41365df8feec5eca263b89916041f944d6dd58fd6926b69f43f085109c25f043",
-      "bytes": 14021
+      "sha256": "e6efcb6f5c021ab8afecc1f1088c0f79e5d34275219238ca656ed24941f016b5",
+      "bytes": 14000
     },
     {
       "path": "internal/netpolicy/broker_regression_test.go",
