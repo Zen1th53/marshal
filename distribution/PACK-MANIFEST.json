@@ -3151,8 +3151,8 @@
     },
     {
       "path": "docs/public/limits.md",
-      "sha256": "3b2ba692cf856a01d0a6053668c420c19bcf1a3be8a16363049cda38b32c6772",
-      "bytes": 3192
+      "sha256": "be3084b998dae3e7182e9027ffa54c97e26b44124a34dcf7659b39d1f555b38a",
+      "bytes": 3570
     },
     {
       "path": "docs/public/release-notes.md",
@@ -11211,13 +11211,13 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.5-rc.6.md",
-      "sha256": "71f997f57809e520070b0ab72bc75c04d90e29580f710d2b01c251d7f00ce6f9",
-      "bytes": 5498
+      "sha256": "fbde104f4d5107c62980829485703978d38db9ad4ac0f559f4925443db29ab70",
+      "bytes": 6029
     },
     {
       "path": "release/RELEASE_NOTES_0.0.5.md",
-      "sha256": "bc9ac7be6e9466818a3eb8c80cff6b0c26dc13c21da0ac3fa337c6b82d58e39e",
-      "bytes": 5319
+      "sha256": "63e77b7a8a293a64c605696035edcb2f8b6d96790c7d9cb0f0f8282ee5c417af",
+      "bytes": 5850
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
