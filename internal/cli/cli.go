@@ -269,6 +269,9 @@ func (c command) policy(ctx context.Context, args []string) error {
 }
 
 func (c command) init(ctx context.Context) error {
+	if err := c.ensureGitBaseline(ctx); err != nil {
+		return err
+	}
 	layout, err := app.Bootstrap(ctx, c.root)
 	if err != nil {
 		return err
@@ -351,7 +354,7 @@ func (c command) status(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.print(value, fmt.Sprintf("schema=%d tasks=%d agents=%d", value.SchemaVersion, value.TaskCount, value.AgentCount))
+	return c.print(value, fmt.Sprintf("schema=%d tasks=%d agents=%d honeypot=%s", value.SchemaVersion, value.TaskCount, value.AgentCount, value.Honeypot))
 }
 
 func (c command) agent(ctx context.Context, args []string) error {
@@ -362,6 +365,8 @@ func (c command) agent(ctx context.Context, args []string) error {
 	set.SetOutput(c.stderr)
 	name := set.String("name", "", "agent display name")
 	role := set.String("role", "", "agent role")
+	provider := set.String("provider", "", "agent model provider")
+	modelName := set.String("model", "", "agent model")
 	if err := set.Parse(args[1:]); err != nil {
 		return fmt.Errorf("%w: %v", model.ErrInvalid, err)
 	}
@@ -369,7 +374,7 @@ func (c command) agent(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	value, _, err := client.RegisterAgent(ctx, app.RegisterAgentRequest{Name: *name, Role: model.Role(*role)})
+	value, _, err := client.RegisterAgent(ctx, app.RegisterAgentRequest{Name: *name, Role: model.Role(*role), ModelProvider: *provider, ModelName: *modelName})
 	if err != nil {
 		return err
 	}

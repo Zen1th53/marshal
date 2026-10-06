@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +14,7 @@ import (
 
 func TestPTYNativeClaudeInputMemoryAndContinue(t *testing.T) {
 	binDir, config := t.TempDir(), t.TempDir()
-	if err := os.MkdirAll(filepath.Join(config, "projects", "fixture"), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Join(config, "projects"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	// The double answers the version probe and treats everything else as a
@@ -30,7 +31,7 @@ printf 'CLAUDE-NATIVE-READY\n'
 for arg do printf 'CLAUDE-ARG:<%s>\n' "$arg"; done
 IFS= read -r answer
 printf 'CLAUDE-INPUT:<%s>\n' "$answer"
-cp "$MARSHAL_TEST_CLAUDE_HISTORY" "$CLAUDE_CONFIG_DIR/projects/fixture/session.jsonl"
+cp "$MARSHAL_TEST_CLAUDE_HISTORY" "$MARSHAL_TEST_CLAUDE_DEST/session.jsonl"
 `
 	if err := os.WriteFile(filepath.Join(binDir, "claude"), []byte(script), 0700); err != nil {
 		t.Fatal(err)
@@ -40,6 +41,12 @@ cp "$MARSHAL_TEST_CLAUDE_HISTORY" "$CLAUDE_CONFIG_DIR/projects/fixture/session.j
 	t.Setenv("CLAUDE_CONFIG_DIR", config)
 	t.Setenv("MARSHAL_TEST_CLAUDE_HISTORY", history)
 	s := startTUI(t, 40, 160)
+	projectDir := filepath.Join(config, "projects", regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(s.cmd.Dir, "-"))
+	os.MkdirAll(projectDir, 0700)
+	// Child inherits environment at launch; the fixture derives its own project folder.
+	script = strings.ReplaceAll(script, "$MARSHAL_TEST_CLAUDE_DEST", projectDir)
+	os.WriteFile(filepath.Join(binDir, "claude"), []byte(script), 0700)
+	grantPTYRead(t, s, projectDir)
 	if err := os.WriteFile(history, nativeClaudeHistory(t, s.cmd.Dir, "claude-pty"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -64,20 +71,21 @@ cp "$MARSHAL_TEST_CLAUDE_HISTORY" "$CLAUDE_CONFIG_DIR/projects/fixture/session.j
 	s.sendLine("BARE-CLAUDE")
 	s.mustSee("CLAUDE-INPUT:<BARE-CLAUDE>")
 	waitForExit()
+	approvePTYMemory(t, s)
 
 	s.sendLine(`/claude cli --marshal-native-test --add-dir "directory with spaces"`)
 	s.mustSee("CLAUDE-ARG:<directory with spaces>")
 	s.sendLine("FIRST-KEY")
 	s.mustSee("CLAUDE-INPUT:<FIRST-KEY>")
 	waitForExit()
-	s.mustSee("Claude exited. 2 message(s), including tool calls, saved")
+	s.mustSee("Claude exited. 2 message(s), including tool calls, proposed")
 	s.sendLine("/claude continue")
 	s.mustSee("CLAUDE-ARG:<--resume>")
 	s.mustSee("CLAUDE-ARG:<claude-pty>")
 	s.sendLine("CONTINUED")
 	s.mustSee("CLAUDE-INPUT:<CONTINUED>")
 	waitForExit()
-	s.mustSee("Claude exited. 0 message(s), including tool calls, saved")
+	s.mustSee("Claude exited. 0 message(s), including tool calls, proposed")
 	s.sendLine("/memory search visible")
 	s.mustSee("MEMORY RECORDS (2 of 2)")
 	// Plain text must not reopen the agent, even right after one was used.

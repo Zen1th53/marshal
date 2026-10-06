@@ -21,9 +21,12 @@ import (
 func sweepWorkEnvironment(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	for _, name := range []string{"git", "go"} {
+	for _, name := range []string{"git", "go", "tmux"} {
 		path, err := exec.LookPath(name)
 		if err != nil {
+			if name == "tmux" {
+				continue
+			}
 			t.Fatal(err)
 		}
 		if err := os.Symlink(path, filepath.Join(dir, name)); err != nil {

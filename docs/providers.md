@@ -6,8 +6,8 @@ release verification are separate facts.
 | Adapter path | Binary | Implemented | Adapter/model E2E | Canonical Runtime E2E |
 |---|---|---:|---|---|
 | Codex | `codex` | Yes | NOT_RUN | NOT_RUN |
-| OpenCode + DeepSeek V4 | `opencode` | Yes | PASS — Flash and Pro | NOT_RUN — enforcing egress unavailable |
-| OpenCode + Ollama | `opencode` | Yes | FAIL — tested local models did not complete the strict proof task | NOT_RUN — enforcing egress unavailable |
+| OpenCode + DeepSeek V4 | `opencode` | Yes | PASS — Flash and Pro | NOT_RUN — live governed provider access not qualified |
+| OpenCode + Ollama | `opencode` | Yes | FAIL — tested local models did not complete the strict proof task | NOT_RUN — live governed provider access not qualified |
 | Gemini CLI | `gemini` | Yes | NOT_RUN | NOT_RUN |
 | Claude Code | `claude` | Yes | NOT_RUN | NOT_RUN |
 | Antigravity | `antigravity` | Yes | NOT_RUN | NOT_RUN |
@@ -35,9 +35,11 @@ marshal run TASK-001 --adapter codex
 marshal run TASK-001 --adapter opencode --model MODEL
 ```
 
-A provider that needs network access is rejected with
-`NET_ENFORCEMENT_UNAVAILABLE`: the available proxy is not an enforcing
-Bubblewrap network backend, so opening the namespace would broaden egress.
+Governed provider runs use a per-run Unix proxy while Bubblewrap keeps
+`--unshare-net`. Only the selected API endpoint is allowed by default; extra
+endpoints need operator grants through `/egress`. Missing Bubblewrap network
+isolation or trusted socat fails closed with `NET_ENFORCEMENT_UNAVAILABLE`.
+Native sessions opened directly are out of scope.
 The OpenCode results above are direct adapter qualification, outside the
 canonical Runtime/MCP/A2A chain; they are not represented as Runtime E2E.
 

@@ -1,0 +1,365 @@
+package tmux
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestProjectNamingAndCollisionAvoidance(t *testing.T) {
+	projA := "/home/user/work/project-alpha"
+	projB := "/home/user/work/project-beta"
+
+	sessA := SessionName(projA)
+	sessB := SessionName(projB)
+	if sessA == sessB {
+		t.Fatalf("sessions collided for distinct projects: %s vs %s", sessA, sessB)
+	}
+
+	winCodexA := WindowName("codex", projA)
+	winCodexB := WindowName("codex", projB)
+	if winCodexA == winCodexB {
+		t.Fatalf("windows collided for distinct projects: %s vs %s", winCodexA, winCodexB)
+	}
+
+	winClaudeA := WindowName("claude", projA)
+	if winCodexA == winClaudeA {
+		t.Fatalf("different providers produced same window name in project A: %s vs %s", winCodexA, winClaudeA)
+	}
+
+	// Stability check
+	if SessionName(projA) != sessA {
+		t.Fatalf("SessionName is not stable across calls")
+	}
+	if WindowName("codex", projA) != winCodexA {
+		t.Fatalf("WindowName is not stable across calls")
+	}
+}
+
+func TestDetectInstallCommand(t *testing.T) {
+	cmd := DetectInstallCommand()
+	if cmd == "" {
+		t.Fatalf("expected non-empty install command")
+	}
+	valid := strings.Contains(cmd, "pacman") ||
+		strings.Contains(cmd, "apt") ||
+		strings.Contains(cmd, "dnf") ||
+		strings.Contains(cmd, "zypper") ||
+		strings.Contains(cmd, "brew")
+	if !valid {
+		t.Fatalf("unexpected install command: %s", cmd)
+	}
+}
+
+func TestFakeTmuxArgvRecording(t *testing.T) {
+	tempDir := t.TempDir()
+	logFile := filepath.Join(tempDir, "tmux_argv.log")
+	fakeTmux := filepath.Join(tempDir, "tmux")
+
+	script := fmt.Sprintf(`#!/bin/sh
+echo "$@" >> %q
+case "$1" in
+  has-session)
+    exit 0
+    ;;
+  display-message)
+    case "$*" in
+      *"#{session_name}"*"#{window_name}"*"#{window_id}"*)
+        printf 'test-session test-win @0\n'
+        exit 0
+        ;;
+      *"#{session_name}"*|*"#{session_id}"*)
+        printf 'test-session\n'
+        exit 0
+        ;;
+      *"#{pane_dead}"*)
+        printf '1\n'
+        exit 0
+        ;;
+    esac
+    exit 0
+    ;;
+  list-windows)
+    printf 'marshal\nmarshal-codex-12345678\n'
+    exit 0
+    ;;
+  capture-pane)
+    printf 'terminal evidence line 1\nterminal evidence line 2\n'
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`, logFile)
+
+	if err := os.WriteFile(fakeTmux, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	SetBinaryPath(fakeTmux)
+	defer ResetBinaryPath()
+
+	ctx := context.Background()
+
+	// 1. HasSession
+	if !HasSession(ctx, "my-session") {
+		t.Fatalf("expected HasSession to return true")
+	}
+
+	// 2. NewSession
+	if err := NewSession(ctx, "my-session", "/tmp", "marshal", []string{"marshal", "tui"}); err != nil {
+		t.Fatalf("NewSession failed: %v", err)
+	}
+
+	// 3. CurrentSessionAndWindow
+	sess, win, winID, err := CurrentSessionAndWindow(ctx)
+	if err != nil || sess != "test-session" || win != "test-win" || winID != "@0" {
+		t.Fatalf("CurrentSessionAndWindow returned unexpected: %s, %s, %s, err=%v", sess, win, winID, err)
+	}
+
+	// 4. ListWindows & WindowExists
+	wins, err := ListWindows(ctx, "test-session")
+	if err != nil || len(wins) != 2 {
+		t.Fatalf("ListWindows returned %v, err=%v", wins, err)
+	}
+	exists, err := WindowExists(ctx, "test-session", "marshal-codex-12345678")
+	if err != nil || !exists {
+		t.Fatalf("WindowExists returned %v, err=%v", exists, err)
+	}
+
+	// 5. SelectWindow
+	if err := SelectWindow(ctx, "marshal-codex-12345678"); err != nil {
+		t.Fatalf("SelectWindow failed: %v", err)
+	}
+
+	// 6. NewWindow
+	if err := NewWindow(ctx, "test-session", "marshal-claude", "/tmp", []string{"FOO=bar"}, []string{"claude"}); err != nil {
+		t.Fatalf("NewWindow failed: %v", err)
+	}
+
+	// 7. KillWindow
+	if err := KillWindow(ctx, "marshal-claude"); err != nil {
+		t.Fatalf("KillWindow failed: %v", err)
+	}
+
+	// 8. CapturePane
+	cap, err := CapturePane(ctx, "marshal-codex-12345678")
+	if err != nil || !strings.Contains(cap, "terminal evidence") {
+		t.Fatalf("CapturePane failed: %v, cap=%q", err, cap)
+	}
+
+	// 9. SetPaneReadOnly
+	if err := SetPaneReadOnly(ctx, "marshal-codex-12345678", true); err != nil {
+		t.Fatalf("SetPaneReadOnly failed: %v", err)
+	}
+
+	// 10. JoinPane & BreakPane
+	if err := JoinPane(ctx, "marshal-codex-12345678", "marshal", true); err != nil {
+		t.Fatalf("JoinPane failed: %v", err)
+	}
+	if err := BreakPane(ctx, "marshal-codex-12345678"); err != nil {
+		t.Fatalf("BreakPane failed: %v", err)
+	}
+
+	// 11. SetStatusText
+	if err := SetStatusText(ctx, "test-session", "status-text"); err != nil {
+		t.Fatalf("SetStatusText failed: %v", err)
+	}
+
+	// 12. Private window key table
+	if err := BindWindowKey(ctx, "%1", "marshal-keys-test", "F11", "select-window", "-t", "@0"); err != nil {
+		t.Fatal(err)
+	}
+
+	// 13. SetWindowOption & IsPaneDead
+	if err := SetWindowOption(ctx, "marshal-codex-12345678", "remain-on-exit", "on"); err != nil {
+		t.Fatalf("SetWindowOption failed: %v", err)
+	}
+	dead, err := IsPaneDead(ctx, "marshal-codex-12345678")
+	if err != nil || !dead {
+		t.Fatalf("IsPaneDead failed: %v, dead=%v", err, dead)
+	}
+
+	// Verify argv log contains key commands
+	logData, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logStr := string(logData)
+
+	expectedCommands := []string{
+		"has-session -t my-session",
+		"new-session -d -s my-session -c /tmp -n marshal marshal tui",
+		"display-message -p #{session_name}\t#{window_name}\t#{window_id}",
+		"list-windows -t test-session -F #{window_name}",
+		"select-window -t marshal-codex-12345678",
+		"new-window -t test-session -n marshal-claude -c /tmp -e FOO=bar claude",
+		"kill-window -t marshal-claude",
+		"capture-pane -p -S - -t marshal-codex-12345678",
+		"select-pane -t marshal-codex-12345678 -d",
+		"join-pane -h -s marshal-codex-12345678 -t marshal",
+		"break-pane -s marshal-codex-12345678",
+		"set-option -t test-session status-right status-text",
+		"bind-key -T marshal-keys-test F11 if-shell -F",
+		"set-hook -t test-session after-select-window[805]",
+		"set-option -w -t marshal-codex-12345678 remain-on-exit on",
+		"display-message -p -t marshal-codex-12345678 #{pane_dead}",
+	}
+
+	if strings.Contains(logStr, "bind-key -n") || strings.Contains(logStr, "unbind-key -T root") {
+		t.Fatal("server-global key mutation")
+	}
+	for _, exp := range expectedCommands {
+		if !strings.Contains(logStr, exp) {
+			t.Errorf("argv log missing expected command %q\nFull log:\n%s", exp, logStr)
+		}
+	}
+}
+
+func TestEscapeTmuxArgs(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"normal", "normal"},
+		{";", `\;`},
+		{"echo hello;", `echo hello\;`},
+		{"a;b", "a;b"},
+		{"a;b;", `a;b\;`},
+		{"", ""},
+	}
+	for _, tc := range cases {
+		got := EscapeTmuxArg(tc.in)
+		if got != tc.want {
+			t.Errorf("EscapeTmuxArg(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+
+	escaped := EscapeTmuxArgs([]string{"echo", "test;", ";", "arg"})
+	expected := []string{"echo", `test\;`, `\;`, "arg"}
+	if len(escaped) != len(expected) {
+		t.Fatalf("length mismatch: %d vs %d", len(escaped), len(expected))
+	}
+	for i := range escaped {
+		if escaped[i] != expected[i] {
+			t.Errorf("arg[%d] = %q, want %q", i, escaped[i], expected[i])
+		}
+	}
+}
+
+func TestWindowAndSessionNaming(t *testing.T) {
+	root := "/path/to/project with spaces"
+	chatWin := ChatWindowName(root)
+	taskWin := TaskWindowName("task-01", root)
+
+	if !strings.HasPrefix(chatWin, "marshal-chat-") {
+		t.Errorf("expected marshal-chat- prefix, got %q", chatWin)
+	}
+	if !strings.HasPrefix(taskWin, "marshal-task-task-01-") {
+		t.Errorf("expected marshal-task-task-01- prefix, got %q", taskWin)
+	}
+}
+
+func TestCurrentSessionAndWindow_Parsing(t *testing.T) {
+	tempDir := t.TempDir()
+	fakeTmux := filepath.Join(tempDir, "tmux")
+
+	script := `#!/bin/sh
+case "$*" in
+  *"display-message"*"#{session_name}"*"#{window_name}"*"#{window_id}"*)
+    printf 'my session with space\tmy window with space\t@42\n'
+    exit 0
+    ;;
+  *"#{pane_dead} #{pane_dead_status}"*)
+    printf '1 137\n'
+    exit 0
+    ;;
+  *"#{pane_pid}"*)
+    printf '12345\n'
+    exit 0
+    ;;
+esac
+exit 0
+`
+	if err := os.WriteFile(fakeTmux, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	SetBinaryPath(fakeTmux)
+	defer ResetBinaryPath()
+
+	ctx := context.Background()
+	sess, win, winID, err := CurrentSessionAndWindow(ctx)
+	if err != nil {
+		t.Fatalf("CurrentSessionAndWindow failed: %v", err)
+	}
+	if sess != "my session with space" {
+		t.Errorf("expected session 'my session with space', got %q", sess)
+	}
+	if win != "my window with space" {
+		t.Errorf("expected window 'my window with space', got %q", win)
+	}
+	if winID != "@42" {
+		t.Errorf("expected winID '@42', got %q", winID)
+	}
+
+	dead, exitCode, err := PaneDeadStatus(ctx, "%1")
+	if err != nil || !dead || exitCode != 137 {
+		t.Errorf("PaneDeadStatus: dead=%v exitCode=%d err=%v", dead, exitCode, err)
+	}
+
+	pid, _, err := PanePIDAndPGID(ctx, "%1")
+	if err != nil || pid != 12345 {
+		t.Errorf("PanePIDAndPGID: pid=%d err=%v", pid, err)
+	}
+}
+
+func TestFindBinaryRejectsUnsupportedVersions(t *testing.T) {
+	for _, tc := range []struct {
+		version string
+		inside  bool
+		wantErr bool
+	}{
+		{"3.1c", false, true}, {"3.2", false, true},
+		{"3.2a", false, true}, {"3.3", false, true},
+		{"3.3a", false, false}, {"3.7b", false, false},
+		{"next-3.8", false, false}, {"unknown", false, true},
+		{"3.1c", true, true}, {"3.2a", true, true},
+		{"3.3", true, true}, {"3.3a", true, false},
+	} {
+		t.Run(fmt.Sprintf("%s/inside=%t", tc.version, tc.inside), func(t *testing.T) {
+			ResetBinaryPath()
+			t.Cleanup(ResetBinaryPath)
+			dir := t.TempDir()
+			script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = -V ]; then echo 'tmux %s'; else echo '%s'; fi\n", tc.version, tc.version)
+			if tc.inside {
+				// A modern executable can still connect to an older server.
+				script = fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = -V ]; then echo 'tmux 3.7b'; else echo '%s'; fi\n", tc.version)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "tmux"), []byte(script), 0700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", dir)
+			t.Setenv("TMUX", "")
+			if tc.inside {
+				t.Setenv("TMUX", "/tmp/test,1,0")
+			}
+			_, err := FindBinary()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("FindBinary error = %v, want error %t", err, tc.wantErr)
+			}
+			if err != nil && !strings.Contains(err.Error(), "requires tmux 3.3a or newer") {
+				t.Fatalf("missing actionable version error: %v", err)
+			}
+			if err != nil && !strings.Contains(err.Error(), tc.version) {
+				t.Fatalf("expected error to contain version %q: %v", tc.version, err)
+			}
+			if err != nil && !strings.Contains(err.Error(), "Ubuntu 22.04 ships 3.2a - use Ubuntu 24.04+, Debian 12+, or build tmux from source") {
+				t.Fatalf("expected error to contain upgrade instructions: %v", err)
+			}
+		})
+	}
+}

@@ -137,3 +137,68 @@ func TestMarshalCLIRealModelReview(t *testing.T) {
 		t.Fatalf("incomplete real review: %+v", review)
 	}
 }
+
+func TestMarshalDraftSchemaRequiresEveryProperty(t *testing.T) {
+	var schema map[string]any
+	if err := json.Unmarshal([]byte(marshalDraftSchema), &schema); err != nil {
+		t.Fatal(err)
+	}
+	var check func(map[string]any)
+	check = func(node map[string]any) {
+		if props, ok := node["properties"].(map[string]any); ok {
+			required := map[string]bool{}
+			for _, key := range node["required"].([]any) {
+				required[key.(string)] = true
+			}
+			for key, prop := range props {
+				if !required[key] {
+					t.Errorf("property %s missing from required", key)
+				}
+				check(prop.(map[string]any))
+			}
+		}
+		if items, ok := node["items"].(map[string]any); ok {
+			check(items)
+		}
+	}
+	check(schema)
+}
+
+func TestMarshalWiredDraftUsesCanonicalProjectBinding(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(t.Context(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := Open(t.Context(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	service, err := runtime.MarshalWired(MarshalWiring{Provider: "codex", Approver: func(context.Context, string, string) (string, error) { return "operator", nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli := service.Model.(*MarshalCLI)
+	if cli.ProjectID != string(service.CanonicalPlanProjectID()) {
+		t.Fatalf("model bound to %s instead of %s", cli.ProjectID, service.CanonicalPlanProjectID())
+	}
+}
+
+func TestMarshalDraftBriefBindsExactCriteriaAndRuntimeWorktree(t *testing.T) {
+	root := t.TempDir()
+	binary := filepath.Join(root, "codex")
+	script := `#!/bin/sh
+for prompt; do :; done
+case "$prompt" in *"copy each criterion string verbatim"*"runtime-assigned worktree"*) ;; *) exit 99 ;; esac
+printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{\"tasks\":[{\"id\":\"a\",\"title\":\"write a\",\"criteria\":[\"a exists\"],\"paths\":[\"a.txt\"],\"depends_on\":[],\"worker\":\"codex\",\"checks\":[{\"command\":\"test -f a.txt\",\"criteria\":[\"a exists\"]}],\"instructions\":\"Use assigned worktree\",\"expected_output\":\"a.txt\"}]}"}}'
+`
+	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	// Drafting lists installed worker CLIs; make the result independent of the host.
+	fakeWorkerOnPath(t, "codex")
+	m := MarshalCLI{Provider: "codex", Binary: binary, Dir: root, ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
+	if _, err := m.Draft(t.Context(), "write a.txt"); err != nil {
+		t.Fatal(err)
+	}
+}

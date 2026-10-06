@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -100,6 +101,13 @@ type Graph struct {
 	Digest string `json:"digest"`
 }
 
+// SafeTaskID accepts identifiers that can be used as a single directory name.
+func SafeTaskID(id string) bool {
+	return id != "." && id != ".." && safeTaskIDPattern.MatchString(id)
+}
+
+var safeTaskIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
 // BuildGraph resolves tasks into an ordering, stages and a critical path.
 //
 // It refuses rather than repairs. A cycle, a dangling dependency or a
@@ -113,8 +121,8 @@ func BuildGraph(tasks []Task) (Graph, error) {
 	byID := make(map[string]Task, len(tasks))
 	var ids []string
 	for _, task := range tasks {
-		if strings.TrimSpace(task.ID) == "" {
-			return Graph{}, fmt.Errorf("%w: a task has no identifier", ErrPlanInvalid)
+		if !SafeTaskID(task.ID) {
+			return Graph{}, fmt.Errorf("%w: a task has an unsafe identifier", ErrPlanInvalid)
 		}
 		if _, duplicate := byID[task.ID]; duplicate {
 			return Graph{}, fmt.Errorf("%w: task %s is defined twice", ErrPlanInvalid, task.ID)

@@ -57,6 +57,7 @@ printf 'CLAUDE-INPUT:<%s>\n' "$answer"
 	}
 
 	// Open Claude and wait until it actually owns the terminal.
+	grantPTYRead(t, s, codexSessions)
 	s.sendLine("/claude cli --marshal-native-test")
 	s.mustSee("CLAUDE-NATIVE-READY")
 

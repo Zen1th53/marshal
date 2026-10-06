@@ -14,12 +14,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/worker"
+	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
 
 // maxOutput bounds each captured output. A worker or a check can print
@@ -44,7 +46,8 @@ var ErrHandInTooLarge = errors.New("hand-in too large")
 
 // Request is one task dispatched to one worker in one worktree.
 type Request struct {
-	Task marshal.Task
+	RunID string
+	Task  marshal.Task
 	// Worktree is the task's git worktree; the worker runs there and nowhere else.
 	Worktree string
 	// Brief is the instruction the worker receives.
@@ -77,6 +80,75 @@ type Handle struct {
 	observed marshal.CommandRecord
 	reported []marshal.CommandRecord
 	runErr   error
+}
+
+func (h *Handle) Worktree() string { return h.req.Worktree }
+
+// Request returns the original request for this handle.
+func (h *Handle) Request() Request {
+	return h.req
+}
+
+// NewHandle creates a handle for a given request.
+func NewHandle(req Request) *Handle {
+	return &Handle{req: req, done: make(chan struct{})}
+}
+
+// SetObserved records the runtime-observed command record on the handle.
+func (h *Handle) SetObserved(rec marshal.CommandRecord) {
+	h.observed = rec
+}
+
+// SetReported records the worker-reported actions on the handle.
+func (h *Handle) SetReported(recs []marshal.CommandRecord) {
+	h.reported = recs
+}
+
+// SetRunErr records the execution error on the handle.
+func (h *Handle) SetRunErr(err error) {
+	h.runErr = err
+}
+
+// SetCancel binds the cancellation function to the handle.
+func (h *Handle) SetCancel(cancel context.CancelFunc) {
+	h.cancel = cancel
+}
+
+// Complete marks the handle as done by closing its done channel.
+func (h *Handle) Complete() {
+	select {
+	case <-h.done:
+	default:
+		close(h.done)
+	}
+}
+
+// Done returns the channel that closes when the handle finishes.
+func (h *Handle) Done() <-chan struct{} {
+	return h.done
+}
+
+// Outcome exposes only a completed driver's observation. Closing done orders
+// these reads after process cleanup and output collection.
+func (h *Handle) Outcome() (marshal.CommandRecord, error, bool) {
+	select {
+	case <-h.done:
+		return h.observed, h.runErr, true
+	default:
+		return marshal.CommandRecord{}, nil, false
+	}
+}
+
+// WorkerCommander is an optional interface implemented by drivers that can
+// describe the worker command line, arguments, and environment.
+type WorkerCommander interface {
+	WorkerCommand(req Request) (binary string, args []string, env []string)
+}
+
+// OutputParser is an optional interface implemented by drivers that can parse
+// worker-reported actions from output.
+type OutputParser interface {
+	ParseOutput(stream []byte) []marshal.CommandRecord
 }
 
 // Driver runs tasks on one kind of worker.
@@ -183,12 +255,26 @@ func recordResult(ctx context.Context, wt, taskID string) (string, error) {
 	return strings.TrimSpace(head), err
 }
 
+// CheckRunner receives the detached checkout and approved command. Runtime
+// composition supplies a sandboxed runner; native sessions retain their runner.
+type CheckRunner func(context.Context, string, string) marshal.CommandRecord
+type checkRunnerKey struct{}
+type checkRunnerBinding struct{ run CheckRunner }
+
+func WithCheckRunner(ctx context.Context, run CheckRunner) context.Context {
+	return context.WithValue(ctx, checkRunnerKey{}, checkRunnerBinding{run})
+}
+
 // runCheck runs one approved check against the result commit and records it.
 //
 // Each check gets its own clean, detached checkout of the result, removed
 // afterwards. Running in the task worktree would let one check change what
 // the next one sees while both results still claim the same commit.
 func runCheck(ctx context.Context, wt, result, command string, timeout time.Duration) marshal.CommandRecord {
+	binding, governed := ctx.Value(checkRunnerKey{}).(checkRunnerBinding)
+	if governed && binding.run == nil {
+		return marshal.CommandRecord{Command: command, ExitCode: -1, Output: "governed check sandbox runner unavailable"}
+	}
 	dir, err := os.MkdirTemp("", "marshal-check-")
 	if err != nil {
 		return marshal.CommandRecord{Command: command, ExitCode: -1, Output: "prepare check checkout: " + err.Error()}
@@ -200,28 +286,21 @@ func runCheck(ctx context.Context, wt, result, command string, timeout time.Dura
 	}
 	defer func() { _, _ = git(context.WithoutCancel(ctx), wt, "worktree", "remove", "--force", checkout) }()
 
-	checkCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	cmd := exec.CommandContext(checkCtx, "sh", "-c", command)
-	cmd.Dir = checkout
-	out := &capBuffer{limit: maxOutput}
-	cmd.Stdout = out
-	cmd.Stderr = out
-	setProcessGroup(cmd)
-	err = cmd.Run()
-	code := 0
+	if governed {
+		checkCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return binding.run(checkCtx, checkout, command)
+	}
+	process, err := worker.RunVerification(ctx, checkout, []string{"/bin/sh", "-c", command}, timeout, maxOutput)
+	code := process.ExitCode
 	if err != nil {
 		code = -1
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			code = exitErr.ExitCode()
-		}
-		if checkCtx.Err() != nil {
-			code = -1
-			return marshal.CommandRecord{Command: command, ExitCode: code, Output: out.String() + "\n[check stopped: " + checkCtx.Err().Error() + "]"}
-		}
 	}
-	return marshal.CommandRecord{Command: command, ExitCode: code, Output: out.String()}
+	output := string(process.Stdout) + string(process.Stderr)
+	if err != nil {
+		output += "\ncheck failed: " + err.Error()
+	}
+	return marshal.CommandRecord{Command: command, ExitCode: code, Output: output}
 }
 
 // capBuffer keeps the first limit bytes written to it and counts the rest.
@@ -262,9 +341,10 @@ func (b *capBuffer) String() string {
 // past the limit is an error rather than a silently shortened diff, because
 // a hand-in whose evidence was cut would misstate what the worker changed.
 func git(ctx context.Context, dir string, args ...string) (string, error) {
-	gitArgs := []string{"-c", "core.hooksPath=/dev/null", "-c", "diff.external=", "-c", "core.pager=cat", "-C", dir}
-	cmd := exec.CommandContext(ctx, "git", append(gitArgs, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_PAGER=cat")
+	cmd, err := hostgit.Command(ctx, dir, args...)
+	if err != nil {
+		return "", err
+	}
 	stdout := &capBuffer{limit: maxGitOutput}
 	stderr := &capBuffer{limit: maxOutput}
 	cmd.Stdout = stdout
@@ -288,6 +368,11 @@ func lines(s string) []string {
 	return out
 }
 
+// Bound keeps the head of an output and says how much was dropped.
+func Bound(s string) string {
+	return bound(s)
+}
+
 // bound keeps the head of an output and says how much was dropped.
 func bound(s string) string {
 	if len(s) <= maxOutput {
@@ -304,12 +389,36 @@ type GovernedRunner func(ctx context.Context, req Request) ([]marshal.CommandRec
 // Governed runs tasks through Process 05, where every action already passes
 // MARSHAL policy. Its hand-in is assembled exactly like a native one.
 type Governed struct {
+	Check        func(context.Context, Request, string, string) marshal.CommandRecord
 	Run          GovernedRunner
 	Provider     string
 	CheckTimeout time.Duration
 }
 
 func (Governed) Mode() marshal.WorkerMode { return marshal.Governed }
+
+func (g Governed) WorkerCommand(req Request) (string, []string, []string) {
+	provider := g.Provider
+	if provider == "" {
+		provider = req.Task.Worker
+	}
+	switch provider {
+	case "codex":
+		d := Codex("")
+		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
+	case "claude", "claude-code":
+		d := Claude("")
+		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
+	case "agy", "antigravity":
+		d := Agy("")
+		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
+	case "opencode":
+		d := OpenCode("")
+		return d.Binary, d.Args(req), cleanWorkerEnv(os.Environ())
+	default:
+		return provider, nil, cleanWorkerEnv(os.Environ())
+	}
+}
 
 // Launch starts the governed run.
 func (g Governed) Launch(ctx context.Context, req Request) (*Handle, error) {
@@ -329,6 +438,7 @@ func (g Governed) Launch(ctx context.Context, req Request) (*Handle, error) {
 			h.observed.ExitCode = 1
 			h.observed.Output = bound(h.runErr.Error())
 		}
+		h.runErr = errors.Join(h.runErr, workerterminal.Completed(runCtx, h.observed.ExitCode))
 	}()
 	return h, nil
 }
@@ -342,7 +452,13 @@ func (g Governed) Wait(ctx context.Context, h *Handle) (marshal.HandIn, error) {
 		return marshal.HandIn{}, h.runErr
 	}
 	id := identity{worker: h.req.Task.Worker, provider: g.Provider, model: h.req.Model, mode: marshal.Governed}
-	return assemble(ctx, h.req, id, []marshal.CommandRecord{h.observed}, h.reported, g.CheckTimeout)
+	var checks CheckRunner
+	if g.Check != nil {
+		checks = func(ctx context.Context, dir, command string) marshal.CommandRecord {
+			return g.Check(ctx, h.req, dir, command)
+		}
+	}
+	return assemble(WithCheckRunner(ctx, checks), h.req, id, []marshal.CommandRecord{h.observed}, h.reported, g.CheckTimeout)
 }
 
 // Cancel stops the governed run; the worktree is left as it is.

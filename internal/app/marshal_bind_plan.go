@@ -85,16 +85,8 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 		if s.GovernedDrivers[worker] == nil {
 			return marshal.Run{}, fmt.Errorf("Process 05 harness %q is not wired into Marshal", worker)
 		}
-		workerProvider := worker
-		switch worker {
-		case "claude-code":
-			workerProvider = "claude"
-		case "antigravity":
-			workerProvider = "agy"
-		}
-		if s.ModelProvider != "" && s.ModelProvider == workerProvider {
-			return marshal.Run{}, fmt.Errorf("Marshal model %s would review its own Process 05 work; choose another with /marshal model", s.ModelProvider)
-		}
+		// Provider equality is allowed: the governed worker runs in its own
+		// fresh session, separate from the Marshal conversation.
 		task := marshal.Task{PlanTaskID: pt.ID, Title: pt.Title, Worker: worker, Mode: marshal.Governed, State: marshal.Queued, BaseCommit: base, Branch: "marshal/" + runID + "/" + pt.ID, Files: append([]string(nil), pt.Paths...), Criteria: append([]string(nil), pt.Criteria...), DependsOn: append([]string(nil), pt.DependsOn...), Instructions: pt.Instructions, ExpectedOutput: pt.ExpectedOutput}
 		for _, command := range p.Checks[pt.ID] {
 			if strings.TrimSpace(command) == "" {

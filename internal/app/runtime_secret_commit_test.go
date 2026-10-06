@@ -49,6 +49,7 @@ func TestBaselineVerificationCommandAllowlist(t *testing.T) {
 	for _, command := range [][]string{
 		{"git", "status", "--short"},
 		{"go", "test", "./..."},
+		{"go", "test", "./...", "-args", "-exec=test-argument"},
 		{"python", "conformance/runner.py", "validate-pack"},
 	} {
 		if _, err := resolveBaselineVerificationCommand(command); err != nil {
@@ -68,6 +69,15 @@ func TestBaselineVerificationCommandAllowlist(t *testing.T) {
 	}
 	for _, command := range [][]string{
 		{"sh", "-c", "id"},
+		{"go", "test", "-exec", "/tmp/runner", "./..."},
+		{"go", "test", "--exec=/tmp/runner", "./..."},
+		{"go", "vet", "-toolexec=/tmp/runner", "./..."},
+		{"go", "vet", "-vettool", "/tmp/runner", "./..."},
+		{"git", "log", "--remerge-diff"},
+		{"git", "show", "--diff-merges=remerge"},
+		{"git", "show", "--diff-merges=r"},
+		{"git", "show", "--diff-merges", "remerge"},
+		{"git", "log", "--diff-merges", "r"},
 		{"git", "push"},
 		{"python", "untrusted.py"},
 		{"codex", "review", "--uncommitted"},

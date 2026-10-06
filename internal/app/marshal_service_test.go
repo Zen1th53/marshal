@@ -138,6 +138,7 @@ func marshalFixture(t *testing.T, n int) (*MarshalService, string) {
 	}
 	p := plan.ExecutionPlan{ID: "PLAN-test", ProjectID: projectid.ID(projectID), Goal: plan.GoalBinding{GoalID: "GOAL-test", Revision: 1}, Version: 1, State: plan.StateReady, Mode: plan.ModeStandard, ConstitutionVersion: constitution.Current, Tasks: tasks, Checks: checks, Graph: graph}
 	s := &MarshalService{Store: db, ProjectID: projectID, Repository: repo, Worktrees: filepath.Join(t.TempDir(), "worktrees"), Reviewer: "marshal", Model: marshalFakeModel{draft: MarshalDraft{Plan: p, Tasks: mt}, review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}}
+	s.GovernedCheck = fixtureCheckRunner
 	s.ApprovalActor = func(context.Context, string, string) (string, error) { return "user", nil }
 	s.GateState = func(context.Context, string, string) (constitution.RuntimeState, error) {
 		return constitution.RuntimeState{SandboxAvailable: true, NetworkEnforced: true, AuthorizedActor: true, EvidencePresent: true, EvidenceFresh: true, HarnessGovernance: constitution.GovernanceVerified}, nil
@@ -800,4 +801,21 @@ func TestM09UltraRejectedCrossReviewReturnsTask(t *testing.T) {
 	if !found {
 		t.Fatal("cross-review rejection was not recorded with the task return")
 	}
+}
+
+// The service tests inject workers and checks. Keep executing their check
+// fixtures and preserve all result/cleanliness assertions; production wiring
+// supplies the observed sandbox instead.
+func fixtureCheckRunner(ctx context.Context, _, _, _, dir, command string) marshal.CommandRecord {
+	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	code := 0
+	if err != nil {
+		code = -1
+		if exit, ok := err.(*exec.ExitError); ok {
+			code = exit.ExitCode()
+		}
+	}
+	return marshal.CommandRecord{Command: command, ExitCode: code, Output: string(out)}
 }

@@ -116,3 +116,13 @@ func TestOpenCodeModelSelectionPrecedence(t *testing.T) {
 		}
 	}
 }
+
+func TestCurrentOpenCodeStreamTextAndSession(t *testing.T) {
+	var result adapter.Result
+	parseOpenCodeOutput([]byte(`{"type":"step_start","sessionID":"ses-current","part":{"type":"step-start"}}
+{"type":"text","sessionID":"ses-current","part":{"type":"text","text":"MARSHAL_"}}
+{"type":"text","sessionID":"ses-current","part":{"type":"text","text":"PROBE_OK"}}`), &result)
+	if result.SessionID != "ses-current" || result.FinalText != "MARSHAL_PROBE_OK" {
+		t.Fatalf("current stream incorrectly parsed: %#v", result)
+	}
+}

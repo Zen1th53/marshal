@@ -39,6 +39,7 @@ func TestM11_ReceiptPersistenceAcrossRestart(t *testing.T) {
 		if err != nil {
 			t.Fatalf("remember: %v", err)
 		}
+		approveTestCandidates(t, rt)
 
 		res, err := rt.Memory().Recall(ctx, p, RecallRequest{
 			ProjectID: projectID,

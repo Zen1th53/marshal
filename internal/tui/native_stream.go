@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/memory/security"
 )
 
 // One channel, flowing one way.
@@ -64,7 +65,7 @@ type streamEntry struct {
 
 // stream is the append-only channel, shared by every agent in one project.
 type stream struct {
-	mu   sync.Mutex
+	mu   *sync.Mutex
 	root string
 	path string
 	next int64
@@ -74,6 +75,8 @@ type stream struct {
 	digests map[string]bool
 }
 
+var channelWriteMu sync.Mutex
+
 func streamDir(root string) string  { return filepath.Join(root, ".marshal", "stream") }
 func streamPath(root string) string { return filepath.Join(streamDir(root), "events.jsonl") }
 
@@ -82,7 +85,7 @@ func openStream(root string) (*stream, error) {
 	if err := os.MkdirAll(streamDir(root), 0700); err != nil {
 		return nil, err
 	}
-	s := &stream{root: root, path: streamPath(root), digests: map[string]bool{}}
+	s := &stream{mu: &channelWriteMu, root: root, path: streamPath(root), digests: map[string]bool{}}
 	entries, err := s.readAll()
 	if err != nil {
 		return nil, err
@@ -106,6 +109,18 @@ func (s *stream) append(provider, session string, message importer.Message) (boo
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Each native watcher can hold its own stream object. Refresh under the
+	// shared writer lock before assigning a sequence or checking duplicates.
+	entries, err := s.readAll()
+	if err != nil {
+		return false, err
+	}
+	for _, e := range entries {
+		if e.Seq >= s.next {
+			s.next = e.Seq + 1
+		}
+		s.digests[e.Digest] = true
+	}
 	at := message.Timestamp.UTC()
 	if at.IsZero() {
 		at = time.Now().UTC()
@@ -303,4 +318,21 @@ func (c cursors) readerNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// publishNativeTranscript binds authorship to the history watcher's producer.
+// Provider metadata may name a model vendor (e.g. openai), not the agent CLI.
+func publishNativeTranscript(s *stream, producer string, tr importer.SessionTranscript) error {
+	if producer == "" || tr.SessionID == "" {
+		return fmt.Errorf("channel transcript has no producer identity")
+	}
+	for _, message := range tr.Messages {
+		if security.NewFirewall(security.FirewallConfig{}).ScanText(message.Content) != nil {
+			continue
+		}
+		if _, err := s.append(producer, tr.SessionID, message); err != nil {
+			return err
+		}
+	}
+	return s.trim()
 }

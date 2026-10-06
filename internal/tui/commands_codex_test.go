@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
 func TestCodexSlashCommands_WithoutAuthority(t *testing.T) {
@@ -30,6 +32,7 @@ func TestCodexSlashCommands_HelpDocumentation(t *testing.T) {
 }
 
 func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
+	t.Chdir(testgit.New(t).Path())
 	_, ws, ctx := newControlWorkspace(t)
 	source, auth := testControl(t)
 	ws.AttachControlSource(source)

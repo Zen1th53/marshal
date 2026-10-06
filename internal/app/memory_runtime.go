@@ -169,6 +169,7 @@ type RetrievalReceipt struct {
 // separate in-memory source of truth. Lexical, vector, and graph indexes
 // remain disposable derived projections.
 type MemoryService struct {
+	propose          func(context.Context, model.MemoryRecordV2) error
 	store            *store.Store
 	authorizer       *authz.MemoryAuthorizer
 	lexicalIndex     *lexical.LexicalIndex
@@ -514,6 +515,12 @@ func (s *MemoryService) Remember(ctx context.Context, principal authz.Principal,
 			Reference: principal.ID,
 		},
 	}
+	if s.propose != nil {
+		if err := s.propose(ctx, rec); err != nil {
+			return model.MemoryRecordV2{}, err
+		}
+		return rec, nil
+	}
 	if err := s.store.WriteMemoryV2(ctx, rec); err != nil {
 		return model.MemoryRecordV2{}, err
 	}
@@ -764,7 +771,7 @@ func (s *MemoryService) CaptureOutcome(ctx context.Context, req OutcomeCaptureRe
 		kind = model.MemoryKindFailure
 	}
 	metadata := map[string]any{
-		"outcome_status": req.Status, "exit_status": req.ExitStatus,
+		"record_class": "system_record", "outcome_status": req.Status, "exit_status": req.ExitStatus,
 		"files_changed":   boundedStrings(req.FilesChanged, 256, 1024),
 		"tests_run":       boundedStrings(req.TestsRun, 128, 2048),
 		"error_signature": truncateMemoryField(req.ErrorSignature, 512),
@@ -782,8 +789,8 @@ func (s *MemoryService) CaptureOutcome(ctx context.Context, req OutcomeCaptureRe
 		Kind:       kind,
 		Lifecycle:  model.MemoryCandidate,
 		Confidence: model.ConfidenceObserved,
-		Authority:  model.AuthorityAgent,
-		Title:      fmt.Sprintf("Run %s outcome: %s", req.Status, req.TaskTitle),
+		Authority:  model.AuthorityPolicy,
+		Title:      fmt.Sprintf("System record · Run %s outcome: %s", req.Status, req.TaskTitle),
 		Body:       body,
 		Scope:      string(model.ScopeTask),
 		ScopeID:    req.TaskID,
@@ -1204,7 +1211,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 	// directly. Use a bounded SQL fallback only when no derived candidate was
 	// found. The store applies project/scope/ACL predicates before returning
 	// IDs, so this does not restore the old full-content production scan.
-	if query != "" && len(matchedTrackMap) == 0 {
+	if len(matchedTrackMap) == 0 {
 		fallbackIDs, fallbackErr := s.store.SearchAuthorizedMemoryIDs(ctx, req.ProjectID, principal.ID, req.AllowedScopeIDs, query, lexicalCandidateLimit)
 		if fallbackErr != nil {
 			return RecallResponse{}, fallbackErr
@@ -1443,7 +1450,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		rec := candidate.record
 		rendered := fmt.Sprintf("  <memory id=\"%s\" kind=\"%s\" authority=\"%s\" lifecycle=\"%s\"><title>%s</title><body>%s</body></memory>\n",
 			html.EscapeString(rec.ID), html.EscapeString(string(rec.Kind)), html.EscapeString(string(rec.Authority)),
-			html.EscapeString(string(rec.Lifecycle)), html.EscapeString(rec.Title), html.EscapeString(rec.Body))
+			html.EscapeString(string(rec.Lifecycle)), html.EscapeString(rec.DisplayTitle()), html.EscapeString(rec.Body))
 		decision := RetrievalDecision{
 			MemoryID:      rec.ID,
 			Authority:     string(rec.Authority),
@@ -1461,7 +1468,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		receipt.ConsumedBytes += len(rendered)
 		receipt.Decisions = append(receipt.Decisions, decision)
 		contextBuilder.WriteString(rendered)
-		results = append(results, RecallItem{ID: rec.ID, Title: rec.Title, Kind: rec.Kind, Lifecycle: rec.Lifecycle})
+		results = append(results, RecallItem{ID: rec.ID, Title: rec.DisplayTitle(), Kind: rec.Kind, Lifecycle: rec.Lifecycle})
 		cacheRecords = append(cacheRecords, rec)
 	}
 	contextBuilder.WriteString("</marshal_memory_context>")
@@ -2197,6 +2204,13 @@ func (s *MemoryService) ImportSessionTranscript(ctx context.Context, principal a
 			}
 			if ex, err := s.store.FindMemoryByDigest(ctx, projectID, rec.ContentDigest); err == nil && ex.ID != "" {
 				result.SkippedCount++
+				continue
+			}
+			if s.propose != nil {
+				if err := s.propose(ctx, rec); err != nil {
+					return importer.ImportResult{}, err
+				}
+				committed = append(committed, rec)
 				continue
 			}
 			if err := s.store.WriteMemoryV2(ctx, rec); err != nil {

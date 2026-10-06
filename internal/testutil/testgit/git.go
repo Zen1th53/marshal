@@ -50,3 +50,27 @@ func Canonical(t testing.TB, path string) string {
 	}
 	return resolved
 }
+
+// SignedCommit creates a descendant with a signature header. Its dummy signature
+// is sufficient to exercise Git's verifier dispatch without signing credentials.
+func SignedCommit(t testing.TB, dir, format string) string {
+	t.Helper()
+	label := map[string]string{"openpgp": "PGP SIGNATURE", "x509": "SIGNED MESSAGE", "ssh": "SSH SIGNATURE"}[format]
+	if label == "" {
+		t.Fatalf("unknown signature format %q", format)
+	}
+	tree := run(t, dir, "git", "rev-parse", "HEAD^{tree}")
+	parent := run(t, dir, "git", "rev-parse", "HEAD")
+	content := "tree " + tree + "\nparent " + parent + "\nauthor Test <test@example.invalid> 1700000000 +0000\ncommitter Test <test@example.invalid> 1700000000 +0000\ngpgsig -----BEGIN " + label + "-----\n dummy\n -----END " + label + "-----\n\nsigned descendant\n"
+	cmd := exec.Command("git", "-C", dir, "hash-object", "-t", "commit", "-w", "--stdin")
+	cmd.Stdin = strings.NewReader(content)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("write signature-bearing commit: %v: %s", err, output)
+	}
+	commit := strings.TrimSpace(string(output))
+	if got := run(t, dir, "git", "cat-file", "commit", commit); !strings.Contains(got, "gpgsig -----BEGIN "+label) {
+		t.Fatal("missing signature header")
+	}
+	return commit
+}

@@ -122,6 +122,9 @@ func (w *nativeHistoryWatch) syncOpenCode() error {
 }
 
 func (w *nativeHistoryWatch) primeOpenCode() error {
+	if w.authorized != nil && !w.authorized(w.dir) {
+		return nil
+	}
 	sessions, err := w.listOpenCodeSessions()
 	if err != nil {
 		return err

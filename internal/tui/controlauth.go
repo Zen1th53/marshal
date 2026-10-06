@@ -1086,11 +1086,10 @@ func (a *runtimeControlAuthority) memoryPrincipal() authz.Principal {
 }
 
 func (a *runtimeControlAuthority) Remember(ctx context.Context, title, body string) (model.MemoryRecordV2, error) {
-	service, err := a.memory()
-	if err != nil {
-		return model.MemoryRecordV2{}, err
+	if a.runtime == nil || a.localControl == nil {
+		return model.MemoryRecordV2{}, errors.New("authenticated local operator required")
 	}
-	return service.Remember(ctx, a.memoryPrincipal(), app.RememberRequest{
+	return a.runtime.CommandRemember(a.localControl.Context(ctx), app.RememberRequest{
 		ProjectID: string(a.projectID), ScopeID: string(a.projectID),
 		Title: title, Body: body, Kind: model.MemoryKindSemantic,
 	})
@@ -1328,7 +1327,7 @@ func (a *runtimeControlAuthority) RuntimeStatus(ctx context.Context) (RuntimeSta
 	return RuntimeStatus{ProjectID: status.Project.ID, ProjectName: status.Project.Repository,
 		SchemaVersion: status.SchemaVersion, AgentCount: status.AgentCount,
 		SessionCount: status.SessionCount, TaskCount: status.TaskCount,
-		LeaseCount: status.LeaseCount}, nil
+		LeaseCount: status.LeaseCount, Honeypot: status.Honeypot}, nil
 }
 
 func (a *runtimeControlAuthority) RuntimeInstanceID() string {

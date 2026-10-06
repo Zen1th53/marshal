@@ -34,6 +34,7 @@ func importInventoryConversation(t *testing.T, r *Runtime, provider, id string, 
 	if _, err := r.Memory().ImportSessionTranscript(context.Background(), testPrincipal("inventory-owner"), r.ProjectID(), data, false); err != nil {
 		t.Fatal(err)
 	}
+	approveTestCandidates(t, r)
 }
 
 func TestSessionInventoryImportsAndNativeSelection(t *testing.T) {
@@ -96,6 +97,7 @@ func TestSessionInventoryProviderHistoryOwnership(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	grantTestRead(t, r, filepath.Join(os.Getenv("CODEX_HOME"), "sessions"))
 	inv, err := r.Sessions(context.Background(), "codex")
 	if err != nil || len(inv.Native) != 1 || inv.Native[0].SourceID != "local-index" || inv.Native[0].ProviderListed {
 		t.Fatalf("history=%+v %v", inv, err)
@@ -112,6 +114,8 @@ func TestSessionInventoryProviderListingVerifiesPresence(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(os.Getenv("PATH"), "opencode"), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
+	os.MkdirAll(nativeInventoryFolder("opencode", r.ProjectRoot()), 0700)
+	grantTestRead(t, r, nativeInventoryFolder("opencode", r.ProjectRoot()))
 	inv, err := r.Sessions(context.Background(), "opencode")
 	if err != nil || len(inv.Native) != 1 || !inv.Native[0].ProviderListed || !strings.Contains(inv.Native[0].Source, "transcript imported") || !strings.Contains(inv.Native[0].Source, "provider listing") {
 		t.Fatalf("listing=%+v %v", inv, err)
@@ -167,6 +171,7 @@ func TestSessionInventoryPrivateDatabaseOwnership(t *testing.T) {
 			if err := db.Close(); err != nil {
 				t.Fatal(err)
 			}
+			grantTestRead(t, r, filepath.Dir(path))
 			inv, err := r.Sessions(ctx, provider)
 			if err != nil || len(inv.Native) != 1 || inv.Native[0].SourceID != "local-private" || inv.Native[0].ProviderListed {
 				t.Fatalf("private history: %+v %v", inv, err)
@@ -186,6 +191,7 @@ func TestSessionInventoryUnsafeHistoryMetadataOmitted(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "unsafe.jsonl"), append(data, '\n'), 0600); err != nil {
 		t.Fatal(err)
 	}
+	grantTestRead(t, r, filepath.Join(os.Getenv("CODEX_HOME"), "sessions"))
 	inv, err := r.Sessions(context.Background(), "codex")
 	if err != nil || len(inv.Native) != 0 || len(inv.Warnings) != 1 || strings.Contains(strings.Join(inv.Warnings, " "), "AKIA") {
 		t.Fatalf("unsafe metadata: %+v %v", inv, err)

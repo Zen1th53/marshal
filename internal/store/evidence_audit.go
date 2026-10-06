@@ -72,3 +72,59 @@ func (s *Store) recordEvidenceEvent(ctx context.Context, eventType string, data 
 	}
 	return tx.Commit()
 }
+
+func (s *Store) appendEvidenceEventWithProject(ctx context.Context, tx *sql.Tx, eventType, projectID, taskID, actorID string, data map[string]any) error {
+	for key, value := range map[string]string{"event_type": eventType, "project_id": projectID, "task_id": taskID, "actor_id": actorID} {
+		if len(value) > maxEvidenceAuditValue {
+			return fmt.Errorf("%w: evidence audit %s is too large", model.ErrInvalid, key)
+		}
+	}
+	for key, value := range data {
+		if err := validateEvidenceAuditValue(key, value); err != nil {
+			return err
+		}
+	}
+	eventID, err := model.NewID("EVENT-")
+	if err != nil {
+		return err
+	}
+
+	validProjectID := ""
+	if projectID != "" {
+		var dummy string
+		if err := tx.QueryRowContext(ctx, `SELECT project_id FROM projects WHERE project_id = ?`, projectID).Scan(&dummy); err == nil {
+			validProjectID = projectID
+		}
+	}
+	validTaskID := ""
+	if taskID != "" {
+		var dummy string
+		if err := tx.QueryRowContext(ctx, `SELECT task_id FROM tasks WHERE task_id = ?`, taskID).Scan(&dummy); err == nil {
+			validTaskID = taskID
+		}
+	}
+	validActorID := ""
+	if actorID != "" {
+		var dummy string
+		if err := tx.QueryRowContext(ctx, `SELECT agent_id FROM agents WHERE agent_id = ?`, actorID).Scan(&dummy); err == nil {
+			validActorID = actorID
+		}
+	}
+
+	return s.AppendEvent(ctx, tx, model.Event{
+		ID: eventID, Type: eventType, ProjectID: validProjectID, TaskID: validTaskID, ActorAgentID: validActorID,
+		Timestamp: time.Now().UTC(), AggregateRevision: 0, Data: data,
+	})
+}
+
+func (s *Store) recordEvidenceEventWithDetails(ctx context.Context, eventType, projectID, taskID, actorID string, data map[string]any) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := s.appendEvidenceEventWithProject(ctx, tx, eventType, projectID, taskID, actorID, data); err != nil {
+		return err
+	}
+	return tx.Commit()
+}

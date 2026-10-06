@@ -5,7 +5,7 @@
 ### One workspace for every coding agent you use.
 
 **Claude Code, Codex, OpenCode, Antigravity and more in the same project, sharing one memory,
-running in sandboxed cells, with a record of everything they did.**
+with sandboxed governed workers and a record of their work.**
 
 [![CI](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml/badge.svg)](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Zen1th53/marshal?color=blue)](https://github.com/Zen1th53/marshal/releases)
@@ -44,9 +44,10 @@ reasoning ends up in scrollback you will never read again. Both agents also edit
 your repository with your full privileges, and nothing sits between them and the
 disk.
 
-**MARSHAL sits between them.** It is a local control plane that runs agents in
-sandboxed cells, records what they actually do, and lets each agent build on the
-others' work.
+**MARSHAL sits between them.** It is a local control plane that runs governed
+workers in sandboxed cells, records their work, and lets agents build on each
+other's work. Native workers are trusted and run with your user account's rights,
+using their own permission controls.
 
 <table>
 <tr>
@@ -67,15 +68,16 @@ changed. One shared channel keeps parallel sessions up to date.
 <td width="33%" valign="top">
 
 ### Fail-closed security
-Agents run in sandboxed cells on their own worktrees, and secrets are redacted.
-If a boundary can't be enforced, the run stops.
+Governed workers run in sandboxed cells on their own worktrees, and secrets are
+redacted. If a required sandbox boundary can't be enforced, the run stops.
 
 </td>
 </tr>
 </table>
 
-> **Everything stays on your machine.** MARSHAL uploads nothing, and nothing runs
-> unless you ask for it.
+> **MARSHAL keeps its records locally.** Agents use their own providers. Sharing
+> through the agents' shared channel sends one provider's text to another
+> provider when the receiving agent uses it. Nothing runs unless you ask for it.
 
 ---
 
@@ -86,7 +88,7 @@ If a boundary can't be enforced, the run stops.
 | Several agents in one project | Separate silos | One workspace |
 | Memory across sessions and agents | No | Yes, automatic, searchable |
 | Agent B knows what agent A changed | No | Yes, briefing and a shared channel |
-| Sandboxed execution | No | Yes, Bubblewrap cells |
+| Sandboxed execution | Depends on the agent | Governed workers use Bubblewrap cells |
 | Isolated Git worktree per run | No | Yes |
 | Secrets kept out of stored history | No | Yes, redacted before writing |
 | Verifiable record of what changed | No | Yes, content-addressed evidence |
@@ -201,6 +203,10 @@ channel**. Every agent drops what it does into one ordered stream as it happens,
 and each agent reads its own view of it (`.marshal/inbox/<agent>.md`). One event
 is stored once, however many agents end up reading it.
 
+Sharing through this channel sends one provider's text to another provider when
+the receiving agent reads it into its conversation. Choose the peers below with
+that in mind; local storage does not mean the shared text stays on your computer.
+
 **An agent that was closed still catches up**, and an agent that opens late joins
 mid-conversation rather than being handed a summary. Each reader has a cursor, so
 Codex opening while Claude is five steps into a task sees those five steps — the
@@ -295,10 +301,16 @@ sync, and any capture error.
 
 ### Security you do not have to configure
 
-- **Sandboxed execution.** Agent processes run in isolated cells with a read-only
-  root filesystem, private runtime directories, and no network by default.
-- **Isolated worktrees.** Each run works on its own Git worktree and branch. Your
-  working tree is never used for experiments.
+- **Marshal access.** The Marshal can read and write the whole project.
+  Protection is at approval and merge: review the plan and results before
+  allowing changes to be integrated.
+- **Trusted native workers.** Native workers run with your user account's rights
+  and their own permission controls. MARSHAL does not sandbox them.
+- **Sandboxed governed workers.** Governed worker processes run in isolated cells
+  with a read-only root filesystem, private runtime directories, and no network
+  by default.
+- **Isolated worktrees.** Governed workers use their own Git worktree and branch.
+  A separate worktree keeps changes apart; it is not a sandbox.
 - **Fail closed.** If a boundary can't be enforced, the run stops instead of
   continuing without the policy.
 - **Secrets never reach storage.** Credentials are redacted from stored output
@@ -395,6 +407,11 @@ For details, see [architecture](docs/architecture.md),
 ---
 
 ## Install
+
+The TUI requires **tmux 3.2a or newer**. MARSHAL checks both the executable
+and, when started inside tmux, the running server; older or unrecognized
+versions are refused with an upgrade message. tmux 3.2a and 3.7b are verified
+with real terminal input tests.
 
 **Linux, one command:**
 
@@ -511,8 +528,9 @@ Run `marshal doctor` to see what is installed and what is missing.
 These are stated plainly, because a control plane that overstates its guarantees
 is worse than none:
 
-- **Network egress isn't filtered per destination.** Runs that need network
-  access stop instead of proceeding without the policy.
+- **Governed egress requires working bubblewrap and trusted socat.** Workers use
+  a per-run proxy with exact endpoint grants (`/egress`); missing enforcement
+  refuses network work. Native sessions opened directly are out of scope.
 - **Sandboxed execution is Linux only.**
 - **One agent per terminal.** A native session takes over its terminal, so
   running two agents at once needs two terminals.
@@ -569,3 +587,7 @@ If MARSHAL is useful to you, **starring the repository helps other people find i
 - **Historical releases** up to `runtime-v0.4.0` remain under their original
   Apache-2.0 grants. See [docs/legal/LICENSE-HISTORY.md](docs/legal/LICENSE-HISTORY.md).
 - **Third-party** attributions: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Operator grants and continuation of earlier agent work are described in
+[Operator permissions](docs/operator-permissions.md), including the limits of
+read enforcement in a native Marshal session.

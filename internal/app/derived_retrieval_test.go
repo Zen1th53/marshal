@@ -92,6 +92,7 @@ func TestM10_DerivedIndexRebuildAndTombstone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("remember r1: %v", err)
 	}
+	approveTestCandidates(t, rt)
 
 	r2, err := svc.Remember(ctx, p, RememberRequest{
 		ProjectID: projectID,
@@ -103,6 +104,7 @@ func TestM10_DerivedIndexRebuildAndTombstone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("remember r2: %v", err)
 	}
+	approveTestCandidates(t, rt)
 
 	// 2. Recall before tombstone
 	res1, err := svc.Recall(ctx, p, RecallRequest{
@@ -161,7 +163,7 @@ func TestM10_DerivedIndexRebuildAndTombstone(t *testing.T) {
 
 func TestM10_DegradedCandidateProviderGracefulFallback(t *testing.T) {
 	ctx := context.Background()
-	_, svc := openTestMemoryService(t)
+	rt, svc := openTestMemoryService(t)
 
 	const projectID = "PROJECT-local"
 	p := testPrincipal("user-1")
@@ -176,6 +178,7 @@ func TestM10_DegradedCandidateProviderGracefulFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("remember: %v", err)
 	}
+	approveTestCandidates(t, rt)
 
 	// Register a failing/degraded candidate provider
 	svc.RegisterCandidateProvider(&degradedProvider{})
@@ -195,7 +198,7 @@ func TestM10_DegradedCandidateProviderGracefulFallback(t *testing.T) {
 
 func TestM10_CandidateProviderTimeoutFallsBackToCanonicalRecall(t *testing.T) {
 	ctx := context.Background()
-	_, svc := openTestMemoryService(t)
+	rt, svc := openTestMemoryService(t)
 	p := testPrincipal("timeout-reader")
 	rec, err := svc.Remember(ctx, p, RememberRequest{
 		ProjectID: "PROJECT-local", Title: "bounded fallback", Body: "lexical recall remains available",
@@ -204,6 +207,7 @@ func TestM10_CandidateProviderTimeoutFallsBackToCanonicalRecall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	approveTestCandidates(t, rt)
 	svc.RegisterCandidateProvider(blockingProvider{})
 	started := time.Now()
 	response, err := svc.Recall(ctx, p, RecallRequest{ProjectID: "PROJECT-local", Query: "bounded fallback"})
@@ -229,6 +233,7 @@ func TestM10_CacheCannotResurrectCanonicalTombstone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	approveTestCandidates(t, rt)
 	if _, err := svc.Recall(ctx, p, RecallRequest{ProjectID: "PROJECT-local", Query: "cached tombstone"}); err != nil {
 		t.Fatal(err)
 	}

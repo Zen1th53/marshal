@@ -198,3 +198,21 @@ func TestWrapRejectsForbiddenCredentialBinds(t *testing.T) {
 		}
 	}
 }
+
+func TestHoneypotHomeMountOutsideWorktree(t *testing.T) {
+	worktree, home := t.TempDir(), t.TempDir()
+	spec, err := NewBwrap("bwrap").Wrap(model.SandboxRequest{Worktree: worktree, ScratchHome: home, ExtraEnv: []string{"GITHUB_TOKEN=synthetic"}}, []string{"/bin/true"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(spec.Args, " ")
+	if !strings.Contains(joined, "--bind "+home+" /home/marshal") || !strings.Contains(joined, "--setenv GITHUB_TOKEN synthetic") {
+		t.Fatalf("missing home or env: %s", joined)
+	}
+	if err := os.Mkdir(filepath.Join(worktree, "home"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewBwrap("bwrap").Wrap(model.SandboxRequest{Worktree: worktree, ScratchHome: filepath.Join(worktree, "home")}, []string{"/bin/true"}); err == nil {
+		t.Fatal("repository HOME accepted")
+	}
+}

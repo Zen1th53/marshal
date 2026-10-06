@@ -16,8 +16,8 @@ into one agent and hoping for the best, you go through five steps.
     accepted while any criterion lacks passing evidence.
 
 3.  **You approve the plan.**
-    You read the plan and correct anything that is wrong. Nothing happens to
-    your code until you approve.
+    You read the plan and correct anything that is wrong. Approval allows
+    MARSHAL to dispatch the planned work.
 
 4.  **Agents do the work.**
     Each task goes to an AI agent, which works in its own separate copy of
@@ -32,6 +32,11 @@ into one agent and hoping for the best, you go through five steps.
     go back with reasons and count toward the rework limit.
 
 </div>
+
+The Marshal can read and write the whole project. Protection is at approval
+and merge: you approve the plan, and results are reviewed before they are
+integrated. The Marshal is not restricted to reading files or to the files
+listed in a task.
 
 ## Words you will see
 
@@ -64,17 +69,24 @@ MARSHAL can open an agent in two ways, and it helps to know which one you are
 using.
 
 **Directly.** Commands such as `/codex` or `/claude` open the agent's own
-interface, the same as running it yourself. It uses its own settings and
-permissions. MARSHAL only remembers the conversation.
+interface, the same as running it yourself. These native workers are trusted
+and run with your user account's rights, using the agent's own settings and
+permission controls. MARSHAL does not sandbox them.
 
-**Through MARSHAL.** When the agent works on a task from an approved plan,
-MARSHAL controls it: the agent works in a separate copy of the project, asks
-you before risky steps, and its result is checked before you accept it.
+**From a plan.** A task can use a native or governed worker. Native workers
+remain trusted and run with your user account's rights. Governed workers are
+sandboxed. A separate copy of the project keeps changes apart, but is not itself
+a sandbox. Results are checked before they are accepted and merged.
 
 ## What stays on your computer
 
 Your project, the plan and MARSHAL's records stay in your project folder.
 The agents use their own accounts and sign-in, the same as when you use them
 on their own. Do not paste passwords or API keys into the composer.
+
+Sharing through the agents' shared channel sends one provider's text to another
+provider when the receiving agent uses it in its conversation. The channel's
+local files do not keep that text local once an agent uses it. Choose which
+agents share with each other accordingly.
 
 Next: [Install MARSHAL](install.md).

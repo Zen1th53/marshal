@@ -47,7 +47,7 @@ func TestM12_FailureOutcomePreservesEvidenceAndRetryBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Kind != model.MemoryKindFailure || rec.Lifecycle != model.MemoryCandidate || rec.Authority != model.AuthorityAgent {
+	if rec.Kind != model.MemoryKindFailure || rec.Lifecycle != model.MemoryCandidate || rec.Authority != model.AuthorityPolicy || rec.ExtMeta["record_class"] != "system_record" || !rec.IsSystemRecord() {
 		t.Fatalf("unexpected failure candidate: %+v", rec)
 	}
 	if rec.ExtMeta["retry_condition"] != "retry only when user namespaces are enabled" || len(rec.EvidenceIDs) != 2 {

@@ -103,6 +103,7 @@ cp "$MARSHAL_TEST_AGY_FIXTURE" "$HOME/.gemini/antigravity-cli/conversations/conv
 	t.Setenv("MARSHAL_NO_UPDATE_CHECK", "1")
 
 	s := startTUI(t, 40, 160)
+	grantPTYRead(t, s, filepath.Dir(conversations))
 	s.sendLine("/agy")
 	s.mustSee("AGY-NATIVE-READY")
 	s.sendLine("FIRST-KEY-SURVIVES")
@@ -110,8 +111,9 @@ cp "$MARSHAL_TEST_AGY_FIXTURE" "$HOME/.gemini/antigravity-cli/conversations/conv
 	if !s.waitForCount("Antigravity exited.", 1, 10*time.Second) {
 		t.Fatalf("Antigravity did not return to MARSHAL.\n--- output tail ---\n%s", tail(s.output(), 3000))
 	}
-	s.mustSee("Antigravity exited. 2 message(s), including tool calls, saved to MARSHAL memory")
+	s.mustSee("Antigravity exited. 2 message(s), including tool calls, proposed for operator memory review")
 
+	approvePTYMemory(t, s)
 	s.sendLine("/memory search AGY-VISIBLE-ANSWER")
 	s.mustSee("MEMORY RECORDS")
 	if strings.Contains(s.output(), "No memory records") {

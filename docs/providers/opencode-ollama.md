@@ -41,21 +41,12 @@ network backend.
 
 ## Runtime security boundary
 
-Bubblewrap can isolate a provider from the network or share the host network;
-it cannot enforce a hostname/port allowlist by itself. The current proxy is not
-wired as an unavoidable network path inside the sandbox. MARSHAL therefore
-returns `NET_ENFORCEMENT_UNAVAILABLE` for network-required provider runs rather
-than silently opening unrestricted egress.
-
-For example, model selection is accepted by the CLI:
-
-```bash
-marshal run TASK-001 --adapter opencode --model ollama/qwythos-9b
-```
-
-but the run fails closed while endpoint-enforcing provider egress is
-unavailable. This is a known v1.0.1 limitation, not an Ollama service-health
-diagnosis.
+Governed OpenCode runs keep `--unshare-net` and use a per-run Unix proxy bridged
+by trusted socat. The model provider determines the single default API endpoint;
+`ollama/…` defaults to `127.0.0.1:11434`. An alternative `OLLAMA_HOST` needs an
+exact operator grant via `/egress`. Unsupported provider prefixes or unavailable
+isolation/bridge fail closed. Native sessions opened directly are out of scope.
+See [network egress enforcement](../network-egress-firewall.md).
 
 ## Model compatibility
 

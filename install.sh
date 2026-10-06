@@ -113,3 +113,30 @@ info "Next:"
 info "  marshal version"
 info "  cd /path/to/your/repository && marshal init && marshal doctor"
 info "  marshal opencode   # native OpenCode; conversation memory saves on exit"
+
+# Dependencies are reported after a successful install; never installed here.
+package_manager=""
+for manager in pacman apt apt-get dnf zypper brew; do
+    if command -v "$manager" >/dev/null 2>&1; then
+        package_manager="$manager"
+        break
+    fi
+done
+for tool in tmux socat; do
+    if command -v "$tool" >/dev/null 2>&1; then
+        continue
+    fi
+    case "$package_manager" in
+        pacman) command="sudo pacman -S $tool" ;;
+        apt | apt-get) command="sudo $package_manager install $tool" ;;
+        dnf) command="sudo dnf install $tool" ;;
+        zypper) command="sudo zypper install $tool" ;;
+        brew) command="brew install $tool" ;;
+        *) command="install $tool with your system's package manager" ;;
+    esac
+    case "$tool" in
+        tmux) reason="the MARSHAL TUI requires it (minimum 3.3a; Ubuntu 22.04 ships 3.2a - use Ubuntu 24.04+, Debian 12+, or build tmux from source)" ;;
+        socat) reason="governed work with network access is refused without it" ;;
+    esac
+    info "Missing $tool: $reason; $command"
+done

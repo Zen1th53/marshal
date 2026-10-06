@@ -19,6 +19,15 @@ import (
 )
 
 func TestMarshalGovernedTaskUsesProcess05AndImportsExactCommit(t *testing.T) {
+	testMarshalProcess05AndImportsExactCommit(t, "codex")
+}
+
+func TestMarshalSameProviderUsesProcess05AndImportsExactCommit(t *testing.T) {
+	testMarshalProcess05AndImportsExactCommit(t, "test-harness")
+}
+
+func testMarshalProcess05AndImportsExactCommit(t *testing.T, modelProvider string) {
+	t.Helper()
 	ctx := context.Background()
 	fixture, _ := marshalFixture(t, 1)
 	runtime := &Runtime{store: fixture.Store, layout: project.Layout{Root: fixture.Repository, Worktrees: fixture.Worktrees}}
@@ -59,17 +68,14 @@ func TestMarshalGovernedTaskUsesProcess05AndImportsExactCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.GovernedCheck = fixtureCheckRunner
 	s.Model = marshalFakeModel{review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
 	s.InstalledVersion = func(context.Context, string) string { return "1.0" }
 	if err := s.Store.SaveHarnessProfile(ctx, model.HarnessProfile{Harness: "test-harness", InstalledVersion: "1.0", ProbeEvidenceID: "process05-probe", ProbedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
-	s.GovernedDrivers["test-harness"] = driver.Governed{Provider: "test", Run: runtime.marshalProcess05Run(s)}
-	s.ModelProvider = "test-harness"
-	if _, err := s.BindApprovedPlan(ctx, "self-review"); err == nil || !strings.Contains(err.Error(), "review its own") {
-		t.Fatalf("self-review was admitted: %v", err)
-	}
-	s.ModelProvider = "codex"
+	s.GovernedDrivers["test-harness"] = driver.Governed{Provider: "test-harness", Run: runtime.marshalProcess05Run(s)}
+	s.ModelProvider = modelProvider
 	run, err := s.BindApprovedPlan(ctx, "run")
 	if err != nil || run.Tasks[0].Mode != marshal.Governed {
 		t.Fatal(err)
@@ -160,6 +166,7 @@ func TestMarshalGovernedMultiTaskPlanRunsInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.GovernedCheck = fixtureCheckRunner
 	s.Model = marshalFakeModel{review: marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "marshal"}}
 	s.InstalledVersion = func(context.Context, string) string { return "1.0" }
 	if err := s.Store.SaveHarnessProfile(ctx, model.HarnessProfile{Harness: "test-harness", InstalledVersion: "1.0", ProbeEvidenceID: "multi-probe", ProbedAt: time.Now().UTC()}); err != nil {

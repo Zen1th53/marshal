@@ -3,11 +3,11 @@ package execution
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/alignment"
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -34,8 +34,10 @@ type AlignmentDecision struct {
 func worktreeChanges(ctx context.Context, wtPath string) (changed, deleted []string, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-c", "core.hooksPath=/dev/null", "status", "--porcelain=v1", "--untracked-files=all", "-z")
-	cmd.Dir = wtPath
+	cmd, err := hostgit.Command(ctx, wtPath, "status", "--porcelain=v1", "--untracked-files=all", "-z")
+	if err != nil {
+		return nil, nil, err
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, nil, err

@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -79,6 +79,9 @@ func (m *Manager) Prepare(ctx context.Context, request model.WorktreeRequest) (m
 	if _, err := m.git(ctx, repository, "worktree", "add", "-b", request.Branch, target, request.BaseCommit); err != nil {
 		return model.Worktree{}, fmt.Errorf("create task worktree: %w", err)
 	}
+	if err := hostgit.RecordRepository(repository, target); err != nil {
+		return model.Worktree{}, err
+	}
 	state, err := m.Inspect(ctx, target)
 	if err != nil {
 		return model.Worktree{}, err
@@ -107,6 +110,9 @@ func (m *Manager) Resume(ctx context.Context, request model.WorktreeRequest) (mo
 		if _, err := m.git(ctx, repository, "worktree", "add", target, request.Branch); err != nil {
 			return model.Worktree{}, fmt.Errorf("reattach task worktree: %w", err)
 		}
+		if err := hostgit.RecordRepository(repository, target); err != nil {
+			return model.Worktree{}, err
+		}
 	} else if err != nil {
 		return model.Worktree{}, err
 	}
@@ -121,6 +127,9 @@ func (m *Manager) Resume(ctx context.Context, request model.WorktreeRequest) (mo
 }
 
 func (m *Manager) Inspect(ctx context.Context, path string) (model.WorktreeState, error) {
+	if err := hostgit.RestoreRepository(m.repository, path); err != nil {
+		return model.WorktreeState{}, err
+	}
 	canonical, err := canonicalPath(path)
 	if err != nil {
 		return model.WorktreeState{}, err
@@ -175,7 +184,10 @@ func (m *Manager) Remove(ctx context.Context, worktree model.Worktree) error {
 // worktrees hold worker-written content; creating or reattaching one must
 // not run a post-checkout hook a worker could have configured.
 func (m *Manager) git(ctx context.Context, directory string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "core.hooksPath=/dev/null", "-C", directory}, args...)...)
+	cmd, err := hostgit.Command(ctx, directory, args...)
+	if err != nil {
+		return "", err
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()

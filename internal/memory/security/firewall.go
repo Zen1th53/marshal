@@ -9,26 +9,11 @@ import (
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/redaction"
 )
 
 var (
 	ErrSecretDetected = errors.New("memory rejected: sensitive material or secret credential detected")
-)
-
-var (
-	// Standard secret patterns
-	privateKeyPattern       = regexp.MustCompile(`(?i)-----BEGIN(?: [A-Z0-9_-]+)? PRIVATE KEY-----`)
-	awsKeyPattern           = regexp.MustCompile(`(?i)\b(?:AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b`)
-	githubTokenPattern      = regexp.MustCompile(`(?i)\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[0-9a-zA-Z_]{36,255}\b`)
-	openaiKeyPattern        = regexp.MustCompile(`(?i)\bsk-[a-zA-Z0-9_-]{20,}\b`)
-	slackTokenPattern       = regexp.MustCompile(`(?i)\bxox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,34}\b`)
-	googleApiKeyPattern     = regexp.MustCompile(`(?i)\bAIza[0-9A-Za-z\-_]{35}\b`)
-	secretAssignmentPattern = regexp.MustCompile(`(?i)(?:api[_-]?key|password|access[_-]?token|secret_key|client_secret|auth_token)\s*[:=]\s*['"]?[^\s'"]{8,}`)
-	dbConnStringPattern     = regexp.MustCompile(`(?i)(?:postgres|postgresql|mysql|mongodb|redis|amqp|couchdb):\/\/[^:]+:[^@]+@`)
-	jwtPattern              = regexp.MustCompile(`\beyJ[0-9A-Za-z_-]{8,}\.[0-9A-Za-z_-]{8,}\.[0-9A-Za-z_-]{8,}\b`)
-	authorizationPattern    = regexp.MustCompile(`(?i)\bauthorization\s*:\s*(?:bearer|basic)\s+[^\s,;]{8,}`)
-	sessionCookiePattern    = regexp.MustCompile(`(?i)\b(?:cookie|set-cookie)\s*:\s*[^\r\n]{8,}`)
-	oauthTokenPattern       = regexp.MustCompile(`(?i)\bya29\.[0-9A-Za-z_-]{16,}\b`)
 )
 
 type FirewallConfig struct {
@@ -45,7 +30,7 @@ func NewFirewall(config FirewallConfig) *Firewall {
 	return &Firewall{config: config}
 }
 
-// ScanRecord inspects all fields of a MemoryRecordV2 for secret material.
+// ScanRecord inspects supplied content fields of a MemoryRecordV2 for secret material.
 // Returns ErrSecretDetected without echoing the secret content if detected.
 func (f *Firewall) ScanRecord(ctx context.Context, rec model.MemoryRecordV2) error {
 	if err := ctx.Err(); err != nil {
@@ -67,14 +52,15 @@ func (f *Firewall) ScanRecord(ctx context.Context, rec model.MemoryRecordV2) err
 		return fmt.Errorf("%w: secret detected in source reference (%s)", ErrSecretDetected, reason)
 	}
 
-	// 4. Scan evidence IDs and metadata
-	for _, id := range rec.EvidenceIDs {
-		if reason := f.detectSecret(id); reason != "" {
-			return fmt.Errorf("%w: secret detected in evidence id (%s)", ErrSecretDetected, reason)
+	// Runtime identifiers are structured data, not assignments supplied in prose.
+	// Retain credential-shape checks for malformed/imported identifiers.
+	for _, id := range append([]string{rec.ScopeID, rec.BranchName, rec.WorktreeID, rec.ACLScope}, rec.EvidenceIDs...) {
+		if reason := redaction.DetectCredentialShape(id); reason != "" {
+			return fmt.Errorf("%w: credential in identifier (%s)", ErrSecretDetected, reason)
 		}
 	}
 
-	// 5. Scan ExtMeta
+	// 6. Scan ExtMeta
 	if rec.ExtMeta != nil {
 		metaBytes, err := json.Marshal(rec.ExtMeta)
 		if err == nil {
@@ -113,49 +99,16 @@ func (f *Firewall) detectSecret(text string) string {
 		}
 	}
 
-	// 2. Standard pattern checks
-	if privateKeyPattern.MatchString(text) {
-		return "private key pattern"
-	}
-	if githubTokenPattern.MatchString(text) {
-		return "github token pattern"
-	}
-	if awsKeyPattern.MatchString(text) {
-		return "aws access key pattern"
-	}
-	if openaiKeyPattern.MatchString(text) {
-		return "openai api key pattern"
-	}
-	if slackTokenPattern.MatchString(text) {
-		return "slack token pattern"
-	}
-	if googleApiKeyPattern.MatchString(text) {
-		return "google api key pattern"
-	}
-	if dbConnStringPattern.MatchString(text) {
-		return "database connection uri credential"
-	}
-	if secretAssignmentPattern.MatchString(text) {
-		return "explicit secret/password assignment"
-	}
-	if jwtPattern.MatchString(text) {
-		return "jwt credential pattern"
-	}
-	if authorizationPattern.MatchString(text) {
-		return "authorization header credential"
-	}
-	if sessionCookiePattern.MatchString(text) {
-		return "session cookie credential"
-	}
-	if oauthTokenPattern.MatchString(text) {
-		return "oauth token pattern"
-	}
-
-	// 3. Custom regex patterns
+	// 2. Custom regex patterns
 	for _, reg := range f.config.CustomRegexPatterns {
 		if reg != nil && reg.MatchString(text) {
 			return "custom security regex match"
 		}
+	}
+
+	// 3. Central repository detector from redaction
+	if kind := redaction.DetectSecret(text); kind != "" {
+		return kind
 	}
 
 	return ""

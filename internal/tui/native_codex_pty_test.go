@@ -47,12 +47,14 @@ exit 0
 	if err := os.WriteFile(history, nativeTestHistory(t, s.cmd.Dir, "native-pty-session"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	grantPTYRead(t, s, filepath.Join(home, "sessions"))
 	s.sendLine(`/codex cli --marshal-native-test -i "picture with spaces.png"`)
 	s.mustSee("NATIVE-READY")
 	s.mustSee("ARG:<picture with spaces.png>")
 	s.sendLine("FIRST-KEY-SURVIVES")
 	s.mustSee("NATIVE-INPUT:<FIRST-KEY-SURVIVES>")
-	s.mustSee("2 message(s), including tool calls, saved to MARSHAL memory")
+	s.mustSee("2 message(s), including tool calls, proposed for operator memory review")
+	approvePTYMemory(t, s)
 	// Returning to MARSHAL must reclaim input and leave commands usable.
 	s.sendLine("/status")
 	s.mustSee("CANONICAL STATUS DETAIL")
@@ -64,7 +66,7 @@ exit 0
 	}
 	s.sendLine("SECOND-SESSION")
 	s.mustSee("NATIVE-INPUT:<SECOND-SESSION>")
-	s.mustSee("0 message(s), including tool calls, saved to MARSHAL memory")
+	s.mustSee("0 message(s), including tool calls, proposed for operator memory review")
 }
 
 func TestPTYInstalledNativeCodexHelp(t *testing.T) {

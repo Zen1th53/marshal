@@ -422,3 +422,63 @@ func TestM05InvalidRequestRejected(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestHandInChecksConfineCommands(t *testing.T) {
+	task, wt := newTask(t)
+	marker := filepath.Join(t.TempDir(), "marker")
+	task.Checks = []marshal.Check{{Command: "printf ran > '" + marker + "'"}}
+	out := handIn(t, Governed{Run: func(context.Context, Request) ([]marshal.CommandRecord, error) { return nil, nil }}, Request{Task: task, Worktree: wt, Brief: "check"})
+	if len(out.CheckResults) != 1 || out.CheckResults[0].Passed {
+		t.Fatalf("unconfined check accepted: %+v", out.CheckResults)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("check escaped: %v", err)
+	}
+}
+
+func TestCleanWorkerEnvStripsBriefingAndSharedChannelVariables(t *testing.T) {
+	inputEnv := []string{
+		"PATH=/usr/bin:/bin",
+		"HOME=/home/user",
+		"OPENCODE_CONFIG_CONTENT={\"instructions\":[\"do this\"]}",
+		"MARSHAL_SHARED_CHANNEL=1",
+		"MARSHAL_LIVE_PEERS=codex claude",
+		"MARSHAL_CHANNEL_STREAM=.marshal/channel-stream.json",
+		"MARSHAL_INBOX=.marshal/inbox/codex.md",
+		"USER=alice",
+	}
+	cleaned := cleanWorkerEnv(inputEnv)
+	joined := strings.Join(cleaned, "\n")
+
+	for _, stripped := range []string{
+		"OPENCODE_CONFIG_CONTENT",
+		"MARSHAL_SHARED_CHANNEL",
+		"MARSHAL_LIVE_PEERS",
+		"MARSHAL_CHANNEL_STREAM",
+		"MARSHAL_INBOX",
+	} {
+		if strings.Contains(joined, stripped) {
+			t.Errorf("cleanWorkerEnv failed to strip %s:\n%s", stripped, joined)
+		}
+	}
+
+	for _, kept := range []string{"PATH=/usr/bin:/bin", "HOME=/home/user", "USER=alice"} {
+		if !strings.Contains(joined, kept) {
+			t.Errorf("cleanWorkerEnv stripped required variable %s:\n%s", kept, joined)
+		}
+	}
+}
+
+func TestOpenCodeWorkerPinsAssignedDirectory(t *testing.T) {
+	d := OpenCode("opencode")
+	args := d.Args(Request{Worktree: "/assigned/task", Brief: "tiny"})
+	found := false
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--dir" && args[i+1] == "/assigned/task" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("OpenCode can choose parent checkout instead of task worktree: %v", args)
+	}
+}

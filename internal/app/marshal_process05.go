@@ -12,6 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/plan"
+	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
 
 // marshalProcess05Run executes one Marshal task only when it is exactly the
@@ -101,6 +102,9 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		if !ok || task.AssignedHarness != req.Task.Worker {
 			return nil, errors.New("process 05: governed harness differs from the Marshal worker")
 		}
+		if err := workerterminal.ReportIdentity(ctx, workerterminal.Identity{ExecutionRunID: p05.RunID, CanonicalTaskID: task.CanonicalTaskID}); err != nil {
+			return nil, err
+		}
 		if p05.State == execution.RunReady {
 			if err := service.SetPreserveBranch(ctx, p05.RunID, run.BaseCommit); err != nil {
 				return nil, err
@@ -131,6 +135,14 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 			return nil, err
 		}
 		result := completed.Tasks[req.Task.PlanTaskID]
+		r.honeypotMu.Lock()
+		trap := r.honeypots[result.WorktreePath]
+		r.honeypotMu.Unlock()
+		if trap != nil {
+			if err := r.checkHoneypot(ctx, req.Task.PlanTaskID, trap, nil, nil, EgressAlert{RunID: p05.RunID, TaskID: result.CanonicalTaskID, Worker: req.Task.Worker}); err != nil {
+				return nil, err
+			}
+		}
 		if completed.State == execution.RunNeedsApproval && result.ApprovalID != "" {
 			return nil, fmt.Errorf("process 05: approval %s required; use /marshal approve-task %s, then /marshal resume", result.ApprovalID, result.ApprovalID)
 		}
@@ -149,6 +161,11 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		if status, err := gitMarshal(ctx, req.Worktree, "status", "--porcelain"); err != nil || status != "" {
 			return nil, errors.New("process 05: Marshal task worktree changed before import")
 		}
+		r.honeypotMu.Lock()
+		if trap != nil {
+			r.honeypots[req.Worktree] = trap
+		}
+		r.honeypotMu.Unlock()
 		if _, err := gitMarshal(ctx, req.Worktree, "reset", "--hard", result.ResultCommit); err != nil {
 			return nil, err
 		}

@@ -161,6 +161,7 @@ func buildPrompt(request adapter.Request) ([]byte, error) {
 func parseOpenCodeOutput(output []byte, result *adapter.Result) {
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	scanner.Buffer(make([]byte, 64<<10), 2<<20)
+	var text strings.Builder
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		var event map[string]any
@@ -171,9 +172,22 @@ func parseOpenCodeOutput(output []byte, result *adapter.Result) {
 		if sessID, ok := event["session_id"].(string); ok && sessID != "" {
 			result.SessionID = sessID
 		}
+		if sessID, ok := event["sessionID"].(string); ok && sessID != "" {
+			result.SessionID = sessID
+		}
+		if event["type"] == "text" {
+			if part, ok := event["part"].(map[string]any); ok {
+				if value, ok := part["text"].(string); ok {
+					text.WriteString(value)
+				}
+			}
+		}
 		if resText, ok := event["result"].(string); ok && resText != "" {
 			result.FinalText = resText
 		}
+	}
+	if text.Len() > 0 {
+		result.FinalText = text.String()
 	}
 	if result.FinalText == "" && len(output) > 0 {
 		result.FinalText = string(output)
