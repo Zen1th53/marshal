@@ -191,6 +191,7 @@ func TestMarshalDraftBriefBindsExactCriteriaAndRuntimeWorktree(t *testing.T) {
 	script := `#!/bin/sh
 for prompt; do :; done
 case "$prompt" in *"fresh checkout of the committed result"*"clean sandbox"*"no worker environment, network or temporary files"*"only repository content"*) ;; *) exit 98 ;; esac
+case "$prompt" in *"rerun after an integration merge"*"never commit history, HEAD diffs or commit structure"*"MARSHAL already records changed-file scope"*) ;; *) exit 97 ;; esac
 case "$prompt" in *"amended JSON"*) ;; *"copy each criterion string verbatim"*"runtime-assigned worktree"*) ;; *) exit 99 ;; esac
 printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{\"tasks\":[{\"id\":\"a\",\"title\":\"write a\",\"criteria\":[\"a exists\"],\"paths\":[\"a.txt\"],\"depends_on\":[],\"worker\":\"codex\",\"checks\":[{\"command\":\"test -f a.txt\",\"criteria\":[\"a exists\"]}],\"instructions\":\"Use assigned worktree\",\"expected_output\":\"a.txt\"}]}"}}'
 `

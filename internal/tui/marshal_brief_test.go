@@ -301,3 +301,15 @@ func TestTaskBriefRecalledMemoryShowsProvenance(t *testing.T) {
 		t.Errorf("brief included session/shared-channel record:\n%s", brief)
 	}
 }
+
+func TestMarshalBriefChecksSurviveIntegrationMerge(t *testing.T) {
+	brief, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"rerun after an integration merge", "never commit history, HEAD diffs or commit structure", "MARSHAL already records changed-file scope"} {
+		if !strings.Contains(brief, text) {
+			t.Errorf("missing check contract %q", text)
+		}
+	}
+}

@@ -15,7 +15,9 @@ marshal doctor
 
 `marshal init` creates missing `CAPABILITIES.yaml`, `PACK-VERSION.yaml`, and
 `RUNTIME-VERSION.yaml` defaults and initializes `.marshal/state.db`. Existing
-regular defaults are preserved. The current release reports v1.0.1 and schema
+regular defaults are preserved. Init commits untracked policy/version defaults
+and ignores private runtime state using the project’s Git info/exclude file,
+without changing .gitignore. The current release reports v1.0.1 and schema
 v72.
 
 Default `doctor` does not execute optional provider probes; those rows are

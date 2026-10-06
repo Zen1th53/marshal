@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -264,5 +265,34 @@ func TestM09ObservedGateStateNeedsApproval(t *testing.T) {
 	}
 	if state, err = s.observedGateState(ctx, "run", "a"); err != nil || !state.AuthorizedActor {
 		t.Fatalf("approved run: %+v %v", state, err)
+	}
+}
+
+func TestMarshalContentCheckPassesWorkerAndIntegrationMerge(t *testing.T) {
+	s, _ := marshalFixture(t, 1)
+	wire(t, s)
+	fake := s.Model.(marshalFakeModel)
+	command := "test -f a.txt && test \"$(cat a.txt)\" = done"
+	fake.draft.Tasks[0].Checks[0].Command = command
+	fake.draft.Plan.Checks["a"][0] = command
+	s.Model = fake
+	if _, err := s.StartPlanning(t.Context(), "run", "write files", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(t.Context(), "run"); err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.Execute(t.Context(), "run", marshalBrief, nil)
+	if err != nil || run.State != marshal.Verifying {
+		t.Fatalf("execute: %s %v", run.State, err)
+	}
+	dir := filepath.Join(s.Worktrees, "TASK-run-integration")
+	head := marshalGit(t, dir, "rev-parse", "HEAD")
+	if parents := strings.Fields(marshalGit(t, dir, "rev-list", "--parents", "-n", "1", head)); len(parents) != 3 {
+		t.Fatalf("expected integration merge with two parents: %v", parents)
+	}
+	session, _, err := s.verifyByChecks(t.Context(), run, head)
+	if err != nil || session.RequiredChecks["a#0"] != verification.StatusPass {
+		t.Fatalf("content check at integration merge: %+v %v", session, err)
 	}
 }

@@ -272,7 +272,7 @@ func (c command) init(ctx context.Context) error {
 	if err := c.ensureGitBaseline(ctx); err != nil {
 		return err
 	}
-	layout, err := app.Bootstrap(ctx, c.root)
+	layout, err := initializeProject(ctx, c.root)
 	if err != nil {
 		return err
 	}

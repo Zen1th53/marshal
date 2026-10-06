@@ -65,7 +65,11 @@ func TestInitAndTUIOfferBaseline(t *testing.T) {
 					t.Fatalf("no git confirmation: %s", out.String())
 				}
 				assertInitializedProject(t, dir)
-				if files := testGit(t, dir, "ls-tree", "--name-only", "HEAD"); files != "" {
+				assertInitFilesRecorded(t, dir)
+				if !repository && testGit(t, dir, "status", "--porcelain") != "" {
+					t.Fatal("init left a dirty checkout")
+				}
+				if files := testGit(t, dir, "ls-tree", "--name-only", "HEAD^"); files != "" {
 					t.Fatalf("baseline unexpectedly committed files: %s", files)
 				}
 				if repository && testGit(t, dir, "diff", "--cached", "--name-only") != "staged.txt" {

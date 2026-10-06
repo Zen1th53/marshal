@@ -306,6 +306,7 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 		"- Workers you may assign tasks to: " + strings.Join(workers, ", ") + ".\n" +
 		"- Current working mode: acceptance mode " + string(settings.AcceptanceMode) + ". The person changes it before approval with /marshal settings acceptance-mode marshal|marshal-then-user|user.\n" +
 		"- Current control level: " + string(settings.EffectiveControl()) + ". The person changes it before approval with /marshal settings control strict|free.\n" +
+		"- " + app.MarshalCheckContract + "\n" +
 		"- Write the plan pack to " + app.MarshalPackRelativePath + "/: REQUIREMENTS.md, 00_INDEX.md and tasks/<id>.md for every task id, each a non-empty Markdown file of at most 64 KiB. The runtime refuses a draft whose pack is missing a note or has a note for no task.\n" +
 		"- Write the task list to " + marshalDraftRelativePath + " as JSON of the form " +
 		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","mode":"governed","checks":[{"command":"executable command","criteria":["criterion this command proves"]}]}]}` +
