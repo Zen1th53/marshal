@@ -51,7 +51,7 @@ const (
 
 // marshalKickoff is the one conversation turn that starts a Marshal whose
 // protocol was delivered outside the conversation.
-const marshalKickoff = "Begin."
+const marshalKickoff = "Begin at step 1. Ask the language question and wait; ask about earlier work only after the language is chosen."
 
 // marshalKickoffArgs are the arguments that give each CLI its opening turn in
 // an interactive session.
@@ -66,12 +66,69 @@ func marshalKickoffArgs(provider string) []string {
 	}
 }
 
-// The compiled protocol is also the opening turn: provider configuration or
-// resume behavior must not turn a fresh Marshal into an ordinary provider chat.
-func marshalProtocolKickoffArgs(provider, protocol string) []string {
-	args := marshalKickoffArgs(provider)
-	args[len(args)-1] = protocol + "\nBegin at step 1. Ask the language question and wait; ask about earlier work only after the language is chosen."
-	return args
+// prepareMarshalLaunch delivers mandatory instructions separately from the
+// opening turn. Every fresh launch and resume must rebuild this delivery;
+// saved argv may belong to an older version that exposed the protocol.
+func prepareMarshalLaunch(provider, root string, args []string, protocol string) ([]string, []string, *briefingDir, error) {
+	channel := hiddenChannel(provider)
+	if channel == injectOff || strings.TrimSpace(protocol) == "" {
+		return nil, nil, nil, fmt.Errorf("Marshal not started: %s has no usable hidden instruction channel", providerDisplayName(provider))
+	}
+	if err := scrubMarshalInboxes(root); err != nil {
+		return nil, nil, nil, fmt.Errorf("Marshal not started: retained briefing cleanup failed: %w", err)
+	}
+	args = append(append([]string(nil), args...), marshalKickoffArgs(provider)...)
+	if channel != injectMarshalDir {
+		updated, _, err := applyBriefing(provider, root, args, protocol, channel)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("Marshal not started: hidden instruction delivery failed: %w", err)
+		}
+		return updated, nil, nil, nil
+	}
+	dir, err := newBriefingDir(root, provider)
+	if err == nil {
+		_, err = dir.add(protocol)
+	}
+	var env []string
+	if err == nil {
+		args, env, err = dir.launch(args)
+	}
+	if err != nil {
+		dir.remove()
+		return nil, nil, nil, fmt.Errorf("Marshal not started: hidden instruction delivery failed: %w", err)
+	}
+	return args, env, dir, nil
+}
+
+// scrubMarshalInboxes prevents old visible kickoffs from being reintroduced
+// through retained peer or granted-continuation files on resume. Ordinary
+// inboxes remain unchanged; the original records remain in durable memory.
+func scrubMarshalInboxes(root string) error {
+	base := filepath.Join(root, ".marshal", "inbox")
+	entries, err := os.ReadDir(base)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(base, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if containsMarshalProtocol(string(data)) {
+			view := &inboxView{reader: strings.TrimSuffix(entry.Name(), ".md"), path: path, written: len(data)}
+			if err := view.trim(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // hiddenChannel is the channel each provider reads instructions from without
@@ -83,8 +140,10 @@ func hiddenChannel(provider string) injectChannel {
 		return injectSystemPrompt
 	case "codex":
 		return injectDeveloperInstructions
-	default:
+	case "opencode", "antigravity":
 		return injectMarshalDir
+	default:
+		return injectOff
 	}
 }
 
@@ -225,7 +284,7 @@ func (w *Workspace) crossAgentBriefing(ctx context.Context, provider string) (st
 		if rec.ObservedAt.After(session.latest) {
 			session.latest = rec.ObservedAt
 		}
-		session.lines = append(session.lines, briefingLine{at: rec.ObservedAt, text: rec.Body})
+		session.lines = append(session.lines, briefingLine{at: rec.ObservedAt, text: hideMarshalProtocol(rec.Body)})
 	}
 	if len(sessions) == 0 {
 		return "", nil
@@ -301,7 +360,7 @@ type briefingLine struct {
 }
 
 func (l briefingLine) String() string {
-	text := strings.TrimSpace(l.text)
+	text := strings.TrimSpace(hideMarshalProtocol(l.text))
 	// Multi-line tool diffs are summarized here; the full record stays in the
 	// database for /memory search, which is the right place to read it.
 	if idx := strings.IndexByte(text, '\n'); idx >= 0 {
@@ -317,6 +376,9 @@ func (l briefingLine) String() string {
 // argv the agent should be launched with and a note for the operator.
 func applyBriefing(provider, root string, args []string, briefing string, channel injectChannel) ([]string, string, error) {
 	briefing = strings.TrimSpace(briefing)
+	if containsMarshalProtocol(briefing) && (channel == injectOff || channel != hiddenChannel(provider)) {
+		return args, "", fmt.Errorf("Marshal not started: protocol requires a hidden instruction channel")
+	}
 	if briefing == "" || channel == injectOff {
 		return args, "", nil
 	}
@@ -328,7 +390,8 @@ func applyBriefing(provider, root string, args []string, briefing string, channe
 		// protocol behind the cross-agent memory, and replacing would drop the
 		// operator's own text.
 		const flag = "--append-system-prompt"
-		for i, arg := range args {
+		for i := len(args) - 1; i >= 0; i-- {
+			arg := args[i]
 			switch {
 			case arg == flag && i+1 < len(args):
 				updated := append([]string(nil), args...)
@@ -351,14 +414,7 @@ func applyBriefing(provider, root string, args []string, briefing string, channe
 		return args, fmt.Sprintf("Cross-agent briefing written to %s (%d bytes).", projectDocName(provider), len(briefing)), nil
 
 	case injectPrompt:
-		// A cross-agent briefing only needs acknowledging. The Marshal's
-		// protocol, which always opens with its pinned header, says itself how
-		// the session opens, so a one-line acknowledgement would cut its
-		// introduction short.
 		closing := "Acknowledge in one line, then wait for the operator."
-		if strings.HasPrefix(briefing, "MARSHAL PROTOCOL") {
-			closing = "Begin now with step 1."
-		}
 		prompt := briefing + "\n\n" + closing
 		if provider == "opencode" {
 			return append([]string{"--prompt", prompt}, args...), fmt.Sprintf("Cross-agent briefing passed as the opening prompt (%d bytes); it will consume one turn.", len(briefing)), nil
@@ -375,7 +431,7 @@ func applyBriefing(provider, root string, args []string, briefing string, channe
 		// second briefing in the same launch joins the first rather than
 		// replacing it.
 		const key = "developer_instructions="
-		for i := 0; i+1 < len(args); i++ {
+		for i := len(args) - 2; i >= 0; i-- {
 			if args[i] == "-c" && strings.HasPrefix(args[i+1], key) {
 				updated := append([]string(nil), args...)
 				updated[i+1] = args[i+1] + "\n\n" + briefing

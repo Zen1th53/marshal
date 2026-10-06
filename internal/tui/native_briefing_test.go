@@ -263,17 +263,16 @@ func TestBriefingRequiresStore(t *testing.T) {
 	}
 }
 
-// The Marshal's protocol opens with its own introduction, so the prompt does
-// not end with the one-line acknowledgement other briefings get.
-func TestMarshalPromptStartsStepOneInsteadOfAcknowledging(t *testing.T) {
+// Mandatory instructions must never fall back to a visible prompt.
+func TestMarshalPromptDeliveryRefused(t *testing.T) {
 	args, _, err := applyBriefing("codex", t.TempDir(), nil, "MARSHAL PROTOCOL\n\n1. Introduce yourself.", injectPrompt)
-	if err != nil || len(args) == 0 {
-		t.Fatalf("args=%v err=%v", args, err)
+	if err == nil || len(args) != 0 {
+		t.Fatalf("visible protocol delivery accepted: args=%v err=%v", args, err)
 	}
-	if last := args[len(args)-1]; !strings.HasSuffix(last, "Begin now with step 1.") || strings.Contains(last, "Acknowledge in one line") {
-		t.Fatalf("Marshal prompt ends wrongly: %q", last)
+	args, _, err = applyBriefing("codex", t.TempDir(), nil, "What other agents did.", injectPrompt)
+	if err != nil {
+		t.Fatal(err)
 	}
-	args, _, _ = applyBriefing("codex", t.TempDir(), nil, "What other agents did.", injectPrompt)
 	if last := args[len(args)-1]; !strings.HasSuffix(last, "Acknowledge in one line, then wait for the operator.") {
 		t.Fatalf("cross-agent prompt lost its acknowledgement: %q", last)
 	}

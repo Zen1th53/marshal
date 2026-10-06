@@ -866,9 +866,22 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 	restartStr := string(restartLogs)
 
 	// Verify respawn-window was called with resume command and conversation ID (F3)
-	expectedRespawn := "respawn-window -k -t " + chatAgent.paneID + " env codex resume session-test-resume-456"
-	if !strings.Contains(restartStr, expectedRespawn) {
-		t.Fatalf("expected respawn with resume arguments %q, got:\n%s", expectedRespawn, restartStr)
+	expectedRespawn := "respawn-window -k -t " + chatAgent.paneID + " /bin/sh "
+	var launchScript string
+	for _, line := range strings.Split(restartStr, "\n") {
+		if strings.HasPrefix(line, expectedRespawn) {
+			path := strings.TrimPrefix(line, expectedRespawn)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.Remove(path)
+			launchScript = string(data)
+		}
+	}
+	if launchScript == "" || !strings.Contains(launchScript, "'codex' '-c' 'developer_instructions=MARSHAL PROTOCOL") ||
+		!strings.Contains(launchScript, "'resume' 'session-test-resume-456' '"+marshalKickoff+"'") {
+		t.Fatalf("respawn lost hidden instructions or bound resume: %q", restartStr)
 	}
 
 	// Verify input was re-enabled on the respawned window

@@ -14,19 +14,19 @@ import (
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
-func TestNativeMarshalOpeningCarriesCompiledProtocolInOrder(t *testing.T) {
+func TestNativeMarshalOpeningKeepsProtocolHidden(t *testing.T) {
 	brief, err := marshalRoleBriefing([]string{"worker"}, marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
-		args := marshalProtocolKickoffArgs(provider, brief)
+		args := marshalKickoffArgs(provider)
 		prompt := args[len(args)-1]
-		if !strings.HasPrefix(prompt, "MARSHAL PROTOCOL") || !strings.Contains(prompt, brief) {
-			t.Fatalf("%s dropped compiled protocol", provider)
+		if containsMarshalProtocol(prompt) || strings.Contains(prompt, brief) {
+			t.Fatalf("%s exposed compiled protocol", provider)
 		}
-		language := strings.Index(prompt, "2. Ask which language")
-		earlier := strings.Index(prompt, "3. Ask whether the person has worked")
+		language := strings.Index(prompt, "Ask the language question")
+		earlier := strings.Index(prompt, "ask about earlier work")
 		if language < 0 || earlier <= language || !strings.Contains(prompt, "Begin at step 1.") {
 			t.Fatalf("%s lost opening order", provider)
 		}
@@ -135,7 +135,10 @@ func TestAutomaticNativeMarshalLaunchUsesCompiledOpening(t *testing.T) {
 		t.Fatal("automatic native Marshal has no launch prompt")
 	}
 	opening := a.args[len(a.args)-1]
-	if !strings.HasPrefix(opening, "MARSHAL PROTOCOL") || !strings.Contains(opening, "2. Ask which language") || !strings.Contains(opening, "3. Ask whether the person has worked") {
-		t.Fatalf("automatic launch skipped compiled opening: %q", opening)
+	if containsMarshalProtocol(opening) || opening != marshalKickoff {
+		t.Fatalf("automatic launch has unsafe opening: %q", opening)
+	}
+	if !strings.Contains(strings.Join(a.args[:len(a.args)-1], "\n"), "MARSHAL PROTOCOL") {
+		t.Fatal("automatic launch lost hidden instructions")
 	}
 }

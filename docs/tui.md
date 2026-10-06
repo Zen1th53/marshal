@@ -121,7 +121,7 @@ The briefing states that its contents are observations rather than verified fact
 
 | Channel | Delivery | Cost |
 | --- | --- | --- |
-| `auto` | Claude: `system-prompt`; Codex: `project-doc` | default |
+| `auto` | Claude: system prompt; Codex: developer instructions; OpenCode / Antigravity: MARSHAL briefing directory | default |
 | `system-prompt` | `--append-system-prompt` (Claude only) | no turn |
 | `project-doc` | a marked block in `AGENTS.md` / `CLAUDE.md` | no turn, touches the worktree |
 | `prompt` | the opening prompt | one turn and its tokens |
@@ -139,9 +139,19 @@ leaves the rest of the file byte-identical; a file with only one of the two
 markers is refused rather than repaired by guesswork. A configured channel the
 provider cannot honour falls back and reports the fallback instead of silently
 delivering nothing. An operator's own `--append-system-prompt`, or their own
-opening prompt, is never overridden. Injection failures are reported and never
-block the session: an agent with no briefing is the earlier behaviour, not a
-broken one.
+opening prompt, is never overridden. Cross-agent memory injection failures are
+reported and do not block ordinary native sessions.
+
+The Marshal protocol always uses the provider’s hidden instruction channel,
+regardless of `/memory inject`: Codex developer instructions, Claude’s appended
+system prompt, OpenCode’s instructions configuration, or Antigravity’s added
+workspace directory. Its visible opening is a short kickoff that starts step 1
+and asks for the language before earlier work. Fresh launches, resumes, and
+automatic restarts deliver the protocol again. If a hidden channel is missing
+or delivery fails, MARSHAL refuses to start the Marshal and reports the failure;
+it never falls back to putting the protocol in the chat. Historical protocol
+copies are withheld from memory excerpts, peer briefings, TUI output and evidence
+views.
 
 ### Live cross-agent exchange
 

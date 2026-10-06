@@ -256,7 +256,7 @@ func outputSection(s UIState, th *Theme, cols int) []string {
 	}
 	out := []string{PadCell(" "+label, cols)}
 
-	for _, line := range strings.Split(s.LastOutput, "\n") {
+	for _, line := range strings.Split(hideMarshalProtocol(s.LastOutput), "\n") {
 		out = append(out, PadCell("   "+line, cols))
 	}
 	return out

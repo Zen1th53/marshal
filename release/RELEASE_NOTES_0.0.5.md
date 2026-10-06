@@ -38,6 +38,8 @@ binding checks, network confinement, and the handling of credentials and
 evidence. These protections apply at their supported boundaries; native agent
 sessions retain the rights of your user account.
 
+- **Marshal protocol stays hidden.** Fresh chats, resumes and automatic restarts use hidden instructions and a short kickoff; failed hidden delivery refuses startup, and historical protocol copies are withheld from TUI and peer views.
+
 ## Requirements
 
 - **Linux only**, on 64-bit Intel/AMD or ARM. macOS is unsupported; WSL 2 has

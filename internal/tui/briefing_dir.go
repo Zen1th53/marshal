@@ -100,6 +100,9 @@ func opencodeInstructionsEnv(existing, file string) (string, error) {
 			return "", fmt.Errorf("OPENCODE_CONFIG_CONTENT is not a JSON object: %w", err)
 		}
 	}
+	if config == nil {
+		return "", fmt.Errorf("OPENCODE_CONFIG_CONTENT must be a JSON object")
+	}
 	var instructions []any
 	if prior, ok := config["instructions"].([]any); ok {
 		instructions = prior

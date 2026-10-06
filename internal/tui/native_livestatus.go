@@ -48,6 +48,7 @@ func liveStatusPath(root, provider string) string {
 // report about the work, not the work.
 func writeLiveStatus(root, provider string, status liveStatus) error {
 	status.Provider = provider
+	status.Error = hideMarshalProtocol(status.Error)
 	path := liveStatusPath(root, provider)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
@@ -75,5 +76,6 @@ func readLiveStatus(root, provider string) (liveStatus, error) {
 	if err := json.Unmarshal(data, &status); err != nil {
 		return liveStatus{}, fmt.Errorf("parse %s live status: %w", provider, err)
 	}
+	status.Error = hideMarshalProtocol(status.Error)
 	return status, nil
 }

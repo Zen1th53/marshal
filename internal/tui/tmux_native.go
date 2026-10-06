@@ -218,25 +218,21 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 	winName := tmux.ChatWindowName(projectRoot)
 	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
+		w.RecordActivity("Marshal not started: protocol unavailable")
 		return
 	}
-	var args []string
-	var env []string
-	var dir *briefingDir
-	if hiddenChannel(provider) == injectMarshalDir {
-		dir, err = newBriefingDir(projectRoot, provider)
-		if err == nil {
-			_, err = dir.add(brief)
-		}
-		if err == nil {
-			args, env, err = dir.launch(marshalProtocolKickoffArgs(provider, brief))
-		}
-	} else {
-		args, _, err = applyBriefing(provider, projectRoot, marshalProtocolKickoffArgs(provider, brief), brief, hiddenChannel(provider))
-	}
+	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, nil, brief)
 	if err != nil {
+		w.RecordActivity(err.Error())
 		return
 	}
+	launched := false
+	defer func() {
+		if !launched {
+			dir.remove()
+		}
+	}()
+
 	saved := loadChatBinding(projectRoot)
 	runID := saved.RunID
 	m := w.marshalSession()
@@ -264,7 +260,11 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 	}
 	cmd := append([]string{binary}, args...)
 
-	_ = tmux.NewWindow(ctx, w.tmuxSession, winName, projectRoot, env, cmd)
+	if err := tmux.NewWindow(ctx, w.tmuxSession, winName, projectRoot, env, cmd); err != nil {
+		w.RecordActivity("Marshal not started: " + RedactContent(err.Error(), nil))
+		return
+	}
+	launched = true
 	_ = tmux.SetWindowOption(ctx, w.tmuxSession+":"+winName, "remain-on-exit", "on")
 	_ = tmux.SetPaneReadOnly(ctx, w.tmuxSession+":"+winName, false) // F3: normal operator input
 
@@ -355,17 +355,43 @@ func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAge
 		agent.binary = bin
 	}
 
-	resumeArgs := agent.args
-	if sessionID != "" {
-		resumeArgs = resumeArgsForProvider(provider, sessionID)
-	}
-	agent.args = resumeArgs
-	cmd := append([]string{bin}, resumeArgs...)
-
-	err := tmux.RespawnWindow(ctx, agent.paneID, cmd)
+	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
-		_ = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, agent.env, cmd)
+		w.RecordActivity("Marshal not started: protocol unavailable")
+		return
 	}
+	var base []string
+	if sessionID != "" {
+		base = resumeArgsForProvider(provider, sessionID)
+	}
+	resumeArgs, env, dir, err := prepareMarshalLaunch(provider, root, base, brief)
+	if err != nil {
+		w.RecordActivity(err.Error())
+		return
+	}
+	for _, prior := range agent.env {
+		if !strings.HasPrefix(prior, "OPENCODE_CONFIG_CONTENT=") {
+			env = append(env, prior)
+		}
+	}
+	// Respawn inherits the old pane environment, so supply the rebuilt hidden
+	// instruction configuration explicitly (especially OpenCode's file pointer).
+	cmd := append([]string{"env"}, env...)
+	cmd = append(cmd, bin)
+	cmd = append(cmd, resumeArgs...)
+	err = tmux.RespawnWindow(ctx, agent.paneID, cmd)
+	if err != nil {
+		err = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, env, append([]string{bin}, resumeArgs...))
+	}
+	if err != nil {
+		dir.remove()
+		w.RecordActivity("Marshal not started: " + RedactContent(err.Error(), nil))
+		return
+	}
+	agent.briefingDir.remove()
+	agent.briefingDir = dir
+	agent.args = resumeArgs
+	agent.env = env
 
 	_ = tmux.SetWindowOption(ctx, agent.paneID, "remain-on-exit", "on")
 	_ = tmux.SetPaneReadOnly(ctx, agent.paneID, false) // F3: normal operator input
@@ -795,6 +821,7 @@ func (w *Workspace) monitorAgent(
 
 // RecordActivity records activity into workspace state and triggers a redraw if interactive.
 func (w *Workspace) RecordActivity(msg string) {
+	msg = RedactContent(msg, nil)
 	w.mu.Lock()
 	if w.state.LastOutput != "" {
 		w.state.LastOutput += "\n" + msg
@@ -836,7 +863,7 @@ func (w *Workspace) updateTmuxStatusLine(ctx context.Context) {
 	if len(parts) > 0 {
 		statusText = fmt.Sprintf(" [%s] ", strings.Join(parts, " | "))
 	}
-	_ = tmux.SetWindowStatus(ctx, target, statusText)
+	_ = tmux.SetWindowStatus(ctx, target, RedactContent(statusText, nil))
 }
 
 // reportActiveTmuxSessions prints still-running agent sessions when MARSHAL exits.
