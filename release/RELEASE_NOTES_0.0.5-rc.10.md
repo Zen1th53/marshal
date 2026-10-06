@@ -1,6 +1,12 @@
-# MARSHAL v0.0.5-rc.9 — The Marshal workspace
+# MARSHAL v0.0.5-rc.10 — The Marshal workspace
 
-A release candidate for 0.0.5. rc.8 was tagged but not published because a sandbox test could not see the release runner's Python; rc.9 fixes that test. It contains everything in rc.7 plus the credential broker: governed Codex and Claude Code workers can use your subscription sign-in without seeing the token.
+A release candidate for 0.0.5. A real acceptance test of the published 0.0.5 found three gaps, so that release was withdrawn. rc.10 fixes them:
+
+- **The Marshal can plan governed work.** Each planned task shows its mode before you approve the plan. Codex and Claude Code tasks default to governed, so they run in the sandbox with the egress proxy and the credential broker; if that protection is unavailable the task is refused, never run natively instead.
+- **Network grants reach every governed run.** `/egress allow` and the permission popup now reach runs started from the command line too, and `/egress status` lists them.
+- **Command-line results can be accepted.** `/marshal import <task> <check>` drafts a review plan for a finished `marshal run` task, which then goes through the usual approval, review, verification and merge.
+
+It also contains the credential broker from rc.9: governed Codex and Claude Code workers can use your subscription sign-in without seeing the token.
 
 ## What changed
 
@@ -56,7 +62,7 @@ missing dependency does not make installation fail.
 The automated source inventory reports:
 
 - Constitution enforcement: 0.3%
-- Scope of protection: 6.5%
+- Scope of protection: 6.8%
 
 Constitution enforcement is the percentage of material source call sites that a constitutional verdict can refuse before the effect occurs.
 Scope of protection is the percentage of material source call sites guarded before execution by a constitutional gate, approval binding, policy authorisation or sandbox.
