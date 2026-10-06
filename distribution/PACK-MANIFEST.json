@@ -11661,8 +11661,8 @@
     },
     {
       "path": "tools/effect-inventory/main_test.go",
-      "sha256": "5e13b76ec563cc305a203cbfca08ebfd9df54b2178f9c478ec8828d878c2f4a6",
-      "bytes": 9953
+      "sha256": "843e4359245d530de3ffa910c0025d8874ec7a135d7202b3a11c0bcd7299b218",
+      "bytes": 9967
     },
     {
       "path": "tools/effect-inventory/sites.csv",
