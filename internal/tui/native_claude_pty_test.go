@@ -70,6 +70,13 @@ cp "$MARSHAL_TEST_CLAUDE_HISTORY" "$MARSHAL_TEST_CLAUDE_DEST/session.jsonl"
 	s.mustSee("CLAUDE-NATIVE-READY")
 	s.sendLine("BARE-CLAUDE")
 	s.mustSee("CLAUDE-INPUT:<BARE-CLAUDE>")
+	if strings.Contains(s.output(), "CLAUDE-ARG:<bypassPermissions>") {
+		t.Fatal("native session received governed permission bypass")
+	}
+	if strings.Contains(s.output(), "CLAUDE-ARG:<--dangerously-skip-permissions>") {
+		t.Fatal("native session received governed permission bypass")
+	}
+
 	waitForExit()
 	approvePTYMemory(t, s)
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -53,6 +54,10 @@ exit 0
 	s.mustSee("ARG:<picture with spaces.png>")
 	s.sendLine("FIRST-KEY-SURVIVES")
 	s.mustSee("NATIVE-INPUT:<FIRST-KEY-SURVIVES>")
+	if strings.Contains(s.output(), "ARG:<--dangerously-bypass-approvals-and-sandbox>") {
+		t.Fatal("native session received governed permission bypass")
+	}
+
 	s.mustSee("2 message(s), including tool calls, proposed for operator memory review")
 	approvePTYMemory(t, s)
 	// Returning to MARSHAL must reclaim input and leave commands usable.

@@ -128,8 +128,25 @@ before returning to the worker. Requests and responses are limited to 32 MiB
 with a 30-second TLS/header deadline and a 30-minute exchange deadline.
 Incremental streaming, WebSocket upgrades, compressed responses, and
 credential-bearing request body fields are refused or unavailable. These limits
-can prevent a long provider call; there has been no live-provider end-to-end
-verification.
+can prevent a long provider call. VM tests verified subscription authentication
+for Codex and Claude; successful governed file-task completion still needs a VM
+retest after the tool-permission fixes.
+
+## Governed worker tool permissions
+
+Governed Codex and Claude workers run non-interactively inside MARSHAL's
+bubblewrap sandbox and isolated task worktree. MARSHAL's sandbox, task approval,
+and merge review are the security boundary. Codex exec uses
+`--dangerously-bypass-approvals-and-sandbox`, the CLI option for an external
+sandbox, to disable its nested sandbox and its own approval prompts. Claude
+print uses `--permission-mode bypassPermissions --permission-prompts none` so
+it can edit and run commands without its own permission prompts. These options
+apply only to governed worker adapters. Native sessions retain their own
+permission controls.
+
+The broker refuses Codex WebSocket upgrades; Codex falls back to HTTPS.
+Synchronous `marshal run` responses can wait for the worker's runtime deadline;
+the API still limits response writes and keeps its write timeout on other routes.
 
 ## Limits of the guarantee
 
