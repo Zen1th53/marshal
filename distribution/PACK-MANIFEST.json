@@ -10816,8 +10816,8 @@
     },
     {
       "path": "internal/worker/socket_boundary_test.go",
-      "sha256": "5322f7c017b3c00a315f38ce2521216388fdd1b88fe8d05b282ae98701a395d6",
-      "bytes": 4948
+      "sha256": "371f4ec48899f898b075be129a7e5e3730dcba631cf4939bf0a7bbee2caf2d2f",
+      "bytes": 5176
     },
     {
       "path": "internal/worker/verification.go",
@@ -11320,6 +11320,11 @@
       "bytes": 7251
     },
     {
+      "path": "release/RELEASE_NOTES_0.0.5-rc.9.md",
+      "sha256": "87d9a59eabb7715ec20c9b1d3f5a11824a0f678bf586337a4b54908bcc906e9c",
+      "bytes": 7371
+    },
+    {
       "path": "release/RELEASE_NOTES_0.0.5.md",
       "sha256": "c80d30ce372b5d5470c84d84033a43607eef24c3f13cec8dee4e1468888fd793",
       "bytes": 6928
@@ -11766,7 +11771,7 @@
     },
     {
       "path": "tools/effect-inventory/main_test.go",
-      "sha256": "7f48d671fbd59a0d93af790c09954ae9cb94fa2af158e12f8c06259b09b790f4",
+      "sha256": "ffc0beab98198886e682c3b446eb516354f8356979b5d601d4146515af653cb7",
       "bytes": 9953
     },
     {

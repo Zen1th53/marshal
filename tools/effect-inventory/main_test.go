@@ -29,7 +29,7 @@ func TestReleaseInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Print(output.String())
-	for _, version := range []string{"0.0.5-rc.8", "0.0.5"} {
+	for _, version := range []string{"0.0.5-rc.9", "0.0.5"} {
 		notes, err := os.ReadFile(filepath.Join(root, "release", "RELEASE_NOTES_"+version+".md"))
 		if err != nil {
 			t.Fatal(err)

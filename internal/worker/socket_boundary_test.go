@@ -31,9 +31,14 @@ func TestGovernedHostRelaySocketsAndRawAttempts(t *testing.T) {
 	if err != nil {
 		t.Skip(err)
 	}
-	python, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 unavailable")
+	// The sandbox mounts only system directories, so a toolchain interpreter
+	// such as the one actions/setup-python puts under /opt is not visible.
+	python := "/usr/bin/python3"
+	if _, err := os.Stat(python); err != nil {
+		python, err = exec.LookPath("python3")
+		if err != nil {
+			t.Skip("python3 unavailable")
+		}
 	}
 	python, err = filepath.EvalSymlinks(python)
 	if err != nil {
