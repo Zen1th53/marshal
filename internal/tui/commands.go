@@ -670,6 +670,7 @@ func (h *CommandHandler) helpText() string {
   /evidence <id>           Show an artifact (bytes re-checked) or evidence reference, with every linked claim
   /evidence list           List stored artifacts and claim evidence references
   /permission read <allow|deny> <path>  Record a session-only read decision
+  /permission credential <request|revoke> <provider>  Control project credential use
   /continue <claude|codex> <path>  Continue project-scoped earlier work after a read grant
   /egress [status|allow|revoke]  Inspect per-run endpoints; operator-only allow/revoke <run-id> <host[:port]>
   /approve [approval_id]    Approve a pending authenticated decision

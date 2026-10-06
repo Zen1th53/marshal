@@ -229,7 +229,13 @@ func (s *Store) ListEvents(ctx context.Context) ([]model.Event, error) {
 		SELECT event_id, event_type, timestamp, COALESCE(project_id, ''),
 		       COALESCE(task_id, ''), COALESCE(actor_agent_id, ''),
 		       COALESCE(session_id, ''), aggregate_revision, data_json
-		FROM audit_events ORDER BY timestamp, event_id
+		FROM audit_events
+		UNION ALL
+		SELECT event_id, event_type, at, '', task_id, subject, run_id, 0, data_json
+		FROM structured_events
+		WHERE event_type LIKE 'network.egress.%'
+		  AND NOT EXISTS (SELECT 1 FROM audit_events WHERE audit_events.event_id = structured_events.event_id)
+		ORDER BY timestamp, event_id
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("list events: %w", err)

@@ -35,8 +35,16 @@ func (r *Runtime) CommandPermission(ctx context.Context, req permission.Request,
 	if req.Kind == "read" && !filepath.IsAbs(req.Object) {
 		return model.ErrInvalid
 	}
-	if req.Kind != "read" && req.Kind != "memory" && req.Kind != "network" {
+	if req.Kind != "read" && req.Kind != "memory" && req.Kind != "network" && req.Kind != "credential" {
 		return model.ErrInvalid
+	}
+	if req.Kind == "credential" {
+		if !credentialProvider(req.Object) {
+			return model.ErrInvalid
+		}
+		req.Scope = "this project, until revoked"
+		req.Who = "MARSHAL"
+		req.Reason = "operator credential broker decision"
 	}
 	if security.NewFirewall(security.FirewallConfig{}).ScanText(req.Reason) != nil {
 		req.Reason = "Secrets were dropped."
@@ -57,6 +65,15 @@ func (r *Runtime) CommandPermission(ctx context.Context, req permission.Request,
 	}
 	if err = r.store.AppendEvent(ctx, nil, model.Event{ID: id, Type: "PERMISSION_DECIDED", ProjectID: r.ProjectID(), Timestamp: time.Now().UTC(), Data: map[string]any{"kind": req.Kind, "object": req.Object, "scope": req.Scope, "requester": req.Who, "reason": req.Reason, "allow": allow, "actor": p.ID(), "source": source, "runtime_instance": r.runtimeInstanceID, "run_id": req.RunID, "task_id": req.TaskID}}); err != nil {
 		return err
+	}
+	if req.Kind == "credential" && !allow {
+		r.egressMu.Lock()
+		for _, scope := range r.egressRuns {
+			if scope.provider == req.Object && scope.broker != nil {
+				_ = scope.proxy.Close()
+			}
+		}
+		r.egressMu.Unlock()
 	}
 	if req.Kind == "read" {
 		if !filepath.IsAbs(req.Object) {

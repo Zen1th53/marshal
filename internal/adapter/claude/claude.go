@@ -87,10 +87,13 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 	if err != nil {
 		return adapter.Result{}, err
 	}
+	// Run is the governed worker path: MARSHAL supplies confinement and
+	// approval/merge review. Native sessions use a separate launcher.
 	process, err := c.runner.Run(ctx, adapter.Command{
 		Path: c.binary,
 		Args: []string{
 			"-p", string(prompt), "--output-format", "json",
+			"--permission-mode", "bypassPermissions", "--permission-prompts", "none",
 		},
 		Dir:               request.Worktree,
 		Heartbeat:         request.Heartbeat,

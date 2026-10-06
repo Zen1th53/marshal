@@ -174,7 +174,7 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		return adapter.Result{}, err
 	}
 	args := []string{
-		"exec", "--json", "-C", request.Worktree, "-s", "workspace-write",
+		"exec", "--json", "-C", request.Worktree,
 		"--ephemeral", "--ignore-user-config",
 	}
 	if request.Model != "" {
@@ -183,10 +183,14 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 	if request.Effort != "" {
 		args = append(args, "-c", `model_reasoning_effort="`+request.Effort+`"`)
 	}
-	args = append(args, "-")
 	if err := ValidateDangerousFlags(args); err != nil {
 		return adapter.Result{}, err
 	}
+
+	// Run is the governed worker path. MARSHAL supplies the sandbox and
+	// approval boundary; validate caller-controlled args before adding this
+	// fixed external-sandbox option. Native sessions use a separate launcher.
+	args = append(args, "--dangerously-bypass-approvals-and-sandbox", "-")
 
 	process, err := c.runner.Run(ctx, adapter.Command{
 		Path:              c.binary,

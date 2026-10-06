@@ -33,6 +33,15 @@ func Render(requests []Request) (string, error) {
 		if i >= MaxPopupItems {
 			continue
 		}
+		if r.Kind == "credential" {
+			names := map[string]string{"codex": "Codex", "claude": "Claude Code", "gemini": "Gemini", "opencode": "OpenCode"}
+			name, ok := names[r.Object]
+			if !ok {
+				return "", fmt.Errorf("unknown credential provider")
+			}
+			fmt.Fprintf(&b, "%d. Allow governed workers to use your %s sign-in through MARSHAL's credential broker? The worker never sees the token.\nScope and duration: this project, until revoked\n", i+1, name)
+			continue
+		}
 		// Control characters in untrusted reasons cannot change the terminal layout.
 		reason := strings.Map(func(c rune) rune {
 			if unicode.IsControl(c) {

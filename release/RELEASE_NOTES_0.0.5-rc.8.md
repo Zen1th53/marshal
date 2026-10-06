@@ -1,6 +1,6 @@
-# MARSHAL v0.0.5 — The Marshal workspace
+# MARSHAL v0.0.5-rc.8 — The Marshal workspace
 
-One workspace for planning with the Marshal and working with your agents.
+A release candidate for 0.0.5. rc.8 contains everything in rc.7 plus the credential broker: governed Codex and Claude Code workers can use your subscription sign-in without seeing the token.
 
 ## What changed
 
@@ -72,6 +72,10 @@ recording a verdict or warning does not count as enforcement. The reviewed
 [counting rules](../tools/effect-inventory/README.md) make the scope inspectable.
 
 ## Known limits
+
+- **Real-provider end-to-end testing is pending.** Automated tests use
+  simulated agents. A full run from planning through approval to accepted work
+  has not yet been completed with real providers.
 
 - **Keep the window open.** There is no background service. Stored runs remain
   recoverable with `/marshal resume` after reopening MARSHAL.

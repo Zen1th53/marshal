@@ -20,6 +20,7 @@ import (
 )
 
 const maxRequestBody = 1 << 20
+const responseWriteTimeout = 30 * time.Second
 
 type Server struct {
 	runtime *app.Runtime
@@ -68,7 +69,7 @@ func (s *Server) Serve(ctx context.Context, socketPath string) error {
 		},
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      responseWriteTimeout,
 		IdleTimeout:       60 * time.Second,
 	}
 	stopped := make(chan struct{})
@@ -150,7 +151,7 @@ func (s *Server) routes() http.Handler {
 		input.TaskID = request.PathValue("id")
 		return struct{}{}, s.runtime.Release(ctx, input)
 	}))
-	mux.HandleFunc("POST /v1/tasks/{id}/run", s.handle(func(ctx context.Context, request *http.Request) (any, error) {
+	mux.HandleFunc("POST /v1/tasks/{id}/run", s.handleRun(func(ctx context.Context, request *http.Request) (any, error) {
 		var input app.RunRequest
 		if err := decode(request, &input); err != nil {
 			return nil, err
@@ -190,6 +191,14 @@ func (s *Server) routes() http.Handler {
 type handler func(context.Context, *http.Request) (any, error)
 
 func (s *Server) handle(next handler) http.HandlerFunc {
+	return s.handleWithDeadline(next, false)
+}
+
+func (s *Server) handleRun(next handler) http.HandlerFunc {
+	return s.handleWithDeadline(next, true)
+}
+
+func (s *Server) handleWithDeadline(next handler, longRun bool) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		requestID, err := model.NewID("REQ-")
 		if err != nil {
@@ -197,7 +206,22 @@ func (s *Server) handle(next handler) http.HandlerFunc {
 			return
 		}
 		writer.Header().Set("X-Request-ID", requestID)
+		controller := http.NewResponseController(writer)
+		if longRun {
+			// Worker duration is bounded by the runtime, not the HTTP write
+			// timeout. Keep read limits and bound the eventual response write.
+			if err := controller.SetWriteDeadline(time.Time{}); err != nil {
+				writeError(writer, requestID, err)
+				return
+			}
+		}
 		result, err := next(request.Context(), request)
+		if longRun {
+			if deadlineErr := controller.SetWriteDeadline(time.Now().Add(responseWriteTimeout)); deadlineErr != nil {
+				writeError(writer, requestID, deadlineErr)
+				return
+			}
+		}
 		if err != nil {
 			writeError(writer, requestID, err)
 			return

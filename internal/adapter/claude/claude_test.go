@@ -2,6 +2,7 @@ package claude
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -42,9 +43,13 @@ func TestClaudeProbeSuccess(t *testing.T) {
 	}
 }
 
-func TestClaudeRunSuccess(t *testing.T) {
+func TestGovernedClaudeRunSuccess(t *testing.T) {
 	runner := &mockRunner{
 		runFunc: func(ctx context.Context, cmd adapter.Command) (adapter.ProcessResult, error) {
+			want := []string{"--output-format", "json", "--permission-mode", "bypassPermissions", "--permission-prompts", "none"}
+			if len(cmd.Args) != 8 || cmd.Args[0] != "-p" || !slices.Equal(cmd.Args[2:], want) {
+				t.Fatalf("governed argv = %q", cmd.Args)
+			}
 			output := `{"session_id":"claude-sess-1","result":"Task completed successfully"}`
 			return adapter.ProcessResult{
 				Stdout:    []byte(output),

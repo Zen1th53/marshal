@@ -59,7 +59,7 @@ func TestProbeRejectsCLIWithoutRequiredFlags(t *testing.T) {
 	}
 }
 
-func TestRunUsesNarrowNativeSurfaceAndNormalizesJSONL(t *testing.T) {
+func TestGovernedRunUsesExternalSandboxAndNormalizesJSONL(t *testing.T) {
 	runner := &capturingRunner{result: adapter.ProcessResult{
 		Stdout: []byte("{\"type\":\"thread.started\",\"thread_id\":\"thread-123\"}\n" +
 			"{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"done\"}}\n"),
@@ -77,12 +77,12 @@ func TestRunUsesNarrowNativeSurfaceAndNormalizesJSONL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"exec", "--json", "-C", "/repo/task", "-s", "workspace-write", "--ephemeral", "--ignore-user-config", "-"}
+	want := []string{"exec", "--json", "-C", "/repo/task", "--ephemeral", "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox", "-"}
 	if !slices.Equal(runner.command.Args, want) {
 		t.Fatalf("args = %#v, want %#v", runner.command.Args, want)
 	}
 	joined := strings.Join(runner.command.Args, " ")
-	for _, forbidden := range []string{"dangerously-bypass", "danger-full-access", "--search"} {
+	for _, forbidden := range []string{"--sandbox", "workspace-write", "danger-full-access", "--search", "--dangerously-bypass-hook-trust"} {
 		if strings.Contains(joined, forbidden) {
 			t.Fatalf("forbidden flag %q in %s", forbidden, joined)
 		}
@@ -104,7 +104,7 @@ func TestRunPassesTypedModelToNativeCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"exec", "--json", "-C", "/repo/task", "-s", "workspace-write", "--ephemeral", "--ignore-user-config", "--model", "gpt-5-codex", "-"}
+	want := []string{"exec", "--json", "-C", "/repo/task", "--ephemeral", "--ignore-user-config", "--model", "gpt-5-codex", "--dangerously-bypass-approvals-and-sandbox", "-"}
 	if !slices.Equal(runner.command.Args, want) {
 		t.Fatalf("args = %#v, want %#v", runner.command.Args, want)
 	}
@@ -169,4 +169,14 @@ func fakeProbeBinary(t *testing.T, compatible bool) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestGovernedRunStillRejectsCallerSuppliedBypass(t *testing.T) {
+	runner := &capturingRunner{}
+	_, err := New("codex", runner).Run(context.Background(), adapter.Request{
+		TaskID: "TASK-001", Title: "--dangerously-bypass-approvals-and-sandbox", Worktree: "/repo/task",
+	})
+	if err == nil || runner.command.Path != "" {
+		t.Fatalf("caller bypass reached runner: err=%v command=%+v", err, runner.command)
+	}
 }
