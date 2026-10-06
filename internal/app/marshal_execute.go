@@ -268,6 +268,11 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 			t.Worker = next
 		}
 		if s.InstalledVersion != nil {
+			if t.Mode == marshal.Governed && s.ProbeWorker != nil && !s.workerGovernance(ctx, t.Worker).Governed() {
+				if err := s.ProbeWorker(ctx, t.Worker); err != nil {
+					return launched, fmt.Errorf("governed worker verification failed: %w", err)
+				}
+			}
 			if g := s.workerGovernance(ctx, t.Worker); !g.Governed() {
 				return launched, s.Escalate(ctx, runID, t.PlanTaskID, fmt.Sprintf("worker %s is not governed (%s): %s", t.Worker, g.State, strings.Join(g.Reasons, " ")))
 			}

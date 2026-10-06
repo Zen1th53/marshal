@@ -40,7 +40,7 @@ func (m *MarshalCLI) SetMarshalConversationID(id string) {
 	}
 }
 
-const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"checks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}}},"required":["command","criteria"]}},"instructions":{"type":"string"},"expected_output":{"type":"string"}},"required":["id","title","criteria","paths","depends_on","worker","checks","instructions","expected_output"]}}},"required":["tasks"]}`
+const marshalDraftSchema = `{"type":"object","additionalProperties":false,"properties":{"tasks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"title":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}},"paths":{"type":"array","items":{"type":"string"}},"depends_on":{"type":"array","items":{"type":"string"}},"worker":{"type":"string"},"mode":{"type":"string","enum":["native","governed"]},"checks":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"command":{"type":"string"},"criteria":{"type":"array","items":{"type":"string"}}},"required":["command","criteria"]}},"instructions":{"type":"string"},"expected_output":{"type":"string"}},"required":["id","title","criteria","paths","depends_on","worker","mode","checks","instructions","expected_output"]}}},"required":["tasks"]}`
 const marshalReviewSchema = `{"type":"object","additionalProperties":false,"properties":{"Verdict":{"type":"string","enum":["accept","return","reassign","escalate"]},"Reviewer":{"type":"string"},"Reasons":{"type":"array","items":{"type":"string"}},"EvidenceRefs":{"type":"array","items":{"type":"string"}}},"required":["Verdict","Reviewer","Reasons","EvidenceRefs"]}`
 const marshalVerifySchema = `{"type":"object","additionalProperties":false,"properties":{"head":{"type":"string"},"verdict":{"type":"string","enum":["pass","fail"]},"findings":{"type":"array","items":{"type":"string"}}},"required":["head","verdict","findings"]}`
 
@@ -188,7 +188,7 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 		return MarshalDraft{}, errors.New("no worker CLI is available")
 	}
 	var proposal marshalTaskProposal
-	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
+	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Use mode governed for codex and claude unless the operator explicitly requests native; agy and opencode use native. Honour a goal that requests governed work. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -212,7 +212,7 @@ func (m *MarshalCLI) Amend(ctx context.Context, run marshal.Run, reason string) 
 	workers := m.availableWorkers()
 	var proposal marshalTaskProposal
 	input, _ := json.Marshal(run)
-	err := m.turn(ctx, "Return the complete amended JSON task list. Use only workers "+strings.Join(workers, ", ")+". Reason: "+reason+". Current run: "+string(input), marshalDraftSchema, &proposal)
+	err := m.turn(ctx, "Return the complete amended JSON task list. Use only workers "+strings.Join(workers, ", ")+". Preserve each existing task mode unless the operator requests a change. New tasks prefer governed for codex and claude; other workers use native. Reason: "+reason+". Current run: "+string(input), marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -221,12 +221,13 @@ func (m *MarshalCLI) Amend(ctx context.Context, run marshal.Run, reason string) 
 
 type marshalTaskProposal struct {
 	Tasks []struct {
-		ID        string   `json:"id"`
-		Title     string   `json:"title"`
-		Criteria  []string `json:"criteria"`
-		Paths     []string `json:"paths"`
-		DependsOn []string `json:"depends_on"`
-		Worker    string   `json:"worker"`
+		ID        string             `json:"id"`
+		Title     string             `json:"title"`
+		Criteria  []string           `json:"criteria"`
+		Paths     []string           `json:"paths"`
+		DependsOn []string           `json:"depends_on"`
+		Worker    string             `json:"worker"`
+		Mode      marshal.WorkerMode `json:"mode"`
 		Checks    []struct {
 			Command  string   `json:"command"`
 			Criteria []string `json:"criteria"`
@@ -291,8 +292,21 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 		if !allowed || item.ID == "" || item.Title == "" || len(item.Criteria) == 0 || len(item.Paths) == 0 || len(item.Checks) == 0 {
 			return MarshalDraft{}, fmt.Errorf("invalid proposed task %q", item.ID)
 		}
+		mode := item.Mode
+		if mode == "" {
+			mode = marshal.Native
+			if item.Worker == "codex" || item.Worker == "claude" {
+				mode = marshal.Governed
+			}
+		}
+		if mode != marshal.Native && mode != marshal.Governed {
+			return MarshalDraft{}, fmt.Errorf("invalid task mode %q", mode)
+		}
+		if mode == marshal.Governed && item.Worker != "codex" && item.Worker != "claude" {
+			return MarshalDraft{}, fmt.Errorf("worker %s does not support governed mode", item.Worker)
+		}
 		draft.Plan.Tasks = append(draft.Plan.Tasks, plan.Task{ID: item.ID, Title: item.Title, Criteria: item.Criteria, Paths: item.Paths, DependsOn: item.DependsOn, Mutating: true, Weight: 1, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput})
-		task := marshal.Task{PlanTaskID: item.ID, Title: item.Title, Worker: item.Worker, Mode: marshal.Native, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput}
+		task := marshal.Task{PlanTaskID: item.ID, Title: item.Title, Worker: item.Worker, Mode: mode, Criteria: item.Criteria, Files: item.Paths, DependsOn: item.DependsOn, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput}
 		for _, check := range item.Checks {
 			task.Checks = append(task.Checks, marshal.Check{Command: check.Command, Criteria: check.Criteria})
 			draft.Plan.Checks[item.ID] = append(draft.Plan.Checks[item.ID], check.Command)

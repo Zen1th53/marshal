@@ -56,6 +56,10 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	s.Reviewer = "marshal:" + w.Provider
 	s.Gate = w.Gate
 	s.ApprovalActor = w.Approver
+	s.ProbeWorker = func(ctx context.Context, worker string) error {
+		_, err := r.VerifyMarshalWorker(ctx, worker, "")
+		return err
+	}
 	s.InstalledVersion = installedCLIVersion
 	s.HandInGuard = r.guardHoneypotHandIn
 	// Every role runs in a session of its own. The ULTRA cross-reviewer and
@@ -91,11 +95,12 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 		"agy":      driver.Agy(""),
 		"opencode": driver.OpenCode(""),
 	}
-	governedRun := r.marshalProcess05Run(s)
+	governedRun := r.marshalGovernedRun(s)
 	s.GovernedDrivers = map[string]driver.Driver{
-		"codex":       driver.Governed{Provider: "codex", Run: governedRun, Check: r.governedHandInCheck},
-		"claude-code": driver.Governed{Provider: "claude", Run: governedRun, Check: r.governedHandInCheck},
+		"codex":  driver.Governed{Provider: "codex", Run: governedRun, Check: r.governedHandInCheck},
+		"claude": driver.Governed{Provider: "claude", Run: governedRun, Check: r.governedHandInCheck},
 	}
+	s.GovernedDrivers["claude-code"] = s.GovernedDrivers["claude"]
 	s.GateState = s.observedGateState
 	s.GovernedCheck = r.runGovernedCheck
 	s.Verify = s.verifyByChecks

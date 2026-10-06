@@ -26,13 +26,15 @@ type MarshalPanel struct {
 
 // MarshalTaskRow is one task as the panel shows it.
 type MarshalTaskRow struct {
-	ID       string
-	Worker   string
-	State    marshal.TaskState
-	Returns  int
-	Criteria []string
-	Files    []string
-	Checks   []string
+	ID             string
+	Worker         string
+	Mode           marshal.WorkerMode
+	ImportedResult *marshal.ImportedResult
+	State          marshal.TaskState
+	Returns        int
+	Criteria       []string
+	Files          []string
+	Checks         []string
 }
 
 // newMarshalPanel snapshots a run for the panel.
@@ -43,7 +45,7 @@ func newMarshalPanel(runID, provider string, run marshal.Run, note string) *Mars
 		for _, n := range t.ReturnsByAgent {
 			returns += n
 		}
-		row := MarshalTaskRow{ID: t.PlanTaskID, Worker: t.Worker, State: t.State, Returns: returns, Criteria: append([]string(nil), t.Criteria...), Files: append([]string(nil), t.Files...)}
+		row := MarshalTaskRow{ID: t.PlanTaskID, Worker: t.Worker, Mode: t.Mode, ImportedResult: t.ImportedResult, State: t.State, Returns: returns, Criteria: append([]string(nil), t.Criteria...), Files: append([]string(nil), t.Files...)}
 		for _, check := range t.Checks {
 			row.Checks = append(row.Checks, check.Command)
 		}
@@ -69,7 +71,7 @@ func marshalSection(s UIState, th *Theme, cols int) []string {
 	out = append(out, PadCell("   "+marshalBudgetText(p), cols))
 	for _, t := range p.Tasks {
 		glyph, color := marshalTaskGlyph(th, t.State)
-		line := fmt.Sprintf("   %s %-12s %-10s %s", th.Colorize(color, glyph), t.ID, t.Worker, t.State)
+		line := fmt.Sprintf("   %s %-12s %-10s %s %s", th.Colorize(color, glyph), t.ID, t.Worker, t.Mode, t.State)
 		if t.Returns > 0 {
 			line += th.Colorize(th.Warning, fmt.Sprintf("  returned %d", t.Returns))
 		}
@@ -114,11 +116,14 @@ func marshalStatusText(p *MarshalPanel) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Marshal run %s — %s\n", p.RunID, p.State)
 	for _, t := range p.Tasks {
-		fmt.Fprintf(&b, "  %-12s %-10s %s", t.ID, t.Worker, t.State)
+		fmt.Fprintf(&b, "  %-12s %-10s %s %s", t.ID, t.Worker, t.Mode, t.State)
 		if t.Returns > 0 {
 			fmt.Fprintf(&b, " (returned %d)", t.Returns)
 		}
 		b.WriteString("\n")
+		if t.ImportedResult != nil {
+			fmt.Fprintf(&b, "    imported: %s revision %d · base %s · result %s\n", t.ImportedResult.TaskID, t.ImportedResult.Revision, t.ImportedResult.BaseCommit, t.ImportedResult.ResultCommit)
+		}
 		if len(t.Criteria) > 0 {
 			fmt.Fprintf(&b, "    criteria: %s\n", strings.Join(t.Criteria, "; "))
 		}

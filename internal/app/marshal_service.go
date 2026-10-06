@@ -56,6 +56,7 @@ type MarshalService struct {
 	GovernedDrivers                  map[string]driver.Driver
 	Gate                             marshal.CapabilityGate
 	Verify                           func(context.Context, marshal.Run, string) (verification.Session, verification.Binding, error)
+	ProbeWorker                      func(context.Context, string) error
 	// InstalledVersion reports the installed version of a worker's CLI, for
 	// the evidence-derived harness governance assessment. Nil means unknown.
 	InstalledVersion func(ctx context.Context, worker string) string
@@ -355,18 +356,23 @@ func marshalApprovalDigest(planDigest string, run marshal.Run) string {
 	}
 	modes := map[string]marshal.WorkerMode{}
 	checks := map[string][]marshal.Check{}
+	imported := map[string]*marshal.ImportedResult{}
 	for _, task := range run.Tasks {
 		modes[task.PlanTaskID] = task.Mode
+		if task.ImportedResult != nil {
+			imported[task.PlanTaskID] = task.ImportedResult
+		}
 		checks[task.PlanTaskID] = task.Checks
 	}
 	data, _ := json.Marshal(struct {
-		Plan    string
-		Budget  marshal.Budget
-		Control marshal.Control               `json:",omitempty"`
-		Pack    string                        `json:",omitempty"`
-		Modes   map[string]marshal.WorkerMode `json:",omitempty"`
-		Checks  map[string][]marshal.Check    `json:",omitempty"`
-	}{planDigest, run.Budget, control, pack, modes, checks})
+		Plan     string
+		Budget   marshal.Budget
+		Control  marshal.Control                    `json:",omitempty"`
+		Pack     string                             `json:",omitempty"`
+		Modes    map[string]marshal.WorkerMode      `json:",omitempty"`
+		Checks   map[string][]marshal.Check         `json:",omitempty"`
+		Imported map[string]*marshal.ImportedResult `json:",omitempty"`
+	}{planDigest, run.Budget, control, pack, modes, checks, imported})
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }

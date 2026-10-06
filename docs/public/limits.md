@@ -58,7 +58,9 @@ same machine moves or replaces project directories at the same time. Do not
 run other tools that rearrange the project while MARSHAL is applying a task.
 
 **Native workers run with your user account's rights.**
-They are trusted and use the agent's own permission controls. Governed workers
+They are trusted and use the agent's own permission controls. Plan approval
+shows each task's mode; Codex and Claude default to governed. A credential grant
+does not change a native task into a governed task. Governed workers
 are sandboxed; a separate working copy alone does not provide that protection.
 
 **Shared text can reach another provider.**
@@ -87,3 +89,12 @@ output. The original agent can then see its own words inside that peer's
 message. MARSHAL does not remove nested quotes; author filtering applies to
 the outer message, not every piece of text inside it. Channel history also
 requires the relevant read grants before messages can be delivered.
+
+**Finished CLI tasks need an acceptance check to enter Marshal review.**
+Use `/marshal import TASK-ID CHECK` for a successful Codex or Claude task in
+review. It creates a plan awaiting approval, pins the existing result and runs
+sandboxed checks and normal review before merging. `/apply` still takes only
+Codex cloud task IDs. Import does not invent evidence for the task's original
+intent; choose a check that proves the result you want. Delivery can refuse if
+the default branch has diverged or is checked out; follow the close command's
+instructions and retry.

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
@@ -53,7 +54,7 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{
 func TestMarshalCLIMaterializesGraphFromTaskProposal(t *testing.T) {
 	m := &MarshalCLI{ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
 	var proposal marshalTaskProposal
-	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"write a","criteria":["a exists"],"paths":["a.txt"],"depends_on":[],"worker":"codex","checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`), &proposal); err != nil {
+	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"write a","mode":"native","criteria":["a exists"],"paths":["a.txt"],"depends_on":[],"worker":"codex","checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`), &proposal); err != nil {
 		t.Fatal(err)
 	}
 	draft, err := m.materialize(proposal, "", 1, []string{"codex"})
@@ -200,5 +201,122 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{
 	m := MarshalCLI{Provider: "codex", Binary: binary, Dir: root, ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
 	if _, err := m.Draft(t.Context(), "write a.txt"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMarshalProposalCarriesGovernedMode(t *testing.T) {
+	m := &MarshalCLI{ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
+	for _, mode := range []string{"governed", "native", ""} {
+		var proposal marshalTaskProposal
+		data := `{"tasks":[{"id":"a","title":"write a","mode":"` + mode + `","worker":"codex","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`
+		if err := json.Unmarshal([]byte(data), &proposal); err != nil {
+			t.Fatal(err)
+		}
+		draft, err := m.materialize(proposal, "", 1, []string{"codex"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := marshal.Governed
+		if mode == "native" {
+			want = marshal.Native
+		}
+		if draft.Tasks[0].Mode != want {
+			t.Fatalf("mode %q: got %s want %s", mode, draft.Tasks[0].Mode, want)
+		}
+	}
+}
+
+func TestMarshalProposalRefusesInvalidOrUnsupportedModes(t *testing.T) {
+	m := &MarshalCLI{ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
+	for _, entry := range []struct{ worker, mode string }{{"codex", "other"}, {"agy", "governed"}, {"opencode", "governed"}} {
+		var proposal marshalTaskProposal
+		data := `{"tasks":[{"id":"a","title":"write a","mode":"` + entry.mode + `","worker":"` + entry.worker + `","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`
+		if err := json.Unmarshal([]byte(data), &proposal); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.materialize(proposal, "", 1, []string{entry.worker}); err == nil {
+			t.Fatalf("accepted %+v", entry)
+		}
+	}
+}
+
+func TestGovernedProposalDispatchesGovernedDriver(t *testing.T) {
+	s, _ := marshalFixture(t, 1)
+	var proposal marshalTaskProposal
+	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"write a","mode":"governed","worker":"codex","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`), &proposal); err != nil {
+		t.Fatal(err)
+	}
+	draft, err := (&MarshalCLI{ProjectID: s.ProjectID}).materialize(proposal, "", 1, []string{"codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Drivers = map[string]driver.Driver{"codex": driver.Codex("must-not-start-native")}
+	called := false
+	s.GovernedDrivers = map[string]driver.Driver{"codex": driver.Governed{Provider: "codex", Run: func(_ context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
+		called = true
+		return nil, os.WriteFile(filepath.Join(req.Worktree, "a.txt"), []byte("done"), 0600)
+	}}}
+	if _, err = s.StartPlanningFromDraft(t.Context(), "governed", "governed goal", draft, marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Dispatch(t.Context(), "governed", "a", "write a"); err == nil {
+		t.Fatal("unapproved plan dispatched")
+	}
+	if _, err = s.Approve(t.Context(), "governed"); err != nil {
+		t.Fatal(err)
+	}
+	dispatch, err := s.Dispatch(t.Context(), "governed", "a", "write a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handin, err := s.CollectHandIn(t.Context(), "governed", dispatch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !called || dispatch.Driver.Mode() != marshal.Governed || handin.Mode != marshal.Governed {
+		t.Fatalf("governed proposal used wrong driver: %+v", handin)
+	}
+}
+
+func TestGovernedDraftRefusesUnavailableProtectionWithoutNativeFallback(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(t.Context(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := Open(t.Context(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	bin := t.TempDir()
+	marker := filepath.Join(bin, "worker-started")
+	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'test-version\\n'; exit 0; fi\nprintf ran > '" + marker + "'\n"
+	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	service, err := runtime.MarshalWired(MarshalWiring{Provider: "codex", Approver: func(context.Context, string, string) (string, error) { return "operator", nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var proposal marshalTaskProposal
+	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"write a","mode":"governed","worker":"codex","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`), &proposal); err != nil {
+		t.Fatal(err)
+	}
+	draft, err := (&MarshalCLI{ProjectID: string(service.CanonicalPlanProjectID())}).materialize(proposal, "", 1, []string{"codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.StartPlanningFromDraft(t.Context(), "protected", "governed goal", draft, marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.Approve(t.Context(), "protected"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.Execute(t.Context(), "protected", func(marshal.Task, BriefContext) string { return "write a" }, nil); err == nil {
+		t.Fatal("governed execution admitted without credential/protection setup")
+	}
+	if _, err = os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("native fallback started worker: %v", err)
 	}
 }

@@ -171,7 +171,16 @@ type Check struct {
 }
 
 // Task binds an approved plan task to its worker, branch, and checks.
+// ImportedResult pins a finished CLI task for review without running it again.
+type ImportedResult struct {
+	TaskID       string
+	Revision     int64
+	BaseCommit   string
+	ResultCommit string
+}
+
 type Task struct {
+	ImportedResult *ImportedResult `json:",omitempty"`
 	PlanTaskID     string
 	Title          string
 	ParentID       string
