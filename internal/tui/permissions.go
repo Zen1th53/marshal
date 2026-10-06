@@ -200,8 +200,22 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 	return nil
 }
 func (h *CommandHandler) handlePermission(ctx context.Context, args []string) (string, error) {
+	if len(args) == 3 && args[0] == "credential" && (args[1] == "request" || args[1] == "revoke") {
+		req := permission.Request{Kind: "credential", Object: args[2], Scope: "this project, until revoked", Who: "MARSHAL"}
+		if _, err := permission.Render([]permission.Request{req}); err != nil {
+			return "", err
+		}
+		if args[1] == "request" {
+			h.ws.queuePermission(req)
+			return "Credential broker permission queued. A allows; every other key denies. Retry the governed task after allowing.", nil
+		}
+		if err := h.ws.decidePermission(ctx, req, false, "operator revoke"); err != nil {
+			return "", err
+		}
+		return "Credential broker revoked for " + req.Object + "; active broker connections closed.", nil
+	}
 	if len(args) < 3 || args[0] != "read" || (args[1] != "allow" && args[1] != "deny") {
-		return "Usage: /permission read <allow|deny> <exact absolute folder>", nil
+		return "Usage: /permission read <allow|deny> <exact absolute folder> | /permission credential <request|revoke> <codex|claude|gemini|opencode>", nil
 	}
 	req := permission.Request{Kind: "read", Object: strings.Join(args[2:], " "), Scope: "this session only, read-only", Who: "operator", Reason: "operator read decision"}
 	if err := h.ws.decidePermission(ctx, req, args[1] == "allow", "operator command"); err != nil {

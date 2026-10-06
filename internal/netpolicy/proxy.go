@@ -77,34 +77,39 @@ type DecisionStore interface {
 }
 
 type ProxyConfig struct {
-	Evaluator Evaluator
-	Store     DecisionStore
-	SubjectID string
-	TaskID    string
-	ChangeID  string
-	Resolver  *net.Resolver
-	Dialer    *net.Dialer
-	Listener  net.Listener
-	RunID     string
-	Attempt   func(context.Context, string, int, Decision) error
+	Broker            *CredentialBroker
+	CredentialAllowed func(context.Context) bool
+	Evaluator         Evaluator
+	Store             DecisionStore
+	SubjectID         string
+	TaskID            string
+	ChangeID          string
+	Resolver          *net.Resolver
+	Dialer            *net.Dialer
+	Listener          net.Listener
+	RunID             string
+	Attempt           func(context.Context, string, int, Decision) error
 }
 
 type EgressProxy struct {
-	evaluator   Evaluator
-	store       DecisionStore
-	subjectID   string
-	taskID      string
-	changeID    string
-	resolver    *net.Resolver
-	dialer      *net.Dialer
-	listener    net.Listener
-	server      *http.Server
-	addr        string
-	mu          sync.Mutex
-	runID       string
-	attempt     func(context.Context, string, int, Decision) error
-	connections map[net.Conn]string
-	closed      bool
+	dialContext       func(context.Context, string, string) (net.Conn, error)
+	broker            *CredentialBroker
+	credentialAllowed func(context.Context) bool
+	evaluator         Evaluator
+	store             DecisionStore
+	subjectID         string
+	taskID            string
+	changeID          string
+	resolver          *net.Resolver
+	dialer            *net.Dialer
+	listener          net.Listener
+	server            *http.Server
+	addr              string
+	mu                sync.Mutex
+	runID             string
+	attempt           func(context.Context, string, int, Decision) error
+	connections       map[net.Conn]string
+	closed            bool
 }
 
 func NewEgressProxy(cfg ProxyConfig) (*EgressProxy, error) {
@@ -133,18 +138,21 @@ func NewEgressProxy(cfg ProxyConfig) (*EgressProxy, error) {
 	}
 
 	p := &EgressProxy{
-		evaluator:   cfg.Evaluator,
-		store:       cfg.Store,
-		subjectID:   cfg.SubjectID,
-		taskID:      cfg.TaskID,
-		changeID:    cfg.ChangeID,
-		runID:       cfg.RunID,
-		attempt:     cfg.Attempt,
-		connections: map[net.Conn]string{},
-		resolver:    resolver,
-		dialer:      dialer,
-		listener:    ln,
-		addr:        ln.Addr().String(),
+		dialContext:       dialer.DialContext,
+		broker:            cfg.Broker,
+		credentialAllowed: cfg.CredentialAllowed,
+		evaluator:         cfg.Evaluator,
+		store:             cfg.Store,
+		subjectID:         cfg.SubjectID,
+		taskID:            cfg.TaskID,
+		changeID:          cfg.ChangeID,
+		runID:             cfg.RunID,
+		attempt:           cfg.Attempt,
+		connections:       map[net.Conn]string{},
+		resolver:          resolver,
+		dialer:            dialer,
+		listener:          ln,
+		addr:              ln.Addr().String(),
 	}
 
 	p.listener = &observedListener{Listener: ln, proxy: p}
@@ -212,6 +220,16 @@ func (p *EgressProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Refuse the known Claude token host before dialing, even if egress is
+	// granted. TLS termination remains confined to the Anthropic API host.
+	if p.broker.refusesAuthHost(host) {
+		if p.recordDecision(ctx, host, port, nil, Decision{Reason: ReasonBrokerRefreshDenied}) != nil {
+			http.Error(w, "credential broker evidence unavailable", http.StatusServiceUnavailable)
+		} else {
+			http.Error(w, "credential broker sandbox refresh refused", http.StatusForbidden)
+		}
+		return
+	}
 	validatedIP, decision, err := p.evaluateAndResolve(ctx, host, port, ProtocolTCP)
 	if recordErr := p.recordDecision(ctx, host, port, validatedIP, decision); recordErr != nil {
 		http.Error(w, "egress evidence unavailable", http.StatusServiceUnavailable)
@@ -230,6 +248,15 @@ func (p *EgressProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer p.disconnect(targetConn)
+
+	if p.broker.handles(host) {
+		if port != 443 {
+			http.Error(w, "credential broker requires provider port 443", http.StatusForbidden)
+			return
+		}
+		p.handleBrokerConnect(w, r, host, port, targetConn)
+		return
+	}
 
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
@@ -287,6 +314,16 @@ func (p *EgressProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Refuse the known Claude token host before dialing, even if egress is
+	// granted. TLS termination remains confined to the Anthropic API host.
+	if p.broker.refusesAuthHost(host) {
+		if p.recordDecision(ctx, host, port, nil, Decision{Reason: ReasonBrokerRefreshDenied}) != nil {
+			http.Error(w, "credential broker evidence unavailable", http.StatusServiceUnavailable)
+		} else {
+			http.Error(w, "credential broker sandbox refresh refused", http.StatusForbidden)
+		}
+		return
+	}
 	validatedIP, decision, err := p.evaluateAndResolve(ctx, host, port, ProtocolTCP)
 	if recordErr := p.recordDecision(ctx, host, port, validatedIP, decision); recordErr != nil {
 		http.Error(w, "egress evidence unavailable", http.StatusServiceUnavailable)
@@ -295,6 +332,11 @@ func (p *EgressProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil || !decision.Allowed {
 		http.Error(w, "egress denied by policy: "+string(decision.Reason), http.StatusForbidden)
+		return
+	}
+
+	if p.broker.handles(host) {
+		http.Error(w, "credential broker requires HTTPS", http.StatusForbidden)
 		return
 	}
 
@@ -470,7 +512,7 @@ func (p *EgressProxy) connect(ctx context.Context, host string, port int, ip net
 	if err != nil || !d.Allowed {
 		return nil, ErrDenied
 	}
-	conn, err := p.dialer.DialContext(ctx, "tcp", net.JoinHostPort(ip.String(), strconv.Itoa(port)))
+	conn, err := p.dialContext(ctx, "tcp", net.JoinHostPort(ip.String(), strconv.Itoa(port)))
 	if err != nil {
 		return nil, err
 	}

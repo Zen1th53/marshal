@@ -19,6 +19,8 @@ const (
 	ActionAllow Action = "allow"
 	ActionDeny  Action = "deny"
 
+	ReasonClaudeSignInExpired    Reason = "NET_BROKER_CLAUDE_SIGN_IN_EXPIRED"
+	ReasonBrokerRefreshDenied    Reason = "NET_BROKER_SANDBOX_REFRESH_DENIED"
 	ReasonAllowed                Reason = "NET_ALLOWED"
 	ReasonDenied                 Reason = "NET_DENIED"
 	ReasonRuleInvalid            Reason = "NET_RULE_INVALID"
@@ -157,7 +159,7 @@ func (d Decision) Validate() error {
 		return nil
 	}
 	switch d.Reason {
-	case ReasonDenied, ReasonRuleInvalid, ReasonProtocolDenied, ReasonRedirectDenied, ReasonEnforcementUnavailable:
+	case ReasonClaudeSignInExpired, ReasonBrokerRefreshDenied, ReasonDenied, ReasonRuleInvalid, ReasonProtocolDenied, ReasonRedirectDenied, ReasonEnforcementUnavailable:
 		return nil
 	default:
 		return ErrRuleInvalid

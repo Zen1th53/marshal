@@ -22,6 +22,7 @@ import (
 )
 
 type runEgress struct {
+	broker                                     *netpolicy.CredentialBroker
 	id, parent, task, worker, provider, socket string
 	allowlist                                  *netpolicy.RunAllowlist
 	proxy                                      *netpolicy.EgressProxy
@@ -94,12 +95,23 @@ func (r *Runtime) startProviderEgress(ctx context.Context, id, parent, provider,
 	if !r.egressEnforcementAvailable() {
 		return "", nil, netpolicy.ErrEnforcementUnavailable
 	}
-	return r.startRunEgress(ctx, id, parent, provider, task.ID, worker, []string{endpoint})
+	broker, err := r.providerBroker(ctx, provider, modelName)
+	if err != nil {
+		return "", nil, err
+	}
+	if provider == "codex" && broker != nil && broker.Subscription() {
+		endpoint = "chatgpt.com:443"
+	}
+	return r.startRunEgress(ctx, id, parent, provider, task.ID, worker, []string{endpoint}, broker)
 }
 
-func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, taskID, worker string, endpoints []string) (string, func(), error) {
+func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, taskID, worker string, endpoints []string, brokers ...*netpolicy.CredentialBroker) (string, func(), error) {
 	if r.store == nil {
 		return "", nil, model.ErrUnavailable
+	}
+	var broker *netpolicy.CredentialBroker
+	if len(brokers) > 0 {
+		broker = brokers[0]
 	}
 	allowlist, err := netpolicy.NewRunAllowlist(endpoints)
 	if err != nil {
@@ -120,8 +132,8 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 		os.RemoveAll(dir)
 		return "", nil, err
 	}
-	scope := &runEgress{id: id, parent: parent, task: taskID, worker: worker, provider: provider, socket: socket, allowlist: allowlist, pending: map[string]bool{}}
-	proxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{Evaluator: allowlist, Store: r.store, SubjectID: worker, TaskID: taskID, RunID: id, Listener: listener, Attempt: func(ctx context.Context, host string, port int, d netpolicy.Decision) error {
+	scope := &runEgress{broker: broker, id: id, parent: parent, task: taskID, worker: worker, provider: provider, socket: socket, allowlist: allowlist, pending: map[string]bool{}}
+	proxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{Broker: broker, CredentialAllowed: func(ctx context.Context) bool { return r.HasCredentialGrant(ctx, provider) }, Evaluator: allowlist, Store: r.store, SubjectID: worker, TaskID: taskID, RunID: id, Listener: listener, Attempt: func(ctx context.Context, host string, port int, d netpolicy.Decision) error {
 		return r.recordEgressAttempt(ctx, scope, host, port, d)
 	}})
 	if err != nil {
@@ -194,6 +206,9 @@ func (r *Runtime) recordEgressAttempt(ctx context.Context, scope *runEgress, hos
 	}
 	if d.Allowed {
 		return nil
+	}
+	if d.Reason == netpolicy.ReasonClaudeSignInExpired {
+		return r.notifyEgressRefusal(ctx, scope, endpoint, netpolicy.ClaudeSignInExpiredMessage)
 	}
 	return r.notifyEgressRefusal(ctx, scope, endpoint, fmt.Sprintf("%s wants to reach %s. Allow?", scope.worker, endpoint))
 }

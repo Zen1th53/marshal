@@ -21,12 +21,23 @@ Use Ubuntu 24.04+, Debian 12+, or build tmux from source.
 macOS is not supported yet. On Windows you can try WSL 2, which has not been
 tested.
 
-**Governed workers cannot use a ChatGPT or Claude subscription yet.**
-The sandbox hides your account files, so Codex and Claude Code signed in with
-a subscription cannot authenticate as governed workers. Use OpenCode
-(including its free models) or a provider configured with an API key for
-governed work. Codex and Claude Code work fully as native sessions and as the
-Marshal.
+**Credential use requires your permission.**
+Use `/permission credential request <codex|claude|gemini|opencode>` and press
+uppercase `A` in MARSHAL's permission prompt. The decision lasts for this
+project until `/permission credential revoke <provider>`. Every other key,
+closing the prompt, and timeout deny. Model text cannot grant access.
+
+The [credential broker](credential-broker.md) keeps supported API keys on the
+host and gives governed workers unissued placeholders. Only the selected
+provider's HTTPS host receives the real credential. Codex ChatGPT subscription
+sign-in works through the broker using fresh host-file reads and a host CLI
+managed-auth refresh; the worker never sees the token. MARSHAL never writes the
+host sign-in file. Claude Code subscription sign-in also works through the
+broker. If its host token expires or is rejected, the broker re-reads once and
+retries only with a changed fresh token; otherwise it alerts and refuses the
+request. Run `claude` once on the host to refresh it, then retry. See the broker details for supported CLI
+formats, the 20-second refresh deadline, and buffering limits. Permission does
+not override unsupported flows. Native sessions remain separate.
 
 **OpenCode cannot be the Marshal.**
 It can do tasks as a worker, but planning needs Codex, Claude Code or

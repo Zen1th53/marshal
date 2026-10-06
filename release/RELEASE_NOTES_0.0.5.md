@@ -56,7 +56,7 @@ missing dependency does not make installation fail.
 The automated source inventory reports:
 
 - Constitution enforcement: 0.3%
-- Scope of protection: 6.6%
+- Scope of protection: 6.5%
 
 Constitution enforcement is the percentage of material source call sites that a constitutional verdict can refuse before the effect occurs.
 Scope of protection is the percentage of material source call sites guarded before execution by a constitutional gate, approval binding, policy authorisation or sandbox.
@@ -75,13 +75,27 @@ recording a verdict or warning does not count as enforcement. The reviewed
 
 - **Keep the window open.** There is no background service. Stored runs remain
   recoverable with `/marshal resume` after reopening MARSHAL.
-- **Governed workers need a provider that can sign in inside the sandbox.**
-  The sandbox hides your account files, so Codex and Claude Code signed in
-  with a ChatGPT or Claude subscription cannot authenticate as governed
-  workers yet. Use OpenCode (including its free models) or a provider that
-  is configured with an API key for governed work. Codex and Claude Code work
-  fully as native sessions and as the Marshal. A credential broker that lets
-  governed workers use your subscription without seeing the token is planned.
+- **Credential broker is opt-in per project and provider.** Use
+  `/permission credential request <codex|claude|gemini|opencode>` and press
+  uppercase `A` in the fixed permission prompt. Revoke with
+  `/permission credential revoke <provider>`. Supported API keys stay on the
+  host; the worker gets only placeholders and a public run CA. Injection is
+  limited to the selected provider HTTPS host; other allowed hosts remain
+  CONNECT tunnels. Setup failures refuse work without copying native auth.
+  Codex ChatGPT subscription sign-in works for governed workers through the
+  broker; the worker never sees the token. Each request reads host sign-in afresh.
+  A bounded host CLI account refresh owns persistence; MARSHAL never writes that
+  file, serializes refreshes, and retries a 401 once. The managed-auth protocol
+  was verified locally for Codex 0.160.1; live provider behavior is unverified.
+  Claude Code subscription sign-in also works for governed workers through the
+  broker. It reads host sign-in afresh and never sends the refresh token. At
+  expiry or a 401 it re-reads once and retries only with a changed fresh token;
+  otherwise it refuses the request and alerts once per run. Run `claude` once
+  on the host to refresh it, then retry. Codex refresh failures, incompatible
+  formats, and commands exceeding 20 seconds refuse work. The broker does not prevent approved
+  workers from spending provider quota or sending permitted data to it.
+  See [broker details](../docs/public/credential-broker.md) for profiles and
+  response buffering limits.
 - **OpenCode is a worker, not the Marshal.** Planning needs Codex, Claude Code
   or Antigravity.
 - **Scope checks only warn.** Out-of-scope changes and goal drift are recorded;

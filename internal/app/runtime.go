@@ -1875,7 +1875,24 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			if err != nil {
 				return nil, "", err
 			}
+
 			extraEnv = append(extraEnv, trap.Env...)
+			brokerEnv, brokerErr := r.sandboxBroker(proxySocket, trap.Home)
+			if brokerErr != nil {
+				return nil, "", brokerErr
+			}
+			// Replace synthetic honeypot env entries for the selected provider.
+			for _, kv := range brokerEnv {
+				key := strings.SplitN(kv, "=", 2)[0] + "="
+				filtered := extraEnv[:0]
+				for _, old := range extraEnv {
+					if !strings.HasPrefix(old, key) {
+						filtered = append(filtered, old)
+					}
+				}
+				extraEnv = append(filtered, kv)
+			}
+
 			runner = worker.NewGuardedSandboxed(process, backend, model.SandboxRequest{
 				ScratchHome: trap.Home,
 				Worktree:    worktreePath, NetworkAllowed: networkAllowed,
