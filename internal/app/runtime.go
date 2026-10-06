@@ -1823,7 +1823,12 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			return nil, "", chooseErr
 		}
 		if chosen.Level == model.IsolationBwrap {
-			readOnlyBinds := []model.Bind{{Source: binary, Target: binary}}
+			resolvedBinary, installationBind, mountErr := cliInstallationMount(binary)
+			if mountErr != nil {
+				return nil, "", mountErr
+			}
+			binary = resolvedBinary
+			readOnlyBinds := []model.Bind{installationBind}
 			gitMetadata := filepath.Join(r.layout.Root, ".git")
 			if info, statErr := os.Stat(gitMetadata); statErr == nil && info.IsDir() {
 				readOnlyBinds = append(readOnlyBinds, model.Bind{Source: gitMetadata, Target: gitMetadata})

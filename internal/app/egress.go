@@ -201,7 +201,7 @@ func (r *Runtime) recordEgressAttempt(ctx context.Context, scope *runEgress, hos
 
 	kind := events.EventTypeNetworkEgressAttempt
 	endpoint := net.JoinHostPort(host, strconv.Itoa(port))
-	if err := r.recordEgress(ctx, scope, kind, map[string]any{"endpoint": endpoint, "allowed": d.Allowed, "reason": string(d.Reason), "source": "proxy attempt"}); err != nil {
+	if err := r.recordEgress(ctx, scope, kind, map[string]any{"endpoint": endpoint, "allowed": d.Allowed, "reason": string(d.Reason), "rule_id": string(d.RuleID), "source": "proxy attempt"}); err != nil {
 		return err
 	}
 	if d.Allowed {

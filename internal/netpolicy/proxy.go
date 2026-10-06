@@ -223,7 +223,7 @@ func (p *EgressProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// Refuse the known Claude token host before dialing, even if egress is
 	// granted. TLS termination remains confined to the Anthropic API host.
 	if p.broker.refusesAuthHost(host) {
-		if p.recordDecision(ctx, host, port, nil, Decision{Reason: ReasonBrokerRefreshDenied}) != nil {
+		if p.recordDecision(ctx, host, port, nil, Decision{Reason: ReasonBrokerRefreshDenied, RuleID: "oauth-token-host"}) != nil {
 			http.Error(w, "credential broker evidence unavailable", http.StatusServiceUnavailable)
 		} else {
 			http.Error(w, "credential broker sandbox refresh refused", http.StatusForbidden)
@@ -317,7 +317,7 @@ func (p *EgressProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	// Refuse the known Claude token host before dialing, even if egress is
 	// granted. TLS termination remains confined to the Anthropic API host.
 	if p.broker.refusesAuthHost(host) {
-		if p.recordDecision(ctx, host, port, nil, Decision{Reason: ReasonBrokerRefreshDenied}) != nil {
+		if p.recordDecision(ctx, host, port, nil, Decision{Reason: ReasonBrokerRefreshDenied, RuleID: "oauth-token-host"}) != nil {
 			http.Error(w, "credential broker evidence unavailable", http.StatusServiceUnavailable)
 		} else {
 			http.Error(w, "credential broker sandbox refresh refused", http.StatusForbidden)

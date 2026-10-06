@@ -86,7 +86,7 @@ func TestBrokerClaudeLatestTokenIsolation(t *testing.T) {
 					Expires int64  `json:"expiresAt"`
 				} `json:"claudeAiOauth"`
 			}
-			if json.Unmarshal(raw, &auth) != nil || auth.OAuth.Access != b.placeholder || auth.OAuth.Refresh != b.scratchName || time.Until(time.UnixMilli(auth.OAuth.Expires)) < 23*time.Hour {
+			if json.Unmarshal(raw, &auth) != nil || auth.OAuth.Access != b.placeholder || auth.OAuth.Refresh != b.refreshPlaceholder || time.Until(time.UnixMilli(auth.OAuth.Expires)) < 23*time.Hour {
 				t.Fatal("placeholder sign-in not fresh")
 			}
 		}
@@ -227,7 +227,7 @@ func TestBrokerClaudeSandboxRefreshRefused(t *testing.T) {
 		}
 		return nil
 	}
-	for _, input := range []struct{ path, body string }{{"/v1/oauth/token", "{}"}, {"/v1/messages", `{"refresh_token":"placeholder"}`}, {"/v1/messages", `{"refreshToken":"placeholder"}`}, {"/v1/messages", b.scratchName}} {
+	for _, input := range []struct{ path, body string }{{"/v1/oauth/token", "{}"}, {"/v1/messages", `{"grant_type":"refresh_token","refresh_token":"placeholder"}`}, {"/v1/messages", `{"grant_type":"refresh_token","refreshToken":"placeholder"}`}, {"/v1/messages", "grant_type=refresh_token&refresh_token=" + b.scratchName}} {
 		status, data := subscriptionRequest(t, client, b, input.path, strings.NewReader(input.body))
 		if status != 403 {
 			t.Fatalf("status %d", status)

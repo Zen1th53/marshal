@@ -75,7 +75,7 @@ func placeholderJWT(account string, expires time.Time) string {
 }
 
 func (b *CredentialBroker) subscriptionAuth() map[string]any {
-	return map[string]any{"auth_mode": "chatgpt", "OPENAI_API_KEY": nil, "last_refresh": time.Now().UTC().Format(time.RFC3339), "tokens": map[string]any{"access_token": b.placeholder, "refresh_token": b.scratchName, "id_token": placeholderJWT(b.scratchName, time.Now().Add(24*time.Hour)), "account_id": b.scratchName}}
+	return map[string]any{"auth_mode": "chatgpt", "OPENAI_API_KEY": nil, "last_refresh": time.Now().UTC().Format(time.RFC3339), "tokens": map[string]any{"access_token": b.placeholder, "refresh_token": b.refreshPlaceholder, "id_token": b.idPlaceholder, "account_id": b.scratchName}}
 }
 
 func (s *subscriptionSource) read() (subscriptionCredential, error) {
@@ -251,7 +251,7 @@ func (s *subscriptionSource) readClaude() (subscriptionCredential, error) {
 
 func (b *CredentialBroker) claudeAuth() map[string]any {
 	return map[string]any{"claudeAiOauth": map[string]any{
-		"accessToken": b.placeholder, "refreshToken": b.scratchName,
+		"accessToken": b.placeholder, "refreshToken": b.refreshPlaceholder,
 		"expiresAt":        time.Now().Add(24 * time.Hour).UnixMilli(),
 		"scopes":           []string{"user:inference", "user:profile"},
 		"subscriptionType": "max", "rateLimitTier": "default_claude_max_5x",

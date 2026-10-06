@@ -28,6 +28,7 @@ var ErrCredentialBroker = errors.New("credential broker unavailable; governed pr
 type CredentialBroker struct {
 	mu                                                         sync.Mutex
 	provider, envKey, header, secret, placeholder, scratchName string
+	refreshPlaceholder, idPlaceholder                          string
 	hosts                                                      map[string]bool
 	ca                                                         *x509.Certificate
 	caKey                                                      *ecdsa.PrivateKey
@@ -137,7 +138,7 @@ func NewCredentialBroker(provider, model, secret string) (*CredentialBroker, err
 	if _, err = rand.Read(random); err != nil {
 		return nil, ErrCredentialBroker
 	}
-	return &CredentialBroker{provider: provider, envKey: env, header: header, secret: secret, placeholder: "marshal-placeholder-" + hex.EncodeToString(random), scratchName: ".marshal-broker-" + hex.EncodeToString(random), hosts: map[string]bool{host: true}, ca: ca, caKey: key, caPEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), certs: map[string]tls.Certificate{}}, nil
+	return &CredentialBroker{provider: provider, envKey: env, header: header, secret: secret, placeholder: "marshal-placeholder-" + hex.EncodeToString(random), scratchName: ".marshal-broker-" + hex.EncodeToString(random), refreshPlaceholder: "marshal-placeholder-refresh-" + hex.EncodeToString(random), idPlaceholder: placeholderJWT(".marshal-broker-"+hex.EncodeToString(random), time.Now().Add(25*time.Hour)), hosts: map[string]bool{host: true}, ca: ca, caKey: key, caPEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), certs: map[string]tls.Certificate{}}, nil
 }
 
 func (b *CredentialBroker) handles(host string) bool {

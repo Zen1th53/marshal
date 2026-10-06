@@ -8,6 +8,20 @@ decision is remembered for this project. `/permission credential revoke
 <provider>` revokes it and closes active broker connections. A message from a
 model never grants access.
 
+## Register and evaluate a worker
+
+Register each worker with its provider before running a task:
+
+```sh
+marshal agent register --name codex-worker --role developer --provider codex
+marshal agent register --name claude-worker --role developer --provider claude
+```
+
+Evaluate the worker result from `marshal run`, `marshal logs <task-id>`, and
+`marshal task show <task-id>`. A successful CLI exit alone does not establish
+success: `marshal run` can exit 0 while reporting a failed worker. Require a
+successful worker result with exit status 0 and the expected task output/status.
+
 ## Supported credentials
 
 | Worker | Host credential source | Injection host and field |
@@ -72,8 +86,10 @@ a placeholder `OPENAI_API_KEY`. Subscription mode uses synthetic access,
 refresh, ID, and account placeholders, a current `last_refresh`, and an access
 expiry 24 hours ahead; its API-key environment value is cleared. The worker CLI
 therefore sees a freshly refreshed sign-in. Any sandbox request to
-`auth.openai.com`, an OAuth path, or a detected refresh body is refused and
-recorded without its headers or body. The auth host is never used for injection
+`auth.openai.com`, the token endpoint paths `/oauth/token` or
+`/v1/oauth/token`, or a form/JSON top-level `grant_type=refresh_token` is refused and
+recorded with a fixed matching rule identifier, without its headers or body.
+Inference content mentioning refresh tokens or scratch paths is allowed. The auth host is never used for injection
 and requires an ordinary egress grant even for the refusal path. API clients
 receive placeholder environment values. Claude subscription mode gets a synthetic
 `.credentials.json` under a scratch `CLAUDE_CONFIG_DIR`, with placeholder access
@@ -82,7 +98,9 @@ Claude API mode uses its environment key. Sandbox OAuth/token requests to the
 Anthropic API are refused and logged without headers or bodies. The known token
 host `platform.claude.com` is refused before dialing, even with an egress grant;
 it is never used for TLS termination or credential injection. Native provider
-settings, plugins, and auth files are not mounted.
+settings, plugins, and auth files are not mounted. The resolved CLI installation
+directory is mounted read-only so sibling helper executables are available;
+home and credential roots are refused as installation mounts.
 
 The sandbox bridge continues to use the existing per-run Unix proxy. TLS is
 terminated only for the selected provider hosts on port 443, after the existing
@@ -96,6 +114,14 @@ and Codex's `CODEX_CA_CERTIFICATE` point to the public run CA. Another run's CA
 is not included. Public files live in a unique reserved scratch directory;
 creation, certificate, root-bundle, or credential failures refuse provider
 work. There is no fallback to copying a real credential file.
+
+Each secret field has a distinct stable placeholder. Response redaction maps
+access, refresh, ID, and account values back to their corresponding placeholders,
+including values from both sides of a host rotation. Account headers therefore
+retain the scratch sign-in identity across requests.
+
+`marshal events` and task logs include stored structured egress/broker events,
+with refusal reasons and matching rule identifiers.
 
 Responses are buffered and scrubbed with the repository's redaction detector
 before returning to the worker. Requests and responses are limited to 32 MiB

@@ -12,6 +12,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -94,11 +96,22 @@ func (p *EgressProxy) handleBrokerConnect(w http.ResponseWriter, r *http.Request
 		brokerError(secured, 413, "credential broker request too large")
 		return
 	}
-	if b.subscription != nil && (host == "auth.openai.com" || host == "platform.claude.com" || strings.Contains(strings.ToLower(req.URL.Path), "/oauth") || strings.Contains(req.URL.RawQuery, "refresh_token") || strings.Contains(req.URL.RawQuery, "refreshToken") || strings.Contains(string(body), "refresh_token") || strings.Contains(string(body), "refreshToken") || strings.Contains(string(body), b.scratchName)) {
-		if err := p.recordDecision(r.Context(), host, port, nil, Decision{Reason: ReasonBrokerRefreshDenied}); err != nil {
+	if rule := brokerRefreshRule(req, body); b.subscription != nil && rule != "" {
+		if err := p.recordDecision(r.Context(), host, port, nil, Decision{Reason: ReasonBrokerRefreshDenied, RuleID: RuleID(rule)}); err != nil {
 			brokerError(secured, 503, "credential broker evidence unavailable")
 		} else {
 			brokerError(secured, 403, "credential broker sandbox refresh refused")
+		}
+		return
+	}
+	// The Codex auth host is intercepted solely to refuse worker token calls.
+	// Keep every other route there closed too, without classifying it as refresh
+	// or ever injecting the host access token into an authentication service.
+	if b.subscription != nil && host == "auth.openai.com" {
+		if err := p.recordDecision(r.Context(), host, port, nil, Decision{Reason: ReasonDenied, RuleID: "credential-injection-host"}); err != nil {
+			brokerError(secured, 503, "credential broker evidence unavailable")
+		} else {
+			brokerError(secured, 403, "credential broker authentication host refused")
 		}
 		return
 	}
@@ -115,6 +128,14 @@ func (p *EgressProxy) handleBrokerConnect(w http.ResponseWriter, r *http.Request
 	req.ContentLength = int64(len(body))
 	req.TransferEncoding = nil
 	secrets := []string{b.secret}
+	replacements := map[string]string{b.secret: b.placeholder}
+	capture := func(c subscriptionCredential) {
+		placeholders := []string{b.placeholder, b.refreshPlaceholder, b.idPlaceholder, b.scratchName}
+		for i, secret := range c.secrets {
+			replacements[secret] = placeholders[i]
+		}
+		secrets = append(secrets, c.secrets...)
+	}
 	var resp *http.Response
 	var generation uint64
 	if b.subscription != nil {
@@ -128,7 +149,7 @@ func (p *EgressProxy) handleBrokerConnect(w http.ResponseWriter, r *http.Request
 			return
 		}
 		credential, err = b.subscription.read()
-		secrets = append(secrets, credential.secrets...)
+		capture(credential)
 		if err == nil && time.Until(credential.expires) <= 2*time.Minute {
 			if p.credentialAllowed != nil && !p.credentialAllowed(r.Context()) {
 				brokerError(secured, 403, "credential broker permission revoked")
@@ -142,7 +163,7 @@ func (p *EgressProxy) handleBrokerConnect(w http.ResponseWriter, r *http.Request
 			brokerError(secured, 503, "credential broker host sign-in refresh unavailable")
 			return
 		}
-		secrets = append(secrets, credential.secrets...)
+		capture(credential)
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		if p.credentialAllowed != nil && !p.credentialAllowed(r.Context()) {
@@ -204,7 +225,7 @@ func (p *EgressProxy) handleBrokerConnect(w http.ResponseWriter, r *http.Request
 			return
 		}
 		refreshed = true
-		secrets = append(secrets, credential.secrets...)
+		capture(credential)
 		// Re-authorize and pin a new connection for the one retry. It participates
 		// in normal revocation and shutdown, just like the first connection.
 		ip, decision, resolveErr := p.evaluateAndResolve(r.Context(), host, port, ProtocolTCP)
@@ -238,18 +259,18 @@ func (p *EgressProxy) handleBrokerConnect(w http.ResponseWriter, r *http.Request
 		brokerError(secured, 502, "credential broker response unavailable or too large")
 		return
 	}
-	clean := b.sanitizeSecrets(string(data), secrets)
+	clean := b.sanitizeMappedSecrets(string(data), replacements)
 	for key, values := range resp.Header {
 		if containsBrokerSecret(key, secrets) || redaction.DetectCredentialShape(key) != "" {
 			delete(resp.Header, key)
 			continue
 		}
 		for i, value := range values {
-			values[i] = b.sanitizeSecrets(value, secrets)
+			values[i] = b.sanitizeMappedSecrets(value, replacements)
 		}
 		resp.Header[key] = values
 	}
-	resp.Status = b.sanitizeSecrets(resp.Status, secrets)
+	resp.Status = b.sanitizeMappedSecrets(resp.Status, replacements)
 	stripBrokerHopHeaders(resp.Header)
 	resp.Trailer = nil
 	resp.TransferEncoding = nil
@@ -273,20 +294,68 @@ func containsBrokerSecret(value string, secrets []string) bool {
 	return false
 }
 
+// Paths verified in the installed Codex 0.160.1 and Claude Code 2.1.290
+// binaries. OAuth API routes such as roles are not token endpoints.
+func brokerRefreshRule(req *http.Request, body []byte) string {
+	switch path.Clean(req.URL.Path) {
+	case "/oauth/token", "/v1/oauth/token":
+		return "oauth-token-path"
+	}
+	var object map[string]json.RawMessage
+	if json.Unmarshal(body, &object) == nil {
+		var grant string
+		if json.Unmarshal(object["grant_type"], &grant) == nil && grant == "refresh_token" {
+			return "refresh-grant-json"
+		}
+		return ""
+	}
+	if form, err := url.ParseQuery(string(body)); err == nil {
+		for _, grant := range form["grant_type"] {
+			if grant == "refresh_token" {
+				return "refresh-grant-form"
+			}
+		}
+	}
+	return ""
+}
+
 func (b *CredentialBroker) sanitizeSecrets(value string, secrets []string) string {
-	// Request-local snapshots scrub both sides of a rotation without retaining
-	// real host credentials in the per-run broker.
+	replacements := make(map[string]string, len(secrets))
 	for _, secret := range secrets {
+		replacements[secret] = b.placeholder
+	}
+	return b.sanitizeMappedSecrets(value, replacements)
+}
+
+func (b *CredentialBroker) sanitizeMappedSecrets(value string, secrets map[string]string) string {
+	// Request-local snapshots scrub both sides of a rotation. Match longest
+	// variants first, in one pass, so account substrings and replacements cannot
+	// corrupt a different field's placeholder.
+	variants := map[string]string{}
+	for secret, placeholder := range secrets {
 		if secret == "" {
 			continue
 		}
 		encodedJSON, _ := json.Marshal(secret)
-		variants := []string{url.QueryEscape(secret), url.PathEscape(secret), base64.StdEncoding.EncodeToString([]byte(secret)), base64.RawURLEncoding.EncodeToString([]byte(secret)), hex.EncodeToString([]byte(secret)), string(encodedJSON[1 : len(encodedJSON)-1]), secret}
-		for _, variant := range variants {
-			value = strings.ReplaceAll(value, variant, b.placeholder)
+		for _, variant := range []string{url.QueryEscape(secret), url.PathEscape(secret), base64.StdEncoding.EncodeToString([]byte(secret)), base64.RawURLEncoding.EncodeToString([]byte(secret)), hex.EncodeToString([]byte(secret)), string(encodedJSON[1 : len(encodedJSON)-1]), secret} {
+			variants[variant] = placeholder
 		}
 	}
-	return redaction.RedactContent(value, nil)
+	keys := make([]string, 0, len(variants))
+	for variant := range variants {
+		keys = append(keys, variant)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if len(keys[i]) == len(keys[j]) {
+			return keys[i] < keys[j]
+		}
+		return len(keys[i]) > len(keys[j])
+	})
+	pairs := make([]string, 0, 2*len(keys))
+	for _, key := range keys {
+		pairs = append(pairs, key, variants[key])
+	}
+	return redaction.RedactContent(strings.NewReplacer(pairs...).Replace(value), nil)
 }
 
 func brokerError(conn net.Conn, status int, message string) {
