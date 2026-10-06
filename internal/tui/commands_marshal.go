@@ -1285,7 +1285,8 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 }
 
 // marshalImportArgs consumes only the command, subcommand and task ID;
-// the check remains shell source, not reconstructed argv.
+// the check remains shell source, not reconstructed argv. A matching outer
+// quote pair around the entire remainder is an operator input wrapper.
 func marshalImportArgs(line string) []string {
 	var taskID string
 	for i := 0; i < 3; i++ {
@@ -1305,6 +1306,25 @@ func marshalImportArgs(line string) []string {
 	check := strings.TrimLeftFunc(line, unicode.IsSpace)
 	if check == "" {
 		return []string{taskID}
+	}
+	trimmed := strings.TrimSpace(check)
+	if len(trimmed) >= 2 && (trimmed[0] == '\'' || trimmed[0] == '"') && trimmed[len(trimmed)-1] == trimmed[0] {
+		// The first closing quote must also be the end of the remainder;
+		// separate shell words such as 'printf' 'hi' remain raw source.
+		end := 1
+		for end < len(trimmed) {
+			if trimmed[0] == '"' && trimmed[end] == '\\' && end+1 < len(trimmed) {
+				end += 2
+				continue
+			}
+			if trimmed[end] == trimmed[0] {
+				break
+			}
+			end++
+		}
+		if end == len(trimmed)-1 {
+			check = trimmed[1:end]
+		}
 	}
 	return []string{taskID, check}
 }

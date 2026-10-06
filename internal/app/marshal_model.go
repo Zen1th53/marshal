@@ -179,6 +179,10 @@ func marshalCLIOutput(provider string, data []byte) ([]byte, string, error) {
 	return nil, "", fmt.Errorf("%s produced no structured Marshal output", strings.TrimSpace(provider))
 }
 
+// Shared by initial planning and amendments: verification cannot observe
+// arbitrary state that existed only while a worker was running.
+const marshalCheckContract = "Checks run in a fresh checkout of the committed result in a clean sandbox with no worker environment, network or temporary files from the worker. Checks must use only repository content; commit any evidence they need into the repository. "
+
 func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, error) {
 	if m.ProjectID == "" {
 		return MarshalDraft{}, errors.New("Marshal model has no project binding")
@@ -188,7 +192,7 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 		return MarshalDraft{}, errors.New("no worker CLI is available")
 	}
 	var proposal marshalTaskProposal
-	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Use mode governed for codex and claude unless the operator explicitly requests native; agy and opencode use native. Honour a goal that requests governed work. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
+	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Use mode governed for codex and claude unless the operator explicitly requests native; agy and opencode use native. Honour a goal that requests governed work. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+marshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -212,7 +216,7 @@ func (m *MarshalCLI) Amend(ctx context.Context, run marshal.Run, reason string) 
 	workers := m.availableWorkers()
 	var proposal marshalTaskProposal
 	input, _ := json.Marshal(run)
-	err := m.turn(ctx, "Return the complete amended JSON task list. Use only workers "+strings.Join(workers, ", ")+". Preserve each existing task mode unless the operator requests a change. New tasks prefer governed for codex and claude; other workers use native. Reason: "+reason+". Current run: "+string(input), marshalDraftSchema, &proposal)
+	err := m.turn(ctx, "Return the complete amended JSON task list. Use only workers "+strings.Join(workers, ", ")+". Preserve each existing task mode unless the operator requests a change. New tasks prefer governed for codex and claude; other workers use native. "+marshalCheckContract+"Reason: "+reason+". Current run: "+string(input), marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}

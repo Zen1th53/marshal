@@ -90,7 +90,26 @@ func (r *Runtime) marshalGovernedRun(s *MarshalService) driver.GovernedRunner {
 			return nil, errors.New("governed result differs from approved base")
 		}
 		current, err := gitMarshal(ctx, req.Worktree, "rev-parse", "HEAD")
-		if err != nil || (current != req.Task.BaseCommit && current != head) {
+		// Rework resumes at this task's last collected result. Only its own
+		// immutable hand-in evidence can authorize that additional prior HEAD.
+		prior := false
+		if err == nil && current != "" && current == run.Tasks[i].ResultCommit {
+			attempt := 0
+			for _, n := range run.Tasks[i].ReturnsByAgent {
+				attempt += n
+			}
+			// A timed-out return may have no hand-in. Find the latest
+			// recorded attempt, never authorize a different older result.
+			for ; attempt > 0; attempt-- {
+				evidence, evidenceErr := s.Store.GetMarshalHandIn(ctx, req.RunID, req.Task.PlanTaskID, attempt)
+				if errors.Is(evidenceErr, model.ErrNotFound) {
+					continue
+				}
+				prior = evidenceErr == nil && evidence.Value.ResultCommit == current && evidence.Value.Worker == req.Task.Worker && evidence.Value.Mode == req.Task.Mode
+				break
+			}
+		}
+		if err != nil || (current != req.Task.BaseCommit && current != head && !prior) {
 			return nil, errors.New("Marshal task branch moved before import")
 		}
 		status, err := gitMarshal(ctx, req.Worktree, "status", "--porcelain")

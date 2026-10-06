@@ -91,4 +91,44 @@ func TestMarshalImportCommandStoresRawCheck(t *testing.T) {
 	if out, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("stored check fails: %s %v", out, err)
 	}
+	for _, quote := range []string{"'", `"`} {
+		quotedCheck := `test -f hello.txt && test 13 = $(wc -c < hello.txt)`
+		if _, err := w.ExecuteCommand(ctx, "/marshal import TASK-finished "+quote+quotedCheck+quote); err != nil {
+			t.Fatal(err)
+		}
+		run, err := m.service.Snapshot(ctx, m.runID)
+		if err != nil || run.Tasks[0].Checks[0].Command != quotedCheck {
+			t.Fatalf("quoted import stored wrong source: %+v %v", run.Tasks, err)
+		}
+		command := exec.Command("/bin/sh", "-c", run.Tasks[0].Checks[0].Command)
+		command.Dir = root
+		if out, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("quoted imported check fails: %s %v", out, err)
+		}
+	}
+}
+
+func TestMarshalImportUnwrapsWholeCheck(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{`'test -f hello.txt && test hi = $(cat hello.txt)'`, `test -f hello.txt && test hi = $(cat hello.txt)`},
+		{`"test -f hello.txt && test hi = $(cat hello.txt)"`, `test -f hello.txt && test hi = $(cat hello.txt)`},
+		{`'printf hi'  `, `printf hi`},
+		{`"printf hi"`, `printf hi`},
+		{`'printf hi"`, `'printf hi"`},
+		{`test "hi" = 'hi'`, `test "hi" = 'hi'`},
+		{`'printf' hi`, `'printf' hi`},
+		{`'printf' 'hi'`, `'printf' 'hi'`},
+		{`"printf" "hi"`, `"printf" "hi"`},
+	} {
+		got := marshalImportArgs("/marshal import TASK-one " + tc.input)
+		if !reflect.DeepEqual(got, []string{"TASK-one", tc.want}) {
+			t.Errorf("input %q: got %#v, want %q", tc.input, got, tc.want)
+		}
+	}
+	for _, quote := range []string{"'", `"`} {
+		args := marshalImportArgs("/marshal import TASK-one " + quote + "test hi = $(printf hi)" + quote)
+		if out, err := exec.Command("/bin/sh", "-c", args[1]).CombinedOutput(); err != nil {
+			t.Fatalf("quoted shell check failed: %s %v", out, err)
+		}
+	}
 }

@@ -63,8 +63,8 @@ missing dependency does not make installation fail.
 
 The automated source inventory reports:
 
-- Constitution enforcement: 0.3%
-- Scope of protection: 6.8%
+- Constitution enforcement: 0.6%
+- Scope of protection: 7.1%
 
 Constitution enforcement is the percentage of material source call sites that a constitutional verdict can refuse before the effect occurs.
 Scope of protection is the percentage of material source call sites guarded before execution by a constitutional gate, approval binding, policy authorisation or sandbox.
