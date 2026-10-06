@@ -2016,8 +2016,8 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "20d0f8e6479c0369cddd017d1faa1ad66d6e38ca3101e3bd21ff093c9b471dbe",
-      "bytes": 4810
+      "sha256": "9550d01eba4d99dedbc2e35f067059278ae40e17f9be98681c062faa2c623619",
+      "bytes": 5243
     },
     {
       "path": ".gitignore",
