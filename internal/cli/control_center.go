@@ -106,6 +106,11 @@ func (c *command) launchOrAttachTmux(ctx context.Context, root string, args []st
 			_ = tmux.NewWindow(ctx, sessionName, "marshal", root, nil, cmd)
 		}
 	}
+	// Re-attachment may find an agent selected from the previous visit.
+	// Always enter through the control centre; chat and workers keep running.
+	if err := tmux.SelectWindow(ctx, sessionName+":marshal"); err != nil {
+		return fmt.Errorf("select control centre: %w", err)
+	}
 	return tmux.AttachSession(sessionName, c.stdin, c.stdout, c.stderr)
 }
 

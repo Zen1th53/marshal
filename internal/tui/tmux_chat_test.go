@@ -155,3 +155,20 @@ func TestRecoveredChatPreservesHistoryProvenance(t *testing.T) {
 		})
 	}
 }
+
+func TestAutomaticWindowCreationPreservesControlCentreFocus(t *testing.T) {
+	w := realTmuxWorkspace(t)
+	ctx := context.Background()
+	assertControl := func() {
+		t.Helper()
+		selected, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", w.tmuxSession, "#{window_index}")
+		if err != nil || strings.TrimSpace(string(selected)) != "0" {
+			t.Fatalf("control centre window 0 is not selected: %q (%v)", selected, err)
+		}
+	}
+	assertControl()
+	if err := tmux.NewWindow(ctx, w.tmuxSession, "background-worker", w.workDir, nil, []string{"sleep", "30"}); err != nil {
+		t.Fatal(err)
+	}
+	assertControl()
+}

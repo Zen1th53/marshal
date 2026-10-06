@@ -741,7 +741,7 @@ Function Keys & Shortcuts:
   F1: Help       F2: Review     F3: Diff viewer
   F4: Status     F5: Models     F6: MCP servers
   F7: Codex      F8: Claude     F9: OpenCode     F12: Antigravity
-  F10: Update    F11: Return to MARSHAL    Ctrl+X: Stop all workers` + navigationHint + `
+  F10: Update    F11: Return to control centre    Ctrl+X: Stop all workers` + navigationHint + `
 
 Composer:
   /  or  @                 Opens the command menu as you type

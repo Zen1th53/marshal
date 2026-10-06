@@ -27,7 +27,7 @@ shift
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -t|-n|-c) shift 2 ;;
-    -k) shift ;;
+    -k|-d) shift ;;
     *) break ;;
   esac
 done

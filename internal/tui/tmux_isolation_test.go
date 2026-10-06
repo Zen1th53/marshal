@@ -99,7 +99,14 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 	// The TUI owns this terminal, but no other window in the user's session.
 	panes, _ := tmux.ListPanes(ctx, w.tmuxSession)
 	w.tmuxMarshalPaneID = panes[0].PaneID
-	_, err := w.runNativeAgentInTmux(ctx, "test", "Test", w.workDir, "/bin/sh", []string{"-c", "echo READY; while read line; do echo received:$line; done"}, nil, nil, nil, nil, nil, nil, nil)
+	// Match InitTmux: the control centre also owns the project key table.
+	w.tmuxMu.Lock()
+	bindErr := w.bindWorkspaceKeysLocked(ctx, w.tmuxMarshalPaneID, w.workDir)
+	w.tmuxMu.Unlock()
+	if bindErr != nil {
+		t.Fatal(bindErr)
+	}
+	_, err := w.runNativeAgentInTmux(ctx, "codex", "Codex", w.workDir, "/bin/sh", []string{"-c", "echo READY; while read line; do echo received:$line; done"}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,14 +148,28 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 		t.Fatalf("client attached after takeover with wrong input state: got %q, want %q", state, want)
 	}
 	w.tmuxMu.Lock()
-	a := copyAgentLocked(w.tmuxActiveWins["test"])
+	a := copyAgentLocked(w.tmuxActiveWins["codex"])
 	w.tmuxMu.Unlock()
 	// Activate the window hook in a real attached client.
 	if err := tmux.SelectWindow(ctx, w.tmuxMarshalPaneID); err != nil {
 		t.Fatal(err)
 	}
-	if err := tmux.SelectWindow(ctx, a.paneID); err != nil {
+	if _, err := master.Write([]byte("\x1b[18~")); err != nil {
 		t.Fatal(err)
+	} // F7 on xterm
+	focusDeadline := time.Now().Add(time.Second)
+	for {
+		selected, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", w.tmuxSession, "#{pane_id}")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.TrimSpace(string(selected)) == a.paneID {
+			break
+		}
+		if time.Now().After(focusDeadline) {
+			t.Fatalf("explicit F7 did not select Codex: %q", selected)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	master.Write([]byte("\x1b[23~")) // F11 on xterm
 	deadline := time.Now().Add(time.Second)

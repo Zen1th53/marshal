@@ -4,6 +4,8 @@ One workspace for planning with the Marshal and working with your agents.
 
 ## What changed
 
+MARSHAL opens on the control centre; the Marshal chat stays open in its own window.
+
 **The Marshal is at the centre of a tmux workspace.** Plan with the Marshal,
 keep the work in view, and switch between conversations without leaving the
 workspace. Codex, Claude Code, OpenCode and Antigravity can work side by side

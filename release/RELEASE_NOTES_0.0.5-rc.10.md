@@ -10,6 +10,8 @@ It also contains the credential broker from rc.9: governed Codex and Claude Code
 
 ## What changed
 
+MARSHAL opens on the control centre; the Marshal chat stays open in its own window.
+
 **The Marshal is at the centre of a tmux workspace.** Plan with the Marshal,
 keep the work in view, and switch between conversations without leaving the
 workspace. Codex, Claude Code, OpenCode and Antigravity can work side by side

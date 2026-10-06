@@ -516,10 +516,10 @@ func SelectPane(ctx context.Context, target string) error {
 	return err
 }
 
-// NewWindow creates a new window in the specified session or current session.
+// NewWindow creates a detached window without changing the operator's focus.
 // Command arguments remain literal, including in the launcher for large commands.
 func NewWindow(ctx context.Context, targetSession, windowName, workDir string, env []string, command []string) error {
-	args := []string{"new-window"}
+	args := []string{"new-window", "-d"}
 	if targetSession != "" {
 		args = append(args, "-t", targetSession)
 	}

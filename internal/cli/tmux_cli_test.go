@@ -115,6 +115,11 @@ esac
 	if !strings.Contains(logStr, "new-session -d -s "+expectedSession) {
 		t.Fatalf("missing new-session call for %s:\n%s", expectedSession, logStr)
 	}
+	selectAt := strings.Index(logStr, "select-window -t "+expectedSession+":marshal")
+	attachAt := strings.Index(logStr, "attach-session -t "+expectedSession)
+	if selectAt < 0 || selectAt >= attachAt {
+		t.Fatalf("startup must select control centre before attaching:\n%s", logStr)
+	}
 	if !strings.Contains(logStr, "attach-session -t "+expectedSession) {
 		t.Fatalf("missing attach-session call for %s:\n%s", expectedSession, logStr)
 	}
@@ -319,7 +324,7 @@ esac
 
 	sess := tmux.SessionName(repo.Path())
 	// Should create a window for marshal and attach
-	if !strings.Contains(logStr, "new-window -t "+sess+" -n marshal") {
+	if !strings.Contains(logStr, "new-window -d -t "+sess+" -n marshal") {
 		t.Fatalf("expected new-window for dead marshal:\n%s", logStr)
 	}
 	if !strings.Contains(logStr, "attach-session -t "+sess) {
@@ -355,5 +360,41 @@ func TestTUIRefusesOldTmuxBeforeStartup(t *testing.T) {
 				t.Fatalf("cli subcommand 'version' failed with old tmux: code=%d stderr=%q", vCode, stderr.String())
 			}
 		})
+	}
+}
+
+func TestReattachSelectsControlCentreBeforeAttach(t *testing.T) {
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "argv.log")
+	fake := filepath.Join(dir, "tmux")
+	script := fmt.Sprintf(`#!/bin/sh
+echo "$@" >> %q
+case "$1" in
+ list-windows) printf 'marshal\nmarshal-chat\n' ;;
+ display-message) printf '0 0\n' ;;
+esac
+`, logFile)
+	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	tmux.SetBinaryPath(fake)
+	defer tmux.ResetBinaryPath()
+	c := &command{stdin: strings.NewReader(""), stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}}
+	if err := c.launchOrAttachTmux(context.Background(), dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(data)
+	sess := tmux.SessionName(dir)
+	selectAt := strings.Index(log, "select-window -t "+sess+":marshal")
+	attachAt := strings.Index(log, "attach-session -t "+sess)
+	if selectAt < 0 || selectAt >= attachAt {
+		t.Fatalf("re-attach must select control centre before attaching:\n%s", log)
+	}
+	if strings.Contains(log, "new-window") || strings.Contains(log, "respawn-window") {
+		t.Fatalf("re-attach restarted a live window:\n%s", log)
 	}
 }

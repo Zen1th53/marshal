@@ -32,9 +32,17 @@ case "$1" in
     for a in "$@"; do
       if [ "$prev" = "-n" ]; then
         echo "$a" >> "$winFile"
+        case " $* " in
+          *" -d "*) ;;
+          *) printf '%%s\n' "$a" > "$winFile.selected" ;;
+        esac
       fi
       prev="$a"
     done
+    exit 0
+    ;;
+  select-window)
+    printf '%%s\n' "$3" > "$winFile.selected"
     exit 0
     ;;
   respawn-window)
@@ -47,7 +55,16 @@ case "$1" in
         exit 0
         ;;
       *"#{session_name}:#{window_id}"*)
-        printf 'test-session:@0\n'
+        target=""
+        prev=""
+        for a in "$@"; do
+          if [ "$prev" = "-t" ]; then target="$a"; fi
+          prev="$a"
+        done
+        case "$target" in
+          %%*) printf 'test-session:@%%s\n' "${target#%%}" ;;
+          *) printf 'test-session:@0\n' ;;
+        esac
         exit 0
         ;;
       *"#{session_name}"*"#{window_name}"*"#{window_id}"*)
@@ -178,7 +195,7 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	logStr := string(logBytes)
 
 	// Verify new-window, select-pane -d (view-only), select-window, bind-key F7 and F11
-	if !strings.Contains(logStr, "new-window -t test-session -n "+codexWin) {
+	if !strings.Contains(logStr, "new-window -d -t test-session -n "+codexWin) {
 		t.Fatalf("missing new-window call:\n%s", logStr)
 	}
 	if !strings.Contains(logStr, "select-pane -t test-session:"+codexWin+" -d") {
@@ -374,13 +391,17 @@ func TestStopAllWorkersPreservesMarshalChat(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Launch a regular worker (isChat = false)
-	_, _ = ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil, false)
+	if _, err := ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil, false); err != nil {
+		t.Fatal(err)
+	}
 	ws.tmuxMu.Lock()
 	claudePane := ws.tmuxActiveWins["claude"].paneID
 	ws.tmuxMu.Unlock()
 
 	// 2. Launch Marshal planning chat (isChat = true)
-	_, _ = ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"planning"}, nil, nil, nil, nil, nil, nil, nil, true)
+	if _, err := ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"planning"}, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
+		t.Fatal(err)
+	}
 	chatWin := tmux.ChatWindowName(workDir)
 
 	ws.tmuxMu.Lock()
@@ -442,7 +463,9 @@ func TestJoinPanePreservesWorkerIdentityAndMonitoring(t *testing.T) {
 	ctx := context.Background()
 
 	// Launch worker
-	_, _ = ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil, false)
+	if _, err := ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil, false); err != nil {
+		t.Fatal(err)
+	}
 	claudeWin := tmux.WindowName("claude", workDir)
 
 	ws.tmuxMu.Lock()
@@ -783,7 +806,7 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 	logStr := string(logBytes)
 
 	// Verify chat window was created and pane set to -e (normal input, not -d)
-	if !strings.Contains(logStr, "new-window -t test-session -n "+chatWin) {
+	if !strings.Contains(logStr, "new-window -d -t test-session -n "+chatWin) {
 		t.Fatalf("missing chat new-window call:\n%s", logStr)
 	}
 	if !strings.Contains(logStr, "select-pane -t test-session:"+chatWin+" -e") {
@@ -875,4 +898,120 @@ func cleanupTmuxWorkspace(t *testing.T, w *Workspace) {
 		}
 		w.tmuxMonitors.Wait()
 	})
+}
+
+func TestTmuxStartupReattachAndAutomaticChatPreserveControlCentre(t *testing.T) {
+	_, logFile := setupFakeTmux(t)
+	t.Setenv("TMUX", "/tmp/tmux-test,1,0")
+	t.Setenv("TMUX_PANE", "%0")
+	ws := NewWorkspace(nil, "project", "session")
+	ws.workDir = t.TempDir()
+	cleanupTmuxWorkspace(t, ws)
+	selectedFile := filepath.Join(filepath.Dir(logFile), "tmux_windows.log.selected")
+	assertSelected := func(want string) {
+		t.Helper()
+		data, err := os.ReadFile(selectedFile)
+		if err != nil || strings.TrimSpace(string(data)) != want {
+			t.Fatalf("selected window = %q (%v), want %q", data, err, want)
+		}
+	}
+	ws.InitTmux(ws.workDir)
+	assertSelected("test-session:@0")
+	ws.tmuxMu.Lock()
+	chat := copyAgentLocked(ws.tmuxActiveWins["marshal-chat"])
+	ws.tmuxMu.Unlock()
+	if chat == nil {
+		t.Fatal("startup did not keep chat open")
+	}
+	ctx := context.Background()
+	// Operator-selected chat must return to the control centre on re-initialization.
+	if err := tmux.SelectWindow(ctx, chat.paneID); err != nil {
+		t.Fatal(err)
+	}
+	ws.InitTmux(ws.workDir)
+	assertSelected("test-session:@0")
+	background := context.WithValue(ctx, tmuxBackgroundLaunchKey{}, true)
+	// Runtime setup shares the operator launch pipeline, including adoption.
+	if _, err := ws.runNativeAgentInTmux(background, "codex", "Codex", ws.workDir, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
+		t.Fatal(err)
+	}
+	assertSelected("test-session:@0")
+	ws.restartMarshalChat(ctx, ws.tmuxActiveWins["marshal-chat"], ws.workDir)
+	assertSelected("test-session:@0")
+	// Explicit /view chat still selects the protected conversation.
+	if _, err := ws.handleViewCommand(ctx, []string{"show", "chat"}); err != nil {
+		t.Fatal(err)
+	}
+	assertSelected("test-session:" + chat.windowID)
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(data), "new-window -d -t test-session -n "+chat.window) != 1 {
+		t.Fatalf("setup restarted or failed to detach chat:\n%s", data)
+	}
+	if !strings.Contains(string(data), "bind-key -T marshal-keys-"+tmux.ProjectHash(ws.workDir)+" F11 if-shell -F") {
+		t.Fatal("missing control centre return binding")
+	}
+}
+
+func TestAutomaticChatLaunchDoesNotSelectNewWindow(t *testing.T) {
+	_, logFile := setupFakeTmux(t)
+	t.Setenv("TMUX", "/tmp/tmux-test,1,0")
+	ws := NewWorkspace(nil, "project", "session")
+	ws.workDir = t.TempDir()
+	ws.tmuxPath, _ = tmux.FindBinary()
+	ws.tmuxSession, ws.tmuxMarshalWin = "test-session", "marshal"
+	cleanupTmuxWorkspace(t, ws)
+	ctx := context.WithValue(context.Background(), tmuxBackgroundLaunchKey{}, true)
+	if _, err := ws.runNativeAgentInTmux(ctx, "codex", "Codex", ws.workDir, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains("\n"+string(data), "\nselect-window ") {
+		t.Fatalf("automatic chat selected a window:\n%s", data)
+	}
+	if !strings.Contains(string(data), "new-window -d -t test-session -n "+tmux.ChatWindowName(ws.workDir)) {
+		t.Fatalf("chat was not opened detached:\n%s", data)
+	}
+}
+
+func TestRuntimeTmuxStartupKeepsControlCentreSelected(t *testing.T) {
+	_, logFile := setupFakeTmux(t)
+	t.Setenv("TMUX", "/tmp/tmux-test,1,0")
+	t.Setenv("TMUX_PANE", "%0")
+	t.Setenv("CODEX_HOME", t.TempDir())
+	binDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(binDir, "codex"), []byte("#!/bin/sh\necho 'codex 0.100.0'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	_, ws, _ := acceptanceWorkspace(t)
+	cleanupTmuxWorkspace(t, ws)
+	ws.InitTmux(ws.runtime.ProjectRoot())
+	ws.tmuxMu.Lock()
+	chat := copyAgentLocked(ws.tmuxActiveWins["marshal-chat"])
+	ws.tmuxMu.Unlock()
+	if chat == nil {
+		t.Fatal("runtime startup did not open chat")
+	}
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(logFile), "tmux_windows.log.selected"))
+	if err != nil || strings.TrimSpace(string(data)) != "test-session:@0" {
+		t.Fatalf("runtime startup selected %q (%v), want window 0", data, err)
+	}
+	ws.InitTmux(ws.runtime.ProjectRoot())
+	data, err = os.ReadFile(filepath.Join(filepath.Dir(logFile), "tmux_windows.log.selected"))
+	if err != nil || strings.TrimSpace(string(data)) != "test-session:@0" {
+		t.Fatalf("runtime re-attach selected %q (%v), want window 0", data, err)
+	}
+	log, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(log), "new-window -d -t test-session -n "+chat.window) != 1 {
+		t.Fatalf("runtime setup restarted chat:\n%s", log)
+	}
 }

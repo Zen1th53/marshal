@@ -32,9 +32,19 @@ func TestTaskAlertsDriveStatusChatAndFollowActive(t *testing.T) {
 		}
 	}
 	w.tmuxMu.Lock()
-	w.tmuxFollowActive = true
 	w.tmuxActiveWins["task-one"] = &activeTmuxAgent{id: "task-one", role: "task", taskID: "one", runID: "run", canonicalTaskID: "canonical-one", executionRunID: "process05", paneID: pane, window: "worker", label: "Task one", state: "working"}
 	w.tmuxMu.Unlock()
+	// Waiting alerts do not steal focus unless the operator enables follow mode.
+	if err := w.deliverEgressAlert(app.EgressAlert{RunID: "egress", ParentRunID: "process05", TaskID: "canonical-one", Worker: "worker", State: "waiting", Kind: "egress refused", Message: "initial waiting alert"}); err != nil {
+		t.Fatal(err)
+	}
+	selectedBeforeFollow, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", w.tmuxSession, "#{window_index}")
+	if err != nil || strings.TrimSpace(string(selectedBeforeFollow)) != "0" {
+		t.Fatalf("alert stole control centre focus: %q (%v)", selectedBeforeFollow, err)
+	}
+	if _, err := w.handleViewCommand(ctx, []string{"follow"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := w.deliverEgressAlert(app.EgressAlert{RunID: "egress", ParentRunID: "process05", TaskID: "canonical-one", Worker: "worker", State: "waiting", Kind: "egress refused", Message: "worker needs endpoint", Endpoint: "localhost:80"}); err != nil {
 		t.Fatal(err)
 	}
@@ -85,6 +95,10 @@ func TestTerminalCompletionAlertUsesDriverExitStatus(t *testing.T) {
 	}
 	defer d.Cancel(h)
 	<-h.Done()
+	selected, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", w.tmuxSession, "#{window_index}")
+	if err != nil || strings.TrimSpace(string(selected)) != "0" {
+		t.Fatalf("worker completion stole control centre focus: %q (%v)", selected, err)
+	}
 	deadline := time.Now().Add(time.Second)
 	for {
 		status, _ := tmux.RunCommand(ctx, "show-options", "-w", "-v", "-t", w.tmuxMarshalWin, "@marshal_status")
