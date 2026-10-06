@@ -79,6 +79,13 @@ recording a verdict or warning does not count as enforcement. The reviewed
 
 - **Keep the window open.** There is no background service. Stored runs remain
   recoverable with `/marshal resume` after reopening MARSHAL.
+- **Governed workers need a provider that can sign in inside the sandbox.**
+  The sandbox hides your account files, so Codex and Claude Code signed in
+  with a ChatGPT or Claude subscription cannot authenticate as governed
+  workers yet. Use OpenCode (including its free models) or a provider that
+  is configured with an API key for governed work. Codex and Claude Code work
+  fully as native sessions and as the Marshal. A credential broker that lets
+  governed workers use your subscription without seeing the token is planned.
 - **OpenCode is a worker, not the Marshal.** Planning needs Codex, Claude Code
   or Antigravity.
 - **Scope checks only warn.** Out-of-scope changes and goal drift are recorded;

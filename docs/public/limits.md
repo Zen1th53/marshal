@@ -21,6 +21,13 @@ Use Ubuntu 24.04+, Debian 12+, or build tmux from source.
 macOS is not supported yet. On Windows you can try WSL 2, which has not been
 tested.
 
+**Governed workers cannot use a ChatGPT or Claude subscription yet.**
+The sandbox hides your account files, so Codex and Claude Code signed in with
+a subscription cannot authenticate as governed workers. Use OpenCode
+(including its free models) or a provider configured with an API key for
+governed work. Codex and Claude Code work fully as native sessions and as the
+Marshal.
+
 **OpenCode cannot be the Marshal.**
 It can do tasks as a worker, but planning needs Codex, Claude Code or
 Antigravity.
