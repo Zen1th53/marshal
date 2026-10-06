@@ -351,8 +351,38 @@ func RunCommand(ctx context.Context, args ...string) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
+// requireTarget rejects implicit-current targeting at explicit-target boundaries.
+func requireTarget(targets ...string) error {
+	for _, target := range targets {
+		if strings.TrimSpace(target) == "" {
+			return errors.New("empty tmux target refused")
+		}
+	}
+	return nil
+}
+
+// resolvePane pins capture/kill to a resolved immutable ID. A successful
+// display-message with empty output is not proof that a pane exists.
+func resolvePane(ctx context.Context, target string) (string, error) {
+	if err := requireTarget(target); err != nil {
+		return "", err
+	}
+	out, err := RunCommand(ctx, "display-message", "-p", "-t", target, "#{pane_id}")
+	if err != nil {
+		return "", err
+	}
+	pane := strings.TrimSpace(string(out))
+	if !regexp.MustCompile(`^%[0-9]+$`).MatchString(pane) {
+		return "", fmt.Errorf("unresolved tmux pane target %q", target)
+	}
+	return pane, nil
+}
+
 // HasSession reports whether a tmux session exists.
 func HasSession(ctx context.Context, session string) bool {
+	if err := requireTarget(session); err != nil {
+		return false
+	}
 	bin, err := FindBinary()
 	if err != nil {
 		return false
@@ -390,6 +420,9 @@ func NewSession(ctx context.Context, session, workDir, windowName string, comman
 
 // AttachSession attaches to an existing tmux session using the provided standard streams.
 func AttachSession(session string, stdin io.Reader, stdout, stderr io.Writer) error {
+	if err := requireTarget(session); err != nil {
+		return err
+	}
 	bin, err := FindBinary()
 	if err != nil {
 		return err
@@ -408,6 +441,9 @@ func AttachSession(session string, stdin io.Reader, stdout, stderr io.Writer) er
 
 // RespawnWindow reactivates a window in which the command has exited.
 func RespawnWindow(ctx context.Context, target string, command []string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
 	args := []string{"respawn-window", "-k", "-t", target}
 	if len(command) > 0 {
 		command = append([]string{"env"}, command...)
@@ -453,6 +489,9 @@ func WindowExists(ctx context.Context, session, windowName string) (bool, error)
 
 // SelectWindow selects the target window in tmux.
 func SelectWindow(ctx context.Context, target string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
 	// A pane ID alone leaves tmux needing a current client to find the session.
 	if strings.HasPrefix(target, "%") {
 		out, err := RunCommand(ctx, "display-message", "-p", "-t", target, "#{session_name}:#{window_id}")
@@ -461,12 +500,18 @@ func SelectWindow(ctx context.Context, target string) error {
 		}
 		target = strings.TrimSpace(string(out))
 	}
+	if err := requireTarget(target); err != nil {
+		return err
+	}
 	_, err := RunCommand(ctx, "select-window", "-t", target)
 	return err
 }
 
 // SelectPane selects the target pane in tmux.
 func SelectPane(ctx context.Context, target string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
 	_, err := RunCommand(ctx, "select-pane", "-t", target)
 	return err
 }
@@ -532,18 +577,29 @@ func runWindowCommand(ctx context.Context, args, command []string) error {
 
 // KillWindow terminates a tmux window and its running processes.
 func KillWindow(ctx context.Context, target string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
 	_, err := RunCommand(ctx, "kill-window", "-t", target)
 	return err
 }
 
 // KillPane terminates a specific tmux pane.
 func KillPane(ctx context.Context, target string) error {
-	_, err := RunCommand(ctx, "kill-pane", "-t", target)
+	target, err := resolvePane(ctx, target)
+	if err != nil {
+		return err
+	}
+	_, err = RunCommand(ctx, "kill-pane", "-t", target)
 	return err
 }
 
 // CapturePane captures the plain-text screen output of the pane.
 func CapturePane(ctx context.Context, target string) (string, error) {
+	target, err := resolvePane(ctx, target)
+	if err != nil {
+		return "", err
+	}
 	out, err := RunCommand(ctx, "capture-pane", "-p", "-S", "-", "-t", target)
 	if err != nil {
 		return "", err
@@ -553,6 +609,9 @@ func CapturePane(ctx context.Context, target string) (string, error) {
 
 // SetPaneReadOnly enables or disables input to a pane (-d disables input / view-only, -e enables input).
 func SetPaneReadOnly(ctx context.Context, target string, readOnly bool) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
 	flag := "-e"
 	if readOnly {
 		flag = "-d"
@@ -563,6 +622,9 @@ func SetPaneReadOnly(ctx context.Context, target string, readOnly bool) error {
 
 // JoinPane joins a pane into the target window (side-by-side if horizontal is true).
 func JoinPane(ctx context.Context, source, target string, horizontal bool) error {
+	if err := requireTarget(source, target); err != nil {
+		return err
+	}
 	flag := "-v"
 	if horizontal {
 		flag = "-h"
@@ -573,6 +635,9 @@ func JoinPane(ctx context.Context, source, target string, horizontal bool) error
 
 // BreakPane breaks a joined pane out into its own window.
 func BreakPane(ctx context.Context, target string, newWinName ...string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
 	args := []string{"break-pane", "-s", target}
 	if len(newWinName) > 0 && newWinName[0] != "" {
 		args = append(args, "-n", newWinName[0])
@@ -595,6 +660,19 @@ func SetStatusText(ctx context.Context, session, statusText string) error {
 // BindWindowKey installs a key in a private project table. Session hooks
 // activate it only when a MARSHAL terminal is selected; root is untouched.
 func BindWindowKey(ctx context.Context, target, table, key string, actionArgs ...string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
+	for i := 0; i < len(actionArgs); i++ {
+		if actionArgs[i] == "-t" {
+			if i+1 == len(actionArgs) {
+				return errors.New("missing tmux action target")
+			}
+			if err := requireTarget(actionArgs[i+1]); err != nil {
+				return err
+			}
+		}
+	}
 	if _, err := RunCommand(ctx, "set-option", "-p", "-t", target, "@marshal_key_table", table); err != nil {
 		return err
 	}
@@ -604,6 +682,9 @@ func BindWindowKey(ctx context.Context, target, table, key string, actionArgs ..
 			return err
 		}
 		actionArgs[2] = strings.TrimSpace(string(out))
+		if err := requireTarget(actionArgs[2]); err != nil {
+			return err
+		}
 	}
 	// Remove the old catch-all when reusing a table from an earlier run.
 	if _, err := RunCommand(ctx, "unbind-key", "-q", "-T", table, "Any"); err != nil {
@@ -618,6 +699,9 @@ func BindWindowKey(ctx context.Context, target, table, key string, actionArgs ..
 		return err
 	}
 	sessionName := strings.TrimSpace(string(session))
+	if err := requireTarget(sessionName); err != nil {
+		return err
+	}
 	// Save the user's default once, including when projects share a session.
 	if _, err := RunCommand(ctx, "set-option", "-oqF", "-t", sessionName, "@marshal_default_key_table", "#{key-table}"); err != nil {
 		return err
@@ -651,6 +735,9 @@ func BindWindowKey(ctx context.Context, target, table, key string, actionArgs ..
 
 // SetWindowOption sets a window-level option in tmux.
 func SetWindowOption(ctx context.Context, target, option, value string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
 	_, err := RunCommand(ctx, "set-option", "-w", "-t", target, option, value)
 	return err
 }
@@ -663,6 +750,9 @@ func IsPaneDead(ctx context.Context, target string) (bool, error) {
 
 // PaneDeadStatus checks whether the pane has exited, and returns its dead status and exit code.
 func PaneDeadStatus(ctx context.Context, target string) (dead bool, exitCode int, err error) {
+	if err := requireTarget(target); err != nil {
+		return false, 0, err
+	}
 	out, err := RunCommand(ctx, "display-message", "-p", "-t", target, "#{pane_dead} #{pane_dead_status}")
 	if err != nil {
 		return false, 0, err
@@ -682,12 +772,18 @@ func PaneDeadStatus(ctx context.Context, target string) (dead bool, exitCode int
 
 // SetPaneTitle sets the title of a pane.
 func SetPaneTitle(ctx context.Context, target, title string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
 	_, err := RunCommand(ctx, "select-pane", "-t", target, "-T", title)
 	return err
 }
 
 // PanePIDAndPGID returns the PID and PGID of the process running in the pane.
 func PanePIDAndPGID(ctx context.Context, target string) (pid, pgid int, err error) {
+	if err := requireTarget(target); err != nil {
+		return 0, 0, err
+	}
 	out, err := RunCommand(ctx, "display-message", "-p", "-t", target, "#{pane_pid}")
 	if err != nil {
 		return 0, 0, err
@@ -772,6 +868,9 @@ func ListPanes(ctx context.Context, session string) ([]PaneInfo, error) {
 
 // SetWindowStatus changes only the workspace's own window in a shared session.
 func SetWindowStatus(ctx context.Context, target, text string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
 	if _, err := RunCommand(ctx, "set-option", "-w", "-t", target, "@marshal_status", text); err != nil {
 		return err
 	}

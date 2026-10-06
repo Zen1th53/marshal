@@ -5,6 +5,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/testutil/processcheck"
+	"github.com/Zen1th53/marshal/internal/tmux"
 	"github.com/Zen1th53/marshal/internal/worker"
 )
 
@@ -63,5 +66,40 @@ func TestTaskTmuxNormalCompletionReapsDescendants(t *testing.T) {
 				return err
 			})
 		})
+	}
+}
+
+func TestImportedTaskCompletionPreservesWorkspaceAndMarshalPanes(t *testing.T) {
+	w := realTmuxWorkspace(t)
+	ctx := context.Background()
+	if err := tmux.NewWindow(ctx, w.tmuxSession, "marshal-chat", w.workDir, nil, []string{"sleep", "600"}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := tmux.ListPanes(ctx, w.tmuxSession)
+	if err != nil || len(before) != 2 {
+		t.Fatalf("panes before: %+v %v", before, err)
+	}
+	req := realTaskRequest(t, w, "imported")
+	req.Task.ImportedResult = &marshal.ImportedResult{TaskID: "TASK-cli", BaseCommit: req.Task.BaseCommit, ResultCommit: req.Task.BaseCommit}
+	d := &tmuxTaskDriver{w: w, inner: driver.Governed{Run: func(context.Context, driver.Request) ([]marshal.CommandRecord, error) { return nil, nil }}}
+	h, err := d.Launch(ctx, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.tmuxMu.Lock()
+	count := len(w.tmuxActiveWins)
+	w.tmuxMu.Unlock()
+	if count != 0 {
+		t.Errorf("task with no terminal host created %d active pane records", count)
+	}
+	if _, err = d.Wait(ctx, h); err != nil {
+		t.Errorf("import completion: %v", err)
+	}
+	after, err := tmux.ListPanes(ctx, w.tmuxSession)
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatalf("protected panes changed: before=%+v after=%+v err=%v", before, after, err)
+	}
+	if files, _ := filepath.Glob(filepath.Join(w.workDir, ".marshal", "tmux-panes", "*.json")); len(files) != 0 {
+		t.Fatalf("pane records for unhosted task: %v", files)
 	}
 }

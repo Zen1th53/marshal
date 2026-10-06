@@ -351,6 +351,9 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/continue":
 		return h.handleContinue(ctx, parts[1:])
 	case "/marshal":
+		if len(parts) > 1 && strings.EqualFold(parts[1], "import") {
+			return h.ws.marshalImport(ctx, marshalImportArgs(rawLine))
+		}
 		return h.handleMarshal(ctx, parts[1:])
 
 	case "/backup":

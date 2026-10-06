@@ -75,6 +75,10 @@ case "$1" in
         printf 'test-session\n'
         exit 0
         ;;
+      *"#{pane_id}"*)
+        printf '%%%%1\n'
+        exit 0
+        ;;
       *"#{pane_dead}"*)
         printf '1\n'
         exit 0
@@ -199,7 +203,8 @@ esac
 		"select-window -t marshal-codex-12345678",
 		"new-window -t test-session -n marshal-claude -c /tmp -e FOO=bar claude",
 		"kill-window -t marshal-claude",
-		"capture-pane -p -S - -t marshal-codex-12345678",
+		"display-message -p -t marshal-codex-12345678 #{pane_id}",
+		"capture-pane -p -S - -t %1",
 		"select-pane -t marshal-codex-12345678 -d",
 		"join-pane -h -s marshal-codex-12345678 -t marshal",
 		"break-pane -s marshal-codex-12345678",

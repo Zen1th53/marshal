@@ -1375,9 +1375,23 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 	if err := policy.Enforce(r.policy, input, func() error { return nil }); err != nil {
 		return RunResult{}, err
 	}
-	baseCommit := r.layout.HEAD
+	var baseCommit string
 	if task.BaseCommit != nil {
 		baseCommit = *task.BaseCommit
+	} else {
+		// The target branch can advance while a daemon remains running,
+		// independently of the branch checked out in the operator's worktree.
+		project, projectErr := r.store.Project(ctx)
+		if projectErr != nil {
+			return RunResult{}, fmt.Errorf("resolve task target: %w", projectErr)
+		}
+		if project.DefaultBranch == "" {
+			return RunResult{}, errors.New("task target branch is missing")
+		}
+		baseCommit, err = gitMarshal(ctx, r.layout.Root, "rev-parse", "--verify", "refs/heads/"+project.DefaultBranch+"^{commit}")
+		if err != nil {
+			return RunResult{}, fmt.Errorf("resolve task base: %w", err)
+		}
 	}
 	branch := "marshal/" + task.ID
 	worktreeManager := worktree.New(r.layout.Root, r.layout.Worktrees)

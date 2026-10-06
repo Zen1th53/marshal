@@ -98,6 +98,9 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 	w.tmuxMu.Lock()
 	pane, id := a.paneID, a.id
 	w.tmuxMu.Unlock()
+	if strings.TrimSpace(pane) == "" {
+		return fmt.Errorf("agent %s has no pane target", id)
+	}
 	evidence, err := tmux.CapturePane(ctx, pane)
 	if err != nil {
 		return fmt.Errorf("capture evidence for %s: %w", id, err)

@@ -1091,6 +1091,9 @@ func (w *Workspace) handleTakeoverCommand(ctx context.Context) (string, error) {
 	if active == nil {
 		return "No active worker session to take over.", nil
 	}
+	if strings.TrimSpace(active.paneID) == "" {
+		return "", errors.New("worker has no pane target")
+	}
 	// Copy mode consumes input even when pane_input_off is clear.
 	if _, err := tmux.RunCommand(ctx, "if-shell", "-F", "-t", active.paneID, "#{pane_in_mode}", "send-keys -X -t "+active.paneID+" cancel"); err != nil {
 		return "", err
@@ -1270,6 +1273,9 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 				break
 			}
 		}
+		// Only the terminal host creates an active pane record. Imported
+		// results run checks without ever invoking this host.
+		t.w.tmuxActiveWins[agentID] = agent
 		if err := tmux.SetWindowOption(ctx, agent.paneID, "remain-on-exit", "on"); err != nil {
 			return err
 		}
@@ -1293,22 +1299,19 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 		agent.canonicalTaskID = id.CanonicalTaskID
 		return saveAgentRecord(root, t.w.tmuxSession, agent)
 	})
-	t.w.tmuxMu.Lock()
-	t.w.tmuxActiveWins[agentID] = agent
-	t.w.tmuxMu.Unlock()
 	h, err := t.inner.Launch(launchCtx, req)
 	if err != nil {
 		t.w.tmuxMu.Lock()
 		delete(t.w.tmuxActiveWins, agentID)
+		pane := agent.paneID
 		t.w.tmuxMu.Unlock()
-		if agent.paneID != "" {
-			_ = tmux.KillPane(context.Background(), agent.paneID)
+		if pane != "" {
+			_ = tmux.KillPane(context.Background(), pane)
 		}
 		return nil, err
 	}
 	t.w.tmuxMu.Lock()
 	agent.handle = h
-	t.w.tmuxActiveWins[agentID] = agent
 	t.w.tmuxMu.Unlock()
 	t.w.updateTmuxStatusLine(ctx)
 	t.monitors.Store(h, agent.doneChan)

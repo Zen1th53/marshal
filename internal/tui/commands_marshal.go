@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/constitution"
@@ -24,6 +25,9 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal chat                    Open a conversation with the Marshal
   /marshal <goal>                  Draft a plan for the goal with the Marshal model
   /marshal import <TASK-id> <check>  Review a finished CLI task through normal approval and merge
+    Check is the raw shell text after TASK-id; quotes and spacing are preserved.
+    Example: /marshal import TASK-123 test "$(cat hello.txt)" = "hello world"
+    Do not wrap the whole check in an extra pair of quotes.
   /marshal use-plan                Run the current approved Process 04 plan through Process 05
   /marshal approve-task <approval-id>  Approve a Process 05 task paused for your decision
   /marshal approve                 Approve the drafted plan and start running it
@@ -1280,6 +1284,31 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 	return fmt.Sprintf("%s set to %s. It applies to the next Marshal run.", args[0], args[1]), nil
 }
 
+// marshalImportArgs consumes only the command, subcommand and task ID;
+// the check remains shell source, not reconstructed argv.
+func marshalImportArgs(line string) []string {
+	var taskID string
+	for i := 0; i < 3; i++ {
+		line = strings.TrimLeftFunc(line, unicode.IsSpace)
+		end := strings.IndexFunc(line, unicode.IsSpace)
+		if end < 0 {
+			if i == 2 {
+				return []string{line}
+			}
+			return nil
+		}
+		if i == 2 {
+			taskID = line[:end]
+		}
+		line = line[end:]
+	}
+	check := strings.TrimLeftFunc(line, unicode.IsSpace)
+	if check == "" {
+		return []string{taskID}
+	}
+	return []string{taskID, check}
+}
+
 func (w *Workspace) marshalImport(ctx context.Context, args []string) (string, error) {
 	if len(args) < 2 {
 		return "", errors.New("usage: /marshal import <TASK-id> <check>")
@@ -1298,7 +1327,7 @@ func (w *Workspace) marshalImport(ctx context.Context, args []string) (string, e
 	if err != nil {
 		return "", err
 	}
-	run, err := w.runtime.ImportMarshalTask(runCtx, service, runID, args[0], strings.Join(args[1:], " "))
+	run, err := w.runtime.ImportMarshalTask(runCtx, service, runID, args[0], args[1])
 	if err != nil {
 		return "", err
 	}

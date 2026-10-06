@@ -4391,8 +4391,13 @@
     },
     {
       "path": "internal/app/runtime.go",
-      "sha256": "cb77bfed6af62133c6863171a6a4f7ac510a25cbd99d171f591ea8818915560f",
-      "bytes": 82706
+      "sha256": "2e0b2fe92b3114695a7d501fdbb78ba68145e196232489b387b392787972993e",
+      "bytes": 83315
+    },
+    {
+      "path": "internal/app/runtime_base_test.go",
+      "sha256": "5cdb6e21ca733f1da12280521637cdacbfff252355a62dce222f6b66589fcdf9",
+      "bytes": 2284
     },
     {
       "path": "internal/app/runtime_secret_commit_test.go",
@@ -9405,14 +9410,19 @@
       "bytes": 2515
     },
     {
+      "path": "internal/tmux/target_test.go",
+      "sha256": "d66b2e58cf4616ddae8789ff83e7f39e26ca7715e13ee1a7a6ec4574758cf77d",
+      "bytes": 3922
+    },
+    {
       "path": "internal/tmux/tmux.go",
-      "sha256": "fe2ef9e518b34d2678db61804a118046097e5dd6000d2fa99eb880717118e8d4",
-      "bytes": 24693
+      "sha256": "d20af004dfba5bb2d073f03c7cf55b7613090c024b6765b795b1fcf2a229249a",
+      "bytes": 27125
     },
     {
       "path": "internal/tmux/tmux_test.go",
-      "sha256": "fb22425424901d2f0af49cc0dc25f4a572e355be1db3b76ca959f1622fc2d71f",
-      "bytes": 10642
+      "sha256": "ff269875bb088b63082943fbd438b07fc7b47ea6815711caed3bc38200c1915a",
+      "bytes": 10756
     },
     {
       "path": "internal/tournament/adversarial_test.go",
@@ -9621,8 +9631,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "c01578152d2edb0be6b1094eede8e8880fec990c433d5a52062779c997baca9a",
-      "bytes": 29211
+      "sha256": "7546be8000b65752750c400a51018ac9b478f2edcf1f417ced9b1e5836e41e22",
+      "bytes": 29340
     },
     {
       "path": "internal/tui/commands_alignment.go",
@@ -9731,8 +9741,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "930310d125748d164ea540833255fff432b7f931bf353421fd6bdfec79c475c5",
-      "bytes": 45084
+      "sha256": "ff2c031361c5303e1a479512c9df7ed490abaadfa5caf91f4d39c7e2923cd39e",
+      "bytes": 45899
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -9978,6 +9988,11 @@
       "path": "internal/tui/marshal_chat_test.go",
       "sha256": "21527ebb70362785c906f9af438e965346303e993777afe6745b067df303ee1c",
       "bytes": 2097
+    },
+    {
+      "path": "internal/tui/marshal_import_args_test.go",
+      "sha256": "2a088fe61aeadc4025348147ac4911e3cd4b3bee6ac2bb9da177a43905e8c639",
+      "bytes": 3399
     },
     {
       "path": "internal/tui/marshal_operator_test.go",
@@ -10581,8 +10596,8 @@
     },
     {
       "path": "internal/tui/tmux_completion_test.go",
-      "sha256": "20dcb27c1b585b536f34b86d106597bf222d227791672154d9e1870a376cf4ef",
-      "bytes": 2244
+      "sha256": "6810d1df6782cd7364983499901c0a8c51e084af91ace5e69ca8ce6993303508",
+      "bytes": 3744
     },
     {
       "path": "internal/tui/tmux_governance_test.go",
@@ -10591,8 +10606,13 @@
     },
     {
       "path": "internal/tui/tmux_identity.go",
-      "sha256": "e4ca0712a4fdcffbc80e22ad525ccde08dd95ce81c051076df2cd39966f33d78",
-      "bytes": 4805
+      "sha256": "5c3cfa568686be070bbf0cf2fc29e514326946683a3e316b98b2691db5b4fa75",
+      "bytes": 4899
+    },
+    {
+      "path": "internal/tui/tmux_import_test.go",
+      "sha256": "d7500a9cd8f965712a65d1d88b664d3d7b1a26606af2fa644ec61e2c383f9515",
+      "bytes": 2174
     },
     {
       "path": "internal/tui/tmux_isolation_test.go",
@@ -10606,8 +10626,8 @@
     },
     {
       "path": "internal/tui/tmux_native.go",
-      "sha256": "a7379dda00e088045612248d2f57f743d4a4776cc9b1bb8d911f4990b6dcfcdc",
-      "bytes": 45436
+      "sha256": "1c22f935afe33644f1822afdb806c801fad0503e3df7e5ddf744a997c6d3379f",
+      "bytes": 45593
     },
     {
       "path": "internal/tui/tmux_native_test.go",
@@ -11816,8 +11836,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "8a4f7e6e3c8ca6d700a2838a17cca1eb51e3b1d071df74ebc31bdf20d4980137",
-      "bytes": 189821
+      "sha256": "92d47623cf858a13dfd0d4a2bc25380caa0831d936cf6ea03c2cce9b4dca4534",
+      "bytes": 190771
     },
     {
       "path": "tools/marshal.py",
