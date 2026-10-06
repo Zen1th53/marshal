@@ -351,7 +351,7 @@ func (b *CredentialBroker) sanitizeMappedSecrets(value string, secrets map[strin
 		}
 		return len(keys[i]) > len(keys[j])
 	})
-	pairs := make([]string, 0, 2*len(keys))
+	var pairs []string
 	for _, key := range keys {
 		pairs = append(pairs, key, variants[key])
 	}
