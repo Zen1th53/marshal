@@ -411,18 +411,26 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 	}
 	if len(marshalBrief) > 0 {
-		// Deliver the compiled protocol through both the instruction channel
-		// and opening turn so native startup cannot silently skip its order.
+		// The protocol is mandatory and must never become a conversation turn.
+		if hiddenChannel(provider) == injectOff || strings.TrimSpace(marshalBrief[0]) == "" {
+			return "", fmt.Errorf("Marshal not started: %s has no hidden instruction channel", label)
+		}
+		if err := scrubMarshalInboxes(root); err != nil {
+			return "", fmt.Errorf("Marshal not started: retained briefing cleanup failed: %w", err)
+		}
 		note, err := deliver(marshalBrief[0], hiddenChannel(provider))
 		if err != nil {
-			return "", fmt.Errorf("deliver Marshal briefing: %w", err)
+			return "", fmt.Errorf("Marshal not started: hidden instruction delivery failed: %w", err)
 		}
 		briefingNotes = append(briefingNotes, note)
-		args = append(args, marshalProtocolKickoffArgs(provider, marshalBrief[0])...)
+		args = append(args, marshalKickoffArgs(provider)...)
 	}
 	args, briefingEnv, err := dir.launch(args)
 	if err != nil {
-		return "", fmt.Errorf("deliver briefing: %w", err)
+		if len(marshalBrief) > 0 {
+			return "", fmt.Errorf("Marshal not started: hidden instruction delivery failed: %s", RedactContent(err.Error(), nil))
+		}
+		return "", fmt.Errorf("Session not started: hidden instruction delivery failed: %s", RedactContent(err.Error(), nil))
 	}
 
 	if w.isTmuxActive() {
@@ -478,7 +486,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	}
 	for _, note := range briefingNotes {
 		if note != "" {
-			fmt.Fprintf(os.Stdout, "MARSHAL · %s\n", note)
+			fmt.Fprintf(os.Stdout, "MARSHAL · %s\n", RedactContent(note, nil))
 		}
 	}
 	// Published on every pass so a long session shows capture working rather

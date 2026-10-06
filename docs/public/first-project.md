@@ -15,7 +15,7 @@ In your project folder, run:
 marshal tui
 ```
 
-The MARSHAL window opens. At the bottom is the **composer**, where you type
+The MARSHAL control centre (window 0) opens. The Marshal chat stays open in its own window. Press **F11** from any MARSHAL window to return to the control centre. At the bottom is the **composer**, where you type
 commands. Type `/help` at any time to see what you can do.
 
 !!! tip

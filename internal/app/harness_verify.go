@@ -28,13 +28,16 @@ func validateHarnessProbe(result adapter.Result) error {
 // It never imports host credentials or accepts injected adapters as evidence.
 func (r *Runtime) VerifyMarshalWorker(ctx context.Context, provider, modelName string) (model.HarnessProfile, error) {
 	var profile model.HarnessProfile
-	if provider != "opencode" {
-		return profile, errors.New("sandboxed harness verification currently supports opencode")
+	if provider == "claude-code" {
+		provider = "claude"
 	}
-	if modelName == "" {
+	if provider != "opencode" && provider != "codex" && provider != "claude" {
+		return profile, errors.New("sandboxed harness verification supports codex, claude and opencode")
+	}
+	if modelName == "" && provider == "opencode" {
 		modelName = strings.TrimSpace(os.Getenv("MARSHAL_OPENCODE_MODEL"))
 	}
-	if modelName == "" {
+	if modelName == "" && provider == "opencode" {
 		return profile, errors.New("harness verification requires an explicit model")
 	}
 	if r.adapters[provider] != nil {
@@ -101,6 +104,6 @@ func (r *Runtime) VerifyMarshalWorker(ctx context.Context, provider, modelName s
 	if err := r.store.AppendEvent(ctx, nil, model.Event{ID: id, Type: "HARNESS_VERIFIED", Timestamp: now, ProjectID: r.ProjectID(), Data: map[string]any{"provider": provider, "version": version, "model": modelName, "reply": result.FinalText, "isolation": result.Isolation}}); err != nil {
 		return profile, err
 	}
-	profile = model.HarnessProfile{Harness: provider, InstalledVersion: version, SupportedModels: []string{modelName}, DefaultModel: modelName, ProbeEvidenceID: id, ProbedAt: now, ExpiresAt: now.Add(24 * time.Hour), FeatureSupport: map[string]model.FeatureStatus{"headless": model.StatusNative, "sandbox": model.StatusEmulated, "network": model.StatusEmulated}}
+	profile = model.HarnessProfile{Harness: marshalHarnessName(provider), InstalledVersion: version, SupportedModels: []string{modelName}, DefaultModel: modelName, ProbeEvidenceID: id, ProbedAt: now, ExpiresAt: now.Add(24 * time.Hour), FeatureSupport: map[string]model.FeatureStatus{"headless": model.StatusNative, "sandbox": model.StatusEmulated, "network": model.StatusEmulated}}
 	return profile, r.store.SaveHarnessProfile(ctx, profile)
 }

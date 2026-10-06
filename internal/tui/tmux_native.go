@@ -54,6 +54,15 @@ type activeTmuxAgent struct {
 	cleaned         bool
 }
 
+// Automatic setup uses the same launch pipeline as operator commands, but must
+// never select an agent window. Explicit commands use an unmarked context.
+type tmuxBackgroundLaunchKey struct{}
+
+func tmuxLaunchInBackground(ctx context.Context) bool {
+	background, _ := ctx.Value(tmuxBackgroundLaunchKey{}).(bool)
+	return background
+}
+
 // InitTmux initializes tmux session and window awareness for the workspace.
 func (w *Workspace) InitTmux(root ...string) {
 	w.tmuxMu.Lock()
@@ -64,7 +73,7 @@ func (w *Workspace) InitTmux(root ...string) {
 			w.startPermissionQueue()
 		}
 		if w.runtime != nil && tmux.IsInsideTmux() {
-			if _, err := w.marshalChat(context.Background()); err != nil {
+			if _, err := w.marshalChat(context.WithValue(context.Background(), tmuxBackgroundLaunchKey{}, true)); err != nil {
 				w.RecordActivity("Marshal chat: " + err.Error())
 			}
 		}
@@ -115,7 +124,12 @@ func (w *Workspace) InitTmux(root ...string) {
 	// Adopt surviving windows from existing session if re-attaching
 	w.adoptSurvivingWorkersLocked(projectRoot)
 
-	// Ensure Marshal Chat is automatically open (F3)
+	// Startup and workspace re-initialization always show the control centre.
+	if tmux.IsInsideTmux() {
+		_ = tmux.SelectWindow(context.Background(), w.marshalTarget())
+	}
+
+	// Ensure Marshal Chat is automatically open
 	if w.runtime == nil {
 		w.ensureMarshalChatAutoLocked(projectRoot)
 	}
@@ -204,25 +218,21 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 	winName := tmux.ChatWindowName(projectRoot)
 	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
+		w.RecordActivity("Marshal not started: protocol unavailable")
 		return
 	}
-	var args []string
-	var env []string
-	var dir *briefingDir
-	if hiddenChannel(provider) == injectMarshalDir {
-		dir, err = newBriefingDir(projectRoot, provider)
-		if err == nil {
-			_, err = dir.add(brief)
-		}
-		if err == nil {
-			args, env, err = dir.launch(marshalProtocolKickoffArgs(provider, brief))
-		}
-	} else {
-		args, _, err = applyBriefing(provider, projectRoot, marshalProtocolKickoffArgs(provider, brief), brief, hiddenChannel(provider))
-	}
+	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, nil, brief)
 	if err != nil {
+		w.RecordActivity(err.Error())
 		return
 	}
+	launched := false
+	defer func() {
+		if !launched {
+			dir.remove()
+		}
+	}()
+
 	saved := loadChatBinding(projectRoot)
 	runID := saved.RunID
 	m := w.marshalSession()
@@ -250,14 +260,13 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 	}
 	cmd := append([]string{binary}, args...)
 
-	_ = tmux.NewWindow(ctx, w.tmuxSession, winName, projectRoot, env, cmd)
+	if err := tmux.NewWindow(ctx, w.tmuxSession, winName, projectRoot, env, cmd); err != nil {
+		w.RecordActivity("Marshal not started: " + RedactContent(err.Error(), nil))
+		return
+	}
+	launched = true
 	_ = tmux.SetWindowOption(ctx, w.tmuxSession+":"+winName, "remain-on-exit", "on")
 	_ = tmux.SetPaneReadOnly(ctx, w.tmuxSession+":"+winName, false) // F3: normal operator input
-
-	// Keep the main MARSHAL workspace window focused
-	if w.tmuxMarshalWin != "" {
-		_ = tmux.SelectWindow(ctx, w.marshalTarget())
-	}
 
 	paneID := winName
 	windowID := ""
@@ -346,17 +355,43 @@ func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAge
 		agent.binary = bin
 	}
 
-	resumeArgs := agent.args
-	if sessionID != "" {
-		resumeArgs = resumeArgsForProvider(provider, sessionID)
-	}
-	agent.args = resumeArgs
-	cmd := append([]string{bin}, resumeArgs...)
-
-	err := tmux.RespawnWindow(ctx, agent.paneID, cmd)
+	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
-		_ = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, agent.env, cmd)
+		w.RecordActivity("Marshal not started: protocol unavailable")
+		return
 	}
+	var base []string
+	if sessionID != "" {
+		base = resumeArgsForProvider(provider, sessionID)
+	}
+	resumeArgs, env, dir, err := prepareMarshalLaunch(provider, root, base, brief)
+	if err != nil {
+		w.RecordActivity(err.Error())
+		return
+	}
+	for _, prior := range agent.env {
+		if !strings.HasPrefix(prior, "OPENCODE_CONFIG_CONTENT=") {
+			env = append(env, prior)
+		}
+	}
+	// Respawn inherits the old pane environment, so supply the rebuilt hidden
+	// instruction configuration explicitly (especially OpenCode's file pointer).
+	cmd := append([]string{"env"}, env...)
+	cmd = append(cmd, bin)
+	cmd = append(cmd, resumeArgs...)
+	err = tmux.RespawnWindow(ctx, agent.paneID, cmd)
+	if err != nil {
+		err = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, env, append([]string{bin}, resumeArgs...))
+	}
+	if err != nil {
+		dir.remove()
+		w.RecordActivity("Marshal not started: " + RedactContent(err.Error(), nil))
+		return
+	}
+	agent.briefingDir.remove()
+	agent.briefingDir = dir
+	agent.args = resumeArgs
+	agent.env = env
 
 	_ = tmux.SetWindowOption(ctx, agent.paneID, "remain-on-exit", "on")
 	_ = tmux.SetPaneReadOnly(ctx, agent.paneID, false) // F3: normal operator input
@@ -496,11 +531,13 @@ func (w *Workspace) runNativeAgentInTmux(
 		}
 	}
 	if exists && winExists {
-		// Window already exists; switch to it without restarting the process.
-		if existingAgent != nil && existingAgent.isJoined {
-			_ = tmux.SelectPane(ctx, existingAgent.paneID)
-		} else {
-			_ = tmux.SelectWindow(ctx, existingAgent.paneID)
+		// Only an operator command switches to a surviving window.
+		if !tmuxLaunchInBackground(ctx) {
+			if existingAgent != nil && existingAgent.isJoined {
+				_ = tmux.SelectPane(ctx, existingAgent.paneID)
+			} else {
+				_ = tmux.SelectWindow(ctx, existingAgent.paneID)
+			}
 		}
 		if !isChat {
 			w.tmuxMu.Lock()
@@ -571,8 +608,10 @@ func (w *Workspace) runNativeAgentInTmux(
 		return failHost(err)
 	}
 
-	// Switch to the newly opened window
-	_ = tmux.SelectWindow(ctx, w.tmuxSession+":"+winName)
+	// Automatic setup leaves focus alone; explicit launches show the session.
+	if !tmuxLaunchInBackground(ctx) {
+		_ = tmux.SelectWindow(ctx, w.tmuxSession+":"+winName)
+	}
 
 	// Discover immutable pane ID and PID
 	panes, _ := tmux.ListPanes(ctx, w.tmuxSession)
@@ -782,6 +821,7 @@ func (w *Workspace) monitorAgent(
 
 // RecordActivity records activity into workspace state and triggers a redraw if interactive.
 func (w *Workspace) RecordActivity(msg string) {
+	msg = RedactContent(msg, nil)
 	w.mu.Lock()
 	if w.state.LastOutput != "" {
 		w.state.LastOutput += "\n" + msg
@@ -823,7 +863,7 @@ func (w *Workspace) updateTmuxStatusLine(ctx context.Context) {
 	if len(parts) > 0 {
 		statusText = fmt.Sprintf(" [%s] ", strings.Join(parts, " | "))
 	}
-	_ = tmux.SetWindowStatus(ctx, target, statusText)
+	_ = tmux.SetWindowStatus(ctx, target, RedactContent(statusText, nil))
 }
 
 // reportActiveTmuxSessions prints still-running agent sessions when MARSHAL exits.
@@ -1091,6 +1131,9 @@ func (w *Workspace) handleTakeoverCommand(ctx context.Context) (string, error) {
 	if active == nil {
 		return "No active worker session to take over.", nil
 	}
+	if strings.TrimSpace(active.paneID) == "" {
+		return "", errors.New("worker has no pane target")
+	}
 	// Copy mode consumes input even when pane_input_off is clear.
 	if _, err := tmux.RunCommand(ctx, "if-shell", "-F", "-t", active.paneID, "#{pane_in_mode}", "send-keys -X -t "+active.paneID+" cancel"); err != nil {
 		return "", err
@@ -1270,6 +1313,9 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 				break
 			}
 		}
+		// Only the terminal host creates an active pane record. Imported
+		// results run checks without ever invoking this host.
+		t.w.tmuxActiveWins[agentID] = agent
 		if err := tmux.SetWindowOption(ctx, agent.paneID, "remain-on-exit", "on"); err != nil {
 			return err
 		}
@@ -1293,22 +1339,19 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 		agent.canonicalTaskID = id.CanonicalTaskID
 		return saveAgentRecord(root, t.w.tmuxSession, agent)
 	})
-	t.w.tmuxMu.Lock()
-	t.w.tmuxActiveWins[agentID] = agent
-	t.w.tmuxMu.Unlock()
 	h, err := t.inner.Launch(launchCtx, req)
 	if err != nil {
 		t.w.tmuxMu.Lock()
 		delete(t.w.tmuxActiveWins, agentID)
+		pane := agent.paneID
 		t.w.tmuxMu.Unlock()
-		if agent.paneID != "" {
-			_ = tmux.KillPane(context.Background(), agent.paneID)
+		if pane != "" {
+			_ = tmux.KillPane(context.Background(), pane)
 		}
 		return nil, err
 	}
 	t.w.tmuxMu.Lock()
 	agent.handle = h
-	t.w.tmuxActiveWins[agentID] = agent
 	t.w.tmuxMu.Unlock()
 	t.w.updateTmuxStatusLine(ctx)
 	t.monitors.Store(h, agent.doneChan)

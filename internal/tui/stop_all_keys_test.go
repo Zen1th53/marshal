@@ -15,8 +15,9 @@ func TestStopAllKeyTargetsControlFromEveryMarshalPane(t *testing.T) {
 	w.tmuxPath = fake
 	w.workDir = t.TempDir()
 	t.Setenv("MARSHAL_TEST_FORCE_TMUX", "1")
-	w.tmuxMarshalPaneID = "%control"
-	for _, pane := range []string{"%control", "%marshal-chat", "%worker"} {
+	// Use real tmux ID syntax: Marshal %0, its chat %1, and a worker %2.
+	w.tmuxMarshalPaneID = "%0"
+	for _, pane := range []string{"%0", "%1", "%2"} {
 		if err := w.bindWorkspaceKeysLocked(context.Background(), pane, w.workDir); err != nil {
 			t.Fatal(err)
 		}
@@ -26,9 +27,9 @@ func TestStopAllKeyTargetsControlFromEveryMarshalPane(t *testing.T) {
 	handle := driver.NewHandle(driver.Request{})
 	handle.SetCancel(func() { cancelled = true })
 	handle.Complete()
-	chat := &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", paneID: "%marshal-chat"}
+	chat := &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", paneID: "%1"}
 	w.tmuxActiveWins = map[string]*activeTmuxAgent{
-		"worker":       {id: "worker", role: "worker", label: "Worker", paneID: "%worker", driver: driver.Native{}, handle: handle},
+		"worker":       {id: "worker", role: "worker", label: "Worker", paneID: "%2", driver: driver.Native{}, handle: handle},
 		"marshal-chat": chat,
 	}
 	response, err := w.cmd.Handle(context.Background(), "/stop all")
@@ -42,10 +43,10 @@ func TestStopAllKeyTargetsControlFromEveryMarshalPane(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(string(data), "C-x if-shell") != 3 || strings.Count(string(data), "send-keys -t %control C-x") != 6 {
+	if strings.Count(string(data), "C-x if-shell") != 3 || strings.Count(string(data), "send-keys -t %0 C-x") != 6 {
 		t.Fatalf("stop key did not route to control: %s", data)
 	}
-	if !strings.Contains(string(data), "kill-pane -t %worker") || strings.Contains(string(data), "kill-pane -t %marshal-chat") || strings.Contains(string(data), "kill-pane -t %control") {
+	if !strings.Contains(string(data), "kill-pane -t %2") || strings.Contains(string(data), "kill-pane -t %1") || strings.Contains(string(data), "kill-pane -t %0") {
 		t.Fatalf("wrong panes stopped: %s", data)
 	}
 	if strings.Contains(string(data), "/stop all") {

@@ -53,7 +53,11 @@ Bubblewrap provides the strong Linux filesystem/process boundary. Governed
 workers always use `--unshare-net`. A runtime-owned per-run Unix proxy, bridged
 to sandbox loopback by trusted socat, enforces exact host/port grants. Only the
 provider API is allowed by default; `/egress` accepts operator grants and
-revocations. Missing proxy/bridge/isolation refuses network work. Native
+revocations. Decisions are durable, socket-incarnation-scoped events in the
+shared project store, read by the owning proxy before dialing. The TUI can
+therefore grant a daemon-owned run without exposing operator commands on the
+worker socket. Status validates live proxy listeners from both runtimes;
+revocation polling closes existing remote connections. Missing proxy/bridge/isolation refuses network work. Native
 sessions opened directly are out of scope.
 
 ## Canonical state

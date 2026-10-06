@@ -52,3 +52,28 @@ func TestHelpDescribesApprovalHandlers(t *testing.T) {
 		}
 	}
 }
+
+func TestImportedTaskPanelAndAcceptance(t *testing.T) {
+	_, ws, ctx := acceptanceWorkspace(t)
+	run := marshal.Run{State: marshal.Drafting, Tasks: []marshal.Task{{PlanTaskID: "TASK-imported", Worker: "codex", Mode: marshal.Governed, ImportedResult: &marshal.ImportedResult{TaskID: "TASK-imported", Revision: 7, BaseCommit: "base", ResultCommit: "result"}}}}
+	panel := newMarshalPanel("RUN-imported", "codex", run, "")
+	text := marshalStatusText(panel)
+	for _, want := range []string{"governed", "revision 7", "base base", "result result"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing approval detail %q: %s", want, text)
+		}
+	}
+	ws.setMarshalPanel(panel)
+	m := ws.marshalSession()
+	m.runID = "RUN-imported"
+	out, err := ws.ExecuteCommand(ctx, "/marshal accept TASK-imported")
+	if err != nil || !strings.Contains(out, "Approved task TASK-imported") {
+		t.Fatalf("accept: %s %v", out, err)
+	}
+	if _, err := m.approver(ctx, "RUN-imported", "TASK-imported"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.approver(ctx, "RUN-imported", "TASK-imported"); err == nil {
+		t.Fatal("approval replay accepted")
+	}
+}

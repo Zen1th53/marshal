@@ -36,7 +36,10 @@ func (h *CommandHandler) handleEgress(ctx context.Context, args []string) (strin
 	if !app.EgressEnforcementAvailable() {
 		b.WriteString("Network work is refused here: bubblewrap network isolation or the trusted socat bridge is unavailable.\n")
 	}
-	rows := a.runtime.EgressStatus()
+	rows, err := a.runtime.OperatorEgressStatus(ctx)
+	if err != nil {
+		return "Egress status unavailable: " + err.Error(), nil
+	}
 	if len(rows) == 0 {
 		b.WriteString("No active governed egress runs.\n")
 	}

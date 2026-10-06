@@ -24,14 +24,22 @@ commands available in your version.
 | `/marshal model codex` | Choose the AI that plans: `codex`, `claude` or `agy`. |
 | `/marshal settings` | Show or change [settings](settings.md). |
 | `/marshal approve` | Approve the plan and start the work. |
-| `/marshal status` | Show the plan's progress, stored criterion evidence, risks, and budget used. |
+| `/marshal status` | Show each task's native/governed mode, the plan's progress, stored criterion evidence, risks, and budget used. |
 | `/marshal approve-task APPROVAL-ID` | Allow a step an agent asked permission for. |
-| `/marshal accept TASK-ID` | Accept a finished task. |
+| `/marshal import TASK-ID CHECK` | Draft a review plan for a successful governed CLI task in review; CHECK is the acceptance command. |
+| `/marshal accept TASK-ID` | Give one-shot task approval in acceptance mode `user`, including an imported result; use `/marshal resume` to continue. |
 | `/marshal return TASK-ID NOTE` | Send a task back with a note on what to fix. |
 | `/marshal resume` | Continue after a decision, a stop or a restart. |
 | `/marshal stop` | Stop the run and keep its state. |
 | `/marshal amend REASON` | Ask to change the plan. Big changes need `/marshal amend approve` or `/marshal amend deny`. Scoped splits require tasks that have not started. Changing an existing task's native/governed mode requires a new plan. |
 | `/marshal close` | Finish a completed run and bring the work into your project. |
+
+Finished CLI tasks first need `/marshal import TASK-ID CHECK`, then
+`/marshal approve`. Review their task branch diff and the pinned commits shown
+by `/marshal status`. In mode `user`, approve the task with `/marshal accept`
+and continue with `/marshal resume`. `/marshal close` delivers a verified run;
+mode `marshal-then-user` requires your close approval. Delivery is recorded in
+the Marshal run; the original CLI task remains as its review evidence.
 
 ## Goals and approvals
 

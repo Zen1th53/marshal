@@ -53,7 +53,8 @@ func (h *CommandHandler) runtimeForEvidence() *app.Runtime {
 	return nil
 }
 
-func (h *CommandHandler) handleEvidence(ctx context.Context, evidenceID string) (string, error) {
+func (h *CommandHandler) handleEvidence(ctx context.Context, evidenceID string) (output string, resultErr error) {
+	defer func() { output = RedactContent(output, nil) }()
 	evidenceID = strings.TrimPrefix(evidenceID, "#")
 	var b strings.Builder
 	var digest string

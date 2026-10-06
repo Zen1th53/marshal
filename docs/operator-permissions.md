@@ -12,7 +12,16 @@ Network grants also retain the existing egress evidence. A model's text cannot
 supply the keyboard decision or authenticated local operator context.
 
 The existing `/egress allow <run-id> <host:port>` command remains an equivalent
-operator action. `/permission read allow <exact absolute folder>` records a
+operator action, including for a CLI run owned by the daemon. `/egress status`
+combines active daemon and TUI runs in the same project. Pending daemon refusals
+can open permission review in the TUI; popup grants and command grants both
+require the authenticated local operator's `egress.decide` capability. They
+persist an exact run-incarnation and host:port decision for the owning proxy to
+read. Model text, socket peer UID and historical notifications confer no grant
+authority. Remote revocations deny new requests immediately and close existing
+connections at the owner's next 100 ms poll; expired runs cannot be granted.
+
+`/permission read allow <exact absolute folder>` records a
 session-only read grant; replace `allow` with `deny` to revoke it. Grants expire
 when this MARSHAL runtime ends and are not restored from historical evidence.
 A denial for a child folder overrides an allowed parent. Grants bind to the

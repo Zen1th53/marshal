@@ -706,8 +706,15 @@ func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker str
 		return err
 	}
 	i := taskIndex(run, taskID)
-	if i < 0 || run.Tasks[i].State != marshal.Reassigned || worker == "" || worker == run.Tasks[i].Worker {
+	if i < 0 || run.Tasks[i].State != marshal.Reassigned || worker == "" || marshalHarnessName(worker) == marshalHarnessName(run.Tasks[i].Worker) {
 		return errors.New("invalid reassignment")
+	}
+	drivers := s.Drivers
+	if run.Tasks[i].Mode == marshal.Governed && s.GovernedDrivers != nil {
+		drivers = s.GovernedDrivers
+	}
+	if d := drivers[worker]; d == nil || d.Mode() != run.Tasks[i].Mode {
+		return fmt.Errorf("worker %s does not support task mode %s", worker, run.Tasks[i].Mode)
 	}
 	run.Tasks[i].Worker = worker
 	if run.Tasks[i].ReturnsByAgent == nil {
@@ -929,13 +936,35 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 		return err
 	}
 	if checkedOut != "" {
-		return fmt.Errorf("target branch %s is checked out at %s; run `git switch --detach` from that worktree to switch it away before the run can close", project.DefaultBranch, checkedOut)
-	}
-	// The target moves in one compare-and-swap: update-ref succeeds only if
-	// the target is still at the checkpointed commit, so no concurrent
-	// advance can slip between a check and the move.
-	if _, err = gitMarshal(ctx, s.Repository, "update-ref", target, head, old); err != nil {
-		return fmt.Errorf("the target branch moved since the checkpoint was taken: %w", err)
+		refusal := fmt.Errorf("target branch %s is checked out at %s; run `git switch --detach` from that worktree to switch it away before the run can close", project.DefaultBranch, checkedOut)
+		// Only the main worktree has the same Git and common directories.
+		// A linked worktree must still be switched away by its operator.
+		dirs, dirErr := gitMarshal(ctx, checkedOut, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
+		paths := strings.Split(dirs, "\n")
+		status, statusErr := gitMarshal(ctx, checkedOut, "status", "--porcelain", "--untracked-files=all")
+		if dirErr != nil || len(paths) != 2 || paths[0] != paths[1] || statusErr != nil || status != "" {
+			return refusal
+		}
+		// Recheck the checkpoint and checkout identity before Git updates the
+		// branch, index and files together. Git's fast-forward merge refuses
+		// divergence and worktree conflicts; hooks stay disabled by gitMarshal.
+		branch, branchErr := gitMarshal(ctx, checkedOut, "symbolic-ref", "HEAD")
+		current, currentErr := gitMarshal(ctx, checkedOut, "rev-parse", "HEAD")
+		if branchErr != nil || branch != target || currentErr != nil || current != old {
+			return refusal
+		}
+		if _, err = gitMarshal(ctx, checkedOut, "merge", "--ff-only", "--no-edit", "--no-overwrite-ignore", head); err != nil {
+			return fmt.Errorf("target fast-forward failed: %w", err)
+		}
+		if after, err := gitMarshal(ctx, checkedOut, "rev-parse", "HEAD"); err != nil || after != head {
+			return errors.New("the target branch moved during close")
+		}
+	} else {
+		// An unchecked target moves with compare-and-swap so a concurrent
+		// advance since the checkpoint cannot be overwritten.
+		if _, err = gitMarshal(ctx, s.Repository, "update-ref", target, head, old); err != nil {
+			return fmt.Errorf("the target branch moved since the checkpoint was taken: %w", err)
+		}
 	}
 	run.State = marshal.Closed
 	if err = s.save(ctx, runID, run, rev); err != nil {

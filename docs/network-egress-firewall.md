@@ -44,6 +44,7 @@ its isolated namespace and does not require the proxy or bridge.
    displays `<worker> wants to reach <host:port>. Allow?`, its worker run ID, and
    the command to grant it. `/egress status` lists active runs, allowed endpoints,
    and refused destinations, plus the durable refusal inbox for completed runs.
+   Active runs from both the daemon and the attached TUI runtime are listed.
    Process 05 worker runs also show their parent run.
 2. Every runtime first persists `network.egress.notification` in its operator
    queue, readable through `/egress status` even without live delivery. With
@@ -54,11 +55,25 @@ its isolated namespace and does not require the proxy or bridge.
    or `/egress revoke <run-id> <host[:port]>` to revoke. An omitted port means 443.
    Only the authenticated local operator context with `egress.decide` authority
    can mutate the list. Model output, including Marshal text, cannot grant.
+   The operator command persists a scoped decision in the shared project event
+   store. The owning proxy reads committed decisions before each request and
+   again before dialing; it does not depend on the TUI owning that run. Popup
+   grants use the same command boundary. The daemon socket remains a worker
+   protocol and gains no operator mutation route.
 4. The worker may retry the refused request. A grant does not replay a request
    or restart a provider that already exited. Revocation also closes existing
-   forwards and tunnels to that exact endpoint.
+   forwards and tunnels to that exact endpoint. Local revocations close them
+   synchronously; another runtime's revocations are consumed by the owner at
+   100 ms polling intervals (subject to scheduling and store latency). New
+   requests observe committed revocations immediately. A revoke followed by a
+   regrant still closes the old connections.
 5. All grants expire when the worker run ends. Each retry is a new run; no grant
-   is restored after restart. Grants/revocations record the operator identity,
+   is restored after restart. A scope is bound to its random private proxy
+   socket; status and remote commands verify that listener is live. Unknown,
+   ended and crashed runs refuse grants. Historical events remain evidence and
+   cannot authorize a new socket, even if its run ID is reused. Store read
+   failures deny requests and stop the owning proxy's live connections.
+   Grants/revocations record the operator identity,
    endpoint, run, and UTC time in structured events.
 
 Matching is exact after case, trailing-dot and standard IP normalization. There

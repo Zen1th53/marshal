@@ -258,9 +258,10 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 			continue
 		}
 		if t.State == marshal.Reassigned && len(t.ReturnsByAgent) <= 1 {
-			next := s.otherWorker(t.Worker)
+			next := s.otherWorker(t.Worker, t.Mode)
 			if next == "" {
-				return launched, s.Escalate(ctx, runID, t.PlanTaskID, "no other worker is available for reassignment")
+				reason := fmt.Sprintf("no other worker supports %s mode for reassignment; operator intervention required", t.Mode)
+				return launched, errors.Join(errors.New(reason), s.Escalate(ctx, runID, t.PlanTaskID, reason))
 			}
 			if err := s.Reassign(ctx, runID, t.PlanTaskID, next); err != nil {
 				return launched, err
@@ -268,6 +269,11 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 			t.Worker = next
 		}
 		if s.InstalledVersion != nil {
+			if t.Mode == marshal.Governed && s.ProbeWorker != nil && !s.workerGovernance(ctx, t.Worker).Governed() {
+				if err := s.ProbeWorker(ctx, t.Worker); err != nil {
+					return launched, fmt.Errorf("governed worker verification failed: %w", err)
+				}
+			}
 			if g := s.workerGovernance(ctx, t.Worker); !g.Governed() {
 				return launched, s.Escalate(ctx, runID, t.PlanTaskID, fmt.Sprintf("worker %s is not governed (%s): %s", t.Worker, g.State, strings.Join(g.Reasons, " ")))
 			}
@@ -319,10 +325,14 @@ func marshalDepsMerged(run marshal.Run, t marshal.Task) bool {
 }
 
 // otherWorker picks a configured worker other than current, in a stable order.
-func (s *MarshalService) otherWorker(current string) string {
-	names := make([]string, 0, len(s.Drivers))
-	for name := range s.Drivers {
-		if name != current {
+func (s *MarshalService) otherWorker(current string, mode marshal.WorkerMode) string {
+	drivers := s.Drivers
+	if mode == marshal.Governed && s.GovernedDrivers != nil {
+		drivers = s.GovernedDrivers
+	}
+	names := make([]string, 0, len(drivers))
+	for name, d := range drivers {
+		if marshalHarnessName(name) != marshalHarnessName(current) && d != nil && d.Mode() == mode {
 			names = append(names, name)
 		}
 	}

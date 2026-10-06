@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/startup"
 
@@ -98,7 +97,7 @@ func setupFixes(assessment startup.Assessment) []setupFix {
 				checkID: check.ID, reason: check.Reason,
 				question: "Set up MARSHAL for this project",
 				apply: func(ctx context.Context, root string) error {
-					_, err := app.Bootstrap(ctx, root)
+					_, err := initializeProject(ctx, root)
 					if err != nil && strings.Contains(err.Error(), "ambiguous argument 'HEAD'") {
 						// The repository has no commit to anchor the project to.
 						// Git's wording is about revision parsing and says

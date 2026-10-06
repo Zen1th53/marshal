@@ -65,8 +65,14 @@ interface, the same as running it yourself. These native workers are trusted
 and run with your user account's rights, using the agent's own settings and
 permission controls. MARSHAL does not sandbox them.
 
-**From a plan.** A task can use a native or governed worker. Native workers
-remain trusted and run with your user account's rights. Governed workers are
+**From a plan.** Each task carries `mode: native` or `mode: governed`, shown
+in the plan approval and `/marshal status`. Codex and Claude tasks default to
+governed and require a credential grant and a current sandboxed capability
+probe. If probe evidence is missing or stale, approval starts the probe before
+dispatch. Antigravity and OpenCode plan workers use native mode. Ask for native
+mode explicitly in the goal to use a trusted native worker.
+A goal requesting governed work can produce governed Codex or Claude tasks.
+Native workers remain trusted and run with your user account's rights. Governed workers are
 sandboxed. A separate copy of the project keeps changes apart, but is not
 itself a sandbox. Results are checked before they are accepted and merged.
 
@@ -85,5 +91,31 @@ Sharing through the agents' shared channel sends one provider's text to another
 provider when the receiving agent uses it in its conversation. The channel's
 local files do not keep that text local once an agent uses it. Choose which
 agents share with each other accordingly.
+
+## Reviewing finished CLI tasks
+
+A task completed with `marshal run TASK-ID` can enter the same review flow with
+`/marshal import TASK-ID CHECK`, for example
+`/marshal import TASK-hello grep -qx hi hello.txt`. You can also wrap the
+whole check in one matching pair of single or double quotes, for example:
+
+```text
+/marshal import TASK-hello 'test -f hello.txt && test hi = $(cat hello.txt)'
+```
+
+The enclosing pair is removed; other input is preserved as raw shell source.
+Imported tasks have no
+acceptance checks, so you supply one. Review the original task branch's changes
+and `/marshal status`, then `/marshal approve` to check and review the pinned
+result without rerunning its worker. In acceptance mode `user`, use
+`/marshal accept TASK-ID` and `/marshal resume`; `/marshal close` delivers the
+verified result to the default branch. Mode `marshal-then-user` asks for the
+operator’s close approval after Marshal review; mode `marshal` uses the
+standing close approval given with the plan. Plan approval binds the task revision,
+base, result commit and check. Changes to that binding are refused. Normal
+merge-driver, target-branch and close protections still apply. A clean main
+worktree on the default branch advances with a fast-forward at close. Dirty
+worktrees and target branches checked out in linked worktrees still require
+you to switch the target branch away before closing.
 
 Next: [Install MARSHAL](install.md).

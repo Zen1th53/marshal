@@ -218,7 +218,7 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 	}
 	goalLine := fmt.Sprintf(" %s %s",
 		th.Colorize(th.Bold, fmt.Sprintf("GOAL [v%d]:", s.Goal.Revision)),
-		RedactContent(Truncate(outcome, width-16), s.KnownSecrets),
+		Truncate(RedactContent(outcome, s.KnownSecrets), width-16),
 	)
 	b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(goalLine, width-3), th.BoxVert))
 
@@ -324,7 +324,7 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 		)
 		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(cardHeader, width-3), th.BoxVert))
 		if card.Summary != "" {
-			cardSummary := fmt.Sprintf("   Command: %s", RedactContent(Truncate(card.Summary, width-16), s.KnownSecrets))
+			cardSummary := fmt.Sprintf("   Command: %s", Truncate(RedactContent(card.Summary, s.KnownSecrets), width-16))
 			b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(cardSummary, width-3), th.BoxVert))
 		}
 		b.WriteString(fmt.Sprintf("%s%s%s\n", th.BoxTRight, strings.Repeat(th.BoxHoriz, width-2), th.BoxTLeft))
@@ -342,7 +342,7 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 		for _, m := range meaningfulMsgs {
 			kindBadge := fmt.Sprintf("[%s]", m.Kind)
 			agentName := strings.ToUpper(m.From.AgentID)
-			content := RedactContent(Truncate(m.Content, width-VisibleLen(kindBadge)-VisibleLen(agentName)-16), s.KnownSecrets)
+			content := Truncate(RedactContent(m.Content, s.KnownSecrets), width-VisibleLen(kindBadge)-VisibleLen(agentName)-16)
 			row := fmt.Sprintf("   %s %s %s %s",
 				th.Colorize(th.Accent, kindBadge),
 				th.Colorize(th.Bold, agentName),

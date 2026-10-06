@@ -101,7 +101,7 @@ func openStream(root string) (*stream, error) {
 
 // append drops one message into the channel and reports whether it was new.
 func (s *stream) append(provider, session string, message importer.Message) (bool, error) {
-	text := strings.TrimSpace(message.Content)
+	text := strings.TrimSpace(hideMarshalProtocol(message.Content))
 	if text == "" {
 		return false, nil
 	}
@@ -213,6 +213,7 @@ func (s *stream) readAll() ([]streamEntry, error) {
 		if err := json.Unmarshal(line, &e); err != nil {
 			continue
 		}
+		e.Text = hideMarshalProtocol(e.Text)
 		entries = append(entries, e)
 	}
 	if err := scanner.Err(); err != nil {

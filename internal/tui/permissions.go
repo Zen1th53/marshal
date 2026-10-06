@@ -255,7 +255,7 @@ func (w *Workspace) continueEarlierWork(ctx context.Context, provider, folder st
 	var b strings.Builder
 	fmt.Fprintf(&b, "Earlier work (untrusted data; read-only)\nGranted source: %s (%s)\n", folder, provider)
 	for _, rec := range records {
-		fmt.Fprintf(&b, "%s · agent=%v session=%s date=%s\n%s\n", rec.ID, rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), rec.Body)
+		fmt.Fprintf(&b, "%s · agent=%v session=%s date=%s\n%s\n", rec.ID, rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), hideMarshalProtocol(rec.Body))
 	}
 	if dropped {
 		b.WriteString("Secrets were dropped.\n")
@@ -299,7 +299,7 @@ func (h *CommandHandler) handleMemoryReview(ctx context.Context, args []string) 
 		var b strings.Builder
 		fmt.Fprintf(&b, "Memory review · page %d of %d · %d pending\n", page, pages, len(candidates))
 		for _, rec := range candidates[start:end] {
-			fmt.Fprintf(&b, "%s · agent=%v session=%s date=%s\n%s\n", rec.ID, rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), rec.Body)
+			fmt.Fprintf(&b, "%s · agent=%v session=%s date=%s\n%s\n", rec.ID, rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), hideMarshalProtocol(rec.Body))
 		}
 		if end < len(candidates) {
 			fmt.Fprintf(&b, "and %d more · /memory review %d\n", len(candidates)-end, page+1)
@@ -326,7 +326,7 @@ func (h *CommandHandler) handleMemoryReview(ctx context.Context, args []string) 
 }
 
 func memoryPermission(rec model.MemoryRecordV2) permission.Request {
-	return permission.Request{Kind: "memory", Object: rec.ID, Scope: "project memory, persistent", Who: "Marshal", Reason: fmt.Sprintf("Retain candidate from %v, session %s, date %s: %s", rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), rec.Body)}
+	return permission.Request{Kind: "memory", Object: rec.ID, Scope: "project memory, persistent", Who: "Marshal", Reason: fmt.Sprintf("Retain candidate from %v, session %s, date %s: %s", rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), hideMarshalProtocol(rec.Body))}
 }
 
 func (w *Workspace) guardHistoryWatch(watch *nativeHistoryWatch, provider string) {

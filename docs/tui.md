@@ -84,15 +84,17 @@ The MARSHAL TUI always runs inside tmux. If started outside tmux, it creates (or
 
 When tmux is missing, the TUI refuses to launch and prints a one-line install command for the detected distribution (`pacman`, `apt`, `dnf`, `zypper`, `brew`). Non-interactive CLI subcommands (`status`, `doctor`, `tasks`, etc.) do not require tmux.
 
+MARSHAL opens on the control centre (window 0: header, Activity, F-keys, Team and status bar), including after re-attach and automatic workspace setup. The Marshal chat stays open in its own window and automatically restarts or resumes without taking focus. Agent starts, alerts and worker completion keep the current window selected; `/view follow` enables automatic following only when you choose it.
+
 ### Session switching and layout
 - **Dedicated windows**: Every native agent (Codex, Claude, OpenCode, Antigravity) runs in its own collision-free tmux window (`marshal-<provider>-<hash>`).
 - **One-key switching**: Pressing **F7** (Codex), **F8** (Claude), **F9** (OpenCode), or **F12** (Antigravity) switches to that agent's window or opens it if not yet running. The agent continues executing in the background when switched away.
-- **Return to MARSHAL**: Press **F11** from any tmux window to immediately return to the central MARSHAL window.
+- **Return to MARSHAL**: Press **F11** from any MARSHAL window to immediately return to the control centre.
 - **View-only by default**: Worker panes open in view-only mode to prevent accidental keystroke injection. Run `/takeover` to enable direct interactive typing.
 - **Layout controls**: Use `/view [focus | side-by-side | worker | show <agent> | hide | follow]` to manage pane views.
 - **Stop workers**: Press **Ctrl+X** or type `/stop all` to terminate all worker windows while keeping MARSHAL running.
 - **Evidence preservation**: When a worker finishes or is stopped, its terminal screen output is preserved under `.marshal/evidence/`.
-- **Re-attach on reconnect**: After network or SSH disconnection, running `marshal` again automatically re-attaches to the existing layout.
+- **Re-attach on reconnect**: After network or SSH disconnection, running `marshal` again automatically re-attaches to the existing layout with the control centre selected.
 
 ## Tool capture
 
@@ -119,7 +121,7 @@ The briefing states that its contents are observations rather than verified fact
 
 | Channel | Delivery | Cost |
 | --- | --- | --- |
-| `auto` | Claude: `system-prompt`; Codex: `project-doc` | default |
+| `auto` | Claude: system prompt; Codex: developer instructions; OpenCode / Antigravity: MARSHAL briefing directory | default |
 | `system-prompt` | `--append-system-prompt` (Claude only) | no turn |
 | `project-doc` | a marked block in `AGENTS.md` / `CLAUDE.md` | no turn, touches the worktree |
 | `prompt` | the opening prompt | one turn and its tokens |
@@ -137,9 +139,19 @@ leaves the rest of the file byte-identical; a file with only one of the two
 markers is refused rather than repaired by guesswork. A configured channel the
 provider cannot honour falls back and reports the fallback instead of silently
 delivering nothing. An operator's own `--append-system-prompt`, or their own
-opening prompt, is never overridden. Injection failures are reported and never
-block the session: an agent with no briefing is the earlier behaviour, not a
-broken one.
+opening prompt, is never overridden. Cross-agent memory injection failures are
+reported and do not block ordinary native sessions.
+
+The Marshal protocol always uses the provider’s hidden instruction channel,
+regardless of `/memory inject`: Codex developer instructions, Claude’s appended
+system prompt, OpenCode’s instructions configuration, or Antigravity’s added
+workspace directory. Its visible opening is a short kickoff that starts step 1
+and asks for the language before earlier work. Fresh launches, resumes, and
+automatic restarts deliver the protocol again. If a hidden channel is missing
+or delivery fails, MARSHAL refuses to start the Marshal and reports the failure;
+it never falls back to putting the protocol in the chat. Historical protocol
+copies are withheld from memory excerpts, peer briefings, TUI output and evidence
+views.
 
 ### Live cross-agent exchange
 

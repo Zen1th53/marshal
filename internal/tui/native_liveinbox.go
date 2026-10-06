@@ -60,6 +60,9 @@ func openInboxView(root, reader string, opening bool) (*inboxView, error) {
 			return nil, err
 		}
 	}
+	if err := v.trim(); err != nil {
+		return nil, err
+	}
 	if opening {
 		if err := v.write(fmt.Sprintf(
 			"---\n\n## session opened · %s\n\nEntries above flowed past before this session started.\n\n",
@@ -122,12 +125,13 @@ func (v *inboxView) write(text string) error {
 }
 
 func (v *inboxView) trim() error {
-	if v.written <= viewMaxBytes {
-		return nil
-	}
 	data, err := os.ReadFile(v.path)
 	if err != nil {
 		return err
+	}
+	private := containsMarshalProtocol(string(data))
+	if !private && v.written <= viewMaxBytes {
+		return nil
 	}
 	header, rest, found := strings.Cut(string(data), "\n---\n")
 	if !found {
@@ -141,11 +145,19 @@ func (v *inboxView) trim() error {
 		entries = entries[1:]
 		dropped++
 	}
-	if dropped == 0 {
+	if private {
+		// A retained view may contain an old visible kickoff. Withhold the whole
+		// view rather than leave a wrapped remainder; durable memory is retained.
+		header, entries, dropped = viewHeader(v.reader), []string{"[REDACTED]\n"}, 0
+	}
+	if dropped == 0 && !private {
 		return nil
 	}
-	note := fmt.Sprintf("\n_%d older entr%s dropped to stay inside %d KiB. Nothing is lost: use MARSHAL's `/memory search` for the rest._\n\n## ",
-		dropped, plural(dropped, "y", "ies"), viewMaxBytes>>10)
+	note := ""
+	if dropped > 0 {
+		note = fmt.Sprintf("\n_%d older entr%s dropped to stay inside %d KiB. Nothing is lost: use MARSHAL's `/memory search` for the rest._\n\n## ",
+			dropped, plural(dropped, "y", "ies"), viewMaxBytes>>10)
+	}
 	rebuilt := header + note + strings.Join(entries, "")
 	if err := os.WriteFile(v.path, []byte(rebuilt), 0600); err != nil {
 		return err
@@ -241,7 +253,7 @@ func renderInboxEntries(reader string, entries []streamEntry, cfg channelConfig)
 			label += ":tool_result"
 		}
 		fmt.Fprintf(&b, "## %s · %s · %s\n\n%s\n\n",
-			e.Provider, e.At.UTC().Format("2006-01-02 15:04:05Z"), label, e.Text)
+			e.Provider, e.At.UTC().Format("2006-01-02 15:04:05Z"), label, hideMarshalProtocol(e.Text))
 		shown++
 	}
 	return b.String(), shown

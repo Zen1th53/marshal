@@ -52,7 +52,7 @@ func (s *Store) IsGovernedSessionID(ctx context.Context, id string) (bool, error
 // SessionInventoryRuns preserves project ownership and includes finished runs.
 func (s *Store) SessionInventoryRuns(ctx context.Context, projectID, adapterName string) ([]model.WorkerRun, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT w.run_id, w.task_id, w.session_id, w.adapter, w.adapter_version, w.status, w.started_at, w.ended_at, w.exit_status
+		SELECT w.run_id, w.task_id, w.session_id, w.adapter, w.adapter_version, w.status, w.started_at, w.ended_at, w.exit_status, w.base_commit, COALESCE(w.result_commit, '')
 		FROM worker_runs w JOIN sessions s ON s.session_id = w.session_id
 		WHERE s.project_id = ? AND (? = '' OR w.adapter = ?)
 		ORDER BY w.started_at DESC
@@ -67,7 +67,7 @@ func (s *Store) SessionInventoryRuns(ctx context.Context, projectID, adapterName
 		var r model.WorkerRun
 		var startedAtStr string
 		var endedAtStr sql.NullString
-		if err := rows.Scan(&r.ID, &r.TaskID, &r.SessionID, &r.Adapter, &r.AdapterVersion, &r.Status, &startedAtStr, &endedAtStr, &r.ExitStatus); err != nil {
+		if err := rows.Scan(&r.ID, &r.TaskID, &r.SessionID, &r.Adapter, &r.AdapterVersion, &r.Status, &startedAtStr, &endedAtStr, &r.ExitStatus, &r.BaseCommit, &r.ResultCommit); err != nil {
 			return nil, fmt.Errorf("scan worker run: %w", err)
 		}
 		if t, err := time.Parse(time.RFC3339Nano, startedAtStr); err == nil {

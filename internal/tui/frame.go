@@ -125,10 +125,10 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 		out = append(out, PadCell(fmt.Sprintf("   %s %s",
 			th.Colorize(th.Success, "Native agent workspace"),
 			th.Colorize(th.Muted, "— F7 Codex · F8 Claude · F9 OpenCode · F12 Antigravity · use /<agent> to send a prompt")), cols))
-		out = append(out, PadCell(fmt.Sprintf("   %s Help   %s Review   %s Diff",
+		out = append(out, PadCell(fmt.Sprintf("   %s Help   %s Review   %s Diff   %s Control centre",
 			th.Colorize(th.Active, "[F1]"),
 			th.Colorize(th.Active, "[F2]"),
-			th.Colorize(th.Active, "[F3]")), cols))
+			th.Colorize(th.Active, "[F3]"), th.Colorize(th.Active, "[F11]")), cols))
 		shortcuts := fmt.Sprintf("   %s Status   %s Models",
 			th.Colorize(th.Active, "[F4]"), th.Colorize(th.Active, "[F5]"))
 		if s.NavigationAvailable {
@@ -256,7 +256,7 @@ func outputSection(s UIState, th *Theme, cols int) []string {
 	}
 	out := []string{PadCell(" "+label, cols)}
 
-	for _, line := range strings.Split(s.LastOutput, "\n") {
+	for _, line := range strings.Split(hideMarshalProtocol(s.LastOutput), "\n") {
 		out = append(out, PadCell("   "+line, cols))
 	}
 	return out

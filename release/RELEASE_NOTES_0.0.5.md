@@ -4,6 +4,8 @@ One workspace for planning with the Marshal and working with your agents.
 
 ## What changed
 
+MARSHAL opens on the control centre; the Marshal chat stays open in its own window.
+
 **The Marshal is at the centre of a tmux workspace.** Plan with the Marshal,
 keep the work in view, and switch between conversations without leaving the
 workspace. Codex, Claude Code, OpenCode and Antigravity can work side by side
@@ -36,6 +38,8 @@ binding checks, network confinement, and the handling of credentials and
 evidence. These protections apply at their supported boundaries; native agent
 sessions retain the rights of your user account.
 
+- **Marshal protocol stays hidden.** Fresh chats, resumes and automatic restarts use hidden instructions and a short kickoff; failed hidden delivery refuses startup, and historical protocol copies are withheld from TUI and peer views.
+
 ## Requirements
 
 - **Linux only**, on 64-bit Intel/AMD or ARM. macOS is unsupported; WSL 2 has
@@ -55,8 +59,8 @@ missing dependency does not make installation fail.
 
 The automated source inventory reports:
 
-- Constitution enforcement: 0.3%
-- Scope of protection: 6.5%
+- Constitution enforcement: 0.6%
+- Scope of protection: 7.1%
 
 Constitution enforcement is the percentage of material source call sites that a constitutional verdict can refuse before the effect occurs.
 Scope of protection is the percentage of material source call sites guarded before execution by a constitutional gate, approval binding, policy authorisation or sandbox.

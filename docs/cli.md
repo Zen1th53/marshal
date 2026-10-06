@@ -22,7 +22,7 @@ Usage: marshal [--json] <command> [arguments]
 
 ### `marshal init`
 
-Purpose: Creates missing project policy/version defaults and initializes the private `.marshal/` runtime state directory inside the current Git repository. Existing regular defaults are preserved; symlinks in their place are rejected.
+Purpose: Creates missing project policy/version defaults and initializes the private `.marshal/` runtime state directory inside the current Git repository. Existing regular defaults are preserved; symlinks in their place are rejected. Init records untracked policy/version defaults in a project commit and excludes private runtime state through the project’s Git info/exclude file. It preserves unrelated staged changes and never edits .gitignore. A previously clean checkout stays clean; repeated init does not create another commit.
 
 ```bash
 marshal init

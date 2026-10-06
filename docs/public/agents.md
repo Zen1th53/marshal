@@ -17,6 +17,16 @@ the versions above, and labels commands for other versions as not checked.
     The Antigravity desktop app alone is not enough. MARSHAL needs its
     command-line tool, `agy`.
 
+## Marshal chat instructions
+
+The Marshal receives its planning protocol through hidden instructions. The
+visible opening is a short kickoff asking it to begin and confirm your language.
+The protocol is delivered again when the chat resumes or restarts, even if memory
+injection is disabled. If hidden delivery fails or is unavailable, MARSHAL refuses
+to start the Marshal and shows a failure message. It never pastes the protocol
+into the chat. Historical copies are withheld from memory, peer briefings,
+workspace output and evidence views.
+
 ## Choose your main agent
 
 If you have more than one agent installed, tell MARSHAL which one to use for

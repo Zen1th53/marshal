@@ -134,6 +134,12 @@ while :; do sleep 1; done
 	s.mustSee("Switched to active Codex session")
 	s.mustSee("continues running")
 
+	// Explicit provider F-keys must still switch without restarting either session.
+	s.send("\x1b[18~") // F7: Codex
+	s.mustSee("Switched to active Codex session")
+	s.send("\x1b[19~") // F8: Claude
+	s.mustSee("Switched to active Claude session")
+
 	// 5. Verify Stop all workers
 	s.sendLine("/stop all")
 	s.mustSee("Stopped all worker sessions")
@@ -147,8 +153,8 @@ while :; do sleep 1; done
 	logStr := string(logData)
 
 	// Verify new-window was only called ONCE for claude and ONCE for codex
-	claudeNewCount := strings.Count(logStr, "new-window -t test-session -n marshal-claude-")
-	codexNewCount := strings.Count(logStr, "new-window -t test-session -n marshal-codex-")
+	claudeNewCount := strings.Count(logStr, "new-window -d -t test-session -n marshal-claude-")
+	codexNewCount := strings.Count(logStr, "new-window -d -t test-session -n marshal-codex-")
 
 	if claudeNewCount != 1 {
 		t.Errorf("expected claude new-window called exactly once, got %d", claudeNewCount)

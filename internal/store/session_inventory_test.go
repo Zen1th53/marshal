@@ -22,7 +22,7 @@ func TestSessionInventoryRunsProjectAndKindBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	runs, err := st.SessionInventoryRuns(ctx, "PROJECT-local", "")
-	if err != nil || len(runs) != 1 || runs[0].ID != run.ID || runs[0].Status != "failed" || runs[0].EndedAt == nil {
+	if err != nil || len(runs) != 1 || runs[0].ID != run.ID || runs[0].Status != "failed" || runs[0].BaseCommit != run.BaseCommit || runs[0].EndedAt == nil {
 		t.Fatalf("finished governed inventory: %+v %v", runs, err)
 	}
 	for _, tc := range []struct{ project, provider string }{{"PROJECT-foreign", ""}, {"PROJECT-local", "codex"}} {

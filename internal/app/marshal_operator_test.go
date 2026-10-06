@@ -137,6 +137,11 @@ func TestMarshalHelpCloseRecoveryInstruction(t *testing.T) {
 	if _, err := s.Execute(t.Context(), "run", func(marshal.Task, BriefContext) string { return "write" }, nil); err != nil {
 		t.Fatal(err)
 	}
+	// A clean main checkout now closes directly; recovery still applies to
+	// an operator's dirty checkout, with the original message assertions.
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("operator edit"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.Close(t.Context(), "run"); err == nil || !strings.Contains(err.Error(), "git switch --detach") || strings.Contains(err.Error(), "fast-forward it") {
 		t.Fatalf("close recovery: %v (repo %s)", err, repo)
 	}
