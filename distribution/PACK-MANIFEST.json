@@ -2016,8 +2016,8 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "20d0f8e6479c0369cddd017d1faa1ad66d6e38ca3101e3bd21ff093c9b471dbe",
-      "bytes": 4810
+      "sha256": "9550d01eba4d99dedbc2e35f067059278ae40e17f9be98681c062faa2c623619",
+      "bytes": 5243
     },
     {
       "path": ".gitignore",
@@ -11215,6 +11215,11 @@
       "bytes": 6029
     },
     {
+      "path": "release/RELEASE_NOTES_0.0.5-rc.7.md",
+      "sha256": "25645a970ef90edf695161fb1ee82e9ad7ba52329659d1b55f3845482466bc68",
+      "bytes": 6143
+    },
+    {
       "path": "release/RELEASE_NOTES_0.0.5.md",
       "sha256": "63e77b7a8a293a64c605696035edcb2f8b6d96790c7d9cb0f0f8282ee5c417af",
       "bytes": 5850
@@ -11661,8 +11666,8 @@
     },
     {
       "path": "tools/effect-inventory/main_test.go",
-      "sha256": "5e13b76ec563cc305a203cbfca08ebfd9df54b2178f9c478ec8828d878c2f4a6",
-      "bytes": 9953
+      "sha256": "843e4359245d530de3ffa910c0025d8874ec7a135d7202b3a11c0bcd7299b218",
+      "bytes": 9967
     },
     {
       "path": "tools/effect-inventory/sites.csv",

@@ -24,7 +24,7 @@ jobs:
     name: Build & Publish Release Artifacts
     # Ubuntu 24.04 hosted runners restrict the user namespaces required by bwrap.
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
@@ -48,7 +48,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install cryptography==49.0.0
           sudo apt-get update
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap socat libevent-dev ncurses-dev build-essential bison pkg-config
+          # The TUI requires tmux 3.3a or newer; ubuntu-22.04 ships 3.2a.
+          curl -fsSL https://github.com/tmux/tmux/releases/download/3.4/tmux-3.4.tar.gz -o /tmp/tmux-3.4.tar.gz
+          tar -xzf /tmp/tmux-3.4.tar.gz -C /tmp
+          (cd /tmp/tmux-3.4 && ./configure && make && sudo make install)
+          tmux -V | grep -q '3.4'
+          command -v socat
           go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
 
       - name: Determine Version
