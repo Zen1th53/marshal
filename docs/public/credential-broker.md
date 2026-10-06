@@ -58,8 +58,7 @@ returned without another refresh.
 This protocol was verified in the locally installed Codex 0.160.1 generated
 protocol documentation. Older or incompatible CLIs, external auth, keyring-only
 sign-in, and incomplete or unrecognized files are unsupported. Host refresh is
-limited to 20 seconds and can require the operator to sign in again. No live
-provider round trip has been verified.
+limited to 20 seconds and can require the operator to sign in again.
 
 Claude Code subscription sign-in works for governed workers through the broker.
 Each request reads `claudeAiOauth.accessToken` and `expiresAt` (milliseconds)
@@ -128,9 +127,9 @@ before returning to the worker. Requests and responses are limited to 32 MiB
 with a 30-second TLS/header deadline and a 30-minute exchange deadline.
 Incremental streaming, WebSocket upgrades, compressed responses, and
 credential-bearing request body fields are refused or unavailable. These limits
-can prevent a long provider call. VM tests verified subscription authentication
-for Codex and Claude; successful governed file-task completion still needs a VM
-retest after the tool-permission fixes.
+can prevent a long provider call. In a Linux VM test with Codex 0.160.0 and
+Claude Code 2.1.291, governed Codex and Claude workers each completed a small
+file task through the broker using a subscription sign-in.
 
 ## Governed worker tool permissions
 

@@ -86,7 +86,8 @@ recording a verdict or warning does not count as enforcement. The reviewed
   broker; the worker never sees the token. Each request reads host sign-in afresh.
   A bounded host CLI account refresh owns persistence; MARSHAL never writes that
   file, serializes refreshes, and retries a 401 once. The managed-auth protocol
-  was verified locally for Codex 0.160.1; live provider behavior is unverified.
+  was verified locally for Codex 0.160.1; a Linux VM test completed
+  governed Codex and Claude tasks through the broker.
   Claude Code subscription sign-in also works for governed workers through the
   broker. It reads host sign-in afresh and never sends the refresh token. At
   expiry or a 401 it re-reads once and retries only with a changed fresh token;
