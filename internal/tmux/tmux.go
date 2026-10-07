@@ -464,6 +464,19 @@ func AttachSessionContext(ctx context.Context, session string, stdin io.Reader, 
 	return cmd.Run()
 }
 
+// RespawnPane restarts the process in a pane without changing the
+// session's current window; respawn-window would select it.
+func RespawnPane(ctx context.Context, target string, command []string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
+	args := []string{"respawn-pane", "-k", "-t", target}
+	if len(command) > 0 {
+		command = append([]string{"env"}, command...)
+	}
+	return runWindowCommand(ctx, args, command)
+}
+
 // RespawnWindow reactivates a window in which the command has exited.
 func RespawnWindow(ctx context.Context, target string, command []string) error {
 	if err := requireTarget(target); err != nil {

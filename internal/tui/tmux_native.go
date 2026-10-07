@@ -398,7 +398,7 @@ func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAge
 	cmd := append([]string{"env"}, env...)
 	cmd = append(cmd, bin)
 	cmd = append(cmd, resumeArgs...)
-	err = tmux.RespawnWindow(ctx, agent.paneID, cmd)
+	err = tmux.RespawnPane(ctx, agent.paneID, cmd)
 	if err != nil {
 		err = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, env, append([]string{bin}, resumeArgs...))
 	}

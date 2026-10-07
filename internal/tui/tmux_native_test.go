@@ -57,7 +57,7 @@ case "$1" in
     esac
     exit 0
     ;;
-  respawn-window)
+  respawn-window|respawn-pane)
     exit 0
     ;;
   display-message)
@@ -951,8 +951,8 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 	restartLogs, _ := os.ReadFile(logFile)
 	restartStr := string(restartLogs)
 
-	// Verify respawn-window was called with resume command and conversation ID (F3)
-	expectedRespawn := "respawn-window -k -t " + chatAgent.paneID + " /bin/sh "
+	// Verify respawn-pane was called with resume command and conversation ID (F3)
+	expectedRespawn := "respawn-pane -k -t " + chatAgent.paneID + " /bin/sh "
 	var launchScript string
 	for _, line := range strings.Split(restartStr, "\n") {
 		if strings.HasPrefix(line, expectedRespawn) {

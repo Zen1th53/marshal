@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +17,12 @@ import (
 func TestMarshalApproveRetryDispatchesGovernedTaskOnce(t *testing.T) {
 	for _, preapproved := range []bool{false, true} {
 		t.Run(map[bool]string{false: "draft", true: "already-approved-queued"}[preapproved], func(t *testing.T) {
+			// Planning only accepts workers whose CLI is installed; CI has none.
+			fakeBin := t.TempDir()
+			if err := os.WriteFile(filepath.Join(fakeBin, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 			w, rt := realControlWorkspace(t, "SESSION-approve-retry")
 			service := *rt.Marshal()
 			m := w.marshalSession()

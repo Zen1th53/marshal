@@ -39,7 +39,7 @@ case "$1" in
   [ "$5" = '#{window_active}' ] || exit 0
   if [ %s = 1 ]; then printf '%%s\n' "$6" > %q; fi ;;
  list-panes) printf '%%%%1\t@1\tchat\t0\t1\t0\n' ;;
- respawn-window) touch %q ;;
+ respawn-window|respawn-pane) touch %q ;;
  capture-pane) echo 'saved output' ;;
 esac
 `, log, active, active, selected, filepath.Join(root, "restarted"))

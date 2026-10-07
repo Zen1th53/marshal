@@ -206,7 +206,7 @@ func TestMarshalRestartRefusesFailedHiddenDelivery(t *testing.T) {
 	if err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), "respawn-window") || strings.Contains(string(data), "new-window") {
+	if strings.Contains(string(data), "respawn-window") || strings.Contains(string(data), "respawn-pane") || strings.Contains(string(data), "new-window") {
 		t.Fatal("restart launched after failed hidden delivery")
 	}
 	if !strings.Contains(w.state.LastOutput, "Marshal not started:") {
