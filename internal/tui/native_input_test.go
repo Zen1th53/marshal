@@ -31,7 +31,7 @@ func TestNativeTmuxHostInputOrigin(t *testing.T) {
 				if origin == nativeLaunchAutomated {
 					flag, forbidden = forbidden, flag
 				}
-				prefix := "select-pane -t test-session:" + name + " "
+				prefix := "select-pane -t %1 "
 				if !strings.Contains(string(data), prefix+flag+"\n") || strings.Contains(string(data), prefix+forbidden+"\n") {
 					t.Fatalf("incorrect input state for %s:\n%s", origin, data)
 				}
@@ -85,7 +85,7 @@ func TestNativeTmuxLaunchOriginRecovery(t *testing.T) {
 			}
 		}
 	}
-	w.adoptSurvivingWorkers(root)
+	w.recoverSurvivingWorkers(root)
 	w.tmuxMu.Lock()
 	defer w.tmuxMu.Unlock()
 	for id, want := range map[string]bool{"codex": false, "task-1": true, "legacy-worker": true} {

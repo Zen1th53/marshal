@@ -39,6 +39,7 @@ case "$1" in
       fi
       prev="$a"
     done
+    case " $* " in *" -P "*) printf '%%%%%%s\n' "$(wc -l < "$winFile")" ;; esac
     exit 0
     ;;
   select-window)
@@ -200,6 +201,9 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	}
 
 	codexWin := tmux.WindowName("codex", workDir)
+	ws.tmuxMu.Lock()
+	codex := copyAgentLocked(ws.tmuxActiveWins["codex"])
+	ws.tmuxMu.Unlock()
 
 	logBytes, err := os.ReadFile(logFile)
 	if err != nil {
@@ -211,10 +215,10 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	if !strings.Contains(logStr, "new-window -d -t test-session -n "+codexWin) {
 		t.Fatalf("missing new-window call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "select-pane -t test-session:"+codexWin+" -e") {
+	if !strings.Contains(logStr, "select-pane -t "+codex.paneID+" -e") {
 		t.Fatalf("missing input-enabled select-pane -e call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "select-window -t test-session:"+codexWin) {
+	if !strings.Contains(logStr, "select-window -t test-session:"+codex.windowID) {
 		t.Fatalf("missing select-window call:\n%s", logStr)
 	}
 	if !strings.Contains(logStr, "bind-key -T marshal-keys-"+tmux.ProjectHash(workDir)+" F7 if-shell -F") {
@@ -316,12 +320,14 @@ func TestTmuxViewCommands(t *testing.T) {
 	ctx := context.Background()
 
 	// Launch a dummy worker
-	_, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
+	_, err := ws.runNativeAgentInTmux(ctx, nativeLaunchAutomated, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	claudeWin := tmux.WindowName("claude", workDir)
+	ws.tmuxMu.Lock()
+	claude := copyAgentLocked(ws.tmuxActiveWins["claude"])
+	ws.tmuxMu.Unlock()
 
 	// Test /view focus
 	resp, err := ws.handleViewCommand(ctx, []string{"focus"})
@@ -376,7 +382,7 @@ func TestTmuxViewCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	logStr := string(logBytes)
-	if !strings.Contains(logStr, "select-window -t test-session:"+claudeWin) {
+	if !strings.Contains(logStr, "select-window -t test-session:"+claude.windowID) {
 		t.Fatalf("missing select-window in log:\n%s", logStr)
 	}
 	if !strings.Contains(logStr, "join-pane -h -s ") {

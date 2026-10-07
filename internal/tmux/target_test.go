@@ -98,3 +98,15 @@ func TestPaneEffectsUseResolvedIdentity(t *testing.T) {
 		t.Fatalf("effects did not use immutable identity: %s", data)
 	}
 }
+
+func TestMissingPaneStatusCannotReportLive(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tmux")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	SetBinaryPath(path)
+	t.Cleanup(ResetBinaryPath)
+	if dead, _, err := PaneDeadStatus(context.Background(), "%999"); err == nil {
+		t.Fatalf("empty status reported a live pane: dead=%v", dead)
+	}
+}

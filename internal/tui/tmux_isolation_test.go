@@ -104,12 +104,12 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 	if bindErr != nil {
 		t.Fatal(bindErr)
 	}
-	_, err := w.runNativeAgentInTmux(ctx, nativeLaunchOperator, "codex", "Codex", w.workDir, "/bin/sh", []string{"-c", "echo READY; while read line; do echo received:$line; done"}, nil, nil, nil, nil, nil, nil, nil)
+	_, err := w.runNativeAgentInTmux(ctx, nativeLaunchAutomated, "codex", "Codex", w.workDir, "/bin/sh", []string{"-c", "echo READY; while read line; do echo received:$line; done"}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Detached takeover selects the worker for the next client to attach.
-	if _, err := w.handleTakeoverCommand(ctx); err != nil {
+	if _, err := w.handleTakeoverCommand(ctx, "codex"); err != nil {
 		t.Fatal(err)
 	}
 	master, slave := openPTY(t)
@@ -169,6 +169,7 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	w.commandBusy.Store(true)        // Return is handled by tmux even while a UI command runs.
 	master.Write([]byte("\x1b[23~")) // F11 on xterm
 	deadline := time.Now().Add(time.Second)
 	for {
@@ -183,7 +184,7 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 	}
 	takeoverAndType := func(line string) {
 		t.Helper()
-		if _, err := w.handleTakeoverCommand(ctx); err != nil {
+		if _, err := w.handleTakeoverCommand(ctx, "codex"); err != nil {
 			t.Fatal(err)
 		}
 		// A successful take-over must leave the attached client ready immediately.

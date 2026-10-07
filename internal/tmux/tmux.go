@@ -543,7 +543,8 @@ func SelectPane(ctx context.Context, target string) error {
 
 // NewWindow creates a detached window without changing the operator's focus.
 // Command arguments remain literal, including in the launcher for large commands.
-func NewWindow(ctx context.Context, targetSession, windowName, workDir string, env []string, command []string) error {
+// An optional paneID receives the immutable ID from the creation response.
+func NewWindow(ctx context.Context, targetSession, windowName, workDir string, env []string, command []string, paneID ...*string) error {
 	args := []string{"new-window", "-d"}
 	if targetSession != "" {
 		args = append(args, "-t", targetSession)
@@ -559,12 +560,15 @@ func NewWindow(ctx context.Context, targetSession, windowName, workDir string, e
 			args = append(args, "-e", e)
 		}
 	}
-	return runWindowCommand(ctx, args, command)
+	if len(paneID) > 0 {
+		args = append(args, "-P", "-F", "#{pane_id}")
+	}
+	return runWindowCommand(ctx, args, command, paneID...)
 }
 
 // tmux 3.2a bounds command messages at 16 KiB. Keep large prompts out of
 // that transport without changing the provider's argv or interpreting it.
-func runWindowCommand(ctx context.Context, args, command []string) error {
+func runWindowCommand(ctx context.Context, args, command []string, paneID ...*string) error {
 	size := 0
 	for _, arg := range append(append([]string(nil), args...), command...) {
 		size += len(arg) + 1
@@ -593,7 +597,14 @@ func runWindowCommand(ctx context.Context, args, command []string) error {
 		command = []string{"/bin/sh", launchPath}
 	}
 	args = append(args, EscapeTmuxArgs(command)...)
-	_, err := RunCommand(ctx, args...)
+	out, err := RunCommand(ctx, args...)
+	if err == nil && len(paneID) > 0 {
+		pane := strings.TrimSpace(string(out))
+		if !strings.HasPrefix(pane, "%") {
+			return fmt.Errorf("new window returned invalid pane ID %q", pane)
+		}
+		*paneID[0] = pane
+	}
 	if err != nil && launchPath != "" {
 		_ = os.Remove(launchPath)
 	}
@@ -783,7 +794,10 @@ func PaneDeadStatus(ctx context.Context, target string) (dead bool, exitCode int
 		return false, 0, err
 	}
 	parts := strings.Fields(strings.TrimSpace(string(out)))
-	if len(parts) >= 1 && parts[0] == "1" {
+	if len(parts) == 0 || (parts[0] != "0" && parts[0] != "1") {
+		return false, 0, fmt.Errorf("unresolved tmux pane status for %q", target)
+	}
+	if parts[0] == "1" {
 		code := 0
 		if len(parts) >= 2 {
 			if c, err := strconv.Atoi(parts[1]); err == nil {

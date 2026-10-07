@@ -1087,12 +1087,37 @@ func (w *Workspace) commandExitRequested() bool {
 	return w.exitRequested
 }
 
+func priorityCommand(cmd string) bool {
+	parts := strings.Fields(cmd)
+	if len(parts) == 0 {
+		return false
+	}
+	switch parts[0] {
+	case "/stop", "/takeover", "/take-over", "/cancel", "/focus", "/view":
+		return true
+	}
+	return false
+}
+
 // runCommand executes a command and records its result as workspace activity.
 //
 // Output is stored in state and painted as part of the next frame rather than
 // printed directly, so a command response cannot scroll the screen or leave
 // chrome behind in scrollback.
 func (w *Workspace) runCommand(ctx context.Context, cmd string) {
+	if w.uiEvents != nil && priorityCommand(cmd) {
+		// Safety and navigation must remain available while ordinary work runs.
+		// They own neither the ordinary lane nor its cancellation token.
+		w.commandWG.Add(1)
+		go func() {
+			defer w.commandWG.Done()
+			commandCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+			resp, err := w.cmd.Handle(commandCtx, cmd)
+			w.postUI(ctx, func() { w.recordCommandResult(cmd, resp, err) })
+		}()
+		return
+	}
 	if w.uiEvents != nil && !w.directTerminalCommand(cmd) {
 		if w.navView != nil {
 			phase := w.navView.Confirmation().Phase()

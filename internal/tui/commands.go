@@ -420,7 +420,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.ws.handleViewCommand(ctx, []string{"focus"})
 
 	case "/takeover", "/take-over":
-		return h.ws.handleTakeoverCommand(ctx)
+		return h.ws.handleTakeoverCommand(ctx, parts[1:]...)
 
 	case "/stop":
 		if len(parts) > 1 && (parts[1] == "all" || parts[1] == "workers") {

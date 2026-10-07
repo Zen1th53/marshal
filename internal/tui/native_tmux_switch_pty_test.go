@@ -33,12 +33,17 @@ case "$1" in
       fi
       prev="$a"
     done
+    case " $* " in *" -P "*) printf '%%%%%%s\n' "$(wc -l < "$winFile")" ;; esac
     exit 0
     ;;
   display-message)
     case "$*" in
       *"#{version}"*)
         printf '3.3a\n'
+        exit 0
+        ;;
+      *"#{session_name}:#{window_id}"*)
+        printf 'test-session:@%%s\n' "${4#%%}"
         exit 0
         ;;
       *"#{session_id}"*)
@@ -50,7 +55,7 @@ case "$1" in
         exit 0
         ;;
       *"#{pane_id}"*)
-        printf '%%%%0\n'
+        case "$4" in %%*) printf '%%s\n' "$4" ;; *) printf '%%%%0\n' ;; esac
         exit 0
         ;;
       *"#{pane_dead}"*)
@@ -65,7 +70,7 @@ case "$1" in
     if [ -f "$winFile" ]; then
       idx=1
       while read -r w; do
-        echo "%%%%$idx	@$idx	$w	$((100 + idx))	0	0	"
+        echo "%%$idx	@$idx	$w	$((100 + idx))	0	0	"
         idx=$((idx + 1))
       done < "$winFile"
     fi
@@ -150,10 +155,24 @@ while :; do sleep 1; done
 		t.Fatal(err)
 	}
 	logStr := string(logData)
+	paneByProvider := make(map[string]string)
+	windowByProvider := make(map[string]string)
+	index := 0
+	for _, line := range strings.Split(logStr, "\n") {
+		if strings.HasPrefix(line, "new-window ") {
+			index++
+			for _, provider := range []string{"claude", "codex"} {
+				if strings.Contains(line, "-n marshal-"+provider+"-") {
+					paneByProvider[provider] = fmt.Sprintf("%%%d", index)
+					windowByProvider[provider] = fmt.Sprintf("test-session:@%d", index)
+				}
+			}
+		}
+	}
 	for _, provider := range []string{"claude", "codex"} {
 		enabled := false
 		for _, line := range strings.Split(logStr, "\n") {
-			if strings.HasPrefix(line, "select-pane -t test-session:marshal-"+provider+"-") {
+			if strings.HasPrefix(line, "select-pane -t "+paneByProvider[provider]+" ") {
 				if strings.HasSuffix(line, " -d") {
 					t.Fatalf("operator %s pane opened view-only: %s", provider, line)
 				}
@@ -177,10 +196,10 @@ while :; do sleep 1; done
 	}
 
 	// Verify select-window was called for switching
-	if !strings.Contains(logStr, "select-window -t test-session:marshal-claude-") {
+	if !strings.Contains(logStr, "select-window -t "+windowByProvider["claude"]) {
 		t.Errorf("expected select-window for claude in log:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "select-window -t test-session:marshal-codex-") {
+	if !strings.Contains(logStr, "select-window -t "+windowByProvider["codex"]) {
 		t.Errorf("expected select-window for codex in log:\n%s", logStr)
 	}
 }
