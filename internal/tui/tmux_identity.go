@@ -115,6 +115,15 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 	if err != nil {
 		return fmt.Errorf("record stop/completion for %s: %w", id, err)
 	}
+	// Native provider shortcuts select an immutable window. Replace that
+	// target while the pane still exists, before removing it. Task and chat
+	// panes do not own the provider shortcut.
+	if key := providerFKey(a.provider); key != "" && id == a.provider {
+		message := fmt.Sprintf("%s session ended; use /%s to reopen.", a.provider, a.provider)
+		if err = tmux.BindWindowKey(ctx, pane, "marshal-keys-"+tmux.ProjectHash(root), key, "display-message", fmt.Sprintf("%q", message)); err != nil {
+			return fmt.Errorf("reset provider shortcut for %s: %w", id, err)
+		}
+	}
 	if err = tmux.KillPane(ctx, pane); err != nil {
 		return err
 	}
