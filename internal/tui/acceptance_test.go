@@ -617,7 +617,7 @@ func TestAcceptanceSystemMaintenance(t *testing.T) {
 	if ws.runtime == runtime {
 		t.Fatal("restore did not replace the stopped runtime with the reopened canonical runtime")
 	}
-	t.Cleanup(func() { _ = ws.runtime.Close() })
+	t.Cleanup(func() { ws.Close(); _ = ws.runtime.Close() })
 	status, err := ws.runtime.Status(ctx)
 	if err != nil || status.Project.ID != string(ws.projectIdentity) {
 		t.Fatalf("reopened runtime status = %+v, err=%v", status, err)
@@ -760,6 +760,7 @@ func acceptanceWorkspace(t *testing.T) (*store.Store, *Workspace, context.Contex
 	}
 	st := runtime.Store()
 	ws := NewWorkspace(st, runtime.ProjectID(), "ACCEPTANCE-session")
+	t.Cleanup(ws.Close)
 	ws.AttachRuntime(runtime, binding.ID)
 	ws.openNavigation(ctx)
 	ws.navView.Refresh(ctx)

@@ -738,7 +738,7 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 	m.approvals = nil
 	m.mu.Unlock()
 	w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: provider, State: marshal.Drafting, Note: "preparing and drafting a plan…"})
-	go func() {
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		defer m.finish(cancel)
 		service, selected, note, err := w.marshalService(runCtx, runID)
 		if err != nil {
@@ -767,7 +767,7 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 			return
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, selected, run, fmt.Sprintf("plan drafted: %d tasks · /marshal approve to run it", len(run.Tasks))))
-	}()
+	})
 	return "Marshal is preparing and drafting a plan for: " + goal, nil
 }
 
@@ -832,11 +832,11 @@ func (w *Workspace) marshalUsePlan(ctx context.Context) (string, error) {
 	m.mu.Unlock()
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approved Process 04 plan · running through Process 05"))
 	started = true
-	go func() {
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		keepNativeTurn := false
 		defer func() { m.finishWithNativeTurn(cancel, keepNativeTurn) }()
 		keepNativeTurn = w.marshalExecute(runCtx, m, service, runID, provider)
-	}()
+	})
 	return "Marshal is executing the approved Process 04 plan through Process 05.", nil
 }
 
@@ -900,7 +900,7 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 		return "", err
 	}
 	w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "approving plan…"))
-	go func() {
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		defer m.finish(cancel)
 		m.mu.Lock()
 		pending := m.pending
@@ -925,7 +925,7 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 		m.mu.Unlock()
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approved · running"))
 		_ = w.marshalExecute(runCtx, m, service, runID, provider)
-	}()
+	})
 	return "Plan approval started; the panel will show the result.", nil
 }
 
@@ -1122,7 +1122,7 @@ func (w *Workspace) marshalClose(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	go func() {
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		defer m.finish(cancel)
 		m.grant(runID, "close")
 		if err := service.Close(runCtx, runID); err != nil {
@@ -1132,7 +1132,7 @@ func (w *Workspace) marshalClose(ctx context.Context) (string, error) {
 		if run, err := service.Resume(runCtx, runID); err == nil {
 			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "closed"))
 		}
-	}()
+	})
 	return "Closing Marshal run; the panel will show the result.", nil
 }
 
@@ -1163,7 +1163,7 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	go func() {
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		keepNativeTurn := false
 		defer func() { m.finishWithNativeTurn(cancel, keepNativeTurn) }()
 		run, err := service.Resume(runCtx, runID)
@@ -1173,7 +1173,7 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "resuming"))
 		keepNativeTurn = w.marshalExecute(runCtx, m, service, runID, provider)
-	}()
+	})
 	return "Resuming Marshal run " + runID + ".", nil
 }
 
@@ -1189,7 +1189,7 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 	if err != nil {
 		return "", err
 	}
-	go func() {
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		defer m.finish(cancel)
 		draft, major, err := service.ProposeAmend(runCtx, runID, reason)
 		if err != nil {
@@ -1220,7 +1220,7 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 			return
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, note))
-	}()
+	})
 	return "Amendment started; the panel will show the result.", nil
 }
 

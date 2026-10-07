@@ -756,9 +756,7 @@ func (w *Workspace) monitorAgent(
 	chStream *stream,
 	view *inboxView,
 ) {
-	w.tmuxMonitors.Add(1)
-	go func() {
-		defer w.tmuxMonitors.Done()
+	if !w.workers.start(agentCtx, &w.tmuxMonitors, func(agentCtx context.Context) {
 		defer close(agent.doneChan)
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -882,7 +880,9 @@ func (w *Workspace) monitorAgent(
 
 			}
 		}
-	}()
+	}) {
+		close(agent.doneChan)
+	}
 }
 
 // RecordActivity records activity into workspace state and triggers a redraw if interactive.
@@ -1337,12 +1337,12 @@ func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, 
 	if previousDone != nil {
 		<-previousDone
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(w.workers.context(), 30*time.Minute)
 	done := make(chan struct{})
 	m.mu.Lock()
 	m.draftCancel, m.draftDone = cancel, done
 	m.mu.Unlock()
-	go func() {
+	if !w.startBackground(ctx, func(ctx context.Context) {
 		defer cancel()
 		defer close(done)
 		ticker := time.NewTicker(1 * time.Second)
@@ -1386,7 +1386,7 @@ func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, 
 				if goal == "" {
 					goal = draft.Plan.ID
 				}
-				run, err := service.StartPlanningFromDraft(context.Background(), runID, goal, draft, marshal.Budget{})
+				run, err := service.StartPlanningFromDraft(ctx, runID, goal, draft, marshal.Budget{})
 				if err != nil {
 					return
 				}
@@ -1399,7 +1399,10 @@ func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, 
 				return
 			}
 		}
-	}()
+	}) {
+		cancel()
+		close(done)
+	}
 }
 
 // wrapServiceDriversForTmux wraps the drivers in MarshalService to integrate dispatched task workers with tmux.
@@ -1500,8 +1503,9 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 	t.w.tmuxMu.Unlock()
 	t.w.updateTmuxStatusLine(ctx)
 	t.monitors.Store(h, agent.doneChan)
-	t.w.tmuxMonitors.Add(1)
-	go func() { defer t.w.tmuxMonitors.Done(); defer close(agent.doneChan); t.w.monitorTaskState(agent, h) }()
+	if !t.w.workers.start(ctx, &t.w.tmuxMonitors, func(ctx context.Context) { defer close(agent.doneChan); t.w.monitorTaskState(ctx, agent, h) }) {
+		close(agent.doneChan)
+	}
 	return h, nil
 }
 

@@ -167,6 +167,7 @@ func TestDynamicE2EWorkflow(t *testing.T) {
 	}
 
 	ws := NewWorkspace(st, projectID, sessionID)
+	t.Cleanup(ws.Close)
 
 	// 1. Initial status
 	out, err := ws.ExecuteCommand(ctx, "/status")

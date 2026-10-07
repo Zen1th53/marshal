@@ -42,7 +42,7 @@ func (w *Workspace) queuePermission(req permission.Request) {
 	// InitTmux starts the queue after publishing the terminal identity.
 	if w.permissions.ready {
 		w.permissions.running = true
-		go w.runPermissionQueue()
+		w.startBackground(context.Background(), w.runPermissionQueue)
 	}
 }
 
@@ -54,7 +54,7 @@ func (w *Workspace) startPermissionQueue() {
 	w.permissions.ready = true
 	if !w.permissions.running && !w.permissions.queue.Empty() {
 		w.permissions.running = true
-		go w.runPermissionQueue()
+		w.startBackground(context.Background(), w.runPermissionQueue)
 	}
 }
 
@@ -80,11 +80,16 @@ func (w *Workspace) permissionBusy() bool {
 	}
 	return false
 }
-func (w *Workspace) runPermissionQueue() {
+func (w *Workspace) runPermissionQueue(ctx context.Context) {
 	// Collect requests arising in the same poll into one review list.
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
-	for range ticker.C {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 		batch := w.permissions.queue.Take(w.permissionBusy())
 		if len(batch) == 0 {
 			w.permissions.mu.Lock()
@@ -99,7 +104,7 @@ func (w *Workspace) runPermissionQueue() {
 		var live []permission.Request
 		for _, req := range batch {
 			if req.Kind == "network" && w.runtime != nil && !w.runtime.EgressRequestPending(req.RunID, req.Object) {
-				_ = w.decidePermission(context.Background(), req, false, "expired run request")
+				_ = w.decidePermission(ctx, req, false, "expired run request")
 				w.permissions.mu.Lock()
 				delete(w.permissions.outstanding, req.Key())
 				w.permissions.mu.Unlock()
@@ -114,7 +119,7 @@ func (w *Workspace) runPermissionQueue() {
 			w.permissions.mu.Unlock()
 		}
 		if len(review) > 0 {
-			w.runCommand(context.Background(), "/memory review")
+			w.runCommand(ctx, "/memory review")
 		}
 		if len(batch) == 0 {
 			continue
@@ -132,10 +137,10 @@ func (w *Workspace) runPermissionQueue() {
 		w.tmuxMu.Unlock()
 		allow := false
 		if path != "" && target != "" {
-			allow, _ = permission.Popup(context.Background(), target, batch, 30*time.Second)
+			allow, _ = permission.Popup(ctx, target, batch, 30*time.Second)
 		}
 		for _, req := range batch {
-			if err := w.decidePermission(context.Background(), req, allow, "operator popup"); err != nil {
+			if err := w.decidePermission(ctx, req, allow, "operator popup"); err != nil {
 				w.mu.Lock()
 				w.state.LastOutput = "Permission decision failed: " + err.Error()
 				w.mu.Unlock()

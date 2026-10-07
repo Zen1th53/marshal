@@ -20,10 +20,11 @@ import (
 
 // NavView is the browsable frozen-IA view.
 type NavView struct {
-	mu    sync.Mutex
-	nav   *NavState
-	open  bool
-	theme *Theme
+	workers workerLifecycle
+	mu      sync.Mutex
+	nav     *NavState
+	open    bool
+	theme   *Theme
 
 	// source supplies canonical reads. It may be nil, in which case every
 	// screen renders UNKNOWN with the reason rather than failing to open.
@@ -92,14 +93,12 @@ func (v *NavView) refreshInBackground(ctx context.Context) {
 	if v == nil || !v.refreshing.CompareAndSwap(false, true) {
 		return
 	}
-	v.background.Add(1)
-	go func() {
-		defer v.background.Done()
+	v.workers.start(ctx, &v.background, func(ctx context.Context) {
 		defer v.refreshing.Store(false)
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		v.Refresh(ctx)
-	}()
+	})
 }
 
 // OnRepaint registers the workspace's redraw hook.
@@ -338,6 +337,7 @@ func (v *NavView) snapshot() Snapshot {
 // synchronised, and Render reads it from the paint path while a background
 // refresh may be running.
 func (v *NavView) HandleKey(ctx context.Context, event KeyEvent) bool {
+	ctx = v.workers.bind(ctx)
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if !v.open {
@@ -1389,9 +1389,7 @@ func (v *NavView) configureConfirmation(c *Confirmation) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.background = func(fn func()) {
-		v.background.Add(1)
-		go func() {
-			defer v.background.Done()
+		v.workers.start(v.workers.context(), &v.background, func(context.Context) {
 			fn()
 			v.mu.Lock()
 			notify, open := v.repaint, v.open
@@ -1399,6 +1397,6 @@ func (v *NavView) configureConfirmation(c *Confirmation) {
 			if notify != nil && open {
 				notify()
 			}
-		}()
+		})
 	}
 }
