@@ -531,6 +531,13 @@ func (w *Workspace) runNativeAgentInTmux(
 		}
 	}
 	if exists && winExists {
+		if isChat && existingAgent.provider != provider {
+			runningProvider := existingAgent.provider
+			if runningProvider == "" {
+				runningProvider = "an unknown provider"
+			}
+			return "", fmt.Errorf("Marshal chat is still running %s. To switch to %s, close the Marshal chat window, then run /marshal chat again. The existing chat has been left running.", runningProvider, provider)
+		}
 		// Only an operator command switches to a surviving window.
 		if !tmuxLaunchInBackground(ctx) {
 			if existingAgent != nil && existingAgent.isJoined {

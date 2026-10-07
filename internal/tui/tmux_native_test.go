@@ -224,6 +224,72 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	}
 }
 
+func TestMarshalChatSurvivingPaneProvider(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		provider string
+		label    string
+		mismatch bool
+	}{
+		{name: "mismatch", provider: "antigravity", label: "Antigravity", mismatch: true},
+		{name: "matching", provider: "codex", label: "Codex"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, logFile := setupFakeTmux(t)
+			root := t.TempDir()
+			ws := NewWorkspace(nil, "project", "test-session")
+			ws.workDir = root
+			ws.tmuxSession = "test-session"
+			window := tmux.ChatWindowName(root)
+			ctx := context.Background()
+			if err := tmux.NewWindow(ctx, ws.tmuxSession, window, root, nil, []string{"echo", "chat"}); err != nil {
+				t.Fatal(err)
+			}
+			cancelled := false
+			chat := &activeTmuxAgent{
+				id: "marshal-chat", role: "marshal-chat", provider: "codex",
+				label: "Marshal Chat (Codex)", window: window, paneID: "%1",
+				cancel: func() { cancelled = true },
+			}
+			ws.tmuxActiveWins = map[string]*activeTmuxAgent{"marshal-chat": chat}
+			if err := os.WriteFile(logFile, nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+
+			msg, err := ws.runNativeAgentInTmux(ctx, tc.provider, tc.label, root, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true)
+			if tc.mismatch {
+				if err == nil || msg != "" {
+					t.Fatalf("mismatch must refuse reuse, got message %q, error %v", msg, err)
+				}
+				for _, want := range []string{"Marshal chat is still running codex", "To switch to antigravity", "close the Marshal chat window", "/marshal chat again"} {
+					if !strings.Contains(err.Error(), want) {
+						t.Fatalf("mismatch error %q missing %q", err, want)
+					}
+				}
+			} else if err != nil || !strings.Contains(msg, "Switched to active Marshal Chat (Codex) session") {
+				t.Fatalf("matching provider must reuse chat, got message %q, error %v", msg, err)
+			}
+			if cancelled || ws.tmuxActiveWins["marshal-chat"] != chat || chat.provider != "codex" || chat.label != "Marshal Chat (Codex)" {
+				t.Fatal("surviving chat was cancelled, replaced or relabelled")
+			}
+			data, err := os.ReadFile(logFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			log := "\n" + string(data)
+			for _, forbidden := range []string{"new-window", "kill-pane", "kill-window", "respawn-window", "respawn-pane"} {
+				if strings.Contains(log, "\n"+forbidden+" ") {
+					t.Fatalf("chat reuse issued %s:\n%s", forbidden, data)
+				}
+			}
+			selected := strings.Contains(log, "\nselect-window -t test-session:@1\n")
+			if selected == tc.mismatch || (tc.mismatch && strings.Contains(log, "\nselect-pane ")) {
+				t.Fatalf("unexpected selection for mismatch=%v:\n%s", tc.mismatch, data)
+			}
+		})
+	}
+}
+
 func TestTmuxViewCommands(t *testing.T) {
 	_, logFile := setupFakeTmux(t)
 	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
@@ -398,8 +464,9 @@ func TestStopAllWorkersPreservesMarshalChat(t *testing.T) {
 	claudePane := ws.tmuxActiveWins["claude"].paneID
 	ws.tmuxMu.Unlock()
 
-	// 2. Launch Marshal planning chat (isChat = true)
-	if _, err := ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"planning"}, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
+	// 2. Open the Marshal planning chat (isChat = true) with the provider
+	// InitTmux already started it with; a different provider is refused.
+	if _, err := ws.runNativeAgentInTmux(ctx, "codex", "Codex", workDir, "echo", []string{"planning"}, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	chatWin := tmux.ChatWindowName(workDir)
