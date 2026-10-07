@@ -193,7 +193,7 @@ func TestMarshalChatCancelledRecoveryDoesNotRespawn(t *testing.T) {
 	cancel()
 	w.restartMarshalChat(ctx, &activeTmuxAgent{provider: "codex", paneID: "%old", window: "old"}, t.TempDir())
 	data, _ := os.ReadFile(logFile)
-	if strings.Contains(string(data), "respawn-window") || strings.Contains(string(data), "new-window") {
+	if strings.Contains(string(data), "respawn-window") || strings.Contains(string(data), "respawn-pane") || strings.Contains(string(data), "new-window") {
 		t.Fatal("cancelled old monitor respawned a chat")
 	}
 }

@@ -26,6 +26,7 @@ import (
 
 // Workspace encapsulates the live Terminal TUI Control Plane over canonical runtime state.
 type Workspace struct {
+	workers            workerLifecycle
 	permissions        permissionState
 	governedDispatches map[string]context.CancelFunc
 	governedDispatchWG sync.WaitGroup
@@ -635,6 +636,7 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 // Supports full raw mode line editing, Tab autocomplete, Ctrl+P palette, diff viewer,
 // or clean fallback to buffered scanner if non-terminal.
 func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error {
+	defer w.Close()
 	w.out = out
 	if w.terminal != nil && w.terminal.IsTerminal() && in == os.Stdin && out == os.Stdout {
 		w.uiEvents = make(chan func(), 64)
@@ -642,14 +644,6 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 	if tmux.IsInsideTmux() {
 		w.InitTmux()
 	}
-
-	// A navigation refresh runs off the input loop and reads the canonical
-	// runtime, which creates its state directories on first use. Returning
-	// while one is in flight would let it recreate .marshal after the caller
-	// had closed the runtime and removed the project, so the session waits for
-	// its own reads on every exit path, including an error or a panic.
-	defer w.navView.Wait()
-	defer func() { w.cancelGovernedDispatches(); w.governedDispatchWG.Wait() }()
 
 	_ = w.RefreshState(ctx)
 	w.replayWorkerAlerts(ctx)
@@ -704,7 +698,7 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 
 	loopCtx, loopCancel := context.WithCancel(ctx)
 	ctx = loopCtx
-	defer func() { loopCancel(); w.cancelCommand(); w.commandWG.Wait() }()
+	defer func() { loopCancel(); w.Close() }()
 	w.navView.OnRepaint(w.requestRepaint)
 	w.navView.mu.Lock()
 	w.navView.asyncActions = true
@@ -1108,14 +1102,12 @@ func (w *Workspace) runCommand(ctx context.Context, cmd string) {
 	if w.uiEvents != nil && priorityCommand(cmd) {
 		// Safety and navigation must remain available while ordinary work runs.
 		// They own neither the ordinary lane nor its cancellation token.
-		w.commandWG.Add(1)
-		go func() {
-			defer w.commandWG.Done()
+		w.workers.start(ctx, &w.commandWG, func(ctx context.Context) {
 			commandCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
 			resp, err := w.cmd.Handle(commandCtx, cmd)
 			w.postUI(ctx, func() { w.recordCommandResult(cmd, resp, err) })
-		}()
+		})
 		return
 	}
 	if w.uiEvents != nil && !w.directTerminalCommand(cmd) {
@@ -1134,16 +1126,15 @@ func (w *Workspace) runCommand(ctx context.Context, cmd string) {
 		w.commandCancelMu.Lock()
 		w.commandCancel = cancel
 		w.commandCancelMu.Unlock()
-		w.commandWG.Add(1)
-		go func() {
-			defer w.commandWG.Done()
+		w.workers.start(commandCtx, &w.commandWG, func(ctx context.Context) {
+			commandCtx = ctx
 			defer cancel()
 			resp, err := w.cmd.Handle(commandCtx, cmd)
 			_ = w.RefreshState(commandCtx)
 			if !w.postUI(ctx, func() { w.recordCommandResult(cmd, resp, err); w.commandBusy.Store(false) }) {
 				w.commandBusy.Store(false)
 			}
-		}()
+		})
 		return
 	}
 	resp, err := w.cmd.Handle(ctx, cmd)
@@ -1303,15 +1294,13 @@ func (w *Workspace) qualifyCompletionInBackground() {
 	completion.Subcommands = maps.Clone(completion.Subcommands)
 	completion.Descriptions = maps.Clone(completion.Descriptions)
 	terminal := w.terminal != nil && w.terminal.IsTerminal()
-	w.commandWG.Add(1)
-	go func() {
-		defer w.commandWG.Done()
+	w.workers.start(context.Background(), &w.commandWG, func(ctx context.Context) {
 		defer w.completionProbeBusy.Store(false)
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
 		qualifyProviderCompletions(ctx, &completion, terminal)
 		skills := w.readInstallableSkills()
-		publishCtx, publishCancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+		publishCtx, publishCancel := context.WithTimeout(ctx, 250*time.Millisecond)
 		defer publishCancel()
 		w.postUI(publishCtx, func() {
 			w.completer.ctx.Commands = completion.Commands
@@ -1324,7 +1313,7 @@ func (w *Workspace) qualifyCompletionInBackground() {
 			w.completionProbeTime = time.Now()
 			w.refreshCompletion()
 		})
-	}()
+	})
 }
 
 // moveCompletion moves the highlight only. The buffer is written on accept.
@@ -1696,14 +1685,12 @@ func (w *Workspace) openNavigation(ctx context.Context) {
 		if !w.navigationOpening.CompareAndSwap(false, true) {
 			return
 		}
-		w.commandWG.Add(1)
-		go func() {
-			defer w.commandWG.Done()
+		w.workers.start(ctx, &w.commandWG, func(ctx context.Context) {
 			defer w.navigationOpening.Store(false)
 			composeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
 			w.attachNavigation(composeCtx)
-		}()
+		})
 		return
 	}
 	w.attachNavigation(ctx)

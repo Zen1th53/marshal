@@ -53,9 +53,7 @@ func (w *Workspace) startOpenCodeDispatch(ctx context.Context, args []string) (s
 	}
 	w.governedDispatches[task.ID] = cancel
 	w.mu.Unlock()
-	w.governedDispatchWG.Add(1)
-	go func() {
-		defer w.governedDispatchWG.Done()
+	if !w.workers.start(runCtx, &w.governedDispatchWG, func(runCtx context.Context) {
 		defer cancel()
 		defer func() { w.mu.Lock(); delete(w.governedDispatches, task.ID); w.mu.Unlock() }()
 		result, err := w.runtime.Run(runCtx, app.RunRequest{TaskID: task.ID, AgentID: agent.ID, Adapter: "opencode", Model: selected, ExpectedRevision: task.Revision, NetworkRequired: true})
@@ -64,7 +62,13 @@ func (w *Workspace) startOpenCodeDispatch(ctx context.Context, args []string) (s
 			return
 		}
 		w.RecordActivity(fmt.Sprintf("OpenCode task %s: %s · run %s · isolation %s", task.ID, result.Status, result.RunID, result.Isolation.Level))
-	}()
+	}) {
+		cancel()
+		w.mu.Lock()
+		delete(w.governedDispatches, task.ID)
+		w.mu.Unlock()
+		return "", fmt.Errorf("workspace is closed")
+	}
 	return "Started governed OpenCode task " + task.ID + "; /egress status shows live requests.", nil
 }
 

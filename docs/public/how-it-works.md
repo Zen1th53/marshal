@@ -29,6 +29,14 @@ and count toward the rework limit.
 
 </div>
 
+During planning, MARSHAL shows its English **Permission request** popup for
+settings, earlier-work reads, memory entries and plan approval. The Marshal's
+working-mode question comes with a proposed setting and its popup. Read the
+exact change and press uppercase **A** to apply; any other key or timeout
+declines. Each decision is recorded. The model only proposes: you never need
+to type `/marshal` commands into the provider chat or a shell. See the
+[planning protocol](protocol.md) for the full sequence.
+
 The Marshal can read and write the whole project. Protection is at approval and
 merge: you approve the plan, and results are reviewed before they are
 integrated. The Marshal is not restricted to reading files or to the files

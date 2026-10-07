@@ -86,7 +86,7 @@ func (w *Workspace) checkForUpdateInBackground(ctx context.Context) {
 	if update.Disabled() {
 		return
 	}
-	go func() {
+	w.startBackground(ctx, func(ctx context.Context) {
 		checkCtx, cancel := context.WithTimeout(ctx, updateCheckTimeout)
 		defer cancel()
 		release, newer, err := update.NewChecker().Available(checkCtx, w.buildVersion())
@@ -95,7 +95,7 @@ func (w *Workspace) checkForUpdateInBackground(ctx context.Context) {
 		}
 		w.setUpdateAvailable(release.Tag)
 		w.requestRepaint()
-	}()
+	})
 }
 
 // buildVersion is the version this binary was stamped with at release build

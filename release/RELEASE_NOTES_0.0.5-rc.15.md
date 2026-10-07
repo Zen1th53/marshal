@@ -1,44 +1,31 @@
-# MARSHAL v0.0.5 — The Marshal workspace
+# MARSHAL v0.0.5-rc.15 — The Marshal workspace
 
 - Marshal protocol decisions now use MARSHAL permission popups: uppercase A applies strict, allow-listed chat proposals through existing handlers with operator evidence; other keys or timeout decline, and duplicate proposals do not stack.
 
-One workspace for planning with the Marshal and working with your agents.
+A release candidate for 0.0.5. rc.14 was tagged but not published because its release gate found background workspace work still writing after teardown. rc.15 cancels and joins workspace workers before the runtime or store is closed. It retains the rc.14 changes, which keep the TUI responsive: commands, function keys, completion and navigation no longer wait on tmux, provider tools, Git or the project store, and every tmux call is time-bounded. Native sessions you open yourself (F7, F8, F9, F12, /codex, /claude, /opencode, /agy) accept keyboard input immediately, as in 0.0.4; workers the Marshal launches stay view-only until /takeover.
+
+Matching `/marshal chat` calls reuse the chat. The never-relabel guard still
+refuses mismatches and names `/marshal model` as the way to switch. The chat is
+never stopped automatically or by stopping workers; replacement requires the
+explicit model command or closing the chat window.
+
+It retains the rc.11 fixes:
+
+- **Provider shortcuts stay safe after a session ends.** Before closing a native provider window, MARSHAL replaces its function-key target with a message explaining how to reopen the provider from the control centre.
+- **Marshal plans can request governed OpenCode work.** Explicitly governed OpenCode tasks use the existing sandbox, egress proxy and sandboxed checks, and OpenCode is available for governed reassignment. Codex and Claude Code still default to governed; OpenCode still defaults to native. For free models, set `MARSHAL_OPENCODE_MODEL` to an available `opencode/<model>` before starting MARSHAL. Free/local models need no credential broker; supported keyed providers require the credential grant.
+
+It retains the rc.10 fixes for governed planning, command-line egress grants and importing command-line results for review.
+
+It also contains the credential broker from rc.9: governed Codex and Claude Code workers can use your subscription sign-in without seeing the token.
 
 ## What changed
 
-**The Marshal is at the centre of a tmux workspace.** MARSHAL opens on the
-control centre, and the Marshal chat stays open in its own window. Plan with
-the Marshal, keep the work in view, and switch between conversations without
-leaving the workspace. Codex, Claude Code, OpenCode and Antigravity can work
-side by side. Choose which agent to focus on or show beside MARSHAL; F11
-returns to the control centre from any window.
+MARSHAL opens on the control centre; the Marshal chat stays open in its own window.
 
-**The TUI stays responsive.** Commands, function keys, completion and
-navigation never wait on tmux, provider tools, Git or the project store, and
-stop-all, F11 and `/takeover` never wait behind a running command.
-
-**Sessions you open are yours to type in.** Native sessions you open with
-F7, F8, F9, F12 or `/codex`, `/claude`, `/opencode`, `/agy` accept keyboard
-input immediately. Workers the Marshal launches stay view-only until
-`/takeover`. A provider key whose session has ended tells you how to reopen it.
-
-**Choose the Marshal's model.** `/marshal model <codex|claude|agy>` switches
-the running Marshal and remembers the choice for the project.
-
-**The Marshal plans protected work.** Each planned task shows whether it runs
-natively or governed before you approve it. Codex and Claude Code tasks are
-governed by default and run in the sandbox with the egress proxy; OpenCode
-tasks can be governed on request (set `MARSHAL_OPENCODE_MODEL` to pick a
-model). If protection is unavailable, the task is refused rather than run
-natively. A finished `marshal run` task can be reviewed and merged with
-`/marshal import <task> <check>`.
-
-**Governed workers can use your subscription without seeing it.** With the
-credential broker, governed Codex and Claude Code workers use your ChatGPT or
-Claude sign-in through MARSHAL; the worker only ever holds a placeholder.
-
-**The Marshal's instructions stay private.** The Marshal protocol reaches the
-model through hidden instructions; the chat shows only a short opening.
+**The Marshal is at the centre of a tmux workspace.** Plan with the Marshal,
+keep the work in view, and switch between conversations without leaving the
+workspace. Codex, Claude Code, OpenCode and Antigravity can work side by side
+in four agent sessions. Choose which agent to focus on or show beside MARSHAL.
 
 **The agents have a shared channel.** They can share notes and read what the
 others have contributed. You control sharing. Sharing sends text across
@@ -66,6 +53,8 @@ and directory handling, host Git command execution, approval identity and
 binding checks, network confinement, and the handling of credentials and
 evidence. These protections apply at their supported boundaries; native agent
 sessions retain the rights of your user account.
+
+- **Marshal protocol stays hidden.** Fresh chats, resumes and automatic restarts use hidden instructions and a short kickoff; failed hidden delivery refuses startup, and historical protocol copies are withheld from TUI and peer views.
 
 ## Requirements
 
@@ -103,6 +92,10 @@ recording a verdict or warning does not count as enforcement. The reviewed
 [counting rules](../tools/effect-inventory/README.md) make the scope inspectable.
 
 ## Known limits
+
+- **Real-provider end-to-end testing is pending.** Automated tests use
+  simulated agents. A full run from planning through approval to accepted work
+  has not yet been completed with real providers.
 
 - **Keep the window open.** There is no background service. Stored runs remain
   recoverable with `/marshal resume` after reopening MARSHAL.

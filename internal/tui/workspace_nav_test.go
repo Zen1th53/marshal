@@ -490,6 +490,7 @@ func realControlWorkspace(t *testing.T, sessionID string) (*Workspace, *app.Runt
 		t.Fatalf("runtime status: %v", err)
 	}
 	ws := NewWorkspace(runtime.Store(), string(status.Project.ID), sessionID)
+	t.Cleanup(func() { ws.Close(); _ = ws.runtime.Close() })
 	ws.AttachRuntime(runtime, projectid.ID(status.Project.ID))
 	entitleULTRA(t, ws)
 	if !ws.dispatchNavigationKey(context.Background(), KeyEvent{Type: KeyCtrlN}) {

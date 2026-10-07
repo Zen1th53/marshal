@@ -112,3 +112,24 @@ func TestPopupBoundsUntrustedReason(t *testing.T) {
 		t.Fatalf("reason hid controls: %d bytes %v", len(rendered), err)
 	}
 }
+
+func TestPermissionPopupContinuationIdentity(t *testing.T) {
+	req := Request{Kind: "read", Object: "/tmp/history", ContinuationProvider: "codex"}
+	other := req
+	other.ContinuationProvider = "claude"
+	if req.Key() == other.Key() {
+		t.Fatal("different continuation importers share a decision")
+	}
+	if _, err := Render([]Request{req}); err != nil {
+		t.Fatal(err)
+	}
+	other.ContinuationProvider = "shell"
+	if _, err := Render([]Request{other}); err == nil {
+		t.Fatal("unknown importer accepted")
+	}
+	other = req
+	other.Kind = "memory"
+	if _, err := Render([]Request{other}); err == nil {
+		t.Fatal("importer accepted outside read request")
+	}
+}

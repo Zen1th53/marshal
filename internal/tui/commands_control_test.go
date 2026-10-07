@@ -37,7 +37,9 @@ func newControlWorkspace(t *testing.T) (*store.Store, *Workspace, context.Contex
 		t.Fatalf("init project: %v", err)
 	}
 
-	return st, NewWorkspace(st, controlProjectID, "sess-control"), ctx
+	ws := NewWorkspace(st, controlProjectID, "sess-control")
+	t.Cleanup(ws.Close)
+	return st, ws, ctx
 }
 
 func seedPendingApproval(t *testing.T, st *store.Store, ctx context.Context, id string) model.Approval {

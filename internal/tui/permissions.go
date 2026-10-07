@@ -15,12 +15,16 @@ import (
 )
 
 type permissionState struct {
-	queue         permission.Queue
-	mu            sync.Mutex
-	ready         bool
-	running       bool
-	outstanding   map[string]bool
-	continuations map[string]string
+	runProposals        map[string]marshalProposal
+	queue               permission.Queue
+	mu                  sync.Mutex
+	ready               bool
+	running             bool
+	outstanding         map[string]bool
+	continuations       map[string]string
+	proposalsSeen       map[string]bool
+	planApprovalPending bool
+	planApprovalRunID   string
 }
 
 func (w *Workspace) queuePermission(req permission.Request) {
@@ -42,7 +46,7 @@ func (w *Workspace) queuePermission(req permission.Request) {
 	// InitTmux starts the queue after publishing the terminal identity.
 	if w.permissions.ready {
 		w.permissions.running = true
-		go w.runPermissionQueue()
+		w.startBackground(context.Background(), w.runPermissionQueue)
 	}
 }
 
@@ -54,7 +58,7 @@ func (w *Workspace) startPermissionQueue() {
 	w.permissions.ready = true
 	if !w.permissions.running && !w.permissions.queue.Empty() {
 		w.permissions.running = true
-		go w.runPermissionQueue()
+		w.startBackground(context.Background(), w.runPermissionQueue)
 	}
 }
 
@@ -80,11 +84,16 @@ func (w *Workspace) permissionBusy() bool {
 	}
 	return false
 }
-func (w *Workspace) runPermissionQueue() {
+func (w *Workspace) runPermissionQueue(ctx context.Context) {
 	// Collect requests arising in the same poll into one review list.
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
-	for range ticker.C {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 		batch := w.permissions.queue.Take(w.permissionBusy())
 		if len(batch) == 0 {
 			w.permissions.mu.Lock()
@@ -99,7 +108,7 @@ func (w *Workspace) runPermissionQueue() {
 		var live []permission.Request
 		for _, req := range batch {
 			if req.Kind == "network" && w.runtime != nil && !w.runtime.EgressRequestPending(req.RunID, req.Object) {
-				_ = w.decidePermission(context.Background(), req, false, "expired run request")
+				_ = w.decidePermission(ctx, req, false, "expired run request")
 				w.permissions.mu.Lock()
 				delete(w.permissions.outstanding, req.Key())
 				w.permissions.mu.Unlock()
@@ -114,7 +123,7 @@ func (w *Workspace) runPermissionQueue() {
 			w.permissions.mu.Unlock()
 		}
 		if len(review) > 0 {
-			w.runCommand(context.Background(), "/memory review")
+			w.runCommand(ctx, "/memory review")
 		}
 		if len(batch) == 0 {
 			continue
@@ -132,10 +141,10 @@ func (w *Workspace) runPermissionQueue() {
 		w.tmuxMu.Unlock()
 		allow := false
 		if path != "" && target != "" {
-			allow, _ = permission.Popup(context.Background(), target, batch, 30*time.Second)
+			allow, _ = permission.Popup(ctx, target, batch, 30*time.Second)
 		}
 		for _, req := range batch {
-			if err := w.decidePermission(context.Background(), req, allow, "operator popup"); err != nil {
+			if err := w.decidePermission(ctx, req, allow, "operator popup"); err != nil {
 				w.mu.Lock()
 				w.state.LastOutput = "Permission decision failed: " + err.Error()
 				w.mu.Unlock()
@@ -166,7 +175,8 @@ func partitionPermissionBatch(batch []permission.Request) (popup, review []permi
 	return
 }
 
-func (w *Workspace) decidePermission(ctx context.Context, req permission.Request, allow bool, source string) error {
+func (w *Workspace) decidePermission(ctx context.Context, req permission.Request, allow bool, source string) (err error) {
+	defer func() { w.marshalProposalDecisionNotice(req, allow, err) }()
 	control := w.controlSource()
 	if control == nil {
 		return errNoRuntime
@@ -183,6 +193,9 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 	if err := a.runtime.CommandPermission(ctx, req, allow, source); err != nil {
 		return err
 	}
+	if req.Kind == "marshal-command" && allow {
+		return w.applyMarshalProposal(ctx, req)
+	}
 	if req.Kind == "network" && allow {
 		return a.runtime.CommandEgress(ctx, req.RunID, "allow", req.Object)
 	}
@@ -190,6 +203,9 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 		folder := filepath.Clean(req.Object)
 		w.permissions.mu.Lock()
 		provider := w.permissions.continuations[folder]
+		if req.ContinuationProvider != "" {
+			provider = req.ContinuationProvider
+		}
 		delete(w.permissions.continuations, folder)
 		w.permissions.mu.Unlock()
 		if allow && provider != "" {
@@ -260,7 +276,7 @@ func (w *Workspace) continueEarlierWork(ctx context.Context, provider, folder st
 	if dropped {
 		b.WriteString("Secrets were dropped.\n")
 	}
-	b.WriteString("Summarise completed work, unfinished work, decisions and conventions from the supplied project-scoped data. Review candidates with /memory review; /memory allow <id> writes one approved entry, /memory deny <id> denies it.\n")
+	b.WriteString("Summarise completed work, unfinished work, decisions and conventions from the supplied project-scoped data. Use the candidate IDs and provenance supplied above; propose each candidate with MARSHAL_PROPOSAL {\"action\":\"memory\",\"id\":\"candidate-id\"}. MARSHAL will show a popup; press A to apply.\n")
 	view, err := openInboxView(w.runtime.ProjectRoot(), "marshal", false)
 	if err != nil {
 		return "", err

@@ -137,7 +137,7 @@ func TestAlertsAndClearingStayWithinRun(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer d.Cancel(h)
-			w.monitorTaskState(first, h)
+			w.monitorTaskState(context.Background(), first, h)
 			if first.state != "done" || second.state != "working" || w.tmuxAlerts["second:same"] != "task waiting: waiting" || w.tmuxAlerts["exec-second:canonical"] != "egress refused: waiting" {
 				t.Fatalf("cross-run completion/clearing: %s / %s %v", first.state, second.state, w.tmuxAlerts)
 			}

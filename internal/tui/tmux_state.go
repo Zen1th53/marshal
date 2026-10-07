@@ -26,11 +26,13 @@ func taskNativeWaiting(runs []execution.ExecutionRun, project, plan string, vers
 	}
 	return false
 }
-func (w *Workspace) monitorTaskState(a *activeTmuxAgent, h *driver.Handle) {
+func (w *Workspace) monitorTaskState(ctx context.Context, a *activeTmuxAgent, h *driver.Handle) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-h.Done():
 			record, err, _ := h.Outcome()
 			state := "done"
@@ -61,11 +63,11 @@ func (w *Workspace) monitorTaskState(a *activeTmuxAgent, h *driver.Handle) {
 			if service == nil || runID == "" || runID != boundRun || w.runtime == nil {
 				continue
 			}
-			run, err := service.Snapshot(context.Background(), runID)
+			run, err := service.Snapshot(ctx, runID)
 			if err != nil {
 				continue
 			}
-			runs, err := w.runtime.Execution().ListRuns(context.Background())
+			runs, err := w.runtime.Execution().ListRuns(ctx)
 			if err != nil {
 				continue
 			}
@@ -92,7 +94,7 @@ func (w *Workspace) monitorTaskState(a *activeTmuxAgent, h *driver.Handle) {
 			if waiting && previous != "waiting" {
 				_ = w.deliverEgressAlert(app.EgressAlert{RunID: runID, ParentRunID: runID, TaskID: taskID, Worker: a.provider, Kind: "task waiting", State: "waiting", Message: "Task " + taskID + " is waiting for your input."})
 			} else if !waiting && previous == "waiting" {
-				w.updateTmuxStatusLine(context.Background())
+				w.updateTmuxStatusLine(ctx)
 			}
 		}
 	}

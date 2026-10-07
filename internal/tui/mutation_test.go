@@ -34,7 +34,9 @@ func newMutationWorkspace(t *testing.T) (*store.Store, *Workspace, context.Conte
 	}); err != nil {
 		t.Fatalf("init project: %v", err)
 	}
-	return st, NewWorkspace(st, "PROJECT-mut", "sess-mut"), ctx
+	ws := NewWorkspace(st, "PROJECT-mut", "sess-mut")
+	t.Cleanup(ws.Close)
+	return st, ws, ctx
 }
 
 // installedHarness returns a harness this host actually provides, so the test

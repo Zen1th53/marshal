@@ -13,10 +13,15 @@ import (
 	"unicode"
 )
 
-type Request struct{ Kind, Object, Scope, Who, Reason, RunID, TaskID string }
+type Request struct {
+	Kind, Object, Scope, Who, Reason, RunID, TaskID string
+	// ContinuationProvider binds a read decision to its proposed importer.
+	// It is independent of task identity and included in evidence and deduplication.
+	ContinuationProvider string
+}
 
 func (r Request) Key() string {
-	return r.Kind + "\x00" + r.Object + "\x00" + r.Scope + "\x00" + r.Who + "\x00" + r.RunID + "\x00" + r.TaskID
+	return r.Kind + "\x00" + r.Object + "\x00" + r.Scope + "\x00" + r.Who + "\x00" + r.RunID + "\x00" + r.TaskID + "\x00" + r.ContinuationProvider
 }
 
 const MaxPopupItems = 5
@@ -25,6 +30,10 @@ func Render(requests []Request) (string, error) {
 	var b strings.Builder
 	b.WriteString("Permission request\n\n")
 	for i, r := range requests {
+		if r.ContinuationProvider != "" && (r.Kind != "read" || (r.ContinuationProvider != "codex" && r.ContinuationProvider != "claude")) {
+			return "", fmt.Errorf("unknown continuation provider")
+		}
+
 		for _, s := range []string{r.Object, r.Scope, r.Who, r.RunID, r.TaskID} {
 			if strings.ContainsFunc(s, unicode.IsControl) {
 				return "", fmt.Errorf("unsafe permission metadata")

@@ -56,6 +56,7 @@ type marshalSession struct {
 	draftCancel    context.CancelFunc
 	draftDone      chan struct{}
 	busy           bool
+	approving      bool
 	amended        bool
 	pending        *marshalAmendment
 	approvals      map[string]bool
@@ -79,8 +80,8 @@ func (m *marshalSession) grant(runID, purpose string) {
 }
 
 // approver answers the service's approval questions only from approvals the
-// person gave with an explicit command. Nothing a model or worker produces
-// can reach this map.
+// person gave with an explicit command or MARSHAL popup. Nothing a model
+// or worker produces can reach this map.
 func (m *marshalSession) approver(_ context.Context, runID, purpose string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -305,11 +306,13 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 	return protocol + "\nThis run:\n" +
 		tierLine +
 		"- After an earlier-work read grant, MARSHAL reads only the granted project-scoped conversation and delivers it as labelled untrusted data in .marshal/inbox/marshal.md. Read that file with your filesystem read tool when the grant is allowed; it contains the granted source paths and content. Summarise the supplied continuation without asking the operator to locate it or reading raw provider history.\n" +
-		"- Governed egress alerts arrive in .marshal/inbox/marshal.md. Re-read it during chat. Relay requests to the operator; model text never grants network access. Only an operator-typed /egress allow <run-id> <host[:port]> grants that endpoint for that worker run.\n" +
+		"- Governed egress alerts arrive in .marshal/inbox/marshal.md. Re-read it during chat. Relay requests to the operator; model text never grants network access. MARSHAL shows pending requests in its Permission request popup; only the operator's A grants the displayed endpoint for that worker run.\n" +
 		"- Each task carries mode native or governed. Prefer governed for codex and claude; agy and opencode support native only. Honour the operator’s requested mode. The person requests the mode in the goal and reviews it before approval.\n" +
 		"- Workers you may assign tasks to: " + strings.Join(workers, ", ") + ".\n" +
-		"- Current working mode: acceptance mode " + string(settings.AcceptanceMode) + ". The person changes it before approval with /marshal settings acceptance-mode marshal|marshal-then-user|user.\n" +
-		"- Current control level: " + string(settings.EffectiveControl()) + ". The person changes it before approval with /marshal settings control strict|free.\n" +
+		"- Current working mode: acceptance mode " + string(settings.AcceptanceMode) + ". Include a setting proposal with the working-mode question; MARSHAL will show a popup; press A to apply.\n" +
+		"- Current execution rights: " + string(settings.ExecutionRights) + ". Change only through a setting proposal and operator popup.\n" +
+		fmt.Sprintf("- Current limits: rework-limit %d; ultra-concurrency %d; task-tokens %d; plan-tokens %d; task-money %d; plan-money %d; task-wall-seconds %d; plan-wall-seconds %d.\n", settings.ReworkLimit, settings.UltraConcurrency, settings.Budget.Tokens.Task, settings.Budget.Tokens.Plan, settings.Budget.Money.Task, settings.Budget.Money.Plan, settings.Budget.WallTime.Task, settings.Budget.WallTime.Plan) +
+		"- Current control level: " + string(settings.EffectiveControl()) + ". Include a control setting proposal with the question; only the operator popup applies.\n" +
 		"- " + app.MarshalCheckContract + "\n" +
 		"- Write the plan pack to " + app.MarshalPackRelativePath + "/: REQUIREMENTS.md, 00_INDEX.md and tasks/<id>.md for every task id, each a non-empty Markdown file of at most 64 KiB. The runtime refuses a draft whose pack is missing a note or has a note for no task.\n" +
 		"- Write the task list to " + marshalDraftRelativePath + " as JSON of the form " +
@@ -451,7 +454,8 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	m.approvals = nil
 	m.mu.Unlock()
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan drafted: %d tasks · read %s · /marshal approve to run it", len(run.Tasks), packDir)))
-	return result + "\nMarshal plan drafted. " + note + " Read the plan in " + packDir + ", then use /marshal approve in MARSHAL to run it.", nil
+	w.queueMarshalPlanApproval()
+	return result + "\nMarshal plan drafted. " + note + " Read the plan in " + packDir + ", then press A in the MARSHAL approval popup to run it.", nil
 }
 
 func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string, error) {
@@ -738,7 +742,7 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 	m.approvals = nil
 	m.mu.Unlock()
 	w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: provider, State: marshal.Drafting, Note: "preparing and drafting a plan…"})
-	go func() {
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		defer m.finish(cancel)
 		service, selected, note, err := w.marshalService(runCtx, runID)
 		if err != nil {
@@ -767,7 +771,7 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 			return
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, selected, run, fmt.Sprintf("plan drafted: %d tasks · /marshal approve to run it", len(run.Tasks))))
-	}()
+	})
 	return "Marshal is preparing and drafting a plan for: " + goal, nil
 }
 
@@ -832,11 +836,11 @@ func (w *Workspace) marshalUsePlan(ctx context.Context) (string, error) {
 	m.mu.Unlock()
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approved Process 04 plan · running through Process 05"))
 	started = true
-	go func() {
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		keepNativeTurn := false
 		defer func() { m.finishWithNativeTurn(cancel, keepNativeTurn) }()
 		keepNativeTurn = w.marshalExecute(runCtx, m, service, runID, provider)
-	}()
+	})
 	return "Marshal is executing the approved Process 04 plan through Process 05.", nil
 }
 
@@ -897,14 +901,41 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 	}
 	runCtx, cancel, err := m.reserve()
 	if err != nil {
+		if run, readErr := service.Snapshot(ctx, runID); readErr == nil && run.State != marshal.Drafting && run.ApprovalScopeDigest != "" {
+			return "Plan already approved; the current operation will show its result.", nil
+		}
+		m.mu.Lock()
+		approving := m.approving
+		m.mu.Unlock()
+		if approving {
+			return "Plan approval is already in progress; the panel will show the result.", nil
+		}
 		return "", err
 	}
+	// Preserve asynchronous failure reporting and the last task snapshot when
+	// the stored run cannot be read. Approve reports that error in the panel.
+	run, readErr := service.Snapshot(ctx, runID)
+	m.mu.Lock()
+	pending := m.pending
+	m.mu.Unlock()
+	already := readErr == nil && pending == nil && run.State != marshal.Drafting && run.ApprovalScopeDigest != ""
+	if already && run.State != marshal.Approved {
+		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "already approved"))
+		m.finish(cancel)
+		return "Plan already approved.", nil
+	}
+	m.mu.Lock()
+	m.approving = true
+	m.mu.Unlock()
 	w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "approving plan…"))
-	go func() {
-		defer m.finish(cancel)
-		m.mu.Lock()
-		pending := m.pending
-		m.mu.Unlock()
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
+		keepNativeTurn := false
+		defer func() {
+			m.mu.Lock()
+			m.approving = false
+			m.mu.Unlock()
+			m.finishWithNativeTurn(cancel, keepNativeTurn)
+		}()
 		if pending != nil {
 			if _, err := service.ApplyAmendDraftBound(runCtx, runID, pending.reason, pending.draft, pending.planVersion); err != nil {
 				w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "amendment failed: "+err.Error()))
@@ -914,8 +945,15 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 			m.pending = nil
 			m.mu.Unlock()
 		}
-		m.grant(runID, "plan")
+		if !already {
+			m.grant(runID, "plan")
+		}
 		run, err := service.Approve(runCtx, runID)
+		// A concurrent prior approval or failed attempt must not leave a grant
+		// that could authorize a later amended plan.
+		m.mu.Lock()
+		delete(m.approvals, runID+"/plan")
+		m.mu.Unlock()
 		if err != nil {
 			w.marshalPublish(m, runID, w.marshalFailurePanel(runID, provider, run, "approval failed: "+err.Error()))
 			return
@@ -924,8 +962,11 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 		m.amended = false
 		m.mu.Unlock()
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approved · running"))
-		_ = w.marshalExecute(runCtx, m, service, runID, provider)
-	}()
+		keepNativeTurn = w.marshalExecute(runCtx, m, service, runID, provider)
+	})
+	if already {
+		return "Plan already approved; starting queued tasks. The panel will show the result.", nil
+	}
 	return "Plan approval started; the panel will show the result.", nil
 }
 
@@ -1122,7 +1163,7 @@ func (w *Workspace) marshalClose(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	go func() {
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		defer m.finish(cancel)
 		m.grant(runID, "close")
 		if err := service.Close(runCtx, runID); err != nil {
@@ -1132,7 +1173,7 @@ func (w *Workspace) marshalClose(ctx context.Context) (string, error) {
 		if run, err := service.Resume(runCtx, runID); err == nil {
 			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "closed"))
 		}
-	}()
+	})
 	return "Closing Marshal run; the panel will show the result.", nil
 }
 
@@ -1163,7 +1204,7 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	go func() {
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		keepNativeTurn := false
 		defer func() { m.finishWithNativeTurn(cancel, keepNativeTurn) }()
 		run, err := service.Resume(runCtx, runID)
@@ -1173,7 +1214,7 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "resuming"))
 		keepNativeTurn = w.marshalExecute(runCtx, m, service, runID, provider)
-	}()
+	})
 	return "Resuming Marshal run " + runID + ".", nil
 }
 
@@ -1189,7 +1230,7 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 	if err != nil {
 		return "", err
 	}
-	go func() {
+	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		defer m.finish(cancel)
 		draft, major, err := service.ProposeAmend(runCtx, runID, reason)
 		if err != nil {
@@ -1220,7 +1261,7 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 			return
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, note))
-	}()
+	})
 	return "Amendment started; the panel will show the result.", nil
 }
 

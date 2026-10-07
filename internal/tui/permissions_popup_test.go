@@ -92,7 +92,7 @@ func TestLargeMemoryBatchRoutesToPerEntryReview(t *testing.T) {
 	for _, req := range requests {
 		w.permissions.queue.Add(req)
 	}
-	w.runPermissionQueue()
+	w.runPermissionQueue(ctx)
 	records, err := runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: runtime.ProjectID()})
 	if err != nil || len(records) != 0 || len(runtime.ContinuationCandidates()) != 88 {
 		t.Fatalf("overflow wrote/lost candidates: %d %v", len(records), err)

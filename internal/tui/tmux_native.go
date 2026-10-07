@@ -398,7 +398,7 @@ func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAge
 	cmd := append([]string{"env"}, env...)
 	cmd = append(cmd, bin)
 	cmd = append(cmd, resumeArgs...)
-	err = tmux.RespawnWindow(ctx, agent.paneID, cmd)
+	err = tmux.RespawnPane(ctx, agent.paneID, cmd)
 	if err != nil {
 		err = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, env, append([]string{bin}, resumeArgs...))
 	}
@@ -756,9 +756,7 @@ func (w *Workspace) monitorAgent(
 	chStream *stream,
 	view *inboxView,
 ) {
-	w.tmuxMonitors.Add(1)
-	go func() {
-		defer w.tmuxMonitors.Done()
+	if !w.workers.start(agentCtx, &w.tmuxMonitors, func(agentCtx context.Context) {
 		defer close(agent.doneChan)
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -849,16 +847,14 @@ func (w *Workspace) monitorAgent(
 						if agentCtx.Err() != nil {
 							return
 						}
-						// F3: The Marshal chat is never killed by the worker monitor.
-						// If it exits unexpectedly, it is restarted automatically and resumes
-						// the stored run / conversation.
-						if agentCtx.Err() == nil {
-							w.RecordActivity(fmt.Sprintf("%s exited unexpectedly; restarting and resuming conversation...", snapshot.label))
-							w.restartMarshalChat(agentCtx, agent, root)
-							w.updateTmuxStatusLine(context.Background())
-							continue
-						}
+						w.returnFromExitedAgent(agentCtx, snapshot)
+						w.RecordActivity("Marshal chat ended; restarting automatically and resuming the conversation. Use /marshal chat to reopen it.")
+						w.restartMarshalChat(agentCtx, agent, root)
+						w.updateTmuxStatusLine(context.Background())
+						continue
 					}
+
+					w.returnFromExitedAgent(agentCtx, snapshot)
 
 					state := "done"
 					if exitCode != 0 {
@@ -882,7 +878,27 @@ func (w *Workspace) monitorAgent(
 
 			}
 		}
-	}()
+	}) {
+		close(agent.doneChan)
+	}
+}
+
+// Evaluate focus in tmux itself so navigation cannot race a query followed by
+// an unconditional select. A failed/missing target never steals focus.
+func (w *Workspace) returnFromExitedAgent(ctx context.Context, agent *activeTmuxAgent) {
+	if agent.role != "marshal-chat" && agent.launchOrigin != nativeLaunchOperator {
+		return
+	}
+	w.tmuxMu.Lock()
+	session, control := w.tmuxSession, w.tmuxMarshalWinID
+	if control == "" {
+		control = w.tmuxMarshalWin
+	}
+	w.tmuxMu.Unlock()
+	if session == "" || control == "" || agent.windowID == "" || agent.windowID == control {
+		return
+	}
+	_, _ = tmux.RunCommand(ctx, "if-shell", "-t", session+":"+agent.windowID, "-F", "#{window_active}", fmt.Sprintf("select-window -t %q", session+":"+control))
 }
 
 // RecordActivity records activity into workspace state and triggers a redraw if interactive.
@@ -1337,12 +1353,12 @@ func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, 
 	if previousDone != nil {
 		<-previousDone
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(w.workers.context(), 30*time.Minute)
 	done := make(chan struct{})
 	m.mu.Lock()
 	m.draftCancel, m.draftDone = cancel, done
 	m.mu.Unlock()
-	go func() {
+	if !w.startBackground(ctx, func(ctx context.Context) {
 		defer cancel()
 		defer close(done)
 		ticker := time.NewTicker(1 * time.Second)
@@ -1386,7 +1402,7 @@ func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, 
 				if goal == "" {
 					goal = draft.Plan.ID
 				}
-				run, err := service.StartPlanningFromDraft(context.Background(), runID, goal, draft, marshal.Budget{})
+				run, err := service.StartPlanningFromDraft(ctx, runID, goal, draft, marshal.Budget{})
 				if err != nil {
 					return
 				}
@@ -1395,11 +1411,15 @@ func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, 
 				m.approvals = nil
 				m.mu.Unlock()
 				w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan drafted: %d tasks · read %s · /marshal approve to run it", len(run.Tasks), packDir)))
-				w.RecordActivity(fmt.Sprintf("Marshal plan drafted (%d tasks). Read the plan in %s, then use /marshal approve in MARSHAL to run it.", len(run.Tasks), packDir))
+				w.RecordActivity(fmt.Sprintf("Marshal plan drafted (%d tasks). Read the plan in %s before allowing its approval popup.", len(run.Tasks), packDir))
+				w.queueMarshalPlanApproval()
 				return
 			}
 		}
-	}()
+	}) {
+		cancel()
+		close(done)
+	}
 }
 
 // wrapServiceDriversForTmux wraps the drivers in MarshalService to integrate dispatched task workers with tmux.
@@ -1500,8 +1520,9 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 	t.w.tmuxMu.Unlock()
 	t.w.updateTmuxStatusLine(ctx)
 	t.monitors.Store(h, agent.doneChan)
-	t.w.tmuxMonitors.Add(1)
-	go func() { defer t.w.tmuxMonitors.Done(); defer close(agent.doneChan); t.w.monitorTaskState(agent, h) }()
+	if !t.w.workers.start(ctx, &t.w.tmuxMonitors, func(ctx context.Context) { defer close(agent.doneChan); t.w.monitorTaskState(ctx, agent, h) }) {
+		close(agent.doneChan)
+	}
 	return h, nil
 }
 
@@ -1675,6 +1696,13 @@ func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWat
 	watch.consume = func(tr importer.SessionTranscript) error {
 		if err := observe(tr); err != nil {
 			return err
+		}
+		w.tmuxMu.Lock()
+		active := w.tmuxActiveWins["marshal-chat"]
+		bound := active != nil && active.sessionID != "" && active.sessionID == tr.SessionID
+		w.tmuxMu.Unlock()
+		if bound {
+			w.observeMarshalProposals(tr)
 		}
 		return previous(tr)
 	}
