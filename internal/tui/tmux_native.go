@@ -785,6 +785,9 @@ func (w *Workspace) monitorAgent(
 
 				// Check whether pane is dead
 				dead, exitCode, err := tmux.PaneDeadStatus(agentCtx, snapshot.paneID)
+				// A clean exit of a pane that still exists is the operator
+				// leaving the Marshal chat (e.g. /exit); a crash restarts it.
+				closedByOperator := err == nil && dead && exitCode == 0
 				if err != nil {
 					// Resolve absence by immutable identity, including renamed windows.
 					panes, listErr := tmux.ListPanes(agentCtx, w.tmuxSession)
@@ -848,6 +851,15 @@ func (w *Workspace) monitorAgent(
 							return
 						}
 						w.returnFromExitedAgent(agentCtx, snapshot)
+						if closedByOperator {
+							if err := w.retainAndCloseAgent(agentCtx, agent, root, "closed by operator"); err != nil {
+								w.RecordActivity(err.Error())
+								continue
+							}
+							w.RecordActivity("Marshal chat closed. Use /marshal chat to reopen it.")
+							w.updateTmuxStatusLine(context.Background())
+							return
+						}
 						w.RecordActivity("Marshal chat ended; restarting automatically and resuming the conversation. Use /marshal chat to reopen it.")
 						w.restartMarshalChat(agentCtx, agent, root)
 						w.updateTmuxStatusLine(context.Background())

@@ -20,6 +20,11 @@ func TestMarshalChatAndNativeExitReturnOnlyViewedWindow(t *testing.T) {
 				log := filepath.Join(root, "calls")
 				selected := filepath.Join(root, "selected")
 				fake := filepath.Join(root, "tmux")
+				// A crashed chat (non-zero status) restarts; a clean exit closes it.
+				deadStatus := "1 0"
+				if chat {
+					deadStatus = "1 1"
+				}
 				active := "0"
 				if viewed {
 					active = "1"
@@ -29,7 +34,7 @@ printf '%%s\n' "$*" >> %q
 case "$1" in
  display-message)
   case "$*" in
-   *'#{pane_dead}'*) echo '1 0' ;;
+   *'#{pane_dead}'*) echo '%s' ;;
    *'#{session_name}:#{window_id}'*) echo 'session:@0' ;;
    *'#{session_id}'*) echo '$0' ;;
    *'#{window_active}'*) echo %s ;;
@@ -42,7 +47,7 @@ case "$1" in
  respawn-window|respawn-pane) touch %q ;;
  capture-pane) echo 'saved output' ;;
 esac
-`, log, active, active, selected, filepath.Join(root, "restarted"))
+`, log, deadStatus, active, active, selected, filepath.Join(root, "restarted"))
 				if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
 					t.Fatal(err)
 				}
@@ -97,5 +102,62 @@ esac
 				}
 			})
 		}
+	}
+}
+
+func TestMarshalChatCleanExitClosesWithoutRestart(t *testing.T) {
+	root := t.TempDir()
+	selected := filepath.Join(root, "selected")
+	fake := filepath.Join(root, "tmux")
+	script := fmt.Sprintf(`#!/bin/sh
+case "$1" in
+ display-message)
+  case "$*" in
+   *'#{pane_dead}'*) echo '1 0' ;;
+   *'#{session_name}:#{window_id}'*) echo 'session:@0' ;;
+   *'#{session_id}'*) echo '$0' ;;
+   *'#{window_active}'*) echo 1 ;;
+   *'#{pane_id}'*) echo '%%1' ;;
+  esac ;;
+ if-shell) printf '%%s\n' "$6" > %q ;;
+ list-panes) printf '%%%%1\t@1\tchat\t0\t1\t0\n' ;;
+ respawn-window|respawn-pane|new-window) touch %q ;;
+ capture-pane) echo 'saved output' ;;
+esac
+`, selected, filepath.Join(root, "restarted"))
+	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	tmux.SetBinaryPath(fake)
+	defer tmux.ResetBinaryPath()
+	w := NewWorkspace(nil, "project", "session")
+	defer w.Close()
+	w.workDir = root
+	w.tmuxSession, w.tmuxMarshalWinID, w.tmuxMarshalPaneID = "session", "@0", "%0"
+	a := &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", provider: "codex", label: "Marshal Chat", paneID: "%1", windowID: "@1", window: "chat", launchOrigin: nativeLaunchOperator, doneChan: make(chan struct{}), binary: "/bin/true"}
+	w.tmuxActiveWins[a.id] = a
+	w.monitorAgent(t.Context(), a, root, nil, nil, nil, nil, nil)
+	select {
+	case <-a.doneChan:
+	case <-time.After(5 * time.Second):
+		t.Fatal("monitor did not finish after a clean exit")
+	}
+	if _, err := os.Stat(filepath.Join(root, "restarted")); !os.IsNotExist(err) {
+		t.Fatalf("clean exit restarted the chat: %v", err)
+	}
+	if data, err := os.ReadFile(selected); err != nil || !strings.Contains(string(data), "@0") {
+		t.Fatalf("did not return to control centre: %q %v", data, err)
+	}
+	w.mu.RLock()
+	out := w.state.LastOutput
+	w.mu.RUnlock()
+	w.tmuxMu.Lock()
+	_, still := w.tmuxActiveWins["marshal-chat"]
+	w.tmuxMu.Unlock()
+	if !strings.Contains(out, "Marshal chat closed") || !strings.Contains(out, "/marshal chat") {
+		t.Fatalf("close guidance: %s", out)
+	}
+	if still {
+		t.Fatal("closed chat is still tracked")
 	}
 }

@@ -11,7 +11,9 @@ control centre, and the Marshal chat stays open in its own window. Plan with
 the Marshal, keep the work in view, and switch between conversations without
 leaving the workspace. Codex, Claude Code, OpenCode and Antigravity can work
 side by side. Choose which agent to focus on or show beside MARSHAL; F11
-returns to the control centre from any window.
+returns to the control centre from any window. Leaving the Marshal chat with
+`/exit` closes it and returns you to the control centre; `/marshal chat`
+reopens it. If the chat stops unexpectedly, it restarts and resumes.
 
 **The TUI stays responsive.** Commands, function keys, completion and
 navigation never wait on tmux, provider tools, Git or the project store, and
