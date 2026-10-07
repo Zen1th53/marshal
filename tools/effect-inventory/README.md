@@ -18,7 +18,9 @@ substitute for reviewing the code.
 
 Material sites are source call sites for Git mutations, material external program and
 agent launches, state restore/rollback, memory/evidence/approval/plan writes,
-and listeners. The AST scan includes command construction, hostgit and Git
+and listeners. Tmux pane stops are material dispatch sites, including explicit
+Marshal provider switches and terminal cleanup; an operator command alone is
+not a constitutional guard. The AST scan includes command construction, hostgit and Git
 helpers, tmux dispatch, agent Launch, adapter process runners, listener setup,
 restore methods, filesystem mutations and store SQL execution. Imports may be
 aliased. Package-level closures and nested closures are included. Build-tagged

@@ -17,6 +17,21 @@ the versions above, and labels commands for other versions as not checked.
     The Antigravity desktop app alone is not enough. MARSHAL needs its
     command-line tool, `agy`.
 
+## Choose the Marshal provider
+
+Use `/marshal model claude` to switch the Marshal to Claude Code, or choose
+`codex` or `agy`. MARSHAL checks that the CLI is installed before closing the
+current chat. A different provider replaces that chat immediately through the
+normal startup path with hidden instructions; the window name and control
+centre focus are kept. It says, for example, “The Marshal now uses claude.”
+Choosing the same provider leaves the chat running.
+
+The choice is saved as this project's default provider, also used by everyday
+commands such as `/models`, `/mcp` and `/resume`. Startup, reattachment and
+recovery keep the chosen Marshal provider. `/marshal chat` reuses its matching
+chat. The Marshal chat is never stopped automatically or by stopping workers;
+only an explicit `/marshal model` switch or closing its window replaces it.
+
 ## Marshal chat instructions
 
 The Marshal receives its planning protocol through hidden instructions. The

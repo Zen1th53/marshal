@@ -29,7 +29,7 @@ func TestReleaseInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Print(output.String())
-	for _, version := range []string{"0.0.5-rc.12", "0.0.5"} {
+	for _, version := range []string{"0.0.5-rc.13", "0.0.5"} {
 		notes, err := os.ReadFile(filepath.Join(root, "release", "RELEASE_NOTES_"+version+".md"))
 		if err != nil {
 			t.Fatal(err)
@@ -285,5 +285,23 @@ func mutate() {
 	}
 	if _, _, err = validate(changed, table); err == nil {
 		t.Fatal("query changed to mutation bypassed review")
+	}
+}
+
+func TestChatPaneStopIsMaterial(t *testing.T) {
+	root := t.TempDir()
+	fixture(t, root, "internal/tui/switch.go", `package tui
+import "github.com/Zen1th53/marshal/internal/tmux"
+func switchModel() { tmux.KillPane(nil, "%chat") }
+`)
+	sites, err := discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sites) != 1 || sites[0].Effect != "program-wrapper" || sites[0].SupportReason != "" {
+		t.Fatalf("pane stop not material: %+v", sites)
+	}
+	if _, _, err := validate(sites, nil); err == nil {
+		t.Fatal("unreviewed chat stop passed")
 	}
 }

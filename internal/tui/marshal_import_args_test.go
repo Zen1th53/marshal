@@ -71,6 +71,12 @@ func TestMarshalImportCommandStoresRawCheck(t *testing.T) {
 	if err := st.FinishRun(ctx, model.RunFinish{ID: "RUN-finished", Status: "success", EndedAt: time.Now().UTC(), ResultCommit: head, ExitStatus: &zero}); err != nil {
 		t.Fatal(err)
 	}
+	// /marshal model checks that the provider CLI exists; CI has none.
+	fakeBin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fakeBin, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	if _, err := w.ExecuteCommand(ctx, "/marshal model codex"); err != nil {
 		t.Fatal(err)
 	}
