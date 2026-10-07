@@ -6,6 +6,11 @@ MARSHAL opens on the control centre (window 0), including after re-attach or aut
 
 Press **F7** for Codex, **F8** for Claude Code, **F9** for OpenCode or **F12** for Antigravity. Use `/view show chat` for the Marshal chat, or `/view` and `/takeover` to choose an agent view. `/focus` returns to the control centre. Press **F11** from any MARSHAL window to return to the control centre.
 
+Native sessions you open with F7/F8/F9/F12, `/codex`, `/claude`, `/opencode`,
+`/agy`, or `/<agent> new|continue` accept keyboard input immediately. The Marshal
+chat also accepts input. Workers launched by the Marshal or a governed or
+automated run open view-only; use `/takeover` to type into a worker pane.
+
 Agent starts, alerts and worker completion keep your current window selected. Automatic following is off until you enable it with `/view follow`; use the same command to turn it off.
 
 ## See what is running

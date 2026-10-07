@@ -87,14 +87,14 @@ func (w *Workspace) checkForUpdateInBackground(ctx context.Context) {
 		return
 	}
 	go func() {
-		checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), updateCheckTimeout)
+		checkCtx, cancel := context.WithTimeout(ctx, updateCheckTimeout)
 		defer cancel()
 		release, newer, err := update.NewChecker().Available(checkCtx, w.buildVersion())
 		if err != nil || !newer {
 			return
 		}
 		w.setUpdateAvailable(release.Tag)
-		w.renderFullView()
+		w.requestRepaint()
 	}()
 }
 

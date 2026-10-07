@@ -266,6 +266,7 @@ func (v *NavView) handleActionFormKey(ctx context.Context, event KeyEvent) bool 
 			return true
 		}
 		f.open = false
+		v.configureConfirmation(v.control.confirm)
 		if err := v.control.confirm.Begin(ctx, f.binding, req); err != nil {
 			v.status, v.statusSeen = err.Error(), false
 		}
@@ -345,6 +346,10 @@ func (v *NavView) handleConfirmKey(ctx context.Context, event KeyEvent) bool {
 				"on Cancel — press → or Tab to reach Proceed, or Esc to dismiss", false
 			return true
 		}
+		if v.commandBusy != nil && v.commandBusy.Load() {
+			v.status, v.statusSeen = "a command is still running", false
+			return true
+		}
 		v.submitConfirmation(ctx, c)
 		return true
 	}
@@ -368,10 +373,8 @@ func (v *NavView) handleConfirmKey(ctx context.Context, event KeyEvent) bool {
 
 // submitConfirmation performs the mutation and records what happened.
 //
-// It runs with the view lock held, which serialises it against the paint path.
-// The mutation itself may be slow; that is acceptable here because the
-// alternative — releasing the lock mid-submission — would let a second key
-// press observe PhaseConfirming and submit again.
+// Interactive submissions publish PhaseSubmitting before starting background
+// work, so a repeated Enter cannot submit again and rendering keeps moving.
 func (v *NavView) submitConfirmation(ctx context.Context, c *Confirmation) {
 	outcome, err := c.Submit(ctx)
 	switch {
@@ -392,6 +395,10 @@ func (v *NavView) submitConfirmation(ctx context.Context, c *Confirmation) {
 // through a confirmation: there is deliberately no way to submit an action
 // without one appearing first.
 func (v *NavView) beginAction(ctx context.Context, node *Node) bool {
+	if v.commandBusy != nil && v.commandBusy.Load() {
+		v.status, v.statusSeen = "a command is still running", false
+		return true
+	}
 	if v.control.source == nil {
 		v.status, v.statusSeen = "no execution authority is attached to this workspace", false
 		return true
@@ -437,6 +444,7 @@ func (v *NavView) beginAction(ctx context.Context, node *Node) bool {
 		req.ApprovalID = v.control.source.selectedApproval
 	}
 
+	v.configureConfirmation(v.control.confirm)
 	if err := v.control.confirm.Begin(ctx, binding, req); err != nil {
 		v.status, v.statusSeen = err.Error(), false
 	}

@@ -477,16 +477,17 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 }
 
 func (h *CommandHandler) handleSetGoal(ctx context.Context, outcome string) (string, error) {
-	h.ws.mu.Lock()
-	defer h.ws.mu.Unlock()
+	h.ws.mu.RLock()
+	stateGoal, st, router, gate := h.ws.state.Goal, h.ws.store, h.ws.router, h.ws.ultra
+	h.ws.mu.RUnlock()
 
-	goalID := h.ws.state.Goal.ID
+	goalID := stateGoal.ID
 	var rev int64 = 1
 	var expectedRev int64 = 0
 	if goalID == "" {
 		goalID = fmt.Sprintf("goal-%d", time.Now().UnixNano())
 	} else {
-		expectedRev = h.ws.state.Goal.Revision
+		expectedRev = stateGoal.Revision
 		rev = expectedRev + 1
 	}
 
@@ -502,12 +503,13 @@ func (h *CommandHandler) handleSetGoal(ctx context.Context, outcome string) (str
 		UpdatedAt:          time.Now().UTC(),
 	}
 
-	if h.ws.store != nil {
-		if err := h.ws.store.SaveGoalContract(ctx, goal, expectedRev); err != nil {
+	if st != nil {
+		if err := st.SaveGoalContract(ctx, goal, expectedRev); err != nil {
 			return "", fmt.Errorf("save goal contract: %w", err)
 		}
 	}
 
+	h.ws.mu.Lock()
 	h.ws.state.Goal = goal
 	h.ws.state.UnderstandingState = model.GoalReady
 
@@ -517,8 +519,9 @@ func (h *CommandHandler) handleSetGoal(ctx context.Context, outcome string) (str
 	// label looking current in Standard mode. Explicit /route remains an
 	// advisory simulation and is labelled NOT APPLIED.
 	h.ws.state.RouteExplanation = ""
-	if h.ws.router != nil && h.ws.ultra != nil && h.ws.ultra.Entitled() {
-		plan, err := h.ws.router.Route(ctx, model.ULTRARouteRequest{
+	h.ws.mu.Unlock()
+	if router != nil && gate != nil && gate.Entitled() {
+		plan, err := router.Route(ctx, model.ULTRARouteRequest{
 			GoalID:            goalID,
 			FixedRole:         model.RoleDeveloper,
 			PreferredHarness:  "codex",
@@ -526,7 +529,11 @@ func (h *CommandHandler) handleSetGoal(ctx context.Context, outcome string) (str
 			HasCriticalClaims: false,
 		})
 		if err == nil {
-			h.ws.state.RouteExplanation = plan.Explanation
+			h.ws.mu.Lock()
+			if h.ws.state.Goal.ID == goal.ID && h.ws.state.Goal.Revision == goal.Revision {
+				h.ws.state.RouteExplanation = plan.Explanation
+			}
+			h.ws.mu.Unlock()
 		}
 	}
 
@@ -577,7 +584,12 @@ func (h *CommandHandler) handleClaims(ctx context.Context) (string, error) {
 
 func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
 	h.ws.mu.Lock()
-	defer h.ws.mu.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			h.ws.mu.Unlock()
+		}
+	}()
 
 	// Check the live gate before reading a cached explanation as leases can
 	// expire between the action that computed it and this command.  Clearing
@@ -606,9 +618,12 @@ func (h *CommandHandler) handleWhy(ctx context.Context) (string, error) {
 
 	// A route explanation is meaningful only while the same canonical Cloud
 	// gate that authorizes ULTRA execution still holds a verified entitlement.
-	if h.ws.router != nil {
-		plan, err := h.ws.router.Route(ctx, model.ULTRARouteRequest{
-			GoalID:    h.ws.state.Goal.ID,
+	router, goalID := h.ws.router, h.ws.state.Goal.ID
+	h.ws.mu.Unlock()
+	locked = false
+	if router != nil {
+		plan, err := router.Route(ctx, model.ULTRARouteRequest{
+			GoalID:    goalID,
 			FixedRole: model.RoleDeveloper,
 			Risk:      model.R1,
 		})
@@ -779,6 +794,16 @@ func plainTextRunsNothing(line string, known func(string) bool) string {
 // knownCommand reports whether a token names a command this workspace has.
 func (w *Workspace) knownCommand(candidate string) bool {
 	if w == nil || w.completer == nil {
+		return false
+	}
+	if w.uiEvents != nil {
+		w.mu.RLock()
+		defer w.mu.RUnlock()
+		for _, name := range w.commandNames {
+			if name == candidate {
+				return true
+			}
+		}
 		return false
 	}
 	_, matches := w.completer.Suggest(candidate, len([]rune(candidate)))

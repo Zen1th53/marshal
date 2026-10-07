@@ -117,7 +117,6 @@ while :; do sleep 1; done
 	// 1. Open Claude in tmux
 	s.sendLine("/claude")
 	s.mustSee("Opened native Claude in tmux window")
-	s.mustSee("view-only mode")
 	s.mustSee("F11 to return to MARSHAL")
 
 	// 2. Open Codex in tmux
@@ -151,6 +150,20 @@ while :; do sleep 1; done
 		t.Fatal(err)
 	}
 	logStr := string(logData)
+	for _, provider := range []string{"claude", "codex"} {
+		enabled := false
+		for _, line := range strings.Split(logStr, "\n") {
+			if strings.HasPrefix(line, "select-pane -t test-session:marshal-"+provider+"-") {
+				if strings.HasSuffix(line, " -d") {
+					t.Fatalf("operator %s pane opened view-only: %s", provider, line)
+				}
+				enabled = enabled || strings.HasSuffix(line, " -e")
+			}
+		}
+		if !enabled {
+			t.Fatalf("operator %s pane input was not enabled:\n%s", provider, logStr)
+		}
+	}
 
 	// Verify new-window was only called ONCE for claude and ONCE for codex
 	claudeNewCount := strings.Count(logStr, "new-window -d -t test-session -n marshal-claude-")

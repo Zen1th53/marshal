@@ -4,6 +4,8 @@ One workspace for planning with the Marshal and working with your agents.
 
 ## What changed
 
+Native sessions opened directly with provider keys or commands accept keyboard input immediately. Marshal and governed or automated workers remain view-only until `/takeover`; the Marshal chat keeps input enabled.
+
 Native provider function keys show reopening guidance after their session ends.
 Marshal plans can explicitly request governed OpenCode tasks, including governed
 reassignment, using the sandbox, egress proxy and sandboxed checks. Codex and

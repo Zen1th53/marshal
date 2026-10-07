@@ -179,3 +179,36 @@ func TestProviderDialectAliasNormalization(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderDialectProbeDoesNotHoldCacheLock(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "started")
+	t.Setenv("PATH", dir)
+	t.Setenv("MARSHAL_PROVIDER_PATH_ONLY", "1")
+	t.Setenv("MARSHAL_VERSION_MARKER", marker)
+	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte("#!/bin/sh\n: > \"$MARSHAL_VERSION_MARKER\"\nexec /bin/sleep 6\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	done := make(chan struct{})
+	go func() { defer close(done); ObserveProviderDialect(ctx, "codex") }()
+	deadline := time.Now().Add(time.Second)
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("version probe did not start")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	locked := providerDialectCache.TryLock()
+	if locked {
+		providerDialectCache.Unlock()
+	} else {
+		t.Error("provider cache mutex held across external CLI execution")
+	}
+	cancel()
+	<-done
+}

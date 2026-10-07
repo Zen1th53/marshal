@@ -24,7 +24,7 @@ func TestInteractiveTmuxNormalCompletionReapsDescendants(t *testing.T) {
 	w := realTmuxWorkspace(t)
 	index := 0
 	processcheck.Completion(t, func(script string) error {
-		_, err := w.runNativeAgentInTmux(context.Background(), fmt.Sprintf("test-%d", index), "Test", w.workDir, "/bin/sh", []string{"-c", script}, nil, nil, nil, nil, nil, nil, nil)
+		_, err := w.runNativeAgentInTmux(context.Background(), nativeLaunchOperator, fmt.Sprintf("test-%d", index), "Test", w.workDir, "/bin/sh", []string{"-c", script}, nil, nil, nil, nil, nil, nil, nil)
 		if err != nil {
 			return err
 		}

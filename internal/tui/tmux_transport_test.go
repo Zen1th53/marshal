@@ -117,9 +117,11 @@ func TestTaskTerminalShowsDriverOutputAndAcceptsTakeover(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	assertNativePaneInput(t, ctx, a.paneID, "1")
 	if _, err := w.handleTakeoverCommand(ctx); err != nil {
 		t.Fatal(err)
 	}
+	assertNativePaneInput(t, ctx, a.paneID, "0")
 	if _, err := tmux.RunCommand(ctx, "send-keys", "-t", a.paneID, "operator-input", "Enter"); err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +167,7 @@ func TestStopAllUsesTaskIdentityAfterRenameAndJoin(t *testing.T) {
 		}
 	}
 	recovered.tmuxMu.Lock()
-	recovered.adoptSurvivingWorkersLocked(w.workDir)
+	recovered.adoptSurvivingWorkers(w.workDir)
 	adopted := recovered.tmuxActiveWins["task-immutable"]
 	recovered.tmuxMu.Unlock()
 	if adopted == nil || adopted.taskID != "immutable" {

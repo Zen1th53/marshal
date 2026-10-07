@@ -73,14 +73,6 @@ func ProbeHarnesses() []HarnessDiscoveryResult {
 	}
 	probeHarnessMu.RUnlock()
 
-	probeHarnessMu.Lock()
-	defer probeHarnessMu.Unlock()
-	if cachedHarnesses != nil && time.Since(harnessCacheTime) < 5*time.Second {
-		res := make([]HarnessDiscoveryResult, len(cachedHarnesses))
-		copy(res, cachedHarnesses)
-		return res
-	}
-
 	targets := []struct {
 		name       string
 		binaryName string
@@ -118,6 +110,8 @@ func ProbeHarnesses() []HarnessDiscoveryResult {
 		})
 	}
 
+	probeHarnessMu.Lock()
+	defer probeHarnessMu.Unlock()
 	cachedHarnesses = results
 	harnessCacheTime = time.Now()
 	res := make([]HarnessDiscoveryResult, len(results))
@@ -142,12 +136,6 @@ func ProbeGitStatus(workDir string) GitStatusResult {
 	}
 	probeGitMu.RUnlock()
 
-	probeGitMu.Lock()
-	defer probeGitMu.Unlock()
-	if res, ok := cachedGitStatus[workDir]; ok && time.Since(gitCacheTime[workDir]) < 3*time.Second {
-		return res
-	}
-
 	res := GitStatusResult{
 		Branch: "unknown",
 		Commit: "unknown",
@@ -168,6 +156,7 @@ func ProbeGitStatus(workDir string) GitStatusResult {
 		return res
 	}
 	var outBranch bytes.Buffer
+	cmdBranch.WaitDelay = 100 * time.Millisecond
 	cmdBranch.Stdout = &outBranch
 	if err := cmdBranch.Run(); err == nil {
 		res.Branch = strings.TrimSpace(outBranch.String())
@@ -179,6 +168,7 @@ func ProbeGitStatus(workDir string) GitStatusResult {
 		return res
 	}
 	var outCommit bytes.Buffer
+	cmdCommit.WaitDelay = 100 * time.Millisecond
 	cmdCommit.Stdout = &outCommit
 	if err := cmdCommit.Run(); err == nil {
 		res.Commit = strings.TrimSpace(outCommit.String())
@@ -190,6 +180,7 @@ func ProbeGitStatus(workDir string) GitStatusResult {
 		return res
 	}
 	var outStatus bytes.Buffer
+	cmdStatus.WaitDelay = 100 * time.Millisecond
 	cmdStatus.Stdout = &outStatus
 	if err := cmdStatus.Run(); err == nil {
 		lines := strings.Split(strings.TrimSpace(outStatus.String()), "\n")
@@ -203,6 +194,8 @@ func ProbeGitStatus(workDir string) GitStatusResult {
 		res.Clean = count == 0
 	}
 
+	probeGitMu.Lock()
+	defer probeGitMu.Unlock()
 	cachedGitStatus[workDir] = res
 	gitCacheTime[workDir] = time.Now()
 	return res

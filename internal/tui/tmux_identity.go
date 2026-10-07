@@ -14,6 +14,7 @@ import (
 )
 
 type agentRecord struct {
+	LaunchOrigin    nativeLaunchOrigin     `json:"launch_origin,omitempty"`
 	ExecutionRunID  string                 `json:"execution_run_id"`
 	CanonicalTaskID string                 `json:"canonical_task_id"`
 	RunID           string                 `json:"run_id"`
@@ -49,7 +50,7 @@ func saveAgentRecord(root, session string, a *activeTmuxAgent) error {
 	if a.paneID == "" {
 		return nil
 	}
-	record := agentRecord{ExecutionRunID: a.executionRunID, CanonicalTaskID: a.canonicalTaskID, RunID: a.runID, Project: tmux.ProjectHash(root), Session: session, ID: a.id, Role: a.role, TaskID: a.taskID, Provider: a.provider, Label: a.label, Window: a.window, Pane: a.paneID, Supervisor: a.supervisor, Outcome: a.state}
+	record := agentRecord{LaunchOrigin: a.launchOrigin, ExecutionRunID: a.executionRunID, CanonicalTaskID: a.canonicalTaskID, RunID: a.runID, Project: tmux.ProjectHash(root), Session: session, ID: a.id, Role: a.role, TaskID: a.taskID, Provider: a.provider, Label: a.label, Window: a.window, Pane: a.paneID, Supervisor: a.supervisor, Outcome: a.state}
 	data, err := json.Marshal(record)
 	if err != nil {
 		return err
@@ -91,10 +92,17 @@ func (w *Workspace) stopAgent(a *activeTmuxAgent) error {
 }
 func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent, root, outcome string) error {
 	a.cleanupMu.Lock()
-	defer a.cleanupMu.Unlock()
 	if a.cleaned {
+		a.cleanupMu.Unlock()
 		return nil
 	}
+	if a.cleaning {
+		a.cleanupMu.Unlock()
+		return fmt.Errorf("cleanup for %s is already in flight", a.id)
+	}
+	a.cleaning = true
+	a.cleanupMu.Unlock()
+	defer func() { a.cleanupMu.Lock(); defer a.cleanupMu.Unlock(); a.cleaning = false }()
 	w.tmuxMu.Lock()
 	pane, id := a.paneID, a.id
 	w.tmuxMu.Unlock()
@@ -110,8 +118,9 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 	}
 	w.tmuxMu.Lock()
 	a.state = outcome
-	err = saveAgentRecord(root, w.tmuxSession, a)
+	snapshot, session := copyAgentLocked(a), w.tmuxSession
 	w.tmuxMu.Unlock()
+	err = saveAgentRecord(root, session, snapshot)
 	if err != nil {
 		return fmt.Errorf("record stop/completion for %s: %w", id, err)
 	}
@@ -127,7 +136,9 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 	if err = tmux.KillPane(ctx, pane); err != nil {
 		return err
 	}
+	a.cleanupMu.Lock()
 	a.cleaned = true
+	a.cleanupMu.Unlock()
 	w.tmuxMu.Lock()
 	delete(w.tmuxActiveWins, id)
 	w.tmuxMu.Unlock()

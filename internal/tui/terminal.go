@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"syscall"
 	"unicode/utf8"
 
+	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
 
@@ -91,6 +93,7 @@ type Terminal struct {
 	isTerm     bool
 	oldState   *term.State
 	resizeChan chan struct{}
+	readErr    error
 	readBuf    []byte
 	signals    chan os.Signal
 	signalDone chan struct{}
@@ -278,20 +281,74 @@ func (t *Terminal) Size() (int, int) {
 }
 
 // ReadKey reads and parses the next KeyEvent from input, buffering any unconsumed bytes.
-func (t *Terminal) ReadKey() (KeyEvent, error) {
+func (t *Terminal) ReadKey() (KeyEvent, error) { return t.ReadKeyContext(context.Background()) }
+
+// ReadKeyContext polls file input at a bounded idle rate so cancellation can
+// release the reader without closing the operator's shared stdin descriptor.
+func (t *Terminal) ReadKeyContext(ctx context.Context) (KeyEvent, error) {
+	empty := 0
+	pasteScan := len("\x1b[200~")
 	for {
+		if err := ctx.Err(); err != nil {
+			return KeyEvent{}, err
+		}
 		if len(t.readBuf) > 0 {
-			evt, consumed := ParseNextKey(t.readBuf)
+			// Search only newly received paste bytes, including the terminator boundary.
+			incompletePaste := false
+			if bytes.HasPrefix(t.readBuf, []byte("\x1b[200~")) {
+				if pasteScan > len(t.readBuf) {
+					pasteScan = len("\x1b[200~")
+				}
+				incompletePaste = bytes.Index(t.readBuf[pasteScan:], []byte("\x1b[201~")) < 0
+				if incompletePaste {
+					pasteScan = len(t.readBuf) - len("\x1b[201~") + 1
+					if pasteScan < len("\x1b[200~") {
+						pasteScan = len("\x1b[200~")
+					}
+				}
+			}
+			var evt KeyEvent
+			consumed := 0
+			if !incompletePaste {
+				evt, consumed = ParseNextKey(t.readBuf)
+			}
 			if consumed > 0 {
 				t.readBuf = t.readBuf[consumed:]
 				return evt, nil
 			}
 		}
 
-		buf := make([]byte, 256)
+		if t.readErr != nil {
+			return KeyEvent{}, t.readErr
+		}
+		buf := make([]byte, 4096)
+		if t.inFd >= 0 && ctx.Done() != nil {
+			fds := []unix.PollFd{{Fd: int32(t.inFd), Events: unix.POLLIN}}
+			for {
+				if err := ctx.Err(); err != nil {
+					return KeyEvent{}, err
+				}
+				n, err := unix.Poll(fds, 100)
+				if err == unix.EINTR {
+					continue
+				}
+				if err != nil {
+					return KeyEvent{}, err
+				}
+				if n > 0 {
+					break
+				}
+			}
+		}
 		n, err := t.in.Read(buf)
-		if err != nil {
-			return KeyEvent{}, err
+		t.readErr = err
+		if n == 0 && err == nil {
+			empty++
+			if empty >= 100 {
+				return KeyEvent{}, io.ErrNoProgress
+			}
+		} else {
+			empty = 0
 		}
 		t.readBuf = append(t.readBuf, buf[:n]...)
 	}
@@ -473,6 +530,9 @@ func ParseNextKey(b []byte) (KeyEvent, int) {
 	}
 
 	// 4. Unicode Runes
+	if !utf8.FullRune(b) {
+		return KeyEvent{Type: KeyUnknown}, 0
+	}
 	r, size := utf8.DecodeRune(b)
 	if r != utf8.RuneError {
 		return KeyEvent{Type: KeyRune, Rune: r, Raw: b[:size]}, size

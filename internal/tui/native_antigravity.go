@@ -104,8 +104,9 @@ func (w *nativeHistoryWatch) primeAntigravity() error {
 	}
 	for _, conversation := range conversations {
 		w.seen[conversation.id] = conversation.stamp
+		w.indexDirty = true
 	}
-	return w.saveIndex()
+	return w.saveIndexIfChanged()
 }
 
 func (w *nativeHistoryWatch) syncAntigravity() error {
@@ -125,6 +126,7 @@ func (w *nativeHistoryWatch) syncAntigravity() error {
 		// baseline instead: it changed while this project's session ran.
 		if uris, known := workspaces[conversation.id]; known && len(uris) > 0 && !w.antigravityWorkspaceMatches(uris) {
 			w.seen[conversation.id] = conversation.stamp
+			w.indexDirty = true
 			continue
 		}
 		steps, err := readAntigravitySteps(conversation.path)
@@ -150,12 +152,13 @@ func (w *nativeHistoryWatch) syncAntigravity() error {
 		}
 		if !failed {
 			w.seen[conversation.id] = conversation.stamp
+			w.indexDirty = true
 		}
 		if len(failures) >= 3 {
 			break
 		}
 	}
-	return errors.Join(append(failures, w.saveIndex())...)
+	return errors.Join(append(failures, w.saveIndexIfChanged())...)
 }
 
 // antigravityWorkspaces reads which workspace each conversation ran in. A

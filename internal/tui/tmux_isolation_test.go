@@ -20,7 +20,7 @@ func TestProjectsKeepRootBindingsAndTargetOwnWindows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.runNativeAgentInTmux(ctx, "test", "Test", w.workDir, "/bin/sh", []string{"-c", "read answer"}, nil, nil, nil, nil, nil, nil, nil)
+	_, err = w.runNativeAgentInTmux(ctx, nativeLaunchOperator, "test", "Test", w.workDir, "/bin/sh", []string{"-c", "read answer"}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestProjectsKeepRootBindingsAndTargetOwnWindows(t *testing.T) {
 		t.Fatal(err)
 	}
 	second.tmuxMarshalWin = "second-marshal"
-	_, err = second.runNativeAgentInTmux(ctx, "test", "Test", second.workDir, "/bin/sh", []string{"-c", "read answer"}, nil, nil, nil, nil, nil, nil, nil)
+	_, err = second.runNativeAgentInTmux(ctx, nativeLaunchOperator, "test", "Test", second.workDir, "/bin/sh", []string{"-c", "read answer"}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,13 +100,11 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 	panes, _ := tmux.ListPanes(ctx, w.tmuxSession)
 	w.tmuxMarshalPaneID = panes[0].PaneID
 	// Match InitTmux: the control centre also owns the project key table.
-	w.tmuxMu.Lock()
-	bindErr := w.bindWorkspaceKeysLocked(ctx, w.tmuxMarshalPaneID, w.workDir)
-	w.tmuxMu.Unlock()
+	bindErr := w.bindWorkspaceKeys(ctx, w.tmuxMarshalPaneID, w.workDir)
 	if bindErr != nil {
 		t.Fatal(bindErr)
 	}
-	_, err := w.runNativeAgentInTmux(ctx, "codex", "Codex", w.workDir, "/bin/sh", []string{"-c", "echo READY; while read line; do echo received:$line; done"}, nil, nil, nil, nil, nil, nil, nil)
+	_, err := w.runNativeAgentInTmux(ctx, nativeLaunchOperator, "codex", "Codex", w.workDir, "/bin/sh", []string{"-c", "echo READY; while read line; do echo received:$line; done"}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

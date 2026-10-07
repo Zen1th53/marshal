@@ -78,6 +78,8 @@ func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, 
 }
 
 func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string, marshalBrief ...string) (result string, resultErr error) {
+	ctx, cancel := context.WithTimeout(ctx, 24*time.Hour)
+	defer cancel()
 	args = app.NormalizeProviderArgs(provider, args)
 
 	label, homeEnv, homeDir, historyDir := "Codex", "CODEX_HOME", ".codex", "sessions"
@@ -467,7 +469,9 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 				return prevConsume(tr)
 			}
 		}
-		return w.runNativeAgentInTmux(ctx, provider, label, root, binary, args, briefingEnv, dir, watch, peers, chStream, view, briefingNotes, isChat)
+		// This entry point serves operator commands, startup sessions and conversation selection.
+		// Runtime-dispatched workers instead enter tmuxTaskDriver.Launch.
+		return w.runNativeAgentInTmux(ctx, nativeLaunchOperator, provider, label, root, binary, args, briefingEnv, dir, watch, peers, chStream, view, briefingNotes, isChat)
 	}
 
 	if w.navView != nil {
@@ -508,6 +512,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	publishStatus()
 
 	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd.WaitDelay = 100 * time.Millisecond
 	cmd.Dir = root
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.Env = append(os.Environ(), briefingEnv...)
@@ -642,6 +647,8 @@ type nativeHistoryWatch struct {
 	captureTools   bool
 	dir, root      string
 	indexPath      string
+	indexDirty     bool
+	indexSaved     bool
 	seen           map[string]string
 	consume        func(importer.SessionTranscript) error
 	observeSession func(importer.SessionTranscript) error
@@ -703,9 +710,10 @@ func (w *nativeHistoryWatch) sync() error {
 			return nil
 		}
 		w.seen[path] = stamp
+		w.indexDirty = true
 		return nil
 	})
-	return errors.Join(append(failures, walkErr, w.saveIndex())...)
+	return errors.Join(append(failures, walkErr, w.saveIndexIfChanged())...)
 }
 
 func (w *nativeHistoryWatch) loadIndex() error {
@@ -727,6 +735,7 @@ func (w *nativeHistoryWatch) loadIndex() error {
 	if seen != nil {
 		w.seen = seen
 	}
+	w.indexSaved = true
 	return nil
 }
 
@@ -754,7 +763,12 @@ func (w *nativeHistoryWatch) saveIndex() error {
 	if closeErr != nil {
 		return closeErr
 	}
-	return os.Rename(f.Name(), w.indexPath)
+	if err := os.Rename(f.Name(), w.indexPath); err != nil {
+		return err
+	}
+	w.indexDirty = false
+	w.indexSaved = true
+	return nil
 }
 
 func (w *nativeHistoryWatch) syncFile(path string) error {
@@ -867,4 +881,11 @@ func newPeerHistoryWatch(peer, root string) (*nativeHistoryWatch, error) {
 	watch := newNativeHistoryWatch(dir, root)
 	watch.claude = peer == "claude"
 	return watch, nil
+}
+
+func (w *nativeHistoryWatch) saveIndexIfChanged() error {
+	if w.indexSaved && !w.indexDirty {
+		return nil
+	}
+	return w.saveIndex()
 }

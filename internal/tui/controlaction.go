@@ -269,7 +269,10 @@ func (p ConfirmPhase) String() string {
 // target, prove the result" is a single object with one owner, rather than
 // state scattered across a render loop where a stray key can advance it.
 type Confirmation struct {
-	mu sync.Mutex
+	mu         sync.Mutex
+	background func(func())
+	running    bool
+	generation uint64
 
 	phase   ConfirmPhase
 	binding Binding
@@ -351,9 +354,9 @@ func (c *Confirmation) Acknowledged() bool {
 func (c *Confirmation) Begin(ctx context.Context, b Binding, req ActionRequest) error {
 	req.Inputs = cloneInputs(req.Inputs)
 	c.mu.Lock()
-	if c.phase == PhaseSubmitting {
+	if c.phase == PhaseSubmitting || c.running {
 		c.mu.Unlock()
-		return fmt.Errorf("tui: a mutation is already in flight")
+		return fmt.Errorf("tui: an operation is already in flight")
 	}
 	c.mu.Unlock()
 
@@ -380,8 +383,22 @@ func (c *Confirmation) Begin(ctx context.Context, b Binding, req ActionRequest) 
 	c.reset()
 	c.binding, c.request = b, req
 	c.phase = PhasePreparing
+	generation, background := c.generation, c.background
+	if background != nil {
+		c.running = true
+	}
 	c.mu.Unlock()
+	if background != nil {
+		background(func() { _ = c.prepare(ctx, b, req, generation) })
+		return nil
+	}
+	return c.prepare(ctx, b, req, generation)
+}
 
+func (c *Confirmation) prepare(ctx context.Context, b Binding, req ActionRequest, generation uint64) error {
+	defer func() { c.mu.Lock(); defer c.mu.Unlock(); c.running = false }()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	var target Target
 	var err error
 	if b.PrepareRequest != nil {
@@ -393,6 +410,9 @@ func (c *Confirmation) Begin(ctx context.Context, b Binding, req ActionRequest) 
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.generation != generation || c.phase != PhasePreparing {
+		return nil
+	}
 	if err != nil {
 		c.phase = PhaseDone
 		c.failure = err
@@ -447,6 +467,7 @@ func cloneInputs(in map[string]string) map[string]string {
 }
 
 func (c *Confirmation) reset() {
+	c.generation++
 	c.phase = PhaseIdle
 	c.binding = Binding{}
 	c.request = ActionRequest{}
@@ -540,8 +561,18 @@ func (c *Confirmation) Submit(ctx context.Context) (Outcome, error) {
 	binding, request, prepared := c.binding, c.request, c.prepared
 	c.submitted = true
 	c.phase = PhaseSubmitting
+	background := c.background
 	c.mu.Unlock()
+	if background != nil {
+		background(func() { _, _ = c.submit(ctx, binding, request, prepared) })
+		return Outcome{Detail: "submission in flight"}, nil
+	}
+	return c.submit(ctx, binding, request, prepared)
+}
 
+func (c *Confirmation) submit(ctx context.Context, binding Binding, request ActionRequest, prepared Target) (Outcome, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 	// Re-read the target immediately before submitting. An approval binds an
 	// exact revision and digest; if either moved while the confirmation was on
 	// screen, the thing the user agreed to is not the thing that would run.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
 )
@@ -78,7 +79,9 @@ func (dv *DiffViewer) Toggle() error {
 
 // Refresh re-runs git diff to update files and hunks.
 func (dv *DiffViewer) Refresh() error {
-	inventory, err := app.LoadDiffInventory(context.Background(), dv.workDir, dv.scope)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	inventory, err := app.LoadDiffInventory(ctx, dv.workDir, dv.scope)
 	if err != nil {
 		dv.active = false
 		dv.files = nil

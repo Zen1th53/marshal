@@ -66,15 +66,6 @@ func FindBinary() (string, error) {
 	}
 	mu.RUnlock()
 
-	mu.Lock()
-	defer mu.Unlock()
-	if forceMissing {
-		return "", ErrTmuxMissing
-	}
-	if cachedPath != "" {
-		return cachedPath, nil
-	}
-
 	p, err := exec.LookPath("tmux")
 	if err != nil {
 		return "", ErrTmuxMissing
@@ -91,15 +82,24 @@ func FindBinary() (string, error) {
 	if err != nil {
 		return p, nil
 	}
-	cachedPath = abs
-	return abs, nil
+	mu.Lock()
+	defer mu.Unlock()
+	if forceMissing {
+		return "", ErrTmuxMissing
+	}
+	if cachedPath == "" {
+		cachedPath = abs
+	}
+	return cachedPath, nil
 }
 
 // checkVersion checks both executables and attached servers before using them.
 func checkVersion(binary string, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, binary, args...).Output()
+	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd.WaitDelay = 100 * time.Millisecond
+	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("cannot determine tmux version: %w", err)
 	}
@@ -328,11 +328,23 @@ func EscapeTmuxArgs(args []string) []string {
 
 // RunCommand executes a tmux command using the resolved binary path and argv list.
 func RunCommand(ctx context.Context, args ...string) ([]byte, error) {
+	timeout := 2 * time.Second
+	if len(args) > 0 && args[0] == "display-popup" {
+		// This client owns an operator review surface until it closes. Honor
+		// its explicit review deadline instead of the short query deadline.
+		timeout = 30 * time.Second
+		if deadline, ok := ctx.Deadline(); ok {
+			timeout = time.Until(deadline)
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	bin, err := FindBinary()
 	if err != nil {
 		return nil, err
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.WaitDelay = 100 * time.Millisecond
 	if os.Getenv("TMUX_TMPDIR") == "" {
 		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("marshal-tmux-%d", os.Getuid()))
 		_ = os.MkdirAll(tmpDir, 0o700)
@@ -380,6 +392,8 @@ func resolvePane(ctx context.Context, target string) (string, error) {
 
 // HasSession reports whether a tmux session exists.
 func HasSession(ctx context.Context, session string) bool {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
 	if err := requireTarget(session); err != nil {
 		return false
 	}
@@ -388,6 +402,7 @@ func HasSession(ctx context.Context, session string) bool {
 		return false
 	}
 	cmd := exec.CommandContext(ctx, bin, "has-session", "-t", session)
+	cmd.WaitDelay = 100 * time.Millisecond
 	if os.Getenv("TMUX_TMPDIR") == "" {
 		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("marshal-tmux-%d", os.Getuid()))
 		_ = os.MkdirAll(tmpDir, 0o700)
@@ -398,6 +413,8 @@ func HasSession(ctx context.Context, session string) bool {
 
 // NewSession creates a new detached tmux session.
 func NewSession(ctx context.Context, session, workDir, windowName string, command []string) error {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
 	bin, err := FindBinary()
 	if err != nil {
 		return err
@@ -407,6 +424,7 @@ func NewSession(ctx context.Context, session, workDir, windowName string, comman
 		args = append(args, EscapeTmuxArg(a))
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.WaitDelay = 100 * time.Millisecond
 	if os.Getenv("TMUX_TMPDIR") == "" {
 		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("marshal-tmux-%d", os.Getuid()))
 		_ = os.MkdirAll(tmpDir, 0o700)
@@ -420,6 +438,12 @@ func NewSession(ctx context.Context, session, workDir, windowName string, comman
 
 // AttachSession attaches to an existing tmux session using the provided standard streams.
 func AttachSession(session string, stdin io.Reader, stdout, stderr io.Writer) error {
+	return AttachSessionContext(context.Background(), session, stdin, stdout, stderr)
+}
+
+func AttachSessionContext(ctx context.Context, session string, stdin io.Reader, stdout, stderr io.Writer) error {
+	ctx, cancel := context.WithTimeout(ctx, 24*time.Hour)
+	defer cancel()
 	if err := requireTarget(session); err != nil {
 		return err
 	}
@@ -427,7 +451,8 @@ func AttachSession(session string, stdin io.Reader, stdout, stderr io.Writer) er
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(bin, "attach-session", "-t", session)
+	cmd := exec.CommandContext(ctx, bin, "attach-session", "-t", session)
+	cmd.WaitDelay = 100 * time.Millisecond
 	if os.Getenv("TMUX_TMPDIR") == "" {
 		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("marshal-tmux-%d", os.Getuid()))
 		_ = os.MkdirAll(tmpDir, 0o700)

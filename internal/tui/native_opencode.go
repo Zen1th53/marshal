@@ -48,6 +48,7 @@ func newOpenCodeHistoryWatch(binary, root string) *nativeHistoryWatch {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, binary, args...)
+		cmd.WaitDelay = 100 * time.Millisecond
 		cmd.Dir = root
 		out, err := cmd.Output()
 		if err != nil {
@@ -113,12 +114,13 @@ func (w *nativeHistoryWatch) syncOpenCode() error {
 		}
 		if !sessionFailed {
 			w.seen[session.ID] = stamp
+			w.indexDirty = true
 		}
 		if len(failures) >= 3 {
 			break
 		}
 	}
-	return errors.Join(append(failures, w.saveIndex())...)
+	return errors.Join(append(failures, w.saveIndexIfChanged())...)
 }
 
 func (w *nativeHistoryWatch) primeOpenCode() error {
@@ -136,9 +138,10 @@ func (w *nativeHistoryWatch) primeOpenCode() error {
 		}
 		if session.ID != "" && filepath.Clean(cwd) == w.root {
 			w.seen[session.ID] = strconv.FormatInt(session.Updated, 10)
+			w.indexDirty = true
 		}
 	}
-	return w.saveIndex()
+	return w.saveIndexIfChanged()
 }
 
 func (w *nativeHistoryWatch) listOpenCodeSessions() ([]openCodeSession, error) {

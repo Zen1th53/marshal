@@ -87,6 +87,11 @@ You can open any agent's own interface from inside MARSHAL:
 /agy
 ```
 
+Native sessions you open with F7/F8/F9/F12, `/codex`, `/claude`, `/opencode`,
+`/agy`, or `/<agent> new|continue` accept keyboard input immediately. The Marshal
+chat also accepts input. Workers launched by the Marshal or a governed or
+automated run open view-only; use `/takeover` to type into a worker pane.
+
 Leave the agent the usual way to come back to MARSHAL. When used like this,
 the agent works exactly as it does on its own, with its own settings.
 These native workers are trusted and run with your user account's rights.

@@ -45,6 +45,7 @@ func runGovernedCodexCmd(ctx context.Context, args []string) (result string, res
 	defer cancel()
 
 	cmd := exec.CommandContext(cmdCtx, binary, args...)
+	cmd.WaitDelay = 100 * time.Millisecond
 	cmd.Env = append(os.Environ(), "CODEX_HOME="+govHome)
 	out, err := cmd.CombinedOutput()
 	outStr := strings.TrimSpace(string(out))

@@ -70,8 +70,10 @@ func (h *CommandHandler) handleEgress(ctx context.Context, args []string) (strin
 // deliverEgressAlert renders a refused request in the TUI and in the Marshal's
 // chat inbox. Native chat delivery is a pull, as with the shared channel.
 func (w *Workspace) deliverEgressAlert(alert app.EgressAlert) error {
-	w.egressMu.Lock()
-	defer w.egressMu.Unlock()
+	if err := w.egressGate.acquire(); err != nil {
+		return err
+	}
+	defer w.egressGate.release()
 	if alert.Kind == "" {
 		alert.Kind = "egress refused"
 	}
@@ -137,7 +139,7 @@ func (w *Workspace) deliverEgressAlert(alert app.EgressAlert) error {
 	w.mu.Lock()
 	w.state.LastOutput = text
 	w.mu.Unlock()
-	w.renderFullView()
+	w.requestRepaint()
 	return nil
 }
 

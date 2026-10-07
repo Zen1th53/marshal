@@ -28,11 +28,14 @@ const viewMaxBytes = 64 << 10
 
 // inboxView is one agent's rendered view of the channel.
 type inboxView struct {
-	mu       sync.Mutex
-	reader   string
-	path     string
-	written  int
-	rendered int
+	mu                                     sync.Mutex
+	io                                     ioGate
+	reader                                 string
+	path                                   string
+	written                                int
+	rendered                               int
+	cachedStream, cachedPolicy, cachedView os.FileInfo
+	refreshCached                          bool
 }
 
 func inboxPath(root, provider string) string {
@@ -94,8 +97,10 @@ to know what the others have done.
 // deliver renders the entries this reader is allowed to see, and reports how
 // many were shown.
 func (v *inboxView) deliver(entries []streamEntry, cfg channelConfig) (int, error) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	if err := v.io.acquire(); err != nil {
+		return 0, err
+	}
+	defer v.io.release()
 
 	text, shown := renderInboxEntries(v.reader, entries, cfg)
 	if shown == 0 {
@@ -104,7 +109,9 @@ func (v *inboxView) deliver(entries []streamEntry, cfg channelConfig) (int, erro
 	if err := v.write(text); err != nil {
 		return 0, err
 	}
+	v.mu.Lock()
 	v.rendered += shown
+	v.mu.Unlock()
 	// Oldest entries give way to newest rather than the file sealing itself: a
 	// view that stopped at the first busy hour would hide exactly the recent
 	// work a returning agent needs.
@@ -120,7 +127,9 @@ func (v *inboxView) write(text string) error {
 	if _, err := f.WriteString(text); err != nil {
 		return err
 	}
+	v.mu.Lock()
 	v.written += len(text)
+	v.mu.Unlock()
 	return nil
 }
 
@@ -130,7 +139,10 @@ func (v *inboxView) trim() error {
 		return err
 	}
 	private := containsMarshalProtocol(string(data))
-	if !private && v.written <= viewMaxBytes {
+	v.mu.Lock()
+	written := v.written
+	v.mu.Unlock()
+	if !private && written <= viewMaxBytes {
 		return nil
 	}
 	header, rest, found := strings.Cut(string(data), "\n---\n")
@@ -162,7 +174,9 @@ func (v *inboxView) trim() error {
 	if err := os.WriteFile(v.path, []byte(rebuilt), 0600); err != nil {
 		return err
 	}
+	v.mu.Lock()
 	v.written = len(rebuilt)
+	v.mu.Unlock()
 	return nil
 }
 
@@ -236,7 +250,7 @@ func (w *nativeHistoryWatch) indexEmpty() bool {
 	return len(w.seen) == 0
 }
 
-var inboxRenderMu sync.Mutex
+var inboxRenderGate ioGate
 
 func renderInboxEntries(reader string, entries []streamEntry, cfg channelConfig) (string, int) {
 	var b strings.Builder
@@ -260,8 +274,10 @@ func renderInboxEntries(reader string, entries []streamEntry, cfg channelConfig)
 }
 
 func (v *inboxView) replace(entries []streamEntry, cfg channelConfig) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	if err := v.io.acquire(); err != nil {
+		return err
+	}
+	defer v.io.release()
 	text, count := renderInboxEntries(v.reader, entries, cfg)
 	text = viewHeader(v.reader) + text
 	tmp := v.path + ".tmp"
@@ -271,20 +287,56 @@ func (v *inboxView) replace(entries []streamEntry, cfg channelConfig) error {
 	if err := os.Rename(tmp, v.path); err != nil {
 		return err
 	}
+	v.mu.Lock()
 	v.written = len(text)
 	v.rendered = count
+	v.mu.Unlock()
 	return v.trim()
 }
 
 // Rebuild from the current policy, even when no new entry arrived. Narrowing
 // a reader's visibility removes earlier entries from its on-disk view too.
 func refreshInboxView(root string, v *inboxView, s *stream) error {
-	inboxRenderMu.Lock()
-	defer inboxRenderMu.Unlock()
+	streamInfo, streamErr := os.Stat(s.path)
+	policyInfo, policyErr := os.Stat(livePeerPath(root))
+	viewInfo, viewErr := os.Stat(v.path)
+	for _, err := range []error{streamErr, policyErr, viewErr} {
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	v.mu.Lock()
+	unchanged := v.refreshCached && sameInboxFile(streamInfo, v.cachedStream) && sameInboxFile(policyInfo, v.cachedPolicy) && sameInboxFile(viewInfo, v.cachedView)
+	v.mu.Unlock()
+	if unchanged {
+		return nil
+	}
+	if err := inboxRenderGate.acquire(); err != nil {
+		return err
+	}
+	defer inboxRenderGate.release()
 	cfg, _ := loadChannelConfig(root)
 	entries, err := s.since(-1)
 	if err != nil {
 		return err
 	}
-	return v.replace(entries, cfg)
+	if err := v.replace(entries, cfg); err != nil {
+		return err
+	}
+	after, err := os.Stat(v.path)
+	if err != nil {
+		return err
+	}
+	v.mu.Lock()
+	v.cachedStream, v.cachedPolicy, v.cachedView = streamInfo, policyInfo, after
+	v.refreshCached = true
+	v.mu.Unlock()
+	return nil
+}
+
+func sameInboxFile(a, b os.FileInfo) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return os.SameFile(a, b) && a.Size() == b.Size() && a.ModTime().Equal(b.ModTime()) && a.Mode() == b.Mode()
 }

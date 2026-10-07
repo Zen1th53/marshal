@@ -48,6 +48,7 @@ func runGovernedClaudeCmd(ctx context.Context, args []string) (result string, re
 	defer cancel()
 
 	cmd := exec.CommandContext(cmdCtx, binary, args...)
+	cmd.WaitDelay = 100 * time.Millisecond
 	cmd.Env = append(os.Environ(), "CLAUDE_CONFIG_DIR="+govHome)
 	out, err := cmd.CombinedOutput()
 	outStr := strings.TrimSpace(string(out))

@@ -256,7 +256,12 @@ func outputSection(s UIState, th *Theme, cols int) []string {
 	}
 	out := []string{PadCell(" "+label, cols)}
 
-	for _, line := range strings.Split(hideMarshalProtocol(s.LastOutput), "\n") {
+	text := activityTail(hideMarshalProtocol(s.LastOutput))
+	lines := strings.Split(text, "\n")
+	if len(lines) > maxActivityEvents {
+		lines = lines[len(lines)-maxActivityEvents:]
+	}
+	for _, line := range lines {
 		out = append(out, PadCell("   "+line, cols))
 	}
 	return out
@@ -322,4 +327,17 @@ func approvalsSection(s UIState, th *Theme, cols int) []string {
 		out = append(out, PadCell("     "+th.Colorize(th.Bold, "/approve "+a.ID)+" · "+th.Colorize(th.Danger, "/reject "+a.ID)+" · "+th.Colorize(th.Muted, "/inspect "+a.ID), cols))
 	}
 	return out
+}
+
+// Frame work and live activity retention stay bounded even after hours of errors.
+func activityTail(text string) string {
+	const limit = 64 << 10
+	if len(text) <= limit {
+		return text
+	}
+	text = text[len(text)-limit:]
+	if newline := strings.IndexByte(text, '\n'); newline >= 0 {
+		return text[newline+1:]
+	}
+	return text
 }
