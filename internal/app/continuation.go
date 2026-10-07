@@ -35,7 +35,7 @@ func (r *Runtime) CommandPermission(ctx context.Context, req permission.Request,
 	if req.Kind == "read" && !filepath.IsAbs(req.Object) {
 		return model.ErrInvalid
 	}
-	if req.Kind != "read" && req.Kind != "memory" && req.Kind != "network" && req.Kind != "credential" {
+	if req.Kind != "read" && req.Kind != "memory" && req.Kind != "network" && req.Kind != "credential" && req.Kind != "marshal-command" {
 		return model.ErrInvalid
 	}
 	if req.Kind == "credential" {
@@ -63,7 +63,7 @@ func (r *Runtime) CommandPermission(ctx context.Context, req permission.Request,
 	if err != nil {
 		return err
 	}
-	if err = r.store.AppendEvent(ctx, nil, model.Event{ID: id, Type: "PERMISSION_DECIDED", ProjectID: r.ProjectID(), Timestamp: time.Now().UTC(), Data: map[string]any{"kind": req.Kind, "object": req.Object, "scope": req.Scope, "requester": req.Who, "reason": req.Reason, "allow": allow, "actor": p.ID(), "source": source, "runtime_instance": r.runtimeInstanceID, "run_id": req.RunID, "task_id": req.TaskID}}); err != nil {
+	if err = r.store.AppendEvent(ctx, nil, model.Event{ID: id, Type: "PERMISSION_DECIDED", ProjectID: r.ProjectID(), Timestamp: time.Now().UTC(), Data: map[string]any{"kind": req.Kind, "object": req.Object, "scope": req.Scope, "requester": req.Who, "reason": req.Reason, "allow": allow, "actor": p.ID(), "source": source, "runtime_instance": r.runtimeInstanceID, "run_id": req.RunID, "task_id": req.TaskID, "continuation_provider": req.ContinuationProvider}}); err != nil {
 		return err
 	}
 	if req.Kind == "credential" && !allow {

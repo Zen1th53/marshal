@@ -15,12 +15,16 @@ import (
 )
 
 type permissionState struct {
-	queue         permission.Queue
-	mu            sync.Mutex
-	ready         bool
-	running       bool
-	outstanding   map[string]bool
-	continuations map[string]string
+	runProposals        map[string]marshalProposal
+	queue               permission.Queue
+	mu                  sync.Mutex
+	ready               bool
+	running             bool
+	outstanding         map[string]bool
+	continuations       map[string]string
+	proposalsSeen       map[string]bool
+	planApprovalPending bool
+	planApprovalRunID   string
 }
 
 func (w *Workspace) queuePermission(req permission.Request) {
@@ -171,7 +175,8 @@ func partitionPermissionBatch(batch []permission.Request) (popup, review []permi
 	return
 }
 
-func (w *Workspace) decidePermission(ctx context.Context, req permission.Request, allow bool, source string) error {
+func (w *Workspace) decidePermission(ctx context.Context, req permission.Request, allow bool, source string) (err error) {
+	defer func() { w.marshalProposalDecisionNotice(req, allow, err) }()
 	control := w.controlSource()
 	if control == nil {
 		return errNoRuntime
@@ -188,6 +193,9 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 	if err := a.runtime.CommandPermission(ctx, req, allow, source); err != nil {
 		return err
 	}
+	if req.Kind == "marshal-command" && allow {
+		return w.applyMarshalProposal(ctx, req)
+	}
 	if req.Kind == "network" && allow {
 		return a.runtime.CommandEgress(ctx, req.RunID, "allow", req.Object)
 	}
@@ -195,6 +203,9 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 		folder := filepath.Clean(req.Object)
 		w.permissions.mu.Lock()
 		provider := w.permissions.continuations[folder]
+		if req.ContinuationProvider != "" {
+			provider = req.ContinuationProvider
+		}
 		delete(w.permissions.continuations, folder)
 		w.permissions.mu.Unlock()
 		if allow && provider != "" {
@@ -265,7 +276,7 @@ func (w *Workspace) continueEarlierWork(ctx context.Context, provider, folder st
 	if dropped {
 		b.WriteString("Secrets were dropped.\n")
 	}
-	b.WriteString("Summarise completed work, unfinished work, decisions and conventions from the supplied project-scoped data. Review candidates with /memory review; /memory allow <id> writes one approved entry, /memory deny <id> denies it.\n")
+	b.WriteString("Summarise completed work, unfinished work, decisions and conventions from the supplied project-scoped data. Use the candidate IDs and provenance supplied above; propose each candidate with MARSHAL_PROPOSAL {\"action\":\"memory\",\"id\":\"candidate-id\"}. MARSHAL will show a popup; press A to apply.\n")
 	view, err := openInboxView(w.runtime.ProjectRoot(), "marshal", false)
 	if err != nil {
 		return "", err

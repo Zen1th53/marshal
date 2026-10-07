@@ -291,6 +291,10 @@ func (s *MarshalService) Approve(ctx context.Context, runID string) (marshal.Run
 	if err != nil {
 		return run, err
 	}
+	// A retry is a read of the existing approval, not another authorization.
+	if run.State != marshal.Drafting && run.ApprovalScopeDigest != "" {
+		return run, nil
+	}
 	if run.State != marshal.Drafting || s.ApprovalActor == nil {
 		return run, errors.New("run is not awaiting plan approval")
 	}

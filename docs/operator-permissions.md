@@ -29,9 +29,11 @@ resolved folder at decision time; replacing a symlink does not grant its new tar
 
 After choosing a language the compiled Marshal protocol asks whether to
 continue previous work, with a recommendation, and clarifies the agents and
-work. Use `/continue claude <exact absolute provider folder>` or `/continue
-codex <exact absolute provider folder>` in MARSHAL. Without a grant this queues
-a read request; repeat the command after allowing it. An exact transcript file
+work. The Marshal emits a structured continuation proposal with the exact
+provider and folder; MARSHAL opens the permission popup. After uppercase A,
+MARSHAL grants the read and automatically delivers project-scoped earlier work
+to the Marshal inbox. Manual `/continue` commands remain available in the
+MARSHAL composer; no command needs to be typed into the provider chat. An exact transcript file
 can also be supplied to narrow the read. Claude normally stores this project's
 sessions and memory in `~/.claude/projects/<encoded-project-path>`; Codex uses
 `~/.codex/sessions/<year>/<month>/<day>`. Environment overrides are respected.
@@ -77,3 +79,28 @@ stops workers while preserving the Marshal chat.
 Restarted runtimes show old network refusals as expired evidence. Only pending
 requests of live runs may open permission review; completed or stopped runs
 cannot receive a new grant.
+
+## Protocol proposals
+
+The bound native Marshal history consumer recognises standalone visible final
+assistant lines beginning `MARSHAL_PROPOSAL ` followed by a JSON object. The
+parser rejects duplicate, unknown or inappropriate fields, non-string values,
+control characters, trailing data, unknown actions and invalid setting values.
+Only allow-listed setting keys/enums and canonical decimal limits are accepted.
+Continuation folders must be exact absolute paths; memory IDs must name pending
+candidates. User messages, tool payloads and other conversations do not propose
+runtime actions. Repeated identical proposals are suppressed for this runtime's
+Marshal conversation, even after a decline.
+
+Settings and run actions use the existing command handler after uppercase A;
+reads and memory reuse the same permission decision path as their slash handlers.
+`PERMISSION_DECIDED` commits with the local authenticated actor before an action
+runs. Run actions additionally bind the stored plan version and state revision;
+changed state refuses the old action. Approval proposals wait for draft import.
+Outcomes are appended to `.marshal/inbox/marshal.md`, which the native Marshal
+reads during chat. As with existing inbox delivery, this does not inject terminal
+keystrokes or automatically start a provider turn.
+
+The model's briefing retains: “You cannot run /marshal commands, change settings
+or approve anything.” Its working-mode question emits the recommended setting
+proposal immediately and says “MARSHAL will show a popup; press A to apply”.

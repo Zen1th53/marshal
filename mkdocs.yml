@@ -10,6 +10,7 @@ exclude_docs: |
   !/index.md
   !/stylesheets/marshal.css
   !/public/how-it-works.md
+  !/public/protocol.md
   !/public/install.md
   !/public/first-project.md
   !/public/agents.md
@@ -74,6 +75,7 @@ nav:
   - Home: index.md
   - Get started:
       - How MARSHAL works: public/how-it-works.md
+      - Planning protocol: public/protocol.md
       - Install: public/install.md
       - Your first project: public/first-project.md
   - Everyday tasks:

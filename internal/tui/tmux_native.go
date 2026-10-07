@@ -847,16 +847,14 @@ func (w *Workspace) monitorAgent(
 						if agentCtx.Err() != nil {
 							return
 						}
-						// F3: The Marshal chat is never killed by the worker monitor.
-						// If it exits unexpectedly, it is restarted automatically and resumes
-						// the stored run / conversation.
-						if agentCtx.Err() == nil {
-							w.RecordActivity(fmt.Sprintf("%s exited unexpectedly; restarting and resuming conversation...", snapshot.label))
-							w.restartMarshalChat(agentCtx, agent, root)
-							w.updateTmuxStatusLine(context.Background())
-							continue
-						}
+						w.returnFromExitedAgent(agentCtx, snapshot)
+						w.RecordActivity("Marshal chat ended; restarting automatically and resuming the conversation. Use /marshal chat to reopen it.")
+						w.restartMarshalChat(agentCtx, agent, root)
+						w.updateTmuxStatusLine(context.Background())
+						continue
 					}
+
+					w.returnFromExitedAgent(agentCtx, snapshot)
 
 					state := "done"
 					if exitCode != 0 {
@@ -883,6 +881,24 @@ func (w *Workspace) monitorAgent(
 	}) {
 		close(agent.doneChan)
 	}
+}
+
+// Evaluate focus in tmux itself so navigation cannot race a query followed by
+// an unconditional select. A failed/missing target never steals focus.
+func (w *Workspace) returnFromExitedAgent(ctx context.Context, agent *activeTmuxAgent) {
+	if agent.role != "marshal-chat" && agent.launchOrigin != nativeLaunchOperator {
+		return
+	}
+	w.tmuxMu.Lock()
+	session, control := w.tmuxSession, w.tmuxMarshalWinID
+	if control == "" {
+		control = w.tmuxMarshalWin
+	}
+	w.tmuxMu.Unlock()
+	if session == "" || control == "" || agent.windowID == "" || agent.windowID == control {
+		return
+	}
+	_, _ = tmux.RunCommand(ctx, "if-shell", "-t", session+":"+agent.windowID, "-F", "#{window_active}", fmt.Sprintf("select-window -t %q", session+":"+control))
 }
 
 // RecordActivity records activity into workspace state and triggers a redraw if interactive.
@@ -1395,7 +1411,8 @@ func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, 
 				m.approvals = nil
 				m.mu.Unlock()
 				w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan drafted: %d tasks · read %s · /marshal approve to run it", len(run.Tasks), packDir)))
-				w.RecordActivity(fmt.Sprintf("Marshal plan drafted (%d tasks). Read the plan in %s, then use /marshal approve in MARSHAL to run it.", len(run.Tasks), packDir))
+				w.RecordActivity(fmt.Sprintf("Marshal plan drafted (%d tasks). Read the plan in %s before allowing its approval popup.", len(run.Tasks), packDir))
+				w.queueMarshalPlanApproval()
 				return
 			}
 		}
@@ -1679,6 +1696,13 @@ func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWat
 	watch.consume = func(tr importer.SessionTranscript) error {
 		if err := observe(tr); err != nil {
 			return err
+		}
+		w.tmuxMu.Lock()
+		active := w.tmuxActiveWins["marshal-chat"]
+		bound := active != nil && active.sessionID != "" && active.sessionID == tr.SessionID
+		w.tmuxMu.Unlock()
+		if bound {
+			w.observeMarshalProposals(tr)
 		}
 		return previous(tr)
 	}

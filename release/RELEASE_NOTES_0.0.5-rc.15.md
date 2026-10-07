@@ -1,5 +1,7 @@
 # MARSHAL v0.0.5-rc.15 — The Marshal workspace
 
+- Marshal protocol decisions now use MARSHAL permission popups: uppercase A applies strict, allow-listed chat proposals through existing handlers with operator evidence; other keys or timeout decline, and duplicate proposals do not stack.
+
 A release candidate for 0.0.5. rc.14 was tagged but not published because its release gate found background workspace work still writing after teardown. rc.15 cancels and joins workspace workers before the runtime or store is closed. It retains the rc.14 changes, which keep the TUI responsive: commands, function keys, completion and navigation no longer wait on tmux, provider tools, Git or the project store, and every tmux call is time-bounded. Native sessions you open yourself (F7, F8, F9, F12, /codex, /claude, /opencode, /agy) accept keyboard input immediately, as in 0.0.4; workers the Marshal launches stay view-only until /takeover.
 
 Matching `/marshal chat` calls reuse the chat. The never-relabel guard still

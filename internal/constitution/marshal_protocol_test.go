@@ -107,7 +107,7 @@ func TestMarshalProtocolPlanAndFinalReport(t *testing.T) {
 				"budget spent",
 				"remaining risks",
 				"what was not done",
-				"Offer /marshal accept or /marshal close",
+				"Offer accept or close proposals with operator popups",
 				"Do not report untested work as working or hide work not done",
 			},
 		},
@@ -130,6 +130,19 @@ func TestContinuationProtocolSafety(t *testing.T) {
 	for _, rule := range []string{"each with provenance", "exact provider folders", "recorded grant", "Never copy secrets", "memory review", "recommend continuing"} {
 		if !strings.Contains(marshalProtocol, rule) {
 			t.Errorf("protocol lacks %q", rule)
+		}
+	}
+}
+
+func TestMarshalProtocolOperatorPopupProposals(t *testing.T) {
+	for _, want := range []string{"MARSHAL_PROPOSAL", "MARSHAL will show a popup; press A to apply", "You cannot run /marshal commands, change settings or approve anything.", "working-mode question"} {
+		if !strings.Contains(marshalProtocol, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	for _, bad := range []string{"give the person the exact command", "give the command and wait", "Use /continue", "approve it with /marshal", "say it is done"} {
+		if strings.Contains(marshalProtocol, bad) {
+			t.Errorf("manual command instruction remains: %q", bad)
 		}
 	}
 }

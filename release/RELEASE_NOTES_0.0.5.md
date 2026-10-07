@@ -1,5 +1,7 @@
 # MARSHAL v0.0.5 — The Marshal workspace
 
+- Marshal protocol decisions now use MARSHAL permission popups: uppercase A applies strict, allow-listed chat proposals through existing handlers with operator evidence; other keys or timeout decline, and duplicate proposals do not stack.
+
 One workspace for planning with the Marshal and working with your agents.
 
 ## What changed
