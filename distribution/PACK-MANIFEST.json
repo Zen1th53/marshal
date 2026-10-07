@@ -11906,8 +11906,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "b06103070f31aa3cbb981b9ecaeed07b055fb020ceb825bffcce4338a7517433",
-      "bytes": 197160
+      "sha256": "2c1a9208ed939b1aaabbdc30bfbc0e50bdb0c9af31f2da8114504b157020be48",
+      "bytes": 197807
     },
     {
       "path": "tools/marshal.py",
