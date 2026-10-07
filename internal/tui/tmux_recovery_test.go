@@ -20,7 +20,7 @@ func TestRecoveredWorkersRetainNaturalCompletion(t *testing.T) {
 		t.Run(code, func(t *testing.T) {
 			w := realTmuxWorkspace(t)
 			gate := filepath.Join(w.workDir, "finish")
-			_, err := w.runNativeAgentInTmux(context.Background(), "test", "Test", w.workDir, "/bin/sh", []string{"-c", "echo RECOVERED_OUTPUT; while [ ! -f finish ]; do sleep .02; done; exit " + code}, nil, nil, nil, nil, nil, nil, nil)
+			_, err := w.runNativeAgentInTmux(context.Background(), nativeLaunchOperator, "test", "Test", w.workDir, "/bin/sh", []string{"-c", "echo RECOVERED_OUTPUT; while [ ! -f finish ]; do sleep .02; done; exit " + code}, nil, nil, nil, nil, nil, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -34,7 +34,7 @@ func TestRecoveredWorkersRetainNaturalCompletion(t *testing.T) {
 			recovered.workDir, recovered.tmuxSession, recovered.tmuxPath = w.workDir, w.tmuxSession, w.tmuxPath
 			recovered.tmuxMarshalWin = w.tmuxMarshalWin
 			recovered.tmuxMu.Lock()
-			recovered.adoptSurvivingWorkersLocked(w.workDir)
+			recovered.adoptSurvivingWorkers(w.workDir)
 			adopted := recovered.tmuxActiveWins["test"]
 			recovered.tmuxMu.Unlock()
 			if adopted == nil {
@@ -98,8 +98,10 @@ func TestNativeHostOptionFailuresAbortLaunch(t *testing.T) {
 			w.workDir = t.TempDir()
 			w.tmuxSession = "test-session"
 			w.tmuxPath = bin
-			if _, err := w.runNativeAgentInTmux(context.Background(), "test", "Test", w.workDir, "/bin/sh", []string{"-c", "touch worker-started; sleep 30"}, nil, nil, nil, nil, nil, nil, nil); err == nil {
+			if _, err := w.runNativeAgentInTmux(context.Background(), nativeLaunchOperator, "test", "Test", w.workDir, "/bin/sh", []string{"-c", "touch worker-started; sleep 30"}, nil, nil, nil, nil, nil, nil, nil); err == nil {
 				t.Fatal("host option failure was ignored")
+			} else {
+				t.Logf("host rejection: %v", err)
 			}
 			if len(w.tmuxActiveWins) != 0 {
 				t.Fatal("failed host was registered")

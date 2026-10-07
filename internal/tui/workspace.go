@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"io"
+	"maps"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
@@ -28,7 +30,7 @@ type Workspace struct {
 	governedDispatches map[string]context.CancelFunc
 	governedDispatchWG sync.WaitGroup
 
-	egressMu   sync.Mutex
+	egressGate ioGate
 	mu         sync.RWMutex
 	store      *store.Store
 	coord      *collaboration.Coordinator
@@ -144,10 +146,23 @@ type Workspace struct {
 	tmuxDelivered     map[string]bool
 	tmuxActiveWins    map[string]*activeTmuxAgent
 	tmuxMu            sync.Mutex
-	tmuxStatusMu      sync.Mutex
+	tmuxStatusBusy    atomic.Bool
+	tmuxStatusDirty   atomic.Bool
 	tmuxMonitors      sync.WaitGroup
 
 	// Scroll and activity unread tracking
+	uiEvents              chan func()
+	repaint               chan struct{}
+	commandBusy           atomic.Bool
+	navigationOpening     atomic.Bool
+	commandWG             sync.WaitGroup
+	commandCancelMu       sync.Mutex
+	commandCancel         context.CancelFunc
+	completionProbeBusy   atomic.Bool
+	completionProbeTime   time.Time
+	completionSkillsReady bool
+	commandNames          []string
+
 	scrollOffset int
 	unreadNew    int
 }
@@ -380,21 +395,23 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	navView, navErr := NewNavView(th)
 
 	ws := &Workspace{
-		store:      st,
-		coord:      collaboration.NewCoordinator(st, nil),
-		router:     harness.NewULTRARouter(nil),
-		projectID:  projectID,
-		sessionID:  sessionID,
-		workDir:    cwd,
-		mode:       "manual",
-		theme:      th,
-		composer:   composer,
-		completer:  completer,
-		palette:    palette,
-		diffViewer: diffViewer,
-		navView:    navView,
-		navErr:     navErr,
-		terminal:   NewTerminal(os.Stdin, os.Stdout),
+		commandNames: append([]string(nil), compCtx.Commands...),
+		repaint:      make(chan struct{}, 1),
+		store:        st,
+		coord:        collaboration.NewCoordinator(st, nil),
+		router:       harness.NewULTRARouter(nil),
+		projectID:    projectID,
+		sessionID:    sessionID,
+		workDir:      cwd,
+		mode:         "manual",
+		theme:        th,
+		composer:     composer,
+		completer:    completer,
+		palette:      palette,
+		diffViewer:   diffViewer,
+		navView:      navView,
+		navErr:       navErr,
+		terminal:     NewTerminal(os.Stdin, os.Stdout),
 		state: UIState{
 			ProjectID:          projectID,
 			SessionID:          sessionID,
@@ -404,29 +421,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			Participants:       participants,
 		},
 	}
-	ws.completer.ctx.InstallableSkills = func() []string {
-		source := ws.controlSource()
-		if source == nil {
-			return nil
-		}
-		reader, ok := source.Authority.(interface {
-			LocalCodexSkills() ([]codex.SkillInfo, error)
-		})
-		if !ok {
-			return nil
-		}
-		skills, err := reader.LocalCodexSkills()
-		if err != nil {
-			return nil
-		}
-		var names []string
-		for _, skill := range skills {
-			if skill.Installable {
-				names = append(names, skill.Name)
-			}
-		}
-		return names
-	}
+	ws.completer.ctx.InstallableSkills = ws.readInstallableSkills
 	ws.navReleased = navigationReleased
 	ws.cmd = NewCommandHandler(ws)
 	ws.tmuxActiveWins = make(map[string]*activeTmuxAgent)
@@ -464,118 +459,127 @@ func (w *Workspace) SetRouter(r *harness.ULTRARouter) {
 
 // RefreshState pulls current ground truth from canonical SQLite tables and live probes.
 func (w *Workspace) RefreshState(ctx context.Context) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.state.UltraEntitled = w.ultra.Entitled()
-	w.state.UltraExecution = w.ultraExecution
-	w.state.NavigationAvailable = w.navReleased && w.state.UltraEntitled
+	w.mu.RLock()
+	state := w.state
+	state.Participants = append([]model.Participant(nil), state.Participants...)
+	previousMessages := len(state.RecentMessages)
+	st, workDir, mode := w.store, w.workDir, w.mode
+	w.mu.RUnlock()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	defer func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		w.state.GitStatus = state.GitStatus
+		w.state.Participants = state.Participants
+		w.state.Goal = state.Goal
+		w.state.Claims = state.Claims
+		w.state.UnderstandingState = state.UnderstandingState
+		w.state.BudgetConsumed = state.BudgetConsumed
+		w.state.TerminationState = state.TerminationState
+		w.state.ActiveTurn = state.ActiveTurn
+		w.state.RecentMessages = state.RecentMessages
+		w.state.PendingApprovals = state.PendingApprovals
+	}()
 
 	// 1. Live Git status
-	w.state.GitStatus = ProbeGitStatus(w.workDir)
+	state.GitStatus = ProbeGitStatus(workDir)
 
 	// 2. Reconcile participants with real live probes (honest state)
-	w.state.Participants = DiscoverTeamParticipants(w.state.Participants)
+	state.Participants = DiscoverTeamParticipants(state.Participants)
 
-	if w.store == nil {
+	if st == nil {
 		return nil
 	}
 
 	// 3. Recover active GoalContract for this session
-	goal, err := w.store.GetActiveGoalContract(ctx, w.sessionID)
+	goal, err := st.GetActiveGoalContract(ctx, w.sessionID)
 	if err != nil && !errors.Is(err, model.ErrGoalNotFound) {
 		return fmt.Errorf("read active goal: %w; reopen the TUI and check /store", err)
 	}
 	if err == nil {
-		w.state.Goal = goal
-		w.state.UnderstandingState = goal.UnderstandingState
+		state.Goal = goal
+		state.UnderstandingState = goal.UnderstandingState
 
 		// 4. Recover Claims for this goal
-		claims, err := w.store.ListClaimsByGoal(ctx, goal.ID, goal.Revision)
+		claims, err := st.ListClaimsByGoal(ctx, goal.ID, goal.Revision)
 		if err == nil {
-			w.state.Claims = claims
+			state.Claims = claims
 		}
 
 		// 5. Recover Budget for this goal
-		budget, err := w.store.GetBudgetTracker(ctx, w.sessionID, goal.ID, goal.Revision)
+		budget, err := st.GetBudgetTracker(ctx, w.sessionID, goal.ID, goal.Revision)
 		if err == nil && budget != nil {
-			w.state.BudgetConsumed = *budget
+			state.BudgetConsumed = *budget
 		} else if errors.Is(err, model.ErrNotFound) {
-			w.state.BudgetConsumed = model.ConsumedBudget{}
+			state.BudgetConsumed = model.ConsumedBudget{}
 		}
 
 		// 6. Recover Termination status if any
-		term, err := w.store.GetGoalTermination(ctx, w.sessionID, goal.ID, goal.Revision)
+		term, err := st.GetGoalTermination(ctx, w.sessionID, goal.ID, goal.Revision)
 		if err == nil && term != nil {
-			w.state.TerminationState = term.State
+			state.TerminationState = term.State
 		} else if errors.Is(err, model.ErrNotFound) {
-			w.state.TerminationState = ""
+			state.TerminationState = ""
 		}
 	}
 
 	// 7. Recover Collaborative Session if existing
-	sess, err := w.store.GetTeamSession(ctx, w.sessionID)
+	sess, err := st.GetTeamSession(ctx, w.sessionID)
 	if err == nil && sess != nil {
-		w.state.Participants = DiscoverTeamParticipants(sess.Participants)
-		w.state.ActiveTurn = sess.ActiveTurn
+		state.Participants = DiscoverTeamParticipants(sess.Participants)
+		state.ActiveTurn = sess.ActiveTurn
 	}
 
 	// 8. Recover recent messages
-	msgs, err := w.store.ListAgentMessages(ctx, w.sessionID, 30)
+	msgs, err := st.ListAgentMessages(ctx, w.sessionID, 30)
 	if err == nil {
-		if w.scrollOffset > 0 && len(msgs) > len(w.state.RecentMessages) {
-			w.unreadNew += len(msgs) - len(w.state.RecentMessages)
-		}
-		w.state.RecentMessages = msgs
+		state.RecentMessages = msgs
 	}
 
 	// 8b. Recover pending approvals
-	pending, err := w.store.ListPendingApprovals(ctx, w.state.ProjectID)
+	pending, err := st.ListPendingApprovals(ctx, state.ProjectID)
 	if err == nil {
-		w.state.PendingApprovals = pending
+		state.PendingApprovals = pending
 	}
 
 	// 9. Update autocomplete context with live objects
 	var claimIDs []string
 	var evidenceIDs []string
-	for _, c := range w.state.Claims {
+	for _, c := range state.Claims {
 		claimIDs = append(claimIDs, c.ID)
 		for _, ev := range append(append([]model.EvidenceRef{}, c.SupportingEvidence...), c.ContradictingEvidence...) {
 			evidenceIDs = append(evidenceIDs, ev.EvidenceID)
 		}
 	}
 	var agentIDs []string
-	for _, p := range w.state.Participants {
+	for _, p := range state.Participants {
 		agentIDs = append(agentIDs, p.AgentID)
 	}
 
-	tasks, _ := w.store.ListTasks(ctx)
+	tasks, _ := st.ListTasks(ctx)
 	var taskIDs []string
 	for _, t := range tasks {
 		taskIDs = append(taskIDs, t.ID)
 	}
 
 	var cpIDs []string
-	if w.store != nil {
-		checkpoints, _ := w.store.ListHandoffCheckpoints(ctx, "task-interactive")
+	if st != nil {
+		checkpoints, _ := st.ListHandoffCheckpoints(ctx, "task-interactive")
 		for _, cp := range checkpoints {
 			cpIDs = append(cpIDs, cp.ID)
 		}
 	}
 
-	compCtx := w.completer.ctx
-	compCtx.Claims = claimIDs
-	compCtx.Evidence = evidenceIDs
-	compCtx.Agents = agentIDs
-	compCtx.Tasks = taskIDs
-	compCtx.Checkpoints = cpIDs
-	w.completer.UpdateContext(compCtx)
-
-	// 10. Update prompt info
-	w.composer.SetPrompt(ComposerPromptInfo{
-		Project: w.projectID,
-		Mode:    strings.ToUpper(w.mode),
-		State:   string(w.state.UnderstandingState),
-		Agent:   "",
+	w.postUI(ctx, func() {
+		if w.scrollOffset > 0 && len(state.RecentMessages) > previousMessages {
+			w.unreadNew += len(state.RecentMessages) - previousMessages
+		}
+		compCtx := w.completer.ctx
+		compCtx.Claims, compCtx.Evidence, compCtx.Agents = claimIDs, evidenceIDs, agentIDs
+		compCtx.Tasks, compCtx.Checkpoints = taskIDs, cpIDs
+		w.completer.UpdateContext(compCtx)
+		w.composer.SetPrompt(ComposerPromptInfo{Project: w.projectID, Mode: strings.ToUpper(mode), State: string(state.UnderstandingState)})
 	})
 
 	return nil
@@ -632,6 +636,9 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 // or clean fallback to buffered scanner if non-terminal.
 func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error {
 	w.out = out
+	if w.terminal != nil && w.terminal.IsTerminal() && in == os.Stdin && out == os.Stdout {
+		w.uiEvents = make(chan func(), 64)
+	}
 	if tmux.IsInsideTmux() {
 		w.InitTmux()
 	}
@@ -664,12 +671,19 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 }
 
 func (w *Workspace) runRawTerminal(ctx context.Context) error {
+	releaseOutput, err := w.terminal.boundOutput()
+	if err != nil {
+		return err
+	}
+	defer releaseOutput()
 	if w.out == nil {
 		w.out = os.Stdout
 	}
 	if err := w.terminal.MakeRaw(); err != nil {
 		return w.runLineScanner(ctx, os.Stdin, os.Stdout)
 	}
+
+	w.out = w.terminal.out
 
 	// Run on the alternate screen so the workspace never disturbs the shell's
 	// scrollback, and unwind it in reverse on every exit path, including a
@@ -688,6 +702,14 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 		fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 	}()
 
+	loopCtx, loopCancel := context.WithCancel(ctx)
+	ctx = loopCtx
+	defer func() { loopCancel(); w.cancelCommand(); w.commandWG.Wait() }()
+	w.navView.OnRepaint(w.requestRepaint)
+	w.navView.mu.Lock()
+	w.navView.asyncActions = true
+	w.navView.commandBusy = &w.commandBusy
+	w.navView.mu.Unlock()
 	w.renderFullView()
 	if w.nativeOnStart != nil {
 		args := *w.nativeOnStart
@@ -720,11 +742,14 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	// own stdin exclusively until its command handler returns.
 	readNext := make(chan struct{})
 	readerDone := make(chan struct{})
-	defer close(readerDone)
+	readerCtx, readerCancel := context.WithCancel(ctx)
+	readerStopped := make(chan struct{})
+	defer func() { close(readerDone); readerCancel(); <-readerStopped }()
 
 	go func() {
+		defer close(readerStopped)
 		for {
-			ev, err := w.terminal.ReadKey()
+			ev, err := w.terminal.ReadKeyContext(readerCtx)
 			select {
 			case keys <- keyRead{ev, err}:
 			case <-readerDone:
@@ -754,6 +779,14 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
+		case fn := <-w.uiEvents:
+			fn()
+			if w.commandExitRequested() {
+				return nil
+			}
+			w.renderFullView()
+		case <-w.repaint:
+			w.renderFullView()
 		case <-w.terminal.ResizeEvents():
 			// A resize invalidates the diff baseline: the previous frame was
 			// laid out for the old geometry.
@@ -766,7 +799,7 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				if err == io.EOF {
 					return nil
 				}
-				continue
+				return fmt.Errorf("read terminal input: %w", err)
 			}
 
 			// Ctrl+C is an interrupt, not a quit. It unwinds the innermost
@@ -775,6 +808,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			// press exit, so a reflexive Ctrl+C never discards a session the
 			// operator is still working in.
 			if event.Type == KeyCtrlC {
+				if w.commandBusy.Load() {
+					w.cancelCommand()
+					continue
+				}
 				if w.interruptNavigation() {
 					w.renderFullView()
 					continue
@@ -1050,14 +1087,72 @@ func (w *Workspace) commandExitRequested() bool {
 	return w.exitRequested
 }
 
+func priorityCommand(cmd string) bool {
+	parts := strings.Fields(cmd)
+	if len(parts) == 0 {
+		return false
+	}
+	switch parts[0] {
+	case "/stop", "/takeover", "/take-over", "/cancel", "/focus", "/view":
+		return true
+	}
+	return false
+}
+
 // runCommand executes a command and records its result as workspace activity.
 //
 // Output is stored in state and painted as part of the next frame rather than
 // printed directly, so a command response cannot scroll the screen or leave
 // chrome behind in scrollback.
 func (w *Workspace) runCommand(ctx context.Context, cmd string) {
+	if w.uiEvents != nil && priorityCommand(cmd) {
+		// Safety and navigation must remain available while ordinary work runs.
+		// They own neither the ordinary lane nor its cancellation token.
+		w.commandWG.Add(1)
+		go func() {
+			defer w.commandWG.Done()
+			commandCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+			resp, err := w.cmd.Handle(commandCtx, cmd)
+			w.postUI(ctx, func() { w.recordCommandResult(cmd, resp, err) })
+		}()
+		return
+	}
+	if w.uiEvents != nil && !w.directTerminalCommand(cmd) {
+		if w.navView != nil {
+			phase := w.navView.Confirmation().Phase()
+			if phase == PhasePreparing || phase == PhaseSubmitting {
+				w.RecordActivity("A Control operation is still running.")
+				return
+			}
+		}
+		if !w.commandBusy.CompareAndSwap(false, true) {
+			w.RecordActivity("A command is still running; Ctrl+C cancels it.")
+			return
+		}
+		commandCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		w.commandCancelMu.Lock()
+		w.commandCancel = cancel
+		w.commandCancelMu.Unlock()
+		w.commandWG.Add(1)
+		go func() {
+			defer w.commandWG.Done()
+			defer cancel()
+			resp, err := w.cmd.Handle(commandCtx, cmd)
+			_ = w.RefreshState(commandCtx)
+			if !w.postUI(ctx, func() { w.recordCommandResult(cmd, resp, err); w.commandBusy.Store(false) }) {
+				w.commandBusy.Store(false)
+			}
+		}()
+		return
+	}
 	resp, err := w.cmd.Handle(ctx, cmd)
 	_ = w.RefreshState(ctx)
+	w.recordCommandResult(cmd, resp, err)
+	w.renderFullView()
+}
+
+func (w *Workspace) recordCommandResult(cmd, resp string, err error) {
 
 	w.mu.Lock()
 	if err != nil {
@@ -1070,10 +1165,9 @@ func (w *Workspace) runCommand(ctx context.Context, cmd string) {
 		w.state.LastOutput = resp
 		w.state.LastOutputIsError = false
 	}
+	w.state.LastOutput = activityTail(hideMarshalProtocol(w.state.LastOutput))
 	w.state.LastCommand = RedactContent(cmd, w.state.KnownSecrets)
 	w.mu.Unlock()
-
-	w.renderFullView()
 }
 
 // SuspendTerminal temporarily leaves raw terminal mode and alternate screen,
@@ -1152,7 +1246,16 @@ func (w *Workspace) refreshCompletion() {
 	if w.completer == nil || w.composer == nil {
 		return
 	}
-	qualifyProviderCompletions(context.Background(), &w.completer.ctx, w.terminal != nil && w.terminal.IsTerminal())
+	if w.uiEvents == nil {
+		qualifyProviderCompletions(context.Background(), &w.completer.ctx, w.terminal != nil && w.terminal.IsTerminal())
+	} else {
+		if !w.completionSkillsReady {
+			w.completer.ctx.InstallableSkills = func() []string { return nil }
+			w.completionSkillsReady = true
+		}
+		w.qualifyCompletionInBackground()
+	}
+
 	if text := w.composer.Text(); text != w.completionText {
 		w.completionSelected = false
 		w.completionCycled = false
@@ -1186,6 +1289,42 @@ func (w *Workspace) refreshCompletion() {
 		}
 	}
 	w.completionOpen = true
+}
+
+// Provider qualification can stat binaries and run their --version command.
+// Keep one bounded probe off the input loop, retaining the current menu until
+// its replacement arrives. No probe runs merely because the workspace is idle.
+func (w *Workspace) qualifyCompletionInBackground() {
+	if time.Since(w.completionProbeTime) < 2*time.Second || !w.completionProbeBusy.CompareAndSwap(false, true) {
+		return
+	}
+	w.completionProbeTime = time.Now()
+	completion := w.completer.ctx
+	completion.Subcommands = maps.Clone(completion.Subcommands)
+	completion.Descriptions = maps.Clone(completion.Descriptions)
+	terminal := w.terminal != nil && w.terminal.IsTerminal()
+	w.commandWG.Add(1)
+	go func() {
+		defer w.commandWG.Done()
+		defer w.completionProbeBusy.Store(false)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		qualifyProviderCompletions(ctx, &completion, terminal)
+		skills := w.readInstallableSkills()
+		publishCtx, publishCancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+		defer publishCancel()
+		w.postUI(publishCtx, func() {
+			w.completer.ctx.Commands = completion.Commands
+			w.mu.Lock()
+			w.commandNames = append([]string(nil), completion.Commands...)
+			w.mu.Unlock()
+			w.completer.ctx.Subcommands = completion.Subcommands
+			w.completer.ctx.Descriptions = completion.Descriptions
+			w.completer.ctx.InstallableSkills = func() []string { return skills }
+			w.completionProbeTime = time.Now()
+			w.refreshCompletion()
+		})
+	}()
 }
 
 // moveCompletion moves the highlight only. The buffer is written on accept.
@@ -1320,7 +1459,7 @@ func (w *Workspace) dispatchNavigationKey(ctx context.Context, event KeyEvent) b
 			// lock inversion and guarantees every section reads the reopened
 			// canonical runtime rather than its closed predecessor.
 			w.openNavigation(ctx)
-			w.navView.Refresh(ctx)
+			w.navView.refreshInBackground(ctx)
 		}
 		return true
 	}
@@ -1463,7 +1602,9 @@ func (w *Workspace) controlSource() *ControlSource {
 		// action refuse with the reason, which is what the user needs to see.
 		return &ControlSource{SessionID: session, ProjectID: project, ApproverID: session}
 	}
-	localControl, localControlErr := runtime.OpenLocalControl(context.Background())
+	controlCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	localControl, localControlErr := runtime.OpenLocalControl(controlCtx)
 	return &ControlSource{
 		Authority: &runtimeControlAuthority{
 			runtime:         runtime,
@@ -1547,6 +1688,31 @@ func (w *Workspace) openNavigation(ctx context.Context) {
 	if w.navView == nil {
 		return
 	}
+	if w.uiEvents != nil {
+		w.navView.mu.Lock()
+		w.navView.open = true
+		w.navView.status, w.navView.statusSeen = "reading canonical state…", false
+		w.navView.mu.Unlock()
+		if !w.navigationOpening.CompareAndSwap(false, true) {
+			return
+		}
+		w.commandWG.Add(1)
+		go func() {
+			defer w.commandWG.Done()
+			defer w.navigationOpening.Store(false)
+			composeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			w.attachNavigation(composeCtx)
+		}()
+		return
+	}
+	w.attachNavigation(ctx)
+}
+
+func (w *Workspace) attachNavigation(ctx context.Context) {
+	if w.navView == nil {
+		return
+	}
 	w.mu.RLock()
 	source := &StatusSource{
 		Runtime:   w.runtimeReader(),
@@ -1605,8 +1771,14 @@ func (w *Workspace) openNavigation(ctx context.Context) {
 	}
 	// A background refresh must reach the screen. Without this the frame sits
 	// on "refreshing…" until the operator presses a key.
-	w.navView.OnRepaint(func() { w.renderFullView() })
-	w.navView.Open(ctx)
+	w.navView.OnRepaint(w.requestRepaint)
+	if w.uiEvents != nil {
+		// This already runs in the owned composition worker. Finish the read
+		// before its context is cancelled, preserving a close made by the user.
+		w.navView.Refresh(ctx)
+	} else {
+		w.navView.Open(ctx)
+	}
 }
 
 // OpenNavigation enters MARSHAL's frozen Community navigation surface.
@@ -1753,4 +1925,99 @@ func onOff(on bool) string {
 		return "ON"
 	}
 	return "OFF"
+}
+
+// postUI transfers widget changes to the input loop. Headless callers remain synchronous.
+func (w *Workspace) postUI(ctx context.Context, fn func()) bool {
+	if w.uiEvents == nil {
+		fn()
+		return true
+	}
+	select {
+	case w.uiEvents <- fn:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (w *Workspace) requestRepaint() {
+	if w.repaint == nil {
+		return
+	}
+	select {
+	case w.repaint <- struct{}{}:
+	default:
+	}
+}
+
+func (w *Workspace) cancelCommand() {
+	w.commandCancelMu.Lock()
+	defer w.commandCancelMu.Unlock()
+	if w.commandCancel != nil {
+		w.commandCancel()
+	}
+}
+
+// A direct PTY child takes exclusive stdin ownership while the workspace is
+// suspended. Production control-centre sessions use tmux and stay asynchronous.
+func (w *Workspace) directTerminalCommand(line string) bool {
+	if tmux.IsInsideTmux() || w.terminal == nil || !w.terminal.IsTerminal() {
+		return false
+	}
+	parts := strings.Fields(line)
+	if len(parts) == 0 {
+		return false
+	}
+	root := strings.ToLower(parts[0])
+	switch root {
+	case "/doctor":
+		return len(parts) > 1 && oneOf(strings.ToLower(parts[1]), "codex", "provider")
+	case "/resume":
+		return len(parts) > 1 && !strings.HasPrefix(parts[1], "run:")
+	case "/review":
+		return len(parts) != 2 || !strings.HasPrefix(parts[1], "ver-")
+	case "/sandbox":
+		return len(parts) > 1
+	case "/marshal":
+		return len(parts) == 2 && strings.EqualFold(parts[1], "chat")
+	}
+	if oneOf(root, "/fork", "/login", "/logout", "/mcp", "/plugin", "/plugins", "/features", "/search") {
+		return true
+	}
+	if !oneOf(root, "/codex", "/claude", "/opencode", "/agy", "/antigravity") {
+		return false
+	}
+	if len(parts) == 1 {
+		return true
+	}
+	sub := strings.ToLower(parts[1])
+	if strings.HasPrefix(sub, "\"") || strings.HasPrefix(sub, "'") {
+		return true
+	}
+	return !oneOf(sub, "status", "info", "health", "help", "sessions", "runs", "history", "models", "model", "select", "skills", "skill", "diff", "apply", "exec", "dispatch") || oneOf(root, "/opencode", "/agy", "/antigravity") && sub == "models"
+}
+
+func (w *Workspace) readInstallableSkills() []string {
+	source := w.controlSource()
+	if source == nil {
+		return nil
+	}
+	reader, ok := source.Authority.(interface {
+		LocalCodexSkills() ([]codex.SkillInfo, error)
+	})
+	if !ok {
+		return nil
+	}
+	skills, err := reader.LocalCodexSkills()
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, skill := range skills {
+		if skill.Installable {
+			names = append(names, skill.Name)
+		}
+	}
+	return names
 }

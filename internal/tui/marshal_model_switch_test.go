@@ -46,7 +46,7 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 			if err := saveDefaultProvider(root, "codex"); err != nil {
 				t.Fatal(err)
 			}
-			if err := w.startMarshalChatLocked(context.Background(), root); err != nil {
+			if err := w.startMarshalChat(context.Background(), root); err != nil {
 				t.Fatal(err)
 			}
 			old := w.tmuxActiveWins["marshal-chat"]
@@ -54,7 +54,7 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 			// A provider change must never resume a conversation from another CLI.
 			w.tmuxMu.Lock()
 			old.sessionID = "codex-only-session"
-			if err := w.saveChatBindingLocked(root, old); err != nil {
+			if err := w.saveChatBindingForAgent(root, old); err != nil {
 				t.Fatal(err)
 			}
 			w.tmuxMu.Unlock()
@@ -126,7 +126,7 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 			fresh.tmuxSession = "test-session"
 			fresh.tmuxActiveWins = make(map[string]*activeTmuxAgent)
 			cleanupTmuxWorkspace(t, fresh)
-			if err := fresh.startMarshalChatLocked(context.Background(), root); err != nil {
+			if err := fresh.startMarshalChat(context.Background(), root); err != nil {
 				t.Fatal(err)
 			}
 			if fresh.tmuxActiveWins["marshal-chat"].provider != "claude" {
@@ -176,7 +176,7 @@ func TestMarshalChatProviderAliasReusesPane(t *testing.T) {
 	if err := os.WriteFile(logFile, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	msg, err := w.runNativeAgentInTmux(context.Background(), "antigravity", "Antigravity", root, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true)
+	msg, err := w.runNativeAgentInTmux(context.Background(), nativeLaunchOperator, "antigravity", "Antigravity", root, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true)
 	if err != nil || !strings.Contains(msg, "Switched to active") || w.tmuxActiveWins["marshal-chat"] != chat || chat.provider != "agy" {
 		t.Fatalf("alias reuse: %q %v", msg, err)
 	}

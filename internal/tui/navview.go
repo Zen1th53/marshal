@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -67,7 +68,10 @@ type NavView struct {
 	// first use, so one still in flight when the session ends would recreate
 	// .marshal under a project that had already been torn down. Wait makes the
 	// session own those goroutines rather than abandoning them.
-	background sync.WaitGroup
+	background   sync.WaitGroup
+	refreshing   atomic.Bool
+	asyncActions bool
+	commandBusy  *atomic.Bool
 }
 
 // Wait blocks until every background refresh has finished.
@@ -85,12 +89,15 @@ func (v *NavView) Wait() {
 // find it. Every background refresh goes through here; a bare `go v.Refresh`
 // would be invisible to Wait.
 func (v *NavView) refreshInBackground(ctx context.Context) {
-	if v == nil {
+	if v == nil || !v.refreshing.CompareAndSwap(false, true) {
 		return
 	}
 	v.background.Add(1)
 	go func() {
 		defer v.background.Done()
+		defer v.refreshing.Store(false)
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
 		v.Refresh(ctx)
 	}()
 }
@@ -535,6 +542,9 @@ func (v *NavView) handlePaletteKey(event KeyEvent) bool {
 
 func (v *NavView) jumpToSection(i int) {
 	nav := v.nav
+	if i < 0 || i >= len(nav.ia.Sections) {
+		return
+	}
 	for nav.sectionIndex() > i {
 		nav.PrevSection()
 	}
@@ -1369,4 +1379,26 @@ func wrap(s string, width int) []string {
 		out = append(out, line)
 	}
 	return out
+}
+
+// Called under the view lock before interactive confirmation dispatch.
+func (v *NavView) configureConfirmation(c *Confirmation) {
+	if !v.asyncActions {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.background = func(fn func()) {
+		v.background.Add(1)
+		go func() {
+			defer v.background.Done()
+			fn()
+			v.mu.Lock()
+			notify, open := v.repaint, v.open
+			v.mu.Unlock()
+			if notify != nil && open {
+				notify()
+			}
+		}()
+	}
 }

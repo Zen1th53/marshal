@@ -76,6 +76,7 @@ type stream struct {
 }
 
 var channelWriteMu sync.Mutex
+var channelWriteGate ioGate
 
 func streamDir(root string) string  { return filepath.Join(root, ".marshal", "stream") }
 func streamPath(root string) string { return filepath.Join(streamDir(root), "events.jsonl") }
@@ -90,12 +91,14 @@ func openStream(root string) (*stream, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.mu.Lock()
 	for _, e := range entries {
 		if e.Seq >= s.next {
 			s.next = e.Seq + 1
 		}
 		s.digests[e.Digest] = true
 	}
+	s.mu.Unlock()
 	return s, nil
 }
 
@@ -106,15 +109,18 @@ func (s *stream) append(provider, session string, message importer.Message) (boo
 		return false, nil
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	if err := channelWriteGate.acquire(); err != nil {
+		return false, err
+	}
+	defer channelWriteGate.release()
 
 	// Each native watcher can hold its own stream object. Refresh under the
-	// shared writer lock before assigning a sequence or checking duplicates.
+	// shared IO ownership before assigning a sequence or checking duplicates.
 	entries, err := s.readAll()
 	if err != nil {
 		return false, err
 	}
+	s.mu.Lock()
 	for _, e := range entries {
 		if e.Seq >= s.next {
 			s.next = e.Seq + 1
@@ -135,9 +141,11 @@ func (s *stream) append(provider, session string, message importer.Message) (boo
 		Digest:   streamDigest(provider, at, message),
 	}
 	if s.digests[entry.Digest] {
+		s.mu.Unlock()
 		return false, nil
 	}
 	entry.Seq = s.next
+	s.mu.Unlock()
 
 	line, err := json.Marshal(entry)
 	if err != nil {
@@ -154,8 +162,10 @@ func (s *stream) append(provider, session string, message importer.Message) (boo
 	if err := f.Close(); err != nil {
 		return false, err
 	}
+	s.mu.Lock()
 	s.next++
 	s.digests[entry.Digest] = true
+	s.mu.Unlock()
 	return true, nil
 }
 
@@ -165,8 +175,10 @@ func (s *stream) append(provider, session string, message importer.Message) (boo
 // rather than nothing: a reader that was away longer than the channel is deep
 // has missed entries, and showing the rest is more use than showing none.
 func (s *stream) since(cursor int64) ([]streamEntry, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	if err := channelWriteGate.acquire(); err != nil {
+		return nil, err
+	}
+	defer channelWriteGate.release()
 	entries, err := s.readAll()
 	if err != nil {
 		return nil, err
@@ -228,8 +240,10 @@ func (s *stream) readAll() ([]streamEntry, error) {
 // reached the channel, and the channel exists so an agent can catch up on
 // recent work without searching.
 func (s *stream) trim() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	if err := channelWriteGate.acquire(); err != nil {
+		return err
+	}
+	defer channelWriteGate.release()
 	entries, err := s.readAll()
 	if err != nil {
 		return err

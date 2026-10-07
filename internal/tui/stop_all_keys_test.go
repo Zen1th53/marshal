@@ -18,7 +18,7 @@ func TestStopAllKeyTargetsControlFromEveryMarshalPane(t *testing.T) {
 	// Use real tmux ID syntax: Marshal %0, its chat %1, and a worker %2.
 	w.tmuxMarshalPaneID = "%0"
 	for _, pane := range []string{"%0", "%1", "%2"} {
-		if err := w.bindWorkspaceKeysLocked(context.Background(), pane, w.workDir); err != nil {
+		if err := w.bindWorkspaceKeys(context.Background(), pane, w.workDir); err != nil {
 			t.Fatal(err)
 		}
 	}

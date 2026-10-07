@@ -90,7 +90,7 @@ MARSHAL opens on the control centre (window 0: header, Activity, F-keys, Team an
 - **Dedicated windows**: Every native agent (Codex, Claude, OpenCode, Antigravity) runs in its own collision-free tmux window (`marshal-<provider>-<hash>`).
 - **One-key switching**: Pressing **F7** (Codex), **F8** (Claude), **F9** (OpenCode), or **F12** (Antigravity) switches to that agent's window or opens it if not yet running. The agent continues executing in the background when switched away.
 - **Return to MARSHAL**: Press **F11** from any MARSHAL window to immediately return to the control centre.
-- **View-only by default**: Worker panes open in view-only mode to prevent accidental keystroke injection. Run `/takeover` to enable direct interactive typing.
+- **Keyboard input**: Native sessions you open with F7/F8/F9/F12, `/codex`, `/claude`, `/opencode`, `/agy`, or `/<agent> new|continue` accept typing immediately. The Marshal chat also keeps input enabled. Workers launched by the Marshal or a governed or automated run open view-only; use `/takeover` to type into their panes.
 - **Layout controls**: Use `/view [focus | side-by-side | worker | show <agent> | hide | follow]` to manage pane views.
 - **Stop workers**: Press **Ctrl+X** or type `/stop all` to terminate all worker windows while keeping MARSHAL running.
 - **Evidence preservation**: When a worker finishes or is stopped, its terminal screen output is preserved under `.marshal/evidence/`.

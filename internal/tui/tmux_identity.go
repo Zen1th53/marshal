@@ -14,6 +14,7 @@ import (
 )
 
 type agentRecord struct {
+	LaunchOrigin    nativeLaunchOrigin     `json:"launch_origin,omitempty"`
 	ExecutionRunID  string                 `json:"execution_run_id"`
 	CanonicalTaskID string                 `json:"canonical_task_id"`
 	RunID           string                 `json:"run_id"`
@@ -49,7 +50,7 @@ func saveAgentRecord(root, session string, a *activeTmuxAgent) error {
 	if a.paneID == "" {
 		return nil
 	}
-	record := agentRecord{ExecutionRunID: a.executionRunID, CanonicalTaskID: a.canonicalTaskID, RunID: a.runID, Project: tmux.ProjectHash(root), Session: session, ID: a.id, Role: a.role, TaskID: a.taskID, Provider: a.provider, Label: a.label, Window: a.window, Pane: a.paneID, Supervisor: a.supervisor, Outcome: a.state}
+	record := agentRecord{LaunchOrigin: a.launchOrigin, ExecutionRunID: a.executionRunID, CanonicalTaskID: a.canonicalTaskID, RunID: a.runID, Project: tmux.ProjectHash(root), Session: session, ID: a.id, Role: a.role, TaskID: a.taskID, Provider: a.provider, Label: a.label, Window: a.window, Pane: a.paneID, Supervisor: a.supervisor, Outcome: a.state}
 	data, err := json.Marshal(record)
 	if err != nil {
 		return err
@@ -91,10 +92,17 @@ func (w *Workspace) stopAgent(a *activeTmuxAgent) error {
 }
 func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent, root, outcome string) error {
 	a.cleanupMu.Lock()
-	defer a.cleanupMu.Unlock()
 	if a.cleaned {
+		a.cleanupMu.Unlock()
 		return nil
 	}
+	if a.cleaning {
+		a.cleanupMu.Unlock()
+		return fmt.Errorf("cleanup for %s is already in flight", a.id)
+	}
+	a.cleaning = true
+	a.cleanupMu.Unlock()
+	defer func() { a.cleanupMu.Lock(); defer a.cleanupMu.Unlock(); a.cleaning = false }()
 	w.tmuxMu.Lock()
 	pane, id := a.paneID, a.id
 	w.tmuxMu.Unlock()
@@ -102,35 +110,64 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 		return fmt.Errorf("agent %s has no pane target", id)
 	}
 	evidence, err := tmux.CapturePane(ctx, pane)
+	missing := false
 	if err != nil {
-		return fmt.Errorf("capture evidence for %s: %w", id, err)
-	}
-	if err = saveAgentEvidence(root, id, evidence); err != nil {
+		// A failed capture alone is not proof of death. Only a successful
+		// inventory can retire an absent immutable pane without new evidence.
+		panes, listErr := tmux.ListPanes(ctx, w.tmuxSession)
+		if listErr != nil {
+			return fmt.Errorf("capture evidence for %s: %w", id, err)
+		}
+		missing = true
+		for _, p := range panes {
+			if p.PaneID == pane {
+				missing = false
+				break
+			}
+		}
+		if !missing {
+			return fmt.Errorf("capture evidence for %s: %w", id, err)
+		}
+	} else if err = saveAgentEvidence(root, id, evidence); err != nil {
 		return fmt.Errorf("retain evidence for %s: %w", id, err)
 	}
 	w.tmuxMu.Lock()
 	a.state = outcome
-	err = saveAgentRecord(root, w.tmuxSession, a)
+	snapshot, session := copyAgentLocked(a), w.tmuxSession
 	w.tmuxMu.Unlock()
+	err = saveAgentRecord(root, session, snapshot)
 	if err != nil {
 		return fmt.Errorf("record stop/completion for %s: %w", id, err)
 	}
 	// Native provider shortcuts select an immutable window. Replace that
 	// target while the pane still exists, before removing it. Task and chat
 	// panes do not own the provider shortcut.
-	if key := providerFKey(a.provider); key != "" && id == a.provider {
+	if key := providerFKey(a.provider); !missing && key != "" && id == a.provider {
 		message := fmt.Sprintf("%s session ended; use /%s to reopen.", a.provider, a.provider)
 		if err = tmux.BindWindowKey(ctx, pane, "marshal-keys-"+tmux.ProjectHash(root), key, "display-message", fmt.Sprintf("%q", message)); err != nil {
 			return fmt.Errorf("reset provider shortcut for %s: %w", id, err)
 		}
 	}
-	if err = tmux.KillPane(ctx, pane); err != nil {
-		return err
+	if !missing {
+		if err = tmux.KillPane(ctx, pane); err != nil {
+			return err
+		}
 	}
+	a.cleanupMu.Lock()
 	a.cleaned = true
+	a.cleanupMu.Unlock()
 	w.tmuxMu.Lock()
-	delete(w.tmuxActiveWins, id)
+	if w.tmuxActiveWins[id] == a {
+		delete(w.tmuxActiveWins, id)
+	}
+	cancel := a.cancel
 	w.tmuxMu.Unlock()
+	if missing && cancel != nil {
+		cancel()
+	}
+	if missing {
+		w.RecordActivity(fmt.Sprintf("%s pane closed externally; earlier evidence retained.", id))
+	}
 	return nil
 }
 

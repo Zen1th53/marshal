@@ -329,11 +329,12 @@ func ObserveProviderDialect(ctx context.Context, provider string) ProviderDialec
 		return d
 	}
 	providerDialectCache.Lock()
-	defer providerDialectCache.Unlock()
 	key := provider + "\x00" + path
 	if cached, ok := providerDialectCache.rows[key]; ok && os.SameFile(info, cached.info) && info.ModTime() == cached.info.ModTime() && info.Size() == cached.info.Size() && info.Mode() == cached.info.Mode() {
+		providerDialectCache.Unlock()
 		return cached.dialect
 	}
+	providerDialectCache.Unlock()
 	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(probeCtx, path, "--version")
@@ -350,6 +351,8 @@ func ObserveProviderDialect(ctx context.Context, provider string) ProviderDialec
 	// across replacement during discovery. The bound avoids process-lifetime
 	// growth when many isolated projects use different provider doubles.
 	if after, err := os.Stat(path); err == nil && os.SameFile(info, after) && info.ModTime() == after.ModTime() && info.Size() == after.Size() {
+		providerDialectCache.Lock()
+		defer providerDialectCache.Unlock()
 		if len(providerDialectCache.rows) >= 64 {
 			providerDialectCache.rows = map[string]providerDialectCacheRow{}
 		}

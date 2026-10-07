@@ -42,8 +42,8 @@ while read line; do echo input:$line; done
 	m.mu.Lock()
 	m.runID = "run-held"
 	m.mu.Unlock()
+	w.startMarshalChat(context.Background(), w.workDir)
 	w.tmuxMu.Lock()
-	w.startMarshalChatLocked(context.Background(), w.workDir)
 	a := w.tmuxActiveWins["marshal-chat"]
 	w.tmuxMu.Unlock()
 	defer a.cancel()
@@ -128,7 +128,7 @@ func TestRecoveredChatPreservesHistoryProvenance(t *testing.T) {
 				t.Fatal(err)
 			}
 			w.tmuxMu.Lock()
-			w.adoptSurvivingWorkersLocked(w.workDir)
+			w.adoptSurvivingWorkers(w.workDir)
 			a = w.tmuxActiveWins["marshal-chat"]
 			w.tmuxMu.Unlock()
 			if a == nil {

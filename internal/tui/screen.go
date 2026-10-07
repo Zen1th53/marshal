@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -56,30 +57,35 @@ func (s *Screen) Render(lines []string, cols, rows int, cursorRow, cursorCol int
 		lines = append(lines, "")
 	}
 
-	s.term.HideCursor()
+	var output strings.Builder
+	paint := &Terminal{out: &output}
+	paint.HideCursor()
 
 	if s.prev == nil {
-		s.term.ClearScreen()
+		paint.ClearScreen()
 		for i, line := range lines {
-			s.term.CursorTo(i+1, 1)
-			fmt.Fprint(s.term.out, line)
-			s.term.ClearToEndOfLine()
+			paint.CursorTo(i+1, 1)
+			fmt.Fprint(paint.out, line)
+			paint.ClearToEndOfLine()
 		}
 	} else {
 		for i, line := range lines {
 			if i < len(s.prev) && s.prev[i] == line {
 				continue
 			}
-			s.term.CursorTo(i+1, 1)
-			fmt.Fprint(s.term.out, line)
-			s.term.ClearToEndOfLine()
+			paint.CursorTo(i+1, 1)
+			fmt.Fprint(paint.out, line)
+			paint.ClearToEndOfLine()
 		}
 	}
 
+	paint.CursorTo(cursorRow, cursorCol)
+	paint.ShowCursor()
+	if _, err := io.WriteString(s.term.out, output.String()); err != nil {
+		s.prev = nil
+		return
+	}
 	s.prev = append(s.prev[:0], lines...)
-
-	s.term.CursorTo(cursorRow, cursorCol)
-	s.term.ShowCursor()
 }
 
 // Frame is one composed workspace screen: a product header, a live activity

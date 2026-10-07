@@ -39,6 +39,7 @@ case "$1" in
       fi
       prev="$a"
     done
+    case " $* " in *" -P "*) printf '%%%%%%s\n' "$(wc -l < "$winFile")" ;; esac
     exit 0
     ;;
   select-window)
@@ -188,7 +189,7 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Open Codex in tmux
-	msg, err := ws.runNativeAgentInTmux(ctx, "codex", "Codex", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
+	msg, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "codex", "Codex", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("runNativeAgentInTmux failed: %v", err)
 	}
@@ -200,6 +201,9 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	}
 
 	codexWin := tmux.WindowName("codex", workDir)
+	ws.tmuxMu.Lock()
+	codex := copyAgentLocked(ws.tmuxActiveWins["codex"])
+	ws.tmuxMu.Unlock()
 
 	logBytes, err := os.ReadFile(logFile)
 	if err != nil {
@@ -207,14 +211,14 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	}
 	logStr := string(logBytes)
 
-	// Verify new-window, select-pane -d (view-only), select-window, bind-key F7 and F11
+	// Verify new-window, enabled input, selection, and F7/F11 bindings.
 	if !strings.Contains(logStr, "new-window -d -t test-session -n "+codexWin) {
 		t.Fatalf("missing new-window call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "select-pane -t test-session:"+codexWin+" -d") {
-		t.Fatalf("missing view-only select-pane -d call:\n%s", logStr)
+	if !strings.Contains(logStr, "select-pane -t "+codex.paneID+" -e") {
+		t.Fatalf("missing input-enabled select-pane -e call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "select-window -t test-session:"+codexWin) {
+	if !strings.Contains(logStr, "select-window -t test-session:"+codex.windowID) {
 		t.Fatalf("missing select-window call:\n%s", logStr)
 	}
 	if !strings.Contains(logStr, "bind-key -T marshal-keys-"+tmux.ProjectHash(workDir)+" F7 if-shell -F") {
@@ -225,7 +229,7 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	}
 
 	// 2. Open Codex again (switching)
-	switchMsg, err := ws.runNativeAgentInTmux(ctx, "codex", "Codex", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
+	switchMsg, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "codex", "Codex", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("second runNativeAgentInTmux failed: %v", err)
 	}
@@ -269,7 +273,7 @@ func TestMarshalChatSurvivingPaneProvider(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			msg, err := ws.runNativeAgentInTmux(ctx, tc.provider, tc.label, root, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true)
+			msg, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, tc.provider, tc.label, root, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true)
 			if tc.mismatch {
 				if err == nil || msg != "" {
 					t.Fatalf("mismatch must refuse reuse, got message %q, error %v", msg, err)
@@ -316,12 +320,14 @@ func TestTmuxViewCommands(t *testing.T) {
 	ctx := context.Background()
 
 	// Launch a dummy worker
-	_, err := ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
+	_, err := ws.runNativeAgentInTmux(ctx, nativeLaunchAutomated, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	claudeWin := tmux.WindowName("claude", workDir)
+	ws.tmuxMu.Lock()
+	claude := copyAgentLocked(ws.tmuxActiveWins["claude"])
+	ws.tmuxMu.Unlock()
 
 	// Test /view focus
 	resp, err := ws.handleViewCommand(ctx, []string{"focus"})
@@ -376,7 +382,7 @@ func TestTmuxViewCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	logStr := string(logBytes)
-	if !strings.Contains(logStr, "select-window -t test-session:"+claudeWin) {
+	if !strings.Contains(logStr, "select-window -t test-session:"+claude.windowID) {
 		t.Fatalf("missing select-window in log:\n%s", logStr)
 	}
 	if !strings.Contains(logStr, "join-pane -h -s ") {
@@ -403,10 +409,10 @@ func TestStopAllWorkersPreservesMarshal(t *testing.T) {
 	ctx := context.Background()
 
 	// Launch two workers
-	if _, err := ws.runNativeAgentInTmux(ctx, "codex", "Codex", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "codex", "Codex", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -470,7 +476,7 @@ func TestStopAllWorkersPreservesMarshalChat(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Launch a regular worker (isChat = false)
-	if _, err := ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil, false); err != nil {
+	if _, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	ws.tmuxMu.Lock()
@@ -479,7 +485,7 @@ func TestStopAllWorkersPreservesMarshalChat(t *testing.T) {
 
 	// 2. Open the Marshal planning chat (isChat = true) with the provider
 	// InitTmux already started it with; a different provider is refused.
-	if _, err := ws.runNativeAgentInTmux(ctx, "codex", "Codex", workDir, "echo", []string{"planning"}, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
+	if _, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "codex", "Codex", workDir, "echo", []string{"planning"}, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	chatWin := tmux.ChatWindowName(workDir)
@@ -543,7 +549,7 @@ func TestJoinPanePreservesWorkerIdentityAndMonitoring(t *testing.T) {
 	ctx := context.Background()
 
 	// Launch worker
-	if _, err := ws.runNativeAgentInTmux(ctx, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil, false); err != nil {
+	if _, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "claude", "Claude", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	claudeWin := tmux.WindowName("claude", workDir)
@@ -1035,7 +1041,7 @@ func TestTmuxStartupReattachAndAutomaticChatPreserveControlCentre(t *testing.T) 
 	assertSelected("test-session:@0")
 	background := context.WithValue(ctx, tmuxBackgroundLaunchKey{}, true)
 	// Runtime setup shares the operator launch pipeline, including adoption.
-	if _, err := ws.runNativeAgentInTmux(background, "codex", "Codex", ws.workDir, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
+	if _, err := ws.runNativeAgentInTmux(background, nativeLaunchOperator, "codex", "Codex", ws.workDir, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	assertSelected("test-session:@0")
@@ -1067,7 +1073,7 @@ func TestAutomaticChatLaunchDoesNotSelectNewWindow(t *testing.T) {
 	ws.tmuxSession, ws.tmuxMarshalWin = "test-session", "marshal"
 	cleanupTmuxWorkspace(t, ws)
 	ctx := context.WithValue(context.Background(), tmuxBackgroundLaunchKey{}, true)
-	if _, err := ws.runNativeAgentInTmux(ctx, "codex", "Codex", ws.workDir, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
+	if _, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "codex", "Codex", ws.workDir, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(logFile)

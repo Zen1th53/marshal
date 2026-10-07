@@ -29,7 +29,7 @@ func TestReleaseInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Print(output.String())
-	for _, version := range []string{"0.0.5-rc.13", "0.0.5"} {
+	for _, version := range []string{"0.0.5-rc.14", "0.0.5"} {
 		notes, err := os.ReadFile(filepath.Join(root, "release", "RELEASE_NOTES_"+version+".md"))
 		if err != nil {
 			t.Fatal(err)
@@ -303,5 +303,20 @@ func switchModel() { tmux.KillPane(nil, "%chat") }
 	}
 	if _, _, err := validate(sites, nil); err == nil {
 		t.Fatal("unreviewed chat stop passed")
+	}
+}
+
+func TestContextTmuxAttachmentIsMaterial(t *testing.T) {
+	root := t.TempDir()
+	fixture(t, root, "internal/cli/attach.go", `package cli
+import "github.com/Zen1th53/marshal/internal/tmux"
+func attach() { tmux.AttachSessionContext(nil,"session",nil,nil,nil) }
+`)
+	sites, err := discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sites) != 1 || sites[0].Effect != "program-wrapper" {
+		t.Fatalf("context attachment escaped inventory: %#v", sites)
 	}
 }

@@ -1260,7 +1260,10 @@ func (h *CommandHandler) handleDiff(ctx context.Context) (string, error) {
 }
 
 func (h *CommandHandler) handleDiffScope(ctx context.Context, scope string) (string, error) {
-	if h.ws.diffViewer != nil {
+	if h.ws.diffViewer == nil {
+		return "Diff viewer unavailable. Open marshal tui in an initialized Git project (marshal init), then retry /diff.", nil
+	}
+	if h.ws.uiEvents == nil {
 		h.ws.diffViewer.scope = scope
 		if err := h.ws.diffViewer.Toggle(); err != nil {
 			return fmt.Sprintf("Diff error: %v. Check that the project is a Git worktree, then retry /diff.", err), nil
@@ -1270,7 +1273,19 @@ func (h *CommandHandler) handleDiffScope(ctx context.Context, scope string) (str
 		}
 		return "Diff viewer closed.", nil
 	}
-	return "Diff viewer unavailable. Open marshal tui in an initialized Git project (marshal init), then retry /diff.", nil
+	viewer := NewDiffViewer(h.ws.theme, h.ws.workDir)
+	viewer.scope = scope
+	if err := viewer.Open(); err != nil {
+		return fmt.Sprintf("Diff error: %v. Check that the project is a Git worktree, then retry /diff.", err), nil
+	}
+	h.ws.postUI(ctx, func() {
+		if h.ws.diffViewer.IsOpen() {
+			h.ws.diffViewer.Close()
+		} else {
+			h.ws.diffViewer = viewer
+		}
+	})
+	return "Diff viewer updated (press Esc or q to close, n/p for hunks).", nil
 }
 
 // setCodexEffort records the reasoning effort future governed Codex runs

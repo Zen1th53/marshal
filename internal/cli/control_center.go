@@ -111,7 +111,7 @@ func (c *command) launchOrAttachTmux(ctx context.Context, root string, args []st
 	if err := tmux.SelectWindow(ctx, sessionName+":marshal"); err != nil {
 		return fmt.Errorf("select control centre: %w", err)
 	}
-	return tmux.AttachSession(sessionName, c.stdin, c.stdout, c.stderr)
+	return tmux.AttachSessionContext(ctx, sessionName, c.stdin, c.stdout, c.stderr)
 }
 
 func (c *command) canonicalRoot(ctx context.Context) string {

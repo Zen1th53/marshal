@@ -115,7 +115,7 @@ func (w *Workspace) setMarshalPanel(p *MarshalPanel) {
 	w.mu.Lock()
 	w.state.Marshal = p
 	w.mu.Unlock()
-	w.renderFullView()
+	w.requestRepaint()
 }
 
 func (w *Workspace) marshalPanel() *MarshalPanel {
@@ -395,10 +395,12 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	w.tmuxMu.Lock()
 	if a := w.tmuxActiveWins["marshal-chat"]; a != nil {
 		a.runID = runID
-		if err := w.saveChatBindingLocked(root, a); err != nil {
-			w.tmuxMu.Unlock()
+		snapshot := copyAgentLocked(a)
+		w.tmuxMu.Unlock()
+		if err := w.saveChatBindingForAgent(root, snapshot); err != nil {
 			return result, err
 		}
+		w.tmuxMu.Lock()
 	}
 	w.tmuxMu.Unlock()
 	if saved.RunID != "" {
@@ -478,25 +480,37 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 		return "", fmt.Errorf("Marshal provider was not saved: %w", err)
 	}
 	w.tmuxMu.Lock()
-	chat := w.tmuxActiveWins["marshal-chat"]
+	chat := copyAgentLocked(w.tmuxActiveWins["marshal-chat"])
 	replace := chat != nil && canonicalNeutralProvider(chat.provider) != provider
+	w.tmuxMu.Unlock()
 	if replace {
 		// Only this explicit operator command may stop the planning chat.
-		// Hold the lifecycle lock until its monitor is cancelled, so recovery
-		// cannot respawn the old provider between the stop and replacement.
-		if err := tmux.KillPane(ctx, chat.paneID); err != nil {
-			w.tmuxMu.Unlock()
-			return "", fmt.Errorf("default Marshal provider saved as %s, but the old chat could not be closed: %w", provider, err)
-		}
+		// Cancel and join its monitor before closing the pane so recovery
+		// cannot respawn the old provider between stop and replacement.
 		if chat.cancel != nil {
 			chat.cancel()
 		}
+		if chat.doneChan != nil {
+			select {
+			case <-chat.doneChan:
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
+		}
+		if err := tmux.KillPane(ctx, chat.paneID); err != nil {
+			return "", fmt.Errorf("default Marshal provider saved as %s, but the old chat could not be closed: %w", provider, err)
+		}
+		w.tmuxMu.Lock()
 		delete(w.tmuxActiveWins, "marshal-chat")
+		w.tmuxMu.Unlock()
 	}
-	w.tmuxMu.Unlock()
 	if replace {
 		if chat.doneChan != nil {
-			<-chat.doneChan
+			select {
+			case <-chat.doneChan:
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
 		}
 		chat.briefingDir.remove()
 		// Finish any draft observer tied to the old provider before changing
@@ -508,7 +522,11 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 			cancel()
 		}
 		if done != nil {
-			<-done
+			select {
+			case <-done:
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
 		}
 	}
 	m.mu.Lock()
@@ -523,9 +541,7 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 		if w.runtime != nil {
 			_, err = w.marshalChat(background)
 		} else {
-			w.tmuxMu.Lock()
-			err = w.startMarshalChatLocked(background, root)
-			w.tmuxMu.Unlock()
+			err = w.startMarshalChat(background, root)
 		}
 		// The command is entered in the control centre; keep it visible.
 		w.tmuxMu.Lock()

@@ -259,8 +259,10 @@ func dedupeSorted(names []string) []string {
 
 // saveChannelConfig writes the arrangement to the project.
 func saveChannelConfig(root string, cfg channelConfig) error {
-	inboxRenderMu.Lock()
-	defer inboxRenderMu.Unlock()
+	if err := inboxRenderGate.acquire(); err != nil {
+		return err
+	}
+	defer inboxRenderGate.release()
 	path := livePeerPath(root)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err

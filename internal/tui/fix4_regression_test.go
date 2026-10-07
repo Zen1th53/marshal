@@ -99,7 +99,7 @@ func TestControlPaneIdentityDoesNotFollowNativeChat(t *testing.T) {
 	w := NewWorkspace(nil, "project", "session")
 	w.tmuxPath, w.tmuxSession, w.tmuxMarshalPaneID = fake, "test-session", pane
 	for _, p := range []string{"%control", "%chat", "%worker"} {
-		if err := w.bindWorkspaceKeysLocked(context.Background(), p, t.TempDir()); err != nil {
+		if err := w.bindWorkspaceKeys(context.Background(), p, t.TempDir()); err != nil {
 			t.Fatal(err)
 		}
 	}

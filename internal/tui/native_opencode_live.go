@@ -314,8 +314,9 @@ func (w *nativeHistoryWatch) syncOpenCodeLive() error {
 			}
 		}
 		w.seen[session.id] = stamp
+		w.indexDirty = true
 	}
-	return errors.Join(append(failures, w.saveIndex())...)
+	return errors.Join(append(failures, w.saveIndexIfChanged())...)
 }
 
 // decodeOpenCodeExport runs the export document through the adapter the CLI
