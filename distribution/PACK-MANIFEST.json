@@ -10641,13 +10641,13 @@
     },
     {
       "path": "internal/tui/tmux_native.go",
-      "sha256": "657bdab46e4359f9778c78891b8a8c2f79897221ccef1264e464fecb49309fa9",
-      "bytes": 46995
+      "sha256": "f0ec1b8ece489c1ff4da3f9ecb377089c3d7669670d3d750d0dc0dda58b1b6b7",
+      "bytes": 47383
     },
     {
       "path": "internal/tui/tmux_native_test.go",
-      "sha256": "0d1a7198c8036fa41088957a1563eb31faf4cb2eeb7eb64dbca0b152d225ff25",
-      "bytes": 31929
+      "sha256": "98d8eafd37b775cb3396deb81fead0b015b2c2153fa5e016a353d73eaed8b13d",
+      "bytes": 34665
     },
     {
       "path": "internal/tui/tmux_recovery_test.go",
@@ -11365,6 +11365,11 @@
       "bytes": 8465
     },
     {
+      "path": "release/RELEASE_NOTES_0.0.5-rc.12.md",
+      "sha256": "207c30acffa12395d74a9d75c12651d9dc8856464ec9296898aa0ee6adc9f448",
+      "bytes": 8792
+    },
+    {
       "path": "release/RELEASE_NOTES_0.0.5-rc.2.md",
       "sha256": "12444b1a27c498d55329a018fb7478813aaef5a4cbdf1a5b51f610eedde34e96",
       "bytes": 4205
@@ -11851,7 +11856,7 @@
     },
     {
       "path": "tools/effect-inventory/main_test.go",
-      "sha256": "98adc5c3283290bebe72a7b6a317d2f7e6fa758c3811c881e1600e042a1d3d44",
+      "sha256": "267401610a74296b13559f6995bee999f8f4e1eb4c4ee4dfd9b8fe08ce5aa815",
       "bytes": 9954
     },
     {
