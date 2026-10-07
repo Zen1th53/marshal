@@ -21,7 +21,7 @@ commands available in your version.
 | --- | --- |
 | `/marshal` | Show the Marshal's status. |
 | `/marshal chat` | Start a planning conversation. |
-| `/marshal model codex` | Choose the AI that plans: `codex`, `claude` or `agy`. |
+| `/marshal model codex` | Switch the Marshal now and remember the choice for this project: `codex`, `claude` or `agy`. |
 | `/marshal settings` | Show or change [settings](settings.md). |
 | `/marshal approve` | Approve the plan and start the work. |
 | `/marshal status` | Show each task's native/governed mode, the plan's progress, stored criterion evidence, risks, and budget used. |
@@ -33,6 +33,16 @@ commands available in your version.
 | `/marshal stop` | Stop the run and keep its state. |
 | `/marshal amend REASON` | Ask to change the plan. Big changes need `/marshal amend approve` or `/marshal amend deny`. Scoped splits require tasks that have not started. Changing an existing task's native/governed mode requires a new plan. |
 | `/marshal close` | Finish a completed run and bring the work into your project. |
+
+`/marshal model claude` saves the project default and replaces a running Marshal
+chat that uses another provider. The chat keeps its window name, and the control
+centre stays in focus. Choosing the same provider leaves the chat running. If
+the requested CLI is missing, the current chat and default stay unchanged.
+Startup, reattachment and recovery keep the chosen provider. `/marshal chat`
+reuses a matching chat; if a different provider is still running, it names
+`/marshal model` as the command to switch. The Marshal chat is never stopped
+automatically or by stopping workers; only an explicit `/marshal model` switch
+or closing its window replaces it.
 
 Finished CLI tasks first need `/marshal import TASK-ID CHECK`, then
 `/marshal approve`. Review their task branch diff and the pinned commits shown

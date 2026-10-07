@@ -198,10 +198,12 @@ func (w *Workspace) ensureMarshalChatAutoLocked(projectRoot string) {
 			return
 		}
 	}
-	w.startMarshalChatLocked(ctx, projectRoot)
+	if err := w.startMarshalChatLocked(ctx, projectRoot); err != nil {
+		w.RecordActivity(err.Error())
+	}
 }
 
-func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot string) {
+func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot string) error {
 	provider := loadDefaultProvider(w.providerRoot())
 	if provider == "" {
 		provider = "codex"
@@ -218,13 +220,11 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 	winName := tmux.ChatWindowName(projectRoot)
 	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
-		w.RecordActivity("Marshal not started: protocol unavailable")
-		return
+		return errors.New("Marshal not started: protocol unavailable")
 	}
 	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, nil, brief)
 	if err != nil {
-		w.RecordActivity(err.Error())
-		return
+		return err
 	}
 	launched := false
 	defer func() {
@@ -234,6 +234,10 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 	}()
 
 	saved := loadChatBinding(projectRoot)
+	if canonicalNeutralProvider(saved.Provider) != canonicalNeutralProvider(provider) {
+		saved.SessionID = ""
+		saved.HistoryBaseline = nil
+	}
 	runID := saved.RunID
 	m := w.marshalSession()
 	m.mu.Lock()
@@ -241,7 +245,7 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 		runID = m.runID
 	}
 	m.mu.Unlock()
-	if saved.Provider == provider && saved.SessionID != "" {
+	if canonicalNeutralProvider(saved.Provider) == canonicalNeutralProvider(provider) && saved.SessionID != "" {
 		args = append(resumeArgsForProvider(provider, saved.SessionID), args...)
 	}
 	for _, key := range []string{"CODEX_HOME", "CLAUDE_CONFIG_DIR", "HOME"} {
@@ -252,17 +256,16 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 	watch := w.chatHistoryWatch(projectRoot, provider, binary)
 	baseline, err := w.prepareChatHistoryWatch(projectRoot, watch, saved.SessionID)
 	if err != nil {
-		return
+		return err
 	}
 	// Persist the prelaunch history even if the process crashes before binding.
 	if err := saveChatBinding(projectRoot, chatBinding{Provider: provider, Binary: binary, Args: args, Env: env, SessionID: saved.SessionID, RunID: runID, HistoryBaseline: baseline}); err != nil {
-		return
+		return err
 	}
 	cmd := append([]string{binary}, args...)
 
 	if err := tmux.NewWindow(ctx, w.tmuxSession, winName, projectRoot, env, cmd); err != nil {
-		w.RecordActivity("Marshal not started: " + RedactContent(err.Error(), nil))
-		return
+		return fmt.Errorf("Marshal not started: %s", RedactContent(err.Error(), nil))
 	}
 	launched = true
 	_ = tmux.SetWindowOption(ctx, w.tmuxSession+":"+winName, "remain-on-exit", "on")
@@ -318,11 +321,15 @@ func (w *Workspace) startMarshalChatLocked(ctx context.Context, projectRoot stri
 	_ = w.bindWorkspaceKeysLocked(ctx, agent.paneID, projectRoot)
 	_ = w.saveChatBindingLocked(projectRoot, agent)
 	w.monitorAgent(agentCtx, agent, projectRoot, dir, watch, nil, nil, nil)
+	return nil
 }
 
 func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAgent, root string) {
 	w.tmuxMu.Lock()
 	defer w.tmuxMu.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
 
 	provider := agent.provider
 	if provider == "" {
@@ -531,12 +538,12 @@ func (w *Workspace) runNativeAgentInTmux(
 		}
 	}
 	if exists && winExists {
-		if isChat && existingAgent.provider != provider {
+		if isChat && canonicalNeutralProvider(existingAgent.provider) != canonicalNeutralProvider(provider) {
 			runningProvider := existingAgent.provider
 			if runningProvider == "" {
 				runningProvider = "an unknown provider"
 			}
-			return "", fmt.Errorf("Marshal chat is still running %s. To switch to %s, close the Marshal chat window, then run /marshal chat again. The existing chat has been left running.", runningProvider, provider)
+			return "", fmt.Errorf("Marshal chat is still running %s. To switch to %s, run /marshal model %s. The existing chat has been left running.", runningProvider, provider, canonicalNeutralProvider(provider))
 		}
 		// Only an operator command switches to a surviving window.
 		if !tmuxLaunchInBackground(ctx) {
@@ -558,7 +565,7 @@ func (w *Workspace) runNativeAgentInTmux(
 	// Resume only the conversation bound to this project.
 	if isChat {
 		saved := loadChatBinding(root)
-		if saved.Provider == provider && saved.SessionID != "" {
+		if canonicalNeutralProvider(saved.Provider) == canonicalNeutralProvider(provider) && saved.SessionID != "" {
 			args = append(resumeArgsForProvider(provider, saved.SessionID), args...)
 		}
 	}
@@ -790,12 +797,15 @@ func (w *Workspace) monitorAgent(
 					}
 
 					if snapshot.role == "marshal-chat" {
+						if agentCtx.Err() != nil {
+							return
+						}
 						// F3: The Marshal chat is never killed by the worker monitor.
 						// If it exits unexpectedly, it is restarted automatically and resumes
 						// the stored run / conversation.
 						if agentCtx.Err() == nil {
 							w.RecordActivity(fmt.Sprintf("%s exited unexpectedly; restarting and resuming conversation...", snapshot.label))
-							w.restartMarshalChat(context.Background(), agent, root)
+							w.restartMarshalChat(agentCtx, agent, root)
 							w.updateTmuxStatusLine(context.Background())
 							continue
 						}
@@ -1205,12 +1215,28 @@ func saveAgentEvidence(root, identifier, evidence string) error {
 
 // watchMarshalDraft starts background monitoring for draft completion when Marshal Chat is active.
 func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, note string) {
+	m.mu.Lock()
+	previousCancel, previousDone := m.draftCancel, m.draftDone
+	m.mu.Unlock()
+	if previousCancel != nil {
+		previousCancel()
+	}
+	if previousDone != nil {
+		<-previousDone
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	done := make(chan struct{})
+	m.mu.Lock()
+	m.draftCancel, m.draftDone = cancel, done
+	m.mu.Unlock()
 	go func() {
+		defer cancel()
+		defer close(done)
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-time.After(30 * time.Minute):
+			case <-ctx.Done():
 				return
 			case <-ticker.C:
 				data, exists, err := consumeMarshalDraft(root)
@@ -1223,7 +1249,9 @@ func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, 
 					}
 					continue
 				}
+				m.mu.Lock()
 				service := m.service
+				m.mu.Unlock()
 				if service == nil {
 					return
 				}

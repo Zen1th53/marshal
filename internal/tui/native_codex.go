@@ -440,6 +440,11 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		isChat := len(marshalBrief) > 0
 		if isChat && watch != nil {
 			saved := loadChatBinding(root)
+			if canonicalNeutralProvider(saved.Provider) != canonicalNeutralProvider(provider) {
+				saved.Provider = provider
+				saved.SessionID = ""
+				saved.HistoryBaseline = nil
+			}
 			baseline, err := w.prepareChatHistoryWatch(root, watch, saved.SessionID)
 			if err != nil {
 				return "", err

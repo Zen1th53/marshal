@@ -45,6 +45,17 @@ case "$1" in
     printf '%%s\n' "$3" > "$winFile.selected"
     exit 0
     ;;
+  kill-pane)
+    target="$3"
+    case "$target" in
+      %%*)
+        paneIndex="${target#%%}"
+        awk -v paneIndex="$paneIndex" 'NR == paneIndex { print ""; next } { print }' "$winFile" > "$winFile.tmp"
+        mv "$winFile.tmp" "$winFile"
+        ;;
+    esac
+    exit 0
+    ;;
   respawn-window)
     exit 0
     ;;
@@ -122,7 +133,9 @@ case "$1" in
     if [ -f "$winFile" ]; then
       idx=1
       while read -r w; do
-        printf '%%%%%%s\t@%%s\t%%s\t%%s\t0\t0\t\n' "$idx" "$idx" "$w" "$((100 + idx))"
+        if [ -n "$w" ]; then
+          printf '%%%%%%s\t@%%s\t%%s\t%%s\t0\t0\t\n' "$idx" "$idx" "$w" "$((100 + idx))"
+        fi
         idx=$((idx + 1))
       done < "$winFile"
     fi
@@ -261,7 +274,7 @@ func TestMarshalChatSurvivingPaneProvider(t *testing.T) {
 				if err == nil || msg != "" {
 					t.Fatalf("mismatch must refuse reuse, got message %q, error %v", msg, err)
 				}
-				for _, want := range []string{"Marshal chat is still running codex", "To switch to antigravity", "close the Marshal chat window", "/marshal chat again"} {
+				for _, want := range []string{"Marshal chat is still running codex", "To switch to antigravity", "/marshal model agy"} {
 					if !strings.Contains(err.Error(), want) {
 						t.Fatalf("mismatch error %q missing %q", err, want)
 					}
@@ -962,6 +975,16 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 func cleanupTmuxWorkspace(t *testing.T, w *Workspace) {
 	t.Helper()
 	t.Cleanup(func() {
+		m := w.marshalSession()
+		m.mu.Lock()
+		cancelDraft, draftDone := m.draftCancel, m.draftDone
+		m.mu.Unlock()
+		if cancelDraft != nil {
+			cancelDraft()
+		}
+		if draftDone != nil {
+			<-draftDone
+		}
 		w.tmuxMu.Lock()
 		agents := make([]*activeTmuxAgent, 0, len(w.tmuxActiveWins))
 		for _, a := range w.tmuxActiveWins {

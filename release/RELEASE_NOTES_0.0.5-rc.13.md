@@ -1,16 +1,28 @@
-# MARSHAL v0.0.5 — The Marshal workspace
+# MARSHAL v0.0.5-rc.13 — The Marshal workspace
 
-One workspace for planning with the Marshal and working with your agents.
+A release candidate for 0.0.5. `/marshal model <codex|claude|agy>` now switches
+the Marshal immediately and saves the provider for this project. A running chat
+with a different provider is closed and replaced through the normal hidden
+protocol launch path, keeping its window name and control centre focus. The
+confirmation is plain: “The Marshal now uses claude.” Startup, reattachment and
+recovery retain the chosen provider. Choosing the same provider leaves the chat
+running; a missing CLI leaves both the chat and default unchanged.
+
+Matching `/marshal chat` calls reuse the chat. The never-relabel guard still
+refuses mismatches and names `/marshal model` as the way to switch. The chat is
+never stopped automatically or by stopping workers; replacement requires the
+explicit model command or closing the chat window.
+
+It retains the rc.11 fixes:
+
+- **Provider shortcuts stay safe after a session ends.** Before closing a native provider window, MARSHAL replaces its function-key target with a message explaining how to reopen the provider from the control centre.
+- **Marshal plans can request governed OpenCode work.** Explicitly governed OpenCode tasks use the existing sandbox, egress proxy and sandboxed checks, and OpenCode is available for governed reassignment. Codex and Claude Code still default to governed; OpenCode still defaults to native. For free models, set `MARSHAL_OPENCODE_MODEL` to an available `opencode/<model>` before starting MARSHAL. Free/local models need no credential broker; supported keyed providers require the credential grant.
+
+It retains the rc.10 fixes for governed planning, command-line egress grants and importing command-line results for review.
+
+It also contains the credential broker from rc.9: governed Codex and Claude Code workers can use your subscription sign-in without seeing the token.
 
 ## What changed
-
-Native provider function keys show reopening guidance after their session ends.
-Marshal plans can explicitly request governed OpenCode tasks, including governed
-reassignment, using the sandbox, egress proxy and sandboxed checks. Codex and
-Claude Code keep their governed defaults; OpenCode keeps its native default.
-Set `MARSHAL_OPENCODE_MODEL=opencode/<model>` before starting MARSHAL to use an
-available free model. Free/local models need no credential broker; supported
-keyed providers require the credential grant.
 
 MARSHAL opens on the control centre; the Marshal chat stays open in its own window.
 
@@ -84,6 +96,10 @@ recording a verdict or warning does not count as enforcement. The reviewed
 [counting rules](../tools/effect-inventory/README.md) make the scope inspectable.
 
 ## Known limits
+
+- **Real-provider end-to-end testing is pending.** Automated tests use
+  simulated agents. A full run from planning through approval to accepted work
+  has not yet been completed with real providers.
 
 - **Keep the window open.** There is no background service. Stored runs remain
   recoverable with `/marshal resume` after reopening MARSHAL.

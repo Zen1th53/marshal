@@ -359,8 +359,12 @@ func TestCommandSweepCrosscutMarshalSettings(t *testing.T) {
 			t.Errorf("no run/plan/terminal should refuse %s: %s", line, out)
 		}
 	}
-	// CLI discovery is absent, so asynchronous planning must end in a visible failure.
-	if _, err := w.cmd.Handle(ctx, "/marshal model codex"); err != nil {
+	// Explicit model switches require an installed CLI. Provider configuration
+	// may still name an absent CLI; asynchronous planning must fail visibly.
+	if _, err := w.cmd.Handle(ctx, "/marshal model codex"); err == nil || !strings.Contains(err.Error(), "CLI is missing") {
+		t.Fatalf("missing CLI model switch: %v", err)
+	}
+	if _, err := w.cmd.Handle(ctx, "/provider use codex"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.cmd.Handle(ctx, "/marshal build a greeting"); err != nil {

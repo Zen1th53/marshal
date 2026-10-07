@@ -182,7 +182,7 @@ func classify(call *ast.CallExpr, imports map[string]string, file string) string
 			return "restore"
 		}
 	case "github.com/Zen1th53/marshal/internal/tmux":
-		if name == "RunCommand" || name == "NewSession" || name == "AttachSession" {
+		if name == "RunCommand" || name == "NewSession" || name == "AttachSession" || name == "KillPane" {
 			return "program-wrapper"
 		}
 	case "net":

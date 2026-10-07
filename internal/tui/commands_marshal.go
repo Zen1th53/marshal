@@ -18,6 +18,8 @@ import (
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
 const marshalUsage = `Marshal mode — one model plans with you, then marshals the work to other agents.
@@ -39,7 +41,7 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal return <task> <reason>  Send a task awaiting your decision back to its worker
   /marshal resume                  Continue a run that stopped or was interrupted
   /marshal stop                    Stop the running run; its state is kept
-  /marshal model <codex|claude|agy>  Choose the Marshal model for the next run
+  /marshal model <codex|claude|agy>  Switch the Marshal and remember the provider for this project
   /marshal settings [key value]    Show or change execution-rights, acceptance-mode, rework-limit, ultra-concurrency, control (free|strict), or budget ceilings`
 
 // marshalSession is the workspace's Marshal state: the service, the active
@@ -51,6 +53,8 @@ type marshalSession struct {
 	provider       string
 	conversationID string
 	cancel         context.CancelFunc
+	draftCancel    context.CancelFunc
+	draftDone      chan struct{}
 	busy           bool
 	amended        bool
 	pending        *marshalAmendment
@@ -227,7 +231,7 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 	case "status":
 		return marshalStatusText(w.marshalPanel()), nil
 	case "model":
-		return w.marshalSetModel(args[1:])
+		return w.marshalSetModel(ctx, args[1:])
 	case "approve":
 		return w.marshalApprove(ctx)
 	case "use-plan":
@@ -331,7 +335,7 @@ func consumeMarshalDraft(root string) ([]byte, bool, error) {
 }
 
 func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
-	saved := loadChatBinding(w.workDir)
+	saved := loadChatBinding(w.providerRoot())
 	m := w.marshalSession()
 	m.mu.Lock()
 	if m.busy {
@@ -339,6 +343,9 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		return "", errors.New("a Marshal operation is already running")
 	}
 	provider := m.provider
+	if provider == "" {
+		provider = loadDefaultProvider(w.providerRoot())
+	}
 	if provider == "" && saved.Provider != "" {
 		provider = saved.Provider
 		if provider == "antigravity" {
@@ -445,20 +452,91 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	return result + "\nMarshal plan drafted. " + note + " Read the plan in " + packDir + ", then use /marshal approve in MARSHAL to run it.", nil
 }
 
-func (w *Workspace) marshalSetModel(args []string) (string, error) {
+func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string, error) {
 	if len(args) != 1 {
 		return "", errors.New("usage: /marshal model <codex|claude|agy>")
 	}
-	switch args[0] {
+	provider := args[0]
+	switch provider {
 	case "codex", "claude", "agy":
 	default:
-		return "", fmt.Errorf("unknown Marshal model provider %q; use codex, claude or agy", args[0])
+		return "", fmt.Errorf("unknown Marshal model provider %q; use codex, claude or agy", provider)
+	}
+	// Validate before persisting or touching the current chat.
+	if _, err := project.FindBinary(provider); err != nil {
+		return "", fmt.Errorf("Marshal unchanged: %s CLI is missing. Install %s and make it available on PATH, then retry /marshal model %s. The existing chat has been left running.", provider, provider, provider)
 	}
 	m := w.marshalSession()
 	m.mu.Lock()
-	m.provider = args[0]
+	busy := m.busy
 	m.mu.Unlock()
-	return "The next Marshal run will use " + args[0] + " as the Marshal model.", nil
+	if busy {
+		return "", errors.New("a Marshal operation is already running")
+	}
+	root := w.providerRoot()
+	if err := saveDefaultProvider(root, provider); err != nil {
+		return "", fmt.Errorf("Marshal provider was not saved: %w", err)
+	}
+	w.tmuxMu.Lock()
+	chat := w.tmuxActiveWins["marshal-chat"]
+	replace := chat != nil && canonicalNeutralProvider(chat.provider) != provider
+	if replace {
+		// Only this explicit operator command may stop the planning chat.
+		// Hold the lifecycle lock until its monitor is cancelled, so recovery
+		// cannot respawn the old provider between the stop and replacement.
+		if err := tmux.KillPane(ctx, chat.paneID); err != nil {
+			w.tmuxMu.Unlock()
+			return "", fmt.Errorf("default Marshal provider saved as %s, but the old chat could not be closed: %w", provider, err)
+		}
+		if chat.cancel != nil {
+			chat.cancel()
+		}
+		delete(w.tmuxActiveWins, "marshal-chat")
+	}
+	w.tmuxMu.Unlock()
+	if replace {
+		if chat.doneChan != nil {
+			<-chat.doneChan
+		}
+		chat.briefingDir.remove()
+		// Finish any draft observer tied to the old provider before changing
+		// the session, so it cannot publish the old provider after the switch.
+		m.mu.Lock()
+		cancel, done := m.draftCancel, m.draftDone
+		m.mu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+		if done != nil {
+			<-done
+		}
+	}
+	m.mu.Lock()
+	m.provider = provider
+	if replace {
+		m.conversationID = ""
+	}
+	m.mu.Unlock()
+	if replace {
+		background := context.WithValue(ctx, tmuxBackgroundLaunchKey{}, true)
+		var err error
+		if w.runtime != nil {
+			_, err = w.marshalChat(background)
+		} else {
+			w.tmuxMu.Lock()
+			err = w.startMarshalChatLocked(background, root)
+			w.tmuxMu.Unlock()
+		}
+		// The command is entered in the control centre; keep it visible.
+		w.tmuxMu.Lock()
+		target := w.marshalTarget()
+		w.tmuxMu.Unlock()
+		_ = tmux.SelectWindow(ctx, target)
+		if err != nil {
+			return "", fmt.Errorf("Marshal provider saved as %s, but the new chat could not start: %w; retry /marshal chat", provider, err)
+		}
+	}
+	return "The Marshal now uses " + provider + ".", nil
 }
 
 // marshalRecommend recommends a Marshal provider from the static model
