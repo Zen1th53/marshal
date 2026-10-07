@@ -10036,8 +10036,8 @@
     },
     {
       "path": "internal/tui/marshal_exit_test.go",
-      "sha256": "c13e4c7c54df154886fceec156cb68ba2af14128a5a34f77c7e980bea84dbe6f",
-      "bytes": 3127
+      "sha256": "b2b09bec528225299bc4dd6c91fb3947b77028f5a69a4f63276790ab4309237a",
+      "bytes": 5359
     },
     {
       "path": "internal/tui/marshal_import_args_test.go",
@@ -10716,8 +10716,8 @@
     },
     {
       "path": "internal/tui/tmux_native.go",
-      "sha256": "f9cd2048eb706b8fe89e4894543c2ae3417a778b6534797d76e07490317829a3",
-      "bytes": 53289
+      "sha256": "dca278070e4c9e6c550a65d0bb2d34d1b5ce2a94bb6cbe3962cea7fdf07f7f0a",
+      "bytes": 53824
     },
     {
       "path": "internal/tui/tmux_native_test.go",
@@ -11511,8 +11511,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.5.md",
-      "sha256": "688b334f4abc5cc0132d5d2e81a45949e6356eb1da013891371a9f9d80df6e58",
-      "bytes": 8801
+      "sha256": "fbcdac9a38a474df62ca5de0ce46ff0648ff071c5fd6200944db6089bbe4480e",
+      "bytes": 8973
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
