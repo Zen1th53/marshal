@@ -194,14 +194,14 @@ func TestProviderKeyAfterWindowClosesHasNoDeadTarget(t *testing.T) {
 			if err := tmux.BindWindowKey(ctx, a.paneID, table, key, "select-window", "-t", a.paneID); err != nil {
 				t.Fatal(err)
 			}
-			before, err := tmux.RunCommand(ctx, "list-keys", "-T", table, key)
+			before, err := tableKeyBinding(ctx, table, key)
 			if err != nil || !strings.Contains(string(before), w.tmuxSession+":"+a.windowID) {
 				t.Fatalf("initial binding: %s %v", before, err)
 			}
 			if err := w.retainAndCloseAgent(ctx, a, w.workDir, "completed"); err != nil {
 				t.Fatal(err)
 			}
-			after, err := tmux.RunCommand(ctx, "list-keys", "-T", table, key)
+			after, err := tableKeyBinding(ctx, table, key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -222,4 +222,22 @@ func TestProviderKeyAfterWindowClosesHasNoDeadTarget(t *testing.T) {
 			}
 		})
 	}
+}
+
+// tableKeyBinding returns the binding of one key in one table. tmux 3.7
+// prints nothing for "list-keys -T table key", so the full listing is
+// filtered instead.
+func tableKeyBinding(ctx context.Context, table, key string) ([]byte, error) {
+	out, err := tmux.RunCommand(ctx, "list-keys")
+	if err != nil {
+		return nil, err
+	}
+	var lines []string
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 4 && f[1] == "-T" && f[2] == table && f[3] == key {
+			lines = append(lines, line)
+		}
+	}
+	return []byte(strings.Join(lines, "\n")), nil
 }
