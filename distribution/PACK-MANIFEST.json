@@ -10611,8 +10611,8 @@
     },
     {
       "path": "internal/tui/tmux_completion_test.go",
-      "sha256": "d2e0f6fd7388d29a0fa68d8c3331574bccb156f65530ccdfaf9e4216d05f61e5",
-      "bytes": 8234
+      "sha256": "6f9298492ba836d46c41c9eb26d6c55458f1d4c8f9ea1314ef4cbbb297b61f98",
+      "bytes": 8785
     },
     {
       "path": "internal/tui/tmux_governance_test.go",
