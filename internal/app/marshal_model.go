@@ -193,7 +193,7 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 		return MarshalDraft{}, errors.New("no worker CLI is available")
 	}
 	var proposal marshalTaskProposal
-	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Use mode governed for codex and claude unless the operator explicitly requests native; agy and opencode use native. Honour a goal that requests governed work. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+MarshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
+	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Use mode governed for codex and claude unless the operator explicitly requests native; agy uses native; opencode defaults to native and also supports governed when requested. Honour a goal that requests governed work. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+MarshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
 	if err != nil {
 		return MarshalDraft{}, err
 	}
@@ -307,7 +307,7 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 		if mode != marshal.Native && mode != marshal.Governed {
 			return MarshalDraft{}, fmt.Errorf("invalid task mode %q", mode)
 		}
-		if mode == marshal.Governed && item.Worker != "codex" && item.Worker != "claude" {
+		if mode == marshal.Governed && item.Worker != "codex" && item.Worker != "claude" && item.Worker != "opencode" {
 			return MarshalDraft{}, fmt.Errorf("worker %s does not support governed mode", item.Worker)
 		}
 		draft.Plan.Tasks = append(draft.Plan.Tasks, plan.Task{ID: item.ID, Title: item.Title, Criteria: item.Criteria, Paths: item.Paths, DependsOn: item.DependsOn, Mutating: true, Weight: 1, Instructions: item.Instructions, ExpectedOutput: item.ExpectedOutput})
