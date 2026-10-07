@@ -192,7 +192,7 @@ func TestMarshalDraftBriefBindsExactCriteriaAndRuntimeWorktree(t *testing.T) {
 for prompt; do :; done
 case "$prompt" in *"fresh checkout of the committed result"*"clean sandbox"*"no worker environment, network or temporary files"*"only repository content"*) ;; *) exit 98 ;; esac
 case "$prompt" in *"rerun after an integration merge"*"never commit history, HEAD diffs or commit structure"*"MARSHAL already records changed-file scope"*) ;; *) exit 97 ;; esac
-case "$prompt" in *"amended JSON"*) ;; *"copy each criterion string verbatim"*"runtime-assigned worktree"*) ;; *) exit 99 ;; esac
+case "$prompt" in *"amended JSON"*) ;; *"opencode defaults to native and also supports governed when requested"*"copy each criterion string verbatim"*"runtime-assigned worktree"*) ;; *) exit 99 ;; esac
 printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{\"tasks\":[{\"id\":\"a\",\"title\":\"write a\",\"criteria\":[\"a exists\"],\"paths\":[\"a.txt\"],\"depends_on\":[],\"worker\":\"codex\",\"checks\":[{\"command\":\"test -f a.txt\",\"criteria\":[\"a exists\"]}],\"instructions\":\"Use assigned worktree\",\"expected_output\":\"a.txt\"}]}"}}'
 `
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
@@ -210,30 +210,34 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{
 }
 
 func TestMarshalProposalCarriesGovernedMode(t *testing.T) {
-	m := &MarshalCLI{ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
-	for _, mode := range []string{"governed", "native", ""} {
-		var proposal marshalTaskProposal
-		data := `{"tasks":[{"id":"a","title":"write a","mode":"` + mode + `","worker":"codex","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`
-		if err := json.Unmarshal([]byte(data), &proposal); err != nil {
-			t.Fatal(err)
-		}
-		draft, err := m.materialize(proposal, "", 1, []string{"codex"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := marshal.Governed
-		if mode == "native" {
-			want = marshal.Native
-		}
-		if draft.Tasks[0].Mode != want {
-			t.Fatalf("mode %q: got %s want %s", mode, draft.Tasks[0].Mode, want)
-		}
+	for _, worker := range []string{"codex", "claude", "opencode"} {
+		t.Run(worker, func(t *testing.T) {
+			m := &MarshalCLI{ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
+			for _, mode := range []string{"governed", "native", ""} {
+				var proposal marshalTaskProposal
+				data := `{"tasks":[{"id":"a","title":"write a","mode":"` + mode + `","worker":"` + worker + `","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`
+				if err := json.Unmarshal([]byte(data), &proposal); err != nil {
+					t.Fatal(err)
+				}
+				draft, err := m.materialize(proposal, "", 1, []string{worker})
+				if err != nil {
+					t.Fatal(err)
+				}
+				want := marshal.Governed
+				if mode == "native" || (mode == "" && worker == "opencode") {
+					want = marshal.Native
+				}
+				if draft.Tasks[0].Mode != want {
+					t.Fatalf("mode %q: got %s want %s", mode, draft.Tasks[0].Mode, want)
+				}
+			}
+		})
 	}
 }
 
 func TestMarshalProposalRefusesInvalidOrUnsupportedModes(t *testing.T) {
 	m := &MarshalCLI{ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
-	for _, entry := range []struct{ worker, mode string }{{"codex", "other"}, {"agy", "governed"}, {"opencode", "governed"}} {
+	for _, entry := range []struct{ worker, mode string }{{"codex", "other"}, {"agy", "governed"}, {"opencode", "other"}} {
 		var proposal marshalTaskProposal
 		data := `{"tasks":[{"id":"a","title":"write a","mode":"` + entry.mode + `","worker":"` + entry.worker + `","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`
 		if err := json.Unmarshal([]byte(data), &proposal); err != nil {
@@ -246,18 +250,28 @@ func TestMarshalProposalRefusesInvalidOrUnsupportedModes(t *testing.T) {
 }
 
 func TestGovernedProposalDispatchesGovernedDriver(t *testing.T) {
+	for _, worker := range []string{"codex", "opencode"} {
+		t.Run(worker, func(t *testing.T) { testGovernedProposalDispatchesGovernedDriver(t, worker) })
+	}
+}
+
+func testGovernedProposalDispatchesGovernedDriver(t *testing.T, worker string) {
+	t.Helper()
 	s, _ := marshalFixture(t, 1)
 	var proposal marshalTaskProposal
-	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"write a","mode":"governed","worker":"codex","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`), &proposal); err != nil {
+	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"write a","mode":"governed","worker":"`+worker+`","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`), &proposal); err != nil {
 		t.Fatal(err)
 	}
-	draft, err := (&MarshalCLI{ProjectID: s.ProjectID}).materialize(proposal, "", 1, []string{"codex"})
+	draft, err := (&MarshalCLI{ProjectID: s.ProjectID}).materialize(proposal, "", 1, []string{worker})
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.Drivers = map[string]driver.Driver{"codex": driver.Codex("must-not-start-native")}
+	s.Drivers = map[string]driver.Driver{worker: driver.Codex("must-not-start-native")}
+	if worker == "opencode" {
+		s.Drivers[worker] = driver.OpenCode("must-not-start-native")
+	}
 	called := false
-	s.GovernedDrivers = map[string]driver.Driver{"codex": driver.Governed{Provider: "codex", Run: func(_ context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
+	s.GovernedDrivers = map[string]driver.Driver{worker: driver.Governed{Provider: worker, Run: func(_ context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
 		called = true
 		return nil, os.WriteFile(filepath.Join(req.Worktree, "a.txt"), []byte("done"), 0600)
 	}}}
@@ -284,6 +298,14 @@ func TestGovernedProposalDispatchesGovernedDriver(t *testing.T) {
 }
 
 func TestGovernedDraftRefusesUnavailableProtectionWithoutNativeFallback(t *testing.T) {
+	for _, worker := range []string{"codex", "opencode"} {
+		t.Run(worker, func(t *testing.T) { testGovernedDraftRefusesUnavailableProtectionWithoutNativeFallback(t, worker) })
+	}
+}
+
+func testGovernedDraftRefusesUnavailableProtectionWithoutNativeFallback(t *testing.T, worker string) {
+	t.Helper()
+	t.Setenv("MARSHAL_OPENCODE_MODEL", "opencode/test-free")
 	repo := runtimeRepo(t)
 	if _, err := Bootstrap(t.Context(), repo.Path()); err != nil {
 		t.Fatal(err)
@@ -296,7 +318,7 @@ func TestGovernedDraftRefusesUnavailableProtectionWithoutNativeFallback(t *testi
 	bin := t.TempDir()
 	marker := filepath.Join(bin, "worker-started")
 	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'test-version\\n'; exit 0; fi\nprintf ran > '" + marker + "'\n"
-	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte(script), 0700); err != nil {
+	if err := os.WriteFile(filepath.Join(bin, worker), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -305,10 +327,10 @@ func TestGovernedDraftRefusesUnavailableProtectionWithoutNativeFallback(t *testi
 		t.Fatal(err)
 	}
 	var proposal marshalTaskProposal
-	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"write a","mode":"governed","worker":"codex","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`), &proposal); err != nil {
+	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"write a","mode":"governed","worker":"`+worker+`","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`), &proposal); err != nil {
 		t.Fatal(err)
 	}
-	draft, err := (&MarshalCLI{ProjectID: string(service.CanonicalPlanProjectID())}).materialize(proposal, "", 1, []string{"codex"})
+	draft, err := (&MarshalCLI{ProjectID: string(service.CanonicalPlanProjectID())}).materialize(proposal, "", 1, []string{worker})
 	if err != nil {
 		t.Fatal(err)
 	}

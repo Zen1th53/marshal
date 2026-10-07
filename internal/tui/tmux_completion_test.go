@@ -5,8 +5,10 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,6 +42,68 @@ func TestInteractiveTmuxNormalCompletionReapsDescendants(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestProviderCleanupResetsShortcutBeforeRemoval(t *testing.T) {
+	for _, entry := range []struct {
+		name, id, provider string
+		reset, fail        bool
+	}{
+		{"codex", "codex", "codex", true, false},
+		{"claude", "claude", "claude", true, false},
+		{"opencode", "opencode", "opencode", true, false},
+		{"agy", "agy", "agy", true, false},
+		{"reset failure", "opencode", "opencode", true, true},
+		{"task", "task-a", "opencode", false, false},
+		{"chat", "marshal-chat", "opencode", false, false},
+	} {
+		t.Run(entry.name, func(t *testing.T) {
+			binary, log := setupFakeTmux(t)
+			if entry.fail {
+				script, err := os.ReadFile(binary)
+				if err != nil {
+					t.Fatal(err)
+				}
+				script = []byte(strings.Replace(string(script), `case "$1" in`, "case \"$1\" in\n  bind-key) exit 1 ;;", 1))
+				if err := os.WriteFile(binary, script, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			w := NewWorkspace(nil, "project", "session")
+			root := t.TempDir()
+			w.tmuxSession = "test-session"
+			a := &activeTmuxAgent{id: entry.id, provider: entry.provider, paneID: "%129", windowID: "@129"}
+			w.tmuxActiveWins[a.id] = a
+			err := w.retainAndCloseAgent(t.Context(), a, root, "completed")
+			if (err != nil) != entry.fail {
+				t.Fatalf("cleanup error = %v, expected failure %v", err, entry.fail)
+			}
+			data, err := os.ReadFile(log)
+			if err != nil {
+				t.Fatal(err)
+			}
+			calls := string(data)
+			binding, removal := strings.Index(calls, "bind-key -T"), strings.Index(calls, "kill-pane")
+			if (binding >= 0) != entry.reset {
+				t.Fatalf("shortcut reset = %v, want %v: %s", binding >= 0, entry.reset, calls)
+			}
+			if entry.reset && (!strings.Contains(calls, "display-message") || !strings.Contains(calls, "session ended; use /"+entry.provider+" to reopen.")) {
+				t.Fatalf("missing reopening guidance: %s", calls)
+			}
+			for _, call := range strings.Split(calls, "\n") {
+				if strings.HasPrefix(call, "bind-key ") && (strings.Contains(call, a.paneID) || strings.Contains(call, a.windowID)) {
+					t.Fatalf("replacement shortcut targets removed provider: %s", call)
+				}
+			}
+			if entry.fail {
+				if removal >= 0 || a.cleaned || w.tmuxActiveWins[a.id] == nil {
+					t.Fatalf("removed provider after failed shortcut reset: %s", calls)
+				}
+			} else if removal < 0 || (entry.reset && binding > removal) || !a.cleaned || w.tmuxActiveWins[a.id] != nil {
+				t.Fatalf("cleanup did not reset before removal: %s", calls)
+			}
+		})
+	}
 }
 
 func TestTaskTmuxNormalCompletionReapsDescendants(t *testing.T) {
@@ -102,4 +166,78 @@ func TestImportedTaskCompletionPreservesWorkspaceAndMarshalPanes(t *testing.T) {
 	if files, _ := filepath.Glob(filepath.Join(w.workDir, ".marshal", "tmux-panes", "*.json")); len(files) != 0 {
 		t.Fatalf("pane records for unhosted task: %v", files)
 	}
+}
+
+func TestProviderKeyAfterWindowClosesHasNoDeadTarget(t *testing.T) {
+	for _, provider := range []string{"codex", "claude", "opencode", "agy"} {
+		t.Run(provider, func(t *testing.T) {
+			w := realTmuxWorkspace(t)
+			ctx := t.Context()
+			if err := tmux.NewWindow(ctx, w.tmuxSession, provider, w.workDir, nil, []string{"sleep", "600"}); err != nil {
+				t.Fatal(err)
+			}
+			panes, err := tmux.ListPanes(ctx, w.tmuxSession)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var a *activeTmuxAgent
+			for _, pane := range panes {
+				if pane.WindowName == provider {
+					a = &activeTmuxAgent{id: provider, provider: provider, label: provider, role: "worker", paneID: pane.PaneID, windowID: pane.WindowID, window: provider}
+				}
+			}
+			if a == nil {
+				t.Fatal("provider pane absent")
+			}
+			w.tmuxActiveWins[a.id] = a
+			table, key := "marshal-keys-"+tmux.ProjectHash(w.workDir), providerFKey(provider)
+			if err := tmux.BindWindowKey(ctx, a.paneID, table, key, "select-window", "-t", a.paneID); err != nil {
+				t.Fatal(err)
+			}
+			before, err := tableKeyBinding(ctx, table, key)
+			if err != nil || !strings.Contains(string(before), w.tmuxSession+":"+a.windowID) {
+				t.Fatalf("initial binding: %s %v", before, err)
+			}
+			if err := w.retainAndCloseAgent(ctx, a, w.workDir, "completed"); err != nil {
+				t.Fatal(err)
+			}
+			after, err := tableKeyBinding(ctx, table, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(after), a.windowID) || strings.Contains(string(after), a.paneID) {
+				t.Fatalf("binding targets removed provider: %s", after)
+			}
+			if !strings.Contains(string(after), "display-message") || !strings.Contains(string(after), "session ended") {
+				t.Fatalf("operator receives no reopening guidance: %s", after)
+			}
+			panes, err = tmux.ListPanes(ctx, w.tmuxSession)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, pane := range panes {
+				if pane.PaneID == a.paneID {
+					t.Fatal("provider pane was not removed")
+				}
+			}
+		})
+	}
+}
+
+// tableKeyBinding returns the binding of one key in one table. tmux 3.7
+// prints nothing for "list-keys -T table key", so the full listing is
+// filtered instead.
+func tableKeyBinding(ctx context.Context, table, key string) ([]byte, error) {
+	out, err := tmux.RunCommand(ctx, "list-keys")
+	if err != nil {
+		return nil, err
+	}
+	var lines []string
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 4 && f[1] == "-T" && f[2] == table && f[3] == key {
+			lines = append(lines, line)
+		}
+	}
+	return []byte(strings.Join(lines, "\n")), nil
 }

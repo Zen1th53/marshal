@@ -47,12 +47,12 @@ func TestMarshalWiredOffersOnlyRealProcess05Harnesses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"codex", "claude-code"} {
+	for _, name := range []string{"codex", "claude-code", "opencode"} {
 		if service.GovernedDrivers[name] == nil {
 			t.Fatalf("real Process 05 harness %s is unavailable", name)
 		}
 	}
-	for _, name := range []string{"antigravity", "opencode"} {
+	for _, name := range []string{"antigravity", "agy"} {
 		if service.GovernedDrivers[name] != nil {
 			t.Fatalf("placeholder Process 05 harness %s was offered", name)
 		}
@@ -294,5 +294,22 @@ func TestMarshalContentCheckPassesWorkerAndIntegrationMerge(t *testing.T) {
 	session, _, err := s.verifyByChecks(t.Context(), run, head)
 	if err != nil || session.RequiredChecks["a#0"] != verification.StatusPass {
 		t.Fatalf("content check at integration merge: %+v %v", session, err)
+	}
+}
+
+func TestGovernedOpenCodeCountsForReassignment(t *testing.T) {
+	fixture, _ := marshalFixture(t, 1)
+	runtime := &Runtime{store: fixture.Store, layout: project.Layout{Root: fixture.Repository, Worktrees: fixture.Worktrees}}
+	service, err := runtime.MarshalWired(MarshalWiring{Provider: "codex", Approver: func(context.Context, string, string) (string, error) { return "operator", nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(service.GovernedDrivers, "claude")
+	delete(service.GovernedDrivers, "claude-code")
+	if got := service.otherWorker("codex", marshal.Governed); got != "opencode" {
+		t.Fatalf("governed replacement = %q, want opencode", got)
+	}
+	if got := service.otherWorker("opencode", marshal.Governed); got != "codex" {
+		t.Fatalf("governed replacement = %q, want codex", got)
 	}
 }

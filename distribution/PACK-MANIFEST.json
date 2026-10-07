@@ -4106,13 +4106,13 @@
     },
     {
       "path": "internal/app/marshal_model.go",
-      "sha256": "3878d5dc721e5240428bb9c70a1917343d32dbe860ba35dc1c9a32ad973e306a",
-      "bytes": 16474
+      "sha256": "ee70c4fdcab9978138282c1077beeec06856b9ea543e058a234aa7a5b730b871",
+      "bytes": 16562
     },
     {
       "path": "internal/app/marshal_model_test.go",
-      "sha256": "811e545a49dfb870e92dffa268a1eb6fe9e023a108f9f53cc53ef7ea0c27dc52",
-      "bytes": 13867
+      "sha256": "376ac0cc44c2b81a2e6e6abebdf0f7d2b8beb2f6979634e35c5f608b6a57214a",
+      "bytes": 14834
     },
     {
       "path": "internal/app/marshal_operator_test.go",
@@ -4176,13 +4176,13 @@
     },
     {
       "path": "internal/app/marshal_wiring.go",
-      "sha256": "d3e18260c9a19c2a8c0bc1492f4b9ebd99e51a78fc8bf9aad3abbfd4ad756a17",
-      "bytes": 12218
+      "sha256": "32d210c527d2d54caa723d1ddc4af87047d0046175f3b5d5d3bbe889b4cda437",
+      "bytes": 12323
     },
     {
       "path": "internal/app/marshal_wiring_test.go",
-      "sha256": "c467a16c6f98fd5f974f11a4b1d31135e7b5039b5b7807fdb1ca4ecdbbe1993c",
-      "bytes": 11870
+      "sha256": "8a091c4112ff0131b0abbb89d92e5db7e634cb4a5577a735ca7667beffd2a6f9",
+      "bytes": 12673
     },
     {
       "path": "internal/app/memory_consolidation.go",
@@ -10611,8 +10611,8 @@
     },
     {
       "path": "internal/tui/tmux_completion_test.go",
-      "sha256": "6810d1df6782cd7364983499901c0a8c51e084af91ace5e69ca8ce6993303508",
-      "bytes": 3744
+      "sha256": "6f9298492ba836d46c41c9eb26d6c55458f1d4c8f9ea1314ef4cbbb297b61f98",
+      "bytes": 8785
     },
     {
       "path": "internal/tui/tmux_governance_test.go",
@@ -10621,8 +10621,8 @@
     },
     {
       "path": "internal/tui/tmux_identity.go",
-      "sha256": "5c3cfa568686be070bbf0cf2fc29e514326946683a3e316b98b2691db5b4fa75",
-      "bytes": 4899
+      "sha256": "06ad55ed70addb69078f07ab05c0727235129884203cfba2f32764022c9ecbd8",
+      "bytes": 5468
     },
     {
       "path": "internal/tui/tmux_import_test.go",
@@ -11360,6 +11360,11 @@
       "bytes": 8369
     },
     {
+      "path": "release/RELEASE_NOTES_0.0.5-rc.11.md",
+      "sha256": "6c349a7d6e52334699362a4f425199e6e89bec5aeb39be7b5aa3904c3da97272",
+      "bytes": 8465
+    },
+    {
       "path": "release/RELEASE_NOTES_0.0.5-rc.2.md",
       "sha256": "12444b1a27c498d55329a018fb7478813aaef5a4cbdf1a5b51f610eedde34e96",
       "bytes": 4205
@@ -11401,8 +11406,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.5.md",
-      "sha256": "9be7674abc48197b1943cdb516ad3267409646768e87149264405abb6fdf9aff",
-      "bytes": 7249
+      "sha256": "94a8651ec5bc21e8c9d11dbd1d992f089e26b05043326feb3937989ad4a81e24",
+      "bytes": 7769
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
@@ -11846,7 +11851,7 @@
     },
     {
       "path": "tools/effect-inventory/main_test.go",
-      "sha256": "d41e3cb35d17c66ef5b5cf707ab2c2490800b4ac8c21608efdc241f0a95783a7",
+      "sha256": "98adc5c3283290bebe72a7b6a317d2f7e6fa758c3811c881e1600e042a1d3d44",
       "bytes": 9954
     },
     {
