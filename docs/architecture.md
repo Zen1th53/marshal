@@ -1,8 +1,8 @@
 # MARSHAL architecture
 
 MARSHAL separates durable engineering authority from the provider process that
-performs work. This page describes current `main` at SQLite schema v91, which is
-ahead of the v1.5.0 tag.
+performs work. This page describes current `main` at SQLite schema v91, after
+the v0.0.7 release (targeting v0.0.8).
 
 ```text
 CLI / terminal TUI / Unix socket / MCP / A2A

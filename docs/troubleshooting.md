@@ -1,6 +1,6 @@
 # MARSHAL Troubleshooting Guide
 
-**Runtime Milestone**: `v1.5.0`
+**Runtime Milestone**: `v0.0.7`
 
 This guide provides symptom-based troubleshooting for engineers operating MARSHAL local control plane and provider adapters.
 
