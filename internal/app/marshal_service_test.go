@@ -94,6 +94,11 @@ func TestMarshalGovernedTaskDoesNotLaunchNativeDriver(t *testing.T) {
 
 func marshalFixture(t *testing.T, n int) (*MarshalService, string) {
 	t.Helper()
+	return marshalFixtureAt(t, n, filepath.Join(t.TempDir(), "state.db"))
+}
+
+func marshalFixtureAt(t *testing.T, n int, dbPath string) (*MarshalService, string) {
+	t.Helper()
 	ctx := context.Background()
 	repo := t.TempDir()
 	marshalGit(t, repo, "init", "-b", "main")
@@ -104,7 +109,7 @@ func marshalFixture(t *testing.T, n int) (*MarshalService, string) {
 	}
 	marshalGit(t, repo, "add", "README.md")
 	marshalGit(t, repo, "commit", "-m", "base")
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "state.db"))
+	db, err := store.Open(ctx, dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}

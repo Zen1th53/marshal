@@ -317,13 +317,18 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 		"- Write the plan pack to " + app.MarshalPackRelativePath + "/: REQUIREMENTS.md, 00_INDEX.md and tasks/<id>.md for every task id, each a non-empty Markdown file of at most 64 KiB. The runtime refuses a draft whose pack is missing a note or has a note for no task.\n" +
 		"- Write the task list to " + marshalDraftRelativePath + " as JSON of the form " +
 		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","mode":"governed","checks":[{"command":"executable command","criteria":["criterion this command proves"]}]}]}` +
-		" and nothing else. Confirm each write succeeded and each file exists on disk: write the pack first, then plan-draft.json, then read back and validate both. Do not read a planned path before its write succeeds; repair failed writes before read-back. An edit preview is not a completed write. Every field shown is required; use an empty list for no dependencies. Map each check only to the criteria it proves; a criterion without passing evidence cannot be accepted. " + instructions + "\n", nil
+		" and nothing else. Confirm each write succeeded and each file exists on disk: write the pack first, then plan-draft.json, then read back and validate both. Only after successful read-back and validation, publish the completion marker " + marshalDraftRelativePath + ".ready containing ready. Do not touch the draft or pack after publishing the marker; the watcher may move them. Do not read a planned path before its write succeeds; repair failed writes before read-back. An edit preview is not a completed write. Every field shown is required; use an empty list for no dependencies. Map each check only to the criteria it proves; a criterion without passing evidence cannot be accepted. " + instructions + "\n", nil
 }
 
-// consumeMarshalDraft takes the draft file out of the way before reading it,
-// so a rejected draft is never picked up twice.
+// consumeMarshalDraft consumes only a draft the producer has validated and published.
 func consumeMarshalDraft(root string) ([]byte, bool, error) {
 	path := filepath.Join(root, marshalDraftRelativePath)
+	marker := path + ".ready"
+	if _, err := os.Stat(marker); errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	} else if err != nil {
+		return nil, false, err
+	}
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return nil, false, nil
 	} else if err != nil {
@@ -334,6 +339,9 @@ func consumeMarshalDraft(root string) ([]byte, bool, error) {
 		return nil, false, err
 	}
 	data, err := os.ReadFile(consumed)
+	if err == nil {
+		err = os.Remove(marker)
+	}
 	return data, true, err
 }
 
@@ -408,7 +416,7 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	w.tmuxMu.Unlock()
 	if saved.RunID != "" {
 		if run, err := service.Snapshot(ctx, runID); err == nil {
-			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "resumed"))
+			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "stored run recovered"))
 			return result, nil
 		}
 	}
@@ -1217,10 +1225,24 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 			w.marshalPublish(m, runID, w.marshalFailurePanel(runID, provider, run, "resume failed: "+err.Error()))
 			return
 		}
+		if run.State == marshal.Closed || run.State == marshal.Drafting || run.State == marshal.AwaitingUser {
+			note := "run already closed"
+			if run.State == marshal.Drafting {
+				note = "awaiting plan approval; /marshal approve"
+			}
+			if run.State == marshal.AwaitingUser {
+				note = "run remains paused"
+				if run.Pause != nil {
+					note = run.Pause.Reason + "; " + strings.Join(run.Pause.Resolutions, "; ")
+				}
+			}
+			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, note))
+			return
+		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "resuming"))
 		keepNativeTurn = w.marshalExecute(runCtx, m, service, runID, provider)
 	})
-	return "Resuming Marshal run " + runID + ".", nil
+	return "Checking recovery for Marshal run " + runID + "; the panel will show whether it can resume.", nil
 }
 
 func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, error) {

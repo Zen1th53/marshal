@@ -385,6 +385,12 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	if err := rt.memoryService.RebuildProjections(ctx, localProjectID); err != nil {
 		return nil, err
 	}
+	if service := rt.Marshal(); service != nil {
+		if err := service.RecoverPendingOperations(ctx); err != nil {
+			database.Close()
+			return nil, err
+		}
+	}
 	_ = rt.ReconcileStartup(ctx)
 	return rt, nil
 }

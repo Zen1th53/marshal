@@ -3,6 +3,7 @@ package marshal
 import (
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/events"
 	"path"
 	"slices"
 	"strings"
@@ -180,21 +181,22 @@ type ImportedResult struct {
 }
 
 type Task struct {
-	ImportedResult *ImportedResult `json:",omitempty"`
-	PlanTaskID     string
-	Title          string
-	ParentID       string
-	Worker         string
-	Mode           WorkerMode
-	Branch         string
-	BaseCommit     string
-	ResultCommit   string
-	State          TaskState
-	ReturnsByAgent map[string]int
-	Checks         []Check
-	Files          []string
-	Criteria       []string
-	DependsOn      []string
+	EvidenceAttemptBase int             `json:",omitempty"`
+	ImportedResult      *ImportedResult `json:",omitempty"`
+	PlanTaskID          string
+	Title               string
+	ParentID            string
+	Worker              string
+	Mode                WorkerMode
+	Branch              string
+	BaseCommit          string
+	ResultCommit        string
+	State               TaskState
+	ReturnsByAgent      map[string]int
+	Checks              []Check
+	Files               []string
+	Criteria            []string
+	DependsOn           []string
 	// Instructions and ExpectedOutput are copied from the approved plan task;
 	// the worker's brief carries them.
 	Instructions   string `json:",omitempty"`
@@ -208,8 +210,29 @@ type CloseAuthorization struct {
 	Voided              bool
 }
 
+// Pause records why execution stopped and how the operator may resolve it.
+type Pause struct {
+	Reason      string
+	Resolutions []string
+	ResumeState RunState
+}
+
+// LifecycleOperation is written before an external effect. Its completion
+// snapshot and audit event commit in the same transaction.
+type LifecycleOperation struct {
+	ID, Kind, TaskID, Dir, Before, After, Target string
+	Authorized                                   bool `json:",omitempty"`
+	Next                                         *Run `json:",omitempty"`
+	Event                                        events.Event
+	HandIn                                       *HandIn `json:",omitempty"`
+	Attempt                                      int
+}
+
 // Run binds plan approval, settings, tasks, and close authority.
 type Run struct {
+	Operation           *LifecycleOperation `json:",omitempty"`
+	Pause               *Pause              `json:",omitempty"`
+	ArtifactRevision    int64               `json:",omitempty"`
 	PlanID              string
 	Process05Bound      bool
 	PlanVersion         int64

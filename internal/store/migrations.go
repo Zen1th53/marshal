@@ -10,7 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 90
+const LatestSchemaVersion = 91
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -2701,6 +2701,14 @@ CREATE TRIGGER IF NOT EXISTS task_snapshots_no_delete BEFORE DELETE ON task_comm
 		}
 	}
 
+	if version < 91 {
+		if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS marshal_proposals(project_id TEXT NOT NULL REFERENCES projects(project_id), occurrence_id TEXT NOT NULL, line TEXT NOT NULL, request_json TEXT NOT NULL DEFAULT '', request_key TEXT NOT NULL DEFAULT '', outcome TEXT NOT NULL DEFAULT '', PRIMARY KEY(project_id,occurrence_id))`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version,applied_at) VALUES(91,?)", utcNow()); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
 	}

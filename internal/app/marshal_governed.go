@@ -94,13 +94,13 @@ func (r *Runtime) marshalGovernedRun(s *MarshalService) driver.GovernedRunner {
 		// immutable hand-in evidence can authorize that additional prior HEAD.
 		prior := false
 		if err == nil && current != "" && current == run.Tasks[i].ResultCommit {
-			attempt := 0
+			attempt := run.Tasks[i].EvidenceAttemptBase
 			for _, n := range run.Tasks[i].ReturnsByAgent {
 				attempt += n
 			}
 			// A timed-out return may have no hand-in. Find the latest
 			// recorded attempt, never authorize a different older result.
-			for ; attempt > 0; attempt-- {
+			for ; attempt > run.Tasks[i].EvidenceAttemptBase; attempt-- {
 				evidence, evidenceErr := s.Store.GetMarshalHandIn(ctx, req.RunID, req.Task.PlanTaskID, attempt)
 				if errors.Is(evidenceErr, model.ErrNotFound) {
 					continue
