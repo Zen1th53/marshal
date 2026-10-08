@@ -261,3 +261,42 @@ esac
 		t.Fatalf("shrunk popup allowed=%v err=%v", allow, err)
 	}
 }
+
+func TestPopupExpiredKeyIsConsumedBeforeReturningToChat(t *testing.T) {
+	for _, version := range []string{"3.3a", "3.2a"} {
+		t.Run(version, func(t *testing.T) {
+			dir := t.TempDir()
+			fake := filepath.Join(dir, "tmux")
+			script := fmt.Sprintf(`#!/bin/bash
+case $1 in
+ display-message) case "${@: -1}" in *client_height*) echo '40 120';; *) echo %s;; esac;;
+ display-popup|new-window)
+  { sleep 1.3; printf A; } | { bash -c "${@: -1}"; IFS= read -r -n 1 stray; printf '%%s' "$stray" > %q; } > %q
+  [[ $1 == new-window ]] && echo %%review
+  exit 0;;
+ select-window|kill-window) exit 0;;
+ *) exit 1;;
+esac
+`, version, filepath.Join(dir, "stray"), filepath.Join(dir, "screen"))
+			// new-window receives the script path, whereas display-popup receives a shell command.
+			script = strings.Replace(script, `bash -c "${@: -1}";`, `if [[ $1 == new-window ]]; then bash "${@: -1}"; else bash -c "${@: -1}"; fi;`, 1)
+			if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
+				t.Fatal(err)
+			}
+			tmux.SetBinaryPath(fake)
+			defer tmux.ResetBinaryPath()
+			allow, err := Popup(t.Context(), "client", []Request{{Kind: "marshal-command", Object: "/marshal approve"}}, 1100*time.Millisecond)
+			if err != nil || allow {
+				t.Fatalf("expired approval: allow=%v err=%v", allow, err)
+			}
+			stray, err := os.ReadFile(filepath.Join(dir, "stray"))
+			if err != nil || len(stray) != 0 {
+				t.Fatalf("late key reached chat: %q %v", stray, err)
+			}
+			screen, _ := os.ReadFile(filepath.Join(dir, "screen"))
+			if !strings.Contains(string(screen), "Time remaining: 2 s") || !strings.Contains(string(screen), "Time remaining: 1 s") || !strings.Contains(string(screen), "Expired") {
+				t.Fatalf("missing countdown/expiry notice: %s", screen)
+			}
+		})
+	}
+}

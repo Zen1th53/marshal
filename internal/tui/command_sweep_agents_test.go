@@ -79,6 +79,7 @@ func TestCommandSweepAgentsMalformedDoesNotAct(t *testing.T) {
 		"/codex model slug extra", "/codex run task model extra", "/codex skill install name extra",
 		"/skill install name extra", "/skill typo name", "/codex new extra", "/codex continue extra",
 		"/mcp list extra", "/mcp get name extra", "/mcp rm name extra", "/mcp remove name extra", "/mcp delete name extra",
+		"/mcp remove --confirm", "/mcp remove name extra --confirm", "/plugin remove --confirm", "/plugin remove name extra --confirm",
 		"/plugin list extra", "/plugins add name extra", "/plugin install name extra", "/plugin remove name extra", "/plugin rm name extra", "/plugin uninstall name extra",
 		"/codex features list extra", "/codex features enable flag extra", "/codex features disable flag extra",
 		"/codex sandbox workspace-write extra", "/codex approval never extra", "/codex search off extra",
@@ -168,9 +169,9 @@ func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
 		{"/mcp", "mcp\nlist\n"}, {"/mcp list", "mcp\nlist\n"},
 		{`/mcp add "server name" -- local-command "arg space"`, "mcp\nadd\nserver name\n--\nlocal-command\narg space\n"},
 		{`/mcp get "server name"`, "mcp\nget\nserver name\n"},
-		{"/mcp rm server", "mcp\nremove\nserver\n"}, {"/mcp remove server", "mcp\nremove\nserver\n"}, {"/mcp delete server", "mcp\nremove\nserver\n"},
+		{"/mcp rm server --confirm", "mcp\nremove\nserver\n"}, {"/mcp remove server --confirm", "mcp\nremove\nserver\n"}, {"/mcp delete server --confirm", "mcp\nremove\nserver\n"},
 		{"/plugin add local-plugin", "plugin\nadd\nlocal-plugin\n"}, {"/plugin install local-plugin", "plugin\nadd\nlocal-plugin\n"},
-		{"/plugins rm local-plugin", "plugin\nremove\nlocal-plugin\n"}, {"/plugin remove local-plugin", "plugin\nremove\nlocal-plugin\n"}, {"/plugin uninstall local-plugin", "plugin\nremove\nlocal-plugin\n"},
+		{"/plugins rm local-plugin --confirm", "plugin\nremove\nlocal-plugin\n"}, {"/plugin remove local-plugin --confirm", "plugin\nremove\nlocal-plugin\n"}, {"/plugin uninstall local-plugin --confirm", "plugin\nremove\nlocal-plugin\n"},
 		{"/plugin marketplace list", "plugin\nmarketplace\nlist\n"},
 		{`/resume --last "prompt with spaces"`, "exec\nresume\nsession with spaces\nprompt with spaces\n"},
 		{`/codex resume "session with spaces"`, "exec\nresume\nsession with spaces\n"},
@@ -190,7 +191,15 @@ func TestCommandSweepAgentsGovernedCLI(t *testing.T) {
 			}
 		})
 	}
-	_ = os.Remove(logPath)
+	if err := os.Remove(logPath); err != nil {
+		t.Fatal(err)
+	}
+	if out := sweepAgentExecute(t, ws, "/mcp rm server"); !strings.Contains(out, "requires explicit operator confirmation") || !strings.Contains(out, "--confirm") {
+		t.Fatal(out)
+	}
+	if data, err := os.ReadFile(logPath); !os.IsNotExist(err) {
+		t.Fatalf("unconfirmed command invoked provider: %q (%v)", data, err)
+	}
 	if out := sweepAgentExecute(t, ws, "/fork --last"); !strings.Contains(out, "terminal-only") {
 		t.Fatal(out)
 	}
@@ -241,6 +250,7 @@ func TestCommandSweepAgentsEmptyAndMissingProvider(t *testing.T) {
 			t.Fatalf("missing CLI recovery: %s", out)
 		}
 	}
+	fakeProviderCLIs(t, "opencode", "agy")
 	for _, root := range []string{"/opencode", "/agy", "/antigravity"} {
 		out := sweepAgentExecute(t, ws, root+" new")
 		if !strings.Contains(out, "interactive terminal") || strings.Contains(out, " exec") {
@@ -571,4 +581,17 @@ func useCodexByDefault(t *testing.T, root string) {
 	if err := saveDefaultProvider(root, "codex"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// fakeProviderCLIs puts do-nothing provider executables first on PATH so a
+// test reaches the checks that follow CLI resolution on machines without them.
+func fakeProviderCLIs(t *testing.T, names ...string) {
+	t.Helper()
+	dir := t.TempDir()
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }

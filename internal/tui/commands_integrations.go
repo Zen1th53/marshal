@@ -15,6 +15,13 @@ func governedAgentUsage(provider string, args []string, interactive bool) string
 	if len(args) == 0 {
 		return ""
 	}
+	if hasHelpFlag(args) {
+		return ""
+	}
+	destructive, _ := isDestructiveNativeSubcommand(provider, args)
+	if destructive {
+		args, _ = extractConfirmation(args)
+	}
 	sub := strings.ToLower(args[0])
 	if provider == "claude" && !oneOf(sub, "status", "info", "health", "help", "doctor", "models", "model", "select", "sessions", "runs", "history", "run", "dispatch") {
 		return ""
@@ -76,7 +83,7 @@ func governedAgentUsage(provider string, args []string, interactive bool) string
 			tail = " list"
 		}
 	}
-	if max >= 0 && len(args) > max {
+	if max >= 0 && (len(args) > max || (destructive && max == 3 && len(args) < 3)) {
 		return fmt.Sprintf("Usage: /%s %s%s", provider, sub, tail)
 	}
 	return ""

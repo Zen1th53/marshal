@@ -12,13 +12,31 @@ var providerManagementCommands = map[string][]string{
 	"plugin": {"list", "add", "install", "remove", "rm", "uninstall", "marketplace", "enable", "disable"},
 }
 
+func providerManagementOperations(provider, group string) []string {
+	switch provider {
+	case "agy":
+		switch group {
+		case "mcp":
+			return []string{"list", "add", "remove", "enable", "disable"}
+		case "plugin":
+			return []string{"list", "install", "uninstall", "enable", "disable", "validate", "import", "link"}
+		}
+	case "opencode":
+		switch group {
+		case "mcp":
+			return []string{"list", "add", "auth", "logout", "debug"}
+		}
+	}
+	return providerManagementCommands[group]
+}
+
 func providerHelpOperations(provider string) []string {
 	ops := append([]string(nil), providerSubcommands[provider]...)
 	for _, group := range []string{"mcp", "plugin"} {
 		if !oneOf(group, providerSubcommands[provider]...) {
 			continue
 		}
-		for _, op := range providerManagementCommands[group] {
+		for _, op := range providerManagementOperations(provider, group) {
 			ops = append(ops, group+" "+op)
 		}
 	}
@@ -47,7 +65,7 @@ func qualifyProviderCompletions(ctx context.Context, c *CompletionContext, termi
 				delete(c.Subcommands, root+" "+group)
 				continue
 			}
-			c.Subcommands[root+" "+group] = providerManagementCommands[group]
+			c.Subcommands[root+" "+group] = providerManagementOperations(provider, group)
 		}
 		if provider == "codex" {
 			c.Subcommands[root+" plugins"] = providerManagementCommands["plugin"]
@@ -96,7 +114,7 @@ func qualifyProviderCompletions(ctx context.Context, c *CompletionContext, termi
 		if provider != "codex" {
 			for _, group := range []string{"mcp", "plugin"} {
 				var qualified []string
-				for _, verb := range providerManagementCommands[group] {
+				for _, verb := range providerManagementOperations(provider, group) {
 					cap := d.WrapperOperation(group+" "+verb, terminal)
 					c.Descriptions[root+" "+group+" "+verb] = cap.Label()
 					if cap.Status == app.ProviderSupported {

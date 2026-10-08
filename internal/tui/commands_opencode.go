@@ -17,6 +17,13 @@ func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line
 	if rejection != "" {
 		return rejection, nil
 	}
+	if hasHelpFlag(args) {
+		cleanArgv, refusal, _ := checkNativePassthroughSafety("opencode", args)
+		if refusal != "" {
+			return refusal, nil
+		}
+		return h.ws.runNativeAgent(ctx, "opencode", cleanArgv)
+	}
 	if prompt != "" {
 		return h.ws.runNativeAgent(ctx, "opencode", []string{"--prompt", prompt})
 	}

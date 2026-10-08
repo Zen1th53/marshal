@@ -25,6 +25,11 @@ func runGovernedCodexCmd(ctx context.Context, args []string) (result string, res
 	if err != nil {
 		return "", fmt.Errorf("codex binary not found on PATH: %w; Install Codex and make codex available on PATH, then retry", err)
 	}
+	cleanArgv, refusal, _ := checkNativePassthroughSafety("codex", args)
+	if refusal != "" {
+		return "", errors.New(refusal)
+	}
+	args = cleanArgv
 	dialect := app.ObserveProviderDialect(ctx, "codex")
 	if dialect.Operation(app.ProviderArgOperation("codex", args)).Status == app.ProviderUnknown {
 		defer func() {
@@ -60,6 +65,13 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 	prompt, rejection := parseProviderCommand("codex", line, args)
 	if rejection != "" {
 		return rejection, nil
+	}
+	if hasHelpFlag(args) {
+		cleanArgv, refusal, _ := checkNativePassthroughSafety("codex", args)
+		if refusal != "" {
+			return refusal, nil
+		}
+		return h.ws.runNativeCodex(ctx, cleanArgv)
 	}
 	if prompt != "" {
 		if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
@@ -134,7 +146,8 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 						argv[0] = strings.ToLower(argv[0])
 					}
 				}
-				return h.ws.runNativeCodex(ctx, append([]string{sub}, argv...))
+				targetArgs := append([]string{sub}, argv...)
+				return h.ws.runNativeCodex(ctx, targetArgs)
 			case "sandbox":
 				if len(args) == 2 && oneOf(strings.ToLower(args[1]), "read-only", "workspace-write") {
 					return h.ws.runNativeCodex(ctx, []string{"--sandbox", strings.ToLower(args[1])})
@@ -309,8 +322,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 			if len(args) < 3 {
 				return "Usage: /codex mcp remove <name>", nil
 			}
-			name := args[2]
-			out, err := runGovernedCodexCmd(ctx, []string{"mcp", "remove", name})
+			out, err := runGovernedCodexCmd(ctx, append([]string{"mcp"}, args[1:]...))
 			if err != nil {
 				return fmt.Sprintf("Codex MCP remove failed: %v", err), nil
 			}
@@ -375,7 +387,7 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 			if len(args) < 3 {
 				return "Usage: /codex plugin remove <plugin_name>", nil
 			}
-			out, err := runGovernedCodexCmd(ctx, []string{"plugin", "remove", args[2]})
+			out, err := runGovernedCodexCmd(ctx, append([]string{"plugin"}, args[1:]...))
 			if err != nil {
 				return fmt.Sprintf("Codex plugin remove failed: %v", err), nil
 			}

@@ -158,3 +158,9 @@ func TestPlanPackIsConfirmedBeforeReadBack(t *testing.T) {
 		}
 	}
 }
+
+func TestMarshalIntakeUsesFileChannel(t *testing.T) {
+	if strings.Contains(marshalProtocol, "MARSHAL_INTAKE") || !strings.Contains(marshalProtocol, `"action":"intake"`) {
+		t.Fatal("intake must use the validated file channel, with no raw chat marker")
+	}
+}

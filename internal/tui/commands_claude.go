@@ -28,6 +28,11 @@ func runGovernedClaudeCmd(ctx context.Context, args []string) (result string, re
 	if err := claude.ValidateDangerousFlags(args); err != nil {
 		return "", err
 	}
+	cleanArgv, refusal, _ := checkNativePassthroughSafety("claude", args)
+	if refusal != "" {
+		return "", errors.New(refusal)
+	}
+	args = cleanArgv
 	dialect := app.ObserveProviderDialect(ctx, "claude")
 	if dialect.Operation(app.ProviderArgOperation("claude", args)).Status == app.ProviderUnknown {
 		defer func() {
@@ -64,6 +69,13 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 	prompt, rejection := parseProviderCommand("claude", line, args)
 	if rejection != "" {
 		return rejection, nil
+	}
+	if hasHelpFlag(args) {
+		cleanArgv, refusal, _ := checkNativePassthroughSafety("claude", args)
+		if refusal != "" {
+			return refusal, nil
+		}
+		return h.ws.runNativeAgent(ctx, "claude", cleanArgv)
 	}
 	if prompt != "" {
 		if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {

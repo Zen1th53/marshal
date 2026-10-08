@@ -82,7 +82,7 @@ func QualifiedProviderDialect(provider, version string) ProviderDialect {
 		add(ProviderUnsupported, "review,mcp remove,mcp get,mcp enable,mcp disable")
 	case "agy":
 		add(ProviderSupported, "new,continue,resume,prompt,models,agents,agent,mcp,plugin,changelog,mcp list,mcp add,mcp remove,mcp enable,mcp disable,plugin list,plugin install,plugin uninstall,plugin enable,plugin disable,plugin validate,plugin import,plugin link")
-		add(ProviderUnsupported, "fork,review,mcp get,plugin get")
+		add(ProviderUnsupported, "fork,review,mcp get,mcp login,mcp logout,mcp auth,mcp debug,plugin get,plugin marketplace")
 	}
 	return d
 }

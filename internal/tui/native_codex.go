@@ -73,6 +73,37 @@ func nativeArgs(s string) ([]string, error) {
 
 type nativeRequestedArgsKey struct{}
 
+func isDirectCLI(args []string) bool {
+	return len(args) > 0 && (args[0] == "--help" || args[0] == "-h")
+}
+
+func (w *Workspace) runOneShotHelp(ctx context.Context, provider, binary string, args []string) (string, error) {
+	cmdCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(cmdCtx, binary, args...)
+	root := w.workDir
+	if w.runtime != nil {
+		root = w.runtime.ProjectRoot()
+	}
+	cmd.Dir = root
+	cmd.Env = os.Environ()
+	if provider == "codex" {
+		if home := os.Getenv("CODEX_HOME"); home != "" {
+			cmd.Env = append(cmd.Env, "CODEX_HOME="+home)
+		}
+	} else if provider == "claude" {
+		if home := os.Getenv("CLAUDE_CONFIG_DIR"); home != "" {
+			cmd.Env = append(cmd.Env, "CLAUDE_CONFIG_DIR="+home)
+		}
+	}
+	out, err := cmd.CombinedOutput()
+	outStr := strings.TrimSpace(string(out))
+	if outStr == "" && err != nil {
+		return "", fmt.Errorf("%s %s failed: %w", provider, strings.Join(args, " "), err)
+	}
+	return outStr, nil
+}
+
 // Native mode intentionally uses the operator's real Codex environment. The
 // config-free task harness is a separate workflow with different guarantees.
 func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, error) {
@@ -97,13 +128,6 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	default:
 		return "", fmt.Errorf("unsupported native provider %q", provider)
 	}
-	if (w.terminal == nil || !w.terminal.IsTerminal()) && !tmux.IsInsideTmux() {
-		hint := fmt.Sprintf("use /%s exec for batch tasks", provider)
-		if provider == "opencode" || provider == "antigravity" {
-			hint = fmt.Sprintf("open marshal tui in a terminal, then retry /%s", map[string]string{"opencode": "opencode", "antigravity": "agy"}[provider])
-		}
-		return "", fmt.Errorf("native %s requires an interactive terminal; %s", label, hint)
-	}
 	binaryName := provider
 	if provider == "antigravity" {
 		binaryName = antigravityBinary
@@ -115,6 +139,30 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	dialect := app.ObserveProviderDialect(ctx, provider)
 	if err := dialect.Check(app.ProviderArgOperation(provider, args), true); err != nil {
 		return "", err
+	}
+	cleanArgv, refusal, _ := checkNativePassthroughSafety(provider, args)
+	if refusal != "" {
+		return refusal, nil
+	}
+	args = cleanArgv
+	if (w.terminal == nil || !w.terminal.IsTerminal()) && !tmux.IsInsideTmux() {
+		hint := fmt.Sprintf("use /%s exec for batch tasks", provider)
+		if provider == "opencode" || provider == "antigravity" {
+			hint = fmt.Sprintf("open marshal tui in a terminal, then retry /%s", map[string]string{"opencode": "opencode", "antigravity": "agy"}[provider])
+		}
+		return "", fmt.Errorf("native %s requires an interactive terminal; %s", label, hint)
+	}
+	if hasHelpFlag(args) {
+		if !providerSubcommandSupportsHelp(provider, args) {
+			sub := ""
+			if len(args) > 1 {
+				sub = " " + args[1]
+			}
+			return fmt.Sprintf("Antigravity plugin%s does not support --help. Use /agy plugin help for usage.", sub), nil
+		}
+		if w.isTmuxActive() {
+			return w.runOneShotHelp(ctx, provider, binary, args)
+		}
 	}
 	root := w.workDir
 	if w.runtime != nil {
