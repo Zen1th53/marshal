@@ -11545,6 +11545,11 @@
       "bytes": 9570
     },
     {
+      "path": "release/RELEASE_NOTES_0.0.5-rc.16.md",
+      "sha256": "8b687ac4d609615087a0f63e15005ada29253cbe82207872269fdea041609cdf",
+      "bytes": 9603
+    },
+    {
       "path": "release/RELEASE_NOTES_0.0.5-rc.2.md",
       "sha256": "12444b1a27c498d55329a018fb7478813aaef5a4cbdf1a5b51f610eedde34e96",
       "bytes": 4205
@@ -12031,7 +12036,7 @@
     },
     {
       "path": "tools/effect-inventory/main_test.go",
-      "sha256": "23b303cac61e360db9006ace9baad4e45b0b71198db0e56236af1c26e71a7dc3",
+      "sha256": "ccc220b0df30473f30d41519b32a0cd0b43f455eb37acaed207e0104bf467e86",
       "bytes": 11451
     },
     {
