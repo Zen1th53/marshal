@@ -20,7 +20,10 @@ import (
 
 const marshalProposalPrefix = "MARSHAL_PROPOSAL "
 
-type marshalProposal struct{ action, key, value, provider, path, id, reason, language, earlierWork string }
+type marshalProposal struct {
+	occurrence                                                            string
+	action, key, value, provider, path, id, reason, language, earlierWork string
+}
 
 // Parse a single visible assistant line, never shell source. Reject unknown,
 // duplicate, non-string and action-inappropriate fields and trailing data.
@@ -166,6 +169,9 @@ func (p marshalProposal) command() string {
 // Called only by the bound Marshal history consumer, not peer/tool/user output.
 // History is polled repeatedly; old message occurrences are not replayed; new emissions may be proposed again.
 func (w *Workspace) observeMarshalProposals(tr importer.SessionTranscript) {
+	w.observeMarshalProposalOccurrence(tr, "")
+}
+func (w *Workspace) observeMarshalProposalOccurrence(tr importer.SessionTranscript, occurrence string) {
 	for messageIndex, message := range tr.Messages {
 		if message.Role != "assistant" || message.Kind != importer.MessageKindText {
 			continue
@@ -190,31 +196,58 @@ func (w *Workspace) observeMarshalProposals(tr importer.SessionTranscript) {
 				continue
 			}
 			fingerprint := fmt.Sprintf("%s\x00%d\x00%s\x00%s", tr.SessionID, messageIndex, message.Timestamp, line)
+			p.occurrence = fmt.Sprintf("%x", sha256.Sum256([]byte(fingerprint)))
+			if occurrence != "" {
+				p.occurrence = occurrence
+				fingerprint = occurrence
+			}
+			if w.store != nil && w.projectID != "" {
+				pending, admitErr := w.store.AdmitMarshalProposal(context.Background(), w.projectID, p.occurrence, line)
+				if admitErr != nil || !pending {
+					continue
+				}
+			}
+
 			w.permissions.mu.Lock()
 			if w.permissions.proposalsSeen == nil {
 				w.permissions.proposalsSeen = map[string]bool{}
 			}
-			seen := w.permissions.proposalsSeen[fingerprint]
-			w.permissions.proposalsSeen[fingerprint] = true
+			seen := w.permissions.proposalsSeen[p.occurrence]
+			w.permissions.proposalsSeen[p.occurrence] = true
 			w.permissions.mu.Unlock()
 			if seen {
 				continue
 			}
 			if err != nil {
+				if w.store != nil {
+					_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "rejected")
+				}
 				w.RecordActivity("Ignored Marshal proposal: malformed or non-allow-listed fields.")
 				continue
 			}
 			switch p.action {
+			case "intake":
+				if err := w.saveMarshalIntake(marshalIntake{Language: p.language, EarlierWork: p.earlierWork}); err != nil {
+					w.permissions.mu.Lock()
+					delete(w.permissions.proposalsSeen, p.occurrence)
+					w.permissions.mu.Unlock()
+					continue
+				}
+				if w.store != nil {
+					_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "applied")
+				}
 			case "continue":
-				w.queuePermission(permission.Request{Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: "Marshal", Reason: p.command(), ContinuationProvider: p.provider})
+				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: "Marshal", Reason: p.command(), ContinuationProvider: p.provider})
 			case "read":
-				w.queuePermission(permission.Request{Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: "Marshal", Reason: p.command()})
+				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: "Marshal", Reason: p.command()})
 			case "memory":
 				found := false
 				if w.runtime != nil {
 					for _, rec := range w.runtime.ContinuationCandidates() {
 						if rec.ID == p.id {
-							w.queuePermission(memoryPermission(rec))
+							req := memoryPermission(rec)
+							req.ProposalID = p.occurrence
+							w.queuePermission(req)
 							found = true
 							break
 						}
@@ -224,7 +257,7 @@ func (w *Workspace) observeMarshalProposals(tr importer.SessionTranscript) {
 					w.RecordActivity("Ignored Marshal memory proposal: candidate does not exist.")
 				}
 			case "setting":
-				w.queuePermission(permission.Request{Kind: "marshal-command", Object: p.command(), Scope: "this project, next Marshal run", Who: "Marshal", Reason: "Apply the exact proposed setting"})
+				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: "this project, next Marshal run", Who: "Marshal", Reason: "Apply the exact proposed setting"})
 			case "approve":
 				m := w.marshalSession()
 				m.mu.Lock()
@@ -233,6 +266,7 @@ func (w *Workspace) observeMarshalProposals(tr importer.SessionTranscript) {
 				w.permissions.mu.Lock()
 				w.permissions.planApprovalPending = true
 				w.permissions.planApprovalRunID = proposalRunID
+				w.permissions.planApprovalOccurrence = p.occurrence
 				w.permissions.mu.Unlock()
 				w.queueMarshalPlanApproval()
 			case "accept", "return", "amend", "close", "resume":
@@ -250,6 +284,7 @@ func (w *Workspace) queueMarshalPlanApproval() {
 	w.permissions.mu.Lock()
 	pending := w.permissions.planApprovalPending
 	proposalRunID := w.permissions.planApprovalRunID
+	occurrence := w.permissions.planApprovalOccurrence
 	w.permissions.mu.Unlock()
 	if !pending {
 		return
@@ -261,7 +296,7 @@ func (w *Workspace) queueMarshalPlanApproval() {
 	if service == nil || runID == "" || (proposalRunID != "" && proposalRunID != runID) {
 		return
 	}
-	p := marshalProposal{action: "approve"}
+	p := marshalProposal{action: "approve", occurrence: occurrence}
 	if amendment != nil {
 		p.action = "amend-approve"
 	}
@@ -307,7 +342,7 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 	if w.permissions.runProposals == nil {
 		w.permissions.runProposals = map[string]marshalProposal{}
 	}
-	req := permission.Request{Kind: "marshal-command", Object: p.command(), Scope: fmt.Sprintf("run %s, plan %s version %d, state revision %d", runID, run.PlanID, run.PlanVersion, record.Revision), Who: "Marshal", Reason: "Apply this exact runtime action; review the plan pack and result first", RunID: runID, TaskID: binding}
+	req := permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: fmt.Sprintf("run %s, plan %s version %d, state revision %d", runID, run.PlanID, run.PlanVersion, record.Revision), Who: "Marshal", Reason: "Apply this exact runtime action; review the plan pack and result first", RunID: runID, TaskID: binding}
 	if pending != nil {
 		req.Scope += "; proposed amendment " + binding[strings.LastIndex(binding, ":")+1:]
 		req.Reason = "Approve proposed amendment: " + pending.reason
@@ -404,6 +439,7 @@ func (w *Workspace) marshalProposalDecisionNotice(req permission.Request, allow 
 // Files are suggestions, never authority. Only the live Marshal monitor consumes
 // them; parsing and the ordinary operator popup remain mandatory.
 func (w *Workspace) observeMarshalProposalFiles(root string) {
+	w.recoverMarshalProposals()
 	project, err := os.OpenRoot(root)
 	if err != nil {
 		return
@@ -442,12 +478,7 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 		if err != nil || !info.Mode().IsRegular() || info.Size() > 4096 {
 			continue
 		}
-		// Atomic claim: a file emission is consumed once, even across repeated polls.
-		claimed := name + ".consumed"
-		if err := fs.Rename(name, claimed); err != nil {
-			continue
-		}
-		file, err := openProposalFile(fs, claimed)
+		file, err := openProposalFile(fs, name)
 		if err != nil {
 			continue
 		}
@@ -462,12 +493,70 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 			continue
 		}
 		line := marshalProposalPrefix + strings.TrimSpace(string(data))
-		if p, err := parseMarshalProposal(line); err == nil && p.action == "intake" {
-			w.saveMarshalIntake(marshalIntake{Language: p.language, EarlierWork: p.earlierWork})
+		_, parseErr := parseMarshalProposal(line)
+		if parseErr != nil {
 			continue
 		}
-		// Unique file occurrence bypasses transcript poll deduplication while pending
-		// requests still deduplicate through their exact permission identity.
-		w.observeMarshalProposals(importer.SessionTranscript{SessionID: "proposal-file:" + name, Messages: []importer.Message{{Role: "assistant", Content: line}}})
+		sessionID := fmt.Sprintf("proposal-file:%s:%d:%x", name, info.ModTime().UnixNano(), sha256.Sum256(data))
+		fingerprint := fmt.Sprintf("%s\x00%d\x00%s\x00%s", sessionID, 0, "", line)
+		id := fmt.Sprintf("%x", sha256.Sum256([]byte(fingerprint)))
+		if w.store == nil {
+			continue
+		}
+		pending, admitErr := w.store.AdmitMarshalProposal(context.Background(), w.projectID, id, line)
+		if admitErr != nil {
+			continue
+		}
+		// Durable admission precedes source consumption. A crash on either
+		// side of the rename replays the same occurrence, not a new request.
+		if err := fs.Rename(name, name+".consumed"); err != nil {
+			continue
+		}
+		if !pending {
+			continue
+		}
+		w.observeMarshalProposalOccurrence(importer.SessionTranscript{SessionID: sessionID, Messages: []importer.Message{{Role: "assistant", Content: line}}}, id)
 	}
+}
+
+// Recovery queues the original bound request. Reconstructing a fresh binding
+// would authorize a different plan/result than the one originally displayed.
+func (w *Workspace) recoverMarshalProposals() {
+	if w.store == nil || w.projectID == "" {
+		return
+	}
+	pending, err := w.store.PendingMarshalProposals(context.Background(), w.projectID)
+	if err != nil {
+		return
+	}
+	for _, record := range pending {
+		if record.RequestJSON == "" {
+			// Admissions interrupted before binding still need parsing and a popup.
+			w.observePendingMarshalProposal(record.ID, record.Line)
+			continue
+		}
+		var req permission.Request
+		if json.Unmarshal([]byte(record.RequestJSON), &req) != nil {
+			continue
+		}
+		if req.RunID != "" {
+			p, err := parseMarshalProposal(record.Line)
+			if err != nil {
+				continue
+			}
+			p.occurrence = record.ID
+			w.permissions.mu.Lock()
+			if w.permissions.runProposals == nil {
+				w.permissions.runProposals = map[string]marshalProposal{}
+			}
+			w.permissions.runProposals[req.Key()] = p
+			w.permissions.mu.Unlock()
+		}
+		w.queuePermission(req)
+	}
+}
+
+func (w *Workspace) observePendingMarshalProposal(id, line string) {
+	// Supply the persisted occurrence ID while reusing the normal validator.
+	w.observeMarshalProposalOccurrence(importer.SessionTranscript{SessionID: "recovered:" + id, Messages: []importer.Message{{Role: "assistant", Content: line}}}, id)
 }

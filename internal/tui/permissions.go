@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -16,19 +17,31 @@ import (
 )
 
 type permissionState struct {
-	runProposals        map[string]marshalProposal
-	queue               permission.Queue
-	mu                  sync.Mutex
-	ready               bool
-	running             bool
-	outstanding         map[string]bool
-	continuations       map[string]string
-	proposalsSeen       map[string]bool
-	planApprovalPending bool
-	planApprovalRunID   string
+	runProposals           map[string]marshalProposal
+	queue                  permission.Queue
+	mu                     sync.Mutex
+	ready                  bool
+	running                bool
+	outstanding            map[string]bool
+	continuations          map[string]string
+	proposalsSeen          map[string]bool
+	planApprovalPending    bool
+	planApprovalRunID      string
+	planApprovalOccurrence string
 }
 
 func (w *Workspace) queuePermission(req permission.Request) {
+	if req.ProposalID != "" && w.store != nil {
+		data, err := json.Marshal(req)
+		if err == nil {
+			err = w.store.BindMarshalProposal(context.Background(), w.projectID, req.ProposalID, string(data), req.Key())
+		}
+		if err != nil {
+			w.RecordActivity("Proposal admission failed: " + err.Error())
+			return
+		}
+	}
+
 	w.permissions.mu.Lock()
 	if w.permissions.outstanding == nil {
 		w.permissions.outstanding = map[string]bool{}
@@ -54,6 +67,7 @@ func (w *Workspace) queuePermission(req permission.Request) {
 // startPermissionQueue is called only after terminal initialization. Requests
 // submitted by a headless runtime must not launch readers of terminal state.
 func (w *Workspace) startPermissionQueue() {
+	w.recoverMarshalProposals()
 	w.permissions.mu.Lock()
 	defer w.permissions.mu.Unlock()
 	w.permissions.ready = true
@@ -227,6 +241,18 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 		w.permissions.mu.Lock()
 		delete(w.permissions.outstanding, req.Key())
 		w.permissions.mu.Unlock()
+		if req.ProposalID != "" && w.store != nil {
+			outcome := "declined"
+			if allow {
+				outcome = "applied"
+				if err != nil {
+					outcome = "failed"
+				}
+			}
+			if saveErr := w.store.ResolveMarshalProposalRequest(context.WithoutCancel(ctx), w.projectID, req.Key(), outcome); saveErr != nil {
+				err = errors.Join(err, saveErr)
+			}
+		}
 		w.marshalProposalDecisionNotice(req, allow, err)
 	}()
 	control := w.controlSource()
@@ -271,10 +297,20 @@ func (h *CommandHandler) handlePermission(ctx context.Context, args []string) (s
 	if len(args) == 1 && args[0] == "status" {
 		return "Permission status is not available in this view. Use /egress status for governed network grants; /permission read and /permission credential record read and credential decisions.", nil
 	}
-	if len(args) == 3 && args[0] == "credential" && (args[1] == "request" || args[1] == "revoke") {
+	if len(args) == 3 && args[0] == "credential" && (args[1] == "request" || args[1] == "revoke" || args[1] == "status") {
 		req := permission.Request{Kind: "credential", Object: args[2], Scope: "this project, until revoked", Who: "MARSHAL"}
 		if _, err := permission.Render([]permission.Request{req}); err != nil {
 			return "", err
+		}
+		if args[1] == "status" {
+			if h.ws.runtime == nil {
+				return "", model.ErrUnavailable
+			}
+			state, err := h.ws.runtime.CredentialRevocationStatus(ctx, req.Object)
+			if err != nil {
+				return "", err
+			}
+			return credentialRevocationMessage(req.Object, state), nil
 		}
 		if args[1] == "request" {
 			h.ws.queuePermission(req)
@@ -283,10 +319,14 @@ func (h *CommandHandler) handlePermission(ctx context.Context, args []string) (s
 		if err := h.ws.decidePermission(ctx, req, false, "operator revoke"); err != nil {
 			return "", err
 		}
-		return "Credential broker revoked for " + req.Object + "; active broker connections closed.", nil
+		state, err := h.ws.runtime.CredentialRevocationStatus(ctx, req.Object)
+		if err != nil {
+			return "", err
+		}
+		return credentialRevocationMessage(req.Object, state), nil
 	}
 	if len(args) < 3 || args[0] != "read" || (args[1] != "allow" && args[1] != "deny") {
-		return "Usage: /permission read <allow|deny> <exact absolute folder> | /permission credential <request|revoke> <codex|claude|gemini|opencode>", nil
+		return "Usage: /permission read <allow|deny> <exact absolute folder> | /permission credential <request|revoke|status> <codex|claude|gemini|opencode>", nil
 	}
 	req := permission.Request{Kind: "read", Object: strings.Join(args[2:], " "), Scope: "this session only, read-only", Who: "operator", Reason: "operator read decision"}
 	if err := h.ws.decidePermission(ctx, req, args[1] == "allow", "operator command"); err != nil {
@@ -519,4 +559,15 @@ func partitionPermissionTimeout(batch []permission.Request) (popup, deferred []p
 		}
 	}
 	return
+}
+
+func credentialRevocationMessage(provider, state string) string {
+	switch state {
+	case "pending":
+		return "Credential broker revoked for " + provider + "; active broker connections pending owner acknowledgement. Check /permission credential status " + provider + "."
+	case "closed":
+		return "Credential broker revoked for " + provider + "; active broker connections closed (owners acknowledged)."
+	default:
+		return "No credential revocation recorded for " + provider + "."
+	}
 }

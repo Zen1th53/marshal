@@ -1,6 +1,6 @@
 # Runtime memory fabric
 
-MARSHAL uses SQLite schema v90 on current `main`. `memory_records_v2` is the canonical
+MARSHAL uses SQLite schema v91 on current `main`. `memory_records_v2` is the canonical
 durable memory store; lexical, vector, graph, and cache structures are derived
 projections.
 
@@ -56,7 +56,7 @@ Verified import adapters exist for supported provider/session formats,
 including Codex, Claude, and Gemini paths represented in the current code.
 Imports retain provenance and pass through the memory firewall. A parser being
 implemented does not imply that every provider filesystem/session version was
-validated in the v1.0.1 release environment.
+validated in the v0.0.7 release environment.
 
 ## Security and custody
 
@@ -75,10 +75,10 @@ an existing database.
 ## Known limits
 
 - optional vector retrieval requires a configured local provider;
-- federation and network memory sync are not Community v1.0.1 features;
+- federation and network memory sync are not Community v0.0.7 features;
 - Community CLI/TUI do not expose every lower-level handoff or consolidation operation;
   and
-- authenticated external-provider E2E is NOT_RUN for v1.0.1 unless the release
+- authenticated external-provider E2E is NOT_RUN for v0.0.7 unless the release
   notes explicitly report otherwise.
 
 See the [memory authority map](memory/current-state-audit.md).

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ const (
 type Server struct {
 	runtime            *app.Runtime
 	authManager        *auth.Manager
+	insecure           bool
 	rateLimiter        *ratelimit.RateLimiter
 	concurrencyLimiter *ratelimit.ConcurrencyLimiter
 	idempotencyStore   *ratelimit.IdempotencyStore
@@ -42,14 +44,26 @@ func NewServer(runtime *app.Runtime) *Server {
 	}
 }
 
-func NewServerWithAuth(runtime *app.Runtime, authManager *auth.Manager) *Server {
-	return &Server{
-		runtime:            runtime,
-		authManager:        authManager,
-		rateLimiter:        ratelimit.NewRateLimiter(50, 100, 10*time.Minute),
-		concurrencyLimiter: ratelimit.NewConcurrencyLimiter(50),
-		idempotencyStore:   ratelimit.NewIdempotencyStore(10 * time.Minute),
+// NewServerWithAuth rejects configuration failures rather than selecting insecure mode.
+func NewServerWithAuth(runtime *app.Runtime, authManager *auth.Manager) (*Server, error) {
+	if authManager == nil {
+		return nil, fmt.Errorf("A2A authentication manager is required")
 	}
+	s := NewServer(runtime)
+	s.authManager = authManager
+	return s, nil
+}
+
+// NewInsecureServer is an explicit opt-in bound to a literal loopback address.
+// The handler also refuses non-loopback peers if it is mounted elsewhere.
+func NewInsecureServer(runtime *app.Runtime, address string) (*Server, error) {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil || !net.ParseIP(host).IsLoopback() {
+		return nil, fmt.Errorf("insecure A2A requires a literal loopback listen address")
+	}
+	s := NewServer(runtime)
+	s.insecure = true
+	return s, nil
 }
 
 func (s *Server) Handler() http.Handler {
@@ -72,7 +86,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/a2a/optimization-cycles/{id}/counterfactuals", s.handleOptimizationCounterfactuals)
 	mux.HandleFunc("/a2a/optimization-cycles/{id}/manifests", s.handleOptimizationManifests)
 	mux.HandleFunc("/a2a/optimization-cycles/{id}/canaries", s.handleOptimizationCanaries)
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.authManager == nil && !s.insecure && (r.URL.Path == "/a2a/tasks" || r.URL.Path == "/message:send") {
+			http.Error(w, "A2A authentication is not configured", http.StatusServiceUnavailable)
+			return
+		}
+		if s.insecure {
+			host, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil || !net.ParseIP(host).IsLoopback() {
+				http.Error(w, "insecure A2A requires a loopback peer", http.StatusForbidden)
+				return
+			}
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) optimizationEvidenceCaller(w http.ResponseWriter, r *http.Request) (auth.Principal, bool) {

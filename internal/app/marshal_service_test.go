@@ -94,6 +94,15 @@ func TestMarshalGovernedTaskDoesNotLaunchNativeDriver(t *testing.T) {
 
 func marshalFixture(t *testing.T, n int, databasePath ...string) (*MarshalService, string) {
 	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "state.db")
+	if len(databasePath) > 0 {
+		dbPath = databasePath[0]
+	}
+	return marshalFixtureAt(t, n, dbPath)
+}
+
+func marshalFixtureAt(t *testing.T, n int, dbPath string) (*MarshalService, string) {
+	t.Helper()
 	ctx := context.Background()
 	repo := t.TempDir()
 	marshalGit(t, repo, "init", "-b", "main")
@@ -104,10 +113,6 @@ func marshalFixture(t *testing.T, n int, databasePath ...string) (*MarshalServic
 	}
 	marshalGit(t, repo, "add", "README.md")
 	marshalGit(t, repo, "commit", "-m", "base")
-	dbPath := filepath.Join(t.TempDir(), "state.db")
-	if len(databasePath) > 0 {
-		dbPath = databasePath[0]
-	}
 	db, err := store.Open(ctx, dbPath)
 	if err != nil {
 		t.Fatal(err)
@@ -822,4 +827,94 @@ func fixtureCheckRunner(ctx context.Context, _, _, _, dir, command string) marsh
 		}
 	}
 	return marshal.CommandRecord{Command: command, ExitCode: code, Output: string(out)}
+}
+
+// An interrupted launch must preserve both its lifecycle receipt and the
+// requirement for durable honeypot assurance when the process restarts.
+func TestMarshalInterruptedLaunchPreservesHoneypotRequirement(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "state.db")
+	s, _ := marshalFixture(t, 1, dbPath)
+	startIntegrityRun(t, s, marshal.Budget{})
+	s.HandInGuard = func(context.Context, string, string, marshal.HandIn) (string, error) { return "scan", nil }
+	interrupted := errors.New("interrupted launch")
+	s.AfterLifecycleEffect = func(kind, id string) error {
+		if kind == "launch" {
+			return interrupted
+		}
+		return nil
+	}
+	if _, err := s.Dispatch(t.Context(), "run", "a", "write"); !errors.Is(err, interrupted) {
+		t.Fatalf("launch fault: %v", err)
+	}
+	if err := s.Store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(t.Context(), dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	restarted := *s
+	restarted.Store = db
+	restarted.HandInGuard = nil
+	restarted.AfterLifecycleEffect = nil
+	if err := restarted.RecoverPendingOperations(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := restarted.load(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Operation != nil || run.Tasks[0].State != marshal.Dispatched || !run.Tasks[0].HoneypotRequired {
+		t.Fatalf("recovered launch lost integrity requirement: %+v", run)
+	}
+	if err := restarted.checkHoneypotAdmission(t.Context(), run.Tasks[0], run.BaseCommit); err == nil || !strings.Contains(err.Error(), "required clean scan missing") {
+		t.Fatalf("recovered result admitted without scan: %v", err)
+	}
+}
+
+func TestMarshalReplacementVerificationUsesRevisionTree(t *testing.T) {
+	s := mergedRecoveryFixture(t)
+	draft := s.Model.(marshalFakeModel).draft
+	draft.Plan.Budget.MaxTasks = 100
+	run, err := s.ApplyAmendDraft(t.Context(), "run", "larger budget", draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.ArtifactRevision == 0 {
+		t.Fatal("replacement has no artifact revision")
+	}
+	if _, err := s.Approve(t.Context(), "run"); err != nil {
+		t.Fatal(err)
+	}
+	dispatch, err := s.Dispatch(t.Context(), "run", "a", "write replacement")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CollectHandIn(t.Context(), "run", dispatch); err != nil {
+		t.Fatal(err)
+	}
+	if verdict, err := s.Review(t.Context(), "run", "a", knownCharge()); err != nil || verdict != marshal.VerdictAccept {
+		t.Fatalf("replacement review: %s %v", verdict, err)
+	}
+	if err := s.Merge(t.Context(), "run", "a"); err != nil {
+		t.Fatal(err)
+	}
+	run, _, err = s.load(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(s.Worktrees, integrationTaskID("run", run))
+	head := marshalGit(t, dir, "rev-parse", "HEAD")
+	tree := marshalGit(t, dir, "rev-parse", "HEAD^{tree}")
+	session, binding, err := s.verifyByChecks(t.Context(), run, head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tree == head || binding.TreeDigest != tree || session.Binding.TreeDigest != tree {
+		t.Fatalf("verification did not bind replacement tree: head=%s tree=%s binding=%+v", head, tree, binding)
+	}
+	if result := verification.Evaluate(session, binding, time.Now().UTC()); result != verification.VerifiedComplete {
+		t.Fatalf("replacement checks: %s", result)
+	}
 }

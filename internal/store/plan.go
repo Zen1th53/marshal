@@ -29,6 +29,18 @@ import (
 // concurrent intentions was meant to win, and picking one would silently
 // discard the other.
 func (s *Store) SavePlan(ctx context.Context, executionPlan plan.ExecutionPlan, expectedVersion int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = savePlanTx(ctx, tx, executionPlan, expectedVersion); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func savePlanTx(ctx context.Context, tx *sql.Tx, executionPlan plan.ExecutionPlan, expectedVersion int64) error {
 	if executionPlan.ID == "" {
 		return fmt.Errorf("%w: plan has no id", plan.ErrPlanInvalid)
 	}
@@ -39,12 +51,7 @@ func (s *Store) SavePlan(ctx context.Context, executionPlan plan.ExecutionPlan, 
 		return fmt.Errorf("%w: plan is not bound to a goal revision", plan.ErrPlanInvalid)
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin save plan tx: %w", err)
-	}
-	defer tx.Rollback()
-
+	var err error
 	var currentVersion int64
 	err = tx.QueryRowContext(ctx, `
 		SELECT max(version) FROM execution_plans WHERE plan_id = ?
@@ -133,9 +140,7 @@ func (s *Store) SavePlan(ctx context.Context, executionPlan plan.ExecutionPlan, 
 			return err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit save plan: %w", err)
-	}
+
 	return nil
 }
 

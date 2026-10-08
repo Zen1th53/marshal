@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,6 +43,9 @@ func TestConsumeMarshalDraft(t *testing.T) {
 	if err := os.WriteFile(path, []byte(written), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(path+".ready", []byte("ready\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	data, found, err := consumeMarshalDraft(root)
 	if err != nil || !found || string(data) != written {
 		t.Fatalf("data=%q found=%v err=%v", data, found, err)
@@ -54,5 +58,66 @@ func TestConsumeMarshalDraft(t *testing.T) {
 	}
 	if _, found, err := consumeMarshalDraft(root); found || err != nil {
 		t.Fatalf("consumed draft picked up again: found=%v err=%v", found, err)
+	}
+}
+
+func TestDraftReadBackBeforePublication(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, marshalDraftRelativePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	data := []byte(`{"tasks":[]}`)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := consumeMarshalDraft(root); err != nil || found {
+		t.Fatalf("unpublished draft consumed: %v %v", found, err)
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != string(data) {
+		t.Fatalf("producer read-back: %s %v", got, err)
+	}
+	if err := os.WriteFile(path+".ready", []byte("ready\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := consumeMarshalDraft(root); err != nil || !found {
+		t.Fatalf("published draft: %v %v", found, err)
+	}
+	brief, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
+	if err != nil || !strings.Contains(brief, marshalDraftRelativePath+".ready") {
+		t.Fatalf("completion marker absent: %v", err)
+	}
+}
+
+func TestWatcherDoesNotMoveDraftDuringProducerReadBack(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, marshalDraftRelativePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	poll := make(chan struct{})
+	result := make(chan error)
+	go func() {
+		defer close(result)
+		for range poll {
+			_, found, err := consumeMarshalDraft(root)
+			if err == nil && found {
+				err = fmt.Errorf("watcher consumed before completion marker")
+			}
+			result <- err
+		}
+	}()
+	defer close(poll)
+	for i := 1; i <= 100; i++ {
+		written := strings.Repeat(" ", i) + `{"tasks":[]}`
+		if err := os.WriteFile(path, []byte(written), 0600); err != nil {
+			t.Fatal(err)
+		}
+		poll <- struct{}{}
+		data, readErr := os.ReadFile(path)
+		pollErr := <-result
+		if readErr != nil || pollErr != nil || string(data) != written {
+			t.Fatalf("read-back raced watcher: read=%v watcher=%v data=%q", readErr, pollErr, data)
+		}
 	}
 }

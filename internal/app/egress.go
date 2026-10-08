@@ -23,6 +23,7 @@ import (
 
 type runEgress struct {
 	broker                                     *netpolicy.CredentialBroker
+	started                                    time.Time
 	id, parent, task, worker, provider, socket string
 	allowlist                                  *netpolicy.RunAllowlist
 	proxy                                      *netpolicy.EgressProxy
@@ -141,7 +142,7 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 		os.RemoveAll(dir)
 		return "", nil, err
 	}
-	scope := &runEgress{broker: broker, id: id, parent: parent, task: taskID, worker: worker, provider: provider, socket: socket, allowlist: allowlist, pending: map[string]bool{}}
+	scope := &runEgress{started: time.Now().UTC(), broker: broker, id: id, parent: parent, task: taskID, worker: worker, provider: provider, socket: socket, allowlist: allowlist, pending: map[string]bool{}}
 	proxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{Broker: broker, CredentialAllowed: func(ctx context.Context) bool { return r.HasCredentialGrant(ctx, provider) }, Evaluator: &storedRunEgress{runtime: r, scope: scope}, Store: r.store, SubjectID: worker, TaskID: taskID, RunID: id, Listener: listener, Attempt: func(ctx context.Context, host string, port int, d netpolicy.Decision) error {
 		return r.recordEgressAttempt(ctx, scope, host, port, d)
 	}})
@@ -151,14 +152,16 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 		return "", nil, err
 	}
 	scope.proxy = proxy
-	if err := r.recordEgress(ctx, scope, events.EventTypeNetworkEgressRequested, map[string]any{"source": "run scope", "allowed_endpoints": endpoints, "scope_socket": socket}); err != nil {
+	if err := r.recordEgress(ctx, scope, events.EventTypeNetworkEgressRequested, map[string]any{"source": "run scope", "allowed_endpoints": endpoints, "scope_socket": socket, "brokered": broker != nil}); err != nil {
 		proxy.Close()
 		os.RemoveAll(dir)
 		return "", nil, err
 	}
 	for _, endpoint := range endpoints {
 		if err := r.recordEgress(ctx, scope, events.EventTypeNetworkEgressGranted, map[string]any{"endpoint": endpoint, "actor": "runtime", "source": "provider default"}); err != nil {
-			proxy.Close()
+			if closeErr := proxy.Close(); closeErr == nil && broker != nil {
+				_ = r.recordBrokerClosed(context.Background(), scope, "")
+			}
 			os.RemoveAll(dir)
 			return "", nil, err
 		}
@@ -183,7 +186,10 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 			r.egressMu.Lock()
 			delete(r.egressRuns, id)
 			r.egressMu.Unlock()
-			_ = proxy.Close()
+			closeErr := proxy.Close()
+			if broker != nil && closeErr == nil {
+				_ = r.recordBrokerClosed(context.Background(), scope, "")
+			}
 			_ = os.RemoveAll(dir)
 		})
 	}
@@ -202,7 +208,14 @@ func (r *Runtime) recordEgress(ctx context.Context, scope *runEgress, kind event
 	data["provider"] = scope.provider
 	data["worker"] = scope.worker
 	data["parent_run_id"] = scope.parent
-	_, err = r.store.Append(ctx, events.Event{ID: id, Type: kind, Subject: scope.worker, RunID: scope.id, TaskID: scope.task, At: time.Now().UTC(), Data: data})
+	at := time.Now().UTC()
+	if kind == events.EventTypeNetworkEgressRequested && data["source"] == "run scope" {
+		at = scope.started
+		if at.IsZero() {
+			at = time.Now().UTC()
+		}
+	}
+	_, err = r.store.Append(ctx, events.Event{ID: id, Type: kind, Subject: scope.worker, RunID: scope.id, TaskID: scope.task, At: at, Data: data})
 	return err
 }
 

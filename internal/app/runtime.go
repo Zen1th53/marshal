@@ -385,6 +385,12 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	if err := rt.memoryService.RebuildProjections(ctx, localProjectID); err != nil {
 		return nil, err
 	}
+	if service := rt.Marshal(); service != nil {
+		if err := service.RecoverPendingOperations(ctx); err != nil {
+			database.Close()
+			return nil, err
+		}
+	}
 	_ = rt.ReconcileStartup(ctx)
 	return rt, nil
 }
@@ -793,7 +799,10 @@ func (r *Runtime) Close() error {
 				<-scope.watchDone
 			}
 			if scope.proxy != nil {
-				_ = scope.proxy.Close()
+				closeErr := scope.proxy.Close()
+				if scope.broker != nil && closeErr == nil {
+					_ = r.recordBrokerClosed(context.Background(), scope, "")
+				}
 			}
 			if scope.socket != "" {
 				_ = os.RemoveAll(filepath.Dir(scope.socket))

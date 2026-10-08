@@ -10,6 +10,23 @@ Evidence and verification integrity.
 - Acceptance and completion reports share approved-check aggregation: any applicable failure fails the criterion; mixed and incomplete evidence is visible.
 - Governed hand-ins require a recorded clean honeypot scan. A recorded hit quarantines the commit at merge admission, including after restart. Missing scan identity refuses delivery.
 - Tasks declare change, inspection or verification. Change tasks require changed files; unchanged inspection and verification results need complete passing evidence.
+Lifecycle intents and completion records survive interruptions. Startup reconciles
+launches, hand-ins, merges and closes without repeating completed effects; run,
+task, hand-in and audit updates commit together. Plan revisions and run state
+also commit together.
+
+Replacement plans use separate branches and worktrees and preserve earlier
+evidence. Pending proposals return to the popup queue after restart, and resolved
+occurrences stay resolved. The Marshal validates and reads back its plan before
+publishing the completion marker. `/marshal resume` retries failed verification
+and reports the reason and next step when a pause needs operator action.
+- Credential revocation reaches every owning runtime through the project store,
+  refuses new broker requests immediately, and closes active exchanges. The
+  permission command reports pending until owners acknowledge closure; use
+  `/permission credential status <provider>` to check it.
+- A2A construction requires a configured authentication manager. Unauthenticated
+  task import requires explicit insecure construction or `--insecure`, with
+  a literal loopback listen address and loopback peers.
 
 ## Requirements
 
@@ -31,7 +48,7 @@ missing dependency does not make installation fail.
 The automated source inventory reports:
 
 - Constitution enforcement: 0.6%
-- Scope of protection: 7.0%
+- Scope of protection: 6.8%
 
 Constitution enforcement is the percentage of material source call sites that a constitutional verdict can refuse before the effect occurs.
 Scope of protection is the percentage of material source call sites guarded before execution by a constitutional gate, approval binding, policy authorisation or sandbox.
@@ -55,12 +72,29 @@ recording a verdict or warning does not count as enforcement. The reviewed
   missing scan identity is refused; its branch remains available for inspection.
 - **Standard review remains in the Marshal conversation.** Independent cross-review
   and model verification are required for ULTRA.
+- **Keep the window open.** There is no background service. Unfinished lifecycle operations are reconciled when the project reopens.
+  `/marshal resume` retries a failed verification. Budget and security pauses
+  require the resolution shown in the panel; uncertain interrupted effects
+  retain their artifacts for operator review.
+- **Credential broker is opt-in per project and provider.** Use
+  `/permission credential request <codex|claude|gemini|opencode>` and press
+  uppercase `A` in the fixed permission prompt. Revoke with
+  `/permission credential revoke <provider>`. Supported API keys stay on the
+  host; workers receive placeholders as described below.
+- **A2A authentication is required by default.** Missing authentication configuration
+  refuses task import. Deliberate unauthenticated serving requires `--insecure`
+  and a literal loopback listen address; non-loopback peers are refused.
+
 - **Keep the window open.** There is no background service. Stored runs remain
   recoverable with `/marshal resume` after reopening MARSHAL.
 - **Credential broker is opt-in per project and provider.** Use
   `/permission credential request <codex|claude|gemini|opencode>` and press
   uppercase `A` in the fixed permission prompt. Revoke with
-  `/permission credential revoke <provider>`. Supported API keys stay on the
+  `/permission credential revoke <provider>`. New broker requests are refused
+  immediately; active exchanges close when their owning runtime consumes the
+  decision (normally within 100 ms). Check `/permission credential status <provider>`
+  for pending or acknowledged closure. An unavailable owner or failed evidence
+  write leaves closure pending; regranting cannot preserve an old exchange. Supported API keys stay on the
   host; the worker gets only placeholders and a public run CA. Injection is
   limited to the selected provider HTTPS host; other allowed hosts remain
   CONNECT tunnels. Setup failures refuse work without copying native auth.
@@ -84,6 +118,8 @@ recording a verdict or warning does not count as enforcement. The reviewed
 - **Process 05 alignment checks are advisory.** Goal drift and intermediate scope
   warnings do not stop execution; Marshal hand-in validation rejects files outside
   the approved task scope before acceptance.
+- **Scope checks only warn during Process 05 execution.** Out-of-scope changes and goal drift are recorded;
+  they do not stop the task at that stage. Marshal hand-in scope validation still applies.
 - **The Marshal can read and write the whole project.** Protection is at
   approval and merge; a task's file list does not restrict the Marshal's access.
 - **Project directories must stay stable while applying work.** MARSHAL cannot

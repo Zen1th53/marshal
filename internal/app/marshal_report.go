@@ -72,13 +72,13 @@ func (s *MarshalService) CompletionReport(ctx context.Context, runID string) (Ma
 		report.Usage.Money.Known = false
 	}
 	for _, task := range run.Tasks {
-		attempts := 1
+		attempts := 1 + task.EvidenceAttemptBase
 		for _, count := range task.ReturnsByAgent {
 			attempts += count
 		}
 		handin, found := marshal.HandIn{}, false
 		attempt := attempts
-		for attempt > 0 {
+		for attempt > task.EvidenceAttemptBase {
 			stored, handinErr := s.Store.GetMarshalHandIn(ctx, runID, task.PlanTaskID, attempt)
 			if handinErr == nil {
 				handin, found = stored.Value, true

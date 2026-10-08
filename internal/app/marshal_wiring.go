@@ -86,7 +86,7 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 		if err != nil || provider == "" {
 			return marshal.VerifierEvidence{}, errors.New("marshal: independent verifier provider is unavailable")
 		}
-		return freshRoleCLI(provider, filepath.Join(s.Worktrees, "TASK-"+marshalRunID(run)+"-integration")).VerifyEvidence(ctx, run, head, session)
+		return freshRoleCLI(provider, filepath.Join(s.Worktrees, integrationTaskID(marshalRunID(run), run))).VerifyEvidence(ctx, run, head, session)
 	}
 	s.Drivers = map[string]driver.Driver{
 		"codex":    driver.Codex(""),
@@ -225,7 +225,7 @@ func roleProvider(installed []string, avoid ...string) string {
 // tree fails verification.
 func (s *MarshalService) verifyByChecks(ctx context.Context, run marshal.Run, head string) (verification.Session, verification.Binding, error) {
 	runID := marshalRunID(run)
-	dir := filepath.Join(s.Worktrees, "TASK-"+runID+"-integration")
+	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
 	tree, err := gitMarshal(ctx, dir, "rev-parse", head+"^{tree}")
 	if err != nil {
 		return verification.Session{}, verification.Binding{}, err
@@ -270,7 +270,7 @@ func (s *MarshalService) verifyByChecks(ctx context.Context, run marshal.Run, he
 // uses: marshal/<run>/<task>.
 func marshalRunID(run marshal.Run) string {
 	for _, t := range run.Tasks {
-		if parts := strings.Split(t.Branch, "/"); len(parts) == 3 && parts[0] == "marshal" {
+		if parts := strings.Split(t.Branch, "/"); (len(parts) == 3 || len(parts) == 4) && parts[0] == "marshal" {
 			return parts[1]
 		}
 	}

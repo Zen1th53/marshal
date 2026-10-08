@@ -16,6 +16,7 @@ import (
 )
 
 type Request struct {
+	ProposalID                                      string `json:",omitempty"`
 	Kind, Object, Scope, Who, Reason, RunID, TaskID string
 	// ContinuationProvider binds a read decision to its proposed importer.
 	// It is independent of task identity and included in evidence and deduplication.

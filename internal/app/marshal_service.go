@@ -61,7 +61,9 @@ type MarshalService struct {
 	// the evidence-derived harness governance assessment. Nil means unknown.
 	InstalledVersion func(ctx context.Context, worker string) string
 	HandInGuard      func(context.Context, string, string, marshal.HandIn) (string, error)
-	now              func() time.Time
+	// AfterLifecycleEffect injects a failure after the effect but before completion.
+	AfterLifecycleEffect func(kind, operationID string) error
+	now                  func() time.Time
 }
 
 func (s *MarshalService) clock() time.Time {
@@ -77,9 +79,17 @@ func (s *MarshalService) ready() error {
 	return nil
 }
 func (s *MarshalService) record(ctx context.Context, runID, taskID string, kind events.EventType, data map[string]any) error {
-	id, err := model.NewID("marshal-event-")
+	event, err := s.decisionEvent(runID, taskID, kind, data)
 	if err != nil {
 		return err
+	}
+	_, err = s.Store.AppendMarshalDecision(ctx, event)
+	return err
+}
+func (s *MarshalService) decisionEvent(runID, taskID string, kind events.EventType, data map[string]any) (events.Event, error) {
+	id, err := model.NewID("marshal-event-")
+	if err != nil {
+		return events.Event{}, err
 	}
 	if model, ok := s.Model.(interface{ MarshalConversationID() string }); ok && model.MarshalConversationID() != "" {
 		if data == nil {
@@ -87,26 +97,14 @@ func (s *MarshalService) record(ctx context.Context, runID, taskID string, kind 
 		}
 		data["model_session_id"] = model.MarshalConversationID()
 	}
-	_, err = s.Store.AppendMarshalDecision(ctx, events.Event{ID: id, Type: kind, Subject: s.ProjectID, RunID: runID, TaskID: taskID, At: s.clock(), Data: data})
-	return err
+	return events.Event{ID: id, Type: kind, Subject: s.ProjectID, RunID: runID, TaskID: taskID, At: s.clock(), Data: data}, nil
 }
 func (s *MarshalService) save(ctx context.Context, runID string, run marshal.Run, revision int64) error {
-	if _, err := s.Store.SetMarshalRun(ctx, s.ProjectID, runID, run, revision); err != nil {
-		return err
+	if run.State == marshal.AwaitingUser && run.Pause == nil {
+		pauseMarshal(&run, "operator intervention required", "resolve the escalation, suspension or security issue, or amend the plan", "")
 	}
-	for _, task := range run.Tasks {
-		old, err := s.Store.GetMarshalTask(ctx, runID, task.PlanTaskID)
-		rev := int64(0)
-		if err == nil {
-			rev = old.Revision
-		} else if !errors.Is(err, model.ErrNotFound) {
-			return err
-		}
-		if _, err := s.Store.SetMarshalTask(ctx, runID, task, rev); err != nil {
-			return err
-		}
-	}
-	return nil
+	return s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, nil, nil, 0)
+
 }
 func (s *MarshalService) load(ctx context.Context, runID string) (marshal.Run, int64, error) {
 	if err := s.ready(); err != nil {
@@ -284,10 +282,7 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 		run.Tasks[i].BaseCommit = run.BaseCommit
 		run.Tasks[i].Branch = "marshal/" + runID + "/" + run.Tasks[i].PlanTaskID
 	}
-	if err = s.Store.SavePlan(ctx, d.Plan, 0); err != nil {
-		return marshal.Run{}, err
-	}
-	if err = s.save(ctx, runID, run, 0); err != nil {
+	if err = s.Store.SaveMarshalPlanState(ctx, s.ProjectID, runID, d.Plan, 0, run, 0, nil); err != nil {
 		return marshal.Run{}, err
 	}
 	return run, nil
@@ -322,19 +317,17 @@ func (s *MarshalService) Approve(ctx context.Context, runID string) (marshal.Run
 	if err != nil {
 		return run, err
 	}
-	if err = s.Store.SavePlan(ctx, approved, p.Version); err != nil {
-		return run, err
-	}
 	run.PlanVersion = p.Version + 1
 	run.ApprovalScopeDigest = marshalApprovalDigest(approved.ApprovalScopeDigest, run)
 	run.State = marshal.Approved
 	if run.Settings.AcceptanceMode == marshal.AcceptMarshal {
 		run.CloseAuthorization = &marshal.CloseAuthorization{User: user, ApprovalScopeDigest: run.ApprovalScopeDigest}
 	}
-	if err = s.save(ctx, runID, run, rev); err != nil {
+	event, err := s.decisionEvent(runID, "", events.EventTypeMarshalPlanApproved, map[string]any{"plan_version": run.PlanVersion})
+	if err != nil {
 		return run, err
 	}
-	return run, s.record(ctx, runID, "", events.EventTypeMarshalPlanApproved, map[string]any{"plan_version": run.PlanVersion})
+	return run, s.Store.SaveMarshalPlanState(ctx, s.ProjectID, runID, approved, p.Version, run, rev, &event)
 }
 
 // gitMarshal runs the runtime's own git commands: worktrees, merges and the
