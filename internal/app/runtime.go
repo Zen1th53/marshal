@@ -1047,7 +1047,11 @@ func (r *Runtime) Artifacts(ctx context.Context) ([]model.Artifact, error) {
 
 func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResult, error) {
 	if len(request.Command) == 0 {
-		request.Command = []string{"python", "conformance/runner.py", "validate-pack"}
+		var err error
+		request.Command, err = DefaultVerificationCommand(r.layout.Root)
+		if err != nil {
+			return VerifyResult{}, err
+		}
 	}
 	if r.policyConfigured {
 		if err := r.authorizeRuntime(ctx, "verification", "", "", policy.Action("verify"), policy.Resource(request.Command[0])); err != nil {
