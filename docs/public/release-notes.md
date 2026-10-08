@@ -1,4 +1,4 @@
-# What's new in 0.0.5
+# What's new in 0.0.7
 
 ## Plan with the Marshal
 

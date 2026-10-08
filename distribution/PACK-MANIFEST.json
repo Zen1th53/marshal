@@ -3156,7 +3156,7 @@
     },
     {
       "path": "docs/public/limits.md",
-      "sha256": "7c8150a8ba10e808ad3226981b74c84f760fe569f87b2f26f70eaf7723d6aeff",
+      "sha256": "aad30bfa069bf033d785e8682cd38f79b6ea6972a401e0b73bc1dcff703c92b8",
       "bytes": 5117
     },
     {
@@ -3166,7 +3166,7 @@
     },
     {
       "path": "docs/public/release-notes.md",
-      "sha256": "dfa9c6feb27b5494b015f466fb940b703d73ade5654a98f5adbdaf4f6eee69ed",
+      "sha256": "36b9870b1e183e08c7b264dd0e91a060e6a325339495fcb8df2d93900a6d600f",
       "bytes": 3223
     },
     {
@@ -11600,6 +11600,11 @@
       "bytes": 10766
     },
     {
+      "path": "release/RELEASE_NOTES_0.0.7.md",
+      "sha256": "3a58fc6b5291f6740d7bc3a1c85dc1cb444acb921224e71b0ad17f812e53648d",
+      "bytes": 11056
+    },
+    {
       "path": "release/RELEASE_NOTES_1.0.1.md",
       "sha256": "934fdce035add28555ef9217ddc688de66251b6573728c302cdf8bfbfbf4b9bb",
       "bytes": 5136
@@ -12041,7 +12046,7 @@
     },
     {
       "path": "tools/effect-inventory/main_test.go",
-      "sha256": "ccc220b0df30473f30d41519b32a0cd0b43f455eb37acaed207e0104bf467e86",
+      "sha256": "4a9e349e58b1e545cdeedb04055bea0b25feac214c6e37bce757c7a0a17af614",
       "bytes": 11451
     },
     {
