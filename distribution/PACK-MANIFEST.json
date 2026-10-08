@@ -9676,8 +9676,8 @@
     },
     {
       "path": "internal/tui/command_sweep_agents_test.go",
-      "sha256": "af4db14c6ee6dbb2ad76841831336008f397412c1aa244966c1c6241be7f47a8",
-      "bytes": 24570
+      "sha256": "de5721a6a9683aabb45a8d74ec0e35a696b5d12ccc2386ac98f1599d9823259c",
+      "bytes": 25082
     },
     {
       "path": "internal/tui/command_sweep_config_test.go",
@@ -10046,8 +10046,8 @@
     },
     {
       "path": "internal/tui/m11_marshal_test.go",
-      "sha256": "18750f17f9faef8d377e373684ec027eb8d53bc9395e03246aa3f28858e22353",
-      "bytes": 9945
+      "sha256": "98843401e6ef32bbe8238ad2555d6c38b5b173358d3b86feed9bbab9da2089bf",
+      "bytes": 10051
     },
     {
       "path": "internal/tui/main_test.go",
