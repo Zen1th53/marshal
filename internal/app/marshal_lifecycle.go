@@ -57,7 +57,7 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		return MarshalDispatch{}, err
 	}
 	if blocked, reason := budgetBlocksDispatch(run.Budget, taskUsage, planUsage); blocked {
-		run.State = marshal.AwaitingUser
+		pauseMarshal(&run, "budget boundary: "+reason, "start a new run with updated budget settings; settings do not change this run", "")
 		if err := s.save(ctx, runID, run, rev); err != nil {
 			return MarshalDispatch{}, err
 		}
@@ -105,7 +105,7 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if (t.ResultCommit == "" || fresh) && len(t.DependsOn) > 0 {
 		// A task builds on its dependencies' merged work: it starts from the
 		// integration head, where every dependency has been merged.
-		integration := filepath.Join(s.Worktrees, "TASK-"+runID+"-integration")
+		integration := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
 		head, headErr := gitMarshal(ctx, integration, "rev-parse", "HEAD")
 		if headErr != nil {
 			return MarshalDispatch{}, fmt.Errorf("task base is unavailable: %w", headErr)
@@ -113,15 +113,38 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		t.BaseCommit = strings.TrimSpace(head)
 	}
 	if run.Process05Bound && t.Mode == marshal.Governed && t.ResultCommit == "" && i > 0 {
-		integration := filepath.Join(s.Worktrees, "TASK-"+runID+"-integration")
+		integration := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
 		if head, headErr := gitMarshal(ctx, integration, "rev-parse", "HEAD"); headErr == nil {
 			t.BaseCommit = head
 		} else if run.Tasks[i-1].State == marshal.Merged {
 			return MarshalDispatch{}, fmt.Errorf("governed task base is unavailable: %w", headErr)
 		}
 	}
+	next := run
+	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
+	next.Tasks[i].State = marshal.Dispatched
+	if fresh {
+		next.Tasks[i].ResultCommit = ""
+	}
+	next.State = marshal.Dispatching
+	if next.Tier != marshal.Ultra {
+		next.Tier = policy.Tier
+	}
+	briefSum := sha256.Sum256([]byte(brief))
+	op := &marshal.LifecycleOperation{Kind: "launch", TaskID: taskID, Next: &next, Event: events.Event{Type: events.EventTypeMarshalTaskDispatched, Data: map[string]any{"tier": string(policy.Tier), "worker": t.Worker, "brief": brief, "brief_sha256": hex.EncodeToString(briefSum[:])}}}
+	rev, err = s.beginOperation(ctx, runID, run, rev, op)
+	if err != nil {
+		return MarshalDispatch{}, err
+	}
+	effectCompleted := false
+	defer func() {
+		if !effectCompleted {
+			s.abandonOperation(ctx, runID, op)
+		}
+	}()
+
 	wt := worktree.New(s.Repository, s.Worktrees)
-	request := model.WorktreeRequest{TaskID: worktreeTaskID(runID, taskID), Branch: t.Branch, BaseCommit: t.BaseCommit}
+	request := model.WorktreeRequest{TaskID: taskArtifactID(runID, *t), Branch: t.Branch, BaseCommit: t.BaseCommit}
 	var tree model.Worktree
 	if t.ResultCommit != "" {
 		request.BaseCommit = t.ResultCommit
@@ -147,19 +170,12 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
-	t.State = marshal.Dispatched
-	run.State = marshal.Dispatching
-	if run.Tier != marshal.Ultra {
-		run.Tier = policy.Tier
-	}
-	if err = s.save(ctx, runID, run, rev); err != nil {
+	effectCompleted = true
+	if err = s.afterOperationEffect(op); err != nil {
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
 	}
-	// The brief is recorded as sent, so what a worker was told can be read
-	// back beside what it handed in.
-	briefSum := sha256.Sum256([]byte(brief))
-	if err = s.record(ctx, runID, taskID, events.EventTypeMarshalTaskDispatched, map[string]any{"tier": string(policy.Tier), "worker": t.Worker, "brief": brief, "brief_sha256": hex.EncodeToString(briefSum[:])}); err != nil {
+	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
 	}
@@ -175,7 +191,7 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 // refs/marshal/<run>/returned/<task>/attempt-<n>, because its hand-ins and
 // reviews name that commit as evidence.
 func restartTaskBranch(ctx context.Context, repository, runID string, t *marshal.Task, dir string) error {
-	attempt := 0
+	attempt := t.EvidenceAttemptBase
 	for _, n := range t.ReturnsByAgent {
 		attempt += n
 	}
@@ -198,7 +214,25 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	if dispatch.Driver == nil || dispatch.Handle == nil {
 		return marshal.HandIn{}, errors.New("missing dispatch handle")
 	}
+	initial, initialRev, err := s.load(ctx, runID)
+	if err != nil {
+		return marshal.HandIn{}, err
+	}
+	op := &marshal.LifecycleOperation{Kind: "hand-in", TaskID: dispatch.TaskID, Dir: dispatch.Handle.Worktree(), Event: events.Event{Type: events.EventTypeMarshalTaskHandedIn}}
+	if _, err = s.beginOperation(ctx, runID, initial, initialRev, op); err != nil {
+		return marshal.HandIn{}, err
+	}
 	handin, err := dispatch.Driver.Wait(ctx, dispatch.Handle)
+	if err != nil {
+		pending, pendingRev, loadErr := s.load(context.WithoutCancel(ctx), runID)
+		if loadErr != nil {
+			return handin, errors.Join(err, loadErr)
+		}
+		pending.Operation = nil
+		if saveErr := s.save(context.WithoutCancel(ctx), runID, pending, pendingRev); saveErr != nil {
+			return handin, errors.Join(err, saveErr)
+		}
+	}
 	if errors.Is(err, worker.ErrHoneypot) {
 		run, rev, loadErr := s.load(context.WithoutCancel(ctx), runID)
 		if loadErr != nil {
@@ -209,7 +243,7 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 			return handin, errors.Join(err, model.ErrNotFound)
 		}
 		run.Tasks[i].State = marshal.Escalated
-		run.State = marshal.AwaitingUser
+		pauseMarshal(&run, "security: "+err.Error(), "resolve the security alert and amend the plan before retrying", "")
 		if saveErr := s.save(context.WithoutCancel(ctx), runID, run, rev); saveErr != nil {
 			return handin, errors.Join(err, saveErr)
 		}
@@ -253,23 +287,32 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 	if t.Mode == marshal.Governed && s.HandInGuard != nil {
 		validationErr = errors.Join(validationErr, s.HandInGuard(ctx, dispatch.TaskID, dispatch.Handle.Worktree(), handin))
 	}
-	attempt := 1
+	attempt := 1 + t.EvidenceAttemptBase
 	for _, n := range t.ReturnsByAgent {
 		attempt += n
-	}
-	if _, err = s.Store.SetMarshalHandIn(ctx, runID, dispatch.TaskID, attempt, handin); err != nil {
-		return handin, err
 	}
 	t.ResultCommit = handin.ResultCommit
 	if validationErr == nil {
 		t.State = marshal.HandedIn
 		run.State = marshal.Reviewing
-		if err = s.save(ctx, runID, run, rev); err != nil {
-			return handin, err
-		}
-		if err = s.record(ctx, runID, dispatch.TaskID, events.EventTypeMarshalTaskHandedIn, map[string]any{"result_commit": handin.ResultCommit}); err != nil {
-			return handin, err
-		}
+	}
+	run.Operation = nil
+	op.HandIn = &handin
+	op.Attempt = attempt
+	op.Next = &run
+	op.Event.Data["result_commit"] = handin.ResultCommit
+	// Persist the observed hand-in as the receipt before recording completion.
+	pending := initial
+	pending.Operation = op
+	if err = s.save(ctx, runID, pending, rev); err != nil {
+		return handin, err
+	}
+	rev++
+	if err = s.afterOperationEffect(op); err != nil {
+		return handin, err
+	}
+	if err = s.completeOperation(ctx, runID, rev, op); err != nil {
+		return handin, err
 	}
 	elapsed := s.clock().Sub(dispatch.Started)
 	if elapsed < 0 {
@@ -284,7 +327,7 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		if err != nil {
 			return handin, err
 		}
-		run.State = marshal.AwaitingUser
+		pauseMarshalBudget(&run, budget)
 		if err = s.save(ctx, runID, run, rev); err != nil {
 			return handin, err
 		}
@@ -328,12 +371,15 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if err != nil {
 		return "", err
 	}
+	if err = unfinishedMarshalOperation(run); err != nil {
+		return "", err
+	}
 	i := taskIndex(run, taskID)
 	if i < 0 || run.Tasks[i].State != marshal.HandedIn {
 		return "", errors.New("task has no hand-in")
 	}
 	t := &run.Tasks[i]
-	attempt := 1
+	attempt := 1 + t.EvidenceAttemptBase
 	for _, n := range t.ReturnsByAgent {
 		attempt += n
 	}
@@ -426,7 +472,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		if loadErr != nil {
 			return "", loadErr
 		}
-		paused.State = marshal.AwaitingUser
+		pauseMarshalBudget(&paused, budget)
 		if loadErr = s.save(ctx, runID, paused, pausedRev); loadErr != nil {
 			return "", loadErr
 		}
@@ -457,7 +503,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 // rework policy for validation, review, budget and merge failures.
 func (s *MarshalService) finishMarshalReturn(ctx context.Context, runID string, run marshal.Run, revision int64, index int, review marshal.Review, data map[string]any) (marshal.Verdict, error) {
 	t := &run.Tasks[index]
-	attempt := 1
+	attempt := 1 + t.EvidenceAttemptBase
 	for _, n := range t.ReturnsByAgent {
 		attempt += n
 	}
@@ -520,7 +566,7 @@ func applyMarshalReturn(run *marshal.Run, t *marshal.Task) marshal.Verdict {
 		t.State = marshal.Reassigned
 	case marshal.VerdictEscalate:
 		t.State = marshal.Escalated
-		run.State = marshal.AwaitingUser
+		pauseMarshal(run, "worker rework limit reached", "resolve the escalation or amend the plan", "")
 	}
 	return result
 }
@@ -536,6 +582,9 @@ func (s *MarshalService) ReturnByUser(ctx context.Context, runID, taskID, reason
 	}
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
+		return "", err
+	}
+	if err = unfinishedMarshalOperation(run); err != nil {
 		return "", err
 	}
 	i := taskIndex(run, taskID)
@@ -570,6 +619,9 @@ func (s *MarshalService) Charge(ctx context.Context, runID, taskID, phase string
 	if err != nil {
 		return marshal.BudgetResult{}, err
 	}
+	if err = unfinishedMarshalOperation(run); err != nil {
+		return marshal.BudgetResult{}, err
+	}
 	if phase == "" {
 		return marshal.BudgetResult{}, errors.New("charge phase is required")
 	}
@@ -582,7 +634,7 @@ func (s *MarshalService) Charge(ctx context.Context, runID, taskID, phase string
 	}
 	result := marshal.CheckBudget(run.Budget, task, planTotal)
 	if len(result.PlanExceeded) > 0 || budgetNeedsOperator(run.Budget, result) {
-		run.State = marshal.AwaitingUser
+		pauseMarshalBudget(&run, result)
 		if err := s.save(ctx, runID, run, rev); err != nil {
 			return marshal.BudgetResult{}, err
 		}
@@ -705,6 +757,9 @@ func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker str
 	if err != nil {
 		return err
 	}
+	if err = unfinishedMarshalOperation(run); err != nil {
+		return err
+	}
 	i := taskIndex(run, taskID)
 	if i < 0 || run.Tasks[i].State != marshal.Reassigned || worker == "" || marshalHarnessName(worker) == marshalHarnessName(run.Tasks[i].Worker) {
 		return errors.New("invalid reassignment")
@@ -752,10 +807,42 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 	if _, err = gitMarshal(ctx, s.Repository, "cat-file", "-e", accepted+"^{commit}"); err != nil {
 		return err
 	}
-	branch := "marshal/" + runID + "/integration"
-	dir := filepath.Join(s.Worktrees, "TASK-"+runID+"-integration")
+	branch := integrationBranch(runID, run)
+	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
+	before := run.BaseCommit
+	if i > 0 {
+		before, err = gitMarshal(ctx, dir, "rev-parse", "HEAD")
+		if err != nil {
+			return err
+		}
+	}
+	next := run
+	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
+	next.Tasks[i].State = marshal.Merged
+	next.State = marshal.Merging
+	all := true
+	for _, t := range next.Tasks {
+		if t.State != marshal.Merged {
+			all = false
+		}
+	}
+	if all {
+		next.State = marshal.Verifying
+	}
+	op := &marshal.LifecycleOperation{Kind: "merge", TaskID: taskID, Dir: dir, Target: "refs/heads/" + branch, Before: before, After: accepted, Next: &next, Event: events.Event{Type: events.EventTypeMarshalTaskMerged}}
+	rev, err = s.beginOperation(ctx, runID, run, rev, op)
+	if err != nil {
+		return err
+	}
+	effectCompleted := false
+	defer func() {
+		if !effectCompleted {
+			s.abandonOperation(ctx, runID, op)
+		}
+	}()
+
 	if i == 0 {
-		if _, err = worktree.New(s.Repository, s.Worktrees).Prepare(ctx, model.WorktreeRequest{TaskID: "TASK-" + runID + "-integration", Branch: branch, BaseCommit: run.BaseCommit}); err != nil {
+		if _, err = worktree.New(s.Repository, s.Worktrees).Prepare(ctx, model.WorktreeRequest{TaskID: integrationTaskID(runID, run), Branch: branch, BaseCommit: run.BaseCommit}); err != nil {
 			return err
 		}
 	}
@@ -767,7 +854,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 	} else if sets {
 		err = errors.New("the hand-in declares a merge driver in .gitattributes")
 	} else {
-		_, err = gitMarshal(ctx, dir, "merge", "--no-ff", "--no-edit", accepted)
+		_, err = gitMarshal(ctx, dir, "merge", "--no-ff", "-m", "marshal: merge "+taskID+"\n\nMarshal-Operation: "+op.ID, accepted)
 	}
 	if err != nil {
 		_, _ = gitMarshal(ctx, dir, "merge", "--abort")
@@ -777,7 +864,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 		}
 		run.Tasks[i].BaseCommit = head
 		run.State = marshal.Reviewing
-		attempt := 1
+		attempt := 1 + run.Tasks[i].EvidenceAttemptBase
 		for _, n := range run.Tasks[i].ReturnsByAgent {
 			attempt += n
 		}
@@ -790,26 +877,19 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 		_, err = s.finishMarshalReturn(ctx, runID, run, rev, i, review, map[string]any{"base_commit": head})
 		return err
 	}
-	run.Tasks[i].State = marshal.Merged
-	run.State = marshal.Merging
-	all := true
-	for _, t := range run.Tasks {
-		if t.State != marshal.Merged {
-			all = false
-		}
-	}
-	if all {
-		run.State = marshal.Verifying
-	}
-	if err = s.save(ctx, runID, run, rev); err != nil {
+	effectCompleted = true
+	if err = s.afterOperationEffect(op); err != nil {
 		return err
 	}
-	return s.record(ctx, runID, taskID, events.EventTypeMarshalTaskMerged, nil)
+	return s.completeOperation(ctx, runID, rev, op)
 }
 
 func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge marshal.Charge) (verification.Decision, error) {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
+		return verification.Blocked, err
+	}
+	if err = unfinishedMarshalOperation(run); err != nil {
 		return verification.Blocked, err
 	}
 	if run.State != marshal.Verifying || s.Verify == nil {
@@ -818,7 +898,7 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 	if err = s.requireIndependentVerifier(ctx, run); err != nil {
 		return verification.Blocked, err
 	}
-	head, err := gitMarshal(ctx, filepath.Join(s.Worktrees, "TASK-"+runID+"-integration"), "rev-parse", "HEAD")
+	head, err := gitMarshal(ctx, filepath.Join(s.Worktrees, integrationTaskID(runID, run)), "rev-parse", "HEAD")
 	if err != nil {
 		return verification.Blocked, err
 	}
@@ -841,14 +921,14 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 		if loadErr != nil {
 			return result, loadErr
 		}
-		paused.State = marshal.AwaitingUser
+		pauseMarshalBudget(&paused, budget)
 		if loadErr = s.save(ctx, runID, paused, pausedRev); loadErr != nil {
 			return result, loadErr
 		}
 		return result, nil
 	}
-	if result != verification.VerifiedComplete || len(budget.PlanExceeded) > 0 {
-		run.State = marshal.AwaitingUser
+	if result != verification.VerifiedComplete {
+		pauseMarshal(&run, "verification failed: "+string(result), "/marshal resume to retry verification", marshal.Verifying)
 	}
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return result, err
@@ -859,6 +939,9 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
+		return err
+	}
+	if err = unfinishedMarshalOperation(run); err != nil {
 		return err
 	}
 	if run.State != marshal.Verifying {
@@ -877,7 +960,7 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	if project.DefaultBranch == "" {
 		return errors.New("project target branch is missing")
 	}
-	dir := filepath.Join(s.Worktrees, "TASK-"+runID+"-integration")
+	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
 	head, err := gitMarshal(ctx, dir, "rev-parse", "HEAD")
 	if err != nil {
 		return err
@@ -909,6 +992,23 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 		return err
 	}
 	checkpoint := "refs/marshal/" + runID + "/pre-close"
+	if run.ArtifactRevision > 0 {
+		checkpoint = fmt.Sprintf("refs/marshal/%s/r%d/pre-close", runID, run.ArtifactRevision)
+	}
+	next := run
+	next.State = marshal.Closed
+	op := &marshal.LifecycleOperation{Kind: "close", Before: old, After: head, Target: target, Next: &next, Event: events.Event{Type: events.EventTypeMarshalRunClosed, Data: map[string]any{"target": project.DefaultBranch, "commit": head, "checkpoint": checkpoint, "previous_commit": old}}}
+	rev, err = s.beginOperation(ctx, runID, run, rev, op)
+	if err != nil {
+		return err
+	}
+	effectCompleted := false
+	defer func() {
+		if !effectCompleted {
+			s.abandonOperation(ctx, runID, op)
+		}
+	}()
+
 	if _, err = gitMarshal(ctx, s.Repository, "update-ref", checkpoint, old); err != nil {
 		return err
 	}
@@ -928,6 +1028,14 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	if !gate.Outcome.Permits() {
 		return fmt.Errorf("close gate: %s", gate.Reason)
 	}
+	// Recovery may finish a close only after this exact intent passed the gate.
+	op.Authorized = true
+	pending := run
+	pending.Operation = op
+	if err = s.save(ctx, runID, pending, rev); err != nil {
+		return err
+	}
+	rev++
 	if _, err = gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", old, head); err != nil {
 		return errors.New("target cannot fast-forward")
 	}
@@ -966,11 +1074,11 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 			return fmt.Errorf("the target branch moved since the checkpoint was taken: %w", err)
 		}
 	}
-	run.State = marshal.Closed
-	if err = s.save(ctx, runID, run, rev); err != nil {
+	effectCompleted = true
+	if err = s.afterOperationEffect(op); err != nil {
 		return err
 	}
-	return s.record(ctx, runID, "", events.EventTypeMarshalRunClosed, map[string]any{"target": project.DefaultBranch, "commit": head, "checkpoint": checkpoint, "previous_commit": old})
+	return s.completeOperation(ctx, runID, rev, op)
 }
 
 func (s *MarshalService) Amend(ctx context.Context, runID, reason string) (marshal.Run, error) {
@@ -1022,6 +1130,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 	if err != nil {
 		return run, err
 	}
+	if err = unfinishedMarshalOperation(run); err != nil {
+		return run, err
+	}
 	if expectedPlanVersion != 0 && run.PlanVersion != expectedPlanVersion {
 		return run, errors.New("amendment proposal is stale")
 	}
@@ -1055,12 +1166,19 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		amended.State = plan.StateReady
 		amended.ApprovedScope = nil
 		amended.ApprovalScopeDigest = ""
+		run.ArtifactRevision = amended.Version
+		run.Pause = nil
 		run.Tasks = d.Tasks
 		for i := range run.Tasks {
+			run.Tasks[i].EvidenceAttemptBase, err = s.Store.MarshalLastAttempt(ctx, runID, run.Tasks[i].PlanTaskID)
+			if err != nil {
+				return run, err
+			}
+			run.Tasks[i].ReturnsByAgent = nil
 			run.Tasks[i].State = marshal.Queued
 			run.Tasks[i].BaseCommit = run.BaseCommit
 			run.Tasks[i].ResultCommit = ""
-			run.Tasks[i].Branch = "marshal/" + runID + "/" + run.Tasks[i].PlanTaskID
+			run.Tasks[i].Branch = fmt.Sprintf("marshal/%s/r%d/%s", runID, amended.Version, run.Tasks[i].PlanTaskID)
 		}
 		run.State = marshal.Drafting
 		if run.CloseAuthorization != nil {
@@ -1101,9 +1219,6 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 			}
 		}
 	}
-	if err = s.Store.SavePlan(ctx, amended, p.Version); err != nil {
-		return run, err
-	}
 	run.PlanVersion = amended.Version
 	if !major {
 		previous := run.Tasks
@@ -1111,6 +1226,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		for i := range run.Tasks {
 			run.Tasks[i].State = marshal.Queued
 			run.Tasks[i].Branch = "marshal/" + runID + "/" + run.Tasks[i].PlanTaskID
+			if run.ArtifactRevision > 0 {
+				run.Tasks[i].Branch = fmt.Sprintf("marshal/%s/r%d/%s", runID, run.ArtifactRevision, run.Tasks[i].PlanTaskID)
+			}
 			run.Tasks[i].BaseCommit = run.BaseCommit
 			run.Tasks[i].ResultCommit = ""
 			run.Tasks[i].ReturnsByAgent = nil
@@ -1121,16 +1239,18 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 					run.Tasks[i].BaseCommit = old.BaseCommit
 					run.Tasks[i].ResultCommit = old.ResultCommit
 					run.Tasks[i].ReturnsByAgent = old.ReturnsByAgent
+					run.Tasks[i].EvidenceAttemptBase = old.EvidenceAttemptBase
 					break
 				}
 			}
 		}
 		run.ApprovalScopeDigest = marshalApprovalDigest(amended.ApprovalScopeDigest, run)
 	}
-	if err = s.save(ctx, runID, run, rev); err != nil {
+	event, err := s.decisionEvent(runID, "", events.EventTypeMarshalPlanAmended, map[string]any{"major": major})
+	if err != nil {
 		return run, err
 	}
-	return run, s.record(ctx, runID, "", events.EventTypeMarshalPlanAmended, map[string]any{"major": major})
+	return run, s.Store.SaveMarshalPlanState(ctx, s.ProjectID, runID, amended, p.Version, run, rev, &event)
 }
 
 // A replacement worker or split child must keep the approved execution mode.
@@ -1164,6 +1284,9 @@ func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, reason str
 	if err != nil {
 		return err
 	}
+	if err = unfinishedMarshalOperation(run); err != nil {
+		return err
+	}
 	if reason == "" {
 		return errors.New("escalation reason required")
 	}
@@ -1174,7 +1297,7 @@ func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, reason str
 		}
 		run.Tasks[i].State = marshal.Escalated
 	}
-	run.State = marshal.AwaitingUser
+	pauseMarshal(&run, reason, "resolve the escalation or amend the plan", "")
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}
@@ -1183,6 +1306,10 @@ func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, reason str
 
 func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run, error) {
 	run, rev, err := s.load(ctx, runID)
+	if err != nil {
+		return run, err
+	}
+	run, rev, err = s.recoverOperation(ctx, runID, run, rev)
 	if err != nil {
 		return run, err
 	}
@@ -1197,19 +1324,30 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 			}
 		}
 	}
+	if run.State == marshal.AwaitingUser {
+		if run.Pause == nil || run.Pause.ResumeState == "" {
+			return run, marshalPauseError(run)
+		}
+		run.State = run.Pause.ResumeState
+		run.Pause = nil
+		if err = s.save(ctx, runID, run, rev); err != nil {
+			return run, err
+		}
+		rev++
+	}
 	wm := worktree.New(s.Repository, s.Worktrees)
 	for i := range run.Tasks {
 		t := &run.Tasks[i]
 		if t.ResultCommit != "" && t.State != marshal.Merged {
-			_, err = wm.Resume(ctx, model.WorktreeRequest{TaskID: worktreeTaskID(runID, t.PlanTaskID), Branch: t.Branch, BaseCommit: t.ResultCommit})
+			_, err = wm.Resume(ctx, model.WorktreeRequest{TaskID: taskArtifactID(runID, *t), Branch: t.Branch, BaseCommit: t.ResultCommit})
 			if err != nil {
 				return run, err
 			}
 		}
 		if t.State == marshal.Dispatched {
-			_, err = wm.Prepare(ctx, model.WorktreeRequest{TaskID: worktreeTaskID(runID, t.PlanTaskID), Branch: t.Branch, BaseCommit: t.BaseCommit})
+			_, err = wm.Prepare(ctx, model.WorktreeRequest{TaskID: taskArtifactID(runID, *t), Branch: t.Branch, BaseCommit: t.BaseCommit})
 			if err != nil {
-				run.State = marshal.AwaitingUser
+				pauseMarshal(&run, "interrupted worker worktree: "+err.Error(), "inspect retained worktree and amend the plan", "")
 			} else if run.State != marshal.AwaitingUser {
 				run.State = marshal.Reviewing
 			}

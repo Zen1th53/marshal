@@ -2,6 +2,16 @@
 
 ## What changed
 
+Lifecycle intents and completion records survive interruptions. Startup reconciles
+launches, hand-ins, merges and closes without repeating completed effects; run,
+task, hand-in and audit updates commit together. Plan revisions and run state
+also commit together.
+
+Replacement plans use separate branches and worktrees and preserve earlier
+evidence. Pending proposals return to the popup queue after restart, and resolved
+occurrences stay resolved. The Marshal validates and reads back its plan before
+publishing the completion marker. `/marshal resume` retries failed verification
+and reports the reason and next step when a pause needs operator action.
 - Credential revocation reaches every owning runtime through the project store,
   refuses new broker requests immediately, and closes active exchanges. The
   permission command reports pending until owners acknowledge closure; use
@@ -30,7 +40,7 @@ missing dependency does not make installation fail.
 The automated source inventory reports:
 
 - Constitution enforcement: 0.6%
-- Scope of protection: 7.0%
+- Scope of protection: 6.8%
 
 Constitution enforcement is the percentage of material source call sites that a constitutional verdict can refuse before the effect occurs.
 Scope of protection is the percentage of material source call sites guarded before execution by a constitutional gate, approval binding, policy authorisation or sandbox.
@@ -47,6 +57,14 @@ recording a verdict or warning does not count as enforcement. The reviewed
 
 ## Known limits
 
+- **Keep the window open.** There is no background service. Unfinished lifecycle operations are reconciled when the project reopens.
+  `/marshal resume` retries a failed verification. Budget and security pauses
+  require the resolution shown in the panel; uncertain interrupted effects
+  retain their artifacts for operator review.
+- **Credential broker is opt-in per project and provider.** Use
+  `/permission credential request <codex|claude|gemini|opencode>` and press
+  uppercase `A` in the fixed permission prompt. Revoke with
+  `/permission credential revoke <provider>`. Supported API keys stay on the
 - **A2A authentication is required by default.** Missing authentication configuration
   refuses task import. Deliberate unauthenticated serving requires `--insecure`
   and a literal loopback listen address; non-loopback peers are refused.

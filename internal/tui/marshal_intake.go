@@ -12,9 +12,9 @@ type marshalIntake struct {
 }
 
 // Intake is validated preference data from the project spool, never authority.
-func (w *Workspace) saveMarshalIntake(intake marshalIntake) {
+func (w *Workspace) saveMarshalIntake(intake marshalIntake) error {
 	if w.runtime == nil {
-		return
+		return errNoRuntime
 	}
 	if intake.EarlierWork == "" {
 		previous, err := os.ReadFile(filepath.Join(w.runtime.ProjectRoot(), ".marshal", "marshal-intake.json"))
@@ -28,12 +28,12 @@ func (w *Workspace) saveMarshalIntake(intake marshalIntake) {
 	dir := filepath.Join(root, ".marshal")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		w.RecordActivity("Intake persistence failed: " + err.Error())
-		return
+		return err
 	}
 	file, err := os.CreateTemp(dir, ".intake-")
 	if err != nil {
 		w.RecordActivity("Intake persistence failed: " + err.Error())
-		return
+		return err
 	}
 	_, err = file.Write(data)
 	if err == nil {
@@ -50,6 +50,7 @@ func (w *Workspace) saveMarshalIntake(intake marshalIntake) {
 	if err != nil {
 		w.RecordActivity("Intake persistence failed: " + err.Error())
 	}
+	return err
 }
 
 func (w *Workspace) marshalContinuityBriefing(root, brief string) string {

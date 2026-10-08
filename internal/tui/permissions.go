@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -16,19 +17,31 @@ import (
 )
 
 type permissionState struct {
-	runProposals        map[string]marshalProposal
-	queue               permission.Queue
-	mu                  sync.Mutex
-	ready               bool
-	running             bool
-	outstanding         map[string]bool
-	continuations       map[string]string
-	proposalsSeen       map[string]bool
-	planApprovalPending bool
-	planApprovalRunID   string
+	runProposals           map[string]marshalProposal
+	queue                  permission.Queue
+	mu                     sync.Mutex
+	ready                  bool
+	running                bool
+	outstanding            map[string]bool
+	continuations          map[string]string
+	proposalsSeen          map[string]bool
+	planApprovalPending    bool
+	planApprovalRunID      string
+	planApprovalOccurrence string
 }
 
 func (w *Workspace) queuePermission(req permission.Request) {
+	if req.ProposalID != "" && w.store != nil {
+		data, err := json.Marshal(req)
+		if err == nil {
+			err = w.store.BindMarshalProposal(context.Background(), w.projectID, req.ProposalID, string(data), req.Key())
+		}
+		if err != nil {
+			w.RecordActivity("Proposal admission failed: " + err.Error())
+			return
+		}
+	}
+
 	w.permissions.mu.Lock()
 	if w.permissions.outstanding == nil {
 		w.permissions.outstanding = map[string]bool{}
@@ -54,6 +67,7 @@ func (w *Workspace) queuePermission(req permission.Request) {
 // startPermissionQueue is called only after terminal initialization. Requests
 // submitted by a headless runtime must not launch readers of terminal state.
 func (w *Workspace) startPermissionQueue() {
+	w.recoverMarshalProposals()
 	w.permissions.mu.Lock()
 	defer w.permissions.mu.Unlock()
 	w.permissions.ready = true
@@ -227,6 +241,18 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 		w.permissions.mu.Lock()
 		delete(w.permissions.outstanding, req.Key())
 		w.permissions.mu.Unlock()
+		if req.ProposalID != "" && w.store != nil {
+			outcome := "declined"
+			if allow {
+				outcome = "applied"
+				if err != nil {
+					outcome = "failed"
+				}
+			}
+			if saveErr := w.store.ResolveMarshalProposalRequest(context.WithoutCancel(ctx), w.projectID, req.Key(), outcome); saveErr != nil {
+				err = errors.Join(err, saveErr)
+			}
+		}
 		w.marshalProposalDecisionNotice(req, allow, err)
 	}()
 	control := w.controlSource()

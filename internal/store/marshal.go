@@ -19,18 +19,29 @@ type MarshalRecord[T any] struct {
 }
 
 func marshalWrite[T any](ctx context.Context, s *Store, table string, keys []string, values []any, value T, expected int64) (int64, error) {
-	if expected < 0 {
-		return 0, fmt.Errorf("%w: negative revision", model.ErrInvalid)
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return 0, fmt.Errorf("marshal record: %w", err)
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
+	next, err := marshalWriteTx(ctx, tx, table, keys, values, value, expected)
+	if err != nil {
+		return 0, err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, err
+	}
+	return next, nil
+}
+
+func marshalWriteTx[T any](ctx context.Context, tx *sql.Tx, table string, keys []string, values []any, value T, expected int64) (int64, error) {
+	if expected < 0 {
+		return 0, fmt.Errorf("%w: negative revision", model.ErrInvalid)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return 0, err
+	}
 	where := make([]string, len(keys))
 	for i, k := range keys {
 		where[i] = k + " = ?"
@@ -68,9 +79,6 @@ func marshalWrite[T any](ctx context.Context, s *Store, table string, keys []str
 	}
 	if err != nil {
 		return 0, fmt.Errorf("write %s: %w", table, err)
-	}
-	if err = tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit %s: %w", table, err)
 	}
 	return next, nil
 }
@@ -228,4 +236,28 @@ func (s *Store) SetMarshalSettings(ctx context.Context, projectID string, settin
 		return 0, fmt.Errorf("%w: %v", model.ErrInvalid, err)
 	}
 	return marshalWrite(ctx, s, "marshal_settings", []string{"project_id"}, []any{projectID}, settings, expected)
+}
+
+// MarshalLastAttempt keeps replacement revisions from overwriting archived evidence.
+func (s *Store) MarshalLastAttempt(ctx context.Context, runID, taskID string) (int, error) {
+	var attempt int
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(attempt),0) FROM (SELECT attempt FROM marshal_handins WHERE run_id=? AND task_id=? UNION ALL SELECT attempt FROM marshal_reviews WHERE run_id=? AND task_id=?)`, runID, taskID, runID, taskID).Scan(&attempt)
+	return attempt, err
+}
+
+func (s *Store) MarshalUnfinishedRuns(ctx context.Context, projectID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT run_id FROM marshal_runs WHERE project_id=? AND json_extract(data_json,'$.Operation') IS NOT NULL ORDER BY rowid`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
