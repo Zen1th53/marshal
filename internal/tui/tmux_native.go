@@ -516,7 +516,20 @@ func (w *Workspace) hostNativeTmuxWindow(ctx context.Context, name, root, socket
 		return err
 	}
 	var target string
-	err = tmux.NewWindow(ctx, w.tmuxSession, name, root, nil, []string{relay, "STDIO,raw,echo=0", "UNIX-CONNECT:" + socket}, &target)
+	argv := []string{relay, "STDIO,raw,echo=0", "UNIX-CONNECT:" + socket}
+	if view, ok := ctx.Value(taskRelayViewKey{}).(taskRelayView); ok {
+		// A governed task can host more than one process; retain all relay output.
+		path := filepath.Join(view.root, ".marshal", "evidence", view.id+"-relay-latest.txt")
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if err := saveAgentEvidence(view.root, view.id+"-relay", ""); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		argv = taskRelayCommand(relay, socket, view.root, view.id)
+	}
+	err = tmux.NewWindow(ctx, w.tmuxSession, name, root, nil, argv, &target)
 	if err != nil {
 		return err
 	}
@@ -1476,6 +1489,9 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 	agent := &activeTmuxAgent{id: agentID, role: "task", launchOrigin: nativeLaunchAutomated, taskID: req.Task.PlanTaskID, provider: req.Task.Worker, runID: req.RunID, label: "Task " + req.Task.PlanTaskID + " (" + req.Task.Worker + ")", state: "working", readOnly: true, driver: t.inner, doneChan: make(chan struct{})}
 	host := func(ctx context.Context, socket string) error {
 		name := tmux.TaskWindowName(strings.TrimPrefix(agentID, "task-"), root)
+		if t.inner.Mode() == marshal.Governed {
+			ctx = withTaskRelayView(ctx, root, agentID)
+		}
 		if err := t.w.hostNativeTmuxWindow(ctx, name, req.Worktree, socket, nativeLaunchAutomated, &agent.paneID); err != nil {
 			return err
 		}

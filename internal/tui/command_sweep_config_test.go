@@ -52,7 +52,7 @@ func TestCommandSweepConfigDiscovery(t *testing.T) {
 	sweepWorkEnvironment(t)
 	installDialectDoubles(t)
 	ws := NewWorkspace(nil, "sweep", "sweep")
-	help := sweepWorkRun(t, ws, "/help", "")
+	help := sweepWorkRun(t, ws, "/help all", "")
 	for _, cmd := range []string{"/policy", "/sandbox", "/doctor", "/provider", "/harness", "/model", "/models", "/effort", "/backup", "/fingerprint", "/runtime", "/store", "/export", "/reinjection", "/alignment", "/optimization", "/features", "/search", "/login", "/logout"} {
 		if !strings.Contains(help, "  "+cmd+" ") || !ws.knownCommand(cmd) {
 			t.Errorf("missing help/completion: %s", cmd)

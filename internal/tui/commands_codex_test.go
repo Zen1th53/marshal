@@ -405,9 +405,9 @@ func TestDeveloperAgentCockpit_Rendering(t *testing.T) {
 
 	for _, want := range []string{
 		"Activity",
-		"Native agent workspace",
+		"Talk to the Marshal", "/marshal chat", "Native sessions",
 		"[F1]", "[F2]", "[F3]", "[F4]", "[F5]",
-		"/codex new", "/codex continue", "/resume", "/diff", "[F7]",
+		"/marshal status", "/help", "/diff", "F7",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in initial screen rendering, got:\n%s", want, rendered)

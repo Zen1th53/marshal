@@ -110,15 +110,6 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		return "", fmt.Errorf("%w; Install %s and make %s available on PATH, then retry", err, label, binaryName)
 	}
 	dialect := app.ObserveProviderDialect(ctx, provider)
-	if dialect.Operation(app.ProviderArgOperation(provider, args)).Status == app.ProviderUnknown {
-		defer func() {
-			label := "UNKNOWN — unqualified pass-through: " + dialect.Provider + " " + app.ProviderArgOperation(provider, args)
-			result = label + "\n" + result
-			if resultErr != nil {
-				resultErr = fmt.Errorf("%s: %w", label, resultErr)
-			}
-		}()
-	}
 	if err := dialect.Check(app.ProviderArgOperation(provider, args), true); err != nil {
 		return "", err
 	}

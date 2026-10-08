@@ -256,7 +256,7 @@ func TestCommandSweepAgentsHelpCompletion(t *testing.T) {
 	sweepWorkEnvironment(t)
 	installDialectDoubles(t)
 	ws := NewWorkspace(nil, "sweep", "sweep")
-	help := sweepAgentExecute(t, ws, "/help")
+	help := sweepAgentExecute(t, ws, "/help all")
 	for _, root := range sweepAgentRoots {
 		if !strings.Contains(help, root) {
 			t.Errorf("%s missing help", root)

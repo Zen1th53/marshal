@@ -139,7 +139,7 @@ func TestProviderDialectSurface(t *testing.T) {
 			}
 		})
 	}
-	if !strings.Contains(sweepAgentExecute(t, ws, "/help"), "terminal-only in MARSHAL") {
+	if !strings.Contains(sweepAgentExecute(t, ws, "/help all"), "terminal-only in MARSHAL") {
 		t.Fatal("help omits mode limits")
 	}
 }
@@ -152,7 +152,7 @@ func TestProviderDialectUnknownVersion(t *testing.T) {
 		}
 	}
 	ws := NewWorkspace(nil, "unknown", "unknown")
-	help := sweepAgentExecute(t, ws, "/help")
+	help := sweepAgentExecute(t, ws, "/help all")
 	for _, provider := range []string{"codex", "claude", "opencode", "agy"} {
 		// An unqualified version keeps its commands, labelled as unqualified.
 		if !oneOf("resume", ws.completer.ctx.Subcommands["/"+provider]...) {
@@ -341,5 +341,24 @@ func TestProviderDialectPTY(t *testing.T) {
 			s.sendLine("/status")
 			s.mustSee("CANONICAL STATUS DETAIL")
 		})
+	}
+}
+
+func TestUnknownDialectChatOpeningOmitsQualificationLabel(t *testing.T) {
+	sweepWorkEnvironment(t)
+	t.Setenv("TMUX", "")
+	for _, provider := range []string{"codex", "claude"} {
+		path := filepath.Join(os.Getenv("PATH"), provider)
+		if err := os.WriteFile(path, []byte("#!/bin/sh\nif [ \"$1\" = --version ]; then printf '999.0.0\\n'; fi\nexit 0\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		for _, brief := range [][]string{nil, {"You are the Marshal."}} {
+			_, ws, _ := acceptanceWorkspace(t)
+			ws.terminal = &Terminal{isTerm: true, out: io.Discard, inFd: -1, outFd: -1}
+			out, err := ws.runNativeAgent(context.Background(), provider, nil, brief...)
+			if err != nil || out == "" || strings.Contains(out, "UNKNOWN — unqualified pass-through") {
+				t.Fatalf("%s opening: %s (%v)", provider, out, err)
+			}
+		}
 	}
 }

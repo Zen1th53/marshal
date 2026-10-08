@@ -128,8 +128,18 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 		if !missing {
 			return fmt.Errorf("capture evidence for %s: %w", id, err)
 		}
-	} else if err = saveAgentEvidence(root, id, evidence); err != nil {
-		return fmt.Errorf("retain evidence for %s: %w", id, err)
+	} else {
+		// A governed result view replaces the raw pane transcript. Keep its full
+		// relay output in the canonical retained evidence as well as the relay file.
+		raw, readErr := os.ReadFile(filepath.Join(root, ".marshal", "evidence", id+"-relay-latest.txt"))
+		if readErr == nil {
+			evidence += "\nFull relay output:\n" + string(raw)
+		} else if !os.IsNotExist(readErr) {
+			return fmt.Errorf("read relay evidence for %s: %w", id, readErr)
+		}
+		if err = saveAgentEvidence(root, id, evidence); err != nil {
+			return fmt.Errorf("retain evidence for %s: %w", id, err)
+		}
 	}
 	w.tmuxMu.Lock()
 	a.state = outcome

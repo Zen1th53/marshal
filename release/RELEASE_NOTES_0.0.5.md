@@ -11,6 +11,11 @@ One workspace for planning with the Marshal and working with your agents.
 
 ## What changed
 
+- The welcome screen and `/help`/F1 lead with `/marshal chat`; `/help all` opens the full reference, and chat openings omit provider qualification labels.
+- Setup acknowledges successful Git initialization and presents the first commit as the next step.
+- Plan instructions require confirmed writes of the plan pack and task list before read-back.
+- Completed governed task panes show a readable worker status, summary and evidence location while retaining full relay output in evidence.
+
 **The Marshal is at the centre of a tmux workspace.** MARSHAL opens on the
 control centre, and the Marshal chat stays open in its own window. Plan with
 the Marshal, keep the work in view, and switch between conversations without

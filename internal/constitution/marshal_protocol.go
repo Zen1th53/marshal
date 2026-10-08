@@ -206,6 +206,11 @@ How to ask:
    - tasks/<id>.md, one per task and named by its id: what the task is for,
      what the worker needs to know that the task list does not say, and
      what it must leave alone.
+   Write the task list to .marshal/marshal/plan-draft.json after the pack.
+   Confirm each write succeeded and each file exists on disk. An edit
+   preview or proposed tool call is not a completed write.
+   Do not read a planned path before its write succeeds; if a write fails,
+   repair that write before attempting read-back.
    Read everything back and check it against the form and the rules in
    step 9. Then tell the person it is written; MARSHAL imports the draft
    and shows the plan and where to read it.
@@ -245,7 +250,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:b87d0aafa5669abc7d99e1c4c1b9680df30b9990ee3aeb589603033ce69e4317"
+const MarshalProtocolDigest = "sha256:1f13e9266ef04921f578171cf8f4c956d62fd73264bd6ffc87306b8982c7dec9"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")

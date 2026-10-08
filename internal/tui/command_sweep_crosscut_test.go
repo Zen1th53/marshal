@@ -66,7 +66,7 @@ func TestCommandSweepCrosscutCatalog(t *testing.T) {
 	sweepCrosscutEnvironment(t)
 	installDialectDoubles(t)
 	w := NewWorkspace(nil, "sweep", "sweep")
-	help, err := w.cmd.Handle(context.Background(), "/help")
+	help, err := w.cmd.Handle(context.Background(), "/help all")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	useCodexByDefault(t, project)
 	t.Setenv("HTTPS_PROXY", "http://[invalid")
 	s := startFrozenTUIInProject(t, 50, 140, bin, project, "tui")
-	for _, c := range []struct{ line, want string }{{"/help", "Function Keys & Shortcuts"}, {"/memory peers", "SHARED CHANNEL"}, {"/ultra status", "ULTRA status: INACTIVE"}, {"/marshal status", "No Marshal"}, {"plain prompt", "Nothing was run"}, {"/unknown", "Unknown command"}} {
+	for _, c := range []struct{ line, want string }{{"/help all", "Function Keys & Shortcuts"}, {"/memory peers", "SHARED CHANNEL"}, {"/ultra status", "ULTRA status: INACTIVE"}, {"/marshal status", "No Marshal"}, {"plain prompt", "Nothing was run"}, {"/unknown", "Unknown command"}} {
 		s.sendLine(c.line)
 		s.mustSee(c.want)
 	}
@@ -273,7 +273,7 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	s.mustSee("not available yet")
 	// A malformed proxy URL refuses HTTP before any network connection.
 	for _, key := range []struct{ raw, want string }{
-		{"\x1bOP", "Function Keys & Shortcuts"}, {"\x1bOQ", "Install Codex"},
+		{"\x1bOP", "Talk to the Marshal: /marshal chat"}, {"\x1bOQ", "Install Codex"},
 		{"\x1bOR", "Git Diff"}, {"\x1bOS", "CANONICAL STATUS DETAIL"},
 		{"\x1b[15~", "Discover models failed"}, {"\x1b[17~", "Install Codex"},
 		{"\x1b[18~", "Install Codex"}, {"\x1b[19~", "Install Claude"},

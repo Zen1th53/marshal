@@ -317,7 +317,7 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 		"- Write the plan pack to " + app.MarshalPackRelativePath + "/: REQUIREMENTS.md, 00_INDEX.md and tasks/<id>.md for every task id, each a non-empty Markdown file of at most 64 KiB. The runtime refuses a draft whose pack is missing a note or has a note for no task.\n" +
 		"- Write the task list to " + marshalDraftRelativePath + " as JSON of the form " +
 		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","mode":"governed","checks":[{"command":"executable command","criteria":["criterion this command proves"]}]}]}` +
-		" and nothing else. Every field shown is required; use an empty list for no dependencies. Map each check only to the criteria it proves; a criterion without passing evidence cannot be accepted. " + instructions + "\n", nil
+		" and nothing else. Confirm each write succeeded and each file exists on disk: write the pack first, then plan-draft.json, then read back and validate both. Do not read a planned path before its write succeeds; repair failed writes before read-back. An edit preview is not a completed write. Every field shown is required; use an empty list for no dependencies. Map each check only to the criteria it proves; a criterion without passing evidence cannot be accepted. " + instructions + "\n", nil
 }
 
 // consumeMarshalDraft takes the draft file out of the way before reading it,
