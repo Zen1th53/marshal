@@ -2,6 +2,8 @@
 
 ## What changed
 
+- CLI and TUI show the same build-injected release version. Local builds show
+  `dev`; schema and constitution versions retain their separate labels.
 - Credential revocation reaches every owning runtime through the project store,
   refuses new broker requests immediately, and closes active exchanges. The
   permission command reports pending until owners acknowledge closure; use

@@ -11,7 +11,9 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/policy"
+	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
+	"github.com/Zen1th53/marshal/internal/tui"
 )
 
 func TestInitAndJSONDoctor(t *testing.T) {
@@ -289,6 +291,12 @@ func policyTestFixtureWithDefault(t *testing.T, defaultEffect, expected string) 
 	return data
 }
 
+func TestCLIDevelopmentVersion(t *testing.T) {
+	if Version != "dev" {
+		t.Fatalf("local build version = %q, want dev", Version)
+	}
+}
+
 func TestCLIVersionCommand(t *testing.T) {
 	ctx := context.Background()
 	var stdout, stderr bytes.Buffer
@@ -297,8 +305,18 @@ func TestCLIVersionCommand(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "MARSHAL v1.5.0") {
+	if !strings.Contains(stdout.String(), "MARSHAL "+Version+" (") {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), fmt.Sprintf("schema: v%d, constitution: %s", store.LatestSchemaVersion, constitutionVersionString())) {
+		t.Fatalf("missing separately labelled runtime versions: %s", stdout.String())
+	}
+	if tui.BuildVersion != Version {
+		t.Fatalf("TUI version %q differs from CLI version %q", tui.BuildVersion, Version)
+	}
+	screen := tui.RenderStyledScreen(tui.UIState{}, tui.NewTheme(tui.ThemeNoColor, false, false), 160)
+	if !strings.Contains(screen, "MARSHAL "+Version+" CONTROL PLANE") {
+		t.Fatalf("TUI banner does not report CLI version %q: %s", Version, screen)
 	}
 
 	stdout.Reset()
@@ -307,7 +325,15 @@ func TestCLIVersionCommand(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), `"version": "v1.5.0"`) {
+	var result struct {
+		Version             string `json:"version"`
+		SchemaVersion       int    `json:"schema_version"`
+		ConstitutionVersion string `json:"constitution_version"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Version != Version || result.SchemaVersion != store.LatestSchemaVersion || result.ConstitutionVersion != constitutionVersionString() {
 		t.Fatalf("unexpected json stdout: %s", stdout.String())
 	}
 }
