@@ -1,6 +1,6 @@
 # What MARSHAL cannot do yet
 
-MARSHAL 0.0.5 is an early version. Knowing its limits helps you use it safely.
+MARSHAL 0.0.7 is an early version. Knowing its limits helps you use it safely.
 
 **It has not yet been tested end to end with real AI models.**
 Each step is covered by automated tests that use simulated agents. A full run
