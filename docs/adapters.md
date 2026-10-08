@@ -4,7 +4,7 @@ Adapters map provider bootstrap, process, permission, session, and evidence
 surfaces into MARSHAL. They do not change task ownership, role authority, or
 policy.
 
-The v1.0.1 runtime resolves only `codex`, `opencode`, `gemini`, and `claude`.
+The v0.0.7 runtime resolves only `codex`, `opencode`, `gemini`, and `claude`.
 Other entries in the compatibility matrix are contract research and are not
 runtime support claims.
 
