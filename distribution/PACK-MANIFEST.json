@@ -4901,8 +4901,8 @@
     },
     {
       "path": "internal/cli/command_help.go",
-      "sha256": "0a8ae21e1f550e38f945a8588bb49cf03747422bd648bf8e32830742516ece1e",
-      "bytes": 6136
+      "sha256": "482405c949c412adbc4660a68e1675cbe32b82035552d2a8add4f89af5b05fa2",
+      "bytes": 6359
     },
     {
       "path": "internal/cli/constitution.go",
@@ -4926,8 +4926,8 @@
     },
     {
       "path": "internal/cli/dispatcher_test.go",
-      "sha256": "ea1c5f446833962b95e805fdd3fb812f343f7982588c78388a08ab9b119dfa7a",
-      "bytes": 9712
+      "sha256": "0c5ea84aeff0dc1bd27fa01cc6e7978ac7a9897aeb2562e3026b155df7f18906",
+      "bytes": 10376
     },
     {
       "path": "internal/cli/execution.go",
