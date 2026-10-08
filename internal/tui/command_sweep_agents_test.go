@@ -250,6 +250,7 @@ func TestCommandSweepAgentsEmptyAndMissingProvider(t *testing.T) {
 			t.Fatalf("missing CLI recovery: %s", out)
 		}
 	}
+	fakeProviderCLIs(t, "opencode", "agy")
 	for _, root := range []string{"/opencode", "/agy", "/antigravity"} {
 		out := sweepAgentExecute(t, ws, root+" new")
 		if !strings.Contains(out, "interactive terminal") || strings.Contains(out, " exec") {
@@ -580,4 +581,17 @@ func useCodexByDefault(t *testing.T, root string) {
 	if err := saveDefaultProvider(root, "codex"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// fakeProviderCLIs puts do-nothing provider executables first on PATH so a
+// test reaches the checks that follow CLI resolution on machines without them.
+func fakeProviderCLIs(t *testing.T, names ...string) {
+	t.Helper()
+	dir := t.TempDir()
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
