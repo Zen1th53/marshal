@@ -793,7 +793,10 @@ func (r *Runtime) Close() error {
 				<-scope.watchDone
 			}
 			if scope.proxy != nil {
-				_ = scope.proxy.Close()
+				closeErr := scope.proxy.Close()
+				if scope.broker != nil && closeErr == nil {
+					_ = r.recordBrokerClosed(context.Background(), scope, "")
+				}
 			}
 			if scope.socket != "" {
 				_ = os.RemoveAll(filepath.Dir(scope.socket))

@@ -25,7 +25,7 @@ func TestTaskMutationsRequireExecute(t *testing.T) {
 			}
 			defer runtime.Close()
 			manager := auth.NewManager(t.TempDir())
-			server := NewServerWithAuth(runtime, manager)
+			server := mustAuthenticatedServer(t, runtime, manager)
 			token, _, err := manager.CreateToken("remote-agent", auth.KindA2AAgent, []string{string(capability)})
 			if err != nil {
 				t.Fatal(err)

@@ -821,16 +821,19 @@ func (c command) a2a(ctx context.Context, args []string) error {
 		var srv *a2a.Server
 		if *insecure {
 			fmt.Fprintln(c.stderr, "WARNING: Running A2A server in insecure mode on loopback (authentication disabled)")
-			srv = a2a.NewServer(runtime)
+			srv, err = a2a.NewInsecureServer(runtime, *listen)
 		} else {
 			layout, err := app.Bootstrap(ctx, c.root)
 			if err != nil {
 				return err
 			}
 			authMgr := auth.NewManager(layout.RuntimeDir)
-			srv = a2a.NewServerWithAuth(runtime, authMgr)
+			srv, err = a2a.NewServerWithAuth(runtime, authMgr)
 		}
 
+		if err != nil {
+			return err
+		}
 		fmt.Fprintf(c.stdout, "Starting MARSHAL A2A server on http://%s\n", *listen)
 		server := httpsrv.NewServer(httpsrv.Config{
 			Addr:    *listen,
