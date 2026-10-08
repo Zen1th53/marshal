@@ -109,12 +109,12 @@ func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
 		t.Fatalf("expected refusal for dangerous flag, got: %s", flagOut)
 	}
 
-	// 7. Commit review
+	// 7. Default review has no target on a clean working tree
 	reviewOut, err := ws.ExecuteCommand(ctx, "/codex review")
 	if err != nil {
 		t.Fatalf("/codex review: %v", err)
 	}
-	if !strings.Contains(reviewOut, "CODEX COMMIT REVIEW") || !strings.Contains(reviewOut, "Verified:      true") {
+	if !strings.Contains(reviewOut, "No uncommitted changes to review") {
 		t.Fatalf("unexpected /codex review output:\n%s", reviewOut)
 	}
 
@@ -288,7 +288,7 @@ func TestTopLevelCodexCommands_DirectRouting(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	_, ws, ctx := newControlWorkspace(t)
-	ws.workDir = t.TempDir()
+	ws.workDir = testgit.New(t).Path()
 	useCodexByDefault(t, ws.workDir)
 	source, auth := testControl(t)
 	ws.AttachControlSource(source)
@@ -320,7 +320,7 @@ func TestTopLevelCodexCommands_DirectRouting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/review: %v", err)
 	}
-	if !strings.Contains(revOut, "CODEX COMMIT REVIEW") {
+	if !strings.Contains(revOut, "No uncommitted changes to review") {
 		t.Fatalf("unexpected /review output: %s", revOut)
 	}
 
@@ -405,9 +405,9 @@ func TestDeveloperAgentCockpit_Rendering(t *testing.T) {
 
 	for _, want := range []string{
 		"Activity",
-		"Native agent workspace",
+		"Talk to the Marshal", "/marshal chat", "Native sessions",
 		"[F1]", "[F2]", "[F3]", "[F4]", "[F5]",
-		"/codex new", "/codex continue", "/resume", "/diff", "[F7]",
+		"/marshal status", "/help", "/diff", "F7",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in initial screen rendering, got:\n%s", want, rendered)

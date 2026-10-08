@@ -19,6 +19,7 @@ func TestTmux32PermissionWindowKeysAndClosure(t *testing.T) {
 			os.WriteFile(filepath.Join(dir, "key"), []byte(key), 0600)
 			fake := filepath.Join(dir, "tmux")
 			script := `#!/bin/bash
+if [[ $* == *'#{client_height} #{client_width}'* ]]; then echo '40 120'; exit; fi
 printf '%s\n' "$*" >> "$REVIEW_FIXTURE/commands"
 case "$1" in
  display-message)

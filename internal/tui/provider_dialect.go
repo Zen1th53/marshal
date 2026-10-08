@@ -15,6 +15,9 @@ var providerManagementCommands = map[string][]string{
 func providerHelpOperations(provider string) []string {
 	ops := append([]string(nil), providerSubcommands[provider]...)
 	for _, group := range []string{"mcp", "plugin"} {
+		if !oneOf(group, providerSubcommands[provider]...) {
+			continue
+		}
 		for _, op := range providerManagementCommands[group] {
 			ops = append(ops, group+" "+op)
 		}
@@ -40,6 +43,10 @@ func qualifyProviderCompletions(ctx context.Context, c *CompletionContext, termi
 		d := app.ObserveProviderDialect(ctx, provider)
 		root := "/" + provider
 		for _, group := range []string{"mcp", "plugin"} {
+			if !oneOf(group, providerSubcommands[provider]...) {
+				delete(c.Subcommands, root+" "+group)
+				continue
+			}
 			c.Subcommands[root+" "+group] = providerManagementCommands[group]
 		}
 		if provider == "codex" {

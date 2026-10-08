@@ -60,6 +60,7 @@ type activeTmuxAgent struct {
 	env             []string
 	historyBaseline []string
 	sessionID       string
+	historyPath     string
 	runID           string
 	driver          driver.Driver
 	handle          *driver.Handle
@@ -162,6 +163,7 @@ func (w *Workspace) recoverSurvivingWorkers(projectRoot string) {
 			agent.args = saved.Args
 			agent.env = saved.Env
 			agent.sessionID = saved.SessionID
+			agent.historyPath = saved.HistoryPath
 			agent.historyBaseline = saved.HistoryBaseline
 			watch = w.chatHistoryWatch(projectRoot, agent.provider, agent.binary)
 			baseline, err := w.prepareChatHistoryWatch(projectRoot, watch, saved.SessionID, saved.HistoryBaseline)
@@ -230,7 +232,7 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	if err != nil {
 		return errors.New("Marshal not started: protocol unavailable")
 	}
-	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, nil, brief)
+	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, nil, w.marshalContinuityBriefing(projectRoot, brief))
 	if err != nil {
 		return err
 	}
@@ -244,6 +246,7 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	saved := loadChatBinding(projectRoot)
 	if canonicalNeutralProvider(saved.Provider) != canonicalNeutralProvider(provider) {
 		saved.SessionID = ""
+		saved.HistoryPath = ""
 		saved.HistoryBaseline = nil
 	}
 	runID := saved.RunID
@@ -267,7 +270,7 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 		return err
 	}
 	// Persist the prelaunch history even if the process crashes before binding.
-	if err := saveChatBinding(projectRoot, chatBinding{Provider: provider, Binary: binary, Args: args, Env: env, SessionID: saved.SessionID, RunID: runID, HistoryBaseline: baseline}); err != nil {
+	if err := saveChatBinding(projectRoot, chatBinding{Provider: provider, Binary: binary, Args: args, Env: env, SessionID: saved.SessionID, HistoryPath: saved.HistoryPath, RunID: runID, HistoryBaseline: baseline}); err != nil {
 		return err
 	}
 	cmd := append([]string{binary}, args...)
@@ -321,6 +324,7 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 		env:             env,
 		briefingDir:     dir,
 		sessionID:       saved.SessionID,
+		historyPath:     saved.HistoryPath,
 		historyBaseline: baseline,
 		runID:           runID,
 	}
@@ -383,7 +387,7 @@ func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAge
 	if sessionID != "" {
 		base = resumeArgsForProvider(provider, sessionID)
 	}
-	resumeArgs, env, dir, err := prepareMarshalLaunch(provider, root, base, brief)
+	resumeArgs, env, dir, err := prepareMarshalLaunch(provider, root, base, w.marshalContinuityBriefing(root, brief))
 	if err != nil {
 		w.RecordActivity(err.Error())
 		return
@@ -512,7 +516,20 @@ func (w *Workspace) hostNativeTmuxWindow(ctx context.Context, name, root, socket
 		return err
 	}
 	var target string
-	err = tmux.NewWindow(ctx, w.tmuxSession, name, root, nil, []string{relay, "STDIO,raw,echo=0", "UNIX-CONNECT:" + socket}, &target)
+	argv := []string{relay, "STDIO,raw,echo=0", "UNIX-CONNECT:" + socket}
+	if view, ok := ctx.Value(taskRelayViewKey{}).(taskRelayView); ok {
+		// A governed task can host more than one process; retain all relay output.
+		path := filepath.Join(view.root, ".marshal", "evidence", view.id+"-relay-latest.txt")
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if err := saveAgentEvidence(view.root, view.id+"-relay", ""); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		argv = taskRelayCommand(relay, socket, view.root, view.id)
+	}
+	err = tmux.NewWindow(ctx, w.tmuxSession, name, root, nil, argv, &target)
 	if err != nil {
 		return err
 	}
@@ -582,6 +599,13 @@ func (w *Workspace) runNativeAgentInTmux(
 		}
 	}
 	if exists && winExists {
+		requestedArgs := args
+		if original, ok := ctx.Value(nativeRequestedArgsKey{}).([]string); ok {
+			requestedArgs = original
+		}
+		if !isChat && len(requestedArgs) > 0 {
+			return "", fmt.Errorf("Nothing was run: %s already has an active native session; arguments %q cannot be applied to it. Exit that session or stop it with Ctrl+X, then retry the command.", agentLabel, requestedArgs)
+		}
 		if isChat && canonicalNeutralProvider(existingAgent.provider) != canonicalNeutralProvider(provider) {
 			runningProvider := existingAgent.provider
 			if runningProvider == "" {
@@ -630,7 +654,7 @@ func (w *Workspace) runNativeAgentInTmux(
 		}
 		var err error
 		sessionCtx := workerterminal.WithLifecycle(workerterminal.WithCompletion(workerterminal.WithHost(context.Background(), host), agentCompletion(root, agentID)), func(ref processgroup.Reference) error { sessionReference = ref; return nil })
-		workerHandle, err = driver.LaunchSession(sessionCtx, provider, binary, root, args, briefingEnv)
+		workerHandle, err = driver.LaunchSession(workerterminal.WithSize(sessionCtx, tmuxPaneSize(&hostedPane)), provider, binary, root, args, briefingEnv)
 		if err != nil {
 			return "", fmt.Errorf("launch %s in tmux: %w", agentLabel, err)
 		}
@@ -674,15 +698,16 @@ func (w *Workspace) runNativeAgentInTmux(
 		}
 	}
 
+	if err := w.bindWorkspaceKeys(ctx, paneID, root); err != nil {
+		return failHost(err)
+	}
+
 	// Bind provider's F-key and F11 in tmux (for workers only, not chat)
 	if !isChat {
 		fkey := providerFKey(provider)
 		if fkey != "" {
 			_ = tmux.BindWindowKey(ctx, paneID, "marshal-keys-"+tmux.ProjectHash(root), fkey, "select-window", "-t", paneID)
 		}
-	}
-	if err := w.bindWorkspaceKeys(ctx, paneID, root); err != nil {
-		return failHost(err)
 	}
 
 	// Install the return key and its selection hooks before exposing the window.
@@ -726,6 +751,7 @@ func (w *Workspace) runNativeAgentInTmux(
 	if isChat {
 		saved := loadChatBinding(root)
 		agent.sessionID = saved.SessionID
+		agent.historyPath = saved.HistoryPath
 		agent.historyBaseline = saved.HistoryBaseline
 		_ = w.saveChatBindingForAgent(root, agent)
 	}
@@ -769,6 +795,9 @@ func (w *Workspace) monitorAgent(
 				snapshot := copyAgentLocked(agent)
 				w.tmuxMu.Unlock()
 				// Poll syncs
+				if snapshot.role == "marshal-chat" {
+					w.observeMarshalProposalFiles(root)
+				}
 				if watch != nil && capturesLive(snapshot.provider) {
 					_ = watch.sync()
 				}
@@ -872,8 +901,10 @@ func (w *Workspace) monitorAgent(
 					if exitCode != 0 {
 						state = "failed"
 					}
-					if err := w.deliverEgressAlert(app.EgressAlert{RunID: snapshot.runID, ParentRunID: snapshot.runID, TaskID: snapshot.taskID, Worker: snapshot.provider, Kind: "worker " + state, State: state, Message: snapshot.label + " worker " + state + "."}); err != nil {
-						w.RecordActivity(err.Error())
+					if snapshot.runID != "" {
+						if err := w.deliverEgressAlert(app.EgressAlert{RunID: snapshot.runID, ParentRunID: snapshot.runID, TaskID: snapshot.taskID, Worker: snapshot.provider, Kind: "worker " + state, State: state, Message: snapshot.label + " worker " + state + "."}); err != nil {
+							w.RecordActivity(err.Error())
+						}
 					}
 					if err := w.retainAndCloseAgent(context.Background(), agent, root, state); err != nil {
 						w.RecordActivity(err.Error())
@@ -1471,6 +1502,9 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 	agent := &activeTmuxAgent{id: agentID, role: "task", launchOrigin: nativeLaunchAutomated, taskID: req.Task.PlanTaskID, provider: req.Task.Worker, runID: req.RunID, label: "Task " + req.Task.PlanTaskID + " (" + req.Task.Worker + ")", state: "working", readOnly: true, driver: t.inner, doneChan: make(chan struct{})}
 	host := func(ctx context.Context, socket string) error {
 		name := tmux.TaskWindowName(strings.TrimPrefix(agentID, "task-"), root)
+		if t.inner.Mode() == marshal.Governed {
+			ctx = withTaskRelayView(ctx, root, agentID)
+		}
 		if err := t.w.hostNativeTmuxWindow(ctx, name, req.Worktree, socket, nativeLaunchAutomated, &agent.paneID); err != nil {
 			return err
 		}
@@ -1601,6 +1635,7 @@ type chatBinding struct {
 	Args            []string `json:"args"`
 	Env             []string `json:"env"`
 	SessionID       string   `json:"session_id"`
+	HistoryPath     string   `json:"history_path,omitempty"`
 	RunID           string   `json:"run_id"`
 }
 
@@ -1613,7 +1648,7 @@ func loadChatBinding(root string) chatBinding {
 	return binding
 }
 func (w *Workspace) saveChatBindingForAgent(root string, a *activeTmuxAgent) error {
-	if err := saveChatBinding(root, chatBinding{Provider: a.provider, Binary: a.binary, Args: a.args, Env: a.env, SessionID: a.sessionID, RunID: a.runID, HistoryBaseline: a.historyBaseline}); err != nil {
+	if err := saveChatBinding(root, chatBinding{Provider: a.provider, Binary: a.binary, Args: a.args, Env: a.env, SessionID: a.sessionID, HistoryPath: a.historyPath, RunID: a.runID, HistoryBaseline: a.historyBaseline}); err != nil {
 		return err
 	}
 	return saveAgentRecord(root, w.tmuxSession, a)
@@ -1687,13 +1722,88 @@ func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWat
 	if previous == nil {
 		previous = func(importer.SessionTranscript) error { return nil }
 	}
-	watch.observeSession = func(tr importer.SessionTranscript) error { baseline[tr.SessionID] = true; return nil }
-	watch.consume = func(tr importer.SessionTranscript) error {
-		baseline[tr.SessionID] = true
-		return previous(tr)
-	}
-	// Legacy unbound records have no provenance: baseline all existing history.
-	if len(recovered) == 0 || recovered[0] == nil {
+	// Own-chat observation is independent of grants. Baseline filenames only;
+	// do not decode old conversations to discover the newly launched chat.
+	historyAuthorized := watch.authorized
+	watch.authorized = nil
+	if watch.openCodeRun == nil {
+		extension := ".jsonl"
+		if watch.antigravity {
+			extension = ".db"
+		}
+		existing := map[string]bool{}
+		recovering := len(recovered) > 0 && recovered[0] != nil
+		err := filepath.WalkDir(watch.dir, func(path string, entry os.DirEntry, err error) error {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if !entry.IsDir() && strings.HasSuffix(path, extension) {
+				id := strings.TrimSuffix(entry.Name(), extension)
+				old := baseline[id] || baseline["file:"+path]
+				for previous := range baseline {
+					if strings.HasPrefix(entry.Name(), "rollout-") && strings.HasSuffix(entry.Name(), "-"+previous+extension) {
+						old = true
+					}
+				}
+				if !recovering || old {
+					existing[path] = true
+					baseline[id] = true
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		watch.seen = map[string]string{}
+		boundPath := ""
+		saved := loadChatBinding(root)
+		if saved.SessionID == savedID && savedID != "" {
+			boundPath = saved.HistoryPath
+		}
+		var candidatePath string
+		watch.chatFile = func(path string) bool {
+			w.tmuxMu.Lock()
+			a := w.tmuxActiveWins["marshal-chat"]
+			id := savedID
+			if a != nil && a.sessionID != "" {
+				id = a.sessionID
+			}
+			w.tmuxMu.Unlock()
+			if boundPath != "" {
+				if path != boundPath {
+					return false
+				}
+				candidatePath = path
+				return true
+			}
+			if id != "" && filepath.Base(path) != id+extension && !(strings.HasPrefix(filepath.Base(path), "rollout-") && strings.HasSuffix(path, "-"+id+extension)) {
+				return false
+			}
+			if id == "" && existing[path] {
+				return false
+			}
+			candidatePath = path
+			return true
+		}
+		watch.observeSession = func(tr importer.SessionTranscript) error {
+			if savedID != "" && tr.SessionID != savedID || savedID == "" && baseline[tr.SessionID] {
+				return nil
+			}
+			w.tmuxMu.Lock()
+			if a := w.tmuxActiveWins["marshal-chat"]; a != nil && (a.sessionID == "" || a.sessionID == tr.SessionID) {
+				boundPath = candidatePath
+				a.historyPath = boundPath
+			}
+			w.tmuxMu.Unlock()
+			return w.captureChatConversation(root, tr.SessionID)
+		}
+	} else if len(recovered) == 0 || recovered[0] == nil {
+		watch.observeSession = func(tr importer.SessionTranscript) error { baseline[tr.SessionID] = true; return nil }
+		watch.consume = func(tr importer.SessionTranscript) error { baseline[tr.SessionID] = true; return nil }
 		if err := watch.sync(); err != nil {
 			return nil, err
 		}
@@ -1704,7 +1814,9 @@ func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWat
 		}
 		return w.captureChatConversation(root, tr.SessionID)
 	}
-	watch.observeSession = observe
+	if watch.observeSession == nil || watch.chatFile == nil {
+		watch.observeSession = observe
+	}
 	watch.consume = func(tr importer.SessionTranscript) error {
 		if err := observe(tr); err != nil {
 			return err
@@ -1716,7 +1828,11 @@ func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWat
 		if bound {
 			w.observeMarshalProposals(tr)
 		}
-		return previous(tr)
+		// Earlier or unbound conversations are never imported by this consumer.
+		if bound && (historyAuthorized == nil || historyAuthorized(watch.dir)) {
+			return previous(tr)
+		}
+		return nil
 	}
 	ids := make([]string, 0, len(baseline))
 	for id := range baseline {
@@ -1771,4 +1887,17 @@ func (w *Workspace) breakJoinedPanes(ctx context.Context, joined []*activeTmuxAg
 		w.tmuxMu.Unlock()
 	}
 	return nil
+}
+
+func tmuxPaneSize(pane *string) workerterminal.Size {
+	// The host publishes the immutable pane before Attach starts polling.
+	return func(ctx context.Context) (uint16, uint16, error) {
+		out, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", *pane, "#{pane_height} #{pane_width}")
+		if err != nil {
+			return 0, 0, err
+		}
+		var rows, cols uint16
+		_, err = fmt.Sscanf(strings.TrimSpace(string(out)), "%d %d", &rows, &cols)
+		return rows, cols, err
+	}
 }

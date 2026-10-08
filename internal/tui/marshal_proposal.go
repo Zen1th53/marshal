@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -158,9 +159,10 @@ func (p marshalProposal) command() string {
 }
 
 // Called only by the bound Marshal history consumer, not peer/tool/user output.
-// History is polled repeatedly; decisions (including declines) are not replayed.
+// History is polled repeatedly; old message occurrences are not replayed; new emissions may be proposed again.
 func (w *Workspace) observeMarshalProposals(tr importer.SessionTranscript) {
-	for _, message := range tr.Messages {
+	w.observeMarshalIntake(tr)
+	for messageIndex, message := range tr.Messages {
 		if message.Role != "assistant" || message.Kind != importer.MessageKindText {
 			continue
 		}
@@ -179,10 +181,11 @@ func (w *Workspace) observeMarshalProposals(tr importer.SessionTranscript) {
 				continue
 			}
 			p, err := parseMarshalProposal(line)
-			fingerprint := tr.SessionID + "\x00" + line
-			if err == nil {
-				fingerprint = tr.SessionID + "\x00" + p.command()
+			if err == nil && (p.action == "read" || p.action == "continue") && !w.marshalEarlierWorkWanted() {
+				w.RecordActivity("History proposal deferred until the operator chooses to continue earlier work.")
+				continue
 			}
+			fingerprint := fmt.Sprintf("%s\x00%d\x00%s\x00%s", tr.SessionID, messageIndex, message.Timestamp, line)
 			w.permissions.mu.Lock()
 			if w.permissions.proposalsSeen == nil {
 				w.permissions.proposalsSeen = map[string]bool{}
@@ -391,5 +394,72 @@ func (w *Workspace) marshalProposalDecisionNotice(req permission.Request, allow 
 	}
 	if e != nil {
 		w.RecordActivity("Marshal popup decision delivery failed: " + e.Error())
+	}
+}
+
+// Files are suggestions, never authority. Only the live Marshal monitor consumes
+// them; parsing and the ordinary operator popup remain mandatory.
+func (w *Workspace) observeMarshalProposalFiles(root string) {
+	project, err := os.OpenRoot(root)
+	if err != nil {
+		return
+	}
+	defer project.Close()
+	info, err := project.Lstat(".marshal/proposals")
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return
+	}
+	fs, err := project.OpenRoot(".marshal/proposals")
+	if err != nil {
+		return
+	}
+	defer fs.Close()
+	directory, err := fs.Open(".")
+	if err != nil {
+		return
+	}
+	opened, err := directory.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		directory.Close()
+		return
+	}
+	entries, err := directory.ReadDir(-1)
+	directory.Close()
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".json") || !entry.Type().IsRegular() {
+			continue
+		}
+		info, err := fs.Lstat(name)
+		if err != nil || !info.Mode().IsRegular() || info.Size() > 4096 {
+			continue
+		}
+		// Atomic claim: a file emission is consumed once, even across repeated polls.
+		claimed := name + ".consumed"
+		if err := fs.Rename(name, claimed); err != nil {
+			continue
+		}
+		file, err := openProposalFile(fs, claimed)
+		if err != nil {
+			continue
+		}
+		current, err := file.Stat()
+		if err != nil || !current.Mode().IsRegular() || !os.SameFile(info, current) {
+			file.Close()
+			continue
+		}
+		data, err := io.ReadAll(io.LimitReader(file, 4097))
+		file.Close()
+		if err != nil || len(data) > 4096 {
+			continue
+		}
+		line := marshalProposalPrefix + strings.TrimSpace(string(data))
+		// Unique file occurrence bypasses transcript poll deduplication while pending
+		// requests still deduplicate through their exact permission identity.
+		w.observeMarshalProposals(importer.SessionTranscript{SessionID: "proposal-file:" + name, Messages: []importer.Message{{Role: "assistant", Content: line}}})
 	}
 }

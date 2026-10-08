@@ -128,8 +128,18 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 		if !missing {
 			return fmt.Errorf("capture evidence for %s: %w", id, err)
 		}
-	} else if err = saveAgentEvidence(root, id, evidence); err != nil {
-		return fmt.Errorf("retain evidence for %s: %w", id, err)
+	} else {
+		// A governed result view replaces the raw pane transcript. Keep its full
+		// relay output in the canonical retained evidence as well as the relay file.
+		raw, readErr := os.ReadFile(filepath.Join(root, ".marshal", "evidence", id+"-relay-latest.txt"))
+		if readErr == nil {
+			evidence += "\nFull relay output:\n" + string(raw)
+		} else if !os.IsNotExist(readErr) {
+			return fmt.Errorf("read relay evidence for %s: %w", id, readErr)
+		}
+		if err = saveAgentEvidence(root, id, evidence); err != nil {
+			return fmt.Errorf("retain evidence for %s: %w", id, err)
+		}
 	}
 	w.tmuxMu.Lock()
 	a.state = outcome
@@ -139,12 +149,13 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 	if err != nil {
 		return fmt.Errorf("record stop/completion for %s: %w", id, err)
 	}
-	// Native provider shortcuts select an immutable window. Replace that
-	// target while the pane still exists, before removing it. Task and chat
-	// panes do not own the provider shortcut.
-	if key := providerFKey(a.provider); !missing && key != "" && id == a.provider {
-		message := fmt.Sprintf("%s session ended; use /%s to reopen.", a.provider, a.provider)
-		if err = tmux.BindWindowKey(ctx, pane, "marshal-keys-"+tmux.ProjectHash(root), key, "display-message", fmt.Sprintf("%q", message)); err != nil {
+	// Route ended provider shortcuts through the centre's normal launcher.
+	// The same project table is used by the centre, chat and native panes.
+	if key := providerFKey(a.provider); key != "" && id == a.provider {
+		w.tmuxMu.Lock()
+		target := w.marshalTarget()
+		w.tmuxMu.Unlock()
+		if err = tmux.BindWindowKey(ctx, target, "marshal-keys-"+tmux.ProjectHash(root), key, "send-keys", "-t", target, key); err != nil {
 			return fmt.Errorf("reset provider shortcut for %s: %w", id, err)
 		}
 	}

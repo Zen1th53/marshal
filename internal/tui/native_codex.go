@@ -71,6 +71,8 @@ func nativeArgs(s string) ([]string, error) {
 	return args, nil
 }
 
+type nativeRequestedArgsKey struct{}
+
 // Native mode intentionally uses the operator's real Codex environment. The
 // config-free task harness is a separate workflow with different guarantees.
 func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, error) {
@@ -80,6 +82,7 @@ func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, 
 func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string, marshalBrief ...string) (result string, resultErr error) {
 	ctx, cancel := context.WithTimeout(ctx, 24*time.Hour)
 	defer cancel()
+	ctx = context.WithValue(ctx, nativeRequestedArgsKey{}, append([]string{}, args...))
 	args = app.NormalizeProviderArgs(provider, args)
 
 	label, homeEnv, homeDir, historyDir := "Codex", "CODEX_HOME", ".codex", "sessions"
@@ -110,15 +113,6 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		return "", fmt.Errorf("%w; Install %s and make %s available on PATH, then retry", err, label, binaryName)
 	}
 	dialect := app.ObserveProviderDialect(ctx, provider)
-	if dialect.Operation(app.ProviderArgOperation(provider, args)).Status == app.ProviderUnknown {
-		defer func() {
-			label := "UNKNOWN — unqualified pass-through: " + dialect.Provider + " " + app.ProviderArgOperation(provider, args)
-			result = label + "\n" + result
-			if resultErr != nil {
-				resultErr = fmt.Errorf("%s: %w", label, resultErr)
-			}
-		}()
-	}
 	if err := dialect.Check(app.ProviderArgOperation(provider, args), true); err != nil {
 		return "", err
 	}
@@ -420,12 +414,12 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		if err := scrubMarshalInboxes(root); err != nil {
 			return "", fmt.Errorf("Marshal not started: retained briefing cleanup failed: %w", err)
 		}
-		note, err := deliver(marshalBrief[0], hiddenChannel(provider))
+		note, err := deliver(w.marshalContinuityBriefing(root, marshalBrief[0]), hiddenChannel(provider))
 		if err != nil {
 			return "", fmt.Errorf("Marshal not started: hidden instruction delivery failed: %w", err)
 		}
 		briefingNotes = append(briefingNotes, note)
-		args = append(args, marshalKickoffArgs(provider)...)
+		args = append(args, marshalKickoffArgs(provider, root)...)
 	}
 	args, briefingEnv, err := dir.launch(args)
 	if err != nil {
@@ -445,6 +439,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if canonicalNeutralProvider(saved.Provider) != canonicalNeutralProvider(provider) {
 				saved.Provider = provider
 				saved.SessionID = ""
+				saved.HistoryPath = ""
 				saved.HistoryBaseline = nil
 			}
 			baseline, err := w.prepareChatHistoryWatch(root, watch, saved.SessionID)
@@ -557,6 +552,9 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			}
 			return result, runErr
 		case <-ticker.C:
+			if len(marshalBrief) > 0 {
+				w.observeMarshalProposalFiles(root)
+			}
 			// OpenCode's public history API is a CLI export backed by the same
 			// database the child is using. Export once the child exits; polling it
 			// here can delay interactive input and contend with the live session.
@@ -627,6 +625,7 @@ func nativeUsesModelPreference(args []string) bool {
 
 type nativeHistoryWatch struct {
 	authorized func(string) bool
+	chatFile   func(string) bool
 	claude     bool
 	// openCodeRun is set for OpenCode's SQLite-backed history. Its public CLI
 	// supplies JSON exports, so MARSHAL never reads the database or depends on
@@ -772,6 +771,9 @@ func (w *nativeHistoryWatch) saveIndex() error {
 }
 
 func (w *nativeHistoryWatch) syncFile(path string) error {
+	if w.chatFile != nil && !w.chatFile(path) {
+		return nil
+	}
 	if w.authorized != nil && !w.authorized(path) {
 		return nil
 	}

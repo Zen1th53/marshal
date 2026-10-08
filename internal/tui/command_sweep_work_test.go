@@ -262,7 +262,7 @@ func TestCommandSweepWorkInspectAndDiscovery(t *testing.T) {
 		}
 	}
 
-	help := sweepWorkRun(t, ws, "/help", "")
+	help := sweepWorkRun(t, ws, "/help all", "")
 	for _, cmd := range []string{"/status", "/goal", "/mode", "/claims", "/inspect", "/approve", "/reject", "/route", "/agents", "/evidence", "/why", "/msg", "/handoff", "/checkpoint", "/rollback", "/budget", "/pause", "/resume", "/cancel", "/tasks", "/task"} {
 		if !strings.Contains(help, cmd) || !ws.knownCommand(cmd) {
 			t.Errorf("missing help/completion: %s", cmd)

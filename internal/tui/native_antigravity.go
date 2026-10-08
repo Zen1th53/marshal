@@ -114,10 +114,16 @@ func (w *nativeHistoryWatch) syncAntigravity() error {
 	if err != nil {
 		return err
 	}
-	workspaces := w.antigravityWorkspaces()
+	var workspaces map[string][]string
+	if w.chatFile == nil {
+		workspaces = w.antigravityWorkspaces()
+	}
 
 	var failures []error
 	for _, conversation := range conversations {
+		if w.chatFile != nil && !w.chatFile(conversation.path) {
+			continue
+		}
 		if w.seen[conversation.id] == conversation.stamp {
 			continue
 		}
@@ -140,6 +146,12 @@ func (w *nativeHistoryWatch) syncAntigravity() error {
 			continue
 		}
 		tr.CWD = w.root
+		if w.observeSession != nil {
+			if err := w.observeSession(tr); err != nil {
+				failures = append(failures, err)
+				continue
+			}
+		}
 		failed := false
 		for _, message := range tr.Messages {
 			one := tr

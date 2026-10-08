@@ -70,10 +70,13 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleEgress(ctx, parts[1:])
 
 	case "/help", "/?":
-		if len(parts) != 1 {
-			return "Usage: /help", nil
+		if len(parts) == 1 {
+			return helpOverview, nil
 		}
-		return h.qualifiedHelp(ctx, h.helpText()), nil
+		if len(parts) == 2 && parts[1] == "all" {
+			return h.qualifiedHelp(ctx, h.helpText()), nil
+		}
+		return "Usage: /help [all]", nil
 
 	case "/quit", "/exit":
 		if len(parts) != 1 {
@@ -653,6 +656,17 @@ func (h *CommandHandler) handleBudget(ctx context.Context) (string, error) {
 		h.ws.state.BudgetConsumed.Duration.Round(time.Millisecond)), nil
 }
 
+const helpOverview = `Talk to the Marshal: /marshal chat — plan and coordinate work
+  /marshal status   View the plan and task progress
+  /marshal approve  Approve the drafted plan and start work
+  /marshal close    Deliver the verified result
+  /status           Workspace status · /models: provider details
+  /diff             Review changes · F2: Review · F3: Diff
+  Native sessions: /codex · /claude · /opencode · /agy
+  F7: Codex · F8: Claude · F9: OpenCode · F12: Antigravity
+  F11: Control centre · Ctrl+X: Stop workers · /exit: Exit
+  /help all         Full reference (PgUp/PgDn to page) · F1: This overview`
+
 func (h *CommandHandler) helpText() string {
 	navigationHint := ""
 	if h.ws.navigationRefusal() == "" {
@@ -705,7 +719,7 @@ func (h *CommandHandler) helpText() string {
   /cancel [run:<id>]       Cancel a run of this session and its provider turns
   /review [instructions]   Native review (Codex only); governed commit review takes no instructions
   /approvals               List pending approvals
-  /approval                Show native Codex approval policy
+  /approval [inspect|diff] <id>  Inspect an approval; /codex approval for native policy
   /termination             Inspect termination state
   /context                 Inspect context and drift
   /diff [staged|unstaged|untracked]  Bounded diff inventory (default: combined)
@@ -749,7 +763,7 @@ func (h *CommandHandler) helpText() string {
   Unknown provider subcommands run nothing; /<provider> cli passes native arguments
   /update [install]        Check for a newer MARSHAL release, or install it
   /verification <id>       Inspect a canonical verification run
-  /help, /?                Show this help reference
+  /help, /?                Short overview; /help all for this full reference
   /quit, /exit             Exit TUI workspace (session remains durable in SQLite)
 
 Function Keys & Shortcuts:
@@ -788,7 +802,7 @@ func plainTextRunsNothing(line string, known func(string) bool) string {
 		"  /opencode run <prompt> Open a native OpenCode session\n" +
 		"  /agy prompt <prompt>     Open a native Antigravity session\n" +
 		"  F7 / F8 / F9 / F12  Open Codex, Claude, OpenCode, or Antigravity\n" +
-		"  /help             List every command"
+		"  /help all         List every command"
 }
 
 // knownCommand reports whether a token names a command this workspace has.

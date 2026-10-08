@@ -38,6 +38,7 @@ case "$1" in
     ;;
   display-message)
     case "$*" in
+      *"#{pane_height} #{pane_width}"*) printf '40 160\n'; exit 0;;
       *"#{version}"*)
         printf '3.3a\n'
         exit 0

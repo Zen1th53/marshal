@@ -415,7 +415,7 @@ func TestControlCommandsAreRegistered(t *testing.T) {
 		}
 	}
 
-	help, err := ws.ExecuteCommand(ctx, "/help")
+	help, err := ws.ExecuteCommand(ctx, "/help all")
 	if err != nil {
 		t.Fatalf("/help: %v", err)
 	}

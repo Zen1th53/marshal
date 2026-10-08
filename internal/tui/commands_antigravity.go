@@ -42,7 +42,11 @@ func (h *CommandHandler) handleAntigravity(ctx context.Context, args []string, l
 
 	switch strings.ToLower(args[0]) {
 	case "new", "open", "interactive", "chat":
-		return h.ws.runNativeAgent(ctx, "antigravity", nil)
+		argv, err := openCodeCLIArgs(line)
+		if err != nil {
+			return "", err
+		}
+		return h.ws.runNativeAgent(ctx, "antigravity", argv)
 	case "cli":
 		argv, err := openCodeCLIArgs(line)
 		if err != nil {

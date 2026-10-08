@@ -317,7 +317,7 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 		"- Write the plan pack to " + app.MarshalPackRelativePath + "/: REQUIREMENTS.md, 00_INDEX.md and tasks/<id>.md for every task id, each a non-empty Markdown file of at most 64 KiB. The runtime refuses a draft whose pack is missing a note or has a note for no task.\n" +
 		"- Write the task list to " + marshalDraftRelativePath + " as JSON of the form " +
 		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","mode":"governed","checks":[{"command":"executable command","criteria":["criterion this command proves"]}]}]}` +
-		" and nothing else. Every field shown is required; use an empty list for no dependencies. Map each check only to the criteria it proves; a criterion without passing evidence cannot be accepted. " + instructions + "\n", nil
+		" and nothing else. Confirm each write succeeded and each file exists on disk: write the pack first, then plan-draft.json, then read back and validate both. Do not read a planned path before its write succeeds; repair failed writes before read-back. An edit preview is not a completed write. Every field shown is required; use an empty list for no dependencies. Map each check only to the criteria it proves; a criterion without passing evidence cannot be accepted. " + instructions + "\n", nil
 }
 
 // consumeMarshalDraft takes the draft file out of the way before reading it,
@@ -781,10 +781,15 @@ func (w *Workspace) marshalActive(ctx context.Context) (*marshalSession, *app.Ma
 	service, runID, provider := m.service, m.runID, m.provider
 	m.mu.Unlock()
 	if service != nil && runID != "" {
-		return m, service, runID, provider, nil
+		if _, err := service.Snapshot(ctx, runID); err == nil {
+			return m, service, runID, provider, nil
+		} else if !errors.Is(err, model.ErrNotFound) {
+			return m, nil, "", "", err
+		}
+		return m, nil, "", "", errors.New("No Marshal run yet; start one with /marshal chat")
 	}
 	if w.runtime == nil || w.runtime.Store() == nil {
-		return m, nil, "", "", errors.New("no Marshal run; start one with /marshal <goal>")
+		return m, nil, "", "", errors.New("No Marshal run yet; start one with /marshal chat")
 	}
 	projectID := w.projectID
 	if projectID == "" && w.runtime.Marshal() != nil {
@@ -792,7 +797,7 @@ func (w *Workspace) marshalActive(ctx context.Context) (*marshalSession, *app.Ma
 	}
 	recoveredID, _, err := w.runtime.Store().LatestMarshalRun(ctx, projectID)
 	if err != nil {
-		return m, nil, "", "", errors.New("no Marshal run; start one with /marshal <goal>")
+		return m, nil, "", "", errors.New("No Marshal run yet; start one with /marshal chat")
 	}
 	service, provider, _, err = w.marshalService(ctx, recoveredID)
 	if err != nil {
@@ -1313,7 +1318,7 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 	m.mu.Unlock()
 	p := w.marshalPanel()
 	if runID == "" || p == nil || p.RunID != runID {
-		return "", errors.New("no Marshal run; start one with /marshal <goal>")
+		return "", errors.New("No Marshal run yet; start one with /marshal chat")
 	}
 	for _, task := range p.Tasks {
 		if task.ID == args[0] {

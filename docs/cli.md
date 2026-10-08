@@ -14,9 +14,16 @@ Usage: marshal [--json] <command> [arguments]
 
 | Option | Description |
 |---|---|
-| `--json` | Format output as structured JSON instead of human-readable text |
+| `--json` | Format output as structured JSON instead of human-readable text; accepted before or after a MARSHAL command |
+| `-h`, `--help` | Print usage for the selected command and exit 0 |
 
 ---
+
+Every command and nested command supports `-h`, `--help`, and `marshal help <command path>` (for example, `marshal help auth token create`). Help is resolved before execution and never opens the runtime, changes project state, contacts a service, or prompts. Existing help topics and `marshal help why` remain available.
+
+`--json` errors are JSON objects on stdout with `error` and `exit_code` fields and a non-zero process exit code. Missing records, including an active lease that does not exist, retain exit code 1.
+
+Global flags stop at `--`: arguments after it belong to the child verification command. Native provider arguments also keep their own `--json`; put the MARSHAL option before the provider command. Help flags before `--` select MARSHAL usage, including on native provider entry commands. Arguments after `--` are left untouched.
 
 ## Core Operational Commands
 
@@ -27,6 +34,8 @@ Purpose: Creates missing project policy/version defaults and initializes the pri
 ```bash
 marshal init
 ```
+
+Outside a Git repository, or in a repository without a first commit, init offers the missing Git steps when stdin is a TTY. With non-interactive stdin it fails immediately, prints the Git commands needed to create a baseline, and makes no changes. JSON mode never prompts. `--yes` is not an automatic confirmation option.
 
 Output:
 ```text
@@ -486,6 +495,8 @@ Purpose: Runs repository verification commands against current code state.
 ```bash
 marshal verify [-- command args...]
 ```
+
+Without an explicit command, verification uses `python conformance/runner.py validate-pack` only when that runner is present. Otherwise it fails with instructions to provide `conformance/runner.py` or pass a command with `marshal verify -- COMMAND [ARGS...]`. Explicit commands still require authorization by the verification policy; a baseline project permits only its supported read-only verification commands. `marshal --json verify` reports a missing runner as valid JSON.
 
 ---
 

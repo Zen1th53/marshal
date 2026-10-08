@@ -146,3 +146,15 @@ func TestMarshalProtocolOperatorPopupProposals(t *testing.T) {
 		}
 	}
 }
+
+func TestPlanPackIsConfirmedBeforeReadBack(t *testing.T) {
+	text, err := MarshalProtocol()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rule := range []string{"Confirm each write succeeded", "Do not read a planned path before its write succeeds", "plan-draft.json"} {
+		if !strings.Contains(text, rule) {
+			t.Errorf("missing write-before-read rule %q", rule)
+		}
+	}
+}

@@ -69,6 +69,20 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		line = "/codex exec " + prompt
 	}
 
+	if len(args) == 1 && strings.EqualFold(args[0], "review") {
+		changes, err := gitChanges(ctx, h.ws.workDir)
+		if err != nil {
+			return "", fmt.Errorf("check uncommitted changes: %w", err)
+		}
+		if len(changes) == 0 {
+			return "No uncommitted changes to review. Make changes, then use /review.", nil
+		}
+		if h.ws.terminal == nil || !h.ws.terminal.IsTerminal() {
+			return "Review of uncommitted changes requires an interactive terminal. Open marshal tui in a terminal, then use /review.", nil
+		}
+		args = append(args, "--uncommitted")
+		line += " --uncommitted"
+	}
 	interactive := h.ws.terminal != nil && h.ws.terminal.IsTerminal()
 	if usage := governedAgentUsage("codex", args, interactive); usage != "" {
 		return usage, nil
@@ -140,9 +154,6 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 		}
 		switch sub {
 		case "cli", "interactive", "chat", "open", "tui", "new":
-			if sub == "new" {
-				return h.ws.runNativeCodex(ctx, nil)
-			}
 			tail := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), strings.Fields(line)[0]))
 			if strings.EqualFold(strings.Fields(line)[0], "/codex") && tail != "" {
 				tail = strings.TrimSpace(strings.TrimPrefix(tail, strings.Fields(tail)[0]))

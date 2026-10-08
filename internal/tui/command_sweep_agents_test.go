@@ -15,6 +15,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/projectid"
+	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 )
 
 var sweepAgentRoots = []string{"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/skill", "/skills", "/apply", "/sessions", "/resume", "/fork", "/diff", "/review"}
@@ -256,7 +257,7 @@ func TestCommandSweepAgentsHelpCompletion(t *testing.T) {
 	sweepWorkEnvironment(t)
 	installDialectDoubles(t)
 	ws := NewWorkspace(nil, "sweep", "sweep")
-	help := sweepAgentExecute(t, ws, "/help")
+	help := sweepAgentExecute(t, ws, "/help all")
 	for _, root := range sweepAgentRoots {
 		if !strings.Contains(help, root) {
 			t.Errorf("%s missing help", root)
@@ -325,7 +326,7 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 		{"/resume --last", "Codex exited.", "resume\nsession with spaces\n"},
 		{"/fork --last", "Codex exited.", "fork\nsession with spaces\n"},
 		{"/diff", "Git Diff", ""},
-		{"/review", "Codex exited.", "review\n"},
+		{"/review", "Codex exited.", "review\n--uncommitted\n"},
 	}
 	for _, provider := range []struct{ root, exit, flag, verb string }{
 		{"codex", "Codex exited.", "--", "exec"},
@@ -347,6 +348,11 @@ func TestCommandSweepAgentsPTY(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.line, func(t *testing.T) {
+			if tc.line == "/review" {
+				if err := os.WriteFile(filepath.Join(root, "review-change.txt"), []byte("uncommitted"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
 			s := startFrozenTUIInProject(t, 50, 200, bin, root, "tui")
 			// Remove startup probes so rejected commands prove zero provider calls.
 			_ = os.Remove(logPath)
@@ -386,7 +392,10 @@ func TestCommandSweepAgentsTerminalMissingProvider(t *testing.T) {
 		if stored {
 			_, ws, _ = newControlWorkspace(t)
 		}
-		ws.workDir = t.TempDir()
+		ws.workDir = testgit.New(t).Path()
+		if err := os.WriteFile(filepath.Join(ws.workDir, "review-change.txt"), []byte("uncommitted"), 0600); err != nil {
+			t.Fatal(err)
+		}
 		useCodexByDefault(t, ws.workDir)
 		ws.terminal = &Terminal{isTerm: true}
 		for _, root := range []string{"/codex", "/claude", "/opencode", "/agy", "/antigravity"} {

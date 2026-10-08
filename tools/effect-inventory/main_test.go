@@ -320,3 +320,20 @@ func attach() { tmux.AttachSessionContext(nil,"session",nil,nil,nil) }
 		t.Fatalf("context attachment escaped inventory: %#v", sites)
 	}
 }
+
+func TestRootedProposalClaimInventoried(t *testing.T) {
+	root := t.TempDir()
+	fixture(t, root, "internal/claim.go", `package claim
+import filesystem "os"
+func consume(){
+ project,err:=filesystem.OpenRoot("project")
+ if err!=nil{return}
+ fs,err:=project.OpenRoot("proposals")
+ if err!=nil{return}
+ fs.Rename("request.json","request.json.consumed")
+}`)
+	sites, err := discover(root)
+	if err != nil || len(sites) != 1 || sites[0].Effect != "filesystem" {
+		t.Fatalf("sites=%v err=%v", sites, err)
+	}
+}

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/permission"
@@ -88,13 +89,14 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 	// Collect requests arising in the same poll into one review list.
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
+	deadlines := map[string]time.Time{}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		}
-		batch := w.permissions.queue.Take(w.permissionBusy())
+		batch := w.permissions.queue.Take(false)
 		if len(batch) == 0 {
 			w.permissions.mu.Lock()
 			if w.permissions.queue.Empty() {
@@ -107,11 +109,17 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 		}
 		var live []permission.Request
 		for _, req := range batch {
+			if deadline, ok := deadlines[req.Key()]; ok && !time.Now().Before(deadline) {
+				_ = w.decidePermission(ctx, req, false, "operator popup")
+				delete(deadlines, req.Key())
+				continue
+			}
+			if w.permissionPopupTarget(ctx, []permission.Request{req}) == "" {
+				w.permissions.queue.Add(req)
+				continue
+			}
 			if req.Kind == "network" && w.runtime != nil && !w.runtime.EgressRequestPending(req.RunID, req.Object) {
 				_ = w.decidePermission(ctx, req, false, "expired run request")
-				w.permissions.mu.Lock()
-				delete(w.permissions.outstanding, req.Key())
-				w.permissions.mu.Unlock()
 				continue
 			}
 			live = append(live, req)
@@ -135,23 +143,56 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 			}
 			batch = batch[:permission.MaxPopupItems]
 		}
-		w.tmuxMu.Lock()
-		target := w.tmuxSession
-		path := w.tmuxPath
-		w.tmuxMu.Unlock()
-		allow := false
-		if path != "" && target != "" {
-			allow, _ = permission.Popup(ctx, target, batch, 30*time.Second)
+		target := w.permissionPopupTarget(ctx, batch)
+		if target == "" {
+			for _, req := range batch {
+				w.permissions.queue.Add(req)
+			}
+			continue
+		}
+		if count := permission.PopupCapacity(ctx, target, batch); count < len(batch) {
+			for _, req := range batch[count:] {
+				w.permissions.queue.Add(req)
+			}
+			batch = batch[:count]
+		}
+		text, _ := permission.Render(batch)
+		w.RecordActivity(text)
+		deadline := time.Now().Add(30 * time.Second)
+		for _, req := range batch {
+			if saved, ok := deadlines[req.Key()]; ok && saved.Before(deadline) {
+				deadline = saved
+			}
 		}
 		for _, req := range batch {
+			deadlines[req.Key()] = deadline
+		}
+		remaining := time.Until(deadline)
+		allow := false
+		var popupErr error
+		if remaining > 0 {
+			allow, popupErr = permission.Popup(ctx, target, batch, remaining)
+		}
+		var navigation *permission.Navigation
+		if errors.As(popupErr, &navigation) {
+			for _, req := range batch {
+				w.permissions.queue.Add(req)
+			}
+			w.navigatePermissionPopup(ctx, target, navigation.Key)
+			continue
+		}
+		for _, req := range batch {
+			delete(deadlines, req.Key())
 			if err := w.decidePermission(ctx, req, allow, "operator popup"); err != nil {
 				w.mu.Lock()
 				w.state.LastOutput = "Permission decision failed: " + err.Error()
 				w.mu.Unlock()
 			}
-			w.permissions.mu.Lock()
-			delete(w.permissions.outstanding, req.Key())
-			w.permissions.mu.Unlock()
+			decision := "denied"
+			if allow {
+				decision = "allowed"
+			}
+			w.RecordActivity("Permission request resolved: " + req.Object + " — " + decision)
 		}
 	}
 }
@@ -176,7 +217,12 @@ func partitionPermissionBatch(batch []permission.Request) (popup, review []permi
 }
 
 func (w *Workspace) decidePermission(ctx context.Context, req permission.Request, allow bool, source string) (err error) {
-	defer func() { w.marshalProposalDecisionNotice(req, allow, err) }()
+	defer func() {
+		w.permissions.mu.Lock()
+		delete(w.permissions.outstanding, req.Key())
+		w.permissions.mu.Unlock()
+		w.marshalProposalDecisionNotice(req, allow, err)
+	}()
 	control := w.controlSource()
 	if control == nil {
 		return errNoRuntime
@@ -216,6 +262,9 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 	return nil
 }
 func (h *CommandHandler) handlePermission(ctx context.Context, args []string) (string, error) {
+	if len(args) == 1 && args[0] == "status" {
+		return "Permission status is not available in this view. Use /egress status for governed network grants; /permission read and /permission credential record read and credential decisions.", nil
+	}
 	if len(args) == 3 && args[0] == "credential" && (args[1] == "request" || args[1] == "revoke") {
 		req := permission.Request{Kind: "credential", Object: args[2], Scope: "this project, until revoked", Who: "MARSHAL"}
 		if _, err := permission.Render([]permission.Request{req}); err != nil {
@@ -276,7 +325,7 @@ func (w *Workspace) continueEarlierWork(ctx context.Context, provider, folder st
 	if dropped {
 		b.WriteString("Secrets were dropped.\n")
 	}
-	b.WriteString("Summarise completed work, unfinished work, decisions and conventions from the supplied project-scoped data. Use the candidate IDs and provenance supplied above; propose each candidate with MARSHAL_PROPOSAL {\"action\":\"memory\",\"id\":\"candidate-id\"}. MARSHAL will show a popup; press A to apply.\n")
+	b.WriteString("Summarise completed work, unfinished work, decisions and conventions from the supplied project-scoped data. Use the candidate IDs and provenance supplied above; propose each candidate by atomically writing {\"action\":\"memory\",\"id\":\"candidate-id\"} to a fresh .marshal/proposals/<unique-request-id>.json file; do not print the payload in chat. MARSHAL will show a popup; press A to apply.\n")
 	view, err := openInboxView(w.runtime.ProjectRoot(), "marshal", false)
 	if err != nil {
 		return "", err
@@ -357,10 +406,85 @@ func (w *Workspace) guardHistoryWatch(watch *nativeHistoryWatch, provider string
 		}
 		return w.runtime.HasReadGrant(path)
 	}
-	if watch.antigravity && !w.runtime.HasReadGrant(watch.antigravitySummaries) {
-		w.queuePermission(permission.Request{Kind: "read", Object: watch.antigravitySummaries, Scope: "this session only, read-only", Who: "Marshal", Reason: "Read project ownership metadata for Antigravity conversations"})
+	// Observation never requests earlier-history access. Explicit continuation
+	// proposals request the exact folder after intake.
+}
+
+// Use an attached client's identity, never a session guessed by tmux. History
+// reviews wait for the control centre or a consenting Marshal chat; they cannot
+// consume input in another provider window.
+func (w *Workspace) permissionPopupTarget(ctx context.Context, batch []permission.Request) string {
+	w.tmuxMu.Lock()
+	session, centre := w.tmuxSession, w.tmuxMarshalPaneID
+	w.tmuxMu.Unlock()
+	out, err := tmux.RunCommand(ctx, "list-clients", "-F", "#{client_name}|#{pane_id}|#{session_name}")
+	if err != nil {
+		return ""
 	}
-	if watch.dir != "" && !w.runtime.HasReadGrant(watch.dir) {
-		w.queuePermission(permission.Request{Kind: "read", Object: watch.dir, Scope: "this session only, read-only", Who: "Marshal", Reason: "Read project-filtered " + provider + " history for the shared channel and memory candidates"})
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.Split(line, "|")
+		if len(parts) != 3 || parts[2] != session || parts[0] == "" {
+			continue
+		}
+		eligible := true
+		for _, req := range batch {
+			if req.Kind == "read" && parts[1] != centre {
+				w.tmuxMu.Lock()
+				chat := w.tmuxActiveWins["marshal-chat"]
+				inChat := chat != nil && chat.paneID == parts[1]
+				w.tmuxMu.Unlock()
+				if !inChat || !w.marshalEarlierWorkWanted() {
+					eligible = false
+					break
+				}
+			}
+			if req.Kind != "read" && parts[1] != centre {
+				w.tmuxMu.Lock()
+				safe := false
+				for _, a := range w.tmuxActiveWins {
+					if a.paneID == parts[1] && (a.role == "marshal-chat" || a.readOnly) {
+						safe = true
+						break
+					}
+				}
+				w.tmuxMu.Unlock()
+				if !safe {
+					eligible = false
+					break
+				}
+			}
+		}
+		if eligible {
+			return parts[0]
+		}
+	}
+	return ""
+}
+
+func (w *Workspace) navigatePermissionPopup(ctx context.Context, client, key string) {
+	w.tmuxMu.Lock()
+	centre := w.marshalTarget()
+	w.tmuxMu.Unlock()
+	if key == "F11" {
+		_, _ = tmux.RunCommand(ctx, "switch-client", "-c", client, "-t", centre)
+		return
+	}
+	providers := map[string]string{"F7": "codex", "F8": "claude", "F9": "opencode", "F12": "antigravity"}
+	w.tmuxMu.Lock()
+	pane := ""
+	for _, agent := range w.tmuxActiveWins {
+		if agent.role != "marshal-chat" && canonicalNeutralProvider(agent.provider) == canonicalNeutralProvider(providers[key]) {
+			pane = agent.paneID
+			break
+		}
+	}
+	w.tmuxMu.Unlock()
+	if pane != "" {
+		_, _ = tmux.RunCommand(ctx, "switch-client", "-c", client, "-t", pane)
+		return
+	}
+	commands := map[string]string{"F7": "/codex", "F8": "/claude", "F9": "/opencode", "F12": "/agy"}
+	if command := commands[key]; command != "" {
+		w.runCommand(ctx, command)
 	}
 }

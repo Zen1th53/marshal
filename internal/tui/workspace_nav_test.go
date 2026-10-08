@@ -465,7 +465,7 @@ func entitleULTRA(t *testing.T, ws *Workspace) {
 	ws.AttachULTRA(testcloud.EntitledGate(t, testcloud.Options{}), true)
 }
 
-func realControlWorkspace(t *testing.T, sessionID string) (*Workspace, *app.Runtime) {
+func realControlWorkspace(t *testing.T, sessionID string, navigation ...bool) (*Workspace, *app.Runtime) {
 	t.Helper()
 	repo := testgit.New(t)
 	for _, name := range []string{"CAPABILITIES.yaml", "PACK-VERSION.yaml", "RUNTIME-VERSION.yaml"} {
@@ -493,6 +493,9 @@ func realControlWorkspace(t *testing.T, sessionID string) (*Workspace, *app.Runt
 	t.Cleanup(func() { ws.Close(); _ = ws.runtime.Close() })
 	ws.AttachRuntime(runtime, projectid.ID(status.Project.ID))
 	entitleULTRA(t, ws)
+	if len(navigation) > 0 && !navigation[0] {
+		return ws, runtime
+	}
 	if !ws.dispatchNavigationKey(context.Background(), KeyEvent{Type: KeyCtrlN}) {
 		t.Fatal("Ctrl+N did not open the real workspace navigation")
 	}

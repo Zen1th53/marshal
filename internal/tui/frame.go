@@ -51,7 +51,7 @@ func buildHeader(s UIState, th *Theme, cols int) []string {
 
 	goal := s.Goal.DesiredOutcome
 	if goal == "" {
-		goal = th.Colorize(th.Muted, "no goal set · /goal <outcome>")
+		goal = th.Colorize(th.Muted, "Talk to the Marshal: /marshal chat")
 	} else {
 		goal = fmt.Sprintf("%s %s",
 			th.Colorize(th.Muted, fmt.Sprintf("v%d", s.Goal.Revision)),
@@ -70,6 +70,9 @@ func buildHeader(s UIState, th *Theme, cols int) []string {
 func buildBody(s UIState, th *Theme, cols, rows int) []string {
 	var out []string
 
+	if s.LastCommand == "/help all" {
+		return outputSection(s, th, cols)
+	}
 	out = append(out, activitySection(s, th, cols)...)
 
 	if res := outputSection(s, th, cols); len(res) > 0 {
@@ -119,12 +122,8 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 
 	if len(events) == 0 && s.ActiveToolCard == nil {
 		var out []string
-		out = append(out, PadCell(fmt.Sprintf(" %s  %s",
-			th.Colorize(th.Bold, "Activity"),
-			th.Colorize(th.Muted, "ready · governed workspace active")), cols))
-		out = append(out, PadCell(fmt.Sprintf("   %s %s",
-			th.Colorize(th.Success, "Native agent workspace"),
-			th.Colorize(th.Muted, "— F7 Codex · F8 Claude · F9 OpenCode · F12 Antigravity · use /<agent> to send a prompt")), cols))
+		out = append(out, PadCell(" Activity · Talk to the Marshal: /marshal chat — plan and coordinate work", cols))
+		out = append(out, PadCell(" Native sessions: F7 Codex · F8 Claude · F9 OpenCode · F12 Antigravity", cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s Help   %s Review   %s Diff   %s Control centre",
 			th.Colorize(th.Active, "[F1]"),
 			th.Colorize(th.Active, "[F2]"),
@@ -139,7 +138,7 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 			th.Colorize(th.Active, "[F7] Codex · [F8] Claude · [F9] OpenCode · [F12] Antigravity"), "Native sessions · automatic memory"), cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s %s",
 			th.Colorize(th.Muted, "Quick Commands:"),
-			"/codex new · /codex continue · /resume · /codex cli · /memory · /diff"), cols))
+			"/marshal chat · /marshal status · /help · /diff"), cols))
 		return append(notice, out...)
 	}
 
@@ -256,9 +255,12 @@ func outputSection(s UIState, th *Theme, cols int) []string {
 	}
 	out := []string{PadCell(" "+label, cols)}
 
-	text := activityTail(hideMarshalProtocol(s.LastOutput))
+	text := hideMarshalProtocol(s.LastOutput)
+	if s.LastCommand != "/help all" {
+		text = activityTail(text)
+	}
 	lines := strings.Split(text, "\n")
-	if len(lines) > maxActivityEvents {
+	if len(lines) > maxActivityEvents && s.LastCommand != "/help all" {
 		lines = lines[len(lines)-maxActivityEvents:]
 	}
 	for _, line := range lines {

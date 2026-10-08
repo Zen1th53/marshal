@@ -390,3 +390,13 @@ func TestPTYMarshalCompletionSelectionAndFinishedGoal(t *testing.T) {
 	s.sendLine("/marshal")
 	s.mustSee("Show status and usage")
 }
+
+func TestPTYF1ShowsMarshalOverviewAt80Columns(t *testing.T) {
+	s := startCommandTUI(t, 24, 80)
+	s.send("\x1bOP")
+	s.mustSee("/help all")
+	screen := s.screenText(24, 80)
+	if !strings.Contains(screen, "Talk to the Marshal: /marshal chat") || strings.Contains(screen, "UNKNOWN — unqualified pass-through") {
+		t.Fatalf("F1 does not show a useful overview: %s", screen)
+	}
+}

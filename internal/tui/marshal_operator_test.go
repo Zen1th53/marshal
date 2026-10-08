@@ -42,7 +42,7 @@ func TestMarshalComposerBudgetSettings(t *testing.T) {
 
 func TestHelpDescribesApprovalHandlers(t *testing.T) {
 	_, ws, ctx := acceptanceWorkspace(t)
-	out, err := ws.ExecuteCommand(ctx, "/help")
+	out, err := ws.ExecuteCommand(ctx, "/help all")
 	if err != nil {
 		t.Fatal(err)
 	}

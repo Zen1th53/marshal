@@ -177,6 +177,8 @@ func (c command) offerSetupFixes(ctx context.Context, assessment startup.Assessm
 		switch {
 		case !found:
 			fmt.Fprint(c.stdout, "  Done, but the result could not be confirmed.\n")
+		case fix.reason == startup.ReasonNotAGitRepository && check.Reason == startup.ReasonRepositoryEmpty:
+			fmt.Fprint(c.stdout, "  Done. Git repository initialized. Next step: make the first commit.\n")
 		case check.Status.Healthy():
 			fmt.Fprintf(c.stdout, "  Done. %s\n", check.Summary)
 		default:

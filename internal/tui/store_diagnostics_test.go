@@ -22,7 +22,7 @@ func TestStoreDiagnosticsCommands(t *testing.T) {
 			t.Errorf("%s: %q %v", tc.command, out, err)
 		}
 	}
-	help, err := ws.ExecuteCommand(ctx, "/help")
+	help, err := ws.ExecuteCommand(ctx, "/help all")
 	if err != nil || !strings.Contains(help, "check full") || !strings.Contains(help, "full can take long") {
 		t.Fatalf("help: %s %v", help, err)
 	}

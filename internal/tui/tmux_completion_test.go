@@ -87,8 +87,8 @@ func TestProviderCleanupResetsShortcutBeforeRemoval(t *testing.T) {
 			if (binding >= 0) != entry.reset {
 				t.Fatalf("shortcut reset = %v, want %v: %s", binding >= 0, entry.reset, calls)
 			}
-			if entry.reset && (!strings.Contains(calls, "display-message") || !strings.Contains(calls, "session ended; use /"+entry.provider+" to reopen.")) {
-				t.Fatalf("missing reopening guidance: %s", calls)
+			if entry.reset && (!strings.Contains(calls, "send-keys -t ") || !strings.Contains(calls, providerFKey(entry.provider))) {
+				t.Fatalf("missing launcher binding: %s", calls)
 			}
 			for _, call := range strings.Split(calls, "\n") {
 				if strings.HasPrefix(call, "bind-key ") && (strings.Contains(call, a.paneID) || strings.Contains(call, a.windowID)) {
@@ -208,8 +208,8 @@ func TestProviderKeyAfterWindowClosesHasNoDeadTarget(t *testing.T) {
 			if strings.Contains(string(after), a.windowID) || strings.Contains(string(after), a.paneID) {
 				t.Fatalf("binding targets removed provider: %s", after)
 			}
-			if !strings.Contains(string(after), "display-message") || !strings.Contains(string(after), "session ended") {
-				t.Fatalf("operator receives no reopening guidance: %s", after)
+			if !strings.Contains(string(after), "send-keys -t ") || !strings.Contains(string(after), key) {
+				t.Fatalf("operator cannot reopen through the launcher: %s", after)
 			}
 			panes, err = tmux.ListPanes(ctx, w.tmuxSession)
 			if err != nil {

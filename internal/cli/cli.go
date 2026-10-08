@@ -46,9 +46,9 @@ const usage = `Usage: marshal [--json] <command> [arguments]
 
 Commands:
   init
-  doctor [--probe-providers]
+  doctor [--probe-providers] [--deep]
   status
-  agent register --name NAME --role ROLE
+  agent register --name NAME --role ROLE [--provider PROVIDER] [--model MODEL]
   agents
   tasks
   task import tasks.json [--dry-run]
@@ -66,7 +66,7 @@ Commands:
   artifacts
   verify [-- command args...]
   reconcile --file-state state.json
-  memory status | recall | show | list | promote | tombstone | audit
+  memory status | recall | show | list | promote | tombstone | audit | remember | write
   policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
   setup | setup status
@@ -74,7 +74,7 @@ Commands:
   goal <request> | goal explain <request>
   plan create SESSION-ID --file INPUT.json | show PROJECT-ID | approve PROJECT-ID | cancel PROJECT-ID | handoff SESSION-ID PROJECT-ID
   exec start --session SESSION-ID --project PROJECT-ID | run RUN-ID | status RUN-ID | approve APPROVAL-ID | rollback CHECKPOINT-ID | handoff RUN-ID
-  review start SESSION.json | status VERIFICATION-ID | evaluate VERIFICATION-ID | attest VERIFICATION-ID --bundle-digest DIGEST --provenance TEXT
+  review start SESSION.json | status VERIFICATION-ID | evaluate VERIFICATION-ID | attest VERIFICATION-ID --bundle ENVELOPE.json --provenance TEXT
   learning commit INPUT.json | show MEMORY-COMMIT-ID | item ITEM-ID | history ITEM-ID | search --project ID | context --project ID | invalidate INPUT.json | trust [TASK-CLASS] | fingerprints --project ID | playbooks --project ID | replays [RUN-ID] | benchmarks [NAME] | export --project ID | restore BUNDLE.json --project ID
   optimization start INPUT.json | show CYCLE-ID | candidates CYCLE-ID | counterfactuals CYCLE-ID | manifests CYCLE-ID | canaries CYCLE-ID
   help [TOPIC] | help why
@@ -84,6 +84,9 @@ Commands:
   claude [NATIVE-CLAUDE-ARGUMENTS...]
   opencode [NATIVE-OPENCODE-ARGUMENTS...]
   agy [NATIVE-AGY-ARGUMENTS...]      (also: antigravity)
+  auth token <create|list|revoke>
+  gc worktrees | artifacts
+  state backup | verify-backup | restore
   daemon
   version
 `
@@ -109,10 +112,10 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 
 func Execute(ctx context.Context, root string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	c := command{root: root, stdin: stdin, stdout: stdout, stderr: stderr}
-	if len(args) > 0 && args[0] == "--json" {
-		c.json = true
-		args = args[1:]
+	if dispatcherHelp(args, stdout) {
+		return 0
 	}
+	args, c.json = globalJSON(args)
 	if len(args) == 0 {
 		// Running `marshal` with no arguments enters the control center.
 		// Previously any startup problem fell through to a usage screen, which
@@ -122,14 +125,6 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 			fmt.Fprintln(stderr, err)
 			return exitCode(err)
 		}
-		return 0
-	}
-	if args[0] == "--help" || args[0] == "-h" {
-		fmt.Fprint(stdout, usage)
-		return 0
-	}
-	if len(args) > 1 && args[0] != "codex" && args[0] != "claude" && args[0] != "opencode" && args[0] != "agy" && args[0] != "antigravity" && (args[1] == "--help" || args[1] == "-h") {
-		fmt.Fprint(stdout, usage)
 		return 0
 	}
 	var err error
@@ -227,17 +222,17 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		if c.json {
+			_ = c.print(map[string]any{"error": err.Error(), "exit_code": exitCode(err)}, "")
+		} else {
+			fmt.Fprintln(stderr, err)
+		}
 		return exitCode(err)
 	}
 	return 0
 }
 
 func (c command) policy(ctx context.Context, args []string) error {
-	if len(args) == 2 && args[0] == "test" && (args[1] == "--help" || args[1] == "-h") {
-		fmt.Fprint(c.stdout, policyTestUsage)
-		return nil
-	}
 	if len(args) != 2 || args[0] != "test" || args[1] == "" {
 		return fmt.Errorf("%w: %s", model.ErrInvalid, policyTestUsage[:len(policyTestUsage)-1])
 	}
@@ -586,6 +581,13 @@ func (c command) artifacts(ctx context.Context) error {
 func (c command) verify(ctx context.Context, args []string) error {
 	if len(args) > 0 && args[0] == "--" {
 		args = args[1:]
+	}
+	if len(args) == 0 {
+		var err error
+		args, err = app.DefaultVerificationCommand(c.root)
+		if err != nil {
+			return err
+		}
 	}
 	client, err := c.client()
 	if err != nil {

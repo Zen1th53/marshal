@@ -38,6 +38,9 @@ func parseProviderCommand(provider, line string, args []string) (prompt, rejecti
 		provider = "agy"
 	}
 	word := strings.ToLower(args[0])
+	if len(args) > 1 && (oneOf(word, "status", "info", "health", "help") || (oneOf(provider, "codex", "claude") && word == "models")) {
+		return "", "Nothing was run. " + root + " " + word + " does not accept arguments. Usage: " + root + " " + word + "; use " + root + " cli <native arguments> for CLI pass-through."
+	}
 	for _, sub := range providerSubcommands[provider] {
 		if word == sub {
 			return "", ""

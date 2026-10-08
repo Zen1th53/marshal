@@ -42,7 +42,7 @@ func (h *CommandHandler) handleRunControl(ctx context.Context, operation string,
 		}
 		switch len(candidates) {
 		case 0:
-			return fmt.Sprintf("%s was NOT performed: no run of this session can be %sd.", verb, strings.TrimSuffix(operation, "e")), nil
+			return fmt.Sprintf("%s was NOT performed: no run of this session can be %s.", verb, map[string]string{"pause": "paused", "resume": "resumed", "cancel": "cancelled"}[operation]), nil
 		case 1:
 			target = &candidates[0]
 		default:

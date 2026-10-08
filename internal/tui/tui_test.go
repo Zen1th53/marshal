@@ -229,13 +229,16 @@ func TestInteractiveWorkspaceAndCommands(t *testing.T) {
 	}
 
 	// Test 8: Workspace Run loop with /help and /quit
-	in := strings.NewReader("/help\n/mode auto\n/quit\n")
+	in := strings.NewReader("/help\n/help all\n/mode auto\n/quit\n")
 	var outBuf bytes.Buffer
 	err = ws.Run(ctx, in, &outBuf)
 	if err != nil {
 		t.Fatalf("Run loop failed: %v", err)
 	}
 	runOutput := outBuf.String()
+	if !strings.Contains(runOutput, "Talk to the Marshal: /marshal chat") || !strings.Contains(runOutput, "/help all") {
+		t.Fatalf("expected short overview in Run output:\n%s", runOutput)
+	}
 	if !strings.Contains(runOutput, "MARSHAL Terminal Workspace Commands") {
 		t.Fatalf("expected /help text in Run output:\n%s", runOutput)
 	}

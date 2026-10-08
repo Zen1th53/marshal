@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -87,9 +88,11 @@ func Attach(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 		}
 		io.Copy(output, master)
 	}()
+	stopResize := func() {}
 	var once sync.Once
 	cleanup := func() {
 		once.Do(func() {
+			stopResize()
 			slave.Close()
 			select {
 			case <-drained:
@@ -109,10 +112,16 @@ func Attach(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 		cleanup()
 		return nil, err
 	}
+	if size, ok := ctx.Value(sizeKey{}).(Size); ok {
+		stopResize, err = propagateTerminalSize(ctx, fd, size)
+		if err != nil {
+			cleanup()
+			return nil, fmt.Errorf("hosted terminal size: %w", err)
+		}
+	}
+
 	if interactive, _ := ctx.Value(interactiveKey{}).(bool); interactive {
-		// os/exec must pass the file itself, not a writer that creates a pipe.
-		cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
-		_ = unix.IoctlSetWinsize(fd, unix.TIOCSWINSZ, &unix.Winsize{Row: 40, Col: 120})
+		configureInteractivePTY(cmd, slave)
 		return cleanup, nil
 	}
 	// Keep explicit provider stdin (a request document) unchanged.
@@ -122,4 +131,58 @@ func Attach(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 	cmd.Stdout = io.MultiWriter(cmd.Stdout, slave)
 	cmd.Stderr = io.MultiWriter(cmd.Stderr, slave)
 	return cleanup, nil
+}
+
+// TIOCSWINSZ updates provider layout and signals the foreground process group.
+func propagateTerminalSize(ctx context.Context, fd int, size Size) (func(), error) {
+	var previous unix.Winsize
+	resize := func() error {
+		child, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		rows, cols, err := size(child)
+		next := unix.Winsize{Row: rows, Col: cols}
+		if err != nil || rows == 0 || cols == 0 {
+			if previous.Row != 0 && previous.Col != 0 {
+				return nil // Keep the last real size while the host is unreadable.
+			}
+			next = unix.Winsize{Row: 40, Col: 120}
+		}
+		if next != previous {
+			if err := unix.IoctlSetWinsize(fd, unix.TIOCSWINSZ, &next); err != nil {
+				return err
+			}
+			previous = next
+		}
+		return nil
+	}
+	if err := resize(); err != nil {
+		return func() {}, err
+	}
+
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				resize()
+			}
+		}
+	}()
+	var once sync.Once
+	return func() { once.Do(func() { close(done); wg.Wait() }) }, nil
+}
+
+func configureInteractivePTY(cmd *exec.Cmd, slave *os.File) {
+	// TIOCSWINSZ delivers SIGWINCH to the supervisor and its foreground provider.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 }

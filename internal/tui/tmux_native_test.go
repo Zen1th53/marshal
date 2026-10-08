@@ -62,6 +62,7 @@ case "$1" in
     ;;
   display-message)
     case "$*" in
+      *"#{pane_height} #{pane_width}"*) printf '40 120\n'; exit 0;;
       *"#{session_id}"*)
         printf '$0\n'
         exit 0
@@ -228,8 +229,13 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 		t.Fatalf("missing F11 bind-key call:\n%s", logStr)
 	}
 
-	// 2. Open Codex again (switching)
-	switchMsg, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "codex", "Codex", workDir, "echo", []string{"hello"}, nil, nil, nil, nil, nil, nil, nil)
+	// A requested operation must never become navigation to the composer.
+	refusal, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "codex", "Codex", workDir, "echo", []string{"review", "--help"}, nil, nil, nil, nil, nil, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "Nothing was run") || !strings.Contains(err.Error(), "--help") || refusal != "" {
+		t.Fatalf("operation silently discarded: %q %v", refusal, err)
+	}
+	// Bare navigation preserves the surviving session.
+	switchMsg, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "codex", "Codex", workDir, "echo", nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("second runNativeAgentInTmux failed: %v", err)
 	}
@@ -626,6 +632,7 @@ winFile=%q
 case "$1" in
   display-message)
     case "$*" in
+      *"#{pane_height} #{pane_width}"*) printf '40 120\n'; exit 0;;
       *"#{session_name}"*"#{window_name}"*"#{window_id}"*)
         printf 'test-session\tmarshal\t@0\n'
         exit 0

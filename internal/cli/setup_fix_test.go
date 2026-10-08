@@ -74,14 +74,12 @@ func TestSetupOffersAndCarriesOutBlockingSteps(t *testing.T) {
 			t.Fatalf("setup did not ask %q.\n%s", want, out)
 		}
 	}
-	// The repository step reports honestly that the problem is not gone: a
-	// repository without a commit is still not one work can run in. The commit
-	// resolves it, and the project step then has a baseline to build on.
-	if !strings.Contains(out, "That step ran but the problem remains. This repository has no commits yet.") {
-		t.Fatalf("the repository step should report what the re-check found.\n%s", out)
+	// Initialization succeeds even though the first commit is a separate step.
+	if !strings.Contains(out, "Done. Git repository initialized. Next step: make the first commit.") || strings.Contains(out, "That step ran but the problem remains.") {
+		t.Fatalf("initialization should be acknowledged before the next step.\n%s", out)
 	}
-	if strings.Count(out, "Done.") != 2 {
-		t.Fatalf("the commit and project steps should each report a confirmed result.\n%s", out)
+	if strings.Count(out, "Done.") != 3 {
+		t.Fatalf("all three steps should report a confirmed result.\n%s", out)
 	}
 	if !strings.Contains(out, "This project is set up for MARSHAL.") {
 		t.Fatalf("setup should end with a project that is ready.\n%s", out)
