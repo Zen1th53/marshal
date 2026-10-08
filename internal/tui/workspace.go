@@ -1156,8 +1156,21 @@ func (w *Workspace) recordCommandResult(cmd, resp string, err error) {
 		w.state.LastOutput = resp
 		w.state.LastOutputIsError = false
 	}
-	w.state.LastOutput = activityTail(hideMarshalProtocol(w.state.LastOutput))
+	w.state.LastOutput = hideMarshalProtocol(w.state.LastOutput)
+	if cmd != "/help all" {
+		w.state.LastOutput = activityTail(w.state.LastOutput)
+	}
 	w.state.LastCommand = RedactContent(cmd, w.state.KnownSecrets)
+	w.scrollOffset = 0
+	if cmd == "/help all" && err == nil {
+		cols, rows := 80, 24
+		if w.terminal != nil {
+			cols, rows = w.terminal.Size()
+		}
+		frame := BuildFrame(w.state, w.theme, w.workDir, w.composer, nil, cols, rows)
+		bodyHeight := rows - len(frame.Header) - 2 - len(frame.Composer)
+		w.scrollOffset = max(0, len(frame.Body)-bodyHeight)
+	}
 	w.mu.Unlock()
 }
 

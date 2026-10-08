@@ -71,6 +71,8 @@ func nativeArgs(s string) ([]string, error) {
 	return args, nil
 }
 
+type nativeRequestedArgsKey struct{}
+
 // Native mode intentionally uses the operator's real Codex environment. The
 // config-free task harness is a separate workflow with different guarantees.
 func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, error) {
@@ -80,6 +82,7 @@ func (w *Workspace) runNativeCodex(ctx context.Context, args []string) (string, 
 func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []string, marshalBrief ...string) (result string, resultErr error) {
 	ctx, cancel := context.WithTimeout(ctx, 24*time.Hour)
 	defer cancel()
+	ctx = context.WithValue(ctx, nativeRequestedArgsKey{}, append([]string{}, args...))
 	args = app.NormalizeProviderArgs(provider, args)
 
 	label, homeEnv, homeDir, historyDir := "Codex", "CODEX_HOME", ".codex", "sessions"

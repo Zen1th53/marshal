@@ -599,6 +599,13 @@ func (w *Workspace) runNativeAgentInTmux(
 		}
 	}
 	if exists && winExists {
+		requestedArgs := args
+		if original, ok := ctx.Value(nativeRequestedArgsKey{}).([]string); ok {
+			requestedArgs = original
+		}
+		if !isChat && len(requestedArgs) > 0 {
+			return "", fmt.Errorf("Nothing was run: %s already has an active native session; arguments %q cannot be applied to it. Exit that session or stop it with Ctrl+X, then retry the command.", agentLabel, requestedArgs)
+		}
 		if isChat && canonicalNeutralProvider(existingAgent.provider) != canonicalNeutralProvider(provider) {
 			runningProvider := existingAgent.provider
 			if runningProvider == "" {
@@ -691,15 +698,16 @@ func (w *Workspace) runNativeAgentInTmux(
 		}
 	}
 
+	if err := w.bindWorkspaceKeys(ctx, paneID, root); err != nil {
+		return failHost(err)
+	}
+
 	// Bind provider's F-key and F11 in tmux (for workers only, not chat)
 	if !isChat {
 		fkey := providerFKey(provider)
 		if fkey != "" {
 			_ = tmux.BindWindowKey(ctx, paneID, "marshal-keys-"+tmux.ProjectHash(root), fkey, "select-window", "-t", paneID)
 		}
-	}
-	if err := w.bindWorkspaceKeys(ctx, paneID, root); err != nil {
-		return failHost(err)
 	}
 
 	// Install the return key and its selection hooks before exposing the window.
@@ -893,8 +901,10 @@ func (w *Workspace) monitorAgent(
 					if exitCode != 0 {
 						state = "failed"
 					}
-					if err := w.deliverEgressAlert(app.EgressAlert{RunID: snapshot.runID, ParentRunID: snapshot.runID, TaskID: snapshot.taskID, Worker: snapshot.provider, Kind: "worker " + state, State: state, Message: snapshot.label + " worker " + state + "."}); err != nil {
-						w.RecordActivity(err.Error())
+					if snapshot.runID != "" {
+						if err := w.deliverEgressAlert(app.EgressAlert{RunID: snapshot.runID, ParentRunID: snapshot.runID, TaskID: snapshot.taskID, Worker: snapshot.provider, Kind: "worker " + state, State: state, Message: snapshot.label + " worker " + state + "."}); err != nil {
+							w.RecordActivity(err.Error())
+						}
 					}
 					if err := w.retainAndCloseAgent(context.Background(), agent, root, state); err != nil {
 						w.RecordActivity(err.Error())

@@ -27,6 +27,17 @@ func (w *Workspace) bindWorkspaceKeys(ctx context.Context, pane, root string) er
 	w.tmuxMu.Lock()
 	target := w.marshalTarget()
 	w.tmuxMu.Unlock()
+	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
+		w.tmuxMu.Lock()
+		active := w.tmuxActiveWins[provider] != nil
+		w.tmuxMu.Unlock()
+		if !active {
+			key := providerFKey(provider)
+			if err := tmux.BindWindowKey(ctx, pane, table, key, "send-keys", "-t", target, key); err != nil {
+				return err
+			}
+		}
+	}
 	if err := tmux.BindWindowKey(ctx, pane, table, "F11", "select-window", "-t", target); err != nil {
 		return err
 	}

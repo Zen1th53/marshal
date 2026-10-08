@@ -781,10 +781,15 @@ func (w *Workspace) marshalActive(ctx context.Context) (*marshalSession, *app.Ma
 	service, runID, provider := m.service, m.runID, m.provider
 	m.mu.Unlock()
 	if service != nil && runID != "" {
-		return m, service, runID, provider, nil
+		if _, err := service.Snapshot(ctx, runID); err == nil {
+			return m, service, runID, provider, nil
+		} else if !errors.Is(err, model.ErrNotFound) {
+			return m, nil, "", "", err
+		}
+		return m, nil, "", "", errors.New("No Marshal run yet; start one with /marshal chat")
 	}
 	if w.runtime == nil || w.runtime.Store() == nil {
-		return m, nil, "", "", errors.New("no Marshal run; start one with /marshal <goal>")
+		return m, nil, "", "", errors.New("No Marshal run yet; start one with /marshal chat")
 	}
 	projectID := w.projectID
 	if projectID == "" && w.runtime.Marshal() != nil {
@@ -792,7 +797,7 @@ func (w *Workspace) marshalActive(ctx context.Context) (*marshalSession, *app.Ma
 	}
 	recoveredID, _, err := w.runtime.Store().LatestMarshalRun(ctx, projectID)
 	if err != nil {
-		return m, nil, "", "", errors.New("no Marshal run; start one with /marshal <goal>")
+		return m, nil, "", "", errors.New("No Marshal run yet; start one with /marshal chat")
 	}
 	service, provider, _, err = w.marshalService(ctx, recoveredID)
 	if err != nil {
@@ -1313,7 +1318,7 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 	m.mu.Unlock()
 	p := w.marshalPanel()
 	if runID == "" || p == nil || p.RunID != runID {
-		return "", errors.New("no Marshal run; start one with /marshal <goal>")
+		return "", errors.New("No Marshal run yet; start one with /marshal chat")
 	}
 	for _, task := range p.Tasks {
 		if task.ID == args[0] {

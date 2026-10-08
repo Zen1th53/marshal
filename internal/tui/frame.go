@@ -70,6 +70,9 @@ func buildHeader(s UIState, th *Theme, cols int) []string {
 func buildBody(s UIState, th *Theme, cols, rows int) []string {
 	var out []string
 
+	if s.LastCommand == "/help all" {
+		return outputSection(s, th, cols)
+	}
 	out = append(out, activitySection(s, th, cols)...)
 
 	if res := outputSection(s, th, cols); len(res) > 0 {
@@ -252,9 +255,12 @@ func outputSection(s UIState, th *Theme, cols int) []string {
 	}
 	out := []string{PadCell(" "+label, cols)}
 
-	text := activityTail(hideMarshalProtocol(s.LastOutput))
+	text := hideMarshalProtocol(s.LastOutput)
+	if s.LastCommand != "/help all" {
+		text = activityTail(text)
+	}
 	lines := strings.Split(text, "\n")
-	if len(lines) > maxActivityEvents {
+	if len(lines) > maxActivityEvents && s.LastCommand != "/help all" {
 		lines = lines[len(lines)-maxActivityEvents:]
 	}
 	for _, line := range lines {

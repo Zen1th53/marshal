@@ -665,7 +665,7 @@ const helpOverview = `Talk to the Marshal: /marshal chat — plan and coordinate
   Native sessions: /codex · /claude · /opencode · /agy
   F7: Codex · F8: Claude · F9: OpenCode · F12: Antigravity
   F11: Control centre · Ctrl+X: Stop workers · /exit: Exit
-  /help all         Full command reference · F1: This overview`
+  /help all         Full reference (PgUp/PgDn to page) · F1: This overview`
 
 func (h *CommandHandler) helpText() string {
 	navigationHint := ""
@@ -719,7 +719,7 @@ func (h *CommandHandler) helpText() string {
   /cancel [run:<id>]       Cancel a run of this session and its provider turns
   /review [instructions]   Native review (Codex only); governed commit review takes no instructions
   /approvals               List pending approvals
-  /approval                Show native Codex approval policy
+  /approval [inspect|diff] <id>  Inspect an approval; /codex approval for native policy
   /termination             Inspect termination state
   /context                 Inspect context and drift
   /diff [staged|unstaged|untracked]  Bounded diff inventory (default: combined)

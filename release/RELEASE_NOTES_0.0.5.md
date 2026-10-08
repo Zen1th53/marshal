@@ -13,6 +13,13 @@ One workspace for planning with the Marshal and working with your agents.
 
 ## What changed
 
+- F7/F8/F9/F12 reopen ended provider sessions from the control centre, Marshal chat and native windows.
+- F2 and `/review` default to uncommitted changes and explain when the working tree is clean.
+- Native commands with arguments are refused with retry instructions when that provider already has a session; arguments no longer disappear into its composer.
+- OpenCode help and completion omit unrouted plugin commands; `/opencode run` requires text.
+- Marshal controls explain how to start a run when chat has no saved plan, instead of showing an internal storage error.
+- `/help all` starts at the beginning of the full reference; PgUp/PgDn page it and End jumps to the end.
+- Empty-run pause/resume/cancel messages and approval help are corrected. `/permission status` explains the available next steps. Ordinary native exits report session status without a blank worker run alert.
 - The welcome screen and `/help`/F1 lead with `/marshal chat`; `/help all` opens the full reference, and chat openings omit provider qualification labels.
 - Setup acknowledges successful Git initialization and presents the first commit as the next step.
 - Plan instructions require confirmed writes of the plan pack and task list before read-back.
@@ -34,7 +41,7 @@ stop-all, F11 and `/takeover` never wait behind a running command.
 **Sessions you open are yours to type in.** Native sessions you open with
 F7, F8, F9, F12 or `/codex`, `/claude`, `/opencode`, `/agy` accept keyboard
 input immediately. Workers the Marshal launches stay view-only until
-`/takeover`. A provider key whose session has ended tells you how to reopen it.
+`/takeover`. A provider key whose session has ended reopens it through the normal provider launcher.
 
 **Choose the Marshal's model.** `/marshal model <codex|claude|agy>` switches
 the running Marshal and remembers the choice for the project.

@@ -262,6 +262,9 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 	return nil
 }
 func (h *CommandHandler) handlePermission(ctx context.Context, args []string) (string, error) {
+	if len(args) == 1 && args[0] == "status" {
+		return "Permission status is not available in this view. Use /egress status for governed network grants; /permission read and /permission credential record read and credential decisions.", nil
+	}
 	if len(args) == 3 && args[0] == "credential" && (args[1] == "request" || args[1] == "revoke") {
 		req := permission.Request{Kind: "credential", Object: args[2], Scope: "this project, until revoked", Who: "MARSHAL"}
 		if _, err := permission.Render([]permission.Request{req}); err != nil {

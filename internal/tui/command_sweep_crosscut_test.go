@@ -251,9 +251,13 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	useCodexByDefault(t, project)
 	t.Setenv("HTTPS_PROXY", "http://[invalid")
 	s := startFrozenTUIInProject(t, 50, 140, bin, project, "tui")
-	for _, c := range []struct{ line, want string }{{"/help all", "Function Keys & Shortcuts"}, {"/memory peers", "SHARED CHANNEL"}, {"/ultra status", "ULTRA status: INACTIVE"}, {"/marshal status", "No Marshal"}, {"plain prompt", "Nothing was run"}, {"/unknown", "Unknown command"}} {
+	for _, c := range []struct{ line, want string }{{"/help all", "MARSHAL Terminal Workspace Commands:"}, {"/memory peers", "SHARED CHANNEL"}, {"/ultra status", "ULTRA status: INACTIVE"}, {"/marshal status", "No Marshal"}, {"plain prompt", "Nothing was run"}, {"/unknown", "Unknown command"}} {
 		s.sendLine(c.line)
 		s.mustSee(c.want)
+		if c.line == "/help all" {
+			s.send("\x1b[4~") // End reaches the retained keyboard reference.
+			s.mustSee("Function Keys & Shortcuts")
+		}
 	}
 	// Popup keys preserve the draft; Enter accepts, then submits.
 	s.send("/memor")
@@ -271,6 +275,10 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	s.mustSee("not available yet")
 	s.send("\x1b")
 	s.mustSee("not available yet")
+	// Give F2 an uncommitted target so its missing-provider path is exercised.
+	if err := os.WriteFile(filepath.Join(project, "review-change.txt"), []byte("uncommitted"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	// A malformed proxy URL refuses HTTP before any network connection.
 	for _, key := range []struct{ raw, want string }{
 		{"\x1bOP", "Talk to the Marshal: /marshal chat"}, {"\x1bOQ", "Install Codex"},
@@ -496,7 +504,7 @@ func TestCommandSweepCrosscutMarshalRecoveryHints(t *testing.T) {
 		}
 	}
 	_, err := w.cmd.Handle(context.Background(), "/marshal accept task")
-	if err == nil || !strings.Contains(err.Error(), "/marshal <goal>") {
+	if err == nil || !strings.Contains(err.Error(), "/marshal chat") {
 		t.Errorf("missing run needs recovery hint: %v", err)
 	}
 }
@@ -600,25 +608,18 @@ func TestCommandSweepCrosscutMarshalFailuresKeepPanel(t *testing.T) {
 	m.service = w.runtime.Marshal()
 	for _, line := range []string{"/marshal close", "/marshal amend add a task", "/marshal approve", "/marshal resume"} {
 		w.state.Marshal = &MarshalPanel{RunID: m.runID, Tasks: []MarshalTaskRow{{ID: "original-task"}}}
-		if _, err := w.cmd.Handle(ctx, line); err != nil {
-			t.Fatal(err)
+		if _, err := w.cmd.Handle(ctx, line); err == nil || !strings.Contains(err.Error(), "No Marshal run yet; start one with /marshal chat") {
+			t.Fatalf("%s must refuse the unsaved run immediately: %v", line, err)
 		}
-		deadline := time.Now().Add(5 * time.Second)
-		for {
-			p := w.marshalPanel()
-			m.mu.Lock()
-			busy := m.busy
-			m.mu.Unlock()
-			if !busy && p != nil && strings.Contains(p.Note, "failed") {
-				if len(p.Tasks) != 1 || p.Tasks[0].ID != "original-task" {
-					t.Fatalf("%s erased the prior task snapshot: %+v", line, p)
-				}
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("%s never reported failure", line)
-			}
-			time.Sleep(time.Millisecond)
+		p := w.marshalPanel()
+		if p == nil || len(p.Tasks) != 1 || p.Tasks[0].ID != "original-task" {
+			t.Fatalf("%s erased the prior task snapshot: %+v", line, p)
+		}
+		m.mu.Lock()
+		busy := m.busy
+		m.mu.Unlock()
+		if busy {
+			t.Fatalf("%s started work on an unsaved run", line)
 		}
 	}
 }

@@ -21,6 +21,16 @@ func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line
 		return h.ws.runNativeAgent(ctx, "opencode", []string{"--prompt", prompt})
 	}
 
+	argv, err := openCodeCLIArgs(line)
+	if err != nil {
+		return "", err
+	}
+	if len(args) > 0 && strings.EqualFold(args[0], "run") {
+		argv = append([]string{"run"}, argv...)
+	}
+	if len(argv) > 0 && strings.EqualFold(argv[0], "run") && (len(argv) == 1 || strings.TrimSpace(strings.Join(argv[1:], " ")) == "") {
+		return "Usage: /opencode run <text>", nil
+	}
 	if usage := nativeSessionUsage("opencode", args); usage != "" {
 		return usage, nil
 	}
@@ -46,7 +56,11 @@ func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line
 	sub := strings.ToLower(args[0])
 	switch sub {
 	case "new", "open", "tui", "interactive", "chat":
-		return h.ws.runNativeAgent(ctx, "opencode", nil)
+		argv, err := openCodeCLIArgs(line)
+		if err != nil {
+			return "", err
+		}
+		return h.ws.runNativeAgent(ctx, "opencode", argv)
 	case "cli":
 		argv, err := openCodeCLIArgs(line)
 		if err != nil {
