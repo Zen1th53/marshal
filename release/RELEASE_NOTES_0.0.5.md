@@ -79,6 +79,24 @@ binding checks, network confinement, and the handling of credentials and
 evidence. These protections apply at their supported boundaries; native agent
 sessions retain the rights of your user account.
 
+**Destructive native subcommands require explicit operator confirmation.** Destructive
+operations such as uninstall, remove, delete, disable, or logout forwarded to native
+provider CLIs (Codex, Claude Code, OpenCode, Antigravity) are refused unless explicitly
+confirmed with `--confirm`. Help requests with `-h` or `--help` only query help on
+subcommands known to support it and never trigger destructive execution.
+
+**The Antigravity catalog advertises only supported commands.** The `/agy` catalog
+and auto-completion match the installed Antigravity CLI grammar, excluding unsupported
+subcommands and enforcing arity guards before dispatching commands.
+
+**Provider help runs independently of active sessions.** Native provider help requests
+such as `/codex <sub> --help` execute as read-only captures displayed in the control
+centre, without blocking on or interrupting active interactive sessions.
+
+**Control centre shortcuts activate when the composer is empty.** Advertised single-key
+shortcuts `d` (Diff) and `?` (Help) trigger their respective actions when the composer
+is empty, while allowing normal character typing when composing commands.
+
 ## Requirements
 
 - **Linux only**, on 64-bit Intel/AMD or ARM. macOS is unsupported; WSL 2 has

@@ -938,6 +938,11 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				continue
 			}
 
+			// Advertised single-rune shortcuts when composer is empty and no popup/overlay is active
+			if w.handleShortcut(ctx, event) {
+				continue
+			}
+
 			// Esc toggles navigation mode when composer is empty and no popup/overlay is active
 			if event.Type == KeyEsc && w.composer.Text() == "" && !w.completionOpen && !w.diffViewer.IsOpen() && !w.palette.IsOpen() {
 				// Navigation is closed until verified, and an ULTRA surface
@@ -1073,6 +1078,20 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			w.renderComposer()
 		}
 	}
+}
+
+func (w *Workspace) handleShortcut(ctx context.Context, event KeyEvent) bool {
+	if event.Type == KeyRune && w.composer.Text() == "" && !w.completionOpen && !w.diffViewer.IsOpen() && !w.palette.IsOpen() {
+		switch event.Rune {
+		case 'd':
+			w.runCommand(ctx, "/diff")
+			return true
+		case '?':
+			w.runCommand(ctx, "/help")
+			return true
+		}
+	}
+	return false
 }
 
 func (w *Workspace) commandExitRequested() bool {

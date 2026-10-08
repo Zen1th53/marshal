@@ -15,6 +15,9 @@ func governedAgentUsage(provider string, args []string, interactive bool) string
 	if len(args) == 0 {
 		return ""
 	}
+	if hasHelpFlag(args) {
+		return ""
+	}
 	sub := strings.ToLower(args[0])
 	if provider == "claude" && !oneOf(sub, "status", "info", "health", "help", "doctor", "models", "model", "select", "sessions", "runs", "history", "run", "dispatch") {
 		return ""

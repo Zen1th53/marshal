@@ -61,6 +61,14 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 	if rejection != "" {
 		return rejection, nil
 	}
+	cleanArgv, refusal, isHelp := checkNativePassthroughSafety("codex", args)
+	if refusal != "" {
+		return refusal, nil
+	}
+	if isHelp {
+		return h.ws.runNativeCodex(ctx, cleanArgv)
+	}
+	args = cleanArgv
 	if prompt != "" {
 		if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
 			return h.ws.runNativeCodex(ctx, []string{"--", prompt})
@@ -134,7 +142,12 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 						argv[0] = strings.ToLower(argv[0])
 					}
 				}
-				return h.ws.runNativeCodex(ctx, append([]string{sub}, argv...))
+				targetArgs := append([]string{sub}, argv...)
+				cleanArgv, refusal, _ := checkNativePassthroughSafety("codex", targetArgs)
+				if refusal != "" {
+					return refusal, nil
+				}
+				return h.ws.runNativeCodex(ctx, cleanArgv)
 			case "sandbox":
 				if len(args) == 2 && oneOf(strings.ToLower(args[1]), "read-only", "workspace-write") {
 					return h.ws.runNativeCodex(ctx, []string{"--sandbox", strings.ToLower(args[1])})
@@ -162,7 +175,11 @@ func (h *CommandHandler) handleCodex(ctx context.Context, args []string, line st
 			if err != nil {
 				return "", err
 			}
-			return h.ws.runNativeCodex(ctx, argv)
+			cleanArgv, refusal, _ := checkNativePassthroughSafety("codex", argv)
+			if refusal != "" {
+				return refusal, nil
+			}
+			return h.ws.runNativeCodex(ctx, cleanArgv)
 		}
 	}
 	source := h.ws.controlSource()

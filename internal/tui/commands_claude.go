@@ -65,6 +65,14 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 	if rejection != "" {
 		return rejection, nil
 	}
+	cleanArgv, refusal, isHelp := checkNativePassthroughSafety("claude", args)
+	if refusal != "" {
+		return refusal, nil
+	}
+	if isHelp {
+		return h.ws.runNativeAgent(ctx, "claude", cleanArgv)
+	}
+	args = cleanArgv
 	if prompt != "" {
 		if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
 			return h.ws.runNativeAgent(ctx, "claude", []string{"--", prompt})
@@ -112,7 +120,11 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 				if sub == "login" || sub == "logout" {
 					argv = append([]string{"auth"}, argv...)
 				}
-				return h.ws.runNativeAgent(ctx, "claude", argv)
+				cleanArgv, refusal, _ := checkNativePassthroughSafety("claude", argv)
+				if refusal != "" {
+					return refusal, nil
+				}
+				return h.ws.runNativeAgent(ctx, "claude", cleanArgv)
 			}
 		}
 		switch sub {
@@ -125,7 +137,11 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 			if err != nil {
 				return "", err
 			}
-			return h.ws.runNativeAgent(ctx, "claude", argv)
+			cleanArgv, refusal, _ := checkNativePassthroughSafety("claude", argv)
+			if refusal != "" {
+				return refusal, nil
+			}
+			return h.ws.runNativeAgent(ctx, "claude", cleanArgv)
 		}
 	}
 	if len(args) > 0 && oneOf(args[0], "mcp", "plugin", "auth", "agents", "login", "logout") {
