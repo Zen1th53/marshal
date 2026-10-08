@@ -80,7 +80,7 @@ func (s *MarshalService) briefContext(ctx context.Context, runID string, run mar
 		}
 		returns[fmt.Sprint(event.Data["return_attempt"])] = reasons
 	}
-	for attempt := 1; attempt <= attempts; attempt++ {
+	for attempt := 1 + t.EvidenceAttemptBase; attempt <= attempts+t.EvidenceAttemptBase; attempt++ {
 		if reasons, ok := returns[fmt.Sprint(attempt)]; ok {
 			bc.Returned = append(bc.Returned, reasons...)
 			continue

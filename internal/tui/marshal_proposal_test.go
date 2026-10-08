@@ -778,3 +778,89 @@ func emitMarshalIntakeFile(t *testing.T, w *Workspace, language, earlierWork str
 	}
 	w.observeMarshalProposalFiles(w.runtime.ProjectRoot())
 }
+
+func TestPendingProposalReturnsAfterWorkspaceRestart(t *testing.T) {
+	w, rt := realControlWorkspace(t, "SESSION-recovery", false)
+	dir := filepath.Join(rt.ProjectRoot(), ".marshal", "proposals")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pending.json"), []byte(`{"action":"setting","key":"control","value":"strict"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	w.observeMarshalProposalFiles(rt.ProjectRoot())
+	if got := w.permissions.queue.Take(false); len(got) != 1 {
+		t.Fatalf("first admission: %v", got)
+	}
+	restarted := NewWorkspace(rt.Store(), rt.ProjectID(), "SESSION-restarted")
+	restarted.runtime = rt
+	restarted.observeMarshalProposalFiles(rt.ProjectRoot())
+	batch := restarted.permissions.queue.Take(false)
+	if len(batch) != 1 || batch[0].Object != "/marshal settings control strict" {
+		t.Fatalf("lost pending proposal: %v", batch)
+	}
+}
+
+func TestProposalAdmissionBeforeConsumptionAndDurableDecision(t *testing.T) {
+	w, rt := realControlWorkspace(t, "SESSION-admission", false)
+	line := `MARSHAL_PROPOSAL {"action":"setting","key":"control","value":"strict"}`
+	// Simulate interruption just after admission, before a queue or source rename.
+	if _, err := rt.Store().AdmitMarshalProposal(t.Context(), rt.ProjectID(), "interrupted-read", line); err != nil {
+		t.Fatal(err)
+	}
+	w.observeMarshalProposalFiles(rt.ProjectRoot())
+	batch := w.permissions.queue.Take(false)
+	if len(batch) != 1 || batch[0].ProposalID != "interrupted-read" {
+		t.Fatalf("unbound admission lost: %v", batch)
+	}
+	if err := w.decidePermission(t.Context(), batch[0], false, "operator popup"); err != nil {
+		t.Fatal(err)
+	}
+	restarted := NewWorkspace(rt.Store(), rt.ProjectID(), "SESSION-restart")
+	restarted.runtime = rt
+	restarted.observeMarshalProposalFiles(rt.ProjectRoot())
+	if !restarted.permissions.queue.Empty() {
+		t.Fatal("resolved admission replayed after restart")
+	}
+	// The same text emitted again is retained as a distinct occurrence.
+	if _, err := rt.Store().AdmitMarshalProposal(t.Context(), rt.ProjectID(), "new-occurrence", line); err != nil {
+		t.Fatal(err)
+	}
+	restarted.observeMarshalProposalFiles(rt.ProjectRoot())
+	if batch := restarted.permissions.queue.Take(false); len(batch) != 1 || batch[0].ProposalID != "new-occurrence" {
+		t.Fatalf("new occurrence suppressed: %v", batch)
+	}
+}
+
+func TestFailedIntakeAdmissionRemainsRecoverable(t *testing.T) {
+	w, rt := realControlWorkspace(t, "SESSION-intake-recovery", false)
+	root := rt.ProjectRoot()
+	dir := filepath.Join(root, ".marshal", "proposals")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, ".marshal", "marshal-intake.json")
+	if err := os.Mkdir(target, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "intake.json"), []byte(`{"action":"intake","language":"English","earlier_work":"no"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	w.observeMarshalProposalFiles(root)
+	pending, err := rt.Store().PendingMarshalProposals(t.Context(), rt.ProjectID())
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("failed intake lost: %v %v", pending, err)
+	}
+	if err = os.Remove(target); err != nil {
+		t.Fatal(err)
+	}
+	w.observeMarshalProposalFiles(root)
+	data, err := os.ReadFile(target)
+	if err != nil || !strings.Contains(string(data), "English") {
+		t.Fatalf("intake retry: %s %v", data, err)
+	}
+	pending, err = rt.Store().PendingMarshalProposals(t.Context(), rt.ProjectID())
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("successful intake still pending: %v %v", pending, err)
+	}
+}

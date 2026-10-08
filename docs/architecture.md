@@ -1,7 +1,7 @@
 # MARSHAL architecture
 
 MARSHAL separates durable engineering authority from the provider process that
-performs work. This page describes current `main` at SQLite schema v90, which is
+performs work. This page describes current `main` at SQLite schema v91, which is
 ahead of the v1.5.0 tag.
 
 ```text
@@ -109,7 +109,7 @@ from a caller. Verification reads the stored run; learning reads the stored
 completion attestation; optimization reads the stored memory commit. A caller
 cannot supply a digest, a tree hash or an outcome and have it believed.
 
-Schema v90 carries the durable stores for these stages, including append-only,
+Schema v91 carries the durable stores for these stages, including append-only,
 digest-protected records for completion attestations, memory commits and
 optimization cycles. Mutable rows use compare-and-swap on their version, so a
 stale writer is refused rather than overwriting newer state.
@@ -130,7 +130,7 @@ Revoked grants are not recreated when a workspace or runtime restarts.
 Goal revision is the first command boundary. Its envelope names the exact
 project, session, goal, expected revision and idempotency key. The canonical
 revision service reconstructs the original request and hard constraints and
-resets confirmation to `PENDING`. Schema v90 includes `command_results` and
+resets confirmation to `PENDING`. Schema v91 includes `command_results` and
 `command_audit`; the goal revision, receipt and audit insert commit together.
 Immutable receipts bind the actor and hashed key to the envelope/payload digest
 and resulting canonical revision. Replay returns that revision, even after the
