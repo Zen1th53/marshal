@@ -408,9 +408,9 @@ For details, see [architecture](docs/architecture.md),
 
 ## Install
 
-The TUI requires **tmux 3.2a or newer**. MARSHAL checks both the executable
+The TUI requires **tmux 3.3a or newer**. MARSHAL checks both the executable
 and, when started inside tmux, the running server; older or unrecognized
-versions are refused with an upgrade message. tmux 3.2a and 3.7b are verified
+versions are refused with an upgrade message. tmux 3.3a and 3.7b are verified
 with real terminal input tests.
 
 **Linux, one command:**
@@ -425,7 +425,7 @@ outside the install directory. If verification fails, nothing is installed.
 
 ```bash
 # Choose the location, or pin a version
-MARSHAL_INSTALL_DIR=/usr/local/bin MARSHAL_VERSION=v0.0.3 \
+MARSHAL_INSTALL_DIR=/usr/local/bin MARSHAL_VERSION=v0.0.7 \
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh)"
 ```
 
@@ -491,12 +491,20 @@ Then, in the workspace:
 `manual` and `auto` are **session preferences**. They are recorded and shown in
 the status line, but on their own they don't allow anything to act without you.
 
-Autonomous delegation, where MARSHAL decides instead of asking each time,
-requires a cryptographically verified entitlement. That check runs on every
-attempt; it isn't cached at startup. A local setting can't grant it, and
-`/mode ultra` without an entitlement is refused. Without one, the session runs as
-Standard and keeps asking you, which is intended behavior and not a degraded
-mode.
+In **Standard** mode, MARSHAL runs a single worker sequentially; the Marshal
+plans with you, reviews task hand-ins within the Marshal conversation, reruns
+approved checks, and reports the result. An operator can approve a plan and
+grant standing close authority bound to the plan digest, allowing MARSHAL to
+automatically merge and close the run once all approved checks pass without
+requiring manual per-task acceptance.
+
+**ULTRA** (requiring a cryptographically verified cloud entitlement) adds
+parallel workers (configurable concurrency, default 3), fresh-session
+cross-review by a second agent, and an independent verifier. That entitlement
+check runs on every attempt and is not cached at startup. The Ctrl+N advanced
+navigation menu belongs to ULTRA and is currently disabled. Without an
+entitlement, the session runs as Standard, which is intended behavior and not a
+degraded mode.
 
 ---
 
@@ -504,9 +512,9 @@ mode.
 
 | Platform | Status | Notes |
 |---|:---:|---|
-| **Linux** | Released | Fully supported, with sandboxed execution through Bubblewrap. [Download](https://github.com/Zen1th53/marshal/releases/latest) |
-| **macOS** | Planned | On the roadmap. It needs a native sandbox backend first. |
-| **Windows** | Maybe, never | No commitment yet. The Linux build may work under WSL2, but it is untested. |
+| **Linux** | Released | Fully supported, with sandboxed execution through Bubblewrap. Stable is 0.0.7; 0.0.8 adds features and fixes. [Download](https://github.com/Zen1th53/marshal/releases/latest) |
+| **macOS** | Planned | On the 0.1.x roadmap (feature freeze, macOS and Windows only). Requires a native sandbox backend. |
+| **Windows** | Planned | On the 0.1.x roadmap (feature freeze, macOS and Windows only). |
 
 ---
 

@@ -21,7 +21,7 @@ curl -fsS http://127.0.0.1:11434/api/version
 contract. Community Resource Awareness can inventory a loopback Ollama service
 and its models. Neither check proves that a model can use tools correctly.
 
-## v1.0.1 qualification results
+## v0.0.7 qualification results
 
 The release qualification used OpenCode 1.18.16 and required the model to
 create a proof file with the requested content. A zero process exit without
@@ -36,7 +36,7 @@ the requested file or content counted as `FAIL`.
 | `ollama/huihui_ai/qwen2.5-coder-abliterate:14b` | Local | FAIL — proof file was not created |
 
 These are direct adapter results. Canonical Runtime, MCP, and A2A provider E2E
-are `NOT_RUN` in v1.0.1 because provider traffic needs an endpoint-enforcing
+are `NOT_RUN` in v0.0.7 because provider traffic needs an endpoint-enforcing
 network backend.
 
 ## Runtime security boundary

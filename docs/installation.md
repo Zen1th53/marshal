@@ -6,11 +6,11 @@ separately installed runtime dependency for sandboxed provider execution.
 ## Release archive
 
 Download the archive for your architecture and `checksums.txt` from the
-[v1.0.1 release](https://github.com/Zen1th53/marshal/releases/tag/v1.0.1).
+[v0.0.7 release](https://github.com/Zen1th53/marshal/releases/tag/v0.0.7).
 
 ```bash
 sha256sum -c checksums.txt --ignore-missing
-tar -xzf marshal_1.0.1_linux_amd64.tar.gz
+tar -xzf marshal_0.0.7_linux_amd64.tar.gz
 install -Dm755 marshal "$HOME/.local/bin/marshal"
 marshal version
 ```
@@ -34,7 +34,7 @@ For a release-style build with embedded metadata:
 
 ```bash
 go build -trimpath \
-  -ldflags="-X github.com/Zen1th53/marshal/internal/cli.Version=v1.0.1 \
+  -ldflags="-X github.com/Zen1th53/marshal/internal/cli.Version=v0.0.7 \
   -X github.com/Zen1th53/marshal/internal/cli.Commit=$(git rev-parse HEAD) \
   -X github.com/Zen1th53/marshal/internal/cli.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   -o ./bin/marshal ./cmd/marshal

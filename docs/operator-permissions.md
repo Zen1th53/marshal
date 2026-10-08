@@ -1,13 +1,14 @@
 # Operator permissions and earlier work
 
-MARSHAL renders **Permission request** with tmux `display-popup` (tmux 3.2a or
+MARSHAL renders **Permission request** with tmux `display-popup` (tmux 3.3a or
 newer). It lists each exact path, memory candidate ID or host:port, its scope
 and duration, requester, and reason. Local proposal files say **Local request
 (unverified)** and **The local request says**. Only requests from the runtime
 consumer bound to the live Marshal chat say **Marshal**. Intake preference
 updates appear in activity with the same provenance.
 Uppercase **A** allows the displayed list; **D**, Enter, Escape, any other key,
-EOF, popup failure and 30 seconds without an answer deny. Requests wait while
+EOF, popup failure and timeout (120 seconds for Marshal commands, 30 seconds for
+network/credential requests) without an answer deny. Requests wait while
 the selected worker pane permits operator typing. Pending duplicates collapse
 and requests arriving together appear in one list. Each decision is recorded
 in `PERMISSION_DECIDED` evidence before a read grant or memory write takes effect.
@@ -73,11 +74,10 @@ continued session entries still require a separate operator approval for each
 entry. Approved session history is for the Marshal only and is excluded from
 worker launch briefs.
 
-On tmux 3.2a, permission review opens a dedicated `marshal-permission` window
-instead of a popup. Uppercase A allows; D, Enter, Escape, any other key,
-closure and timeout deny. This avoids the observed popup/window-creation
-server crashes. Ctrl+X from any MARSHAL window routes to the control pane and
-stops workers while preserving the Marshal chat.
+On older environments such as Ubuntu 22.04 shipping tmux 3.2a, MARSHAL refuses
+startup and requires upgrading to tmux 3.3a or newer because tmux 3.2a's server
+crashes during popup and native-window usage. Ctrl+X from any MARSHAL window
+routes to the control pane and stops workers while preserving the Marshal chat.
 
 Restarted runtimes show old network refusals as expired evidence. Only pending
 requests of live runs may open permission review; completed or stopped runs
