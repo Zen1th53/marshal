@@ -183,6 +183,14 @@ func dispatcherHelp(args []string, out io.Writer) bool {
 	if !requested {
 		return false
 	}
+	// Native provider commands pass their arguments, help included, to the
+	// provider's own CLI.
+	if len(tokens) > 0 {
+		switch tokens[0] {
+		case "codex", "claude", "opencode", "agy", "antigravity":
+			return false
+		}
+	}
 	if len(tokens) == 0 {
 		fmt.Fprint(out, usage)
 		return true

@@ -32,7 +32,19 @@ var sweepTree = map[string]string{
 	"optimization": "start show candidates counterfactuals manifests canaries", "help": "why",
 	"constitution": "version invariants decisions violations", "auth": "token", "auth token": "create list revoke",
 	"gc": "worktrees artifacts", "state": "backup verify-backup restore", "daemon": "", "version": "", "tui": "",
-	"codex": "", "claude": "", "opencode": "", "agy": "", "antigravity": "",
+}
+
+// Native provider commands pass --help to the provider's own CLI; the
+// dispatcher must not answer it for them.
+func TestDispatcherHelpLeavesNativeProviderHelpToProvider(t *testing.T) {
+	for _, name := range []string{"codex", "claude", "opencode", "agy", "antigravity"} {
+		for _, flag := range []string{"--help", "-h"} {
+			var out bytes.Buffer
+			if dispatcherHelp([]string{name, flag}, &out) || out.Len() != 0 {
+				t.Fatalf("%s %s was answered by the dispatcher: %q", name, flag, out.String())
+			}
+		}
+	}
 }
 
 type unreadableInput struct{}
@@ -242,7 +254,9 @@ func TestDispatcherArgumentBoundaries(t *testing.T) {
 }
 
 func TestHelpCatalogCoversSweepTree(t *testing.T) {
-	expected := map[string]bool{}
+	// Native provider commands keep a catalog entry for `marshal help`, but
+	// their -h/--help belongs to the provider and is not walked here.
+	expected := map[string]bool{"codex": true, "claude": true, "opencode": true, "agy": true, "antigravity": true}
 	for parent, children := range sweepTree {
 		expected[parent] = true
 		for _, child := range strings.Fields(children) {
