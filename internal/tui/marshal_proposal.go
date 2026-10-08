@@ -20,7 +20,7 @@ import (
 
 const marshalProposalPrefix = "MARSHAL_PROPOSAL "
 
-type marshalProposal struct{ action, key, value, provider, path, id, reason string }
+type marshalProposal struct{ action, key, value, provider, path, id, reason, language, earlierWork string }
 
 // Parse a single visible assistant line, never shell source. Reject unknown,
 // duplicate, non-string and action-inappropriate fields and trailing data.
@@ -60,9 +60,14 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	if _, err = d.Token(); err != io.EOF {
 		return p, invalid
 	}
-	p = marshalProposal{action: fields["action"], key: fields["key"], value: fields["value"], provider: fields["provider"], path: fields["path"], id: fields["id"], reason: fields["reason"]}
+	p = marshalProposal{action: fields["action"], key: fields["key"], value: fields["value"], provider: fields["provider"], path: fields["path"], id: fields["id"], reason: fields["reason"], language: fields["language"], earlierWork: fields["earlier_work"]}
 	var keys []string
 	switch p.action {
+	case "intake":
+		keys = []string{"action", "language", "earlier_work"}
+		if strings.TrimSpace(p.language) == "" || len(p.language) > 100 || (p.earlierWork != "" && p.earlierWork != "yes" && p.earlierWork != "no") {
+			return p, invalid
+		}
 	case "setting":
 		keys = []string{"action", "key", "value"}
 		valid := false
@@ -161,7 +166,6 @@ func (p marshalProposal) command() string {
 // Called only by the bound Marshal history consumer, not peer/tool/user output.
 // History is polled repeatedly; old message occurrences are not replayed; new emissions may be proposed again.
 func (w *Workspace) observeMarshalProposals(tr importer.SessionTranscript) {
-	w.observeMarshalIntake(tr)
 	for messageIndex, message := range tr.Messages {
 		if message.Role != "assistant" || message.Kind != importer.MessageKindText {
 			continue
@@ -458,6 +462,10 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 			continue
 		}
 		line := marshalProposalPrefix + strings.TrimSpace(string(data))
+		if p, err := parseMarshalProposal(line); err == nil && p.action == "intake" {
+			w.saveMarshalIntake(marshalIntake{Language: p.language, EarlierWork: p.earlierWork})
+			continue
+		}
 		// Unique file occurrence bypasses transcript poll deduplication while pending
 		// requests still deduplicate through their exact permission identity.
 		w.observeMarshalProposals(importer.SessionTranscript{SessionID: "proposal-file:" + name, Messages: []importer.Message{{Role: "assistant", Content: line}}})

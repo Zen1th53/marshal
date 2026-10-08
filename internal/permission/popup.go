@@ -82,7 +82,7 @@ func Render(requests []Request) (string, error) {
 	if len(requests) > MaxPopupItems {
 		fmt.Fprintf(&b, "and %d more (require separate decisions)\n\n", len(requests)-MaxPopupItems)
 	}
-	b.WriteString("A = Allow   D = Deny\nEsc, D, n, Enter, other non-navigation keys or timeout = Deny\nF7/F8/F9/F11/F12 navigate; request stays pending\n")
+	b.WriteString("A = Allow   D = Deny\nEsc, D, n, Enter, other non-navigation keys or timeout = Deny\nF7/F8/F9/F11/F12 navigate; request stays pending · Time remaining: -- s\n")
 	return b.String(), nil
 }
 
@@ -191,8 +191,37 @@ func Popup(ctx context.Context, target string, requests []Request, timeout time.
 	// Read the full terminal sequence before treating Escape as a decision.
 	body := fmt.Sprintf(`#!/bin/bash
 cat %s
+printf '\033[1A'
 key=''
-if IFS= read -r -s -n 1 -t %.3f key; then
+# EPOCHREALTIME is Bash's clock; use an absolute deadline even across redraws.
+now=${EPOCHREALTIME/./}
+deadline=$((now + %d))
+expired=false
+while :; do
+ now=${EPOCHREALTIME/./}
+ remaining=$((deadline - now))
+ if (( remaining <= 0 )); then
+  expired=true
+  printf '\r\033[KExpired. Denied. Press any key to close.'
+  # Retain input ownership until dismissal: a late A must not reach the chat.
+  IFS= read -r -s -n 1 key
+  break
+ fi
+ printf '\r\033[KF7/F8/F9/F11/F12 navigate; request stays pending · Time remaining: %%d s' "$(((remaining + 999999) / 1000000))"
+ slice=$remaining
+ (( slice > 1000000 )) && slice=1000000
+ printf -v wait '%%d.%%06d' "$((slice / 1000000))" "$((slice %% 1000000))"
+ IFS= read -r -s -n 1 -t "$wait" key
+ status=$?
+ now=${EPOCHREALTIME/./}
+ if (( status == 0 )); then
+  (( now >= deadline )) && expired=true
+  break
+ fi
+ (( status <= 128 )) && break # EOF denies without waiting for dismissal.
+done
+printf '\n'
+if [[ -n $key ]]; then
  if [[ $key == $'\e' ]]; then
   sequence=''
   while IFS= read -r -s -n 1 -t .05 part; do
@@ -204,6 +233,7 @@ if IFS= read -r -s -n 1 -t %.3f key; then
   esac
  fi
 fi
+[[ $expired == true ]] && key=expired
 case "$key" in
  A)
   # Recheck wrapping in the actual popup, including a resize while it was open.
@@ -216,11 +246,12 @@ case "$key" in
  F7|F8|F9|F11|F12) printf 'navigate:%%s' "$key" > %s;;
  *) printf deny > %s;;
 esac
-`, quote(prompt), timeout.Seconds(), height-2, width-2, lineWidths.String(), quote(result), quote(result), quote(result), quote(result))
+`, quote(prompt), timeout.Microseconds(), height-2, width-2, lineWidths.String(), quote(result), quote(result), quote(result), quote(result))
 	if err = os.WriteFile(script, []byte(body), 0700); err != nil {
 		return false, err
 	}
-	child, cancel := context.WithTimeout(ctx, timeout+time.Second)
+	// The script owns expiry and consumes dismissal before releasing input.
+	child, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// Query the server, which may differ from the client executable.
 	version, versionErr := tmux.RunCommand(child, "display-message", "-p", "#{version}")

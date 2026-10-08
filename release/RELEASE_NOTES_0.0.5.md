@@ -4,6 +4,8 @@ One workspace for planning with the Marshal and working with your agents.
 
 ## What changed
 
+Marshal intake preferences use validated files without chat JSON; proposal and plan popups allow 120 seconds, show a countdown, and consume late dismissal keys before returning to chat.
+
 **The Marshal is at the centre of a tmux workspace.** MARSHAL opens on the
 control centre, and the Marshal chat stays open in its own window. Plan with
 the Marshal, keep the work in view, and switch between conversations without

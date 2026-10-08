@@ -69,8 +69,7 @@ func TestAcceptanceOwnChatWithoutHistoryGrant(t *testing.T) {
 
 func TestAcceptanceIntakeSurvivesProviderSwitch(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-intake")
-	tr := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_INTAKE {"language":"Uzbek","earlier_work":"no"}`}}}
-	w.observeMarshalProposals(tr)
+	emitMarshalIntakeFile(t, w, "Uzbek", "no")
 	fresh := NewWorkspace(nil, "project", "session")
 	brief := fresh.marshalContinuityBriefing(rt.ProjectRoot(), "protocol")
 	if !strings.Contains(brief, "Uzbek") || !strings.Contains(brief, `"earlier_work":"no"`) || !strings.Contains(brief, "Do not repeat") {
@@ -120,12 +119,12 @@ func TestAcceptanceHistoryProposalRequiresEarlierWorkYes(t *testing.T) {
 	if !w.permissions.queue.Empty() {
 		t.Fatal("history request before earlier-work answer")
 	}
-	w.observeMarshalProposals(importer.SessionTranscript{Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_INTAKE {"language":"Uzbek","earlier_work":"no"}`}}})
+	emitMarshalIntakeFile(t, w, "Uzbek", "no")
 	w.observeMarshalProposals(proposal)
 	if !w.permissions.queue.Empty() {
 		t.Fatal("history request after no")
 	}
-	w.observeMarshalProposals(importer.SessionTranscript{Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_INTAKE {"language":"Uzbek","earlier_work":"yes"}`}}})
+	emitMarshalIntakeFile(t, w, "Uzbek", "yes")
 	w.observeMarshalProposals(proposal)
 	batch := w.permissions.queue.Take(false)
 	if len(batch) != 1 || batch[0].Kind != "read" {

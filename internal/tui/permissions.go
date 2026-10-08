@@ -136,6 +136,12 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 		if len(batch) == 0 {
 			continue
 		}
+		// Keep human proposals separate from shorter-lived worker requests.
+		var deferred []permission.Request
+		batch, deferred = partitionPermissionTimeout(batch)
+		for _, req := range deferred {
+			w.permissions.queue.Add(req)
+		}
 		// Every popup decision covers only the visible items. Keep overflow queued.
 		if len(batch) > permission.MaxPopupItems {
 			for _, req := range batch[permission.MaxPopupItems:] {
@@ -158,7 +164,7 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 		}
 		text, _ := permission.Render(batch)
 		w.RecordActivity(text)
-		deadline := time.Now().Add(30 * time.Second)
+		deadline := time.Now().Add(permissionPopupTimeout(batch))
 		for _, req := range batch {
 			if saved, ok := deadlines[req.Key()]; ok && saved.Before(deadline) {
 				deadline = saved
@@ -487,4 +493,30 @@ func (w *Workspace) navigatePermissionPopup(ctx context.Context, client, key str
 	if command := commands[key]; command != "" {
 		w.runCommand(ctx, command)
 	}
+}
+
+// Network requests retain their short deadline; human Marshal decisions have
+// two minutes. Mixed batches use the shortest applicable deadline.
+func permissionPopupTimeout(batch []permission.Request) time.Duration {
+	for _, req := range batch {
+		if req.Kind == "network" || (req.Kind != "marshal-command" && req.Who != "Marshal") {
+			return 30 * time.Second
+		}
+	}
+	return 120 * time.Second
+}
+
+func partitionPermissionTimeout(batch []permission.Request) (popup, deferred []permission.Request) {
+	if len(batch) == 0 {
+		return
+	}
+	duration := permissionPopupTimeout(batch[:1])
+	for _, req := range batch {
+		if permissionPopupTimeout([]permission.Request{req}) == duration {
+			popup = append(popup, req)
+		} else {
+			deferred = append(deferred, req)
+		}
+	}
+	return
 }

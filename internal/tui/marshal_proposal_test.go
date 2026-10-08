@@ -253,7 +253,7 @@ func TestMarshalProposalBoundNativeHistory(t *testing.T) {
 func TestMarshalProposalReadMemoryAndContinuation(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-proposal-continuation", false)
 	// Explicit intake consent precedes requests; popup/grant assertions below remain unchanged.
-	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_INTAKE {"language":"English","earlier_work":"yes"}`}}})
+	emitMarshalIntakeFile(t, w, "English", "yes")
 	root := rt.ProjectRoot()
 	folder := t.TempDir()
 	data := fmt.Sprintf("{\"type\":\"session_meta\",\"timestamp\":\"2026-10-01T10:00:00Z\",\"payload\":{\"id\":\"earlier\",\"cwd\":%q}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"phase\":\"final_answer\",\"content\":[{\"type\":\"output_text\",\"text\":\"Pending work\"}]}}\n", root)
@@ -702,4 +702,79 @@ func TestMarshalProposalNavigationTargets(t *testing.T) {
 			t.Fatalf("%s did not navigate: %s", key, data)
 		}
 	}
+}
+
+func TestMarshalIntakeFilesPersistValidatedPreferences(t *testing.T) {
+	w, rt := realControlWorkspace(t, "SESSION-file-intake")
+	dir := filepath.Join(rt.ProjectRoot(), ".marshal", "proposals")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	emit := func(name, data string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name+".json"), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		w.observeMarshalProposalFiles(rt.ProjectRoot())
+	}
+	emit("01", `{"action":"intake","language":"Uzbek","earlier_work":"no"}`)
+	emit("02", `{"action":"intake","language":"English","earlier_work":""}`)
+	for i, bad := range []string{
+		`{"action":"intake","language":"Bad","earlier_work":"maybe"}`,
+		`{"action":"intake","language":"Bad","earlier_work":"yes","command":"approve"}`,
+		`{"action":"intake","language":"Bad","language":"Other","earlier_work":"yes"}`,
+		`{"action":"intake","language":"","earlier_work":"yes"}`,
+		`{"action":"intake","language":"Bad\nInjected","earlier_work":"yes"}`,
+	} {
+		emit(fmt.Sprintf("bad-%d", i), bad)
+	}
+	// Replaying an old transcript must not overwrite the newer file preferences.
+	w.observeMarshalProposals(importer.SessionTranscript{Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_INTAKE {"language":"Old","earlier_work":"yes"}`}}})
+	fresh := NewWorkspace(nil, "project", "session")
+	brief := fresh.marshalContinuityBriefing(rt.ProjectRoot(), "protocol")
+	if !strings.Contains(brief, `"language":"English"`) || !strings.Contains(brief, `"earlier_work":"no"`) {
+		t.Fatalf("saved intake lost or invalid file accepted: %s", brief)
+	}
+	if !w.permissions.queue.Empty() {
+		t.Fatal("intake conferred permission authority")
+	}
+	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
+		args := marshalKickoffArgs(provider, rt.ProjectRoot())
+		opening := args[len(args)-1]
+		if !strings.Contains(opening, `"language":"English"`) || !strings.Contains(opening, `"earlier_work":"no"`) || !strings.Contains(opening, "Do not repeat") {
+			t.Fatalf("%s reopened/switched opening lost file intake: %s", provider, opening)
+		}
+	}
+	if other := fresh.marshalContinuityBriefing(t.TempDir(), "protocol"); other != "protocol" {
+		t.Fatal("intake leaked into another project")
+	}
+	emit("03", `{"action":"intake","language":"Uzbek","earlier_work":"yes"}`)
+	if !w.marshalEarlierWorkWanted() {
+		t.Fatal("earlier-work answer not persisted")
+	}
+}
+
+func emitMarshalIntakeFile(t *testing.T, w *Workspace, language, earlierWork string) {
+	t.Helper()
+	dir := filepath.Join(w.runtime.ProjectRoot(), ".marshal", "proposals")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.CreateTemp(dir, "intake-*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(map[string]string{"action": "intake", "language": language, "earlier_work": earlierWork})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = file.Write(data)
+	closeErr := file.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	w.observeMarshalProposalFiles(w.runtime.ProjectRoot())
 }

@@ -48,7 +48,12 @@ How to ask:
   chat, another window, or a shell, or to report that a command is done.
   Wait for the runtime decision in .marshal/inbox/marshal.md before continuing.
   A chat answer, including "done", is not runtime approval.
+  Intake preferences use the same validated file channel without a popup;
+  never print intake JSON in chat. Keep only the human sentence.
   Supported proposals (all fields are strings; no extra or duplicate fields):
+  - {"action":"intake","language":"chosen language","earlier_work":""}
+    Language is nonempty, at most 100 bytes; earlier_work is "", "yes" or "no".
+    This saves project preferences only and confers no permission or read grant.
   - {"action":"setting","key":"acceptance-mode","value":"marshal"}
     Keys and values: acceptance-mode marshal|marshal-then-user|user;
     execution-rights none|read-only|small-tasks; control free|strict;
@@ -82,9 +87,10 @@ How to ask:
    message in that language until the person asks for another, the plan
    pack included. Commands, paths, identifiers and the task list stay as
    they are.
-   After an explicit language answer emit MARSHAL_INTAKE {"language":"chosen language","earlier_work":""}
-   on its own line; this records preferences, not permission. After the explicit
-   earlier-work answer emit it again with earlier_work "yes" or "no".
+   After an explicit language answer write an intake file under .marshal/proposals/
+   with action "intake", language chosen by the person and earlier_work "".
+   After the explicit earlier-work answer write a fresh intake file with
+   earlier_work "yes" or "no". Use the atomic file handoff above, never chat.
    If PROJECT INTAKE is supplied, continue in that language and skip the
    introduction and already answered intake questions.
    Exit: the language is chosen.
@@ -254,7 +260,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:c0b12d1489234593218685923e9873c2c5b1aff6726288833dd930bea55aa66a"
+const MarshalProtocolDigest = "sha256:1da75f3f91f91e4d0d05ed0ca8a7afe99cecc3f93f6c06e394fa207cacb9e2b3"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")
