@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/processgroup"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -113,15 +114,46 @@ while true; do read -r -t .1 ignored; done`
 	waitFile("resized", "31 101")
 }
 
-func TestProviderPTYRejectsUnknownInitialSize(t *testing.T) {
-	fd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer unix.Close(fd)
-	stop, err := propagateTerminalSize(t.Context(), fd, func(context.Context) (uint16, uint16, error) { return 0, 0, nil })
-	defer stop()
-	if err == nil {
-		t.Fatal("provider would launch with unknown pane dimensions")
+func TestProviderPTYFallsBackAndRecoversHostSize(t *testing.T) {
+	for _, initialError := range []bool{false, true} {
+		t.Run(fmt.Sprint(initialError), func(t *testing.T) {
+			fd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer unix.Close(fd)
+			var dimensions atomic.Uint32
+			stop, err := propagateTerminalSize(t.Context(), fd, func(context.Context) (uint16, uint16, error) {
+				d := dimensions.Load()
+				if d == 0 && initialError {
+					return 0, 0, io.EOF
+				}
+				return uint16(d >> 16), uint16(d), nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stop()
+			assertSize := func(rows, cols uint16) bool {
+				size, err := unix.IoctlGetWinsize(fd, unix.TIOCGWINSZ)
+				return err == nil && size.Row == rows && size.Col == cols
+			}
+			if !assertSize(40, 120) {
+				t.Fatal("missing sensible initial fallback")
+			}
+			dimensions.Store(23<<16 | 80)
+			deadline := time.Now().Add(time.Second)
+			for !assertSize(23, 80) {
+				if time.Now().After(deadline) {
+					t.Fatal("readable host size did not replace fallback")
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			dimensions.Store(0)
+			time.Sleep(250 * time.Millisecond)
+			if !assertSize(23, 80) {
+				t.Fatal("transient size failure replaced last real size")
+			}
+		})
 	}
 }

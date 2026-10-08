@@ -7551,18 +7551,18 @@
     },
     {
       "path": "internal/permission/compat32_test.go",
-      "sha256": "5825d8a41632d929ce22866d2b3c3406be58aee2575bdbaa8ea228f9f9e2415a",
-      "bytes": 1990
+      "sha256": "8fb9fdce85a79fcc7d5864d819e4d92c27e605585e86eba5fc90f03583b4bf6c",
+      "bytes": 2072
     },
     {
       "path": "internal/permission/popup.go",
-      "sha256": "3fa34d3839cc4bbe0c8f54fcde893d1af0300ba714782d3b7cf17f5585e53ba6",
-      "bytes": 7452
+      "sha256": "05806034ca36bb0ee7312bf19d4ddc5c26ed3c8fbe9714722bc48b496eeff57e",
+      "bytes": 10779
     },
     {
       "path": "internal/permission/popup_test.go",
-      "sha256": "6fb6ac8741ad3e162a9d326cd332bc8c2df7cd20dcc0bdffb8b187729a542ce0",
-      "bytes": 6113
+      "sha256": "7b28ca01fbf579fe82c15dbd4ba12916b86e3d43e8227c9bc34ae22d64d9b0a2",
+      "bytes": 10130
     },
     {
       "path": "internal/plan/adversarial_test.go",
@@ -9571,8 +9571,8 @@
     },
     {
       "path": "internal/tui/acceptance_regression_test.go",
-      "sha256": "0052cbbe6623ae856bd1815ff12b96b2dad34e9f037cb8a96eb3b7ce4820fcae",
-      "bytes": 8405
+      "sha256": "4f5e879273089c0f0957fcfda23f598a01a17be059bd33f5e5a56dc86bfe6ab9",
+      "bytes": 8487
     },
     {
       "path": "internal/tui/acceptance_test.go",
@@ -10091,8 +10091,8 @@
     },
     {
       "path": "internal/tui/marshal_proposal_test.go",
-      "sha256": "34987c5443f9d70ce9d287aa0abd835df7a23164dcaf62c992040d66b7f574ce",
-      "bytes": 29286
+      "sha256": "d35eaa127d7838bbd3b081a0075b09439504857919f80bd82bd4dbb202ef0ccf",
+      "bytes": 29534
     },
     {
       "path": "internal/tui/marshal_protocol_privacy_test.go",
@@ -10311,8 +10311,8 @@
     },
     {
       "path": "internal/tui/native_tmux_switch_pty_test.go",
-      "sha256": "ff5ee770ef35e4633288810e1000b00233b04a294d669f0a9906788bfbeff9ea",
-      "bytes": 5526
+      "sha256": "f3bba6135f56ceb082a6ff570861d15bb0910d50f08f986336445a04f2286b3b",
+      "bytes": 5594
     },
     {
       "path": "internal/tui/native_twowindow_pty_test.go",
@@ -10386,13 +10386,13 @@
     },
     {
       "path": "internal/tui/permissions.go",
-      "sha256": "0b2bec735a7241ffc1054cb625487722077b7bb1599ca7bddd06e4252a75217a",
-      "bytes": 16379
+      "sha256": "94646f263bcbbd37d57a8e271ed6b210f33dddb7c582fe7610df17887d0c2072",
+      "bytes": 16566
     },
     {
       "path": "internal/tui/permissions_popup_test.go",
-      "sha256": "4b02723d5ad68868760c7a52e6b875383ad2671bb7fe3a3a5561d3d96e3432bc",
-      "bytes": 5038
+      "sha256": "b974c9a680586ea699734ddd2a44332cb0534d4f6820ae46a04a102fea968825",
+      "bytes": 6982
     },
     {
       "path": "internal/tui/permissions_test.go",
@@ -10761,8 +10761,8 @@
     },
     {
       "path": "internal/tui/tmux_native_test.go",
-      "sha256": "18c9085ca4a8edd704dc8660d70cc936890d7ca311a60213d7f35a76b277e908",
-      "bytes": 35617
+      "sha256": "59b19ce8b2c164b2fc24e593ae2c96a1f469ef27c07ee72f81305fcbb2eb78c7",
+      "bytes": 35753
     },
     {
       "path": "internal/tui/tmux_recovery_test.go",
@@ -11046,13 +11046,13 @@
     },
     {
       "path": "internal/workerterminal/terminal_linux.go",
-      "sha256": "9d3554fa702ebb6229924ca9d5414d985b81c81446f5a63272d09ad6fdc7d7ff",
-      "bytes": 4779
+      "sha256": "0c03e21efb1130c8f8bdaf3c24d0d1c37f74086914c54b72ef6175ed96b5f504",
+      "bytes": 4857
     },
     {
       "path": "internal/workerterminal/terminal_linux_test.go",
-      "sha256": "c69b7569eff770e1753fee659b1a5cd938ae25b5654b5d36ddac53f6783135e4",
-      "bytes": 3537
+      "sha256": "54cf4e8f845d14b3eaaff6568651ec579ae49d08a1918eed5307d53cae389031",
+      "bytes": 4446
     },
     {
       "path": "internal/workerterminal/terminal_other.go",
@@ -11561,8 +11561,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.5.md",
-      "sha256": "571f90bbc149f8428a741c81c3d8c50dfd6314aba32fa5797b3dbb3f54c34417",
-      "bytes": 10491
+      "sha256": "f522f315a0c762c4a982bc1d9bd4416a62d2dac6b69f1721f8d7c22543faf14a",
+      "bytes": 10696
     },
     {
       "path": "release/RELEASE_NOTES_1.0.1.md",
@@ -12011,8 +12011,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "7467596d0f2cf0cc9d5ce44a2056e0fe544d2fe3ef112d7201fe31fbc9e97f10",
-      "bytes": 202699
+      "sha256": "4af3a824357610cbf153ac01eabd65de0ad2a854c46fcafdc8e87e0775c381b8",
+      "bytes": 203021
     },
     {
       "path": "tools/marshal.py",

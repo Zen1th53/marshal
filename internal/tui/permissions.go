@@ -150,6 +150,12 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 			}
 			continue
 		}
+		if count := permission.PopupCapacity(ctx, target, batch); count < len(batch) {
+			for _, req := range batch[count:] {
+				w.permissions.queue.Add(req)
+			}
+			batch = batch[:count]
+		}
 		text, _ := permission.Render(batch)
 		w.RecordActivity(text)
 		deadline := time.Now().Add(30 * time.Second)

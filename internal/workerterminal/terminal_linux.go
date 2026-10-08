@@ -141,11 +141,11 @@ func propagateTerminalSize(ctx context.Context, fd int, size Size) (func(), erro
 		defer cancel()
 		rows, cols, err := size(child)
 		next := unix.Winsize{Row: rows, Col: cols}
-		if err != nil {
-			return err
-		}
-		if rows == 0 || cols == 0 {
-			return fmt.Errorf("invalid pane dimensions %dx%d", cols, rows)
+		if err != nil || rows == 0 || cols == 0 {
+			if previous.Row != 0 && previous.Col != 0 {
+				return nil // Keep the last real size while the host is unreadable.
+			}
+			next = unix.Winsize{Row: 40, Col: 120}
 		}
 		if next != previous {
 			if err := unix.IoctlSetWinsize(fd, unix.TIOCSWINSZ, &next); err != nil {

@@ -161,6 +161,7 @@ func TestAcceptanceProposalPopupAppliesOnChatClient(t *testing.T) {
 	fake := filepath.Join(dir, "tmux")
 	log := filepath.Join(dir, "target")
 	script := fmt.Sprintf(`#!/bin/bash
+if [[ $* == *'#{client_height} #{client_width}'* ]]; then echo '40 120'; exit; fi
 case "$1" in
  list-clients) printf '/dev/pts/7|%%%%chat|session\n';;
  display-message) echo 3.3a;;

@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/tmux"
+	"github.com/rivo/uniseg"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +31,12 @@ const MaxPopupItems = 5
 func Render(requests []Request) (string, error) {
 	var b strings.Builder
 	b.WriteString("Permission request\n\n")
+	for _, request := range requests {
+		if request.Kind == "network" {
+			b.WriteString("Network access: this worker run only\n")
+			break
+		}
+	}
 	for i, r := range requests {
 		if r.ContinuationProvider != "" && (r.Kind != "read" || (r.ContinuationProvider != "codex" && r.ContinuationProvider != "claude")) {
 			return "", fmt.Errorf("unknown continuation provider")
@@ -62,7 +70,12 @@ func Render(requests []Request) (string, error) {
 			reason = string(runes[:100]) + "…"
 		}
 		if r.Kind == "network" {
-			fmt.Fprintf(&b, "Run: %s · Task: %s\n", r.RunID, r.TaskID)
+			who := []rune(r.Who)
+			if len(who) > 12 {
+				who = append(append(who[:6:6], '…'), who[len(who)-6:]...)
+			}
+			fmt.Fprintf(&b, "%d. %s · Run: %s · Task: %s · Who: %s\n", i+1, r.Object, r.RunID, r.TaskID, string(who))
+			continue
 		}
 		fmt.Fprintf(&b, "%d. %s\nScope and duration: %s\nWho asks: %s · The Marshal says: \"%s\"\n", i+1, r.Object, r.Scope, r.Who, reason)
 	}
@@ -72,6 +85,67 @@ func Render(requests []Request) (string, error) {
 	b.WriteString("A = Allow   D = Deny\nEsc, D, n, Enter, other non-navigation keys or timeout = Deny\nF7/F8/F9/F11/F12 navigate; request stays pending\n")
 	return b.String(), nil
 }
+
+// popupDimensions reserves a border and a spare row so cat's final newline
+// cannot scroll the first request off screen. Widths are terminal cells.
+func popupDimensions(text string, cols, rows int) (width, height int, fits bool) {
+	if cols < 4 || rows < 4 {
+		return cols, rows, false
+	}
+	widest := 1
+	for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+		if cells := uniseg.StringWidth(line); cells > widest {
+			widest = cells
+		}
+	}
+	width = min(cols, widest+3)
+	needed := 1
+	for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+		// Reserve a cell at each wrap boundary for a two-cell grapheme.
+		needed += uniseg.StringWidth(line)/(width-3) + 1
+	}
+	height = min(rows, needed+2)
+	return width, height, needed+2 <= rows
+}
+
+// PopupCapacity limits a decision to items visible together. Overflow stays
+// queued for separate decisions; a failed size query permits only one attempt.
+func PopupCapacity(ctx context.Context, target string, requests []Request) int {
+	count := min(len(requests), MaxPopupItems)
+	text, err := Render(requests[:count])
+	if err != nil || count == 0 {
+		return count
+	}
+	cols, rows, err := popupTerminalSize(ctx, target)
+	if err != nil {
+		return 1
+	}
+	if _, _, fits := popupDimensions(text, cols, rows); !fits {
+		return 1
+	}
+	return count
+}
+
+func popupTerminalSize(ctx context.Context, target string) (int, int, error) {
+	// Client dimensions bound both wrapped rows and tmux's popup border.
+	sizeArgs := []string{"display-message", "-p"}
+	if target != "" {
+		sizeArgs = append(sizeArgs, "-c", target)
+	}
+	sizeArgs = append(sizeArgs, "#{client_height} #{client_width}")
+	sizeCtx, sizeCancel := context.WithTimeout(ctx, time.Second)
+	sizeOut, sizeErr := tmux.RunCommand(sizeCtx, sizeArgs...)
+	sizeCancel()
+	var rows, cols int
+	if sizeErr != nil {
+		return 0, 0, sizeErr
+	}
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(sizeOut)), "%d %d", &rows, &cols); err != nil {
+		return 0, 0, fmt.Errorf("permission terminal size: %w", err)
+	}
+	return cols, rows, nil
+}
+
 func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 
 // Popup reads one literal operator key. On tmux 3.2a it uses a dedicated
@@ -86,6 +160,22 @@ func Popup(ctx context.Context, target string, requests []Request, timeout time.
 	}
 	if timeout <= 0 {
 		timeout = 30 * time.Second
+	}
+
+	cols, rows, err := popupTerminalSize(ctx, target)
+	if err != nil {
+		return false, err
+	}
+	width, height, fits := popupDimensions(text, cols, rows)
+	if len(requests) > MaxPopupItems {
+		return false, nil
+	}
+	if !fits {
+		return false, fmt.Errorf("permission request does not fit terminal")
+	}
+	var lineWidths strings.Builder
+	for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+		fmt.Fprintf(&lineWidths, "%d ", uniseg.StringWidth(line))
 	}
 	dir, err := os.MkdirTemp("", "marshal-permission-")
 	if err != nil {
@@ -115,11 +205,18 @@ if IFS= read -r -s -n 1 -t %.3f key; then
  fi
 fi
 case "$key" in
- A) printf allow > %s;;
+ A)
+  # Recheck wrapping in the actual popup, including a resize while it was open.
+  read -r actualRows actualCols < <(stty size 2>/dev/null) || { actualRows=%d; actualCols=%d; }
+  needed=1
+  if (( actualCols > 1 )); then
+   for cells in %s; do (( needed += cells / (actualCols - 1) + 1 )); done
+  fi
+  if (( actualCols > 1 && needed <= actualRows )); then printf allow > %s; else printf deny > %s; fi;;
  F7|F8|F9|F11|F12) printf 'navigate:%%s' "$key" > %s;;
  *) printf deny > %s;;
 esac
-`, quote(prompt), timeout.Seconds(), quote(result), quote(result), quote(result))
+`, quote(prompt), timeout.Seconds(), height-2, width-2, lineWidths.String(), quote(result), quote(result), quote(result), quote(result))
 	if err = os.WriteFile(script, []byte(body), 0700); err != nil {
 		return false, err
 	}
@@ -130,7 +227,7 @@ esac
 	if versionErr == nil && strings.TrimSpace(string(version)) == "3.2a" {
 		return windowDecision(child, target, script, result, len(requests))
 	}
-	args := []string{"display-popup", "-E", "-w", "90%", "-h", "80%"}
+	args := []string{"display-popup", "-E", "-w", strconv.Itoa(width), "-h", strconv.Itoa(height)}
 	if target != "" {
 		args = append(args, "-t", target)
 	}

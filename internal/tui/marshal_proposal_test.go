@@ -116,7 +116,7 @@ func TestMarshalProposalPopupKeysAndEvidence(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, "key"), []byte(key), 0600); err != nil {
 				t.Fatal(err)
 			}
-			script := "#!/bin/bash\nif [[ $1 == list-clients ]]; then printf 'client|%%marshal|session\\n'; exit; fi\nif [[ $1 == display-message ]]; then printf '%%marshal\\n'; exit; fi\nif [[ $1 == display-popup ]]; then printf 'popup\\n' >> '" + dir + "/calls'; bash -c \"${@: -1}\" < '" + dir + "/key' > '" + dir + "/screen'; exit; fi\nexit 1\n"
+			script := "#!/bin/bash\nif [[ $* == *'#{client_height} #{client_width}'* ]]; then echo '40 120'; exit; fi\nif [[ $1 == list-clients ]]; then printf 'client|%%marshal|session\\n'; exit; fi\nif [[ $1 == display-message ]]; then printf '%%marshal\\n'; exit; fi\nif [[ $1 == display-popup ]]; then printf 'popup\\n' >> '" + dir + "/calls'; bash -c \"${@: -1}\" < '" + dir + "/key' > '" + dir + "/screen'; exit; fi\nexit 1\n"
 			if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
 				t.Fatal(err)
 			}
@@ -188,7 +188,7 @@ func TestMarshalProposalTimeoutDeclines(t *testing.T) {
 	batch := w.permissions.queue.Take(false)
 	dir := t.TempDir()
 	fake := filepath.Join(dir, "tmux")
-	script := "#!/bin/bash\n[[ $1 == display-popup ]] || exit 1\n{ sleep .2; } | bash -c \"${@: -1}\"\n"
+	script := "#!/bin/bash\nif [[ $* == *'#{client_height} #{client_width}'* ]]; then echo '40 120'; exit; fi\n[[ $1 == display-popup ]] || exit 1\n{ sleep .2; } | bash -c \"${@: -1}\"\n"
 	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -623,6 +623,7 @@ func TestMarshalProposalNavigatesChatToCentreOnce(t *testing.T) {
 	fake := filepath.Join(dir, "tmux")
 	t.Setenv("POPUP_FIXTURE", dir)
 	script := `#!/bin/bash
+if [[ $* == *'#{client_height} #{client_width}'* ]]; then echo '40 120'; exit; fi
 case "$1" in
  list-clients)
   if [[ -f "$POPUP_FIXTURE/centre" ]]; then printf 'client|%%centre|session\n'; else printf 'client|%%chat|session\n'; fi;;

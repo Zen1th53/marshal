@@ -62,6 +62,7 @@ case "$1" in
     ;;
   display-message)
     case "$*" in
+      *"#{pane_height} #{pane_width}"*) printf '40 120\n'; exit 0;;
       *"#{session_id}"*)
         printf '$0\n'
         exit 0
@@ -626,6 +627,7 @@ winFile=%q
 case "$1" in
   display-message)
     case "$*" in
+      *"#{pane_height} #{pane_width}"*) printf '40 120\n'; exit 0;;
       *"#{session_name}"*"#{window_name}"*"#{window_id}"*)
         printf 'test-session\tmarshal\t@0\n'
         exit 0

@@ -5,7 +5,8 @@
 - Marshal proposals appear on the attached client in the control centre or Marshal chat, even when earlier-history access was declined. F7/F8/F9/F11/F12 navigate without deciding; the request stays pending, and A records one decision. The centre also displays the pending request.
 - Governed work waits for an undecided credential popup and continues automatically after A; denial or timeout stops it.
 - Reopening or switching the Marshal continues in the saved language and skips answered intake across providers; reopening resumes its known conversation.
-- Native operator terminals use the hosted tmux pane dimensions at startup and propagate resizes to the provider PTY and SIGWINCH, preventing rendering at a fixed 120×40 size.
+- Native operator terminals use the hosted tmux pane dimensions at startup when readable, fall back to 120×40 while unavailable, and keep propagating real sizes to the provider PTY and SIGWINCH.
+- Network permission items use compact lines and content-sized popups bounded by the terminal; batches that do not fit require a separate visible popup for each request before approval.
 - Earlier-history popups wait for an explicit yes to continuation and focus on the control centre or Marshal chat, so they do not interrupt provider input or trust prompts.
 
 One workspace for planning with the Marshal and working with your agents.
