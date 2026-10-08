@@ -1,29 +1,8 @@
 # MARSHAL v0.0.5 — The Marshal workspace
 
-- Marshal protocol decisions use validated JSON handoffs in `.marshal/proposals`, keeping proposal payloads out of chat. Uppercase A applies allow-listed proposals through existing handlers with operator evidence; Esc, D, n, other non-navigation keys or timeout decline. Identical proposals deduplicate while pending and can be emitted again after a decision.
-
-- Marshal proposals appear on the attached client in the control centre or Marshal chat, even when earlier-history access was declined. F7/F8/F9/F11/F12 navigate without deciding; the request stays pending, and A records one decision. The centre also displays the pending request.
-- Governed work waits for an undecided credential popup and continues automatically after A; denial or timeout stops it.
-- Reopening or switching the Marshal continues in the saved language and skips answered intake across providers; reopening resumes its known conversation.
-- Native operator terminals use the hosted tmux pane dimensions at startup when readable, fall back to 120×40 while unavailable, and keep propagating real sizes to the provider PTY and SIGWINCH.
-- Network permission items use compact lines and content-sized popups bounded by the terminal; batches that do not fit require a separate visible popup for each request before approval.
-- Earlier-history popups wait for an explicit yes to continuation and focus on the control centre or Marshal chat, so they do not interrupt provider input or trust prompts.
-
 One workspace for planning with the Marshal and working with your agents.
 
 ## What changed
-
-- F7/F8/F9/F12 reopen ended provider sessions from the control centre, Marshal chat and native windows.
-- F2 and `/review` default to uncommitted changes and explain when the working tree is clean.
-- Native commands with arguments are refused with retry instructions when that provider already has a session; arguments no longer disappear into its composer.
-- OpenCode help and completion omit unrouted plugin commands; `/opencode run` requires text.
-- Marshal controls explain how to start a run when chat has no saved plan, instead of showing an internal storage error.
-- `/help all` starts at the beginning of the full reference; PgUp/PgDn page it and End jumps to the end.
-- Empty-run pause/resume/cancel messages and approval help are corrected. `/permission status` explains the available next steps. Ordinary native exits report session status without a blank worker run alert.
-- The welcome screen and `/help`/F1 lead with `/marshal chat`; `/help all` opens the full reference, and chat openings omit provider qualification labels.
-- Setup acknowledges successful Git initialization and presents the first commit as the next step.
-- Plan instructions require confirmed writes of the plan pack and task list before read-back.
-- Completed governed task panes show a readable worker status, summary and evidence location while retaining full relay output in evidence.
 
 **The Marshal is at the centre of a tmux workspace.** MARSHAL opens on the
 control centre, and the Marshal chat stays open in its own window. Plan with
@@ -36,15 +15,20 @@ reopens it. If the chat stops unexpectedly, it restarts and resumes.
 
 **The TUI stays responsive.** Commands, function keys, completion and
 navigation never wait on tmux, provider tools, Git or the project store, and
-stop-all, F11 and `/takeover` never wait behind a running command.
+stop-all, F11 and `/takeover` never wait behind a running command. The
+welcome screen and `/help` lead with `/marshal chat`; `/help all` opens the
+full reference at its start.
 
 **Sessions you open are yours to type in.** Native sessions you open with
 F7, F8, F9, F12 or `/codex`, `/claude`, `/opencode`, `/agy` accept keyboard
 input immediately. Workers the Marshal launches stay view-only until
-`/takeover`. A provider key whose session has ended reopens it through the normal provider launcher.
+`/takeover`. A provider key whose session has ended reopens it. Native
+sessions follow the size of their window.
 
 **Choose the Marshal's model.** `/marshal model <codex|claude|agy>` switches
-the running Marshal and remembers the choice for the project.
+the running Marshal and remembers the choice for the project. A reopened or
+switched Marshal continues in the language you chose and does not repeat
+questions you already answered.
 
 **The Marshal plans protected work.** Each planned task shows whether it runs
 natively or governed before you approve it. Codex and Claude Code tasks are
@@ -60,6 +44,13 @@ Claude sign-in through MARSHAL; the worker only ever holds a placeholder.
 
 **The Marshal's instructions stay private.** The Marshal protocol reaches the
 model through hidden instructions; the chat shows only a short opening.
+
+**Decisions are one key.** When the Marshal needs a setting changed, a plan
+approved or access granted, MARSHAL shows a popup wherever you are; press A to
+apply. Any other key or a timeout declines, F7-F12 move between windows
+without deciding, and the Marshal can ask again after you decline. A governed
+task waits for your credential decision and continues on A. Every network
+request in a popup is visible before you approve it.
 
 **The agents have a shared channel.** They can share notes and read what the
 others have contributed. You control sharing. Sharing sends text across
