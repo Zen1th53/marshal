@@ -4911,13 +4911,13 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "4d9bd6caa7f62b0d8fc43576c4b89f5de60b59d98b6f1f4ab06d044ae762cce4",
-      "bytes": 35479
+      "sha256": "fca4355cba779997583f05ff1038ae23a360ffbd6bd378f083affa83bf313f6e",
+      "bytes": 35476
     },
     {
       "path": "internal/cli/cli_test.go",
-      "sha256": "8de555907da2169764f61ea7ffe61ae5d207a1fabb00893b949b367353f12a2f",
-      "bytes": 17538
+      "sha256": "5cd1a50913cd0b38d76e86d12cf942e6cf84fe57f22cbb5bf0a9206f765f3b9e",
+      "bytes": 18712
     },
     {
       "path": "internal/cli/cloud_identity.go",
@@ -9891,8 +9891,8 @@
     },
     {
       "path": "internal/tui/commands_update.go",
-      "sha256": "14313e010c224b9ac1e89b55fed8ef696a86c2fdf1920bc07b3a04666f3bce03",
-      "bytes": 4391
+      "sha256": "42e16541fafc9ce42b61942c9c9531ac2b2db9ec0984483b5b5dcbe662a18389",
+      "bytes": 4388
     },
     {
       "path": "internal/tui/commands_work.go",
@@ -10900,9 +10900,14 @@
       "bytes": 9800
     },
     {
+      "path": "internal/tui/version_test.go",
+      "sha256": "4b79c75646fe3ab249e1f4d269374571fed7aa3216a7f25c82b6e55d3bdcb560",
+      "bytes": 405
+    },
+    {
       "path": "internal/tui/view.go",
-      "sha256": "e3e5102081e0711c9ecddebc9333483e857591ecb73e50fdf223b59f607284ef",
-      "bytes": 14181
+      "sha256": "6bb885041d444b788aedc6c5691b5adf099539655b400c85df048bb5c8fbdd90",
+      "bytes": 14204
     },
     {
       "path": "internal/tui/workdata.go",
@@ -11631,8 +11636,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.8.md",
-      "sha256": "f105bdf10eacafc30fbf904122cdb7c5d9bba87db4524176faed5a38739fb9e0",
-      "bytes": 7282
+      "sha256": "6ed5bf3f629e6aa668d74e00b42e3d39a9cc6fab2e375033eacc7e85651f5537",
+      "bytes": 7432
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",

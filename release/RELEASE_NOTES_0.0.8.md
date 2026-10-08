@@ -12,6 +12,8 @@ evidence. Pending proposals return to the popup queue after restart, and resolve
 occurrences stay resolved. The Marshal validates and reads back its plan before
 publishing the completion marker. `/marshal resume` retries failed verification
 and reports the reason and next step when a pause needs operator action.
+- CLI and TUI show the same build-injected release version. Local builds show
+  `dev`; schema and constitution versions retain their separate labels.
 - Credential revocation reaches every owning runtime through the project store,
   refuses new broker requests immediately, and closes active exchanges. The
   permission command reports pending until owners acknowledge closure; use
