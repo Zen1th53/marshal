@@ -54,7 +54,7 @@ Candidate: `marshal/m12-docs`, implementation base `6f681df6ce64211cda305948354f
 | M08.1 No lease means Standard | PASS | `TestTierPolicyNoLeaseUsesStandard` |
 | M08.2 ULTRA lease uses settings | PASS | `TestTierPolicyMarshalLeaseUsesSettings` |
 | M08.3 Expiry affects next dispatch only | PASS | `TestTierPolicyExpiryAffectsNextDispatchOnly` |
-| M08.4 Cross-review uses another provider | PASS | `TestCrossReviewRequiresDifferentProvider` |
+| M08.4 Cross-review needs fresh-session reviewer | PASS | `TestCrossReviewNeedsAReviewerNotAnotherProvider` |
 | M09.1 Two-task plan through close | PASS | `TestM09HappyPathTwoTasksVerifyClose` |
 | M09.2 Return twice, reassign, escalate | PASS | `TestM09ReturnTwiceReassignThenEscalate` |
 | M09.3 Major amendment pauses dispatch | PASS | `TestM09MajorAmendmentPausesDispatch` |

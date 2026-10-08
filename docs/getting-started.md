@@ -17,8 +17,8 @@ marshal doctor
 `RUNTIME-VERSION.yaml` defaults and initializes `.marshal/state.db`. Existing
 regular defaults are preserved. Init commits untracked policy/version defaults
 and ignores private runtime state using the project’s Git info/exclude file,
-without changing .gitignore. The current release reports v1.0.1 and schema
-v72.
+without changing .gitignore. The current release reports v0.0.7 and schema
+v90.
 
 Default `doctor` does not execute optional provider probes; those rows are
 reported as `NOT_RUN`. Probe installed provider CLIs explicitly:

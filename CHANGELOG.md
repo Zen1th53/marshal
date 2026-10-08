@@ -171,7 +171,7 @@ archive. SQLite schema advanced from v79 to **v85**.
 - **SQLite Migrations 73–79**:
   - Forward migrations for goals, claims, checkpoints, budgets, blind interpretations, team sessions, and harness profiles.
 
-See [`release/RELEASE_NOTES_1.5.0.md`](release/RELEASE_NOTES_1.5.0.md) for
+See [`release/archive/RELEASE_NOTES_1.5.0.md`](release/archive/RELEASE_NOTES_1.5.0.md) for
 detailed verification and release evidence.
 
 ## v1.0.1 — Canonical Community Consolidation and Production Hardening
@@ -200,7 +200,7 @@ detailed verification and release evidence.
   checksums, release-manifest verification, and clean-install validation to the
   existing release process.
 
-See [`release/RELEASE_NOTES_1.0.1.md`](release/RELEASE_NOTES_1.0.1.md) for
+See [`release/archive/RELEASE_NOTES_1.0.1.md`](release/archive/RELEASE_NOTES_1.0.1.md) for
 exact verification and provider qualification results.
 
 ## Web Control Plane 1.0.0 (T165–T220) — 2026-08-20

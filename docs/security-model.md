@@ -68,7 +68,9 @@ receipts or audit events. Restart does not renew a revoked grant.
 
 - **Append-Only Audit Events**: State mutations record immutable audit events with monotonic revisions.
 - **Content-Addressed Artifacts**: Artifacts are stored under SHA-256 digests with reference tracking and garbage collection.
-- **Quorum Merge Gate**: High-risk task merges require signed multi-party attestations from QA and AppSec roles before merge authorization.
+- **Task Scope & Verification**: In Marshal mode, hand-in validation enforces a hard task scope boundary (modifications outside the approved task scope are strictly rejected, distinct from advisory alignment warnings). Merge admission requires approved checks to pass (with fresh-session cross-review and independent verification in ULTRA tier). The verification quorum engine (`internal/verify/quorum`) is an implemented subsystem for attestation evaluation rather than a universal signed-quorum gate.
+- **Honeypot Assurance**: Canary tokens detect credential leakage in output and history scanning; in real-provider qualification runs, honeypot traps were NOT TRIGGERED (interception of active external reads/traffic is outside the simple variant's contract).
+- **Effect Inventory Metrics**: Effect-inventory coverage percentages report source-site call counts in Go runtime code, not dynamic operational frequency or an absolute probability of safety.
 - **Backup & Restore Preflight**: Online SQLite backups (`VACUUM INTO`) require preflight integrity and schema checks before restoration.
 
 Report vulnerabilities through [SECURITY.md](../SECURITY.md).

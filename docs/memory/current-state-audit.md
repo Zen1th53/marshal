@@ -1,8 +1,8 @@
 # MARSHAL memory authority map
 
-**Current release:** v1.0.1
+**Current release:** v0.0.7
 
-**Current schema:** v72
+**Current schema:** v90
 
 **Canonical store:** `memory_records_v2`
 

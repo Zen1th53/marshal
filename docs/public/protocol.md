@@ -11,9 +11,9 @@ proposal immediately, so you can decide in the popup.
 
 Read the exact setting, path, memory candidate or plan action and its scope.
 Press uppercase **A** to apply the displayed change. Any other key, closing the
-popup, or 30 seconds without an answer declines. A chat reply such as “done”
-does not approve a change. You do not need to type `/marshal` commands in the
-provider chat or a shell.
+popup, or 120 seconds without an answer declines (30 seconds for credential
+requests). A chat reply such as “done” does not approve a change. You do not
+need to type `/marshal` commands in the provider chat or a shell.
 
 This applies to acceptance mode, execution rights, control level, rework limit,
 concurrency and budget settings; read access to earlier work; individual memory
