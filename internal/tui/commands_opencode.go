@@ -17,14 +17,13 @@ func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line
 	if rejection != "" {
 		return rejection, nil
 	}
-	cleanArgv, refusal, isHelp := checkNativePassthroughSafety("opencode", args)
-	if refusal != "" {
-		return refusal, nil
-	}
-	if isHelp {
+	if hasHelpFlag(args) {
+		cleanArgv, refusal, _ := checkNativePassthroughSafety("opencode", args)
+		if refusal != "" {
+			return refusal, nil
+		}
 		return h.ws.runNativeAgent(ctx, "opencode", cleanArgv)
 	}
-	args = cleanArgv
 	if prompt != "" {
 		return h.ws.runNativeAgent(ctx, "opencode", []string{"--prompt", prompt})
 	}
@@ -74,21 +73,13 @@ func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line
 		if err != nil {
 			return "", err
 		}
-		cleanArgv, refusal, _ := checkNativePassthroughSafety("opencode", argv)
-		if refusal != "" {
-			return refusal, nil
-		}
-		return h.ws.runNativeAgent(ctx, "opencode", cleanArgv)
+		return h.ws.runNativeAgent(ctx, "opencode", argv)
 	case "mcp", "providers", "auth", "agent", "models", "stats", "session", "debug", "github", "pr", "attach", "acp", "serve", "web", "run":
 		argv, err := nativeArgs(strings.TrimSpace(line[len(strings.Fields(line)[0]):]))
 		if err != nil {
 			return "", err
 		}
-		cleanArgv, refusal, _ := checkNativePassthroughSafety("opencode", argv)
-		if refusal != "" {
-			return refusal, nil
-		}
-		return h.ws.runNativeAgent(ctx, "opencode", cleanArgv)
+		return h.ws.runNativeAgent(ctx, "opencode", argv)
 	default:
 		return "Unknown subcommand. To send a prompt use /opencode run <text>", nil
 	}

@@ -28,6 +28,11 @@ func runGovernedClaudeCmd(ctx context.Context, args []string) (result string, re
 	if err := claude.ValidateDangerousFlags(args); err != nil {
 		return "", err
 	}
+	cleanArgv, refusal, _ := checkNativePassthroughSafety("claude", args)
+	if refusal != "" {
+		return "", errors.New(refusal)
+	}
+	args = cleanArgv
 	dialect := app.ObserveProviderDialect(ctx, "claude")
 	if dialect.Operation(app.ProviderArgOperation("claude", args)).Status == app.ProviderUnknown {
 		defer func() {
@@ -65,14 +70,13 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 	if rejection != "" {
 		return rejection, nil
 	}
-	cleanArgv, refusal, isHelp := checkNativePassthroughSafety("claude", args)
-	if refusal != "" {
-		return refusal, nil
-	}
-	if isHelp {
+	if hasHelpFlag(args) {
+		cleanArgv, refusal, _ := checkNativePassthroughSafety("claude", args)
+		if refusal != "" {
+			return refusal, nil
+		}
 		return h.ws.runNativeAgent(ctx, "claude", cleanArgv)
 	}
-	args = cleanArgv
 	if prompt != "" {
 		if h.ws.terminal != nil && h.ws.terminal.IsTerminal() {
 			return h.ws.runNativeAgent(ctx, "claude", []string{"--", prompt})
@@ -120,11 +124,7 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 				if sub == "login" || sub == "logout" {
 					argv = append([]string{"auth"}, argv...)
 				}
-				cleanArgv, refusal, _ := checkNativePassthroughSafety("claude", argv)
-				if refusal != "" {
-					return refusal, nil
-				}
-				return h.ws.runNativeAgent(ctx, "claude", cleanArgv)
+				return h.ws.runNativeAgent(ctx, "claude", argv)
 			}
 		}
 		switch sub {
@@ -137,11 +137,7 @@ func (h *CommandHandler) handleClaude(ctx context.Context, args []string, line s
 			if err != nil {
 				return "", err
 			}
-			cleanArgv, refusal, _ := checkNativePassthroughSafety("claude", argv)
-			if refusal != "" {
-				return refusal, nil
-			}
-			return h.ws.runNativeAgent(ctx, "claude", cleanArgv)
+			return h.ws.runNativeAgent(ctx, "claude", argv)
 		}
 	}
 	if len(args) > 0 && oneOf(args[0], "mcp", "plugin", "auth", "agents", "login", "logout") {

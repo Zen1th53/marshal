@@ -140,6 +140,11 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	if err := dialect.Check(app.ProviderArgOperation(provider, args), true); err != nil {
 		return "", err
 	}
+	cleanArgv, refusal, _ := checkNativePassthroughSafety(provider, args)
+	if refusal != "" {
+		return refusal, nil
+	}
+	args = cleanArgv
 	if (w.terminal == nil || !w.terminal.IsTerminal()) && !tmux.IsInsideTmux() {
 		hint := fmt.Sprintf("use /%s exec for batch tasks", provider)
 		if provider == "opencode" || provider == "antigravity" {

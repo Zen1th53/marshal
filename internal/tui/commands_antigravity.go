@@ -52,11 +52,14 @@ func (h *CommandHandler) handleAntigravity(ctx context.Context, args []string, l
 		if err != nil {
 			return "", err
 		}
-		cleanArgv, refusal, _ := checkNativePassthroughSafety("antigravity", argv)
-		if refusal != "" {
-			return refusal, nil
+		if hasHelpFlag(argv) {
+			cleanArgv, refusal, _ := checkNativePassthroughSafety("antigravity", argv)
+			if refusal != "" {
+				return refusal, nil
+			}
+			argv = cleanArgv
 		}
-		return h.ws.runNativeAgent(ctx, "antigravity", cleanArgv)
+		return h.ws.runNativeAgent(ctx, "antigravity", argv)
 	case "models", "agents", "agent", "mcp", "plugin", "plugins", "changelog":
 		argv, err := nativeArgs(strings.TrimSpace(line[len(strings.Fields(line)[0]):]))
 		if err != nil {
@@ -114,11 +117,14 @@ func (h *CommandHandler) handleAntigravity(ctx context.Context, args []string, l
 				return fmt.Sprintf("Nothing was run. agy plugin %s is UNSUPPORTED for %s", verb, d.Version), nil
 			}
 		}
-		cleanArgv, refusal, _ := checkNativePassthroughSafety("antigravity", argv)
-		if refusal != "" {
-			return refusal, nil
+		if hasHelpFlag(argv) {
+			cleanArgv, refusal, _ := checkNativePassthroughSafety("antigravity", argv)
+			if refusal != "" {
+				return refusal, nil
+			}
+			argv = cleanArgv
 		}
-		return h.ws.runNativeAgent(ctx, "antigravity", cleanArgv)
+		return h.ws.runNativeAgent(ctx, "antigravity", argv)
 	case "prompt":
 		if len(args) < 2 {
 			return "Usage: /agy prompt <text>", nil

@@ -175,7 +175,10 @@ func TestKeysfixLocalProviderArgumentsNotDropped(t *testing.T) {
 }
 
 func TestKeysfixSafetyDestructiveConfirmationAndHelp(t *testing.T) {
+	sweepWorkEnvironment(t)
 	_, w, ctx := newControlWorkspace(t)
+	installDialectDoubles(t)
+	w.terminal = &Terminal{isTerm: true}
 
 	// 1. /agy plugin uninstall --help must refuse help for subcommands that do not support it, never uninstalling
 	out, err := w.ExecuteCommand(ctx, "/agy plugin uninstall --help")

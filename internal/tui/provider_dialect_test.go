@@ -274,7 +274,11 @@ func TestProviderDialectAliasesTerminalAndBatch(t *testing.T) {
 		{"opencode", []string{"auth", "list"}, []string{"providers", "list"}},
 		{"antigravity", []string{"plugins", "remove", "Name"}, []string{"plugin", "uninstall", "Name"}},
 	} {
-		if _, err := ws.runNativeAgent(ctx, tc.provider, tc.args); err != nil {
+		requestArgs := append([]string(nil), tc.args...)
+		if destructive, _ := isDestructiveNativeSubcommand(tc.provider, requestArgs); destructive {
+			requestArgs = append(requestArgs, "--confirm")
+		}
+		if _, err := ws.runNativeAgent(ctx, tc.provider, requestArgs); err != nil {
 			t.Fatal(err)
 		}
 		data, err := os.ReadFile(log)
@@ -296,7 +300,7 @@ func TestProviderDialectAliasesTerminalAndBatch(t *testing.T) {
 			t.Fatalf("batch double: %s %v", out, err)
 		}
 		if tc.provider == "codex" {
-			if _, err := runGovernedCodexCmd(ctx, tc.args); err != nil {
+			if _, err := runGovernedCodexCmd(ctx, requestArgs); err != nil {
 				t.Fatal(err)
 			}
 		}
