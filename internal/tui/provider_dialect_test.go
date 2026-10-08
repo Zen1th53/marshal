@@ -125,7 +125,7 @@ func TestProviderDialectSurface(t *testing.T) {
 	ws := NewWorkspace(nil, "dialect", "dialect")
 	for _, tc := range []struct{ provider, supported, unknown string }{
 		{"codex", "fork", "mcp auth"}, {"claude", "resume", "plugin add-json"},
-		{"opencode", "fork", "plugin install"}, {"agy", "resume", "plugin marketplace"},
+		{"opencode", "fork", "plugin install"}, {"agy", "resume", "plugin add-json"},
 	} {
 		t.Run(tc.provider, func(t *testing.T) {
 			root := "/" + tc.provider
