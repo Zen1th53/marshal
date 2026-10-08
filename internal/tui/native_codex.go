@@ -420,7 +420,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		if err := scrubMarshalInboxes(root); err != nil {
 			return "", fmt.Errorf("Marshal not started: retained briefing cleanup failed: %w", err)
 		}
-		note, err := deliver(marshalBrief[0], hiddenChannel(provider))
+		note, err := deliver(w.marshalContinuityBriefing(root, marshalBrief[0]), hiddenChannel(provider))
 		if err != nil {
 			return "", fmt.Errorf("Marshal not started: hidden instruction delivery failed: %w", err)
 		}
@@ -445,6 +445,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			if canonicalNeutralProvider(saved.Provider) != canonicalNeutralProvider(provider) {
 				saved.Provider = provider
 				saved.SessionID = ""
+				saved.HistoryPath = ""
 				saved.HistoryBaseline = nil
 			}
 			baseline, err := w.prepareChatHistoryWatch(root, watch, saved.SessionID)
@@ -627,6 +628,7 @@ func nativeUsesModelPreference(args []string) bool {
 
 type nativeHistoryWatch struct {
 	authorized func(string) bool
+	chatFile   func(string) bool
 	claude     bool
 	// openCodeRun is set for OpenCode's SQLite-backed history. Its public CLI
 	// supplies JSON exports, so MARSHAL never reads the database or depends on
@@ -772,6 +774,9 @@ func (w *nativeHistoryWatch) saveIndex() error {
 }
 
 func (w *nativeHistoryWatch) syncFile(path string) error {
+	if w.chatFile != nil && !w.chatFile(path) {
+		return nil
+	}
 	if w.authorized != nil && !w.authorized(path) {
 		return nil
 	}

@@ -244,6 +244,8 @@ func TestMarshalProposalBoundNativeHistory(t *testing.T) {
 
 func TestMarshalProposalReadMemoryAndContinuation(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-proposal-continuation")
+	// Explicit intake consent precedes requests; popup/grant assertions below remain unchanged.
+	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_INTAKE {"language":"English","earlier_work":"yes"}`}}})
 	root := rt.ProjectRoot()
 	folder := t.TempDir()
 	data := fmt.Sprintf("{\"type\":\"session_meta\",\"timestamp\":\"2026-10-01T10:00:00Z\",\"payload\":{\"id\":\"earlier\",\"cwd\":%q}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"phase\":\"final_answer\",\"content\":[{\"type\":\"output_text\",\"text\":\"Pending work\"}]}}\n", root)

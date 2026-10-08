@@ -94,7 +94,7 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 			return
 		case <-ticker.C:
 		}
-		batch := w.permissions.queue.Take(w.permissionBusy())
+		batch := w.permissions.queue.Take(false)
 		if len(batch) == 0 {
 			w.permissions.mu.Lock()
 			if w.permissions.queue.Empty() {
@@ -107,6 +107,10 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 		}
 		var live []permission.Request
 		for _, req := range batch {
+			if w.permissionPopupTarget(ctx, []permission.Request{req}) == "" {
+				w.permissions.queue.Add(req)
+				continue
+			}
 			if req.Kind == "network" && w.runtime != nil && !w.runtime.EgressRequestPending(req.RunID, req.Object) {
 				_ = w.decidePermission(ctx, req, false, "expired run request")
 				w.permissions.mu.Lock()
@@ -135,14 +139,14 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 			}
 			batch = batch[:permission.MaxPopupItems]
 		}
-		w.tmuxMu.Lock()
-		target := w.tmuxSession
-		path := w.tmuxPath
-		w.tmuxMu.Unlock()
-		allow := false
-		if path != "" && target != "" {
-			allow, _ = permission.Popup(ctx, target, batch, 30*time.Second)
+		target := w.permissionPopupTarget(ctx, batch)
+		if target == "" {
+			for _, req := range batch {
+				w.permissions.queue.Add(req)
+			}
+			continue
 		}
+		allow, _ := permission.Popup(ctx, target, batch, 30*time.Second)
 		for _, req := range batch {
 			if err := w.decidePermission(ctx, req, allow, "operator popup"); err != nil {
 				w.mu.Lock()
@@ -357,10 +361,57 @@ func (w *Workspace) guardHistoryWatch(watch *nativeHistoryWatch, provider string
 		}
 		return w.runtime.HasReadGrant(path)
 	}
-	if watch.antigravity && !w.runtime.HasReadGrant(watch.antigravitySummaries) {
-		w.queuePermission(permission.Request{Kind: "read", Object: watch.antigravitySummaries, Scope: "this session only, read-only", Who: "Marshal", Reason: "Read project ownership metadata for Antigravity conversations"})
+	// Observation never requests earlier-history access. Explicit continuation
+	// proposals request the exact folder after intake.
+}
+
+// Use an attached client's identity, never a session guessed by tmux. History
+// reviews wait for the control centre or a consenting Marshal chat; they cannot
+// consume input in another provider window.
+func (w *Workspace) permissionPopupTarget(ctx context.Context, batch []permission.Request) string {
+	w.tmuxMu.Lock()
+	session, centre := w.tmuxSession, w.tmuxMarshalPaneID
+	w.tmuxMu.Unlock()
+	out, err := tmux.RunCommand(ctx, "list-clients", "-F", "#{client_name}|#{pane_id}|#{session_name}")
+	if err != nil {
+		return ""
 	}
-	if watch.dir != "" && !w.runtime.HasReadGrant(watch.dir) {
-		w.queuePermission(permission.Request{Kind: "read", Object: watch.dir, Scope: "this session only, read-only", Who: "Marshal", Reason: "Read project-filtered " + provider + " history for the shared channel and memory candidates"})
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.Split(line, "|")
+		if len(parts) != 3 || parts[2] != session || parts[0] == "" {
+			continue
+		}
+		eligible := true
+		for _, req := range batch {
+			if req.Kind == "read" && parts[1] != centre {
+				w.tmuxMu.Lock()
+				chat := w.tmuxActiveWins["marshal-chat"]
+				inChat := chat != nil && chat.paneID == parts[1]
+				w.tmuxMu.Unlock()
+				if !inChat || !w.marshalEarlierWorkWanted() {
+					eligible = false
+					break
+				}
+			}
+			if req.Kind != "marshal-command" && req.Kind != "read" && parts[1] != centre {
+				w.tmuxMu.Lock()
+				safe := false
+				for _, a := range w.tmuxActiveWins {
+					if a.paneID == parts[1] && (a.role == "marshal-chat" || a.readOnly) {
+						safe = true
+						break
+					}
+				}
+				w.tmuxMu.Unlock()
+				if !safe {
+					eligible = false
+					break
+				}
+			}
+		}
+		if eligible {
+			return parts[0]
+		}
 	}
+	return ""
 }

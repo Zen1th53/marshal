@@ -41,5 +41,5 @@ func copyAgentLocked(a *activeTmuxAgent) *activeTmuxAgent {
 	if a == nil {
 		return nil
 	}
-	return &activeTmuxAgent{launchOrigin: a.launchOrigin, canonicalTaskID: a.canonicalTaskID, executionRunID: a.executionRunID, id: a.id, role: a.role, provider: a.provider, taskID: a.taskID, label: a.label, window: a.window, windowID: a.windowID, paneID: a.paneID, pid: a.pid, pgid: a.pgid, state: a.state, readOnly: a.readOnly, isJoined: a.isJoined, cancel: a.cancel, briefingDir: a.briefingDir, doneChan: a.doneChan, binary: a.binary, args: a.args, env: a.env, sessionID: a.sessionID, historyBaseline: a.historyBaseline, runID: a.runID, driver: a.driver, handle: a.handle, supervisor: a.supervisor}
+	return &activeTmuxAgent{launchOrigin: a.launchOrigin, canonicalTaskID: a.canonicalTaskID, executionRunID: a.executionRunID, id: a.id, role: a.role, provider: a.provider, taskID: a.taskID, label: a.label, window: a.window, windowID: a.windowID, paneID: a.paneID, pid: a.pid, pgid: a.pgid, state: a.state, readOnly: a.readOnly, isJoined: a.isJoined, cancel: a.cancel, briefingDir: a.briefingDir, doneChan: a.doneChan, binary: a.binary, args: a.args, env: a.env, sessionID: a.sessionID, historyPath: a.historyPath, historyBaseline: a.historyBaseline, runID: a.runID, driver: a.driver, handle: a.handle, supervisor: a.supervisor}
 }

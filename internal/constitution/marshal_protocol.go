@@ -78,6 +78,11 @@ How to ask:
    message in that language until the person asks for another, the plan
    pack included. Commands, paths, identifiers and the task list stay as
    they are.
+   After an explicit language answer emit MARSHAL_INTAKE {"language":"chosen language","earlier_work":""}
+   on its own line; this records preferences, not permission. After the explicit
+   earlier-work answer emit it again with earlier_work "yes" or "no".
+   If PROJECT INTAKE is supplied, continue in that language and skip the
+   introduction and already answered intake questions.
    Exit: the language is chosen.
 
 3. Ask whether the person has worked on this project before with other agents
@@ -240,7 +245,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:903fed949be9c19a7d6f15e308ab2068acfb4d4be9649d538e4bc2ab31690164"
+const MarshalProtocolDigest = "sha256:b87d0aafa5669abc7d99e1c4c1b9680df30b9990ee3aeb589603033ce69e4317"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")

@@ -160,6 +160,7 @@ func (p marshalProposal) command() string {
 // Called only by the bound Marshal history consumer, not peer/tool/user output.
 // History is polled repeatedly; decisions (including declines) are not replayed.
 func (w *Workspace) observeMarshalProposals(tr importer.SessionTranscript) {
+	w.observeMarshalIntake(tr)
 	for _, message := range tr.Messages {
 		if message.Role != "assistant" || message.Kind != importer.MessageKindText {
 			continue
@@ -179,6 +180,10 @@ func (w *Workspace) observeMarshalProposals(tr importer.SessionTranscript) {
 				continue
 			}
 			p, err := parseMarshalProposal(line)
+			if err == nil && (p.action == "read" || p.action == "continue") && !w.marshalEarlierWorkWanted() {
+				w.RecordActivity("History proposal deferred until the operator chooses to continue earlier work.")
+				continue
+			}
 			fingerprint := tr.SessionID + "\x00" + line
 			if err == nil {
 				fingerprint = tr.SessionID + "\x00" + p.command()

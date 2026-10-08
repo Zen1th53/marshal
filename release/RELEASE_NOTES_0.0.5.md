@@ -2,6 +2,11 @@
 
 - Marshal protocol decisions now use MARSHAL permission popups: uppercase A applies strict, allow-listed chat proposals through existing handlers with operator evidence; other keys or timeout decline, and duplicate proposals do not stack.
 
+- Marshal proposals appear on the attached client, including the Marshal chat, even when earlier-history access was declined; A applies the proposal.
+- Governed work waits for an undecided credential popup and continues automatically after A; denial or timeout stops it.
+- Reopening or switching the Marshal preserves the project's language and earlier-work answer, and reopening resumes its known conversation.
+- Earlier-history popups wait for an explicit yes to continuation and focus on the control centre or Marshal chat, so they do not interrupt provider input or trust prompts.
+
 One workspace for planning with the Marshal and working with your agents.
 
 ## What changed
