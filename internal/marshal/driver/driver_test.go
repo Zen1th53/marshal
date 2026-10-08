@@ -482,3 +482,43 @@ func TestOpenCodeWorkerPinsAssignedDirectory(t *testing.T) {
 		t.Fatalf("OpenCode can choose parent checkout instead of task worktree: %v", args)
 	}
 }
+
+func TestCheckCannotModifyTestedSource(t *testing.T) {
+	task, wt := newTask(t)
+	rec := runCheck(t.Context(), wt, task.BaseCommit, "printf modified > README", time.Minute)
+	if rec.ExitCode == 0 {
+		t.Fatal("source-modifying check passed")
+	}
+	// An injected runner must also fail if it leaves a different tree.
+	rec = runCheck(WithCheckRunner(t.Context(), func(_ context.Context, dir, command string) marshal.CommandRecord {
+		if err := os.WriteFile(filepath.Join(dir, "README"), []byte("modified"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		return marshal.CommandRecord{Command: command}
+	}), wt, task.BaseCommit, "injected", time.Minute)
+	if rec.ExitCode == 0 {
+		t.Fatal("modified source accepted from runner")
+	}
+}
+
+func TestHandInChecksBindExactCommitAndTree(t *testing.T) {
+	task, wt := newTask(t)
+	task.Type = marshal.TaskInspection
+	task.Criteria = []string{"c"}
+	task.Checks = []marshal.Check{{Command: "true", Criteria: []string{"c"}}}
+	ctx := WithCheckRunner(t.Context(), func(_ context.Context, _ string, command string) marshal.CommandRecord {
+		return marshal.CommandRecord{Command: command}
+	})
+	h, err := assemble(ctx, Request{Task: task, Worktree: wt}, identity{}, nil, nil, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := run(t, wt, "git", "rev-parse", task.BaseCommit+"^{tree}")
+	if h.TreeDigest != want || h.CheckResults[0].TreeDigest != want || h.CheckResults[0].ResultCommit != h.ResultCommit {
+		t.Fatalf("unbound evidence: %+v", h)
+	}
+	h.CheckResults[0].TreeDigest = "different"
+	if err := marshal.ValidateHandIn(task, h); err == nil {
+		t.Fatal("different tested tree accepted")
+	}
+}

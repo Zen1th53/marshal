@@ -92,7 +92,7 @@ func TestMarshalGovernedTaskDoesNotLaunchNativeDriver(t *testing.T) {
 	}
 }
 
-func marshalFixture(t *testing.T, n int) (*MarshalService, string) {
+func marshalFixture(t *testing.T, n int, databasePath ...string) (*MarshalService, string) {
 	t.Helper()
 	ctx := context.Background()
 	repo := t.TempDir()
@@ -104,7 +104,11 @@ func marshalFixture(t *testing.T, n int) (*MarshalService, string) {
 	}
 	marshalGit(t, repo, "add", "README.md")
 	marshalGit(t, repo, "commit", "-m", "base")
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "state.db"))
+	dbPath := filepath.Join(t.TempDir(), "state.db")
+	if len(databasePath) > 0 {
+		dbPath = databasePath[0]
+	}
+	db, err := store.Open(ctx, dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -733,7 +737,7 @@ func TestM09UltraDispatchRequiresCrossReviewAndVerifier(t *testing.T) {
 		t.Fatal("ULTRA review without cross-review passed")
 	}
 	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error) {
-		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check"}}, "other", nil
+		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{"check:test -f a.txt"}}, "other", nil
 	}
 	if v, err := s.Review(ctx, "run", "a", knownCharge()); err != nil || v != marshal.VerdictAccept {
 		t.Fatalf("review %s %v", v, err)
@@ -745,11 +749,11 @@ func TestM09UltraDispatchRequiresCrossReviewAndVerifier(t *testing.T) {
 		t.Fatal("ULTRA verified without independent verifier")
 	}
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "verifier", nil }
-	s.IndependentVerify = func(_ context.Context, _ marshal.Run, head string, session verification.Session) error {
+	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
 		if session.Binding.TreeDigest != head {
-			return errors.New("verifier saw a different commit")
+			return marshal.VerifierEvidence{}, errors.New("verifier saw a different commit")
 		}
-		return nil
+		return marshal.VerifierEvidence{Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
 	}
 	if v, err := s.VerifyMerged(ctx, "run", knownCharge()); err != nil || v != verification.VerifiedComplete {
 		t.Fatalf("verify %s %v", v, err)
@@ -775,7 +779,7 @@ func TestM09UltraRejectedCrossReviewReturnsTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.CrossReview = func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error) {
-		return marshal.Review{Verdict: marshal.VerdictReturn, Reviewer: "second", Reasons: []string{"check failed"}, EvidenceRefs: []string{"check"}}, "other", nil
+		return marshal.Review{Verdict: marshal.VerdictReturn, Reviewer: "second", Reasons: []string{"check failed"}, EvidenceRefs: []string{"check:test -f a.txt"}}, "other", nil
 	}
 	if verdict, err := s.Review(ctx, "run", "a", knownCharge()); err != nil || verdict != marshal.VerdictReturn {
 		t.Fatalf("rejected cross-review: verdict=%s err=%v", verdict, err)

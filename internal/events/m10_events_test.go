@@ -6,7 +6,7 @@ var marshalTypes = []EventType{
 	EventTypeMarshalRecommended, EventTypeMarshalPlanApproved, EventTypeMarshalTaskDispatched, EventTypeMarshalUsageCharged,
 	EventTypeMarshalTaskHandedIn, EventTypeMarshalTaskAccepted, EventTypeMarshalTaskReturned,
 	EventTypeMarshalTaskReassigned, EventTypeMarshalPlanAmended, EventTypeMarshalEscalated,
-	EventTypeMarshalTaskMerged, EventTypeMarshalRunClosed,
+	EventTypeMarshalTaskMerged, EventTypeMarshalRunClosed, EventTypeMarshalVerifierRecorded,
 }
 
 func TestM10MarshalEventVocabulary(t *testing.T) {

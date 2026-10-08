@@ -10,6 +10,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
+	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/worker"
 )
 
@@ -20,7 +21,8 @@ func TestMarshalHoneypotHandInNeverMerged(t *testing.T) {
 			name = "token"
 		}
 		t.Run(name, func(t *testing.T) {
-			s, repo := marshalFixture(t, 1)
+			dbPath := filepath.Join(t.TempDir(), "state.db")
+			s, repo := marshalFixture(t, 1, dbPath)
 			r := &Runtime{store: s.Store}
 			notified := false
 			r.SetEgressAlertSink(func(alert EgressAlert) error {
@@ -98,6 +100,29 @@ func TestMarshalHoneypotHandInNeverMerged(t *testing.T) {
 				if err != nil || handin.Value.ResultCommit == "" {
 					t.Fatalf("missing hand-in evidence: %v", err)
 				}
+				// Even a later accepted state cannot override durable artifact quarantine.
+				saved, revision, err := s.load(t.Context(), "run")
+				if err != nil {
+					t.Fatal(err)
+				}
+				saved.Tasks[0].State = marshal.Accepted
+				saved.Tasks[0].ResultCommit = handin.Value.ResultCommit
+				if err := s.save(t.Context(), "run", saved, revision); err != nil {
+					t.Fatal(err)
+				}
+				if err := s.Store.Close(); err != nil {
+					t.Fatal(err)
+				}
+				reopened, err := store.Open(t.Context(), dbPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = reopened.Close() })
+				restarted := &MarshalService{Store: reopened, Repository: s.Repository, Worktrees: s.Worktrees, ProjectID: s.ProjectID}
+				if err := restarted.Merge(t.Context(), "run", "a"); err == nil || !strings.Contains(err.Error(), "quarantined") {
+					t.Fatalf("quarantine lost after restart: %v", err)
+				}
+
 			} else {
 				if run.Tasks[0].State != marshal.HandedIn {
 					t.Fatalf("clean hand-in returned: %s", run.Tasks[0].State)

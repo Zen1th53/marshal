@@ -49,7 +49,7 @@ type MarshalService struct {
 	ModelProvider                    string
 	CrossReview                      func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error)
 	VerifierProvider                 func(context.Context, marshal.Run) (string, error)
-	IndependentVerify                func(context.Context, marshal.Run, string, verification.Session) error
+	IndependentVerify                func(context.Context, marshal.Run, string, verification.Session) (marshal.VerifierEvidence, error)
 	GateState                        func(context.Context, string, string) (constitution.RuntimeState, error)
 	ApprovalActor                    func(context.Context, string, string) (string, error)
 	Drivers                          map[string]driver.Driver
@@ -60,7 +60,7 @@ type MarshalService struct {
 	// InstalledVersion reports the installed version of a worker's CLI, for
 	// the evidence-derived harness governance assessment. Nil means unknown.
 	InstalledVersion func(ctx context.Context, worker string) string
-	HandInGuard      func(context.Context, string, string, marshal.HandIn) error
+	HandInGuard      func(context.Context, string, string, marshal.HandIn) (string, error)
 	now              func() time.Time
 }
 
@@ -154,6 +154,13 @@ func validateDraft(d MarshalDraft) error {
 		}
 		if p == nil || t.Worker == "" || (t.Mode != marshal.Native && t.Mode != marshal.Governed) || len(t.Checks) == 0 || len(t.Criteria) == 0 {
 			return fmt.Errorf("invalid Marshal task %s", t.PlanTaskID)
+		}
+		planType := marshal.TaskType(p.Type)
+		if planType == "" {
+			planType = marshal.TaskChange
+		}
+		if t.EffectiveType() != planType || (planType != marshal.TaskChange && planType != marshal.TaskInspection && planType != marshal.TaskVerification) {
+			return fmt.Errorf("task %s type differs from plan", t.PlanTaskID)
 		}
 		if !sameStrings(t.Criteria, p.Criteria) || !sameStrings(t.Files, p.Paths) || !sameStrings(t.DependsOn, p.DependsOn) ||
 			t.Instructions != p.Instructions || t.ExpectedOutput != p.ExpectedOutput {
@@ -358,10 +365,14 @@ func marshalApprovalDigest(planDigest string, run marshal.Run) string {
 	if run.Pack != nil {
 		pack = run.Pack.Digest
 	}
+	types := map[string]marshal.TaskType{}
 	modes := map[string]marshal.WorkerMode{}
 	checks := map[string][]marshal.Check{}
 	imported := map[string]*marshal.ImportedResult{}
 	for _, task := range run.Tasks {
+		if task.Type != "" {
+			types[task.PlanTaskID] = task.Type
+		}
 		modes[task.PlanTaskID] = task.Mode
 		if task.ImportedResult != nil {
 			imported[task.PlanTaskID] = task.ImportedResult
@@ -376,7 +387,8 @@ func marshalApprovalDigest(planDigest string, run marshal.Run) string {
 		Modes    map[string]marshal.WorkerMode      `json:",omitempty"`
 		Checks   map[string][]marshal.Check         `json:",omitempty"`
 		Imported map[string]*marshal.ImportedResult `json:",omitempty"`
-	}{planDigest, run.Budget, control, pack, modes, checks, imported})
+		Types    map[string]marshal.TaskType        `json:",omitempty"`
+	}{planDigest, run.Budget, control, pack, modes, checks, imported, types})
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }

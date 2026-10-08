@@ -126,6 +126,7 @@ const (
 	EventTypeMarshalPlanAmended             EventType = "marshal.plan.amended"
 	EventTypeMarshalEscalated               EventType = "marshal.escalated"
 	EventTypeMarshalTaskMerged              EventType = "marshal.task.merged"
+	EventTypeMarshalVerifierRecorded        EventType = "marshal.verifier.recorded"
 	EventTypeMarshalRunClosed               EventType = "marshal.run.closed"
 
 	EventTypeAppended          EventType = "events.appended"
@@ -165,7 +166,7 @@ var eventTypes = map[EventType]struct{}{
 	EventTypeMarshalTaskDispatched: {}, EventTypeMarshalUsageCharged: {}, EventTypeMarshalTaskHandedIn: {},
 	EventTypeMarshalTaskAccepted: {}, EventTypeMarshalTaskReturned: {},
 	EventTypeMarshalTaskReassigned: {}, EventTypeMarshalPlanAmended: {},
-	EventTypeMarshalEscalated: {}, EventTypeMarshalTaskMerged: {}, EventTypeMarshalRunClosed: {},
+	EventTypeMarshalEscalated: {}, EventTypeMarshalTaskMerged: {}, EventTypeMarshalRunClosed: {}, EventTypeMarshalVerifierRecorded: {},
 	EventTypeAppended: {}, EventTypeSubscriberDropped: {}, EventTypeSchemaRejected: {},
 }
 

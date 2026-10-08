@@ -36,7 +36,7 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 			return nil, errors.New("process 05: task does not match the approved Marshal run")
 		}
 		stored := run.Tasks[storedIndex]
-		if stored.Title != req.Task.Title || stored.Worker != req.Task.Worker || stored.Branch != req.Task.Branch || !sameStrings(stored.Files, req.Task.Files) || !sameStrings(stored.Criteria, req.Task.Criteria) || len(stored.Checks) != len(req.Task.Checks) {
+		if stored.EffectiveType() != req.Task.EffectiveType() || stored.Title != req.Task.Title || stored.Worker != req.Task.Worker || stored.Branch != req.Task.Branch || !sameStrings(stored.Files, req.Task.Files) || !sameStrings(stored.Criteria, req.Task.Criteria) || len(stored.Checks) != len(req.Task.Checks) {
 			return nil, errors.New("process 05: dispatch differs from the stored Marshal task")
 		}
 		for i, check := range stored.Checks {
@@ -138,6 +138,9 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		r.honeypotMu.Lock()
 		trap := r.honeypots[result.WorktreePath]
 		r.honeypotMu.Unlock()
+		if result.State == execution.TaskCompletedPendingVerify && trap == nil {
+			return nil, errors.New("honeypot: required scan identity unavailable after recovery")
+		}
 		if trap != nil {
 			if err := r.checkHoneypot(ctx, req.Task.PlanTaskID, trap, nil, nil, EgressAlert{RunID: p05.RunID, TaskID: result.CanonicalTaskID, Worker: req.Task.Worker}); err != nil {
 				return nil, err
@@ -172,6 +175,9 @@ func (r *Runtime) marshalProcess05Run(s *MarshalService) driver.GovernedRunner {
 		if head, err := gitMarshal(ctx, filepath.Clean(req.Worktree), "rev-parse", "HEAD"); err != nil || head != result.ResultCommit {
 			return nil, errors.New("process 05: imported commit does not match the governed result")
 		}
+		r.honeypotMu.Lock()
+		r.honeypots[req.Worktree] = trap
+		r.honeypotMu.Unlock()
 		return []marshal.CommandRecord{{Command: "process05 " + p05.RunID, Output: "imported " + result.ResultCommit}}, nil
 	}
 }

@@ -39,7 +39,14 @@ func (r *Runtime) honeypotStatus() string {
 }
 
 func (r *Runtime) checkHoneypot(ctx context.Context, taskID string, trap *worker.Honeypot, stdout, stderr []byte, identity ...EgressAlert) error {
+	if trap == nil {
+		return errors.New("honeypot: required scan identity unavailable")
+	}
 	err := trap.Check(ctx, stdout, stderr)
+	scanErr := r.recordHoneypotScan(context.WithoutCancel(ctx), taskID, trap, err)
+	if scanErr != nil {
+		return errors.Join(err, scanErr)
+	}
 	if !errors.Is(err, worker.ErrHoneypot) {
 		return err
 	}
@@ -80,16 +87,65 @@ func (r *Runtime) checkHoneypot(ctx context.Context, taskID string, trap *worker
 	return err
 }
 
-func (r *Runtime) guardHoneypotHandIn(ctx context.Context, taskID, worktree string, handin marshal.HandIn) error {
+func (r *Runtime) guardHoneypotHandIn(ctx context.Context, taskID, worktree string, handin marshal.HandIn) (string, error) {
 	r.honeypotMu.Lock()
 	trap := r.honeypots[worktree]
 	r.honeypotMu.Unlock()
 	if trap == nil {
-		return nil
+		return "", errors.New("honeypot: required scan identity unavailable")
 	}
 	data, err := json.Marshal(handin)
 	if err != nil {
+		return trap.Home, err
+	}
+	return trap.Home, r.checkHoneypot(ctx, taskID, trap, data, nil)
+}
+
+// Every scan binds its runtime identity and disposition to the scanned commit.
+func (r *Runtime) recordHoneypotScan(ctx context.Context, taskID string, trap *worker.Honeypot, scanErr error) error {
+	if r.store == nil {
+		return errors.New("honeypot: durable scan store unavailable")
+	}
+	head, err := gitMarshal(ctx, trap.Worktree(), "rev-parse", "HEAD")
+	if err != nil {
 		return err
 	}
-	return r.checkHoneypot(ctx, taskID, trap, data, nil)
+	outcome := "clean"
+	if errors.Is(scanErr, worker.ErrHoneypot) {
+		outcome = "hit"
+	} else if scanErr != nil {
+		outcome = "incomplete"
+	}
+	id, err := model.NewID("EVENT-")
+	if err != nil {
+		return err
+	}
+	project, err := r.store.Project(ctx)
+	if err != nil {
+		return err
+	}
+	return r.store.AppendEvent(ctx, nil, model.Event{ID: id, Type: "HONEYPOT_SCAN", ProjectID: project.ID, Timestamp: time.Now().UTC(), Data: map[string]any{"task_id": taskID, "scan_id": trap.Home, "result_commit": head, "outcome": outcome}})
+}
+
+func (s *MarshalService) checkHoneypotAdmission(ctx context.Context, task marshal.Task, commit string) error {
+	events, err := s.Store.ListEvents(ctx)
+	if err != nil {
+		return err
+	}
+	clean := false
+	for _, event := range events {
+		if event.Type != "HONEYPOT_SCAN" || event.Data["result_commit"] != commit {
+			continue
+		}
+		if event.Data["outcome"] == "hit" {
+			return errors.New("honeypot: artifact quarantined")
+		}
+		if event.Data["outcome"] == "clean" && task.HoneypotScanID != "" && event.Data["scan_id"] == task.HoneypotScanID {
+			clean = true
+		}
+	}
+	if (task.HoneypotRequired || task.Mode == marshal.Governed && s.HandInGuard != nil) && !clean {
+		return errors.New("honeypot: required clean scan missing")
+	}
+	return nil
 }

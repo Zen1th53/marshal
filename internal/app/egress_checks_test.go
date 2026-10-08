@@ -27,7 +27,7 @@ func TestGovernedIntegrationUsesRunBoundCheckRunner(t *testing.T) {
 	called := 0
 	s.GovernedCheck = func(_ context.Context, parent, task, worker, checkout, command string) marshal.CommandRecord {
 		called++
-		if parent != "plan" || task != "task" || worker != "worker" || checkout != dir {
+		if parent != "plan" || task != "task" || worker != "worker" || checkout == dir || marshalGit(t, checkout, "rev-parse", "HEAD") != head {
 			t.Fatalf("unbound check %s %s %s %s", parent, task, worker, checkout)
 		}
 		return marshal.CommandRecord{Command: command, ExitCode: 1, Output: "unapproved connection refused"}

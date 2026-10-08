@@ -147,6 +147,7 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
+	t.HoneypotRequired = t.Mode == marshal.Governed && s.HandInGuard != nil
 	t.State = marshal.Dispatched
 	run.State = marshal.Dispatching
 	if run.Tier != marshal.Ultra {
@@ -250,8 +251,13 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		return handin, errors.New("hand-in identity differs from dispatch")
 	}
 	validationErr := marshal.ValidateHandIn(*t, handin)
+	if t.HoneypotRequired && s.HandInGuard == nil {
+		validationErr = errors.Join(validationErr, errors.New("honeypot: required scan guard unavailable after recovery"))
+	}
 	if t.Mode == marshal.Governed && s.HandInGuard != nil {
-		validationErr = errors.Join(validationErr, s.HandInGuard(ctx, dispatch.TaskID, dispatch.Handle.Worktree(), handin))
+		scanID, scanErr := s.HandInGuard(ctx, dispatch.TaskID, dispatch.Handle.Worktree(), handin)
+		t.HoneypotScanID = scanID
+		validationErr = errors.Join(validationErr, scanErr)
 	}
 	attempt := 1
 	for _, n := range t.ReturnsByAgent {
@@ -342,6 +348,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		return "", err
 	}
 	h := stored.Value
+	if err := marshal.ValidateHandIn(*t, h); err != nil {
+		return "", err
+	}
 	if s.Model == nil {
 		return "", errors.New("Marshal model is unavailable")
 	}
@@ -375,6 +384,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		}
 		if (crossReview.Verdict != marshal.VerdictAccept && crossReview.Verdict != marshal.VerdictReturn && crossReview.Verdict != marshal.VerdictReassign && crossReview.Verdict != marshal.VerdictEscalate) || crossReview.Reviewer == "" || crossReview.Reviewer == h.Worker || crossReview.Reviewer == s.Reviewer || len(crossReview.EvidenceRefs) == 0 {
 			return "", errors.New("independent cross-review is incomplete")
+		}
+		if err := resolveReviewReferences(crossReview, h); err != nil {
+			return "", err
 		}
 		crossReviewerProvider = provider
 		if err = marshal.CheckCrossReviewProvider(policy, h.Provider, crossReviewerProvider); err != nil {
@@ -746,6 +758,9 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 		}
 	}
 	accepted := run.Tasks[i].ResultCommit
+	if err := s.checkHoneypotAdmission(ctx, run.Tasks[i], accepted); err != nil {
+		return err
+	}
 	if !marshalCommitPattern.MatchString(accepted) {
 		return errors.New("accepted result commit is missing or invalid")
 	}
@@ -828,7 +843,7 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 	}
 	result := verification.Evaluate(session, binding, s.clock())
 	if run.Tier == marshal.Ultra && result == verification.VerifiedComplete {
-		if err = s.IndependentVerify(ctx, run, head, session); err != nil {
+		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
 			return verification.Blocked, err
 		}
 	}
@@ -887,7 +902,7 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 		return errors.New("integrated result is not verified")
 	}
 	if run.Tier == marshal.Ultra {
-		if err = s.IndependentVerify(ctx, run, head, session); err != nil {
+		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
 			return err
 		}
 	}

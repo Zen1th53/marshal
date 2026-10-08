@@ -216,3 +216,29 @@ func TestHoneypotHomeMountOutsideWorktree(t *testing.T) {
 		t.Fatal("repository HOME accepted")
 	}
 }
+
+func TestReadOnlyCheckSourceCannotBeOverlaidWritable(t *testing.T) {
+	tree := t.TempDir()
+	backend := NewBwrap("bwrap")
+	spec, err := backend.Wrap(model.SandboxRequest{Worktree: tree, ReadOnlyWorktree: true, WritableTmpfs: []string{"/tmp/marshal-build"}}, []string{"/bin/true"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for i := 0; i+2 < len(spec.Args); i++ {
+		if spec.Args[i] == "--ro-bind" && spec.Args[i+1] == tree && spec.Args[i+2] == tree {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("tested source is not read-only")
+	}
+	for _, request := range []model.SandboxRequest{
+		{Worktree: tree, ReadOnlyWorktree: true, WritableDirs: []string{tree}},
+		{Worktree: tree, ReadOnlyWorktree: true, WritableTmpfs: []string{tree}},
+	} {
+		if _, err := backend.Wrap(request, []string{"/bin/true"}); err == nil {
+			t.Fatal("writable overlay accepted")
+		}
+	}
+}
