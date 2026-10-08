@@ -144,6 +144,9 @@ type storedRunEgress struct {
 // Read committed decisions on every evaluation, including the proxy's final
 // check before dialing. A read error refuses access, including provider defaults.
 func (e *storedRunEgress) Evaluate(ctx context.Context, request netpolicy.Request) (netpolicy.Decision, error) {
+	if e.scope.broker != nil && !e.runtime.HasCredentialGrant(ctx, e.scope.provider) {
+		return netpolicy.Decision{Reason: netpolicy.ReasonDenied}, nil
+	}
 	history, err := e.runtime.store.EgressControlEvents(ctx, e.scope.id, 0)
 	if err != nil {
 		return netpolicy.Decision{Reason: netpolicy.ReasonDenied}, err
@@ -166,11 +169,31 @@ func (r *Runtime) watchEgressRevocations(ctx context.Context, scope *runEgress) 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	var after events.Sequence
+	seen := map[string]bool{}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if scope.broker != nil {
+				records, err := r.store.ListEvents(ctx)
+				if err != nil {
+					_ = scope.proxy.Close()
+					return
+				}
+				for _, event := range records {
+					if seen[event.ID] || event.Type != "PERMISSION_DECIDED" || event.ProjectID != r.ProjectID() || event.Data["kind"] != "credential" || event.Data["object"] != scope.provider || event.Data["allow"] != false || event.Timestamp.Before(scope.started) {
+						continue
+					}
+					if err := scope.proxy.Close(); err != nil {
+						return
+					}
+					if err := r.recordBrokerClosed(ctx, scope, event.ID); err != nil {
+						return
+					}
+					seen[event.ID] = true
+				}
+			}
 			history, err := r.store.EgressControlEvents(ctx, scope.id, after)
 			if err != nil {
 				if ctx.Err() == nil {
