@@ -92,10 +92,16 @@ func TestAcceptancePermissionTargetsClientAndDefersHistory(t *testing.T) {
 	w := NewWorkspace(nil, "project", "session")
 	w.tmuxSession = "session"
 	w.tmuxMarshalPaneID = "%centre"
+	w.tmuxActiveWins = map[string]*activeTmuxAgent{"marshal-chat": {role: "marshal-chat", paneID: "%chat"}}
 	target := w.permissionPopupTarget(context.Background(), []permission.Request{{Kind: "marshal-command"}})
 	if target != "/dev/pts/7" {
 		t.Fatalf("popup target=%q", target)
 	}
+	w.tmuxActiveWins = nil
+	if got := w.permissionPopupTarget(context.Background(), []permission.Request{{Kind: "marshal-command"}}); got != "" {
+		t.Fatal("proposal interrupts an unregistered provider pane")
+	}
+	w.tmuxActiveWins = map[string]*activeTmuxAgent{"marshal-chat": {role: "marshal-chat", paneID: "%chat"}}
 	if got := w.permissionPopupTarget(context.Background(), []permission.Request{{Kind: "read"}}); got != "" {
 		t.Fatalf("history interrupts chat: %s", got)
 	}
@@ -156,7 +162,7 @@ func TestAcceptanceProposalPopupAppliesOnChatClient(t *testing.T) {
 	log := filepath.Join(dir, "target")
 	script := fmt.Sprintf(`#!/bin/bash
 case "$1" in
- list-clients) printf '/dev/pts/7|%%chat|session\n';;
+ list-clients) printf '/dev/pts/7|%%%%chat|session\n';;
  display-message) echo 3.3a;;
  display-popup) printf '%%s\n' "$@" > %q; printf A | bash -c "${@: -1}";;
  *) exit 1;;
@@ -170,6 +176,7 @@ esac
 	w.tmuxSession = "session"
 	w.tmuxPath = fake
 	w.tmuxMarshalPaneID = "%centre"
+	w.tmuxActiveWins = map[string]*activeTmuxAgent{"marshal-chat": {role: "marshal-chat", paneID: "%chat"}}
 	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"setting","key":"control","value":"strict"}`}}})
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()

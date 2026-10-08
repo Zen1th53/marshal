@@ -95,16 +95,42 @@ func scanFile(rel, path string) ([]site, error) {
 		var formatted bytes.Buffer
 		_ = format.Node(&formatted, fset, body)
 		sourceHash := fmt.Sprintf("%x", sha256.Sum256(formatted.Bytes()))
+		// Track locally opened os.Root handles so rooted mutations are inventoried
+		// like their os package equivalents rather than disappearing at a method call.
+		localImports := map[string]string{}
+		for name, path := range imports {
+			localImports[name] = path
+		}
+		ast.Inspect(body, func(node ast.Node) bool {
+			assignment, ok := node.(*ast.AssignStmt)
+			if !ok || len(assignment.Rhs) != 1 || len(assignment.Lhs) == 0 {
+				return true
+			}
+			call, ok := assignment.Rhs[0].(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			selector, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || selector.Sel.Name != "OpenRoot" {
+				return true
+			}
+			pkg, ok := selector.X.(*ast.Ident)
+			handle, handleOK := assignment.Lhs[0].(*ast.Ident)
+			if ok && handleOK && localImports[pkg.Name] == "os" {
+				localImports[handle.Name] = "os"
+			}
+			return true
+		})
 		ordinals := map[string]int{}
 		ast.Inspect(body, func(node ast.Node) bool {
 			call, ok := node.(*ast.CallExpr)
 			if !ok {
 				return true
 			}
-			effect := classify(call, imports, rel)
+			effect := classify(call, localImports, rel)
 			if effect != "" {
 				ordinals[effect]++
-				sites = append(sites, site{rel, name, effect, sourceHash, ordinals[effect], supportReason(call, imports, rel, name, body)})
+				sites = append(sites, site{rel, name, effect, sourceHash, ordinals[effect], supportReason(call, localImports, rel, name, body)})
 			}
 			return true
 		})

@@ -647,7 +647,7 @@ func (w *Workspace) runNativeAgentInTmux(
 		}
 		var err error
 		sessionCtx := workerterminal.WithLifecycle(workerterminal.WithCompletion(workerterminal.WithHost(context.Background(), host), agentCompletion(root, agentID)), func(ref processgroup.Reference) error { sessionReference = ref; return nil })
-		workerHandle, err = driver.LaunchSession(sessionCtx, provider, binary, root, args, briefingEnv)
+		workerHandle, err = driver.LaunchSession(workerterminal.WithSize(sessionCtx, tmuxPaneSize(&hostedPane)), provider, binary, root, args, briefingEnv)
 		if err != nil {
 			return "", fmt.Errorf("launch %s in tmux: %w", agentLabel, err)
 		}
@@ -787,6 +787,9 @@ func (w *Workspace) monitorAgent(
 				snapshot := copyAgentLocked(agent)
 				w.tmuxMu.Unlock()
 				// Poll syncs
+				if snapshot.role == "marshal-chat" {
+					w.observeMarshalProposalFiles(root)
+				}
 				if watch != nil && capturesLive(snapshot.provider) {
 					_ = watch.sync()
 				}
@@ -1874,4 +1877,17 @@ func (w *Workspace) breakJoinedPanes(ctx context.Context, joined []*activeTmuxAg
 		w.tmuxMu.Unlock()
 	}
 	return nil
+}
+
+func tmuxPaneSize(pane *string) workerterminal.Size {
+	// The host publishes the immutable pane before Attach starts polling.
+	return func(ctx context.Context) (uint16, uint16, error) {
+		out, err := tmux.RunCommand(ctx, "display-message", "-p", "-t", *pane, "#{pane_height} #{pane_width}")
+		if err != nil {
+			return 0, 0, err
+		}
+		var rows, cols uint16
+		_, err = fmt.Sscanf(strings.TrimSpace(string(out)), "%d %d", &rows, &cols)
+		return rows, cols, err
+	}
 }

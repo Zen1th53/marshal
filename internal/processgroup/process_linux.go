@@ -56,23 +56,41 @@ func supervise(argv []string) int {
 		return 125
 	}
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGWINCH)
 	defer signal.Stop(signals)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// An interactive child must remain in the controlling terminal's foreground
+	// group. A separate group would suspend provider input with SIGTTIN.
+	foreground, terminalErr := unix.IoctlGetInt(int(os.Stdin.Fd()), unix.TIOCGPGRP)
+	interactive := terminalErr == nil && foreground == syscall.Getpgrp()
+	if interactive {
+		cmd.SysProcAttr = nil
+	}
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 125
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
-	select {
-	case <-done:
-	case <-signals:
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		_ = cmd.Process.Kill()
-		<-done
+wait:
+	for {
+		select {
+		case <-done:
+			break wait
+		case sig := <-signals:
+			if sig == syscall.SIGWINCH {
+				if !interactive {
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGWINCH)
+				}
+				continue
+			}
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Process.Kill()
+			<-done
+			break wait
+		}
 	}
 	// The leader is reaped. Any surviving children, including escaped groups,
 	// are now ours. Killing each adopted child makes its children ours in turn.

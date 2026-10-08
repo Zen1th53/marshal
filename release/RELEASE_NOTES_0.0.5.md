@@ -1,10 +1,11 @@
 # MARSHAL v0.0.5 — The Marshal workspace
 
-- Marshal protocol decisions now use MARSHAL permission popups: uppercase A applies strict, allow-listed chat proposals through existing handlers with operator evidence; other keys or timeout decline, and duplicate proposals do not stack.
+- Marshal protocol decisions use validated JSON handoffs in `.marshal/proposals`, keeping proposal payloads out of chat. Uppercase A applies allow-listed proposals through existing handlers with operator evidence; Esc, D, n, other non-navigation keys or timeout decline. Identical proposals deduplicate while pending and can be emitted again after a decision.
 
-- Marshal proposals appear on the attached client, including the Marshal chat, even when earlier-history access was declined; A applies the proposal.
+- Marshal proposals appear on the attached client in the control centre or Marshal chat, even when earlier-history access was declined. F7/F8/F9/F11/F12 navigate without deciding; the request stays pending, and A records one decision. The centre also displays the pending request.
 - Governed work waits for an undecided credential popup and continues automatically after A; denial or timeout stops it.
-- Reopening or switching the Marshal preserves the project's language and earlier-work answer, and reopening resumes its known conversation.
+- Reopening or switching the Marshal continues in the saved language and skips answered intake across providers; reopening resumes its known conversation.
+- Native operator terminals use the hosted tmux pane dimensions at startup and propagate resizes to the provider PTY and SIGWINCH, preventing rendering at a fixed 120×40 size.
 - Earlier-history popups wait for an explicit yes to continuation and focus on the control centre or Marshal chat, so they do not interrupt provider input or trust prompts.
 
 One workspace for planning with the Marshal and working with your agents.

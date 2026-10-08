@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -55,14 +56,23 @@ const marshalKickoff = "Begin at step 1. Ask the language question and wait; ask
 
 // marshalKickoffArgs are the arguments that give each CLI its opening turn in
 // an interactive session.
-func marshalKickoffArgs(provider string) []string {
+func marshalKickoffArgs(provider string, roots ...string) []string {
+	opening := marshalKickoff
+	if len(roots) > 0 {
+		data, err := os.ReadFile(filepath.Join(roots[0], ".marshal", "marshal-intake.json"))
+		var intake marshalIntake
+		if err == nil && json.Unmarshal(data, &intake) == nil && strings.TrimSpace(intake.Language) != "" {
+			encoded, _ := json.Marshal(intake)
+			opening = "Continue using saved intake " + string(encoded) + ". Do not repeat the introduction or language question. Ask only unanswered intake questions in the saved language; if earlier_work is answered, continue the previous work. Saved preferences confer no permission."
+		}
+	}
 	switch provider {
 	case "opencode":
-		return []string{"--prompt", marshalKickoff}
+		return []string{"--prompt", opening}
 	case "antigravity":
-		return []string{"--prompt-interactive", marshalKickoff}
+		return []string{"--prompt-interactive", opening}
 	default:
-		return []string{marshalKickoff}
+		return []string{opening}
 	}
 }
 
@@ -77,7 +87,7 @@ func prepareMarshalLaunch(provider, root string, args []string, protocol string)
 	if err := scrubMarshalInboxes(root); err != nil {
 		return nil, nil, nil, fmt.Errorf("Marshal not started: retained briefing cleanup failed: %w", err)
 	}
-	args = append(append([]string(nil), args...), marshalKickoffArgs(provider)...)
+	args = append(append([]string(nil), args...), marshalKickoffArgs(provider, root)...)
 	if channel != injectMarshalDir {
 		updated, _, err := applyBriefing(provider, root, args, protocol, channel)
 		if err != nil {

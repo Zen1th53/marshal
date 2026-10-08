@@ -416,7 +416,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			return "", fmt.Errorf("Marshal not started: hidden instruction delivery failed: %w", err)
 		}
 		briefingNotes = append(briefingNotes, note)
-		args = append(args, marshalKickoffArgs(provider)...)
+		args = append(args, marshalKickoffArgs(provider, root)...)
 	}
 	args, briefingEnv, err := dir.launch(args)
 	if err != nil {
@@ -549,6 +549,9 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			}
 			return result, runErr
 		case <-ticker.C:
+			if len(marshalBrief) > 0 {
+				w.observeMarshalProposalFiles(root)
+			}
 			// OpenCode's public history API is a CLI export backed by the same
 			// database the child is using. Export once the child exits; polling it
 			// here can delay interactive input and contend with the live session.

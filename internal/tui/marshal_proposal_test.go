@@ -20,7 +20,7 @@ import (
 
 func TestMarshalProposalSettingPermission(t *testing.T) {
 	for _, allow := range []bool{true, false} {
-		w, rt := realControlWorkspace(t, "SESSION-proposal")
+		w, rt := realControlWorkspace(t, "SESSION-proposal", false)
 		tr := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"setting","key":"acceptance-mode","value":"marshal"}`}}}
 		w.observeMarshalProposals(tr)
 		w.observeMarshalProposals(tr)
@@ -94,7 +94,7 @@ func TestMarshalProposalStrictParsing(t *testing.T) {
 			t.Errorf("accepted invalid: %s", line)
 		}
 	}
-	w, _ := realControlWorkspace(t, "SESSION-invalid-proposals")
+	w, _ := realControlWorkspace(t, "SESSION-invalid-proposals", false)
 	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "user", Content: `MARSHAL_PROPOSAL {"action":"setting","key":"control","value":"strict"}`}, {Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"setting","key":"control","value":"bogus"}`}}})
 	if !w.permissions.queue.Empty() {
 		t.Fatal("untrusted or malformed output queued")
@@ -110,19 +110,20 @@ func TestMarshalProposalStrictParsing(t *testing.T) {
 func TestMarshalProposalPopupKeysAndEvidence(t *testing.T) {
 	for _, key := range []string{"A", "a", "D", "\n", "\x1b", ""} {
 		t.Run(fmt.Sprintf("key-%x", key), func(t *testing.T) {
-			w, rt := realControlWorkspace(t, "SESSION-proposal-key")
+			w, rt := realControlWorkspace(t, "SESSION-proposal-key", false)
 			dir := t.TempDir()
 			fake := filepath.Join(dir, "tmux")
 			if err := os.WriteFile(filepath.Join(dir, "key"), []byte(key), 0600); err != nil {
 				t.Fatal(err)
 			}
-			script := "#!/bin/bash\nif [[ $1 == display-message ]]; then printf '%%marshal\\n'; exit; fi\nif [[ $1 == display-popup ]]; then printf 'popup\\n' >> '" + dir + "/calls'; bash -c \"${@: -1}\" < '" + dir + "/key' > '" + dir + "/screen'; exit; fi\nexit 1\n"
+			script := "#!/bin/bash\nif [[ $1 == list-clients ]]; then printf 'client|%%marshal|session\\n'; exit; fi\nif [[ $1 == display-message ]]; then printf '%%marshal\\n'; exit; fi\nif [[ $1 == display-popup ]]; then printf 'popup\\n' >> '" + dir + "/calls'; bash -c \"${@: -1}\" < '" + dir + "/key' > '" + dir + "/screen'; exit; fi\nexit 1\n"
 			if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
 				t.Fatal(err)
 			}
 			tmux.SetBinaryPath(fake)
 			defer tmux.ResetBinaryPath()
 			w.tmuxPath, w.tmuxSession = fake, "session"
+			w.tmuxMarshalPaneID = "%marshal"
 			tr := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"setting","key":"acceptance-mode","value":"marshal"}`}}}
 			w.observeMarshalProposals(tr)
 			w.observeMarshalProposals(tr)
@@ -130,9 +131,11 @@ func TestMarshalProposalPopupKeysAndEvidence(t *testing.T) {
 			if string(before.Value.AcceptanceMode) == "marshal" {
 				t.Fatal("model applied before A")
 			}
-			w.runPermissionQueue(t.Context())
+			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+			defer cancel()
+			w.runPermissionQueue(ctx)
 			w.observeMarshalProposals(tr)
-			w.runPermissionQueue(t.Context())
+			w.runPermissionQueue(ctx)
 			calls, err := os.ReadFile(filepath.Join(dir, "calls"))
 			if err != nil || string(calls) != "popup\n" {
 				t.Fatalf("calls=%q %v", calls, err)
@@ -180,7 +183,7 @@ func TestMarshalProposalPopupKeysAndEvidence(t *testing.T) {
 }
 
 func TestMarshalProposalTimeoutDeclines(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-timeout")
+	w, rt := realControlWorkspace(t, "SESSION-proposal-timeout", false)
 	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"setting","key":"control","value":"strict"}`}}})
 	batch := w.permissions.queue.Take(false)
 	dir := t.TempDir()
@@ -212,10 +215,15 @@ func TestMarshalProposalTimeoutDeclines(t *testing.T) {
 	if !found {
 		t.Fatal("timeout decline not recorded")
 	}
+	message := importer.Message{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"setting","key":"control","value":"strict"}`}
+	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{message, message}})
+	if len(w.permissions.queue.Take(false)) != 1 {
+		t.Fatal("timeout suppressed later identical emission")
+	}
 }
 
 func TestMarshalProposalBoundNativeHistory(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-history")
+	w, rt := realControlWorkspace(t, "SESSION-proposal-history", false)
 	root := rt.ProjectRoot()
 	dir := t.TempDir()
 	w.tmuxActiveWins = map[string]*activeTmuxAgent{"marshal-chat": {id: "marshal-chat", role: "marshal-chat", sessionID: "chat", provider: "codex"}}
@@ -243,7 +251,7 @@ func TestMarshalProposalBoundNativeHistory(t *testing.T) {
 }
 
 func TestMarshalProposalReadMemoryAndContinuation(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-continuation")
+	w, rt := realControlWorkspace(t, "SESSION-proposal-continuation", false)
 	// Explicit intake consent precedes requests; popup/grant assertions below remain unchanged.
 	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_INTAKE {"language":"English","earlier_work":"yes"}`}}})
 	root := rt.ProjectRoot()
@@ -320,7 +328,7 @@ func TestMarshalProposalReadMemoryAndContinuation(t *testing.T) {
 }
 
 func TestMarshalProposalApprovalWaitsForDraftAndExpires(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-approval")
+	w, rt := realControlWorkspace(t, "SESSION-proposal-approval", false)
 	tr := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"approve"}`}}}
 	w.observeMarshalProposals(tr)
 	if !w.permissions.queue.Empty() {
@@ -360,7 +368,7 @@ func TestMarshalProposalApprovalWaitsForDraftAndExpires(t *testing.T) {
 }
 
 func TestMarshalProposalTaskAcceptanceUsesHandler(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-task")
+	w, rt := realControlWorkspace(t, "SESSION-proposal-task", false)
 	m := w.marshalSession()
 	m.mu.Lock()
 	m.service = rt.Marshal()
@@ -397,7 +405,7 @@ func TestMarshalProposalTaskAcceptanceUsesHandler(t *testing.T) {
 }
 
 func TestMarshalProposalSettingAllowList(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-settings")
+	w, rt := realControlWorkspace(t, "SESSION-proposal-settings", false)
 	values := map[string][]string{
 		"execution-rights": {"none", "read-only", "small-tasks"},
 		"acceptance-mode":  {"marshal", "marshal-then-user", "user"},
@@ -432,7 +440,7 @@ func TestMarshalProposalSettingAllowList(t *testing.T) {
 }
 
 func TestMarshalProposalRejectsToolPayloadAndInvalidJSON(t *testing.T) {
-	w, _ := realControlWorkspace(t, "SESSION-proposal-tool")
+	w, _ := realControlWorkspace(t, "SESSION-proposal-tool", false)
 	proposal := `MARSHAL_PROPOSAL {"action":"setting","key":"control","value":"strict"}`
 	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Kind: importer.MessageKindToolUse, Content: proposal}}})
 	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: "```json\n" + proposal + "\n```"}}})
@@ -452,7 +460,7 @@ func TestMarshalProposalRejectsToolPayloadAndInvalidJSON(t *testing.T) {
 }
 
 func TestMarshalProposalPlanApprovalUsesHandler(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-plan")
+	w, rt := realControlWorkspace(t, "SESSION-proposal-plan", false)
 	bin := t.TempDir()
 	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
@@ -509,7 +517,7 @@ func TestMarshalProposalPlanApprovalUsesHandler(t *testing.T) {
 }
 
 func TestMarshalProposalAmendmentApprovalBinding(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-amend")
+	w, rt := realControlWorkspace(t, "SESSION-proposal-amend", false)
 	m := w.marshalSession()
 	run := marshal.Run{PlanID: "PLAN-amend", PlanVersion: 1, State: marshal.AwaitingUser, Settings: marshal.DefaultSettings()}
 	if _, err := rt.Marshal().Store.SetMarshalRun(t.Context(), rt.ProjectID(), "RUN-amend", run, 0); err != nil {
@@ -537,5 +545,160 @@ func TestMarshalProposalAmendmentApprovalBinding(t *testing.T) {
 	m.mu.Unlock()
 	if busy {
 		t.Fatal("changed amendment dispatched")
+	}
+}
+
+func TestMarshalProposalReemittedAfterDecision(t *testing.T) {
+	for _, allow := range []bool{true, false} {
+		w, _ := realControlWorkspace(t, "SESSION-retry", false)
+		msg := importer.Message{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"setting","key":"control","value":"strict"}`}
+		tr := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{msg}}
+		w.observeMarshalProposals(tr)
+		batch := w.permissions.queue.Take(false)
+		tr.Messages = append(tr.Messages, msg)
+		w.observeMarshalProposals(tr)
+		if !w.permissions.queue.Empty() {
+			t.Fatal("duplicate pending popup")
+		}
+		if err := w.decidePermission(t.Context(), batch[0], allow, "operator popup"); err != nil {
+			t.Fatal(err)
+		}
+		w.observeMarshalProposals(tr)
+		if !w.permissions.queue.Empty() {
+			t.Fatal("old message replayed")
+		}
+		tr.Messages = append(tr.Messages, msg)
+		w.observeMarshalProposals(tr)
+		if got := w.permissions.queue.Take(false); len(got) != 1 {
+			t.Fatalf("fresh identical proposal: %v", got)
+		}
+	}
+}
+
+func TestMarshalProposalFileHandoff(t *testing.T) {
+	w, rt := realControlWorkspace(t, "SESSION-files", false)
+	root := rt.ProjectRoot()
+	dir := filepath.Join(root, ".marshal", "proposals")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	valid := `{"action":"setting","key":"control","value":"strict"}`
+	for name, data := range map[string]string{"valid.json": valid, "invalid.json": `{"action":"shell","value":"bad"}`, "duplicate.json": `{"action":"approve","action":"close"}`, "large.json": strings.Repeat(" ", 4097)} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	external := filepath.Join(t.TempDir(), "outside")
+	os.WriteFile(external, []byte(valid), 0600)
+	if err := os.Symlink(external, filepath.Join(dir, "link.json")); err != nil {
+		t.Fatal(err)
+	}
+	w.observeMarshalProposalFiles(root)
+	w.observeMarshalProposalFiles(root)
+	batch := w.permissions.queue.Take(false)
+	if len(batch) != 1 || batch[0].Object != "/marshal settings control strict" {
+		t.Fatalf("requests=%v", batch)
+	}
+	before, _ := rt.Marshal().Store.GetMarshalSettings(t.Context(), rt.ProjectID())
+	if string(before.Value.Control) == "strict" {
+		t.Fatal("file conferred authority")
+	}
+	if err := w.decidePermission(t.Context(), batch[0], false, "operator popup"); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(dir, "retry.json"), []byte(valid), 0600)
+	w.observeMarshalProposalFiles(root)
+	if len(w.permissions.queue.Take(false)) != 1 {
+		t.Fatal("file retry suppressed")
+	}
+	data, _ := os.ReadFile(external)
+	if string(data) != valid {
+		t.Fatal("external symlink target modified")
+	}
+}
+
+func TestMarshalProposalNavigatesChatToCentreOnce(t *testing.T) {
+	w, rt := realControlWorkspace(t, "SESSION-surfaces", false)
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "tmux")
+	t.Setenv("POPUP_FIXTURE", dir)
+	script := `#!/bin/bash
+case "$1" in
+ list-clients)
+  if [[ -f "$POPUP_FIXTURE/centre" ]]; then printf 'client|%%centre|session\n'; else printf 'client|%%chat|session\n'; fi;;
+ display-message) echo 3.3a;;
+ switch-client) printf '%s\n' "$*" > "$POPUP_FIXTURE/navigation"; touch "$POPUP_FIXTURE/centre";;
+ display-popup)
+  printf popup\\n >> "$POPUP_FIXTURE/calls"
+  if [[ -f "$POPUP_FIXTURE/centre" ]]; then printf A; else printf '\033[23~'; fi | bash -c "${@: -1}";;
+ *) exit 1;;
+esac
+`
+	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	tmux.SetBinaryPath(fake)
+	defer tmux.ResetBinaryPath()
+	w.tmuxSession = "session"
+	w.tmuxPath = fake
+	w.tmuxMarshalPaneID = "%centre"
+	w.tmuxActiveWins = map[string]*activeTmuxAgent{"marshal-chat": {role: "marshal-chat", paneID: "%chat"}}
+	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"setting","key":"control","value":"strict"}`}}})
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	w.runPermissionQueue(ctx)
+	calls, _ := os.ReadFile(filepath.Join(dir, "calls"))
+	if strings.Count(string(calls), "popup") != 2 {
+		t.Fatalf("expected popup on chat and centre: %q", calls)
+	}
+	navigation, _ := os.ReadFile(filepath.Join(dir, "navigation"))
+	if !strings.Contains(string(navigation), "switch-client -c client -t %centre") {
+		t.Fatal(string(navigation))
+	}
+	settings, _ := rt.Marshal().Store.GetMarshalSettings(t.Context(), rt.ProjectID())
+	if string(settings.Value.Control) != "strict" {
+		t.Fatal("navigation silently denied")
+	}
+	events, _ := rt.Store().ListEvents(t.Context())
+	count := 0
+	for _, event := range events {
+		if event.Type == "PERMISSION_DECIDED" {
+			count++
+			if event.Data["allow"] != true {
+				t.Fatal("navigation recorded denial")
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("decisions=%d", count)
+	}
+	w.mu.RLock()
+	visible := strings.Contains(w.state.LastOutput, "/marshal settings control strict")
+	w.mu.RUnlock()
+	if !visible {
+		t.Fatal("centre has no pending request display")
+	}
+}
+
+func TestMarshalProposalNavigationTargets(t *testing.T) {
+	w, _ := realControlWorkspace(t, "SESSION-nav-targets", false)
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "tmux")
+	log := filepath.Join(dir, "calls")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> '"+log+"'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	tmux.SetBinaryPath(fake)
+	defer tmux.ResetBinaryPath()
+	w.tmuxMarshalPaneID = "%centre"
+	for i, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
+		pane := fmt.Sprintf("%%%d", i)
+		w.tmuxActiveWins = map[string]*activeTmuxAgent{provider: {provider: provider, paneID: pane, role: "worker"}}
+		key := []string{"F7", "F8", "F9", "F12"}[i]
+		w.navigatePermissionPopup(t.Context(), "client", key)
+		data, _ := os.ReadFile(log)
+		if !strings.Contains(string(data), "switch-client -c client -t "+pane) {
+			t.Fatalf("%s did not navigate: %s", key, data)
+		}
 	}
 }

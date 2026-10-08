@@ -16,17 +16,18 @@ import (
 )
 
 func TestPermissionPopupRecordsBatchedDecisions(t *testing.T) {
-	w, runtime := realControlWorkspace(t, "SESSION-popup-batch")
+	w, runtime := realControlWorkspace(t, "SESSION-popup-batch", false)
 	dir := t.TempDir()
 	fake := filepath.Join(dir, "tmux")
 	// Execute the actual popup program with an operator-key fixture.
-	script := "#!/bin/bash\nif [[ $1 == display-message ]]; then printf '%%marshal\\n'; exit; fi\nif [[ $1 == display-popup ]]; then printf 'A' | bash -c \"${@: -1}\"; exit; fi\nexit 1\n"
+	script := "#!/bin/bash\nif [[ $1 == list-clients ]]; then printf 'client|%%marshal|session\\n'; exit; fi\nif [[ $1 == display-message ]]; then printf '%%marshal\\n'; exit; fi\nif [[ $1 == display-popup ]]; then printf 'A' | bash -c \"${@: -1}\"; exit; fi\nexit 1\n"
 	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
 	tmux.SetBinaryPath(fake)
 	defer tmux.ResetBinaryPath()
 	w.tmuxPath, w.tmuxSession = fake, "session"
+	w.tmuxMarshalPaneID = "%marshal"
 	w.startPermissionQueue()
 	first, second := t.TempDir(), t.TempDir()
 	req := permission.Request{Kind: "read", Object: first, Scope: "this session only, read-only", Who: "Marshal", Reason: "Continue earlier work"}
@@ -63,7 +64,7 @@ func TestPermissionPopupRecordsBatchedDecisions(t *testing.T) {
 }
 
 func TestLargeMemoryBatchRoutesToPerEntryReview(t *testing.T) {
-	w, runtime := realControlWorkspace(t, "SESSION-overflow")
+	w, runtime := realControlWorkspace(t, "SESSION-overflow", false)
 	ctx := context.Background()
 	for i := 0; i < 88; i++ {
 		_, _, err := runtime.ProposeContinuation(ctx, importer.SessionTranscript{SessionID: fmt.Sprintf("earlier-%d", i), Provider: "claude", CWD: runtime.ProjectRoot(), Messages: []importer.Message{{Role: "assistant", Content: fmt.Sprintf("Handoff %d", i)}}})
@@ -83,16 +84,22 @@ func TestLargeMemoryBatchRoutesToPerEntryReview(t *testing.T) {
 	// Drive the real queue: the read popup allows, while no memory decision is made.
 	dir := t.TempDir()
 	fake := filepath.Join(dir, "tmux")
-	if err := os.WriteFile(fake, []byte("#!/bin/bash\nif [[ $1 == display-message ]]; then printf '%%marshal\\n'; exit; fi\nif [[ $1 == display-popup ]]; then printf A | bash -c \"${@: -1}\"; exit; fi\nexit 1\n"), 0700); err != nil {
+	if err := os.WriteFile(fake, []byte("#!/bin/bash\nif [[ $1 == list-clients ]]; then printf 'client|%%marshal|session\\n'; exit; fi\nif [[ $1 == display-message ]]; then printf '%%marshal\\n'; exit; fi\nif [[ $1 == display-popup ]]; then printf A | bash -c \"${@: -1}\"; exit; fi\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	tmux.SetBinaryPath(fake)
 	defer tmux.ResetBinaryPath()
 	w.tmuxPath, w.tmuxSession = fake, "session"
+	w.tmuxMarshalPaneID = "%marshal"
 	for _, req := range requests {
 		w.permissions.queue.Add(req)
 	}
-	w.runPermissionQueue(ctx)
+	queueCtx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	w.runPermissionQueue(queueCtx)
+	if !w.permissions.queue.Empty() {
+		t.Fatal("permission queue did not drain")
+	}
 	records, err := runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: runtime.ProjectID()})
 	if err != nil || len(records) != 0 || len(runtime.ContinuationCandidates()) != 88 {
 		t.Fatalf("overflow wrote/lost candidates: %d %v", len(records), err)

@@ -69,7 +69,7 @@ func Render(requests []Request) (string, error) {
 	if len(requests) > MaxPopupItems {
 		fmt.Fprintf(&b, "and %d more (require separate decisions)\n\n", len(requests)-MaxPopupItems)
 	}
-	b.WriteString("A = Allow   D = Deny\nEnter, Esc, any other key or timeout = Deny\n")
+	b.WriteString("A = Allow   D = Deny\nEsc, D, n, Enter, other non-navigation keys or timeout = Deny\nF7/F8/F9/F11/F12 navigate; request stays pending\n")
 	return b.String(), nil
 }
 func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
@@ -98,9 +98,28 @@ func Popup(ctx context.Context, target string, requests []Request, timeout time.
 	if err = os.WriteFile(prompt, []byte(text), 0600); err != nil {
 		return false, err
 	}
-	// Bash read consumes exactly one character, including Escape. Enter yields an
-	// empty string. EOF and timeout fail read. Nothing except uppercase A allows.
-	body := fmt.Sprintf("#!/bin/bash\ncat %s\nkey=''\nif IFS= read -r -s -n 1 -t %.3f key && [[ $key == A ]]; then printf allow > %s; else printf deny > %s; fi\n", quote(prompt), timeout.Seconds(), quote(result), quote(result))
+	// Read the full terminal sequence before treating Escape as a decision.
+	body := fmt.Sprintf(`#!/bin/bash
+cat %s
+key=''
+if IFS= read -r -s -n 1 -t %.3f key; then
+ if [[ $key == $'\e' ]]; then
+  sequence=''
+  while IFS= read -r -s -n 1 -t .05 part; do
+   sequence+="$part"
+   [[ $part == '~' || $part =~ [[:alpha:]] || ${#sequence} -ge 16 ]] && break
+  done
+  case "$sequence" in
+   '[18~') key=F7;; '[19~') key=F8;; '[20~') key=F9;; '[23~') key=F11;; '[24~') key=F12;;
+  esac
+ fi
+fi
+case "$key" in
+ A) printf allow > %s;;
+ F7|F8|F9|F11|F12) printf 'navigate:%%s' "$key" > %s;;
+ *) printf deny > %s;;
+esac
+`, quote(prompt), timeout.Seconds(), quote(result), quote(result), quote(result))
 	if err = os.WriteFile(script, []byte(body), 0700); err != nil {
 		return false, err
 	}
@@ -123,7 +142,7 @@ func Popup(ctx context.Context, target string, requests []Request, timeout time.
 	if os.IsNotExist(err) {
 		return false, nil
 	}
-	return string(data) == "allow" && len(requests) <= MaxPopupItems, err
+	return popupResult(data, len(requests), err)
 }
 
 // Create detached, then select only after tmux has finished creating the pane.
@@ -151,7 +170,7 @@ func windowDecision(ctx context.Context, target, script, result string, count in
 	for {
 		data, err := os.ReadFile(result)
 		if err == nil {
-			return string(data) == "allow" && count <= MaxPopupItems, nil
+			return popupResult(data, count, nil)
 		}
 		if !os.IsNotExist(err) {
 			return false, err
@@ -200,3 +219,14 @@ func (q *Queue) Take(busy bool) []Request {
 }
 
 func (q *Queue) Empty() bool { q.mu.Lock(); defer q.mu.Unlock(); return len(q.pending) == 0 }
+
+// Navigation closes only the display, never the pending request.
+type Navigation struct{ Key string }
+
+func (n *Navigation) Error() string { return "permission popup navigation: " + n.Key }
+func popupResult(data []byte, count int, err error) (bool, error) {
+	if strings.HasPrefix(string(data), "navigate:") {
+		return false, &Navigation{Key: strings.TrimPrefix(string(data), "navigate:")}
+	}
+	return string(data) == "allow" && count <= MaxPopupItems, err
+}

@@ -311,3 +311,29 @@ func TestMarshalKickoffArgsPerProvider(t *testing.T) {
 		}
 	}
 }
+
+func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
+	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
+		for _, earlier := range []string{"", "no", "yes"} {
+			root := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(root, ".marshal"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			data := `{"language":"Uzbek","earlier_work":"` + earlier + `"}`
+			if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			args, _, dir, err := prepareMarshalLaunch(provider, root, nil, "MARSHAL PROTOCOL")
+			if dir != nil {
+				defer dir.remove()
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			opening := args[len(args)-1]
+			if opening == marshalKickoff || !strings.Contains(opening, "Uzbek") || !strings.Contains(opening, "Do not repeat") {
+				t.Fatalf("%s opening: %s", provider, opening)
+			}
+		}
+	}
+}

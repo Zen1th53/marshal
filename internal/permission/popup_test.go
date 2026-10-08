@@ -133,3 +133,30 @@ func TestPermissionPopupContinuationIdentity(t *testing.T) {
 		t.Fatal("importer accepted outside read request")
 	}
 }
+
+func TestPopupNavigationPreservesRequest(t *testing.T) {
+	for _, version := range []string{"3.3a", "3.2a"} {
+		for _, key := range []struct{ sequence, name string }{{"\x1b[18~", "F7"}, {"\x1b[19~", "F8"}, {"\x1b[20~", "F9"}, {"\x1b[23~", "F11"}, {"\x1b[24~", "F12"}} {
+			t.Run(version+key.name, func(t *testing.T) {
+				dir := t.TempDir()
+				os.WriteFile(filepath.Join(dir, "key"), []byte(key.sequence), 0600)
+				fake := filepath.Join(dir, "tmux")
+				script := fmt.Sprintf("#!/bin/bash\ncase $1 in\n display-message) echo %s;;\n display-popup) bash -c \"${@: -1}\" < %q;;\n new-window) bash \"${@: -1}\" < %q > /dev/null; echo %%review;;\n select-window|kill-window) exit 0;;\n *) exit 1;;\nesac\n", version, filepath.Join(dir, "key"), filepath.Join(dir, "key"))
+				if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
+					t.Fatal(err)
+				}
+				tmux.SetBinaryPath(fake)
+				defer tmux.ResetBinaryPath()
+				allowed, err := Popup(t.Context(), "client", []Request{{Object: "exact proposal"}}, time.Second)
+				nav, ok := err.(*Navigation)
+				if allowed || !ok || nav.Key != key.name {
+					t.Fatalf("allow=%v err=%v", allowed, err)
+				}
+				text, _ := Render([]Request{{Object: "exact proposal"}})
+				if !strings.Contains(text, "navigate; request stays pending") {
+					t.Fatal(text)
+				}
+			})
+		}
+	}
+}
