@@ -41,7 +41,7 @@ func TestA2ATaskMemoryGrantCASAndHandoffUseCanonicalRuntime(t *testing.T) {
 	if err := runtime.Store().RegisterAgent(ctx, model.Agent{ID: agentRecord.ID, ProjectID: "PROJECT-local", DisplayName: "memory-agent", Role: model.RoleDeveloper, Capabilities: agentRecord.Capabilities, Status: model.AgentRegistered}); err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(NewServerWithAuth(runtime, authManager).Handler())
+	server := httptest.NewServer(mustAuthenticatedServer(t, runtime, authManager).Handler())
 	defer server.Close()
 
 	status, body := postA2AMemory(t, server.URL+"/a2a/task-memory", adminToken, map[string]any{
@@ -173,7 +173,7 @@ func TestA2ATaskMemoryRejectsUngrantedAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(NewServerWithAuth(runtime, authManager).Handler())
+	server := httptest.NewServer(mustAuthenticatedServer(t, runtime, authManager).Handler())
 	defer server.Close()
 	status, body := postA2AMemory(t, server.URL+"/a2a/task-memory", token, map[string]any{"operation": "set", "task_id": "TASK-a2a-denied", "slot_type": "finding", "value": "denied"})
 	if status != http.StatusForbidden {

@@ -70,7 +70,14 @@ func (r *Runtime) CommandPermission(ctx context.Context, req permission.Request,
 		r.egressMu.Lock()
 		for _, scope := range r.egressRuns {
 			if scope.provider == req.Object && scope.broker != nil {
-				_ = scope.proxy.Close()
+				if err := scope.proxy.Close(); err != nil {
+					r.egressMu.Unlock()
+					return err
+				}
+				if err := r.recordBrokerClosed(ctx, scope, id); err != nil {
+					r.egressMu.Unlock()
+					return err
+				}
 			}
 		}
 		r.egressMu.Unlock()
