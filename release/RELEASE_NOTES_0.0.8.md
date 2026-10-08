@@ -12,6 +12,13 @@ evidence. Pending proposals return to the popup queue after restart, and resolve
 occurrences stay resolved. The Marshal validates and reads back its plan before
 publishing the completion marker. `/marshal resume` retries failed verification
 and reports the reason and next step when a pause needs operator action.
+- Credential revocation reaches every owning runtime through the project store,
+  refuses new broker requests immediately, and closes active exchanges. The
+  permission command reports pending until owners acknowledge closure; use
+  `/permission credential status <provider>` to check it.
+- A2A construction requires a configured authentication manager. Unauthenticated
+  task import requires explicit insecure construction or `--insecure`, with
+  a literal loopback listen address and loopback peers.
 
 ## Requirements
 
@@ -58,6 +65,20 @@ recording a verdict or warning does not count as enforcement. The reviewed
   `/permission credential request <codex|claude|gemini|opencode>` and press
   uppercase `A` in the fixed permission prompt. Revoke with
   `/permission credential revoke <provider>`. Supported API keys stay on the
+- **A2A authentication is required by default.** Missing authentication configuration
+  refuses task import. Deliberate unauthenticated serving requires `--insecure`
+  and a literal loopback listen address; non-loopback peers are refused.
+
+- **Keep the window open.** There is no background service. Stored runs remain
+  recoverable with `/marshal resume` after reopening MARSHAL.
+- **Credential broker is opt-in per project and provider.** Use
+  `/permission credential request <codex|claude|gemini|opencode>` and press
+  uppercase `A` in the fixed permission prompt. Revoke with
+  `/permission credential revoke <provider>`. New broker requests are refused
+  immediately; active exchanges close when their owning runtime consumes the
+  decision (normally within 100 ms). Check `/permission credential status <provider>`
+  for pending or acknowledged closure. An unavailable owner or failed evidence
+  write leaves closure pending; regranting cannot preserve an old exchange. Supported API keys stay on the
   host; the worker gets only placeholders and a public run CA. Injection is
   limited to the selected provider HTTPS host; other allowed hosts remain
   CONNECT tunnels. Setup failures refuse work without copying native auth.

@@ -49,7 +49,7 @@ func TestA2AServerAgentCardDiscovery(t *testing.T) {
 	}
 	defer runtime.Close()
 
-	srv := NewServer(runtime)
+	srv := mustInsecureServer(t, runtime)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -90,7 +90,7 @@ func TestA2AUsupportedVersionHeader(t *testing.T) {
 	}
 	defer runtime.Close()
 
-	srv := NewServer(runtime)
+	srv := mustInsecureServer(t, runtime)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -121,7 +121,7 @@ func TestA2ASendMessageValidationAndRoleSpoof(t *testing.T) {
 	}
 	defer runtime.Close()
 
-	srv := NewServer(runtime)
+	srv := mustInsecureServer(t, runtime)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -163,7 +163,7 @@ func TestA2ATaskDelegation(t *testing.T) {
 	}
 	defer runtime.Close()
 
-	srv := NewServer(runtime)
+	srv := mustInsecureServer(t, runtime)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -213,7 +213,7 @@ func TestA2AServerBearerAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := NewServerWithAuth(runtime, authMgr)
+	srv := mustAuthenticatedServer(t, runtime, authMgr)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -276,7 +276,7 @@ func TestA06TypedHandoffEndpointFailsClosedWithoutAuthenticatedPrincipal(t *test
 	}
 	defer runtime.Close()
 
-	server := httptest.NewServer(NewServer(runtime).Handler())
+	server := httptest.NewServer(mustInsecureServer(t, runtime).Handler())
 	defer server.Close()
 	response, err := http.Post(server.URL+"/a2a/handoffs", "application/a2a+json", bytes.NewBufferString(`{"idempotency_key":"handoff-a06","handoff":{}}`))
 	if err != nil {
@@ -317,7 +317,7 @@ func TestA06TypedHandoffEndpointUsesAuthenticatedTypedContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(NewServerWithAuth(runtime, authManager).Handler())
+	server := httptest.NewServer(mustAuthenticatedServer(t, runtime, authManager).Handler())
 	defer server.Close()
 	request, err := http.NewRequest(http.MethodPost, server.URL+"/a2a/handoffs", bytes.NewReader(body))
 	if err != nil {
@@ -366,7 +366,7 @@ func TestA2APrincipalKindIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := NewServerWithAuth(runtime, authMgr)
+	srv := mustAuthenticatedServer(t, runtime, authMgr)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -467,7 +467,7 @@ func TestA2AActionLevelCapabilityAuthorization(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := NewServerWithAuth(runtime, authMgr)
+	srv := mustAuthenticatedServer(t, runtime, authMgr)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
@@ -507,7 +507,7 @@ func TestA2AMessageIdempotencyAndRateLimiting(t *testing.T) {
 	}
 	defer runtime.Close()
 
-	srv := NewServer(runtime)
+	srv := mustInsecureServer(t, runtime)
 	srv.rateLimiter = ratelimit.NewRateLimiter(1, 2, time.Minute) // 1 rps, burst 2
 	srv.idempotencyStore.Set("msg-cached-1", []byte(`{"status":"cached_result"}`))
 
@@ -585,7 +585,7 @@ func TestA2AOversizedBodyAndMalformedJSON(t *testing.T) {
 	}
 	defer runtime.Close()
 
-	srv := NewServer(runtime)
+	srv := mustInsecureServer(t, runtime)
 	ts := httptest.NewServer(httpsrv.LimitBodyMiddleware(srv.Handler(), 100))
 	defer ts.Close()
 

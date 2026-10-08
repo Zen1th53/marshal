@@ -15,6 +15,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/netpolicy"
+	"github.com/Zen1th53/marshal/internal/permission"
 )
 
 func egressProxyGet(t *testing.T, socket, endpoint string) int {
@@ -355,4 +356,120 @@ func TestDurableEgressProjectionExactScopeAndOrder(t *testing.T) {
 	}
 	// Runtime.Close must not remove a fixture path from the host.
 	operator.egressRuns[scope.id].socket = ""
+}
+
+func TestCrossRuntimeCredentialRevokeClosesExistingExchange(t *testing.T) {
+	owner := openNetpolRuntime(t)
+	operator, err := Open(t.Context(), owner.ProjectRoot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer operator.Close()
+	control, err := operator.OpenLocalControl(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upstream.Close()
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		conn, err := upstream.Accept()
+		if err == nil {
+			accepted <- conn
+		}
+	}()
+	endpoint := upstream.Addr().String()
+	req := permission.Request{Kind: "credential", Object: "codex"}
+	if err := operator.CommandPermission(control.Context(t.Context()), req, true, "operator grant"); err != nil {
+		t.Fatal(err)
+	}
+	broker, err := netpolicy.NewCredentialBroker("codex", "", "synthetic-host-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	socket, cleanup, err := owner.startRunEgress(t.Context(), "RUN-tunnel", "", "codex", "TASK-tunnel", "worker", nil, broker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	ctx := control.Context(t.Context())
+	if err := operator.CommandEgress(ctx, "RUN-tunnel", "allow", endpoint); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.Dial("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := fmt.Fprintf(conn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", endpoint, endpoint); err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(conn)
+	response, err := http.ReadResponse(reader, nil)
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("tunnel: %+v %v", response, err)
+	}
+	var upstreamConn net.Conn
+	select {
+	case upstreamConn = <-accepted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("upstream not connected")
+	}
+	defer upstreamConn.Close()
+	// Verify the tunnel carries bytes before revocation.
+	if _, err := upstreamConn.Write([]byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := reader.ReadByte(); err != nil || b != 'x' {
+		t.Fatalf("tunnel byte: %q %v", b, err)
+	}
+	// Pause the owner consumer to observe pending independently of polling timing.
+	scope := owner.egressRuns["RUN-tunnel"]
+	scope.stopWatch()
+	<-scope.watchDone
+	if err := operator.CommandPermission(ctx, req, false, "operator revoke"); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := operator.CredentialRevocationStatus(t.Context(), "codex"); err != nil || state != "pending" {
+		t.Fatalf("before owner ack: %s %v", state, err)
+	}
+	if owner.HasCredentialGrant(t.Context(), "codex") {
+		t.Fatal("new credentials allowed after revoke")
+	}
+	if d, err := (&storedRunEgress{runtime: owner, scope: scope}).Evaluate(t.Context(), netpolicy.Request{Host: "api.openai.com", Port: 443, Protocol: netpolicy.ProtocolTCP}); err != nil || d.Allowed {
+		t.Fatalf("new request after revoke: %+v %v", d, err)
+	}
+	// A rapid regrant cannot preserve the old exchange.
+	if err := operator.CommandPermission(ctx, req, true, "operator regrant"); err != nil {
+		t.Fatal(err)
+	}
+	watchCtx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { defer close(done); owner.watchEgressRevocations(watchCtx, scope) }()
+	defer func() { cancel(); <-done }()
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := reader.ReadByte(); err == nil {
+		t.Fatal("revoked tunnel still open")
+	} else if timeout, ok := err.(net.Error); ok && timeout.Timeout() {
+		t.Fatal("revoked tunnel was not closed")
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		state, err := operator.CredentialRevocationStatus(t.Context(), "codex")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if state == "closed" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("owner acknowledgement missing: %s", state)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
