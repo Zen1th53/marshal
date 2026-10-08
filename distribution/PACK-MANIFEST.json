@@ -10476,8 +10476,8 @@
     },
     {
       "path": "internal/tui/provider_dialect_test.go",
-      "sha256": "c3c10ed826860c2ac3876525bf82f82c75c77c450c489d19694ac1bb3cb7805b",
-      "bytes": 15853
+      "sha256": "8854729b8f5ba3c8af5cb1ee9df465dae8c81cf78e0fdf46c3bae30b481ff6a1",
+      "bytes": 15850
     },
     {
       "path": "internal/tui/provider_grammar.go",
