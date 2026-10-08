@@ -128,7 +128,7 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 	}
 
 	headerLeft := fmt.Sprintf(" %s %s %s %s %s %s %s ",
-		th.Colorize(th.Marshal, "MARSHAL v1.5.0 CONTROL PLANE"),
+		th.Colorize(th.Marshal, fmt.Sprintf("MARSHAL %s CONTROL PLANE", BuildVersion)),
 		th.BoxHoriz,
 		proj,
 		th.BoxHoriz,

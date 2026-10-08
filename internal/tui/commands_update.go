@@ -125,4 +125,4 @@ func (w *Workspace) setUpdateAvailable(tag string) {
 // BuildVersion is the running build's version, set from the same variable the
 // CLI reports. It is a variable rather than an import so the TUI does not
 // depend on the CLI package.
-var BuildVersion = "v0.0.0"
+var BuildVersion = "dev"
