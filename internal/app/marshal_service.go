@@ -41,6 +41,8 @@ type MarshalDraft struct {
 }
 
 type MarshalService struct {
+	ReservedMergeRequest func(context.Context, string, string, int64, string, []string)
+
 	GovernedCheck                    func(context.Context, string, string, string, string, string) marshal.CommandRecord
 	Store                            *store.Store
 	ProjectID, Repository, Worktrees string
@@ -312,6 +314,10 @@ func (s *MarshalService) Approve(ctx context.Context, runID string) (marshal.Run
 	}
 	run.PlanVersion = p.Version + 1
 	run.ApprovalScopeDigest = marshalApprovalDigest(approved.ApprovalScopeDigest, run)
+	run.GoverningDigest, err = governingDigest(s.Repository)
+	if err != nil {
+		return run, err
+	}
 	run.State = marshal.Approved
 	if run.Settings.AcceptanceMode == marshal.AcceptMarshal {
 		run.CloseAuthorization = &marshal.CloseAuthorization{User: user, ApprovalScopeDigest: run.ApprovalScopeDigest}

@@ -2,7 +2,10 @@
 
 MARSHAL renders **Permission request** with tmux `display-popup` (tmux 3.2a or
 newer). It lists each exact path, memory candidate ID or host:port, its scope
-and duration, requester, and reason under `The Marshal says: "..."`.
+and duration, requester, and reason. Local proposal files say **Local request
+(unverified)** and **The local request says**. Only requests from the runtime
+consumer bound to the live Marshal chat say **Marshal**. Intake preference
+updates appear in activity with the same provenance.
 Uppercase **A** allows the displayed list; **D**, Enter, Escape, any other key,
 EOF, popup failure and 30 seconds without an answer deny. Requests wait while
 the selected worker pane permits operator typing. Pending duplicates collapse
@@ -104,3 +107,26 @@ keystrokes or automatically start a provider turn.
 The model's briefing retains: “You cannot run /marshal commands, change settings
 or approve anything.” Its working-mode question emits the recommended setting
 proposal immediately and says “MARSHAL will show a popup; press A to apply”.
+
+## Governance file protection
+
+A governed result that changes `.marshal/`, policy files, `.github/` or other CI
+configuration, agent configuration directories, `AGENTS.md`, `CLAUDE.md`,
+`SKILL.md` or other recognised instruction files needs a separate operator popup
+even when those paths are in the approved task scope. The popup shows the
+reserved paths and binds consent to the accepted commit and current run revision.
+**D** keeps the accepted result unmerged. **A** resumes that exact run; a changed
+result or revision expires the request. Missing popup consent refuses delivery.
+
+Plan approval records a digest of governing configuration, policy, CI and
+instruction files. Admission and the active proposal monitor detect unexpected
+changes and report an integrity alert; dispatch, resume and merge refuse to
+continue until the original governing files are restored or a new plan is
+approved. Mutable `.marshal` operational records (database, artifacts, logs,
+worktrees, proposals and inbox) are excluded. Within `.marshal`, the baseline
+covers files named for policy, constitution, configuration or instructions.
+Older runs without a saved baseline retain their earlier integrity limits.
+
+This is detection and delivery approval. Native workers still have the user's
+host rights and can modify governing files, the database or even the saved
+baseline outside MARSHAL. These checks cannot prevent all same-user writes.

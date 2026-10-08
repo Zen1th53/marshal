@@ -13,6 +13,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 	"github.com/Zen1th53/marshal/internal/permission"
@@ -22,6 +23,7 @@ const marshalProposalPrefix = "MARSHAL_PROPOSAL "
 
 type marshalProposal struct {
 	occurrence                                                            string
+	who                                                                   string
 	action, key, value, provider, path, id, reason, language, earlierWork string
 }
 
@@ -172,6 +174,21 @@ func (w *Workspace) observeMarshalProposals(tr importer.SessionTranscript) {
 	w.observeMarshalProposalOccurrence(tr, "")
 }
 func (w *Workspace) observeMarshalProposalOccurrence(tr importer.SessionTranscript, occurrence string) {
+	w.observeMarshalProposalSource(tr, occurrence, "Local request (unverified)")
+}
+
+// Only the runtime consumer of the bound live Marshal conversation calls this.
+func (w *Workspace) observeAuthenticatedMarshalProposals(tr importer.SessionTranscript) {
+	w.tmuxMu.Lock()
+	active := w.tmuxActiveWins["marshal-chat"]
+	bound := active != nil && active.sessionID != "" && active.sessionID == tr.SessionID
+	w.tmuxMu.Unlock()
+	if bound {
+		w.observeMarshalProposalSource(tr, "", "Marshal")
+	}
+}
+
+func (w *Workspace) observeMarshalProposalSource(tr importer.SessionTranscript, occurrence, who string) {
 	for messageIndex, message := range tr.Messages {
 		if message.Role != "assistant" || message.Kind != importer.MessageKindText {
 			continue
@@ -196,7 +213,11 @@ func (w *Workspace) observeMarshalProposalOccurrence(tr importer.SessionTranscri
 				continue
 			}
 			fingerprint := fmt.Sprintf("%s\x00%d\x00%s\x00%s", tr.SessionID, messageIndex, message.Timestamp, line)
+			p.who = who
 			p.occurrence = fmt.Sprintf("%x", sha256.Sum256([]byte(fingerprint)))
+			if who == "Marshal" {
+				p.occurrence = "runtime:" + p.occurrence
+			}
 			if occurrence != "" {
 				p.occurrence = occurrence
 				fingerprint = occurrence
@@ -233,13 +254,14 @@ func (w *Workspace) observeMarshalProposalOccurrence(tr importer.SessionTranscri
 					w.permissions.mu.Unlock()
 					continue
 				}
+				w.RecordActivity(fmt.Sprintf("%s: intake updated (language %s, earlier work %s)", p.requester(), p.language, p.earlierWork))
 				if w.store != nil {
 					_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "applied")
 				}
 			case "continue":
-				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: "Marshal", Reason: p.command(), ContinuationProvider: p.provider})
+				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: p.requester(), Reason: p.command(), ContinuationProvider: p.provider})
 			case "read":
-				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: "Marshal", Reason: p.command()})
+				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: p.requester(), Reason: p.command()})
 			case "memory":
 				found := false
 				if w.runtime != nil {
@@ -247,6 +269,7 @@ func (w *Workspace) observeMarshalProposalOccurrence(tr importer.SessionTranscri
 						if rec.ID == p.id {
 							req := memoryPermission(rec)
 							req.ProposalID = p.occurrence
+							req.Who = p.requester()
 							w.queuePermission(req)
 							found = true
 							break
@@ -257,7 +280,7 @@ func (w *Workspace) observeMarshalProposalOccurrence(tr importer.SessionTranscri
 					w.RecordActivity("Ignored Marshal memory proposal: candidate does not exist.")
 				}
 			case "setting":
-				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: "this project, next Marshal run", Who: "Marshal", Reason: "Apply the exact proposed setting"})
+				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: "this project, next Marshal run", Who: p.requester(), Reason: "Apply the exact proposed setting"})
 			case "approve":
 				m := w.marshalSession()
 				m.mu.Lock()
@@ -342,7 +365,7 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 	if w.permissions.runProposals == nil {
 		w.permissions.runProposals = map[string]marshalProposal{}
 	}
-	req := permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: fmt.Sprintf("run %s, plan %s version %d, state revision %d", runID, run.PlanID, run.PlanVersion, record.Revision), Who: "Marshal", Reason: "Apply this exact runtime action; review the plan pack and result first", RunID: runID, TaskID: binding}
+	req := permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: fmt.Sprintf("run %s, plan %s version %d, state revision %d", runID, run.PlanID, run.PlanVersion, record.Revision), Who: p.requester(), Reason: "Apply this exact runtime action; review the plan pack and result first", RunID: runID, TaskID: binding}
 	if pending != nil {
 		req.Scope += "; proposed amendment " + binding[strings.LastIndex(binding, ":")+1:]
 		req.Reason = "Approve proposed amendment: " + pending.reason
@@ -354,6 +377,36 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 }
 
 func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Request) error {
+	if strings.HasPrefix(req.TaskID, "reserved:") {
+		m := w.marshalSession()
+		m.mu.Lock()
+		service, runID := m.service, m.runID
+		m.mu.Unlock()
+		if service == nil || runID != req.RunID {
+			return errors.New("reserved merge approval expired")
+		}
+		record, err := service.Store.GetMarshalRun(ctx, service.ProjectID, runID)
+		if err != nil {
+			return err
+		}
+		matched := false
+		for _, task := range record.Value.Tasks {
+			if task.State == marshal.Accepted && app.ReservedMergePurpose(task.PlanTaskID, task.ResultCommit, record.Revision) == req.TaskID {
+				matched = true
+			}
+		}
+		if !matched {
+			return errors.New("reserved merge approval expired")
+		}
+		m.grant(runID, req.TaskID)
+		_, err = w.cmd.handleMarshal(ctx, []string{"resume"})
+		if err != nil {
+			m.mu.Lock()
+			delete(m.approvals, runID+"/"+req.TaskID)
+			m.mu.Unlock()
+		}
+		return err
+	}
 	if req.RunID != "" {
 		w.permissions.mu.Lock()
 		p, ok := w.permissions.runProposals[req.Key()]
@@ -413,7 +466,7 @@ func marshalProposalArgs(p marshalProposal) []string {
 }
 
 func (w *Workspace) marshalProposalDecisionNotice(req permission.Request, allow bool, err error) {
-	if req.Who != "Marshal" {
+	if req.Who != "Marshal" && req.ProposalID == "" && req.Kind != "memory" {
 		return
 	}
 	decision := "declined"
@@ -439,6 +492,7 @@ func (w *Workspace) marshalProposalDecisionNotice(req permission.Request, allow 
 // Files are suggestions, never authority. Only the live Marshal monitor consumes
 // them; parsing and the ordinary operator popup remain mandatory.
 func (w *Workspace) observeMarshalProposalFiles(root string) {
+	w.monitorGoverningIntegrity()
 	w.recoverMarshalProposals()
 	project, err := os.OpenRoot(root)
 	if err != nil {
@@ -539,6 +593,9 @@ func (w *Workspace) recoverMarshalProposals() {
 		if json.Unmarshal([]byte(record.RequestJSON), &req) != nil {
 			continue
 		}
+		if !strings.HasPrefix(record.ID, "runtime:") {
+			req.Who = "Local request (unverified)"
+		}
 		if req.RunID != "" {
 			p, err := parseMarshalProposal(record.Line)
 			if err != nil {
@@ -558,5 +615,39 @@ func (w *Workspace) recoverMarshalProposals() {
 
 func (w *Workspace) observePendingMarshalProposal(id, line string) {
 	// Supply the persisted occurrence ID while reusing the normal validator.
-	w.observeMarshalProposalOccurrence(importer.SessionTranscript{SessionID: "recovered:" + id, Messages: []importer.Message{{Role: "assistant", Content: line}}}, id)
+	who := "Local request (unverified)"
+	if strings.HasPrefix(id, "runtime:") {
+		who = "Marshal"
+	}
+	w.observeMarshalProposalSource(importer.SessionTranscript{SessionID: "recovered:" + id, Messages: []importer.Message{{Role: "assistant", Content: line}}}, id, who)
+}
+
+func (p marshalProposal) requester() string {
+	if p.who != "" {
+		return p.who
+	}
+	if strings.HasPrefix(p.occurrence, "runtime:") {
+		return "Marshal"
+	}
+	return "Local request (unverified)"
+}
+
+func (w *Workspace) queueReservedMergeApproval(_ context.Context, runID, taskID string, revision int64, result string, files []string) {
+	w.queuePermission(permission.Request{Kind: "marshal-command", Object: "Merge reserved governance files: " + strings.Join(files, ", "), RunID: runID, TaskID: app.ReservedMergePurpose(taskID, result, revision), Who: "MARSHAL runtime", Scope: fmt.Sprintf("run %s task %s revision %d result %s", runID, taskID, revision, result), Reason: "Separate operator consent for these changes; A merges and resumes, D keeps the result unmerged"})
+}
+
+func (w *Workspace) monitorGoverningIntegrity() {
+	m := w.marshalSession()
+	m.mu.Lock()
+	service, runID, alerted := m.service, m.runID, m.integrityAlertRunID
+	m.mu.Unlock()
+	if service == nil || runID == "" || alerted == runID {
+		return
+	}
+	if err := service.CheckGoverningIntegrity(context.Background(), runID); err != nil {
+		m.mu.Lock()
+		m.integrityAlertRunID = runID
+		m.mu.Unlock()
+		w.RecordActivity("Governance integrity alert: " + err.Error())
+	}
 }
