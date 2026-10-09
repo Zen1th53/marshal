@@ -61,6 +61,9 @@ Evidence and verification integrity.
 
 ### Durable lifecycle
 
+- Rewritten chat drafts refuse approval of the old plan and offer `/marshal draft discard` to clear the handoff and reopen chat.
+- Fresh Marshal chat uses a neutral start cue that explicitly requests the hidden introduction and language intake; saved intake continues privately.
+- Empty-composer Ctrl+C shows its exit warning through the screen renderer without accumulating terminal lines; double Ctrl+C still exits.
 - Lifecycle intents and completion records survive interruptions. Startup
   reconciles launches, hand-ins, merges and closes without repeating completed
   effects; run, task, hand-in and audit updates commit together. Plan revisions

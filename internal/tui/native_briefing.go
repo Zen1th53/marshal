@@ -52,7 +52,7 @@ const (
 
 // marshalKickoff is the one conversation turn that starts a Marshal whose
 // protocol was delivered outside the conversation.
-const marshalKickoff = "Hello."
+const marshalKickoff = "Start."
 
 // marshalKickoffContinue is the conversation turn used when a saved intake
 // exists, delivered through the hidden instruction channel.
