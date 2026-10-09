@@ -16,6 +16,8 @@ import (
 )
 
 type Request struct {
+	// ApprovalBinding retains an opaque reviewed snapshot across popup recovery.
+	ApprovalBinding                                 string `json:",omitempty"`
 	ProposalID                                      string `json:",omitempty"`
 	Kind, Object, Scope, Who, Reason, RunID, TaskID string
 	// ContinuationProvider binds a read decision to its proposed importer.
@@ -24,7 +26,7 @@ type Request struct {
 }
 
 func (r Request) Key() string {
-	return r.Kind + "\x00" + r.Object + "\x00" + r.Scope + "\x00" + r.Who + "\x00" + r.RunID + "\x00" + r.TaskID + "\x00" + r.ContinuationProvider
+	return r.Kind + "\x00" + r.Object + "\x00" + r.Scope + "\x00" + r.Who + "\x00" + r.RunID + "\x00" + r.TaskID + "\x00" + r.ContinuationProvider + "\x00" + r.ApprovalBinding
 }
 
 const MaxPopupItems = 5

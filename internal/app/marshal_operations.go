@@ -116,6 +116,10 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 			return run, rev, fmt.Errorf("unfinished merge %s: integration moved; inspect retained worktree %s", op.ID, op.Dir)
 		}
 	case "close":
+		repository, err := s.repositoryIdentity(ctx)
+		if err != nil || repository != run.Repository {
+			return run, rev, errors.New("unfinished close: approved repository changed; inspect retained operation")
+		}
 		head, err := gitMarshal(ctx, s.Repository, "rev-parse", op.Target)
 		if err != nil {
 			return run, rev, err

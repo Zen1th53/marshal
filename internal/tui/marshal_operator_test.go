@@ -66,14 +66,40 @@ func TestImportedTaskPanelAndAcceptance(t *testing.T) {
 	ws.setMarshalPanel(panel)
 	m := ws.marshalSession()
 	m.runID = "RUN-imported"
-	out, err := ws.ExecuteCommand(ctx, "/marshal accept TASK-imported")
-	if err != nil || !strings.Contains(out, "Approved task TASK-imported") {
-		t.Fatalf("accept: %s %v", out, err)
-	}
-	if _, err := m.approver(ctx, "RUN-imported", "TASK-imported"); err != nil {
+	m.service = ws.runtime.Marshal()
+	run.PlanVersion, run.PlanID, run.Settings = 1, "PLAN-imported", marshal.DefaultSettings()
+	run.Tasks[0].State = marshal.Queued
+	if _, err := m.service.Store.SetMarshalRun(ctx, ws.projectID, "RUN-imported", run, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.approver(ctx, "RUN-imported", "TASK-imported"); err == nil {
+	if _, err := ws.ExecuteCommand(ctx, "/marshal accept TASK-imported"); err == nil {
+		t.Fatal("queued imported task accepted")
+	}
+	if len(m.approvals) != 0 {
+		t.Fatal("queued task stored consent")
+	}
+	run.Tasks[0].State, run.Tasks[0].ResultCommit = marshal.HandedIn, "result"
+	if _, err := m.service.Store.SetMarshalRun(ctx, ws.projectID, "RUN-imported", run, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.service.Store.SetMarshalTask(ctx, "RUN-imported", run.Tasks[0], 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.service.Store.SetMarshalHandIn(ctx, "RUN-imported", "TASK-imported", 1, marshal.HandIn{ResultCommit: "result"}); err != nil {
+		t.Fatal(err)
+	}
+	purpose, err := m.service.TaskAcceptance(ctx, "RUN-imported", "TASK-imported")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := ws.ExecuteCommand(ctx, "/marshal accept TASK-imported")
+	if err != nil || !strings.Contains(out, purpose) {
+		t.Fatalf("accept: %s %v", out, err)
+	}
+	if _, err := m.approver(ctx, "RUN-imported", purpose); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.approver(ctx, "RUN-imported", purpose); err == nil {
 		t.Fatal("approval replay accepted")
 	}
 }

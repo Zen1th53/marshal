@@ -2,6 +2,16 @@
 
 ## What changed
 
+- Task acceptance binds the current hand-in attempt, result commit, evidence digest
+  and plan version. Queued work cannot receive advance consent; `/marshal accept`
+  identifies the exact result it accepts.
+- Plan approval displays the pack digest, repository, base commit and target ref.
+  Changed pack bytes require review and approval again.
+- Automatic delivery needs a separate confirmation for the shown target branch.
+  Close refuses a changed repository, base or target. Scoped amendments explicitly
+  cancel standing delivery when the approval digest changes and ask again;
+  unchanged digests keep consent.
+
 Lifecycle intents and completion records survive interruptions. Startup reconciles
 launches, hand-ins, merges and closes without repeating completed effects; run,
 task, hand-in and audit updates commit together. Plan revisions and run state
@@ -40,7 +50,7 @@ missing dependency does not make installation fail.
 The automated source inventory reports:
 
 - Constitution enforcement: 0.6%
-- Scope of protection: 6.8%
+- Scope of protection: 7.1%
 
 Constitution enforcement is the percentage of material source call sites that a constitutional verdict can refuse before the effect occurs.
 Scope of protection is the percentage of material source call sites guarded before execution by a constitutional gate, approval binding, policy authorisation or sandbox.
@@ -56,6 +66,9 @@ recording a verdict or warning does not count as enforcement. The reviewed
 [counting rules](../tools/effect-inventory/README.md) make the scope inspectable.
 
 ## Known limits
+
+- Runs approved before destination binding was introduced need a replacement
+  plan and fresh approval before delivery. Unbound standing consent is refused.
 
 - **Keep the window open.** There is no background service. Unfinished lifecycle operations are reconciled when the project reopens.
   `/marshal resume` retries a failed verification. Budget and security pauses

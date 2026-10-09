@@ -123,7 +123,7 @@ func readPackFile(dir, name string) (string, error) {
 	if text == "" {
 		return "", fmt.Errorf("plan pack: %s is empty", name)
 	}
-	return text, nil
+	return string(data), nil
 }
 
 func planPackDigest(pack marshal.PlanPack) string {
@@ -145,8 +145,8 @@ func planPackDigest(pack marshal.PlanPack) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// refreshPlanPack reads the run's pack again at approval, so what is bound
-// is what the person could read at that moment, including their own edits.
+// refreshPlanPack reads the run's pack for a review snapshot and checks at
+// approval that its bytes still match the reviewed digest.
 // Only the notes of the original tasks are required: an amendment may have
 // added tasks without one.
 func (s *MarshalService) refreshPlanPack(runID string, run marshal.Run) (*marshal.PlanPack, error) {

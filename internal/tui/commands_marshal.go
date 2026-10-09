@@ -908,6 +908,10 @@ func marshalProcess05ApprovalBound(run marshal.Run, p05 execution.ExecutionRun, 
 }
 
 func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
+	return w.marshalApproveReviewed(ctx, nil)
+}
+
+func (w *Workspace) marshalApproveReviewed(ctx context.Context, reviewed *app.PlanApprovalSnapshot) (string, error) {
 	m, service, runID, provider, err := w.marshalActive(ctx)
 	if err != nil {
 		return "", err
@@ -924,6 +928,12 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 			return "Plan approval is already in progress; the panel will show the result.", nil
 		}
 		return "", err
+	}
+	if reviewed == nil {
+		snapshot, e := service.PlanApprovalSnapshot(ctx, runID)
+		if e == nil {
+			reviewed = &snapshot
+		}
 	}
 	// Preserve asynchronous failure reporting and the last task snapshot when
 	// the stored run cannot be read. Approve reports that error in the panel.
@@ -950,9 +960,24 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 			m.finishWithNativeTurn(cancel, keepNativeTurn)
 		}()
 		if pending != nil {
+			if reviewed != nil {
+				current, e := service.PlanApprovalSnapshot(runCtx, runID)
+				if e != nil || current != *reviewed {
+					w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "approval expired; review plan pack again"))
+					return
+				}
+			}
 			if _, err := service.ApplyAmendDraftBound(runCtx, runID, pending.reason, pending.draft, pending.planVersion); err != nil {
 				w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "amendment failed: "+err.Error()))
 				return
+			}
+			if reviewed != nil {
+				current, e := service.PlanApprovalSnapshot(runCtx, runID)
+				if e != nil || current.PackDigest != reviewed.PackDigest || current.Repository != reviewed.Repository || current.BaseCommit != reviewed.BaseCommit || current.TargetRef != reviewed.TargetRef {
+					w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, "approval expired; review plan pack and delivery destination again"))
+					return
+				}
+				reviewed = &current
 			}
 			m.mu.Lock()
 			m.pending = nil
@@ -961,7 +986,11 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 		if !already {
 			m.grant(runID, "plan")
 		}
-		run, err := service.Approve(runCtx, runID)
+		var snapshots []app.PlanApprovalSnapshot
+		if reviewed != nil {
+			snapshots = append(snapshots, *reviewed)
+		}
+		run, err := service.Approve(runCtx, runID, snapshots...)
 		// A concurrent prior approval or failed attempt must not leave a grant
 		// that could authorize a later amended plan.
 		m.mu.Lock()
@@ -974,10 +1003,18 @@ func (w *Workspace) marshalApprove(ctx context.Context) (string, error) {
 		m.mu.Lock()
 		m.amended = false
 		m.mu.Unlock()
+		if run.Settings.AcceptanceMode == marshal.AcceptMarshal && !run.ValidCloseAuthorization() {
+			_ = w.queueMarshalRunProposal(marshalProposal{action: "deliver"})
+			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approved · confirm automatic delivery, or /marshal resume for manual close"))
+			return
+		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approved · running"))
 		keepNativeTurn = w.marshalExecute(runCtx, m, service, runID, provider)
 	})
 	if already {
+		if run.Settings.AcceptanceMode == marshal.AcceptMarshal && !run.ValidCloseAuthorization() {
+			return "Plan already approved; confirm automatic delivery, or /marshal resume for manual close.", nil
+		}
 		return "Plan already approved; starting queued tasks. The panel will show the result.", nil
 	}
 	return "Plan approval started; the panel will show the result.", nil
@@ -1287,6 +1324,10 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 			w.marshalPublish(m, runID, w.marshalFailurePanel(runID, provider, run, "amendment failed: "+err.Error()))
 			return
 		}
+		if run.CloseAuthorization != nil && run.CloseAuthorization.Voided {
+			note += " · standing delivery cancelled because approval changed; confirm delivery again"
+			_ = w.queueMarshalRunProposal(marshalProposal{action: "deliver"})
+		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, note))
 	})
 	return "Amendment started; the panel will show the result.", nil
@@ -1342,13 +1383,18 @@ func (w *Workspace) marshalAccept(args []string) (string, error) {
 	if runID == "" || p == nil || p.RunID != runID {
 		return "", errors.New("No Marshal run yet; start one with /marshal chat")
 	}
-	for _, task := range p.Tasks {
-		if task.ID == args[0] {
-			m.grant(runID, args[0])
-			return "Approved task " + args[0] + " once; /marshal resume to continue.", nil
-		}
+	m.mu.Lock()
+	service, busy := m.service, m.busy
+	m.mu.Unlock()
+	if service == nil || busy {
+		return "", errors.New("stop the current operation before accepting a result")
 	}
-	return "", fmt.Errorf("task %q is not in the active run", args[0])
+	purpose, err := service.TaskAcceptance(context.Background(), runID, args[0])
+	if err != nil {
+		return "", err
+	}
+	m.grant(runID, purpose)
+	return "Approved result " + purpose + " once; /marshal resume to continue.", nil
 }
 
 // marshalReturn is the person's decision to send a handed-in task back with
