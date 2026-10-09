@@ -103,3 +103,18 @@ func TestDiffScopeCommandsAndCompletion(t *testing.T) {
 		t.Fatalf("failure left stale/clean overlay: %v", err)
 	}
 }
+
+func TestF11ClosesDiffViewerOverlay(t *testing.T) {
+	dv := NewDiffViewer(nil, t.TempDir())
+	dv.active = true
+	if !dv.IsOpen() {
+		t.Fatal("expected diff viewer to be open")
+	}
+	handled := dv.HandleKey(KeyEvent{Type: KeyF11})
+	if !handled {
+		t.Fatal("expected KeyF11 to be handled by diff viewer")
+	}
+	if dv.IsOpen() {
+		t.Fatal("expected diff viewer to be closed after KeyF11")
+	}
+}

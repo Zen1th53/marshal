@@ -38,10 +38,12 @@ Evidence and verification integrity.
 - Completion reports label Standard review as the Marshal's own ("Standard: review
   by the Marshal itself; independent review in ULTRA") and confirm approved checks
   passed.
+- Completion reports withhold check results until tasks produce them, and accurately label the aggregate as passed, failed, incomplete or not tested.
 
 ### Governance integrity
 
 - The control centre keeps permission headings and network scope visible with pending items when the prompt fits the panel.
+- The control centre diff overlay returns to the main view on F11, including when the command palette is open.
 - Constitutional suspension and stored version bindings now refuse dispatch and
   resume; unreadable bindings fail closed.
 - Governed results that change policy, CI, MARSHAL storage or agent instructions
@@ -59,6 +61,9 @@ Evidence and verification integrity.
 
 ### Durable lifecycle
 
+- Rewritten chat drafts refuse approval of the old plan and offer `/marshal draft discard` to clear the handoff and reopen chat.
+- Fresh Marshal chat uses a neutral start cue that explicitly requests the hidden introduction and language intake; saved intake continues privately.
+- Empty-composer Ctrl+C shows its exit warning through the screen renderer without accumulating terminal lines; double Ctrl+C still exits.
 - Multiple MARSHAL windows can share project memory; only the lifecycle owner recovers interrupted operations or runs lifecycle commands. Reopen another window after the owner exits to recover and take ownership.
 - `/marshal status` shows the stored run when the control centre has no in-memory run panel.
 - Lifecycle intents and completion records survive interruptions. Startup

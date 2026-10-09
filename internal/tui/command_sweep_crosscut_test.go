@@ -309,7 +309,7 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 			s.send("\x1b")
 		}
 	}
-	s.send("draft")
+	s.send("my draft")
 	draft = s.composerLine(50, 140)
 	s.send("\x1b[23~") // F11 is explicitly unassigned.
 	if s.composerLine(50, 140) != draft {

@@ -33,3 +33,41 @@ func TestStatusShowsCompletionReportLabels(t *testing.T) {
 		t.Fatalf("status missing checks label: %s", text)
 	}
 }
+
+func TestStatusHidesCompletionReportBeforeTasksHaveResults(t *testing.T) {
+	draftingPanel := &MarshalPanel{
+		RunID: "run-draft",
+		Tasks: []MarshalTaskRow{{
+			ID:     "bye",
+			Worker: "codex",
+			State:  marshal.Queued,
+		}},
+		Report: &app.MarshalCompletionReport{
+			ReviewLabel: "Standard: review by the Marshal itself; independent review in ULTRA",
+			ChecksLabel: "not tested",
+			Criteria:    []app.MarshalCriterionReport{{TaskID: "bye", Criterion: "check bytes", Status: "not tested"}},
+		},
+	}
+	text := marshalStatusText(draftingPanel)
+	if strings.Contains(text, "completion report:") {
+		t.Fatalf("drafting panel should not show completion report, got:\n%s", text)
+	}
+
+	handedInPanel := &MarshalPanel{
+		RunID: "run-draft",
+		Tasks: []MarshalTaskRow{{
+			ID:     "bye",
+			Worker: "codex",
+			State:  marshal.HandedIn,
+		}},
+		Report: &app.MarshalCompletionReport{
+			ReviewLabel: "Standard: review by the Marshal itself; independent review in ULTRA",
+			ChecksLabel: "approved checks passed",
+			Criteria:    []app.MarshalCriterionReport{{TaskID: "bye", Criterion: "check bytes", Status: "verified"}},
+		},
+	}
+	text2 := marshalStatusText(handedInPanel)
+	if !strings.Contains(text2, "completion report:") {
+		t.Fatalf("handed-in panel must show completion report, got:\n%s", text2)
+	}
+}

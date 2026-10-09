@@ -25,6 +25,7 @@ import (
 const marshalUsage = `Marshal mode — one model plans with you, then marshals the work to other agents.
   /marshal                         Show status and usage
   /marshal chat                    Open a conversation with the Marshal
+  /marshal draft discard           Discard an unimported draft and reopen chat
   /marshal <goal>                  Draft a plan for the goal with the Marshal model
   /marshal import <TASK-id> <check>  Review a finished CLI task through normal approval and merge
     Check is the raw shell text after TASK-id; quotes and spacing are preserved.
@@ -234,6 +235,11 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 			return "", errors.New("usage: /marshal chat")
 		}
 		return w.marshalChat(ctx)
+	case "draft":
+		if len(args) != 2 || args[1] != "discard" {
+			return "", errors.New("usage: /marshal draft discard")
+		}
+		return w.marshalDiscardDraft()
 	case "help":
 		return marshalUsage, nil
 	case "status":
@@ -333,6 +339,53 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 		" and nothing else. Confirm each write succeeded and each file exists on disk: write the pack first, then plan-draft.json, then read back and validate both. Only after successful read-back and validation, publish the completion marker " + marshalDraftRelativePath + ".ready containing ready. Do not touch the draft or pack after publishing the marker; the watcher may move them. Do not read a planned path before its write succeeds; repair failed writes before read-back. An edit preview is not a completed write. Every field shown is required; use an empty list for no dependencies. Map each check only to the criteria it proves; a criterion without passing evidence cannot be accepted. " + instructions + "\n", nil
 }
 
+// refuseUnimportedMarshalDraft keeps approvals bound to the imported plan,
+// even when the chat writes another draft after the first observer has exited.
+func refuseUnimportedMarshalDraft(root string) error {
+	for _, relative := range []string{marshalDraftRelativePath, marshalDraftRelativePath + ".ready", app.MarshalPackRelativePath} {
+		path := filepath.Join(root, relative)
+		if _, err := os.Lstat(path); err == nil {
+			return fmt.Errorf("unimported Marshal draft at %s; use /marshal draft discard to discard it, then /marshal chat to continue with the stored plan or start a new run", path)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *Workspace) marshalDiscardDraft() (string, error) {
+	m := w.marshalSession()
+	_, operationCancel, err := m.reserve()
+	if err != nil {
+		return "", err
+	}
+	defer m.finish(operationCancel)
+	m.mu.Lock()
+	cancel, done := m.draftCancel, m.draftDone
+	m.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
+	// Only the unimported handoff is removed. Stored plans and their packs remain.
+	root := w.providerRoot()
+	for _, relative := range []string{marshalDraftRelativePath + ".ready", marshalDraftRelativePath, app.MarshalPackRelativePath} {
+		if err := os.RemoveAll(filepath.Join(root, relative)); err != nil {
+			return "", err
+		}
+	}
+	return "Unimported Marshal draft discarded. Use /marshal chat to continue.", nil
+}
+
+func marshalChatClosedMessage(root string) string {
+	if err := refuseUnimportedMarshalDraft(root); err != nil {
+		return "Marshal chat closed. " + err.Error()
+	}
+	return "Marshal chat closed. Use /marshal chat to reopen it."
+}
+
 // consumeMarshalDraft consumes only a draft the producer has validated and published.
 func consumeMarshalDraft(root string) ([]byte, bool, error) {
 	path := filepath.Join(root, marshalDraftRelativePath)
@@ -408,14 +461,8 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		provider = selected
 	}
 	root := service.Repository
-	for _, leftover := range []string{marshalDraftRelativePath, app.MarshalPackRelativePath} {
-		if saved.RunID == runID {
-			break
-		}
-		path := filepath.Join(root, leftover)
-		if _, err := os.Lstat(path); err == nil {
-			return "", fmt.Errorf("existing Marshal draft at %s must be handled first", path)
-		} else if !errors.Is(err, os.ErrNotExist) {
+	if saved.RunID != runID {
+		if err := refuseUnimportedMarshalDraft(root); err != nil {
 			return "", err
 		}
 	}
@@ -969,6 +1016,9 @@ func (w *Workspace) marshalApproveReviewed(ctx context.Context, reviewed *app.Pl
 	if err != nil {
 		return "", err
 	}
+	if err := refuseUnimportedMarshalDraft(service.Repository); err != nil {
+		return "", err
+	}
 	runCtx, cancel, err := m.reserve()
 	if err != nil {
 		if run, readErr := service.Snapshot(ctx, runID); readErr == nil && run.State != marshal.Drafting && run.ApprovalScopeDigest != "" {
@@ -1035,6 +1085,10 @@ func (w *Workspace) marshalApproveReviewed(ctx context.Context, reviewed *app.Pl
 			m.mu.Lock()
 			m.pending = nil
 			m.mu.Unlock()
+		}
+		if err := refuseUnimportedMarshalDraft(service.Repository); err != nil {
+			w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, err.Error()))
+			return
 		}
 		if !already {
 			m.grant(runID, "plan")

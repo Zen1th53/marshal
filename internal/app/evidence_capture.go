@@ -31,7 +31,7 @@ func (r *Runtime) recordRunEvidence(ctx context.Context, runID, taskID, adapterN
 		runtimeEvidenceNode(evidence.NodeID("EVIDENCE-RUN-"+runID+"-OUTPUT"), evidence.NodeTypeOutput, created, map[string]string{
 			"task_id": taskID, "run_id": runID, "adapter": adapterName, "status": string(result.Status),
 			"exit_code": strconv.Itoa(result.ExitCode), "stdout_digest": stdoutDigest, "stderr_digest": stderrDigest,
-			"result_commit": resultCommit,
+			"result_commit":   resultCommit,
 			"requested_model": requestedModel, "effective_model": effectiveModel, "session_id": sessionID,
 		}),
 		runtimeEvidenceNode(evidence.NodeID("EVIDENCE-RUN-"+runID+"-ENV"), evidence.NodeTypeEnvironment, created, map[string]string{

@@ -147,7 +147,7 @@ func marshalStatusText(p *MarshalPanel) string {
 	if p.Note != "" {
 		b.WriteString(p.Note)
 	}
-	if p.Report != nil {
+	if p.Report != nil && p.hasTaskResults() {
 		b.WriteString("\ncompletion report:\n")
 		if p.Report.ReviewLabel != "" {
 			fmt.Fprintf(&b, "  review: %s\n", p.Report.ReviewLabel)
@@ -179,4 +179,30 @@ func marshalStatusText(p *MarshalPanel) string {
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+func (p *MarshalPanel) hasTaskResults() bool {
+	if len(p.Tasks) == 0 {
+		return true
+	}
+	for _, t := range p.Tasks {
+		if t.ImportedResult != nil {
+			return true
+		}
+		switch t.State {
+		case marshal.HandedIn, marshal.Accepted, marshal.Merged, marshal.Returned:
+			return true
+		}
+	}
+	if p.Report != nil {
+		for _, c := range p.Report.Criteria {
+			if c.Status != "not tested" {
+				return true
+			}
+		}
+		if len(p.Report.Verifiers) > 0 {
+			return true
+		}
+	}
+	return false
 }
