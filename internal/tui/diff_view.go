@@ -176,7 +176,7 @@ func (dv *DiffViewer) HandleKey(k KeyEvent) bool {
 	}
 
 	switch k.Type {
-	case KeyEsc:
+	case KeyEsc, KeyF11:
 		dv.Close()
 		return true
 

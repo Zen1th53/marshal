@@ -101,6 +101,9 @@ func governingFile(name string) bool {
 		return false
 	}
 	if strings.HasPrefix(name, ".marshal/") {
+		if name == ".marshal/briefing" || strings.HasPrefix(name, ".marshal/briefing/") {
+			return false
+		}
 		lower := strings.ToLower(name)
 		return strings.Contains(lower, "policy") || strings.Contains(lower, "constitution") || strings.Contains(lower, "config") || strings.HasSuffix(lower, "instructions.md") || strings.HasSuffix(lower, "agents.md") || strings.HasSuffix(lower, "claude.md")
 	}
@@ -119,7 +122,7 @@ func governingDigest(root string) (string, error) {
 		}
 		rel = filepath.ToSlash(rel)
 		if entry.IsDir() {
-			if entry.Name() == ".git" || entry.Name() == "node_modules" || rel == ".marshal/worktrees" || rel == ".marshal/artifacts" || rel == ".marshal/logs" || rel == ".marshal/proposals" || rel == ".marshal/inbox" {
+			if entry.Name() == ".git" || entry.Name() == "node_modules" || rel == ".marshal/worktrees" || rel == ".marshal/artifacts" || rel == ".marshal/logs" || rel == ".marshal/proposals" || rel == ".marshal/inbox" || rel == ".marshal/briefing" || strings.HasPrefix(rel, ".marshal/briefing/") {
 				return filepath.SkipDir
 			}
 			return nil

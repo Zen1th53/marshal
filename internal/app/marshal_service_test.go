@@ -363,6 +363,42 @@ func TestEscalatedTaskRetryReassignCancel(t *testing.T) {
 	}
 }
 
+func TestReassignDistinctErrorReasons(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 2)
+	if _, err := s.StartPlanning(ctx, "run-err", "write file", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Missing task
+	err := s.Reassign(ctx, "run-err", "nonexistent-task", "other")
+	if err == nil || !strings.Contains(err.Error(), "task not found") {
+		t.Fatalf("expected 'task not found', got %v", err)
+	}
+
+	// 2. Wrong state (task 'a' is Queued)
+	err = s.Reassign(ctx, "run-err", "a", "other")
+	if err == nil || !strings.Contains(err.Error(), "only escalated tasks can be reassigned") {
+		t.Fatalf("expected 'only escalated tasks can be reassigned', got %v", err)
+	}
+
+	// Escalate task 'a'
+	if err := s.Escalate(ctx, "run-err", "a", "temporary worker failure"); err != nil {
+		t.Fatal(err)
+	}
+
+	// 3. Same harness (task 'a' has worker 'worker')
+	run, _, err := s.load(ctx, "run-err")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sameWorker := run.Tasks[0].Worker
+	err = s.Reassign(ctx, "run-err", "a", sameWorker)
+	if err == nil || !strings.Contains(err.Error(), "cannot reassign to the same harness") {
+		t.Fatalf("expected 'cannot reassign to the same harness', got %v", err)
+	}
+}
+
 func TestSingleProviderFreshSessionRetryBounded(t *testing.T) {
 	ctx := context.Background()
 	s, _ := marshalFixture(t, 1)

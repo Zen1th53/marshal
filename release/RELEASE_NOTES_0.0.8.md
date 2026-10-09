@@ -38,10 +38,12 @@ Evidence and verification integrity.
 - Completion reports label Standard review as the Marshal's own ("Standard: review
   by the Marshal itself; independent review in ULTRA") and confirm approved checks
   passed.
+- Completion reports withhold check results until tasks produce them, and accurately label the aggregate as passed, failed, incomplete or not tested.
 
 ### Governance integrity
 
 - The control centre keeps permission headings and network scope visible with pending items when the prompt fits the panel.
+- The control centre diff overlay returns to the main view on F11, including when the command palette is open.
 - Constitutional suspension and stored version bindings now refuse dispatch and
   resume; unreadable bindings fail closed.
 - Governed results that change policy, CI, MARSHAL storage or agent instructions

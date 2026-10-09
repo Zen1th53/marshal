@@ -814,7 +814,7 @@ func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker str
 	}
 	i := taskIndex(run, taskID)
 	if i < 0 {
-		return errors.New("invalid reassignment")
+		return errors.New("task not found")
 	}
 	t := &run.Tasks[i]
 	if t.State == marshal.Escalated {
@@ -822,10 +822,13 @@ func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker str
 			return fmt.Errorf("cannot reassign task with escalation reason: %s", t.EscalationReason)
 		}
 	} else if t.State != marshal.Reassigned {
-		return errors.New("invalid reassignment")
+		return errors.New("only escalated tasks can be reassigned")
 	}
-	if worker == "" || marshalHarnessName(worker) == marshalHarnessName(t.Worker) {
-		return errors.New("invalid reassignment")
+	if worker == "" {
+		return errors.New("worker is required")
+	}
+	if marshalHarnessName(worker) == marshalHarnessName(t.Worker) {
+		return errors.New("cannot reassign to the same harness")
 	}
 	drivers := s.Drivers
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
