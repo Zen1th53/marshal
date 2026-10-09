@@ -378,6 +378,24 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	}
 	m.mu.Unlock()
 	runID := saved.RunID
+	var recoveringRun *marshal.Run
+	if runID != "" {
+		s, _, _, err := w.marshalService(ctx, runID)
+		if err != nil {
+			return "", err
+		}
+		run, err := s.Snapshot(ctx, runID)
+		switch {
+		case errors.Is(err, model.ErrNotFound):
+			// The saved chat may still be producing its first draft.
+		case err != nil:
+			return "", err
+		case run.State == marshal.Closed:
+			runID = ""
+		default:
+			recoveringRun = &run
+		}
+	}
 	if runID == "" {
 		runID = fmt.Sprintf("RUN-%d", time.Now().UTC().UnixNano())
 	}
@@ -390,7 +408,7 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	}
 	root := service.Repository
 	for _, leftover := range []string{marshalDraftRelativePath, app.MarshalPackRelativePath} {
-		if saved.RunID != "" {
+		if saved.RunID == runID {
 			break
 		}
 		path := filepath.Join(root, leftover)
@@ -408,6 +426,9 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	m.mu.Lock()
+	m.runID = runID
+	m.mu.Unlock()
 	result, sessionErr := w.runNativeAgent(ctx, marshalChatProvider(provider), nil, briefing)
 	if sessionErr != nil {
 		return result, sessionErr
@@ -423,14 +444,16 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		if err := w.saveChatBindingForAgent(root, snapshot); err != nil {
 			return result, err
 		}
-		w.tmuxMu.Lock()
-	}
-	w.tmuxMu.Unlock()
-	if saved.RunID != "" {
-		if run, err := service.Snapshot(ctx, runID); err == nil {
-			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "stored run recovered"))
-			return result, nil
+	} else {
+		w.tmuxMu.Unlock()
+		saved.RunID = runID
+		if err := saveChatBinding(root, saved); err != nil {
+			return result, err
 		}
+	}
+	if recoveringRun != nil {
+		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, *recoveringRun, "stored run recovered"))
+		return result, nil
 	}
 	data, exists, err := consumeMarshalDraft(root)
 	if err != nil {

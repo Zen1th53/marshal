@@ -71,6 +71,8 @@ Evidence and verification integrity.
 - Escalated tasks support operator `/marshal retry`, `/marshal reassign` and
   `/marshal cancel` where permitted; single-provider tasks support bounded
   fresh-session retries.
+- Reopening Marshal chat after a closed or finished run starts fresh with a
+  new run ID and watches for new plan drafts and approval proposals.
 
 ### ULTRA
 

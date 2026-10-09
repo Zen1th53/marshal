@@ -9901,8 +9901,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "f30fd23468dcb6247aa820fe97b1f0cae5f6f3e2c98f88302aa6e6d527f49d73",
-      "bytes": 59347
+      "sha256": "b45a61f745073e8f3a5448ad392c4068fa62eddddbb23a7dcd279c3e7c7593f8",
+      "bytes": 59856
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -10170,9 +10170,14 @@
       "bytes": 11563
     },
     {
+      "path": "internal/tui/marshal_chat_recovery_test.go",
+      "sha256": "29484c0e65bb0bcb7131714e177b01d6e5852e31d56fd7aae84c3da3cf8aca48",
+      "bytes": 8447
+    },
+    {
       "path": "internal/tui/marshal_chat_test.go",
-      "sha256": "c4337d6eff130423b90d546b5058274062d62de177a52bc18bde3ea5099e87c4",
-      "bytes": 4333
+      "sha256": "c3677dfcf9f1da14e6d15e3fcdee647e277c79cb30fd49782a9ff37945b180ef",
+      "bytes": 11029
     },
     {
       "path": "internal/tui/marshal_exit_test.go",
@@ -10211,8 +10216,8 @@
     },
     {
       "path": "internal/tui/marshal_proposal.go",
-      "sha256": "190b22457d62dc17792bf27d1c8e3d1a502aef56a9454606b13616c953bf4819",
-      "bytes": 24669
+      "sha256": "2862f4b83552bc85e49b8a86dc6c52d917aac11bc1bd79addff47d23f9e174e7",
+      "bytes": 25395
     },
     {
       "path": "internal/tui/marshal_proposal_test.go",
@@ -10515,11 +10520,6 @@
       "bytes": 5237
     },
     {
-      "path": "internal/tui/permission_frame_test.go",
-      "sha256": "06f74c49447e3ead80f8e56f0179f126615ee1f9958f61f44b81d0f497c5204d",
-      "bytes": 5020
-    },
-    {
       "path": "internal/tui/permission_pty_helpers_test.go",
       "sha256": "33f18f72759e3d68a61d4193cff9c5e20e7126e196dd014c7febec6799a98775",
       "bytes": 628
@@ -10696,8 +10696,8 @@
     },
     {
       "path": "internal/tui/screen.go",
-      "sha256": "a31412d4c6546bbeba67ab183bcc5d338d2480b621e8783e0ff54ba1ebcceeba",
-      "bytes": 5511
+      "sha256": "bd9c71ddee2235dc5c1103e5c96177fd5bb7bf382acaa78121aa4c4921f3df8e",
+      "bytes": 4513
     },
     {
       "path": "internal/tui/securitydata.go",
@@ -11701,8 +11701,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.8.md",
-      "sha256": "1b23e6eabc8034b6f3a43038f455d7bcaaace7a4e3547eabd7e1f6a1a2713a66",
-      "bytes": 11690
+      "sha256": "0d55a05afcd4b0c4fc5d4b68d54cdd9fbefced864dcb84159fa1bd0a9128c7c7",
+      "bytes": 11711
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",
