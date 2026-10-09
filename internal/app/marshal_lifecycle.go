@@ -38,6 +38,9 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if run.State != marshal.Approved && run.State != marshal.Dispatching && run.State != marshal.Reviewing && run.State != marshal.Merging {
 		return MarshalDispatch{}, errors.New("dispatch is paused")
 	}
+	if err := s.executionAdmission(ctx, runID, taskID, run); err != nil {
+		return MarshalDispatch{}, err
+	}
 	i := taskIndex(run, taskID)
 	if i < 0 {
 		return MarshalDispatch{}, model.ErrNotFound
@@ -452,6 +455,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		}
 	}
 	verdict := constitution.EvaluateTaskAcceptance(constitution.Default(), envelope, state, constitution.TaskAcceptance{Mode: run.Settings.AcceptanceMode, MarshalVerdictAccept: proposal.Verdict == marshal.VerdictAccept, UserApprovalActor: userApproval, Executor: h.Worker, Reviewer: s.Reviewer, ResultCommit: h.ResultCommit, EvidenceCommit: h.ResultCommit, CriteriaMet: met, CriteriaTotal: total, IndependentReviewDone: !policy.CrossReviewRequired || crossReviewAccepted})
+	if err := s.recordConstitutionalVerdict(ctx, envelope, verdict); err != nil {
+		return "", err
+	}
 	proposal.Reviewer = s.Reviewer
 	result := proposal.Verdict
 	if !verdict.Outcome.Permits() {
@@ -608,6 +614,13 @@ func (s *MarshalService) gateInputs(ctx context.Context, runID, taskID string, r
 		return env, constitution.RuntimeState{}, errors.New("constitutional runtime state is unavailable")
 	}
 	state, err := s.GateState(ctx, runID, taskID)
+	bound, found, bindingErr := s.constitutionService().SessionVersion(ctx, runID)
+	if bindingErr != nil {
+		return env, state, bindingErr
+	}
+	if found {
+		env.ConstitutionVersion = bound
+	}
 	state.RuntimeConstitution = constitution.Current
 	state.Now = now
 	return env, state, err
@@ -807,6 +820,12 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 	if _, err = gitMarshal(ctx, s.Repository, "cat-file", "-e", accepted+"^{commit}"); err != nil {
 		return err
 	}
+	if err := s.checkGoverningIntegrity(ctx, runID, run); err != nil {
+		return err
+	}
+	if err := s.approveReservedMerge(ctx, runID, taskID, run, rev); err != nil {
+		return err
+	}
 	branch := integrationBranch(runID, run)
 	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
 	before := run.BaseCommit
@@ -947,6 +966,9 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	if run.State != marshal.Verifying {
 		return errors.New("run is not verified")
 	}
+	if err := s.checkGoverningIntegrity(ctx, runID, run); err != nil {
+		return err
+	}
 	if s.Verify == nil {
 		return errors.New("verifier is unavailable")
 	}
@@ -1025,6 +1047,9 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 		}
 	}
 	gate := constitution.EvaluateMarshalClose(constitution.Default(), env, state, run, userApproval)
+	if err := s.recordConstitutionalVerdict(ctx, env, gate); err != nil {
+		return err
+	}
 	if !gate.Outcome.Permits() {
 		return fmt.Errorf("close gate: %s", gate.Reason)
 	}
@@ -1307,6 +1332,9 @@ func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, reason str
 func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run, error) {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
+		return run, err
+	}
+	if err := s.executionAdmission(ctx, runID, "", run); err != nil {
 		return run, err
 	}
 	run, rev, err = s.recoverOperation(ctx, runID, run, rev)

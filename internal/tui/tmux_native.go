@@ -1826,7 +1826,7 @@ func (w *Workspace) prepareChatHistoryWatch(root string, watch *nativeHistoryWat
 		bound := active != nil && active.sessionID != "" && active.sessionID == tr.SessionID
 		w.tmuxMu.Unlock()
 		if bound {
-			w.observeMarshalProposals(tr)
+			w.observeAuthenticatedMarshalProposals(tr)
 		}
 		// Earlier or unbound conversations are never imported by this consumer.
 		if bound && (historyAuthorized == nil || historyAuthorized(watch.dir)) {

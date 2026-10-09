@@ -230,6 +230,7 @@ type LifecycleOperation struct {
 
 // Run binds plan approval, settings, tasks, and close authority.
 type Run struct {
+	GoverningDigest     string              `json:",omitempty"`
 	Operation           *LifecycleOperation `json:",omitempty"`
 	Pause               *Pause              `json:",omitempty"`
 	ArtifactRevision    int64               `json:",omitempty"`

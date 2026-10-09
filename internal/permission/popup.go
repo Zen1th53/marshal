@@ -78,7 +78,11 @@ func Render(requests []Request) (string, error) {
 			fmt.Fprintf(&b, "%d. %s · Run: %s · Task: %s · Who: %s\n", i+1, r.Object, r.RunID, r.TaskID, string(who))
 			continue
 		}
-		fmt.Fprintf(&b, "%d. %s\nScope and duration: %s\nWho asks: %s · The Marshal says: \"%s\"\n", i+1, r.Object, r.Scope, r.Who, reason)
+		speaker := "The Marshal"
+		if r.Who == "Local request (unverified)" {
+			speaker = "The local request"
+		}
+		fmt.Fprintf(&b, "%d. %s\nScope and duration: %s\nWho asks: %s · %s says: \"%s\"\n", i+1, r.Object, r.Scope, r.Who, speaker, reason)
 	}
 	if len(requests) > MaxPopupItems {
 		fmt.Fprintf(&b, "and %d more (require separate decisions)\n\n", len(requests)-MaxPopupItems)
