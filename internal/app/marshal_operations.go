@@ -172,6 +172,9 @@ func (s *MarshalService) abandonOperation(ctx context.Context, runID string, op 
 // be dispatched. Recoverable receipts become state; unresolved intents remain
 // visible for operator intervention.
 func (s *MarshalService) RecoverPendingOperations(ctx context.Context) error {
+	if err := s.requireLifecycleOwner(); err != nil {
+		return err
+	}
 	ids, err := s.Store.MarshalUnfinishedRuns(ctx, s.ProjectID)
 	if err != nil {
 		return err

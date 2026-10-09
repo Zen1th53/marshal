@@ -38,6 +38,9 @@ func MarshalRunPackPath(root, runID string) string {
 // so a later Marshal session starts without it and a rejected pack is kept
 // for inspection rather than read twice.
 func (s *MarshalService) TakePlanPack(runID string) (string, error) {
+	if err := s.requireLifecycleOwner(); err != nil {
+		return "", err
+	}
 	if !marshalIdentifier(runID) {
 		return "", errors.New("invalid run ID")
 	}

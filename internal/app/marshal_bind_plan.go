@@ -26,6 +26,9 @@ func (s *MarshalService) CanonicalPlanProjectID() projectid.ID {
 // Process 04 plan. Each task remains separate so Marshal reviews and merges
 // the result before admitting the next Process 05 task.
 func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (marshal.Run, error) {
+	if err := s.requireLifecycleOwner(); err != nil {
+		return marshal.Run{}, err
+	}
 	if err := s.ready(); err != nil {
 		return marshal.Run{}, err
 	}

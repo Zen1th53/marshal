@@ -33,7 +33,7 @@ func (s *MarshalService) repositoryIdentity(ctx context.Context) (string, error)
 }
 
 func (s *MarshalService) PlanApprovalSnapshot(ctx context.Context, runID string) (PlanApprovalSnapshot, error) {
-	run, rev, err := s.load(ctx, runID)
+	run, rev, err := s.readRun(ctx, runID)
 	if err != nil {
 		return PlanApprovalSnapshot{}, err
 	}
@@ -117,7 +117,7 @@ func taskAcceptancePurpose(run marshal.Run, task marshal.Task, attempt int, h ma
 
 // TaskAcceptance identifies only an existing current hand-in, never queued work.
 func (s *MarshalService) TaskAcceptance(ctx context.Context, runID, taskID string) (string, error) {
-	run, _, err := s.load(ctx, runID)
+	run, _, err := s.readRun(ctx, runID)
 	if err != nil {
 		return "", err
 	}
