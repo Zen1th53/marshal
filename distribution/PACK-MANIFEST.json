@@ -9901,8 +9901,8 @@
     },
     {
       "path": "internal/tui/commands_marshal.go",
-      "sha256": "f30fd23468dcb6247aa820fe97b1f0cae5f6f3e2c98f88302aa6e6d527f49d73",
-      "bytes": 59347
+      "sha256": "8ec7fa8c95f5e9b941a6f1a2a1f7eaee2115df50b8c794433f5f7fc414bc7e42",
+      "bytes": 59693
     },
     {
       "path": "internal/tui/commands_memory_inject_test.go",
@@ -10171,8 +10171,8 @@
     },
     {
       "path": "internal/tui/marshal_chat_test.go",
-      "sha256": "c4337d6eff130423b90d546b5058274062d62de177a52bc18bde3ea5099e87c4",
-      "bytes": 4333
+      "sha256": "c3677dfcf9f1da14e6d15e3fcdee647e277c79cb30fd49782a9ff37945b180ef",
+      "bytes": 11029
     },
     {
       "path": "internal/tui/marshal_exit_test.go",
@@ -10211,8 +10211,8 @@
     },
     {
       "path": "internal/tui/marshal_proposal.go",
-      "sha256": "06eb598e0f86018e6ea10a96c43ec626d2fe7c1de5059bb0b37bfd82b1e6bb0f",
-      "bytes": 24614
+      "sha256": "f205c54335381b9d378f26804176f09cf9242eee3639e3d9d09605ecd3c1ae9b",
+      "bytes": 25110
     },
     {
       "path": "internal/tui/marshal_proposal_test.go",
@@ -11696,8 +11696,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.8.md",
-      "sha256": "2d38fa38db96e4c59d1ef787971b33d136399b404fef5beb949cf6bcadcc0f52",
-      "bytes": 11432
+      "sha256": "c0e18ef7915da479a72bda071a54e294aa9ab96bc013facc2a97690462468933",
+      "bytes": 11577
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",
