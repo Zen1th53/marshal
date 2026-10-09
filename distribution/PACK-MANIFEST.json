@@ -10125,6 +10125,11 @@
       "bytes": 14238
     },
     {
+      "path": "internal/tui/interrupt_tmux_pty_test.go",
+      "sha256": "23a021e9e8e75a5250f51894c1a76afc2e830c6db8d7b662f2f0fff8eb6db325",
+      "bytes": 2862
+    },
+    {
       "path": "internal/tui/io_gate.go",
       "sha256": "6ab38fe6a3adadc76a9155e4f531b5369480a0aefd98c2cae562546b171e3aaa",
       "bytes": 699
@@ -11001,13 +11006,13 @@
     },
     {
       "path": "internal/tui/workspace.go",
-      "sha256": "b80dbaf9a8f73504aff979c1f5f62f67cf178a6ed2213b243c0c40dc211d4ab3",
-      "bytes": 68327
+      "sha256": "53530c489df01795331dd448d9fbb4c13b04a7b33d792f355af4270b74273173",
+      "bytes": 68387
     },
     {
       "path": "internal/tui/workspace_nav_test.go",
-      "sha256": "ac0c46474ace8aace6355d4fb6b2ef446244b01a8279a7f5778dfe311558deeb",
-      "bytes": 34302
+      "sha256": "8f537c98cd314cea34c9613fb494d8bf05d3058c614f08bfe7b226f4c92d8962",
+      "bytes": 34463
     },
     {
       "path": "internal/tui/workspace_shutdown.go",
@@ -11711,8 +11716,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.8.md",
-      "sha256": "176071c55d41ef59078f51b69a7a5d24dff8b70192e27a86bf1ef5938780e96b",
-      "bytes": 12508
+      "sha256": "a552d5e0b5abeb845da6a5d54c3071b3beeb6dd69d9c750bc9fd9431b225711e",
+      "bytes": 12646
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",
