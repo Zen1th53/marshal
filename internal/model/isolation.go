@@ -48,6 +48,7 @@ type SandboxRequest struct {
 	SupervisorBinary string
 	SupervisorSocket string
 	ScratchHome      string // private runtime-owned HOME outside the repository
+	ReadOnlyWorktree bool
 	Worktree         string
 	WritableDirs     []string
 	WritableTmpfs    []string // sandbox-internal paths mounted as ephemeral tmpfs

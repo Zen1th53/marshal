@@ -193,6 +193,11 @@ func assemble(ctx context.Context, req Request, id identity, observed, reported 
 	if err != nil {
 		return marshal.HandIn{}, err
 	}
+	tree, err := git(ctx, wt, "rev-parse", result+"^{tree}")
+	if err != nil {
+		return marshal.HandIn{}, err
+	}
+	tree = strings.TrimSpace(tree)
 	diff, err := git(ctx, wt, "diff", "--no-ext-diff", "--no-textconv", req.Task.BaseCommit, result)
 	if err != nil {
 		return marshal.HandIn{}, err
@@ -213,9 +218,11 @@ func assemble(ctx context.Context, req Request, id identity, observed, reported 
 			Criteria:     append([]string(nil), c.Criteria...),
 			Passed:       record.ExitCode == 0,
 			ResultCommit: result,
+			TreeDigest:   tree,
 		})
 	}
 	return marshal.HandIn{
+		TreeDigest:      tree,
 		BaseCommit:      req.Task.BaseCommit,
 		ResultCommit:    result,
 		Diff:            diff,
@@ -270,7 +277,11 @@ func WithCheckRunner(ctx context.Context, run CheckRunner) context.Context {
 // Each check gets its own clean, detached checkout of the result, removed
 // afterwards. Running in the task worktree would let one check change what
 // the next one sees while both results still claim the same commit.
-func runCheck(ctx context.Context, wt, result, command string, timeout time.Duration) marshal.CommandRecord {
+func RunCheck(ctx context.Context, wt, result, command string, timeout time.Duration) marshal.CommandRecord {
+	return runCheck(ctx, wt, result, command, timeout)
+}
+
+func runCheck(ctx context.Context, wt, result, command string, timeout time.Duration) (record marshal.CommandRecord) {
 	binding, governed := ctx.Value(checkRunnerKey{}).(checkRunnerBinding)
 	if governed && binding.run == nil {
 		return marshal.CommandRecord{Command: command, ExitCode: -1, Output: "governed check sandbox runner unavailable"}
@@ -286,6 +297,14 @@ func runCheck(ctx context.Context, wt, result, command string, timeout time.Dura
 	}
 	defer func() { _, _ = git(context.WithoutCancel(ctx), wt, "worktree", "remove", "--force", checkout) }()
 
+	defer func() {
+		status, err := git(context.WithoutCancel(ctx), checkout, "status", "--porcelain=v1", "--untracked-files=all", "--ignored")
+		head, headErr := git(context.WithoutCancel(ctx), checkout, "rev-parse", "HEAD")
+		if err != nil || headErr != nil || strings.TrimSpace(status) != "" || strings.TrimSpace(head) != result {
+			record.ExitCode = -1
+			record.Output += "\ncheck changed tested source or its identity"
+		}
+	}()
 	if governed {
 		checkCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()

@@ -191,6 +191,7 @@ func TestMarshalDraftBriefBindsExactCriteriaAndRuntimeWorktree(t *testing.T) {
 	script := `#!/bin/sh
 for prompt; do :; done
 case "$prompt" in *"fresh checkout of the committed result"*"clean sandbox"*"no worker environment, network or temporary files"*"only repository content"*) ;; *) exit 98 ;; esac
+case "$prompt" in *"source is read-only"*"MARSHAL_BUILD_DIR"*) ;; *) exit 96 ;; esac
 case "$prompt" in *"rerun after an integration merge"*"never commit history, HEAD diffs or commit structure"*"MARSHAL already records changed-file scope"*) ;; *) exit 97 ;; esac
 case "$prompt" in *"amended JSON"*) ;; *"opencode defaults to native and also supports governed when requested"*"copy each criterion string verbatim"*"runtime-assigned worktree"*) ;; *) exit 99 ;; esac
 printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{\"tasks\":[{\"id\":\"a\",\"title\":\"write a\",\"criteria\":[\"a exists\"],\"paths\":[\"a.txt\"],\"depends_on\":[],\"worker\":\"codex\",\"checks\":[{\"command\":\"test -f a.txt\",\"criteria\":[\"a exists\"]}],\"instructions\":\"Use assigned worktree\",\"expected_output\":\"a.txt\"}]}"}}'
@@ -345,5 +346,43 @@ func testGovernedDraftRefusesUnavailableProtectionWithoutNativeFallback(t *testi
 	}
 	if _, err = os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("native fallback started worker: %v", err)
+	}
+}
+
+func TestVerifierEvidenceRetainsFindingsAndInputBinding(t *testing.T) {
+	root := t.TempDir()
+	stub := `#!/bin/sh
+printf '%s\n' '{"type":"thread.started","thread_id":"verifier-session"}'
+printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{\"head\":\"expected\",\"verdict\":\"pass\",\"findings\":[\"reviewed boundary handling\"]}"}}'
+`
+	path := filepath.Join(root, "codex")
+	if err := os.WriteFile(path, []byte(stub), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", root+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cli := &MarshalCLI{Provider: "codex", Dir: root}
+	record, err := cli.VerifyEvidence(t.Context(), marshal.Run{}, "expected", verification.Session{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Commit != "expected" || record.Verdict != "pass" || len(record.Findings) != 1 || record.InputDigest == "" || record.Reviewer != "verifier:codex" || record.SessionID != "verifier-session" {
+		t.Fatalf("lost verifier evidence: %+v", record)
+	}
+}
+
+func TestInspectionTypeKeepsConservativeMutationScheduling(t *testing.T) {
+	m := &MarshalCLI{ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
+	var proposal marshalTaskProposal
+	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"inspect a","type":"inspection","mode":"native","criteria":["inspection complete"],"paths":["a.txt"],"worker":"codex","checks":[{"command":"test -f a.txt","criteria":["inspection complete"]}]}]}`), &proposal); err != nil {
+		t.Fatal(err)
+	}
+	draft, err := m.materialize(proposal, "", 1, []string{"codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Inspection type permits an unchanged result; it must not remove the
+	// prior mutation scheduling/lease protection for optional report writes.
+	if !draft.Plan.Tasks[0].Mutating || draft.Tasks[0].Type != marshal.TaskInspection {
+		t.Fatalf("type weakened scheduling protection: %+v", draft)
 	}
 }

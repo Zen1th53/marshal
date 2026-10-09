@@ -59,6 +59,11 @@ func testMarshalProcess05AndImportsExactCommit(t *testing.T, modelProvider strin
 	}
 	execService := runtime.Execution()
 	execService.RegisterHarness(execution.NewMockHarness("test-harness", func(_ context.Context, task execution.TaskExecution, _ execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+		trap, err := runtime.armHoneypot(worktree)
+		if err != nil {
+			return execution.TaskResult{}, err
+		}
+		t.Cleanup(func() { _ = trap.Close() })
 		if err := os.WriteFile(filepath.Join(worktree, "README.md"), []byte("fixed\n"), 0600); err != nil {
 			return execution.TaskResult{}, err
 		}
@@ -146,6 +151,11 @@ func TestMarshalGovernedMultiTaskPlanRunsInOrder(t *testing.T) {
 	}
 	execService := runtime.Execution()
 	execService.RegisterHarness(execution.NewMockHarness("test-harness", func(_ context.Context, task execution.TaskExecution, _ execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+		trap, err := runtime.armHoneypot(worktree)
+		if err != nil {
+			return execution.TaskResult{}, err
+		}
+		t.Cleanup(func() { _ = trap.Close() })
 		switch task.TaskID {
 		case "fix":
 			if err := os.WriteFile(filepath.Join(worktree, "README.md"), []byte("fixed\n"), 0600); err != nil {

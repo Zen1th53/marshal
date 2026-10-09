@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -816,10 +817,13 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 
 				if t.State != TaskFailed {
 					// Record collected evidence
+					var captureErr error
 					for _, ev := range result.EvidenceList {
 						ev.RunID = run.RunID
 						recordedEv, err := e.oracle.RecordEvidence(ev)
-						if err == nil {
+						if err != nil {
+							captureErr = errors.Join(captureErr, err)
+						} else {
 							t.CollectedEvidence = append(t.CollectedEvidence, recordedEv.EvidenceID)
 							run.Evidence = append(run.Evidence, EvidenceRef{
 								EvidenceID: recordedEv.EvidenceID,
@@ -835,13 +839,39 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 					// Record claims
 					for _, cl := range result.Claims {
 						cl.RunID = run.RunID
-						_, _ = e.oracle.RecordClaim(cl)
+						if _, err := e.oracle.RecordClaim(cl); err != nil {
+							captureErr = errors.Join(captureErr, err)
+						}
 					}
 
 					compTime := time.Now().UTC()
 					t.CompletedAt = &compTime
 					t.State = TaskCompletedPendingVerify
+					if captureErr != nil {
+						t.State = TaskFailed
+						t.CompletedAt = nil
+						t.LastFailureReason = "incomplete evidence: " + captureErr.Error()
+					}
 				}
+			}
+
+			actor := harnessName
+			if harness != nil {
+				actor = harness.Name()
+			}
+			_, journalErr := e.journal.Append(JournalEvent{
+				RunID:       run.RunID,
+				TaskID:      t.TaskID,
+				Actor:       actor,
+				EventType:   "TASK_FINISHED",
+				StateBefore: string(TaskRunning),
+				StateAfter:  string(t.State),
+				Summary:     fmt.Sprintf("Task %s completed with state %s", t.TaskID, t.State),
+			})
+			if journalErr != nil {
+				t.State = TaskFailed
+				t.CompletedAt = nil
+				t.LastFailureReason = "incomplete evidence: journal: " + journalErr.Error()
 			}
 
 			// A live native provider turn owns its worktree and lease until the
@@ -853,7 +883,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			// their lease before re-admission.
 			retainLiveNativeTurn := providerApprovalPaused && t.NativeTurn != nil
 			if !retainLiveNativeTurn {
-				if run.Delivery != DeliveryPreserveBranch {
+				if run.Delivery != DeliveryPreserveBranch && !strings.HasPrefix(t.LastFailureReason, "incomplete evidence:") {
 					_ = e.worktrees.CleanWorktree(ctx, wtPath)
 				}
 				if t.Mutates && lease != nil {
@@ -872,19 +902,6 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				return &run, err
 			}
 
-			actor := harnessName
-			if harness != nil {
-				actor = harness.Name()
-			}
-			_, _ = e.journal.Append(JournalEvent{
-				RunID:       run.RunID,
-				TaskID:      t.TaskID,
-				Actor:       actor,
-				EventType:   "TASK_FINISHED",
-				StateBefore: string(TaskRunning),
-				StateAfter:  string(t.State),
-				Summary:     fmt.Sprintf("Task %s completed with state %s", t.TaskID, t.State),
-			})
 			// Admission stops at the first provider-native approval pause. In
 			// particular, another ready task must not race past a newly raised
 			// hard gate in this same scheduler pass.

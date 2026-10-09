@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -578,5 +579,58 @@ func TestEngine_CheckpointAndRollback(t *testing.T) {
 	}
 	if string(restored) != "original content" {
 		t.Fatalf("expected 'original content', got %q", string(restored))
+	}
+}
+
+type failingFinishJournal struct{ JournalStore }
+
+func (j failingFinishJournal) Append(ev JournalEvent) (JournalEvent, error) {
+	if ev.EventType == "TASK_FINISHED" {
+		return JournalEvent{}, errors.New("injected journal failure")
+	}
+	return j.JournalStore.Append(ev)
+}
+
+func TestMandatoryCaptureFailurePreventsCompletion(t *testing.T) {
+	for _, kind := range []string{"evidence", "claim", "journal"} {
+		t.Run(kind, func(t *testing.T) {
+			journal := JournalStore(NewMemoryJournalStore())
+			if kind == "journal" {
+				journal = failingFinishJournal{journal}
+			}
+			engine, err := NewEngine(EngineConfig{ProjectRoot: t.TempDir()}, nil, journal)
+			if err != nil {
+				t.Fatal(err)
+			}
+			engine.RegisterHarness(NewMockHarness("mock", func(_ context.Context, task TaskExecution, _ ConstraintPackage, wt string) (TaskResult, error) {
+				if err := os.WriteFile(filepath.Join(wt, "kept.txt"), []byte("work"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				result := TaskResult{TaskID: task.TaskID, Success: true}
+				if kind == "evidence" {
+					result.EvidenceList = []ExecutionEvidence{{}}
+				}
+				if kind == "claim" {
+					result.Claims = []ExecutionClaim{{}}
+				}
+				return result, nil
+			}))
+			goal, p := createTestGoalAndPlan(time.Now().UTC())
+			run, err := engine.InitializeRun(t.Context(), createTestHandoff(t, engine.cfg.ProjectRoot, goal, p), goal, p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			completed, err := engine.ExecuteRun(t.Context(), run.RunID)
+			if completed == nil {
+				t.Fatal(err)
+			}
+			task := completed.Tasks["task-1"]
+			if task.State == TaskCompletedPendingVerify || !strings.Contains(task.LastFailureReason, "incomplete evidence") {
+				t.Fatalf("task=%+v err=%v", task, err)
+			}
+			if _, err := os.Stat(filepath.Join(task.WorktreePath, "kept.txt")); err != nil {
+				t.Fatalf("work lost: %v", err)
+			}
+		})
 	}
 }

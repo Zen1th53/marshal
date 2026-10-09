@@ -26,6 +26,7 @@ type MarshalPanel struct {
 
 // MarshalTaskRow is one task as the panel shows it.
 type MarshalTaskRow struct {
+	Type           marshal.TaskType
 	ID             string
 	Worker         string
 	Mode           marshal.WorkerMode
@@ -45,7 +46,7 @@ func newMarshalPanel(runID, provider string, run marshal.Run, note string) *Mars
 		for _, n := range t.ReturnsByAgent {
 			returns += n
 		}
-		row := MarshalTaskRow{ID: t.PlanTaskID, Worker: t.Worker, Mode: t.Mode, ImportedResult: t.ImportedResult, State: t.State, Returns: returns, Criteria: append([]string(nil), t.Criteria...), Files: append([]string(nil), t.Files...)}
+		row := MarshalTaskRow{Type: t.EffectiveType(), ID: t.PlanTaskID, Worker: t.Worker, Mode: t.Mode, ImportedResult: t.ImportedResult, State: t.State, Returns: returns, Criteria: append([]string(nil), t.Criteria...), Files: append([]string(nil), t.Files...)}
 		for _, check := range t.Checks {
 			row.Checks = append(row.Checks, check.Command)
 		}
@@ -72,6 +73,9 @@ func marshalSection(s UIState, th *Theme, cols int) []string {
 	for _, t := range p.Tasks {
 		glyph, color := marshalTaskGlyph(th, t.State)
 		line := fmt.Sprintf("   %s %-12s %-10s %s %s", th.Colorize(color, glyph), t.ID, t.Worker, t.Mode, t.State)
+		if t.Type != "" {
+			line += " · " + string(t.Type)
+		}
 		if t.Returns > 0 {
 			line += th.Colorize(th.Warning, fmt.Sprintf("  returned %d", t.Returns))
 		}
@@ -117,6 +121,9 @@ func marshalStatusText(p *MarshalPanel) string {
 	fmt.Fprintf(&b, "Marshal run %s — %s\n", p.RunID, p.State)
 	for _, t := range p.Tasks {
 		fmt.Fprintf(&b, "  %-12s %-10s %s %s", t.ID, t.Worker, t.Mode, t.State)
+		if t.Type != "" {
+			fmt.Fprintf(&b, " · %s", t.Type)
+		}
 		if t.Returns > 0 {
 			fmt.Fprintf(&b, " (returned %d)", t.Returns)
 		}
@@ -141,7 +148,20 @@ func marshalStatusText(p *MarshalPanel) string {
 	if p.Report != nil {
 		b.WriteString("\ncompletion report:\n")
 		for _, criterion := range p.Report.Criteria {
-			fmt.Fprintf(&b, "  %s / %s: %s\n", criterion.TaskID, criterion.Criterion, criterion.Status)
+			fmt.Fprintf(&b, "  %s / %s: %s", criterion.TaskID, criterion.Criterion, criterion.Status)
+			if criterion.Mixed {
+				b.WriteString(" (mixed pass/fail)")
+			}
+			if criterion.Incomplete {
+				b.WriteString(" (incomplete)")
+			}
+			b.WriteString("\n")
+		}
+		for _, record := range p.Report.Verifiers {
+			fmt.Fprintf(&b, "  verifier %s (%s session %s): %s · commit %s · input %s\n", record.Reviewer, record.Provider, record.SessionID, record.Verdict, record.Commit, record.InputDigest)
+			if len(record.Findings) > 0 {
+				fmt.Fprintf(&b, "    findings: %s\n", strings.Join(record.Findings, "; "))
+			}
 		}
 		if len(p.Report.Untested) > 0 {
 			b.WriteString("  not tested: " + strings.Join(p.Report.Untested, "; ") + "\n")
