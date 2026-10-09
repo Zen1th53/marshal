@@ -3156,8 +3156,8 @@
     },
     {
       "path": "docs/public/limits.md",
-      "sha256": "aad30bfa069bf033d785e8682cd38f79b6ea6972a401e0b73bc1dcff703c92b8",
-      "bytes": 5117
+      "sha256": "9506d21292cb3635b456a2c8a729db9fa1944c87aacb7f9e8210162ecfc0e21b",
+      "bytes": 5201
     },
     {
       "path": "docs/public/protocol.md",
@@ -11696,8 +11696,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.8.md",
-      "sha256": "4deebdd78e847f52253c73578bc96d1744d34d75771e42667c3950c8d1ff17ca",
-      "bytes": 11777
+      "sha256": "2d38fa38db96e4c59d1ef787971b33d136399b404fef5beb949cf6bcadcc0f52",
+      "bytes": 11432
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",
