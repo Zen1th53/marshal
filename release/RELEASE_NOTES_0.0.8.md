@@ -46,6 +46,8 @@ Evidence and verification integrity.
 - Governed results that change policy, CI, MARSHAL storage or agent instructions
   need separate, commit-bound operator popup consent before merge.
 - Governing-file digests detect unexpected changes and show an activity alert.
+- A newly started run no longer shows a false "Governance integrity alert"
+  before its record is saved; real mismatches still alert.
 - Local file proposals say **Local request (unverified)**; intake preference
   updates show their source in activity.
 - Governed requests refuse native tasks in drafts unless the operator explicitly

@@ -10211,8 +10211,8 @@
     },
     {
       "path": "internal/tui/marshal_proposal.go",
-      "sha256": "06eb598e0f86018e6ea10a96c43ec626d2fe7c1de5059bb0b37bfd82b1e6bb0f",
-      "bytes": 24614
+      "sha256": "190b22457d62dc17792bf27d1c8e3d1a502aef56a9454606b13616c953bf4819",
+      "bytes": 24669
     },
     {
       "path": "internal/tui/marshal_proposal_test.go",
@@ -10221,8 +10221,8 @@
     },
     {
       "path": "internal/tui/marshal_protection_test.go",
-      "sha256": "6828f2a1d85ebb52d21466da2d4674801569ae5706f4f7ea6b38c7aa47ddf7ea",
-      "bytes": 9357
+      "sha256": "5ccaf68a410f2f328f7f675a262ef1f43eff1c662fb97197b7f9d8142a569541",
+      "bytes": 11169
     },
     {
       "path": "internal/tui/marshal_protocol_privacy_test.go",
@@ -11696,8 +11696,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.8.md",
-      "sha256": "2d38fa38db96e4c59d1ef787971b33d136399b404fef5beb949cf6bcadcc0f52",
-      "bytes": 11432
+      "sha256": "5821afdba8b6e0457db2c9d763751c76f4aad45d7951eb0e81421928297a634c",
+      "bytes": 11566
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",
