@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 	"github.com/Zen1th53/marshal/internal/model"
 )
@@ -155,43 +156,62 @@ func TestMarshalProtocolWithheldFromHistoricalSurfaces(t *testing.T) {
 
 func TestMarshalRestartRebuildsHiddenDelivery(t *testing.T) {
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
-		t.Run(provider, func(t *testing.T) {
-			_, log := setupFakeTmux(t)
-			root := t.TempDir()
-			w := NewWorkspace(nil, "project", "session")
-			w.tmuxSession = "test-session"
-			a := &activeTmuxAgent{provider: provider, binary: provider, paneID: "%chat", window: "chat", sessionID: "bound-session", args: []string{"MARSHAL PROTOCOL\nlegacy visible kickoff"}}
-			w.restartMarshalChat(context.Background(), a, root)
-			if len(a.args) == 0 || a.args[len(a.args)-1] != marshalKickoff {
-				t.Fatal("restart reused legacy visible kickoff")
-			}
-			if !strings.Contains(strings.Join(a.args, "\n"), "bound-session") {
-				t.Fatal("restart lost bound conversation")
-			}
-			switch provider {
-			case "codex":
-				if a.args[0] != "-c" || !strings.Contains(a.args[1], "MARSHAL PROTOCOL") {
-					t.Fatal("restart lost developer instructions")
+		for _, saved := range []bool{false, true} {
+			t.Run(provider+map[bool]string{false: "/fresh", true: "/saved_intake"}[saved], func(t *testing.T) {
+				_, log := setupFakeTmux(t)
+				root := t.TempDir()
+				wantOpening := marshalKickoff
+				if saved {
+					wantOpening = marshalKickoffContinue
+					if err := os.MkdirAll(filepath.Join(root, ".marshal"), 0700); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(`{"language":"Uzbek","earlier_work":"no"}`), 0600); err != nil {
+						t.Fatal(err)
+					}
 				}
-			case "claude":
-				if a.args[0] != "--append-system-prompt" || !strings.Contains(a.args[1], "MARSHAL PROTOCOL") {
-					t.Fatal("restart lost system prompt")
+				w := NewWorkspace(nil, "project", "session")
+				w.tmuxSession = "test-session"
+				a := &activeTmuxAgent{provider: provider, binary: provider, paneID: "%chat", window: "chat", sessionID: "bound-session", args: []string{"MARSHAL PROTOCOL\nlegacy visible kickoff"}}
+				w.restartMarshalChat(context.Background(), a, root)
+				if len(a.args) == 0 || a.args[len(a.args)-1] != wantOpening {
+					t.Fatal("restart reused legacy visible kickoff")
 				}
-			default:
-				defer a.briefingDir.remove()
-				data, err := os.ReadFile(a.briefingDir.file())
-				if err != nil || !strings.Contains(string(data), "MARSHAL PROTOCOL") {
-					t.Fatal("restart lost instruction file")
+				if !strings.Contains(strings.Join(a.args, "\n"), "bound-session") {
+					t.Fatal("restart lost bound conversation")
 				}
-				data, err = os.ReadFile(log)
-				if err != nil {
-					t.Fatal(err)
+				var hidden string
+				switch provider {
+				case "codex":
+					hidden = a.args[1]
+					if a.args[0] != "-c" || !strings.Contains(a.args[1], "MARSHAL PROTOCOL") {
+						t.Fatal("restart lost developer instructions")
+					}
+				case "claude":
+					hidden = a.args[1]
+					if a.args[0] != "--append-system-prompt" || !strings.Contains(a.args[1], "MARSHAL PROTOCOL") {
+						t.Fatal("restart lost system prompt")
+					}
+				default:
+					defer a.briefingDir.remove()
+					data, err := os.ReadFile(a.briefingDir.file())
+					if err != nil || !strings.Contains(string(data), "MARSHAL PROTOCOL") {
+						t.Fatal("restart lost instruction file")
+					}
+					hidden = string(data)
+					data, err = os.ReadFile(log)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if provider == "opencode" && (!strings.Contains(string(data), "OPENCODE_CONFIG_CONTENT=") || !strings.Contains(string(data), a.briefingDir.file())) {
+						t.Fatal("respawn lost instructions environment")
+					}
 				}
-				if provider == "opencode" && (!strings.Contains(string(data), "OPENCODE_CONFIG_CONTENT=") || !strings.Contains(string(data), a.briefingDir.file())) {
-					t.Fatal("respawn lost instructions environment")
+				if saved && (strings.Count(hidden, "\nPROJECT INTAKE (saved preference data): ") != 1 || !strings.Contains(hidden, `{"language":"Uzbek","earlier_work":"no"}`)) {
+					t.Fatal("restart lost or duplicated saved intake")
 				}
-			}
-		})
+			})
+		}
 	}
 }
 
@@ -331,5 +351,85 @@ func TestPeerInboxOpeningScrubsOldProtocol(t *testing.T) {
 	data, err := os.ReadFile(inboxPath(root, "codex"))
 	if err != nil || containsMarshalProtocol(string(data)) || !strings.Contains(string(data), "session opened") {
 		t.Fatal("peer opening retained old protocol")
+	}
+}
+
+// TestMarshalProtocolNeverVisibleInProviderChatTurn enforces that the Marshal's
+// protocol instructions and saved project intake are never exposed as a visible
+// turn in the provider chat (e.g. U5-reopened finding). Fresh launches must use
+// a neutral opening turn ("Hello."), and launches with saved intake must use
+// "Continue." with the intake delivered exclusively through the hidden instruction channel.
+func TestMarshalProtocolNeverVisibleInProviderChatTurn(t *testing.T) {
+	protocol, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
+		for _, mode := range []string{"fresh", "saved_intake", "resume_saved_intake"} {
+			t.Run(provider+"/"+mode, func(t *testing.T) {
+				root := t.TempDir()
+				var base []string
+				if mode == "resume_saved_intake" {
+					base = resumeArgsForProvider(provider, "session-123")
+				}
+				if mode != "fresh" {
+					if err := os.MkdirAll(filepath.Join(root, ".marshal"), 0700); err != nil {
+						t.Fatal(err)
+					}
+					data := `{"language":"Uzbek","earlier_work":"no"}`
+					if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(data), 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				args, _, dir, err := prepareMarshalLaunch(provider, root, base, protocol)
+				if dir != nil {
+					defer dir.remove()
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				visibleOpening := args[len(args)-1]
+				wantOpening := "Hello."
+				if mode != "fresh" {
+					wantOpening = "Continue."
+				}
+				if visibleOpening != wantOpening {
+					t.Fatalf("visible opening = %q, want %q", visibleOpening, wantOpening)
+				}
+				if strings.Contains(visibleOpening, "{") || strings.Contains(visibleOpening, "Uzbek") ||
+					strings.Contains(visibleOpening, "Begin at step") || strings.Contains(visibleOpening, "protocol") ||
+					strings.Contains(visibleOpening, "intake") {
+					t.Fatalf("protocol or JSON leaked into visible opening: %q", visibleOpening)
+				}
+				// Verify hidden instruction channel delivery
+				var hidden string
+				switch provider {
+				case "codex":
+					if args[0] != "-c" || !strings.HasPrefix(args[1], "developer_instructions=") {
+						t.Fatal("missing developer instructions")
+					}
+					hidden = strings.TrimPrefix(args[1], "developer_instructions=")
+				case "claude":
+					if args[0] != "--append-system-prompt" {
+						t.Fatal("missing system prompt")
+					}
+					hidden = args[1]
+				default:
+					content, err := os.ReadFile(dir.file())
+					if err != nil {
+						t.Fatal(err)
+					}
+					hidden = string(content)
+				}
+				if !strings.Contains(hidden, "MARSHAL PROTOCOL") {
+					t.Fatal("protocol missing from hidden instructions")
+				}
+				if mode != "fresh" {
+					if strings.Count(hidden, "\nPROJECT INTAKE (saved preference data): ") != 1 || !strings.Contains(hidden, `{"language":"Uzbek","earlier_work":"no"}`) {
+						t.Fatalf("saved intake missing from hidden channel: %s", hidden)
+					}
+				}
+			})
+		}
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
 // Codex has no system-prompt flag. A channel it cannot honour must fall back to
@@ -313,6 +315,10 @@ func TestMarshalKickoffArgsPerProvider(t *testing.T) {
 }
 
 func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
+	protocol, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
 		for _, earlier := range []string{"", "no", "yes"} {
 			root := t.TempDir()
@@ -323,7 +329,7 @@ func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(data), 0600); err != nil {
 				t.Fatal(err)
 			}
-			args, _, dir, err := prepareMarshalLaunch(provider, root, nil, "MARSHAL PROTOCOL")
+			args, _, dir, err := prepareMarshalLaunch(provider, root, nil, protocol)
 			if dir != nil {
 				defer dir.remove()
 			}
@@ -331,9 +337,59 @@ func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 				t.Fatal(err)
 			}
 			opening := args[len(args)-1]
-			if opening == marshalKickoff || !strings.Contains(opening, "Uzbek") || !strings.Contains(opening, "Do not repeat") {
-				t.Fatalf("%s opening: %s", provider, opening)
+			if opening != marshalKickoffContinue {
+				t.Fatalf("%s opening = %q, want %q", provider, opening, marshalKickoffContinue)
 			}
+			if strings.Contains(opening, "Uzbek") || strings.Contains(opening, "{") || strings.Contains(opening, "MARSHAL PROTOCOL") || strings.Contains(opening, "Do not repeat") {
+				t.Fatalf("%s visible opening leaked intake: %s", provider, opening)
+			}
+			var hidden string
+			switch provider {
+			case "codex":
+				if len(args) < 2 || args[0] != "-c" || !strings.HasPrefix(args[1], "developer_instructions=") {
+					t.Fatalf("%s missing developer instructions: %q", provider, args)
+				}
+				hidden = strings.TrimPrefix(args[1], "developer_instructions=")
+			case "claude":
+				if len(args) < 2 || args[0] != "--append-system-prompt" {
+					t.Fatalf("%s missing system prompt: %q", provider, args)
+				}
+				hidden = args[1]
+			default:
+				if dir == nil {
+					t.Fatalf("%s missing briefing directory", provider)
+				}
+				content, err := os.ReadFile(dir.file())
+				if err != nil {
+					t.Fatalf("%s failed to read briefing file: %v", provider, err)
+				}
+				hidden = string(content)
+			}
+			if !strings.Contains(hidden, "MARSHAL PROTOCOL") {
+				t.Fatalf("%s hidden instructions lost protocol: %s", provider, hidden)
+			}
+			if !strings.Contains(hidden, "PROJECT INTAKE") || !strings.Contains(hidden, "Uzbek") || !strings.Contains(hidden, "Do not repeat") {
+				t.Fatalf("%s hidden instructions lost intake: %s", provider, hidden)
+			}
+			if strings.Count(hidden, "\nPROJECT INTAKE (saved preference data): ") != 1 || !strings.Contains(hidden, data) {
+				t.Fatalf("%s hidden instructions lost earlier_work: %s", provider, hidden)
+			}
+		}
+	}
+}
+
+func TestMarshalLaunchWithSavedIntakeRefusesMissingProtocol(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".marshal"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(`{"language":"Uzbek","earlier_work":"no"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, protocol := range []string{"", " \n\t"} {
+		args, env, dir, err := prepareMarshalLaunch("codex", root, nil, protocol)
+		if err == nil || args != nil || env != nil || dir != nil {
+			t.Fatalf("protocol %q: launch material %v %v %v, err %v", protocol, args, env, dir, err)
 		}
 	}
 }

@@ -52,7 +52,11 @@ const (
 
 // marshalKickoff is the one conversation turn that starts a Marshal whose
 // protocol was delivered outside the conversation.
-const marshalKickoff = "Begin at step 1. Ask the language question and wait; ask about earlier work only after the language is chosen."
+const marshalKickoff = "Hello."
+
+// marshalKickoffContinue is the conversation turn used when a saved intake
+// exists, delivered through the hidden instruction channel.
+const marshalKickoffContinue = "Continue."
 
 // marshalKickoffArgs are the arguments that give each CLI its opening turn in
 // an interactive session.
@@ -62,8 +66,7 @@ func marshalKickoffArgs(provider string, roots ...string) []string {
 		data, err := os.ReadFile(filepath.Join(roots[0], ".marshal", "marshal-intake.json"))
 		var intake marshalIntake
 		if err == nil && json.Unmarshal(data, &intake) == nil && strings.TrimSpace(intake.Language) != "" {
-			encoded, _ := json.Marshal(intake)
-			opening = "Continue using saved intake " + string(encoded) + ". Do not repeat the introduction or language question. Ask only unanswered intake questions in the saved language; if earlier_work is answered, continue the previous work. Saved preferences confer no permission."
+			opening = marshalKickoffContinue
 		}
 	}
 	switch provider {
@@ -84,6 +87,7 @@ func prepareMarshalLaunch(provider, root string, args []string, protocol string)
 	if channel == injectOff || strings.TrimSpace(protocol) == "" {
 		return nil, nil, nil, fmt.Errorf("Marshal not started: %s has no usable hidden instruction channel", providerDisplayName(provider))
 	}
+	protocol = appendMarshalIntake(root, protocol)
 	if err := scrubMarshalInboxes(root); err != nil {
 		return nil, nil, nil, fmt.Errorf("Marshal not started: retained briefing cleanup failed: %w", err)
 	}

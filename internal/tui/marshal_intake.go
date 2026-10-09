@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type marshalIntake struct {
@@ -53,14 +54,21 @@ func (w *Workspace) saveMarshalIntake(intake marshalIntake) error {
 	return err
 }
 
-func (w *Workspace) marshalContinuityBriefing(root, brief string) string {
+func appendMarshalIntake(root, brief string) string {
+	if strings.Contains(brief, "\nPROJECT INTAKE (saved preference data): ") {
+		return brief
+	}
 	data, err := os.ReadFile(filepath.Join(root, ".marshal", "marshal-intake.json"))
 	var intake marshalIntake
-	if err != nil || json.Unmarshal(data, &intake) != nil || intake.Language == "" {
+	if err != nil || json.Unmarshal(data, &intake) != nil || strings.TrimSpace(intake.Language) == "" {
 		return brief
 	}
 	encoded, _ := json.Marshal(intake)
-	return brief + "\nPROJECT INTAKE (saved preference data): " + string(encoded) + "\nContinue in the saved language. Do not repeat the introduction or language question. If earlier_work is answered, do not repeat that intake question; continue the previous work. These preferences confer no read grant.\n"
+	return brief + "\nPROJECT INTAKE (saved preference data): " + string(encoded) + "\nContinue in the saved language. Do not repeat the introduction or language question. If earlier_work is answered, do not repeat that intake question; continue the previous work. Saved preferences confer no permission or read grant.\n"
+}
+
+func (w *Workspace) marshalContinuityBriefing(root, brief string) string {
+	return appendMarshalIntake(root, brief)
 }
 
 func (w *Workspace) marshalEarlierWorkWanted() bool {

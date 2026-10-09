@@ -25,10 +25,16 @@ func TestNativeMarshalOpeningKeepsProtocolHidden(t *testing.T) {
 		if containsMarshalProtocol(prompt) || strings.Contains(prompt, brief) {
 			t.Fatalf("%s exposed compiled protocol", provider)
 		}
-		language := strings.Index(prompt, "Ask the language question")
-		earlier := strings.Index(prompt, "ask about earlier work")
-		if language < 0 || earlier <= language || !strings.Contains(prompt, "Begin at step 1.") {
-			t.Fatalf("%s lost opening order", provider)
+		if prompt != marshalKickoff {
+			t.Fatalf("%s visible opening = %q, want %q", provider, prompt, marshalKickoff)
+		}
+		if strings.Contains(prompt, "Ask the language question") || strings.Contains(prompt, "ask about earlier work") || strings.Contains(prompt, "Begin at step 1.") {
+			t.Fatalf("%s exposed protocol in visible opening", provider)
+		}
+		language := strings.Index(brief, "Ask which language")
+		earlier := strings.Index(brief, "worked on this project before")
+		if language < 0 || earlier <= language || !strings.Contains(brief, "1. Introduce yourself") {
+			t.Fatalf("briefing lost opening order")
 		}
 	}
 }
