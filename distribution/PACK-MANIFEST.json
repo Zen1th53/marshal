@@ -10311,13 +10311,13 @@
     },
     {
       "path": "internal/tui/native_briefing.go",
-      "sha256": "d75a36b1b301e5c0098f6b636dc9ad5758de8a1ecb198e50fef6952c4218bc68",
+      "sha256": "32b22af2151afb6808af3a60a49848abfe0ebed1cf5370f56fbb07e88a13df67",
       "bytes": 19526
     },
     {
       "path": "internal/tui/native_briefing_test.go",
-      "sha256": "8346340880e51dcea613db01f6641e890c5506ada841b9d8724c6734db86cdcb",
-      "bytes": 14027
+      "sha256": "2921ba1efa93b461a5e6e55615950af2c66d1de457d06071c763f1e116a196c2",
+      "bytes": 14677
     },
     {
       "path": "internal/tui/native_channel_author_test.go",
