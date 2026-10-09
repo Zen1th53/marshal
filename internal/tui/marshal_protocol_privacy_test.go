@@ -333,3 +333,79 @@ func TestPeerInboxOpeningScrubsOldProtocol(t *testing.T) {
 		t.Fatal("peer opening retained old protocol")
 	}
 }
+
+// TestMarshalProtocolNeverVisibleInProviderChatTurn enforces that the Marshal's
+// protocol instructions and saved project intake are never exposed as a visible
+// turn in the provider chat (e.g. U5-reopened finding). Fresh launches must use
+// a neutral opening turn ("Hello."), and launches with saved intake must use
+// "Continue." with the intake delivered exclusively through the hidden instruction channel.
+func TestMarshalProtocolNeverVisibleInProviderChatTurn(t *testing.T) {
+	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
+		for _, mode := range []string{"fresh", "saved_intake", "resume_saved_intake"} {
+			t.Run(provider+"/"+mode, func(t *testing.T) {
+				root := t.TempDir()
+				var base []string
+				if mode == "resume_saved_intake" {
+					base = resumeArgsForProvider(provider, "session-123")
+				}
+				if mode != "fresh" {
+					if err := os.MkdirAll(filepath.Join(root, ".marshal"), 0700); err != nil {
+						t.Fatal(err)
+					}
+					data := `{"language":"Uzbek","earlier_work":"no"}`
+					if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(data), 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				args, _, dir, err := prepareMarshalLaunch(provider, root, base, "MARSHAL PROTOCOL\nFollow steps in order.")
+				if dir != nil {
+					defer dir.remove()
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				visibleOpening := args[len(args)-1]
+				wantOpening := "Hello."
+				if mode != "fresh" {
+					wantOpening = "Continue."
+				}
+				if visibleOpening != wantOpening {
+					t.Fatalf("visible opening = %q, want %q", visibleOpening, wantOpening)
+				}
+				if strings.Contains(visibleOpening, "{") || strings.Contains(visibleOpening, "Uzbek") ||
+					strings.Contains(visibleOpening, "Begin at step") || strings.Contains(visibleOpening, "protocol") ||
+					strings.Contains(visibleOpening, "intake") {
+					t.Fatalf("protocol or JSON leaked into visible opening: %q", visibleOpening)
+				}
+				// Verify hidden instruction channel delivery
+				var hidden string
+				switch provider {
+				case "codex":
+					if args[0] != "-c" || !strings.HasPrefix(args[1], "developer_instructions=") {
+						t.Fatal("missing developer instructions")
+					}
+					hidden = strings.TrimPrefix(args[1], "developer_instructions=")
+				case "claude":
+					if args[0] != "--append-system-prompt" {
+						t.Fatal("missing system prompt")
+					}
+					hidden = args[1]
+				default:
+					content, err := os.ReadFile(dir.file())
+					if err != nil {
+						t.Fatal(err)
+					}
+					hidden = string(content)
+				}
+				if !strings.Contains(hidden, "MARSHAL PROTOCOL") {
+					t.Fatal("protocol missing from hidden instructions")
+				}
+				if mode != "fresh" {
+					if !strings.Contains(hidden, "PROJECT INTAKE") || !strings.Contains(hidden, "Uzbek") || !strings.Contains(hidden, `"earlier_work":"no"`) {
+						t.Fatalf("saved intake missing from hidden channel: %s", hidden)
+					}
+				}
+			})
+		}
+	}
+}

@@ -331,8 +331,42 @@ func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 				t.Fatal(err)
 			}
 			opening := args[len(args)-1]
-			if opening == marshalKickoff || !strings.Contains(opening, "Uzbek") || !strings.Contains(opening, "Do not repeat") {
-				t.Fatalf("%s opening: %s", provider, opening)
+			if opening != marshalKickoffContinue {
+				t.Fatalf("%s opening = %q, want %q", provider, opening, marshalKickoffContinue)
+			}
+			if strings.Contains(opening, "Uzbek") || strings.Contains(opening, "{") || strings.Contains(opening, "MARSHAL PROTOCOL") || strings.Contains(opening, "Do not repeat") {
+				t.Fatalf("%s visible opening leaked intake: %s", provider, opening)
+			}
+			var hidden string
+			switch provider {
+			case "codex":
+				if len(args) < 2 || args[0] != "-c" || !strings.HasPrefix(args[1], "developer_instructions=") {
+					t.Fatalf("%s missing developer instructions: %q", provider, args)
+				}
+				hidden = strings.TrimPrefix(args[1], "developer_instructions=")
+			case "claude":
+				if len(args) < 2 || args[0] != "--append-system-prompt" {
+					t.Fatalf("%s missing system prompt: %q", provider, args)
+				}
+				hidden = args[1]
+			default:
+				if dir == nil {
+					t.Fatalf("%s missing briefing directory", provider)
+				}
+				content, err := os.ReadFile(dir.file())
+				if err != nil {
+					t.Fatalf("%s failed to read briefing file: %v", provider, err)
+				}
+				hidden = string(content)
+			}
+			if !strings.Contains(hidden, "MARSHAL PROTOCOL") {
+				t.Fatalf("%s hidden instructions lost protocol: %s", provider, hidden)
+			}
+			if !strings.Contains(hidden, "PROJECT INTAKE") || !strings.Contains(hidden, "Uzbek") || !strings.Contains(hidden, "Do not repeat") {
+				t.Fatalf("%s hidden instructions lost intake: %s", provider, hidden)
+			}
+			if earlier != "" && !strings.Contains(hidden, `"earlier_work":"`+earlier+`"`) {
+				t.Fatalf("%s hidden instructions lost earlier_work: %s", provider, hidden)
 			}
 		}
 	}

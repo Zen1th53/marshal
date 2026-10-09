@@ -52,6 +52,9 @@ Evidence and verification integrity.
   updates show their source in activity.
 - Governed requests refuse native tasks in drafts unless the operator explicitly
   allows an exception.
+- The Marshal's protocol instructions and saved intake preferences are delivered
+  exclusively via hidden channels on fresh launch and resume, keeping raw protocol
+  text and intake JSON out of the provider chat.
 
 ### Durable lifecycle
 
