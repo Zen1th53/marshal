@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/Zen1th53/marshal/internal/permission"
 )
 
 // Screen is the workspace's frame buffer.
@@ -144,6 +146,35 @@ func (f Frame) Lines(cols, rows int) ([]string, int) {
 		start := total - bodyHeight - f.ScrollOffset
 		if start < 0 {
 			start = 0
+		}
+		// When following activity, keep a permission block's heading with
+		// its items if the whole prompt fits. Reuse Render's boundary lines
+		// so the network context and all item/help formatting stay intact.
+		if f.ScrollOffset == 0 {
+			prompt, _ := permission.Render(nil)
+			promptLines := strings.Split(strings.TrimSpace(prompt), "\n")
+			heading := PadCell("   "+promptLines[0], cols)
+			footer := PadCell("   "+promptLines[len(promptLines)-1], cols)
+			// Anchor on the latest visible footer so an older heading cannot
+			// displace a newer prompt or pair with its footer. Both searches
+			// are bounded by the viewport height.
+			for j := total - 1; j >= start; j-- {
+				if body[j] != footer {
+					continue
+				}
+				for i := j - 1; i >= max(0, j-bodyHeight+1); i-- {
+					if body[i] == footer {
+						break
+					}
+					if body[i] == heading {
+						if i < start {
+							start = i
+						}
+						break
+					}
+				}
+				break
+			}
 		}
 		end := start + bodyHeight
 		if end > total {
