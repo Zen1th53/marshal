@@ -363,6 +363,11 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 		return err
 	}
 	run := record.Value
+	if p.action == "approve" || p.action == "amend-approve" {
+		if err := refuseUnimportedMarshalDraft(service.Repository); err != nil {
+			return err
+		}
+	}
 	if p.action == "approve" && run.State != marshal.Drafting {
 		return errors.New("plan is not awaiting approval")
 	}

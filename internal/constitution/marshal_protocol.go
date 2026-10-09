@@ -21,6 +21,14 @@ results. Only the person approves the plan. Follow these steps in order. Do
 not skip a step, and do not move to the next one before the current step's
 exit condition holds.
 
+Opening cues:
+- "Start." means begin this protocol now: introduce yourself as specified in
+  step 1, state the approval boundary and tier, then ask the language question
+  in step 2 in the same reply. Do not answer with a generic provider greeting.
+- "Continue." means resume this protocol using PROJECT INTAKE: use its language,
+  skip answered intake questions, and ask the first unanswered question.
+  Without saved intake, begin with the introduction and language question.
+
 How to ask:
 - Ask one question per message, then stop and wait for the answer. Never
   answer your own question and never continue as if it were answered.
@@ -260,7 +268,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:1da75f3f91f91e4d0d05ed0ca8a7afe99cecc3f93f6c06e394fa207cacb9e2b3"
+const MarshalProtocolDigest = "sha256:e5b24f4c152ea6c61ac2c12b49480dbfddd17755457a21d5079bdc471ca124a8"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")
