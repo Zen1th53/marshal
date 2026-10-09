@@ -2,10 +2,12 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/testutil/testcloud"
 )
 
@@ -79,4 +81,108 @@ func TestUltraStartAndConfirmedStop(t *testing.T) {
 	if out := run("/ultra stop"); !strings.Contains(out, "already off") {
 		t.Fatalf("stop when off: %q", out)
 	}
+}
+
+func TestUltraActivationErrors(t *testing.T) {
+	ctx := context.Background()
+
+	// Case 1: entitlement_unavailable error (no ULTRA entitlement for this installation)
+	t.Run("entitlement unavailable", func(t *testing.T) {
+		ws := NewWorkspace(nil, "proj", "sess-ultra-unentitled")
+		err := &cloud.RefusalError{
+			StatusCode: 403,
+			Code:       "entitlement_unavailable",
+			Message:    "no usable ULTRA entitlement",
+			Err:        cloud.ErrRefused,
+		}
+		ws.AttachULTRAError(err)
+
+		// Command 1: /ultra status (and /ultra)
+		status, errStatus := ws.ExecuteCommand(ctx, "/ultra status")
+		if errStatus != nil {
+			t.Fatalf("/ultra status: %v", errStatus)
+		}
+		wantStatus := "ULTRA status: INACTIVE — this installation has no ULTRA entitlement.\n  The session is running as Standard."
+		if status != wantStatus {
+			t.Fatalf("/ultra status = %q, want %q", status, wantStatus)
+		}
+
+		statusBare, errBare := ws.ExecuteCommand(ctx, "/ultra")
+		if errBare != nil {
+			t.Fatalf("/ultra: %v", errBare)
+		}
+		if statusBare != wantStatus {
+			t.Fatalf("/ultra = %q, want %q", statusBare, wantStatus)
+		}
+
+		// Command 2: /ultra start
+		start, errStart := ws.ExecuteCommand(ctx, "/ultra start")
+		if errStart != nil {
+			t.Fatalf("/ultra start: %v", errStart)
+		}
+		wantStart := "ULTRA was not started: this installation has no ULTRA entitlement.\n  The session is running as Standard."
+		if start != wantStart {
+			t.Fatalf("/ultra start = %q, want %q", start, wantStart)
+		}
+
+		// Must not contain "Try again shortly" or "activation failed"
+		for _, out := range []string{status, statusBare, start} {
+			if strings.Contains(out, "Try again shortly") {
+				t.Fatalf("unexpected retry advice in %q", out)
+			}
+			if strings.Contains(out, "activation failed") {
+				t.Fatalf("unexpected activation failed wording in %q", out)
+			}
+		}
+	})
+
+	t.Run("entitlement unavailable sentinel", func(t *testing.T) {
+		ws := NewWorkspace(nil, "proj", "sess-ultra-sentinel")
+		ws.AttachULTRAError(cloud.ErrEntitlementUnavailable)
+
+		status, err := ws.ExecuteCommand(ctx, "/ultra status")
+		if err != nil {
+			t.Fatalf("/ultra status: %v", err)
+		}
+		wantStatus := "ULTRA status: INACTIVE — this installation has no ULTRA entitlement.\n  The session is running as Standard."
+		if status != wantStatus {
+			t.Fatalf("/ultra status = %q, want %q", status, wantStatus)
+		}
+
+		start, err := ws.ExecuteCommand(ctx, "/ultra start")
+		if err != nil {
+			t.Fatalf("/ultra start: %v", err)
+		}
+		wantStart := "ULTRA was not started: this installation has no ULTRA entitlement.\n  The session is running as Standard."
+		if start != wantStart {
+			t.Fatalf("/ultra start = %q, want %q", start, wantStart)
+		}
+	})
+
+	// Case 2: Other activation errors keep today's text including "Try again shortly"
+	t.Run("other activation error", func(t *testing.T) {
+		ws := NewWorkspace(nil, "proj", "sess-ultra-other-err")
+		otherErr := errors.New("connection reset by peer")
+		ws.AttachULTRAError(otherErr)
+
+		// Command 1: /ultra status
+		status, errStatus := ws.ExecuteCommand(ctx, "/ultra status")
+		if errStatus != nil {
+			t.Fatalf("/ultra status: %v", errStatus)
+		}
+		wantStatus := "ULTRA status: INACTIVE — activation failed: connection reset by peer\n  The session is running as Standard. Try again shortly."
+		if status != wantStatus {
+			t.Fatalf("/ultra status = %q, want %q", status, wantStatus)
+		}
+
+		// Command 2: /ultra start
+		start, errStart := ws.ExecuteCommand(ctx, "/ultra start")
+		if errStart != nil {
+			t.Fatalf("/ultra start: %v", errStart)
+		}
+		wantStart := "ULTRA was not started: activation failed: connection reset by peer\n  The session is running as Standard. Try again shortly."
+		if start != wantStart {
+			t.Fatalf("/ultra start = %q, want %q", start, wantStart)
+		}
+	})
 }

@@ -400,3 +400,36 @@ func TestRefusalCarriesTheServerReason(t *testing.T) {
 		}
 	}
 }
+
+// An entitlement_unavailable response yields a typed error matching ErrEntitlementUnavailable.
+func TestEntitlementUnavailableRefusal(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"code":"entitlement_unavailable","message":"no usable ULTRA entitlement"}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(server.URL, "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, _ := NewInstallation()
+	_, err = client.StartSession(context.Background(), state, "sess-x")
+	if !errors.Is(err, ErrRefused) {
+		t.Fatalf("want ErrRefused, got %v", err)
+	}
+	if !errors.Is(err, ErrEntitlementUnavailable) {
+		t.Fatalf("want ErrEntitlementUnavailable, got %v", err)
+	}
+	var ref *RefusalError
+	if !errors.As(err, &ref) {
+		t.Fatalf("want *RefusalError, got %T: %v", err, err)
+	}
+	if ref.StatusCode != http.StatusForbidden || ref.Code != "entitlement_unavailable" {
+		t.Fatalf("unexpected RefusalError fields: %+v", ref)
+	}
+	wantText := "cloud: refused: server returned 403 (entitlement_unavailable: no usable ULTRA entitlement)"
+	if err.Error() != wantText {
+		t.Fatalf("err.Error() = %q, want %q", err.Error(), wantText)
+	}
+}
