@@ -107,7 +107,7 @@ func TestApprovalBindsThePackAsThePersonLeftIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if run.Pack.Requirements != "edited by the person" || run.Pack.Digest == pack.Digest {
+	if run.Pack.Requirements != "edited by the person\n" || run.Pack.Digest == pack.Digest {
 		t.Fatalf("approval did not bind the edited pack: %+v", run.Pack)
 	}
 	if err := os.Remove(filepath.Join(dir, "tasks", "a.md")); err != nil {

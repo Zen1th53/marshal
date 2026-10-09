@@ -162,7 +162,8 @@ func TestBudgetWallTimeBoundary(t *testing.T) {
 }
 func TestCloseAuthorizationDigest(t *testing.T) {
 	r := fixture()
-	r.CloseAuthorization = &CloseAuthorization{User: "user", ApprovalScopeDigest: "d"}
+	r.Repository, r.BaseCommit, r.TargetRef = "repo", "base", "refs/heads/main"
+	r.CloseAuthorization = &CloseAuthorization{User: "user", ApprovalScopeDigest: "d", Repository: "repo", BaseCommit: "base", TargetRef: "refs/heads/main"}
 	if !r.ValidCloseAuthorization() {
 		t.Fatal("valid")
 	}
@@ -174,5 +175,31 @@ func TestCloseAuthorizationDigest(t *testing.T) {
 	r.CloseAuthorization.Voided = true
 	if r.ValidCloseAuthorization() {
 		t.Fatal("voided")
+	}
+}
+
+func TestCloseAuthorizationRequiresExactDeliveryBinding(t *testing.T) {
+	r := Run{Repository: "repo", BaseCommit: "base", TargetRef: "refs/heads/main", ApprovalScopeDigest: "scope", CloseAuthorization: &CloseAuthorization{User: "user", Repository: "repo", BaseCommit: "base", TargetRef: "refs/heads/main", ApprovalScopeDigest: "scope"}}
+	if !r.ValidCloseAuthorization() {
+		t.Fatal("valid delivery refused")
+	}
+	for _, field := range []string{"repository", "base", "target", "missing"} {
+		changed := r
+		switch field {
+		case "repository":
+			changed.Repository = "other"
+		case "base":
+			changed.BaseCommit = "other"
+		case "target":
+			changed.TargetRef = "refs/heads/other"
+		case "missing":
+			changed.Repository = ""
+		}
+		if changed.ValidCloseAuthorization() {
+			t.Fatalf("%s change retained consent", field)
+		}
+	}
+	if (Run{ApprovalScopeDigest: "scope", CloseAuthorization: &CloseAuthorization{User: "user", ApprovalScopeDigest: "scope"}}).ValidCloseAuthorization() {
+		t.Fatal("unbound legacy authority accepted")
 	}
 }

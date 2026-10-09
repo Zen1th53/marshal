@@ -223,9 +223,10 @@ type Task struct {
 
 // CloseAuthorization records the user's digest-bound standing consent to close.
 type CloseAuthorization struct {
-	User                string
-	ApprovalScopeDigest string
-	Voided              bool
+	Repository, BaseCommit, TargetRef string
+	User                              string
+	ApprovalScopeDigest               string
+	Voided                            bool
 }
 
 // Pause records why execution stopped and how the operator may resolve it.
@@ -248,22 +249,23 @@ type LifecycleOperation struct {
 
 // Run binds plan approval, settings, tasks, and close authority.
 type Run struct {
-	GoverningDigest     string              `json:",omitempty"`
-	Operation           *LifecycleOperation `json:",omitempty"`
-	Pause               *Pause              `json:",omitempty"`
-	ArtifactRevision    int64               `json:",omitempty"`
-	PlanID              string
-	Process05Bound      bool
-	PlanVersion         int64
-	ApprovalScopeDigest string
-	BaseCommit          string
-	Tier                Tier
-	Settings            Settings
-	GoalBinding         string
-	Budget              Budget
-	Tasks               []Task
-	State               RunState
-	CloseAuthorization  *CloseAuthorization
+	GoverningDigest       string `json:",omitempty"`
+	Repository, TargetRef string
+	Operation             *LifecycleOperation `json:",omitempty"`
+	Pause                 *Pause              `json:",omitempty"`
+	ArtifactRevision      int64               `json:",omitempty"`
+	PlanID                string
+	Process05Bound        bool
+	PlanVersion           int64
+	ApprovalScopeDigest   string
+	BaseCommit            string
+	Tier                  Tier
+	Settings              Settings
+	GoalBinding           string
+	Budget                Budget
+	Tasks                 []Task
+	State                 RunState
+	CloseAuthorization    *CloseAuthorization
 	// Pack is the plan as the person read it before approving; runs drafted
 	// without one, such as headless drafts, leave it nil.
 	Pack *PlanPack `json:",omitempty"`
@@ -284,7 +286,7 @@ type PlanPack struct {
 
 // ValidCloseAuthorization requires current, unvoided user consent.
 func (r Run) ValidCloseAuthorization() bool {
-	return r.CloseAuthorization != nil && !r.CloseAuthorization.Voided && r.CloseAuthorization.User != "" && r.ApprovalScopeDigest != "" && r.CloseAuthorization.ApprovalScopeDigest == r.ApprovalScopeDigest
+	return r.Repository != "" && r.BaseCommit != "" && r.TargetRef != "" && r.CloseAuthorization != nil && !r.CloseAuthorization.Voided && r.CloseAuthorization.User != "" && r.ApprovalScopeDigest != "" && r.CloseAuthorization.ApprovalScopeDigest == r.ApprovalScopeDigest && r.CloseAuthorization.Repository == r.Repository && r.CloseAuthorization.BaseCommit == r.BaseCommit && r.CloseAuthorization.TargetRef == r.TargetRef
 }
 
 // Verdict is a review recommendation; the gate decides acceptance.

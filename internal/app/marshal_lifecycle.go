@@ -397,6 +397,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		return "", err
 	}
 	h := stored.Value
+	if h.ResultCommit == "" || h.ResultCommit != t.ResultCommit {
+		return "", errors.New("hand-in result does not match task")
+	}
 	if err := marshal.ValidateHandIn(*t, h); err != nil {
 		return "", err
 	}
@@ -461,7 +464,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		if s.ApprovalActor == nil {
 			return "", errors.New("user approval source is unavailable")
 		}
-		userApproval, err = s.ApprovalActor(ctx, runID, taskID)
+		userApproval, err = s.ApprovalActor(ctx, runID, taskAcceptancePurpose(run, *t, attempt, h))
 		if err != nil {
 			return "", err
 		}
@@ -997,6 +1000,9 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	if project.DefaultBranch == "" {
 		return errors.New("project target branch is missing")
 	}
+	if err = s.validateDelivery(ctx, run); err != nil {
+		return err
+	}
 	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
 	head, err := gitMarshal(ctx, dir, "rev-parse", "HEAD")
 	if err != nil {
@@ -1028,6 +1034,12 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	if err != nil {
 		return err
 	}
+	if old != run.BaseCommit {
+		return errors.New("approved delivery base changed; review and approve again")
+	}
+	if err = s.validateDelivery(ctx, run); err != nil {
+		return err
+	}
 	checkpoint := "refs/marshal/" + runID + "/pre-close"
 	if run.ArtifactRevision > 0 {
 		checkpoint = fmt.Sprintf("refs/marshal/%s/r%d/pre-close", runID, run.ArtifactRevision)
@@ -1052,7 +1064,7 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	env.Reversibility = constitution.ReversibleInternal
 	env.CheckpointID = checkpoint + "@" + old
 	userApproval := ""
-	if run.Settings.AcceptanceMode != marshal.AcceptMarshal {
+	if !run.ValidCloseAuthorization() {
 		if s.ApprovalActor == nil {
 			return errors.New("user approval source is unavailable")
 		}
@@ -1061,12 +1073,19 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 			return err
 		}
 	}
-	gate := constitution.EvaluateMarshalClose(constitution.Default(), env, state, run, userApproval)
+	gateRun := run
+	if userApproval != "" {
+		gateRun.Settings.AcceptanceMode = marshal.AcceptUser
+	}
+	gate := constitution.EvaluateMarshalClose(constitution.Default(), env, state, gateRun, userApproval)
 	if err := s.recordConstitutionalVerdict(ctx, env, gate); err != nil {
 		return err
 	}
 	if !gate.Outcome.Permits() {
 		return fmt.Errorf("close gate: %s", gate.Reason)
+	}
+	if err = s.validateDelivery(ctx, run); err != nil {
+		return err
 	}
 	// Recovery may finish a close only after this exact intent passed the gate.
 	op.Authorized = true
@@ -1285,6 +1304,9 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 			}
 		}
 		run.ApprovalScopeDigest = marshalApprovalDigest(amended.ApprovalScopeDigest, run)
+		if run.CloseAuthorization != nil && run.CloseAuthorization.ApprovalScopeDigest != run.ApprovalScopeDigest {
+			run.CloseAuthorization.Voided = true
+		}
 	}
 	event, err := s.decisionEvent(runID, "", events.EventTypeMarshalPlanAmended, map[string]any{"major": major})
 	if err != nil {

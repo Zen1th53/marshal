@@ -290,7 +290,7 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	return run, nil
 }
 
-func (s *MarshalService) Approve(ctx context.Context, runID string) (marshal.Run, error) {
+func (s *MarshalService) Approve(ctx context.Context, runID string, reviewed ...PlanApprovalSnapshot) (marshal.Run, error) {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return run, err
@@ -302,14 +302,32 @@ func (s *MarshalService) Approve(ctx context.Context, runID string) (marshal.Run
 	if run.State != marshal.Drafting || s.ApprovalActor == nil {
 		return run, errors.New("run is not awaiting plan approval")
 	}
+	snapshot, err := s.PlanApprovalSnapshot(ctx, runID)
+	if err != nil {
+		return run, err
+	}
+	if len(reviewed) > 0 && reviewed[0] != snapshot {
+		return run, errors.New("plan pack or destination changed; review and approve again")
+	}
 	user, err := s.ApprovalActor(ctx, runID, "plan")
 	if err != nil || user == "" {
 		return run, errors.New("plan approval is unavailable")
+	}
+	current, err := s.PlanApprovalSnapshot(ctx, runID)
+	if err != nil {
+		return run, err
+	}
+	if current != snapshot {
+		return run, errors.New("plan pack or destination changed; review and approve again")
 	}
 	pack, err := s.refreshPlanPack(runID, run)
 	if err != nil {
 		return run, err
 	}
+	if packDigest(pack) != snapshot.PackDigest {
+		return run, errors.New("plan pack changed; review and approve again")
+	}
+	run.Repository, run.TargetRef = snapshot.Repository, snapshot.TargetRef
 	run.Pack = pack
 	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
 	if err != nil {
@@ -327,7 +345,10 @@ func (s *MarshalService) Approve(ctx context.Context, runID string) (marshal.Run
 	}
 	run.State = marshal.Approved
 	if run.Settings.AcceptanceMode == marshal.AcceptMarshal {
-		run.CloseAuthorization = &marshal.CloseAuthorization{User: user, ApprovalScopeDigest: run.ApprovalScopeDigest}
+		// Standing delivery is a separate approval question from plan approval.
+		if actor, e := s.ApprovalActor(ctx, runID, "standing-close:"+run.ApprovalScopeDigest); e == nil && actor != "" {
+			run.CloseAuthorization = closeAuthorization(run, actor)
+		}
 	}
 	event, err := s.decisionEvent(runID, "", events.EventTypeMarshalPlanApproved, map[string]any{"plan_version": run.PlanVersion})
 	if err != nil {
@@ -379,15 +400,16 @@ func marshalApprovalDigest(planDigest string, run marshal.Run) string {
 		checks[task.PlanTaskID] = task.Checks
 	}
 	data, _ := json.Marshal(struct {
-		Plan     string
-		Budget   marshal.Budget
-		Control  marshal.Control                    `json:",omitempty"`
-		Pack     string                             `json:",omitempty"`
-		Modes    map[string]marshal.WorkerMode      `json:",omitempty"`
-		Checks   map[string][]marshal.Check         `json:",omitempty"`
-		Imported map[string]*marshal.ImportedResult `json:",omitempty"`
-		Types    map[string]marshal.TaskType        `json:",omitempty"`
-	}{planDigest, run.Budget, control, pack, modes, checks, imported, types})
+		Plan                              string
+		Repository, BaseCommit, TargetRef string `json:",omitempty"`
+		Budget                            marshal.Budget
+		Control                           marshal.Control                    `json:",omitempty"`
+		Pack                              string                             `json:",omitempty"`
+		Modes                             map[string]marshal.WorkerMode      `json:",omitempty"`
+		Checks                            map[string][]marshal.Check         `json:",omitempty"`
+		Imported                          map[string]*marshal.ImportedResult `json:",omitempty"`
+		Types                             map[string]marshal.TaskType        `json:",omitempty"`
+	}{planDigest, run.Repository, run.BaseCommit, run.TargetRef, run.Budget, control, pack, modes, checks, imported, types})
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }

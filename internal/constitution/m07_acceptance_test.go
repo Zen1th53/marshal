@@ -99,14 +99,14 @@ func TestM07CloseRequiresCurrentUserAuthorization(t *testing.T) {
 	e, s, _ := taskCase()
 	e.Reversibility = constitution.ReversibilityUnknown
 	e.CheckpointID = "checkpoint-1"
-	run := marshal.Run{ApprovalScopeDigest: "scope", Settings: marshal.Settings{AcceptanceMode: marshal.AcceptMarshal}}
+	run := marshal.Run{Repository: "repo", BaseCommit: "base", TargetRef: "refs/heads/main", ApprovalScopeDigest: "scope", Settings: marshal.Settings{AcceptanceMode: marshal.AcceptMarshal}}
 	close := func() constitution.Verdict {
 		return constitution.EvaluateMarshalClose(constitution.Default(), e, s, run, "")
 	}
 	if v := close(); v.Outcome.Permits() {
 		t.Fatalf("no authorization: %+v", v)
 	}
-	run.CloseAuthorization = &marshal.CloseAuthorization{User: "user", ApprovalScopeDigest: "scope"}
+	run.CloseAuthorization = &marshal.CloseAuthorization{User: "user", ApprovalScopeDigest: "scope", Repository: "repo", BaseCommit: "base", TargetRef: "refs/heads/main"}
 	if v := close(); !v.Outcome.Permits() {
 		t.Fatalf("standing authorization: %+v", v)
 	}
@@ -119,8 +119,8 @@ func TestM07CloseRequiresCurrentUserAuthorization(t *testing.T) {
 func TestM07CloseRequiresCheckpointOrIrreversibilityStatement(t *testing.T) {
 	e, s, _ := taskCase()
 	e.Reversibility = constitution.ReversibilityUnknown
-	run := marshal.Run{ApprovalScopeDigest: "scope", Settings: marshal.Settings{AcceptanceMode: marshal.AcceptMarshal},
-		CloseAuthorization: &marshal.CloseAuthorization{User: "user", ApprovalScopeDigest: "scope"}}
+	run := marshal.Run{Repository: "repo", BaseCommit: "base", TargetRef: "refs/heads/main", ApprovalScopeDigest: "scope", Settings: marshal.Settings{AcceptanceMode: marshal.AcceptMarshal},
+		CloseAuthorization: &marshal.CloseAuthorization{User: "user", ApprovalScopeDigest: "scope", Repository: "repo", BaseCommit: "base", TargetRef: "refs/heads/main"}}
 	v := constitution.EvaluateMarshalClose(constitution.Default(), e, s, run, "")
 	if v.Outcome != constitution.OutcomeRequireApproval || !hasInvariant(v, constitution.InvRollbackTruthful) {
 		t.Fatalf("close without checkpoint or disclosure: %+v", v)
@@ -131,8 +131,8 @@ func TestM07CloseRequiresFreshIntegratedEvidence(t *testing.T) {
 	e, s, _ := taskCase()
 	e.Reversibility = constitution.ReversibilityUnknown
 	e.CheckpointID = "checkpoint-1"
-	run := marshal.Run{ApprovalScopeDigest: "scope", Settings: marshal.Settings{AcceptanceMode: marshal.AcceptMarshal},
-		CloseAuthorization: &marshal.CloseAuthorization{User: "user", ApprovalScopeDigest: "scope"}}
+	run := marshal.Run{Repository: "repo", BaseCommit: "base", TargetRef: "refs/heads/main", ApprovalScopeDigest: "scope", Settings: marshal.Settings{AcceptanceMode: marshal.AcceptMarshal},
+		CloseAuthorization: &marshal.CloseAuthorization{User: "user", ApprovalScopeDigest: "scope", Repository: "repo", BaseCommit: "base", TargetRef: "refs/heads/main"}}
 	close := func() constitution.Verdict {
 		return constitution.EvaluateMarshalClose(constitution.Default(), e, s, run, "")
 	}
