@@ -83,11 +83,11 @@ func marshalKickoffArgs(provider string, roots ...string) []string {
 // opening turn. Every fresh launch and resume must rebuild this delivery;
 // saved argv may belong to an older version that exposed the protocol.
 func prepareMarshalLaunch(provider, root string, args []string, protocol string) ([]string, []string, *briefingDir, error) {
-	protocol = appendMarshalIntake(root, protocol)
 	channel := hiddenChannel(provider)
 	if channel == injectOff || strings.TrimSpace(protocol) == "" {
 		return nil, nil, nil, fmt.Errorf("Marshal not started: %s has no usable hidden instruction channel", providerDisplayName(provider))
 	}
+	protocol = appendMarshalIntake(root, protocol)
 	if err := scrubMarshalInboxes(root); err != nil {
 		return nil, nil, nil, fmt.Errorf("Marshal not started: retained briefing cleanup failed: %w", err)
 	}

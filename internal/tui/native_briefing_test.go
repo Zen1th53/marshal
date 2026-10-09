@@ -377,3 +377,19 @@ func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 		}
 	}
 }
+
+func TestMarshalLaunchWithSavedIntakeRefusesMissingProtocol(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".marshal"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(`{"language":"Uzbek","earlier_work":"no"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, protocol := range []string{"", " \n\t"} {
+		args, env, dir, err := prepareMarshalLaunch("codex", root, nil, protocol)
+		if err == nil || args != nil || env != nil || dir != nil {
+			t.Fatalf("protocol %q: launch material %v %v %v, err %v", protocol, args, env, dir, err)
+		}
+	}
+}
