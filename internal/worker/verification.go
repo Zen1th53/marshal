@@ -15,9 +15,9 @@ import (
 )
 
 // RunVerification never falls back to executing project code on the host.
-func RunVerification(ctx context.Context, dir string, command []string, timeout time.Duration, limit int) (adapter.ProcessResult, error) {
+func RunVerification(ctx context.Context, dir string, command []string, timeout time.Duration, limit int, outputDir ...string) (adapter.ProcessResult, error) {
 	backend := sandbox.NewBwrap(verificationBwrap())
-	return runVerification(ctx, backend, dir, command, timeout, limit)
+	return runVerification(ctx, backend, dir, command, timeout, limit, outputDir...)
 }
 
 func verificationBwrap() string {
@@ -29,14 +29,14 @@ func verificationBwrap() string {
 	return ""
 }
 
-func runVerification(ctx context.Context, backend *sandbox.Bwrap, dir string, command []string, timeout time.Duration, limit int) (adapter.ProcessResult, error) {
+func runVerification(ctx context.Context, backend *sandbox.Bwrap, dir string, command []string, timeout time.Duration, limit int, outputDir ...string) (adapter.ProcessResult, error) {
 	if _, err := sandbox.ChooseIsolation(backend.Probe(ctx), model.R2, false, false); err != nil {
 		return adapter.ProcessResult{}, err
 	}
 	if len(command) == 0 {
 		return adapter.ProcessResult{}, fmt.Errorf("%w: empty verification command", model.ErrInvalid)
 	}
-	request, err := VerificationSandboxRequest(ctx, dir)
+	request, err := VerificationSandboxRequest(ctx, dir, outputDir...)
 	if err != nil {
 		return adapter.ProcessResult{}, err
 	}
@@ -51,8 +51,13 @@ func runVerification(ctx context.Context, backend *sandbox.Bwrap, dir string, co
 
 // VerificationSandboxRequest preserves read-only metadata and dependency inputs
 // for both local verification and run-bound governed checks.
-func VerificationSandboxRequest(ctx context.Context, dir string) (model.SandboxRequest, error) {
-	request := model.SandboxRequest{Worktree: dir, ExtraEnv: []string{"GOPROXY=off", "GOSUMDB=off", "GOCACHE=/tmp/go-build", "GOMODCACHE=/home/marshal/go/pkg/mod", "GOTOOLCHAIN=local"}}
+func VerificationSandboxRequest(ctx context.Context, dir string, outputDir ...string) (model.SandboxRequest, error) {
+	request := model.SandboxRequest{ReadOnlyWorktree: true, Worktree: dir, ExtraEnv: []string{"GOPROXY=off", "GOSUMDB=off", "GOCACHE=/tmp/go-build", "GOMODCACHE=/home/marshal/go/pkg/mod", "GOTOOLCHAIN=local", "MARSHAL_BUILD_DIR=/tmp/marshal-build", "TMPDIR=/tmp"}}
+	request.WritableTmpfs = []string{"/tmp/marshal-build"}
+	if len(outputDir) > 0 && outputDir[0] != "" {
+		request.WritableDirs = []string{outputDir[0]}
+		request.ExtraEnv = append(request.ExtraEnv, "MARSHAL_BUILD_DIR="+outputDir[0])
+	}
 	// Dependencies are read-only inputs; build caches stay inside the sandbox.
 	cache := os.Getenv("GOMODCACHE")
 	if cache == "" {

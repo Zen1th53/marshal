@@ -85,7 +85,7 @@ func (p ExecutionPlan) AmendScoped(expectedVersion int64, reason string, next Ex
 		}
 		criteria, paths := map[string]bool{}, map[string]bool{}
 		for _, child := range children {
-			if !contained(child.Criteria, old.Criteria) || !contained(child.Paths, old.Paths) || child.Mutating != old.Mutating ||
+			if !contained(child.Criteria, old.Criteria) || !contained(child.Paths, old.Paths) || child.Mutating != old.Mutating || child.Type != old.Type ||
 				child.NeedsNetwork != old.NeedsNetwork || child.RequiresApproval != old.RequiresApproval ||
 				!sameStrings(next.Checks[child.ID], p.ApprovedScope.Checks[id]) {
 				return refuse("a task changed its approved criteria, files, permissions or checks")

@@ -15,7 +15,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/verification"
-	"github.com/Zen1th53/marshal/internal/worker"
 )
 
 // MarshalWiring is what a surface supplies to run a real Marshal plan.
@@ -82,12 +81,12 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 		}
 		return roleProvider(installedMarshalProviders(), avoid...), nil
 	}
-	s.IndependentVerify = func(ctx context.Context, run marshal.Run, head string, session verification.Session) error {
+	s.IndependentVerify = func(ctx context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
 		provider, err := s.VerifierProvider(ctx, run)
 		if err != nil || provider == "" {
-			return errors.New("marshal: independent verifier provider is unavailable")
+			return marshal.VerifierEvidence{}, errors.New("marshal: independent verifier provider is unavailable")
 		}
-		return freshRoleCLI(provider, filepath.Join(s.Worktrees, integrationTaskID(marshalRunID(run), run))).Verify(ctx, run, head, session)
+		return freshRoleCLI(provider, filepath.Join(s.Worktrees, integrationTaskID(marshalRunID(run), run))).VerifyEvidence(ctx, run, head, session)
 	}
 	s.Drivers = map[string]driver.Driver{
 		"codex":    driver.Codex(""),
@@ -227,7 +226,11 @@ func roleProvider(installed []string, avoid ...string) string {
 func (s *MarshalService) verifyByChecks(ctx context.Context, run marshal.Run, head string) (verification.Session, verification.Binding, error) {
 	runID := marshalRunID(run)
 	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
-	binding := verification.Binding{ProjectID: s.ProjectID, GoalID: run.GoalBinding, PlanID: run.PlanID, RunID: runID, GoalRevision: 1, PlanVersion: run.PlanVersion, RunVersion: 1, TreeDigest: head, EnvironmentDigest: "marshal-local"}
+	tree, err := gitMarshal(ctx, dir, "rev-parse", head+"^{tree}")
+	if err != nil {
+		return verification.Session{}, verification.Binding{}, err
+	}
+	binding := verification.Binding{ProjectID: s.ProjectID, GoalID: run.GoalBinding, PlanID: run.PlanID, RunID: runID, GoalRevision: 1, PlanVersion: run.PlanVersion, RunVersion: 1, TreeDigest: tree, EnvironmentDigest: "marshal-local"}
 	governed := false
 	for _, task := range run.Tasks {
 		if task.Mode == marshal.Governed {
@@ -282,22 +285,16 @@ func runIntegrationCheck(ctx context.Context, dir, head, command string) error {
 	return runIntegrationCheckWithRunner(ctx, dir, head, command, nil)
 }
 func runIntegrationCheckWithRunner(ctx context.Context, dir, head, command string, runner driver.CheckRunner) error {
+
+	checkCtx := ctx
 	if runner != nil {
-		checkCtx, cancel := context.WithTimeout(ctx, driver.DefaultCheckTimeout)
-		defer cancel()
-		result := runner(checkCtx, dir, command)
-		if result.ExitCode != 0 {
-			return fmt.Errorf("integration check failed: %s", result.Output)
-		}
-	} else {
-		result, err := worker.RunVerification(ctx, dir, []string{"/bin/sh", "-c", command}, driver.DefaultCheckTimeout, 64<<10)
-		if err != nil {
-			return err
-		}
-		if result.ExitCode != 0 {
-			return fmt.Errorf("check failed with exit status %d: %s", result.ExitCode, result.Stderr)
-		}
+		checkCtx = driver.WithCheckRunner(ctx, runner)
 	}
+	result := driver.RunCheck(checkCtx, dir, head, command, driver.DefaultCheckTimeout)
+	if result.ExitCode != 0 {
+		return fmt.Errorf("integration check failed: %s", result.Output)
+	}
+
 	status, err := gitMarshal(ctx, dir, "status", "--porcelain")
 	if err != nil {
 		return err

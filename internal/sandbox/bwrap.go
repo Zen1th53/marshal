@@ -76,8 +76,12 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		"--dir", "/home/marshal",
 		"--setenv", "HOME", "/home/marshal",
 		"--setenv", "PATH", "/usr/bin:/bin",
-		"--bind", worktree, worktree,
 	)
+	bindMode := "--bind"
+	if request.ReadOnlyWorktree {
+		bindMode = "--ro-bind"
+	}
+	args = append(args, bindMode, worktree, worktree)
 	if request.ScratchHome != "" {
 		home, err := existingDirectory(request.ScratchHome)
 		if err != nil || home == worktree || pathWithin(worktree, home) || pathWithin(home, worktree) {
@@ -90,11 +94,17 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		if err != nil {
 			return model.CommandSpec{}, fmt.Errorf("%w: writable bind %s: %v", model.ErrInvalid, path, err)
 		}
+		if request.ReadOnlyWorktree && (resolved == worktree || pathWithin(worktree, resolved) || pathWithin(resolved, worktree)) {
+			return model.CommandSpec{}, fmt.Errorf("%w: writable bind overlaps tested source", model.ErrInvalid)
+		}
 		args = append(args, "--bind", resolved, resolved)
 	}
 	for _, mountPath := range request.WritableTmpfs {
 		if !filepath.IsAbs(mountPath) {
 			return model.CommandSpec{}, fmt.Errorf("%w: writable tmpfs path must be absolute: %s", model.ErrInvalid, mountPath)
+		}
+		if request.ReadOnlyWorktree && (mountPath == worktree || pathWithin(worktree, mountPath) || pathWithin(mountPath, worktree)) {
+			return model.CommandSpec{}, fmt.Errorf("%w: writable tmpfs overlaps tested source", model.ErrInvalid)
 		}
 		args = append(args, "--tmpfs", mountPath)
 	}

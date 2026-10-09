@@ -22,7 +22,8 @@ import (
 
 // Task is one unit of planned work.
 type Task struct {
-	ID string `json:"id"`
+	Type string `json:"type,omitempty"`
+	ID   string `json:"id"`
 	// Title is what a user reads.
 	Title string `json:"title"`
 	// Criteria are the Goal acceptance criteria this task serves. A task that

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
@@ -27,7 +28,7 @@ func TestGovernedIntegrationUsesRunBoundCheckRunner(t *testing.T) {
 	called := 0
 	s.GovernedCheck = func(_ context.Context, parent, task, worker, checkout, command string) marshal.CommandRecord {
 		called++
-		if parent != "plan" || task != "task" || worker != "worker" || checkout != dir {
+		if parent != "plan" || task != "task" || worker != "worker" || checkout == dir || marshalGit(t, checkout, "rev-parse", "HEAD") != head {
 			t.Fatalf("unbound check %s %s %s %s", parent, task, worker, checkout)
 		}
 		return marshal.CommandRecord{Command: command, ExitCode: 1, Output: "unapproved connection refused"}
@@ -78,36 +79,32 @@ s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 try: s.connect(("127.0.0.1",%s));raise RuntimeError("direct reached")
 except PermissionError: pass' || exit 10
 if curl --silent --show-error --fail --max-time 2 --noproxy '' --proxy http://127.0.0.1:18080 %s; then exit 11; fi
-touch refused
 while [ ! -f grant ]; do sleep .02; done
 curl --silent --show-error --fail --max-time 2 --noproxy '' --proxy http://127.0.0.1:18080 %s || exit 12
-touch allowed
 while [ ! -f revoke ]; do sleep .02; done
 if curl --silent --show-error --fail --max-time 2 --noproxy '' --proxy http://127.0.0.1:18080 %s; then exit 13; fi
 `, port, server.URL, server.URL, server.URL)
 	done := make(chan marshal.CommandRecord, 1)
 	go func() { done <- r.runGovernedCheck(ctx, "RUN-plan", "TASK-check", "checker", dir, command) }()
-	waitFile := func(name string) {
-		t.Helper()
-		for {
-			if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-				return
-			}
-			select {
-			case result := <-done:
-				t.Fatalf("check exited before %s: %+v", name, result)
-			case <-ctx.Done():
-				t.Fatal(ctx.Err())
-			case <-time.After(10 * time.Millisecond):
-			}
+	var rows []EgressStatus
+	var alerts []EgressAlert
+	for {
+		rows = r.EgressStatus()
+		alerts, err = r.EgressNotifications(t.Context())
+		if err == nil && len(rows) == 1 && rows[0].ParentRunID == "RUN-plan" && rows[0].Provider == "check" && len(rows[0].Allowed) == 0 && len(alerts) >= 2 {
+			break
+		}
+		select {
+		case result := <-done:
+			t.Fatalf("check exited before refusal: %+v", result)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(10 * time.Millisecond):
 		}
 	}
-	waitFile("refused")
-	rows := r.EgressStatus()
 	if len(rows) != 1 || rows[0].ParentRunID != "RUN-plan" || rows[0].Provider != "check" || len(rows[0].Allowed) != 0 {
 		t.Fatalf("check scope: %+v", rows)
 	}
-	alerts, err := r.EgressNotifications(t.Context())
 	if err != nil || len(alerts) < 2 {
 		t.Fatalf("direct and proxy refusals missing: %+v %v", alerts, err)
 	}
@@ -116,7 +113,37 @@ if curl --silent --show-error --fail --max-time 2 --noproxy '' --proxy http://12
 		t.Fatal(err)
 	}
 	os.WriteFile(filepath.Join(dir, "grant"), nil, 0600)
-	waitFile("allowed")
+	for {
+		var found bool
+		history, err := r.store.Since(t.Context(), 0)
+		if err == nil {
+			for _, event := range history {
+				if event.RunID == rows[0].RunID {
+					if event.Type == events.EventTypeNetworkEgressAllowed {
+						found = true
+						break
+					}
+					if event.Type == events.EventTypeNetworkEgressAttempt {
+						if allowed, ok := event.Data["allowed"].(bool); ok && allowed {
+							found = true
+							break
+						}
+					}
+				}
+			}
+		}
+		if found {
+			time.Sleep(50 * time.Millisecond)
+			break
+		}
+		select {
+		case result := <-done:
+			t.Fatalf("check exited before allowed request: %+v", result)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
 	if err := r.CommandEgress(control.Context(t.Context()), rows[0].RunID, "revoke", endpoint); err != nil {
 		t.Fatal(err)
 	}

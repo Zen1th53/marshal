@@ -39,15 +39,15 @@ func TestVerificationExecutesInsideDetachedWorktreeEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	outside := filepath.Join(t.TempDir(), "host-marker")
-	// All three writes must be refused, while a regular worktree write and
+	// All source and metadata writes must be refused, while a scratch write and
 	// Git reads must execute successfully. Admission failure cannot pass this test.
-	script := "set -eu; test -c /dev/null; printf discarded > /dev/null; test \"$(git rev-parse HEAD)\" = '" + head + "'; printf executed > inside-marker; if (printf escaped > '" + outside + "') 2>/dev/null; then exit 21; fi; if (printf corrupt > '" + filepath.Join(repo.Path(), ".git", "config") + "') 2>/dev/null; then exit 22; fi; if (printf corrupt > '" + filepath.Join(strings.TrimSpace(string(private)), "HEAD") + "') 2>/dev/null; then exit 23; fi; printf confined"
+	script := "set -eu; test -c /dev/null; printf discarded > /dev/null; test \"$(git rev-parse HEAD)\" = '" + head + "'; printf executed > /tmp/inside-marker; test \"$(cat /tmp/inside-marker)\" = executed; if (printf corrupt > inside-marker) 2>/dev/null; then exit 24; fi; if (printf escaped > '" + outside + "') 2>/dev/null; then exit 21; fi; if (printf corrupt > '" + filepath.Join(repo.Path(), ".git", "config") + "') 2>/dev/null; then exit 22; fi; if (printf corrupt > '" + filepath.Join(strings.TrimSpace(string(private)), "HEAD") + "') 2>/dev/null; then exit 23; fi; printf confined"
 	result, err := RunVerification(t.Context(), wt, []string{"/bin/sh", "-c", script}, 10*time.Second, 4096)
 	if err != nil || result.ExitCode != 0 || string(result.Stdout) != "confined" || result.Isolation.Level != model.IsolationBwrap || !result.Isolation.Available {
 		t.Fatalf("positive verification: %+v %v", result, err)
 	}
-	if data, err := os.ReadFile(filepath.Join(wt, "inside-marker")); err != nil || string(data) != "executed" {
-		t.Fatalf("command never executed: %q %v", data, err)
+	if _, err := os.Stat(filepath.Join(wt, "inside-marker")); !os.IsNotExist(err) {
+		t.Fatalf("source write escaped: %v", err)
 	}
 	if _, err := os.Stat(outside); !os.IsNotExist(err) {
 		t.Fatalf("host write escaped: %v", err)
@@ -64,15 +64,16 @@ func TestVerificationRefusesIncompleteEvidence(t *testing.T) {
 	for _, kind := range []string{"timeout", "cancellation", "truncation"} {
 		t.Run(kind, func(t *testing.T) {
 			dir := t.TempDir()
+			output := t.TempDir()
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			timeout, limit := 10*time.Second, 4096
-			script := "printf started > started; sleep 30"
+			script := "printf started > \"$MARSHAL_BUILD_DIR/started\"; sleep 30"
 			if kind == "timeout" {
 				timeout = time.Second
 			}
 			if kind == "truncation" {
-				script = "printf started > started; printf 123456789; exit 0"
+				script = "printf started > \"$MARSHAL_BUILD_DIR/started\"; printf 123456789; exit 0"
 				limit = 4
 			}
 			var cancelled chan struct{}
@@ -87,7 +88,7 @@ func TestVerificationRefusesIncompleteEvidence(t *testing.T) {
 						case <-ctx.Done():
 							return
 						case <-ticker.C:
-							if _, err := os.Stat(filepath.Join(dir, "started")); err == nil {
+							if _, err := os.Stat(filepath.Join(output, "started")); err == nil {
 								cancel()
 								return
 							}
@@ -95,12 +96,12 @@ func TestVerificationRefusesIncompleteEvidence(t *testing.T) {
 					}
 				}()
 			}
-			result, err := RunVerification(ctx, dir, []string{"/bin/sh", "-c", script}, timeout, limit)
+			result, err := RunVerification(ctx, dir, []string{"/bin/sh", "-c", script}, timeout, limit, output)
 			cancel()
 			if cancelled != nil {
 				<-cancelled
 			}
-			if data, readErr := os.ReadFile(filepath.Join(dir, "started")); readErr != nil || string(data) != "started" {
+			if data, readErr := os.ReadFile(filepath.Join(output, "started")); readErr != nil || string(data) != "started" {
 				t.Fatalf("command never executed: %q %v; runner: %+v %v", data, readErr, result, err)
 			}
 			if !errors.Is(err, model.ErrUnavailable) {

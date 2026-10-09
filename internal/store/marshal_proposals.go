@@ -41,7 +41,9 @@ func (s *Store) PendingMarshalProposals(ctx context.Context, projectID string) (
 
 // ResolveMarshalProposalRequest resolves all separately retained occurrences
 // represented by the same pending popup; a later emission remains a new row.
-func (s *Store) ResolveMarshalProposalRequest(ctx context.Context, projectID, key, outcome string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE marshal_proposals SET outcome=? WHERE project_id=? AND request_key=? AND outcome=''`, outcome, projectID, key)
+// The occurrence also retains the original group when recovery downgrades its
+// requester label and therefore changes the display request key.
+func (s *Store) ResolveMarshalProposalRequest(ctx context.Context, projectID, key, occurrenceID, outcome string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE marshal_proposals SET outcome=? WHERE project_id=? AND outcome='' AND (request_key=? OR occurrence_id=? OR (request_key<>'' AND request_key=(SELECT request_key FROM marshal_proposals WHERE project_id=? AND occurrence_id=?)))`, outcome, projectID, key, occurrenceID, projectID, occurrenceID)
 	return err
 }

@@ -241,7 +241,7 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 		w.permissions.mu.Lock()
 		delete(w.permissions.outstanding, req.Key())
 		w.permissions.mu.Unlock()
-		if req.ProposalID != "" && w.store != nil {
+		if (req.ProposalID != "" || req.Kind == "memory") && w.store != nil {
 			outcome := "declined"
 			if allow {
 				outcome = "applied"
@@ -249,7 +249,7 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 					outcome = "failed"
 				}
 			}
-			if saveErr := w.store.ResolveMarshalProposalRequest(context.WithoutCancel(ctx), w.projectID, req.Key(), outcome); saveErr != nil {
+			if saveErr := w.store.ResolveMarshalProposalRequest(context.WithoutCancel(ctx), w.projectID, req.Key(), req.ProposalID, outcome); saveErr != nil {
 				err = errors.Join(err, saveErr)
 			}
 		}
@@ -270,6 +270,12 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 	ctx = a.localControl.Context(ctx)
 	if err := a.runtime.CommandPermission(ctx, req, allow, source); err != nil {
 		return err
+	}
+	if !allow && req.Kind == "marshal-command" && strings.HasPrefix(req.TaskID, "reserved:") {
+		m := w.marshalSession()
+		m.mu.Lock()
+		delete(m.approvals, req.RunID+"/"+req.TaskID)
+		m.mu.Unlock()
 	}
 	if req.Kind == "marshal-command" && allow {
 		return w.applyMarshalProposal(ctx, req)
@@ -437,7 +443,7 @@ func (h *CommandHandler) handleMemoryReview(ctx context.Context, args []string) 
 }
 
 func memoryPermission(rec model.MemoryRecordV2) permission.Request {
-	return permission.Request{Kind: "memory", Object: rec.ID, Scope: "project memory, persistent", Who: "Marshal", Reason: fmt.Sprintf("Retain candidate from %v, session %s, date %s: %s", rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), hideMarshalProtocol(rec.Body))}
+	return permission.Request{Kind: "memory", Object: rec.ID, Scope: "project memory, persistent", Who: "Local request (unverified)", Reason: fmt.Sprintf("Retain candidate from %v, session %s, date %s: %s", rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), hideMarshalProtocol(rec.Body))}
 }
 
 func (w *Workspace) guardHistoryWatch(watch *nativeHistoryWatch, provider string) {
@@ -539,7 +545,7 @@ func (w *Workspace) navigatePermissionPopup(ctx context.Context, client, key str
 // two minutes. Mixed batches use the shortest applicable deadline.
 func permissionPopupTimeout(batch []permission.Request) time.Duration {
 	for _, req := range batch {
-		if req.Kind == "network" || (req.Kind != "marshal-command" && req.Who != "Marshal") {
+		if req.Kind == "network" || (req.Kind != "marshal-command" && req.Kind != "memory" && req.Who != "Marshal" && req.ProposalID == "") {
 			return 30 * time.Second
 		}
 	}

@@ -87,7 +87,14 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 		}
 		// Provider equality is allowed: the governed worker runs in its own
 		// fresh session, separate from the Marshal conversation.
-		task := marshal.Task{PlanTaskID: pt.ID, Title: pt.Title, Worker: worker, Mode: marshal.Governed, State: marshal.Queued, BaseCommit: base, Branch: "marshal/" + runID + "/" + pt.ID, Files: append([]string(nil), pt.Paths...), Criteria: append([]string(nil), pt.Criteria...), DependsOn: append([]string(nil), pt.DependsOn...), Instructions: pt.Instructions, ExpectedOutput: pt.ExpectedOutput}
+		kind := marshal.TaskType(pt.Type)
+		if kind == "" {
+			kind = marshal.TaskChange
+			if !pt.Mutating {
+				kind = marshal.TaskInspection
+			}
+		}
+		task := marshal.Task{Type: kind, PlanTaskID: pt.ID, Title: pt.Title, Worker: worker, Mode: marshal.Governed, State: marshal.Queued, BaseCommit: base, Branch: "marshal/" + runID + "/" + pt.ID, Files: append([]string(nil), pt.Paths...), Criteria: append([]string(nil), pt.Criteria...), DependsOn: append([]string(nil), pt.DependsOn...), Instructions: pt.Instructions, ExpectedOutput: pt.ExpectedOutput}
 		for _, command := range p.Checks[pt.ID] {
 			if strings.TrimSpace(command) == "" {
 				return marshal.Run{}, errors.New("approved plan contains an empty check")

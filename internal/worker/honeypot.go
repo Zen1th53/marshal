@@ -90,6 +90,8 @@ func NewHoneypot(worktree string) (*Honeypot, error) {
 	return h, nil
 }
 
+func (h *Honeypot) Worktree() string { return h.worktree }
+
 func (h *Honeypot) Contains(data []byte) bool {
 	for _, token := range h.tokens {
 		if bytes.Contains(data, []byte(token)) {

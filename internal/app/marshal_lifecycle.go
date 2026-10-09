@@ -38,6 +38,9 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if run.State != marshal.Approved && run.State != marshal.Dispatching && run.State != marshal.Reviewing && run.State != marshal.Merging {
 		return MarshalDispatch{}, errors.New("dispatch is paused")
 	}
+	if err := s.executionAdmission(ctx, runID, taskID, run); err != nil {
+		return MarshalDispatch{}, err
+	}
 	i := taskIndex(run, taskID)
 	if i < 0 {
 		return MarshalDispatch{}, model.ErrNotFound
@@ -122,6 +125,7 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	}
 	next := run
 	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
+	next.Tasks[i].HoneypotRequired = t.Mode == marshal.Governed && s.HandInGuard != nil
 	next.Tasks[i].State = marshal.Dispatched
 	if fresh {
 		next.Tasks[i].ResultCommit = ""
@@ -284,8 +288,13 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		return handin, errors.New("hand-in identity differs from dispatch")
 	}
 	validationErr := marshal.ValidateHandIn(*t, handin)
+	if t.HoneypotRequired && s.HandInGuard == nil {
+		validationErr = errors.Join(validationErr, errors.New("honeypot: required scan guard unavailable after recovery"))
+	}
 	if t.Mode == marshal.Governed && s.HandInGuard != nil {
-		validationErr = errors.Join(validationErr, s.HandInGuard(ctx, dispatch.TaskID, dispatch.Handle.Worktree(), handin))
+		scanID, scanErr := s.HandInGuard(ctx, dispatch.TaskID, dispatch.Handle.Worktree(), handin)
+		t.HoneypotScanID = scanID
+		validationErr = errors.Join(validationErr, scanErr)
 	}
 	attempt := 1 + t.EvidenceAttemptBase
 	for _, n := range t.ReturnsByAgent {
@@ -391,6 +400,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	if h.ResultCommit == "" || h.ResultCommit != t.ResultCommit {
 		return "", errors.New("hand-in result does not match task")
 	}
+	if err := marshal.ValidateHandIn(*t, h); err != nil {
+		return "", err
+	}
 	if s.Model == nil {
 		return "", errors.New("Marshal model is unavailable")
 	}
@@ -425,6 +437,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		if (crossReview.Verdict != marshal.VerdictAccept && crossReview.Verdict != marshal.VerdictReturn && crossReview.Verdict != marshal.VerdictReassign && crossReview.Verdict != marshal.VerdictEscalate) || crossReview.Reviewer == "" || crossReview.Reviewer == h.Worker || crossReview.Reviewer == s.Reviewer || len(crossReview.EvidenceRefs) == 0 {
 			return "", errors.New("independent cross-review is incomplete")
 		}
+		if err := resolveReviewReferences(crossReview, h); err != nil {
+			return "", err
+		}
 		crossReviewerProvider = provider
 		if err = marshal.CheckCrossReviewProvider(policy, h.Provider, crossReviewerProvider); err != nil {
 			return "", err
@@ -455,6 +470,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		}
 	}
 	verdict := constitution.EvaluateTaskAcceptance(constitution.Default(), envelope, state, constitution.TaskAcceptance{Mode: run.Settings.AcceptanceMode, MarshalVerdictAccept: proposal.Verdict == marshal.VerdictAccept, UserApprovalActor: userApproval, Executor: h.Worker, Reviewer: s.Reviewer, ResultCommit: h.ResultCommit, EvidenceCommit: h.ResultCommit, CriteriaMet: met, CriteriaTotal: total, IndependentReviewDone: !policy.CrossReviewRequired || crossReviewAccepted})
+	if err := s.recordConstitutionalVerdict(ctx, envelope, verdict); err != nil {
+		return "", err
+	}
 	proposal.Reviewer = s.Reviewer
 	result := proposal.Verdict
 	if !verdict.Outcome.Permits() {
@@ -611,6 +629,13 @@ func (s *MarshalService) gateInputs(ctx context.Context, runID, taskID string, r
 		return env, constitution.RuntimeState{}, errors.New("constitutional runtime state is unavailable")
 	}
 	state, err := s.GateState(ctx, runID, taskID)
+	bound, found, bindingErr := s.constitutionService().SessionVersion(ctx, runID)
+	if bindingErr != nil {
+		return env, state, bindingErr
+	}
+	if found {
+		env.ConstitutionVersion = bound
+	}
 	state.RuntimeConstitution = constitution.Current
 	state.Now = now
 	return env, state, err
@@ -804,10 +829,19 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 		}
 	}
 	accepted := run.Tasks[i].ResultCommit
+	if err := s.checkHoneypotAdmission(ctx, run.Tasks[i], accepted); err != nil {
+		return err
+	}
 	if !marshalCommitPattern.MatchString(accepted) {
 		return errors.New("accepted result commit is missing or invalid")
 	}
 	if _, err = gitMarshal(ctx, s.Repository, "cat-file", "-e", accepted+"^{commit}"); err != nil {
+		return err
+	}
+	if err := s.checkGoverningIntegrity(ctx, runID, run); err != nil {
+		return err
+	}
+	if err := s.approveReservedMerge(ctx, runID, taskID, run, rev); err != nil {
 		return err
 	}
 	branch := integrationBranch(runID, run)
@@ -911,7 +945,7 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 	}
 	result := verification.Evaluate(session, binding, s.clock())
 	if run.Tier == marshal.Ultra && result == verification.VerifiedComplete {
-		if err = s.IndependentVerify(ctx, run, head, session); err != nil {
+		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
 			return verification.Blocked, err
 		}
 	}
@@ -950,6 +984,9 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	if run.State != marshal.Verifying {
 		return errors.New("run is not verified")
 	}
+	if err := s.checkGoverningIntegrity(ctx, runID, run); err != nil {
+		return err
+	}
 	if s.Verify == nil {
 		return errors.New("verifier is unavailable")
 	}
@@ -976,7 +1013,7 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 		return errors.New("integrated result is not verified")
 	}
 	if run.Tier == marshal.Ultra {
-		if err = s.IndependentVerify(ctx, run, head, session); err != nil {
+		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
 			return err
 		}
 	}
@@ -1041,6 +1078,9 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 		gateRun.Settings.AcceptanceMode = marshal.AcceptUser
 	}
 	gate := constitution.EvaluateMarshalClose(constitution.Default(), env, state, gateRun, userApproval)
+	if err := s.recordConstitutionalVerdict(ctx, env, gate); err != nil {
+		return err
+	}
 	if !gate.Outcome.Permits() {
 		return fmt.Errorf("close gate: %s", gate.Reason)
 	}
@@ -1329,6 +1369,9 @@ func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, reason str
 func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run, error) {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
+		return run, err
+	}
+	if err := s.executionAdmission(ctx, runID, "", run); err != nil {
 		return run, err
 	}
 	run, rev, err = s.recoverOperation(ctx, runID, run, rev)

@@ -41,7 +41,9 @@ func TestRoleStartsInAFreshSession(t *testing.T) {
 // With a single installed provider the Marshal's own provider verifies ULTRA
 // work in a fresh session; only a missing verifier is refused.
 func TestSingleProviderCanVerifyUltra(t *testing.T) {
-	s := &MarshalService{ModelProvider: "codex", IndependentVerify: func(context.Context, marshal.Run, string, verification.Session) error { return nil }}
+	s := &MarshalService{ModelProvider: "codex", IndependentVerify: func(context.Context, marshal.Run, string, verification.Session) (marshal.VerifierEvidence, error) {
+		return marshal.VerifierEvidence{}, nil
+	}}
 	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "codex", nil }
 	if err := s.requireIndependentVerifier(context.Background(), marshal.Run{Tier: marshal.Ultra}); err != nil {
 		t.Fatalf("a single provider could not verify: %v", err)

@@ -180,8 +180,25 @@ type ImportedResult struct {
 	ResultCommit string
 }
 
+type TaskType string
+
+const (
+	TaskChange       TaskType = "change"
+	TaskInspection   TaskType = "inspection"
+	TaskVerification TaskType = "verification"
+)
+
+func (t Task) EffectiveType() TaskType {
+	if t.Type == "" {
+		return TaskChange
+	}
+	return t.Type
+}
+
 type Task struct {
-	EvidenceAttemptBase int             `json:",omitempty"`
+	Type                TaskType        `json:",omitempty"`
+	HoneypotScanID      string          `json:",omitempty"`
+	HoneypotRequired    bool            `json:",omitempty"`
 	ImportedResult      *ImportedResult `json:",omitempty"`
 	PlanTaskID          string
 	Title               string
@@ -197,6 +214,7 @@ type Task struct {
 	Files               []string
 	Criteria            []string
 	DependsOn           []string
+	EvidenceAttemptBase int `json:",omitempty"`
 	// Instructions and ExpectedOutput are copied from the approved plan task;
 	// the worker's brief carries them.
 	Instructions   string `json:",omitempty"`
@@ -231,6 +249,7 @@ type LifecycleOperation struct {
 
 // Run binds plan approval, settings, tasks, and close authority.
 type Run struct {
+	GoverningDigest       string `json:",omitempty"`
 	Repository, TargetRef string
 	Operation             *LifecycleOperation `json:",omitempty"`
 	Pause                 *Pause              `json:",omitempty"`
@@ -312,10 +331,12 @@ type CheckResult struct {
 	Criteria     []string
 	Passed       bool
 	ResultCommit string
+	TreeDigest   string `json:",omitempty"`
 }
 
 // HandIn separates runtime evidence from worker claims for gate review.
 type HandIn struct {
+	TreeDigest      string `json:",omitempty"`
 	BaseCommit      string
 	ResultCommit    string
 	Diff            string
@@ -332,8 +353,26 @@ type HandIn struct {
 
 // ValidateHandIn checks scope and completeness of re-run evidence, regardless of pass status.
 func ValidateHandIn(task Task, h HandIn) error {
+	if task.BaseCommit != "" && h.TreeDigest == "" {
+		return errors.New("missing tested tree digest")
+	}
 	if h.ResultCommit == "" {
 		return errors.New("missing result commit")
+	}
+	switch task.EffectiveType() {
+	case TaskChange:
+		if task.BaseCommit != "" && (h.ResultCommit == task.BaseCommit || len(h.FilesTouched) == 0) {
+			return errors.New("change task requires a changed result")
+		}
+	case TaskInspection, TaskVerification:
+		if h.ResultCommit == task.BaseCommit {
+			met, total, _ := CriteriaMet(task, h)
+			if total == 0 || met != total {
+				return errors.New("unchanged result requires complete passing evidence")
+			}
+		}
+	default:
+		return errors.New("invalid task type")
 	}
 	allowed := make([]string, 0, len(task.Files))
 	for _, f := range task.Files {
@@ -359,7 +398,7 @@ func ValidateHandIn(task Task, h HandIn) error {
 	for _, c := range task.Checks {
 		found := false
 		for _, r := range h.CheckResults {
-			if r.Command == c.Command && r.ResultCommit == h.ResultCommit && sameSet(r.Criteria, c.Criteria) {
+			if r.Command == c.Command && r.ResultCommit == h.ResultCommit && r.TreeDigest == h.TreeDigest && sameSet(r.Criteria, c.Criteria) {
 				found = true
 				break
 			}
@@ -387,30 +426,16 @@ func validScopePath(name string) bool {
 
 // CriteriaMet counts criteria proved by passing re-runs for the result commit.
 func CriteriaMet(task Task, h HandIn) (met, total int, failing []string) {
-	passed := make(map[string]bool)
-	checked := make(map[string]bool)
-	for _, c := range task.Checks {
-		checkPassed := false
-		for _, r := range h.CheckResults {
-			if r.Command == c.Command && r.ResultCommit == h.ResultCommit && r.Passed && sameSet(r.Criteria, c.Criteria) {
-				checkPassed = true
-			}
-		}
-		for _, criterion := range c.Criteria {
-			if !checked[criterion] || !checkPassed {
-				passed[criterion] = checkPassed
-			}
-			checked[criterion] = true
-		}
-	}
+
 	for _, criterion := range task.Criteria {
 		total++
-		if passed[criterion] {
+		if CriterionEvidence(task, h, criterion).Status == "verified" {
 			met++
 		} else {
 			failing = append(failing, criterion)
 		}
 	}
+
 	return
 }
 
@@ -473,7 +498,7 @@ func ClassifyAmendment(before, after Run) Amendment {
 		files := map[string]bool{}
 		criteria := map[string]bool{}
 		for _, c := range cs {
-			if !subset(c.Files, p.Files) || !subset(c.Criteria, p.Criteria) || c.Mode != p.Mode || !sameChecks(c.Checks, p.Checks) {
+			if !subset(c.Files, p.Files) || !subset(c.Criteria, p.Criteria) || c.Mode != p.Mode || c.EffectiveType() != p.EffectiveType() || !sameChecks(c.Checks, p.Checks) {
 				return Major
 			}
 			if c.PlanTaskID == id && !sameSet(c.DependsOn, p.DependsOn) {
@@ -529,4 +554,52 @@ func covers(got map[string]bool, want []string) bool {
 		}
 	}
 	return true
+}
+
+// CriterionResult is the shared acceptance/report aggregation for approved checks.
+type CriterionResult struct {
+	Status     string
+	Mixed      bool
+	Incomplete bool
+}
+
+func CriterionEvidence(task Task, h HandIn, criterion string) CriterionResult {
+	passed, failed, missing, applicable := false, false, false, false
+	for _, check := range task.Checks {
+		if !slices.Contains(check.Criteria, criterion) {
+			continue
+		}
+		applicable = true
+		found := false
+		for _, result := range h.CheckResults {
+			if result.Command != check.Command || result.ResultCommit != h.ResultCommit || result.TreeDigest != h.TreeDigest || !sameSet(result.Criteria, check.Criteria) {
+				continue
+			}
+			found = true
+			passed = passed || result.Passed
+			failed = failed || !result.Passed
+		}
+		missing = missing || !found
+	}
+	result := CriterionResult{Status: "not tested", Mixed: passed && failed, Incomplete: missing}
+	switch {
+	case failed:
+		result.Status = "failed"
+	case missing && passed:
+		result.Status = "incomplete"
+	case applicable && passed:
+		result.Status = "verified"
+	}
+	return result
+}
+
+// VerifierEvidence retains the independent session's verdict and exact input binding.
+type VerifierEvidence struct {
+	Reviewer    string
+	Provider    string
+	SessionID   string
+	Commit      string
+	Verdict     string
+	Findings    []string
+	InputDigest string
 }
