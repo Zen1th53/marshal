@@ -117,7 +117,7 @@ func (s *ConstitutionService) SessionVersion(ctx context.Context, sessionID stri
 	}
 	version, parseErr := constitution.ParseVersion(binding.Version)
 	if parseErr != nil {
-		return constitution.Version{}, false, fmt.Errorf(
+		return constitution.Version{}, true, fmt.Errorf(
 			"stored constitution version for session %s is unreadable: %w", sessionID, parseErr)
 	}
 	return version, true, nil
@@ -178,18 +178,54 @@ func (s *ConstitutionService) Decide(ctx context.Context, request DecideRequest)
 	// A session's recorded binding outranks whatever version the caller put in
 	// the envelope, so a surface cannot shop for laxer semantics by asserting
 	// an older version.
-	if bound, found, err := s.SessionVersion(ctx, envelope.SessionID); err == nil && found {
+	if bound, found, err := s.SessionVersion(ctx, envelope.SessionID); err != nil {
+		return DecideResult{}, fmt.Errorf("read constitutional binding: %w", err)
+	} else if found {
 		envelope.ConstitutionVersion = bound
 	}
 
+	open, err := s.OpenViolations(ctx, envelope.SessionID)
+	if err != nil {
+		return DecideResult{}, err
+	}
+	suspended := false
+	for _, violation := range open {
+		suspended = suspended || violation.Response.Halting()
+	}
 	verdict := constitution.Evaluate(s.registry, envelope, state, request.Advisory)
+	if suspended && envelope.Domain.Mutating() {
+		verdict.Outcome = constitution.OutcomeBlock
+		verdict.Reason = constitution.ReasonAuthorizationDenied
+		verdict.Findings = append(verdict.Findings, constitution.Finding{Invariant: constitution.InvAuthorityPrecedence, Severity: constitution.SeverityHard, Outcome: constitution.OutcomeBlock, Reason: constitution.ReasonAuthorizationDenied, Explanation: "Session is constitutionally suspended.", Detail: "unresolved halting constitutional violation"})
+	}
 	violations := constitution.ViolationsFrom(verdict, envelope, state.Now)
+	if suspended && envelope.Domain.Mutating() {
+		// Reaffirm the existing halting response; refusal is not a new bypass.
+		violations = nil
+		seen := make(map[constitution.ViolationClass]bool)
+		for _, violation := range open {
+			if !violation.Response.Halting() || seen[violation.Class] {
+				continue
+			}
+			seen[violation.Class] = true
+			violation.DecisionID = envelope.DecisionID
+			violation.Actor = envelope.Actor
+			violation.Surface = envelope.Surface
+			violation.DetectedAt = state.Now
+			violation.Detail = "execution refused while halting violation remains unresolved"
+			violations = append(violations, violation)
+		}
+	}
 
 	result := DecideResult{Verdict: verdict, Violations: violations}
+
 	if response, ok := constitution.MostSevereResponse(violations); ok {
 		result.Response = response
 	}
 
+	if suspended {
+		result.Response = constitution.ResponseSuspend
+	}
 	if err := s.record(ctx, envelope, result); err != nil {
 		return DecideResult{}, err
 	}

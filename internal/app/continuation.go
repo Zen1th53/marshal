@@ -374,7 +374,7 @@ func (r *Runtime) proposeMemory(ctx context.Context, rec model.MemoryRecordV2) e
 	sink := r.permissionSink
 	r.permissionMu.Unlock()
 	if sink != nil && ctx.Value(memoryReviewKey{}) != r {
-		sink(permission.Request{Kind: "memory", Object: rec.ID, Scope: "project memory, persistent", Who: "Marshal", Reason: fmt.Sprintf("Retain candidate from %v, session %s, date %s: %s", rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), rec.Body)})
+		sink(permission.Request{Kind: "memory", Object: rec.ID, Scope: "project memory, persistent", Who: "Local request (unverified)", Reason: fmt.Sprintf("Retain candidate from %v, session %s, date %s: %s", rec.ExtMeta["provider"], rec.SessionID, rec.ObservedAt.Format(time.RFC3339), rec.Body)})
 	}
 	return nil
 }

@@ -4,6 +4,13 @@ Evidence and verification integrity.
 
 ## What changed
 
+Constitutional suspension and stored version bindings now refuse dispatch and
+resume; unreadable bindings fail closed. Governed results that change policy,
+CI, MARSHAL storage or agent instructions need separate, commit-bound operator
+popup consent before merge. Governing-file digests detect unexpected changes
+and show an activity alert. Local file proposals say **Local request (unverified)**;
+intake preference updates show their source in activity.
+
 - Acceptance checks test read-only source with separate writable build space. Hand-ins record the result commit and tested tree digest.
 - Failed mandatory evidence, claim or journal capture leaves the task failed with an “incomplete evidence” reason and preserves its work.
 - Independent review references must resolve to hand-in artifacts. Verifier identity, commit, verdict, findings and input binding are retained and shown in `/marshal status`.
@@ -49,8 +56,8 @@ missing dependency does not make installation fail.
 
 The automated source inventory reports:
 
-- Constitution enforcement: 0.6%
-- Scope of protection: 6.8%
+- Constitution enforcement: 0.9%
+- Scope of protection: 7.1%
 
 Constitution enforcement is the percentage of material source call sites that a constitutional verdict can refuse before the effect occurs.
 Scope of protection is the percentage of material source call sites guarded before execution by a constitutional gate, approval binding, policy authorisation or sandbox.
@@ -78,6 +85,7 @@ recording a verdict or warning does not count as enforcement. The reviewed
   `/marshal resume` retries a failed verification. Budget and security pauses
   require the resolution shown in the panel; uncertain interrupted effects
   retain their artifacts for operator review.
+
 - **Credential broker is opt-in per project and provider.** Use
   `/permission credential request <codex|claude|gemini|opencode>` and press
   uppercase `A` in the fixed permission prompt. Revoke with
@@ -86,9 +94,6 @@ recording a verdict or warning does not count as enforcement. The reviewed
 - **A2A authentication is required by default.** Missing authentication configuration
   refuses task import. Deliberate unauthenticated serving requires `--insecure`
   and a literal loopback listen address; non-loopback peers are refused.
-
-- **Keep the window open.** There is no background service. Stored runs remain
-  recoverable with `/marshal resume` after reopening MARSHAL.
 - **Credential broker is opt-in per project and provider.** Use
   `/permission credential request <codex|claude|gemini|opencode>` and press
   uppercase `A` in the fixed permission prompt. Revoke with
@@ -117,6 +122,9 @@ recording a verdict or warning does not count as enforcement. The reviewed
   response buffering limits.
 - **OpenCode is a worker, not the Marshal.** Planning needs Codex, Claude Code
   or Antigravity.
+- **Scope checks do not restrict native host writes.** Marshal hand-ins validate
+  the approved file list, and reserved governed changes need separate consent
+  before merge. General task execution may only warn about scope and goal drift.
 - **Process 05 alignment checks are advisory.** Goal drift and intermediate scope
   warnings do not stop execution; Marshal hand-in validation rejects files outside
   the approved task scope before acceptance.
@@ -126,8 +134,12 @@ recording a verdict or warning does not count as enforcement. The reviewed
   approval and merge; a task's file list does not restrict the Marshal's access.
 - **Project directories must stay stable while applying work.** MARSHAL cannot
   protect delivery if another process moves or replaces those directories.
-- **Native workers have your account's rights.** Governed workers are
-  sandboxed; a separate working copy alone does not provide that protection.
+- **Native workers have your account's rights.** Same-user native writes to
+  governance files and MARSHAL storage cannot be fully prevented. Reserved-path
+  merge approval and governing-file integrity detection are additional checks,
+  not host isolation. Mutable operational records are excluded from the digest;
+  runs created before this release have no integrity baseline. Governed workers
+  are sandboxed; a separate working copy alone does not provide that protection.
 - **Shared text can reach another provider.** Check what you share before the
   receiving agent uses it.
 - **Provider qualification is limited to specific versions.** Other versions
