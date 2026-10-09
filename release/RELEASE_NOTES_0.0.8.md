@@ -41,6 +41,7 @@ Evidence and verification integrity.
 
 ### Governance integrity
 
+- The control centre keeps permission headings and network scope visible with pending items when the prompt fits the panel.
 - Constitutional suspension and stored version bindings now refuse dispatch and
   resume; unreadable bindings fail closed.
 - Governed results that change policy, CI, MARSHAL storage or agent instructions
@@ -73,6 +74,8 @@ Evidence and verification integrity.
 - Escalated tasks support operator `/marshal retry`, `/marshal reassign` and
   `/marshal cancel` where permitted; single-provider tasks support bounded
   fresh-session retries.
+- Reopening Marshal chat after a closed or finished run starts fresh with a
+  new run ID and watches for new plan drafts and approval proposals.
 
 ### ULTRA
 
@@ -80,6 +83,9 @@ Evidence and verification integrity.
   to Standard otherwise.
 - ULTRA worker hand-ins are collected and reviewed as soon as ready, merging
   sequentially in plan order.
+- `/ultra status` and `/ultra start` report when an installation holds no ULTRA
+  entitlement instead of treating missing entitlement as an activation failure
+  with retry advice.
 
 ### Credentials and A2A
 

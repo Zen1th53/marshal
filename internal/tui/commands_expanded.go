@@ -890,6 +890,10 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 		// requesting one, and telling a user to request when the server is
 		// rate-limiting them sends them round a loop.
 		if err := h.ws.ultraError(); err != nil {
+			if errors.Is(err, cloud.ErrEntitlementUnavailable) {
+				return "ULTRA status: INACTIVE — this installation has no ULTRA entitlement.\n" +
+					"  The session is running as Standard.", nil
+			}
 			return "ULTRA status: INACTIVE — activation failed: " + err.Error() + "\n" +
 				"  The session is running as Standard. Try again shortly.", nil
 		}
@@ -920,6 +924,10 @@ func (h *CommandHandler) startUltra() string {
 	gate, _ := h.ws.ultraGate()
 	if !gate.Entitled() {
 		if err := h.ws.ultraError(); err != nil {
+			if errors.Is(err, cloud.ErrEntitlementUnavailable) {
+				return "ULTRA was not started: this installation has no ULTRA entitlement.\n" +
+					"  The session is running as Standard."
+			}
 			return "ULTRA was not started: activation failed: " + err.Error() + "\n" +
 				"  The session is running as Standard. Try again shortly."
 		}

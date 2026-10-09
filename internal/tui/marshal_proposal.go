@@ -296,7 +296,10 @@ func (w *Workspace) observeMarshalProposalSource(tr importer.SessionTranscript, 
 				w.queueMarshalPlanApproval()
 			case "accept", "return", "amend", "close", "resume", "deliver":
 				if err := w.queueMarshalRunProposal(p); err != nil {
-					w.RecordActivity("Ignored Marshal proposal: no matching active run or task.")
+					if w.store != nil && p.occurrence != "" {
+						_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "rejected")
+					}
+					w.RecordActivity("Ignored Marshal proposal: " + err.Error())
 				}
 			}
 		}
@@ -326,10 +329,23 @@ func (w *Workspace) queueMarshalPlanApproval() {
 		p.action = "amend-approve"
 	}
 	if err := w.queueMarshalRunProposal(p); err != nil {
+		if !errors.Is(err, model.ErrNotFound) {
+			w.permissions.mu.Lock()
+			if w.permissions.planApprovalOccurrence == occurrence && w.permissions.planApprovalRunID == proposalRunID {
+				w.permissions.planApprovalPending = false
+			}
+			w.permissions.mu.Unlock()
+			if w.store != nil && occurrence != "" {
+				_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, occurrence, "rejected")
+			}
+			w.RecordActivity("Ignored Marshal proposal: " + err.Error())
+		}
 		return
 	}
 	w.permissions.mu.Lock()
-	w.permissions.planApprovalPending = false
+	if w.permissions.planApprovalOccurrence == occurrence && w.permissions.planApprovalRunID == proposalRunID {
+		w.permissions.planApprovalPending = false
+	}
 	w.permissions.mu.Unlock()
 }
 
