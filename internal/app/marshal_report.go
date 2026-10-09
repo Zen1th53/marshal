@@ -39,7 +39,7 @@ func (s *MarshalService) CompletionReport(ctx context.Context, runID string) (Ma
 	}
 	report := MarshalCompletionReport{
 		ReviewLabel: "Standard: review by the Marshal itself; independent review in ULTRA",
-		ChecksLabel: "approved checks passed",
+		ChecksLabel: "not tested",
 	}
 	_, report.Usage, err = s.marshalUsage(ctx, runID, "")
 	if err != nil {
@@ -76,6 +76,11 @@ func (s *MarshalService) CompletionReport(ctx context.Context, runID string) (Ma
 		report.Usage.Tokens.Known = false
 		report.Usage.Money.Known = false
 	}
+	passedCount := 0
+	failedCount := 0
+	incompleteCount := 0
+	untestedCount := 0
+	applicableTotal := 0
 	for _, task := range run.Tasks {
 		attempts := 1 + task.EvidenceAttemptBase
 		for _, count := range task.ReturnsByAgent {
@@ -107,7 +112,41 @@ func (s *MarshalService) CompletionReport(ctx context.Context, runID string) (Ma
 			if result.Status == "not tested" || result.Incomplete {
 				report.Untested = append(report.Untested, fmt.Sprintf("%s: %s", task.PlanTaskID, criterion))
 			}
+			applicableTotal++
+			switch result.Status {
+			case "failed":
+				failedCount++
+			case "incomplete":
+				incompleteCount++
+			case "verified":
+				passedCount++
+			default:
+				untestedCount++
+			}
 
+		}
+		if len(task.Criteria) == 0 {
+			for _, check := range task.Checks {
+				applicableTotal++
+				if !found {
+					untestedCount++
+					continue
+				}
+				matched := false
+				for _, res := range handin.CheckResults {
+					if res.Command == check.Command {
+						matched = true
+						if res.Passed {
+							passedCount++
+						} else {
+							failedCount++
+						}
+					}
+				}
+				if !matched {
+					untestedCount++
+				}
+			}
 		}
 		if found {
 			latest := attempts
@@ -126,6 +165,18 @@ func (s *MarshalService) CompletionReport(ctx context.Context, runID string) (Ma
 				latest--
 			}
 		}
+	}
+	switch {
+	case failedCount > 0:
+		report.ChecksLabel = "failed"
+	case incompleteCount > 0:
+		report.ChecksLabel = "incomplete"
+	case passedCount > 0 && untestedCount > 0:
+		report.ChecksLabel = "incomplete"
+	case applicableTotal > 0 && passedCount == applicableTotal:
+		report.ChecksLabel = "approved checks passed"
+	default:
+		report.ChecksLabel = "not tested"
 	}
 	return report, nil
 }

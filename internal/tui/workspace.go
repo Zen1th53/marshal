@@ -865,6 +865,14 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				continue
 			}
 			if event.Type == KeyF11 {
+				if w.diffViewer.IsOpen() {
+					w.diffViewer.Close()
+					if w.palette.IsOpen() {
+						w.palette.Close()
+					}
+					w.renderFullView()
+					continue
+				}
 				// F11 returns to MARSHAL from tmux agent windows; inside MARSHAL
 				// it leaves the workspace and any in-progress composer draft alone.
 				continue

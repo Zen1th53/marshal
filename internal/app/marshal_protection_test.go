@@ -296,3 +296,44 @@ func TestRuntimeImportedMemoryRequestKeepsUnverifiedProvenance(t *testing.T) {
 		t.Fatalf("imported candidate request: %v %v", requests, err)
 	}
 }
+
+func TestGoverningDigestExcludesTransientBriefingDirectory(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("project instructions"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte("claude instructions"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	initialDigest, err := governingDigest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	briefingDir := filepath.Join(root, ".marshal", "briefing", "antigravity-123456")
+	if err := os.MkdirAll(briefingDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(briefingDir, "AGENTS.md"), []byte("briefing instructions"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	digestWithBriefing, err := governingDigest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digestWithBriefing != initialDigest {
+		t.Fatalf("expected digest to remain unchanged when briefing files are added: got %s, want %s", digestWithBriefing, initialDigest)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("modified instructions"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	digestAfterMod, err := governingDigest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digestAfterMod == initialDigest {
+		t.Fatal("expected digest to change when project AGENTS.md is modified")
+	}
+}

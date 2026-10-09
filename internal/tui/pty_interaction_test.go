@@ -400,3 +400,32 @@ func TestPTYF1ShowsMarshalOverviewAt80Columns(t *testing.T) {
 		t.Fatalf("F1 does not show a useful overview: %s", screen)
 	}
 }
+
+func TestPTYF11LeavesDiffOverlay(t *testing.T) {
+	s := startCommandTUI(t, 24, 80)
+	s.send("\x1bOR")
+	s.mustSee("Git Diff")
+	s.send("\x1b[23~")
+	time.Sleep(300 * time.Millisecond)
+	screen := s.screenText(24, 80)
+	if strings.Contains(screen, "Git Diff") {
+		t.Fatalf("F11 did not close diff overlay: %s", screen)
+	}
+}
+
+func TestPTYF11LeavesDiffOverlayWithPalette(t *testing.T) {
+	s := startCommandTUI(t, 24, 80)
+	s.send("\x1bOR")
+	s.mustSee("Git Diff")
+	s.send("\x10")
+	time.Sleep(300 * time.Millisecond)
+	s.send("\x1b[23~")
+	time.Sleep(300 * time.Millisecond)
+	screen := s.screenText(24, 80)
+	if strings.Contains(screen, "Git Diff") {
+		t.Fatalf("F11 did not close diff overlay with palette open: %s", screen)
+	}
+	if strings.Contains(screen, "Command Palette") {
+		t.Fatalf("F11 left command palette open: %s", screen)
+	}
+}

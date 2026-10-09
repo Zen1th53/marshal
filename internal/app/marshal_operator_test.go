@@ -153,6 +153,16 @@ func TestCompletionReportLabelsStandardReview(t *testing.T) {
 	if _, err := s.StartPlanning(ctx, "run-standard-report", "write files", marshal.Budget{}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := s.Approve(ctx, "run-standard-report"); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.Dispatch(ctx, "run-standard-report", "a", "write files")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CollectHandIn(ctx, "run-standard-report", d); err != nil {
+		t.Fatal(err)
+	}
 	report, err := s.CompletionReport(ctx, "run-standard-report")
 	if err != nil {
 		t.Fatal(err)
@@ -162,5 +172,69 @@ func TestCompletionReportLabelsStandardReview(t *testing.T) {
 	}
 	if report.ChecksLabel != "approved checks passed" {
 		t.Fatalf("unexpected checks label: %q", report.ChecksLabel)
+	}
+}
+
+func TestCompletionReportChecksLabelAggregate(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Untested when just started planning
+	s1, _ := marshalFixture(t, 1)
+	if _, err := s1.StartPlanning(ctx, "run-untested", "write files", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	rep1, err := s1.CompletionReport(ctx, "run-untested")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep1.ChecksLabel != "not tested" {
+		t.Fatalf("expected 'not tested', got %q", rep1.ChecksLabel)
+	}
+
+	// 2. Incomplete when 1 of 2 tasks passed and other not tested
+	s2, _ := marshalFixture(t, 2)
+	if _, err := s2.StartPlanning(ctx, "run-incomplete", "write files", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s2.Approve(ctx, "run-incomplete"); err != nil {
+		t.Fatal(err)
+	}
+	d2, err := s2.Dispatch(ctx, "run-incomplete", "a", "write files")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s2.CollectHandIn(ctx, "run-incomplete", d2); err != nil {
+		t.Fatal(err)
+	}
+	rep2, err := s2.CompletionReport(ctx, "run-incomplete")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep2.ChecksLabel != "incomplete" {
+		t.Fatalf("expected 'incomplete', got %q", rep2.ChecksLabel)
+	}
+
+	// 3. Failed when a check fails
+	s3, _ := marshalFixture(t, 1)
+	if _, err := s3.StartPlanning(ctx, "run-failed", "write files", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	run3, _, err := s3.load(ctx, "run-failed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c3 := run3.Tasks[0].Checks[0]
+	if _, err := s3.Store.SetMarshalHandIn(ctx, "run-failed", "a", 1, marshal.HandIn{
+		ResultCommit: "res",
+		CheckResults: []marshal.CheckResult{{Command: c3.Command, Criteria: c3.Criteria, ResultCommit: "res", Passed: false}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rep3, err := s3.CompletionReport(ctx, "run-failed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep3.ChecksLabel != "failed" {
+		t.Fatalf("expected 'failed', got %q", rep3.ChecksLabel)
 	}
 }
