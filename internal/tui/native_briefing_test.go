@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
 // Codex has no system-prompt flag. A channel it cannot honour must fall back to
@@ -313,6 +315,10 @@ func TestMarshalKickoffArgsPerProvider(t *testing.T) {
 }
 
 func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
+	protocol, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
 		for _, earlier := range []string{"", "no", "yes"} {
 			root := t.TempDir()
@@ -323,7 +329,7 @@ func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(data), 0600); err != nil {
 				t.Fatal(err)
 			}
-			args, _, dir, err := prepareMarshalLaunch(provider, root, nil, "MARSHAL PROTOCOL")
+			args, _, dir, err := prepareMarshalLaunch(provider, root, nil, protocol)
 			if dir != nil {
 				defer dir.remove()
 			}
@@ -365,7 +371,7 @@ func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 			if !strings.Contains(hidden, "PROJECT INTAKE") || !strings.Contains(hidden, "Uzbek") || !strings.Contains(hidden, "Do not repeat") {
 				t.Fatalf("%s hidden instructions lost intake: %s", provider, hidden)
 			}
-			if earlier != "" && !strings.Contains(hidden, `"earlier_work":"`+earlier+`"`) {
+			if strings.Count(hidden, "\nPROJECT INTAKE (saved preference data): ") != 1 || !strings.Contains(hidden, data) {
 				t.Fatalf("%s hidden instructions lost earlier_work: %s", provider, hidden)
 			}
 		}

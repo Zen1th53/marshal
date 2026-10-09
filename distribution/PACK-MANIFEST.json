@@ -10186,8 +10186,8 @@
     },
     {
       "path": "internal/tui/marshal_intake.go",
-      "sha256": "efc3c95ea72fcca0da221e1754f9dee40148acde39fd8be2236bd9522e2857a8",
-      "bytes": 2521
+      "sha256": "60c7d5695130fd816089f5e0417e41407c1853be1114ba16a0c5813f094211a2",
+      "bytes": 2549
     },
     {
       "path": "internal/tui/marshal_model_switch_test.go",
@@ -10226,8 +10226,8 @@
     },
     {
       "path": "internal/tui/marshal_protocol_privacy_test.go",
-      "sha256": "6da42ed0269c86c04d50ded1562d37a86c889d4645467f1b77c13c01ce4d4679",
-      "bytes": 15218
+      "sha256": "d17c894859aeeb374590ed0c9d07ad5b8d1f599e1a5f7a047169d11ad7978593",
+      "bytes": 16238
     },
     {
       "path": "internal/tui/marshal_splash.go",
@@ -10316,8 +10316,8 @@
     },
     {
       "path": "internal/tui/native_briefing_test.go",
-      "sha256": "9a7febfcd7a51dbdfffdfdf03fb2058ccb310d6b6b51f137fad1352faf8c9208",
-      "bytes": 13818
+      "sha256": "8346340880e51dcea613db01f6641e890c5506ada841b9d8724c6734db86cdcb",
+      "bytes": 14027
     },
     {
       "path": "internal/tui/native_channel_author_test.go",

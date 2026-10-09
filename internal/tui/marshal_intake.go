@@ -55,7 +55,7 @@ func (w *Workspace) saveMarshalIntake(intake marshalIntake) error {
 }
 
 func appendMarshalIntake(root, brief string) string {
-	if strings.Contains(brief, "PROJECT INTAKE") {
+	if strings.Contains(brief, "\nPROJECT INTAKE (saved preference data): ") {
 		return brief
 	}
 	data, err := os.ReadFile(filepath.Join(root, ".marshal", "marshal-intake.json"))
