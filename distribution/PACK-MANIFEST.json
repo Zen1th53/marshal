@@ -10066,8 +10066,8 @@
     },
     {
       "path": "internal/tui/fix4_regression_test.go",
-      "sha256": "ce88c61a5b55334b0f8f3c4d41a5da48453739f54f8f43f04eb3d0af58481532",
-      "bytes": 5675
+      "sha256": "a798b1a8f10a8f871c7c1185cfec30362d7ce3758cb3f36c8e24e2630b2610d4",
+      "bytes": 6022
     },
     {
       "path": "internal/tui/fix6_regression_test.go",
@@ -10186,8 +10186,8 @@
     },
     {
       "path": "internal/tui/marshal_intake.go",
-      "sha256": "fe274eb11f7aeb788097e95456c36aefc1dede3026306f5ac2375ad3730a17d3",
-      "bytes": 2313
+      "sha256": "efc3c95ea72fcca0da221e1754f9dee40148acde39fd8be2236bd9522e2857a8",
+      "bytes": 2521
     },
     {
       "path": "internal/tui/marshal_model_switch_test.go",
@@ -10216,8 +10216,8 @@
     },
     {
       "path": "internal/tui/marshal_proposal_test.go",
-      "sha256": "7f7e786c0cb70bdbf536a30ea7e7b6cff6cb0e5682366ab6f6d3e5fb2a727fc8",
-      "bytes": 42944
+      "sha256": "c73fdfe34cfeceddad1129119c5f46f6d54cce4bfdda459b8c24f64d39d66a32",
+      "bytes": 43384
     },
     {
       "path": "internal/tui/marshal_protection_test.go",
@@ -10226,8 +10226,8 @@
     },
     {
       "path": "internal/tui/marshal_protocol_privacy_test.go",
-      "sha256": "bc5271fa5200b020d6a6a5275aae5b0f11c96905a9c340ac3e818a378e6b246b",
-      "bytes": 12256
+      "sha256": "6da42ed0269c86c04d50ded1562d37a86c889d4645467f1b77c13c01ce4d4679",
+      "bytes": 15218
     },
     {
       "path": "internal/tui/marshal_splash.go",
@@ -10311,13 +10311,13 @@
     },
     {
       "path": "internal/tui/native_briefing.go",
-      "sha256": "7fbe8fac2edb9479151434f832ddd7a4fe69197fc4468e23f320d305adb91df3",
-      "bytes": 19681
+      "sha256": "d75a36b1b301e5c0098f6b636dc9ad5758de8a1ecb198e50fef6952c4218bc68",
+      "bytes": 19526
     },
     {
       "path": "internal/tui/native_briefing_test.go",
-      "sha256": "c65640bc3268dd8a5a0a74ddf6f825d640a2f769457d3e5dbdb27654370ec0ad",
-      "bytes": 12358
+      "sha256": "9a7febfcd7a51dbdfffdfdf03fb2058ccb310d6b6b51f137fad1352faf8c9208",
+      "bytes": 13818
     },
     {
       "path": "internal/tui/native_channel_author_test.go",
@@ -11696,8 +11696,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.8.md",
-      "sha256": "5821afdba8b6e0457db2c9d763751c76f4aad45d7951eb0e81421928297a634c",
-      "bytes": 11566
+      "sha256": "e294fbe5896f6c4efd7d7e966c887745bea31328eb8657f651c586641d347039",
+      "bytes": 11779
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",
