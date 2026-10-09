@@ -10516,8 +10516,8 @@
     },
     {
       "path": "internal/tui/permission_frame_test.go",
-      "sha256": "76df1999b7d15a841ba4942548e1036aeaf7f66f1172d47b2b54c7521216a8e3",
-      "bytes": 2138
+      "sha256": "06f74c49447e3ead80f8e56f0179f126615ee1f9958f61f44b81d0f497c5204d",
+      "bytes": 5020
     },
     {
       "path": "internal/tui/permission_pty_helpers_test.go",
@@ -10696,8 +10696,8 @@
     },
     {
       "path": "internal/tui/screen.go",
-      "sha256": "56162cdd33d3da1c2ee6b3dbaeba7ceb69cb53f33bb4078f2a13d7c164d3d41a",
-      "bytes": 5251
+      "sha256": "a31412d4c6546bbeba67ab183bcc5d338d2480b621e8783e0ff54ba1ebcceeba",
+      "bytes": 5511
     },
     {
       "path": "internal/tui/securitydata.go",

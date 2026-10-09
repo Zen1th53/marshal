@@ -61,3 +61,82 @@ func TestPermissionFrameKeepsHeadingWhenBodyClipsIntoRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestPermissionFrameDoesNotPullOlderHeadingOverLatestPrompt(t *testing.T) {
+	const cols = 80
+	prompt := func(object string) []string {
+		text, err := permission.Render([]permission.Request{{Kind: "network", Object: object}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var lines []string
+		for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+			lines = append(lines, PadCell("   "+line, cols))
+		}
+		return lines
+	}
+	for _, tc := range []struct {
+		name       string
+		prefix     int
+		gap        int
+		tail       int
+		bodyHeight int
+		fake       bool
+	}{
+		{name: "older footer still visible", prefix: 2, gap: 6, bodyHeight: 18},
+		{name: "older footer above viewport", prefix: 5, gap: 6, tail: 8, bodyHeight: 20},
+		{name: "ordinary activity heading", prefix: 5, gap: 6, tail: 8, bodyHeight: 20, fake: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := make([]string, tc.prefix)
+			if tc.fake {
+				body = append(body, PadCell("   Permission request", cols))
+			} else {
+				body = append(body, prompt("old.example.test:443")...)
+			}
+			body = append(body, make([]string, tc.gap)...)
+			latest := len(body)
+			body = append(body, prompt("pending.example.test:443")...)
+			body = append(body, make([]string, tc.tail)...)
+			start := len(body) - tc.bodyHeight
+			if start <= tc.prefix || latest < start {
+				t.Fatal("fixture must clip the old heading and fully show the latest prompt")
+			}
+			lines, _ := (Frame{Body: body}).Lines(cols, tc.bodyHeight+3)
+			for i, want := range body[start:] {
+				if lines[i] != want {
+					t.Fatalf("body row %d = %q, want %q; viewport moved away from latest prompt", i, lines[i], want)
+				}
+			}
+		})
+	}
+}
+
+func TestPermissionFrameKeepsLatestPromptWithActivityAndTeam(t *testing.T) {
+	const cols, rows = 80, 24
+	th := NewTheme(ThemeNoColor, false, false)
+	w := NewWorkspace(nil, "project", "session")
+	for _, object := range []string{"old.example.test:443", "pending.example.test:443"} {
+		text, err := permission.Render([]permission.Request{{Kind: "network", Object: object}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.RecordActivity(text)
+		if strings.HasPrefix(object, "old.") {
+			w.RecordActivity("Permission request resolved: old.example.test:443 — denied")
+			w.RecordActivity("Worker continues after the decision")
+		}
+	}
+	frame := BuildFrame(w.GetUIState(), th, "", NewComposer(th), nil, cols, rows)
+	lines, _ := frame.Lines(cols, rows)
+	got := strings.Join(lines, "\n")
+	text, _ := permission.Render([]permission.Request{{Kind: "network", Object: "pending.example.test:443"}})
+	for _, line := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+		if !strings.Contains(got, PadCell("   "+line, cols)) {
+			t.Errorf("latest prompt line missing: %q", line)
+		}
+	}
+	if !strings.Contains(got, "Team") {
+		t.Error("fully visible latest prompt must not displace the trailing team section")
+	}
+}

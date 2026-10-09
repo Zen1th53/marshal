@@ -155,13 +155,21 @@ func (f Frame) Lines(cols, rows int) ([]string, int) {
 			promptLines := strings.Split(strings.TrimSpace(prompt), "\n")
 			heading := PadCell("   "+promptLines[0], cols)
 			footer := PadCell("   "+promptLines[len(promptLines)-1], cols)
-			for i := start - 1; i >= 0; i-- {
-				if body[i] != heading {
+			// Anchor on the latest visible footer so an older heading cannot
+			// displace a newer prompt or pair with its footer. Both searches
+			// are bounded by the viewport height.
+			for j := total - 1; j >= start; j-- {
+				if body[j] != footer {
 					continue
 				}
-				for j := start; j < min(i+bodyHeight, total); j++ {
-					if body[j] == footer {
-						start = i
+				for i := j - 1; i >= max(0, j-bodyHeight+1); i-- {
+					if body[i] == footer {
+						break
+					}
+					if body[i] == heading {
+						if i < start {
+							start = i
+						}
 						break
 					}
 				}
