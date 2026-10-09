@@ -55,6 +55,9 @@ func (r *Runtime) ReconcileStartupWithReport(ctx context.Context) (RecoveryRepor
 	if r == nil || r.store == nil {
 		return RecoveryReport{}, fmt.Errorf("runtime is unavailable")
 	}
+	if err := r.requireLifecycleOwner(); err != nil {
+		return RecoveryReport{}, err
+	}
 	result, err := r.store.ReconcileStartupOrphans(ctx)
 	if err != nil {
 		return RecoveryReport{}, err

@@ -54,6 +54,10 @@ import (
 const localProjectID = "PROJECT-local"
 
 type Runtime struct {
+	ownerLock              *os.File
+	ownerMu                sync.Mutex
+	closed                 bool
+	closeErr               error
 	permissionMu           sync.Mutex
 	readGrants             map[string]bool
 	continuationCandidates map[string]model.MemoryRecordV2
@@ -279,6 +283,16 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	if err != nil {
 		return nil, err
 	}
+	ownerLock, err := acquireRuntimeOwner(layout.RuntimeDir)
+	if err != nil && !errors.Is(err, ErrRuntimeOwned) {
+		return nil, err
+	}
+	opened := false
+	defer func() {
+		if !opened && ownerLock != nil {
+			_ = ownerLock.Close()
+		}
+	}()
 	sanitizer := options.EvidenceSanitizer
 	if sanitizer == nil {
 		sanitizer = evidence.NewStrictSanitizer(evidence.SanitizerConfig{})
@@ -287,13 +301,16 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if !opened {
+			_ = database.Close()
+		}
+	}()
 	if err := database.Migrate(ctx); err != nil {
-		database.Close()
 		return nil, err
 	}
 	identity, err := database.Project(ctx)
 	if err != nil {
-		database.Close()
 		return nil, fmt.Errorf("runtime is not initialized: %w", err)
 	}
 	// Admission is decided by project identity rather than by comparing paths.
@@ -302,24 +319,21 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	// path. Comparing paths got both of those backwards.
 	admission, admitErr := admitProject(ctx, layout, identity)
 	if admitErr != nil {
-		database.Close()
 		return nil, admitErr
 	}
 	if !admission.Admitted {
-		database.Close()
 		return nil, fmt.Errorf("%w: %s", model.ErrConflict, admission.Reason)
 	}
 	engine, err := policy.Load(filepath.Join(layout.Root, "CAPABILITIES.yaml"))
 	if err != nil {
-		database.Close()
 		return nil, err
 	}
 	instanceID, err := model.NewID("INSTANCE-")
 	if err != nil {
-		database.Close()
 		return nil, err
 	}
 	rt := &Runtime{
+		ownerLock:           ownerLock,
 		layout:              layout,
 		store:               database,
 		eventEngine:         events.NewEngine(database),
@@ -385,13 +399,15 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 	if err := rt.memoryService.RebuildProjections(ctx, localProjectID); err != nil {
 		return nil, err
 	}
-	if service := rt.Marshal(); service != nil {
+	if service := rt.Marshal(); ownerLock != nil && service != nil {
 		if err := service.RecoverPendingOperations(ctx); err != nil {
-			database.Close()
 			return nil, err
 		}
 	}
-	_ = rt.ReconcileStartup(ctx)
+	if ownerLock != nil {
+		_ = rt.ReconcileStartup(ctx)
+	}
+	opened = true
 	return rt, nil
 }
 
@@ -792,6 +808,17 @@ func (r *Runtime) PrepareCell(ctx context.Context, spec cell.Spec) (cell.Record,
 
 func (r *Runtime) Close() error {
 	if r != nil {
+		r.ownerMu.Lock()
+		defer r.ownerMu.Unlock()
+		if r.closed {
+			return r.closeErr
+		}
+		r.closed = true
+		if r.ownerLock != nil {
+			lock := r.ownerLock
+			r.ownerLock = nil
+			defer lock.Close()
+		}
 		r.egressMu.Lock()
 		for id, scope := range r.egressRuns {
 			if scope.stopWatch != nil {
@@ -840,13 +867,17 @@ func (r *Runtime) Close() error {
 		}
 		r.honeypotMu.Unlock()
 		if r.store != nil {
-			return r.store.Close()
+			r.closeErr = r.store.Close()
+			return r.closeErr
 		}
 	}
 	return nil
 }
 
 func (r *Runtime) ReconcileStartup(ctx context.Context) error {
+	if err := r.requireLifecycleOwner(); err != nil {
+		return err
+	}
 	// 1. Reconcile database orphans (dead worker runs, stale sessions, expired leases)
 	if _, err := r.store.ReconcileStartupOrphans(ctx); err != nil {
 		return err
@@ -2218,5 +2249,11 @@ func (r *Runtime) Marshal() *MarshalService {
 	if err != nil {
 		return nil
 	}
-	return &MarshalService{Store: r.store, ProjectID: project.ID, Repository: r.layout.Root, Worktrees: r.layout.Worktrees}
+	service := &MarshalService{Store: r.store, ProjectID: project.ID, Repository: r.layout.Root, Worktrees: r.layout.Worktrees}
+	// Open assigns an instance ID and manages project lifecycle ownership.
+	// Services composed directly over a store have no runtime lifecycle to own.
+	if r.runtimeInstanceID != "" {
+		service.requireOwner = r.requireLifecycleOwner
+	}
+	return service
 }

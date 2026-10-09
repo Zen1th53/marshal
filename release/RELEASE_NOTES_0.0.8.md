@@ -59,6 +59,8 @@ Evidence and verification integrity.
 
 ### Durable lifecycle
 
+- Multiple MARSHAL windows can share project memory; only the lifecycle owner recovers interrupted operations or runs lifecycle commands. Reopen another window after the owner exits to recover and take ownership.
+- `/marshal status` shows the stored run when the control centre has no in-memory run panel.
 - Lifecycle intents and completion records survive interruptions. Startup
   reconciles launches, hand-ins, merges and closes without repeating completed
   effects; run, task, hand-in and audit updates commit together. Plan revisions

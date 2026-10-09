@@ -41,6 +41,7 @@ type MarshalDraft struct {
 }
 
 type MarshalService struct {
+	requireOwner         func() error
 	ReservedMergeRequest func(context.Context, string, string, int64, string, []string)
 
 	GovernedCheck                    func(context.Context, string, string, string, string, string) marshal.CommandRecord
@@ -108,7 +109,24 @@ func (s *MarshalService) save(ctx context.Context, runID string, run marshal.Run
 	return s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, revision, nil, nil, 0)
 
 }
+
+// load is the lifecycle read boundary. Snapshot uses readRun instead so a
+// non-owner can inspect state without taking over or reconciling it.
 func (s *MarshalService) load(ctx context.Context, runID string) (marshal.Run, int64, error) {
+	if err := s.requireLifecycleOwner(); err != nil {
+		return marshal.Run{}, 0, err
+	}
+	return s.readRun(ctx, runID)
+}
+
+func (s *MarshalService) requireLifecycleOwner() error {
+	if s != nil && s.requireOwner != nil {
+		return s.requireOwner()
+	}
+	return nil
+}
+
+func (s *MarshalService) readRun(ctx context.Context, runID string) (marshal.Run, int64, error) {
 	if err := s.ready(); err != nil {
 		return marshal.Run{}, 0, err
 	}
@@ -118,7 +136,7 @@ func (s *MarshalService) load(ctx context.Context, runID string) (marshal.Run, i
 
 // Snapshot reads a Marshal run without changing worker or plan state.
 func (s *MarshalService) Snapshot(ctx context.Context, runID string) (marshal.Run, error) {
-	run, _, err := s.load(ctx, runID)
+	run, _, err := s.readRun(ctx, runID)
 	return run, err
 }
 func taskIndex(run marshal.Run, id string) int {
@@ -234,6 +252,9 @@ func sameStrings(a, b []string) bool {
 }
 
 func (s *MarshalService) Recommend(ctx context.Context, runID string, goal marshal.GoalAssessment, inventory marshal.Inventory) (marshal.Recommendation, error) {
+	if err := s.requireLifecycleOwner(); err != nil {
+		return marshal.Recommendation{}, err
+	}
 	if err := s.ready(); err != nil {
 		return marshal.Recommendation{}, err
 	}
@@ -246,6 +267,9 @@ func (s *MarshalService) Recommend(ctx context.Context, runID string, goal marsh
 
 // StartPlanning accepts a model draft only after checking its graph, scopes and checks.
 func (s *MarshalService) StartPlanning(ctx context.Context, runID, goal string, budget marshal.Budget) (marshal.Run, error) {
+	if err := s.requireLifecycleOwner(); err != nil {
+		return marshal.Run{}, err
+	}
 	if err := s.ready(); err != nil {
 		return marshal.Run{}, err
 	}
@@ -261,6 +285,9 @@ func (s *MarshalService) StartPlanning(ctx context.Context, runID, goal string, 
 
 // StartPlanningFromDraft treats an interactive CLI draft as model output.
 func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal string, d MarshalDraft, budget marshal.Budget) (marshal.Run, error) {
+	if err := s.requireLifecycleOwner(); err != nil {
+		return marshal.Run{}, err
+	}
 	if err := s.ready(); err != nil {
 		return marshal.Run{}, err
 	}

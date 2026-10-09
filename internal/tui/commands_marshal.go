@@ -217,7 +217,8 @@ func marshalEditDistance(a, b string) int {
 func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (string, error) {
 	w := h.ws
 	if len(args) == 0 {
-		return marshalStatusText(w.marshalPanel()) + "\n\n" + marshalUsage, nil
+		status, err := w.marshalStatus(ctx)
+		return status + "\n\n" + marshalUsage, err
 	}
 	sub := strings.ToLower(args[0])
 	switch sub {
@@ -236,7 +237,7 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 	case "help":
 		return marshalUsage, nil
 	case "status":
-		return marshalStatusText(w.marshalPanel()), nil
+		return w.marshalStatus(ctx)
 	case "model":
 		return w.marshalSetModel(ctx, args[1:])
 	case "approve":

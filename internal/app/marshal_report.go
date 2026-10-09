@@ -33,7 +33,7 @@ type MarshalCompletionReport struct {
 
 // CompletionReport reports only evidence and usage already stored for a run.
 func (s *MarshalService) CompletionReport(ctx context.Context, runID string) (MarshalCompletionReport, error) {
-	run, _, err := s.load(ctx, runID)
+	run, _, err := s.readRun(ctx, runID)
 	if err != nil {
 		return MarshalCompletionReport{}, err
 	}
