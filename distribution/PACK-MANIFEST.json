@@ -11976,8 +11976,8 @@
     },
     {
       "path": "scripts/community-release-gate.sh",
-      "sha256": "a51fb134bb7806f49e1a0ee3da8217dcfec786c61b4f44cd213fa9557a917c68",
-      "bytes": 4164
+      "sha256": "6e898557e8de44cf1760bf26093070fd71c4ea9da928e81dc483f131a39b364b",
+      "bytes": 4177
     },
     {
       "path": "scripts/docs-audit.py",
