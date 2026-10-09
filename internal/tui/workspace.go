@@ -831,7 +831,6 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				if !w.interruptArmed {
 					w.interruptArmed = true
 					w.renderFullView()
-					fmt.Fprintln(w.out, "Press Ctrl+C again to exit, or /quit. Any durable session data is preserved either way.")
 					continue
 				}
 				w.terminal.ClearScreen()
@@ -839,7 +838,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			}
 
 			// Any other key cancels a pending exit confirmation.
-			w.interruptArmed = false
+			if w.interruptArmed {
+				w.interruptArmed = false
+				w.renderFullView()
+			}
 
 			// Navigation owns every key while it is open, and Ctrl+N opens it.
 			if event.Type == KeyF7 {
@@ -1494,13 +1496,11 @@ func (w *Workspace) dispatchNavigationKey(ctx context.Context, event KeyEvent) b
 			return true
 		}
 		if w.navView == nil {
-			if w.out != nil {
-				reason := "the frozen interface manifest did not load"
-				if w.navErr != nil {
-					reason = w.navErr.Error()
-				}
-				fmt.Fprintf(w.out, "Navigation is unavailable: %s\n", reason)
+			reason := "the frozen interface manifest did not load"
+			if w.navErr != nil {
+				reason = w.navErr.Error()
 			}
+			w.setOutput("Navigation is unavailable: "+reason, true)
 			return true
 		}
 		w.openNavigation(ctx)
@@ -1866,6 +1866,9 @@ func (w *Workspace) paint() {
 	}
 
 	frame := BuildFrame(state, th, workDir, w.composer, popup, cols, rows)
+	if w.interruptArmed {
+		frame.Status = PadCell(th.Colorize(th.Warning, " Press Ctrl+C again to exit, or /quit. Durable session data is preserved."), cols)
+	}
 	frame.ScrollOffset = w.scrollOffset
 	frame.UnreadCount = w.unreadNew
 	lines, cursorRow := frame.Lines(cols, rows)

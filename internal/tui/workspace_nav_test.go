@@ -358,8 +358,11 @@ func TestRealKeyDispatchHandlesAMissingView(t *testing.T) {
 	if !ws.dispatchNavigationKey(context.Background(), KeyEvent{Type: KeyCtrlN}) {
 		t.Fatal("Ctrl+N was not consumed when the view was missing")
 	}
-	if !strings.Contains(out.String(), "Navigation is unavailable") {
-		t.Fatalf("the missing view was not explained: %q", out.String())
+	if !strings.Contains(ws.state.LastOutput, "Navigation is unavailable") || !ws.state.LastOutputIsError {
+		t.Fatalf("the missing view was not explained in the renderer state: %q", ws.state.LastOutput)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("navigation wrote outside the renderer: %q", out.String())
 	}
 	if ws.interruptNavigation() {
 		t.Fatal("a nil view consumed the interrupt")

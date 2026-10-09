@@ -59,6 +59,7 @@ Evidence and verification integrity.
 
 ### Durable lifecycle
 
+- Empty-composer Ctrl+C shows its exit warning through the screen renderer without accumulating terminal lines; double Ctrl+C still exits.
 - Lifecycle intents and completion records survive interruptions. Startup
   reconciles launches, hand-ins, merges and closes without repeating completed
   effects; run, task, hand-in and audit updates commit together. Plan revisions
