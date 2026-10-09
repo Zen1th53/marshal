@@ -111,7 +111,11 @@ func TestImportedTaskUsesBoundApprovalAndMerge(t *testing.T) {
 	if err := s.Merge(t.Context(), "imported", "TASK-finished"); err == nil {
 		t.Fatal("merged without task approval")
 	}
-	s.ApprovalActor = onlyApproves("TASK-finished")
+	purpose, err := s.TaskAcceptance(t.Context(), "imported", "TASK-finished")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.ApprovalActor = onlyApproves(purpose)
 	if _, err = s.Execute(t.Context(), "imported", func(marshal.Task, BriefContext) string { return "review imported" }, nil); err != nil {
 		t.Fatal(err)
 	}

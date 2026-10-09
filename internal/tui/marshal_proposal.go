@@ -16,12 +16,14 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/permission"
 )
 
 const marshalProposalPrefix = "MARSHAL_PROPOSAL "
 
 type marshalProposal struct {
+	reviewed                                                              *app.PlanApprovalSnapshot
 	occurrence                                                            string
 	who                                                                   string
 	action, key, value, provider, path, id, reason, language, earlierWork string
@@ -115,7 +117,7 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 		}) {
 			return p, invalid
 		}
-	case "approve", "close", "resume":
+	case "approve", "close", "resume", "deliver":
 		keys = []string{"action"}
 	case "amend":
 		keys = []string{"action", "reason"}
@@ -154,7 +156,7 @@ func (p marshalProposal) command() string {
 		return "/permission read allow " + p.path
 	case "memory":
 		return "/memory allow " + p.id
-	case "approve", "close", "resume":
+	case "approve", "close", "resume", "deliver":
 		return "/marshal " + p.action
 	case "amend-approve":
 		return "/marshal amend approve"
@@ -292,7 +294,7 @@ func (w *Workspace) observeMarshalProposalSource(tr importer.SessionTranscript, 
 				w.permissions.planApprovalOccurrence = p.occurrence
 				w.permissions.mu.Unlock()
 				w.queueMarshalPlanApproval()
-			case "accept", "return", "amend", "close", "resume":
+			case "accept", "return", "amend", "close", "resume", "deliver":
 				if err := w.queueMarshalRunProposal(p); err != nil {
 					w.RecordActivity("Ignored Marshal proposal: no matching active run or task.")
 				}
@@ -360,12 +362,50 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 			return errors.New("task is not in the active plan")
 		}
 	}
+	if p.action == "approve" || p.action == "amend-approve" {
+		snapshot, err := service.PlanApprovalSnapshot(context.Background(), runID)
+		if err != nil {
+			return err
+		}
+		p.reviewed = &snapshot
+	}
+	if p.action == "deliver" && p.occurrence == "" {
+		// Runtime-generated confirmations use the same durable popup journal as
+		// model proposals, including renewed consent after a scoped amendment.
+		id, err := model.NewID("marshal-delivery-")
+		if err != nil {
+			return err
+		}
+		p.occurrence = id
+		if _, err = w.store.AdmitMarshalProposal(context.Background(), w.projectID, id, marshalProposalPrefix+`{"action":"deliver"}`); err != nil {
+			return err
+		}
+	}
 	binding := marshalRunProposalBinding(run.PlanVersion, record.Revision, pending)
 	w.permissions.mu.Lock()
 	if w.permissions.runProposals == nil {
 		w.permissions.runProposals = map[string]marshalProposal{}
 	}
 	req := permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: fmt.Sprintf("run %s, plan %s version %d, state revision %d", runID, run.PlanID, run.PlanVersion, record.Revision), Who: p.requester(), Reason: "Apply this exact runtime action; review the plan pack and result first", RunID: runID, TaskID: binding}
+	if p.action == "accept" {
+		purpose, e := service.TaskAcceptance(context.Background(), runID, p.id)
+		if e != nil {
+			w.permissions.mu.Unlock()
+			return e
+		}
+		req.Scope += "; result " + purpose
+	}
+	if p.reviewed != nil {
+		data, _ := json.Marshal(p.reviewed)
+		req.ApprovalBinding = string(data)
+		req.Scope += fmt.Sprintf("; pack %s; repository %s; base %s; target %s", p.reviewed.PackDigest, p.reviewed.Repository, p.reviewed.BaseCommit, p.reviewed.TargetRef)
+	}
+	if p.action == "deliver" {
+		p.value = run.ApprovalScopeDigest
+		req.ApprovalBinding = run.ApprovalScopeDigest
+		req.Scope += "; target " + run.TargetRef + "; approval " + run.ApprovalScopeDigest
+		req.Reason = "Separate confirmation: deliver automatically to this target after verification"
+	}
 	if pending != nil {
 		req.Scope += "; proposed amendment " + binding[strings.LastIndex(binding, ":")+1:]
 		req.Reason = "Approve proposed amendment: " + pending.reason
@@ -421,9 +461,39 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 		if service == nil || runID != req.RunID || (pending != nil && p.action != "amend-approve") || (pending == nil && p.action == "amend-approve") {
 			return errors.New("Marshal proposal expired")
 		}
+		binding := req.TaskID
+		if p.action == "approve" || p.action == "amend-approve" {
+			var snapshot app.PlanApprovalSnapshot
+			if req.ApprovalBinding == "" || json.Unmarshal([]byte(req.ApprovalBinding), &snapshot) != nil {
+				return errors.New("plan snapshot missing; review and approve again")
+			}
+			p.reviewed = &snapshot
+		}
 		record, err := service.Store.GetMarshalRun(ctx, service.ProjectID, runID)
-		if err != nil || marshalRunProposalBinding(record.Value.PlanVersion, record.Revision, pending) != req.TaskID {
+		if err != nil || (p.action != "deliver" && marshalRunProposalBinding(record.Value.PlanVersion, record.Revision, pending) != binding) || (p.action == "deliver" && record.Value.ApprovalScopeDigest != req.ApprovalBinding) {
 			return errors.New("Marshal proposal expired")
+		}
+		if p.action == "approve" || p.action == "amend-approve" {
+			_, err = w.marshalApproveReviewed(ctx, p.reviewed)
+			return err
+		}
+		if p.action == "deliver" {
+			_, cancel, err := m.reserve()
+			if err != nil {
+				return err
+			}
+			purpose := "standing-close:" + record.Value.ApprovalScopeDigest
+			m.grant(runID, purpose)
+			authErr := service.AuthorizeDelivery(ctx, runID, record.Value.ApprovalScopeDigest)
+			m.mu.Lock()
+			delete(m.approvals, runID+"/"+purpose)
+			m.mu.Unlock()
+			m.finish(cancel)
+			if authErr != nil {
+				return authErr
+			}
+			_, err = w.marshalResume(ctx)
+			return err
 		}
 		// Dispatch arguments directly so spaces in free-text reasons are exact.
 		_, err = w.cmd.handleMarshal(ctx, marshalProposalArgs(p))

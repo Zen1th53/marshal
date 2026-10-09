@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tmux"
@@ -374,8 +375,18 @@ func TestMarshalProposalTaskAcceptanceUsesHandler(t *testing.T) {
 	m.service = rt.Marshal()
 	m.runID = "RUN-task"
 	m.mu.Unlock()
-	run := marshal.Run{PlanID: "PLAN-task", PlanVersion: 1, State: marshal.AwaitingUser, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "T.1", State: marshal.HandedIn}}}
+	run := marshal.Run{PlanID: "PLAN-task", PlanVersion: 1, State: marshal.AwaitingUser, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "T.1", State: marshal.HandedIn, ResultCommit: "result"}}}
 	if _, err := rt.Marshal().Store.SetMarshalRun(t.Context(), rt.ProjectID(), "RUN-task", run, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.Marshal().Store.SetMarshalTask(t.Context(), "RUN-task", run.Tasks[0], 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.Marshal().Store.SetMarshalHandIn(t.Context(), "RUN-task", "T.1", 1, marshal.HandIn{ResultCommit: "result"}); err != nil {
+		t.Fatal(err)
+	}
+	purpose, err := rt.Marshal().TaskAcceptance(t.Context(), "RUN-task", "T.1")
+	if err != nil {
 		t.Fatal(err)
 	}
 	w.setMarshalPanel(newMarshalPanel("RUN-task", "codex", run, "review"))
@@ -385,16 +396,16 @@ func TestMarshalProposalTaskAcceptanceUsesHandler(t *testing.T) {
 	if len(batch) != 1 || batch[0].Object != "/marshal accept T.1" {
 		t.Fatalf("task popup=%v", batch)
 	}
-	if _, err := m.approver(t.Context(), "RUN-task", "T.1"); err == nil {
+	if _, err := m.approver(t.Context(), "RUN-task", purpose); err == nil {
 		t.Fatal("model authorized task before operator")
 	}
 	if err := w.decidePermission(t.Context(), batch[0], true, "operator popup"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.approver(t.Context(), "RUN-task", "T.1"); err != nil {
+	if _, err := m.approver(t.Context(), "RUN-task", purpose); err != nil {
 		t.Fatalf("same slash handler did not authorize task: %v", err)
 	}
-	if _, err := m.approver(t.Context(), "RUN-task", "T.1"); err == nil {
+	if _, err := m.approver(t.Context(), "RUN-task", purpose); err == nil {
 		t.Fatal("approval reused")
 	}
 	tr.Messages[0].Content = `MARSHAL_PROPOSAL {"action":"accept","id":"unknown"}`
@@ -862,5 +873,173 @@ func TestFailedIntakeAdmissionRemainsRecoverable(t *testing.T) {
 	pending, err = rt.Store().PendingMarshalProposals(t.Context(), rt.ProjectID())
 	if err != nil || len(pending) != 0 {
 		t.Fatalf("successful intake still pending: %v %v", pending, err)
+	}
+}
+
+func TestMarshalPlanPopupFreezesPackAndAsksDeliverySeparately(t *testing.T) {
+	w, rt := realControlWorkspace(t, "SESSION-proposal-plan", false)
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	service := *rt.Marshal()
+	m := w.marshalSession()
+	service.ApprovalActor = m.approver
+	service.Drivers = nil
+	service.GovernedDrivers = nil
+	service.ProbeWorker = func(context.Context, string) error { return errors.New("worker dispatch disabled in proposal fixture") }
+	draft, err := service.DraftFromProposal([]byte(`{"tasks":[{"id":"T1","title":"Review fixture","criteria":["fixture checked"],"paths":["README.md"],"depends_on":[],"worker":"codex","mode":"governed","checks":[{"command":"true","criteria":["fixture checked"]}]}]}`), "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := app.MarshalRunPackPath(service.Repository, "RUN-plan-proposal")
+	if err = os.MkdirAll(filepath.Join(dir, "tasks"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for name, contents := range map[string]string{"REQUIREMENTS.md": "requirements", "00_INDEX.md": "index", "tasks/T1.md": "note"} {
+		if err = os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pack, err := app.ReadPlanPack(dir, []string{"T1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft.Pack = &pack
+	settings := marshal.DefaultSettings()
+	settings.AcceptanceMode = marshal.AcceptMarshal
+	if _, err = service.Store.SetMarshalSettings(t.Context(), service.ProjectID, settings, 0); err != nil {
+		t.Fatal(err)
+	}
+	run, err := service.StartPlanningFromDraft(t.Context(), "RUN-plan-proposal", "proposal fixture", draft, marshal.Budget{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	m.service = &service
+	m.runID = "RUN-plan-proposal"
+	m.provider = "codex"
+	m.mu.Unlock()
+	w.setMarshalPanel(newMarshalPanel("RUN-plan-proposal", "codex", run, "review plan"))
+	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"approve"}`}}})
+	batch := w.permissions.queue.Take(false)
+	if len(batch) != 1 {
+		t.Fatalf("approval popup=%v", batch)
+	}
+	if !strings.Contains(batch[0].Scope, pack.Digest) || !strings.Contains(batch[0].Scope, "refs/heads/main") {
+		t.Fatalf("popup omits binding: %+v", batch)
+	}
+	// Recover the persisted popup, preserving the reviewed bytes rather than
+	// taking a fresh snapshot of whatever happens to be on disk now.
+	original := batch[0]
+	if err = os.WriteFile(filepath.Join(dir, "tasks/T1.md"), []byte("changed note"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	w.permissions.mu.Lock()
+	w.permissions.runProposals = nil
+	w.permissions.outstanding = nil
+	w.permissions.mu.Unlock()
+	w.recoverMarshalProposals()
+	batch = w.permissions.queue.Take(false)
+	if len(batch) != 1 || batch[0].ApprovalBinding != original.ApprovalBinding {
+		t.Fatalf("recovery refreshed reviewed snapshot: %v", batch)
+	}
+	if err = w.applyMarshalProposal(t.Context(), batch[0]); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		m.mu.Lock()
+		busy := m.busy
+		m.mu.Unlock()
+		if !busy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("approval did not finish")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	run, err = service.Snapshot(t.Context(), "RUN-plan-proposal")
+	if err != nil || run.State != marshal.Drafting || run.ValidCloseAuthorization() {
+		t.Fatalf("changed pack approved: %+v %v", run, err)
+	}
+	if err = w.queueMarshalRunProposal(marshalProposal{action: "approve"}); err != nil {
+		t.Fatal(err)
+	}
+	batch = w.permissions.queue.Take(false)
+	if len(batch) != 1 {
+		t.Fatalf("fresh popup: %v", batch)
+	}
+	if err = w.applyMarshalProposal(t.Context(), batch[0]); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		m.mu.Lock()
+		busy := m.busy
+		m.mu.Unlock()
+		if !busy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("approval did not finish")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	run, err = service.Snapshot(t.Context(), "RUN-plan-proposal")
+	if err != nil || run.ApprovalScopeDigest == "" || run.ValidCloseAuthorization() {
+		t.Fatalf("plan approval granted standing consent: %+v %v", run, err)
+	}
+	batch = w.permissions.queue.Take(false)
+	if len(batch) != 1 || batch[0].Object != "/marshal deliver" || !strings.Contains(batch[0].Scope, "refs/heads/main") {
+		t.Fatalf("separate delivery popup: %v", batch)
+	}
+	if err = w.applyMarshalProposal(t.Context(), batch[0]); err != nil {
+		t.Fatal(err)
+	}
+	run, err = service.Snapshot(t.Context(), "RUN-plan-proposal")
+	if err != nil || !run.ValidCloseAuthorization() {
+		t.Fatalf("delivery consent missing: %+v %v", run, err)
+	}
+}
+
+func TestStandingDeliveryPopupSurvivesRestart(t *testing.T) {
+	for _, renewed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("renewed-%t", renewed), func(t *testing.T) {
+			w, rt := realControlWorkspace(t, "SESSION-delivery-recovery", false)
+			m := w.marshalSession()
+			m.service, m.runID = rt.Marshal(), "RUN-delivery"
+			run := marshal.Run{PlanID: "PLAN-delivery", PlanVersion: 2, State: marshal.Approved, ApprovalScopeDigest: "displayed-scope", Repository: "repository", BaseCommit: "base", TargetRef: "refs/heads/main", Settings: marshal.DefaultSettings()}
+			if renewed {
+				run.CloseAuthorization = &marshal.CloseAuthorization{User: "operator", ApprovalScopeDigest: "old-scope", Voided: true}
+			}
+			if _, err := m.service.Store.SetMarshalRun(t.Context(), rt.ProjectID(), m.runID, run, 0); err != nil {
+				t.Fatal(err)
+			}
+			if err := w.queueMarshalRunProposal(marshalProposal{action: "deliver"}); err != nil {
+				t.Fatal(err)
+			}
+			batch := w.permissions.queue.Take(false)
+			if len(batch) != 1 {
+				t.Fatalf("initial popup: %v", batch)
+			}
+			original := batch[0]
+			w.permissions.mu.Lock()
+			w.permissions.runProposals, w.permissions.outstanding = nil, nil
+			w.permissions.mu.Unlock()
+			w.recoverMarshalProposals()
+			batch = w.permissions.queue.Take(false)
+			if len(batch) != 1 || batch[0] != original {
+				t.Fatalf("lost delivery confirmation: %v", batch)
+			}
+			w.permissions.mu.Lock()
+			_, recovered := w.permissions.runProposals[batch[0].Key()]
+			w.permissions.mu.Unlock()
+			if !recovered {
+				t.Fatal("confirmation has no recovered action")
+			}
+		})
 	}
 }

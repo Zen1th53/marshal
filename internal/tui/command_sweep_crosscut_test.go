@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/testutil/testcloud"
 )
@@ -541,13 +542,37 @@ func TestCommandSweepCrosscutDecisions(t *testing.T) {
 	m := w.marshalSession()
 	m.runID = "RUN-sweep4"
 	w.state.Marshal = &MarshalPanel{RunID: m.runID, Tasks: []MarshalTaskRow{{ID: "pending"}}}
-	// Current acceptance deliberately grants a future one-use decision even when
-	// the panel task has not reached a user-acceptance state (DECISION D4).
-	sweepWorkRun(t, w, "/marshal accept pending", "Approved task")
-	if _, err := m.approver(ctx, m.runID, "pending"); err != nil {
+	m.service = w.runtime.Marshal()
+	run := marshal.Run{PlanID: "PLAN-sweep4", PlanVersion: 1, State: marshal.AwaitingUser, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "pending", State: marshal.Queued}}}
+	if _, err := m.service.Store.SetMarshalRun(ctx, w.projectID, m.runID, run, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.approver(ctx, m.runID, "pending"); err == nil {
+	// Consent requires an existing current result; queued work has no authority.
+	if _, err := w.cmd.Handle(ctx, "/marshal accept pending"); err == nil {
+		t.Fatal("queued task accepted")
+	}
+	if len(m.approvals) != 0 {
+		t.Fatal("queued task stored consent")
+	}
+	run.Tasks[0].State, run.Tasks[0].ResultCommit = marshal.HandedIn, "result"
+	if _, err := m.service.Store.SetMarshalRun(ctx, w.projectID, m.runID, run, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.service.Store.SetMarshalTask(ctx, m.runID, run.Tasks[0], 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.service.Store.SetMarshalHandIn(ctx, m.runID, "pending", 1, marshal.HandIn{ResultCommit: "result"}); err != nil {
+		t.Fatal(err)
+	}
+	purpose, err := m.service.TaskAcceptance(ctx, m.runID, "pending")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sweepWorkRun(t, w, "/marshal accept pending", purpose)
+	if _, err := m.approver(ctx, m.runID, purpose); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.approver(ctx, m.runID, purpose); err == nil {
 		t.Fatal("reused task approval")
 	}
 	m.amended = true

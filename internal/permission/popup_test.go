@@ -300,3 +300,19 @@ esac
 		})
 	}
 }
+
+func TestApprovalSnapshotDistinguishesPopupRequests(t *testing.T) {
+	first := Request{Kind: "marshal-command", Object: "/marshal approve", ApprovalBinding: "reviewed"}
+	next := first
+	next.ApprovalBinding = "changed"
+	if first.Key() == next.Key() {
+		t.Fatal("different reviewed snapshots deduplicated")
+	}
+	text, err := Render([]Request{first})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(text, "reviewed") {
+		t.Fatal("opaque snapshot exposed as popup implementation details")
+	}
+}

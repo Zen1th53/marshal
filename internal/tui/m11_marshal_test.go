@@ -194,13 +194,39 @@ func TestM11StandardDecisionCommands(t *testing.T) {
 	if _, err := ws.ExecuteCommand(ctx, "/marshal accept missing"); err == nil {
 		t.Fatal("accepted an unknown task")
 	}
-	if _, err := ws.ExecuteCommand(ctx, "/marshal accept task-1"); err != nil {
+	m.service = ws.runtime.Marshal()
+	run := marshal.Run{PlanID: "PLAN-1", PlanVersion: 1, State: marshal.AwaitingUser, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "task-1", State: marshal.Queued}}}
+	if _, err := m.service.Store.SetMarshalRun(ctx, ws.projectID, "RUN-1", run, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.approver(ctx, "RUN-1", "task-1"); err != nil {
+	if _, err := ws.ExecuteCommand(ctx, "/marshal accept task-1"); err == nil {
+		t.Fatal("queued task accepted")
+	}
+	if len(m.approvals) != 0 {
+		t.Fatal("queued task stored consent")
+	}
+	run.Tasks[0].State, run.Tasks[0].ResultCommit = marshal.HandedIn, "result"
+	if _, err := m.service.Store.SetMarshalRun(ctx, ws.projectID, "RUN-1", run, 1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.approver(ctx, "RUN-1", "task-1"); err == nil {
+	if _, err := m.service.Store.SetMarshalTask(ctx, "RUN-1", run.Tasks[0], 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.service.Store.SetMarshalHandIn(ctx, "RUN-1", "task-1", 1, marshal.HandIn{ResultCommit: "result"}); err != nil {
+		t.Fatal(err)
+	}
+	purpose, err := m.service.TaskAcceptance(ctx, "RUN-1", "task-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := ws.ExecuteCommand(ctx, "/marshal accept task-1")
+	if err != nil || !strings.Contains(out, purpose) {
+		t.Fatalf("exact task acceptance: %s %v", out, err)
+	}
+	if _, err := m.approver(ctx, "RUN-1", purpose); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.approver(ctx, "RUN-1", purpose); err == nil {
 		t.Fatal("task approval reused")
 	}
 	if _, err := ws.ExecuteCommand(ctx, "/marshal amend deny"); err != nil {

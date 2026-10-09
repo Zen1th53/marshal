@@ -11,6 +11,15 @@ popup consent before merge. Governing-file digests detect unexpected changes
 and show an activity alert. Local file proposals say **Local request (unverified)**;
 intake preference updates show their source in activity.
 
+- Task acceptance binds the current hand-in attempt, result commit, evidence digest
+  and plan version. Queued work cannot receive advance consent; `/marshal accept`
+  identifies the exact result it accepts.
+- Plan approval displays the pack digest, repository, base commit and target ref.
+  Changed pack bytes require review and approval again.
+- Automatic delivery needs a separate confirmation for the shown target branch.
+  Close refuses a changed repository, base or target. Scoped amendments explicitly
+  cancel standing delivery when the approval digest changes and ask again;
+  unchanged digests keep consent.
 - Acceptance checks test read-only source with separate writable build space. Hand-ins record the result commit and tested tree digest.
 - Failed mandatory evidence, claim or journal capture leaves the task failed with an “incomplete evidence” reason and preserves its work.
 - Independent review references must resolve to hand-in artifacts. Verifier identity, commit, verdict, findings and input binding are retained and shown in `/marshal status`.
@@ -63,7 +72,7 @@ missing dependency does not make installation fail.
 The automated source inventory reports:
 
 - Constitution enforcement: 0.9%
-- Scope of protection: 7.1%
+- Scope of protection: 7.4%
 
 Constitution enforcement is the percentage of material source call sites that a constitutional verdict can refuse before the effect occurs.
 Scope of protection is the percentage of material source call sites guarded before execution by a constitutional gate, approval binding, policy authorisation or sandbox.
@@ -80,6 +89,8 @@ recording a verdict or warning does not count as enforcement. The reviewed
 
 ## Known limits
 
+- Runs approved before destination binding was introduced need a replacement
+  plan and fresh approval before delivery. Unbound standing consent is refused.
 - **Checks cannot write to tested source.** Commands producing binaries, generated
   files or reports must write them under `$MARSHAL_BUILD_DIR` or `/tmp`; build
   caches have separate writable space. Checks needing unavailable isolation fail.

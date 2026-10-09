@@ -85,6 +85,18 @@ func testMarshalProcess05AndImportsExactCommit(t *testing.T, modelProvider strin
 	if err != nil || run.Tasks[0].Mode != marshal.Governed {
 		t.Fatal(err)
 	}
+	if run.Repository == "" || run.TargetRef != "refs/heads/main" || run.BaseCommit == "" {
+		t.Fatalf("Process 05 destination not bound: %+v", run)
+	}
+	changed := run
+	changed.TargetRef = "refs/heads/other"
+	approvedPlan, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if marshalApprovalDigest(approvedPlan.ApprovalScopeDigest, changed) == run.ApprovalScopeDigest {
+		t.Fatal("Process 05 digest omits destination")
+	}
 	tampered := run.Tasks[0]
 	tampered.Checks[0].Command = "true"
 	if _, err := runtime.marshalProcess05Run(s)(ctx, driver.Request{Task: tampered}); err == nil || !strings.Contains(err.Error(), "checks differ") {

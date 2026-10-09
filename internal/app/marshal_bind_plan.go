@@ -107,6 +107,18 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 		return marshal.Run{}, err
 	}
 	run := marshal.Run{PlanID: p.ID, Process05Bound: true, PlanVersion: p.Version, BaseCommit: base, GoalBinding: goal.OriginalRequest, Tasks: tasks, State: marshal.Approved, Settings: settings.Value}
+	repo, err := s.repositoryIdentity(ctx)
+	if err != nil {
+		return marshal.Run{}, err
+	}
+	project, err := s.Store.Project(ctx)
+	if err != nil {
+		return marshal.Run{}, err
+	}
+	if project.DefaultBranch == "" {
+		return marshal.Run{}, errors.New("project target branch is missing")
+	}
+	run.Repository, run.TargetRef = repo, "refs/heads/"+project.DefaultBranch
 	run.ApprovalScopeDigest = marshalApprovalDigest(p.ApprovalScopeDigest, run)
 	if err := s.save(ctx, runID, run, 0); err != nil {
 		return marshal.Run{}, err
