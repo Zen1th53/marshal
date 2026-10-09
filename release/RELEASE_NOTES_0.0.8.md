@@ -4,12 +4,7 @@ Evidence and verification integrity.
 
 ## What changed
 
-Constitutional suspension and stored version bindings now refuse dispatch and
-resume; unreadable bindings fail closed. Governed results that change policy,
-CI, MARSHAL storage or agent instructions need separate, commit-bound operator
-popup consent before merge. Governing-file digests detect unexpected changes
-and show an activity alert. Local file proposals say **Local request (unverified)**;
-intake preference updates show their source in activity.
+### Approval and acceptance binding
 
 - Task acceptance binds the current hand-in attempt, result commit, evidence digest
   and plan version. Queued work cannot receive advance consent; `/marshal accept`
@@ -20,24 +15,69 @@ intake preference updates show their source in activity.
   Close refuses a changed repository, base or target. Scoped amendments explicitly
   cancel standing delivery when the approval digest changes and ask again;
   unchanged digests keep consent.
-- Acceptance checks test read-only source with separate writable build space. Hand-ins record the result commit and tested tree digest.
-- Failed mandatory evidence, claim or journal capture leaves the task failed with an “incomplete evidence” reason and preserves its work.
-- Independent review references must resolve to hand-in artifacts. Verifier identity, commit, verdict, findings and input binding are retained and shown in `/marshal status`.
-- Acceptance and completion reports share approved-check aggregation: any applicable failure fails the criterion; mixed and incomplete evidence is visible.
-- Governed hand-ins require a recorded clean honeypot scan. A recorded hit quarantines the commit at merge admission, including after restart. Missing scan identity refuses delivery.
-- Tasks declare change, inspection or verification. Change tasks require changed files; unchanged inspection and verification results need complete passing evidence.
-Lifecycle intents and completion records survive interruptions. Startup reconciles
-launches, hand-ins, merges and closes without repeating completed effects; run,
-task, hand-in and audit updates commit together. Plan revisions and run state
-also commit together.
 
-Replacement plans use separate branches and worktrees and preserve earlier
-evidence. Pending proposals return to the popup queue after restart, and resolved
-occurrences stay resolved. The Marshal validates and reads back its plan before
-publishing the completion marker. `/marshal resume` retries failed verification
-and reports the reason and next step when a pause needs operator action.
-- CLI and TUI show the same build-injected release version. Local builds show
-  `dev`; schema and constitution versions retain their separate labels.
+### Evidence and verification
+
+- Acceptance checks test read-only source with separate writable build space.
+  Hand-ins record the result commit and tested tree digest.
+- Failed mandatory evidence, claim or journal capture leaves the task failed with
+  an "incomplete evidence" reason and preserves its work.
+- Independent review references must resolve to hand-in artifacts. Verifier
+  identity, commit, verdict, findings and input binding are retained and shown in
+  `/marshal status`.
+- Acceptance and completion reports share approved-check aggregation: any
+  applicable failure fails the criterion; mixed and incomplete evidence is visible.
+- Governed hand-ins require a recorded clean honeypot scan. A recorded hit
+  quarantines the commit at merge admission, including after restart. Missing
+  scan identity refuses delivery.
+- Tasks declare change, inspection or verification. Change tasks require changed
+  files; unchanged inspection and verification results need complete passing
+  evidence.
+- Process 05 scope and explicit constraints are checked against the recorded base
+  and fail the task; semantic goal drift remains an advisory warning.
+- Completion reports label Standard review as the Marshal's own ("Standard: review
+  by the Marshal itself; independent review in ULTRA") and confirm approved checks
+  passed.
+
+### Governance integrity
+
+- Constitutional suspension and stored version bindings now refuse dispatch and
+  resume; unreadable bindings fail closed.
+- Governed results that change policy, CI, MARSHAL storage or agent instructions
+  need separate, commit-bound operator popup consent before merge.
+- Governing-file digests detect unexpected changes and show an activity alert.
+- Local file proposals say **Local request (unverified)**; intake preference
+  updates show their source in activity.
+- Governed requests refuse native tasks in drafts unless the operator explicitly
+  allows an exception.
+
+### Durable lifecycle
+
+- Lifecycle intents and completion records survive interruptions. Startup
+  reconciles launches, hand-ins, merges and closes without repeating completed
+  effects; run, task, hand-in and audit updates commit together. Plan revisions
+  and run state also commit together.
+- Replacement plans use separate branches and worktrees and preserve earlier
+  evidence.
+- Pending proposals return to the popup queue after restart, and resolved
+  occurrences stay resolved.
+- The Marshal validates and reads back its plan before publishing the completion
+  marker.
+- `/marshal resume` retries failed verification and reports the reason and next
+  step when a pause needs operator action.
+- Escalated tasks support operator `/marshal retry`, `/marshal reassign` and
+  `/marshal cancel` where permitted; single-provider tasks support bounded
+  fresh-session retries.
+
+### ULTRA
+
+- ULTRA work requires both entitlement and execution enabled, safely falling back
+  to Standard otherwise.
+- ULTRA worker hand-ins are collected and reviewed as soon as ready, merging
+  sequentially in plan order.
+
+### Credentials and A2A
+
 - Credential revocation reaches every owning runtime through the project store,
   refuses new broker requests immediately, and closes active exchanges. The
   permission command reports pending until owners acknowledge closure; use
@@ -45,12 +85,11 @@ and reports the reason and next step when a pause needs operator action.
 - A2A construction requires a configured authentication manager. Unauthenticated
   task import requires explicit insecure construction or `--insecure`, with
   a literal loopback listen address and loopback peers.
-- Governed requests refuse native tasks in drafts unless the operator explicitly allows an exception.
-- ULTRA work requires both entitlement and execution enabled, safely falling back to Standard otherwise.
-- Escalated tasks support operator `/marshal retry`, `/marshal reassign` and `/marshal cancel` where permitted; single-provider tasks support bounded fresh-session retries.
-- ULTRA worker hand-ins are collected and reviewed as soon as ready, merging sequentially in plan order.
-- Completion reports label Standard review as the Marshal's own ("Standard: review by the Marshal itself; independent review in ULTRA") and confirm approved checks passed.
-- Process 05 scope and explicit constraints are checked against the recorded base and are hard; semantic drift remains an advisory warning.
+
+### Version display
+
+- CLI and TUI show the same build-injected release version. Local builds show
+  `dev`; schema and constitution versions retain their separate labels.
 
 ## Requirements
 
@@ -98,16 +137,10 @@ recording a verdict or warning does not count as enforcement. The reviewed
   missing scan identity is refused; its branch remains available for inspection.
 - **Standard review remains in the Marshal conversation.** Independent cross-review
   and model verification are required for ULTRA.
-- **Keep the window open.** There is no background service. Unfinished lifecycle operations are reconciled when the project reopens.
-  `/marshal resume` retries a failed verification. Budget and security pauses
+- **Keep the window open.** There is no background service. Unfinished lifecycle
+  operations are reconciled when the project reopens. `/marshal resume` retries a failed verification. Budget and security pauses
   require the resolution shown in the panel; uncertain interrupted effects
   retain their artifacts for operator review.
-
-- **Credential broker is opt-in per project and provider.** Use
-  `/permission credential request <codex|claude|gemini|opencode>` and press
-  uppercase `A` in the fixed permission prompt. Revoke with
-  `/permission credential revoke <provider>`. Supported API keys stay on the
-  host; workers receive placeholders as described below.
 - **A2A authentication is required by default.** Missing authentication configuration
   refuses task import. Deliberate unauthenticated serving requires `--insecure`
   and a literal loopback listen address; non-loopback peers are refused.
@@ -139,14 +172,11 @@ recording a verdict or warning does not count as enforcement. The reviewed
   response buffering limits.
 - **OpenCode is a worker, not the Marshal.** Planning needs Codex, Claude Code
   or Antigravity.
-- **Scope checks do not restrict native host writes.** Marshal hand-ins validate
-  the approved file list, and reserved governed changes need separate consent
-  before merge. General task execution may only warn about scope and goal drift.
-- **Process 05 alignment checks are advisory.** Goal drift and intermediate scope
-  warnings do not stop execution; Marshal hand-in validation rejects files outside
-  the approved task scope before acceptance.
-- **Scope checks only warn during Process 05 execution.** Out-of-scope changes and goal drift are recorded;
-  they do not stop the task at that stage. Marshal hand-in scope validation still applies.
+- **Scope is checked after the worker runs.** Out-of-scope changes and broken
+  explicit constraints fail the task, but native workers can still write outside
+  their scope on disk before the check. Goal drift is recorded as a warning and
+  does not stop the task. Marshal hand-ins validate the approved file list, and
+  reserved governed changes need separate consent before merge.
 - **The Marshal can read and write the whole project.** Protection is at
   approval and merge; a task's file list does not restrict the Marshal's access.
 - **Project directories must stay stable while applying work.** MARSHAL cannot

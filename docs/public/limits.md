@@ -43,10 +43,11 @@ not override unsupported flows. Native sessions remain separate.
 It can do tasks as a worker, but planning needs Codex, Claude Code or
 Antigravity.
 
-**Scope checks only warn.**
-MARSHAL notices when an agent changes files outside its task or drifts from
-the goal, and records it, but it does not stop the task. You see the warning
-when you review.
+**Scope is checked after the worker runs.**
+If an agent changes files outside its task or breaks an explicit constraint,
+the task fails. Native workers can still write those files before the check
+runs. Drift from the goal is only recorded as a warning; you see it when you
+review.
 
 **The Marshal can read and write the whole project.**
 Protection is at approval and merge. A task's file list does not restrict the
