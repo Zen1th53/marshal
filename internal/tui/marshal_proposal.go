@@ -331,7 +331,9 @@ func (w *Workspace) queueMarshalPlanApproval() {
 	if err := w.queueMarshalRunProposal(p); err != nil {
 		if !errors.Is(err, model.ErrNotFound) {
 			w.permissions.mu.Lock()
-			w.permissions.planApprovalPending = false
+			if w.permissions.planApprovalOccurrence == occurrence && w.permissions.planApprovalRunID == proposalRunID {
+				w.permissions.planApprovalPending = false
+			}
 			w.permissions.mu.Unlock()
 			if w.store != nil && occurrence != "" {
 				_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, occurrence, "rejected")
@@ -341,7 +343,9 @@ func (w *Workspace) queueMarshalPlanApproval() {
 		return
 	}
 	w.permissions.mu.Lock()
-	w.permissions.planApprovalPending = false
+	if w.permissions.planApprovalOccurrence == occurrence && w.permissions.planApprovalRunID == proposalRunID {
+		w.permissions.planApprovalPending = false
+	}
 	w.permissions.mu.Unlock()
 }
 

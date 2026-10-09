@@ -380,13 +380,23 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	runID := saved.RunID
 	var recoveringRun *marshal.Run
 	if runID != "" {
-		if s, _, _, err := w.marshalService(ctx, runID); err == nil {
-			if run, snapErr := s.Snapshot(ctx, runID); snapErr == nil && run.State != marshal.Closed {
-				recoveringRun = &run
-			}
+		s, _, _, err := w.marshalService(ctx, runID)
+		if err != nil {
+			return "", err
+		}
+		run, err := s.Snapshot(ctx, runID)
+		switch {
+		case errors.Is(err, model.ErrNotFound):
+			// The saved chat may still be producing its first draft.
+		case err != nil:
+			return "", err
+		case run.State == marshal.Closed:
+			runID = ""
+		default:
+			recoveringRun = &run
 		}
 	}
-	if recoveringRun == nil {
+	if runID == "" {
 		runID = fmt.Sprintf("RUN-%d", time.Now().UTC().UnixNano())
 	}
 	service, selected, note, err := w.marshalService(ctx, runID)
@@ -398,7 +408,7 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	}
 	root := service.Repository
 	for _, leftover := range []string{marshalDraftRelativePath, app.MarshalPackRelativePath} {
-		if recoveringRun != nil {
+		if saved.RunID == runID {
 			break
 		}
 		path := filepath.Join(root, leftover)
