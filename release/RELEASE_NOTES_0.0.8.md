@@ -80,6 +80,9 @@ Evidence and verification integrity.
   to Standard otherwise.
 - ULTRA worker hand-ins are collected and reviewed as soon as ready, merging
   sequentially in plan order.
+- `/ultra status` and `/ultra start` report when an installation holds no ULTRA
+  entitlement instead of treating missing entitlement as an activation failure
+  with retry advice.
 
 ### Credentials and A2A
 

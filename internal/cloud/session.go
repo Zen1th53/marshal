@@ -26,6 +26,8 @@ var (
 	ErrRefused             = errors.New("cloud: refused")
 	ErrRateLimited         = errors.New("cloud: registration rate limited")
 	ErrUnknownInstallation = errors.New("cloud: unknown installation")
+	// ErrEntitlementUnavailable marks an installation that has no usable ULTRA entitlement.
+	ErrEntitlementUnavailable = errors.New("cloud: entitlement unavailable")
 	// ErrInsecureEndpoint marks an endpoint that is not HTTPS.
 	ErrInsecureEndpoint = errors.New("cloud: endpoint must be https")
 )
@@ -44,6 +46,34 @@ const requestTimeout = 10 * time.Second
 // its job is to be kind to a server that is already struggling, and a server
 // does not care what clock the client is reasoning with.
 const retryInterval = 15 * time.Second
+
+// RefusalError records a structured rejection from the Community Cloud.
+type RefusalError struct {
+	StatusCode int
+	Code       string
+	Message    string
+	Err        error
+}
+
+func (e *RefusalError) Error() string {
+	base := "cloud: refused"
+	if e.Err != nil {
+		base = e.Err.Error()
+	}
+	if e.Code != "" {
+		return fmt.Sprintf("%s: server returned %d (%s: %s)", base, e.StatusCode, e.Code, e.Message)
+	}
+	return fmt.Sprintf("%s: server returned %d", base, e.StatusCode)
+}
+
+func (e *RefusalError) Unwrap() error {
+	return e.Err
+}
+
+// Is matches ErrEntitlementUnavailable for the server's 403 entitlement refusal.
+func (e *RefusalError) Is(target error) bool {
+	return target == ErrEntitlementUnavailable && e.StatusCode == http.StatusForbidden && e.Code == "entitlement_unavailable"
+}
 
 // Client talks to the Community Cloud.
 //
@@ -132,9 +162,17 @@ func (c *Client) post(ctx context.Context, path string, in, out any) error {
 			Message string `json:"message"`
 		}
 		if err := json.NewDecoder(io.LimitReader(resp.Body, 2048)).Decode(&reason); err == nil && reason.Code != "" {
-			return fmt.Errorf("%w: server returned %d (%s: %s)", ErrRefused, resp.StatusCode, reason.Code, reason.Message)
+			return &RefusalError{
+				StatusCode: resp.StatusCode,
+				Code:       reason.Code,
+				Message:    reason.Message,
+				Err:        ErrRefused,
+			}
 		}
-		return fmt.Errorf("%w: server returned %d", ErrRefused, resp.StatusCode)
+		return &RefusalError{
+			StatusCode: resp.StatusCode,
+			Err:        ErrRefused,
+		}
 	}
 	if out == nil {
 		return nil
