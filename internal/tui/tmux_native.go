@@ -885,7 +885,7 @@ func (w *Workspace) monitorAgent(
 								w.RecordActivity(err.Error())
 								continue
 							}
-							w.RecordActivity("Marshal chat closed. Use /marshal chat to reopen it.")
+							w.RecordActivity(marshalChatClosedMessage(root))
 							w.updateTmuxStatusLine(context.Background())
 							return
 						}
