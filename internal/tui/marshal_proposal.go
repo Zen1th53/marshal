@@ -727,6 +727,9 @@ func (w *Workspace) monitorGoverningIntegrity() {
 		return
 	}
 	if err := service.CheckGoverningIntegrity(context.Background(), runID); err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			return
+		}
 		m.mu.Lock()
 		m.integrityAlertRunID = runID
 		m.mu.Unlock()

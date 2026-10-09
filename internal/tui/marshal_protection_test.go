@@ -145,6 +145,56 @@ func TestMonitorShowsGoverningIntegrityAlert(t *testing.T) {
 	}
 }
 
+func TestMonitorSkipsMissingRunAndAlertsOnLaterMismatch(t *testing.T) {
+	w, rt := realControlWorkspace(t, "SESSION-missing-run-integrity", false)
+	service := rt.Marshal()
+	runID := "pending-start-run"
+	m := w.marshalSession()
+	m.service, m.runID = service, runID
+
+	// 1. Missing run record must not produce a governance integrity alert.
+	w.observeMarshalProposalFiles(rt.ProjectRoot())
+	if strings.Contains(w.state.LastOutput, "Governance integrity alert") {
+		t.Fatalf("unexpected alert on unpersisted run: %s", w.state.LastOutput)
+	}
+	m.mu.Lock()
+	alerted := m.integrityAlertRunID
+	m.mu.Unlock()
+	if alerted != "" {
+		t.Fatalf("expected integrityAlertRunID to remain empty for unpersisted run, got %q", alerted)
+	}
+
+	// 2. Once the run is saved with a mismatched baseline, integrity monitoring must alert.
+	run := marshal.Run{
+		PlanID:          "PLAN-integrity-late",
+		PlanVersion:     1,
+		Settings:        marshal.DefaultSettings(),
+		State:           marshal.Approved,
+		GoverningDigest: "sha256:mismatch",
+	}
+	if _, err := rt.Store().SetMarshalRun(t.Context(), rt.ProjectID(), runID, run, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	w.observeMarshalProposalFiles(rt.ProjectRoot())
+	if !strings.Contains(w.state.LastOutput, "Governance integrity alert: governing files changed unexpectedly") {
+		t.Fatalf("expected alert on later mismatch, got activity: %s", w.state.LastOutput)
+	}
+	m.mu.Lock()
+	alerted = m.integrityAlertRunID
+	m.mu.Unlock()
+	if alerted != runID {
+		t.Fatalf("expected integrityAlertRunID = %q, got %q", runID, alerted)
+	}
+
+	// 3. Repeated check should not emit duplicate alerts.
+	w.observeMarshalProposalFiles(rt.ProjectRoot())
+	events, err := rt.Store().MarshalDecisions(t.Context(), runID)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("duplicate/missing alert: %v %v", events, err)
+	}
+}
+
 func TestLegacyProposalAttributionDowngradeStillResolvesDuplicates(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-legacy-source", false)
 	line := `MARSHAL_PROPOSAL {"action":"setting","key":"control","value":"strict"}`
