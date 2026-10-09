@@ -41,6 +41,7 @@ Evidence and verification integrity.
 
 ### Governance integrity
 
+- The control centre keeps permission headings and network scope visible with pending items when the prompt fits the panel.
 - Constitutional suspension and stored version bindings now refuse dispatch and
   resume; unreadable bindings fail closed.
 - Governed results that change policy, CI, MARSHAL storage or agent instructions
