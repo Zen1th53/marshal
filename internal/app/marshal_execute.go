@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -178,11 +179,55 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 			}
 			return run, fmt.Errorf("marshal run %s cannot progress: no task is ready, handed in or accepted", runID)
 		}
-		if err := s.collectAll(ctx, runID, launched, observe, current); err != nil {
-			after, _ := current()
-			return after, err
+		policy := marshal.TierPolicy(s.Gate, run.Settings)
+		if policy.Tier == marshal.Ultra && len(launched) > 1 {
+			if err := s.collectAndReviewUltra(ctx, runID, launched, observe, current); err != nil {
+				after, _ := current()
+				return after, err
+			}
+		} else {
+			if err := s.collectAll(ctx, runID, launched, observe, current); err != nil {
+				after, _ := current()
+				return after, err
+			}
 		}
 	}
+}
+
+// collectAndReviewUltra collects and reviews each launched worker in ULTRA as soon
+// as it is ready. State writes to the run and store are serialized.
+func (s *MarshalService) collectAndReviewUltra(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error)) error {
+	var (
+		mu   sync.Mutex
+		wg   sync.WaitGroup
+		errs []error
+	)
+	for _, d := range launched {
+		wg.Add(1)
+		go func(dispatch MarshalDispatch) {
+			defer wg.Done()
+			if dispatch.Handle != nil && dispatch.Handle.Done() != nil {
+				select {
+				case <-dispatch.Handle.Done():
+				case <-ctx.Done():
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if _, err := s.CollectHandIn(ctx, runID, dispatch); err != nil {
+				errs = append(errs, fmt.Errorf("collect %s: %w", dispatch.TaskID, err))
+			} else {
+				if _, err := s.Review(ctx, runID, dispatch.TaskID, zeroMarshalCharge()); err != nil {
+					errs = append(errs, fmt.Errorf("review %s: %w", dispatch.TaskID, err))
+				}
+			}
+			if observe != nil {
+				_, _ = current()
+			}
+		}(d)
+	}
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 // collectAll collects every launched worker, even after one collection
@@ -206,7 +251,7 @@ func (s *MarshalService) collectAll(ctx context.Context, runID string, launched 
 func (s *MarshalService) mergeAccepted(ctx context.Context, runID string, run marshal.Run) (bool, error) {
 	progressed := false
 	for _, t := range run.Tasks {
-		if t.State == marshal.Merged {
+		if t.State == marshal.Merged || t.State == marshal.Cancelled {
 			continue
 		}
 		if t.State != marshal.Accepted {

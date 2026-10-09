@@ -22,11 +22,13 @@ type MarshalCriterionReport struct {
 
 // MarshalCompletionReport is a read-only projection of the durable run data.
 type MarshalCompletionReport struct {
-	Verifiers []marshal.VerifierEvidence
-	Criteria  []MarshalCriterionReport
-	Untested  []string
-	Risks     []string
-	Usage     marshal.Charge
+	ReviewLabel string
+	ChecksLabel string
+	Verifiers   []marshal.VerifierEvidence
+	Criteria    []MarshalCriterionReport
+	Untested    []string
+	Risks       []string
+	Usage       marshal.Charge
 }
 
 // CompletionReport reports only evidence and usage already stored for a run.
@@ -35,7 +37,10 @@ func (s *MarshalService) CompletionReport(ctx context.Context, runID string) (Ma
 	if err != nil {
 		return MarshalCompletionReport{}, err
 	}
-	report := MarshalCompletionReport{}
+	report := MarshalCompletionReport{
+		ReviewLabel: "Standard: review by the Marshal itself; independent review in ULTRA",
+		ChecksLabel: "approved checks passed",
+	}
 	_, report.Usage, err = s.marshalUsage(ctx, runID, "")
 	if err != nil {
 		return report, err

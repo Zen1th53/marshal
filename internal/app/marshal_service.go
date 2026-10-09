@@ -144,6 +144,23 @@ func validateDraft(d MarshalDraft) error {
 	if len(d.Tasks) != len(d.Plan.Tasks) {
 		return errors.New("Marshal task count differs from plan")
 	}
+	governedOnly := false
+	allowNative := false
+	for _, c := range d.Plan.HardConstraints {
+		if c == "allowed-mode:governed" {
+			governedOnly = true
+		}
+		if c == "allow-native-exception" {
+			allowNative = true
+		}
+	}
+	if governedOnly && !allowNative {
+		for _, t := range d.Tasks {
+			if t.Mode == marshal.Native {
+				return fmt.Errorf("task %s uses native mode in governed plan without explicit exception", t.PlanTaskID)
+			}
+		}
+	}
 	for _, t := range d.Tasks {
 		var p *plan.Task
 		for i := range d.Plan.Tasks {
@@ -252,6 +269,13 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	}
 	if err := validateDraft(d); err != nil {
 		return marshal.Run{}, err
+	}
+	if requestsGovernedWork(goal) && !allowsNativeException(goal) {
+		for _, task := range d.Tasks {
+			if task.Mode == marshal.Native {
+				return marshal.Run{}, fmt.Errorf("governed request refuses native task %s without explicit exception", task.PlanTaskID)
+			}
+		}
 	}
 	if d.Plan.ProjectID != s.CanonicalPlanProjectID() {
 		return marshal.Run{}, errors.New("plan belongs to another project")

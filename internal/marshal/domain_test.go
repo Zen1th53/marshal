@@ -16,7 +16,7 @@ func TestStateTransitions(t *testing.T) {
 		}
 	}
 	for from := range taskMoves {
-		for _, to := range []TaskState{Queued, Dispatched, HandedIn, Accepted, Returned, Reassigned, Escalated, Merged, "invalid"} {
+		for _, to := range []TaskState{Queued, Dispatched, HandedIn, Accepted, Returned, Reassigned, Escalated, Merged, Cancelled, "invalid"} {
 			err := TransitionTask(from, to)
 			if (err == nil) != slices.Contains(taskMoves[from], to) {
 				t.Fatalf("task %s -> %s", from, to)

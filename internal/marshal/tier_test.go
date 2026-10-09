@@ -27,6 +27,34 @@ func TestTierPolicyMarshalLeaseUsesSettings(t *testing.T) {
 	}
 }
 
+type fakeExecutionGate struct {
+	capable bool
+	enabled bool
+}
+
+func (g fakeExecutionGate) Capability(name string) bool {
+	return g.capable && name == CapabilityMarshal
+}
+
+func (g fakeExecutionGate) ExecutionEnabled() bool {
+	return g.enabled
+}
+
+func TestTierPolicyExecutionDisabledUsesStandard(t *testing.T) {
+	settings := DefaultSettings()
+	settings.UltraConcurrency = 4
+	// Entitled but execution off -> must use Standard with Concurrency 1
+	p := TierPolicy(fakeExecutionGate{capable: true, enabled: false}, settings)
+	if p.Tier != Standard || p.Concurrency != 1 || p.CrossReviewRequired || p.VerifierRequired {
+		t.Fatalf("expected Standard with concurrency 1 when execution is disabled, got: %+v", p)
+	}
+	// Entitled and execution on -> must use Ultra
+	pOn := TierPolicy(fakeExecutionGate{capable: true, enabled: true}, settings)
+	if pOn.Tier != Ultra || pOn.Concurrency != 4 || !pOn.CrossReviewRequired || !pOn.VerifierRequired {
+		t.Fatalf("expected Ultra when execution is enabled, got: %+v", pOn)
+	}
+}
+
 func TestTierPolicyExpiryAffectsNextDispatchOnly(t *testing.T) {
 	gate := fakeCapabilityGate(true)
 	running := TierPolicy(gate, DefaultSettings())

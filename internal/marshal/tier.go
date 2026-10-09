@@ -12,6 +12,12 @@ type CapabilityGate interface {
 	Capability(name string) bool
 }
 
+// ExecutionGate reports whether a capability is currently granted and execution is enabled.
+type ExecutionGate interface {
+	CapabilityGate
+	ExecutionEnabled() bool
+}
+
 // DispatchPolicy is the execution policy selected for one dispatch.
 type DispatchPolicy struct {
 	Tier                Tier
@@ -23,6 +29,9 @@ type DispatchPolicy struct {
 // TierPolicy reads the gate when dispatch is about to start.
 func TierPolicy(gate CapabilityGate, settings Settings) DispatchPolicy {
 	if gate == nil || !gate.Capability(CapabilityMarshal) {
+		return DispatchPolicy{Tier: Standard, Concurrency: 1}
+	}
+	if eg, ok := gate.(interface{ ExecutionEnabled() bool }); ok && !eg.ExecutionEnabled() {
 		return DispatchPolicy{Tier: Standard, Concurrency: 1}
 	}
 	concurrency := settings.UltraConcurrency

@@ -359,6 +359,9 @@ func (wm *WorktreeManager) ReconcileChanges(wtPath string, permittedFiles []stri
 	if err != nil || !os.SameFile(wm.projectInfo, targetInfo) {
 		return nil, fmt.Errorf("%w: project root changed", ErrIsolationCompromised)
 	}
+	if permittedFiles == nil {
+		permittedFiles = []string{}
+	}
 	return reconcileFiles(source, target, permittedFiles, []string{".git", ".marshal"})
 }
 

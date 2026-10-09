@@ -36,6 +36,12 @@ and reports the reason and next step when a pause needs operator action.
 - A2A construction requires a configured authentication manager. Unauthenticated
   task import requires explicit insecure construction or `--insecure`, with
   a literal loopback listen address and loopback peers.
+- Governed requests refuse native tasks in drafts unless the operator explicitly allows an exception.
+- ULTRA work requires both entitlement and execution enabled, safely falling back to Standard otherwise.
+- Escalated tasks support operator `/marshal retry`, `/marshal reassign` and `/marshal cancel` where permitted; single-provider tasks support bounded fresh-session retries.
+- ULTRA worker hand-ins are collected and reviewed as soon as ready, merging sequentially in plan order.
+- Completion reports label Standard review as the Marshal's own ("Standard: review by the Marshal itself; independent review in ULTRA") and confirm approved checks passed.
+- Process 05 scope and explicit constraints are checked against the recorded base and are hard; semantic drift remains an advisory warning.
 
 ## Requirements
 

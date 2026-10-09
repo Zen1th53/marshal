@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
@@ -23,11 +24,13 @@ import (
 
 // MarshalCLI runs one structured, noninteractive model turn at a time.
 type MarshalCLI struct {
-	Provider       string
-	Binary         string
-	Dir            string
-	ProjectID      string
-	ConversationID string
+	Provider             string
+	Binary               string
+	Dir                  string
+	ProjectID            string
+	ConversationID       string
+	AllowedModes         []marshal.WorkerMode
+	AllowNativeException bool
 }
 
 func (m *MarshalCLI) MarshalConversationID() string {
@@ -186,6 +189,20 @@ func marshalCLIOutput(provider string, data []byte) ([]byte, string, error) {
 // MarshalCheckContract also governs the interactive planner briefing.
 const MarshalCheckContract = "Checks run in a fresh checkout of the committed result in a clean sandbox with no worker environment, network or temporary files from the worker. The source is read-only; write build outputs and generated reports under $MARSHAL_BUILD_DIR or /tmp. Checks must use only repository content; commit any evidence they need into the repository. Checks are rerun after an integration merge: verify the resulting repository content (files and their contents, build/test commands), never commit history, HEAD diffs or commit structure (including git diff-tree, log, rev-list or show HEAD). MARSHAL already records changed-file scope; do not ask checks to verify that scope. "
 
+func requestsGovernedWork(goal string) bool {
+	lower := strings.ToLower(goal)
+	return strings.Contains(lower, "governed")
+}
+
+func allowsNativeException(goal string) bool {
+	lower := strings.ToLower(goal)
+	return strings.Contains(lower, "allow native") ||
+		strings.Contains(lower, "permit native") ||
+		strings.Contains(lower, "native exception") ||
+		strings.Contains(lower, "allow-native") ||
+		strings.Contains(lower, "native allowed")
+}
+
 func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, error) {
 	if m.ProjectID == "" {
 		return MarshalDraft{}, errors.New("Marshal model has no project binding")
@@ -193,6 +210,13 @@ func (m *MarshalCLI) Draft(ctx context.Context, goal string) (MarshalDraft, erro
 	workers := m.availableWorkers()
 	if len(workers) == 0 {
 		return MarshalDraft{}, errors.New("no worker CLI is available")
+	}
+	if requestsGovernedWork(goal) {
+		m.AllowedModes = []marshal.WorkerMode{marshal.Governed}
+		m.AllowNativeException = allowsNativeException(goal)
+	} else {
+		m.AllowedModes = nil
+		m.AllowNativeException = false
 	}
 	var proposal marshalTaskProposal
 	err := m.turn(ctx, "Return JSON tasks for this goal. Use only worker names from "+strings.Join(workers, ", ")+". Use mode governed for codex and claude unless the operator explicitly requests native; agy uses native; opencode defaults to native and also supports governed when requested. Honour a goal that requests governed work. Each task declares type change, inspection, or verification. Change tasks must produce a change; inspection and verification may have an unchanged result only with complete passing evidence. Each task needs a unique short id, precise acceptance criteria, exact files to change, dependencies, and executable checks with explicit command and criteria fields: copy each criterion string verbatim from the task criteria into the checks that prove it; cover every criterion without paraphrasing. "+MarshalCheckContract+"Instructions must refer to the runtime-assigned worktree, never hardcode this checkout path; file tools may use absolute paths inside that assigned worktree, and must carry instructions (purpose, approach, what to leave alone) and an expected output. Draft the tasks only; do not perform them. Keep tasks small. Goal: "+goal, marshalDraftSchema, &proposal)
@@ -291,6 +315,14 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 		}
 	}
 	p := plan.ExecutionPlan{ID: planID, ProjectID: projectid.ID(m.ProjectID), Goal: plan.GoalBinding{GoalID: "GOAL-" + planID, Revision: 1}, Version: version, State: plan.StateReady, Mode: plan.ModeStandard, ConstitutionVersion: constitution.Current, Checks: map[string][]string{}}
+	if m != nil && len(m.AllowedModes) > 0 {
+		for _, am := range m.AllowedModes {
+			p.HardConstraints = append(p.HardConstraints, "allowed-mode:"+string(am))
+		}
+		if m.AllowNativeException {
+			p.HardConstraints = append(p.HardConstraints, "allow-native-exception")
+		}
+	}
 	draft := MarshalDraft{Plan: p}
 	for _, item := range proposal.Tasks {
 		allowed := false
@@ -312,6 +344,9 @@ func (m *MarshalCLI) materialize(proposal marshalTaskProposal, planID string, ve
 		}
 		if mode == marshal.Governed && item.Worker != "codex" && item.Worker != "claude" && item.Worker != "opencode" {
 			return MarshalDraft{}, fmt.Errorf("worker %s does not support governed mode", item.Worker)
+		}
+		if mode == marshal.Native && m != nil && slices.Contains(m.AllowedModes, marshal.Governed) && !m.AllowNativeException {
+			return MarshalDraft{}, fmt.Errorf("task %s uses native mode in governed plan without explicit exception", item.ID)
 		}
 		kind := item.Type
 		if kind == "" {

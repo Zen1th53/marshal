@@ -127,6 +127,7 @@ const (
 	Reassigned TaskState = "reassigned"
 	Escalated  TaskState = "escalated"
 	Merged     TaskState = "merged"
+	Cancelled  TaskState = "cancelled"
 )
 
 var runMoves = map[RunState][]RunState{
@@ -145,8 +146,9 @@ var taskMoves = map[TaskState][]TaskState{
 	Accepted:   {Merged, Returned},                          // Accepted work merges or a conflict returns it.
 	Returned:   {Dispatched, Reassigned, Escalated},         // Rework retries, changes worker, or escalates.
 	Reassigned: {Dispatched, Escalated},                     // The new worker starts or reassignment cannot proceed.
-	Escalated:  {},                                          // User intervention ends automatic task moves.
+	Escalated:  {Returned, Reassigned, Cancelled},           // Operator can retry, reassign or cancel.
 	Merged:     {},                                          // Integrated work is final for this task.
+	Cancelled:  {},                                          // Cancelled task ends work.
 }
 
 // TransitionRun rejects phase changes outside the run lifecycle.
@@ -217,8 +219,10 @@ type Task struct {
 	EvidenceAttemptBase int `json:",omitempty"`
 	// Instructions and ExpectedOutput are copied from the approved plan task;
 	// the worker's brief carries them.
-	Instructions   string `json:",omitempty"`
-	ExpectedOutput string `json:",omitempty"`
+	Instructions        string `json:",omitempty"`
+	ExpectedOutput      string `json:",omitempty"`
+	EscalationReason    string `json:",omitempty"`
+	FreshSessionRetries int    `json:",omitempty"`
 }
 
 // CloseAuthorization records the user's digest-bound standing consent to close.

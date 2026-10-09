@@ -39,6 +39,9 @@ const marshalUsage = `Marshal mode — one model plans with you, then marshals t
   /marshal amend approve|deny      Approve or deny a major amended plan
   /marshal accept <task>           Approve one task for user acceptance mode
   /marshal return <task> <reason>  Send a task awaiting your decision back to its worker
+  /marshal retry <task> [fresh-session]  Retry an escalated task (optional fresh session for one provider)
+  /marshal reassign <task> <worker>      Reassign an escalated task to another worker
+  /marshal cancel <task>                 Cancel an escalated task
   /marshal resume                  Continue a run that stopped or was interrupted
   /marshal stop                    Stop the running run; its state is kept
   /marshal model <codex|claude|agy>  Switch the Marshal and remember the provider for this project
@@ -146,9 +149,11 @@ func (w *Workspace) marshalFailurePanel(runID, provider string, run marshal.Run,
 
 var marshalSubcommands = []string{"chat", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task"}
 
+var allMarshalSubcommands = []string{"chat", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task", "retry", "reassign", "cancel"}
+
 // marshalTypoSuggestion prefers a unique prefix, then the closest spelling.
 func marshalTypoSuggestion(word string) string {
-	return commandTypoSuggestion(word, marshalSubcommands, true)
+	return commandTypoSuggestion(word, allMarshalSubcommands, true)
 }
 
 // commandTypoSuggestion shares the distance-two typo policy. Marshal also
@@ -249,6 +254,12 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 		return w.marshalAccept(args[1:])
 	case "return":
 		return w.marshalReturn(ctx, args[1:])
+	case "retry":
+		return w.marshalRetry(ctx, args[1:])
+	case "reassign":
+		return w.marshalReassign(ctx, args[1:])
+	case "cancel":
+		return w.marshalCancel(ctx, args[1:])
 	case "close":
 		return w.marshalClose(ctx)
 	case "stop":
@@ -635,7 +646,7 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 	}
 	var gate marshal.CapabilityGate
 	if w.ultra != nil {
-		gate = w.ultra
+		gate = workspaceUltraGate{gate: w.ultra, execution: w.ultraExecution}
 	}
 	service, err := w.runtime.MarshalWired(app.MarshalWiring{Provider: provider, Gate: gate, Approver: m.approver})
 	if err != nil {
@@ -646,6 +657,22 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 		w.wrapServiceDriversForTmux(service)
 	}
 	return service, provider, note, nil
+}
+
+type workspaceUltraGate struct {
+	gate      marshal.CapabilityGate
+	execution bool
+}
+
+func (g workspaceUltraGate) Capability(name string) bool {
+	if g.gate == nil {
+		return false
+	}
+	return g.gate.Capability(name)
+}
+
+func (g workspaceUltraGate) ExecutionEnabled() bool {
+	return g.execution
 }
 
 // marshalReserve owns the session until the background operation finishes.
@@ -1380,6 +1407,86 @@ func (w *Workspace) marshalReturn(ctx context.Context, args []string) (string, e
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "task "+task+" returned by you"))
 	}
 	return fmt.Sprintf("Task %s returned (%s); /marshal resume to continue.", task, verdict), nil
+}
+
+func (w *Workspace) marshalRetry(ctx context.Context, args []string) (string, error) {
+	if len(args) < 1 || len(args) > 2 {
+		return "", errors.New("usage: /marshal retry <task> [fresh-session]")
+	}
+	m, service, runID, provider, err := w.marshalActive(ctx)
+	if err != nil {
+		return "", err
+	}
+	m.mu.Lock()
+	busy := m.busy
+	m.mu.Unlock()
+	if busy {
+		return "", errors.New("a Marshal operation is already running; /marshal stop first")
+	}
+	task := args[0]
+	freshSession := false
+	if len(args) == 2 {
+		if strings.EqualFold(args[1], "fresh-session") || strings.EqualFold(args[1], "fresh") || strings.EqualFold(args[1], "true") {
+			freshSession = true
+		} else {
+			return "", errors.New("usage: /marshal retry <task> [fresh-session]")
+		}
+	}
+	if err := service.RetryTask(ctx, runID, task, freshSession); err != nil {
+		return "", err
+	}
+	if run, loadErr := service.Snapshot(ctx, runID); loadErr == nil {
+		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "task "+task+" retried"))
+	}
+	return fmt.Sprintf("Task %s retried; /marshal resume to continue.", task), nil
+}
+
+func (w *Workspace) marshalReassign(ctx context.Context, args []string) (string, error) {
+	if len(args) != 2 || strings.TrimSpace(args[0]) == "" || strings.TrimSpace(args[1]) == "" {
+		return "", errors.New("usage: /marshal reassign <task> <worker>")
+	}
+	m, service, runID, provider, err := w.marshalActive(ctx)
+	if err != nil {
+		return "", err
+	}
+	m.mu.Lock()
+	busy := m.busy
+	m.mu.Unlock()
+	if busy {
+		return "", errors.New("a Marshal operation is already running; /marshal stop first")
+	}
+	task, worker := args[0], args[1]
+	if err := service.Reassign(ctx, runID, task, worker); err != nil {
+		return "", err
+	}
+	if run, loadErr := service.Snapshot(ctx, runID); loadErr == nil {
+		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "task "+task+" reassigned to "+worker))
+	}
+	return fmt.Sprintf("Task %s reassigned to %s; /marshal resume to continue.", task, worker), nil
+}
+
+func (w *Workspace) marshalCancel(ctx context.Context, args []string) (string, error) {
+	if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
+		return "", errors.New("usage: /marshal cancel <task>")
+	}
+	m, service, runID, provider, err := w.marshalActive(ctx)
+	if err != nil {
+		return "", err
+	}
+	m.mu.Lock()
+	busy := m.busy
+	m.mu.Unlock()
+	if busy {
+		return "", errors.New("a Marshal operation is already running; /marshal stop first")
+	}
+	task := args[0]
+	if err := service.CancelTask(ctx, runID, task); err != nil {
+		return "", err
+	}
+	if run, loadErr := service.Snapshot(ctx, runID); loadErr == nil {
+		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "task "+task+" cancelled"))
+	}
+	return fmt.Sprintf("Task %s cancelled; /marshal resume to continue.", task), nil
 }
 
 // marshalSettings shows or changes the project's Marshal settings.

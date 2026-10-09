@@ -146,3 +146,21 @@ func TestMarshalHelpCloseRecoveryInstruction(t *testing.T) {
 		t.Fatalf("close recovery: %v (repo %s)", err, repo)
 	}
 }
+
+func TestCompletionReportLabelsStandardReview(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 1)
+	if _, err := s.StartPlanning(ctx, "run-standard-report", "write files", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	report, err := s.CompletionReport(ctx, "run-standard-report")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.ReviewLabel != "Standard: review by the Marshal itself; independent review in ULTRA" {
+		t.Fatalf("unexpected review label: %q", report.ReviewLabel)
+	}
+	if report.ChecksLabel != "approved checks passed" {
+		t.Fatalf("unexpected checks label: %q", report.ChecksLabel)
+	}
+}

@@ -70,6 +70,47 @@ func TestMarshalCLIMaterializesGraphFromTaskProposal(t *testing.T) {
 	}
 }
 
+func TestGovernedRequestRefusesNativeTaskWithoutException(t *testing.T) {
+	m := &MarshalCLI{
+		ProjectID:    "PROJECT-0123456789abcdef0123456789abcdef",
+		AllowedModes: []marshal.WorkerMode{marshal.Governed},
+	}
+	var proposal marshalTaskProposal
+	if err := json.Unmarshal([]byte(`{"tasks":[{"id":"a","title":"write a","mode":"native","criteria":["a exists"],"paths":["a.txt"],"depends_on":[],"worker":"codex","checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`), &proposal); err != nil {
+		t.Fatal(err)
+	}
+
+	// Governed constraint refuses native task
+	if _, err := m.materialize(proposal, "", 1, []string{"codex"}); err == nil {
+		t.Fatal("expected native task in governed request to be refused")
+	}
+
+	// Explicit exception permits it
+	m.AllowNativeException = true
+	draft, err := m.materialize(proposal, "", 1, []string{"codex"})
+	if err != nil {
+		t.Fatalf("expected exception to permit native task, got error: %v", err)
+	}
+	if err := validateDraft(draft); err != nil {
+		t.Fatalf("expected validateDraft to pass with exception, got: %v", err)
+	}
+
+	// Service StartPlanningFromDraft also refuses native task for governed goal
+	s, _ := marshalFixture(t, 1)
+	mNoException := &MarshalCLI{ProjectID: s.ProjectID}
+	draftNative, err := mNoException.materialize(proposal, "", 1, []string{"codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartPlanningFromDraft(t.Context(), "run-gov", "implement auth in governed mode", draftNative, marshal.Budget{}); err == nil {
+		t.Fatal("expected StartPlanningFromDraft to refuse native task for governed goal")
+	}
+	// With explicit exception in goal:
+	if _, err := s.StartPlanningFromDraft(t.Context(), "run-gov2", "implement auth in governed mode (allow native exception)", draftNative, marshal.Budget{}); err != nil {
+		t.Fatalf("expected explicit exception in goal to succeed, got: %v", err)
+	}
+}
+
 func TestMarshalCLIRealModelDraft(t *testing.T) {
 	if os.Getenv("MARSHAL_REAL_MODEL") != "1" {
 		t.Skip("set MARSHAL_REAL_MODEL=1 for a live provider turn")

@@ -273,6 +273,155 @@ func TestM09ReturnTwiceReassignThenEscalate(t *testing.T) {
 	}
 }
 
+func TestEscalatedTaskRetryReassignCancel(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 2)
+	s.Drivers["third"] = driver.Governed{Provider: "third", Run: func(_ context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
+		return nil, nil
+	}}
+	if _, err := s.StartPlanning(ctx, "run", "write file", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Escalate task "a" with rework limit reason
+	if err := s.Escalate(ctx, "run", "a", "worker rework limit reached"); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Retry task "a"
+	if err := s.RetryTask(ctx, "run", "a", false); err != nil {
+		t.Fatalf("retry failed: %v", err)
+	}
+	run, _, err := s.load(ctx, "run")
+	if err != nil || run.Tasks[0].State != marshal.Returned || run.State != marshal.Dispatching {
+		t.Fatalf("unexpected state after retry: %+v", run)
+	}
+
+	// 3. Reassign task "a" from escalated state
+	if err := s.Escalate(ctx, "run", "a", "worker rework limit reached"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Reassign(ctx, "run", "a", "third"); err != nil {
+		t.Fatalf("reassign from escalated failed: %v", err)
+	}
+	run, _, err = s.load(ctx, "run")
+	if err != nil || run.Tasks[0].State != marshal.Reassigned || run.Tasks[0].Worker != "third" {
+		t.Fatalf("unexpected state after reassign: %+v", run)
+	}
+
+	// 4. Cancel task "a" from escalated state
+	if err := s.Escalate(ctx, "run", "a", "no worker available"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CancelTask(ctx, "run", "a"); err != nil {
+		t.Fatalf("cancel failed: %v", err)
+	}
+	run, _, err = s.load(ctx, "run")
+	if err != nil || run.Tasks[0].State != marshal.Cancelled {
+		t.Fatalf("unexpected state after cancel: %+v", run)
+	}
+	// Task "b" is still queued so run is dispatching
+	if run.State != marshal.Dispatching {
+		t.Fatalf("run state should be dispatching, got %s", run.State)
+	}
+	// Cancel task "b" as well -> all tasks are Merged or Cancelled -> transitions to Verifying
+	if err := s.Escalate(ctx, "run", "b", "not needed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CancelTask(ctx, "run", "b"); err != nil {
+		t.Fatal(err)
+	}
+	run, _, err = s.load(ctx, "run")
+	if err != nil || run.State != marshal.Verifying {
+		t.Fatalf("run state should be verifying after all tasks cancelled, got: %s", run.State)
+	}
+
+	// 5. Permanent escalation reasons cannot be cleared by retry, reassign, or cancel
+	sPerm, _ := marshalFixture(t, 1)
+	if _, err := sPerm.StartPlanning(ctx, "run-perm", "write file", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sPerm.Approve(ctx, "run-perm"); err != nil {
+		t.Fatal(err)
+	}
+	for _, reason := range []string{"plan budget exceeded", "security: honeypot touched", "quarantine active", "suspension enforced"} {
+		if err := sPerm.Escalate(ctx, "run-perm", "a", reason); err != nil {
+			t.Fatal(err)
+		}
+		if err := sPerm.RetryTask(ctx, "run-perm", "a", false); err == nil {
+			t.Fatalf("expected RetryTask to fail for reason %q", reason)
+		}
+		if err := sPerm.Reassign(ctx, "run-perm", "a", "other"); err == nil {
+			t.Fatalf("expected Reassign to fail for reason %q", reason)
+		}
+		if err := sPerm.CancelTask(ctx, "run-perm", "a"); err == nil {
+			t.Fatalf("expected CancelTask to fail for reason %q", reason)
+		}
+	}
+}
+
+func TestSingleProviderFreshSessionRetryBounded(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 1)
+	// Clear other drivers so only one worker exists
+	for k := range s.Drivers {
+		if k != "worker" {
+			delete(s.Drivers, k)
+		}
+	}
+	for k := range s.GovernedDrivers {
+		if k != "worker" {
+			delete(s.GovernedDrivers, k)
+		}
+	}
+	if _, err := s.StartPlanning(ctx, "run", "write file", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Escalate(ctx, "run", "a", "worker rework limit reached"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Retry without fresh-session flag fails for single provider
+	if err := s.RetryTask(ctx, "run", "a", false); err == nil {
+		t.Fatal("expected retry without fresh session to fail for single provider")
+	}
+
+	// Fresh session retry 1 succeeds
+	if err := s.RetryTask(ctx, "run", "a", true); err != nil {
+		t.Fatalf("fresh session retry 1 failed: %v", err)
+	}
+	run, _, err := s.load(ctx, "run")
+	if err != nil || run.Tasks[0].FreshSessionRetries != 1 || run.Tasks[0].State != marshal.Returned {
+		t.Fatalf("unexpected state after fresh session retry 1: %+v", run)
+	}
+
+	// Fresh session retry 2 succeeds
+	if err := s.Escalate(ctx, "run", "a", "worker rework limit reached"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RetryTask(ctx, "run", "a", true); err != nil {
+		t.Fatalf("fresh session retry 2 failed: %v", err)
+	}
+	run, _, err = s.load(ctx, "run")
+	if err != nil || run.Tasks[0].FreshSessionRetries != 2 || run.Tasks[0].State != marshal.Returned {
+		t.Fatalf("unexpected state after fresh session retry 2: %+v", run)
+	}
+
+	// Fresh session retry 3 fails (bound reached)
+	if err := s.Escalate(ctx, "run", "a", "worker rework limit reached"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RetryTask(ctx, "run", "a", true); err == nil {
+		t.Fatal("expected fresh session retry to fail after reaching bounded limit")
+	}
+}
+
 func TestM09MajorAmendmentPausesDispatch(t *testing.T) {
 	ctx := context.Background()
 	s, _ := marshalFixture(t, 1)
