@@ -787,7 +787,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 					Recoverable: false,
 				})
 			} else {
-				// Advisory alignment check of the task's changes against its goal,
+				// Alignment check of the task's changes against its goal,
 				// taken before the worktree is committed or reconciled.
 				e.mu.RLock()
 				goal, haveGoal := e.cachedGoal[run.RunID]

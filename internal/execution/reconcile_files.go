@@ -82,7 +82,7 @@ func reconcileFiles(source, target *os.Root, permitted, skips []string) (modifie
 			} else if !os.IsNotExist(err) {
 				return err
 			}
-			if len(scopes) == 0 {
+			if permitted == nil {
 				directories = append(directories, path)
 			}
 			return nil
@@ -108,7 +108,7 @@ func reconcileFiles(source, target *os.Root, permitted, skips []string) (modifie
 		if err == nil && bytes.Equal(data, f.before) && f.mode == f.info.Mode().Perm() {
 			return nil
 		}
-		allowed := len(scopes) == 0
+		allowed := permitted == nil
 		for _, scope := range scopes {
 			if path == scope || strings.HasPrefix(path, scope+"/") {
 				allowed = true

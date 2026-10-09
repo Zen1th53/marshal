@@ -12,6 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
@@ -485,5 +486,138 @@ func TestMarshalReassignmentReportsUnsupportedModeToOperator(t *testing.T) {
 	last := decisions[len(decisions)-1]
 	if !strings.Contains(fmt.Sprint(last.Data["reason"]), "no other worker supports governed mode") {
 		t.Fatalf("missing durable reason: %+v", last)
+	}
+}
+
+type ultraGate struct {
+	enabled bool
+}
+
+func (g ultraGate) Capability(name string) bool { return name == marshal.CapabilityMarshal }
+func (g ultraGate) ExecutionEnabled() bool      { return g.enabled }
+
+func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 2)
+	s.Gate = ultraGate{enabled: true}
+	s.ModelProvider = "test"
+	s.CrossReview = func(_ context.Context, t marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
+		ref := "check:test -f " + t.PlanTaskID + ".txt"
+		return marshal.Review{Verdict: marshal.VerdictAccept, Reviewer: "second", EvidenceRefs: []string{ref}}, "test", nil
+	}
+	s.VerifierProvider = func(context.Context, marshal.Run) (string, error) { return "test", nil }
+	s.IndependentVerify = func(_ context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
+		return marshal.VerifierEvidence{Reviewer: "verifier", Provider: "verifier", Commit: head, Verdict: "pass", InputDigest: verifierInputDigest(run, head, session)}, nil
+	}
+
+	settings, err := s.Store.GetMarshalSettings(ctx, s.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Value.UltraConcurrency = 2
+	if _, err := s.Store.SetMarshalSettings(ctx, s.ProjectID, settings.Value, settings.Revision); err != nil {
+		t.Fatal(err)
+	}
+
+	fakeModel := s.Model.(marshalFakeModel)
+	draft := fakeModel.draft
+	draft.Tasks[1].DependsOn = nil
+	draft.Plan.Tasks[1].DependsOn = nil
+	g, err := plan.BuildGraph(draft.Plan.Tasks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft.Plan.Graph = g
+	s.Model = marshalFakeModel{draft: draft, review: fakeModel.review}
+
+	if _, err := s.StartPlanning(ctx, "run-ultra", "write files", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(ctx, "run-ultra"); err != nil {
+		t.Fatal(err)
+	}
+
+	runRec, err := s.Store.GetMarshalRun(ctx, s.ProjectID, "run-ultra")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runRec.Value.Process05Bound = false
+	if _, err := s.Store.SetMarshalRun(ctx, s.ProjectID, "run-ultra", runRec.Value, runRec.Revision); err != nil {
+		t.Fatal(err)
+	}
+
+	releaseA := make(chan struct{})
+	bHandedIn := make(chan struct{})
+
+	// Task a waits for releaseA
+	// Task b completes immediately and signals bHandedIn
+	s.Drivers["worker"] = driver.Governed{
+		Provider: "worker",
+		Run: func(_ context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
+			if req.Task.PlanTaskID == "a" {
+				<-releaseA
+				_ = os.WriteFile(filepath.Join(req.Worktree, "a.txt"), []byte("a\n"), 0600)
+			} else {
+				_ = os.WriteFile(filepath.Join(req.Worktree, "b.txt"), []byte("b\n"), 0600)
+				close(bHandedIn)
+			}
+			return nil, nil
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, execErr := s.Execute(ctx, "run-ultra", marshalBrief, nil)
+		done <- execErr
+	}()
+
+	// Wait for b to finish
+	select {
+	case <-bHandedIn:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for task b to finish")
+	}
+
+	// Wait for task b to be collected and reviewed while task a is still blocked
+	var run marshal.Run
+	for range 50 {
+		time.Sleep(50 * time.Millisecond)
+		r, _, err := s.load(ctx, "run-ultra")
+		if err == nil {
+			run = r
+			if len(r.Tasks) == 2 && r.Tasks[1].State == marshal.Accepted {
+				break
+			}
+		}
+	}
+	if len(run.Tasks) < 2 {
+		t.Fatalf("expected 2 tasks in run, got: %+v", run)
+	}
+	if run.Tasks[1].State != marshal.Accepted {
+		t.Fatalf("task b should be collected and reviewed as soon as ready; got state: %s, task 0 state: %s, run state: %s", run.Tasks[1].State, run.Tasks[0].State, run.State)
+	}
+	// Verify task a is still dispatched
+	if run.Tasks[0].State != marshal.Dispatched {
+		t.Fatalf("task a should still be dispatched, got: %s", run.Tasks[0].State)
+	}
+
+	// Release task a so it can complete
+	close(releaseA)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("execute failed: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("execute timed out after releasing task a")
+	}
+
+	// Both tasks should now be merged in plan order
+	finalRun, _, err := s.load(ctx, "run-ultra")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finalRun.Tasks[0].State != marshal.Merged || finalRun.Tasks[1].State != marshal.Merged {
+		t.Fatalf("both tasks should be merged: %+v", finalRun.Tasks)
 	}
 }

@@ -19,3 +19,17 @@ func TestStatusShowsVerifierFindingsAndMixedEvidence(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusShowsCompletionReportLabels(t *testing.T) {
+	panel := &MarshalPanel{RunID: "run", Report: &app.MarshalCompletionReport{
+		ReviewLabel: "Standard: review by the Marshal itself; independent review in ULTRA",
+		ChecksLabel: "approved checks passed",
+	}}
+	text := marshalStatusText(panel)
+	if !strings.Contains(text, "Standard: review by the Marshal itself; independent review in ULTRA") {
+		t.Fatalf("status missing review label: %s", text)
+	}
+	if !strings.Contains(text, "approved checks passed") {
+		t.Fatalf("status missing checks label: %s", text)
+	}
+}

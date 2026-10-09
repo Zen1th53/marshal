@@ -12,6 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/projectid"
+	"github.com/Zen1th53/marshal/internal/testutil/testcloud"
 )
 
 func TestM11MarshalUsageAndEmptyStatus(t *testing.T) {
@@ -280,4 +281,88 @@ func TestM11ExecutionReservationIsExclusive(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.finish(cancel)
+}
+
+func TestUltraExecutionOffUsesStandardNoParallelDispatch(t *testing.T) {
+	_, ws, ctx := acceptanceWorkspace(t)
+	opts := testcloud.Options{Capabilities: []string{marshal.CapabilityMarshal}}
+	ws.AttachULTRA(testcloud.EntitledGate(t, opts), false)
+
+	service, _, _, err := ws.marshalService(ctx, "run-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := marshal.DefaultSettings()
+	settings.UltraConcurrency = 4
+	policy := marshal.TierPolicy(service.Gate, settings)
+	if policy.Tier != marshal.Standard || policy.Concurrency != 1 {
+		t.Fatalf("expected Standard tier with concurrency 1 when ultra execution is off, got: %+v", policy)
+	}
+
+	// When ultra execution is on, policy uses Ultra with settings concurrency
+	ws.AttachULTRA(testcloud.EntitledGate(t, opts), true)
+	serviceOn, _, _, err := ws.marshalService(ctx, "run-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyOn := marshal.TierPolicy(serviceOn.Gate, settings)
+	if policyOn.Tier != marshal.Ultra || policyOn.Concurrency != 4 {
+		t.Fatalf("expected Ultra tier with concurrency 4 when ultra execution is on, got: %+v", policyOn)
+	}
+}
+
+func TestM11MarshalRetryReassignCancelCommands(t *testing.T) {
+	_, ws, ctx := acceptanceWorkspace(t)
+	fakeProviderCLIs(t, "codex")
+	m := ws.marshalSession()
+	service, _, _, err := ws.marshalService(ctx, "run-tui")
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err := service.DraftFromProposal([]byte(`{"tasks":[{"id":"a","title":"task a","criteria":["a checked"],"paths":["README.md"],"depends_on":[],"worker":"codex","mode":"governed","checks":[{"command":"true","criteria":["a checked"]}]}]}`), "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := service.StartPlanningFromDraft(ctx, "run-tui", "fixture", draft, marshal.Budget{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.grant("run-tui", "plan")
+	run, err = service.Approve(ctx, "run-tui")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	m.runID = "run-tui"
+	m.mu.Unlock()
+	ws.setMarshalPanel(newMarshalPanel("run-tui", "codex", run, "active"))
+
+	// Escalate task
+	if err := service.Escalate(ctx, "run-tui", "a", "worker rework limit reached"); err != nil {
+		t.Fatal(err)
+	}
+
+	// /marshal retry
+	out, err := ws.ExecuteCommand(ctx, "/marshal retry a")
+	if err != nil || !strings.Contains(out, "retried") {
+		t.Fatalf("retry output: %q %v", out, err)
+	}
+
+	// Escalate again and test /marshal reassign
+	if err := service.Escalate(ctx, "run-tui", "a", "worker rework limit reached"); err != nil {
+		t.Fatal(err)
+	}
+	out, err = ws.ExecuteCommand(ctx, "/marshal reassign a claude")
+	if err != nil || !strings.Contains(out, "reassigned to claude") {
+		t.Fatalf("reassign output: %q %v", out, err)
+	}
+
+	// Escalate again and test /marshal cancel
+	if err := service.Escalate(ctx, "run-tui", "a", "no worker"); err != nil {
+		t.Fatal(err)
+	}
+	out, err = ws.ExecuteCommand(ctx, "/marshal cancel a")
+	if err != nil || !strings.Contains(out, "cancelled") {
+		t.Fatalf("cancel output: %q %v", out, err)
+	}
 }

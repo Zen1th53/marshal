@@ -97,6 +97,8 @@ func marshalTaskGlyph(th *Theme, state marshal.TaskState) (string, string) {
 		return th.GlyphDotHalf, th.Warning
 	case marshal.Escalated:
 		return th.GlyphCross, th.Danger
+	case marshal.Cancelled:
+		return th.GlyphCross, th.Muted
 	default:
 		return th.GlyphDotEmpty, th.Muted
 	}
@@ -147,6 +149,12 @@ func marshalStatusText(p *MarshalPanel) string {
 	}
 	if p.Report != nil {
 		b.WriteString("\ncompletion report:\n")
+		if p.Report.ReviewLabel != "" {
+			fmt.Fprintf(&b, "  review: %s\n", p.Report.ReviewLabel)
+		}
+		if p.Report.ChecksLabel != "" {
+			fmt.Fprintf(&b, "  checks: %s\n", p.Report.ChecksLabel)
+		}
 		for _, criterion := range p.Report.Criteria {
 			fmt.Fprintf(&b, "  %s / %s: %s", criterion.TaskID, criterion.Criterion, criterion.Status)
 			if criterion.Mixed {

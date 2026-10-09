@@ -247,6 +247,7 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 			return handin, errors.Join(err, model.ErrNotFound)
 		}
 		run.Tasks[i].State = marshal.Escalated
+		run.Tasks[i].EscalationReason = "security: " + err.Error()
 		pauseMarshal(&run, "security: "+err.Error(), "resolve the security alert and amend the plan before retrying", "")
 		if saveErr := s.save(context.WithoutCancel(ctx), runID, run, rev); saveErr != nil {
 			return handin, errors.Join(err, saveErr)
@@ -587,6 +588,7 @@ func applyMarshalReturn(run *marshal.Run, t *marshal.Task) marshal.Verdict {
 		t.State = marshal.Reassigned
 	case marshal.VerdictEscalate:
 		t.State = marshal.Escalated
+		t.EscalationReason = "worker rework limit reached"
 		pauseMarshal(run, "worker rework limit reached", "resolve the escalation or amend the plan", "")
 	}
 	return result
@@ -780,6 +782,28 @@ func int64Number(v any) int64 {
 	return 0
 }
 
+func isPermanentEscalationReason(reason string) bool {
+	r := strings.ToLower(reason)
+	for _, s := range []string{"budget", "quarantine", "suspension", "honeypot", "security", "governing files changed"} {
+		if strings.Contains(r, s) {
+			return true
+		}
+	}
+	return false
+}
+
+func unpauseIfNoEscalated(run *marshal.Run) {
+	for _, t := range run.Tasks {
+		if t.State == marshal.Escalated {
+			return
+		}
+	}
+	if run.State == marshal.AwaitingUser {
+		run.State = marshal.Dispatching
+		run.Pause = nil
+	}
+}
+
 func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker string) error {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
@@ -789,21 +813,38 @@ func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker str
 		return err
 	}
 	i := taskIndex(run, taskID)
-	if i < 0 || run.Tasks[i].State != marshal.Reassigned || worker == "" || marshalHarnessName(worker) == marshalHarnessName(run.Tasks[i].Worker) {
+	if i < 0 {
+		return errors.New("invalid reassignment")
+	}
+	t := &run.Tasks[i]
+	if t.State == marshal.Escalated {
+		if isPermanentEscalationReason(t.EscalationReason) {
+			return fmt.Errorf("cannot reassign task with escalation reason: %s", t.EscalationReason)
+		}
+	} else if t.State != marshal.Reassigned {
+		return errors.New("invalid reassignment")
+	}
+	if worker == "" || marshalHarnessName(worker) == marshalHarnessName(t.Worker) {
 		return errors.New("invalid reassignment")
 	}
 	drivers := s.Drivers
-	if run.Tasks[i].Mode == marshal.Governed && s.GovernedDrivers != nil {
+	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
 		drivers = s.GovernedDrivers
 	}
-	if d := drivers[worker]; d == nil || d.Mode() != run.Tasks[i].Mode {
-		return fmt.Errorf("worker %s does not support task mode %s", worker, run.Tasks[i].Mode)
+	if d := drivers[worker]; d == nil || d.Mode() != t.Mode {
+		return fmt.Errorf("worker %s does not support task mode %s", worker, t.Mode)
 	}
-	run.Tasks[i].Worker = worker
-	if run.Tasks[i].ReturnsByAgent == nil {
-		run.Tasks[i].ReturnsByAgent = map[string]int{}
+	t.Worker = worker
+	t.State = marshal.Reassigned
+	t.EscalationReason = ""
+	if t.ReturnsByAgent == nil {
+		t.ReturnsByAgent = map[string]int{}
 	}
-	run.Tasks[i].ReturnsByAgent[worker] = 0
+	t.ReturnsByAgent[worker] = 0
+	if run.CloseAuthorization != nil {
+		run.CloseAuthorization.Voided = true
+	}
+	unpauseIfNoEscalated(&run)
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}
@@ -812,6 +853,102 @@ func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker str
 	}
 	_, err = s.Charge(ctx, runID, taskID, "reassign", marshal.Charge{Tokens: marshal.Amount{Known: true}, Money: marshal.Amount{Known: true}})
 	return err
+}
+
+func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, freshSession bool) error {
+	run, rev, err := s.load(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if err = unfinishedMarshalOperation(run); err != nil {
+		return err
+	}
+	i := taskIndex(run, taskID)
+	if i < 0 {
+		return errors.New("task not found")
+	}
+	t := &run.Tasks[i]
+	if t.State != marshal.Escalated {
+		return errors.New("only escalated tasks can be retried")
+	}
+	if isPermanentEscalationReason(t.EscalationReason) {
+		return fmt.Errorf("cannot retry task with escalation reason: %s", t.EscalationReason)
+	}
+	hasOtherWorker := s.otherWorker(t.Worker, t.Mode) != ""
+	if !hasOtherWorker {
+		if !freshSession {
+			return errors.New("single provider retry requires a fresh session")
+		}
+		if t.FreshSessionRetries >= 2 {
+			return errors.New("maximum fresh session retries exceeded")
+		}
+		t.FreshSessionRetries++
+	} else if freshSession {
+		if t.FreshSessionRetries >= 2 {
+			return errors.New("maximum fresh session retries exceeded")
+		}
+		t.FreshSessionRetries++
+	}
+	if err := marshal.TransitionTask(t.State, marshal.Returned); err != nil {
+		return err
+	}
+	t.State = marshal.Returned
+	t.EscalationReason = ""
+	if t.ReturnsByAgent != nil {
+		t.ReturnsByAgent[t.Worker] = 0
+	}
+	if run.CloseAuthorization != nil {
+		run.CloseAuthorization.Voided = true
+	}
+	unpauseIfNoEscalated(&run)
+	if err = s.save(ctx, runID, run, rev); err != nil {
+		return err
+	}
+	return s.record(ctx, runID, taskID, events.EventTypeMarshalTaskReturned, map[string]any{"retry": true, "fresh_session": freshSession})
+}
+
+func (s *MarshalService) CancelTask(ctx context.Context, runID, taskID string) error {
+	run, rev, err := s.load(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if err = unfinishedMarshalOperation(run); err != nil {
+		return err
+	}
+	i := taskIndex(run, taskID)
+	if i < 0 {
+		return errors.New("task not found")
+	}
+	t := &run.Tasks[i]
+	if t.State != marshal.Escalated {
+		return errors.New("only escalated tasks can be cancelled")
+	}
+	if isPermanentEscalationReason(t.EscalationReason) {
+		return fmt.Errorf("cannot cancel task with escalation reason: %s", t.EscalationReason)
+	}
+	if err := marshal.TransitionTask(t.State, marshal.Cancelled); err != nil {
+		return err
+	}
+	t.State = marshal.Cancelled
+	if run.CloseAuthorization != nil {
+		run.CloseAuthorization.Voided = true
+	}
+	allDone := true
+	for _, task := range run.Tasks {
+		if task.State != marshal.Merged && task.State != marshal.Cancelled {
+			allDone = false
+		}
+	}
+	if allDone {
+		run.State = marshal.Verifying
+		run.Pause = nil
+	} else {
+		unpauseIfNoEscalated(&run)
+	}
+	if err = s.save(ctx, runID, run, rev); err != nil {
+		return err
+	}
+	return s.record(ctx, runID, taskID, events.EventTypeMarshalTaskCancelled, map[string]any{"reason": "cancelled by operator"})
 }
 
 func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error {
@@ -824,7 +961,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 		return errors.New("task is not accepted")
 	}
 	for j := 0; j < i; j++ {
-		if run.Tasks[j].State != marshal.Merged {
+		if run.Tasks[j].State != marshal.Merged && run.Tasks[j].State != marshal.Cancelled {
 			return errors.New("merge order violation")
 		}
 	}
@@ -859,7 +996,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 	next.State = marshal.Merging
 	all := true
 	for _, t := range next.Tasks {
-		if t.State != marshal.Merged {
+		if t.State != marshal.Merged && t.State != marshal.Cancelled {
 			all = false
 		}
 	}
@@ -1358,6 +1495,7 @@ func (s *MarshalService) Escalate(ctx context.Context, runID, taskID, reason str
 			return model.ErrNotFound
 		}
 		run.Tasks[i].State = marshal.Escalated
+		run.Tasks[i].EscalationReason = reason
 	}
 	pauseMarshal(&run, reason, "resolve the escalation or amend the plan", "")
 	if err = s.save(ctx, runID, run, rev); err != nil {
