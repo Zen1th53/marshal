@@ -10515,6 +10515,11 @@
       "bytes": 5237
     },
     {
+      "path": "internal/tui/permission_frame_test.go",
+      "sha256": "76df1999b7d15a841ba4942548e1036aeaf7f66f1172d47b2b54c7521216a8e3",
+      "bytes": 2138
+    },
+    {
       "path": "internal/tui/permission_pty_helpers_test.go",
       "sha256": "33f18f72759e3d68a61d4193cff9c5e20e7126e196dd014c7febec6799a98775",
       "bytes": 628
@@ -10691,8 +10696,8 @@
     },
     {
       "path": "internal/tui/screen.go",
-      "sha256": "bd9c71ddee2235dc5c1103e5c96177fd5bb7bf382acaa78121aa4c4921f3df8e",
-      "bytes": 4513
+      "sha256": "56162cdd33d3da1c2ee6b3dbaeba7ceb69cb53f33bb4078f2a13d7c164d3d41a",
+      "bytes": 5251
     },
     {
       "path": "internal/tui/securitydata.go",
@@ -11696,8 +11701,8 @@
     },
     {
       "path": "release/RELEASE_NOTES_0.0.8.md",
-      "sha256": "5821afdba8b6e0457db2c9d763751c76f4aad45d7951eb0e81421928297a634c",
-      "bytes": 11566
+      "sha256": "1b23e6eabc8034b6f3a43038f455d7bcaaace7a4e3547eabd7e1f6a1a2713a66",
+      "bytes": 11690
     },
     {
       "path": "release/REPRODUCIBLE-BUILDS.md",
