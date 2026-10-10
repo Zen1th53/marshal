@@ -865,7 +865,7 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				continue
 			}
 			if event.Type == KeyF11 {
-				if w.diffViewer.IsOpen() {
+				if w.diffViewer.IsOpen() || w.palette.IsOpen() {
 					w.diffViewer.Close()
 					if w.palette.IsOpen() {
 						w.palette.Close()

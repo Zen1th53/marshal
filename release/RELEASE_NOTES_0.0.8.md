@@ -43,7 +43,7 @@ Evidence and verification integrity.
 ### Governance integrity
 
 - The control centre keeps permission headings and network scope visible with pending items when the prompt fits the panel.
-- The control centre diff overlay returns to the main view on F11, including when the command palette is open.
+- F11 returns to the control centre and closes its diff overlay and command palette, including with an attached tmux client.
 - Constitutional suspension and stored version bindings now refuse dispatch and
   resume; unreadable bindings fail closed.
 - Governed results that change policy, CI, MARSHAL storage or agent instructions
@@ -65,7 +65,7 @@ Evidence and verification integrity.
 - Fresh Marshal chat uses a neutral start cue that explicitly requests the hidden introduction and language intake; saved intake continues privately.
 - Empty-composer Ctrl+C shows its exit warning through the screen renderer without accumulating terminal lines; double Ctrl+C still exits.
 - Multiple MARSHAL windows can share project memory; only the lifecycle owner recovers interrupted operations or runs lifecycle commands. Reopen another window after the owner exits to recover and take ownership.
-- `/marshal status` shows the stored run when the control centre has no in-memory run panel.
+- `/marshal status` refreshes other MARSHAL windows from the stored run so task and run states match the lifecycle owner.
 - Lifecycle intents and completion records survive interruptions. Startup
   reconciles launches, hand-ins, merges and closes without repeating completed
   effects; run, task, hand-in and audit updates commit together. Plan revisions

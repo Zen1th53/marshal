@@ -38,7 +38,7 @@ func (w *Workspace) bindWorkspaceKeys(ctx context.Context, pane, root string) er
 			}
 		}
 	}
-	if err := tmux.BindWindowKey(ctx, pane, table, "F11", "select-window", "-t", target); err != nil {
+	if err := tmux.BindWindowKey(ctx, pane, table, "F11", "select-window", "-t", target, ";", "send-keys", "-t", target, "F11"); err != nil {
 		return err
 	}
 	if err := tmux.BindWindowKey(ctx, pane, table, "C-x", "send-keys", "-t", target, "C-x"); err != nil {
