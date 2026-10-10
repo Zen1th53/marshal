@@ -725,7 +725,7 @@ func BindWindowKey(ctx context.Context, target, table, key string, actionArgs ..
 	if _, err := RunCommand(ctx, "set-option", "-p", "-t", target, "@marshal_key_table", table); err != nil {
 		return err
 	}
-	if len(actionArgs) == 3 && actionArgs[0] == "select-window" && actionArgs[1] == "-t" && strings.HasPrefix(actionArgs[2], "%") {
+	if len(actionArgs) >= 3 && actionArgs[0] == "select-window" && actionArgs[1] == "-t" && strings.HasPrefix(actionArgs[2], "%") {
 		out, err := RunCommand(ctx, "display-message", "-p", "-t", actionArgs[2], "#{session_name}:#{window_id}")
 		if err != nil {
 			return err

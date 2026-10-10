@@ -9,7 +9,7 @@ import (
 
 func (w *Workspace) marshalStatus(ctx context.Context) (string, error) {
 	panel := w.marshalPanel()
-	if panel == nil && w.runtime != nil {
+	if w.runtime != nil && (panel == nil || !w.runtime.IsLifecycleOwner()) {
 		service := w.runtime.Marshal()
 		if service != nil {
 			id, record, err := service.Store.LatestMarshalRun(ctx, service.ProjectID)
@@ -17,8 +17,20 @@ func (w *Workspace) marshalStatus(ctx context.Context) (string, error) {
 				return "", err
 			}
 			if err == nil {
-				panel = newMarshalPanel(id, "", record.Value, "stored Marshal run")
+				provider := ""
+				if panel != nil && panel.RunID == id {
+					provider = panel.Provider
+				}
+				panel = newMarshalPanel(id, provider, record.Value, "stored Marshal run")
+				report, err := service.CompletionReport(ctx, id)
+				if err != nil {
+					return "", err
+				}
+				panel.Usage, panel.Report = report.Usage, &report
+			} else {
+				panel = nil
 			}
+			w.setMarshalPanel(panel)
 		}
 	}
 	return marshalStatusText(panel), nil

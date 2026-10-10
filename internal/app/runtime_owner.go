@@ -10,6 +10,13 @@ import (
 
 var ErrRuntimeOwned = errors.New("another MARSHAL window owns this project’s lifecycle; use that window for lifecycle commands, or close it and reopen this window to recover and take ownership")
 
+// IsLifecycleOwner reports whether this runtime owns the project's lifecycle.
+func (r *Runtime) IsLifecycleOwner() bool {
+	r.ownerMu.Lock()
+	defer r.ownerMu.Unlock()
+	return !r.closed && r.ownerLock != nil
+}
+
 // The kernel lock is the liveness check: it survives client disconnection but
 // is released when the owner closes or crashes. Never unlink the lock file;
 // replacing its inode would let two processes acquire different locks.
