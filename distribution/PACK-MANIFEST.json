@@ -13211,8 +13211,8 @@
     },
     {
       "path": "internal/tui/main_test.go",
-      "sha256": "ba3f099ebd80105f65b4446dffa7451c311fca7eede31a579c110dea21706f4f",
-      "bytes": 970
+      "sha256": "37b39ac8b3ae1b9645548353fe869445f6cf37c2cdc61c2c53ba0717c2f50f7d",
+      "bytes": 1533
     },
     {
       "path": "internal/tui/manifest.json",
