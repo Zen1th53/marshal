@@ -86,8 +86,8 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "d8b8f01d0d2f4bf6662106e6cceaf65ebc0b69f2366e4c2f0a89e9dfc9c21612",
-      "bytes": 7335
+      "sha256": "291e66e8cf035c1163b17d7e187b807e0102a49e86daa4ab3cc137f69ea3475f",
+      "bytes": 7558
     },
     {
       "path": ".github/workflows/codeql.yml",

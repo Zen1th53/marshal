@@ -122,7 +122,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [default, governed]
+        # Pull requests test the public build; the governed build is tested
+        # on pushes to main, which halves PR runner time.
+        edition: ${{ github.event_name == 'pull_request' && fromJSON('["default"]') || fromJSON('["default", "governed"]') }}
         shard: [0, 1, 2, 3, 4, 5]
 
     steps:
