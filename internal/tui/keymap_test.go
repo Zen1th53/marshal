@@ -271,6 +271,9 @@ func TestBoardConfirmKeysOnlyOpenConfirmation(t *testing.T) {
 	// Inbox y arms an owner gate's reply for Enter and any other key
 	// cancels it; TestOwnerGate* press it against a waiting gate.
 	covered["INBOX y"] = true
+	// Inbox u arms the undo of files changed outside a run for Enter and
+	// any other key cancels it; TestGuard* press it against an alert.
+	covered["INBOX u"] = true
 	for _, k := range boardKeymap {
 		if k.Direct != "" || k.Listed {
 			continue
