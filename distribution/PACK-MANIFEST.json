@@ -116,8 +116,8 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "91c983e3fde4f9a8c6451bcc949bb3dc33ea17e926549f0a71ce0e6b7e8de529",
-      "bytes": 5317
+      "sha256": "b2f30de5933efa59d81e75df3f9843d945171139961e0661ccdaf3753224f3b9",
+      "bytes": 5764
     },
     {
       "path": ".gitignore",
@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "2fd22efe11d1cfc2abc23a4ec4792032ba17c2cb51e5ef0336268652e21ee965",
-      "bytes": 2373
+      "sha256": "bac11ab9f279ed2c042e519ee31495735ba8640a882840cb2602c9777b280775",
+      "bytes": 2765
     },
     {
       "path": "docs/assets/marshal-tui.png",
@@ -536,8 +536,8 @@
     },
     {
       "path": "docs/installation.md",
-      "sha256": "1fb753256c3115e349d8d869b35dbd421513c109e3205a206d49022cdc39b61f",
-      "bytes": 3172
+      "sha256": "ee92f83e92630a7c1b536b3fdd4eac185a30395c736f14ec67d62e05686d7907",
+      "bytes": 3175
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -641,7 +641,7 @@
     },
     {
       "path": "go.mod",
-      "sha256": "366a06fda6ecfa9e53cab7318fd31678742b9ffffb1f2ef876a7d7899bddcc68",
+      "sha256": "cb8bfcbe2c60e78d7681ad8c62cd4cc563390146c4c4432612c216fd80992901",
       "bytes": 730
     },
     {
@@ -15485,6 +15485,11 @@
       "bytes": 1972
     },
     {
+      "path": "release/RELEASE_NOTES_0.2.1.md",
+      "sha256": "2dbfb4e2a80d4804eb1fee9b1f4e1796d39e2c89a8295f0c07b2b0fe39bacc6c",
+      "bytes": 2352
+    },
+    {
       "path": "release/archive/RELEASE_NOTES_0.0.2.md",
       "sha256": "60da76751a5ad983b797e0ecae6816bdd0b60286c8d6ab508211c0a754d3bbf0",
       "bytes": 2823
@@ -15503,16 +15508,6 @@
       "path": "release/archive/RELEASE_NOTES_0.0.4.md",
       "sha256": "784bb2ca805da0e4dc93c1d6a2f0fcbccf8d51328402f46d6b041a6e4c8da055",
       "bytes": 5234
-    },
-    {
-      "path": "release/archive/RELEASE_NOTES_1.0.1.md",
-      "sha256": "934fdce035add28555ef9217ddc688de66251b6573728c302cdf8bfbfbf4b9bb",
-      "bytes": 5136
-    },
-    {
-      "path": "release/archive/RELEASE_NOTES_1.5.0.md",
-      "sha256": "5a9dc4993967be40245dd0b7a265e7f09726a96104c8cf2fa65acd4b55874dfe",
-      "bytes": 6012
     },
     {
       "path": "schemas/architecture-review.schema.json",
@@ -15586,8 +15581,8 @@
     },
     {
       "path": "scripts/community-release-gate.sh",
-      "sha256": "e33ef1060933a4d694e55e2647d6681ab8dde19862f34871998079a8f2ad3981",
-      "bytes": 4330
+      "sha256": "82bb22b89e8029a8dc75aae2b6ce293a0f572ed2e8b3bc16da4014a499a6b478",
+      "bytes": 4768
     },
     {
       "path": "scripts/docs-audit.py",
@@ -15686,7 +15681,7 @@
     },
     {
       "path": "third_party/code-evidence/go.mod",
-      "sha256": "d3619ed753cce0e0777c4d67ecb38f3ee000ca996fd17a28b513e970cb46c1e5",
+      "sha256": "609bf96b018736cbc8890870a8e737de78812d33952259c6b777aeb92a9937a5",
       "bytes": 552
     },
     {
@@ -15896,7 +15891,7 @@
     },
     {
       "path": "tools/e2e/extreme-e2e.sh",
-      "sha256": "dbdee4673de7198e88bac3ce0fc28f2dc436e40ac94768dbf8fa868c8aef1627",
+      "sha256": "6874bf4c22de1d55246f2f79c5a76c3c30a3a70f78867a0d4581e0030a1b4c56",
       "bytes": 37029
     },
     {

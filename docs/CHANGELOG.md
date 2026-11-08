@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+First published release of the new Marshal line.
+
+### Fixed
+- Marshal role turns time out (default 15 minutes, `MARSHAL_ROLE_TURN_TIMEOUT`) instead of leaving a run in REVIEWING; `/marshal resume` retries.
+- The Board flags project files changed outside a run while the Marshal plans, with `[u] undo` and `[K] keep`.
+- Built with Go 1.26.10 (standard-library vulnerability fixes).
+
 ## 0.2.0
 
 Public release of Marshal: a free, open-source local multi-agent coding orchestrator under AGPL-3.0-only (with commercial licensing options).
