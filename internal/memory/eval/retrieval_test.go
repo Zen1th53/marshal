@@ -1,6 +1,8 @@
 package eval
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -56,5 +58,117 @@ func TestLoadCorpusRejectsOverlappingClassifications(t *testing.T) {
 	}`))
 	if err == nil {
 		t.Fatal("expected overlapping relevance classifications to fail validation")
+	}
+}
+
+func TestEvaluateDynamicResponsivenessWhenRankingsChange(t *testing.T) {
+	corpus := Corpus{
+		Version:   1,
+		ProjectID: "PROJECT-eval",
+		Records: []RecordFixture{
+			{ID: "req-1", Title: "req-1", Body: "req-1"},
+			{ID: "req-2", Title: "req-2", Body: "req-2"},
+			{ID: "acc-1", Title: "acc-1", Body: "acc-1"},
+			{ID: "irr-1", Title: "irr-1", Body: "irr-1"},
+			{ID: "irr-2", Title: "irr-2", Body: "irr-2"},
+			{ID: "stale-1", Title: "stale-1", Body: "stale-1"},
+		},
+		Queries: []QueryFixture{{
+			ID:          "q1",
+			Text:        "find relevant context",
+			PrincipalID: "worker",
+			Required:    []string{"req-1", "req-2"},
+			Acceptable:  []string{"acc-1"},
+			Irrelevant:  []string{"irr-1", "irr-2"},
+			Forbidden:   map[string][]string{"stale": {"stale-1"}},
+		}},
+	}
+
+	// 1. Optimal ranking: all required in top 2.
+	metricsOptimal, err := Evaluate(corpus, []QueryOutcome{{
+		QueryID:        "q1",
+		RankedIDs:      []string{"req-1", "req-2", "acc-1"},
+		ContextBytes:   300,
+		RecallDuration: 5 * time.Millisecond,
+	}}, []int{1, 2, 3})
+	if err != nil {
+		t.Fatalf("Evaluate optimal: %v", err)
+	}
+
+	// 2. Degraded ranking: required items delayed behind irrelevant items.
+	metricsDegraded, err := Evaluate(corpus, []QueryOutcome{{
+		QueryID:        "q1",
+		RankedIDs:      []string{"irr-1", "irr-2", "req-1"},
+		ContextBytes:   300,
+		RecallDuration: 15 * time.Millisecond,
+	}}, []int{1, 2, 3})
+	if err != nil {
+		t.Fatalf("Evaluate degraded: %v", err)
+	}
+
+	// 3. Stale/forbidden exposure ranking:
+	metricsForbidden, err := Evaluate(corpus, []QueryOutcome{{
+		QueryID:        "q1",
+		RankedIDs:      []string{"stale-1", "req-1"},
+		ContextBytes:   200,
+		RecallDuration: 8 * time.Millisecond,
+	}}, []int{1, 2, 3})
+	if err != nil {
+		t.Fatalf("Evaluate forbidden: %v", err)
+	}
+
+	// 4. Empty ranking:
+	metricsEmpty, err := Evaluate(corpus, []QueryOutcome{{
+		QueryID:        "q1",
+		RankedIDs:      nil,
+		ContextBytes:   0,
+		RecallDuration: 1 * time.Millisecond,
+	}}, []int{1, 2, 3})
+	if err != nil {
+		t.Fatalf("Evaluate empty: %v", err)
+	}
+
+	// Verify metrics dynamically reflect outcomes and are not hardcoded constants.
+	if metricsOptimal.RecallAtK[2] != 1.0 {
+		t.Fatalf("optimal Recall@2 = %f, want 1.0", metricsOptimal.RecallAtK[2])
+	}
+	if metricsDegraded.RecallAtK[2] != 0.0 {
+		t.Fatalf("degraded Recall@2 = %f, want 0.0", metricsDegraded.RecallAtK[2])
+	}
+	if metricsDegraded.RecallAtK[3] != 0.5 {
+		t.Fatalf("degraded Recall@3 = %f, want 0.5", metricsDegraded.RecallAtK[3])
+	}
+	if metricsOptimal.MRR != 1.0 {
+		t.Fatalf("optimal MRR = %f, want 1.0", metricsOptimal.MRR)
+	}
+	if metricsDegraded.MRR != 1.0/3.0 {
+		t.Fatalf("degraded MRR = %f, want %f", metricsDegraded.MRR, 1.0/3.0)
+	}
+	if metricsEmpty.RecallAtK[1] != 0.0 || metricsEmpty.MRR != 0.0 {
+		t.Fatalf("empty metrics should be 0, got Recall@1=%f MRR=%f", metricsEmpty.RecallAtK[1], metricsEmpty.MRR)
+	}
+	if metricsOptimal.ForbiddenExposureRate["stale"] != 0.0 {
+		t.Fatalf("optimal forbidden exposure = %f, want 0.0", metricsOptimal.ForbiddenExposureRate["stale"])
+	}
+	if metricsForbidden.ForbiddenExposureRate["stale"] != 1.0 {
+		t.Fatalf("forbidden exposure = %f, want 1.0", metricsForbidden.ForbiddenExposureRate["stale"])
+	}
+}
+
+func TestRootConformanceReportsDoNotExist(t *testing.T) {
+	root := filepath.Join("..", "..", "..")
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		t.Fatalf("could not locate repo root via %s: %v", root, err)
+	}
+
+	reports := []string{
+		"derived-index-rebuild-report.json",
+		"memory-ultimate-conformance.json",
+	}
+	for _, reportFile := range reports {
+		path := filepath.Join(root, reportFile)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("fabricated root report %s must not exist in repository root (err=%v)", reportFile, err)
+		}
 	}
 }

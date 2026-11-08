@@ -11,19 +11,26 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
+	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
 // ApprovalScope records the task boundaries to which approval was given.
 type ApprovalScope struct {
-	Goal   GoalBinding         `json:"goal"`
-	Budget Budget              `json:"budget"`
-	Mode   Mode                `json:"mode"`
-	Tasks  []Task              `json:"tasks"`
-	Checks map[string][]string `json:"checks,omitempty"`
+	RequiredProjectContract *projectcontext.ContractRef `json:"required_project_contract,omitempty"`
+	Goal                    GoalBinding                 `json:"goal"`
+	Budget                  Budget                      `json:"budget"`
+	Mode                    Mode                        `json:"mode"`
+	Tasks                   []Task                      `json:"tasks"`
+	Checks                  map[string][]string         `json:"checks,omitempty"`
+	ProducerAssignments     *ProducerApprovalSeal       `json:"producer_assignments,omitempty"`
 }
 
-func approvalScopeFor(p ExecutionPlan) *ApprovalScope {
+func approvalScopeFor(p ExecutionPlan) (*ApprovalScope, error) {
 	s := &ApprovalScope{Goal: p.Goal, Budget: p.Budget, Mode: p.Mode, Checks: map[string][]string{}}
+	if p.RequiredProjectContract != nil {
+		ref := *p.RequiredProjectContract
+		s.RequiredProjectContract = &ref
+	}
 	s.Tasks = append([]Task(nil), p.Tasks...)
 	sort.Slice(s.Tasks, func(i, j int) bool { return s.Tasks[i].ID < s.Tasks[j].ID })
 	for i := range s.Tasks {
@@ -35,7 +42,10 @@ func approvalScopeFor(p ExecutionPlan) *ApprovalScope {
 			s.Checks[t.ID] = append([]string(nil), checks...)
 		}
 	}
-	return s
+	if err := sealPrivateProducerAssignments(p, s); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // Digest is separate from the graph fingerprint and includes approved criteria and checks.
@@ -56,7 +66,7 @@ func (p ExecutionPlan) AmendScoped(expectedVersion int64, reason string, next Ex
 	if p.ApprovedScope == nil || p.ApprovalScopeDigest != p.ApprovedScope.Digest() {
 		return refuse("approval scope is missing or invalid")
 	}
-	if p.Goal != next.Goal || p.ProjectID != next.ProjectID || p.Mode != next.Mode || p.ConstitutionVersion != next.ConstitutionVersion ||
+	if !reflect.DeepEqual(p.RequiredProjectContract, next.RequiredProjectContract) || p.Goal != next.Goal || p.ProjectID != next.ProjectID || p.Mode != next.Mode || p.ConstitutionVersion != next.ConstitutionVersion ||
 		!reflect.DeepEqual(p.Budget, next.Budget) || !reflect.DeepEqual(p.Assessment, next.Assessment) ||
 		!reflect.DeepEqual(p.HardConstraints, next.HardConstraints) || !reflect.DeepEqual(p.DoNotDo, next.DoNotDo) {
 		return refuse("goal, budget or plan authority changed")

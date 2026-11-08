@@ -57,6 +57,8 @@ type BudgetLimit struct {
 	MaxModelCalls  int           `json:"max_model_calls,omitempty"`
 	MaxHandoffs    int           `json:"max_handoffs,omitempty"`
 	MaxRetries     int           `json:"max_retries,omitempty"`
+	// VerificationReserveCalls protects model calls for Process 06.
+	VerificationReserveCalls int `json:"verification_reserve_calls,omitempty"`
 }
 
 // ConsumedBudget tracks actual cumulative resource consumption.
@@ -70,6 +72,16 @@ type ConsumedBudget struct {
 	Retries           int           `json:"retries"`
 	HasReportedTokens bool          `json:"has_reported_tokens"`
 	HasReportedCost   bool          `json:"has_reported_cost"`
+	// Reserved bounds are admission evidence, not measured usage.
+	ReservedTotalTokens *int64   `json:"reserved_total_tokens,omitempty"`
+	ReservedCostUSD     *float64 `json:"reserved_cost_usd,omitempty"`
+	VerificationCalls   int      `json:"verification_calls,omitempty"`
+	UnreportedTokens    bool     `json:"unreported_tokens,omitempty"`
+	UnreportedCost      bool     `json:"unreported_cost,omitempty"`
+	// CallReservations binds admitted calls to immutable intent digests.
+	CallSettlements  map[string]string        `json:"call_settlements,omitempty"`
+	CallReservations map[string]string        `json:"call_reservations,omitempty"`
+	RunDurations     map[string]time.Duration `json:"run_durations,omitempty"`
 }
 
 // GoalTermination records the definitive final product state for a Goal execution.

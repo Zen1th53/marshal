@@ -494,6 +494,7 @@ func TestE2E_12_ProviderVersionDriftFallback(t *testing.T) {
 
 // E2E-13 TUI real session flow
 func TestE2E_13_TUIRuntimeSessionLifecycle(t *testing.T) {
+	isolateIntegrationTUIProviderPath(t)
 	st, ctx := setupTestStore(t)
 	ws := tui.NewWorkspace(st, "proj-13", "sess-13")
 

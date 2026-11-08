@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
@@ -115,7 +116,7 @@ esac
 	if !strings.Contains(logStr, "new-session -d -s "+expectedSession) {
 		t.Fatalf("missing new-session call for %s:\n%s", expectedSession, logStr)
 	}
-	selectAt := strings.Index(logStr, "select-window -t "+expectedSession+":marshal")
+	selectAt := strings.Index(logStr, "select-window -t "+expectedSession+":="+statepath.Name)
 	attachAt := strings.Index(logStr, "attach-session -t "+expectedSession)
 	if selectAt < 0 || selectAt >= attachAt {
 		t.Fatalf("startup must select control centre before attaching:\n%s", logStr)
@@ -370,10 +371,10 @@ func TestReattachSelectsControlCentreBeforeAttach(t *testing.T) {
 	script := fmt.Sprintf(`#!/bin/sh
 echo "$@" >> %q
 case "$1" in
- list-windows) printf 'marshal\nmarshal-chat\n' ;;
+ list-windows) printf '%s\n%s-chat\n' ;;
  display-message) printf '0 0\n' ;;
 esac
-`, logFile)
+`, logFile, statepath.Name, statepath.Name)
 	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -389,12 +390,54 @@ esac
 	}
 	log := string(data)
 	sess := tmux.SessionName(dir)
-	selectAt := strings.Index(log, "select-window -t "+sess+":marshal")
+	selectAt := strings.Index(log, "select-window -t "+sess+":="+statepath.Name)
 	attachAt := strings.Index(log, "attach-session -t "+sess)
 	if selectAt < 0 || selectAt >= attachAt {
 		t.Fatalf("re-attach must select control centre before attaching:\n%s", log)
 	}
 	if strings.Contains(log, "new-window") || strings.Contains(log, "respawn-window") {
 		t.Fatalf("re-attach restarted a live window:\n%s", log)
+	}
+}
+
+// TestReattachAfterQuitFindsControlCentreByExactName: after /quit the
+// session keeps its provider windows (marshal-codex-…, the chat) but not
+// the control centre. The bare name matched a leftover window by prefix:
+// the relaunch respawned that window and then failed to select the control
+// centre. It now creates the control centre and selects it by exact name.
+func TestReattachAfterQuitFindsControlCentreByExactName(t *testing.T) {
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "argv.log")
+	fake := filepath.Join(dir, "tmux")
+	script := fmt.Sprintf(`#!/bin/sh
+echo "$@" >> %q
+case "$1" in
+ list-windows) printf '%s-codex-1\n%s-chat-1\n' ;;
+ display-message) printf '1 0\n' ;;
+esac
+`, logFile, statepath.Name, statepath.Name)
+	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	tmux.SetBinaryPath(fake)
+	defer tmux.ResetBinaryPath()
+	c := &command{stdin: strings.NewReader(""), stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}}
+	if err := c.launchOrAttachTmux(context.Background(), dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(data)
+	sess := tmux.SessionName(dir)
+	if strings.Contains(log, "respawn-window") {
+		t.Fatalf("relaunch respawned a leftover window:\n%s", log)
+	}
+	if !strings.Contains(log, "new-window -d -t "+sess+" -n "+statepath.Name+" ") {
+		t.Fatalf("relaunch did not create the control centre:\n%s", log)
+	}
+	if !strings.Contains(log, "select-window -t "+sess+":="+statepath.Name) {
+		t.Fatalf("relaunch did not select the control centre by exact name:\n%s", log)
 	}
 }

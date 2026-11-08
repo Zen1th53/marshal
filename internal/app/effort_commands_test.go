@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/projectid"
 	"testing"
 	"time"
 
@@ -86,7 +87,9 @@ func TestGovernedCodexRunCarriesThePreferredEffort(t *testing.T) {
 	if _, err := r.CommandSetEffort(owner, CommandEnvelope{ProjectID: r.ProjectIdentity(), SessionID: "s", TargetID: "effort:codex", ExpectedVersion: 1, IdempotencyKey: "e"}, "codex", "high"); err != nil {
 		t.Fatal(err)
 	}
+	requiredTestAcceptedProjectContract(t, r)
 	goal := planGoal()
+	goal.ProjectID = requiredProcess05TestProjectID(r, goal.ProjectID)
 	goal.SuccessCriteria = []string{"output exists"}
 	if err := r.Store().SaveGoalContract(ctx, goal, 0); err != nil {
 		t.Fatal(err)
@@ -94,20 +97,20 @@ func TestGovernedCodexRunCarriesThePreferredEffort(t *testing.T) {
 	now := time.Now().UTC()
 	capacity := goalintake.UnknownCapacity("codex", true)
 	if _, err := r.Plans().Create(ctx, CreatePlanRequest{
-		SessionID: goal.SessionID, ProjectID: runtimePlanProject,
+		SessionID: goal.SessionID, ProjectID: projectid.ID(goal.ProjectID),
 		Tasks:             []plan.Task{{ID: "plan-local-task", Title: "write Codex output", Mutating: true, Paths: []string{"codex_output.txt"}, Criteria: []string{"output exists"}}},
 		Candidates:        []goalintake.Candidate{{Provider: "codex", Model: "gpt-5.6-terra", Capacity: capacity, Governance: constitution.GovernanceVerified}},
 		HarnessCandidates: []plan.HarnessCandidate{{Profile: model.HarnessProfile{Harness: "codex", InstalledVersion: "0.154.0", SupportedModels: []string{"gpt-5.6-terra"}, DefaultModel: "gpt-5.6-terra", ProbeEvidenceID: "EV-codex", ProbedAt: now}, InstalledVersion: "0.154.0", Provider: "codex", Capacity: capacity}},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Plans().Approve(ctx, runtimePlanProject); err != nil {
+	if _, err := r.Plans().Approve(ctx, projectid.ID(goal.ProjectID)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.RegisterAgent(ctx, RegisterAgentRequest{Name: "planned codex", Role: model.RoleDeveloper, ModelProvider: "codex"}); err != nil {
 		t.Fatal(err)
 	}
-	run, err := r.Execution().StartRun(ctx, goal.SessionID, runtimePlanProject)
+	run, err := r.Execution().StartRun(ctx, goal.SessionID, projectid.ID(goal.ProjectID))
 	if err != nil {
 		t.Fatal(err)
 	}

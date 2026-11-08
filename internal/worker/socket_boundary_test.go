@@ -44,7 +44,11 @@ func TestGovernedHostRelaySocketsAndRawAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	worktree := t.TempDir()
+	worktree, err := os.MkdirTemp("/tmp", "wb-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(worktree) })
 	metadata := filepath.Join(worktree, ".git")
 	if err := os.Mkdir(metadata, 0700); err != nil {
 		t.Fatal(err)
@@ -91,7 +95,12 @@ func TestGovernedHostRelaySocketsAndRawAttempts(t *testing.T) {
 	makeRelay(relays[1])
 	// The test proxy listener accepts bridge probes and closes them. The
 	// worker is in a separate PID namespace from the unfiltered bridge.
-	proxySocket := filepath.Join(t.TempDir(), "proxy.sock")
+	proxyDir, err := os.MkdirTemp("/tmp", "prx-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(proxyDir) })
+	proxySocket := filepath.Join(proxyDir, "proxy.sock")
 	proxy, err := net.Listen("unix", proxySocket)
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +121,15 @@ func TestGovernedHostRelaySocketsAndRawAttempts(t *testing.T) {
 	runner := NewObservedSandboxed(New(8*time.Second, time.Second, 64<<10), backend, model.SandboxRequest{Worktree: worktree, ReadOnlyBinds: []model.Bind{{Source: metadata, Target: metadata}}, NetworkAllowed: true, EgressSocket: proxySocket, BridgeBinary: bridge}, func(_ context.Context, r sandbox.Refusal) error { attempts <- r; return nil })
 	ready := filepath.Join(worktree, "ready")
 	goAhead := filepath.Join(worktree, "go")
+	// Extreme lets the worker create sockets and reach its own (namespace)
+	// loopback, where nothing listens here; host relays stay refused and the
+	// host target is never reached in either edition.
+	localOK := "False"
+	if sandbox.UnconfinedFallbackAllowed() {
+		localOK = "True"
+	}
 	script := fmt.Sprintf(`import socket,time,os
+local_ok=%s
 open(%q,'w').close()
 while not os.path.exists(%q): time.sleep(.01)
 for path in [%q,%q,%q]:
@@ -120,13 +137,19 @@ for path in [%q,%q,%q]:
   s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);s.connect(path);raise RuntimeError('relay reached')
  except PermissionError: pass
 for typ in [socket.SOCK_DGRAM,socket.SOCK_RAW]:
- try: socket.socket(socket.AF_INET,typ);raise RuntimeError('raw socket created')
+ try:
+  socket.socket(socket.AF_INET,typ)
+  if not local_ok: raise RuntimeError('raw socket created')
  except PermissionError: pass
+ except OSError:
+  if not local_ok: raise
 s=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 try: s.connect(('127.0.0.1',%s));raise RuntimeError('direct TCP reached')
 except PermissionError: pass
+except ConnectionRefusedError:
+ if not local_ok: raise
 print('all refused')
-`, ready, goAhead, relays[0], relays[1], relays[2], strings.Split(target.Addr().String(), ":")[1])
+`, localOK, ready, goAhead, relays[0], relays[1], relays[2], strings.Split(target.Addr().String(), ":")[1])
 	done := make(chan struct{})
 	var result adapter.ProcessResult
 	var runErr error
@@ -157,7 +180,11 @@ print('all refused')
 	if hits.Load() != 0 {
 		t.Fatalf("relay target reached %d times", hits.Load())
 	}
-	if len(attempts) < 6 {
+	want := 6
+	if sandbox.UnconfinedFallbackAllowed() {
+		want = 3
+	}
+	if len(attempts) < want {
 		t.Fatalf("missing refusals: %d", len(attempts))
 	}
 }

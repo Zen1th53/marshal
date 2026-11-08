@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,7 +58,7 @@ func TestMarshalMergeUsesAcceptedCommitAfterBranchMoves(t *testing.T) {
 		t.Fatal(err)
 	}
 	integration := filepath.Join(s.Worktrees, "TASK-run-integration")
-	if got := marshalGit(t, repo, "rev-parse", "marshal/run/integration^2"); got != h.ResultCommit {
+	if got := marshalGit(t, repo, "rev-parse", statepath.RefName+"/run/integration^2"); got != h.ResultCommit {
 		t.Fatalf("merged %s, accepted %s", got, h.ResultCommit)
 	}
 	if _, err := os.Stat(filepath.Join(integration, "unreviewed.txt")); !os.IsNotExist(err) {
@@ -267,7 +268,7 @@ func TestMarshalScopedSplitChildCanDispatch(t *testing.T) {
 		t.Fatalf("split: %+v %v", run, err)
 	}
 	for _, task := range run.Tasks {
-		if task.State != marshal.Queued || task.BaseCommit != run.BaseCommit || task.Branch != "marshal/run/"+task.PlanTaskID {
+		if task.State != marshal.Queued || task.BaseCommit != run.BaseCommit || task.Branch != statepath.RefName+"/run/"+task.PlanTaskID {
 			t.Fatalf("child initialization: %+v", task)
 		}
 		acceptIntegrityTask(t, s, task.PlanTaskID)

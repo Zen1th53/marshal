@@ -21,10 +21,36 @@ func (s *Store) WriteMemoryV2(ctx context.Context, rec model.MemoryRecordV2) err
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
-	fw := security.NewFirewall(security.FirewallConfig{})
-	if err := fw.ScanRecord(ctx, rec); err != nil {
+	// Community refuses a record that holds a secret; Extreme keeps it with
+	// the secret removed and the redaction recorded in its metadata.
+	rec, _, err := security.NewFirewall(security.FirewallConfig{}).AdmitRecord(ctx, rec)
+	if err != nil {
 		_ = s.recordMemoryRefusalEvidence(ctx, rec, err)
+		return fmt.Errorf("memory write firewall rejected: %w", err)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin write memory tx: %w", err)
+	}
+	defer tx.Rollback()
+	if err := s.writeMemoryV2Tx(ctx, tx, rec); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit write memory v2: %w", err)
+	}
+	return nil
+}
+
+// writeMemoryV2Tx keeps validation, firewall and outbox identical for callers
+// that atomically join a canonical memory write with its permission receipt.
+func (s *Store) writeMemoryV2Tx(ctx context.Context, tx *sql.Tx, rec model.MemoryRecordV2) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	rec, _, err := security.NewFirewall(security.FirewallConfig{}).AdmitRecord(ctx, rec)
+	if err != nil {
 		return fmt.Errorf("memory write firewall rejected: %w", err)
 	}
 
@@ -72,12 +98,6 @@ func (s *Store) WriteMemoryV2(ctx context.Context, rec model.MemoryRecordV2) err
 		rec.UpdatedAt = now
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin write memory tx: %w", err)
-	}
-	defer tx.Rollback()
-
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO memory_records_v2(
 			memory_id, project_id, kind, lifecycle, confidence, authority,
@@ -119,14 +139,20 @@ func (s *Store) WriteMemoryV2(ctx context.Context, rec model.MemoryRecordV2) err
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit write memory v2: %w", err)
-	}
 	return nil
 }
 
 // GetMemoryV2 retrieves a single MemoryRecordV2 by project ID and memory ID.
 func (s *Store) GetMemoryV2(ctx context.Context, projectID, memoryID string) (model.MemoryRecordV2, error) {
+	return getMemoryV2(ctx, s.db, projectID, memoryID)
+}
+
+type memoryRowReader interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+// getMemoryV2 also permits reads from one consistent migration transaction.
+func getMemoryV2(ctx context.Context, reader memoryRowReader, projectID, memoryID string) (model.MemoryRecordV2, error) {
 	var (
 		rec                                    model.MemoryRecordV2
 		kind, lifecycle, confidence, authority string
@@ -136,7 +162,7 @@ func (s *Store) GetMemoryV2(ctx context.Context, projectID, memoryID string) (mo
 		createdAt, updatedAt                   string
 		validTo, lastVerifiedAt                sql.NullString
 	)
-	err := s.db.QueryRowContext(ctx, `
+	err := reader.QueryRowContext(ctx, `
 		SELECT
 			memory_id, project_id, kind, lifecycle, confidence, authority,
 			title, body, content_digest, scope, scope_id,
@@ -366,6 +392,20 @@ type MemoryQueryFilter struct {
 // candidate discovery can enforce authorization before ranking without a
 // full canonical-content scan.
 func (s *Store) ListAuthorizedMemoryIDs(ctx context.Context, projectID, actorID string, allowedScopeIDs []string) (map[string]struct{}, error) {
+	return s.ListAuthorizedMemoryIDsForAudience(ctx, projectID, actorID, allowedScopeIDs, false)
+}
+
+// The predicates match MemoryRecordV2.IsSessionHistory plus shared/session sources.
+// Malformed source metadata is excluded for workers rather than treated as safe.
+const workerMemoryAudiencePredicate = ` AND scope != 'session'
+ AND substr(memory_id, 1, 11) != 'MEM-IMPORT-'
+ AND CASE WHEN json_valid(source_json) THEN
+   coalesce(json_extract(source_json, '$.kind'), '') NOT IN ('external', 'shared_channel')
+   AND substr(coalesce(json_extract(source_json, '$.reference'), ''), 1, 9) != 'external:'
+ ELSE 0 END`
+
+// ListAuthorizedMemoryIDsForAudience excludes raw session history before candidate discovery for workers.
+func (s *Store) ListAuthorizedMemoryIDsForAudience(ctx context.Context, projectID, actorID string, allowedScopeIDs []string, excludeSessionHistory bool) (map[string]struct{}, error) {
 	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(actorID) == "" || len(allowedScopeIDs) == 0 {
 		return nil, fmt.Errorf("%w: project, actor, and allowed scopes are required", model.ErrInvalid)
 	}
@@ -380,6 +420,9 @@ func (s *Store) ListAuthorizedMemoryIDs(ctx context.Context, projectID, actorID 
 		args = append(args, scopeID)
 	}
 	query += ")"
+	if excludeSessionHistory {
+		query += workerMemoryAudiencePredicate
+	}
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list authorized memory IDs: %w", err)
@@ -405,6 +448,11 @@ func (s *Store) ListAuthorizedMemoryIDs(ctx context.Context, projectID, actorID 
 // reloaded and gated by MemoryService before ranking. An empty phrase selects
 // recent authorized IDs without reading content.
 func (s *Store) SearchAuthorizedMemoryIDs(ctx context.Context, projectID, actorID string, allowedScopeIDs []string, phrase string, limit int) ([]string, error) {
+	return s.SearchAuthorizedMemoryIDsForAudience(ctx, projectID, actorID, allowedScopeIDs, phrase, limit, false)
+}
+
+// SearchAuthorizedMemoryIDsForAudience applies worker history exclusion before the fallback LIMIT.
+func (s *Store) SearchAuthorizedMemoryIDsForAudience(ctx context.Context, projectID, actorID string, allowedScopeIDs []string, phrase string, limit int, excludeSessionHistory bool) ([]string, error) {
 	phrase = strings.TrimSpace(phrase)
 	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(actorID) == "" || len(allowedScopeIDs) == 0 {
 		return nil, fmt.Errorf("%w: project, actor, and allowed scopes are required", model.ErrInvalid)
@@ -424,6 +472,9 @@ func (s *Store) SearchAuthorizedMemoryIDs(ctx context.Context, projectID, actorI
 		args = append(args, scopeID)
 	}
 	query += `)`
+	if excludeSessionHistory {
+		query += workerMemoryAudiencePredicate
+	}
 	if phrase != "" {
 		query += ` AND instr(lower(memory_id || ' ' || title || ' ' || body), lower(?)) > 0`
 		args = append(args, phrase)
@@ -615,7 +666,50 @@ func (s *Store) UpdateMemory(ctx context.Context, projectID, memoryID string, ex
 		return model.MemoryRecordV2{}, fmt.Errorf("begin update memory: %w", err)
 	}
 	defer tx.Rollback()
+	rec, err := s.updateMemoryTx(ctx, tx, projectID, memoryID, expectedRevision, mutator)
+	if err != nil {
+		var refusal *memoryUpdateFirewallRefusal
+		if errors.As(err, &refusal) {
+			_ = tx.Rollback()
+			_ = s.recordMemoryRefusalEvidence(ctx, refusal.record, refusal.cause)
+		} else if errors.Is(err, security.ErrSecretDetected) {
+			// Record the refusal outside the mutation transaction so the
+			// event survives the rollback, without echoing the secret.
+			_ = tx.Rollback()
+			if current, gErr := s.GetMemoryV2(ctx, projectID, memoryID); gErr == nil {
+				_ = s.recordMemoryRefusalEvidence(ctx, current, err)
+			}
+		}
+		return model.MemoryRecordV2{}, err
+	}
+	if command, ok := ctx.Value(commandKey{}).(CommandRecord); ok {
+		if (command.ProjectID != projectID && command.TargetProjectID != projectID) || command.TargetID != memoryID || command.ExpectedVersion != expectedRevision {
+			return model.MemoryRecordV2{}, model.ErrConflict
+		}
+		if err := insertCommandReceipt(ctx, tx, command, rec.Revision); err != nil {
+			return model.MemoryRecordV2{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("commit update memory: %w", err)
+	}
+	return rec, nil
+}
 
+type memoryUpdateFirewallRefusal struct {
+	record model.MemoryRecordV2
+	cause  error
+}
+
+func (e *memoryUpdateFirewallRefusal) Error() string {
+	return fmt.Sprintf("updated record firewall rejected: %v", e.cause)
+}
+func (e *memoryUpdateFirewallRefusal) Unwrap() error { return e.cause }
+
+// updateMemoryTx preserves the canonical CAS/firewall/outbox path for batch
+// operations whose caller owns the transaction and atomic audit receipts.
+func (s *Store) updateMemoryTx(ctx context.Context, tx *sql.Tx, projectID, memoryID string, expectedRevision int64, mutator func(*model.MemoryRecordV2) error) (model.MemoryRecordV2, error) {
+	var err error
 	// 1. Fetch existing record with row-level lock/transaction
 	var (
 		rec                                    model.MemoryRecordV2
@@ -716,6 +810,9 @@ func (s *Store) UpdateMemory(ctx context.Context, projectID, memoryID string, ex
 		rec.LastVerifiedAt = &t
 	}
 
+	if err := completeOperatorMemoryMutationSnapshot(ctx, &rec, createdAt, updatedAt); err != nil {
+		return model.MemoryRecordV2{}, fmt.Errorf("decode complete memory mutation snapshot: %w", err)
+	}
 	// 3. Apply mutator
 	if err := mutator(&rec); err != nil {
 		return model.MemoryRecordV2{}, fmt.Errorf("mutator error: %w", err)
@@ -726,11 +823,9 @@ func (s *Store) UpdateMemory(ctx context.Context, projectID, memoryID string, ex
 		return model.MemoryRecordV2{}, fmt.Errorf("updated record invalid: %w", err)
 	}
 
-	fw := security.NewFirewall(security.FirewallConfig{})
-	if err := fw.ScanRecord(ctx, rec); err != nil {
-		_ = tx.Rollback()
-		_ = s.recordMemoryRefusalEvidence(ctx, rec, err)
-		return model.MemoryRecordV2{}, fmt.Errorf("updated record firewall rejected: %w", err)
+	rec, _, err = security.NewFirewall(security.FirewallConfig{}).AdmitRecord(ctx, rec)
+	if err != nil {
+		return model.MemoryRecordV2{}, &memoryUpdateFirewallRefusal{record: rec, cause: err}
 	}
 
 	rec.Revision = expectedRevision + 1
@@ -804,10 +899,6 @@ func (s *Store) UpdateMemory(ctx context.Context, projectID, memoryID string, ex
 		MemoryID: rec.ID, Revision: rec.Revision, Lifecycle: rec.Lifecycle, ContentDigest: rec.ContentDigest,
 	}); err != nil {
 		return model.MemoryRecordV2{}, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return model.MemoryRecordV2{}, fmt.Errorf("commit update memory: %w", err)
 	}
 
 	return rec, nil

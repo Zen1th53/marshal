@@ -1,0 +1,470 @@
+{
+  "coverage": {
+    "go_files": 7,
+    "parsed": 7,
+    "failed": 0,
+    "skipped": 0,
+    "complete": true
+  },
+  "files": [
+    {
+      "path": "cmd/app/main.go",
+      "package": "main",
+      "configs": [
+        "linux",
+        "darwinpro"
+      ],
+      "imports": [
+        "fmt",
+        "example.com/fixture/internal/failover",
+        "example.com/fixture/store"
+      ],
+      "decls": [
+        {
+          "id": "cmd/app#main",
+          "kind": "func",
+          "lines": "11-13",
+          "bytes": "143-165",
+          "signature": "func main()"
+        },
+        {
+          "id": "cmd/app#run",
+          "kind": "func",
+          "lines": "15-20",
+          "bytes": "167-307",
+          "signature": "func run()"
+        }
+      ]
+    },
+    {
+      "path": "internal/failover/failover.go",
+      "package": "failover",
+      "configs": [
+        "linux",
+        "darwinpro"
+      ],
+      "decls": [
+        {
+          "id": "internal/failover#Failover",
+          "kind": "func",
+          "lines": "5-12",
+          "bytes": "112-235",
+          "signature": "func Failover(providers []string) string",
+          "doc": "Failover returns the first healthy provider."
+        },
+        {
+          "id": "internal/failover#healthy",
+          "kind": "func",
+          "lines": "14-14",
+          "bytes": "237-297",
+          "signature": "func healthy(provider string) bool"
+        },
+        {
+          "id": "internal/failover#retryBudget",
+          "kind": "func",
+          "lines": "17-17",
+          "bytes": "366-401",
+          "signature": "func retryBudget() int",
+          "doc": "retryBudget mentions egress only in this comment: egress proxy."
+        }
+      ]
+    },
+    {
+      "path": "store/pro.go",
+      "package": "store",
+      "constraint": "pro",
+      "configs": [
+        "darwinpro"
+      ],
+      "decls": [
+        {
+          "id": "store#ProFeature",
+          "kind": "func",
+          "lines": "6-8",
+          "bytes": "79-135",
+          "signature": "func ProFeature() string",
+          "doc": "ProFeature is only built with the \"pro\" tag."
+        }
+      ]
+    },
+    {
+      "path": "store/store.go",
+      "package": "store",
+      "configs": [
+        "linux",
+        "darwinpro"
+      ],
+      "decls": [
+        {
+          "id": "store#DB",
+          "kind": "type",
+          "lines": "5-7",
+          "bytes": "78-109",
+          "signature": "type DB struct",
+          "doc": "DB is a widget database."
+        },
+        {
+          "id": "store#Open",
+          "kind": "func",
+          "lines": "10-12",
+          "bytes": "144-198",
+          "signature": "func Open(name string) *DB",
+          "doc": "Open opens a widget database."
+        },
+        {
+          "id": "store#DB.Close",
+          "kind": "method",
+          "lines": "15-17",
+          "bytes": "230-272",
+          "signature": "func (d *DB) Close() error",
+          "doc": "Close closes the database."
+        },
+        {
+          "id": "store#Base",
+          "kind": "type",
+          "lines": "20-20",
+          "bytes": "344-362",
+          "signature": "type Base struct",
+          "doc": "Base provides a Name method that is promoted into embedding types."
+        },
+        {
+          "id": "store#Base.Name",
+          "kind": "method",
+          "lines": "23-23",
+          "bytes": "395-438",
+          "signature": "func (Base) Name() string",
+          "doc": "Name returns the base name."
+        },
+        {
+          "id": "store#Widget",
+          "kind": "type",
+          "lines": "26-28",
+          "bytes": "501-529",
+          "signature": "type Widget struct",
+          "doc": "Widget embeds Base, so Widget.Name is promoted from Base.",
+          "embeds": [
+            "Base"
+          ]
+        },
+        {
+          "id": "store#Platform",
+          "kind": "func",
+          "lines": "31-33",
+          "bytes": "582-627",
+          "signature": "func Platform() string",
+          "doc": "Platform reports the platform-specific backend."
+        }
+      ]
+    },
+    {
+      "path": "store/store_darwin.go",
+      "package": "store",
+      "configs": [
+        "darwinpro"
+      ],
+      "decls": [
+        {
+          "id": "store#platform",
+          "kind": "func",
+          "lines": "3-3",
+          "bytes": "15-57",
+          "signature": "func platform() string"
+        }
+      ]
+    },
+    {
+      "path": "store/store_linux.go",
+      "package": "store",
+      "configs": [
+        "linux"
+      ],
+      "decls": [
+        {
+          "id": "store#platform",
+          "kind": "func",
+          "lines": "3-3",
+          "bytes": "15-56",
+          "signature": "func platform() string"
+        }
+      ]
+    },
+    {
+      "path": "store/store_test.go",
+      "package": "store",
+      "test": true,
+      "configs": [
+        "linux",
+        "darwinpro"
+      ],
+      "imports": [
+        "testing"
+      ],
+      "decls": [
+        {
+          "id": "store#TestOpen",
+          "kind": "func",
+          "lines": "5-10",
+          "bytes": "33-133",
+          "signature": "func TestOpen(t *testing.T)",
+          "test_func": true
+        }
+      ]
+    }
+  ],
+  "predicates": {
+    "cmd/app#run": {
+      "callees": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "cmd/app/main.go:16 store#Open store#Open []",
+          "cmd/app/main.go:17 ?.Close ?.Close []",
+          "cmd/app/main.go:19 ?.Name ?.Name []",
+          "cmd/app/main.go:19 ext:fmt.Println ext:fmt.Println []",
+          "cmd/app/main.go:19 internal/failover#Failover internal/failover#Failover []"
+        ]
+      },
+      "callers": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "cmd/app/main.go:12 cmd/app#main cmd/app/main.go#cmd/app#main#1 [linux,darwinpro]"
+        ]
+      },
+      "declared_in": {
+        "method": "syntactic/decl",
+        "bound": "exact",
+        "items": [
+          "cmd/app/main.go:15 cmd/app#run cmd/app/main.go#cmd/app#run [linux,darwinpro]"
+        ]
+      },
+      "references": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "cmd/app/main.go:12 cmd/app#main cmd/app/main.go#cmd/app#main#1 [linux,darwinpro]"
+        ]
+      },
+      "tests_of": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": []
+      }
+    },
+    "internal/failover#Failover": {
+      "callees": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "internal/failover/failover.go:7 internal/failover#healthy internal/failover#healthy []"
+        ]
+      },
+      "callers": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "cmd/app/main.go:19 cmd/app#run cmd/app/main.go#cmd/app#run#1 [linux,darwinpro]"
+        ]
+      },
+      "declared_in": {
+        "method": "syntactic/decl",
+        "bound": "exact",
+        "items": [
+          "internal/failover/failover.go:5 internal/failover#Failover internal/failover/failover.go#internal/failover#Failover [linux,darwinpro]"
+        ]
+      },
+      "references": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "cmd/app/main.go:19 cmd/app#run cmd/app/main.go#cmd/app#run#1 [linux,darwinpro]"
+        ]
+      },
+      "tests_of": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": []
+      }
+    },
+    "store#Base.Name": {
+      "callees": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": []
+      },
+      "callers": {
+        "method": "syntactic/name-match",
+        "bound": "none",
+        "items": [
+          "cmd/app/main.go:19 cmd/app#run cmd/app/main.go#cmd/app#run#1 [linux,darwinpro]"
+        ]
+      },
+      "declared_in": {
+        "method": "syntactic/decl",
+        "bound": "exact",
+        "items": [
+          "store/store.go:23 store#Base.Name store/store.go#store#Base.Name [linux,darwinpro]"
+        ]
+      },
+      "tests_of": {
+        "method": "syntactic/name-match",
+        "bound": "none",
+        "items": []
+      }
+    },
+    "store#DB.Close": {
+      "callees": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": []
+      },
+      "callers": {
+        "method": "syntactic/name-match",
+        "bound": "none",
+        "items": [
+          "cmd/app/main.go:17 cmd/app#run cmd/app/main.go#cmd/app#run#1 [linux,darwinpro]",
+          "store/store_test.go:7 store#TestOpen store/store_test.go#store#TestOpen#1 [linux,darwinpro]"
+        ]
+      },
+      "declared_in": {
+        "method": "syntactic/decl",
+        "bound": "exact",
+        "items": [
+          "store/store.go:15 store#DB.Close store/store.go#store#DB.Close [linux,darwinpro]"
+        ]
+      },
+      "tests_of": {
+        "method": "syntactic/name-match",
+        "bound": "none",
+        "items": [
+          "store/store_test.go:5 store#TestOpen store/store_test.go#store#TestOpen [linux,darwinpro]"
+        ]
+      }
+    },
+    "store#Open": {
+      "callees": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": []
+      },
+      "callers": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "cmd/app/main.go:16 cmd/app#run cmd/app/main.go#cmd/app#run#1 [linux,darwinpro]",
+          "store/store_test.go:6 store#TestOpen store/store_test.go#store#TestOpen#1 [linux,darwinpro]"
+        ]
+      },
+      "declared_in": {
+        "method": "syntactic/decl",
+        "bound": "exact",
+        "items": [
+          "store/store.go:10 store#Open store/store.go#store#Open [linux,darwinpro]"
+        ]
+      },
+      "references": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "cmd/app/main.go:16 cmd/app#run cmd/app/main.go#cmd/app#run#1 [linux,darwinpro]",
+          "store/store_test.go:6 store#TestOpen store/store_test.go#store#TestOpen#1 [linux,darwinpro]"
+        ]
+      },
+      "tests_of": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "store/store_test.go:5 store#TestOpen store/store_test.go#store#TestOpen [linux,darwinpro]"
+        ]
+      }
+    },
+    "store#ProFeature": {
+      "callees": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "store/pro.go:7 store#platform store#platform []"
+        ]
+      },
+      "callers": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": []
+      },
+      "declared_in": {
+        "method": "syntactic/decl",
+        "bound": "exact",
+        "items": [
+          "store/pro.go:6 store#ProFeature store/pro.go#store#ProFeature [darwinpro]"
+        ]
+      },
+      "references": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": []
+      },
+      "tests_of": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": []
+      }
+    },
+    "store#Widget": {
+      "declared_in": {
+        "method": "syntactic/decl",
+        "bound": "exact",
+        "items": [
+          "store/store.go:26 store#Widget store/store.go#store#Widget [linux,darwinpro]"
+        ]
+      },
+      "references": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "cmd/app/main.go:18 cmd/app#run cmd/app/main.go#cmd/app#run#1 [linux,darwinpro]"
+        ]
+      },
+      "tests_of": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": []
+      }
+    },
+    "store#platform": {
+      "callees": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": []
+      },
+      "callers": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "store/pro.go:7 store#ProFeature store/pro.go#store#ProFeature#1 [darwinpro]",
+          "store/store.go:32 store#Platform store/store.go#store#Platform#1 [linux,darwinpro]"
+        ]
+      },
+      "declared_in": {
+        "method": "syntactic/decl",
+        "bound": "exact",
+        "items": [
+          "store/store_darwin.go:3 store#platform store/store_darwin.go#store#platform [darwinpro]",
+          "store/store_linux.go:3 store#platform store/store_linux.go#store#platform [linux]"
+        ]
+      },
+      "references": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": [
+          "store/pro.go:7 store#ProFeature store/pro.go#store#ProFeature#1 [darwinpro]",
+          "store/store.go:32 store#Platform store/store.go#store#Platform#1 [linux,darwinpro]"
+        ]
+      },
+      "tests_of": {
+        "method": "syntactic/scope",
+        "bound": "lower",
+        "items": []
+      }
+    }
+  }
+}

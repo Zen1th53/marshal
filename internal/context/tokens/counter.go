@@ -51,7 +51,7 @@ func (c *Counter) CountTokens(provider, modelName, text string) int {
 		charsPerToken = 3.4
 	case "openai", "codex":
 		charsPerToken = 3.6
-	case "gemini", "google":
+	case "agy", "antigravity", "google":
 		charsPerToken = 3.5
 	default:
 		charsPerToken = 3.2 // conservative fallback

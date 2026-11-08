@@ -47,7 +47,7 @@ func TestPTYLocalControlProofReadbackAndSlashRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	terminal := startFrozenTUIInProject(t, 40, 180, bin, project, "tui", session)
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/goal")
 	terminal.mustSee("Active Goal [v2]: PTY canonical local proof wording")
 	terminal.sendLine("/goal forged worker interpretation")

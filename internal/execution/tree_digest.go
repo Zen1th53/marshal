@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/hostgit"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,7 +15,8 @@ import (
 
 // WorkspaceTreeDigest binds verification to the bytes Process 05 actually
 // leaves behind, including dirty and untracked files. Metadata owned by Git
-// and MARSHAL is excluded; symlinks are hashed as links and never followed.
+// and MARSHAL is excluded, as are nested repositories and linked worktrees;
+// symlinks are hashed as links and never followed.
 func WorkspaceTreeDigest(root string) (string, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
@@ -32,8 +35,24 @@ func WorkspaceTreeDigest(root string) (string, error) {
 			return nil
 		}
 		first := strings.Split(filepath.ToSlash(rel), "/")[0]
-		if entry.IsDir() && (first == ".git" || first == ".marshal") {
-			return filepath.SkipDir
+		if first == ".git" || statepath.Reserved(first) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// A nested repository or linked worktree (its own .git file or
+		// directory) belongs to another checkout, not to this workspace.
+		if entry.IsDir() {
+			if _, err := os.Lstat(filepath.Join(path, ".git")); err == nil {
+				return filepath.SkipDir
+			}
+			// Interpreter and tool caches are rebuilt by any run of the
+			// project's own tests (a verifier running them writes
+			// __pycache__); they are never part of a delivered result.
+			if hostgit.DisposableCacheDir(entry.Name()) {
+				return filepath.SkipDir
+			}
 		}
 		paths = append(paths, rel)
 		return nil

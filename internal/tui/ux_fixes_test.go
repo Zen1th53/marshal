@@ -83,7 +83,7 @@ func TestBareMarshalShowsStatusAndUsage(t *testing.T) {
 
 func TestMarshalCompletionListsEverySubcommand(t *testing.T) {
 	ws := NewWorkspace(nil, "proj", "sess-1")
-	want := []string{"chat", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task"}
+	want := []string{"chat", "architecture", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task"}
 	_, matches := ws.completer.Suggest("/marshal ", len("/marshal "))
 	if len(matches) == 0 || matches[0] != "chat" {
 		t.Errorf("first suggestion = %v, want chat", matches)

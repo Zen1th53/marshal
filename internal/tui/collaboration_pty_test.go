@@ -39,7 +39,7 @@ func TestPTYCollaborationMessageAndHandoff(t *testing.T) {
 	}
 
 	terminal := startFrozenTUIInProject(t, 40, 180, bin, project, "tui", session)
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/msg AGENT-qa look at the retry path")
 	terminal.mustSee("sent to AGENT-qa")
 	terminal.sendLine("/handoff qa ready for review")

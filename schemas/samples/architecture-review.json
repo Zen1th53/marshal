@@ -1,0 +1,16 @@
+{
+  "protocol_version": "architecture-review.v1",
+  "action": "submit",
+  "revision": 1,
+  "digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "ui_digest": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+  "language": "go",
+  "request_type": "comment",
+  "comment": "Clarify boundary between local control and canonical execution.",
+  "target": {
+    "kind": "component",
+    "id": "execution-engine",
+    "diagram_id": "overview",
+    "layout_version": "1.0"
+  }
+}

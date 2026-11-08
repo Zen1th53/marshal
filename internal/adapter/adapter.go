@@ -39,9 +39,23 @@ type Request struct {
 	TrustedContext    string
 	Heartbeat         func()
 	HeartbeatInterval time.Duration
+	// Idle policy for progress-based liveness; zero disables it.
+	StallAfter  time.Duration
+	IdleTimeout time.Duration
+	Stalled     func(idle time.Duration)
+}
+
+// WorkerLiveness builds the command liveness policy for a request.
+func WorkerLiveness(request Request, classify func([]byte) StreamSignal) *Liveness {
+	return &Liveness{Classify: classify, DoneGrace: DefaultDoneGrace,
+		StallAfter: request.StallAfter, IdleTimeout: request.IdleTimeout, Stalled: request.Stalled}
 }
 
 type Command struct {
+	// StallWindow supervises silent worker turns; zero disables the watchdog.
+	StallWindow       time.Duration
+	StallScanInterval time.Duration
+	StallWorktree     string
 	// OutputObserver receives bytes before capture limits are applied.
 	OutputObserver    func(string, []byte)
 	Supervised        bool
@@ -54,18 +68,49 @@ type Command struct {
 	Stdin             []byte
 	Heartbeat         func()
 	HeartbeatInterval time.Duration
+	// Liveness, when set, supervises the worker by progress and by an
+	// explicit completion event instead of process existence alone.
+	Liveness *Liveness
+}
+
+// StreamSignal classifies one provider stdout line.
+type StreamSignal int
+
+const (
+	SignalNone StreamSignal = iota
+	SignalToolStart
+	SignalToolEnd
+	SignalDone
+)
+
+// DefaultDoneGrace is how long a worker may keep running after its final
+// stream event before the process group is stopped.
+const DefaultDoneGrace = 20 * time.Second
+
+// Liveness configures progress-based worker supervision.
+type Liveness struct {
+	Classify    func(line []byte) StreamSignal
+	DoneGrace   time.Duration
+	StallAfter  time.Duration
+	IdleTimeout time.Duration
+	Stalled     func(idle time.Duration)
 }
 
 type ProcessResult struct {
-	Stdout          []byte
-	Stderr          []byte
-	ExitCode        int
-	StartedAt       time.Time
-	EndedAt         time.Time
-	TimedOut        bool
-	Cancelled       bool
-	OutputTruncated bool
-	Isolation       model.IsolationCapability
+	Stalled          bool
+	StallReason      string
+	DoneSeen         bool
+	StoppedAfterDone bool
+	IdleTimedOut     bool
+	Stdout           []byte
+	Stderr           []byte
+	ExitCode         int
+	StartedAt        time.Time
+	EndedAt          time.Time
+	TimedOut         bool
+	Cancelled        bool
+	OutputTruncated  bool
+	Isolation        model.IsolationCapability
 }
 
 // Usage records normalized resource consumption reported by the harness.
@@ -82,6 +127,10 @@ type Usage struct {
 }
 
 type Result struct {
+	// NativeEnvelope is private governed parser metadata, never native text.
+	// Empty leaves legacy/default result serialization unchanged.
+	NativeEnvelope string `json:"-"`
+
 	Adapter         string
 	AdapterVersion  string
 	Model           string
@@ -99,6 +148,10 @@ type Result struct {
 	OutputTruncated bool
 	Isolation       model.IsolationCapability
 	Usage           Usage
+	// StoppedAfterDone: the worker emitted its final event but did not exit
+	// within the grace period, so it was stopped. IdleTimedOut: no progress.
+	StoppedAfterDone bool
+	IdleTimedOut     bool
 }
 
 type ProcessRunner interface {

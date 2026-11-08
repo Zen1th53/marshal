@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"unsafe"
+
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 // setupPTY allocates a pseudo-terminal so setup sees a real terminal on stdin,
@@ -87,7 +89,7 @@ func TestSetupOffersAndCarriesOutBlockingSteps(t *testing.T) {
 	if !strings.Contains(out, "project-execution") {
 		t.Fatalf("work should be available once the steps are done.\n%s", out)
 	}
-	for _, created := range []string{".git", ".marshal"} {
+	for _, created := range []string{".git", statepath.DirName} {
 		if _, err := os.Stat(filepath.Join(dir, created)); err != nil {
 			t.Fatalf("setup answered yes but %s does not exist: %v", created, err)
 		}

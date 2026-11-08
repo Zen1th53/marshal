@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,7 +36,7 @@ func TestNativeClaudeHistoryIsolationRecoveryAndFiltering(t *testing.T) {
 	}
 	w := newNativeHistoryWatch(dir, root)
 	w.claude = true
-	w.indexPath = filepath.Join(root, ".marshal", "claude", "history-index.json")
+	w.indexPath = filepath.Join(root, statepath.DirName, "claude", "history-index.json")
 	called := 0
 	w.consume = func(tr importer.SessionTranscript) error {
 		called++

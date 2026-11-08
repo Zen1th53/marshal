@@ -14,7 +14,7 @@ func TestT93ProviderAgnosticEpisodeCapture(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	providers := []string{"codex", "claude", "gemini", "opencode"}
+	providers := []string{"codex", "claude", "agy", "opencode"}
 
 	for _, prov := range providers {
 		in := episode.EpisodeInput{

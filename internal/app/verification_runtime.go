@@ -9,7 +9,6 @@ import (
 	goruntime "runtime"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
 	marshalstore "github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/verification"
@@ -99,7 +98,31 @@ func (s *VerificationService) Attestation(ctx context.Context, id string) (verif
 	if s == nil || s.runtime == nil {
 		return verification.CompletionAttestation{}, model.ErrUnavailable
 	}
-	return s.runtime.store.LatestCompletionAttestation(ctx, id)
+	a, err := s.runtime.store.LatestCompletionAttestation(ctx, id)
+	if err != nil {
+		return a, err
+	}
+	current, err := s.Current(ctx, id)
+	if err != nil {
+		return a, err
+	}
+	if err = verification.AttestationCurrent(a, current); err != nil {
+		return verification.CompletionAttestation{}, err
+	}
+	binding, err := s.authoritativeBinding(ctx, current.Binding.RunID)
+	if err != nil {
+		// Extreme attests under the required-context fence at close; once that
+		// observation is consumed the live source cannot be re-resolved, and the
+		// attestation is already verified against its own session binding.
+		if attestationAcceptsStoredBinding(err) {
+			return a, nil
+		}
+		return verification.CompletionAttestation{}, err
+	}
+	if err = a.Verify(binding); err != nil {
+		return verification.CompletionAttestation{}, err
+	}
+	return a, nil
 }
 
 func (s *VerificationService) Evaluate(ctx context.Context, id string) (verification.Session, error) {
@@ -140,14 +163,7 @@ func (s *VerificationService) Attest(ctx context.Context, id string, envelope ve
 	if err := envelope.Bundle.Verify(envelope.Payloads, current); err != nil {
 		return verification.CompletionAttestation{}, err
 	}
-	a, err := verification.NewCompletionAttestation("completion-"+id+fmt.Sprintf("-%d", session.Version), session, envelope.Bundle.ManifestDigest, provenance, s.now())
-	if err != nil {
-		return verification.CompletionAttestation{}, err
-	}
-	if err := s.runtime.store.AppendCompletionAttestation(ctx, a); err != nil {
-		return verification.CompletionAttestation{}, err
-	}
-	return a, nil
+	return s.completeRequiredContextAttestation(ctx, session, envelope, provenance)
 }
 
 func (s *VerificationService) authoritativeBinding(ctx context.Context, runID string) (verification.Binding, error) {
@@ -167,7 +183,7 @@ func (s *VerificationService) authoritativeBinding(ctx context.Context, runID st
 	if goal.Revision != run.GoalRevision || plan.Goal.GoalID != run.GoalID || plan.Goal.Revision != run.GoalRevision || string(run.ProjectID) != goal.ProjectID || plan.ProjectID != run.ProjectID {
 		return verification.Binding{}, verification.ErrBindingMismatch
 	}
-	tree, err := execution.WorkspaceTreeDigest(s.runtime.layout.Root)
+	_, _, tree, err := s.runtime.resolveRequiredCompletionSource(ctx, run)
 	if err != nil {
 		return verification.Binding{}, err
 	}

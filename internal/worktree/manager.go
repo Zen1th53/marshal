@@ -277,12 +277,6 @@ func (m *Manager) GC(ctx context.Context, req GCRequest) (GCResult, error) {
 		activeLeaseMap[l] = true
 	}
 
-	now := time.Now().UTC()
-	ttl := req.TTL
-	if ttl <= 0 {
-		ttl = 24 * time.Hour
-	}
-
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -312,7 +306,7 @@ func (m *Manager) GC(ctx context.Context, req GCRequest) (GCResult, error) {
 			continue
 		}
 
-		// 4. Determine retention state based on task status and TTL
+		// 4. Only an explicit terminal task status authorizes cleanup.
 		status, hasStatus := req.TaskStatuses[taskID]
 		canClean := false
 
@@ -327,13 +321,10 @@ func (m *Manager) GC(ctx context.Context, req GCRequest) (GCResult, error) {
 			}
 		}
 
-		// 5. Check directory age against TTL if not explicitly retained
-		if !canClean {
-			info, err := entry.Info()
-			if err == nil && now.Sub(info.ModTime()) > ttl {
-				canClean = true
-			}
-		}
+		// Age does not establish disposability. Unknown identities include
+		// Marshal task, integration and canonical lane artifacts that legacy
+		// task rows cannot classify. Retain them until their owner explicitly
+		// supplies a terminal cleanup disposition, regardless of TTL.
 
 		if canClean {
 			if !req.DryRun {

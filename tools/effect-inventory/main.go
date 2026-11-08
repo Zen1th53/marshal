@@ -50,7 +50,10 @@ func discover(root string) ([]site, error) {
 		}
 		rel = filepath.ToSlash(rel)
 		if entry.IsDir() {
-			if rel != "." && (strings.HasPrefix(entry.Name(), ".") || entry.Name() == "testdata" || rel == "tools" || rel == "internal/testutil") {
+			// third_party holds vendored dependency implementations (the code
+			// evidence module); its effects are reviewed in its own threat
+			// model and reached only through MARSHAL's adapter sites.
+			if rel != "." && (strings.HasPrefix(entry.Name(), ".") || entry.Name() == "testdata" || rel == "tools" || rel == "internal/testutil" || rel == "third_party") {
 				return filepath.SkipDir
 			}
 			return nil
@@ -169,6 +172,9 @@ func scanFile(rel, path string) ([]site, error) {
 func classify(call *ast.CallExpr, imports map[string]string, file string) string {
 	selector, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
+		if id, ok := call.Fun.(*ast.Ident); ok && (id.Name == "ApplyLegacyMemoryMigration" || id.Name == "InitializeAndApplyLegacyMemoryMigration" || id.Name == "RollbackLegacyMemoryMigration") {
+			return "record-write-wrapper"
+		}
 		if id, ok := call.Fun.(*ast.Ident); ok && (id.Name == "git" || id.Name == "gitMarshal" || id.Name == "runGit" || id.Name == "gitOutput" || id.Name == "execGit" || id.Name == "diffGit" || id.Name == "restoreSnapshot" || id.Name == "RestoreDatabase" || id.Name == "RestoreDatabaseExpected") {
 			return "git-or-restore-wrapper"
 		}
@@ -188,6 +194,9 @@ func classify(call *ast.CallExpr, imports map[string]string, file string) string
 	case "syscall", "golang.org/x/sys/unix":
 		if name == "Exec" || name == "ForkExec" || name == "StartProcess" {
 			return "program"
+		}
+		if name == "Renameat2" {
+			return "filesystem"
 		}
 	case "os":
 		switch name {
@@ -216,7 +225,7 @@ func classify(call *ast.CallExpr, imports map[string]string, file string) string
 			return "listener"
 		}
 	case "github.com/Zen1th53/marshal/internal/hostgit":
-		if name == "Command" || name == "Root" {
+		if name == "Command" || name == "CommitCommand" || name == "Root" {
 			return "git-program"
 		}
 	}
@@ -245,10 +254,12 @@ func classify(call *ast.CallExpr, imports map[string]string, file string) string
 	if name == "ListenAndServe" || name == "ListenAndServeTLS" {
 		return "listener"
 	}
-	if (name == "Exec" || name == "ExecContext") && (strings.HasPrefix(file, "internal/store/") || strings.HasPrefix(file, "internal/memory/")) {
+	if (name == "Exec" || name == "ExecContext") && (strings.HasPrefix(file, "internal/store/") || strings.HasPrefix(file, "internal/memory/") || file == "internal/statepath/migrate.go") {
 		return "record-write"
 	}
 	switch name {
+	case "ApplyLegacyMemoryMigration", "InitializeAndApplyLegacyMemoryMigration", "RollbackLegacyMemoryMigration", "recordProviderTransportConsumed":
+		return "record-write-wrapper"
 	case "Launch":
 		return "agent-launch"
 	case "RestoreDatabase", "RestoreDatabaseExpected", "RestoreCheckpoint", "RestoreVerified", "RestoreBackup", "RestoreState", "RollbackToCheckpoint":

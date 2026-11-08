@@ -47,4 +47,14 @@ func TestM10MarshalDecisionsReopenSequence(t *testing.T) {
 	if len(got) != 2 || got[0].Type != events.EventTypeMarshalRecommended || got[1].Type != events.EventTypeMarshalTaskAccepted || got[0].Sequence >= got[1].Sequence {
 		t.Fatalf("decisions: %+v", got)
 	}
+	after, err := s.MarshalDecisionsAfter(ctx, "run-1", got[0].Sequence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != 1 || after[0].Sequence != got[1].Sequence {
+		t.Fatalf("decisions after %d: %+v", got[0].Sequence, after)
+	}
+	if none, err := s.MarshalDecisionsAfter(ctx, "run-1", got[1].Sequence); err != nil || len(none) != 0 {
+		t.Fatalf("decisions after the last: %+v, %v", none, err)
+	}
 }

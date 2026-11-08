@@ -1,0 +1,18 @@
+Vendored copy of the Code Evidence Context module (github.com/Zen1th53/code-evidence).
+
+Upstream: local repository (no remote), branch cost-model
+Commit:   75e9c3d (Held-out check of the cost model (A' vs C2) and docs/COST-MODEL.md)
+Imported: 2026-11-06, unmodified except as listed below.
+
+Included: go.mod, go.sum, README.md, evidence/, internal/, docs/SPEC.md,
+docs/THREAT-MODEL.md, docs/COST-MODEL.md.
+Removed:  every *_test.go file, bench/, cmd/, release/, scripts/, tools/,
+testdata/, internal/conformance, internal/corpus and internal/mcp (tests,
+benchmarks, the CLI and the standalone MCP server run in the upstream
+repository; MARSHAL links only evidence/ and the internal packages it uses).
+
+MARSHAL builds it through `replace github.com/Zen1th53/code-evidence =>
+./third_party/code-evidence` in go.mod, so release builds need no network
+fetch. License: not yet chosen upstream (owner decision, SPEC section 11);
+this copy is the owner's own code and is not redistributed separately.
+To update: re-run the same git archive at the new commit and update this file.

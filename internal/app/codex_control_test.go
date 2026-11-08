@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/projectid"
 	"os"
 	"path/filepath"
 	"strings"
@@ -140,15 +141,19 @@ func TestCodexModelValidationBeforeClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	before, err := runtime.Task(ctx, "TASK-CODEX-VALIDATION")
+	if err != nil {
+		t.Fatal(err)
+	}
 	// 1. Unknown model must fail closed before claim
-	_, err = runtime.Run(ctx, RunRequest{
+	result, err := runtime.Run(ctx, RunRequest{
 		TaskID:           "TASK-CODEX-VALIDATION",
 		AgentID:          agent.ID,
 		Adapter:          "codex",
 		Model:            "gpt-fake-nonexistent",
 		ExpectedRevision: 0,
 	})
-	if err == nil || !errors.Is(err, model.ErrInvalid) {
+	if !assertLegacyRunFixtureRefused(t, runtime, before, result, err) && (err == nil || !errors.Is(err, model.ErrInvalid)) {
 		t.Fatalf("expected ErrInvalid for unknown model, got %v", err)
 	}
 
@@ -172,10 +177,10 @@ func TestCodexModelValidationBeforeClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = runtime.Run(ctx, RunRequest{
+	result, err = runtime.Run(ctx, RunRequest{
 		TaskID: "TASK-CODEX-VALIDATION", AgentID: wrongProvider.ID, Adapter: "codex", Model: "gpt-5.6-terra", ExpectedRevision: 0,
 	})
-	if !errors.Is(err, model.ErrInvalid) {
+	if !assertLegacyRunFixtureRefused(t, runtime, before, result, err) && !errors.Is(err, model.ErrInvalid) {
 		t.Fatalf("wrong provider must be refused before claim: %v", err)
 	}
 	sessCount, err = runtime.store.Count(ctx, "sessions")
@@ -193,15 +198,22 @@ func TestCodexModelValidationBeforeClaim(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = runtime.Run(ctx, RunRequest{
+	before, err = runtime.Task(ctx, "TASK-CODEX-DANGEROUS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err = runtime.Run(ctx, RunRequest{
 		TaskID:           "TASK-CODEX-DANGEROUS",
 		AgentID:          agent2.ID,
 		Adapter:          "codex",
 		Model:            "--dangerously-bypass-approvals-and-sandbox",
 		ExpectedRevision: 0,
 	})
-	if err == nil || !errors.Is(err, model.ErrPolicyDenied) {
+	if !assertLegacyRunFixtureRefused(t, runtime, before, result, err) && (err == nil || !errors.Is(err, model.ErrPolicyDenied)) {
 		t.Fatalf("expected ErrPolicyDenied for dangerous flag, got %v", err)
+	}
+	if fake.probes != 0 || fake.runs != 0 {
+		t.Fatal("validation attempt reached the adapter")
 	}
 }
 
@@ -251,7 +263,9 @@ func TestProcess05PlanRunUsesDurableCanonicalTaskForCodex(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runtime.Close()
+	requiredTestAcceptedProjectContract(t, runtime)
 	goal := planGoal()
+	goal.ProjectID = requiredProcess05TestProjectID(runtime, goal.ProjectID)
 	goal.SuccessCriteria = []string{"output exists"}
 	if err := runtime.Store().SaveGoalContract(ctx, goal, 0); err != nil {
 		t.Fatal(err)
@@ -259,7 +273,7 @@ func TestProcess05PlanRunUsesDurableCanonicalTaskForCodex(t *testing.T) {
 	now := time.Now().UTC()
 	capacity := goalintake.UnknownCapacity("codex", true)
 	_, err = runtime.Plans().Create(ctx, CreatePlanRequest{
-		SessionID: goal.SessionID, ProjectID: runtimePlanProject,
+		SessionID: goal.SessionID, ProjectID: projectid.ID(goal.ProjectID),
 		Tasks:             []plan.Task{{ID: "plan-local-task", Title: "write Codex output", Mutating: true, Paths: []string{"codex_output.txt"}, Criteria: []string{"output exists"}}},
 		Candidates:        []goalintake.Candidate{{Provider: "codex", Model: "gpt-5.6-terra", Capacity: capacity, Governance: constitution.GovernanceVerified}},
 		HarnessCandidates: []plan.HarnessCandidate{{Profile: model.HarnessProfile{Harness: "codex", InstalledVersion: "0.154.0", SupportedModels: []string{"gpt-5.6-terra"}, DefaultModel: "gpt-5.6-terra", ProbeEvidenceID: "EV-codex", ProbedAt: now}, InstalledVersion: "0.154.0", Provider: "codex", Capacity: capacity}},
@@ -267,13 +281,13 @@ func TestProcess05PlanRunUsesDurableCanonicalTaskForCodex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runtime.Plans().Approve(ctx, runtimePlanProject); err != nil {
+	if _, err := runtime.Plans().Approve(ctx, projectid.ID(goal.ProjectID)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := runtime.RegisterAgent(ctx, RegisterAgentRequest{Name: "planned codex", Role: model.RoleDeveloper, ModelProvider: "codex"}); err != nil {
 		t.Fatal(err)
 	}
-	run, err := runtime.Execution().StartRun(ctx, goal.SessionID, runtimePlanProject)
+	run, err := runtime.Execution().StartRun(ctx, goal.SessionID, projectid.ID(goal.ProjectID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -616,6 +630,11 @@ func TestCodexRunEvidenceAndSessionBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	before, err := runtime.Task(ctx, "TASK-CODEX-RUN")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Run with explicit model
 	res, err := runtime.Run(ctx, RunRequest{
 		TaskID:           "TASK-CODEX-RUN",
@@ -624,6 +643,12 @@ func TestCodexRunEvidenceAndSessionBinding(t *testing.T) {
 		Model:            "gpt-5.6-terra",
 		ExpectedRevision: 0,
 	})
+	if assertLegacyRunFixtureRefused(t, runtime, before, res, err) {
+		if fake.probes != 0 || fake.runs != 0 {
+			t.Fatal("refused legacy Run called the adapter", fake.probes, fake.runs)
+		}
+		return
+	}
 	if err != nil {
 		t.Fatalf("Runtime.Run failed: %v", err)
 	}

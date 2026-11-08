@@ -20,13 +20,14 @@ const CapabilityDelegation = "ultra.delegate"
 // itself, "every path is gated" would be a convention maintained by whoever
 // remembered, and the first surface to forget would be a bypass nobody noticed.
 //
-// The gate answers from a held lease, never from configuration. A nil gate
-// answers no, which is what makes Standard MARSHAL work with this package
-// present but unconfigured.
+// The default build answers from a held lease. Build-specific authorization
+// may supply a local grant. A nil gate always answers no.
 type Gate struct {
-	mu    sync.RWMutex
-	lease *Lease
-	ring  *KeyRing
+	buildGateState
+	mu     sync.RWMutex
+	lease  *Lease
+	ring   *KeyRing
+	reason error
 
 	// highWater is the latest time this gate has observed. Expiry is judged
 	// against it rather than against the raw clock, so winding the clock back
@@ -87,16 +88,22 @@ func (g *Gate) Adopt(l Lease) error {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if g.reason != nil {
+		return g.reason
+	}
 	g.lease = &l
 	return nil
 }
 
-// Entitled reports whether a verified, unexpired lease is held right now.
+// Entitled reports current authorization: a verified lease or a build grant.
 //
 // Expiry is re-checked on every call rather than captured at adoption. A lease
 // that was valid six minutes ago is not a lease that is valid now, and a gate
 // that answered from adoption-time state would keep ULTRA alive past its window.
 func (g *Gate) Entitled() bool {
+	if g.localEntitlement() {
+		return true
+	}
 	if g == nil {
 		return false
 	}
@@ -127,6 +134,9 @@ func (g *Gate) entitledLocked() bool {
 
 // Capability reports whether the held lease grants a named capability.
 func (g *Gate) Capability(name string) bool {
+	if g.localEntitlement() {
+		return name == CapabilityDelegation || name == "ultra.marshal"
+	}
 	if g == nil {
 		return false
 	}
@@ -140,9 +150,8 @@ func (g *Gate) Capability(name string) bool {
 
 // Bundle returns the server-held ULTRA material.
 //
-// This is what an ULTRA session actually consumes, and it is why forcing
-// Entitled to true in a patched build buys nothing: there is no local way to
-// produce this, so the session has a boolean and nothing to run with it.
+// Local grants do not carry lease material. Dispatch and verification use
+// the gate capabilities and their existing local routing services.
 func (g *Gate) Bundle() (Bundle, error) {
 	if g == nil {
 		return Bundle{}, ErrNoLease
@@ -202,9 +211,8 @@ func (g *Gate) EntitlementExpiresAt() (time.Time, bool) {
 // RenewAt reports when renewal should be attempted.
 //
 // Renewal is scheduled at the midpoint of the lease's window rather than at
-// expiry, so one failed attempt still leaves time for another before ULTRA
-// drops. A client that renewed at the last moment would degrade on every brief
-// hiccup.
+// expiry, so a healthy connected client has time to verify the next lease.
+// Any failed attempt immediately returns the session to Standard.
 func (g *Gate) RenewAt() (time.Time, bool) {
 	if g == nil {
 		return time.Time{}, false
@@ -252,4 +260,28 @@ func (g *Gate) Policy(executionEnabled bool) goalintake.DelegationPolicy {
 		Entitled:         g.Capability(CapabilityDelegation),
 		ExecutionEnabled: executionEnabled,
 	}
+}
+
+// DegradeBecause remembers why the connected lease became unavailable.
+func (g *Gate) DegradeBecause(err error) {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.lease = nil
+	g.reason = err
+}
+
+// Failure reports a lost connected session for honest status presentation.
+func (g *Gate) Failure() error {
+	if g == nil {
+		return nil
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.reason == nil && g.lease != nil && !g.entitledLocked() {
+		return ErrLeaseExpired
+	}
+	return g.reason
 }

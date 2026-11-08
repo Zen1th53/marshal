@@ -1,3 +1,14 @@
+# CAPABILITIES.yaml — Capability and Permission Policy
+#
+# NOTE ON EDITIONS & ENFORCEMENT:
+# In the governed edition (commercial), this policy specifies baseline operation constraints,
+# role permissions, and dangerous operation gates for sandboxed execution.
+# In Marshal, execution runs directly on the host without artificial
+# sandbox or permission restrictions (Marshal is intentionally unrestricted).
+# The role `may`/`may_not` and `dangerous_operations` specifications serve as
+# human/LLM guidance conventions and the governed edition (commercial) policy definitions, not
+# as runtime permission blockers in Marshal.
+
 version: 1
 
 principle: "tool possession does not imply authority"

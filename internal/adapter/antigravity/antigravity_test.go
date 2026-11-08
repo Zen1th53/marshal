@@ -27,10 +27,10 @@ func TestAntigravityProbe(t *testing.T) {
 			if len(cmd.Args) > 0 && cmd.Args[0] == "--version" {
 				return adapter.ProcessResult{
 					ExitCode: 0,
-					Stdout:   []byte("agy version 2.1.0\n"),
+					Stdout:   []byte("1.2.14\n"),
 				}, nil
 			}
-			return adapter.ProcessResult{ExitCode: 0}, nil
+			return adapter.ProcessResult{ExitCode: 0, Stdout: []byte("--print --output-format --conversation --mode --sandbox --new-project --disable-slash-commands")}, nil
 		},
 	}
 
@@ -45,8 +45,8 @@ func TestAntigravityProbe(t *testing.T) {
 	if !probe.Available {
 		t.Fatalf("expected available = true")
 	}
-	if probe.Capabilities["artifacts"] != "native" {
-		t.Fatalf("expected native artifacts capability")
+	if probe.Capabilities["artifacts"] != "unsupported" {
+		t.Fatalf("unimplemented adapter artifacts capability must remain unsupported")
 	}
 }
 
@@ -57,8 +57,7 @@ func TestAntigravityRunAndUsageParsing(t *testing.T) {
 	runner := &mockRunner{
 		runFn: func(ctx context.Context, cmd adapter.Command) (adapter.ProcessResult, error) {
 			executedCmd = cmd
-			jsonOutput := `{"type":"status","state":"working"}` + "\n" +
-				`{"type":"usage","usage":{"total_tokens":4200,"prompt_tokens":3000,"completion_tokens":1200,"cost_usd":0.012},"session_id":"sess-agy-001"}` + "\n"
+			jsonOutput := `{"conversation_id":"sess-agy-001","status":"SUCCESS","response":"Done","usage":{"total_tokens":4200,"input_tokens":3000,"output_tokens":1200,"cost_usd":0.012},"num_turns":1}`
 			return adapter.ProcessResult{
 				ExitCode:  0,
 				Stdout:    []byte(jsonOutput),
@@ -73,7 +72,7 @@ func TestAntigravityRunAndUsageParsing(t *testing.T) {
 		TaskID:   "task-agy-1",
 		Title:    "Implement network protocol handler",
 		Worktree: "/tmp/worktree-test",
-		Model:    "gemini-3.8-flash",
+		Model:    "gemini-3.8-flash-high",
 	}
 
 	result, err := client.Run(ctx, req)
@@ -91,13 +90,13 @@ func TestAntigravityRunAndUsageParsing(t *testing.T) {
 	// Verify command arguments
 	foundModel := false
 	for i, arg := range executedCmd.Args {
-		if arg == "--model" && i+1 < len(executedCmd.Args) && executedCmd.Args[i+1] == "gemini-3.8-flash" {
+		if arg == "--model" && i+1 < len(executedCmd.Args) && executedCmd.Args[i+1] == "gemini-3.8-flash-high" {
 			foundModel = true
 			break
 		}
 	}
 	if !foundModel {
-		t.Fatalf("expected --model gemini-3.8-flash in executed command args: %v", executedCmd.Args)
+		t.Fatalf("expected --model gemini-3.8-flash-high in executed command args: %v", executedCmd.Args)
 	}
 
 	// Verify usage parsing
@@ -121,7 +120,7 @@ func TestAntigravityResume(t *testing.T) {
 			executedCmd = cmd
 			return adapter.ProcessResult{
 				ExitCode:  0,
-				Stdout:    []byte(`{"type":"resumed","session_id":"sess-resume-100"}` + "\n"),
+				Stdout:    []byte(`{"conversation_id":"sess-resume-100","status":"SUCCESS","response":"Continued"}`),
 				StartedAt: time.Now().UTC(),
 				EndedAt:   time.Now().UTC(),
 			}, nil
@@ -145,12 +144,12 @@ func TestAntigravityResume(t *testing.T) {
 
 	foundResume := false
 	for i, arg := range executedCmd.Args {
-		if arg == "--resume" && i+1 < len(executedCmd.Args) && executedCmd.Args[i+1] == "sess-resume-100" {
+		if arg == "--conversation" && i+1 < len(executedCmd.Args) && executedCmd.Args[i+1] == "sess-resume-100" {
 			foundResume = true
 			break
 		}
 	}
 	if !foundResume {
-		t.Fatalf("expected --resume sess-resume-100 in executed command args: %v", executedCmd.Args)
+		t.Fatalf("expected --conversation sess-resume-100 in executed command args: %v", executedCmd.Args)
 	}
 }

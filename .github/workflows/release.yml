@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version tag (e.g. v0.0.2)'
+        description: 'Release version tag (e.g. v0.2.0)'
         required: true
 
 permissions:
@@ -24,7 +24,10 @@ jobs:
     name: Build & Publish Release Artifacts
     # Ubuntu 24.04 hosted runners restrict the user namespaces required by bwrap.
     runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    timeout-minutes: 180
+    env:
+      MARSHAL_CLOUD_ENDPOINT: 'off'
+      GOFLAGS: -buildvcs=false
 
     steps:
       - name: Checkout repository
@@ -91,7 +94,7 @@ jobs:
             *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
           esac
 
-      - name: Run Community release gates
+      - name: Run Marshal release gates
         run: scripts/community-release-gate.sh
 
       - name: Build release artifacts
@@ -117,7 +120,7 @@ jobs:
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.version.outputs.tag_name }}
-          name: "MARSHAL ${{ steps.version.outputs.tag_name }}"
+          name: "Marshal ${{ steps.version.outputs.tag_name }}"
           body_path: ${{ steps.version.outputs.release_notes }}
           prerelease: ${{ steps.version.outputs.prerelease }}
           fail_on_unmatched_files: true

@@ -69,6 +69,10 @@ type PromoteRequest struct {
 	MemoryID  string `json:"memory_id"`
 	ScopeID   string `json:"scope_id"`
 	Rationale string `json:"rationale,omitempty"`
+	// Nil preserves the legacy service API. Reviewed operator commands always
+	// supply this, including revision zero, and it reaches the store CAS.
+	ExpectedRevision *int64 `json:"expected_revision,omitempty"`
+	ExpectedDigest   string `json:"expected_digest,omitempty"`
 }
 
 type OutcomeCaptureRequest struct {
@@ -95,24 +99,26 @@ type OutcomeCaptureRequest struct {
 }
 
 type RecallRequest struct {
-	ProjectID         string            `json:"project_id"`
-	Query             string            `json:"query"`
-	AllowedScopeIDs   []string          `json:"allowed_scope_ids"`
-	CurrentHead       string            `json:"current_head,omitempty"`
-	CanonicalHead     string            `json:"canonical_head,omitempty"`
-	CurrentBranch     string            `json:"current_branch,omitempty"`
-	CurrentWorktreeID string            `json:"current_worktree_id,omitempty"`
-	ModifiedFiles     []string          `json:"modified_files,omitempty"`
-	DeletedFiles      []string          `json:"deleted_files,omitempty"`
-	RenamedFiles      map[string]string `json:"renamed_files,omitempty"`
-	CurrentFileHashes map[string]string `json:"current_file_hashes,omitempty"`
-	ExistingSymbols   map[string]bool   `json:"existing_symbols,omitempty"`
-	InvalidatedTests  []string          `json:"invalidated_tests,omitempty"`
-	MaxRecords        int               `json:"max_records,omitempty"`
-	MaxBytes          int               `json:"max_bytes,omitempty"`
-	RunID             string            `json:"run_id,omitempty"`
-	TaskID            string            `json:"task_id,omitempty"`
-	Provider          string            `json:"provider,omitempty"`
+	// ExcludeSessionHistory is a runtime-set worker audience boundary, never a caller grant.
+	ExcludeSessionHistory bool              `json:"-"`
+	ProjectID             string            `json:"project_id"`
+	Query                 string            `json:"query"`
+	AllowedScopeIDs       []string          `json:"allowed_scope_ids"`
+	CurrentHead           string            `json:"current_head,omitempty"`
+	CanonicalHead         string            `json:"canonical_head,omitempty"`
+	CurrentBranch         string            `json:"current_branch,omitempty"`
+	CurrentWorktreeID     string            `json:"current_worktree_id,omitempty"`
+	ModifiedFiles         []string          `json:"modified_files,omitempty"`
+	DeletedFiles          []string          `json:"deleted_files,omitempty"`
+	RenamedFiles          map[string]string `json:"renamed_files,omitempty"`
+	CurrentFileHashes     map[string]string `json:"current_file_hashes,omitempty"`
+	ExistingSymbols       map[string]bool   `json:"existing_symbols,omitempty"`
+	InvalidatedTests      []string          `json:"invalidated_tests,omitempty"`
+	MaxRecords            int               `json:"max_records,omitempty"`
+	MaxBytes              int               `json:"max_bytes,omitempty"`
+	RunID                 string            `json:"run_id,omitempty"`
+	TaskID                string            `json:"task_id,omitempty"`
+	Provider              string            `json:"provider,omitempty"`
 }
 
 type RecallItem struct {
@@ -122,10 +128,20 @@ type RecallItem struct {
 	Lifecycle model.MemoryLifecycle `json:"lifecycle"`
 }
 
+// RecallSource is minimal provenance captured from the same authorized snapshot
+// as an included body. It is an internal transport hook, not a separate lookup.
+type RecallSource struct {
+	Kind       string
+	Reference  string
+	HeadCommit string
+	ObservedAt time.Time
+}
+
 type RecallResponse struct {
-	Results []RecallItem     `json:"results"`
-	Receipt RetrievalReceipt `json:"receipt"`
-	Context string           `json:"context,omitempty"`
+	RecordSources map[string]RecallSource `json:"-"`
+	Results       []RecallItem            `json:"results"`
+	Receipt       RetrievalReceipt        `json:"receipt"`
+	Context       string                  `json:"context,omitempty"`
 }
 
 type RetrievalDecision struct {
@@ -301,6 +317,15 @@ func (s *MemoryService) InvalidateRecord(ctx context.Context, projectID, memoryI
 }
 
 func (s *MemoryService) IndexRecord(ctx context.Context, rec model.MemoryRecordV2) error {
+	// Extreme: a caller may index the record it wrote, whose secret the store
+	// removed; never let the value reach an index either.
+	if security.RedactsSecrets {
+		clean, _, err := security.NewFirewall(security.FirewallConfig{}).AdmitRecord(ctx, rec)
+		if err != nil {
+			return err
+		}
+		rec = clean
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -435,6 +460,9 @@ func (s *MemoryService) Get(ctx context.Context, principal authz.Principal, proj
 		return model.MemoryRecordV2{}, err
 	}
 	allowedScopes := []string{projectID, principal.ID}
+	if record.Scope == string(model.ScopeSession) && record.Source.Kind == "external" && record.SessionID == record.ScopeID && record.ACLScope == "" && principalHasAuthority(principal, authz.AuthorityPolicyAdmin) {
+		allowedScopes = append(allowedScopes, record.ScopeID)
+	}
 	if model.MemoryScopeKind(record.Scope) == model.ScopeTask {
 		if err := s.authorizeTaskScope(ctx, principal, authz.ActionMemoryRecall, record.ScopeID); err != nil {
 			return model.MemoryRecordV2{}, err
@@ -452,6 +480,10 @@ func (s *MemoryService) Get(ctx context.Context, principal authz.Principal, proj
 }
 
 func (s *MemoryService) Remember(ctx context.Context, principal authz.Principal, req RememberRequest) (model.MemoryRecordV2, error) {
+	return s.remember(ctx, principal, req, nil)
+}
+
+func (s *MemoryService) remember(ctx context.Context, principal authz.Principal, req RememberRequest, source *model.MemorySource) (model.MemoryRecordV2, error) {
 	if err := ctx.Err(); err != nil {
 		return model.MemoryRecordV2{}, err
 	}
@@ -515,6 +547,14 @@ func (s *MemoryService) Remember(ctx context.Context, principal authz.Principal,
 			Reference: principal.ID,
 		},
 	}
+	if source != nil {
+		rec.Source = *source
+	}
+	// Community refuses a secret; Extreme removes it and records that it did.
+	rec, _, err = security.NewFirewall(security.FirewallConfig{}).AdmitRecord(ctx, rec)
+	if err != nil {
+		return model.MemoryRecordV2{}, err
+	}
 	if s.propose != nil {
 		if err := s.propose(ctx, rec); err != nil {
 			return model.MemoryRecordV2{}, err
@@ -541,6 +581,9 @@ func (s *MemoryService) Promote(ctx context.Context, principal authz.Principal, 
 	if err != nil {
 		return model.MemoryRecordV2{}, err
 	}
+	if err = checkOperatorMemoryPromotionRead(ctx, s, principal, existing); err != nil {
+		return model.MemoryRecordV2{}, err
+	}
 	if req.ScopeID != "" && req.ScopeID != existing.ScopeID {
 		return model.MemoryRecordV2{}, authz.ErrUnauthorized
 	}
@@ -558,10 +601,11 @@ func (s *MemoryService) Promote(ctx context.Context, principal authz.Principal, 
 			return model.MemoryRecordV2{}, err
 		}
 	}
-	// Operator-authored runtime_service candidates are explicit operator
-	// proposals. Every model/import/outcome candidate remains evidence-gated,
-	// even when the promoting principal happens to share its source identity.
-	if existing.Authority == model.AuthorityAgent && existing.Source.Kind != "runtime_service" {
+	// Operator-authored runtime_service candidates and session history imports
+	// are explicit review proposals. Other agent candidates remain evidence-
+	// gated, even when the promoting principal shares their source identity.
+	operatorApprovedImport := existing.Scope == string(model.ScopeSession) && existing.Source.Kind == "external"
+	if existing.Authority == model.AuthorityAgent && existing.Source.Kind != "runtime_service" && !operatorApprovedImport {
 		if len(existing.EvidenceIDs) == 0 {
 			return model.MemoryRecordV2{}, fmt.Errorf("%w: agent candidate promotion requires evidence", model.ErrInvalid)
 		}
@@ -572,9 +616,23 @@ func (s *MemoryService) Promote(ctx context.Context, principal authz.Principal, 
 			}
 		}
 	}
-	promoted, err := s.store.UpdateMemory(ctx, existing.ProjectID, req.MemoryID, existing.Revision, func(rec *model.MemoryRecordV2) error {
+	expected := existing.Revision
+	if req.ExpectedRevision != nil {
+		expected = *req.ExpectedRevision
+	}
+	promoted, err := s.store.UpdateMemory(ctx, existing.ProjectID, req.MemoryID, expected, func(rec *model.MemoryRecordV2) error {
+		if err := checkOperatorMemoryPromotionRead(ctx, s, principal, *rec); err != nil {
+			return err
+		}
+		if req.ExpectedDigest != "" && req.ExpectedDigest != rec.ContentDigest {
+			return model.ErrConflict
+		}
 		rec.Lifecycle = model.MemoryDurable
 		rec.Authority = model.AuthorityOperator
+		if operatorApprovedImport {
+			rec.Scope = string(model.ScopeProject)
+			rec.ScopeID = req.ProjectID
+		}
 		now := time.Now().UTC()
 		rec.LastVerifiedAt = &now
 		if rec.ExtMeta == nil {
@@ -587,7 +645,8 @@ func (s *MemoryService) Promote(ctx context.Context, principal authz.Principal, 
 	if err != nil {
 		return model.MemoryRecordV2{}, err
 	}
-	if err := s.IndexRecord(ctx, promoted); err != nil {
+	noteOperatorMemoryPromotionPersisted(ctx, s, principal, promoted)
+	if err := indexOperatorMemoryPromotion(ctx, s, promoted); err != nil {
 		return model.MemoryRecordV2{}, fmt.Errorf("index promoted memory: %w", err)
 	}
 	return promoted, nil
@@ -649,49 +708,12 @@ func (s *MemoryService) ExtractCandidate(ctx context.Context, principal authz.Pr
 		}
 	}
 
-	kind := req.Kind
-	if !kind.IsValid() {
-		kind = model.MemoryKindSemantic
-	}
-
-	now := time.Now().UTC()
-	id, err := model.NewID("MEM-")
+	rec, err := buildExtractCandidate(principal, req)
 	if err != nil {
 		return model.MemoryRecordV2{}, err
 	}
 
-	rec := model.MemoryRecordV2{
-		ID:          id,
-		ProjectID:   req.ProjectID,
-		Kind:        kind,
-		Lifecycle:   model.MemoryCandidate,
-		Confidence:  model.ConfidenceInferred,
-		Authority:   model.AuthorityAgent, // Invariant: candidate extracts are ALWAYS agent-level authority
-		Title:       req.Title,
-		Body:        req.Body,
-		Scope:       string(scopeKind),
-		ScopeID:     scopeID,
-		EvidenceIDs: req.EvidenceIDs,
-		HeadCommit:  req.HeadCommit,
-		BranchName:  req.BranchName,
-		WorktreeID:  req.WorktreeID,
-		SessionID:   req.SessionID,
-		RunID:       req.RunID,
-		ObservedAt:  now,
-		IngestedAt:  now,
-		ValidFrom:   now,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		ExtMeta:     req.ExtMeta,
-		Source: model.MemorySource{
-			Kind:      "extracted_candidate",
-			Reference: principal.ID,
-			AgentID:   principal.ID,
-			SessionID: req.SessionID,
-			RunID:     req.RunID,
-		},
-	}
-	if err := security.NewFirewall(security.FirewallConfig{}).ScanRecord(ctx, rec); err != nil {
+	if rec, _, err = security.NewFirewall(security.FirewallConfig{}).AdmitRecord(ctx, rec); err != nil {
 		return model.MemoryRecordV2{}, err
 	}
 
@@ -1108,6 +1130,9 @@ func (s *MemoryService) Reconcile(ctx context.Context, principal authz.Principal
 	return report, nil
 }
 
+// maxRecalledSessionHistory bounds imported session history in one recall.
+const maxRecalledSessionHistory = 2
+
 func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, req RecallRequest) (RecallResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return RecallResponse{}, err
@@ -1156,7 +1181,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		}
 	}
 	query := strings.ToLower(strings.TrimSpace(req.Query))
-	authorizedIDs, err := s.store.ListAuthorizedMemoryIDs(ctx, req.ProjectID, principal.ID, req.AllowedScopeIDs)
+	authorizedIDs, err := s.store.ListAuthorizedMemoryIDsForAudience(ctx, req.ProjectID, principal.ID, req.AllowedScopeIDs, req.ExcludeSessionHistory)
 	if err != nil {
 		return RecallResponse{}, err
 	}
@@ -1165,6 +1190,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 	for _, term := range queryTerms {
 		queryTermSet[term] = struct{}{}
 	}
+	minimumTerms := recallMinimumTerms(len(queryTerms))
 	s.mu.RLock()
 	lexicalIndex := s.lexicalIndex
 	graphIndex := s.graphIndex
@@ -1194,7 +1220,10 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 	// 1. Lexical track candidates
 	if lexicalIndex != nil && query != "" {
 		trackCtx, cancel := context.WithTimeout(ctx, derivedTrackTimeout)
-		lexResults, err := lexicalIndex.SearchAuthorized(trackCtx, req.ProjectID, query, authorizedIDs, lexicalCandidateLimit)
+		// Candidates must be complete for the admission rule below: scanning
+		// only the rarest token's posting hid records that matched enough other
+		// terms but not that one.
+		lexResults, err := lexicalIndex.SearchAuthorizedMinTerms(trackCtx, req.ProjectID, query, authorizedIDs, lexicalCandidateLimit, minimumTerms)
 		cancel()
 		if err == nil {
 			for _, r := range lexResults {
@@ -1212,7 +1241,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 	// found. The store applies project/scope/ACL predicates before returning
 	// IDs, so this does not restore the old full-content production scan.
 	if len(matchedTrackMap) == 0 {
-		fallbackIDs, fallbackErr := s.store.SearchAuthorizedMemoryIDs(ctx, req.ProjectID, principal.ID, req.AllowedScopeIDs, query, lexicalCandidateLimit)
+		fallbackIDs, fallbackErr := s.store.SearchAuthorizedMemoryIDsForAudience(ctx, req.ProjectID, principal.ID, req.AllowedScopeIDs, query, lexicalCandidateLimit, req.ExcludeSessionHistory)
 		if fallbackErr != nil {
 			return RecallResponse{}, fallbackErr
 		}
@@ -1315,6 +1344,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		score         int
 		authorityRank int
 		tracks        []string
+		history       bool
 	}
 	var ranked []rankedRecord
 	receiptID, err := model.NewID("RCPT-")
@@ -1340,7 +1370,13 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 
 	for _, rec := range records {
 		decision := RetrievalDecision{MemoryID: rec.ID, Authority: string(rec.Authority), Lifecycle: string(rec.Lifecycle)}
-		if rec.Kind == model.MemoryKindWorking || rec.Lifecycle == model.MemoryTombstoned || rec.Lifecycle == model.MemoryRejected {
+		// Revalidate the canonical source even when a projection/cache was populated for the Marshal.
+		if req.ExcludeSessionHistory && (rec.Scope == string(model.ScopeSession) || rec.Source.Kind == "shared_channel" || rec.IsSessionHistory()) {
+			decision.Reason = "marshal_only_history"
+			receipt.Decisions = append(receipt.Decisions, decision)
+			continue
+		}
+		if rec.Kind == model.MemoryKindWorking || (rec.Lifecycle == model.MemoryCandidate && !recallsCandidateMemory(rec)) || rec.Lifecycle == model.MemoryTombstoned || rec.Lifecycle == model.MemoryRejected {
 			decision.Reason = "inactive_lifecycle"
 			receipt.Decisions = append(receipt.Decisions, decision)
 			continue
@@ -1411,15 +1447,6 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		// This relevance admission gate runs only after canonical authorization,
 		// lifecycle, and freshness gates. Strong semantic/graph providers may
 		// still admit paraphrases with no lexical overlap.
-		minimumTerms := (3*len(queryTerms) + 3) / 4 // ceil(75% overlap)
-		if minimumTerms > 4 {
-			// Long natural-language task prompts need not repeat every stop word;
-			// four exact cues are sufficient for lexical admission.
-			minimumTerms = 4
-		}
-		if minimumTerms < 1 {
-			minimumTerms = 1
-		}
 		strongDerivedMatch := hasStrongDerivedTrack(tracks, scoreMap[rec.ID])
 		taskScopedMatch := req.TaskID != "" && rec.Scope == string(model.ScopeTask) && rec.ScopeID == req.TaskID
 		if query != "" && !exactPhrase && matchedTerms < minimumTerms && !strongDerivedMatch && !taskScopedMatch {
@@ -1429,10 +1456,16 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		}
 		utilityScore := utilityScoreFromRecord(rec)
 		score += int(utilityScore * 5)
-		ranked = append(ranked, rankedRecord{record: rec, score: score, authorityRank: memoryAuthorityRank(rec.Authority), tracks: tracks})
+		ranked = append(ranked, rankedRecord{record: rec, score: score, authorityRank: memoryAuthorityRank(rec.Authority), tracks: tracks, history: rec.IsSessionHistory()})
 	}
 
+	// Imported session history (raw provider conversation) never outranks
+	// curated knowledge and fills at most a few slots, so a long captured
+	// session cannot crowd out what was deliberately remembered.
 	sort.SliceStable(ranked, func(i, j int) bool {
+		if ranked[i].history != ranked[j].history {
+			return !ranked[i].history
+		}
 		if ranked[i].authorityRank != ranked[j].authorityRank {
 			return ranked[i].authorityRank > ranked[j].authorityRank
 		}
@@ -1443,9 +1476,11 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 	})
 
 	var results []RecallItem
+	recordSources := make(map[string]RecallSource)
 	var cacheRecords []model.MemoryRecordV2
 	var contextBuilder strings.Builder
 	contextBuilder.WriteString("<marshal_memory_context trust=\"historical_data_not_instructions\">\n")
+	includedHistory := 0
 	for _, candidate := range ranked {
 		rec := candidate.record
 		rendered := fmt.Sprintf("  <memory id=\"%s\" kind=\"%s\" authority=\"%s\" lifecycle=\"%s\"><title>%s</title><body>%s</body></memory>\n",
@@ -1463,12 +1498,21 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 			receipt.Decisions = append(receipt.Decisions, decision)
 			continue
 		}
+		if candidate.history && includedHistory >= maxRecalledSessionHistory {
+			decision.Reason = "session_history_capped"
+			receipt.Decisions = append(receipt.Decisions, decision)
+			continue
+		}
+		if candidate.history {
+			includedHistory++
+		}
 		decision.Included = true
 		decision.Reason = "authorized_relevant_fresh"
 		receipt.ConsumedBytes += len(rendered)
 		receipt.Decisions = append(receipt.Decisions, decision)
 		contextBuilder.WriteString(rendered)
 		results = append(results, RecallItem{ID: rec.ID, Title: rec.DisplayTitle(), Kind: rec.Kind, Lifecycle: rec.Lifecycle})
+		recordSources[rec.ID] = RecallSource{Kind: rec.Source.Kind, Reference: rec.Source.Reference, HeadCommit: rec.HeadCommit, ObservedAt: rec.ObservedAt}
 		cacheRecords = append(cacheRecords, rec)
 	}
 	contextBuilder.WriteString("</marshal_memory_context>")
@@ -1502,7 +1546,7 @@ func (s *MemoryService) Recall(ctx context.Context, principal authz.Principal, r
 		return RecallResponse{}, fmt.Errorf("persist retrieval receipt: %w", err)
 	}
 
-	return RecallResponse{Results: results, Receipt: receipt, Context: contextBuilder.String()}, nil
+	return RecallResponse{Results: results, Receipt: receipt, Context: contextBuilder.String(), RecordSources: recordSources}, nil
 }
 
 func boundRetrievalDecisions(decisions []RetrievalDecision, limit int) ([]RetrievalDecision, int) {
@@ -1692,6 +1736,21 @@ func memorySearchTokens(value string) []string {
 			return false
 		}
 	})
+}
+
+// recallMinimumTerms is the lexical relevance admission rule: a record must
+// match ceil(75%) of the query terms, but never more than four.
+func recallMinimumTerms(queryTerms int) int {
+	minimumTerms := (3*queryTerms + 3) / 4 // ceil(75% overlap)
+	if minimumTerms > 4 {
+		// Long natural-language task prompts need not repeat every stop word;
+		// four exact cues are sufficient for lexical admission.
+		minimumTerms = 4
+	}
+	if minimumTerms < 1 {
+		minimumTerms = 1
+	}
+	return minimumTerms
 }
 
 func matchedMemorySearchTerms(value string, queryTerms map[string]struct{}) int {
@@ -1989,7 +2048,7 @@ func (s *MemoryService) persistWorkingConflict(ctx context.Context, projectID, t
 	return s.store.WriteMemoryV2(ctx, rec)
 }
 
-func (s *MemoryService) PromoteTaskSlot(ctx context.Context, principal authz.Principal, projectID, taskID string, slotType working.SlotType, targetKind model.MemoryKind, title string) (model.MemoryRecordV2, error) {
+func (s *MemoryService) PromoteTaskSlot(ctx context.Context, principal authz.Principal, projectID, taskID string, slotType working.SlotType, targetKind model.MemoryKind, title string, reviewed ...SlotPromotionReview) (model.MemoryRecordV2, error) {
 	if err := ctx.Err(); err != nil {
 		return model.MemoryRecordV2{}, err
 	}
@@ -2008,7 +2067,7 @@ func (s *MemoryService) PromoteTaskSlot(ctx context.Context, principal authz.Pri
 		return model.MemoryRecordV2{}, fmt.Errorf("%w: slot %s not found on task %s", model.ErrNotFound, slotType, taskID)
 	}
 
-	return s.ExtractCandidate(ctx, principal, ExtractCandidateRequest{
+	request := ExtractCandidateRequest{
 		ProjectID: projectID,
 		TaskID:    taskID,
 		Kind:      targetKind,
@@ -2021,7 +2080,32 @@ func (s *MemoryService) PromoteTaskSlot(ctx context.Context, principal authz.Pri
 			"slot_revision":    targetSlot.Revision,
 			"promoted_by":      principal.ID,
 		},
-	})
+	}
+	if len(reviewed) == 0 {
+		return s.ExtractCandidate(ctx, principal, request)
+	}
+	if len(reviewed) != 1 {
+		return model.MemoryRecordV2{}, model.ErrInvalid
+	}
+	review := reviewed[0]
+	if review.TaskID != taskID || review.SlotType != slotType || review.Revision != int64(targetSlot.Revision) || review.SourceID != taskSlotID(projectID, taskID, string(slotType)) {
+		return model.MemoryRecordV2{}, model.ErrConflict
+	}
+	rec, err := buildExtractCandidate(principal, request)
+	if err != nil {
+		return model.MemoryRecordV2{}, err
+	}
+	inserted, _, err := s.store.CommitMemoryCandidates(ctx, []model.MemoryRecordV2{rec}, &store.MemorySlotGuard{ID: review.SourceID, Revision: review.Revision, Digest: review.Digest})
+	if err != nil {
+		return model.MemoryRecordV2{}, err
+	}
+	if len(inserted) != 1 {
+		return model.MemoryRecordV2{}, model.ErrConflict
+	}
+	// Canonical durability is proven independently of disposable projections.
+	_ = s.IndexRecord(ctx, inserted[0])
+	return s.store.GetMemoryV2(ctx, projectID, rec.ID)
+
 }
 
 // Provider-Neutral Handoff Surfaces (M15)
@@ -2055,6 +2139,9 @@ type HandoffBundle struct {
 	DiffHash       string                `json:"diff_hash"`
 	ByteSize       int                   `json:"byte_size"`
 	GeneratedAt    time.Time             `json:"generated_at"`
+	// FirewallRedacted names the kinds of secret removed from the bundle
+	// (Marshal only); never the values.
+	FirewallRedacted []string `json:"firewall_redacted,omitempty"`
 }
 
 func (s *MemoryService) CompileHandoff(ctx context.Context, principal authz.Principal, req HandoffCompileRequest) (HandoffBundle, error) {
@@ -2164,8 +2251,21 @@ func (s *MemoryService) CompileHandoff(ctx context.Context, principal authz.Prin
 		return HandoffBundle{}, fmt.Errorf("encode sized handoff bundle: %w", err)
 	}
 	bundle.ByteSize = len(raw)
-	if err := security.NewFirewall(security.FirewallConfig{}).ScanText(string(raw)); err != nil {
+	// Community refuses a handoff that holds a secret. Marshal hands it on
+	// with the secret removed and the redaction named in the bundle.
+	if redacted, r, err := security.NewFirewall(security.FirewallConfig{}).AdmitJSON(raw); err != nil {
 		return HandoffBundle{}, fmt.Errorf("handoff firewall rejected: %w", err)
+	} else if r.Applied() {
+		var clean HandoffBundle
+		if err := json.Unmarshal(redacted, &clean); err != nil {
+			return HandoffBundle{}, fmt.Errorf("handoff redaction: %w", err)
+		}
+		clean.FirewallRedacted = r.Kinds
+		if raw, err = json.Marshal(clean); err != nil {
+			return HandoffBundle{}, err
+		}
+		clean.ByteSize = len(raw)
+		bundle = clean
 	}
 	if bundle.ByteSize > req.MaxBytes {
 		return HandoffBundle{}, fmt.Errorf("%w: handoff is %d bytes, limit is %d", model.ErrInvalid, bundle.ByteSize, req.MaxBytes)
@@ -2368,4 +2468,57 @@ func (s *MemoryService) GetUtilityScore(ctx context.Context, memoryID string) fl
 		return 0.5
 	}
 	return utilityScoreFromRecord(rec)
+}
+
+func buildExtractCandidate(principal authz.Principal, req ExtractCandidateRequest) (model.MemoryRecordV2, error) {
+	scopeKind := req.Scope
+	if scopeKind == "" {
+		scopeKind = model.ScopeProject
+	}
+	scopeID := strings.TrimSpace(req.ScopeID)
+	if scopeID == "" && scopeKind == model.ScopeProject {
+		scopeID = req.ProjectID
+	}
+	kind := req.Kind
+	if !kind.IsValid() {
+		kind = model.MemoryKindSemantic
+	}
+	now := time.Now().UTC()
+	id, err := model.NewID("MEM-")
+	if err != nil {
+		return model.MemoryRecordV2{}, err
+	}
+
+	rec := model.MemoryRecordV2{
+		ID:          id,
+		ProjectID:   req.ProjectID,
+		Kind:        kind,
+		Lifecycle:   model.MemoryCandidate,
+		Confidence:  model.ConfidenceInferred,
+		Authority:   model.AuthorityAgent, // Invariant: candidate extracts are ALWAYS agent-level authority
+		Title:       req.Title,
+		Body:        req.Body,
+		Scope:       string(scopeKind),
+		ScopeID:     scopeID,
+		EvidenceIDs: req.EvidenceIDs,
+		HeadCommit:  req.HeadCommit,
+		BranchName:  req.BranchName,
+		WorktreeID:  req.WorktreeID,
+		SessionID:   req.SessionID,
+		RunID:       req.RunID,
+		ObservedAt:  now,
+		IngestedAt:  now,
+		ValidFrom:   now,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		ExtMeta:     req.ExtMeta,
+		Source: model.MemorySource{
+			Kind:      "extracted_candidate",
+			Reference: principal.ID,
+			AgentID:   principal.ID,
+			SessionID: req.SessionID,
+			RunID:     req.RunID,
+		},
+	}
+	return rec, nil
 }

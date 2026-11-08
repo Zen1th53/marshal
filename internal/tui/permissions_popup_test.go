@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/store"
 	"os"
 	"path/filepath"
@@ -16,6 +17,9 @@ import (
 )
 
 func TestPermissionPopupRecordsBatchedDecisions(t *testing.T) {
+	if Edition() == "Marshal" {
+		t.Skip("Marshal applies reads automatically instead of a popup batch; TestExtremeReadsApplyAutomatically covers it")
+	}
 	w, runtime := realControlWorkspace(t, "SESSION-popup-batch", false)
 	dir := t.TempDir()
 	fake := filepath.Join(dir, "tmux")
@@ -64,6 +68,9 @@ func TestPermissionPopupRecordsBatchedDecisions(t *testing.T) {
 }
 
 func TestLargeMemoryBatchRoutesToPerEntryReview(t *testing.T) {
+	if Edition() == "Marshal" {
+		t.Skip("Marshal applies reads automatically and never opens an operator popup; TestExtremeReadsApplyAutomatically covers it")
+	}
 	w, runtime := realControlWorkspace(t, "SESSION-overflow", false)
 	ctx := context.Background()
 	for i := 0; i < 88; i++ {
@@ -101,8 +108,13 @@ func TestLargeMemoryBatchRoutesToPerEntryReview(t *testing.T) {
 		t.Fatal("permission queue did not drain")
 	}
 	records, err := runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: runtime.ProjectID()})
-	if err != nil || len(records) != 0 || len(runtime.ContinuationCandidates()) != 88 {
-		t.Fatalf("overflow wrote/lost candidates: %d %v", len(records), err)
+	if err != nil || len(records) != 88 || len(runtime.ContinuationCandidates()) != 88 {
+		t.Fatalf("overflow lost durable review candidates: %d %v", len(records), err)
+	}
+	for _, rec := range records {
+		if rec.Lifecycle != model.MemoryCandidate {
+			t.Fatalf("unreviewed candidate became active: %s %s", rec.ID, rec.Lifecycle)
+		}
 	}
 	events, err := runtime.Store().ListEvents(ctx)
 	if err != nil {
@@ -127,12 +139,19 @@ func TestLargeMemoryBatchRoutesToPerEntryReview(t *testing.T) {
 		t.Fatal(err)
 	}
 	records, err = runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: runtime.ProjectID()})
-	if err != nil || len(records) != 1 || records[0].ID != id {
+	if err != nil || len(records) != 88 {
 		t.Fatalf("per-entry allow: %v %v", records, err)
+	}
+	approved, err := runtime.Store().GetMemoryV2(ctx, runtime.ProjectID(), id)
+	if err != nil || approved.Lifecycle != model.MemoryDurable {
+		t.Fatalf("per-entry approval: record=%+v err=%v", approved, err)
 	}
 }
 
 func TestPermissionQueueSmallTerminalDecidesOnlyVisibleRequest(t *testing.T) {
+	if Edition() == "Marshal" {
+		t.Skip("Marshal applies reads automatically and never opens an operator popup; TestExtremeReadsApplyAutomatically covers it")
+	}
 	w, runtime := realControlWorkspace(t, "SESSION-visible-pages", false)
 	dir, err := os.MkdirTemp("", "uaD-popup-")
 	if err != nil {

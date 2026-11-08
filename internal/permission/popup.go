@@ -16,6 +16,8 @@ import (
 )
 
 type Request struct {
+	SourceLaunch     string `json:",omitempty"`
+	SourceOccurrence string `json:",omitempty"`
 	// ApprovalBinding retains an opaque reviewed snapshot across popup recovery.
 	ApprovalBinding                                 string `json:",omitempty"`
 	ProposalID                                      string `json:",omitempty"`
@@ -26,7 +28,11 @@ type Request struct {
 }
 
 func (r Request) Key() string {
-	return r.Kind + "\x00" + r.Object + "\x00" + r.Scope + "\x00" + r.Who + "\x00" + r.RunID + "\x00" + r.TaskID + "\x00" + r.ContinuationProvider + "\x00" + r.ApprovalBinding
+	key := r.Kind + "\x00" + r.Object + "\x00" + r.Scope + "\x00" + r.Who + "\x00" + r.RunID + "\x00" + r.TaskID + "\x00" + r.ContinuationProvider + "\x00" + r.ApprovalBinding
+	if r.SourceLaunch != "" {
+		key += "\x00" + r.SourceLaunch + "\x00" + r.SourceOccurrence
+	}
+	return key
 }
 
 const MaxPopupItems = 5
@@ -46,20 +52,36 @@ func Render(requests []Request) (string, error) {
 		}
 
 		for _, s := range []string{r.Object, r.Scope, r.Who, r.RunID, r.TaskID} {
-			if strings.ContainsFunc(s, unicode.IsControl) {
+			if strings.ContainsFunc(s, func(c rune) bool { return unicode.IsControl(c) || unicode.Is(unicode.Cf, c) }) {
 				return "", fmt.Errorf("unsafe permission metadata")
 			}
 		}
 		if i >= MaxPopupItems {
 			continue
 		}
-		if r.Kind == "credential" {
-			names := map[string]string{"codex": "Codex", "claude": "Claude Code", "gemini": "Gemini", "opencode": "OpenCode"}
+		if r.Kind == "credential" || r.Kind == "credential-bound" {
+			names := map[string]string{"codex": "Codex", "claude": "Claude Code", "opencode": "OpenCode"}
 			name, ok := names[r.Object]
+			if !ok {
+				name, ok = privateCredentialDisplayName(r.Object)
+			}
 			if !ok {
 				return "", fmt.Errorf("unknown credential provider")
 			}
-			fmt.Fprintf(&b, "%d. Allow governed workers to use your %s sign-in through MARSHAL's credential broker? The worker never sees the token.\nScope and duration: this project, until revoked\n", i+1, name)
+			if r.Kind == "credential-bound" {
+				reason := strings.Map(func(c rune) rune {
+					if unicode.IsControl(c) || unicode.Is(unicode.Cf, c) {
+						return ' '
+					}
+					return c
+				}, r.Reason)
+				if runes := []rune(reason); len(runes) > 100 {
+					reason = string(runes[:100]) + "…"
+				}
+				fmt.Fprintf(&b, "%d. Allow your %s sign-in through MARSHAL's credential broker? The worker never sees the token.\nScope and duration: %s\nPurpose: %s\n", i+1, name, r.Scope, reason)
+			} else {
+				fmt.Fprintf(&b, "%d. Allow governed workers to use your %s sign-in through MARSHAL's credential broker? The worker never sees the token.\nScope and duration: this project, until revoked\n", i+1, name)
+			}
 			continue
 		}
 		// Control characters in untrusted reasons cannot change the terminal layout.
@@ -222,7 +244,12 @@ while :; do
  status=$?
  now=${EPOCHREALTIME/./}
  if (( status == 0 )); then
-  (( now >= deadline )) && expired=true
+  if (( now >= deadline )); then
+   expired=true
+   # A late key can win a scheduling race with read's timeout. Show the
+   # expiry result even though that key has already been consumed.
+   printf '\r\033[KExpired. Denied.'
+  fi
   break
  fi
  (( status <= 128 )) && break # EOF denies without waiting for dismissal.

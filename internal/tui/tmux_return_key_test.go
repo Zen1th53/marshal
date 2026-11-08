@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ func TestTmuxF11SelectsControlAndForwardsReturnKey(t *testing.T) {
 	}
 	bindings := 0
 	for _, line := range strings.Split(string(data), "\n") {
-		if !strings.HasPrefix(line, "bind-key -T marshal-keys-"+tmux.ProjectHash(w.workDir)+" F11 ") {
+		if !strings.HasPrefix(line, "bind-key -T "+statepath.Name+"-keys-"+tmux.ProjectHash(w.workDir)+" F11 ") {
 			continue
 		}
 		bindings++

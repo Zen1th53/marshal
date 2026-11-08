@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,7 +22,7 @@ func TestFingerprintHistoryFromDurableRuns(t *testing.T) {
 	if _, err := app.Bootstrap(ctx, repo.Path()); err != nil {
 		t.Fatal(err)
 	}
-	store, err := execution.NewFileRunStore(filepath.Join(repo.Path(), ".marshal", "execution", "runs"))
+	store, err := execution.NewFileRunStore(filepath.Join(repo.Path(), statepath.DirName, "execution", "runs"))
 	if err != nil {
 		t.Fatal(err)
 	}

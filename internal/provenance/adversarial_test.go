@@ -17,7 +17,7 @@ func TestT07A04AdversarialImmutabilityAndBoundaries(t *testing.T) {
 	}
 
 	// 2. Begin record
-	_, err := eng.Begin(ctx, "chg-adv", "task-adv", "agent-adv", "gemini", "ctx-adv", "patch-adv")
+	_, err := eng.Begin(ctx, "chg-adv", "task-adv", "agent-adv", "agy", "ctx-adv", "patch-adv")
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}

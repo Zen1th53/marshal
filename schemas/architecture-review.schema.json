@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:marshal:architecture-review:v1",
+  "title": "Architecture browser request",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {"const": "architecture-review.v1"},
+    "action": {"enum": ["submit", "approve", "withdraw"]},
+    "revision": {"type": "integer", "minimum": 1},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "ui_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "language": {"type": "string", "minLength": 1, "maxLength": 100},
+    "request_type": {"enum": ["comment", "change"]},
+    "comment": {"type": "string", "minLength": 1, "maxLength": 5000},
+    "followup_to": {"type": "string", "pattern": "^[0-9a-f]{24}$"},
+    "request_id": {"type": "string", "pattern": "^[0-9a-f]{24}$"},
+    "reason": {"type": "string", "maxLength": 500},
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["component", "connection", "area"]},
+        "id": {"type": "string", "minLength": 1},
+        "diagram_id": {"type": "string", "minLength": 1},
+        "layout_version": {"type": "string", "minLength": 1},
+        "rect": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "x": {"type": "number", "minimum": 0},
+            "y": {"type": "number", "minimum": 0},
+            "width": {"type": "number", "minimum": 5},
+            "height": {"type": "number", "minimum": 5}
+          },
+          "required": ["x", "y", "width", "height"]
+        }
+      },
+      "required": ["kind", "diagram_id", "layout_version"],
+      "oneOf": [
+        {"properties": {"kind": {"enum": ["component", "connection"]}}, "required": ["id"], "not": {"required": ["rect"]}},
+        {"properties": {"kind": {"const": "area"}}, "required": ["rect"], "not": {"required": ["id"]}}
+      ]
+    }
+  },
+  "required": ["protocol_version", "action", "revision", "digest", "ui_digest", "language"],
+  "oneOf": [
+    {"properties": {"action": {"const": "submit"}}, "required": ["target", "request_type", "comment"], "not": {"required": ["request_id"]}},
+    {"properties": {"action": {"const": "approve"}}, "not": {"anyOf": [{"required": ["target"]}, {"required": ["request_id"]}, {"required": ["comment"]}, {"required": ["followup_to"]}]}},
+    {"properties": {"action": {"const": "withdraw"}}, "required": ["request_id"], "not": {"required": ["target"]}}
+  ]
+}

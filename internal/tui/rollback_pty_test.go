@@ -24,7 +24,7 @@ func TestPTYCheckpointCreateAndRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	terminal := startFrozenTUIInProject(t, 40, 200, bin, project, "tui", "SESSION-pty-rollback")
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/checkpoint create before editing notes")
 	terminal.mustSee("captured (digest")
 

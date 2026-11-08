@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,7 +38,7 @@ func TestM04RestartReattachesBranchAtRecordedResult(t *testing.T) {
 func committedTaskBranch(t *testing.T) (*Manager, model.WorktreeRequest, string, string) {
 	t.Helper()
 	repo := testgit.New(t)
-	manager := New(repo.Path(), filepath.Join(repo.Path(), ".marshal", "worktrees"))
+	manager := New(repo.Path(), filepath.Join(repo.Path(), statepath.DirName, "worktrees"))
 	request := model.WorktreeRequest{TaskID: "TASK-001", Branch: "marshal/run/task", BaseCommit: repo.HEAD(t)}
 	wt, err := manager.Prepare(context.Background(), request)
 	if err != nil {

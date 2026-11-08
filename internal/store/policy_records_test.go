@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/memory/security"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -115,7 +116,20 @@ func TestGeneralMemoryRejectsSecretsButAcceptsDigests(t *testing.T) {
 	secretAssignment := strings.Join([]string{"api", "key"}, "_") + "=" + strings.Join([]string{"TEST", "ONLY", "VALUE"}, "_")
 	for i, body := range []string{privateKeyHeader, secretAssignment} {
 		record := memoryRecord("MEM-secret-"+string(rune('a'+i)), body)
-		if err := st.Remember(context.Background(), record); !errors.Is(err, model.ErrSecretMaterial) {
+		err := st.Remember(context.Background(), record)
+		if security.RedactsSecrets {
+			// Extreme keeps the record with the secret removed and an
+			// evidence event naming the redaction.
+			if err != nil {
+				t.Fatalf("secret %d refused in Marshal: %v", i, err)
+			}
+			var kept string
+			if err := st.db.QueryRow("SELECT body FROM memory_records WHERE memory_id=?", record.ID).Scan(&kept); err != nil || containsSecretMaterial(kept) || strings.Contains(kept, "TEST_ONLY_VALUE") {
+				t.Fatalf("secret %d kept: %q %v", i, kept, err)
+			}
+			continue
+		}
+		if !errors.Is(err, model.ErrSecretMaterial) {
 			t.Fatalf("secret %d error = %v", i, err)
 		}
 	}

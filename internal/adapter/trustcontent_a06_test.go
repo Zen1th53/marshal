@@ -6,18 +6,18 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/adapter/antigravity"
 	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
-	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 )
 
 func TestProvidersReceiveMarkedTrustContextWithoutReclassification(t *testing.T) {
 	for name, build := range map[string]func(*contextCapturingRunner) adapter.Adapter{
-		"codex":    func(r *contextCapturingRunner) adapter.Adapter { return codex.New("codex", r) },
-		"claude":   func(r *contextCapturingRunner) adapter.Adapter { return claude.New("claude", r) },
-		"gemini":   func(r *contextCapturingRunner) adapter.Adapter { return gemini.New("gemini", r) },
-		"opencode": func(r *contextCapturingRunner) adapter.Adapter { return opencode.New("opencode", r) },
+		"codex":       func(r *contextCapturingRunner) adapter.Adapter { return codex.New("codex", r) },
+		"claude":      func(r *contextCapturingRunner) adapter.Adapter { return claude.New("claude", r) },
+		"antigravity": func(r *contextCapturingRunner) adapter.Adapter { return antigravity.New("agy", r) },
+		"opencode":    func(r *contextCapturingRunner) adapter.Adapter { return opencode.New("opencode", r) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			runner := &contextCapturingRunner{}

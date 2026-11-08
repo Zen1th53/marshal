@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 // RestoreResult reports a verified restore and how to undo it.
@@ -37,7 +38,7 @@ func (e *Engine) PreviewRestore(ctx context.Context, checkpointID string) (Snaps
 }
 
 // snapshotSkips are the directories a snapshot never captures or restores.
-var snapshotSkips = []string{".git", ".marshal"}
+var snapshotSkips = []string{".git", statepath.DirName, statepath.OtherDirName}
 
 // RestoreVerified restores a checkpoint only when it is safe and bound to
 // what the operator confirmed:

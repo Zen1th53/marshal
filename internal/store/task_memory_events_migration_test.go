@@ -41,6 +41,7 @@ func TestTaskMemoryEventsMigrationFromSchema71PreservesCanonicalMemory(t *testin
 	`); err != nil {
 		t.Fatalf("prepare schema 71 fixture: %v", err)
 	}
+	resetProjectContext95HistoricalFixture(t, st)
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("migrate schema 71 to 72: %v", err)
 	}

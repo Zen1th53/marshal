@@ -21,6 +21,14 @@ type RunControlResult struct {
 // take effect there; resume validates the goal binding again before the run
 // may dispatch. It never kills a process itself.
 func (e *Engine) ControlRun(ctx context.Context, runID, operation string, expectedVersion int64) (RunControlResult, error) {
+	e.operationMu.Lock()
+	defer e.operationMu.Unlock()
+	return e.controlRunLocked(ctx, runID, operation, expectedVersion)
+}
+
+// controlRunLocked is ControlRun for a caller already holding operationMu,
+// such as a parent run controlling its task lanes.
+func (e *Engine) controlRunLocked(ctx context.Context, runID, operation string, expectedVersion int64) (RunControlResult, error) {
 	run, err := e.store.GetRun(ctx, runID)
 	if err != nil {
 		return RunControlResult{}, err
@@ -51,8 +59,19 @@ func (e *Engine) ControlRun(ctx context.Context, runID, operation string, expect
 	if err := e.persistRun(ctx, &run); err != nil {
 		return RunControlResult{}, err
 	}
+	if err := e.controlTaskLanes(ctx, run, operation); err != nil {
+		return RunControlResult{Run: run, Executing: e.IsExecuting(runID)}, err
+	}
+	if operation == "cancel" {
+		if cancel := e.turnCancels[runID]; cancel != nil {
+			cancel()
+		}
+	}
 	_, _ = e.journal.Append(JournalEvent{RunID: runID, Actor: "MARSHAL_ENGINE", EventType: "RUN_CONTROL_" + operation, Summary: "operator requested " + operation})
-	return RunControlResult{Run: run, Executing: e.IsExecuting(runID)}, nil
+	// A parent run is still executing while any of its task lanes is.
+	_, executing := e.activeRuns[runID]
+	executing = executing || e.taskLanesExecuting(runID)
+	return RunControlResult{Run: run, Executing: executing}, nil
 }
 
 // IsExecuting reports whether an executor currently owns the run.
@@ -60,5 +79,5 @@ func (e *Engine) IsExecuting(runID string) bool {
 	e.operationMu.Lock()
 	defer e.operationMu.Unlock()
 	_, running := e.activeRuns[runID]
-	return running
+	return running || e.taskLanesExecuting(runID)
 }

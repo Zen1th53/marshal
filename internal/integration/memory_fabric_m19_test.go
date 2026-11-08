@@ -71,6 +71,10 @@ func TestM19_MultiAgentPersistenceAndSecurityScenario(t *testing.T) {
 		defer rt.Close()
 		svc := rt.Memory()
 		grantMemoryTaskAccess(t, rt, taskID, pClaude, pCodex, pGemini)
+		control, err := rt.OpenLocalControl(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// T1: Discovery Candidate
 		cand, err := svc.ExtractCandidate(ctx, pClaude, app.ExtractCandidateRequest{
@@ -84,6 +88,10 @@ func TestM19_MultiAgentPersistenceAndSecurityScenario(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatalf("T1 create candidate: %v", err)
+		}
+		// Operator approves the discovery so it becomes durable and recallable.
+		if err := rt.CommandPermission(control.Context(ctx), permission.Request{Kind: "memory", Object: cand.ID, Scope: "project memory, persistent", Who: "operator-admin"}, true, "operator memory review"); err != nil {
+			t.Fatalf("T1 approve discovery: %v", err)
 		}
 		discoveredFindingID = cand.ID
 
@@ -99,14 +107,15 @@ func TestM19_MultiAgentPersistenceAndSecurityScenario(t *testing.T) {
 			t.Fatalf("T2 create constraint: %v", err)
 		}
 		constraintID = cons.ID
-		// Remember proposes volatile memory; explicit local approval must precede
-		// persistence and restart recall, even for an admin principal.
-		if _, err := rt.Store().GetMemoryV2(ctx, projectID, cons.ID); !errors.Is(err, model.ErrNotFound) {
-			t.Fatalf("T2 constraint persisted before operator approval: %v", err)
-		}
-		control, err := rt.OpenLocalControl(ctx)
+		// Remember proposes a durable candidate; explicit local approval must
+		// precede recall, even for an admin principal. The candidate persists but
+		// is excluded from retrieval until the operator approves it.
+		consRec, err := rt.Store().GetMemoryV2(ctx, projectID, cons.ID)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("T2 constraint candidate not persisted: %v", err)
+		}
+		if consRec.Lifecycle != model.MemoryCandidate {
+			t.Fatalf("T2 constraint expected candidate lifecycle before approval, got %s", consRec.Lifecycle)
 		}
 		if err := rt.CommandPermission(control.Context(ctx), permission.Request{Kind: "memory", Object: cons.ID, Scope: "project memory, persistent", Who: "operator-admin"}, true, "operator memory review"); err != nil {
 			t.Fatalf("T2 approve constraint: %v", err)
@@ -134,6 +143,11 @@ func TestM19_MultiAgentPersistenceAndSecurityScenario(t *testing.T) {
 		if err != nil {
 			t.Fatalf("T6 extract injection candidate: %v", err)
 		}
+		// Operator approves the candidate so the injection body reaches retrieval;
+		// the escape check must still hold for durable records.
+		if err := rt.CommandPermission(control.Context(ctx), permission.Request{Kind: "memory", Object: injCand.ID, Scope: "project memory, persistent", Who: "operator-admin"}, true, "operator memory review"); err != nil {
+			t.Fatalf("T6 approve injection candidate: %v", err)
+		}
 		recallInj, err := svc.Recall(ctx, pCodex, app.RecallRequest{
 			ProjectID: projectID,
 			Query:     "Benign Looking",
@@ -146,7 +160,6 @@ func TestM19_MultiAgentPersistenceAndSecurityScenario(t *testing.T) {
 			!strings.Contains(recallInj.Context, "&lt;/marshal_memory_context&gt;") {
 			t.Fatalf("T6 XML delimiters unescaped in context: %s", recallInj.Context)
 		}
-		_ = injCand
 
 		// T8: Task Blackboard CAS conflict test
 		s1, err := svc.SetTaskSlot(ctx, pClaude, projectID, taskID, working.SlotPlanState, "Claude step 1", true)
@@ -331,8 +344,8 @@ func TestM19_AdversarialSuite(t *testing.T) {
 		Body:      "Extracted secret token sk-abcdef12345678901234567890",
 		Scope:     model.ScopeProject,
 	})
-	if err == nil || !errors.Is(err, security.ErrSecretDetected) {
-		t.Fatalf("expected ErrSecretDetected for API key leak, got %v", err)
+	if !secretRefusedOrRedacted(err) {
+		t.Fatalf("expected ErrSecretDetected (Marshal: redaction) for API key leak, got %v", err)
 	}
 
 	// 4. Attack Vector: two agents concurrently CAS the same revision. Exactly
@@ -531,18 +544,18 @@ func TestM19_SecretFirewallCoversRuntimeIngressesAndHandoff(t *testing.T) {
 				ProjectID: projectID, TaskID: taskID, Kind: model.MemoryKindFinding,
 				Title: "tainted runtime observation", Body: secret, Scope: model.ScopeTask, ScopeID: taskID,
 			})
-			if !errors.Is(err, security.ErrSecretDetected) {
+			if !secretRefusedOrRedacted(err) {
 				t.Fatalf("secret ingress accepted: %v", err)
 			}
 		})
 	}
 
 	transcript := []byte(`{"session_id":"SES-M19-SECRET","provider":"codex","task_id":"TASK-M19-SECRET-HANDOFF","messages":[{"role":"assistant","content":"Set-Cookie: session=credential-value-1234567890"}],"success":false}`)
-	if _, err := rt.Memory().ImportSessionTranscript(ctx, principal, projectID, transcript, false); !errors.Is(err, security.ErrSecretDetected) {
+	if _, err := rt.Memory().ImportSessionTranscript(ctx, principal, projectID, transcript, false); !secretRefusedOrRedacted(err) {
 		t.Fatalf("secret session import accepted: %v", err)
 	}
 
-	if err := rt.Memory().SetPrivateTaskSlot(ctx, principal, projectID, taskID, "scratch", "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB"); !errors.Is(err, security.ErrSecretDetected) {
+	if err := rt.Memory().SetPrivateTaskSlot(ctx, principal, projectID, taskID, "scratch", "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB"); !secretRefusedOrRedacted(err) {
 		t.Fatalf("secret private working memory accepted: %v", err)
 	}
 
@@ -550,7 +563,7 @@ func TestM19_SecretFirewallCoversRuntimeIngressesAndHandoff(t *testing.T) {
 		ProjectID: projectID, TaskID: taskID, SourceAgentID: principal.ID,
 		TargetRole: "gemini", ChangedFiles: []string{"Authorization: Basic credential-value-1234567890"},
 	})
-	if !errors.Is(err, security.ErrSecretDetected) {
+	if !secretRefusedOrRedacted(err) {
 		t.Fatalf("secret handoff accepted: %v", err)
 	}
 
@@ -563,4 +576,14 @@ func TestM19_SecretFirewallCoversRuntimeIngressesAndHandoff(t *testing.T) {
 			t.Fatalf("credential persisted in canonical memory: %s", rec.ID)
 		}
 	}
+}
+
+// secretRefusedOrRedacted is the edition outcome for secret-bearing input:
+// Community refuses it; Extreme accepts it with the secret removed (the
+// callers then check that no credential was persisted).
+func secretRefusedOrRedacted(err error) bool {
+	if security.RedactsSecrets {
+		return err == nil
+	}
+	return errors.Is(err, security.ErrSecretDetected)
 }

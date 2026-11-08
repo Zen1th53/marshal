@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,7 +36,7 @@ func TestBootstrapIsIdempotentAndDoesNotInventTasks(t *testing.T) {
 	if status.SchemaVersion != store.LatestSchemaVersion || status.TaskCount != 0 || status.Project.Repository != repo.Path() {
 		t.Fatalf("status = %#v", status)
 	}
-	info, err := os.Stat(filepath.Join(repo.Path(), ".marshal"))
+	info, err := os.Stat(filepath.Join(repo.Path(), statepath.DirName))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,5 +326,30 @@ func TestDefaultRuntimeWiredSecuritySubsystems(t *testing.T) {
 	}
 	if runtime.RiskEngine() == nil {
 		t.Fatal("expected non-nil RiskEngine in default runtime")
+	}
+}
+
+func TestVerifyQuorumRejectsSyntheticDigest(t *testing.T) {
+	repo := runtimeRepo(t)
+	if _, err := Bootstrap(t.Context(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := Open(t.Context(), repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	if _, err := runtime.ImportTasks(t.Context(), []model.Task{{ID: "TASK-Q1", Title: "q1", Status: model.TaskReady, Risk: model.R1}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Calling VerifyQuorum without ContentDigest and without task.HeadCommit must fail,
+	// never manufacturing "head-digest-TASK-Q1".
+	_, err = runtime.VerifyQuorum(t.Context(), QuorumVerifyRequest{
+		TaskID: "TASK-Q1",
+	})
+	if err == nil || !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("expected ErrInvalid for missing content digest, got: %v", err)
 	}
 }

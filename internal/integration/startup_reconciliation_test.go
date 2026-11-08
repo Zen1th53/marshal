@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"database/sql"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"testing"
 
@@ -16,7 +17,7 @@ func TestStartupReconciliationRecoversDeadWorkerRunsAndSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dbPath := filepath.Join(repo.Path(), ".marshal", "state.db")
+	dbPath := filepath.Join(repo.Path(), statepath.DirName, "state.db")
 	ctx := context.Background()
 
 	// 1. Simulate unclosed state from crashed daemon

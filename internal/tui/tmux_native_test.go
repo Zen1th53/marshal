@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,8 @@ func setupFakeTmuxWithDeadFile(t *testing.T) (fakeTmuxPath, logFile, deadFile st
 echo "$@" >> %q
 winFile=%q
 deadFile=%q
+session="${MARSHAL_FAKE_TMUX_SESSION:-test-session}"
+control="${MARSHAL_FAKE_TMUX_CONTROL:-marshal}"
 case "$1" in
   new-window)
     prev=""
@@ -75,17 +78,17 @@ case "$1" in
           prev="$a"
         done
         case "$target" in
-          %%*) printf 'test-session:@%%s\n' "${target#%%}" ;;
-          *) printf 'test-session:@0\n' ;;
+          %%*) printf '%%s:@%%s\n' "$session" "${target#%%}" ;;
+          *) printf '%%s:@0\n' "$session" ;;
         esac
         exit 0
         ;;
       *"#{session_name}"*"#{window_name}"*"#{window_id}"*)
-        printf 'test-session\tmarshal\t@0\n'
+        printf '%%s\t%%s\t@0\n' "$session" "$control"
         exit 0
         ;;
       *"#{session_name}"*)
-        printf 'test-session\n'
+        printf '%%s\n' "$session"
         exit 0
         ;;
       *"#{pane_id}"*)
@@ -101,7 +104,7 @@ case "$1" in
           %%) exit 1 ;;
           %%*[!0-9]*) exit 1 ;;
           %%*) printf '%%s\n' "$target"; exit 0 ;;
-          marshal|*:marshal) printf '%%%%0\n'; exit 0 ;;
+          "$control"|*:"$control") printf '%%%%0\n'; exit 0 ;;
         esac
         if [ -f "$winFile" ]; then
           idx=1
@@ -131,7 +134,7 @@ case "$1" in
     exit 0
     ;;
   list-panes)
-    printf '%%%%0\t@0\tmarshal\t100\t0\t0\t\n'
+    printf '%%%%0\t@0\t%%s\t100\t0\t0\t\n' "$control"
     if [ -f "$winFile" ]; then
       idx=1
       while read -r w; do
@@ -144,7 +147,7 @@ case "$1" in
     exit 0
     ;;
   list-windows)
-    printf 'marshal\n'
+    printf '%%s\n' "$control"
     if [ -f "$winFile" ]; then
       cat "$winFile"
     fi
@@ -165,7 +168,11 @@ esac
 	}
 
 	tmux.SetBinaryPath(fakeTmuxPath)
+	restoreAuth := SetAuthPreflightForTest(func(context.Context, string, string, []string) error {
+		return nil
+	})
 	t.Cleanup(func() {
+		restoreAuth()
 		tmux.ResetBinaryPath()
 	})
 	return fakeTmuxPath, logFile, deadFile
@@ -185,6 +192,7 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
 	cleanupTmuxWorkspace(t, ws)
+	ws.tmuxSession = fixtureTmuxNamespace(t, workDir)
 	ws.InitTmux(workDir)
 
 	ctx := context.Background()
@@ -213,19 +221,19 @@ func TestTmuxNativeAgentOpenAndSwitch(t *testing.T) {
 	logStr := string(logBytes)
 
 	// Verify new-window, enabled input, selection, and F7/F11 bindings.
-	if !strings.Contains(logStr, "new-window -d -t test-session -n "+codexWin) {
+	if !strings.Contains(logStr, "new-window -d -t "+ws.tmuxSession+" -n "+codexWin) {
 		t.Fatalf("missing new-window call:\n%s", logStr)
 	}
 	if !strings.Contains(logStr, "select-pane -t "+codex.paneID+" -e") {
 		t.Fatalf("missing input-enabled select-pane -e call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "select-window -t test-session:"+codex.windowID) {
+	if !strings.Contains(logStr, "select-window -t "+ws.tmuxSession+":"+codex.windowID) {
 		t.Fatalf("missing select-window call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "bind-key -T marshal-keys-"+tmux.ProjectHash(workDir)+" F7 if-shell -F") {
+	if !strings.Contains(logStr, "bind-key -T "+statepath.Name+"-keys-"+tmux.ProjectHash(workDir)+" F7 if-shell -F") {
 		t.Fatalf("missing F7 bind-key call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "bind-key -T marshal-keys-"+tmux.ProjectHash(workDir)+" F11 if-shell -F") {
+	if !strings.Contains(logStr, "bind-key -T "+statepath.Name+"-keys-"+tmux.ProjectHash(workDir)+" F11 if-shell -F") {
 		t.Fatalf("missing F11 bind-key call:\n%s", logStr)
 	}
 
@@ -262,7 +270,7 @@ func TestMarshalChatSurvivingPaneProvider(t *testing.T) {
 			root := t.TempDir()
 			ws := NewWorkspace(nil, "project", "test-session")
 			ws.workDir = root
-			ws.tmuxSession = "test-session"
+			ws.tmuxSession = fixtureTmuxNamespace(t, ws.providerRoot())
 			window := tmux.ChatWindowName(root)
 			ctx := context.Background()
 			if err := tmux.NewWindow(ctx, ws.tmuxSession, window, root, nil, []string{"echo", "chat"}); err != nil {
@@ -305,7 +313,7 @@ func TestMarshalChatSurvivingPaneProvider(t *testing.T) {
 					t.Fatalf("chat reuse issued %s:\n%s", forbidden, data)
 				}
 			}
-			selected := strings.Contains(log, "\nselect-window -t test-session:@1\n")
+			selected := strings.Contains(log, "\nselect-window -t "+ws.tmuxSession+":@1\n")
 			if selected == tc.mismatch || (tc.mismatch && strings.Contains(log, "\nselect-pane ")) {
 				t.Fatalf("unexpected selection for mismatch=%v:\n%s", tc.mismatch, data)
 			}
@@ -322,6 +330,7 @@ func TestTmuxViewCommands(t *testing.T) {
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
 	cleanupTmuxWorkspace(t, ws)
+	ws.tmuxSession = fixtureTmuxNamespace(t, workDir)
 	ws.InitTmux(workDir)
 	ctx := context.Background()
 
@@ -388,7 +397,7 @@ func TestTmuxViewCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	logStr := string(logBytes)
-	if !strings.Contains(logStr, "select-window -t test-session:"+claude.windowID) {
+	if !strings.Contains(logStr, "select-window -t "+ws.tmuxSession+":"+claude.windowID) {
 		t.Fatalf("missing select-window in log:\n%s", logStr)
 	}
 	if !strings.Contains(logStr, "join-pane -h -s ") {
@@ -411,6 +420,7 @@ func TestStopAllWorkersPreservesMarshal(t *testing.T) {
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
 	cleanupTmuxWorkspace(t, ws)
+	ws.tmuxSession = fixtureTmuxNamespace(t, workDir)
 	ws.InitTmux(workDir)
 	ctx := context.Background()
 
@@ -457,7 +467,7 @@ func TestStopAllWorkersPreservesMarshal(t *testing.T) {
 	}
 
 	// Verify evidence was saved for both workers
-	evidenceDir := filepath.Join(workDir, ".marshal", "evidence")
+	evidenceDir := filepath.Join(workDir, statepath.DirName, "evidence")
 	codexLatest := filepath.Join(evidenceDir, "codex-latest.txt")
 	claudeLatest := filepath.Join(evidenceDir, "claude-latest.txt")
 
@@ -478,6 +488,7 @@ func TestStopAllWorkersPreservesMarshalChat(t *testing.T) {
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
 	cleanupTmuxWorkspace(t, ws)
+	ws.tmuxSession = fixtureTmuxNamespace(t, workDir)
 	ws.InitTmux(workDir)
 	ctx := context.Background()
 
@@ -551,6 +562,7 @@ func TestJoinPanePreservesWorkerIdentityAndMonitoring(t *testing.T) {
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
 	cleanupTmuxWorkspace(t, ws)
+	ws.tmuxSession = fixtureTmuxNamespace(t, workDir)
 	ws.InitTmux(workDir)
 	ctx := context.Background()
 
@@ -619,6 +631,7 @@ func TestSurvivorAdoptionOnReattach(t *testing.T) {
 	fakeTmuxPath := filepath.Join(tempDir, "tmux")
 
 	workDir := t.TempDir()
+	session := fixtureTmuxNamespace(t, workDir)
 	hash := tmux.ProjectHash(workDir)
 	claudeWin := fmt.Sprintf("marshal-claude-%s", hash)
 	chatWin := fmt.Sprintf("marshal-chat-%s", hash)
@@ -629,16 +642,18 @@ func TestSurvivorAdoptionOnReattach(t *testing.T) {
 	script := fmt.Sprintf(`#!/bin/sh
 echo "$@" >> %q
 winFile=%q
+session="$MARSHAL_FAKE_TMUX_SESSION"
+control="$MARSHAL_FAKE_TMUX_CONTROL"
 case "$1" in
   display-message)
     case "$*" in
       *"#{pane_height} #{pane_width}"*) printf '40 120\n'; exit 0;;
       *"#{session_name}"*"#{window_name}"*"#{window_id}"*)
-        printf 'test-session\tmarshal\t@0\n'
+        printf '%%s\t%%s\t@0\n' "$session" "$control"
         exit 0
         ;;
       *"#{session_name}"*)
-        printf 'test-session\n'
+        printf '%%s\n' "$session"
         exit 0
         ;;
       *"#{pane_id}"*)
@@ -674,19 +689,23 @@ esac
 
 	tmux.SetBinaryPath(fakeTmuxPath)
 	defer tmux.ResetBinaryPath()
+	t.Cleanup(SetAuthPreflightForTest(func(context.Context, string, string, []string) error {
+		return nil
+	}))
 
 	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
 	t.Setenv("MARSHAL_TEST_FORCE_TMUX", "1")
 
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
-	if err := saveAgentRecord(workDir, "test-session", &activeTmuxAgent{id: "claude", role: "worker", provider: "claude", window: claudeWin, paneID: "%1"}); err != nil {
+	if err := saveAgentRecord(workDir, session, &activeTmuxAgent{id: "claude", role: "worker", provider: "claude", window: claudeWin, paneID: "%1"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := saveAgentRecord(workDir, "test-session", &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", window: chatWin, paneID: "%2"}); err != nil {
+	if err := saveAgentRecord(workDir, session, &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", window: chatWin, paneID: "%2"}); err != nil {
 		t.Fatal(err)
 	}
 	cleanupTmuxWorkspace(t, ws)
+	ws.tmuxSession = fixtureTmuxNamespace(t, workDir)
 	ws.InitTmux(workDir)
 
 	ws.tmuxMu.Lock()
@@ -740,6 +759,7 @@ func TestDispatchedTaskWorkersTrackedAndStopped(t *testing.T) {
 	ws := NewWorkspace(nil, "test-proj", "test-session")
 	ws.workDir = workDir
 	cleanupTmuxWorkspace(t, ws)
+	ws.tmuxSession = fixtureTmuxNamespace(t, workDir)
 	ws.InitTmux(workDir)
 	ctx := context.Background()
 
@@ -841,7 +861,7 @@ func TestF2TaskWindowRunsRealWorker(t *testing.T) {
 	if len(handin.WorkerReported) == 0 || handin.WorkerReported[0].Command != "fake-action" || !strings.Contains(handin.WorkerReported[0].Output, "fake-action:success") {
 		t.Fatalf("missing parsed real worker output: %+v", handin)
 	}
-	evidence, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "evidence", "task-task-f2-latest.txt"))
+	evidence, err := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "evidence", "task-task-f2-latest.txt"))
 	if err != nil || !strings.Contains(string(evidence), "Recorded agent output evidence") {
 		t.Fatalf("missing terminal evidence: %q %v", evidence, err)
 	}
@@ -875,6 +895,7 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 
 	// 1. Initialize tmux: Marshal Chat MUST start automatically (F3)
 	cleanupTmuxWorkspace(t, ws)
+	ws.tmuxSession = fixtureTmuxNamespace(t, workDir)
 	ws.InitTmux(workDir)
 
 	ws.tmuxMu.Lock()
@@ -899,14 +920,14 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 	logStr := string(logBytes)
 
 	// Verify chat window was created and pane set to -e (normal input, not -d)
-	if !strings.Contains(logStr, "new-window -d -t test-session -n "+chatWin) {
+	if !strings.Contains(logStr, "new-window -d -t "+ws.tmuxSession+" -n "+chatWin) {
 		t.Fatalf("missing chat new-window call:\n%s", logStr)
 	}
-	if !strings.Contains(logStr, "select-pane -t test-session:"+chatWin+" -e") {
+	if !strings.Contains(logStr, "select-pane -t "+ws.tmuxSession+":"+chatWin+" -e") {
 		t.Fatalf("chat pane was not given operator input (-e):\n%s", logStr)
 	}
 	// Verify main MARSHAL window remains focused
-	if !strings.Contains(logStr, "select-window -t test-session:@0") {
+	if !strings.Contains(logStr, "select-window -t "+ws.tmuxSession+":@0") {
 		t.Fatalf("marshal workspace was not re-selected after opening chat:\n%s", logStr)
 	}
 
@@ -962,6 +983,11 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 	expectedRespawn := "respawn-pane -k -t " + chatAgent.paneID + " /bin/sh "
 	var launchScript string
 	for _, line := range strings.Split(restartStr, "\n") {
+		// The respawn names the project root explicitly (-c <root>) so a
+		// deleted tmux server directory cannot break the restart.
+		if strings.HasPrefix(line, "respawn-pane -k -t "+chatAgent.paneID+" -c ") && strings.Contains(line, " /bin/sh ") {
+			line = "respawn-pane -k -t " + chatAgent.paneID + line[strings.Index(line, " /bin/sh "):]
+		}
 		if strings.HasPrefix(line, expectedRespawn) {
 			path := strings.TrimPrefix(line, expectedRespawn)
 			data, err := os.ReadFile(path)
@@ -973,7 +999,8 @@ func TestF3MarshalChatAutoStartProtectedRestartResume(t *testing.T) {
 		}
 	}
 	if launchScript == "" || !strings.Contains(launchScript, "'codex' '-c' 'developer_instructions=MARSHAL PROTOCOL") ||
-		!strings.Contains(launchScript, "'resume' 'session-test-resume-456' '"+marshalKickoff+"'") {
+		!strings.Contains(launchScript, "'resume' 'session-test-resume-456'") ||
+		!strings.Contains(launchScript, "'"+marshalKickoff+"'\n") {
 		t.Fatalf("respawn lost hidden instructions or bound resume: %q", restartStr)
 	}
 
@@ -1031,8 +1058,9 @@ func TestTmuxStartupReattachAndAutomaticChatPreserveControlCentre(t *testing.T) 
 			t.Fatalf("selected window = %q (%v), want %q", data, err, want)
 		}
 	}
+	fixtureTmuxNamespace(t, ws.workDir)
 	ws.InitTmux(ws.workDir)
-	assertSelected("test-session:@0")
+	assertSelected(fixtureTmuxNamespace(t, ws.providerRoot()) + ":@0")
 	ws.tmuxMu.Lock()
 	chat := copyAgentLocked(ws.tmuxActiveWins["marshal-chat"])
 	ws.tmuxMu.Unlock()
@@ -1044,29 +1072,30 @@ func TestTmuxStartupReattachAndAutomaticChatPreserveControlCentre(t *testing.T) 
 	if err := tmux.SelectWindow(ctx, chat.paneID); err != nil {
 		t.Fatal(err)
 	}
+	fixtureTmuxNamespace(t, ws.workDir)
 	ws.InitTmux(ws.workDir)
-	assertSelected("test-session:@0")
+	assertSelected(fixtureTmuxNamespace(t, ws.providerRoot()) + ":@0")
 	background := context.WithValue(ctx, tmuxBackgroundLaunchKey{}, true)
 	// Runtime setup shares the operator launch pipeline, including adoption.
 	if _, err := ws.runNativeAgentInTmux(background, nativeLaunchOperator, "codex", "Codex", ws.workDir, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
 		t.Fatal(err)
 	}
-	assertSelected("test-session:@0")
+	assertSelected(fixtureTmuxNamespace(t, ws.providerRoot()) + ":@0")
 	ws.restartMarshalChat(ctx, ws.tmuxActiveWins["marshal-chat"], ws.workDir)
-	assertSelected("test-session:@0")
+	assertSelected(fixtureTmuxNamespace(t, ws.providerRoot()) + ":@0")
 	// Explicit /view chat still selects the protected conversation.
 	if _, err := ws.handleViewCommand(ctx, []string{"show", "chat"}); err != nil {
 		t.Fatal(err)
 	}
-	assertSelected("test-session:" + chat.windowID)
+	assertSelected(ws.tmuxSession + ":" + chat.windowID)
 	data, err := os.ReadFile(logFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(string(data), "new-window -d -t test-session -n "+chat.window) != 1 {
+	if strings.Count(string(data), "new-window -d -t "+ws.tmuxSession+" -n "+chat.window) != 1 {
 		t.Fatalf("setup restarted or failed to detach chat:\n%s", data)
 	}
-	if !strings.Contains(string(data), "bind-key -T marshal-keys-"+tmux.ProjectHash(ws.workDir)+" F11 if-shell -F") {
+	if !strings.Contains(string(data), "bind-key -T "+statepath.Name+"-keys-"+tmux.ProjectHash(ws.workDir)+" F11 if-shell -F") {
 		t.Fatal("missing control centre return binding")
 	}
 }
@@ -1077,7 +1106,7 @@ func TestAutomaticChatLaunchDoesNotSelectNewWindow(t *testing.T) {
 	ws := NewWorkspace(nil, "project", "session")
 	ws.workDir = t.TempDir()
 	ws.tmuxPath, _ = tmux.FindBinary()
-	ws.tmuxSession, ws.tmuxMarshalWin = "test-session", "marshal"
+	ws.tmuxSession, ws.tmuxMarshalWin = fixtureTmuxNamespace(t, ws.providerRoot()), statepath.Name
 	cleanupTmuxWorkspace(t, ws)
 	ctx := context.WithValue(context.Background(), tmuxBackgroundLaunchKey{}, true)
 	if _, err := ws.runNativeAgentInTmux(ctx, nativeLaunchOperator, "codex", "Codex", ws.workDir, "echo", nil, nil, nil, nil, nil, nil, nil, nil, true); err != nil {
@@ -1090,7 +1119,7 @@ func TestAutomaticChatLaunchDoesNotSelectNewWindow(t *testing.T) {
 	if strings.Contains("\n"+string(data), "\nselect-window ") {
 		t.Fatalf("automatic chat selected a window:\n%s", data)
 	}
-	if !strings.Contains(string(data), "new-window -d -t test-session -n "+tmux.ChatWindowName(ws.workDir)) {
+	if !strings.Contains(string(data), "new-window -d -t "+ws.tmuxSession+" -n "+tmux.ChatWindowName(ws.workDir)) {
 		t.Fatalf("chat was not opened detached:\n%s", data)
 	}
 }
@@ -1107,6 +1136,7 @@ func TestRuntimeTmuxStartupKeepsControlCentreSelected(t *testing.T) {
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	_, ws, _ := acceptanceWorkspace(t)
 	cleanupTmuxWorkspace(t, ws)
+	fixtureTmuxNamespace(t, ws.runtime.ProjectRoot())
 	ws.InitTmux(ws.runtime.ProjectRoot())
 	ws.tmuxMu.Lock()
 	chat := copyAgentLocked(ws.tmuxActiveWins["marshal-chat"])
@@ -1115,19 +1145,31 @@ func TestRuntimeTmuxStartupKeepsControlCentreSelected(t *testing.T) {
 		t.Fatal("runtime startup did not open chat")
 	}
 	data, err := os.ReadFile(filepath.Join(filepath.Dir(logFile), "tmux_windows.log.selected"))
-	if err != nil || strings.TrimSpace(string(data)) != "test-session:@0" {
+	if err != nil || strings.TrimSpace(string(data)) != fixtureTmuxNamespace(t, ws.providerRoot())+":@0" {
 		t.Fatalf("runtime startup selected %q (%v), want window 0", data, err)
 	}
+	fixtureTmuxNamespace(t, ws.runtime.ProjectRoot())
 	ws.InitTmux(ws.runtime.ProjectRoot())
 	data, err = os.ReadFile(filepath.Join(filepath.Dir(logFile), "tmux_windows.log.selected"))
-	if err != nil || strings.TrimSpace(string(data)) != "test-session:@0" {
+	if err != nil || strings.TrimSpace(string(data)) != fixtureTmuxNamespace(t, ws.providerRoot())+":@0" {
 		t.Fatalf("runtime re-attach selected %q (%v), want window 0", data, err)
 	}
 	log, err := os.ReadFile(logFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(string(log), "new-window -d -t test-session -n "+chat.window) != 1 {
+	if strings.Count(string(log), "new-window -d -t "+ws.tmuxSession+" -n "+chat.window) != 1 {
 		t.Fatalf("runtime setup restarted chat:\n%s", log)
 	}
+}
+
+func fixtureTmuxNamespace(t *testing.T, root string) string {
+	t.Helper()
+	session := "test-session"
+	if editionExtreme {
+		session = tmux.SessionName(root)
+	}
+	t.Setenv("MARSHAL_FAKE_TMUX_SESSION", session)
+	t.Setenv("MARSHAL_FAKE_TMUX_CONTROL", statepath.Name)
+	return session
 }

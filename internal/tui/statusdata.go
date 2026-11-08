@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/resources"
 	"github.com/Zen1th53/marshal/internal/startup"
@@ -90,10 +91,12 @@ type CloudReader interface {
 // render, saying truthfully that it has nothing to read rather than crashing or
 // showing zeros.
 type StatusSource struct {
-	Runtime    RuntimeReader
-	Assessment AssessmentReader
-	Resources  ResourceReader
-	Cloud      CloudReader
+	lifecycle     func(context.Context) lifecycleSnapshot
+	Runtime       RuntimeReader
+	Assessment    AssessmentReader
+	Resources     ResourceReader
+	Cloud         CloudReader
+	RequestReader EntitlementRequestReader
 
 	// Now is the clock, injectable so staleness and expiry are testable.
 	Now func() time.Time
@@ -654,9 +657,78 @@ type CloudSnapshot struct {
 	Renewal        Value
 	Refusal        Value
 	StandardFallbk Value
+
+	// Entitlement request state (CTUI-0157).
+	RequestStatus  Value
+	LocalAttemptID Value
+	ServerReqID    Value
+	RequestAge     Value
+	RequestError   Value
 }
 
 const cloudSource = "internal/cloud/gate.go, internal/cloud/state.go"
+
+func (s *StatusSource) populateRequestState(ctx context.Context, out *CloudSnapshot, c CloudReader) {
+	var reqReader EntitlementRequestReader
+	if s != nil && s.RequestReader != nil {
+		reqReader = s.RequestReader
+	} else if r, ok := c.(EntitlementRequestReader); ok {
+		reqReader = r
+	}
+
+	at := s.now()
+	if reqReader != nil {
+		obs, err := reqReader.EntitlementRequest(ctx)
+		if err != nil {
+			errVal := Errored(fmt.Sprintf("entitlement request state could not be read: %v", err), cloudSource)
+			out.RequestStatus = errVal
+			out.LocalAttemptID = Unknown("request state error", cloudSource)
+			out.ServerReqID = Unknown("request state error", cloudSource)
+			out.RequestAge = Unknown("request state error", cloudSource)
+			out.RequestError = Errored(RedactContent(err.Error(), nil), cloudSource)
+		} else if !obs.Recorded && obs.LocalAttemptID == "" {
+			out.RequestStatus = NotRun("no entitlement request has been recorded for this session", cloudSource)
+			out.LocalAttemptID = Unknown("no local request attempt recorded", cloudSource)
+			out.ServerReqID = Unknown("no server request ID recorded", cloudSource)
+			out.RequestAge = Unknown("no request recorded", cloudSource)
+			out.RequestError = Empty(cloudSource)
+		} else {
+			state := strings.ToUpper(strings.TrimSpace(obs.State))
+			if state == "" {
+				state = "RECORDED"
+			}
+			out.RequestStatus = Known(state, cloudSource)
+			if obs.LocalAttemptID != "" {
+				out.LocalAttemptID = Known(obs.LocalAttemptID, cloudSource)
+			} else {
+				out.LocalAttemptID = Unknown("no local attempt ID recorded", cloudSource)
+			}
+			if obs.HasServerID && obs.ServerRequestID != "" {
+				out.ServerReqID = Known(obs.ServerRequestID, cloudSource)
+			} else {
+				// Old status-only server response gets server-ID UNKNOWN, not a made-up ID.
+				out.ServerReqID = Unknown("server response did not return a server request ID", cloudSource)
+			}
+			if !obs.RequestedAt.IsZero() {
+				out.RequestAge = Known(relativeTime(at, obs.RequestedAt), cloudSource)
+			} else {
+				out.RequestAge = Unknown("request timestamp was not recorded", cloudSource)
+			}
+			if obs.Error != "" {
+				out.RequestError = Known(RedactContent(obs.Error, nil), cloudSource)
+			} else {
+				out.RequestError = Empty(cloudSource)
+			}
+		}
+	} else {
+		unattached := Unknown("no entitlement request reader is attached to this workspace", cloudSource)
+		out.RequestStatus = unattached
+		out.LocalAttemptID = unattached
+		out.ServerReqID = unattached
+		out.RequestAge = unattached
+		out.RequestError = Empty(cloudSource)
+	}
+}
 
 // ReadCloud reads Community Cloud and ULTRA state.
 //
@@ -667,12 +739,14 @@ const cloudSource = "internal/cloud/gate.go, internal/cloud/state.go"
 func (s *StatusSource) ReadCloud(ctx context.Context) CloudSnapshot {
 	if s == nil || s.Cloud == nil {
 		v := Unknown("no Community Cloud session is attached to this workspace", cloudSource)
-		return CloudSnapshot{
+		out := CloudSnapshot{
 			Mode:       Known("Standard", cloudSource),
 			Connection: v, Installation: v, Session: v, Lease: v,
 			Capabilities: v, Expiry: v, Renewal: v, Refusal: v,
 			StandardFallbk: Known("active: Community runs locally without the Cloud", cloudSource),
 		}
+		s.populateRequestState(ctx, &out, nil)
+		return out
 	}
 
 	c := s.Cloud
@@ -681,7 +755,7 @@ func (s *StatusSource) ReadCloud(ctx context.Context) CloudSnapshot {
 	if !c.Configured() {
 		unconfigured := NotRun(
 			"no Community Cloud is configured for this installation", cloudSource)
-		return CloudSnapshot{
+		out = CloudSnapshot{
 			Mode:         Known("Standard", cloudSource),
 			Connection:   unconfigured,
 			Installation: unconfigured,
@@ -694,6 +768,8 @@ func (s *StatusSource) ReadCloud(ctx context.Context) CloudSnapshot {
 			StandardFallbk: Known(
 				"active: Community runs locally without the Cloud", cloudSource),
 		}
+		s.populateRequestState(ctx, &out, c)
+		return out
 	}
 
 	// The gate is the only authority. This reads its answer; it never derives
@@ -767,6 +843,7 @@ func (s *StatusSource) ReadCloud(ctx context.Context) CloudSnapshot {
 			} else {
 				out.Renewal = NotRun("no renewal is scheduled without a lease", cloudSource)
 			}
+			s.populateRequestState(ctx, &out, c)
 			return out
 		}
 
@@ -775,6 +852,7 @@ func (s *StatusSource) ReadCloud(ctx context.Context) CloudSnapshot {
 				"already been retired, so this cannot distinguish expiry from never having one",
 			cloudSource)
 		out.Lease, out.Capabilities, out.Expiry, out.Renewal = noLease, noLease, noLease, noLease
+		s.populateRequestState(ctx, &out, c)
 		return out
 	}
 
@@ -810,6 +888,7 @@ func (s *StatusSource) ReadCloud(ctx context.Context) CloudSnapshot {
 	} else {
 		out.Renewal = Unknown("no renewal time was reported", cloudSource)
 	}
+	s.populateRequestState(ctx, &out, c)
 	return out
 }
 
@@ -817,17 +896,19 @@ func (s *StatusSource) ReadCloud(ctx context.Context) CloudSnapshot {
 
 // ProviderRow is one provider's evidenced state.
 type ProviderRow struct {
-	Name Value
-	// Availability is whether the provider's CLI was found.
-	Availability Value
-	Version      Value
-	Model        Value
-	// Quota, Reset and Allowance are the three fields the frozen pack marks as
-	// implementation gaps. They are never populated by inference.
-	Quota     Value
-	Reset     Value
-	Allowance Value
-	Auth      Value
+	Name          Value
+	Availability  Value
+	Version       Value
+	Model         Value
+	Quota         Value
+	Reset         Value
+	Allowance     Value
+	Auth          Value
+	Cooldown      Value
+	UsageTokens   Value
+	UsageCost     Value
+	UsageCalls    Value
+	UsageDuration Value
 }
 
 // ProviderList is the provider surface, all of it evidence-gated.
@@ -841,13 +922,28 @@ const providerSource = "internal/harness/intelligence.go, internal/adapter/adapt
 // ProviderProbe is one evidenced provider observation supplied by canonical
 // code. The TUI never probes providers itself.
 type ProviderProbe struct {
-	Name      string
-	Found     bool
-	Path      string
-	Version   string
-	Model     string
-	Probed    bool
-	ProbeNote string
+	Name              string
+	Found             bool
+	Path              string
+	Version           string
+	Model             string
+	Probed            bool
+	ProbeNote         string
+	AuthStatus        string
+	AuthReason        string
+	AuthSource        string
+	AuthTime          time.Time
+	UsageReported     bool
+	TotalTokens       *int64
+	CostUSD           *float64
+	ModelCalls        int
+	UsageDuration     time.Duration
+	CooldownActive    bool
+	CooldownRemaining time.Duration
+	CooldownReason    string
+	QuotaReason       string
+	ResetReason       string
+	AllowanceReason   string
 }
 
 // ProviderReader supplies evidenced provider observations.
@@ -857,26 +953,86 @@ type ProviderReader interface {
 
 // ReadProviders renders provider state from evidence only.
 //
-// Quota, reset time and promotional allowance are rendered as implementation
-// gaps, not guessed. No provider exposes them through a supported interface,
-// and inventing a number here would put a figure on screen that no canonical
-// source could ever confirm — which is precisely what the frozen pack marks
-// CTUI-0148, CTUI-0149 and CTUI-0151 as gaps to prevent.
+// Quota, reset time and promotional allowance are rendered as reasoned UNKNOWN
+// when probed (or NOT_RUN when unprobed/not installed), never guessed.
+// No provider exposes them through a supported interface.
 func (s *StatusSource) ReadProviders(ctx context.Context, source ProviderReader) ProviderList {
-	gap := func(spec, what string) Value {
-		return NotRun(fmt.Sprintf(
-			"IMPLEMENTATION GAP (%s): no provider exposes %s through a supported interface, so MARSHAL has no evidence for it",
-			spec, what), providerSource)
-	}
-	quota := gap("CTUI-0148", "a machine-readable quota or capacity")
-	reset := gap("CTUI-0149", "a machine-readable quota reset time")
-	allowance := gap("CTUI-0151", "a machine-readable temporary or promotional allowance")
-	auth := gap("CTUI-0144", "an inspectable authentication or session state")
-
 	if source == nil {
 		return ProviderList{Status: NotRun(
 			"no provider probe has been run for this session", providerSource)}
 	}
+
+	at := s.now()
+
+	// If source implements the richer ProviderStatusReader, use its rich observations.
+	if statusReader, ok := source.(ProviderStatusReader); ok {
+		obs, err := statusReader.ProviderStatuses(ctx)
+		if err != nil {
+			return ProviderList{Status: Errored(
+				fmt.Sprintf("providers could not be probed: %s", err), providerSource)}
+		}
+		if len(obs) == 0 {
+			return ProviderList{Status: Empty(providerSource)}
+		}
+
+		rows := make([]ProviderRow, 0, len(obs))
+		for _, p := range obs {
+			row := ProviderRow{
+				Name: Known(p.Name, providerSource),
+			}
+			if !p.Found {
+				reason := "the provider's command was not found on PATH"
+				row.Availability = Known("not installed", providerSource)
+				row.Version = NotRun(reason, providerSource)
+				row.Model = NotRun(reason, providerSource)
+				row.Quota = NotRun(reason, providerSource)
+				row.Reset = NotRun(reason, providerSource)
+				row.Allowance = NotRun(reason, providerSource)
+				row.Auth = NotRun(reason, providerSource)
+				row.Cooldown = NotRun(reason, providerSource)
+				row.UsageTokens = NotRun(reason, providerSource)
+				row.UsageCost = NotRun(reason, providerSource)
+				row.UsageCalls = NotRun(reason, providerSource)
+				row.UsageDuration = NotRun(reason, providerSource)
+			} else {
+				row.Availability = Known("installed", providerSource)
+				if p.Version != "" {
+					row.Version = Known(p.Version, providerSource)
+				} else {
+					row.Version = Unknown("the provider did not report a version", providerSource)
+				}
+				if p.Model != "" {
+					row.Model = Known(p.Model, providerSource)
+				} else {
+					row.Model = Unknown("no model has been selected for this provider", providerSource)
+				}
+				quotaReason := p.QuotaReason
+				if quotaReason == "" {
+					quotaReason = "no provider exposes a machine-readable quota or capacity through a supported interface"
+				}
+				resetReason := p.ResetReason
+				if resetReason == "" {
+					resetReason = "no provider exposes a machine-readable quota reset time through a supported interface"
+				}
+				allowanceReason := p.AllowanceReason
+				if allowanceReason == "" {
+					allowanceReason = "no provider exposes a machine-readable temporary or promotional allowance through a supported interface"
+				}
+				row.Quota = Unknown(quotaReason, providerSource)
+				row.Reset = Unknown(resetReason, providerSource)
+				row.Allowance = Unknown(allowanceReason, providerSource)
+				row.Auth = formatAuthValue(p.Auth, p.Found, at)
+				row.Cooldown = formatCooldownValue(p.Cooldown, p.Found, at)
+				row.UsageTokens = formatTokensValue(p.Usage.TotalTokens, p.Usage.Reported, p.Usage.Source)
+				row.UsageCost = formatCostValue(p.Usage.CostUSD, p.Usage.Reported, p.Usage.Source)
+				row.UsageCalls = formatCallsValue(p.Usage.ModelCalls, p.Usage.Reported, p.Usage.Source)
+				row.UsageDuration = formatDurationValue(p.Usage.Duration, p.Usage.Reported, p.Usage.Source)
+			}
+			rows = append(rows, row)
+		}
+		return ProviderList{Rows: rows, Status: Known(fmt.Sprintf("%d providers", len(rows)), providerSource)}
+	}
+
 	probes, err := source.Providers(ctx)
 	if err != nil {
 		return ProviderList{Status: Errored(
@@ -889,11 +1045,7 @@ func (s *StatusSource) ReadProviders(ctx context.Context, source ProviderReader)
 	rows := make([]ProviderRow, 0, len(probes))
 	for _, p := range probes {
 		row := ProviderRow{
-			Name:      Known(p.Name, providerSource),
-			Quota:     quota,
-			Reset:     reset,
-			Allowance: allowance,
-			Auth:      auth,
+			Name: Known(p.Name, providerSource),
 		}
 		switch {
 		case !p.Probed:
@@ -904,6 +1056,15 @@ func (s *StatusSource) ReadProviders(ctx context.Context, source ProviderReader)
 			row.Availability = NotRun(note, providerSource)
 			row.Version = NotRun(note, providerSource)
 			row.Model = NotRun(note, providerSource)
+			row.Quota = NotRun(note, providerSource)
+			row.Reset = NotRun(note, providerSource)
+			row.Allowance = NotRun(note, providerSource)
+			row.Auth = NotRun(note, providerSource)
+			row.Cooldown = NotRun(note, providerSource)
+			row.UsageTokens = NotRun(note, providerSource)
+			row.UsageCost = NotRun(note, providerSource)
+			row.UsageCalls = NotRun(note, providerSource)
+			row.UsageDuration = NotRun(note, providerSource)
 		case p.Found:
 			row.Availability = Known("installed", providerSource)
 			if p.Version != "" {
@@ -918,13 +1079,83 @@ func (s *StatusSource) ReadProviders(ctx context.Context, source ProviderReader)
 				row.Model = Unknown(
 					"no model has been selected for this provider", providerSource)
 			}
+			quotaReason := p.QuotaReason
+			if quotaReason == "" {
+				quotaReason = "no provider exposes a machine-readable quota or capacity through a supported interface"
+			}
+			resetReason := p.ResetReason
+			if resetReason == "" {
+				resetReason = "no provider exposes a machine-readable quota reset time through a supported interface"
+			}
+			allowanceReason := p.AllowanceReason
+			if allowanceReason == "" {
+				allowanceReason = "no provider exposes a machine-readable temporary or promotional allowance through a supported interface"
+			}
+			row.Quota = Unknown(quotaReason, providerSource)
+			row.Reset = Unknown(resetReason, providerSource)
+			row.Allowance = Unknown(allowanceReason, providerSource)
+
+			if p.AuthStatus != "" {
+				row.Auth = formatAuthValue(app.ProviderAuthObservation{
+					Provider:   p.Name,
+					Status:     app.ProviderAuthStatus(p.AuthStatus),
+					Reason:     p.AuthReason,
+					Source:     p.AuthSource,
+					ObservedAt: p.AuthTime,
+				}, p.Found, at)
+			} else if obs, ok := GetAuthPreflightObservation(p.Name, authObservationMaxAge); ok {
+				row.Auth = formatAuthValue(app.ProviderAuthObservation{
+					Provider:   p.Name,
+					Status:     app.ProviderAuthStatus(obs.Status),
+					Reason:     obs.Reason,
+					Source:     obs.Source,
+					ObservedAt: obs.ObservedAt,
+				}, p.Found, at)
+			} else {
+				row.Auth = Unknown("no provider exposes an inspectable authentication or session state through a supported interface", providerSource)
+			}
+
+			if p.CooldownActive {
+				row.Cooldown = formatCooldownValue(app.ProviderCooldownObservation{
+					Active:     true,
+					RetryAfter: p.CooldownRemaining,
+					Reason:     p.CooldownReason,
+				}, p.Found, at)
+			} else {
+				row.Cooldown = Known("no active cooldown", providerSource)
+			}
+
+			row.UsageTokens = formatTokensValue(p.TotalTokens, p.UsageReported, "")
+			row.UsageCost = formatCostValue(p.CostUSD, p.UsageReported, "")
+			row.UsageCalls = formatCallsValue(p.ModelCalls, p.UsageReported, "")
+			row.UsageDuration = formatDurationValue(p.UsageDuration, p.UsageReported, "")
 		default:
 			reason := "the provider's command was not found on PATH"
 			row.Availability = Known("not installed", providerSource)
 			row.Version = NotRun(reason, providerSource)
 			row.Model = NotRun(reason, providerSource)
+			row.Quota = NotRun(reason, providerSource)
+			row.Reset = NotRun(reason, providerSource)
+			row.Allowance = NotRun(reason, providerSource)
+			row.Auth = NotRun(reason, providerSource)
+			row.Cooldown = NotRun(reason, providerSource)
+			row.UsageTokens = NotRun(reason, providerSource)
+			row.UsageCost = NotRun(reason, providerSource)
+			row.UsageCalls = NotRun(reason, providerSource)
+			row.UsageDuration = NotRun(reason, providerSource)
 		}
 		rows = append(rows, row)
 	}
 	return ProviderList{Rows: rows, Status: Known(fmt.Sprintf("%d providers", len(rows)), providerSource)}
+}
+
+// extremeCloudSnapshot reports that the Cloud-only facts do not apply: ULTRA is
+// local in Extreme, so there is no connection, entitlement or lease to show.
+func extremeCloudSnapshot() CloudSnapshot {
+	na := Known("Not needed in Marshal: ULTRA runs locally", cloudSource)
+	return CloudSnapshot{
+		Mode: Known("ULTRA (local)", cloudSource), Connection: na, Installation: na, Session: na,
+		Lease: na, Capabilities: na, Expiry: na, Renewal: na, Refusal: na, StandardFallbk: na,
+		RequestStatus: na, LocalAttemptID: na, ServerReqID: na, RequestAge: na, RequestError: Empty(cloudSource),
+	}
 }

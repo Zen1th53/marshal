@@ -11,7 +11,6 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
-	"github.com/Zen1th53/marshal/internal/store"
 )
 
 // MarshalObserver receives the run after every step, so a surface can show
@@ -31,6 +30,9 @@ type BriefContext struct {
 	Requirements, Index, Note string
 	// Memory holds bounded project-memory recall relevant to the task.
 	Memory []model.MemoryRecordV2
+	// MemoryContext is the bounded, authorized Extreme worker memory contribution.
+	MemoryContext string
+	MemoryStatus  string
 }
 
 // MarshalBrief produces the instruction a worker receives for a task.
@@ -39,32 +41,34 @@ type MarshalBrief func(marshal.Task, BriefContext) string
 // briefContext gathers durable return reasons, falling back to reviews for
 // attempts recorded before return events carried their own reasons.
 func (s *MarshalService) briefContext(ctx context.Context, runID string, run marshal.Run, t marshal.Task) (BriefContext, error) {
+	return s.briefContextFromTask(ctx, runID, run, t, false)
+}
+
+func (s *MarshalService) briefContextFromTask(ctx context.Context, runID string, run marshal.Run, t marshal.Task, baseResolved bool) (BriefContext, error) {
 	bc := BriefContext{Control: run.Settings.EffectiveControl()}
 	if run.Pack != nil {
 		bc.Requirements, bc.Index, bc.Note = run.Pack.Requirements, run.Pack.Index, run.Pack.Tasks[t.PlanTaskID]
 	}
-	if s.Store != nil && s.ProjectID != "" {
-		records, err := s.Store.ListMemoryV2(ctx, store.MemoryQueryFilter{
-			ProjectID: s.ProjectID,
-			Scope:     model.ScopeProject,
-			Limit:     10,
-		})
-		if err == nil {
-			for _, rec := range records {
-				if rec.Scope == string(model.ScopeSession) || rec.Source.Kind == "shared_channel" || rec.IsSessionHistory() {
-					continue
-				}
-				bc.Memory = append(bc.Memory, rec)
-			}
-		}
+	if err := s.addWorkerMemory(ctx, runID, run, t, baseResolved, &bc); err != nil {
+		return bc, err
 	}
-	attempts := 0
-	for _, n := range t.ReturnsByAgent {
-		attempts += n
-	}
-	history, err := s.Store.MarshalDecisions(ctx, runID)
+	returned, err := s.taskReturnReasons(ctx, runID, t)
 	if err != nil {
 		return bc, err
+	}
+	bc.Returned = returned
+	return bc, nil
+}
+
+// taskReturnReasons lists why earlier attempts at the task were returned,
+// oldest first, from durable return events, falling back to reviews for
+// attempts recorded before return events carried their own reasons.
+func (s *MarshalService) taskReturnReasons(ctx context.Context, runID string, t marshal.Task) ([]string, error) {
+	var out []string
+	attempts := taskReturns(t)
+	history, err := s.marshalDecisionsResolved(ctx, runID)
+	if err != nil {
+		return nil, err
 	}
 	returns := map[string][]string{}
 	for _, event := range history {
@@ -73,17 +77,17 @@ func (s *MarshalService) briefContext(ctx context.Context, runID string, run mar
 		}
 		data, err := json.Marshal(event.Data["return_reasons"])
 		if err != nil {
-			return bc, err
+			return nil, err
 		}
 		var reasons []string
 		if err := json.Unmarshal(data, &reasons); err != nil {
-			return bc, err
+			return nil, err
 		}
 		returns[fmt.Sprint(event.Data["return_attempt"])] = reasons
 	}
 	for attempt := 1 + t.EvidenceAttemptBase; attempt <= attempts+t.EvidenceAttemptBase; attempt++ {
 		if reasons, ok := returns[fmt.Sprint(attempt)]; ok {
-			bc.Returned = append(bc.Returned, reasons...)
+			out = append(out, reasons...)
 			continue
 		}
 		review, err := s.Store.GetMarshalReview(ctx, runID, t.PlanTaskID, attempt)
@@ -91,14 +95,14 @@ func (s *MarshalService) briefContext(ctx context.Context, runID string, run mar
 			continue
 		}
 		if err != nil {
-			return bc, err
+			return nil, err
 		}
-		bc.Returned = append(bc.Returned, review.Value.Reasons...)
+		out = append(out, review.Value.Reasons...)
 		if review.Value.Independent != nil {
-			bc.Returned = append(bc.Returned, review.Value.Independent.Reasons...)
+			out = append(out, review.Value.Independent.Reasons...)
 		}
 	}
-	return bc, nil
+	return out, nil
 }
 
 // Execute drives an approved run to the next point that needs a person:
@@ -163,7 +167,17 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 			}
 			continue
 		}
+		// An approval that expired unanswered is cleared before dispatch,
+		// so its task relaunches in this round beside its siblings instead
+		// of waiting until nothing else can move.
+		if cleared, err := s.clearExpiredProcess05WaitsBeforeDispatch(ctx, runID); err != nil {
+			after, _ := current()
+			return after, err
+		} else if cleared {
+			continue
+		}
 		launched, err := s.dispatchReady(ctx, runID, run, brief)
+		s.markDispatchLive(runID, launched)
 		if err != nil {
 			// Workers already launched in this round are still running;
 			// collect them so none is left without a hand-in.
@@ -175,6 +189,14 @@ func (s *MarshalService) Execute(ctx context.Context, runID string, brief Marsha
 			// An escalation or reassignment during dispatch changes the run;
 			// the next round reports it. Otherwise nothing can move.
 			if after, _, err := s.load(ctx, runID); err == nil && after.State != run.State {
+				continue
+			}
+			// Tasks waiting for their own approvals were passed by; once
+			// nothing else can move, the run waits for those decisions.
+			if again, err := s.pausePrivateProcess05Waits(ctx, runID); err != nil {
+				after, _ := current()
+				return after, err
+			} else if again {
 				continue
 			}
 			return run, fmt.Errorf("marshal run %s cannot progress: no task is ready, handed in or accepted", runID)
@@ -214,10 +236,11 @@ func (s *MarshalService) collectAndReviewUltra(ctx context.Context, runID string
 			}
 			mu.Lock()
 			defer mu.Unlock()
+			defer s.clearDispatchLive(runID, dispatch.TaskID)
 			if _, err := s.CollectHandIn(ctx, runID, dispatch); err != nil {
 				errs = append(errs, fmt.Errorf("collect %s: %w", dispatch.TaskID, err))
 			} else {
-				if _, err := s.Review(ctx, runID, dispatch.TaskID, zeroMarshalCharge()); err != nil {
+				if err := s.reviewCollectedDispatch(ctx, runID, dispatch.TaskID); err != nil {
 					errs = append(errs, fmt.Errorf("review %s: %w", dispatch.TaskID, err))
 				}
 			}
@@ -236,7 +259,9 @@ func (s *MarshalService) collectAndReviewUltra(ctx context.Context, runID string
 func (s *MarshalService) collectAll(ctx context.Context, runID string, launched []MarshalDispatch, observe MarshalObserver, current func() (marshal.Run, error)) error {
 	var errs []error
 	for _, d := range launched {
-		if _, err := s.CollectHandIn(ctx, runID, d); err != nil {
+		_, err := s.CollectHandIn(ctx, runID, d)
+		s.clearDispatchLive(runID, d.TaskID)
+		if err != nil {
 			errs = append(errs, fmt.Errorf("collect %s: %w", d.TaskID, err))
 		}
 		if observe != nil {
@@ -290,11 +315,14 @@ func (s *MarshalService) reviewHandedIn(ctx context.Context, runID string, run m
 // accepted, so running it would only spend the budget. The task is escalated
 // with the governance reasons instead.
 func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run marshal.Run, brief MarshalBrief) ([]MarshalDispatch, error) {
-	policy := marshal.TierPolicy(s.Gate, run.Settings)
 	var launched []MarshalDispatch
 	for _, t := range run.Tasks {
-		if len(launched) >= policy.Concurrency {
+		canLaunch, stop := canLaunchCandidate(s.Gate, run, t, launched)
+		if stop {
 			break
+		}
+		if !canLaunch {
+			continue
 		}
 		if t.State != marshal.Queued && t.State != marshal.Returned && t.State != marshal.Reassigned {
 			continue
@@ -302,7 +330,12 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 		if !marshalDepsMerged(run, t) {
 			continue
 		}
-		if t.State == marshal.Reassigned && len(t.ReturnsByAgent) <= 1 {
+		if waiting, err := s.privateProcess05WaitPending(ctx, run, t); err != nil {
+			return launched, err
+		} else if waiting {
+			continue
+		}
+		if t.State == marshal.Reassigned && len(t.ReturnsByAgent) <= 1 && !isProviderFailover(t) {
 			next := s.otherWorker(t.Worker, t.Mode)
 			if next == "" {
 				reason := fmt.Sprintf("no other worker supports %s mode for reassignment; operator intervention required", t.Mode)
@@ -312,27 +345,33 @@ func (s *MarshalService) dispatchReady(ctx context.Context, runID string, run ma
 				return launched, err
 			}
 			t.Worker = next
+			if i := taskIndex(run, t.PlanTaskID); i >= 0 {
+				run.Tasks[i].Worker = next
+			}
+			canLaunch, stop = canLaunchCandidate(s.Gate, run, t, launched)
+			if stop {
+				break
+			}
+			if !canLaunch {
+				continue
+			}
 		}
 		if s.InstalledVersion != nil {
-			if t.Mode == marshal.Governed && s.ProbeWorker != nil && !s.workerGovernance(ctx, t.Worker).Governed() {
+			if (t.Mode == marshal.Governed || t.Worker == "agy") && s.ProbeWorker != nil && !s.workerTaskGovernance(ctx, t).Governed() {
 				if err := s.ProbeWorker(ctx, t.Worker); err != nil {
 					return launched, fmt.Errorf("governed worker verification failed: %w", err)
 				}
 			}
-			if g := s.workerGovernance(ctx, t.Worker); !g.Governed() {
+			if g := s.workerTaskGovernance(ctx, t); !g.Governed() {
 				return launched, s.Escalate(ctx, runID, t.PlanTaskID, fmt.Sprintf("worker %s is not governed (%s): %s", t.Worker, g.State, strings.Join(g.Reasons, " ")))
 			}
 		}
-		bc, err := s.briefContext(ctx, runID, run, t)
-		if err != nil {
-			return launched, err
-		}
-		d, err := s.Dispatch(ctx, runID, t.PlanTaskID, brief(t, bc))
+		d, err := s.dispatchWithBrief(ctx, runID, t.PlanTaskID, "", brief)
 		if err != nil {
 			return launched, err
 		}
 		launched = append(launched, d)
-		if run.Process05Bound && t.Mode == marshal.Governed {
+		if shouldStopAfterLaunchGate(s.Gate, run, t) {
 			break
 		}
 	}
@@ -384,6 +423,16 @@ func (s *MarshalService) otherWorker(current string, mode marshal.WorkerMode) st
 	sort.Strings(names)
 	if len(names) == 0 {
 		return ""
+	}
+	// Prefer a worker whose harness is currently verified: an unverified one
+	// (no profile, or no explicit model) fails its probe at dispatch and
+	// leaves the reassigned task stalled.
+	if s.Store != nil {
+		for _, name := range names {
+			if s.workerGovernance(context.Background(), name).Governed() {
+				return name
+			}
+		}
 	}
 	return names[0]
 }

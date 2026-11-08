@@ -8,7 +8,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/goalintake"
 )
 
-// EnvEndpoint names the Cloud authority. Unset means Standard, offline.
+// EnvEndpoint overrides the default Community Cloud authority.
 //
 // There is no variable that switches ULTRA Execution on: a session starts in
 // Standard and the person turns execution on inside the TUI with /ultra start.
@@ -21,13 +21,14 @@ const DefaultEndpoint = "https://marshal.blackhat.uz"
 type Config struct {
 	// Endpoint is the Cloud authority. Empty disables the client entirely.
 	Endpoint string
+	// TelemetryManaged means the process-wide reporter owns telemetry.
+	TelemetryManaged bool
 }
 
 // LoadConfig resolves configuration from the environment.
 //
-// The default is off. MARSHAL must work for someone who has never heard of the
-// Community Cloud, on a machine with no network, and that is only true if
-// absence of configuration means Standard rather than an error or a retry loop.
+// Standard remains usable offline. Telemetry runs separately in the background;
+// failure to contact the authority never grants ULTRA.
 func LoadConfig() Config {
 	return Config{Endpoint: resolveEndpoint(os.Getenv(EnvEndpoint))}
 }
@@ -129,90 +130,4 @@ func (a Authorization) Stop() {
 	if a.Reporter != nil {
 		a.Reporter.Close(context.Background())
 	}
-}
-
-// Authorize brings up the Cloud client for one session.
-//
-// Every failure path returns a usable Authorization with a nil gate, so a
-// caller that ignores the error still gets Standard rather than a crash or an
-// accidental grant. That is deliberate: this function sits in front of ordinary
-// work, and the cost of it going wrong should be a lost capability, never a
-// lost session.
-func Authorize(ctx context.Context, cfg Config, runtimeDir, clientVersion string) Authorization {
-	result := Authorization{}
-	if !cfg.Enabled() {
-		return result
-	}
-
-	client, err := NewClient(cfg.Endpoint, clientVersion)
-	if err != nil {
-		result.Err = err
-		return result
-	}
-	result.Client = client
-
-	store := NewStore(runtimeDir)
-	client.store = store
-	state, err := store.LoadOrCreate()
-	if err != nil {
-		result.Err = err
-		return result
-	}
-	result.State = state
-
-	// Keys come from the server rather than being compiled in, so a rotation
-	// does not require shipping a new MARSHAL. The trade is that key discovery
-	// rides on TLS, which is why NewClient refuses plain HTTP.
-	ring, err := FetchKeys(ctx, client)
-	if err != nil {
-		result.Err = err
-		return result
-	}
-
-	sessionID, err := NewSessionID()
-	if err != nil {
-		result.Err = err
-		return result
-	}
-	result.SessionID = sessionID
-
-	gate := NewGate(state.InstallationID, sessionID, ring, nil)
-	session := NewSession(client, gate, state, sessionID)
-	reporter := NewReporter(client, state.InstallationID, sessionID, clientVersion, nil)
-
-	// The reporter is attached to the result before the first call that can
-	// fail, so a failure is itself reportable. Attaching it afterwards would
-	// mean the events worth having — activation failures — were the ones the
-	// client had no way to send.
-	result.Reporter = reporter
-	session.AttachReporter(reporter)
-	reporter.Record(KindAppStart, TelemetryStandard, "")
-
-	registered, err := client.ensureRegistered(ctx, state, false)
-	if err != nil {
-		reporter.Record(KindErrorClass, TelemetryStandard, ClassifyError(err))
-		result.Err = err
-		return result
-	}
-	if registered {
-		reporter.Record(KindRegistration, TelemetryStandard, "")
-	}
-
-	if err := session.Start(ctx); err != nil {
-		reporter.Record(KindActivationFail, TelemetryStandard, ClassifyError(err))
-		result.Err = err
-		return result
-	}
-	reporter.Record(KindActivationOK, TelemetryUltra, "")
-	reporter.Record(KindModeChange, TelemetryUltra, "")
-
-	result.Gate = gate
-	result.Session = session
-	result.Heartbeat = NewHeartbeat(client, gate, reporter, state, sessionID)
-	return result
-}
-
-// FetchKeys is a package-level wrapper so tests can substitute key discovery.
-func FetchKeys(ctx context.Context, c *Client) (*KeyRing, error) {
-	return c.FetchKeys(ctx)
 }

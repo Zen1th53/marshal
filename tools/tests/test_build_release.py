@@ -1,6 +1,7 @@
 import hashlib
 import json
 import pathlib
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -9,16 +10,43 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "tools" / "build_release.sh"
-VERSION = "v1.5.0"
+VERSION = "v0.2.0"
 COMMIT = "0123456789abcdef"
 BUILD_DATE = "2026-08-18T12:00:00Z"
 
 
 class BuildReleaseTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source_directory = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.source_directory.cleanup)
+        cls.root = pathlib.Path(cls.source_directory.name)
+        try:
+            tracked = subprocess.check_output(
+                ["git", "ls-files", "-z"], cwd=ROOT
+            ).decode("utf-8").split("\0")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            manifest_path = ROOT / "distribution" / "PACK-MANIFEST.json"
+            if manifest_path.exists():
+                data = json.loads(manifest_path.read_text("utf-8"))
+                tracked = [entry["path"] for entry in data.get("files", [])]
+            else:
+                tracked = []
+        for name in filter(None, tracked):
+            target = cls.root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / name, target)
+        shutil.copy2(ROOT / "tools" / "regen_pack_manifest.sh", cls.root / "tools")
+        subprocess.run(["git", "init", "-q"], cwd=cls.root, check=True)
+        subprocess.run(["git", "add", "."], cwd=cls.root, check=True)
+        manifest = cls.root / "distribution" / "PACK-MANIFEST.json"
+        subprocess.run(["python3", str(cls.root / "tools" / "release_verify.py"), str(cls.root), str(manifest), "--generate"], check=True, capture_output=True)
+        subprocess.run(["git", "add", "."], cwd=cls.root, check=True)
+
     def build(self, output: pathlib.Path) -> None:
         subprocess.run(
-            ["bash", str(SCRIPT), VERSION, COMMIT, BUILD_DATE, str(output)],
-            cwd=ROOT,
+            ["bash", str(self.root / "tools" / SCRIPT.name), VERSION, COMMIT, BUILD_DATE, str(output)],
+            cwd=self.root,
             check=True,
         )
 
@@ -30,8 +58,8 @@ class BuildReleaseTests(unittest.TestCase):
             self.build(second)
 
             archive_names = [
-                "marshal_1.5.0_linux_amd64.tar.gz",
-                "marshal_1.5.0_linux_arm64.tar.gz",
+                "marshal_0.2.0_linux_amd64.tar.gz",
+                "marshal_0.2.0_linux_arm64.tar.gz",
             ]
             bundle_names = [
                 "INSTALL.md",
@@ -50,6 +78,14 @@ class BuildReleaseTests(unittest.TestCase):
                 )
                 with tarfile.open(archive, "r:gz") as bundle:
                     self.assertEqual(sorted(bundle.getnames()), bundle_names)
+                    for notice in ("LICENSING.md", "THIRD_PARTY_NOTICES.md"):
+                        with bundle.extractfile(notice) as source:
+                            self.assertEqual(source.read(), (ROOT / "docs" / "legal" / notice).read_bytes())
+                    with bundle.extractfile("README.md") as source:
+                        readme = source.read().decode("utf-8")
+                    self.assertIn("(LICENSING.md)", readme)
+                    self.assertIn("(THIRD_PARTY_NOTICES.md)", readme)
+                    self.assertNotIn("(docs/legal/LICENSING.md)", readme)
 
             executable = first / "marshal"
             with tarfile.open(first / archive_names[0], "r:gz") as bundle:
@@ -63,7 +99,7 @@ class BuildReleaseTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             ).stdout
-            self.assertIn("MARSHAL v1.5.0", version)
+            self.assertIn("Marshal v0.2.0", version)
             self.assertIn("commit: 0123456789abcdef", version)
             executable.unlink()
 
@@ -72,7 +108,7 @@ class BuildReleaseTests(unittest.TestCase):
                 digest, name = line.split("  ", 1)
                 checksums[name] = digest
             expected = archive_names + [
-                "marshal_1.5.0_sbom.spdx.json",
+                "marshal_0.2.0_sbom.spdx.json",
                 "build-metadata.json",
             ]
             for name in expected:
@@ -81,7 +117,7 @@ class BuildReleaseTests(unittest.TestCase):
                 )
 
             sbom = json.loads(
-                (first / "marshal_1.5.0_sbom.spdx.json").read_text(encoding="utf-8")
+                (first / "marshal_0.2.0_sbom.spdx.json").read_text(encoding="utf-8")
             )
             marshal_package = next(
                 package
@@ -110,7 +146,7 @@ class BuildReleaseTests(unittest.TestCase):
                         "--output",
                         str(output / "RELEASE-MANIFEST.json"),
                     ],
-                    cwd=ROOT,
+                    cwd=self.root,
                     check=True,
                 )
                 subprocess.run(
@@ -123,7 +159,7 @@ class BuildReleaseTests(unittest.TestCase):
                         "--dist",
                         str(output),
                     ],
-                    cwd=ROOT,
+                    cwd=self.root,
                     check=True,
                 )
             self.assertEqual(

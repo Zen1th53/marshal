@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"testing"
 	"time"
@@ -217,7 +218,7 @@ func TestNativeCodexApprovalCannotBeDecidedAsOrdinaryTaskApproval(t *testing.T) 
 func TestExecutionServiceNativeCodexApprovalConsumesExactLiveTurn(t *testing.T) {
 	ctx := context.Background()
 	projectRoot := t.TempDir()
-	journal, err := execution.NewFileJournalStore(filepath.Join(projectRoot, ".marshal", "journal"))
+	journal, err := execution.NewFileJournalStore(filepath.Join(projectRoot, statepath.DirName, "journal"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,6 +301,7 @@ func TestProcess05CodexAppServerStartsOneTypedTurnAndRefusesReplacement(t *testi
 	if err != nil || !handled || !result.Success || result.NativeTurn == nil {
 		t.Fatalf("app-server typed execution = result:%#v handled:%v err:%v", result, handled, err)
 	}
+	assertNativeProviderObservation(t, task, result)
 	if server.sessions != 1 || server.turns != 1 || server.waits != 1 {
 		t.Fatalf("typed app-server lifecycle counts = sessions:%d turns:%d waits:%d", server.sessions, server.turns, server.waits)
 	}

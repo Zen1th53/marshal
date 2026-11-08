@@ -27,7 +27,7 @@ func separatorWidth(s *ptySession, rows, cols int) int {
 func TestPTYEscDismissesOverlayWithoutDestroyingDraft(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	const draft = "/inspect my-precious-draft"
 	s.send(draft)
@@ -62,7 +62,7 @@ func TestPTYEscDismissesOverlayWithoutDestroyingDraft(t *testing.T) {
 func TestPTYEscOnPaletteKeepsDraft(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	s.send("/inspect palette-draft")
 	time.Sleep(300 * time.Millisecond)
@@ -82,7 +82,7 @@ func TestPTYEscOnPaletteKeepsDraft(t *testing.T) {
 func TestPTYEscWithNoOverlayKeepsDraft(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	s.send("/inspect bare-esc-draft")
 	time.Sleep(300 * time.Millisecond)
@@ -107,7 +107,7 @@ func TestPTYEscWithNoOverlayKeepsDraft(t *testing.T) {
 func TestPTYGrowResizeRepaintsWithoutKeypress(t *testing.T) {
 	const startRows, startCols = 24, 80
 	s := startTUI(t, startRows, startCols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 	time.Sleep(400 * time.Millisecond)
 
 	if w := separatorWidth(s, startRows, startCols); w != startCols {
@@ -155,7 +155,7 @@ func TestPTYGrowResizeRepaintsWithoutKeypress(t *testing.T) {
 func TestPTYTabCyclesThroughCandidates(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	// "/c" matches several commands: /claims, /checkpoint, /cancel, /context...
 	// The menu opens on its own while typing; no key is pressed to summon it.
@@ -194,7 +194,7 @@ func TestPTYTabCyclesThroughCandidates(t *testing.T) {
 func TestPTYBracketedPasteStillIntact(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	s.send("\x1b[200~line one\nline two\nline three\x1b[201~")
 	time.Sleep(700 * time.Millisecond)
@@ -228,7 +228,7 @@ func TestPTYBracketedPasteStillIntact(t *testing.T) {
 func TestPTYGraphemeEditingOnRealTerminal(t *testing.T) {
 	const rows, cols = 24, 110
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	for _, sample := range []struct{ name, text string }{
 		{"familyZWJ", "👨‍👩‍👧‍👦"},

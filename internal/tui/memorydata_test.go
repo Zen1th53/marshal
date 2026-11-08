@@ -188,17 +188,32 @@ func TestUnhealthyMemoryServiceWarns(t *testing.T) {
 	}
 }
 
+func TestUnestablishedMemoryServiceReportsUnknown(t *testing.T) {
+	snap := testMemory(t, fakeMemoryReader{
+		status: MemoryStatus{},
+	}).ReadMemory(context.Background())
+
+	if snap.ServiceHealth.Status != TruthUnknown {
+		t.Fatalf("expected TruthUnknown, got %v: %q", snap.ServiceHealth.Status, snap.ServiceHealth.Display())
+	}
+	if !strings.Contains(snap.ServiceHealth.Reason, "not established") {
+		t.Fatalf("expected not established reason, got: %q", snap.ServiceHealth.Reason)
+	}
+}
+
 // Memory actions that still lack their own typed form remain unavailable and
 // say why. CTUI-0424 and CTUI-0426 are deliberately excluded from this list:
 // they respectively collect semantic knowledge and Process05-bound outcome
 // metadata before submitting through the canonical MemoryService boundary.
+// CTUI-0450, CTUI-0484..0487, CTUI-0489 and CTUI-0491 are excluded because the
+// memory action bindings (control_memory.go) now give each a closed typed form.
 func TestMemoryWritesThatNeedContentAreUnavailable(t *testing.T) {
 	source, auth := testControl(t)
 	ctx := context.Background()
 
 	for _, id := range []ActionID{
+		// CTUI-0461 now takes a typed input file (controlbind_menu_cheap.go).
 		"CTUI-0433", "CTUI-0434",
-		"CTUI-0450", "CTUI-0461", "CTUI-0485", "CTUI-0491",
 	} {
 		binding, ok := source.Bindings()[id]
 		if !ok {

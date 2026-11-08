@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 	"github.com/Zen1th53/marshal/internal/processgroup"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,11 +17,30 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
+	"github.com/Zen1th53/marshal/internal/nativehistory"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
+
+// inferStateFromTitle inspects the pane title for state hints when OSC 7501 is absent.
+func inferStateFromTitle(title string) string {
+	low := strings.ToLower(title)
+	switch {
+	case strings.Contains(low, "blocked") || strings.Contains(low, "waiting") || strings.Contains(low, "ask"):
+		return "blocked"
+	case strings.Contains(low, "done") || strings.Contains(low, "completed") || strings.Contains(low, "success"):
+		return "done"
+	case strings.Contains(low, "error") || strings.Contains(low, "failed"):
+		return "error"
+	case strings.Contains(low, "idle"):
+		return "idle"
+	default:
+		return "working"
+	}
+}
 
 // Launch origin is supplied by the command or dispatch boundary, never inferred
 // from the provider or whether a launch changes focus.
@@ -60,6 +80,7 @@ type activeTmuxAgent struct {
 	env             []string
 	historyBaseline []string
 	sessionID       string
+	mcpLaunchID     string
 	historyPath     string
 	runID           string
 	driver          driver.Driver
@@ -89,9 +110,17 @@ func (w *Workspace) InitTmux(root ...string) {
 	if err != nil {
 		return
 	}
-	session, win, winID, pane := tmux.SessionName(projectRoot), "marshal", "", ""
+	if err := statepath.Validate(projectRoot); err != nil {
+		w.RecordActivity("State namespace refused: " + err.Error())
+		return
+	}
+	session, win, winID, pane := tmux.SessionName(projectRoot), statepath.Name, "", ""
 	if tmux.IsInsideTmux() {
 		if sess, name, id, err := tmux.CurrentSessionAndWindow(context.Background()); err == nil && sess != "" {
+			if !tmux.SessionBelongs(sess, projectRoot) {
+				w.RecordActivity("tmux namespace differs; open the dedicated " + statepath.Name + " session")
+				return
+			}
 			session = sess
 			if name != "" {
 				win = name
@@ -119,9 +148,12 @@ func (w *Workspace) InitTmux(root ...string) {
 	}
 	w.startPermissionQueue()
 	if w.runtime != nil && tmux.IsInsideTmux() {
-		if _, err := w.marshalChat(context.WithValue(context.Background(), tmuxBackgroundLaunchKey{}, true)); err != nil {
+		if _, err := w.marshalChat(context.WithValue(context.Background(), tmuxBackgroundLaunchKey{}, true)); err != nil && !isProviderAuthError(err) {
 			w.RecordActivity("Marshal chat: " + err.Error())
 		}
+	}
+	if err := w.reconcileStartupDock(context.Background()); err != nil {
+		w.RecordActivity("Marshal dock: " + err.Error())
 	}
 }
 
@@ -147,18 +179,29 @@ func (w *Workspace) recoverSurvivingWorkers(projectRoot string) {
 			continue
 		}
 		w.tmuxMu.Lock()
+		hosted := w.agentRecordHostedBy(record, p)
+		w.tmuxMu.Unlock()
+		if !hosted {
+			// The recorded pane is gone; its ID now names an unrelated pane.
+			_ = os.Remove(agentRecordPath(projectRoot, p.PaneID))
+			continue
+		}
+		w.tmuxMu.Lock()
 		_, exists := w.tmuxActiveWins[record.ID]
 		w.tmuxMu.Unlock()
 		if exists {
 			continue
 		}
-		agent := &activeTmuxAgent{id: record.ID, role: record.Role, taskID: record.TaskID, runID: record.RunID, executionRunID: record.ExecutionRunID, canonicalTaskID: record.CanonicalTaskID, provider: record.Provider, label: record.Label, window: record.Window, windowID: p.WindowID, paneID: p.PaneID, state: "working", launchOrigin: record.LaunchOrigin, readOnly: record.LaunchOrigin.readOnly(record.Role == "marshal-chat"), supervisor: record.Supervisor, isJoined: p.WindowID == w.tmuxMarshalWinID}
+		agent := &activeTmuxAgent{id: record.ID, role: record.Role, taskID: record.TaskID, runID: record.RunID, executionRunID: record.ExecutionRunID, canonicalTaskID: record.CanonicalTaskID, provider: record.Provider, label: record.Label, window: record.Window, windowID: p.WindowID, paneID: p.PaneID, pid: p.PID, state: "working", launchOrigin: record.LaunchOrigin, readOnly: record.LaunchOrigin.readOnly(record.Role == "marshal-chat"), supervisor: record.Supervisor, isJoined: p.WindowID == w.tmuxMarshalWinID}
 		agentCtx, cancel := context.WithCancel(context.Background())
 		agent.cancel = cancel
 		agent.doneChan = make(chan struct{})
 		var watch *nativeHistoryWatch
+		var saved chatBinding
+		var chatRecoveryErr error
 		if record.Role == "marshal-chat" {
-			saved := loadChatBinding(projectRoot)
+			saved = loadChatBinding(projectRoot)
+			agent.mcpLaunchID = saved.MCPLaunchID
 			agent.binary = saved.Binary
 			agent.args = saved.Args
 			agent.env = saved.Env
@@ -169,17 +212,34 @@ func (w *Workspace) recoverSurvivingWorkers(projectRoot string) {
 			baseline, err := w.prepareChatHistoryWatch(projectRoot, watch, saved.SessionID, saved.HistoryBaseline)
 			if err == nil {
 				agent.historyBaseline = baseline
-				err = w.saveChatBindingForAgent(projectRoot, agent)
 			}
 			if err != nil {
-				cancel()
-				w.RecordActivity(err.Error())
-				continue
+				chatRecoveryErr = err
+				watch = nil
 			}
 		}
 		w.tmuxMu.Lock()
 		w.tmuxActiveWins[record.ID] = agent
 		w.tmuxMu.Unlock()
+		if record.Role == "marshal-chat" {
+			if chatRecoveryErr == nil {
+				chatRecoveryErr = w.restoreRecoveredChatMCP(agentCtx, projectRoot, agent, saved)
+			}
+			if chatRecoveryErr == nil {
+				chatRecoveryErr = w.saveChatBindingForAgent(projectRoot, agent)
+			}
+			if chatRecoveryErr != nil {
+				// Keep monitoring /exit and capturing a not-yet-known own
+				// conversation, but never observe a foreign binding.
+				if errors.Is(chatRecoveryErr, errChatMCPBindingMismatch) {
+					watch = nil
+				}
+				w.tmuxMu.Lock()
+				agent.state = "mcp-unavailable"
+				w.tmuxMu.Unlock()
+				w.chatMCPRecoveryFailed(projectRoot, chatRecoveryErr)
+			}
+		}
 		_ = w.bindWorkspaceKeys(context.Background(), agent.paneID, projectRoot)
 		w.monitorAgent(agentCtx, agent, projectRoot, nil, watch, nil, nil, nil)
 	}
@@ -208,16 +268,13 @@ func (w *Workspace) ensureMarshalChatAuto(projectRoot string) {
 			return
 		}
 	}
-	if err := w.startMarshalChat(ctx, projectRoot); err != nil {
+	if err := w.startMarshalChat(ctx, projectRoot); err != nil && !isProviderAuthError(err) {
 		w.RecordActivity(err.Error())
 	}
 }
 
 func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) error {
-	provider := loadDefaultProvider(w.providerRoot())
-	if provider == "" {
-		provider = "codex"
-	}
+	provider, _ := w.chooseMarshalProvider(ctx)
 	binaryName := provider
 	if provider == "antigravity" {
 		binaryName = "agy"
@@ -233,6 +290,9 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 		return errors.New("Marshal not started: protocol unavailable")
 	}
 	args, env, dir, err := prepareMarshalLaunch(provider, projectRoot, nil, w.marshalContinuityBriefing(projectRoot, brief))
+	if err == nil {
+		args, env, dir, err = w.prepareProposalMCP(provider, projectRoot, args, env, dir)
+	}
 	if err != nil {
 		return err
 	}
@@ -257,7 +317,7 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	}
 	m.mu.Unlock()
 	if canonicalNeutralProvider(saved.Provider) == canonicalNeutralProvider(provider) && saved.SessionID != "" {
-		args = append(resumeArgsForProvider(provider, saved.SessionID), args...)
+		args = append(marshalResumeArgs(provider, saved.SessionID), args...)
 	}
 	for _, key := range []string{"CODEX_HOME", "CLAUDE_CONFIG_DIR", "HOME"} {
 		if value := os.Getenv(key); value != "" {
@@ -269,11 +329,14 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	if err != nil {
 		return err
 	}
+	if err := w.preflightProviderAuth(ctx, provider, binary, env); err != nil {
+		return err
+	}
 	// Persist the prelaunch history even if the process crashes before binding.
 	if err := saveChatBinding(projectRoot, chatBinding{Provider: provider, Binary: binary, Args: args, Env: env, SessionID: saved.SessionID, HistoryPath: saved.HistoryPath, RunID: runID, HistoryBaseline: baseline}); err != nil {
 		return err
 	}
-	cmd := append([]string{binary}, args...)
+	cmd := marshalChatCommand(binary, args)
 
 	if err := tmux.NewWindow(ctx, w.tmuxSession, winName, projectRoot, env, cmd); err != nil {
 		return fmt.Errorf("Marshal not started: %s", RedactContent(err.Error(), nil))
@@ -332,27 +395,50 @@ func (w *Workspace) startMarshalChat(ctx context.Context, projectRoot string) er
 	w.tmuxMu.Lock()
 	w.tmuxActiveWins["marshal-chat"] = agent
 	w.tmuxMu.Unlock()
+	w.activateProposalMCP(agent)
 	_ = w.bindWorkspaceKeys(ctx, agent.paneID, projectRoot)
 	_ = w.saveChatBindingForAgent(projectRoot, agent)
 	w.monitorAgent(agentCtx, agent, projectRoot, dir, watch, nil, nil, nil)
+	w.ensureMarshalDraftWatch(projectRoot, provider, runID)
+	// A new chat window joins the Board's dock.
+	w.kickDock()
 	return nil
 }
 
+// marshalChatHiddenEnv removes the tmux client variables from the Marshal's
+// process. With them, any shell command the Marshal runs reaches MARSHAL's own
+// tmux server and could type into the owner's pane (tmux send-keys). The
+// Marshal acts only through its MCP tools and proposals.
+var marshalChatHiddenEnv = []string{"-u", "TMUX", "-u", "TMUX_PANE"}
+
+// marshalChatCommand is the argv that starts the Marshal chat CLI without
+// the tmux client variables.
+func marshalChatCommand(binary string, args []string) []string {
+	cmd := append([]string{"env"}, marshalChatHiddenEnv...)
+	cmd = append(cmd, binary)
+	return append(cmd, args...)
+}
+
 func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAgent, root string) {
+	if err := w.respawnMarshalChat(ctx, agent, root, true); err != nil {
+		w.RecordActivity(err.Error())
+	}
+}
+
+// Recovery uses an in-place respawn: falling back to another window could
+// obscure a failed restore or resume the conversation in two provider panes.
+func (w *Workspace) respawnMarshalChat(ctx context.Context, agent *activeTmuxAgent, root string, allowNewWindow bool) error {
 	w.tmuxMu.Lock()
 	original := agent
 	agent = copyAgentLocked(agent)
 	w.tmuxMu.Unlock()
 	if ctx.Err() != nil {
-		return
+		return ctx.Err()
 	}
 
 	provider := agent.provider
 	if provider == "" {
-		provider = loadDefaultProvider(w.providerRoot())
-	}
-	if provider == "" {
-		provider = "codex"
+		provider, _ = w.chooseMarshalProvider(ctx)
 	}
 
 	sessionID := agent.sessionID
@@ -380,48 +466,69 @@ func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAge
 
 	brief, err := marshalRoleBriefing(app.MarshalWorkers(provider), marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
-		w.RecordActivity("Marshal not started: protocol unavailable")
-		return
+		return errors.New("Marshal not started: protocol unavailable")
 	}
 	var base []string
 	if sessionID != "" {
-		base = resumeArgsForProvider(provider, sessionID)
+		base = marshalResumeArgs(provider, sessionID)
 	}
 	resumeArgs, env, dir, err := prepareMarshalLaunch(provider, root, base, w.marshalContinuityBriefing(root, brief))
-	if err != nil {
-		w.RecordActivity(err.Error())
-		return
-	}
-	for _, prior := range agent.env {
-		if !strings.HasPrefix(prior, "OPENCODE_CONFIG_CONTENT=") {
-			env = append(env, prior)
-		}
-	}
-	// Respawn inherits the old pane environment, so supply the rebuilt hidden
-	// instruction configuration explicitly (especially OpenCode's file pointer).
-	cmd := append([]string{"env"}, env...)
-	cmd = append(cmd, bin)
-	cmd = append(cmd, resumeArgs...)
-	err = tmux.RespawnPane(ctx, agent.paneID, cmd)
-	if err != nil {
-		err = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, env, append([]string{bin}, resumeArgs...))
+	if err == nil {
+		resumeArgs, env, dir, err = w.prepareProposalMCP(provider, root, resumeArgs, env, dir)
 	}
 	if err != nil {
 		dir.remove()
-		w.RecordActivity("Marshal not started: " + RedactContent(err.Error(), nil))
-		return
+		return err
+	}
+	for _, prior := range agent.env {
+		if strings.HasPrefix(prior, "CODEX_HOME=") || strings.HasPrefix(prior, "CLAUDE_CONFIG_DIR=") || strings.HasPrefix(prior, "HOME=") {
+			env = append(env, prior)
+		}
+	}
+	if err := w.preflightProviderAuth(ctx, provider, bin, env); err != nil {
+		dir.remove()
+		if !allowNewWindow {
+			return err
+		}
+		_ = w.retainAndCloseAgent(ctx, original, root, "failed")
+		if original.cancel != nil {
+			original.cancel()
+		}
+		w.updateTmuxStatusLine(context.Background())
+		return err
+	}
+	// Respawn inherits the old pane environment, so supply the rebuilt hidden
+	// instruction configuration explicitly (especially OpenCode's file pointer).
+	cmd := append([]string{"env"}, marshalChatHiddenEnv...)
+	cmd = append(cmd, env...)
+	cmd = append(cmd, bin)
+	cmd = append(cmd, resumeArgs...)
+	w.revokeProposalMCP(original)
+	err = tmux.RespawnPaneIn(ctx, agent.paneID, root, cmd)
+	if err != nil && allowNewWindow {
+		err = tmux.NewWindow(ctx, w.tmuxSession, agent.window, root, env, marshalChatCommand(bin, resumeArgs))
+	}
+	if err != nil {
+		dir.remove()
+		return fmt.Errorf("Marshal not started: %s", RedactContent(err.Error(), nil))
 	}
 	agent.briefingDir.remove()
 	agent.briefingDir = dir
 	agent.args = resumeArgs
 	agent.env = env
 
-	_ = tmux.SetWindowOption(ctx, agent.paneID, "remain-on-exit", "on")
+	if w.dockedChat() == agent.paneID {
+		// Docked, the pane's window is the Board's: keep the option on the
+		// chat pane alone, so the Board window keeps its own.
+		_ = tmux.SetPaneOption(ctx, agent.paneID, "remain-on-exit", "on")
+	} else {
+		_ = tmux.SetWindowOption(ctx, agent.paneID, "remain-on-exit", "on")
+	}
 	_ = tmux.SetPaneReadOnly(ctx, agent.paneID, false) // F3: normal operator input
 
 	panes, _ := tmux.ListPanes(ctx, w.tmuxSession)
 	for _, p := range panes {
-		if p.WindowName == agent.window {
+		if p.PaneID == agent.paneID || allowNewWindow && p.WindowName == agent.window {
 			agent.paneID = p.PaneID
 			agent.windowID = p.WindowID
 			pidVal, pgidVal, err := tmux.PanePIDAndPGID(ctx, p.PaneID)
@@ -443,8 +550,57 @@ func (w *Workspace) restartMarshalChat(ctx context.Context, agent *activeTmuxAge
 	original.paneID, original.windowID, original.pid, original.pgid = agent.paneID, agent.windowID, agent.pid, agent.pgid
 	original.state, original.readOnly = agent.state, agent.readOnly
 	w.tmuxMu.Unlock()
+	w.activateProposalMCP(original)
 	_ = w.bindWorkspaceKeys(ctx, agent.paneID, root)
-	_ = w.saveChatBindingForAgent(root, agent)
+	w.tmuxMu.Lock()
+	savedAgent := copyAgentLocked(original)
+	w.tmuxMu.Unlock()
+	if err := w.saveChatBindingForAgent(root, savedAgent); err != nil {
+		w.revokeProposalMCP(original)
+		return fmt.Errorf("Marshal chat binding not saved: %w", err)
+	}
+	w.ensureMarshalDraftWatch(root, provider, agent.runID)
+	// A chat respawned in place stays docked; one recreated in a new window
+	// is joined again, and the dock's keys are bound to it again (the
+	// ordinary agent table was just bound over them).
+	w.invalidateDockKeys(agent.paneID)
+	w.kickDock()
+	return nil
+}
+
+// ensureMarshalDraftWatch starts the draft watcher for a Marshal chat launch
+// unless one is already running. Every launch path (automatic start, model
+// switch, crash restart, /marshal chat) must import the Marshal's drafts; a
+// chat whose drafts nobody imports stalls the whole flow. Without a runtime
+// no draft can be imported, so nothing is started.
+func (w *Workspace) ensureMarshalDraftWatch(root, provider, runID string) {
+	if w.runtime == nil || !w.isTmuxActive() {
+		return
+	}
+	m := w.marshalSession()
+	m.mu.Lock()
+	running := false
+	if m.draftDone != nil {
+		select {
+		case <-m.draftDone:
+		default:
+			running = true
+		}
+	}
+	if m.runID != "" {
+		runID = m.runID
+	}
+	m.mu.Unlock()
+	if running {
+		return
+	}
+	if runID == "" {
+		runID = loadChatBinding(root).RunID
+	}
+	if runID == "" {
+		runID = fmt.Sprintf("RUN-%d", time.Now().UTC().UnixNano())
+	}
+	w.watchMarshalDraft(m, runID, root, provider, "")
 }
 
 func resumeArgsForProvider(provider, sessionID string) []string {
@@ -519,7 +675,7 @@ func (w *Workspace) hostNativeTmuxWindow(ctx context.Context, name, root, socket
 	argv := []string{relay, "STDIO,raw,echo=0", "UNIX-CONNECT:" + socket}
 	if view, ok := ctx.Value(taskRelayViewKey{}).(taskRelayView); ok {
 		// A governed task can host more than one process; retain all relay output.
-		path := filepath.Join(view.root, ".marshal", "evidence", view.id+"-relay-latest.txt")
+		path := filepath.Join(view.root, statepath.DirName, "evidence", view.id+"-relay-latest.txt")
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			if err := saveAgentEvidence(view.root, view.id+"-relay", ""); err != nil {
 				return err
@@ -598,6 +754,10 @@ func (w *Workspace) runNativeAgentInTmux(
 			}
 		}
 	}
+	var operatorArgs []string
+	if original, ok := ctx.Value(nativeRequestedArgsKey{}).([]string); ok {
+		operatorArgs = original
+	}
 	if exists && winExists {
 		requestedArgs := args
 		if original, ok := ctx.Value(nativeRequestedArgsKey{}).([]string); ok {
@@ -612,6 +772,19 @@ func (w *Workspace) runNativeAgentInTmux(
 				runningProvider = "an unknown provider"
 			}
 			return "", fmt.Errorf("Marshal chat is still running %s. To switch to %s, run /marshal model %s. The existing chat has been left running.", runningProvider, provider, canonicalNeutralProvider(provider))
+		}
+		if isChat && existingAgent.state == "mcp-unavailable" {
+			return "", errors.New("Marshal chat MCP is unavailable. " + chatMCPRepairInstructions)
+		}
+		if existingAgent != nil && existingAgent.state == "unavailable" && !shouldSkipAuthPreflight(operatorArgs, args) {
+			if err := w.preflightProviderAuth(ctx, provider, binary, briefingEnv); err != nil {
+				return "", err
+			}
+			w.tmuxMu.Lock()
+			if current := w.tmuxActiveWins[agentID]; current != nil && current.state == "unavailable" {
+				current.state = "working"
+			}
+			w.tmuxMu.Unlock()
 		}
 		// Only an operator command switches to a surviving window.
 		if !tmuxLaunchInBackground(ctx) {
@@ -629,12 +802,18 @@ func (w *Workspace) runNativeAgentInTmux(
 		w.updateTmuxStatusLine(ctx)
 		return fmt.Sprintf("Switched to active %s session (tmux window %s). The session continues running. Press F11 to return to MARSHAL.", agentLabel, winName), nil
 	}
+	if !shouldSkipAuthPreflight(operatorArgs, args) {
+		if err := w.preflightProviderAuth(ctx, provider, binary, briefingEnv); err != nil {
+			dir.remove()
+			return "", err
+		}
+	}
 
 	// Resume only the conversation bound to this project.
 	if isChat {
 		saved := loadChatBinding(root)
 		if canonicalNeutralProvider(saved.Provider) == canonicalNeutralProvider(provider) && saved.SessionID != "" {
-			args = append(resumeArgsForProvider(provider, saved.SessionID), args...)
+			args = append(marshalResumeArgs(provider, saved.SessionID), args...)
 		}
 	}
 	// The driver owns native worker execution; tmux hosts its terminal relay.
@@ -642,7 +821,7 @@ func (w *Workspace) runNativeAgentInTmux(
 	var sessionReference processgroup.Reference
 	var hostedPane string
 	if isChat {
-		if err := tmux.NewWindow(ctx, w.tmuxSession, winName, root, briefingEnv, append([]string{binary}, args...), &hostedPane); err != nil {
+		if err := tmux.NewWindow(ctx, w.tmuxSession, winName, root, briefingEnv, marshalChatCommand(binary, args), &hostedPane); err != nil {
 			return "", err
 		}
 	} else {
@@ -706,7 +885,7 @@ func (w *Workspace) runNativeAgentInTmux(
 	if !isChat {
 		fkey := providerFKey(provider)
 		if fkey != "" {
-			_ = tmux.BindWindowKey(ctx, paneID, "marshal-keys-"+tmux.ProjectHash(root), fkey, "select-window", "-t", paneID)
+			_ = tmux.BindWindowKey(ctx, paneID, statepath.Name+"-keys-"+tmux.ProjectHash(root), fkey, "select-window", "-t", paneID)
 		}
 	}
 
@@ -757,6 +936,11 @@ func (w *Workspace) runNativeAgentInTmux(
 	}
 	w.tmuxMu.Lock()
 	w.tmuxActiveWins[agentID] = agent
+	w.tmuxMu.Unlock()
+	if isChat {
+		w.activateProposalMCP(agent)
+	}
+	w.tmuxMu.Lock()
 	if !isChat {
 		w.nativeProvider = provider
 	}
@@ -784,8 +968,27 @@ func (w *Workspace) monitorAgent(
 ) {
 	if !w.workers.start(agentCtx, &w.tmuxMonitors, func(agentCtx context.Context) {
 		defer close(agent.doneChan)
+		if agent.role == "marshal-chat" {
+			// A chat that ended for good leaves the dock.
+			defer w.kickDock()
+		}
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
+		authReported := false
+		// A worker's OSC 7501 reports reach MARSHAL only through the pane's
+		// raw output (capture-pane drops them), so the pane is tapped for as
+		// long as it is monitored. The Marshal chat reports to no lane.
+		if agent.role != "marshal-chat" {
+			w.tmuxMu.Lock()
+			pane := agent.paneID
+			w.tmuxMu.Unlock()
+			if pane != "" {
+				defer w.tapPane(agentCtx, pane)()
+			}
+		}
+		// The title heuristic is read every few ticks: it runs a tmux
+		// command, and a monitor runs per agent window.
+		laneTicks := 0
 		for {
 			select {
 			case <-agentCtx.Done():
@@ -797,6 +1000,11 @@ func (w *Workspace) monitorAgent(
 				// Poll syncs
 				if snapshot.role == "marshal-chat" {
 					w.observeMarshalProposalFiles(root)
+					// A published draft must never wait for a relaunch: if no
+					// watcher is importing it, start one (a no-op while running).
+					if marshalDraftReady(root) {
+						w.ensureMarshalDraftWatch(root, snapshot.provider, snapshot.runID)
+					}
 				}
 				if watch != nil && capturesLive(snapshot.provider) {
 					_ = watch.sync()
@@ -809,6 +1017,18 @@ func (w *Workspace) monitorAgent(
 				}
 				if view != nil {
 					status := liveStatus{Delivered: view.Count(), LastSync: time.Now().UTC()}
+					laneTicks++
+					if st, ok := w.paneStatusOf(snapshot.paneID); ok && snapshot.paneID != "" {
+						// The worker's own report wins over the title.
+						status.State, status.LastAction = st.State, st.laneLast()
+					} else if snapshot.paneID != "" && laneTicks%5 == 1 {
+						if status.State == "" {
+							if title, err := tmux.GetPaneTitle(agentCtx, snapshot.paneID); err == nil && title != "" {
+								status.LastAction = title
+								status.State = inferStateFromTitle(title)
+							}
+						}
+					}
 					_ = writeLiveStatus(root, snapshot.provider, status)
 				}
 
@@ -874,6 +1094,26 @@ func (w *Workspace) monitorAgent(
 					for _, pw := range peers {
 						_ = pw.sync()
 					}
+					if isAuthLoginSubcommand(snapshot.args) && exitCode == 0 {
+						w.clearProviderAuthUnavailable(snapshot.provider)
+					}
+
+					authExit := authReported
+					if !authExit && !closedByOperator && !shouldSkipAuthPreflight(nil, snapshot.args) {
+						if snapshot.handle != nil {
+							if record, outcomeErr, ok := snapshot.handle.Outcome(); ok {
+								if detectProviderAuthFailure(snapshot.provider, record.Output) ||
+									(outcomeErr != nil && detectProviderAuthFailure(snapshot.provider, outcomeErr.Error())) {
+									authExit = true
+								}
+							}
+						}
+						if !authExit && snapshot.paneID != "" {
+							if paneText, capErr := tmux.CapturePane(agentCtx, snapshot.paneID); capErr == nil && detectProviderAuthFailure(snapshot.provider, paneText) {
+								authExit = true
+							}
+						}
+					}
 
 					if snapshot.role == "marshal-chat" {
 						if agentCtx.Err() != nil {
@@ -889,8 +1129,39 @@ func (w *Workspace) monitorAgent(
 							w.updateTmuxStatusLine(context.Background())
 							return
 						}
+						if snapshot.state == "mcp-unavailable" {
+							if err := w.retainAndCloseAgent(agentCtx, agent, root, "failed"); err != nil {
+								w.RecordActivity(err.Error())
+								continue
+							}
+							w.chatMCPRecoveryFailed(root, errors.New("the unrecovered chat exited"))
+							return
+						}
+						if authExit {
+							if err := w.retainAndCloseAgent(agentCtx, agent, root, "failed"); err != nil {
+								w.RecordActivity(err.Error())
+								continue
+							}
+							if dir != nil {
+								dir.remove()
+							}
+							w.markProviderAuthUnavailable(snapshot.provider, providerNotSignedInMessage(snapshot.provider))
+							w.updateTmuxStatusLine(context.Background())
+							return
+						}
+						if err := w.preflightProviderAuth(agentCtx, snapshot.provider, snapshot.binary, snapshot.env); err != nil {
+							if closeErr := w.retainAndCloseAgent(agentCtx, agent, root, "failed"); closeErr != nil {
+								w.RecordActivity(closeErr.Error())
+								continue
+							}
+							if dir != nil {
+								dir.remove()
+							}
+							w.updateTmuxStatusLine(context.Background())
+							return
+						}
 						w.RecordActivity("Marshal chat ended; restarting automatically and resuming the conversation. Use /marshal chat to reopen it.")
-						w.restartMarshalChat(agentCtx, agent, root)
+						w.restartMarshalChat(withAuthPreflightChecked(agentCtx, snapshot.provider), agent, root)
 						w.updateTmuxStatusLine(context.Background())
 						continue
 					}
@@ -902,7 +1173,11 @@ func (w *Workspace) monitorAgent(
 						state = "failed"
 					}
 					if snapshot.runID != "" {
-						if err := w.deliverEgressAlert(app.EgressAlert{RunID: snapshot.runID, ParentRunID: snapshot.runID, TaskID: snapshot.taskID, Worker: snapshot.provider, Kind: "worker " + state, State: state, Message: snapshot.label + " worker " + state + "."}); err != nil {
+						alertMsg := snapshot.label + " worker " + state + "."
+						if authExit {
+							alertMsg = providerNotSignedInMessage(snapshot.provider)
+						}
+						if err := w.deliverEgressAlert(app.EgressAlert{RunID: snapshot.runID, ParentRunID: snapshot.runID, TaskID: snapshot.taskID, Worker: snapshot.provider, Kind: "worker " + state, State: state, Message: alertMsg}); err != nil {
 							w.RecordActivity(err.Error())
 						}
 					}
@@ -913,10 +1188,37 @@ func (w *Workspace) monitorAgent(
 					if dir != nil {
 						dir.remove()
 					}
-
-					w.RecordActivity(fmt.Sprintf("%s session ended (exit %d). Output saved to evidence.", snapshot.label, exitCode))
+					if authExit {
+						w.markProviderAuthUnavailable(snapshot.provider, providerNotSignedInMessage(snapshot.provider))
+					} else {
+						w.RecordActivity(fmt.Sprintf("%s session ended (exit %d). Output saved to evidence.", snapshot.label, exitCode))
+					}
 					w.updateTmuxStatusLine(context.Background())
 					return
+				}
+
+				if snapshot.paneID != "" && !shouldSkipAuthPreflight(nil, snapshot.args) {
+					if visible, capErr := tmux.CaptureVisiblePane(agentCtx, snapshot.paneID); capErr == nil {
+						if detectProviderAuthFailure(snapshot.provider, visible) {
+							if !authReported {
+								authReported = true
+								w.tmuxMu.Lock()
+								if agent.state != "unavailable" {
+									agent.state = "unavailable"
+								}
+								w.tmuxMu.Unlock()
+								w.markProviderAuthUnavailable(snapshot.provider, providerNotSignedInMessage(snapshot.provider))
+							}
+						} else if authReported {
+							authReported = false
+							w.tmuxMu.Lock()
+							if agent.state == "unavailable" {
+								agent.state = "working"
+							}
+							w.tmuxMu.Unlock()
+							w.clearProviderAuthUnavailable(snapshot.provider)
+						}
+					}
 				}
 
 			}
@@ -945,8 +1247,13 @@ func (w *Workspace) returnFromExitedAgent(ctx context.Context, agent *activeTmux
 }
 
 // RecordActivity records activity into workspace state and triggers a redraw if interactive.
+//
+// It is the background channel: on the Board the message becomes one
+// Activity line (the whole text a click away) and never opens the ANSWER
+// overlay or replaces the footer, which answer only what the operator did.
 func (w *Workspace) RecordActivity(msg string) {
 	msg = hideMarshalProtocol(RedactContent(msg, nil))
+	w.addNote(msg, false)
 	w.mu.Lock()
 	if w.state.LastOutput != "" {
 		w.state.LastOutput += "\n" + msg
@@ -990,6 +1297,9 @@ func (w *Workspace) updateTmuxStatusLine(ctx context.Context) {
 		w.tmuxMu.Unlock()
 
 		statusText := ""
+		if buildMarker != "" {
+			parts = append([]string{buildMarker}, parts...)
+		}
 		if len(parts) > 0 {
 			statusText = fmt.Sprintf(" [%s] ", strings.Join(parts, " | "))
 		}
@@ -1112,24 +1422,32 @@ func (w *Workspace) activeWorkerAgentLocked() *activeTmuxAgent {
 
 // handleViewCommand implements the /view command family.
 func (w *Workspace) handleViewCommand(ctx context.Context, args []string) (string, error) {
+	// The Board and the classic screen are this terminal's own views and
+	// need no tmux; nor does the native chat.
+	if len(args) >= 1 && strings.EqualFold(args[0], "chat") {
+		return w.handleViewChat(ctx, args[1:])
+	}
+	if len(args) == 1 {
+		switch strings.ToLower(args[0]) {
+		case "board":
+			return w.setBoardView(false), nil
+		case "classic":
+			return w.setBoardView(true), nil
+		}
+	}
 	if !w.isTmuxActive() {
 		return "View commands require MARSHAL to run inside tmux.", nil
 	}
 	if len(args) == 0 {
-		return "Usage: /view [focus | side-by-side | worker | show <agent> | hide | follow | readonly | takeover]", nil
+		return "Usage: /view [board | classic | chat [native|tmux] | focus | side-by-side | worker | show <agent> | hide | follow | readonly | takeover]", nil
 	}
 
 	sub := strings.ToLower(args[0])
 	switch sub {
 	case "focus", "marshal":
 		// Break any joined panes back out into their windows so only Marshal is visible
+		joined := w.joinedWorkers()
 		w.tmuxMu.Lock()
-		var joined []*activeTmuxAgent
-		for _, a := range w.tmuxActiveWins {
-			if a.isJoined {
-				joined = append(joined, copyAgentLocked(a))
-			}
-		}
 		mWin := w.marshalTarget()
 		mPane := w.tmuxMarshalPaneID
 		w.tmuxMu.Unlock()
@@ -1193,6 +1511,10 @@ func (w *Workspace) handleViewCommand(ctx context.Context, args []string) (strin
 			chatAgent, exists := w.tmuxActiveWins["marshal-chat"]
 			chatAgent = copyAgentLocked(chatAgent)
 			w.tmuxMu.Unlock()
+			if exists && w.dockedChat() == chatAgent.paneID {
+				_ = tmux.SelectPane(ctx, chatAgent.paneID)
+				return "View: Marshal Chat focused beside the Board. Press F11 to return to the Board.", nil
+			}
 			if exists {
 				_ = tmux.SelectWindow(ctx, chatAgent.paneID)
 				return "View: showing Marshal Chat. Press F11 to return to MARSHAL.", nil
@@ -1229,13 +1551,8 @@ func (w *Workspace) handleViewCommand(ctx context.Context, args []string) (strin
 		}
 
 	case "hide", "others":
+		joined := w.joinedWorkers()
 		w.tmuxMu.Lock()
-		var joined []*activeTmuxAgent
-		for _, a := range w.tmuxActiveWins {
-			if a.isJoined {
-				joined = append(joined, copyAgentLocked(a))
-			}
-		}
 		mWin := w.marshalTarget()
 		w.tmuxMu.Unlock()
 		if err := w.breakJoinedPanes(ctx, joined); err != nil {
@@ -1272,7 +1589,7 @@ func (w *Workspace) handleViewCommand(ctx context.Context, args []string) (strin
 		return w.handleTakeoverCommand(ctx)
 
 	default:
-		return "Usage: /view [focus | side-by-side | worker | show <agent> | hide | follow | readonly | takeover]", nil
+		return "Usage: /view [board | classic | chat [native|tmux] | focus | side-by-side | worker | show <agent> | hide | follow | readonly | takeover]", nil
 	}
 }
 
@@ -1366,7 +1683,7 @@ func (w *Workspace) handleTakeoverCommand(ctx context.Context, args ...string) (
 }
 
 func saveAgentEvidence(root, identifier, evidence string) error {
-	dir := filepath.Join(root, ".marshal", "evidence")
+	dir := filepath.Join(root, statepath.DirName, "evidence")
 	if strings.ContainsAny(identifier, "/\\") || identifier == "" {
 		return fmt.Errorf("invalid evidence identity")
 	}
@@ -1385,7 +1702,12 @@ func saveAgentEvidence(root, identifier, evidence string) error {
 	return nil
 }
 
-// watchMarshalDraft starts background monitoring for draft completion when Marshal Chat is active.
+// watchMarshalDraft imports every draft the Marshal publishes while its chat
+// is alive. It is started for each Marshal chat launch. A rejected draft is
+// reported with its exact reason and the watcher keeps running, so the
+// Marshal's corrected draft is imported without any owner step. It ends when
+// the chat is gone, when it is replaced, or after a draft was imported (plan
+// approval then owns the run).
 func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, note string) {
 	m.mu.Lock()
 	previousCancel, previousDone := m.draftCancel, m.draftDone
@@ -1396,7 +1718,7 @@ func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, 
 	if previousDone != nil {
 		<-previousDone
 	}
-	ctx, cancel := context.WithTimeout(w.workers.context(), 30*time.Minute)
+	ctx, cancel := context.WithCancel(w.workers.context())
 	done := make(chan struct{})
 	m.mu.Lock()
 	m.draftCancel, m.draftDone = cancel, done
@@ -1421,48 +1743,103 @@ func (w *Workspace) watchMarshalDraft(m *marshalSession, runID, root, provider, 
 					}
 					continue
 				}
-				m.mu.Lock()
-				service := m.service
-				m.mu.Unlock()
-				if service == nil {
+				if w.importWatchedMarshalDraft(ctx, m, runID, provider, data) {
 					return
 				}
-				packDir, packErr := service.TakePlanPack(runID)
-				draft, err := service.DraftFromProposal(data, provider)
-				if err != nil || packErr != nil {
-					return
-				}
-				ids := make([]string, 0, len(draft.Tasks))
-				for _, task := range draft.Tasks {
-					ids = append(ids, task.PlanTaskID)
-				}
-				pack, err := app.ReadPlanPack(packDir, ids)
-				if err != nil {
-					return
-				}
-				draft.Pack = &pack
-				goal := draft.Plan.Goal.GoalID
-				if goal == "" {
-					goal = draft.Plan.ID
-				}
-				run, err := service.StartPlanningFromDraft(ctx, runID, goal, draft, marshal.Budget{})
-				if err != nil {
-					return
-				}
-				m.mu.Lock()
-				m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
-				m.approvals = nil
-				m.mu.Unlock()
-				w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan drafted: %d tasks · read %s · /marshal approve to run it", len(run.Tasks), packDir)))
-				w.RecordActivity(fmt.Sprintf("Marshal plan drafted (%d tasks). Read the plan in %s before allowing its approval popup.", len(run.Tasks), packDir))
-				w.queueMarshalPlanApproval()
-				return
 			}
 		}
 	}) {
 		cancel()
 		close(done)
 	}
+}
+
+// importWatchedMarshalDraft imports one consumed draft. It reports true when
+// the draft became the canonical Process 04 plan. A rejection is published
+// with its reason and leaves the watcher running for the next draft.
+func (w *Workspace) importWatchedMarshalDraft(ctx context.Context, m *marshalSession, runID, provider string, data []byte) bool {
+	m.mu.Lock()
+	service := m.service
+	m.mu.Unlock()
+	if service == nil {
+		var err error
+		if service, _, _, err = w.marshalService(ctx, runID); err != nil {
+			w.marshalDraftRejected(m, runID, provider, "draft validation failed", err)
+			return false
+		}
+		m.mu.Lock()
+		if m.service == nil {
+			m.service = service
+		}
+		if m.runID == "" {
+			m.runID = runID
+		}
+		m.mu.Unlock()
+	}
+	// Rejections are reported on the watched run: the panel and chat follow
+	// that run, and a superseding run ID exists only once the draft is in.
+	watchedRunID := runID
+	_, snapErr := service.Snapshot(ctx, runID)
+	superseding := draftSupersedesRun(snapErr)
+	if superseding {
+		runID = fmt.Sprintf("RUN-%d", time.Now().UTC().UnixNano())
+	}
+	packDir, packErr := service.TakePlanPack(runID)
+	draft, err := service.DraftFromProposal(data, provider)
+	if err != nil {
+		w.marshalDraftRejected(m, watchedRunID, provider, "draft validation failed", err)
+		return false
+	}
+	if packErr != nil {
+		w.marshalDraftRejected(m, watchedRunID, provider, "plan pack transfer failed", packErr)
+		return false
+	}
+	ids := make([]string, 0, len(draft.Tasks))
+	for _, task := range draft.Tasks {
+		ids = append(ids, task.PlanTaskID)
+	}
+	pack, err := app.ReadPlanPack(packDir, ids)
+	if err != nil {
+		w.marshalDraftRejected(m, watchedRunID, provider, "plan pack validation failed", err)
+		return false
+	}
+	draft.Pack = &pack
+	run, err := w.persistNativePlanningDraft(ctx, provider, service, runID, draft, marshal.Budget{})
+	if err != nil {
+		w.marshalDraftRejected(m, watchedRunID, provider, "canonical Process 04 evidence unavailable", err)
+		return false
+	}
+	if superseding {
+		w.cancelSupersededTaskLanes(ctx, run.PlanID)
+	}
+	m.mu.Lock()
+	m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
+	m.approvals = nil
+	m.mu.Unlock()
+	// The chat binding names the run a restarted workspace recovers. A
+	// superseding run left it on the replaced run, which then took the panel
+	// and the approval questions after every restart.
+	w.tmuxMu.Lock()
+	if a := w.tmuxActiveWins["marshal-chat"]; a != nil {
+		a.runID = runID
+		snapshot := copyAgentLocked(a)
+		w.tmuxMu.Unlock()
+		if err := w.saveChatBindingForAgent(service.Repository, snapshot); err != nil {
+			w.RecordActivity("Marshal chat binding not updated: " + err.Error())
+		}
+	} else {
+		w.tmuxMu.Unlock()
+		if saved := loadChatBinding(service.Repository); saved.SessionID != "" {
+			saved.RunID = runID
+			if err := saveChatBinding(service.Repository, saved); err != nil {
+				w.RecordActivity("Marshal chat binding not updated: " + err.Error())
+			}
+		}
+	}
+	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("canonical Process 04 plan ready: %d tasks · review %s and the approval scope", len(run.Tasks), packDir)))
+	w.RecordActivity(fmt.Sprintf("Canonical Process 04 plan drafted (%d tasks). Review the plan in %s and its exact approval scope.", len(run.Tasks), packDir))
+	w.queueMarshalPlanApproval()
+	return true
 }
 
 // wrapServiceDriversForTmux wraps the drivers in MarshalService to integrate dispatched task workers with tmux.
@@ -1494,6 +1871,15 @@ func (t *tmuxTaskDriver) Mode() marshal.WorkerMode {
 }
 
 func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*driver.Handle, error) {
+	if req.Task.ImportedResult == nil && canonicalAuthProvider(req.Task.Worker) != "" {
+		var binary string
+		if nativeDrv, ok := t.inner.(driver.Native); ok {
+			binary = nativeDrv.Binary
+		}
+		if err := t.w.preflightProviderAuth(ctx, req.Task.Worker, binary, nil); err != nil {
+			return nil, err
+		}
+	}
 	root := t.w.workDir
 	agentID := taskAgentID(req)
 	if err := resetAgentOutcome(root, agentID); err != nil {
@@ -1517,6 +1903,7 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 			if p.PaneID == agent.paneID {
 				agent.paneID = p.PaneID
 				agent.windowID = p.WindowID
+				agent.pid = p.PID
 				break
 			}
 		}
@@ -1550,7 +1937,8 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 		t.w.tmuxMu.Unlock()
 		return saveAgentRecord(root, session, snapshot)
 	})
-	h, err := t.inner.Launch(launchCtx, req)
+	driverToLaunch := configureWorkerDriverExtreme(t.inner, root, agent)
+	h, err := driverToLaunch.Launch(launchCtx, req)
 	if err != nil {
 		t.w.tmuxMu.Lock()
 		delete(t.w.tmuxActiveWins, agentID)
@@ -1566,7 +1954,7 @@ func (t *tmuxTaskDriver) Launch(ctx context.Context, req driver.Request) (*drive
 	t.w.tmuxMu.Unlock()
 	t.w.updateTmuxStatusLine(ctx)
 	t.monitors.Store(h, agent.doneChan)
-	if !t.w.workers.start(ctx, &t.w.tmuxMonitors, func(ctx context.Context) { defer close(agent.doneChan); t.w.monitorTaskState(ctx, agent, h) }) {
+	if !t.w.workers.start(ctx, &t.w.tmuxMonitors, func(ctx context.Context) { defer close(agent.doneChan); t.w.monitorTaskAuthAndState(ctx, agent, h) }) {
 		close(agent.doneChan)
 	}
 	return h, nil
@@ -1577,24 +1965,72 @@ func (t *tmuxTaskDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.Ha
 	t.joinMonitor(h)
 
 	taskID := h.Request().Task.PlanTaskID
+	worker := h.Request().Task.Worker
 	agentID := taskAgentID(h.Request())
 	root := t.w.workDir
 	if t.w.runtime != nil && t.w.runtime.ProjectRoot() != "" {
 		root = t.w.runtime.ProjectRoot()
 	}
 
+	hasFailure := err != nil
+	for _, record := range handin.RuntimeObserved {
+		if record.ExitCode != 0 {
+			hasFailure = true
+			break
+		}
+	}
+	authFailed := false
+	if err != nil && detectProviderAuthFailure(worker, err.Error()) {
+		authFailed = true
+	}
+	for _, record := range handin.RuntimeObserved {
+		if (record.ExitCode != 0 || err != nil) && detectProviderAuthFailure(worker, record.Output) {
+			authFailed = true
+			break
+		}
+	}
+
 	t.w.tmuxMu.Lock()
 	agent, ok := t.w.tmuxActiveWins[agentID]
+	approvalID, waiting := "", false
+	if ok && agent != nil {
+		approvalID, waiting = taskHandleApprovalWait(agent, h, err)
+	}
+	var agentPane string
+	var agentState string
+	if ok && agent != nil {
+		agentPane = agent.paneID
+		agentState = agent.state
+	}
 	t.w.tmuxMu.Unlock()
 
+	if agentState == "unavailable" {
+		authFailed = true
+	}
+	if !authFailed && hasFailure && strings.TrimSpace(agentPane) != "" {
+		if paneText, capErr := tmux.CapturePane(context.Background(), agentPane); capErr == nil && detectProviderAuthFailure(worker, paneText) {
+			authFailed = true
+		}
+	}
+	if authFailed {
+		t.w.markProviderAuthUnavailable(worker, providerNotSignedInMessage(worker))
+	}
+
 	if ok && agent != nil {
-		if closeErr := t.w.retainAndCloseAgent(context.Background(), agent, root, "completed"); closeErr != nil {
-			err = errors.Join(err, closeErr)
+		// An orchestration handle may end while its canonical task waits for
+		// approval. Its provider turn/pane is retained for that exact continuation.
+		if !waiting {
+			if closeErr := t.w.retainAndCloseAgent(context.Background(), agent, root, "completed"); closeErr != nil {
+				err = errors.Join(err, closeErr)
+			}
 		}
 		t.w.updateTmuxStatusLine(context.Background())
 		state := "done"
 		message := "Task " + taskID + " completed."
-		if err != nil {
+		if waiting {
+			state = "waiting"
+			message = taskApprovalNotice(taskID, approvalID)
+		} else if err != nil {
 			state = "failed"
 			message = "Task " + taskID + " failed: " + err.Error()
 		} else {
@@ -1606,7 +2042,10 @@ func (t *tmuxTaskDriver) Wait(ctx context.Context, h *driver.Handle) (marshal.Ha
 				}
 			}
 		}
-		if alertErr := t.w.deliverEgressAlert(app.EgressAlert{RunID: h.Request().RunID, ParentRunID: h.Request().RunID, TaskID: taskID, Worker: h.Request().Task.Worker, Kind: "task " + state, State: state, Message: message}); alertErr != nil {
+		if authFailed && state == "failed" {
+			message = "Task " + taskID + " failed: " + providerNotSignedInMessage(worker)
+		}
+		if alertErr := t.w.deliverEgressAlert(app.EgressAlert{RunID: h.Request().RunID, ParentRunID: h.Request().RunID, TaskID: taskID, Worker: worker, Kind: "task " + state, State: state, Message: message}); alertErr != nil {
 			err = errors.Join(err, alertErr)
 		}
 	}
@@ -1629,6 +2068,13 @@ func (t *tmuxTaskDriver) joinMonitor(h *driver.Handle) {
 
 // chatBinding pins restart to the conversation observed for this project.
 type chatBinding struct {
+	// Launch identity detects a broker from a previous TUI; scope pins the
+	// binding to the exact project, tmux session and provider pane.
+	MCPLaunchID     string   `json:"mcp_launch_id,omitempty"`
+	Project         string   `json:"project,omitempty"`
+	TmuxSession     string   `json:"tmux_session,omitempty"`
+	PaneID          string   `json:"pane_id,omitempty"`
+	Namespace       string   `json:"state_namespace,omitempty"`
 	HistoryBaseline []string `json:"history_baseline"`
 	Provider        string   `json:"provider"`
 	Binary          string   `json:"binary"`
@@ -1641,24 +2087,34 @@ type chatBinding struct {
 
 func loadChatBinding(root string) chatBinding {
 	var binding chatBinding
-	data, err := os.ReadFile(filepath.Join(root, ".marshal", "tmux-chat.json"))
+	if statepath.CheckPath(root, statepath.Path(root, "tmux-chat.json")) != nil {
+		return binding
+	}
+	data, err := os.ReadFile(filepath.Join(root, statepath.DirName, "tmux-chat.json"))
 	if err == nil {
 		_ = json.Unmarshal(data, &binding)
+		if binding.Namespace != statepath.DirName && (statepath.PublicEngine || binding.Namespace != "") {
+			return chatBinding{}
+		}
 	}
 	return binding
 }
 func (w *Workspace) saveChatBindingForAgent(root string, a *activeTmuxAgent) error {
-	if err := saveChatBinding(root, chatBinding{Provider: a.provider, Binary: a.binary, Args: a.args, Env: a.env, SessionID: a.sessionID, HistoryPath: a.historyPath, RunID: a.runID, HistoryBaseline: a.historyBaseline}); err != nil {
+	if err := saveChatBinding(root, chatBinding{MCPLaunchID: a.mcpLaunchID, Project: tmux.ProjectHash(root), TmuxSession: w.tmuxSession, PaneID: a.paneID, Provider: a.provider, Binary: a.binary, Args: a.args, Env: a.env, SessionID: a.sessionID, HistoryPath: a.historyPath, RunID: a.runID, HistoryBaseline: a.historyBaseline}); err != nil {
 		return err
 	}
 	return saveAgentRecord(root, w.tmuxSession, a)
 }
 func saveChatBinding(root string, binding chatBinding) error {
+	binding.Namespace = statepath.DirName
+	if err := statepath.CheckPath(root, statepath.Path(root, "tmux-chat.json")); err != nil {
+		return err
+	}
 	data, err := json.Marshal(binding)
 	if err != nil {
 		return err
 	}
-	dir := filepath.Join(root, ".marshal")
+	dir := statepath.Path(root)
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
@@ -1850,16 +2306,8 @@ func (w *Workspace) chatHistoryWatch(root, provider, binary string) *nativeHisto
 	case "antigravity", "agy":
 		watch, _ = newAntigravityHistoryWatch(root)
 	default:
-		env, dir, history := "CODEX_HOME", ".codex", "sessions"
-		if provider == "claude" {
-			env, dir, history = "CLAUDE_CONFIG_DIR", ".claude", "projects"
-		}
-		home := os.Getenv(env)
-		if home == "" {
-			home, _ = os.UserHomeDir()
-			home = filepath.Join(home, dir)
-		}
-		watch = newNativeHistoryWatch(filepath.Join(home, history), root)
+		history, _ := nativehistory.HistoryDir(nativehistory.Provider(provider), root)
+		watch = newNativeHistoryWatch(history, root)
 		watch.claude = provider == "claude"
 	}
 	if watch == nil {
@@ -1873,6 +2321,22 @@ func taskAgentID(req driver.Request) string {
 		return "task-" + req.RunID + "-" + req.Task.PlanTaskID
 	}
 	return "task-" + req.Task.PlanTaskID
+}
+
+// joinedWorkers lists the panes joined into the Board window that /view
+// focus and /view hide break out. The docked Marshal chat is not one of
+// them: only exit and /view classic undock it.
+func (w *Workspace) joinedWorkers() []*activeTmuxAgent {
+	docked := w.dockedChat()
+	w.tmuxMu.Lock()
+	defer w.tmuxMu.Unlock()
+	var joined []*activeTmuxAgent
+	for _, a := range w.tmuxActiveWins {
+		if a.isJoined && (docked == "" || a.paneID != docked) {
+			joined = append(joined, copyAgentLocked(a))
+		}
+	}
+	return joined
 }
 
 func (w *Workspace) breakJoinedPanes(ctx context.Context, joined []*activeTmuxAgent) error {
@@ -1899,5 +2363,93 @@ func tmuxPaneSize(pane *string) workerterminal.Size {
 		var rows, cols uint16
 		_, err = fmt.Sscanf(strings.TrimSpace(string(out)), "%d %d", &rows, &cols)
 		return rows, cols, err
+	}
+}
+
+// marshalDraftRejected retains consumed producer bytes and reports only a
+// finite validation stage. Native draft contents and errors remain private.
+func (w *Workspace) marshalDraftRejected(m *marshalSession, runID, provider, stage string, cause ...error) {
+	switch stage {
+	case "draft validation failed", "plan pack transfer failed", "plan pack validation failed", "canonical Process 04 evidence unavailable":
+	default:
+		return
+	}
+	m.mu.Lock()
+	current := m.runID == runID
+	m.mu.Unlock()
+	if !current {
+		return
+	}
+	note := "Marshal " + stage + "; consumed draft retained. Review it and any transferred plan pack before preparing a fresh handoff."
+	if stage == "canonical Process 04 evidence unavailable" {
+		note = "Marshal cannot offer plan approval until Process 04 verifies the current Goal, project context, and every selected worker profile. Inspect /harness status, verify the missing workers, then prepare a fresh draft. Consumed draft retained."
+	}
+	// The exact runtime reason is what lets the Marshal correct and
+	// republish the draft. Draft validation errors can quote untrusted draft
+	// content, so only runtime-side reasons are repeated.
+	if stage != "draft validation failed" {
+		for _, err := range cause {
+			if err != nil {
+				note += " Reason: " + RedactContent(err.Error(), nil)
+				break
+			}
+		}
+	}
+	note += " The draft watcher remains active: publish a corrected draft to import it."
+	w.marshalPublish(m, runID, w.marshalPanelWithNote(runID, provider, note))
+	w.RecordActivity(note)
+	if view, err := openInboxView(w.workDir, "marshal", false); err == nil {
+		if view.write(fmt.Sprintf("## runtime · %s · draft rejected\n\n%s\nRun: %s\n", time.Now().UTC().Format(time.RFC3339), note, runID)) == nil {
+			_ = view.trim()
+		}
+	}
+}
+
+// draftSupersedesRun reports whether a published draft must become a fresh
+// run instead of the watched one. A draft only ever creates a run (it is
+// stored at revision 0), so any stored run is superseded: one that left
+// drafting (a returned governed task paused it for a new Process 04 plan),
+// and also one still drafting whose plan can no longer be approved, for
+// example after its Goal was revised. Reusing a stored run's ID failed with
+// "marshal_runs revision 1, expected 0" and left the new draft unimported.
+func draftSupersedesRun(snapshotErr error) bool {
+	return snapshotErr == nil
+}
+
+// marshalDraftReady reports a validated, published draft waiting for import.
+func marshalDraftReady(root string) bool {
+	path := filepath.Join(root, marshalDraftRelativePath)
+	if _, err := os.Stat(path + ".ready"); err != nil {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// cancelSupersededTaskLanes cancels unfinished task lanes left by an earlier
+// plan once a new plan replaced it. Their file-scope leases would otherwise
+// refuse the new plan's lanes ("task lane scope conflicts").
+func (w *Workspace) cancelSupersededTaskLanes(ctx context.Context, planID string) {
+	if w.runtime == nil || w.runtime.Execution() == nil || w.runtime.Execution().Engine() == nil || planID == "" {
+		return
+	}
+	runs, err := w.runtime.Execution().ListRuns(ctx)
+	if err != nil {
+		return
+	}
+	parents := make(map[string]string, len(runs))
+	for _, run := range runs {
+		parents[run.RunID] = run.PlanID
+	}
+	for _, lane := range runs {
+		if lane.ParentRunID == "" || lane.State.IsTerminal() || lane.State == execution.RunDonePendingVerification {
+			continue
+		}
+		if plan := parents[lane.ParentRunID]; plan == "" || plan == planID {
+			continue
+		}
+		if _, err := w.runtime.Execution().Engine().ControlRun(ctx, lane.RunID, "cancel", lane.Version); err == nil {
+			w.RecordActivity("Cancelled task lane " + lane.RunID + " of a superseded plan")
+		}
 	}
 }

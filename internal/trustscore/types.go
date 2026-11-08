@@ -3,7 +3,8 @@ package trustscore
 type Code string
 
 const (
-	CodeStale Code = "TRUSTSCORE_STALE"
+	CodeStale  Code = "TRUSTSCORE_STALE"
+	CodeNoData Code = "TRUSTSCORE_NO_DATA"
 )
 
 type Error struct {
@@ -20,7 +21,8 @@ func (e *Error) Is(target error) bool {
 }
 
 var (
-	ErrStale = &Error{Code: CodeStale, Message: "trust score evidence input is stale"}
+	ErrStale  = &Error{Code: CodeStale, Message: "trust score evidence input is stale"}
+	ErrNoData = &Error{Code: CodeNoData, Message: "no data: no components provided for trust scoring"}
 )
 
 type Component struct {

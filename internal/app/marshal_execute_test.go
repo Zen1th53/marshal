@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +24,7 @@ func marshalBrief(t marshal.Task, _ BriefContext) string { return "complete task
 // to close.
 func TestM09ExecuteRunsApprovedPlanToUserClose(t *testing.T) {
 	ctx := context.Background()
-	s, repo := marshalFixture(t, 2)
+	s, repo := marshalUserCloseFixture(t, 2)
 	if _, err := s.StartPlanning(ctx, "run", "write files", marshal.Budget{}); err != nil {
 		t.Fatal(err)
 	}
@@ -51,14 +52,14 @@ func TestM09ExecuteRunsApprovedPlanToUserClose(t *testing.T) {
 	if err := s.Close(ctx, "run"); err != nil {
 		t.Fatal(err)
 	}
-	if got := marshalGit(t, repo, "rev-parse", "refs/marshal/run/pre-close"); got != before {
+	if got := marshalGit(t, repo, "rev-parse", "refs/"+statepath.RefName+"/run/pre-close"); got != before {
 		t.Fatalf("checkpoint = %s, want the target's pre-close commit %s", got, before)
 	}
 }
 
 func TestM09CloseRefusesDirtyCheckedOutTargetWithoutChangingRefOrWorktree(t *testing.T) {
 	ctx := context.Background()
-	s, repo := marshalFixture(t, 1)
+	s, repo := marshalUserCloseFixture(t, 1)
 	if _, err := s.StartPlanning(ctx, "run", "write file", marshal.Budget{}); err != nil {
 		t.Fatal(err)
 	}
@@ -122,10 +123,10 @@ func TestM09ExecuteClosesUnderStandingAuthorization(t *testing.T) {
 	if run.State != marshal.Closed {
 		t.Fatalf("state = %s, want closed", run.State)
 	}
-	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != marshalGit(t, repo, "rev-parse", "refs/heads/marshal/run/integration") {
+	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != marshalGit(t, repo, "rev-parse", "refs/heads/"+statepath.RefName+"/run/integration") {
 		t.Fatal("target was not fast-forwarded to the integration branch")
 	}
-	if got := marshalGit(t, repo, "rev-parse", "refs/marshal/run/pre-close"); got != before {
+	if got := marshalGit(t, repo, "rev-parse", "refs/"+statepath.RefName+"/run/pre-close"); got != before {
 		t.Fatalf("checkpoint = %s, want %s", got, before)
 	}
 }
@@ -133,7 +134,7 @@ func TestM09ExecuteClosesUnderStandingAuthorization(t *testing.T) {
 // Merging a hand-in must not run hooks the repository or a worker set up.
 func TestM09MergeDoesNotRunRepositoryHooks(t *testing.T) {
 	ctx := context.Background()
-	s, repo := marshalFixture(t, 2)
+	s, repo := marshalUserCloseFixture(t, 2)
 	hooks := t.TempDir()
 	marker := filepath.Join(t.TempDir(), "hook-ran")
 	for _, name := range []string{"pre-merge-commit", "prepare-commit-msg", "commit-msg", "post-merge", "post-commit", "post-checkout"} {
@@ -226,11 +227,19 @@ func TestMarshalBriefContextRecallsProjectMemoryWithProvenanceAndExcludesSharedC
 		t.Fatal(err)
 	}
 
+	s.workerRecall = NewMemoryService(s.Store).Recall
+	run.Tasks[0].Title = "Architecture Decision"
 	bc, err := s.briefContext(ctx, "run", run, run.Tasks[0])
 	if err != nil {
 		t.Fatalf("briefContext: %v", err)
 	}
 
+	if bc.MemoryContext != "" {
+		if !strings.Contains(bc.MemoryContext, "bounded project memory content") || strings.Contains(bc.MemoryContext, "private earlier conversation") || strings.Contains(bc.MemoryContext, "cross-agent shared channel chat") {
+			t.Fatal("authorized memory block lost source audience boundary")
+		}
+		return
+	}
 	if len(bc.Memory) != 1 {
 		t.Fatalf("expected 1 project memory record in BriefContext, got %d", len(bc.Memory))
 	}
@@ -248,7 +257,7 @@ func TestMarshalBriefContextRecallsProjectMemoryWithProvenanceAndExcludesSharedC
 }
 
 func TestMarshalCloseAdvancesCleanMainWorktree(t *testing.T) {
-	s, repo := marshalFixture(t, 1)
+	s, repo := marshalUserCloseFixture(t, 1)
 	ctx := t.Context()
 	if _, err := s.StartPlanning(ctx, "run", "write file", marshal.Budget{}); err != nil {
 		t.Fatal(err)
@@ -263,7 +272,7 @@ func TestMarshalCloseAdvancesCleanMainWorktree(t *testing.T) {
 	if err := s.Close(ctx, "run"); err != nil {
 		t.Fatal(err)
 	}
-	head := marshalGit(t, repo, "rev-parse", "marshal/run/integration")
+	head := marshalGit(t, repo, "rev-parse", statepath.RefName+"/run/integration")
 	if got := marshalGit(t, repo, "rev-parse", "HEAD"); got != head {
 		t.Fatalf("HEAD = %s, want %s", got, head)
 	}
@@ -276,7 +285,7 @@ func TestMarshalCloseAdvancesCleanMainWorktree(t *testing.T) {
 	if got, err := os.ReadFile(filepath.Join(repo, "a.txt")); err != nil || string(got) != "done\n" {
 		t.Fatalf("delivered file: %q %v", got, err)
 	}
-	if got := marshalGit(t, repo, "rev-parse", "refs/marshal/run/pre-close"); got != before {
+	if got := marshalGit(t, repo, "rev-parse", "refs/"+statepath.RefName+"/run/pre-close"); got != before {
 		t.Fatalf("checkpoint = %s, want %s", got, before)
 	}
 }
@@ -338,7 +347,7 @@ func TestMarshalReassignmentSelectsModeCompatibleDriver(t *testing.T) {
 func TestMarshalCloseRefusesOtherUnsafeCheckouts(t *testing.T) {
 	for _, kind := range []string{"staged", "untracked", "linked", "diverged", "verification", "ignored"} {
 		t.Run(kind, func(t *testing.T) {
-			s, repo := marshalFixture(t, 1)
+			s, repo := marshalUserCloseFixture(t, 1)
 			ctx := t.Context()
 			if _, err := s.StartPlanning(ctx, "run", "write file", marshal.Budget{}); err != nil {
 				t.Fatal(err)
@@ -449,6 +458,27 @@ func TestMarshalReassignmentSkipsAliasesAndKeepsNativeMode(t *testing.T) {
 	}
 	if got := s.otherWorker("codex", marshal.Native); got != "agy" {
 		t.Fatalf("native reassignment = %s", got)
+	}
+}
+
+// Reassignment prefers a verified harness over the first name in order; an
+// unverified provider would fail its probe and stall the task.
+func TestMarshalReassignmentPrefersVerifiedWorker(t *testing.T) {
+	s, _ := marshalFixture(t, 1)
+	s.GovernedDrivers = map[string]driver.Driver{"agy": driver.Governed{}, "claude": driver.Governed{}, "codex": driver.Governed{}}
+	s.InstalledVersion = func(context.Context, string) string { return "1.0.0" }
+	if got := s.otherWorker("claude", marshal.Governed); got != "agy" {
+		t.Fatalf("without verified harnesses the order changed: %s", got)
+	}
+	profile := model.HarnessProfile{Harness: marshalHarnessName("codex"), InstalledVersion: "1.0.0", SupportedModels: []string{"m"}, DefaultModel: "m", ProbeEvidenceID: "fixture", ProbedAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	if err := s.Store.SaveHarnessProfile(t.Context(), profile); err != nil {
+		t.Fatal(err)
+	}
+	if g := s.workerGovernance(t.Context(), "codex"); !g.Governed() {
+		t.Fatalf("fixture profile not governed: %+v", g)
+	}
+	if got := s.otherWorker("claude", marshal.Governed); got != "codex" {
+		t.Fatalf("reassigned to an unverified worker: %s", got)
 	}
 }
 
@@ -600,6 +630,11 @@ func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
 	if run.Tasks[0].State != marshal.Dispatched {
 		t.Fatalf("task a should still be dispatched, got: %s", run.Tasks[0].State)
 	}
+	// A resume while a is still running must see it as live, not as a
+	// worker interrupted by a restart.
+	if !s.dispatchLive("run-ultra", "a") || s.dispatchLive("run-ultra", "b") {
+		t.Fatalf("live dispatch registry: a=%v b=%v", s.dispatchLive("run-ultra", "a"), s.dispatchLive("run-ultra", "b"))
+	}
 
 	// Release task a so it can complete
 	close(releaseA)
@@ -619,5 +654,8 @@ func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
 	}
 	if finalRun.Tasks[0].State != marshal.Merged || finalRun.Tasks[1].State != marshal.Merged {
 		t.Fatalf("both tasks should be merged: %+v", finalRun.Tasks)
+	}
+	if s.dispatchLive("run-ultra", "a") {
+		t.Fatal("collected worker still registered as live")
 	}
 }

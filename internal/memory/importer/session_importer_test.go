@@ -3,6 +3,7 @@ package importer_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/memory/importer"
@@ -62,7 +63,17 @@ func TestT94SecretsInImportedTranscriptRejected(t *testing.T) {
 
 	secretTranscript := `{"session_id":"sess-sec","provider":"claude","task_id":"TASK-02","messages":[{"role":"assistant","content":"Here is the key: ghp_1234567890abcdefghijklmnopqrstuvwxyzAB"}]}`
 
-	_, err := imp.ImportRawJSON(ctx, "PROJ-1", []byte(secretTranscript), false)
+	res, err := imp.ImportRawJSON(ctx, "PROJ-1", []byte(secretTranscript), false)
+	if security.RedactsSecrets {
+		// Extreme imports the transcript with the secret removed.
+		if err != nil || len(res.ImportedRecords) != 1 || strings.Contains(res.ImportedRecords[0].Body, "ghp_") {
+			t.Fatalf("expected redacted import, got %+v %v", res, err)
+		}
+		if _, ok := res.ImportedRecords[0].ExtMeta[security.RedactionMetaKey]; !ok {
+			t.Fatal("redaction evidence missing")
+		}
+		return
+	}
 	if !errors.Is(err, security.ErrSecretDetected) {
 		t.Fatalf("expected ErrSecretDetected from firewall on secret-bearing transcript, got: %v", err)
 	}

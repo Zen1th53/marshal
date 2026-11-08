@@ -246,6 +246,9 @@ func TestWorkspaceSurvivesAMissingNavigationView(t *testing.T) {
 // captured the nil gate it saw at open time would report Standard for the rest
 // of the session however the server later answered.
 func TestCloudStateIsReadLiveNotCapturedAtOpen(t *testing.T) {
+	if editionExtreme {
+		t.Skip("Marshal has no Community Cloud: its Cloud screens report that ULTRA is local")
+	}
 	ws := NewWorkspace(nil, "proj", "sess-1")
 	ctx := context.Background()
 
@@ -257,7 +260,7 @@ func TestCloudStateIsReadLiveNotCapturedAtOpen(t *testing.T) {
 		t.Fatalf("deep link to cloud connection: %v", err)
 	}
 	before := strings.Join(ws.navView.Render(120, 30), "\n")
-	if !strings.Contains(before, "NOT_RUN") && !strings.Contains(before, "UNKNOWN") {
+	if !strings.Contains(before, "NOT_RUN") && !strings.Contains(before, "Not run yet") && !strings.Contains(before, "UNKNOWN") {
 		t.Fatalf("an unconfigured Cloud did not read as unavailable:\n%s", before)
 	}
 
@@ -322,7 +325,7 @@ func TestRealKeyDispatchOpensAndOwnsNavigation(t *testing.T) {
 	// Now it owns every key, including ones the composer would otherwise take.
 	for _, ev := range []KeyEvent{
 		{Type: KeyRune, Rune: 'x'}, {Type: KeyDown}, {Type: KeyEnter},
-		{Type: KeyTab}, {Type: KeyRune, Rune: '/'},
+		{Type: KeyTab}, {Type: KeyCtrlK},
 	} {
 		if !ws.dispatchNavigationKey(ctx, ev) {
 			t.Fatalf("navigation did not consume %v while open", ev.Type)
@@ -390,10 +393,35 @@ func TestControlThroughTheRealWorkspaceRefusesWithoutARuntime(t *testing.T) {
 	}
 	ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEnter})
 
+	// The private canonical task control asks for an exact task ID before
+	// preparing its request. Complete that input through the real key lane so
+	// this test reaches the missing-authority refusal instead of stopping at
+	// the form. The workspace still has no runtime or persisted task.
+	if ws.navView.formOpen() {
+		for _, r := range "TASK-no-runtime" {
+			if !ws.dispatchNavigationKey(ctx, runeKey(r)) {
+				t.Fatal("typed task input was not consumed")
+			}
+		}
+		ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEnter})
+		if ws.navView.formOpen() {
+			t.Fatal("completed task input did not reach authority preparation")
+		}
+	}
+
 	// With no runtime the confirmation must not stand ready to submit.
 	c := ws.navView.Confirmation()
 	if c.Phase() == PhaseConfirming {
 		t.Fatal("a confirmation opened with no authority to submit to")
+	}
+	if buildNavigationReleased && c.Phase() == PhaseIdle {
+		node, _ := ws.navView.Nav().ia.Node("CTUI-0046")
+		av := ws.navView.buildActionAvailability(node)
+		if av.Enabled || ws.navView.formOpen() || ws.navView.confirmOpen() || !strings.Contains(ws.navView.status, av.Reason) {
+			t.Fatalf("missing runtime was not refused before dialog: %+v status=%q", av, ws.navView.status)
+		}
+	} else if c.Phase() != PhaseDone || c.Outcome().Verdict != VerdictBlocked || c.Failure() == nil || !strings.Contains(c.Failure().Error(), "authority") {
+		t.Fatalf("missing runtime did not produce a blocked authority refusal: phase=%s outcome=%+v failure=%v", c.Phase(), c.Outcome(), c.Failure())
 	}
 	out := strings.Join(ws.navView.Render(140, 30), "\n")
 	if !strings.Contains(out, "authority") && !strings.Contains(out, "runtime") {
@@ -445,6 +473,7 @@ func TestInterruptClosesAConfirmationWithoutSubmitting(t *testing.T) {
 		t.Fatalf("deep link: %v", err)
 	}
 	ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEnter})
+	completeTaskInputForm(t, ctx, ws.navView, "task-1")
 	if ws.navView.Confirmation().Phase() != PhaseConfirming {
 		t.Fatalf("no confirmation opened, phase %s", ws.navView.Confirmation().Phase())
 	}
@@ -493,8 +522,10 @@ func realControlWorkspace(t *testing.T, sessionID string, navigation ...bool) (*
 		t.Fatalf("runtime status: %v", err)
 	}
 	ws := NewWorkspace(runtime.Store(), string(status.Project.ID), sessionID)
+	ws.workDir = runtime.ProjectRoot()
 	t.Cleanup(func() { ws.Close(); _ = ws.runtime.Close() })
-	ws.AttachRuntime(runtime, projectid.ID(status.Project.ID))
+	ws.AttachRuntime(runtime, projectid.ID(runtime.ProjectIdentity()))
+	ws.tmuxSession = fixtureTmuxNamespace(t, runtime.ProjectRoot())
 	entitleULTRA(t, ws)
 	if len(navigation) > 0 && !navigation[0] {
 		return ws, runtime
@@ -814,6 +845,12 @@ func TestControlClaimAndCancelTaskThroughRealWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEnter})
+	if ws.navView.formOpen() {
+		for _, r := range task.ID {
+			ws.dispatchNavigationKey(ctx, runeKey(r))
+		}
+		ws.dispatchNavigationKey(ctx, key(KeyEnter))
+	}
 	ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyRune, Rune: 'y'})
 	ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyRight})
 	ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyEnter})
@@ -833,6 +870,18 @@ func TestControlClaimAndCancelTaskThroughRealWorkspace(t *testing.T) {
 func TestNavigationRefusedWithoutULTRA(t *testing.T) {
 	ws := NewWorkspace(nil, "proj", "sess-1")
 	ctx := context.Background()
+	if editionExtreme {
+		if ws.navigationEntitled() {
+			t.Fatal("Marshal navigation bypass granted a ULTRA entitlement")
+		}
+		if got := ws.navigationRefusal(); got != "" {
+			t.Fatalf("extreme Standard navigation refusal = %q, want empty", got)
+		}
+		if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) || !ws.navView.IsOpen() {
+			t.Fatal("extreme Standard session could not open navigation")
+		}
+		return
+	}
 
 	if ws.navigationEntitled() {
 		t.Fatal("a workspace with no gate reported an ULTRA entitlement")
@@ -866,6 +915,12 @@ func TestNavigationClosedUntilReleasedEvenWithULTRA(t *testing.T) {
 	ws.navReleased = false
 	ws.AttachULTRA(testcloud.EntitledGate(t, testcloud.Options{}), true)
 	ctx := context.Background()
+	if editionExtreme {
+		if got := ws.navigationRefusal(); got != "" {
+			t.Fatalf("extreme navigation refusal with navReleased=false = %q, want empty", got)
+		}
+		return
+	}
 
 	if !ws.dispatchNavigationKey(ctx, KeyEvent{Type: KeyCtrlN}) {
 		t.Fatal("Ctrl+N was not consumed")

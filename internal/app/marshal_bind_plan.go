@@ -43,6 +43,9 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 	if p.State != plan.StateApproved || len(p.Tasks) == 0 {
 		return marshal.Run{}, errors.New("Process 05 binding requires a current approved plan with tasks")
 	}
+	if blockers := planExecutionBlockers(p); len(blockers) > 0 {
+		return marshal.Run{}, fmt.Errorf("%w: approved plan is not executable: %s", plan.ErrPlanInvalid, strings.Join(blockers, "; "))
+	}
 	goal, err := s.Store.GetGoalContract(ctx, p.Goal.GoalID, p.Goal.Revision)
 	if err != nil {
 		return marshal.Run{}, err
@@ -97,7 +100,7 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 				kind = marshal.TaskInspection
 			}
 		}
-		task := marshal.Task{Type: kind, PlanTaskID: pt.ID, Title: pt.Title, Worker: worker, Mode: marshal.Governed, State: marshal.Queued, BaseCommit: base, Branch: "marshal/" + runID + "/" + pt.ID, Files: append([]string(nil), pt.Paths...), Criteria: append([]string(nil), pt.Criteria...), DependsOn: append([]string(nil), pt.DependsOn...), Instructions: pt.Instructions, ExpectedOutput: pt.ExpectedOutput}
+		task := marshal.Task{Type: kind, PlanTaskID: pt.ID, Title: pt.Title, Worker: worker, Mode: marshal.Governed, State: marshal.Queued, BaseCommit: base, Branch: marshalTaskBranch(runID, pt.ID, 0), Files: append([]string(nil), pt.Paths...), Criteria: append([]string(nil), pt.Criteria...), DependsOn: append([]string(nil), pt.DependsOn...), Instructions: pt.Instructions, ExpectedOutput: pt.ExpectedOutput}
 		for _, command := range p.Checks[pt.ID] {
 			if strings.TrimSpace(command) == "" {
 				return marshal.Run{}, errors.New("approved plan contains an empty check")
@@ -109,7 +112,8 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 	if err := instructionsPresent(settings.Value, tasks); err != nil {
 		return marshal.Run{}, err
 	}
-	run := marshal.Run{PlanID: p.ID, Process05Bound: true, PlanVersion: p.Version, BaseCommit: base, GoalBinding: goal.OriginalRequest, Tasks: tasks, State: marshal.Approved, Settings: settings.Value}
+	run := marshal.Run{Compatibility: newMarshalCompatibility(), PlanID: p.ID, Process05Bound: true, PlanVersion: p.Version, BaseCommit: base, GoalBinding: goal.OriginalRequest, Tasks: tasks, State: marshal.Approved, Settings: settings.Value, Budget: settings.Value.Budget}
+	bindPrivateProcess05Tier(&run, p)
 	repo, err := s.repositoryIdentity(ctx)
 	if err != nil {
 		return marshal.Run{}, err
@@ -130,6 +134,10 @@ func (s *MarshalService) BindApprovedPlan(ctx context.Context, runID string) (ma
 }
 
 func marshalPlanTaskWorker(p plan.ExecutionPlan, task plan.Task) (string, error) {
+	// An edition-specific refusal must not escape into the legacy fallback.
+	if worker, handled, err := privatePlanTaskWorker(p, task); handled || err != nil {
+		return worker, err
+	}
 	worker := ""
 	for _, assignment := range p.Assignments.Assignments {
 		if assignment.Harness == "" {

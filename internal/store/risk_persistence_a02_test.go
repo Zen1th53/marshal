@@ -205,6 +205,7 @@ func TestRiskAssessmentMigrationFromSchema21(t *testing.T) {
 			t.Fatalf("prepare schema 21 with %q: %v", statement, err)
 		}
 	}
+	resetProjectContext95HistoricalFixture(t, st)
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("migrate schema 21: %v", err)
 	}

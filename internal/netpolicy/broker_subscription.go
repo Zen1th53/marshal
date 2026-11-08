@@ -292,5 +292,5 @@ func (s *subscriptionSource) renew(ctx context.Context, generation uint64, previ
 }
 
 func (b *CredentialBroker) refusesAuthHost(host string) bool {
-	return b != nil && b.subscription != nil && b.subscription.claude && normalizeHost(host) == "platform.claude.com"
+	return b != nil && ((b.nativeSource != nil && b.nativeSource.refusesAuthHost(host)) || (b.subscription != nil && b.subscription.claude && normalizeHost(host) == "platform.claude.com"))
 }

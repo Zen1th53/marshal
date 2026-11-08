@@ -65,7 +65,7 @@ cp "$MARSHAL_TEST_CODEX_HISTORY" "$CODEX_HOME/sessions/rollout.jsonl"
 	t.Setenv("MARSHAL_TEST_CODEX_HISTORY", codexHistory)
 
 	s := startFrozenTUI(t, 40, 160)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	project := s.cmd.Dir
 	if resolved, err := filepath.EvalSymlinks(project); err == nil {

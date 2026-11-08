@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
 	"github.com/Zen1th53/marshal/internal/permission"
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 func TestMarshalChatBriefingAndLaunchDecision(t *testing.T) {
@@ -19,7 +21,7 @@ func TestMarshalChatBriefingAndLaunchDecision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, phrase := range []string{"You are the Marshal", marshalDraftRelativePath, app.MarshalPackRelativePath, "tasks/<id>.md", "Do not edit project files", "Only the person approves the plan", "/marshal approve", `{"tasks":[`, "codex, agy", "acceptance mode marshal-then-user", "Current control level: free", "This run:\n- Tier: Standard.\n", "write the pack first, then plan-draft.json, then read back", "Do not read a planned path before its write succeeds", "Confirm each write succeeded"} {
+	for _, phrase := range []string{"You are the Marshal", marshalDraftRelativePath, app.MarshalPackRelativePath, "tasks/<id>.md", "Do not edit project files", "Only the person approves the plan", "/marshal approve", `{"tasks":[`, "codex, agy", "acceptance mode " + string(marshal.DefaultSettings().AcceptanceMode), "Current control level: free", "This run:\n- Tier: Standard.\n", "write the pack first, then plan-draft.json, then read back", "Do not read a planned path before its write succeeds", "Confirm each write succeeded", "exactly one success criterion", "current verified harness profile", "canonical Process 04"} {
 		if !strings.Contains(brief, phrase) {
 			t.Errorf("briefing lacks %q", phrase)
 		}
@@ -27,7 +29,20 @@ func TestMarshalChatBriefingAndLaunchDecision(t *testing.T) {
 	// The model is asked for tasks only; plan identity and digests are the
 	// runtime's to compute.
 	for _, phrase := range []string{"MarshalDraft", "ExecutionPlan", "project_id", "digest"} {
-		if strings.Contains(brief, phrase) {
+		checked := brief
+		if phrase == "digest" {
+			// The Extreme architecture-knowledge rule in the shared protocol
+			// names the content digest of the accepted architecture binding.
+			// That is a binding the runtime verifies, not a field the model
+			// supplies, so only the run-specific instructions are checked.
+			protocol, err := constitution.MarshalProtocol()
+			if err != nil {
+				t.Fatal(err)
+			}
+			checked = strings.ReplaceAll(brief, strings.ReplaceAll(protocol, ".marshal/", statepath.DirName+"/"), "")
+			checked = strings.ReplaceAll(checked, strings.ReplaceAll(buildRoleAuthority, ".marshal/", statepath.DirName+"/"), "")
+		}
+		if strings.Contains(checked, phrase) {
 			t.Errorf("briefing asks the model for %q", phrase)
 		}
 	}
@@ -126,6 +141,7 @@ func TestWatcherDoesNotMoveDraftDuringProducerReadBack(t *testing.T) {
 }
 
 func TestMarshalChatReopenClosedRunStartsFreshDraftAndApproval(t *testing.T) {
+	isolateRequiredFixtureProviders(t)
 	_, fakeLog := setupFakeTmux(t)
 	_ = fakeLog
 	bin := t.TempDir()
@@ -140,8 +156,8 @@ func TestMarshalChatReopenClosedRunStartsFreshDraftAndApproval(t *testing.T) {
 	_, ws, ctx := acceptanceWorkspace(t)
 	cleanupTmuxWorkspace(t, ws)
 	root := ws.providerRoot()
-	ws.tmuxSession = "test-session"
-	ws.tmuxMarshalWin = "marshal"
+	ws.tmuxSession = fixtureTmuxNamespace(t, ws.providerRoot())
+	ws.tmuxMarshalWin = statepath.Name
 	ws.tmuxPath = "tmux"
 	ws.tmuxActiveWins = make(map[string]*activeTmuxAgent)
 
@@ -187,6 +203,16 @@ func TestMarshalChatReopenClosedRunStartsFreshDraftAndApproval(t *testing.T) {
 	saved := loadChatBinding(root)
 	if saved.RunID != newRunID {
 		t.Fatalf("chat binding run ID %s != new run ID %s", saved.RunID, newRunID)
+	}
+
+	if requiredLegacyFixtureRefusal {
+		stopRecoveryDraftWatcher(ws)
+		assertUnreviewedDraftRefusedAndDiscarded(t, ws, saved)
+		stored, err := ws.runtime.Marshal().Store.GetMarshalRun(ctx, ws.projectID, closedRunID)
+		if err != nil || stored.Revision != 1 || stored.Value.State != marshal.Closed {
+			t.Fatalf("raw draft altered closed run: %+v %v", stored, err)
+		}
+		return
 	}
 
 	// 4. Codex writes plan pack, draft, ready marker, and emits approve proposal.
@@ -256,8 +282,8 @@ func TestMarshalChatReopenNonTerminalRunKeepsRecovery(t *testing.T) {
 	_, ws, ctx := acceptanceWorkspace(t)
 	cleanupTmuxWorkspace(t, ws)
 	root := ws.providerRoot()
-	ws.tmuxSession = "test-session"
-	ws.tmuxMarshalWin = "marshal"
+	ws.tmuxSession = fixtureTmuxNamespace(t, ws.providerRoot())
+	ws.tmuxMarshalWin = statepath.Name
 	ws.tmuxPath = "tmux"
 	ws.tmuxActiveWins = make(map[string]*activeTmuxAgent)
 

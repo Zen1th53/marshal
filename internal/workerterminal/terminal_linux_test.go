@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -82,6 +83,9 @@ while true; do read -r -t .1 ignored; done`
 		t.Fatal(err)
 	}
 	configureInteractivePTY(cmd, slave)
+	if cmd.SysProcAttr.Pdeathsig != syscall.SIGKILL || !cmd.SysProcAttr.Setsid {
+		t.Fatal("interactive PTY dropped worker parent-death signal or process group")
+	}
 	if err := unix.IoctlSetWinsize(fd, unix.TIOCSWINSZ, &unix.Winsize{Row: 23, Col: 80}); err != nil {
 		t.Fatal(err)
 	}

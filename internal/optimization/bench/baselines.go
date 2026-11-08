@@ -18,13 +18,12 @@ const (
 	HarnessClaudeCode  SupportedHarness = "claude"
 	HarnessOpenCode    SupportedHarness = "opencode"
 	HarnessAntigravity SupportedHarness = "antigravity"
-	HarnessGemini      SupportedHarness = "gemini"
 	HarnessAider       SupportedHarness = "aider"
 	HarnessCrush       SupportedHarness = "crush"
 )
 
 // implementedHarnesses lists the harnesses this repository has an adapter
-// for today (internal/adapter/{codex,claude,opencode,antigravity,gemini}).
+// for today (internal/adapter/{codex,claude,opencode,antigravity}).
 // Aider and Crush are named by the pack as "other supported harnesses where
 // practical" but have no adapter here, so a baseline naming them is honest
 // only when it also says NOT_RUN and why.
@@ -33,7 +32,6 @@ var implementedHarnesses = map[SupportedHarness]bool{
 	HarnessClaudeCode:  true,
 	HarnessOpenCode:    true,
 	HarnessAntigravity: true,
-	HarnessGemini:      true,
 }
 
 // HasAdapter reports whether this repository can actually drive h, as
@@ -91,9 +89,9 @@ type BaselineConfig struct {
 // BaselineSuite is a single-agent baseline comparison across harnesses on one
 // shared task set.
 type BaselineSuite struct {
-	ID              string
-	DatasetSnapshot string
-	TaskIDs         []string
+	ID               string
+	DatasetSnapshot  string
+	TaskIDs          []string
 	EnvironmentImage string
 	MarshalSHA       string
 	Configs          []BaselineConfig

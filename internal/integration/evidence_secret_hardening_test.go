@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,8 +32,9 @@ func TestRuntimeRejectsSecretProviderOutputBeforeArtifactPersistence(t *testing.
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
 		t.Fatal(err)
 	}
+	fixtureAdapter, fixture := observeLegacyIntegrationAdapter(a07SecretAdapter{})
 	rt, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{
-		Adapters: map[string]adapter.Adapter{"secret": a07SecretAdapter{}},
+		Adapters: map[string]adapter.Adapter{"secret": fixtureAdapter},
 		EvidenceSanitizer: evidence.NewStrictSanitizer(evidence.SanitizerConfig{
 			LiteralSecrets: []string{a07ProviderSecretMarker},
 		}),
@@ -47,7 +49,9 @@ func TestRuntimeRejectsSecretProviderOutputBeforeArtifactPersistence(t *testing.
 	if _, err := rt.ImportTasks(context.Background(), []model.Task{{ID: "TASK-A07-SECRET", Title: "secret output", Status: model.TaskReady, Risk: model.R1}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rt.Run(context.Background(), app.RunRequest{TaskID: "TASK-A07-SECRET", AgentID: agent.ID, Adapter: "secret"}); !errors.Is(err, evidence.ErrSecretRejected) {
+	fixture.ObserveTask(t, rt, "TASK-A07-SECRET")
+	result, err := rt.Run(context.Background(), app.RunRequest{TaskID: "TASK-A07-SECRET", AgentID: agent.ID, Adapter: "secret"})
+	if !fixture.RequireRunRefusal(t, rt, "TASK-A07-SECRET", result, err) && !errors.Is(err, evidence.ErrSecretRejected) {
 		t.Fatalf("Run error = %v, want secret rejection", err)
 	}
 
@@ -66,7 +70,7 @@ func TestRuntimeRejectsSecretProviderOutputBeforeArtifactPersistence(t *testing.
 			return nil
 		})
 	}
-	if err := scan(filepath.Join(repo.Path(), ".marshal")); err != nil {
+	if err := scan(filepath.Join(repo.Path(), statepath.DirName)); err != nil {
 		t.Fatal(err)
 	}
 	events, err := rt.Events(context.Background())
@@ -81,7 +85,7 @@ func TestRuntimeRejectsSecretProviderOutputBeforeArtifactPersistence(t *testing.
 	if err := rt.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := scan(filepath.Join(repo.Path(), ".marshal")); err != nil {
+	if err := scan(filepath.Join(repo.Path(), statepath.DirName)); err != nil {
 		t.Fatal(err)
 	}
 }

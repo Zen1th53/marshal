@@ -7,14 +7,21 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
 
 // PlanApprovalSnapshot identifies the bytes and destination shown for approval.
 type PlanApprovalSnapshot struct {
-	PackDigest, Repository, BaseCommit, TargetRef string
-	PlanVersion, Revision                         int64
+	PackDigest, Repository, BaseCommit, TargetRef                    string
+	PlanVersion, Revision                                            int64
+	PlanID, GoalID, ContractDigest, CanonicalScopeDigest             string
+	GoalRevision                                                     int64
+	RouteSummary, TeamSummary, VerificationSummary, TaskCheckSummary string
+	AssignmentSummary                                                string
+	MarshalBudgetSummary, PlanningMode                               string
 }
 
 func packDigest(pack *marshal.PlanPack) string {
@@ -52,7 +59,46 @@ func (s *MarshalService) PlanApprovalSnapshot(ctx context.Context, runID string)
 	if project.DefaultBranch == "" {
 		return PlanApprovalSnapshot{}, errors.New("project target branch is missing")
 	}
-	return PlanApprovalSnapshot{packDigest(pack), repo, run.BaseCommit, "refs/heads/" + project.DefaultBranch, run.PlanVersion, rev}, nil
+	snapshot := PlanApprovalSnapshot{PackDigest: packDigest(pack), Repository: repo,
+		BaseCommit: run.BaseCommit, TargetRef: "refs/heads/" + project.DefaultBranch,
+		PlanVersion: run.PlanVersion, Revision: rev}
+	p, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
+	if err != nil {
+		return PlanApprovalSnapshot{}, err
+	}
+	snapshot.PlanID, snapshot.GoalID, snapshot.GoalRevision = p.ID, p.Goal.GoalID, p.Goal.Revision
+	snapshot.PlanningMode = string(p.Mode)
+	marshalBudget, _ := json.Marshal(run.Budget)
+	snapshot.MarshalBudgetSummary = string(marshalBudget)
+	if p.RequiredProjectContract != nil {
+		snapshot.ContractDigest = p.RequiredProjectContract.Digest
+	}
+	if p.State == "READY" && len(planExecutionBlockers(p)) == 0 {
+		preview, e := p.Approve(s.clock())
+		if e != nil {
+			return PlanApprovalSnapshot{}, e
+		}
+		snapshot.CanonicalScopeDigest = preview.ApprovalScopeDigest
+	}
+	ids := make([]string, 0, len(p.Tasks))
+	for _, task := range p.Tasks {
+		ids = append(ids, task.ID)
+	}
+	sort.Strings(ids)
+	var routes, checks []string
+	for _, id := range ids {
+		route := p.Routes[id]
+		routes = append(routes, fmt.Sprintf("%s: %s/%s (%s)", id, route.Provider, route.Model, route.Governance))
+		checks = append(checks, fmt.Sprintf("%s: %s", id, strings.Join(p.Checks[id], " | ")))
+	}
+	snapshot.RouteSummary = strings.Join(routes, "\n")
+	snapshot.TaskCheckSummary = strings.Join(checks, "\n")
+	assignments, _ := json.Marshal(p.Assignments)
+	snapshot.AssignmentSummary = string(assignments)
+	team, _ := json.Marshal(p.Team)
+	verification, _ := json.Marshal(p.Verification)
+	snapshot.TeamSummary, snapshot.VerificationSummary = string(team), string(verification)
+	return snapshot, nil
 }
 
 func closeAuthorization(run marshal.Run, user string) *marshal.CloseAuthorization {
@@ -127,9 +173,7 @@ func (s *MarshalService) TaskAcceptance(ctx context.Context, runID, taskID strin
 	}
 	task := run.Tasks[i]
 	attempt := 1 + task.EvidenceAttemptBase
-	for _, n := range task.ReturnsByAgent {
-		attempt += n
-	}
+	attempt += taskReturns(task)
 	h, err := s.Store.GetMarshalHandIn(ctx, runID, taskID, attempt)
 	if err != nil {
 		return "", err

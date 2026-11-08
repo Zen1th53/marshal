@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -51,21 +52,47 @@ func (r *Runtime) OpenLocalControl(ctx context.Context) (*LocalControl, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: local owner unavailable", authz.ErrDenied)
 	}
-	for _, action := range []string{"goal.revise", "goal.create", "goal.edit", "goal.add-constraint", "goal.rm-constraint", "approval.decide", "task.create", "task.assign", "task.control", "collab.message", "collab.handoff", "profile.model", "profile.effort", "run.control", "alignment.decide", "checkpoint.create", "checkpoint.restore", "state.restore", "egress.decide"} {
+	actions := []string{"goal.revise", "goal.create", "goal.edit", "goal.add-constraint", "goal.rm-constraint", "goal.cancel", "approval.decide", "task.create", "task.assign", "task.control", "cell.exec", "cell.destroy", "collab.message", "collab.handoff", "profile.model", "profile.effort", "run.control", "alignment.decide", "checkpoint.create", "checkpoint.restore", "state.restore", "egress.decide", "session.recover", "memory.snapshot", "memory.restore", "memory.promote", "memory.slot-promote", "memory.import", "memory.export", "verification.challenge", "verification.close-finding", "verification.attest", "verification.build-bundle", "verification.export-bundle"}
+	actions = append(actions, privateLocalControlActions()...)
+	actions = append(actions, memoryMenuLocalControlActions...)
+	actions = append(actions, menuRestLocalControlActions...)
+	for _, action := range actions {
 		key := "local-" + strings.ReplaceAll(action, ".", "-") + ":" + projectID + ":" + p.ID()
+		sum := sha256.Sum256([]byte(key))
+		now := time.Now().UTC()
+		grant := capability.Grant{ID: capability.GrantID("cap-local-" + hex.EncodeToString(sum[:])), Subject: capability.SubjectID(p.ID()), TaskID: capability.TaskID(projectID), Kind: capability.KindFilesystemWrite, Scope: capability.Scope{Resource: r.layout.Database, Actions: []string{action}}, IssuedAt: now, ExpiresAt: now.AddDate(100, 0, 0), Issuer: capability.SubjectID(p.ID()), IdempotencyKey: key}
 		// Provision once. Restart must never resurrect a revoked scoped grant.
-		if _, found, err := r.store.FindCapabilityGrantByIdempotencyKey(ctx, key); err != nil {
+		if existing, found, err := r.store.FindCapabilityGrantByIdempotencyKey(ctx, key); err != nil {
 			return nil, err
-		} else if !found {
-			sum := sha256.Sum256([]byte(key))
-			now := time.Now().UTC()
-			grant := capability.Grant{ID: capability.GrantID("cap-local-" + hex.EncodeToString(sum[:])), Subject: capability.SubjectID(p.ID()), TaskID: capability.TaskID(projectID), Kind: capability.KindFilesystemWrite, Scope: capability.Scope{Resource: r.layout.Database, Actions: []string{action}}, IssuedAt: now, ExpiresAt: now.AddDate(100, 0, 0), Issuer: capability.SubjectID(p.ID()), IdempotencyKey: key}
-			if err := r.store.PutCapabilityGrant(ctx, grant); err != nil {
-				return nil, err
+		} else if found {
+			if !sameLocalControlBinding(existing, grant) {
+				return nil, fmt.Errorf("%w: local capability grant binding changed", model.ErrConflict)
 			}
+			continue
+		}
+		if err := r.store.PutCapabilityGrant(ctx, grant); err != nil {
+			// Another local caller can win the insert after our first read.
+			// Its issue time differs, so Put's exact equality check conflicts;
+			// accept only the same durable authority and never issue anew.
+			if errors.Is(err, model.ErrConflict) {
+				existing, found, readErr := r.store.FindCapabilityGrantByIdempotencyKey(ctx, key)
+				if readErr == nil && found && sameLocalControlBinding(existing, grant) {
+					continue
+				}
+			}
+			return nil, err
 		}
 	}
 	return &LocalControl{runtime: r, principal: p}, nil
+}
+
+func sameLocalControlBinding(existing, expected capability.Grant) bool {
+	return existing.ID == expected.ID && existing.Subject == expected.Subject &&
+		existing.TaskID == expected.TaskID && existing.Kind == expected.Kind &&
+		existing.Scope.Resource == expected.Scope.Resource &&
+		len(existing.Scope.Actions) == 1 && existing.Scope.Actions[0] == expected.Scope.Actions[0] &&
+		len(existing.Scope.Constraints) == 0 && existing.Issuer == expected.Issuer &&
+		existing.PolicyDigest == expected.PolicyDigest && existing.IdempotencyKey == expected.IdempotencyKey
 }
 
 func (r *Runtime) CommandReviseGoal(ctx context.Context, e CommandEnvelope, interpretation, reason string) (model.GoalContract, error) {

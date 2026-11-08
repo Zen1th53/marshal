@@ -1,0 +1,96 @@
+{
+  "tasks": [
+    {
+      "id": "g9-codex-b0b43f0e",
+      "title": "Create exact codex marker using gpt-6.1-sol",
+      "criteria": [
+        "codex-marker.txt contains exactly codex-ok followed by one newline"
+      ],
+      "paths": [
+        "codex-marker.txt"
+      ],
+      "depends_on": [],
+      "worker": "codex",
+      "mode": "governed",
+      "checks": [
+        {
+          "command": "python3 -c 'import pathlib,sys; actual=pathlib.Path('\"'\"'codex-marker.txt'\"'\"').read_bytes(); expected=b'\"'\"'codex-ok\\n'\"'\"'; ok=actual==expected; print('\"'\"'codex exact-byte '\"'\"'+('\"'\"'PASS'\"'\"' if ok else '\"'\"'FAIL'\"'\"')); sys.exit(0 if ok else 1)'",
+          "criteria": [
+            "codex-marker.txt contains exactly codex-ok followed by one newline"
+          ]
+        }
+      ],
+      "instructions": "Use exactly worker codex with explicit native model gpt-6.1-sol. Registered principal AGENT-c5cd088291309f840416bb92cf5f6e96 is input metadata only. Requested model must be pinned by the approved handoff and observed native execution; do not use provider defaults as evidence. Create only codex-marker.txt containing b'codex-ok\\n'.\n\nThis is a draft only, not an approved handoff or dispatch instruction.\nEach worker may change only its assigned root marker in its separate assigned worktree. No other repository edits; no installs/downloads, global settings changes, login/authentication, credential copies, pushes, publishing or weakened approvals.\nDo not reuse, replay, reset, manufacture or override past task, transport, permission, acceptance, RETURN or cancelled/failed-run records. Preserve all prior evidence and reserves. Profile/registration metadata and the owner-approved goal confer no task or provider transport grants.\nBefore execution require a distinct approved handoff, genuine fresh Native Marshal MCP task and per-run provider transport decisions, pinned requested and observed native models, and independent review of corrected production source ed0abc47f43836d68135ec161543bceb228e340b. This includes Claude --model propagation, OpenCode provider/MCP configuration merge, AGY sealed MCP mount and exact endpoint binding. Historical review/profile claims remain input metadata until evidenced in the bound runtime.\nOne actual initial provider attempt per new worker; task wall time at most 300 seconds. No automatic retry or spending retained rework/reserves. Existing token/money settings and reserves remain unchanged.\nExactly four independent governed change tasks, no dependency edges, no substituted provider/model, no extra change/review/verifier task in this four-item task draft. Fresh independent cross-review and a fresh independent verifier are separate runtime sessions and gates, not worker self-certification.\nCurrent settings revision 5 permits UltraConcurrency 4. Keep exactly four independent lanes eligible for parallel scheduling in their separate assigned worktrees within this unchanged limit. Settings and independent readiness do not prove actual lifecycle overlap; report only observed provider/native overlap.\nReport parallelism only from observed provider/native lifecycle overlap with timestamped evidence. Reservations and paid inference intervals are not provider-call or overlap evidence.\nEach sandbox command below proves only the stated file-byte criterion. Runtime evidence must separately establish authorized scope, actual native model, fresh task/transport decisions, actual initial attempt count, wall-time bound and lifecycle overlap. Every task requires genuine Marshal review; passing bytes alone is insufficient acceptance. RETURN remains binding.\nAfter approved execution, runtime integration must rerun all four byte commands against the integrated repository in a clean read-only-source sandbox. Use only committed repository content; generated outputs belong under $MARSHAL_BUILD_DIR or /tmp. Never test commit history/HEAD diffs/commit structure or ask checks to re-prove runtime changed-file scope.\nRequire fresh independent cross-review, genuine per-task Marshal reviews, successful integration checks and a fresh independent verifier before separately delegated owner close. This draft performs none of those gates, accepts no task and closes no run.\nAGY transport must visibly bind primary daily-cloudcode-pa.googleapis.com:443 and additional www.googleapis.com:443, exactly. Additional host permits only necessary readonly OAuth2 v2 userinfo metadata after genuine typed upstream success, projected to the existing synthetic worker email/name; eligibility/settings stay actual. Other Google hosts/routes, auth refresh and optional admin/quota RPCs remain denied. Do not infer authority from profiles or prior probes.\n",
+      "expected_output": "codex exact-byte PASS; exit 0"
+    },
+    {
+      "id": "g9-claude-b0b43f0e",
+      "title": "Create exact claude marker using sonnet",
+      "criteria": [
+        "claude-marker.txt contains exactly claude-ok followed by one newline"
+      ],
+      "paths": [
+        "claude-marker.txt"
+      ],
+      "depends_on": [],
+      "worker": "claude",
+      "mode": "governed",
+      "checks": [
+        {
+          "command": "python3 -c 'import pathlib,sys; actual=pathlib.Path('\"'\"'claude-marker.txt'\"'\"').read_bytes(); expected=b'\"'\"'claude-ok\\n'\"'\"'; ok=actual==expected; print('\"'\"'claude exact-byte '\"'\"'+('\"'\"'PASS'\"'\"' if ok else '\"'\"'FAIL'\"'\"')); sys.exit(0 if ok else 1)'",
+          "criteria": [
+            "claude-marker.txt contains exactly claude-ok followed by one newline"
+          ]
+        }
+      ],
+      "instructions": "Use exactly worker claude with explicit native model sonnet. Registered principal AGENT-a838b3de53615ec2836fba06040e235c is input metadata only. Requested model must be pinned by the approved handoff and observed native execution; do not use provider defaults as evidence. Create only claude-marker.txt containing b'claude-ok\\n'.\n\nThis is a draft only, not an approved handoff or dispatch instruction.\nEach worker may change only its assigned root marker in its separate assigned worktree. No other repository edits; no installs/downloads, global settings changes, login/authentication, credential copies, pushes, publishing or weakened approvals.\nDo not reuse, replay, reset, manufacture or override past task, transport, permission, acceptance, RETURN or cancelled/failed-run records. Preserve all prior evidence and reserves. Profile/registration metadata and the owner-approved goal confer no task or provider transport grants.\nBefore execution require a distinct approved handoff, genuine fresh Native Marshal MCP task and per-run provider transport decisions, pinned requested and observed native models, and independent review of corrected production source ed0abc47f43836d68135ec161543bceb228e340b. This includes Claude --model propagation, OpenCode provider/MCP configuration merge, AGY sealed MCP mount and exact endpoint binding. Historical review/profile claims remain input metadata until evidenced in the bound runtime.\nOne actual initial provider attempt per new worker; task wall time at most 300 seconds. No automatic retry or spending retained rework/reserves. Existing token/money settings and reserves remain unchanged.\nExactly four independent governed change tasks, no dependency edges, no substituted provider/model, no extra change/review/verifier task in this four-item task draft. Fresh independent cross-review and a fresh independent verifier are separate runtime sessions and gates, not worker self-certification.\nCurrent settings revision 5 permits UltraConcurrency 4. Keep exactly four independent lanes eligible for parallel scheduling in their separate assigned worktrees within this unchanged limit. Settings and independent readiness do not prove actual lifecycle overlap; report only observed provider/native overlap.\nReport parallelism only from observed provider/native lifecycle overlap with timestamped evidence. Reservations and paid inference intervals are not provider-call or overlap evidence.\nEach sandbox command below proves only the stated file-byte criterion. Runtime evidence must separately establish authorized scope, actual native model, fresh task/transport decisions, actual initial attempt count, wall-time bound and lifecycle overlap. Every task requires genuine Marshal review; passing bytes alone is insufficient acceptance. RETURN remains binding.\nAfter approved execution, runtime integration must rerun all four byte commands against the integrated repository in a clean read-only-source sandbox. Use only committed repository content; generated outputs belong under $MARSHAL_BUILD_DIR or /tmp. Never test commit history/HEAD diffs/commit structure or ask checks to re-prove runtime changed-file scope.\nRequire fresh independent cross-review, genuine per-task Marshal reviews, successful integration checks and a fresh independent verifier before separately delegated owner close. This draft performs none of those gates, accepts no task and closes no run.\nAGY transport must visibly bind primary daily-cloudcode-pa.googleapis.com:443 and additional www.googleapis.com:443, exactly. Additional host permits only necessary readonly OAuth2 v2 userinfo metadata after genuine typed upstream success, projected to the existing synthetic worker email/name; eligibility/settings stay actual. Other Google hosts/routes, auth refresh and optional admin/quota RPCs remain denied. Do not infer authority from profiles or prior probes.\n",
+      "expected_output": "claude exact-byte PASS; exit 0"
+    },
+    {
+      "id": "g9-opencode-b0b43f0e",
+      "title": "Create exact opencode marker using ollama/qwythos-9b",
+      "criteria": [
+        "opencode-marker.txt contains exactly opencode-ok followed by one newline"
+      ],
+      "paths": [
+        "opencode-marker.txt"
+      ],
+      "depends_on": [],
+      "worker": "opencode",
+      "mode": "governed",
+      "checks": [
+        {
+          "command": "python3 -c 'import pathlib,sys; actual=pathlib.Path('\"'\"'opencode-marker.txt'\"'\"').read_bytes(); expected=b'\"'\"'opencode-ok\\n'\"'\"'; ok=actual==expected; print('\"'\"'opencode exact-byte '\"'\"'+('\"'\"'PASS'\"'\"' if ok else '\"'\"'FAIL'\"'\"')); sys.exit(0 if ok else 1)'",
+          "criteria": [
+            "opencode-marker.txt contains exactly opencode-ok followed by one newline"
+          ]
+        }
+      ],
+      "instructions": "Use exactly worker opencode with explicit native model ollama/qwythos-9b. Registered principal AGENT-287816e65d8be08ed893d0d8536033ac is input metadata only. Requested model must be pinned by the approved handoff and observed native execution; do not use provider defaults as evidence. Create only opencode-marker.txt containing b'opencode-ok\\n'.\n\nThis is a draft only, not an approved handoff or dispatch instruction.\nEach worker may change only its assigned root marker in its separate assigned worktree. No other repository edits; no installs/downloads, global settings changes, login/authentication, credential copies, pushes, publishing or weakened approvals.\nDo not reuse, replay, reset, manufacture or override past task, transport, permission, acceptance, RETURN or cancelled/failed-run records. Preserve all prior evidence and reserves. Profile/registration metadata and the owner-approved goal confer no task or provider transport grants.\nBefore execution require a distinct approved handoff, genuine fresh Native Marshal MCP task and per-run provider transport decisions, pinned requested and observed native models, and independent review of corrected production source ed0abc47f43836d68135ec161543bceb228e340b. This includes Claude --model propagation, OpenCode provider/MCP configuration merge, AGY sealed MCP mount and exact endpoint binding. Historical review/profile claims remain input metadata until evidenced in the bound runtime.\nOne actual initial provider attempt per new worker; task wall time at most 300 seconds. No automatic retry or spending retained rework/reserves. Existing token/money settings and reserves remain unchanged.\nExactly four independent governed change tasks, no dependency edges, no substituted provider/model, no extra change/review/verifier task in this four-item task draft. Fresh independent cross-review and a fresh independent verifier are separate runtime sessions and gates, not worker self-certification.\nCurrent settings revision 5 permits UltraConcurrency 4. Keep exactly four independent lanes eligible for parallel scheduling in their separate assigned worktrees within this unchanged limit. Settings and independent readiness do not prove actual lifecycle overlap; report only observed provider/native overlap.\nReport parallelism only from observed provider/native lifecycle overlap with timestamped evidence. Reservations and paid inference intervals are not provider-call or overlap evidence.\nEach sandbox command below proves only the stated file-byte criterion. Runtime evidence must separately establish authorized scope, actual native model, fresh task/transport decisions, actual initial attempt count, wall-time bound and lifecycle overlap. Every task requires genuine Marshal review; passing bytes alone is insufficient acceptance. RETURN remains binding.\nAfter approved execution, runtime integration must rerun all four byte commands against the integrated repository in a clean read-only-source sandbox. Use only committed repository content; generated outputs belong under $MARSHAL_BUILD_DIR or /tmp. Never test commit history/HEAD diffs/commit structure or ask checks to re-prove runtime changed-file scope.\nRequire fresh independent cross-review, genuine per-task Marshal reviews, successful integration checks and a fresh independent verifier before separately delegated owner close. This draft performs none of those gates, accepts no task and closes no run.\nAGY transport must visibly bind primary daily-cloudcode-pa.googleapis.com:443 and additional www.googleapis.com:443, exactly. Additional host permits only necessary readonly OAuth2 v2 userinfo metadata after genuine typed upstream success, projected to the existing synthetic worker email/name; eligibility/settings stay actual. Other Google hosts/routes, auth refresh and optional admin/quota RPCs remain denied. Do not infer authority from profiles or prior probes.\n",
+      "expected_output": "opencode exact-byte PASS; exit 0"
+    },
+    {
+      "id": "g9-agy-b0b43f0e",
+      "title": "Create exact agy marker using gemini-3.8-flash-high",
+      "criteria": [
+        "agy-marker.txt contains exactly agy-ok followed by one newline"
+      ],
+      "paths": [
+        "agy-marker.txt"
+      ],
+      "depends_on": [],
+      "worker": "agy",
+      "mode": "governed",
+      "checks": [
+        {
+          "command": "python3 -c 'import pathlib,sys; actual=pathlib.Path('\"'\"'agy-marker.txt'\"'\"').read_bytes(); expected=b'\"'\"'agy-ok\\n'\"'\"'; ok=actual==expected; print('\"'\"'agy exact-byte '\"'\"'+('\"'\"'PASS'\"'\"' if ok else '\"'\"'FAIL'\"'\"')); sys.exit(0 if ok else 1)'",
+          "criteria": [
+            "agy-marker.txt contains exactly agy-ok followed by one newline"
+          ]
+        }
+      ],
+      "instructions": "Use exactly worker agy with explicit native model gemini-3.8-flash-high. Registered principal AGENT-04332817a17b86023348f7c3b4dfe9fb is input metadata only. Requested model must be pinned by the approved handoff and observed native execution; do not use provider defaults as evidence. Create only agy-marker.txt containing b'agy-ok\\n'.\n\nThis is a draft only, not an approved handoff or dispatch instruction.\nEach worker may change only its assigned root marker in its separate assigned worktree. No other repository edits; no installs/downloads, global settings changes, login/authentication, credential copies, pushes, publishing or weakened approvals.\nDo not reuse, replay, reset, manufacture or override past task, transport, permission, acceptance, RETURN or cancelled/failed-run records. Preserve all prior evidence and reserves. Profile/registration metadata and the owner-approved goal confer no task or provider transport grants.\nBefore execution require a distinct approved handoff, genuine fresh Native Marshal MCP task and per-run provider transport decisions, pinned requested and observed native models, and independent review of corrected production source ed0abc47f43836d68135ec161543bceb228e340b. This includes Claude --model propagation, OpenCode provider/MCP configuration merge, AGY sealed MCP mount and exact endpoint binding. Historical review/profile claims remain input metadata until evidenced in the bound runtime.\nOne actual initial provider attempt per new worker; task wall time at most 300 seconds. No automatic retry or spending retained rework/reserves. Existing token/money settings and reserves remain unchanged.\nExactly four independent governed change tasks, no dependency edges, no substituted provider/model, no extra change/review/verifier task in this four-item task draft. Fresh independent cross-review and a fresh independent verifier are separate runtime sessions and gates, not worker self-certification.\nCurrent settings revision 5 permits UltraConcurrency 4. Keep exactly four independent lanes eligible for parallel scheduling in their separate assigned worktrees within this unchanged limit. Settings and independent readiness do not prove actual lifecycle overlap; report only observed provider/native overlap.\nReport parallelism only from observed provider/native lifecycle overlap with timestamped evidence. Reservations and paid inference intervals are not provider-call or overlap evidence.\nEach sandbox command below proves only the stated file-byte criterion. Runtime evidence must separately establish authorized scope, actual native model, fresh task/transport decisions, actual initial attempt count, wall-time bound and lifecycle overlap. Every task requires genuine Marshal review; passing bytes alone is insufficient acceptance. RETURN remains binding.\nAfter approved execution, runtime integration must rerun all four byte commands against the integrated repository in a clean read-only-source sandbox. Use only committed repository content; generated outputs belong under $MARSHAL_BUILD_DIR or /tmp. Never test commit history/HEAD diffs/commit structure or ask checks to re-prove runtime changed-file scope.\nRequire fresh independent cross-review, genuine per-task Marshal reviews, successful integration checks and a fresh independent verifier before separately delegated owner close. This draft performs none of those gates, accepts no task and closes no run.\nAGY transport must visibly bind primary daily-cloudcode-pa.googleapis.com:443 and additional www.googleapis.com:443, exactly. Additional host permits only necessary readonly OAuth2 v2 userinfo metadata after genuine typed upstream success, projected to the existing synthetic worker email/name; eligibility/settings stay actual. Other Google hosts/routes, auth refresh and optional admin/quota RPCs remain denied. Do not infer authority from profiles or prior probes.\n",
+      "expected_output": "agy exact-byte PASS; exit 0"
+    }
+  ]
+}

@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,7 +68,7 @@ func TestTaskRelayShowsOutcomeAndRetainsRawOutput(t *testing.T) {
 		if !strings.Contains(screen, "Status: "+status) || !strings.Contains(screen, "Summary:") || !strings.Contains(screen, "Full output:") || strings.Contains(screen, "instruction payload") || strings.Contains(screen, "socat noise") {
 			t.Fatalf("screen: %s", screen)
 		}
-		raw, err := os.ReadFile(filepath.Join(root, ".marshal", "evidence", id+"-relay-latest.txt"))
+		raw, err := os.ReadFile(filepath.Join(root, statepath.DirName, "evidence", id+"-relay-latest.txt"))
 		if err != nil || !strings.Contains(string(raw), "instruction payload") || !strings.Contains(string(raw), "socat noise") {
 			t.Fatalf("raw evidence: %s (%v)", raw, err)
 		}
@@ -79,14 +80,14 @@ func TestTaskRelayHostPreservesEarlierProcessEvidence(t *testing.T) {
 	root := t.TempDir()
 	id := "task-multiple-processes"
 	w := NewWorkspace(nil, "project", "session")
-	w.workDir, w.tmuxSession = root, "test-session"
+	w.workDir, w.tmuxSession = root, fixtureTmuxNamespace(t, root)
 	if err := saveAgentEvidence(root, id+"-relay", "earlier process output\n"); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.hostNativeTmuxWindow(withTaskRelayView(context.Background(), root, id), "task-view", root, "unused", nativeLaunchAutomated); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(root, ".marshal", "evidence", id+"-relay-latest.txt"))
+	raw, err := os.ReadFile(filepath.Join(root, statepath.DirName, "evidence", id+"-relay-latest.txt"))
 	if err != nil || string(raw) != "earlier process output\n" {
 		t.Fatalf("earlier output lost: %s (%v)", raw, err)
 	}
@@ -100,7 +101,7 @@ func TestTaskRelayCleanupRetainsFullOutput(t *testing.T) {
 	_, _ = setupFakeTmux(t)
 	root := t.TempDir()
 	w := NewWorkspace(nil, "project", "session")
-	w.workDir, w.tmuxSession = root, "test-session"
+	w.workDir, w.tmuxSession = root, fixtureTmuxNamespace(t, root)
 	id := "task-retained"
 	var pane string
 	if err := w.hostNativeTmuxWindow(withTaskRelayView(context.Background(), root, id), "task-view", root, "unused", nativeLaunchAutomated, &pane); err != nil {
@@ -115,7 +116,7 @@ func TestTaskRelayCleanupRetainsFullOutput(t *testing.T) {
 	if err := w.retainAndCloseAgent(context.Background(), a, root, "completed"); err != nil {
 		t.Fatal(err)
 	}
-	retained, err := os.ReadFile(filepath.Join(root, ".marshal", "evidence", id+"-latest.txt"))
+	retained, err := os.ReadFile(filepath.Join(root, statepath.DirName, "evidence", id+"-latest.txt"))
 	if err != nil || !strings.Contains(string(retained), raw) {
 		t.Fatalf("canonical evidence lost raw output: %s (%v)", retained, err)
 	}
@@ -149,7 +150,7 @@ func TestTaskRelayRealSocatSupportsRedirectedOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { cancel(); _ = cmd.Wait() }()
-	path := filepath.Join(root, ".marshal", "evidence", id+"-relay-latest.txt")
+	path := filepath.Join(root, statepath.DirName, "evidence", id+"-relay-latest.txt")
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		raw, err := os.ReadFile(path)

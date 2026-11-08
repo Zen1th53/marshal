@@ -1,92 +1,58 @@
+# Marshal
+
+Marshal is a free, open-source (AGPL-3.0 plus a commercial licence) local multi-agent coding orchestrator. Plan work with one AI, let other AI agents do it, and stay in charge.
+
+Instead of typing a request into one AI assistant and hoping it makes no mistakes, Marshal introduces a structured multi-agent workflow: one model acts as the **Marshal** to clarify your goals, draft architecture, and plan discrete tasks; other AI agents execute those tasks across isolated branches; a cross-provider reviewer evaluates the code; and an independent verifier tests the integrated result before it is merged into `main`.
+
+> [!WARNING]
+> **Important Notice on Worker Execution**: Worker agents run directly on your host machine with your user permissions and without a sandbox. Worktrees isolate Git changes, not system calls. Always review plans, commands, and code changes before approving them.
+
 ---
-hide:
-  - navigation
-  - toc
+
+## 60-Second Quick Start
+
+Get from zero to an executed multi-agent run in four steps:
+
+```bash
+# 1. Install Marshal to ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
+
+# 2. Enter a Git repository and initialize Marshal
+cd /path/to/project
+marshal init
+
+# 3. Launch the interactive Board
+marshal
+```
+
+Once inside the Board:
+1. **State your goal**: Press `s` to type your request directly to the Marshal, or focus the chat pane with `F11` or `Alt+←`.
+2. **Accept the architecture**: The Marshal clarifies requirements and drafts a project contract. When the `NEEDS YOU` gate appears, press `y` to accept the architecture.
+3. **Approve the plan**: The Marshal decomposes your goal into discrete tasks with verifiable criteria. Press `y` to approve the plan.
+4. **Watch the run**: Worker agents execute tasks in parallel branches, a cross-provider reviewer inspects the diffs, an independent verifier runs checks, and accepted changes are closed to `main`.
+
 ---
 
-<div class="hero" markdown>
+## Key Features
 
-# Let one AI plan the work. Let others do it. You stay in charge.
+- **Local & Multi-Agent**: Orchestrate Claude Code, OpenAI Codex, OpenCode, and Google Antigravity (`agy`) simultaneously on your own machine.
+- **The Board (TUI)**: A dynamic tmux-powered terminal dashboard providing real-time visibility into tasks, worker lanes, activity logs, and a docked conversation pane.
+- **Cross-Provider Review**: No agent marks its own homework. Changes handed in by one provider are reviewed against acceptance criteria by a different provider.
+- **Independent Verification**: Test suites and acceptance criteria are evaluated by an independent verifier before code is integrated.
+- **Project Memory & MCP**: Built-in Model Context Protocol server and persistent candidate-reviewed knowledge store.
+- **Transparent & Anonymous**: Anonymous opt-out telemetry directed to `marshal.blackhat.uz`, with no code, prompts, or sensitive data transmitted.
 
-MARSHAL is a terminal app that helps you get real work done with AI coding
-agents such as Codex and Claude Code. You describe what you want. One AI, the
-**Marshal**, talks it through with you and writes a plan. After you approve the
-plan, other AI agents do the work, each in its own separate copy of your
-project. Nothing is final until you accept it.
+---
 
-[Get started](public/install.md){ .md-button .md-button--primary }
-[How it works](public/how-it-works.md){ .md-button }
+## Documentation Guide
 
-</div>
-
-## Why use MARSHAL?
-
-<div class="grid cards" markdown>
-
--   **A plan before workers start**
-
-    ---
-
-    The Marshal asks you questions first, then writes the plan down. You read
-    it, correct it if needed, and approve it.
-
--   **Agents work in their own copy**
-
-    ---
-
-    Each task runs in a separate working copy of your project, so unfinished
-    work stays separate until merge. Governed workers are sandboxed; native
-    workers are trusted and run with your user account's rights.
-
--   **You decide what is finished**
-
-    ---
-
-    You review each result and accept it or send it back with a note. MARSHAL
-    runs the task's checks again itself instead of taking the agent's word.
-
--   **Easy to undo**
-
-    ---
-
-    Save a snapshot of your project at any time and go back to it later.
-
-</div>
-
-The Marshal can read and write the whole project. Protection is at approval
-and merge. Sharing through the agents' shared channel sends one provider's
-text to another provider when the receiving agent uses it. Read
-[How MARSHAL works](public/how-it-works.md) before starting work.
-
-## Where to start
-
-<div class="grid cards" markdown>
-
--   **New to MARSHAL?**
-
-    ---
-
-    [Install it](public/install.md), then follow
-    [Your first project](public/first-project.md).
-
--   **Want the big picture first?**
-
-    ---
-
-    Read [How MARSHAL works](public/how-it-works.md). It explains the idea and
-    the few words you need to know.
-
--   **Stuck?**
-
-    ---
-
-    [Problems and fixes](public/troubleshooting.md) answers the most common
-    questions.
-
-</div>
-
-!!! note "Version 0.0.5"
-    MARSHAL runs on Linux. On Windows you can try it inside WSL 2, which
-    has not been tested yet. Read
-    [What MARSHAL cannot do yet](public/limits.md) before you rely on it for
-    important work.
+- [Installation](installation.md) — System requirements, `install.sh`, building from source, and setup verification.
+- [Getting Started](getting-started.md) — End-to-end walkthrough from `marshal init` to completed run.
+- [The Board and Keys](board-and-keys.md) — Screen layout, focus switching, shortcuts, inspector action row, and `NEEDS YOU` gates.
+- [Providers](providers.md) — Configuring Claude Code, Codex, OpenCode, and Antigravity, plus harness verification.
+- [How a Run Works](how-it-works.md) — Planning, workers, cross-provider review, independent verification, and closing to `main`.
+- [Memory and MCP](memory-and-mcp.md) — Using the MCP server, memory commands, and candidate review.
+- [Configuration](configuration.md) — TUI settings, project files, environment variables, and CLI options.
+- [Telemetry](telemetry.md) — Anonymous telemetry details and how to opt out.
+- [Troubleshooting](troubleshooting.md) — Solutions for uninitialized projects, provider limits, and resuming runs.
+- [Changelog](CHANGELOG.md) — Version 0.2.0 release notes and history.

@@ -13,7 +13,7 @@ func TestPTYProviderConfigNamesTheHarness(t *testing.T) {
 	project := initProject(t, bin)
 	t.Chdir(project)
 	terminal := startFrozenTUIInProject(t, 40, 200, bin, project, "tui", "SESSION-pty-provider")
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/provider config anthropic")
 	terminal.mustSee("reached through the claude harness")
 	terminal.mustSee("changes no configuration")

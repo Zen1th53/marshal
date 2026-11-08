@@ -60,7 +60,16 @@ func (h *CommandHandler) handleAntigravity(ctx context.Context, args []string, l
 			argv = cleanArgv
 		}
 		return h.ws.runNativeAgent(ctx, "antigravity", argv)
-	case "models", "agents", "agent", "mcp", "plugin", "plugins", "changelog":
+	case "models":
+		if len(args) == 1 && !hasHelpFlag(args) {
+			return listNativeModels(ctx, "agy", "ANTIGRAVITY"), nil
+		}
+		argv, err := nativeArgs(strings.TrimSpace(line[len(strings.Fields(line)[0]):]))
+		if err != nil {
+			return "", err
+		}
+		return h.ws.runNativeAgent(ctx, "antigravity", argv)
+	case "agents", "agent", "mcp", "plugin", "plugins", "changelog":
 		argv, err := nativeArgs(strings.TrimSpace(line[len(strings.Fields(line)[0]):]))
 		if err != nil {
 			return "", err

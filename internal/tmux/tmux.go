@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io"
 	"os"
 	"os/exec"
@@ -267,25 +268,25 @@ func SessionName(projectRoot string) string {
 	base := filepath.Base(filepath.Clean(resolved))
 	base = sanitizeName(base)
 	hash := ProjectHash(projectRoot)
-	return fmt.Sprintf("marshal-%s-%s", base, hash)
+	return fmt.Sprintf(statepath.Name+"-%s-%s", base, hash)
 }
 
 // WindowName returns a window name for a given agent provider and project.
 func WindowName(provider, projectRoot string) string {
 	hash := ProjectHash(projectRoot)
-	return fmt.Sprintf("marshal-%s-%s", sanitizeName(provider), hash)
+	return fmt.Sprintf(statepath.Name+"-%s-%s", sanitizeName(provider), hash)
 }
 
 // ChatWindowName returns the dedicated window name for the protected Marshal planning chat.
 func ChatWindowName(projectRoot string) string {
 	hash := ProjectHash(projectRoot)
-	return fmt.Sprintf("marshal-chat-%s", hash)
+	return fmt.Sprintf(statepath.Name+"-chat-%s", hash)
 }
 
 // TaskWindowName returns the dedicated window name for a dispatched task worker.
 func TaskWindowName(taskID, projectRoot string) string {
 	hash := ProjectHash(projectRoot)
-	return fmt.Sprintf("marshal-task-%s-%s", sanitizeName(taskID), hash)
+	return fmt.Sprintf(statepath.Name+"-task-%s-%s", sanitizeName(taskID), hash)
 }
 
 func sanitizeName(s string) string {
@@ -329,6 +330,11 @@ func EscapeTmuxArgs(args []string) []string {
 // RunCommand executes a tmux command using the resolved binary path and argv list.
 func RunCommand(ctx context.Context, args ...string) ([]byte, error) {
 	timeout := 2 * time.Second
+	if len(args) > 0 && (args[0] == "new-window" || args[0] == "respawn-window" || args[0] == "respawn-pane") {
+		// Creating a pane starts a real worker process. Busy hosts may need
+		// longer than a read-only tmux query to complete that handshake.
+		timeout = 5 * time.Second
+	}
 	if len(args) > 0 && args[0] == "display-popup" {
 		// This client owns an operator review surface until it closes. Honor
 		// its explicit review deadline instead of the short query deadline.
@@ -346,7 +352,7 @@ func RunCommand(ctx context.Context, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.WaitDelay = 100 * time.Millisecond
 	if os.Getenv("TMUX_TMPDIR") == "" {
-		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("marshal-tmux-%d", os.Getuid()))
+		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf(statepath.Name+"-tmux-%d", os.Getuid()))
 		_ = os.MkdirAll(tmpDir, 0o700)
 		cmd.Env = append(os.Environ(), "TMUX_TMPDIR="+tmpDir)
 	}
@@ -404,7 +410,7 @@ func HasSession(ctx context.Context, session string) bool {
 	cmd := exec.CommandContext(ctx, bin, "has-session", "-t", session)
 	cmd.WaitDelay = 100 * time.Millisecond
 	if os.Getenv("TMUX_TMPDIR") == "" {
-		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("marshal-tmux-%d", os.Getuid()))
+		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf(statepath.Name+"-tmux-%d", os.Getuid()))
 		_ = os.MkdirAll(tmpDir, 0o700)
 		cmd.Env = append(os.Environ(), "TMUX_TMPDIR="+tmpDir)
 	}
@@ -420,19 +426,25 @@ func NewSession(ctx context.Context, session, workDir, windowName string, comman
 		return err
 	}
 	args := []string{"new-session", "-d", "-s", session, "-c", workDir, "-n", windowName}
-	for _, a := range command {
+	for _, a := range InDir(workDir, command) {
 		args = append(args, EscapeTmuxArg(a))
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.WaitDelay = 100 * time.Millisecond
 	if os.Getenv("TMUX_TMPDIR") == "" {
-		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("marshal-tmux-%d", os.Getuid()))
+		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf(statepath.Name+"-tmux-%d", os.Getuid()))
 		_ = os.MkdirAll(tmpDir, 0o700)
 		cmd.Env = append(os.Environ(), "TMUX_TMPDIR="+tmpDir)
 	}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("tmux new-session: %s: %w", string(out), err)
 	}
+	// MARSHAL paints its own header and inbox; tmux's status line only
+	// repeated alerts in a bar the operator asked not to see.
+	off := exec.CommandContext(ctx, bin, "set-option", "-t", session, "status", "off")
+	off.Env = cmd.Env
+	off.WaitDelay = cmd.WaitDelay
+	_ = off.Run()
 	return nil
 }
 
@@ -454,7 +466,7 @@ func AttachSessionContext(ctx context.Context, session string, stdin io.Reader, 
 	cmd := exec.CommandContext(ctx, bin, "attach-session", "-t", session)
 	cmd.WaitDelay = 100 * time.Millisecond
 	if os.Getenv("TMUX_TMPDIR") == "" {
-		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("marshal-tmux-%d", os.Getuid()))
+		tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf(statepath.Name+"-tmux-%d", os.Getuid()))
 		_ = os.MkdirAll(tmpDir, 0o700)
 		cmd.Env = append(os.Environ(), "TMUX_TMPDIR="+tmpDir)
 	}
@@ -462,6 +474,46 @@ func AttachSessionContext(ctx context.Context, session string, stdin io.Reader, 
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	return cmd.Run()
+}
+
+// InDir makes command start in workDir even when the tmux server's own
+// working directory was deleted. tmux 3.8 was observed starting panes in the
+// server's deleted directory despite -c, so every launch then failed with
+// "getwd: no such file or directory". The wrapper changes directory itself
+// and execs the unchanged argv. A single string stays a shell command, as
+// tmux would have run it; an empty command keeps tmux's default shell.
+func InDir(workDir string, command []string) []string {
+	if workDir == "" || len(command) == 0 {
+		return command
+	}
+	if len(command) == 1 {
+		command = []string{"/bin/sh", "-c", command[0]}
+	}
+	return append([]string{"/bin/sh", "-c", `cd -- "$1" || exit 127; shift; exec "$@"`, statepath.Name + "-cd", workDir}, command...)
+}
+
+// RespawnPaneIn is RespawnPane starting in workDir.
+func RespawnPaneIn(ctx context.Context, target, workDir string, command []string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
+	args := []string{"respawn-pane", "-k", "-t", target}
+	if workDir != "" {
+		args = append(args, "-c", workDir)
+	}
+	return runWindowCommand(ctx, args, InDir(workDir, command))
+}
+
+// RespawnWindowIn is RespawnWindow starting in workDir.
+func RespawnWindowIn(ctx context.Context, target, workDir string, command []string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
+	args := []string{"respawn-window", "-k", "-t", target}
+	if workDir != "" {
+		args = append(args, "-c", workDir)
+	}
+	return runWindowCommand(ctx, args, InDir(workDir, command))
 }
 
 // RespawnPane restarts the process in a pane without changing the
@@ -576,7 +628,7 @@ func NewWindow(ctx context.Context, targetSession, windowName, workDir string, e
 	if len(paneID) > 0 {
 		args = append(args, "-P", "-F", "#{pane_id}")
 	}
-	return runWindowCommand(ctx, args, command, paneID...)
+	return runWindowCommand(ctx, args, InDir(workDir, command), paneID...)
 }
 
 // tmux 3.2a bounds command messages at 16 KiB. Keep large prompts out of
@@ -588,7 +640,7 @@ func runWindowCommand(ctx context.Context, args, command []string, paneID ...*st
 	}
 	var launchPath string
 	if size > 8<<10 {
-		file, err := os.CreateTemp("", "marshal-tmux-launch-*")
+		file, err := os.CreateTemp("", statepath.Name+"-tmux-launch-*")
 		if err != nil {
 			return err
 		}
@@ -656,6 +708,45 @@ func CapturePane(ctx context.Context, target string) (string, error) {
 	return string(out), nil
 }
 
+// CaptureVisiblePane captures the currently visible plain-text screen of the pane without scrollback history.
+func CaptureVisiblePane(ctx context.Context, target string) (string, error) {
+	target, err := resolvePane(ctx, target)
+	if err != nil {
+		return "", err
+	}
+	out, err := RunCommand(ctx, "capture-pane", "-p", "-t", target)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// PipePaneOutput sends everything the pane writes to its terminal to the
+// standard input of shellCommand, which tmux runs with /bin/sh. It replaces
+// any pipe the pane already has. The output stream carries the escape
+// sequences capture-pane drops, such as OSC status reports.
+func PipePaneOutput(ctx context.Context, target, shellCommand string) error {
+	if err := requireTarget(shellCommand); err != nil {
+		return err
+	}
+	target, err := resolvePane(ctx, target)
+	if err != nil {
+		return err
+	}
+	_, err = RunCommand(ctx, "pipe-pane", "-O", "-t", target, shellCommand)
+	return err
+}
+
+// StopPipePane closes the pane's output pipe, if it has one.
+func StopPipePane(ctx context.Context, target string) error {
+	target, err := resolvePane(ctx, target)
+	if err != nil {
+		return err
+	}
+	_, err = RunCommand(ctx, "pipe-pane", "-t", target)
+	return err
+}
+
 // SetPaneReadOnly enables or disables input to a pane (-d disables input / view-only, -e enables input).
 func SetPaneReadOnly(ctx context.Context, target string, readOnly bool) error {
 	if err := requireTarget(target); err != nil {
@@ -692,6 +783,158 @@ func BreakPane(ctx context.Context, target string, newWinName ...string) error {
 		args = append(args, "-n", newWinName[0])
 	}
 	_, err := RunCommand(ctx, args...)
+	return err
+}
+
+// DockPane joins source at the left edge of target's window, width columns
+// wide, without moving focus: -b puts it before (left of) target, -d keeps
+// the target's window and active pane as they were.
+func DockPane(ctx context.Context, source, target string, width int) error {
+	if err := requireTarget(source, target); err != nil {
+		return err
+	}
+	if width < 1 {
+		return fmt.Errorf("dock width %d is not positive", width)
+	}
+	_, err := RunCommand(ctx, "join-pane", "-h", "-b", "-d", "-l", strconv.Itoa(width), "-s", source, "-t", target)
+	return err
+}
+
+// UndockPane breaks a joined pane back out into its own window named name,
+// without selecting that window.
+func UndockPane(ctx context.Context, pane, name string) error {
+	if err := requireTarget(pane); err != nil {
+		return err
+	}
+	args := []string{"break-pane", "-d", "-s", pane}
+	if name != "" {
+		args = append(args, "-n", name)
+	}
+	_, err := RunCommand(ctx, args...)
+	return err
+}
+
+// ResizePaneWidth sets a pane's width in columns.
+func ResizePaneWidth(ctx context.Context, pane string, width int) error {
+	if err := requireTarget(pane); err != nil {
+		return err
+	}
+	if width < 1 {
+		return fmt.Errorf("pane width %d is not positive", width)
+	}
+	_, err := RunCommand(ctx, "resize-pane", "-t", pane, "-x", strconv.Itoa(width))
+	return err
+}
+
+// PaneGeometry is where a pane sits: its window and the widths of both.
+type PaneGeometry struct {
+	WindowID    string
+	WindowWidth int
+	PaneWidth   int
+}
+
+// QueryPaneGeometry reads a pane's window and widths in one query.
+func QueryPaneGeometry(ctx context.Context, pane string) (PaneGeometry, error) {
+	if err := requireTarget(pane); err != nil {
+		return PaneGeometry{}, err
+	}
+	out, err := RunCommand(ctx, "display-message", "-p", "-t", pane, "#{pane_id} #{window_id} #{window_width} #{pane_width}")
+	if err != nil {
+		return PaneGeometry{}, err
+	}
+	var id string
+	var g PaneGeometry
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(out)), "%s %s %d %d", &id, &g.WindowID, &g.WindowWidth, &g.PaneWidth); err != nil {
+		return PaneGeometry{}, fmt.Errorf("pane geometry %q: %w", strings.TrimSpace(string(out)), err)
+	}
+	// display-message falls back to the current pane for a target that no
+	// longer exists on some versions; a different id means it is gone.
+	if strings.HasPrefix(pane, "%") && id != pane {
+		return PaneGeometry{}, fmt.Errorf("pane %s not found", pane)
+	}
+	return g, nil
+}
+
+// BindMouseKeys copies the server's root-table mouse bindings (a click
+// selects the pane, a drag selects text, the wheel scrolls) into table. A
+// private key table is a client's default table while one of its panes is
+// selected, and tmux then looks mouse events up only there: without these
+// a click would never select another pane and the wheel would never scroll
+// a provider CLI. They take effect only while the session's mouse option is
+// on. The bindings are copied as list-keys prints them, so the server's own
+// version of each (and any the operator changed) is kept.
+func BindMouseKeys(ctx context.Context, table string) error {
+	if strings.TrimSpace(table) == "" || strings.ContainsAny(table, " \t\n'\"") {
+		return errors.New("missing tmux key table")
+	}
+	out, err := RunCommand(ctx, "list-keys", "-T", "root")
+	if err != nil {
+		return err
+	}
+	var b strings.Builder
+	for _, line := range strings.Split(string(out), "\n") {
+		if key, ok := rootBindingKey(line); ok && isMouseKey(key) {
+			b.WriteString(strings.Replace(line, "-T root ", "-T "+table+" ", 1) + "\n")
+		}
+	}
+	if b.Len() == 0 {
+		return nil
+	}
+	f, err := os.CreateTemp("", "marshal-mouse-*.conf")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.WriteString(b.String()); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	_, err = RunCommand(ctx, "source-file", f.Name())
+	return err
+}
+
+// rootBindingKey is the key of one list-keys line of the root table.
+func rootBindingKey(line string) (string, bool) {
+	f := strings.Fields(line)
+	for i := 0; i+2 < len(f); i++ {
+		if f[i] == "-T" {
+			return f[i+2], f[i+1] == "root" && f[0] == "bind-key"
+		}
+	}
+	return "", false
+}
+
+// isMouseKey reports whether a tmux key name is a mouse event.
+func isMouseKey(key string) bool {
+	for {
+		rest, ok := strings.CutPrefix(key, "M-")
+		if !ok {
+			if rest, ok = strings.CutPrefix(key, "C-"); !ok {
+				rest, ok = strings.CutPrefix(key, "S-")
+			}
+		}
+		if !ok {
+			break
+		}
+		key = rest
+	}
+	for _, p := range []string{"Mouse", "Wheel", "DoubleClick", "TripleClick", "SecondClick"} {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// UnbindKeyTable removes every binding of a key table.
+func UnbindKeyTable(ctx context.Context, table string) error {
+	if strings.TrimSpace(table) == "" {
+		return errors.New("missing tmux key table")
+	}
+	_, err := RunCommand(ctx, "unbind-key", "-q", "-a", "-T", table)
 	return err
 }
 
@@ -791,6 +1034,16 @@ func SetWindowOption(ctx context.Context, target, option, value string) error {
 	return err
 }
 
+// SetPaneOption sets a pane-level option in tmux. A pane option travels
+// with the pane when it is joined into another window.
+func SetPaneOption(ctx context.Context, target, option, value string) error {
+	if err := requireTarget(target); err != nil {
+		return err
+	}
+	_, err := RunCommand(ctx, "set-option", "-p", "-t", target, option, value)
+	return err
+}
+
 // IsPaneDead checks whether the pane has exited.
 func IsPaneDead(ctx context.Context, target string) (bool, error) {
 	dead, _, err := PaneDeadStatus(ctx, target)
@@ -829,6 +1082,18 @@ func SetPaneTitle(ctx context.Context, target, title string) error {
 	}
 	_, err := RunCommand(ctx, "select-pane", "-t", target, "-T", title)
 	return err
+}
+
+// GetPaneTitle returns the current title of a pane.
+func GetPaneTitle(ctx context.Context, target string) (string, error) {
+	if err := requireTarget(target); err != nil {
+		return "", err
+	}
+	out, err := RunCommand(ctx, "display-message", "-p", "-t", target, "#{pane_title}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // PanePIDAndPGID returns the PID and PGID of the process running in the pane.
@@ -932,4 +1197,13 @@ func SetWindowStatus(ctx context.Context, target, text string) error {
 		}
 	}
 	return nil
+}
+
+// SessionBelongs refuses the other variant before any pane recovery or binding.
+// Community retains existing attachment to user-created sessions.
+func SessionBelongs(session, root string) bool {
+	if statepath.PublicEngine {
+		return session == SessionName(root)
+	}
+	return !strings.HasPrefix(session, "marshal-extreme-")
 }

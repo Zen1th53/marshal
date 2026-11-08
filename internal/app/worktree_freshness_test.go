@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"strings"
 	"testing"
 	"time"
@@ -20,12 +21,12 @@ func TestWorktreeMemoryIsLocalUntilCanonicalHeadAdvances(t *testing.T) {
 	now := time.Now().UTC()
 	rec := model.MemoryRecordV2{
 		ID: "MEM-WORKTREE-LOCAL", ProjectID: "PROJECT-local",
-		Kind: model.MemoryKindFinding, Lifecycle: model.MemoryCandidate,
+		Kind: model.MemoryKindFinding, Lifecycle: model.MemoryDurable,
 		Confidence: model.ConfidenceObserved, Authority: model.AuthorityAgent,
 		Title: "worktree implementation", Body: "foo.go uses implementation X",
 		Scope: string(model.ScopeTask), ScopeID: taskID,
 		Source:     model.MemorySource{Kind: "runtime", Reference: "RUN-A", AgentID: principal.ID},
-		HeadCommit: "worktree-a-head", BranchName: "marshal/task-a", WorktreeID: "WT-A",
+		HeadCommit: "worktree-a-head", BranchName: statepath.RefName + "/task-a", WorktreeID: "WT-A",
 		ObservedAt: now, IngestedAt: now, ValidFrom: now, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := rt.Store().WriteMemoryV2(ctx, rec); err != nil {

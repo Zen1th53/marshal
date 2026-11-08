@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/project"
@@ -102,8 +103,21 @@ func (r *Runtime) ProjectIdentity() string {
 	if r == nil {
 		return localProjectID
 	}
-	if binding, found := projectid.LoadBinding(r.layout.RuntimeDir); found {
-		return string(binding.ID)
+	// Every agent's history guard asks on every tick, and loading the binding
+	// validates the whole state tree; with a few dozen agent windows that
+	// alone held several cores. The binding is reloaded at most every
+	// projectIdentityTTL, so a rebinding is still seen within that window.
+	r.projectIdentityMu.Lock()
+	defer r.projectIdentityMu.Unlock()
+	if !r.projectIdentityAt.IsZero() && time.Since(r.projectIdentityAt) < projectIdentityTTL {
+		return r.projectIdentityValue
 	}
-	return localProjectID
+	id := localProjectID
+	if binding, found := projectid.LoadBinding(r.layout.RuntimeDir); found {
+		id = string(binding.ID)
+	}
+	r.projectIdentityValue, r.projectIdentityAt = id, time.Now()
+	return id
 }
+
+const projectIdentityTTL = 2 * time.Second

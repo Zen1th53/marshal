@@ -654,3 +654,71 @@ func (c *Composer) expandPastes(text string) string {
 
 // PendingPastes reports how many collapsed pastes the current draft carries.
 func (c *Composer) PendingPastes() int { return len(c.pastes) }
+
+// RenderWrapped lays the composer out for a terminal cols wide and reports the
+// cursor's (row, column) within the returned lines, 0-indexed. Input longer
+// than the line wraps onto continuation rows under the prompt, so a terminal
+// never auto-wraps a row it believes is a single line (which duplicated the
+// input on every repaint).
+func (c *Composer) RenderWrapped(cols int) (lines []string, cursorRow, cursorCol int) {
+	if c.searchMode {
+		lines = c.RenderLines()
+		row, col := c.CursorPosition()
+		for i := range lines {
+			if VisibleLen(lines[i]) >= cols {
+				lines[i] = Truncate(lines[i], cols-1)
+			}
+		}
+		if col > cols-1 {
+			col = cols - 1
+		}
+		return lines, row, col
+	}
+	prompt := c.PromptString()
+	pw := c.PromptVisibleWidth()
+	avail := cols - pw - 1
+	if avail < 1 {
+		avail = 1
+	}
+	cont := strings.Repeat(" ", pw)
+	offset := 0
+	logical := strings.Split(string(c.buffer), "\n")
+	for li, text := range logical {
+		runes := []rune(text)
+		start := 0
+		first := true
+		for {
+			end, width := start, 0
+			for end < len(runes) {
+				w := RuneWidth(runes[end])
+				if width+w > avail {
+					break
+				}
+				width += w
+				end++
+			}
+			if end == start && end < len(runes) {
+				end++ // a rune wider than the line still advances
+			}
+			prefix := cont
+			if li == 0 && first {
+				prefix = prompt
+			}
+			lines = append(lines, prefix+string(runes[start:end]))
+			last := end >= len(runes)
+			here := offset + start
+			next := offset + end
+			if c.cursor >= here && (c.cursor < next || (last && c.cursor == next)) {
+				cursorRow = len(lines) - 1
+				cursorCol = pw + VisibleLen(string(runes[start:c.cursor-offset]))
+			}
+			if last {
+				break
+			}
+			start = end
+			first = false
+		}
+		offset += len(runes) + 1
+	}
+	return lines, cursorRow, cursorCol
+}

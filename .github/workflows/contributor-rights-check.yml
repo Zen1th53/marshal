@@ -27,7 +27,8 @@ jobs:
           actor = os.environ.get("PR_AUTHOR", "").strip().lower()
           print(f"Checking contributor assignment status for PR author: @{actor}")
 
-          if "dependabot" in actor:
+          approved_bots = set(["dependabot", "dependabot[bot]", "app/dependabot"])
+          if actor in approved_bots:
               print(f"SUCCESS: Automated bot @{actor} exempted from contributor assignment.")
               sys.exit(0)
 
@@ -82,4 +83,4 @@ jobs:
               sys.exit(1)
           '
         env:
-          PR_AUTHOR: ${{ github.actor }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login || github.actor }}

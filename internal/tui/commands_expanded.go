@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/execution"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/google/uuid"
 	"os"
 	"path/filepath"
@@ -266,6 +267,9 @@ func (h *CommandHandler) handleSandbox(ctx context.Context) (string, error) {
 
 // handleMemory handles epistemic memory inspection and search.
 func (h *CommandHandler) handleMemory(ctx context.Context, args []string, line string) (string, error) {
+	if text, handled, err := h.handleOperatorMemoryReview(ctx, args); handled {
+		return text, err
+	}
 	if len(args) == 0 {
 		return "SHARED EPISTEMIC MEMORY:\n" +
 			"  Shared memory stores verified records and agent-authority candidates; candidates are not verified facts.\n" +
@@ -689,19 +693,38 @@ func (h *CommandHandler) handleProvider(ctx context.Context, args []string) (str
 
 // handleHarness handles harness probe and selection.
 func (h *CommandHandler) handleHarness(ctx context.Context, args []string) (string, error) {
-	if len(args) >= 2 && strings.EqualFold(args[0], "verify") {
+	if len(args) >= 2 && (strings.EqualFold(args[0], "verify") || strings.EqualFold(args[0], "verify-native")) {
 		if len(args) > 3 || h.ws.runtime == nil {
-			return "Usage: /harness verify opencode <model>", nil
+			return "Usage: /harness verify <provider> <model> | /harness verify-native agy [model]", nil
 		}
 		modelName := ""
 		if len(args) == 3 {
 			modelName = args[2]
 		}
-		profile, err := h.ws.runtime.VerifyMarshalWorker(ctx, args[1], modelName)
+		var profile model.HarnessProfile
+		var err error
+		if strings.EqualFold(args[0], "verify-native") {
+			if provider := canonicalNeutralProvider(args[1]); provider != "agy" {
+				return "Usage: /harness verify-native agy [model]", nil
+			}
+			profile, err = h.ws.runtime.VerifyNativeAgyWorker(ctx, modelName)
+		} else {
+			profile, err = h.ws.runtime.VerifyMarshalWorker(ctx, args[1], modelName)
+		}
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("Verified %s %s in sandbox through proxy; evidence %s", profile.Harness, profile.InstalledVersion, profile.ProbeEvidenceID), nil
+		verified := fmt.Sprintf("Verified %s %s in sandbox through proxy; evidence %s", profile.Harness, profile.InstalledVersion, profile.ProbeEvidenceID)
+		if profile.FeatureSupport["sandbox"] == model.StatusUnsupported {
+			verified = fmt.Sprintf("Verified %s %s native print; CLI-owned permissions and authentication; evidence %s", profile.Harness, profile.InstalledVersion, profile.ProbeEvidenceID)
+		}
+		// The verified version is also checked against the native chat
+		// transport's qualified range, and the contract is recorded.
+		line, recErr := h.ws.recordChatTransportQualification(ctx, args[1], profile.InstalledVersion, profile.ProbeEvidenceID)
+		if recErr != nil {
+			line += " (not recorded: " + recErr.Error() + ")"
+		}
+		return verified + "\n" + line, nil
 	}
 
 	if len(args) == 0 || strings.EqualFold(args[0], "status") || strings.EqualFold(args[0], "probe") {
@@ -883,12 +906,18 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 		return "Usage: /ultra [status|start|stop|request]", nil
 	}
 	gate, executionEnabled := h.ws.ultraGate()
+	if status := buildUltraStatus(gate, executionEnabled); status != "" {
+		return status, nil
+	}
 
 	if !gate.Entitled() {
 		// Distinguish "you have not been granted this" from "we could not ask".
 		// Both leave the session in Standard, but only the first is answered by
 		// requesting one, and telling a user to request when the server is
 		// rate-limiting them sends them round a loop.
+		if err := gate.Failure(); err != nil {
+			return "ULTRA connection or lease renewal lost; session is running as Standard. Restart MARSHAL to reconnect.", nil
+		}
 		if err := h.ws.ultraError(); err != nil {
 			if errors.Is(err, cloud.ErrEntitlementUnavailable) {
 				return "ULTRA status: INACTIVE — this installation has no ULTRA entitlement.\n" +
@@ -898,7 +927,7 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 				"  The session is running as Standard. Try again shortly.", nil
 		}
 		return "ULTRA status: INACTIVE — no cryptographically verified entitlement is active.\n" +
-			"  Use /ultra request to ask an operator for one.", nil
+			"  Use /ultra request to request one from marshal.blackhat.uz.", nil
 	}
 
 	expiry, _ := gate.ExpiresAt()
@@ -923,6 +952,9 @@ func (h *CommandHandler) handleUltra(ctx context.Context, args []string) (string
 func (h *CommandHandler) startUltra() string {
 	gate, _ := h.ws.ultraGate()
 	if !gate.Entitled() {
+		if gate.Failure() != nil {
+			return "ULTRA connection or lease renewal lost; session is running as Standard. Restart MARSHAL to reconnect."
+		}
 		if err := h.ws.ultraError(); err != nil {
 			if errors.Is(err, cloud.ErrEntitlementUnavailable) {
 				return "ULTRA was not started: this installation has no ULTRA entitlement.\n" +
@@ -932,7 +964,7 @@ func (h *CommandHandler) startUltra() string {
 				"  The session is running as Standard. Try again shortly."
 		}
 		return "ULTRA was not started: no cryptographically verified entitlement is active.\n" +
-			"  Use /ultra request to ask an operator for one."
+			"  Use /ultra request to request one from marshal.blackhat.uz."
 	}
 	h.ws.setUltraExecution(true)
 	if !gate.Capability(cloud.CapabilityDelegation) {
@@ -957,33 +989,100 @@ func (h *CommandHandler) askStopUltra() string {
 // The reply is a status rather than a capability. "pending" means somebody has
 // been asked; nothing changes here until they answer, and the next session will
 // pick up the entitlement if they approved it.
+//
+// It routes through the persisted request service when one is composed, so the
+// slash command and the navigation surface observe the same durable attempt. An
+// outcome that could not be confirmed as sent is never reported as "not sent":
+// the attempt is recorded before the transport call, so an ambiguous timeout is
+// an unknown outcome, not a silent no-op.
 func (h *CommandHandler) requestUltra(ctx context.Context) (string, error) {
+	gate, execution := h.ws.ultraGate()
+	if status := buildUltraStatus(gate, execution); status != "" {
+		return status, nil
+	}
+	source := h.ws.controlSource()
+	if a, ok := source.Authority.(ultraRequestActionAuthority); ok {
+		return h.requestUltraTracked(ctx, source, a)
+	}
+	return h.requestUltraDirectTracked(ctx)
+}
+
+// requestUltraTracked submits through the persisted request service and reads
+// the durable attempt back before reporting, so an unknown server outcome is
+// never flattened into a "not sent" claim.
+func (h *CommandHandler) requestUltraTracked(ctx context.Context, source *ControlSource, a ultraRequestActionAuthority) (string, error) {
+	target, err := a.EntitlementRequestTarget(ctx)
+	if err != nil {
+		// The durable service is unreachable (no runtime, no request store).
+		// Fall back to the direct client so an operator can still ask.
+		return h.requestUltraDirectTracked(ctx)
+	}
+	envelope := app.CommandEnvelope{
+		ProjectID:       source.ProjectID,
+		SessionID:       target.WorkspaceSessionID,
+		TargetID:        model.SessionRecoveryDigest(target.Key),
+		ExpectedVersion: target.ExpectedGeneration,
+		IdempotencyKey:  uuid.NewString(),
+	}
+	_, _ = a.SubmitEntitlementRequest(ctx, envelope, target)
+	proof, found, readErr := a.PersistedEntitlementRequest(ctx)
+	if readErr != nil || !found || proof.LocalAttemptID == "" {
+		// No durable attempt was recorded; fall back to the direct client so
+		// the operator can still ask, rather than inventing an outcome.
+		return h.requestUltraDirectTracked(ctx)
+	}
+	return renderUltraRequestOutcome(proof), nil
+}
+
+// renderUltraRequestOutcome reports the durable attempt. "sending" and "unknown"
+// are preserved as unknown outcomes, never as "not sent".
+func renderUltraRequestOutcome(o cloud.RequestObservation) string {
+	switch o.State {
+	case "pending":
+		return "Requested ULTRA from marshal.blackhat.uz. Requests are auto-approved by the service.\n" +
+			"  Execution requires a connected, renewing signed lease; check back with /ultra."
+	case "active":
+		return "This installation is already entitled to ULTRA.\n" +
+			"  Restart MARSHAL to pick it up if /ultra still says otherwise."
+	case "accepted":
+		return "The Community Cloud accepted your request. Check back with /ultra."
+	case "refused", "denied":
+		return "The request was refused by the Community Cloud."
+	case "sending", "unknown":
+		return "Your request was recorded, but the Community Cloud's answer is unknown.\n" +
+			"  It may have been received; check back with /ultra."
+	default:
+		return "The server answered: " + o.State
+	}
+}
+
+// requestUltraDirectTracked uses the same durable client flow when no runtime
+// request service is composed. An ambiguous transport failure stays unknown.
+func (h *CommandHandler) requestUltraDirectTracked(ctx context.Context) (string, error) {
 	client, state, sessionID := h.ws.ultraRequester()
 	if client == nil {
 		return "The Community Cloud is not configured, so there is nobody to ask.\n" +
 			"  Set " + cloud.EnvEndpoint + " and start MARSHAL again.", nil
 	}
 
-	status, err := client.RequestEntitlement(ctx, state, sessionID)
+	dir, err := cloud.MachineStateDir("")
 	if err != nil {
-		// A refusal and an outage read differently because they call for
-		// different responses: one is an answer, the other is "try later".
-		if errors.Is(err, cloud.ErrUnreachable) {
-			return "Could not reach the Community Cloud. Your request was not sent.", nil
-		}
-		return "The request was refused: " + err.Error(), nil
+		return "Cannot record the ULTRA request locally; no request was sent.", nil
 	}
-
-	switch status {
-	case "pending":
-		return "Requested. An operator has been asked to approve ULTRA for this installation.\n" +
-			"  Nothing changes until they do; check back with /ultra.", nil
-	case "active":
-		return "This installation is already entitled to ULTRA.\n" +
-			"  Restart MARSHAL to pick it up if /ultra still says otherwise.", nil
-	default:
-		return "The server answered: " + status, nil
+	requests := cloud.NewRequestStore(dir)
+	previous, found, err := requests.Read(ctx, cloud.RequestKey{Endpoint: client.Endpoint(), InstallationID: state.InstallationID, SessionID: sessionID})
+	if err != nil {
+		return "Cannot read the recorded ULTRA request; no request was sent.", err
 	}
+	generation := int64(0)
+	if found {
+		generation = previous.Generation
+	}
+	observation, callErr := client.RequestEntitlementTracked(ctx, state, sessionID, requests, generation)
+	if observation.LocalAttemptID == "" {
+		return "Cannot record the ULTRA request locally; no request was sent.", callErr
+	}
+	return renderUltraRequestOutcome(observation), nil
 }
 
 // handleBackup handles snapshot backup creation and restoration.
@@ -1001,7 +1100,7 @@ func (h *CommandHandler) handleBackup(ctx context.Context, args []string) (strin
 		// Write a real, integrity-verified backup artifact. store.Backup writes
 		// to a temporary sibling, verifies it, and only then publishes it, so a
 		// reported path always names a file that exists and passed verification.
-		dir := filepath.Join(h.ws.workDir, ".marshal", "backups")
+		dir := filepath.Join(h.ws.workDir, statepath.DirName, "backups")
 		path := filepath.Join(dir, fmt.Sprintf("backup-%s.db", time.Now().UTC().Format("2006-01-02T150405.000000000Z")))
 		meta, err := h.ws.store.Backup(ctx, path)
 		if err != nil {
@@ -1017,7 +1116,14 @@ func (h *CommandHandler) handleBackup(ctx context.Context, args []string) (strin
 		// Restoring swaps the live database out from under an open session, so
 		// it is not performed from inside a running workspace. Verify the
 		// artifact here and direct the operator to the offline path.
-		meta, err := store.VerifyBackup(ctx, args[1], "", 0)
+		expectedProjectID := ""
+		if h.ws != nil {
+			expectedProjectID = h.ws.projectID
+			if expectedProjectID == "" && h.ws.runtime != nil {
+				expectedProjectID = h.ws.runtime.ProjectIdentity()
+			}
+		}
+		meta, err := store.VerifyBackup(ctx, args[1], expectedProjectID, 0)
 		if err != nil {
 			return "", fmt.Errorf("verify backup %s: %w; use /backup restore <backup_path> with an existing verified backup file", args[1], err)
 		}
@@ -1191,13 +1297,13 @@ func (h *CommandHandler) handleExport(ctx context.Context, args []string) (strin
 		return "", fmt.Errorf("encode evidence bundle: %w", err)
 	}
 
-	dir := filepath.Join(h.ws.workDir, ".marshal", "evidence")
+	dir := filepath.Join(h.ws.workDir, statepath.DirName, "evidence")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("create evidence directory: %w; check that .marshal/evidence is a writable directory", err)
+		return "", fmt.Errorf("create evidence directory: %w; check that %s/evidence is a writable directory", err, statepath.DirName)
 	}
 	path := filepath.Join(dir, b.BundleID+".json")
 	if err := os.WriteFile(path, payload, 0o600); err != nil {
-		return "", fmt.Errorf("write evidence bundle: %w; check that .marshal/evidence is a writable directory", err)
+		return "", fmt.Errorf("write evidence bundle: %w; check that %s/evidence is a writable directory", err, statepath.DirName)
 	}
 
 	return fmt.Sprintf("Evidence bundle written:\n  Path:       %s\n  Goal:       %s [rev %d]\n  Critical:   %d claim(s)\n  Evidence:   %d ref(s)\n  Unresolved: %d\n  Digest:     %s",

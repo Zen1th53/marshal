@@ -100,3 +100,10 @@ func TestEngineObservabilityRecordsBoundedQuorumMetric(t *testing.T) {
 		t.Fatalf("metrics=%+v", snapshot)
 	}
 }
+
+func TestEngineRejectsSyntheticTaskDigest(t *testing.T) {
+	result, err := NewEngine(nil).Evaluate(context.Background(), nil, nil, Provenance{ChangeID: "task", ContentDigest: "head-digest-task"})
+	if !errors.Is(err, ErrInvalidProvenance) || result.Satisfied {
+		t.Fatalf("fabricated task digest qualified: %+v %v", result, err)
+	}
+}

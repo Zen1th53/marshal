@@ -53,6 +53,34 @@ func TestMarshalChatProposalAcceptsTheMarshalsOwnProvider(t *testing.T) {
 	}
 }
 
+func TestMarshalChatProposalAcceptsOnlySingleJSONCodeFence(t *testing.T) {
+	fakeWorkerOnPath(t, "codex")
+	s, _ := marshalFixture(t, 1)
+	proposal := `{"tasks":[{"id":"a","title":"t","criteria":["c"],"paths":["a.txt"],"depends_on":[],"worker":"codex","checks":[{"command":"true","criteria":["c"]}]}]}`
+	for _, tc := range []struct {
+		name  string
+		reply string
+		ok    bool
+	}{
+		{"bare JSON", proposal, true},
+		{"fenced json", "```json\n" + proposal + "\n```", true},
+		{"fenced without tag", "```\n" + proposal + "\n```", true},
+		{"prose plus fence", "Here is the plan:\n```json\n" + proposal + "\n```", false},
+		{"two fences", "```json\n" + proposal + "\n```\n```json\n" + proposal + "\n```", false},
+		{"unterminated fence", "```json\n" + proposal, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := s.DraftFromProposal([]byte(tc.reply), "claude")
+			if tc.ok && err != nil {
+				t.Fatalf("rejected valid reply: %v", err)
+			}
+			if !tc.ok && err == nil {
+				t.Fatal("accepted reply that is not one fenced block")
+			}
+		})
+	}
+}
+
 func TestMarshalChatProposalRefusesWhatTheBriefingDidNotAskFor(t *testing.T) {
 	fakeWorkerOnPath(t, "codex")
 	s, _ := marshalFixture(t, 1)

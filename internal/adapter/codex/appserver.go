@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io"
 	"os"
 	"os/exec"
@@ -233,7 +234,7 @@ func (s *AppServer) StartSession(ctx context.Context, request adapter.Request) (
 // GovernedCodexHomeDir returns the path to MARSHAL's managed config-free CODEX_HOME.
 func GovernedCodexHomeDir() string {
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		return filepath.Join(home, ".marshal", "codex_appserver")
+		return filepath.Join(home, statepath.DirName, "codex_appserver")
 	}
 	return filepath.Join(os.TempDir(), fmt.Sprintf("marshal-codex-appserver-%d", os.Getuid()))
 }

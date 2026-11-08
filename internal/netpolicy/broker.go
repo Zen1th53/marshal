@@ -36,6 +36,7 @@ type CredentialBroker struct {
 	upstreamRoots                                              *x509.CertPool
 	certs                                                      map[string]tls.Certificate
 	subscription                                               *subscriptionSource
+	nativeSource                                               nativeOAuthSource
 	expiryAlerted                                              bool
 }
 
@@ -45,8 +46,6 @@ func brokerProfile(provider, model string) (envKey, header, host string) {
 		return "OPENAI_API_KEY", "Authorization", "api.openai.com"
 	case "claude":
 		return "ANTHROPIC_API_KEY", "X-Api-Key", "api.anthropic.com"
-	case "gemini":
-		return "GEMINI_API_KEY", "X-Goog-Api-Key", "generativelanguage.googleapis.com"
 	case "opencode":
 		switch strings.SplitN(model, "/", 2)[0] {
 		case "openai":
@@ -59,21 +58,21 @@ func brokerProfile(provider, model string) (envKey, header, host string) {
 			return "DEEPSEEK_API_KEY", "Authorization", "api.deepseek.com"
 		}
 	}
-	return "", "", ""
+	return privateCredentialProfile(provider, model)
 }
 
 // LoadCredentialBroker is called only after project operator consent. No host
 // auth file is ever copied or written. Codex refresh uses a fixed host CLI
 // protocol; Claude only rechecks sign-in maintained by the native host session.
 func LoadCredentialBroker(provider, model string) (*CredentialBroker, error) {
+	if b, handled, err := privateNativeBroker(provider, model); handled {
+		return b, err
+	}
 	if provider == "opencode" && model == "" {
 		model = os.Getenv("MARSHAL_OPENCODE_MODEL")
 	}
 	key, _, _ := brokerProfile(provider, model)
 	secret := os.Getenv(key)
-	if provider == "gemini" && secret == "" {
-		secret = os.Getenv("GOOGLE_API_KEY")
-	}
 	if (provider == "codex" || provider == "claude") && secret == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -193,14 +192,16 @@ func (b *CredentialBroker) Prepare(home, sandboxHome string, roots []byte) ([]st
 	}
 	target := filepath.Join(sandboxHome, b.scratchName) + string(os.PathSeparator)
 	env := []string{"SSL_CERT_FILE=" + target + "roots.pem", "NODE_EXTRA_CA_CERTS=" + target + "ca.pem", "CODEX_CA_CERTIFICATE=" + target + "ca.pem"}
-	if b.subscription == nil {
+	if b.nativeSource != nil {
+		env = append(env, "GEMINI_API_KEY=", "GOOGLE_API_KEY=")
+		if err := b.nativeSource.prepare(home, b); err != nil {
+			return nil, err
+		}
+	} else if b.subscription == nil {
 		env = append(env, b.envKey+"="+b.placeholder)
 	} else {
 		// Clear the synthetic honeypot API key to select subscription auth.
 		env = append(env, b.envKey+"=")
-	}
-	if b.provider == "gemini" {
-		env = append(env, "GOOGLE_API_KEY="+b.placeholder)
 	}
 	if b.provider == "codex" {
 		authDir := filepath.Join(dir, "codex")

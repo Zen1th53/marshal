@@ -167,7 +167,8 @@ func (s *MemoryService) ProposeConsolidation(ctx context.Context, principal auth
 	if err := s.linkPriorConsolidationProposals(ctx, principal, &candidate, req.Mode, signature, sourceIDs); err != nil {
 		return ConsolidationResult{}, err
 	}
-	if err := security.NewFirewall(security.FirewallConfig{}).ScanRecord(ctx, candidate); err != nil {
+	candidate, _, err = security.NewFirewall(security.FirewallConfig{}).AdmitRecord(ctx, candidate)
+	if err != nil {
 		return ConsolidationResult{}, err
 	}
 

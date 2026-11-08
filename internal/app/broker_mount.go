@@ -26,7 +26,7 @@ func cliInstallationMount(binary string) (string, model.Bind, error) {
 		return "", model.Bind{}, err
 	}
 	protected := []string{home}
-	for _, name := range []string{".codex", ".claude", ".gemini", ".opencode", ".config", ".aws", ".ssh", ".local/share/keyrings", ".local/share/opencode"} {
+	for _, name := range []string{".codex", ".claude", ".gemini", ".gemini/antigravity-cli", ".gemini/antigravity-ide", ".opencode", ".config", ".aws", ".ssh", ".local/share/keyrings", ".local/share/opencode"} {
 		protected = append(protected, filepath.Join(home, name))
 	}
 	for _, key := range []string{"CODEX_HOME", "CLAUDE_CONFIG_DIR", "XDG_CONFIG_HOME"} {

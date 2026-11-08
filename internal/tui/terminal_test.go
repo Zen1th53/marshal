@@ -61,3 +61,101 @@ func TestParseKey(t *testing.T) {
 		})
 	}
 }
+
+func TestIsNoColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	if IsNoColor() {
+		t.Errorf("IsNoColor() = true with empty NO_COLOR")
+	}
+
+	t.Setenv("NO_COLOR", "1")
+	if !IsNoColor() {
+		t.Errorf("IsNoColor() = false with NO_COLOR=1")
+	}
+
+	t.Setenv("NO_COLOR", "true")
+	if !IsNoColor() {
+		t.Errorf("IsNoColor() = false with NO_COLOR=true")
+	}
+}
+
+func TestIsUTF8(t *testing.T) {
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LC_CTYPE", "")
+	t.Setenv("LANG", "en_US.UTF-8")
+	if !IsUTF8() {
+		t.Errorf("IsUTF8() = false with LANG=en_US.UTF-8")
+	}
+
+	t.Setenv("LANG", "C")
+	if IsUTF8() {
+		t.Errorf("IsUTF8() = true with LANG=C")
+	}
+
+	t.Setenv("LC_ALL", "C.UTF-8")
+	if !IsUTF8() {
+		t.Errorf("IsUTF8() = false with LC_ALL=C.UTF-8 overriding LANG=C")
+	}
+}
+
+func TestIsUTF8LocalePrecedence(t *testing.T) {
+	cases := []struct {
+		lcAll, lcCtype, lang string
+		want                 bool
+	}{
+		{"C", "", "en_US.UTF-8", false},
+		{"", "POSIX", "en_US.UTF-8", false},
+		{"", "", "en_US.ISO-8859-1", false},
+		{"", "", "en_US.utf8", true},
+		{"", "de_DE.UTF-8", "C", true},
+		{"", "", "", true},
+	}
+	for _, c := range cases {
+		t.Setenv("LC_ALL", c.lcAll)
+		t.Setenv("LC_CTYPE", c.lcCtype)
+		t.Setenv("LANG", c.lang)
+		if got := IsUTF8(); got != c.want {
+			t.Errorf("IsUTF8(LC_ALL=%q LC_CTYPE=%q LANG=%q) = %v, want %v", c.lcAll, c.lcCtype, c.lang, got, c.want)
+		}
+	}
+}
+
+func TestResolveThemeHonoursNoColorAndLocale(t *testing.T) {
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LC_CTYPE", "")
+	t.Setenv("LANG", "en_US.UTF-8")
+	t.Setenv("NO_COLOR", "")
+	if mode, uni := ResolveTheme(ThemeDefault); mode != ThemeDefault || !uni {
+		t.Fatalf("plain UTF-8 terminal = (%s, %v), want (default, true)", mode, uni)
+	}
+	t.Setenv("NO_COLOR", "1")
+	if mode, uni := ResolveTheme(ThemeDefault); mode != ThemeNoColor || !uni {
+		t.Fatalf("NO_COLOR on UTF-8 = (%s, %v), want (no-color, true)", mode, uni)
+	}
+	if mode, _ := ResolveTheme(ThemeHighContrast); mode != ThemeHighContrast {
+		t.Fatalf("explicit --theme must survive NO_COLOR, got %s", mode)
+	}
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("LANG", "C")
+	if mode, uni := ResolveTheme(ThemeDefault); mode != ThemeDefault || uni {
+		t.Fatalf("LANG=C = (%s, %v), want (default, false)", mode, uni)
+	}
+	// The --no-color flag wins whatever the environment says.
+	t.Setenv("LANG", "en_US.UTF-8")
+	if mode, uni := ResolveTheme(ThemeNoColor); mode != ThemeNoColor || uni {
+		t.Fatalf("--no-color = (%s, %v), want (no-color, false)", mode, uni)
+	}
+}
+
+func TestWorkspaceSetThemeReadsEnvironment(t *testing.T) {
+	t.Setenv("LC_ALL", "C")
+	t.Setenv("NO_COLOR", "1")
+	w := NewWorkspace(nil, "project", "session")
+	w.SetTheme(ThemeDefault, false)
+	if w.theme.Mode != ThemeNoColor || w.theme.Unicode {
+		t.Fatalf("SetTheme under NO_COLOR + LC_ALL=C = (%s, unicode=%v)", w.theme.Mode, w.theme.Unicode)
+	}
+	if w.theme.Success != "" || w.theme.BoxHoriz != "-" {
+		t.Fatalf("theme still colours or uses Unicode boxes: %q %q", w.theme.Success, w.theme.BoxHoriz)
+	}
+}

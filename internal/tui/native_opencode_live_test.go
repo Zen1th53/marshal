@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 // writeOpenCodeStore builds a store in the shape OpenCode keeps one.
@@ -194,7 +195,7 @@ func TestOpenCodeLiveSharesTheSeenIndexWithTheExport(t *testing.T) {
 	w := newNativeHistoryWatch(dir, root)
 	w.openCodeDB = path
 	w.captureTools = true
-	w.indexPath = filepath.Join(t.TempDir(), "index.json")
+	w.indexPath = statepath.Path(w.root, "opencode", "history-index.json")
 	imported := 0
 	w.consume = func(tr importer.SessionTranscript) error {
 		imported += len(tr.Messages)

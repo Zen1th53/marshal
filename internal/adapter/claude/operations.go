@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -71,7 +72,7 @@ type DoctorReport struct {
 // reading or corrupting the operator's own Claude Code state.
 func GovernedClaudeHomeDir() string {
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		return filepath.Join(home, ".marshal", "claude_session")
+		return filepath.Join(home, statepath.DirName, "claude_session")
 	}
 	return filepath.Join(os.TempDir(), fmt.Sprintf("marshal-claude-session-%d", os.Getuid()))
 }

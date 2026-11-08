@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,7 +107,7 @@ func TestAdaptersAndProbeCLI(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	code = Execute(context.Background(), ".", []string{"--json", "adapter", "probe", "gemini"}, strings.NewReader(""), &stdout, &stderr)
+	code = Execute(context.Background(), ".", []string{"--json", "adapter", "probe", "agy"}, strings.NewReader(""), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("adapter probe code=%d stderr=%s", code, stderr.String())
 	}
@@ -118,12 +119,30 @@ func TestMCPAndA2AStatusCLI(t *testing.T) {
 	if code != 0 || !strings.Contains(stdout.String(), "2026-07-28") {
 		t.Fatalf("mcp status code=%d stdout=%s", code, stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "providers") {
+		t.Fatalf("mcp status JSON should include providers: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Execute(context.Background(), ".", []string{"mcp", "status"}, strings.NewReader(""), &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "Provider connections:") {
+		t.Fatalf("mcp status text should include Provider connections: code=%d stdout=%s", code, stdout.String())
+	}
 
 	stdout.Reset()
 	stderr.Reset()
 	code = Execute(context.Background(), ".", []string{"--json", "a2a", "status"}, strings.NewReader(""), &stdout, &stderr)
 	if code != 0 || !strings.Contains(stdout.String(), "1.0.0") {
 		t.Fatalf("a2a status code=%d stdout=%s", code, stdout.String())
+	}
+}
+
+func TestRetiredGeminiCLIIsNotProbed(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Execute(context.Background(), ".", []string{"--json", "adapter", "probe", "gemini"}, strings.NewReader(""), &stdout, &stderr)
+	if code == 0 || !strings.Contains(stdout.String(), "unsupported adapter") {
+		t.Fatalf("retired adapter accepted: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 }
 
@@ -206,7 +225,7 @@ func TestPolicyTestCLIPassAndFailExitCodes(t *testing.T) {
 	if code := Execute(context.Background(), repo.Path(), []string{"policy", "test", failFile}, strings.NewReader(""), &stdout, &stderr); code == 0 {
 		t.Fatalf("fail unexpectedly returned zero stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
-	if _, err := os.Stat(filepath.Join(repo.Path(), ".marshal")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(repo.Path(), statepath.DirName)); !os.IsNotExist(err) {
 		t.Fatalf("read-only policy test created runtime state: err=%v", err)
 	}
 }
@@ -292,8 +311,8 @@ func policyTestFixtureWithDefault(t *testing.T, defaultEffect, expected string) 
 }
 
 func TestCLIDevelopmentVersion(t *testing.T) {
-	if Version != "dev" {
-		t.Fatalf("local build version = %q, want dev", Version)
+	if Version != "v0.2.0" {
+		t.Fatalf("local build version = %q, want v0.2.0", Version)
 	}
 }
 
@@ -305,7 +324,12 @@ func TestCLIVersionCommand(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected code 0, got %d, stderr: %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "MARSHAL "+Version+" (") {
+	if tui.Edition() == "Marshal" {
+		if !strings.Contains(stdout.String(), "Marshal") {
+			t.Fatalf("Marshal version output omits its edition: %s", stdout.String())
+		}
+	}
+	if !strings.Contains(stdout.String(), "Marshal "+Version+" (") {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), fmt.Sprintf("schema: v%d, constitution: %s", store.LatestSchemaVersion, constitutionVersionString())) {
@@ -315,10 +339,9 @@ func TestCLIVersionCommand(t *testing.T) {
 		t.Fatalf("TUI version %q differs from CLI version %q", tui.BuildVersion, Version)
 	}
 	screen := tui.RenderStyledScreen(tui.UIState{}, tui.NewTheme(tui.ThemeNoColor, false, false), 160)
-	if !strings.Contains(screen, "MARSHAL "+Version+" CONTROL PLANE") {
+	if !strings.Contains(screen, "Marshal "+Version+" CONTROL PLANE") {
 		t.Fatalf("TUI banner does not report CLI version %q: %s", Version, screen)
 	}
-
 	stdout.Reset()
 	stderr.Reset()
 	code = Run(ctx, []string{"--json", "version"}, nil, &stdout, &stderr)
@@ -327,6 +350,7 @@ func TestCLIVersionCommand(t *testing.T) {
 	}
 	var result struct {
 		Version             string `json:"version"`
+		Edition             string `json:"edition"`
 		SchemaVersion       int    `json:"schema_version"`
 		ConstitutionVersion string `json:"constitution_version"`
 	}
@@ -335,6 +359,12 @@ func TestCLIVersionCommand(t *testing.T) {
 	}
 	if result.Version != Version || result.SchemaVersion != store.LatestSchemaVersion || result.ConstitutionVersion != constitutionVersionString() {
 		t.Fatalf("unexpected json stdout: %s", stdout.String())
+	}
+	if tui.Edition() == "Marshal" && result.Edition != "Marshal" {
+		t.Fatalf("JSON version output edition = %q, want Marshal", result.Edition)
+	}
+	if tui.Edition() != "Marshal" && result.Edition != "" {
+		t.Fatalf("default JSON version output changed: %s", stdout.String())
 	}
 }
 

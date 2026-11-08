@@ -573,7 +573,11 @@ func TestRealCanonicalValuesReachTheScreen(t *testing.T) {
 		t.Fatalf("real runtime values did not reach the screen:\n%s", out)
 	}
 
-	// Cloud state shows the granted capability, from the gate.
+	// Cloud state shows the granted capability, from the gate. Extreme has no
+	// Cloud: its screens say so instead.
+	if editionExtreme {
+		return
+	}
 	if err := v.Nav().DeepLink("CTUI-0159"); err != nil {
 		t.Fatalf("deep link to lease capabilities: %v", err)
 	}
@@ -988,5 +992,30 @@ func TestStatusSurvivesUntilItHasBeenSeen(t *testing.T) {
 	out := lines(v, 100, 30)
 	if !strings.Contains(out, "refreshed") {
 		t.Fatalf("the refresh status never reached a frame:\n%s", out)
+	}
+}
+
+// A background refresh that lands after an action's refusal must not write
+// "refreshed" over it: the refusal is the only place its reason is shown
+// (e2e 2026-11-06, Control / Budgets / Handoff limit).
+func TestRefreshKeepsARefusalStatus(t *testing.T) {
+	ctx := context.Background()
+	v := testView(t)
+	v.AttachSource(&StatusSource{Now: fixedClock(), Runtime: fakeRuntime{id: "i"}}, nil)
+	v.OpenAndWait(ctx)
+
+	const refusal = "cannot start handoff limit: there is no goal yet"
+	v.mu.Lock()
+	v.status, v.statusSeen = refusal, false
+	v.mu.Unlock()
+	v.Refresh(ctx)
+	out := lines(v, 120, 30)
+	if !strings.Contains(out, refusal) || strings.Contains(out, "→ refreshed") {
+		t.Fatalf("a refresh replaced the refusal:\n%s", out)
+	}
+	for _, s := range []string{"", "refreshing…", "reading canonical state…", "refreshed"} {
+		if !refreshStatusReplaceable(s) {
+			t.Fatalf("refresh progress %q must be replaceable", s)
+		}
 	}
 }

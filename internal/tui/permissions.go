@@ -1,15 +1,21 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/permission"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
+	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
+	"github.com/Zen1th53/marshal/internal/tui/board/widgets/inbox"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,8 +23,10 @@ import (
 )
 
 type permissionState struct {
+	build                  buildPermissionState
 	runProposals           map[string]marshalProposal
 	queue                  permission.Queue
+	inbox                  []permission.Request
 	mu                     sync.Mutex
 	ready                  bool
 	running                bool
@@ -28,9 +36,22 @@ type permissionState struct {
 	planApprovalPending    bool
 	planApprovalRunID      string
 	planApprovalOccurrence string
+	// hostCapLive holds the lane-cap requests host-watch still stands
+	// behind; an accepted one is applied only while it is here.
+	hostCapLive map[string]bool
 }
 
 func (w *Workspace) queuePermission(req permission.Request) {
+	_ = w.queuePermissionChecked(req)
+}
+
+func (w *Workspace) queuePermissionChecked(req permission.Request) error {
+	var sourceErr error
+	req, sourceErr = w.bindProposalMCPRequest(req)
+	if sourceErr != nil {
+		w.RecordActivity("Proposal source binding failed: " + sourceErr.Error())
+		return sourceErr
+	}
 	if req.ProposalID != "" && w.store != nil {
 		data, err := json.Marshal(req)
 		if err == nil {
@@ -38,7 +59,7 @@ func (w *Workspace) queuePermission(req permission.Request) {
 		}
 		if err != nil {
 			w.RecordActivity("Proposal admission failed: " + err.Error())
-			return
+			return err
 		}
 	}
 
@@ -48,13 +69,13 @@ func (w *Workspace) queuePermission(req permission.Request) {
 	}
 	if w.permissions.outstanding[req.Key()] {
 		w.permissions.mu.Unlock()
-		return
+		return nil
 	}
 	w.permissions.outstanding[req.Key()] = true
 	w.permissions.queue.Add(req)
 	defer w.permissions.mu.Unlock()
 	if w.permissions.running {
-		return
+		return nil
 	}
 	// Without a terminal there is no decision surface. Keep requests pending;
 	// InitTmux starts the queue after publishing the terminal identity.
@@ -62,6 +83,7 @@ func (w *Workspace) queuePermission(req permission.Request) {
 		w.permissions.running = true
 		w.startBackground(context.Background(), w.runPermissionQueue)
 	}
+	return nil
 }
 
 // startPermissionQueue is called only after terminal initialization. Requests
@@ -122,7 +144,18 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 			continue
 		}
 		var live []permission.Request
+		w.registerPrivateProcess05Questions(ctx, batch)
 		for _, req := range batch {
+			if w.routeBuildPermission(ctx, req) {
+				continue
+			}
+			if w.boardVisible() {
+				w.permissions.mu.Lock()
+				w.permissions.inbox = append(w.permissions.inbox, req)
+				w.permissions.mu.Unlock()
+				w.requestRepaint()
+				continue
+			}
 			if deadline, ok := deadlines[req.Key()]; ok && !time.Now().Before(deadline) {
 				_ = w.decidePermission(ctx, req, false, "operator popup")
 				delete(deadlines, req.Key())
@@ -207,6 +240,7 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 				w.mu.Lock()
 				w.state.LastOutput = "Permission decision failed: " + err.Error()
 				w.mu.Unlock()
+				w.addNote("Permission decision failed: "+err.Error(), true)
 			}
 			decision := "denied"
 			if allow {
@@ -215,6 +249,81 @@ func (w *Workspace) runPermissionQueue(ctx context.Context) {
 			w.RecordActivity("Permission request resolved: " + req.Object + " — " + decision)
 		}
 	}
+}
+
+func (w *Workspace) boardVisible() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.screen != nil && (w.state.Marshal != nil || w.homeBoard) && !w.boardClassic
+}
+
+func (w *Workspace) boardInbox() []boardmodel.InboxItem {
+	w.permissions.mu.Lock()
+	requests := append([]permission.Request(nil), w.permissions.inbox...)
+	w.permissions.mu.Unlock()
+	items := make([]boardmodel.InboxItem, 0, len(requests))
+	for _, req := range requests {
+		items = append(items, boardmodel.NewInboxItem(req))
+	}
+	slices.SortStableFunc(items, func(a, b boardmodel.InboxItem) int {
+		if a.Gate != b.Gate {
+			if a.Gate == boardmodel.GateTyped {
+				return -1
+			}
+			return 1
+		}
+		return cmp.Compare(inboxBlastRank(b.Request.Scope), inboxBlastRank(a.Request.Scope))
+	})
+	return items
+}
+
+func inboxBlastRank(scope string) int {
+	if strings.Contains(scope, "project") {
+		return 2
+	}
+	if strings.Contains(scope, "run") {
+		return 1
+	}
+	return 0
+}
+
+func (w *Workspace) decideInbox(ctx context.Context, d inbox.Decision) error {
+	w.permissions.mu.Lock()
+	var req permission.Request
+	found := false
+	for _, pending := range w.permissions.inbox {
+		if pending.Key() == d.RequestKey {
+			req, found = pending, true
+			break
+		}
+	}
+	w.permissions.mu.Unlock()
+	if !found {
+		return fmt.Errorf("permission request is no longer pending")
+	}
+	item := boardmodel.NewInboxItem(req)
+	if d.Canonical != item.Canonical || d.Blast != inbox.Blast(item) || d.Allow != (d.Action == 'a' || d.Action == 'A') {
+		return fmt.Errorf("permission confirmation no longer matches the pending request")
+	}
+	if d.Action != 'a' && d.Action != 'A' && d.Action != 'd' && d.Action != 'r' {
+		return fmt.Errorf("permission action is not a decision")
+	}
+	result := "deny"
+	if d.Allow {
+		result = "allow"
+	}
+	source := fmt.Sprintf("operator inbox; id=%s; blast=%s; action=%c; result=%s", d.Canonical, strings.ReplaceAll(d.Blast, "\n", " "), d.Action, result)
+	if d.Reason != "" {
+		source += "; reason=" + strings.ReplaceAll(d.Reason, "\n", " ")
+	}
+	if err := w.decidePermission(ctx, req, d.Allow, source); err != nil {
+		return err
+	}
+	w.permissions.mu.Lock()
+	w.permissions.inbox = slices.DeleteFunc(w.permissions.inbox, func(p permission.Request) bool { return p.Key() == req.Key() })
+	w.permissions.mu.Unlock()
+	w.requestRepaint()
+	return nil
 }
 
 // Large memory batches stay pending for per-entry operator review. They never
@@ -237,11 +346,20 @@ func partitionPermissionBatch(batch []permission.Request) (popup, review []permi
 }
 
 func (w *Workspace) decidePermission(ctx context.Context, req permission.Request, allow bool, source string) (err error) {
+	finish, guardErr := w.beginProposalMCPApply(req)
+	if guardErr != nil {
+		return guardErr
+	}
+	defer func() { err = errors.Join(err, finish(allow, err)) }()
+	// The native application guard owns its authority mutex until finish.
+	// Nested readiness reads must reuse that exact lease, not acquire it again.
+	ctx, expireHeldLease := w.privateProposalMCPApplyContext(ctx, req)
+	defer expireHeldLease()
 	defer func() {
 		w.permissions.mu.Lock()
 		delete(w.permissions.outstanding, req.Key())
 		w.permissions.mu.Unlock()
-		if (req.ProposalID != "" || req.Kind == "memory") && w.store != nil {
+		if req.SourceLaunch == "" && (req.ProposalID != "" || req.Kind == "memory") && w.store != nil {
 			outcome := "declined"
 			if allow {
 				outcome = "applied"
@@ -271,6 +389,9 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 	if err := a.runtime.CommandPermission(ctx, req, allow, source); err != nil {
 		return err
 	}
+	if req.Kind == app.MarshalToolPermissionKind {
+		return w.answerNativeChatAsk(ctx, req, allow, source)
+	}
 	if !allow && req.Kind == "marshal-command" && strings.HasPrefix(req.TaskID, "reserved:") {
 		m := w.marshalSession()
 		m.mu.Lock()
@@ -299,6 +420,19 @@ func (w *Workspace) decidePermission(ctx context.Context, req permission.Request
 	}
 	return nil
 }
+
+func (w *Workspace) decideReadRevoke(ctx context.Context, folder string) error {
+	control := w.controlSource()
+	if control == nil {
+		return errNoRuntime
+	}
+	a, _ := control.Authority.(*runtimeControlAuthority)
+	if a == nil || a.runtime == nil || a.localControl == nil {
+		return errNoRuntime
+	}
+	return a.runtime.CommandRevokeReadGrant(a.localControl.Context(ctx), folder)
+}
+
 func (h *CommandHandler) handlePermission(ctx context.Context, args []string) (string, error) {
 	if len(args) == 1 && args[0] == "status" {
 		return "Permission status is not available in this view. Use /egress status for governed network grants; /permission read and /permission credential record read and credential decisions.", nil
@@ -320,6 +454,9 @@ func (h *CommandHandler) handlePermission(ctx context.Context, args []string) (s
 		}
 		if args[1] == "request" {
 			h.ws.queuePermission(req)
+			if buildMarker != "" {
+				return "Credential broker permission queued. The Marshal will decide the requested project scope. Retry the governed task after the decision.", nil
+			}
 			return "Credential broker permission queued. A allows; every other key denies. Retry the governed task after allowing.", nil
 		}
 		if err := h.ws.decidePermission(ctx, req, false, "operator revoke"); err != nil {
@@ -331,10 +468,43 @@ func (h *CommandHandler) handlePermission(ctx context.Context, args []string) (s
 		}
 		return credentialRevocationMessage(req.Object, state), nil
 	}
-	if len(args) < 3 || args[0] != "read" || (args[1] != "allow" && args[1] != "deny") {
-		return "Usage: /permission read <allow|deny> <exact absolute folder> | /permission credential <request|revoke|status> <codex|claude|gemini|opencode>", nil
+	if len(args) < 3 || args[0] != "read" || (args[1] != "allow" && args[1] != "deny" && args[1] != "revoke" && args[1] != "list") {
+		return "Usage: /permission read <allow|deny|revoke|list> <exact absolute folder> | /permission credential <request|revoke|status> <codex|claude|opencode" + privateCredentialProviderHelp() + ">", nil
 	}
-	req := permission.Request{Kind: "read", Object: strings.Join(args[2:], " "), Scope: "this session only, read-only", Who: "operator", Reason: "operator read decision"}
+	folder := strings.Join(args[2:], " ")
+	if !filepath.IsAbs(folder) {
+		return "An exact absolute folder is required.", nil
+	}
+	if h.ws.runtime == nil {
+		return "", errNoRuntime
+	}
+	if args[1] == "list" {
+		grants, err := h.ws.runtime.OperatorReadGrants(ctx)
+		if err != nil {
+			return "", err
+		}
+		canonical := filepath.Clean(folder)
+		if resolved, evalErr := filepath.EvalSymlinks(canonical); evalErr == nil {
+			canonical = resolved
+		}
+		for _, grant := range grants {
+			if grant.Folder == canonical {
+				decision := "deny"
+				if grant.Allowed {
+					decision = "allow"
+				}
+				return "Read decision " + decision + ": " + grant.Folder, nil
+			}
+		}
+		return "Read decision unset: " + canonical, nil
+	}
+	if args[1] == "revoke" {
+		if err := h.ws.decideReadRevoke(ctx, folder); err != nil {
+			return "", err
+		}
+		return "Read decision revoked: " + folder, nil
+	}
+	req := permission.Request{Kind: "read", Object: folder, Scope: "this project, until revoked, read-only", Who: "operator", Reason: "operator read decision"}
 	if err := h.ws.decidePermission(ctx, req, args[1] == "allow", "operator command"); err != nil {
 		return "", err
 	}
@@ -358,7 +528,7 @@ func (h *CommandHandler) handleContinue(ctx context.Context, args []string) (str
 		}
 		h.ws.permissions.continuations[folder] = args[0]
 		h.ws.permissions.mu.Unlock()
-		h.ws.queuePermission(permission.Request{Kind: "read", Object: folder, Scope: "this session only, read-only", Who: "Marshal", Reason: "Continue earlier " + args[0] + " work in this project"})
+		h.ws.queuePermission(permission.Request{Kind: "read", Object: folder, Scope: "this project, until revoked, read-only", Who: "Marshal", Reason: "Continue earlier " + args[0] + " work in this project"})
 		return "Read request queued. After allowing it, project-scoped earlier work is delivered to the Marshal inbox automatically. Enter, Escape and timeout deny.", nil
 	}
 	return h.ws.continueEarlierWork(ctx, args[0], folder)
@@ -377,7 +547,7 @@ func (w *Workspace) continueEarlierWork(ctx context.Context, provider, folder st
 	if dropped {
 		b.WriteString("Secrets were dropped.\n")
 	}
-	b.WriteString("Summarise completed work, unfinished work, decisions and conventions from the supplied project-scoped data. Use the candidate IDs and provenance supplied above; propose each candidate by atomically writing {\"action\":\"memory\",\"id\":\"candidate-id\"} to a fresh .marshal/proposals/<unique-request-id>.json file; do not print the payload in chat. MARSHAL will show a popup; press A to apply.\n")
+	b.WriteString(strings.ReplaceAll("Summarise completed work, unfinished work, decisions and conventions from the supplied project-scoped data. Use the candidate IDs and provenance supplied above; propose each candidate by atomically writing {\"action\":\"memory\",\"id\":\"candidate-id\"} to a fresh .marshal/proposals/<unique-request-id>.json file; do not print the payload in chat. MARSHAL will show a popup; press A to apply.\n", ".marshal/", statepath.DirName+"/"))
 	view, err := openInboxView(w.runtime.ProjectRoot(), "marshal", false)
 	if err != nil {
 		return "", err
@@ -421,7 +591,7 @@ func (h *CommandHandler) handleMemoryReview(ctx context.Context, args []string) 
 		if end < len(candidates) {
 			fmt.Fprintf(&b, "and %d more · /memory review %d\n", len(candidates)-end, page+1)
 		}
-		b.WriteString("Each entry requires /memory allow <id> or /memory deny <id>; pending entries are not stored.\n")
+		b.WriteString("Each entry requires /memory allow <id> or /memory deny <id>; candidates remain inactive until approved.\n")
 		return b.String(), nil
 	}
 	if len(args) == 2 && (args[0] == "allow" || args[0] == "deny" || args[0] == "request") {

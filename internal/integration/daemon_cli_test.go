@@ -23,8 +23,9 @@ func TestDaemonCLIEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	fixtureAdapter, fixture := observeLegacyIntegrationAdapter(fakeCommitAdapter{})
 	runtime, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{
-		Adapters: map[string]adapter.Adapter{"fake": fakeCommitAdapter{}},
+		Adapters: map[string]adapter.Adapter{"fake": fixtureAdapter},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -46,6 +47,10 @@ func TestDaemonCLIEndToEnd(t *testing.T) {
 	runCLI(t, repo.Path(), "task", "import", taskFile)
 	runCLI(t, repo.Path(), "task", "claim", "TASK-001")
 	runCLI(t, repo.Path(), "task", "release", "TASK-001")
+	fixture.ObserveTask(t, runtime, "TASK-001")
+	if fixture.RequireCLIRefusal(t, runtime, repo.Path(), "TASK-001", []string{"--json", "run", "TASK-001", "--adapter", "fake", "--revision", "2"}) {
+		return
+	}
 	runOutput := runCLI(t, repo.Path(), "--json", "run", "TASK-001", "--adapter", "fake", "--revision", "2")
 	var result app.RunResult
 	decodeOutput(t, runOutput, &result)
@@ -80,7 +85,8 @@ func TestRuntimeFakeAdapterExecution(t *testing.T) {
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{Adapters: map[string]adapter.Adapter{"fake": fakeCommitAdapter{}}})
+	fixtureAdapter, fixture := observeLegacyIntegrationAdapter(fakeCommitAdapter{})
+	runtime, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{Adapters: map[string]adapter.Adapter{"fake": fixtureAdapter}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +98,11 @@ func TestRuntimeFakeAdapterExecution(t *testing.T) {
 	if _, err := runtime.ImportTasks(context.Background(), []model.Task{{ID: "TASK-001", Title: "prove runtime", Status: model.TaskReady, Risk: model.R1}}); err != nil {
 		t.Fatal(err)
 	}
+	fixture.ObserveTask(t, runtime, "TASK-001")
 	result, err := runtime.Run(context.Background(), app.RunRequest{TaskID: "TASK-001", AgentID: agent.ID, Adapter: "fake"})
+	if fixture.RequireRunRefusal(t, runtime, "TASK-001", result, err) {
+		return
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

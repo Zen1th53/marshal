@@ -19,6 +19,12 @@ import (
 
 const supervisorArg = "__marshal_process_group"
 
+// stopGrace bounds how long the supervisor waits for its child group to exit
+// gracefully after forwarding SIGTERM before it escalates to SIGKILL. It must
+// stay well below any caller's grace period so a supervisor that is still
+// reaping descendants is not force-killed first.
+const stopGrace = 20 * time.Millisecond
+
 func init() {
 	if len(os.Args) > 2 && os.Args[1] == supervisorArg {
 		os.Exit(supervise(os.Args[2:]))
@@ -34,7 +40,7 @@ func Wrap(cmd *exec.Cmd) error {
 	}
 	cmd.Args = append([]string{executable, supervisorArg, cmd.Path}, cmd.Args[1:]...)
 	cmd.Path = executable
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	cmd.WaitDelay = time.Second
 	if cmd.Cancel != nil {
 		cmd.Cancel = func() error { return Stop(cmd) }
@@ -42,12 +48,25 @@ func Wrap(cmd *exec.Cmd) error {
 	return nil
 }
 
-// Stop asks the supervisor to kill and reap its children before exiting.
+// Stop asks the supervisor to terminate its child group and reap descendants
+// before exiting. The supervisor forwards SIGTERM and then SIGKILL to its
+// group (see supervise).
 func Stop(cmd *exec.Cmd) error {
 	if cmd.Process == nil {
 		return nil
 	}
 	return cmd.Process.Signal(syscall.SIGTERM)
+}
+
+// Kill force-terminates the supervisor and its process group. It is the
+// last-resort escalation after Stop and a grace period: a hung supervisor
+// must not block the caller's Wait forever.
+func Kill(cmd *exec.Cmd) error {
+	if cmd.Process == nil {
+		return nil
+	}
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	return cmd.Process.Kill()
 }
 
 func supervise(argv []string) int {
@@ -60,13 +79,13 @@ func supervise(argv []string) int {
 	defer signal.Stop(signals)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	// An interactive child must remain in the controlling terminal's foreground
 	// group. A separate group would suspend provider input with SIGTTIN.
 	foreground, terminalErr := unix.IoctlGetInt(int(os.Stdin.Fd()), unix.TIOCGPGRP)
 	interactive := terminalErr == nil && foreground == syscall.Getpgrp()
 	if interactive {
-		cmd.SysProcAttr = nil
+		cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
 	}
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -86,9 +105,27 @@ wait:
 				}
 				continue
 			}
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-			_ = cmd.Process.Kill()
-			<-done
+			// Forward termination to the child group: SIGTERM first so a
+			// well-behaved provider can exit cleanly, then SIGKILL after a
+			// short grace so a stuck provider cannot keep the supervisor (and
+			// the caller's Wait) alive. An interactive child shares the
+			// foreground group, so signal its leader directly.
+			if interactive {
+				_ = cmd.Process.Signal(syscall.SIGTERM)
+			} else {
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			}
+			select {
+			case <-done:
+			case <-time.After(stopGrace):
+				if interactive {
+					_ = cmd.Process.Kill()
+				} else {
+					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					_ = cmd.Process.Kill()
+				}
+				<-done
+			}
 			break wait
 		}
 	}

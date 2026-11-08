@@ -3,6 +3,7 @@ package app
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net"
@@ -37,7 +38,156 @@ func egressProxyGet(t *testing.T, socket, endpoint string) int {
 	return response.StatusCode
 }
 
+func TestCredentialWatcherMalformedDecisionClosesProxy(t *testing.T) {
+	cases := []struct {
+		name, raw string
+		revoke    bool
+	}{
+		{"object_current_last", `{"kind":"credential","object":"claude","object":"codex","allow":false}`, true},
+		{"kind_credential_last", `{"kind":"network","kind":"credential","object":"codex","allow":false}`, true},
+		{"allow_false_last", `{"kind":"credential","object":"codex","allow":true,"allow":false}`, true},
+		{"allow_invalid_last", `{"kind":"credential","object":"codex","allow":false,"allow":"invalid"}`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			owner := openNetpolRuntime(t)
+			operator, err := Open(t.Context(), owner.ProjectRoot())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer operator.Close()
+			control, err := operator.OpenLocalControl(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := control.Context(t.Context())
+			if err := operator.CommandPermission(ctx, permission.Request{Kind: "credential", Object: "codex"}, true, "test grant"); err != nil {
+				t.Fatal(err)
+			}
+			upstream, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer upstream.Close()
+			accepted := make(chan net.Conn, 1)
+			go func() {
+				if c, err := upstream.Accept(); err == nil {
+					accepted <- c
+				}
+			}()
+			broker, err := netpolicy.NewCredentialBroker("codex", "", "synthetic-host-key")
+			if err != nil {
+				t.Fatal(err)
+			}
+			const runID = "RUN-duplicate-decision"
+			endpoint := upstream.Addr().String()
+			socket, cleanup, err := owner.startRunEgress(t.Context(), runID, "", "codex", "TASK-duplicate", "worker", nil, broker)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cleanup()
+			if err := operator.CommandEgress(ctx, runID, "allow", endpoint); err != nil {
+				t.Fatal(err)
+			}
+			conn, err := net.Dial("unix", socket)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
+			if _, err := fmt.Fprintf(conn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", endpoint, endpoint); err != nil {
+				t.Fatal(err)
+			}
+			reader := bufio.NewReader(conn)
+			response, err := http.ReadResponse(reader, nil)
+			if err != nil || response.StatusCode != http.StatusOK {
+				t.Fatalf("CONNECT: %+v %v", response, err)
+			}
+			var upstreamConn net.Conn
+			select {
+			case upstreamConn = <-accepted:
+			case <-time.After(3 * time.Second):
+				t.Fatal("upstream did not accept")
+			}
+			defer upstreamConn.Close()
+			if _, err := upstreamConn.Write([]byte("x")); err != nil {
+				t.Fatal(err)
+			}
+			if b, err := reader.ReadByte(); err != nil || b != 'x' {
+				t.Fatalf("exchange: %q %v", b, err)
+			}
+			scope := owner.egressRuns[runID]
+			scope.stopWatch()
+			<-scope.watchDone
+			// Commit both records before the next watcher poll. A later allow
+			// cannot make the old exchange survive the earlier revoke.
+			db, err := sql.Open("sqlite", owner.layout.Database)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			tx, err := db.BeginTx(t.Context(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			decisionID := "EVENT-RAW-" + tc.name
+			at := time.Now().UTC().Add(time.Millisecond).Format(time.RFC3339Nano)
+			for _, row := range []struct{ id, raw string }{{decisionID, tc.raw}, {"EVENT-RAW-LATER-ALLOW", `{"kind":"credential","object":"codex","allow":true}`}} {
+				if _, err := tx.ExecContext(t.Context(), `INSERT INTO audit_events(event_id,event_type,project_id,aggregate_revision,timestamp,data_json) VALUES(?, 'PERMISSION_DECIDED', ?, 0, ?, ?)`, row.id, owner.ProjectID(), at, row.raw); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			watchCtx, cancel := context.WithCancel(t.Context())
+			done := make(chan struct{})
+			go func() { defer close(done); owner.watchEgressRevocations(watchCtx, scope) }()
+			defer func() { cancel(); <-done }()
+			_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+			if _, err := reader.ReadByte(); err == nil {
+				t.Fatal("active exchange survived decision")
+			} else if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
+				t.Fatal("active exchange was not closed")
+			}
+			if tc.revoke {
+				deadline := time.Now().Add(3 * time.Second)
+				for {
+					state, err := operator.CredentialRevocationStatus(t.Context(), "codex")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if state == "closed" {
+						break
+					}
+					if time.Now().After(deadline) {
+						t.Fatalf("missing native closure acknowledgement for %s: %s", decisionID, state)
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				records, err := owner.store.ListEvents(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				ack := false
+				for _, event := range records {
+					if event.Type == "BROKER_SCOPE_CLOSED" && event.ProjectID == owner.ProjectID() && event.Data["decision_id"] == decisionID && event.Data["scope_socket"] == socket && event.Data["provider"] == "codex" {
+						ack = true
+					}
+				}
+				if !ack {
+					t.Fatalf("missing exact broker closure for %s", decisionID)
+				}
+			}
+		})
+	}
+}
+
 func TestEgressGrantAndRevokeAcrossRuntimes(t *testing.T) {
+	if openEgressEdition {
+		t.Skip("the private edition grants every destination at first connection; TestExtremeOpenEgress covers it")
+	}
 	owner := openNetpolRuntime(t)
 	operator, err := Open(t.Context(), owner.ProjectRoot())
 	if err != nil {
@@ -469,6 +619,83 @@ func TestCrossRuntimeCredentialRevokeClosesExistingExchange(t *testing.T) {
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("owner acknowledgement missing: %s", state)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestCredentialWatcherReadFailureClosesProxy(t *testing.T) {
+	r := openNetpolRuntime(t)
+	broker, err := netpolicy.NewCredentialBroker("codex", "", "synthetic-host-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	socket, cleanup, err := r.startRunEgress(t.Context(), "RUN-read-failure", "", "codex", "TASK-read-failure", "worker", nil, broker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if err := r.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for egressScopeLive(socket) {
+		if time.Now().After(deadline) {
+			t.Fatal("credential query failure left proxy open")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestCredentialWatcherLargeHistoryKeepsCapabilityMetadataResponsive(t *testing.T) {
+	r := openNetpolRuntime(t)
+	operator, err := Open(t.Context(), r.ProjectRoot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer operator.Close()
+	control, err := operator.OpenLocalControl(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := control.Context(t.Context())
+	for i := 0; i < 1500; i++ {
+		if err := r.store.AppendEvent(t.Context(), nil, model.Event{ID: fmt.Sprintf("EVENT-unrelated-%04d", i), Type: "UNRELATED", ProjectID: r.ProjectID(), Timestamp: time.Now().UTC(), Data: map[string]any{"valid": "audit"}}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.store.Append(t.Context(), events.Event{ID: fmt.Sprintf("NETWORK-unrelated-%04d", i), Type: events.EventTypeNetworkEgressAttempt, RunID: "other-run", At: time.Now().UTC(), Data: map[string]any{"valid": "network"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	req := permission.Request{Kind: "credential", Object: "codex"}
+	if err := operator.CommandPermission(ctx, req, true, "operator grant"); err != nil {
+		t.Fatal(err)
+	}
+	broker, err := netpolicy.NewCredentialBroker("codex", "", "synthetic-host-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	socket, cleanup, err := r.startRunEgress(t.Context(), "RUN-large-history", "", "codex", "TASK-large-history", "worker", nil, broker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	metadataCtx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	grants, err := r.store.ListCapabilityGrants(metadataCtx)
+	if err != nil || len(grants) == 0 {
+		t.Fatalf("capability list under watcher: %d grants, %v", len(grants), err)
+	}
+	if _, err := r.store.GetCapabilityGrant(metadataCtx, grants[0].ID); err != nil {
+		t.Fatalf("capability get under watcher: %v", err)
+	}
+	if err := operator.CommandPermission(ctx, req, false, "operator revoke"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for egressScopeLive(socket) {
+		if time.Now().After(deadline) {
+			t.Fatal("revocation after unrelated history left proxy open")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

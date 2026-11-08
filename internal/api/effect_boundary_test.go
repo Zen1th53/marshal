@@ -10,11 +10,12 @@ import (
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/sandbox"
 )
 
 func TestVerifyRouteConfinesProjectCode(t *testing.T) {
-	runtime, socket := apiRuntime(t)
-	root := filepath.Dir(filepath.Dir(socket))
+	runtime, _, root := apiRuntimeWithRoot(t)
 	marker := filepath.Join(t.TempDir(), "marker")
 	if err := os.MkdirAll(filepath.Join(root, "conformance"), 0755); err != nil {
 		t.Fatal(err)
@@ -32,6 +33,16 @@ func TestVerifyRouteConfinesProjectCode(t *testing.T) {
 	var envelope Envelope
 	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
 		t.Fatal(err)
+	}
+	if sandbox.HostExecutionPreferred() {
+		var result app.VerifyResult
+		if response.Code != http.StatusOK || envelope.Error != nil || json.Unmarshal(envelope.Data, &result) != nil || result.ExitStatus != 0 || result.Isolation == nil || result.Isolation.Level != model.IsolationProcessOnly || !strings.Contains(result.Isolation.Reason, "Marshal verifies on the host by design") {
+			t.Fatalf("host verification not reported: %d %s", response.Code, response.Body.String())
+		}
+		if body, err := os.ReadFile(marker); err != nil || string(body) != "ran" {
+			t.Fatalf("verification did not execute on host: %q %v", body, err)
+		}
+		return
 	}
 	if envelope.Error == nil || !((response.Code == http.StatusServiceUnavailable && envelope.Error.Code == "unavailable" && strings.Contains(envelope.Error.Message, "required isolation cannot be enforced")) || (response.Code == http.StatusInternalServerError && envelope.Error.Code == "internal" && strings.HasPrefix(envelope.Error.Message, "verification failed with exit status "))) {
 		t.Fatalf("request did not reach verification boundary: %d %s", response.Code, response.Body.String())

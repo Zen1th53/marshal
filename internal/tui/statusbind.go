@@ -30,6 +30,8 @@ type storeRuntimeReader struct {
 	projectID string
 	sessionID string
 	honeypot  func(context.Context) (string, error)
+	// instanceID is the attached runtime's instance id, when there is one.
+	instanceID func() string
 }
 
 // runtimeReader returns a reader over the workspace's store, or nil when there
@@ -40,6 +42,7 @@ func (w *Workspace) runtimeReader() RuntimeReader {
 	}
 	reader := storeRuntimeReader{store: w.store, projectID: w.projectID, sessionID: w.sessionID}
 	if w.runtime != nil {
+		reader.instanceID = w.runtime.InstanceID
 		reader.honeypot = func(ctx context.Context) (string, error) {
 			status, err := w.runtime.Status(ctx)
 			return status.Honeypot, err
@@ -100,15 +103,20 @@ func (r storeRuntimeReader) Tasks(ctx context.Context) ([]model.Task, error) {
 	return r.store.ListTasks(ctx)
 }
 
-// InstanceID reports the runtime instance id, which a store-only workspace
-// does not have.
+// InstanceID reports the attached runtime's instance id. A store-only
+// workspace has none.
 //
 // A runtime instance id names a running daemon process. This workspace reads
 // the store directly and there is no such process, so returning the TUI's own
 // session id would put a plausible-looking identifier under a label reading
 // "runtime instance" and let a user conclude a daemon is up. Returning nothing
 // makes the reader render UNKNOWN with the reason instead.
-func (r storeRuntimeReader) InstanceID() string { return "" }
+func (r storeRuntimeReader) InstanceID() string {
+	if r.instanceID != nil {
+		return r.instanceID()
+	}
+	return ""
+}
 
 // SessionID is what this workspace actually is, reported under its own name.
 func (r storeRuntimeReader) SessionID() string { return r.sessionID }

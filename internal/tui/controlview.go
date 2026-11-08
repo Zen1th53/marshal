@@ -28,8 +28,10 @@ import (
 type controlState struct {
 	source  *ControlSource
 	confirm *Confirmation
-	form    *actionForm
-	snap    ControlSnapshot
+	// confirmDetails shows the internal ids, digests and idempotency key.
+	confirmDetails bool
+	form           *actionForm
+	snap           ControlSnapshot
 	// snapValid distinguishes "never read" from "read and found nothing".
 	snapValid bool
 	// listIndex is the selected row within an approval or checkpoint list.
@@ -256,7 +258,7 @@ func (v *NavView) handleActionFormKey(ctx context.Context, event KeyEvent) bool 
 	case KeyRune:
 		f.append(string(event.Rune))
 	case KeyEnter:
-		if f.index < len(f.binding.Inputs)-1 {
+		if f.index < len(f.binding.Inputs)-1 && !f.restAreEmptyAdvanced() {
 			f.move(1)
 			return true
 		}
@@ -295,6 +297,8 @@ func (v *NavView) handleConfirmKey(ctx context.Context, event KeyEvent) bool {
 		switch event.Type {
 		case KeyEsc, KeyEnter:
 			c.Dismiss()
+			// A finished action changed canonical state; show it.
+			v.refreshInBackground(ctx)
 			return true
 		case KeyRune:
 			if event.Rune == 'q' {
@@ -362,6 +366,9 @@ func (v *NavView) handleConfirmKey(ctx context.Context, event KeyEvent) bool {
 			c.Acknowledge()
 			v.status, v.statusSeen = "acknowledged; choose Proceed to submit", false
 			return true
+		case 'd', 'D':
+			v.control.confirmDetails = !v.control.confirmDetails
+			return true
 		case 'n', 'N', 'q':
 			c.Cancel()
 			v.status, v.statusSeen = "cancelled; nothing was submitted", false
@@ -382,6 +389,8 @@ func (v *NavView) submitConfirmation(ctx context.Context, c *Confirmation) {
 		v.status, v.statusSeen = fmt.Sprintf("refused: %s", err), false
 	case outcome.Verdict == VerdictPass && outcome.Proof.Status.IsSuccess():
 		v.status, v.statusSeen = outcome.Detail, false
+	case outcome.Detail == statusSubmitting:
+		v.status, v.statusSeen = statusSubmitting, false
 	case outcome.Detail != "":
 		v.status, v.statusSeen = outcome.Detail, false
 	default:
@@ -395,6 +404,10 @@ func (v *NavView) submitConfirmation(ctx context.Context, c *Confirmation) {
 // through a confirmation: there is deliberately no way to submit an action
 // without one appearing first.
 func (v *NavView) beginAction(ctx context.Context, node *Node) bool {
+	if reason := v.buildActionDispatchRefusal(node); reason != "" {
+		v.status, v.statusSeen = reason, false
+		return true
+	}
 	if v.commandBusy != nil && v.commandBusy.Load() {
 		v.status, v.statusSeen = "a command is still running", false
 		return true
@@ -433,6 +446,14 @@ func (v *NavView) beginAction(ctx context.Context, node *Node) bool {
 		ProjectID: v.control.source.ProjectID,
 	}
 	if len(binding.Inputs) > 0 {
+		// Check the target's preconditions before asking for any input, so a
+		// form is never filled in only to be refused afterwards.
+		if binding.Prepare != nil {
+			if _, err := binding.Prepare(ctx); err != nil {
+				v.status, v.statusSeen = "cannot start "+strings.ToLower(binding.Title)+": "+humanReason(err.Error()), false
+				return true
+			}
+		}
 		v.control.form = newActionForm(binding, req)
 		v.status, v.statusSeen = "complete the typed action form; Enter advances", false
 		return true
@@ -445,6 +466,7 @@ func (v *NavView) beginAction(ctx context.Context, node *Node) bool {
 	}
 
 	v.configureConfirmation(v.control.confirm)
+	v.control.confirmDetails = false
 	if err := v.control.confirm.Begin(ctx, binding, req); err != nil {
 		v.status, v.statusSeen = err.Error(), false
 	}
@@ -506,9 +528,7 @@ func (v *NavView) renderConfirmation(c *Confirmation, width, rows int) []string 
 
 	case PhaseDone:
 		out = append(out, truncate("Result", width), "")
-		for _, line := range RenderFields(OutcomeFields(c.Outcome()), width) {
-			out = append(out, truncate(line, width))
-		}
+		out = append(out, renderOutcomeFields(OutcomeFields(c.Outcome()), width)...)
 		out = append(out, "", truncate("Esc or Enter to dismiss", width))
 		return out
 
@@ -520,7 +540,11 @@ func (v *NavView) renderConfirmation(c *Confirmation, width, rows int) []string 
 	}
 
 	// Confirming: show the exact request that will be submitted.
-	for _, line := range RenderFields(ConfirmationFields(c), width) {
+	confirmFields := ConfirmationSummaryFields(c)
+	if v.control.confirmDetails {
+		confirmFields = ConfirmationFields(c)
+	}
+	for _, line := range RenderFields(confirmFields, width) {
 		out = append(out, truncate(line, width))
 	}
 
@@ -548,10 +572,47 @@ func (v *NavView) renderConfirmation(c *Confirmation, width, rows int) []string 
 	out = append(out, truncate(cancel+proceed, width))
 	out = append(out, "")
 	out = append(out, wrap(
-		"← → or Tab to choose · Enter to confirm · Esc to cancel", width)...)
+		"← → or Tab to choose · Enter to confirm · Esc to cancel · d: details", width)...)
 
 	if len(out) > rows {
 		out = out[:rows]
+	}
+	return out
+}
+
+// renderOutcomeFields keeps the exact outcome detail visible. Other fields
+// retain the usual single-line behavior used throughout the Control view.
+func renderOutcomeFields(fields []Field, width int) []string {
+	lines := RenderFields(fields, width)
+	out := make([]string, 0, len(lines))
+	for i, field := range fields {
+		if field.Label != "Detail" || i >= len(lines) || width <= 0 {
+			if i < len(lines) {
+				out = append(out, lines[i])
+			}
+			continue
+		}
+		display := field.Value.Display()
+		if field.Value.Status != TruthKnown && field.Value.Status != TruthStale {
+			display = communityLabel(display)
+		}
+		prefix := strings.TrimSuffix(lines[i], display)
+		available := width - len([]rune(prefix))
+		if available <= 0 || len([]rune(display)) <= available {
+			out = append(out, lines[i])
+			continue
+		}
+		const leaseDisclaimer = "grants no ULTRA lease"
+		const leaseDisclaimerToken = "grants_no_ULTRA_lease"
+		wrapped := wrap(strings.ReplaceAll(display, leaseDisclaimer, leaseDisclaimerToken), available)
+		for i := range wrapped {
+			wrapped[i] = strings.ReplaceAll(wrapped[i], leaseDisclaimerToken, leaseDisclaimer)
+		}
+		out = append(out, prefix+wrapped[0])
+		continuation := strings.Repeat(" ", len([]rune(prefix)))
+		for _, line := range wrapped[1:] {
+			out = append(out, continuation+line)
+		}
 	}
 	return out
 }
@@ -592,7 +653,7 @@ func (v *NavView) renderControlDetail(node *Node, width, rows int) ([]string, bo
 	// its one canonical owner.
 	case node.SpecID == "CTUI-0030":
 		return fields("Mode & Autonomy", []Field{
-			{Label: "Entitlement mode", Value: snap.Mode},
+			{Label: modeFieldLabel, Value: snap.Mode},
 			{Label: "Autonomy", Value: snap.Autonomy},
 			{Label: "ULTRA execution preference", Value: snap.ULTRAPreference},
 		})
@@ -927,3 +988,7 @@ func (v *NavView) renderSelectedCheckpoint(snap ControlSnapshot, width, rows int
 	}
 	return out
 }
+
+// statusSubmitting is the transient status while a background submission runs.
+// It is dropped as soon as the confirmation reaches a result.
+const statusSubmitting = "submission in flight"

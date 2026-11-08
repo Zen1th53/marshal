@@ -10,11 +10,19 @@ import (
 func TestMarshalSplashShowsAWordmark(t *testing.T) {
 	th := NewTheme(ThemeDefault, true, false)
 	seen := map[string]bool{}
+	wantSubtitle := "Summoning the Marshal"
+	if buildMarker != "" {
+		wantSubtitle = buildMarker
+	}
+	splitAnchor := "Summoning"
+	if buildMarker != "" {
+		splitAnchor = buildMarker
+	}
 	for i := 0; i < 200; i++ {
 		var b strings.Builder
 		playMarshalSplash(&b, th, false)
 		out := b.String()
-		if !strings.Contains(out, "Summoning the Marshal") {
+		if !strings.Contains(out, wantSubtitle) {
 			t.Fatalf("splash lacks its subtitle:\n%s", out)
 		}
 		for _, provider := range []string{"Codex", "Claude", "OpenCode", "Antigravity", "codex", "claude"} {
@@ -22,7 +30,7 @@ func TestMarshalSplashShowsAWordmark(t *testing.T) {
 				t.Fatalf("splash named the underlying provider %q:\n%s", provider, out)
 			}
 		}
-		seen[strings.Split(out, "Summoning")[0]] = true
+		seen[strings.Split(out, splitAnchor)[0]] = true
 	}
 	if len(seen) < 2 {
 		t.Fatalf("the splash did not rotate between wordmarks: %d seen", len(seen))

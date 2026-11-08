@@ -2,6 +2,7 @@ package projectid
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"sort"
@@ -264,7 +265,7 @@ func QualifyGit(ctx context.Context, collector Collector, root string) GitQualif
 // redundant warning, while the other direction risks losing someone's work.
 func marshalOwnedPath(path string) bool {
 	cleaned := strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(path)), "./")
-	if cleaned == StateDirName || strings.HasPrefix(cleaned, StateDirName+"/") {
+	if statepath.Reserved(cleaned) {
 		return true
 	}
 	switch cleaned {

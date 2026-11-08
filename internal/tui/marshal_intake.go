@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,7 @@ func (w *Workspace) saveMarshalIntake(intake marshalIntake) error {
 		return errNoRuntime
 	}
 	if intake.EarlierWork == "" {
-		previous, err := os.ReadFile(filepath.Join(w.runtime.ProjectRoot(), ".marshal", "marshal-intake.json"))
+		previous, err := os.ReadFile(filepath.Join(w.runtime.ProjectRoot(), statepath.DirName, "marshal-intake.json"))
 		var saved marshalIntake
 		if err == nil && json.Unmarshal(previous, &saved) == nil {
 			intake.EarlierWork = saved.EarlierWork
@@ -26,7 +27,7 @@ func (w *Workspace) saveMarshalIntake(intake marshalIntake) error {
 	}
 	data, _ := json.Marshal(intake)
 	root := w.runtime.ProjectRoot()
-	dir := filepath.Join(root, ".marshal")
+	dir := statepath.Path(root)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		w.RecordActivity("Intake persistence failed: " + err.Error())
 		return err
@@ -58,7 +59,7 @@ func appendMarshalIntake(root, brief string) string {
 	if strings.Contains(brief, "\nPROJECT INTAKE (saved preference data): ") {
 		return brief
 	}
-	data, err := os.ReadFile(filepath.Join(root, ".marshal", "marshal-intake.json"))
+	data, err := os.ReadFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"))
 	var intake marshalIntake
 	if err != nil || json.Unmarshal(data, &intake) != nil || strings.TrimSpace(intake.Language) == "" {
 		return brief
@@ -68,14 +69,14 @@ func appendMarshalIntake(root, brief string) string {
 }
 
 func (w *Workspace) marshalContinuityBriefing(root, brief string) string {
-	return appendMarshalIntake(root, brief)
+	return w.appendProjectKnowledge(root, appendMarshalIntake(root, brief))
 }
 
 func (w *Workspace) marshalEarlierWorkWanted() bool {
 	if w.runtime == nil {
 		return false
 	}
-	data, err := os.ReadFile(filepath.Join(w.runtime.ProjectRoot(), ".marshal", "marshal-intake.json"))
+	data, err := os.ReadFile(filepath.Join(w.runtime.ProjectRoot(), statepath.DirName, "marshal-intake.json"))
 	var intake marshalIntake
 	return err == nil && json.Unmarshal(data, &intake) == nil && intake.EarlierWork == "yes"
 }

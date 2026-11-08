@@ -9,7 +9,7 @@ import (
 // These files need separate operator consent even when included in task scope.
 func ReservedPath(name string) bool {
 	name = strings.ToLower(name)
-	for _, dir := range []string{".marshal", ".github", ".agents", ".claude", ".codex", ".gemini", ".cursor", "policy", "policies", ".circleci", ".buildkite"} {
+	for _, dir := range []string{".marshal", ".marshal-extreme", ".github", ".agents", ".claude", ".codex", ".gemini", ".cursor", "policy", "policies", ".circleci", ".buildkite"} {
 		if name == dir || strings.HasPrefix(name, dir+"/") {
 			return true
 		}

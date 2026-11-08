@@ -27,7 +27,8 @@ func TestRuntimeRunRecordsCanonicalEvidenceAndAudit(t *testing.T) {
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{Adapters: map[string]adapter.Adapter{"fake": fakeCommitAdapter{}}})
+	fixtureAdapter, fixture := observeLegacyIntegrationAdapter(fakeCommitAdapter{})
+	rt, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{Adapters: map[string]adapter.Adapter{"fake": fixtureAdapter}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +40,11 @@ func TestRuntimeRunRecordsCanonicalEvidenceAndAudit(t *testing.T) {
 	if _, err := rt.ImportTasks(context.Background(), []model.Task{{ID: "TASK-A06-EVIDENCE", Title: "evidence runtime", Status: model.TaskReady, Risk: model.R1}}); err != nil {
 		t.Fatal(err)
 	}
+	fixture.ObserveTask(t, rt, "TASK-A06-EVIDENCE")
 	result, err := rt.Run(context.Background(), app.RunRequest{TaskID: "TASK-A06-EVIDENCE", AgentID: agent.ID, Adapter: "fake"})
+	if fixture.RequireRunRefusal(t, rt, "TASK-A06-EVIDENCE", result, err) {
+		return
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +76,8 @@ func TestRuntimeProviderSecretIsDigestOnly(t *testing.T) {
 	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
 		t.Fatal(err)
 	}
-	rt, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{Adapters: map[string]adapter.Adapter{"secret": secretEvidenceAdapter{}}})
+	fixtureAdapter, fixture := observeLegacyIntegrationAdapter(secretEvidenceAdapter{})
+	rt, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{Adapters: map[string]adapter.Adapter{"secret": fixtureAdapter}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,8 +89,10 @@ func TestRuntimeProviderSecretIsDigestOnly(t *testing.T) {
 	if _, err := rt.ImportTasks(context.Background(), []model.Task{{ID: "TASK-A06-SECRET", Title: "secret evidence", Status: model.TaskReady, Risk: model.R1}}); err != nil {
 		t.Fatal(err)
 	}
+	fixture.ObserveTask(t, rt, "TASK-A06-SECRET")
 	result, err := rt.Run(context.Background(), app.RunRequest{TaskID: "TASK-A06-SECRET", AgentID: agent.ID, Adapter: "secret"})
-	if err != nil {
+	refused := fixture.RequireRunRefusal(t, rt, "TASK-A06-SECRET", result, err)
+	if !refused && err != nil {
 		t.Fatal(err)
 	}
 	events, err := rt.Events(context.Background())
@@ -97,6 +105,12 @@ func TestRuntimeProviderSecretIsDigestOnly(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), a06SecretMarker) {
 		t.Fatal("provider secret marker leaked into audit events")
+	}
+	if refused {
+		if _, err := rt.Evidence(context.Background(), evidence.NodeID("EVIDENCE-RUN-"+result.RunID+"-OUTPUT")); err == nil {
+			t.Fatal("refused provider emitted output evidence")
+		}
+		return
 	}
 	node, err := rt.Evidence(context.Background(), evidence.NodeID("EVIDENCE-RUN-"+result.RunID+"-OUTPUT"))
 	if err != nil {

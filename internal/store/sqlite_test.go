@@ -271,6 +271,7 @@ func TestPolicyTestRecoveryMigrationsFromV9(t *testing.T) {
 			t.Fatalf("prepare v9 schema with %q: %v", statement, err)
 		}
 	}
+	resetProjectContext95HistoricalFixture(t, st)
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("migrate v9: %v", err)
 	}
@@ -438,6 +439,7 @@ func TestPolicyTestRecoveryMigrationsFromPreT49V7(t *testing.T) {
 			t.Fatalf("prepare v7 schema with %q: %v", statement, err)
 		}
 	}
+	resetProjectContext95HistoricalFixture(t, st)
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("migrate v7 to latest: %v", err)
 	}

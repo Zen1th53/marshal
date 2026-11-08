@@ -137,8 +137,19 @@ func (w *Workspace) deliverEgressAlert(alert app.EgressAlert) error {
 		}
 	}
 	w.mu.Lock()
+	if w.lastCommandError != "" && strings.HasPrefix(w.state.LastOutput, w.lastCommandError) {
+		// The failed command's error is still on screen: keep it above the
+		// alert instead of replacing it.
+		text = w.lastCommandError + "\n" + text
+		w.state.LastOutputIsError = true
+	} else {
+		w.lastCommandError = ""
+	}
 	w.state.LastOutput = text
 	w.mu.Unlock()
+	// An alert arrives on its own: on the Board it is an Activity line, red
+	// only when it reports a failure or needs the operator.
+	w.addNote(text, alertIsProblem(alert.State))
 	w.requestRepaint()
 	return nil
 }
@@ -155,4 +166,14 @@ func alertMatchesAgent(alert app.EgressAlert, a *activeTmuxAgent) bool {
 		return (a.taskID == alert.TaskID && a.runID == scope) || (a.canonicalTaskID == alert.TaskID && a.executionRunID == scope)
 	}
 	return a.role == "worker" && a.provider == alert.Worker && a.runID == scope
+}
+
+// alertIsProblem reports whether a runtime alert state is a failure or a
+// decision, as opposed to ordinary progress such as a finished task.
+func alertIsProblem(state string) bool {
+	switch state {
+	case "done", "completed", "merged", "accepted":
+		return false
+	}
+	return true
 }

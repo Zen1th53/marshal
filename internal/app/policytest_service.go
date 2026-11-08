@@ -39,6 +39,11 @@ func RunPolicyTestFile(ctx context.Context, path string) (PolicyTestReport, erro
 	if err != nil {
 		return PolicyTestReport{}, fmt.Errorf("%w: policy test file unavailable", model.ErrUnavailable)
 	}
+	return runPolicyTestData(ctx, data)
+}
+
+// runPolicyTestData evaluates an already-read declarative suite.
+func runPolicyTestData(ctx context.Context, data []byte) (PolicyTestReport, error) {
 	if len(data) > maxPolicyTestFileSize {
 		return PolicyTestReport{}, policytest.ErrCaseInvalid
 	}

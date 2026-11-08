@@ -69,6 +69,9 @@ type visit struct {
 	// screen can say where the user came from while the breadcrumb still
 	// names the canonical hierarchy.
 	origin *Node
+	// filter narrows this level's menu. It belongs to the visit, so opening
+	// a child starts unfiltered and Esc back finds the filter it left.
+	filter string
 }
 
 // NavState is the navigation and focus model for one TUI session.
@@ -146,7 +149,50 @@ func (ns *NavState) Children() []*Node {
 	if cur != nil && cur.SpecID == "CTUI-0509" {
 		return CodexSubscreens(cur)
 	}
-	return cur.Children
+	children := visibleChildren(cur.Children)
+	terms := strings.Fields(strings.ToLower(ns.Filter()))
+	if len(terms) == 0 {
+		return children
+	}
+	out := make([]*Node, 0, len(children))
+	for _, c := range children {
+		if filterMatches(c, terms) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// Filter returns the current level's menu filter.
+func (ns *NavState) Filter() string { return ns.stack[len(ns.stack)-1].filter }
+
+// SetFilter narrows the current level's menu. The selection returns to the
+// first match, because the old index points into a different list.
+func (ns *NavState) SetFilter(q string) {
+	top := &ns.stack[len(ns.stack)-1]
+	top.filter, top.selection, top.scroll = q, 0, 0
+}
+
+// visibleChildren drops entries the menu does not offer: those this edition
+// leaves out and those not wired yet (menuHidesSpec).
+func visibleChildren(children []*Node) []*Node {
+	hidden := false
+	for _, c := range children {
+		if menuHidesSpec(c.SpecID) {
+			hidden = true
+			break
+		}
+	}
+	if !hidden {
+		return children
+	}
+	out := make([]*Node, 0, len(children))
+	for _, c := range children {
+		if !menuHidesSpec(c.SpecID) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // SelectedChild returns the child the selection points at, if any.
@@ -501,7 +547,8 @@ func (ns *NavState) ActivatePalette() (*Node, bool) {
 		ns.syncSectionTo(target)
 		// Point the selection at the action and focus the action bar, which
 		// is where its safety class and any disabled reason are displayed.
-		for i, c := range target.parent.Children {
+		// Index into the visible list: hidden entries are not rows.
+		for i, c := range ns.Children() {
 			if c == target {
 				ns.stack[len(ns.stack)-1].selection = i
 				break

@@ -10,7 +10,11 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
-const LatestSchemaVersion = 91
+const CommunitySchemaVersion = 91
+
+// ArchitectureReceiverSchemaVersion is the last canonical step of the
+// architecture receiver storage (104-107).
+const ArchitectureReceiverSchemaVersion = schemaArchitectureOwnerNamespaces
 const schemaV1 = `
 CREATE TABLE projects (
 	project_id TEXT PRIMARY KEY,
@@ -223,7 +227,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version); err != nil {
 		return fmt.Errorf("read schema version: %w", err)
 	}
-	if version > LatestSchemaVersion {
+	if !SchemaVersionSupported(version) {
 		return fmt.Errorf("database schema version %d is newer than supported version %d", version, LatestSchemaVersion)
 	}
 	if version == 0 {
@@ -2709,10 +2713,23 @@ CREATE TRIGGER IF NOT EXISTS task_snapshots_no_delete BEFORE DELETE ON task_comm
 			return err
 		}
 	}
+	if err := migrateCanonical(ctx, tx); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
 	}
 	return nil
+}
+
+// MigrateArchitectureReceiver is an explicit upgrade for a separately
+// governed handoff. Normal runtime startup never calls it.
+// MigrateArchitectureReceiver installs the architecture receiver storage. The
+// receiver steps (104-107) are part of the canonical chain, so this is the
+// ordinary migration; it is kept for callers that ask for the receiver
+// explicitly.
+func (s *Store) MigrateArchitectureReceiver(ctx context.Context) error {
+	return s.Migrate(ctx)
 }
 
 func (s *Store) InitProject(ctx context.Context, project model.Project) error {

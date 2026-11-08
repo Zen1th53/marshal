@@ -53,6 +53,10 @@ func TestDiffScopesPTY(t *testing.T) {
 	s.send("\x1b[C")
 	s.mustSee("untracked-proof")
 	s.send("\x1b")
+	// The viewer can render the last scope before its asynchronous command
+	// clears the ordinary command lane. Closing the viewer lets its completion
+	// activity appear; wait for it before submitting /status.
+	s.mustSee("Diff viewer updated")
 	s.send("/status")
 	s.send("\x1b")
 	s.send("\r")

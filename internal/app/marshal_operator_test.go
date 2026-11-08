@@ -90,7 +90,7 @@ func TestMarshalDraftWithSingleProvider(t *testing.T) {
 	}
 	t.Setenv("PATH", root)
 	cli := &MarshalCLI{Provider: "claude", Dir: root, ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
-	draft, err := cli.Draft(t.Context(), "write a")
+	draft, err := cli.Draft(requiredMarshalTestContext(t, cli), "write a")
 	if err != nil || len(draft.Tasks) != 1 || draft.Tasks[0].Worker != "claude" {
 		t.Fatalf("draft: %+v %v", draft, err)
 	}
@@ -127,7 +127,7 @@ func TestMarshalCompletionReportUsesStoredEvidence(t *testing.T) {
 }
 
 func TestMarshalHelpCloseRecoveryInstruction(t *testing.T) {
-	s, repo := marshalFixture(t, 1)
+	s, repo := marshalUserCloseFixture(t, 1)
 	if _, err := s.StartPlanning(t.Context(), "run", "write", marshal.Budget{}); err != nil {
 		t.Fatal(err)
 	}

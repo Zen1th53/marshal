@@ -227,7 +227,7 @@ func TestOptimizationSubRecords(t *testing.T) {
 			{Metric: "error_rate", Threshold: 0.05, HigherIsWorse: true, Reason: "error spike"},
 		},
 		StartedAt: now,
-		State:               optimization.CanaryPending,
+		State:     optimization.CanaryPending,
 	}
 	if err := st.AppendCanary(ctx, "opt-sub", "", canary); err != nil {
 		t.Fatalf("AppendCanary: %v", err)

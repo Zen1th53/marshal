@@ -230,3 +230,45 @@ func RedactContent(input string, knownSecrets []string) string {
 
 	return input
 }
+
+// Marker replaces a secret value that was removed. It matches no detector, so
+// redacted text passes a later scan.
+const Marker = "[REDACTED secret]"
+
+// RedactAll replaces every value the detectors recognize with Marker. A
+// key/value assignment keeps its key and loses its value. Text a detector
+// still recognizes afterwards is redacted further by the caller, line by line;
+// see security.Firewall.Redact.
+func RedactAll(input string) string {
+	for _, p := range []*regexp.Regexp{privateKeyPattern, netrcPattern, credentialFilePattern, skPattern, githubTokenPattern, awsKeyPattern, slackTokenPattern, googleApiKeyPattern, dbConnStringPattern, jwtPattern, sessionCookiePattern, oauthTokenPattern} {
+		input = p.ReplaceAllString(input, Marker)
+	}
+	input = authorizationPattern.ReplaceAllStringFunc(input, func(m string) string {
+		if detectSecret(m, false) == "" {
+			return m
+		}
+		return Marker
+	})
+	input = bearerPattern.ReplaceAllStringFunc(input, func(m string) string {
+		if isBearerToken(m) {
+			return Marker
+		}
+		return m
+	})
+	assignment := func(p *regexp.Regexp, value int, keep func([]string) bool) {
+		input = p.ReplaceAllStringFunc(input, func(m string) string {
+			idx := p.FindStringSubmatchIndex(m)
+			if len(idx) <= 2*value+1 || idx[2*value] < 0 || (keep != nil && keep(p.FindStringSubmatch(m))) {
+				return m
+			}
+			// Drop the separator too: "key: <Marker>" would read as a new
+			// assignment of the marker itself.
+			head := strings.TrimRight(m[:idx[2*value]], "\"' \t:=")
+			return head + " " + Marker
+		})
+	}
+	assignment(passwordPattern, 1, nil)
+	assignment(keyPattern, 2, nil)
+	assignment(genericKeyPattern, 2, func(m []string) bool { return len(m) < 3 || isIdentifierName(m[1]) || !isHighEntropyToken(m[2]) })
+	return input
+}

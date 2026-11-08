@@ -1,6 +1,7 @@
 package hostgit
 
 import (
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -81,7 +82,7 @@ func TestHostGitPinsWorktree(t *testing.T) {
 
 func TestHostGitDoesNotFallBackToParentRepository(t *testing.T) {
 	repo := testgit.New(t)
-	tree := filepath.Join(repo.Path(), ".marshal", "worktrees", "worker")
+	tree := filepath.Join(repo.Path(), statepath.DirName, "worktrees", "worker")
 	if err := os.MkdirAll(tree, 0700); err != nil {
 		t.Fatal(err)
 	}

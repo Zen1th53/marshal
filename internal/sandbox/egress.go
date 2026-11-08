@@ -72,5 +72,6 @@ func proxyEnvironment() []string {
 	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
 		env = append(env, key+"="+SandboxProxyURL)
 	}
-	return append(env, "NO_PROXY=", "no_proxy=")
+	noProxy := buildNoProxy()
+	return append(env, "NO_PROXY="+noProxy, "no_proxy="+noProxy)
 }

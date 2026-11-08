@@ -625,9 +625,14 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	adapter := req.Adapter
+	if adapter == "" {
+		adapter = "codex"
+	}
 	agent, err := s.runtime.RegisterAgent(ctx, app.RegisterAgentRequest{
-		Name: "a2a-remote-agent",
-		Role: model.RoleDeveloper,
+		Name:          "a2a-remote-agent",
+		Role:          model.RoleDeveloper,
+		ModelProvider: adapter,
 	})
 	if err != nil {
 		w.Header().Set("Content-Type", "application/a2a+json")
@@ -650,11 +655,6 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	adapter := req.Adapter
-	if adapter == "" {
-		adapter = "codex"
-	}
-
 	result, err := s.runtime.Run(ctx, app.RunRequest{
 		TaskID:  taskID,
 		AgentID: agent.ID,
@@ -662,6 +662,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/a2a+json")
+	if err == nil && (result.Status != "success" || result.ExitStatus != 0) {
+		err = fmt.Errorf("provider worker status=%s exit=%d", result.Status, result.ExitStatus)
+	}
 	if err != nil {
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{

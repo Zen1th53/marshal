@@ -71,9 +71,7 @@ var helpTopics = []HelpTopic{
 	{
 		Key:   "modes",
 		Title: "Standard and ULTRA",
-		Body: "Standard is the default and is fully functional. " +
-			"ULTRA adds depth and parallelism and requires a valid entitlement. " +
-			"It is never switched on automatically, and it never removes a safety requirement that applies in Standard.",
+		Body:  ultraModesBody,
 	},
 	{
 		Key:   "providers",

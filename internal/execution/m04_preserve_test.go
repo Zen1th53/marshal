@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -223,7 +224,7 @@ func TestM04PreserveBranchNeverCopiesOnGitFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("non-git project accepted branch delivery")
 	}
-	if _, err := os.Stat(filepath.Join(root, ".marshal", "branches", "TASK-task")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, statepath.DirName, "branches", "TASK-task")); !os.IsNotExist(err) {
 		t.Fatal("directory-copy fallback created")
 	}
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,7 +14,7 @@ func TestNativeOpenCodeHistoryImportsVisibleExportFields(t *testing.T) {
 	root := t.TempDir()
 	watch := newNativeHistoryWatch("", root)
 	watch.captureTools = true
-	watch.indexPath = filepath.Join(root, ".marshal", "opencode", "history-index.json")
+	watch.indexPath = filepath.Join(root, statepath.DirName, "opencode", "history-index.json")
 	commands := make([]string, 0, 2)
 	watch.openCodeRun = func(args ...string) ([]byte, error) {
 		commands = append(commands, strings.Join(args, " "))
@@ -48,7 +49,7 @@ func TestNativeOpenCodeHistoryImportsVisibleExportFields(t *testing.T) {
 func TestNativeOpenCodePrimeBaselinesExistingSessionsWithoutExport(t *testing.T) {
 	root := t.TempDir()
 	watch := newNativeHistoryWatch("", root)
-	watch.indexPath = filepath.Join(root, ".marshal", "opencode", "history-index.json")
+	watch.indexPath = filepath.Join(root, statepath.DirName, "opencode", "history-index.json")
 	var commands []string
 	watch.openCodeRun = func(args ...string) ([]byte, error) {
 		commands = append(commands, strings.Join(args, " "))

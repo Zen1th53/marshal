@@ -65,16 +65,10 @@ func TestRealOpenCodeAdapter(t *testing.T) {
 	}
 }
 
-func requireOpenCodeRuntimeEgress(t *testing.T) {
-	t.Helper()
-	t.Skip("NOT_RUN: canonical provider runtime egress is fail-closed until an endpoint-enforcing backend is wired")
-}
-
 func TestRealOpenCodeRuntimeE2E(t *testing.T) {
 	if os.Getenv("MARSHAL_TEST_REAL_OPENCODE") != "1" {
 		t.Skip("set MARSHAL_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
 	}
-	requireOpenCodeRuntimeEgress(t)
 	t.Setenv("MARSHAL_OPENCODE_MODEL", defaultOpenCodeModel())
 
 	repo := runtimeIntegrationRepo(t)
@@ -87,12 +81,13 @@ func TestRealOpenCodeRuntimeE2E(t *testing.T) {
 	}
 	defer runtime.Close()
 
-	agent, err := runtime.RegisterAgent(context.Background(), app.RegisterAgentRequest{Name: "real-opencode", Role: model.RoleDeveloper})
+	allowRealProviderCredentials(t, runtime, "opencode")
+	agent, err := runtime.RegisterAgent(context.Background(), app.RegisterAgentRequest{Name: "real-opencode", Role: model.RoleDeveloper, ModelProvider: "opencode"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := runtime.ImportTasks(context.Background(), []model.Task{{
-		ID: "TASK-REAL-OPENCODE-RUNTIME", Title: "Create opencode-real-proof.txt containing MARSHAL opencode real proof.",
+		ID: "TASK-REAL-OPENCODE-RUNTIME", Title: "Create opencode-real-proof.txt containing exactly MARSHAL opencode real proof followed by a newline. Do not commit; the runtime commits changes.",
 		Status: model.TaskReady, Risk: model.R1,
 	}}); err != nil {
 		t.Fatal(err)
@@ -102,27 +97,13 @@ func TestRealOpenCodeRuntimeE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, _ := os.ReadFile(result.StdoutArtifact.Path)
-	stderr, _ := os.ReadFile(result.StderrArtifact.Path)
-
-	if result.ExitStatus != 0 && result.Status == "failed" {
-		t.Fatalf("OpenCode adapter crashed (exit %d):\nstdout: %s\nstderr: %s", result.ExitStatus, stdout, stderr)
-	}
-
-	if result.ResultCommit == result.BaseCommit {
-		t.Fatalf("OpenCode produced no task commit.\nstdout: %s\nstderr: %s", stdout, stderr)
-	}
-
-	if result.ResultCommit != result.BaseCommit {
-		t.Logf("OpenCode produced a commit: %s", result.ResultCommit)
-	}
+	requireRealProviderProof(t, runtime, result, "opencode-real-proof.txt", "MARSHAL opencode real proof\n")
 }
 
 func TestRealOpenCodeMCPFullChain(t *testing.T) {
 	if os.Getenv("MARSHAL_TEST_REAL_OPENCODE") != "1" {
 		t.Skip("set MARSHAL_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
 	}
-	requireOpenCodeRuntimeEgress(t)
 	t.Setenv("MARSHAL_OPENCODE_MODEL", defaultOpenCodeModel())
 
 	repo := runtimeIntegrationRepo(t)
@@ -135,7 +116,8 @@ func TestRealOpenCodeMCPFullChain(t *testing.T) {
 	}
 	defer runtime.Close()
 
-	agent, err := runtime.RegisterAgent(context.Background(), app.RegisterAgentRequest{Name: "real-opencode-mcp", Role: model.RoleDeveloper})
+	allowRealProviderCredentials(t, runtime, "opencode")
+	agent, err := runtime.RegisterAgent(context.Background(), app.RegisterAgentRequest{Name: "real-opencode-mcp", Role: model.RoleDeveloper, ModelProvider: "opencode"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,8 +180,8 @@ func TestRealOpenCodeMCPFullChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Status != model.TaskReview && task.Status != model.TaskReady {
-		t.Fatalf("expected task execution status review or ready, got %v", task.Status)
+	if task.Status != model.TaskReview {
+		t.Fatalf("expected task execution status review, got %v", task.Status)
 	}
 }
 
@@ -207,7 +189,6 @@ func TestRealOpenCodeA2AFullChain(t *testing.T) {
 	if os.Getenv("MARSHAL_TEST_REAL_OPENCODE") != "1" {
 		t.Skip("set MARSHAL_TEST_REAL_OPENCODE=1 for real OpenCode -> Ollama integration")
 	}
-	requireOpenCodeRuntimeEgress(t)
 	t.Setenv("MARSHAL_OPENCODE_MODEL", defaultOpenCodeModel())
 
 	repo := runtimeIntegrationRepo(t)
@@ -220,7 +201,11 @@ func TestRealOpenCodeA2AFullChain(t *testing.T) {
 	}
 	defer runtime.Close()
 
-	server := a2a.NewServer(runtime)
+	allowRealProviderCredentials(t, runtime, "opencode")
+	server, err := a2a.NewInsecureServer(runtime, "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	ts := httptest.NewServer(server.Handler())
 	defer ts.Close()
 
@@ -277,7 +262,7 @@ func TestRealOpenCodeA2AFullChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Status != model.TaskReview && task.Status != model.TaskReady {
-		t.Fatalf("expected canonical MARSHAL task status review or ready, got %v", task.Status)
+	if task.Status != model.TaskReview {
+		t.Fatalf("expected canonical MARSHAL task status review, got %v", task.Status)
 	}
 }

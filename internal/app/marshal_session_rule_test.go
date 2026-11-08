@@ -53,3 +53,29 @@ func TestSingleProviderCanVerifyUltra(t *testing.T) {
 		t.Fatal("a missing verifier was accepted")
 	}
 }
+
+// A provider other than the worker's is chosen whenever one is installed.
+func TestPickIndependentProviderPrefersDifferent(t *testing.T) {
+	got, same := pickIndependentProvider([]string{"codex", "claude", "agy"}, []string{"codex"}, "codex")
+	if got != "claude" || same {
+		t.Fatalf("got %q same=%v, want claude false", got, same)
+	}
+	// The Marshal's own provider is acceptable when it is the only
+	// non-worker left.
+	got, same = pickIndependentProvider([]string{"codex", "claude"}, []string{"codex"}, "claude")
+	if got != "claude" || same {
+		t.Fatalf("got %q same=%v, want claude false", got, same)
+	}
+}
+
+// With only the worker's provider available the role falls back to it and
+// says so.
+func TestPickIndependentProviderFallbackIsReported(t *testing.T) {
+	got, same := pickIndependentProvider([]string{"codex"}, []string{"codex"}, "codex")
+	if got != "codex" || !same {
+		t.Fatalf("got %q same=%v, want codex true", got, same)
+	}
+	if !sameProviderAsWorker("Codex", "codex") || sameProviderAsWorker("claude", "codex") {
+		t.Fatal("sameProviderAsWorker mismatch")
+	}
+}

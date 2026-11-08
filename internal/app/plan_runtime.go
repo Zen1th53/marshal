@@ -43,12 +43,30 @@ type CreatePlanRequest struct {
 	HarnessCandidates      []plan.HarnessCandidate `json:"harness_candidates"`
 	RequiredCapabilities   []string                `json:"required_capabilities"`
 	EstimatedContextTokens int                     `json:"estimated_context_tokens"`
+	// Checks and TaskProviders are optional private model-draft inputs. They
+	// never carry approval or harness evidence; the runtime validates them.
+	Checks        map[string][]string `json:"checks,omitempty"`
+	TaskProviders map[string]string   `json:"task_providers,omitempty"`
 }
 
 // Create builds a plan from the session's active Goal, assigns its harnesses,
 // and persists its first version. It never fills missing evidence with a
 // plausible value; missing routes or harnesses remain visible in the plan.
 func (s *PlanService) Create(ctx context.Context, request CreatePlanRequest) (plan.ExecutionPlan, error) {
+	built, err := s.Build(ctx, request)
+	if err != nil {
+		return plan.ExecutionPlan{}, err
+	}
+	if err := s.runtime.store.SavePlan(ctx, built, 0); err != nil {
+		return plan.ExecutionPlan{}, err
+	}
+	return s.runtime.store.GetPlan(ctx, built.ID, 1)
+}
+
+// Build prepares the canonical Process 04 plan without persisting it. Native
+// Marshal intake uses this so the plan and its reviewable run can be committed
+// in one transaction after the authenticated planning-read fence is checked.
+func (s *PlanService) Build(ctx context.Context, request CreatePlanRequest) (plan.ExecutionPlan, error) {
 	if err := s.available(); err != nil {
 		return plan.ExecutionPlan{}, err
 	}
@@ -77,10 +95,19 @@ func (s *PlanService) Create(ctx context.Context, request CreatePlanRequest) (pl
 		Candidates: request.HarnessCandidates, RequiredCapabilities: request.RequiredCapabilities,
 		EstimatedContextTokens: request.EstimatedContextTokens, Now: now,
 	})
-	if err := s.runtime.store.SavePlan(ctx, built, 0); err != nil {
+	if err := s.applyModelPlanInputs(ctx, &built, request, now); err != nil {
 		return plan.ExecutionPlan{}, err
 	}
-	return s.runtime.store.GetPlan(ctx, built.ID, 1)
+	if built.State == plan.StateReady {
+		if blockers := planExecutionBlockers(built); len(blockers) > 0 {
+			built.State = plan.StateBlocked
+			built.BlockedBy = blockers
+		}
+	}
+	if err := s.bindRequiredPlanProjectContract(ctx, &built); err != nil {
+		return plan.ExecutionPlan{}, err
+	}
+	return built, nil
 }
 
 // Current loads the active plan for a project.
@@ -109,6 +136,9 @@ func (s *PlanService) ApproveVersion(ctx context.Context, projectID projectid.ID
 	if p.Version != expectedVersion {
 		return plan.ExecutionPlan{}, fmt.Errorf("%w: plan moved from version %d to %d", model.ErrConflict, expectedVersion, p.Version)
 	}
+	if blockers := planExecutionBlockers(p); len(blockers) > 0 {
+		return plan.ExecutionPlan{}, fmt.Errorf("%w: plan is not executable: %s", plan.ErrPlanInvalid, strings.Join(blockers, "; "))
+	}
 	approved, err := p.Approve(s.now())
 	if err != nil {
 		return plan.ExecutionPlan{}, err
@@ -117,6 +147,83 @@ func (s *PlanService) ApproveVersion(ctx context.Context, projectID projectid.ID
 		return plan.ExecutionPlan{}, err
 	}
 	return s.runtime.store.GetPlan(ctx, approved.ID, p.Version+1)
+}
+
+// planExecutionBlockers checks the actual Process 05 inputs after harness
+// assignment. Build resolves routes before assignment, so READY alone cannot
+// prove that a governed worker exists for every task. Rechecking at approval
+// also protects older or imported READY plans.
+func planExecutionBlockers(p plan.ExecutionPlan) []string {
+	blockers := planStructureBlockers(p)
+	blockers = append(blockers, p.Assignments.Unresolved...)
+	for _, task := range p.Tasks {
+		route, ok := p.Routes[task.ID]
+		if !ok || strings.TrimSpace(route.Provider) == "" || route.Governance == constitution.GovernanceUnavailable {
+			blockers = append(blockers, "no governed route for "+task.ID)
+		}
+		worker, err := marshalPlanTaskWorker(p, task)
+		if err != nil {
+			blockers = append(blockers, err.Error())
+			continue
+		}
+		// Routes describe the upstream provider/model, while assignments name
+		// the executable harness. The harness name may legitimately differ
+		// (for example openai through a test harness); the selected upstream
+		// identity must still be the one the operator reviews in the route.
+		matched := false
+		for _, assignment := range p.Assignments.Assignments {
+			if assignment.Independent || (assignment.Harness != worker && assignment.Harness != marshalHarnessName(worker)) || !planAssignmentCoversTask(assignment, task) {
+				continue
+			}
+			matched = true
+			if assignment.Provider != route.Provider || assignment.Model != route.Model {
+				blockers = append(blockers, "route and governed producer differ for "+task.ID)
+			}
+		}
+		if !matched {
+			blockers = append(blockers, "no governed producer assignment for "+task.ID)
+		}
+	}
+	return blockers
+}
+
+// planStructureBlockers names each failed structural check exactly, so the
+// Marshal and the owner can see which part of the plan to fix.
+func planStructureBlockers(p plan.ExecutionPlan) []string {
+	var blockers []string
+	if len(p.Tasks) == 0 {
+		blockers = append(blockers, "task graph is empty: the plan has no tasks")
+	}
+	graph, graphErr := plan.BuildGraph(p.Tasks)
+	switch {
+	case graphErr != nil:
+		blockers = append(blockers, "task graph is invalid: "+graphErr.Error())
+	case graph.Digest != p.Graph.Digest:
+		blockers = append(blockers, "task graph digest does not match the plan's tasks")
+	}
+	if len(p.Graph.Order) != len(p.Tasks) {
+		blockers = append(blockers, fmt.Sprintf("task graph orders %d of %d tasks", len(p.Graph.Order), len(p.Tasks)))
+	}
+	if len(p.Team.Members) == 0 {
+		blockers = append(blockers, "team has no members")
+	}
+	if len(p.Verification.Obligations) == 0 {
+		blockers = append(blockers, "verification plan has no obligations")
+	} else if !p.Verification.Complete() {
+		blockers = append(blockers, "verification plan is incomplete: "+planVerificationGap(p.Verification))
+	}
+	return blockers
+}
+
+func planAssignmentCoversTask(assignment plan.Assignment, task plan.Task) bool {
+	if len(assignment.Tasks) > 0 {
+		return containsMarshal(assignment.Tasks, task.ID)
+	}
+	role := plan.Role(task.Role)
+	if role == "" {
+		role = plan.RoleDeveloper
+	}
+	return assignment.Role == role
 }
 
 // Cancel records cancellation as a new CAS-guarded plan version.
@@ -153,6 +260,9 @@ func (s *PlanService) Handoff(ctx context.Context, sessionID string, projectID p
 	if err != nil {
 		return plan.Handoff{}, err
 	}
+	if blockers := planExecutionBlockers(p); len(blockers) > 0 {
+		return plan.Handoff{}, fmt.Errorf("%w: approved plan is not executable: %s", plan.ErrPlanInvalid, strings.Join(blockers, "; "))
+	}
 	goal, err := s.runtime.store.GetActiveGoalContract(ctx, sessionID)
 	if err != nil {
 		return plan.Handoff{}, err
@@ -184,4 +294,37 @@ func (s *PlanService) available() error {
 		return fmt.Errorf("%w: plan service is unavailable", model.ErrUnavailable)
 	}
 	return nil
+}
+
+// planBlockerReport merges the build's own blockers with the execution
+// checks, once each, so a refusal never reports an empty or generic reason.
+func planBlockerReport(lists ...[]string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, list := range lists {
+		for _, blocker := range list {
+			if blocker = strings.TrimSpace(blocker); blocker != "" && !seen[blocker] {
+				seen[blocker] = true
+				out = append(out, blocker)
+			}
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, "no blocker was recorded")
+	}
+	return out
+}
+
+// planVerificationGap lists the Goal criteria no task obligation covers.
+func planVerificationGap(v plan.VerificationPlan) string {
+	const limit = 3
+	var named []string
+	for i, criterion := range v.Uncovered {
+		if i == limit {
+			named = append(named, fmt.Sprintf("and %d more", len(v.Uncovered)-limit))
+			break
+		}
+		named = append(named, fmt.Sprintf("%q", criterion))
+	}
+	return fmt.Sprintf("%d Goal criteria have no covering task (%s)", len(v.Uncovered), strings.Join(named, ", "))
 }

@@ -508,8 +508,9 @@ func TestCloudCapabilitiesComeOnlyFromTheGate(t *testing.T) {
 
 // --- providers ---
 
-// Quota, reset and promotional allowance are implementation gaps. They must be
-// rendered as gaps on every provider, never inferred from usage.
+// Quota, reset and promotional allowance are unsupported provider capabilities.
+// They must be rendered as reasoned UNKNOWN on every installed provider, and NOT_RUN
+// when uninstalled/unprobed, never inferred from usage.
 func TestProviderQuotaResetAndAllowanceAreAlwaysGaps(t *testing.T) {
 	list := (&StatusSource{Now: fixedClock()}).ReadProviders(
 		context.Background(),
@@ -527,14 +528,20 @@ func TestProviderQuotaResetAndAllowanceAreAlwaysGaps(t *testing.T) {
 			"allowance": row.Allowance, "auth": row.Auth,
 		} {
 			if v.Status.IsSuccess() {
-				t.Fatalf("%s %s reports a known value, but it is an implementation gap",
+				t.Fatalf("%s %s reports a known value, but it is unsupported/unknown",
 					row.Name.Display(), name)
 			}
-			if !strings.Contains(v.Display(), "IMPLEMENTATION GAP") {
-				t.Fatalf("%s %s does not name the gap: %q", row.Name.Display(), name, v.Display())
-			}
-			if !strings.Contains(v.Display(), "CTUI-") {
-				t.Fatalf("%s %s does not identify which gap: %q", row.Name.Display(), name, v.Display())
+			if row.Availability.Display() == "installed" {
+				if v.Status != TruthUnknown {
+					t.Fatalf("%s %s reported %s, want UNKNOWN with reason", row.Name.Display(), name, v.Status.Label())
+				}
+				if v.Reason == "" {
+					t.Fatalf("%s %s gave no reason", row.Name.Display(), name)
+				}
+			} else {
+				if v.Status != TruthNotRun {
+					t.Fatalf("%s %s reported %s, want NOT_RUN for uninstalled provider", row.Name.Display(), name, v.Status.Label())
+				}
 			}
 		}
 	}
@@ -659,36 +666,38 @@ func TestProviderGapsSurviveEveryProbeShape(t *testing.T) {
 		t.Fatalf("got %d rows, want %d", len(list.Rows), len(probes))
 	}
 	for _, row := range list.Rows {
-		gaps := map[string]struct {
-			v    Value
-			spec string
-		}{
-			"quota":     {row.Quota, "CTUI-0148"},
-			"reset":     {row.Reset, "CTUI-0149"},
-			"allowance": {row.Allowance, "CTUI-0151"},
-			"auth":      {row.Auth, "CTUI-0144"},
+		gaps := map[string]Value{
+			"quota":     row.Quota,
+			"reset":     row.Reset,
+			"allowance": row.Allowance,
+			"auth":      row.Auth,
 		}
-		for name, g := range gaps {
-			if g.v.Status.IsSuccess() {
+		for name, v := range gaps {
+			if v.Status.IsSuccess() {
 				t.Fatalf("%s %s became a known value", row.Name.Display(), name)
 			}
-			if g.v.Status != TruthNotRun {
-				t.Fatalf("%s %s reported %s, want NOT_RUN",
-					row.Name.Display(), name, g.v.Status.Label())
+			if row.Availability.Display() == "installed" {
+				if v.Status != TruthUnknown {
+					t.Fatalf("%s %s reported %s, want UNKNOWN",
+						row.Name.Display(), name, v.Status.Label())
+				}
+			} else {
+				if v.Status != TruthNotRun {
+					t.Fatalf("%s %s reported %s, want NOT_RUN",
+						row.Name.Display(), name, v.Status.Label())
+				}
 			}
-			if !strings.Contains(g.v.Reason, g.spec) {
-				t.Fatalf("%s %s does not cite %s: %q",
-					row.Name.Display(), name, g.spec, g.v.Reason)
+			if v.Reason == "" {
+				t.Fatalf("%s %s has empty reason", row.Name.Display(), name)
 			}
-			// Nothing a probe said may leak into the gap's explanation.
-			if strings.Contains(g.v.Display(), "1000000") ||
-				strings.Contains(g.v.Display(), "3h") {
+			// Nothing a probe said may leak into the explanation.
+			if strings.Contains(v.Display(), "1000000") ||
+				strings.Contains(v.Display(), "3h") {
 				t.Fatalf("%s %s echoed unevidenced probe text: %q",
-					row.Name.Display(), name, g.v.Display())
+					row.Name.Display(), name, v.Display())
 			}
-			// And a gap is never copyable, so an unevidenced figure cannot
-			// reach the clipboard and be pasted somewhere as fact.
-			if _, ok := g.v.CopyText(); ok {
+			// And unevidenced figures are never copyable.
+			if _, ok := v.CopyText(); ok {
 				t.Fatalf("%s %s was copyable", row.Name.Display(), name)
 			}
 		}
@@ -703,8 +712,8 @@ func TestProviderGapsReadAsUnimplementedNotBroken(t *testing.T) {
 		fakeProviders{probes: []ProviderProbe{{Name: "p", Found: true, Probed: true}}})
 
 	reason := list.Rows[0].Quota.Display()
-	if !strings.Contains(reason, "IMPLEMENTATION GAP") {
-		t.Fatalf("the gap does not name itself: %q", reason)
+	if !strings.Contains(strings.ToLower(reason), "supported") && !strings.Contains(strings.ToLower(reason), "interface") {
+		t.Fatalf("the reason does not explain lack of supported interface: %q", reason)
 	}
 	for _, misleading := range []string{"try again", "retry", "temporarily", "outage"} {
 		if strings.Contains(strings.ToLower(reason), misleading) {

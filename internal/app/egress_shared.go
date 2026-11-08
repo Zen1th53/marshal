@@ -47,7 +47,8 @@ func projectEgressScopes(history []events.Event) (map[string]*runEgress, error) 
 			}
 			provider, _ := event.Data["provider"].(string)
 			parent, _ := event.Data["parent_run_id"].(string)
-			scopes[event.RunID] = &runEgress{id: event.RunID, parent: parent, task: event.TaskID, worker: event.Subject, provider: provider, socket: socket, allowlist: allowlist, pending: map[string]bool{}}
+			probe, _ := event.Data["harness_probe"].(bool)
+			scopes[event.RunID] = &runEgress{id: event.RunID, parent: parent, task: event.TaskID, worker: event.Subject, provider: provider, socket: socket, harnessProbe: probe, allowlist: allowlist, pending: map[string]bool{}}
 			continue
 		}
 		scope := scopes[event.RunID]
@@ -57,9 +58,11 @@ func projectEgressScopes(history []events.Event) (map[string]*runEgress, error) 
 		endpoint, _ := event.Data["endpoint"].(string)
 		switch event.Type {
 		case events.EventTypeNetworkEgressNotification:
-			scope.pending[endpoint] = true
+			if event.Data["requestable"] != false {
+				scope.pending[endpoint] = true
+			}
 		case events.EventTypeNetworkEgressGranted, events.EventTypeNetworkEgressRevoked:
-			if event.Data["source"] != "operator command" {
+			if event.Data["source"] != "operator command" && !buildAutomaticEgressSource(event.Data["source"]) && !buildOpenEgressSource(event.Data["source"]) {
 				continue
 			}
 			if err := scope.allowlist.Set(endpoint, event.Type == events.EventTypeNetworkEgressGranted, func(string) error { return nil }); err != nil {
@@ -144,7 +147,7 @@ type storedRunEgress struct {
 // Read committed decisions on every evaluation, including the proxy's final
 // check before dialing. A read error refuses access, including provider defaults.
 func (e *storedRunEgress) Evaluate(ctx context.Context, request netpolicy.Request) (netpolicy.Decision, error) {
-	if e.scope.broker != nil && !e.runtime.HasCredentialGrant(ctx, e.scope.provider) {
+	if e.scope.broker != nil && !e.runtime.credentialAllowedForEgress(ctx, e.scope) {
 		return netpolicy.Decision{Reason: netpolicy.ReasonDenied}, nil
 	}
 	history, err := e.runtime.store.EgressControlEvents(ctx, e.scope.id, 0)
@@ -159,7 +162,7 @@ func (e *storedRunEgress) Evaluate(ctx context.Context, request netpolicy.Reques
 	if scope == nil || scope.socket != e.scope.socket {
 		return netpolicy.Decision{Reason: netpolicy.ReasonDenied}, model.ErrUnavailable
 	}
-	return scope.allowlist.Evaluate(ctx, request)
+	return e.buildEvaluateOpenEgress(ctx, scope, request, history)
 }
 
 // New requests observe revocation synchronously. Existing connections are closed
@@ -176,13 +179,20 @@ func (r *Runtime) watchEgressRevocations(ctx context.Context, scope *runEgress) 
 			return
 		case <-ticker.C:
 			if scope.broker != nil {
-				records, err := r.store.ListEvents(ctx)
+				if scope.boundCredential != nil && !r.credentialAllowedForEgress(ctx, scope) {
+					if err := scope.proxy.Close(); err != nil {
+						return
+					}
+					_ = r.recordBrokerClosed(ctx, scope, "")
+					return
+				}
+				records, err := r.store.CredentialDecisionEvents(ctx, r.ProjectID(), scope.provider, scope.started)
 				if err != nil {
 					_ = scope.proxy.Close()
 					return
 				}
 				for _, event := range records {
-					if seen[event.ID] || event.Type != "PERMISSION_DECIDED" || event.ProjectID != r.ProjectID() || event.Data["kind"] != "credential" || event.Data["object"] != scope.provider || event.Data["allow"] != false || event.Timestamp.Before(scope.started) {
+					if seen[event.ID] || event.Data["allow"] != false {
 						continue
 					}
 					if err := scope.proxy.Close(); err != nil {

@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -52,7 +53,7 @@ while read line; do echo input:$line; done
 	}
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		data, _ := os.ReadFile(filepath.Join(w.workDir, ".marshal", "tmux-chat.json"))
+		data, _ := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "tmux-chat.json"))
 		var saved map[string]any
 		json.Unmarshal(data, &saved)
 		if saved["session_id"] == "chat-bound-id" {
@@ -123,7 +124,7 @@ func TestRecoveredChatPreservesHistoryProvenance(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			a := &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", provider: "codex", paneID: panes[0].PaneID, window: "marshal"}
+			a := &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", provider: "codex", paneID: panes[0].PaneID, window: statepath.Name}
 			if err := saveAgentRecord(w.workDir, w.tmuxSession, a); err != nil {
 				t.Fatal(err)
 			}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"sync"
@@ -21,7 +22,9 @@ var ErrState = errors.New("cloud: state")
 // deleting this file costs a registration round trip, not an entitlement, which
 // is the property that makes the file safe to delete when something goes wrong.
 type State struct {
-	InstallationID string `json:"installation_id"`
+	TelemetryDisabled    bool   `json:"telemetry_disabled,omitempty"`
+	TelemetryNoticeShown bool   `json:"telemetry_notice_shown,omitempty"`
+	InstallationID       string `json:"installation_id"`
 	// PrivateKey is the installation key. Proof of possession rests on it and
 	// it never leaves this machine, which is why the file holding it is 0600.
 	PrivateKey []byte `json:"private_key"`
@@ -203,9 +206,15 @@ func MachineStateDir(projectStateDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: %s", ErrState, err)
 	}
-	dir := filepath.Join(base, "marshal")
+	if err := statepath.ValidateConfig(base); err != nil {
+		return "", err
+	}
+	dir := filepath.Join(base, machineConfigName)
 	machine := NewStore(dir)
 	if fileExists(machine.Path()) {
+		return dir, nil
+	}
+	if !adoptLegacyMachineState {
 		return dir, nil
 	}
 	if legacy, err := NewStore(projectStateDir).Load(); err == nil {

@@ -13,6 +13,7 @@ __pycache__/
 *~
 .DS_Store
 .marshal/
+.marshal-extreme/
 bin/
 *.tar.gz
 *.zip

@@ -1,0 +1,33 @@
+{
+  "upstream_url": "https://github.com/google/elephant-goldfish-model",
+  "tested_release": "v0.1.0",
+  "commit": "6690c125f298c370410557f1d8399b6f9f880e6e",
+  "license": "Apache-2.0",
+  "required_skills": [
+    "egm-bootstrap",
+    "egm-brainstorm",
+    "egm-draft",
+    "egm-review",
+    "egm-review-loop",
+    "egm-resolve",
+    "egm-drift-report"
+  ],
+  "required_directories": [
+    "agents",
+    "resources/document_standards"
+  ],
+  "artifacts": {
+    "concepts_brief": "concepts_brief.md",
+    "approved_design": "design_draft.md",
+    "review_findings": "consolidated_review_report.md",
+    "resolution": "goldfish_review_report.md",
+    "design_draft": "design_draft.md"
+  },
+  "review_stage_artifacts": [
+    "zoom_out_report.md",
+    "comprehension_report.md",
+    "critic_report.md",
+    "intermediate_zoom_out_report.md",
+    "implementation_readiness_report.md"
+  ]
+}

@@ -1,3 +1,5 @@
+//go:build governed
+
 package constitution
 
 import (
@@ -32,10 +34,11 @@ func TestMarshalProtocolOrder(t *testing.T) {
 		"4. Ask one open question: what does the person want to achieve",
 		"5. Read the current state",
 		"6. Clarify the goal",
-		"7. Ask how the person wants to work",
-		"8. Ask for the control level",
-		"9. Plan the tasks",
-		"10. Write the draft",
+		"7. Review the design",
+		"8. Ask how the person wants to work",
+		"9. Ask for the control level",
+		"10. Plan the tasks",
+		"11. Write the draft",
 		"/marshal approve",
 		"After approval",
 	}
@@ -88,8 +91,8 @@ func TestMarshalProtocolPlanAndFinalReport(t *testing.T) {
 		rules []string
 	}{
 		{
-			start: "9. Plan the tasks",
-			end:   "10. Write the draft",
+			start: "10. Plan the tasks",
+			end:   "11. Write the draft",
 			rules: []string{
 				"the worker and why that worker",
 				"the expected output",
@@ -162,5 +165,19 @@ func TestPlanPackIsConfirmedBeforeReadBack(t *testing.T) {
 func TestMarshalIntakeUsesFileChannel(t *testing.T) {
 	if strings.Contains(marshalProtocol, "MARSHAL_INTAKE") || !strings.Contains(marshalProtocol, `"action":"intake"`) {
 		t.Fatal("intake must use the validated file channel, with no raw chat marker")
+	}
+}
+
+func TestMarshalProtocolEGMApprovalAndFallback(t *testing.T) {
+	start := strings.Index(marshalProtocol, "7. Review the design")
+	end := strings.Index(marshalProtocol, "8. Ask how")
+	if start < 0 || end <= start {
+		t.Fatal("missing design step")
+	}
+	step := strings.Join(strings.Fields(marshalProtocol[start:end]), " ")
+	for _, rule := range []string{"small, clear bug fix", "appointed Marshal model", "DIFFERENT provider", "fresh zero-context sessions", "never your transcript", "Only pinned or compatible", "built-in plain design review", "design_record", "memory candidates", "never auto-promote", "explicit approval before planning tasks", "one question per message"} {
+		if !strings.Contains(step, rule) {
+			t.Errorf("EGM step lacks %q", rule)
+		}
 	}
 }

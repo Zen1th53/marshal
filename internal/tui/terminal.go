@@ -52,6 +52,7 @@ const (
 	KeyWordRight
 	KeyWordDeleteAfter
 	KeyCtrlJ
+	KeyCtrlY
 	KeyPaste
 	// Function keys F1-F12
 	KeyF1
@@ -525,6 +526,8 @@ func ParseNextKey(b []byte) (KeyEvent, int) {
 		return KeyEvent{Type: KeyCtrlW, Raw: b[:1]}, 1
 	case 0x18:
 		return KeyEvent{Type: KeyCtrlX, Raw: b[:1]}, 1
+	case 0x19:
+		return KeyEvent{Type: KeyCtrlY, Raw: b[:1]}, 1
 	case 0x7F, 0x08:
 		return KeyEvent{Type: KeyBackspace, Raw: b[:1]}, 1
 	}
@@ -571,4 +574,57 @@ func MoveCursorSeq(row, col int) string {
 		col = 1
 	}
 	return fmt.Sprintf("\x1b[%d;%dH", row, col)
+}
+
+// IsNoColor reports whether the NO_COLOR environment variable is set and nonempty.
+// See https://no-color.org.
+func IsNoColor() bool {
+	return os.Getenv("NO_COLOR") != ""
+}
+
+// IsUTF8 reports whether the active locale specifies UTF-8 encoding.
+//
+// The effective locale is the first nonempty of LC_ALL, LC_CTYPE and LANG, in
+// that order (POSIX precedence), so LC_ALL=C wins over a UTF-8 LANG. A locale
+// naming UTF-8 is UTF-8; C, POSIX and any locale naming another charset are
+// not. With no locale set at all the terminal is assumed to be UTF-8.
+func IsUTF8() bool {
+	for _, env := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		val := os.Getenv(env)
+		if val == "" {
+			continue
+		}
+		upper := strings.ToUpper(val)
+		if strings.Contains(upper, "UTF-8") || strings.Contains(upper, "UTF8") {
+			return true
+		}
+		if upper == "C" || upper == "POSIX" {
+			return false
+		}
+		// An explicit charset that is not UTF-8 (en_US.ISO-8859-1).
+		if strings.Contains(upper, ".") {
+			return false
+		}
+		return true
+	}
+	return true
+}
+
+// ResolveTheme turns the requested theme mode into the effective mode and
+// Unicode setting for this terminal. An explicit --no-color always wins and
+// keeps the plain ASCII glyph set it has always had. Otherwise NO_COLOR in
+// the environment turns the default theme colourless (an explicitly chosen
+// --theme is user configuration and is kept), and the glyph set follows the
+// locale: a non-UTF-8 locale gets ASCII box drawing and glyphs.
+func ResolveTheme(mode ThemeMode) (ThemeMode, bool) {
+	if mode == ThemeNoColor {
+		return ThemeNoColor, false
+	}
+	if (mode == "" || mode == ThemeDefault) && IsNoColor() {
+		mode = ThemeNoColor
+	}
+	if mode == "" {
+		mode = ThemeDefault
+	}
+	return mode, IsUTF8()
 }

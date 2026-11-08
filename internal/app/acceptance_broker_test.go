@@ -11,6 +11,7 @@ import (
 )
 
 func TestAcceptanceCredentialWaitsForOperator(t *testing.T) {
+	requireOperatorCredentialDecisions(t)
 	for _, allow := range []bool{true, false} {
 		t.Run(map[bool]string{true: "allow", false: "deny"}[allow], func(t *testing.T) {
 			r := openNetpolRuntime(t)
@@ -51,6 +52,7 @@ func TestAcceptanceCredentialWaitsForOperator(t *testing.T) {
 	}
 }
 func TestAcceptanceCredentialWaitTimeout(t *testing.T) {
+	requireOperatorCredentialDecisions(t)
 	r := openNetpolRuntime(t)
 	r.SetPermissionSink(func(permission.Request) {})
 	start := time.Now()
@@ -63,6 +65,7 @@ func TestAcceptanceCredentialWaitTimeout(t *testing.T) {
 }
 
 func TestAcceptanceProviderBrokerContinuesAfterAllow(t *testing.T) {
+	requireOperatorCredentialDecisions(t)
 	t.Setenv("OPENAI_API_KEY", "synthetic-acceptance-key")
 	r := openNetpolRuntime(t)
 	control, err := r.OpenLocalControl(t.Context())
@@ -101,6 +104,7 @@ func TestAcceptanceProviderBrokerContinuesAfterAllow(t *testing.T) {
 }
 
 func TestAcceptanceCredentialUnavailableIsNotDenied(t *testing.T) {
+	requireOperatorCredentialDecisions(t)
 	r := openNetpolRuntime(t)
 	if _, err := r.providerBroker(t.Context(), "codex", ""); err == nil || strings.Contains(err.Error(), "credential use denied") {
 		t.Fatalf("unavailable decision surface: %v", err)

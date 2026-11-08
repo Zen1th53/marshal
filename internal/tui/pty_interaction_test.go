@@ -4,6 +4,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -117,7 +118,7 @@ func countOnScreen(text, needle string) int {
 func TestPTYTabCompletesWithoutExecuting(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	s.send("/mo")
 	s.send("\t")
@@ -145,11 +146,20 @@ func TestPTYTabCompletesWithoutExecuting(t *testing.T) {
 	}
 }
 
+// The private build marker has highest status priority, so it survives the
+// narrow terminal after lower-priority mode fields are dropped.
+func freshPTYStatusMarker() string {
+	if statepath.PublicEngine {
+		return "Marshal — approval authority"
+	}
+	return "MANUAL"
+}
+
 // Test B: Tab many times must not accumulate chrome.
 func TestPTYRepeatedTabKeepsOneComposerAndStatusline(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	s.send("/mo")
 	for i := 0; i < 50; i++ {
@@ -162,7 +172,7 @@ func TestPTYRepeatedTabKeepsOneComposerAndStatusline(t *testing.T) {
 	if n := countOnScreen(text, PromptMarker); n != 1 {
 		t.Errorf("after 50 Tabs expected 1 composer, found %d:\n%s", n, text)
 	}
-	if n := countOnScreen(text, "MANUAL"); n != 1 {
+	if n := countOnScreen(text, freshPTYStatusMarker()); n != 1 {
 		t.Errorf("after 50 Tabs expected 1 statusline, found %d:\n%s", n, text)
 	}
 	// The legacy banner must not reappear in any form.
@@ -175,7 +185,7 @@ func TestPTYRepeatedTabKeepsOneComposerAndStatusline(t *testing.T) {
 func TestPTYCursorEditingProducesExactBuffer(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	s.send("/rote")
 	// Move left twice to sit between 'o' and 't', then insert 'u' -> "/route".
@@ -194,7 +204,7 @@ func TestPTYCursorEditingProducesExactBuffer(t *testing.T) {
 func TestPTYHistoryRecall(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	s.sendLine("/status")
 	s.sendLine("/budget")
@@ -222,7 +232,7 @@ func TestPTYHistoryRecall(t *testing.T) {
 func TestPTYTabCompletesWithoutRunningAndEnterRuns(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	s.send("/ro")
 	time.Sleep(300 * time.Millisecond)
@@ -276,7 +286,7 @@ func TestPTYTabCompletesWithoutRunningAndEnterRuns(t *testing.T) {
 func TestPTYResizeWithCompletionOpen(t *testing.T) {
 	const rows, cols = 30, 120
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	s.send("/ro")
 	s.send("\t")
@@ -292,7 +302,7 @@ func TestPTYResizeWithCompletionOpen(t *testing.T) {
 	if n := countOnScreen(text, PromptMarker); n != 1 {
 		t.Errorf("after resize expected 1 composer, found %d:\n%s", n, text)
 	}
-	if n := countOnScreen(text, "MANUAL"); n != 1 {
+	if n := countOnScreen(text, freshPTYStatusMarker()); n != 1 {
 		t.Errorf("after resize expected 1 statusline, found %d:\n%s", n, text)
 	}
 	if s.cmd.ProcessState != nil && s.cmd.ProcessState.Exited() {
@@ -304,7 +314,7 @@ func TestPTYResizeWithCompletionOpen(t *testing.T) {
 func TestPTYStateChangePreservesInput(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	// Type a partial command, then force a state refresh via a resize repaint.
 	s.send("/inspect partial-input")
@@ -327,7 +337,7 @@ func TestPTYStateChangePreservesInput(t *testing.T) {
 func TestPTYManyRefreshesKeepSingleChrome(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	for i := 0; i < 40; i++ {
 		s.send("x")
@@ -339,7 +349,7 @@ func TestPTYManyRefreshesKeepSingleChrome(t *testing.T) {
 	if n := countOnScreen(text, PromptMarker); n != 1 {
 		t.Errorf("expected 1 composer after 80 edits, found %d:\n%s", n, text)
 	}
-	if n := countOnScreen(text, "MANUAL"); n != 1 {
+	if n := countOnScreen(text, freshPTYStatusMarker()); n != 1 {
 		t.Errorf("expected 1 statusline after 80 edits, found %d:\n%s", n, text)
 	}
 }
@@ -349,7 +359,7 @@ func TestPTYManyRefreshesKeepSingleChrome(t *testing.T) {
 func TestPTYStatuslineShowsRealProject(t *testing.T) {
 	const rows, cols = 24, 100
 	s := startTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 	time.Sleep(300 * time.Millisecond)
 
 	text := s.screenText(rows, cols)
@@ -362,7 +372,7 @@ func TestPTYMarshalCompletionSelectionAndFinishedGoal(t *testing.T) {
 	t.Setenv("MARSHAL_NO_UPDATE_CHECK", "1")
 	const rows, cols = 40, 140
 	s := startFrozenTUI(t, rows, cols)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 	s.send("/marshal ")
 	time.Sleep(300 * time.Millisecond)
 	s.send("\x1b[A") // Up selects the last candidate without changing the draft.
@@ -374,8 +384,8 @@ func TestPTYMarshalCompletionSelectionAndFinishedGoal(t *testing.T) {
 	s.send("\x15")
 	s.send("/marshal ")
 	time.Sleep(300 * time.Millisecond)
-	// chat is first; nine Tabs reach settings in the declared order.
-	s.send(strings.Repeat("\t", 9))
+	// chat is first; ten Tabs reach settings in the declared order.
+	s.send(strings.Repeat("\t", 10))
 	s.send("\r")
 	time.Sleep(400 * time.Millisecond)
 	if got := strings.TrimSpace(strings.TrimPrefix(s.composerLine(rows, cols), PromptMarker)); got != "/marshal settings" {

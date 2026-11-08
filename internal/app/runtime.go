@@ -8,11 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +19,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
-	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	artifactstore "github.com/Zen1th53/marshal/internal/artifact"
 	"github.com/Zen1th53/marshal/internal/auth"
@@ -39,10 +37,12 @@ import (
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/projectid"
+	"github.com/Zen1th53/marshal/internal/projectknowledge"
 	"github.com/Zen1th53/marshal/internal/protocol"
 	"github.com/Zen1th53/marshal/internal/risk"
 	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/secrets"
+	"github.com/Zen1th53/marshal/internal/sessionmcp"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/trustcontent"
 	"github.com/Zen1th53/marshal/internal/verify/quorum"
@@ -54,56 +54,79 @@ import (
 const localProjectID = "PROJECT-local"
 
 type Runtime struct {
-	ownerLock              *os.File
-	ownerMu                sync.Mutex
-	closed                 bool
-	closeErr               error
-	permissionMu           sync.Mutex
-	readGrants             map[string]bool
-	continuationCandidates map[string]model.MemoryRecordV2
-	permissionSink         func(permission.Request)
-	layout                 project.Layout
-	store                  *store.Store
-	eventEngine            *events.Engine
-	policy                 *policy.Engine
-	adapters               map[string]adapter.Adapter
-	evidenceSanitizer      evidence.Sanitizer
-	capabilityBroker       capability.Broker
-	dagGraph               *dag.Engine
-	cellManager            *cell.Manager
-	secretBroker           secrets.Broker
-	gateEngine             *gate.Engine
-	riskEngine             *risk.Engine
-	authorityPrincipal     *authz.Principal
-	processAuthority       authz.Authority
-	runtimeInstanceID      string
-	runtimePolicy          RuntimePolicyConfig
-	policyConfigured       bool
-	handoffService         *protocol.Service
-	memoryService          *MemoryService
-	quorumEngine           *quorum.Engine
-	allowProcessOnly       bool
-	execService            *ExecutionService
-	honeypotMu             sync.Mutex
-	honeypots              map[string]*worker.Honeypot
-	egressMu               sync.Mutex
-	egressRuns             map[string]*runEgress
-	egressAlert            func(EgressAlert) error
-	taskMu                 sync.Mutex
-	taskRuns               map[string]context.CancelFunc
-	execMu                 sync.Mutex
-	codexAppServerMu       sync.Mutex
-	codexAppServerTurns    map[string]*liveCodexAppServerTurn
-	codexAppServerNew      func(string, string) codexAppServerClient
-	claudeStreamMu         sync.Mutex
-	claudeStreamTurns      map[string]*liveClaudeStreamTurn
-	claudeStreamNew        func(string, string) claudeStreamClient
-	tokenManager           *auth.Manager
+	// projectIdentity* cache ProjectIdentity for projectIdentityTTL.
+	projectIdentityMu    sync.Mutex
+	projectIdentityAt    time.Time
+	projectIdentityValue string
+
+	ownerLock                  *os.File
+	ownerMu                    sync.Mutex
+	closed                     bool
+	closeErr                   error
+	providerTransport          providerTransportState
+	requiredIntegrationSources requiredIntegrationSourceRegistry
+	permissionMu               sync.Mutex
+	process05WorkerMu          sync.Mutex
+	harnessReverifyCancel      context.CancelFunc
+	marshalLive                sync.Map
+	boundCredentials           boundCredentialState
+	readGrants                 map[string]bool
+	automaticReads             sync.Map
+	continuationCandidates     map[string]model.MemoryRecordV2
+	permissionSink             func(permission.Request)
+	layout                     project.Layout
+	admittedProjectIdentity    projectid.ID
+	store                      *store.Store
+	eventEngine                *events.Engine
+	policy                     *policy.Engine
+	adapters                   map[string]adapter.Adapter
+	evidenceSanitizer          evidence.Sanitizer
+	capabilityBroker           capability.Broker
+	dagGraph                   *dag.Engine
+	cellManager                *cell.Manager
+	secretBroker               secrets.Broker
+	gateEngine                 *gate.Engine
+	riskEngine                 *risk.Engine
+	authorityPrincipal         *authz.Principal
+	processAuthority           authz.Authority
+	runtimeInstanceID          string
+	runtimePolicy              RuntimePolicyConfig
+	policyConfigured           bool
+	handoffService             *protocol.Service
+	memoryService              *MemoryService
+	quorumEngine               *quorum.Engine
+	allowProcessOnly           bool
+	execService                *ExecutionService
+	honeypotMu                 sync.Mutex
+	honeypots                  map[string]*worker.Honeypot
+	egressMu                   sync.Mutex
+	egressRuns                 map[string]*runEgress
+	egressAlert                func(EgressAlert) error
+	taskMu                     sync.Mutex
+	taskRuns                   map[string]context.CancelFunc
+	execMu                     sync.Mutex
+	codexAppServerMu           sync.Mutex
+	codexAppServerTurns        map[string]*liveCodexAppServerTurn
+	codexAppServerNew          func(string, string) codexAppServerClient
+	claudeStreamMu             sync.Mutex
+	claudeStreamTurns          map[string]*liveClaudeStreamTurn
+	claudeStreamNew            func(string, string) claudeStreamClient
+	tokenManager               *auth.Manager
+	workerMCPFactory           sessionmcp.WorkerServerFactory
 
 	// ultra is the canonical ULTRA authorization gate. It is nil when no Cloud
 	// session is attached, and a nil gate answers "not entitled", so a runtime
 	// without one evaluates every ULTRA envelope as unentitled.
 	ultra *cloud.Gate
+
+	// recoveryHooks are the trusted workspace composition that freezes and
+	// revalidates workspace/environment/budget state during session recovery.
+	// Set by the workspace at open time; nil hooks leave recovery unavailable.
+	recoveryHooks SessionRecoveryHooks
+
+	// entitlementRequests is the persisted ULTRA-entitlement request service.
+	// Set by the workspace at open time; nil leaves request tracking unavailable.
+	entitlementRequests *ULTRARequestService
 
 	// resumeRun restarts canonical execution of a resumed run; nil means
 	// ExecuteRun. Tests replace it to observe the restart without executing.
@@ -130,7 +153,46 @@ func (r *Runtime) ULTRAEntitled() bool {
 	return r.ultra.Entitled()
 }
 
+// SetWorkspaceRecoveryHooks installs the trusted workspace recovery hooks that
+// freeze and revalidate workspace/environment/budget state. It is trusted
+// composition, not a wire operation; nil hooks leave recovery unavailable.
+func (r *Runtime) SetWorkspaceRecoveryHooks(h SessionRecoveryHooks) {
+	if r == nil {
+		return
+	}
+	r.recoveryHooks = h
+}
+
+// WorkspaceRecoveryHooks returns the installed recovery hooks. A zero value
+// makes SessionRecoveryService adoption fail closed with ErrUnavailable.
+func (r *Runtime) WorkspaceRecoveryHooks() SessionRecoveryHooks {
+	if r == nil {
+		return SessionRecoveryHooks{}
+	}
+	return r.recoveryHooks
+}
+
+// SetWorkspaceEntitlementRequests installs the persisted request service built
+// by trusted workspace composition. It owns no lease or gate.
+func (r *Runtime) SetWorkspaceEntitlementRequests(s *ULTRARequestService) {
+	if r == nil {
+		return
+	}
+	r.entitlementRequests = s
+}
+
+// WorkspaceEntitlementRequests returns the persisted request service, or nil
+// when the workspace has not composed one.
+func (r *Runtime) WorkspaceEntitlementRequests() *ULTRARequestService {
+	if r == nil {
+		return nil
+	}
+	return r.entitlementRequests
+}
+
 type Options struct {
+	// KnowledgeReadOnly is used by bound query children; their owner prepares indexes.
+	KnowledgeReadOnly  bool
 	Adapters           map[string]adapter.Adapter
 	EvidenceAuthorizer evidence.Authorizer
 	EvidenceSanitizer  evidence.Sanitizer
@@ -217,12 +279,13 @@ type VerifyRequest struct {
 }
 
 type VerifyResult struct {
-	Command      []string `json:"command"`
-	ExitStatus   int      `json:"exit_status"`
-	OutputDigest string   `json:"output_digest"`
-	Stdout       string   `json:"stdout"`
-	Stderr       string   `json:"stderr"`
-	Commit       string   `json:"commit"`
+	Command      []string                   `json:"command"`
+	ExitStatus   int                        `json:"exit_status"`
+	OutputDigest string                     `json:"output_digest"`
+	Stdout       string                     `json:"stdout"`
+	Stderr       string                     `json:"stderr"`
+	Commit       string                     `json:"commit"`
+	Isolation    *model.IsolationCapability `json:"isolation,omitempty"`
 }
 
 type versionDocument struct {
@@ -253,7 +316,7 @@ func Bootstrap(ctx context.Context, root string) (project.Layout, error) {
 		return project.Layout{}, err
 	}
 	defer database.Close()
-	if err := database.Migrate(ctx); err != nil {
+	if err := migrateBootstrapStore(ctx, database, layout.RuntimeDir); err != nil {
 		return project.Layout{}, err
 	}
 	if err := database.InitProject(ctx, model.Project{
@@ -271,6 +334,9 @@ func Bootstrap(ctx context.Context, root string) (project.Layout, error) {
 	// A failure here does not fail setup: the project is usable, and the
 	// identity will be established on first open instead.
 	_, _ = projectid.Adopt(ctx, nil, layout.Root, layout.RuntimeDir)
+	if err := ensureProjectKnowledge(ctx, layout); err != nil {
+		return project.Layout{}, err
+	}
 	return layout, nil
 }
 
@@ -279,7 +345,7 @@ func Open(ctx context.Context, root string) (*Runtime, error) {
 }
 
 func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtime, error) {
-	layout, err := project.Discover(root)
+	layout, err := ValidateProject(ctx, root)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +372,7 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 			_ = database.Close()
 		}
 	}()
-	if err := database.Migrate(ctx); err != nil {
+	if err := migrateRuntimeStore(ctx, database, ownerLock != nil); err != nil {
 		return nil, err
 	}
 	identity, err := database.Project(ctx)
@@ -333,26 +399,28 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		return nil, err
 	}
 	rt := &Runtime{
-		ownerLock:           ownerLock,
-		layout:              layout,
-		store:               database,
-		eventEngine:         events.NewEngine(database),
-		dagGraph:            func() *dag.Engine { graph, _ := dag.NewEngine(database); return graph }(),
-		policy:              engine,
-		adapters:            options.Adapters,
-		evidenceSanitizer:   sanitizer,
-		capabilityBroker:    options.CapabilityBroker,
-		cellManager:         options.CellManager,
-		secretBroker:        options.SecretBroker,
-		gateEngine:          options.GateEngine,
-		riskEngine:          options.RiskEngine,
-		authorityPrincipal:  options.AuthorityPrincipal,
-		processAuthority:    options.ProcessAuthority,
-		runtimeInstanceID:   instanceID,
-		tokenManager:        auth.NewManager(layout.RuntimeDir),
-		codexAppServerTurns: make(map[string]*liveCodexAppServerTurn),
-		claudeStreamTurns:   make(map[string]*liveClaudeStreamTurn),
-		allowProcessOnly:    options.AllowProcessOnlyFallback,
+		ownerLock:               ownerLock,
+		layout:                  layout,
+		admittedProjectIdentity: admission.Identity,
+		store:                   database,
+		eventEngine:             events.NewEngine(database),
+		dagGraph:                func() *dag.Engine { graph, _ := dag.NewEngine(database); return graph }(),
+		policy:                  engine,
+		adapters:                options.Adapters,
+		evidenceSanitizer:       sanitizer,
+		capabilityBroker:        options.CapabilityBroker,
+		cellManager:             options.CellManager,
+		secretBroker:            options.SecretBroker,
+		gateEngine:              options.GateEngine,
+		riskEngine:              options.RiskEngine,
+		authorityPrincipal:      options.AuthorityPrincipal,
+		processAuthority:        options.ProcessAuthority,
+		runtimeInstanceID:       instanceID,
+		tokenManager:            auth.NewManager(layout.RuntimeDir),
+		workerMCPFactory:        sessionmcp.WorkerServerFactoryFrom(ctx),
+		codexAppServerTurns:     make(map[string]*liveCodexAppServerTurn),
+		claudeStreamTurns:       make(map[string]*liveClaudeStreamTurn),
+		allowProcessOnly:        options.AllowProcessOnlyFallback,
 	}
 	if rt.capabilityBroker == nil {
 		rt.capabilityBroker = capability.NewAuditedEngine(database, time.Now, runtimeCapabilityAuthority{}, rt.eventEngine)
@@ -394,18 +462,33 @@ func OpenWithOptions(ctx context.Context, root string, options Options) (*Runtim
 		rt.quorumEngine = quorum.NewEngine(nil)
 	}
 	rt.handoffService = protocol.NewService(protocol.Config{RepositoryRoot: layout.Root}, database, handoffAuthorizer)
+	if !options.KnowledgeReadOnly {
+		previousRoot := ""
+		if admission.Rebound {
+			previousRoot = identity.Repository
+		}
+		if err := ensureProjectKnowledge(ctx, layout, previousRoot); err != nil {
+			return nil, err
+		}
+	}
 	rt.memoryService = NewMemoryService(database)
 	rt.memoryService.propose = rt.proposeMemory
 	if err := rt.memoryService.RebuildProjections(ctx, localProjectID); err != nil {
 		return nil, err
 	}
 	if service := rt.Marshal(); ownerLock != nil && service != nil {
+		if err := database.PauseIncompatibleMarshalRuns(ctx, service.ProjectID); err != nil {
+			return nil, err
+		}
 		if err := service.RecoverPendingOperations(ctx); err != nil {
 			return nil, err
 		}
 	}
 	if ownerLock != nil {
 		_ = rt.ReconcileStartup(ctx)
+		loopCtx, cancel := context.WithCancel(context.Background())
+		rt.harnessReverifyCancel = cancel
+		rt.startHarnessReverifyLoop(loopCtx)
 	}
 	opened = true
 	return rt, nil
@@ -711,6 +794,13 @@ func (r *Runtime) ConsumeHandoff(ctx context.Context, principal protocol.Princip
 // authenticated, durable handoff service. Raw transcript/context content is
 // deliberately not duplicated into the handoff row.
 func (r *Runtime) CompileAndSubmitHandoff(ctx context.Context, principal authz.Principal, request HandoffCompileRequest) (protocol.Handoff, error) {
+	return r.compileAndSubmitHandoff(ctx, principal, request, "")
+}
+
+// compileAndSubmitHandoff is CompileAndSubmitHandoff with an optional
+// caller-derived handoff identity, so an operator retry of one command binds to
+// the same durable handoff instead of compiling a second one.
+func (r *Runtime) compileAndSubmitHandoff(ctx context.Context, principal authz.Principal, request HandoffCompileRequest, handoffID protocol.HandoffID) (protocol.Handoff, error) {
 	if r == nil || r.memoryService == nil || r.handoffService == nil {
 		return protocol.Handoff{}, protocol.ErrUnavailable
 	}
@@ -751,15 +841,18 @@ func (r *Runtime) CompileAndSubmitHandoff(ctx context.Context, principal authz.P
 		ID: principal.ID, Role: protocol.Role(strings.ToLower(principal.Role.Name)),
 		Capabilities: append([]string(nil), principal.Role.Capabilities...),
 	}
+	if handoffID == "" {
+		handoffID = protocol.HandoffID(bundle.BundleID)
+	}
 	handoff := protocol.Handoff{
-		ID: protocol.HandoffID(bundle.BundleID), Version: protocol.Version1,
+		ID: handoffID, Version: protocol.Version1,
 		TaskID: protocol.TaskID(bundle.TaskID), FromAgent: principal.ID,
 		ToRole: protocol.Role(request.TargetRole), Claims: claims,
 		EvidenceIDs: evidenceIDs, ChangedFiles: append([]string(nil), bundle.ChangedFiles...),
 		ContextDigest: "sha256:" + hex.EncodeToString(sum[:]),
 	}
 	return r.handoffService.Submit(ctx, handoffPrincipal, protocol.Submission{
-		IdempotencyKey: bundle.BundleID, Handoff: handoff,
+		IdempotencyKey: string(handoffID), Handoff: handoff,
 	})
 }
 
@@ -813,7 +906,21 @@ func (r *Runtime) Close() error {
 		if r.closed {
 			return r.closeErr
 		}
+		// Admission shares ownerMu with Close. Join owned checks while their
+		// store and egress scopes remain available for durable settlement.
+		// A refused close retains ownership and can be retried.
+		if err := closeApprovedCellWorkers(r); err != nil {
+			r.closeErr = err
+			return err
+		}
 		r.closed = true
+		if r.harnessReverifyCancel != nil {
+			r.harnessReverifyCancel()
+			r.harnessReverifyCancel = nil
+		}
+		if r.store != nil {
+			r.closeErr = errors.Join(r.closeErr, r.store.RevokeRuntimeKnowledgeReadLeases(context.Background(), r.runtimeInstanceID))
+		}
 		if r.ownerLock != nil {
 			lock := r.ownerLock
 			r.ownerLock = nil
@@ -834,6 +941,7 @@ func (r *Runtime) Close() error {
 			if scope.socket != "" {
 				_ = os.RemoveAll(filepath.Dir(scope.socket))
 			}
+			r.closeBoundCredentialEgress(scope.boundCredential, scope.id, scope.socket)
 			delete(r.egressRuns, id)
 		}
 		r.egressMu.Unlock()
@@ -867,7 +975,7 @@ func (r *Runtime) Close() error {
 		}
 		r.honeypotMu.Unlock()
 		if r.store != nil {
-			r.closeErr = r.store.Close()
+			r.closeErr = errors.Join(r.closeErr, r.store.Close())
 			return r.closeErr
 		}
 	}
@@ -1029,6 +1137,9 @@ func (r *Runtime) Task(ctx context.Context, taskID string) (model.Task, error) {
 }
 
 func (r *Runtime) Claim(ctx context.Context, request ClaimRequest) (ClaimResult, error) {
+	if _, err := r.validateTaskGoalDispatch(ctx, request.TaskID); err != nil {
+		return ClaimResult{}, err
+	}
 	sessionID, err := model.NewID("SESSION-")
 	if err != nil {
 		return ClaimResult{}, err
@@ -1104,7 +1215,7 @@ func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResu
 		}
 		request.Command = resolved
 	}
-	result, err := worker.RunVerification(ctx, r.layout.Root, request.Command, 15*time.Minute, 8<<20)
+	result, err := worker.RunVerification(ctx, r.layout.Root, request.Command, verificationTimeout, 8<<20)
 	if err != nil {
 		return VerifyResult{}, err
 	}
@@ -1112,6 +1223,9 @@ func (r *Runtime) Verify(ctx context.Context, request VerifyRequest) (VerifyResu
 	verification := VerifyResult{Command: request.Command, ExitStatus: result.ExitCode,
 		OutputDigest: "sha256:" + hex.EncodeToString(digest[:]), Stdout: string(result.Stdout),
 		Stderr: string(result.Stderr), Commit: r.layout.HEAD}
+	if sandbox.HostExecutionPreferred() {
+		verification.Isolation = &result.Isolation
+	}
 	if result.ExitCode != 0 || result.TimedOut || result.Cancelled || result.OutputTruncated {
 		return verification, fmt.Errorf("verification failed with exit status %d", result.ExitCode)
 	}
@@ -1245,6 +1359,9 @@ func isCommitIdentifier(value string) bool {
 }
 
 func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunResult, finalErr error) {
+	if err := r.requiredLegacyRunAdmission(ctx, request); err != nil {
+		return RunResult{}, err
+	}
 	var settle func() error
 	var admissionErr error
 	ctx, settle, admissionErr = r.superviseTask(ctx, request.TaskID)
@@ -1327,11 +1444,10 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		policy.Action("shell.execute"), policy.Resource(r.layout.Root)); gateErr != nil {
 		return RunResult{}, gateErr
 	}
-	// Network policy is a prerequisite, not an after-claim cleanup. Evaluate
-	// its static, deny-by-default portion before adapter/provider selection so
-	// a malformed egress request cannot be masked by an unrelated provider
-	// configuration error or create a lease first.
-	if request.NetworkRequired {
+	// Community network policy is a prerequisite, not an after-claim cleanup.
+	// Extreme host workers use the host network directly; injected adapters
+	// still need the existing explicit network admission.
+	if request.NetworkRequired && (!sandbox.HostExecutionPreferred() || r.adapters[request.Adapter] != nil) {
 		if len(request.EgressRules) == 0 {
 			agent, err := r.store.GetAgent(ctx, request.AgentID)
 			if err != nil || agent.Status == model.AgentDisabled || agent.ModelProvider != request.Adapter {
@@ -1344,22 +1460,8 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		if r.adapters[request.Adapter] != nil {
 			return RunResult{}, netpolicy.ErrEnforcementUnavailable
 		}
-		endpoint, err := providerEndpoint(request.Adapter, request.Model)
-		if err != nil {
+		if err := validateProviderRequestEgress(request.Adapter, request.Model, request.EgressRules); err != nil {
 			return RunResult{}, err
-		}
-		// Caller/model-supplied rules are never grants. Only the default API
-		// endpoint can be admitted before a live operator-controlled run exists.
-		for _, rule := range request.EgressRules {
-			if err := rule.Validate(); err != nil {
-				return RunResult{}, model.ErrPolicyDenied
-			}
-			for _, port := range rule.Ports {
-				exact, err := netpolicy.Endpoint(net.JoinHostPort(rule.HostPattern, strconv.Itoa(port)))
-				if err != nil || exact != endpoint || rule.Protocol != netpolicy.ProtocolTCP || rule.Action != netpolicy.ActionAllow {
-					return RunResult{}, model.ErrPolicyDenied
-				}
-			}
 		}
 	}
 
@@ -1437,12 +1539,15 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 			return RunResult{}, fmt.Errorf("resolve task base: %w", err)
 		}
 	}
-	branch := "marshal/" + task.ID
+	branch := statepath.RefName + "/" + task.ID
 	worktreeManager := worktree.New(r.layout.Root, r.layout.Worktrees)
 	worktreeState, err := worktreeManager.Prepare(ctx, model.WorktreeRequest{
 		TaskID: task.ID, Branch: branch, BaseCommit: baseCommit,
 	})
 	if err != nil {
+		return RunResult{}, err
+	}
+	if _, err := r.validateTaskGoalDispatch(ctx, task.ID); err != nil {
 		return RunResult{}, err
 	}
 	if err := r.store.BeginExecution(ctx, task.ID, claim.Session.ID, request.AgentID,
@@ -1481,7 +1586,7 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		return RunResult{}, fmt.Errorf("automatic memory recall: %w", err)
 	}
 	trustedContext += "\n" + recall.Context
-	agentAdapter, shellExecGrant, err := r.resolveAdapter(ctx, request.Adapter, task, worktreeState.Path, request.AgentID, proxySocket != "", request.Model, proxySocket)
+	agentAdapter, shellExecGrant, err := r.resolveAdapter(withOutsideReadHints(ctx, task.Title), request.Adapter, task, worktreeState.Path, request.AgentID, proxySocket != "", request.Model, proxySocket)
 	if err != nil {
 		_ = r.store.FinalizeExecution(context.Background(), task.ID, claim.Session.ID, false, executionRevision)
 		return RunResult{}, err
@@ -1578,7 +1683,13 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		}
 	}()
 
-	result, runErr := agentAdapter.Run(ctx, adapter.Request{
+	workerCtx, closeKnowledge, err := r.workerMCPContext(ctx, task.ID, request.AgentID, request.Adapter, nil)
+	if err != nil {
+		return RunResult{}, err
+	}
+	defer closeKnowledge()
+	trustedContext += r.workerKnowledgeContext(workerCtx, request.AgentID, task.ID, baseCommit)
+	result, runErr := agentAdapter.Run(workerCtx, adapter.Request{
 		TaskID: task.ID, Title: "MARSHAL task details are supplied in marked context.", Worktree: worktreeState.Path,
 		Model:      request.Model,
 		BaseCommit: baseCommit, HeadCommit: baseCommit,
@@ -1587,6 +1698,8 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 		TrustedContext:    trustedContext,
 		Heartbeat:         heartbeat,
 		HeartbeatInterval: 5 * time.Second,
+		StallAfter:        3 * time.Minute,
+		IdleTimeout:       6 * time.Minute,
 	})
 
 	if len(leasedSecrets) > 0 {
@@ -1595,6 +1708,11 @@ func (r *Runtime) Run(ctx context.Context, request RunRequest) (finalResult RunR
 	}
 
 	state, inspectErr := worktreeManager.Inspect(context.Background(), worktreeState.Path)
+	if runErr == nil && inspectErr == nil && result.IdleTimedOut && !result.TimedOut && !result.Cancelled && state.Dirty {
+		// Partial hand-in: the worker wrote changes but went silent. Commit
+		// them and let the normal checks and review decide.
+		result.Status, result.ExitCode = adapter.StatusSuccess, 0
+	}
 	if runErr == nil && inspectErr == nil && result.Status == adapter.StatusSuccess && result.ExitCode == 0 {
 		if state.Dirty {
 			commitInput := input
@@ -1860,11 +1978,19 @@ func (r *Runtime) egressEnforcementAvailable() bool {
 }
 
 func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Task, worktreePath, subject string, networkAllowed bool, modelName string, proxySocket string) (adapter.Adapter, capability.GrantID, error) {
+	name = privateAGYCanonical(name)
+	if err := validatePrivateAGYModel(name, modelName); err != nil {
+		return nil, "", err
+	}
 	if candidate := r.adapters[name]; candidate != nil {
-		return candidate, "", nil
+		return r.observedTaskAdapter(candidate, name, task.ID, false), "", nil
 	}
 	switch name {
-	case "codex", "gemini", "claude", "opencode":
+	case "codex", "claude", "opencode":
+	case "agy":
+		if !privateAGYEnabled() {
+			return nil, "", fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
+		}
 	default:
 		return nil, "", fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
 	}
@@ -1875,16 +2001,36 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	if resolved, resolveErr := filepath.EvalSymlinks(binary); resolveErr == nil {
 		binary = resolved
 	}
-	process := worker.New(30*time.Minute, 3*time.Second, 8<<20)
-	var runner adapter.ProcessRunner = process
-	if bwrapPath, lookupErr := trustedBwrapPath(); lookupErr == nil {
+	process := worker.New(buildTaskLaunchTimeout(), 3*time.Second, 8<<20)
+	var runner adapter.ProcessRunner = &taskLaunchRunner{runtime: r, taskID: task.ID, base: process}
+	// Extreme workers run on the host by design. Community keeps its existing
+	// confinement selection and refusal behavior.
+	unconfined := sandbox.HostExecutionPreferred() || sandbox.UnconfinedFallbackAllowed() && networkAllowed && (proxySocket == "" || !r.egressEnforcementAvailable())
+	if sandbox.HostExecutionPreferred() {
+		r.recordUnconfined(ctx, task.ID, subject, fmt.Errorf("Marshal worker runs on the host by design"))
+		// A host worker gets no synthetic HOME, but its worktree still needs
+		// the honeypot scan identity: completion, provider-failure failover
+		// and hand-in scan its commits and output and refuse without one.
+		// The trap's files live under /tmp, never in the worktree.
+		if worktreePath != "" {
+			if _, err := r.armHoneypot(worktreePath); err != nil {
+				return nil, "", err
+			}
+		}
+	} else if unconfined {
+		r.recordUnconfined(ctx, task.ID, subject, netpolicy.ErrEnforcementUnavailable)
+	}
+	if bwrapPath, lookupErr := trustedBwrapPath(); lookupErr == nil && !unconfined {
 		backend := sandbox.NewBwrap(bwrapPath)
 		capability := backend.Probe(ctx)
 		chosen, chooseErr := sandbox.ChooseIsolation(capability, task.Risk, networkAllowed, r.allowProcessOnly)
 		if chooseErr != nil {
-			return nil, "", chooseErr
+			if !sandbox.UnconfinedFallbackAllowed() {
+				return nil, "", chooseErr
+			}
+			r.recordUnconfined(ctx, task.ID, subject, chooseErr)
 		}
-		if chosen.Level == model.IsolationBwrap {
+		if chooseErr == nil && chosen.Level == model.IsolationBwrap {
 			resolvedBinary, installationBind, mountErr := cliInstallationMount(binary)
 			if mountErr != nil {
 				return nil, "", mountErr
@@ -1899,7 +2045,8 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			var extraEnv []string
 			var writableTmpfs []string
 
-			// Adapter runtime storage (.codex, .opencode, etc.) must be writable tmpfs for sqlite DBs / logs
+			// Adapter SQLite/log storage uses fresh tmpfs; private OpenCode keeps its
+			// extra HOME config absent so only the pinned read-only bootstrap is searched.
 			writableTmpfs = append(writableTmpfs,
 				"/home/marshal/."+name,
 				"/home/marshal/.local",
@@ -1908,6 +2055,8 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				"/home/marshal/.cache",
 				"/home/marshal/.cache/"+name,
 			)
+
+			writableTmpfs = privateProviderStorageDirs(name, writableTmpfs)
 
 			// Provider HOME/XDG trees are fresh tmpfs mounts. Host-native auth,
 			// instructions, memory, plugins and MCP configuration are deliberately
@@ -1918,12 +2067,29 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				"XDG_CACHE_HOME=/home/marshal/.cache",
 			)
 
+			bootstrapBinds, bootstrapEnv, bootstrapErr := privateProviderBootstrap(name)
+			if bootstrapErr != nil {
+				return nil, "", bootstrapErr
+			}
+			readOnlyBinds = append(readOnlyBinds, bootstrapBinds...)
+			extraEnv = append(extraEnv, bootstrapEnv...)
+
 			// Forward OLLAMA_HOST; default to the exact allowed IP for local Ollama
 			ollamaHost := os.Getenv("OLLAMA_HOST")
 			if ollamaHost == "" {
 				ollamaHost = "http://127.0.0.1:11434"
 			}
 			extraEnv = append(extraEnv, "OLLAMA_HOST="+ollamaHost)
+			if name == "opencode" {
+				localConfig, configErr := privateOpenCodeLocalConfig(modelName, ollamaHost)
+				if isHarnessVerification(ctx) {
+					localConfig, configErr = privateOpenCodeProbeConfig(modelName, ollamaHost)
+				}
+				if configErr != nil {
+					return nil, "", configErr
+				}
+				extraEnv = append(extraEnv, localConfig...)
+			}
 
 			// Forward MARSHAL_OPENCODE_MODEL if set
 			if m := os.Getenv("MARSHAL_OPENCODE_MODEL"); m != "" {
@@ -1948,6 +2114,12 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			if brokerErr != nil {
 				return nil, "", brokerErr
 			}
+			authBinds, authBindErr := privateAGYAuthBinds(name, trap.Home)
+			if authBindErr != nil {
+				return nil, "", authBindErr
+			}
+			readOnlyBinds = append(readOnlyBinds, authBinds...)
+			readOnlyBinds, extraEnv = withWorkerGoModuleCache(readOnlyBinds, extraEnv)
 			// Replace synthetic honeypot env entries for the selected provider.
 			for _, kv := range brokerEnv {
 				key := strings.SplitN(kv, "=", 2)[0] + "="
@@ -1960,11 +2132,12 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				extraEnv = append(filtered, kv)
 			}
 
-			runner = worker.NewGuardedSandboxed(process, backend, model.SandboxRequest{
+			runner = worker.NewGuardedSandboxed(runner, backend, model.SandboxRequest{
 				ScratchHome: trap.Home,
 				Worktree:    worktreePath, NetworkAllowed: networkAllowed,
 				EgressSocket: proxySocket, BridgeBinary: bridge,
 				ReadOnlyBinds: readOnlyBinds,
+				OutsideReads:  r.outsideReadMounts(ctx, task.ID, subject, worktreePath),
 				WritableTmpfs: writableTmpfs,
 				ExtraEnv:      extraEnv,
 			}, trap.Observe, func(ctx context.Context, result *adapter.ProcessResult) error {
@@ -1983,8 +2156,11 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 				return err
 			}, r.socketObserver(proxySocket))
 		}
-	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed, r.allowProcessOnly); err != nil {
-		return nil, "", err
+	} else if _, err := sandbox.ChooseIsolation(model.IsolationCapability{}, task.Risk, networkAllowed, r.allowProcessOnly); err != nil && !unconfined {
+		if !sandbox.UnconfinedFallbackAllowed() {
+			return nil, "", err
+		}
+		r.recordUnconfined(ctx, task.ID, subject, err)
 	}
 	if r.capabilityBroker != nil {
 		if r.authorityPrincipal != nil && r.processAuthority != "" {
@@ -2009,7 +2185,7 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 			Kind:           capability.KindShellExec,
 			Scope:          capability.Scope{Resource: binary, Actions: []string{"execute"}},
 			IssuedAt:       time.Now().UTC(),
-			ExpiresAt:      time.Now().UTC().Add(30 * time.Minute),
+			ExpiresAt:      time.Now().UTC().Add(buildShellExecGrantTTL()),
 			Issuer:         "runtime",
 			IdempotencyKey: grantKey,
 		})
@@ -2020,13 +2196,17 @@ func (r *Runtime) resolveAdapter(ctx context.Context, name string, task model.Ta
 	}
 	switch name {
 	case "codex":
-		return codex.New(binary, runner), shellExecGrant, nil
-	case "gemini":
-		return gemini.New(binary, runner), shellExecGrant, nil
+		return r.observedTaskAdapter(codex.New(binary, runner), name, task.ID, true), shellExecGrant, nil
 	case "claude":
-		return claude.New(binary, runner), shellExecGrant, nil
+		return r.observedTaskAdapter(claude.New(binary, runner), name, task.ID, true), shellExecGrant, nil
 	case "opencode":
-		return opencode.NewWithModel(binary, runner, modelName), shellExecGrant, nil
+		return r.observedTaskAdapter(opencode.NewWithRequiredVersion(binary, runner, modelName, privateOpenCodeVersion()), name, task.ID, true), shellExecGrant, nil
+	case "agy":
+		client, err := privateAGYAdapter(ctx, binary, runner)
+		if err != nil {
+			return nil, shellExecGrant, err
+		}
+		return r.observedTaskAdapter(client, name, task.ID, true), shellExecGrant, nil
 	default:
 		return nil, "", fmt.Errorf("%w: adapter %s is unavailable", model.ErrUnavailable, name)
 	}
@@ -2131,7 +2311,7 @@ func (r *Runtime) VerifyQuorum(ctx context.Context, req QuorumVerifyRequest) (qu
 		contentDigest = *task.HeadCommit
 	}
 	if contentDigest == "" {
-		contentDigest = "head-digest-" + req.TaskID
+		return quorum.Evaluation{State: quorum.StateInvalidated}, fmt.Errorf("%w: %w: missing content digest; synthetic quorum digest is not permitted", quorum.ErrInvalidProvenance, model.ErrInvalid)
 	}
 
 	provenance := quorum.Provenance{
@@ -2154,7 +2334,10 @@ func (r *Runtime) GCWorktrees(ctx context.Context, dryRun bool, ttl time.Duratio
 	}
 
 	taskStatuses := make(map[string]model.TaskStatus, len(tasks))
-	var activeLeases []string
+	activeLeases, err := r.retainedWorktreeIDs(ctx, tasks)
+	if err != nil {
+		return worktree.GCResult{}, fmt.Errorf("read retained worktrees: %w", err)
+	}
 	for _, t := range tasks {
 		taskStatuses[t.ID] = t.Status
 		if t.OwnerAgentID != nil && *t.OwnerAgentID != "" {
@@ -2234,6 +2417,15 @@ func (r *Runtime) ProjectRoot() string {
 	return r.layout.Root
 }
 
+// AdmittedProjectIdentity is the identity verified when this runtime opened.
+// Unlike a fresh binding read, it cannot change while the runtime is live.
+func (r *Runtime) AdmittedProjectIdentity() projectid.ID {
+	if r == nil {
+		return ""
+	}
+	return r.admittedProjectIdentity
+}
+
 func (r *Runtime) Store() *store.Store { return r.store }
 
 // Memory exposes the single canonical product-facing memory service to local
@@ -2249,11 +2441,27 @@ func (r *Runtime) Marshal() *MarshalService {
 	if err != nil {
 		return nil
 	}
-	service := &MarshalService{Store: r.store, ProjectID: project.ID, Repository: r.layout.Root, Worktrees: r.layout.Worktrees}
+	service := &MarshalService{runtime: r, Store: r.store, ProjectID: project.ID, Repository: r.layout.Root, Worktrees: r.layout.Worktrees}
+	configureWorkerMemory(service, r)
+	r.bindMarshalProjectKnowledge(service)
 	// Open assigns an instance ID and manages project lifecycle ownership.
 	// Services composed directly over a store have no runtime lifecycle to own.
 	if r.runtimeInstanceID != "" {
 		service.requireOwner = r.requireLifecycleOwner
 	}
 	return service
+}
+
+// StateDirectory is the admitted build-specific state binding, never caller metadata.
+func (r *Runtime) StateDirectory() string { return r.layout.RuntimeDir }
+
+func ensureProjectKnowledge(ctx context.Context, layout project.Layout, previousRoots ...string) error {
+	index, err := projectknowledge.Open(layout.Root, layout.RuntimeDir)
+	if err != nil {
+		return err
+	}
+	if err = index.Ensure(ctx); errors.Is(err, projectknowledge.ErrBinding) && len(previousRoots) > 0 && previousRoots[0] != "" {
+		_, err = index.RebuildAfterMove(ctx, previousRoots[0])
+	}
+	return err
 }

@@ -19,6 +19,7 @@ import (
 
 // Snapshot is everything Home and Status display, read at one instant.
 type Snapshot struct {
+	lifecycle lifecycleSnapshot
 	Runtime   RuntimeSnapshot
 	Events    EventFeed
 	Blockers  BlockerList
@@ -127,7 +128,10 @@ func exactHomeStatusValue(specID string, s Snapshot) (Value, bool) {
 	case "CTUI-0138":
 		return providerAvailability(s.Providers, "Codex"), true
 	case "CTUI-0139":
-		return providerAvailability(s.Providers, "Gemini"), true
+		// Gemini was replaced by Antigravity (agy) as a provider. The frozen
+		// node kept its id; say so rather than duplicating CTUI-0141 under a
+		// Gemini title or probing a provider that no longer exists.
+		return NotRun("Gemini was replaced by Antigravity; see Antigravity", providerSource), true
 	case "CTUI-0140":
 		return providerAvailability(s.Providers, "OpenCode"), true
 	case "CTUI-0141":
@@ -189,19 +193,30 @@ func sectionTitleOf(n *Node) string {
 // blank. Showing the evidenced neighbours around the gap is more honest than
 // hiding them, provided the gap itself stays marked.
 func gapFields(n *Node, snap Snapshot) []Field {
+	if fields := buildLifecycleGapFields(n.SpecID, snap); fields != nil {
+		return fields
+	}
 	switch n.SpecID {
 	case "CTUI-0148", "CTUI-0149", "CTUI-0151", "CTUI-0144":
 		// The provider gaps: show which providers exist, with the gapped
 		// column marked on each row rather than omitted.
 		return providerGapFields(n.SpecID, snap.Providers)
 	case "CTUI-0157":
-		// Entitlement request state has no canonical store; the surrounding
-		// Cloud state is real and is shown.
-		return []Field{
-			{Label: "Cloud connection", Value: snap.Cloud.Connection},
-			{Label: "Current mode", Value: snap.Cloud.Mode},
-			{Label: "Refusal reason", Value: snap.Cloud.Refusal},
+		fields := []Field{
+			{Label: "Request state", Value: snap.Cloud.RequestStatus},
+			{Label: "Local attempt ID", Value: snap.Cloud.LocalAttemptID},
+			{Label: "Server request ID", Value: snap.Cloud.ServerReqID},
+			{Label: "Request age", Value: snap.Cloud.RequestAge},
 		}
+		if snap.Cloud.RequestError.Status == TruthError || (snap.Cloud.RequestError.Status == TruthKnown && snap.Cloud.RequestError.Text != "") {
+			fields = append(fields, Field{Label: "Request error", Value: snap.Cloud.RequestError})
+		}
+		fields = append(fields,
+			Field{Label: "Cloud connection", Value: snap.Cloud.Connection},
+			Field{Label: "Current mode", Value: snap.Cloud.Mode},
+			Field{Label: "Refusal reason", Value: snap.Cloud.Refusal},
+		)
+		return fields
 	}
 	return nil
 }
@@ -375,6 +390,74 @@ var screenRenderers = map[string]func(Snapshot) ScreenContent{
 		}
 		return ScreenContent{Fields: fields}
 	},
+	"CTUI-0150": func(s Snapshot) ScreenContent { // Observed cooldown or rate limit
+		if len(s.Providers.Rows) == 0 {
+			return ScreenContent{ReadOnly: true, Fields: []Field{{Label: "Providers", Value: s.Providers.Status}}}
+		}
+		fields := make([]Field, 0, len(s.Providers.Rows)*2)
+		for _, r := range s.Providers.Rows {
+			fields = append(fields,
+				Field{Label: r.Name.Display(), Value: r.Cooldown},
+				Field{Label: "  installed", Value: r.Availability})
+		}
+		return ScreenContent{
+			ReadOnly: true,
+			Fields:   fields,
+			CrossLinks: []CrossLinkTarget{{
+				Label:    "Open Models / Providers & Harnesses",
+				MenuPath: "MARSHAL — COMMUNITY TUI / Models / Providers & Harnesses",
+				Reason:   "provider configuration is owned by Models",
+			}},
+		}
+	},
+	"CTUI-0144": func(s Snapshot) ScreenContent { // Authentication and provider session
+		if len(s.Providers.Rows) == 0 {
+			return ScreenContent{ReadOnly: true, Fields: []Field{{Label: "Providers", Value: s.Providers.Status}}}
+		}
+		fields := make([]Field, 0, len(s.Providers.Rows)*2)
+		for _, r := range s.Providers.Rows {
+			fields = append(fields,
+				Field{Label: r.Name.Display(), Value: r.Auth},
+				Field{Label: "  installed", Value: r.Availability})
+		}
+		return ScreenContent{ReadOnly: true, Fields: fields}
+	},
+	"CTUI-0148": func(s Snapshot) ScreenContent { // Provider-reported quota or capacity
+		if len(s.Providers.Rows) == 0 {
+			return ScreenContent{ReadOnly: true, Fields: []Field{{Label: "Providers", Value: s.Providers.Status}}}
+		}
+		fields := make([]Field, 0, len(s.Providers.Rows)*2)
+		for _, r := range s.Providers.Rows {
+			fields = append(fields,
+				Field{Label: r.Name.Display(), Value: r.Quota},
+				Field{Label: "  installed", Value: r.Availability})
+		}
+		return ScreenContent{ReadOnly: true, Fields: fields}
+	},
+	"CTUI-0149": func(s Snapshot) ScreenContent { // Provider-reported reset time
+		if len(s.Providers.Rows) == 0 {
+			return ScreenContent{ReadOnly: true, Fields: []Field{{Label: "Providers", Value: s.Providers.Status}}}
+		}
+		fields := make([]Field, 0, len(s.Providers.Rows)*2)
+		for _, r := range s.Providers.Rows {
+			fields = append(fields,
+				Field{Label: r.Name.Display(), Value: r.Reset},
+				Field{Label: "  installed", Value: r.Availability})
+		}
+		return ScreenContent{ReadOnly: true, Fields: fields}
+	},
+	"CTUI-0151": func(s Snapshot) ScreenContent { // Provider-reported temporary/free allowance or feature
+		if len(s.Providers.Rows) == 0 {
+			return ScreenContent{ReadOnly: true, Fields: []Field{{Label: "Providers", Value: s.Providers.Status}}}
+		}
+		fields := make([]Field, 0, len(s.Providers.Rows)*2)
+		for _, r := range s.Providers.Rows {
+			fields = append(fields,
+				Field{Label: r.Name.Display(), Value: r.Allowance},
+				Field{Label: "  installed", Value: r.Availability})
+		}
+		return ScreenContent{ReadOnly: true, Fields: fields}
+	},
 	"CTUI-0152": func(s Snapshot) ScreenContent { // UNKNOWN / NOT_RUN with reason when not evidenced
 		// This screen exists to state the policy it enforces, so it shows the
 		// unevidenced fields together with why each is unevidenced.
@@ -419,6 +502,31 @@ var screenRenderers = map[string]func(Snapshot) ScreenContent{
 			{Label: "Installation", Value: s.Cloud.Installation},
 			{Label: "Session", Value: s.Cloud.Session},
 		}}
+	},
+	"CTUI-0157": func(s Snapshot) ScreenContent { // Entitlement request state
+		fields := []Field{
+			{Label: "Request state", Value: s.Cloud.RequestStatus},
+			{Label: "Local attempt ID", Value: s.Cloud.LocalAttemptID},
+			{Label: "Server request ID", Value: s.Cloud.ServerReqID},
+			{Label: "Request age", Value: s.Cloud.RequestAge},
+		}
+		if s.Cloud.RequestError.Status == TruthError || (s.Cloud.RequestError.Status == TruthKnown && s.Cloud.RequestError.Text != "") {
+			fields = append(fields, Field{Label: "Request error", Value: s.Cloud.RequestError})
+		}
+		fields = append(fields,
+			Field{Label: "Cloud connection", Value: s.Cloud.Connection},
+			Field{Label: "Current mode", Value: s.Cloud.Mode},
+			Field{Label: "Refusal reason", Value: s.Cloud.Refusal},
+		)
+		return ScreenContent{
+			ReadOnly: true,
+			Fields:   fields,
+			CrossLinks: []CrossLinkTarget{{
+				Label:    "Open Models / Entitlement request detail",
+				MenuPath: "MARSHAL — COMMUNITY TUI / Models / Community Cloud & ULTRA / Entitlement request detail",
+				Reason:   "Models carries entitlement request detail",
+			}},
+		}
 	},
 	"CTUI-0158": func(s Snapshot) ScreenContent { // Verified signed lease
 		return ScreenContent{Fields: []Field{{Label: "Lease", Value: s.Cloud.Lease}}}
@@ -516,7 +624,7 @@ func init() {
 	bindStatusScreens(sessionStatusScreen, "CTUI-0110", "CTUI-0111", "CTUI-0112", "CTUI-0113", "CTUI-0114", "CTUI-0115")
 	bindStatusScreens(blockerScreenAll, "CTUI-0118", "CTUI-0120", "CTUI-0122", "CTUI-0123", "CTUI-0124")
 	bindStatusScreens(schedulingStatusScreen, "CTUI-0126", "CTUI-0127", "CTUI-0128", "CTUI-0129", "CTUI-0130", "CTUI-0131", "CTUI-0132", "CTUI-0133", "CTUI-0134")
-	bindStatusScreens(providerScreenAll, "CTUI-0136", "CTUI-0137", "CTUI-0138", "CTUI-0139", "CTUI-0140", "CTUI-0141", "CTUI-0145", "CTUI-0146", "CTUI-0147", "CTUI-0150")
+	bindStatusScreens(providerScreenAll, "CTUI-0136", "CTUI-0137", "CTUI-0138", "CTUI-0140", "CTUI-0141", "CTUI-0145", "CTUI-0146", "CTUI-0147")
 	bindStatusScreens(runtimeScreenAll, "CTUI-0165", "CTUI-0169", "CTUI-0170")
 	bindStatusScreens(alertScreen, "CTUI-0178", "CTUI-0179", "CTUI-0180", "CTUI-0181", "CTUI-0182", "CTUI-0183", "CTUI-0184")
 	bindStatusScreens(versionScreen, "CTUI-0185", "CTUI-0186", "CTUI-0187", "CTUI-0188", "CTUI-0189", "CTUI-0190", "CTUI-0191")

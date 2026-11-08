@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -25,28 +27,38 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/policytest"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/projectid"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tui"
 )
 
 var (
-	Version   = "dev"
-	Commit    = "head"
-	BuildDate = "unknown"
+	Version   = defaultVersion
+	Commit    = defaultCommit
+	BuildDate = defaultBuildDate
 )
 
 func init() {
 	// The workspace reports and compares the same version the CLI does. It is
 	// handed over rather than imported so the TUI keeps no dependency on the
 	// CLI package.
+	//
+	// A source build carries only the defaults above, so identify it from the
+	// VCS stamp Go embeds when present. Values injected via -ldflags always
+	// win, and the defaults are kept when no stamp exists.
+	Version, Commit, BuildDate = fillBuildIdentity(Version, Commit, BuildDate, currentVCSStamp())
 	tui.BuildVersion = Version
 }
 
 const usage = `Usage: marshal [--json] <command> [arguments]
 
 Commands:
+  telemetry status | disable | enable
+  ultra request
   init
   doctor [--probe-providers] [--deep]
+  egm status [--provider X] | install --provider X | record --stage X --provider X --egm-version X --file PATH
   status
   agent register --name NAME --role ROLE [--provider PROVIDER] [--model MODEL]
   agents
@@ -66,12 +78,16 @@ Commands:
   artifacts
   verify [-- command args...]
   reconcile --file-state state.json
-  memory status | recall | show | list | promote | tombstone | audit | remember | write
+  memory status | recall | show | list | candidates | promote | tombstone | audit | remember | write
+  permission read <allow|deny|revoke|list> <absolute folder>
   policy test SUITE-FILE
   legal audit [--json] | legal export --output PATH
   setup | setup status
   update [install]
   goal <request> | goal explain <request>
+  architecture serve [--proposal FILE] [--layout FILE] [--provider PROVIDER] [--no-open]
+  architecture draft [--request REQUEST] [--output FILE] [--provider PROVIDER]
+  architecture feedback [--provider PROVIDER]
   plan create SESSION-ID --file INPUT.json | show PROJECT-ID | approve PROJECT-ID | cancel PROJECT-ID | handoff SESSION-ID PROJECT-ID
   exec start --session SESSION-ID --project PROJECT-ID | run RUN-ID | status RUN-ID | approve APPROVAL-ID | rollback CHECKPOINT-ID | handoff RUN-ID
   review start SESSION.json | status VERIFICATION-ID | evaluate VERIFICATION-ID | attest VERIFICATION-ID --bundle ENVELOPE.json --provenance TEXT
@@ -87,11 +103,13 @@ Commands:
   auth token <create|list|revoke>
   gc worktrees | artifacts
   state backup | verify-backup | restore
+  architecture receipt import FILE
   daemon
   version
 `
 
 const policyTestUsage = "Usage: marshal policy test SUITE-FILE\n"
+const telemetryChildFlag = "--marshal-internal-telemetry-child"
 
 type command struct {
 	root   string
@@ -99,6 +117,9 @@ type command struct {
 	stdin  io.Reader
 	stdout io.Writer
 	stderr io.Writer
+	// stopTelemetry ends this process's telemetry; a session relaunch
+	// calls it before the exec that skips the deferred call.
+	stopTelemetry func()
 }
 
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -111,17 +132,33 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 }
 
 func Execute(ctx context.Context, root string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	ctx = withWorkerHost(ctx)
 	c := command{root: root, stdin: stdin, stdout: stdout, stderr: stderr}
 	if dispatcherHelp(args, stdout) {
 		return 0
 	}
 	args, c.json = globalJSON(args)
+	if usesProject(args) {
+		if err := statepath.ValidateRoot(root); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if showsHostNotice(args) {
+			if err := c.hostWorkerNotice(); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+		}
+	}
+	ctx, stopTelemetry := c.startTelemetry(ctx, args)
+	c.stopTelemetry = sync.OnceFunc(stopTelemetry)
+	defer c.stopTelemetry()
+	if len(args) > 1 && args[0] == "tui" && args[1] == telemetryChildFlag {
+		args = append(args[:1], args[2:]...)
+	}
 	if len(args) == 0 {
-		// Running `marshal` with no arguments enters the control center.
-		// Previously any startup problem fell through to a usage screen, which
-		// told the user neither that something had failed nor what to do about
-		// it. The control center now opens and explains the situation itself.
-		if err := c.controlCenter(ctx, nil); err != nil {
+		// No arguments follows the same validated startup path as `marshal tui`.
+		if err := c.relaunchSession(c.controlCenter(ctx, nil), nil); err != nil {
 			fmt.Fprintln(stderr, err)
 			return exitCode(err)
 		}
@@ -129,15 +166,24 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 	}
 	var err error
 	switch args[0] {
+	case "telemetry":
+		err = c.telemetry(ctx, args[1:])
+	case "ultra":
+		err = c.ultra(ctx, args[1:])
 	case "version", "--version", "-version", "-v":
-		err = c.print(map[string]any{
+		versionLine := fmt.Sprintf("Marshal %s (commit: %s, build date: %s, schema: v%d, constitution: %s)",
+			Version, Commit, BuildDate, store.LatestSchemaVersion, constitutionVersionString())
+		versionData := map[string]any{
 			"version":              Version,
 			"commit":               Commit,
 			"build_date":           BuildDate,
 			"schema_version":       store.LatestSchemaVersion,
 			"constitution_version": constitutionVersionString(),
-		}, fmt.Sprintf("MARSHAL %s (commit: %s, build date: %s, schema: v%d, constitution: %s)",
-			Version, Commit, BuildDate, store.LatestSchemaVersion, constitutionVersionString()))
+		}
+		if tui.Edition() == "Marshal" {
+			versionData["edition"] = "Marshal"
+		}
+		err = c.print(versionData, versionLine)
 	case "update":
 		err = c.update(ctx, args[1:])
 	case "init":
@@ -188,8 +234,18 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 		err = c.gc(ctx, args[1:])
 	case "state":
 		err = c.state(ctx, args[1:])
+	case "architecture":
+		if len(args) > 1 && args[1] == "receipt" {
+			err = c.architectureReceipt(ctx, args[1:])
+		} else {
+			err = c.architecture(ctx, args[1:])
+		}
+	case "egm":
+		err = c.egm(ctx, args[1:])
 	case "memory":
 		err = c.memory(ctx, args[1:])
+	case "permission":
+		err = c.permission(ctx, args[1:])
 	case "setup":
 		err = c.setup(ctx, args[1:])
 	case "goal":
@@ -209,15 +265,15 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 	case "constitution":
 		err = c.constitution(ctx, args[1:])
 	case "tui":
-		err = c.tui(ctx, args[1:])
+		err = c.relaunchSession(c.tui(ctx, args[1:]), args[1:])
 	case "codex":
-		err = c.tui(ctx, append([]string{"--codex"}, args[1:]...))
+		return c.nativeProvider(ctx, "codex", args[1:])
 	case "claude":
-		err = c.tui(ctx, append([]string{"--claude"}, args[1:]...))
+		return c.nativeProvider(ctx, "claude", args[1:])
 	case "opencode":
-		err = c.tui(ctx, append([]string{"--opencode"}, args[1:]...))
+		return c.nativeProvider(ctx, "opencode", args[1:])
 	case "agy", "antigravity":
-		err = c.tui(ctx, append([]string{"--antigravity"}, args[1:]...))
+		return c.nativeProvider(ctx, "antigravity", args[1:])
 	default:
 		err = fmt.Errorf("%w: unknown command %s", model.ErrInvalid, args[0])
 	}
@@ -333,11 +389,11 @@ func (c command) daemon(ctx context.Context) error {
 }
 
 func (c command) client() (*api.Client, error) {
-	layout, err := filepath.Abs(filepath.Join(c.root, ".marshal", "runtime.sock"))
+	layout, err := project.Discover(c.root)
 	if err != nil {
 		return nil, err
 	}
-	return api.NewClient(layout), nil
+	return api.NewClient(layout.Socket), nil
 }
 
 func (c command) status(ctx context.Context) error {
@@ -684,18 +740,19 @@ func (c command) cancel(ctx context.Context, args []string) error {
 }
 
 func (c command) adapters(ctx context.Context) error {
-	names := []string{"codex", "gemini", "claude", "opencode"}
+	names := []string{"codex", "agy", "claude", "opencode"}
 	list := make([]map[string]any, 0, len(names))
 	for _, name := range names {
 		binary, err := project.FindBinary(name)
-		available := err == nil
-		version := "not_probed"
-		list = append(list, map[string]any{
-			"name":      name,
-			"available": available,
-			"binary":    binary,
-			"version":   version,
-		})
+		entry := map[string]any{"name": name, "available": false, "binary": binary, "version": "", "detail": "CLI missing"}
+		if err == nil {
+			obs := observeAdapterCLI(ctx, name, binary)
+			entry["available"], entry["version"], entry["detail"] = obs.Available, obs.Version, obs.Detail
+			if obs.Pinned != "" {
+				entry["pinned_version"] = obs.Pinned
+			}
+		}
+		list = append(list, entry)
 	}
 	if !c.json {
 		var lines []string
@@ -705,7 +762,11 @@ func (c command) adapters(ctx context.Context) error {
 			if a["available"].(bool) {
 				avail = "AVAILABLE"
 			}
-			lines = append(lines, fmt.Sprintf("  %-10s %-12s binary=%-40s version=%s", a["name"], avail, a["binary"], a["version"]))
+			line := fmt.Sprintf("  %-10s %-12s binary=%-40s version=%s", a["name"], avail, a["binary"], a["version"])
+			if d, _ := a["detail"].(string); d != "" {
+				line += " (" + d + ")"
+			}
+			lines = append(lines, line)
 		}
 		return c.print(list, strings.Join(lines, "\n"))
 	}
@@ -720,16 +781,28 @@ func (c command) adapter(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: adapter name required", model.ErrInvalid)
 	}
 	name := args[1]
+	if name == "antigravity" {
+		name = "agy"
+	}
+	if name != "codex" && name != "claude" && name != "opencode" && name != "agy" {
+		return fmt.Errorf("%w: unsupported adapter %s", model.ErrInvalid, name)
+	}
 	binary, err := project.FindBinary(name)
 	if err != nil {
 		return c.print(map[string]any{
 			"name": name, "available": false, "error": err.Error(),
 		}, fmt.Sprintf("adapter %s: unavailable (CLI missing)", name))
 	}
-	version := "not_probed"
-	return c.print(map[string]any{
-		"name": name, "available": true, "binary": binary, "version": version,
-	}, fmt.Sprintf("adapter %s: executable detected; version probe deferred to governed runtime", name))
+	obs := observeAdapterCLI(ctx, name, binary)
+	state := "available"
+	if !obs.Available {
+		state = "unavailable"
+	}
+	out := map[string]any{"name": name, "available": obs.Available, "binary": binary, "version": obs.Version, "detail": obs.Detail}
+	if obs.Pinned != "" {
+		out["pinned_version"] = obs.Pinned
+	}
+	return c.print(out, fmt.Sprintf("adapter %s: %s, version %s (%s)", name, state, obs.Version, obs.Detail))
 }
 
 func (c command) mcp(ctx context.Context, args []string) error {
@@ -737,7 +810,12 @@ func (c command) mcp(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: mcp subcommand required (serve|status)", model.ErrInvalid)
 	}
 	switch args[0] {
+	case "relay":
+		return c.handleMCPRelay(ctx, args[1:])
 	case "serve":
+		if handled, err := c.handleMCPServeStdio(ctx, args[1:]); handled {
+			return err
+		}
 		flags := flag.NewFlagSet("mcp serve", flag.ContinueOnError)
 		flags.SetOutput(c.stderr)
 		listen := flags.String("listen", "127.0.0.1:8080", "listen address (host:port)")
@@ -786,10 +864,154 @@ func (c command) mcp(ctx context.Context, args []string) error {
 		case err := <-errCh:
 			return err
 		}
+	case "stdio":
+		flags := flag.NewFlagSet("mcp stdio", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		root := flags.String("project", c.root, "project root")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if flags.NArg() != 0 {
+			return model.ErrInvalid
+		}
+		runtime, err := app.Open(ctx, *root)
+		if err != nil {
+			return err
+		}
+		defer runtime.Close()
+		return mcp.NewSessionServer(runtime, auth.NewManager(filepath.Join(runtime.ProjectRoot(), projectid.StateDirName))).ServeStdio(ctx, c.stdin, c.stdout)
+
 	case "status":
+		flags := flag.NewFlagSet("mcp status", flag.ContinueOnError)
+		flags.SetOutput(c.stderr)
+		endpoint := flags.String("endpoint", "127.0.0.1:8080", "MCP server endpoint address to probe (host:port or URL)")
+		flags.StringVar(endpoint, "listen", "127.0.0.1:8080", "alias for --endpoint")
+		flags.StringVar(endpoint, "addr", "127.0.0.1:8080", "alias for --endpoint")
+		token := flags.String("token", "", "bearer token for authenticated probe")
+		timeout := flags.Duration("timeout", 1*time.Second, "probe timeout")
+		if err := flags.Parse(args[1:]); err != nil {
+			return fmt.Errorf("%w: %v", model.ErrInvalid, err)
+		}
+		if len(flags.Args()) > 0 {
+			*endpoint = flags.Arg(0)
+		}
+
+		addr := *endpoint
+		if strings.HasPrefix(addr, "http://") {
+			addr = strings.TrimPrefix(addr, "http://")
+		} else if strings.HasPrefix(addr, "https://") {
+			addr = strings.TrimPrefix(addr, "https://")
+		}
+		if idx := strings.Index(addr, "/"); idx != -1 {
+			addr = addr[:idx]
+		}
+		if !isLoopbackAddr(addr) {
+			return fmt.Errorf("%w: mcp status probe is restricted to local loopback addresses (got %s)", model.ErrInvalid, *endpoint)
+		}
+
+		probeURL := *endpoint
+		if !strings.HasPrefix(probeURL, "http://") && !strings.HasPrefix(probeURL, "https://") {
+			probeURL = "http://" + probeURL
+		}
+		if !strings.HasSuffix(probeURL, "/") && !strings.HasSuffix(probeURL, "/mcp") {
+			probeURL = probeURL + "/"
+		}
+
+		probeCtx, cancel := context.WithTimeout(ctx, *timeout)
+		defer cancel()
+
+		reqBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + mcp.ProtocolVersion2026 + `"}}`
+		req, err := http.NewRequestWithContext(probeCtx, http.MethodPost, probeURL, strings.NewReader(reqBody))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("MCP-Protocol-Version", mcp.ProtocolVersion2026)
+		if *token != "" {
+			req.Header.Set("Authorization", "Bearer "+*token)
+		}
+
+		client := &http.Client{
+			Transport: &http.Transport{
+				Proxy: nil, // direct loopback probe only, bypass any host proxy
+			},
+			Timeout: *timeout,
+		}
+
+		var authMgr *auth.Manager
+		if layout, layoutErr := project.Discover(c.root); layoutErr == nil && layout.RuntimeDir != "" {
+			authMgr = auth.NewManager(layout.RuntimeDir)
+		}
+		providerStates := mcp.CheckProviderStates(authMgr)
+		formatWithProviders := func(header string) string {
+			var sb strings.Builder
+			sb.WriteString(header)
+			sb.WriteString("\nProvider connections:\n")
+			for _, p := range []string{"claude", "codex", "opencode", "antigravity"} {
+				ps := providerStates[p]
+				sb.WriteString(fmt.Sprintf("  %-12s %s - %s\n", p+":", strings.ToUpper(ps.Status), ps.Detail))
+			}
+			return strings.TrimRight(sb.String(), "\n")
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return c.print(map[string]any{
+				"status":           "offline",
+				"endpoint":         probeURL,
+				"protocol_version": mcp.ProtocolVersion2026,
+				"healthy":          false,
+				"reason":           err.Error(),
+				"providers":        providerStates,
+			}, formatWithProviders(fmt.Sprintf("MCP server status OFFLINE at %s (%v)", probeURL, err)))
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			var rpcResp struct {
+				Result struct {
+					ProtocolVersion string            `json:"protocolVersion"`
+					ServerInfo      map[string]string `json:"serverInfo"`
+				} `json:"result"`
+			}
+			_ = json.NewDecoder(resp.Body).Decode(&rpcResp)
+			proto := rpcResp.Result.ProtocolVersion
+			if proto == "" {
+				proto = mcp.ProtocolVersion2026
+			}
+			srvName := rpcResp.Result.ServerInfo["name"]
+			srvVer := rpcResp.Result.ServerInfo["version"]
+			return c.print(map[string]any{
+				"status":           "online",
+				"endpoint":         probeURL,
+				"protocol_version": proto,
+				"healthy":          true,
+				"server_info":      rpcResp.Result.ServerInfo,
+				"providers":        providerStates,
+			}, formatWithProviders(fmt.Sprintf("MCP server status ONLINE at %s (protocol %s, server %s %s)", probeURL, proto, srvName, srvVer)))
+		}
+
+		if resp.StatusCode == http.StatusUnauthorized {
+			return c.print(map[string]any{
+				"status":           "online",
+				"endpoint":         probeURL,
+				"protocol_version": mcp.ProtocolVersion2026,
+				"healthy":          true,
+				"authenticated":    true,
+				"reason":           "authentication required (bearer token)",
+				"providers":        providerStates,
+			}, formatWithProviders(fmt.Sprintf("MCP server status ONLINE at %s (authentication required, protocol %s)", probeURL, mcp.ProtocolVersion2026)))
+		}
+
 		return c.print(map[string]any{
-			"status": "unknown", "protocol_version": mcp.ProtocolVersion2026, "reason": "no live endpoint probe performed",
-		}, "MCP server status UNKNOWN (no live endpoint probe performed)")
+			"status":           "unhealthy",
+			"endpoint":         probeURL,
+			"http_code":        resp.StatusCode,
+			"protocol_version": mcp.ProtocolVersion2026,
+			"healthy":          false,
+			"reason":           fmt.Sprintf("HTTP %d", resp.StatusCode),
+			"providers":        providerStates,
+		}, formatWithProviders(fmt.Sprintf("MCP server status UNHEALTHY at %s (HTTP %d)", probeURL, resp.StatusCode)))
 	default:
 		return fmt.Errorf("%w: unknown mcp subcommand %s", model.ErrInvalid, args[0])
 	}

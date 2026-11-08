@@ -50,6 +50,139 @@ func TestApprovingAPlanCreatesTheNextVersion(t *testing.T) {
 	}
 }
 
+func TestPlanWithRouteButNoGovernedHarnessIsBlockedBeforeApproval(t *testing.T) {
+	runtime := runtimeForPlan(t)
+	request := planCreateRequest()
+	request.HarnessCandidates = nil
+	created, err := runtime.Plans().Create(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.State != plan.StateBlocked || len(created.Routes) == 0 || len(created.Assignments.Assignments) != 0 {
+		t.Fatalf("missing harness evidence produced state=%s routes=%d assignments=%d", created.State, len(created.Routes), len(created.Assignments.Assignments))
+	}
+	if _, err := runtime.Plans().Approve(t.Context(), request.ProjectID); err == nil {
+		t.Fatal("unexecutable plan was approved")
+	}
+}
+
+func TestPlanRouteMustMatchChosenProducer(t *testing.T) {
+	for name, mutate := range map[string]func(*CreatePlanRequest){
+		"provider": func(request *CreatePlanRequest) {
+			request.Candidates[0].Provider = "codex"
+			request.HarnessCandidates[0].Profile.Harness = "claude"
+			request.HarnessCandidates[0].Provider = "claude"
+		},
+		"model": func(request *CreatePlanRequest) {
+			request.HarnessCandidates[0].Profile.DefaultModel = "other-model"
+			request.HarnessCandidates[0].Profile.SupportedModels = []string{"other-model"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runtime := runtimeForPlan(t)
+			request := planCreateRequest()
+			mutate(&request)
+			created, err := runtime.Plans().Create(t.Context(), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if created.State != plan.StateBlocked {
+				t.Fatalf("route %+v with producer %+v was %s", created.Routes["fix"], created.Assignments.Assignments[0], created.State)
+			}
+			if _, err := runtime.Plans().Approve(t.Context(), request.ProjectID); err == nil {
+				t.Fatal("mismatched route and producer were approved")
+			}
+		})
+	}
+}
+
+func TestApprovalRefusesLegacyReadyPlanWithDifferentRoute(t *testing.T) {
+	runtime := runtimeForPlan(t)
+	request := planCreateRequest()
+	created, err := runtime.Plans().Create(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := created.Routes["fix"]
+	changed.Provider = "other-provider"
+	created.Routes["fix"] = changed
+	if err := runtime.Store().SavePlan(t.Context(), created, created.Version); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Plans().Approve(t.Context(), request.ProjectID); err == nil {
+		t.Fatal("legacy READY plan with different producer route was approved")
+	}
+}
+
+func TestCanonicalHarnessAliasKeepsRouteAlignment(t *testing.T) {
+	runtime := runtimeForPlan(t)
+	request := planCreateRequest()
+	request.Candidates[0].Provider = "claude"
+	request.HarnessCandidates[0].Profile.Harness = "claude-code"
+	request.HarnessCandidates[0].Provider = "claude"
+	created, err := runtime.Plans().Create(t.Context(), request)
+	if err != nil || created.State != plan.StateReady {
+		t.Fatalf("canonical Claude harness was blocked: state=%s err=%v blockers=%v", created.State, err, created.BlockedBy)
+	}
+	if _, err := runtime.Plans().Approve(t.Context(), request.ProjectID); err != nil {
+		t.Fatalf("canonical Claude harness could not be approved: %v", err)
+	}
+}
+
+func TestHandoffRefusesApprovedRouteProducerDrift(t *testing.T) {
+	runtime := runtimeForPlan(t)
+	request := planCreateRequest()
+	if _, err := runtime.Plans().Create(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	approved, err := runtime.Plans().Approve(t.Context(), request.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := approved.Routes["fix"]
+	changed.Provider = "other-provider"
+	approved.Routes["fix"] = changed
+	if err := runtime.Store().SavePlan(t.Context(), approved, approved.Version); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Plans().Handoff(t.Context(), request.SessionID, request.ProjectID); err == nil {
+		t.Fatal("approved plan with changed route reached handoff")
+	}
+	if _, err := runtime.Execution().StartRun(t.Context(), request.SessionID, request.ProjectID); err == nil {
+		t.Fatal("approved plan with changed route started Process 05")
+	}
+	runs, err := runtime.Execution().Engine().ListRuns(t.Context())
+	if err != nil || len(runs) != 0 {
+		t.Fatalf("refused route created runs: count=%d err=%v", len(runs), err)
+	}
+}
+
+func TestApprovalRefusesLegacyReadyPlanWithoutRoutesTeamOrAssignments(t *testing.T) {
+	runtime := runtimeForPlan(t)
+	request := planCreateRequest()
+	created, err := runtime.Plans().Create(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created.Routes = nil
+	created.Assignments = plan.AssignmentPlan{}
+	created.Team = plan.Team{}
+	created.Verification = plan.VerificationPlan{}
+	if err := runtime.Store().SavePlan(t.Context(), created, created.Version); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.Plans().Approve(t.Context(), request.ProjectID); err == nil {
+		t.Fatal("legacy READY plan without routes, team, verification or assignments was approved")
+	}
+	current, err := runtime.Plans().Current(t.Context(), request.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.State != plan.StateReady {
+		t.Fatalf("refusal mutated the historical plan to %s", current.State)
+	}
+}
+
 func TestStalePlanWriteIsRefusedAfterApproval(t *testing.T) {
 	runtime := runtimeForPlan(t)
 	service := runtime.Plans()

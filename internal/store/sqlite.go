@@ -38,10 +38,13 @@ func waitSQLiteRetry(ctx context.Context, attempt int) error {
 }
 
 type Store struct {
-	db         *sql.DB
-	sanitizer  evidence.Sanitizer
-	authorizer evidence.Authorizer
-	metrics    *evidence.MetricsRecorder
+	db               *sql.DB
+	architectureFile *architectureSQLiteFile
+	sanitizer        evidence.Sanitizer
+	authorizer       evidence.Authorizer
+	metrics          *evidence.MetricsRecorder
+	// credentialDecisions caches CredentialDecisionEvents per project/provider.
+	credentialDecisions credentialDecisionCache
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -62,13 +65,17 @@ func OpenWithObservability(ctx context.Context, path string, sanitizer evidence.
 	if sanitizer == nil {
 		return nil, fmt.Errorf("evidence sanitizer is required")
 	}
-	db, err := sql.Open("sqlite", path)
+	dsn, architectureFile, err := architectureSQLiteDSN(path)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", withConnectionSettings(dsn))
 	if err != nil {
 		return nil, fmt.Errorf("open SQLite: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	st := &Store{db: db, sanitizer: sanitizer, authorizer: authorizer, metrics: metrics}
+	st := &Store{db: db, architectureFile: architectureFile, sanitizer: sanitizer, authorizer: authorizer, metrics: metrics}
 	if err := st.configure(ctx); err != nil {
 		db.Close()
 		return nil, err
@@ -79,11 +86,32 @@ func OpenWithObservability(ctx context.Context, path string, sanitizer evidence.
 // Metrics returns the configured detached operational recorder, if any.
 func (s *Store) Metrics() *evidence.MetricsRecorder { return s.metrics }
 
+// withConnectionSettings puts the per-connection settings in the DSN, so the
+// driver applies them to every connection the pool opens (busy_timeout first),
+// not only to the one that ran configure.
+//
+// _txlock=immediate makes every read-write transaction BEGIN IMMEDIATE.
+// Several Store handles (runtimes, processes) share one database. A deferred
+// transaction that reads and then writes must upgrade its read snapshot to the
+// write lock, and SQLite never runs the busy handler for that upgrade: it fails
+// at once with SQLITE_BUSY while another handle writes, whatever busy_timeout
+// is. Taking the write lock at BEGIN waits for it under busy_timeout instead.
+// Read-only transactions (sql.TxOptions{ReadOnly: true}) stay deferred.
+func withConnectionSettings(dsn string) string {
+	separator := "?"
+	if strings.Contains(dsn, "?") {
+		separator = "&"
+	}
+	return dsn + separator + "_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_txlock=immediate"
+}
+
 func (s *Store) configure(ctx context.Context) error {
+	// The DSN already set busy_timeout on this connection, so switching to
+	// WAL waits for a lock another process holds instead of failing at once.
 	for _, statement := range []string{
+		"PRAGMA busy_timeout = 5000",
 		"PRAGMA foreign_keys = ON",
 		"PRAGMA journal_mode = WAL",
-		"PRAGMA busy_timeout = 5000",
 	} {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
 			return fmt.Errorf("configure SQLite with %q: %w", statement, err)

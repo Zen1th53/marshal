@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,13 +17,18 @@ import (
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
-func realTmuxWorkspace(t *testing.T) *Workspace {
+func realTmuxWorkspace(t *testing.T, projectRoot ...string) *Workspace {
 	t.Helper()
 	bin, err := exec.LookPath("tmux")
 	if err != nil {
 		t.Fatal(err)
 	}
-	sock := filepath.Join(t.TempDir(), "tmux.sock")
+	sockDir, err := os.MkdirTemp("/tmp", "tmx-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(sockDir) })
+	sock := filepath.Join(sockDir, "tmux.sock")
 	wrapper := filepath.Join(t.TempDir(), "tmux")
 	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nexec "+bin+" -S "+sock+" \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
@@ -30,15 +36,19 @@ func realTmuxWorkspace(t *testing.T) *Workspace {
 	tmux.SetBinaryPath(wrapper)
 	t.Cleanup(func() { exec.Command(bin, "-S", sock, "kill-server").Run(); tmux.ResetBinaryPath() })
 	ctx := context.Background()
-	if _, err := tmux.RunCommand(ctx, "new-session", "-d", "-s", "test", "-n", "marshal", "sleep", "600"); err != nil {
-		t.Fatal(err)
-	}
 	w := NewWorkspace(nil, "project", "session")
 	w.workDir = t.TempDir()
+	if len(projectRoot) != 0 {
+		w.workDir = projectRoot[0]
+	}
+	session := tmux.SessionName(w.workDir)
+	if _, err := tmux.RunCommand(ctx, "new-session", "-d", "-s", session, "-n", statepath.Name, "sleep", "600"); err != nil {
+		t.Fatal(err)
+	}
 	cleanupTmuxWorkspace(t, w)
 	w.tmuxPath = wrapper
-	w.tmuxSession = "test"
-	w.tmuxMarshalWin = "test:marshal"
+	w.tmuxSession = session
+	w.tmuxMarshalWin = session + ":" + statepath.Name
 	t.Setenv("TMUX", sock+",1,0")
 	t.Setenv("MARSHAL_TEST_FORCE_TMUX", "1")
 	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-qm", "base"}} {
@@ -48,7 +58,7 @@ func realTmuxWorkspace(t *testing.T) *Workspace {
 			t.Fatalf("%s %v", out, err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(w.workDir, ".git", "info", "exclude"), []byte(".marshal/\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(w.workDir, ".git", "info", "exclude"), []byte(statepath.DirName+"/\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	return w
@@ -162,7 +172,7 @@ func TestStopAllUsesTaskIdentityAfterRenameAndJoin(t *testing.T) {
 	recovered.tmuxMarshalWin = w.tmuxMarshalWin
 	panes, _ := tmux.ListPanes(ctx, w.tmuxSession)
 	for _, p := range panes {
-		if p.WindowName == "marshal" && p.PaneID != a.paneID {
+		if p.WindowName == statepath.Name && p.PaneID != a.paneID {
 			recovered.tmuxMarshalPaneID = p.PaneID
 		}
 	}
@@ -186,7 +196,7 @@ func TestStopAllUsesTaskIdentityAfterRenameAndJoin(t *testing.T) {
 			t.Fatal("task terminal survives stop-all")
 		}
 	}
-	evidence, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "evidence", "task-immutable-latest.txt"))
+	evidence, err := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "evidence", "task-immutable-latest.txt"))
 	if err != nil || !strings.Contains(string(evidence), "TASK_EVIDENCE") {
 		t.Fatalf("task evidence lost: %q %v", evidence, err)
 	}
@@ -200,7 +210,7 @@ func TestEvidenceFailureRetainsStoppedTaskPane(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer d.Cancel(h)
-	path := filepath.Join(w.workDir, ".marshal", "evidence")
+	path := filepath.Join(w.workDir, statepath.DirName, "evidence")
 	os.MkdirAll(filepath.Dir(path), 0700)
 	if err := os.WriteFile(path, []byte("occupied"), 0600); err != nil {
 		t.Fatal(err)
@@ -258,7 +268,7 @@ func TestConcurrentRunsKeepSameTaskIDsSeparate(t *testing.T) {
 		t.Fatal(response)
 	}
 	for _, run := range []string{"first", "second"} {
-		data, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "evidence", "task-"+run+"-same-latest.txt"))
+		data, err := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "evidence", "task-"+run+"-same-latest.txt"))
 		if err != nil || !strings.Contains(string(data), "evidence:"+run) {
 			t.Fatalf("run %s evidence is not bound to task identity: %q %v", run, data, err)
 		}

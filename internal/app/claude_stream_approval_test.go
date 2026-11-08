@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"testing"
 	"time"
@@ -96,7 +97,7 @@ func newClaudeStreamApprovalFixture(t *testing.T) *claudeStreamApprovalFixture {
 	t.Helper()
 	ctx := context.Background()
 	projectRoot := t.TempDir()
-	journal, err := execution.NewFileJournalStore(filepath.Join(projectRoot, ".marshal", "journal"))
+	journal, err := execution.NewFileJournalStore(filepath.Join(projectRoot, statepath.DirName, "journal"))
 	if err != nil {
 		t.Fatal(err)
 	}

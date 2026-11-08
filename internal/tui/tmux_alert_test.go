@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,7 +64,7 @@ func TestTaskAlertsDriveStatusChatAndFollowActive(t *testing.T) {
 	if !strings.Contains(string(status), "honeypot") {
 		t.Fatalf("incident missing from status: %q", status)
 	}
-	inbox, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "inbox", "marshal.md"))
+	inbox, err := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "inbox", "marshal.md"))
 	if err != nil || !strings.Contains(string(inbox), "worker needs endpoint") || !strings.Contains(string(inbox), "worker stopped; do not merge") {
 		t.Fatalf("alerts missing from Marshal inbox: %q %v", inbox, err)
 	}
@@ -165,7 +166,7 @@ func TestStartupReplaysIncidentWithRunIdentity(t *testing.T) {
 	if w.tmuxActiveWins["first"].state != "failed" || w.tmuxActiveWins["second"].state != "working" {
 		t.Fatal("startup incident replay lost run identity")
 	}
-	data, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "inbox", "marshal.md"))
+	data, err := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "inbox", "marshal.md"))
 	if err != nil || !strings.Contains(string(data), "honeypot hit") {
 		t.Fatalf("startup incident missing from inbox: %s %v", data, err)
 	}

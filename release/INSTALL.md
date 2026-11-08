@@ -1,6 +1,6 @@
-# Install MARSHAL
+# Install Marshal
 
-MARSHAL release binaries support Linux on amd64 and arm64.
+Marshal release binaries support Linux on amd64 and arm64.
 
 The quickest route is the installer, which does all of the below and refuses to
 install a download whose checksum does not match:
@@ -27,7 +27,7 @@ To do it by hand instead:
    marshal version
    ```
 
-4. In an existing Git repository, initialize and diagnose MARSHAL:
+4. In an existing Git repository, initialize and diagnose Marshal:
 
    ```bash
    cd /path/to/repository
@@ -46,6 +46,17 @@ To do it by hand instead:
    Native OpenCode conversation and bounded tool evidence are automatically
    captured as project candidate memory when the OpenCode process exits.
 
-Bubblewrap is required for sandboxed provider execution on Linux. Provider
+Workers run on the host without a sandbox. Use a dedicated project directory;
+`/` and `$HOME` itself are refused. The TUI requires tmux 3.3a or newer. Provider
 CLIs and credentials are optional and are not bundled. Use
 `marshal doctor --probe-providers` to probe installed providers.
+
+Back up project state and stop old sessions before upgrading. A lone
+`.marshal-extreme/` is atomically renamed to `.marshal/`, then stored absolute
+paths are relocated with backups. Existing `.marshal/` state takes precedence;
+old public schema-90 databases upgrade in place. Recovery details are in
+[the upgrade guide](https://github.com/Zen1th53/marshal/blob/main/docs/upgrading.md).
+
+Anonymous telemetry is enabled at `https://marshal.blackhat.uz`. Opt out with
+`marshal telemetry disable`, or set `MARSHAL_CLOUD_ENDPOINT=off` to prevent
+all telemetry requests. Project content is never sent.

@@ -1,5 +1,5 @@
 #!/bin/sh
-# MARSHAL installer.
+# Marshal installer.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
 #
@@ -32,7 +32,7 @@ os=$(uname -s)
 case $(uname -m) in
     x86_64 | amd64) arch="amd64" ;;
     aarch64 | arm64) arch="arm64" ;;
-    *) die "no release binary for $(uname -m); MARSHAL publishes linux amd64 and arm64" ;;
+    *) die "no release binary for $(uname -m); Marshal publishes linux amd64 and arm64" ;;
 esac
 
 need curl
@@ -61,7 +61,7 @@ fetch() {
 
 tag="${MARSHAL_VERSION:-}"
 if [ -z "$tag" ]; then
-    info "Resolving the latest MARSHAL release..."
+    info "Resolving the latest Marshal release..."
     tag=$(fetch --max-time 30 "https://api.github.com/repos/$REPO/releases/latest" |
         sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' |
         head -n 1)
@@ -76,7 +76,7 @@ tmp=$(mktemp -d)
 # Leave nothing behind, including when the download or verification fails.
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-info "Downloading MARSHAL $tag for linux/$arch..."
+info "Downloading Marshal $tag for linux/$arch..."
 fetch -o "$tmp/$archive" "$base/$archive" ||
     die "could not download $archive from release $tag"
 fetch --max-time 60 -o "$tmp/checksums.txt" "$base/checksums.txt" ||
@@ -95,7 +95,7 @@ install -Dm755 "$tmp/marshal" "$INSTALL_DIR/marshal" ||
     die "could not install to $INSTALL_DIR; set MARSHAL_INSTALL_DIR to a writable directory"
 
 info ""
-info "MARSHAL $tag installed to $INSTALL_DIR/marshal"
+info "Marshal $tag installed to $INSTALL_DIR/marshal"
 
 # A binary the shell cannot find is not installed as far as the user is
 # concerned, so say so rather than letting the next command fail.
@@ -122,21 +122,21 @@ for manager in pacman apt apt-get dnf zypper brew; do
         break
     fi
 done
-for tool in tmux socat; do
+for tool in tmux; do
     if command -v "$tool" >/dev/null 2>&1; then
         continue
     fi
+    pkg="$tool"
     case "$package_manager" in
-        pacman) command="sudo pacman -S $tool" ;;
-        apt | apt-get) command="sudo $package_manager install $tool" ;;
-        dnf) command="sudo dnf install $tool" ;;
-        zypper) command="sudo zypper install $tool" ;;
-        brew) command="brew install $tool" ;;
-        *) command="install $tool with your system's package manager" ;;
+        pacman) command="sudo pacman -S $pkg" ;;
+        apt | apt-get) command="sudo $package_manager install $pkg" ;;
+        dnf) command="sudo dnf install $pkg" ;;
+        zypper) command="sudo zypper install $pkg" ;;
+        brew) command="brew install $pkg" ;;
+        *) command="install $pkg with your system's package manager" ;;
     esac
     case "$tool" in
-        tmux) reason="the MARSHAL TUI requires it (minimum 3.3a; Ubuntu 22.04 ships 3.2a - use Ubuntu 24.04+, Debian 12+, or build tmux from source)" ;;
-        socat) reason="governed work with network access is refused without it" ;;
+        tmux) reason="the Marshal TUI requires it (minimum 3.3a; Ubuntu 22.04 ships 3.2a - use Ubuntu 24.04+, Debian 12+, or build tmux from source)" ;;
     esac
     info "Missing $tool: $reason; $command"
 done

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/projectid"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,14 +65,16 @@ func TestGovernedPlanRunUsesPreparedProviderRunner(t *testing.T) {
 			streamStarts := 0
 			runtime.codexAppServerNew = func(string, string) codexAppServerClient { streamStarts++; return nil }
 			runtime.claudeStreamNew = func(string, string) claudeStreamClient { streamStarts++; return nil }
+			requiredTestAcceptedProjectContract(t, runtime)
 			goal := planGoal()
+			goal.ProjectID = requiredProcess05TestProjectID(runtime, goal.ProjectID)
 			goal.SuccessCriteria = []string{"output exists"}
 			if err := runtime.Store().SaveGoalContract(ctx, goal, 0); err != nil {
 				t.Fatal(err)
 			}
 			capacity := goalintake.UnknownCapacity(provider, true)
 			_, err = runtime.Plans().Create(ctx, CreatePlanRequest{
-				SessionID: goal.SessionID, ProjectID: runtimePlanProject,
+				SessionID: goal.SessionID, ProjectID: projectid.ID(goal.ProjectID),
 				Tasks:             []plan.Task{{ID: "write", Title: "write output", Mutating: true, Paths: []string{"output.txt"}, Criteria: goal.SuccessCriteria}},
 				Candidates:        []goalintake.Candidate{{Provider: provider, Model: "test-model", Capacity: capacity, Governance: constitution.GovernanceVerified}},
 				HarnessCandidates: []plan.HarnessCandidate{{Profile: model.HarnessProfile{Harness: provider, InstalledVersion: "1.0.0", SupportedModels: []string{"test-model"}, DefaultModel: "test-model", ProbeEvidenceID: "EV-provider", ProbedAt: time.Now().UTC()}, InstalledVersion: "1.0.0", Provider: provider, Capacity: capacity}},
@@ -79,13 +82,13 @@ func TestGovernedPlanRunUsesPreparedProviderRunner(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := runtime.Plans().Approve(ctx, runtimePlanProject); err != nil {
+			if _, err := runtime.Plans().Approve(ctx, projectid.ID(goal.ProjectID)); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := runtime.RegisterAgent(ctx, RegisterAgentRequest{Name: "worker", Role: model.RoleDeveloper, ModelProvider: provider}); err != nil {
 				t.Fatal(err)
 			}
-			run, err := runtime.Execution().StartRun(ctx, goal.SessionID, runtimePlanProject)
+			run, err := runtime.Execution().StartRun(ctx, goal.SessionID, projectid.ID(goal.ProjectID))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -104,6 +107,7 @@ func TestGovernedPlanRunUsesPreparedProviderRunner(t *testing.T) {
 			if err != nil || runner.runs != 1 || streamStarts != 0 {
 				t.Fatalf("state=%s runner runs=%d stream starts=%d err=%v", executed.State, runner.runs, streamStarts, err)
 			}
+			assertGovernedProviderEvidence(t, executed)
 			for _, task := range executed.Tasks {
 				if task.NativeTurn != nil {
 					t.Fatal("governed task acquired a native turn")

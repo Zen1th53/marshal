@@ -133,7 +133,19 @@ func (s *Store) SetMarshalRun(ctx context.Context, projectID, runID string, run 
 	if projectID == "" || runID == "" || run.PlanID == "" || run.PlanVersion < 1 || run.Settings.Validate() != nil {
 		return 0, fmt.Errorf("%w: invalid marshal run", model.ErrInvalid)
 	}
-	return marshalWrite(ctx, s, "marshal_runs", []string{"run_id", "project_id"}, []any{runID, projectID}, run, expected)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if err := recordMarshalRecoveryTx(ctx, tx, projectID, runID, run, expected); err != nil {
+		return 0, err
+	}
+	next, err := marshalWriteTx(ctx, tx, "marshal_runs", []string{"run_id", "project_id"}, []any{runID, projectID}, run, expected)
+	if err != nil {
+		return 0, err
+	}
+	return next, tx.Commit()
 }
 
 // GetMarshalRun loads the durable state needed to resume a run.
@@ -246,7 +258,7 @@ func (s *Store) MarshalLastAttempt(ctx context.Context, runID, taskID string) (i
 }
 
 func (s *Store) MarshalUnfinishedRuns(ctx context.Context, projectID string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT run_id FROM marshal_runs WHERE project_id=? AND json_extract(data_json,'$.Operation') IS NOT NULL ORDER BY rowid`, projectID)
+	rows, err := s.db.QueryContext(ctx, `SELECT r.run_id FROM marshal_runs r JOIN marshal_run_compatibility c ON c.project_id=r.project_id AND c.run_id=r.run_id AND c.protocol_version=1 WHERE r.project_id=? AND json_extract(r.data_json,'$.Operation') IS NOT NULL ORDER BY r.rowid`, projectID)
 	if err != nil {
 		return nil, err
 	}

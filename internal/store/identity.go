@@ -12,8 +12,14 @@ import (
 )
 
 func (s *Store) RegisterAgent(ctx context.Context, agent model.Agent) error {
-	if agent.ID == "" || agent.ProjectID == "" || agent.DisplayName == "" || !agent.Role.Valid() {
-		return fmt.Errorf("%w: incomplete agent identity", model.ErrInvalid)
+	if agent.ID == "" || agent.ProjectID == "" {
+		return fmt.Errorf("%w: agent identity needs an id and a project", model.ErrInvalid)
+	}
+	if agent.DisplayName == "" {
+		return fmt.Errorf("%w: agent name is required (use --name <name>)", model.ErrInvalid)
+	}
+	if !agent.Role.Valid() {
+		return fmt.Errorf("%w: agent role %q is not valid; use one of: orchestrator, architect, developer, qa, appsec, reviewer, admin (use --role <role>)", model.ErrInvalid, string(agent.Role))
 	}
 	if agent.Status == "" {
 		agent.Status = model.AgentRegistered

@@ -273,8 +273,15 @@ func checkTaskBindings(ctx context.Context, tx *sql.Tx, gid string, gr int64, pi
 		if err != nil {
 			return err
 		}
-		if goal.Confirmation != model.ConfirmationApproved {
+		if !goal.Confirmation.Settled() {
 			return fmt.Errorf("%w: task goal not confirmed", model.ErrConflict)
+		}
+		var cancelled int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM goal_terminations WHERE session_id=? AND goal_id=? AND state='CANCELLED'`, goal.SessionID, gid).Scan(&cancelled); err != nil {
+			return err
+		}
+		if cancelled != 0 {
+			return fmt.Errorf("%w: task goal is cancelled", model.ErrConflict)
 		}
 	}
 	if pid != "" {

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io"
 	"os"
 	"path/filepath"
@@ -33,7 +34,10 @@ func NewCheckpointEngine(projectRoot string) (*CheckpointEngine, error) {
 		return nil, fmt.Errorf("failed to resolve project root: %w", err)
 	}
 
-	backupDir := filepath.Join(absRoot, ".marshal", "checkpoints")
+	if err := statepath.CheckPath(absRoot, statepath.Path(absRoot, "checkpoints")); err != nil {
+		return nil, err
+	}
+	backupDir := filepath.Join(absRoot, statepath.DirName, "checkpoints")
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create checkpoints dir: %w", err)
 	}
@@ -72,7 +76,7 @@ func (ce *CheckpointEngine) CaptureCheckpoint(ctx context.Context, runID, taskID
 
 	// Create backup snapshot directory
 	cpDir := filepath.Join(ce.backupDir, cpID)
-	if err := copyDir(ce.projectRoot, cpDir, []string{".git", ".marshal"}); err != nil {
+	if err := copyDir(ce.projectRoot, cpDir, []string{".git", statepath.DirName, statepath.OtherDirName}); err != nil {
 		return CheckpointRecord{}, fmt.Errorf("%w: failed to snapshot directory: %v", ErrCheckpointFailed, err)
 	}
 	snapshotDigest, err := digestSnapshot(cpDir)
@@ -143,7 +147,7 @@ func (ce *CheckpointEngine) RestoreCheckpoint(ctx context.Context, checkpointID 
 		if actualDigest != rec.SnapshotDigest {
 			return CheckpointRecord{}, fmt.Errorf("%w: snapshot digest mismatch", ErrCheckpointFailed)
 		}
-		if err := restoreSnapshot(ctx, rec.WorktreePath, ce.projectRoot, []string{".git", ".marshal"}); err != nil {
+		if err := restoreSnapshot(ctx, rec.WorktreePath, ce.projectRoot, []string{".git", statepath.DirName, statepath.OtherDirName}); err != nil {
 			return CheckpointRecord{}, fmt.Errorf("%w: failed to restore snapshot: %v", ErrCheckpointFailed, err)
 		}
 	}

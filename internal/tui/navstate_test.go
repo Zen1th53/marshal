@@ -423,19 +423,24 @@ func TestPaletteResetsBetweenOpenings(t *testing.T) {
 	}
 }
 
-// The 17 gaps must be disabled with the gap named. This is the mechanism that
-// keeps them from becoming decorative UI.
+// The remaining gaps must be disabled with the gap named. This is the mechanism
+// that keeps them from becoming decorative UI.
 func TestImplementationGapsAreDisabledAndExplained(t *testing.T) {
 	ia, err := FrozenIA()
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 	gaps := ia.Gaps()
-	// The count is pinned: the spec pack declares seventeen. A drop would mean
-	// a gap was quietly rebound or dropped from the inventory rather than
+	// The count is pinned: the pack declares two remaining gaps (CTUI-0092
+	// current lifecycle stage, CTUI-0100 Process 00→08 timeline). A drop would
+	// mean a gap was quietly rebound or dropped from the inventory rather than
 	// implemented, and this test would otherwise still pass.
-	if len(gaps) != 17 {
-		t.Fatalf("the frozen pack declares 17 implementation gaps, the IA has %d", len(gaps))
+	wantGaps := 2
+	if editionExtreme {
+		wantGaps = 17 - len(buildResolvedGapIDs)
+	}
+	if len(gaps) != wantGaps {
+		t.Fatalf("the frozen pack declares %d implementation gaps, the IA has %d", wantGaps, len(gaps))
 	}
 	// Every gap is checked, not only the ones that happen to be actions. Nine
 	// of the seventeen are read-only nodes, and skipping those would let a gap

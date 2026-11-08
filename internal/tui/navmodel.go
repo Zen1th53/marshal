@@ -224,7 +224,7 @@ func communityLabel(text string) string {
 		"Process 06", "verification service",
 		"Process 07", "learning service",
 		"Process 08", "optimization service",
-	).Replace(text)
+	).Replace(humanReason(editionLabel(text)))
 }
 
 // LoadIA parses a MANIFEST.json into the navigable tree.
@@ -537,7 +537,7 @@ func (ia *IA) Search(query string) []*Node {
 	var out []*Node
 	var walk func(*Node)
 	walk = func(n *Node) {
-		if n.Type != NodeRoot {
+		if n.Type != NodeRoot && !menuHidesSpec(n.SpecID) {
 			haystack := strings.ToLower(n.Title + " " + n.MenuPath)
 			matched := true
 			for _, t := range terms {

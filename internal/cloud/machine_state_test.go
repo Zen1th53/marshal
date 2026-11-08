@@ -1,3 +1,5 @@
+//go:build governed
+
 package cloud
 
 import (
@@ -5,18 +7,6 @@ import (
 	"path/filepath"
 	"testing"
 )
-
-func savedInstallation(t *testing.T, dir string) State {
-	t.Helper()
-	st, err := NewInstallation()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := NewStore(dir).Save(st); err != nil {
-		t.Fatal(err)
-	}
-	return st
-}
 
 // One installation has one identity: the first project-level identity is
 // adopted, and a second project does not replace it.

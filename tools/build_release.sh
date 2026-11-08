@@ -54,13 +54,20 @@ for release_file in "${release_files[@]}"; do
   fi
 done
 
+python3 tools/release_verify.py . distribution/PACK-MANIFEST.json
+
 for release_arch in amd64 arm64; do
   release_bundle="$release_staging/bundle-$release_arch"
   mkdir -p "$release_bundle"
   CGO_ENABLED=0 GOOS=linux GOARCH="$release_arch" go build \
     -trimpath -buildvcs=false -ldflags "$release_ldflags" \
     -o "$release_bundle/marshal" ./cmd/marshal
-  cp LICENSE LICENSING.md README.md THIRD_PARTY_NOTICES.md release/INSTALL.md "$release_bundle/"
+  cp LICENSE docs/legal/LICENSING.md README.md docs/legal/THIRD_PARTY_NOTICES.md release/INSTALL.md "$release_bundle/"
+  # The source tree groups documentation; release archives keep their flat
+  # licensing layout and README links to the bundled notices.
+  sed -e 's#(docs/legal/LICENSING.md)#(LICENSING.md)#g' \
+    -e 's#(docs/legal/THIRD_PARTY_NOTICES.md)#(THIRD_PARTY_NOTICES.md)#g' \
+    README.md > "$release_bundle/README.md"
   TZ=UTC tar --sort=name --mtime="$release_date" --owner=0 --group=0 \
     --numeric-owner -C "$release_bundle" -cf - \
     INSTALL.md LICENSE LICENSING.md README.md THIRD_PARTY_NOTICES.md marshal | \

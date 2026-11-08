@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 )
 
@@ -11,7 +12,7 @@ type taskRelayViewKey struct{}
 // The relay is only a view: raw provider output remains evidence, and its
 // exit cannot certify task success. The driver publishes the outcome separately.
 func taskRelayCommand(relay, socket, root, id string) []string {
-	evidence := filepath.Join(root, ".marshal", "evidence", id+"-relay-latest.txt")
+	evidence := filepath.Join(root, statepath.DirName, "evidence", id+"-relay-latest.txt")
 	return []string{"/bin/sh", "-c", `
 printf 'Task worker running. Result pending.\nF11: Control centre\n'
 "$1" STDIO "UNIX-CONNECT:$2" >> "$3" 2>&1

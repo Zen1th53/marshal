@@ -155,6 +155,18 @@ const (
 
 // ExecutionRun represents the durable canonical run entity in Process 05.
 type ExecutionRun struct {
+	// Task lanes isolate execution CAS/native authority without changing the approved parent plan.
+	ParentRunID    string                        `json:"parent_run_id,omitempty"`
+	LaneTaskID     string                        `json:"lane_task_id,omitempty"`
+	ParentBinding  string                        `json:"parent_binding,omitempty"`
+	TaskLanes      map[string]string             `json:"task_lanes,omitempty"`
+	TaskLaneStates map[string]TaskExecutionState `json:"task_lane_states,omitempty"`
+	// TaskProviderSwitches records operator provider switches of lane-parent
+	// tasks, each with the lane bindings it superseded.
+	TaskProviderSwitches    map[string]ProviderSwitch `json:"task_provider_switches,omitempty"`
+	ParallelCallsReserved   int                       `json:"parallel_calls_reserved,omitempty"`
+	ParallelRetriesReserved int                       `json:"parallel_retries_reserved,omitempty"`
+
 	Delivery            DeliveryMode                `json:"delivery,omitempty"`
 	BaseCommit          string                      `json:"base_commit,omitempty"`
 	SelectedTask        string                      `json:"selected_task,omitempty"`
@@ -175,6 +187,8 @@ type ExecutionRun struct {
 	Leases              map[string]Lease            `json:"leases,omitempty"`
 	Approvals           map[string]RuntimeApproval  `json:"approvals,omitempty"`
 	Checkpoints         []CheckpointRecord          `json:"checkpoints,omitempty"`
+	EvidenceRecords     []ExecutionEvidence         `json:"evidence_records,omitempty"`
+	ClaimRecords        []ExecutionClaim            `json:"claim_records,omitempty"`
 	Evidence            []EvidenceRef               `json:"evidence,omitempty"`
 	BudgetConsumed      BudgetUsage                 `json:"budget_consumed"`
 	ProviderCalls       []ProviderCallMeta          `json:"provider_calls,omitempty"`
@@ -391,40 +405,42 @@ type RunProvenance struct {
 
 // EvidenceRef references an evidence record.
 type EvidenceRef struct {
-	EvidenceID   string         `json:"evidence_id"`
-	TaskID       string         `json:"task_id"`
-	Type         string         `json:"type"`
-	Digest       string         `json:"digest"`
-	Status       EvidenceStatus `json:"status"`
-	CapturedAt   time.Time      `json:"captured_at"`
-	WorktreePath string         `json:"worktree_path,omitempty"`
+	ProviderObservation *ProviderObservation `json:"provider_observation,omitempty"`
+	EvidenceID          string               `json:"evidence_id"`
+	TaskID              string               `json:"task_id"`
+	Type                string               `json:"type"`
+	Digest              string               `json:"digest"`
+	Status              EvidenceStatus       `json:"status"`
+	CapturedAt          time.Time            `json:"captured_at"`
+	WorktreePath        string               `json:"worktree_path,omitempty"`
 }
 
 // ExecutionEvidence is a raw evidence record from tool execution.
 type ExecutionEvidence struct {
-	EvidenceID     string         `json:"evidence_id"`
-	RunID          string         `json:"run_id"`
-	TaskID         string         `json:"task_id"`
-	ToolName       string         `json:"tool_name"`
-	Args           []string       `json:"args,omitempty"`
-	Cwd            string         `json:"cwd"`
-	CommandDigest  string         `json:"command_digest"`
-	ExitCode       int            `json:"exit_code"`
-	StdoutSummary  string         `json:"stdout_summary"`
-	StderrSummary  string         `json:"stderr_summary"`
-	OutputDigest   string         `json:"output_digest"`
-	RawArtifactRef string         `json:"raw_artifact_ref,omitempty"`
-	GitCommit      string         `json:"git_commit,omitempty"`
-	WorktreePath   string         `json:"worktree_path,omitempty"`
-	BinaryPath     string         `json:"binary_path,omitempty"`
-	BinaryVersion  string         `json:"binary_version,omitempty"`
-	BinarySHA256   string         `json:"binary_sha256,omitempty"`
-	Status         EvidenceStatus `json:"status"`
-	DurationMs     int64          `json:"duration_ms"`
-	RelevantFiles  []string       `json:"relevant_files,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	StaleAt        *time.Time     `json:"stale_at,omitempty"`
-	StaleReason    string         `json:"stale_reason,omitempty"`
+	ProviderObservation *ProviderObservation `json:"provider_observation,omitempty"`
+	EvidenceID          string               `json:"evidence_id"`
+	RunID               string               `json:"run_id"`
+	TaskID              string               `json:"task_id"`
+	ToolName            string               `json:"tool_name"`
+	Args                []string             `json:"args,omitempty"`
+	Cwd                 string               `json:"cwd"`
+	CommandDigest       string               `json:"command_digest"`
+	ExitCode            int                  `json:"exit_code"`
+	StdoutSummary       string               `json:"stdout_summary"`
+	StderrSummary       string               `json:"stderr_summary"`
+	OutputDigest        string               `json:"output_digest"`
+	RawArtifactRef      string               `json:"raw_artifact_ref,omitempty"`
+	GitCommit           string               `json:"git_commit,omitempty"`
+	WorktreePath        string               `json:"worktree_path,omitempty"`
+	BinaryPath          string               `json:"binary_path,omitempty"`
+	BinaryVersion       string               `json:"binary_version,omitempty"`
+	BinarySHA256        string               `json:"binary_sha256,omitempty"`
+	Status              EvidenceStatus       `json:"status"`
+	DurationMs          int64                `json:"duration_ms"`
+	RelevantFiles       []string             `json:"relevant_files,omitempty"`
+	CreatedAt           time.Time            `json:"created_at"`
+	StaleAt             *time.Time           `json:"stale_at,omitempty"`
+	StaleReason         string               `json:"stale_reason,omitempty"`
 }
 
 // ExecutionClaim represents a claim submitted during execution.
@@ -491,4 +507,14 @@ type Process06HandoffBundle struct {
 	Contradictions          []string              `json:"contradictions,omitempty"`
 	Limitations             []string              `json:"limitations,omitempty"`
 	CompletedAt             time.Time             `json:"completed_at"`
+}
+
+// ProviderSwitch is an operator's durable switch of one lane-parent task to
+// another provider within its approved plan version.
+type ProviderSwitch struct {
+	From          string   `json:"from"`
+	To            string   `json:"to"`
+	Model         string   `json:"model"`
+	Receipt       string   `json:"receipt"`
+	PriorBindings []string `json:"prior_bindings,omitempty"`
 }

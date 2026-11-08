@@ -17,6 +17,7 @@ func TestMarshalChatAndNativeExitReturnOnlyViewedWindow(t *testing.T) {
 		for _, viewed := range []bool{true, false} {
 			t.Run(fmt.Sprintf("chat=%v/viewed=%v", chat, viewed), func(t *testing.T) {
 				root := t.TempDir()
+				session := fixtureTmuxNamespace(t, root)
 				log := filepath.Join(root, "calls")
 				selected := filepath.Join(root, "selected")
 				fake := filepath.Join(root, "tmux")
@@ -35,7 +36,7 @@ case "$1" in
  display-message)
   case "$*" in
    *'#{pane_dead}'*) echo '%s' ;;
-   *'#{session_name}:#{window_id}'*) echo 'session:@0' ;;
+   *'#{session_name}:#{window_id}'*) echo '%s:@0' ;;
    *'#{session_id}'*) echo '$0' ;;
    *'#{window_active}'*) echo %s ;;
    *'#{pane_id}'*) echo '%%1' ;;
@@ -47,7 +48,7 @@ case "$1" in
  respawn-window|respawn-pane) touch %q ;;
  capture-pane) echo 'saved output' ;;
 esac
-`, log, deadStatus, active, active, selected, filepath.Join(root, "restarted"))
+`, log, deadStatus, session, active, active, selected, filepath.Join(root, "restarted"))
 				if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
 					t.Fatal(err)
 				}
@@ -56,7 +57,7 @@ esac
 				w := NewWorkspace(nil, "project", "session")
 				defer w.Close()
 				w.workDir = root
-				w.tmuxSession, w.tmuxMarshalWinID, w.tmuxMarshalPaneID = "session", "@0", "%0"
+				w.tmuxSession, w.tmuxMarshalWinID, w.tmuxMarshalPaneID = fixtureTmuxNamespace(t, w.providerRoot()), "@0", "%0"
 				a := &activeTmuxAgent{id: "codex", provider: "codex", label: "Codex", paneID: "%1", windowID: "@1", window: "chat", launchOrigin: nativeLaunchOperator, doneChan: make(chan struct{}), binary: "/bin/true"}
 				if chat {
 					a.id, a.role, a.label = "marshal-chat", "marshal-chat", "Marshal Chat"
@@ -114,7 +115,7 @@ case "$1" in
  display-message)
   case "$*" in
    *'#{pane_dead}'*) echo '1 0' ;;
-   *'#{session_name}:#{window_id}'*) echo 'session:@0' ;;
+   *'#{session_name}:#{window_id}'*) echo '%s:@0' ;;
    *'#{session_id}'*) echo '$0' ;;
    *'#{window_active}'*) echo 1 ;;
    *'#{pane_id}'*) echo '%%1' ;;
@@ -124,7 +125,7 @@ case "$1" in
  respawn-window|respawn-pane|new-window) touch %q ;;
  capture-pane) echo 'saved output' ;;
 esac
-`, selected, filepath.Join(root, "restarted"))
+`, fixtureTmuxNamespace(t, root), selected, filepath.Join(root, "restarted"))
 	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +134,7 @@ esac
 	w := NewWorkspace(nil, "project", "session")
 	defer w.Close()
 	w.workDir = root
-	w.tmuxSession, w.tmuxMarshalWinID, w.tmuxMarshalPaneID = "session", "@0", "%0"
+	w.tmuxSession, w.tmuxMarshalWinID, w.tmuxMarshalPaneID = fixtureTmuxNamespace(t, w.providerRoot()), "@0", "%0"
 	a := &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", provider: "codex", label: "Marshal Chat", paneID: "%1", windowID: "@1", window: "chat", launchOrigin: nativeLaunchOperator, doneChan: make(chan struct{}), binary: "/bin/true"}
 	w.tmuxActiveWins[a.id] = a
 	w.monitorAgent(t.Context(), a, root, nil, nil, nil, nil, nil)

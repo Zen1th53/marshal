@@ -11,14 +11,20 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/opencodecli"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/sessionmcp"
 )
 
 type Client struct {
-	binary  string
-	runner  adapter.ProcessRunner
-	version string
-	model   string
+	binary          string
+	runner          adapter.ProcessRunner
+	version         string
+	model           string
+	requiredVersion string
+	// contract is what the installed CLI was observed to accept; nil until
+	// Probe has run, in which case Run passes the 1.x argv unchanged.
+	contract *opencodecli.Contract
 }
 
 func New(binary string, runner adapter.ProcessRunner) *Client {
@@ -29,6 +35,11 @@ func NewWithModel(binary string, runner adapter.ProcessRunner, model string) *Cl
 	return &Client{binary: binary, runner: runner, model: model}
 }
 
+// NewWithRequiredVersion binds an isolated CLI to its pinned offline libraries.
+func NewWithRequiredVersion(binary string, runner adapter.ProcessRunner, model, version string) *Client {
+	return &Client{binary: binary, runner: runner, model: model, requiredVersion: version}
+}
+
 func (c *Client) SetModel(model string) {
 	c.model = model
 }
@@ -37,7 +48,8 @@ func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
 	if c.binary == "" || c.runner == nil {
 		return adapter.Probe{}, fmt.Errorf("%w: OpenCode binary and process runner are required", model.ErrInvalid)
 	}
-	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	// Lanes open in parallel; a short budget fails healthy probes under load.
+	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	versionRes, err := c.runner.Run(probeCtx, adapter.Command{
 		Path: c.binary, Args: []string{"--version"},
@@ -45,10 +57,36 @@ func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
 	if err != nil || versionRes.ExitCode != 0 {
 		return adapter.Probe{}, fmt.Errorf("%w: probe OpenCode version failed: %v", model.ErrUnavailable, err)
 	}
-	c.version = strings.TrimSpace(string(versionRes.Stdout))
-
+	raw := strings.TrimSpace(string(versionRes.Stdout))
+	c.version = opencodecli.NormalizeVersion(raw)
+	if c.version == "" {
+		c.version = raw
+	}
+	capabilities := c.Capabilities()
+	helpRes, helpErr := c.runner.Run(probeCtx, adapter.Command{Path: c.binary, Args: []string{"run", "--help"}})
+	var contract opencodecli.Contract
+	if helpErr == nil {
+		contract = opencodecli.ParseRunHelp(string(helpRes.Stdout) + string(helpRes.Stderr))
+	}
+	contract.RawVersion, contract.Version = raw, opencodecli.NormalizeVersion(raw)
+	if c.requiredVersion != "" && c.version != c.requiredVersion {
+		// The pinned bootstrap names the version the offline libraries were
+		// prepared for. A different CLI is accepted only when the flags and
+		// JSON event stream this adapter uses were observed on the binary.
+		if helpErr != nil {
+			return adapter.Probe{}, fmt.Errorf("%w: OpenCode CLI %s differs from pinned offline bootstrap %s and its run --help could not be read: %v", model.ErrUnavailable, raw, c.requiredVersion, helpErr)
+		}
+		if err := contract.WorkerError(); err != nil {
+			return adapter.Probe{}, fmt.Errorf("%w: OpenCode CLI %s differs from pinned offline bootstrap %s and does not match the adapter contract: %v", model.ErrUnavailable, raw, c.requiredVersion, err)
+		}
+		capabilities["pinned_bootstrap_version"] = c.requiredVersion
+		capabilities["cli_contract"] = "verified " + c.version
+	}
+	if helpErr == nil {
+		c.contract = &contract
+	}
 	return adapter.Probe{
-		Name: "opencode", Available: true, Version: c.version, Capabilities: c.Capabilities(),
+		Name: "opencode", Available: true, Version: c.version, Capabilities: capabilities,
 	}, nil
 }
 
@@ -71,10 +109,19 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 		args = append(args, "-m", modelOpt)
 	}
 	args = append(args, string(prompt))
+	if c.contract != nil {
+		args = c.contract.RunArgs(args)
+	}
 
+	args, env, cleanup, err := sessionmcp.Configure(ctx, "opencode", args, nil)
+	if err != nil {
+		return adapter.Result{}, err
+	}
+	defer cleanup()
 	process, err := c.runner.Run(ctx, adapter.Command{
 		Path:              c.binary,
 		Args:              args,
+		Env:               env,
 		Dir:               request.Worktree,
 		Heartbeat:         request.Heartbeat,
 		HeartbeatInterval: request.HeartbeatInterval,
@@ -127,6 +174,10 @@ func (c *Client) Shutdown(context.Context, string) error {
 	return nil
 }
 
+// GovernedPrompt renders the exact data envelope used by this adapter. It
+// performs no provider call and conveys no execution or approval authority.
+func GovernedPrompt(request adapter.Request) ([]byte, error) { return buildPrompt(request) }
+
 func buildPrompt(request adapter.Request) ([]byte, error) {
 	envelope := struct {
 		TaskID            string   `json:"task_id"`
@@ -169,6 +220,11 @@ func parseOpenCodeOutput(output []byte, result *adapter.Result) {
 			continue
 		}
 		result.Events = append(result.Events, event)
+		// The CLI can exit zero after emitting a provider/session error.
+		// Preserve that observed failure independently of its process status.
+		if event["type"] == "error" {
+			result.Status = adapter.StatusFailure
+		}
 		if sessID, ok := event["session_id"].(string); ok && sessID != "" {
 			result.SessionID = sessID
 		}

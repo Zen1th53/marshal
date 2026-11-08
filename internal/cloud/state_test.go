@@ -188,3 +188,15 @@ func TestSavedStateCarriesNoMachineIdentifiers(t *testing.T) {
 		}
 	}
 }
+
+func savedInstallation(t *testing.T, dir string) State {
+	t.Helper()
+	st, err := NewInstallation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := NewStore(dir).Save(st); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}

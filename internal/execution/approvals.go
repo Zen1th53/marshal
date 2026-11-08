@@ -194,6 +194,9 @@ func (am *ApprovalManager) DecideContext(ctx context.Context, approvalID string,
 	if decider == "" || requester == decider {
 		return nil, fmt.Errorf("%w: requester cannot approve its own action", ErrApprovalDenied)
 	}
+	if reservedApprovalDecider(ctx, decider) {
+		return nil, fmt.Errorf("%w: decider %s is reserved to the runtime", ErrApprovalDenied, decider)
+	}
 	if approve && app.HardViolation {
 		return nil, fmt.Errorf("%w: hard violation cannot be approved", ErrConstraintViolation)
 	}

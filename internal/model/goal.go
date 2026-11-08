@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var (
@@ -124,8 +125,8 @@ type GoalContract struct {
 	CreatedAt              time.Time            `json:"created_at"`
 	UpdatedAt              time.Time            `json:"updated_at"`
 
-	// BudgetLimits are the ceilings this revision binds each of its runs to.
-	// Only dimensions the engine measures for every provider are accepted.
+	// BudgetLimits are this revision's ceilings on cumulative Goal execution.
+	// Unknown measurements fail closed when a corresponding limit is configured.
 	BudgetLimits *BudgetLimit `json:"budget_limits,omitempty"`
 }
 
@@ -151,7 +152,28 @@ func (g *GoalContract) EvaluateUnderstanding() UnderstandingState {
 	return GoalReady
 }
 
+// ValidateGoalContextText checks only the text delivered in the required Goal
+// projection. It neither authenticates a Goal nor changes its stored words.
+func ValidateGoalContextText(g GoalContract) error {
+	texts := []string{g.ID, g.OriginalRequest, g.DesiredOutcome, g.ExpectedArtifact}
+	for _, c := range g.Constraints {
+		texts = append(texts, c.ID, c.Text, c.Source, c.Scope)
+	}
+	for _, values := range [][]string{g.DoNotDo, g.SuccessCriteria, g.Scope, g.RequiredCriticalClaims} {
+		texts = append(texts, values...)
+	}
+	for _, text := range texts {
+		if !utf8.ValidString(text) || strings.ContainsRune(text, 0) {
+			return fmt.Errorf("%w: goal context text must be valid UTF-8 without NUL", ErrGoalInvalid)
+		}
+	}
+	return nil
+}
+
 func ValidateGoal(g GoalContract) error {
+	if err := ValidateGoalContextText(g); err != nil {
+		return err
+	}
 	if strings.TrimSpace(g.ID) == "" {
 		return fmt.Errorf("%w: goal ID is required", ErrGoalInvalid)
 	}
@@ -175,6 +197,9 @@ func ValidateGoal(g GoalContract) error {
 	// code would never have written.
 	if g.Confirmation != "" && !ValidConfirmationState(g.Confirmation) {
 		return fmt.Errorf("%w: unknown confirmation state %q", ErrGoalInvalid, g.Confirmation)
+	}
+	if g.BudgetLimits != nil {
+		return g.BudgetLimits.Validate()
 	}
 	return nil
 }

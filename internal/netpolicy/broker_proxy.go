@@ -96,7 +96,7 @@ func (p *EgressProxy) handleBrokerConnect(w http.ResponseWriter, r *http.Request
 		brokerError(secured, 413, "credential broker request too large")
 		return
 	}
-	if rule := brokerRefreshRule(req, body); b.subscription != nil && rule != "" {
+	if rule := brokerRefreshRule(req, body); (b.subscription != nil || b.nativeSource != nil) && rule != "" {
 		if err := p.recordDecision(r.Context(), host, port, nil, Decision{Reason: ReasonBrokerRefreshDenied, RuleID: RuleID(rule)}); err != nil {
 			brokerError(secured, 503, "credential broker evidence unavailable")
 		} else {
@@ -115,7 +115,7 @@ func (p *EgressProxy) handleBrokerConnect(w http.ResponseWriter, r *http.Request
 		}
 		return
 	}
-	if strings.Contains(string(body), b.placeholder) {
+	if strings.Contains(string(body), b.placeholder) || (b.nativeSource != nil && (strings.Contains(string(body), b.refreshPlaceholder) || strings.Contains(string(body), b.idPlaceholder))) {
 		brokerError(secured, 403, "credential broker unsupported credential body field")
 		return
 	}
@@ -165,12 +165,33 @@ func (p *EgressProxy) handleBrokerConnect(w http.ResponseWriter, r *http.Request
 		}
 		capture(credential)
 	}
+
+	if b.nativeSource != nil {
+		if len(req.Header.Values("Authorization")) != 1 || req.Header.Get("Authorization") != "Bearer "+b.placeholder || !b.nativeSource.requestAllowed(req, body) {
+			brokerError(secured, 403, "credential broker native OAuth request refused")
+			return
+		}
+		native, readErr := b.nativeSource.read(r.Context(), b)
+		if readErr != nil || native.access == "" || time.Until(native.expires) <= 2*time.Minute {
+			brokerError(secured, 503, "credential broker native host sign-in unavailable")
+			return
+		}
+		credential.access = native.access
+		for secret, placeholder := range native.replacements {
+			if secret != "" {
+				secrets = append(secrets, secret)
+				replacements[secret] = placeholder
+			}
+		}
+	}
 	for attempt := 0; attempt < 2; attempt++ {
 		if p.credentialAllowed != nil && !p.credentialAllowed(r.Context()) {
 			brokerError(secured, 403, "credential broker permission revoked")
 			return
 		}
-		if b.subscription != nil {
+		if b.nativeSource != nil {
+			req.Header.Set("Authorization", "Bearer "+credential.access)
+		} else if b.subscription != nil {
 			req.Header.Set("Authorization", "Bearer "+credential.access)
 			if !b.subscription.claude && (req.Header.Get("Chatgpt-Account-Id") == b.scratchName || attempt == 1) {
 				req.Header.Set("Chatgpt-Account-Id", credential.account)
@@ -258,6 +279,14 @@ func (p *EgressProxy) handleBrokerConnect(w http.ResponseWriter, r *http.Request
 	if err != nil || len(data) > brokerBodyLimit {
 		brokerError(secured, 502, "credential broker response unavailable or too large")
 		return
+	}
+	if b.nativeSource != nil {
+		var accepted bool
+		data, accepted = b.nativeSource.responseForWorker(req, resp, data, secrets)
+		if !accepted {
+			brokerError(secured, 502, "credential broker native metadata response refused")
+			return
+		}
 	}
 	clean := b.sanitizeMappedSecrets(string(data), replacements)
 	for key, values := range resp.Header {

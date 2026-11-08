@@ -1,6 +1,6 @@
 {
   "scenario_id": "CONF-001",
-  "adapter": "gemini",
+  "adapter": "antigravity",
   "agent_version": null,
   "adapter_version": null,
   "status": "BLOCKED",

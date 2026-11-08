@@ -747,7 +747,7 @@ func (f *fakeAuthority) WorkspaceExitRequested() bool {
 
 func (f *fakeAuthority) CodexHealth(_ context.Context) (CodexHealthReport, error) {
 	return CodexHealthReport{
-		BinaryPath: "/home/Zen1th53/.local/bin/codex",
+		BinaryPath: "/home/user/.local/bin/codex",
 		Version:    "codex-cli 0.154.0",
 		Available:  true,
 		Verdict:    "ready",
@@ -838,7 +838,7 @@ func (f *fakeAuthority) CodexPlugins(_ context.Context) ([]codex.PluginInfo, []c
 
 func (f *fakeAuthority) ClaudeHealth(_ context.Context) (ClaudeHealthReport, error) {
 	return ClaudeHealthReport{
-		BinaryPath:   "/home/Zen1th53/.local/bin/claude",
+		BinaryPath:   "/home/user/.local/bin/claude",
 		Version:      "claude-cli 2.0.0",
 		Available:    true,
 		StreamStatus: "CONFIG_FREE",
@@ -1005,7 +1005,7 @@ func TestSubmitOnCancelDoesNothing(t *testing.T) {
 	c := &Confirmation{}
 
 	binding := source.Bindings()["CTUI-0046"] // Cancel task, destructive
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046"}); err != nil {
+	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	// A destructive confirmation starts on Cancel.
@@ -1028,7 +1028,7 @@ func TestDestructiveActionNeedsAnExplicitAcknowledgement(t *testing.T) {
 	c := &Confirmation{}
 
 	binding := source.Bindings()["CTUI-0046"]
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046"}); err != nil {
+	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	c.MoveSelection(1) // move to Proceed
@@ -1184,7 +1184,7 @@ func TestStaleRevisionIsRefusedAtSubmit(t *testing.T) {
 	c := &Confirmation{}
 
 	binding := source.Bindings()["CTUI-0046"] // Cancel task
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046"}); err != nil {
+	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	c.MoveSelection(1)
@@ -1399,39 +1399,49 @@ func TestConfirmationDowngradesAProoflessPass(t *testing.T) {
 // A gapped action never reaches an authority, and says exactly what is missing.
 func TestGappedActionsNeverReachAnAuthority(t *testing.T) {
 	source, auth := testControl(t)
-	ctx := context.Background()
 	bindings := source.Bindings()
 
-	// The eight Control gaps from the frozen manifest.
+	// The eight Control actions that used to be implementation gaps are now
+	// bound to canonical operators. None may still report a gap; a missing
+	// narrow authority fails closed through Requires instead.
 	for _, id := range []ActionID{
 		"CTUI-0043", "CTUI-0044", "CTUI-0045", "CTUI-0048",
 		"CTUI-0051", "CTUI-0052", "CTUI-0071", "CTUI-0073",
 	} {
+		if _, implemented := buildTaskControlOperations[id]; implemented {
+			continue // Extreme task controls have their own canonical-bound tests.
+		}
 		binding, ok := bindings[id]
 		if !ok {
 			t.Fatalf("%s has no binding", id)
 		}
-		if binding.Bound() {
-			t.Fatalf("%s is a frozen implementation gap but reports itself bound", id)
+		if binding.Gap != "" {
+			t.Fatalf("%s still reports an implementation gap: %q", id, binding.Gap)
 		}
-		if !strings.Contains(binding.Gap, "IMPLEMENTATION GAP") {
-			t.Fatalf("%s does not name its gap: %q", id, binding.Gap)
-		}
-		if !strings.Contains(binding.Gap, string(id)) {
-			t.Fatalf("%s does not identify which gap: %q", id, binding.Gap)
-		}
+	}
 
-		c := &Confirmation{}
-		if err := c.Begin(ctx, binding, ActionRequest{Action: id}); !errors.Is(err, ErrNoBinding) {
-			t.Fatalf("%s began a confirmation: %v", id, err)
+	// The only remaining implementation gaps are the two Status read-model
+	// screens that have no canonical binding yet. They must survive loading as
+	// gaps so they cannot read as decorative bound UI.
+	ia, err := FrozenIA()
+	if err != nil {
+		t.Fatalf("load IA: %v", err)
+	}
+	var remaining []string
+	for _, g := range ia.Gaps() {
+		remaining = append(remaining, g.SpecID)
+		if g.Binding != BindingGap {
+			t.Fatalf("%s is listed as a gap but its binding is %q", g.SpecID, g.Binding)
 		}
-		if _, err := c.Submit(ctx); err == nil {
-			t.Fatalf("%s submitted despite being a gap", id)
+	}
+	if editionExtreme {
+		// Extreme also keeps provider quota/status and entitlement request
+		// detail as honest gaps (see buildUnboundProviderGaps).
+		if len(remaining) != 17-len(buildResolvedGapIDs) || remaining[0] != "CTUI-0092" || remaining[1] != "CTUI-0100" {
+			t.Fatalf("remaining implementation gaps = %v", remaining)
 		}
-		outcome := c.Outcome()
-		if outcome.Verdict != VerdictBlocked {
-			t.Fatalf("%s produced verdict %s, want BLOCKED", id, outcome.Verdict)
-		}
+	} else if len(remaining) != 2 || remaining[0] != "CTUI-0092" || remaining[1] != "CTUI-0100" {
+		t.Fatalf("remaining implementation gaps = %v, want [CTUI-0092 CTUI-0100]", remaining)
 	}
 
 	// Not one canonical call was made by any of them.
@@ -1448,35 +1458,21 @@ func TestGappedActionsNeverReachAnAuthority(t *testing.T) {
 	}
 }
 
-// A budget screen refuses the edit and names where the change belongs. It is
-// bound, not gapped: the frozen pack binds it, and the canonical rule is that
-// the limit lives on the Goal contract.
+// Budget edits are no longer blanket refusals. They route through
+// CommandPatchGoalBudget and must fail closed (Requires) when no goal budget
+// authority is attached, rather than silently writing a limit nowhere.
 func TestBudgetEditsRouteToTheGoalRevision(t *testing.T) {
 	source, _ := testControl(t)
-	ctx := context.Background()
-
 	for _, id := range []ActionID{
 		"CTUI-0077", "CTUI-0078", "CTUI-0079",
 		"CTUI-0080", "CTUI-0081", "CTUI-0082",
 	} {
 		binding := source.Bindings()[id]
-		if !binding.Bound() {
-			t.Fatalf("%s is bound in the frozen pack but reports itself gapped", id)
+		if binding.Gap != "" {
+			t.Fatalf("%s reports an implementation gap instead of failing closed", id)
 		}
-		c := &Confirmation{}
-		if err := c.Begin(ctx, binding, ActionRequest{Action: id, ApprovalID: "app-1"}); err != nil {
-			t.Fatalf("%s: begin: %v", id, err)
-		}
-		c.MoveSelection(1)
-		outcome, _ := c.Submit(ctx)
-		if outcome.Verdict != VerdictBlocked {
-			t.Fatalf("%s produced verdict %s, want BLOCKED", id, outcome.Verdict)
-		}
-		if !strings.Contains(outcome.Detail, "new Goal revision") {
-			t.Fatalf("%s does not name where the change belongs: %q", id, outcome.Detail)
-		}
-		if outcome.Proof.Status.IsSuccess() {
-			t.Fatalf("%s reported a successful proof for a refused edit", id)
+		if binding.Requires == "" {
+			t.Fatalf("%s is enabled without a goal budget authority", id)
 		}
 	}
 }
@@ -1648,7 +1644,7 @@ func TestIdempotencyKeyBindsTheExactTarget(t *testing.T) {
 
 	first := &Confirmation{}
 	binding := source.Bindings()["CTUI-0046"]
-	if err := first.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046"}); err != nil {
+	if err := first.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	keyOne := first.Request().IdempotencyKey
@@ -1658,7 +1654,7 @@ func TestIdempotencyKeyBindsTheExactTarget(t *testing.T) {
 
 	// Same target, same key: a retry of the same intent.
 	repeat := &Confirmation{}
-	if err := repeat.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046"}); err != nil {
+	if err := repeat.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	if repeat.Request().IdempotencyKey != keyOne {
@@ -1671,7 +1667,7 @@ func TestIdempotencyKeyBindsTheExactTarget(t *testing.T) {
 	auth.mu.Unlock()
 
 	moved := &Confirmation{}
-	if err := moved.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046"}); err != nil {
+	if err := moved.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	if moved.Request().IdempotencyKey == keyOne {
@@ -1917,7 +1913,7 @@ func TestAConfirmationDoesNotSurviveARestart(t *testing.T) {
 
 	before := &Confirmation{}
 	binding := source.Bindings()["CTUI-0046"]
-	if err := before.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046"}); err != nil {
+	if err := before.Begin(ctx, binding, ActionRequest{Action: "CTUI-0046", Inputs: map[string]string{"task_id": "task-1"}}); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	before.MoveSelection(1)
@@ -1936,36 +1932,38 @@ func TestAConfirmationDoesNotSurviveARestart(t *testing.T) {
 	}
 }
 
-// A budget change while a run is executing must not alter the contract: the
-// canonical rule routes it to a new Goal revision, and that holds regardless
-// of what the run is doing.
+// A budget change while a run is executing must still route to a new Goal
+// revision: the canonical rule is that contract editing requires a Goal
+// revision, and that holds regardless of what the run is doing.
 func TestBudgetChangeDuringExecutionStillRoutesToTheGoal(t *testing.T) {
-	source, auth := testControl(t)
+	g := model.GoalContract{ID: "g", SessionID: "sess-1", ProjectID: "proj-1",
+		Revision: 1, Confirmation: model.ConfirmationApproved, RequestDigest: "sha256:acceptance-goal-v1",
+		BudgetLimits: &model.BudgetLimit{MaxModelCalls: 10}}
+	f := &goalBudgetFake{fakeAuthority: &fakeAuthority{goal: g}, revisions: map[int64]model.GoalContract{1: g}}
+	// The run is mid-execution.
+	f.mu.Lock()
+	f.run.State = execution.RunState("RUNNING")
+	f.run.CurrentPhase = execution.RunPhase("EXECUTE")
+	f.mu.Unlock()
+	source := &ControlSource{Authority: f, ProjectID: "proj-1", SessionID: "sess-1"}
 	ctx := context.Background()
 
-	// The run is mid-execution.
-	auth.mu.Lock()
-	auth.run.State = execution.RunState("RUNNING")
-	auth.run.CurrentPhase = execution.RunPhase("EXECUTE")
-	auth.mu.Unlock()
-
-	c := &Confirmation{}
 	binding := source.Bindings()["CTUI-0077"] // Token limit
-	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0077", ApprovalID: "app-1"}); err != nil {
+	target, err := binding.Prepare(ctx)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	c := &Confirmation{}
+	if err := c.Begin(ctx, binding, ActionRequest{Action: "CTUI-0077", Target: target, ProjectID: "proj-1", SessionID: "sess-1", IdempotencyKey: "exec-budget", Inputs: map[string]string{"value": "1000", "reason": "raise during execution"}}); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
 	c.MoveSelection(1)
-	outcome, _ := c.Submit(ctx)
-
-	if outcome.Verdict != VerdictBlocked {
-		t.Fatalf("a budget edit during execution produced %s", outcome.Verdict)
+	outcome, err := c.Submit(ctx)
+	if err != nil || !outcome.Succeeded() {
+		t.Fatalf("a budget edit during execution failed: %+v %v", outcome, err)
 	}
-	if outcome.Proof.Status.IsSuccess() {
-		t.Fatal("a refused budget edit reported a successful proof")
-	}
-	// And it names the goal revision that owns the limit.
-	if !strings.Contains(outcome.Detail, "Goal revision") {
-		t.Fatalf("the refusal does not route to the goal: %q", outcome.Detail)
+	if f.goal.Confirmation != model.ConfirmationPending || f.goal.Revision != 2 {
+		t.Fatalf("a budget edit during execution did not create a PENDING revision: rev=%d conf=%s", f.goal.Revision, f.goal.Confirmation)
 	}
 }
 

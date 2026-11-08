@@ -45,7 +45,11 @@ func TestMissingValuesNeverRenderAsZeroOrBlank(t *testing.T) {
 		if got == "0" {
 			t.Fatalf("%s rendered as zero", v.Status.Label())
 		}
-		if !strings.Contains(got, v.Status.Label()) {
+		badge := v.Status.Label()
+		if v.Status == TruthNotRun {
+			badge = "Not run yet" // readable wording instead of the raw code
+		}
+		if !strings.Contains(got, badge) {
 			t.Fatalf("%q does not carry its status badge", got)
 		}
 	}

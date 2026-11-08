@@ -2,7 +2,8 @@ package epistemic
 
 import (
 	"context"
-	"fmt"
+	"crypto/sha256"
+	"encoding/hex"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/model"
@@ -113,10 +114,24 @@ func NewDeterministicEvidenceRef(
 	summary string,
 	coveredFiles []string,
 ) model.EvidenceRef {
+	h := sha256.New()
+	h.Write([]byte(id))
+	h.Write([]byte{0})
+	h.Write([]byte(tool))
+	h.Write([]byte{0})
+	h.Write([]byte(commitSHA))
+	h.Write([]byte{0})
+	h.Write([]byte(summary))
+	for _, f := range coveredFiles {
+		h.Write([]byte{0})
+		h.Write([]byte(f))
+	}
+	digest := "sha256:" + hex.EncodeToString(h.Sum(nil))
+
 	return model.EvidenceRef{
 		EvidenceID:      id,
 		EvidenceType:    "verification",
-		Digest:          fmt.Sprintf("sha256:det-%s-%d", id, time.Now().UnixNano()),
+		Digest:          digest,
 		Tool:            tool,
 		IsDeterministic: true,
 		CommitSHA:       commitSHA,

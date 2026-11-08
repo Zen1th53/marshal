@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/hostgit"
@@ -114,6 +115,18 @@ func setupFixes(assessment startup.Assessment) []setupFix {
 
 func runGit(ctx context.Context, root string, args ...string) error {
 	command, err := hostgit.Command(ctx, root, args...)
+	return runGitCommand(command, err, args)
+}
+
+// runGitCommit records a commit MARSHAL makes for its own bookkeeping, using a
+// neutral identity only when Git has none.
+func runGitCommit(ctx context.Context, root string, args ...string) error {
+	args = append([]string{"commit"}, args...)
+	command, err := hostgit.CommitCommand(ctx, root, args...)
+	return runGitCommand(command, err, args)
+}
+
+func runGitCommand(command *exec.Cmd, err error, args []string) error {
 	if err != nil {
 		return err
 	}

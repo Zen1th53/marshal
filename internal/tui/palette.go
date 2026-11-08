@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -15,7 +16,36 @@ type PaletteAction struct {
 	Shortcut    string // e.g. "g" or empty
 	Disabled    bool
 	Reason      string // reason if disabled
+	// Key is the Board key the entry sends instead of a command; View
+	// marks an entry that opens one of the Board's views with it.
+	Key  *KeyEvent
+	View bool
+	// Pane is the Board pane or view the entry acts in ("inbox", "Memory");
+	// empty for an entry that acts anywhere. The palette ranks the focused
+	// pane's entries first.
+	Pane string
+	// Inbox is the key of the pending request an inbox entry decides.
+	Inbox string
 }
+
+// PaletteContext is what the palette ranks by while it is open: the pane
+// or view the focus is in, the actions of the selection (the selected
+// task's or inbox item's pending request), and the other actions the
+// moment offers (the rest of the inbox). It is read once as the palette
+// opens, so the order does not move under the operator, and for a given
+// state it is always the same order.
+type PaletteContext struct {
+	Pane      string
+	Selection []PaletteAction
+	Others    []PaletteAction
+}
+
+// Context ranks, highest first.
+const (
+	rankSelection = 3
+	rankPane      = 2
+	rankOther     = 1
+)
 
 // CommandPalette manages the Ctrl+P command palette modal.
 type CommandPalette struct {
@@ -25,6 +55,10 @@ type CommandPalette struct {
 	actions  []PaletteAction
 	filtered []PaletteAction
 	selected int
+	// context reads the PaletteContext as the palette opens; ctx is the
+	// one read.
+	context func() PaletteContext
+	ctx     PaletteContext
 }
 
 // NewCommandPalette creates a new CommandPalette with actions.
@@ -56,6 +90,10 @@ func (cp *CommandPalette) Open() {
 	cp.active = true
 	cp.query = make([]rune, 0)
 	cp.selected = 0
+	cp.ctx = PaletteContext{}
+	if cp.context != nil {
+		cp.ctx = cp.context()
+	}
 	cp.filter()
 }
 
@@ -64,6 +102,8 @@ func (cp *CommandPalette) Close() {
 	cp.active = false
 	cp.query = nil
 	cp.selected = 0
+	cp.ctx = PaletteContext{}
+	cp.filter()
 }
 
 // Toggle toggles the command palette.
@@ -129,19 +169,59 @@ func (cp *CommandPalette) HandleKey(k KeyEvent) (*PaletteAction, bool) {
 	return nil, false
 }
 
+// filter orders the entries the query matches. With no query that is the
+// context's order: the selection's actions, then the focused pane's
+// entries, then the context's other actions, then the rest as listed.
+// A query ranks how well an entry matches first: a key typed as it is
+// (a, A, d) picks the entries it is the key of, then a word of a title
+// the query starts, then the query anywhere; ties keep the context order
+// and, typed, put the entries that can run before those that cannot.
+// The sort is stable, so one state always gives one order.
 func (cp *CommandPalette) filter() {
-	query := strings.ToLower(strings.TrimSpace(string(cp.query)))
-	if query == "" {
-		cp.filtered = make([]PaletteAction, len(cp.actions))
-		copy(cp.filtered, cp.actions)
-	} else {
-		cp.filtered = nil
-		for _, a := range cp.actions {
-			target := strings.ToLower(fmt.Sprintf("%s %s %s %s", a.Category, a.Title, a.Description, a.Command))
-			if strings.Contains(target, query) {
-				cp.filtered = append(cp.filtered, a)
+	raw := strings.TrimSpace(string(cp.query))
+	query := strings.ToLower(raw)
+	type ranked struct {
+		a           PaletteAction
+		match, rank int
+	}
+	var all []ranked
+	add := func(as []PaletteAction, rank int) {
+		for _, a := range as {
+			r := rank
+			if rank == 0 && a.Pane != "" && a.Pane == cp.ctx.Pane {
+				r = rankPane
 			}
+			all = append(all, ranked{a: a, rank: r})
 		}
+	}
+	add(cp.ctx.Selection, rankSelection)
+	add(cp.ctx.Others, rankOther)
+	add(cp.actions, 0)
+	cp.filtered = cp.filtered[:0]
+	kept := all[:0]
+	for _, r := range all {
+		r.match = paletteMatch(r.a, raw, query)
+		if r.match > 0 || query == "" {
+			kept = append(kept, r)
+		}
+	}
+	slices.SortStableFunc(kept, func(x, y ranked) int {
+		if x.match != y.match {
+			return y.match - x.match
+		}
+		if x.rank != y.rank {
+			return y.rank - x.rank
+		}
+		if query != "" && x.a.Disabled != y.a.Disabled {
+			if x.a.Disabled {
+				return 1
+			}
+			return -1
+		}
+		return 0
+	})
+	for _, r := range kept {
+		cp.filtered = append(cp.filtered, r.a)
 	}
 
 	if cp.selected >= len(cp.filtered) {
@@ -151,6 +231,30 @@ func (cp *CommandPalette) filter() {
 			cp.selected = 0
 		}
 	}
+}
+
+// paletteMatch is how well an entry matches the query, raw as typed and
+// lowered: 3 for a key the entry is bound to, 2 for a title word the
+// query starts, 1 for the query anywhere in the entry, 0 for no match.
+func paletteMatch(a PaletteAction, raw, query string) int {
+	if query == "" {
+		return 0
+	}
+	if slices.Contains(strings.Fields(a.Shortcut), raw) {
+		return 3
+	}
+	for _, f := range strings.FieldsFunc(strings.ToLower(a.Title), func(r rune) bool {
+		return r == ' ' || r == ':' || r == '·' || r == '(' || r == ')' || r == ','
+	}) {
+		if strings.HasPrefix(f, query) {
+			return 2
+		}
+	}
+	target := strings.ToLower(fmt.Sprintf("%s %s %s %s %s", a.Category, a.Title, a.Description, a.Command, a.Shortcut))
+	if strings.Contains(target, query) {
+		return 1
+	}
+	return 0
 }
 
 // Render renders the Command Palette box for display in the terminal.
@@ -234,6 +338,10 @@ func (cp *CommandPalette) Render(width, height int) []string {
 			catBadge := fmt.Sprintf("[%s]", act.Category)
 			title := act.Title
 			cmd := act.Command
+			if cmd == "" || act.Key != nil || act.View {
+				// A Board key shows the key it stands for.
+				cmd = act.Shortcut
+			}
 
 			// Every row is the same visible width: a two-column marker followed
 			// by rowText. Padding rowText to a width that already excludes the

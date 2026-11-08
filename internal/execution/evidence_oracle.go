@@ -29,8 +29,16 @@ func (eo *EvidenceOracle) RecordEvidence(ev ExecutionEvidence) (ExecutionEvidenc
 		return ExecutionEvidence{}, fmt.Errorf("%w: evidence ID cannot be empty", ErrRunInvalid)
 	}
 
+	ev.ProviderObservation = cloneProviderObservation(ev.ProviderObservation)
+	if err := ValidateProviderObservation(ev.ProviderObservation); err != nil {
+		return ExecutionEvidence{}, err
+	}
+
 	eo.mu.Lock()
 	defer eo.mu.Unlock()
+	if existing, ok := eo.evidence[ev.EvidenceID]; ok && existing.StaleReason == failedDiagnosticOnly {
+		return ExecutionEvidence{}, fmt.Errorf("%w: failed diagnostic identity cannot be reused", ErrRunInvalid)
+	}
 
 	if ev.CreatedAt.IsZero() {
 		ev.CreatedAt = time.Now().UTC()
@@ -40,7 +48,26 @@ func (eo *EvidenceOracle) RecordEvidence(ev ExecutionEvidence) (ExecutionEvidenc
 	}
 
 	eo.evidence[ev.EvidenceID] = ev
+	ev.ProviderObservation = cloneProviderObservation(ev.ProviderObservation)
 	return ev, nil
+}
+
+// recordFailedDiagnostics atomically reserves diagnostic identities. Their
+// INVALIDATED status prevents them supporting claims, including later attempts.
+func (eo *EvidenceOracle) recordFailedDiagnostics(batch []ExecutionEvidence) ([]ExecutionEvidence, error) {
+	eo.mu.Lock()
+	defer eo.mu.Unlock()
+	for _, ev := range batch {
+		if _, exists := eo.evidence[ev.EvidenceID]; exists {
+			return nil, fmt.Errorf("%w: failed diagnostic identity already exists", ErrRunInvalid)
+		}
+	}
+	for i, ev := range batch {
+		ev.ProviderObservation = cloneProviderObservation(ev.ProviderObservation)
+		eo.evidence[ev.EvidenceID] = ev
+		batch[i].ProviderObservation = cloneProviderObservation(ev.ProviderObservation)
+	}
+	return batch, nil
 }
 
 // GetEvidence retrieves an evidence record by ID.
@@ -52,6 +79,7 @@ func (eo *EvidenceOracle) GetEvidence(evidenceID string) (ExecutionEvidence, err
 	if !exists {
 		return ExecutionEvidence{}, fmt.Errorf("%w: %s", ErrEvidenceMissing, evidenceID)
 	}
+	ev.ProviderObservation = cloneProviderObservation(ev.ProviderObservation)
 	return ev, nil
 }
 
@@ -63,6 +91,7 @@ func (eo *EvidenceOracle) ListEvidenceForRun(runID string) []ExecutionEvidence {
 	var list []ExecutionEvidence
 	for _, ev := range eo.evidence {
 		if ev.RunID == runID {
+			ev.ProviderObservation = cloneProviderObservation(ev.ProviderObservation)
 			list = append(list, ev)
 		}
 	}

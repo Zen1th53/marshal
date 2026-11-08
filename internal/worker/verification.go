@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,7 +15,8 @@ import (
 	"github.com/Zen1th53/marshal/internal/sandbox"
 )
 
-// RunVerification never falls back to executing project code on the host.
+// RunVerification uses host execution in Extreme. Community uses confinement
+// and permits host fallback only when its edition policy explicitly allows it.
 func RunVerification(ctx context.Context, dir string, command []string, timeout time.Duration, limit int, outputDir ...string) (adapter.ProcessResult, error) {
 	backend := sandbox.NewBwrap(verificationBwrap())
 	return runVerification(ctx, backend, dir, command, timeout, limit, outputDir...)
@@ -30,8 +32,14 @@ func verificationBwrap() string {
 }
 
 func runVerification(ctx context.Context, backend *sandbox.Bwrap, dir string, command []string, timeout time.Duration, limit int, outputDir ...string) (adapter.ProcessResult, error) {
+	if sandbox.HostExecutionPreferred() {
+		return runUnconfined(ctx, errHostVerification, dir, command, timeout, limit, outputDir...)
+	}
 	if _, err := sandbox.ChooseIsolation(backend.Probe(ctx), model.R2, false, false); err != nil {
-		return adapter.ProcessResult{}, err
+		if !sandbox.UnconfinedFallbackAllowed() {
+			return adapter.ProcessResult{}, err
+		}
+		return runUnconfined(ctx, err, dir, command, timeout, limit, outputDir...)
 	}
 	if len(command) == 0 {
 		return adapter.ProcessResult{}, fmt.Errorf("%w: empty verification command", model.ErrInvalid)
@@ -46,19 +54,44 @@ func runVerification(ctx context.Context, backend *sandbox.Bwrap, dir string, co
 	if err == nil {
 		err = VerificationResultError(result)
 	}
+	if err != nil && sandbox.UnconfinedFallbackAllowed() && !result.TimedOut && !result.Cancelled && !result.OutputTruncated {
+		return runUnconfined(ctx, err, dir, command, timeout, limit, outputDir...)
+	}
 	return result, err
 }
 
-// VerificationSandboxRequest preserves read-only metadata and dependency inputs
-// for both local verification and run-bound governed checks.
-func VerificationSandboxRequest(ctx context.Context, dir string, outputDir ...string) (model.SandboxRequest, error) {
-	request := model.SandboxRequest{ReadOnlyWorktree: true, Worktree: dir, ExtraEnv: []string{"GOPROXY=off", "GOSUMDB=off", "GOCACHE=/tmp/go-build", "GOMODCACHE=/home/marshal/go/pkg/mod", "GOTOOLCHAIN=local", "MARSHAL_BUILD_DIR=/tmp/marshal-build", "TMPDIR=/tmp"}}
-	request.WritableTmpfs = []string{"/tmp/marshal-build"}
-	if len(outputDir) > 0 && outputDir[0] != "" {
-		request.WritableDirs = []string{outputDir[0]}
-		request.ExtraEnv = append(request.ExtraEnv, "MARSHAL_BUILD_DIR="+outputDir[0])
+// errHostVerification is the recorded cause when the Marshal build verifies
+// on the host by design.
+var errHostVerification = errors.New("Marshal verifies on the host by design")
+
+// UnconfinedReasonPrefix marks verification evidence produced on the host
+// without confinement (Marshal build only).
+const UnconfinedReasonPrefix = "unconfined: "
+
+func runUnconfined(ctx context.Context, cause error, dir string, command []string, timeout time.Duration, limit int, outputDir ...string) (adapter.ProcessResult, error) {
+	if len(command) == 0 {
+		return adapter.ProcessResult{}, fmt.Errorf("%w: empty verification command", model.ErrInvalid)
 	}
-	// Dependencies are read-only inputs; build caches stay inside the sandbox.
+	// The host run keeps the host environment and, like the sandbox, gives the
+	// command its build output directory when the caller supplied one.
+	var env []string
+	if len(outputDir) > 0 && outputDir[0] != "" {
+		env = append(os.Environ(), "MARSHAL_BUILD_DIR="+outputDir[0])
+	}
+	result, err := New(timeout, 3*time.Second, limit).Run(ctx, adapter.Command{Path: command[0], Args: command[1:], Dir: dir, Env: env})
+	result.Isolation = model.IsolationCapability{Level: model.IsolationProcessOnly, Reason: UnconfinedReasonPrefix + "ran on the host after confinement refused: " + cause.Error()}
+	if err == nil && (result.TimedOut || result.Cancelled || result.OutputTruncated) {
+		err = fmt.Errorf("%w: verification did not complete", model.ErrUnavailable)
+	}
+	return result, err
+}
+
+// sandboxGoModCache is where a sandbox sees the host's Go module cache.
+const sandboxGoModCache = "/home/marshal/go/pkg/mod"
+
+// GoModuleCacheBind is a read-only bind of the host's Go module cache at
+// sandboxGoModCache, or false when the host has none.
+func GoModuleCacheBind() (model.Bind, bool) {
 	cache := os.Getenv("GOMODCACHE")
 	if cache == "" {
 		home, err := os.UserHomeDir()
@@ -67,7 +100,30 @@ func VerificationSandboxRequest(ctx context.Context, dir string, outputDir ...st
 		}
 	}
 	if info, err := os.Stat(cache); err == nil && info.IsDir() {
-		request.ReadOnlyBinds = append(request.ReadOnlyBinds, model.Bind{Source: cache, Target: "/home/marshal/go/pkg/mod"})
+		return model.Bind{Source: cache, Target: sandboxGoModCache}, true
+	}
+	return model.Bind{}, false
+}
+
+// WorkerGoEnv is the Go environment of a sandboxed worker given the module
+// cache bind: modules resolve offline from the read-only cache, so a build
+// never downloads dependencies, and build caches stay in the worker's home.
+func WorkerGoEnv() []string {
+	return []string{"GOMODCACHE=" + sandboxGoModCache, "GOPROXY=off", "GOSUMDB=off", "GOTOOLCHAIN=local"}
+}
+
+// VerificationSandboxRequest preserves read-only metadata and dependency inputs
+// for both local verification and run-bound governed checks.
+func VerificationSandboxRequest(ctx context.Context, dir string, outputDir ...string) (model.SandboxRequest, error) {
+	request := model.SandboxRequest{ReadOnlyWorktree: true, Worktree: dir, ExtraEnv: []string{"GOPROXY=off", "GOSUMDB=off", "GOCACHE=/tmp/go-build", "GOMODCACHE=" + sandboxGoModCache, "GOTOOLCHAIN=local", "MARSHAL_BUILD_DIR=/tmp/marshal-build", "TMPDIR=/tmp"}}
+	request.WritableTmpfs = []string{"/tmp/marshal-build"}
+	if len(outputDir) > 0 && outputDir[0] != "" {
+		request.WritableDirs = []string{outputDir[0]}
+		request.ExtraEnv = append(request.ExtraEnv, "MARSHAL_BUILD_DIR="+outputDir[0])
+	}
+	// Dependencies are read-only inputs; build caches stay inside the sandbox.
+	if bind, ok := GoModuleCacheBind(); ok {
+		request.ReadOnlyBinds = append(request.ReadOnlyBinds, bind)
 	}
 	// Worktree pointers need their metadata, but checks must not alter it.
 	for _, arg := range []string{"--absolute-git-dir", "--git-common-dir"} {
@@ -92,6 +148,9 @@ func VerificationSandboxRequest(ctx context.Context, dir string, outputDir ...st
 
 // VerificationResultError prevents partial evidence from becoming a passing check.
 func VerificationResultError(result adapter.ProcessResult) error {
+	if sandbox.UnconfinedFallbackAllowed() && strings.HasPrefix(result.Isolation.Reason, UnconfinedReasonPrefix) && !result.TimedOut && !result.Cancelled && !result.OutputTruncated {
+		return nil
+	}
 	if result.Isolation.Level != model.IsolationBwrap || !result.Isolation.Available || result.TimedOut || result.Cancelled || result.OutputTruncated {
 		return fmt.Errorf("%w: verification did not complete confined", model.ErrUnavailable)
 	}

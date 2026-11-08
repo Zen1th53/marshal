@@ -3,6 +3,7 @@ package execution
 import (
 	"bytes"
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 	"os"
 	"os/exec"
@@ -95,7 +96,7 @@ func TestWorktreeCleanupRequiresOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unknown := filepath.Join(root, ".marshal", "worktrees", "unknown")
+	unknown := filepath.Join(root, statepath.DirName, "worktrees", "unknown")
 	if err := os.Mkdir(unknown, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +246,7 @@ func TestWorktreePreservesUnownedNamesAndDirectoryIdentity(t *testing.T) {
 func TestWorktreeRejectsLinkedStorageAtConstruction(t *testing.T) {
 	root := t.TempDir()
 	external := t.TempDir()
-	if err := os.Symlink(external, filepath.Join(root, ".marshal")); err != nil {
+	if err := os.Symlink(external, filepath.Join(root, statepath.DirName)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := NewWorktreeManager(root); err == nil {
@@ -303,7 +304,7 @@ func TestReconcilePublishesCompleteSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".marshal-") {
+		if strings.HasPrefix(entry.Name(), ".marshal-stage-") || strings.HasPrefix(entry.Name(), ".marshal-backup-") {
 			t.Fatalf("left transaction file %s", entry.Name())
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io/fs"
 	"net"
 	"net/http"
@@ -19,13 +20,24 @@ import (
 	"github.com/Zen1th53/marshal/internal/api"
 )
 
+// fullSweepTree is the shared tree plus this edition's private commands.
+func fullSweepTree() map[string]string {
+	tree := map[string]string{}
+	for parent, children := range sweepTree {
+		tree[parent] = strings.TrimSpace(children + " " + editionSweepTree[parent])
+	}
+	return tree
+}
+
 // Keep this independent of the help catalog: include aliases and all dispatcher branches.
 var sweepTree = map[string]string{
+	"telemetry": "status disable enable", "ultra": "request",
 	"init": "", "doctor": "", "status": "", "agent": "register", "agents": "", "tasks": "",
 	"task": "import show claim release", "run": "", "logs": "", "cancel": "", "adapters": "", "adapter": "probe",
-	"mcp": "serve status", "a2a": "serve status", "events": "", "artifacts": "", "verify": "", "reconcile": "",
-	"memory": "status recall show list promote tombstone audit remember write", "policy": "test", "legal": "audit export",
+	"mcp": "serve status stdio", "egm": "status install record", "a2a": "serve status", "events": "", "artifacts": "", "verify": "", "reconcile": "",
+	"memory": "status recall show list candidates promote tombstone audit remember write", "policy": "test", "legal": "audit export",
 	"setup": "status", "update": "check status install apply", "goal": "explain", "plan": "create show approve cancel handoff",
+	"architecture": "serve draft feedback receipt", "architecture receipt": "import",
 	"exec": "start run status approve rollback handoff", "execution": "start run status approve rollback handoff",
 	"review": "start status evaluate attest", "verification": "start status evaluate attest",
 	"learning":     "commit show item history search context invalidate trust fingerprints playbooks replays benchmarks export restore",
@@ -92,7 +104,7 @@ func TestDispatcherHelpWholeTreeHasNoEffects(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", home)
 	// Unix API calls are counted too, even though they use a private HTTP transport.
-	runtimeDir := filepath.Join(repo.Path(), ".marshal")
+	runtimeDir := filepath.Join(repo.Path(), statepath.DirName)
 	if err := os.Mkdir(runtimeDir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +126,7 @@ func TestDispatcherHelpWholeTreeHasNoEffects(t *testing.T) {
 	t.Cleanup(func() { http.DefaultTransport = original })
 	before := snapshotSweep(t, repo.Path())
 	homeBefore := snapshotSweep(t, home)
-	for parent, children := range sweepTree {
+	for parent, children := range fullSweepTree() {
 		paths := []string{parent}
 		for _, child := range strings.Fields(children) {
 			paths = append(paths, parent+" "+child)
@@ -133,11 +145,37 @@ func TestDispatcherHelpWholeTreeHasNoEffects(t *testing.T) {
 					if code != 0 || !strings.Contains(out.String(), "Usage: marshal "+path) || stderr.Len() != 0 {
 						t.Errorf("code=%d stdout=%q stderr=%q", code, out.String(), stderr.String())
 					}
-					if !reflect.DeepEqual(before, snapshotSweep(t, repo.Path())) {
-						t.Fatal("help changed repository files")
+					if after := snapshotSweep(t, repo.Path()); !reflect.DeepEqual(before, after) {
+						var diffs []string
+						for k, v := range after {
+							if b, ok := before[k]; !ok {
+								diffs = append(diffs, fmt.Sprintf("added %s (%s)", k, v))
+							} else if b != v {
+								diffs = append(diffs, fmt.Sprintf("modified %s (before: %s, after: %s)", k, b, v))
+							}
+						}
+						for k, v := range before {
+							if _, ok := after[k]; !ok {
+								diffs = append(diffs, fmt.Sprintf("deleted %s (%s)", k, v))
+							}
+						}
+						t.Fatalf("help changed repository files: %s", strings.Join(diffs, ", "))
 					}
-					if !reflect.DeepEqual(homeBefore, snapshotSweep(t, home)) {
-						t.Fatal("help changed home files")
+					if afterHome := snapshotSweep(t, home); !reflect.DeepEqual(homeBefore, afterHome) {
+						var diffs []string
+						for k, v := range afterHome {
+							if b, ok := homeBefore[k]; !ok {
+								diffs = append(diffs, fmt.Sprintf("added %s (%s)", k, v))
+							} else if b != v {
+								diffs = append(diffs, fmt.Sprintf("modified %s (before: %s, after: %s)", k, b, v))
+							}
+						}
+						for k, v := range homeBefore {
+							if _, ok := afterHome[k]; !ok {
+								diffs = append(diffs, fmt.Sprintf("deleted %s (%s)", k, v))
+							}
+						}
+						t.Fatalf("help changed home files: %s", strings.Join(diffs, ", "))
 					}
 					if deny.calls.Load() != 0 || localCalls.Load() != 0 {
 						t.Fatalf("help attempted network: remote=%d local=%d", deny.calls.Load(), localCalls.Load())
@@ -203,7 +241,7 @@ func TestTrailingJSONMatchesLeading(t *testing.T) {
 
 func TestJSONTaskReleaseWithoutLease(t *testing.T) {
 	repo := cliRepo(t)
-	dir := filepath.Join(repo.Path(), ".marshal")
+	dir := filepath.Join(repo.Path(), statepath.DirName)
 	if err := os.Mkdir(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +295,7 @@ func TestHelpCatalogCoversSweepTree(t *testing.T) {
 	// Native provider commands keep a catalog entry for `marshal help`, but
 	// their -h/--help belongs to the provider and is not walked here.
 	expected := map[string]bool{"codex": true, "claude": true, "opencode": true, "agy": true, "antigravity": true}
-	for parent, children := range sweepTree {
+	for parent, children := range fullSweepTree() {
 		expected[parent] = true
 		for _, child := range strings.Fields(children) {
 			expected[parent+" "+child] = true

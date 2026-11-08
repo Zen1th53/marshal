@@ -29,6 +29,10 @@ func (c command) update(ctx context.Context, args []string) error {
 		}
 	}
 
+	if update.PrivateEdition() {
+		// The private build never contacts the public feed or replaces itself.
+		return c.print(map[string]any{"current": Version, "edition": "extreme", "available": false, "private": true}, update.PrivateGuidance)
+	}
 	checker := update.NewChecker()
 	checkCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()

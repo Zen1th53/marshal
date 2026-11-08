@@ -48,7 +48,7 @@ func (h *CommandHandler) handleGoalConstraints(ctx context.Context) (string, err
 	return b.String(), nil
 }
 
-const goalUsage = "Usage: /goal create <request> | edit <outcome> | constraints | add-constraint <text> | rm-constraint <id|text> | version [revision] | diff [from to] | criteria | donotdo | progress"
+const goalUsage = "Usage: /goal create <request> | edit <outcome> | cancel <reason> | constraints | add-constraint <text> | rm-constraint <id|text> | version [revision] | diff [from to] | criteria | donotdo | progress"
 
 // The adapter supplies only the exact envelope and input. Formation, provenance,
 // constraint revisions, receipts and read-back belong to the application.
@@ -85,11 +85,94 @@ func (h *CommandHandler) handleGoalMutation(ctx context.Context, verb, text stri
 	return fmt.Sprintf("Goal %s [rev %d] %s: %s", stored.ID, stored.Revision, stored.Confirmation, RedactContent(stored.DesiredOutcome, secrets)), nil
 }
 
+// handleGoalShortForm implements "/goal <desired outcome>": it creates the
+// Goal when there is no active one (or it was cancelled), through the same
+// canonical mutation as /goal create. Free text never silently rewrites an
+// active Goal; revising one stays the explicit /goal edit.
+func (h *CommandHandler) handleGoalShortForm(ctx context.Context, text string) (string, error) {
+	if strings.TrimSpace(text) == "" {
+		return goalUsage, nil
+	}
+	if source := h.ws.controlSource(); source != nil {
+		if authority, ok := source.Authority.(*runtimeControlAuthority); ok && authority != nil && authority.runtime != nil && authority.localControlErr == nil {
+			goal, err := authority.CurrentGoal(ctx)
+			switch {
+			case errors.Is(err, model.ErrGoalNotFound) || (err == nil && goal.Confirmation == model.ConfirmationCancelled):
+				return h.handleGoalMutation(ctx, "create", text)
+			case err != nil:
+				return "", err
+			default:
+				return fmt.Sprintf("Goal mutation is unavailable in TUI for free text while Goal %s is active; revise it with /goal edit <outcome>.\n%s", goal.ID, goalUsage), nil
+			}
+		}
+	}
+	return h.handleGoalMutation(ctx, "create", text)
+}
+
 func (h *CommandHandler) handleGoalAddConstraint(ctx context.Context, text string) (string, error) {
 	return h.handleGoalMutation(ctx, "add-constraint", text)
 }
 func (h *CommandHandler) handleGoalRemoveConstraint(ctx context.Context, text string) (string, error) {
 	return h.handleGoalMutation(ctx, "rm-constraint", text)
+}
+
+// handleGoalCancel routes /goal cancel through the same prepared, revision-bound
+// destructive confirmation the Control menu uses. It never cancels directly: the
+// reason is carried into the Cancel/Proceed dialog, and the goal is cancelled
+// only on an acknowledged Proceed against the exact revision that was reviewed.
+func (h *CommandHandler) handleGoalCancel(ctx context.Context, reason string) (string, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "Usage: /goal cancel <reason>", nil
+	}
+	source := h.ws.controlSource()
+	if _, ok := source.Authority.(goalCancellationAuthority); !ok {
+		return "Goal cancellation is unavailable: authenticated runtime authorization is required.", nil
+	}
+	goal, err := source.Authority.CurrentGoal(ctx)
+	if err != nil && !errors.Is(err, model.ErrGoalNotFound) {
+		return "", err
+	}
+	if goal.ID == "" {
+		return "No active goal to cancel.", nil
+	}
+	if err := h.ws.openGoalCancellationConfirmation(ctx, reason); err != nil {
+		return fmt.Sprintf("Goal cancellation could not be prepared: %v", err), nil
+	}
+	return "Goal cancellation needs confirmation.\n" +
+		"  In the dialog, press 'y' to acknowledge, then → or Tab to Proceed and Enter.\n" +
+		"  Esc keeps the goal.", nil
+}
+
+// openGoalCancellationConfirmation prepares the exact current goal revision and
+// opens the destructive Cancel/Proceed confirmation the Control menu uses, with
+// the reason pre-filled. Cancellation happens only on an acknowledged Proceed,
+// so the slash command and the menu share one governed path.
+func (w *Workspace) openGoalCancellationConfirmation(ctx context.Context, reason string) error {
+	if w.navView == nil {
+		return errors.New("the navigation surface is unavailable")
+	}
+	source := w.controlSource()
+	if source == nil || source.Authority == nil {
+		return errors.New("no execution authority is attached to this workspace")
+	}
+	binding, ok := source.Bindings()[ActionID("CTUI-0048")]
+	if !ok {
+		return errors.New("goal cancellation is unavailable in this build")
+	}
+	// Open navigation so the confirmation owns the screen and the keyboard.
+	w.openNavigation(ctx)
+	w.navView.AttachControl(source)
+	confirm := w.navView.Confirmation()
+	w.navView.configureConfirmation(confirm)
+	return confirm.Begin(ctx, binding, ActionRequest{
+		Action:    binding.Action,
+		Title:     binding.Title,
+		Safety:    binding.Safety,
+		SessionID: source.SessionID,
+		ProjectID: source.ProjectID,
+		Inputs:    map[string]string{"reason": reason},
+	})
 }
 
 // goalCommandText removes the command and verb, preserving the argument's

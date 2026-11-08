@@ -281,6 +281,8 @@ func TestCodexSlashCommands_WithAttachedAuthority(t *testing.T) {
 }
 
 func TestTopLevelCodexCommands_DirectRouting(t *testing.T) {
+	// Provider command fixtures must keep managed CLI state in test-owned storage.
+	t.Setenv("HOME", t.TempDir())
 	// Never send an invented fixture task ID to the real Codex Cloud API.
 	binDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(binDir, "codex"), []byte("#!/bin/sh\nif [ \"$1\" = apply ]; then echo 'fixture apply rejected'; exit 7; fi\necho 'fixture true'\n"), 0700); err != nil {

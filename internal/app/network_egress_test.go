@@ -101,12 +101,14 @@ func TestAuthorizeNetworkEgressAllowlistSemantics(t *testing.T) {
 	}
 }
 
-type netpolMockAdapter struct{}
+type netpolMockAdapter struct{ probes, runs int }
 
 func (a *netpolMockAdapter) Probe(context.Context) (adapter.Probe, error) {
+	a.probes++
 	return adapter.Probe{Available: true, Version: "1.0"}, nil
 }
 func (a *netpolMockAdapter) Run(ctx context.Context, req adapter.Request) (adapter.Result, error) {
+	a.runs++
 	_ = os.WriteFile(filepath.Join(req.Worktree, "result.txt"), []byte("egress test result"), 0644)
 	return adapter.Result{Status: adapter.StatusSuccess, ExitCode: 0}, nil
 }
@@ -144,13 +146,23 @@ func TestRunWithRestrictedEgressFailsClosedWithoutEnforcingBackend(t *testing.T)
 		t.Fatal(err)
 	}
 
-	_, err = runtime.Run(context.Background(), RunRequest{
+	before, err := runtime.Task(t.Context(), "TASK-NETPOL-RUN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runtime.Run(context.Background(), RunRequest{
 		TaskID:          "TASK-NETPOL-RUN",
 		AgentID:         agent.ID,
 		Adapter:         "codex",
 		NetworkRequired: true,
 		EgressRules:     allowRule("api.example.com", 443),
 	})
+	if assertLegacyRunFixtureRefused(t, runtime, before, result, err) {
+		if fake.probes != 0 || fake.runs != 0 {
+			t.Fatal("refused legacy Run called the adapter", fake.probes, fake.runs)
+		}
+		return
+	}
 	if !errors.Is(err, netpolicy.ErrEnforcementUnavailable) {
 		t.Fatalf("expected ErrEnforcementUnavailable, got %v", err)
 	}
@@ -168,12 +180,19 @@ func TestRunWithNetworkRequiredButEmptyAllowlistDenied(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = runtime.Run(context.Background(), RunRequest{
+	before, err := runtime.Task(t.Context(), "TASK-NETPOL-EMPTY")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runtime.Run(context.Background(), RunRequest{
 		TaskID:          "TASK-NETPOL-EMPTY",
 		AgentID:         agent.ID,
 		Adapter:         "codex",
 		NetworkRequired: true,
 	})
+	if assertLegacyRunFixtureRefused(t, runtime, before, result, err) {
+		return
+	}
 	if err == nil {
 		t.Fatal("network required without an explicit allowlist was allowed")
 	}

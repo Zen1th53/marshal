@@ -9,6 +9,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/sandbox"
+	"github.com/Zen1th53/marshal/internal/sessionmcp"
 )
 
 type commandWrapper interface {
@@ -43,7 +44,10 @@ func NewObservedSandboxed(process adapter.ProcessRunner, wrapper commandWrapper,
 
 func (r *sandboxedRunner) Run(ctx context.Context, command adapter.Command) (adapter.ProcessResult, error) {
 	argv := append([]string{command.Path}, command.Args...)
-	request := r.request
+	request, err := sessionmcp.SandboxRequest(ctx, r.request)
+	if err != nil {
+		return adapter.ProcessResult{}, err
+	}
 	if r.refusal == nil {
 		if _, actual := r.process.(*Manager); actual {
 			return adapter.ProcessResult{}, fmt.Errorf("socket refusal observer required")
@@ -83,7 +87,7 @@ func (r *sandboxedRunner) Run(ctx context.Context, command adapter.Command) (ada
 		Supervised: request.Supervised, SupervisorSocket: request.SupervisorSocket, Refusal: r.refusal,
 		Path: spec.Path, Args: spec.Args, Env: spec.Env, Dir: spec.Dir,
 		Stdin: command.Stdin, Heartbeat: command.Heartbeat,
-		HeartbeatInterval: command.HeartbeatInterval,
+		HeartbeatInterval: command.HeartbeatInterval, Liveness: command.Liveness,
 	})
 	result.Isolation = spec.Isolation
 	if r.check != nil {

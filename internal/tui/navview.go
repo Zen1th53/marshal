@@ -47,6 +47,10 @@ type NavView struct {
 	// so it is cleared on the next key rather than the one that set it.
 	statusSeen bool
 
+	// filtering sends typing to the menu filter rather than to the
+	// single-letter shortcuts, until Enter keeps the filter or Esc clears it.
+	filtering bool
+
 	// control is the mutation-bearing half of the view. It owns the pending
 	// confirmation, so a key press can only reach a canonical authority
 	// through the state machine there.
@@ -100,6 +104,9 @@ func (v *NavView) refreshInBackground(ctx context.Context) {
 		v.Refresh(ctx)
 	})
 }
+
+// navAutoRefreshAfter is how old a read may be before the next key re-reads.
+const navAutoRefreshAfter = 10 * time.Second
 
 // OnRepaint registers the workspace's redraw hook.
 func (v *NavView) OnRepaint(fn func()) {
@@ -183,6 +190,15 @@ func (v *NavView) OpenAndWait(ctx context.Context) {
 
 // Close leaves navigation. It discards nothing: the position is kept, so
 // reopening returns the user where they were.
+// TakesText reports whether a key typed now goes into text the view is
+// editing: its search palette, the menu filter, an action form or a
+// confirmation. Otherwise '/' leaves the view for the command line.
+func (v *NavView) TakesText() bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.open && (v.confirmOpen() || v.formOpen() || v.filtering || v.nav != nil && v.nav.Overlay() == OverlayPalette)
+}
+
 func (v *NavView) Close() {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -212,7 +228,7 @@ func (v *NavView) Refresh(ctx context.Context) {
 			Events:    (&StatusSource{}).ReadEvents(ctx, 12),
 			Blockers:  (&StatusSource{}).ReadBlockers(ctx),
 			Resources: (&StatusSource{}).ReadResources(ctx),
-			Cloud:     (&StatusSource{}).ReadCloud(ctx),
+			Cloud:     (&StatusSource{}).readCloudForEdition(ctx),
 			Providers: (&StatusSource{}).ReadProviders(ctx, nil),
 		}
 		v.snapValid, v.takenAt = true, time.Now().UTC()
@@ -262,11 +278,12 @@ func (v *NavView) Refresh(ctx context.Context) {
 	// Reads happen outside the lock: a slow provider probe must not freeze the
 	// render path.
 	snap := Snapshot{
+		lifecycle: source.readLifecycle(ctx),
 		Runtime:   source.ReadRuntime(ctx),
 		Events:    source.ReadEvents(ctx, 12),
 		Blockers:  source.ReadBlockers(ctx),
 		Resources: source.ReadResources(ctx),
-		Cloud:     source.ReadCloud(ctx),
+		Cloud:     source.readCloudForEdition(ctx),
 		Providers: source.ReadProviders(ctx, providers),
 	}
 
@@ -301,7 +318,10 @@ func (v *NavView) Refresh(ctx context.Context) {
 	if hasSystem {
 		v.control.systemSnap, v.control.systemValid = system, true
 	}
-	if had {
+	// A refresh only reports itself over its own progress lines: a refusal
+	// or an action's status set while the read ran is what the operator
+	// needs to see, and "refreshed" would wipe it before the next key.
+	if had && refreshStatusReplaceable(v.status) {
 		v.status, v.statusSeen = "refreshed", false
 	}
 	notify := v.repaint
@@ -343,6 +363,13 @@ func (v *NavView) HandleKey(ctx context.Context, event KeyEvent) bool {
 	if !v.open {
 		return false
 	}
+	// Re-read canonical state when what is on screen has gone stale, so a
+	// result such as a new token shows up without a manual refresh.
+	defer func() {
+		if v.open && v.snapValid && time.Since(v.takenAt) > navAutoRefreshAfter {
+			v.refreshInBackground(ctx)
+		}
+	}()
 	// The status line is cleared on the key *after* the one that produced it,
 	// so a message set by a background refresh is not wiped before it has been
 	// painted even once.
@@ -371,12 +398,19 @@ func (v *NavView) HandleKey(ctx context.Context, event KeyEvent) bool {
 	if nav.Overlay() == OverlayPalette {
 		return v.handlePaletteKey(event)
 	}
+	if v.filtering {
+		return v.handleFilterKey(event)
+	}
 
 	switch event.Type {
 	case KeyEsc:
-		// Esc closes an overlay, then walks back, and only leaves navigation
-		// when there is nowhere left to go — so it can never discard a session
-		// by being pressed once too often.
+		// Esc closes an overlay, then clears a filter, then walks back, and
+		// only leaves navigation when there is nowhere left to go — so it can
+		// never discard a session by being pressed once too often.
+		if nav.Overlay() == OverlayNone && nav.Filter() != "" {
+			nav.SetFilter("")
+			return true
+		}
 		if nav.Back() {
 			return true
 		}
@@ -421,11 +455,11 @@ func (v *NavView) HandleKey(ctx context.Context, event KeyEvent) bool {
 		// Enter on the action bar opens a confirmation. It does not submit:
 		// submission needs a second, deliberate Enter on Proceed inside the
 		// dialog, which is what stops a key repeat from mutating anything.
-		if nav.Focus() == PaneActions {
-			if child, ok := nav.SelectedChild(); ok && child.Type.IsAction() {
-				v.selectControlRecord(child)
-				return v.beginAction(ctx, child)
-			}
+		// One Enter on an action in either pane opens its confirmation; a
+		// disabled action states its reason instead of silently moving focus.
+		if child, ok := nav.SelectedChild(); ok && child.Type.IsAction() {
+			v.selectControlRecord(child)
+			return v.beginAction(ctx, child)
 		}
 		if !nav.Open() {
 			v.reportRefusal(nav)
@@ -461,6 +495,9 @@ func (v *NavView) HandleKey(ctx context.Context, event KeyEvent) bool {
 			return true
 		case '/':
 			nav.OpenPalette()
+			return true
+		case 'f':
+			v.filtering = true
 			return true
 		case 'r':
 			// A manual refresh, because Status is read-only and the user needs
@@ -540,6 +577,26 @@ func (v *NavView) handlePaletteKey(event KeyEvent) bool {
 	return true
 }
 
+// handleFilterKey edits the current menu's filter. Enter keeps it and gives
+// the keys back to navigation; Esc clears it.
+func (v *NavView) handleFilterKey(event KeyEvent) bool {
+	nav := v.nav
+	switch event.Type {
+	case KeyEsc:
+		nav.SetFilter("")
+		v.filtering = false
+	case KeyEnter, KeyDown, KeyTab:
+		v.filtering = false
+	case KeyBackspace:
+		if runes := []rune(nav.Filter()); len(runes) > 0 {
+			nav.SetFilter(string(runes[:len(runes)-1]))
+		}
+	case KeyRune:
+		nav.SetFilter(nav.Filter() + string(event.Rune))
+	}
+	return true
+}
+
 func (v *NavView) jumpToSection(i int) {
 	nav := v.nav
 	if i < 0 || i >= len(nav.ia.Sections) {
@@ -580,6 +637,9 @@ func (v *NavView) Render(cols, rows int) []string {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	nav, th, status := v.nav, v.theme, v.status
+	if status == statusSubmitting && (v.control.confirm == nil || v.control.confirm.Phase() != PhaseSubmitting) {
+		v.status, status = "", ""
+	}
 	snap := v.snapshot()
 	takenAt, valid := v.takenAt, v.snapValid
 
@@ -604,6 +664,12 @@ func (v *NavView) Render(cols, rows int) []string {
 	meta := fmt.Sprintf("%s · %s · [%s]", age, focusLabel(nav.Focus()), nav.Current().Type)
 	if nav.Current().Binding == BindingGap {
 		meta += " · IMPLEMENTATION GAP"
+	}
+	if filter := nav.Filter(); filter != "" || v.filtering {
+		meta += " · filter: " + filter
+		if v.filtering {
+			meta += "▌"
+		}
 	}
 	lines = append(lines, truncate(meta, cols))
 	if status != "" {
@@ -733,6 +799,18 @@ func styleNavigationMenuRow(line string, th *Theme) string {
 		colour = th.Reverse + th.Active + th.Bold
 	case strings.HasPrefix(left, "· "):
 		colour = th.Accent
+	case strings.HasPrefix(left, "  "+wipMark+" "):
+		// Under construction: the name is dimmed and its phase and cause
+		// stand out, so the row reads as "not yet" before it is selected.
+		if at := strings.Index(left, " · phase "); at >= 0 {
+			left = th.Colorize(th.Muted, left[:at]) + th.Colorize(th.Warning, left[at:])
+		} else {
+			left = th.Colorize(th.Muted, left)
+		}
+		if !hasDetail {
+			return left
+		}
+		return left + th.Colorize(th.Border, " │ ") + right
 	}
 	if colour == "" {
 		return line
@@ -1133,6 +1211,10 @@ func (v *NavView) renderMenu(nav *NavState, width, rows int) []string {
 			marker = "· "
 		}
 		label := communityLabel(c.Title)
+		wired := Wired(c.SpecID)
+		if wired.UnderConstruction() {
+			label = wipMark + " " + label
+		}
 		if c.Type.IsAction() {
 			// The safety class travels with the row, in text, so a no-colour
 			// terminal still shows what kind of action it is.
@@ -1142,6 +1224,9 @@ func (v *NavView) renderMenu(nav *NavState, width, rows int) []string {
 		}
 		if c.Binding == BindingGap {
 			label += " (GAP)"
+		}
+		if wired.UnderConstruction() {
+			label += " · phase " + wired.Phase + " · " + communityLabel(wired.Cause)
 		}
 		out = append(out, truncate(marker+label, width))
 	}
@@ -1154,6 +1239,13 @@ func (v *NavView) renderDetail(nav *NavState, snap Snapshot, width, rows int) []
 	// whether it can run, rather than the screen's data.
 	if nav.Focus() == PaneActions {
 		if child, ok := nav.SelectedChild(); ok && child.Type.IsAction() {
+			return v.renderActionBar(child, width)
+		}
+	}
+	// Selecting an entry that is under construction says who owns it, why,
+	// and when it lands, before the operator presses anything.
+	if nav.Focus() == PaneMenu {
+		if child, ok := nav.SelectedChild(); ok && child.Type.IsAction() && Wired(child.SpecID).UnderConstruction() {
 			return v.renderActionBar(child, width)
 		}
 	}
@@ -1209,7 +1301,7 @@ func (v *NavView) renderDetail(nav *NavState, snap Snapshot, width, rows int) []
 }
 
 func (v *NavView) renderActionBar(action *Node, width int) []string {
-	av := Availability(action)
+	av := v.buildActionAvailability(action)
 	out := []string{
 		truncate(communityLabel(action.Title)+" "+action.Type.SafetyLabel(), width),
 		"",
@@ -1223,6 +1315,18 @@ func (v *NavView) renderActionBar(action *Node, width int) []string {
 	}
 	out = append(out, "")
 	out = append(out, wrap("Owner: "+communityLabel(action.CanonicalOwner), width)...)
+	if wired := Wired(action.SpecID); wired.UnderConstruction() {
+		task := wired.Task
+		if task == "" {
+			task = "none filed yet"
+		}
+		out = append(out, "", truncate(wipMark+" UNDER CONSTRUCTION", width))
+		out = append(out, wrap("  owner: "+communityLabel(wired.Owner), width)...)
+		out = append(out, wrap("  cause: "+communityLabel(wired.Cause), width)...)
+		out = append(out, wrap("  phase: "+wired.Phase, width)...)
+		out = append(out, wrap("  task: "+task, width)...)
+	}
+	out = append(out, v.buildActionSupplement(action, width)...)
 	return out
 }
 
@@ -1261,7 +1365,7 @@ func (v *NavView) renderPalette(nav *NavState, cols, rows int) []string {
 	results := nav.PaletteResults()
 	if len(results) == 0 {
 		if nav.PaletteQuery() == "" {
-			out = append(out, "Type to search the 804 frozen destinations.")
+			out = append(out, "Type to search the 801 frozen destinations.")
 		} else {
 			out = append(out, "No destination matches that search.")
 		}
@@ -1294,7 +1398,8 @@ func (v *NavView) renderHelp(cols, rows int) []string {
 		"  Esc        close an overlay, then go back, then leave",
 		"  Tab        move focus between panes",
 		"  1–9        jump to a top-level section",
-		"  / or Ctrl+K  search every destination",
+		"  Ctrl+K       search every destination",
+		"  f          filter this menu (\"wip\" lists what is under construction)",
 		"  r          re-read canonical state",
 		"  ?          this help",
 		"  q          leave navigation",
@@ -1319,7 +1424,10 @@ func (v *NavView) renderHint(nav *NavState) string {
 	case OverlayHelp:
 		return "Esc close help"
 	}
-	return "↑↓ move · Enter open · Esc back · F7 Codex · F8 Claude · F9 OpenCode · F12 Antigravity · Tab focus · / search · r refresh · ? help · q leave"
+	if v.filtering {
+		return "type to filter · Enter keep · Esc clear"
+	}
+	return "↑↓ move · Enter open · Esc back · F7 Codex · F8 Claude · F9 OpenCode · F12 Antigravity · Tab focus · ^K search · / command · r refresh · ? help · q leave"
 }
 
 func focusLabel(p Pane) string { return "focus: " + p.String() }
@@ -1399,4 +1507,15 @@ func (v *NavView) configureConfirmation(c *Confirmation) {
 			}
 		})
 	}
+}
+
+// refreshStatusReplaceable reports whether a finished background refresh may
+// write "refreshed" over the status line: only over nothing or over the
+// refresh's own progress text, never over a refusal or an action's result.
+func refreshStatusReplaceable(status string) bool {
+	switch status {
+	case "", "refreshed", "refreshing…", "reading canonical state…":
+		return true
+	}
+	return false
 }

@@ -11,6 +11,20 @@ func TestManagerRecover(t *testing.T) {
 	mgr := NewManager()
 	ctx := context.Background()
 
+	// 1. Unregistered checkpoint must return ErrNoValidCheckpoint (eliminating synthetic fake checkpoint)
+	_, err := mgr.Recover(ctx, "task-1", "cp-1")
+	if !errors.Is(err, ErrNoValidCheckpoint) {
+		t.Fatalf("expected ErrNoValidCheckpoint for unregistered checkpoint, got: %v", err)
+	}
+
+	// 2. Explicitly registered checkpoint can be recovered
+	mgr.RegisterCheckpoint(Checkpoint{
+		ID:        "cp-1",
+		TaskID:    "task-1",
+		State:     CheckpointValid,
+		CreatedAt: time.Now().UTC(),
+	})
+
 	plan, err := mgr.Recover(ctx, "task-1", "cp-1")
 	if err != nil {
 		t.Fatalf("Recover: %v", err)

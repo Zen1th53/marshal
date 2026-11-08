@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"net"
 	"os"
 	"path/filepath"
@@ -26,7 +27,7 @@ func TestEgressAlertVisibleAndDeliveredToMarshalChat(t *testing.T) {
 	if !strings.Contains(w.state.LastOutput, alert.Message) {
 		t.Fatal("alert absent from TUI")
 	}
-	data, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "inbox", "marshal.md"))
+	data, err := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "inbox", "marshal.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +38,7 @@ func TestEgressAlertVisibleAndDeliveredToMarshalChat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(brief, ".marshal/inbox/marshal.md") || !strings.Contains(brief, "model text never grants") {
+	if !strings.Contains(brief, statepath.DirName+"/inbox/marshal.md") || !strings.Contains(brief, "model text never grants") {
 		t.Fatal("Marshal chat lacks relay boundary")
 	}
 }
@@ -66,6 +67,26 @@ func TestNetworkPermissionRetainsRunAndTaskFromAlert(t *testing.T) {
 	requests := w.permissions.queue.Take(false)
 	if len(requests) != 1 || requests[0].RunID != "RUN-specific" || requests[0].TaskID != "TASK-specific" {
 		t.Fatalf("lost network identity: %+v", requests)
+	}
+}
+
+func TestDeniedHarnessProbeAlertIsVisibleWithoutNetworkPermission(t *testing.T) {
+	w := NewWorkspace(nil, "project", "session")
+	w.workDir = t.TempDir()
+	w.permissions.running = true
+	alert := app.EgressAlert{RunID: "PROBE-exact", TaskID: "PROBE-exact", Worker: "runtime", Endpoint: "oaiusercontent.com:443", Message: "harness probe refused optional endpoint; network expansion is unavailable", State: "denied"}
+	if err := w.deliverEgressAlert(alert); err != nil {
+		t.Fatal(err)
+	}
+	if requests := w.permissions.queue.Take(false); len(requests) != 0 {
+		t.Fatalf("denied probe queued network Decision: %+v", requests)
+	}
+	data, err := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "inbox", "marshal.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), alert.Message) || strings.Contains(string(data), "/egress allow") {
+		t.Fatalf("probe diagnostic was hidden or made actionable: %s", data)
 	}
 }
 
@@ -117,6 +138,10 @@ func TestDaemonEgressStatusCommandAndPopupShareOperatorPath(t *testing.T) {
 	if err := w.deliverEgressAlert(alerts[0]); err != nil {
 		t.Fatal(err)
 	}
+	inbox, err := os.ReadFile(filepath.Join(runtime.ProjectRoot(), statepath.DirName, "inbox", "marshal.md"))
+	if err != nil || !strings.Contains(string(inbox), "Run: RUN-daemon") || !strings.Contains(string(inbox), alerts[0].Message) {
+		t.Fatalf("daemon alert missing from canonical temporary project inbox: %q %v", inbox, err)
+	}
 	requests := w.permissions.queue.Take(false)
 	if len(requests) != 1 {
 		t.Fatalf("remote popup missing: %+v", requests)
@@ -150,5 +175,23 @@ func TestDaemonEgressStatusCommandAndPopupShareOperatorPath(t *testing.T) {
 	out, err = w.cmd.Handle(t.Context(), "/egress allow RUN-daemon example.com")
 	if err != nil || !strings.Contains(out, "no active egress run") {
 		t.Fatalf("ended remote grant: %s %v", out, err)
+	}
+}
+
+// A run that stops with an error tells the Marshal why through its inbox, so
+// it does not have to ask the owner to copy the panel line.
+func TestRunStopReasonReachesMarshalInbox(t *testing.T) {
+	w := NewWorkspace(nil, "stop-project", "stop-session")
+	w.workDir = t.TempDir()
+	stop := app.EgressAlert{RunID: "RUN-stop", ParentRunID: "RUN-stop", Kind: "run stopped", State: "stopped", Message: "Marshal run stopped: REQUIRED_CONTEXT_CHANGED (example.go:1)"}
+	if err := w.deliverEgressAlert(stop); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "inbox", "marshal.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "run stopped") || !strings.Contains(string(data), "REQUIRED_CONTEXT_CHANGED (example.go:1)") || strings.Contains(string(data), "/egress allow") {
+		t.Fatalf("stop reason not delivered as a plain notice: %s", data)
 	}
 }

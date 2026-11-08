@@ -1,4 +1,6 @@
 
+from contextlib import redirect_stdout
+import io
 import json
 import tempfile
 import unittest
@@ -43,7 +45,7 @@ class ConformanceRunnerTests(unittest.TestCase):
         matrix = {
             "version": 1,
             "adapters": {
-                "gemini": {},
+                "antigravity": {},
                 "codex": {},
                 "claude-code": {},
             },
@@ -52,6 +54,32 @@ class ConformanceRunnerTests(unittest.TestCase):
         self.assertTrue(any("opencode" in e for e in errors))
         self.assertTrue(any("aider" in e for e in errors))
         self.assertTrue(any("crush" in e for e in errors))
+
+    def test_validate_matrix_requires_antigravity_not_gemini(self):
+        matrix = {
+            "version": 1,
+            "adapters": {
+                "gemini": {},
+                "codex": {},
+                "claude-code": {},
+                "opencode": {},
+                "aider": {},
+                "crush": {},
+            },
+        }
+        self.assertEqual(runner.validate_matrix(matrix), ["missing core adapter: antigravity"])
+        matrix["adapters"]["antigravity"] = {"binary": "agy"}
+        del matrix["adapters"]["gemini"]
+        self.assertEqual(runner.validate_matrix(matrix), [])
+
+    def test_probe_defaults_to_agy_binary(self):
+        buf = io.StringIO()
+        args = runner.build_parser().parse_args(["probe-adapters"])
+        with redirect_stdout(buf):
+            self.assertEqual(args.func(args), 0)
+        probed = [item["name"] for item in json.loads(buf.getvalue())]
+        self.assertIn("agy", probed)
+        self.assertNotIn("gemini", probed)
 
     def test_detect_binary_returns_boolean_and_path(self):
         result = runner.detect_binary("python3")
@@ -84,6 +112,29 @@ class ConformanceRunnerTests(unittest.TestCase):
             (root / "README.md").write_text("See `interop/MISSING.md`")
             errors = runner.validate_markdown_references(root)
             self.assertTrue(any("interop/MISSING.md" in e for e in errors))
+
+    def test_markdown_relative_links_validated(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "README.md").write_text("See [missing](docs/missing.md) and [ok](target.md#heading) and [ext](https://example.com)")
+            (root / "target.md").write_text("# Target\n")
+            errors = runner.validate_markdown_references(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("docs/missing.md", errors[0])
+
+    def test_schema_sample_validation(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "schemas" / "samples").mkdir(parents=True)
+            schema = {"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}}}
+            (root / "schemas" / "item.schema.json").write_text(json.dumps(schema))
+            (root / "schemas" / "samples" / "item.json").write_text(json.dumps({"id": "valid"}))
+            errors = runner.validate_schemas(root)
+            self.assertEqual(errors, [])
+
+            (root / "schemas" / "samples" / "item.json").write_text(json.dumps({"id": 123}))
+            errors = runner.validate_schemas(root)
+            self.assertTrue(len(errors) > 0)
 
 
 if __name__ == "__main__":

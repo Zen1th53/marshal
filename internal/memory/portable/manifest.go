@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,11 +21,11 @@ var (
 )
 
 type ExportManifest struct {
-	Version            string                      `json:"version"`
-	CreatedAt          time.Time                   `json:"created_at"`
-	Records            []model.MemoryRecordV2      `json:"records"`
-	MutationEnvelopes  []mutation.MutationEnvelope `json:"mutation_envelopes"`
-	IntegrityDigest    string                      `json:"integrity_digest"`
+	Version           string                      `json:"version"`
+	CreatedAt         time.Time                   `json:"created_at"`
+	Records           []model.MemoryRecordV2      `json:"records"`
+	MutationEnvelopes []mutation.MutationEnvelope `json:"mutation_envelopes"`
+	IntegrityDigest   string                      `json:"integrity_digest"`
 }
 
 type ImportOptions struct {
@@ -39,19 +40,29 @@ func NewManager() *Manager {
 
 // Export builds a portable canonical memory manifest without derived index dependencies.
 func (m *Manager) Export(ctx context.Context, records []model.MemoryRecordV2, envelopes []mutation.MutationEnvelope) (ExportManifest, error) {
-	h := sha256.New()
-	for _, r := range records {
-		fmt.Fprintf(h, "%s:%s:%s;", r.ID, r.Lifecycle, r.ContentDigest)
-	}
-	digest := hex.EncodeToString(h.Sum(nil))
+	return m.ExportAt(ctx, records, envelopes, time.Now().UTC())
+}
 
-	return ExportManifest{
-		Version:           CurrentManifestVersion,
-		CreatedAt:         time.Now().UTC(),
-		Records:           records,
-		MutationEnvelopes: envelopes,
-		IntegrityDigest:   digest,
-	}, nil
+func (m *Manager) ExportAt(ctx context.Context, records []model.MemoryRecordV2, envelopes []mutation.MutationEnvelope, now time.Time) (ExportManifest, error) {
+	if err := ctx.Err(); err != nil {
+		return ExportManifest{}, err
+	}
+	manifest := ExportManifest{Version: CurrentManifestVersion, CreatedAt: now, Records: records, MutationEnvelopes: envelopes}
+	body, err := json.Marshal(manifest)
+	if err != nil {
+		return ExportManifest{}, err
+	}
+	sum := sha256.Sum256(body)
+	manifest.IntegrityDigest = hex.EncodeToString(sum[:])
+	// Return an owned copy so mutating an input slice cannot alter a sealed pack.
+	body, err = json.Marshal(manifest)
+	if err != nil {
+		return ExportManifest{}, err
+	}
+	var owned ExportManifest
+	err = json.Unmarshal(body, &owned)
+	return owned, err
+
 }
 
 // Import parses and validates a memory manifest, enforcing version compatibility and tombstone preservation.
@@ -60,6 +71,22 @@ func (m *Manager) Import(ctx context.Context, manifest ExportManifest, opts Impo
 		return nil, fmt.Errorf("%w: version %s", ErrUnsupportedSchemaVersion, manifest.Version)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(manifest.Records) > 128 || len(manifest.MutationEnvelopes) > 256 {
+		return nil, fmt.Errorf("portable pack exceeds bounds")
+	}
+	stored := manifest.IntegrityDigest
+	manifest.IntegrityDigest = ""
+	body, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(body)
+	if stored == "" || stored != hex.EncodeToString(sum[:]) {
+		return nil, fmt.Errorf("portable pack integrity mismatch")
+	}
 	if opts.DryRun {
 		return manifest.Records, nil
 	}

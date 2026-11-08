@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestSchedulerNext(t *testing.T) {
@@ -70,6 +71,11 @@ func TestSchedulerLoadAndSuccessRateOrdering(t *testing.T) {
 		t.Fatalf("expected agent-1 to win, got %s", asgn1.AgentID)
 	}
 
+	// Release first task before scheduling scenario 2
+	if err := sched.Release(ctx, asgn1.LeaseID, "completed"); err != nil {
+		t.Fatal(err)
+	}
+
 	// Scenario 2: Agent 1 becomes heavily loaded (0.95) and Agent 2 is idle (0.1) with good success (0.90) -> Agent 2 wins
 	cands[0].Load = 0.95
 	cands[1].Load = 0.1
@@ -117,8 +123,20 @@ func TestSchedulerLeaseLifecycle(t *testing.T) {
 	}
 
 	// Renew valid lease
+	recBefore, ok := sched.GetLease(asgn.LeaseID)
+	if !ok {
+		t.Fatal("lease not found in map")
+	}
+	time.Sleep(10 * time.Millisecond)
 	if err := sched.Renew(ctx, asgn.LeaseID); err != nil {
 		t.Fatalf("expected successful renewal, got: %v", err)
+	}
+	recAfter, ok := sched.GetLease(asgn.LeaseID)
+	if !ok {
+		t.Fatal("lease not found after renewal")
+	}
+	if !recAfter.ExpiresAt.After(recBefore.ExpiresAt) {
+		t.Fatalf("expected ExpiresAt to be extended: before=%v, after=%v", recBefore.ExpiresAt, recAfter.ExpiresAt)
 	}
 
 	// Renew invalid / unknown lease fails
@@ -134,5 +152,46 @@ func TestSchedulerLeaseLifecycle(t *testing.T) {
 	// Releasing again fails because lease was removed
 	if err := sched.Release(ctx, asgn.LeaseID, "completed"); !errors.Is(err, ErrStaleWorker) {
 		t.Fatalf("expected ErrStaleWorker for released lease, got: %v", err)
+	}
+}
+
+func TestSchedulerLeaseConflictAndCapabilityMissing(t *testing.T) {
+	sched := NewScheduler()
+	ctx := context.Background()
+
+	task := Task{TaskID: "task-conflict-1", RequiredCapabilities: []string{"go"}}
+	cands := []Candidate{
+		{AgentID: "agent-go", Capabilities: []string{"go"}, SuccessRate: 0.9, Load: 0.1},
+	}
+
+	// 1. First assignment succeeds
+	asgn, err := sched.Next(ctx, task, cands)
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+
+	// 2. Second assignment on same task while lease is active returns ErrLeaseConflict
+	_, err = sched.Next(ctx, task, cands)
+	if !errors.Is(err, ErrLeaseConflict) {
+		t.Fatalf("expected ErrLeaseConflict, got %v", err)
+	}
+
+	// 3. Capability missing returns ErrCapabilityMissing
+	taskMissing := Task{TaskID: "task-missing-caps", RequiredCapabilities: []string{"haskell"}}
+	_, err = sched.Next(ctx, taskMissing, cands)
+	if !errors.Is(err, ErrCapabilityMissing) {
+		t.Fatalf("expected ErrCapabilityMissing, got %v", err)
+	}
+
+	// 4. After release, task can be assigned again
+	if err := sched.Release(ctx, asgn.LeaseID, "done"); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	asgn2, err := sched.Next(ctx, task, cands)
+	if err != nil {
+		t.Fatalf("Next after release failed: %v", err)
+	}
+	if asgn2.AgentID != "agent-go" {
+		t.Fatalf("expected agent-go, got %s", asgn2.AgentID)
 	}
 }

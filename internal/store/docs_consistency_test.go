@@ -51,6 +51,8 @@ var schemaClaim = regexp.MustCompile(`(?i)(?:schema|sqlite)\s*\x60?v(\d{2,3})\x6
 // was written. Freezing those is the point of an evidence record.
 func TestDocumentedSchemaMatchesMigrations(t *testing.T) {
 	root := docsRoot(t)
+	// The registered canonical chain determines the runtime schema maximum;
+	// CommunitySchemaVersion is the legacy baseline before canonical steps.
 	current := strconv.Itoa(LatestSchemaVersion)
 
 	// Documents that describe the runtime as it is now.
@@ -62,8 +64,9 @@ func TestDocumentedSchemaMatchesMigrations(t *testing.T) {
 	}
 
 	// Lines that legitimately mention an older schema: release history,
-	// support matrices and migration notes written in the past tense.
-	historical := regexp.MustCompile(`(?i)v1\.0\.[01]|v1\.5\.0|latest tagged|tagged release|added a|End of Support|Security fixes only|migrat`)
+	// support matrices and migration notes written in the past tense,
+	// or the v108 baseline before Wave 1 schema additions.
+	historical := regexp.MustCompile(`(?i)v1\.0\.[01]|v1\.5\.0|latest tagged|tagged release|added a|End of Support|Security fixes only|migrat|schema v108|sqlite v108`)
 
 	for _, rel := range live {
 		body, ok := readDoc(t, root, rel)
@@ -124,7 +127,7 @@ func TestNoPublishedBenchmarkScores(t *testing.T) {
 	// the shape a fabricated score takes.
 	score := regexp.MustCompile(`(?i)(terminal[- ]bench|swe[- ]bench)[^.\n]*?(\d+(?:\.\d+)?\s*%|\bresolved\s*[:=]\s*\d+|\bscore\s*[:=]\s*\d)`)
 
-	for _, rel := range []string{"README.md", "docs/benchmarks.md", "EVALS.md"} {
+	for _, rel := range []string{"README.md", "docs/benchmarks.md", "docs/agents/EVALS.md"} {
 		body, ok := readDoc(t, root, rel)
 		if !ok {
 			continue

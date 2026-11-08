@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"sync"
-	"time"
 )
 
 type Manager struct {
@@ -37,22 +36,13 @@ func (m *Manager) Recover(ctx context.Context, taskID, checkpointID string) (*Pl
 	cp, found := m.checkpoints[checkpointID]
 	m.mu.RUnlock()
 
-	var cpPtr *Checkpoint
-	if found {
-		cpPtr = &cp
-	} else {
-		// Default synthetic valid checkpoint if not explicitly registered
-		cpPtr = &Checkpoint{
-			ID:        checkpointID,
-			TaskID:    taskID,
-			State:     CheckpointValid,
-			CreatedAt: time.Now().UTC(),
-		}
+	if !found {
+		return nil, ErrNoValidCheckpoint
 	}
 
 	return m.PlanRecovery(ctx, RecoveryRequest{
 		TaskID:         taskID,
-		Checkpoint:     cpPtr,
+		Checkpoint:     &cp,
 		CurrentRetries: 0,
 		MaxRetries:     3,
 	})
@@ -75,7 +65,15 @@ func (m *Manager) PlanRecovery(ctx context.Context, req RecoveryRequest) (*Plan,
 
 	// 2. Check retry budget
 	if req.CurrentRetries >= maxRetries {
-		return nil, ErrRetryExhausted
+		return &Plan{
+			TaskID:     req.TaskID,
+			RetryCount: req.CurrentRetries,
+			MaxRetries: maxRetries,
+			Action:     ActionFailExhausted,
+			Reasons: []string{
+				fmt.Sprintf("retry budget exhausted (%d/%d)", req.CurrentRetries, maxRetries),
+			},
+		}, ErrRetryExhausted
 	}
 
 	retryCount := req.CurrentRetries + 1

@@ -11,22 +11,12 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/startup"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
-// controlCenter is the Process 01 entry point: what happens when a user runs
-// `marshal` or `marshal tui`.
-//
-// The order here is the whole point. Startup is assessed *before* the
-// execution runtime is opened, so a runtime that cannot open becomes a
-// described condition on a screen rather than a terminated process with a
-// subprocess error on stderr. The full workspace is opened only when the
-// assessment says a project is genuinely ready; otherwise the landing view is
-// shown, which is still the control center — just with fewer actions enabled.
-//
-// The execution runtime keeps its existing strictness. Nothing here makes
-// app.Open more permissive; it simply stops being the gate on whether a user
-// can see anything at all.
+// controlCenter validates the project before creating a tmux session or opening
+// the execution runtime. Setup and doctor remain available for diagnostics.
 func (c *command) controlCenter(ctx context.Context, args []string) error {
 	if _, err := tmux.FindBinary(); err != nil {
 		if err != tmux.ErrTmuxMissing {
@@ -37,7 +27,26 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 		return fmt.Errorf("tmux is required to run the MARSHAL TUI; install with: %s", hint)
 	}
 
-	canonicalRoot := c.canonicalRoot(ctx)
+	layout, err := app.ValidateProject(ctx, c.root)
+	if err != nil {
+		return err
+	}
+	canonicalRoot := layout.Root
+
+	assessment := startup.Assess(ctx, startup.NewSystemProber(), c.startupEnvironment())
+
+	// A genuine core failure is the only case where nothing can be shown. Even
+	// then the user gets the reason and a remedy rather than a raw error.
+	if !assessment.ControlCenterOpens() {
+		landing := startup.BuildLanding(assessment)
+		fmt.Fprint(c.stderr, landing.Render())
+		return errCoreFailure
+	}
+
+	if !assessment.ExecutionPermitted() {
+		fmt.Fprint(c.stderr, startup.BuildLanding(assessment).Render())
+		return fmt.Errorf("MARSHAL project %q cannot start; run `marshal doctor` for details", canonicalRoot)
+	}
 
 	// Decision 1: The MARSHAL TUI ALWAYS runs inside tmux.
 	// If MARSHAL is not started inside tmux, it creates (or re-attaches to) a dedicated
@@ -47,71 +56,73 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 		return c.launchOrAttachTmux(ctx, canonicalRoot, args)
 	}
 
-	assessment := startup.Assess(ctx, startup.NewSystemProber(), c.startupEnvironment())
-
-	// A genuine core failure is the only case where nothing can be shown. Even
-	// then the user gets the reason and a remedy rather than a raw error.
-	if !assessment.ControlCenterOpens() {
-		landing := startup.BuildLanding(assessment)
-		fmt.Fprint(c.stdout, landing.Render())
-		return errCoreFailure
+	runtime, err := app.Open(ctx, canonicalRoot)
+	if err != nil {
+		return fmt.Errorf("open MARSHAL project %q: %w; run `marshal doctor` for details", canonicalRoot, err)
 	}
-
-	// Offer first-run Git setup before trying to open a workspace. Reuse setup's
-	// separate confirmations and re-assessment, including project initialization.
-	if check, found := assessment.Check("project.repository"); found &&
-		(check.Reason == startup.ReasonNotAGitRepository || check.Reason == startup.ReasonRepositoryEmpty) &&
-		!c.json && c.confirmer() != nil {
-		assessment = c.offerSetupFixes(ctx, assessment)
-	}
-
-	// A ready project gets the full workspace. This is the only path that
-	// opens the execution runtime, and it is reached only when the assessment
-	// already established that the project is usable.
-	if assessment.ExecutionPermitted() {
-		runtime, err := app.Open(ctx, canonicalRoot)
-		if err == nil {
-			defer runtime.Close()
-			return c.runWorkspace(ctx, runtime, args)
-		}
-		// The assessment said the project was ready and the runtime disagreed.
-		// That gap is itself worth reporting: it is re-assessed so the user
-		// sees a described condition rather than the raw open error.
-		assessment = startup.Assess(ctx, startup.NewSystemProber(), c.startupEnvironment())
-	}
-
-	fmt.Fprint(c.stdout, startup.BuildLanding(assessment).Render())
-	return nil
+	defer runtime.Close()
+	werr := c.runWorkspace(ctx, runtime, args)
+	// Close before a session relaunch execs over this process.
+	runtime.Close()
+	return werr
 }
 
 func (c *command) launchOrAttachTmux(ctx context.Context, root string, args []string) error {
+	if err := statepath.Validate(root); err != nil {
+		return err
+	}
 	sessionName := tmux.SessionName(root)
 	exe, err := os.Executable()
 	if err != nil {
 		exe = "marshal"
 	}
-	cmd := []string{exe, "tui"}
+	cmd := []string{exe, "tui", telemetryChildFlag}
 	cmd = append(cmd, args...)
 
 	if !tmux.HasSession(ctx, sessionName) {
-		if err := tmux.NewSession(ctx, sessionName, root, "marshal", cmd); err != nil {
-			return fmt.Errorf("start tmux session: %w", err)
+		cmd, err = prepareTUIChild(root, cmd)
+		if err != nil {
+			return err
+		}
+		if err := tmux.NewSession(ctx, sessionName, root, statepath.Name, cmd); err != nil {
+			return tuiChildResult(root, fmt.Errorf("start tmux session: %w", err))
 		}
 	} else {
-		// Session already exists: verify Marshal window is alive, repair/respawn if exited
-		target := sessionName + ":marshal"
-		if dead, _ := tmux.IsPaneDead(ctx, target); dead {
-			_ = tmux.RespawnWindow(ctx, target, cmd)
-		} else if exists, _ := tmux.WindowExists(ctx, sessionName, "marshal"); !exists {
-			_ = tmux.NewWindow(ctx, sessionName, "marshal", root, nil, cmd)
+		// Session already exists: verify Marshal window is alive, repair/respawn if exited.
+		// The window is named exactly ("=name"): a bare name also matches
+		// a prefix, so after /quit it found a leftover provider window
+		// (marshal-codex-…), respawned that and then could not select the
+		// control centre at all.
+		if exists, _ := tmux.WindowExists(ctx, sessionName, statepath.Name); !exists {
+			cmd, err = prepareTUIChild(root, cmd)
+			if err == nil {
+				err = tmux.NewWindow(ctx, sessionName, statepath.Name, root, nil, cmd)
+			}
+			if err != nil {
+				return tuiChildResult(root, err)
+			}
+		} else if dead, _ := tmux.IsPaneDead(ctx, controlCentreTarget(sessionName)); dead {
+			cmd, err = prepareTUIChild(root, cmd)
+			if err == nil {
+				err = tmux.RespawnWindowIn(ctx, controlCentreTarget(sessionName), root, cmd)
+			}
+			if err != nil {
+				return tuiChildResult(root, err)
+			}
 		}
 	}
 	// Re-attachment may find an agent selected from the previous visit.
 	// Always enter through the control centre; chat and workers keep running.
-	if err := tmux.SelectWindow(ctx, sessionName+":marshal"); err != nil {
-		return fmt.Errorf("select control centre: %w", err)
+	if err := tmux.SelectWindow(ctx, controlCentreTarget(sessionName)); err != nil {
+		return tuiChildResult(root, fmt.Errorf("select control centre: %w", err))
 	}
-	return tmux.AttachSessionContext(ctx, sessionName, c.stdin, c.stdout, c.stderr)
+	return tuiChildResult(root, tmux.AttachSessionContext(ctx, sessionName, c.stdin, c.stdout, c.stderr))
+}
+
+// controlCentreTarget is the control centre window of sessionName, matched
+// by its exact name.
+func controlCentreTarget(sessionName string) string {
+	return sessionName + ":=" + statepath.Name
 }
 
 func (c *command) canonicalRoot(ctx context.Context) string {
@@ -152,9 +163,9 @@ func (c *command) startupEnvironment() startup.Environment {
 		WorkingDir:      c.root,
 		SandboxEnforced: app.SandboxEnforcementAvailable(),
 		NetworkEnforced: app.EgressEnforcementAvailable(),
-		// ULTRA is never inferred at startup. It stays off until an
-		// entitlement check verifies a signed, unexpired grant.
-		UltraEntitled: false,
+		// The build-specific authorization supplies readiness evidence;
+		// Community keeps its conservative startup default.
+		UltraEntitled: startupUltraEntitled(),
 	}
 }
 

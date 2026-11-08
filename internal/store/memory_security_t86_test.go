@@ -54,6 +54,14 @@ func TestT86StoreRejectsSecretsOnWrite(t *testing.T) {
 	}
 
 	err := st.WriteMemoryV2(ctx, secretRec)
+	if security.RedactsSecrets {
+		// Extreme keeps the record with the secret removed.
+		if err != nil {
+			t.Fatalf("Marshal refused a redactable record: %v", err)
+		}
+		assertRedactedMemory(t, st, projID, secretRec.ID, "ghp_")
+		return
+	}
 	if !errors.Is(err, security.ErrSecretDetected) {
 		t.Fatalf("expected ErrSecretDetected from store firewall, got: %v", err)
 	}
@@ -268,6 +276,13 @@ func TestStoreRejectsAllCredentialShapesOnWrite(t *testing.T) {
 			}
 
 			err := st.WriteMemoryV2(ctx, rec)
+			if security.RedactsSecrets {
+				if err != nil {
+					t.Fatalf("Marshal refused a redactable %s: %v", tc.name, err)
+				}
+				assertRedactedMemory(t, st, projID, tc.memID, tc.secretVal)
+				return
+			}
 			if !errors.Is(err, security.ErrSecretDetected) {
 				t.Fatalf("expected ErrSecretDetected for %s, got: %v", tc.name, err)
 			}
@@ -290,6 +305,10 @@ func TestStoreRejectsAllCredentialShapesOnWrite(t *testing.T) {
 		})
 	}
 
+	if security.RedactsSecrets {
+		// Extreme refused nothing; each kept record carries its redaction.
+		return
+	}
 	// 4. Verify all refusal evidence events were recorded and never leak secret values
 	events, err := st.ListEvents(ctx)
 	if err != nil {
@@ -360,6 +379,13 @@ func TestStoreRejectsSecretsOnUpdate(t *testing.T) {
 		return nil
 	})
 
+	if security.RedactsSecrets {
+		if err != nil {
+			t.Fatalf("Marshal refused a redactable update: %v", err)
+		}
+		assertRedactedMemory(t, st, projID, cleanRec.ID, secretVal)
+		return
+	}
 	if !errors.Is(err, security.ErrSecretDetected) {
 		t.Fatalf("expected ErrSecretDetected on update, got: %v", err)
 	}
@@ -474,5 +500,26 @@ func TestStoreAcceptsCleanEntriesAndDigests(t *testing.T) {
 		if retrieved.Body != tc.body {
 			t.Fatalf("body mismatch for %s: got %q, want %q", tc.id, retrieved.Body, tc.body)
 		}
+	}
+}
+
+// assertRedactedMemory checks the Extreme outcome: the record was kept, the
+// secret was not, the kept record passes the firewall, and it names the
+// redaction.
+func assertRedactedMemory(t *testing.T, st *Store, projID, id, secret string) {
+	t.Helper()
+	stored, err := st.GetMemoryV2(context.Background(), projID, id)
+	if err != nil {
+		t.Fatalf("redacted record not kept: %v", err)
+	}
+	raw, _ := json.Marshal(stored)
+	if strings.Contains(string(raw), secret) {
+		t.Fatalf("secret persisted: %s", raw)
+	}
+	if err := security.NewFirewall(security.FirewallConfig{}).ScanRecord(context.Background(), stored); err != nil {
+		t.Fatalf("kept record still holds a secret: %v", err)
+	}
+	if _, ok := stored.ExtMeta[security.RedactionMetaKey]; !ok {
+		t.Fatalf("redaction evidence missing: %+v", stored.ExtMeta)
 	}
 }

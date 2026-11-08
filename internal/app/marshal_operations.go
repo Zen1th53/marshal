@@ -15,6 +15,9 @@ func (s *MarshalService) beginOperation(ctx context.Context, runID string, run m
 	if run.Operation != nil {
 		return rev, errors.New("unfinished lifecycle operation; /marshal resume to reconcile it")
 	}
+	if _, reserved := op.Event.Data["event_artifact"]; reserved {
+		return rev, fmt.Errorf("%w: reserved event_artifact key in inline intent", errMarshalEventArtifact)
+	}
 	id, err := model.NewID("marshal-op-")
 	if err != nil {
 		return rev, err
@@ -33,6 +36,9 @@ func (s *MarshalService) beginOperation(ctx context.Context, runID string, run m
 	if model, ok := s.Model.(interface{ MarshalConversationID() string }); ok && model.MarshalConversationID() != "" {
 		op.Event.Data["model_session_id"] = model.MarshalConversationID()
 	}
+	if err := s.boundMarshalEvent(&op.Event); err != nil {
+		return rev, err
+	}
 	run.Operation = op
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return rev, err
@@ -43,6 +49,11 @@ func (s *MarshalService) beginOperation(ctx context.Context, runID string, run m
 func (s *MarshalService) completeOperation(ctx context.Context, runID string, rev int64, op *marshal.LifecycleOperation) error {
 	if op.Next == nil {
 		return errors.New("lifecycle completion snapshot is missing")
+	}
+	// Artifact creation and verification must finish before the external effect.
+	// Completion only checks the bounded event that will enter the transaction.
+	if err := op.Event.Validate(); err != nil {
+		return err
 	}
 	next := *op.Next
 	next.Operation = nil
@@ -63,9 +74,15 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 	if op == nil {
 		return run, rev, nil
 	}
+	if err := s.boundMarshalEvent(&op.Event); err != nil {
+		return run, rev, fmt.Errorf("%w: %w", errMarshalEventArtifact, err)
+	}
+	op.Event.Data = copyMarshalEventData(op.Event.Data)
 	completed := false
 	switch op.Kind {
 	case "launch":
+		op.HandIn = nil
+		op.Attempt = 0
 		// A launch may have reached the driver even without a receipt. Treat it
 		// as interrupted, never as queued work that Execute could launch again.
 		if op.Next != nil {
@@ -82,6 +99,11 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 		completed = true
 	case "hand-in":
 		completed = op.HandIn != nil && op.Next != nil
+		if completed {
+			if err := s.repairRetainedHandInAttempt(ctx, runID, op); err != nil {
+				return run, rev, err
+			}
+		}
 		if !completed {
 			head, err := gitMarshal(ctx, op.Dir, "rev-parse", "HEAD")
 			if err == nil {
@@ -132,6 +154,9 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 		return run, rev, fmt.Errorf("unknown lifecycle operation %s", op.Kind)
 	}
 	if completed {
+		if err := s.boundMarshalEvent(&op.Event); err != nil {
+			return run, rev, err
+		}
 		if err := s.completeOperation(ctx, runID, rev, op); err != nil {
 			return run, rev, err
 		}
@@ -146,6 +171,9 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 	op.Event.Data["reason"] = run.Pause.Reason
 	op.Next = &run
 	op.HandIn = nil
+	if err := s.boundMarshalEvent(&op.Event); err != nil {
+		return run, rev, err
+	}
 	if err := s.completeOperation(ctx, runID, rev, op); err != nil {
 		return run, rev, err
 	}
@@ -154,18 +182,31 @@ func (s *MarshalService) recoverOperation(ctx context.Context, runID string, run
 
 // abandonOperation clears only an intent whose effect was refused or failed
 // before completion. The caller must retain intents for effects that succeeded.
-func (s *MarshalService) abandonOperation(ctx context.Context, runID string, op *marshal.LifecycleOperation) {
+func (s *MarshalService) abandonOperation(ctx context.Context, runID string, op *marshal.LifecycleOperation) error {
 	ctx = context.WithoutCancel(ctx)
 	stored, err := s.Store.GetMarshalRun(ctx, s.ProjectID, runID)
-	if err != nil || stored.Value.Operation == nil || stored.Value.Operation.ID != op.ID {
-		return
+	if err != nil {
+		return fmt.Errorf("load lifecycle intent for abandonment: %w", err)
 	}
+	if stored.Value.Operation == nil || stored.Value.Operation.ID != op.ID {
+		return nil
+	}
+	event := stored.Value.Operation.Event
 	run := stored.Value
 	run.Operation = nil
-	event := op.Event
+	if err := s.boundMarshalEvent(&event); err != nil {
+		return fmt.Errorf("bound stored lifecycle event for abandonment: %w", err)
+	}
+	event.Data = copyMarshalEventData(event.Data)
 	event.Type = events.EventTypeMarshalEscalated
 	event.Data["reason"] = "lifecycle effect refused or failed before completion"
-	_ = s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, stored.Revision, &event, nil, 0)
+	if err := s.boundMarshalEvent(&event); err != nil {
+		return fmt.Errorf("bound escalated lifecycle event for abandonment: %w", err)
+	}
+	if err := s.Store.SaveMarshalState(ctx, s.ProjectID, runID, run, stored.Revision, &event, nil, 0); err != nil {
+		return fmt.Errorf("save lifecycle abandonment: %w", err)
+	}
+	return nil
 }
 
 // RecoverPendingOperations is called on project startup before any worker can
@@ -185,6 +226,10 @@ func (s *MarshalService) RecoverPendingOperations(ctx context.Context) error {
 		if err == nil {
 			_, _, err = s.recoverOperation(ctx, id, run, rev)
 		}
+		if errors.Is(err, errMarshalEventArtifact) {
+			failures = append(failures, fmt.Errorf("recover Marshal run %s: %w", id, err))
+			continue
+		}
 		if err != nil {
 			pauseMarshal(&run, err.Error(), "inspect the retained operation and Git references before resolving it", "")
 			if saveErr := s.save(ctx, id, run, rev); saveErr != nil {
@@ -199,5 +244,47 @@ func unfinishedMarshalOperation(run marshal.Run) error {
 	if run.Operation != nil {
 		return errors.New("unfinished lifecycle operation; /marshal resume to reconcile it")
 	}
+	return nil
+}
+
+func copyMarshalEventData(data map[string]any) map[string]any {
+	copied := make(map[string]any, len(data))
+	for key, value := range data {
+		copied[key] = value
+	}
+	return copied
+}
+
+// repairRetainedHandInAttempt renumbers a retained hand-in whose attempt is
+// already held by another attempt's record. An earlier build did not count
+// returns a reassignment or retry retired, so its hand-in could reuse an
+// earlier attempt number and never complete. The hand-in's own attempt is
+// the one after every recorded return; nothing else about it changes.
+func (s *MarshalService) repairRetainedHandInAttempt(ctx context.Context, runID string, op *marshal.LifecycleOperation) error {
+	i := taskIndex(*op.Next, op.TaskID)
+	if i < 0 {
+		return nil
+	}
+	stored, err := s.Store.GetMarshalHandIn(ctx, runID, op.TaskID, op.Attempt)
+	if errors.Is(err, model.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if stored.Value.ResultCommit == op.HandIn.ResultCommit {
+		return nil
+	}
+	t := op.Next.Tasks[i]
+	want := 1 + t.EvidenceAttemptBase + taskReturns(t)
+	if want <= op.Attempt {
+		return fmt.Errorf("retained hand-in %s: attempt %d is held by another attempt; inspect the retained operation", op.ID, op.Attempt)
+	}
+	if _, err = s.Store.GetMarshalHandIn(ctx, runID, op.TaskID, want); err == nil {
+		return fmt.Errorf("retained hand-in %s: attempt %d is held by another attempt; inspect the retained operation", op.ID, want)
+	} else if !errors.Is(err, model.ErrNotFound) {
+		return err
+	}
+	op.Attempt = want
 	return nil
 }

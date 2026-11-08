@@ -1,0 +1,75 @@
+name: Race
+
+# The race detector makes the suite three to five times slower, so it runs
+# weekly and on demand instead of on every push. Same shards as CI.
+on:
+  schedule:
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+env:
+  MARSHAL_CLOUD_ENDPOINT: 'off'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: race-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  race:
+    name: Race — ${{ matrix.edition }} ${{ matrix.shard }}/8
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [default, governed]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap socat libevent-core-2.1-7
+
+      - name: Cache tmux 3.4
+        id: tmux-cache
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ~/.local/tmux
+          key: tmux-3.4-${{ runner.os }}-ubuntu-22.04
+
+      - name: Build tmux 3.4
+        if: steps.tmux-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install -y libevent-dev ncurses-dev build-essential bison pkg-config
+          curl -fsSL https://github.com/tmux/tmux/releases/download/3.4/tmux-3.4.tar.gz -o /tmp/tmux-3.4.tar.gz
+          tar -xzf /tmp/tmux-3.4.tar.gz -C /tmp
+          (cd /tmp/tmux-3.4 && ./configure --prefix="$HOME/.local/tmux" && make && make install)
+
+      - name: Use tmux 3.4
+        run: echo "$HOME/.local/tmux/bin" >> "$GITHUB_PATH"
+
+      # Marshal runs the isolated OpenCode adapter from a pinned offline
+      # bootstrap. Preparation verifies every npm tarball against the lock's
+      # SHA-512 integrity and the final tree against its pinned digest.
+      - name: Prepare OpenCode offline bootstrap
+        if: matrix.edition == 'default'
+        run: python3 tools/prepare_opencode_bootstrap.py
+
+      - name: Run race shard
+        env:
+          GO_TEST_TAGS: ${{ matrix.edition == 'governed' && 'governed' || '' }}
+        run: tools/ci/test-shard.sh ${{ matrix.shard }} 8 -race -count=1 -timeout=50m

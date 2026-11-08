@@ -11,6 +11,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/testutil/testcloud"
 )
@@ -130,6 +131,9 @@ func TestM11PanelShowsTasks(t *testing.T) {
 	}
 	if marshalSection(UIState{}, th, 100) != nil {
 		t.Fatal("no run must paint nothing")
+	}
+	if b := p.Board; b.Run.ID != "RUN-1" || len(b.Tasks) != 2 || b.Tasks[0].ID != "write-docs" || b.Tasks[0].Returns != 1 {
+		t.Fatalf("board = %+v, want both tasks with the returned one first", b)
 	}
 }
 
@@ -312,56 +316,68 @@ func TestUltraExecutionOffUsesStandardNoParallelDispatch(t *testing.T) {
 }
 
 func TestM11MarshalRetryReassignCancelCommands(t *testing.T) {
-	_, ws, ctx := acceptanceWorkspace(t)
-	fakeProviderCLIs(t, "codex")
+	fixture := newMarshalPopupFixture(t, false, false)
+	ws, ctx, service := fixture.w, t.Context(), fixture.service
 	m := ws.marshalSession()
-	service, _, _, err := ws.marshalService(ctx, "run-tui")
+	if service.GovernedDrivers == nil {
+		service.GovernedDrivers = map[string]driver.Driver{}
+	}
+	service.GovernedDrivers["claude"] = driver.Governed{Provider: "claude", Run: func(context.Context, driver.Request) ([]marshal.CommandRecord, error) {
+		return nil, nil
+	}}
+	const runID, taskID = "RUN-plan-proposal", "T1"
+	m.grant(runID, "plan")
+	run, err := service.Approve(ctx, runID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	draft, err := service.DraftFromProposal([]byte(`{"tasks":[{"id":"a","title":"task a","criteria":["a checked"],"paths":["README.md"],"depends_on":[],"worker":"codex","mode":"governed","checks":[{"command":"true","criteria":["a checked"]}]}]}`), "codex")
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, err := service.StartPlanningFromDraft(ctx, "run-tui", "fixture", draft, marshal.Budget{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	m.grant("run-tui", "plan")
-	run, err = service.Approve(ctx, "run-tui")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m.mu.Lock()
-	m.runID = "run-tui"
-	m.mu.Unlock()
-	ws.setMarshalPanel(newMarshalPanel("run-tui", "codex", run, "active"))
+	ws.setMarshalPanel(newMarshalPanel(runID, "codex", run, "active"))
 
 	// Escalate task
-	if err := service.Escalate(ctx, "run-tui", "a", "worker rework limit reached"); err != nil {
+	if err := service.Escalate(ctx, runID, taskID, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
 
 	// /marshal retry
-	out, err := ws.ExecuteCommand(ctx, "/marshal retry a")
+	out, err := ws.ExecuteCommand(ctx, "/marshal retry "+taskID)
 	if err != nil || !strings.Contains(out, "retried") {
 		t.Fatalf("retry output: %q %v", out, err)
 	}
 
 	// Escalate again and test /marshal reassign
-	if err := service.Escalate(ctx, "run-tui", "a", "worker rework limit reached"); err != nil {
+	if err := service.Escalate(ctx, runID, taskID, "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
-	out, err = ws.ExecuteCommand(ctx, "/marshal reassign a claude")
-	if err != nil || !strings.Contains(out, "reassigned to claude") {
-		t.Fatalf("reassign output: %q %v", out, err)
+	// Community keeps a governed Process 05 task on its approved plan's
+	// worker: a switch names the plan amendment it needs and leaves the task
+	// escalated. The private edition lets the operator switch it; any other
+	// task is reassigned.
+	record, err := service.Store.GetMarshalRun(ctx, service.ProjectID, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	governed := record.Value.Process05Bound
+	for _, task := range record.Value.Tasks {
+		if task.PlanTaskID == taskID {
+			governed = governed && task.Mode == marshal.Governed
+		}
+	}
+	out, err = ws.ExecuteCommand(ctx, "/marshal reassign "+taskID+" claude")
+	if governed && Edition() != "Marshal" {
+		if err == nil || strings.Contains(out, "reassigned to claude") || !strings.Contains(out+err.Error(), "plan amendment") {
+			t.Fatalf("governed reassign output: %q %v", out, err)
+		}
+	} else {
+		if err != nil || !strings.Contains(out, "reassigned to claude") {
+			t.Fatalf("reassign output: %q %v", out, err)
+		}
+		if err := service.Escalate(ctx, runID, taskID, "no worker"); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	// Escalate again and test /marshal cancel
-	if err := service.Escalate(ctx, "run-tui", "a", "no worker"); err != nil {
-		t.Fatal(err)
-	}
-	out, err = ws.ExecuteCommand(ctx, "/marshal cancel a")
+	// The task is escalated: test /marshal cancel
+	out, err = ws.ExecuteCommand(ctx, "/marshal cancel "+taskID)
 	if err != nil || !strings.Contains(out, "cancelled") {
 		t.Fatalf("cancel output: %q %v", out, err)
 	}

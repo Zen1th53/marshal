@@ -39,7 +39,7 @@ func GeneratePostMortemCard(c PostMortemCard) string {
 
 	sb.WriteString("\n## 2. What Was Redone / Rolled Back\n")
 	if len(c.WhatWasRedone) == 0 {
-		sb.WriteString("- Zero rework required\n")
+		sb.WriteString("- None recorded\n")
 	} else {
 		for _, r := range c.WhatWasRedone {
 			sb.WriteString(fmt.Sprintf("- %s\n", r))
@@ -48,7 +48,7 @@ func GeneratePostMortemCard(c PostMortemCard) string {
 
 	sb.WriteString("\n## 3. Invalidated / Wrong Assumptions\n")
 	if len(c.WrongAssumptions) == 0 {
-		sb.WriteString("- All initial assumptions held\n")
+		sb.WriteString("- None recorded\n")
 	} else {
 		for _, a := range c.WrongAssumptions {
 			sb.WriteString(fmt.Sprintf("- %s\n", a))
@@ -57,7 +57,7 @@ func GeneratePostMortemCard(c PostMortemCard) string {
 
 	sb.WriteString("\n## 4. Failures & Fingerprints\n")
 	if len(c.Failures) == 0 {
-		sb.WriteString("- No notable failures recorded\n")
+		sb.WriteString("- None recorded\n")
 	} else {
 		for _, f := range c.Failures {
 			sb.WriteString(fmt.Sprintf("- %s\n", f))
@@ -90,7 +90,7 @@ func GeneratePostMortemCard(c PostMortemCard) string {
 
 	sb.WriteString("\n## 7. Routing Lessons\n")
 	if len(c.RoutingLessons) == 0 {
-		sb.WriteString("- Default routes optimal\n")
+		sb.WriteString("- None recorded\n")
 	} else {
 		for _, rl := range c.RoutingLessons {
 			sb.WriteString(fmt.Sprintf("- %s\n", rl))

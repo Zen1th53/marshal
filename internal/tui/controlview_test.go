@@ -21,6 +21,22 @@ func testControlView(t *testing.T) (*NavView, *fakeAuthority) {
 	return v, auth
 }
 
+// completeTaskInputForm enters the exact task identity when the private
+// build exposes a typed task form. Community still uses its original adapter.
+func completeTaskInputForm(t *testing.T, ctx context.Context, v *NavView, taskID string) {
+	t.Helper()
+	if !v.formOpen() {
+		return
+	}
+	for _, r := range taskID {
+		v.HandleKey(ctx, runeKey(r))
+	}
+	v.HandleKey(ctx, key(KeyEnter))
+	if v.Confirmation().Phase() != PhaseConfirming {
+		t.Fatalf("typed task form did not reach confirmation: %s", v.Confirmation().Phase())
+	}
+}
+
 // Enter on a list row must never mutate. It moves focus to the action bar,
 // where the safety label and any disabled reason are shown.
 func TestEnterOnAControlRowDoesNotMutate(t *testing.T) {
@@ -56,6 +72,8 @@ func TestHoldingEnterNeverMutates(t *testing.T) {
 	if err := v.Nav().DeepLink("CTUI-0046"); err != nil { // Cancel task, destructive
 		t.Fatalf("deep link: %v", err)
 	}
+	v.HandleKey(ctx, key(KeyEnter))
+	completeTaskInputForm(t, ctx, v, "task-1")
 	// A deep link to an action focuses the action bar. Now hold Enter.
 	for i := 0; i < 40; i++ {
 		v.HandleKey(ctx, key(KeyEnter))
@@ -107,10 +125,11 @@ func TestTheDeliberatePathReachesTheAuthorityExactlyOnce(t *testing.T) {
 	if err := v.Nav().DeepLink("CTUI-0046"); err != nil {
 		t.Fatalf("deep link: %v", err)
 	}
-	v.HandleKey(ctx, key(KeyEnter)) // open the confirmation
-	v.HandleKey(ctx, runeKey('y'))  // acknowledge
-	v.HandleKey(ctx, key(KeyRight)) // move to Proceed
-	v.HandleKey(ctx, key(KeyEnter)) // submit
+	v.HandleKey(ctx, key(KeyEnter))
+	completeTaskInputForm(t, ctx, v, "task-1") // open the confirmation
+	v.HandleKey(ctx, runeKey('y'))             // acknowledge
+	v.HandleKey(ctx, key(KeyRight))            // move to Proceed
+	v.HandleKey(ctx, key(KeyEnter))            // submit
 
 	if n := atomic.LoadInt32(&auth.cancels); n != 1 {
 		t.Fatalf("the deliberate path caused %d cancellations, want exactly 1", n)
@@ -244,6 +263,7 @@ func TestNKeyCancelsTheConfirmation(t *testing.T) {
 		t.Fatalf("deep link: %v", err)
 	}
 	v.HandleKey(ctx, key(KeyEnter))
+	completeTaskInputForm(t, ctx, v, "task-1")
 	v.HandleKey(ctx, runeKey('n'))
 
 	if n := atomic.LoadInt32(&auth.cancels); n != 0 {
@@ -264,6 +284,7 @@ func TestNavigationIsFrozenWhileAConfirmationIsOpen(t *testing.T) {
 		t.Fatalf("deep link: %v", err)
 	}
 	v.HandleKey(ctx, key(KeyEnter))
+	completeTaskInputForm(t, ctx, v, "task-1")
 	where := v.Nav().Current()
 	depth := v.Nav().Depth()
 
@@ -288,26 +309,28 @@ func TestNavigationIsFrozenWhileAConfirmationIsOpen(t *testing.T) {
 	}
 }
 
-// A gapped action shows its reason and never opens a confirmation.
+// An unavailable action shows its reason and never opens a confirmation.
+// The Control actions that used to be implementation gaps are now bound; an
+// unavailable action is one whose binding carries a Requires reason.
 func TestGappedActionShowsItsReasonInsteadOfAConfirmation(t *testing.T) {
 	v, auth := testControlView(t)
 	ctx := context.Background()
 
-	if err := v.Nav().DeepLink("CTUI-0043"); err != nil { // Pause task, a gap
+	if err := v.Nav().DeepLink("CTUI-0201"); err != nil { // Create local state, a Requires action
 		t.Fatalf("deep link: %v", err)
 	}
 	v.HandleKey(ctx, key(KeyEnter))
 
 	if v.Confirmation().Phase() != PhaseIdle {
-		t.Fatalf("a gapped action opened a confirmation (phase %s)",
+		t.Fatalf("an unavailable action opened a confirmation (phase %s)",
 			v.Confirmation().Phase())
 	}
 	out := lines(v, 120, 30)
-	if !strings.Contains(out, "IMPLEMENTATION GAP") {
-		t.Fatalf("the gap reason did not reach the screen:\n%s", out)
+	if !strings.Contains(out, "initialization runs through `marshal init`") {
+		t.Fatalf("the unavailable reason did not reach the screen:\n%s", out)
 	}
 	if n := atomic.LoadInt32(&auth.executes); n != 0 {
-		t.Fatalf("a gapped action made %d authority calls", n)
+		t.Fatalf("an unavailable action made %d authority calls", n)
 	}
 }
 
@@ -373,7 +396,16 @@ func TestConfirmationShowsTheExactBinding(t *testing.T) {
 		t.Fatalf("deep link: %v", err)
 	}
 	v.HandleKey(ctx, key(KeyEnter))
+	completeTaskInputForm(t, ctx, v, "task-1")
 
+	// The main view states what will happen; internals sit behind "d".
+	summary := lines(v, 120, 30)
+	for _, internal := range []string{"Revision", "Digest", "Idempotency"} {
+		if strings.Contains(summary, internal) {
+			t.Fatalf("the confirmation shows internal %q before details are requested:\n%s", internal, summary)
+		}
+	}
+	v.HandleKey(ctx, KeyEvent{Type: KeyRune, Rune: 'd'})
 	out := lines(v, 120, 30)
 	for _, want := range []string{"task-1", "Revision", "Confirm"} {
 		if !strings.Contains(out, want) {

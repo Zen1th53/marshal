@@ -62,7 +62,8 @@ func TestRealCodexRuntimeE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runtime.Close()
-	agent, err := runtime.RegisterAgent(context.Background(), app.RegisterAgentRequest{Name: "real-codex", Role: model.RoleDeveloper})
+	allowRealProviderCredentials(t, runtime, "codex")
+	agent, err := runtime.RegisterAgent(context.Background(), app.RegisterAgentRequest{Name: "real-codex", Role: model.RoleDeveloper, ModelProvider: "codex"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,6 +80,7 @@ func TestRealCodexRuntimeE2E(t *testing.T) {
 	if result.Status != "success" || result.ResultCommit == result.BaseCommit || result.Isolation.Level != model.IsolationBwrap {
 		t.Fatalf("result = %#v", result)
 	}
+	requireRealProviderProof(t, runtime, result, "runtime-real-proof.txt", "MARSHAL real runtime proof\n")
 	task, err := runtime.Task(context.Background(), "TASK-REAL-RUNTIME")
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +104,8 @@ func TestRealCodexMCPFullChain(t *testing.T) {
 	}
 	defer runtime.Close()
 
-	agent, err := runtime.RegisterAgent(context.Background(), app.RegisterAgentRequest{Name: "mcp-codex", Role: model.RoleDeveloper})
+	allowRealProviderCredentials(t, runtime, "codex")
+	agent, err := runtime.RegisterAgent(context.Background(), app.RegisterAgentRequest{Name: "mcp-codex", Role: model.RoleDeveloper, ModelProvider: "codex"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,8 +187,12 @@ func TestRealCodexA2AFullChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runtime.Close()
+	allowRealProviderCredentials(t, runtime, "codex")
 
-	a2aServer := a2a.NewServer(runtime)
+	a2aServer, err := a2a.NewInsecureServer(runtime, "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
 	ts := httptest.NewServer(a2aServer.Handler())
 	defer ts.Close()
 

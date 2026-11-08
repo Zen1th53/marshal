@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,10 +26,10 @@ func TestBriefingDirStaysOutOfTheProject(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("the project's AGENTS.md was written: %v", err)
 	}
-	if !strings.HasPrefix(dir.path, filepath.Join(root, ".marshal", "briefing")+string(os.PathSeparator)) {
+	if !strings.HasPrefix(dir.path, filepath.Join(root, statepath.DirName, "briefing")+string(os.PathSeparator)) {
 		t.Fatalf("briefing directory %s is not under .marshal/briefing", dir.path)
 	}
-	ignore, err := os.ReadFile(filepath.Join(root, ".marshal", "briefing", ".gitignore"))
+	ignore, err := os.ReadFile(filepath.Join(root, statepath.DirName, "briefing", ".gitignore"))
 	if err != nil || string(ignore) != "*\n" {
 		t.Fatalf("briefing directory does not ignore itself: %q %v", ignore, err)
 	}

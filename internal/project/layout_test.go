@@ -1,6 +1,7 @@
 package project
 
 import (
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,7 +32,7 @@ func TestDiscoverUsesMarshalRuntimeDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := layout.RuntimeDir, filepath.Join(repo, ".marshal"); got != want {
+	if got, want := layout.RuntimeDir, filepath.Join(repo, statepath.DirName); got != want {
 		t.Fatalf("RuntimeDir = %q, want %q", got, want)
 	}
 }

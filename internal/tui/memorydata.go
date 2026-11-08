@@ -126,6 +126,8 @@ func (s *MemoryFeed) ReadMemory(ctx context.Context) MemorySnapshot {
 		// Health is the service's own answer, restated rather than judged.
 		if status.Healthy {
 			snap.ServiceHealth = Known("healthy", memoryBinding)
+		} else if strings.TrimSpace(status.Version) == "" && strings.TrimSpace(status.ProjectID) == "" {
+			snap.ServiceHealth = Unknown("memory service status not established", memoryBinding)
 		} else {
 			snap.ServiceHealth = Value{
 				Text: "unhealthy", Status: TruthKnown,

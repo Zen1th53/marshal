@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,7 +58,7 @@ func assertInitializedProject(t *testing.T, dir string) {
 		t.Fatalf("initialized project cannot open: %v", err)
 	}
 	runtime.Close()
-	if _, err := os.Stat(filepath.Join(dir, ".marshal")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, statepath.DirName)); err != nil {
 		t.Fatal(err)
 	}
 	testGit(t, dir, "rev-parse", "--verify", "HEAD")
@@ -68,7 +69,7 @@ func assertInitFilesRecorded(t *testing.T, dir string) {
 	for _, name := range []string{"CAPABILITIES.yaml", "PACK-VERSION.yaml", "RUNTIME-VERSION.yaml"} {
 		testGit(t, dir, "cat-file", "-e", "HEAD:"+name)
 	}
-	if got := testGit(t, dir, "ls-files", ".marshal"); got != "" {
+	if got := testGit(t, dir, "ls-files", statepath.DirName); got != "" {
 		t.Fatalf("private runtime state tracked: %s", got)
 	}
 	if got := testGit(t, dir, "check-ignore", ".marshal/state.db"); got != ".marshal/state.db" {

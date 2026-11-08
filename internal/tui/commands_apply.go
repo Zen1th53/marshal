@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"sort"
 	"strings"
 	"time"
@@ -89,7 +90,7 @@ func gitChanges(ctx context.Context, root string) (map[string]string, error) {
 		if status[0] == 'R' || status[0] == 'C' {
 			i++
 		}
-		if strings.HasPrefix(path, ".marshal/") {
+		if statepath.Reserved(path) {
 			continue
 		}
 		stamp := status

@@ -10,6 +10,24 @@ import (
 	"testing"
 )
 
+func TestStatStorageMeasuresNearestExistingAncestor(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "does", "not", "exist")
+	got, err := statStorage(missing)
+	if err != nil {
+		t.Fatalf("statStorage(%q): %v", missing, err)
+	}
+	if got.Path != dir {
+		t.Fatalf("statStorage(%q) measured %q, want nearest existing ancestor %q", missing, got.Path, dir)
+	}
+	if got.TotalBytes == 0 || got.FreeBytes == 0 {
+		t.Fatalf("statStorage(%q) reported a zero measurement: %+v", missing, got)
+	}
+	if got.Source != "statfs" {
+		t.Fatalf("statStorage(%q) source = %q, want statfs", missing, got.Source)
+	}
+}
+
 func TestReadMemInfoAndCgroupLimits(t *testing.T) {
 	dir := t.TempDir()
 	mem := filepath.Join(dir, "meminfo")

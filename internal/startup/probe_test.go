@@ -2,6 +2,7 @@ package startup_test
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -94,7 +95,7 @@ func healthyProject(root string) *fakeProber {
 	prober := newFakeProber()
 	prober.repoRoot = root
 	prober.dirs[root] = true
-	prober.dirs[filepath.Join(root, ".marshal")] = true
+	prober.dirs[filepath.Join(root, statepath.DirName)] = true
 	prober.files[filepath.Join(root, "CAPABILITIES.yaml")] = true
 	prober.writable[root] = true
 	return prober

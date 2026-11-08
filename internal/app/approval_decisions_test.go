@@ -11,6 +11,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/projectid"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -253,7 +254,7 @@ func TestExecutionApprovalDecisions(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(filepath.Join(r.ProjectRoot(), ".marshal", "approvals", a.ApprovalID+".json"), raw, 0600); err != nil {
+				if err := os.WriteFile(filepath.Join(r.ProjectRoot(), statepath.DirName, "approvals", a.ApprovalID+".json"), raw, 0600); err != nil {
 					t.Fatal(err)
 				}
 			}

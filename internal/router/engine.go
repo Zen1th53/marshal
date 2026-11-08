@@ -18,7 +18,7 @@ func DefaultProfiles() []ModelProfile {
 	return []ModelProfile{
 		{Provider: "codex", Model: "gpt-4o", Capabilities: []string{"code", "refactor"}, MaxContext: 128000, CostClass: "MEDIUM", LatencyClass: "LOW", Available: true},
 		{Provider: "claude", Model: "claude-3-5-sonnet", Capabilities: []string{"code", "reasoning", "refactor"}, MaxContext: 200000, CostClass: "HIGH", LatencyClass: "LOW", Available: true},
-		{Provider: "gemini", Model: "gemini-1.5-pro", Capabilities: []string{"code", "long-context", "reasoning"}, MaxContext: 1000000, CostClass: "MEDIUM", LatencyClass: "MEDIUM", Available: true},
+		{Provider: "agy", Model: "gemini-3.8-flash-high", Capabilities: []string{"code", "long-context", "reasoning"}, MaxContext: 1000000, CostClass: "MEDIUM", LatencyClass: "MEDIUM", Available: true},
 		{Provider: "opencode", Model: "qwen2.5-coder", Capabilities: []string{"code", "local", "refactor"}, MaxContext: 32000, CostClass: "FREE", LatencyClass: "FAST", Available: true, LocalOnly: true},
 	}
 }

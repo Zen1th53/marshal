@@ -66,6 +66,12 @@ func CountTables() []string {
 	return []string{"agents", "sessions", "tasks", "leases", "findings", "approvals", "artifacts", "audit_events"}
 }
 
+// countableTables is CountTables plus the extra inventories that backup and
+// projection-rebuild confirmations bind to.
+func countableTables() []string {
+	return append(CountTables(), "projects", "memory_records_v2")
+}
+
 func (s *Store) Project(ctx context.Context) (model.Project, error) {
 	var project model.Project
 	err := s.db.QueryRowContext(ctx, `
@@ -83,7 +89,7 @@ func (s *Store) Project(ctx context.Context) (model.Project, error) {
 
 func (s *Store) Count(ctx context.Context, table string) (int, error) {
 	allowed := false
-	for _, name := range CountTables() {
+	for _, name := range countableTables() {
 		if name == table {
 			allowed = true
 			break

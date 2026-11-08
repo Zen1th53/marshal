@@ -41,7 +41,7 @@ func TestPTYCheckpointInspectAndDiff(t *testing.T) {
 	}
 
 	terminal := startFrozenTUIInProject(t, 40, 200, bin, project, "tui", "SESSION-pty-checkpoint")
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/checkpoint inspect " + first.CheckpointID)
 	terminal.mustSee("Files:       INTACT")
 	terminal.sendLine("/checkpoint diff " + first.CheckpointID + " " + second.CheckpointID)

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -27,7 +28,7 @@ func TestThemeRendering(t *testing.T) {
 	}
 
 	// Test VisibleLen and Truncate
-	styled := th.Colorize(th.Marshal, "MARSHAL")
+	styled := th.Colorize(th.Marshal, "Marshal")
 	if VisibleLen(styled) != 7 {
 		t.Errorf("expected visible len 7, got %d", VisibleLen(styled))
 	}
@@ -60,5 +61,35 @@ func TestUnicodeRuneWidth(t *testing.T) {
 	trunc := Truncate("你好世界", 5)
 	if VisibleLen(trunc) > 5 {
 		t.Errorf("truncated string %q exceeds width 5: %d", trunc, VisibleLen(trunc))
+	}
+}
+
+// ansiOracle is the pattern StripANSI and VisibleLen scan for by hand.
+var ansiOracle = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// StripANSI and VisibleLen agree with the regexp they replaced on every
+// sequence the Board writes and on malformed ones.
+func TestStripANSIMatchesTheRegexp(t *testing.T) {
+	parts := []string{"", "a", "ab c", "✓", "日本", "⣾", "\x1b", "\x1b[", "\x1b[0m", "\x1b[38;5;111m", "\x1b[48;2;11;14;20m", "\x1b[1m", "\x1b[;m", "\x1b[12", "\x1b[3x", "\x1b[3;", "\x1b]0;t\a", "[0m", "\xff", "é", "\x1b\x1b[0m", "…"}
+	var cases []string
+	for _, a := range parts {
+		for _, b := range parts {
+			for _, c := range parts {
+				cases = append(cases, a+b+c)
+			}
+		}
+	}
+	for _, s := range cases {
+		want := ansiOracle.ReplaceAllString(s, "")
+		if got := StripANSI(s); got != want {
+			t.Fatalf("StripANSI(%q) = %q, want %q", s, got, want)
+		}
+		w := 0
+		for _, r := range want {
+			w += RuneWidth(r)
+		}
+		if got := VisibleLen(s); got != w {
+			t.Fatalf("VisibleLen(%q) = %d, want %d", s, got, w)
+		}
 	}
 }

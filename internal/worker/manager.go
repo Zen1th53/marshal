@@ -46,12 +46,18 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 	if len(command.Stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(command.Stdin)
 	}
+	live := newLivenessTracker(command.Liveness)
+	stall := newWorkerStallWatch(command)
 	stdout := &limitedBuffer{limit: m.outputLimit, observe: func(p []byte) {
+		stall.output(p)
+		live.observe(p, true)
 		if command.OutputObserver != nil {
 			command.OutputObserver("stdout", p)
 		}
 	}}
 	stderr := &limitedBuffer{limit: m.outputLimit, observe: func(p []byte) {
+		stall.output(p)
+		live.observe(p, false)
 		if command.OutputObserver != nil {
 			command.OutputObserver("stderr", p)
 		}
@@ -59,9 +65,11 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := processgroup.Wrap(cmd); err != nil {
+	releaseProcess, closeProcessGate, err := wrapWorkerProcess(runCtx, cmd)
+	if err != nil {
 		return adapter.ProcessResult{}, err
 	}
+	defer closeProcessGate()
 
 	closeTerminal, err := workerterminal.Attach(runCtx, cmd)
 	if err != nil {
@@ -92,6 +100,19 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 	if err := workerterminal.Started(runCtx, cmd); err != nil {
 		_ = processgroup.Stop(cmd)
 		_ = cmd.Wait()
+		if observe != nil {
+			stopObserver()
+			_ = observe()
+		}
+		return adapter.ProcessResult{}, err
+	}
+	if err := releaseProcess(); err != nil {
+		_ = processgroup.Stop(cmd)
+		_ = cmd.Wait()
+		if observe != nil {
+			stopObserver()
+			_ = observe()
+		}
 		return adapter.ProcessResult{}, err
 	}
 	observerDone := make(chan error, 1)
@@ -117,14 +138,54 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 		heartbeat = ticker.C
 	}
 
+	var liveTick <-chan time.Time
+	if live != nil {
+		t := time.NewTicker(live.tick)
+		defer t.Stop()
+		liveTick = t.C
+	}
+	var stallTick <-chan time.Time
+	if stall != nil {
+		t := time.NewTicker(stall.interval)
+		defer t.Stop()
+		stallTick = t.C
+	}
+
 	var waitErr error
 	finished := false
+	stopAndWait := func() {
+		_ = processgroup.Stop(cmd)
+		timer := time.NewTimer(m.grace)
+		select {
+		case waitErr = <-wait:
+			timer.Stop()
+		case <-timer.C:
+			_ = processgroup.Kill(cmd)
+			waitErr = <-wait
+		}
+		finished = true
+	}
 	for !finished {
 		select {
 		case waitErr = <-wait:
 			finished = true
 		case <-heartbeat:
 			command.Heartbeat()
+		case <-liveTick:
+			switch live.check(time.Now()) {
+			case liveStopDone:
+				result.StoppedAfterDone = true
+				stopAndWait()
+			case liveStopIdle:
+				result.IdleTimedOut = true
+				stopAndWait()
+			}
+		case <-stallTick:
+			if stall.stalled(time.Now()) {
+				result.Stalled = true
+				result.StallReason = fmt.Sprintf("worker stalled: no output or worktree change for %s", stall.window)
+				stopAndWait()
+			}
 		case <-runCtx.Done():
 			result.TimedOut = errors.Is(runCtx.Err(), context.DeadlineExceeded)
 			result.Cancelled = !result.TimedOut
@@ -136,8 +197,10 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 					<-timer.C
 				}
 			case <-timer.C:
-				// Keep the subreaper alive until all descendants are reaped.
-				_ = processgroup.Stop(cmd)
+				// The grace period elapsed without the supervisor exiting.
+				// Force-kill it so Wait returns rather than leaking an
+				// orphaned subreaper and its descendants.
+				_ = processgroup.Kill(cmd)
 				waitErr = <-wait
 			}
 			finished = true
@@ -149,6 +212,7 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 			return adapter.ProcessResult{}, err
 		}
 	}
+	result.DoneSeen = live.done()
 	result.EndedAt = time.Now().UTC()
 	result.Stdout = stdout.Bytes()
 	result.Stderr = stderr.Bytes()
@@ -159,6 +223,9 @@ func (m *Manager) Run(ctx context.Context, command adapter.Command) (adapter.Pro
 		if !errors.As(waitErr, &exitError) {
 			return adapter.ProcessResult{}, fmt.Errorf("wait for worker process: %w", waitErr)
 		}
+	}
+	if result.Stalled {
+		return result, errors.New(result.StallReason)
 	}
 	return result, nil
 }

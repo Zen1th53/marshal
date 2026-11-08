@@ -1,14 +1,10 @@
 package tui
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
+	"github.com/Zen1th53/marshal/internal/chattransport"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +13,10 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/nativehistory"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
@@ -116,17 +115,21 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	ctx = context.WithValue(ctx, nativeRequestedArgsKey{}, append([]string{}, args...))
 	args = app.NormalizeProviderArgs(provider, args)
 
-	label, homeEnv, homeDir, historyDir := "Codex", "CODEX_HOME", ".codex", "sessions"
+	label := "Codex"
 	switch provider {
 	case "claude":
-		label, homeEnv, homeDir, historyDir = "Claude", "CLAUDE_CONFIG_DIR", ".claude", "projects"
+		label = "Claude"
 	case "opencode":
-		label, homeEnv, homeDir, historyDir = "OpenCode", "", "", ""
+		label = "OpenCode"
 	case "antigravity":
-		label, homeEnv, homeDir, historyDir = "Antigravity", "", "", ""
+		label = "Antigravity"
 	case "codex":
 	default:
 		return "", fmt.Errorf("unsupported native provider %q", provider)
+	}
+	if len(marshalBrief) > 0 && w.nativeChatActive() {
+		// One Marshal: the native chat already holds the conversation.
+		return "Marshal chat is open in the Board (native). m talks to it.", nil
 	}
 	binaryName := provider
 	if provider == "antigravity" {
@@ -177,23 +180,9 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			return "", err
 		}
 	} else {
-		home := os.Getenv(homeEnv)
-		if home == "" {
-			userHome, err := os.UserHomeDir()
-			if err != nil {
-				return "", err
-			}
-			home = filepath.Join(userHome, homeDir)
-		}
-		if !filepath.IsAbs(home) {
-			home = filepath.Join(root, home)
-		}
-		historyPath := filepath.Join(home, historyDir)
-		if provider == "claude" {
-			historyPath, err = providerHistoryDir(provider, root)
-			if err != nil {
-				return "", err
-			}
+		historyPath, err := nativehistory.HistoryDir(nativehistory.Provider(provider), root)
+		if err != nil {
+			return "", err
 		}
 		watch = newNativeHistoryWatch(historyPath, root)
 		watch.claude = provider == "claude"
@@ -203,7 +192,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	}
 	watch.captureTools = true
 	var syncErr error
-	watch.indexPath = filepath.Join(root, ".marshal", provider, "history-index.json")
+	watch.indexPath = filepath.Join(root, statepath.DirName, provider, "history-index.json")
 	if err := watch.loadIndex(); err != nil {
 		syncErr = err
 	}
@@ -216,9 +205,10 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 	}
 	if provider == "antigravity" {
-		// The same baseline, for the same reason: agy keeps every conversation
-		// the machine has ever held, and only this launch's belong here.
-		if err := watch.primeAntigravity(); err != nil {
+		// Establish the baseline and identify the launched conversation so the
+		// direct-TTY path imports this run even if agy has not yet recorded it
+		// in summaries. Sessions confirmed for another project remain skipped.
+		if err := watch.prepareAntigravityDirectLaunch(args); err != nil {
 			syncErr = joinNativeSyncError(syncErr, err)
 		}
 	}
@@ -237,22 +227,24 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 					args = append([]string{"--model", selected}, args...)
 				}
 			}
+			counted := map[string]int{}
 			watch.consume = func(tr importer.SessionTranscript) error {
 				records, dropped, err := authority.runtime.ProposeContinuation(context.WithoutCancel(ctx), tr)
 				if err != nil {
 					return err
 				}
-				for _, rec := range records {
-					// Existing approved records do not need another write.
-					if _, err := authority.runtime.Store().GetMemoryV2(ctx, authority.runtime.ProjectID(), rec.ID); err == nil {
-						continue
+				imported += countProposedMessages(records, func(id string) (model.MemoryLifecycle, bool) {
+					existing, err := authority.runtime.Store().GetMemoryV2(ctx, authority.runtime.ProjectID(), id)
+					if err != nil {
+						return "", false
 					}
-					imported++
-				}
+					return existing.Lifecycle, true
+				}, counted)
 				if dropped {
 					w.mu.Lock()
 					w.state.LastOutput = "Secrets were dropped from captured history."
 					w.mu.Unlock()
+					w.addNote("Secrets were dropped from captured history.", false)
 				}
 				return nil
 			}
@@ -348,7 +340,7 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 			// A separate index: two MARSHAL sessions watching the same provider
 			// must not fight over one file, and this watcher's progress is not
 			// that provider's own import progress.
-			pw.indexPath = filepath.Join(root, ".marshal", provider, "peer-"+peer+"-index.json")
+			pw.indexPath = filepath.Join(root, statepath.DirName, provider, "peer-"+peer+"-index.json")
 			if err := pw.loadIndex(); err != nil {
 				syncErr = joinNativeSyncError(syncErr, err)
 			}
@@ -476,7 +468,47 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		}
 		return "", fmt.Errorf("Session not started: hidden instruction delivery failed: %s", RedactContent(err.Error(), nil))
 	}
+	if len(marshalBrief) > 0 {
+		args, briefingEnv, dir, err = configureMarshalMCP(provider, root, args, briefingEnv, dir, "marshal", "")
+		if err == nil && w.isTmuxActive() {
+			args, briefingEnv, dir, err = w.prepareProposalMCP(provider, root, args, briefingEnv, dir)
+		}
+		if err != nil {
+			if dir != nil {
+				dir.remove()
+			}
+			return "", fmt.Errorf("Marshal not started: MCP delivery failed: %s", RedactContent(err.Error(), nil))
+		}
+	}
+	if len(marshalBrief) == 0 {
+		args, briefingEnv, dir, err = configureMarshalMCP(provider, root, args, briefingEnv, dir, "session", w.sessionID)
+		if err != nil {
+			if dir != nil {
+				dir.remove()
+			}
+			return "", fmt.Errorf("session MCP configuration: %w", err)
+		}
+	}
 
+	if len(marshalBrief) > 0 && w.nativeChatWanted() {
+		if !w.isTmuxActive() {
+			args, briefingEnv, dir, err = w.prepareProposalMCP(provider, root, args, briefingEnv, dir)
+			if err != nil {
+				return "", fmt.Errorf("Marshal not started: MCP delivery failed: %s", RedactContent(err.Error(), nil))
+			}
+		}
+		out, err := w.launchNativeChat(ctx, provider, root, binary, args, briefingEnv, dir, watch)
+		if err == nil {
+			// The native chat owns the briefing directory now.
+			dir = nil
+			return out, nil
+		}
+		if !errors.Is(err, chattransport.ErrUnqualified) || !w.isTmuxActive() {
+			return "", err
+		}
+		// Not qualified here: the tmux-docked chat stays, unchanged.
+		w.RecordActivity("Native Marshal chat unavailable, using the tmux dock: " + err.Error())
+	}
 	if w.isTmuxActive() {
 		if w.navView != nil {
 			w.navView.Close()
@@ -515,6 +547,27 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 		// This entry point serves operator commands, startup sessions and conversation selection.
 		// Runtime-dispatched workers instead enter tmuxTaskDriver.Launch.
 		return w.runNativeAgentInTmux(ctx, nativeLaunchOperator, provider, label, root, binary, args, briefingEnv, dir, watch, peers, chStream, view, briefingNotes, isChat)
+	}
+
+	if len(marshalBrief) > 0 {
+		args, err = w.prepareUnleasedNativePlanningLaunch(ctx, provider, root, args, dir)
+		if err != nil {
+			return "", err
+		}
+	}
+	// Direct TTY takeover runs the same provider-auth preflight as the tmux
+	// path. An unsigned-in provider refuses before MARSHAL surrenders the
+	// terminal, so the operator sees the "not signed in" message instead of a
+	// provider login prompt MARSHAL cannot watch: the child owns the terminal
+	// directly, so there is no captured pane output to inspect on exit.
+	var operatorArgs []string
+	if original, ok := ctx.Value(nativeRequestedArgsKey{}).([]string); ok {
+		operatorArgs = original
+	}
+	if !shouldSkipAuthPreflight(operatorArgs, args) {
+		if err := w.preflightProviderAuth(ctx, provider, binary, briefingEnv); err != nil {
+			return "", err
+		}
 	}
 
 	if w.navView != nil {
@@ -625,6 +678,51 @@ func (w *Workspace) runNativeAgent(ctx context.Context, provider string, args []
 	}
 }
 
+// countNewProposals advances the imported tally by the records that are still
+// new proposals. A record already stored under a non-candidate lifecycle was
+// approved or rejected in an earlier pass, so it is not new; a record not yet
+// stored, or still a candidate, is. seen deduplicates a live re-poll, where a
+// growing history re-reads messages this launch has already counted, and the
+// deterministic import ID makes that dedup sound rather than a guess.
+func countNewProposals(records []model.MemoryRecordV2, lifecycle func(id string) (model.MemoryLifecycle, bool), seen map[string]struct{}) int {
+	added := 0
+	for _, rec := range records {
+		if _, ok := seen[rec.ID]; ok {
+			continue
+		}
+		if lc, ok := lifecycle(rec.ID); ok && lc != model.MemoryCandidate {
+			continue
+		}
+		seen[rec.ID] = struct{}{}
+		added++
+	}
+	return added
+}
+
+// countProposedMessages counts the captured messages newly proposed for
+// review. A session is one episode record whose episode_messages grows as
+// turns arrive; counted remembers the last count seen per record.
+func countProposedMessages(records []model.MemoryRecordV2, lifecycle func(id string) (model.MemoryLifecycle, bool), counted map[string]int) int {
+	added := 0
+	for _, rec := range records {
+		if lc, ok := lifecycle(rec.ID); ok && lc != model.MemoryCandidate {
+			continue
+		}
+		n := 1
+		switch v := rec.ExtMeta["episode_messages"].(type) {
+		case int:
+			n = v
+		case float64:
+			n = int(v)
+		}
+		if n > counted[rec.ID] {
+			added += n - counted[rec.ID]
+			counted[rec.ID] = n
+		}
+	}
+	return added
+}
+
 // joinNativeSyncError keeps a repeated polling failure from filling the result
 // pane with the same diagnostic every two seconds. The first occurrence stays
 // visible; distinct failures are still reported.
@@ -691,12 +789,17 @@ type nativeHistoryWatch struct {
 	// captureTools records tool calls and their results alongside conversation,
 	// so a later session can see what the agent actually ran and changed rather
 	// than only what it said about it.
-	captureTools   bool
-	dir, root      string
-	indexPath      string
-	indexDirty     bool
-	indexSaved     bool
-	seen           map[string]string
+	captureTools bool
+	dir, root    string
+	indexPath    string
+	indexDirty   bool
+	indexSaved   bool
+	seen         map[string]string
+	// resume is where the last sync stopped in each Claude history. It
+	// outlives the Capture built for each sync, so a live chat's growing
+	// history is read from there rather than decoded from the start every
+	// second: that re-decoding of a tens-of-megabytes chat kept a core busy.
+	resume         *nativehistory.Resume
 	consume        func(importer.SessionTranscript) error
 	observeSession func(importer.SessionTranscript) error
 }
@@ -705,200 +808,68 @@ func newNativeHistoryWatch(dir, root string) *nativeHistoryWatch {
 	if resolved, err := filepath.EvalSymlinks(root); err == nil {
 		root = resolved
 	}
-	return &nativeHistoryWatch{dir: dir, root: filepath.Clean(root), seen: make(map[string]string)}
+	return &nativeHistoryWatch{dir: dir, root: filepath.Clean(root), seen: make(map[string]string), resume: nativehistory.NewResume()}
 }
 
 func (w *nativeHistoryWatch) sync() error {
-	if w.authorized != nil && !w.authorized(w.dir) {
-		return nil
-	}
-	if w.openCodeDB != "" {
-		err := w.syncOpenCodeLive()
-		// A store that is not the shape MARSHAL reads is not a failure, it is a
-		// reason to use the supported interface instead. The export is slower
-		// and cannot run mid-session, so the work arrives at exit rather than as
-		// it happens — late, but never wrong and never missing.
-		if errors.Is(err, errOpenCodeSchemaMoved) && w.openCodeRun != nil {
-			w.openCodeDB = ""
-			return w.syncOpenCode()
-		}
-		return err
-	}
-	if w.openCodeRun != nil {
-		return w.syncOpenCode()
-	}
-	if w.antigravity {
-		return w.syncAntigravity()
-	}
-	var failures []error
-	walkErr := filepath.WalkDir(w.dir, func(path string, entry fs.DirEntry, err error) error {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !strings.HasSuffix(path, ".jsonl") {
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		stamp := fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
-		if w.seen[path] == stamp {
-			return nil
-		}
-		if err := w.syncFile(path); err != nil {
-			// One damaged or rejected session must not stop all other sessions.
-			if len(failures) < 3 {
-				failures = append(failures, fmt.Errorf("%s: %w", filepath.Base(path), err))
-			}
-			return nil
-		}
-		w.seen[path] = stamp
-		w.indexDirty = true
-		return nil
-	})
-	return errors.Join(append(failures, walkErr, w.saveIndexIfChanged())...)
-}
-
-func (w *nativeHistoryWatch) loadIndex() error {
-	if w.indexPath == "" {
-		return nil
-	}
-	f, err := os.Open(w.indexPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
+	capture, err := w.sharedCapture()
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	var seen map[string]string
-	if err := json.NewDecoder(io.LimitReader(f, 1<<20)).Decode(&seen); err != nil {
+	err = capture.Sync(context.Background())
+	w.indexSaved, w.indexDirty = capture.IndexState()
+	return err
+}
+
+func (w *nativeHistoryWatch) sharedCapture() (*nativehistory.Capture, error) {
+	provider := nativehistory.Codex
+	if w.claude {
+		provider = nativehistory.Claude
+	}
+	if w.openCodeRun != nil {
+		provider = nativehistory.OpenCode
+	}
+	if w.antigravity {
+		provider = nativehistory.Antigravity
+	}
+	return nativehistory.NewAt(provider, w.dir, w.root,
+		nativehistory.WithAuthorize(w.authorized), nativehistory.WithChatFile(w.chatFile),
+		nativehistory.WithCaptureTools(w.captureTools), nativehistory.WithIndex(w.indexPath),
+		nativehistory.WithSeen(w.seen), nativehistory.WithIndexState(w.indexSaved, w.indexDirty), nativehistory.WithResume(w.resume),
+		nativehistory.WithConsume(w.consume), nativehistory.WithObserveSession(w.observeSession),
+		nativehistory.WithOpenCodeRun(w.openCodeRun), nativehistory.WithOpenCodeDB(w.openCodeDB),
+		nativehistory.WithAntigravitySummaries(w.antigravitySummaries))
+}
+
+func (w *nativeHistoryWatch) loadIndex() error {
+	capture, err := w.sharedCapture()
+	if err != nil {
 		return err
 	}
-	if seen != nil {
-		w.seen = seen
+	if err := capture.LoadIndex(); err != nil {
+		return err
 	}
-	w.indexSaved = true
+	w.seen = capture.SeenIndex()
+	w.indexSaved, w.indexDirty = capture.IndexState()
 	return nil
 }
 
 func (w *nativeHistoryWatch) saveIndex() error {
-	if w.indexPath == "" {
-		return nil
-	}
-	dir := filepath.Dir(w.indexPath)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, ".history-index-*")
+	capture, err := w.sharedCapture()
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
-	err = json.NewEncoder(f).Encode(w.seen)
-	if err == nil {
-		err = f.Sync()
-	}
-	closeErr := f.Close()
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	if err := os.Rename(f.Name(), w.indexPath); err != nil {
-		return err
-	}
-	w.indexDirty = false
-	w.indexSaved = true
-	return nil
+	err = capture.SaveIndex()
+	w.indexSaved, w.indexDirty = capture.IndexState()
+	return err
 }
 
 func (w *nativeHistoryWatch) syncFile(path string) error {
-	if w.chatFile != nil && !w.chatFile(path) {
-		return nil
-	}
-	if w.authorized != nil && !w.authorized(path) {
-		return nil
-	}
-	if w.claude {
-		return w.syncClaudeFile(path)
-	}
-	f, err := os.Open(path)
+	capture, err := w.sharedCapture()
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	r := bufio.NewReaderSize(f, 1<<20)
-	meta, err := r.ReadSlice('\n')
-	if errors.Is(err, io.EOF) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	meta = bytes.Clone(meta)
-	adapter := importer.CodexJSONLAdapter{CaptureTools: w.captureTools}
-	tr, err := adapter.Decode(meta)
-	if err != nil {
-		return err
-	}
-	tr.Provider = "codex"
-	cwd := tr.CWD
-	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
-		cwd = resolved
-	}
-	if tr.SessionID == "" || filepath.Clean(cwd) != w.root {
-		return nil
-	}
-	if w.observeSession != nil {
-		if err := w.observeSession(tr); err != nil {
-			return err
-		}
-	}
-	for {
-		line, readErr := r.ReadSlice('\n')
-		if errors.Is(readErr, bufio.ErrBufferFull) {
-			// Tool payloads can exceed the provider adapter's one-line bound.
-			// Drain that event and continue with later conversation instead of
-			// making the entire live history permanently unimportable.
-			for errors.Is(readErr, bufio.ErrBufferFull) {
-				_, readErr = r.ReadSlice('\n')
-			}
-			if readErr == nil {
-				continue
-			}
-		}
-		// Ignore a partial final event; a later poll retries it after append.
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
-		if readErr != nil {
-			return readErr
-		}
-		item, err := adapter.Decode(line)
-		if err != nil {
-			return err
-		}
-		if item.SessionID != "" && item.SessionID != tr.SessionID {
-			return errors.New("mixed session IDs")
-		}
-		tr.Messages = append(tr.Messages, item.Messages...)
-		if len(tr.Messages) >= 64 {
-			if err := w.consume(tr); err != nil {
-				return err
-			}
-			tr.Messages = nil
-		}
-	}
-	if len(tr.Messages) != 0 {
-		return w.consume(tr)
-	}
-	return nil
+	return capture.SyncFile(path)
 }
 
 // newPeerHistoryWatch builds a watcher for another agent's history.

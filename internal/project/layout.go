@@ -3,7 +3,11 @@ package project
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +16,8 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/hostgit"
 )
+
+var ErrStatePreparation = errors.New("project state is not ready")
 
 func FindBinary(name string) (string, error) {
 	// A binary is looked up by bare name only. A name carrying a directory
@@ -46,11 +52,6 @@ func FindBinary(name string) (string, error) {
 					return compareSemver(dirI, dirJ) < 0
 				})
 				return matches[len(matches)-1], nil
-			}
-		case "gemini":
-			pattern := filepath.Join(home, ".gemini", "antigravity-ide", "bin", "gemini")
-			if info, err := os.Stat(pattern); err == nil && !info.IsDir() {
-				return pattern, nil
 			}
 		}
 	}
@@ -127,6 +128,9 @@ type Layout struct {
 }
 
 func Discover(start string) (Layout, error) {
+	if err := statepath.ValidateRoot(start); err != nil {
+		return Layout{}, err
+	}
 	root, err := hostgit.Root(start)
 	if err != nil {
 		return Layout{}, fmt.Errorf("discover repository root: %w", err)
@@ -143,14 +147,20 @@ func Discover(start string) (Layout, error) {
 	if err != nil {
 		return Layout{}, fmt.Errorf("discover HEAD: %w", err)
 	}
-	runtimeDir := filepath.Join(root, ".marshal")
+	if err := statepath.Prepare(root, repairWorktrees); err != nil {
+		return Layout{}, fmt.Errorf("%w: %w", ErrStatePreparation, err)
+	}
+	if err := statepath.Validate(root); err != nil {
+		return Layout{}, fmt.Errorf("%w: %w", ErrStatePreparation, err)
+	}
+	runtimeDir := statepath.Path(root)
 	return Layout{
 		Root:       root,
 		Branch:     branch,
 		HEAD:       head,
 		RuntimeDir: runtimeDir,
 		Database:   filepath.Join(runtimeDir, "state.db"),
-		Socket:     filepath.Join(runtimeDir, "runtime.sock"),
+		Socket:     SocketPath(root),
 		PID:        filepath.Join(runtimeDir, "pid"),
 		Artifacts:  filepath.Join(runtimeDir, "artifacts"),
 		Worktrees:  filepath.Join(runtimeDir, "worktrees"),
@@ -159,6 +169,20 @@ func Discover(start string) (Layout, error) {
 }
 
 func (l Layout) Ensure() error {
+	if err := statepath.Prepare(l.Root, repairWorktrees); err != nil {
+		return err
+	}
+	if l.RuntimeDir != statepath.Path(l.Root) || l.Database != statepath.Path(l.Root, "state.db") || l.Socket != SocketPath(l.Root) || l.PID != statepath.Path(l.Root, "pid") || l.Artifacts != statepath.Path(l.Root, "artifacts") || l.Worktrees != statepath.Path(l.Root, "worktrees") || l.Logs != statepath.Path(l.Root, "logs") {
+		return fmt.Errorf("layout belongs to a different state namespace")
+	}
+	if err := statepath.Validate(l.Root); err != nil {
+		return err
+	}
+	if filepath.Dir(l.Socket) != l.RuntimeDir {
+		if err := ensureShortSocketDir(filepath.Dir(l.Socket)); err != nil {
+			return err
+		}
+	}
 	for _, path := range []string{l.RuntimeDir, l.Artifacts, l.Worktrees, l.Logs} {
 		if err := os.MkdirAll(path, 0o700); err != nil {
 			return fmt.Errorf("create runtime directory %s: %w", path, err)
@@ -182,4 +206,35 @@ func gitOutput(dir string, args ...string) (string, error) {
 		return "", fmt.Errorf("git %v: %w: %s", args, err, bytes.TrimSpace(stderr.Bytes()))
 	}
 	return string(bytes.TrimSpace(output)), nil
+}
+
+// maxSocketPath is a conservative bound below the 108-byte sun_path limit
+// (107 usable bytes on Linux, 103 on the BSDs).
+const maxSocketPath = 100
+
+// SocketPath returns the runtime socket for a project root. It lives in the
+// state directory unless that path would exceed the AF_UNIX limit; then a
+// short per-user, per-project path is used. Server and clients both derive it
+// from the root, so discovery needs no extra state.
+func SocketPath(root string) string {
+	inState := statepath.Path(root, "runtime.sock")
+	if len(inState) <= maxSocketPath {
+		return inState
+	}
+	sum := sha256.Sum256([]byte(statepath.Path(root)))
+	name := hex.EncodeToString(sum[:8]) + ".sock"
+	uid := os.Geteuid()
+	var candidates []string
+	if x := os.Getenv("XDG_RUNTIME_DIR"); filepath.IsAbs(x) {
+		candidates = append(candidates, filepath.Join(x, "marshal"))
+	}
+	candidates = append(candidates,
+		filepath.Join(os.TempDir(), fmt.Sprintf("marshal-%d", uid)),
+		filepath.Join("/tmp", fmt.Sprintf("marshal-%d", uid)))
+	for _, dir := range candidates {
+		if p := filepath.Join(dir, name); len(p) <= maxSocketPath {
+			return p
+		}
+	}
+	return inState
 }

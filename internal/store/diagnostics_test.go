@@ -35,6 +35,12 @@ func TestStoreDiagnostics(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Backup and projection-rebuild confirmations count these two as well.
+	for _, table := range []string{"projects", "memory_records_v2"} {
+		if _, err := s.Count(ctx, table); err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+	}
 	for _, table := range []string{"sqlite_master", "schema_migrations", "tasks; DROP TABLE tasks", "TASKS", ""} {
 		if _, err := s.Count(ctx, table); err == nil {
 			t.Fatalf("accepted %q", table)

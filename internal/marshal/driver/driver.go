@@ -32,9 +32,6 @@ const maxOutput = 64 << 10
 // its reported actions.
 const maxStream = 8 << 20
 
-// DefaultCheckTimeout bounds one acceptance check when a driver sets none.
-const DefaultCheckTimeout = 10 * time.Minute
-
 // maxGitOutput bounds one git command's output, such as the hand-in diff.
 const maxGitOutput = 16 << 20
 
@@ -77,9 +74,10 @@ type Handle struct {
 	done   chan struct{}
 
 	// Set before done is closed and read only after it.
-	observed marshal.CommandRecord
-	reported []marshal.CommandRecord
-	runErr   error
+	observed        marshal.CommandRecord
+	reported        []marshal.CommandRecord
+	runtimeObserved []marshal.CommandRecord
+	runErr          error
 }
 
 func (h *Handle) Worktree() string { return h.req.Worktree }
@@ -298,15 +296,22 @@ func runCheck(ctx context.Context, wt, result, command string, timeout time.Dura
 	defer func() { _, _ = git(context.WithoutCancel(ctx), wt, "worktree", "remove", "--force", checkout) }()
 
 	defer func() {
-		status, err := git(context.WithoutCancel(ctx), checkout, "status", "--porcelain=v1", "--untracked-files=all", "--ignored")
+		// Files the repository ignores, and untracked interpreter or tool
+		// caches, are by-products of running the check (`python3 -m
+		// unittest` writes __pycache__), not a change to the tested source.
+		// Every tracked change and every other untracked file still is.
+		status, err := git(context.WithoutCancel(ctx), checkout, "status", "--porcelain=v1", "--untracked-files=all")
 		head, headErr := git(context.WithoutCancel(ctx), checkout, "rev-parse", "HEAD")
-		if err != nil || headErr != nil || strings.TrimSpace(status) != "" || strings.TrimSpace(head) != result {
+		if err != nil || headErr != nil || len(hostgit.SourceStatusChanges(status)) != 0 || strings.TrimSpace(head) != result {
 			record.ExitCode = -1
 			record.Output += "\ncheck changed tested source or its identity"
 		}
 	}()
 	if governed {
-		checkCtx, cancel := context.WithTimeout(ctx, timeout)
+		checkCtx, cancel := context.WithCancel(ctx)
+		if timeout > 0 {
+			checkCtx, cancel = context.WithTimeout(ctx, timeout)
+		}
 		defer cancel()
 		return binding.run(checkCtx, checkout, command)
 	}
@@ -451,7 +456,11 @@ func (g Governed) Launch(ctx context.Context, req Request) (*Handle, error) {
 	h := &Handle{req: req, cancel: cancel, done: make(chan struct{})}
 	go func() {
 		defer close(h.done)
-		h.reported, h.runErr = g.Run(runCtx, req)
+		sink := &runtimeObservationSink{}
+		h.reported, h.runErr = g.Run(context.WithValue(runCtx, runtimeObservationKey{}, sink), req)
+		var observationErr error
+		h.runtimeObserved, observationErr = sink.read()
+		h.runErr = errors.Join(h.runErr, observationErr)
 		h.observed = marshal.CommandRecord{Command: "process05 " + req.Task.PlanTaskID}
 		if h.runErr != nil {
 			h.observed.ExitCode = 1
@@ -477,7 +486,13 @@ func (g Governed) Wait(ctx context.Context, h *Handle) (marshal.HandIn, error) {
 			return g.Check(ctx, h.req, dir, command)
 		}
 	}
-	return assemble(WithCheckRunner(ctx, checks), h.req, id, []marshal.CommandRecord{h.observed}, h.reported, g.CheckTimeout)
+	observed := append([]marshal.CommandRecord{h.observed}, h.runtimeObserved...)
+	if model, present, err := privateRuntimeObservedModel(h.req, g.Provider, h.runtimeObserved); err != nil {
+		return marshal.HandIn{}, err
+	} else if present {
+		id.model = model
+	}
+	return assemble(WithCheckRunner(ctx, checks), h.req, id, observed, h.reported, g.CheckTimeout)
 }
 
 // Cancel stops the governed run; the worktree is left as it is.

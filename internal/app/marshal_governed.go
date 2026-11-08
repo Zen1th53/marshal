@@ -37,6 +37,9 @@ func (r *Runtime) marshalGovernedRun(s *MarshalService) driver.GovernedRunner {
 		if marshalApprovalDigest(p.ApprovalScopeDigest, requested) != run.ApprovalScopeDigest {
 			return nil, errors.New("governed request approval binding changed")
 		}
+		// The worker launch below serves this approved task; code evidence
+		// receipts are recorded with it and scoped to its approved paths.
+		ctx = withCodeEvidenceTask(ctx, s, req.RunID, req.Task, req.Brief)
 		if run.Process05Bound {
 			return r.marshalProcess05Run(s)(ctx, req)
 		}
@@ -55,7 +58,7 @@ func (r *Runtime) marshalGovernedRun(s *MarshalService) driver.GovernedRunner {
 				sourceWorktree = *task.Worktree
 			}
 		} else {
-			agent, err := r.RegisterAgent(ctx, RegisterAgentRequest{Name: "Marshal " + req.Task.Worker, Role: model.RoleDeveloper, ModelProvider: req.Task.Worker})
+			agentID, err := r.providerWorkerAgent(ctx, req.Task.Worker)
 			if err != nil {
 				return nil, err
 			}
@@ -67,7 +70,7 @@ func (r *Runtime) marshalGovernedRun(s *MarshalService) driver.GovernedRunner {
 			if _, err := r.ImportTasks(ctx, []model.Task{{ID: id, Title: req.Brief, Status: model.TaskReady, Risk: model.R1, BaseCommit: &base}}); err != nil {
 				return nil, err
 			}
-			result, err := r.Run(ctx, RunRequest{TaskID: id, AgentID: agent.ID, Adapter: req.Task.Worker, NetworkRequired: true})
+			result, err := r.Run(ctx, RunRequest{TaskID: id, AgentID: agentID, Adapter: req.Task.Worker, NetworkRequired: true})
 			if err != nil {
 				return nil, err
 			}
@@ -95,9 +98,7 @@ func (r *Runtime) marshalGovernedRun(s *MarshalService) driver.GovernedRunner {
 		prior := false
 		if err == nil && current != "" && current == run.Tasks[i].ResultCommit {
 			attempt := run.Tasks[i].EvidenceAttemptBase
-			for _, n := range run.Tasks[i].ReturnsByAgent {
-				attempt += n
-			}
+			attempt += taskReturns(run.Tasks[i])
 			// A timed-out return may have no hand-in. Find the latest
 			// recorded attempt, never authorize a different older result.
 			for ; attempt > run.Tasks[i].EvidenceAttemptBase; attempt-- {

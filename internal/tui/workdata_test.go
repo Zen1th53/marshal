@@ -392,6 +392,28 @@ func TestCreatePlanProvesItself(t *testing.T) {
 	}
 }
 
+// CTUI-0251 never returns VerdictPass when a created plan is BLOCKED.
+func TestCreatePlanBlockedFails(t *testing.T) {
+	source, auth := testControl(t)
+	ctx := context.Background()
+
+	auth.mu.Lock()
+	auth.plan = PlanState{PlanID: "plan-blocked", Status: "BLOCKED", Version: 1}
+	auth.mu.Unlock()
+
+	outcome, err := source.executeCreatePlan(ctx,
+		ActionRequest{Action: "CTUI-0251", Target: Target{Kind: "goal", ID: "goal-1"}})
+	if err != nil {
+		t.Fatalf("create plan: %v", err)
+	}
+	if outcome.Verdict != VerdictFail {
+		t.Fatalf("expected VerdictFail for BLOCKED plan, got %s: %s", outcome.Verdict, outcome.Detail)
+	}
+	if outcome.Proof.Status != TruthBlocked {
+		t.Fatalf("expected TruthBlocked proof status, got %v", outcome.Proof.Status)
+	}
+}
+
 // fakeVerifyReader supplies canonical Process 06 shapes to the Verify tests.
 type fakeVerifyReader struct {
 	session     verification.Session

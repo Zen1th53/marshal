@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"golang.org/x/sys/unix"
 )
@@ -427,7 +428,7 @@ func TestIdleInboxRefreshDoesNotRewriteView(t *testing.T) {
 
 func TestIdleHistorySyncDoesNotRewriteIndex(t *testing.T) {
 	w := newNativeHistoryWatch(t.TempDir(), t.TempDir())
-	w.indexPath = filepath.Join(t.TempDir(), "index.json")
+	w.indexPath = statepath.Path(w.root, "codex", "history-index.json")
 	if err := w.sync(); err != nil {
 		t.Fatal(err)
 	}
@@ -641,6 +642,13 @@ func TestIdleWorkspaceMonitorPollCountAndGoroutinesStayBounded(t *testing.T) {
 	tmux.SetBinaryPath(path)
 	t.Cleanup(tmux.ResetBinaryPath)
 	w.tmuxPath, w.tmuxSession = path, "test"
+	// The pane's OSC status tap is set up once and torn down once; it is
+	// not a poll, so it is counted on its own.
+	var taps, untaps atomic.Int32
+	oldPipe, oldStop := tapPipe, tapStop
+	tapPipe = func(context.Context, string, string) error { taps.Add(1); return nil }
+	tapStop = func(context.Context, string) error { untaps.Add(1); return nil }
+	t.Cleanup(func() { tapPipe, tapStop = oldPipe, oldStop })
 	a := &activeTmuxAgent{id: "worker", role: "worker", paneID: "%1", doneChan: make(chan struct{})}
 	baseline := runtime.NumGoroutine()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -655,6 +663,9 @@ func TestIdleWorkspaceMonitorPollCountAndGoroutinesStayBounded(t *testing.T) {
 	}
 	if calls := strings.Count(string(data), "poll\n"); calls < 1 || calls > 2 {
 		t.Fatalf("idle monitor performed %d polls in 1.25s", calls)
+	}
+	if taps.Load() != 1 || untaps.Load() != 1 {
+		t.Fatalf("status tap set up %d and torn down %d times, want once each", taps.Load(), untaps.Load())
 	}
 	if got := runtime.NumGoroutine(); got > baseline+2 {
 		t.Fatalf("idle monitor leaked goroutines: %d -> %d", baseline, got)

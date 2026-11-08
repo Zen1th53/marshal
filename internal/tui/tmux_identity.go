@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 )
 
 type agentRecord struct {
+	Namespace       string                 `json:"state_namespace,omitempty"`
 	LaunchOrigin    nativeLaunchOrigin     `json:"launch_origin,omitempty"`
 	ExecutionRunID  string                 `json:"execution_run_id"`
 	CanonicalTaskID string                 `json:"canonical_task_id"`
@@ -27,30 +29,54 @@ type agentRecord struct {
 	Label           string                 `json:"label"`
 	Window          string                 `json:"window"`
 	Pane            string                 `json:"pane"`
+	PanePID         int                    `json:"pane_pid,omitempty"`
 	Supervisor      processgroup.Reference `json:"supervisor"`
 	Outcome         string                 `json:"outcome,omitempty"`
 }
 
 func agentRecordPath(root, pane string) string {
-	return filepath.Join(root, ".marshal", "tmux-panes", strings.ReplaceAll(pane, "%", "pane-")+".json")
+	return filepath.Join(root, statepath.DirName, "tmux-panes", strings.ReplaceAll(pane, "%", "pane-")+".json")
 }
 func loadAgentRecord(root, pane string) (agentRecord, error) {
 	var record agentRecord
+	if err := statepath.CheckPath(root, agentRecordPath(root, pane)); err != nil {
+		return record, err
+	}
 	data, err := os.ReadFile(agentRecordPath(root, pane))
 	if err != nil {
 		return record, err
 	}
 	err = json.Unmarshal(data, &record)
-	if err == nil && record.Pane != pane {
+	if err == nil && (record.Pane != pane || !tmux.SessionBelongs(record.Session, root) || (record.Namespace != statepath.DirName && (statepath.PublicEngine || record.Namespace != ""))) {
 		err = fmt.Errorf("pane identity mismatch")
 	}
 	return record, err
 }
+
+// tmux reuses pane IDs after its server restarts, so a pane ID alone does
+// not identify the pane a record was written for. The pane's process pins it;
+// records written before that was stored fall back to the hosting window.
+func (w *Workspace) agentRecordHostedBy(record agentRecord, p tmux.PaneInfo) bool {
+	if record.PanePID > 0 {
+		return record.PanePID == p.PID
+	}
+	if record.Window != "" && record.Window == p.WindowName {
+		return true
+	}
+	// A joined agent pane lives in the MARSHAL window under that window's name.
+	return w.tmuxMarshalWinID != "" && p.WindowID == w.tmuxMarshalWinID && p.PaneID != w.tmuxMarshalPaneID
+}
 func saveAgentRecord(root, session string, a *activeTmuxAgent) error {
+	if err := statepath.CheckPath(root, agentRecordPath(root, a.paneID)); err != nil {
+		return err
+	}
+	if !tmux.SessionBelongs(session, root) {
+		return fmt.Errorf("agent session belongs to a different namespace")
+	}
 	if a.paneID == "" {
 		return nil
 	}
-	record := agentRecord{LaunchOrigin: a.launchOrigin, ExecutionRunID: a.executionRunID, CanonicalTaskID: a.canonicalTaskID, RunID: a.runID, Project: tmux.ProjectHash(root), Session: session, ID: a.id, Role: a.role, TaskID: a.taskID, Provider: a.provider, Label: a.label, Window: a.window, Pane: a.paneID, Supervisor: a.supervisor, Outcome: a.state}
+	record := agentRecord{Namespace: statepath.DirName, LaunchOrigin: a.launchOrigin, ExecutionRunID: a.executionRunID, CanonicalTaskID: a.canonicalTaskID, RunID: a.runID, Project: tmux.ProjectHash(root), Session: session, ID: a.id, Role: a.role, TaskID: a.taskID, Provider: a.provider, Label: a.label, Window: a.window, Pane: a.paneID, PanePID: a.pid, Supervisor: a.supervisor, Outcome: a.state}
 	data, err := json.Marshal(record)
 	if err != nil {
 		return err
@@ -91,6 +117,7 @@ func (w *Workspace) stopAgent(a *activeTmuxAgent) error {
 	return driver.StopRecovered(a.supervisor)
 }
 func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent, root, outcome string) error {
+	w.revokeProposalMCP(a)
 	a.cleanupMu.Lock()
 	if a.cleaned {
 		a.cleanupMu.Unlock()
@@ -131,7 +158,7 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 	} else {
 		// A governed result view replaces the raw pane transcript. Keep its full
 		// relay output in the canonical retained evidence as well as the relay file.
-		raw, readErr := os.ReadFile(filepath.Join(root, ".marshal", "evidence", id+"-relay-latest.txt"))
+		raw, readErr := os.ReadFile(filepath.Join(root, statepath.DirName, "evidence", id+"-relay-latest.txt"))
 		if readErr == nil {
 			evidence += "\nFull relay output:\n" + string(raw)
 		} else if !os.IsNotExist(readErr) {
@@ -155,7 +182,7 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 		w.tmuxMu.Lock()
 		target := w.marshalTarget()
 		w.tmuxMu.Unlock()
-		if err = tmux.BindWindowKey(ctx, target, "marshal-keys-"+tmux.ProjectHash(root), key, "send-keys", "-t", target, key); err != nil {
+		if err = tmux.BindWindowKey(ctx, target, statepath.Name+"-keys-"+tmux.ProjectHash(root), key, "send-keys", "-t", target, key); err != nil {
 			return fmt.Errorf("reset provider shortcut for %s: %w", id, err)
 		}
 	}
@@ -173,6 +200,7 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 	}
 	cancel := a.cancel
 	w.tmuxMu.Unlock()
+	cleanupMarshalMCP(a.briefingDir)
 	if missing && cancel != nil {
 		cancel()
 	}
@@ -185,7 +213,7 @@ func (w *Workspace) retainAndCloseAgent(ctx context.Context, a *activeTmuxAgent,
 // The relay exit status is not the worker result. Keep the driver result durable
 // so a replacement workspace can finish observing a hosted worker.
 func agentOutcomePath(root, id string) string {
-	return filepath.Join(root, ".marshal", "tmux-outcomes", id+".json")
+	return filepath.Join(root, statepath.DirName, "tmux-outcomes", id+".json")
 }
 func agentCompletion(root, id string) func(int) error {
 	return func(code int) error {

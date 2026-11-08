@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -57,7 +58,9 @@ func TestAdapterRunsCanonicalProcess03Through07(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runtime.Close()
+	harnessCalls := atomic.Int64{}
 	runtime.Execution().RegisterHarness(execution.NewMockHarness("test-harness", func(context.Context, execution.TaskExecution, execution.ConstraintPackage, string) (execution.TaskResult, error) {
+		harnessCalls.Add(1)
 		return execution.TaskResult{TaskID: "task", Success: true, Claims: []execution.ExecutionClaim{{ClaimID: "claim", TaskID: "task", ClaimText: "done", Status: execution.ClaimSupported, EvidenceRefs: []string{"evidence"}}}}, nil
 	}))
 	a, err := New(runtime, approved{true}, passVerifier{})
@@ -66,8 +69,11 @@ func TestAdapterRunsCanonicalProcess03Through07(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	cap := goalintake.UnknownCapacity("openai", true)
-	req := Request{CorrelationID: "job-1", SessionID: "session-1", GoalID: "goal-1", ProjectID: "PROJECT-0123456789abcdef0123456789abcdef", Intent: "Make a bounded safe change", Constraints: []model.Constraint{{ID: "immutable", Text: "do not access secrets", IsHard: true}}, SuccessCriteria: []string{"done"}, Tasks: []plan.Task{{ID: "task", Title: "bounded change", Criteria: []string{"done"}}}, RequestedHarness: "test-harness", Candidates: []goalintake.Candidate{{Provider: "openai", Model: "gpt-4o", Capacity: cap, Governance: constitution.GovernanceVerified}}, HarnessCandidates: []plan.HarnessCandidate{{Profile: model.HarnessProfile{Harness: "test-harness", InstalledVersion: "1", BinaryPath: "/test/test-harness", SupportedModels: []string{"gpt-4o"}, DefaultModel: "gpt-4o", FeatureSupport: map[string]model.FeatureStatus{"approval_mode": model.StatusNative, "sandbox_mode": model.StatusNative}, ProbeEvidenceID: "probe", ProbedAt: now}, InstalledVersion: "1", Provider: "openai", Capacity: cap}}}
+	req := Request{CorrelationID: "job-1", SessionID: "session-1", GoalID: "goal-1", ProjectID: runtime.ProjectIdentity(), Intent: "Make a bounded safe change", Constraints: []model.Constraint{{ID: "immutable", Text: "do not access secrets", IsHard: true}}, SuccessCriteria: []string{"done"}, Tasks: []plan.Task{{ID: "task", Title: "bounded change", Criteria: []string{"done"}}}, RequestedHarness: "test-harness", Candidates: []goalintake.Candidate{{Provider: "openai", Model: "gpt-4o", Capacity: cap, Governance: constitution.GovernanceVerified}}, HarnessCandidates: []plan.HarnessCandidate{{Profile: model.HarnessProfile{Harness: "test-harness", InstalledVersion: "1", BinaryPath: "/test/test-harness", SupportedModels: []string{"gpt-4o"}, DefaultModel: "gpt-4o", FeatureSupport: map[string]model.FeatureStatus{"approval_mode": model.StatusNative, "sandbox_mode": model.StatusNative}, ProbeEvidenceID: "probe", ProbedAt: now}, InstalledVersion: "1", Provider: "openai", Capacity: cap}}}
 	out, err := a.Submit(ctx, req)
+	if assertPrivateUnboundLifecycle(t, runtime, a, req, out, err, harnessCalls.Load()) {
+		return
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

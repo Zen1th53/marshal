@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"os"
 	"path/filepath"
@@ -17,7 +18,7 @@ import (
 
 func TestFileProposalProvenanceSurvivesRecovery(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-provenance", false)
-	dir := filepath.Join(rt.ProjectRoot(), ".marshal", "proposals")
+	dir := filepath.Join(rt.ProjectRoot(), statepath.DirName, "proposals")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +243,23 @@ func TestImportedMemoryCandidateRequestIsUnverified(t *testing.T) {
 
 func TestLocalMemoryProposalDeduplicationResolvesRetainedOccurrence(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-memory-source", false)
-	req := memoryPermission(model.MemoryRecordV2{ID: "MEM-candidate", Body: "candidate"})
+	now := time.Now().UTC()
+	candidate := model.MemoryRecordV2{
+		ID:         "MEM-candidate",
+		ProjectID:  rt.ProjectID(),
+		Scope:      string(model.ScopeProject),
+		ScopeID:    rt.ProjectID(),
+		Body:       "candidate",
+		Kind:       model.MemoryKindSemantic,
+		Lifecycle:  model.MemoryCandidate,
+		ObservedAt: now,
+		ValidFrom:  now,
+		CreatedAt:  now,
+	}
+	if err := rt.Store().WriteMemoryV2(t.Context(), candidate); err != nil {
+		t.Fatal(err)
+	}
+	req := memoryPermission(candidate)
 	w.queuePermission(req) // The automatic candidate request precedes the proposal.
 	req.ProposalID = "local-memory-proposal"
 	if _, err := rt.Store().AdmitMarshalProposal(t.Context(), rt.ProjectID(), req.ProposalID, `MARSHAL_PROPOSAL {"action":"memory","id":"MEM-candidate"}`); err != nil {

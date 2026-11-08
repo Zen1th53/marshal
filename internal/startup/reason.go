@@ -1,5 +1,7 @@
 package startup
 
+import "github.com/Zen1th53/marshal/internal/statepath"
+
 // ReasonCode is the stable machine name for a startup outcome. Every surface
 // reports the same code for the same condition, so a user never gets a softer
 // story from one entry point than another, and a support conversation can name
@@ -70,7 +72,7 @@ var reasonCatalog = map[ReasonCode]ReasonInfo{
 	ReasonOK: {Code: ReasonOK, Remedy: "No action needed."},
 
 	ReasonStateDirUnwritable: {Code: ReasonStateDirUnwritable, BlocksControlCenter: true, BlocksExecution: true, RepairNeedsConsent: true,
-		Remedy: "Check the permissions on the project's .marshal directory."},
+		Remedy: "Check the permissions on the project's " + statepath.DirName + " directory."},
 	ReasonStateCorrupt: {Code: ReasonStateCorrupt, BlocksExecution: true, RepairNeedsConsent: true,
 		Remedy: "Run Doctor to inspect the stored state. Restore from a backup rather than deleting it."},
 	ReasonSchemaTooNew: {Code: ReasonSchemaTooNew, BlocksExecution: true,
@@ -117,9 +119,9 @@ var reasonCatalog = map[ReasonCode]ReasonInfo{
 		Remedy: "Optional. Install it only if you want the feature it provides."},
 
 	ReasonUltraNotEntitled: {Code: ReasonUltraNotEntitled,
-		Remedy: "ULTRA needs a valid entitlement. Standard mode is unaffected."},
+		Remedy: ultraNotEntitledRemedy},
 	ReasonUltraExpired: {Code: ReasonUltraExpired,
-		Remedy: "The ULTRA entitlement has expired. Renew it to use ULTRA again."},
+		Remedy: ultraExpiredRemedy},
 	ReasonInterruptedSession: {Code: ReasonInterruptedSession,
 		Remedy: "Earlier work was interrupted. Review it and choose whether to resume."},
 	ReasonCheckpointFound: {Code: ReasonCheckpointFound,

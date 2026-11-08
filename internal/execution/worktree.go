@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -17,7 +18,7 @@ import (
 )
 
 func (e *Engine) branchManager() *branchworktree.Manager {
-	return branchworktree.New(e.cfg.ProjectRoot, filepath.Join(e.cfg.ProjectRoot, ".marshal", "branches"))
+	return branchworktree.New(e.cfg.ProjectRoot, filepath.Join(e.cfg.ProjectRoot, statepath.DirName, "branches"))
 }
 
 func branchTaskID(taskID string) string {
@@ -35,12 +36,12 @@ func (e *Engine) prepareTaskWorktree(ctx context.Context, run ExecutionRun, task
 	if task.BaseCommit != "" {
 		baseCommit = task.BaseCommit
 	}
-	request := model.WorktreeRequest{TaskID: branchTaskID(task.TaskID), Branch: "marshal/" + run.RunID + "/" + task.TaskID, BaseCommit: baseCommit}
+	request := model.WorktreeRequest{TaskID: taskWorktreeID(run, task), Branch: statepath.RefName + "/" + run.RunID + "/" + task.TaskID, BaseCommit: baseCommit}
 	if task.NativeTurn != nil {
 		// The live provider may already have changed its worktree after approval.
 		// Reuse only the exact persisted path, branch, and base commit; Prepare
 		// intentionally rejects dirty worktrees for every other admission.
-		expected := filepath.Join(e.cfg.ProjectRoot, ".marshal", "branches", request.TaskID)
+		expected := filepath.Join(e.cfg.ProjectRoot, statepath.DirName, "branches", request.TaskID)
 		expectedAbs, err := filepath.Abs(expected)
 		if err != nil {
 			return "", err
@@ -138,6 +139,9 @@ func NewWorktreeManager(projectRoot string) (*WorktreeManager, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := statepath.Validate(absRoot); err != nil {
+		return nil, err
+	}
 	root, err := os.OpenRoot(absRoot)
 	if err != nil {
 		return nil, err
@@ -147,7 +151,7 @@ func NewWorktreeManager(projectRoot string) (*WorktreeManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	trees, err := openDirectory(root, filepath.Join(".marshal", "worktrees"), true, nil)
+	trees, err := openDirectory(root, filepath.Join(statepath.DirName, "worktrees"), true, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +164,7 @@ func NewWorktreeManager(projectRoot string) (*WorktreeManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &WorktreeManager{projectRoot: absRoot, worktreesDir: filepath.Join(absRoot, ".marshal", "worktrees"), isGitRepo: cmd.Run() == nil, projectInfo: projectInfo, worktreesInfo: treesInfo, owned: make(map[string]os.FileInfo), workspaces: make(map[string]string)}, nil
+	return &WorktreeManager{projectRoot: absRoot, worktreesDir: filepath.Join(absRoot, statepath.DirName, "worktrees"), isGitRepo: cmd.Run() == nil, projectInfo: projectInfo, worktreesInfo: treesInfo, owned: make(map[string]os.FileInfo), workspaces: make(map[string]string)}, nil
 }
 
 // ValidateTargetPaths ensures that target files do not escape the project boundary.
@@ -250,7 +254,7 @@ func (wm *WorktreeManager) PrepareWorktree(ctx context.Context, taskID, runID st
 		if err := preserveCheckoutModes(source, target); err != nil {
 			return "", err
 		}
-	} else if _, err := reconcileFiles(source, target, nil, []string{".git", ".marshal"}); err != nil {
+	} else if _, err := reconcileFiles(source, target, nil, []string{".git", statepath.DirName, statepath.OtherDirName}); err != nil {
 		return "", fmt.Errorf("failed to create fallback workspace copy: %w", err)
 	}
 	wm.workspaces[key] = wtPath
@@ -267,7 +271,7 @@ func (wm *WorktreeManager) openWorktrees() (*os.Root, error) {
 	if err != nil || !os.SameFile(wm.projectInfo, info) {
 		return nil, fmt.Errorf("%w: project root changed", ErrIsolationCompromised)
 	}
-	trees, err := openDirectory(root, filepath.Join(".marshal", "worktrees"), false, nil)
+	trees, err := openDirectory(root, filepath.Join(statepath.DirName, "worktrees"), false, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +366,7 @@ func (wm *WorktreeManager) ReconcileChanges(wtPath string, permittedFiles []stri
 	if permittedFiles == nil {
 		permittedFiles = []string{}
 	}
-	return reconcileFiles(source, target, permittedFiles, []string{".git", ".marshal"})
+	return reconcileFiles(source, target, permittedFiles, []string{".git", statepath.DirName, statepath.OtherDirName})
 }
 
 func copyDir(src, dst string, skips []string) error {
@@ -395,7 +399,7 @@ func preserveCheckoutModes(source, target *os.Root) error {
 		if err != nil {
 			return err
 		}
-		if name == ".git" || name == ".marshal" {
+		if name == ".git" || statepath.Reserved(name) {
 			if entry.IsDir() {
 				return fs.SkipDir
 			}

@@ -52,7 +52,8 @@ func TestSecurityWorkerCrashPreservesWorktreeAndNeverCompletes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{Adapters: map[string]adapter.Adapter{"crash": crashAdapter{}}})
+	fixtureAdapter, fixture := observeLegacyIntegrationAdapter(crashAdapter{})
+	runtime, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{Adapters: map[string]adapter.Adapter{"crash": fixtureAdapter}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +65,11 @@ func TestSecurityWorkerCrashPreservesWorktreeAndNeverCompletes(t *testing.T) {
 	if _, err := runtime.ImportTasks(context.Background(), []model.Task{{ID: "TASK-CRASH", Title: "crash", Status: model.TaskReady, Risk: model.R1}}); err != nil {
 		t.Fatal(err)
 	}
+	fixture.ObserveTask(t, runtime, "TASK-CRASH")
 	result, err := runtime.Run(context.Background(), app.RunRequest{TaskID: "TASK-CRASH", AgentID: agent.ID, Adapter: "crash"})
+	if fixture.RequireRunRefusal(t, runtime, "TASK-CRASH", result, err) {
+		return
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

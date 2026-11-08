@@ -14,6 +14,9 @@ import (
 )
 
 func TestAcceptanceOwnChatWithoutHistoryGrant(t *testing.T) {
+	if Edition() == "Marshal" {
+		t.Skip("Marshal reads history without a read grant; TestExtremeReadsApplyAutomatically covers it")
+	}
 	w, rt := realControlWorkspace(t, "SESSION-own-chat")
 	root, dir := rt.ProjectRoot(), t.TempDir()
 	old := filepath.Join(dir, "earlier.jsonl")
@@ -155,6 +158,9 @@ func TestAcceptanceHistoryProposalRequiresEarlierWorkYes(t *testing.T) {
 }
 
 func TestAcceptanceProposalPopupAppliesOnChatClient(t *testing.T) {
+	if Edition() == "Marshal" {
+		t.Skip("Marshal never opens an operator popup for proposals; the Marshal decides (TestExtremeUnverifiedProposalFileNeverAutoApplied)")
+	}
 	w, rt := realControlWorkspace(t, "SESSION-client-popup")
 	dir := t.TempDir()
 	fake := filepath.Join(dir, "tmux")

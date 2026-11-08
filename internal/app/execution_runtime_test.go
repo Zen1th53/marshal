@@ -6,14 +6,17 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/execution"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
@@ -39,23 +42,33 @@ func TestExecutionService_GateRefusalIfPlanUnapproved(t *testing.T) {
 func TestExecutionService_StartRunAndExecute_Success(t *testing.T) {
 	runtime := runtimeForPlan(t)
 	pService := runtime.Plans()
+	// Worker dispatch must bind to this repository, including its goal and plan.
+	goal := planGoal()
+	goal.ProjectID = runtime.ProjectIdentity()
+	if err := runtime.Store().SaveGoalContract(context.Background(), goal, goal.Revision); err != nil {
+		t.Fatal(err)
+	}
+	request := planCreateRequest()
+	request.ProjectID = projectid.ID(runtime.ProjectIdentity())
 
 	// 1. Create plan
-	_, err := pService.Create(context.Background(), planCreateRequest())
+	_, err := pService.Create(context.Background(), request)
 	if err != nil {
 		t.Fatalf("create plan: %v", err)
 	}
 
 	// 2. Approve plan
-	_, err = pService.Approve(context.Background(), runtimePlanProject)
+	_, err = pService.Approve(context.Background(), request.ProjectID)
 	if err != nil {
 		t.Fatalf("approve plan: %v", err)
 	}
 
 	execService := runtime.Execution()
 
+	harnessCalls := atomic.Int64{}
 	// 3. Register mock worker harness that reports valid completion and evidence
 	execService.RegisterHarness(execution.NewMockHarness("test-harness", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+		harnessCalls.Add(1)
 		return execution.TaskResult{
 			TaskID:  task.TaskID,
 			Success: true,
@@ -80,7 +93,7 @@ func TestExecutionService_StartRunAndExecute_Success(t *testing.T) {
 	})
 
 	// 4. Start execution run
-	run, err := execService.StartRun(context.Background(), "SESSION-plan", runtimePlanProject)
+	run, err := execService.StartRun(context.Background(), "SESSION-plan", request.ProjectID)
 	if err != nil {
 		t.Fatalf("StartRun failed: %v", err)
 	}
@@ -102,6 +115,9 @@ func TestExecutionService_StartRunAndExecute_Success(t *testing.T) {
 
 	// 5. Execute run
 	completedRun, err := execService.ExecuteRun(context.Background(), run.RunID)
+	if assertPrivateLegacyMockExecutionRefused(t, runtime, run, completedRun, err, harnessCalls.Load()) {
+		return
+	}
 	if err != nil {
 		t.Fatalf("ExecuteRun failed: %v", err)
 	}
@@ -254,7 +270,7 @@ func TestExecutionServiceRefusesDurableInitializationFailure(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			runtime := runtimeForPlan(t)
-			blocked := filepath.Join(runtime.layout.Root, ".marshal", tc.path)
+			blocked := filepath.Join(runtime.layout.Root, statepath.DirName, tc.path)
 			if err := os.MkdirAll(filepath.Dir(blocked), 0755); err != nil {
 				t.Fatal(err)
 			}

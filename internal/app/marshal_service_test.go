@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,6 +93,59 @@ func TestMarshalGovernedTaskDoesNotLaunchNativeDriver(t *testing.T) {
 	}
 }
 
+func TestRuntimeOwnedGovernedDraftApprovalByEdition(t *testing.T) {
+	s, _ := marshalFixture(t, 1)
+	s.requireOwner = func() error { return nil }
+	approvalCalls := 0
+	s.ApprovalActor = func(context.Context, string, string) (string, error) {
+		approvalCalls++
+		return "operator", nil
+	}
+	started, err := s.StartPlanning(t.Context(), "run", "write file", marshal.Budget{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, beforeRev, err := s.readRun(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.requiresCanonicalGovernedApproval() {
+		approved, err := s.Approve(t.Context(), "run")
+		if err != nil || approved.State != marshal.Approved || approvalCalls == 0 {
+			t.Fatalf("community governed draft approval: state=%s calls=%d err=%v", approved.State, approvalCalls, err)
+		}
+		return
+	}
+	if _, err := s.Approve(t.Context(), "run"); err == nil || !strings.Contains(err.Error(), "canonical approved Process 04 plan") {
+		t.Fatalf("governed draft approval = %v, want Process 04 refusal", err)
+	}
+	after, afterRev, err := s.readRun(t.Context(), "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if approvalCalls != 0 || beforeRev != afterRev || before.State != marshal.Drafting || after.State != marshal.Drafting || after.PlanID != started.PlanID || after.PlanVersion != 1 {
+		t.Fatalf("refusal changed state or requested approval: calls=%d beforeRev=%d afterRev=%d before=%s after=%s plan=%s@%d", approvalCalls, beforeRev, afterRev, before.State, after.State, after.PlanID, after.PlanVersion)
+	}
+	p, err := s.Store.GetPlan(t.Context(), started.PlanID, 1)
+	if err != nil || p.State != plan.StateReady {
+		t.Fatalf("refusal changed plan state: %v %+v", err, p)
+	}
+}
+
+func TestRuntimeOwnedNativeDraftStillApproves(t *testing.T) {
+	s, _ := marshalFixture(t, 1)
+	s.requireOwner = func() error { return nil }
+	draft := s.Model.(marshalFakeModel).draft
+	draft.Tasks[0].Mode = marshal.Native
+	if _, err := s.StartPlanningFromDraft(t.Context(), "native", "write file", draft, marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	approved, err := s.Approve(t.Context(), "native")
+	if err != nil || approved.State != marshal.Approved {
+		t.Fatalf("native draft approval: state=%s err=%v", approved.State, err)
+	}
+}
+
 func marshalFixture(t *testing.T, n int, databasePath ...string) (*MarshalService, string) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "state.db")
@@ -99,6 +153,23 @@ func marshalFixture(t *testing.T, n int, databasePath ...string) (*MarshalServic
 		dbPath = databasePath[0]
 	}
 	return marshalFixtureAt(t, n, dbPath)
+}
+
+// marshalUserCloseFixture makes the two-stage acceptance policy explicit for
+// tests that exercise verification and a later user close. Production defaults
+// remain independently tested and standing authorization fixtures opt in.
+func marshalUserCloseFixture(t *testing.T, n int) (*MarshalService, string) {
+	t.Helper()
+	s, repo := marshalFixture(t, n)
+	settings, err := s.Store.GetMarshalSettings(t.Context(), s.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.Value.AcceptanceMode = marshal.AcceptMarshalThenUser
+	if _, err := s.Store.SetMarshalSettings(t.Context(), s.ProjectID, settings.Value, settings.Revision); err != nil {
+		t.Fatal(err)
+	}
+	return s, repo
 }
 
 func marshalFixtureAt(t *testing.T, n int, dbPath string) (*MarshalService, string) {
@@ -213,7 +284,7 @@ func TestM09HappyPathTwoTasksVerifyClose(t *testing.T) {
 		t.Fatalf("close: %+v %v", got, err)
 	}
 	target := marshalGit(t, repo, "rev-parse", "refs/heads/main")
-	integrated := marshalGit(t, repo, "rev-parse", "refs/heads/marshal/run/integration")
+	integrated := marshalGit(t, repo, "rev-parse", "refs/heads/"+statepath.RefName+"/run/integration")
 	if target != integrated {
 		t.Fatal("target was not fast-forwarded")
 	}
@@ -323,11 +394,11 @@ func TestEscalatedTaskRetryReassignCancel(t *testing.T) {
 	if err != nil || run.Tasks[0].State != marshal.Cancelled {
 		t.Fatalf("unexpected state after cancel: %+v", run)
 	}
-	// Task "b" is still queued so run is dispatching
-	if run.State != marshal.Dispatching {
-		t.Fatalf("run state should be dispatching, got %s", run.State)
+	// Cancelling approved scope pauses even while another task is queued.
+	if run.State != marshal.AwaitingUser || run.Pause == nil || run.Pause.ResumeState != "" {
+		t.Fatalf("cancelled scope must await review: %+v", run)
 	}
-	// Cancel task "b" as well -> all tasks are Merged or Cancelled -> transitions to Verifying
+	// Cancelling every task still requires reviewed scope; it is not success.
 	if err := s.Escalate(ctx, "run", "b", "not needed"); err != nil {
 		t.Fatal(err)
 	}
@@ -335,8 +406,8 @@ func TestEscalatedTaskRetryReassignCancel(t *testing.T) {
 		t.Fatal(err)
 	}
 	run, _, err = s.load(ctx, "run")
-	if err != nil || run.State != marshal.Verifying {
-		t.Fatalf("run state should be verifying after all tasks cancelled, got: %s", run.State)
+	if err != nil || run.State != marshal.AwaitingUser || run.Pause == nil || run.Pause.ResumeState != "" {
+		t.Fatalf("cancelled scope must await reviewed amendment: %+v %v", run, err)
 	}
 
 	// 5. Permanent escalation reasons cannot be cleared by retry, reassign, or cancel
@@ -453,8 +524,61 @@ func TestSingleProviderFreshSessionRetryBounded(t *testing.T) {
 	if err := s.Escalate(ctx, "run", "a", "worker rework limit reached"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RetryTask(ctx, "run", "a", true); err == nil {
+	err = s.RetryTask(ctx, "run", "a", true)
+	if buildMaxFreshSessionRetries() == 0 {
+		// Extreme sets no fresh-session retry bound.
+		if err != nil {
+			t.Fatalf("Marshal bounded fresh session retries: %v", err)
+		}
+		return
+	}
+	if err == nil {
 		t.Fatal("expected fresh session retry to fail after reaching bounded limit")
+	}
+}
+
+func TestReturnedTaskRetryPreservesReworkAndEscalatedRetry(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 1)
+	if _, err := s.StartPlanning(ctx, "retry-returned", "write file", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(ctx, "retry-returned"); err != nil {
+		t.Fatal(err)
+	}
+	run, rev, err := s.load(ctx, "retry-returned")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RetryTask(ctx, "retry-returned", "a", true); err == nil || !strings.Contains(err.Error(), "/marshal resume") {
+		t.Fatalf("queued task needs actionable retry error: %v", err)
+	}
+	run.Tasks[0].State = marshal.Returned
+	run.Tasks[0].ReturnsByAgent = map[string]int{"worker": 1}
+	run.Process05Bound, run.Process05Parallel = true, true
+	if err := s.save(ctx, "retry-returned", run, rev); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RetryTask(ctx, "retry-returned", "a", true); err != nil {
+		t.Fatalf("returned task retry: %v", err)
+	}
+	run, _, err = s.load(ctx, "retry-returned")
+	if err != nil || run.Tasks[0].State != marshal.Returned || run.Tasks[0].FreshSessionRetries != 1 || taskReturns(run.Tasks[0]) != 1 {
+		t.Fatalf("returned retry lost its next attempt: %v %+v", err, run.Tasks[0])
+	}
+	if err := s.Escalate(ctx, "retry-returned", "a", "worker rework limit reached"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RetryTask(ctx, "retry-returned", "a", true); err != nil {
+		t.Fatalf("escalated task retry: %v", err)
+	}
+	run, _, err = s.load(ctx, "retry-returned")
+	wantReturns := 0
+	if isExtremeBuild {
+		wantReturns = 1
+	}
+	if err != nil || run.Tasks[0].State != marshal.Returned || run.Tasks[0].FreshSessionRetries != 2 || taskReturns(run.Tasks[0]) != wantReturns {
+		t.Fatalf("escalated retry changed: %v %+v", err, run.Tasks[0])
 	}
 }
 
@@ -634,11 +758,11 @@ func TestM09MergeConflictReturnsAtIntegrationHead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	head := marshalGit(t, repo, "rev-parse", "refs/heads/marshal/run/integration")
+	head := marshalGit(t, repo, "rev-parse", "refs/heads/"+statepath.RefName+"/run/integration")
 	if run.Tasks[1].State != marshal.Returned || run.Tasks[1].BaseCommit != head {
 		t.Fatalf("conflict state %+v", run.Tasks[1])
 	}
-	if got := marshalGit(t, repo, "rev-parse", "refs/heads/marshal/run/b"); got == head {
+	if got := marshalGit(t, repo, "rev-parse", "refs/heads/"+statepath.RefName+"/run/b"); got == head {
 		t.Fatal("conflicting task was rebased")
 	}
 }
@@ -797,7 +921,7 @@ func TestM09CloseUsesProjectBranchOnDetachedHEAD(t *testing.T) {
 	if err = s.Close(ctx, "run"); err != nil {
 		t.Fatal(err)
 	}
-	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != marshalGit(t, repo, "rev-parse", "refs/heads/marshal/run/integration") {
+	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != marshalGit(t, repo, "rev-parse", "refs/heads/"+statepath.RefName+"/run/integration") {
 		t.Fatal("default branch did not advance")
 	}
 }
@@ -989,11 +1113,50 @@ func TestM09UltraRejectedCrossReviewReturnsTask(t *testing.T) {
 	found := false
 	for _, event := range history {
 		if event.Type == events.EventTypeMarshalTaskReturned && event.TaskID == "a" {
-			found = event.Data["cross_review_verdict"] == string(marshal.VerdictReturn) && event.Data["cross_review_provider"] == "other"
+			found = event.Data["cross_review_verdict"] == string(marshal.VerdictReturn) && event.Data["cross_review_provider"] == "other" && event.Data["cross_review_same_provider_fallback"] == nil
 		}
 	}
 	if !found {
 		t.Fatal("cross-review rejection was not recorded with the task return")
+	}
+}
+
+func TestUltraSameProviderCrossReviewRecordsFallback(t *testing.T) {
+	ctx := context.Background()
+	s, _ := marshalFixture(t, 1)
+	s.Gate = marshalTestGate(true)
+	s.ModelProvider = "model"
+	if _, err := s.StartPlanning(ctx, "run", "write", marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(ctx, "run"); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.Dispatch(ctx, "run", "a", "write")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CollectHandIn(ctx, "run", d); err != nil {
+		t.Fatal(err)
+	}
+	s.CrossReview = func(_ context.Context, _ marshal.Task, h marshal.HandIn, _ marshal.Control) (marshal.Review, string, error) {
+		return marshal.Review{Verdict: marshal.VerdictReturn, Reviewer: "second", Reasons: []string{"check failed"}, EvidenceRefs: []string{"check:test -f a.txt"}}, h.Worker, nil
+	}
+	if _, err := s.Review(ctx, "run", "a", knownCharge()); err != nil {
+		t.Fatal(err)
+	}
+	history, err := s.Store.MarshalDecisions(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, event := range history {
+		if event.Type == events.EventTypeMarshalTaskReturned && event.TaskID == "a" {
+			found = event.Data["cross_review_same_provider_fallback"] == true
+		}
+	}
+	if !found {
+		t.Fatal("same-provider cross-review fallback was not recorded")
 	}
 }
 
@@ -1101,5 +1264,71 @@ func TestMarshalReplacementVerificationUsesRevisionTree(t *testing.T) {
 	}
 	if result := verification.Evaluate(session, binding, time.Now().UTC()); result != verification.VerifiedComplete {
 		t.Fatalf("replacement checks: %s", result)
+	}
+}
+
+func TestDraftWorkerSelectionCommitsWithRunAndPlan(t *testing.T) {
+	s, _ := marshalFixture(t, 1)
+	draft := s.Model.(marshalFakeModel).draft
+	selection := &marshal.WorkerSelection{RequestedWorker: "codex", RequestedModel: "requested-model", SelectedModel: "verified-model", Reason: "Codex cooling: usage limit until reset"}
+	draft.Tasks[0].WorkerSelection = selection
+	if _, err := s.StartPlanningFromDraft(t.Context(), "selection", "goal", draft, marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.Snapshot(t.Context(), "selection")
+	if err != nil || run.Tasks[0].WorkerSelection == nil || *run.Tasks[0].WorkerSelection != *selection {
+		t.Fatalf("lost requested identity: %+v %v", run, err)
+	}
+	decisions, err := s.Store.MarshalDecisions(t.Context(), "selection")
+	if err != nil || len(decisions) != 1 {
+		t.Fatalf("selection history: %+v %v", decisions, err)
+	}
+	event := decisions[0]
+	data, err := json.Marshal(event.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"worker-selection", "requested-model", "verified-model", selection.Reason, draft.Tasks[0].PlanTaskID, draft.Tasks[0].Worker} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("selection missing %s: %s", want, data)
+		}
+	}
+	if event.RunID != "selection" {
+		t.Fatalf("uncorrelated selection: %+v", event)
+	}
+	// An optimistic-write conflict must not commit another routing decision.
+	if _, err := s.StartPlanningFromDraft(t.Context(), "selection", "goal", draft, marshal.Budget{}); err == nil {
+		t.Fatal("duplicate import succeeded")
+	}
+	after, err := s.Store.MarshalDecisions(t.Context(), "selection")
+	if err != nil || len(after) != len(decisions) {
+		t.Fatalf("failed import wrote selection: %+v %v", after, err)
+	}
+}
+
+func TestDispatchDeliversApprovedModelToDriver(t *testing.T) {
+	s, _ := marshalFixture(t, 1)
+	draft := s.Model.(marshalFakeModel).draft
+	draft.Plan.Routes = map[string]plan.Route{"a": {Provider: "worker", Model: "approved-exact-model"}}
+	if _, err := s.StartPlanningFromDraft(t.Context(), "model", "write", draft, marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Approve(t.Context(), "model"); err != nil {
+		t.Fatal(err)
+	}
+	observed := make(chan string, 1)
+	s.Drivers["worker"] = driver.Governed{Provider: "worker", Run: func(_ context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
+		observed <- req.Model
+		return nil, errors.New("fixture stops after observing admitted request")
+	}}
+	dispatch, err := s.Dispatch(t.Context(), "model", "a", "brief")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dispatch.Driver.Wait(t.Context(), dispatch.Handle); err == nil {
+		t.Fatal("fixture did not stop")
+	}
+	if got := <-observed; got != "approved-exact-model" {
+		t.Fatalf("driver received model %q", got)
 	}
 }

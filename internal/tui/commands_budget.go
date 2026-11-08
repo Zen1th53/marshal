@@ -43,36 +43,68 @@ func (h *CommandHandler) budgetLimitsAndRuns(ctx context.Context) string {
 }
 
 // handleBudgetSet changes the goal's budget limits by revising the goal, the
-// only place a limit is honoured. Tokens and cost are not accepted: not every
-// provider reports them, and enforcement must not rest on unreported values.
+// only place a limit is honoured. All six enforced dimensions are accepted and
+// set as one full-replace revision through CommandSetGoalBudget; token and cost
+// ceilings are enforced (fail closed when usage is unreported) rather than
+// guessed.
 func (h *CommandHandler) handleBudgetSet(ctx context.Context, args []string) (string, error) {
 	a, ok := h.ws.controlSource().Authority.(*runtimeControlAuthority)
 	if !ok || a == nil || a.runtime == nil || a.localControl == nil {
 		return "Budget limits were NOT changed: authenticated runtime authorization is required.", nil
 	}
+	if len(args) > 0 && strings.EqualFold(args[0], "set") {
+		args = args[1:]
+	}
+	const usage = "Usage: /budget set [calls=<n>] [duration=<go duration>] [tokens=<n>] [cost=<n>] [handoffs=<n>] [reserve=<n>]"
 	var limits model.BudgetLimit
-	if strings.EqualFold(args[0], "set") {
-		for _, arg := range args[1:] {
-			key, value, ok := strings.Cut(arg, "=")
-			switch {
-			case ok && key == "calls":
-				n, err := strconv.Atoi(value)
-				if err != nil || n <= 0 {
-					return "Budget limits were NOT changed: calls must be a positive whole number.", nil
-				}
-				limits.MaxModelCalls = n
-			case ok && key == "duration":
-				d, err := time.ParseDuration(value)
-				if err != nil || d <= 0 {
-					return "Budget limits were NOT changed: duration must be a positive Go duration such as 30m or 2h.", nil
-				}
-				limits.MaxDuration = d
-			case ok && (key == "tokens" || key == "cost"):
-				return "Budget limits were NOT changed: token and cost limits are not enforced, since not every provider reports them. Use calls= and duration=.", nil
-			default:
-				return "Usage: /budget set [calls=<n>] [duration=<go duration>]", nil
-			}
+	for _, arg := range args {
+		key, value, ok := strings.Cut(arg, "=")
+		if !ok {
+			return usage, nil
 		}
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "calls":
+			n, err := strconv.Atoi(value)
+			if err != nil || n <= 0 {
+				return "Budget limits were NOT changed: calls must be a positive whole number.", nil
+			}
+			limits.MaxModelCalls = n
+		case "duration":
+			d, err := time.ParseDuration(value)
+			if err != nil || d <= 0 {
+				return "Budget limits were NOT changed: duration must be a positive Go duration such as 30m or 2h.", nil
+			}
+			limits.MaxDuration = d
+		case "tokens":
+			n, err := strconv.ParseInt(value, 10, 64)
+			if err != nil || n <= 0 {
+				return "Budget limits were NOT changed: tokens must be a positive whole number.", nil
+			}
+			limits.MaxTotalTokens = &n
+		case "cost":
+			f, err := strconv.ParseFloat(value, 64)
+			if err != nil || f <= 0 {
+				return "Budget limits were NOT changed: cost must be a positive number.", nil
+			}
+			limits.MaxCostUSD = &f
+		case "handoffs":
+			n, err := strconv.Atoi(value)
+			if err != nil || n <= 0 {
+				return "Budget limits were NOT changed: handoffs must be a positive whole number.", nil
+			}
+			limits.MaxHandoffs = n
+		case "reserve":
+			n, err := strconv.Atoi(value)
+			if err != nil || n <= 0 {
+				return "Budget limits were NOT changed: reserve must be a positive whole number.", nil
+			}
+			limits.VerificationReserveCalls = n
+		default:
+			return usage, nil
+		}
+	}
+	if limits.Empty() {
+		return usage, nil
 	}
 	h.ws.mu.RLock()
 	goal := h.ws.state.Goal

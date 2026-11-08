@@ -117,7 +117,8 @@ func TestA10MigrationFromSchemaV3PreservesEvidenceAndAddsState(t *testing.T) {
 func TestA10MigrationRejectsNewerSchemaWithoutMutation(t *testing.T) {
 	ctx := context.Background()
 	st := openEmptyTestStore(t)
-	if _, err := st.db.ExecContext(ctx, `CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); INSERT INTO schema_migrations(version, applied_at) VALUES(?, '2026-01-01T00:00:00Z')`, LatestSchemaVersion+1); err != nil {
+	newer := max(LatestSchemaVersion, legacyDivergentSchemaMax) + 1
+	if _, err := st.db.ExecContext(ctx, `CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); INSERT INTO schema_migrations(version, applied_at) VALUES(?, '2026-01-01T00:00:00Z')`, newer); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Migrate(ctx); err == nil {
@@ -127,7 +128,7 @@ func TestA10MigrationRejectsNewerSchemaWithoutMutation(t *testing.T) {
 	if err := st.db.QueryRowContext(ctx, "SELECT max(version) FROM schema_migrations").Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != LatestSchemaVersion+1 {
+	if version != newer {
 		t.Fatalf("schema version changed to %d", version)
 	}
 }

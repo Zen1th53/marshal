@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,12 +22,12 @@ func TestPTYBackupRestoreFromLiveSession(t *testing.T) {
 	project := initProject(t, bin)
 	t.Chdir(project)
 	terminal := startFrozenTUIInProject(t, 40, 220, bin, project, "tui", "SESSION-pty-restore")
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/backup create")
 	terminal.mustSee("Backup written and verified")
 	var backup string
 	for deadline := time.Now().Add(5 * time.Second); backup == "" && time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
-		matches, _ := filepath.Glob(filepath.Join(project, ".marshal", "backups", "backup-*.db"))
+		matches, _ := filepath.Glob(filepath.Join(project, statepath.DirName, "backups", "backup-*.db"))
 		if len(matches) == 1 {
 			backup = matches[0]
 		}
@@ -40,7 +41,9 @@ func TestPTYBackupRestoreFromLiveSession(t *testing.T) {
 	}
 
 	terminal.sendLine("/task create work done after the backup")
-	terminal.mustSee("work done after the backup")
+	// The typed command itself appears in the PTY. Wait for its durable
+	// completion before sending another line through the busy command lane.
+	terminal.mustSee("ready (revision 1, attempt 1): work done after the backup")
 	terminal.sendLine("/backup restore " + backup)
 	terminal.mustSee("Nothing has changed yet")
 	terminal.sendLine("/backup restore " + backup + " confirm " + strings.TrimPrefix(meta.DatabaseSHA256, "sha256:")[:12])
@@ -48,7 +51,7 @@ func TestPTYBackupRestoreFromLiveSession(t *testing.T) {
 	terminal.sendLine("/tasks")
 	terminal.mustSee("No tasks in store")
 
-	recoveries, _ := filepath.Glob(filepath.Join(project, ".marshal", "backups", "pre-restore-*.db"))
+	recoveries, _ := filepath.Glob(filepath.Join(project, statepath.DirName, "backups", "pre-restore-*.db"))
 	if len(recoveries) != 1 {
 		t.Fatalf("recovery backups: %v", recoveries)
 	}

@@ -330,5 +330,6 @@ func remoteError(value *Error) error {
 	default:
 		sentinel = errors.New("runtime API error")
 	}
-	return fmt.Errorf("%w: %s", sentinel, value.Message)
+	// The server message already carries the sentinel text; do not double it.
+	return fmt.Errorf("%w: %s", sentinel, strings.TrimPrefix(value.Message, sentinel.Error()+": "))
 }

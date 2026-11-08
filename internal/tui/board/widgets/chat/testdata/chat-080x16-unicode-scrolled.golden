@@ -1,0 +1,16 @@
+MARSHAL  claude · planner/reviewer · plan v2 approved 13:41  ⣟ thinking
+
+  The argument carries taint U (package.json came from outside).
+  So: park. The lane finished 2 files in the meantime; the decision is in the
+  inbox.
+  ▸ Bash  npm view deja-vu --json
+    ✗ denied in the inbox
+  Proposal: [A] allow for this run - low risk (read-only registry, 0 files
+  outside).
+
+you 14:02
+  A. And explain T-031
+
+marshal 14:02
+ ↓ 5 newer lines (End)
+› m to talk to Marshal

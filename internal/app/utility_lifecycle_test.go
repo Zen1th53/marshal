@@ -19,12 +19,12 @@ func TestM17_OutcomeUtilityFeedbackAndAuthorityDominance(t *testing.T) {
 
 	now := time.Now().UTC()
 
-	// 1. Agent candidate memory A (will receive 10 repeated successes)
+	// 1. Approved agent memory A (will receive 10 repeated successes)
 	agentA := model.MemoryRecordV2{
 		ID:         "MEM-AGENT-A",
 		ProjectID:  projectID,
 		Kind:       model.MemoryKindSemantic,
-		Lifecycle:  model.MemoryCandidate,
+		Lifecycle:  model.MemoryDurable,
 		Confidence: model.ConfidenceInferred,
 		Authority:  model.AuthorityAgent,
 		Title:      "Go build optimization helper",
@@ -43,12 +43,12 @@ func TestM17_OutcomeUtilityFeedbackAndAuthorityDominance(t *testing.T) {
 	}
 	svc.IndexRecord(ctx, agentA)
 
-	// 2. Agent candidate memory B (will receive repeated failures)
+	// 2. Approved agent memory B (will receive repeated failures)
 	agentB := model.MemoryRecordV2{
 		ID:         "MEM-AGENT-B",
 		ProjectID:  projectID,
 		Kind:       model.MemoryKindSemantic,
-		Lifecycle:  model.MemoryCandidate,
+		Lifecycle:  model.MemoryDurable,
 		Confidence: model.ConfidenceInferred,
 		Authority:  model.AuthorityAgent,
 		Title:      "Go build optimization bypass",

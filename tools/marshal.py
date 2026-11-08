@@ -29,7 +29,7 @@ INSTRUCTION_FILES = [
     "CONVENTIONS.md",
 ]
 
-AGENT_BINARIES = ["gemini", "codex", "claude", "opencode", "aider", "crush"]
+AGENT_BINARIES = ["agy", "codex", "claude", "opencode", "aider", "crush"]
 
 
 def _matches(root: Path, pattern: str) -> bool:

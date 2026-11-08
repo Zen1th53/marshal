@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +14,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
-	"github.com/Zen1th53/marshal/internal/projectid"
 )
 
 func TestExecCLI_Usage(t *testing.T) {
@@ -43,13 +44,9 @@ func TestExecCLI_Lifecycle(t *testing.T) {
 		t.Fatalf("bootstrap project: %v", err)
 	}
 
-	runtime, err := app.Open(ctx, dir)
-	if err != nil {
-		t.Fatalf("open runtime: %v", err)
-	}
+	runtime, _, projectID := openProcess05FixtureRuntime(t, ctx, dir)
 
 	sessionID := "SESSION-cli-exec"
-	projectID := projectid.ID("PROJECT-0123456789abcdef0123456789abcdef")
 
 	// 2. Set up Goal contract
 	goal := model.GoalContract{
@@ -104,6 +101,7 @@ func TestExecCLI_Lifecycle(t *testing.T) {
 			},
 		},
 	}
+	createReq = prepareProcess05FixturePlan(createReq)
 	if _, err := runtime.Plans().Create(ctx, createReq); err != nil {
 		t.Fatalf("create plan: %v", err)
 	}
@@ -176,11 +174,11 @@ func TestExecCLI_Lifecycle(t *testing.T) {
 	}
 
 	// 8. Register mock harness on runtime to test execution through CLI
-	rtForExec, err := app.Open(ctx, dir)
-	if err != nil {
-		t.Fatalf("open runtime for exec: %v", err)
-	}
-	rtForExec.Execution().RegisterHarness(execution.NewMockHarness("mock-harness", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+	rtForExec, registerFixture, _ := openProcess05FixtureRuntime(t, ctx, dir)
+	registerFixture("mock-harness", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+		if err := os.WriteFile(filepath.Join(worktree, "README.md"), []byte("Updated by owned CLI fixture\n"), 0600); err != nil {
+			return execution.TaskResult{}, err
+		}
 		return execution.TaskResult{
 			TaskID:  task.TaskID,
 			Success: true,
@@ -193,8 +191,16 @@ func TestExecCLI_Lifecycle(t *testing.T) {
 					EvidenceRefs: []string{"ev-1"},
 				},
 			},
+			EvidenceList: []execution.ExecutionEvidence{
+				{
+					EvidenceID:    "ev-1",
+					RunID:         runID,
+					RelevantFiles: []string{"README.md"},
+					Status:        execution.EvidenceValid,
+				},
+			},
 		}, nil
-	}))
+	})
 	rtForExec.Execution().Engine().EvidenceOracle().RecordEvidence(execution.ExecutionEvidence{
 		EvidenceID:    "ev-1",
 		RunID:         runID,
@@ -229,11 +235,11 @@ func TestExecCLI_Lifecycle(t *testing.T) {
 			}
 
 			// Resume execution
-			rtForExec, err = app.Open(ctx, dir)
-			if err != nil {
-				t.Fatalf("reopen runtime: %v", err)
-			}
-			rtForExec.Execution().RegisterHarness(execution.NewMockHarness("mock-harness", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+			rtForExec, registerFixture, _ = openProcess05FixtureRuntime(t, ctx, dir)
+			registerFixture("mock-harness", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+				if err := os.WriteFile(filepath.Join(worktree, "README.md"), []byte("Updated by owned CLI fixture\n"), 0600); err != nil {
+					return execution.TaskResult{}, err
+				}
 				return execution.TaskResult{
 					TaskID:  task.TaskID,
 					Success: true,
@@ -246,11 +252,19 @@ func TestExecCLI_Lifecycle(t *testing.T) {
 							EvidenceRefs: []string{"ev-1"},
 						},
 					},
+					EvidenceList: []execution.ExecutionEvidence{
+						{
+							EvidenceID:    "ev-1",
+							RunID:         runID,
+							RelevantFiles: []string{"README.md"},
+							Status:        execution.EvidenceValid,
+						},
+					},
 				}, nil
-			}))
+			})
 			execRun, err = rtForExec.Execution().ExecuteRun(ctx, runID)
 			if err != nil {
-				t.Fatalf("ExecuteRun after approve: %v", err)
+				t.Fatalf("ExecuteRun after approve: %v run=%+v", err, execRun)
 			}
 		}
 	}

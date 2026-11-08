@@ -28,7 +28,7 @@ func reviewPrompt(t *testing.T, control marshal.Control) string {
 		RuntimeObserved: []marshal.CommandRecord{{Command: "worker CLI", Output: `{"result":"output written"}`}},
 		CheckResults:    []marshal.CheckResult{{Command: "test -f output.txt", Criteria: task.Criteria, Passed: true}},
 	}
-	if _, err := cli.Review(t.Context(), task, handin, control); err != nil {
+	if _, err := cli.Review(requiredMarshalTestContext(t, cli), task, handin, control); err != nil {
 		t.Fatal(err)
 	}
 	prompt, err := os.ReadFile(promptFile)

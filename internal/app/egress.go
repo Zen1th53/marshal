@@ -23,6 +23,8 @@ import (
 
 type runEgress struct {
 	broker                                     *netpolicy.CredentialBroker
+	boundCredential                            *boundCredentialLease
+	harnessProbe                               bool
 	started                                    time.Time
 	id, parent, task, worker, provider, socket string
 	allowlist                                  *netpolicy.RunAllowlist
@@ -31,6 +33,9 @@ type runEgress struct {
 	watchDone                                  chan struct{}
 	mu                                         sync.Mutex
 	pending                                    map[string]bool
+	// refused holds the socket refusals already in evidence. A worker that
+	// retries a refused syscall in a loop must not flood the event store.
+	refused map[string]bool
 }
 
 type EgressStatus struct {
@@ -56,8 +61,6 @@ func providerEndpoint(provider, modelName string) (string, error) {
 		return "api.openai.com:443", nil
 	case "claude":
 		return "api.anthropic.com:443", nil
-	case "gemini":
-		return "generativelanguage.googleapis.com:443", nil
 	case "opencode":
 		if modelName == "" {
 			modelName = strings.TrimSpace(os.Getenv("MARSHAL_OPENCODE_MODEL"))
@@ -79,7 +82,27 @@ func providerEndpoint(provider, modelName string) (string, error) {
 			return "127.0.0.1:11434", nil
 		}
 	}
+	if endpoint, ok := privateAGYEndpoint(provider); ok {
+		return endpoint, nil
+	}
 	return "", fmt.Errorf("%w: no default API endpoint for provider %s model %s", model.ErrPolicyDenied, provider, modelName)
+}
+
+// This provider-owned default set is not caller/model-supplied authority.
+func providerEgressEndpoints(provider, modelName string) ([]string, error) {
+	primary, err := providerEndpoint(provider, modelName)
+	if err != nil {
+		return nil, err
+	}
+	return append([]string{primary}, privateAGYAdditionalEndpoints(provider)...), nil
+}
+func providerEndpointInSet(endpoints []string, endpoint string) bool {
+	for _, current := range endpoints {
+		if current == endpoint {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Runtime) startProviderEgress(ctx context.Context, id, parent, provider, modelName string, task model.Task, worker, session string, role model.Role) (string, func(), error) {
@@ -88,15 +111,55 @@ func (r *Runtime) startProviderEgress(ctx context.Context, id, parent, provider,
 	if r.adapters[provider] != nil {
 		return "", func() {}, nil
 	}
+	// Host workers use the host network directly. No proxy, bridge, socket
+	// supervisor, or egress decision may block an Extreme worker.
+	if sandbox.HostExecutionPreferred() {
+		var lease *boundCredentialLease
+		if scope, ok := r.boundScopeFromContext(ctx, provider, modelName); ok {
+			var err error
+			lease, err = r.waitBoundCredential(ctx, scope)
+			if err != nil {
+				return "", nil, err
+			}
+		} else if _, hasBound := r.boundCredentialForContext(ctx, provider); hasBound {
+			return "", nil, netpolicy.ErrCredentialBroker
+		} else if r.store != nil && netpolicy.CredentialProfileSupported(provider, modelName) {
+			allowed, err := r.waitCredentialGrant(ctx, provider, 30*time.Second)
+			if err != nil {
+				return "", nil, err
+			}
+			if !allowed {
+				return "", nil, netpolicy.ErrCredentialBroker
+			}
+		}
+		if err := r.consumeReviewedProviderTransport(ctx, "", id); err != nil {
+			return "", nil, err
+		}
+		if lease != nil {
+			if err := r.bindBoundCredentialHost(ctx, lease, id); err != nil {
+				return "", nil, err
+			}
+			return "", func() { r.closeBoundCredentialEgress(lease, id, "") }, nil
+		}
+		return "", func() {}, nil
+	}
 	endpoint, err := providerEndpoint(provider, modelName)
 	if err != nil {
 		return "", nil, err
 	}
-	if err := authorizeNetworkAccess(r.policy, worker, session, task.ID, role, task.Risk, true); err != nil {
+	if handled, reviewErr := r.authorizeReviewedProviderTransport(ctx, id, parent, provider, modelName, task, worker, session, role, endpoint); handled {
+		if reviewErr != nil {
+			return "", nil, reviewErr
+		}
+	} else if err := authorizeNetworkAccess(r.policy, worker, session, task.ID, role, task.Risk, true); err != nil {
 		return "", nil, err
 	}
 	if !r.egressEnforcementAvailable() {
-		return "", nil, netpolicy.ErrEnforcementUnavailable
+		if !sandbox.UnconfinedFallbackAllowed() {
+			return "", nil, netpolicy.ErrEnforcementUnavailable
+		}
+		r.recordUnconfined(ctx, task.ID, worker, netpolicy.ErrEnforcementUnavailable)
+		return "", func() {}, nil
 	}
 	broker, err := r.providerBroker(ctx, provider, modelName)
 	if err != nil {
@@ -105,7 +168,10 @@ func (r *Runtime) startProviderEgress(ctx context.Context, id, parent, provider,
 	if provider == "codex" && broker != nil && broker.Subscription() {
 		endpoint = "chatgpt.com:443"
 	}
-	return r.startRunEgress(ctx, id, parent, provider, task.ID, worker, []string{endpoint}, broker)
+	if err := r.consumeReviewedProviderTransport(ctx, endpoint, id); err != nil {
+		return "", nil, err
+	}
+	return r.startRunEgress(ctx, id, parent, provider, task.ID, worker, append([]string{endpoint}, privateAGYAdditionalEndpoints(provider)...), broker)
 }
 
 func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, taskID, worker string, endpoints []string, brokers ...*netpolicy.CredentialBroker) (string, func(), error) {
@@ -122,6 +188,20 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 	var broker *netpolicy.CredentialBroker
 	if len(brokers) > 0 {
 		broker = brokers[0]
+	}
+	harnessProbe := r.exactHarnessProbeEgress(ctx, id, parent, provider, taskID, worker)
+	var bound *boundCredentialLease
+	if broker != nil {
+		var hasBound bool
+		bound, hasBound = r.boundCredentialForContext(ctx, provider)
+		if hasBound && bound == nil {
+			return "", nil, netpolicy.ErrCredentialBroker
+		}
+		if bound != nil {
+			if bound.scope.Purpose == "probe" && bound.scope.Probe != id || bound.scope.Purpose == "task" && (bound.scope.Run != parent || bound.scope.CanonicalTask != taskID) {
+				return "", nil, netpolicy.ErrCredentialBroker
+			}
+		}
 	}
 	allowlist, err := netpolicy.NewRunAllowlist(endpoints)
 	if err != nil {
@@ -142,19 +222,28 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 		os.RemoveAll(dir)
 		return "", nil, err
 	}
-	scope := &runEgress{started: time.Now().UTC(), broker: broker, id: id, parent: parent, task: taskID, worker: worker, provider: provider, socket: socket, allowlist: allowlist, pending: map[string]bool{}}
-	proxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{Broker: broker, CredentialAllowed: func(ctx context.Context) bool { return r.HasCredentialGrant(ctx, provider) }, Evaluator: &storedRunEgress{runtime: r, scope: scope}, Store: r.store, SubjectID: worker, TaskID: taskID, RunID: id, Listener: listener, Attempt: func(ctx context.Context, host string, port int, d netpolicy.Decision) error {
+	if bound != nil {
+		if err := r.bindBoundCredentialEgress(ctx, bound, id, socket); err != nil {
+			listener.Close()
+			os.RemoveAll(dir)
+			return "", nil, err
+		}
+	}
+	scope := &runEgress{started: time.Now().UTC(), broker: broker, boundCredential: bound, harnessProbe: harnessProbe, id: id, parent: parent, task: taskID, worker: worker, provider: provider, socket: socket, allowlist: allowlist, pending: map[string]bool{}}
+	proxy, err := netpolicy.NewEgressProxy(netpolicy.ProxyConfig{Broker: broker, CredentialAllowed: func(ctx context.Context) bool { return r.credentialAllowedForEgress(ctx, scope) }, Evaluator: &storedRunEgress{runtime: r, scope: scope}, Store: r.store, SubjectID: worker, TaskID: taskID, RunID: id, Listener: listener, Attempt: func(ctx context.Context, host string, port int, d netpolicy.Decision) error {
 		return r.recordEgressAttempt(ctx, scope, host, port, d)
 	}})
 	if err != nil {
 		listener.Close()
 		os.RemoveAll(dir)
+		r.closeBoundCredentialEgress(bound, id, socket)
 		return "", nil, err
 	}
 	scope.proxy = proxy
-	if err := r.recordEgress(ctx, scope, events.EventTypeNetworkEgressRequested, map[string]any{"source": "run scope", "allowed_endpoints": endpoints, "scope_socket": socket, "brokered": broker != nil}); err != nil {
+	if err := r.recordEgress(ctx, scope, events.EventTypeNetworkEgressRequested, map[string]any{"source": "run scope", "allowed_endpoints": endpoints, "scope_socket": socket, "brokered": broker != nil, "harness_probe": harnessProbe}); err != nil {
 		proxy.Close()
 		os.RemoveAll(dir)
+		r.closeBoundCredentialEgress(bound, id, socket)
 		return "", nil, err
 	}
 	for _, endpoint := range endpoints {
@@ -163,6 +252,7 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 				_ = r.recordBrokerClosed(context.Background(), scope, "")
 			}
 			os.RemoveAll(dir)
+			r.closeBoundCredentialEgress(bound, id, socket)
 			return "", nil, err
 		}
 	}
@@ -191,9 +281,25 @@ func (r *Runtime) startRunEgress(ctx context.Context, id, parent, provider, task
 				_ = r.recordBrokerClosed(context.Background(), scope, "")
 			}
 			_ = os.RemoveAll(dir)
+			r.closeBoundCredentialEgress(bound, id, socket)
 		})
 	}
 	return socket, cleanup, nil
+}
+
+// Only the private scope minted by VerifyMarshalWorker can make a run a
+// nonexpanding probe. The Extreme-only AGY verification context is insufficient,
+// and an arbitrary PROBE- label never changes network permission behavior.
+func (r *Runtime) exactHarnessProbeEgress(ctx context.Context, id, parent, provider, taskID, worker string) bool {
+	marker, ok := ctx.Value(boundCredentialContextKey{}).(struct {
+		runtime *Runtime
+		scope   boundCredentialScope
+	})
+	if !ok {
+		return false
+	}
+	scope, valid := r.boundScopeFromContext(ctx, provider, marker.scope.Model)
+	return valid && scope.Purpose == "probe" && scope.Probe == id && parent == "" && taskID == id && worker == "runtime"
 }
 
 func (r *Runtime) recordEgress(ctx context.Context, scope *runEgress, kind events.EventType, data map[string]any) error {
@@ -237,23 +343,33 @@ func (r *Runtime) recordEgressAttempt(ctx context.Context, scope *runEgress, hos
 	if d.Reason == netpolicy.ReasonClaudeSignInExpired {
 		return r.notifyEgressRefusal(ctx, scope, endpoint, netpolicy.ClaudeSignInExpiredMessage)
 	}
+	if scope.harnessProbe {
+		return r.notifyEgressRefusal(ctx, scope, endpoint, fmt.Sprintf("%s harness probe refused optional endpoint %s; network expansion is unavailable for this verification.", scope.worker, endpoint))
+	}
 	return r.notifyEgressRefusal(ctx, scope, endpoint, fmt.Sprintf("%s wants to reach %s. Allow?", scope.worker, endpoint))
 }
 
 func (r *Runtime) notifyEgressRefusal(ctx context.Context, scope *runEgress, endpoint, message string) error {
-	scope.mu.Lock()
-	scope.pending[endpoint] = true
-	scope.mu.Unlock()
+	requestable := !scope.harnessProbe
+	if requestable {
+		scope.mu.Lock()
+		scope.pending[endpoint] = true
+		scope.mu.Unlock()
+	}
 	r.egressMu.Lock()
 	sink := r.egressAlert
 	r.egressMu.Unlock()
 	// This event stream is the durable operator notification queue, available
 	// without an attached TUI. Persist before attempting live delivery.
-	if err := r.recordEgress(ctx, scope, events.EventTypeNetworkEgressNotification, map[string]any{"endpoint": endpoint, "message": message}); err != nil {
+	if err := r.recordEgress(ctx, scope, events.EventTypeNetworkEgressNotification, map[string]any{"endpoint": endpoint, "message": message, "requestable": requestable}); err != nil {
 		return err
 	}
 	if sink != nil {
-		return sink(EgressAlert{RunID: scope.id, ParentRunID: scope.parent, TaskID: scope.task, Worker: scope.worker, Endpoint: endpoint, Message: message, Kind: "egress refused", State: "waiting"})
+		state := "waiting"
+		if !requestable {
+			state = "denied"
+		}
+		return sink(EgressAlert{RunID: scope.id, ParentRunID: scope.parent, TaskID: scope.task, Worker: scope.worker, Endpoint: endpoint, Message: message, Kind: "egress refused", State: state})
 	}
 
 	return nil
@@ -304,6 +420,9 @@ func (r *Runtime) CommandEgress(ctx context.Context, runID, operation, endpoint 
 		}
 	}
 	allow := operation == "allow"
+	if allow && scope.harnessProbe {
+		return model.ErrPolicyDenied
+	}
 	kind := events.EventTypeNetworkEgressRevoked
 	if allow {
 		kind = events.EventTypeNetworkEgressGranted
@@ -342,10 +461,31 @@ func (r *Runtime) socketObserver(socket string) func(context.Context, sandbox.Re
 		if scope == nil {
 			return model.ErrUnavailable
 		}
-		if err := r.recordEgress(ctx, scope, events.EventTypeNetworkEgressAttempt, map[string]any{"source": "socket supervisor", "operation": refusal.Operation, "endpoint": net.JoinHostPort(refusal.Host, strconv.Itoa(refusal.Port)), "allowed": false}); err != nil {
+		endpoint := net.JoinHostPort(refusal.Host, strconv.Itoa(refusal.Port))
+		// Each distinct refusal is recorded once per run; repeats are still
+		// refused by the supervisor and add nothing to the evidence.
+		key := refusal.Operation + " " + endpoint
+		scope.mu.Lock()
+		seen := scope.refused[key]
+		scope.mu.Unlock()
+		if seen {
+			return nil
+		}
+		if err := r.recordEgress(ctx, scope, events.EventTypeNetworkEgressAttempt, map[string]any{"source": "socket supervisor", "operation": refusal.Operation, "endpoint": endpoint, "allowed": false, "local_kernel_discovery": refusal.LocalKernelDiscovery}); err != nil {
 			return err
 		}
-		endpoint := net.JoinHostPort(refusal.Host, strconv.Itoa(refusal.Port))
+		scope.mu.Lock()
+		if scope.refused == nil {
+			scope.refused = map[string]bool{}
+		}
+		scope.refused[key] = true
+		scope.mu.Unlock()
+		if refusal.LocalKernelDiscovery {
+			return nil // Kernel returned EACCES; there is no endpoint to grant.
+		}
+		if scope.harnessProbe {
+			return r.notifyEgressRefusal(ctx, scope, endpoint, fmt.Sprintf("%s harness probe direct socket attempt refused: %s (%s); network expansion is unavailable for this verification.", scope.worker, endpoint, refusal.Operation))
+		}
 		return r.notifyEgressRefusal(ctx, scope, endpoint, fmt.Sprintf("%s direct socket attempt refused: %s (%s). Use the run proxy; grants apply only through the proxy.", scope.worker, endpoint, refusal.Operation))
 	}
 }
@@ -398,12 +538,58 @@ func (r *Runtime) EgressNotifications(ctx context.Context) ([]EgressAlert, error
 			worker, _ := event.Data["worker"].(string)
 			message, _ := event.Data["message"].(string)
 			parent, _ := event.Data["parent_run_id"].(string)
-			state := "expired"
-			if r.EgressRequestPending(event.RunID, endpoint) {
-				state = "waiting"
+			state := "denied"
+			if event.Data["requestable"] != false {
+				state = "expired"
+				if r.EgressRequestPending(event.RunID, endpoint) {
+					state = "waiting"
+				}
 			}
 			alerts = append(alerts, EgressAlert{RunID: event.RunID, ParentRunID: parent, TaskID: event.TaskID, Worker: worker, Endpoint: endpoint, Message: message, Kind: "egress refused", State: state})
 		}
 	}
 	return alerts, nil
+}
+
+// Explicit caller rules never add authority; a multi-host provider request
+// must name its complete fixed default set, without aliases or duplicates.
+func validateProviderRequestEgress(provider, modelName string, rules []netpolicy.Rule) error {
+	endpoints, err := providerEgressEndpoints(provider, modelName)
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, rule := range rules {
+		if rule.Validate() != nil {
+			return model.ErrPolicyDenied
+		}
+		for _, port := range rule.Ports {
+			exact, e := netpolicy.Endpoint(net.JoinHostPort(rule.HostPattern, strconv.Itoa(port)))
+			if e != nil || !providerEndpointInSet(endpoints, exact) || rule.Protocol != netpolicy.ProtocolTCP || rule.Action != netpolicy.ActionAllow {
+				return model.ErrPolicyDenied
+			}
+			if len(endpoints) > 1 && seen[exact] {
+				return model.ErrPolicyDenied
+			}
+			seen[exact] = true
+		}
+	}
+	if len(endpoints) > 1 && len(rules) > 0 && len(seen) != len(endpoints) {
+		return model.ErrPolicyDenied
+	}
+	return nil
+}
+
+// recordUnconfined durably records that work ran on the host without
+// confinement (Marshal build only).
+func (r *Runtime) recordUnconfined(ctx context.Context, taskID, subject string, cause error) {
+	if r.store == nil {
+		return
+	}
+	id, err := model.NewID("EVENT-")
+	if err != nil {
+		return
+	}
+	_, _ = r.store.Append(ctx, events.Event{ID: id, Type: events.EventTypePolicyAllowed, Subject: subject, TaskID: taskID, At: time.Now().UTC(),
+		Data: map[string]any{"decision": "ran unconfined on the host", "confinement_cause": cause.Error()}})
 }

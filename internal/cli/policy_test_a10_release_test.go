@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +32,7 @@ func TestA10PolicyTestCLIJSONIncludesDigestAndRemainsReadOnly(t *testing.T) {
 	if report.Status != "PASS" || !strings.HasPrefix(report.PolicyDigest, "sha256:") {
 		t.Fatalf("report=%#v, want PASS with exact policy digest", report)
 	}
-	if _, err := os.Stat(filepath.Join(repo.Path(), ".marshal")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(repo.Path(), statepath.DirName)); !os.IsNotExist(err) {
 		t.Fatalf("read-only policy test created runtime state: err=%v", err)
 	}
 }

@@ -38,11 +38,13 @@ func sweepWorkEnvironment(t *testing.T) {
 	t.Setenv("CODEX_HOME", t.TempDir())
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	t.Setenv("PATH", dir)
+	t.Setenv("MARSHAL_PROVIDER_PATH_ONLY", "1")
 	t.Chdir(t.TempDir())
 	t.Setenv("MARSHAL_NO_UPDATE_CHECK", "1")
 	t.Setenv("GOPROXY", "off")
 	t.Setenv("GOSUMDB", "off")
 	t.Setenv("MARSHAL_CLOUD_ENDPOINT", "off")
+	t.Setenv("MARSHAL_PROVIDER_PATH_ONLY", "1")
 	InvalidateProbeCache()
 	t.Cleanup(InvalidateProbeCache)
 }
@@ -277,11 +279,15 @@ func TestCommandSweepWorkPTY(t *testing.T) {
 	project := initProject(t, bin)
 	useCodexByDefault(t, project)
 
+	whyExpected := "No ULTRA route explanation"
+	if buildNavigationReleased {
+		whyExpected = "ADVISORY ROUTING EXPLANATION (NOT APPLIED):"
+	}
 	cases := []struct{ line, want string }{
 		{"/status", "CANONICAL STATUS DETAIL"}, {"/goal", "No active goal"}, {"/mode auto", "Operating mode switched"},
 		{"/claims", "No claims"}, {"/inspect task missing", "No task found"}, {"/approve apr", "Error: not found"},
 		{"/reject apr", "Error: not found"}, {"/route role=qa", "ADVISORY ONLY"}, {"/agents", "TEAM ROSTER"},
-		{"/evidence missing", "NOT FOUND"}, {"/why", "No ULTRA route explanation"}, {"/msg all guidance", "nothing was sent"},
+		{"/evidence missing", "NOT FOUND"}, {"/why", whyExpected}, {"/msg all guidance", "nothing was sent"},
 		{"/handoff qa review", "nothing was sent"}, {"/checkpoint list", "No execution snapshots in this project"},
 		{"/rollback cp", "NOT performed"}, {"/budget", "BUDGET CONSUMED"}, {"/pause", "Pause was NOT performed"},
 		{"/resume --last", "Install Codex"}, {"/cancel", "Cancel was NOT performed"}, {"/tasks", "No tasks in store"},
@@ -369,7 +375,7 @@ func TestCommandSweepWorkRevisionRefresh(t *testing.T) {
 		t.Fatal(err)
 	}
 	sweepWorkRun(t, ws, "/goal", "Second outcome")
-	sweepWorkRun(t, ws, "/budget", "Tokens: UNKNOWN")
+	sweepWorkRun(t, ws, "/budget", "Tokens: 321")
 	if ws.state.TerminationState != "" {
 		t.Fatalf("old termination leaked into new revision: %s", ws.state.TerminationState)
 	}

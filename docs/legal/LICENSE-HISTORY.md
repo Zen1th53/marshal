@@ -34,14 +34,14 @@ The official Apache License 2.0 text is preserved at:
 
 ---
 
-## Current Licensing: AGPL-3.0-only (Community) + Commercial
+## Current Licensing: AGPL-3.0-only (Marshal) + Commercial
 
 Beginning with the licensing migration commit identified below, MARSHAL
 uses a dual-licensing model:
 
-### Community License
+### Open-source License
 
-The MARSHAL community edition is licensed under the GNU Affero General
+Marshal is licensed under the GNU Affero General
 Public License, version 3.0 only (`AGPL-3.0-only`).
 
 The full license text is in the root [`LICENSE`](../../LICENSE) file.
@@ -50,7 +50,7 @@ The full license text is in the root [`LICENSE`](../../LICENSE) file.
 
 Organizations requiring alternative licensing terms may obtain a separate
 commercial license from the copyright owner. See
-[`LICENSING.md`](../../LICENSING.md) for details.
+[`docs/legal/LICENSING.md`](LICENSING.md) for details.
 
 ---
 

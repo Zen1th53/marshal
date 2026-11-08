@@ -14,6 +14,9 @@ type Refusal struct {
 	Host      string
 	Port      int
 	Operation string
+	// LocalKernelDiscovery is never set off Linux amd64; it keeps callers
+	// portable.
+	LocalKernelDiscovery bool
 }
 
 func SupervisedArgv([]string) ([]string, string, error) {

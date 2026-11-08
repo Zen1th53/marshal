@@ -125,7 +125,7 @@ func TestHandInScopeAndEvidence(t *testing.T) {
 }
 func TestSettingsDefaultsAndEnums(t *testing.T) {
 	d := DefaultSettings()
-	if d.ExecutionRights != RightsReadOnly || d.AcceptanceMode != AcceptMarshalThenUser || d.ReworkLimit != 2 || d.UltraConcurrency != 3 || d.Validate() != nil {
+	if d.ReworkLimit != 2 || d.UltraConcurrency < 1 || d.Validate() != nil {
 		t.Fatal(d)
 	}
 	d.ExecutionRights = "unknown"

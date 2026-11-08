@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Qualification must never enroll a test installation with the public service.
+export MARSHAL_CLOUD_ENDPOINT=off
+
 gate_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 gate_logs=$(mktemp -d)
 trap 'rm -rf "$gate_logs"' EXIT
@@ -8,7 +11,7 @@ cd "$gate_root"
 
 printf '%s\n' \
   "=========================================================" \
-  "       MARSHAL Community Production Release Gate        " \
+  "       Marshal Production Release Gate        " \
   "========================================================="
 
 gate_failures=0
@@ -50,7 +53,8 @@ printf '%s\n' "Mandatory automated verification" "------------------------------
 
 run_check "BUILD" go build -buildvcs=false ./...
 run_check "GO VET" go vet ./...
-run_check "GO TEST" go test -count=1 -timeout=30m ./...
+run_check "BUILD GOVERNED" go build -tags governed -buildvcs=false ./...
+run_check "GO TEST" go test -count=1 -p 6 -timeout=60m ./...
 # The race suite drives the full SQLite migration chain and outlasts Go's
 # 10-minute per-package default in internal/store; CI allows the same window.
 run_check "GO TEST RACE" go test -race -count=1 -timeout=45m ./...
@@ -88,15 +92,15 @@ printf '%s\n' "---------------------------------------------------------" "Opt-i
 run_optional_e2e "CODEX E2E" MARSHAL_TEST_REAL_CODEX 'TestRealCodex'
 run_optional_e2e "OPENCODE ADAPTER E2E" MARSHAL_TEST_REAL_OPENCODE '^TestRealOpenCodeAdapter$'
 printf "%-26s ... NOT_RUN (endpoint-enforcing provider runtime egress is unavailable)\n" "OPENCODE RUNTIME E2E"
-run_optional_e2e "GEMINI E2E" MARSHAL_TEST_REAL_GEMINI 'TestRealGemini'
+run_optional_e2e "AGY E2E" MARSHAL_TEST_REAL_AGY 'TestRealAgy'
 run_optional_e2e "CLAUDE E2E" MARSHAL_TEST_REAL_CLAUDE 'TestRealClaude'
 run_optional_e2e "CODEX+CLAUDE PARALLEL" MARSHAL_TEST_REAL_PARALLEL_CODEX_CLAUDE 'TestRealParallelProviderAgentsSharedMemory'
 run_optional_e2e "TWO-CODEX PARALLEL" MARSHAL_TEST_REAL_PARALLEL_CODEX_AGENTS 'TestRealParallelProviderAgentsSharedMemory'
 
 printf '%s\n' "========================================================="
 if [[ $gate_failures -eq 0 ]]; then
-  printf '%s\n' ">> MARSHAL Community Release Gate: PASSED"
+  printf '%s\n' ">> Marshal Release Gate: PASSED"
   exit 0
 fi
-printf '%s\n' ">> MARSHAL Community Release Gate: FAILED ($gate_failures failures)"
+printf '%s\n' ">> Marshal Release Gate: FAILED ($gate_failures failures)"
 exit 1

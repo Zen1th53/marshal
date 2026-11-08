@@ -251,12 +251,28 @@ func statStorage(path string) (Storage, error) {
 	if path == "" {
 		path = "."
 	}
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(path, &st); err != nil {
-		return Storage{}, err
+	// A state path may not exist yet (before marshal init, for example), and
+	// statfs resolves only existing paths. Measure the nearest existing
+	// ancestor instead, so a missing path never reads as a zero-sized disk.
+	p := path
+	for {
+		var st syscall.Statfs_t
+		err := syscall.Statfs(p, &st)
+		if err == nil {
+			size := uint64(st.Bsize)
+			return Storage{Path: p, TotalBytes: st.Blocks * size, FreeBytes: st.Bavail * size, Source: "statfs"}, nil
+		}
+		if !os.IsNotExist(err) {
+			return Storage{}, err
+		}
+		parent := filepath.Dir(p)
+		if parent == p {
+			// filepath.Dir stops at the root; if even that is unreadable
+			// there is no existing ancestor left to measure.
+			return Storage{}, err
+		}
+		p = parent
 	}
-	size := uint64(st.Bsize)
-	return Storage{Path: path, TotalBytes: st.Blocks * size, FreeBytes: st.Bavail * size, Source: "statfs"}, nil
 }
 func (c *Collector) accelerators(ctx context.Context) []Accelerator {
 	result := c.drmAccelerators()

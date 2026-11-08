@@ -2,14 +2,46 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestReleaseInventory(t *testing.T) {
+func TestLegacyMigrationAndExclusivePublishBoundariesAreDiscovered(t *testing.T) {
+	for _, test := range []struct{ expr, effect string }{
+		{"store.ApplyLegacyMemoryMigration(ctx,root,kind,digest)", "record-write-wrapper"},
+		{"InitializeAndApplyLegacyMemoryMigration(ctx,root,kind,digest)", "record-write-wrapper"},
+		{"store.RollbackLegacyMemoryMigration(ctx,root,digest)", "record-write-wrapper"},
+		{"unix.Renameat2(a,stage,b,target,flags)", "filesystem"},
+	} {
+		expr, err := parser.ParseExpr(test.expr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		call := expr.(*ast.CallExpr)
+		if got := classify(call, map[string]string{"unix": "golang.org/x/sys/unix", "store": "github.com/Zen1th53/marshal/internal/store"}, "internal/store/legacy_memory_publish_linux_extreme.go"); got != test.effect {
+			t.Fatal(test.expr, got, test.effect)
+		}
+	}
+}
+
+func TestHostGitCommitCommandIsADiscoveredGitProgram(t *testing.T) {
+	expr, err := parser.ParseExpr(`hostgit.CommitCommand(ctx,root,"commit","-m","x")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imports := map[string]string{"hostgit": "github.com/Zen1th53/marshal/internal/hostgit"}
+	if got := classify(expr.(*ast.CallExpr), imports, "internal/cli/setup_fix.go"); got != "git-program" {
+		t.Fatalf("hostgit.CommitCommand classified as %q", got)
+	}
+}
+
+func TestCurrentPrivateInventory(t *testing.T) {
 	root := filepath.Join("..", "..")
 	sites, err := discover(root)
 	if err != nil {
@@ -29,19 +61,21 @@ func TestReleaseInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Print(output.String())
-	for _, version := range []string{"0.0.8"} {
-		notes, err := os.ReadFile(filepath.Join(root, "release", "RELEASE_NOTES_"+version+".md"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
-			// Release notes publish the percentage only; the counts stay in this report.
-			if i := strings.Index(line, " ("); i > 0 {
-				line = line[:i]
-			}
-			if !strings.Contains(string(notes), line) {
-				t.Errorf("%s release notes do not contain exact inventory line %q", version, line)
-			}
+	// The scanner intentionally includes both editions' source. New private
+	// controls must update the live private audit, without rewriting historical
+	// public release claims. Require counts as well as percentages.
+	notes, err := os.ReadFile(filepath.Join(root, "docs", "extreme-qualification-2026-10-11.md"))
+	if errors.Is(err, os.ErrNotExist) {
+		// The qualification report is a maintainer document that the public
+		// source release does not ship; the inventory itself is still checked.
+		t.Skip("qualification report not present in this source release")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		if !strings.Contains(string(notes), line) {
+			t.Errorf("current private qualification does not contain exact inventory line %q", line)
 		}
 	}
 }

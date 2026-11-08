@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ func TestCommandRunControlPausesResumesAndCancels(t *testing.T) {
 	if _, err := Bootstrap(ctx, repo.Path()); err != nil {
 		t.Fatal(err)
 	}
-	store, err := execution.NewFileRunStore(filepath.Join(repo.Path(), ".marshal", "execution", "runs"))
+	store, err := execution.NewFileRunStore(filepath.Join(repo.Path(), statepath.DirName, "execution", "runs"))
 	if err != nil {
 		t.Fatal(err)
 	}

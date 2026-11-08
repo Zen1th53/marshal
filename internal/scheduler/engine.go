@@ -7,16 +7,17 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Scheduler struct {
 	mu     sync.RWMutex
-	leases map[string]string
+	leases map[string]*LeaseRecord
 }
 
 func NewScheduler() *Scheduler {
 	return &Scheduler{
-		leases: make(map[string]string),
+		leases: make(map[string]*LeaseRecord),
 	}
 }
 
@@ -34,12 +35,24 @@ func (s *Scheduler) Next(ctx context.Context, task Task, candidates []Candidate)
 		return nil, ErrNoEligibleAgent
 	}
 
+	s.mu.RLock()
+	now := time.Now()
+	for _, l := range s.leases {
+		if l.TaskID == task.TaskID && l.ExpiresAt.After(now) {
+			s.mu.RUnlock()
+			return nil, ErrLeaseConflict
+		}
+	}
+	s.mu.RUnlock()
+
 	var eligible []scoredCandidate
+	var anyMissingCaps bool
 	for _, c := range candidates {
 		if c.AgentID == "" {
 			continue
 		}
 		if !hasAllCapabilities(c.Capabilities, task.RequiredCapabilities) {
+			anyMissingCaps = true
 			continue
 		}
 
@@ -52,6 +65,9 @@ func (s *Scheduler) Next(ctx context.Context, task Task, candidates []Candidate)
 	}
 
 	if len(eligible) == 0 {
+		if anyMissingCaps && len(task.RequiredCapabilities) > 0 {
+			return nil, ErrCapabilityMissing
+		}
 		return nil, ErrNoEligibleAgent
 	}
 
@@ -67,7 +83,20 @@ func (s *Scheduler) Next(ctx context.Context, task Task, candidates []Candidate)
 	leaseID := fmt.Sprintf("lease-%s-%s", task.TaskID, best.candidate.AgentID)
 
 	s.mu.Lock()
-	s.leases[leaseID] = best.candidate.AgentID
+	// Re-verify no lease conflict under write lock
+	now = time.Now()
+	for _, l := range s.leases {
+		if l.TaskID == task.TaskID && l.ExpiresAt.After(now) {
+			s.mu.Unlock()
+			return nil, ErrLeaseConflict
+		}
+	}
+	s.leases[leaseID] = &LeaseRecord{
+		LeaseID:   leaseID,
+		TaskID:    task.TaskID,
+		AgentID:   best.candidate.AgentID,
+		ExpiresAt: now.Add(5 * time.Minute),
+	}
 	s.mu.Unlock()
 
 	return &Assignment{
@@ -146,11 +175,17 @@ func (s *Scheduler) Renew(ctx context.Context, leaseID string) error {
 	if leaseID == "" {
 		return ErrStaleWorker
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if _, exists := s.leases[leaseID]; !exists {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	record, exists := s.leases[leaseID]
+	if !exists {
 		return ErrStaleWorker
 	}
+	if time.Now().After(record.ExpiresAt) {
+		delete(s.leases, leaseID)
+		return ErrStaleWorker
+	}
+	record.ExpiresAt = time.Now().Add(5 * time.Minute)
 	return nil
 }
 
@@ -165,4 +200,15 @@ func (s *Scheduler) Release(ctx context.Context, leaseID, outcome string) error 
 	}
 	delete(s.leases, leaseID)
 	return nil
+}
+
+func (s *Scheduler) GetLease(leaseID string) (*LeaseRecord, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rec, exists := s.leases[leaseID]
+	if !exists {
+		return nil, false
+	}
+	cp := *rec
+	return &cp, true
 }
