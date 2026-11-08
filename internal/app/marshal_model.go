@@ -207,8 +207,18 @@ func (m *MarshalCLI) turn(ctx context.Context, prompt, schema string, out any) e
 		}
 		defer cleanup()
 	}
-	cmd := exec.CommandContext(ctx, binary, args...)
+	// A provider that stalls (a dropped network, a hung login refresh) must
+	// not hold the run in REVIEWING forever: the turn is bounded, and on
+	// expiry the provider's whole session is killed.
+	timeout := marshalRoleTurnTimeout()
+	cmdCtx, cancelTurn := context.WithTimeoutCause(ctx, timeout, errMarshalTurnDeadline)
+	defer cancelTurn()
+	cmd := exec.CommandContext(cmdCtx, binary, args...)
 	detachControllingTerminal(cmd)
+	killProviderGroupOnCancel(cmd)
+	// A helper that inherited the output pipe must not keep Output waiting
+	// after the provider itself is gone.
+	cmd.WaitDelay = 5 * time.Second
 	cmd.Dir = m.Dir
 	if m.Provider == "codex" {
 		// Codex exec and exec resume accept '-' as the stdin prompt marker.
@@ -224,8 +234,20 @@ func (m *MarshalCLI) turn(ctx context.Context, prompt, schema string, out any) e
 		cmd.Env = append(os.Environ(), launchEnv...)
 	}
 	data, err := cmd.Output()
+	timedOut := err != nil && errors.Is(context.Cause(cmdCtx), errMarshalTurnDeadline)
+	if !timedOut && errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		// The provider answered and exited; only a lingering descendant
+		// held the pipe open. Its answer is complete.
+		err = nil
+	}
 	if contextErr := finishContext(); contextErr != nil {
+		if timedOut {
+			return errors.Join(marshalTurnTimeoutError(timeout, err), contextErr)
+		}
 		return contextErr
+	}
+	if timedOut {
+		return marshalTurnTimeoutError(timeout, err)
 	}
 	if err != nil {
 		return marshalTurnError(err, data)
@@ -674,6 +696,37 @@ func verifierInputDigest(run marshal.Run, head string, session verification.Sess
 	}
 	sum := sha256.Sum256(input)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// defaultMarshalRoleTurnTimeout bounds one noninteractive Marshal role turn
+// (planning, review, verification, permission decisions).
+const defaultMarshalRoleTurnTimeout = 15 * time.Minute
+
+// marshalRoleTurnTimeoutEnv overrides the bound with a time.ParseDuration
+// value such as "30m"; a missing, malformed or non-positive value keeps the
+// default.
+const marshalRoleTurnTimeoutEnv = "MARSHAL_ROLE_TURN_TIMEOUT"
+
+// ErrMarshalTurnTimeout marks a Marshal role turn the runtime stopped because
+// the provider did not answer in time. Nothing was decided, so the run stops
+// with the task where it was and /marshal resume repeats the turn.
+var ErrMarshalTurnTimeout = errors.New("Marshal turn timed out")
+
+// errMarshalTurnDeadline is the cancellation cause of the turn's own bound,
+// telling it apart from a cancellation or deadline of the caller.
+var errMarshalTurnDeadline = errors.New("Marshal role turn deadline")
+
+func marshalRoleTurnTimeout() time.Duration {
+	if value := strings.TrimSpace(os.Getenv(marshalRoleTurnTimeoutEnv)); value != "" {
+		if d, err := time.ParseDuration(value); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultMarshalRoleTurnTimeout
+}
+
+func marshalTurnTimeoutError(timeout time.Duration, err error) error {
+	return fmt.Errorf("%w after %s; the provider was stopped and nothing was decided; /marshal resume to retry the turn (set %s to change the limit): %w", ErrMarshalTurnTimeout, timeout, marshalRoleTurnTimeoutEnv, err)
 }
 
 // marshalTurnError names a failed model turn with the provider's own output.
