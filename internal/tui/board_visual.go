@@ -18,7 +18,10 @@ import (
 // boardVisual paints the approved Board prototype from the read model. It owns
 // presentation only; decisions and events remain with their existing owners.
 type boardVisual struct {
-	board model.Board
+	tails                  func(string) []string
+	tailWant               int
+	usageWide, usageNarrow string
+	board                  model.Board
 	// noNav hides the ^N hint where Ctrl+N only refuses (navigation not
 	// released in this session).
 	noNav                       bool
@@ -354,7 +357,7 @@ type headerPart struct {
 // step at a time until it fits: a part is shortened ("-") or left out.
 // The host chip gives way before the run's own identity, state and inbox;
 // the architecture chip stays longest, after the brand.
-var headerSteps = []string{"-run", "clock", "-health", "-budget", "-lanes", "-done", "-brand", "budget", "lanes", "done", "health", "-host", "host", "-arch", "inbox", "run", "state", "arch", "brand"}
+var headerSteps = []string{"usage", "-run", "clock", "-health", "-budget", "-lanes", "-done", "-brand", "budget", "lanes", "done", "health", "-host", "host", "-arch", "inbox", "run", "state", "arch", "brand"}
 
 // headerSpan is where one header part landed on the line, in cells.
 type headerSpan struct {
@@ -476,6 +479,9 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 	if w <= 100 {
 		return v.narrowHeader(w, brand, full, short, state, inboxColor)
 	}
+	if v.usageWide != "" {
+		parts = append(parts, headerPart{"usage", v.usageWide, ""})
+	}
 	kept := fitHeaderParts(parts, w, v.fg("faint", " · "))
 	return v.bg("band", PadCell(" "+joinHeader(kept, v.fg("faint", " · ")), w)), spansOf(kept, " · ", 1)
 }
@@ -484,7 +490,7 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 // mockups 05 and 06 draw it: the edition and the inbox label go first, then
 // a warm host chip, the budget bar, the lanes and the done count; the run,
 // its state and the architecture chip ("rev 7 D3") stay longest.
-var narrowHeaderSteps = []string{"-brand", "-inbox", "-host", "budget", "lanes", "done", "host", "inbox", "state", "run", "arch", "brand"}
+var narrowHeaderSteps = []string{"usage", "-brand", "-inbox", "-host", "budget", "lanes", "done", "host", "inbox", "state", "run", "arch", "brand"}
 
 // narrowHeader is the header at 100 columns or fewer (owner decision
 // 2026-11-06, mockups 05 and 06): the run id, its state, the done count,
@@ -526,6 +532,9 @@ func (v boardVisual) narrowHeader(w int, brand, full, shortRun, state, inboxColo
 		}
 	}
 	sep := v.fg("faint", " · ")
+	if v.usageNarrow != "" {
+		parts = append(parts, headerPart{"usage", v.usageNarrow, ""})
+	}
 	kept := fitHeaderPartsBy(parts, w, sep, narrowHeaderSteps)
 	return v.bg("band", PadCell(" "+joinHeader(kept, sep), w)), spansOf(kept, " · ", 1)
 }
@@ -1052,6 +1061,16 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 	if len(v.board.Lanes) > len(out)-2 && len(out) == h {
 		out[h-1] = PadCell(fmt.Sprintf("… %d more", len(v.board.Lanes)-h+3), w)
 		v.unhit(p.Rect.Y + h - 1)
+	}
+	if p.Density != layout.Strip && v.tails != nil {
+		for _, lane := range v.board.Lanes {
+			for _, line := range v.tails(lane.Pane) {
+				if len(out) >= h {
+					return out
+				}
+				out = append(out, PadCell("  "+redaction.RedactContent(line, nil), w))
+			}
+		}
 	}
 	return out
 }

@@ -30,6 +30,10 @@ import (
 
 // Workspace encapsulates the live Terminal TUI Control Plane over canonical runtime state.
 type Workspace struct {
+	laneTail           laneTailState
+	taskDiff           taskDiffOverlay
+	attn               attentionState
+	usage              usageState
 	proposalMCP        proposalMCPState
 	chat               nativeChatState
 	workers            workerLifecycle
@@ -435,7 +439,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/rollback", "/budget", "/pause", "/resume", "/cancel", "/doctor", "/tasks", "/task",
 			"/policy", "/sandbox", "/memory", "/provider", "/providers", "/harness", "/model", "/models",
 			"/effort", "/ultra", "/marshal", "/backup", "/fingerprint", "/runtime", "/store", "/export",
-			"/reinjection", "/alignment", "/optimization", "/verification", "/diff", "/review",
+			"/reinjection", "/alignment", "/optimization", "/verification", "/notify", "/diff", "/review",
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/permission", "/continue", "/egress", "/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
@@ -789,6 +793,11 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 // Supports full raw mode line editing, Tab autocomplete, Ctrl+P palette, diff viewer,
 // or clean fallback to buffered scanner if non-terminal.
 func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	w.startLaneTail(ctx)
+	w.startAttention(ctx)
+	w.startUsage(ctx)
 	if buildMarker != "" {
 		fmt.Fprintln(out, buildMarker)
 	}
@@ -1159,6 +1168,11 @@ func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit
 		if executed && action != nil {
 			w.runPaletteAction(ctx, *action)
 		}
+		w.renderFullView()
+		return false
+	}
+
+	if w.taskDiff.HandleKey(w, event) {
 		w.renderFullView()
 		return false
 	}
@@ -2450,7 +2464,15 @@ func (w *Workspace) frameLinesFull(cols, rows int) ([]string, int, int) {
 
 	// The diff viewer and palette own the screen while open.
 	if w.diffViewer.IsOpen() {
-		lines := w.diffViewer.Render(cols, rows-1)
+		height := rows - 1
+		status := w.taskDiff.StatusLine(cols)
+		if status != "" {
+			height--
+		}
+		lines := w.diffViewer.Render(cols, height)
+		if status != "" {
+			lines = append(lines, status)
+		}
 		for len(lines) < rows {
 			lines = append(lines, "")
 		}
