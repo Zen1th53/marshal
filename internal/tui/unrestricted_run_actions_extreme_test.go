@@ -42,7 +42,7 @@ func TestExtremeRunActionsApplyWithoutPopup(t *testing.T) {
 		found := false
 		for _, e := range events {
 			if e.Type == "PERMISSION_DECIDED" && e.Data["object"] == req.Object && e.Data["task_id"] == req.TaskID {
-				found = e.Data["allow"] == true && e.Data["decided_by"] == "marshal-runtime" && e.Data["decision_reason"] == extremeRunActionReason && e.Data["source"] == "marshal-extreme"
+				found = e.Data["allow"] == true && e.Data["decided_by"] == "marshal-runtime" && e.Data["decision_reason"] == extremeRunActionReason && e.Data["source"] == "marshal"
 			}
 		}
 		if !found {

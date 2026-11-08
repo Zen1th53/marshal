@@ -84,7 +84,7 @@ func (c *command) telemetry(ctx context.Context, args []string) error {
 	}
 	detail := "Anonymous telemetry: " + status + "."
 	if changed && !st.TelemetryDisabled {
-		detail += " A new installation identity and keypair were created; request ULTRA again if needed."
+		detail += " A new anonymous installation identity was created."
 	}
 	return c.print(struct {
 		Enabled bool `json:"enabled"`

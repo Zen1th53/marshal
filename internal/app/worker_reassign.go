@@ -129,7 +129,7 @@ func (r *Runtime) retryRoleAfterLimit(ctx context.Context, role, provider string
 		if id, idErr := model.NewID("EVENT-"); idErr == nil {
 			_, _ = r.store.Append(ctx, events.Event{ID: id, Type: events.EventTypePolicyAllowed, Subject: "marshal-runtime", At: time.Now().UTC(), Data: map[string]any{
 				"decision": "role moved off a limited provider", "role": role, "from": provider, "provider_message": reason,
-				"decided_by": "marshal-runtime", "source": "marshal-extreme",
+				"decided_by": "marshal-runtime", "source": "marshal",
 			}})
 		}
 	}

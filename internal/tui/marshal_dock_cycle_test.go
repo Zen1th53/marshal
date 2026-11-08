@@ -90,7 +90,9 @@ func TestRealTmuxDockFocusCyclesDoNotLeak(t *testing.T) {
 	layoutOf := func() string { return run("list-panes", "-t", board, "-F", "#{pane_id} #{pane_left} #{pane_width}") }
 	docked := chatPane + " 0 " + strconv.Itoa(dockWidth(120)) + "\n"
 	waitFor(t, func() bool { return strings.HasPrefix(layoutOf(), docked) }, layoutOf)
-	active := func() string { return strings.TrimSpace(run("display-message", "-p", "-t", w.tmuxSession, "#{pane_id}")) }
+	active := func() string {
+		return strings.TrimSpace(run("display-message", "-p", "-t", w.tmuxSession, "#{pane_id}"))
+	}
 	cycle := func() {
 		w.kickDock()
 		if w.handleTerminalKey(loopCtx, KeyEvent{Type: KeyRune, Rune: 'm'}) {

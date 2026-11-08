@@ -36,7 +36,7 @@ func TestMCPMemoryIndexFailureRetainsCanonicalAndFreshRuntimeRepairs(t *testing.
 	if err = r.CommandPermission(ctx, req, true, "unauthenticated caller"); err == nil {
 		t.Fatal("memory permission bypassed local authentication")
 	}
-	audit := model.Event{ID: "EVENT-index-failure", ProjectID: r.ProjectID(), Type: "PERMISSION_DECIDED", Timestamp: time.Now().UTC(), Data: map[string]any{"allow": true, "source": "marshal-extreme"}}
+	audit := model.Event{ID: "EVENT-index-failure", ProjectID: r.ProjectID(), Type: "PERMISSION_DECIDED", Timestamp: time.Now().UTC(), Data: map[string]any{"allow": true, "source": "marshal"}}
 	// Fault injection only replaces the derived-index step, after the checked
 	// commit seam used by authenticated CommandPermission; it cannot write SQL.
 	handled, err := r.commitBrokerMemoryPermissionWithIndex(ctx, req, true, rec, audit, func(context.Context, model.MemoryRecordV2) error { return errors.New("injected index unavailable") })

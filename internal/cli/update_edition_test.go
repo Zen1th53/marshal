@@ -19,6 +19,9 @@ func TestUpdateEdition(t *testing.T) {
 	t.Setenv("NO_PROXY", "")
 	t.Setenv("no_proxy", "")
 	t.Setenv(update.DisableEnv, "")
+	// Never reach the real feed: a newer release would be installed over
+	// the test binary.
+	t.Setenv(update.APIEnv, "http://127.0.0.1:1")
 	for _, args := range [][]string{{"update"}, {"update", "install"}} {
 		var stdout, stderr bytes.Buffer
 		code := Run(context.Background(), args, nil, &stdout, &stderr)
@@ -32,7 +35,7 @@ func TestUpdateEdition(t *testing.T) {
 		// Community still consults the release feed: either the unreachable
 		// proxy fails the check, or (for a dev build) the feed path reports
 		// the latest release. It never prints the private guidance.
-		checked := code != 0 && strings.Contains(stderr.String(), "update check failed") || code == 0 && strings.Contains(stdout.String(), "latest release")
+		checked := code != 0 && strings.Contains(stderr.String(), "update check failed") || code == 0 && (strings.Contains(stdout.String(), "latest release") || strings.Contains(stdout.String(), "is available"))
 		if !checked || strings.Contains(stdout.String(), "private build") {
 			t.Fatalf("%v: community did not check the release feed: code %d stdout %q stderr %q", args, code, stdout.String(), stderr.String())
 		}

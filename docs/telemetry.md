@@ -18,7 +18,7 @@ When telemetry is enabled, Marshal sends periodic heartbeat and startup events c
 - A public signing key generated locally (the private key never leaves your machine)
 - The Marshal binary version (e.g. `0.2.0`)
 - Operating system and architecture (e.g. `linux/amd64`)
-- Current execution mode (e.g. Standard or ULTRA)
+- The run mode Marshal is in
 - Timestamp of app start and background heartbeat intervals
 
 ---

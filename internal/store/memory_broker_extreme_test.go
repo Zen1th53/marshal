@@ -59,7 +59,7 @@ func memoryBrokerFixture(t *testing.T) (*Store, MCPMemoryCandidate) {
 	return s, c
 }
 func memoryBrokerAudit() model.Event {
-	return model.Event{ID: "EVENT-memory-test", ProjectID: "PROJECT-local", Type: "PERMISSION_DECIDED", Timestamp: time.Now().UTC(), Data: map[string]any{"allow": true, "source": "marshal-extreme"}}
+	return model.Event{ID: "EVENT-memory-test", ProjectID: "PROJECT-local", Type: "PERMISSION_DECIDED", Timestamp: time.Now().UTC(), Data: map[string]any{"allow": true, "source": "marshal"}}
 }
 func TestMCPMemoryTransactionFaultsRollbackAndSafeRetry(t *testing.T) {
 	for _, trigger := range []string{

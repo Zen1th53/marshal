@@ -104,7 +104,7 @@ func integrationSourceFixtureForCriteria(t *testing.T, criteria []string, config
 	actual := completed.Tasks["fix"]
 	s := r.Marshal()
 	settings := marshal.DefaultSettings()
-	run := marshal.Run{Repository: r.ProjectRoot(), TargetRef: "refs/heads/main", BaseCommit: base, PlanID: p.ID, PlanVersion: p.Version, Process05Bound: true, ApprovalScopeDigest: p.ApprovalScopeDigest, Settings: settings, State: marshal.Verifying, Tasks: []marshal.Task{{PlanTaskID: "fix", Title: p.Tasks[0].Title, Worker: actual.AssignedHarness, Mode: marshal.Governed, Branch: "marshal-extreme/source-fixture/fix", BaseCommit: base, ResultCommit: actual.ResultCommit, State: marshal.Merged, Files: p.Tasks[0].Paths, Criteria: p.Tasks[0].Criteria}}}
+	run := marshal.Run{Repository: r.ProjectRoot(), TargetRef: "refs/heads/main", BaseCommit: base, PlanID: p.ID, PlanVersion: p.Version, Process05Bound: true, ApprovalScopeDigest: p.ApprovalScopeDigest, Settings: settings, State: marshal.Verifying, Tasks: []marshal.Task{{PlanTaskID: "fix", Title: p.Tasks[0].Title, Worker: actual.AssignedHarness, Mode: marshal.Governed, Branch: "marshal/source-fixture/fix", BaseCommit: base, ResultCommit: actual.ResultCommit, State: marshal.Merged, Files: p.Tasks[0].Paths, Criteria: p.Tasks[0].Criteria}}}
 	for _, command := range p.Checks["fix"] {
 		run.Tasks[0].Checks = append(run.Tasks[0].Checks, marshal.Check{Command: command, Criteria: append([]string{}, p.Tasks[0].Criteria...)})
 	}
@@ -119,7 +119,7 @@ func integrationSourceFixtureForCriteria(t *testing.T, criteria []string, config
 		t.Fatal(err)
 	}
 	path := filepath.Join(r.layout.Worktrees, integrationTaskID("source-fixture", run))
-	if _, err = worktree.New(r.ProjectRoot(), r.layout.Worktrees).Prepare(t.Context(), model.WorktreeRequest{TaskID: integrationTaskID("source-fixture", run), Branch: "marshal-extreme/source-fixture/integration", BaseCommit: base}); err != nil {
+	if _, err = worktree.New(r.ProjectRoot(), r.layout.Worktrees).Prepare(t.Context(), model.WorktreeRequest{TaskID: integrationTaskID("source-fixture", run), Branch: "marshal/source-fixture/integration", BaseCommit: base}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = gitMarshal(t.Context(), path, "merge", "--no-ff", "-m", "Actual host integration fixture", actual.ResultCommit); err != nil {

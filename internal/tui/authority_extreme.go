@@ -311,7 +311,7 @@ func (w *Workspace) finishBuildDecisionAs(ctx context.Context, req permission.Re
 	} else {
 		ctx = app.WithExtremeRuntimeDecision(ctx, id, reason, req.Reason, provider, req.ApprovalBinding, decidedBy)
 	}
-	err := w.decidePermission(ctx, req, allow, "marshal-extreme")
+	err := w.decidePermission(ctx, req, allow, "marshal")
 	if err == nil && allow && req.Kind == "marshal-command" && strings.HasPrefix(req.Object, "/marshal approve-task ") {
 		w.queuePrivateProcess05Resume()
 	}
@@ -356,7 +356,7 @@ func (w *Workspace) collectRecentMarshalDecisions(ctx context.Context) []marshal
 					continue
 				}
 				source, _ := e.Data["source"].(string)
-				if source != "marshal-extreme" {
+				if source != "marshal" {
 					continue
 				}
 				reqID, _ := e.Data["request_id"].(string)

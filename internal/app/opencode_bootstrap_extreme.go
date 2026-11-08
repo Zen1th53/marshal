@@ -36,7 +36,7 @@ func privateProviderBootstrap(provider string) ([]model.Bind, []string, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		root = filepath.Join(home, ".cache", "marshal-extreme", "opencode-bootstrap", opencodeBootstrapRevision)
+		root = filepath.Join(home, ".cache", "marshal", "opencode-bootstrap", opencodeBootstrapRevision)
 	}
 	root, err := filepath.Abs(root)
 	if err == nil {

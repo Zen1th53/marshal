@@ -317,6 +317,11 @@ func probeClaude(ctx context.Context, lookup func(string) (string, error), run f
 }
 
 func probeBwrap(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
+	if statepath.PublicEngine {
+		// The public engine runs workers on the host; bubblewrap is not used.
+		add(Result{Name: "bwrap", Verdict: Pass, Method: "edition", Capability: "not used", Detail: "workers run on the host as you; bubblewrap is not required"})
+		return
+	}
 	binary, err := lookup("bwrap")
 	if err != nil {
 		add(Result{Name: "bwrap", Verdict: Degraded, Method: "PATH lookup", Capability: "R2/R3 execution blocked", Detail: "bubblewrap is missing; isolation is process_only"})

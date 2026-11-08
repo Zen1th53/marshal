@@ -9,4 +9,4 @@ const OtherDirName = ".marshal-extreme"
 const PublicEngine = true
 
 // RefName preserves stored Git branch and checkpoint identities across namespace migration.
-const RefName = "marshal-extreme"
+const RefName = "marshal"

@@ -46,7 +46,7 @@ func demoSecurityOverview(now time.Time) store.SecurityOverview {
 
 // demoSecurityEdition is the edition the goldens paint, the same in
 // either build.
-var demoSecurityEdition = securityEdition{Mode: "Marshal · local ULTRA", Sandbox: "bwrap per lane · host fallback only when bwrap is missing", Secrets: "workers never see auth files; the broker issues short leases"}
+var demoSecurityEdition = securityEdition{Mode: "Marshal · local ULTRA", Sandbox: "bwrap per lane · host fallback only when bwrap is missing", Secrets: "workers never see auth files; the broker issues short leases", Headline: "egress only through the broker", EgressNote: "every network call a worker makes in this run", LeaseNote: "short, per task, revoked when the lane ends"}
 
 func demoSecurityPaint(now time.Time) securityPaint {
 	return securityPaint{Snap: securitySnapshot{Overview: demoSecurityOverview(now), Loaded: true, At: now.Add(-4 * time.Second)}, Selected: "44", InInbox: true, Edition: demoSecurityEdition}
@@ -442,9 +442,9 @@ func TestSecurityEditionInfo(t *testing.T) {
 	ed := securityEditionInfo()
 	want := "standard · ULTRA by lease"
 	if editionExtreme {
-		want = "Marshal · local ULTRA"
+		want = "Marshal"
 	}
-	if ed.Mode != want || ed.Sandbox == "" || ed.Secrets == "" {
+	if ed.Mode != want || ed.Sandbox == "" || ed.Secrets == "" || ed.Headline == "" || ed.EgressNote == "" || ed.LeaseNote == "" {
 		t.Fatalf("edition %+v", ed)
 	}
 }

@@ -6,7 +6,7 @@ render beside a mockup for comparison.
   ansi_png.py compare MOCKUP.png RENDER.png OUT.png [--title TEXT]
 
 The cell is 9x17 px in DejaVu Sans Mono, the grid the TUI v3 mockups
-(private-docs/assets/tui-v3/*.png) are drawn on, so a render of the same
+(design mockups) are drawn on, so a render of the same
 size lines up with its mockup column for column. Default colours are the
 mockups' terminal background and foreground. Needs Pillow.
 """
