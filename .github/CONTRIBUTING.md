@@ -5,8 +5,7 @@ and remain small enough to review and revert independently.
 
 ## Before starting
 
-1. Read [TEAM.md](../docs/agents/TEAM.md), [TORVALDS.md](../docs/agents/TORVALDS.md), and the relevant role
-   and protocol contracts.
+1. Read the [documentation](../docs/index.md), especially [how it works](../docs/how-it-works.md).
 2. Search existing issues and pull requests before duplicating work.
 3. For non-trivial work, state the requirement, affected contracts, invariants,
    and verification plan before editing.

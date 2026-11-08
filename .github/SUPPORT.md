@@ -9,7 +9,7 @@ Welcome to the MARSHAL community support portal.
 ### 1. Documentation & FAQs
 Before opening a support issue, please consult:
 - [README.md](../README.md) — Landing page & quick start
-- [docs/README.md](../docs/README.md) — Complete documentation hub
+- [docs/index.md](../docs/index.md) — Complete documentation hub
 - [docs/troubleshooting.md](../docs/troubleshooting.md) — Diagnostics and recovery guide
 
 ### 2. GitHub Issues (Bug Reports & Feature Requests)

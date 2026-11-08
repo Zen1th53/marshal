@@ -214,7 +214,7 @@ func startTUIInProjectEnv(t *testing.T, rows, cols uint16, bin, project string, 
 		}
 	})
 
-	s.waitFor("MARSHAL", 15*time.Second)
+	s.waitFor("Marshal", 15*time.Second)
 	return s
 }
 
@@ -241,13 +241,13 @@ func TestPTYNavigationLocalCloudAuthorizes(t *testing.T) {
 	s := startCloudTUI(t, 40, 120, f.URL())
 	s.mustSee("Marshal")
 
-	s.sendLine("/ultra")
 	if editionExtreme {
-		// The Marshal build grants ULTRA locally and performs no cloud check,
-		// so the fixture endpoint is never consulted for the grant.
-		s.mustSee("ULTRA: ACTIVE (Marshal build, no cloud check)")
+		// The Marshal build opens the Board, which has no command line, and
+		// grants ULTRA locally without a cloud check; ultra_extreme_test.go
+		// covers that status text.
 		return
 	}
+	s.sendLine("/ultra")
 	s.mustSee("ENTITLED")
 }
 
@@ -262,7 +262,7 @@ func TestPTYNavigationStandardRefused(t *testing.T) {
 
 	// Cloud off: an unentitled session.
 	s := startCloudTUI(t, 40, 120, "off")
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 	s.mustNotSee("Continue Work")
 
 	// Ctrl+N entry point.
@@ -295,7 +295,7 @@ func TestPTYNavigationLeaseLoss(t *testing.T) {
 	f := newLocalCloudFixture(t)
 	f.setLeaseLifetime(4 * time.Second) // short window so renewal is observable in-test
 	s := startCloudTUI(t, 40, 120, f.URL())
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	// Prove the session is actually entitled before it is taken away.
 	s.sendLine("/ultra")
@@ -385,7 +385,7 @@ func TestPTYNavigationRepresentativeFlows(t *testing.T) {
 
 	f := newLocalCloudFixture(t)
 	s := startCloudTUI(t, 40, 120, f.URL())
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	// Composer → menu through the keyboard entry point.
 	s.send("\x0e") // Ctrl+N

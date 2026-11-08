@@ -26,8 +26,8 @@
     },
     {
       "path": ".github/CONTRIBUTING.md",
-      "sha256": "9db712dbd4efedba2ce3af2168a45572ac2154d7ca3a5c38a7fffbf8d472a90e",
-      "bytes": 4892
+      "sha256": "f5a369e8416c55b6aaa2b7337463cd03afd6b39acca8e604691dacada55255c2",
+      "bytes": 4856
     },
     {
       "path": ".github/GOVERNANCE.md",
@@ -61,8 +61,8 @@
     },
     {
       "path": ".github/SUPPORT.md",
-      "sha256": "0647eecbc9f2fe92636cd3b149a106ad958fb657d55ecdef690392523d16825d",
-      "bytes": 1253
+      "sha256": "f9d2a04a9579abb1f15c94f58460a2e0c4f0ee96bd3c121a8990284a8d6a43be",
+      "bytes": 1251
     },
     {
       "path": ".github/dependabot.yml",
@@ -536,8 +536,8 @@
     },
     {
       "path": "docs/legal/COMMERCIAL-LICENSING.md",
-      "sha256": "f63ab366639e0b78b29d87b57a15db3196ce2ca4e62a4f05e6a0cb5cf334747a",
-      "bytes": 2689
+      "sha256": "920a93495083883552d971b074189358bea63217c4569a188773179c10f97f23",
+      "bytes": 2564
     },
     {
       "path": "docs/legal/CONTRIBUTOR-ONBOARDING.md",
@@ -598,6 +598,11 @@
       "path": "docs/troubleshooting.md",
       "sha256": "d57f4e0d7f3041d85c486925137e921218cc9def002a9860803dd08ddeee9285",
       "bytes": 4005
+    },
+    {
+      "path": "docs/upgrading.md",
+      "sha256": "e47bd5623044d276ea3e3ca227ee8cc776aca659ba24a916386f5b60fd58ff55",
+      "bytes": 936
     },
     {
       "path": "examples/01-codex-task.json",
@@ -13876,8 +13881,8 @@
     },
     {
       "path": "internal/tui/navigation_release_pty_test.go",
-      "sha256": "df86ac1085c27a1f6211f68917259bc2c9dfdab6aaa6def68a04741a0089b01b",
-      "bytes": 14775
+      "sha256": "53e8cf2e89c41e92030383e9dace60735f97200e0d4c39ed05777544e81375d0",
+      "bytes": 14750
     },
     {
       "path": "internal/tui/navigation_release_test.go",
@@ -15458,96 +15463,6 @@
       "path": "release/INSTALL.md",
       "sha256": "c85a4f1b4214f09927f09808cd295e2516d834a08f83622a8106d36ad3f3c15b",
       "bytes": 2014
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.10.md",
-      "sha256": "7d6d1b8d2801bc5356fadb98f227470b7e1479df7c6d164e7aa2dc310871cbdb",
-      "bytes": 8369
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.11.md",
-      "sha256": "6c349a7d6e52334699362a4f425199e6e89bec5aeb39be7b5aa3904c3da97272",
-      "bytes": 8465
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.12.md",
-      "sha256": "207c30acffa12395d74a9d75c12651d9dc8856464ec9296898aa0ee6adc9f448",
-      "bytes": 8792
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.13.md",
-      "sha256": "7035e4f0b876e3659052cd6322351ab607d77555b35435a4a830f62bdc103108",
-      "bytes": 9228
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.14.md",
-      "sha256": "5161ec714bb7c698c93b076dbf13fd3d356378d8d1b35165e0d758b5c8aa60aa",
-      "bytes": 9098
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.15.md",
-      "sha256": "d0f05984ac4e2c14025e0c6359b492ec468bd8d9f83d4c201bbde0ce8e19bf45",
-      "bytes": 9570
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.16.md",
-      "sha256": "8b687ac4d609615087a0f63e15005ada29253cbe82207872269fdea041609cdf",
-      "bytes": 9603
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.2.md",
-      "sha256": "12444b1a27c498d55329a018fb7478813aaef5a4cbdf1a5b51f610eedde34e96",
-      "bytes": 4205
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.3.md",
-      "sha256": "9ca6413258ca405ed43d201d19935b5a2cf153333bc812efc8a4366b7a3efd44",
-      "bytes": 5720
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.4.md",
-      "sha256": "205f6c2dafed0fc3188929c488e3271b31c4ba9bbe463a3c91e9d494c9f05cf5",
-      "bytes": 7040
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.5.md",
-      "sha256": "e0fcf7c5df19499a677b3f2c7023f259dc68e2ade5f5ca838fbf11eaf6214ab9",
-      "bytes": 9370
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.6.md",
-      "sha256": "fbde104f4d5107c62980829485703978d38db9ad4ac0f559f4925443db29ab70",
-      "bytes": 6029
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.7.md",
-      "sha256": "25645a970ef90edf695161fb1ee82e9ad7ba52329659d1b55f3845482466bc68",
-      "bytes": 6143
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.8.md",
-      "sha256": "ae21ec4e61bca6bcfbafbf4f559d513ef8bcef294b0a2822c2b8fc6b6c03dd15",
-      "bytes": 7251
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5-rc.9.md",
-      "sha256": "87d9a59eabb7715ec20c9b1d3f5a11824a0f678bf586337a4b54908bcc906e9c",
-      "bytes": 7371
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.5.md",
-      "sha256": "96d4ff044d25bcb4ea9eb825415112c4885375cc57bf7811650a5aadf9e29265",
-      "bytes": 10766
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.7.md",
-      "sha256": "3a58fc6b5291f6740d7bc3a1c85dc1cb444acb921224e71b0ad17f812e53648d",
-      "bytes": 11056
-    },
-    {
-      "path": "release/RELEASE_NOTES_0.0.8.md",
-      "sha256": "546bc692527e5bb59765dd05f1707218a7d683b638575c711f4ba7dc37c5f590",
-      "bytes": 16106
     },
     {
       "path": "release/RELEASE_NOTES_0.2.0.md",

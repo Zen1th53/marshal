@@ -52,4 +52,3 @@ To initiate a commercial licensing inquiry:
 > [!IMPORTANT]
 > This document is informational only and does not constitute a binding contract or license offer. Commercial licenses are granted exclusively through executed written agreements signed by the authorized MARSHAL copyright owner.
 
-For legal review checklist details, see [`docs/legal/COMMERCIAL-AGREEMENT-CHECKLIST.md`](COMMERCIAL-AGREEMENT-CHECKLIST.md).
