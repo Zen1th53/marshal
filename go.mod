@@ -1,6 +1,6 @@
 module github.com/Zen1th53/marshal
 
-go 1.25.13
+go 1.26.10
 
 require (
 	github.com/google/uuid v1.6.0

@@ -2,7 +2,7 @@ module github.com/Zen1th53/code-evidence
 
 go 1.25.0
 
-toolchain go1.25.13
+toolchain go1.26.10
 
 require modernc.org/sqlite v1.57.0
 

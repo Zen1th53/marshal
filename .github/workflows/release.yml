@@ -15,6 +15,7 @@ on:
         required: true
 
 permissions:
+  actions: read
   contents: write
   id-token: write
   attestations: write
@@ -94,7 +95,17 @@ jobs:
             *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
           esac
 
+      - name: Require a successful CI run on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&status=success" --jq '.total_count')
+          echo "successful CI runs for ${{ github.sha }}: $count"
+          test "$count" -ge 1
+
       - name: Run Marshal release gates
+        env:
+          MARSHAL_RELEASE_SUITE_FROM_CI: "1"
         run: scripts/community-release-gate.sh
 
       - name: Build release artifacts
