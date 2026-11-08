@@ -82,12 +82,18 @@ func validateMarshalTaskIdentity(runID string, t marshal.Task) error {
 	if !marshalIdentifier(runID) || !marshalIdentifier(t.PlanTaskID) {
 		return fmt.Errorf("invalid Marshal task identity")
 	}
-	if t.Branch == marshalTaskBranch(runID, t.PlanTaskID, 0) {
+	branch := t.Branch
+	if statepath.LegacyRefName != "" && strings.HasPrefix(branch, statepath.LegacyRefName+"/") {
+		// A run started before the prefix was renamed keeps its branches.
+		branch = statepath.RefName + strings.TrimPrefix(branch, statepath.LegacyRefName)
+		parts = strings.Split(branch, "/")
+	}
+	if branch == marshalTaskBranch(runID, t.PlanTaskID, 0) {
 		return nil
 	}
 	if len(parts) == 4 {
 		var revision int64
-		if _, err := fmt.Sscanf(parts[2], "r%d", &revision); err == nil && revision > 0 && t.Branch == marshalTaskBranch(runID, t.PlanTaskID, revision) {
+		if _, err := fmt.Sscanf(parts[2], "r%d", &revision); err == nil && revision > 0 && branch == marshalTaskBranch(runID, t.PlanTaskID, revision) {
 			return nil
 		}
 	}
