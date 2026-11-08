@@ -14941,8 +14941,8 @@
     },
     {
       "path": "internal/tui/tmux_return_key_pty_test.go",
-      "sha256": "6d15381e14c91e3726978d1d95cf8d072db217264c58c8699349dd8c8ef00649",
-      "bytes": 3936
+      "sha256": "3f646a6cdc620bf6e2d16c3f15f18421f3224cb4d79cdce482521672a3d6a545",
+      "bytes": 4090
     },
     {
       "path": "internal/tui/tmux_return_key_test.go",

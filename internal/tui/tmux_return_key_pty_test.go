@@ -45,6 +45,9 @@ func TestRealClientF11ClosesControlCentreOverlays(t *testing.T) {
 	defer func() { _ = client.Process.Kill(); _ = client.Wait() }()
 	go io.Copy(io.Discard, master)
 	waitForTmuxOutput(t, pane, "Marshal")
+	// The header paints before the Board body; keys sent earlier can be lost
+	// on a slow runner.
+	waitForTmuxOutput(t, pane, "HOW A RUN STARTS")
 	if err := tmux.NewWindow(ctx, w.tmuxSession, "worker", project, nil, []string{"sleep", "600"}); err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +102,7 @@ func TestRealClientF11ClosesControlCentreOverlays(t *testing.T) {
 			if _, err := master.Write([]byte("\x1b[23~")); err != nil {
 				t.Fatal(err)
 			}
-			deadline := time.Now().Add(3 * time.Second)
+			deadline := time.Now().Add(ptyWait(3 * time.Second))
 			for {
 				out, err := tmux.CapturePane(ctx, pane)
 				if err != nil {
