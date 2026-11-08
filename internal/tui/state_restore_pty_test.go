@@ -26,7 +26,7 @@ func TestPTYBackupRestoreFromLiveSession(t *testing.T) {
 	terminal.sendLine("/backup create")
 	terminal.mustSee("Backup written and verified")
 	var backup string
-	for deadline := time.Now().Add(5 * time.Second); backup == "" && time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+	for deadline := time.Now().Add(ptyWait(5 * time.Second)); backup == "" && time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
 		matches, _ := filepath.Glob(filepath.Join(project, statepath.DirName, "backups", "backup-*.db"))
 		if len(matches) == 1 {
 			backup = matches[0]

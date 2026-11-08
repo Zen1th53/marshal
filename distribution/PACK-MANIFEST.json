@@ -12771,8 +12771,8 @@
     },
     {
       "path": "internal/tui/control_session_recovery_pty_test.go",
-      "sha256": "d3f5678b061f71a77844d58cc9f6d8ce8caa05988e226e15ef0a18c89f3501b0",
-      "bytes": 3737
+      "sha256": "c38ec6442393dd23b5705a9e145c805a6fe2d0af6a66fcdc1c27f772880f3f84",
+      "bytes": 3746
     },
     {
       "path": "internal/tui/control_session_recovery_test.go",
@@ -14271,8 +14271,8 @@
     },
     {
       "path": "internal/tui/pty_conformance_test.go",
-      "sha256": "9ed978ffa9cbe152dc9bdc7ed2abd8d5d85cf9fae1d44f851058f5f30304bf4e",
-      "bytes": 18161
+      "sha256": "474fafa1421d7e4164f789999829228ffed65b9d8c1158511c8c2b8d3d4f327a",
+      "bytes": 18245
     },
     {
       "path": "internal/tui/pty_interaction_test.go",
@@ -14486,8 +14486,8 @@
     },
     {
       "path": "internal/tui/state_restore_pty_test.go",
-      "sha256": "d97aef941a1a89b5789d00f0b8f99522269ab6d9af331224e2344e2fca8ab176",
-      "bytes": 2079
+      "sha256": "80518eb1d99f79e230373f849efd1d0d196e2fe0a5b80be567fc35b758ff0292",
+      "bytes": 2088
     },
     {
       "path": "internal/tui/statusbind.go",
@@ -14951,8 +14951,8 @@
     },
     {
       "path": "internal/tui/tmux_return_key_pty_test.go",
-      "sha256": "63095ce7091cdabfcd5605cf68a8706b2463da7c583d6d37accbd53c83d92b45",
-      "bytes": 4242
+      "sha256": "a9a02442021633ce5b8d0a2848543d7ed4afdb09ef4c5c74e32f1d7169547b01",
+      "bytes": 4134
     },
     {
       "path": "internal/tui/tmux_return_key_test.go",
@@ -14971,8 +14971,8 @@
     },
     {
       "path": "internal/tui/tmux_transport_test.go",
-      "sha256": "64cc4747869fba453f4f06e3e8814cd6a42d0c1b510fc4b58ef440f75a246dd6",
-      "bytes": 9321
+      "sha256": "c81b025f6282c850a5c3553e6ef756c20cefe6d47017f4f612b8ca19b9b48709",
+      "bytes": 9330
     },
     {
       "path": "internal/tui/truthstate.go",

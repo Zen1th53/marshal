@@ -37,7 +37,7 @@ func TestPTYInterruptedWorkspaceRecovery(t *testing.T) {
 	first.sendLine("/goal create Fix the scratch parser typo. Do not change the public API.")
 	first.mustSee("[rev 1]")
 	var saved model.SessionRecovery
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(ptyWait(15 * time.Second))
 	for time.Now().Before(deadline) {
 		r, err := app.Open(context.Background(), project)
 		if err != nil {
