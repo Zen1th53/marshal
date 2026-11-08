@@ -1,42 +1,78 @@
 name: Bug report
-description: Report a reproducible MARSHAL defect
+description: Something in Marshal did not work as expected
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Do not disclose vulnerabilities or secrets here. Follow SECURITY.md for private reporting.
+        Thanks for reporting! Please remove secrets, tokens and private code from anything you paste.
+        Security problems go to the private channel in [SECURITY.md](https://github.com/Zen1th53/marshal/blob/main/.github/SECURITY.md), not here.
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: What happened, and what did you expect?
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+      placeholder: "The run stayed in REVIEWING for 20 minutes after the worker finished…"
     validations:
       required: true
   - type: textarea
     id: reproduction
     attributes:
-      label: Reproduction
-      description: Provide minimal deterministic steps and relevant commands.
-    validations:
-      required: true
-  - type: input
-    id: commit
-    attributes:
-      label: Version or commit
-      description: Runtime version, pack version, or Git commit.
+      label: Steps to reproduce
+      description: The shortest steps that show the problem, starting from `marshal init` if you can.
+      placeholder: |
+        1. mkdir demo && cd demo && git init && marshal init
+        2. marshal
+        3. Goal: …
+        4. Pressed y on NEEDS YOU …
     validations:
       required: true
   - type: textarea
+    id: version
+    attributes:
+      label: Marshal version
+      description: Paste the output of `marshal --json version`.
+      render: json
+    validations:
+      required: true
+  - type: dropdown
+    id: marshal-provider
+    attributes:
+      label: Which provider was the Marshal (the planning chat)?
+      options:
+        - Claude Code
+        - Codex
+        - OpenCode
+        - Antigravity
+        - Not sure
+    validations:
+      required: true
+  - type: checkboxes
+    id: workers
+    attributes:
+      label: Which providers were workers or reviewers?
+      options:
+        - label: Claude Code
+        - label: Codex
+        - label: OpenCode
+        - label: Antigravity
+  - type: input
     id: environment
     attributes:
       label: Environment
-      description: OS, Go/Python version, adapter and sandbox details as relevant.
+      description: Linux distribution, tmux version (`tmux -V`), terminal, and provider CLI versions if known.
+      placeholder: "Arch Linux, tmux 3.5a, kitty, codex 0.167.0, claude 2.x"
     validations:
       required: true
   - type: textarea
-    id: evidence
+    id: board
     attributes:
-      label: Evidence
-      description: Sanitized logs, test output, or artifact references. Remove secrets and private data.
+      label: Board state or screenshot
+      description: The Board header line and the Activity lines around the problem, or a screenshot.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant output from `marshal doctor` and, if the TUI misbehaved, `.marshal/logs/tui-child.stderr`. Remove secrets first.
+      render: text
