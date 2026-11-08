@@ -136,8 +136,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "3625c3b222c1f085fccfbd70d65d46a0a7769a30d107fa9eace3801e83b92992",
-      "bytes": 6107
+      "sha256": "d70b65c3df4ac1ade2f11d5222493183ce72a9e7a172f512fb7427d2b307527a",
+      "bytes": 6224
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -2701,8 +2701,8 @@
     },
     {
       "path": "internal/app/marshal_wiring_test.go",
-      "sha256": "fcc13618373c0e55cfc21efb2d10bfb845d39b68678c87b95ed0613cfb3f1639",
-      "bytes": 13067
+      "sha256": "91e3e625309f0be61cd20a5c531c2929aae7b73f0670857eb90737c9fa7122bf",
+      "bytes": 13187
     },
     {
       "path": "internal/app/marshal_worker_fallback_review_extreme_test.go",
@@ -4546,8 +4546,8 @@
     },
     {
       "path": "internal/cli/cli.go",
-      "sha256": "377653edd3f9b06bbf8818971cd02d1d79485e8bac3367291279f01090bb07d0",
-      "bytes": 43516
+      "sha256": "c9c7a577293452f11d658fdc92b7af2764de7bcb24557427d3da934f96c13da4",
+      "bytes": 43553
     },
     {
       "path": "internal/cli/cli_mcp_default.go",
@@ -4631,8 +4631,8 @@
     },
     {
       "path": "internal/cli/dispatcher_test.go",
-      "sha256": "c257f78efd0fd2f0371421d12968294abfe3e843dd1a863d4ae552e2a8a06e54",
-      "bytes": 11947
+      "sha256": "fdb21b369d0efe4cb707e1dc92bcfeb9d5e1827c149c73c4aad093b32fd59cdd",
+      "bytes": 11939
     },
     {
       "path": "internal/cli/egm.go",
@@ -4681,13 +4681,13 @@
     },
     {
       "path": "internal/cli/host_notice.go",
-      "sha256": "a15410d5b3c845d5a6926147f5fb8ce14c5f291f6a950dfd6a78cbfa4b8061f5",
-      "bytes": 1074
+      "sha256": "fb66fa35a8b7233c3a77fe95483cdebb66fd67b746fc9aa078b837626f72d4d6",
+      "bytes": 1443
     },
     {
       "path": "internal/cli/host_notice_test.go",
-      "sha256": "6d382dfbe589100b288d4fff57d730041365e99b9cbfe05035d06a13ef32f057",
-      "bytes": 1005
+      "sha256": "ff797dc9f99d54bf1e37d27e988b4ec67d5b4274a6e6e0626322d23f815d6158",
+      "bytes": 1433
     },
     {
       "path": "internal/cli/init_identity_test.go",
@@ -15866,8 +15866,8 @@
     },
     {
       "path": "tools/e2e/board_walk.py",
-      "sha256": "9d6705f216fcb0107e44f9b18ffc08c4520ae434bc07752933ad5963ff50b68e",
-      "bytes": 9168
+      "sha256": "62995b04b9991a34538521501ff02dcb09ada300b6334a072c256e9cc24297c1",
+      "bytes": 9181
     },
     {
       "path": "tools/e2e/boardseed/main.go",
@@ -16051,8 +16051,8 @@
     },
     {
       "path": "tools/tests/test_tui_wired.py",
-      "sha256": "960ee3e320eae5c51d7de614c8f4b0a0610118ca39c9626bcd00c0c9d925bf5b",
-      "bytes": 5094
+      "sha256": "aa87232908ff359c87cfad2d2c950940dff4354de14a18912ed264b9fcd769fc",
+      "bytes": 5212
     },
     {
       "path": "tools/tests_v6/test_behavioral_runner.py",

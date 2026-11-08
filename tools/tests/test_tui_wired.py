@@ -99,6 +99,8 @@ class WiredTests(unittest.TestCase):
         self.assertEqual([], self.walk.regressions(str(self.root), old, wired))
 
     def test_committed_wired_json_is_current(self):
+        if not (ROOT / "tasks").is_dir():
+            self.skipTest("task specs are not part of this source release")
         out = ROOT / "internal" / "tui" / "wired.json"
         committed = json.loads(out.read_text(encoding="utf-8"))
         wired = self.walk.build_wired(str(ROOT), committed["source"], "internal/tui/manifest.json", "tasks")

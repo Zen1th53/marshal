@@ -16,6 +16,9 @@ import (
 )
 
 func TestMarshalWiredUltraHasIndependentVerifier(t *testing.T) {
+	if len(installedMarshalProviders()) < 2 {
+		t.Skip("needs two installed provider CLIs for an independent verifier")
+	}
 	fixture, _ := marshalFixture(t, 1)
 	runtime := &Runtime{store: fixture.Store, layout: project.Layout{Root: fixture.Repository, Worktrees: fixture.Worktrees}}
 	service, err := runtime.MarshalWired(MarshalWiring{Provider: "codex", Approver: func(context.Context, string, string) (string, error) { return "operator", nil }})

@@ -19,6 +19,20 @@ func usesProject(args []string) bool {
 	return true
 }
 
+// showsHostNotice limits the one-time host notice to commands a person runs to
+// start or prepare work. Machine-facing subcommands (MCP relays, workers,
+// status) keep their output clean.
+func showsHostNotice(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	switch args[0] {
+	case "tui", "init", "setup", "run", "goal":
+		return true
+	}
+	return false
+}
+
 func (c *command) hostWorkerNotice() error {
 	if tui.Edition() != "Marshal" {
 		return nil

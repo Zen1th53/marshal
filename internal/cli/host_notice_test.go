@@ -39,3 +39,16 @@ func TestCLIRefusesHomeAndRootBeforeStateWrites(t *testing.T) {
 		t.Fatal("wrote to refused root", err, entries)
 	}
 }
+
+func TestHostNoticeOnlyForInteractiveCommands(t *testing.T) {
+	for _, args := range [][]string{nil, {"tui"}, {"init"}, {"setup"}} {
+		if !showsHostNotice(args) {
+			t.Fatalf("%v should show the host notice", args)
+		}
+	}
+	for _, args := range [][]string{{"mcp", "relay"}, {"mcp", "serve", "--stdio"}, {"status"}, {"agent"}, {"events"}} {
+		if showsHostNotice(args) {
+			t.Fatalf("%v must keep its output clean", args)
+		}
+	}
+}

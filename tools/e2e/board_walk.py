@@ -47,7 +47,7 @@ def lines(screen):
 def board_shown(screen):
     """The Board's header and at least one of its panes are on screen."""
     ls = lines(screen)
-    if not ls or not ls[0].lstrip().startswith("MARSHAL"):
+    if not ls or not ls[0].lstrip().startswith(("MARSHAL", "Marshal")):
         return False
     body = "\n".join(ls[1:])
     return bool(re.search(r"(^|[\s│>])(TASKS|LANES|INBOX)\b", body, re.M))

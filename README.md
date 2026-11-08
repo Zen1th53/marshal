@@ -154,4 +154,4 @@ Full documentation is available in the `docs/` directory:
 
 ## Licensing
 
-Marshal is open-source software licensed under the GNU Affero General Public License v3.0 (AGPL-3.0-only), with separate commercial licensing options available. See [docs/legal/LICENSING.md](docs/legal/LICENSING.md) and [docs/legal/COMMERCIAL-LICENSING.md](docs/legal/COMMERCIAL-LICENSING.md) for details.
+Marshal is open-source software licensed under the GNU Affero General Public License v3.0 (AGPL-3.0-only), with separate commercial licensing options available. See [docs/legal/LICENSING.md](docs/legal/LICENSING.md) and [docs/legal/COMMERCIAL-LICENSING.md](docs/legal/COMMERCIAL-LICENSING.md) for details. Bundled open-source components are listed in [docs/legal/THIRD_PARTY_NOTICES.md](docs/legal/THIRD_PARTY_NOTICES.md).

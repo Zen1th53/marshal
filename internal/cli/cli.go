@@ -143,9 +143,11 @@ func Execute(ctx context.Context, root string, args []string, stdin io.Reader, s
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		if err := c.hostWorkerNotice(); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
+		if showsHostNotice(args) {
+			if err := c.hostWorkerNotice(); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
 		}
 	}
 	ctx, stopTelemetry := c.startTelemetry(ctx, args)

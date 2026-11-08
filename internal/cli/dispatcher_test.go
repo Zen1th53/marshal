@@ -38,7 +38,7 @@ var sweepTree = map[string]string{
 	"memory": "status recall show list candidates promote tombstone audit remember write", "policy": "test", "legal": "audit export",
 	"setup": "status", "update": "check status install apply", "goal": "explain", "plan": "create show approve cancel handoff",
 	"architecture": "serve draft feedback receipt", "architecture receipt": "import",
-	"exec":         "start run status approve rollback handoff", "execution": "start run status approve rollback handoff",
+	"exec": "start run status approve rollback handoff", "execution": "start run status approve rollback handoff",
 	"review": "start status evaluate attest", "verification": "start status evaluate attest",
 	"learning":     "commit show item history search context invalidate trust fingerprints playbooks replays benchmarks export restore",
 	"optimization": "start show candidates counterfactuals manifests canaries", "help": "why",
