@@ -109,7 +109,7 @@ func TestRealClientF11ClosesControlCentreOverlays(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if strings.TrimSpace(string(selected)) == pane && strings.Contains(out, "Marshal") && !strings.Contains(out, "Git Diff") && !strings.Contains(out, "Command Palette") {
+				if strings.TrimSpace(string(selected)) == pane && (strings.Contains(out, "MARSHAL") || strings.Contains(out, "Marshal")) && !strings.Contains(out, "Git Diff") && !strings.Contains(out, "Command Palette") {
 					break
 				}
 				if time.Now().After(deadline) {

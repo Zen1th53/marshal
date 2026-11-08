@@ -14936,8 +14936,8 @@
     },
     {
       "path": "internal/tui/tmux_return_key_pty_test.go",
-      "sha256": "55da76c96b0f08fea27f084929bbc31743ae45ca69e3644418e6d84aa62a2117",
-      "bytes": 3898
+      "sha256": "6d15381e14c91e3726978d1d95cf8d072db217264c58c8699349dd8c8ef00649",
+      "bytes": 3936
     },
     {
       "path": "internal/tui/tmux_return_key_test.go",
@@ -15895,6 +15895,11 @@
       "bytes": 3346
     },
     {
+      "path": "tools/e2e/results/e2e-menu-6265bd4c-menu-actions.md",
+      "sha256": "78deec670a21c6de02324f5586cf51be341c8814a8c19300e1268b479ee523fc",
+      "bytes": 26158
+    },
+    {
       "path": "tools/e2e/tui_matrix.py",
       "sha256": "0b8e042b10f7c4c8aa6fb3f975bc363eca4afc0da0a8e2a42724f9a51f9bcaea",
       "bytes": 4088
@@ -15936,8 +15941,8 @@
     },
     {
       "path": "tools/extreme/prq/prq_default_test.go",
-      "sha256": "832166895d7a88fdb5a3dfd072d2d258f269066b504c4a69ddac27a39231c5e0",
-      "bytes": 577
+      "sha256": "54091e60cc50ca7a0a9ff613b30987c2d2baa7bfcf4a2cfb7a471e6897c8d8ef",
+      "bytes": 598
     },
     {
       "path": "tools/extreme/prq/prq_extreme.go",

@@ -10,7 +10,7 @@ import (
 
 func TestDefaultBuildRefusesExecution(t *testing.T) {
 	exe := t.TempDir() + "/prq"
-	cmd := exec.Command("go", "build", "-o", exe, ".")
+	cmd := exec.Command("go", "build", "-tags", "governed", "-o", exe, ".")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build default prq: %v\n%s", err, out)
 	}
