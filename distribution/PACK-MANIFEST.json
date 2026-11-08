@@ -2431,13 +2431,13 @@
     },
     {
       "path": "internal/app/marshal_model.go",
-      "sha256": "ae623c3c80b3048a7100ccd3ce0e3c28e505b344a921a7609cc2264e052bb043",
-      "bytes": 31486
+      "sha256": "55967e9cabcdc563fef69ec0312e55c27bb0b863351a1148296c73b142f23eb7",
+      "bytes": 33957
     },
     {
       "path": "internal/app/marshal_model_session_linux.go",
-      "sha256": "2e17d3d39eff6e7d6ff0a6b6b9308d1b7466962ad285188f7aabc8196f2c68ca",
-      "bytes": 795
+      "sha256": "467334d4b37d63b6dccaba2567030d94e4be33da837adfdcf027439b078733e1",
+      "bytes": 1250
     },
     {
       "path": "internal/app/marshal_model_session_linux_test.go",
@@ -2446,13 +2446,13 @@
     },
     {
       "path": "internal/app/marshal_model_session_other.go",
-      "sha256": "f5240714855da780d92521fd503d8997fe3f7720c183ca6314a2710d03c7d4d1",
-      "bytes": 94
+      "sha256": "285b25c98d3fc534be73081705b875c1254e68cb7560dff9a36840bd1d039344",
+      "bytes": 212
     },
     {
       "path": "internal/app/marshal_model_session_unix.go",
-      "sha256": "9218fcf315f01d90b10392dec201506357a0ea3e109f644a970c1506d3c6bffb",
-      "bytes": 324
+      "sha256": "c889c90d5d0286849006084ed788d592dd03caa23f228b03115f46257d3afdf8",
+      "bytes": 779
     },
     {
       "path": "internal/app/marshal_model_test.go",
@@ -2673,6 +2673,11 @@
       "path": "internal/app/marshal_turn_error_test.go",
       "sha256": "28774b67d615b6701f2236ae406656d0b7251e85ff34be565c0adab58b7fc01c",
       "bytes": 1156
+    },
+    {
+      "path": "internal/app/marshal_turn_timeout_test.go",
+      "sha256": "101efa8ec79092a4dd1c41fad2c0a173de07ffdc9006009e5a6f90112d470cd1",
+      "bytes": 6581
     },
     {
       "path": "internal/app/marshal_ultra_extreme_test.go",
@@ -15946,7 +15951,7 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "f06a25f7a7f8ffb3a34d13a482de986979f04bc00479e5ae7b9f3bc43f906ab6",
+      "sha256": "bbee910f33c858ba7300b68dcfbb12f3c609a2dc56ff2f0b7027c53b8e71367b",
       "bytes": 397666
     },
     {
