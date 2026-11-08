@@ -70,6 +70,11 @@
       "bytes": 1251
     },
     {
+      "path": ".github/assets/demo.gif",
+      "sha256": "ab31516dcd2b830b262d5e34b6f45f401f8b95605b197d4ccd1de25f8a1db1bc",
+      "bytes": 7426890
+    },
+    {
       "path": ".github/dependabot.yml",
       "sha256": "8e8b2d746134ff04ce6943f21e56f352afae1d1abd329c6c5555dcfbacc037b0",
       "bytes": 207
@@ -141,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "87c78a4613e2cf7571f4017c6081341633d65b9b288fbce11ff41f4c9c18f00d",
-      "bytes": 7785
+      "sha256": "b30acf5bc1742862cf5213e36870b9c31928f8cad371c9c182279c6e0c315e14",
+      "bytes": 9022
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -531,8 +536,8 @@
     },
     {
       "path": "docs/installation.md",
-      "sha256": "851e8fb67e6e8985dfb0c32d641d084cb8a861088a863178bd7af152913aa4c8",
-      "bytes": 3336
+      "sha256": "1fb753256c3115e349d8d869b35dbd421513c109e3205a206d49022cdc39b61f",
+      "bytes": 3172
     },
     {
       "path": "docs/legal/AI-CONTRIBUTION-POLICY.md",
@@ -5261,8 +5266,8 @@
     },
     {
       "path": "internal/constitution/marshal_protocol.go",
-      "sha256": "2ef07cd385ab9d33b575ede79157091b9bdb87d9e35fd20cee2363a335ad2ffa",
-      "bytes": 23076
+      "sha256": "734198298f8811b74cb14fbf90dc7ac1426cb7e32e6000a8f739ebd6a15f0538",
+      "bytes": 23547
     },
     {
       "path": "internal/constitution/marshal_protocol_test.go",
@@ -5286,7 +5291,7 @@
     },
     {
       "path": "internal/constitution/protocol_extreme.go",
-      "sha256": "10b1e0df61759ef265d726f1936c0aa44bbd83d33f0003d5086d35940a87fd79",
+      "sha256": "d8a97c6847acb53c56c55ed2e2722f622e3a114b0ea4865976b9105cf9f206bc",
       "bytes": 9473
     },
     {
@@ -11865,6 +11870,11 @@
       "bytes": 3195
     },
     {
+      "path": "internal/tui/alert_problem_test.go",
+      "sha256": "4e334d9a1c68b21e9744bfbb4ed2fa75978d1d87d7e930cd5b7bdb97859f95cf",
+      "bytes": 411
+    },
+    {
       "path": "internal/tui/alignment_pty_test.go",
       "sha256": "eaaefd0f22dbb03c310dabd1b3e7cf688f834b9fab6a64e710fb4e41d5059d2c",
       "bytes": 2113
@@ -12566,8 +12576,8 @@
     },
     {
       "path": "internal/tui/commands_egress.go",
-      "sha256": "661cbd34629f004343475beef52f7fee8de59d037d1419cdc8afe72c541b7ff0",
-      "bytes": 6129
+      "sha256": "82ba554f641764c1678a67dee8acf5ec93136762cafddc8cac99a95151abd7a9",
+      "bytes": 6498
     },
     {
       "path": "internal/tui/commands_evidence.go",

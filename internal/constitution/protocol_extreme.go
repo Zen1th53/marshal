@@ -126,7 +126,7 @@ current Goal, architecture and all applicable essentials in a fresh independent
 session. Only a current runtime-bound PASS for every obligation can qualify
 completion; FAIL, UNKNOWN, N/A, self-reported success and old source reviews cannot.
 `
-const ExtremeProtocolDigest = "sha256:a76d763e7645559ed01d377c2926b729016677460e907603bed95a8edacc21dc"
+const ExtremeProtocolDigest = "sha256:b50b126149d512db8a78327c952266edbe9ca4112226261ed418e6c66d59f0ca"
 
 func buildMarshalProtocol(base string) (string, error) {
 	text := strings.ReplaceAll(base+ExtremeAuthorityProtocol, ".marshal/", statepath.DirName+"/")

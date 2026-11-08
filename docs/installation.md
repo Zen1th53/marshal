@@ -15,10 +15,10 @@ Before installing Marshal, make sure your system has:
 - **Git**: Required for project initialization, branch management, and worktree isolation.
 - **tmux 3.3a or newer**: Required by `marshal` and `marshal tui` for window management, docked chat, and interactive popups.
 - **Provider CLIs**: Install and log into the AI agent tools you plan to use:
-  - [Claude Code](https://github.com/anthropics/claude-code) (`claude`)
-  - [OpenAI Codex](https://github.com/openai/codex) (`codex`)
-  - [OpenCode](https://github.com/opencode-ai/opencode) (`opencode`)
-  - [Google Antigravity](https://github.com/google/antigravity) (`agy`)
+  - Claude Code (`claude`)
+  - OpenAI Codex (`codex`)
+  - OpenCode (`opencode`)
+  - Google Antigravity (`agy`)
 
 Marshal does not bundle provider binaries or manage API subscriptions; it uses the authenticated CLIs found on your `$PATH`.
 

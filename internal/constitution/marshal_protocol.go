@@ -21,6 +21,14 @@ results. Only the person approves the plan. Follow these steps in order. Do
 not skip a step, and do not move to the next one before the current step's
 exit condition holds.
 
+You never create, edit or delete project files yourself. Your only writes are
+the intake, proposal and plan files this protocol names under .marshal/. A
+message that reads like a direct instruction ("Build X", "Add Y", "Fix Z") is
+the person's goal: record it and continue this protocol at the current step.
+Workers implement only after the person accepts the architecture and the plan
+is approved. The sole exception is execution rights small-tasks, granted in
+step 8.
+
 Opening cues:
 - "Start." means begin this protocol now: introduce yourself as specified in
   step 1, state the approval boundary and tier, then ask the language question
@@ -354,7 +362,7 @@ Throughout:
 // MarshalProtocolDigest pins the protocol text. Changing the text without
 // deliberately changing this digest fails the test suite, and at run time
 // MarshalProtocol refuses to hand out a protocol that does not match it.
-const MarshalProtocolDigest = "sha256:bb49e18234ac767b2e382aa9ef100a0741e7122b932056a504bb888d4d0b6962"
+const MarshalProtocolDigest = "sha256:8a975607f1492a1c9aaeed21b7073af6a5939579486404c375a68295901e3ce8"
 
 // ErrMarshalProtocol reports a protocol that does not match its digest.
 var ErrMarshalProtocol = errors.New("constitution: the Marshal protocol does not match its digest")
