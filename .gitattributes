@@ -1,0 +1,3 @@
+*.golden -whitespace
+**/testdata/** -whitespace
+tools/extreme/prq/prq_extreme_test.go -whitespace conflict-marker-size=32

@@ -10,6 +10,11 @@
   ],
   "files": [
     {
+      "path": ".gitattributes",
+      "sha256": "3b4161d24bb4ebb805156f69d55dd9cdc7be152a16d9af726bab65ec824ddc25",
+      "bytes": 122
+    },
+    {
       "path": ".github/CODEOWNERS",
       "sha256": "d3114d8bffc508d4d88d24f04b53dd5f4379a9182a145b68edd6c74c6be43d4e",
       "bytes": 404
@@ -76,8 +81,8 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "232ec22729e0ab178ec3cbc5f6d022ebdfb9219c58cd991304dcb3dfb1e2d1c6",
-      "bytes": 7175
+      "sha256": "d8b8f01d0d2f4bf6662106e6cceaf65ebc0b69f2366e4c2f0a89e9dfc9c21612",
+      "bytes": 7335
     },
     {
       "path": ".github/workflows/codeql.yml",
@@ -491,8 +496,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "c01d5c7fc1bdccafcb3d491b0598547c145a2c7d5cb84c25656de6eb1309aa26",
-      "bytes": 2374
+      "sha256": "2fd22efe11d1cfc2abc23a4ec4792032ba17c2cb51e5ef0336268652e21ee965",
+      "bytes": 2373
     },
     {
       "path": "docs/assets/marshal-tui.png",
@@ -536,8 +541,8 @@
     },
     {
       "path": "docs/legal/COMMERCIAL-LICENSING.md",
-      "sha256": "920a93495083883552d971b074189358bea63217c4569a188773179c10f97f23",
-      "bytes": 2564
+      "sha256": "c9b6b5c3058354214316fc0a687e49339926acc8e8ecb6bb013ca4f79849b76e",
+      "bytes": 2563
     },
     {
       "path": "docs/legal/CONTRIBUTOR-ONBOARDING.md",
@@ -3681,8 +3686,8 @@
     },
     {
       "path": "internal/app/runtime_test.go",
-      "sha256": "e71d595b64b210f7b81a6977d8315e1614f655740fe3448e8750d92130b41db7",
-      "bytes": 10791
+      "sha256": "ad7aa65a81c4cd82d948640d6d12e6c9edb583265179aa74d13a3e31bd9ad23d",
+      "bytes": 10790
     },
     {
       "path": "internal/app/secrets_runtime_a06_test.go",
@@ -7181,8 +7186,8 @@
     },
     {
       "path": "internal/mcp/events_page.go",
-      "sha256": "ebc8c23373755152c230c3b8271bfd9db52fa0fc527de94cff0a877405fcbc35",
-      "bytes": 2542
+      "sha256": "0c3dfb9d6216d1eb27b7681187b715dc9a0ffb5f64d1054b6bbd9c46782c95e8",
+      "bytes": 2541
     },
     {
       "path": "internal/mcp/events_page_test.go",
@@ -12786,8 +12791,8 @@
     },
     {
       "path": "internal/tui/control_ultra_request_pty_test.go",
-      "sha256": "31240ad2aa32e6f132b20ff35761815ba287169cc815fb0c549e72e85e4a38e4",
-      "bytes": 3496
+      "sha256": "abb67372391cef93fb88cfbfc74c8eb002228ecad2e7bafbc1e7889c5da49e0d",
+      "bytes": 3690
     },
     {
       "path": "internal/tui/control_ultra_request_test.go",
@@ -14271,8 +14276,8 @@
     },
     {
       "path": "internal/tui/pty_patience_test.go",
-      "sha256": "4fc489cdf72a29c328395acc25e63d776cacd2bb53748d193b13cc09c1deb354",
-      "bytes": 248
+      "sha256": "7bd59559ee1d1569ceb5a360a96de729fa581c1e8e2f34127b8554fd0ed17492",
+      "bytes": 402
     },
     {
       "path": "internal/tui/pty_qualification_test.go",

@@ -87,6 +87,10 @@ jobs:
       # construction unless a task file names it.
       - name: Advanced menu wired status
         run: |
+          if [ ! -d tasks ]; then
+            echo "task specs are not part of this source release; wired status check skipped"
+            exit 0
+          fi
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base=origin/${{ github.base_ref }}
           else

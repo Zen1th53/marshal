@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -20,6 +21,11 @@ func TestPTYEntitlementRequestTracking(t *testing.T) {
 		t.Skip("candidate navigation qualification requires (default build)")
 	}
 	openPTY(t)
+	if _, err := exec.LookPath("codex"); err != nil {
+		if _, err := exec.LookPath("claude"); err != nil {
+			t.Skip("ULTRA execution preference needs an installed provider CLI")
+		}
+	}
 	if _, ok := any(&app.Runtime{}).(ultraRequestServiceProvider); !ok {
 		t.Skip("integration prerequisite: compose typed persistent request service and install ultraRequestActionBindings")
 	}

@@ -80,4 +80,3 @@ func pageEvents(events []model.Event, args map[string]any) (eventsPage, bool, er
 	}
 	return page, true, nil
 }
-

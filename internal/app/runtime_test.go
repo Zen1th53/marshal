@@ -353,4 +353,3 @@ func TestVerifyQuorumRejectsSyntheticDigest(t *testing.T) {
 		t.Fatalf("expected ErrInvalid for missing content digest, got: %v", err)
 	}
 }
-

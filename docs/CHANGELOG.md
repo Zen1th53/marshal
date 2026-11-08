@@ -35,4 +35,3 @@ Public release of Marshal: a free, open-source local multi-agent coding orchestr
   - One-line installer script `install.sh` for Linux amd64 and arm64 with SHA-256 checksum verification.
   - Diagnostic command `marshal doctor` with `--probe-providers` and `--deep` options.
   - Standardized `.marshal/` runtime directory structure with automatic Git exclusion via `.git/info/exclude`.
-
