@@ -99,8 +99,9 @@ func (v boardVisual) stateChip(state string) string {
 		}
 		return v.bold(v.fg("failed", "STOPPED"))
 	}
-	if waitingGates(v.gates) > 0 {
-		// The Marshal waits for the owner's reply (board_gates.go).
+	if v.ownerWaits() {
+		// The Marshal waits for the owner's reply (board_gates.go), or
+		// changed files wait for keep or undo (board_guard.go).
 		return v.bold(v.fg("waiting", "NEEDS YOU"))
 	}
 	return v.fg("accent", state)
