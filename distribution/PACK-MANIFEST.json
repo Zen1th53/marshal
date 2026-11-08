@@ -3691,8 +3691,8 @@
     },
     {
       "path": "internal/app/runtime_secret_commit_test.go",
-      "sha256": "bc16feb23105ae35af2b40948c9dd82f381ee30746939879b69ac22df3a6037f",
-      "bytes": 3304
+      "sha256": "523259d785752d0197d22d35e7e166b963bc8fa86222ef3d0ca6dd442d0c6f73",
+      "bytes": 3817
     },
     {
       "path": "internal/app/runtime_test.go",
