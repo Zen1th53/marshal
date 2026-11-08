@@ -24,15 +24,21 @@ func TestMain(m *testing.M) {
 	// Never reach a person's tmux server. The PTY and tmux tests start real
 	// sessions; a worker or developer running this suite inside Marshal (or
 	// any tmux) would otherwise create and respawn panes in that live server.
+	// Helper processes re-run this binary and inherit the parent's directory.
 	_ = os.Unsetenv("TMUX")
 	_ = os.Unsetenv("TMUX_PANE")
-	// A short base keeps the tmux socket path under the Unix socket limit.
-	tmuxDir, err := os.MkdirTemp("/tmp", "mtt-")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "TUI test tmux isolation failed:", err)
-		os.Exit(1)
+	tmuxDir := ""
+	if os.Getenv("MARSHAL_TUI_TEST_TMUX") == "" {
+		// A short base keeps the tmux socket path under the Unix socket limit.
+		dir, err := os.MkdirTemp("/tmp", "mtt-")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "TUI test tmux isolation failed:", err)
+			os.Exit(1)
+		}
+		tmuxDir = dir
+		_ = os.Setenv("MARSHAL_TUI_TEST_TMUX", dir)
+		_ = os.Setenv("TMUX_TMPDIR", dir)
 	}
-	_ = os.Setenv("TMUX_TMPDIR", tmuxDir)
 	cleanup, err := isolateOrdinaryTestProviderPath()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "TUI test provider isolation failed:", err)
@@ -40,6 +46,8 @@ func TestMain(m *testing.M) {
 	}
 	code := m.Run()
 	cleanup()
-	_ = os.RemoveAll(tmuxDir)
+	if tmuxDir != "" {
+		_ = os.RemoveAll(tmuxDir)
+	}
 	os.Exit(code)
 }
