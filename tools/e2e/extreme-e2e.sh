@@ -225,7 +225,7 @@ build_binary() {
 	sha=$(git -C "$REPO" rev-parse --short HEAD)
 	bd=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 	mkdir -p "$(dirname "$BIN")"
-	(cd "$REPO" && GOTOOLCHAIN=${GOTOOLCHAIN:-go1.25.13} go build -buildvcs=false \
+	(cd "$REPO" && GOTOOLCHAIN=${GOTOOLCHAIN:-go1.26.10} go build -buildvcs=false \
 		-ldflags "-X $pkg.Version=$EXPECT_VERSION -X $pkg.Commit=$sha -X $pkg.BuildDate=$bd" \
 		-o "$BIN" ./cmd/marshal)
 }

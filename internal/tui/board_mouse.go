@@ -40,6 +40,10 @@ const (
 	// button arms the reply, which Enter or a second click sends; its
 	// details button opens the view the gate is about.
 	hitGate boardHitKind = "gate"
+	// hitGuard is the plan-only guard's entry in the inbox
+	// (board_guard.go): undo arms, a second click or Enter runs it; keep
+	// dismisses it.
+	hitGuard boardHitKind = "guard"
 )
 
 // boardHit is one clickable region of the last Board paint: frame row and
@@ -169,6 +173,8 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 		}
 	case hitGate:
 		w.clickGate(h.id, h.action)
+	case hitGuard:
+		w.clickGuard(h.action)
 	case hitInspect:
 		// The same paths the inspector's keys take: a decision button
 		// opens the inbox's confirmation, never decides; o shows the pane.

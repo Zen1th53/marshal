@@ -46,6 +46,15 @@ func TestCommitGuardRejectsCredentialPathsAndLeasedSecrets(t *testing.T) {
 }
 
 func TestBaselineVerificationCommandAllowlist(t *testing.T) {
+	if goPath, err := exec.LookPath("go"); err == nil {
+		if resolved, err := filepath.EvalSymlinks(goPath); err == nil {
+			if info, err := os.Stat(resolved); err == nil && info.Mode().Perm()&0o022 != 0 {
+				// The resolver refuses a group- or world-writable toolchain by
+				// design; some CI toolchain caches install Go that way.
+				t.Skipf("go toolchain %s is group/world writable (%v)", resolved, info.Mode().Perm())
+			}
+		}
+	}
 	for _, command := range [][]string{
 		{"git", "status", "--short"},
 		{"go", "test", "./..."},
@@ -53,7 +62,8 @@ func TestBaselineVerificationCommandAllowlist(t *testing.T) {
 		{"python", "conformance/runner.py", "validate-pack"},
 	} {
 		if _, err := resolveBaselineVerificationCommand(command); err != nil {
-			t.Fatalf("safe verification rejected %v: %v", command, err)
+			goPath, lookErr := exec.LookPath("go")
+			t.Fatalf("safe verification rejected %v: %v (go on PATH: %q %v)", command, err, goPath, lookErr)
 		}
 	}
 	// Unlike git/go/python, codex has no trusted absolute fallback path: it is

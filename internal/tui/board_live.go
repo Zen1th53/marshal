@@ -392,6 +392,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	v.noNav = w.navigationRefusal() != ""
 	v.empty, v.docked, v.echo, v.notes = empty, w.dock.docked.Load(), w.sayEchoList(), w.noteList()
 	v.gates, v.gateArmed = w.ownerGates(state.Marshal), w.gateArmed()
+	v.guard, v.guardPrefix, v.guardArmed, v.guardUndo = w.guardPaint()
 	if empty {
 		v.project = filepath.Base(w.providerRoot())
 		v.chips, v.armed = w.firstUseChips(v.now), w.firstUseArmed()
@@ -553,6 +554,11 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		p = &MarshalPanel{}
 	}
 	ui := &w.boardUI
+	// Project files changed outside a run: u arms the undo, which Enter
+	// runs and any other key cancels; K keeps them (board_guard.go).
+	if w.handleGuardKey(event) {
+		return true
+	}
 	// An owner gate's armed reply takes the next key: Enter sends it,
 	// anything else cancels. y arms the first gate still waiting.
 	if w.handleGateKey(event, w.state.Marshal) {

@@ -78,7 +78,7 @@ func realTaskRequest(t *testing.T, w *Workspace, id string) driver.Request {
 // must observe the fixture's output before asking StopAll to cancel it.
 func waitForTmuxOutput(t *testing.T, pane, want string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), ptyWait(3*time.Second))
 	defer cancel()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()

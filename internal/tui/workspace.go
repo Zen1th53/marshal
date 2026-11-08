@@ -138,13 +138,13 @@ type Workspace struct {
 	// interruptArmed records that a Ctrl+C arrived with nothing left to
 	// interrupt. A second consecutive press then exits; any other key disarms
 	// it, so a stray interrupt never closes the workspace on its own.
-	interruptArmed        bool
-	exitRequested         bool
+	interruptArmed bool
+	exitRequested  bool
 	// relaunchable is set by the launcher that execs `marshal tui
 	// SESSION-ID` when Run returns a SessionRelaunch; relaunchSession is
 	// the session the operator chose to open (CTUI-0219).
-	relaunchable    bool
-	relaunchSession string
+	relaunchable          bool
+	relaunchSession       string
 	nativeOnStart         *[]string
 	nativeStartupProvider string
 	// nativeProvider records which agent a session last opened. It is an
@@ -221,6 +221,12 @@ type Workspace struct {
 	// gateContractSource replaces the store's pending contract in tests.
 	gates              gateState
 	gateContractSource gateSource
+	// guard is the plan-only guard's baseline and alert (board_guard.go);
+	// guardSource replaces git status and guardTell the delivery to the
+	// Marshal chat in tests.
+	guard       guardState
+	guardSource guardSource
+	guardTell   func(text string)
 	// answer is the last answer to something the operator did (a command,
 	// a key, a click), the only text the Board's ANSWER overlay and footer
 	// show; background messages never change it. Guarded by mu, numbered
@@ -1374,6 +1380,8 @@ func (w *Workspace) startFollowers(ctx context.Context) {
 	// So do the Plan and Architecture views.
 	w.startBackground(ctx, w.followPlan)
 	w.startBackground(ctx, w.followArch)
+	// The plan-only guard looks at the main tree while the Marshal plans.
+	w.startBackground(ctx, w.followGuard)
 }
 
 // clearTerminal clears the screen when there is a terminal to clear.

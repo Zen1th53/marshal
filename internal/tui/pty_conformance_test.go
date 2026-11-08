@@ -114,12 +114,19 @@ func startFrozenTUIInProject(t *testing.T, rows, cols uint16, bin, project strin
 // run opens on the Board's first-use card.
 func startBoardTUIInProject(t *testing.T, rows, cols uint16, bin, project string, args ...string) *ptySession {
 	t.Helper()
-	return startPTYTUI(t, rows, cols, bin, project, nil, args...)
+	// The Board has no composer prompt; wait for its header instead.
+	return startPTYTUIUntil(t, rows, cols, bin, project, nil, "Marshal", args...)
 }
 
 // startPTYTUI runs bin on a PTY in project with env added to the inherited
 // environment.
 func startPTYTUI(t *testing.T, rows, cols uint16, bin, project string, env []string, args ...string) *ptySession {
+	t.Helper()
+	return startPTYTUIUntil(t, rows, cols, bin, project, env, PromptMarker, args...)
+}
+
+// startPTYTUIUntil is startPTYTUI waiting for ready instead of the prompt.
+func startPTYTUIUntil(t *testing.T, rows, cols uint16, bin, project string, env []string, ready string, args ...string) *ptySession {
 	t.Helper()
 
 	master, slave := openPTY(t)
@@ -162,8 +169,9 @@ func startPTYTUI(t *testing.T, rows, cols uint16, bin, project string, env []str
 		}
 	})
 
-	// Wait for the workspace to paint before driving input.
-	s.waitFor("Marshal", 15*time.Second)
+	// The header is painted before the composer is ready to accept input. Wait
+	// for the prompt itself so callers never race the initial frame on slow CI.
+	s.mustSee(ready)
 	return s
 }
 

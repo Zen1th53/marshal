@@ -284,9 +284,9 @@ func (v boardVisual) firstUseHeaderLine(w int) (string, []headerSpan) {
 		{"project", v.fg("dim", "project ") + v.fg("accent", project), v.fg("accent", project)},
 		{"state", v.bg("sel", v.fg("waiting", " NO RUN YET ")), v.fg("waiting", "NO RUN")},
 	}
-	if waitingGates(v.gates) > 0 {
+	if v.ownerWaits() {
 		// The Marshal waits for the owner before any run exists: the
-		// project contract to accept.
+		// project contract to accept, or files changed to keep or undo.
 		parts[2] = headerPart{"state", v.bold(v.bg("sel", v.fg("waiting", " NEEDS YOU "))), v.bold(v.fg("waiting", "NEEDS YOU"))}
 	}
 	inboxColor := "merged"
@@ -384,7 +384,7 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 		pad = " "
 	}
 	// A decision already waiting comes before anything else.
-	if n := len(v.board.Inbox) + len(v.gates); n > 0 {
+	if n := len(v.board.Inbox) + len(v.gates) + v.guardCount(); n > 0 {
 		rows := min(h/2, 2+3*n)
 		p := layout.Pane{ID: layout.Inbox, Rect: layout.Rect{X: 0, Y: y, W: w, H: rows}, Density: layout.Compact}
 		if w >= layout.FullDensity {

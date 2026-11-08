@@ -86,6 +86,14 @@ type boardVisual struct {
 	// for Enter.
 	gates     []ownerGate
 	gateArmed string
+	// guard is the plan-only guard's alert (board_guard.go), nil for
+	// none; guardArmed is set while its undo waits for Enter, guardUndo
+	// what it would do; guardPrefix the project's directory in its
+	// repository.
+	guard       *guardAlert
+	guardPrefix string
+	guardArmed  bool
+	guardUndo   guardUndo
 	// docked is set while the Marshal chat is docked beside the Board.
 	docked bool
 	// echo is what the operator said to the Marshal from the composer,
@@ -596,6 +604,10 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 		// for.
 		items = append([][2]string{{"y", "reply"}}, items...)
 	}
+	if v.guard != nil {
+		// Project files changed outside a run: undo or keep them.
+		items = append([][2]string{{"u", "undo"}, {"K", "keep"}}, items...)
+	}
 	if v.docked {
 		// F11 (or Alt+arrow) switches between the chat and the Board
 		// from either side; tmux takes it before the Board sees it.
@@ -1070,6 +1082,12 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 			summary += fmt.Sprintf(" · %d more waiting", m)
 		}
 	}
+	if v.guard != nil && waitingGates(v.gates) == 0 && !stopped {
+		summary = "project files changed outside a run"
+		if m := len(v.board.Inbox); m > 0 {
+			summary += fmt.Sprintf(" · %d more waiting", m)
+		}
+	}
 	if stopped {
 		summary = "the run needs you"
 		if n := len(v.board.Inbox); n > 0 {
@@ -1081,6 +1099,16 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		// The run's stop leads the inbox: it is what holds everything
 		// else up. Its button types the command, the operator runs it.
 		out = append(out, v.stopEntry(stop, p.Rect.X, p.Rect.Y+len(out), w)...)
+		out = out[:min(len(out), h)]
+	}
+	// Project files changed outside a run come next: the Marshal plans
+	// and workers implement (board_guard.go).
+	if v.guard != nil && len(out) < h {
+		lines := v.guardEntry(p.Rect.X, p.Rect.Y+len(out), w)
+		if len(out)+len(lines) > h {
+			v.unhit(p.Rect.Y + len(out) + 1)
+		}
+		out = append(out, lines...)
 		out = out[:min(len(out), h)]
 	}
 	// What the Marshal waits for the owner to say comes next: nothing
@@ -1270,7 +1298,7 @@ func (v boardVisual) activityLine(a model.ActivityLine) string {
 // inboxCount is what the header's inbox chip counts: pending requests and
 // the owner gates still waiting for a reply.
 func (v boardVisual) inboxCount() int {
-	return len(v.board.Inbox) + waitingGates(v.gates)
+	return len(v.board.Inbox) + waitingGates(v.gates) + v.guardCount()
 }
 
 func boolInt(b bool) int {
