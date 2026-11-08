@@ -141,8 +141,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "d70b65c3df4ac1ade2f11d5222493183ce72a9e7a172f512fb7427d2b307527a",
-      "bytes": 6224
+      "sha256": "87c78a4613e2cf7571f4017c6081341633d65b9b288fbce11ff41f4c9c18f00d",
+      "bytes": 7785
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -14941,8 +14941,8 @@
     },
     {
       "path": "internal/tui/tmux_return_key_pty_test.go",
-      "sha256": "3f646a6cdc620bf6e2d16c3f15f18421f3224cb4d79cdce482521672a3d6a545",
-      "bytes": 4090
+      "sha256": "63095ce7091cdabfcd5605cf68a8706b2463da7c583d6d37accbd53c83d92b45",
+      "bytes": 4242
     },
     {
       "path": "internal/tui/tmux_return_key_test.go",

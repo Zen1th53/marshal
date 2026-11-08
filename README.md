@@ -1,4 +1,39 @@
+<div align="center">
+
 # Marshal
+
+### Plan with one AI. Let other AIs build it. Stay in charge.
+
+**A free, open-source multi-agent coding orchestrator for your terminal.
+Claude Code, Codex, OpenCode and Antigravity work together on your project:
+one plans, others build, a different one reviews, and verified work lands on `main`.**
+
+[![CI](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml/badge.svg)](https://github.com/Zen1th53/marshal/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Zen1th53/marshal?color=blue)](https://github.com/Zen1th53/marshal/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Zen1th53/marshal)](https://go.dev)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Linux-informational)](#1-install-marshal)
+[![Stars](https://img.shields.io/github/stars/Zen1th53/marshal?style=social)](https://github.com/Zen1th53/marshal/stargazers)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
+```
+
+[Quick start](#60-second-quick-start) ·
+[The Board](#the-board-and-core-shortcuts) ·
+[Providers](#supported-providers) ·
+[Telemetry](#telemetry-and-privacy) ·
+[Docs](#documentation)
+
+<br>
+
+<img src=".github/assets/board-needs-you.png" alt="The Board asks for your decision: accept the architecture with y" width="420">
+&nbsp;
+<img src=".github/assets/board-run-closed.png" alt="A run closed to main after review and verification" width="420">
+
+</div>
+
+---
 
 **Current release: `v0.2.0`**
 
