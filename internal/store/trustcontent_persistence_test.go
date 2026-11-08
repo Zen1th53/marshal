@@ -161,6 +161,7 @@ func TestT23MigrationUpgradesSchema26(t *testing.T) {
 			t.Fatalf("prepare schema 24 with %q: %v", statement, err)
 		}
 	}
+	resetProjectContext95HistoricalFixture(t, st)
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("upgrade schema: %v", err)
 	}

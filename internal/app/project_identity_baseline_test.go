@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,7 +55,7 @@ func TestMovedProjectOpensAndKeepsItsIdentity(t *testing.T) {
 	}
 
 	// The binding records the new location, so a later open sees no change.
-	binding, found := projectid.LoadBinding(filepath.Join(moved, ".marshal"))
+	binding, found := projectid.LoadBinding(filepath.Join(moved, statepath.DirName))
 	if !found {
 		t.Fatal("the moved project has no identity binding")
 	}
@@ -123,11 +124,11 @@ func TestForeignProjectStateIsRefused(t *testing.T) {
 	}
 	secondRuntime.Close()
 
-	firstBinding, found := projectid.LoadBinding(filepath.Join(first.Path(), ".marshal"))
+	firstBinding, found := projectid.LoadBinding(filepath.Join(first.Path(), statepath.DirName))
 	if !found {
 		t.Skip("identity bindings are unavailable in this environment")
 	}
-	secondBinding, found := projectid.LoadBinding(filepath.Join(second.Path(), ".marshal"))
+	secondBinding, found := projectid.LoadBinding(filepath.Join(second.Path(), statepath.DirName))
 	if !found {
 		t.Skip("identity bindings are unavailable in this environment")
 	}
@@ -137,11 +138,11 @@ func TestForeignProjectStateIsRefused(t *testing.T) {
 
 	// The first project's binding is copied over the second's, as a careless
 	// backup restore or a copied template would do.
-	data, err := os.ReadFile(filepath.Join(first.Path(), ".marshal", projectid.BindingFileName))
+	data, err := os.ReadFile(filepath.Join(first.Path(), statepath.DirName, projectid.BindingFileName))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(second.Path(), ".marshal", projectid.BindingFileName), data, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(second.Path(), statepath.DirName, projectid.BindingFileName), data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 

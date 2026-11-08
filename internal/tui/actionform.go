@@ -17,6 +17,9 @@ type InputSpec struct {
 	Sensitive bool
 	Default   string
 	Validate  func(string) error
+	// Advanced marks an optional field reached with Tab. Enter on the field
+	// before it submits the form while every later Advanced field is empty.
+	Advanced bool
 }
 
 type actionForm struct {
@@ -115,3 +118,14 @@ func (f *actionForm) build() (ActionRequest, error) {
 }
 
 func (f *actionForm) cancel() { f.open = false }
+
+// restAreEmptyAdvanced reports whether every field after the current one is an
+// Advanced field that is still empty, so Enter may submit instead of advancing.
+func (f *actionForm) restAreEmptyAdvanced() bool {
+	for _, field := range f.binding.Inputs[f.index+1:] {
+		if !field.Advanced || strings.TrimSpace(f.values[field.Key]) != "" {
+			return false
+		}
+	}
+	return true
+}

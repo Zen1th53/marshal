@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/sandbox"
 	"github.com/Zen1th53/marshal/internal/testutil/testgit"
 	"os"
 	"os/exec"
@@ -11,6 +12,9 @@ import (
 )
 
 func TestVerifyConfinesProjectCode(t *testing.T) {
+	if sandbox.HostExecutionPreferred() {
+		t.Skip("confinement of checks applies to the default build; the Marshal build checks on the host (TestExtremeChecksRunOnHost)")
+	}
 	repo := runtimeRepo(t)
 	if _, err := Bootstrap(t.Context(), repo.Path()); err != nil {
 		t.Fatal(err)
@@ -78,6 +82,9 @@ func TestRuntimeCommitDisablesRepositoryHelpers(t *testing.T) {
 }
 
 func TestIntegrationCheckConfinesCommand(t *testing.T) {
+	if sandbox.HostExecutionPreferred() {
+		t.Skip("confinement of checks applies to the default build; the Marshal build checks on the host (TestExtremeChecksRunOnHost)")
+	}
 	repo := runtimeRepo(t)
 	head, err := gitMarshal(t.Context(), repo.Path(), "rev-parse", "HEAD")
 	if err != nil {

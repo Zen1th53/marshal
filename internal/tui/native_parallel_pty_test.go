@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,7 +50,7 @@ printf 'CLAUDE-INPUT:<%s>\n' "$answer"
 	t.Setenv("CODEX_HOME", codexHome)
 
 	s := startFrozenTUI(t, 40, 160)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
 	project := s.cmd.Dir
 	if resolved, err := filepath.EvalSymlinks(project); err == nil {
@@ -68,7 +69,7 @@ printf 'CLAUDE-INPUT:<%s>\n' "$answer"
 		t.Fatal(err)
 	}
 
-	inbox := filepath.Join(project, ".marshal", "inbox", "claude.md")
+	inbox := filepath.Join(project, statepath.DirName, "inbox", "claude.md")
 	deadline := time.Now().Add(25 * time.Second)
 	var content string
 	for time.Now().Before(deadline) {

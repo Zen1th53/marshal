@@ -60,24 +60,26 @@ esac''')
 
     def test_package_managers_and_each_missing_tool(self):
         for manager in ("pacman", "apt", "apt-get", "dnf", "zypper", "brew"):
-            for present in ((), ("tmux",), ("socat",), ("tmux", "socat")):
+            for present in ((), ("tmux",), ("socat",), ("bwrap",), ("tmux", "socat", "bwrap")):
                 with self.subTest(manager=manager, present=present):
                     lines = self.install(manager, present)
-                    missing = [tool for tool in ("tmux", "socat") if tool not in present]
+                    missing = [tool for tool in ("tmux",) if tool not in present]
                     self.assertEqual(len(lines), len(missing))
                     for line, tool in zip(lines, missing):
-                        command = (f"brew install {tool}" if manager == "brew" else
-                                   f"sudo pacman -S {tool}" if manager == "pacman" else
-                                   f"sudo {manager} install {tool}")
+                        pkg = "bubblewrap" if tool == "bwrap" else tool
+                        command = (f"brew install {pkg}" if manager == "brew" else
+                                   f"sudo pacman -S {pkg}" if manager == "pacman" else
+                                   f"sudo {manager} install {pkg}")
                         self.assertTrue(line.startswith(f"Missing {tool}:"))
                         self.assertTrue(line.endswith(command), line)
-                        self.assertIn("requires it" if tool == "tmux" else "refused without it", line)
+                        self.assertIn("requires it" if tool == "tmux" else "isolation for governed tasks" if tool == "bwrap" else "refused without it", line)
 
     def test_no_package_manager_is_nonfatal(self):
         lines = self.install(None, ())
-        self.assertEqual(len(lines), 2)
-        for line, tool in zip(lines, ("tmux", "socat")):
-            self.assertTrue(line.endswith(f"install {tool} with your system's package manager"))
+        self.assertEqual(len(lines), 1)
+        for line, tool in zip(lines, ("tmux",)):
+            pkg = "bubblewrap" if tool == "bwrap" else tool
+            self.assertTrue(line.endswith(f"install {pkg} with your system's package manager"))
 
 
 if __name__ == "__main__":

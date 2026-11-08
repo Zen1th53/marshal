@@ -38,7 +38,17 @@ func TestRuntimeRunsResolveLiveTargetBranchBase(t *testing.T) {
 		if id == "TASK-explicit" {
 			want = initial
 		}
+		before, err := rt.Task(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
 		result, err := rt.Run(ctx, RunRequest{TaskID: id, AgentID: agent.ID, Adapter: "codex"})
+		if assertLegacyRunFixtureRefused(t, rt, before, result, err) {
+			if fake := rt.adapters["codex"].(*baseMovingAdapter); fake.probes != 0 || fake.runs != 0 {
+				t.Fatal("refused legacy Run called the adapter")
+			}
+			continue
+		}
 		if err != nil {
 			t.Fatal(err)
 		}

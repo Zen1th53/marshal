@@ -15,21 +15,36 @@ import (
 )
 
 func TestMarshalApproveRetryDispatchesGovernedTaskOnce(t *testing.T) {
+	isolateRequiredFixtureProviders(t)
 	for _, preapproved := range []bool{false, true} {
 		t.Run(map[bool]string{false: "draft", true: "already-approved-queued"}[preapproved], func(t *testing.T) {
 			// Planning only accepts workers whose CLI is installed; CI has none.
 			fakeBin := t.TempDir()
-			if err := os.WriteFile(filepath.Join(fakeBin, "codex"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			if err := os.WriteFile(filepath.Join(fakeBin, "codex"), []byte("#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'codex-cli 0.159.2'; fi\nexit 0\n"), 0o755); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-			w, rt := realControlWorkspace(t, "SESSION-approve-retry")
+			w, rt, goal := marshalRetryFixtureWorkspace(t)
 			service := *rt.Marshal()
+			marshalRetryConfigureService(&service)
+			// This retry fixture exercises plan approval only. Standing delivery
+			// consent is a distinct question covered by the service's mode matrix.
+			settings, err := service.Store.GetMarshalSettings(t.Context(), service.ProjectID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			settings.Value.AcceptanceMode = marshal.AcceptMarshalThenUser
+			if _, err = service.Store.SetMarshalSettings(t.Context(), service.ProjectID, settings.Value, settings.Revision); err != nil {
+				t.Fatal(err)
+			}
 			m := w.marshalSession()
 			approvalEntered := make(chan struct{})
 			approvalRelease := make(chan struct{})
 			defer close(approvalRelease)
 			service.ApprovalActor = func(ctx context.Context, runID, purpose string) (string, error) {
+				if purpose != "plan" {
+					return "", errors.New("fixture approves only the plan")
+				}
 				if !preapproved {
 					close(approvalEntered)
 					select {
@@ -55,11 +70,15 @@ func TestMarshalApproveRetryDispatchesGovernedTaskOnce(t *testing.T) {
 				}
 				return nil, errors.New("fixture stops after proving dispatch")
 			}}}
-			draft, err := service.DraftFromProposal([]byte(`{"tasks":[{"id":"T1","title":"Review fixture","criteria":["fixture checked"],"paths":["README.md"],"depends_on":[],"worker":"codex","mode":"governed","checks":[{"command":"true","criteria":["fixture checked"]}]}]}`), "codex")
+			draft, err := service.DraftFromProposal(marshalRetryProposal(), "codex")
 			if err != nil {
 				t.Fatal(err)
 			}
-			run, err := service.StartPlanningFromDraft(t.Context(), "RUN-retry", "fixture", draft, marshal.Budget{})
+			draft, err = marshalRetryCanonicalDraft(t, rt, w, draft)
+			if err != nil {
+				t.Fatal(err)
+			}
+			run, err := service.StartPlanningFromDraft(t.Context(), "RUN-retry", goal, draft, marshal.Budget{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -87,6 +106,15 @@ func TestMarshalApproveRetryDispatchesGovernedTaskOnce(t *testing.T) {
 			w.mu.RLock()
 			out := w.state.LastOutput
 			w.mu.RUnlock()
+			if requiredLegacyFixtureRefusal && !preapproved {
+				requests := w.permissions.queue.Take(false)
+				if len(requests) != 1 || requests[0].Object != "/marshal approve" || requests[0].ApprovalBinding == "" {
+					t.Fatalf("canonical plan popup missing: %+v, output=%q", requests, out)
+				}
+				if err := w.applyMarshalProposal(t.Context(), requests[0]); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if !preapproved {
 				select {
 				case <-approvalEntered:
@@ -102,6 +130,47 @@ func TestMarshalApproveRetryDispatchesGovernedTaskOnce(t *testing.T) {
 			if preapproved && !strings.Contains(strings.ToLower(out), "already approved") {
 				t.Fatalf("retry response: %s", out)
 			}
+			if requiredLegacyFixtureRefusal {
+				deadline := time.Now().Add(5 * time.Second)
+				for time.Now().Before(deadline) {
+					snapshot, readErr := service.Snapshot(t.Context(), "RUN-retry")
+					if readErr == nil && snapshot.Process05Bound && snapshot.ApprovalScopeDigest != "" {
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				snapshot, readErr := service.Snapshot(t.Context(), "RUN-retry")
+				if readErr != nil || !snapshot.Process05Bound || snapshot.ApprovalScopeDigest == "" {
+					t.Fatalf("canonical approval did not settle: %+v %v panel=%+v", snapshot, readErr, w.marshalPanel())
+				}
+				out, err = w.ExecuteCommand(t.Context(), "/marshal approve")
+				if err != nil || !strings.Contains(strings.ToLower(out), "already approved") {
+					t.Fatalf("approved retry: %q %v", out, err)
+				}
+				w.Close()
+				select {
+				case <-entered:
+					t.Fatal("unreviewed custom driver dispatched")
+				default:
+				}
+				events, err := rt.Store().MarshalDecisions(t.Context(), "RUN-retry")
+				if err != nil {
+					t.Fatal(err)
+				}
+				count := 0
+				for _, event := range events {
+					if event.Type == "marshal.plan.approved" {
+						count++
+					}
+				}
+				if count != 1 {
+					t.Fatalf("approval events=%d", count)
+				}
+				if _, err := m.approver(t.Context(), "RUN-retry", "plan"); err == nil {
+					t.Fatal("retry left an unused grant")
+				}
+				return
+			}
 			select {
 			case <-entered:
 			case <-time.After(5 * time.Second):
@@ -111,7 +180,6 @@ func TestMarshalApproveRetryDispatchesGovernedTaskOnce(t *testing.T) {
 			if err != nil || !strings.Contains(strings.ToLower(out), "already approved") {
 				t.Fatalf("in-flight retry: %q %v", out, err)
 			}
-			// Join detached work before inspecting durable decisions.
 			w.Close()
 			out, err = w.ExecuteCommand(t.Context(), "/marshal approve")
 			if err != nil || !strings.Contains(strings.ToLower(out), "already approved") {

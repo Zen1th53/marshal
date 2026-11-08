@@ -25,7 +25,7 @@ func TestT114ProviderAwareTokenCounting(t *testing.T) {
 
 	// 3. Multi-byte Unicode / CJK characters: must never underestimate
 	unicodeFixture := "こんにちは世界！ 🚀 Safe multi-agent governance and token budgeting."
-	countUnicode := c.CountTokens("gemini", "gemini-1.5-pro", unicodeFixture)
+	countUnicode := c.CountTokens("agy", "gemini-1.5-pro", unicodeFixture)
 	if countUnicode < 15 {
 		t.Fatalf("expected >= 15 tokens for Unicode fixture, got %d", countUnicode)
 	}

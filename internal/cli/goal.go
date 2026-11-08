@@ -20,6 +20,9 @@ import (
 // it, and a command that formed and approved in one step would remove exactly
 // that opportunity.
 func (c *command) goal(ctx context.Context, args []string) error {
+	if handled, err := c.privateGoalCommand(ctx, args); handled {
+		return err
+	}
 	if len(args) == 0 {
 		return fmt.Errorf("%w: describe what you want, or use: goal explain <request>", model.ErrInvalid)
 	}

@@ -8,20 +8,8 @@
     "unsupported"
   ],
   "adapters": {
-    "gemini": {
-      "binary": "gemini",
-      "instructions": "native",
-      "headless": "native",
-      "structured_output": "native",
-      "mcp_client": "native",
-      "native_server_or_protocol": "native",
-      "permissions": "native",
-      "sandbox": "native",
-      "hooks": "native",
-      "session_resume": "native",
-      "subagents": "probe_required"
-    },
     "codex": {
+      "integration": "runtime_provider",
       "binary": "codex",
       "instructions": "native",
       "headless": "native",
@@ -35,6 +23,7 @@
       "subagents": "probe_required"
     },
     "claude-code": {
+      "integration": "runtime_provider",
       "binary": "claude",
       "instructions": "native",
       "headless": "native",
@@ -48,6 +37,7 @@
       "subagents": "probe_required"
     },
     "opencode": {
+      "integration": "runtime_provider",
       "binary": "opencode",
       "instructions": "native",
       "headless": "native",
@@ -61,6 +51,7 @@
       "subagents": "native"
     },
     "aider": {
+      "integration": "interop_only",
       "binary": "aider",
       "instructions": "native",
       "headless": "native",
@@ -74,6 +65,7 @@
       "subagents": "emulated"
     },
     "crush": {
+      "integration": "interop_only",
       "binary": "crush",
       "instructions": "native",
       "headless": "probe_required",
@@ -86,6 +78,7 @@
       "session_resume": "native"
     },
     "antigravity": {
+      "integration": "runtime_provider",
       "binary": "agy",
       "instructions": "native",
       "headless": "native",

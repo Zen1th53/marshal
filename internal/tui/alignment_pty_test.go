@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func TestPTYAlignmentViolationsAndDecision(t *testing.T) {
 	t.Chdir(project)
 	const session = "SESSION-pty-alignment"
 	binding, _ := projectid.LoadBinding(filepath.Join(project, projectid.StateDirName))
-	store, err := execution.NewFileRunStore(filepath.Join(project, ".marshal", "execution", "runs"))
+	store, err := execution.NewFileRunStore(filepath.Join(project, statepath.DirName, "execution", "runs"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +39,7 @@ func TestPTYAlignmentViolationsAndDecision(t *testing.T) {
 	}
 
 	terminal := startFrozenTUIInProject(t, 40, 200, bin, project, "tui", session)
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/alignment scope")
 	terminal.mustSee("#0 [BLOCKING] SCOPE_LOCK secrets.txt")
 	terminal.sendLine("/alignment resolve run:RUN-al/T1#0 acknowledged reviewed with the owner")

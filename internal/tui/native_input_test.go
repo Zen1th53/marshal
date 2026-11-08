@@ -18,7 +18,7 @@ func TestNativeTmuxHostInputOrigin(t *testing.T) {
 				_, logFile := setupFakeTmux(t)
 				root := t.TempDir()
 				w := NewWorkspace(nil, "project", "session")
-				w.workDir, w.tmuxSession = root, "test-session"
+				w.workDir, w.tmuxSession = root, fixtureTmuxNamespace(t, root)
 				name := tmux.WindowName(provider, root)
 				if err := w.hostNativeTmuxWindow(context.Background(), name, root, "unused-socket", origin); err != nil {
 					t.Fatal(err)
@@ -57,7 +57,7 @@ func TestNativeTmuxLaunchOriginRecovery(t *testing.T) {
 	_, _ = setupFakeTmux(t)
 	root := t.TempDir()
 	w := NewWorkspace(nil, "project", "session")
-	w.workDir, w.tmuxSession = root, "test-session"
+	w.workDir, w.tmuxSession = root, fixtureTmuxNamespace(t, root)
 	cleanupTmuxWorkspace(t, w)
 	for _, tc := range []struct {
 		id       string

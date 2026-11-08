@@ -47,6 +47,10 @@ func RenderStatusline(s UIState, th *Theme, workDir string, width int) string {
 		segments = append(segments, StatusSegment{Text: th.Colorize(th.Ultra, badge), Priority: 3})
 	}
 
+	if buildMarker != "" {
+		segments = append(segments, StatusSegment{Text: buildMarker, Priority: 0})
+	}
+
 	// Drop the lowest-priority field until the row fits.
 	for {
 		var kept []string

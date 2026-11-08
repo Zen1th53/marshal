@@ -5,6 +5,16 @@ on:
   push:
     branches:
       - main
+    # Documentation has its own workflow; a docs-only push does not rerun the
+    # Go suite. Pull requests always run it because the gate is a required check.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'mkdocs.yml'
+      - 'scripts/docs-*'
+
+env:
+  MARSHAL_CLOUD_ENDPOINT: 'off'
 
 permissions:
   contents: read
@@ -13,19 +23,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The gate used to be one serial job that ran the whole suite twice — once
-# plain, once under the race detector — and took about eighteen minutes. The
-# race run is a superset: no test is skipped under `-race`, and nothing is
-# guarded by a build tag that excludes it, so the plain run repeated work the
-# race run already covered while doubling the exposure of the timing-sensitive
-# PTY tests to a slow runner.
-#
-# What remains is split by cost rather than by topic. internal/store is its own
-# job because it alone accounts for roughly 650 seconds of race time: its tests
-# are individually fast, and the time goes on opening a fresh SQLite database
-# and replaying the full migration chain 180-odd times under instrumentation.
-# It sets the floor for the whole gate, so it starts at the same moment as
-# everything else instead of waiting behind it.
+# The race-instrumented suite in one job took about fifty minutes. Tests now
+# run in parallel shards for both editions, and the slower race run lives in
+# race.yml (weekly and on demand).
 
 jobs:
   checks:
@@ -72,6 +72,7 @@ jobs:
         run: |
           go build ./...
           go vet ./...
+          go build -tags governed ./...
 
       - name: Validate pack and run Python test suites
         run: |
@@ -81,6 +82,22 @@ jobs:
           python3 -m unittest discover -s tools/tests_v6 -v
           python3 tools/release_verify.py . distribution/PACK-MANIFEST.json
 
+      # internal/tui/wired.json is generated from the recorded Ctrl+N walk. It
+      # must match its matrix, and no spec may fall from live to under
+      # construction unless a task file names it.
+      - name: Advanced menu wired status
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base=origin/${{ github.base_ref }}
+          else
+            base=HEAD~1
+          fi
+          if git show "$base:internal/tui/wired.json" > "$RUNNER_TEMP/wired-base.json" 2>/dev/null; then
+            python3 tools/e2e/tui_walk.py wired --check --base "$RUNNER_TEMP/wired-base.json"
+          else
+            python3 tools/e2e/tui_walk.py wired --check
+          fi
+
       - name: Validate diff whitespace
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -89,10 +106,20 @@ jobs:
             git diff --check HEAD~1...HEAD || true
           fi
 
-  race-store:
-    name: Race — store
+  # Tests are split by a stable hash of the test name (tools/ci/test-shard.sh),
+  # so the gate takes about as long as one shard instead of the whole suite.
+  # Pushes and pull requests run the ordinary build of both editions; the race
+  # detector is three to five times slower and runs weekly and on demand.
+  test:
+    name: Test — ${{ matrix.edition }} ${{ matrix.shard }}/6
+    # Ubuntu 24.04 hosted runners restrict the user namespaces required by bwrap.
     runs-on: ubuntu-22.04
-    timeout-minutes: 35
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [default, governed]
+        shard: [0, 1, 2, 3, 4, 5]
 
     steps:
       - name: Checkout repository
@@ -105,60 +132,46 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
-      # setup-go caches modules and the build cache keyed on go.sum, which does
-      # not distinguish an instrumented build from an ordinary one. Keying this
-      # one separately keeps each job's -race objects from evicting the other's.
-      - name: Cache race build objects
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
-        with:
-          path: ~/.cache/go-build
-          key: go-race-store-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: go-race-store-${{ runner.os }}-
-
-      - name: Run the store suite with the race detector
-        run: go test -race -count=1 -timeout=30m ./internal/store/...
-
-  race-rest:
-    name: Race — everything else
-    runs-on: ubuntu-22.04
-    timeout-minutes: 35
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Cache race build objects
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
-        with:
-          path: ~/.cache/go-build
-          key: go-race-rest-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: go-race-rest-${{ runner.os }}-
-
-      # Sandboxed execution is exercised outside internal/store, so bwrap is
-      # needed here; the store job is the one that can do without it.
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap socat libevent-dev ncurses-dev build-essential bison pkg-config
-          curl -fsSL https://github.com/tmux/tmux/releases/download/3.4/tmux-3.4.tar.gz -o /tmp/tmux-3.4.tar.gz
-          tar -xzf /tmp/tmux-3.4.tar.gz -C /tmp
-          (cd /tmp/tmux-3.4 && ./configure && make && sudo make install)
-          tmux -V
-          tmux -V | grep -q '3.4'
+          sudo apt-get install -y bubblewrap socat libevent-core-2.1-7
           bwrap --version
           command -v socat
 
-      - name: Run the remaining suites with the race detector
+      # The PTY tests need tmux 3.4; Ubuntu 22.04 ships 3.2a. Build it once and
+      # keep the binary instead of compiling it in every job.
+      - name: Cache tmux 3.4
+        id: tmux-cache
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ~/.local/tmux
+          key: tmux-3.4-${{ runner.os }}-ubuntu-22.04
+
+      - name: Build tmux 3.4
+        if: steps.tmux-cache.outputs.cache-hit != 'true'
         run: |
-          packages=$(go list ./... | grep -v '/internal/store$')
-          go test -race -count=1 -timeout=30m $packages
+          sudo apt-get install -y libevent-dev ncurses-dev build-essential bison pkg-config
+          curl -fsSL https://github.com/tmux/tmux/releases/download/3.4/tmux-3.4.tar.gz -o /tmp/tmux-3.4.tar.gz
+          tar -xzf /tmp/tmux-3.4.tar.gz -C /tmp
+          (cd /tmp/tmux-3.4 && ./configure --prefix="$HOME/.local/tmux" && make && make install)
+
+      - name: Use tmux 3.4
+        run: |
+          echo "$HOME/.local/tmux/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/tmux/bin/tmux" -V | grep -q '3.4'
+
+      # Marshal runs the isolated OpenCode adapter from a pinned offline
+      # bootstrap. Preparation verifies every npm tarball against the lock's
+      # SHA-512 integrity and the final tree against its pinned digest.
+      - name: Prepare OpenCode offline bootstrap
+        if: matrix.edition == 'default'
+        run: python3 tools/prepare_opencode_bootstrap.py
+
+      - name: Run test shard
+        env:
+          GO_TEST_TAGS: ${{ matrix.edition == 'governed' && 'governed' || '' }}
+        run: tools/ci/test-shard.sh ${{ matrix.shard }} 6 -count=1 -timeout=35m
 
   verify:
     # The name branch protection requires. It carries no work of its own: it
@@ -167,7 +180,7 @@ jobs:
     name: Runtime & Pack Verification
     runs-on: ubuntu-22.04
     timeout-minutes: 5
-    needs: [checks, race-store, race-rest]
+    needs: [checks, test]
     if: always()
 
     steps:
@@ -176,14 +189,11 @@ jobs:
       - name: Report the gate
         env:
           CHECKS: ${{ needs.checks.result }}
-          RACE_STORE: ${{ needs['race-store'].result }}
-          RACE_REST: ${{ needs['race-rest'].result }}
+          TESTS: ${{ needs.test.result }}
         run: |
-          echo "checks:     $CHECKS"
-          echo "race-store: $RACE_STORE"
-          echo "race-rest:  $RACE_REST"
-          if [ "$CHECKS" != "success" ] || [ "$RACE_STORE" != "success" ] \
-            || [ "$RACE_REST" != "success" ]; then
+          echo "checks: $CHECKS"
+          echo "tests:  $TESTS"
+          if [ "$CHECKS" != "success" ] || [ "$TESTS" != "success" ]; then
             echo "::error::one or more verification jobs did not pass"
             exit 1
           fi

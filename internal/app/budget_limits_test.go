@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,7 +22,7 @@ func TestBudgetLimitsAreAGoalRevisionAndBlockTheRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	binding, _ := projectid.LoadBinding(filepath.Join(repo.Path(), projectid.StateDirName))
-	store, err := execution.NewFileRunStore(filepath.Join(repo.Path(), ".marshal", "execution", "runs"))
+	store, err := execution.NewFileRunStore(filepath.Join(repo.Path(), statepath.DirName, "execution", "runs"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,8 +50,8 @@ func TestBudgetLimitsAreAGoalRevisionAndBlockTheRun(t *testing.T) {
 	owner := local.Context(ctx)
 	env := CommandEnvelope{ProjectID: r.ProjectIdentity(), SessionID: "S", TargetID: "GOAL-b", ExpectedVersion: 1, IdempotencyKey: "b1"}
 
-	if _, err := r.CommandSetGoalBudget(owner, env, model.BudgetLimit{MaxTotalTokens: new(int64)}); !errors.Is(err, model.ErrGoalInvalid) {
-		t.Fatalf("token limit accepted: %v", err)
+	if _, err := r.CommandSetGoalBudget(owner, env, model.BudgetLimit{MaxModelCalls: -1}); !errors.Is(err, model.ErrGoalInvalid) {
+		t.Fatalf("negative limit accepted: %v", err)
 	}
 	revised, err := r.CommandSetGoalBudget(owner, env, model.BudgetLimit{MaxModelCalls: 2})
 	if err != nil || revised.Revision != 2 || revised.Confirmation != model.ConfirmationPending || revised.BudgetLimits == nil || revised.BudgetLimits.MaxModelCalls != 2 {

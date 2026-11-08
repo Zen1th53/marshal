@@ -3,6 +3,7 @@ package projectid_test
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -293,7 +294,7 @@ func TestMarshalOwnFilesAreNotUserWork(t *testing.T) {
 	repo := newRepo(t)
 	// Recreate what marshal init leaves behind: its state directory and the
 	// version files, none of them committed.
-	if err := os.MkdirAll(filepath.Join(repo, ".marshal", "artifacts"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, statepath.DirName, "artifacts"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"CAPABILITIES.yaml", "PACK-VERSION.yaml", "RUNTIME-VERSION.yaml"} {
@@ -320,7 +321,7 @@ func TestMarshalOwnFilesAreNotUserWork(t *testing.T) {
 		t.Fatal("genuine uncommitted work was not detected")
 	}
 	for _, path := range withWork.DirtyPaths {
-		if strings.HasPrefix(path, ".marshal") || strings.HasSuffix(path, "-VERSION.yaml") {
+		if strings.HasPrefix(path, statepath.DirName) || strings.HasSuffix(path, "-VERSION.yaml") {
 			t.Fatalf("a MARSHAL-owned file was listed as work at risk: %q", path)
 		}
 	}

@@ -32,7 +32,19 @@ func TestCodexPreparationFailureReleasesClaimAndSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rt.Run(ctx, RunRequest{TaskID: "TASK-fix6-preparation", AgentID: agent.ID, Adapter: "codex", Model: "gpt-5.6-terra", ExpectedRevision: 1}); err == nil {
+	before, err := rt.Task(ctx, "TASK-fix6-preparation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, runErr := rt.Run(ctx, RunRequest{TaskID: "TASK-fix6-preparation", AgentID: agent.ID, Adapter: "codex", Model: "gpt-5.6-terra", ExpectedRevision: 1})
+	if privateLegacyRunFixture() {
+		assertLegacyRunFixtureRefusedWithExistingLease(t, rt, before, result, runErr)
+		if fake.probes != 0 || fake.runs != 0 {
+			t.Fatal("refused legacy assignment reached adapter")
+		}
+		return
+	}
+	if runErr == nil {
 		t.Fatal("missing base accepted")
 	}
 	if fake.runs != 0 {

@@ -87,11 +87,22 @@ func TestMemoryHandoffUsesDurableTypedServiceAcrossRestart(t *testing.T) {
 	if _, err := runtime.Memory().SetTaskSlot(ctx, sender, localProjectID, taskID, working.SlotPlanState, "verified next step", true); err != nil {
 		t.Fatal(err)
 	}
-	memory, err := runtime.Memory().ExtractCandidate(ctx, sender, ExtractCandidateRequest{
-		ProjectID: localProjectID, TaskID: taskID, Kind: model.MemoryKindFinding,
-		Title: "Canonical handoff fact", Body: "task memory is persisted in SQLite", Scope: model.ScopeTask, ScopeID: taskID,
-	})
-	if err != nil {
+	// Handoffs carry canonical durable memory only: unapproved candidates are
+	// excluded from recall, so persist this finding as verified before handoff.
+	now := time.Now().UTC()
+	memory := model.MemoryRecordV2{
+		ID: "MEM-MEMORY-HANDOFF-FACT", ProjectID: localProjectID, Kind: model.MemoryKindFinding,
+		Lifecycle: model.MemoryVerified, Confidence: model.ConfidenceVerified,
+		Authority: model.AuthorityVerified,
+		Title:     "Canonical handoff fact", Body: "task memory is persisted in SQLite",
+		Scope: string(model.ScopeTask), ScopeID: taskID,
+		ObservedAt: now, IngestedAt: now, ValidFrom: now, CreatedAt: now, UpdatedAt: now,
+		Source: model.MemorySource{Kind: "agent", Reference: sender.ID},
+	}
+	if err := runtime.Store().WriteMemoryV2(ctx, memory); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.Memory().IndexRecord(ctx, memory); err != nil {
 		t.Fatal(err)
 	}
 	handoff, err := runtime.CompileAndSubmitHandoff(ctx, sender, HandoffCompileRequest{

@@ -13,6 +13,12 @@ import (
 )
 
 func Completion(t *testing.T, run func(string) error) {
+	CompletionWithin(t, 2*time.Second, run)
+}
+
+// CompletionWithin allows host integrations to budget their own setup and
+// teardown while retaining the same descendant-reaping assertions.
+func CompletionWithin(t *testing.T, limit time.Duration, run func(string) error) {
 	t.Helper()
 	// Race-instrumented re-exec helpers otherwise sleep one second at exit,
 	// which is unrelated to worker cleanup and exceeds this test's deadline.
@@ -43,7 +49,7 @@ func Completion(t *testing.T, run func(string) error) {
 			if err != nil {
 				t.Errorf("normal completion: %v", err)
 			}
-			if time.Since(start) > 2*time.Second {
+			if time.Since(start) > limit {
 				t.Error("completion blocked by descendant output")
 			}
 			data, err := os.ReadFile(pidFile)
@@ -54,8 +60,17 @@ func Completion(t *testing.T, run func(string) error) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := syscall.Kill(pid, 0); err != syscall.ESRCH {
-				t.Fatalf("descendant %d survived completion: %v", pid, err)
+			dead := false
+			deadline := time.Now().Add(2 * time.Second)
+			for time.Now().Before(deadline) {
+				if err := syscall.Kill(pid, 0); err == syscall.ESRCH {
+					dead = true
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if !dead {
+				t.Fatalf("descendant %d survived completion: %v", pid, syscall.Kill(pid, 0))
 			}
 		})
 	}

@@ -40,7 +40,7 @@ cp "$MARSHAL_TEST_CLAUDE_HISTORY" "$MARSHAL_TEST_CLAUDE_DEST/session.jsonl"
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("CLAUDE_CONFIG_DIR", config)
 	t.Setenv("MARSHAL_TEST_CLAUDE_HISTORY", history)
-	s := startTUI(t, 40, 160)
+	s := startTUI(t, 40, 200)
 	projectDir := filepath.Join(config, "projects", regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(s.cmd.Dir, "-"))
 	os.MkdirAll(projectDir, 0700)
 	// Child inherits environment at launch; the fixture derives its own project folder.
@@ -94,7 +94,8 @@ cp "$MARSHAL_TEST_CLAUDE_HISTORY" "$MARSHAL_TEST_CLAUDE_DEST/session.jsonl"
 	waitForExit()
 	s.mustSee("Claude exited. 0 message(s), including tool calls, proposed")
 	s.sendLine("/memory search visible")
-	s.mustSee("MEMORY RECORDS (2 of 2)")
+	// The first session is one retained episode, not one record per message.
+	s.mustSee("MEMORY RECORDS (1 of 1)")
 	// Plain text must not reopen the agent, even right after one was used.
 	s.sendLine("another prompt")
 	s.mustSee("Nothing was run")

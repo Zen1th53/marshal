@@ -31,7 +31,7 @@ func TestPTYEmptyComposerCtrlCKeepsScreenInRealTmux(t *testing.T) {
 	t.Cleanup(func() { exec.Command(tmuxBin, "-S", socket, "kill-server").Run() })
 	run("-f", "/dev/null", "new-session", "-d", "-s", "interrupt", "-x", "80", "-y", "24", "-c", project)
 	run("set-option", "-w", "remain-on-exit", "on")
-	run("respawn-pane", "-k", "-t", "interrupt:0", bin, "tui")
+	run("respawn-pane", "-k", "-t", "interrupt:0", "-e", "MARSHAL_TEST_CLASSIC_SCREEN=1", bin, "tui")
 	capture := func() string { return run("capture-pane", "-p", "-t", "interrupt:0") }
 	wait := func(check func(string) bool) string {
 		t.Helper()

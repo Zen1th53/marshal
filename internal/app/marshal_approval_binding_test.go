@@ -75,7 +75,7 @@ func TestTaskConsentCannotAuthorizeQueuedOrLaterAttempt(t *testing.T) {
 	}
 }
 
-func TestPlanPackChangedAfterReviewRefusesApproval(t *testing.T) {
+func TestPlanSourceEditAfterReviewDoesNotChangeSQLiteApprovalRevision(t *testing.T) {
 	s, repo := marshalFixture(t, 1)
 	writePlanPack(t, repo, map[string]string{"a": "note"})
 	dir, err := s.TakePlanPack("run")
@@ -98,23 +98,16 @@ func TestPlanPackChangedAfterReviewRefusesApproval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Even whitespace bytes must invalidate the reviewed snapshot.
-	if err = os.WriteFile(filepath.Join(dir, "tasks", "a.md"), []byte("note\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = s.Approve(t.Context(), "run", reviewed); err == nil {
-		t.Fatal("changed pack approved")
-	}
-	run, err := s.Snapshot(t.Context(), "run")
-	if err != nil || run.State != marshal.Drafting || run.CloseAuthorization != nil {
-		t.Fatalf("refused approval changed run: %+v %v", run, err)
-	}
-	reviewed, err = s.PlanApprovalSnapshot(t.Context(), "run")
-	if err != nil {
+	// Editing the draft source does not alter the SQLite revision under review.
+	if err = os.WriteFile(filepath.Join(dir, "tasks", "a.md"), []byte("edited source\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.Approve(t.Context(), "run", reviewed); err != nil {
-		t.Fatal(err)
+		t.Fatalf("source-file edit changed the proposal-time SQLite revision: %v", err)
+	}
+	run, err := s.Snapshot(t.Context(), "run")
+	if err != nil || run.State == marshal.Drafting || run.Pack == nil || run.Pack.Tasks["a"] != "note" {
+		t.Fatalf("approval did not preserve the reviewed SQLite revision: %+v %v", run, err)
 	}
 }
 
@@ -338,7 +331,7 @@ func TestDeliveryRefusesDestinationChangedDuringConsent(t *testing.T) {
 }
 
 func TestCloseRecoveryRefusesAnotherRepositoryWithSameCommit(t *testing.T) {
-	s, repo := marshalFixture(t, 1)
+	s, repo := marshalUserCloseFixture(t, 1)
 	startIntegrityRun(t, s, marshal.Budget{})
 	if _, err := s.Execute(t.Context(), "run", marshalBrief, nil); err != nil {
 		t.Fatal(err)

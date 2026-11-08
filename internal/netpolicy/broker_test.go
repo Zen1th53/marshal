@@ -304,7 +304,7 @@ func brokerPipeClient(t *testing.T, b *CredentialBroker, upstream *pipeTLSProvid
 }
 
 func TestBrokerAPIProfiles(t *testing.T) {
-	for _, profile := range []struct{ provider, model string }{{"codex", ""}, {"claude", ""}, {"gemini", ""}, {"opencode", "openai/gpt-test"}, {"opencode", "anthropic/claude-test"}, {"opencode", "google/gemini-test"}, {"opencode", "deepseek/test"}} {
+	for _, profile := range []struct{ provider, model string }{{"codex", ""}, {"claude", ""}, {"opencode", "openai/gpt-test"}, {"opencode", "anthropic/claude-test"}, {"opencode", "google/gemini-test"}, {"opencode", "deepseek/test"}} {
 		t.Run(profile.provider+profile.model, func(t *testing.T) {
 			const secret = "real-provider-key-123456789"
 			b, err := NewCredentialBroker(profile.provider, profile.model, secret)

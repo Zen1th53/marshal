@@ -29,6 +29,9 @@ var (
 func FrozenIA() (*IA, error) {
 	frozenOnce.Do(func() {
 		frozenIA, frozenErr = LoadIA(frozenManifest)
+		if frozenErr == nil {
+			configureBuildIA(frozenIA)
+		}
 	})
 	return frozenIA, frozenErr
 }

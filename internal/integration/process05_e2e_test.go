@@ -16,7 +16,6 @@ import (
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
-	"github.com/Zen1th53/marshal/internal/projectid"
 )
 
 func gitCommitAll(t *testing.T, dir, msg string) {
@@ -42,10 +41,7 @@ func TestProcess05_FullChainE2E(t *testing.T) {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 
-	runtime, err := app.Open(ctx, projectDir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	runtime, registerFixture, projectID := openProcess05FixtureRuntime(t, ctx, projectDir)
 	defer runtime.Close()
 
 	// Initial repository file
@@ -58,7 +54,6 @@ func TestProcess05_FullChainE2E(t *testing.T) {
 	// Phase 1: Natural language request -> Process 03 Goal Contract
 	originalReq := "Safely refactor logging and update docs, but do not touch security package."
 	sessionID := "SESSION-P05-E2E"
-	projectID := projectid.ID("PROJECT-0123456789abcdef0123456789abcdef")
 
 	goal := model.GoalContract{
 		ID:                  "GOAL-P05-001",
@@ -126,7 +121,8 @@ func TestProcess05_FullChainE2E(t *testing.T) {
 		},
 	}
 
-	_, err = runtime.Plans().Create(ctx, createReq)
+	createReq = prepareProcess05FixturePlan(createReq)
+	_, err := runtime.Plans().Create(ctx, createReq)
 	if err != nil {
 		t.Fatalf("Plans.Create: %v", err)
 	}
@@ -140,7 +136,7 @@ func TestProcess05_FullChainE2E(t *testing.T) {
 	var executedTasks []string
 	var receivedPackages []execution.ConstraintPackage
 
-	runtime.Execution().RegisterHarness(execution.NewMockHarness("mock-harness", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+	registerFixture("mock-harness", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
 		executedTasks = append(executedTasks, task.TaskID)
 		receivedPackages = append(receivedPackages, pkg)
 
@@ -174,7 +170,7 @@ func TestProcess05_FullChainE2E(t *testing.T) {
 				},
 			},
 		}, nil
-	}))
+	})
 
 	// 2. Start Run from Process 04 handoff
 	run, err := runtime.Execution().StartRun(ctx, sessionID, projectID)
@@ -324,14 +320,10 @@ func TestProcess05_FailureChain_SafeReturn(t *testing.T) {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 
-	runtime, err := app.Open(ctx, projectDir)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	runtime, registerFixture, projectID := openProcess05FixtureRuntime(t, ctx, projectDir)
 	defer runtime.Close()
 
 	sessionID := "SESSION-P05-FAIL"
-	projectID := projectid.ID("PROJECT-0123456789abcdef0123456789abcdef")
 
 	goal := model.GoalContract{
 		ID:                  "GOAL-P05-FAIL",
@@ -385,6 +377,7 @@ func TestProcess05_FailureChain_SafeReturn(t *testing.T) {
 		},
 	}
 
+	createReq = prepareProcess05FixturePlan(createReq)
 	if _, err := runtime.Plans().Create(ctx, createReq); err != nil {
 		t.Fatalf("Plans.Create: %v", err)
 	}
@@ -394,13 +387,13 @@ func TestProcess05_FailureChain_SafeReturn(t *testing.T) {
 
 	// Register the exact governed harness selected by Process 04. Provider
 	// labels are not executable worker identifiers.
-	runtime.Execution().RegisterHarness(execution.NewMockHarness("mock-failing-harness", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+	registerFixture("mock-failing-harness", func(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
 		return execution.TaskResult{
 			TaskID:       task.TaskID,
 			Success:      false,
 			ErrorMessage: "Simulated worker compilation failure",
 		}, nil
-	}))
+	})
 
 	run, err := runtime.Execution().StartRun(ctx, sessionID, projectID)
 	if err != nil {

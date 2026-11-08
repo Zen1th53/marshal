@@ -116,7 +116,11 @@ func TestStatuslineDropsByPriority(t *testing.T) {
 		}
 	}
 
-	narrow := StripANSI(RenderStatusline(state, th, "/home/u/proj", 34))
+	narrowWidth := 34
+	if buildMarker != "" {
+		narrowWidth += len(buildMarker) + 3
+	}
+	narrow := StripANSI(RenderStatusline(state, th, "/home/u/proj", narrowWidth))
 	if !strings.Contains(narrow, "proj") {
 		t.Errorf("narrow statusline dropped the project identity: %q", narrow)
 	}

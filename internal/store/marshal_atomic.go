@@ -31,6 +31,9 @@ func saveMarshalStateTx(ctx context.Context, tx *sql.Tx, projectID, runID string
 	if projectID == "" || runID == "" || run.PlanID == "" || run.PlanVersion < 1 || run.Settings.Validate() != nil {
 		return fmt.Errorf("%w: invalid marshal run", model.ErrInvalid)
 	}
+	if err := recordMarshalRecoveryTx(ctx, tx, projectID, runID, run, expected); err != nil {
+		return err
+	}
 	var err error
 	if _, err = marshalWriteTx(ctx, tx, "marshal_runs", []string{"run_id", "project_id"}, []any{runID, projectID}, run, expected); err != nil {
 		return err
@@ -85,11 +88,35 @@ func (s *Store) SaveMarshalPlanState(ctx context.Context, projectID, runID strin
 		return err
 	}
 	defer tx.Rollback()
+	if err = s.validateNativePlanningFence(ctx, tx, p); err != nil {
+		return err
+	}
+	if err = s.validateMarshalApprovalAuthorityTx(ctx, tx, projectID, p, run, expectedPlan); err != nil {
+		return err
+	}
+	// A per-plan version check cannot detect another plan becoming active for
+	// this project between review and approval. Keep that pointer check in the
+	// same transaction as the new plan/run versions.
+	if expectedPlan > 0 {
+		var activeID string
+		var activeVersion int64
+		if err = tx.QueryRowContext(ctx, `SELECT plan_id, version FROM execution_plan_active WHERE project_id=?`, string(p.ProjectID)).Scan(&activeID, &activeVersion); err != nil {
+			return fmt.Errorf("%w: active plan changed: %v", plan.ErrPlanConflict, err)
+		}
+		if activeID != p.ID || activeVersion != expectedPlan {
+			return fmt.Errorf("%w: active plan changed from %s@%d to %s@%d", plan.ErrPlanConflict, p.ID, expectedPlan, activeID, activeVersion)
+		}
+	}
 	if err = savePlanTx(ctx, tx, p, expectedPlan); err != nil {
 		return err
 	}
 	if err = saveMarshalStateTx(ctx, tx, projectID, runID, run, expectedRun, event, nil, 0); err != nil {
 		return err
+	}
+	if expectedRun == 0 {
+		if err = saveMarshalImportProvenanceTx(ctx, tx, projectID, runID, p); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

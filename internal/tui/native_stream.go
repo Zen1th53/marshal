@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"sort"
@@ -78,16 +79,19 @@ type stream struct {
 var channelWriteMu sync.Mutex
 var channelWriteGate ioGate
 
-func streamDir(root string) string  { return filepath.Join(root, ".marshal", "stream") }
+func streamDir(root string) string  { return filepath.Join(root, statepath.DirName, "stream") }
 func streamPath(root string) string { return filepath.Join(streamDir(root), "events.jsonl") }
 
 // openStream opens the channel, learning where it left off.
 func openStream(root string) (*stream, error) {
+	if err := statepath.CheckPath(root, streamPath(root)); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(streamDir(root), 0700); err != nil {
 		return nil, err
 	}
 	s := &stream{mu: &channelWriteMu, root: root, path: streamPath(root), digests: map[string]bool{}}
-	entries, err := s.readAll()
+	entries, err := s.readMarks()
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +108,20 @@ func openStream(root string) (*stream, error) {
 
 // append drops one message into the channel and reports whether it was new.
 func (s *stream) append(provider, session string, message importer.Message) (bool, error) {
+	// A history re-sync offers every earlier message again. The channel is
+	// append-only, so a digest this stream already holds is a duplicate:
+	// skip it before redaction and before re-reading the channel.
+	at := message.Timestamp.UTC()
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	digest := streamDigest(provider, at, message)
+	s.mu.Lock()
+	known := s.digests[digest]
+	s.mu.Unlock()
+	if known {
+		return false, nil
+	}
 	text := strings.TrimSpace(hideMarshalProtocol(message.Content))
 	if text == "" {
 		return false, nil
@@ -116,7 +134,7 @@ func (s *stream) append(provider, session string, message importer.Message) (boo
 
 	// Each native watcher can hold its own stream object. Refresh under the
 	// shared IO ownership before assigning a sequence or checking duplicates.
-	entries, err := s.readAll()
+	entries, err := s.readMarks()
 	if err != nil {
 		return false, err
 	}
@@ -127,10 +145,6 @@ func (s *stream) append(provider, session string, message importer.Message) (boo
 		}
 		s.digests[e.Digest] = true
 	}
-	at := message.Timestamp.UTC()
-	if at.IsZero() {
-		at = time.Now().UTC()
-	}
 	entry := streamEntry{
 		Provider: provider,
 		Session:  session,
@@ -138,7 +152,7 @@ func (s *stream) append(provider, session string, message importer.Message) (boo
 		Role:     strings.ToLower(strings.TrimSpace(message.Role)),
 		Kind:     strings.ToLower(strings.TrimSpace(message.Kind)),
 		Text:     truncateStreamText(text),
-		Digest:   streamDigest(provider, at, message),
+		Digest:   digest,
 	}
 	if s.digests[entry.Digest] {
 		s.mu.Unlock()
@@ -234,6 +248,45 @@ func (s *stream) readAll() ([]streamEntry, error) {
 	return entries, nil
 }
 
+// streamMark is the part of an entry that ordering and de-duplication need.
+type streamMark struct {
+	Seq    int64  `json:"seq"`
+	Digest string `json:"digest"`
+}
+
+// readMarks reads only sequence numbers and digests. Appending runs once per
+// imported message; decoding and redacting every stored text on each append
+// made a long chat history cost a core.
+func (s *stream) readMarks() ([]streamMark, error) {
+	f, err := os.Open(s.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var marks []streamMark
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 1<<16), 1<<20)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var m streamMark
+		if err := json.Unmarshal(line, &m); err != nil {
+			continue // a torn final line, as in readAll
+		}
+		marks = append(marks, m)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return marks, nil
+}
+
 // trim keeps the channel bounded, dropping the oldest entries.
 //
 // Nothing is lost by this: every entry was written to durable memory before it
@@ -244,6 +297,15 @@ func (s *stream) trim() error {
 		return err
 	}
 	defer channelWriteGate.release()
+	// Trim runs after every publish. Count with the cheap marks read and
+	// decode and redact the channel only when it actually has to be cut.
+	marks, err := s.readMarks()
+	if err != nil {
+		return err
+	}
+	if len(marks) <= streamMaxEntries {
+		return nil
+	}
 	entries, err := s.readAll()
 	if err != nil {
 		return err
@@ -293,6 +355,9 @@ type cursors map[string]int64
 func cursorPath(root string) string { return filepath.Join(streamDir(root), "cursors.json") }
 
 func loadCursors(root string) (cursors, error) {
+	if err := statepath.CheckPath(root, cursorPath(root)); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(cursorPath(root))
 	if errors.Is(err, os.ErrNotExist) {
 		return cursors{}, nil
@@ -311,6 +376,12 @@ func loadCursors(root string) (cursors, error) {
 }
 
 func saveCursors(root string, c cursors) error {
+	if err := statepath.CheckPath(root, cursorPath(root)); err != nil {
+		return err
+	}
+	if err := statepath.CheckPath(root, cursorPath(root)+".tmp"); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(streamDir(root), 0700); err != nil {
 		return err
 	}
@@ -342,9 +413,13 @@ func publishNativeTranscript(s *stream, producer string, tr importer.SessionTran
 		return fmt.Errorf("channel transcript has no producer identity")
 	}
 	for _, message := range tr.Messages {
-		if security.NewFirewall(security.FirewallConfig{}).ScanText(message.Content) != nil {
+		// Community drops a message holding a secret; Extreme publishes it
+		// with the secret removed.
+		content, _, err := security.NewFirewall(security.FirewallConfig{}).AdmitText(message.Content)
+		if err != nil {
 			continue
 		}
+		message.Content = content
 		if _, err := s.append(producer, tr.SessionID, message); err != nil {
 			return err
 		}

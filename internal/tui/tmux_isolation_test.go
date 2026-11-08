@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io"
 	"os"
 	"os/exec"
@@ -27,12 +28,20 @@ func TestProjectsKeepRootBindingsAndTargetOwnWindows(t *testing.T) {
 	second := NewWorkspace(nil, "second", "session")
 	second.workDir = t.TempDir()
 	cleanupTmuxWorkspace(t, second)
-	second.tmuxSession = w.tmuxSession
 	second.tmuxPath = w.tmuxPath
-	if err := tmux.NewWindow(ctx, w.tmuxSession, "second-marshal", second.workDir, nil, []string{"sleep", "30"}); err != nil {
-		t.Fatal(err)
+	if statepath.PublicEngine {
+		second.tmuxSession = tmux.SessionName(second.workDir)
+		if _, err := tmux.RunCommand(ctx, "new-session", "-d", "-s", second.tmuxSession, "-n", statepath.Name, "sleep", "30"); err != nil {
+			t.Fatal(err)
+		}
+		second.tmuxMarshalWin = second.tmuxSession + ":" + statepath.Name
+	} else {
+		second.tmuxSession = w.tmuxSession
+		if err := tmux.NewWindow(ctx, second.tmuxSession, "second-marshal", second.workDir, nil, []string{"sleep", "30"}); err != nil {
+			t.Fatal(err)
+		}
+		second.tmuxMarshalWin = second.tmuxSession + ":second-marshal"
 	}
-	second.tmuxMarshalWin = "second-marshal"
 	_, err = second.runNativeAgentInTmux(ctx, nativeLaunchOperator, "test", "Test", second.workDir, "/bin/sh", []string{"-c", "read answer"}, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -41,22 +50,27 @@ func TestProjectsKeepRootBindingsAndTargetOwnWindows(t *testing.T) {
 	if string(before) != string(after) {
 		t.Fatal("opening projects changed server-global root bindings")
 	}
-	firstKeys, err := tmux.RunCommand(ctx, "list-keys", "-T", "marshal-keys-"+tmux.ProjectHash(w.workDir))
+	firstKeys, err := tmux.RunCommand(ctx, "list-keys", "-T", statepath.Name+"-keys-"+tmux.ProjectHash(w.workDir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondKeys, err := tmux.RunCommand(ctx, "list-keys", "-T", "marshal-keys-"+tmux.ProjectHash(second.workDir))
+	secondKeys, err := tmux.RunCommand(ctx, "list-keys", "-T", statepath.Name+"-keys-"+tmux.ProjectHash(second.workDir))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(firstKeys) == string(secondKeys) {
 		t.Fatal("project key tables collided")
 	}
-	if strings.Contains(string(firstKeys), "-t marshal") || strings.Contains(string(secondKeys), "-t marshal") {
-		t.Fatal("bindings use ambiguous bare window targets")
+	for _, keys := range []string{string(firstKeys), string(secondKeys)} {
+		fields := strings.Fields(keys)
+		for i, field := range fields {
+			if field == "-t" && i+1 < len(fields) && strings.Trim(fields[i+1], "\";") == statepath.Name {
+				t.Fatal("bindings use ambiguous bare window targets")
+			}
+		}
 	}
 	w.StopAllWorkers(ctx)
-	secondAfter, err := tmux.RunCommand(ctx, "list-keys", "-T", "marshal-keys-"+tmux.ProjectHash(second.workDir))
+	secondAfter, err := tmux.RunCommand(ctx, "list-keys", "-T", statepath.Name+"-keys-"+tmux.ProjectHash(second.workDir))
 	if err != nil || string(secondKeys) != string(secondAfter) {
 		t.Fatal("ending first project altered second project's keys")
 	}
@@ -72,7 +86,7 @@ func TestProjectsKeepRootBindingsAndTargetOwnWindows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondStatus, err := tmux.RunCommand(ctx, "show-options", "-w", "-v", "-t", w.tmuxSession+":second-marshal", "@marshal_status")
+	secondStatus, err := tmux.RunCommand(ctx, "show-options", "-w", "-v", "-t", second.tmuxMarshalWin, "@marshal_status")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +156,7 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "0 marshal-keys-" + tmux.ProjectHash(w.workDir); strings.TrimSpace(string(state)) != want {
+	if want := "0 " + statepath.Name + "-keys-" + tmux.ProjectHash(w.workDir); strings.TrimSpace(string(state)) != want {
 		t.Fatalf("client attached after takeover with wrong input state: got %q, want %q", state, want)
 	}
 	w.tmuxMu.Lock()
@@ -192,7 +206,7 @@ func TestRealClientReturnKeyAndInputStayWindowScoped(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := a.paneID + " 0 0 marshal-keys-" + tmux.ProjectHash(w.workDir)
+		want := a.paneID + " 0 0 " + statepath.Name + "-keys-" + tmux.ProjectHash(w.workDir)
 		if strings.TrimSpace(string(state)) != want {
 			t.Fatalf("take over returned before client input was ready: got %q, want %q", state, want)
 		}

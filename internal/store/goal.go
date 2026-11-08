@@ -55,6 +55,18 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 	}
 	defer tx.Rollback()
 
+	if err := s.saveGoalContractTx(ctx, tx, goal, expectedRevision); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit save goal: %w", err)
+	}
+	return nil
+}
+
+// saveGoalContractTx is shared by ordinary revisions and atomic cancellation.
+func (s *Store) saveGoalContractTx(ctx context.Context, tx *sql.Tx, goal model.GoalContract, expectedRevision int64) error {
+	var err error
 	// Check active goal for session
 	var currentGoalID string
 	var currentRevision int64
@@ -83,7 +95,17 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 			return fmt.Errorf("%w: current revision is %d (goal %s), expected %d (goal %s)",
 				model.ErrGoalConflict, currentRevision, currentGoalID, expectedRevision, goal.ID)
 		}
+		previous, err := readGoalContract(ctx, tx, currentGoalID, currentRevision)
+		if err != nil {
+			return err
+		}
+		if previous.Confirmation == model.ConfirmationCancelled {
+			return fmt.Errorf("%w: cancelled goal is terminal", model.ErrGoalConflict)
+		}
 		goal.Revision = expectedRevision + 1
+	}
+	if err := model.ValidateGoal(goal); err != nil {
+		return err
 	}
 
 	scopeJSON, err := json.Marshal(goal.Scope)
@@ -190,8 +212,11 @@ func (s *Store) SaveGoalContract(ctx context.Context, goal model.GoalContract, e
 	if err := writeCommand(ctx, tx, goal); err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit save goal: %w", err)
+	// Carry cumulative consumption forward without resetting it on edits or approval.
+	if expectedRevision > 0 {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO budget_trackers(session_id,goal_id,revision,consumed_json,updated_at) SELECT session_id,goal_id,?,consumed_json,? FROM budget_trackers WHERE session_id=? AND goal_id=? AND revision=?`, goal.Revision, now, goal.SessionID, goal.ID, expectedRevision); err != nil {
+			return fmt.Errorf("carry goal budget: %w", err)
+		}
 	}
 	return nil
 }

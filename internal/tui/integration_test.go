@@ -198,7 +198,7 @@ func TestIntegrationNarrowNoColorPreservesTruthLabels(t *testing.T) {
 				}
 			}
 			joined := strings.Join(out, "\n")
-			if !strings.Contains(joined, "UNKNOWN") && !strings.Contains(joined, "NOT_RUN") {
+			if !strings.Contains(joined, "UNKNOWN") && !strings.Contains(joined, "NOT_RUN") && !strings.Contains(joined, "Not run") {
 				t.Fatalf("%s width %d hid every textual truth status:\n%s", section.Title, width, joined)
 			}
 			if strings.Contains(joined, "UNKNO…") || strings.Contains(joined, "NOT_RU…") {
@@ -219,6 +219,7 @@ func TestIntegrationStalenessCancellationAndIdempotency(t *testing.T) {
 			t.Fatal(err)
 		}
 		ws.dispatchNavigationKey(ctx, key(KeyEnter))
+		completeTaskInputForm(t, ctx, ws.navView, "task-1")
 		auth.mu.Lock()
 		auth.task.Revision++
 		auth.mu.Unlock()

@@ -37,7 +37,7 @@ func ModelInventory(codexCachedModels, ollamaCachedTags []string) marshal.Invent
 			provider = "claude"
 		}
 		if key == "antigravity" {
-			provider = "gemini"
+			provider = "agy"
 		}
 		for _, name := range p.SupportedModels {
 			add(provider, name)

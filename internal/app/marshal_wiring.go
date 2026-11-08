@@ -4,21 +4,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/harness"
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/marshal/driver"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/sandbox"
+	"github.com/Zen1th53/marshal/internal/sessionmcp"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
 // MarshalWiring is what a surface supplies to run a real Marshal plan.
 type MarshalWiring struct {
+	// SessionID selects an existing canonical goal for the first planning turn.
+	// It supplies no goal approval or worker execution authority.
+	SessionID string
 	// Provider is the Marshal model's CLI: "codex", "claude" or "agy".
 	Provider string
 	// Gate is the session's ULTRA gate; nil means Standard.
@@ -42,15 +50,13 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	if s == nil {
 		return nil, errors.New("marshal: no project is open")
 	}
-	switch w.Provider {
-	case "codex", "claude", "agy":
-	default:
+	if !slices.Contains(MarshalProviders(), w.Provider) {
 		return nil, fmt.Errorf("marshal: unsupported Marshal model provider %q", w.Provider)
 	}
 	if w.Approver == nil {
 		return nil, errors.New("marshal: an approval source is required")
 	}
-	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository, ProjectID: string(s.CanonicalPlanProjectID())}
+	s.Model = &MarshalCLI{Provider: w.Provider, Dir: s.Repository, ProjectID: string(s.CanonicalPlanProjectID()), runtime: r, requiredGoalSession: w.SessionID, ProjectContext: s.ProjectContext, ConfigureKnowledgeMCP: s.ConfigureKnowledgeMCP}
 	s.ModelProvider = w.Provider
 	s.Reviewer = "marshal:" + w.Provider
 	s.Gate = w.Gate
@@ -64,29 +70,36 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 	// Every role runs in a session of its own. The ULTRA cross-reviewer and
 	// the verifier are started fresh, never resumed from the Marshal's or a
 	// worker's conversation, so none of them judges work it saw being made.
-	// Another installed provider is preferred; with a single provider the same
-	// one serves again, in a new session.
+	// Verification requires a provider different from every worker provider.
 	s.CrossReview = func(ctx context.Context, task marshal.Task, handin marshal.HandIn, control marshal.Control) (marshal.Review, string, error) {
-		provider := roleProvider(installedMarshalProviders(), w.Provider, handin.Provider)
-		review, err := freshRoleCLI(provider, s.Repository).Review(ctx, task, handin, control)
-		review.Reviewer = "cross-review:" + provider
-		return review, provider, err
+		// In the private edition a reviewer that reports its own quota or
+		// rate limit is skipped and the next independent provider reviews.
+		tried := []string{handin.Provider}
+		for {
+			provider, err := crossReviewProvider(r.roleProviders(), tried, w.Provider, task.PlanTaskID)
+			if err != nil {
+				return marshal.Review{}, provider, err
+			}
+			review, err := s.knowledgeRoleCLI(provider, s.Repository).Review(ctx, task, handin, control)
+			review.Reviewer = "cross-review:" + provider
+			if err != nil && r.retryRoleAfterLimit(ctx, "cross-review", provider, err, tried) {
+				tried = append(tried, provider)
+				continue
+			}
+			return review, provider, err
+		}
 	}
 	// Runtime checks and an independent model must both accept the integrated
 	// commit. A new model session is used for each verification decision.
 	s.VerifierProvider = func(_ context.Context, run marshal.Run) (string, error) {
-		avoid := []string{w.Provider}
-		for _, task := range run.Tasks {
-			avoid = append(avoid, task.Worker)
-		}
-		return roleProvider(installedMarshalProviders(), avoid...), nil
+		return r.independentVerifierProvider(run)
 	}
 	s.IndependentVerify = func(ctx context.Context, run marshal.Run, head string, session verification.Session) (marshal.VerifierEvidence, error) {
 		provider, err := s.VerifierProvider(ctx, run)
-		if err != nil || provider == "" {
-			return marshal.VerifierEvidence{}, errors.New("marshal: independent verifier provider is unavailable")
+		if err != nil {
+			return marshal.VerifierEvidence{}, err
 		}
-		return freshRoleCLI(provider, filepath.Join(s.Worktrees, integrationTaskID(marshalRunID(run), run))).VerifyEvidence(ctx, run, head, session)
+		return s.knowledgeRoleCLI(provider, filepath.Join(s.Worktrees, integrationTaskID(marshalRunID(run), run))).VerifyEvidence(ctx, run, head, session)
 	}
 	s.Drivers = map[string]driver.Driver{
 		"codex":    driver.Codex(""),
@@ -94,16 +107,47 @@ func (r *Runtime) MarshalWired(w MarshalWiring) (*MarshalService, error) {
 		"agy":      driver.Agy(""),
 		"opencode": driver.OpenCode(""),
 	}
+	for provider, d := range s.Drivers {
+		native := d.(driver.Native)
+		native.ConfigureLaunch = func(ctx context.Context, req driver.Request, args, env []string) ([]string, []string, func(), error) {
+			binding, revoke, err := r.openKnowledgeReadLease(ctx, taskArtifactID(req.RunID, req.Task), req.Worktree)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			leaseCtx := sessionmcp.WithWorker(ctx, r.layout.Root, binding.TaskID, binding.LeaseID)
+			args, env, closeTransport, err := sessionmcp.Configure(leaseCtx, nativeKnowledgeProvider(req.Task.Worker), args, env)
+			if err != nil {
+				revoke()
+				return nil, nil, nil, err
+			}
+			if req.Task.Worker == "agy" || req.Task.Worker == "antigravity" {
+				for i, arg := range args {
+					if arg == req.Brief {
+						args[i] += "\nMARSHAL_KNOWLEDGE_MCP contains a JSON argv array for this invocation's bound stdio MCP relay. Use that relay through your shell tool to call project_overview, find_symbol, references, related_files, project_search or project_context. Keep one relay session open while querying. Its project, task and lease are fixed by the runtime.\n"
+					}
+				}
+			}
+			return args, env, func() { closeTransport(); revoke() }, nil
+		}
+		s.Drivers[provider] = native
+	}
 	governedRun := r.marshalGovernedRun(s)
 	s.GovernedDrivers = map[string]driver.Driver{
 		"codex":    driver.Governed{Provider: "codex", Run: governedRun, Check: r.governedHandInCheck},
 		"claude":   driver.Governed{Provider: "claude", Run: governedRun, Check: r.governedHandInCheck},
 		"opencode": driver.Governed{Provider: "opencode", Run: governedRun, Check: r.governedHandInCheck},
 	}
+	// AGY is offered only where its native OAuth source and governed adapter
+	// are supported. Registration itself never supplies a verified profile.
+	if privateAGYEnabled() {
+		s.GovernedDrivers["agy"] = driver.Governed{Provider: "agy", Run: governedRun, Check: r.governedHandInCheck}
+	}
 	s.GovernedDrivers["claude-code"] = s.GovernedDrivers["claude"]
 	s.GateState = s.observedGateState
 	s.GovernedCheck = r.runGovernedCheck
 	s.Verify = s.verifyByChecks
+	r.wirePrivateProcess05Wait(s)
+	r.wireCodeEvidence(s)
 	return s, nil
 }
 
@@ -134,7 +178,7 @@ func (s *MarshalService) observedGateState(ctx context.Context, runID, taskID st
 	if i < 0 {
 		return state, fmt.Errorf("marshal: task %s is not in run %s", taskID, runID)
 	}
-	state.HarnessGovernance = s.workerGovernance(ctx, run.Tasks[i].Worker).State
+	state.HarnessGovernance = s.workerTaskGovernance(ctx, run.Tasks[i]).State
 	return state, nil
 }
 
@@ -153,6 +197,21 @@ func (s *MarshalService) workerGovernance(ctx context.Context, worker string) ha
 		return harness.AssessGovernance(p, installed, s.clock())
 	}
 	return harness.AssessGovernance(*profile, installed, s.clock())
+}
+
+// A verified native capability contract cannot vouch for a governed task's
+// isolation. Native tasks retain the CLI-owned controls they were approved for.
+func (s *MarshalService) workerTaskGovernance(ctx context.Context, task marshal.Task) harness.GovernanceAssessment {
+	g := s.workerGovernance(ctx, task.Worker)
+	if task.Mode != marshal.Governed || !g.Governed() {
+		return g
+	}
+	p, err := s.Store.GetHarnessProfile(ctx, marshalHarnessName(task.Worker))
+	if err != nil || p == nil || (p.FeatureSupport["sandbox"] == model.StatusUnsupported || p.FeatureSupport["network"] == model.StatusUnsupported) && !(sandbox.HostExecutionPreferred() && p.FeatureSupport["host-execution"] == model.StatusNative) {
+		g.State = constitution.GovernanceUnverified
+		g.Reasons = append(g.Reasons, "Native capability evidence does not establish governed sandbox and network enforcement.")
+	}
+	return g
 }
 
 // marshalHarnessName maps a worker to its harness profile name.
@@ -193,7 +252,7 @@ func freshRoleCLI(provider, dir string) *MarshalCLI {
 // on this machine.
 func installedMarshalProviders() []string {
 	var out []string
-	for _, provider := range []string{"codex", "claude", "agy"} {
+	for _, provider := range MarshalProviders() {
 		if _, err := exec.LookPath(provider); err == nil {
 			out = append(out, provider)
 		}
@@ -220,9 +279,64 @@ func roleProvider(installed []string, avoid ...string) string {
 	return ""
 }
 
+// pickIndependentProvider chooses the provider for an independent reviewer or
+// verifier. A provider that differs from every worker is always preferred,
+// and among those one that also differs from the Marshal's own (extra). Only
+// when every installed provider is a worker's does the role fall back to a
+// worker's provider, and sameProvider reports that so the caller can record
+// the fallback in the evidence instead of leaving it silent.
+func pickIndependentProvider(installed, workers []string, extra ...string) (provider string, sameProvider bool) {
+	isIn := func(list []string, c string) bool {
+		for _, a := range list {
+			if a != "" && strings.EqualFold(a, c) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, candidate := range installed {
+		if !isIn(workers, candidate) && !isIn(extra, candidate) {
+			return candidate, false
+		}
+	}
+	for _, candidate := range installed {
+		if !isIn(workers, candidate) {
+			return candidate, false
+		}
+	}
+	for _, w := range workers {
+		if w != "" {
+			return w, true
+		}
+	}
+	for _, e := range extra {
+		if e != "" {
+			return e, false
+		}
+	}
+	return "", false
+}
+
+// sameProviderAsWorker reports whether provider is one of the workers'.
+func sameProviderAsWorker(provider string, workers ...string) bool {
+	for _, w := range workers {
+		if w != "" && providerHealthKey(w) == providerHealthKey(provider) {
+			return true
+		}
+	}
+	return false
+}
+
 // verifyByChecks verifies the integrated head by re-running every task's
 // approved checks there. A check that fails, cannot run, or changes the
 // tree fails verification.
+func (s *MarshalService) verifyMarshalIntegration(ctx context.Context, id string, run marshal.Run, head string) (verification.Session, verification.Binding, error) {
+	if s.requiredCanonicalVerification != nil {
+		return s.requiredCanonicalVerification(ctx, id, run, head)
+	}
+	return s.Verify(ctx, run, head)
+}
+
 func (s *MarshalService) verifyByChecks(ctx context.Context, run marshal.Run, head string) (verification.Session, verification.Binding, error) {
 	runID := marshalRunID(run)
 	dir := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
@@ -237,18 +351,25 @@ func (s *MarshalService) verifyByChecks(ctx context.Context, run marshal.Run, he
 			governed = true
 		}
 	}
+	proof, err := s.beginMarshalRuntimeProof(ctx, dir, run, head, tree, governed)
+	if err != nil {
+		return verification.Session{}, binding, err
+	}
 	checks := map[string]verification.Status{}
 	for _, t := range run.Tasks {
 		for i, c := range t.Checks {
 			status := verification.StatusPass
 			var checkErr error
+			var observed *marshal.CommandRecord
 			if governed {
 				if s.GovernedCheck == nil {
 					checkErr = errors.New("governed integration sandbox runner unavailable")
 				} else {
-					checkErr = runIntegrationCheckWithRunner(ctx, dir, head, c.Command, func(ctx context.Context, dir, command string) marshal.CommandRecord {
+					var record marshal.CommandRecord
+					record, checkErr = runIntegrationCheckObserved(ctx, dir, head, c.Command, func(ctx context.Context, dir, command string) marshal.CommandRecord {
 						return s.GovernedCheck(ctx, runID, t.PlanTaskID, t.Worker, dir, command)
 					})
+					observed = &record
 				}
 			} else {
 				checkErr = runIntegrationCheck(ctx, dir, head, c.Command)
@@ -256,21 +377,28 @@ func (s *MarshalService) verifyByChecks(ctx context.Context, run marshal.Run, he
 			if checkErr != nil {
 				status = verification.StatusFail
 			}
-			checks[fmt.Sprintf("%s#%d", t.PlanTaskID, i)] = status
+			id := fmt.Sprintf("%s#%d", t.PlanTaskID, i)
+			if err := s.appendMarshalRuntimeCheck(ctx, proof, id, t, c, observed, checkErr); err != nil {
+				return verification.Session{}, binding, fmt.Errorf("check %s: %w", id, err)
+			}
+			checks[id] = status
 		}
 	}
 	if len(checks) == 0 {
 		return verification.Session{}, binding, errors.New("marshal: no approved checks to verify the integrated result")
 	}
+	if err := finishMarshalRuntimeProof(ctx, dir, proof, checks); err != nil {
+		return verification.Session{}, binding, err
+	}
 	now := s.clock()
-	return verification.Session{ID: "marshal-" + head, Version: 1, Binding: binding, RequiredChecks: checks, CreatedAt: now, UpdatedAt: now}, binding, nil
+	return verification.Session{RuntimeProof: proof, ID: "marshal-" + head, Version: 1, Binding: binding, RequiredChecks: checks, CreatedAt: now, UpdatedAt: now}, binding, nil
 }
 
 // marshalRunID recovers the run ID from the task branch naming the service
 // uses: marshal/<run>/<task>.
 func marshalRunID(run marshal.Run) string {
 	for _, t := range run.Tasks {
-		if parts := strings.Split(t.Branch, "/"); (len(parts) == 3 || len(parts) == 4) && parts[0] == "marshal" {
+		if parts := strings.Split(t.Branch, "/"); (len(parts) == 3 || len(parts) == 4) && parts[0] == statepath.RefName {
 			return parts[1]
 		}
 	}
@@ -285,6 +413,10 @@ func runIntegrationCheck(ctx context.Context, dir, head, command string) error {
 	return runIntegrationCheckWithRunner(ctx, dir, head, command, nil)
 }
 func runIntegrationCheckWithRunner(ctx context.Context, dir, head, command string, runner driver.CheckRunner) error {
+	_, err := runIntegrationCheckObserved(ctx, dir, head, command, runner)
+	return err
+}
+func runIntegrationCheckObserved(ctx context.Context, dir, head, command string, runner driver.CheckRunner) (marshal.CommandRecord, error) {
 
 	checkCtx := ctx
 	if runner != nil {
@@ -292,22 +424,44 @@ func runIntegrationCheckWithRunner(ctx context.Context, dir, head, command strin
 	}
 	result := driver.RunCheck(checkCtx, dir, head, command, driver.DefaultCheckTimeout)
 	if result.ExitCode != 0 {
-		return fmt.Errorf("integration check failed: %s", result.Output)
+		return result, fmt.Errorf("integration check failed: %s", result.Output)
 	}
 
-	status, err := gitMarshal(ctx, dir, "status", "--porcelain")
+	status, err := gitMarshal(ctx, dir, "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
-		return err
+		return result, err
 	}
-	if status != "" {
-		return fmt.Errorf("check %q changed the integrated tree", command)
+	if len(hostgit.SourceStatusChanges(status)) != 0 {
+		return result, fmt.Errorf("check %q changed the integrated tree", command)
 	}
 	current, err := gitMarshal(ctx, dir, "rev-parse", "HEAD")
 	if err != nil {
-		return err
+		return result, err
 	}
 	if current != head {
-		return fmt.Errorf("check %q moved HEAD from %s to %s", command, head, current)
+		return result, fmt.Errorf("check %q moved HEAD from %s to %s", command, head, current)
 	}
-	return nil
+	return result, nil
+}
+
+func (s *MarshalService) knowledgeRoleCLI(provider, root string) *MarshalCLI {
+	cli := freshRoleCLI(provider, root)
+	cli.ProjectContext = s.ProjectContext
+	cli.ConfigureKnowledgeMCP = s.ConfigureKnowledgeMCP
+	cli.runtime = s.runtime
+	if s.runtime != nil {
+		cli.ProjectID = s.runtime.ProjectIdentity()
+	}
+	return cli
+}
+
+// crossReviewProvider picks the provider for an independent cross-review.
+// tried holds the worker's provider and any provider skipped for its limit.
+// The private edition never falls back to one of them.
+func crossReviewProvider(installed, tried []string, marshalProvider, taskID string) (string, error) {
+	provider, sameProvider := pickIndependentProvider(installed, tried, marshalProvider)
+	if sameProvider && independentCrossReviewRequired {
+		return provider, fmt.Errorf("cross-review: no provider other than %s is available to review task %s", strings.Join(tried, ", "), taskID)
+	}
+	return provider, nil
 }

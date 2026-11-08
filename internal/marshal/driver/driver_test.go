@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/opencodecli"
 )
 
 // claudeStream follows the stream-json shape Claude Code writes, as recorded
@@ -470,6 +471,14 @@ func TestCleanWorkerEnvStripsBriefingAndSharedChannelVariables(t *testing.T) {
 }
 
 func TestOpenCodeWorkerPinsAssignedDirectory(t *testing.T) {
+	// A 1.x CLI takes --dir; 2.x rejects that flag and is pinned by the
+	// process working directory instead (Launch sets cmd.Dir to the worktree;
+	// see TestOpenCodeWorkerArgvFollowsInstalledCLI).
+	saved := openCodeRunContract
+	defer func() { openCodeRunContract = saved }()
+	openCodeRunContract = func(string) (opencodecli.Contract, bool) {
+		return opencodecli.Contract{Version: "1.18.16", Run: true, FormatJSON: true, Model: true, Dir: true}, true
+	}
 	d := OpenCode("opencode")
 	args := d.Args(Request{Worktree: "/assigned/task", Brief: "tiny"})
 	found := false

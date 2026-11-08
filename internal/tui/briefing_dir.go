@@ -3,6 +3,8 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/auth"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,15 +15,21 @@ import (
 // out of the project's own files, such as AGENTS.md, and is removed when the
 // session ends.
 type briefingDir struct {
-	provider string
-	path     string
-	size     int
+	mcpToken, mcpTokenID string
+	authMgr              *auth.Manager
+	revokeProposal       func()
+	provider             string
+	path                 string
+	size                 int
 }
 
 // newBriefingDir creates the directory. The briefing directory ignores itself
 // in git, so a project that does not ignore .marshal still never commits one.
 func newBriefingDir(root, provider string) (*briefingDir, error) {
-	base := filepath.Join(root, ".marshal", "briefing")
+	if err := statepath.CheckPath(root, statepath.Path(root, "briefing", ".gitignore")); err != nil {
+		return nil, err
+	}
+	base := filepath.Join(root, statepath.DirName, "briefing")
 	if err := os.MkdirAll(base, 0o700); err != nil {
 		return nil, err
 	}
@@ -69,7 +77,7 @@ func (d *briefingDir) launch(args []string) ([]string, []string, error) {
 	if d == nil || d.size == 0 {
 		return args, nil, nil
 	}
-	switch d.provider {
+	switch marshalMCPProvider(d.provider) {
 	case "opencode":
 		env, err := opencodeInstructionsEnv(os.Getenv("OPENCODE_CONFIG_CONTENT"), d.file())
 		if err != nil {
@@ -85,6 +93,12 @@ func (d *briefingDir) launch(args []string) ([]string, []string, error) {
 // remove deletes the directory once the session is over.
 func (d *briefingDir) remove() {
 	if d != nil {
+		if d.revokeProposal != nil {
+			d.revokeProposal()
+		}
+		if d.authMgr != nil && d.mcpTokenID != "" {
+			_ = d.authMgr.RevokeToken(d.mcpTokenID)
+		}
 		_ = os.RemoveAll(d.path)
 	}
 }

@@ -3,6 +3,7 @@ package worktree
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,7 +14,7 @@ import (
 
 func TestPrepareCreatesTaskBranchAtExactBase(t *testing.T) {
 	repo := testgit.New(t)
-	root := filepath.Join(repo.Path(), ".marshal", "worktrees")
+	root := filepath.Join(repo.Path(), statepath.DirName, "worktrees")
 	manager := New(repo.Path(), root)
 	request := model.WorktreeRequest{
 		TaskID: "TASK-001", Branch: "agent/task-001-local", BaseCommit: repo.HEAD(t),
@@ -39,7 +40,7 @@ func TestPrepareCreatesTaskBranchAtExactBase(t *testing.T) {
 
 func TestPrepareRejectsBranchCollision(t *testing.T) {
 	repo := testgit.New(t)
-	manager := New(repo.Path(), filepath.Join(repo.Path(), ".marshal", "worktrees"))
+	manager := New(repo.Path(), filepath.Join(repo.Path(), statepath.DirName, "worktrees"))
 	base := repo.HEAD(t)
 	if _, err := manager.Prepare(context.Background(), model.WorktreeRequest{
 		TaskID: "TASK-001", Branch: "agent/shared", BaseCommit: base,
@@ -55,7 +56,7 @@ func TestPrepareRejectsBranchCollision(t *testing.T) {
 
 func TestDirtyTaskWorktreeIsNeverDestroyed(t *testing.T) {
 	repo := testgit.New(t)
-	manager := New(repo.Path(), filepath.Join(repo.Path(), ".marshal", "worktrees"))
+	manager := New(repo.Path(), filepath.Join(repo.Path(), statepath.DirName, "worktrees"))
 	worktree, err := manager.Prepare(context.Background(), model.WorktreeRequest{
 		TaskID: "TASK-001", Branch: "agent/task-001", BaseCommit: repo.HEAD(t),
 	})
@@ -79,7 +80,7 @@ func TestDirtyTaskWorktreeIsNeverDestroyed(t *testing.T) {
 
 func TestPreparePreservesUnexpectedTargetDirectory(t *testing.T) {
 	repo := testgit.New(t)
-	root := filepath.Join(repo.Path(), ".marshal", "worktrees")
+	root := filepath.Join(repo.Path(), statepath.DirName, "worktrees")
 	target := filepath.Join(root, "TASK-001")
 	if err := os.MkdirAll(target, 0o700); err != nil {
 		t.Fatal(err)

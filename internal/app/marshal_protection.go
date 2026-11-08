@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -100,8 +101,8 @@ func governingFile(name string) bool {
 	if !marshal.ReservedPath(name) {
 		return false
 	}
-	if strings.HasPrefix(name, ".marshal/") {
-		if name == ".marshal/briefing" || strings.HasPrefix(name, ".marshal/briefing/") {
+	if statepath.Reserved(name) {
+		if name == statepath.DirName+"/briefing" || strings.HasPrefix(name, statepath.DirName+"/briefing/") {
 			return false
 		}
 		lower := strings.ToLower(name)
@@ -122,7 +123,9 @@ func governingDigest(root string) (string, error) {
 		}
 		rel = filepath.ToSlash(rel)
 		if entry.IsDir() {
-			if entry.Name() == ".git" || entry.Name() == "node_modules" || rel == ".marshal/worktrees" || rel == ".marshal/artifacts" || rel == ".marshal/logs" || rel == ".marshal/proposals" || rel == ".marshal/inbox" || rel == ".marshal/briefing" || strings.HasPrefix(rel, ".marshal/briefing/") {
+			// .claude/worktrees holds whole checkouts made by agents; their
+			// files govern those checkouts, not this one.
+			if entry.Name() == ".git" || entry.Name() == "node_modules" || rel == ".claude/worktrees" || rel == statepath.OtherDirName || rel == statepath.DirName+"/worktrees" || rel == statepath.DirName+"/branches" || rel == statepath.DirName+"/artifacts" || rel == statepath.DirName+"/logs" || rel == statepath.DirName+"/checkpoints" || rel == statepath.DirName+"/proposals" || rel == statepath.DirName+"/inbox" || rel == statepath.DirName+"/briefing" || strings.HasPrefix(rel, statepath.DirName+"/briefing/") {
 				return filepath.SkipDir
 			}
 			return nil

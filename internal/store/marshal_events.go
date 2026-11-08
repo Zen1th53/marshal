@@ -21,12 +21,19 @@ func (s *Store) AppendMarshalDecision(ctx context.Context, event events.Event) (
 
 // MarshalDecisions returns one run's decisions in durable sequence order.
 func (s *Store) MarshalDecisions(ctx context.Context, runID string) ([]events.Event, error) {
+	return s.MarshalDecisionsAfter(ctx, runID, 0)
+}
+
+// MarshalDecisionsAfter returns one run's decisions with a sequence above
+// after, in durable sequence order. A reader that keeps the last sequence it
+// saw reads only what is new; the run and sequence index serves the query.
+func (s *Store) MarshalDecisionsAfter(ctx context.Context, runID string, after events.Sequence) ([]events.Event, error) {
 	if runID == "" {
 		return nil, events.ErrEventDataInvalid
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT event_id, sequence, event_type, subject, task_id, run_id,
 		resource_id, evidence_id, at, data_json, idempotency_key FROM structured_events
-		WHERE run_id = ? AND event_type LIKE 'marshal.%' ORDER BY sequence ASC`, runID)
+		WHERE run_id = ? AND sequence > ? AND event_type LIKE 'marshal.%' ORDER BY sequence ASC`, runID, int64(after))
 	if err != nil {
 		return nil, events.NewError(events.CodeEventStoreFailed, err)
 	}

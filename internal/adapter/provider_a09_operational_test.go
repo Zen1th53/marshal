@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/adapter/antigravity"
 	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
-	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	"github.com/Zen1th53/marshal/internal/evidence"
 )
@@ -26,7 +26,7 @@ func TestProviderEvidenceContractIsConcurrencyNeutral(t *testing.T) {
 	}{
 		{"codex", func() adapter.Adapter { return codex.New("codex", providerRunner{}) }},
 		{"claude", func() adapter.Adapter { return claude.New("claude", providerRunner{}) }},
-		{"gemini", func() adapter.Adapter { return gemini.New("gemini", providerRunner{}) }},
+		{"antigravity", func() adapter.Adapter { return antigravity.New("agy", providerRunner{}) }},
 		{"opencode", func() adapter.Adapter { return opencode.New("opencode", providerRunner{}) }},
 	}
 
@@ -105,7 +105,7 @@ func TestProviderCancellationStopsEveryAdapter(t *testing.T) {
 	}{
 		{"codex", func(r adapter.ProcessRunner) adapter.Adapter { return codex.New("codex", r) }},
 		{"claude", func(r adapter.ProcessRunner) adapter.Adapter { return claude.New("claude", r) }},
-		{"gemini", func(r adapter.ProcessRunner) adapter.Adapter { return gemini.New("gemini", r) }},
+		{"antigravity", func(r adapter.ProcessRunner) adapter.Adapter { return antigravity.New("agy", r) }},
 		{"opencode", func(r adapter.ProcessRunner) adapter.Adapter { return opencode.New("opencode", r) }},
 	}
 	for _, provider := range providers {

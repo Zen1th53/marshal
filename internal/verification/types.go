@@ -4,6 +4,7 @@
 package verification
 
 import (
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -89,7 +90,49 @@ type Waiver struct {
 	Critical                       bool
 }
 
+// RuntimeProof contains bounded observations from the runtime's integrated
+// checkout and runtime check runner, not worker claims or model authority.
+type RuntimeProof struct {
+	ProviderObservations               []RuntimeProviderObservationProof `json:"provider_observations,omitempty"`
+	Head, Base, Tree, Diff, Provenance string
+	Checks                             []RuntimeCheckProof
+	Honeypot                           []RuntimeHoneypotProof
+}
+
+// RuntimeProviderObservationProof binds bounded lifecycle metadata to its exact
+// immutable hand-in. Observation is canonical typed JSON, never provider output.
+type RuntimeProviderObservationProof struct {
+	Task          string `json:"task"`
+	HandInAttempt int    `json:"handin_attempt"`
+	// ResultCommit is the exact immutable collected hand-in result.
+	ResultCommit               string          `json:"result_commit"`
+	ProviderResultCommit       string          `json:"provider_result_commit"`
+	IntegratedTaskResultCommit string          `json:"integrated_task_result_commit"`
+	EvidenceID                 string          `json:"evidence_id"`
+	Observation                json.RawMessage `json:"observation"`
+}
+
+type RuntimeHoneypotProof struct {
+	Task, EventID, ProjectID, SourceTaskID, ScanID, ResultCommit, Outcome, Timestamp string
+}
+
+// RuntimeCheckOutput references the complete immutable output, not its preview.
+type RuntimeCheckOutput struct {
+	ID, Digest, Path string
+	Size             int64
+}
+
+type RuntimeCheckProof struct {
+	OutputArtifact *RuntimeCheckOutput `json:"output_artifact,omitempty"`
+	// Isolation is unknown unless observed by the runtime runner.
+	Isolation                             string `json:"isolation,omitempty"`
+	ID, Task, Head, Tree, Command, Output string
+	Criteria                              []string
+	ExitCode                              int
+}
+
 type Session struct {
+	RuntimeProof         *RuntimeProof     `json:"runtime_proof,omitempty"`
 	ID                   string            `json:"verification_id"`
 	Version              int64             `json:"version"`
 	Binding              Binding           `json:"binding"`

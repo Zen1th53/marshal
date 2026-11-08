@@ -89,3 +89,80 @@ func TestConnectedSendPreservesDestinationBoundary(t *testing.T) {
 		}
 	}
 }
+
+func msghdr(name uint64, namelen uint32) []byte {
+	b := make([]byte, 56)
+	binary.LittleEndian.PutUint64(b, name)
+	binary.LittleEndian.PutUint32(b[8:], namelen)
+	return b
+}
+
+// Extreme decides sendmsg like connect and sendto: no name means the peer
+// connect already confined, a name must be a local destination. Community
+// refuses without reading the destination.
+func TestMsgSendFollowsTheEditionDestinationBoundary(t *testing.T) {
+	reads := 0
+	reader := func(addr []byte) func(ptr, size uint64) []byte {
+		return func(ptr, size uint64) []byte {
+			reads++
+			if ptr != 0x1000 || size != uint64(len(addr)) {
+				t.Fatalf("read %#x/%d", ptr, size)
+			}
+			return addr
+		}
+	}
+	none := reader(nil)
+	for _, flags := range []uint64{0, unix.MSG_NOSIGNAL | unix.MSG_DONTWAIT} {
+		if msgSendAllowed(msghdr(0, 0), flags, none) != editionIsExtreme {
+			t.Fatalf("connected sendmsg flags %#x", flags)
+		}
+	}
+	if reads != 0 {
+		t.Fatal("connected sendmsg read a destination")
+	}
+	for _, addr := range [][]byte{inet4("127.0.0.1", 3000), inet6("::1", 8080), {afUnixFamily, 0, 0, 'x'}} {
+		if msgSendAllowed(msghdr(0x1000, uint32(len(addr))), 0, reader(addr)) != editionIsExtreme {
+			t.Fatalf("local sendmsg %v", addr)
+		}
+	}
+	unixPath := append([]byte{afUnixFamily, 0}, "/tmp/dev.sock\x00"...)
+	for _, addr := range [][]byte{inet4("192.0.2.1", 443), inet6("2001:db8::1", 443), unixPath, nil} {
+		if msgSendAllowed(msghdr(0x1000, uint32(len(addr))), 0, reader(addr)) {
+			t.Fatalf("outward sendmsg %v allowed", addr)
+		}
+	}
+	if msgSendAllowed(msghdr(0, 0), unix.MSG_FASTOPEN, none) {
+		t.Fatal("name-less Fast Open sendmsg allowed")
+	}
+	if msgSendAllowed(msghdr(0, 0)[:8], 0, none) || msgSendAllowed(nil, 0, none) {
+		t.Fatal("short msghdr allowed")
+	}
+	if !editionIsExtreme && reads != 0 {
+		t.Fatalf("Community read %d sendmsg destinations", reads)
+	}
+	if buildSupervisorAllowsMsgSend() != editionIsExtreme {
+		t.Fatal("sendmsg edition gate")
+	}
+}
+
+func TestDeniedNetlinkDiscoveryIsExactAndStillTrapped(t *testing.T) {
+	allowed := notification{Arch: unix.AUDIT_ARCH_X86_64, Nr: unix.SYS_SOCKET, Args: [6]uint64{unix.AF_NETLINK, unix.SOCK_RAW | unix.SOCK_CLOEXEC, unix.NETLINK_ROUTE}}
+	if !deniedNetlinkDiscovery(allowed) {
+		t.Fatal("exact route discovery not identified")
+	}
+	if filterAction(unix.SYS_SOCKET, allowed.Args) != unix.SECCOMP_RET_USER_NOTIF {
+		t.Fatal("netlink socket bypasses kernel refusal")
+	}
+	for _, req := range []notification{
+		{Arch: unix.AUDIT_ARCH_I386, Nr: unix.SYS_SOCKET, Args: allowed.Args},
+		{Arch: unix.AUDIT_ARCH_X86_64, Nr: unix.SYS_CONNECT, Args: allowed.Args},
+		{Arch: unix.AUDIT_ARCH_X86_64, Nr: unix.SYS_SOCKET, Args: [6]uint64{unix.AF_NETLINK, unix.SOCK_DGRAM, unix.NETLINK_ROUTE}},
+		{Arch: unix.AUDIT_ARCH_X86_64, Nr: unix.SYS_SOCKET, Args: [6]uint64{unix.AF_NETLINK, unix.SOCK_RAW, unix.NETLINK_GENERIC}},
+		{Arch: unix.AUDIT_ARCH_X86_64, Nr: unix.SYS_SOCKET, Args: [6]uint64{unix.AF_NETLINK, unix.SOCK_RAW | 0x10000, unix.NETLINK_ROUTE}},
+		{Arch: unix.AUDIT_ARCH_X86_64, Nr: unix.SYS_SOCKET, Args: [6]uint64{unix.AF_UNIX, unix.SOCK_RAW, unix.NETLINK_ROUTE}},
+	} {
+		if deniedNetlinkDiscovery(req) {
+			t.Fatalf("unexpected discovery exemption: %+v", req)
+		}
+	}
+}

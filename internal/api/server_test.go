@@ -138,6 +138,11 @@ func TestPrepareSocketRefusesUnknownLiveSocket(t *testing.T) {
 }
 
 func apiRuntime(t *testing.T) (*app.Runtime, string) {
+	runtime, socket, _ := apiRuntimeWithRoot(t)
+	return runtime, socket
+}
+
+func apiRuntimeWithRoot(t *testing.T) (*app.Runtime, string, string) {
 	t.Helper()
 	repo := testgit.New(t)
 	for _, name := range []string{"CAPABILITIES.yaml", "PACK-VERSION.yaml", "RUNTIME-VERSION.yaml"} {
@@ -158,7 +163,7 @@ func apiRuntime(t *testing.T) (*app.Runtime, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { runtime.Close() })
-	return runtime, layout.Socket
+	return runtime, layout.Socket, repo.Path()
 }
 
 func waitForSocket(t *testing.T, socket string, done <-chan error) {

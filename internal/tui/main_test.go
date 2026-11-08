@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
@@ -17,5 +18,15 @@ func TestMain(m *testing.M) {
 	if os.Getenv("MARSHAL_CLOUD_ENDPOINT") == "" {
 		_ = os.Setenv("MARSHAL_CLOUD_ENDPOINT", "off")
 	}
-	os.Exit(m.Run())
+	if os.Getenv("MARSHAL_NO_UPDATE_CHECK") == "" {
+		_ = os.Setenv("MARSHAL_NO_UPDATE_CHECK", "1")
+	}
+	cleanup, err := isolateOrdinaryTestProviderPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "TUI test provider isolation failed:", err)
+		os.Exit(1)
+	}
+	code := m.Run()
+	cleanup()
+	os.Exit(code)
 }

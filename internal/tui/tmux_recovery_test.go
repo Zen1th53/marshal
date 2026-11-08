@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,7 +66,7 @@ func TestRecoveredWorkersRetainNaturalCompletion(t *testing.T) {
 			if err != nil || record.Outcome != want {
 				t.Fatalf("outcome = %q, %v; want %s", record.Outcome, err, want)
 			}
-			data, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "evidence", "test-latest.txt"))
+			data, err := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "evidence", "test-latest.txt"))
 			if err != nil || !strings.Contains(string(data), "RECOVERED_OUTPUT") {
 				t.Fatalf("missing retained output: %s %v", data, err)
 			}
@@ -96,7 +97,7 @@ func TestNativeHostOptionFailuresAbortLaunch(t *testing.T) {
 			}
 			w := NewWorkspace(nil, "project", "session")
 			w.workDir = t.TempDir()
-			w.tmuxSession = "test-session"
+			w.tmuxSession = fixtureTmuxNamespace(t, w.providerRoot())
 			w.tmuxPath = bin
 			if _, err := w.runNativeAgentInTmux(context.Background(), nativeLaunchOperator, "test", "Test", w.workDir, "/bin/sh", []string{"-c", "touch worker-started; sleep 30"}, nil, nil, nil, nil, nil, nil, nil); err == nil {
 				t.Fatal("host option failure was ignored")
@@ -122,7 +123,8 @@ func TestNativeHostOptionFailuresAbortLaunch(t *testing.T) {
 func TestRecoveredWorkerWaitsForOutcomeWhileRelayIsAlive(t *testing.T) {
 	bin, log, _ := setupFakeTmuxWithDeadFile(t)
 	w := NewWorkspace(nil, "project", "session")
-	w.workDir, w.tmuxSession, w.tmuxPath = t.TempDir(), "test-session", bin
+	w.workDir, w.tmuxPath = t.TempDir(), bin
+	w.tmuxSession = fixtureTmuxNamespace(t, w.providerRoot())
 	cleanupTmuxWorkspace(t, w)
 	supervisor := exec.Command("sleep", "30")
 	if err := supervisor.Start(); err != nil {
@@ -174,5 +176,64 @@ func TestRecoveredWorkerWaitsForOutcomeWhileRelayIsAlive(t *testing.T) {
 	record, err := loadAgentRecord(w.workDir, a.paneID)
 	if err != nil || record.Outcome != "done" {
 		t.Fatalf("outcome = %q, %v; want done", record.Outcome, err)
+	}
+}
+
+// After a tmux server restart pane IDs start again at %0, so a record left by
+// the previous server can name the MARSHAL pane itself. Recovery must not
+// adopt it as the chat (which would suppress starting the real chat).
+func TestRecoveryIgnoresReusedPaneID(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		stale func(p tmux.PaneInfo) int
+	}{
+		{"recorded pane pid", func(p tmux.PaneInfo) int { return p.PID + 100000 }},
+		{"legacy record", func(tmux.PaneInfo) int { return 0 }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := realTmuxWorkspace(t)
+			ctx := context.Background()
+			worker := tmux.WindowName("codex", w.workDir)
+			if err := tmux.NewWindow(ctx, w.tmuxSession, worker, w.workDir, nil, []string{"sleep", "600"}); err != nil {
+				t.Fatal(err)
+			}
+			panes, err := tmux.ListPanes(ctx, w.tmuxSession)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var centre, live tmux.PaneInfo
+			for _, p := range panes {
+				switch p.WindowName {
+				case statepath.Name:
+					centre = p
+				case worker:
+					live = p
+				}
+			}
+			if centre.PaneID == "" || live.PaneID == "" {
+				t.Fatalf("panes not found: %+v", panes)
+			}
+			stale := &activeTmuxAgent{id: "marshal-chat", role: "marshal-chat", provider: "codex", window: tmux.ChatWindowName(w.workDir), paneID: centre.PaneID, pid: tc.stale(centre)}
+			if err := saveAgentRecord(w.workDir, w.tmuxSession, stale); err != nil {
+				t.Fatal(err)
+			}
+			current := &activeTmuxAgent{id: "codex", role: "worker", provider: "codex", window: worker, paneID: live.PaneID, pid: live.PID, launchOrigin: nativeLaunchOperator}
+			if err := saveAgentRecord(w.workDir, w.tmuxSession, current); err != nil {
+				t.Fatal(err)
+			}
+			w.recoverSurvivingWorkers(w.workDir)
+			w.tmuxMu.Lock()
+			chat, adopted := w.tmuxActiveWins["marshal-chat"], w.tmuxActiveWins["codex"]
+			w.tmuxMu.Unlock()
+			if chat != nil {
+				t.Fatalf("stale record adopted pane %s as the chat", chat.paneID)
+			}
+			if adopted == nil || adopted.paneID != live.PaneID {
+				t.Fatalf("verified worker not adopted: %+v", adopted)
+			}
+			if _, err := os.Stat(agentRecordPath(w.workDir, centre.PaneID)); !os.IsNotExist(err) {
+				t.Fatalf("stale record kept: %v", err)
+			}
+		})
 	}
 }

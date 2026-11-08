@@ -246,6 +246,10 @@ func (v Value) Display() string {
 		return "EMPTY"
 	}
 	label := v.Status.Label()
+	if v.Status == TruthNotRun {
+		// A raw state code means nothing to the operator.
+		label = "Not run yet"
+	}
 	if v.Status.NeedsReason() {
 		if v.Reason == "" {
 			return label + " (no reason recorded — this is a defect)"
@@ -377,4 +381,12 @@ func RenderFields(fields []Field, width int) []string {
 		out = append(out, line)
 	}
 	return out
+}
+
+// humanReason rewrites internal wording in a refusal reason for the operator.
+func humanReason(reason string) string {
+	return strings.NewReplacer(
+		"goal contract not found", "there is no goal yet; create and confirm one first",
+		"NOT_RUN", "not run yet",
+	).Replace(reason)
 }

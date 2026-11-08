@@ -12,8 +12,11 @@ import (
 )
 
 func (c command) memory(ctx context.Context, args []string) error {
+	if handled, err := c.memoryLegacyMigration(ctx, args); handled {
+		return err
+	}
 	if len(args) == 0 {
-		return fmt.Errorf("%w: memory subcommand required (status, remember, recall, show, list, promote, tombstone, audit)", model.ErrInvalid)
+		return fmt.Errorf("%w: memory subcommand required (status, remember, recall, show, list, candidates, promote, tombstone, audit)", model.ErrInvalid)
 	}
 
 	sub := args[0]
@@ -53,7 +56,7 @@ func (c command) memory(ctx context.Context, args []string) error {
 		return c.print(status, fmt.Sprintf("status=healthy version=2.0.0 records=%d schema=v%d", len(records), version))
 
 	case "remember", "write":
-		return c.memoryRemember(ctx, memoryService, operator, projectID, subArgs)
+		return c.memoryRemember(ctx, runtime, projectID, subArgs)
 
 	case "recall":
 		query := strings.Join(subArgs, " ")
@@ -82,8 +85,21 @@ func (c command) memory(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+		records = excludeMemoryCandidates(records)
 		res := map[string]any{"items": records}
 		human := fmt.Sprintf("memory list count=%d", len(records))
+		for _, r := range records {
+			human += fmt.Sprintf("\n%s %s %s", r.ID, r.Lifecycle, r.Title)
+		}
+		return c.print(res, human)
+
+	case "candidates":
+		records, err := st.ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: projectID, Lifecycle: model.MemoryCandidate})
+		if err != nil {
+			return err
+		}
+		res := map[string]any{"items": records}
+		human := fmt.Sprintf("memory candidates count=%d", len(records))
 		for _, r := range records {
 			human += fmt.Sprintf("\n%s %s %s", r.ID, r.Lifecycle, r.Title)
 		}
@@ -97,7 +113,7 @@ func (c command) memory(ctx context.Context, args []string) error {
 		if dryRun {
 			return c.print(map[string]any{"action": "memory.promote", "memory_id": memID, "dry_run": true, "status": "DRY_RUN"}, fmt.Sprintf("promote dry-run memory_id=%s", memID))
 		}
-		promoted, err := memoryService.Promote(ctx, operator, app.PromoteRequest{ProjectID: projectID, MemoryID: memID, ScopeID: projectID})
+		promoted, err := memoryService.Promote(ctx, operator, app.PromoteRequest{ProjectID: projectID, MemoryID: memID})
 		if err != nil {
 			return err
 		}
@@ -141,6 +157,16 @@ func (c command) memory(ctx context.Context, args []string) error {
 	}
 }
 
+func excludeMemoryCandidates(records []model.MemoryRecordV2) []model.MemoryRecordV2 {
+	filtered := records[:0]
+	for _, rec := range records {
+		if rec.Lifecycle != model.MemoryCandidate {
+			filtered = append(filtered, rec)
+		}
+	}
+	return filtered
+}
+
 func currentProjectID(ctx context.Context, st *store.Store) (string, error) {
 	project, err := st.Project(ctx)
 	if err != nil {
@@ -149,7 +175,7 @@ func currentProjectID(ctx context.Context, st *store.Store) (string, error) {
 	return project.ID, nil
 }
 
-func (c command) memoryRemember(ctx context.Context, service *app.MemoryService, principal authz.Principal, projectID string, args []string) error {
+func (c command) memoryRemember(ctx context.Context, runtime *app.Runtime, projectID string, args []string) error {
 	title := ""
 	body := ""
 	kind := model.MemoryKindSemantic
@@ -174,7 +200,14 @@ func (c command) memoryRemember(ctx context.Context, service *app.MemoryService,
 		}
 		kind = model.MemoryKindSemantic
 	}
-	rec, err := service.Remember(ctx, principal, app.RememberRequest{ProjectID: projectID, ScopeID: projectID, Title: title, Body: body, Kind: kind})
+	// This explicit local operator command is the review decision. A plain
+	// MemoryService.Remember only stages a volatile proposal in a runtime, so
+	// returning success from that path loses the entry when the CLI exits.
+	control, err := runtime.OpenLocalControl(ctx)
+	if err != nil {
+		return err
+	}
+	rec, err := runtime.CommandRemember(control.Context(ctx), app.RememberRequest{ProjectID: projectID, ScopeID: projectID, Title: title, Body: body, Kind: kind})
 	if err != nil {
 		return err
 	}

@@ -28,11 +28,57 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{
 	var output struct {
 		OK bool `json:"ok"`
 	}
-	if err := cli.turn(context.Background(), "test", marshalDraftSchema, &output); err != nil {
+	if err := cli.turn(requiredMarshalTestContext(t, cli), "test", marshalDraftSchema, &output); err != nil {
 		t.Fatal(err)
 	}
 	if !output.OK || cli.ConversationID != "thread-test" {
 		t.Fatalf("default provider binary did not return a model turn: %+v session=%q", output, cli.ConversationID)
+	}
+}
+
+func TestMarshalCLIDraftReplyAcceptsOnlySingleJSONCodeFence(t *testing.T) {
+	proposal := `{"tasks":[{"id":"a","title":"t","criteria":["c"],"paths":["a.txt"],"depends_on":[],"worker":"codex","checks":[{"command":"true","criteria":["c"]}]}]}`
+	for _, tc := range []struct {
+		name  string
+		reply string
+		ok    bool
+	}{
+		{"bare JSON", proposal, true},
+		{"fenced json", "```json\n" + proposal + "\n```", true},
+		{"fenced without tag", "```\n" + proposal + "\n```", true},
+		{"prose plus fence", "Here is the plan:\n```json\n" + proposal + "\n```", false},
+		{"two fences", "```json\n" + proposal + "\n```\n```json\n" + proposal + "\n```", false},
+		{"unterminated fence", "```json\n" + proposal, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			reply := filepath.Join(root, "reply.json")
+			event, err := json.Marshal(map[string]any{
+				"type": "item.completed",
+				"item": map[string]any{"type": "agent_message", "text": tc.reply},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(reply, event, 0600); err != nil {
+				t.Fatal(err)
+			}
+			bin := t.TempDir()
+			if err = os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\ncat \"$MARSHAL_TEST_REPLY\"\n"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("MARSHAL_TEST_REPLY", reply)
+			cli := &MarshalCLI{Provider: "codex", Dir: root}
+			var out marshalTaskProposal
+			err = cli.turn(requiredMarshalTestContext(t, cli), "test", marshalDraftSchema, &out)
+			if tc.ok && (err != nil || len(out.Tasks) != 1) {
+				t.Fatalf("rejected valid reply: %v", err)
+			}
+			if !tc.ok && err == nil {
+				t.Fatal("accepted reply that is not one fenced block")
+			}
+		})
 	}
 }
 
@@ -46,7 +92,7 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{
 		t.Fatal(err)
 	}
 	cli := &MarshalCLI{Provider: "codex", Binary: path, Dir: root}
-	if err := cli.Verify(t.Context(), marshal.Run{}, "expected", verification.Session{}); err == nil {
+	if err := cli.Verify(requiredMarshalTestContext(t, cli), marshal.Run{}, "expected", verification.Session{}); err == nil {
 		t.Fatal("verifier accepted a verdict for another commit")
 	}
 }
@@ -231,10 +277,12 @@ func TestMarshalDraftBriefBindsExactCriteriaAndRuntimeWorktree(t *testing.T) {
 	binary := filepath.Join(root, "codex")
 	script := `#!/bin/sh
 for prompt; do :; done
+if [ "$prompt" = "-" ]; then prompt=''; while IFS= read -r line || [ -n "$line" ]; do prompt="$prompt$line
+"; done; fi
 case "$prompt" in *"fresh checkout of the committed result"*"clean sandbox"*"no worker environment, network or temporary files"*"only repository content"*) ;; *) exit 98 ;; esac
 case "$prompt" in *"source is read-only"*"MARSHAL_BUILD_DIR"*) ;; *) exit 96 ;; esac
 case "$prompt" in *"rerun after an integration merge"*"never commit history, HEAD diffs or commit structure"*"MARSHAL already records changed-file scope"*) ;; *) exit 97 ;; esac
-case "$prompt" in *"amended JSON"*) ;; *"opencode defaults to native and also supports governed when requested"*"copy each criterion string verbatim"*"runtime-assigned worktree"*) ;; *) exit 99 ;; esac
+case "$prompt" in *"amended JSON"*) ;; *"copy each criterion string verbatim"*"runtime-assigned worktree"*) ;; *) exit 99 ;; esac
 printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{\"tasks\":[{\"id\":\"a\",\"title\":\"write a\",\"criteria\":[\"a exists\"],\"paths\":[\"a.txt\"],\"depends_on\":[],\"worker\":\"codex\",\"checks\":[{\"command\":\"test -f a.txt\",\"criteria\":[\"a exists\"]}],\"instructions\":\"Use assigned worktree\",\"expected_output\":\"a.txt\"}]}"}}'
 `
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
@@ -243,10 +291,11 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{
 	// Drafting lists installed worker CLIs; make the result independent of the host.
 	fakeWorkerOnPath(t, "codex")
 	m := MarshalCLI{Provider: "codex", Binary: binary, Dir: root, ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
-	if _, err := m.Draft(t.Context(), "write a.txt"); err != nil {
+	ctx := requiredMarshalTestContext(t, &m)
+	if _, err := m.Draft(ctx, "write a.txt"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Amend(t.Context(), marshal.Run{PlanID: "PLAN-test", PlanVersion: 1}, "add a check"); err != nil {
+	if _, err := m.Amend(ctx, marshal.Run{PlanID: "PLAN-test", PlanVersion: 1}, "add a check"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -279,7 +328,13 @@ func TestMarshalProposalCarriesGovernedMode(t *testing.T) {
 
 func TestMarshalProposalRefusesInvalidOrUnsupportedModes(t *testing.T) {
 	m := &MarshalCLI{ProjectID: "PROJECT-0123456789abcdef0123456789abcdef"}
-	for _, entry := range []struct{ worker, mode string }{{"codex", "other"}, {"agy", "governed"}, {"opencode", "other"}} {
+	entries := []struct{ worker, mode string }{{"codex", "other"}, {"agy", "other"}, {"opencode", "other"}}
+	// Private Linux now admits explicitly governed AGY drafts. The separate
+	// real four-provider fixture covers that admission; other editions refuse it.
+	if !privateAGYEnabled() {
+		entries = append(entries, struct{ worker, mode string }{"agy", "governed"})
+	}
+	for _, entry := range entries {
 		var proposal marshalTaskProposal
 		data := `{"tasks":[{"id":"a","title":"write a","mode":"` + entry.mode + `","worker":"` + entry.worker + `","criteria":["a exists"],"paths":["a.txt"],"checks":[{"command":"test -f a.txt","criteria":["a exists"]}]}]}`
 		if err := json.Unmarshal([]byte(data), &proposal); err != nil {
@@ -359,7 +414,10 @@ func testGovernedDraftRefusesUnavailableProtectionWithoutNativeFallback(t *testi
 	defer runtime.Close()
 	bin := t.TempDir()
 	marker := filepath.Join(bin, "worker-started")
-	script := "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'test-version\\n'; exit 0; fi\nprintf ran > '" + marker + "'\n"
+	script := "#!/bin/sh\n" +
+		"if [ \"$1\" = \"--version\" ]; then printf 'test-version\\n'; exit 0; fi\n" +
+		"if [ \"$1\" = \"debug\" ] && [ \"$2\" = \"models\" ]; then printf '{\"models\":[{\"slug\":\"test-model\",\"is_default\":true}]}\\n'; exit 0; fi\n" +
+		"printf ran > '" + marker + "'\n"
 	if err := os.WriteFile(filepath.Join(bin, worker), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -379,11 +437,21 @@ func testGovernedDraftRefusesUnavailableProtectionWithoutNativeFallback(t *testi
 	if _, err = service.StartPlanningFromDraft(t.Context(), "protected", "governed goal", draft, marshal.Budget{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = service.Approve(t.Context(), "protected"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = service.Execute(t.Context(), "protected", func(marshal.Task, BriefContext) string { return "write a" }, nil); err == nil {
-		t.Fatal("governed execution admitted without credential/protection setup")
+	if service.requiresCanonicalGovernedApproval() {
+		if _, err = service.Approve(t.Context(), "protected"); err == nil || !strings.Contains(err.Error(), "canonical approved Process 04 plan") {
+			t.Fatalf("unbound governed draft approval = %v, want canonical Process 04 refusal", err)
+		}
+		run, err := service.Execute(t.Context(), "protected", func(marshal.Task, BriefContext) string { return "write a" }, nil)
+		if err != nil || run.State != marshal.Drafting {
+			t.Fatalf("unapproved governed draft executed: state=%s err=%v", run.State, err)
+		}
+	} else {
+		if _, err = service.Approve(t.Context(), "protected"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = service.Execute(t.Context(), "protected", func(marshal.Task, BriefContext) string { return "write a" }, nil); err == nil {
+			t.Fatal("governed execution admitted without credential/protection setup")
+		}
 	}
 	if _, err = os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("native fallback started worker: %v", err)
@@ -402,7 +470,7 @@ printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{
 	}
 	t.Setenv("PATH", root+string(os.PathListSeparator)+os.Getenv("PATH"))
 	cli := &MarshalCLI{Provider: "codex", Dir: root}
-	record, err := cli.VerifyEvidence(t.Context(), marshal.Run{}, "expected", verification.Session{})
+	record, err := cli.VerifyEvidence(requiredMarshalTestContext(t, cli), marshal.Run{}, "expected", verification.Session{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,5 +493,29 @@ func TestInspectionTypeKeepsConservativeMutationScheduling(t *testing.T) {
 	// prior mutation scheduling/lease protection for optional report writes.
 	if !draft.Plan.Tasks[0].Mutating || draft.Tasks[0].Type != marshal.TaskInspection {
 		t.Fatalf("type weakened scheduling protection: %+v", draft)
+	}
+}
+
+func TestMarshalProviderHasNoControllingTerminal(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "provider")
+	// Opening /dev/tty must fail even when MARSHAL itself owns a terminal.
+	stub := `#!/bin/sh
+if (exec 3<>/dev/tty) 2>/dev/null; then exit 91; fi
+cat >/dev/null
+printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"{\"ok\":true}"}}'
+`
+	if err := os.WriteFile(path, []byte(stub), 0700); err != nil {
+		t.Fatal(err)
+	}
+	cli := &MarshalCLI{Provider: "codex", Binary: path, Dir: root}
+	var output struct {
+		OK bool `json:"ok"`
+	}
+	if err := cli.turn(requiredMarshalTestContext(t, cli), "isolated prompt", marshalDraftSchema, &output); err != nil {
+		t.Fatal(err)
+	}
+	if !output.OK {
+		t.Fatal("missing provider result")
 	}
 }

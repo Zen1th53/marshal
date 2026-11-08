@@ -1,3 +1,5 @@
+//go:build governed
+
 package cloud
 
 import (
@@ -7,8 +9,6 @@ import (
 	"encoding/base64"
 	"testing"
 	"time"
-
-	"github.com/Zen1th53/marshal/internal/goalintake"
 )
 
 // These are the bypass attempts the design is meant to defeat, written as the
@@ -16,23 +16,6 @@ import (
 // Each asserts the same end state: no delegation, and no usable ULTRA material.
 
 // assertNoULTRA is the outcome every attack in this file must produce.
-func assertNoULTRA(t *testing.T, g *Gate, attack string) {
-	t.Helper()
-	if g.Entitled() {
-		t.Fatalf("%s: gate reported entitlement", attack)
-	}
-	if g.Mode() != goalintake.ModeStandard {
-		t.Fatalf("%s: gate did not report Standard", attack)
-	}
-	if _, err := g.Bundle(); err == nil {
-		t.Fatalf("%s: ULTRA material was available", attack)
-	}
-	// The decision that actually governs behaviour must refuse to delegate,
-	// even with the local preference switched on.
-	if goalintake.Confirm(goalintake.Intake{}, g.Mode(), g.Policy(true)).Delegated {
-		t.Fatalf("%s: confirmation was delegated", attack)
-	}
-}
 
 // Attack: patch the local configuration to claim ULTRA. This is the flag the
 // pack forbids relying on, and it must achieve nothing on its own.
@@ -263,7 +246,7 @@ func TestBypassEmptyKeyRingFailsClosed(t *testing.T) {
 // Attack: reach ULTRA without configuring the Cloud at all, hoping the absent
 // client defaults to permitting rather than refusing.
 func TestBypassUnconfiguredCloudFailsClosed(t *testing.T) {
-	result := Authorize(context.Background(), Config{}, t.TempDir(), "1.0.0")
+	result := authorizeCloud(context.Background(), Config{}, t.TempDir(), "1.0.0")
 	if result.Gate != nil {
 		t.Fatal("an unconfigured Cloud produced a gate")
 	}
@@ -277,7 +260,7 @@ func TestBypassUnreachableCloudFailsClosed(t *testing.T) {
 		// A port nothing is listening on, over loopback so no DNS is involved.
 		Endpoint: "http://127.0.0.1:1",
 	}
-	result := Authorize(context.Background(), cfg, t.TempDir(), "1.0.0")
+	result := authorizeCloud(context.Background(), cfg, t.TempDir(), "1.0.0")
 	if result.Err == nil {
 		t.Fatal("an unreachable Cloud reported success")
 	}

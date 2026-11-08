@@ -67,6 +67,7 @@ func TestUpgradeFromSchema79PreservesExistingState(t *testing.T) {
 		t.Fatalf("rewind to schema 79: %v", err)
 	}
 
+	resetProjectContext95HistoricalFixture(t, st)
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("upgrade from schema 79 failed: %v", err)
 	}

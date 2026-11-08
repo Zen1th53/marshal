@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,10 +151,14 @@ esac
 		t.Fatalf("KillWindow failed: %v", err)
 	}
 
-	// 8. CapturePane
+	// 8. CapturePane & CaptureVisiblePane
 	cap, err := CapturePane(ctx, "marshal-codex-12345678")
 	if err != nil || !strings.Contains(cap, "terminal evidence") {
 		t.Fatalf("CapturePane failed: %v, cap=%q", err, cap)
+	}
+	visCap, err := CaptureVisiblePane(ctx, "marshal-codex-12345678")
+	if err != nil || !strings.Contains(visCap, "terminal evidence") {
+		t.Fatalf("CaptureVisiblePane failed: %v, visCap=%q", err, visCap)
 	}
 
 	// 9. SetPaneReadOnly
@@ -197,14 +202,17 @@ esac
 
 	expectedCommands := []string{
 		"has-session -t my-session",
-		"new-session -d -s my-session -c /tmp -n marshal marshal tui",
+		"new-session -d -s my-session -c /tmp -n marshal /bin/sh -c ",
+		" /tmp marshal tui",
 		"display-message -p #{session_name}\t#{window_name}\t#{window_id}",
 		"list-windows -t test-session -F #{window_name}",
 		"select-window -t marshal-codex-12345678",
-		"new-window -d -t test-session -n marshal-claude -c /tmp -e FOO=bar claude",
+		"new-window -d -t test-session -n marshal-claude -c /tmp -e FOO=bar /bin/sh -c ",
+		" /tmp /bin/sh -c claude",
 		"kill-window -t marshal-claude",
 		"display-message -p -t marshal-codex-12345678 #{pane_id}",
 		"capture-pane -p -S - -t %1",
+		"capture-pane -p -t %1",
 		"select-pane -t marshal-codex-12345678 -d",
 		"join-pane -h -s marshal-codex-12345678 -t marshal",
 		"break-pane -s marshal-codex-12345678",
@@ -261,10 +269,10 @@ func TestWindowAndSessionNaming(t *testing.T) {
 	chatWin := ChatWindowName(root)
 	taskWin := TaskWindowName("task-01", root)
 
-	if !strings.HasPrefix(chatWin, "marshal-chat-") {
+	if !strings.HasPrefix(chatWin, statepath.Name+"-chat-") {
 		t.Errorf("expected marshal-chat- prefix, got %q", chatWin)
 	}
-	if !strings.HasPrefix(taskWin, "marshal-task-task-01-") {
+	if !strings.HasPrefix(taskWin, statepath.Name+"-task-task-01-") {
 		t.Errorf("expected marshal-task-task-01- prefix, got %q", taskWin)
 	}
 }

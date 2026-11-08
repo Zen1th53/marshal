@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/app"
@@ -19,7 +20,7 @@ func TestCheckHealthyRuntime(t *testing.T) {
 	if report.Verdict != Pass {
 		t.Fatalf("report = %#v", report)
 	}
-	for _, required := range []string{"git", "repository", "pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "resources", "ollama_models", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
+	for _, required := range []string{"git", "repository", "pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "resources", "ollama_models", "codex", "opencode", "ollama", "agy", "claude", "bwrap", "artifacts", "policy"} {
 		if report.Check(required) == nil {
 			t.Errorf("missing check %s", required)
 		}
@@ -41,7 +42,7 @@ func TestDefaultCheckDoesNotProbeOptionalProviders(t *testing.T) {
 	if report.Verdict != Pass {
 		t.Fatalf("report = %#v", report)
 	}
-	for _, name := range []string{"codex", "opencode", "ollama", "gemini", "claude"} {
+	for _, name := range []string{"codex", "opencode", "ollama", "agy", "claude"} {
 		if check := report.Check(name); check == nil || check.Verdict != NotRun {
 			t.Fatalf("%s check = %#v", name, check)
 		}
@@ -120,4 +121,19 @@ func doctorRepo(t *testing.T) *testgit.Repository {
 		}
 	}
 	return repo
+}
+
+func TestProbeMCPProviders(t *testing.T) {
+	repo := doctorRepo(t)
+	if _, err := app.Bootstrap(context.Background(), repo.Path()); err != nil {
+		t.Fatal(err)
+	}
+	report := Check(context.Background(), repo.Path(), Options{Lookup: availableTools, Run: successfulProbe})
+	check := report.Check("mcp_providers")
+	if check == nil {
+		t.Fatal("missing mcp_providers check")
+	}
+	if !strings.Contains(check.Detail, "claude:") || !strings.Contains(check.Detail, "antigravity:") {
+		t.Fatalf("mcp_providers detail expected provider names, got %q", check.Detail)
+	}
 }

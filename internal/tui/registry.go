@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/Zen1th53/marshal/internal/app"
 )
 
 // AccessMode defines whether a capability is Read, Write, or Execute.
@@ -345,10 +347,11 @@ func registerAllCapabilities(r *CapabilityRegistry) {
 	})
 	r.Register(Capability{
 		ID: "model.select", Category: "HARNESS", Name: "Select Model",
-		Description: "Unavailable until Runtime provides an authenticated execution-profile service",
+		Description: "Choose the model future governed codex or claude runs use (/model select <codex|claude> <model>)",
 		Access:      AccessWrite, CLISurface: "marshal model select",
 		TUISurface: "/model select", KeyboardPath: "m s", PalettePath: "model select",
 	})
+	registerMarshalModelChoices(r)
 	r.Register(Capability{
 		ID: "native.mode", Category: "HARNESS", Name: "Set Native Mode",
 		Description: "Configure native execution mode per harness",
@@ -837,4 +840,26 @@ func registerAllCapabilities(r *CapabilityRegistry) {
 		Access:      AccessRead, CLISurface: "marshal fingerprint",
 		TUISurface: "/fingerprint", KeyboardPath: "f p", PalettePath: "failure fingerprint recurring errors",
 	})
+}
+
+// registerMarshalModelChoices offers the Marshal model choice in the command
+// palette: searching "choose marshal model" lists one row per provider this
+// edition's Marshal accepts (app.MarshalProviders), and each row runs the same
+// /marshal model <provider> command an operator would type. The plain
+// /marshal entry comes first so completion describes /marshal itself.
+func registerMarshalModelChoices(r *CapabilityRegistry) {
+	r.Register(Capability{
+		ID: "marshal.session", Category: "MARSHAL", Name: "Marshal",
+		Description: "Show the Marshal run status and the /marshal commands",
+		Access:      AccessExecute,
+		TUISurface:  "/marshal", PalettePath: "marshal status commands",
+	})
+	for _, provider := range app.MarshalProviders() {
+		r.Register(Capability{
+			ID: "marshal.model." + provider, Category: "MARSHAL", Name: "Choose Marshal model: " + provider,
+			Description: "Make " + provider + " the Marshal model; a running planning chat on another provider is replaced",
+			Access:      AccessWrite,
+			TUISurface:  "/marshal model " + provider, PalettePath: "choose marshal model " + provider,
+		})
+	}
 }

@@ -29,7 +29,7 @@ func TestConsolidationProcedureIsCandidateIdempotentAndConcurrent(t *testing.T) 
 	})
 	second := captureConsolidationOutcome(t, svc, OutcomeCaptureRequest{
 		ProjectID: "PROJECT-local", TaskID: taskID, TaskTitle: "validate release", RunID: "RUN-CONS-PROC-2",
-		AgentID: principal.ID, Provider: "gemini", Status: "success", HeadCommit: "head-1", Branch: "main",
+		AgentID: principal.ID, Provider: "agy", Status: "success", HeadCommit: "head-1", Branch: "main",
 		EvidenceIDs: []string{"EVID-PROC-2"}, FilesChanged: []string{"internal/app/release.go", "README.md"},
 		TestsRun: []string{"go test ./internal/app", "npm test"}, Environment: map[string]string{"os": "linux"},
 	})
@@ -126,7 +126,7 @@ func TestRunCompletionSchedulerWaitsThenProposesGovernedCandidate(t *testing.T) 
 	}
 	second := captureConsolidationOutcome(t, svc, OutcomeCaptureRequest{
 		ProjectID: "PROJECT-local", TaskID: taskID, TaskTitle: "validate release", RunID: "RUN-AUTO-2", AgentID: principal.ID,
-		Provider: "gemini", Status: "success", HeadCommit: "head", TestsRun: []string{"go test ./..."},
+		Provider: "agy", Status: "success", HeadCommit: "head", TestsRun: []string{"go test ./..."},
 	})
 	result, err := svc.ProposeOutcomeConsolidation(ctx, principal, second, "validate release")
 	if err != nil || result == nil {
@@ -278,10 +278,16 @@ func TestConsolidationPoisoningAndSecretsCannotGainTrust(t *testing.T) {
 	}
 
 	secretSubject := "release with ghp_1234567890abcdefghijklmnopqrstuvwxyzAB"
-	if _, err := svc.ProposeConsolidation(ctx, principal, ConsolidationRequest{
+	_, err = svc.ProposeConsolidation(ctx, principal, ConsolidationRequest{
 		ProjectID: "PROJECT-local", Mode: ConsolidateProcedure, Subject: secretSubject,
 		Scope: model.ScopeTask, ScopeID: taskID, SourceMemoryIDs: []string{one.ID, two.ID},
-	}); !errors.Is(err, security.ErrSecretDetected) {
+	})
+	// Community refuses; Extreme keeps the proposal with the secret removed
+	// (checked below: no record holds it).
+	if security.RedactsSecrets && err != nil {
+		t.Fatalf("Marshal refused a redactable consolidation: %v", err)
+	}
+	if !security.RedactsSecrets && !errors.Is(err, security.ErrSecretDetected) {
 		t.Fatalf("secret-bearing consolidation was accepted: %v", err)
 	}
 	records, err := rt.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: "PROJECT-local"})

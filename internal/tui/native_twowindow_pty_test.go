@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,6 +53,20 @@ func startInProject(t *testing.T, project string, rows, cols uint16, args ...str
 		}
 	})
 	return s
+}
+
+// twoWindowPatience is this test's wait for a step that crosses both
+// windows (a watcher pass, the runtime owner answering). Two TUIs and two
+// native doubles share the host here, and a loaded run once took 8.9 s for
+// a step the shared 8 s wait allowed; this is more than twice that.
+const twoWindowPatience = 20 * time.Second
+
+// mustSeeWithin is mustSee with this test's patience.
+func mustSeeWithin(t *testing.T, s *ptySession, want string, patience time.Duration) {
+	t.Helper()
+	if !s.waitFor(want, patience) {
+		t.Fatalf("expected %q on the terminal after %s.\n--- output tail ---\n%s", want, ptyWait(patience), tail(s.output(), 3000))
+	}
 }
 
 // TestPTYTwoWindowsShareOneProjectMemory runs the arrangement an operator
@@ -112,8 +127,8 @@ func TestPTYTwoWindowsShareOneProjectMemory(t *testing.T) {
 	// Neither window passes --session, so both take the default identity.
 	first := startInProject(t, project, 40, 160)
 	second := startInProject(t, project, 40, 160)
-	first.mustSee("MARSHAL")
-	second.mustSee("MARSHAL")
+	first.mustSee("Marshal")
+	second.mustSee("Marshal")
 
 	grantPTYRead(t, first, claudeDir)
 	grantPTYRead(t, first, filepath.Join(codexHome, "sessions"))
@@ -130,21 +145,60 @@ func TestPTYTwoWindowsShareOneProjectMemory(t *testing.T) {
 	second.sendLine("beta")
 	second.mustSee("CODEX-IN:<beta>")
 
-	// Give both watchers a poll to import what the doubles wrote.
-	time.Sleep(5 * time.Second)
+	// Wait until both watchers have imported what the doubles wrote: each
+	// session publishes its import count in live-status.json on every pass.
+	// The wait is on that event, not on a fixed sleep a loaded host can
+	// outrun.
+	imported := func(provider string) bool {
+		st, err := readLiveStatus(resolved, provider)
+		return err == nil && st.Imported > 0
+	}
+	deadline := time.Now().Add(ptyWait(twoWindowPatience))
+	for !(imported("claude") && imported("codex")) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the watchers imported nothing within %s (claude %v, codex %v)", ptyWait(twoWindowPatience), imported("claude"), imported("codex"))
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 
 	// Leave both agents and ask one window what the project remembers. It must
 	// carry both agents' work, not only the one this window opened.
 	first.send("\r")
 	second.send("\r")
-	first.mustSee("Claude exited.")
+	mustSeeWithin(t, first, "Claude exited.", twoWindowPatience)
+	mustSeeWithin(t, second, "Codex exited.", twoWindowPatience)
 
-	approvePTYMemory(t, first)
+	// Whichever window owns the runtime performs lifecycle decisions. The
+	// other window remains a reader; ownership may move during native sessions.
+	beforeReview := len(first.output())
+	first.sendLine("/memory review")
+	var reviewer *ptySession
+	deadline = time.Now().Add(ptyWait(twoWindowPatience))
+	for time.Now().Before(deadline) {
+		response := first.output()[beforeReview:]
+		if strings.Contains(response, "MEM-IMPORT-") {
+			reviewer = first
+			break
+		}
+		if strings.Contains(response, "another MARSHAL window owns") {
+			reviewer = second
+			second.sendLine("/memory review")
+			break
+		}
+		time.Sleep(80 * time.Millisecond)
+	}
+	if reviewer == nil {
+		t.Fatalf("neither window returned the memory review or an owner refusal: %s", tail(first.output(), 1200))
+	}
+	if !reviewer.waitFor("MEM-IMPORT-", twoWindowPatience) {
+		t.Fatalf("no memory review listed within %s: %s", ptyWait(twoWindowPatience), tail(reviewer.output(), 1200))
+	}
+	approvePTYMemoryListed(t, reviewer)
 	// Either terminal reads the records approved by the operator in the first.
 	first.sendLine("/memory search visible")
-	first.mustSee("MEMORY RECORDS")
+	mustSeeWithin(t, first, "MEMORY RECORDS", twoWindowPatience)
 	second.sendLine("/memory search fixed")
-	second.mustSee("MEMORY RECORDS")
+	mustSeeWithin(t, second, "MEMORY RECORDS", twoWindowPatience)
 
 	if strings.Contains(first.output(), "No memory records") {
 		t.Errorf("the Claude window found no memory:\n%s", tail(first.output(), 1200))
@@ -156,7 +210,7 @@ func TestPTYTwoWindowsShareOneProjectMemory(t *testing.T) {
 	// Each provider keeps its own import index, so two windows watching the same
 	// project cannot corrupt one another's progress.
 	for _, provider := range []string{"claude", "codex"} {
-		path := filepath.Join(resolved, ".marshal", provider, "history-index.json")
+		path := filepath.Join(resolved, statepath.DirName, provider, "history-index.json")
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Errorf("%s has no import index: %v", provider, err)

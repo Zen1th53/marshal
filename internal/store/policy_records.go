@@ -211,6 +211,22 @@ func (s *Store) Remember(ctx context.Context, record model.MemoryRecord) error {
 		record.Status == "" || record.Confidence == "" || strings.TrimSpace(record.Body) == "" {
 		return fmt.Errorf("%w: incomplete memory record", model.ErrInvalid)
 	}
+	if security.RedactsSecrets && containsSecretMaterial(record.Body) {
+		// Extreme keeps the record with the secret removed and records the
+		// redaction (kinds only, never the value). Community refuses below.
+		body, r := security.NewFirewall(security.FirewallConfig{}).Redact(record.Body)
+		record.Body = body
+		memID, projID := record.ID, record.ProjectID
+		if redaction.DetectSecret(memID) != "" || len(memID) > maxEvidenceAuditValue {
+			memID = "[REDACTED]"
+		}
+		if redaction.DetectSecret(projID) != "" || len(projID) > maxEvidenceAuditValue {
+			projID = "[REDACTED]"
+		}
+		_ = s.recordEvidenceEventWithDetails(ctx, "memory.secret.redacted", projID, "", "", map[string]any{
+			"action": "memory.redacted", "memory_id": memID, "redacted_kinds": r.Kinds, "target_project_id": projID,
+		})
+	}
 	if containsSecretMaterial(record.Body) {
 		reason := "sensitive material or secret credential detected"
 		fw := security.NewFirewall(security.FirewallConfig{})

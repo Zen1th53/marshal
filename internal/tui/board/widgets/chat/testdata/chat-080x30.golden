@@ -1,0 +1,31 @@
+|MARSHAL  claude - planner/reviewer - plan v2 approved 13:41  - thinking         |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|you 14:01                                                                       |
+|  Why is T-023 parked?                                                          |
+|                                                                                |
+|marshal 14:01                                                                   |
+|  T-023 (codex-3) wanted to run `npm view deja-vu`. The manifest names only     |
+|  api.openai.com and github.com; registry.npmjs.org is not in the plan.         |
+|  The argument carries taint U (package.json came from outside).                |
+|  So: park. The lane finished 2 files in the meantime; the decision is in the   |
+|  inbox.                                                                        |
+|  > Bash  npm view deja-vu --json                                               |
+|    x denied in the inbox                                                       |
+|  Proposal: [A] allow for this run - low risk (read-only registry, 0 files      |
+|  outside).                                                                     |
+|                                                                                |
+|you 14:02                                                                       |
+|  A. And explain T-031                                                          |
+|                                                                                |
+|marshal 14:02                                                                   |
+|  > Read  internal/netpolicy/broker_npm.go                                      |
+|    + 212 lines                                                                 |
+|  T-023 allow recorded, decided_by: mandate:M-7f3a-23 - the lane continues.     |
+|  T-031 hard gate: `git push --force` - irreversible. I will not decide it; type|
+|  the canonical id. Blast radius: origin/main, 3 tags.                          |
+|> type canonical id                                                             |
+cursor 30,20

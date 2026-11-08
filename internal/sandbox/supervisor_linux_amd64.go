@@ -25,6 +25,9 @@ type Refusal struct {
 	Host      string
 	Port      int
 	Operation string
+	// LocalKernelDiscovery marks only a denied NETLINK_ROUTE socket request.
+	// It never grants a socket or suppresses the durable denial audit.
+	LocalKernelDiscovery bool
 }
 
 // The trampoline runs on a locked thread and execs from that same thread:
@@ -216,13 +219,48 @@ func AttachSupervisor(ctx context.Context, cmd *exec.Cmd, socketPath string, obs
 				}
 				local := []unix.Iovec{{Base: &addr[0], Len: size}}
 				remote := []unix.RemoteIovec{{Base: uintptr(req.Args[1]), Len: int(size)}}
-				if n, err := unix.ProcessVMReadv(int(req.PID), local, remote, 0); err == nil && n >= 8 && binary.LittleEndian.Uint16(addr[:2]) == unix.AF_INET {
+				n, readErr := unix.ProcessVMReadv(int(req.PID), local, remote, 0)
+				if readErr == nil && n >= 8 && binary.LittleEndian.Uint16(addr[:2]) == unix.AF_INET {
 					refusal.Host = net.IP(addr[4:8]).String()
 					refusal.Port = int(binary.BigEndian.Uint16(addr[2:4]))
 					allow = refusal.Host == "127.0.0.1" && refusal.Port == 18080
 				}
+				// The worker's network namespace is private: Extreme also lets
+				// it reach its own loopback (a dev server the task started) and
+				// local Unix sockets. Community refuses them.
+				if !allow && readErr == nil {
+					allow = buildSupervisorAllowsConnect(addr[:n])
+				}
+			} else if req.Arch == unix.AUDIT_ARCH_X86_64 && req.Nr == unix.SYS_SENDTO && !allow && req.Args[4] != 0 {
+				// A datagram (or Fast Open) send names its destination.
+				var addr [128]byte
+				size := req.Args[5]
+				if size > uint64(len(addr)) {
+					size = uint64(len(addr))
+				}
+				local := []unix.Iovec{{Base: &addr[0], Len: size}}
+				remote := []unix.RemoteIovec{{Base: uintptr(req.Args[4]), Len: int(size)}}
+				if n, readErr := unix.ProcessVMReadv(int(req.PID), local, remote, 0); readErr == nil {
+					allow = buildSupervisorAllowsConnect(addr[:n])
+				}
+			} else if req.Arch == unix.AUDIT_ARCH_X86_64 && req.Nr == unix.SYS_SENDMSG && buildSupervisorAllowsMsgSend() {
+				// Extreme only: Community never reads worker memory to allow a
+				// sendmsg. The msghdr and the name it points to are read the
+				// same way as a connect or sendto destination.
+				pid := int(req.PID)
+				if hdr, readErr := readWorkerMemory(pid, req.Args[1], msghdrNameSize); readErr == nil {
+					allow = msgSendAllowed(hdr, req.Args[2], func(ptr, size uint64) []byte {
+						addr, err := readWorkerMemory(pid, ptr, min(size, 128))
+						if err != nil {
+							return nil
+						}
+						return addr
+					})
+				}
 			} else if req.Arch == unix.AUDIT_ARCH_X86_64 && req.Nr == unix.SYS_SOCKET {
 				refusal.Host = fmt.Sprintf("socket-family-%d-type-%d", req.Args[0], req.Args[1]&15)
+				refusal.LocalKernelDiscovery = deniedNetlinkDiscovery(req)
+				allow = buildSupervisorAllowsSocket(req.Args[0])
 			}
 			resp := response{ID: req.ID, Error: -int32(unix.EACCES)}
 			if allow {
@@ -240,9 +278,58 @@ func AttachSupervisor(ctx context.Context, cmd *exec.Cmd, socketPath string, obs
 	}, nil
 }
 
+// OpenCode/Bun probes local interfaces with NETLINK_ROUTE before doing useful
+// work. The socket is still refused by seccomp. This marker distinguishes the
+// denied local query from an actionable network egress attempt.
+func deniedNetlinkDiscovery(req notification) bool {
+	const permittedFlags = uint64(unix.SOCK_CLOEXEC | unix.SOCK_NONBLOCK)
+	return req.Arch == unix.AUDIT_ARCH_X86_64 && req.Nr == unix.SYS_SOCKET &&
+		req.Args[0] == unix.AF_NETLINK && req.Args[1]&^permittedFlags == unix.SOCK_RAW &&
+		req.Args[2] == unix.NETLINK_ROUTE
+}
+
 // A destination-free send cannot open a connection. Workers inherit no socket
 // descriptors and can create only TCP streams; connect confines those streams
 // to the proxy. Explicit destinations and Fast Open still require refusal.
 func connectedSend(req notification) bool {
 	return req.Arch == unix.AUDIT_ARCH_X86_64 && req.Nr == unix.SYS_SENDTO && req.Args[4] == 0 && req.Args[3]&unix.MSG_FASTOPEN == 0
+}
+
+// msghdrNameSize covers msg_name (offset 0) and msg_namelen (offset 8) of the
+// x86_64 struct msghdr; the rest of the header does not choose a destination.
+const msghdrNameSize = 12
+
+// msgSendAllowed decides an intercepted sendmsg from the worker's msghdr. With
+// no msg_name and no Fast Open the send goes to the socket's existing peer,
+// which connect already confined: inside the worker's private network
+// namespace that peer is the proxy, its own loopback or an abstract socket. A
+// named destination gets the same check as connect and sendto. Like those, the
+// decision rests on worker memory read before the kernel acts, so it narrows
+// nothing the namespace does not already enforce. Community refuses every
+// sendmsg here without reading the destination.
+func msgSendAllowed(hdr []byte, flags uint64, readName func(ptr, size uint64) []byte) bool {
+	if !buildSupervisorAllowsMsgSend() || len(hdr) < msghdrNameSize {
+		return false
+	}
+	name := binary.LittleEndian.Uint64(hdr[0:8])
+	if name == 0 {
+		return flags&unix.MSG_FASTOPEN == 0
+	}
+	return buildSupervisorAllowsConnect(readName(name, uint64(binary.LittleEndian.Uint32(hdr[8:12]))))
+}
+
+// readWorkerMemory copies up to size bytes at ptr out of the worker; a short
+// read returns only the bytes the kernel copied.
+func readWorkerMemory(pid int, ptr, size uint64) ([]byte, error) {
+	buf := make([]byte, size)
+	if size == 0 {
+		return buf, nil
+	}
+	local := []unix.Iovec{{Base: &buf[0], Len: size}}
+	remote := []unix.RemoteIovec{{Base: uintptr(ptr), Len: int(size)}}
+	n, err := unix.ProcessVMReadv(pid, local, remote, 0)
+	if err != nil {
+		return nil, err
+	}
+	return buf[:n], nil
 }

@@ -13,6 +13,14 @@ import (
 
 func TestMarshalRewrittenDraftRefusesApprovalAndCanDiscard(t *testing.T) {
 	w := recoveryChatWorkspace(t)
+	if requiredLegacyFixtureRefusal {
+		if _, err := w.marshalChat(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		stopRecoveryDraftWatcher(w)
+		assertUnreviewedDraftRefusedAndDiscarded(t, w, loadChatBinding(w.providerRoot()))
+		return
+	}
 	if _, err := w.marshalChat(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -141,5 +149,51 @@ func TestMarshalNativeLaunchDeliversIntakeCueAllProviders(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestMarshalNativeLaunchConfiguresMarshalMCPOnce(t *testing.T) {
+	for _, provider := range []string{"codex", "claude"} {
+		t.Run(provider, func(t *testing.T) {
+			w := recoveryChatWorkspace(t)
+			bin := t.TempDir()
+			for _, name := range []string{"codex", "claude"} {
+				if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\necho '0.159.2'\n"), 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+			protocol, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := w.runNativeAgent(t.Context(), provider, nil, protocol); err != nil {
+				t.Fatal(err)
+			}
+			w.tmuxMu.Lock()
+			a := copyAgentLocked(w.tmuxActiveWins["marshal-chat"])
+			w.tmuxMu.Unlock()
+			if a == nil {
+				t.Fatal("no Marshal launch")
+			}
+			joined := strings.Join(a.args, "\n")
+			switch provider {
+			case "codex":
+				if n := strings.Count(joined, "mcp_servers.marshal.command="); n != 1 {
+					t.Fatalf("Marshal MCP server configured %d times: %v", n, a.args)
+				}
+			case "claude":
+				n := 0
+				for _, arg := range a.args {
+					if arg == "--mcp-config" {
+						n++
+					}
+				}
+				if n != 1 {
+					t.Fatalf("Marshal MCP config passed %d times: %v", n, a.args)
+				}
+			}
+		})
 	}
 }

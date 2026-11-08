@@ -34,7 +34,9 @@ func (r *CapabilityRunner) Run(ctx context.Context, command Command) (ProcessRes
 		Resource: command.Path, Action: "execute",
 	})
 	if err != nil {
-		return ProcessResult{}, capability.ErrDenied
+		// Preserve the broker's error identity and diagnostic cause. The
+		// process boundary still fails closed: no delegated execution occurs.
+		return ProcessResult{}, fmt.Errorf("authorize capability: %w", err)
 	}
 	if decision.Outcome != capability.OutcomeAllow {
 		return ProcessResult{}, decisionError(decision.Reason)
@@ -45,15 +47,15 @@ func (r *CapabilityRunner) Run(ctx context.Context, command Command) (ProcessRes
 func decisionError(reason capability.ErrorCode) error {
 	switch reason {
 	case capability.CodeExpired:
-		return capability.ErrExpired
+		return fmt.Errorf("%w: %w", capability.ErrDenied, capability.ErrExpired)
 	case capability.CodeRevoked:
-		return capability.ErrRevoked
+		return fmt.Errorf("%w: %w", capability.ErrDenied, capability.ErrRevoked)
 	case capability.CodeSubjectMismatch:
-		return capability.ErrSubjectMismatch
+		return fmt.Errorf("%w: %w", capability.ErrDenied, capability.ErrSubjectMismatch)
 	case capability.CodeTaskMismatch:
-		return capability.ErrTaskMismatch
+		return fmt.Errorf("%w: %w", capability.ErrDenied, capability.ErrTaskMismatch)
 	case capability.CodeInvalidScope:
-		return capability.ErrInvalidScope
+		return fmt.Errorf("%w: %w", capability.ErrDenied, capability.ErrInvalidScope)
 	case capability.CodeDenied:
 		return capability.ErrDenied
 	default:

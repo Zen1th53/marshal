@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/hostgit"
@@ -41,13 +42,17 @@ type MarshalDraft struct {
 }
 
 type MarshalService struct {
-	requireOwner         func() error
-	ReservedMergeRequest func(context.Context, string, string, int64, string, []string)
+	runtime               *Runtime
+	requireOwner          func() error
+	ReservedMergeRequest  func(context.Context, string, string, int64, string, []string)
+	ConfigureKnowledgeMCP func(context.Context, string, string, []string, []string) ([]string, []string, func(), error)
 
 	GovernedCheck                    func(context.Context, string, string, string, string, string) marshal.CommandRecord
 	Store                            *store.Store
 	ProjectID, Repository, Worktrees string
 	Model                            MarshalModel
+	ProjectContext                   func(context.Context, string, string) (string, error)
+	RequireArchitectureAcceptance    func(context.Context) error
 	Reviewer                         string
 	ModelProvider                    string
 	CrossReview                      func(context.Context, marshal.Task, marshal.HandIn, marshal.Control) (marshal.Review, string, error)
@@ -65,8 +70,19 @@ type MarshalService struct {
 	InstalledVersion func(ctx context.Context, worker string) string
 	HandInGuard      func(context.Context, string, string, marshal.HandIn) (string, error)
 	// AfterLifecycleEffect injects a failure after the effect but before completion.
-	AfterLifecycleEffect func(kind, operationID string) error
-	now                  func() time.Time
+	AfterLifecycleEffect          func(kind, operationID string) error
+	RecordActivity                func(string)
+	workerRecall                  func(context.Context, authz.Principal, RecallRequest) (RecallResponse, error)
+	requiredContextDispatch       func(context.Context, marshal.Run, marshal.Task) error
+	requiredIntegrationSource     func(context.Context, string, marshal.Run, string) error
+	requiredCanonicalVerification func(context.Context, string, marshal.Run, string) (verification.Session, verification.Binding, error)
+	requiredContextCloseEffect    func(context.Context, string, marshal.Run, *marshal.LifecycleOperation, func() error) error
+	process05WaitReceipt          func(context.Context, marshal.Run, marshal.Task, string, string) (bool, error)
+	process05WaitPause            func(context.Context, string) error
+	now                           func() time.Time
+	// codeEvidence is the Extreme code evidence host (nil when disabled);
+	// Community's field type is empty.
+	codeEvidence codeEvidenceHostField
 }
 
 func (s *MarshalService) clock() time.Time {
@@ -162,6 +178,9 @@ func validateDraft(d MarshalDraft) error {
 	if len(d.Tasks) != len(d.Plan.Tasks) {
 		return errors.New("Marshal task count differs from plan")
 	}
+	if err := validateGovernedPlanNotes(d.Pack, d.Tasks); err != nil {
+		return err
+	}
 	governedOnly := false
 	allowNative := false
 	for _, c := range d.Plan.HardConstraints {
@@ -208,7 +227,7 @@ func validateDraft(d MarshalDraft) error {
 			}
 			for _, criterion := range c.Criteria {
 				if strings.TrimSpace(criterion) == "" || !containsMarshal(t.Criteria, criterion) {
-					return fmt.Errorf("check criterion differs for %s", t.PlanTaskID)
+					return fmt.Errorf("check criterion differs for %s: %q is not one of the task's criteria", t.PlanTaskID, criterion)
 				}
 			}
 			commands = append(commands, c.Command)
@@ -280,6 +299,14 @@ func (s *MarshalService) StartPlanning(ctx context.Context, runID, goal string, 
 	if err != nil {
 		return marshal.Run{}, err
 	}
+	if s.requireOwner != nil && s.requiresCanonicalGovernedApproval() {
+		if _, ok := s.Model.(*MarshalCLI); ok {
+			d, err = s.canonicalizeHeadlessDraft(ctx, goal, d, budget)
+			if err != nil {
+				return marshal.Run{}, err
+			}
+		}
+	}
 	return s.StartPlanningFromDraft(ctx, runID, goal, d, budget)
 }
 
@@ -329,29 +356,77 @@ func (s *MarshalService) StartPlanningFromDraft(ctx context.Context, runID, goal
 	if err != nil {
 		return marshal.Run{}, err
 	}
-	run := marshal.Run{PlanID: d.Plan.ID, PlanVersion: d.Plan.Version, BaseCommit: strings.TrimSpace(base), Settings: settings.Value, GoalBinding: goal, Budget: budget, Tasks: d.Tasks, State: marshal.Drafting, Pack: d.Pack}
+	run := marshal.Run{Compatibility: newMarshalCompatibility(), PlanID: d.Plan.ID, PlanVersion: d.Plan.Version, BaseCommit: strings.TrimSpace(base), Settings: settings.Value, GoalBinding: goal, Budget: budget, Tasks: d.Tasks, State: marshal.Drafting, Pack: d.Pack}
 	for i := range run.Tasks {
 		run.Tasks[i].State = marshal.Queued
 		run.Tasks[i].BaseCommit = run.BaseCommit
-		run.Tasks[i].Branch = "marshal/" + runID + "/" + run.Tasks[i].PlanTaskID
+		run.Tasks[i].Branch = marshalTaskBranch(runID, run.Tasks[i].PlanTaskID, 0)
 	}
-	if err = s.Store.SaveMarshalPlanState(ctx, s.ProjectID, runID, d.Plan, 0, run, 0, nil); err != nil {
+	var selectionEvent *events.Event
+	selections := make([]map[string]any, 0)
+	for _, task := range run.Tasks {
+		if selection := task.WorkerSelection; selection != nil {
+			selections = append(selections, map[string]any{"task_id": task.PlanTaskID,
+				"requested_worker": selection.RequestedWorker, "requested_model": selection.RequestedModel,
+				"selected_worker": task.Worker, "selected_model": selection.SelectedModel, "reason": selection.Reason})
+		}
+	}
+	if len(selections) > 0 {
+		event, eventErr := s.decisionEvent(runID, "", events.EventTypeMarshalRecommended,
+			map[string]any{"role": "worker-selection", "selections": selections})
+		if eventErr != nil {
+			return marshal.Run{}, eventErr
+		}
+		selectionEvent = &event
+	}
+	if err = s.Store.SaveMarshalPlanState(ctx, s.ProjectID, runID, d.Plan, 0, run, 0, selectionEvent); err != nil {
+		if s.requireOwner != nil && s.requiresCanonicalGovernedApproval() && d.Plan.RequiredProjectContract != nil && errors.Is(err, plan.ErrPlanConflict) {
+			return marshal.Run{}, fmt.Errorf("%w: a Process 04 plan already exists for this confirmed Goal; review the existing Marshal run or use /goal edit, reconfirm the revised Goal, then start a new draft", err)
+		}
 		return marshal.Run{}, err
 	}
 	return run, nil
 }
 
 func (s *MarshalService) Approve(ctx context.Context, runID string, reviewed ...PlanApprovalSnapshot) (marshal.Run, error) {
+	if s.RequireArchitectureAcceptance != nil {
+		if err := s.RequireArchitectureAcceptance(ctx); err != nil {
+			return marshal.Run{}, err
+		}
+	}
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return run, err
 	}
 	// A retry is a read of the existing approval, not another authorization.
 	if run.State != marshal.Drafting && run.ApprovalScopeDigest != "" {
+		if s.requireOwner != nil && s.requiresCanonicalGovernedApproval() && !run.Process05Bound {
+			for _, task := range run.Tasks {
+				if task.Mode == marshal.Governed {
+					return run, errors.New("historical governed Marshal approval has no canonical Process 05 binding; create a new confirmed Goal and plan")
+				}
+			}
+		}
 		return run, nil
 	}
 	if run.State != marshal.Drafting || s.ApprovalActor == nil {
 		return run, errors.New("run is not awaiting plan approval")
+	}
+	canonicalGoverned := false
+	if s.requireOwner != nil && s.requiresCanonicalGovernedApproval() && !run.Process05Bound {
+		for _, task := range run.Tasks {
+			canonicalGoverned = canonicalGoverned || task.Mode == marshal.Governed
+		}
+	}
+	// A runtime-owned governed worker must enter through the approved Process 04
+	// plan. Interactive Marshal drafts have only task/check data; approving one
+	// here would record consent for a plan with no provider routes, harness
+	// assignments, team or verification obligations. BindApprovedPlan is the
+	// supported path and checks those inputs before creating the run.
+	if canonicalGoverned {
+		if err := s.validateCanonicalGovernedDraft(ctx, run); err != nil {
+			return run, fmt.Errorf("governed Marshal draft needs a canonical approved Process 04 plan: %w", err)
+		}
 	}
 	snapshot, err := s.PlanApprovalSnapshot(ctx, runID)
 	if err != nil {
@@ -387,6 +462,20 @@ func (s *MarshalService) Approve(ctx context.Context, runID string, reviewed ...
 	approved, err := p.Approve(s.clock())
 	if err != nil {
 		return run, err
+	}
+	if canonicalGoverned {
+		if err := s.validateCanonicalGovernedDraft(ctx, run); err != nil {
+			return run, err
+		}
+		bound, e := s.canonicalBoundRun(ctx, runID, approved, run)
+		if e != nil {
+			return run, e
+		}
+		bound.Repository, bound.TargetRef = run.Repository, run.TargetRef
+		run = bound
+		if snapshot.CanonicalScopeDigest == "" || snapshot.CanonicalScopeDigest != approved.ApprovalScopeDigest {
+			return run, errors.New("Process 04 approval scope changed; review again")
+		}
 	}
 	run.PlanVersion = p.Version + 1
 	run.ApprovalScopeDigest = marshalApprovalDigest(approved.ApprovalScopeDigest, run)

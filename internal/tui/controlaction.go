@@ -565,7 +565,7 @@ func (c *Confirmation) Submit(ctx context.Context) (Outcome, error) {
 	c.mu.Unlock()
 	if background != nil {
 		background(func() { _, _ = c.submit(ctx, binding, request, prepared) })
-		return Outcome{Detail: "submission in flight"}, nil
+		return Outcome{Detail: statusSubmitting}, nil
 	}
 	return c.submit(ctx, binding, request, prepared)
 }

@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 // What capture is doing, while it is doing it.
@@ -36,10 +39,14 @@ type liveStatus struct {
 	// Error carries the most recent capture failure, empty when the last pass
 	// succeeded. A session that is failing to save should not look idle.
 	Error string `json:"error,omitempty"`
+	// ProgramStatus is the state reported via OSC 7501 Program Status Protocol.
+	State string `json:"state,omitempty"`
+	// LastAction is the human-readable last action (msg in OSC 7501, or title heuristic), redacted.
+	LastAction string `json:"last_action,omitempty"`
 }
 
 func liveStatusPath(root, provider string) string {
-	return filepath.Join(root, ".marshal", provider, "live-status.json")
+	return filepath.Join(root, statepath.DirName, provider, "live-status.json")
 }
 
 // writeLiveStatus publishes the current capture state.
@@ -47,8 +54,15 @@ func liveStatusPath(root, provider string) string {
 // A failure to write is returned but never stops a session: this file is a
 // report about the work, not the work.
 func writeLiveStatus(root, provider string, status liveStatus) error {
+	if err := statepath.CheckPath(root, liveStatusPath(root, provider)); err != nil {
+		return err
+	}
+	if err := statepath.CheckPath(root, liveStatusPath(root, provider)+".tmp"); err != nil {
+		return err
+	}
 	status.Provider = provider
 	status.Error = hideMarshalProtocol(status.Error)
+	status.LastAction = RedactContent(strings.TrimSpace(status.LastAction), nil)
 	path := liveStatusPath(root, provider)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
@@ -68,6 +82,9 @@ func writeLiveStatus(root, provider string, status liveStatus) error {
 // readLiveStatus reports what a provider's last session published, for the
 // operator asking after the fact.
 func readLiveStatus(root, provider string) (liveStatus, error) {
+	if err := statepath.CheckPath(root, liveStatusPath(root, provider)); err != nil {
+		return liveStatus{}, err
+	}
 	data, err := os.ReadFile(liveStatusPath(root, provider))
 	if err != nil {
 		return liveStatus{}, err

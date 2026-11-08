@@ -1,126 +1,123 @@
-# MARSHAL Troubleshooting Guide
+# Troubleshooting
 
-**Runtime Milestone**: `v0.0.7`
-
-This guide provides symptom-based troubleshooting for engineers operating MARSHAL local control plane and provider adapters.
+This guide addresses common questions, error messages, and operational situations encountered while using Marshal.
 
 ---
 
-## 1. Environment & Diagnostics
+## 1. Uninitialized Project Message
 
-### Symptom: `marshal doctor` reports `bwrap` is missing / unavailable
-- **Meaning**: Linux `bubblewrap` binary is not found on `$PATH`.
-- **Impact**: Provider execution fails closed by default. Process-only execution is available only through an explicit operator opt-in for eligible R0/R1 work.
-- **Fix**: Install bubblewrap using your host package manager:
-  ```bash
-  # Ubuntu / Debian
-  sudo apt-get install bubblewrap
+### The Error
 
-  # Fedora / RHEL
-  sudo dnf install bubblewrap
+When running `marshal` or `marshal tui`, you may encounter an error message similar to:
 
-  # Arch Linux
-  sudo pacman -S bubblewrap
-  ```
+```text
+MARSHAL project "/path/to/project" is not initialized or is invalid: missing CAPABILITIES.yaml; missing state.db; run `marshal init` here (or cd into your project); run `marshal doctor` for details
+```
 
----
+### Why it Happens
 
-## 2. Daemon & Service Lifecycle
+Marshal requires an initialized, valid Git project before launching the runtime or opening the Board. This ensures your repository has a valid Git root, tracking baseline, and state storage.
 
-### Symptom: Daemon will not start / `socket state or permissions are unsafe`
-- **Meaning**: Socket `.marshal/runtime.sock` already exists or has unsafe file permissions.
-- **Inspection**:
-  ```bash
-  ls -la .marshal/runtime.sock
-  ```
-- **Fix**: Verify if another `marshal daemon` instance is running (`pgrep -fl marshal`). If no process is running, safely remove the stale socket file:
-  ```bash
-  rm -f .marshal/runtime.sock
-  ```
+### How to Fix It
 
-### Symptom: Stale PID file detected on daemon startup
-- **Meaning**: `.marshal/pid` contains a PID from an unclean daemon shutdown.
-- **Behavior**: MARSHAL automatically performs process liveness checks (`syscall.Kill(pid, 0) == ESRCH`) on startup. If the old PID is dead, MARSHAL unlinks the stale PID and socket files automatically.
-- **Manual Fix**: If needed, remove `.marshal/pid` and restart `marshal daemon`.
-
----
-
-## 3. Provider Binary & Execution Issues
-
-### Symptom: `codex` binary not found
-- **Meaning**: `codex` binary is missing from `$PATH`, `~/.local/bin`, and `/usr/local/bin`.
-- **Fix**: Ensure `codex-cli` is installed and add `~/.local/bin` to your `$PATH`:
-  ```bash
-  export PATH="$HOME/.local/bin:$PATH"
-  ```
-
-### Symptom: `opencode` binary not found
-- **Meaning**: `opencode` binary is missing from PATH.
-- **Fix**: Install OpenCode CLI and verify with `opencode --version`.
-
-### Symptom: Ollama service unreachable (`http://localhost:11434`)
-- **Meaning**: Ollama daemon is offline or listening on an unexpected port.
-- **Inspection**:
-  ```bash
-  curl -v http://localhost:11434/api/tags
-  ```
-- **Fix**: Start the Ollama background service:
-  ```bash
-  ollama serve
-  ```
-
-### Symptom: Local Ollama model missing / unavailable
-- **Meaning**: The requested model specified in `--model` has not been pulled into Ollama.
-- **Fix**: Pull the model:
-  ```bash
-  ollama pull qwythos-9b
-  ```
-
-### Symptom: Local model returns conversational text instead of executing tool calls
-- **Meaning**: The selected model lacks OpenCode tool-calling schema support.
-- **Explanation**: Conversational text capability does NOT imply tool-calling capability.
-- **Fix**: Select a model that exposes compatible tool calls in your installed OpenCode/Ollama versions and verify it locally.
+1. **Ensure you are in the correct directory**: Check that your current working directory is the intended project root.
+2. **Ensure Git is initialized**:
+   ```bash
+   git status
+   ```
+   If Git is not initialized or the repository has no commits yet:
+   ```bash
+   git init
+   git commit --allow-empty -m "Initial commit"
+   ```
+3. **Run `marshal init`**:
+   ```bash
+   marshal init
+   ```
+   This generates the `.marshal/` directory and creates default metadata files (`CAPABILITIES.yaml`, `PACK-VERSION.yaml`, `RUNTIME-VERSION.yaml`).
+4. **Verify project readiness**:
+   ```bash
+   marshal doctor
+   ```
 
 ---
 
-## 4. Task Execution, Worktrees & Recovery
+## 2. Provider Limits, Rate Limits, and Quotas
 
-### Symptom: Task returns `ErrConflict` or "worker produced no commit"
-- **Meaning**: The provider process ran inside `.marshal/worktrees/TASK-ID` but did not create any modified files or git commits.
-- **Inspection**: View stdout/stderr logs with `marshal logs TASK-ID`.
-- **Safe Recovery**: Check if the task prompt was too vague or if the model failed to issue tool calls. Re-run or cancel the task with `marshal cancel TASK-ID`.
+### Symptoms
 
-### Symptom: Task is stuck or long-running
-- **Meaning**: The LLM provider is processing a complex task or waiting on response generation.
-- **Inspection**: Check active logs:
-  ```bash
-  marshal logs TASK-ID
-  ```
-- **Cancellation**: Cancel the running task safely:
-  ```bash
-  marshal cancel TASK-ID
-  ```
+- A worker lane hangs or marks a task as `failed` / `returned`.
+- The provider reports HTTP 429, token quota exhaustion, or authentication expiration.
+- The provider lane shows as `limited` in the Providers view (`4`).
 
-### Symptom: Git worktree preserved after interrupted task
-- **Meaning**: An unhandled termination left `.marshal/worktrees/TASK-ID` intact.
-- **Safe Cleanup**: Use Git worktree commands to inspect or prune stale worktrees:
-  ```bash
-  git worktree list
-  git worktree prune
-  ```
+### How to Fix It
+
+1. **Verify native CLI authentication**:
+   Make sure you are logged into the relevant provider CLI on your host machine:
+   - For Claude Code: run `claude` or `claude login`
+   - For Codex: run `codex`
+   - For OpenCode: verify API keys in your environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.)
+   - For Antigravity: run `agy login` or `agy`
+2. **Probe providers**:
+   ```bash
+   marshal doctor --probe-providers
+   ```
+3. **Select a different model**:
+   If a specific model is rate-limited, switch to another model using the Board command line (`/`):
+   ```text
+   /model select claude claude-3-7-sonnet
+   /model select codex o3-mini
+   /model select agy gemini-3.8-flash-high
+   ```
+4. **Reduce concurrency**:
+   If you hit aggressive API rate limits, reduce the number of concurrent worker lanes:
+   ```text
+   /marshal settings ultra-concurrency 1
+   ```
 
 ---
 
-## 5. Protocol & Authentication Issues
+## 3. Resuming a Stopped Run
 
-### Symptom: MCP or A2A request returns `HTTP 401 Unauthorized`
-- **Meaning**: Missing or invalid Bearer token in `Authorization` header.
-- **Fix**: Generate a valid token using `marshal auth token create --name <NAME>` and pass `Authorization: Bearer marshal_token_...`.
+### What Happens When a Run Stops
 
-### Symptom: Gemini returns HTTP 429 Rate Limit / Quota Exhausted
-- **Meaning**: Gemini CLI exceeded API quota limits.
-- **Behavior**: MARSHAL probes Gemini non-destructively; quota limits mark Gemini as `CAPABILITY-PROBED / UNVERIFIED` without crashing the runtime.
+If Marshal is interrupted (e.g. terminal closed, machine rebooted, or workers stopped with `Ctrl+X`), work is not lost:
+- Tasks that already merged remain in their respective Git commits.
+- Task outputs, events, and candidate memories are preserved in `.marshal/state.db`.
+- Unfinished task branches remain in their temporary worktrees.
 
-### Symptom: Claude returns OAuth Session Expired
-- **Meaning**: Claude Code OAuth session expired.
-- **Behavior**: MARSHAL marks Claude as `CAPABILITY-PROBED / UNVERIFIED`. Re-authenticate Claude Code (`claude login`) to restore full functionality.
+### How to Resume
+
+To resume where you left off:
+
+1. Return to the project root and start Marshal:
+   ```bash
+   cd /path/to/project
+   marshal
+   ```
+2. Marshal automatically detects the latest unfinished run in `.marshal/state.db` and reloads the Board.
+3. If the run was paused at an approval gate (such as architecture acceptance or plan approval), the amber **`NEEDS YOU`** gate reappears. Press **`y`** and **`Enter`** to continue.
+4. If workers were stopped while dispatching, Marshal releases stale leases, reschedules incomplete tasks, and resumes execution.
+
+---
+
+## 4. Diagnostics and Health Checks
+
+Use Marshal's built-in diagnostic tools to troubleshoot issues:
+
+```bash
+# Basic system checks (Git version, state database, directories)
+marshal doctor
+
+# Include live execution probes for all installed provider CLIs
+marshal doctor --probe-providers
+
+# Deep diagnostics (verifies state integrity and repository layout)
+marshal doctor --deep
+
+# Check raw task logs from outside the TUI
+marshal logs <TASK-ID>
+
+# Check current project status and active tasks
+marshal status
+```

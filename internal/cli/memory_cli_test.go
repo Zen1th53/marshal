@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -35,7 +36,7 @@ func TestT131MemoryCLIAndOperatorWorkflows(t *testing.T) {
 		t.Fatalf("unexpected JSON status output: %s", outBuf.String())
 	}
 
-	// 3. Write memory then recall it through the same CLI surface.
+	// 3. Remember survives a process boundary as an inactive candidate.
 	var rememberBuf bytes.Buffer
 	var rememberErr bytes.Buffer
 	code = Execute(ctx, repo.Path(), []string{"--json", "memory", "remember", "SQLite WAL", "journal_mode=WAL"}, strings.NewReader(""), &rememberBuf, &rememberErr)
@@ -45,6 +46,59 @@ func TestT131MemoryCLIAndOperatorWorkflows(t *testing.T) {
 	if !strings.Contains(rememberBuf.String(), `"REMEMBERED"`) && !strings.Contains(rememberBuf.String(), "REMEMBERED") {
 		t.Fatalf("unexpected remember output: %s", rememberBuf.String())
 	}
+	var remembered struct {
+		ID        string `json:"id"`
+		Status    string `json:"status"`
+		Lifecycle string `json:"lifecycle"`
+	}
+	if err := json.Unmarshal(rememberBuf.Bytes(), &remembered); err != nil || remembered.ID == "" || remembered.Status != "REMEMBERED" {
+		t.Fatalf("invalid remember receipt: %+v, %v, output=%s", remembered, err, rememberBuf.String())
+	}
+	// Execute closes its runtime on return. A new invocation must still find
+	// the exact record that the previous invocation claimed to remember.
+	var showBuf bytes.Buffer
+	var showErr bytes.Buffer
+	code = Execute(ctx, repo.Path(), []string{"--json", "memory", "show", remembered.ID}, strings.NewReader(""), &showBuf, &showErr)
+	if code != 0 || !strings.Contains(showBuf.String(), "journal_mode=WAL") {
+		t.Fatalf("remember receipt did not survive runtime reopen, code=%d output=%s err=%s", code, showBuf.String(), showErr.String())
+	}
+	var persisted struct {
+		ID        string `json:"id"`
+		Lifecycle string `json:"lifecycle"`
+		Title     string `json:"title"`
+		Body      string `json:"body"`
+	}
+	if err := json.Unmarshal(showBuf.Bytes(), &persisted); err != nil || persisted.ID != remembered.ID || persisted.Lifecycle != remembered.Lifecycle || persisted.Title != "SQLite WAL" || persisted.Body != "journal_mode=WAL" {
+		t.Fatalf("remembered record mismatch after reopen: %+v, %v, output=%s", persisted, err, showBuf.String())
+	}
+	outBuf.Reset()
+	errBuf.Reset()
+	code = Execute(ctx, repo.Path(), []string{"--json", "memory", "status"}, strings.NewReader(""), &outBuf, &errBuf)
+	var status struct {
+		Records int `json:"records"`
+	}
+	if code != 0 || json.Unmarshal(outBuf.Bytes(), &status) != nil || status.Records != 1 {
+		t.Fatalf("memory status lost remembered record, code=%d output=%s err=%s", code, outBuf.String(), errBuf.String())
+	}
+	runtime, err := app.Open(ctx, repo.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := runtime.Store().ListEvents(ctx)
+	if err != nil {
+		runtime.Close()
+		t.Fatal(err)
+	}
+	runtime.Close()
+	approved := false
+	for _, event := range events {
+		if event.Type == "PERMISSION_DECIDED" && event.Data["kind"] == "memory" && event.Data["object"] == remembered.ID && event.Data["allow"] == true && event.Data["source"] == "operator memory review" {
+			approved = true
+		}
+	}
+	if !approved {
+		t.Fatal("remembered record lacks a durable operator review decision")
+	}
 
 	var recallBuf bytes.Buffer
 	var recallErr bytes.Buffer
@@ -52,11 +106,13 @@ func TestT131MemoryCLIAndOperatorWorkflows(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("memory recall failed, code=%d err=%s", code, recallErr.String())
 	}
-	if !strings.Contains(recallBuf.String(), `"query"`) {
-		t.Fatalf("unexpected recall output: %s", recallBuf.String())
+	var recalled struct {
+		Results []struct {
+			ID string `json:"id"`
+		} `json:"results"`
 	}
-	if !strings.Contains(recallBuf.String(), "SQLite WAL") {
-		t.Fatalf("recall did not return the persisted record: %s", recallBuf.String())
+	if err := json.Unmarshal(recallBuf.Bytes(), &recalled); err != nil || len(recalled.Results) != 1 || recalled.Results[0].ID != remembered.ID {
+		t.Fatalf("recall did not return the exact persisted record: %+v, %v, output=%s", recalled, err, recallBuf.String())
 	}
 
 	// 4. memory promote dry-run

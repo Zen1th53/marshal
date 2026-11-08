@@ -118,8 +118,13 @@ func TestM10_DerivedIndexRebuildAndTombstone(t *testing.T) {
 		t.Fatalf("expected r2 in recall, got %+v", res1.Results)
 	}
 
-	// 3. Tombstone r2
-	_, err = rt.Store().UpdateMemory(ctx, projectID, r2.ID, r2.Revision, func(rec *model.MemoryRecordV2) error {
+	// 3. Tombstone r2. Operator approval now CAS-bumps the candidate to a
+	// durable revision, so reload the persisted revision before mutating.
+	durableR2, err := rt.Store().GetMemoryV2(ctx, projectID, r2.ID)
+	if err != nil {
+		t.Fatalf("reload r2 after approval: %v", err)
+	}
+	_, err = rt.Store().UpdateMemory(ctx, projectID, r2.ID, durableR2.Revision, func(rec *model.MemoryRecordV2) error {
 		rec.Lifecycle = model.MemoryTombstoned
 		rec.UpdatedAt = time.Now().UTC()
 		return nil
@@ -237,7 +242,11 @@ func TestM10_CacheCannotResurrectCanonicalTombstone(t *testing.T) {
 	if _, err := svc.Recall(ctx, p, RecallRequest{ProjectID: "PROJECT-local", Query: "cached tombstone"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rt.Store().TombstoneMemory(ctx, "PROJECT-local", rec.ID, rec.Revision, "test revocation"); err != nil {
+	durable, err := rt.Store().GetMemoryV2(ctx, "PROJECT-local", rec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.Store().TombstoneMemory(ctx, "PROJECT-local", rec.ID, durable.Revision, "test revocation"); err != nil {
 		t.Fatal(err)
 	}
 	response, err := svc.Recall(ctx, p, RecallRequest{ProjectID: "PROJECT-local", Query: "cached tombstone"})

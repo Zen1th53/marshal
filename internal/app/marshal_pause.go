@@ -1,15 +1,51 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"strings"
+	"time"
 
+	"github.com/Zen1th53/marshal/internal/events"
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
+
+func (s *MarshalService) pauseVerificationFailure(ctx context.Context, runID string, cause error) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	run, rev, err := s.load(ctx, runID)
+	if err != nil {
+		return errors.Join(cause, err)
+	}
+	if run.State != marshal.Verifying {
+		return cause
+	}
+	pauseMarshal(&run, "verification stopped: "+cause.Error(),
+		"inspect the retained verification error and artifacts; resolve the reported cause, then /marshal resume to rerun verification; if historical Process05 proof is missing, create and approve a new plan and use /marshal use-plan", marshal.Verifying)
+	if err := s.save(ctx, runID, run, rev); err != nil {
+		return errors.Join(cause, err)
+	}
+	return errors.Join(cause, s.record(ctx, runID, "", events.EventTypeMarshalEscalated, map[string]any{"reason": run.Pause.Reason, "role": "verification", "resolutions": run.Pause.Resolutions}))
+}
 
 func pauseMarshal(run *marshal.Run, reason, resolution string, resume marshal.RunState) {
 	run.State = marshal.AwaitingUser
 	run.Pause = &marshal.Pause{Reason: reason, Resolutions: []string{resolution}, ResumeState: resume}
+}
+
+// Cancellation leaves approved criteria unresolved, including on runs written
+// by older runtimes that treated a cancelled task as completed integration.
+func (s *MarshalService) requireUncancelledScope(ctx context.Context, runID string, run marshal.Run, rev int64) error {
+	for _, task := range run.Tasks {
+		if task.State == marshal.Cancelled {
+			reason := "task " + task.PlanTaskID + " cancelled; approved plan scope requires review"
+			pauseMarshal(&run, reason, "create and approve an amended plan that removes or replaces the cancelled task and updates its dependencies, then /marshal use-plan", "")
+			return errors.Join(errors.New(reason), s.save(context.WithoutCancel(ctx), runID, run, rev))
+		}
+	}
+	return nil
 }
 
 func marshalPauseError(run marshal.Run) error {
@@ -27,10 +63,37 @@ func integrationTaskID(runID string, run marshal.Run) string {
 }
 func integrationBranch(runID string, run marshal.Run) string {
 	if run.ArtifactRevision > 0 {
-		return fmt.Sprintf("marshal/%s/r%d/integration", runID, run.ArtifactRevision)
+		return fmt.Sprintf(statepath.RefName+"/%s/r%d/integration", runID, run.ArtifactRevision)
 	}
-	return "marshal/" + runID + "/integration"
+	return statepath.RefName + "/" + runID + "/integration"
 }
+
+// marshalTaskBranch is shared by initial planning and revised artifacts. L2
+// Process05 admission must validate the stored task using this same identity.
+func marshalTaskBranch(runID, taskID string, revision int64) string {
+	if revision > 0 {
+		return fmt.Sprintf(statepath.RefName+"/%s/r%d/%s", runID, revision, taskID)
+	}
+	return statepath.RefName + "/" + runID + "/" + taskID
+}
+
+func validateMarshalTaskIdentity(runID string, t marshal.Task) error {
+	parts := strings.Split(t.Branch, "/")
+	if !marshalIdentifier(runID) || !marshalIdentifier(t.PlanTaskID) {
+		return fmt.Errorf("invalid Marshal task identity")
+	}
+	if t.Branch == marshalTaskBranch(runID, t.PlanTaskID, 0) {
+		return nil
+	}
+	if len(parts) == 4 {
+		var revision int64
+		if _, err := fmt.Sscanf(parts[2], "r%d", &revision); err == nil && revision > 0 && t.Branch == marshalTaskBranch(runID, t.PlanTaskID, revision) {
+			return nil
+		}
+	}
+	return fmt.Errorf("process 05: invalid Marshal task branch for run %s task %s", runID, t.PlanTaskID)
+}
+
 func taskArtifactID(runID string, t marshal.Task) string {
 	parts := strings.Split(t.Branch, "/")
 	if len(parts) == 4 {

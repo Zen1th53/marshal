@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,10 +53,13 @@ func canonicalNeutralProvider(name string) string {
 }
 
 func defaultProviderPath(root string) string {
-	return filepath.Join(root, ".marshal", "default-provider")
+	return filepath.Join(root, statepath.DirName, "default-provider")
 }
 
 func loadDefaultProvider(root string) string {
+	if statepath.CheckPath(root, defaultProviderPath(root)) != nil {
+		return ""
+	}
 	if root == "" {
 		// Without a project directory the path would resolve against the
 		// process's working directory, which is not the operator's project.
@@ -69,6 +73,9 @@ func loadDefaultProvider(root string) string {
 }
 
 func saveDefaultProvider(root, provider string) error {
+	if err := statepath.CheckPath(root, defaultProviderPath(root)); err != nil {
+		return err
+	}
 	if root == "" {
 		return fmt.Errorf("no project is open; run MARSHAL in an initialized project (marshal init)")
 	}

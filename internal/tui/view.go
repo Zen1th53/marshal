@@ -95,6 +95,10 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 	}
 
 	var b strings.Builder
+	edition := ""
+	if editionExtreme {
+		edition = ""
+	}
 
 	// 1. TOP DYNAMIC STATUS BAR
 	// ╭─ MARSHAL ─ marshal ─ ULTRA ─ VERIFYING ────────── main · 123d960 · clean ─╮
@@ -128,7 +132,7 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 	}
 
 	headerLeft := fmt.Sprintf(" %s %s %s %s %s %s %s ",
-		th.Colorize(th.Marshal, fmt.Sprintf("MARSHAL %s CONTROL PLANE", BuildVersion)),
+		th.Colorize(th.Marshal, fmt.Sprintf("Marshal %s CONTROL PLANE%s", BuildVersion, edition)),
 		th.BoxHoriz,
 		proj,
 		th.BoxHoriz,
@@ -299,14 +303,14 @@ func RenderStyledScreen(s UIState, th *Theme, width int) string {
 	// 4. BLOCKERS / DECISIONS / NOTICES
 	if s.ActiveQuestion != "" {
 		notice := fmt.Sprintf(" %s DECISION REQUIRED: %s",
-			th.Colorize(th.Warning, "⚠"),
+			th.Colorize(th.Warning, "[!]"),
 			RedactContent(s.ActiveQuestion, s.KnownSecrets),
 		)
 		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(notice, width-3), th.BoxVert))
 		b.WriteString(fmt.Sprintf("%s%s%s\n", th.BoxTRight, strings.Repeat(th.BoxHoriz, width-2), th.BoxTLeft))
 	} else if s.ActiveBlocker != "" {
 		notice := fmt.Sprintf(" %s BLOCKER: %s",
-			th.Colorize(th.Danger, "⛔"),
+			th.Colorize(th.Danger, "[X]"),
 			RedactContent(s.ActiveBlocker, s.KnownSecrets),
 		)
 		b.WriteString(fmt.Sprintf("%s %s%s\n", th.BoxVert, PadCell(notice, width-3), th.BoxVert))
@@ -418,7 +422,7 @@ func summarizeClaims(claims []model.Claim) string {
 		}
 	}
 	if contested > 0 {
-		return fmt.Sprintf("%d/%d (⚡%d)", verified, len(claims), contested)
+		return fmt.Sprintf("%d/%d (contested %d)", verified, len(claims), contested)
 	}
 	return fmt.Sprintf("%d/%d", verified, len(claims))
 }

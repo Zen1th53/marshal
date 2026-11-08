@@ -4,6 +4,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,9 @@ import (
 // TestPTYSwitchTmuxAgentsWithoutRestart tests that in a tmux environment,
 // opening two native agents and switching back and forth does not kill or restart either agent.
 func TestPTYSwitchTmuxAgentsWithoutRestart(t *testing.T) {
+	bin := buildMarshalBinary(t)
+	project := initProject(t, bin)
+	session := fixtureTmuxNamespace(t, project)
 	binDir := t.TempDir()
 	logFile := filepath.Join(binDir, "tmux_argv.log")
 	winFile := filepath.Join(binDir, "tmux_windows.log")
@@ -93,13 +97,25 @@ case "$1" in
     ;;
 esac
 `, logFile, winFile)
+	fakeTmux = strings.ReplaceAll(fakeTmux, "test-session", session)
+	fakeTmux = strings.ReplaceAll(fakeTmux, "\tmarshal\t", "\t"+statepath.Name+"\t")
+	fakeTmux = strings.ReplaceAll(fakeTmux, "\tmarshal\n", "\t"+statepath.Name+"\n")
+	fakeTmux = strings.ReplaceAll(fakeTmux, "\\tmarshal\\t", "\\t"+statepath.Name+"\\t")
+	fakeTmux = strings.ReplaceAll(fakeTmux, "printf 'marshal\\n'", "printf '"+statepath.Name+"\\n'")
 
+	// The double answers startup probes (version, help, model catalog) and
+	// stays alive only for the interactive session. A probe that fell through
+	// to the session loop would hang MARSHAL's bounded probe until its timeout
+	// and leak the governed subprocess.
 	agentScript := `#!/bin/sh
 for arg do
   case "$arg" in
     --version|-v) printf '1.0.0\n'; exit 0 ;;
+    login|--help|debug) exit 0 ;;
   esac
 done
+# A model inventory probe must not turn into an immortal fake session.
+if [ "$1" = debug ] && [ "$2" = models ]; then printf '[]\n'; exit 0; fi
 echo session-started
 while :; do sleep 1; done
 `
@@ -117,7 +133,7 @@ while :; do sleep 1; done
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("TMUX", "/tmp/tmux-test,1234,0")
 
-	s := startFrozenTUI(t, 40, 160)
+	s := startFrozenTUIInProject(t, 40, 160, bin, project, "tui")
 	s.mustSee("MARSHAL")
 
 	// 1. Open Claude in tmux
@@ -163,9 +179,9 @@ while :; do sleep 1; done
 		if strings.HasPrefix(line, "new-window ") {
 			index++
 			for _, provider := range []string{"claude", "codex"} {
-				if strings.Contains(line, "-n marshal-"+provider+"-") {
+				if strings.Contains(line, "-n "+statepath.Name+"-"+provider+"-") {
 					paneByProvider[provider] = fmt.Sprintf("%%%d", index)
-					windowByProvider[provider] = fmt.Sprintf("test-session:@%d", index)
+					windowByProvider[provider] = fmt.Sprintf("%s:@%d", session, index)
 				}
 			}
 		}
@@ -186,8 +202,8 @@ while :; do sleep 1; done
 	}
 
 	// Verify new-window was only called ONCE for claude and ONCE for codex
-	claudeNewCount := strings.Count(logStr, "new-window -d -t test-session -n marshal-claude-")
-	codexNewCount := strings.Count(logStr, "new-window -d -t test-session -n marshal-codex-")
+	claudeNewCount := strings.Count(logStr, "new-window -d -t "+session+" -n "+statepath.Name+"-claude-")
+	codexNewCount := strings.Count(logStr, "new-window -d -t "+session+" -n "+statepath.Name+"-codex-")
 
 	if claudeNewCount != 1 {
 		t.Errorf("expected claude new-window called exactly once, got %d", claudeNewCount)

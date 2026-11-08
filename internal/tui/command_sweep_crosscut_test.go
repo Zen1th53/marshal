@@ -26,7 +26,7 @@ import (
 func sweepCrosscutEnvironment(t *testing.T) {
 	t.Helper()
 	sweepWorkEnvironment(t)
-	for _, name := range []string{"codex", "claude", "opencode", "agy", "gemini"} {
+	for _, name := range []string{"codex", "claude", "opencode", "agy", "agy"} {
 		for _, directory := range []string{"/usr/local/bin", "/usr/bin"} {
 			if info, err := os.Stat(filepath.Join(directory, name)); err == nil && !info.IsDir() {
 				if err := os.WriteFile(filepath.Join(os.Getenv("PATH"), name), []byte("#!/bin/sh\nexit 127\n"), 0700); err != nil {
@@ -252,7 +252,11 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	useCodexByDefault(t, project)
 	t.Setenv("HTTPS_PROXY", "http://[invalid")
 	s := startFrozenTUIInProject(t, 50, 140, bin, project, "tui")
-	for _, c := range []struct{ line, want string }{{"/help all", "MARSHAL Terminal Workspace Commands:"}, {"/memory peers", "SHARED CHANNEL"}, {"/ultra status", "ULTRA status: INACTIVE"}, {"/marshal status", "No Marshal"}, {"plain prompt", "Nothing was run"}, {"/unknown", "Unknown command"}} {
+	ultraStatus := "ULTRA status: INACTIVE"
+	if buildNavigationReleased {
+		ultraStatus = "ULTRA: ACTIVE (Marshal build, no cloud check)"
+	}
+	for _, c := range []struct{ line, want string }{{"/help all", "MARSHAL Terminal Workspace Commands:"}, {"/memory peers", "SHARED CHANNEL"}, {"/ultra status", ultraStatus}, {"/marshal status", "No Marshal"}, {"plain prompt", "Nothing was run"}, {"/unknown", "Unknown command"}} {
 		s.sendLine(c.line)
 		s.mustSee(c.want)
 		if c.line == "/help all" {
@@ -273,9 +277,17 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 	}
 	s.send("\x15")
 	s.send("\x0e")
-	s.mustSee("not available yet")
-	s.send("\x1b")
-	s.mustSee("not available yet")
+	if buildNavigationReleased {
+		s.mustSee("Help & Navigation")
+		if !strings.Contains(s.screenText(50, 140), "[read-only screen]") {
+			t.Fatal("private navigation did not render the actual advanced menu")
+		}
+		s.send("\x1b")
+	} else {
+		s.mustSee("not available yet")
+		s.send("\x1b")
+		s.mustSee("not available yet")
+	}
 	// Give F2 an uncommitted target so its missing-provider path is exercised.
 	if err := os.WriteFile(filepath.Join(project, "review-change.txt"), []byte("uncommitted"), 0600); err != nil {
 		t.Fatal(err)
@@ -289,6 +301,11 @@ func TestCommandSweepCrosscutPTY(t *testing.T) {
 		{"\x1b[20~", "OpenCode exited"}, {"\x1b[21~", "Update check failed"},
 		{"\x1b[24~", "Antigravity exited"},
 	} {
+		if key.raw == "\x1b[19~" {
+			if _, err := os.Stat(filepath.Join(os.Getenv("PATH"), "claude")); err == nil {
+				key.want = "Claude exited"
+			}
+		}
 		if key.raw == "\x1b[20~" {
 			if _, err := os.Stat(filepath.Join(os.Getenv("PATH"), "opencode")); os.IsNotExist(err) {
 				key.want = "Install OpenCode"
@@ -616,9 +633,37 @@ func TestCommandSweepCrosscutMarshalApprovedPlanPTY(t *testing.T) {
 	s.sendLine("/marshal approve-task unrelated-id")
 	s.mustSee("does not belong to the active Marshal plan")
 	s.sendLine("/marshal close")
-	s.mustSee("not verified")
+	deadline := time.Now().Add(ptyWait(15 * time.Second))
+	found := false
+	lastTry := time.Now()
+	for time.Now().Before(deadline) {
+		out := s.output()
+		screen := s.screenText(40, 160)
+		if strings.Contains(out, "not verified") || strings.Contains(screen, "not verified") {
+			found = true
+			break
+		}
+		if time.Since(lastTry) >= 800*time.Millisecond {
+			s.sendLine("/marshal close")
+			lastTry = time.Now()
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !found {
+		t.Fatalf("expected \"not verified\" on the terminal after %s.\n--- output tail ---\n%s\n--- screen ---\n%s",
+			ptyWait(15*time.Second), tail(s.output(), 3000), s.screenText(40, 160))
+	}
 	s.sendLine("/marshal status")
-	if !strings.Contains(s.screenText(40, 160), "fix") {
+	deadline = time.Now().Add(ptyWait(8 * time.Second))
+	found = false
+	for time.Now().Before(deadline) {
+		if strings.Contains(s.screenText(40, 160), "fix") {
+			found = true
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if !found {
 		t.Fatal("failed close erased the task from Marshal status")
 	}
 	s.sendLine("/marshal stop")

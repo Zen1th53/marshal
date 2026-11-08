@@ -72,37 +72,6 @@ func TestClaudeJSONLExcludesThinkingAndTools(t *testing.T) {
 	}
 }
 
-func TestGeminiJSONLImportsPublicMessagesOnly(t *testing.T) {
-	const history = `{"sessionId":"gemini-session-1","projectHash":"abc","startTime":"2026-08-23T09:00:00Z","lastUpdated":"2026-08-23T09:01:00Z"}
-{"id":"u1","type":"user","content":"Where is the canonical store?","timestamp":"2026-08-23T09:00:01Z"}
-{"id":"g1","type":"gemini","content":"Canonical memory is stored in SQLite.","thoughts":[{"subject":"private","description":"hidden reasoning"}],"toolCalls":[{"name":"read_file","result":"tool-secret"}]}
-{"id":"i1","type":"info","content":"internal system notice"}
-`
-	imp := importer.NewSessionImporter(importer.Config{})
-	result, err := imp.ImportProviderHistory(context.Background(), "PROJECT-1", importer.FormatGeminiJSONL, []byte(history), false)
-	if err != nil {
-		t.Fatalf("ImportProviderHistory: %v", err)
-	}
-	if len(result.ImportedRecords) != 1 {
-		t.Fatalf("expected one candidate, got %+v", result)
-	}
-	rec := result.ImportedRecords[0]
-	if rec.Authority != model.AuthorityAgent || rec.Lifecycle != model.MemoryCandidate {
-		t.Fatalf("Gemini import gained authority: %+v", rec)
-	}
-	if !strings.Contains(rec.Body, "canonical store") || !strings.Contains(rec.Body, "stored in SQLite") {
-		t.Fatalf("public messages missing: %q", rec.Body)
-	}
-	for _, forbidden := range []string{"hidden reasoning", "tool-secret", "system notice"} {
-		if strings.Contains(rec.Body, forbidden) {
-			t.Fatalf("Gemini private/tool content leaked: %q", rec.Body)
-		}
-	}
-	if got := rec.ExtMeta["source_format"]; got != string(importer.FormatGeminiJSONL) {
-		t.Fatalf("source format = %v", got)
-	}
-}
-
 func TestOpenCodeExportImportsVisibleConversationOnly(t *testing.T) {
 	const history = `{
   "info":{"id":"ses-open-1","directory":"/work/repository","time":{"created":1787205973846}},
@@ -182,7 +151,14 @@ func TestProviderImportIsDeterministicAndSecretSafe(t *testing.T) {
 
 	const tainted = `{"type":"user","sessionId":"claude-secret","message":{"role":"user","content":"Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345"}}
 `
-	_, err = imp.ImportProviderHistory(context.Background(), "PROJECT-1", importer.FormatClaudeJSONL, []byte(tainted), false)
+	res, err := imp.ImportProviderHistory(context.Background(), "PROJECT-1", importer.FormatClaudeJSONL, []byte(tainted), false)
+	if security.RedactsSecrets {
+		// Extreme imports the record with the secret removed.
+		if err != nil || len(res.ImportedRecords) != 1 || strings.Contains(res.ImportedRecords[0].Body, "abcdefghijklmnopqrstuvwxyz012345") {
+			t.Fatalf("expected redacted import, got %+v %v", res, err)
+		}
+		return
+	}
 	if !errors.Is(err, security.ErrSecretDetected) {
 		t.Fatalf("expected secret rejection, got %v", err)
 	}

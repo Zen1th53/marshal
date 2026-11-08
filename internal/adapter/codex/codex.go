@@ -5,12 +5,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/sessionmcp"
 )
 
 type Client struct {
@@ -49,18 +51,24 @@ func (c *Client) Runner() adapter.ProcessRunner {
 }
 
 func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
+	return c.probe(ctx, 20*time.Second, 5*time.Second)
+}
+
+// Each required command gets a fresh startup budget. The total probe budget
+// remains finite (45 seconds in production) and is bounded by the caller.
+func (c *Client) probe(ctx context.Context, metadataBudget, catalogBudget time.Duration) (adapter.Probe, error) {
 	if c.binary == "" || c.runner == nil {
 		return adapter.Probe{}, fmt.Errorf("%w: Codex binary and process runner are required", model.ErrInvalid)
 	}
-	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	probeCtx, cancel := context.WithTimeout(ctx, 2*metadataBudget+catalogBudget)
 	defer cancel()
-	versionResult, err := c.runner.Run(probeCtx, adapter.Command{Path: c.binary, Args: []string{"--version"}})
-	if err != nil || versionResult.ExitCode != 0 {
-		return adapter.Probe{}, fmt.Errorf("%w: probe Codex version failed: %v", model.ErrUnavailable, err)
+	versionResult, err := c.probeCommand(probeCtx, metadataBudget, "version", []string{"--version"})
+	if err != nil {
+		return adapter.Probe{}, err
 	}
-	helpResult, err := c.runner.Run(probeCtx, adapter.Command{Path: c.binary, Args: []string{"exec", "--help"}})
-	if err != nil || helpResult.ExitCode != 0 {
-		return adapter.Probe{}, fmt.Errorf("%w: probe Codex exec failed: %v", model.ErrUnavailable, err)
+	helpResult, err := c.probeCommand(probeCtx, metadataBudget, "exec", []string{"exec", "--help"})
+	if err != nil {
+		return adapter.Probe{}, err
 	}
 	version := string(versionResult.Stdout)
 	help := string(helpResult.Stdout)
@@ -71,7 +79,9 @@ func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
 	}
 	c.version = strings.TrimSpace(version)
 	if len(c.models) == 0 {
-		if models, def, mErr := DiscoverModels(probeCtx, c.binary, c.runner); mErr == nil && len(models) > 0 {
+		catalogCtx, catalogCancel := context.WithTimeout(probeCtx, catalogBudget)
+		defer catalogCancel()
+		if models, def, mErr := DiscoverModels(catalogCtx, c.binary, c.runner); mErr == nil && len(models) > 0 {
 			c.models = models
 			c.defaultModel = def
 		}
@@ -79,6 +89,25 @@ func (c *Client) Probe(ctx context.Context) (adapter.Probe, error) {
 	return adapter.Probe{
 		Name: "codex", Available: true, Version: c.version, Capabilities: c.Capabilities(),
 	}, nil
+}
+
+// Keep runner errors (including real capability denials) and context causes
+// discoverable even when the governed runner masks cancellation as a denial.
+func (c *Client) probeCommand(ctx context.Context, budget time.Duration, name string, args []string) (adapter.ProcessResult, error) {
+	commandCtx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	if err := commandCtx.Err(); err != nil {
+		return adapter.ProcessResult{}, fmt.Errorf("%w: probe Codex %s failed: %w", model.ErrUnavailable, name, err)
+	}
+	result, err := c.runner.Run(commandCtx, adapter.Command{Path: c.binary, Args: args})
+	cause := errors.Join(err, commandCtx.Err())
+	if cause != nil {
+		return adapter.ProcessResult{}, fmt.Errorf("%w: probe Codex %s failed: %w", model.ErrUnavailable, name, cause)
+	}
+	if result.ExitCode != 0 {
+		return adapter.ProcessResult{}, fmt.Errorf("%w: probe Codex %s failed: exit code %d", model.ErrUnavailable, name, result.ExitCode)
+	}
+	return result, nil
 }
 
 // Models returns the probed eligible model catalog and discovered default.
@@ -192,39 +221,75 @@ func (c *Client) Run(ctx context.Context, request adapter.Request) (adapter.Resu
 	// fixed external-sandbox option. Native sessions use a separate launcher.
 	args = append(args, "--dangerously-bypass-approvals-and-sandbox", "-")
 
+	args, env, cleanup, err := sessionmcp.Configure(ctx, "codex", args, nil)
+	if err != nil {
+		return adapter.Result{}, err
+	}
+	defer cleanup()
 	process, err := c.runner.Run(ctx, adapter.Command{
 		Path:              c.binary,
 		Args:              args,
+		Env:               env,
 		Dir:               request.Worktree,
 		Stdin:             append(prompt, '\n'),
 		Heartbeat:         request.Heartbeat,
 		HeartbeatInterval: request.HeartbeatInterval,
+		Liveness:          adapter.WorkerLiveness(request, ClassifyStreamLine),
 	})
 	if err != nil {
 		return adapter.Result{}, fmt.Errorf("run Codex process: %w", err)
 	}
 	result := adapter.Result{
-		Adapter:         "codex",
-		AdapterVersion:  c.version,
-		Model:           effectiveModel,
-		ExitCode:        process.ExitCode,
-		Stdout:          process.Stdout,
-		Stderr:          process.Stderr,
-		StartedAt:       process.StartedAt,
-		EndedAt:         process.EndedAt,
-		TimedOut:        process.TimedOut,
-		Cancelled:       process.Cancelled,
-		OutputTruncated: process.OutputTruncated,
-		Isolation:       process.Isolation,
-		Status:          adapter.StatusSuccess,
+		Adapter:          "codex",
+		AdapterVersion:   c.version,
+		Model:            effectiveModel,
+		ExitCode:         process.ExitCode,
+		Stdout:           process.Stdout,
+		Stderr:           process.Stderr,
+		StartedAt:        process.StartedAt,
+		EndedAt:          process.EndedAt,
+		TimedOut:         process.TimedOut,
+		Cancelled:        process.Cancelled,
+		OutputTruncated:  process.OutputTruncated,
+		Isolation:        process.Isolation,
+		Status:           adapter.StatusSuccess,
+		StoppedAfterDone: process.StoppedAfterDone,
+		IdleTimedOut:     process.IdleTimedOut,
 	}
-	if process.ExitCode != 0 || process.TimedOut || process.Cancelled {
+	if process.StoppedAfterDone && !process.TimedOut && !process.Cancelled {
+		// turn.completed was observed; the lingering process was stopped.
+		result.ExitCode = 0
+	}
+	if result.ExitCode != 0 || process.TimedOut || process.Cancelled || process.IdleTimedOut {
 		result.Status = adapter.StatusFailure
 	} else if process.OutputTruncated {
 		result.Status = adapter.StatusBlocked
 	}
 	parseJSONL(process.Stdout, &result)
 	return result, nil
+}
+
+// ClassifyStreamLine maps one `codex exec --json` line to a liveness signal.
+func ClassifyStreamLine(line []byte) adapter.StreamSignal {
+	var event struct {
+		Type string `json:"type"`
+		Item struct {
+			Type string `json:"type"`
+		} `json:"item"`
+	}
+	if json.Unmarshal(line, &event) != nil {
+		return adapter.SignalNone
+	}
+	tool := event.Item.Type == "command_execution" || event.Item.Type == "mcp_tool_call"
+	switch {
+	case event.Type == "turn.completed":
+		return adapter.SignalDone
+	case event.Type == "item.started" && tool:
+		return adapter.SignalToolStart
+	case event.Type == "item.completed" && tool:
+		return adapter.SignalToolEnd
+	}
+	return adapter.SignalNone
 }
 
 func (c *Client) Status(context.Context, string) (adapter.Status, error) {
@@ -254,6 +319,10 @@ func (c *Client) CollectEvidence(result adapter.Result) map[string]any {
 func (c *Client) Shutdown(context.Context, string) error {
 	return nil
 }
+
+// GovernedPrompt renders the exact data envelope used by this adapter. It
+// performs no provider call and conveys no execution or approval authority.
+func GovernedPrompt(request adapter.Request) ([]byte, error) { return buildPrompt(request) }
 
 func buildPrompt(request adapter.Request) ([]byte, error) {
 	envelope := struct {

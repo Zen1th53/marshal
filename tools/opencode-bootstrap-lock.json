@@ -1,0 +1,145 @@
+{
+  "version": "1.18.16",
+  "packages": [
+    {
+      "name": "@ai-sdk/provider",
+      "version": "3.0.8",
+      "url": "https://registry.npmjs.org/@ai-sdk/provider/-/provider-3.0.8.tgz",
+      "integrity": "sha512-oGMAgGoQdBXbZqNG0Ze56CHjDZ1IDYOwGYxYjO5KLSlz5HiNQ9udIXsPZ61VWaHGZ5XW/jyjmr6t2xz2jGVwbQ=="
+    },
+    {
+      "name": "@opencode-ai/plugin",
+      "version": "1.18.16",
+      "url": "https://registry.npmjs.org/@opencode-ai/plugin/-/plugin-1.18.16.tgz",
+      "integrity": "sha512-XvlZ9CFAXqrNrmpTe+EhhRYnDhca6db1ebcB10v5JO8kSm1iFbVbPP982Qzc4MRSrfpPjD8W1fg13Ubnff377g=="
+    },
+    {
+      "name": "@opencode-ai/sdk",
+      "version": "1.18.16",
+      "url": "https://registry.npmjs.org/@opencode-ai/sdk/-/sdk-1.18.16.tgz",
+      "integrity": "sha512-UvaHyL93spLm7MttoprWTOBSYQN3aYWd7/3Ie5WNnG2pRAPq/U/d51qt0smYBTrkjxqlQmg+AJoGw8MEH6lGUg=="
+    },
+    {
+      "name": "@standard-schema/spec",
+      "version": "1.1.0",
+      "url": "https://registry.npmjs.org/@standard-schema/spec/-/spec-1.1.0.tgz",
+      "integrity": "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="
+    },
+    {
+      "name": "cross-spawn",
+      "version": "7.0.6",
+      "url": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz",
+      "integrity": "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA=="
+    },
+    {
+      "name": "effect",
+      "version": "4.0.0-beta.83",
+      "url": "https://registry.npmjs.org/effect/-/effect-4.0.0-beta.83.tgz",
+      "integrity": "sha512-0wsak8RtgGAr9UWSbVDgJHZcUqMSvicHcvaZv1MbMM7MCGgW4Rn/137J1MHQbwYPcwYGxT/IqehFd+UbYuj78w=="
+    },
+    {
+      "name": "fast-check",
+      "version": "4.8.0",
+      "url": "https://registry.npmjs.org/fast-check/-/fast-check-4.8.0.tgz",
+      "integrity": "sha512-GOJ158CUMnN6cSahsv4+ExARvIDuzzinFjkp0E9WtiBa5zcVeLozVkWaE4IzFcc+Y48Wp1EDlUZsXRyAztQcSg=="
+    },
+    {
+      "name": "find-my-way-ts",
+      "version": "0.1.6",
+      "url": "https://registry.npmjs.org/find-my-way-ts/-/find-my-way-ts-0.1.6.tgz",
+      "integrity": "sha512-a85L9ZoXtNAey3Y6Z+eBWW658kO/MwR7zIafkIUPUMf3isZG0NCs2pjW2wtjxAKuJPxMAsHUIP4ZPGv0o5gyTA=="
+    },
+    {
+      "name": "ini",
+      "version": "7.0.0",
+      "url": "https://registry.npmjs.org/ini/-/ini-7.0.0.tgz",
+      "integrity": "sha512-ifK0CgjALofS5bkrcTy4RaQ9Vx2Knf/eLeIO+NaswQEpH1UblrtTSCIvN71qQDMq0PeQ/SSPojvEJp9vvvfr+w=="
+    },
+    {
+      "name": "isexe",
+      "version": "2.0.0",
+      "url": "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz",
+      "integrity": "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw=="
+    },
+    {
+      "name": "json-schema",
+      "version": "0.4.0",
+      "url": "https://registry.npmjs.org/json-schema/-/json-schema-0.4.0.tgz",
+      "integrity": "sha512-es94M3nTIfsEPisRafak+HDLfHXnKBhV3vU5eqPcS3flIWqcxJWgXHXiey3YrpaNsanY5ei1VoYEbOzijuq9BA=="
+    },
+    {
+      "name": "kubernetes-types",
+      "version": "1.30.0",
+      "url": "https://registry.npmjs.org/kubernetes-types/-/kubernetes-types-1.30.0.tgz",
+      "integrity": "sha512-Dew1okvhM/SQcIa2rcgujNndZwU8VnSapDgdxlYoB84ZlpAD43U6KLAFqYo17ykSFGHNPrg0qry0bP+GJd9v7Q=="
+    },
+    {
+      "name": "msgpackr",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/msgpackr/-/msgpackr-2.0.1.tgz",
+      "integrity": "sha512-9J+tqTEsbHqY8YohazYgty7LgerFIWxvMLpUjqETSmjHojtJm2WnX2kK/2a1fLI7CO7ERP1YSEUXMucz4j+yBA=="
+    },
+    {
+      "name": "multipasta",
+      "version": "0.2.7",
+      "url": "https://registry.npmjs.org/multipasta/-/multipasta-0.2.7.tgz",
+      "integrity": "sha512-KPA58d68KgGil15oDqXjkUBEBYc00XvbPj5/X+dyzeo/lWm9Nc25pQRlf1D+gv4OpK7NM0J1odrbu9JNNGvynA=="
+    },
+    {
+      "name": "path-key",
+      "version": "3.1.0",
+      "url": "https://registry.npmjs.org/path-key/-/path-key-3.1.0.tgz",
+      "integrity": "sha512-8cChqz0RP6SHJkMt48FW0A7+qUOn+OsnOsVtzI59tZ8m+5bCSk7hzwET0pulwOM2YMn9J1efb07KB9l9f30SGg=="
+    },
+    {
+      "name": "pure-rand",
+      "version": "8.0.0",
+      "url": "https://registry.npmjs.org/pure-rand/-/pure-rand-8.0.0.tgz",
+      "integrity": "sha512-7rgWlxG2gAvFPIQfUreo1XYlNvrQ9VnQPFWdncPkdl3icucLK0InOxsaafbvxGTnI6Bk/Rxmslg0lQlRCuzOXw=="
+    },
+    {
+      "name": "shebang-command",
+      "version": "2.0.0",
+      "url": "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz",
+      "integrity": "sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA=="
+    },
+    {
+      "name": "shebang-regex",
+      "version": "3.0.0",
+      "url": "https://registry.npmjs.org/shebang-regex/-/shebang-regex-3.0.0.tgz",
+      "integrity": "sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A=="
+    },
+    {
+      "name": "toml",
+      "version": "4.2.0",
+      "url": "https://registry.npmjs.org/toml/-/toml-4.2.0.tgz",
+      "integrity": "sha512-TvAJjbHZlYmI323+srtqHQFyJsoWy6mI09ppkuj9+iRsqsVKG9fvTcOP7FHF2UCb0QSYtjEavffrKzdd0XgClg=="
+    },
+    {
+      "name": "uuid",
+      "version": "14.0.0",
+      "url": "https://registry.npmjs.org/uuid/-/uuid-14.0.0.tgz",
+      "integrity": "sha512-Qo+uWgilfSmAhXCMav1uYFynlQO7fMFiMVZsQqZRMIXp0O7rR7qjkj+cPvBHLgBqi960QCoo/PH2/6ZtVqKvrg=="
+    },
+    {
+      "name": "which",
+      "version": "2.0.1",
+      "url": "https://registry.npmjs.org/which/-/which-2.0.1.tgz",
+      "integrity": "sha512-N7GBZOTswtB9lkQBZA4+zAXrjEIWAUOB93AvzUiudRzRxhUdLURQ7D/gAIMY1gatT/LTbmbcv8SiYazy3eYB7w=="
+    },
+    {
+      "name": "yaml",
+      "version": "2.9.0",
+      "url": "https://registry.npmjs.org/yaml/-/yaml-2.9.0.tgz",
+      "integrity": "sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA=="
+    },
+    {
+      "name": "zod",
+      "version": "4.1.8",
+      "url": "https://registry.npmjs.org/zod/-/zod-4.1.8.tgz",
+      "integrity": "sha512-5R1P+WwQqmmMIEACyzSvo4JXHY5WiAFHRMg+zBZKgKS+Q1viRa0C1hmUKtHltoIFKtIdki3pRxkmpP74jnNYHQ=="
+    }
+  ],
+  "tree_sha256": "07f61eec0c41559e9ae27d7af116b72d7fc84162043ce3c54584e70f479ed58c",
+  "bootstrap_revision": "1.18.16-toml4.2.0"
+}

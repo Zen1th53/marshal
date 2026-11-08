@@ -45,7 +45,7 @@ func (s *MarshalService) CompletionReport(ctx context.Context, runID string) (Ma
 	if err != nil {
 		return report, err
 	}
-	decisions, err := s.Store.MarshalDecisions(ctx, runID)
+	decisions, err := s.marshalDecisionsResolved(ctx, runID)
 	if err != nil {
 		return report, err
 	}
@@ -83,9 +83,7 @@ func (s *MarshalService) CompletionReport(ctx context.Context, runID string) (Ma
 	applicableTotal := 0
 	for _, task := range run.Tasks {
 		attempts := 1 + task.EvidenceAttemptBase
-		for _, count := range task.ReturnsByAgent {
-			attempts += count
-		}
+		attempts += taskReturns(task)
 		handin, found := marshal.HandIn{}, false
 		attempt := attempts
 		for attempt > task.EvidenceAttemptBase {

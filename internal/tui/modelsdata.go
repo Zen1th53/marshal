@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
+	"github.com/Zen1th53/marshal/internal/app"
 )
 
 // CodexGovernanceReader reads live state from the governed Codex control plane.
@@ -77,9 +78,10 @@ type LocalModel struct {
 
 // ModelsFeed bundles the readers Models binds to.
 type ModelsFeed struct {
-	Reader    ModelsReader
-	ProjectID string
-	Now       func() time.Time
+	Reader        ModelsReader
+	ProjectID     string
+	Now           func() time.Time
+	RequestReader EntitlementRequestReader
 }
 
 func (s *ModelsFeed) now() time.Time {
@@ -103,18 +105,24 @@ type ModelsSnapshot struct {
 	LocalModels []LocalModelRow
 	LocalStatus Value
 
-	// The two frozen gaps, rendered as gaps wherever they appear.
-	ProviderDetail       Value
-	Entitlement          Value
-	ProviderStatus       Value
-	RoutingStatus        Value
-	ContextStatus        Value
-	CloudStatus          Value
-	EvaluationStatus     Value
-	CounterfactualStatus Value
-	BenchmarkStatus      Value
-	ResultsStatus        Value
-	FeedbackStatus       Value
+	// Provider detail and entitlement request state.
+	ProviderDetail            Value
+	ProviderDetails           []ProviderDetailRow
+	Entitlement               Value
+	EntitlementRequestStatus  Value
+	EntitlementLocalAttemptID Value
+	EntitlementServerID       Value
+	EntitlementAge            Value
+	EntitlementError          Value
+	ProviderStatus            Value
+	RoutingStatus             Value
+	ContextStatus             Value
+	CloudStatus               Value
+	EvaluationStatus          Value
+	CounterfactualStatus      Value
+	BenchmarkStatus           Value
+	ResultsStatus             Value
+	FeedbackStatus            Value
 
 	// Governed Codex control plane.
 	CodexHealth        CodexHealthReport
@@ -151,6 +159,23 @@ type LocalModelRow struct {
 	Compatibility Value
 }
 
+// ProviderDetailRow is one provider's live session, usage, and capability state.
+type ProviderDetailRow struct {
+	Name          Value
+	Availability  Value
+	Version       Value
+	Model         Value
+	Auth          Value
+	Cooldown      Value
+	UsageTokens   Value
+	UsageCost     Value
+	UsageCalls    Value
+	UsageDuration Value
+	Quota         Value
+	Reset         Value
+	Allowance     Value
+}
+
 // ReadModels gathers Models state at one instant.
 func (s *ModelsFeed) ReadModels(ctx context.Context) ModelsSnapshot {
 	snap := ModelsSnapshot{ObservedAt: s.now()}
@@ -169,6 +194,9 @@ func (s *ModelsFeed) ReadModels(ctx context.Context) ModelsSnapshot {
 	snap.RoutingStatus = Unknown("no selected canonical plan/run route is exposed by the attached Models reader", modelsBinding)
 	snap.ContextStatus = Unknown("no compiled context package is selected", modelsBinding)
 	snap.CloudStatus = Unknown("Community Cloud detail is owned by the live Cloud status reader, not this optimization reader", modelsBinding)
+	if editionExtreme {
+		snap.CloudStatus = Known("Not needed in Marshal: ULTRA runs locally", modelsBinding)
+	}
 	snap.EvaluationStatus = Unknown("no Evaluation Lab result is selected", modelsBinding)
 	snap.CounterfactualStatus = Unknown("no Process 08 counterfactual record is selected", modelsBinding)
 	snap.BenchmarkStatus = Unknown("no Process 08 benchmark manifest is selected", modelsBinding)
@@ -181,15 +209,281 @@ func (s *ModelsFeed) ReadModels(ctx context.Context) ModelsSnapshot {
 			"no optimization service is attached to this workspace", modelsBinding)
 		snap.CyclesStatus, snap.CanaryStatus, snap.LocalStatus =
 			unavailable, unavailable, unavailable
+		s.readEntitlementRequest(ctx, &snap)
 		return snap
 	}
 
 	s.readCycles(ctx, &snap)
 	s.readProviderSummary(ctx, &snap)
+	s.readProviderDetails(ctx, &snap)
+	s.readEntitlementRequest(ctx, &snap)
 	s.readCycleEvidence(ctx, &snap)
 	s.readLocalModels(ctx, &snap)
 	s.readCodexGovernance(ctx, &snap)
 	return snap
+}
+
+func (s *ModelsFeed) readEntitlementRequest(ctx context.Context, snap *ModelsSnapshot) {
+	var reqReader EntitlementRequestReader
+	if s != nil && s.RequestReader != nil {
+		reqReader = s.RequestReader
+	} else if s != nil && s.Reader != nil {
+		if r, ok := s.Reader.(EntitlementRequestReader); ok {
+			reqReader = r
+		}
+	}
+
+	if reqReader == nil {
+		unattached := Unknown("no entitlement request reader is attached to this workspace", modelsBinding)
+		snap.Entitlement = unattached
+		snap.EntitlementRequestStatus = unattached
+		snap.EntitlementLocalAttemptID = unattached
+		snap.EntitlementServerID = unattached
+		snap.EntitlementAge = unattached
+		snap.EntitlementError = Empty(modelsBinding)
+		return
+	}
+
+	obs, err := reqReader.EntitlementRequest(ctx)
+	if err != nil {
+		errVal := Errored(fmt.Sprintf("entitlement request state could not be read: %v", err), modelsBinding)
+		snap.Entitlement = errVal
+		snap.EntitlementRequestStatus = errVal
+		snap.EntitlementLocalAttemptID = Unknown("request state error", modelsBinding)
+		snap.EntitlementServerID = Unknown("request state error", modelsBinding)
+		snap.EntitlementAge = Unknown("request state error", modelsBinding)
+		snap.EntitlementError = Errored(RedactContent(err.Error(), nil), modelsBinding)
+		return
+	}
+
+	if !obs.Recorded && obs.LocalAttemptID == "" {
+		snap.Entitlement = NotRun("no entitlement request has been recorded for this session", modelsBinding)
+		snap.EntitlementRequestStatus = NotRun("no entitlement request has been recorded for this session", modelsBinding)
+		snap.EntitlementLocalAttemptID = Unknown("no local request attempt recorded", modelsBinding)
+		snap.EntitlementServerID = Unknown("no server request ID recorded", modelsBinding)
+		snap.EntitlementAge = Unknown("no request recorded", modelsBinding)
+		snap.EntitlementError = Empty(modelsBinding)
+		return
+	}
+
+	state := strings.ToUpper(strings.TrimSpace(obs.State))
+	if state == "" {
+		state = "RECORDED"
+	}
+	snap.Entitlement = Known(fmt.Sprintf("request %s: state=%s", obs.LocalAttemptID, state), modelsBinding)
+	snap.EntitlementRequestStatus = Known(state, modelsBinding)
+	if obs.LocalAttemptID != "" {
+		snap.EntitlementLocalAttemptID = Known(obs.LocalAttemptID, modelsBinding)
+	} else {
+		snap.EntitlementLocalAttemptID = Unknown("no local attempt ID recorded", modelsBinding)
+	}
+	if obs.HasServerID && obs.ServerRequestID != "" {
+		snap.EntitlementServerID = Known(obs.ServerRequestID, modelsBinding)
+	} else {
+		// Old status-only server response gets server-ID UNKNOWN, not a made-up ID.
+		snap.EntitlementServerID = Unknown("server response did not return a server request ID", modelsBinding)
+	}
+	if !obs.RequestedAt.IsZero() {
+		snap.EntitlementAge = Known(relativeTime(s.now(), obs.RequestedAt), modelsBinding)
+	} else {
+		snap.EntitlementAge = Unknown("request timestamp was not recorded", modelsBinding)
+	}
+	if obs.Error != "" {
+		snap.EntitlementError = Known(RedactContent(obs.Error, nil), modelsBinding)
+	} else {
+		snap.EntitlementError = Empty(modelsBinding)
+	}
+}
+
+func (s *ModelsFeed) readProviderDetails(ctx context.Context, snap *ModelsSnapshot) {
+	at := s.now()
+	if s == nil || s.Reader == nil {
+		return
+	}
+
+	if statusReader, ok := s.Reader.(ProviderStatusReader); ok {
+		statuses, err := statusReader.ProviderStatuses(ctx)
+		if err != nil {
+			snap.ProviderDetail = Errored(fmt.Sprintf("provider detail could not be read: %s", err), modelsBinding)
+			return
+		}
+		if len(statuses) == 0 {
+			snap.ProviderDetail = Empty(modelsBinding)
+			return
+		}
+		for _, p := range statuses {
+			row := ProviderDetailRow{
+				Name: Known(p.Name, modelsBinding),
+			}
+			if !p.Found {
+				reason := "the provider's command was not found on PATH"
+				row.Availability = Known("not installed", modelsBinding)
+				row.Version = NotRun(reason, modelsBinding)
+				row.Model = NotRun(reason, modelsBinding)
+				row.Quota = NotRun(reason, modelsBinding)
+				row.Reset = NotRun(reason, modelsBinding)
+				row.Allowance = NotRun(reason, modelsBinding)
+				row.Auth = NotRun(reason, modelsBinding)
+				row.Cooldown = NotRun(reason, modelsBinding)
+				row.UsageTokens = NotRun(reason, modelsBinding)
+				row.UsageCost = NotRun(reason, modelsBinding)
+				row.UsageCalls = NotRun(reason, modelsBinding)
+				row.UsageDuration = NotRun(reason, modelsBinding)
+			} else {
+				row.Availability = Known("installed", modelsBinding)
+				if p.Version != "" {
+					row.Version = Known(p.Version, modelsBinding)
+				} else {
+					row.Version = Unknown("the provider did not report a version", modelsBinding)
+				}
+				if p.Model != "" {
+					row.Model = Known(p.Model, modelsBinding)
+				} else {
+					row.Model = Unknown("no model has been selected for this provider", modelsBinding)
+				}
+				quotaReason := p.QuotaReason
+				if quotaReason == "" {
+					quotaReason = "no provider exposes a machine-readable quota or capacity through a supported interface"
+				}
+				resetReason := p.ResetReason
+				if resetReason == "" {
+					resetReason = "no provider exposes a machine-readable quota reset time through a supported interface"
+				}
+				allowanceReason := p.AllowanceReason
+				if allowanceReason == "" {
+					allowanceReason = "no provider exposes a machine-readable temporary or promotional allowance through a supported interface"
+				}
+				row.Quota = Unknown(quotaReason, modelsBinding)
+				row.Reset = Unknown(resetReason, modelsBinding)
+				row.Allowance = Unknown(allowanceReason, modelsBinding)
+				row.Auth = formatAuthValue(p.Auth, p.Found, at)
+				row.Cooldown = formatCooldownValue(p.Cooldown, p.Found, at)
+				row.UsageTokens = formatTokensValue(p.Usage.TotalTokens, p.Usage.Reported, p.Usage.Source)
+				row.UsageCost = formatCostValue(p.Usage.CostUSD, p.Usage.Reported, p.Usage.Source)
+				row.UsageCalls = formatCallsValue(p.Usage.ModelCalls, p.Usage.Reported, p.Usage.Source)
+				row.UsageDuration = formatDurationValue(p.Usage.Duration, p.Usage.Reported, p.Usage.Source)
+			}
+			snap.ProviderDetails = append(snap.ProviderDetails, row)
+		}
+		snap.ProviderDetail = Known(fmt.Sprintf("%d providers detailed", len(snap.ProviderDetails)), modelsBinding)
+		return
+	}
+
+	pReader, ok := s.Reader.(ProviderReader)
+	if !ok {
+		return
+	}
+	probes, err := pReader.Providers(ctx)
+	if err != nil {
+		snap.ProviderDetail = Errored(fmt.Sprintf("provider detail could not be read: %s", err), modelsBinding)
+		return
+	}
+	if len(probes) == 0 {
+		snap.ProviderDetail = Empty(modelsBinding)
+		return
+	}
+	for _, p := range probes {
+		row := ProviderDetailRow{
+			Name: Known(p.Name, modelsBinding),
+		}
+		switch {
+		case !p.Probed:
+			note := p.ProbeNote
+			if note == "" {
+				note = "this provider was not probed in this session"
+			}
+			row.Availability = NotRun(note, modelsBinding)
+			row.Version = NotRun(note, modelsBinding)
+			row.Model = NotRun(note, modelsBinding)
+			row.Quota = NotRun(note, modelsBinding)
+			row.Reset = NotRun(note, modelsBinding)
+			row.Allowance = NotRun(note, modelsBinding)
+			row.Auth = NotRun(note, modelsBinding)
+			row.Cooldown = NotRun(note, modelsBinding)
+			row.UsageTokens = NotRun(note, modelsBinding)
+			row.UsageCost = NotRun(note, modelsBinding)
+			row.UsageCalls = NotRun(note, modelsBinding)
+			row.UsageDuration = NotRun(note, modelsBinding)
+		case p.Found:
+			row.Availability = Known("installed", modelsBinding)
+			if p.Version != "" {
+				row.Version = Known(p.Version, modelsBinding)
+			} else {
+				row.Version = Unknown("the provider did not report a version", modelsBinding)
+			}
+			if p.Model != "" {
+				row.Model = Known(p.Model, modelsBinding)
+			} else {
+				row.Model = Unknown("no model has been selected for this provider", modelsBinding)
+			}
+			quotaReason := p.QuotaReason
+			if quotaReason == "" {
+				quotaReason = "no provider exposes a machine-readable quota or capacity through a supported interface"
+			}
+			resetReason := p.ResetReason
+			if resetReason == "" {
+				resetReason = "no provider exposes a machine-readable quota reset time through a supported interface"
+			}
+			allowanceReason := p.AllowanceReason
+			if allowanceReason == "" {
+				allowanceReason = "no provider exposes a machine-readable temporary or promotional allowance through a supported interface"
+			}
+			row.Quota = Unknown(quotaReason, modelsBinding)
+			row.Reset = Unknown(resetReason, modelsBinding)
+			row.Allowance = Unknown(allowanceReason, modelsBinding)
+
+			if p.AuthStatus != "" {
+				row.Auth = formatAuthValue(app.ProviderAuthObservation{
+					Provider:   p.Name,
+					Status:     app.ProviderAuthStatus(p.AuthStatus),
+					Reason:     p.AuthReason,
+					Source:     p.AuthSource,
+					ObservedAt: p.AuthTime,
+				}, p.Found, at)
+			} else if obs, ok := GetAuthPreflightObservation(p.Name, authObservationMaxAge); ok {
+				row.Auth = formatAuthValue(app.ProviderAuthObservation{
+					Provider:   p.Name,
+					Status:     app.ProviderAuthStatus(obs.Status),
+					Reason:     obs.Reason,
+					Source:     obs.Source,
+					ObservedAt: obs.ObservedAt,
+				}, p.Found, at)
+			} else {
+				row.Auth = Unknown("no provider exposes an inspectable authentication or session state through a supported interface", modelsBinding)
+			}
+
+			if p.CooldownActive {
+				row.Cooldown = formatCooldownValue(app.ProviderCooldownObservation{
+					Active:     true,
+					RetryAfter: p.CooldownRemaining,
+					Reason:     p.CooldownReason,
+				}, p.Found, at)
+			} else {
+				row.Cooldown = Known("no active cooldown", modelsBinding)
+			}
+
+			row.UsageTokens = formatTokensValue(p.TotalTokens, p.UsageReported, "")
+			row.UsageCost = formatCostValue(p.CostUSD, p.UsageReported, "")
+			row.UsageCalls = formatCallsValue(p.ModelCalls, p.UsageReported, "")
+			row.UsageDuration = formatDurationValue(p.UsageDuration, p.UsageReported, "")
+		default:
+			reason := "the provider's command was not found on PATH"
+			row.Availability = Known("not installed", modelsBinding)
+			row.Version = NotRun(reason, modelsBinding)
+			row.Model = NotRun(reason, modelsBinding)
+			row.Quota = NotRun(reason, modelsBinding)
+			row.Reset = NotRun(reason, modelsBinding)
+			row.Allowance = NotRun(reason, modelsBinding)
+			row.Auth = NotRun(reason, modelsBinding)
+			row.Cooldown = NotRun(reason, modelsBinding)
+			row.UsageTokens = NotRun(reason, modelsBinding)
+			row.UsageCost = NotRun(reason, modelsBinding)
+			row.UsageCalls = NotRun(reason, modelsBinding)
+			row.UsageDuration = NotRun(reason, modelsBinding)
+		}
+		snap.ProviderDetails = append(snap.ProviderDetails, row)
+	}
+	snap.ProviderDetail = Known(fmt.Sprintf("%d providers detailed", len(snap.ProviderDetails)), modelsBinding)
 }
 
 func (s *ModelsFeed) readCodexGovernance(ctx context.Context, snap *ModelsSnapshot) {

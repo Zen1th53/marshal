@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -107,7 +108,7 @@ func TestNativeHistoryIndexSurvivesRestart(t *testing.T) {
 	if err := os.WriteFile(path, nativeTestHistory(t, root, "saved"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	index := filepath.Join(root, ".marshal", "codex", "history-index.json")
+	index := filepath.Join(root, statepath.DirName, "codex", "history-index.json")
 	w := newNativeHistoryWatch(dir, root)
 	w.indexPath = index
 	w.consume = func(importer.SessionTranscript) error { return nil }

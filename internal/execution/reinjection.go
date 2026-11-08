@@ -9,20 +9,24 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
+	"github.com/Zen1th53/marshal/internal/projectcontext"
 )
 
 // ConstraintPackage represents canonical constraints that must be injected into every worker context.
 type ConstraintPackage struct {
-	GoalOutcome             string   `json:"goal_outcome"`
-	TaskID                  string   `json:"task_id"`
-	TaskDescription         string   `json:"task_description"`
-	HardConstraints         []string `json:"hard_constraints"`
-	DoNotDo                 []string `json:"do_not_do"`
-	CapabilityLimits        []string `json:"capability_limits,omitempty"`
-	ApprovalRequired        bool     `json:"approval_required"`
-	ExpectedOutputs         []string `json:"expected_outputs,omitempty"`
-	VerificationObligations []string `json:"verification_obligations,omitempty"`
-	Digest                  string   `json:"digest"`
+	// RequiredContext is a canonical data binding, never provider authority.
+	// Nil preserves the legacy Community wire and digest exactly.
+	RequiredContext         *projectcontext.Binding `json:"required_context,omitempty"`
+	GoalOutcome             string                  `json:"goal_outcome"`
+	TaskID                  string                  `json:"task_id"`
+	TaskDescription         string                  `json:"task_description"`
+	HardConstraints         []string                `json:"hard_constraints"`
+	DoNotDo                 []string                `json:"do_not_do"`
+	CapabilityLimits        []string                `json:"capability_limits,omitempty"`
+	ApprovalRequired        bool                    `json:"approval_required"`
+	ExpectedOutputs         []string                `json:"expected_outputs,omitempty"`
+	VerificationObligations []string                `json:"verification_obligations,omitempty"`
+	Digest                  string                  `json:"digest"`
 }
 
 // BuildConstraintPackage builds and digests a canonical constraint package for a task.
@@ -73,6 +77,9 @@ func BuildConstraintPackage(goal model.GoalContract, task TaskExecution, p plan.
 
 // ComputeConstraintDigest calculates a SHA256 digest over the critical constraint fields.
 func ComputeConstraintDigest(pkg ConstraintPackage) string {
+	if digest, bound := requiredConstraintDigest(pkg); bound {
+		return digest
+	}
 	h := sha256.New()
 	fmt.Fprintf(h, "goal:%s\n", pkg.GoalOutcome)
 	fmt.Fprintf(h, "task:%s:%s\n", pkg.TaskID, pkg.TaskDescription)
@@ -91,6 +98,9 @@ func ComputeConstraintDigest(pkg ConstraintPackage) string {
 
 // VerifyConstraintPackage verifies the package integrity and ensures no constraints were omitted.
 func VerifyConstraintPackage(pkg ConstraintPackage) error {
+	if err := verifyRequiredConstraintBinding(pkg); err != nil {
+		return err
+	}
 	if pkg.GoalOutcome == "" {
 		return fmt.Errorf("%w: missing goal outcome in constraint package", ErrConstraintViolation)
 	}

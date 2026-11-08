@@ -164,6 +164,37 @@ func repositoryPaths(dir string, discover bool) (string, string, error) {
 	}
 }
 
+// Fallback identity for commits MARSHAL records for its own bookkeeping on a
+// machine where Git has no usable identity.
+const (
+	FallbackName  = "MARSHAL"
+	FallbackEmail = "marshal@localhost"
+)
+
+// CommitCommand is Command for a commit MARSHAL itself records (project
+// initialization). When Git can already resolve author and committer identities
+// (configuration, environment or its own detection) nothing is added, so a
+// configured identity is never overridden. Only when it cannot does the commit
+// carry the neutral MARSHAL identity. args are the full Git arguments,
+// starting at "commit".
+func CommitCommand(ctx context.Context, dir string, args ...string) (*exec.Cmd, error) {
+	for _, variable := range []string{"GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"} {
+		probe, err := Command(ctx, dir, "var", variable)
+		if err != nil {
+			return nil, err
+		}
+		if err := probe.Run(); err != nil {
+			var exit *exec.ExitError
+			if !errors.As(err, &exit) {
+				return nil, err
+			}
+			args = append([]string{"-c", "user.name=" + FallbackName, "-c", "user.email=" + FallbackEmail}, args...)
+			break
+		}
+	}
+	return Command(ctx, dir, args...)
+}
+
 // Root discovers a project from a subdirectory without consulting Git settings.
 // Worker bookkeeping uses Command directly and never falls back to a parent.
 func Root(dir string) (string, error) {

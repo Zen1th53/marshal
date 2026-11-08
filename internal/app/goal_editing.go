@@ -26,6 +26,7 @@ type GoalEdit struct {
 	// BudgetLimits, when set, replaces the revision's limits; an all-zero
 	// value removes them.
 	BudgetLimits *model.BudgetLimit
+	BudgetPatch  *model.BudgetPatch
 }
 
 func (r *Runtime) CommandCreateGoal(ctx context.Context, e CommandEnvelope, request string) (model.GoalContract, error) {
@@ -98,16 +99,22 @@ func (r *Runtime) editGoal(ctx context.Context, e CommandEnvelope, edit GoalEdit
 	}
 	if edit.BudgetLimits != nil {
 		limits := *edit.BudgetLimits
-		if limits.MaxTotalTokens != nil || limits.MaxCostUSD != nil || limits.MaxHandoffs != 0 || limits.MaxRetries != 0 {
-			return model.GoalContract{}, fmt.Errorf("%w: only model-call and duration limits are enforced; tokens and cost are not reported by every provider", model.ErrGoalInvalid)
+		if err := limits.Validate(); err != nil {
+			return model.GoalContract{}, err
 		}
-		if limits.MaxModelCalls < 0 || limits.MaxDuration < 0 {
-			return model.GoalContract{}, fmt.Errorf("%w: budget limits cannot be negative", model.ErrGoalInvalid)
-		}
-		if limits.MaxModelCalls == 0 && limits.MaxDuration == 0 {
+		if limits.Empty() {
 			g.BudgetLimits = nil
 		} else {
 			g.BudgetLimits = &limits
+		}
+	}
+	if edit.BudgetPatch != nil {
+		if edit.BudgetLimits != nil {
+			return model.GoalContract{}, model.ErrGoalInvalid
+		}
+		g.BudgetLimits, err = edit.BudgetPatch.Apply(g.BudgetLimits)
+		if err != nil {
+			return model.GoalContract{}, err
 		}
 	}
 	g.Confirmation = model.ConfirmationPending

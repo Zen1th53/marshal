@@ -70,7 +70,7 @@ type Provenance struct {
 }
 
 func (p Provenance) Validate() error {
-	if strings.TrimSpace(p.ChangeID) == "" || strings.TrimSpace(p.ContentDigest) == "" {
+	if strings.TrimSpace(p.ChangeID) == "" || strings.TrimSpace(p.ContentDigest) == "" || strings.HasPrefix(p.ContentDigest, "head-digest-") {
 		return ErrInvalidProvenance
 	}
 	return nil

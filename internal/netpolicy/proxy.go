@@ -426,7 +426,7 @@ func (p *EgressProxy) evaluateAndResolve(ctx context.Context, host string, port 
 	var chosenIP net.IP
 	for _, resolved := range ips {
 		ip := resolved.IP
-		if IsForbiddenPrivateIP(ip) {
+		if IsForbiddenPrivateIP(ip) && !buildPrivateResolutionAllowed() {
 			// A domain name rule cannot resolve to private/local IPs
 			return nil, Decision{
 				Allowed: false,

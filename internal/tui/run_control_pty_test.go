@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func TestPTYRunControl(t *testing.T) {
 	if !found {
 		t.Fatal("no binding")
 	}
-	store, err := execution.NewFileRunStore(filepath.Join(project, ".marshal", "execution", "runs"))
+	store, err := execution.NewFileRunStore(filepath.Join(project, statepath.DirName, "execution", "runs"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +40,7 @@ func TestPTYRunControl(t *testing.T) {
 	}
 
 	terminal := startFrozenTUIInProject(t, 40, 200, bin, project, "tui", session)
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/pause")
 	terminal.mustSee("more than one run qualifies")
 	terminal.sendLine("/pause run:RUN-a")

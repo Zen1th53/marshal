@@ -222,6 +222,11 @@ func (m *Manager) Transition(ctx context.Context, id CellID, from, to State) err
 	if m == nil || m.repository == nil {
 		return fmt.Errorf("%w: cell repository is unavailable", ErrNotReady)
 	}
+	unlock, err := m.lockLifecycle(ctx, id)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	return m.repository.TransitionCellState(ctx, id, from, to)
 }
 
@@ -229,32 +234,80 @@ func (m *Manager) Exec(ctx context.Context, handle Handle, request ExecRequest) 
 	if m == nil || m.repository == nil {
 		return ExecResult{}, fmt.Errorf("%w: cell repository is unavailable", ErrNotReady)
 	}
-	m.lifecycleMu.Lock()
-	defer m.lifecycleMu.Unlock()
-	if err := handle.Validate(); err != nil {
-		return ExecResult{}, err
-	}
-	record, err := m.repository.GetCell(ctx, handle.ID)
+	unlock, err := m.lockLifecycle(ctx, handle.ID)
 	if err != nil {
 		return ExecResult{}, err
 	}
+	defer unlock()
+	return m.execLocked(ctx, handle, request)
+}
+
+func (m *Manager) execLocked(ctx context.Context, handle Handle, request ExecRequest) (ExecResult, error) {
+	return m.execLockedAcknowledged(ctx, handle, request, nil)
+}
+
+func (m *Manager) execLockedAcknowledged(ctx context.Context, handle Handle, request ExecRequest, launched func()) (ExecResult, error) {
+	prepared, err := m.prepareExecLocked(ctx, handle)
+	if err != nil {
+		return ExecResult{}, err
+	}
+	return m.execPreparedAcknowledged(ctx, prepared, handle, request, launched)
+}
+
+type preparedExec struct {
+	record  Record
+	backend Backend
+}
+
+// prepareExecLocked performs all repository reads and pre-launch event writes.
+// Callers that hold a SQLite dispatch admission while launching a backend must
+// finish this work first to avoid re-entering a single-connection store.
+func (m *Manager) prepareExecLocked(ctx context.Context, handle Handle) (preparedExec, error) {
+	if err := handle.Validate(); err != nil {
+		return preparedExec{}, err
+	}
+	record, err := m.repository.GetCell(ctx, handle.ID)
+	if err != nil {
+		return preparedExec{}, err
+	}
 	if record.State == StateDestroyed {
-		return ExecResult{}, ErrDestroyed
+		return preparedExec{}, ErrDestroyed
 	}
 	if record.TaskID != handle.TaskID || record.Backend != handle.Backend || record.Workspace != handle.Workspace {
-		return ExecResult{}, ErrNotReady
+		return preparedExec{}, ErrNotReady
 	}
 	if record.State != StateRunning {
-		return ExecResult{}, ErrNotReady
+		return preparedExec{}, ErrNotReady
 	}
 	backend := m.backends[record.Backend]
 	if backend == nil {
-		return ExecResult{}, ErrBackendUnavailable
+		return preparedExec{}, ErrBackendUnavailable
 	}
 	if err := m.emit(ctx, record, events.EventType("cell.exec.started"), "started"); err != nil {
-		return ExecResult{}, err
+		return preparedExec{}, err
 	}
-	result, execErr := backend.Exec(ctx, handle, request)
+	return preparedExec{record: record, backend: backend}, nil
+}
+
+func (m *Manager) execPreparedAcknowledged(ctx context.Context, prepared preparedExec, handle Handle, request ExecRequest, launched func()) (ExecResult, error) {
+	record, backend := prepared.record, prepared.backend
+	var result ExecResult
+	var execErr error
+	if acknowledged, ok := backend.(LaunchAcknowledgedBackend); ok {
+		onLaunched := launched
+		if onLaunched == nil {
+			onLaunched = func() {}
+		}
+		result, execErr = acknowledged.ExecAcknowledged(ctx, handle, request, onLaunched)
+	} else {
+		result, execErr = backend.Exec(ctx, handle, request)
+	}
+	// A backend may return without an earlier acknowledgement. Its settled
+	// return is then the safest available boundary; release before any result
+	// event writes that may need the same SQLite connection.
+	if launched != nil {
+		launched()
+	}
 	if execErr != nil {
 		_ = m.emit(ctx, record, events.EventType("cell.failed"), string(CodePrepareFailed))
 		return ExecResult{}, execErr
@@ -269,8 +322,15 @@ func (m *Manager) Destroy(ctx context.Context, handle Handle) error {
 	if m == nil || m.repository == nil {
 		return fmt.Errorf("%w: cell repository is unavailable", ErrCleanupFailed)
 	}
-	m.lifecycleMu.Lock()
-	defer m.lifecycleMu.Unlock()
+	unlock, err := m.lockLifecycle(ctx, handle.ID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return m.destroyLocked(ctx, handle)
+}
+
+func (m *Manager) destroyLocked(ctx context.Context, handle Handle) error {
 	if err := handle.Validate(); err != nil {
 		return err
 	}

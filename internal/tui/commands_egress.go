@@ -137,8 +137,18 @@ func (w *Workspace) deliverEgressAlert(alert app.EgressAlert) error {
 		}
 	}
 	w.mu.Lock()
+	if w.lastCommandError != "" && strings.HasPrefix(w.state.LastOutput, w.lastCommandError) {
+		// The failed command's error is still on screen: keep it above the
+		// alert instead of replacing it.
+		text = w.lastCommandError + "\n" + text
+		w.state.LastOutputIsError = true
+	} else {
+		w.lastCommandError = ""
+	}
 	w.state.LastOutput = text
 	w.mu.Unlock()
+	// An alert arrives on its own: on the Board it is an Activity line.
+	w.addNote(text, true)
 	w.requestRepaint()
 	return nil
 }

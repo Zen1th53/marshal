@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/Zen1th53/marshal/internal/memory/security"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -93,7 +95,15 @@ func TestM16_SessionImporterRejectsCredentials(t *testing.T) {
 		"success": false
 	}`)
 
-	_, err := svc.ImportSessionTranscript(ctx, p, projectID, taintedTranscript, false)
+	res, err := svc.ImportSessionTranscript(ctx, p, projectID, taintedTranscript, false)
+	if security.RedactsSecrets {
+		// Extreme imports the transcript with the key replaced by a marker.
+		raw, _ := json.Marshal(res)
+		if err != nil || strings.Contains(string(raw), "AKIAIOSFODNN7EXAMPLE") {
+			t.Fatalf("expected redacted import, got %s %v", raw, err)
+		}
+		return
+	}
 	if err == nil {
 		t.Fatalf("expected secret firewall to reject tainted transcript containing AWS key")
 	}

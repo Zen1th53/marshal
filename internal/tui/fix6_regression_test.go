@@ -15,16 +15,20 @@ import (
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/permission"
 	"github.com/Zen1th53/marshal/internal/projectid"
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 func TestContinuationGrantDeliversProjectDataToMarshal(t *testing.T) {
+	if Edition() == "Marshal" {
+		t.Skip("Marshal reads continuation folders without a grant; TestExtremeReadsApplyAutomatically covers it")
+	}
 	w, rt := realControlWorkspace(t, "SESSION-fix6-continuation")
 	ctx := context.Background()
 	brief, err := marshalRoleBriefing([]string{"codex"}, marshal.DefaultSettings(), marshal.Standard)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{".marshal/inbox/marshal.md", "Read that file", "labelled untrusted data"} {
+	for _, want := range []string{statepath.DirName + "/inbox/marshal.md", "Read that file", "labelled untrusted data"} {
 		if !strings.Contains(brief, want) {
 			t.Errorf("Marshal was not told how to read continuation: %q", want)
 		}
@@ -76,16 +80,20 @@ func TestContinuationGrantDeliversProjectDataToMarshal(t *testing.T) {
 
 type fix6CodexAdapter struct {
 	adapter.Adapter
-	runs int
+	runs        int
+	probes      int
+	validations int
 }
 
 func (f *fix6CodexAdapter) ValidateModel(_ context.Context, name string) error {
+	f.validations++
 	if name != "test-model" {
 		return model.ErrInvalid
 	}
 	return nil
 }
 func (f *fix6CodexAdapter) Probe(context.Context) (adapter.Probe, error) {
+	f.probes++
 	return adapter.Probe{Name: "codex", Available: true, Version: "test"}, nil
 }
 func (f *fix6CodexAdapter) Run(_ context.Context, req adapter.Request) (adapter.Result, error) {
@@ -97,6 +105,7 @@ func (f *fix6CodexAdapter) Run(_ context.Context, req adapter.Request) (adapter.
 }
 
 func TestCodexCommandDispatchesAssignedTaskAndReleasesFailedClaim(t *testing.T) {
+	isolateRequiredFixtureProviders(t)
 	for _, invalid := range []bool{false, true} {
 		t.Run(fmt.Sprint("invalid-model=", invalid), func(t *testing.T) {
 			w, original := realControlWorkspace(t, "SESSION-fix6-dispatch")
@@ -139,6 +148,8 @@ func TestCodexCommandDispatchesAssignedTaskAndReleasesFailedClaim(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
+			beforeDispatch := assignedFixtureSnapshot(t, rt, task.ID)
+			beforeProbes, beforeValidations := fake.probes, fake.validations
 			name := "test-model"
 			if invalid {
 				name = "invalid"
@@ -146,6 +157,13 @@ func TestCodexCommandDispatchesAssignedTaskAndReleasesFailedClaim(t *testing.T) 
 			out, err := w.ExecuteCommand(ctx, "/codex run "+task.ID+" "+name)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if requiredLegacyFixtureRefusal {
+				if !strings.Contains(out, "REQUIRED_CONTEXT_REVIEW_PENDING") || fake.runs != 0 || fake.probes != beforeProbes || fake.validations != beforeValidations || assignedFixtureSnapshot(t, rt, task.ID) != beforeDispatch {
+					t.Fatalf("private refusal changed assignment or worked: runs=%d output=%q", fake.runs, out)
+				}
+				assertNoFixtureArtifacts(t, rt)
+				return
 			}
 			if invalid {
 				if !strings.Contains(out, "dispatch failed") {

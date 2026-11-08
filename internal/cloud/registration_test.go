@@ -1,3 +1,5 @@
+//go:build governed
+
 package cloud
 
 import (
@@ -11,7 +13,7 @@ func TestAuthorizeRegistersOncePerInstallationAndEndpoint(t *testing.T) {
 	dir := t.TempDir()
 	cfg := Config{Endpoint: f.server.URL}
 	for i := 0; i < 2; i++ {
-		auth := Authorize(context.Background(), cfg, dir, "1.0.0")
+		auth := authorizeCloud(context.Background(), cfg, dir, "1.0.0")
 		if auth.Err != nil {
 			t.Fatalf("authorize run %d: %v", i, auth.Err)
 		}
@@ -30,7 +32,7 @@ func TestAuthorizeRegistersOncePerInstallationAndEndpoint(t *testing.T) {
 	if err := store.Save(st); err != nil {
 		t.Fatal(err)
 	}
-	auth := Authorize(context.Background(), cfg, dir, "1.0.0")
+	auth := authorizeCloud(context.Background(), cfg, dir, "1.0.0")
 	if auth.Err != nil {
 		t.Fatal(auth.Err)
 	}
@@ -52,7 +54,7 @@ func TestAuthorizeRegistersOncePerInstallationAndEndpoint(t *testing.T) {
 	if err := store.Save(newInstallation); err != nil {
 		t.Fatal(err)
 	}
-	auth = Authorize(context.Background(), cfg, dir, "1.0.0")
+	auth = authorizeCloud(context.Background(), cfg, dir, "1.0.0")
 	if auth.Err != nil {
 		t.Fatal(auth.Err)
 	}
@@ -68,7 +70,7 @@ func TestUnknownInstallationReregistersAndRetriesOnce(t *testing.T) {
 			f := newFakeServer(t)
 			dir := t.TempDir()
 			cfg := Config{Endpoint: f.server.URL}
-			first := Authorize(context.Background(), cfg, dir, "1.0.0")
+			first := authorizeCloud(context.Background(), cfg, dir, "1.0.0")
 			if first.Err != nil {
 				t.Fatal(first.Err)
 			}
@@ -78,7 +80,7 @@ func TestUnknownInstallationReregistersAndRetriesOnce(t *testing.T) {
 			} else {
 				f.unknownSession.Store(1)
 			}
-			second := Authorize(context.Background(), cfg, dir, "1.0.0")
+			second := authorizeCloud(context.Background(), cfg, dir, "1.0.0")
 			if second.Err != nil {
 				t.Fatal(second.Err)
 			}
@@ -96,7 +98,7 @@ func TestUnknownInstallationReregistersAndRetriesOnce(t *testing.T) {
 func TestRegistrationRateLimit(t *testing.T) {
 	f := newFakeServer(t)
 	f.rateLimitRegistration.Store(true)
-	auth := Authorize(context.Background(), Config{Endpoint: f.server.URL}, t.TempDir(), "1.0.0")
+	auth := authorizeCloud(context.Background(), Config{Endpoint: f.server.URL}, t.TempDir(), "1.0.0")
 	if !errors.Is(auth.Err, ErrRateLimited) {
 		t.Fatalf("want rate limited error, got %v", auth.Err)
 	}
@@ -109,13 +111,13 @@ func TestUnknownInstallationRetriesOnlyOnce(t *testing.T) {
 	f := newFakeServer(t)
 	dir := t.TempDir()
 	cfg := Config{Endpoint: f.server.URL}
-	first := Authorize(context.Background(), cfg, dir, "1.0.0")
+	first := authorizeCloud(context.Background(), cfg, dir, "1.0.0")
 	if first.Err != nil {
 		t.Fatal(first.Err)
 	}
 	first.Stop()
 	f.unknownChallenge.Store(2)
-	second := Authorize(context.Background(), cfg, dir, "1.0.0")
+	second := authorizeCloud(context.Background(), cfg, dir, "1.0.0")
 	if !errors.Is(second.Err, ErrUnknownInstallation) {
 		t.Fatalf("want unknown installation after retry, got %v", second.Err)
 	}
@@ -128,14 +130,14 @@ func TestFailedReregistrationClearsState(t *testing.T) {
 	f := newFakeServer(t)
 	dir := t.TempDir()
 	cfg := Config{Endpoint: f.server.URL}
-	first := Authorize(context.Background(), cfg, dir, "1.0.0")
+	first := authorizeCloud(context.Background(), cfg, dir, "1.0.0")
 	if first.Err != nil {
 		t.Fatal(first.Err)
 	}
 	first.Stop()
 	f.unknownChallenge.Store(1)
 	f.rateLimitRegistration.Store(true)
-	second := Authorize(context.Background(), cfg, dir, "1.0.0")
+	second := authorizeCloud(context.Background(), cfg, dir, "1.0.0")
 	if !errors.Is(second.Err, ErrRateLimited) {
 		t.Fatalf("want rate limit after unknown installation, got %v", second.Err)
 	}

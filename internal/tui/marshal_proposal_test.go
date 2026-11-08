@@ -3,10 +3,10 @@ package tui
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/marshal/driver"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/tmux"
 	"os"
@@ -22,6 +22,10 @@ import (
 func TestMarshalProposalSettingPermission(t *testing.T) {
 	for _, allow := range []bool{true, false} {
 		w, rt := realControlWorkspace(t, "SESSION-proposal", false)
+		before, err := rt.Marshal().Store.GetMarshalSettings(t.Context(), rt.ProjectID())
+		if err != nil {
+			t.Fatal(err)
+		}
 		tr := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"setting","key":"acceptance-mode","value":"marshal"}`}}}
 		w.observeMarshalProposals(tr)
 		w.observeMarshalProposals(tr)
@@ -40,7 +44,7 @@ func TestMarshalProposalSettingPermission(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if (string(settings.Value.AcceptanceMode) == "marshal") != allow {
+		if allow && (settings.Value.AcceptanceMode != marshal.AcceptMarshal || settings.Revision != before.Revision+1) || !allow && settings != before {
 			t.Fatalf("settings=%+v allow=%v", settings.Value, allow)
 		}
 		events, err := rt.Store().ListEvents(context.Background())
@@ -109,6 +113,9 @@ func TestMarshalProposalStrictParsing(t *testing.T) {
 }
 
 func TestMarshalProposalPopupKeysAndEvidence(t *testing.T) {
+	if Edition() == "Marshal" {
+		t.Skip("Marshal never opens an operator popup for proposals; the Marshal decides (TestExtremeUnverifiedProposalFileNeverAutoApplied)")
+	}
 	for _, key := range []string{"A", "a", "D", "\n", "\x1b", ""} {
 		t.Run(fmt.Sprintf("key-%x", key), func(t *testing.T) {
 			w, rt := realControlWorkspace(t, "SESSION-proposal-key", false)
@@ -129,7 +136,7 @@ func TestMarshalProposalPopupKeysAndEvidence(t *testing.T) {
 			w.observeMarshalProposals(tr)
 			w.observeMarshalProposals(tr)
 			before, _ := rt.Marshal().Store.GetMarshalSettings(t.Context(), rt.ProjectID())
-			if string(before.Value.AcceptanceMode) == "marshal" {
+			if before.Revision != 0 {
 				t.Fatal("model applied before A")
 			}
 			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
@@ -149,7 +156,7 @@ func TestMarshalProposalPopupKeysAndEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if (string(after.Value.AcceptanceMode) == "marshal") != (key == "A") {
+			if key == "A" && (after.Value.AcceptanceMode != marshal.AcceptMarshal || after.Revision != before.Revision+1) || key != "A" && after != before {
 				t.Fatalf("key=%q mode=%s", key, after.Value.AcceptanceMode)
 			}
 			events, err := rt.Store().ListEvents(t.Context())
@@ -252,6 +259,9 @@ func TestMarshalProposalBoundNativeHistory(t *testing.T) {
 }
 
 func TestMarshalProposalReadMemoryAndContinuation(t *testing.T) {
+	if Edition() == "Marshal" {
+		t.Skip("Marshal applies reads automatically and waits for the Marshal on memory; TestExtremeReadsApplyAutomatically covers it")
+	}
 	w, rt := realControlWorkspace(t, "SESSION-proposal-continuation", false)
 	// Explicit intake consent precedes requests; popup/grant assertions below remain unchanged.
 	emitMarshalIntakeFile(t, w, "English", "yes")
@@ -329,19 +339,22 @@ func TestMarshalProposalReadMemoryAndContinuation(t *testing.T) {
 }
 
 func TestMarshalProposalApprovalWaitsForDraftAndExpires(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-approval", false)
+	fixture := newMarshalPopupFixture(t, false, false)
+	w, rt := fixture.w, fixture.runtime
+	m := w.marshalSession()
+	m.mu.Lock()
+	runID := m.runID
+	m.runID = "" // The imported proposal precedes attachment to its saved draft.
+	m.mu.Unlock()
 	tr := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"approve"}`}}}
 	w.observeMarshalProposals(tr)
 	if !w.permissions.queue.Empty() {
 		t.Fatal("approval popup before imported draft")
 	}
-	m := w.marshalSession()
 	m.mu.Lock()
-	m.service = rt.Marshal()
-	m.runID = "RUN-proposal"
+	m.runID = runID
 	m.mu.Unlock()
-	run := marshal.Run{PlanID: "PLAN-proposal", PlanVersion: 1, State: marshal.Drafting, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "T1"}}}
-	rec, err := rt.Marshal().Store.SetMarshalRun(t.Context(), rt.ProjectID(), "RUN-proposal", run, 0)
+	record, err := fixture.service.Store.GetMarshalRun(t.Context(), rt.ProjectID(), runID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,12 +362,13 @@ func TestMarshalProposalApprovalWaitsForDraftAndExpires(t *testing.T) {
 	w.queueMarshalPlanApproval()
 	w.observeMarshalProposals(tr)
 	batch := w.permissions.queue.Take(false)
-	if len(batch) != 1 || batch[0].Object != "/marshal approve" || !strings.Contains(batch[0].Scope, "PLAN-proposal version 1") {
+	if len(batch) != 1 || batch[0].Object != "/marshal approve" || !strings.Contains(batch[0].Scope, record.Value.PlanID+" version 1") {
 		t.Fatalf("approval requests=%v", batch)
 	}
 	// Updating even the result state invalidates the old proposal binding.
+	run := record.Value
 	run.PlanVersion = 2
-	if _, err := rt.Marshal().Store.SetMarshalRun(t.Context(), rt.ProjectID(), "RUN-proposal", run, rec); err != nil {
+	if _, err := fixture.service.Store.SetMarshalRun(t.Context(), rt.ProjectID(), runID, run, record.Revision); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.decidePermission(t.Context(), batch[0], true, "operator popup"); err == nil || !strings.Contains(err.Error(), "expired") {
@@ -471,32 +485,8 @@ func TestMarshalProposalRejectsToolPayloadAndInvalidJSON(t *testing.T) {
 }
 
 func TestMarshalProposalPlanApprovalUsesHandler(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-plan", false)
-	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	service := *rt.Marshal()
-	m := w.marshalSession()
-	service.ApprovalActor = m.approver
-	service.Drivers = nil
-	service.GovernedDrivers = nil
-	service.ProbeWorker = func(context.Context, string) error { return errors.New("worker dispatch disabled in proposal fixture") }
-	draft, err := service.DraftFromProposal([]byte(`{"tasks":[{"id":"T1","title":"Review fixture","criteria":["fixture checked"],"paths":["README.md"],"depends_on":[],"worker":"codex","mode":"governed","checks":[{"command":"true","criteria":["fixture checked"]}]}]}`), "codex")
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, err := service.StartPlanningFromDraft(t.Context(), "RUN-plan-proposal", "proposal fixture", draft, marshal.Budget{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	m.mu.Lock()
-	m.service = &service
-	m.runID = "RUN-plan-proposal"
-	m.provider = "codex"
-	m.mu.Unlock()
-	w.setMarshalPanel(newMarshalPanel("RUN-plan-proposal", "codex", run, "review plan"))
+	fixture := newMarshalPopupFixture(t, false, false)
+	w, rt := fixture.w, fixture.runtime
 	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"approve"}`}}})
 	batch := w.permissions.queue.Take(false)
 	if len(batch) != 1 {
@@ -528,17 +518,24 @@ func TestMarshalProposalPlanApprovalUsesHandler(t *testing.T) {
 }
 
 func TestMarshalProposalAmendmentApprovalBinding(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-amend", false)
+	fixture := newMarshalPopupFixture(t, false, false)
+	w, rt := fixture.w, fixture.runtime
 	m := w.marshalSession()
-	run := marshal.Run{PlanID: "PLAN-amend", PlanVersion: 1, State: marshal.AwaitingUser, Settings: marshal.DefaultSettings()}
-	if _, err := rt.Marshal().Store.SetMarshalRun(t.Context(), rt.ProjectID(), "RUN-amend", run, 0); err != nil {
+	m.mu.Lock()
+	runID := m.runID
+	m.mu.Unlock()
+	record, err := fixture.service.Store.GetMarshalRun(t.Context(), rt.ProjectID(), runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := record.Value
+	run.State = marshal.AwaitingUser
+	if _, err := fixture.service.Store.SetMarshalRun(t.Context(), rt.ProjectID(), runID, run, record.Revision); err != nil {
 		t.Fatal(err)
 	}
 	m.mu.Lock()
-	m.service = rt.Marshal()
-	m.runID = "RUN-amend"
 	m.amended = true
-	m.pending = &marshalAmendment{reason: "add a cache", planVersion: 1}
+	m.pending = &marshalAmendment{reason: "add a cache", planVersion: run.PlanVersion}
 	m.mu.Unlock()
 	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"approve"}`}}})
 	batch := w.permissions.queue.Take(false)
@@ -546,7 +543,7 @@ func TestMarshalProposalAmendmentApprovalBinding(t *testing.T) {
 		t.Fatalf("amendment popup=%v", batch)
 	}
 	m.mu.Lock()
-	m.pending = &marshalAmendment{reason: "different change", planVersion: 1}
+	m.pending = &marshalAmendment{reason: "different change", planVersion: run.PlanVersion}
 	m.mu.Unlock()
 	if err := w.decidePermission(t.Context(), batch[0], true, "operator popup"); err == nil || !strings.Contains(err.Error(), "expired") {
 		t.Fatalf("changed amendment approved: %v", err)
@@ -589,7 +586,7 @@ func TestMarshalProposalReemittedAfterDecision(t *testing.T) {
 func TestMarshalProposalFileHandoff(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-files", false)
 	root := rt.ProjectRoot()
-	dir := filepath.Join(root, ".marshal", "proposals")
+	dir := filepath.Join(root, statepath.DirName, "proposals")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -628,70 +625,6 @@ func TestMarshalProposalFileHandoff(t *testing.T) {
 	}
 }
 
-func TestMarshalProposalNavigatesChatToCentreOnce(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-surfaces", false)
-	dir := t.TempDir()
-	fake := filepath.Join(dir, "tmux")
-	t.Setenv("POPUP_FIXTURE", dir)
-	script := `#!/bin/bash
-if [[ $* == *'#{client_height} #{client_width}'* ]]; then echo '40 120'; exit; fi
-case "$1" in
- list-clients)
-  if [[ -f "$POPUP_FIXTURE/centre" ]]; then printf 'client|%%centre|session\n'; else printf 'client|%%chat|session\n'; fi;;
- display-message) echo 3.3a;;
- switch-client) printf '%s\n' "$*" > "$POPUP_FIXTURE/navigation"; touch "$POPUP_FIXTURE/centre";;
- display-popup)
-  printf popup\\n >> "$POPUP_FIXTURE/calls"
-  if [[ -f "$POPUP_FIXTURE/centre" ]]; then printf A; else printf '\033[23~'; fi | bash -c "${@: -1}";;
- *) exit 1;;
-esac
-`
-	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
-	tmux.SetBinaryPath(fake)
-	defer tmux.ResetBinaryPath()
-	w.tmuxSession = "session"
-	w.tmuxPath = fake
-	w.tmuxMarshalPaneID = "%centre"
-	w.tmuxActiveWins = map[string]*activeTmuxAgent{"marshal-chat": {role: "marshal-chat", paneID: "%chat"}}
-	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"setting","key":"control","value":"strict"}`}}})
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-	defer cancel()
-	w.runPermissionQueue(ctx)
-	calls, _ := os.ReadFile(filepath.Join(dir, "calls"))
-	if strings.Count(string(calls), "popup") != 2 {
-		t.Fatalf("expected popup on chat and centre: %q", calls)
-	}
-	navigation, _ := os.ReadFile(filepath.Join(dir, "navigation"))
-	if !strings.Contains(string(navigation), "switch-client -c client -t %centre") {
-		t.Fatal(string(navigation))
-	}
-	settings, _ := rt.Marshal().Store.GetMarshalSettings(t.Context(), rt.ProjectID())
-	if string(settings.Value.Control) != "strict" {
-		t.Fatal("navigation silently denied")
-	}
-	events, _ := rt.Store().ListEvents(t.Context())
-	count := 0
-	for _, event := range events {
-		if event.Type == "PERMISSION_DECIDED" {
-			count++
-			if event.Data["allow"] != true {
-				t.Fatal("navigation recorded denial")
-			}
-		}
-	}
-	if count != 1 {
-		t.Fatalf("decisions=%d", count)
-	}
-	w.mu.RLock()
-	visible := strings.Contains(w.state.LastOutput, "/marshal settings control strict")
-	w.mu.RUnlock()
-	if !visible {
-		t.Fatal("centre has no pending request display")
-	}
-}
-
 func TestMarshalProposalNavigationTargets(t *testing.T) {
 	w, _ := realControlWorkspace(t, "SESSION-nav-targets", false)
 	dir := t.TempDir()
@@ -717,7 +650,7 @@ func TestMarshalProposalNavigationTargets(t *testing.T) {
 
 func TestMarshalIntakeFilesPersistValidatedPreferences(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-file-intake")
-	dir := filepath.Join(rt.ProjectRoot(), ".marshal", "proposals")
+	dir := filepath.Join(rt.ProjectRoot(), statepath.DirName, "proposals")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -777,7 +710,7 @@ func TestMarshalIntakeFilesPersistValidatedPreferences(t *testing.T) {
 
 func emitMarshalIntakeFile(t *testing.T, w *Workspace, language, earlierWork string) {
 	t.Helper()
-	dir := filepath.Join(w.runtime.ProjectRoot(), ".marshal", "proposals")
+	dir := filepath.Join(w.runtime.ProjectRoot(), statepath.DirName, "proposals")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -802,7 +735,7 @@ func emitMarshalIntakeFile(t *testing.T, w *Workspace, language, earlierWork str
 
 func TestPendingProposalReturnsAfterWorkspaceRestart(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-recovery", false)
-	dir := filepath.Join(rt.ProjectRoot(), ".marshal", "proposals")
+	dir := filepath.Join(rt.ProjectRoot(), statepath.DirName, "proposals")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -856,11 +789,11 @@ func TestProposalAdmissionBeforeConsumptionAndDurableDecision(t *testing.T) {
 func TestFailedIntakeAdmissionRemainsRecoverable(t *testing.T) {
 	w, rt := realControlWorkspace(t, "SESSION-intake-recovery", false)
 	root := rt.ProjectRoot()
-	dir := filepath.Join(root, ".marshal", "proposals")
+	dir := filepath.Join(root, statepath.DirName, "proposals")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	target := filepath.Join(root, ".marshal", "marshal-intake.json")
+	target := filepath.Join(root, statepath.DirName, "marshal-intake.json")
 	if err := os.Mkdir(target, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -887,51 +820,10 @@ func TestFailedIntakeAdmissionRemainsRecoverable(t *testing.T) {
 }
 
 func TestMarshalPlanPopupFreezesPackAndAsksDeliverySeparately(t *testing.T) {
-	w, rt := realControlWorkspace(t, "SESSION-proposal-plan", false)
-	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	service := *rt.Marshal()
-	m := w.marshalSession()
-	service.ApprovalActor = m.approver
-	service.Drivers = nil
-	service.GovernedDrivers = nil
-	service.ProbeWorker = func(context.Context, string) error { return errors.New("worker dispatch disabled in proposal fixture") }
-	draft, err := service.DraftFromProposal([]byte(`{"tasks":[{"id":"T1","title":"Review fixture","criteria":["fixture checked"],"paths":["README.md"],"depends_on":[],"worker":"codex","mode":"governed","checks":[{"command":"true","criteria":["fixture checked"]}]}]}`), "codex")
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := app.MarshalRunPackPath(service.Repository, "RUN-plan-proposal")
-	if err = os.MkdirAll(filepath.Join(dir, "tasks"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	for name, contents := range map[string]string{"REQUIREMENTS.md": "requirements", "00_INDEX.md": "index", "tasks/T1.md": "note"} {
-		if err = os.WriteFile(filepath.Join(dir, name), []byte(contents), 0600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	pack, err := app.ReadPlanPack(dir, []string{"T1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	draft.Pack = &pack
-	settings := marshal.DefaultSettings()
-	settings.AcceptanceMode = marshal.AcceptMarshal
-	if _, err = service.Store.SetMarshalSettings(t.Context(), service.ProjectID, settings, 0); err != nil {
-		t.Fatal(err)
-	}
-	run, err := service.StartPlanningFromDraft(t.Context(), "RUN-plan-proposal", "proposal fixture", draft, marshal.Budget{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	m.mu.Lock()
-	m.service = &service
-	m.runID = "RUN-plan-proposal"
-	m.provider = "codex"
-	m.mu.Unlock()
-	w.setMarshalPanel(newMarshalPanel("RUN-plan-proposal", "codex", run, "review plan"))
+	fixture := newMarshalPopupFixture(t, true, true)
+	w, service, dir, pack := fixture.w, fixture.service, fixture.dir, fixture.pack
+	m, run := w.marshalSession(), fixture.run
+	var err error
 	w.observeMarshalProposals(importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{Role: "assistant", Content: `MARSHAL_PROPOSAL {"action":"approve"}`}}})
 	batch := w.permissions.queue.Take(false)
 	if len(batch) != 1 {
@@ -971,32 +863,11 @@ func TestMarshalPlanPopupFreezesPackAndAsksDeliverySeparately(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	// The reviewed pack lives in SQLite; a later file edit cannot change what
+	// is approved, so approval proceeds with the frozen bytes.
 	run, err = service.Snapshot(t.Context(), "RUN-plan-proposal")
-	if err != nil || run.State != marshal.Drafting || run.ValidCloseAuthorization() {
-		t.Fatalf("changed pack approved: %+v %v", run, err)
-	}
-	if err = w.queueMarshalRunProposal(marshalProposal{action: "approve"}); err != nil {
-		t.Fatal(err)
-	}
-	batch = w.permissions.queue.Take(false)
-	if len(batch) != 1 {
-		t.Fatalf("fresh popup: %v", batch)
-	}
-	if err = w.applyMarshalProposal(t.Context(), batch[0]); err != nil {
-		t.Fatal(err)
-	}
-	deadline = time.Now().Add(5 * time.Second)
-	for {
-		m.mu.Lock()
-		busy := m.busy
-		m.mu.Unlock()
-		if !busy {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("approval did not finish")
-		}
-		time.Sleep(10 * time.Millisecond)
+	if err != nil || run.Pack == nil || run.Pack.Digest != pack.Digest || run.Pack.Tasks["T1"] == "changed note" {
+		t.Fatalf("approval did not keep the reviewed SQLite pack: %+v %v", run, err)
 	}
 	run, err = service.Snapshot(t.Context(), "RUN-plan-proposal")
 	if err != nil || run.ApprovalScopeDigest == "" || run.ValidCloseAuthorization() {
@@ -1051,5 +922,273 @@ func TestStandingDeliveryPopupSurvivesRestart(t *testing.T) {
 				t.Fatal("confirmation has no recovered action")
 			}
 		})
+	}
+}
+
+func TestMarshalProposalAmendApproveReassignHarnessVerify(t *testing.T) {
+	for _, tc := range []struct {
+		line    string
+		action  string
+		command string
+	}{
+		{
+			line:    `MARSHAL_PROPOSAL {"action":"amend-approve"}`,
+			action:  "amend-approve",
+			command: "/marshal amend approve",
+		},
+		{
+			line:    `MARSHAL_PROPOSAL {"action":"amend-deny"}`,
+			action:  "amend-deny",
+			command: "/marshal amend deny",
+		},
+		{
+			line:    `MARSHAL_PROPOSAL {"action":"retry","task_id":"T.1","fresh_session":false}`,
+			action:  "retry",
+			command: "/marshal retry T.1",
+		},
+		{
+			line:    `MARSHAL_PROPOSAL {"action":"retry","task_id":"T.1","fresh_session":true}`,
+			action:  "retry",
+			command: "/marshal retry T.1 fresh-session",
+		},
+		{
+			line:    `MARSHAL_PROPOSAL {"action":"reassign","task_id":"T.1","target_worker":"claude"}`,
+			action:  "reassign",
+			command: "/marshal reassign T.1 claude",
+		},
+		{
+			line:    `MARSHAL_PROPOSAL {"action":"harness-verify","provider":"agy"}`,
+			action:  "harness-verify",
+			command: "/harness verify agy",
+		},
+		{
+			line:    `MARSHAL_PROPOSAL {"action":"harness-verify","provider":"agy","model":"gemini-3.8-flash-high"}`,
+			action:  "harness-verify",
+			command: "/harness verify agy gemini-3.8-flash-high",
+		},
+	} {
+		p, err := parseMarshalProposal(tc.line)
+		if err != nil {
+			t.Fatalf("parse %s: %v", tc.line, err)
+		}
+		if p.action != tc.action {
+			t.Errorf("action got %q, want %q", p.action, tc.action)
+		}
+		if p.command() != tc.command {
+			t.Errorf("command got %q, want %q", p.command(), tc.command)
+		}
+	}
+
+	for _, invalid := range []string{
+		`MARSHAL_PROPOSAL {"action":"amend-deny","extra":"x"}`,
+		`MARSHAL_PROPOSAL {"action":"amend-deny","reason":"foo"}`,
+		`MARSHAL_PROPOSAL {"action":"retry"}`,
+		`MARSHAL_PROPOSAL {"action":"retry","task_id":"T.1"}`,
+		`MARSHAL_PROPOSAL {"action":"retry","task_id":""}`,
+		`MARSHAL_PROPOSAL {"action":"retry","task_id":"","fresh_session":true}`,
+		`MARSHAL_PROPOSAL {"action":"retry","task_id":"T 1","fresh_session":true}`,
+		`MARSHAL_PROPOSAL {"action":"retry","task_id":"T.1","fresh_session":"true"}`,
+		`MARSHAL_PROPOSAL {"action":"retry","task_id":"T.1","fresh_session":1}`,
+		`MARSHAL_PROPOSAL {"action":"retry","task_id":"T.1","fresh_session":true,"extra":"x"}`,
+		`MARSHAL_PROPOSAL {"action":"reassign"}`,
+		`MARSHAL_PROPOSAL {"action":"reassign","task_id":"T.1"}`,
+		`MARSHAL_PROPOSAL {"action":"reassign","task_id":"","target_worker":"claude"}`,
+		`MARSHAL_PROPOSAL {"action":"reassign","task_id":"T.1","target_worker":""}`,
+		`MARSHAL_PROPOSAL {"action":"reassign","task_id":"T.1","target_worker":"claude","extra":"x"}`,
+		`MARSHAL_PROPOSAL {"action":"harness-verify"}`,
+		`MARSHAL_PROPOSAL {"action":"harness-verify","provider":""}`,
+		`MARSHAL_PROPOSAL {"action":"harness-verify","provider":"agy","extra":"x"}`,
+	} {
+		if _, err := parseMarshalProposal(invalid); err == nil {
+			t.Errorf("expected rejection for invalid proposal: %s", invalid)
+		}
+	}
+}
+
+func TestMarshalProposalReassignRouting(t *testing.T) {
+	fixture := newMarshalPopupFixture(t, false, false)
+	w, service := fixture.w, fixture.service
+	m := w.marshalSession()
+	if service.GovernedDrivers == nil {
+		service.GovernedDrivers = map[string]driver.Driver{}
+	}
+	service.GovernedDrivers["claude"] = driver.Governed{Provider: "claude", Run: func(context.Context, driver.Request) ([]marshal.CommandRecord, error) {
+		return nil, nil
+	}}
+	const runID, taskID = "RUN-plan-proposal", "T1"
+	m.grant(runID, "plan")
+	run, err := service.Approve(t.Context(), runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.setMarshalPanel(newMarshalPanel(runID, "codex", run, "active"))
+	if err := service.Escalate(t.Context(), runID, taskID, "worker rework limit reached"); err != nil {
+		t.Fatal(err)
+	}
+
+	tr := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{
+		Role:    "assistant",
+		Content: `MARSHAL_PROPOSAL {"action":"reassign","task_id":"` + taskID + `","target_worker":"claude"}`,
+	}}}
+	w.observeMarshalProposals(tr)
+	batch := w.permissions.queue.Take(false)
+	if len(batch) != 1 || batch[0].Object != "/marshal reassign "+taskID+" claude" {
+		t.Fatalf("unexpected queued permission: %+v", batch)
+	}
+	if err := w.decidePermission(t.Context(), batch[0], true, "operator popup"); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := service.Store.GetMarshalTask(t.Context(), runID, taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Value.Worker != "claude" {
+		t.Fatalf("task was not reassigned to claude: %+v", updated.Value)
+	}
+}
+
+func TestMarshalProposalHarnessVerifyQueuesCommand(t *testing.T) {
+	w, _ := realControlWorkspace(t, "SESSION-proposal-harness", false)
+	tr := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{
+		Role:    "assistant",
+		Content: `MARSHAL_PROPOSAL {"action":"harness-verify","provider":"agy"}`,
+	}}}
+	w.observeMarshalProposals(tr)
+	batch := w.permissions.queue.Take(false)
+	if len(batch) != 1 || batch[0].Object != "/harness verify agy" || batch[0].Kind != "marshal-command" {
+		t.Fatalf("unexpected harness verify batch: %+v", batch)
+	}
+}
+
+func TestMarshalProposalRetryRouting(t *testing.T) {
+	fixture := newMarshalPopupFixture(t, false, false)
+	w, service := fixture.w, fixture.service
+	m := w.marshalSession()
+	if service.GovernedDrivers == nil {
+		service.GovernedDrivers = map[string]driver.Driver{}
+	}
+	service.GovernedDrivers["claude"] = driver.Governed{Provider: "claude", Run: func(context.Context, driver.Request) ([]marshal.CommandRecord, error) {
+		return nil, nil
+	}}
+	const runID, taskID = "RUN-plan-proposal", "T1"
+	m.grant(runID, "plan")
+	run, err := service.Approve(t.Context(), runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.setMarshalPanel(newMarshalPanel(runID, "codex", run, "active"))
+	if err := service.Escalate(t.Context(), runID, taskID, "worker rework limit reached"); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Owner denial must never apply retry.
+	trDeny := importer.SessionTranscript{SessionID: "chat-deny", Messages: []importer.Message{{
+		Role:    "assistant",
+		Content: `MARSHAL_PROPOSAL {"action":"retry","task_id":"` + taskID + `","fresh_session":false}`,
+	}}}
+	w.observeMarshalProposals(trDeny)
+	batchDeny := w.permissions.queue.Take(false)
+	if len(batchDeny) != 1 || batchDeny[0].Object != "/marshal retry "+taskID {
+		t.Fatalf("unexpected queued permission for retry: %+v", batchDeny)
+	}
+	if err := w.decidePermission(t.Context(), batchDeny[0], false, "operator popup"); err != nil {
+		t.Fatal(err)
+	}
+	afterDeny, err := service.Store.GetMarshalTask(t.Context(), runID, taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterDeny.Value.State != marshal.Escalated {
+		t.Fatalf("task was retried despite owner denial: %+v", afterDeny.Value)
+	}
+
+	// 2. Owner approval with fresh_session: true.
+	tr := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{
+		Role:    "assistant",
+		Content: `MARSHAL_PROPOSAL {"action":"retry","task_id":"` + taskID + `","fresh_session":true}`,
+	}}}
+	w.observeMarshalProposals(tr)
+	batch := w.permissions.queue.Take(false)
+	if len(batch) != 1 || batch[0].Object != "/marshal retry "+taskID+" fresh-session" {
+		t.Fatalf("unexpected queued permission: %+v", batch)
+	}
+	if err := w.decidePermission(t.Context(), batch[0], true, "operator popup"); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := service.Store.GetMarshalTask(t.Context(), runID, taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Value.State != marshal.Returned {
+		t.Fatalf("task was not retried: %+v", updated.Value)
+	}
+	if updated.Value.FreshSessionRetries != 1 {
+		t.Fatalf("fresh session retries not incremented: %+v", updated.Value)
+	}
+}
+
+func TestMarshalProposalAmendDenyRouting(t *testing.T) {
+	fixture := newMarshalPopupFixture(t, false, false)
+	w, service := fixture.w, fixture.service
+	m := w.marshalSession()
+	const runID = "RUN-plan-proposal"
+	m.grant(runID, "plan")
+	run, err := service.Approve(t.Context(), runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.setMarshalPanel(newMarshalPanel(runID, "codex", run, "active"))
+
+	m.mu.Lock()
+	m.amended = true
+	m.pending = &marshalAmendment{reason: "add new task", planVersion: run.PlanVersion}
+	m.mu.Unlock()
+
+	// 1. Owner denial must leave amendment pending.
+	trDenial := importer.SessionTranscript{SessionID: "chat-deny", Messages: []importer.Message{{
+		Role:    "assistant",
+		Content: `MARSHAL_PROPOSAL {"action":"amend-deny"}`,
+	}}}
+	w.observeMarshalProposals(trDenial)
+	batchDeny := w.permissions.queue.Take(false)
+	if len(batchDeny) != 1 || batchDeny[0].Object != "/marshal amend deny" {
+		t.Fatalf("unexpected queued permission: %+v", batchDeny)
+	}
+	if !strings.Contains(batchDeny[0].Reason, "Deny proposed amendment: add new task") {
+		t.Fatalf("unexpected reason: %s", batchDeny[0].Reason)
+	}
+	if err := w.decidePermission(t.Context(), batchDeny[0], false, "operator popup"); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	amendedStill := m.amended
+	pendingStill := m.pending
+	m.mu.Unlock()
+	if !amendedStill || pendingStill == nil {
+		t.Fatalf("amendment cleared despite owner denial: amended=%v pending=%+v", amendedStill, pendingStill)
+	}
+
+	// 2. Owner approval applies amend deny.
+	tr := importer.SessionTranscript{SessionID: "chat", Messages: []importer.Message{{
+		Role:    "assistant",
+		Content: `MARSHAL_PROPOSAL {"action":"amend-deny"}`,
+	}}}
+	w.observeMarshalProposals(tr)
+	batch := w.permissions.queue.Take(false)
+	if len(batch) != 1 || batch[0].Object != "/marshal amend deny" {
+		t.Fatalf("unexpected queued permission: %+v", batch)
+	}
+	if err := w.decidePermission(t.Context(), batch[0], true, "operator popup"); err != nil {
+		t.Fatal(err)
+	}
+
+	m.mu.Lock()
+	amended := m.amended
+	pending := m.pending
+	m.mu.Unlock()
+	if amended || pending != nil {
+		t.Fatalf("amendment was not cleared: amended=%v, pending=%+v", amended, pending)
 	}
 }

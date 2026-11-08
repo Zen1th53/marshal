@@ -316,6 +316,28 @@ func EnsureDatabaseClosed(dbPath string) error {
 	return fmt.Errorf("%w: the database is open in process(es) %v; close every MARSHAL window and stop the daemon first", model.ErrConflict, holders)
 }
 
+// WaitDatabaseClosed is EnsureDatabaseClosed for a caller that has just closed
+// its own handles. Closing a database/sql pool only releases connections that
+// are idle; one still serving an in-flight query is closed when that query
+// returns, so for a moment the closing process itself still shows as a holder.
+// The check is repeated until timeout so that drain is not mistaken for a
+// second user. A holder that is still there at the deadline is refused exactly
+// as EnsureDatabaseClosed refuses it.
+func WaitDatabaseClosed(ctx context.Context, dbPath string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		err := EnsureDatabaseClosed(dbPath)
+		if err == nil || !time.Now().Before(deadline) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
+}
+
 // DatabaseInUseCheckSupported reports whether EnsureDatabaseClosed can see
 // other processes on this platform.
 func DatabaseInUseCheckSupported() bool { return inUseCheckSupported }

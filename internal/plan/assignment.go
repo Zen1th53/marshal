@@ -125,6 +125,8 @@ type Assignment struct {
 	// weaker claim than a fresh one, and the timestamp is what lets a reader
 	// tell the difference.
 	ProbedAt time.Time `json:"probed_at"`
+	// ProbeEvidenceID binds the chosen producer to the exact verified probe.
+	ProbeEvidenceID string `json:"probe_evidence_id,omitempty"`
 	// Independent marks an assignment that must not review its own work.
 	Independent bool `json:"independent,omitempty"`
 	// SharesWorkerHarness records that an independent role ended up on the
@@ -142,10 +144,14 @@ type Assignment struct {
 // switch: a fallback cannot inherit the original's approvals or independence
 // by being called a fallback.
 type Fallback struct {
-	Harness  string `json:"harness"`
-	Provider string `json:"provider"`
-	Model    string `json:"model,omitempty"`
-	Reason   string `json:"reason"`
+	ExpiresAt       *time.Time `json:"expires_at,omitempty"`
+	HarnessVersion  string     `json:"harness_version,omitempty"`
+	ProbeEvidenceID string     `json:"probe_evidence_id,omitempty"`
+	ProbedAt        *time.Time `json:"probed_at,omitempty"`
+	Harness         string     `json:"harness"`
+	Provider        string     `json:"provider"`
+	Model           string     `json:"model,omitempty"`
+	Reason          string     `json:"reason"`
 	// Revalidate names what must be re-checked after switching to this.
 	Revalidate []string `json:"revalidate,omitempty"`
 }
@@ -227,18 +233,19 @@ func AssignHarnesses(request AssignRequest) AssignmentPlan {
 
 		chosen := eligible[0]
 		assignment := Assignment{
-			Role:           member.Role,
-			Tasks:          tasksByRole[member.Role],
-			Harness:        chosen.Profile.Harness,
-			HarnessVersion: chosen.InstalledVersion,
-			Provider:       chosen.Provider,
-			Model:          modelFor(chosen),
-			Native:         nativeConfigFor(chosen, member, request.Assessment),
-			Governance:     harness.AssessGovernance(chosen.Profile, chosen.InstalledVersion, now).State,
-			Capacity:       chosen.Capacity,
-			Reason:         selectionReason(chosen, member),
-			ProbedAt:       chosen.Profile.ProbedAt,
-			Independent:    member.Independent,
+			Role:            member.Role,
+			Tasks:           tasksByRole[member.Role],
+			Harness:         chosen.Profile.Harness,
+			HarnessVersion:  chosen.InstalledVersion,
+			Provider:        chosen.Provider,
+			Model:           modelFor(chosen),
+			Native:          nativeConfigFor(chosen, member, request.Assessment),
+			Governance:      harness.AssessGovernance(chosen.Profile, chosen.InstalledVersion, now).State,
+			Capacity:        chosen.Capacity,
+			Reason:          selectionReason(chosen, member),
+			ProbedAt:        chosen.Profile.ProbedAt,
+			ProbeEvidenceID: chosen.Profile.ProbeEvidenceID,
+			Independent:     member.Independent,
 		}
 		if len(eligible) > 1 {
 			assignment.Fallback = fallbackFor(eligible[1], member)
@@ -495,6 +502,7 @@ func fallbackFor(candidate HarnessCandidate, member Member) *Fallback {
 			"verification independence, which the replacement must still satisfy")
 	}
 	sort.Strings(fallback.Revalidate)
+	pinPrivateFallbackProfile(candidate, fallback)
 	return fallback
 }
 

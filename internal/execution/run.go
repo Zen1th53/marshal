@@ -116,17 +116,20 @@ func NewRunFromHandoff(handoff plan.Handoff, now time.Time, prov RunProvenance) 
 // 04. A provider is an account/service, not necessarily an executable. Empty
 // is deliberate: Process 05 will fail closed rather than run a mock worker.
 func assignedHarness(assignments plan.AssignmentPlan, task plan.Task, route plan.Route) string {
+	if harness, bound := privateTaskAssignment(assignments, task); bound {
+		return harness
+	}
 	for _, assignment := range assignments.Assignments {
-		if string(assignment.Role) == task.Role && assignment.Harness != "" {
-			return assignment.Harness
+		if producerAssignmentAllowed(assignment) && string(assignment.Role) == task.Role && assignment.Harness != "" {
+			return executionHarnessName(assignment.Harness)
 		}
 	}
-	if len(assignments.Assignments) == 1 && assignments.Assignments[0].Harness != "" {
-		return assignments.Assignments[0].Harness
+	if len(assignments.Assignments) == 1 && producerAssignmentAllowed(assignments.Assignments[0]) && assignments.Assignments[0].Harness != "" {
+		return executionHarnessName(assignments.Assignments[0].Harness)
 	}
 	for _, assignment := range assignments.Assignments {
-		if assignment.Provider == route.Provider && assignment.Harness != "" {
-			return assignment.Harness
+		if producerAssignmentAllowed(assignment) && assignment.Provider == route.Provider && assignment.Harness != "" {
+			return executionHarnessName(assignment.Harness)
 		}
 	}
 	return ""

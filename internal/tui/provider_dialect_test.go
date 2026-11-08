@@ -51,7 +51,7 @@ for arg do
   -*)
    case "$provider:$arg" in
     codex:--last|codex:--model|codex:--sandbox|codex:--ask-for-approval|codex:--search|codex:--cd|codex:--json|codex:--ephemeral|codex:--ignore-user-config|codex:--color|codex:--skip-git-repo-check|codex:--uncommitted|codex:--base|codex:--commit|codex:-c|codex:-m|codex:-s|codex:-C|codex:--config) ;;
-    claude:--continue|claude:--resume|claude:--fork-session|claude:--model|claude:--print|claude:-p|claude:--output-format|claude:--input-format|claude:--verbose|claude:--permission-mode|claude:--include-partial-messages|claude:--no-session-persistence|claude:--append-system-prompt) ;;
+    claude:--continue|claude:--resume|claude:--fork-session|claude:--model|claude:--print|claude:-p|claude:--output-format|claude:--input-format|claude:--verbose|claude:--permission-mode|claude:--include-partial-messages|claude:--no-session-persistence|claude:--append-system-prompt|claude:--mcp-config|claude:--allowedTools) ;;
     opencode:--continue|opencode:--session|opencode:--fork|opencode:--model|opencode:--prompt|opencode:--format|opencode:--agent) ;;
     agy:--continue|agy:--conversation|agy:--model|agy:--prompt-interactive|agy:--print|agy:--output-format|agy:--add-dir) ;;
     *) reject "flag $arg";;
@@ -60,7 +60,7 @@ for arg do
 done
 while [ "$#" -gt 0 ]; do
  case "$1" in
-  -c|--config|--model|-m|--append-system-prompt|--add-dir) [ "$#" -ge 2 ] || reject 'missing option value'; shift 2;;
+  -c|--config|--model|-m|--append-system-prompt|--add-dir|--mcp-config|--allowedTools) [ "$#" -ge 2 ] || reject 'missing option value'; shift 2;;
   *) break;;
  esac
 done

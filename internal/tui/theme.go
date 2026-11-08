@@ -2,8 +2,8 @@ package tui
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // ThemeMode specifies the visual style mode.
@@ -16,23 +16,51 @@ const (
 	ThemeNoColor      ThemeMode = "no-color"
 )
 
-var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-
-// StripANSI removes all ANSI escape sequences from a string.
+// StripANSI removes all ANSI escape sequences from a string: each
+// ESC [ digits-or-semicolons letter, the regexp \x1b\[[0-9;]*[a-zA-Z]. It scans by
+// hand because it runs for nearly every cell a frame pads, and a string with
+// no escape is returned as it is.
 func StripANSI(str string) string {
-	return ansiRegex.ReplaceAllString(str, "")
+	i := strings.IndexByte(str, '\x1b')
+	if i < 0 {
+		return str
+	}
+	var b strings.Builder
+	b.Grow(len(str))
+	for i >= 0 {
+		b.WriteString(str[:i])
+		if n := csiLen(str[i:]); n > 0 {
+			str = str[i+n:]
+		} else {
+			b.WriteByte('\x1b')
+			str = str[i+1:]
+		}
+		i = strings.IndexByte(str, '\x1b')
+	}
+	b.WriteString(str)
+	return b.String()
+}
+
+// csiLen is the length of the escape sequence StripANSI removes at the
+// start of s, or 0 when s does not start with one.
+func csiLen(s string) int {
+	if len(s) < 3 || s[0] != '\x1b' || s[1] != '[' {
+		return 0
+	}
+	j := 2
+	for j < len(s) && (s[j] >= '0' && s[j] <= '9' || s[j] == ';') {
+		j++
+	}
+	if j < len(s) && (s[j] >= 'a' && s[j] <= 'z' || s[j] >= 'A' && s[j] <= 'Z') {
+		return j + 1
+	}
+	return 0
 }
 
 // RuneWidth returns the display column width of a rune on a terminal (0, 1, or 2).
 func RuneWidth(r rune) int {
 	if r == 0 || r < 32 || (r >= 0x7f && r < 0xa0) {
 		return 0 // non-printing control
-	}
-	// U+276F is a text presentation character. Terminals render the composer
-	// marker in one cell, even though it sits inside the broader Dingbats block
-	// where many emoji-style symbols are double-width.
-	if r == '❯' {
-		return 1
 	}
 	// Combining characters and zero-width spaces
 	if (r >= 0x0300 && r <= 0x036f) || (r >= 0x1ab0 && r <= 0x1aff) ||
@@ -49,8 +77,25 @@ func RuneWidth(r rune) int {
 		(r >= 0xfe30 && r <= 0xfe6f) || // CJK Compatibility Forms
 		(r >= 0xff01 && r <= 0xff60) || // Fullwidth Forms
 		(r >= 0xffe0 && r <= 0xffe6) ||
-		(r >= 0x1f300 && r <= 0x1faff) || // Misc Symbols and Pictographs, Emoticons, Transport, Supplemental Symbols
-		(r >= 0x2600 && r <= 0x27bf) { // Misc Symbols, Dingbats
+		(r >= 0x1f300 && r <= 0x1faff) { // Misc Symbols and Pictographs, Emoticons, Transport, Supplemental Symbols
+		return 2
+	}
+	if r >= 0x2600 && r <= 0x27bf {
+		return miscSymbolWidth(r)
+	}
+	return 1
+}
+
+// miscSymbolWidth is the width of a rune in Misc Symbols and Dingbats. Only
+// the East Asian Wide ones (emoji presentation) take two cells; text symbols
+// such as ✓ or ✗ take one, as wcwidth and terminals draw them.
+func miscSymbolWidth(r rune) int {
+	switch {
+	case r >= 0x2614 && r <= 0x2615, r >= 0x2648 && r <= 0x2653, r == 0x267f, r == 0x2693, r == 0x26a1,
+		r >= 0x26aa && r <= 0x26ab, r >= 0x26bd && r <= 0x26be, r >= 0x26c4 && r <= 0x26c5, r == 0x26ce,
+		r == 0x26d4, r == 0x26ea, r >= 0x26f2 && r <= 0x26f3, r == 0x26f5, r == 0x26fa, r == 0x26fd,
+		r == 0x2705, r >= 0x270a && r <= 0x270b, r == 0x2728, r == 0x274c, r == 0x274e,
+		r >= 0x2753 && r <= 0x2755, r == 0x2757, r >= 0x2795 && r <= 0x2797, r == 0x27b0, r == 0x27bf:
 		return 2
 	}
 	return 1
@@ -58,10 +103,17 @@ func RuneWidth(r rune) int {
 
 // VisibleLen returns the printable terminal column width of a string ignoring ANSI codes.
 func VisibleLen(str string) int {
-	clean := StripANSI(str)
 	w := 0
-	for _, r := range clean {
+	for i := 0; i < len(str); {
+		if str[i] == '\x1b' {
+			if n := csiLen(str[i:]); n > 0 {
+				i += n
+				continue
+			}
+		}
+		r, size := utf8.DecodeRuneInString(str[i:])
 		w += RuneWidth(r)
+		i += size
 	}
 	return w
 }

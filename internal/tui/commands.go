@@ -11,7 +11,8 @@ import (
 
 // CommandHandler dispatches interactive slash commands in the TUI workspace.
 type CommandHandler struct {
-	ws *Workspace
+	ws          *Workspace
+	memoryReads operatorMemoryReadState
 }
 
 func NewCommandHandler(ws *Workspace) *CommandHandler {
@@ -69,6 +70,18 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/egress":
 		return h.handleEgress(ctx, parts[1:])
 
+	case "/menu":
+		// /menu is the same entry point as Ctrl+N and Esc-on-an-empty-composer:
+		// it opens the frozen navigation surface only when the live ULTRA gate
+		// allows it, and refuses with the reason otherwise.
+		if len(parts) != 1 {
+			return "Usage: /menu", nil
+		}
+		if h.ws.OpenNavigation(ctx) {
+			return "Opened the navigation surface.", nil
+		}
+		return "Navigation is unavailable: this session is Standard or the surface is not released.", nil
+
 	case "/help", "/?":
 		if len(parts) == 1 {
 			return helpOverview, nil
@@ -108,8 +121,12 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 			return h.handleGoalReport(ctx, strings.ToLower(parts[1]), parts[2:])
 		case "create", "edit", "add-constraint", "rm-constraint":
 			return h.handleGoalMutation(ctx, strings.ToLower(parts[1]), goalCommandText(rawLine))
+		case "cancel":
+			return h.handleGoalCancel(ctx, goalCommandText(rawLine))
 		}
-		return "Goal mutation is unavailable in TUI for unknown verbs.\n" + goalUsage, nil
+		// "/goal <desired outcome>" is the documented short form: it creates
+		// the Goal when none is active and revises the outcome otherwise.
+		return h.handleGoalShortForm(ctx, strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(rawLine), parts[0])))
 
 	case "/mode":
 		const modeMeaning = "The mode is a supervision preference: it grants no authority, hard approvals always stay with you, and ULTRA execution is switched separately with /ultra start|stop."
@@ -674,6 +691,7 @@ func (h *CommandHandler) helpText() string {
 	}
 	return `MARSHAL Terminal Workspace Commands:
   /status                  Show canonical session, goal, team, claim, budget, and termination status
+  /menu                    Open the frozen navigation surface (same as Ctrl+N / Esc)
   /goal                    View the active goal
   /goal constraints        List bound constraints
   /goal create|edit|add-constraint|rm-constraint  Create or revise the goal as the local owner
@@ -756,7 +774,7 @@ func (h *CommandHandler) helpText() string {
   /claude [subcommand]     Full Claude control plane (status, models, doctor, exec, run)
   /opencode [subcommand]   Native OpenCode sessions (new, continue, resume, fork, cli, run)
   /agy /antigravity [subcommand] Native Antigravity sessions (new, continue, resume, cli, prompt)
-  /view [focus|side-by-side|worker|show <agent>|hide|follow|readonly|takeover] Manage worker layouts and views (/focus alias)
+  /view [chat native|tmux|focus|side-by-side|worker|show <agent>|hide|follow|readonly|takeover] Manage worker layouts and views (/focus alias)
   /takeover, /take-over    Enable interactive typing in the active worker pane
   /stop all                Stop all worker sessions while keeping MARSHAL active
   <prompt...>              Plain text runs nothing; use provider exec/run/prompt or a quoted prompt
@@ -780,7 +798,7 @@ Composer:
   Esc                      Dismiss the menu, keeping what you typed
   Paste                    Long or multi-line pastes collapse to a placeholder
                            and are restored in full when you submit
-  Select & copy            Works with the terminal's own selection`
+  Select & copy            Works with the terminal's own selection` + operatorMemoryReviewHelp()
 }
 
 // plainTextRunsNothing explains why a bare line did nothing, and names the ways

@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/permission"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
@@ -77,6 +79,10 @@ func TestEndedRunAlertIsEvidenceWithoutPermission(t *testing.T) {
 	if err := w.deliverEgressAlert(app.EgressAlert{RunID: "RUN-ended", TaskID: "TASK-ended", Endpoint: "example.test:443", Message: "Old refusal", State: "expired"}); err != nil {
 		t.Fatal(err)
 	}
+	inbox, err := os.ReadFile(filepath.Join(r.ProjectRoot(), statepath.DirName, "inbox", "marshal.md"))
+	if err != nil || !strings.Contains(string(inbox), "Run: RUN-ended") || !strings.Contains(string(inbox), "Old refusal") {
+		t.Fatalf("ended-run evidence missing from canonical temporary project inbox: %q %v", inbox, err)
+	}
 	if !w.permissions.queue.Empty() || !strings.Contains(w.state.LastOutput, "expired") {
 		t.Fatal("ended run replayed a permission")
 	}
@@ -133,6 +139,7 @@ func TestAutomaticNativeMarshalLaunchUsesCompiledOpening(t *testing.T) {
 	w := NewWorkspace(nil, "project", "session")
 	w.workDir = t.TempDir()
 	cleanupTmuxWorkspace(t, w)
+	fixtureTmuxNamespace(t, w.workDir)
 	w.InitTmux(w.workDir)
 	w.tmuxMu.Lock()
 	a := copyAgentLocked(w.tmuxActiveWins["marshal-chat"])

@@ -167,10 +167,26 @@ func NewFileRunStore(baseDir string) (*FileRunStore, error) {
 }
 
 func (f *FileRunStore) CreateRun(ctx context.Context, run ExecutionRun) error {
-	if err := f.mem.CreateRun(ctx, run); err != nil {
+	if run.RunID == "" {
+		return fmt.Errorf("%w: run ID cannot be empty", ErrRunInvalid)
+	}
+	f.mem.mu.Lock()
+	defer f.mem.mu.Unlock()
+	if _, exists := f.mem.runs[run.RunID]; exists {
+		return fmt.Errorf("%w: run %s already exists", ErrRunConflict, run.RunID)
+	}
+	if run.Version == 0 {
+		run.Version = 1
+	}
+	owned, err := cloneExecutionRun(run)
+	if err != nil {
 		return err
 	}
-	return f.persistRun(run)
+	if err := f.persistRun(owned); err != nil {
+		return err
+	}
+	f.mem.runs[run.RunID] = owned
+	return nil
 }
 
 func (f *FileRunStore) GetRun(ctx context.Context, runID string) (ExecutionRun, error) {
@@ -178,11 +194,29 @@ func (f *FileRunStore) GetRun(ctx context.Context, runID string) (ExecutionRun, 
 }
 
 func (f *FileRunStore) UpdateRun(ctx context.Context, run ExecutionRun) error {
-	if err := f.mem.UpdateRun(ctx, run); err != nil {
+	// Hold the canonical store lock through the disk commit: failed persistence
+	// must not publish a new revision, and competing CAS writers must serialize.
+	f.mem.mu.Lock()
+	defer f.mem.mu.Unlock()
+	current, exists := f.mem.runs[run.RunID]
+	if !exists {
+		return fmt.Errorf("%w: %s", ErrRunNotFound, run.RunID)
+	}
+	if run.Version != current.Version {
+		return fmt.Errorf("%w: version mismatch (got v%d, want v%d)",
+			ErrRunConflict, run.Version, current.Version)
+	}
+	run.Version++
+	run.UpdatedAt = time.Now().UTC()
+	owned, err := cloneExecutionRun(run)
+	if err != nil {
 		return err
 	}
-	updated, _ := f.mem.GetRun(ctx, run.RunID)
-	return f.persistRun(updated)
+	if err := f.persistRun(owned); err != nil {
+		return err
+	}
+	f.mem.runs[run.RunID] = owned
+	return nil
 }
 
 func (f *FileRunStore) ListRuns(ctx context.Context) ([]ExecutionRun, error) {
@@ -196,18 +230,7 @@ func (f *FileRunStore) persistRun(run ExecutionRun) error {
 	}
 
 	destPath := filepath.Join(f.baseDir, run.RunID+".json")
-	tmpPath := destPath + ".tmp"
-
-	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write run temp file: %w", err)
-	}
-
-	// Atomic rename ensures crash consistency
-	if err := os.Rename(tmpPath, destPath); err != nil {
-		return fmt.Errorf("failed to commit run file atomically: %w", err)
-	}
-
-	return nil
+	return writeRunSnapshot(destPath, data)
 }
 
 // MemoryIntentStore implements an in-memory two-phase intent store.

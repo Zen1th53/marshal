@@ -74,7 +74,16 @@ func (h *CommandHandler) handleOpenCode(ctx context.Context, args []string, line
 			return "", err
 		}
 		return h.ws.runNativeAgent(ctx, "opencode", argv)
-	case "mcp", "providers", "auth", "agent", "models", "stats", "session", "debug", "github", "pr", "attach", "acp", "serve", "web", "run":
+	case "models":
+		if len(args) == 1 && !hasHelpFlag(args) {
+			return listNativeModels(ctx, "opencode", "OPENCODE"), nil
+		}
+		argv, err := nativeArgs(strings.TrimSpace(line[len(strings.Fields(line)[0]):]))
+		if err != nil {
+			return "", err
+		}
+		return h.ws.runNativeAgent(ctx, "opencode", argv)
+	case "mcp", "providers", "auth", "agent", "stats", "session", "debug", "github", "pr", "attach", "acp", "serve", "web", "run":
 		argv, err := nativeArgs(strings.TrimSpace(line[len(strings.Fields(line)[0]):]))
 		if err != nil {
 			return "", err

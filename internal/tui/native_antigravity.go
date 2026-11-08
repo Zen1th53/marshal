@@ -2,274 +2,179 @@ package tui
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/nativehistory"
 )
-
-// Antigravity's CLI is `agy`. It keeps each conversation as its own SQLite
-// database under ~/.gemini/antigravity-cli/conversations, with a summaries
-// database beside it that names the workspace a conversation ran in.
-//
-// Like OpenCode, the history is a live database rather than an append-only
-// log, so it is read once the agent exits rather than polled while it writes.
-// Reading is read-only: MARSHAL never writes to agy's files.
 
 const antigravityBinary = "agy"
 
-// StartWithNativeAntigravity opens agy after MARSHAL owns the terminal.
 func (w *Workspace) StartWithNativeAntigravity(args []string) {
 	w.StartWithNativeCodex(args)
 	w.nativeStartupProvider = "antigravity"
 }
 
-// antigravityHome is where agy keeps its CLI state.
-func antigravityHome() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".gemini", "antigravity-cli"), nil
-}
-
 func newAntigravityHistoryWatch(root string) (*nativeHistoryWatch, error) {
-	home, err := antigravityHome()
+	dir, err := nativehistory.HistoryDir(nativehistory.Antigravity, root)
 	if err != nil {
 		return nil, err
 	}
-	watch := newNativeHistoryWatch(filepath.Join(home, "conversations"), root)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	watch := newNativeHistoryWatch(dir, root)
 	watch.antigravity = true
-	watch.antigravitySummaries = filepath.Join(home, "conversation_summaries.db")
+	watch.antigravitySummaries = filepath.Join(home, ".gemini", "antigravity-cli", "conversation_summaries.db")
 	return watch, nil
 }
 
-// antigravityConversation is one conversation database on disk.
-type antigravityConversation struct {
-	id    string
-	path  string
-	stamp string
-}
-
-// listAntigravityConversations finds the conversation databases and stamps
-// each with its size and modification times. The write-ahead log is included,
-// because a conversation's newest steps can live there before a checkpoint.
-func (w *nativeHistoryWatch) listAntigravityConversations() ([]antigravityConversation, error) {
-	entries, err := os.ReadDir(w.dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var conversations []antigravityConversation
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !strings.HasSuffix(name, ".db") {
-			continue
-		}
-		path := filepath.Join(w.dir, name)
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		stamp := fmt.Sprintf("%d:%d", info.ModTime().UnixNano(), info.Size())
-		if wal, err := os.Stat(path + "-wal"); err == nil {
-			stamp += fmt.Sprintf(":%d:%d", wal.ModTime().UnixNano(), wal.Size())
-		}
-		conversations = append(conversations, antigravityConversation{
-			id: strings.TrimSuffix(name, ".db"), path: path, stamp: stamp,
-		})
-	}
-	return conversations, nil
-}
-
-// primeAntigravity records every conversation that already exists, so the exit
-// sync imports only what this launch created or continued rather than every
-// agy conversation ever held on the machine.
 func (w *nativeHistoryWatch) primeAntigravity() error {
-	if w.authorized != nil && !w.authorized(w.dir) {
-		return nil
-	}
-	conversations, err := w.listAntigravityConversations()
+	capture, err := w.sharedCapture()
 	if err != nil {
 		return err
 	}
-	for _, conversation := range conversations {
-		w.seen[conversation.id] = conversation.stamp
-		w.indexDirty = true
-	}
-	return w.saveIndexIfChanged()
+	err = capture.Baseline(context.Background())
+	w.seen = capture.SeenIndex()
+	w.indexSaved, w.indexDirty = capture.IndexState()
+	return err
 }
 
-func (w *nativeHistoryWatch) syncAntigravity() error {
-	conversations, err := w.listAntigravityConversations()
-	if err != nil {
+// prepareAntigravityDirectLaunch establishes the baseline and sets chatFile so
+// the direct-TTY path captures the conversation launched by this run even if
+// agy has not yet recorded it in conversation_summaries.db. Conversations
+// confirmed for other projects remain skipped.
+func (w *nativeHistoryWatch) prepareAntigravityDirectLaunch(args []string) error {
+	if err := w.primeAntigravity(); err != nil {
 		return err
 	}
-	var workspaces map[string][]string
-	if w.chatFile == nil {
-		workspaces = w.antigravityWorkspaces()
+	existing := make(map[string]bool)
+	entries, err := os.ReadDir(w.dir)
+	if err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".db") {
+				existing[entry.Name()] = true
+			}
+		}
 	}
+	targetID := antigravityConversationIDFromArgs(args)
+	if targetID == "" && hasAgyFlag(args, "-c", "--continue") {
+		targetID = newestExistingAntigravityConversation(w.dir, existing)
+	}
+	var boundPath string
+	var mu sync.Mutex
 
-	var failures []error
-	for _, conversation := range conversations {
-		if w.chatFile != nil && !w.chatFile(conversation.path) {
-			continue
+	w.chatFile = func(path string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+
+		if targetID != "" {
+			id := strings.TrimSuffix(filepath.Base(path), ".db")
+			return id == targetID
 		}
-		if w.seen[conversation.id] == conversation.stamp {
-			continue
+		if boundPath != "" {
+			return path == boundPath
 		}
-		// A conversation agy recorded against another workspace belongs to
-		// that project. One with no recorded workspace is attributed by the
-		// baseline instead: it changed while this project's session ran.
-		if uris, known := workspaces[conversation.id]; known && len(uris) > 0 && !w.antigravityWorkspaceMatches(uris) {
-			w.seen[conversation.id] = conversation.stamp
-			w.indexDirty = true
-			continue
+		if existing[filepath.Base(path)] {
+			return false
 		}
-		steps, err := readAntigravitySteps(conversation.path)
-		if err != nil {
-			failures = append(failures, fmt.Errorf("read %s: %w", conversation.id, err))
-			continue
+		candidate := findNewestAntigravityCandidate(w.dir, existing)
+		if candidate != "" && path == candidate {
+			boundPath = candidate
+			return true
 		}
-		tr, err := importer.DecodeAntigravityConversation(conversation.id, steps, w.captureTools)
-		if err != nil {
-			failures = append(failures, fmt.Errorf("decode %s: %w", conversation.id, err))
-			continue
+		return false
+	}
+	return nil
+}
+
+func antigravityConversationIDFromArgs(args []string) string {
+	for i, arg := range args {
+		if arg == "--conversation" && i+1 < len(args) {
+			return args[i+1]
 		}
-		tr.CWD = w.root
-		if w.observeSession != nil {
-			if err := w.observeSession(tr); err != nil {
-				failures = append(failures, err)
-				continue
-			}
+		if strings.HasPrefix(arg, "--conversation=") {
+			return strings.TrimPrefix(arg, "--conversation=")
 		}
-		failed := false
-		for _, message := range tr.Messages {
-			one := tr
-			one.Messages = []importer.Message{message}
-			if err := w.consume(one); err != nil {
-				failures = append(failures, fmt.Errorf("import %s: %w", conversation.id, err))
-				failed = true
-				break
-			}
-		}
-		if !failed {
-			w.seen[conversation.id] = conversation.stamp
-			w.indexDirty = true
-		}
-		if len(failures) >= 3 {
+	}
+	if len(args) >= 2 && strings.EqualFold(args[0], "resume") && !strings.HasPrefix(args[1], "-") {
+		return args[1]
+	}
+	return ""
+}
+
+func hasAgyFlag(args []string, flags ...string) bool {
+	for _, arg := range args {
+		if arg == "--" {
 			break
 		}
-	}
-	return errors.Join(append(failures, w.saveIndexIfChanged())...)
-}
-
-// antigravityWorkspaces reads which workspace each conversation ran in. A
-// summaries database that cannot be read leaves every conversation to the
-// baseline rule rather than failing the sync.
-func (w *nativeHistoryWatch) antigravityWorkspaces() map[string][]string {
-	workspaces := map[string][]string{}
-	if w.antigravitySummaries == "" {
-		return workspaces
-	}
-	if _, err := os.Stat(w.antigravitySummaries); err != nil {
-		return workspaces
-	}
-	db, err := openReadOnlySQLite(w.antigravitySummaries)
-	if err != nil {
-		return workspaces
-	}
-	defer db.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	rows, err := db.QueryContext(ctx, `SELECT conversation_id, workspace_uris FROM conversation_summaries`)
-	if err != nil {
-		return workspaces
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id, uris string
-		if err := rows.Scan(&id, &uris); err != nil {
-			continue
-		}
-		workspaces[id] = splitWorkspaceURIs(uris)
-	}
-	return workspaces
-}
-
-// splitWorkspaceURIs reads the summaries column. agy writes it as a JSON array
-// of file URIs; anything that is not one is split on separators instead, so a
-// change of encoding degrades to a looser match rather than to none.
-func splitWorkspaceURIs(value string) []string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil
-	}
-	var uris []string
-	if err := json.Unmarshal([]byte(value), &uris); err == nil {
-		return uris
-	}
-	return strings.FieldsFunc(value, func(r rune) bool {
-		return r == ',' || r == ' ' || r == '\n' || r == '\t' || r == ';' ||
-			r == '[' || r == ']' || r == '"'
-	})
-}
-
-func (w *nativeHistoryWatch) antigravityWorkspaceMatches(uris []string) bool {
-	for _, raw := range uris {
-		path := raw
-		if parsed, err := url.Parse(raw); err == nil && parsed.Scheme == "file" {
-			path = parsed.Path
-		}
-		if resolved, err := filepath.EvalSymlinks(path); err == nil {
-			path = resolved
-		}
-		if filepath.Clean(path) == w.root {
-			return true
+		for _, flag := range flags {
+			if arg == flag || (strings.HasPrefix(flag, "--") && strings.HasPrefix(arg, flag+"=")) {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-// readAntigravitySteps reads a conversation's steps without writing to it.
-func readAntigravitySteps(path string) ([]importer.AntigravityStep, error) {
-	db, err := openReadOnlySQLite(path)
+func newestExistingAntigravityConversation(dir string, existing map[string]bool) string {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, err
+		return ""
 	}
-	defer db.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	rows, err := db.QueryContext(ctx, `SELECT idx, step_type, metadata, step_payload FROM steps ORDER BY idx`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var steps []importer.AntigravityStep
-	for rows.Next() {
-		var step importer.AntigravityStep
-		if err := rows.Scan(&step.Index, &step.Type, &step.Metadata, &step.Payload); err != nil {
-			return nil, err
+	var newestID string
+	var newestMod time.Time
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".db") || !existing[name] {
+			continue
 		}
-		steps = append(steps, step)
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if newestID == "" || info.ModTime().After(newestMod) || (info.ModTime().Equal(newestMod) && name > newestID+".db") {
+			newestID = strings.TrimSuffix(name, ".db")
+			newestMod = info.ModTime()
+		}
 	}
-	return steps, rows.Err()
+	return newestID
 }
 
-func openReadOnlySQLite(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+func findNewestAntigravityCandidate(dir string, existing map[string]bool) string {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, err
+		return ""
 	}
-	db.SetMaxOpenConns(1)
-	return db, nil
+	var newestPath string
+	var newestMod time.Time
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".db") {
+			continue
+		}
+		if existing[name] {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if newestPath == "" || info.ModTime().After(newestMod) || (info.ModTime().Equal(newestMod) && name > filepath.Base(newestPath)) {
+			newestPath = filepath.Join(dir, name)
+			newestMod = info.ModTime()
+		}
+	}
+	return newestPath
+}
+
+func splitWorkspaceURIs(value string) []string { return nativehistory.SplitWorkspaceURIs(value) }
+
+func (w *nativeHistoryWatch) antigravityWorkspaceMatches(uris []string) bool {
+	capture, err := w.sharedCapture()
+	return err == nil && capture.WorkspaceMatches(uris)
 }

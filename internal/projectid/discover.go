@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,6 +112,9 @@ func NewNonce() (string, error) {
 // answer is the same, which is that this directory has no identity MARSHAL can
 // rely on yet.
 func LoadBinding(marshalDir string) (Binding, bool) {
+	if filepath.Base(marshalDir) == StateDirName && statepath.Validate(filepath.Dir(marshalDir)) != nil {
+		return Binding{}, false
+	}
 	data, err := os.ReadFile(filepath.Join(marshalDir, BindingFileName))
 	if err != nil {
 		return Binding{}, false
@@ -132,6 +136,11 @@ func LoadBinding(marshalDir string) (Binding, bool) {
 // a crash partway through leaves the previous binding intact rather than a
 // truncated file that would read as "no identity".
 func SaveBinding(marshalDir string, binding Binding) error {
+	if filepath.Base(marshalDir) == StateDirName {
+		if err := statepath.Validate(filepath.Dir(marshalDir)); err != nil {
+			return err
+		}
+	}
 	if err := binding.Validate(); err != nil {
 		return err
 	}
@@ -251,7 +260,7 @@ func stillBoundElsewhere(binding Binding) bool {
 
 // StateDirName is the project-local MARSHAL state directory. It mirrors the
 // layout in internal/project.
-const StateDirName = ".marshal"
+const StateDirName = statepath.DirName
 
 // Adopt establishes an identity for a project and records it.
 //
@@ -261,6 +270,12 @@ const StateDirName = ".marshal"
 // project, which is what stops a reused directory from quietly acquiring the
 // previous occupant's identity.
 func Adopt(ctx context.Context, collector Collector, root, marshalDir string) (Binding, error) {
+	if marshalDir != statepath.Path(root) {
+		return Binding{}, fmt.Errorf("%w: project state namespace differs", ErrInvalidIdentity)
+	}
+	if err := statepath.Validate(root); err != nil {
+		return Binding{}, err
+	}
 	observed := CollectEvidence(ctx, collector, root)
 
 	if existing, found := LoadBinding(marshalDir); found {

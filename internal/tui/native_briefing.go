@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"sort"
@@ -29,8 +30,8 @@ const (
 	// injectSystemPrompt appends the briefing to the agent's system prompt. It
 	// costs no conversation turn but exists only on Claude.
 	injectSystemPrompt injectChannel = "system-prompt"
-	// injectProjectDoc writes the briefing into the project document both CLIs
-	// read on startup. Also free, but it touches a file in the worktree.
+	// injectProjectDoc is a legacy setting. Resolution redirects it to the
+	// provider's private channel without writing project source documents.
 	injectProjectDoc injectChannel = "project-doc"
 	// injectPrompt passes the briefing as the opening prompt. Always available,
 	// but the agent answers it, which spends a turn and tokens.
@@ -63,7 +64,7 @@ const marshalKickoffContinue = "Continue."
 func marshalKickoffArgs(provider string, roots ...string) []string {
 	opening := marshalKickoff
 	if len(roots) > 0 {
-		data, err := os.ReadFile(filepath.Join(roots[0], ".marshal", "marshal-intake.json"))
+		data, err := os.ReadFile(filepath.Join(roots[0], statepath.DirName, "marshal-intake.json"))
 		var intake marshalIntake
 		if err == nil && json.Unmarshal(data, &intake) == nil && strings.TrimSpace(intake.Language) != "" {
 			opening = marshalKickoffContinue
@@ -97,7 +98,14 @@ func prepareMarshalLaunch(provider, root string, args []string, protocol string)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("Marshal not started: hidden instruction delivery failed: %w", err)
 		}
-		return updated, nil, nil, nil
+		args, env, dir, err := configureMarshalMCP(provider, root, updated, nil, nil, "marshal", "")
+		if err != nil {
+			if dir != nil {
+				dir.remove()
+			}
+			return nil, nil, nil, fmt.Errorf("Marshal not started: MCP delivery failed: %w", err)
+		}
+		return args, env, dir, nil
 	}
 	dir, err := newBriefingDir(root, provider)
 	if err == nil {
@@ -111,6 +119,13 @@ func prepareMarshalLaunch(provider, root string, args []string, protocol string)
 		dir.remove()
 		return nil, nil, nil, fmt.Errorf("Marshal not started: hidden instruction delivery failed: %w", err)
 	}
+	args, env, dir, err = configureMarshalMCP(provider, root, args, env, dir, "marshal", "")
+	if err != nil {
+		if dir != nil {
+			dir.remove()
+		}
+		return nil, nil, nil, fmt.Errorf("Marshal not started: MCP delivery failed: %w", err)
+	}
 	return args, env, dir, nil
 }
 
@@ -118,7 +133,7 @@ func prepareMarshalLaunch(provider, root string, args []string, protocol string)
 // through retained peer or granted-continuation files on resume. Ordinary
 // inboxes remain unchanged; the original records remain in durable memory.
 func scrubMarshalInboxes(root string) error {
-	base := filepath.Join(root, ".marshal", "inbox")
+	base := filepath.Join(root, statepath.DirName, "inbox")
 	entries, err := os.ReadDir(base)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -149,7 +164,7 @@ func scrubMarshalInboxes(root string) error {
 // showing them as a conversation turn, so a briefing costs no turn and never
 // lands in the project's own files.
 func hiddenChannel(provider string) injectChannel {
-	switch provider {
+	switch marshalMCPProvider(provider) {
 	case "claude":
 		return injectSystemPrompt
 	case "codex":
@@ -195,7 +210,7 @@ func parseInjectChannel(value string) (injectChannel, error) {
 }
 
 func injectChannelPath(root string) string {
-	return filepath.Join(root, ".marshal", "inject-channel")
+	return filepath.Join(root, statepath.DirName, "inject-channel")
 }
 
 func loadInjectChannel(root string) injectChannel {
@@ -222,6 +237,9 @@ func saveInjectChannel(root string, channel injectChannel) error {
 // actually accept. A configured channel a provider does not support falls back
 // rather than silently delivering nothing, and the note says so out loud.
 func resolveInjectChannel(provider string, configured injectChannel) (injectChannel, string) {
+	if configured == injectProjectDoc {
+		return hiddenChannel(provider), "Project document injection is retired; briefing uses the provider's private channel."
+	}
 	switch configured {
 	case injectOff:
 		return injectOff, ""
@@ -421,11 +439,7 @@ func applyBriefing(provider, root string, args []string, briefing string, channe
 			fmt.Sprintf("Briefing injected into the system prompt (%d bytes).", len(briefing)), nil
 
 	case injectProjectDoc:
-		path := filepath.Join(root, projectDocName(provider))
-		if err := writeProjectDocBlock(path, briefing); err != nil {
-			return args, "", err
-		}
-		return args, fmt.Sprintf("Cross-agent briefing written to %s (%d bytes).", projectDocName(provider), len(briefing)), nil
+		return args, "", fmt.Errorf("project document injection is retired; resolve the private briefing channel before launch")
 
 	case injectPrompt:
 		closing := "Acknowledge in one line, then wait for the operator."

@@ -78,9 +78,9 @@ func TestPlanPackTravelsFromChatToWorkerBrief(t *testing.T) {
 	}
 }
 
-// The person may correct the pack before approving; approval binds the text
-// as it stands then, not as the Marshal first wrote it.
-func TestApprovalBindsThePackAsThePersonLeftIt(t *testing.T) {
+// Proposal imports the source pack into SQLite. Later edits to its private
+// Markdown copy do not replace the revision presented for approval.
+func TestApprovalUsesProposalTimeSQLitePack(t *testing.T) {
 	ctx := context.Background()
 	s, repo := marshalFixture(t, 1)
 	writePlanPack(t, repo, map[string]string{"a": "note"})
@@ -107,14 +107,62 @@ func TestApprovalBindsThePackAsThePersonLeftIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if run.Pack.Requirements != "edited by the person\n" || run.Pack.Digest == pack.Digest {
-		t.Fatalf("approval did not bind the edited pack: %+v", run.Pack)
+	if run.Pack.Requirements != pack.Requirements || run.Pack.Digest != pack.Digest {
+		t.Fatalf("approval did not use the proposal-time pack: %+v", run.Pack)
 	}
 	if err := os.Remove(filepath.Join(dir, "tasks", "a.md")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.refreshPlanPack("run", run); err == nil {
-		t.Fatal("a pack that lost a task's note was accepted")
+	stored, err := s.refreshPlanPack("run", run)
+	if err != nil || stored == nil || stored.Digest != pack.Digest || stored.Tasks["a"] != "note" {
+		t.Fatalf("filesystem edit changed the canonical SQLite pack: %+v %v", stored, err)
+	}
+	bc, err := s.briefContext(ctx, "run", run, run.Tasks[0])
+	if err != nil || bc.Note != "note" {
+		t.Fatalf("dispatch context did not use the approved SQLite pack: %+v %v", bc, err)
+	}
+}
+
+func TestPostApprovalPlanFileEditDoesNotChangeApprovedPack(t *testing.T) {
+	ctx := context.Background()
+	s, repo := marshalFixture(t, 1)
+	writePlanPack(t, repo, map[string]string{"a": "approved task note"})
+	dir, err := s.TakePlanPack("run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pack, err := ReadPlanPack(dir, []string{"a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.Model.Draft(ctx, "write files")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Pack = &pack
+	if _, err := s.StartPlanningFromDraft(ctx, "run", "write files", d, marshal.Budget{}); err != nil {
+		t.Fatal(err)
+	}
+	approved, err := s.Approve(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, "REQUIREMENTS.md"), []byte("changed after approval\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, "tasks", "a.md"), []byte("changed task note\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.Snapshot(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.ApprovalScopeDigest != approved.ApprovalScopeDigest || current.Pack == nil || current.Pack.Digest != pack.Digest || current.Pack.Tasks["a"] != "approved task note" {
+		t.Fatalf("post-approval file edits changed the approved SQLite revision: %+v", current)
+	}
+	bc, err := s.briefContext(ctx, "run", current, current.Tasks[0])
+	if err != nil || bc.Note != "approved task note" || bc.Requirements != pack.Requirements {
+		t.Fatalf("dispatch read the edited plan files: %+v %v", bc, err)
 	}
 }
 
@@ -146,6 +194,30 @@ func TestPlanPackRefusesWhatDoesNotMatchTheTasks(t *testing.T) {
 		if _, err := ReadPlanPack(dir, []string{"a", "b"}); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// A corrected draft for the same run is taken again: the new pack replaces the
+// taken one and the earlier pack is retained beside it.
+func TestTakePlanPackAgainForSameRunReplacesAndRetains(t *testing.T) {
+	s, repo := marshalFixture(t, 1)
+	writePlanPack(t, repo, map[string]string{"a": "first draft"})
+	first, err := s.TakePlanPack("run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writePlanPack(t, repo, map[string]string{"a": "second draft"})
+	second, err := s.TakePlanPack("run")
+	if err != nil || second != first {
+		t.Fatalf("retake = %q, %v; want %q", second, err, first)
+	}
+	pack, err := ReadPlanPack(second, []string{"a"})
+	if err != nil || !strings.Contains(pack.Tasks["a"], "second draft") {
+		t.Fatalf("current pack = %+v, %v", pack.Tasks, err)
+	}
+	old, err := ReadPlanPack(first+".superseded-1", []string{"a"})
+	if err != nil || !strings.Contains(old.Tasks["a"], "first draft") {
+		t.Fatalf("retained pack = %+v, %v", old.Tasks, err)
 	}
 }
 

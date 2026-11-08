@@ -124,6 +124,7 @@ func TestA02TypedHandoffMigrationPreservesLegacyHandoffs(t *testing.T) {
 		}
 	}
 
+	resetProjectContext95HistoricalFixture(t, st)
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("second Migrate: %v", err)
 	}

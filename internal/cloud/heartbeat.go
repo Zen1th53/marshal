@@ -2,7 +2,6 @@ package cloud
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 )
@@ -18,9 +17,8 @@ const heartbeatInterval = 2 * time.Minute
 
 // Heartbeat reports presence for a live ULTRA session.
 //
-// It exists only while ULTRA does. Standard sessions send nothing, because
-// presence is a fact about entitlement usage and a Standard user has not asked
-// the Cloud for anything.
+// This is the ULTRA authority heartbeat. Both modes send operational telemetry
+// separately; opting out of telemetry does not disable lease validation.
 type Heartbeat struct {
 	client   *Client
 	gate     *Gate
@@ -81,30 +79,26 @@ func (h *Heartbeat) Run(ctx context.Context) {
 		case <-ticker.C:
 		}
 
-		if !h.gate.Entitled() {
-			// No entitlement, nothing to report presence for. Returning rather
-			// than idling means a degraded session stops beating for good.
+		if !h.beat(ctx) {
 			return
 		}
-
-		err := h.client.Heartbeat(ctx, h.state, h.session)
-		if err == nil {
-			h.reporter.Record(KindHeartbeat, TelemetryUltra, "")
-			continue
-		}
-
-		h.reporter.Record(KindErrorClass, TelemetryUltra, ClassifyError(err))
-
-		// A refusal means the server has ended this session — revoked, expired
-		// or unknown. This is how a revocation reaches a client that is already
-		// running, so it degrades rather than retrying.
-		if errors.Is(err, ErrRefused) {
-			h.gate.Degrade()
-			h.reporter.Record(KindModeChange, TelemetryStandard, "")
-			return
-		}
-		// Unreachable is transient: keep the lease and try again next tick.
 	}
+}
+
+// beat returns false once the connected authority is lost.
+func (h *Heartbeat) beat(ctx context.Context) bool {
+	if !h.gate.Entitled() {
+		return false
+	}
+	err := h.client.Heartbeat(ctx, h.state, h.session)
+	if err == nil {
+		h.reporter.Record(KindHeartbeat, TelemetryUltra, "")
+		return true
+	}
+	h.reporter.Record(KindErrorClass, TelemetryUltra, ClassifyError(err))
+	h.gate.DegradeBecause(err)
+	h.reporter.Record(KindModeChange, TelemetryStandard, "")
+	return false
 }
 
 // Stop ends the heartbeat.

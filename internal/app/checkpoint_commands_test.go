@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"slices"
@@ -115,7 +116,7 @@ func TestRestoreRefusedWhileARunIsActive(t *testing.T) {
 		t.Fatal(err)
 	}
 	binding, _ := projectid.LoadBinding(filepath.Join(repo.Path(), projectid.StateDirName))
-	store, err := execution.NewFileRunStore(filepath.Join(repo.Path(), ".marshal", "execution", "runs"))
+	store, err := execution.NewFileRunStore(filepath.Join(repo.Path(), statepath.DirName, "execution", "runs"))
 	if err != nil {
 		t.Fatal(err)
 	}

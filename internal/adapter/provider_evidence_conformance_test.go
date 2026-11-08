@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/adapter/antigravity"
 	"github.com/Zen1th53/marshal/internal/adapter/claude"
 	"github.com/Zen1th53/marshal/internal/adapter/codex"
-	"github.com/Zen1th53/marshal/internal/adapter/gemini"
 	"github.com/Zen1th53/marshal/internal/adapter/opencode"
 	"github.com/Zen1th53/marshal/internal/evidence"
 	"github.com/Zen1th53/marshal/internal/model"
@@ -25,9 +25,8 @@ func (providerRunner) Run(_ context.Context, command adapter.Command) (adapter.P
 {"type":"item.completed","item":{"type":"agent_message","text":"provider output"}}`
 	case "claude":
 		output = `{"session_id":"claude-session","result":"provider output"}`
-	case "gemini":
-		output = `{"type":"session/init","session_id":"gemini-session"}
-{"type":"final_result","text":"provider output"}`
+	case "agy":
+		output = `{"conversation_id":"agy-session","status":"SUCCESS","response":"provider output"}`
 	case "opencode":
 		output = `{"session_id":"opencode-session","result":"provider output"}`
 	}
@@ -47,7 +46,7 @@ func TestProvidersProduceTheSameEvidenceMetadataContract(t *testing.T) {
 	}{
 		{name: "codex", build: func() adapter.Adapter { return codex.New("codex", providerRunner{}) }},
 		{name: "claude", build: func() adapter.Adapter { return claude.New("claude", providerRunner{}) }},
-		{name: "gemini", build: func() adapter.Adapter { return gemini.New("gemini", providerRunner{}) }},
+		{name: "antigravity", build: func() adapter.Adapter { return antigravity.New("agy", providerRunner{}) }},
 		{name: "opencode", build: func() adapter.Adapter { return opencode.New("opencode", providerRunner{}) }},
 	}
 
@@ -109,7 +108,7 @@ func TestProvidersProduceTheSameEvidenceMetadataContract(t *testing.T) {
 }
 
 func TestProviderEvidenceDoesNotGrantTrust(t *testing.T) {
-	providers := []string{"codex", "claude", "gemini", "opencode"}
+	providers := []string{"codex", "claude", "antigravity", "opencode"}
 	for _, provider := range providers {
 		t.Run(provider, func(t *testing.T) {
 			metadata := map[string]string{"adapter": provider, "claim": "verified"}

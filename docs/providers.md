@@ -1,55 +1,103 @@
-# Provider adapters
+# Providers and Harness Verification
 
-MARSHAL implements five runtime adapters (`codex`, `claude`, `opencode`, `gemini`, `antigravity`). Provider availability and
-release verification are separate facts.
+Marshal orchestrates multiple AI coding agents across your project. Instead of relying on a single provider for planning, execution, and verification, Marshal coordinates different CLIs to ensure balanced, independently verified work.
 
-| Adapter path | Binary | Implemented | Adapter/model E2E | Canonical Runtime E2E |
-|---|---|---:|---|---|
-| Codex | `codex` | Yes | NOT_RUN | NOT_RUN |
-| OpenCode + DeepSeek V4 | `opencode` | Yes | PASS — Flash and Pro | NOT_RUN — live governed provider access not qualified |
-| OpenCode + Ollama | `opencode` | Yes | FAIL — tested local models did not complete the strict proof task | NOT_RUN — live governed provider access not qualified |
-| Gemini CLI | `gemini` | Yes | NOT_RUN | NOT_RUN |
-| Claude Code | `claude` | Yes | NOT_RUN | NOT_RUN |
-| Antigravity | `antigravity` | Yes | NOT_RUN | NOT_RUN |
+> [!WARNING]
+> **Host Execution Notice**: Worker processes execute directly on your host machine with your user privileges and without a sandbox. Ensure you trust the goals and instructions given to each provider.
 
-The release notes report which binaries were locally probed. A successful
-`--version` or help probe does not establish credentials, model compatibility,
-remote service access, or successful task execution.
+---
 
-Probe providers without making an E2E claim:
+## Supported Providers
+
+Marshal supports four runtime providers out of the box:
+
+| Provider | Binary | Integration Role | Authentication / Setup |
+|---|---|---|---|
+| **Claude Code** | `claude` | Marshal, Worker, Reviewer, Verifier | Authenticate via native Anthropic CLI (`claude login`) |
+| **OpenAI Codex** | `codex` | Marshal, Worker, Reviewer, Verifier | Authenticate via native OpenAI CLI (`codex`) |
+| **OpenCode** | `opencode` | Worker, Reviewer, Verifier | Configure provider keys in OpenCode configuration |
+| **Antigravity** | `agy` | Marshal, Worker, Reviewer, Verifier | Authenticate via native Antigravity CLI (`agy login`) |
+
+Marshal uses the CLIs already installed on your system. It does not bundle agent binaries, proxy credentials, or manage API billing.
+
+---
+
+## Harness Verification
+
+Before assigning tasks to an agent provider, Marshal runs a **harness verification probe**.
+
+### What Verification Proves
+
+The harness probe tests the provider binary to verify:
+1. **Binary Availability**: The command is present on `$PATH` and executable.
+2. **Interactive & Headless Protocol**: The provider can accept prompts, run non-interactively, and emit structured output.
+3. **Probe Integrity**: The model responds with the exact verification handshake string (`MARSHAL_PROBE_OK`).
+4. **Tool Support**: File manipulation and Git command capabilities operate properly.
+
+If a probe times out, exits with a non-zero status, or produces invalid output, the provider is marked `unverified` or `limited` and will not be assigned tasks until re-verified.
+
+---
+
+## How to Verify Providers
+
+You can verify providers through several interfaces:
+
+### 1. On the Board (TUI)
+
+- **First-Use Card**: When opening a fresh project, press **`v`** to arm verification for the next unverified provider shown in the header chips. Press **`Enter`** to run the probe.
+- **Providers View**: Press **`4`** to switch to the Providers view, select a provider with `j` / `k`, and press **`v`** then **`Enter`** to verify it.
+
+### 2. From the TUI Command Line
+
+Type `/` on the Board to open the command prompt:
+
+```text
+/harness verify codex
+/harness verify claude claude-3-7-sonnet
+/harness verify-native agy
+/provider status
+```
+
+### 3. From the Terminal (CLI)
+
+Run diagnostics before opening the TUI:
 
 ```bash
+# Run comprehensive checks including provider probes
 marshal doctor --probe-providers
-marshal adapters
+
+# Probe an individual provider adapter
+marshal adapter probe agy
 marshal adapter probe codex
-marshal adapter probe opencode
-marshal adapter probe gemini
 marshal adapter probe claude
-marshal adapter probe antigravity
+marshal adapter probe opencode
 ```
 
-Provider execution is explicit:
+---
 
-```bash
-marshal run TASK-001 --adapter codex
-marshal run TASK-001 --adapter opencode --model MODEL
+## Model Selection and Configuration
+
+Marshal allows you to configure which models each provider uses:
+
+```text
+# Show current model selection
+/model show
+
+# Select a model for a specific harness
+/model select claude claude-3-7-sonnet
+/model select codex o3-mini
+/model select agy gemini-3.8-flash-high
+
+# List available models
+/models
 ```
 
-Governed provider runs use a per-run Unix proxy while Bubblewrap keeps
-`--unshare-net`. Only the selected API endpoint is allowed by default; extra
-endpoints need operator grants through `/egress`. Missing Bubblewrap network
-isolation or trusted socat fails closed with `NET_ENFORCEMENT_UNAVAILABLE`.
-Native sessions opened directly are out of scope.
-The OpenCode results above are direct adapter qualification, outside the
-canonical Runtime/MCP/A2A chain; they are not represented as Runtime E2E.
+---
 
-Adapters do not weaken MARSHAL policy or sandbox requirements. Missing
-binaries, credentials, required flags, Bubblewrap, or enforceable egress cause
-the run to fail or degrade according to the documented boundary; they are not
-converted into a false PASS.
+## Handling Provider Limits and Failover
 
-The compatibility contracts in [`adapters/MATRIX.json`](../adapters/MATRIX.json)
-also describe tools such as Aider and Crush. Those entries are interoperability
-contracts, not runtime adapters.
-
-See [OpenCode and Ollama](providers/opencode-ollama.md) for local setup notes.
+If an AI provider encounters rate limits, billing caps, or network errors during a run:
+1. Marshal records the failure reason in `.marshal/state.db`.
+2. The affected provider lane is marked as limited.
+3. If an alternate verified provider is available, Marshal reassigns pending tasks according to the approved plan.
+4. If no eligible provider remains, the run pauses with an amber **`NEEDS YOU`** alert on the Board, allowing you to re-verify, select a different model, or resolve the quota before resuming.

@@ -58,6 +58,7 @@ func TestRegistrySurfacesAreWellFormed(t *testing.T) {
 // This runs in-process so it fails in seconds during development; the PTY suite
 // proves the same property through a real terminal.
 func TestEveryRegisteredCommandIsDispatched(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "://invalid")
 	ctx := context.Background()
 
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "parity.db"))
@@ -117,6 +118,7 @@ func TestNoFabricatedModelsInDiscovery(t *testing.T) {
 		"gpt-4o", "o3-mini", "o1",
 		"deepseek-coder",
 		"gemini-2.5-pro", "gemini-2.5-flash",
+		"gemini-3.8-flash-high", "gemini-3.8-flash-medium",
 	}
 
 	for _, p := range DiscoverTeamParticipants(nil) {

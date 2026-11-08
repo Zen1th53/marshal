@@ -39,7 +39,7 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 			}
 			cleanupTmuxWorkspace(t, w)
 			root := w.providerRoot()
-			w.tmuxSession = "test-session"
+			w.tmuxSession = fixtureTmuxNamespace(t, w.providerRoot())
 			w.tmuxMarshalWin = "marshal"
 			w.tmuxPath = "tmux"
 			w.tmuxActiveWins = make(map[string]*activeTmuxAgent)
@@ -86,11 +86,11 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 			data, _ := os.ReadFile(logFile)
 			log := string(data)
 			kill := strings.Index(log, "kill-pane -t "+oldPane)
-			launch := strings.Index(log, "new-window -d -t test-session -n "+old.window)
+			launch := strings.Index(log, "new-window -d -t "+w.tmuxSession+" -n "+old.window)
 			if kill < 0 || launch < kill {
 				t.Fatalf("stop/launch order: %s", log)
 			}
-			if strings.Contains(log, "select-window -t test-session:"+old.window) || !strings.Contains(log, "select-window -t test-session:marshal") {
+			if strings.Contains(log, "select-window -t "+w.tmuxSession+":"+old.window) || !strings.Contains(log, "select-window -t "+w.tmuxSession+":"+w.tmuxMarshalWin) {
 				t.Fatalf("control centre focus lost: %s", log)
 			}
 			if err := os.WriteFile(logFile, nil, 0600); err != nil {
@@ -116,6 +116,7 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 			reattached := NewWorkspace(nil, "project", "test-session")
 			reattached.workDir = root
 			cleanupTmuxWorkspace(t, reattached)
+			fixtureTmuxNamespace(t, root)
 			reattached.InitTmux(root)
 			if a := reattached.tmuxActiveWins["marshal-chat"]; a == nil || a.provider != "claude" {
 				t.Fatal("reattach lost provider")
@@ -123,7 +124,7 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 			// A new workspace with no surviving chat uses the persisted choice.
 			fresh := NewWorkspace(nil, "project", "test-session")
 			fresh.workDir = root
-			fresh.tmuxSession = "test-session"
+			fresh.tmuxSession = fixtureTmuxNamespace(t, fresh.providerRoot())
 			fresh.tmuxActiveWins = make(map[string]*activeTmuxAgent)
 			cleanupTmuxWorkspace(t, fresh)
 			if err := fresh.startMarshalChat(context.Background(), root); err != nil {
@@ -166,7 +167,7 @@ func TestMarshalChatProviderAliasReusesPane(t *testing.T) {
 	_, logFile := setupFakeTmux(t)
 	w := NewWorkspace(nil, "project", "test-session")
 	root := t.TempDir()
-	w.tmuxSession = "test-session"
+	w.tmuxSession = fixtureTmuxNamespace(t, w.providerRoot())
 	window := tmux.ChatWindowName(root)
 	if err := tmux.NewWindow(context.Background(), w.tmuxSession, window, root, nil, []string{"echo", "chat"}); err != nil {
 		t.Fatal(err)
@@ -213,6 +214,7 @@ func TestMarshalChatStartupUsesPersistedProvider(t *testing.T) {
 	if err := saveChatBinding(root, chatBinding{Provider: "codex", SessionID: "old-codex"}); err != nil {
 		t.Fatal(err)
 	}
+	fixtureTmuxNamespace(t, root)
 	w.InitTmux(root)
 	w.tmuxMu.Lock()
 	chat := copyAgentLocked(w.tmuxActiveWins["marshal-chat"])

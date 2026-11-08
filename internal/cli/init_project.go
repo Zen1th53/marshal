@@ -43,7 +43,7 @@ func initializeProject(ctx context.Context, root string) (project.Layout, error)
 		if err := runGit(ctx, layout.Root, append([]string{"add", "--"}, files...)...); err != nil {
 			return layout, err
 		}
-		if err := runGit(ctx, layout.Root, append([]string{"commit", "--only", "-m", "Initialize MARSHAL project", "--"}, files...)...); err != nil {
+		if err := runGitCommit(ctx, layout.Root, append([]string{"--only", "-m", "Initialize MARSHAL project", "--"}, files...)...); err != nil {
 			return layout, fmt.Errorf("record MARSHAL project defaults: %w", err)
 		}
 	}
@@ -77,13 +77,14 @@ func excludeRuntimeState(ctx context.Context, root string) error {
 		return err
 	}
 	// Keep the rule last: an earlier match can be overridden by a negation.
-	if strings.HasSuffix("\n"+string(data), "\n/.marshal/\n") {
+	rules := "/.marshal/\n/.marshal-extreme/\n"
+	if strings.HasSuffix("\n"+string(data), "\n"+rules) {
 		return nil
 	}
 	if len(data) > 0 && data[len(data)-1] != '\n' {
 		data = append(data, '\n')
 	}
-	data = append(data, []byte("/.marshal/\n")...)
+	data = append(data, []byte(rules)...)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}

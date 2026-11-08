@@ -6,6 +6,7 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	boardmodel "github.com/Zen1th53/marshal/internal/tui/board/model"
 )
 
 // MarshalPanel is the live view of the active Marshal run. It is a snapshot
@@ -22,6 +23,12 @@ type MarshalPanel struct {
 	// Note is the latest thing the operator should know: what is happening,
 	// or what the run is waiting for.
 	Note string
+	// Board is the same run as the Board read model: projected from the run
+	// here, then tailed with the run's decision events when published.
+	Board boardmodel.Board
+	// run is the snapshot the Board is projected from, kept so the Board can
+	// be projected again when its workers change without reading the store.
+	run marshal.Run
 }
 
 // MarshalTaskRow is one task as the panel shows it.
@@ -40,7 +47,7 @@ type MarshalTaskRow struct {
 
 // newMarshalPanel snapshots a run for the panel.
 func newMarshalPanel(runID, provider string, run marshal.Run, note string) *MarshalPanel {
-	p := &MarshalPanel{RunID: runID, Provider: provider, State: run.State, Tier: run.Tier, Budget: run.Budget, Note: note}
+	p := &MarshalPanel{RunID: runID, Provider: provider, State: run.State, Tier: run.Tier, Budget: run.Budget, Note: note, Board: boardmodel.Project(boardmodel.Snapshot{RunID: runID, Run: run}, nil), run: run}
 	for _, t := range run.Tasks {
 		returns := 0
 		for _, n := range t.ReturnsByAgent {

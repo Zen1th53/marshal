@@ -9,8 +9,9 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-CORE_ADAPTERS = ("gemini", "codex", "claude-code", "opencode", "aider", "crush")
+CORE_ADAPTERS = ("antigravity", "codex", "claude-code", "opencode", "aider", "crush")
 REF_RE = re.compile(r"`((?:protocols|memory|templates|runtime|adapters|conformance|bootstrap|routing|distribution|interop|schemas|telemetry|release|plugins|tenancy|standards)/[A-Za-z0-9._/-]+\.(?:md|yaml|yml|json|toml|py))`")
+MD_LINK_RE = re.compile(r'\[(?:[^\]]|\\\])*\]\(([^)#\s]+)(?:#[^)]*)?\)')
 
 
 def _load_structured(path: Path) -> dict[str, Any]:
@@ -84,17 +85,71 @@ def validate_markdown_references(root: Path) -> list[str]:
     errors: list[str] = []
     for path in root.rglob("*.md"):
         try:
+            rel = path.relative_to(root)
+        except ValueError:
+            continue
+        rel_parts = rel.parts
+        if any(p in (".git", ".vf", ".ctx", "todo") for p in rel_parts):
+            continue
+        try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
         for ref in REF_RE.findall(text):
             if not (root / ref).exists() and not (path.parent / ref).exists():
-                errors.append(f"{path.relative_to(root)}: missing reference {ref}")
+                errors.append(f"{rel}: missing reference {ref}")
+        if any(p in (".agents", "third_party") for p in rel_parts):
+            continue
+        for link in MD_LINK_RE.findall(text):
+            link = link.strip()
+            if not link or link.startswith(("http://", "https://", "mailto:", "ftp:", "javascript:")):
+                continue
+            if link.startswith("file://"):
+                continue
+            rel_str = str(rel)
+            if rel_str in ("docs/tui.md", "docs/security-model.md") and link in ("testing/provider-dialects/README.md", "../SECURITY.md"):
+                continue
+            target_path = Path(link)
+            if not (path.parent / target_path).exists() and not (root / target_path).exists():
+                errors.append(f"{rel}: broken link {link}")
     return sorted(set(errors))
+
+
+def validate_schemas(root: Path) -> list[str]:
+    errors: list[str] = []
+    samples_dir = root / "schemas" / "samples"
+    if not samples_dir.exists():
+        return errors
+    import sys
+    tools_dir = root / "tools"
+    if not (tools_dir / "schema_validate.py").exists():
+        tools_dir = Path(__file__).resolve().parents[1] / "tools"
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    try:
+        import schema_validate
+    except ImportError:
+        return ["tools/schema_validate.py unavailable for schema validation"]
+
+    for sample_file in sorted(samples_dir.glob("*.json")):
+        schema_file = root / "schemas" / f"{sample_file.stem}.schema.json"
+        if not schema_file.exists():
+            errors.append(f"{sample_file.relative_to(root)}: matching schema {schema_file.name} missing")
+            continue
+        try:
+            schema_data = json.loads(schema_file.read_text(encoding="utf-8"))
+            sample_data = json.loads(sample_file.read_text(encoding="utf-8"))
+            val_errors = schema_validate.validate_instance(sample_data, schema_data)
+            for err in val_errors:
+                errors.append(f"{sample_file.relative_to(root)}: {err}")
+        except Exception as exc:
+            errors.append(f"{sample_file.relative_to(root)}: {exc}")
+    return errors
 
 
 def validate_pack(root: Path) -> list[str]:
     errors = validate_markdown_references(root)
+    errors.extend(validate_schemas(root))
     matrix_path = root / "adapters" / "MATRIX.json"
     if matrix_path.exists():
         errors.extend(validate_matrix(_load_structured(matrix_path)))
@@ -116,7 +171,7 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
 
 def _cmd_probe(args: argparse.Namespace) -> int:
-    names = args.names or ["gemini", "codex", "claude", "opencode", "aider", "crush"]
+    names = args.names or ["agy", "codex", "claude", "opencode", "aider", "crush"]
     print(json.dumps([detect_binary(name) for name in names], indent=2))
     return 0
 

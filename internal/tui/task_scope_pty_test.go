@@ -13,11 +13,13 @@ func TestPTYTaskScopeLabels(t *testing.T) {
 	project := initProject(t, bin)
 	t.Chdir(project)
 	terminal := startFrozenTUIInProject(t, 40, 180, bin, project, "tui", "SESSION-pty-task-scope")
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/tasks --scope active")
 	terminal.mustSee("the active scope is unavailable")
 	terminal.sendLine("/task create scoped work")
-	terminal.mustSee("scoped work")
+	// The input line is echoed before the asynchronous command finishes. Wait
+	// for the persisted task acknowledgement before sending the next command.
+	terminal.mustSee("ready (revision 1, attempt 1): scoped work")
 	terminal.sendLine("/tasks")
 	terminal.mustSee("scope: project, all tasks in this project")
 }

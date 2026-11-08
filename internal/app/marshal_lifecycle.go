@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -31,10 +32,24 @@ type MarshalDispatch struct {
 }
 
 func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief string) (MarshalDispatch, error) {
+	return s.dispatchWithBrief(ctx, runID, taskID, brief, nil)
+}
+
+func (s *MarshalService) dispatchWithBrief(ctx context.Context, runID, taskID, brief string, builder MarshalBrief) (dispatch MarshalDispatch, retErr error) {
+	if s.RequireArchitectureAcceptance != nil {
+		if err := s.RequireArchitectureAcceptance(ctx); err != nil {
+			return MarshalDispatch{}, err
+		}
+	}
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
+	run, rev, err = s.observeMarshalCompatibility(ctx, runID, run, rev)
+	if err != nil {
+		return MarshalDispatch{}, err
+	}
+
 	if run.State != marshal.Approved && run.State != marshal.Dispatching && run.State != marshal.Reviewing && run.State != marshal.Merging {
 		return MarshalDispatch{}, errors.New("dispatch is paused")
 	}
@@ -46,14 +61,36 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		return MarshalDispatch{}, model.ErrNotFound
 	}
 	t := &run.Tasks[i]
+	if err := validateMarshalTaskIdentity(runID, *t); err != nil {
+		return MarshalDispatch{}, err
+	}
 	if t.State != marshal.Queued && t.State != marshal.Returned && t.State != marshal.Reassigned {
 		return MarshalDispatch{}, errors.New("task is not ready")
+	}
+	// A governed worker receives its plan note inside a bounded brief; one
+	// that cannot fit is refused here rather than launched without it.
+	if t.Mode == marshal.Governed {
+		if err := validateGovernedPlanNotes(run.Pack, []marshal.Task{*t}); err != nil {
+			return MarshalDispatch{}, err
+		}
+	}
+	if s.requiredContextDispatch != nil {
+		if err := s.requiredContextDispatch(ctx, run, *t); err != nil {
+			return MarshalDispatch{}, err
+		}
 	}
 	for _, dep := range t.DependsOn {
 		j := taskIndex(run, dep)
 		if j < 0 || run.Tasks[j].State != marshal.Merged {
 			return MarshalDispatch{}, errors.New("dependency is not merged")
 		}
+	}
+	rev, err = s.admitProviderDispatch(ctx, runID, &run, rev, i, brief)
+	if err != nil {
+		return MarshalDispatch{}, err
+	}
+	if err = s.executionAdmission(ctx, runID, taskID, run); err != nil {
+		return MarshalDispatch{}, err
 	}
 	taskUsage, planUsage, err := s.marshalUsage(ctx, runID, taskID)
 	if err != nil {
@@ -67,24 +104,8 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		return MarshalDispatch{}, fmt.Errorf("dispatch paused at budget boundary: %s", reason)
 	}
 	policy := marshal.TierPolicy(s.Gate, run.Settings)
-	active := 0
-	for _, other := range run.Tasks {
-		if other.State == marshal.Dispatched {
-			active++
-		}
-	}
-	if active >= policy.Concurrency {
-		return MarshalDispatch{}, errors.New("dispatch concurrency reached")
-	}
-	if run.Process05Bound && t.Mode == marshal.Governed && active > 0 {
-		return MarshalDispatch{}, errors.New("governed plan tasks dispatch one at a time")
-	}
-	if run.Process05Bound && t.Mode == marshal.Governed {
-		for j := 0; j < i; j++ {
-			if run.Tasks[j].State != marshal.Merged {
-				return MarshalDispatch{}, errors.New("earlier governed task must be merged before dispatch")
-			}
-		}
+	if err := checkDispatchAdmission(s.Gate, run, *t, i); err != nil {
+		return MarshalDispatch{}, err
 	}
 	d := s.Drivers[t.Worker]
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
@@ -102,33 +123,40 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if d.Mode() != t.Mode {
 		return MarshalDispatch{}, fmt.Errorf("worker %s has %s driver, task requires %s", t.Worker, d.Mode(), t.Mode)
 	}
-	// A reassigned worker starts from the task's base, not from the work the
-	// previous worker had returned twice.
-	fresh := t.State == marshal.Reassigned && t.ResultCommit != ""
-	if (t.ResultCommit == "" || fresh) && len(t.DependsOn) > 0 {
-		// A task builds on its dependencies' merged work: it starts from the
-		// integration head, where every dependency has been merged.
-		integration := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
-		head, headErr := gitMarshal(ctx, integration, "rev-parse", "HEAD")
-		if headErr != nil {
-			return MarshalDispatch{}, fmt.Errorf("task base is unavailable: %w", headErr)
-		}
-		t.BaseCommit = strings.TrimSpace(head)
+	approvedPlan, err := s.Store.GetPlan(ctx, run.PlanID, run.PlanVersion)
+	if err != nil {
+		return MarshalDispatch{}, err
 	}
-	if run.Process05Bound && t.Mode == marshal.Governed && t.ResultCommit == "" && i > 0 {
-		integration := filepath.Join(s.Worktrees, integrationTaskID(runID, run))
-		if head, headErr := gitMarshal(ctx, integration, "rev-parse", "HEAD"); headErr == nil {
-			t.BaseCommit = head
-		} else if run.Tasks[i-1].State == marshal.Merged {
-			return MarshalDispatch{}, fmt.Errorf("governed task base is unavailable: %w", headErr)
+	modelName := ""
+	if route, ok := approvedPlan.Routes[t.PlanTaskID]; ok && marshalHarnessName(route.Provider) == marshalHarnessName(t.Worker) {
+		modelName = route.Model
+	}
+	// A reassigned worker starts from the task's base, not from the work the
+	// previous worker had returned twice; so does a task lane rework (Extreme).
+	brief = providerFailoverBrief(*t, brief)
+	fresh := (t.State == marshal.Reassigned || reworkInTaskLane(run, *t)) && (t.ResultCommit != "" || t.FailedAttemptCommit != "")
+	resolvedTask, err := s.resolveDispatchTaskBase(ctx, runID, run, *t)
+	if err != nil {
+		return MarshalDispatch{}, err
+	}
+	t.BaseCommit = resolvedTask.BaseCommit
+	if builder != nil {
+		// Admission can reassign a cooling provider. Recall only for the final
+		// admitted actor and the frozen execution base, never an earlier brief.
+		bc, err := s.briefContextFromTask(ctx, runID, run, *t, true)
+		if err != nil {
+			return MarshalDispatch{}, err
 		}
+		brief = builder(*t, bc)
 	}
 	next := run
 	next.Tasks = append([]marshal.Task(nil), run.Tasks...)
 	next.Tasks[i].HoneypotRequired = t.Mode == marshal.Governed && s.HandInGuard != nil
 	next.Tasks[i].State = marshal.Dispatched
+	finishProviderFailoverDispatch(&next.Tasks[i])
 	if fresh {
 		next.Tasks[i].ResultCommit = ""
+		next.Tasks[i].FailedAttemptCommit = ""
 	}
 	next.State = marshal.Dispatching
 	if next.Tier != marshal.Ultra {
@@ -140,19 +168,33 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 	if err != nil {
 		return MarshalDispatch{}, err
 	}
-	effectCompleted := false
+	retainOperation := false
 	defer func() {
-		if !effectCompleted {
-			s.abandonOperation(ctx, runID, op)
+		if !retainOperation {
+			if abandonErr := s.abandonOperation(ctx, runID, op); abandonErr != nil {
+				retErr = errors.Join(retErr, abandonErr)
+			}
 		}
 	}()
 
 	wt := worktree.New(s.Repository, s.Worktrees)
 	request := model.WorktreeRequest{TaskID: taskArtifactID(runID, *t), Branch: t.Branch, BaseCommit: t.BaseCommit}
 	var tree model.Worktree
-	if t.ResultCommit != "" {
+	if t.ResultCommit != "" || t.FailedAttemptCommit != "" {
 		request.BaseCommit = t.ResultCommit
+		if t.FailedAttemptCommit != "" {
+			request.BaseCommit = t.FailedAttemptCommit
+		}
 		tree, err = wt.Resume(ctx, request)
+		// Recovery may have stopped after preserving and resetting the failed
+		// attempt, but before committing the launch operation.
+		if err != nil && fresh && t.FailedAttemptCommit != "" {
+			ref := returnedTaskRef(runID, *t)
+			if saved, refErr := gitMarshal(ctx, s.Repository, "rev-parse", "--verify", ref); refErr == nil && saved == t.FailedAttemptCommit {
+				request.BaseCommit = t.BaseCommit
+				tree, err = wt.Resume(ctx, request)
+			}
+		}
 		if err == nil && fresh {
 			err = restartTaskBranch(ctx, s.Repository, runID, t, tree.Path)
 		}
@@ -160,7 +202,36 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		tree, err = wt.Prepare(ctx, request)
 	}
 	if err != nil {
+		if t.FailedAttemptCommit != "" {
+			retained, retainedRev, loadErr := s.load(context.WithoutCancel(ctx), runID)
+			if loadErr == nil {
+				retained.Operation = nil // no worker has been launched
+				pauseMarshal(&retained, "failed attempt recovery: "+err.Error(),
+					"inspect and preserve the retained worktree; restore its recorded branch and commit and resolve dirty changes, then /marshal resume", run.State)
+				loadErr = s.save(context.WithoutCancel(ctx), runID, retained, retainedRev)
+			}
+			err = errors.Join(err, loadErr)
+		}
 		return MarshalDispatch{}, err
+	}
+	if s.ProjectContext != nil {
+		knowledge, err := s.ProjectContext(ctx, tree.Path, run.GoalBinding+"\n"+t.Title+"\n"+strings.Join(t.Files, " "))
+		if err != nil {
+			return MarshalDispatch{}, err
+		}
+		brief += "\n" + knowledge
+		fullEvent, err := s.marshalEventWithBrief(op.Event, brief)
+		if err != nil {
+			return MarshalDispatch{}, err
+		}
+		op.Event = fullEvent
+		// Persist the exact delivered data before launch, retaining the existing
+		// operation identity and CAS recovery boundary.
+		run.Operation = op
+		if err := s.save(ctx, runID, run, rev); err != nil {
+			return MarshalDispatch{}, err
+		}
+		rev++
 	}
 	dispatchCtx := ctx
 	deadline := time.Time{}
@@ -170,11 +241,22 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 		dispatchCtx, cancel = context.WithDeadline(ctx, deadline)
 		_ = cancel
 	}
-	handle, err := d.Launch(dispatchCtx, driver.Request{RunID: runID, Task: *t, Worktree: tree.Path, Brief: brief})
-	if err != nil {
+	if s.RequireArchitectureAcceptance != nil {
+		if err := s.RequireArchitectureAcceptance(ctx); err != nil {
+			return MarshalDispatch{}, err
+		}
+	}
+	if err := s.boundMarshalEvent(&op.Event); err != nil {
 		return MarshalDispatch{}, err
 	}
-	effectCompleted = true
+	handle, err := d.Launch(dispatchCtx, driver.Request{RunID: runID, Task: *t, Worktree: tree.Path, Brief: brief, Model: modelName})
+	if err != nil {
+		// A canceled or timed-out acknowledgement does not prove that launch
+		// was refused. Retain the intent so recovery cannot dispatch it again.
+		retainOperation = errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+		return MarshalDispatch{}, err
+	}
+	retainOperation = true
 	if err = s.afterOperationEffect(op); err != nil {
 		_ = d.Cancel(handle)
 		return MarshalDispatch{}, err
@@ -195,19 +277,28 @@ func (s *MarshalService) Dispatch(ctx context.Context, runID, taskID, brief stri
 // refs/marshal/<run>/returned/<task>/attempt-<n>, because its hand-ins and
 // reviews name that commit as evidence.
 func restartTaskBranch(ctx context.Context, repository, runID string, t *marshal.Task, dir string) error {
-	attempt := t.EvidenceAttemptBase
-	for _, n := range t.ReturnsByAgent {
-		attempt += n
+	commit := t.ResultCommit
+	if t.FailedAttemptCommit != "" {
+		commit = t.FailedAttemptCommit
 	}
-	ref := fmt.Sprintf("refs/marshal/%s/returned/%s/attempt-%d", runID, t.PlanTaskID, attempt)
-	if _, err := gitMarshal(ctx, repository, "update-ref", ref, t.ResultCommit); err != nil {
+	ref := returnedTaskRef(runID, *t)
+	if saved, err := gitMarshal(ctx, repository, "rev-parse", "--verify", ref); err == nil {
+		if saved != commit {
+			return errors.New("preserved attempt identity differs; inspect retained worktree before retry")
+		}
+	} else if _, err := gitMarshal(ctx, repository, "update-ref", ref, commit, strings.Repeat("0", len(commit))); err != nil {
 		return fmt.Errorf("preserve returned attempt: %w", err)
 	}
 	if _, err := gitMarshal(ctx, dir, "reset", "--hard", t.BaseCommit); err != nil {
 		return fmt.Errorf("restart task branch: %w", err)
 	}
 	t.ResultCommit = ""
+	t.FailedAttemptCommit = ""
 	return nil
+}
+
+func returnedTaskRef(runID string, t marshal.Task) string {
+	return fmt.Sprintf("refs/"+statepath.RefName+"/%s/returned/%s/attempt-%d", runID, t.PlanTaskID, t.EvidenceAttemptBase+taskReturns(t))
 }
 
 func worktreeTaskID(runID, taskID string) string {
@@ -219,6 +310,10 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		return marshal.HandIn{}, errors.New("missing dispatch handle")
 	}
 	initial, initialRev, err := s.load(ctx, runID)
+	if err != nil {
+		return marshal.HandIn{}, err
+	}
+	initial, initialRev, err = s.observeMarshalCompatibility(ctx, runID, initial, initialRev)
 	if err != nil {
 		return marshal.HandIn{}, err
 	}
@@ -255,6 +350,17 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		alertErr := s.record(context.WithoutCancel(ctx), runID, dispatch.TaskID, events.EventTypeMarshalEscalated, map[string]any{"reason": err.Error()})
 		return handin, errors.Join(err, alertErr)
 	}
+	if handled, waitErr := s.pausePrivateProcess05Approval(ctx, runID, dispatch, err); handled {
+		return handin, waitErr
+	}
+	if isGovernedHarnessMismatch(err) {
+		return marshal.HandIn{}, errors.Join(s.escalateGovernedHarnessMismatch(context.WithoutCancel(ctx), runID, dispatch.TaskID))
+	}
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && (dispatch.Deadline.IsZero() || time.Now().Before(dispatch.Deadline)) {
+		if isLimit, reason, cooldown := classifyProviderLimitAt(err, handin, dispatch.Handle, s.clock()); isLimit {
+			return s.handleWorkerLimit(ctx, runID, dispatch, handin, reason, cooldown)
+		}
+	}
 	if err != nil {
 		if !dispatch.Deadline.IsZero() && time.Now().After(dispatch.Deadline) {
 			run, rev, loadErr := s.load(ctx, runID)
@@ -266,13 +372,37 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 				return handin, errors.New("task is not dispatched")
 			}
 			run.State = marshal.Reviewing
-			_, returnErr := s.finishMarshalReturn(ctx, runID, run, rev, i, marshal.Review{Reviewer: "marshal-runtime", Reasons: []string{"worker stopped at the wall-time ceiling"}}, nil)
+			var returnErr error
+			if infraRetryApplies(run, run.Tasks[i]) {
+				// No hand-in was delivered, so this is not rework.
+				returnErr = s.returnInfraFailure(ctx, runID, run, rev, i, "worker stopped at the wall-time ceiling: "+err.Error())
+			} else {
+				_, returnErr = s.finishMarshalReturn(ctx, runID, run, rev, i, marshal.Review{Reviewer: "marshal-runtime", Reasons: []string{"worker stopped at the wall-time ceiling"}}, nil)
+			}
 			elapsed := s.clock().Sub(dispatch.Started)
 			if elapsed < 0 {
 				elapsed = 0
 			}
 			_, chargeErr := s.Charge(ctx, runID, dispatch.TaskID, "dispatch_timeout", marshal.Charge{Tokens: marshal.Amount{Known: false}, Money: marshal.Amount{Known: false}, WallTime: elapsed})
 			return marshal.HandIn{}, errors.Join(returnErr, chargeErr)
+		}
+		// In an Extreme parallel plan one failed worker returns its task for
+		// rework in a fresh lane (bounded by the rework limit) instead of
+		// stopping every other lane of the run.
+		if run, rev, loadErr := s.load(ctx, runID); loadErr == nil {
+			if i := taskIndex(run, dispatch.TaskID); i >= 0 && run.Tasks[i].State == marshal.Dispatched && reworkFailedLaneWorker(run, run.Tasks[i]) {
+				if isTaskLaneAdmissionRefusal(err) {
+					return marshal.HandIn{}, s.escalateTaskLaneAdmission(context.WithoutCancel(ctx), runID, run, rev, i, err)
+				}
+				// The worker delivered no hand-in: a provider, quota,
+				// transport, harness or tool failure is retried (with
+				// failover) under its own bound, never as rework (bug #23).
+				run.State = marshal.Reviewing
+				if returnErr := s.returnInfraFailure(ctx, runID, run, rev, i, "worker failed: "+err.Error()); returnErr != nil {
+					return handin, errors.Join(err, returnErr)
+				}
+				return marshal.HandIn{}, nil
+			}
 		}
 		return handin, err
 	}
@@ -297,10 +427,12 @@ func (s *MarshalService) CollectHandIn(ctx context.Context, runID string, dispat
 		t.HoneypotScanID = scanID
 		validationErr = errors.Join(validationErr, scanErr)
 	}
-	attempt := 1 + t.EvidenceAttemptBase
-	for _, n := range t.ReturnsByAgent {
-		attempt += n
+	if t.Mode == marshal.Governed {
+		// Advisory unless code_evidence.on_invalidated is "return".
+		validationErr = errors.Join(validationErr, s.codeEvidenceHandIn(ctx, runID, run, *t, handin))
 	}
+	attempt := 1 + t.EvidenceAttemptBase
+	attempt += taskReturns(*t)
 	t.ResultCommit = handin.ResultCommit
 	if validationErr == nil {
 		t.State = marshal.HandedIn
@@ -390,9 +522,7 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	}
 	t := &run.Tasks[i]
 	attempt := 1 + t.EvidenceAttemptBase
-	for _, n := range t.ReturnsByAgent {
-		attempt += n
-	}
+	attempt += taskReturns(*t)
 	stored, err := s.Store.GetMarshalHandIn(ctx, runID, taskID, attempt)
 	if err != nil {
 		return "", err
@@ -413,6 +543,9 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	}
 	// Only the runtime may attach an independent review. Model output is a claim.
 	proposal.Independent = nil
+	if note := s.codeEvidenceReviewNote(ctx, runID, taskID); note != "" {
+		proposal.Reasons = append(proposal.Reasons, note)
+	}
 	if proposal.Verdict != marshal.VerdictAccept && proposal.Verdict != marshal.VerdictReturn && proposal.Verdict != marshal.VerdictReassign && proposal.Verdict != marshal.VerdictEscalate {
 		return "", errors.New("invalid model review verdict")
 	}
@@ -438,8 +571,14 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		if (crossReview.Verdict != marshal.VerdictAccept && crossReview.Verdict != marshal.VerdictReturn && crossReview.Verdict != marshal.VerdictReassign && crossReview.Verdict != marshal.VerdictEscalate) || crossReview.Reviewer == "" || crossReview.Reviewer == h.Worker || crossReview.Reviewer == s.Reviewer || len(crossReview.EvidenceRefs) == 0 {
 			return "", errors.New("independent cross-review is incomplete")
 		}
-		if err := resolveReviewReferences(crossReview, h); err != nil {
+		refs, notes, err := resolveReviewReferencesWithNotes(crossReview, h)
+		if err != nil {
 			return "", err
+		}
+		crossReview.EvidenceRefs = refs
+		crossReview.Reasons = append(crossReview.Reasons, notes...)
+		if len(notes) > 0 {
+			crossReviewData["cross_review_reference_notes"] = notes
 		}
 		crossReviewerProvider = provider
 		if err = marshal.CheckCrossReviewProvider(policy, h.Provider, crossReviewerProvider); err != nil {
@@ -449,6 +588,13 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 		crossReviewData["cross_review_verdict"] = string(crossReview.Verdict)
 		crossReviewData["cross_review_reviewer"] = crossReview.Reviewer
 		crossReviewData["cross_review_provider"] = crossReviewerProvider
+		crossReviewData["worker_provider"] = h.Provider
+		// A same-provider review is recorded as an explicit fallback, never
+		// left implicit: it means no other provider was available.
+		if sameProviderAsWorker(crossReviewerProvider, h.Provider, h.Worker) {
+			crossReviewData["cross_review_same_provider_fallback"] = true
+			crossReviewData["cross_review_fallback_reason"] = "no provider other than the worker's was available"
+		}
 		proposal.Independent = &marshal.IndependentReview{Verdict: crossReview.Verdict, Reviewer: crossReview.Reviewer, Provider: crossReviewerProvider, Reasons: crossReview.Reasons, EvidenceRefs: crossReview.EvidenceRefs}
 	}
 	met, total, failing := marshal.CriteriaMet(*t, h)
@@ -521,18 +667,19 @@ func (s *MarshalService) Review(ctx context.Context, runID, taskID string, charg
 	return result, s.record(ctx, runID, taskID, events.EventTypeMarshalTaskAccepted, eventData)
 }
 
-// finishMarshalReturn records the attempt's reasons and applies the same
-// rework policy for validation, review, budget and merge failures.
+// finishMarshalReturn records the attempt's reasons and applies the rework
+// policy for validation, review, budget and merge failures. Private governed
+// Process05 bindings pause for a fresh approved plan instead of replaying the
+// previous canonical execution domain and its spent authority.
 func (s *MarshalService) finishMarshalReturn(ctx context.Context, runID string, run marshal.Run, revision int64, index int, review marshal.Review, data map[string]any) (marshal.Verdict, error) {
 	t := &run.Tasks[index]
 	attempt := 1 + t.EvidenceAttemptBase
-	for _, n := range t.ReturnsByAgent {
-		attempt += n
-	}
+	attempt += taskReturns(*t)
 	if len(review.Reasons) == 0 {
 		review.Reasons = []string{"the review did not accept the hand-in"}
 	}
 	result := applyMarshalReturn(&run, t)
+	pauseReturnedProcess05Task(&run, *t)
 	if review.Verdict == "" {
 		review.Verdict = marshal.VerdictReturn
 	}
@@ -783,6 +930,11 @@ func int64Number(v any) int64 {
 }
 
 func isPermanentEscalationReason(reason string) bool {
+	// An exhausted infrastructure retry names the provider's own failure,
+	// which may mention a budget; the operator may still retry it.
+	if strings.HasPrefix(reason, infraRetryEscalation) {
+		return false
+	}
 	r := strings.ToLower(reason)
 	for _, s := range []string{"budget", "quarantine", "suspension", "honeypot", "security", "governing files changed"} {
 		if strings.Contains(r, s) {
@@ -794,7 +946,7 @@ func isPermanentEscalationReason(reason string) bool {
 
 func unpauseIfNoEscalated(run *marshal.Run) {
 	for _, t := range run.Tasks {
-		if t.State == marshal.Escalated {
+		if t.State == marshal.Escalated || t.State == marshal.Cancelled {
 			return
 		}
 	}
@@ -804,7 +956,23 @@ func unpauseIfNoEscalated(run *marshal.Run) {
 	}
 }
 
+// Reassign moves an escalated task to another worker on the runtime's own
+// decision. A governed Process 05 task stays on its approved plan's worker.
 func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker string) error {
+	return s.reassign(ctx, runID, taskID, worker, "")
+}
+
+// ReassignByOperator is the operator's reassignment. In the private edition
+// it may also switch a governed Process 05 task to another provider within
+// its approved plan version; the switch is recorded with its reason.
+func (s *MarshalService) ReassignByOperator(ctx context.Context, runID, taskID, worker, reason string) error {
+	if strings.TrimSpace(reason) == "" {
+		reason = "operator reassignment"
+	}
+	return s.reassign(ctx, runID, taskID, worker, reason)
+}
+
+func (s *MarshalService) reassign(ctx context.Context, runID, taskID, worker, operatorReason string) error {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return err
@@ -817,11 +985,14 @@ func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker str
 		return errors.New("task not found")
 	}
 	t := &run.Tasks[i]
+	// In the private edition the operator may also move a task that is
+	// still waiting to be dispatched; it stays queued for its new worker.
+	queued := t.State == marshal.Queued && operatorReason != "" && governedProviderSwitchAllowed
 	if t.State == marshal.Escalated {
 		if isPermanentEscalationReason(t.EscalationReason) {
 			return fmt.Errorf("cannot reassign task with escalation reason: %s", t.EscalationReason)
 		}
-	} else if t.State != marshal.Reassigned {
+	} else if t.State != marshal.Reassigned && !queued {
 		return errors.New("only escalated tasks can be reassigned")
 	}
 	if worker == "" {
@@ -829,6 +1000,11 @@ func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker str
 	}
 	if marshalHarnessName(worker) == marshalHarnessName(t.Worker) {
 		return errors.New("cannot reassign to the same harness")
+	}
+	previous := t.Worker
+	providerSwitch, err := s.governedProviderSwitch(ctx, run, *t, worker, operatorReason != "")
+	if err != nil {
+		return err
 	}
 	drivers := s.Drivers
 	if t.Mode == marshal.Governed && s.GovernedDrivers != nil {
@@ -838,12 +1014,14 @@ func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker str
 		return fmt.Errorf("worker %s does not support task mode %s", worker, t.Mode)
 	}
 	t.Worker = worker
-	t.State = marshal.Reassigned
+	if !queued {
+		t.State = marshal.Reassigned
+	}
 	t.EscalationReason = ""
 	if t.ReturnsByAgent == nil {
 		t.ReturnsByAgent = map[string]int{}
 	}
-	t.ReturnsByAgent[worker] = 0
+	retireWorkerReturns(t, worker)
 	if run.CloseAuthorization != nil {
 		run.CloseAuthorization.Voided = true
 	}
@@ -851,7 +1029,17 @@ func (s *MarshalService) Reassign(ctx context.Context, runID, taskID, worker str
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}
-	if err = s.record(ctx, runID, taskID, events.EventTypeMarshalTaskReassigned, map[string]any{"worker": worker}); err != nil {
+	data := map[string]any{"worker": worker}
+	if operatorReason != "" {
+		data["actor"] = "operator"
+		data["previous_worker"] = previous
+		data["reason"] = operatorReason
+	}
+	if providerSwitch != "" {
+		data["provider_switch"] = true
+		data["planned_worker"] = providerSwitch
+	}
+	if err = s.record(ctx, runID, taskID, events.EventTypeMarshalTaskReassigned, data); err != nil {
 		return err
 	}
 	_, err = s.Charge(ctx, runID, taskID, "reassign", marshal.Charge{Tokens: marshal.Amount{Known: true}, Money: marshal.Amount{Known: true}})
@@ -871,35 +1059,46 @@ func (s *MarshalService) RetryTask(ctx context.Context, runID, taskID string, fr
 		return errors.New("task not found")
 	}
 	t := &run.Tasks[i]
-	if t.State != marshal.Escalated {
-		return errors.New("only escalated tasks can be retried")
+	if t.State != marshal.Escalated && t.State != marshal.Returned {
+		if t.State == marshal.HandedIn {
+			return fmt.Errorf("task is %s; use /marshal return %s <reason> to request rework", t.State, taskID)
+		}
+		return fmt.Errorf("task is %s; /marshal retry applies to returned or escalated tasks; use /marshal resume to continue", t.State)
 	}
+	wasEscalated := t.State == marshal.Escalated
 	if isPermanentEscalationReason(t.EscalationReason) {
 		return fmt.Errorf("cannot retry task with escalation reason: %s", t.EscalationReason)
 	}
 	hasOtherWorker := s.otherWorker(t.Worker, t.Mode) != ""
+	// Zero means no bound (Extreme); Community bounds fresh-session retries.
+	maxFresh := buildMaxFreshSessionRetries()
 	if !hasOtherWorker {
 		if !freshSession {
 			return errors.New("single provider retry requires a fresh session")
 		}
-		if t.FreshSessionRetries >= 2 {
+		if maxFresh > 0 && t.FreshSessionRetries >= maxFresh {
 			return errors.New("maximum fresh session retries exceeded")
 		}
 		t.FreshSessionRetries++
 	} else if freshSession {
-		if t.FreshSessionRetries >= 2 {
+		if maxFresh > 0 && t.FreshSessionRetries >= maxFresh {
 			return errors.New("maximum fresh session retries exceeded")
 		}
 		t.FreshSessionRetries++
 	}
-	if err := marshal.TransitionTask(t.State, marshal.Returned); err != nil {
-		return err
+	if wasEscalated {
+		if err := marshal.TransitionTask(t.State, marshal.Returned); err != nil {
+			return err
+		}
+	} else {
+		prepareReturnedTaskRetry(run, t)
 	}
 	t.State = marshal.Returned
 	t.EscalationReason = ""
-	if t.ReturnsByAgent != nil {
-		t.ReturnsByAgent[t.Worker] = 0
+	if t.ReturnsByAgent != nil && (wasEscalated || isExtremeBuild) {
+		retireWorkerReturns(t, t.Worker)
 	}
+	resetInfraRetries(t)
 	if run.CloseAuthorization != nil {
 		run.CloseAuthorization.Voided = true
 	}
@@ -936,27 +1135,22 @@ func (s *MarshalService) CancelTask(ctx context.Context, runID, taskID string) e
 	if run.CloseAuthorization != nil {
 		run.CloseAuthorization.Voided = true
 	}
-	allDone := true
-	for _, task := range run.Tasks {
-		if task.State != marshal.Merged && task.State != marshal.Cancelled {
-			allDone = false
-		}
-	}
-	if allDone {
-		run.State = marshal.Verifying
-		run.Pause = nil
-	} else {
-		unpauseIfNoEscalated(&run)
-	}
+	// Cancellation does not satisfy the approved task's criteria or remove
+	// its dependency obligations. Only a reviewed scope amendment can do so.
+	pauseMarshal(&run, "task "+taskID+" cancelled; approved plan scope requires review",
+		"create and approve an amended plan that removes or replaces the cancelled task and updates its dependencies, then /marshal use-plan", "")
 	if err = s.save(ctx, runID, run, rev); err != nil {
 		return err
 	}
 	return s.record(ctx, runID, taskID, events.EventTypeMarshalTaskCancelled, map[string]any{"reason": "cancelled by operator"})
 }
 
-func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error {
+func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) (retErr error) {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
+		return err
+	}
+	if err := s.requireUncancelledScope(ctx, runID, run, rev); err != nil {
 		return err
 	}
 	i := taskIndex(run, taskID)
@@ -964,7 +1158,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 		return errors.New("task is not accepted")
 	}
 	for j := 0; j < i; j++ {
-		if run.Tasks[j].State != marshal.Merged && run.Tasks[j].State != marshal.Cancelled {
+		if run.Tasks[j].State != marshal.Merged {
 			return errors.New("merge order violation")
 		}
 	}
@@ -999,7 +1193,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 	next.State = marshal.Merging
 	all := true
 	for _, t := range next.Tasks {
-		if t.State != marshal.Merged && t.State != marshal.Cancelled {
+		if t.State != marshal.Merged {
 			all = false
 		}
 	}
@@ -1014,7 +1208,9 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 	effectCompleted := false
 	defer func() {
 		if !effectCompleted {
-			s.abandonOperation(ctx, runID, op)
+			if abandonErr := s.abandonOperation(ctx, runID, op); abandonErr != nil {
+				retErr = errors.Join(retErr, abandonErr)
+			}
 		}
 	}()
 
@@ -1042,9 +1238,7 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 		run.Tasks[i].BaseCommit = head
 		run.State = marshal.Reviewing
 		attempt := 1 + run.Tasks[i].EvidenceAttemptBase
-		for _, n := range run.Tasks[i].ReturnsByAgent {
-			attempt += n
-		}
+		attempt += taskReturns(run.Tasks[i])
 		stored, reviewErr := s.Store.GetMarshalReview(ctx, runID, taskID, attempt)
 		if reviewErr != nil {
 			return reviewErr
@@ -1061,30 +1255,55 @@ func (s *MarshalService) Merge(ctx context.Context, runID, taskID string) error 
 	return s.completeOperation(ctx, runID, rev, op)
 }
 
-func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge marshal.Charge) (verification.Decision, error) {
+func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge marshal.Charge) (decision verification.Decision, retErr error) {
+	// Proof construction, source admission and provider failures all stop the
+	// same durable lifecycle. Retain the cause even when the caller disconnects.
+	defer func() {
+		if retErr != nil {
+			retErr = s.pauseVerificationFailure(ctx, runID, retErr)
+		}
+	}()
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return verification.Blocked, err
 	}
+	run, rev, err = s.observeMarshalCompatibility(ctx, runID, run, rev)
+	if err != nil {
+		return verification.Blocked, err
+	}
+	if err := s.requireUncancelledScope(ctx, runID, run, rev); err != nil {
+		return verification.Blocked, err
+	}
+
 	if err = unfinishedMarshalOperation(run); err != nil {
 		return verification.Blocked, err
+	}
+	if run.State == marshal.AwaitingUser && run.Pause != nil && run.Pause.ResumeState == marshal.Verifying {
+		run.State = marshal.Verifying
+		run.Pause = nil
 	}
 	if run.State != marshal.Verifying || s.Verify == nil {
 		return verification.Blocked, errors.New("run is not ready for verification")
 	}
 	if err = s.requireIndependentVerifier(ctx, run); err != nil {
-		return verification.Blocked, err
+		return verification.Blocked, s.pauseUnavailableVerifier(ctx, runID, run, rev, err)
 	}
 	head, err := gitMarshal(ctx, filepath.Join(s.Worktrees, integrationTaskID(runID, run)), "rev-parse", "HEAD")
 	if err != nil {
 		return verification.Blocked, err
 	}
-	session, binding, err := s.Verify(ctx, run, head)
+	s.codeEvidenceVerify(ctx, runID, run, head)
+	if s.requiredIntegrationSource != nil {
+		if err := s.requiredIntegrationSource(ctx, runID, run, head); err != nil {
+			return verification.Blocked, err
+		}
+	}
+	session, binding, err := s.verifyMarshalIntegration(ctx, runID, run, head)
 	if err != nil {
-		return verification.Blocked, err
+		return verification.Blocked, s.pauseUnavailableVerifier(ctx, runID, run, rev, err)
 	}
 	result := verification.Evaluate(session, binding, s.clock())
-	if run.Tier == marshal.Ultra && result == verification.VerifiedComplete {
+	if run.Tier == marshal.Ultra && result == verification.VerifiedComplete && s.requiredCanonicalVerification == nil {
 		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
 			return verification.Blocked, err
 		}
@@ -1104,6 +1323,9 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 		}
 		return result, nil
 	}
+	if result == verification.VerifiedComplete && run.Compatibility != nil {
+		run.Compatibility.Disposition = "reviewed-current-runtime"
+	}
 	if result != verification.VerifiedComplete {
 		pauseMarshal(&run, "verification failed: "+string(result), "/marshal resume to retry verification", marshal.Verifying)
 	}
@@ -1113,11 +1335,19 @@ func (s *MarshalService) VerifyMerged(ctx context.Context, runID string, charge 
 	return result, nil
 }
 
-func (s *MarshalService) Close(ctx context.Context, runID string) error {
+func (s *MarshalService) Close(ctx context.Context, runID string) (retErr error) {
 	run, rev, err := s.load(ctx, runID)
 	if err != nil {
 		return err
 	}
+	run, rev, err = s.observeMarshalCompatibility(ctx, runID, run, rev)
+	if err != nil {
+		return err
+	}
+	if err := s.requireUncancelledScope(ctx, runID, run, rev); err != nil {
+		return err
+	}
+
 	if err = unfinishedMarshalOperation(run); err != nil {
 		return err
 	}
@@ -1131,7 +1361,7 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 		return errors.New("verifier is unavailable")
 	}
 	if err = s.requireIndependentVerifier(ctx, run); err != nil {
-		return err
+		return s.pauseUnavailableVerifier(ctx, runID, run, rev, err)
 	}
 	project, err := s.Store.Project(ctx)
 	if err != nil {
@@ -1148,11 +1378,21 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	if err != nil {
 		return err
 	}
-	session, binding, err := s.Verify(ctx, run, head)
-	if err != nil || verification.Evaluate(session, binding, s.clock()) != verification.VerifiedComplete {
+	if s.requiredIntegrationSource != nil {
+		if err := s.requiredIntegrationSource(ctx, runID, run, head); err != nil {
+			return err
+		}
+	}
+	session, binding, err := s.verifyMarshalIntegration(ctx, runID, run, head)
+	if err != nil {
+		// Say why: a bare "not verified" hid a context or budget refusal
+		// behind a session that had in fact verified.
+		return fmt.Errorf("integrated result is not verified: %w", s.pauseUnavailableVerifier(ctx, runID, run, rev, err))
+	}
+	if verification.Evaluate(session, binding, s.clock()) != verification.VerifiedComplete {
 		return errors.New("integrated result is not verified")
 	}
-	if run.Tier == marshal.Ultra {
+	if run.Tier == marshal.Ultra && s.requiredCanonicalVerification == nil {
 		if err = s.captureIndependentVerification(ctx, runID, run, head, session); err != nil {
 			return err
 		}
@@ -1180,9 +1420,9 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	if err = s.validateDelivery(ctx, run); err != nil {
 		return err
 	}
-	checkpoint := "refs/marshal/" + runID + "/pre-close"
+	checkpoint := "refs/" + statepath.RefName + "/" + runID + "/pre-close"
 	if run.ArtifactRevision > 0 {
-		checkpoint = fmt.Sprintf("refs/marshal/%s/r%d/pre-close", runID, run.ArtifactRevision)
+		checkpoint = fmt.Sprintf("refs/"+statepath.RefName+"/%s/r%d/pre-close", runID, run.ArtifactRevision)
 	}
 	next := run
 	next.State = marshal.Closed
@@ -1194,7 +1434,9 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 	effectCompleted := false
 	defer func() {
 		if !effectCompleted {
-			s.abandonOperation(ctx, runID, op)
+			if abandonErr := s.abandonOperation(ctx, runID, op); abandonErr != nil {
+				retErr = errors.Join(retErr, abandonErr)
+			}
 		}
 	}()
 
@@ -1235,43 +1477,54 @@ func (s *MarshalService) Close(ctx context.Context, runID string) error {
 		return err
 	}
 	rev++
-	if _, err = gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", old, head); err != nil {
-		return errors.New("target cannot fast-forward")
+	effect := func() error {
+		if _, err = gitMarshal(ctx, s.Repository, "merge-base", "--is-ancestor", old, head); err != nil {
+			return errors.New("target cannot fast-forward")
+		}
+		checkedOut, err := marshalTargetWorktree(ctx, s.Repository, target)
+		if err != nil {
+			return err
+		}
+		if checkedOut != "" {
+			refusal := fmt.Errorf("target branch %s is checked out at %s; run `git switch --detach` from that worktree to switch it away before the run can close", project.DefaultBranch, checkedOut)
+			// Only the main worktree has the same Git and common directories.
+			// A linked worktree must still be switched away by its operator.
+			dirs, dirErr := gitMarshal(ctx, checkedOut, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
+			paths := strings.Split(dirs, "\n")
+			status, statusErr := gitMarshal(ctx, checkedOut, "status", "--porcelain", "--untracked-files=all")
+			if dirErr != nil || len(paths) != 2 || paths[0] != paths[1] || statusErr != nil || status != "" {
+				return refusal
+			}
+			// Recheck the checkpoint and checkout identity before Git updates the
+			// branch, index and files together. Git's fast-forward merge refuses
+			// divergence and worktree conflicts; hooks stay disabled by gitMarshal.
+			branch, branchErr := gitMarshal(ctx, checkedOut, "symbolic-ref", "HEAD")
+			current, currentErr := gitMarshal(ctx, checkedOut, "rev-parse", "HEAD")
+			if branchErr != nil || branch != target || currentErr != nil || current != old {
+				return refusal
+			}
+			if _, err = gitMarshal(ctx, checkedOut, "merge", "--ff-only", "--no-edit", "--no-overwrite-ignore", head); err != nil {
+				return fmt.Errorf("target fast-forward failed: %w", err)
+			}
+			if after, err := gitMarshal(ctx, checkedOut, "rev-parse", "HEAD"); err != nil || after != head {
+				return errors.New("the target branch moved during close")
+			}
+		} else {
+			// An unchecked target moves with compare-and-swap so a concurrent
+			// advance since the checkpoint cannot be overwritten.
+			if _, err = gitMarshal(ctx, s.Repository, "update-ref", target, head, old); err != nil {
+				return fmt.Errorf("the target branch moved since the checkpoint was taken: %w", err)
+			}
+		}
+		return nil
 	}
-	checkedOut, err := marshalTargetWorktree(ctx, s.Repository, target)
+	if s.requiredContextCloseEffect != nil {
+		err = s.requiredContextCloseEffect(ctx, runID, run, op, effect)
+	} else {
+		err = effect()
+	}
 	if err != nil {
 		return err
-	}
-	if checkedOut != "" {
-		refusal := fmt.Errorf("target branch %s is checked out at %s; run `git switch --detach` from that worktree to switch it away before the run can close", project.DefaultBranch, checkedOut)
-		// Only the main worktree has the same Git and common directories.
-		// A linked worktree must still be switched away by its operator.
-		dirs, dirErr := gitMarshal(ctx, checkedOut, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
-		paths := strings.Split(dirs, "\n")
-		status, statusErr := gitMarshal(ctx, checkedOut, "status", "--porcelain", "--untracked-files=all")
-		if dirErr != nil || len(paths) != 2 || paths[0] != paths[1] || statusErr != nil || status != "" {
-			return refusal
-		}
-		// Recheck the checkpoint and checkout identity before Git updates the
-		// branch, index and files together. Git's fast-forward merge refuses
-		// divergence and worktree conflicts; hooks stay disabled by gitMarshal.
-		branch, branchErr := gitMarshal(ctx, checkedOut, "symbolic-ref", "HEAD")
-		current, currentErr := gitMarshal(ctx, checkedOut, "rev-parse", "HEAD")
-		if branchErr != nil || branch != target || currentErr != nil || current != old {
-			return refusal
-		}
-		if _, err = gitMarshal(ctx, checkedOut, "merge", "--ff-only", "--no-edit", "--no-overwrite-ignore", head); err != nil {
-			return fmt.Errorf("target fast-forward failed: %w", err)
-		}
-		if after, err := gitMarshal(ctx, checkedOut, "rev-parse", "HEAD"); err != nil || after != head {
-			return errors.New("the target branch moved during close")
-		}
-	} else {
-		// An unchecked target moves with compare-and-swap so a concurrent
-		// advance since the checkpoint cannot be overwritten.
-		if _, err = gitMarshal(ctx, s.Repository, "update-ref", target, head, old); err != nil {
-			return fmt.Errorf("the target branch moved since the checkpoint was taken: %w", err)
-		}
 	}
 	effectCompleted = true
 	if err = s.afterOperationEffect(op); err != nil {
@@ -1377,7 +1630,8 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 			run.Tasks[i].State = marshal.Queued
 			run.Tasks[i].BaseCommit = run.BaseCommit
 			run.Tasks[i].ResultCommit = ""
-			run.Tasks[i].Branch = fmt.Sprintf("marshal/%s/r%d/%s", runID, amended.Version, run.Tasks[i].PlanTaskID)
+			run.Tasks[i].FailedAttemptCommit = ""
+			run.Tasks[i].Branch = marshalTaskBranch(runID, run.Tasks[i].PlanTaskID, amended.Version)
 		}
 		run.State = marshal.Drafting
 		if run.CloseAuthorization != nil {
@@ -1424,12 +1678,13 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 		run.Tasks = d.Tasks
 		for i := range run.Tasks {
 			run.Tasks[i].State = marshal.Queued
-			run.Tasks[i].Branch = "marshal/" + runID + "/" + run.Tasks[i].PlanTaskID
+			run.Tasks[i].Branch = marshalTaskBranch(runID, run.Tasks[i].PlanTaskID, 0)
 			if run.ArtifactRevision > 0 {
-				run.Tasks[i].Branch = fmt.Sprintf("marshal/%s/r%d/%s", runID, run.ArtifactRevision, run.Tasks[i].PlanTaskID)
+				run.Tasks[i].Branch = marshalTaskBranch(runID, run.Tasks[i].PlanTaskID, run.ArtifactRevision)
 			}
 			run.Tasks[i].BaseCommit = run.BaseCommit
 			run.Tasks[i].ResultCommit = ""
+			run.Tasks[i].FailedAttemptCommit = ""
 			run.Tasks[i].ReturnsByAgent = nil
 			for _, old := range previous {
 				if old.PlanTaskID == run.Tasks[i].PlanTaskID {
@@ -1437,6 +1692,7 @@ func (s *MarshalService) ApplyAmendDraftBound(ctx context.Context, runID, reason
 					run.Tasks[i].Branch = old.Branch
 					run.Tasks[i].BaseCommit = old.BaseCommit
 					run.Tasks[i].ResultCommit = old.ResultCommit
+					run.Tasks[i].FailedAttemptCommit = old.FailedAttemptCommit
 					run.Tasks[i].ReturnsByAgent = old.ReturnsByAgent
 					run.Tasks[i].EvidenceAttemptBase = old.EvidenceAttemptBase
 					break
@@ -1519,6 +1775,11 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 	if err != nil {
 		return run, err
 	}
+	run, rev, err = s.observeMarshalCompatibility(ctx, runID, run, rev)
+	if err != nil {
+		return run, err
+	}
+
 	if model, ok := s.Model.(interface{ SetMarshalConversationID(string) }); ok {
 		decisions, err := s.Store.MarshalDecisions(ctx, runID)
 		if err != nil {
@@ -1529,6 +1790,12 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 				model.SetMarshalConversationID(id)
 			}
 		}
+	}
+	if waiting, err := s.checkPrivateProcess05Approval(ctx, run); err != nil || waiting {
+		if err != nil {
+			return run, err
+		}
+		return run, nil
 	}
 	if run.State == marshal.AwaitingUser {
 		if run.Pause == nil || run.Pause.ResumeState == "" {
@@ -1550,7 +1817,22 @@ func (s *MarshalService) Resume(ctx context.Context, runID string) (marshal.Run,
 				return run, err
 			}
 		}
-		if t.State == marshal.Dispatched {
+		// A parallel worker this process launched and is still collecting
+		// was not interrupted: resuming the run must not return it.
+		if t.State == marshal.Dispatched && !s.dispatchLive(runID, t.PlanTaskID) {
+			if infraRetryApplies(run, *t) {
+				// Observe the failed attempt before preparing a base checkout.
+				// Its branch may legitimately have advanced before hand-in.
+				run.State = marshal.Reviewing
+				if err = s.returnInfraFailure(ctx, runID, run, rev, i, "worker interrupted by restart"); err != nil {
+					return run, err
+				}
+				run, rev, err = s.load(ctx, runID)
+				if err != nil {
+					return run, err
+				}
+				continue
+			}
 			_, err = wm.Prepare(ctx, model.WorktreeRequest{TaskID: taskArtifactID(runID, *t), Branch: t.Branch, BaseCommit: t.BaseCommit})
 			if err != nil {
 				pauseMarshal(&run, "interrupted worker worktree: "+err.Error(), "inspect retained worktree and amend the plan", "")
@@ -1620,7 +1902,7 @@ func zeroMarshalCharge() marshal.Charge {
 }
 
 func (s *MarshalService) dispatchedTier(ctx context.Context, runID, taskID string) (marshal.Tier, error) {
-	history, err := s.Store.MarshalDecisions(ctx, runID)
+	history, err := s.marshalDecisionsResolved(ctx, runID)
 	if err != nil {
 		return "", err
 	}
@@ -1650,8 +1932,7 @@ func (s *MarshalService) requireIndependentVerifier(ctx context.Context, run mar
 	if err != nil {
 		return err
 	}
-	// Independence comes from the verifier's own fresh session, not from its
-	// provider: with a single installed provider the Marshal's serves again.
+	// The wired selector requires a fresh session and a non-worker provider.
 	if provider == "" {
 		return errors.New("independent verifier is unavailable")
 	}

@@ -8,10 +8,11 @@ import (
 
 // TaskResult holds the execution outcome from a worker harness.
 type TaskResult struct {
-	TaskID        string
-	Success       bool
-	NeedsApproval bool
-	ApprovalReq   *ApprovalRequest
+	transportAdmission *providerTransportAdmission
+	TaskID             string
+	Success            bool
+	NeedsApproval      bool
+	ApprovalReq        *ApprovalRequest
 	// NativeApprovalID is an existing canonical approval record created by a
 	// typed provider bridge. Engine must adopt that exact record rather than
 	// manufacture a second generic approval for the same native request.
@@ -57,6 +58,8 @@ func (m *MockHarness) Name() string {
 }
 
 func (m *MockHarness) Execute(ctx context.Context, task TaskExecution, pkg ConstraintPackage, worktree string) (TaskResult, error) {
+	// This synchronous backend has now entered execution; there is no provider preparation.
+	AcknowledgeWorkerLaunch(ctx)
 	if m.handler != nil {
 		return m.handler(ctx, task, pkg, worktree)
 	}
@@ -180,6 +183,7 @@ func (c *CodexNativeHarness) Execute(ctx context.Context, task TaskExecution, pk
 
 // OpenCodeNativeHarness adapts open-weights / local models under MARSHAL governance.
 type OpenCodeNativeHarness struct {
+	executor  func(context.Context, TaskExecution, ConstraintPackage, string) (TaskResult, error)
 	modelName string
 }
 
@@ -190,11 +194,26 @@ func NewOpenCodeNativeHarness(modelName string) *OpenCodeNativeHarness {
 	return &OpenCodeNativeHarness{modelName: modelName}
 }
 
+func NewOpenCodeNativeHarnessWithExecutor(modelName string, executor func(context.Context, TaskExecution, ConstraintPackage, string) (TaskResult, error)) *OpenCodeNativeHarness {
+	h := NewOpenCodeNativeHarness(modelName)
+	h.executor = executor
+	return h
+}
+
 func (o *OpenCodeNativeHarness) Name() string {
+	if rejectUnboundNative {
+		return "opencode"
+	}
 	return "opencode-native"
 }
 
 func (o *OpenCodeNativeHarness) Execute(ctx context.Context, task TaskExecution, pkg ConstraintPackage, worktree string) (TaskResult, error) {
+	if o != nil && o.executor != nil {
+		return o.executor(ctx, task, pkg, worktree)
+	}
+	if rejectUnboundNative {
+		return TaskResult{TaskID: task.TaskID}, fmt.Errorf("%w: OpenCode canonical runtime executor unavailable", ErrRunBlocked)
+	}
 	start := time.Now().UTC()
 	evID := fmt.Sprintf("ev-open-%s-%d", task.TaskID, start.UnixNano())
 	evidence := ExecutionEvidence{
@@ -223,6 +242,7 @@ func (o *OpenCodeNativeHarness) Execute(ctx context.Context, task TaskExecution,
 // AntigravityNativeHarness adapts Google Antigravity / Gemini models under MARSHAL governance.
 type AntigravityNativeHarness struct {
 	modelName string
+	executor  func(context.Context, TaskExecution, ConstraintPackage, string) (TaskResult, error)
 }
 
 func NewAntigravityNativeHarness(modelName string) *AntigravityNativeHarness {
@@ -233,10 +253,25 @@ func NewAntigravityNativeHarness(modelName string) *AntigravityNativeHarness {
 }
 
 func (a *AntigravityNativeHarness) Name() string {
+	if rejectUnboundNative {
+		return "agy"
+	}
 	return "antigravity-native"
 }
 
+func NewAntigravityNativeHarnessWithExecutor(modelName string, executor func(context.Context, TaskExecution, ConstraintPackage, string) (TaskResult, error)) *AntigravityNativeHarness {
+	h := NewAntigravityNativeHarness(modelName)
+	h.executor = executor
+	return h
+}
+
 func (a *AntigravityNativeHarness) Execute(ctx context.Context, task TaskExecution, pkg ConstraintPackage, worktree string) (TaskResult, error) {
+	if a != nil && a.executor != nil {
+		return a.executor(ctx, task, pkg, worktree)
+	}
+	if rejectUnboundNative {
+		return TaskResult{TaskID: task.TaskID}, fmt.Errorf("%w: Antigravity governed runtime executor unsupported", ErrRunBlocked)
+	}
 	start := time.Now().UTC()
 	evID := fmt.Sprintf("ev-agy-%s-%d", task.TaskID, start.UnixNano())
 	evidence := ExecutionEvidence{
@@ -261,3 +296,15 @@ func (a *AntigravityNativeHarness) Execute(ctx context.Context, task TaskExecuti
 		Duration:      35 * time.Millisecond,
 	}, nil
 }
+
+// Runtime-owned native executors prepare policy, supervision and provider
+// configuration before their shared adapter backend admits the launch.
+func (*CodexNativeHarness) DefersWorkerLaunch() bool  { return true }
+func (*ClaudeNativeHarness) DefersWorkerLaunch() bool { return true }
+
+// A bound runtime executor prepares supervision and provider configuration
+// (SQLite writes) before its adapter admits the launch, exactly as the Codex
+// and Claude executors do; admitting here would hold the store's only
+// connection across that preparation.
+func (o *OpenCodeNativeHarness) DefersWorkerLaunch() bool    { return o != nil && o.executor != nil }
+func (a *AntigravityNativeHarness) DefersWorkerLaunch() bool { return a != nil && a.executor != nil }

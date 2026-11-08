@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/learning"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/optimization"
+	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
@@ -32,12 +34,13 @@ func TestProcess03Through08Lifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runtime.Close()
+	projectID := projectid.ID(runtime.ProjectIdentity())
 
 	// Process 03: form the user request before any plan exists, preserve the
 	// raw request/constraints, and persist only an approved canonical contract.
 	intake, err := goalintake.Form(goalintake.FormationRequest{
 		Request:   "Fix the documented typo. Do not change the public API.",
-		ProjectID: runtimePlanProject, SessionID: "SESSION-p03-p08",
+		ProjectID: projectID, SessionID: "SESSION-p03-p08",
 		Version: constitution.Current,
 		Context: goalintake.RequestContext{Recoverable: true, ScopeKnown: true},
 	})
@@ -64,6 +67,7 @@ func TestProcess03Through08Lifecycle(t *testing.T) {
 	// Process 04: the actual planning service reads the active canonical goal.
 	request := planCreateRequest()
 	request.SessionID = goal.SessionID
+	request.ProjectID = projectID
 	created, err := runtime.Plans().Create(ctx, request)
 	if err != nil {
 		t.Fatal(err)
@@ -71,24 +75,29 @@ func TestProcess03Through08Lifecycle(t *testing.T) {
 	if created.Goal.GoalID != goal.ID {
 		t.Fatalf("plan lost Process 03 goal binding: %+v", created.Goal)
 	}
-	if _, err := runtime.Plans().Approve(ctx, runtimePlanProject); err != nil {
+	if _, err := runtime.Plans().Approve(ctx, projectID); err != nil {
 		t.Fatal(err)
 	}
 
+	harnessCalls := atomic.Int64{}
 	// Process 05: run the approved plan through the real execution service.
 	execService := runtime.Execution()
 	execService.RegisterHarness(execution.NewMockHarness("test-harness", func(context.Context, execution.TaskExecution, execution.ConstraintPackage, string) (execution.TaskResult, error) {
+		harnessCalls.Add(1)
 		return execution.TaskResult{TaskID: "fix", Success: true, Claims: []execution.ExecutionClaim{{
 			ClaimID: "claim-fix", TaskID: "fix", ClaimText: "fixed typo in README.md",
 			Status: execution.ClaimSupported, EvidenceRefs: []string{"ev-readme"},
 		}}}, nil
 	}))
-	run, err := execService.StartRun(ctx, goal.SessionID, runtimePlanProject)
+	run, err := execService.StartRun(ctx, goal.SessionID, projectID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	execService.Engine().EvidenceOracle().RecordEvidence(execution.ExecutionEvidence{EvidenceID: "ev-readme", RunID: run.RunID, RelevantFiles: []string{"README.md"}, Status: execution.EvidenceValid})
 	completed, err := execService.ExecuteRun(ctx, run.RunID)
+	if assertPrivateLegacyMockExecutionRefused(t, runtime, run, completed, err, harnessCalls.Load()) {
+		return
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -22,7 +22,7 @@ class CleanInstallSmokeTests(unittest.TestCase):
                 "build",
                 "-buildvcs=false",
                 "-ldflags",
-                "-X github.com/Zen1th53/marshal/internal/cli.Version=v1.5.0",
+                "-X github.com/Zen1th53/marshal/internal/cli.Version=v0.2.0",
                 "-o",
                 str(cls.marshal_bin),
                 "./cmd/marshal",
@@ -35,13 +35,13 @@ class CleanInstallSmokeTests(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.bin_dir, ignore_errors=True)
 
-    def run_marshal(self, repo_path, *args):
+    def run_marshal(self, repo_path, *args, check=True):
         return subprocess.run(
             [str(self.marshal_bin), *args],
             cwd=repo_path,
             capture_output=True,
             text=True,
-            check=True,
+            check=check,
         )
 
     def wait_for_process(self, process, predicate, label):
@@ -102,7 +102,7 @@ class CleanInstallSmokeTests(unittest.TestCase):
             )
 
             version = self.run_marshal(repo_path, "version")
-            self.assertIn("MARSHAL v1.5.0", version.stdout)
+            self.assertIn("Marshal v0.2.0", version.stdout)
 
             initialized = self.run_marshal(repo_path, "init")
             self.assertIn("initialized", initialized.stdout)
@@ -114,8 +114,13 @@ class CleanInstallSmokeTests(unittest.TestCase):
                 self.assertTrue((repo_path / name).is_file())
             self.assertTrue((repo_path / ".marshal" / "state.db").is_file())
 
-            doctor = self.run_marshal(repo_path, "doctor")
-            self.assertIn("MARSHAL Doctor Verdict: PASS", doctor.stdout)
+            doctor = self.run_marshal(repo_path, "doctor", check=False)
+            self.assertIn(doctor.returncode, (0, 2))
+            if doctor.returncode == 0:
+                self.assertIn("MARSHAL Doctor Verdict: PASS", doctor.stdout)
+            else:
+                self.assertIn("MARSHAL Doctor Verdict: DEGRADED", doctor.stdout)
+                self.assertTrue("bubblewrap" in doctor.stdout or "bwrap" in doctor.stdout)
             self.assertIn("[NOT_RUN]  codex", doctor.stdout)
 
             daemon = self.start_daemon(repo_path)

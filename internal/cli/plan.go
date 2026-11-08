@@ -25,6 +25,8 @@ func (c command) plan(ctx context.Context, args []string) error {
 	service := runtime.Plans()
 
 	switch args[0] {
+	case "draft":
+		return c.draftModelPlan(ctx, runtime, args[1:])
 	case "create":
 		return c.createPlan(ctx, service, args[1:])
 	case "show":

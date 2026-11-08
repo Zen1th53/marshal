@@ -23,10 +23,19 @@ import (
 const ProtocolVersion2026 = "2026-07-28"
 
 type Server struct {
+	proposalCall       func(context.Context, string, json.RawMessage) (json.RawMessage, error)
+	chatPermission     func(context.Context, json.RawMessage) (json.RawMessage, error)
+	role               string
+	workerTaskID       string
+	workerBinding      app.KnowledgeBinding
+	workerBindingErr   error
+	scopedKnowledge    bool
 	runtime            *app.Runtime
 	authManager        *auth.Manager
 	rateLimiter        *ratelimit.RateLimiter
 	concurrencyLimiter *ratelimit.ConcurrencyLimiter
+	workerCaller       *auth.Principal
+	workerValidate     func(context.Context) error
 }
 
 func NewServer(runtime *app.Runtime) *Server {
@@ -187,7 +196,17 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 		if callerPrincipal.ID == "" {
 			callerPrincipal.ID = "mcp-client"
 		}
-		res, err := s.callTool(ctx, callerPrincipal, params.Name, params.Arguments)
+		// Live tools retain their raw JSON and launch binding on HTTP just as
+		// on stdio. A token capability permits submission, never acceptance.
+		if resp, handled := s.callChatPermission(ctx, req); handled {
+			s.writeLiveResponse(ctx, w, req, resp)
+			return
+		}
+		if resp, handled := s.callStdioProposal(ctx, req); handled {
+			s.writeLiveResponse(ctx, w, req, resp)
+			return
+		}
+		res, err := s.callTool(knowledgeRequestContext(ctx, req.ID), callerPrincipal, params.Name, params.Arguments)
 		if err != nil {
 			s.writeError(w, req.ID, -32000, err.Error())
 			return
@@ -203,6 +222,21 @@ func (s *Server) handleJSONRPC(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) writeLiveResponse(ctx context.Context, w http.ResponseWriter, req jsonRPCRequest, resp jsonRPCResponse) {
+	data, err := json.Marshal(resp)
+	if err != nil || (nativePlanningContextRequest(req) && ctx.Err() != nil) {
+		if nativePlanningContextRequest(req) {
+			s.abortNativePlanningDelivery(req, resp)
+		}
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	n, err := w.Write(append(data, '\n'))
+	if nativePlanningContextRequest(req) && (err != nil || n != len(data)+1) {
+		s.abortNativePlanningDelivery(req, resp)
+	}
+}
+
 func (s *Server) writeErrorWithStatus(w http.ResponseWriter, id any, status, code int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -212,6 +246,36 @@ func (s *Server) writeErrorWithStatus(w http.ResponseWriter, id any, status, cod
 }
 
 func (s *Server) listTools() []Tool {
+	if s.scopedKnowledge {
+		return s.knowledgeTools()
+	}
+	if s.role == "session" {
+		return []Tool{
+			{Name: "memory_status", InputSchema: objectSchema(map[string]any{})},
+			{Name: "memory_recall", InputSchema: objectSchema(map[string]any{"query": stringSchema()}, "query")},
+			{Name: "memory_remember", InputSchema: objectSchema(map[string]any{"title": stringSchema(), "body": stringSchema()}, "title", "body")},
+			designRecordTool(),
+		}
+	}
+	if s.role == "worker" {
+		return append(append(workerCandidateTools(), []Tool{
+			{
+				Name:        "marshal_status",
+				Description: "Get MARSHAL local runtime status and object counts",
+				InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			},
+			{
+				Name:        "task_get",
+				Description: "Get specific MARSHAL task by ID",
+				InputSchema: map[string]any{
+					"type":       "object",
+					"properties": map[string]any{"task_id": map[string]any{"type": "string"}},
+					"required":   []string{"task_id"},
+				},
+			},
+			memoryRecallTool(),
+		}...), append(s.knowledgeTools(), s.workerCodeEvidenceTools()...)...)
+	}
 	tools := []Tool{
 		{
 			Name:        "marshal_status",
@@ -265,9 +329,14 @@ func (s *Server) listTools() []Tool {
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		},
 		{
-			Name:        "events_list",
-			Description: "List audit events",
+			Name:        "run_digest",
+			Description: "Read the current Marshal run once: state, pause, close authorization, each task's worker and state, and the events_cursor to continue events_list from",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+		},
+		{
+			Name:        "events_list",
+			Description: "List audit events. With no arguments it returns the full history as before; with since_cursor, types, task_id or limit it returns {events, next_cursor, has_more} holding only matching events after the cursor",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{"since_cursor": stringSchema(), "types": stringSchema(), "task_id": stringSchema(), "limit": map[string]any{"type": "integer"}}},
 		},
 		{
 			Name:        "artifacts_list",
@@ -293,24 +362,8 @@ func (s *Server) listTools() []Tool {
 				"properties": map[string]any{"project_id": map[string]any{"type": "string"}},
 			},
 		},
-		{
-			Name:        "memory_recall",
-			Description: "Search memory using progressive hybrid retrieval",
-			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{"project_id": map[string]any{"type": "string"}, "query": map[string]any{"type": "string"}},
-				"required":   []string{"project_id", "query"},
-			},
-		},
-		{
-			Name:        "memory_remember",
-			Description: "Record unverified candidate memory",
-			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{"project_id": map[string]any{"type": "string"}, "title": map[string]any{"type": "string"}, "body": map[string]any{"type": "string"}},
-				"required":   []string{"project_id", "title", "body"},
-			},
-		},
+		memoryRecallTool(),
+		memoryRememberTool(),
 		{
 			Name:        "task_memory_list",
 			Description: "List governed shared working-memory slots for an authorized task",
@@ -361,13 +414,143 @@ func (s *Server) listTools() []Tool {
 		Tool{Name: "process08_manifests", Description: "List reproducible benchmark manifests for one optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
 		Tool{Name: "process08_canaries", Description: "List bounded canary records for one optimization cycle", InputSchema: objectSchema(map[string]any{"optimization_id": stringSchema()}, "optimization_id")},
 	)
-	return tools
+	tools = append(tools, s.knowledgeTools()...)
+	tools = append(tools, designRecordTool())
+	tools = append(tools, s.chatPermissionTools()...)
+	return append(tools, s.proposalTools()...)
+}
+
+func (s *Server) defaultCaller() auth.Principal {
+	if s.workerCaller != nil {
+		return *s.workerCaller
+	}
+	id := s.role
+	if id == "" {
+		id = "marshal"
+	}
+	if s.role == "worker" {
+		agentID := s.workerBinding.AgentID
+		if agentID == "" {
+			agentID = id
+		}
+		return auth.Principal{ID: agentID, Name: agentID, Kind: auth.KindMCPClient, Capabilities: []string{string(auth.CapStatusRead), string(auth.CapTaskRead)}}
+	}
+	if s.role == "marshal" {
+		// The Marshal's own launch-bound transport may refresh the source
+		// index; role-bound servers never take authority from the transport.
+		return auth.Principal{ID: id, Name: id, Kind: auth.KindLocalUser, Capabilities: []string{string(auth.CapTaskRead), string(auth.CapTaskExecute)}}
+	}
+	return auth.Principal{ID: id, Name: id, Kind: auth.KindLocalUser}
 }
 
 func (s *Server) callTool(ctx context.Context, caller auth.Principal, name string, args map[string]any) (string, error) {
+	if s.role == "marshal" {
+		// The launch-bound Marshal transport owns its authority; a caller
+		// identity supplied by the transport is never widened or substituted.
+		caller = s.defaultCaller()
+	}
+	if s.workerCaller != nil {
+		if s.role != "worker" || caller.ID != s.workerCaller.ID || s.workerValidate == nil {
+			return "", model.ErrPolicyDenied
+		}
+		if err := s.workerValidate(ctx); err != nil {
+			return "", err
+		}
+	}
+	if s.role != "" && name == "status" {
+		name = "marshal_status"
+	}
+	if s.role != "" {
+		if (s.role != "session" && s.role != "marshal" && s.role != "worker") || (s.role == "worker" && s.workerTaskID == "") {
+			return "", fmt.Errorf("%w: invalid MCP role", model.ErrPolicyDenied)
+		}
+		if projectID := stringArg(args, "project_id"); projectID != "" {
+			project, err := s.runtime.Store().Project(ctx)
+			if err != nil {
+				return "", err
+			}
+			if project.ID != projectID && (projectID == s.runtime.ProjectIdentity() || projectID == s.runtime.ProjectRoot()) {
+				// The durable project identity (project.json) and the project
+				// root name this same bound project; use its canonical store ID.
+				args["project_id"] = project.ID
+				projectID = project.ID
+			}
+			if project.ID != projectID {
+				return "", fmt.Errorf("%w: MCP project scope mismatch", model.ErrPolicyDenied)
+			}
+		}
+	}
+	if isKnowledgeTool(name) && s.role == "" && caller.Kind == auth.KindMCPClient {
+		taskID, err := knowledgeStringArg(args, "task_id", 256)
+		if err != nil {
+			return "", err
+		}
+		leaseID, err := knowledgeStringArg(args, "lease_id", 256)
+		if err != nil || taskID == "" || leaseID == "" {
+			return "", model.ErrPolicyDenied
+		}
+		binding, err := s.runtime.WorkerKnowledgeLease(ctx, taskID, leaseID)
+		if err != nil {
+			return "", err
+		}
+		if caller.Name != binding.AgentID {
+			return "", model.ErrPolicyDenied
+		}
+		scoped := *s
+		scoped.role, scoped.workerTaskID, scoped.workerBinding, scoped.workerBindingErr = "worker", taskID, binding, nil
+		caller.ID = binding.AgentID
+		return scoped.callTool(ctx, caller, name, args)
+	}
+	if s.scopedKnowledge && !isKnowledgeTool(name) {
+		return "", fmt.Errorf("%w: tool %q is not authorized for scoped knowledge transport", model.ErrPolicyDenied, name)
+	}
+	if s.role == "worker" && workerCandidateWrites && (name == "memory_remember" || name == "design_record") {
+		task, err := s.runtime.Task(ctx, s.workerTaskID)
+		if err != nil || task.Status == model.TaskCancelled || task.Status == model.TaskSuperseded || task.Status == model.TaskMerged {
+			return "", fmt.Errorf("%w: worker task is not live", model.ErrPolicyDenied)
+		}
+		caller.ID = "worker:" + s.workerTaskID
+	}
+	if s.role == "worker" {
+		switch name {
+		case "marshal_status", "memory_recall":
+		case "memory_remember", "design_record":
+			if !workerCandidateWrites {
+				return "", fmt.Errorf("%w: worker candidate writes are not available in this edition", model.ErrPolicyDenied)
+			}
+		case "task_get":
+			if stringArg(args, "task_id") != s.workerTaskID {
+				return "", fmt.Errorf("%w: worker may only access its own task %q", model.ErrPolicyDenied, s.workerTaskID)
+			}
+		case "code_context", "code_expand", "code_validate":
+			if !isCodeEvidenceTool(name) {
+				return "", fmt.Errorf("%w: tool %q is not authorized for worker", model.ErrPolicyDenied, name)
+			}
+		default:
+			if !isKnowledgeTool(name) {
+				return "", fmt.Errorf("%w: tool %q is not authorized for worker", model.ErrPolicyDenied, name)
+			}
+		}
+	}
+
+	if s.role == "session" {
+		switch name {
+		case "memory_status", "memory_recall", "memory_remember", "design_record":
+		default:
+			return "", fmt.Errorf("%w: session memory tool required", model.ErrPolicyDenied)
+		}
+	}
 	principalID := caller.ID
 	principal := memoryPrincipal(caller)
+	if result, handled, err := s.callKnowledgeTool(ctx, principal, name, args); handled {
+		return result, err
+	}
+	if result, handled, err := s.callCodeEvidenceTool(ctx, caller, name, args); handled {
+		return result, err
+	}
 	switch name {
+	case "design_record":
+		return s.recordDesign(ctx, caller, args)
 	case "marshal_status":
 		status, err := s.runtime.Status(ctx)
 		if err != nil {
@@ -383,38 +566,37 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 				proj = p.ID
 			}
 		}
-		records, err := s.runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: proj, Scope: model.ScopeProject, ActorID: principalID})
+		records, err := s.runtime.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: proj})
+		if err != nil {
+			return "", err
+		}
+		version, err := s.runtime.Store().SchemaVersion(ctx)
 		if err != nil {
 			return "", err
 		}
 		status := map[string]any{
-			"version":    "2.0.0",
-			"healthy":    true,
-			"project_id": proj,
-			"records":    len(records),
+			"version":        "2.0.0",
+			"healthy":        true,
+			"schema_version": fmt.Sprintf("v%d", version),
+			"project_id":     proj,
+			"records":        len(records),
 		}
 		data, _ := json.Marshal(status)
 		return string(data), nil
 
 	case "memory_recall":
-		proj, _ := args["project_id"].(string)
-		query, _ := args["query"].(string)
-		if proj == "" {
-			if p, projectErr := s.runtime.Store().Project(ctx); projectErr == nil {
-				proj = p.ID
-			}
-		}
-		res, err := s.runtime.Memory().Recall(ctx, principal, app.RecallRequest{ProjectID: proj, Query: query})
-		if err != nil {
-			return "", err
-		}
-		data, _ := json.Marshal(res)
-		return string(data), nil
+		return s.recallMemory(ctx, principal, args)
 
 	case "memory_remember":
+		if out, handled, err := s.rememberViaProposalMCP(ctx, args); handled {
+			return out, err
+		}
 		proj, _ := args["project_id"].(string)
 		title, _ := args["title"].(string)
 		body, _ := args["body"].(string)
+		if strings.TrimSpace(title) == "" || strings.TrimSpace(body) == "" {
+			return "", fmt.Errorf("%w: title and body parameters are required", model.ErrInvalid)
+		}
 		if proj == "" {
 			if p, projectErr := s.runtime.Store().Project(ctx); projectErr == nil {
 				proj = p.ID
@@ -480,15 +662,24 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 		return `{"status":"revoked"}`, nil
 
 	case "memory_handoff_create":
+		taskID := stringArg(args, "task_id")
+		targetRole := stringArg(args, "target_role")
+		if taskID == "" || targetRole == "" {
+			return "", fmt.Errorf("%w: task_id and target_role parameters are required", model.ErrInvalid)
+		}
 		maxBytes, err := optionalIntArg(args, "max_bytes")
 		if err != nil {
 			return "", err
 		}
-		handoff, err := s.runtime.CompileAndSubmitHandoff(ctx, principal, app.HandoffCompileRequest{ProjectID: s.projectID(ctx, args), TaskID: stringArg(args, "task_id"), SourceAgentID: principalID, TargetRole: stringArg(args, "target_role"), MaxBytes: maxBytes, CurrentHead: stringArg(args, "current_head"), CurrentBranch: stringArg(args, "current_branch"), ChangedFiles: stringSliceArg(args, "changed_files"), DiffHash: stringArg(args, "diff_hash")})
+		handoff, err := s.runtime.CompileAndSubmitHandoff(ctx, principal, app.HandoffCompileRequest{ProjectID: s.projectID(ctx, args), TaskID: taskID, SourceAgentID: principalID, TargetRole: targetRole, MaxBytes: maxBytes, CurrentHead: stringArg(args, "current_head"), CurrentBranch: stringArg(args, "current_branch"), ChangedFiles: stringSliceArg(args, "changed_files"), DiffHash: stringArg(args, "diff_hash")})
 		return marshalToolResult(handoff, err)
 
 	case "memory_handoff_consume":
-		handoffID := protocol.HandoffID(stringArg(args, "handoff_id"))
+		handoffIDStr := stringArg(args, "handoff_id")
+		if handoffIDStr == "" {
+			return "", fmt.Errorf("%w: handoff_id parameter is required", model.ErrInvalid)
+		}
+		handoffID := protocol.HandoffID(handoffIDStr)
 		pending, err := s.runtime.Store().GetHandoff(ctx, handoffID)
 		if err != nil {
 			return "", err
@@ -582,12 +773,28 @@ func (s *Server) callTool(ctx context.Context, caller auth.Principal, name strin
 		data, _ := json.Marshal(agents)
 		return string(data), nil
 
+	case "run_digest":
+		digest, err := s.runDigest(ctx)
+		if err != nil {
+			return "", err
+		}
+		data, _ := json.Marshal(digest)
+		return string(data), nil
+
 	case "events_list":
 		events, err := s.runtime.Events(ctx)
 		if err != nil {
 			return "", err
 		}
-		data, _ := json.Marshal(events)
+		page, paged, err := pageEvents(events, args)
+		if err != nil {
+			return "", err
+		}
+		if !paged {
+			data, _ := json.Marshal(events)
+			return string(data), nil
+		}
+		data, _ := json.Marshal(page)
 		return string(data), nil
 
 	case "artifacts_list":
@@ -732,7 +939,17 @@ func (s *Server) writeError(w http.ResponseWriter, id any, code int, message str
 }
 
 func requiredCapabilityForTool(toolName string) auth.Capability {
+	if isKnowledgeTool(toolName) {
+		return auth.CapTaskRead
+	}
 	switch toolName {
+	case "marshal_project_contract_inventory", "marshal_project_contract_read", "marshal_project_contract_context",
+		"marshal_project_contract_receipt", "marshal_memory_receipt", "marshal_proposal_receipt":
+		return auth.CapTaskRead
+	case "marshal_project_contract_submit", "marshal_memory_candidate_submit", "marshal_proposal_submit", ChatPermissionToolName:
+		// The bound parent validates actions and retains owner acceptance.
+		// These tools submit requests; they cannot confer approval authority.
+		return auth.CapTaskExecute
 	case "marshal_status":
 		return auth.CapStatusRead
 	case "tasks_list", "task_get":
@@ -741,9 +958,13 @@ func requiredCapabilityForTool(toolName string) auth.Capability {
 		return auth.CapTaskExecute
 	case "task_run":
 		return auth.CapTaskExecute
-	case "memory_status", "memory_recall", "task_memory_list":
+	case "memory_status", "memory_recall", "task_memory_list", "project_context", "project_overview", "find_symbol", "references", "related_files", "project_search":
 		return auth.CapTaskRead
-	case "memory_remember", "task_memory_set", "task_memory_cas", "task_memory_promote":
+	case "code_context", "code_expand", "code_validate":
+		// Read-only code evidence. Served only on the governed worker relay
+		// (Extreme), which also checks the live lease and approved scope.
+		return auth.CapTaskRead
+	case "design_record", "memory_remember", "task_memory_set", "task_memory_cas", "task_memory_promote":
 		return auth.CapTaskExecute
 	case "task_memory_grant", "task_memory_revoke":
 		return auth.CapAll
@@ -753,7 +974,7 @@ func requiredCapabilityForTool(toolName string) auth.Capability {
 		return auth.CapHandoffRead
 	case "agents_list":
 		return auth.CapAgentRead
-	case "events_list", "artifacts_list":
+	case "events_list", "artifacts_list", "run_digest":
 		return auth.CapEvidenceRead
 	case "verification_status", "process06_status":
 		return auth.CapVerifyRun
@@ -784,11 +1005,16 @@ func memoryPrincipal(caller auth.Principal) authz.Principal {
 	}
 	// The unauthenticated server constructor is retained for local-only tests
 	// and development mode. Production authenticated servers never take this
-	// path.
+	// path. Allow candidate proposals and task handoffs without granting source
+	// writes or policy administration.
+	capabilities := append([]string(nil), caller.Capabilities...)
 	if len(caller.Capabilities) == 0 {
-		authorities = append(authorities, authz.AuthorityTaskPlan, authz.AuthoritySourceWrite)
+		authorities = append(authorities, authz.AuthorityTaskPlan)
+		// The typed handoff service authorizes on the handoff.create capability
+		// (not on authorities), so grant it explicitly for local-only callers.
+		capabilities = append(capabilities, string(auth.CapHandoffCreate))
 	}
-	return authz.Principal{ID: caller.ID, Role: authz.Role{Name: "developer", Capabilities: append([]string(nil), caller.Capabilities...), Authorities: authorities}}
+	return authz.Principal{ID: caller.ID, Role: authz.Role{Name: "developer", Capabilities: capabilities, Authorities: authorities}}
 }
 
 func (s *Server) projectID(ctx context.Context, args map[string]any) string {

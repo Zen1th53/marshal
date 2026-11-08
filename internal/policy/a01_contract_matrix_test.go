@@ -153,7 +153,7 @@ func TestPolicyProviderMetadataDoesNotImplyTrust(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, provider := range []string{"codex", "claude", "gemini", "opencode", "trusted", "owner"} {
+	for _, provider := range []string{"codex", "claude", "agy", "opencode", "trusted", "owner"} {
 		decision, err := evaluator.Evaluate(context.Background(), EvaluationRequest{SubjectID: "subject-1", Action: "delete", Resource: "repo", Provider: provider})
 		if err != nil || decision.Allowed {
 			t.Fatalf("provider %q changed denied decision: %#v err=%v", provider, decision, err)

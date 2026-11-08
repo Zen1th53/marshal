@@ -109,7 +109,7 @@ func TestEveryNodeIsReachable(t *testing.T) {
 	}
 }
 
-// The pack declares 804 frozen IA nodes. The loader skips its own contract
+// The pack declares 801 frozen IA nodes. The loader skips its own contract
 // documents, so the navigable count must match that number exactly — if it
 // drifts, either a place was lost or a document became a destination.
 func TestNavigableCountMatchesFrozenInventory(t *testing.T) {
@@ -127,17 +127,22 @@ func TestNavigableCountMatchesFrozenInventory(t *testing.T) {
 	}
 }
 
-// The 17 gaps are load-bearing: each names something the frozen TUI requires
-// and no canonical binding provides. They must survive loading as gaps, because
-// a gap that reads as BOUND becomes decorative UI.
+// The remaining gaps are load-bearing: each names something the frozen TUI
+// requires and no canonical binding provides. They must survive loading as
+// gaps, because a gap that reads as BOUND becomes decorative UI.
 func TestImplementationGapsSurviveLoading(t *testing.T) {
-	ia, err := FrozenIA()
+	// Generic loading preserves every declaration in the historical pack;
+	// Extreme resolves only its separately tested production bindings.
+	ia, err := LoadIA(frozenManifest)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 	gaps := ia.Gaps()
-	if len(gaps) != 17 {
-		t.Fatalf("the IA reports %d implementation gaps, the pack declares 17", len(gaps))
+	if len(gaps) != 2 {
+		t.Fatalf("the IA reports %d implementation gaps, the pack declares 2", len(gaps))
+	}
+	if gaps[0].SpecID != "CTUI-0092" || gaps[1].SpecID != "CTUI-0100" {
+		t.Fatalf("remaining gaps = %v, want [CTUI-0092 CTUI-0100]", []string{gaps[0].SpecID, gaps[1].SpecID})
 	}
 	for _, g := range gaps {
 		if g.Binding != BindingGap {
@@ -380,13 +385,15 @@ func TestEmbeddedManifestMatchesSpecPack(t *testing.T) {
 // The frozen top level is enforced by the loader, not only asserted by a test.
 // A manifest that renamed or reordered a section must fail to load.
 func TestLoaderRejectsRenamedOrReorderedSections(t *testing.T) {
-	pack, err := os.ReadFile("../../.marshal/tasks/community-tui-final/MANIFEST.json")
-	if err != nil {
-		t.Skipf("spec pack not present: %v", err)
-	}
+	// Exercise the production loader's actual embedded input. This mutation
+	// test needs no historical external pack; independent copy comparison above
+	// still requires that independent source and never compares a copy to itself.
 	var file manifestFile
-	if err := json.Unmarshal(pack, &file); err != nil {
+	if err := json.Unmarshal(frozenManifest, &file); err != nil {
 		t.Fatalf("parse: %v", err)
+	}
+	if _, err := LoadIA(frozenManifest); err != nil {
+		t.Fatalf("unmodified embedded manifest must load before mutation: %v", err)
 	}
 
 	renamed := file
@@ -408,6 +415,26 @@ func TestLoaderRejectsRenamedOrReorderedSections(t *testing.T) {
 	}
 	if _, err := LoadIA(raw); err == nil {
 		t.Fatal("a manifest that renamed a top-level section loaded without error")
+	}
+	reordered := file
+	reordered.Specs = append([]manifestSpec(nil), file.Specs...)
+	var sections []int
+	for i, spec := range reordered.Specs {
+		if spec.Type == string(NodeSection) {
+			sections = append(sections, i)
+		}
+	}
+	if len(sections) != len(FrozenSections) {
+		t.Fatalf("embedded manifest has %d sections, want %d", len(sections), len(FrozenSections))
+	}
+	a, b := sections[0], sections[1]
+	reordered.Specs[a], reordered.Specs[b] = reordered.Specs[b], reordered.Specs[a]
+	raw, err = json.Marshal(reordered)
+	if err != nil {
+		t.Fatalf("remarshal reordered sections: %v", err)
+	}
+	if _, err := LoadIA(raw); err == nil {
+		t.Fatal("a manifest that reordered top-level sections loaded without error")
 	}
 }
 

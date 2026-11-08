@@ -1,10 +1,10 @@
 package app
 
 import (
+	"context"
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/model"
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -26,49 +26,57 @@ func TestHarnessProbeEvidenceRequiresIsolatedReply(t *testing.T) {
 	}
 }
 
-func TestHarnessVerificationRunsSandboxAndPersistsEvidence(t *testing.T) {
+func TestHostHarnessProbeEvidenceRequiresSupervisedHostProcess(t *testing.T) {
+	good := adapter.Result{Status: adapter.StatusSuccess, FinalText: "MARSHAL_PROBE_OK", Isolation: model.IsolationCapability{Level: model.IsolationProcessOnly, Available: true, Process: true}}
+	if err := validateHostHarnessProbe(good); err != nil {
+		t.Fatal(err)
+	}
+	cases := []adapter.Result{good, good, good, good, good}
+	cases[0].Isolation.Level = model.IsolationBwrap
+	cases[1].Isolation.Process = false
+	cases[2].Isolation.Available = false
+	cases[3].FinalText = "prompt asked for MARSHAL_PROBE_OK"
+	cases[4].ExitCode = 1
+	for i, result := range cases {
+		if validateHostHarnessProbe(result) == nil {
+			t.Fatalf("invalid host probe %d accepted", i)
+		}
+	}
+}
+
+func TestHarnessProbeModelRejectsEmptyBeforeEgress(t *testing.T) {
+	t.Setenv("MARSHAL_OPENCODE_MODEL", "")
+	r := &Runtime{}
+	for _, provider := range []string{"codex", "claude", "opencode"} {
+		if _, err := r.harnessProbeModel(context.Background(), provider, "  "); err == nil || !strings.Contains(err.Error(), "explicit model") {
+			t.Fatalf("%s would retain an empty-model profile: %v", provider, err)
+		}
+	}
+}
+func TestHarnessProbeModelUsesOnlyDurableProjectPreference(t *testing.T) {
 	repo := runtimeRepo(t)
 	if _, err := Bootstrap(t.Context(), repo.Path()); err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := Open(t.Context(), repo.Path())
+	r, err := Open(t.Context(), repo.Path())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer runtime.Close()
-	bin := t.TempDir()
-	path := filepath.Join(bin, "opencode")
-	stub := `#!/bin/sh
-if [ "$1" = "--version" ]; then printf 'test-version\n'; exit 0; fi
-printf '%s\n' '{"type":"text","part":{"text":"MARSHAL_PROBE_OK"}}'
-`
-	if err := os.WriteFile(path, []byte(stub), 0700); err != nil {
-		t.Fatal(err)
+	defer r.Close()
+	for _, provider := range []string{"codex", "claude"} {
+		preference := model.ExecutionModelPreference{ProjectID: localProjectID, Adapter: provider, Model: "selected-model"}
+		if _, err := r.Store().SetExecutionModelPreference(t.Context(), preference, 0); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := r.harnessProbeModel(t.Context(), provider, ""); err != nil || got != "selected-model" {
+			t.Fatalf("durable %s model unresolved: %q %v", provider, got, err)
+		}
+		if got, err := r.harnessProbeModel(t.Context(), provider, " explicit "); err != nil || got != "explicit" {
+			t.Fatalf("explicit model overridden: %q %v", got, err)
+		}
 	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	profile, err := runtime.VerifyMarshalWorker(t.Context(), "opencode", "opencode/test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	stored, err := runtime.Store().GetHarnessProfile(t.Context(), "opencode")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.ProbeEvidenceID == "" || stored.ProbeEvidenceID != profile.ProbeEvidenceID || stored.InstalledVersion != "test-version" {
-		t.Fatalf("probe evidence not bound: %+v", stored)
-	}
-
-	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := runtime.VerifyMarshalWorker(t.Context(), "opencode", "opencode/test"); err == nil {
-		t.Fatal("failed provider minted probe evidence")
-	}
-	after, err := runtime.Store().GetHarnessProfile(t.Context(), "opencode")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if after.ProbeEvidenceID != profile.ProbeEvidenceID {
-		t.Fatal("failure replaced successful evidence")
+	t.Setenv("MARSHAL_OPENCODE_MODEL", " ollama/local ")
+	if got, err := r.harnessProbeModel(t.Context(), "opencode", ""); err != nil || got != "ollama/local" {
+		t.Fatalf("local model fallback lost: %q %v", got, err)
 	}
 }

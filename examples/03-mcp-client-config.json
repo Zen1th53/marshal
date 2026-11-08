@@ -1,10 +1,10 @@
 {
   "mcpServers": {
     "marshal": {
-      "command": "marshal",
-      "args": ["mcp", "serve"],
+      "type": "http",
+      "url": "http://127.0.0.1:8080",
       "headers": {
-        "Authorization": "Bearer mcp_sec_live_9f8a3b7c2d1e"
+        "Authorization": "Bearer REPLACE_WITH_MARSHAL_MCP_TOKEN"
       }
     }
   }

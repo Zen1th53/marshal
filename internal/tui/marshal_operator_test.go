@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
 )
@@ -101,5 +102,53 @@ func TestImportedTaskPanelAndAcceptance(t *testing.T) {
 	}
 	if _, err := m.approver(ctx, "RUN-imported", purpose); err == nil {
 		t.Fatal("approval replay accepted")
+	}
+}
+
+func TestMarshalResumeAwaitingUserInterruptedPhases(t *testing.T) {
+	store, ws, ctx := acceptanceWorkspace(t)
+	projectID := ws.projectID
+
+	// 1. Unresolved pause: run is in AwaitingUser with Pause information.
+	run := marshal.Run{
+		PlanID:      "PLAN-paused",
+		PlanVersion: 1,
+		Settings:    marshal.DefaultSettings(),
+		State:       marshal.AwaitingUser,
+		Pause: &marshal.Pause{
+			Reason:      "awaiting operator approval for high-risk action",
+			Resolutions: []string{"/approve to proceed", "/reject to abort"},
+		},
+	}
+	if _, err := store.SetMarshalRun(ctx, projectID, "RUN-paused", run, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	ws.marshalSession().mu.Lock()
+	ws.marshalSession().runID = "RUN-paused"
+	ws.marshalSession().mu.Unlock()
+
+	out, err := ws.ExecuteCommand(ctx, "/marshal resume")
+	if err != nil {
+		t.Fatalf("resume command failed: %v", err)
+	}
+	if !strings.Contains(out, "RUN-paused") {
+		t.Fatalf("expected output referencing RUN-paused, got %q", out)
+	}
+
+	// Wait briefly for background recovery check
+	var panel *MarshalPanel
+	for start := time.Now(); time.Since(start) < 2*time.Second; time.Sleep(20 * time.Millisecond) {
+		p := ws.marshalPanel()
+		if p != nil && p.RunID == "RUN-paused" && strings.Contains(p.Note, "awaiting operator approval") {
+			panel = p
+			break
+		}
+	}
+	if panel == nil {
+		t.Fatalf("expected panel with pause note, got: %+v", ws.marshalPanel())
+	}
+	if panel.State != marshal.AwaitingUser {
+		t.Fatalf("expected run state to remain AwaitingUser, got %v", panel.State)
 	}
 }

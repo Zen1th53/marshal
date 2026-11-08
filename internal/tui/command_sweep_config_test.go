@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +44,7 @@ func TestCommandSweepConfigMalformed(t *testing.T) {
 			t.Run(line, func(t *testing.T) { sweepWorkRun(t, ws, line, "Usage:") })
 		}
 	}
-	if files, _ := filepath.Glob(filepath.Join(stored.workDir, ".marshal", "backups", "*.db")); len(files) != 0 {
+	if files, _ := filepath.Glob(filepath.Join(stored.workDir, statepath.DirName, "backups", "*.db")); len(files) != 0 {
 		t.Fatalf("malformed backup wrote files: %v", files)
 	}
 }
@@ -117,7 +118,7 @@ func TestCommandSweepConfigExportFreshState(t *testing.T) {
 		t.Fatal(err)
 	}
 	sweepWorkRun(t, ws, "/export", "Evidence bundle written")
-	files, _ := filepath.Glob(filepath.Join(ws.workDir, ".marshal", "evidence", "*.json"))
+	files, _ := filepath.Glob(filepath.Join(ws.workDir, statepath.DirName, "evidence", "*.json"))
 	if len(files) != 1 {
 		t.Fatalf("export artifacts: %v", files)
 	}
@@ -168,7 +169,7 @@ func TestCommandSweepConfigBackupArtifacts(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		sweepWorkRun(t, ws, "/backup create", "written and verified")
 	}
-	files, _ := filepath.Glob(filepath.Join(ws.workDir, ".marshal", "backups", "*.db"))
+	files, _ := filepath.Glob(filepath.Join(ws.workDir, statepath.DirName, "backups", "*.db"))
 	if len(files) != 2 {
 		t.Errorf("backup collision: %v", files)
 	}
@@ -186,6 +187,29 @@ func TestCommandSweepConfigBackupArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	sweepWorkRun(t, ws, `/backup restore "`+path+`"`, "marshal state restore")
+}
+
+// T§31: /backup restore requires discovered project identity to match the backup's project ID.
+func TestBackupRestoreRejectsForeignProject(t *testing.T) {
+	sweepWorkEnvironment(t)
+	_, ws1, ctx := newControlWorkspace(t)
+	ws1.workDir = t.TempDir()
+	sweepWorkRun(t, ws1, "/backup create", "written and verified")
+
+	files, _ := filepath.Glob(filepath.Join(ws1.workDir, statepath.DirName, "backups", "*.db"))
+	if len(files) == 0 {
+		t.Fatal("no backup created")
+	}
+	backupPath := files[0]
+
+	_, ws2, _ := newControlWorkspace(t)
+	ws2.projectID = "different-project-id"
+	ws2.workDir = t.TempDir()
+
+	out, err := ws2.ExecuteCommand(ctx, "/backup restore "+backupPath)
+	if err == nil || !strings.Contains(err.Error(), "backup project ID mismatch") {
+		t.Fatalf("expected project ID mismatch error, got out=%q, err=%v", out, err)
+	}
 }
 
 func TestCommandSweepConfigDoctorNativePTY(t *testing.T) {
@@ -548,7 +572,7 @@ func TestCommandSweepConfigArtifactFailures(t *testing.T) {
 	if err := st.SaveGoalContract(ctx, model.GoalContract{ID: "goal-file-error", SessionID: ws.sessionID, DesiredOutcome: "Export fail closed", Risk: model.R1, AuthoritySource: "test", UnderstandingState: model.GoalReady}, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(ws.workDir, ".marshal"), []byte("blocked"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(ws.workDir, statepath.DirName), []byte("blocked"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, line := range []string{"/backup create", "/export"} {

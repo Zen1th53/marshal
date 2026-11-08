@@ -41,6 +41,29 @@ func (s *Store) saveGoalTerminationTx(ctx context.Context, term model.GoalTermin
 	}
 	defer tx.Rollback()
 
+	if err := s.writeGoalTermination(ctx, tx, term, budgetJSON); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) writeGoalTermination(ctx context.Context, tx *sql.Tx, term model.GoalTermination, budgetJSON string) error {
+	// A late Process 06 result for any older revision cannot erase cancellation.
+	var cancelled int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM goal_contracts WHERE session_id=? AND goal_id=? AND json_extract(intake_json,'$.confirmation')='CANCELLED'`, term.SessionID, term.GoalID).Scan(&cancelled); err != nil {
+		return err
+	}
+	if cancelled > 0 && (term.State != model.StateCancelled || term.ReasonCode != model.ReasonUserCancelled) {
+		return fmt.Errorf("%w: goal is cancelled", model.ErrGoalConflict)
+	}
+	var alreadyCancelled int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM goal_terminations WHERE session_id=? AND goal_id=? AND state='CANCELLED'`, term.SessionID, term.GoalID).Scan(&alreadyCancelled); err != nil {
+		return err
+	}
+	if alreadyCancelled > 0 {
+		return fmt.Errorf("%w: cancellation termination is immutable", model.ErrGoalConflict)
+	}
+
 	completedAt := term.CompletedAt.UTC().Format(time.RFC3339Nano)
 
 	query := `
@@ -70,9 +93,6 @@ func (s *Store) saveGoalTerminationTx(ctx context.Context, term model.GoalTermin
 		return fmt.Errorf("insert goal termination: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit save goal termination: %w", err)
-	}
 	return nil
 }
 
@@ -160,6 +180,20 @@ func (s *Store) saveBudgetTrackerTx(ctx context.Context, sessionID, goalID strin
 	}
 	defer tx.Rollback()
 
+	var existingJSON string
+	readErr := tx.QueryRowContext(ctx, `SELECT consumed_json FROM budget_trackers WHERE session_id=? AND goal_id=? AND revision=?`, sessionID, goalID, revision).Scan(&existingJSON)
+	if readErr != nil && !errors.Is(readErr, sql.ErrNoRows) {
+		return readErr
+	}
+	if readErr == nil {
+		var existing model.ConsumedBudget
+		if err := json.Unmarshal([]byte(existingJSON), &existing); err != nil {
+			return err
+		}
+		if len(existing.CallReservations) > 0 {
+			return fmt.Errorf("%w: admitted budget must use call settlement", model.ErrConflict)
+		}
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	query := `

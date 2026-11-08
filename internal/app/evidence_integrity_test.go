@@ -10,6 +10,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/store"
 	"github.com/Zen1th53/marshal/internal/verification"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -47,11 +48,42 @@ func TestCrossReviewReferencesMustResolve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := resolveReviewReferences(marshal.Review{EvidenceRefs: []string{"invented"}}, h); err == nil {
+	if _, err := resolveReviewReferences(marshal.Review{EvidenceRefs: []string{"invented"}}, h); err == nil {
 		t.Fatal("invented evidence accepted")
 	}
-	if err := resolveReviewReferences(marshal.Review{EvidenceRefs: []string{"result:" + h.ResultCommit, "diff", "check:" + h.CheckResults[0].Command, "file:a.txt"}}, h); err != nil {
+	if _, err := resolveReviewReferences(marshal.Review{EvidenceRefs: []string{"result:" + h.ResultCommit, "diff", "check:" + h.CheckResults[0].Command, "file:a.txt"}}, h); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A reviewer that also cites a file it only read keeps the review going: the
+// untouched file is dropped from the evidence, never recorded as an artifact.
+func TestReviewEvidenceDropsUntouchedFileReference(t *testing.T) {
+	s, _ := marshalFixture(t, 1)
+	startIntegrityRun(t, s, marshal.Budget{})
+	d, err := s.Dispatch(t.Context(), "run", "a", "write")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := s.CollectHandIn(t.Context(), "run", d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs, err := resolveReviewReferences(marshal.Review{EvidenceRefs: []string{"diff", "file:context/read-only.go", "file:a.txt"}}, h)
+	if err != nil {
+		t.Fatalf("untouched file reference stopped the review: %v", err)
+	}
+	if !slices.Equal(refs, []string{"diff", "file:a.txt"}) {
+		t.Fatalf("evidence refs = %q", refs)
+	}
+	if _, err := resolveReviewReferences(marshal.Review{EvidenceRefs: []string{"file:context/read-only.go"}}, h); err == nil {
+		t.Fatal("review citing only an untouched file accepted")
+	}
+	if _, err := resolveReviewReferences(marshal.Review{EvidenceRefs: []string{"diff", "file:"}}, h); err == nil {
+		t.Fatal("empty file reference accepted")
+	}
+	if refs, err := resolveReviewReferences(marshal.Review{EvidenceRefs: []string{"diff", "check:invented"}}, h); err != nil || !slices.Equal(refs, []string{"diff"}) {
+		t.Fatalf("unmatched check was not dropped: %q %v", refs, err)
 	}
 }
 

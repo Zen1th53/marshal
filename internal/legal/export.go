@@ -53,7 +53,7 @@ func ExportPack(ctx context.Context, repoDir string, outputPath string) (*Export
 	var files []fileToArchive
 
 	addBlob := func(relPath string, archiveRelPath string) {
-		if data, err := ReadBlob(ctx, repoDir, headSHA, relPath); err == nil {
+		if data, _, err := readDocumentBlob(ctx, repoDir, headSHA, relPath); err == nil {
 			files = append(files, fileToArchive{
 				archivePath: filepath.Join("marshal-due-diligence", archiveRelPath),
 				data:        data,

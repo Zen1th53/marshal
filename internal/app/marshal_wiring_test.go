@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,10 +53,11 @@ func TestMarshalWiredOffersOnlyRealProcess05Harnesses(t *testing.T) {
 			t.Fatalf("real Process 05 harness %s is unavailable", name)
 		}
 	}
-	for _, name := range []string{"antigravity", "agy"} {
-		if service.GovernedDrivers[name] != nil {
-			t.Fatalf("placeholder Process 05 harness %s was offered", name)
-		}
+	if service.GovernedDrivers["antigravity"] != nil {
+		t.Fatal("noncanonical antigravity worker alias was offered")
+	}
+	if got := service.GovernedDrivers["agy"] != nil; got != privateAGYEnabled() {
+		t.Fatalf("AGY Process 05 driver wired=%t, private Linux enabled=%t", got, privateAGYEnabled())
 	}
 }
 
@@ -95,7 +97,7 @@ func TestM09UngovernedWorkerEscalatesBeforeDispatch(t *testing.T) {
 	if run.State != marshal.AwaitingUser || run.Tasks[0].State != marshal.Escalated {
 		t.Fatalf("run %s task %s, want awaiting_user/escalated", run.State, run.Tasks[0].State)
 	}
-	if out := marshalGit(t, repo, "branch", "--list", "marshal/run/a"); out != "" {
+	if out := marshalGit(t, repo, "branch", "--list", statepath.RefName+"/run/a"); out != "" {
 		t.Fatalf("an ungoverned worker was dispatched: %q", out)
 	}
 }
@@ -132,7 +134,7 @@ func TestM09ReassignMovesToAnotherWorkerThenEscalates(t *testing.T) {
 // work passes its approved checks at the integrated head closes.
 func TestM09WiredRunClosesOnObservedState(t *testing.T) {
 	ctx := context.Background()
-	s, repo := marshalFixture(t, 2)
+	s, repo := marshalUserCloseFixture(t, 2)
 	wire(t, s)
 	if _, err := s.StartPlanning(ctx, "run", "write files", marshal.Budget{}); err != nil {
 		t.Fatal(err)
@@ -151,7 +153,7 @@ func TestM09WiredRunClosesOnObservedState(t *testing.T) {
 	if err := s.Close(ctx, "run"); err != nil {
 		t.Fatal(err)
 	}
-	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != marshalGit(t, repo, "rev-parse", "refs/heads/marshal/run/integration") {
+	if marshalGit(t, repo, "rev-parse", "refs/heads/main") != marshalGit(t, repo, "rev-parse", "refs/heads/"+statepath.RefName+"/run/integration") {
 		t.Fatal("target was not fast-forwarded")
 	}
 }
@@ -160,7 +162,7 @@ func TestM09WiredRunClosesOnObservedState(t *testing.T) {
 // fails there makes the result incomplete.
 func TestM09WiredVerificationFailsOnIntegratedCheck(t *testing.T) {
 	ctx := context.Background()
-	s, _ := marshalFixture(t, 1)
+	s, _ := marshalUserCloseFixture(t, 1)
 	wire(t, s)
 	if _, err := s.StartPlanning(ctx, "run", "write files", marshal.Budget{}); err != nil {
 		t.Fatal(err)
@@ -192,7 +194,7 @@ func TestM09WiredVerificationFailsOnIntegratedCheck(t *testing.T) {
 // being closed.
 func TestM09WiredVerificationFailsWhenCheckMovesHead(t *testing.T) {
 	ctx := context.Background()
-	s, _ := marshalFixture(t, 1)
+	s, _ := marshalUserCloseFixture(t, 1)
 	wire(t, s)
 	if _, err := s.StartPlanning(ctx, "run", "write files", marshal.Budget{}); err != nil {
 		t.Fatal(err)
@@ -219,24 +221,24 @@ func TestM09WiredVerificationFailsWhenCheckMovesHead(t *testing.T) {
 // before any merge runs; a commented line does not count.
 func TestM09DetectsMergeDriverInHandIn(t *testing.T) {
 	_, repo := marshalFixture(t, 1)
-	marshalGit(t, repo, "checkout", "-q", "-b", "marshal/run/a")
+	marshalGit(t, repo, "checkout", "-q", "-b", statepath.RefName+"/run/a")
 	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("# * merge=ignored\n*.txt text\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	marshalGit(t, repo, "add", ".gitattributes")
 	marshalGit(t, repo, "commit", "-q", "-m", "comment only")
 	marshalGit(t, repo, "checkout", "-q", "main")
-	sets, err := marshalSetsMergeDriver(context.Background(), repo, "marshal/run/a")
+	sets, err := marshalSetsMergeDriver(context.Background(), repo, statepath.RefName+"/run/a")
 	if err != nil || sets {
 		t.Fatalf("commented attribute: sets=%v err=%v", sets, err)
 	}
-	marshalGit(t, repo, "checkout", "-q", "marshal/run/a")
+	marshalGit(t, repo, "checkout", "-q", statepath.RefName+"/run/a")
 	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("* merge=worker-driver\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	marshalGit(t, repo, "commit", "-q", "-am", "adds a merge driver")
 	marshalGit(t, repo, "checkout", "-q", "main")
-	sets, err = marshalSetsMergeDriver(context.Background(), repo, "marshal/run/a")
+	sets, err = marshalSetsMergeDriver(context.Background(), repo, statepath.RefName+"/run/a")
 	if err != nil || !sets {
 		t.Fatalf("merge driver attribute: sets=%v err=%v", sets, err)
 	}
@@ -269,7 +271,7 @@ func TestM09ObservedGateStateNeedsApproval(t *testing.T) {
 }
 
 func TestMarshalContentCheckPassesWorkerAndIntegrationMerge(t *testing.T) {
-	s, _ := marshalFixture(t, 1)
+	s, _ := marshalUserCloseFixture(t, 1)
 	wire(t, s)
 	fake := s.Model.(marshalFakeModel)
 	command := "test -f a.txt && test \"$(cat a.txt)\" = done"
@@ -306,6 +308,8 @@ func TestGovernedOpenCodeCountsForReassignment(t *testing.T) {
 	}
 	delete(service.GovernedDrivers, "claude")
 	delete(service.GovernedDrivers, "claude-code")
+	// This fixture checks only the original Codex/OpenCode replacement pair.
+	delete(service.GovernedDrivers, "agy")
 	if got := service.otherWorker("codex", marshal.Governed); got != "opencode" {
 		t.Fatalf("governed replacement = %q, want opencode", got)
 	}

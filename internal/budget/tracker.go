@@ -36,6 +36,12 @@ func (t *Tracker) RecordUsage(usage adapter.Usage, duration time.Duration, isHan
 		t.consumed.Retries++
 	}
 
+	if !usage.Reported || usage.TotalTokens == nil {
+		t.consumed.UnreportedTokens = true
+	}
+	if !usage.Reported || usage.CostUSD == nil {
+		t.consumed.UnreportedCost = true
+	}
 	if usage.Reported {
 		if usage.TotalTokens != nil {
 			if t.consumed.TotalTokens == nil {
@@ -64,11 +70,17 @@ func (t *Tracker) CheckExhaustion(limits BudgetLimit) (bool, string, ReasonCode)
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	if limits.MaxTotalTokens != nil && t.consumed.TotalTokens != nil && *t.consumed.TotalTokens >= *limits.MaxTotalTokens {
+	if limits.MaxTotalTokens != nil && (t.consumed.TotalTokens == nil || t.consumed.UnreportedTokens) {
+		return true, "tokens (usage UNKNOWN)", ReasonBudgetExhaustedTokens
+	}
+	if limits.MaxTotalTokens != nil && *t.consumed.TotalTokens >= *limits.MaxTotalTokens {
 		return true, "tokens", ReasonBudgetExhaustedTokens
 	}
 
-	if limits.MaxCostUSD != nil && t.consumed.CostUSD != nil && *t.consumed.CostUSD >= *limits.MaxCostUSD {
+	if limits.MaxCostUSD != nil && (t.consumed.CostUSD == nil || t.consumed.UnreportedCost) {
+		return true, "cost (usage UNKNOWN)", ReasonBudgetExhaustedCost
+	}
+	if limits.MaxCostUSD != nil && *t.consumed.CostUSD >= *limits.MaxCostUSD {
 		return true, "cost", ReasonBudgetExhaustedCost
 	}
 
@@ -104,6 +116,32 @@ func (t *Tracker) Consumed() ConsumedBudget {
 	if t.consumed.CostUSD != nil {
 		val := *t.consumed.CostUSD
 		copy.CostUSD = &val
+	}
+	if t.consumed.ReservedTotalTokens != nil {
+		v := *t.consumed.ReservedTotalTokens
+		copy.ReservedTotalTokens = &v
+	}
+	if t.consumed.ReservedCostUSD != nil {
+		v := *t.consumed.ReservedCostUSD
+		copy.ReservedCostUSD = &v
+	}
+	if t.consumed.CallReservations != nil {
+		copy.CallReservations = map[string]string{}
+		for k, v := range t.consumed.CallReservations {
+			copy.CallReservations[k] = v
+		}
+	}
+	if t.consumed.RunDurations != nil {
+		copy.RunDurations = map[string]time.Duration{}
+		for k, v := range t.consumed.RunDurations {
+			copy.RunDurations[k] = v
+		}
+	}
+	if t.consumed.CallSettlements != nil {
+		copy.CallSettlements = map[string]string{}
+		for k, v := range t.consumed.CallSettlements {
+			copy.CallSettlements[k] = v
+		}
 	}
 	return copy
 }

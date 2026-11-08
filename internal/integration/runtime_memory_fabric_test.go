@@ -11,6 +11,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/authz"
 	"github.com/Zen1th53/marshal/internal/memory/security"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/store"
 )
 
 func memoryReader(id string) authz.Principal {
@@ -46,6 +47,13 @@ func TestRuntimeMemoryFabricCrossProviderRestartAndStaleness(t *testing.T) {
 			t.Fatalf("agent A capture: %v", err)
 		}
 		memoryID = captured.ID
+
+		// System records are captured as candidates; operator approval promotes
+		// them to durable before they become recallable.
+		operator := authz.Principal{ID: "operator-admin", Role: authz.Role{Name: "admin", Authorities: []authz.Authority{authz.AuthorityPolicyAdmin}}}
+		if _, err := rt.Memory().Promote(ctx, operator, app.PromoteRequest{ProjectID: "PROJECT-local", MemoryID: memoryID}); err != nil {
+			t.Fatalf("promote captured outcome: %v", err)
+		}
 
 		res, err := rt.Memory().Recall(ctx, memoryReader("agent-gemini"), app.RecallRequest{
 			ProjectID: "PROJECT-local", Query: "SQLite canonical", AllowedScopeIDs: []string{taskID},
@@ -158,6 +166,22 @@ func TestRuntimeOutcomeCaptureRejectsSecretsBeforePersistence(t *testing.T) {
 		TaskTitle: "leaked ghp_1234567890abcdefghijklmnopqrstuvwxyzAB", AgentID: "agent-codex",
 		Provider: "codex", Status: "failed", ExitStatus: 1, HeadCommit: "commit-current",
 	})
+	if security.RedactsSecrets {
+		// Extreme keeps the outcome with the secret removed.
+		if err != nil {
+			t.Fatalf("CaptureOutcome error = %v, want redacted capture", err)
+		}
+		records, err := rt.Store().ListMemoryV2(ctx, store.MemoryQueryFilter{ProjectID: "PROJECT-local"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, rec := range records {
+			if strings.Contains(rec.Title+rec.Body, "ghp_") {
+				t.Fatalf("secret-bearing outcome persisted: %s", rec.ID)
+			}
+		}
+		return
+	}
 	if !errors.Is(err, security.ErrSecretDetected) {
 		t.Fatalf("CaptureOutcome error = %v, want secret rejection", err)
 	}

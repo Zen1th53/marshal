@@ -15,7 +15,29 @@ import (
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectid"
+	"github.com/Zen1th53/marshal/internal/store"
 )
+
+// revokeAllActionGrants revokes every scoped grant carrying the given action.
+// OpenLocalControl re-provisions operator capabilities on reopen, so a
+// revocation test must revoke both the fixture grant and the re-provisioned
+// grant to prove replay is denied.
+func revokeAllActionGrants(ctx context.Context, s *store.Store, action string) error {
+	grants, err := s.ListCapabilityGrants(ctx)
+	if err != nil {
+		return err
+	}
+	for _, g := range grants {
+		for _, a := range g.Scope.Actions {
+			if a == action {
+				if err := s.RevokeCapabilityGrant(ctx, g.ID, time.Now().UTC()); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
 
 func TestLocalControlBoundary(t *testing.T) {
 	r := runtimeForPlan(t)
@@ -103,8 +125,8 @@ func TestLocalControlBoundary(t *testing.T) {
 		t.Fatalf("restart replay: %+v %v", replay, err)
 	}
 	grants, err := reopened.Store().ListCapabilityGrants(ctx)
-	if err != nil || len(grants) != 19 {
-		t.Fatalf("grants: %+v %v", grants, err)
+	if err != nil || len(grants) != expectedLocalControlGrantCount {
+		t.Fatalf("grant count: got %d, want %d: %v", len(grants), expectedLocalControlGrantCount, err)
 	}
 	var egressGrant bool
 	for _, grant := range grants {
@@ -206,8 +228,8 @@ func TestLocalControlCanonicalBoundGoal(t *testing.T) {
 		t.Fatal("principal is not canonically scoped")
 	}
 	grants, err := r.Store().ListCapabilityGrants(ctx)
-	if err != nil || len(grants) != 19 || string(grants[0].TaskID) != string(binding.ID) {
-		t.Fatalf("canonical grant: %+v %v", grants, err)
+	if err != nil || len(grants) != expectedLocalControlGrantCount || string(grants[0].TaskID) != string(binding.ID) {
+		t.Fatalf("canonical grant count: got %d, want %d: %v", len(grants), expectedLocalControlGrantCount, err)
 	}
 	for _, grant := range grants {
 		if string(grant.TaskID) != string(binding.ID) {

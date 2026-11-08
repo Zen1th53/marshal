@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io"
 	"os"
 	"path/filepath"
@@ -26,7 +27,10 @@ type marshalProposal struct {
 	reviewed                                                              *app.PlanApprovalSnapshot
 	occurrence                                                            string
 	who                                                                   string
+	sourceSession, revision, digest, instructionRef, criteria             string
 	action, key, value, provider, path, id, reason, language, earlierWork string
+	taskID, targetWorker, model                                           string
+	freshSession                                                          bool
 }
 
 // Parse a single visible assistant line, never shell source. Reject unknown,
@@ -43,6 +47,8 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 		return p, invalid
 	}
 	fields := map[string]string{}
+	var hasFreshSession bool
+	var freshSessionVal bool
 	for d.More() {
 		token, err = d.Token()
 		if err != nil {
@@ -54,6 +60,16 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 		}
 		if _, exists := fields[key]; exists {
 			return p, invalid
+		}
+		if key == "fresh_session" {
+			var b bool
+			if d.Decode(&b) != nil {
+				return p, invalid
+			}
+			hasFreshSession = true
+			freshSessionVal = b
+			fields[key] = strconv.FormatBool(b)
+			continue
 		}
 		var value string
 		if d.Decode(&value) != nil || strings.ContainsFunc(value, unicode.IsControl) {
@@ -67,7 +83,8 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	if _, err = d.Token(); err != io.EOF {
 		return p, invalid
 	}
-	p = marshalProposal{action: fields["action"], key: fields["key"], value: fields["value"], provider: fields["provider"], path: fields["path"], id: fields["id"], reason: fields["reason"], language: fields["language"], earlierWork: fields["earlier_work"]}
+	p = marshalProposal{action: fields["action"], key: fields["key"], value: fields["value"], provider: fields["provider"], path: fields["path"], id: fields["id"], reason: fields["reason"], language: fields["language"], earlierWork: fields["earlier_work"], taskID: fields["task_id"], targetWorker: fields["target_worker"], model: fields["model"], freshSession: freshSessionVal}
+	p.revision, p.digest, p.instructionRef, p.criteria = fields["revision"], fields["digest"], fields["instruction_ref"], fields["criteria"]
 	var keys []string
 	switch p.action {
 	case "intake":
@@ -117,12 +134,52 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 		}) {
 			return p, invalid
 		}
-	case "approve", "close", "resume", "deliver":
+	case "approve", "amend-approve", "amend-deny", "close", "resume", "deliver":
 		keys = []string{"action"}
-	case "amend":
+	case "amend", "architecture":
 		keys = []string{"action", "reason"}
+	case "retry":
+		keys = []string{"action", "task_id", "fresh_session"}
+		if !hasFreshSession {
+			return p, invalid
+		}
+		if p.taskID == "" || len(p.taskID) > 200 || strings.ContainsFunc(p.taskID, func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.'
+		}) {
+			return p, invalid
+		}
+	case "reassign":
+		keys = []string{"action", "task_id", "target_worker"}
+		if p.taskID == "" || len(p.taskID) > 200 || strings.ContainsFunc(p.taskID, func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.'
+		}) {
+			return p, invalid
+		}
+		if p.targetWorker == "" || len(p.targetWorker) > 100 || strings.ContainsFunc(p.targetWorker, func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_'
+		}) {
+			return p, invalid
+		}
+	case "harness-verify":
+		if _, hasModel := fields["model"]; hasModel {
+			keys = []string{"action", "provider", "model"}
+		} else {
+			keys = []string{"action", "provider"}
+		}
+		if p.provider == "" || len(p.provider) > 100 || strings.ContainsFunc(p.provider, func(r rune) bool {
+			return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_'
+		}) {
+			return p, invalid
+		}
+		if p.model != "" && (len(p.model) > 200 || strings.ContainsFunc(p.model, unicode.IsControl)) {
+			return p, invalid
+		}
 	default:
-		return p, invalid
+		var ok bool
+		keys, ok = privateMarshalProposalKeys(p)
+		if !ok {
+			return p, invalid
+		}
 	}
 	if p.action == "return" {
 		keys = append(keys, "reason")
@@ -130,7 +187,7 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	if p.action == "amend" && (strings.EqualFold(p.reason, "approve") || strings.EqualFold(p.reason, "deny")) {
 		return p, invalid
 	}
-	if p.action == "return" || p.action == "amend" {
+	if p.action == "return" || p.action == "amend" || p.action == "architecture" {
 		if strings.TrimSpace(p.reason) == "" || len(p.reason) > 500 {
 			return p, invalid
 		}
@@ -160,12 +217,30 @@ func (p marshalProposal) command() string {
 		return "/marshal " + p.action
 	case "amend-approve":
 		return "/marshal amend approve"
+	case "amend-deny":
+		return "/marshal amend deny"
+	case "retry":
+		if p.freshSession {
+			return "/marshal retry " + p.taskID + " fresh-session"
+		}
+		return "/marshal retry " + p.taskID
 	case "accept":
 		return "/marshal accept " + p.id
 	case "return":
 		return "/marshal return " + p.id + " " + p.reason
 	case "amend":
 		return "/marshal amend " + p.reason
+	case "architecture":
+		return "/marshal architecture"
+	case "approve-task":
+		return "/marshal approve-task " + p.id
+	case "reassign":
+		return "/marshal reassign " + p.taskID + " " + p.targetWorker
+	case "harness-verify":
+		if p.model != "" {
+			return "/harness verify " + p.provider + " " + p.model
+		}
+		return "/harness verify " + p.provider
 	}
 	return ""
 }
@@ -192,6 +267,9 @@ func (w *Workspace) observeAuthenticatedMarshalProposals(tr importer.SessionTran
 
 func (w *Workspace) observeMarshalProposalSource(tr importer.SessionTranscript, occurrence, who string) {
 	for messageIndex, message := range tr.Messages {
+		if who == "Marshal" && occurrence == "" && message.Role == "user" && message.Kind == importer.MessageKindText {
+			w.observeArchitectureOperatorInstruction(tr.SessionID, messageIndex, message.Timestamp, message.Content)
+		}
 		if message.Role != "assistant" || message.Kind != importer.MessageKindText {
 			continue
 		}
@@ -216,6 +294,9 @@ func (w *Workspace) observeMarshalProposalSource(tr importer.SessionTranscript, 
 			}
 			fingerprint := fmt.Sprintf("%s\x00%d\x00%s\x00%s", tr.SessionID, messageIndex, message.Timestamp, line)
 			p.who = who
+			if who == "Marshal" && occurrence == "" {
+				p.sourceSession = tr.SessionID
+			}
 			p.occurrence = fmt.Sprintf("%x", sha256.Sum256([]byte(fingerprint)))
 			if who == "Marshal" {
 				p.occurrence = "runtime:" + p.occurrence
@@ -248,60 +329,7 @@ func (w *Workspace) observeMarshalProposalSource(tr importer.SessionTranscript, 
 				w.RecordActivity("Ignored Marshal proposal: malformed or non-allow-listed fields.")
 				continue
 			}
-			switch p.action {
-			case "intake":
-				if err := w.saveMarshalIntake(marshalIntake{Language: p.language, EarlierWork: p.earlierWork}); err != nil {
-					w.permissions.mu.Lock()
-					delete(w.permissions.proposalsSeen, p.occurrence)
-					w.permissions.mu.Unlock()
-					continue
-				}
-				w.RecordActivity(fmt.Sprintf("%s: intake updated (language %s, earlier work %s)", p.requester(), p.language, p.earlierWork))
-				if w.store != nil {
-					_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "applied")
-				}
-			case "continue":
-				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: p.requester(), Reason: p.command(), ContinuationProvider: p.provider})
-			case "read":
-				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: p.requester(), Reason: p.command()})
-			case "memory":
-				found := false
-				if w.runtime != nil {
-					for _, rec := range w.runtime.ContinuationCandidates() {
-						if rec.ID == p.id {
-							req := memoryPermission(rec)
-							req.ProposalID = p.occurrence
-							req.Who = p.requester()
-							w.queuePermission(req)
-							found = true
-							break
-						}
-					}
-				}
-				if !found {
-					w.RecordActivity("Ignored Marshal memory proposal: candidate does not exist.")
-				}
-			case "setting":
-				w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: "this project, next Marshal run", Who: p.requester(), Reason: "Apply the exact proposed setting"})
-			case "approve":
-				m := w.marshalSession()
-				m.mu.Lock()
-				proposalRunID := m.runID
-				m.mu.Unlock()
-				w.permissions.mu.Lock()
-				w.permissions.planApprovalPending = true
-				w.permissions.planApprovalRunID = proposalRunID
-				w.permissions.planApprovalOccurrence = p.occurrence
-				w.permissions.mu.Unlock()
-				w.queueMarshalPlanApproval()
-			case "accept", "return", "amend", "close", "resume", "deliver":
-				if err := w.queueMarshalRunProposal(p); err != nil {
-					if w.store != nil && p.occurrence != "" {
-						_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "rejected")
-					}
-					w.RecordActivity("Ignored Marshal proposal: " + err.Error())
-				}
-			}
+			w.enqueueValidatedMarshalProposal(p)
 		}
 	}
 }
@@ -355,7 +383,7 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 	m.mu.Lock()
 	service, runID, pending := m.service, m.runID, m.pending
 	m.mu.Unlock()
-	if service == nil || runID == "" || (pending != nil && p.action != "amend-approve") || (pending == nil && p.action == "amend-approve") {
+	if service == nil || runID == "" || (pending != nil && p.action != "amend-approve" && p.action != "amend-deny") || (pending == nil && (p.action == "amend-approve" || p.action == "amend-deny")) {
 		return errors.New("no matching active plan")
 	}
 	record, err := service.Store.GetMarshalRun(context.Background(), service.ProjectID, runID)
@@ -371,10 +399,14 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 	if p.action == "approve" && run.State != marshal.Drafting {
 		return errors.New("plan is not awaiting approval")
 	}
-	if p.action == "accept" || p.action == "return" {
+	if p.action == "accept" || p.action == "return" || p.action == "reassign" || p.action == "retry" {
+		targetID := p.id
+		if p.action == "reassign" || p.action == "retry" {
+			targetID = p.taskID
+		}
 		found := false
 		for _, task := range run.Tasks {
-			if task.PlanTaskID == p.id {
+			if task.PlanTaskID == targetID {
 				found = true
 				break
 			}
@@ -383,10 +415,20 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 			return errors.New("task is not in the active plan")
 		}
 	}
+	if p.action == "approve-task" {
+		if !w.pendingProcess05Approval(context.Background(), run, p.id) {
+			return errors.New("approval does not belong to the active Marshal plan")
+		}
+	}
 	if p.action == "approve" || p.action == "amend-approve" {
 		snapshot, err := service.PlanApprovalSnapshot(context.Background(), runID)
 		if err != nil {
 			return err
+		}
+		if p.action == "approve" && statepath.PublicEngine {
+			if marshalRunHasGovernedTask(run) && (snapshot.PlanID != run.PlanID || snapshot.GoalID == "" || snapshot.GoalRevision < 1 || snapshot.ContractDigest == "" || snapshot.CanonicalScopeDigest == "" || snapshot.PlanningMode == "" || snapshot.MarshalBudgetSummary == "" || snapshot.RouteSummary == "" || snapshot.AssignmentSummary == "" || snapshot.TeamSummary == "" || snapshot.VerificationSummary == "" || snapshot.TaskCheckSummary == "") {
+				return errors.New("governed Marshal draft lacks a reviewable canonical Process 04 scope; verify its Goal, project context, and worker profiles before approval")
+			}
 		}
 		p.reviewed = &snapshot
 	}
@@ -403,11 +445,23 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 		}
 	}
 	binding := marshalRunProposalBinding(run.PlanVersion, record.Revision, pending)
+	var resumeDescription permission.Request
+	if !w.describePrivateProcess05Resume(&resumeDescription, p) {
+		return errors.New("Process 05 continuation gates are not ready")
+	}
 	w.permissions.mu.Lock()
 	if w.permissions.runProposals == nil {
 		w.permissions.runProposals = map[string]marshalProposal{}
 	}
 	req := permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: fmt.Sprintf("run %s, plan %s version %d, state revision %d", runID, run.PlanID, run.PlanVersion, record.Revision), Who: p.requester(), Reason: "Apply this exact runtime action; review the plan pack and result first", RunID: runID, TaskID: binding}
+	if p.action == "approve-task" {
+		w.describePrivateTransportApproval(&req, p.id)
+	}
+	if resumeDescription.ApprovalBinding != "" {
+		req.ApprovalBinding = resumeDescription.ApprovalBinding
+		req.Scope += resumeDescription.Scope
+		req.Reason = resumeDescription.Reason
+	}
 	if p.action == "accept" {
 		purpose, e := service.TaskAcceptance(context.Background(), runID, p.id)
 		if e != nil {
@@ -420,6 +474,11 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 		data, _ := json.Marshal(p.reviewed)
 		req.ApprovalBinding = string(data)
 		req.Scope += fmt.Sprintf("; pack %s; repository %s; base %s; target %s", p.reviewed.PackDigest, p.reviewed.Repository, p.reviewed.BaseCommit, p.reviewed.TargetRef)
+		if p.reviewed.CanonicalScopeDigest != "" {
+			// Permission metadata is one line: Render rejects control characters.
+			// Keep every reviewed task route and check visible, separated clearly.
+			req.Scope += fmt.Sprintf("; Process 04 %s version %d; Goal %s revision %d; project contract %s; approval scope %s; mode %s; Marshal budget %s; task routes: %s; harness assignments: %s; team: %s; verification: %s; executable checks: %s", p.reviewed.PlanID, p.reviewed.PlanVersion, p.reviewed.GoalID, p.reviewed.GoalRevision, p.reviewed.ContractDigest, p.reviewed.CanonicalScopeDigest, p.reviewed.PlanningMode, popupReviewText(p.reviewed.MarshalBudgetSummary), popupReviewText(p.reviewed.RouteSummary), popupReviewText(p.reviewed.AssignmentSummary), popupReviewText(p.reviewed.TeamSummary), popupReviewText(p.reviewed.VerificationSummary), popupReviewText(p.reviewed.TaskCheckSummary))
+		}
 	}
 	if p.action == "deliver" {
 		p.value = run.ApprovalScopeDigest
@@ -429,12 +488,43 @@ func (w *Workspace) queueMarshalRunProposal(p marshalProposal) error {
 	}
 	if pending != nil {
 		req.Scope += "; proposed amendment " + binding[strings.LastIndex(binding, ":")+1:]
-		req.Reason = "Approve proposed amendment: " + pending.reason
+		if p.action == "amend-deny" {
+			req.Reason = "Deny proposed amendment: " + pending.reason
+		} else {
+			req.Reason = "Approve proposed amendment: " + pending.reason
+		}
 	}
+	bound, bindErr := w.bindProposalMCPRequest(req)
+	if bindErr != nil {
+		w.permissions.mu.Unlock()
+		return bindErr
+	}
+	req = bound
 	w.permissions.runProposals[req.Key()] = p
 	w.permissions.mu.Unlock()
 	w.queuePermission(req)
 	return nil
+}
+
+func marshalRunHasGovernedTask(run marshal.Run) bool {
+	for _, task := range run.Tasks {
+		if task.Mode == marshal.Governed {
+			return true
+		}
+	}
+	return false
+}
+
+func popupReviewText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' {
+			return ' '
+		}
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Request) error {
@@ -479,7 +569,7 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 		m.mu.Lock()
 		service, runID, pending := m.service, m.runID, m.pending
 		m.mu.Unlock()
-		if service == nil || runID != req.RunID || (pending != nil && p.action != "amend-approve") || (pending == nil && p.action == "amend-approve") {
+		if service == nil || runID != req.RunID || (pending != nil && p.action != "amend-approve" && p.action != "amend-deny") || (pending == nil && (p.action == "amend-approve" || p.action == "amend-deny")) {
 			return errors.New("Marshal proposal expired")
 		}
 		binding := req.TaskID
@@ -516,11 +606,35 @@ func (w *Workspace) applyMarshalProposal(ctx context.Context, req permission.Req
 			_, err = w.marshalResume(ctx)
 			return err
 		}
+		if err := w.validatePrivateProcess05Resume(ctx, req, p); err != nil {
+			return err
+		}
 		// Dispatch arguments directly so spaces in free-text reasons are exact.
 		_, err = w.cmd.handleMarshal(ctx, marshalProposalArgs(p))
 		return err
 	}
+	if req.Who == hostWatchActor {
+		// A host-watch lane-cap request is applied only once, and only
+		// while the guard that posted it still stands behind it.
+		if err := w.takeHostCapRequest(req); err != nil {
+			return err
+		}
+		_, err := w.cmd.Handle(ctx, req.Object)
+		return err
+	}
 	parts := strings.Fields(req.Object)
+	if len(parts) >= 3 && parts[0] == "/harness" && parts[1] == "verify" {
+		fields := map[string]string{"action": "harness-verify", "provider": parts[2]}
+		if len(parts) >= 4 {
+			fields["model"] = parts[3]
+		}
+		data, _ := json.Marshal(fields)
+		if _, err := parseMarshalProposal(marshalProposalPrefix + string(data)); err != nil {
+			return err
+		}
+		_, err := w.cmd.Handle(ctx, req.Object)
+		return err
+	}
 	if len(parts) != 4 || parts[0] != "/marshal" || parts[1] != "settings" {
 		return errors.New("invalid Marshal command proposal")
 	}
@@ -545,7 +659,16 @@ func marshalProposalArgs(p marshalProposal) []string {
 	switch p.action {
 	case "amend-approve":
 		return []string{"amend", "approve"}
-	case "accept":
+	case "amend-deny":
+		return []string{"amend", "deny"}
+	case "reassign":
+		return []string{"reassign", p.taskID, p.targetWorker}
+	case "retry":
+		if p.freshSession {
+			return []string{"retry", p.taskID, "fresh-session"}
+		}
+		return []string{"retry", p.taskID}
+	case "accept", "approve-task":
 		return []string{p.action, p.id}
 	case "return":
 		return []string{p.action, p.id, p.reason}
@@ -590,11 +713,11 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 		return
 	}
 	defer project.Close()
-	info, err := project.Lstat(".marshal/proposals")
+	info, err := project.Lstat(statepath.DirName + "/proposals")
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return
 	}
-	fs, err := project.OpenRoot(".marshal/proposals")
+	fs, err := project.OpenRoot(statepath.DirName + "/proposals")
 	if err != nil {
 		return
 	}
@@ -637,14 +760,25 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 		if err != nil || len(data) > 4096 {
 			continue
 		}
+		if w.consumeBuildDecision(data) {
+			_ = fs.Rename(name, name+".consumed")
+			continue
+		}
 		line := marshalProposalPrefix + strings.TrimSpace(string(data))
-		_, parseErr := parseMarshalProposal(line)
+		proposal, parseErr := parseMarshalProposal(line)
 		if parseErr != nil {
 			continue
 		}
 		sessionID := fmt.Sprintf("proposal-file:%s:%d:%x", name, info.ModTime().UnixNano(), sha256.Sum256(data))
 		fingerprint := fmt.Sprintf("%s\x00%d\x00%s\x00%s", sessionID, 0, "", line)
 		id := fmt.Sprintf("%x", sha256.Sum256([]byte(fingerprint)))
+		who := "Local request (unverified)"
+		if proposal.action == "architecture" && root == w.providerRoot() {
+			if bound := w.boundMarshalArchitectureSource(); bound != "" {
+				id = fmt.Sprintf("runtime:%x", sha256.Sum256([]byte(bound+"\x00"+fingerprint)))
+				who = "Marshal"
+			}
+		}
 		if w.store == nil {
 			continue
 		}
@@ -660,7 +794,7 @@ func (w *Workspace) observeMarshalProposalFiles(root string) {
 		if !pending {
 			continue
 		}
-		w.observeMarshalProposalOccurrence(importer.SessionTranscript{SessionID: sessionID, Messages: []importer.Message{{Role: "assistant", Content: line}}}, id)
+		w.observeMarshalProposalSource(importer.SessionTranscript{SessionID: sessionID, Messages: []importer.Message{{Role: "assistant", Content: line}}}, id, who)
 	}
 }
 
@@ -675,6 +809,12 @@ func (w *Workspace) recoverMarshalProposals() {
 		return
 	}
 	for _, record := range pending {
+		if w.staleProposalMCP(record.ID) {
+			continue
+		}
+		if w.recoverBoundMCPMemory(record) {
+			continue
+		}
 		if record.RequestJSON == "" {
 			// Admissions interrupted before binding still need parsing and a popup.
 			w.observePendingMarshalProposal(record.ID, record.Line)
@@ -743,5 +883,80 @@ func (w *Workspace) monitorGoverningIntegrity() {
 		m.integrityAlertRunID = runID
 		m.mu.Unlock()
 		w.RecordActivity("Governance integrity alert: " + err.Error())
+	}
+}
+
+// applyMarshalProposal reuses the validator-bound action pipeline for authenticated sources.
+func (w *Workspace) enqueueValidatedMarshalProposal(p marshalProposal) {
+	switch p.action {
+	case "architecture":
+		var openErr error
+		if p.who != "Marshal" || !strings.HasPrefix(p.occurrence, "runtime:") {
+			openErr = errors.New("architecture auto-open requires the bound live Marshal source; use /marshal architecture")
+		} else {
+			_, openErr = w.marshalArchitecture(w.workers.context(), "", p.occurrence)
+		}
+		if openErr != nil {
+			w.resolveArchitectureProposal(p.occurrence, openErr)
+			w.RecordActivity("Ignored Marshal architecture proposal: " + openErr.Error())
+		}
+	case "accept-architecture":
+		w.applyMarshalArchitectureAcceptance(p)
+	case "intake":
+		if err := w.saveMarshalIntake(marshalIntake{Language: p.language, EarlierWork: p.earlierWork}); err != nil {
+			w.permissions.mu.Lock()
+			delete(w.permissions.proposalsSeen, p.occurrence)
+			w.permissions.mu.Unlock()
+			return
+		}
+		w.RecordActivity(fmt.Sprintf("%s: intake updated (language %s, earlier work %s)", p.requester(), p.language, p.earlierWork))
+		if w.store != nil {
+			_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "applied")
+		}
+	case "continue":
+		w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: p.requester(), Reason: p.command(), ContinuationProvider: p.provider})
+	case "read":
+		w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "read", Object: p.path, Scope: "this session only, read-only", Who: p.requester(), Reason: p.command()})
+	case "memory":
+		found := false
+		if w.runtime != nil {
+			for _, rec := range w.runtime.ContinuationCandidates() {
+				if rec.ID == p.id {
+					req := memoryPermission(rec)
+					req.ProposalID = p.occurrence
+					req.Who = p.requester()
+					w.queuePermission(req)
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			w.RecordActivity("Ignored Marshal memory proposal: candidate does not exist.")
+		}
+	case "harness-verify":
+		w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: "this project, worker qualification", Who: p.requester(), Reason: "Verify provider harness configuration"})
+	case "setting":
+		w.queuePermission(permission.Request{ProposalID: p.occurrence, Kind: "marshal-command", Object: p.command(), Scope: "this project, next Marshal run", Who: p.requester(), Reason: "Apply the exact proposed setting"})
+	case "approve":
+		m := w.marshalSession()
+		m.mu.Lock()
+		proposalRunID := m.runID
+		m.mu.Unlock()
+		w.permissions.mu.Lock()
+		w.permissions.planApprovalPending = true
+		w.permissions.planApprovalRunID = proposalRunID
+		w.permissions.planApprovalOccurrence = p.occurrence
+		w.permissions.mu.Unlock()
+		w.queueMarshalPlanApproval()
+	case "goal":
+		w.applyMarshalGoalProposal(p)
+	case "accept", "return", "amend", "amend-approve", "amend-deny", "close", "resume", "deliver", "approve-task", "reassign", "retry":
+		if err := w.queueMarshalRunProposal(p); err != nil {
+			if w.store != nil && p.occurrence != "" {
+				_ = w.store.ResolveMarshalProposal(context.Background(), w.projectID, p.occurrence, "rejected")
+			}
+			w.RecordActivity("Ignored Marshal proposal: " + err.Error())
+		}
 	}
 }

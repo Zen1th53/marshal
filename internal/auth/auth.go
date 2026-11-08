@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -32,6 +33,7 @@ type Principal struct {
 }
 
 type TokenRecord struct {
+	ExpiresAt    time.Time     `json:"expires_at,omitempty"`
 	ID           string        `json:"id"`
 	Name         string        `json:"name"`
 	Kind         PrincipalKind `json:"kind"`
@@ -61,6 +63,10 @@ func (m *Manager) CreateToken(name string, kind PrincipalKind, capabilities []st
 // CreateTokenIdempotent creates one token for a stable request key. A replay
 // returns the existing metadata but never re-exposes its plaintext.
 func (m *Manager) CreateTokenIdempotent(name string, kind PrincipalKind, capabilities []string, creationKey string) (string, TokenRecord, bool, error) {
+	return m.createToken(name, kind, capabilities, creationKey, time.Time{})
+}
+
+func (m *Manager) createToken(name string, kind PrincipalKind, capabilities []string, creationKey string, expiresAt time.Time) (string, TokenRecord, bool, error) {
 	if name == "" {
 		return "", TokenRecord{}, false, errors.New("token name is required")
 	}
@@ -72,8 +78,11 @@ func (m *Manager) CreateTokenIdempotent(name string, kind PrincipalKind, capabil
 		return "", TokenRecord{}, false, err
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	unlock, err := m.lockTokens()
+	if err != nil {
+		return "", TokenRecord{}, false, err
+	}
+	defer unlock()
 	records, err := m.loadUnlocked()
 	if err != nil {
 		return "", TokenRecord{}, false, err
@@ -101,6 +110,7 @@ func (m *Manager) CreateTokenIdempotent(name string, kind PrincipalKind, capabil
 	id := "TOKEN-" + hex.EncodeToString(idBytes)
 
 	record := TokenRecord{
+		ExpiresAt:    expiresAt,
 		ID:           id,
 		Name:         name,
 		Kind:         kind,
@@ -135,15 +145,18 @@ func (m *Manager) Authenticate(plaintext string) (Principal, error) {
 	}
 	digest := hashToken(plaintext)
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	unlock, err := m.lockTokens()
+	if err != nil {
+		return Principal{}, err
+	}
+	defer unlock()
 
 	records, err := m.loadUnlocked()
 	if err != nil {
 		return Principal{}, err
 	}
 	for _, rec := range records {
-		if !rec.Revoked && subtle.ConstantTimeCompare([]byte(rec.Digest), []byte(digest)) == 1 {
+		if !rec.Revoked && (rec.ExpiresAt.IsZero() || time.Now().Before(rec.ExpiresAt)) && subtle.ConstantTimeCompare([]byte(rec.Digest), []byte(digest)) == 1 {
 			return Principal{
 				ID:           rec.ID,
 				Name:         rec.Name,
@@ -156,8 +169,11 @@ func (m *Manager) Authenticate(plaintext string) (Principal, error) {
 }
 
 func (m *Manager) ListTokens() ([]TokenRecord, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	unlock, err := m.lockTokens()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	return m.loadUnlocked()
 }
 
@@ -175,8 +191,11 @@ func RedactTokenMetadata(records []TokenRecord) []TokenRecord {
 }
 
 func (m *Manager) RevokeToken(id string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	unlock, err := m.lockTokens()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
 	records, err := m.loadUnlocked()
 	if err != nil {
@@ -226,7 +245,27 @@ func (m *Manager) saveUnlocked(records []TokenRecord) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(m.path, data, 0o600)
+	file, err := os.CreateTemp(filepath.Dir(m.path), ".auth-tokens-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if err := file.Chmod(0o600); err != nil {
+		file.Close()
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), m.path)
 }
 
 func hashToken(plaintext string) string {
@@ -356,4 +395,41 @@ func DefaultCapabilitiesForKind(kind PrincipalKind) []string {
 	default:
 		return []string{string(CapStatusRead)}
 	}
+}
+
+// CreateTokenWithTTL issues a bounded credential for a managed provider session.
+func (m *Manager) CreateTokenWithTTL(name string, kind PrincipalKind, capabilities []string, ttl time.Duration) (string, TokenRecord, error) {
+	if ttl <= 0 {
+		return "", TokenRecord{}, errors.New("token lifetime must be positive")
+	}
+	plaintext, record, _, err := m.createToken(name, kind, capabilities, "", time.Now().UTC().Add(ttl))
+	return plaintext, record, err
+}
+
+// lockTokens coordinates distinct managers and processes sharing one registry.
+// The critical section contains file operations only, never provider or network I/O.
+func (m *Manager) lockTokens() (func(), error) {
+	m.mu.Lock()
+	if err := os.MkdirAll(filepath.Dir(m.path), 0o700); err != nil {
+		m.mu.Unlock()
+		return nil, err
+	}
+	f, err := os.OpenFile(m.path+".lock", os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0o600)
+	if err != nil {
+		m.mu.Unlock()
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		f.Close()
+		m.mu.Unlock()
+		return nil, err
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			_ = f.Close()
+			m.mu.Unlock()
+		})
+	}, nil
 }

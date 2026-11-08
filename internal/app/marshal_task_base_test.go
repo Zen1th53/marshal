@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,7 +41,7 @@ func TestMarshalDependentTaskStartsFromIntegrationHead(t *testing.T) {
 		}
 		if id == "b" {
 			run, _, err := s.load(ctx, "run")
-			if head := marshalGit(t, repo, "rev-parse", "refs/heads/marshal/run/integration"); err != nil || run.Tasks[1].BaseCommit != head {
+			if head := marshalGit(t, repo, "rev-parse", "refs/heads/"+statepath.RefName+"/run/integration"); err != nil || run.Tasks[1].BaseCommit != head {
 				t.Fatalf("b's base = %s, want integration head %s (%v)", run.Tasks[1].BaseCommit, head, err)
 			}
 		}
@@ -105,7 +106,7 @@ func TestMarshalReassignedWorkerStartsFresh(t *testing.T) {
 	if err != nil || h.BaseCommit != run.BaseCommit {
 		t.Fatalf("reassigned hand-in base = %s, want run base %s (%v)", h.BaseCommit, run.BaseCommit, err)
 	}
-	if got := marshalGit(t, repo, "rev-parse", "refs/marshal/run/returned/a/attempt-2"); got != rejected {
+	if got := marshalGit(t, repo, "rev-parse", "refs/"+statepath.RefName+"/run/returned/a/attempt-2"); got != rejected {
 		t.Fatalf("returned attempt ref = %s, want %s", got, rejected)
 	}
 }

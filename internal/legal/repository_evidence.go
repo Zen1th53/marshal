@@ -9,7 +9,7 @@ const draftMarker = "DRAFT — REQUIRES QUALIFIED SOFTWARE/IP LEGAL REVIEW BEFOR
 const ownerPlaceholderMarker = "[COPYRIGHT OWNER NAME / DESIGNATED ENTITY]"
 
 func auditFile(ctx context.Context, repoDir string, headSHA string, relPath string) FileEvidence {
-	data, err := ReadBlob(ctx, repoDir, headSHA, relPath)
+	data, relPath, err := readDocumentBlob(ctx, repoDir, headSHA, relPath)
 	if err != nil {
 		return FileEvidence{
 			Path:   relPath,

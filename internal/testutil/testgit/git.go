@@ -16,6 +16,10 @@ func New(t testing.TB) *Repository {
 
 	path := t.TempDir()
 	run(t, path, "git", "init", "-b", "main")
+	// Keep automatic maintenance from changing fixture metadata after Git exits.
+	run(t, path, "git", "config", "gc.auto", "0")
+	run(t, path, "git", "config", "maintenance.auto", "false")
+	run(t, path, "git", "config", "gc.autoDetach", "false")
 	run(t, path, "git", "config", "user.name", "MARSHAL Test")
 	run(t, path, "git", "config", "user.email", "marshal-test@example.invalid")
 	run(t, path, "git", "commit", "--allow-empty", "-m", "initial")

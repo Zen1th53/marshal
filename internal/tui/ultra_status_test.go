@@ -186,3 +186,19 @@ func TestUltraActivationErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestUltraStatusAfterConnectionLoss(t *testing.T) {
+	ws := NewWorkspace(nil, "proj", "sess-ultra-offline")
+	gate := testcloud.EntitledGate(t, testcloud.Options{})
+	ws.AttachULTRA(gate, true)
+	gate.DegradeBecause(cloud.ErrUnreachable)
+	for _, cmd := range []string{"/ultra status", "/ultra start"} {
+		out, err := ws.ExecuteCommand(context.Background(), cmd)
+		if err != nil || !strings.Contains(out, "connection or lease renewal lost") || !strings.Contains(out, "Standard") {
+			t.Fatalf("%s: %q, %v", cmd, out, err)
+		}
+	}
+	if ultraActive(ws.GetUIState()) {
+		t.Fatal("ULTRA badge survived lost connection")
+	}
+}

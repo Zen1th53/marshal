@@ -35,10 +35,10 @@ func TestRouterContextRequirementFilter(t *testing.T) {
 		MinContext:           500000,
 	})
 	if err != nil {
-		t.Fatalf("expected gemini route, got error: %v", err)
+		t.Fatalf("expected agy route, got error: %v", err)
 	}
-	if dec.Provider != "gemini" {
-		t.Fatalf("expected gemini to win for 500k context, got %s", dec.Provider)
+	if dec.Provider != "agy" {
+		t.Fatalf("expected agy to win for 500k context, got %s", dec.Provider)
 	}
 
 	// Require 2,000,000 tokens context -> ErrContextTooSmall
@@ -62,8 +62,8 @@ func TestRouterCapabilityFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dec.Provider != "gemini" {
-		t.Fatalf("expected gemini, got %s", dec.Provider)
+	if dec.Provider != "agy" {
+		t.Fatalf("expected agy, got %s", dec.Provider)
 	}
 
 	// Require non-existent capability -> ErrCapabilityMismatch

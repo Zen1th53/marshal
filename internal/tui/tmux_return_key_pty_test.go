@@ -44,7 +44,7 @@ func TestRealClientF11ClosesControlCentreOverlays(t *testing.T) {
 	}
 	defer func() { _ = client.Process.Kill(); _ = client.Wait() }()
 	go io.Copy(io.Discard, master)
-	waitForTmuxOutput(t, pane, "MARSHAL")
+	waitForTmuxOutput(t, pane, "Marshal")
 	if err := tmux.NewWindow(ctx, w.tmuxSession, "worker", project, nil, []string{"sleep", "600"}); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestRealClientF11ClosesControlCentreOverlays(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if strings.TrimSpace(string(selected)) == pane && strings.Contains(out, "MARSHAL") && !strings.Contains(out, "Git Diff") && !strings.Contains(out, "Command Palette") {
+				if strings.TrimSpace(string(selected)) == pane && strings.Contains(out, "Marshal") && !strings.Contains(out, "Git Diff") && !strings.Contains(out, "Command Palette") {
 					break
 				}
 				if time.Now().After(deadline) {

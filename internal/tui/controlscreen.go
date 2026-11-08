@@ -50,8 +50,9 @@ type ControlSnapshot struct {
 	Termination       *model.GoalTermination
 	TerminationStatus Value
 	// Selected names which approval and checkpoint the actions act on.
-	SelectedApproval   string
-	SelectedCheckpoint string
+	SelectedApproval       string
+	SelectedCheckpoint     string
+	MemoryRestoreSnapshots []Field
 	// ObservedAt is when this was read.
 	ObservedAt time.Time
 }
@@ -145,6 +146,7 @@ func (s *ControlSource) ReadControl(ctx context.Context) ControlSnapshot {
 	} else {
 		snap.Mode = Known("Standard", "internal/cloud/gate.go Gate.Entitled")
 	}
+	buildRecoverySnapshot(ctx, s, &snap)
 	return snap
 }
 
@@ -175,14 +177,10 @@ func ApprovalFields(a *execution.RuntimeApproval, now time.Time) []Field {
 		{Label: "Risk", Value: Known(string(a.RiskLevel), controlSource)},
 	}
 
+	// A scope the approval never recorded is omitted rather than shown as
+	// UNKNOWN: there is nothing for the operator to act on.
 	if a.Scope != "" {
 		fields = append(fields, Field{Label: "Scope", Value: Known(a.Scope, controlSource)})
-	} else {
-		// An unstated scope is not an unlimited one, and it must not read as
-		// though the blast radius were known to be small.
-		fields = append(fields, Field{Label: "Scope", Value: Unknown(
-			"this approval records no scope, so the blast radius is not stated",
-			controlSource)})
 	}
 
 	fields = append(fields,
@@ -190,14 +188,16 @@ func ApprovalFields(a *execution.RuntimeApproval, now time.Time) []Field {
 		Field{Label: "State digest", Value: Known(a.StateDigest, controlSource)},
 		Field{Label: "Plan", Value: Known(
 			fmt.Sprintf("%s version %d", a.PlanID, a.PlanVersion), controlSource)},
-		Field{Label: "Run / task", Value: Known(
-			fmt.Sprintf("%s / %s", a.RunID, a.TaskID), controlSource)},
 		Field{Label: "Requested", Value: Known(
 			a.CreatedAt.UTC().Format(time.RFC3339), controlSource)},
 	)
 
 	// Expiry and consumption are the two states that make an approval unusable,
 	// and both must be visible before a decision rather than discovered after.
+	if a.RunID != "" || a.TaskID != "" {
+		fields = append(fields, Field{Label: "Run / task", Value: Known(
+			fmt.Sprintf("%s / %s", a.RunID, a.TaskID), controlSource)})
+	}
 	fields = append(fields, Field{Label: "Expiry", Value: approvalExpiry(a, now)})
 	fields = append(fields, Field{Label: "State", Value: approvalState(a)})
 
@@ -212,7 +212,7 @@ func ApprovalFields(a *execution.RuntimeApproval, now time.Time) []Field {
 
 func approvalExpiry(a *execution.RuntimeApproval, now time.Time) Value {
 	if a.ExpiresAt == nil {
-		return Unknown("this approval records no expiry", controlSource)
+		return Known("none: stays valid until it is decided", controlSource)
 	}
 	remaining := a.ExpiresAt.Sub(now)
 	if remaining <= 0 {
@@ -311,36 +311,47 @@ func CheckpointFields(record execution.CheckpointRecord) []Field {
 // action, target, revision and digest. Rendering anything else here — a summary,
 // a friendlier paraphrase — would break the binding between what was approved
 // and what runs.
-func ConfirmationFields(c *Confirmation) []Field {
+func ConfirmationFields(c *Confirmation) []Field { return confirmationFields(c, true) }
+
+// ConfirmationSummaryFields is the operator-facing confirmation: what will
+// happen and to what, without internal ids, digests or idempotency keys.
+func ConfirmationSummaryFields(c *Confirmation) []Field { return confirmationFields(c, false) }
+
+func confirmationFields(c *Confirmation, internals bool) []Field {
 	req := c.Request()
 	binding := c.Binding()
 
 	fields := []Field{
 		{Label: "Action", Value: Known(
 			fmt.Sprintf("%s [%s]", binding.Title, binding.Safety), string(binding.Action))},
-		{Label: "Target", Value: Known(req.Target.String(), controlSource)},
+	}
+	if internals || req.Target.Summary == "" {
+		fields = append(fields, Field{Label: "Target", Value: Known(req.Target.String(), controlSource)})
 	}
 	if req.Target.Summary != "" {
-		fields = append(fields, Field{Label: "", Value: Known(req.Target.Summary, controlSource)})
+		label := ""
+		if !internals {
+			label = "Target"
+		}
+		fields = append(fields, Field{Label: label, Value: Known(req.Target.Summary, controlSource)})
 	}
 	if req.Target.Scope != "" {
 		fields = append(fields, Field{Label: "Scope", Value: Known(req.Target.Scope, controlSource)})
-	} else {
-		fields = append(fields, Field{Label: "Scope", Value: Unknown(
-			"no scope was recorded for this target", controlSource)})
 	}
-	if req.Target.Revision > 0 {
+	if internals && req.Target.Revision > 0 {
 		fields = append(fields, Field{Label: "Revision",
 			Value: Known(fmt.Sprintf("%d", req.Target.Revision), controlSource)})
 	}
-	if req.Target.Digest != "" {
+	if internals && req.Target.Digest != "" {
 		fields = append(fields, Field{Label: "Digest",
 			Value: Known(req.Target.Digest, controlSource)})
 	}
 	if binding.RequiresApproval {
 		if req.ApprovalID != "" {
-			fields = append(fields, Field{Label: "Approval",
-				Value: Known(req.ApprovalID, controlSource)})
+			if internals {
+				fields = append(fields, Field{Label: "Approval",
+					Value: Known(req.ApprovalID, controlSource)})
+			}
 		} else {
 			fields = append(fields, Field{Label: "Approval", Value: Blocked(
 				"this governed action carries no approval and cannot be submitted",
@@ -357,8 +368,10 @@ func ConfirmationFields(c *Confirmation) []Field {
 		fields = append(fields, Field{Label: input.Label,
 			Value: knownOrEmpty(RedactContent(value, nil), string(binding.Action))})
 	}
-	fields = append(fields, Field{Label: "Idempotency",
-		Value: Known(shortDigest(req.IdempotencyKey), controlSource)})
+	if internals {
+		fields = append(fields, Field{Label: "Idempotency",
+			Value: Known(shortDigest(req.IdempotencyKey), controlSource)})
+	}
 	return fields
 }
 

@@ -43,6 +43,9 @@ func executeWithPolicy(ctx context.Context, evaluator *policy.Evaluator, current
 
 func (r *Runtime) authorizeRuntime(ctx context.Context, subject, task, provider string, action policy.Action, resource policy.Resource) error {
 	if !r.policyConfigured {
+		if handled, err := r.authorizeWorkerReadPreflight(ctx, subject, task, provider, action, resource); handled {
+			return err
+		}
 		// A missing lifecycle policy must never become an implicit allow. Runs
 		// may fall back only to the repository's mandatory CAPABILITIES policy,
 		// evaluated against a real registered agent and task. Other privileged
@@ -96,7 +99,7 @@ func authorizeNetworkAccess(engine *policy.Engine, agentID, sessionID, taskID st
 	if !required {
 		return fmt.Errorf("%w: network access was not explicitly required", model.ErrPolicyDenied)
 	}
-	if (risk == model.R2 || risk == model.R3) && role == model.RoleDeveloper {
+	if (risk == model.R2 || risk == model.R3) && role == model.RoleDeveloper && !buildHighRiskNetworkAllowed() {
 		return fmt.Errorf("%w: high-risk task network access requires explicit architect or appsec review", model.ErrPolicyDenied)
 	}
 	return policy.Enforce(engine, model.PolicyInput{

@@ -39,8 +39,8 @@ func newMutationWorkspace(t *testing.T) (*store.Store, *Workspace, context.Conte
 	return st, ws, ctx
 }
 
-// installedHarness returns a harness this host actually provides, so the test
-// exercises a real binding rather than an invented one.
+// installedHarness discovers an executable supplied by the per-test owned
+// fixture. It does not qualify a host CLI, model turn, or runtime profile.
 func installedHarness(t *testing.T) string {
 	t.Helper()
 	for _, pr := range ProbeHarnesses() {
@@ -55,6 +55,7 @@ func installedHarness(t *testing.T) string {
 // TestModelSelectPersists is the regression for the audit finding that
 // "/model select" reported success while writing nothing.
 func TestModelSelectFailsClosedWithoutRuntimeProfileService(t *testing.T) {
+	isolateRequiredFixtureProviders(t)
 	st, ws, ctx := newMutationWorkspace(t)
 	harness := installedHarness(t)
 
@@ -77,6 +78,7 @@ func TestModelSelectFailsClosedWithoutRuntimeProfileService(t *testing.T) {
 
 // TestEffortPersists proves "/effort" writes to the canonical profile.
 func TestEffortFailsClosedWithoutRuntimeProfileService(t *testing.T) {
+	isolateRequiredFixtureProviders(t)
 	st, ws, ctx := newMutationWorkspace(t)
 	_ = installedHarness(t)
 
@@ -102,6 +104,7 @@ func TestEffortFailsClosedWithoutRuntimeProfileService(t *testing.T) {
 // TestHarnessSelectPersists proves a role binding reaches the canonical store,
 // and that an unknown harness is refused rather than silently accepted.
 func TestHarnessSelectFailsClosedWithoutRuntimeProfileService(t *testing.T) {
+	isolateRequiredFixtureProviders(t)
 	st, ws, ctx := newMutationWorkspace(t)
 	harness := installedHarness(t)
 

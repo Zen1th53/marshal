@@ -61,7 +61,7 @@ func NewSessionImporter(config Config) *SessionImporter {
 		firewall: fw,
 		adapters: make(map[ProviderFormat]HistoryAdapter),
 	}
-	for _, adapter := range []HistoryAdapter{CodexJSONLAdapter{}, ClaudeJSONLAdapter{}, GeminiJSONLAdapter{}, OpenCodeExportAdapter{}} {
+	for _, adapter := range []HistoryAdapter{CodexJSONLAdapter{}, ClaudeJSONLAdapter{}, OpenCodeExportAdapter{}} {
 		imp.adapters[adapter.Format()] = adapter
 	}
 	for _, adapter := range config.Adapters {
@@ -197,7 +197,10 @@ func (s *SessionImporter) importTranscript(ctx context.Context, projectID string
 	}
 
 	// Security scan
-	if err := s.firewall.ScanRecord(ctx, rec); err != nil {
+	// Community refuses a secret; Extreme removes it and names the redaction
+	// in the record's metadata.
+	rec, _, err := s.firewall.AdmitRecord(ctx, rec)
+	if err != nil {
 		return ImportResult{}, err
 	}
 

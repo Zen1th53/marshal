@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -17,7 +18,7 @@ import (
 
 // MarshalPackRelativePath is where an interactive Marshal writes the plan
 // pack next to its task list.
-const MarshalPackRelativePath = ".marshal/marshal/plan"
+const MarshalPackRelativePath = statepath.DirName + "/marshal/plan"
 
 const (
 	marshalPackRequirements = "REQUIREMENTS.md"
@@ -28,15 +29,16 @@ const (
 	marshalPackFileLimit = 64 << 10
 )
 
-// MarshalRunPackPath is where a run's plan pack is kept once the runtime has
-// taken it: the person reads and may edit it there until approval.
+// MarshalRunPackPath is where a planning draft's source pack is kept once the
+// runtime has taken it. Proposal imports its contents into SQLite; this path
+// is never consulted for approval or dispatch.
 func MarshalRunPackPath(root, runID string) string {
-	return filepath.Join(root, ".marshal", "marshal", "runs", runID, "plan")
+	return filepath.Join(root, statepath.DirName, "marshal", "runs", runID, "plan")
 }
 
-// TakePlanPack moves the pack the Marshal wrote to the run's own directory,
-// so a later Marshal session starts without it and a rejected pack is kept
-// for inspection rather than read twice.
+// TakePlanPack moves the pack the Marshal wrote to its private run directory,
+// so a later Marshal session starts without it and the source remains
+// available for inspection after it is imported into SQLite.
 func (s *MarshalService) TakePlanPack(runID string) (string, error) {
 	if err := s.requireLifecycleOwner(); err != nil {
 		return "", err
@@ -59,10 +61,30 @@ func (s *MarshalService) TakePlanPack(runID string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
 		return "", err
 	}
+	// A later draft for the same run (a corrected or re-imported draft)
+	// replaces the taken pack. The earlier pack is kept beside it for
+	// inspection, never merged into or silently overwritten by the new one.
+	if _, err := os.Lstat(to); err == nil {
+		if err := os.Rename(to, supersededPackPath(to)); err != nil {
+			return "", fmt.Errorf("retain the previously taken plan pack: %w", err)
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return "", err
+	}
 	if err := os.Rename(from, to); err != nil {
 		return "", err
 	}
 	return to, nil
+}
+
+// supersededPackPath names the first free "<pack>.superseded-N" path.
+func supersededPackPath(pack string) string {
+	for n := 1; ; n++ {
+		candidate := fmt.Sprintf("%s.superseded-%d", pack, n)
+		if _, err := os.Lstat(candidate); errors.Is(err, fs.ErrNotExist) {
+			return candidate
+		}
+	}
 }
 
 // ReadPlanPack reads a pack and requires exactly one note per task, so a
@@ -148,21 +170,21 @@ func planPackDigest(pack marshal.PlanPack) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// refreshPlanPack reads the run's pack for a review snapshot and checks at
-// approval that its bytes still match the reviewed digest.
-// Only the notes of the original tasks are required: an amendment may have
-// added tasks without one.
-func (s *MarshalService) refreshPlanPack(runID string, run marshal.Run) (*marshal.PlanPack, error) {
+// refreshPlanPack validates and copies the proposal-time SQLite snapshot. The
+// run passed here is loaded from the canonical store by approval and review
+// paths. Source Markdown is deliberately not re-read: edits after proposal
+// cannot alter the revision being reviewed or approved.
+func (s *MarshalService) refreshPlanPack(_ string, run marshal.Run) (*marshal.PlanPack, error) {
 	if run.Pack == nil {
 		return nil, nil
 	}
-	ids := make([]string, 0, len(run.Pack.Tasks))
-	for id := range run.Pack.Tasks {
-		ids = append(ids, id)
+	pack := *run.Pack
+	pack.Tasks = make(map[string]string, len(run.Pack.Tasks))
+	for id, note := range run.Pack.Tasks {
+		pack.Tasks[id] = note
 	}
-	pack, err := ReadPlanPack(MarshalRunPackPath(s.Repository, runID), ids)
-	if err != nil {
-		return nil, err
+	if pack.Digest == "" || pack.Digest != planPackDigest(pack) {
+		return nil, errors.New("plan pack: stored SQLite revision digest is invalid")
 	}
 	return &pack, nil
 }

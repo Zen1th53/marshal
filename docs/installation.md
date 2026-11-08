@@ -1,68 +1,108 @@
-# MARSHAL installation
+# Installation
 
-MARSHAL publishes Linux archives for amd64 and arm64. Bubblewrap is a
-separately installed runtime dependency for sandboxed provider execution.
+Marshal is published as a standalone binary for Linux on x86_64 (`amd64`) and ARM64 (`arm64`).
 
-## Release archive
+> [!WARNING]
+> **Host Execution Notice**: Worker processes execute directly on your host machine under your user account without a sandbox. Worktrees isolate Git changes, not process execution or network activity. Always review goals, plans, and generated code before approving work.
 
-Download the archive for your architecture and `checksums.txt` from the
-[v0.0.7 release](https://github.com/Zen1th53/marshal/releases/tag/v0.0.7).
+---
+
+## Prerequisites
+
+Before installing Marshal, make sure your system has:
+
+- **Linux OS**: amd64 or arm64 architecture.
+- **Git**: Required for project initialization, branch management, and worktree isolation.
+- **tmux 3.3a or newer**: Required by `marshal` and `marshal tui` for window management, docked chat, and interactive popups.
+- **Provider CLIs**: Install and log into the AI agent tools you plan to use:
+  - [Claude Code](https://github.com/anthropics/claude-code) (`claude`)
+  - [OpenAI Codex](https://github.com/openai/codex) (`codex`)
+  - [OpenCode](https://github.com/opencode-ai/opencode) (`opencode`)
+  - [Google Antigravity](https://github.com/google/antigravity) (`agy`)
+
+Marshal does not bundle provider binaries or manage API subscriptions; it uses the authenticated CLIs found on your `$PATH`.
+
+---
+
+## Recommended: Install via `install.sh`
+
+The official installer downloads the release binary, verifies its SHA-256 checksum against published release hashes, and installs it to your local binary folder. Nothing runs with `sudo` and no system directories are modified.
 
 ```bash
-sha256sum -c checksums.txt --ignore-missing
-tar -xzf marshal_0.0.7_linux_amd64.tar.gz
-install -Dm755 marshal "$HOME/.local/bin/marshal"
-marshal version
+curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
 ```
 
-The release also publishes an SPDX SBOM, build metadata, a release manifest,
-and GitHub build-provenance attestations.
+### Customizing the Installation
 
-## Build from source
+You can override default settings using environment variables:
 
-Go 1.25 or newer is required:
+| Variable | Description | Default |
+|---|---|---|
+| `MARSHAL_INSTALL_DIR` | Destination folder for the `marshal` binary | `$HOME/.local/bin` |
+| `MARSHAL_VERSION` | Specific release tag to install (e.g. `v0.2.0`) | Latest release |
+
+Example:
 
 ```bash
+MARSHAL_INSTALL_DIR="/usr/local/bin" MARSHAL_VERSION="v0.2.0" \
+  curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
+```
+
+Ensure your installation directory is included in your shell's `$PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+---
+
+## Building from Source
+
+To compile Marshal directly from the Git repository, you need a Go compiler (Go 1.25 or newer):
+
+```bash
+# 1. Clone the repository
 git clone https://github.com/Zen1th53/marshal.git
 cd marshal
-go test ./...
-go build -o ./bin/marshal ./cmd/marshal
-./bin/marshal version
+
+# 2. Build the binary
+go build -o marshal ./cmd/marshal
+
+# 3. Install to your local path
+install -Dm755 marshal "$HOME/.local/bin/marshal"
 ```
 
-For a release-style build with embedded metadata:
+---
+
+## Verifying the Installation
+
+Check the installed version and verify runtime dependencies:
 
 ```bash
-go build -trimpath \
-  -ldflags="-X github.com/Zen1th53/marshal/internal/cli.Version=v0.0.7 \
-  -X github.com/Zen1th53/marshal/internal/cli.Commit=$(git rev-parse HEAD) \
-  -X github.com/Zen1th53/marshal/internal/cli.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -o ./bin/marshal ./cmd/marshal
-```
+# Display binary version, commit hash, and build timestamp
+marshal version
 
-## Bubblewrap
-
-Install `bwrap` with the host package manager:
-
-```bash
-# Debian / Ubuntu
-sudo apt-get install bubblewrap
-
-# Fedora
-sudo dnf install bubblewrap
-
-# Arch / BlackArch
-sudo pacman -S bubblewrap
-```
-
-Verify the installation and initialize a Git repository for MARSHAL:
-
-```bash
-bwrap --version
-cd /path/to/repository
-marshal init
+# Run diagnostics on Git, tmux, and available tools
 marshal doctor
+
+# Probe installed agent provider CLIs
+marshal doctor --probe-providers
 ```
 
-Provider CLIs are optional and not bundled. Probe them explicitly with
-`marshal doctor --probe-providers`.
+`marshal doctor` checks system prerequisites, detects installed agent CLIs, probes provider availability, and reports any configuration issues.
+
+---
+
+## Updating Marshal
+
+To check for or install updates from within the terminal:
+
+```bash
+# Check update status
+marshal update
+
+# Install latest available update
+marshal update install
+```
+
+You can also re-run the `install.sh` script at any time to upgrade to the latest release.

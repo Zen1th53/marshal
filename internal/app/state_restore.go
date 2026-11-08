@@ -22,6 +22,10 @@ type CoordinatedRestoreResult struct {
 	RecoveryPath string
 }
 
+// restoreHandleDrain bounds how long a just-closed runtime's in-flight queries
+// may keep the database open before the restore treats it as in use.
+const restoreHandleDrain = 3 * time.Second
+
 // CoordinatedRestore replaces the project database with a verified backup
 // from inside a running workspace, without the risks of swapping it under
 // open connections:
@@ -62,7 +66,7 @@ func CoordinatedRestore(ctx context.Context, old *Runtime, backupPath, projectID
 		}
 		return CoordinatedRestoreResult{Runtime: reopened, RecoveryPath: recovery}, cause
 	}
-	if err := store.EnsureDatabaseClosed(layout.Database); err != nil {
+	if err := store.WaitDatabaseClosed(ctx, layout.Database, restoreHandleDrain); err != nil {
 		return reopenOld(err)
 	}
 	if err := RestoreStateForProjectExpected(ctx, root, backupPath, projectID, expectedDigest); err != nil {

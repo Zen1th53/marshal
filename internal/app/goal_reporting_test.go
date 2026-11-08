@@ -1,39 +1,16 @@
 package app
 
 import (
-	"context"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/verification"
 )
 
 func TestGoalProgressCanonicalEvidenceAndRevisionStaleness(t *testing.T) {
-	r := runtimeForPlan(t)
-	ctx := context.Background()
-	g := planGoal()
-	g.ProjectID = r.ProjectIdentity()
-	g.SuccessCriteria = []string{"verified", "failed", "not run", "unknown", "missing", "expired", "unmapped"}
-	if err := r.Store().SaveGoalContract(ctx, g, 1); err != nil {
-		t.Fatal(err)
-	}
-	g.Revision = 2
-	req := planCreateRequest()
-	req.ProjectID = projectid.ID(g.ProjectID)
-	req.Tasks[0].Criteria = g.SuccessCriteria
-	if _, err := r.Plans().Create(ctx, req); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := r.Plans().Approve(ctx, req.ProjectID); err != nil {
-		t.Fatal(err)
-	}
-	run, err := r.Execution().StartRun(ctx, g.SessionID, req.ProjectID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	r, ctx, g, run := requiredGoalReportFixture(t)
 	binding, err := r.Verification().BindingForRun(ctx, run.RunID)
 	if err != nil {
 		t.Fatal(err)

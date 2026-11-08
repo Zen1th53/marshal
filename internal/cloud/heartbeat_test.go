@@ -1,3 +1,5 @@
+//go:build governed
+
 package cloud
 
 import (
@@ -105,7 +107,7 @@ func TestAuthorizationStopIsOrderly(t *testing.T) {
 	f := newFakeServer(t)
 	ctx := context.Background()
 
-	auth := Authorize(ctx, Config{Endpoint: f.server.URL},
+	auth := authorizeCloud(ctx, Config{Endpoint: f.server.URL},
 		t.TempDir(), "1.0.0")
 	if auth.Err != nil {
 		t.Fatalf("authorize: %v", auth.Err)
@@ -132,7 +134,7 @@ func TestAuthorizationStopIsOrderly(t *testing.T) {
 // recorded, or the server learns nothing about activations that worked.
 func TestAuthorizeRecordsLifecycleEvents(t *testing.T) {
 	f := newFakeServer(t)
-	auth := Authorize(context.Background(),
+	auth := authorizeCloud(context.Background(),
 		Config{Endpoint: f.server.URL}, t.TempDir(), "1.0.0")
 	if auth.Err != nil {
 		t.Fatalf("authorize: %v", auth.Err)
@@ -162,7 +164,7 @@ func TestFailedActivationIsStillReported(t *testing.T) {
 	f := newFakeServer(t)
 	f.refuse.Store(true)
 
-	auth := Authorize(context.Background(),
+	auth := authorizeCloud(context.Background(),
 		Config{Endpoint: f.server.URL}, t.TempDir(), "1.0.0")
 	if auth.Err == nil {
 		t.Fatal("a refusing server produced a successful authorization")

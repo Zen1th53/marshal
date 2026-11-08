@@ -2,8 +2,8 @@
   "schema_version": 1,
   "pack": "community-tui-final",
   "frozen_root": "MARSHAL — COMMUNITY TUI",
-  "frozen_ia_node_count": 804,
-  "markdown_spec_count": 813,
+  "frozen_ia_node_count": 801,
+  "markdown_spec_count": 810,
   "specs": [
     {
       "spec_id": "CTUI-0000",
@@ -1018,18 +1018,14 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Control / Execution / Pause task",
       "type": "ACTION",
       "process_association": "Process 05",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "ACTION"
       ],
       "backend_sources": [
-        "internal/app/execution_runtime.go",
-        "internal/app/runtime.go",
-        "internal/execution/engine.go",
-        "internal/execution/run.go",
-        "internal/cell/engine.go"
+        "internal/app/task_commands.go"
       ]
     },
     {
@@ -1041,18 +1037,14 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Control / Execution / Resume task",
       "type": "ACTION",
       "process_association": "Process 05",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "ACTION"
       ],
       "backend_sources": [
-        "internal/app/execution_runtime.go",
-        "internal/app/runtime.go",
-        "internal/execution/engine.go",
-        "internal/execution/run.go",
-        "internal/cell/engine.go"
+        "internal/app/task_commands.go"
       ]
     },
     {
@@ -1064,18 +1056,14 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Control / Execution / Retry task",
       "type": "ACTION",
       "process_association": "Process 05",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "ACTION"
       ],
       "backend_sources": [
-        "internal/app/execution_runtime.go",
-        "internal/app/runtime.go",
-        "internal/execution/engine.go",
-        "internal/execution/run.go",
-        "internal/cell/engine.go"
+        "internal/app/task_commands.go"
       ]
     },
     {
@@ -1133,18 +1121,15 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Control / Execution / Cancel goal",
       "type": "DESTRUCTIVE_ACTION",
       "process_association": "Process 05",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "DESTRUCTIVE_ACTION"
       ],
       "backend_sources": [
-        "internal/app/execution_runtime.go",
-        "internal/app/runtime.go",
-        "internal/execution/engine.go",
-        "internal/execution/run.go",
-        "internal/cell/engine.go"
+        "internal/app/goal_cancel.go",
+        "internal/store/goal_cancel.go"
       ]
     },
     {
@@ -1202,18 +1187,15 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Control / Execution / Execution Cells / Execute governed tool/action",
       "type": "GOVERNED_ACTION",
       "process_association": "Process 05",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "GOVERNED_ACTION"
       ],
       "backend_sources": [
-        "internal/app/execution_runtime.go",
-        "internal/app/runtime.go",
-        "internal/execution/engine.go",
-        "internal/execution/run.go",
-        "internal/cell/engine.go"
+        "internal/app/cell_commands.go",
+        "internal/store/cell_commands.go"
       ]
     },
     {
@@ -1225,18 +1207,15 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Control / Execution / Execution Cells / Destroy cell",
       "type": "DESTRUCTIVE_ACTION",
       "process_association": "Process 05",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "DESTRUCTIVE_ACTION"
       ],
       "backend_sources": [
-        "internal/app/execution_runtime.go",
-        "internal/app/runtime.go",
-        "internal/execution/engine.go",
-        "internal/execution/run.go",
-        "internal/cell/engine.go"
+        "internal/app/cell_commands.go",
+        "internal/store/cell_commands.go"
       ]
     },
     {
@@ -1657,18 +1636,16 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Control / Rollback \u0026 Recovery / Roll back memory state",
       "type": "DESTRUCTIVE_ACTION",
       "process_association": "Community runtime / pre-Process-00 capability",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "DESTRUCTIVE_ACTION"
       ],
       "backend_sources": [
-        "internal/app/execution_runtime.go",
-        "internal/app/optimization_runtime.go",
-        "internal/recovery/engine.go",
-        "internal/adapter/recovery_check.go",
-        "internal/memory/versioning/snapshot.go"
+        "internal/app/memory_restore.go",
+        "internal/store/memory_restore.go",
+        "internal/store/migration_memory_restore.go"
       ]
     },
     {
@@ -1703,18 +1680,16 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Control / Rollback \u0026 Recovery / Resume interrupted session",
       "type": "ACTION",
       "process_association": "Community runtime / pre-Process-00 capability",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "ACTION"
       ],
       "backend_sources": [
-        "internal/app/execution_runtime.go",
-        "internal/app/optimization_runtime.go",
-        "internal/recovery/engine.go",
-        "internal/adapter/recovery_check.go",
-        "internal/memory/versioning/snapshot.go"
+        "internal/app/session_recovery.go",
+        "internal/store/session_recovery.go",
+        "internal/store/migration_session_recovery.go"
       ]
     },
     {
@@ -3221,28 +3196,6 @@
       ]
     },
     {
-      "spec_id": "CTUI-0139",
-      "title": "Gemini",
-      "path": ".marshal/tasks/community-tui-final/status/providers-and-usage/gemini.md",
-      "menu_path": "MARSHAL — COMMUNITY TUI / Status / Providers \u0026 Usage / Gemini",
-      "parent": "CTUI-0135",
-      "canonical_owner": "MARSHAL — COMMUNITY TUI / Status / Providers \u0026 Usage / Gemini",
-      "type": "DETAIL",
-      "process_association": "Community runtime / pre-Process-00 capability",
-      "implementation_binding_status": "BOUND",
-      "frozen_ia_node": true,
-      "markers": [
-        "BOUND",
-        "READ_ONLY"
-      ],
-      "backend_sources": [
-        "internal/adapter/adapter.go",
-        "internal/harness/intelligence.go",
-        "internal/store/harness.go",
-        "internal/execution/rate_limit.go"
-      ]
-    },
-    {
       "spec_id": "CTUI-0140",
       "title": "OpenCode",
       "path": ".marshal/tasks/community-tui-final/status/providers-and-usage/opencode.md",
@@ -3339,17 +3292,14 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Status / Providers \u0026 Usage / Provider Status / Authentication and provider session",
       "type": "DETAIL",
       "process_association": "Community runtime / pre-Process-00 capability",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "READ_ONLY"
       ],
       "backend_sources": [
-        "internal/adapter/adapter.go",
-        "internal/harness/intelligence.go",
-        "internal/store/harness.go",
-        "internal/execution/rate_limit.go"
+        "internal/app/provider_status.go"
       ]
     },
     {
@@ -3427,17 +3377,14 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Status / Providers \u0026 Usage / Provider Status / Provider-reported quota or capacity",
       "type": "DETAIL",
       "process_association": "Community runtime / pre-Process-00 capability",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "READ_ONLY"
       ],
       "backend_sources": [
-        "internal/adapter/adapter.go",
-        "internal/harness/intelligence.go",
-        "internal/store/harness.go",
-        "internal/execution/rate_limit.go"
+        "internal/app/provider_status.go"
       ]
     },
     {
@@ -3449,17 +3396,14 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Status / Providers \u0026 Usage / Provider Status / Provider-reported reset time",
       "type": "DETAIL",
       "process_association": "Community runtime / pre-Process-00 capability",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "READ_ONLY"
       ],
       "backend_sources": [
-        "internal/adapter/adapter.go",
-        "internal/harness/intelligence.go",
-        "internal/store/harness.go",
-        "internal/execution/rate_limit.go"
+        "internal/app/provider_status.go"
       ]
     },
     {
@@ -3493,17 +3437,14 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Status / Providers \u0026 Usage / Provider Status / Provider-reported temporary/free allowance or feature",
       "type": "DETAIL",
       "process_association": "Community runtime / pre-Process-00 capability",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "READ_ONLY"
       ],
       "backend_sources": [
-        "internal/adapter/adapter.go",
-        "internal/harness/intelligence.go",
-        "internal/store/harness.go",
-        "internal/execution/rate_limit.go"
+        "internal/app/provider_status.go"
       ]
     },
     {
@@ -3633,19 +3574,15 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Status / Community Cloud \u0026 ULTRA / Entitlement request state",
       "type": "DETAIL",
       "process_association": "Community runtime / pre-Process-00 capability",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "READ_ONLY"
       ],
       "backend_sources": [
-        "internal/cloud/config.go",
-        "internal/cloud/state.go",
-        "internal/cloud/session.go",
-        "internal/cloud/gate.go",
-        "internal/cloud/lease.go",
-        "internal/cloud/heartbeat.go"
+        "internal/cloud/request_state.go",
+        "internal/app/ultra_requests.go"
       ]
     },
     {
@@ -11219,11 +11156,11 @@
     },
     {
       "spec_id": "CTUI-0487",
-      "title": "Import Gemini JSONL",
-      "path": ".marshal/tasks/community-tui-final/memory/import-and-bootstrap/import-gemini-jsonl.md",
-      "menu_path": "MARSHAL — COMMUNITY TUI / Memory / Import \u0026 Bootstrap / Import Gemini JSONL",
+      "title": "Import Antigravity SQLite",
+      "path": ".marshal/tasks/community-tui-final/memory/import-and-bootstrap/import-antigravity-sqlite.md",
+      "menu_path": "MARSHAL — COMMUNITY TUI / Memory / Import \u0026 Bootstrap / Import Antigravity SQLite",
       "parent": "CTUI-0479",
-      "canonical_owner": "MARSHAL — COMMUNITY TUI / Memory / Import \u0026 Bootstrap / Import Gemini JSONL",
+      "canonical_owner": "MARSHAL — COMMUNITY TUI / Memory / Import \u0026 Bootstrap / Import Antigravity SQLite",
       "type": "ACTION",
       "process_association": "Process 07 / memory fabric",
       "implementation_binding_status": "BOUND",
@@ -11586,7 +11523,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11612,7 +11548,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11638,7 +11573,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11664,7 +11598,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11690,7 +11623,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11716,7 +11648,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11742,7 +11673,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11768,7 +11698,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11794,33 +11723,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
-        "internal/adapter/opencode/opencode.go",
-        "internal/adapter/antigravity/antigravity.go",
-        "internal/harness/intelligence.go",
-        "internal/store/harness.go"
-      ]
-    },
-    {
-      "spec_id": "CTUI-0511",
-      "title": "Gemini",
-      "path": ".marshal/tasks/community-tui-final/models/providers-and-harnesses/gemini.md",
-      "menu_path": "MARSHAL — COMMUNITY TUI / Models / Providers \u0026 Harnesses / Gemini",
-      "parent": "CTUI-0502",
-      "canonical_owner": "MARSHAL — COMMUNITY TUI / Models / Providers \u0026 Harnesses / Gemini",
-      "type": "DETAIL",
-      "process_association": "Community runtime / pre-Process-00 capability",
-      "implementation_binding_status": "BOUND",
-      "frozen_ia_node": true,
-      "markers": [
-        "BOUND",
-        "READ_ONLY"
-      ],
-      "backend_sources": [
-        "internal/adapter/adapter.go",
-        "internal/adapter/codex/codex.go",
-        "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11846,7 +11748,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11872,7 +11773,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11898,7 +11798,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11924,7 +11823,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11950,7 +11848,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -11976,7 +11873,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -12002,7 +11898,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -12028,7 +11923,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -12054,7 +11948,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -12080,7 +11973,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -12106,7 +11998,6 @@
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
@@ -12122,21 +12013,22 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Status / Providers \u0026 Usage",
       "type": "CROSS_LINK",
       "process_association": "Community runtime / pre-Process-00 capability",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "CROSS_LINK"
       ],
       "backend_sources": [
         "internal/adapter/adapter.go",
         "internal/adapter/codex/codex.go",
         "internal/adapter/claude/claude.go",
-        "internal/adapter/gemini/gemini.go",
         "internal/adapter/opencode/opencode.go",
         "internal/adapter/antigravity/antigravity.go",
         "internal/harness/intelligence.go",
-        "internal/store/harness.go"
+        "internal/store/harness.go",
+        "internal/app/provider_status.go",
+        "internal/tui/modelsdata.go"
       ],
       "cross_links": [
         "MARSHAL — COMMUNITY TUI / Status / Providers \u0026 Usage"
@@ -12874,18 +12766,15 @@
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Models / Community Cloud \u0026 ULTRA / Entitlement request detail",
       "type": "DETAIL",
       "process_association": "Community runtime / pre-Process-00 capability",
-      "implementation_binding_status": "IMPLEMENTATION_GAP",
+      "implementation_binding_status": "BOUND",
       "frozen_ia_node": true,
       "markers": [
-        "IMPLEMENTATION_GAP",
+        "BOUND",
         "READ_ONLY"
       ],
       "backend_sources": [
-        "internal/cloud/config.go",
-        "internal/cloud/state.go",
-        "internal/cloud/session.go",
-        "internal/cloud/gate.go",
-        "internal/cloud/telemetry.go"
+        "internal/cloud/request_state.go",
+        "internal/tui/modelsdata.go"
       ]
     },
     {
@@ -13769,31 +13658,6 @@
       "menu_path": "MARSHAL — COMMUNITY TUI / Models / Governed Optimization — Process 08 / Benchmarks / Single-Agent Baselines / Claude",
       "parent": "CTUI-0592",
       "canonical_owner": "MARSHAL — COMMUNITY TUI / Models / Governed Optimization — Process 08 / Benchmarks / Single-Agent Baselines / Claude",
-      "type": "DETAIL",
-      "process_association": "Process 08",
-      "implementation_binding_status": "BOUND",
-      "frozen_ia_node": true,
-      "markers": [
-        "BOUND",
-        "READ_ONLY"
-      ],
-      "backend_sources": [
-        "internal/app/optimization_runtime.go",
-        "internal/optimization/engine.go",
-        "internal/optimization/counterfactual.go",
-        "internal/optimization/replay.go",
-        "internal/optimization/rollout.go",
-        "internal/optimization/bench/baselines.go",
-        "internal/store/optimization.go"
-      ]
-    },
-    {
-      "spec_id": "CTUI-0595",
-      "title": "Gemini",
-      "path": ".marshal/tasks/community-tui-final/models/governed-optimization-process-08/benchmarks/single-agent-baselines/gemini.md",
-      "menu_path": "MARSHAL — COMMUNITY TUI / Models / Governed Optimization — Process 08 / Benchmarks / Single-Agent Baselines / Gemini",
-      "parent": "CTUI-0592",
-      "canonical_owner": "MARSHAL — COMMUNITY TUI / Models / Governed Optimization — Process 08 / Benchmarks / Single-Agent Baselines / Gemini",
       "type": "DETAIL",
       "process_association": "Process 08",
       "implementation_binding_status": "BOUND",

@@ -73,6 +73,8 @@ type runtimeControlAuthority struct {
 	preference    func() bool
 	requestExit   func() error
 	exitRequested func() bool
+	// relauncher is the workspace's session hand-over (CTUI-0219).
+	relauncher sessionRelauncher
 	// replaceRuntime updates the workspace after a stopped-runtime restore.
 	// It does not perform the restore; it only swaps in the canonical runtime
 	// that app.Open produced after store.RestoreDatabase succeeded.
@@ -85,16 +87,36 @@ func (a *runtimeControlAuthority) Providers(ctx context.Context) ([]ProviderProb
 	if a == nil || a.runtime == nil {
 		return nil, errNoRuntime
 	}
-	rows, err := a.runtime.ProviderObservations(ctx)
+	details, err := a.runtime.ProviderStatusDetails(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]ProviderProbe, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, ProviderProbe{
-			Name: row.Name, Found: row.Found, Path: row.Path,
-			Probed: row.Probed, ProbeNote: row.Note,
-		})
+	out := make([]ProviderProbe, 0, len(details))
+	for _, d := range details {
+		probe := ProviderProbe{
+			Name:              d.Name,
+			Found:             d.Found,
+			Path:              d.Path,
+			Version:           d.Version,
+			Model:             d.Model,
+			Probed:            d.Found,
+			AuthStatus:        string(d.Auth.Status),
+			AuthReason:        d.Auth.Reason,
+			AuthSource:        d.Auth.Source,
+			AuthTime:          d.Auth.ObservedAt,
+			UsageReported:     d.Usage.Reported,
+			TotalTokens:       d.Usage.TotalTokens,
+			CostUSD:           d.Usage.CostUSD,
+			ModelCalls:        d.Usage.ModelCalls,
+			UsageDuration:     d.Usage.Duration,
+			CooldownActive:    d.Cooldown.Active,
+			CooldownRemaining: d.Cooldown.RetryAfter,
+			CooldownReason:    d.Cooldown.Reason,
+			QuotaReason:       d.QuotaReason,
+			ResetReason:       d.ResetReason,
+			AllowanceReason:   d.AllowanceReason,
+		}
+		out = append(out, probe)
 	}
 	return out, nil
 }
@@ -1021,6 +1043,13 @@ func (a *runtimeControlAuthority) memory() (*app.MemoryService, error) {
 	if a == nil || a.runtime == nil {
 		return nil, errNoRuntime
 	}
+	// Control admission is keyed by the canonical project binding. Memory's
+	// data rows remain keyed by the runtime's local project ID; translating an
+	// arbitrary caller-supplied identity would turn this into a cross-project
+	// reader, so validate the binding before reaching any data API.
+	if a.projectID == "" || string(a.projectID) != a.runtime.ProjectIdentity() || a.runtime.ProjectID() == "" {
+		return nil, authz.ErrDenied
+	}
 	service := a.runtime.Memory()
 	if service == nil {
 		return nil, errors.New("the memory service is unavailable in this runtime")
@@ -1033,7 +1062,7 @@ func (a *runtimeControlAuthority) RebuildMemoryProjections(ctx context.Context) 
 	if err != nil {
 		return err
 	}
-	return service.RebuildProjections(ctx, string(a.projectID))
+	return service.RebuildProjections(ctx, a.runtime.ProjectID())
 }
 
 func (a *runtimeControlAuthority) InvalidateMemory(ctx context.Context, memoryID, scopeID string) error {
@@ -1041,7 +1070,7 @@ func (a *runtimeControlAuthority) InvalidateMemory(ctx context.Context, memoryID
 	if err != nil {
 		return err
 	}
-	return service.InvalidateRecord(ctx, string(a.projectID), memoryID, scopeID)
+	return service.InvalidateRecord(ctx, a.runtime.ProjectID(), memoryID, scopeID)
 }
 
 func (a *runtimeControlAuthority) MemoryRecord(ctx context.Context, memoryID string) (model.MemoryRecordV2, error) {
@@ -1049,7 +1078,7 @@ func (a *runtimeControlAuthority) MemoryRecord(ctx context.Context, memoryID str
 	if err != nil {
 		return model.MemoryRecordV2{}, err
 	}
-	return service.Get(ctx, a.memoryPrincipal(), string(a.projectID), memoryID)
+	return service.Get(ctx, a.memoryPrincipal(), a.runtime.ProjectID(), memoryID)
 }
 
 // MemoryStatus reports the service's own health, for the Memory section reads.
@@ -1058,7 +1087,7 @@ func (a *runtimeControlAuthority) MemoryStatus(ctx context.Context) (MemoryStatu
 	if err != nil {
 		return MemoryStatus{}, err
 	}
-	status, err := service.Status(ctx, string(a.projectID))
+	status, err := service.Status(ctx, a.runtime.ProjectID())
 	if err != nil {
 		return MemoryStatus{}, err
 	}
@@ -1073,7 +1102,7 @@ func (a *runtimeControlAuthority) RecallRecent(ctx context.Context, limit int) (
 	if err != nil {
 		return nil, err
 	}
-	return service.ListRecent(ctx, a.memoryPrincipal(), string(a.projectID), limit)
+	return service.ListRecent(ctx, a.memoryPrincipal(), a.runtime.ProjectID(), limit)
 }
 
 func (a *runtimeControlAuthority) memoryPrincipal() authz.Principal {
@@ -1086,11 +1115,14 @@ func (a *runtimeControlAuthority) memoryPrincipal() authz.Principal {
 }
 
 func (a *runtimeControlAuthority) Remember(ctx context.Context, title, body string) (model.MemoryRecordV2, error) {
-	if a.runtime == nil || a.localControl == nil {
+	if a == nil || a.runtime == nil || a.localControl == nil {
 		return model.MemoryRecordV2{}, errors.New("authenticated local operator required")
 	}
+	if _, err := a.memory(); err != nil {
+		return model.MemoryRecordV2{}, err
+	}
 	return a.runtime.CommandRemember(a.localControl.Context(ctx), app.RememberRequest{
-		ProjectID: string(a.projectID), ScopeID: string(a.projectID),
+		ProjectID: a.runtime.ProjectID(), ScopeID: a.runtime.ProjectID(),
 		Title: title, Body: body, Kind: model.MemoryKindSemantic,
 	})
 }
@@ -1120,7 +1152,7 @@ func (a *runtimeControlAuthority) CaptureOutcome(ctx context.Context, taskID, st
 		return model.MemoryRecordV2{}, err
 	}
 	return service.CaptureOutcome(ctx, app.OutcomeCaptureRequest{
-		ProjectID: string(a.projectID), TaskID: taskID, TaskTitle: task.Title,
+		ProjectID: a.runtime.ProjectID(), TaskID: taskID, TaskTitle: task.Title,
 		RunID: runID, SessionID: a.sessionID, AgentID: runTask.AssignedAgent,
 		Provider: runTask.AssignedHarness, Status: status,
 		HeadCommit: "", WorktreeID: runTask.WorktreePath,

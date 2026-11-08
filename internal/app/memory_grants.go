@@ -59,8 +59,7 @@ func (s *MemoryService) GrantTaskAccess(ctx context.Context, principal authz.Pri
 	if !found {
 		return authz.RoleBinding{}, fmt.Errorf("%w: active agent %s", model.ErrNotFound, req.PrincipalID)
 	}
-	sum := sha256.Sum256([]byte(req.TaskID + "\x00" + req.PrincipalID))
-	bindingID := "MEM-GRANT-" + hex.EncodeToString(sum[:])[:24]
+	bindingID := taskMemoryGrantID(req.TaskID, req.PrincipalID)
 	if existing, getErr := s.store.GetRoleBinding(ctx, bindingID); getErr == nil {
 		if existing.PrincipalID == req.PrincipalID && existing.ScopeID == req.TaskID && existing.Role == req.Role &&
 			existing.BoundBy == principal.ID && existing.PolicyDigest == req.PolicyDigest && existing.RevokedAt == nil {
@@ -100,4 +99,10 @@ func (s *MemoryService) RevokeTaskAccess(ctx context.Context, principal authz.Pr
 		return err
 	}
 	return s.store.RevokeRoleBinding(ctx, bindingID, time.Now().UTC())
+}
+
+// taskMemoryGrantID is the deterministic binding ID for one task/principal pair.
+func taskMemoryGrantID(taskID, principalID string) string {
+	sum := sha256.Sum256([]byte(taskID + "\x00" + principalID))
+	return "MEM-GRANT-" + hex.EncodeToString(sum[:])[:24]
 }

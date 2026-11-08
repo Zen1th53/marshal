@@ -1,0 +1,2 @@
+{"type":"user","sessionId":"claude-fixture","cwd":"{{ROOT}}","timestamp":"2026-09-14T00:00:00Z","message":{"role":"user","content":[{"type":"text","text":"fixture request"}]}}
+{"type":"assistant","sessionId":"claude-fixture","cwd":"{{ROOT}}","timestamp":"2026-09-14T00:00:01Z","message":{"role":"assistant","content":[{"type":"text","text":"fixture answer"}]}}

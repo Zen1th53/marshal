@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,7 +72,11 @@ func TestMarshalLaunchHiddenProtocolMatrix(t *testing.T) {
 						}
 					}
 				}
-				if hidden != strings.TrimSpace(protocol) {
+				wantHidden := strings.TrimSpace(protocol)
+				if provider == "antigravity" {
+					wantHidden += "\n\nMCP availability: this Antigravity CLI has no documented per-session MCP configuration. MARSHAL did not change your global or project provider configuration. MARSHAL_KNOWLEDGE_MCP supplies a JSON argv array for the bound stdio source-query transport. Use it through the provider shell tool and keep one query session open; do not claim MCP tool results unless they were actually returned."
+				}
+				if hidden != wantHidden {
 					t.Fatal("hidden channel lost or changed protocol")
 				}
 				if resumed && !strings.Contains(strings.Join(args, "\x00"), "bound-session") {
@@ -92,7 +97,7 @@ func TestMarshalLaunchRefusesMissingOrFailedHiddenDelivery(t *testing.T) {
 		t.Run(tc.provider, func(t *testing.T) {
 			root := t.TempDir()
 			if tc.badRoot {
-				if err := os.WriteFile(filepath.Join(root, ".marshal"), []byte("blocked"), 0600); err != nil {
+				if err := os.WriteFile(filepath.Join(root, statepath.DirName), []byte("blocked"), 0600); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -163,10 +168,10 @@ func TestMarshalRestartRebuildsHiddenDelivery(t *testing.T) {
 				wantOpening := marshalKickoff
 				if saved {
 					wantOpening = marshalKickoffContinue
-					if err := os.MkdirAll(filepath.Join(root, ".marshal"), 0700); err != nil {
+					if err := os.MkdirAll(filepath.Join(root, statepath.DirName), 0700); err != nil {
 						t.Fatal(err)
 					}
-					if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(`{"language":"Uzbek","earlier_work":"no"}`), 0600); err != nil {
+					if err := os.WriteFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"), []byte(`{"language":"Uzbek","earlier_work":"no"}`), 0600); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -307,7 +312,7 @@ func TestMarshalProtocolCannotUseVisibleOrDisabledChannels(t *testing.T) {
 
 func TestMarshalLaunchScrubsRetainedProtocolInboxes(t *testing.T) {
 	root := t.TempDir()
-	base := filepath.Join(root, ".marshal", "inbox")
+	base := filepath.Join(root, statepath.DirName, "inbox")
 	if err := os.MkdirAll(base, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -373,11 +378,11 @@ func TestMarshalProtocolNeverVisibleInProviderChatTurn(t *testing.T) {
 					base = resumeArgsForProvider(provider, "session-123")
 				}
 				if mode != "fresh" {
-					if err := os.MkdirAll(filepath.Join(root, ".marshal"), 0700); err != nil {
+					if err := os.MkdirAll(filepath.Join(root, statepath.DirName), 0700); err != nil {
 						t.Fatal(err)
 					}
 					data := `{"language":"Uzbek","earlier_work":"no"}`
-					if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(data), 0600); err != nil {
+					if err := os.WriteFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"), []byte(data), 0600); err != nil {
 						t.Fatal(err)
 					}
 				}

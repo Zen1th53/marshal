@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"sort"
@@ -41,7 +42,7 @@ import (
 // as though another agent had reported it.
 
 func livePeerPath(root string) string {
-	return filepath.Join(root, ".marshal", "live-peers")
+	return filepath.Join(root, statepath.DirName, "live-peers")
 }
 
 // knownProviders is every agent MARSHAL can run in a project.
@@ -145,6 +146,9 @@ func (c channelConfig) canSee(reader, author string) bool {
 }
 
 func loadChannelConfig(root string) (channelConfig, []string) {
+	if err := statepath.CheckPath(root, livePeerPath(root)); err != nil {
+		return newChannelConfig(), []string{err.Error()}
+	}
 	data, err := os.ReadFile(livePeerPath(root))
 	if err != nil {
 		return newChannelConfig(), nil
@@ -259,6 +263,9 @@ func dedupeSorted(names []string) []string {
 
 // saveChannelConfig writes the arrangement to the project.
 func saveChannelConfig(root string, cfg channelConfig) error {
+	if err := statepath.CheckPath(root, livePeerPath(root)); err != nil {
+		return err
+	}
 	if err := inboxRenderGate.acquire(); err != nil {
 		return err
 	}

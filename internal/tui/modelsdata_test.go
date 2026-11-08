@@ -49,7 +49,7 @@ func testModels(t *testing.T, reader ModelsReader) *ModelsFeed {
 	return &ModelsFeed{Reader: reader, ProjectID: "proj-1", Now: fixedClock()}
 }
 
-// The two frozen gaps render as gaps everywhere, including with no reader.
+// Provider detail and entitlement require canonical readers and never invent facts.
 func TestModelsGapsAreAlwaysStated(t *testing.T) {
 	for _, snap := range []ModelsSnapshot{
 		(&ModelsFeed{Now: fixedClock()}).ReadModels(context.Background()),
@@ -60,20 +60,18 @@ func TestModelsGapsAreAlwaysStated(t *testing.T) {
 			"entitlement":     snap.Entitlement,
 		} {
 			if v.Status.IsSuccess() {
-				t.Fatalf("%s reports a known value but is a frozen gap", name)
+				t.Fatalf("%s reports a known value without a reader", name)
 			}
-			if !strings.Contains(v.Display(), "IMPLEMENTATION GAP") {
-				t.Fatalf("%s does not name its gap: %q", name, v.Display())
-			}
-			if !strings.Contains(v.Display(), "CTUI-") {
-				t.Fatalf("%s does not identify which gap: %q", name, v.Display())
+			if v.Reason == "" {
+				t.Fatalf("%s gave no reason for unevidenced state: %q", name, v.Display())
 			}
 		}
 	}
 }
 
-// A gap node renders as a gap through the node renderer too, so reaching it by
-// cross-link from another section shows the same thing.
+// Provider detail (CTUI-0523) and entitlement request detail (CTUI-0557) are
+// now bound to provider_status.go / request_state.go and render their fields
+// through the Models node renderer, never a stale implementation-gap notice.
 func TestModelsGapNodesRenderAsGaps(t *testing.T) {
 	ia, err := FrozenIA()
 	if err != nil {
@@ -84,15 +82,23 @@ func TestModelsGapNodesRenderAsGaps(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s is not in the IA", id)
 		}
+		if editionExtreme {
+			// Extreme has no provider quota source and no cloud entitlement
+			// request; these nodes stay honest, read-only gaps there.
+			if node.Binding != BindingGap {
+				t.Fatalf("%s must stay an implementation gap in Marshal, reports %q", id, node.Binding)
+			}
+			continue
+		}
+		if node.Binding != BindingBound {
+			t.Fatalf("%s is bound in the pack but reports %q", id, node.Binding)
+		}
 		content, handled := RenderModelsNode(node, ModelsSnapshot{})
 		if !handled {
 			t.Fatalf("%s is not rendered", id)
 		}
-		if !content.HasNotice {
-			t.Fatalf("%s renders without a notice", id)
-		}
-		if !strings.Contains(content.Notice.Display(), "IMPLEMENTATION GAP") {
-			t.Fatalf("%s does not name its gap: %q", id, content.Notice.Display())
+		if content.HasNotice && strings.Contains(content.Notice.Display(), "IMPLEMENTATION GAP") {
+			t.Fatalf("%s renders a gap notice despite being bound: %q", id, content.Notice.Display())
 		}
 	}
 }
@@ -239,7 +245,8 @@ func TestRichModelsReaderUsesCanonicalProcess08AndProviderEvidence(t *testing.T)
 func TestOptimizationDecisionsAreUnavailable(t *testing.T) {
 	source, _ := testControl(t)
 	for _, id := range []ActionID{
-		"CTUI-0573", "CTUI-0587", "CTUI-0617", "CTUI-0621", "CTUI-0623", "CTUI-0626",
+		// CTUI-0573 now takes a typed input file (controlbind_menu_cheap.go).
+		"CTUI-0587", "CTUI-0617", "CTUI-0621", "CTUI-0623", "CTUI-0626",
 	} {
 		binding, ok := source.Bindings()[id]
 		if !ok {

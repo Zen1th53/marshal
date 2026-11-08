@@ -3,33 +3,29 @@ package recommendation
 import (
 	"context"
 	"fmt"
+	"sync"
 )
 
-type Engine struct{}
-
-func NewEngine() *Engine {
-	return &Engine{}
+type Engine struct {
+	mu   sync.RWMutex
+	recs map[string]*Recommendation
 }
 
+func NewEngine() *Engine {
+	return &Engine{
+		recs: make(map[string]*Recommendation),
+	}
+}
+
+// Generate reports honest no-data in Wave 1 pending real failure-observation wiring.
 func (e *Engine) Generate(ctx context.Context, query string) (*Recommendation, error) {
 	if query == "" {
 		return nil, fmt.Errorf("query cannot be empty")
 	}
-	if query == "LOW_CONF" {
-		return nil, ErrLowConfidence
-	}
-
-	return &Recommendation{
-		ID:             "rec-generated-1",
-		Kind:           "CONFIG_OPTIMIZATION",
-		Target:         "scheduler.max_concurrent",
-		ProposedChange: "increase from 10 to 16",
-		Rationale:      "historical worker utilization is 98%",
-		Confidence:     0.94,
-		Status:         "PROPOSED",
-	}, nil
+	return nil, ErrNoData
 }
 
+// Apply applies an existing recommendation given valid human approval.
 func (e *Engine) Apply(ctx context.Context, id, approver string) error {
 	if id == "" {
 		return fmt.Errorf("id cannot be empty")
@@ -37,5 +33,14 @@ func (e *Engine) Apply(ctx context.Context, id, approver string) error {
 	if approver == "" {
 		return ErrApprovalRequired
 	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	rec, ok := e.recs[id]
+	if !ok {
+		return ErrNotFound
+	}
+	rec.Status = "APPLIED"
 	return nil
 }

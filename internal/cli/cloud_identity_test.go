@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/constitution"
 )
 
@@ -31,8 +32,14 @@ func TestCloudAuthorizeOfflineLeavesUserConfigAlone(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", config)
 	t.Setenv("MARSHAL_CLOUD_ENDPOINT", "off")
 	auth := cloudAuthorize(context.Background(), t.TempDir())
-	if auth.Gate != nil || auth.Client != nil {
+	if auth.Client != nil || auth.Session != nil || auth.Heartbeat != nil || auth.Reporter != nil {
 		t.Fatal("an offline session reached a Cloud")
+	}
+	if auth.Gate.Entitled() != cloud.ExecutionOnAtStartup {
+		t.Fatal("offline authorization disagrees with build policy")
+	}
+	if !cloud.ExecutionOnAtStartup && auth.Gate != nil {
+		t.Fatal("default offline authorization created a gate")
 	}
 	if _, err := os.Stat(filepath.Join(config, "marshal")); !os.IsNotExist(err) {
 		t.Fatalf("offline run wrote to the user's configuration: %v", err)

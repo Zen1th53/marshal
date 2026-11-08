@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -39,13 +38,6 @@ var (
 // feel hung. Ten seconds is long enough for a slow mobile link and short enough
 // that a person does not wonder whether the tool has crashed.
 const requestTimeout = 10 * time.Second
-
-// retryInterval spaces out renewal attempts after a transient failure.
-//
-// It is a real wall-clock delay even when the gate's clock is injected, because
-// its job is to be kind to a server that is already struggling, and a server
-// does not care what clock the client is reasoning with.
-const retryInterval = 15 * time.Second
 
 // RefusalError records a structured rejection from the Community Cloud.
 type RefusalError struct {
@@ -81,11 +73,21 @@ func (e *RefusalError) Is(target error) bool {
 // separation is what keeps "what the server said" and "what we are allowed to
 // do" from drifting into the same mutable object.
 type Client struct {
-	endpoint       string
-	http           *http.Client
-	version        string
-	store          *Store
+	endpoint string
+	http     *http.Client
+	version  string
+	store    *Store
+	// telemetryOnly distinguishes background enrollment from required ULTRA authority calls.
+	telemetryOnly  bool
 	registrationMu sync.Mutex
+}
+
+// Endpoint is the normalized identity used for request-state isolation.
+func (c *Client) Endpoint() string {
+	if c == nil {
+		return ""
+	}
+	return c.endpoint
 }
 
 // NewClient builds a Cloud client for an endpoint.
@@ -147,10 +149,10 @@ func (c *Client) post(ctx context.Context, path string, in, out any) error {
 	defer resp.Body.Close()
 
 	switch {
-	case resp.StatusCode == http.StatusOK:
+	case resp.StatusCode == http.StatusOK || (path == "/v1/entitlements/request" && resp.StatusCode == http.StatusAccepted):
 	case resp.StatusCode == http.StatusNotFound && (path == "/v1/ultra/challenge" || path == "/v1/ultra/sessions"):
 		return fmt.Errorf("%w: server returned 404", ErrUnknownInstallation)
-	case resp.StatusCode == http.StatusTooManyRequests && path == "/v1/installations/register":
+	case registrationRateLimited(path, resp.StatusCode):
 		return fmt.Errorf("%w: server returned 429; try again later", ErrRateLimited)
 	case resp.StatusCode >= 500:
 		// A server error is the Cloud failing, not the client being refused,
@@ -181,57 +183,6 @@ func (c *Client) post(ctx context.Context, path string, in, out any) error {
 		return fmt.Errorf("%w: malformed response: %s", ErrRefused, err)
 	}
 	return nil
-}
-
-// ensureRegistered enrolls only when this identity is not known at this endpoint.
-func (c *Client) ensureRegistered(ctx context.Context, st State, force bool) (bool, error) {
-	c.registrationMu.Lock()
-	defer c.registrationMu.Unlock()
-	if c.store == nil {
-		return false, nil
-	}
-	current, err := c.store.Load()
-	if err != nil {
-		return false, err
-	}
-	if !force && current.RegisteredInstallationID == st.InstallationID && current.RegisteredEndpoint == c.endpoint {
-		return false, nil
-	}
-	if force {
-		current.RegisteredInstallationID = ""
-		current.RegisteredEndpoint = ""
-		if err := c.store.Save(current); err != nil {
-			return false, err
-		}
-	}
-	if err := c.Register(ctx, st); err != nil {
-		return false, err
-	}
-	current.RegisteredInstallationID = st.InstallationID
-	current.RegisteredEndpoint = c.endpoint
-	if err := c.store.Save(current); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-// Register enrolls this installation and returns the server's view of it.
-func (c *Client) Register(ctx context.Context, st State) error {
-	pub, err := st.Public()
-	if err != nil {
-		return err
-	}
-	// Platform is sent because the server validates registration through the
-	// same rules as telemetry, and those require a recognised os and arch.
-	// These describe the build, not the machine: "linux/amd64" says nothing
-	// about who is running it.
-	return c.post(ctx, "/v1/installations/register", map[string]any{
-		"installation_id": st.InstallationID,
-		"public_key":      base64.RawURLEncoding.EncodeToString(pub),
-		"client_version":  c.version,
-		"os":              runtime.GOOS,
-		"arch":            runtime.GOARCH,
-	}, nil)
 }
 
 // challenge is the server's proof-of-possession challenge.
@@ -309,35 +260,44 @@ func (c *Client) RenewLease(ctx context.Context, st State, sessionID string) (Le
 // asked and has not yet decided; nothing about this client's capability changes
 // until they do.
 func (c *Client) RequestEntitlement(ctx context.Context, st State, sessionID string) (string, error) {
-	status, err := c.requestEntitlement(ctx, st, sessionID)
+	reply, err := c.RequestEntitlementResponse(ctx, st, sessionID)
+	return reply.Status, err
+}
+
+// RequestEntitlementResponse preserves observed request metadata. It never
+// installs a lease or changes the Gate, even if the response says "active".
+func (c *Client) RequestEntitlementResponse(ctx context.Context, st State, sessionID string) (EntitlementResponse, error) {
+	status, err := c.requestEntitlementResponse(ctx, st, sessionID)
 	if errors.Is(err, ErrUnknownInstallation) && c.store != nil {
 		if _, registerErr := c.ensureRegistered(ctx, st, true); registerErr != nil {
-			return "", registerErr
+			return EntitlementResponse{}, registerErr
 		}
-		return c.requestEntitlement(ctx, st, sessionID)
+		return c.requestEntitlementResponse(ctx, st, sessionID)
 	}
 	return status, err
 }
 
 func (c *Client) requestEntitlement(ctx context.Context, st State, sessionID string) (string, error) {
+	reply, err := c.requestEntitlementResponse(ctx, st, sessionID)
+	return reply.Status, err
+}
+
+func (c *Client) requestEntitlementResponse(ctx context.Context, st State, sessionID string) (EntitlementResponse, error) {
 	var ch challenge
 	if err := c.post(ctx, "/v1/ultra/challenge", map[string]any{
 		"installation_id": st.InstallationID,
 	}, &ch); err != nil {
-		return "", err
+		return EntitlementResponse{}, err
 	}
 	if ch.Nonce == "" {
-		return "", fmt.Errorf("%w: empty challenge", ErrRefused)
+		return EntitlementResponse{}, fmt.Errorf("%w: empty challenge", ErrRefused)
 	}
 	proof, err := st.Sign([]byte("marshal-cloud-pop:v1:" + st.InstallationID + ":" + ch.Nonce))
 	if err != nil {
-		return "", err
+		return EntitlementResponse{}, err
 	}
 
-	var reply struct {
-		Status string `json:"status"`
-		Tier   string `json:"tier"`
-	}
+	var reply EntitlementResponse
 	if err := c.post(ctx, "/v1/entitlements/request", map[string]any{
 		"installation_id": st.InstallationID,
 		"session_id":      sessionID,
@@ -345,9 +305,9 @@ func (c *Client) requestEntitlement(ctx context.Context, st State, sessionID str
 		"proof":           base64.RawURLEncoding.EncodeToString(proof),
 		"tier":            "ultra",
 	}, &reply); err != nil {
-		return "", err
+		return EntitlementResponse{}, err
 	}
-	return reply.Status, nil
+	return reply, nil
 }
 
 // Heartbeat reports that an ULTRA session is still live.
@@ -360,19 +320,6 @@ func (c *Client) Heartbeat(ctx context.Context, st State, sessionID string) erro
 		"installation_id": st.InstallationID,
 		"session_id":      sessionID,
 	}, nil)
-}
-
-// SendTelemetry submits a batch of operational events.
-//
-// The server re-validates every event and drops any that fail rather than
-// sanitising them, so a client bug costs the event, not the privacy guarantee.
-// This is the one call whose failure is genuinely unimportant: losing telemetry
-// must never cost somebody their session.
-func (c *Client) SendTelemetry(ctx context.Context, events []Event) error {
-	if len(events) == 0 {
-		return nil
-	}
-	return c.post(ctx, "/v1/telemetry/events", events, nil)
 }
 
 // isErr is errors.Is, named locally so ClassifyError reads as a table.
@@ -525,35 +472,19 @@ func (s *Session) Maintain(ctx context.Context) {
 		case <-timer.C:
 		}
 
+		if !s.gate.Entitled() {
+			return
+		}
 		lease, err := s.client.RenewLease(ctx, s.state, s.id)
 		if err != nil {
-			// A refusal is final: the entitlement is gone, so drop it now
-			// rather than holding ULTRA until the current lease runs out.
 			s.reporter.Record(KindRenewalFail, TelemetryUltra, ClassifyError(err))
-			if errors.Is(err, ErrRefused) {
-				s.gate.Degrade()
-				s.reporter.Record(KindModeChange, TelemetryStandard, "")
-				return
-			}
-			// Unreachable is transient, so the existing lease is kept and
-			// expiry is what eventually degrades. Retrying needs its own delay:
-			// once renewal is due, RenewAt stays in the past, so looping
-			// straight back would spin against a server that is already
-			// struggling.
-			select {
-			case <-ctx.Done():
-				s.gate.Degrade()
-				return
-			case <-s.stop:
-				s.gate.Degrade()
-				return
-			case <-time.After(retryInterval):
-			}
-			continue
+			s.gate.DegradeBecause(err)
+			s.reporter.Record(KindModeChange, TelemetryStandard, "")
+			return
 		}
 		if err := s.gate.Adopt(lease); err != nil {
 			s.reporter.Record(KindRenewalFail, TelemetryUltra, ClassifyError(err))
-			s.gate.Degrade()
+			s.gate.DegradeBecause(err)
 			s.reporter.Record(KindModeChange, TelemetryStandard, "")
 			return
 		}

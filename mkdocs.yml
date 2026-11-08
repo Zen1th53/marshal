@@ -1,4 +1,4 @@
-site_name: MARSHAL
+site_name: Marshal
 site_description: Plan work with one AI, let other AI agents do it, and stay in charge.
 repo_url: https://github.com/Zen1th53/marshal
 strict: true
@@ -8,22 +8,18 @@ site_dir: site
 exclude_docs: |
   /**
   !/index.md
+  !/installation.md
+  !/getting-started.md
+  !/board-and-keys.md
+  !/providers.md
+  !/how-it-works.md
+  !/memory-and-mcp.md
+  !/configuration.md
+  !/telemetry.md
+  !/troubleshooting.md
+  !/upgrading.md
+  !/CHANGELOG.md
   !/stylesheets/marshal.css
-  !/public/how-it-works.md
-  !/public/protocol.md
-  !/public/install.md
-  !/public/first-project.md
-  !/public/agents.md
-  !/public/undo.md
-  !/public/control.md
-  !/public/sessions.md
-  !/public/ultra.md
-  !/public/troubleshooting.md
-  !/public/limits.md
-  !/public/settings.md
-  !/public/commands.md
-  !/public/cli.md
-  !/public/release-notes.md
 theme:
   name: material
   features:
@@ -73,22 +69,14 @@ plugins:
   - search
 nav:
   - Home: index.md
-  - Get started:
-      - How MARSHAL works: public/how-it-works.md
-      - Planning protocol: public/protocol.md
-      - Install: public/install.md
-      - Your first project: public/first-project.md
-  - Everyday tasks:
-      - Connect your AI agents: public/agents.md
-      - Undo changes and keep backups: public/undo.md
-      - Pause, stop and set limits: public/control.md
-      - Continue past conversations: public/sessions.md
-      - ULTRA: public/ultra.md
-  - Help:
-      - Problems and fixes: public/troubleshooting.md
-      - What MARSHAL cannot do yet: public/limits.md
-  - Reference:
-      - Commands: public/commands.md
-      - Terminal commands: public/cli.md
-      - Settings: public/settings.md
-  - What's new in 0.0.5: public/release-notes.md
+  - Installation: installation.md
+  - Getting started: getting-started.md
+  - The Board and keys: board-and-keys.md
+  - Providers: providers.md
+  - How a run works: how-it-works.md
+  - Memory and MCP: memory-and-mcp.md
+  - Configuration: configuration.md
+  - Telemetry: telemetry.md
+  - Upgrading: upgrading.md
+  - Troubleshooting: troubleshooting.md
+  - Changelog: CHANGELOG.md

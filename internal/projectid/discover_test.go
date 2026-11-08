@@ -2,6 +2,7 @@ package projectid_test
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -55,7 +56,7 @@ func git(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func marshalDir(root string) string { return filepath.Join(root, ".marshal") }
+func marshalDir(root string) string { return filepath.Join(root, statepath.DirName) }
 
 func TestEvidenceComesFromTheRepositoryNotThePath(t *testing.T) {
 	ctx := context.Background()

@@ -104,6 +104,9 @@ func (r *Runtime) CommandTask(ctx context.Context, e CommandEnvelope, input Task
 // as signalled locally, so a different in-process control Runtime can request
 // settlement without putting operator commands on the worker socket.
 func (r *Runtime) superviseTask(ctx context.Context, id string) (context.Context, func() error, error) {
+	if _, err := r.validateTaskGoalDispatch(ctx, id); err != nil {
+		return ctx, nil, err
+	}
 	if binding, ok := ctx.Value(taskSupervisorKey{}).(taskSupervisorBinding); ok && binding.runtime == r && binding.id == id {
 		return ctx, func() error { return nil }, nil
 	}
@@ -142,6 +145,10 @@ func (r *Runtime) superviseTask(ctx context.Context, id string) (context.Context
 				return
 			case <-ticker.C:
 				task, err := r.store.GetTask(child, id)
+				if _, goalErr := r.validateTaskGoalDispatch(child, id); goalErr != nil {
+					cancel()
+					return
+				}
 				if err == nil && (task.ControlState == "pause-requested" || task.ControlState == "cancelled" || task.Status == model.TaskCancelled) {
 					cancel()
 					return
@@ -163,6 +170,9 @@ func (r *Runtime) superviseTask(ctx context.Context, id string) (context.Context
 }
 
 func (r *Runtime) claimForRun(ctx context.Context, task model.Task, request RunRequest) (ClaimResult, error) {
+	if _, err := r.validateTaskGoalDispatch(ctx, task.ID); err != nil {
+		return ClaimResult{}, err
+	}
 	if task.Status != model.TaskClaimed {
 		return r.Claim(ctx, ClaimRequest{TaskID: task.ID, AgentID: request.AgentID, ExpectedRevision: request.ExpectedRevision})
 	}
@@ -199,7 +209,7 @@ type taskSupervisedHarness struct {
 func (h *taskSupervisedHarness) Name() string { return h.inner.Name() }
 func (h *taskSupervisedHarness) Execute(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (result execution.TaskResult, err error) {
 	if h.runtime == nil || task.CanonicalTaskID == "" {
-		return h.inner.Execute(ctx, task, pkg, worktree)
+		return h.executeAdmitted(ctx, task, pkg, worktree)
 	}
 	child, settle, err := h.runtime.superviseTask(ctx, task.CanonicalTaskID)
 	if err != nil {
@@ -210,7 +220,7 @@ func (h *taskSupervisedHarness) Execute(ctx context.Context, task execution.Task
 			err = settleErr
 		}
 	}()
-	return h.inner.Execute(child, task, pkg, worktree)
+	return h.executeAdmitted(child, task, pkg, worktree)
 }
 
 func (r *Runtime) checkTaskRuntimeApprovals(ctx context.Context, id string) error {
@@ -248,4 +258,19 @@ func (r *Runtime) checkTaskRuntimeApprovals(ctx context.Context, id string) erro
 		}
 	}
 	return nil
+}
+
+// Supervision writes SQLite, so it always precedes backend admission.
+func (h *taskSupervisedHarness) DefersWorkerLaunch() bool { return true }
+
+func (h *taskSupervisedHarness) executeAdmitted(ctx context.Context, task execution.TaskExecution, pkg execution.ConstraintPackage, worktree string) (execution.TaskResult, error) {
+	if deferred, ok := h.inner.(execution.DeferredLaunchHarness); ok && deferred.DefersWorkerLaunch() {
+		return h.inner.Execute(ctx, task, pkg, worktree)
+	}
+	release, err := execution.BeginWorkerLaunch(ctx)
+	if err != nil {
+		return execution.TaskResult{}, err
+	}
+	defer release()
+	return h.inner.Execute(execution.WithWorkerLaunchAcknowledgement(ctx, release), task, pkg, worktree)
 }

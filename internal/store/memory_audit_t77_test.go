@@ -35,6 +35,11 @@ var knownMemoryTables = map[string]string{
 	"memory_item_revisions": "canonical-p07: immutable claim version history, Process 07",
 	"memory_dependencies":   "canonical-p07: dependency freshness graph, Process 07",
 	"memory_evidence":       "canonical-p07: claim evidence and source clusters, Process 07",
+	// v93: durable memory restore. Snapshots are immutable manifests plus
+	// protected payloads; heads/history record restore generations.
+	"memory_restore_snapshots": "canonical-restore: immutable snapshot manifests and payloads, v93",
+	"memory_restore_heads":     "canonical-restore: restore generation heads, v93",
+	"memory_restore_history":   "canonical-restore: append-only restore history, v93",
 }
 
 // derivedDecisionTables are subsystem decision logs, not canonical memory.

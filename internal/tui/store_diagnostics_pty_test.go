@@ -10,7 +10,7 @@ func TestPTYStoreDiagnostics(t *testing.T) {
 	t.Setenv("MARSHAL_PROVIDER_PATH_ONLY", "1")
 	project := initProject(t, bin)
 	terminal := startFrozenTUIInProject(t, 40, 180, bin, project, "tui", "SESSION-store-diagnostics")
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/store")
 	terminal.mustSee("SQLite quick_check passed")
 	terminal.mustSee("Inventory counts (not proof of health)")

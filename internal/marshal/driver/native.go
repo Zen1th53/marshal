@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/opencodecli"
 	"github.com/Zen1th53/marshal/internal/processgroup"
 	"github.com/Zen1th53/marshal/internal/workerterminal"
 )
@@ -22,6 +23,10 @@ import (
 // must not be able to stop and wait for a person, and several must run at
 // once, which an interactive session that takes over the terminal cannot do.
 type Native struct {
+	// ResolveModel binds a task to the runtime's approved, verified selection
+	// before argv or provider configuration is constructed.
+	ResolveModel    func(context.Context, Request) (string, error)
+	ConfigureLaunch func(context.Context, Request, []string, []string) ([]string, []string, func(), error)
 	// Provider names the worker family recorded on the hand-in.
 	Provider string
 	// Binary is the CLI to run.
@@ -65,7 +70,8 @@ func Claude(binary string) Native {
 // Agy runs the Antigravity CLI in print mode with a stream-json transcript.
 func Agy(binary string) Native {
 	return Native{Provider: "agy", Binary: orDefault(binary, "agy"), Parse: parseAgy, Args: func(r Request) []string {
-		args := []string{"-p", r.Brief, "--output-format", "stream-json", "--mode", "accept-edits"}
+		prompt := r.Brief + "\n\nNative agy headless execution: use file tools (view_file, replace_file_content, write_to_file) to inspect and edit the assigned files inside the runtime-assigned worktree. Do not invoke run_command, command_status, ask_permission or ask_question: no interactive command approval is available. Do not run startup routines or use MCP tools. Do not commit or push; MARSHAL records the file changes and runs all acceptance commands after you finish."
+		args := []string{"-p", prompt, "--output-format", "stream-json", "--mode", "accept-edits"}
 		if r.Model != "" {
 			args = append(args, "--model", r.Model)
 		}
@@ -77,13 +83,36 @@ func Agy(binary string) Native {
 // selected with a model of the form "ollama/<tag>"; MARSHAL has no separate
 // Ollama execution adapter.
 func OpenCode(binary string) Native {
-	return Native{Provider: "opencode", Binary: orDefault(binary, "opencode"), Parse: parseNone, Args: func(r Request) []string {
+	bin := orDefault(binary, "opencode")
+	return Native{Provider: "opencode", Binary: bin, Parse: parseNone, Args: func(r Request) []string {
 		args := []string{"run", "--format", "json", "--dir", r.Worktree}
 		if r.Model != "" {
 			args = append(args, "-m", r.Model)
 		}
-		return append(args, r.Brief)
+		return openCodeRunArgs(bin, append(args, r.Brief))
 	}}
+}
+
+// openCodeRunContract is replaceable in tests; it observes the installed CLI.
+var openCodeRunContract = func(binary string) (opencodecli.Contract, bool) {
+	path, err := exec.LookPath(binary)
+	if err != nil {
+		return opencodecli.Contract{}, false
+	}
+	c, err := opencodecli.ProbeContract(context.Background(), path)
+	return c, err == nil
+}
+
+// openCodeRunArgs keeps the 1.x argv when the CLI cannot be observed. A 2.x
+// CLI rejects --dir (the process already runs in the worktree) and needs
+// --standalone, or it joins a shared background server that ignores this
+// launch's configuration.
+func openCodeRunArgs(binary string, args []string) []string {
+	c, ok := openCodeRunContract(binary)
+	if !ok {
+		return args
+	}
+	return c.RunArgs(args)
 }
 
 func orDefault(value, fallback string) string {
@@ -118,6 +147,16 @@ func (n Native) Launch(ctx context.Context, req Request) (*Handle, error) {
 	if n.Args == nil || n.Parse == nil {
 		return nil, fmt.Errorf("%w: %s driver is incomplete", ErrInvalidRequest, n.Provider)
 	}
+	if n.ResolveModel != nil {
+		selected, err := n.ResolveModel(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(selected) == "" {
+			return nil, fmt.Errorf("%w: %s has no selected verified model", ErrInvalidRequest, n.Provider)
+		}
+		req.Model = selected
+	}
 	return n.launch(ctx, req, cleanWorkerEnv(os.Environ()))
 }
 
@@ -130,6 +169,23 @@ func LaunchSession(ctx context.Context, provider, binary, root string, args, env
 
 func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle, error) {
 	argv := n.Args(req)
+	cleanup := func() {}
+	if n.ConfigureLaunch != nil {
+		var err error
+		argv, env, cleanup, err = n.ConfigureLaunch(ctx, req, argv, env)
+		if err != nil {
+			return nil, err
+		}
+		if cleanup == nil {
+			cleanup = func() {}
+		}
+	}
+	started := false
+	defer func() {
+		if !started {
+			cleanup()
+		}
+	}()
 	runCtx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(runCtx, n.Binary, argv...)
 	cmd.Dir = req.Worktree
@@ -164,8 +220,10 @@ func (n Native) launch(ctx context.Context, req Request, env []string) (*Handle,
 	}
 	h := &Handle{req: req, cancel: cancel, done: make(chan struct{})}
 	command := n.Binary + " " + strings.Join(argv, " ")
+	started = true
 	go func() {
 		defer close(h.done)
+		defer cleanup()
 		err := cmd.Wait()
 		code := 0
 		if err != nil {

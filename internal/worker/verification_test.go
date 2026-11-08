@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/sandbox"
 )
@@ -18,7 +19,24 @@ import (
 func TestVerificationFailsClosedWithoutIsolation(t *testing.T) {
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "marker")
-	_, err := runVerification(t.Context(), sandbox.NewBwrap(filepath.Join(dir, "missing")), dir, []string{"/bin/sh", "-c", "printf ran > '" + marker + "'"}, time.Second, 1024)
+	result, err := runVerification(t.Context(), sandbox.NewBwrap(filepath.Join(dir, "missing")), dir, []string{"/bin/sh", "-c", "printf ran > '" + marker + "'"}, time.Second, 1024)
+	if sandbox.UnconfinedFallbackAllowed() {
+		// Extreme: missing isolation must not stop the work; it runs on the
+		// host and the evidence says so.
+		if err != nil || result.ExitCode != 0 {
+			t.Fatalf("extreme must run unconfined: %+v %v", result, err)
+		}
+		if !strings.HasPrefix(result.Isolation.Reason, UnconfinedReasonPrefix) || result.Isolation.Level != model.IsolationProcessOnly {
+			t.Fatalf("unconfined run not recorded in evidence: %+v", result.Isolation)
+		}
+		if _, err := os.Stat(marker); err != nil {
+			t.Fatalf("unconfined run did not execute: %v", err)
+		}
+		if err := VerificationResultError(result); err != nil {
+			t.Fatalf("marked unconfined evidence must be accepted in extreme: %v", err)
+		}
+		return
+	}
 	if !errors.Is(err, model.ErrUnavailable) {
 		t.Fatalf("missing isolation = %v", err)
 	}
@@ -27,7 +45,28 @@ func TestVerificationFailsClosedWithoutIsolation(t *testing.T) {
 	}
 }
 
+func TestVerificationResultErrorUnconfinedEvidence(t *testing.T) {
+	result := adapter.ProcessResult{Isolation: model.IsolationCapability{Level: model.IsolationProcessOnly, Reason: UnconfinedReasonPrefix + "test"}}
+	err := VerificationResultError(result)
+	if sandbox.UnconfinedFallbackAllowed() {
+		if err != nil {
+			t.Fatalf("extreme accepts marked unconfined evidence: %v", err)
+		}
+		result.TimedOut = true
+		if VerificationResultError(result) == nil {
+			t.Fatal("a timed-out run is never a pass")
+		}
+		return
+	}
+	if !errors.Is(err, model.ErrUnavailable) {
+		t.Fatalf("default must reject unconfined evidence: %v", err)
+	}
+}
+
 func TestVerificationExecutesInsideDetachedWorktreeEnvelope(t *testing.T) {
+	if sandbox.HostExecutionPreferred() {
+		t.Skip("confinement of checks applies to the default build; the Marshal build checks on the host (TestExtremeVerificationRunsOnHost)")
+	}
 	repo := testgit.New(t)
 	wt := filepath.Join(t.TempDir(), "detached")
 	if out, err := exec.Command("git", "-C", repo.Path(), "worktree", "add", "--detach", wt, "HEAD").CombinedOutput(); err != nil {

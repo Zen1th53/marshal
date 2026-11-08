@@ -15,9 +15,8 @@ import (
 type capturedOnlyAuthorizer struct{}
 
 func (capturedOnlyAuthorizer) Authorize(_ context.Context, request evidence.AccessRequest) (evidence.AuthorizationDecision, error) {
-	if request.CurrentState != evidence.StateStored {
-		return evidence.AuthorizationDecision{Allowed: false}, evidence.ErrInvalidTransition
-	}
+	// Model a decision captured at Stored even if the competing store already
+	// won; production freshness checking must reject that stale decision.
 	return evidence.AuthorizationDecision{
 		Allowed: true, SubjectID: request.SubjectID, NodeID: request.NodeID,
 		State: evidence.StateStored, PolicyDigest: "sha256:" + strings.Repeat("c", 64),

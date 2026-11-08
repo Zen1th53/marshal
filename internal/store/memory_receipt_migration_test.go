@@ -37,6 +37,7 @@ func TestMemoryReceiptMigrationFromSchema69PreservesCanonicalRows(t *testing.T) 
 		t.Fatalf("prepare schema 69 fixture: %v", err)
 	}
 
+	resetProjectContext95HistoricalFixture(t, st)
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("migrate schema 69 to 70: %v", err)
 	}
@@ -71,6 +72,7 @@ func TestMemoryReceiptMigrationFromSchema70PreservesReceipts(t *testing.T) {
 	`); err != nil {
 		t.Fatalf("prepare schema 70 fixture: %v", err)
 	}
+	resetProjectContext95HistoricalFixture(t, st)
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("migrate schema 70 to 71: %v", err)
 	}

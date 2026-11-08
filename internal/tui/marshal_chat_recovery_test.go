@@ -14,14 +14,18 @@ import (
 	"time"
 
 	"github.com/Zen1th53/marshal/internal/app"
+	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/marshal"
 	"github.com/Zen1th53/marshal/internal/memory/importer"
+	"github.com/Zen1th53/marshal/internal/plan"
 	"github.com/Zen1th53/marshal/internal/project"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"github.com/Zen1th53/marshal/internal/store"
 	"modernc.org/sqlite"
 )
 
 func recoveryChatWorkspace(t *testing.T) *Workspace {
+	isolateRequiredFixtureProviders(t)
 	t.Helper()
 	setupFakeTmux(t)
 	bin := t.TempDir()
@@ -34,7 +38,7 @@ func recoveryChatWorkspace(t *testing.T) *Workspace {
 	t.Setenv("CODEX_HOME", t.TempDir())
 	_, w, _ := acceptanceWorkspace(t)
 	cleanupTmuxWorkspace(t, w)
-	w.tmuxSession, w.tmuxMarshalWin, w.tmuxPath = "test-session", "marshal", "tmux"
+	w.tmuxSession, w.tmuxMarshalWin, w.tmuxPath = fixtureTmuxNamespace(t, w.providerRoot()), statepath.Name, "tmux"
 	w.tmuxActiveWins = make(map[string]*activeTmuxAgent)
 	if err := saveDefaultProvider(w.providerRoot(), "codex"); err != nil {
 		t.Fatal(err)
@@ -79,6 +83,38 @@ func writeRecoveryChatDraft(t *testing.T, root string) {
 	}
 }
 
+func TestMarshalChatRestartRecoversStoredRunAfterUnsavedPlanningPlaceholder(t *testing.T) {
+	w := recoveryChatWorkspace(t)
+	service := w.runtime.Marshal()
+	run := marshal.Run{PlanID: "approved-native-plan", PlanVersion: 2, State: marshal.AwaitingUser, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "codex", State: marshal.Queued}}}
+	if _, err := service.Store.SetMarshalRun(t.Context(), service.ProjectID, "RUN-real-process05", run, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveChatBinding(w.providerRoot(), chatBinding{Provider: "codex", RunID: "RUN-unsaved-first-draft"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.marshalChat(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	m := w.marshalSession()
+	m.mu.Lock()
+	id, watcher := m.runID, m.draftCancel
+	m.mu.Unlock()
+	if id != "RUN-real-process05" || watcher != nil {
+		t.Fatalf("restart retained placeholder or started competing draft observer: %s watcher=%v", id, watcher != nil)
+	}
+	if panel := w.marshalPanel(); panel == nil || panel.RunID != id || panel.State != marshal.AwaitingUser {
+		t.Fatalf("recovered panel: %+v", panel)
+	}
+	if binding := loadChatBinding(w.providerRoot()); binding.RunID != id {
+		t.Fatalf("chat binding not corrected by supported restart: %+v", binding)
+	}
+	record, err := service.Store.GetMarshalRun(t.Context(), service.ProjectID, id)
+	if err != nil || record.Revision != 1 {
+		t.Fatalf("chat restart changed stored run: %+v %v", record, err)
+	}
+}
+
 func TestMarshalChatReopenUnimportedDraftKeepsPendingApproval(t *testing.T) {
 	for _, existingDraft := range []bool{false, true} {
 		t.Run(fmt.Sprint(existingDraft), func(t *testing.T) {
@@ -96,6 +132,16 @@ func TestMarshalChatReopenUnimportedDraftKeepsPendingApproval(t *testing.T) {
 			w.permissions.mu.Unlock()
 			if !pending {
 				t.Fatal("approval was not pending for the unimported run")
+			}
+			if requiredLegacyFixtureRefusal {
+				if !existingDraft {
+					if _, err := w.marshalChat(t.Context()); err != nil {
+						t.Fatal(err)
+					}
+					stopRecoveryDraftWatcher(w)
+				}
+				assertUnreviewedDraftRefusedAndDiscarded(t, w, before)
+				return
 			}
 			if existingDraft {
 				writeRecoveryChatDraft(t, root)
@@ -124,7 +170,7 @@ func TestMarshalChatReopenUnimportedDraftKeepsPendingApproval(t *testing.T) {
 func TestMarshalChatUnreadableRunPreservesBinding(t *testing.T) {
 	w := recoveryChatWorkspace(t)
 	root := w.providerRoot()
-	binding := chatBinding{Provider: "codex", RunID: "RUN-corrupt"}
+	binding := chatBinding{Namespace: statepath.DirName, Provider: "codex", RunID: "RUN-corrupt"}
 	if err := saveChatBinding(root, binding); err != nil {
 		t.Fatal(err)
 	}
@@ -153,6 +199,37 @@ func TestMarshalChatUnreadableRunPreservesBinding(t *testing.T) {
 	m.mu.Unlock()
 	if runID != binding.RunID {
 		t.Fatalf("session binding overwritten: %s", runID)
+	}
+}
+
+func TestMarshalChatRecoversDurableRunInsteadOfUnpublishedChat(t *testing.T) {
+	for _, staleID := range []string{"", "RUN-unpublished-chat"} {
+		t.Run(staleID, func(t *testing.T) {
+			w := recoveryChatWorkspace(t)
+			root := w.providerRoot()
+			if err := saveChatBinding(root, chatBinding{Provider: "codex", RunID: staleID}); err != nil {
+				t.Fatal(err)
+			}
+			run := marshal.Run{PlanID: "delivered-goal", PlanVersion: 1, State: marshal.AwaitingUser, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "fix", State: marshal.Escalated}}}
+			if _, err := w.store.SetMarshalRun(t.Context(), w.projectID, "RUN-durable", run, 0); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := w.marshalChat(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			stopRecoveryDraftWatcher(w)
+			if got := loadChatBinding(root).RunID; got != "RUN-durable" {
+				t.Fatalf("stored lifecycle hidden by chat ID %q", got)
+			}
+			_, _, got, _, err := w.marshalActive(t.Context())
+			if err != nil || got != "RUN-durable" {
+				t.Fatalf("recovered commands select %q: %v", got, err)
+			}
+			stored, err := w.store.GetMarshalRun(t.Context(), w.projectID, "RUN-durable")
+			if err != nil || stored.Revision != 1 {
+				t.Fatalf("recovery mutated durable run: %+v %v", stored, err)
+			}
+		})
 	}
 }
 
@@ -236,6 +313,15 @@ func TestMarshalOlderRejectionKeepsNewPendingApproval(t *testing.T) {
 	}
 	if len(retained) != 1 || retained[0].ID != occurrence {
 		t.Fatalf("expected only B's approval to remain unresolved: %+v", retained)
+	}
+	// An approval snapshot resolves the stored Process 04 plan, so B needs its
+	// own plan identity as well as the synthetic run used by this race test.
+	if err := w.runtime.Marshal().Store.SavePlan(t.Context(), plan.ExecutionPlan{
+		ID: "PLAN-B", ProjectID: w.runtime.Marshal().CanonicalPlanProjectID(),
+		Goal: plan.GoalBinding{GoalID: "GOAL-B", Revision: 1}, Version: 1,
+		State: plan.StateDraft, Mode: plan.ModeStandard, ConstitutionVersion: constitution.Current,
+	}, 0); err != nil {
+		t.Fatal(err)
 	}
 	run.PlanID, run.State = "PLAN-B", marshal.Drafting
 	if _, err := w.runtime.Marshal().Store.SetMarshalRun(t.Context(), w.projectID, "RUN-B", run, 0); err != nil {

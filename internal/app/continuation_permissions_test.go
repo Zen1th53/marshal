@@ -54,8 +54,83 @@ func TestContinuationGrantedSymlinkBindsToOriginalFolder(t *testing.T) {
 	if err := os.Symlink(other, link); err != nil {
 		t.Fatal(err)
 	}
-	if r.HasReadGrant(link) {
+	// Undecided folders are readable by default only in the private edition.
+	if !unrestrictedEdition && r.HasReadGrant(link) {
 		t.Fatal("grant followed replaced symlink")
+	}
+}
+
+func TestContinuationGrantPersistsAcrossRuntimeProcessesAndRevoke(t *testing.T) {
+	ctx := context.Background()
+	r := openNetpolRuntime(t)
+	root := r.ProjectRoot()
+	folder := t.TempDir()
+	path := filepath.Join(folder, "history.jsonl")
+	if err := os.WriteFile(path, []byte("private"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	grantTestRead(t, r, folder)
+	child := filepath.Join(folder, "denied")
+	if err := os.Mkdir(child, 0700); err != nil {
+		t.Fatal(err)
+	}
+	childPath := filepath.Join(child, "history.jsonl")
+	if err := os.WriteFile(childPath, []byte("private"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	control, err := r.OpenLocalControl(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.CommandPermission(control.Context(ctx), permission.Request{Kind: "read", Object: child, Scope: "project", Who: "operator"}, false, "operator command"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := Open(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	if !second.HasReadGrant(path) {
+		t.Fatal("read grant did not persist across runtime processes")
+	}
+	if second.HasReadGrant(childPath) {
+		t.Fatal("nested denial did not persist or override parent grant")
+	}
+	control, err = second.OpenLocalControl(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := second.CommandRevokeReadGrant(control.Context(ctx), child); err != nil {
+		t.Fatal(err)
+	}
+	if !second.HasReadGrant(childPath) {
+		t.Fatal("revoking the nested denial did not restore the parent grant")
+	}
+	if err := second.CommandRevokeReadGrant(control.Context(ctx), folder); err != nil {
+		t.Fatal(err)
+	}
+	// Undecided folders are readable by default only in the private edition.
+	if !unrestrictedEdition && second.HasReadGrant(path) {
+		t.Fatal("revoked grant still authorized a read")
+	}
+}
+
+func TestMCPAndWorkerContextsCannotCreateReadGrant(t *testing.T) {
+	r := openNetpolRuntime(t)
+	folder := t.TempDir()
+	req := permission.Request{Kind: "read", Object: folder, Scope: "project", Who: "agent"}
+	for _, name := range []string{"MCP tool", "A2A worker", "governed worker"} {
+		t.Run(name, func(t *testing.T) {
+			if err := r.CommandPermission(context.Background(), req, true, name); !errors.Is(err, authz.ErrDenied) {
+				t.Fatalf("unauthenticated grant returned %v", err)
+			}
+			if grants, err := r.OperatorReadGrants(context.Background()); err != nil || len(grants) != 0 {
+				t.Fatalf("unauthenticated caller created a grant: %+v %v", grants, err)
+			}
+		})
 	}
 }
 

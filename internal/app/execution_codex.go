@@ -32,8 +32,9 @@ type codexAppServerClient interface {
 }
 
 type liveCodexAppServerTurn struct {
-	client  codexAppServerClient
-	binding execution.NativeTurnBinding
+	startedAt time.Time
+	client    codexAppServerClient
+	binding   execution.NativeTurnBinding
 	// initialWorktreeDigest is retained only while the native stdio turn is
 	// live. Unlike binding.WorktreeDigest, which advances to the exact pause
 	// point for approval TOCTOU checks, it proves whether a mutating task made
@@ -91,7 +92,7 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
 	if _, err := r.AssessTool(ctx, risk.AssessmentRequest{
-		ID:         risk.AssessmentID("process05-codex-" + canonicalTask.ID),
+		ID:         process05RiskAssessmentID("codex", canonicalTask.ID, task),
 		Descriptor: risk.ToolDescriptor{Tool: "marshal-process05", Action: "shell.execute", Resource: worktree, Factors: risk.Factors{ExternalWrite: true, ScopeBreadth: 1}},
 	}); err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, err
@@ -115,12 +116,22 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
+	if err := r.preflightRequiredProcess05Context(ctx, task, agentID, "codex", modelName, pkg); err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
+	ctx, transportPause, err := r.reviewProviderTransport(ctx, task, pkg, canonicalTask, agentID, "codex", modelName, worktree)
+	if err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
+	if transportPause != nil {
+		return *transportPause, nil
+	}
 	proxySocket, closeEgress, err := r.startProviderEgress(ctx, egressRunID, task.RunID, "codex", modelName, canonicalTask, agentID, task.RunID, model.RoleDeveloper)
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
 	defer closeEgress()
-	provider, grantID, err := r.resolveAdapter(ctx, "codex", canonicalTask, worktree, agentID, proxySocket != "", modelName, proxySocket)
+	provider, grantID, err := r.resolveAdapter(withProcess05OutsideReadHints(ctx, task, pkg), "codex", canonicalTask, worktree, agentID, proxySocket != "", modelName, proxySocket)
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
@@ -133,6 +144,10 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
+	trustedHeader, err := r.providerConstraintPrompt(ctx, task, pkg, worktree)
+	if err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
 	request := adapter.Request{
 		TaskID:            canonicalTask.ID,
 		Title:             pkg.TaskDescription,
@@ -141,12 +156,30 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 		Effort:            effort,
 		AllowedOperations: []string{"filesystem.read", "filesystem.write", "shell.execute"},
 		EvidenceRequired:  append([]string(nil), pkg.VerificationObligations...),
-		TrustedContext:    pkg.FormatPromptHeader(),
+		TrustedContext:    trustedHeader,
 	}
 	// The prepared adapter retains the isolation and capability runner for
 	// every provider invocation, including probes and task execution.
 	started := time.Now().UTC()
-	result, runErr := provider.Run(ctx, request)
+	workerCtx, closeKnowledge, err := r.workerMCPContext(ctx, canonicalTask.ID, agentID, "codex", &task)
+	if err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
+	defer closeKnowledge()
+	providerCtx, finishContext, err := r.prepareWatchedRequiredProcess05Request(workerCtx, task, agentID, "codex", modelName, &request, r.workerKnowledgeContext(workerCtx, agentID, canonicalTask.ID, task.BaseCommit))
+	if err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
+	defer finishContext()
+	result, runErr := provider.Run(providerCtx, request)
+	// A worker that hits its provider's own quota or rate limit marks the
+	// provider limited, so the next draft or review moves off it.
+	if runErr != nil || result.ExitCode != 0 {
+		r.noteProviderLimit("codex", fmt.Sprint(runErr)+"\n"+string(result.Stdout)+"\n"+string(result.Stderr))
+	}
+	if contextErr := finishContext(); contextErr != nil {
+		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: "required project context changed; provider result quarantined"}, contextErr
+	}
 	if runErr != nil {
 		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: runErr.Error()}, runErr
 	}
@@ -169,7 +202,8 @@ func (r *Runtime) executeProcess05Codex(ctx context.Context, task execution.Task
 		TaskID:  task.TaskID,
 		Success: success,
 		EvidenceList: []execution.ExecutionEvidence{{
-			EvidenceID: evidenceID, TaskID: task.TaskID, ToolName: "codex", Cwd: worktree,
+			ProviderObservation: process05ProviderObservation(task, result, nil, "adapter_process"),
+			EvidenceID:          evidenceID, TaskID: task.TaskID, ToolName: "codex", Cwd: worktree,
 			ExitCode: result.ExitCode, StdoutSummary: string(stdout), StderrSummary: string(stderr),
 			OutputDigest: "sha256:" + hex.EncodeToString(digest[:]), BinaryVersion: probe.Version,
 			Status: execution.EvidenceValid, DurationMs: duration.Milliseconds(), RelevantFiles: task.TargetFiles, CreatedAt: time.Now().UTC(),
@@ -229,6 +263,7 @@ func (r *Runtime) executeProcess05CodexAppServer(ctx context.Context, task execu
 			_ = server.Close()
 			return execution.TaskResult{TaskID: task.TaskID}, false, err
 		}
+		startedAt := time.Now().UTC()
 		turn, err := server.StartTurn(runCtx, session, request)
 		if err != nil {
 			runCancel()
@@ -243,7 +278,7 @@ func (r *Runtime) executeProcess05CodexAppServer(ctx context.Context, task execu
 			_ = server.Close()
 			return execution.TaskResult{TaskID: task.TaskID}, true, err
 		}
-		live = &liveCodexAppServerTurn{client: server, initialWorktreeDigest: worktreeDigest, binding: execution.NativeTurnBinding{
+		live = &liveCodexAppServerTurn{startedAt: startedAt, client: server, initialWorktreeDigest: worktreeDigest, binding: execution.NativeTurnBinding{
 			Provider: "codex-app-server", ThreadID: turn.ThreadID, TurnID: turn.TurnID, SessionID: session.SessionID,
 			Worktree: worktree, WorktreeDigest: worktreeDigest, Model: session.Model, ConstraintDigest: pkg.Digest,
 			RunRevision: task.RunRevision, State: "RUNNING",
@@ -343,8 +378,9 @@ func (r *Runtime) executeProcess05CodexAppServer(ctx context.Context, task execu
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, err
 	}
+	observed := process05ProviderObservation(task, adapter.Result{StartedAt: live.startedAt, EndedAt: time.Now().UTC()}, &live.binding, "runtime_native_turn_lifecycle")
 	success := result.Status == "completed"
-	return execution.TaskResult{TaskID: task.TaskID, Success: success, NativeTurn: &live.binding, EvidenceList: []execution.ExecutionEvidence{{EvidenceID: evidenceID, TaskID: task.TaskID, ToolName: "codex-app-server", Cwd: worktree, ExitCode: 0, StdoutSummary: string(stdout), OutputDigest: "sha256:" + hex.EncodeToString(digest[:]), BinaryVersion: binaryVersion, Status: execution.EvidenceValid, DurationMs: 0, RelevantFiles: task.TargetFiles, CreatedAt: time.Now().UTC()}}, ErrorMessage: func() string {
+	return execution.TaskResult{TaskID: task.TaskID, Success: success, NativeTurn: &live.binding, EvidenceList: []execution.ExecutionEvidence{{ProviderObservation: observed, EvidenceID: evidenceID, TaskID: task.TaskID, ToolName: "codex-app-server", Cwd: worktree, ExitCode: 0, StdoutSummary: string(stdout), OutputDigest: "sha256:" + hex.EncodeToString(digest[:]), BinaryVersion: binaryVersion, Status: execution.EvidenceValid, DurationMs: 0, RelevantFiles: task.TargetFiles, CreatedAt: time.Now().UTC()}}, ErrorMessage: func() string {
 		if success {
 			return ""
 		}
@@ -373,39 +409,5 @@ func (r *Runtime) removeLiveCodexAppServerTurn(key string) {
 // authority identity; treating it as one would bypass the canonical policy
 // and capability binding.
 func (r *Runtime) process05CodexAgent(ctx context.Context, task execution.TaskExecution) (string, error) {
-	if task.AssignedAgent != "" {
-		if agent, err := r.store.GetAgent(ctx, task.AssignedAgent); err == nil {
-			if agent.Status != model.AgentDisabled && agent.ModelProvider == "codex" {
-				return task.AssignedAgent, nil
-			}
-			return "", fmt.Errorf("%w: assigned Process 05 agent %q is not an eligible local Codex agent", model.ErrUnavailable, task.AssignedAgent)
-		}
-	}
-	agents, err := r.Agents(ctx)
-	if err != nil {
-		return "", fmt.Errorf("list Process 05 agents: %w", err)
-	}
-	var eligible []model.Agent
-	var allCodex []model.Agent
-	for _, agent := range agents {
-		if agent.Status != model.AgentDisabled && agent.ModelProvider == "codex" {
-			allCodex = append(allCodex, agent)
-			if task.AssignedRole != "" && string(agent.Role) == task.AssignedRole {
-				eligible = append(eligible, agent)
-			}
-		}
-	}
-	// Some Process 04 assignment roles are provider route labels ("codex")
-	// rather than an Agent.Role enum. In that case only a *unique* eligible
-	// Codex principal may be used; multiple candidates remain a hard refusal.
-	if len(eligible) == 0 {
-		eligible = allCodex
-	}
-	if len(eligible) == 1 {
-		return eligible[0].ID, nil
-	}
-	if len(eligible) > 1 {
-		return "", fmt.Errorf("%w: %d eligible local Codex agents match Process 05 assignment %q; bind AssignedAgent explicitly", model.ErrInvalid, len(eligible), task.AssignedRole)
-	}
-	return "", fmt.Errorf("%w: no registered local Codex agent matches Process 05 assignment %q", model.ErrUnavailable, task.AssignedRole)
+	return r.resolveProcess05Worker(ctx, task, "codex", "Codex", func(p string) bool { return p == "codex" }, false)
 }

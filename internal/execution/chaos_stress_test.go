@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -349,7 +350,7 @@ func TestAdversarial_CheckpointRestoreRemovesPostCheckpointFiles(t *testing.T) {
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
 		t.Fatalf("post-checkpoint file survived restore: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".marshal", "checkpoints", record.CheckpointID)); err != nil {
+	if _, err := os.Stat(filepath.Join(root, statepath.DirName, "checkpoints", record.CheckpointID)); err != nil {
 		t.Fatalf("MARSHAL checkpoint metadata was removed: %v", err)
 	}
 }
@@ -387,7 +388,7 @@ func TestAdversarial_CheckpointRecordCannotRedirectRestorePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".marshal", "checkpoints", record.CheckpointID+".json"), raw, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, statepath.DirName, "checkpoints", record.CheckpointID+".json"), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	restarted, err := NewCheckpointEngine(root)

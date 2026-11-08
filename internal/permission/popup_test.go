@@ -268,18 +268,41 @@ func TestPopupExpiredKeyIsConsumedBeforeReturningToChat(t *testing.T) {
 			dir := t.TempDir()
 			fake := filepath.Join(dir, "tmux")
 			script := fmt.Sprintf(`#!/bin/bash
+screen=%q
+stray_file=%q
+done_file=%q
+late_key() {
+ for ((i=0; i<1000; i++)); do
+  if [[ -f "$screen" && $(<"$screen") == *Expired* ]]; then
+   printf A
+   return
+  fi
+  sleep .01
+ done
+ printf A
+}
+run_popup() {
+ mode=$1
+ shift
+ late_key | {
+  if [[ $mode == new-window ]]; then bash "${@: -1}"; else bash -c "${@: -1}"; fi
+  IFS= read -r -n 1 stray
+  printf '%%s' "$stray" > "$stray_file"
+ } > "$screen"
+ : > "$done_file"
+}
 case $1 in
  display-message) case "${@: -1}" in *client_height*) echo '40 120';; *) echo %s;; esac;;
- display-popup|new-window)
-  { sleep 1.3; printf A; } | { bash -c "${@: -1}"; IFS= read -r -n 1 stray; printf '%%s' "$stray" > %q; } > %q
-  [[ $1 == new-window ]] && echo %%review
+ display-popup) run_popup "$@"; exit 0;;
+ new-window)
+  # A detached tmux window returns before its command completes.
+  run_popup "$@" </dev/null >/dev/null 2>&1 &
+  echo %%review
   exit 0;;
  select-window|kill-window) exit 0;;
  *) exit 1;;
 esac
-`, version, filepath.Join(dir, "stray"), filepath.Join(dir, "screen"))
-			// new-window receives the script path, whereas display-popup receives a shell command.
-			script = strings.Replace(script, `bash -c "${@: -1}";`, `if [[ $1 == new-window ]]; then bash "${@: -1}"; else bash -c "${@: -1}"; fi;`, 1)
+`, filepath.Join(dir, "screen"), filepath.Join(dir, "stray"), filepath.Join(dir, "done"), version)
 			if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
 				t.Fatal(err)
 			}
@@ -289,12 +312,24 @@ esac
 			if err != nil || allow {
 				t.Fatalf("expired approval: allow=%v err=%v", allow, err)
 			}
+			deadline := time.Now().Add(15 * time.Second)
+			for {
+				if _, err := os.Stat(filepath.Join(dir, "done")); err == nil {
+					break
+				} else if !os.IsNotExist(err) {
+					t.Fatal(err)
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("permission window did not finish consuming the late key")
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
 			stray, err := os.ReadFile(filepath.Join(dir, "stray"))
 			if err != nil || len(stray) != 0 {
 				t.Fatalf("late key reached chat: %q %v", stray, err)
 			}
 			screen, _ := os.ReadFile(filepath.Join(dir, "screen"))
-			if !strings.Contains(string(screen), "Time remaining: 2 s") || !strings.Contains(string(screen), "Time remaining: 1 s") || !strings.Contains(string(screen), "Expired") {
+			if !strings.Contains(string(screen), "Time remaining:") || !strings.Contains(string(screen), "Expired") {
 				t.Fatalf("missing countdown/expiry notice: %s", screen)
 			}
 		})

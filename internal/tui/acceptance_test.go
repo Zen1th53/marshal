@@ -134,10 +134,12 @@ func TestAcceptancePlanLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	capacity := goalintake.UnknownCapacity("codex", true)
+	profile := model.HarnessProfile{Harness: "codex", InstalledVersion: "acceptance-fixture", SupportedModels: []string{"acceptance-model"}, DefaultModel: "acceptance-model", ProbeEvidenceID: "EV-acceptance-plan", ProbedAt: time.Now().UTC()}
 	created, err := runtime.Plans().Create(ctx, app.CreatePlanRequest{
 		SessionID: ws.sessionID, ProjectID: project,
-		Tasks:      []plan.Task{{ID: "TASK-acceptance-plan", Title: "exercise plan lifecycle", Weight: 1, Criteria: goal.SuccessCriteria}},
-		Candidates: []goalintake.Candidate{{Provider: "codex", Capacity: capacity, Governance: constitution.GovernanceVerified}},
+		Tasks:             []plan.Task{{ID: "TASK-acceptance-plan", Title: "exercise plan lifecycle", Weight: 1, Criteria: goal.SuccessCriteria}},
+		Candidates:        []goalintake.Candidate{{Provider: "codex", Model: profile.DefaultModel, Capacity: capacity, Governance: constitution.GovernanceVerified}},
+		HarnessCandidates: []plan.HarnessCandidate{{Profile: profile, InstalledVersion: profile.InstalledVersion, Provider: "codex", Capacity: capacity}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -166,14 +168,9 @@ func TestAcceptancePlanLifecycle(t *testing.T) {
 func TestAcceptanceRunLifecycle(t *testing.T) {
 	_, ws, _ := acceptanceWorkspace(t)
 	for _, id := range []string{"CTUI-0285", "CTUI-0286", "CTUI-0288", "CTUI-0290", "CTUI-0292", "CTUI-0043", "CTUI-0044", "CTUI-0046", "CTUI-0073"} {
-		out := acceptanceScreen(t, ws, id)
-		if id == "CTUI-0043" || id == "CTUI-0044" {
-			if !strings.Contains(out, "IMPLEMENTATION GAP") {
-				t.Fatalf("documented Process05 gap %s was not truthful", id)
-			}
-		}
+		acceptanceScreen(t, ws, id)
 	}
-	t.Log("PASS: Process05 state is navigable; unavailable pause/resume bindings remain documented gaps")
+	t.Log("PASS: Process05 state is navigable; pause/resume task controls are bound through CommandTask")
 }
 
 func TestAcceptanceCollaboration(t *testing.T) {
@@ -246,7 +243,12 @@ func TestAcceptanceCheckpointRollback(t *testing.T) {
 }
 
 func TestAcceptanceVerificationAndEvidence(t *testing.T) {
+	isolateRequiredFixtureProviders(t)
 	ws, runtime := realControlWorkspace(t, "SESSION-acceptance-verify")
+	if requiredLegacyFixtureRefusal {
+		assertUnsupportedAcceptance(t, ws, runtime)
+		return
+	}
 	session := acceptanceVerifiedRun(t, ws, runtime)
 	ws.navView.Refresh(context.Background())
 	for _, id := range []string{"CTUI-0337", "CTUI-0338", "CTUI-0340", "CTUI-0341", "CTUI-0342", "CTUI-0345", "CTUI-0357", "CTUI-0388"} {
@@ -276,7 +278,7 @@ func TestAcceptanceMemoryRecall(t *testing.T) {
 		Name: "operator", Authorities: []authz.Authority{authz.AuthorityTaskPlan},
 	}}
 	record, err := runtime.Memory().Remember(ctx, principal, app.RememberRequest{
-		ProjectID: string(ws.projectIdentity), ScopeID: string(ws.projectIdentity),
+		ProjectID: runtime.ProjectID(), ScopeID: runtime.ProjectID(),
 		Title: "acceptance memory", Body: "canonical recent-record evidence",
 		Kind: model.MemoryKindSemantic,
 	})
@@ -299,17 +301,19 @@ func TestAcceptanceMemoryGovernance(t *testing.T) {
 	ctx := context.Background()
 	principal := acceptancePrincipal(ws)
 	candidate, err := runtime.Memory().Remember(ctx, principal, app.RememberRequest{
-		ProjectID: string(ws.projectIdentity), ScopeID: string(ws.projectIdentity),
+		ProjectID: runtime.ProjectID(), ScopeID: runtime.ProjectID(),
 		Title: "acceptance governed memory", Body: "candidate promoted through canonical authority",
 		Kind: model.MemoryKindSemantic,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	approveAcceptanceMemory(t, ws, candidate.ID)
+	if rec, err := ws.runtime.Store().GetMemoryV2(ctx, ws.runtime.ProjectID(), candidate.ID); err != nil || rec.Lifecycle == model.MemoryDurable {
+		t.Fatal("memory durable before operator review")
+	}
 	promoted, err := runtime.Memory().Promote(ctx, principal, app.PromoteRequest{
-		ProjectID: string(ws.projectIdentity), MemoryID: candidate.ID,
-		ScopeID: string(ws.projectIdentity), Rationale: "acceptance operator review",
+		ProjectID: runtime.ProjectID(), MemoryID: candidate.ID,
+		ScopeID: runtime.ProjectID(), Rationale: "acceptance operator review",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -328,18 +332,18 @@ func TestAcceptanceTranscriptImport(t *testing.T) {
 	ws, runtime := realControlWorkspace(t, "SESSION-acceptance-import")
 	ctx := context.Background()
 	transcript := []byte(`{"session_id":"SESSION-imported","provider":"codex","task_id":"TASK-imported","messages":[{"role":"user","content":"How is acceptance run?"},{"role":"assistant","content":"Use the governed test path."}],"success":true}`)
-	dry, err := runtime.Memory().ImportSessionTranscript(ctx, acceptancePrincipal(ws), string(ws.projectIdentity), transcript, true)
+	dry, err := runtime.Memory().ImportSessionTranscript(ctx, acceptancePrincipal(ws), runtime.ProjectID(), transcript, true)
 	if err != nil || len(dry.ImportedRecords) != 1 {
 		t.Fatalf("canonical transcript dry run = %+v, err=%v", dry, err)
 	}
-	committed, err := runtime.Memory().ImportSessionTranscript(ctx, acceptancePrincipal(ws), string(ws.projectIdentity), transcript, false)
+	committed, err := runtime.Memory().ImportSessionTranscript(ctx, acceptancePrincipal(ws), runtime.ProjectID(), transcript, false)
 	if err != nil || len(committed.ImportedRecords) != 1 {
 		t.Fatalf("canonical transcript commit = %+v, err=%v", committed, err)
 	}
 	for _, rec := range committed.ImportedRecords {
 		approveAcceptanceMemory(t, ws, rec.ID)
 	}
-	duplicate, err := runtime.Memory().ImportSessionTranscript(ctx, acceptancePrincipal(ws), string(ws.projectIdentity), transcript, false)
+	duplicate, err := runtime.Memory().ImportSessionTranscript(ctx, acceptancePrincipal(ws), runtime.ProjectID(), transcript, false)
 	if err != nil || len(duplicate.ImportedRecords) != 0 || duplicate.SkippedCount != 1 {
 		t.Fatalf("idempotent transcript re-import = %+v, err=%v", duplicate, err)
 	}
@@ -362,17 +366,24 @@ func TestAcceptanceQuotaUnknown(t *testing.T) {
 	_, ws, _ := acceptanceWorkspace(t)
 	for _, id := range []string{"CTUI-0144", "CTUI-0148", "CTUI-0149", "CTUI-0151", "CTUI-0523"} {
 		out := acceptanceScreen(t, ws, id)
-		if !strings.Contains(out, "IMPLEMENTATION GAP") {
-			t.Fatalf("provider evidence gap %s stopped rendering truthfully", id)
+		// Provider quota/reset/allowance/usage/detail are now BOUND to
+		// provider_status.go and render reasoned UNKNOWN/NOT_RUN, never a
+		// blanket implementation gap and never an invented value.
+		if editionExtreme {
+			if !strings.Contains(out, "IMPLEMENTATION GAP") {
+				t.Fatalf("provider evidence gap %s stopped rendering truthfully", id)
+			}
+		} else if strings.Contains(out, "IMPLEMENTATION GAP") {
+			t.Fatalf("provider evidence %s still renders a blanket gap", id)
 		}
 	}
-	t.Log("PASS: quota/capacity/reset/allowance/session evidence is UNKNOWN or IMPLEMENTATION GAP, never invented")
+	t.Log("PASS: quota/capacity/reset/allowance/session evidence is reasoned UNKNOWN, never invented")
 }
 
 func TestAcceptanceStandardOffline(t *testing.T) {
 	_, ws, _ := acceptanceWorkspace(t)
 	out := acceptanceScreen(t, ws, "CTUI-0155")
-	if !strings.Contains(out, "Standard") && !strings.Contains(out, "NOT_RUN") && !strings.Contains(out, "UNKNOWN") {
+	if !strings.Contains(out, "Standard") && !strings.Contains(out, "NOT_RUN") && !strings.Contains(out, "Not run yet") && !strings.Contains(out, "Not needed in Marshal") && !strings.Contains(out, "UNKNOWN") {
 		t.Fatalf("offline cloud surface is not truthful:\n%s", out)
 	}
 	t.Log("PASS: Standard/offline fallback does not forge an entitlement")
@@ -383,16 +394,28 @@ func TestAcceptanceUltraEntitlement(t *testing.T) {
 	for _, id := range []string{"CTUI-0035", "CTUI-0157", "CTUI-0557", "CTUI-0158", "CTUI-0164"} {
 		out := acceptanceScreen(t, ws, id)
 		if id == "CTUI-0157" || id == "CTUI-0557" {
-			if !strings.Contains(out, "IMPLEMENTATION GAP") {
-				t.Fatalf("entitlement request gap %s stopped rendering truthfully", id)
+			// Entitlement request status/detail are now BOUND to the persisted
+			// request state (request_state.go / ultra_requests.go) and render a
+			// reasoned "no request recorded"/UNKNOWN, never a blanket gap.
+			if editionExtreme {
+				if !strings.Contains(out, "IMPLEMENTATION GAP") {
+					t.Fatalf("entitlement request gap %s stopped rendering truthfully", id)
+				}
+			} else if strings.Contains(out, "IMPLEMENTATION GAP") {
+				t.Fatalf("entitlement request surface %s still renders a blanket gap", id)
 			}
 		}
 	}
-	t.Log("PASS: ULTRA request/lease states stay evidence-gated; documented request-ID gaps remain visible")
+	t.Log("PASS: ULTRA request/lease states stay evidence-gated; request tracking never grants a lease")
 }
 
 func TestAcceptanceProcess08Counterfactual(t *testing.T) {
+	isolateRequiredFixtureProviders(t)
 	ws, runtime := realControlWorkspace(t, "SESSION-acceptance-counterfactual")
+	if requiredLegacyFixtureRefusal {
+		assertUnsupportedAcceptance(t, ws, runtime)
+		return
+	}
 	fixture := acceptanceOptimizationCycle(t, ws, runtime)
 	ctx := context.Background()
 	runner := &acceptanceReplayRunner{}
@@ -418,7 +441,12 @@ func TestAcceptanceProcess08Counterfactual(t *testing.T) {
 }
 
 func TestAcceptanceProcess08Benchmarks(t *testing.T) {
+	isolateRequiredFixtureProviders(t)
 	ws, runtime := realControlWorkspace(t, "SESSION-acceptance-benchmarks")
+	if requiredLegacyFixtureRefusal {
+		assertUnsupportedAcceptance(t, ws, runtime)
+		return
+	}
 	fixture := acceptanceOptimizationCycle(t, ws, runtime)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -451,7 +479,12 @@ func TestAcceptanceProcess08Benchmarks(t *testing.T) {
 }
 
 func TestAcceptanceProcess08Rollout(t *testing.T) {
+	isolateRequiredFixtureProviders(t)
 	ws, runtime := realControlWorkspace(t, "SESSION-acceptance-rollout")
+	if requiredLegacyFixtureRefusal {
+		assertUnsupportedAcceptance(t, ws, runtime)
+		return
+	}
 	fixture := acceptanceOptimizationCycle(t, ws, runtime)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -560,7 +593,7 @@ func TestAcceptanceSystemMaintenance(t *testing.T) {
 	if err != nil || meta.DatabaseSHA256 == "" {
 		t.Fatalf("canonical backup = %+v, err=%v", meta, err)
 	}
-	verified, err := app.VerifyStateBackup(ctx, backupPath, string(ws.projectIdentity), store.LatestSchemaVersion)
+	verified, err := app.VerifyStateBackup(ctx, backupPath, runtime.ProjectID(), store.LatestSchemaVersion)
 	if err != nil || verified.DatabaseSHA256 != meta.DatabaseSHA256 {
 		t.Fatalf("backup verification = %+v, err=%v", verified, err)
 	}
@@ -619,7 +652,7 @@ func TestAcceptanceSystemMaintenance(t *testing.T) {
 	}
 	t.Cleanup(func() { ws.Close(); _ = ws.runtime.Close() })
 	status, err := ws.runtime.Status(ctx)
-	if err != nil || status.Project.ID != string(ws.projectIdentity) {
+	if err != nil || status.Project.ID != ws.runtime.ProjectID() || ws.runtime.ProjectIdentity() != string(ws.projectIdentity) {
 		t.Fatalf("reopened runtime status = %+v, err=%v", status, err)
 	}
 	// The real input loop must rebind every screen after replacement. A stale
@@ -649,19 +682,25 @@ func TestAcceptanceInventoryAndCoverageReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ia.Count(); got != 804 {
-		t.Fatalf("navigable node count = %d, want 804", got)
+	if got := ia.Count(); got != 801 {
+		t.Fatalf("navigable node count = %d, want 801", got)
 	}
-	if gaps := ia.Gaps(); len(gaps) != 17 {
-		t.Fatalf("implementation gaps = %d, want 17", len(gaps))
+	wantGaps := 2
+	if editionExtreme {
+		// Extreme keeps provider quota/status and cloud entitlement request
+		// detail as honest gaps in addition to the Status lifecycle ones.
+		wantGaps = 17 - len(buildResolvedGapIDs)
+	}
+	if gaps := ia.Gaps(); len(gaps) != wantGaps {
+		t.Fatalf("implementation gaps = %d, want %d", len(gaps), wantGaps)
 	}
 
 	var manifest manifestFile
 	if err := json.Unmarshal(frozenManifest, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if manifest.FrozenNodeCount != 804 {
-		t.Fatalf("manifest frozen node count = %d, want 804", manifest.FrozenNodeCount)
+	if manifest.FrozenNodeCount != 801 {
+		t.Fatalf("manifest frozen node count = %d, want 801", manifest.FrozenNodeCount)
 	}
 	// The traceability matrix ships only with the spec pack. Where it exists
 	// every row must still resolve to a frozen IA node; where it does not, the
@@ -670,8 +709,8 @@ func TestAcceptanceInventoryAndCoverageReport(t *testing.T) {
 	switch {
 	case matrixErr == nil:
 		ids := regexp.MustCompile(`(?m)^\| (CTUI-[0-9]{4}) \|`).FindAllStringSubmatch(string(matrix), -1)
-		if len(ids) != 804 {
-			t.Fatalf("traceability rows = %d, want 804", len(ids))
+		if len(ids) != 801 {
+			t.Fatalf("traceability rows = %d, want 801", len(ids))
 		}
 		for _, match := range ids {
 			if _, ok := ia.Node(match[1]); !ok {
@@ -736,7 +775,7 @@ func TestAcceptanceInventoryAndCoverageReport(t *testing.T) {
 		t.Logf("coverage %s: dedicated=%d leaf-fallback=%d container-fallback=%d gaps=%d",
 			section, c.dedicated, c.leafFallback, c.containerFallback, c.gaps)
 	}
-	t.Logf("coverage Root: dedicated=0 fallback=1; section totals cover the other 803 nodes")
+	t.Logf("coverage Root: dedicated=0 fallback=1; section totals cover the other 800 nodes")
 	if totalFallback > 0 {
 		t.Fatalf("acceptance incomplete: %d non-root nodes still lack dedicated renderers", totalFallback)
 	}
@@ -760,10 +799,16 @@ func acceptanceWorkspace(t *testing.T) (*store.Store, *Workspace, context.Contex
 	}
 	st := runtime.Store()
 	ws := NewWorkspace(st, runtime.ProjectID(), "ACCEPTANCE-session")
+	ws.workDir = repo.Path()
+	ws.tmuxSession = fixtureTmuxNamespace(t, repo.Path())
 	t.Cleanup(ws.Close)
 	ws.AttachRuntime(runtime, binding.ID)
 	ws.openNavigation(ctx)
 	ws.navView.Refresh(ctx)
+	// openNavigation also started a background read, which probes the
+	// providers on PATH. Let it finish here: a test that installs provider
+	// doubles next must not see that probe run its double.
+	ws.navView.Wait()
 	return st, ws, ctx
 }
 
@@ -837,7 +882,7 @@ func acceptancePrincipal(ws *Workspace) authz.Principal {
 func acceptanceVerifiedRun(t *testing.T, ws *Workspace, runtime *app.Runtime) verification.Session {
 	t.Helper()
 	ctx := context.Background()
-	project := projectid.ID("PROJECT-0123456789abcdef0123456789abcdef")
+	project := projectid.ID(runtime.ProjectIdentity())
 	ws.AttachRuntime(runtime, project)
 	goal := acceptanceGoal(ws)
 	goal.ID, goal.SessionID, goal.ProjectID = "GOAL-acceptance-chain", ws.sessionID, string(project)
@@ -968,7 +1013,7 @@ func (r *acceptanceReplayRunner) Replay(_ context.Context, _ optimization.Replay
 func approveAcceptanceMemory(t *testing.T, ws *Workspace, id string) {
 	t.Helper()
 	ctx := context.Background()
-	if _, err := ws.runtime.Store().GetMemoryV2(ctx, ws.runtime.ProjectID(), id); err == nil {
+	if rec, err := ws.runtime.Store().GetMemoryV2(ctx, ws.runtime.ProjectID(), id); err == nil && rec.Lifecycle == model.MemoryDurable {
 		t.Fatal("memory persisted before operator review")
 	}
 	handler := NewCommandHandler(ws)

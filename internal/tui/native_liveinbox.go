@@ -2,12 +2,14 @@ package tui
 
 import (
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Zen1th53/marshal/internal/nativehistory"
 )
 
 // What one agent sees of the channel.
@@ -39,7 +41,7 @@ type inboxView struct {
 }
 
 func inboxPath(root, provider string) string {
-	return filepath.Join(root, ".marshal", "inbox", provider+".md")
+	return filepath.Join(root, statepath.DirName, "inbox", provider+".md")
 }
 
 // openInboxView prepares the file an agent reads.
@@ -48,6 +50,9 @@ func inboxPath(root, provider string) string {
 // closed are the point of the channel, and a boundary marks where the current
 // session begins so nothing older reads as though it just arrived.
 func openInboxView(root, reader string, opening bool) (*inboxView, error) {
+	if err := statepath.CheckPath(root, inboxPath(root, reader)); err != nil {
+		return nil, err
+	}
 	path := inboxPath(root, reader)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
@@ -202,27 +207,7 @@ func plural(n int, one, many string) string {
 // It honours the operator's own home override, because native sessions run in
 // the operator's real environment rather than a MARSHAL-managed one.
 func providerHistoryDir(provider, root string) (string, error) {
-	homeEnv, homeDir, historyDir := "CODEX_HOME", ".codex", "sessions"
-	if provider == "claude" {
-		homeEnv, homeDir, historyDir = "CLAUDE_CONFIG_DIR", ".claude", "projects"
-	} else if provider != "codex" {
-		return "", fmt.Errorf("unsupported provider %q", provider)
-	}
-	home := os.Getenv(homeEnv)
-	if home == "" {
-		userHome, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		home = filepath.Join(userHome, homeDir)
-	}
-	if !filepath.IsAbs(home) {
-		home = filepath.Join(root, home)
-	}
-	if provider == "claude" {
-		return filepath.Join(home, historyDir, regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(filepath.Clean(root), "-")), nil
-	}
-	return filepath.Join(home, historyDir), nil
+	return nativehistory.HistoryDir(nativehistory.Provider(provider), root)
 }
 
 // inboxBriefingNote tells the agent the view exists and what it is for.

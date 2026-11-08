@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,9 +36,10 @@ func TestProviderSecretExecutionLeaseAndRedaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	fixtureAdapter, fixture := observeLegacyIntegrationAdapter(echoSecretAdapter{secretToEcho: secretVal})
 	rt, err := app.OpenWithOptions(context.Background(), repo.Path(), app.Options{
 		Adapters: map[string]adapter.Adapter{
-			"fake-secret": echoSecretAdapter{secretToEcho: secretVal},
+			"fake-secret": fixtureAdapter,
 		},
 	})
 	if err != nil {
@@ -59,15 +61,17 @@ func TestProviderSecretExecutionLeaseAndRedaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	fixture.ObserveTask(t, rt, "TASK-SEC-001")
 	result, err := rt.Run(context.Background(), app.RunRequest{
 		TaskID:  "TASK-SEC-001",
 		AgentID: agent.ID,
 		Adapter: "fake-secret",
 	})
-	if err != nil {
+	refused := fixture.RequireRunRefusal(t, rt, "TASK-SEC-001", result, err)
+	if !refused && err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
-	if result.ExitStatus != 0 {
+	if !refused && result.ExitStatus != 0 {
 		t.Fatalf("expected exit status 0, got %d", result.ExitStatus)
 	}
 
@@ -76,7 +80,7 @@ func TestProviderSecretExecutionLeaseAndRedaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(artifacts) == 0 {
+	if !refused && len(artifacts) == 0 {
 		t.Fatal("expected artifacts to be created")
 	}
 
@@ -96,7 +100,7 @@ func TestProviderSecretExecutionLeaseAndRedaction(t *testing.T) {
 			return nil
 		})
 	}
-	if err := scan(filepath.Join(repo.Path(), ".marshal")); err != nil {
+	if err := scan(filepath.Join(repo.Path(), statepath.DirName)); err != nil {
 		t.Fatal(err)
 	}
 

@@ -38,6 +38,11 @@ func (r *Runtime) CommandRunControl(ctx context.Context, e CommandEnvelope, oper
 	if !typed || runID == "" || e.ExpectedVersion < 0 || strings.TrimSpace(e.IdempotencyKey) == "" || len(e.IdempotencyKey) > 256 {
 		return execution.RunControlResult{}, model.ErrInvalid
 	}
+	releaseOwner, err := admitRunControlLifecycle(r)
+	if err != nil {
+		return execution.RunControlResult{}, err
+	}
+	defer releaseOwner()
 	principal := authz.Principal{ID: p.ID(), Role: authz.Role{Name: "orchestrator", Authorities: []authz.Authority{authz.AuthorityTaskPlan}}}
 	query := capability.Query{Subject: capability.SubjectID(p.ID()), TaskID: capability.TaskID(e.ProjectID), Kind: capability.KindFilesystemWrite, Resource: r.layout.Database, Action: "run.control"}
 	decision, err := authz.CanWithCapability(ctx, principal, authz.AuthorityTaskPlan, r.layout.Database, query, capability.NewEngine(r.store, nil))

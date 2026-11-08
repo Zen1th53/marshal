@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"reflect"
 	"strings"
 	"sync"
@@ -204,7 +203,7 @@ type telemetrySink struct {
 func newTelemetrySink(t *testing.T) (*telemetrySink, *Client) {
 	t.Helper()
 	sink := &telemetrySink{status: http.StatusOK}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := contractClient(t, func(w http.ResponseWriter, r *http.Request) {
 		sink.mu.Lock()
 		status := sink.status
 		sink.mu.Unlock()
@@ -218,12 +217,7 @@ func newTelemetrySink(t *testing.T) (*telemetrySink, *Client) {
 		sink.batches = append(sink.batches, batch)
 		sink.mu.Unlock()
 		json.NewEncoder(w).Encode(map[string]any{"accepted": len(batch), "submitted": len(batch)})
-	}))
-	t.Cleanup(server.Close)
-	client, err := NewClient(server.URL, "1.0.0")
-	if err != nil {
-		t.Fatalf("client: %v", err)
-	}
+	})
 	return sink, client
 }
 

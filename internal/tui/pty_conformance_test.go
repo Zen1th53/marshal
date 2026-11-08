@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 	"unsafe"
+
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 // PTY conformance harness.
@@ -103,12 +105,29 @@ func startFrozenTUICommand(t *testing.T, rows, cols uint16, args ...string) *pty
 
 func startFrozenTUIInProject(t *testing.T, rows, cols uint16, bin, project string, args ...string) *ptySession {
 	t.Helper()
+	// These tests drive the classic screen's composer row; a project
+	// with no run opens on the Board otherwise (startBoardTUIInProject).
+	return startPTYTUI(t, rows, cols, bin, project, []string{"MARSHAL_TEST_CLASSIC_SCREEN=1"}, args...)
+}
+
+// startBoardTUIInProject launches as an operator does: a project with no
+// run opens on the Board's first-use card.
+func startBoardTUIInProject(t *testing.T, rows, cols uint16, bin, project string, args ...string) *ptySession {
+	t.Helper()
+	return startPTYTUI(t, rows, cols, bin, project, nil, args...)
+}
+
+// startPTYTUI runs bin on a PTY in project with env added to the inherited
+// environment.
+func startPTYTUI(t *testing.T, rows, cols uint16, bin, project string, env []string, args ...string) *ptySession {
+	t.Helper()
 
 	master, slave := openPTY(t)
 	setWinsize(master, rows, cols)
 
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = project
+	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdin = slave
 	cmd.Stdout = slave
 	cmd.Stderr = slave
@@ -144,7 +163,7 @@ func startFrozenTUIInProject(t *testing.T, rows, cols uint16, bin, project strin
 	})
 
 	// Wait for the workspace to paint before driving input.
-	s.waitFor("MARSHAL", 15*time.Second)
+	s.waitFor("Marshal", 15*time.Second)
 	return s
 }
 
@@ -167,22 +186,45 @@ func startCommandTUI(t *testing.T, rows, cols uint16) *ptySession {
 }
 
 // TestPTYWorkspaceStartsInComposerAndGatesNavigation proves a real `marshal tui`
-// launch lands on the composer, and that the navigation surface, closed until
-// it is verified, cannot be reached through either of its entry points.
+// launch lands on the composer. Community refuses unreleased navigation;
+// Extreme admits both entry points and returns safely to the same composer.
 func TestPTYWorkspaceStartsInComposerAndGatesNavigation(t *testing.T) {
 	s := startFrozenTUI(t, 40, 120)
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
+	if editionExtreme {
+		s.send("\x0e") // Ctrl+N
+		s.mustSee("Continue Work")
+		return
+	}
 	// Navigation's own chrome must be absent: a Standard session never lands
 	// in a screen it is not entitled to and has to back out of.
 	s.mustNotSee("Continue Work")
 
 	s.send("\x0e") // Ctrl+N
-	s.mustSee("not available yet")
-	s.mustNotSee("Continue Work")
-
-	s.send("\x1b") // Esc on an empty composer is the other entry point.
-	s.mustSee("not available yet")
-	s.mustNotSee("Continue Work")
+	if statepath.PublicEngine {
+		s.mustSee("[TOP_LEVEL_SECTION]")
+		s.mustSee("Dashboard")
+		s.send("\x1b") // Return from the top-level menu to the composer.
+		s.mustSee("Quick Commands:")
+		if screen := s.screenText(40, 120); strings.Contains(screen, "[TOP_LEVEL_SECTION]") {
+			t.Fatalf("Esc did not close navigation:\n%s", screen)
+		}
+		s.send("\x1b") // The empty-composer entry point reopens the same menu.
+		deadline := time.Now().Add(ptyWait(8 * time.Second))
+		for !strings.Contains(s.screenText(40, 120), "[TOP_LEVEL_SECTION]") && time.Now().Before(deadline) {
+			time.Sleep(80 * time.Millisecond)
+		}
+		if screen := s.screenText(40, 120); !strings.Contains(screen, "[TOP_LEVEL_SECTION]") || !strings.Contains(screen, "Dashboard") {
+			t.Fatalf("Esc did not reopen admitted Marshal navigation:\n%s", screen)
+		}
+		s.send("\x1b")
+	} else {
+		s.mustSee("not available yet")
+		s.mustNotSee("Continue Work")
+		s.send("\x1b")
+		s.mustSee("not available yet")
+		s.mustNotSee("Continue Work")
+	}
 
 	// The composer itself keeps working, which is the whole point of the refusal.
 	s.sendLine("/status")
@@ -196,18 +238,24 @@ func (s *ptySession) output() string {
 }
 
 // send writes raw bytes to the terminal, exactly as a keyboard would.
+//
+// The short settle lets the process consume the keystroke (and, for the first
+// key of a command, paint its completion popup) before the next byte arrives.
+// Output is otherwise asserted through waitFor/mustSee, which poll; the sleep
+// here is pacing only, so it stays far smaller than the old per-keystroke 120ms
+// that dominated the suite's wall clock.
 func (s *ptySession) send(raw string) {
 	s.t.Helper()
 	if _, err := s.master.WriteString(raw); err != nil {
 		s.t.Fatalf("write to pty: %v", err)
 	}
-	time.Sleep(120 * time.Millisecond)
+	time.Sleep(40 * time.Millisecond)
 }
 
 // sendLine types a line and presses Enter.
 func (s *ptySession) sendLine(line string) {
 	s.send(line + "\r")
-	time.Sleep(350 * time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
 }
 
 // ptyWait scales a wait by ptyPatience, so every deadline in this suite moves
@@ -225,7 +273,7 @@ func (s *ptySession) waitFor(want string, timeout time.Duration) bool {
 		if strings.Contains(s.output(), want) {
 			return true
 		}
-		time.Sleep(80 * time.Millisecond)
+		time.Sleep(25 * time.Millisecond)
 	}
 	return false
 }
@@ -238,9 +286,28 @@ func (s *ptySession) waitForCount(want string, n int, timeout time.Duration) boo
 		if strings.Count(s.output(), want) >= n {
 			return true
 		}
-		time.Sleep(80 * time.Millisecond)
+		time.Sleep(25 * time.Millisecond)
 	}
 	return false
+}
+
+// waitForSettle blocks until the terminal output stops growing, signalling
+// that every buffered command has been processed and repainted. It is bounded
+// so a genuinely stalled session still fails fast rather than waiting forever.
+func (s *ptySession) waitForSettle(timeout time.Duration) {
+	deadline := time.Now().Add(ptyWait(timeout))
+	last := -1
+	lastChange := time.Now()
+	for time.Now().Before(deadline) {
+		cur := len(s.output())
+		if cur != last {
+			last = cur
+			lastChange = time.Now()
+		} else if time.Since(lastChange) >= 750*time.Millisecond {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func (s *ptySession) mustSee(want string) {
@@ -275,7 +342,11 @@ func buildMarshalBinary(t *testing.T) string {
 			return
 		}
 		out := filepath.Join(dir, "marshal")
-		cmd := exec.Command("go", "build", "-tags=marshal_pty_test", "-o", out, "../../cmd/marshal")
+		tags := "marshal_pty_test"
+		if !statepath.PublicEngine {
+			tags += ",governed"
+		}
+		cmd := exec.Command("go", "build", "-p", "2", "-tags="+tags, "-o", out, "../../cmd/marshal")
 		if combined, err := cmd.CombinedOutput(); err != nil {
 			buildErr = fmt.Errorf("build marshal: %v: %s", err, combined)
 			return
@@ -312,6 +383,12 @@ func initProject(t *testing.T, bin string) string {
 	run("git", "add", "-A")
 	run("git", "commit", "-qm", "chore: init")
 	run(bin, "init")
+	if _, err := os.Stat(statepath.Path(dir, "state.db")); err != nil {
+		t.Fatalf("compiled PTY binary did not initialize %s: %v", statepath.DirName, err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, statepath.OtherDirName)); !os.IsNotExist(err) {
+		t.Fatalf("compiled PTY binary initialized foreign namespace %s: %v", statepath.OtherDirName, err)
+	}
 
 	return dir
 }
@@ -321,15 +398,15 @@ func initProject(t *testing.T, bin string) string {
 func TestPTYWorkspacePaintsRealState(t *testing.T) {
 	s := startCommandTUI(t, 40, 120)
 
-	s.mustSee("MARSHAL")
+	s.mustSee("Marshal")
 
-	s.sendLine("/goal Prove the terminal is real")
-	s.mustSee("Prove the terminal is real")
+	s.sendLine("/goal create Prove the terminal is real")
+	s.mustSee("[rev 1] PENDING: Prove the terminal is real")
 
 	// /status must reflect the goal that was just persisted.
 	s.sendLine("/status")
 	s.mustSee("CANONICAL STATUS DETAIL")
-	s.mustSee("Prove the terminal is real")
+	s.mustSee("[rev 1] Prove the terminal is real")
 }
 
 // TestPTYEveryRegisteredCommandDispatches drives every slash command the
@@ -337,6 +414,7 @@ func TestPTYWorkspacePaintsRealState(t *testing.T) {
 // them falls through to the unknown-command branch. A registry entry that names
 // a command the binary rejects is a false capability claim.
 func TestPTYEveryRegisteredCommandDispatches(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "://invalid")
 	s := startCommandTUI(t, 40, 120)
 
 	seen := map[string]bool{}
@@ -362,8 +440,8 @@ func TestPTYEveryRegisteredCommandDispatches(t *testing.T) {
 		s.sendLine(cmd)
 	}
 
-	// Give the last command time to render.
-	time.Sleep(700 * time.Millisecond)
+	// Give every buffered command time to render before sampling the output.
+	s.waitForSettle(10 * time.Second)
 	out := s.output()
 
 	var broken []string
@@ -478,6 +556,7 @@ func TestPTYNoFabricatedModelNames(t *testing.T) {
 		"gpt-4o", "o3-mini",
 		"deepseek-coder",
 		"gemini-2.5-pro", "gemini-2.5-flash",
+		"gemini-3.8-flash-high", "gemini-3.8-flash-medium",
 	} {
 		if strings.Contains(out, fabricated) {
 			t.Errorf("terminal displayed fabricated model %q on a project with no configured model", fabricated)

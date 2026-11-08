@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,10 +102,10 @@ func TestTaskBriefNeverContainsSharedChannelTextEvenWhenPeersAreEnabled(t *testi
 	root := t.TempDir()
 
 	// 1. Enable peers in .marshal/live-peers
-	if err := os.MkdirAll(filepath.Join(root, ".marshal", "inbox"), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, statepath.DirName, "inbox"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".marshal", "live-peers"), []byte("codex claude\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, statepath.DirName, "live-peers"), []byte("codex claude\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 

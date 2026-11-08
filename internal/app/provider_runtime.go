@@ -26,11 +26,11 @@ func (r *Runtime) ProviderObservations(ctx context.Context) ([]ProviderObservati
 		return nil, err
 	}
 	names := map[string]struct{}{
-		"claude": {}, "codex": {}, "gemini": {}, "opencode": {}, "antigravity": {},
+		"claude": {}, "codex": {}, "opencode": {}, "agy": {},
 	}
 	if r != nil {
 		for name := range r.adapters {
-			names[name] = struct{}{}
+			names[providerKey(name)] = struct{}{}
 		}
 	}
 	ordered := make([]string, 0, len(names))

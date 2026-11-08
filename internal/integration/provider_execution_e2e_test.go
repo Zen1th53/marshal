@@ -40,8 +40,9 @@ func TestProviderExecutionE2EChain(t *testing.T) {
 	}
 
 	mockAdapter := &e2eMockProviderAdapter{}
+	fixtureAdapter, fixture := observeLegacyIntegrationAdapter(mockAdapter)
 	runtime, err := app.OpenWithOptions(ctx, repo.Path(), app.Options{
-		Adapters: map[string]adapter.Adapter{"codex": mockAdapter},
+		Adapters: map[string]adapter.Adapter{"codex": fixtureAdapter},
 	})
 	if err != nil {
 		t.Fatalf("OpenWithOptions: %v", err)
@@ -72,11 +73,18 @@ func TestProviderExecutionE2EChain(t *testing.T) {
 	}
 
 	// 3. Execute an offline RunRequest through the entire chain.
+	fixture.ObserveTask(t, runtime, "TASK-E2E-001")
 	runResult, err := runtime.Run(ctx, app.RunRequest{
 		TaskID:  "TASK-E2E-001",
 		AgentID: agent.ID,
 		Adapter: "codex",
 	})
+	if fixture.RequireRunRefusal(t, runtime, "TASK-E2E-001", runResult, err) {
+		if mockAdapter.runs != 0 {
+			t.Fatal("refused legacy request invoked actual fake provider")
+		}
+		return
+	}
 	if err != nil {
 		t.Fatalf("runtime.Run failed: %v", err)
 	}

@@ -15,7 +15,7 @@ func TestNavigationHintsFollowAvailability(t *testing.T) {
 			if entitled {
 				entitleULTRA(t, ws)
 			}
-			want := released && entitled
+			want := editionExtreme || (released && entitled)
 			help := h.helpText()
 			if strings.Contains(help, "Ctrl+N: Navigation") != want {
 				t.Fatalf("help navigation hint with released=%v entitled=%v: %s", released, entitled, help)

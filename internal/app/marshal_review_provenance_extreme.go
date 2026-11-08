@@ -1,0 +1,7 @@
+//go:build !governed
+
+package app
+
+func privateMarshalReviewEvidence() string {
+	return "Validated typed runtime provenance records in RuntimeObserved report historical admitted facts for their exact canonical plan, task and consumed transport proof; they are not current grants or an acceptance verdict. The same labels in WorkerReported or Claims remain worker assertions. attempt_basis=execution_engine_admission means execution-engine admissions including preflight and resume; neither that ordinal nor a record count proves actual model calls or billing. native_cli_event tool counts describe captured CLI emissions, not evidence of host tool effects, and unavailable telemetry stays UNKNOWN. binding.Model selects the requested CLI model; only emitted ProviderObservation.Model and its HandIn.Model projection report a native model identity, with absence UNKNOWN. Runtime executable/VCS identity is separate from the marker repository Git commit and does not imply independent source review. Apply the task criteria and current strict instructions independently; preserve RETURN or ESCALATE when warranted. Who reviews is the runtime's routing, not part of the work: the runtime runs the independent cross-provider review of this hand-in separately and checks provider independence itself, so a reviewer named in the task text, or your provider matching the worker's, is never a reason to return or reassign; judge the work on its merits. "
+}

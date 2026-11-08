@@ -9,6 +9,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/goalintake"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/projectcontext"
 	"github.com/Zen1th53/marshal/internal/projectid"
 )
 
@@ -112,8 +113,11 @@ type Budget struct {
 
 // ExecutionPlan is the canonical output of Process 04.
 type ExecutionPlan struct {
-	ID        string       `json:"id"`
-	ProjectID projectid.ID `json:"project_id"`
+	// Data pin only: execution separately loads every applicable accepted
+	// essential and checks current architecture under runtime admission.
+	RequiredProjectContract *projectcontext.ContractRef `json:"required_project_contract,omitempty"`
+	ID                      string                      `json:"id"`
+	ProjectID               projectid.ID                `json:"project_id"`
 	// Goal binds the plan to the exact Goal it was built from.
 	Goal GoalBinding `json:"goal"`
 	// Version is the CAS revision. A write must name the version it read.
@@ -399,7 +403,11 @@ func (p ExecutionPlan) Approve(now time.Time) (ExecutionPlan, error) {
 	}
 	approved := p
 	approved.State = StateApproved
-	approved.ApprovedScope = approvalScopeFor(p)
+	scope, err := approvalScopeFor(p)
+	if err != nil {
+		return p, err
+	}
+	approved.ApprovedScope = scope
 	approved.ApprovalScopeDigest = approved.ApprovedScope.Digest()
 	approved.UpdatedAt = timeOrNow(now)
 	return approved, nil

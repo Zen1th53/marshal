@@ -51,6 +51,7 @@ func TestBrokerDefaultDenyRememberAndRevoke(t *testing.T) {
 }
 
 func TestBrokerDeniedQueuesFixedRequestBeforeCredentialLoad(t *testing.T) {
+	requireOperatorCredentialDecisions(t)
 	r := openNetpolRuntime(t)
 	ctx := context.Background()
 	var queued permission.Request

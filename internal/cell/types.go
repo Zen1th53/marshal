@@ -162,6 +162,14 @@ type Backend interface {
 	Destroy(context.Context, Handle) error
 }
 
+// LaunchAcknowledgedBackend may acknowledge the point at which an execution
+// has actually started. Goal dispatch admission can then be released without
+// waiting for the command to finish. Backends that implement only Backend
+// keep admission until their synchronous Exec call returns.
+type LaunchAcknowledgedBackend interface {
+	ExecAcknowledged(context.Context, Handle, ExecRequest, func()) (ExecResult, error)
+}
+
 func validID(value string) bool {
 	return validText(value) && !strings.Contains(value, "/") && !strings.Contains(value, "\\")
 }

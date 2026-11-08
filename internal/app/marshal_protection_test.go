@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -310,7 +311,7 @@ func TestGoverningDigestExcludesTransientBriefingDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	briefingDir := filepath.Join(root, ".marshal", "briefing", "antigravity-123456")
+	briefingDir := filepath.Join(root, statepath.DirName, "briefing", "antigravity-123456")
 	if err := os.MkdirAll(briefingDir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -335,5 +336,38 @@ func TestGoverningDigestExcludesTransientBriefingDirectory(t *testing.T) {
 	}
 	if digestAfterMod == initialDigest {
 		t.Fatal("expected digest to change when project AGENTS.md is modified")
+	}
+}
+
+// A run's baseline checkpoint copies the whole repository under the state
+// directory; files named like policy or config in that copy are not
+// governing files and must not trip the governing-integrity check.
+func TestGoverningDigestIgnoresCheckpointCopies(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("rules"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	before, err := governingDigest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copyDir := filepath.Join(root, statepath.DirName, "checkpoints", "cp-baseline", "docs")
+	if err := os.MkdirAll(copyDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"policy-as-code.md", "config.yml", "AGENTS.md"} {
+		if err := os.WriteFile(filepath.Join(copyDir, name), []byte("copy"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after, err := governingDigest(root)
+	if err != nil || after != before {
+		t.Fatalf("checkpoint copy changed the governing digest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("changed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if changed, _ := governingDigest(root); changed == before {
+		t.Fatal("a real governing file change went undetected")
 	}
 }

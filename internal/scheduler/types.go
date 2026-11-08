@@ -1,5 +1,7 @@
 package scheduler
 
+import "time"
+
 type Code string
 
 const (
@@ -52,4 +54,11 @@ type Assignment struct {
 	LeaseID string   `json:"lease_id"`
 	Score   float64  `json:"score"`
 	Reasons []string `json:"reasons,omitempty"`
+}
+
+type LeaseRecord struct {
+	LeaseID   string    `json:"lease_id"`
+	TaskID    string    `json:"task_id"`
+	AgentID   string    `json:"agent_id"`
+	ExpiresAt time.Time `json:"expires_at"`
 }

@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -22,20 +23,23 @@ func TestRealClaudeAdapter(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := testgit.New(t)
-	runner := worker.New(30*time.Second, 2*time.Second, 8<<20)
+	runner := worker.New(3*time.Minute, 2*time.Second, 8<<20)
 	client := claude.New(binary, runner)
 	if _, err := client.Probe(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	result, err := client.Run(context.Background(), adapter.Request{
-		TaskID: "TASK-REAL-CLAUDE", Title: "Create claude-proof.txt containing MARSHAL runtime proof.",
+		TaskID: "TASK-REAL-CLAUDE", Title: "Create claude-proof.txt containing exactly MARSHAL runtime proof followed by a newline.",
 		Worktree: repo.Path(), BaseCommit: repo.HEAD(t), HeadCommit: repo.HEAD(t),
 	})
 	if err != nil {
-		t.Skipf("Claude run unverified (auth or rate limit): %v", err)
-		return
+		t.Fatal(err)
 	}
 	if result.Status != adapter.StatusSuccess {
-		t.Skipf("Claude run status: %#v", result)
+		t.Fatalf("Claude run status=%s exit=%d timed_out=%t stderr=%s", result.Status, result.ExitCode, result.TimedOut, result.Stderr)
+	}
+	proof, err := os.ReadFile(filepath.Join(repo.Path(), "claude-proof.txt"))
+	if err != nil || string(proof) != "MARSHAL runtime proof\n" {
+		t.Fatalf("Claude proof=%q err=%v", proof, err)
 	}
 }

@@ -183,6 +183,16 @@ func propagateTerminalSize(ctx context.Context, fd int, size Size) (func(), erro
 
 func configureInteractivePTY(cmd *exec.Cmd, slave *os.File) {
 	// TIOCSWINSZ delivers SIGWINCH to the supervisor and its foreground provider.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
+	attr := cmd.SysProcAttr
+	if attr == nil {
+		attr = &syscall.SysProcAttr{}
+	}
+	// Preserve the supervisor's parent-death signal while making it the PTY
+	// session leader. Setsid supplies its private process group.
+	attr.Setpgid = false
+	attr.Setsid = true
+	attr.Setctty = true
+	attr.Ctty = 0
+	cmd.SysProcAttr = attr
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 }

@@ -7,6 +7,8 @@ const (
 	CodeHardFloor        Code = "OPTIMIZER_HARD_FLOOR"
 	CodeApprovalRequired Code = "OPTIMIZER_APPROVAL_REQUIRED"
 	CodeConfigConflict   Code = "OPTIMIZER_CONFIG_CONFLICT"
+	CodeNoData           Code = "OPTIMIZER_NO_DATA"
+	CodeNotFound         Code = "OPTIMIZER_NOT_FOUND"
 )
 
 type Error struct {
@@ -27,6 +29,8 @@ var (
 	ErrHardFloor        = &Error{Code: CodeHardFloor, Message: "proposed change violates safety hard floor"}
 	ErrApprovalRequired = &Error{Code: CodeApprovalRequired, Message: "human approval required before applying recommendation"}
 	ErrConfigConflict   = &Error{Code: CodeConfigConflict, Message: "recommendation conflicts with existing system configuration"}
+	ErrNoData           = &Error{Code: CodeNoData, Message: "no data: no failure observations available for recommendation"}
+	ErrNotFound         = &Error{Code: CodeNotFound, Message: "recommendation not found"}
 )
 
 type Recommendation struct {

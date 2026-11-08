@@ -308,12 +308,31 @@ type SkillInfo struct {
 // DiscoverModels queries the native Codex CLI for its model catalog.
 // If probing fails, no models are guessed.
 func DiscoverModels(ctx context.Context, binary string, runner adapter.ProcessRunner) ([]ModelInfo, string, error) {
+	return discoverModels(ctx, binary, runner, 20*time.Second)
+}
+
+// modelCatalogError keeps runner causes inspectable without rendering provider
+// messages, which may contain credentials or raw native output.
+type modelCatalogError struct {
+	status string
+	cause  error
+}
+
+func (e *modelCatalogError) Error() string { return e.status }
+func (e *modelCatalogError) Unwrap() error { return e.cause }
+
+func discoverModels(ctx context.Context, binary string, runner adapter.ProcessRunner, budget time.Duration) ([]ModelInfo, string, error) {
 	if binary == "" || runner == nil {
 		return nil, "", fmt.Errorf("%w: binary and runner required", model.ErrInvalid)
 	}
 
+	// Required discovery allows cold starts; the parent still bounds optional
+	// Probe discovery. The private budget permits fast controlled tests.
+	if budget > 20*time.Second {
+		budget = 20 * time.Second
+	}
 	// 1. Probe models catalog via `codex debug models`
-	debugCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	debugCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 
 	cmd := adapter.Command{
@@ -321,8 +340,17 @@ func DiscoverModels(ctx context.Context, binary string, runner adapter.ProcessRu
 		Args: []string{"debug", "models"},
 	}
 	res, err := runner.Run(debugCtx, cmd)
-	if err != nil || res.ExitCode != 0 {
-		return nil, "", fmt.Errorf("%w: failed to query models from codex: %v", model.ErrUnavailable, err)
+	ctxErr := debugCtx.Err()
+	if err != nil || ctxErr != nil || res.ExitCode != 0 || res.TimedOut || res.Cancelled || res.OutputTruncated {
+		contextStatus := "active"
+		if ctxErr != nil {
+			contextStatus = ctxErr.Error()
+		}
+		return nil, "", &modelCatalogError{
+			status: fmt.Sprintf("%s: failed to query models from codex (exit_code=%d timed_out=%t cancelled=%t output_truncated=%t context=%s)",
+				model.ErrUnavailable, res.ExitCode, res.TimedOut, res.Cancelled, res.OutputTruncated, contextStatus),
+			cause: errors.Join(model.ErrUnavailable, err, ctxErr),
+		}
 	}
 
 	var catalog struct {
@@ -403,7 +431,7 @@ func DiscoverModels(ctx context.Context, binary string, runner adapter.ProcessRu
 		}
 		models = append(models, ModelInfo{
 			ReasoningEfforts: efforts,
-			Slug: slug,
+			Slug:             slug,
 			// The native slug is the validated selector. Do not render an
 			// arbitrary catalog display name alongside it.
 			DisplayName: slug,

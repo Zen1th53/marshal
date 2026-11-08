@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,46 +27,53 @@ import (
 const marshalUsage = `Marshal mode — one model plans with you, then marshals the work to other agents.
   /marshal                         Show status and usage
   /marshal chat                    Open a conversation with the Marshal
+  /marshal architecture [goal]     Open the view-only architecture diagram in your browser
   /marshal draft discard           Discard an unimported draft and reopen chat
-  /marshal <goal>                  Draft a plan for the goal with the Marshal model
+  /marshal <goal>                  Draft a plan for the goal; governed tasks need current Process 04 evidence
   /marshal import <TASK-id> <check>  Review a finished CLI task through normal approval and merge
     Check is the raw shell text after TASK-id; quotes and spacing are preserved.
     Example: /marshal import TASK-123 test "$(cat hello.txt)" = "hello world"
     Do not wrap the whole check in an extra pair of quotes.
   /marshal use-plan                Run the current approved Process 04 plan through Process 05
   /marshal approve-task <approval-id>  Approve a Process 05 task paused for your decision
-  /marshal approve                 Approve the drafted plan and start running it
+  /marshal approve                 Review the exact plan scope, then approve eligible work
   /marshal status                  Show the run, its tasks and what it is waiting for
   /marshal close                   Close a verified run (moves the target branch)
   /marshal amend <reason>          Ask the Marshal to amend the plan; major changes need re-approval
   /marshal amend approve|deny      Approve or deny a major amended plan
   /marshal accept <task>           Approve one task for user acceptance mode
   /marshal return <task> <reason>  Send a task awaiting your decision back to its worker
-  /marshal retry <task> [fresh-session]  Retry an escalated task (optional fresh session for one provider)
+  /marshal retry <task> [fresh-session]  Retry a returned or escalated task (fresh session required for one provider)
   /marshal reassign <task> <worker>      Reassign an escalated task to another worker
   /marshal cancel <task>                 Cancel an escalated task
   /marshal resume                  Continue a run that stopped or was interrupted
   /marshal stop                    Stop the running run; its state is kept
-  /marshal model <codex|claude|agy>  Switch the Marshal and remember the provider for this project
+  /marshal model <` + marshalProviderUsage + `>  Switch the Marshal and remember the provider for this project
   /marshal settings [key value]    Show or change execution-rights, acceptance-mode, rework-limit, ultra-concurrency, control (free|strict), or budget ceilings`
 
 // marshalSession is the workspace's Marshal state: the service, the active
 // run, and the approvals the person has given in this session.
 type marshalSession struct {
-	mu                  sync.Mutex
-	service             *app.MarshalService
-	runID               string
-	provider            string
-	conversationID      string
-	cancel              context.CancelFunc
-	draftCancel         context.CancelFunc
-	draftDone           chan struct{}
-	busy                bool
-	integrityAlertRunID string
-	approving           bool
-	amended             bool
-	pending             *marshalAmendment
-	approvals           map[string]bool
+	mu                      sync.Mutex
+	service                 *app.MarshalService
+	runID                   string
+	provider                string
+	conversationID          string
+	cancel                  context.CancelFunc
+	nativeCancels           []context.CancelFunc
+	draftCancel             context.CancelFunc
+	draftDone               chan struct{}
+	busy                    bool
+	integrityAlertRunID     string
+	approving               bool
+	amended                 bool
+	pending                 *marshalAmendment
+	approvals               map[string]bool
+	architecture            *app.ArchitectureReviewSession
+	architectureStarting    bool
+	architectureOccurrences []string
+	architectureStart       func(context.Context, string, string) (*app.ArchitectureReviewSession, error)
+	architectureBrowser     func(context.Context, string) error
 }
 
 type marshalAmendment struct {
@@ -120,8 +129,13 @@ func (w *Workspace) marshalSession() *marshalSession {
 func (w *Workspace) setMarshalPanel(p *MarshalPanel) {
 	w.mu.Lock()
 	w.state.Marshal = p
+	// Under w.mu so two publishers reach the animator in the order they
+	// reached the state.
+	w.animate(p)
 	w.mu.Unlock()
+	w.wakeBoard()
 	w.requestRepaint()
+	w.kickDock()
 }
 
 func (w *Workspace) marshalPanel() *MarshalPanel {
@@ -148,9 +162,9 @@ func (w *Workspace) marshalFailurePanel(runID, provider string, run marshal.Run,
 	return w.marshalPanelWithNote(runID, provider, note)
 }
 
-var marshalSubcommands = []string{"chat", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task"}
+var marshalSubcommands = []string{"chat", "architecture", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task"}
 
-var allMarshalSubcommands = []string{"chat", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task", "retry", "reassign", "cancel"}
+var allMarshalSubcommands = []string{"chat", "architecture", "approve", "status", "close", "amend", "resume", "stop", "model", "settings", "help", "accept", "return", "use-plan", "approve-task", "retry", "reassign", "cancel"}
 
 // marshalTypoSuggestion prefers a unique prefix, then the closest spelling.
 func marshalTypoSuggestion(word string) string {
@@ -230,6 +244,8 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 	}
 
 	switch sub {
+	case "architecture":
+		return w.marshalArchitecture(ctx, strings.Join(args[1:], " "), "")
 	case "chat":
 		if len(args) != 1 {
 			return "", errors.New("usage: /marshal chat")
@@ -243,7 +259,8 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 	case "help":
 		return marshalUsage, nil
 	case "status":
-		return w.marshalStatus(ctx)
+		status, err := w.marshalStatus(ctx)
+		return w.decorateMarshalStatus(ctx, status), err
 	case "model":
 		return w.marshalSetModel(ctx, args[1:])
 	case "approve":
@@ -293,7 +310,7 @@ func (h *CommandHandler) handleMarshal(ctx context.Context, args []string) (stri
 	}
 }
 
-const marshalDraftRelativePath = ".marshal/marshal/plan-draft.json"
+const marshalDraftRelativePath = statepath.DirName + "/marshal/plan-draft.json"
 
 func marshalChatProvider(provider string) string {
 	if provider == "agy" {
@@ -314,6 +331,7 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 	if err != nil {
 		return "", err
 	}
+	runAuthority := marshalRunAuthorityInstructions(settings)
 	instructions := "Each task may add \"instructions\" (purpose, approach, what to leave alone) and \"expected_output\"; workers choose their own approach within the task's files."
 	if settings.EffectiveControl() == marshal.ControlStrict {
 		instructions = "Control is strict: every task must add \"instructions\" (purpose, approach, steps, what to leave alone) and may add \"expected_output\"; workers are held to the instructions exactly."
@@ -322,21 +340,23 @@ func marshalRoleBriefing(workers []string, settings marshal.Settings, tier marsh
 	if tier == marshal.Ultra {
 		tierLine = "- Tier: ULTRA (independent cross-review and verification).\n"
 	}
-	return protocol + "\nThis run:\n" +
-		tierLine +
-		"- After an earlier-work read grant, MARSHAL reads only the granted project-scoped conversation and delivers it as labelled untrusted data in .marshal/inbox/marshal.md. Read that file with your filesystem read tool when the grant is allowed; it contains the granted source paths and content. Summarise the supplied continuation without asking the operator to locate it or reading raw provider history.\n" +
-		"- Governed egress alerts arrive in .marshal/inbox/marshal.md. Re-read it during chat. Relay requests to the operator; model text never grants network access. MARSHAL shows pending requests in its Permission request popup; only the operator's A grants the displayed endpoint for that worker run.\n" +
-		"- Each task carries mode native or governed. Prefer governed for codex and claude; agy and opencode support native only. Honour the operator’s requested mode. The person requests the mode in the goal and reviews it before approval.\n" +
-		"- Workers you may assign tasks to: " + strings.Join(workers, ", ") + ".\n" +
-		"- Current working mode: acceptance mode " + string(settings.AcceptanceMode) + ". Include a setting proposal with the working-mode question; MARSHAL will show a popup; press A to apply.\n" +
-		"- Current execution rights: " + string(settings.ExecutionRights) + ". Change only through a setting proposal and operator popup.\n" +
-		fmt.Sprintf("- Current limits: rework-limit %d; ultra-concurrency %d; task-tokens %d; plan-tokens %d; task-money %d; plan-money %d; task-wall-seconds %d; plan-wall-seconds %d.\n", settings.ReworkLimit, settings.UltraConcurrency, settings.Budget.Tokens.Task, settings.Budget.Tokens.Plan, settings.Budget.Money.Task, settings.Budget.Money.Plan, settings.Budget.WallTime.Task, settings.Budget.WallTime.Plan) +
-		"- Current control level: " + string(settings.EffectiveControl()) + ". Include a control setting proposal with the question; only the operator popup applies.\n" +
-		"- " + app.MarshalCheckContract + "\n" +
-		"- Write the plan pack to " + app.MarshalPackRelativePath + "/: REQUIREMENTS.md, 00_INDEX.md and tasks/<id>.md for every task id, each a non-empty Markdown file of at most 64 KiB. The runtime refuses a draft whose pack is missing a note or has a note for no task.\n" +
-		"- Write the task list to " + marshalDraftRelativePath + " as JSON of the form " +
-		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","mode":"governed","checks":[{"command":"executable command","criteria":["criterion this command proves"]}]}]}` +
-		" and nothing else. Confirm each write succeeded and each file exists on disk: write the pack first, then plan-draft.json, then read back and validate both. Only after successful read-back and validation, publish the completion marker " + marshalDraftRelativePath + ".ready containing ready. Do not touch the draft or pack after publishing the marker; the watcher may move them. Do not read a planned path before its write succeeds; repair failed writes before read-back. An edit preview is not a completed write. Every field shown is required; use an empty list for no dependencies. Map each check only to the criteria it proves; a criterion without passing evidence cannot be accepted. " + instructions + "\n", nil
+	return strings.ReplaceAll(protocol+"\nThis run:\n"+
+		tierLine+
+		"- After an earlier-work read grant, MARSHAL reads only the granted project-scoped conversation and delivers it as labelled untrusted data in .marshal/inbox/marshal.md. Read that file with your filesystem read tool when the grant is allowed; it contains the granted source paths and content. Summarise the supplied continuation without asking the operator to locate it or reading raw provider history.\n"+
+		runAuthority.egress+
+		runAuthority.workerModes+
+		"- Workers you may assign tasks to: "+strings.Join(workers, ", ")+".\n"+
+		"- A worker appearing here only means its CLI is installed. Governed work also needs a current verified harness profile and a matching canonical Process 04 route and assignment. If that evidence is missing, the runtime will reject the draft and explain what to verify. Do not claim a task can run until the runtime has accepted its canonical plan.\n"+
+		"- Give each task exactly one success criterion and executable checks that prove that criterion. Process 05 binds checks to that exact criterion.\n"+
+		runAuthority.settings+
+		fmt.Sprintf("- Current limits: rework-limit %d; ultra-concurrency %d; task-tokens %d; plan-tokens %d; task-money %d; plan-money %d; task-wall-seconds %d; plan-wall-seconds %d.\n", settings.ReworkLimit, settings.UltraConcurrency, settings.Budget.Tokens.Task, settings.Budget.Tokens.Plan, settings.Budget.Money.Task, settings.Budget.Money.Plan, settings.Budget.WallTime.Task, settings.Budget.WallTime.Plan)+
+		runAuthority.control+
+		runAuthority.goal+
+		"- "+app.MarshalCheckContract+"\n"+
+		"- Write the plan pack to "+app.MarshalPackRelativePath+"/: REQUIREMENTS.md, 00_INDEX.md and tasks/<id>.md for every task id, each a non-empty Markdown file of at most 64 KiB. The runtime refuses a draft whose pack is missing a note or has a note for no task. A governed worker's worktree has no copy of the pack: the runtime delivers its own tasks/<id>.md text inside a brief of at most 4 KiB and refuses a draft whose governed task note does not fit, so keep each such note under 3.5 KiB and name in it every path the worker must write.\n"+
+		"- Write the task list to "+marshalDraftRelativePath+" as JSON of the form "+
+		`{"tasks":[{"id":"short-unique-id","title":"...","criteria":["..."],"paths":["files to change"],"depends_on":["task ids"],"worker":"...","mode":"governed","checks":[{"command":"executable command","criteria":["criterion this command proves"]}]}]}`+
+		" and nothing else. Confirm each write succeeded and each file exists on disk: write the pack first, then plan-draft.json, then read back and validate both. Only after successful read-back and validation, publish the completion marker "+marshalDraftRelativePath+".ready containing ready. Do not touch the draft or pack after publishing the marker; the watcher may move them. Do not read a planned path before its write succeeds; repair failed writes before read-back. An edit preview is not a completed write. Every field shown is required; use an empty list for no dependencies. Map each check only to the criteria it proves; a criterion without passing evidence cannot be accepted. After the runtime accepts a canonical Process 04 plan, only the person may use /marshal approve to authorize its exact reviewed scope. "+instructions+"\n"+buildRoleAuthority, ".marshal/", statepath.DirName+"/"), nil
 }
 
 // refuseUnimportedMarshalDraft keeps approvals bound to the imported plan,
@@ -412,6 +432,13 @@ func consumeMarshalDraft(root string) ([]byte, bool, error) {
 }
 
 func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
+	w.tmuxMu.Lock()
+	chat := w.tmuxActiveWins["marshal-chat"]
+	unavailable := chat != nil && chat.state == "mcp-unavailable"
+	w.tmuxMu.Unlock()
+	if unavailable {
+		return "", errors.New("Marshal chat MCP is unavailable. " + chatMCPRepairInstructions)
+	}
 	saved := loadChatBinding(w.providerRoot())
 	m := w.marshalSession()
 	m.mu.Lock()
@@ -441,13 +468,36 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		run, err := s.Snapshot(ctx, runID)
 		switch {
 		case errors.Is(err, model.ErrNotFound):
-			// The saved chat may still be producing its first draft.
+			// A chat may retain its initial planning placeholder after an
+			// approved Process 04 plan started a distinct runtime run. Recover
+			// the admitted stored run before watching for a new first draft.
+			storedID, stored, lookupErr := w.latestAdmittedMarshalRun(ctx)
+			if lookupErr != nil && !errors.Is(lookupErr, model.ErrNotFound) {
+				return "", lookupErr
+			}
+			if lookupErr == nil && stored.State != marshal.Closed {
+				runID, recoveringRun = storedID, &stored
+			}
 		case err != nil:
 			return "", err
 		case run.State == marshal.Closed:
 			runID = ""
 		default:
 			recoveringRun = &run
+		}
+	}
+	if recoveringRun == nil && refuseUnimportedMarshalDraft(w.providerRoot()) == nil {
+		w.permissions.mu.Lock()
+		pendingApproval := w.permissions.planApprovalPending
+		w.permissions.mu.Unlock()
+		if !pendingApproval && w.store != nil {
+			latestID, latest, err := w.store.LatestMarshalRun(ctx, w.projectID)
+			if err != nil && !errors.Is(err, model.ErrNotFound) {
+				return "", err
+			}
+			if err == nil && latest.Value.State != marshal.Closed {
+				runID, recoveringRun = latestID, &latest.Value
+			}
 		}
 	}
 	if runID == "" {
@@ -473,6 +523,14 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 	briefing, err := marshalRoleBriefing(app.MarshalWorkers(provider), settings.Value, marshal.TierPolicy(service.Gate, settings.Value).Tier)
 	if err != nil {
 		return "", err
+	}
+	if !w.hasHealthyMarshalChatWindow(ctx, provider) {
+		if bin, findErr := project.FindBinary(provider); findErr == nil {
+			if err := w.preflightProviderAuth(ctx, marshalChatProvider(provider), bin, nil); err != nil {
+				return "", err
+			}
+			ctx = withAuthPreflightChecked(ctx, marshalChatProvider(provider))
+		}
 	}
 	m.mu.Lock()
 	m.runID = runID
@@ -513,6 +571,14 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		}
 		return result, nil
 	}
+	// A rejected draft must not end draft import for this chat: the watcher
+	// picks up the Marshal's corrected draft without another owner command.
+	imported := false
+	defer func() {
+		if !imported && w.isTmuxActive() {
+			w.watchMarshalDraft(m, runID, root, provider, note)
+		}
+	}()
 	// The pack is moved with the task list, before either is judged, so a
 	// rejected draft never blocks the next Marshal session.
 	packDir, packErr := service.TakePlanPack(runID)
@@ -532,32 +598,27 @@ func (w *Workspace) marshalChat(ctx context.Context) (string, error) {
 		return result, fmt.Errorf("Marshal draft rejected: %w", err)
 	}
 	draft.Pack = &pack
-	goal := draft.Plan.Goal.GoalID
-	if goal == "" {
-		goal = draft.Plan.ID
-	}
-	run, err := service.StartPlanningFromDraft(ctx, runID, goal, draft, marshal.Budget{})
+	run, err := w.persistNativePlanningDraft(ctx, provider, service, runID, draft, marshal.Budget{})
 	if err != nil {
 		return result, fmt.Errorf("Marshal draft rejected: %w", err)
 	}
+	imported = true
 	m.mu.Lock()
 	m.runID, m.service, m.provider, m.amended, m.pending = runID, service, provider, false, nil
 	m.approvals = nil
 	m.mu.Unlock()
-	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("plan drafted: %d tasks · read %s · /marshal approve to run it", len(run.Tasks), packDir)))
+	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, fmt.Sprintf("canonical Process 04 plan ready: %d tasks · review %s and the approval scope", len(run.Tasks), packDir)))
 	w.queueMarshalPlanApproval()
-	return result + "\nMarshal plan drafted. " + note + " Read the plan in " + packDir + ", then press A in the MARSHAL approval popup to run it.", nil
+	return result + "\nCanonical Process 04 plan drafted. " + note + " Review the plan in " + packDir + " and the exact provider, model, checks, and destination in the approval popup before authorizing execution.", nil
 }
 
 func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string, error) {
 	if len(args) != 1 {
-		return "", errors.New("usage: /marshal model <codex|claude|agy>")
+		return "", fmt.Errorf("usage: /marshal model <%s>", marshalProviderUsage)
 	}
 	provider := args[0]
-	switch provider {
-	case "codex", "claude", "agy":
-	default:
-		return "", fmt.Errorf("unknown Marshal model provider %q; use codex, claude or agy", provider)
+	if !slices.Contains(app.MarshalProviders(), provider) {
+		return "", fmt.Errorf("unknown Marshal model provider %q; use %s", provider, marshalProviderNames)
 	}
 	// Validate before persisting or touching the current chat.
 	if _, err := project.FindBinary(provider); err != nil {
@@ -650,48 +711,41 @@ func (w *Workspace) marshalSetModel(ctx context.Context, args []string) (string,
 	return "The Marshal now uses " + provider + ".", nil
 }
 
-// marshalRecommend recommends a Marshal provider from the static model
-// inventory. It never probes a provider: probing Claude opens a billed
-// session.
-func marshalRecommend(ctx context.Context, service *app.MarshalService, runID string) (string, string) {
-	// The notes never name the chosen provider: the person works with the
-	// Marshal, not with the model behind it. The provider is returned for the
-	// runtime's own use.
-	// Only an installed provider can be the Marshal. The recommendation comes
-	// from a static inventory, so it is narrowed to what this host has; no
-	// provider is preferred when the inventory cannot decide.
-	var installed []string
-	for _, p := range installedNeutralProviders(ctx) {
-		if p != "opencode" {
-			installed = append(installed, p)
+// marshalRecommend chooses the Marshal provider when the project has no
+// default provider: the first installed CLI in the documented order of
+// app.MarshalProviders() (codex, claude, agy, then opencode where the edition
+// offers it), or codex when none is found. The choice is deterministic for a
+// given host; it never depends on usage history and never probes a provider
+// (probing Claude opens a billed session). The notes never name the chosen
+// provider: the person works with the Marshal, not with the model behind it.
+func marshalRecommend(ctx context.Context) (string, string) {
+	installed := installedNeutralProviders(ctx)
+	for _, p := range app.MarshalProviders() {
+		if slices.Contains(installed, p) {
+			return p, "Marshal model selected automatically (first installed in the order " + strings.Join(app.MarshalProviders(), ", ") + ")."
 		}
 	}
-	isInstalled := func(p string) bool {
-		for _, i := range installed {
-			if i == p {
-				return true
-			}
-		}
-		return len(installed) == 0
+	return "codex", "Marshal model selected automatically (no supported CLI was found; the documented first choice is used)."
+}
+
+// chooseMarshalProvider returns the project's default provider when it names
+// a Marshal provider, otherwise the deterministic automatic choice, which is
+// then written as the project's default provider so every later launch and
+// every other surface agrees on it.
+func (w *Workspace) chooseMarshalProvider(ctx context.Context) (string, string) {
+	root := w.providerRoot()
+	if p := loadDefaultProvider(root); slices.Contains(app.MarshalProviders(), p) {
+		return p, "Marshal model: the default provider."
 	}
-	if rec, err := service.Recommend(ctx, runID, marshal.GoalAssessment{}, app.ModelInventory(nil, nil)); err == nil {
-		for _, c := range rec.Candidates {
-			provider := c.Provider
-			if provider == "gemini" {
-				provider = "agy"
-			}
-			switch provider {
-			case "codex", "claude", "agy":
-				if isInstalled(provider) {
-					return provider, "Marshal model selected automatically."
-				}
-			}
+	provider, note := marshalRecommend(ctx)
+	if root != "" {
+		if err := saveDefaultProvider(root, provider); err != nil {
+			note += " The choice was not saved: " + err.Error()
+		} else {
+			note += " Saved as this project's default provider; change it with /marshal model."
 		}
 	}
-	if len(installed) > 0 {
-		return installed[0], "Marshal model selected automatically."
-	}
-	return "codex", "Marshal model selected automatically."
+	return provider, note
 }
 
 func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.MarshalService, string, string, error) {
@@ -704,22 +758,16 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 	m.mu.Unlock()
 	note := ""
 	if provider == "" {
-		bare := w.runtime.Marshal()
-		if bare == nil {
+		if w.runtime.Marshal() == nil {
 			return nil, "", "", errors.New("no project is open")
 		}
-		switch p := loadDefaultProvider(w.providerRoot()); p {
-		case "codex", "claude", "agy":
-			provider, note = p, "Marshal model: the default provider."
-		default:
-			provider, note = marshalRecommend(ctx, bare, runID)
-		}
+		provider, note = w.chooseMarshalProvider(ctx)
 	}
 	var gate marshal.CapabilityGate
 	if w.ultra != nil {
 		gate = workspaceUltraGate{gate: w.ultra, execution: w.ultraExecution}
 	}
-	service, err := w.runtime.MarshalWired(app.MarshalWiring{Provider: provider, Gate: gate, Approver: m.approver})
+	service, err := w.runtime.MarshalWired(app.MarshalWiring{Provider: provider, Gate: gate, Approver: m.approver, SessionID: w.sessionID})
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -727,6 +775,7 @@ func (w *Workspace) marshalService(ctx context.Context, runID string) (*app.Mars
 	if w.isTmuxActive() {
 		w.wrapServiceDriversForTmux(service)
 	}
+	service.RecordActivity = w.RecordActivity
 	return service, provider, note, nil
 }
 
@@ -748,14 +797,31 @@ func (g workspaceUltraGate) ExecutionEnabled() bool {
 
 // marshalReserve owns the session until the background operation finishes.
 func (m *marshalSession) reserve() (context.Context, context.CancelFunc, error) {
+	return m.reserveContext(context.Background())
+}
+
+// Commands may end before a reserved operation or paused native turn does.
+// Retain values, including current trusted owner identity, while keeping the
+// operation's cancellation owned by Marshal stop and workspace shutdown.
+func (m *marshalSession) reserveContext(parent context.Context) (context.Context, context.CancelFunc, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.busy {
 		return nil, nil, errors.New("a Marshal operation is already running")
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
 	m.busy, m.cancel = true, cancel
 	return ctx, cancel, nil
+}
+
+func (w *Workspace) reserveMarshalOperation(ctx context.Context) (context.Context, context.CancelFunc, error) {
+	// Bind only through the workspace's existing trusted owner composition.
+	// Caller context values and labels never create local operator authority.
+	ownerCtx, err := w.marshalOperationOwnerContext(context.WithoutCancel(ctx))
+	if err != nil {
+		return nil, nil, err
+	}
+	return w.marshalSession().reserveContext(ownerCtx)
 }
 
 func (m *marshalSession) finish(cancel context.CancelFunc) {
@@ -765,6 +831,12 @@ func (m *marshalSession) finish(cancel context.CancelFunc) {
 func (m *marshalSession) finishWithNativeTurn(cancel context.CancelFunc, nativeTurnWaiting bool) {
 	m.mu.Lock()
 	m.busy, m.cancel = false, nil
+	if nativeTurnWaiting {
+		// A paused native turn still owns this context after the orchestration
+		// operation releases its reservation. Preserve its owner stop handle
+		// independently of any later resume operation's cancellation context.
+		m.nativeCancels = append(m.nativeCancels, cancel)
+	}
 	m.mu.Unlock()
 	if !nativeTurnWaiting {
 		cancel()
@@ -780,7 +852,10 @@ func (w *Workspace) marshalPublish(m *marshalSession, runID string, p *MarshalPa
 		return
 	}
 	if service != nil {
-		if events, err := service.Store.MarshalDecisions(context.Background(), runID); err == nil {
+		// The feed reads only decisions it has not seen; the rest come
+		// from its cache, so a publish per run step stays one indexed query.
+		if events, _, _, err := w.boardFeed.read(context.Background(), service.Store, runID); err == nil {
+			p.Board = w.projectBoard(p, events)
 			p.Usage.Tokens.Known = true
 			p.Usage.Money.Known = true
 			for _, event := range events {
@@ -808,6 +883,8 @@ func (w *Workspace) marshalPublish(m *marshalSession, runID string, p *MarshalPa
 				p.Usage = report.Usage
 				p.Report = &report
 			}
+		} else {
+			p.Board.Stale = true
 		}
 	}
 	m.mu.Lock()
@@ -839,7 +916,7 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 		return "", errors.New("Marshal planning requires an attached project runtime; reopen MARSHAL in an initialized project")
 	}
 	m := w.marshalSession()
-	runCtx, cancel, err := m.reserve()
+	runCtx, cancel, err := w.reserveMarshalOperation(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -865,6 +942,12 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 		m.service, m.provider = service, selected
 		m.mu.Unlock()
 		w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: selected, State: marshal.Drafting, Note: "drafting a plan… " + note})
+		if bin, findErr := project.FindBinary(selected); findErr == nil {
+			if err := w.preflightProviderAuth(runCtx, marshalChatProvider(selected), bin, nil); err != nil {
+				w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: selected, State: marshal.Drafting, Note: "planning failed: " + err.Error()})
+				return
+			}
+		}
 		settings, settingsErr := service.Store.GetMarshalSettings(runCtx, service.ProjectID)
 		if settingsErr != nil {
 			w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: selected, State: marshal.Drafting, Note: "planning failed: " + settingsErr.Error()})
@@ -878,7 +961,7 @@ func (w *Workspace) marshalStart(ctx context.Context, goal string) (string, erro
 			w.marshalPublish(m, runID, &MarshalPanel{RunID: runID, Provider: selected, State: marshal.Drafting, Note: "planning failed: " + err.Error()})
 			return
 		}
-		w.marshalPublish(m, runID, newMarshalPanel(runID, selected, run, fmt.Sprintf("plan drafted: %d tasks · /marshal approve to run it", len(run.Tasks))))
+		w.marshalPublish(m, runID, newMarshalPanel(runID, selected, run, fmt.Sprintf("plan drafted: %d tasks · governed work needs a canonical Process 04 review before approval", len(run.Tasks))))
 	})
 	return "Marshal is preparing and drafting a plan for: " + goal, nil
 }
@@ -899,13 +982,12 @@ func (w *Workspace) marshalActive(ctx context.Context) (*marshalSession, *app.Ma
 	if w.runtime == nil || w.runtime.Store() == nil {
 		return m, nil, "", "", errors.New("No Marshal run yet; start one with /marshal chat")
 	}
-	projectID := w.projectID
-	if projectID == "" && w.runtime.Marshal() != nil {
-		projectID = w.runtime.Marshal().ProjectID
-	}
-	recoveredID, _, err := w.runtime.Store().LatestMarshalRun(ctx, projectID)
+	recoveredID, _, err := w.latestAdmittedMarshalRun(ctx)
 	if err != nil {
-		return m, nil, "", "", errors.New("No Marshal run yet; start one with /marshal chat")
+		if errors.Is(err, model.ErrNotFound) {
+			return m, nil, "", "", errors.New("No Marshal run yet; start one with /marshal chat")
+		}
+		return m, nil, "", "", err
 	}
 	service, provider, _, err = w.marshalService(ctx, recoveredID)
 	if err != nil {
@@ -922,9 +1004,24 @@ func (w *Workspace) marshalActive(ctx context.Context) (*marshalSession, *app.Ma
 	return m, service, recoveredID, provider, nil
 }
 
+func (w *Workspace) latestAdmittedMarshalRun(ctx context.Context) (string, marshal.Run, error) {
+	// The attached identity admits the project; Marshal records use the
+	// runtime's actual data project row. A canonical binding ID is not that
+	// row's key, and must not turn a saved run into an empty recovery result.
+	if w.runtime == nil || w.projectIdentity == "" || string(w.projectIdentity) != w.runtime.ProjectIdentity() {
+		return "", marshal.Run{}, errors.New("Marshal recovery requires the admitted project identity")
+	}
+	bare := w.runtime.Marshal()
+	if bare == nil || bare.ProjectID == "" {
+		return "", marshal.Run{}, errors.New("no admitted Marshal data project")
+	}
+	id, record, err := w.runtime.Store().LatestMarshalRun(ctx, bare.ProjectID)
+	return id, record.Value, err
+}
+
 func (w *Workspace) marshalUsePlan(ctx context.Context) (string, error) {
 	m := w.marshalSession()
-	runCtx, cancel, err := m.reserve()
+	runCtx, cancel, err := w.reserveMarshalOperation(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -948,6 +1045,9 @@ func (w *Workspace) marshalUsePlan(ctx context.Context) (string, error) {
 	m.approvals = nil
 	m.mu.Unlock()
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "approved Process 04 plan · running through Process 05"))
+	if err := w.bindCurrentMarshalChatRun(service.Repository, runID); err != nil {
+		w.RecordActivity("Marshal chat recovery binding could not be saved: " + err.Error())
+	}
 	started = true
 	w.startMarshalBackground(runCtx, func(runCtx context.Context) {
 		keepNativeTurn := false
@@ -955,6 +1055,21 @@ func (w *Workspace) marshalUsePlan(ctx context.Context) (string, error) {
 		keepNativeTurn = w.marshalExecute(runCtx, m, service, runID, provider)
 	})
 	return "Marshal is executing the approved Process 04 plan through Process 05.", nil
+}
+
+func (w *Workspace) bindCurrentMarshalChatRun(root, runID string) error {
+	w.tmuxMu.Lock()
+	chat := w.tmuxActiveWins["marshal-chat"]
+	if chat == nil || chat.role != "marshal-chat" || chat.state == "done" || chat.state == "failed" {
+		w.tmuxMu.Unlock()
+		return nil
+	}
+	chat.runID = runID
+	snapshot := copyAgentLocked(chat)
+	w.tmuxMu.Unlock()
+	// This changes recovery metadata only: provider/session, native launch
+	// provenance, MCP lease and broker grants remain those of the live chat.
+	return w.saveChatBindingForAgent(root, snapshot)
 }
 
 func (w *Workspace) marshalApproveProcess05Task(ctx context.Context, args []string) (string, error) {
@@ -979,7 +1094,7 @@ func (w *Workspace) marshalApproveProcess05Task(ctx context.Context, args []stri
 	}
 	bound := false
 	for _, p05 := range runs {
-		bound = bound || marshalProcess05ApprovalBound(run, p05, string(service.CanonicalPlanProjectID()), args[0])
+		bound = bound || marshalProcess05ApprovalBound(run, p05, string(service.CanonicalPlanProjectID()), args[0]) || privateProcess05ApprovalBound(ctx, execService, run, p05, string(service.CanonicalPlanProjectID()), args[0])
 	}
 	if !bound {
 		return "", errors.New("approval does not belong to the active Marshal plan")
@@ -1019,7 +1134,25 @@ func (w *Workspace) marshalApproveReviewed(ctx context.Context, reviewed *app.Pl
 	if err := refuseUnimportedMarshalDraft(service.Repository); err != nil {
 		return "", err
 	}
-	runCtx, cancel, err := m.reserve()
+	if reviewed == nil && editionExtreme {
+		run, readErr := service.Snapshot(ctx, runID)
+		if readErr != nil {
+			return "", readErr
+		}
+		if run.State == marshal.Drafting && marshalRunHasGovernedTask(run) {
+			m.mu.Lock()
+			approving := m.approving
+			m.mu.Unlock()
+			if approving {
+				return "Plan approval is already in progress; the panel will show the result.", nil
+			}
+			if err := w.queueMarshalRunProposal(marshalProposal{action: "approve"}); err != nil {
+				return "", err
+			}
+			return "Review the exact Process 04 Goal, project contract, routes, producers, checks, plan pack, and destination in the approval popup.", nil
+		}
+	}
+	runCtx, cancel, err := w.reserveMarshalOperation(ctx)
 	if err != nil {
 		if run, readErr := service.Snapshot(ctx, runID); readErr == nil && run.State != marshal.Drafting && run.ApprovalScopeDigest != "" {
 			return "Plan already approved; the current operation will show its result.", nil
@@ -1135,6 +1268,16 @@ func (w *Workspace) marshalExecute(ctx context.Context, m *marshalSession, servi
 		}
 	})
 	w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, marshalOutcomeNote(run, err)))
+	if err != nil && ctx.Err() == nil {
+		// The panel line alone is invisible to the Marshal; its inbox carries
+		// the same stop reason so it can act instead of asking the owner.
+		_ = w.deliverEgressAlert(app.EgressAlert{RunID: runID, ParentRunID: runID, Kind: "run stopped", State: "stopped", Message: "Marshal run stopped: " + err.Error()})
+	}
+	w.queuePrivateProcess05Continuation(run)
+	// A run that stops for a new plan (a returned governed task, an amended
+	// Process 04 plan) needs the Marshal's next draft imported; the watcher
+	// of the launch that imported the last draft has already ended.
+	w.ensureMarshalDraftWatch(w.workDir, provider, runID)
 	return w.marshalNativeApprovalWaiting(service, run)
 }
 
@@ -1227,8 +1370,14 @@ func marshalTaskBrief(t marshal.Task, bc app.BriefContext) string {
 	if bc.Index != "" {
 		b.WriteString("How the tasks of the approved plan fit together:\n" + bc.Index + "\n")
 	}
+	if bc.MemoryContext != "" {
+		b.WriteString(hideMarshalProtocol(bc.MemoryContext))
+	}
 	var memoryRecords []model.MemoryRecordV2
 	for _, rec := range bc.Memory {
+		if bc.MemoryContext != "" {
+			break // the authorized bounded block already carries the memory contribution
+		}
 		// Approval changes an import's scope to project; provenance still
 		// makes it Marshal-only history rather than worker task context.
 		if rec.Scope == string(model.ScopeSession) || rec.Source.Kind == "shared_channel" ||
@@ -1316,7 +1465,7 @@ func (w *Workspace) marshalClose(ctx context.Context) (string, error) {
 	if pending {
 		return "", errors.New("decide the proposed amendment before closing")
 	}
-	runCtx, cancel, err := m.reserve()
+	runCtx, cancel, err := w.reserveMarshalOperation(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -1338,11 +1487,18 @@ func (w *Workspace) marshalStop() string {
 	m := w.marshalSession()
 	m.mu.Lock()
 	cancel := m.cancel
+	waiting := m.nativeCancels
+	m.nativeCancels = nil
 	m.mu.Unlock()
-	if cancel == nil {
+	if cancel == nil && len(waiting) == 0 {
 		return "No Marshal operation is running."
 	}
-	cancel()
+	if cancel != nil {
+		cancel()
+	}
+	for _, stop := range waiting {
+		stop()
+	}
 	return "Stopping the Marshal operation. Its state is kept."
 }
 
@@ -1357,7 +1513,7 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 	if pending {
 		return "", errors.New("decide the proposed amendment before resuming")
 	}
-	runCtx, cancel, err := m.reserve()
+	runCtx, cancel, err := w.reserveMarshalOperation(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -1381,6 +1537,7 @@ func (w *Workspace) marshalResume(ctx context.Context) (string, error) {
 				}
 			}
 			w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, note))
+			w.queuePrivateProcess05Continuation(run)
 			return
 		}
 		w.marshalPublish(m, runID, newMarshalPanel(runID, provider, run, "resuming"))
@@ -1397,7 +1554,7 @@ func (w *Workspace) marshalAmend(ctx context.Context, reason string) (string, er
 	if err != nil {
 		return "", err
 	}
-	runCtx, cancel, err := m.reserve()
+	runCtx, cancel, err := w.reserveMarshalOperation(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -1580,7 +1737,7 @@ func (w *Workspace) marshalReassign(ctx context.Context, args []string) (string,
 		return "", errors.New("a Marshal operation is already running; /marshal stop first")
 	}
 	task, worker := args[0], args[1]
-	if err := service.Reassign(ctx, runID, task, worker); err != nil {
+	if err := service.ReassignByOperator(ctx, runID, task, worker, "operator /marshal reassign "+task+" "+worker); err != nil {
 		return "", err
 	}
 	if run, loadErr := service.Snapshot(ctx, runID); loadErr == nil {
@@ -1631,9 +1788,13 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 	}
 	s := record.Value
 	if len(args) == 0 {
-		return fmt.Sprintf("execution-rights %s\nacceptance-mode %s\nrework-limit %d\nultra-concurrency %d\ncontrol %s\ntask-tokens %d\nplan-tokens %d\ntask-money %d\nplan-money %d\ntask-wall-seconds %d\nplan-wall-seconds %d",
+		base := fmt.Sprintf("execution-rights %s\nacceptance-mode %s\nrework-limit %d\nultra-concurrency %d\ncontrol %s\ntask-tokens %d\nplan-tokens %d\ntask-money %d\nplan-money %d\ntask-wall-seconds %d\nplan-wall-seconds %d",
 			s.ExecutionRights, s.AcceptanceMode, s.ReworkLimit, s.UltraConcurrency, s.EffectiveControl(),
-			s.Budget.Tokens.Task, s.Budget.Tokens.Plan, s.Budget.Money.Task, s.Budget.Money.Plan, s.Budget.WallTime.Task, s.Budget.WallTime.Plan), nil
+			s.Budget.Tokens.Task, s.Budget.Tokens.Plan, s.Budget.Money.Task, s.Budget.Money.Plan, s.Budget.WallTime.Task, s.Budget.WallTime.Plan)
+		if extra := formatExtremeSettings(s); extra != "" {
+			base += "\n" + extra
+		}
+		return base + formatFailoverSetting(s), nil
 	}
 	switch args[0] {
 	case "execution-rights":
@@ -1672,6 +1833,27 @@ func (w *Workspace) marshalSettings(ctx context.Context, args []string) (string,
 			s.Budget.WallTime.Plan = n
 		}
 	default:
+		if handled, msg, err := applyExtremeSetting(&s, args); handled {
+			if err != nil {
+				return "", err
+			}
+			if _, err := service.Store.SetMarshalSettings(ctx, service.ProjectID, s, record.Revision); err != nil {
+				return "", err
+			}
+			if msg != "" {
+				return msg, nil
+			}
+			return fmt.Sprintf("%s set to %s. It applies to the next Marshal run.", args[0], args[1]), nil
+		}
+		if msg, handled, err := handleFailoverSetting(args, &s); handled {
+			if err != nil {
+				return "", err
+			}
+			if _, err := service.Store.SetMarshalSettings(ctx, service.ProjectID, s, record.Revision); err != nil {
+				return "", err
+			}
+			return msg, nil
+		}
 		return "", fmt.Errorf("unknown setting %q", args[0])
 	}
 	if _, err := service.Store.SetMarshalSettings(ctx, service.ProjectID, s, record.Revision); err != nil {
@@ -1733,7 +1915,7 @@ func (w *Workspace) marshalImport(ctx context.Context, args []string) (string, e
 		return "", errors.New("import requires an attached project runtime")
 	}
 	m := w.marshalSession()
-	runCtx, cancel, err := m.reserve()
+	runCtx, cancel, err := w.reserveMarshalOperation(ctx)
 	if err != nil {
 		return "", err
 	}

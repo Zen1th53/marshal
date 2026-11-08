@@ -28,7 +28,7 @@ func TestPTYApplyReportsChangedFilesAndCanBeUndone(t *testing.T) {
 	t.Chdir(project)
 
 	terminal := startFrozenTUIInProject(t, 40, 200, bin, project, "tui", "SESSION-pty-apply")
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/apply TASK-CODEX-1")
 	terminal.mustSee("is a MARSHAL task ID, not a Codex task ID")
 	terminal.sendLine("/apply cloud-123")

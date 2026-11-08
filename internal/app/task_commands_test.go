@@ -213,6 +213,14 @@ func TestTaskRunningPauseSettlementAndRetryEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if privateLegacyRunFixture() {
+				result, runErr := r.Run(ctx, RunRequest{TaskID: task.ID, AgentID: agent.ID, Adapter: "codex", ExpectedRevision: task.Revision})
+				assertLegacyRunFixtureRefusedWithExistingLease(t, r, task, result, runErr)
+				if fake.probes != 0 || fake.runs != 0 {
+					t.Fatal("refused legacy Run called adapter")
+				}
+				return
+			}
 			done := make(chan error, 1)
 			go func() {
 				_, err := r.Run(context.Background(), RunRequest{TaskID: task.ID, AgentID: agent.ID, Adapter: "codex", ExpectedRevision: task.Revision})
@@ -490,15 +498,15 @@ func TestTaskMutationAuditRollbackAndRestartReplay(t *testing.T) {
 }
 
 func TestTaskProcess05PauseAndPlanBinding(t *testing.T) {
-	r := runtimeForPlan(t)
+	r, request, registerWorker := pausePlanFixture(t)
 	ctx := context.Background()
 	goal := planGoal()
 	goal.ProjectID = r.ProjectIdentity()
+	goal.SessionID = request.SessionID
 	goal.Revision = 2
 	if err := r.Store().SaveGoalContract(ctx, goal, 1); err != nil {
 		t.Fatal(err)
 	}
-	request := planCreateRequest()
 	request.ProjectID = projectid.ID(r.ProjectIdentity())
 	if _, err := r.Plans().Create(ctx, request); err != nil {
 		t.Fatal(err)
@@ -509,13 +517,7 @@ func TestTaskProcess05PauseAndPlanBinding(t *testing.T) {
 	}
 	service := r.Execution()
 	started, cancelled, settle := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	service.RegisterHarness(execution.NewMockHarness("test-harness", func(ctx context.Context, task execution.TaskExecution, _ execution.ConstraintPackage, _ string) (execution.TaskResult, error) {
-		close(started)
-		<-ctx.Done()
-		close(cancelled)
-		<-settle
-		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: "settled pause"}, ctx.Err()
-	}))
+	registerWorker(started, cancelled, settle)
 	run, err := service.StartRun(ctx, goal.SessionID, request.ProjectID)
 	if err != nil {
 		t.Fatal(err)

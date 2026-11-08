@@ -3,12 +3,15 @@ package codex
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
+	"github.com/Zen1th53/marshal/internal/capability"
 	"github.com/Zen1th53/marshal/internal/model"
 )
 
@@ -455,5 +458,128 @@ func TestProjectSkillInstallBindsDigestAndRefusesOverwrite(t *testing.T) {
 		if strings.HasPrefix(entry.Name(), ".marshal-skill-") {
 			t.Fatalf("private install snapshot leaked: %s", entry.Name())
 		}
+	}
+}
+
+type catalogContextRunner func(context.Context, adapter.Command) (adapter.ProcessResult, error)
+
+func (r catalogContextRunner) Run(ctx context.Context, cmd adapter.Command) (adapter.ProcessResult, error) {
+	return r(ctx, cmd)
+}
+
+func TestRequiredCatalogBudget(t *testing.T) {
+	runner := catalogContextRunner(func(ctx context.Context, cmd adapter.Command) (adapter.ProcessResult, error) {
+		deadline, ok := ctx.Deadline()
+		remaining := time.Until(deadline)
+		if !ok || remaining <= 19*time.Second || remaining > 20*time.Second {
+			t.Fatalf("required budget: %v", remaining)
+		}
+		if cmd.Path != "/bin/codex" || strings.Join(cmd.Args, " ") != "debug models" {
+			t.Fatalf("unexpected command: %+v", cmd)
+		}
+		return adapter.ProcessResult{Stdout: []byte(`{"models":[]}`)}, nil
+	})
+	if _, _, err := DiscoverModels(context.Background(), "/bin/codex", runner); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCatalogColdStartBudgets(t *testing.T) {
+	t.Setenv("CODEX_CONFIG", "")
+	t.Setenv("CODEX_HOME", t.TempDir())
+	// Scale the old 5s and new 20s budgets to 25ms and 100ms. Startup
+	// takes 50ms, so only the longer budget can admit the fixture catalog.
+	runner := catalogContextRunner(func(ctx context.Context, _ adapter.Command) (adapter.ProcessResult, error) {
+		timer := time.NewTimer(50 * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return adapter.ProcessResult{TimedOut: true}, nil
+		case <-timer.C:
+			return adapter.ProcessResult{Stdout: []byte(`{"models":[{"slug":"catalog-model","is_default":true}]}`)}, nil
+		}
+	})
+	models, def, err := discoverModels(context.Background(), "/bin/codex", runner, 100*time.Millisecond)
+	if err != nil || len(models) != 1 || def != "catalog-model" || !models[0].IsDefault {
+		t.Fatalf("catalog=%+v default=%q err=%v", models, def, err)
+	}
+	models, def, err = discoverModels(context.Background(), "/bin/codex", runner, 25*time.Millisecond)
+	if !errors.Is(err, context.DeadlineExceeded) || len(models) != 0 || def != "" {
+		t.Fatalf("short catalog=%+v default=%q err=%v", models, def, err)
+	}
+}
+
+func TestCatalogParentCausesAndRunnerErrorAreRetained(t *testing.T) {
+	for _, cancelled := range []bool{false, true} {
+		t.Run(fmt.Sprint(cancelled), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+			defer cancel()
+			want := context.DeadlineExceeded
+			if cancelled {
+				cancel()
+				want = context.Canceled
+			}
+			runner := catalogContextRunner(func(child context.Context, _ adapter.Command) (adapter.ProcessResult, error) {
+				if childDeadline, _ := child.Deadline(); childDeadline.After(time.Now().Add(30 * time.Millisecond)) {
+					t.Fatal("parent deadline extended")
+				}
+				<-child.Done()
+				return adapter.ProcessResult{}, fmt.Errorf("provider-secret: %w", capability.ErrDenied)
+			})
+			models, def, err := DiscoverModels(ctx, "/bin/codex", runner)
+			if !errors.Is(err, want) || !errors.Is(err, capability.ErrDenied) || !errors.Is(err, model.ErrUnavailable) || len(models) != 0 || def != "" {
+				t.Fatalf("lost causes or fallback: %v", err)
+			}
+			if strings.Contains(err.Error(), "provider-secret") {
+				t.Fatal("runner message leaked")
+			}
+		})
+	}
+}
+
+func TestCatalogFailedProcessHasSafeStatus(t *testing.T) {
+	for _, result := range []adapter.ProcessResult{
+		{ExitCode: 17}, {TimedOut: true}, {Cancelled: true}, {OutputTruncated: true},
+	} {
+		result.Stdout = []byte(`{"models":[{"slug":"must-not-be-admitted"}]}`)
+		result.Stderr = []byte("provider-secret")
+		calls := 0
+		runner := catalogContextRunner(func(context.Context, adapter.Command) (adapter.ProcessResult, error) { calls++; return result, nil })
+		models, def, err := DiscoverModels(context.Background(), "/bin/codex", runner)
+		if !errors.Is(err, model.ErrUnavailable) || len(models) != 0 || def != "" || calls != 1 {
+			t.Fatalf("failed result admitted: %v", err)
+		}
+		for _, want := range []string{fmt.Sprintf("exit_code=%d", result.ExitCode), fmt.Sprintf("timed_out=%t", result.TimedOut), fmt.Sprintf("cancelled=%t", result.Cancelled)} {
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("missing %q: %v", want, err)
+			}
+		}
+		if strings.Contains(err.Error(), "<nil>") || strings.Contains(err.Error(), "provider-secret") || strings.Contains(err.Error(), "must-not-be-admitted") {
+			t.Fatalf("unsafe error: %v", err)
+		}
+	}
+}
+
+type catalogDenyBroker struct{}
+
+func (catalogDenyBroker) Grant(context.Context, capability.GrantRequest) (capability.Grant, error) {
+	return capability.Grant{}, capability.ErrDenied
+}
+func (catalogDenyBroker) Revoke(context.Context, capability.RevokeRequest) error {
+	return capability.ErrDenied
+}
+func (catalogDenyBroker) Authorize(context.Context, capability.Query) (capability.Decision, error) {
+	return capability.Decision{Outcome: capability.OutcomeDeny, Reason: capability.CodeDenied}, nil
+}
+
+func TestCatalogPreservesBrokerDenial(t *testing.T) {
+	base := catalogContextRunner(func(context.Context, adapter.Command) (adapter.ProcessResult, error) {
+		t.Fatal("denied process executed")
+		return adapter.ProcessResult{}, nil
+	})
+	runner := adapter.NewCapabilityRunner(base, catalogDenyBroker{}, "catalog-test", "task-test")
+	models, def, err := DiscoverModels(context.Background(), "/bin/codex", runner)
+	if !errors.Is(err, capability.ErrDenied) || !errors.Is(err, model.ErrUnavailable) || len(models) != 0 || def != "" {
+		t.Fatalf("denial lost or fallback returned: %v", err)
 	}
 }

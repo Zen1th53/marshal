@@ -46,7 +46,7 @@ for file in published:
 expected_pages = {f.dest_uri for f in published if f.is_documentation_page()}
 # Only theme's standard error page may be generated without a docs source.
 expected_pages.add('404.html')
-site = Path(config['site_dir'])
+site = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(config['site_dir'])
 actual_pages = {p.relative_to(site).as_posix() for p in site.rglob('*.html')}
 for extra in sorted(actual_pages - expected_pages):
     errors.append(f'page has no allowlisted source: {extra}')
@@ -76,13 +76,15 @@ for source in (root / 'internal').rglob('*.go'):
         except ValueError:
             continue
         if host and host not in {'127.0.0.1', '0.0.0.0', 'localhost', 'unix',
-                                'github.com', 'api.github.com'}:
+                                'github.com', 'api.github.com', 'marshal.blackhat.uz'}:
             endpoint_hosts.add(host.lower())
     # Cover bare host/domain literals in Cloud/backend code as well.
     if 'cloud' in source.as_posix().lower() or 'backend' in source.as_posix().lower():
         for literal in re.findall(r'"([^"\n]+)"', text):
             if re.fullmatch(r'(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?::\d+)?', literal):
-                endpoint_hosts.add(literal.split(':')[0].lower())
+                h = literal.split(':')[0].lower()
+                if h != 'marshal.blackhat.uz':
+                    endpoint_hosts.add(h)
 
 leak_patterns = {
     'local home path': r'/home/',

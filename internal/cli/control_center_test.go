@@ -3,6 +3,9 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
+	"github.com/Zen1th53/marshal/internal/tmux"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,60 +53,66 @@ func gitDirectory(t *testing.T) string {
 	return dir
 }
 
-// The baseline defect: running marshal outside a repository produced a usage
-// screen that neither reported a failure nor offered a way forward.
-func TestNoArgsOutsideRepositoryOpensControlCenter(t *testing.T) {
-	stdout, stderr, code := runCLI(t, plainDirectory(t))
-
-	if code != 0 {
-		t.Fatalf("exit code %d in a plain directory: %s", code, stderr)
-	}
-	if strings.HasPrefix(stdout, "Usage:") {
-		t.Fatal("a usage screen was shown instead of the control center")
-	}
-	for _, expected := range []string{"doctor", "setup", "help"} {
-		if !strings.Contains(stdout, expected) {
-			t.Fatalf("the control center omits %q:\n%s", expected, stdout)
+// Startup failures must reach the terminal before tmux is launched.
+func TestTUIRejectsUninitializedProjectWithoutWrites(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		for _, args := range [][]string{nil, {"tui"}} {
+			t.Run(fmt.Sprintf("partial=%t/args=%v", partial, args), func(t *testing.T) {
+				dir := gitDirectory(t)
+				if partial {
+					for _, name := range []string{"claude_session", "codex_appserver"} {
+						if err := os.MkdirAll(statepath.Path(dir, name), 0700); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
+				t.Setenv("TMUX", "")
+				t.Setenv("MARSHAL_TEST_FORCE_TMUX_LAUNCH", "1")
+				// Any tmux operation would fail and leave a marker.
+				marker := filepath.Join(t.TempDir(), "called")
+				fake := filepath.Join(t.TempDir(), "tmux")
+				if err := os.WriteFile(fake, []byte(fmt.Sprintf("#!/bin/sh\ntouch %q\nexit 1\n", marker)), 0700); err != nil {
+					t.Fatal(err)
+				}
+				tmux.SetBinaryPath(fake)
+				defer tmux.ResetBinaryPath()
+				stdout, stderr, code := runCLI(t, dir, args...)
+				if code == 0 || stdout != "" {
+					t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+				}
+				for _, want := range []string{dir, "missing PACK-VERSION.yaml", "CAPABILITIES.yaml", "state.db", "run `marshal init` here", "cd into your project", "marshal doctor"} {
+					if !strings.Contains(stderr, want) {
+						t.Fatalf("missing %q in %q", want, stderr)
+					}
+				}
+				for _, path := range []string{marker, statepath.Path(dir, "state.db"), statepath.Path(dir, "runtime-owner.lock"), statepath.Path(dir, "logs")} {
+					if _, err := os.Stat(path); !os.IsNotExist(err) {
+						t.Fatalf("startup wrote %s: %v", path, err)
+					}
+				}
+			})
 		}
 	}
-	// The user must be told what is wrong and what to do.
-	if !strings.Contains(stdout, "not part of a Git repository") {
-		t.Fatalf("the situation was not explained:\n%s", stdout)
-	}
-	assertNoInternalLeak(t, stdout+stderr)
 }
 
-// The baseline defect: marshal tui printed raw Git subprocess stderr.
-func TestTuiOutsideRepositoryExplainsInsteadOfErroring(t *testing.T) {
-	stdout, stderr, code := runCLI(t, plainDirectory(t), "tui")
-
-	if code != 0 {
-		t.Fatalf("exit code %d: %s", code, stderr)
+func TestTUIOutsideRepositoryReportsFailure(t *testing.T) {
+	for _, args := range [][]string{nil, {"tui"}} {
+		dir := plainDirectory(t)
+		t.Setenv("HOME", t.TempDir())
+		stdout, stderr, code := runCLI(t, dir, args...)
+		if code == 0 || stdout != "" {
+			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+		}
+		for _, want := range []string{dir, "Git repository", "cd into your project", "marshal doctor"} {
+			if !strings.Contains(stderr, want) {
+				t.Fatalf("missing %q in %q", want, stderr)
+			}
+		}
+		assertNoInternalLeak(t, stderr)
+		if _, err := os.Stat(statepath.Path(dir)); !os.IsNotExist(err) {
+			t.Fatalf("home startup created state: %v", err)
+		}
 	}
-	if strings.Contains(stderr, "rev-parse") || strings.Contains(stdout, "rev-parse") {
-		t.Fatalf("a Git command leaked to the user:\nstdout=%s\nstderr=%s", stdout, stderr)
-	}
-	if !strings.Contains(stdout, "doctor") {
-		t.Fatalf("Doctor was not offered:\n%s", stdout)
-	}
-	assertNoInternalLeak(t, stdout+stderr)
-}
-
-// The baseline defect: a real repository with no MARSHAL project produced a
-// SQLite driver string.
-func TestUninitializedProjectIsExplainedNotErrored(t *testing.T) {
-	stdout, stderr, code := runCLI(t, gitDirectory(t), "tui")
-
-	if code != 0 {
-		t.Fatalf("exit code %d: %s", code, stderr)
-	}
-	if !strings.Contains(stdout, "not been set up") {
-		t.Fatalf("the first-run state was not explained:\n%s", stdout)
-	}
-	if !strings.Contains(stdout, "setup") {
-		t.Fatalf("Setup was not offered on a first run:\n%s", stdout)
-	}
-	assertNoInternalLeak(t, stdout+stderr)
 }
 
 // Setup assesses and never mutates: running it in a plain directory must not
@@ -124,7 +133,7 @@ func TestSetupNeverMutatesTheDirectory(t *testing.T) {
 	if len(before) != len(after) {
 		t.Fatalf("setup changed the directory: before=%v after=%v", before, after)
 	}
-	for _, forbidden := range []string{".git", ".marshal", "CAPABILITIES.yaml"} {
+	for _, forbidden := range []string{".git", statepath.DirName, "CAPABILITIES.yaml"} {
 		if _, err := os.Stat(filepath.Join(dir, forbidden)); err == nil {
 			t.Fatalf("setup created %s without being asked", forbidden)
 		}
@@ -134,10 +143,10 @@ func TestSetupNeverMutatesTheDirectory(t *testing.T) {
 // Entering the control center must likewise create nothing.
 func TestControlCenterEntryNeverMutates(t *testing.T) {
 	dir := plainDirectory(t)
-	if _, _, code := runCLI(t, dir); code != 0 {
+	if _, _, code := runCLI(t, dir); code == 0 {
 		t.Fatalf("control center exited %d", code)
 	}
-	for _, forbidden := range []string{".git", ".marshal", "CAPABILITIES.yaml"} {
+	for _, forbidden := range []string{".git", statepath.DirName, "CAPABILITIES.yaml"} {
 		if _, err := os.Stat(filepath.Join(dir, forbidden)); err == nil {
 			t.Fatalf("entering the control center created %s", forbidden)
 		}

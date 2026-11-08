@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,7 +24,7 @@ import (
 func TestInteractiveTmuxNormalCompletionReapsDescendants(t *testing.T) {
 	w := realTmuxWorkspace(t)
 	index := 0
-	processcheck.Completion(t, func(script string) error {
+	processcheck.CompletionWithin(t, 5*time.Second, func(script string) error {
 		_, err := w.runNativeAgentInTmux(context.Background(), nativeLaunchOperator, fmt.Sprintf("test-%d", index), "Test", w.workDir, "/bin/sh", []string{"-c", script}, nil, nil, nil, nil, nil, nil, nil)
 		if err != nil {
 			return err
@@ -71,7 +72,8 @@ func TestProviderCleanupResetsShortcutBeforeRemoval(t *testing.T) {
 			}
 			w := NewWorkspace(nil, "project", "session")
 			root := t.TempDir()
-			w.tmuxSession = "test-session"
+			w.workDir = root
+			w.tmuxSession = fixtureTmuxNamespace(t, root)
 			a := &activeTmuxAgent{id: entry.id, provider: entry.provider, paneID: "%129", windowID: "@129"}
 			w.tmuxActiveWins[a.id] = a
 			err := w.retainAndCloseAgent(t.Context(), a, root, "completed")
@@ -110,7 +112,7 @@ func TestTaskTmuxNormalCompletionReapsDescendants(t *testing.T) {
 	for _, mode := range []string{"native", "governed-runner"} {
 		t.Run(mode, func(t *testing.T) {
 			w := realTmuxWorkspace(t)
-			processcheck.Completion(t, func(script string) error {
+			processcheck.CompletionWithin(t, 5*time.Second, func(script string) error {
 				var inner driver.Driver = driver.Native{Provider: "test", Binary: "/bin/sh", Args: func(driver.Request) []string { return []string{"-c", script} }, Parse: func([]byte) []marshal.CommandRecord { return nil }}
 				if mode == "governed-runner" {
 					inner = driver.Governed{Run: func(ctx context.Context, req driver.Request) ([]marshal.CommandRecord, error) {
@@ -163,7 +165,7 @@ func TestImportedTaskCompletionPreservesWorkspaceAndMarshalPanes(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatalf("protected panes changed: before=%+v after=%+v err=%v", before, after, err)
 	}
-	if files, _ := filepath.Glob(filepath.Join(w.workDir, ".marshal", "tmux-panes", "*.json")); len(files) != 0 {
+	if files, _ := filepath.Glob(filepath.Join(w.workDir, statepath.DirName, "tmux-panes", "*.json")); len(files) != 0 {
 		t.Fatalf("pane records for unhosted task: %v", files)
 	}
 }
@@ -190,7 +192,7 @@ func TestProviderKeyAfterWindowClosesHasNoDeadTarget(t *testing.T) {
 				t.Fatal("provider pane absent")
 			}
 			w.tmuxActiveWins[a.id] = a
-			table, key := "marshal-keys-"+tmux.ProjectHash(w.workDir), providerFKey(provider)
+			table, key := statepath.Name+"-keys-"+tmux.ProjectHash(w.workDir), providerFKey(provider)
 			if err := tmux.BindWindowKey(ctx, a.paneID, table, key, "select-window", "-t", a.paneID); err != nil {
 				t.Fatal(err)
 			}

@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Zen1th53/marshal/internal/adapter"
 	"github.com/Zen1th53/marshal/internal/model"
+	"github.com/Zen1th53/marshal/internal/statepath"
 )
 
 type mockOperationsRunner struct {
@@ -97,7 +99,7 @@ func TestGovernedClaudeHomeDirIsUnderHome(t *testing.T) {
 	if !strings.HasPrefix(dir, home) {
 		t.Fatalf("expected governed home under %q, got %q", home, dir)
 	}
-	if !strings.HasSuffix(dir, "/.marshal/claude_session") {
+	if dir != filepath.Join(home, statepath.DirName, "claude_session") {
 		t.Fatalf("unexpected governed home layout: %q", dir)
 	}
 }

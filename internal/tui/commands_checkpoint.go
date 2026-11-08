@@ -35,7 +35,7 @@ func (h *CommandHandler) handleCheckpointRead(ctx context.Context, args []string
 			return "No execution snapshots in this project.", nil
 		}
 		var b strings.Builder
-		fmt.Fprintf(&b, "EXECUTION SNAPSHOTS (%d in this project, newest first; project files, excluding .git and .marshal):\n", len(records))
+		fmt.Fprintf(&b, "EXECUTION SNAPSHOTS (%d in this project, newest first; project files, excluding .git, .marshal and .marshal-extreme):\n", len(records))
 		for _, r := range records {
 			restored := ""
 			if r.RestoredAt != nil {
@@ -61,7 +61,7 @@ func (h *CommandHandler) handleCheckpointRead(ctx context.Context, args []string
 		fmt.Fprintf(&b, "  Git commit:  %s\n", commit)
 		fmt.Fprintf(&b, "  Created:     %s\n", r.CreatedAt.Format("2006-01-02 15:04:05Z07:00"))
 		fmt.Fprintf(&b, "  Reason:      %s\n", RedactContent(r.Reason, nil))
-		fmt.Fprintf(&b, "  Scope:       project files, excluding .git and .marshal\n")
+		fmt.Fprintf(&b, "  Scope:       project files, excluding .git, .marshal and .marshal-extreme\n")
 		fmt.Fprintf(&b, "  Files:       %s", check.State)
 		switch check.State {
 		case execution.SnapshotIntact:
@@ -137,7 +137,7 @@ func (h *CommandHandler) handleRollback(ctx context.Context, args []string) (str
 	if len(args) == 1 {
 		var b strings.Builder
 		fmt.Fprintf(&b, "ROLLBACK PREVIEW for %s (nothing has changed yet):\n", id)
-		fmt.Fprintf(&b, "  Restores project files (not .git or .marshal) to %s, captured %s.\n", id, check.Record.CreatedAt.Format("2006-01-02 15:04:05"))
+		fmt.Fprintf(&b, "  Restores project files (not .git, .marshal or .marshal-extreme) to %s, captured %s.\n", id, check.Record.CreatedAt.Format("2006-01-02 15:04:05"))
 		fmt.Fprintf(&b, "  %d files would be restored, %d deleted, %d overwritten:\n", len(diff.Added), len(diff.Removed), len(diff.Changed))
 		for _, group := range []struct {
 			mark  string

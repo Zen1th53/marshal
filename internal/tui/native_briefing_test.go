@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +27,10 @@ func TestResolveInjectChannelFallsBackPerProvider(t *testing.T) {
 		{"codex cannot take a system prompt", "codex", injectSystemPrompt, injectDeveloperInstructions, true},
 		{"claude takes a system prompt", "claude", injectSystemPrompt, injectSystemPrompt, false},
 		{"opencode cannot take a system prompt", "opencode", injectSystemPrompt, injectMarshalDir, true},
-		{"project doc stays available when chosen", "codex", injectProjectDoc, injectProjectDoc, false},
+		{"legacy project doc uses private Codex instructions", "codex", injectProjectDoc, injectDeveloperInstructions, true},
+		{"legacy project doc uses private Claude instructions", "claude", injectProjectDoc, injectSystemPrompt, true},
+		{"legacy project doc uses private OpenCode directory", "opencode", injectProjectDoc, injectMarshalDir, true},
+		{"legacy project doc uses private agy directory", "antigravity", injectProjectDoc, injectMarshalDir, true},
 		{"prompt channel is universal", "codex", injectPrompt, injectPrompt, false},
 		{"off stays off", "claude", injectOff, injectOff, false},
 	} {
@@ -55,6 +59,18 @@ func TestInjectChannelRoundTripsAndRejectsUnknown(t *testing.T) {
 	}
 	if _, err := parseInjectChannel("telepathy"); err == nil {
 		t.Error("unknown channel was accepted")
+	}
+}
+
+func TestProjectDocInjectionCannotCreateRootMarkdown(t *testing.T) {
+	root := t.TempDir()
+	_, _, err := applyBriefing("codex", root, nil, "private task context", injectProjectDoc)
+	if err == nil {
+		t.Fatal("root document injection must refuse the obsolete channel")
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("briefing polluted the source directory: %v %v", entries, err)
 	}
 }
 
@@ -322,11 +338,11 @@ func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 	for _, provider := range []string{"codex", "claude", "opencode", "antigravity"} {
 		for _, earlier := range []string{"", "no", "yes"} {
 			root := t.TempDir()
-			if err := os.MkdirAll(filepath.Join(root, ".marshal"), 0700); err != nil {
+			if err := os.MkdirAll(filepath.Join(root, statepath.DirName), 0700); err != nil {
 				t.Fatal(err)
 			}
 			data := `{"language":"Uzbek","earlier_work":"` + earlier + `"}`
-			if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(data), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"), []byte(data), 0600); err != nil {
 				t.Fatal(err)
 			}
 			args, _, dir, err := prepareMarshalLaunch(provider, root, nil, protocol)
@@ -380,10 +396,10 @@ func TestMarshalSavedIntakeOpeningAllProviders(t *testing.T) {
 
 func TestMarshalLaunchWithSavedIntakeRefusesMissingProtocol(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ".marshal"), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, statepath.DirName), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".marshal", "marshal-intake.json"), []byte(`{"language":"Uzbek","earlier_work":"no"}`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, statepath.DirName, "marshal-intake.json"), []byte(`{"language":"Uzbek","earlier_work":"no"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, protocol := range []string{"", " \n\t"} {

@@ -26,7 +26,7 @@ func TestPTYModelAndEffortApplyToFutureRuns(t *testing.T) {
 	t.Chdir(project)
 
 	terminal := startFrozenTUIInProject(t, 40, 200, bin, project, "tui", "SESSION-pty-model")
-	terminal.mustSee("MARSHAL")
+	terminal.mustSee("Marshal")
 	terminal.sendLine("/model select codex gpt-unknown")
 	terminal.mustSee("NOT applied")
 	terminal.sendLine("/model select codex gpt-test")

@@ -1,0 +1,9 @@
+⣾ codex    T-01     18s     ▂▃▅█   41k edit schema.proto            |
+⣾ claude   T-02     45s   ▂▄▅▆▇█   20k run tests ./internal/tui/... |
+⣾ omp      T-03      2m  ▂▃▄▄▅▆█   18k review PR test coverage      |
+⣾ agy      T-04     12s    ▂▄▆▇█    6k git diff inspection          |
+⣾ codex-2  T-05      5m  ▂▃▅▆▆▇█   85k implement OSC 7501 ingestion |
+▮ claude-2 T-06     15m ████████   12k parked waiting for gate      |
+⣾ tern     T-07      3m ▂▃▄▅▆▆▇█   34k rework: fix race condition   |
+⣾ orca     T-08      4m   ▂▄▅▆▇█   27k verifying acceptance gates   |
+○ devin    T-09     25m              0 idle awaiting dispatch       |

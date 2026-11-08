@@ -6,7 +6,50 @@ import (
 
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/marshal"
+	"github.com/Zen1th53/marshal/internal/projectid"
 )
+
+func TestMarshalFreshWorkspaceRecoveryUsesAdmittedRuntimeDataProject(t *testing.T) {
+	fakeProviderCLIs(t, "codex", "claude", "opencode", "agy")
+	w, runtime := realControlWorkspace(t, "SESSION-native-restart", false)
+	identity := projectid.ID(runtime.ProjectIdentity())
+	service := runtime.Marshal()
+	if string(identity) == service.ProjectID {
+		t.Fatal("fixture lacks distinct canonical binding and data row")
+	}
+	run := marshal.Run{PlanID: "restart-plan", PlanVersion: 1, State: marshal.AwaitingUser, Settings: marshal.DefaultSettings(), Tasks: []marshal.Task{{PlanTaskID: "saved-task", State: marshal.Queued}}}
+	if _, err := service.Store.SetMarshalRun(t.Context(), service.ProjectID, "RUN-saved-native", run, 0); err != nil {
+		t.Fatal(err)
+	}
+	// Close and reopen the actual runtime and construct a new workspace exactly
+	// as the CLI does: canonical binding ID in the view, local data ID in Store.
+	w.Close()
+	if err := runtime.Close(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := app.Open(t.Context(), runtime.ProjectRoot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = second.Close() })
+	for _, binding := range []projectid.ID{identity, "PROJECT-foreign"} {
+		fresh := NewWorkspace(second.Store(), string(identity), "SESSION-native-restart")
+		fresh.AttachRuntime(second, binding)
+		_, recoveredService, recoveredID, _, err := fresh.marshalActive(t.Context())
+		if binding != identity {
+			if err == nil || recoveredService != nil {
+				t.Fatal("foreign workspace binding recovered a run")
+			}
+		} else if err != nil || recoveredID != "RUN-saved-native" || recoveredService.ProjectID != service.ProjectID {
+			t.Fatalf("canonical fresh recovery: %s %+v %v", recoveredID, recoveredService, err)
+		}
+		fresh.Close()
+	}
+	record, err := second.Store().GetMarshalRun(t.Context(), service.ProjectID, "RUN-saved-native")
+	if err != nil || record.Revision != 1 || record.Value.State != marshal.AwaitingUser {
+		t.Fatalf("recovery changed saved run: %+v %v", record, err)
+	}
+}
 
 func TestMarshalStatusLoadsStoredRun(t *testing.T) {
 	fakeProviderCLIs(t, "codex", "claude", "opencode", "agy")

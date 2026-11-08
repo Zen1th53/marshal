@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/budget"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/plan"
 )
@@ -20,34 +23,44 @@ type EngineConfig struct {
 	ProjectRoot string
 	MaxWorkers  int
 	DefaultTTL  time.Duration
+	// HarnessAdmission is trusted local composition, fixed at construction.
+	// It cannot be replaced by registration, a task name, or serialized data.
+	HarnessAdmission func(WorkerHarness) error `json:"-"`
 }
 
 // Engine coordinates governed execution across gate, scheduler, leases, harnesses, and journal.
 type Engine struct {
 	mu sync.RWMutex
+	// startedAt is when this runtime process created the engine. Leases are
+	// process-local: one recorded on a task that finished before this time
+	// belonged to an earlier process and cannot be held now.
+	startedAt time.Time
 	// operationMu serializes admission to workspace-affecting operations.
 	// activeRuns is process-local execution liveness; durable run/task state is
 	// checked as well before rollback. Together they prevent a second ExecuteRun
 	// and a restore racing the worker that is changing the same workspace.
-	operationMu   sync.Mutex
-	activeRuns    map[string]struct{}
-	cfg           EngineConfig
-	planReader    PlanReader
-	goalReader    GoalReader
-	gate          *EntryGate
-	store         RunStore
-	journal       JournalStore
-	leases        *LeaseManager
-	scheduler     *Scheduler
-	approvals     *ApprovalManager
-	worktrees     *WorktreeManager
-	checkpoints   *CheckpointEngine
-	oracle        *EvidenceOracle
-	reaper        *ProcessReaper
-	harnesses     map[string]WorkerHarness
-	cachedPlan    map[string]plan.ExecutionPlan
-	cachedGoal    map[string]model.GoalContract
-	cachedHandoff map[string]plan.Handoff
+	operationMu      sync.Mutex
+	turnCancels      map[string]context.CancelFunc
+	laneCommitMu     sync.Mutex
+	activeRuns       map[string]struct{}
+	cfg              EngineConfig
+	planReader       PlanReader
+	goalReader       GoalReader
+	gate             *EntryGate
+	store            RunStore
+	journal          JournalStore
+	leases           *LeaseManager
+	scheduler        *Scheduler
+	approvals        *ApprovalManager
+	worktrees        *WorktreeManager
+	checkpoints      *CheckpointEngine
+	oracle           *EvidenceOracle
+	reaper           *ProcessReaper
+	harnesses        map[string]WorkerHarness
+	harnessAdmission func(WorkerHarness) error
+	cachedPlan       map[string]plan.ExecutionPlan
+	cachedGoal       map[string]model.GoalContract
+	cachedHandoff    map[string]plan.Handoff
 }
 
 // NewEngine creates and initializes a Governed Execution Engine.
@@ -91,24 +104,26 @@ func NewEngineWithReaders(cfg EngineConfig, store RunStore, journal JournalStore
 
 	lm := NewLeaseManager()
 	eng := &Engine{
-		cfg:           cfg,
-		planReader:    pReader,
-		goalReader:    gReader,
-		gate:          gate,
-		store:         store,
-		journal:       journal,
-		leases:        lm,
-		scheduler:     NewScheduler(cfg.MaxWorkers, lm),
-		approvals:     NewApprovalManager(filepath.Join(cfg.ProjectRoot, ".marshal", "approvals")),
-		worktrees:     wtManager,
-		checkpoints:   cpEngine,
-		oracle:        NewEvidenceOracle(),
-		reaper:        NewProcessReaper(),
-		harnesses:     make(map[string]WorkerHarness),
-		cachedPlan:    make(map[string]plan.ExecutionPlan),
-		cachedGoal:    make(map[string]model.GoalContract),
-		cachedHandoff: make(map[string]plan.Handoff),
-		activeRuns:    make(map[string]struct{}),
+		startedAt:        time.Now().UTC(),
+		cfg:              cfg,
+		harnessAdmission: cfg.HarnessAdmission,
+		planReader:       pReader,
+		goalReader:       gReader,
+		gate:             gate,
+		store:            store,
+		journal:          journal,
+		leases:           lm,
+		scheduler:        NewScheduler(cfg.MaxWorkers, lm),
+		approvals:        NewApprovalManager(filepath.Join(cfg.ProjectRoot, statepath.DirName, "approvals")),
+		worktrees:        wtManager,
+		checkpoints:      cpEngine,
+		oracle:           NewEvidenceOracle(),
+		reaper:           NewProcessReaper(),
+		harnesses:        make(map[string]WorkerHarness),
+		cachedPlan:       make(map[string]plan.ExecutionPlan),
+		cachedGoal:       make(map[string]model.GoalContract),
+		cachedHandoff:    make(map[string]plan.Handoff),
+		activeRuns:       make(map[string]struct{}),
 	}
 
 	// Register default harnesses
@@ -219,7 +234,7 @@ func (e *Engine) InitializeRun(ctx context.Context, h plan.Handoff, g model.Goal
 
 	// Persist plan and goal alongside the run for cross-process execution
 	if e.cfg.ProjectRoot != "" {
-		runDir := filepath.Join(e.cfg.ProjectRoot, ".marshal", "runs")
+		runDir := filepath.Join(e.cfg.ProjectRoot, statepath.DirName, "runs")
 		_ = os.MkdirAll(runDir, 0755)
 		planBytes, _ := json.MarshalIndent(p, "", "  ")
 		_ = os.WriteFile(filepath.Join(runDir, run.RunID+"_plan.json"), planBytes, 0644)
@@ -303,12 +318,18 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 	if err != nil {
 		return nil, err
 	}
+	if err := e.validateTaskLaneExecution(run); err != nil {
+		return &run, err
+	}
 	if err := e.ValidateRunGoal(ctx, run); err != nil {
 		return &run, err
 	}
 	if expectedVersion >= 0 && run.Version != expectedVersion {
 		return nil, fmt.Errorf("%w: run %s moved from version %d to %d",
 			ErrInvalidStateTransition, runID, expectedVersion, run.Version)
+	}
+	if run.State.IsTerminal() {
+		return &run, fmt.Errorf("%w: cannot execute terminal run in state %s", ErrInvalidStateTransition, run.State)
 	}
 	if selectedTask != "" {
 		if run.Delivery != DeliveryPreserveBranch || run.BaseCommit == "" {
@@ -324,6 +345,47 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 		if task.State.IsTerminal() {
 			return &run, fmt.Errorf("%w: selected task is %s", ErrInvalidStateTransition, task.State)
 		}
+		// Extreme: a TASK_EXECUTE approval that expired unanswered does not
+		// stop the lane; the task returns to pending and this round requests a
+		// fresh approval.
+		if run.State == RunNeedsApproval && run.CurrentPhase == PhaseAwaitingApproval && run.SelectedTask == selectedTask && task.NativeTurn == nil && task.BaseCommit == taskBase && e.renewExpiredTaskApproval(run, &task, time.Now().UTC()) {
+			run.Tasks[selectedTask] = task
+			if err := e.persistRun(ctx, &run); err != nil {
+				return &run, err
+			}
+		}
+		// Re-entering an idle task lane must preserve its existing approval
+		// wait. The scheduler cannot dispatch NEEDS_APPROVAL tasks, so marking
+		// this run RUNNING would invent provider activity and lose the wait
+		// receipt. Only the canonical approval path may make the task ready.
+		if task.State == TaskNeedsApproval {
+			if task.ApprovalID == "" || task.BaseCommit != taskBase || run.SelectedTask != selectedTask {
+				return &run, fmt.Errorf("%w: selected approval wait binding missing", ErrRunInvalid)
+			}
+			approval, err := e.approvals.GetApproval(task.ApprovalID)
+			if err != nil {
+				return &run, err
+			}
+			if approval.RunID != run.RunID || approval.TaskID != selectedTask || approval.PlanID != run.PlanID || approval.PlanVersion != run.PlanVersion {
+				return &run, fmt.Errorf("%w: selected task approval binding differs", ErrRunInvalid)
+			}
+			if approval.Status == ApprovalApproved || approval.Status == ApprovalConsumed {
+				return &run, fmt.Errorf("%w: approved task still awaits canonical readiness", ErrInvalidStateTransition)
+			}
+			if run.State != RunNeedsApproval || run.CurrentPhase != PhaseAwaitingApproval {
+				if run.State != RunRunning || run.CurrentPhase != PhaseExecuting || task.NativeTurn != nil || IsNativeProviderApproval(approval.OperationType) {
+					return &run, fmt.Errorf("%w: approval wait requires explicit reconciliation", ErrInvalidStateTransition)
+				}
+				run.State, run.CurrentPhase = RunNeedsApproval, PhaseAwaitingApproval
+				if err := e.persistRun(ctx, &run); err != nil {
+					return &run, err
+				}
+			}
+			if approval.Status != ApprovalRequested || (approval.ExpiresAt != nil && !time.Now().UTC().Before(*approval.ExpiresAt)) {
+				return &run, fmt.Errorf("%w: selected task approval is %s or expired", ErrApprovalTOCTOUViolation, approval.Status)
+			}
+			return &run, nil
+		}
 		if task.BaseCommit == "" || run.SelectedTask != selectedTask {
 			task.BaseCommit = taskBase
 			run.Tasks[selectedTask] = task
@@ -334,10 +396,6 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 		}
 	}
 
-	if run.State.IsTerminal() {
-		return &run, fmt.Errorf("%w: cannot execute terminal run in state %s", ErrInvalidStateTransition, run.State)
-	}
-
 	run.State = RunRunning
 	run.CurrentPhase = PhaseExecuting
 	run.UpdatedAt = time.Now().UTC()
@@ -345,6 +403,20 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 		return nil, err
 	}
 
+	// Restore the oracle from the same durable run revision on continuation.
+	for _, ev := range run.EvidenceRecords {
+		if _, exists := e.oracle.GetEvidence(ev.EvidenceID); exists == nil {
+			continue
+		}
+		if _, err := e.oracle.RecordEvidence(ev); err != nil {
+			return nil, err
+		}
+	}
+	for _, claim := range run.ClaimRecords {
+		if _, err := e.oracle.RecordClaim(claim); err != nil {
+			return nil, err
+		}
+	}
 	e.mu.RLock()
 	g := e.cachedGoal[runID]
 	p := e.cachedPlan[runID]
@@ -352,7 +424,7 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 
 	runDir := ""
 	if e.cfg.ProjectRoot != "" {
-		runDir = filepath.Join(e.cfg.ProjectRoot, ".marshal", "runs")
+		runDir = filepath.Join(e.cfg.ProjectRoot, statepath.DirName, "runs")
 	}
 
 	if p.ID == "" && runDir != "" {
@@ -436,6 +508,11 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			}
 			if err := e.persistRun(ctx, &run); err != nil {
 				return &run, err
+			}
+			if run.ParentRunID != "" && run.Tasks[run.LaneTaskID].Attempts == 0 {
+				// A task lane refused before any provider attempt reports it; the
+				// parent run owns the budget and must not see a silent success.
+				return &run, fmt.Errorf("%w: %s", ErrRunBlocked, reason)
 			}
 			return &run, nil
 		}
@@ -528,6 +605,13 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			taskID := candidate.TaskID
 			t := run.Tasks[taskID]
 
+			// Runtime-owned dispatch admission precedes any task execution effects.
+			// Keep the exact checked instance even if registration changes later.
+			admittedHarness, guarded, admissionErr := e.admitWorkerHarness(t.AssignedHarness)
+			if admissionErr != nil {
+				return &run, e.refuseWorkerHarness(ctx, &run, t, admissionErr)
+			}
+
 			// Check Approval requirement
 			if t.ApprovalRequired && t.ApprovalID == "" {
 				appReq := ApprovalRequest{
@@ -546,22 +630,32 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 					return &run, err
 				}
 				t.ApprovalID = app.ApprovalID
-				t.State = TaskNeedsApproval
-				run.Tasks[taskID] = t
-				run.State = RunNeedsApproval
-				run.CurrentPhase = PhaseAwaitingApproval
-				if err := e.persistRun(ctx, &run); err != nil {
-					return &run, err
-				}
+				// Extreme only: an exact approved-plan task scope is granted by
+				// the runtime and executes in this same round.
+				if e.grantApprovedPlanTask(ctx, run, t, *app) {
+					t.State = TaskReady
+					run.Tasks[taskID] = t
+					if err := e.persistRun(ctx, &run); err != nil {
+						return &run, err
+					}
+				} else {
+					t.State = TaskNeedsApproval
+					run.Tasks[taskID] = t
+					run.State = RunNeedsApproval
+					run.CurrentPhase = PhaseAwaitingApproval
+					if err := e.persistRun(ctx, &run); err != nil {
+						return &run, err
+					}
 
-				_, _ = e.journal.Append(JournalEvent{
-					RunID:     run.RunID,
-					TaskID:    t.TaskID,
-					Actor:     "MARSHAL_ENGINE",
-					EventType: "APPROVAL_REQUESTED",
-					Summary:   fmt.Sprintf("Approval requested for task %s", t.TaskID),
-				})
-				return &run, nil
+					_, _ = e.journal.Append(JournalEvent{
+						RunID:     run.RunID,
+						TaskID:    t.TaskID,
+						Actor:     "MARSHAL_ENGINE",
+						EventType: "APPROVAL_REQUESTED",
+						Summary:   fmt.Sprintf("Approval requested for task %s", t.TaskID),
+					})
+					return &run, nil
+				}
 			}
 
 			// If task needs approval and not approved yet, skip for now
@@ -652,6 +746,13 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				return &run, err
 			}
 
+			if err := e.reserveTaskLaneAttempt(ctx, run, t); err != nil {
+				if lease != nil {
+					_ = e.leases.ReleaseLease(lease.LeaseID, lease.AgentID, nowUTC())
+				}
+				return &run, err
+			}
+
 			// Transition task to running
 			t.State = TaskRunning
 			t.Attempts++
@@ -670,11 +771,14 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			if harnessName == "" {
 				harnessName = "unbound"
 			}
-			harness, harnessErr := e.GetHarness(harnessName)
+			harness, harnessErr := admittedHarness, error(nil)
+			if !guarded {
+				harness, harnessErr = e.GetHarness(harnessName)
+			}
 			result := TaskResult{TaskID: t.TaskID}
 			execErr := harnessErr
 			if harnessErr == nil {
-				result, execErr = harness.Execute(ctx, t, pkg, wtPath)
+				result, execErr = e.dispatchBudgetedTask(ctx, run, t, pkg, wtPath, harness)
 			}
 			// Cancellation is a durable canonical transition. A worker can return
 			// concurrently after its typed provider interrupt has been accepted;
@@ -683,6 +787,17 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			if latest, latestErr := e.store.GetRun(ctx, runID); latestErr != nil {
 				return &run, latestErr
 			} else if latest.State == RunCancelled || latest.State == RunCancelling {
+				captureErr := e.retainCancelledTaskResult(&latest, taskID, result)
+				if err := e.persistRun(context.WithoutCancel(ctx), &latest); err != nil {
+					return &latest, err
+				}
+				if captureErr != nil {
+					return &latest, captureErr
+				}
+				if errors.Is(execErr, ErrBudgetSettlement) {
+					return &latest, execErr
+				}
+				e.settleCancelledTaskLane(latest, t, lease)
 				return &latest, nil
 			} else {
 				// A native provider can bind its accepted thread/turn while WaitTurn
@@ -712,7 +827,17 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 			}
 
 			// Record Budget Consumption
-			run.BudgetConsumed.ModelCalls++
+			if execErr == nil && e.ownsProviderTransportAdmission(result, run, t) {
+				if err := e.releaseProviderTransportReservation(ctx, result, run, t); err != nil {
+					return &run, err
+				}
+			} else {
+				run.BudgetConsumed.ModelCalls++
+			}
+			if t.Attempts > 1 {
+				run.BudgetConsumed.Retries++
+			}
+			run.BudgetConsumed.Handoffs = len(run.Handoffs)
 			run.BudgetConsumed.InputTokens += result.InputTokens
 			run.BudgetConsumed.OutputTokens += result.OutputTokens
 
@@ -757,17 +882,25 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 						t.State = TaskFailed
 						t.LastFailureReason = fmt.Sprintf("native approval request failed: %v", approvalErr)
 					} else {
+						original := t.ApprovalID
 						t.ApprovalID = app.ApprovalID
 						t.ApprovalRequired = true
-						t.State = TaskNeedsApproval
-						run.State = RunNeedsApproval
-						run.CurrentPhase = PhaseAwaitingApproval
-						providerApprovalPaused = true
 						_, _ = e.journal.Append(JournalEvent{
 							RunID: run.RunID, TaskID: t.TaskID, Actor: harnessName,
 							EventType: "PROVIDER_APPROVAL_REQUESTED",
 							Summary:   fmt.Sprintf("Provider-native approval requested for task %s", t.TaskID),
 						})
+						// Extreme only: the brokered transport of an approved-plan
+						// task is granted by the runtime. The task is re-admitted
+						// in this same round through the ordinary resume path.
+						if e.grantApprovedPlanTransport(ctx, run, t, original, *app) {
+							t.State = TaskReady
+						} else {
+							t.State = TaskNeedsApproval
+							run.State = RunNeedsApproval
+							run.CurrentPhase = PhaseAwaitingApproval
+							providerApprovalPaused = true
+						}
 					}
 				}
 			} else if execErr != nil || !result.Success {
@@ -779,6 +912,11 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 				}
 				t.State = TaskFailed
 				t.LastFailureReason = failReason
+				if err := e.captureFailedDiagnostics(&run, &t, result.EvidenceList); err != nil {
+					// Keep the original failure and refuse the entire diagnostic
+					// batch; neither raw output nor validation details are events.
+					t.LastFailureReason += "; failed diagnostic capture refused"
+				}
 				run.Failures = append(run.Failures, RunFailure{
 					TaskID:      t.TaskID,
 					Stage:       "EXECUTE",
@@ -819,6 +957,10 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 					// Record collected evidence
 					var captureErr error
 					for _, ev := range result.EvidenceList {
+						if hasFailedDiagnosticIdentity(run, ev.EvidenceID) {
+							captureErr = errors.Join(captureErr, fmt.Errorf("%w: failed diagnostic identity cannot support completion", ErrRunInvalid))
+							continue
+						}
 						ev.RunID = run.RunID
 						recordedEv, err := e.oracle.RecordEvidence(ev)
 						if err != nil {
@@ -826,12 +968,13 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 						} else {
 							t.CollectedEvidence = append(t.CollectedEvidence, recordedEv.EvidenceID)
 							run.Evidence = append(run.Evidence, EvidenceRef{
-								EvidenceID: recordedEv.EvidenceID,
-								TaskID:     t.TaskID,
-								Type:       "tool_output",
-								Digest:     recordedEv.OutputDigest,
-								Status:     recordedEv.Status,
-								CapturedAt: recordedEv.CreatedAt,
+								EvidenceID:          recordedEv.EvidenceID,
+								ProviderObservation: cloneProviderObservation(recordedEv.ProviderObservation),
+								TaskID:              t.TaskID,
+								Type:                "tool_output",
+								Digest:              recordedEv.OutputDigest,
+								Status:              recordedEv.Status,
+								CapturedAt:          recordedEv.CreatedAt,
 							})
 						}
 					}
@@ -844,6 +987,8 @@ func (e *Engine) executeRun(ctx context.Context, runID string, expectedVersion i
 						}
 					}
 
+					run.EvidenceRecords = e.oracle.ListEvidenceForRun(run.RunID)
+					run.ClaimRecords = e.oracle.ListClaimsForRun(run.RunID)
 					compTime := time.Now().UTC()
 					t.CompletedAt = &compTime
 					t.State = TaskCompletedPendingVerify
@@ -972,6 +1117,9 @@ func (e *Engine) persistRun(ctx context.Context, run *ExecutionRun) error {
 	if run == nil {
 		return fmt.Errorf("%w: cannot persist nil run", ErrRunInvalid)
 	}
+	if handled, err := e.persistTaskLaneRun(ctx, run); handled {
+		return err
+	}
 	if err := e.store.UpdateRun(ctx, *run); err != nil {
 		return err
 	}
@@ -1026,6 +1174,7 @@ func (e *Engine) DecideApproval(ctx context.Context, approvalID string, approve 
 		run.State = RunRunning
 		run.CurrentPhase = PhaseExecuting
 	}
+	privateTaskLaneApprovalReady(&run, approve)
 
 	if err := e.persistRun(ctx, &run); err != nil {
 		return err
@@ -1221,17 +1370,67 @@ func (e *Engine) AssembleProcess06Bundle(ctx context.Context, runID string) (*Pr
 		}
 	}
 
-	e.mu.RLock()
-	p := e.cachedPlan[runID]
-	e.mu.RUnlock()
-
+	// A new CLI process has no engine caches. Read the exact durable plan,
+	// with the persisted initialization snapshot as the standalone fallback.
+	var p plan.ExecutionPlan
+	if e.planReader != nil {
+		p, err = e.planReader.GetPlan(ctx, run.PlanID, run.PlanVersion)
+		if err != nil {
+			p = plan.ExecutionPlan{}
+		}
+	}
+	if p.ID == "" {
+		raw, readErr := os.ReadFile(filepath.Join(e.cfg.ProjectRoot, statepath.DirName, "runs", runID+"_plan.json"))
+		if readErr != nil {
+			return nil, fmt.Errorf("%w: durable handoff plan unavailable: %v", ErrEvidenceMissing, readErr)
+		}
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, fmt.Errorf("%w: durable handoff plan malformed", ErrRunInvalid)
+		}
+	}
+	if p.ID != run.PlanID || p.Version != run.PlanVersion || p.ProjectID != run.ProjectID || p.Goal.GoalID != run.GoalID || p.Goal.Revision != run.GoalRevision {
+		return nil, fmt.Errorf("%w: durable handoff plan binding differs", ErrRunInvalid)
+	}
 	tasksList := make([]TaskExecution, 0, len(run.Tasks))
 	for _, t := range run.Tasks {
 		tasksList = append(tasksList, t)
 	}
-
-	evidenceBundle := e.oracle.ListEvidenceForRun(runID)
-	claims := e.oracle.ListClaimsForRun(runID)
+	sort.Slice(tasksList, func(i, j int) bool { return tasksList[i].TaskID < tasksList[j].TaskID })
+	evidenceBundle := run.EvidenceRecords
+	claims := run.ClaimRecords
+	records := make(map[string]ExecutionEvidence, len(evidenceBundle))
+	for _, ev := range evidenceBundle {
+		if ev.EvidenceID == "" || ev.RunID != runID {
+			return nil, fmt.Errorf("%w: foreign handoff evidence", ErrRunInvalid)
+		}
+		if _, duplicate := records[ev.EvidenceID]; duplicate {
+			return nil, fmt.Errorf("%w: duplicate handoff evidence", ErrRunInvalid)
+		}
+		records[ev.EvidenceID] = ev
+	}
+	for _, ref := range run.Evidence {
+		ev, ok := records[ref.EvidenceID]
+		if !ok || ev.OutputDigest != ref.Digest {
+			return nil, fmt.Errorf("%w: durable evidence %s unavailable or changed", ErrEvidenceMissing, ref.EvidenceID)
+		}
+	}
+	for _, task := range tasksList {
+		for _, id := range task.CollectedEvidence {
+			if _, ok := records[id]; !ok {
+				return nil, fmt.Errorf("%w: durable task evidence %s unavailable", ErrEvidenceMissing, id)
+			}
+		}
+	}
+	for _, claim := range claims {
+		if claim.RunID != runID {
+			return nil, fmt.Errorf("%w: foreign handoff claim", ErrRunInvalid)
+		}
+		for _, id := range claim.EvidenceRefs {
+			if _, ok := records[id]; !ok {
+				return nil, fmt.Errorf("%w: durable claim evidence %s unavailable", ErrEvidenceMissing, id)
+			}
+		}
+	}
 	// Bind the handoff to the exact committed tree. An empty or guessed tree
 	// would let Process 06 certify a different checkout than Process 05 ran.
 	finalGitTree, err := WorkspaceTreeDigest(e.cfg.ProjectRoot)
@@ -1381,16 +1580,18 @@ func (e *Engine) ValidateRunGoal(ctx context.Context, run ExecutionRun) error {
 	if err != nil {
 		return fmt.Errorf("%w: read current goal: %v", ErrRunBlocked, err)
 	}
+	if goal.Confirmation == model.ConfirmationCancelled {
+		return fmt.Errorf("%w: goal is cancelled", ErrRunBlocked)
+	}
 	if goal.ID != run.GoalID || goal.Revision != run.GoalRevision || goal.ProjectID != string(run.ProjectID) {
 		return fmt.Errorf("%w: run goal binding is stale (goal %s revision %d, run revision %d)", ErrRunBlocked, goal.ID, goal.Revision, run.GoalRevision)
 	}
 	return nil
 }
 
-// budgetExhausted checks the run against its goal revision's budget limits
-// before another task is dispatched. Only model calls (counted by this engine
-// for every provider turn) and run duration are limited: tokens and cost are
-// not reported by every provider, and an unreported value is never read as 0.
+// budgetExhausted refuses unknown token/cost evidence and protects the Process
+// 06 reserve before build work. Durable admission also runs immediately before
+// each provider launch, including when a scheduler returns several tasks.
 func (e *Engine) budgetExhausted(ctx context.Context, run ExecutionRun, now time.Time) string {
 	if run.GoalID == "" {
 		return ""
@@ -1400,15 +1601,40 @@ func (e *Engine) budgetExhausted(ctx context.Context, run ExecutionRun, now time
 		target = run.GoalID
 	}
 	goal, err := e.goalReader.GetActiveGoalContract(ctx, target)
-	if err != nil || goal.ID != run.GoalID || goal.BudgetLimits == nil {
+	if err != nil {
+		return fmt.Sprintf("goal budget UNKNOWN: %v", err)
+	}
+	if goal.ID != run.GoalID || goal.Revision != run.GoalRevision {
+		return "goal budget binding is stale"
+	}
+	if goal.BudgetLimits == nil {
 		return ""
 	}
-	limits := goal.BudgetLimits
-	if limits.MaxModelCalls > 0 && run.BudgetConsumed.ModelCalls >= limits.MaxModelCalls {
-		return fmt.Sprintf("%s: %d of %d model calls used", model.ReasonBudgetExhaustedCalls, run.BudgetConsumed.ModelCalls, limits.MaxModelCalls)
+	c := model.ConsumedBudget{ModelCalls: run.BudgetConsumed.ModelCalls, Retries: run.BudgetConsumed.Retries, Handoffs: run.BudgetConsumed.Handoffs}
+	if !run.StartedAt.IsZero() {
+		c.Duration = now.Sub(run.StartedAt)
 	}
-	if limits.MaxDuration > 0 && !run.StartedAt.IsZero() && now.Sub(run.StartedAt) >= limits.MaxDuration {
-		return fmt.Sprintf("%s: run has lasted %s of %s", model.ReasonBudgetExhaustedWallClock, now.Sub(run.StartedAt).Round(time.Second), limits.MaxDuration)
+	if reader, ok := e.goalReader.(interface {
+		GoalBudgetConsumed(context.Context, string, string, int64) (model.ConsumedBudget, error)
+	}); ok {
+		durable, err := reader.GoalBudgetConsumed(ctx, run.SessionID, run.GoalID, run.GoalRevision)
+		if err != nil {
+			return fmt.Sprintf("goal budget UNKNOWN: %v", err)
+		}
+		if durable.ModelCalls > c.ModelCalls {
+			c.ModelCalls = durable.ModelCalls
+		}
+		if durable.Duration > c.Duration {
+			c.Duration = durable.Duration
+		}
+		c.VerificationCalls = durable.VerificationCalls
+		c.TotalTokens = durable.TotalTokens
+		c.CostUSD = durable.CostUSD
+		c.UnreportedTokens = durable.UnreportedTokens
+		c.UnreportedCost = durable.UnreportedCost
+	}
+	if err := budget.CheckDispatch(*goal.BudgetLimits, c, budget.CallRequest{Key: "preflight", Process: budget.ProcessBuild}); err != nil {
+		return err.Error()
 	}
 	return ""
 }

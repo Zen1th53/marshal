@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,6 +36,7 @@ func TestPTYMarshalUsePlanReachesProcess05Approval(t *testing.T) {
 }
 
 func startApprovedProcess05PTY(t *testing.T, modelName, reviewer string) *ptySession {
+	isolateRequiredFixtureProviders(t)
 	t.Helper()
 	bin := buildMarshalBinary(t)
 	project := initProject(t, bin)
@@ -89,8 +91,37 @@ func startApprovedProcess05PTY(t *testing.T, modelName, reviewer string) *ptySes
 
 	s := startFrozenTUIInProject(t, 40, 160, bin, project, "tui")
 	s.sendLine("/marshal model " + reviewer)
-	s.mustSee(reviewer)
+	s.mustSee("The Marshal now uses " + reviewer + ".")
 	s.sendLine("/marshal use-plan")
+	if requiredLegacyFixtureRefusal && os.Getenv("MARSHAL_REAL_MODEL") != "1" {
+		s.mustSee("REQUIRED_CONTEXT_REVIEW_PENDING")
+		state, e := readProcess05PTYState(project)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if state.ApprovalID != "" || state.WorktreePath != "" || state.NativeTurn {
+			t.Fatalf("unreviewed plan acquired execution effects: %+v", state)
+		}
+		return s
+	}
+	if editionExtreme {
+		// Extreme records a durable orchestration pause instead of reporting
+		// the canonical task approval as an execution error. A pending resume
+		// exposes its exact recovery reason and must preserve the same approval.
+		s.mustSee("awaiting_user")
+		before, err := readProcess05PTYState(project)
+		if err != nil || before.State != "NEEDS_APPROVAL" || before.TaskState != "NEEDS_APPROVAL" || before.ApprovalID == "" {
+			t.Fatalf("private durable approval pause missing: %+v %v", before, err)
+		}
+		s.sendLine("/marshal resume")
+		if !s.waitFor("process 05: approval "+before.ApprovalID+" required", 15*time.Second) {
+			t.Fatalf("pending private resume did not show its exact approval: %s", tail(s.output(), 3000))
+		}
+		after, err := readProcess05PTYState(project)
+		if err != nil || after.State != before.State || after.TaskState != before.TaskState || after.ApprovalID != before.ApprovalID {
+			t.Fatalf("pending private resume changed canonical approval: before=%+v after=%+v %v", before, after, err)
+		}
+	}
 	if !s.waitFor("process 05: approval", 15*time.Second) {
 		t.Fatalf("Process 05 did not reach its approval pause from PTY: %s", tail(s.output(), 3000))
 	}
@@ -196,7 +227,7 @@ type process05PTYState struct {
 }
 
 func readProcess05PTYState(project string) (process05PTYState, error) {
-	paths, err := filepath.Glob(filepath.Join(project, ".marshal", "execution", "runs", "*.json"))
+	paths, err := filepath.Glob(filepath.Join(project, statepath.DirName, "execution", "runs", "*.json"))
 	if err != nil {
 		return process05PTYState{}, err
 	}

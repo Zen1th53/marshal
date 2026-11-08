@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // MemoryKind classifies what a memory record represents.
@@ -52,6 +53,22 @@ const (
 	MemorySuperseded MemoryLifecycle = "superseded"
 	MemoryTombstoned MemoryLifecycle = "tombstoned"
 )
+
+// WorkerUsable reports whether a record may be shown to a worker as project
+// memory: only durable or verified lifecycle states qualify, and a record that
+// is superseded, in conflict, or past its validity window never does.
+func (r MemoryRecordV2) WorkerUsable(now time.Time) bool {
+	if r.Lifecycle != MemoryDurable && r.Lifecycle != MemoryVerified {
+		return false
+	}
+	if len(r.SupersededBy) > 0 || len(r.ConflictIDs) > 0 {
+		return false
+	}
+	if r.ValidTo != nil && !r.ValidTo.IsZero() && r.ValidTo.Before(now) {
+		return false
+	}
+	return true
+}
 
 func (l MemoryLifecycle) IsValid() bool {
 	switch l {
@@ -251,6 +268,9 @@ func (r *MemoryRecordV2) Validate() error {
 	}
 	if r.Authority != "" && !r.Authority.IsValid() {
 		return fmt.Errorf("%w: memory authority %q is not valid", ErrInvalid, r.Authority)
+	}
+	if !utf8.ValidString(r.Title) || strings.ContainsRune(r.Title, 0) || !utf8.ValidString(r.Body) || strings.ContainsRune(r.Body, 0) {
+		return fmt.Errorf("%w: memory title and body must be valid UTF-8 without NUL", ErrInvalid)
 	}
 	if strings.TrimSpace(r.Body) == "" {
 		return fmt.Errorf("%w: memory record Body cannot be empty", ErrInvalid)

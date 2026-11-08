@@ -32,12 +32,32 @@ func TestCLIInstallationMountIncludesCompanion(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(bind.Source, "codex-code-mode-host")); err != nil {
 		t.Fatal("companion not visible", err)
 	}
-	for _, dir := range []string{home, filepath.Join(home, ".codex"), filepath.Join(home, ".claude"), filepath.Join(home, ".aws"), filepath.Join(home, ".ssh"), filepath.Join(home, ".gemini")} {
+	for _, dir := range []string{home, filepath.Join(home, ".codex"), filepath.Join(home, ".claude"), filepath.Join(home, ".aws"), filepath.Join(home, ".ssh"), filepath.Join(home, ".gemini"), filepath.Join(home, ".gemini", "antigravity-cli"), filepath.Join(home, ".gemini", "antigravity-ide")} {
 		os.MkdirAll(dir, 0700)
 		path := filepath.Join(dir, "cli")
 		os.WriteFile(path, []byte("cli"), 0700)
 		if _, _, err := cliInstallationMount(path); err == nil {
 			t.Fatalf("unsafe directory accepted: %s", dir)
 		}
+	}
+}
+
+func TestAntigravityInstallationMountPreservesNativeLayout(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	install := filepath.Join(home, ".gemini", "antigravity-ide", "bin")
+	if err := os.MkdirAll(install, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(install, "agy")
+	if err := os.WriteFile(path, []byte("executable"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	binary, bind, err := cliInstallationMount(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binary != path || bind.Source != install || bind.Target != install {
+		t.Fatalf("wrong Antigravity mount: %s %+v", binary, bind)
 	}
 }

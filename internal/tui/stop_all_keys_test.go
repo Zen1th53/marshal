@@ -11,9 +11,9 @@ import (
 func TestStopAllKeyTargetsControlFromEveryMarshalPane(t *testing.T) {
 	fake, log := setupFakeTmux(t)
 	w := NewWorkspace(nil, "project", "session")
-	w.tmuxSession = "owned-session"
 	w.tmuxPath = fake
 	w.workDir = t.TempDir()
+	w.tmuxSession = fixtureTmuxNamespace(t, w.providerRoot())
 	t.Setenv("MARSHAL_TEST_FORCE_TMUX", "1")
 	// Use real tmux ID syntax: Marshal %0, its chat %1, and a worker %2.
 	w.tmuxMarshalPaneID = "%0"

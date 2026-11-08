@@ -108,17 +108,18 @@ func TestKeysfixActiveNativeOperationRefused(t *testing.T) {
 }
 
 func TestKeysfixDirtyReviewTargetsUncommitted(t *testing.T) {
-	w := realTmuxWorkspace(t)
 	_, attached, _ := acceptanceWorkspace(t)
+	w := realTmuxWorkspace(t, attached.providerRoot())
 	w.runtime = attached.runtime
 	w.projectID, w.sessionID = attached.projectID, attached.sessionID
 	w.terminal = &Terminal{isTerm: true, out: io.Discard, inFd: -1, outFd: -1}
 	bin := t.TempDir()
 	script := filepath.Join(bin, "codex")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'codex 0.160.1'; exit; fi\nif [ \"$1\" = \"--help\" ]; then echo review; exit; fi\nread answer\n"), 0700); err != nil {
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'codex 0.160.1'; exit; fi\nif [ \"$1\" = \"login\" ]; then exit 0; fi\nif [ \"$1\" = \"--help\" ]; then echo review; exit; fi\nread answer\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("MARSHAL_PROVIDER_PATH_ONLY", "1")
 	if err := os.WriteFile(filepath.Join(w.workDir, "change.txt"), []byte("change"), 0600); err != nil {
 		t.Fatal(err)
 	}

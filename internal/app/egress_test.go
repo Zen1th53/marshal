@@ -102,7 +102,6 @@ func TestProviderDefaultsAreSelectedExactly(t *testing.T) {
 	for _, tc := range []struct{ provider, model, endpoint string }{
 		{"codex", "", "api.openai.com:443"},
 		{"claude", "", "api.anthropic.com:443"},
-		{"gemini", "", "generativelanguage.googleapis.com:443"},
 		{"opencode", "", "api.deepseek.com:443"},
 		{"opencode", "ollama/local", "127.0.0.1:11434"},
 	} {
@@ -113,6 +112,9 @@ func TestProviderDefaultsAreSelectedExactly(t *testing.T) {
 	}
 	if _, err := providerEndpoint("opencode", "unknown/model"); err == nil {
 		t.Fatal("unknown provider default granted")
+	}
+	if _, err := providerEndpoint("gemini", ""); err == nil || credentialProvider("gemini") {
+		t.Fatal("removed Gemini provider accepted")
 	}
 }
 
@@ -177,6 +179,73 @@ func TestSocketRefusalPersistsEvidenceAndHeadlessInbox(t *testing.T) {
 		if d.Allowed != (op == "allow") {
 			t.Fatalf("%s: %+v", op, d)
 		}
+	}
+}
+
+func TestRepeatedSocketRefusalRecordedOnce(t *testing.T) {
+	r := openNetpolRuntime(t)
+	a, _ := netpolicy.NewRunAllowlist(nil)
+	scope := &runEgress{id: "RUN-retry", worker: "runtime", provider: "opencode", socket: "test-retry-socket", allowlist: a, pending: map[string]bool{}}
+	r.egressRuns = map[string]*runEgress{scope.id: scope}
+	observe := r.socketObserver(scope.socket)
+	for i := 0; i < 500; i++ {
+		if err := observe(context.Background(), sandbox.Refusal{Host: "socket-operation", Operation: "46"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := observe(context.Background(), sandbox.Refusal{Host: "203.0.113.8", Port: 443, Operation: "connect"}); err != nil {
+		t.Fatal(err)
+	}
+	history, err := r.store.Since(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempts, notices := 0, 0
+	for _, e := range history {
+		switch string(e.Type) {
+		case "network.egress.attempt":
+			attempts++
+		case "network.egress.notification":
+			notices++
+		}
+	}
+	if attempts != 2 || notices != 2 {
+		t.Fatalf("a retried refusal flooded evidence: attempts=%d notifications=%d", attempts, notices)
+	}
+}
+
+func TestDeniedLocalNetlinkDiscoveryAuditedWithoutActionableEgressAlert(t *testing.T) {
+	r := openNetpolRuntime(t)
+	a, _ := netpolicy.NewRunAllowlist(nil)
+	scope := &runEgress{id: "RUN-netlink", worker: "runtime", provider: "opencode", socket: "test-netlink-socket", allowlist: a, pending: map[string]bool{}}
+	r.egressRuns = map[string]*runEgress{scope.id: scope}
+	if err := r.socketObserver(scope.socket)(context.Background(), sandbox.Refusal{
+		Host: "socket-family-16-type-3", Operation: "41", LocalKernelDiscovery: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(scope.pending) != 0 {
+		t.Fatalf("local denied query became actionable egress: %+v", scope.pending)
+	}
+	alerts, err := r.EgressNotifications(context.Background())
+	if err != nil || len(alerts) != 0 {
+		t.Fatalf("local denied query raised egress alert: %+v %v", alerts, err)
+	}
+	history, err := r.store.Since(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, event := range history {
+		if event.Data["source"] == "socket supervisor" && event.Data["local_kernel_discovery"] == true {
+			count++
+			if event.Data["allowed"] != false || event.RunID != scope.id {
+				t.Fatalf("denial audit not bound: %+v", event)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("denied local query audit count %d", count)
 	}
 }
 

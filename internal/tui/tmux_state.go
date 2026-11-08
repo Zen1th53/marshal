@@ -40,6 +40,10 @@ func (w *Workspace) monitorTaskState(ctx context.Context, a *activeTmuxAgent, h 
 				state = "failed"
 			}
 			w.tmuxMu.Lock()
+			approvalID, waiting := taskHandleApprovalWait(a, h, err)
+			if waiting {
+				state = "waiting"
+			}
 			a.state = state
 			taskID, runID, provider := a.taskID, a.runID, a.provider
 			for key, value := range w.tmuxAlerts {
@@ -50,7 +54,11 @@ func (w *Workspace) monitorTaskState(ctx context.Context, a *activeTmuxAgent, h 
 				}
 			}
 			w.tmuxMu.Unlock()
-			_ = w.deliverEgressAlert(app.EgressAlert{RunID: runID, ParentRunID: runID, TaskID: taskID, Worker: provider, Kind: "worker " + state, State: state, Message: "Task " + taskID + " worker " + state + "."})
+			message := "Task " + taskID + " worker " + state + "."
+			if waiting {
+				message = taskApprovalNotice(taskID, approvalID)
+			}
+			_ = w.deliverEgressAlert(app.EgressAlert{RunID: runID, ParentRunID: runID, TaskID: taskID, Worker: provider, Kind: "worker " + state, State: state, Message: message})
 			return
 		case <-ticker.C:
 			m := w.marshalSession()
@@ -100,12 +108,29 @@ func (w *Workspace) monitorTaskState(ctx context.Context, a *activeTmuxAgent, h 
 	}
 }
 
+// Caller holds tmuxMu. A wait belongs to this exact orchestration handle and
+// reported Process 05 identity; a reused task label cannot reclassify a failure.
+func taskHandleApprovalWait(a *activeTmuxAgent, h *driver.Handle, cause error) (string, bool) {
+	executionID, taskID, approvalID, waiting := app.MarshalApprovalWaitBinding(cause)
+	request := h.Request()
+	if !waiting || a.runID != request.RunID || a.taskID != request.Task.PlanTaskID || taskID != a.taskID || a.executionRunID == "" || executionID != a.executionRunID {
+		return "", false
+	}
+	return approvalID, true
+}
+
 // Replay durable incidents independently of whether their panes still exist.
 func (w *Workspace) replayWorkerAlerts(ctx context.Context) {
 	if w.runtime != nil {
 		alerts, err := w.runtime.EgressNotifications(ctx)
 		if err == nil {
 			for _, alert := range alerts {
+				// Expired and denied refusals are history: /egress still lists
+				// them, but replaying them would fill the status line with
+				// requests nobody can act on any more.
+				if alert.State != "waiting" {
+					continue
+				}
 				_ = w.deliverEgressAlert(alert)
 			}
 		}

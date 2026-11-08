@@ -34,6 +34,9 @@ func (h *CommandHandler) handleUpdate(ctx context.Context, args []string) (strin
 		}
 	}
 
+	if update.PrivateEdition() {
+		return update.PrivateGuidance, nil
+	}
 	checker := update.NewChecker()
 	current := h.ws.buildVersion()
 
@@ -83,7 +86,7 @@ func (h *CommandHandler) handleUpdate(ctx context.Context, args []string) (strin
 // all when MARSHAL_NO_UPDATE_CHECK is set: a workspace that opened is not the
 // place to explain that GitHub was unreachable.
 func (w *Workspace) checkForUpdateInBackground(ctx context.Context) {
-	if update.Disabled() {
+	if update.Disabled() || update.PrivateEdition() {
 		return
 	}
 	w.startBackground(ctx, func(ctx context.Context) {

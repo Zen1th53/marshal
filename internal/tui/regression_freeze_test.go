@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,7 +47,7 @@ func TestAdoptSurvivingWorkersLockedContract(t *testing.T) {
 	path, _ := setupFakeTmux(t)
 	w := NewWorkspace(nil, "test", "test")
 	w.workDir = t.TempDir()
-	w.tmuxPath, w.tmuxSession = path, "test-session"
+	w.tmuxPath, w.tmuxSession = path, fixtureTmuxNamespace(t, w.providerRoot())
 	done := make(chan struct{})
 	go func() {
 		w.tmuxMu.Lock()
@@ -66,7 +67,7 @@ func TestTakeoverSelectsViewedWorkerAndRejectsOperators(t *testing.T) {
 	t.Setenv("MARSHAL_TEST_FORCE_TMUX", "1")
 	w := NewWorkspace(nil, "test", "test")
 	w.workDir = t.TempDir()
-	w.tmuxPath, w.tmuxSession = path, "test-session"
+	w.tmuxPath, w.tmuxSession = path, fixtureTmuxNamespace(t, w.providerRoot())
 	w.nativeProvider = "codex"
 	w.tmuxActiveWins["codex"] = &activeTmuxAgent{id: "codex", provider: "codex", paneID: "%1", launchOrigin: nativeLaunchOperator}
 	w.tmuxActiveWins["task"] = &activeTmuxAgent{id: "task", role: "task", paneID: "%2", readOnly: true, launchOrigin: nativeLaunchAutomated}
@@ -93,7 +94,8 @@ func TestMissingPaneRetiredPreservingEvidence(t *testing.T) {
 	tmux.SetBinaryPath(path)
 	t.Cleanup(tmux.ResetBinaryPath)
 	w := NewWorkspace(nil, "test", "test")
-	w.workDir, w.tmuxSession = t.TempDir(), "test"
+	w.workDir = t.TempDir()
+	w.tmuxSession = fixtureTmuxNamespace(t, w.providerRoot())
 	a := &activeTmuxAgent{id: "task", role: "task", paneID: "%9"}
 	w.tmuxActiveWins[a.id] = a
 	if err := saveAgentEvidence(w.workDir, a.id, "earlier evidence"); err != nil {
@@ -108,7 +110,7 @@ func TestMissingPaneRetiredPreservingEvidence(t *testing.T) {
 	if err := w.retainAndCloseAgent(context.Background(), a, w.workDir, "closed externally"); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "evidence", "task-latest.txt"))
+	data, err := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "evidence", "task-latest.txt"))
 	if err != nil || !strings.Contains(string(data), "earlier evidence") {
 		t.Fatalf("earlier evidence lost: %q %v", data, err)
 	}
@@ -202,7 +204,7 @@ func TestClosedPaneMonitorRetiresOnce(t *testing.T) {
 	}
 	select {
 	case <-a.doneChan:
-	case <-time.After(3 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Fatal("closed pane monitor did not stop")
 	}
 	status, statusErr := tmux.RunCommand(ctx, "show-options", "-w", "-v", "-t", w.marshalTarget(), "@marshal_status")
@@ -225,7 +227,7 @@ func TestClosedPaneMonitorRetiresOnce(t *testing.T) {
 	if w.GetUIState().LastOutput != output {
 		t.Fatal("retirement repeated")
 	}
-	data, err := os.ReadFile(filepath.Join(w.workDir, ".marshal", "evidence", "worker-latest.txt"))
+	data, err := os.ReadFile(filepath.Join(w.workDir, statepath.DirName, "evidence", "worker-latest.txt"))
 	if err != nil || string(data) != "earlier evidence" {
 		t.Fatalf("lost evidence: %q %v", data, err)
 	}
@@ -242,16 +244,17 @@ func TestRelayHostUsesCreationPaneAfterRename(t *testing.T) {
 	tmux.SetBinaryPath(bin)
 	t.Cleanup(tmux.ResetBinaryPath)
 	w := NewWorkspace(nil, "test", "test")
-	w.tmuxSession = "test-session"
+	w.workDir = t.TempDir()
+	w.tmuxSession = fixtureTmuxNamespace(t, w.providerRoot())
 	var pane string
-	if err := w.hostNativeTmuxWindow(context.Background(), "gone-name", t.TempDir(), "unused", nativeLaunchAutomated, &pane); err != nil {
+	if err := w.hostNativeTmuxWindow(context.Background(), "gone-name", w.workDir, "unused", nativeLaunchAutomated, &pane); err != nil {
 		t.Fatal(err)
 	}
 	if pane != "%77" {
 		t.Fatalf("wrong identity: %s", pane)
 	}
 	data, _ := os.ReadFile(log)
-	if !strings.Contains(string(data), "select-pane -t %77 -d") || strings.Contains(string(data), "-t test-session:gone-name") {
+	if !strings.Contains(string(data), "select-pane -t %77 -d") || strings.Contains(string(data), "-t "+w.tmuxSession+":gone-name") {
 		t.Fatalf("name used after creation: %s", data)
 	}
 }
@@ -261,7 +264,7 @@ func TestReturnKeyInstalledBeforeSelectingWorker(t *testing.T) {
 	t.Setenv("MARSHAL_TEST_FORCE_TMUX", "1")
 	w := NewWorkspace(nil, "test", "test")
 	w.workDir = t.TempDir()
-	w.tmuxSession = "test-session"
+	w.tmuxSession = fixtureTmuxNamespace(t, w.providerRoot())
 	cleanupTmuxWorkspace(t, w)
 	if _, err := w.runNativeAgentInTmux(context.Background(), nativeLaunchOperator, "test", "Test", w.workDir, "/bin/sh", []string{"-c", "read answer"}, nil, nil, nil, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)

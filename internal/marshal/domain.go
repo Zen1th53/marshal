@@ -58,19 +58,22 @@ const (
 
 // Settings captures the policy approved for a run.
 type Settings struct {
-	ExecutionRights  ExecutionRights
-	AcceptanceMode   AcceptanceMode
-	ReworkLimit      int
-	UltraConcurrency int
-	Budget           Budget `json:",omitempty"`
+	WorkerStallMinutes int `json:",omitempty"`
+	ExecutionRights    ExecutionRights
+	AcceptanceMode     AcceptanceMode
+	ReworkLimit        int
+	UltraConcurrency   int
+	Budget             Budget `json:",omitempty"`
 	// Control is empty in settings stored before it existed; that reads as
 	// ControlFree.
 	Control Control `json:",omitempty"`
+	concurrencySettings
+	failoverSettings
 }
 
 // DefaultSettings returns the Marshal role's agreed defaults.
 func DefaultSettings() Settings {
-	return Settings{ExecutionRights: RightsReadOnly, AcceptanceMode: AcceptMarshalThenUser, ReworkLimit: 2, UltraConcurrency: 3, Control: ControlFree}
+	return buildDefaultSettings()
 }
 
 // EffectiveControl is the control level in force, reading an unset one as free.
@@ -92,8 +95,17 @@ func (s Settings) Validate() error {
 	if s.ReworkLimit < 0 || s.UltraConcurrency < 1 {
 		return errors.New("invalid settings limit")
 	}
+	if s.WorkerStallMinutes < 0 {
+		return errors.New("invalid worker stall window")
+	}
+	if err := s.validateConcurrencySettings(); err != nil {
+		return err
+	}
 	if c := s.EffectiveControl(); c != ControlFree && c != ControlStrict {
 		return errors.New("invalid control level")
+	}
+	if err := s.validateFailoverSettings(); err != nil {
+		return err
 	}
 	if err := s.Budget.Validate(); err != nil {
 		return err
@@ -197,19 +209,33 @@ func (t Task) EffectiveType() TaskType {
 	return t.Type
 }
 
+// WorkerSelection retains import-time routing observations. Empty models mean
+// unknown, never an inferred CLI default. The selected worker is Task.Worker.
+type WorkerSelection struct {
+	RequestedWorker string
+	RequestedModel  string `json:",omitempty"`
+	SelectedModel   string `json:",omitempty"`
+	Reason          string
+}
+
 type Task struct {
-	Type                TaskType        `json:",omitempty"`
-	HoneypotScanID      string          `json:",omitempty"`
-	HoneypotRequired    bool            `json:",omitempty"`
-	ImportedResult      *ImportedResult `json:",omitempty"`
-	PlanTaskID          string
-	Title               string
-	ParentID            string
-	Worker              string
-	Mode                WorkerMode
-	Branch              string
-	BaseCommit          string
-	ResultCommit        string
+	failoverTask
+	WorkerSelection  *WorkerSelection `json:",omitempty"`
+	Type             TaskType         `json:",omitempty"`
+	HoneypotScanID   string           `json:",omitempty"`
+	HoneypotRequired bool             `json:",omitempty"`
+	ImportedResult   *ImportedResult  `json:",omitempty"`
+	PlanTaskID       string
+	Title            string
+	ParentID         string
+	Worker           string
+	Mode             WorkerMode
+	Branch           string
+	BaseCommit       string
+	ResultCommit     string
+	// FailedAttemptCommit is observed by the runtime after an attempt fails
+	// before hand-in. It is recovery identity, never completion evidence.
+	FailedAttemptCommit string `json:",omitempty"`
 	State               TaskState
 	ReturnsByAgent      map[string]int
 	Checks              []Check
@@ -223,6 +249,10 @@ type Task struct {
 	ExpectedOutput      string `json:",omitempty"`
 	EscalationReason    string `json:",omitempty"`
 	FreshSessionRetries int    `json:",omitempty"`
+	// Exact pending Process 05 continuation; private builds validate its
+	// canonical approval receipt before returning this task to dispatch.
+	Process05WaitRunID      string `json:",omitempty"`
+	Process05WaitApprovalID string `json:",omitempty"`
 }
 
 // CloseAuthorization records the user's digest-bound standing consent to close.
@@ -251,15 +281,26 @@ type LifecycleOperation struct {
 	Attempt                                      int
 }
 
+// RuntimeCompatibility records observed runtime provenance independently of proof.
+type RuntimeCompatibility struct {
+	// Zero denotes an unversioned historical run, not an inferred protocol.
+	ProtocolVersion int
+	CreatedRuntime  string `json:",omitempty"`
+	ObservedRuntime string `json:",omitempty"`
+	Disposition     string
+}
+
 // Run binds plan approval, settings, tasks, and close authority.
 type Run struct {
-	GoverningDigest       string `json:",omitempty"`
+	Compatibility         *RuntimeCompatibility `json:",omitempty"`
+	GoverningDigest       string                `json:",omitempty"`
 	Repository, TargetRef string
 	Operation             *LifecycleOperation `json:",omitempty"`
 	Pause                 *Pause              `json:",omitempty"`
 	ArtifactRevision      int64               `json:",omitempty"`
 	PlanID                string
 	Process05Bound        bool
+	Process05Parallel     bool `json:"process05_parallel,omitempty"`
 	PlanVersion           int64
 	ApprovalScopeDigest   string
 	BaseCommit            string
@@ -396,7 +437,7 @@ func ValidateHandIn(task Task, h HandIn) error {
 			}
 		}
 		if !inScope {
-			return fmt.Errorf("out of scope file: %s", f)
+			return fmt.Errorf("out of scope file: %s; %s", f, allowedScopeHint(allowed))
 		}
 	}
 	for _, c := range task.Checks {
@@ -412,6 +453,31 @@ func ValidateHandIn(task Task, h HandIn) error {
 		}
 	}
 	return nil
+}
+
+// allowedScopeHint names the task's approved paths in a return reason, so a
+// rework can move the change instead of guessing again. It is bounded so a
+// task with a very wide scope still yields a short reason.
+func allowedScopeHint(allowed []string) string {
+	if len(allowed) == 0 {
+		return "this task may change no files; revert the change"
+	}
+	const limit = 1024
+	var b strings.Builder
+	b.WriteString("this task may change only: ")
+	for i, scope := range allowed {
+		entry := scope
+		if i > 0 {
+			entry = ", " + scope
+		}
+		if b.Len()+len(entry) > limit {
+			fmt.Fprintf(&b, " and %d more", len(allowed)-i)
+			break
+		}
+		b.WriteString(entry)
+	}
+	b.WriteString("; write the result inside these paths and revert the file outside them")
+	return b.String()
 }
 
 // Scopes and changed paths must stay relative to the repository, with no

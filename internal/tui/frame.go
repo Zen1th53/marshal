@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Zen1th53/marshal/internal/model"
@@ -26,12 +27,13 @@ func BuildFrame(s UIState, th *Theme, workDir string, composer *Composer, popup 
 	if cols < 40 {
 		cols = 40
 	}
+	var authNotices []string
+	s, authNotices = applyAuthUnavailableToState(s, workDir)
 
-	composerLines := composer.RenderLines()
-	cursorLine, cursorCol := composer.CursorPosition()
+	composerLines, cursorLine, cursorCol := composer.RenderWrapped(cols)
 	f := Frame{
 		Header:          buildHeader(s, th, cols),
-		Body:            buildBody(s, th, cols, rows),
+		Body:            buildBodyWithNotices(s, th, cols, rows, authNotices),
 		Status:          RenderStatusline(s, th, workDir, cols),
 		Popup:           popup,
 		Composer:        composerLines,
@@ -68,12 +70,16 @@ func buildHeader(s UIState, th *Theme, cols int) []string {
 // buildBody renders the live workspace: activity first, then a compact team
 // line, then claims only when they exist.
 func buildBody(s UIState, th *Theme, cols, rows int) []string {
+	return buildBodyWithNotices(s, th, cols, rows, nil)
+}
+
+func buildBodyWithNotices(s UIState, th *Theme, cols, rows int, authNotices []string) []string {
 	var out []string
 
 	if s.LastCommand == "/help all" {
 		return outputSection(s, th, cols)
 	}
-	out = append(out, activitySection(s, th, cols)...)
+	out = append(out, activitySectionWithNotices(s, th, cols, authNotices)...)
 
 	if res := outputSection(s, th, cols); len(res) > 0 {
 		out = append(out, "")
@@ -107,6 +113,10 @@ func buildBody(s UIState, th *Theme, cols, rows int) []string {
 // activitySection is the primary surface. Each entry names its author and what
 // happened, in the shape an operator reads top to bottom.
 func activitySection(s UIState, th *Theme, cols int) []string {
+	return activitySectionWithNotices(s, th, cols, nil)
+}
+
+func activitySectionWithNotices(s UIState, th *Theme, cols int, authNotices []string) []string {
 	events := MeaningfulMessages(s.RecentMessages)
 
 	// A newer release is stated where the operator is already looking, with
@@ -118,6 +128,13 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 			th.Colorize(th.Bold, "Update"),
 			th.Colorize(th.Success, "MARSHAL "+s.UpdateAvailable+" is available"),
 			th.Colorize(th.Active, "[F10] Download and install")+th.Colorize(th.Muted, " · /update")), cols))
+	}
+	for _, msg := range authNotices {
+		if !strings.Contains(s.LastOutput, msg) {
+			notice = append(notice, PadCell(fmt.Sprintf(" %s  %s",
+				th.Colorize(th.Danger, "Auth"),
+				RedactContent(msg, s.KnownSecrets)), cols))
+		}
 	}
 
 	if len(events) == 0 && s.ActiveToolCard == nil {
@@ -131,7 +148,8 @@ func activitySection(s UIState, th *Theme, cols int) []string {
 		shortcuts := fmt.Sprintf("   %s Status   %s Models",
 			th.Colorize(th.Active, "[F4]"), th.Colorize(th.Active, "[F5]"))
 		if s.NavigationAvailable {
-			shortcuts += "   " + th.Colorize(th.Active, "[Esc]") + " Navigation"
+			shortcuts += "   " + th.Colorize(th.Active, "[Ctrl+N]") + " Menu (every action)   " +
+				th.Colorize(th.Active, "[Esc]") + " Navigation"
 		}
 		out = append(out, PadCell(shortcuts, cols))
 		out = append(out, PadCell(fmt.Sprintf("   %s %s",
@@ -260,13 +278,51 @@ func outputSection(s UIState, th *Theme, cols int) []string {
 		text = activityTail(text)
 	}
 	lines := strings.Split(text, "\n")
-	if len(lines) > maxActivityEvents && s.LastCommand != "/help all" {
+	memoryRead := strings.HasPrefix(s.LastCommand, "/memory read ") && strings.HasPrefix(text, "MEMORY ")
+	if memoryRead {
+		// The review token may become complete after this output is produced.
+		// Keep the entire body in the scrollable frame and quote it so control
+		// bytes, trailing spaces and embedded newlines remain inspectable.
+		if parts := strings.SplitN(text, "\n", 4); len(parts) == 4 {
+			lines = append(parts[:3:3], "Body (quoted UTF-8): "+strconv.Quote(parts[3]))
+		}
+	}
+	if len(lines) > maxActivityEvents && s.LastCommand != "/help all" && !memoryRead {
 		lines = lines[len(lines)-maxActivityEvents:]
 	}
 	for _, line := range lines {
-		out = append(out, PadCell("   "+line, cols))
+		if memoryRead {
+			for _, part := range wrapMemoryReviewLine(line, cols-3) {
+				out = append(out, PadCell("   "+part, cols))
+			}
+		} else {
+			out = append(out, PadCell("   "+line, cols))
+		}
 	}
 	return out
+}
+
+// wrapMemoryReviewLine preserves every displayed rune. PadCell alone replaces
+// the unseen suffix with an ellipsis, which would certify a read the operator
+// could never actually inspect.
+func wrapMemoryReviewLine(line string, width int) []string {
+	if width < 1 {
+		return []string{""}
+	}
+	var out []string
+	var current strings.Builder
+	columns := 0
+	for _, r := range line {
+		runeColumns := RuneWidth(r)
+		if columns > 0 && columns+runeColumns > width {
+			out = append(out, current.String())
+			current.Reset()
+			columns = 0
+		}
+		current.WriteRune(r)
+		columns += runeColumns
+	}
+	return append(out, current.String())
 }
 
 func blockerSection(s UIState, th *Theme, cols int) []string {

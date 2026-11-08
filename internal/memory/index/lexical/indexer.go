@@ -210,6 +210,17 @@ func (idx *LexicalIndex) Search(ctx context.Context, projectID, query string, li
 // examining document content or calculating a score. A nil set is retained
 // only for index unit tests and trusted maintenance callers.
 func (idx *LexicalIndex) SearchAuthorized(ctx context.Context, projectID, query string, authorizedIDs map[string]struct{}, limit int) ([]SearchResult, error) {
+	return idx.SearchAuthorizedMinTerms(ctx, projectID, query, authorizedIDs, limit, 0)
+}
+
+// SearchAuthorizedMinTerms is SearchAuthorized for a caller that admits a
+// document matching at least minTerms distinct query tokens. Candidates come
+// from the rarest postings only: a document missing every one of the
+// (indexed tokens - minTerms + 1) rarest tokens matches fewer than minTerms
+// tokens, so the union of those postings is complete for that rule while
+// common tokens are never scanned. minTerms <= 0 keeps the strictest
+// candidate set (the single rarest posting).
+func (idx *LexicalIndex) SearchAuthorizedMinTerms(ctx context.Context, projectID, query string, authorizedIDs map[string]struct{}, limit, minTerms int) ([]SearchResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -225,7 +236,7 @@ func (idx *LexicalIndex) SearchAuthorized(ctx context.Context, projectID, query 
 	lowerQuery := strings.ToLower(q)
 
 	uniqueQueryTokens := make(map[string]struct{}, len(qTokens))
-	var candidates *postingList
+	var postings []*postingList
 	for _, token := range qTokens {
 		if _, duplicate := uniqueQueryTokens[token]; duplicate {
 			continue
@@ -235,16 +246,29 @@ func (idx *LexicalIndex) SearchAuthorized(ctx context.Context, projectID, query 
 		if posting.len() == 0 {
 			continue
 		}
-		if candidates == nil || posting.len() < candidates.len() {
-			candidates = posting
-		}
+		postings = append(postings, posting)
 	}
-	if candidates.len() == 0 {
+	if len(postings) == 0 {
 		return nil, nil
+	}
+	sort.SliceStable(postings, func(i, j int) bool { return postings[i].len() < postings[j].len() })
+	scan := 1
+	if minTerms > 0 && len(postings)-minTerms+1 > scan {
+		scan = len(postings) - minTerms + 1
+	}
+	var candidateIDs []string
+	seen := make(map[string]struct{})
+	for _, posting := range postings[:scan] {
+		for _, id := range posting.ids() {
+			if _, duplicate := seen[id]; !duplicate {
+				seen[id] = struct{}{}
+				candidateIDs = append(candidateIDs, id)
+			}
+		}
 	}
 
 	var scored []SearchResult
-	for _, memoryID := range candidates.ids() {
+	for _, memoryID := range candidateIDs {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}

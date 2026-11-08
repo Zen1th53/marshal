@@ -46,12 +46,14 @@ func (s *Store) GetVerificationSession(ctx context.Context, id string) (verifica
 // LatestVerificationForRun returns the newest canonical verification session
 // for an exact Process 05 run.  Status surfaces use this read path rather than
 // guessing that a run ID is itself a verification ID.
+// Versions are local to each session. Canonical creation order selects the
+// current attempt; a late update of an older attempt must not supersede it.
 func (s *Store) LatestVerificationForRun(ctx context.Context, runID string) (verification.Session, error) {
 	var body []byte
 	err := s.db.QueryRowContext(ctx, `
 		SELECT session_json FROM verification_sessions
 		WHERE run_id=?
-		ORDER BY version DESC, updated_at DESC, verification_id DESC LIMIT 1
+		ORDER BY rowid DESC LIMIT 1
 	`, runID).Scan(&body)
 	if errors.Is(err, sql.ErrNoRows) {
 		return verification.Session{}, verification.ErrNotFound
@@ -77,7 +79,12 @@ func (s *Store) UpdateVerificationSession(ctx context.Context, session verificat
 	if err != nil {
 		return err
 	}
-	r, err := s.db.ExecContext(ctx, `UPDATE verification_sessions SET version=?,state=?,session_json=?,updated_at=? WHERE verification_id=? AND version=?`, session.Version, session.State, body, session.UpdatedAt.UTC().Format(timeLayout), session.ID, expectedVersion)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	r, err := tx.ExecContext(ctx, `UPDATE verification_sessions SET version=?,state=?,session_json=?,updated_at=? WHERE verification_id=? AND version=?`, session.Version, session.State, body, session.UpdatedAt.UTC().Format(timeLayout), session.ID, expectedVersion)
 	if err != nil {
 		return err
 	}
@@ -85,7 +92,15 @@ func (s *Store) UpdateVerificationSession(ctx context.Context, session verificat
 	if n != 1 {
 		return verification.ErrConflict
 	}
-	return nil
+	if command, ok := ctx.Value(commandKey{}).(CommandRecord); ok {
+		if command.ProjectID != session.Binding.ProjectID || command.TargetID != session.ID || command.ExpectedVersion != expectedVersion {
+			return verification.ErrConflict
+		}
+		if err := insertCommandReceipt(ctx, tx, command, session.Version); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) AppendCompletionAttestation(ctx context.Context, a verification.CompletionAttestation) error {
@@ -96,7 +111,12 @@ func (s *Store) AppendCompletionAttestation(ctx context.Context, a verification.
 	if err != nil {
 		return err
 	}
-	result, err := s.db.ExecContext(ctx, `INSERT INTO completion_attestations(attestation_id,verification_id,verification_version,decision,digest,attestation_json,issued_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM verification_sessions WHERE verification_id=? AND version=?)`, a.ID, a.VerificationID, a.VerificationVersion, a.Decision, a.Digest, body, a.IssuedAt.UTC().Format(timeLayout), a.VerificationID, a.VerificationVersion)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `INSERT INTO completion_attestations(attestation_id,verification_id,verification_version,decision,digest,attestation_json,issued_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM verification_sessions WHERE verification_id=? AND version=?)`, a.ID, a.VerificationID, a.VerificationVersion, a.Decision, a.Digest, body, a.IssuedAt.UTC().Format(timeLayout), a.VerificationID, a.VerificationVersion)
 	if err != nil {
 		return fmt.Errorf("append completion attestation: %w", err)
 	}
@@ -104,7 +124,15 @@ func (s *Store) AppendCompletionAttestation(ctx context.Context, a verification.
 	if err != nil || count != 1 {
 		return verification.ErrConflict
 	}
-	return nil
+	if command, ok := ctx.Value(commandKey{}).(CommandRecord); ok {
+		if command.ProjectID != a.Binding.ProjectID || command.TargetID != a.VerificationID || command.ExpectedVersion != a.VerificationVersion {
+			return verification.ErrConflict
+		}
+		if err := insertCommandReceipt(ctx, tx, command, a.VerificationVersion); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // LatestCompletionAttestation returns the most recent attestation for one

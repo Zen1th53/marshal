@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -110,4 +111,42 @@ func TestWorktreeGCLifecycle(t *testing.T) {
 	}
 
 	_ = realRes
+}
+
+func TestGCRetainsAgedActiveAndUnknownArtifacts(t *testing.T) {
+	repo := testgit.New(t)
+	wm := New(repo.Path(), filepath.Join(t.TempDir(), "worktrees"))
+	statuses := []model.TaskStatus{model.TaskWorking, model.TaskReview, model.TaskQA, model.TaskSecurityReview, model.TaskReadyToMerge, ""}
+	var paths []string
+	req := GCRequest{TTL: time.Second, DryRun: true, TaskStatuses: map[string]model.TaskStatus{}}
+	for i, status := range statuses {
+		id := fmt.Sprintf("TASK-retained-%d", i)
+		wt, err := wm.Prepare(t.Context(), model.WorktreeRequest{TaskID: id, Branch: id, BaseCommit: repo.HEAD(t)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		old := time.Now().Add(-48 * time.Hour)
+		if err := os.Chtimes(wt.Path, old, old); err != nil {
+			t.Fatal(err)
+		}
+		if status != "" {
+			req.TaskStatuses[id] = status
+		}
+		paths = append(paths, wt.Path)
+	}
+	for _, dry := range []bool{true, false} {
+		req.DryRun = dry
+		result, err := wm.GC(t.Context(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(result.CleanedPaths) != 0 || len(result.RetainedPaths) != len(paths) {
+			t.Fatalf("aged artifacts lost (dry=%v): %+v", dry, result)
+		}
+		for _, path := range paths {
+			if _, err := os.Stat(path); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 }

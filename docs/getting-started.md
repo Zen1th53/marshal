@@ -1,96 +1,126 @@
-# Getting started with MARSHAL
+# Getting Started
 
-This guide covers the first local Community workflow. Install MARSHAL using
-the [installation guide](installation.md), then enter an existing Git
-repository.
+This guide walks you through your first complete multi-agent engineering run with Marshal: from a fresh Git repository to merged code in `main`.
 
-## Initialize and diagnose
+> [!WARNING]
+> **Host Execution Notice**: Workers execute on your local machine with your user privileges and without a sandbox. Worktrees isolate Git changes, not operating system calls. Always inspect goals, plans, and generated code before giving approval.
+
+---
+
+## 1. Prepare your Project
+
+Marshal works inside any standard Git repository. Navigate to an existing project or create a fresh one:
 
 ```bash
-cd /path/to/repository
+mkdir my-project
+cd my-project
+git init
+git commit --allow-empty -m "Initial commit"
+```
+
+A Git repository must have at least one commit so Marshal can establish a clean baseline for worker branches and merges.
+
+---
+
+## 2. Initialize Marshal (`marshal init`)
+
+Run `marshal init` from the root of your project:
+
+```bash
 marshal init
-marshal version
-marshal doctor
 ```
 
-`marshal init` creates missing `CAPABILITIES.yaml`, `PACK-VERSION.yaml`, and
-`RUNTIME-VERSION.yaml` defaults and initializes `.marshal/state.db`. Existing
-regular defaults are preserved. Init commits untracked policy/version defaults
-and ignores private runtime state using the project’s Git info/exclude file,
-without changing .gitignore. The current release reports v0.0.7 and schema
-v90.
+What `marshal init` does:
+- Creates the local state directory at `.marshal/`, where runtime databases and task logs reside.
+- Writes initial project configuration files: `CAPABILITIES.yaml`, `PACK-VERSION.yaml`, and `RUNTIME-VERSION.yaml`.
+- Configures Git to ignore the `.marshal/` runtime state using `.git/info/exclude`, leaving your personal `.gitignore` clean and untouched.
+- Commits initial configuration defaults to Git.
 
-Default `doctor` does not execute optional provider probes; those rows are
-reported as `NOT_RUN`. Probe installed provider CLIs explicitly:
+---
+
+## 3. Open the Board (`marshal`)
+
+Launch Marshal:
 
 ```bash
-marshal doctor --probe-providers
-marshal adapters
+marshal
 ```
 
-## Start the daemon
+Marshal opens inside a managed tmux environment displaying **the Board**.
 
-Run the daemon in one terminal:
+The Board is divided into clean operational sections:
+- **Header**: Displays run status, active tasks, inbox count, and `NEEDS YOU` operator gates.
+- **Docked Chat (left)**: Conversation pane with the Marshal model.
+- **Tasks Pane (center)**: Current tasks, their status (`queued`, `dispatched`, `reviewing`, `merged`), and assigned workers.
+- **Lanes Pane (right)**: Live status of active worker processes.
+- **Activity Log**: Event stream of state transitions, reviews, and verifications.
+- **Footer**: Key bindings and quick shortcuts.
 
-```bash
-marshal daemon
+---
+
+## 4. Give a Goal with `s` or in the Chat
+
+To start work, describe what you want built:
+
+- **Quick input from anywhere**: Press `s` on your keyboard. This opens the "Say" composer directly over the Board. Type your goal and press `Enter`.
+- **In the chat pane**: Press `F11` or `Alt+←` to move keyboard focus to the docked chat pane. Type your goal into the conversation and press `Enter`.
+
+Example goal:
+> "Add a health check HTTP endpoint at /healthz that returns JSON with status ok and current server uptime. Include unit tests."
+
+---
+
+## 5. Accept the Architecture with `y`
+
+After receiving your goal, the Marshal reviews your repository structure, asks clarifying questions if needed, and drafts an **architecture proposal** and project contract.
+
+When the draft is ready:
+1. The Board header alerts with a amber **`NEEDS YOU`** banner:
+   ```text
+   contract my-project rev 1 waits for your acceptance · [y] accept architecture · [b] open details
+   ```
+2. Press `y` on the Board. This arms the acceptance reply.
+3. Press `Enter` to confirm.
+
+The accepted architecture becomes the binding contract for all subsequent tasks.
+
+---
+
+## 6. Approve the Plan with `y`
+
+Next, the Marshal decomposes the architecture into discrete, small tasks. Each task defines:
+- Assigned worker model (e.g. Codex, Claude, OpenCode, Antigravity).
+- Scope of files to create or modify.
+- Concrete check criteria (e.g. `go test -v ./...` or `npm test`).
+
+When the plan is ready, another **`NEEDS YOU`** gate appears:
+```text
+drafted plan waits for your approval · 2 tasks · [y] approve the plan · [7] open the plan
 ```
 
-Use another terminal in the same repository:
+Press `y` and then `Enter` to approve the plan and begin dispatching workers.
 
-```bash
-marshal status
-```
+---
 
-The daemon listens on `.marshal/runtime.sock` with mode `0600`.
+## 7. Watch the Run
 
-## Register an agent and import a task
+Once approved, Marshal orchestrates the work automatically:
 
-```bash
-marshal agent register --name local-developer --role developer
+1. **Dispatch**: Tasks are assigned to worker agents. Each task runs in a separate Git worktree so workers never overwrite each other's in-progress changes.
+2. **Execution**: The worker implements the changes and submits them for review.
+3. **Cross-Provider Review**: A different provider inspects the diff against the task's criteria. If issues are found, the work is returned for rework (`r`).
+4. **Independent Verifier**: An independent model that did not author any of the task changes evaluates test results and criteria.
 
-cat > tasks.json <<'JSON'
-[
-  {
-    "id": "TASK-001",
-    "title": "Add a repository status check",
-    "status": "ready",
-    "risk": "R1"
-  }
-]
-JSON
+You can inspect any running or completed task at any time:
+- Highlight a task with `j` / `k` (or `↑` / `↓`) and press `Enter` to open its **Inspector**.
+- Press `o` inside the inspector to view the live worker terminal pane.
 
-marshal task import tasks.json --dry-run
-marshal task import tasks.json
-marshal tasks
-marshal task show TASK-001
-```
+---
 
-## Optional provider execution
+## 8. Result Closed to Main
 
-After the selected provider passes its local probe:
-
-```bash
-marshal run TASK-001 --adapter codex
-```
-
-The implemented adapter names are `codex`, `opencode`, `gemini`, and `claude`.
-Execution may fail closed if policy, credentials, Bubblewrap, or enforceable
-network isolation is unavailable. A binary probe is not an authenticated E2E
-verification.
-
-## Backup
-
-With the daemon running:
-
-```bash
-marshal state backup --output ./marshal-backup.db
-marshal state verify-backup ./marshal-backup.db
-```
-
-Community has no Web control plane or remote listener. Its local interfaces
-are the CLI, terminal TUI, MCP, and A2A. Remote Web and organization control
-are Enterprise capabilities.
-
-Continue with the [CLI reference](cli.md), [provider guide](providers.md), and
-[security model](security-model.md).
+When all tasks pass review and verification:
+- Marshal merges the task branches cleanly into your project's `main` branch.
+- The run state transitions to `CLOSED`.
+- You can review the completed commits with standard Git commands (`git log`, `git diff HEAD~1`).
+- Press `Ctrl+C` twice or type `/exit` in the command line to leave the Board.

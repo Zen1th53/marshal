@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -48,7 +49,7 @@ func (r *Runtime) Execution() *ExecutionService {
 		return r.execService
 	}
 
-	execRoot := filepath.Join(r.layout.Root, ".marshal", "execution")
+	execRoot := filepath.Join(r.layout.Root, statepath.DirName, "execution")
 	// Keep a failed service available only to report the initialization error.
 	// Never expose a partial engine or substitute non-durable stores.
 	fail := func(err error) *ExecutionService {
@@ -66,10 +67,12 @@ func (r *Runtime) Execution() *ExecutionService {
 
 	cfg := execution.EngineConfig{
 		ProjectRoot: r.layout.Root,
-		MaxWorkers:  4,
+		MaxWorkers:  runtimeMaxWorkers,
 		DefaultTTL:  30 * time.Minute,
 	}
 
+	ownedHarnesses := runtimeProcess05Harnesses(r)
+	configureRuntimeHarnessAdmission(r, &cfg, ownedHarnesses)
 	reader := &storePlanGoalReader{store: r.store}
 	engine, err := execution.NewEngineWithReaders(cfg, rStore, jStore, reader, reader)
 	if err != nil {
@@ -87,21 +90,26 @@ func (r *Runtime) Execution() *ExecutionService {
 	// Codex adapter. This is intentionally done at the application boundary so
 	// execution keeps using the canonical policy, sandbox, capability and
 	// evidence services rather than a second provider runner.
-	engine.RegisterHarness(runtimeCodexHarness(r))
-	engine.RegisterHarness(runtimeClaudeHarness(r))
+	for _, harness := range ownedHarnesses {
+		engine.RegisterHarness(harness)
+	}
 	return r.execService
 }
 
 // NewExecutionServiceWithEngine creates an ExecutionService with a specific preconfigured engine.
 func NewExecutionServiceWithEngine(r *Runtime, engine *execution.Engine) *ExecutionService {
+	if service, handled := privatePreconfiguredExecutionService(r, engine); handled {
+		return service
+	}
 	service := &ExecutionService{
 		runtime: r,
 		engine:  engine,
 		now:     func() time.Time { return time.Now().UTC() },
 	}
 	if r != nil && engine != nil {
-		engine.RegisterHarness(runtimeCodexHarness(r))
-		engine.RegisterHarness(runtimeClaudeHarness(r))
+		for _, harness := range runtimeProcess05Harnesses(r) {
+			engine.RegisterHarness(harness)
+		}
 	}
 	return service
 }
@@ -149,6 +157,9 @@ func (s *ExecutionService) startRun(ctx context.Context, sessionID string, proje
 	if err != nil {
 		return nil, fmt.Errorf("get active plan: %w", err)
 	}
+	if blockers := planExecutionBlockers(p); len(blockers) > 0 {
+		return nil, fmt.Errorf("%w: approved plan is not executable: %s", plan.ErrPlanInvalid, strings.Join(blockers, "; "))
+	}
 	actualDigest := fmt.Sprintf("%s/%s", p.Goal.RequestDigest, p.Goal.ConstraintDigest)
 	if expectedPlanID != "" && (p.ID != expectedPlanID || p.Version != expectedPlanVersion || actualDigest != expectedPlanDigest) {
 		return nil, fmt.Errorf("%w: approved plan binding changed (now %s v%d %s)",
@@ -173,7 +184,7 @@ func (s *ExecutionService) startRun(ctx context.Context, sessionID string, proje
 	}
 	for i := range runs {
 		run := runs[i]
-		if run.SessionID == sessionID && run.ProjectID == projectID &&
+		if run.ParentRunID == "" && run.SessionID == sessionID && run.ProjectID == projectID &&
 			run.GoalID == goal.ID && run.GoalRevision == goal.Revision &&
 			run.PlanID == p.ID && run.PlanVersion == p.Version {
 			return &run, nil
@@ -599,4 +610,11 @@ func (r *storePlanGoalReader) GetActiveGoalContract(ctx context.Context, session
 func canonicalPlanTaskID(planID string, planVersion int64, taskID string) string {
 	sum := sha256.Sum256([]byte(planID + "\x00" + fmt.Sprint(planVersion) + "\x00" + taskID))
 	return "TASK-P05-" + hex.EncodeToString(sum[:12])
+}
+
+// Materialize each owned provider callback once so the constructor guard and
+// registry share its exact identity rather than a caller-controlled name.
+func runtimeProcess05Harnesses(r *Runtime) []execution.WorkerHarness {
+	owned := []execution.WorkerHarness{runtimeCodexHarness(r), runtimeClaudeHarness(r)}
+	return append(owned, privateProcess05Harnesses(r)...)
 }

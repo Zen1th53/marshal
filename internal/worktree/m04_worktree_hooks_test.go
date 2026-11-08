@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,7 +24,7 @@ func TestM04WorktreeOperationsDoNotRunHooks(t *testing.T) {
 	if out, err := exec.Command("git", "-C", repo.Path(), "config", "core.hooksPath", hooks).CombinedOutput(); err != nil {
 		t.Fatalf("configure hooks: %s: %v", out, err)
 	}
-	manager := New(repo.Path(), filepath.Join(repo.Path(), ".marshal", "worktrees"))
+	manager := New(repo.Path(), filepath.Join(repo.Path(), statepath.DirName, "worktrees"))
 	request := model.WorktreeRequest{TaskID: "TASK-001", Branch: "marshal/run/task", BaseCommit: repo.HEAD(t)}
 	wt, err := manager.Prepare(context.Background(), request)
 	if err != nil {

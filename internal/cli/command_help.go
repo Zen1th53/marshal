@@ -9,7 +9,14 @@ import (
 
 // Static usage is resolved before dispatch, so help never opens a runtime or
 // invokes a handler. Parent commands list their own children, including aliases.
-const commandSynopsis = `init
+// commandSynopsis is the shared catalog plus the edition-private commands.
+const commandSynopsis = baseCommandSynopsis + editionCommandSynopsis
+
+const baseCommandSynopsis = `telemetry status
+telemetry disable
+telemetry enable
+ultra request
+init
 doctor [--probe-providers] [--deep]
 status
 agent register --name NAME --role ROLE [--provider PROVIDER] [--model MODEL]
@@ -26,6 +33,10 @@ adapters
 adapter probe NAME
 mcp serve [--listen ADDR] [--insecure]
 mcp status
+mcp stdio [--insecure]
+egm status [--provider PROVIDER]
+egm install --provider PROVIDER
+egm record --stage STAGE --provider PROVIDER --egm-version VERSION --file PATH
 a2a serve [--listen ADDR] [--insecure]
 a2a status
 events
@@ -36,6 +47,7 @@ memory status
 memory recall QUERY
 memory show MEM-ID
 memory list
+memory candidates
 memory promote MEM-ID [--dry-run]
 memory tombstone MEM-ID [--dry-run]
 memory audit
@@ -53,6 +65,10 @@ update install
 update apply
 goal REQUEST
 goal explain REQUEST
+architecture serve [--proposal FILE] [--layout FILE] [--provider PROVIDER] [--no-open]
+architecture draft [--request REQUEST] [--output FILE] [--provider PROVIDER]
+architecture feedback [--provider PROVIDER]
+architecture receipt import FILE
 plan create SESSION-ID --file INPUT.json
 plan show PROJECT-ID
 plan approve PROJECT-ID

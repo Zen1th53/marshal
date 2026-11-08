@@ -38,8 +38,12 @@ func TestRuntimeRunAppliesConfiguredGateBeforeClaimOrAdapter(t *testing.T) {
 	if _, err := runtime.ImportTasks(context.Background(), []model.Task{{ID: "TASK-GATE-A06", Title: "gate task", Status: model.TaskReady, Risk: model.R1}}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = runtime.Run(context.Background(), RunRequest{TaskID: "TASK-GATE-A06", AgentID: agent.ID, Adapter: "codex", ExpectedRevision: 0})
-	if !errors.Is(err, gate.ErrUnknownCheck) {
+	before, err := runtime.Task(t.Context(), "TASK-GATE-A06")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runtime.Run(context.Background(), RunRequest{TaskID: "TASK-GATE-A06", AgentID: agent.ID, Adapter: "codex", ExpectedRevision: 0})
+	if !assertLegacyRunFixtureRefused(t, runtime, before, result, err) && !errors.Is(err, gate.ErrUnknownCheck) {
 		t.Fatalf("Run error=%v want=%v", err, gate.ErrUnknownCheck)
 	}
 	if fake.calls != 0 {
@@ -69,8 +73,17 @@ func TestDefaultRuntimeDoesNotRecordPlaceholderCompliance(t *testing.T) {
 	if _, err := runtime.ImportTasks(ctx, []model.Task{{ID: "TASK-POLICY", Title: "write output", Status: model.TaskReady, Risk: model.R1}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runtime.Run(ctx, RunRequest{TaskID: "TASK-POLICY", AgentID: agent.ID, Adapter: "codex"}); err != nil {
+	before, err := runtime.Task(ctx, "TASK-POLICY")
+	if err != nil {
 		t.Fatal(err)
+	}
+	result, err := runtime.Run(ctx, RunRequest{TaskID: "TASK-POLICY", AgentID: agent.ID, Adapter: "codex"})
+	refused := assertLegacyRunFixtureRefused(t, runtime, before, result, err)
+	if !refused && err != nil {
+		t.Fatal(err)
+	}
+	if refused && (fake.probes != 0 || fake.runs != 0) {
+		t.Fatal("refused legacy Run called the adapter")
 	}
 	readback, err := runtime.PolicyReadback(ctx)
 	if err != nil {

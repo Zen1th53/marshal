@@ -5,12 +5,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Zen1th53/marshal/internal/mcp"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/Zen1th53/marshal/internal/egm"
 	"github.com/Zen1th53/marshal/internal/policy"
 	"github.com/Zen1th53/marshal/internal/project"
 	"github.com/Zen1th53/marshal/internal/resources"
@@ -79,6 +82,10 @@ func Check(ctx context.Context, root string, options Options) Report {
 		run = commandOutput
 	}
 	report := Report{Verdict: Pass}
+	// Optional EGM failures select the built-in flow, leaving runtime health intact.
+	for _, status := range egm.All() {
+		report.Results = append(report.Results, Result{Name: "egm_" + status.Provider, Verdict: Pass, Method: "local plugin compatibility", Capability: "optional design review", Detail: status.String()})
+	}
 	add := func(result Result) {
 		report.Results = append(report.Results, result)
 		if result.Verdict == Fail {
@@ -122,7 +129,7 @@ func Check(ctx context.Context, root string, options Options) Report {
 		defer database.Close()
 		version, versionErr := database.SchemaVersion(ctx)
 		integrityErr := database.Integrity(ctx)
-		if versionErr != nil || integrityErr != nil || version < 1 || version > store.LatestSchemaVersion {
+		if versionErr != nil || integrityErr != nil || version < 1 || !store.SchemaVersionSupported(version) {
 			add(failure("sqlite", "PRAGMA integrity_check", "canonical state is invalid"))
 		} else {
 			add(success("sqlite", "PRAGMA integrity_check", fmt.Sprintf("schema version %d is healthy", version)))
@@ -135,9 +142,9 @@ func Check(ctx context.Context, root string, options Options) Report {
 	}
 
 	if secureDirectory(layout.RuntimeDir) {
-		add(success("permissions", "stat .marshal", "runtime directory mode is 0700"))
+		add(success("permissions", "stat "+statepath.DirName, "runtime directory mode is 0700"))
 	} else {
-		add(failure("permissions", "stat .marshal", "runtime directory must have mode 0700"))
+		add(failure("permissions", "stat "+statepath.DirName, "runtime directory must have mode 0700"))
 	}
 	if info, err := os.Lstat(layout.Socket); errors.Is(err, os.ErrNotExist) {
 		add(success("socket", "lstat runtime.sock", "daemon is not running"))
@@ -188,10 +195,10 @@ func Check(ctx context.Context, root string, options Options) Report {
 		probeCodex(ctx, lookup, run, add)
 		probeOpenCode(ctx, lookup, run, add)
 		probeOllama(ctx, lookup, run, add)
-		probeGemini(ctx, lookup, run, add)
+		probeAgy(ctx, lookup, run, add)
 		probeClaude(ctx, lookup, run, add)
 	} else {
-		for _, name := range []string{"codex", "opencode", "ollama", "gemini", "claude"} {
+		for _, name := range []string{"codex", "opencode", "ollama", "agy", "claude"} {
 			add(Result{
 				Name:       name,
 				Verdict:    NotRun,
@@ -212,7 +219,20 @@ func Check(ctx context.Context, root string, options Options) Report {
 	} else {
 		add(success("policy", "strict parse CAPABILITIES.yaml", "policy is available"))
 	}
+	probeMCP(ctx, layout.Root, add)
 	return report
+}
+
+func probeMCP(_ context.Context, _ string, add func(Result)) {
+	states := mcp.CheckProviderStates(nil)
+	parts := make([]string, 0, len(states))
+	for _, provider := range []string{"claude", "codex", "opencode", "antigravity"} {
+		if state, ok := states[provider]; ok {
+			parts = append(parts, provider+": "+state.Detail)
+		}
+	}
+	detail := strings.Join(parts, "; ") + ". Configuration does not prove a live connection."
+	add(Result{Name: "mcp_providers", Verdict: Pass, Method: "session configuration", Capability: "shared durable memory", Detail: detail})
 }
 
 func probeCodex(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
@@ -268,18 +288,18 @@ func probeOllama(ctx context.Context, lookup func(string) (string, error), run f
 	add(success("ollama", "ollama --version", fmt.Sprintf("%s (%s)", strings.TrimSpace(version), host)))
 }
 
-func probeGemini(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
-	binary, err := lookup("gemini")
+func probeAgy(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
+	binary, err := lookup("agy")
 	if err != nil {
-		add(Result{Name: "gemini", Verdict: Pass, Method: "PATH lookup", Capability: "Gemini execution optional", Detail: "Gemini CLI is missing (optional provider)"})
+		add(Result{Name: "agy", Verdict: Pass, Method: "PATH lookup", Capability: "Antigravity execution optional", Detail: "Antigravity CLI is missing (optional provider)"})
 		return
 	}
 	version, versionErr := runBounded(ctx, run, binary, "--version")
 	if versionErr != nil {
-		add(Result{Name: "gemini", Verdict: Pass, Method: "gemini --version", Capability: "Gemini execution optional", Detail: "Gemini probe failed (optional provider)"})
+		add(Result{Name: "agy", Verdict: Pass, Method: "agy --version", Capability: "Antigravity execution optional", Detail: "Antigravity probe failed (optional provider)"})
 		return
 	}
-	add(success("gemini", "gemini --version", strings.TrimSpace(version)))
+	add(success("agy", "agy --version", strings.TrimSpace(version)))
 }
 
 func probeClaude(ctx context.Context, lookup func(string) (string, error), run func(context.Context, string, ...string) (string, error), add func(Result)) {
@@ -356,7 +376,7 @@ func failure(name, method, detail string) Result {
 }
 
 func finalizeMissing(report Report) Report {
-	for _, name := range []string{"pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "resources", "ollama_models", "codex", "opencode", "ollama", "gemini", "claude", "bwrap", "artifacts", "policy"} {
+	for _, name := range []string{"pack", "runtime_version", "sqlite", "permissions", "socket", "worktree", "resources", "ollama_models", "codex", "opencode", "ollama", "agy", "claude", "bwrap", "artifacts", "policy"} {
 		report.Results = append(report.Results, failure(name, "repository prerequisite", "not checked because repository discovery failed"))
 	}
 	report.Verdict = Fail

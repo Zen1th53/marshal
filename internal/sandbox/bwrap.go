@@ -59,6 +59,9 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 	if err != nil {
 		return model.CommandSpec{}, fmt.Errorf("%w: worktree: %v", model.ErrInvalid, err)
 	}
+	if !request.WorkerMCPMask.ValidEnvelope(request) {
+		return model.CommandSpec{}, fmt.Errorf("%w: invalid sealed MCP mount envelope", model.ErrInvalid)
+	}
 	args := namespaceArgs()
 	args = append(args, "--unshare-net")
 	if request.Supervised {
@@ -77,6 +80,22 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		"--setenv", "HOME", "/home/marshal",
 		"--setenv", "PATH", "/usr/bin:/bin",
 	)
+	// The sealed AGY global configuration must retain every mutable ancestor
+	// at a mount boundary. Install these before the existing trap/scratch HOME
+	// bind so synthetic canaries and normal HOME writes remain available.
+	if !request.WorkerMCPMask.Empty() {
+		args = append(args, "--tmpfs", "/home", "--dir", "/home/marshal")
+		if request.ScratchHome == "" {
+			args = append(args, "--tmpfs", "/home/marshal")
+		}
+	}
+	// Outside folders go first so the worktree, scratch HOME and every later
+	// mount still sit on top of them where paths nest.
+	outsideArgs, err := outsideReadArgs(request.OutsideReads, worktree)
+	if err != nil {
+		return model.CommandSpec{}, err
+	}
+	args = append(args, outsideArgs...)
 	bindMode := "--bind"
 	if request.ReadOnlyWorktree {
 		bindMode = "--ro-bind"
@@ -109,19 +128,19 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		args = append(args, "--tmpfs", mountPath)
 	}
 	for _, bind := range request.ReadOnlyBinds {
-		if isForbiddenCredentialPath(bind.Source) || isForbiddenCredentialPath(bind.Target) {
+		if (isForbiddenCredentialPath(bind.Source) || isForbiddenCredentialPath(bind.Target)) && !request.WorkerMCPMask.Allows(bind.Source, bind.Target, worktree) {
 			return model.CommandSpec{}, fmt.Errorf("%w: read-only bind to credential file forbidden: %s -> %s", model.ErrInvalid, bind.Source, bind.Target)
 		}
 		source, err := existingPath(bind.Source)
 		if err != nil || !filepath.IsAbs(bind.Target) ||
-			(!pathWithin("/home/marshal", bind.Target) && source != bind.Target) {
+			(!pathWithin("/home/marshal", bind.Target) && source != bind.Target && !request.WorkerMCPMask.Allows(source, bind.Target, worktree)) {
 			return model.CommandSpec{}, fmt.Errorf("%w: invalid read-only bind %s -> %s", model.ErrInvalid, bind.Source, bind.Target)
 		}
 		info, err := os.Stat(source)
 		if err != nil {
 			return model.CommandSpec{}, fmt.Errorf("%w: inspect read-only bind %s: %v", model.ErrInvalid, bind.Source, err)
 		}
-		if info.IsDir() && (isProviderStateDirectory(source) || isProviderStateDirectory(bind.Target)) {
+		if info.IsDir() && (isProviderStateDirectory(source) || isProviderStateDirectory(bind.Target)) && !request.WorkerMCPMask.Allows(source, bind.Target, worktree) {
 			return model.CommandSpec{}, fmt.Errorf("%w: provider state directory bind forbidden: %s -> %s", model.ErrInvalid, bind.Source, bind.Target)
 		}
 		targetParent := filepath.Dir(bind.Target)
@@ -131,7 +150,26 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 		args = append(args, "--dir", targetParent)
 		args = append(args, "--ro-bind", source, bind.Target)
 	}
+	sizeBounded := true
+	if !request.WorkerMCPMask.Empty() {
+		sizeBounded = bwrapSupportsOption(b.binary, "--size")
+	}
+	projectMounts, projectEvidence, err := workerProjectCacheMounts(request, sizeBounded)
+	if err != nil {
+		return model.CommandSpec{}, err
+	}
+	args = append(args, projectMounts...)
 	isolationReason := "bubblewrap command envelope"
+	if len(request.OutsideReads) > 0 {
+		folders := make([]string, 0, len(request.OutsideReads))
+		for _, read := range request.OutsideReads {
+			folders = append(folders, read.Folder)
+		}
+		isolationReason += "; outside folders read-only: " + strings.Join(folders, ", ")
+	}
+	if projectEvidence != "" {
+		isolationReason += "; " + projectEvidence
+	}
 	if request.NetworkAllowed {
 		isolationReason += "; isolated network with per-run Unix egress proxy"
 		bridgeArgs, argv, err := egressEnvelope(request.EgressSocket, request.BridgeBinary, command)
@@ -186,6 +224,41 @@ func (b *Bwrap) Wrap(request model.SandboxRequest, command []string) (model.Comm
 			Network: request.NetworkAllowed, Reason: isolationReason,
 		},
 	}, nil
+}
+
+// outsideReadArgs mounts each requested outside folder read-only at its own
+// path and hides its masked credential stores and sockets. A folder must be a
+// resolved absolute directory that neither contains nor lies inside the
+// worktree, and is never a credential or provider state directory itself.
+func outsideReadArgs(reads []model.OutsideRead, worktree string) ([]string, error) {
+	var args []string
+	for _, read := range reads {
+		folder, err := existingDirectory(read.Folder)
+		if err != nil || folder != filepath.Clean(read.Folder) || folder == "/" {
+			return nil, fmt.Errorf("%w: invalid outside read folder %s", model.ErrInvalid, read.Folder)
+		}
+		if folder == worktree || pathWithin(worktree, folder) || pathWithin(folder, worktree) ||
+			folder == "/home/marshal" || pathWithin("/home/marshal", folder) {
+			return nil, fmt.Errorf("%w: outside read folder overlaps the sandbox: %s", model.ErrInvalid, folder)
+		}
+		if isForbiddenCredentialPath(folder) || isProviderStateDirectory(folder) {
+			return nil, fmt.Errorf("%w: outside read folder is a credential store: %s", model.ErrInvalid, folder)
+		}
+		args = append(args, "--ro-bind", folder, folder)
+		for _, dir := range read.MaskDirs {
+			if !pathWithin(folder, dir) {
+				return nil, fmt.Errorf("%w: outside read mask %s is not inside %s", model.ErrInvalid, dir, folder)
+			}
+			args = append(args, "--tmpfs", dir)
+		}
+		for _, file := range read.MaskFiles {
+			if !pathWithin(folder, file) {
+				return nil, fmt.Errorf("%w: outside read mask %s is not inside %s", model.ErrInvalid, file, folder)
+			}
+			args = append(args, "--ro-bind", "/dev/null", file)
+		}
+	}
+	return args, nil
 }
 
 func pathWithin(root, candidate string) bool {
@@ -285,10 +358,13 @@ func isForbiddenCredentialPath(path string) bool {
 func isProviderStateDirectory(path string) bool {
 	lower := strings.ToLower(filepath.ToSlash(filepath.Clean(path)))
 	base := filepath.Base(lower)
+	if base == "config" && filepath.Base(filepath.Dir(lower)) == ".gemini" {
+		return true
+	}
 	if base == ".codex" || base == ".claude" || base == ".opencode" || base == ".gemini" {
 		return true
 	}
-	for _, provider := range []string{"codex", "claude", "opencode", "gemini"} {
+	for _, provider := range []string{"codex", "claude", "opencode", "gemini", "antigravity"} {
 		if strings.Contains(lower, "/.config/"+provider) {
 			return true
 		}

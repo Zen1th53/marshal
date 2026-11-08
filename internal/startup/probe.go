@@ -3,6 +3,7 @@ package startup
 import (
 	"context"
 	"errors"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -256,7 +257,7 @@ func marshalInitialized(prober Prober, root string) bool {
 	if root == "" {
 		return false
 	}
-	info, err := prober.Stat(filepath.Join(root, ".marshal"))
+	info, err := prober.Stat(statepath.Path(root))
 	return err == nil && info.IsDir()
 }
 
@@ -353,7 +354,7 @@ func probeIsolation(env Environment) []Check {
 		checks = append(checks, Check{
 			ID: "env.network", Dimension: DimensionEnvironment, Status: StatusReady,
 			Required: false, Reason: ReasonOK,
-			Summary: "Outbound access is limited to approved destinations.",
+			Summary: networkReadySummary,
 		})
 	} else {
 		// Unenforced egress removes network and provider capability but does

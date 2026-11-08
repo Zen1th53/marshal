@@ -18,18 +18,29 @@ import (
 	"github.com/Zen1th53/marshal/internal/app"
 	"github.com/Zen1th53/marshal/internal/cloud"
 	"github.com/Zen1th53/marshal/internal/collaboration"
+	"github.com/Zen1th53/marshal/internal/constitution"
 	"github.com/Zen1th53/marshal/internal/harness"
+	"github.com/Zen1th53/marshal/internal/hostgit"
 	"github.com/Zen1th53/marshal/internal/model"
 	"github.com/Zen1th53/marshal/internal/projectid"
 	"github.com/Zen1th53/marshal/internal/store"
+	"github.com/Zen1th53/marshal/internal/tui/board/anim"
+	"github.com/Zen1th53/marshal/internal/tui/board/widgets/inbox"
 )
 
 // Workspace encapsulates the live Terminal TUI Control Plane over canonical runtime state.
 type Workspace struct {
+	proposalMCP        proposalMCPState
+	chat               nativeChatState
 	workers            workerLifecycle
 	permissions        permissionState
+	inboxView          inbox.View
 	governedDispatches map[string]context.CancelFunc
 	governedDispatchWG sync.WaitGroup
+	// operatorInstructionsSeen holds the refs of owner transcript messages
+	// already observed as architecture instructions, so polling the same
+	// transcript never re-records, re-binds or re-refuses one message.
+	operatorInstructionsSeen sync.Map
 
 	egressGate ioGate
 	mu         sync.RWMutex
@@ -129,6 +140,11 @@ type Workspace struct {
 	// it, so a stray interrupt never closes the workspace on its own.
 	interruptArmed        bool
 	exitRequested         bool
+	// relaunchable is set by the launcher that execs `marshal tui
+	// SESSION-ID` when Run returns a SessionRelaunch; relaunchSession is
+	// the session the operator chose to open (CTUI-0219).
+	relaunchable    bool
+	relaunchSession string
 	nativeOnStart         *[]string
 	nativeStartupProvider string
 	// nativeProvider records which agent a session last opened. It is an
@@ -154,6 +170,7 @@ type Workspace struct {
 	// Scroll and activity unread tracking
 	uiEvents              chan func()
 	repaint               chan struct{}
+	animator              atomic.Pointer[anim.Animator] // set while runRawTerminal owns the screen
 	commandBusy           atomic.Bool
 	navigationOpening     atomic.Bool
 	commandWG             sync.WaitGroup
@@ -165,7 +182,115 @@ type Workspace struct {
 	commandNames          []string
 
 	scrollOffset int
-	unreadNew    int
+	// lastCommandError is the output of the last command that failed. While
+	// that error is still on screen, a later alert shows below it instead of
+	// replacing it; any other output ends it.
+	lastCommandError string
+	unreadNew        int
+
+	// boardUI is the Board's focus, selection and open inspector. Like
+	// inboxView it belongs to the loop that reads keys and paints.
+	boardUI boardUI
+	// boardFeed caches the run's decisions so the Board reads only new ones.
+	boardFeed boardFeed
+	// boardWake tells the Board follower that the panel or the view changed.
+	boardWake chan struct{}
+	// laneNudge tells the Board follower a worker pane reported a new
+	// OSC 7501 status; paneTaps holds the tap on each worker pane.
+	laneNudge chan struct{}
+	tapMu     sync.Mutex
+	paneTaps  map[string]*paneTap
+	// boardHits is where the last Board paint put what a click can reach.
+	boardHits boardHitMap
+	// boardClassic is set by /view classic: a run is then shown on the
+	// classic screen instead of the Board. Guarded by mu.
+	boardClassic bool
+	// homeBoard makes the Board the screen with no run open: the raw
+	// terminal sets it, so a fresh project opens on the Board's first-use
+	// card rather than the classic screen. Guarded by mu.
+	homeBoard bool
+	// firstUse is the empty Board's own state.
+	firstUse firstUseState
+	// say carries what the operator types to the Marshal from the Board's
+	// composer into the chat.
+	say sayState
+	// notes is what happened in the background (re-deliveries, alerts,
+	// verify results) as the Board's Activity shows it.
+	notes boardNotes
+	// gates is the owner gates the Board's inbox shows (board_gates.go);
+	// gateContractSource replaces the store's pending contract in tests.
+	gates              gateState
+	gateContractSource gateSource
+	// answer is the last answer to something the operator did (a command,
+	// a key, a click), the only text the Board's ANSWER overlay and footer
+	// show; background messages never change it. Guarded by mu, numbered
+	// by outputSeq.
+	answer        string
+	answerIsError bool
+	// chatTypeMu is held while anything types into the tmux chat pane, so
+	// two writers never interleave in its composer.
+	chatTypeMu sync.Mutex
+	// dock keeps the Marshal chat joined beside the Board.
+	dock marshalDock
+	// hostWatch samples the host for as long as the screen runs; nil
+	// before then. Set once, before its goroutine starts.
+	hostWatch atomic.Pointer[hostWatcher]
+	// hostView is set while the Host view is painted in the Board's body.
+	hostView atomic.Bool
+	// memView is set while the Memory view is painted in the Board's body;
+	// mem is its data and selection, memWake wakes its follower, and
+	// memSource replaces the store as its source in tests.
+	memView   atomic.Bool
+	mem       memoryViewState
+	memWake   chan struct{}
+	memSource memorySource
+	// provView is set while the Providers view is painted in the Board's
+	// body; prov is its data and selection, provWake wakes its follower,
+	// and provSource replaces the store as its source in tests.
+	provView   atomic.Bool
+	prov       providerViewState
+	provWake   chan struct{}
+	provSource providerViewSource
+	// verView is set while the Verify view is painted in the Board's body;
+	// ver is its data and selection, verWake wakes its follower, and
+	// verSource replaces the store as its source in tests.
+	verView   atomic.Bool
+	ver       verifyViewState
+	verWake   chan struct{}
+	verSource verifyViewSource
+	// secView is set while the Security view is painted in the Board's
+	// body; sec is its data and selection, secWake wakes its follower, and
+	// secSource replaces the store and the inbox as its source in tests.
+	secView   atomic.Bool
+	sec       securityViewState
+	secWake   chan struct{}
+	secSource securityViewSource
+	// planView is set while the Plan view is painted in the Board's body;
+	// plan is its data and selection, planWake wakes its follower, and
+	// planSource replaces the store as its source in tests.
+	planView   atomic.Bool
+	plan       planViewState
+	planWake   chan struct{}
+	planSource planViewSource
+	// archView is set while the Architecture view is painted in the
+	// Board's body; arch is its data, archWake wakes its follower, and
+	// archSource replaces the store and the browser in tests.
+	archView   atomic.Bool
+	arch       archViewState
+	archWake   chan struct{}
+	archSource archViewSource
+	// boardHelp is set while the help overlay (?) is open over the Board.
+	boardHelp atomic.Bool
+	// outputSeq counts command answers and status outputs, so the Board
+	// can tell an answer that arrived with a run note from an older one.
+	outputSeq atomic.Uint64
+}
+
+// AttachULTRASession applies authorization and the build's startup preference.
+func (w *Workspace) AttachULTRASession(a cloud.Authorization) {
+	w.AttachULTRA(a.Gate, cloud.ExecutionOnAtStartup)
+	w.AttachULTRARequester(a.Client, a.State, a.SessionID)
+	w.AttachULTRAError(a.Err)
 }
 
 // AttachULTRA wires the canonical ULTRA gate into the workspace.
@@ -236,6 +361,13 @@ func (w *Workspace) ultraGate() (*cloud.Gate, bool) {
 	return w.ultra, w.ultraExecution
 }
 
+// ULTRAExecutionEnabled reports the current preference for operational mode
+// telemetry. A lease remains mandatory; the preference grants no authority.
+func (w *Workspace) ULTRAExecutionEnabled() bool {
+	_, enabled := w.ultraGate()
+	return enabled
+}
+
 // setUltraExecution records the person's ULTRA Execution preference and
 // withdraws any pending stop question.
 func (w *Workspace) setUltraExecution(enabled bool) {
@@ -301,12 +433,13 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 			"/codex", "/claude", "/opencode", "/agy", "/antigravity", "/mcp", "/plugin", "/plugins", "/apply", "/sessions", "/fork",
 			"/permission", "/continue", "/egress", "/roster", "/say", "/learning", "/memory-search", "/memory-stale", "/provenance", "/trust", "/fingerprints", "/playbooks", "/replay-index", "/approvals", "/approval", "/termination", "/context", "/update", "/?", "/exit",
 			"/search", "/features", "/skill", "/skills", "/login", "/logout", "/help", "/quit",
-			"/view", "/focus", "/takeover", "/take-over", "/stop",
+			"/view", "/focus", "/takeover", "/take-over", "/stop", "/menu",
 		},
 		Agents:      agentIDs,
 		Subcommands: make(map[string][]string),
 	}
-	compCtx.Subcommands["/view"] = []string{"focus", "side-by-side", "worker", "show", "hide", "follow", "readonly", "takeover"}
+	compCtx.Subcommands["/view chat"] = []string{"native", "tmux"}
+	compCtx.Subcommands["/view"] = []string{"board", "classic", "chat", "focus", "side-by-side", "worker", "show", "hide", "follow", "readonly", "takeover"}
 	compCtx.Subcommands["/view show"] = []string{"codex", "claude", "opencode", "agy", "marshal"}
 	compCtx.Subcommands["/stop"] = []string{"all", "workers"}
 	compCtx.Subcommands["/store"] = []string{"check", "counts"}
@@ -314,12 +447,12 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/mode"] = []string{"manual", "auto", "ultra"}
 	compCtx.Subcommands["/inspect"] = []string{"claim", "evidence", "checkpoint", "task", "handoff", "approval", "agent"}
 	compCtx.Subcommands["/diff"] = []string{"staged", "unstaged", "untracked"}
-	compCtx.Subcommands["/goal"] = []string{"create", "edit", "diff", "version", "criteria", "constraints", "add-constraint", "rm-constraint", "donotdo", "progress"}
+	compCtx.Subcommands["/goal"] = []string{"create", "edit", "cancel", "diff", "version", "criteria", "constraints", "add-constraint", "rm-constraint", "donotdo", "progress"}
 	compCtx.Subcommands["/tasks"] = []string{"list", "create", "inspect", "assign", "pause", "resume", "cancel", "retry", "ownership"}
 	compCtx.Subcommands["/task"] = []string{"list", "create", "inspect", "assign", "pause", "resume", "cancel", "retry", "ownership"}
 	compCtx.Subcommands["/policy"] = []string{"network", "sandbox", "capability", "scope", "write", "audit"}
 	compCtx.Subcommands["/checkpoint"] = []string{"list", "create", "inspect", "diff"}
-	compCtx.Subcommands["/memory"] = []string{"list", "search", "provenance", "inject", "peers", "review", "request", "allow", "deny"}
+	compCtx.Subcommands["/memory"] = operatorMemoryReviewSubcommands([]string{"list", "search", "provenance", "inject", "peers", "review", "request", "allow", "deny"})
 	// Second level: the agents a channel line can name, plus the keywords.
 	// Offer both the short agent command and the canonical provider name.
 	compCtx.Subcommands["/memory peers"] = []string{"participants", "claude", "codex", "opencode", "agy", "antigravity"}
@@ -338,7 +471,7 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	compCtx.Subcommands["/agy"] = providerSubcommands["agy"]
 	compCtx.Subcommands["/antigravity"] = compCtx.Subcommands["/agy"]
 	compCtx.Subcommands["/marshal"] = marshalSubcommands
-	compCtx.Subcommands["/marshal model"] = []string{"codex", "claude", "agy"}
+	compCtx.Subcommands["/marshal model"] = app.MarshalProviders()
 	compCtx.Subcommands["/marshal amend"] = []string{"approve", "deny"}
 	compCtx.Subcommands["/marshal settings"] = []string{"execution-rights", "acceptance-mode", "rework-limit", "ultra-concurrency", "control"}
 	compCtx.Subcommands["/marshal settings execution-rights"] = []string{"none", "read-only", "small-tasks"}
@@ -385,7 +518,8 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 		Agent:   "",
 	})
 
-	paletteActions := GlobalRegistry.ToPaletteActions()
+	// The Board's keys and views lead the palette; the registry follows.
+	paletteActions := append(boardPaletteActions(), GlobalRegistry.ToPaletteActions()...)
 	palette := NewCommandPalette(th, paletteActions)
 	diffViewer := NewDiffViewer(th, cwd)
 
@@ -398,6 +532,14 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	ws := &Workspace{
 		commandNames: append([]string(nil), compCtx.Commands...),
 		repaint:      make(chan struct{}, 1),
+		boardWake:    make(chan struct{}, 1),
+		laneNudge:    make(chan struct{}, 1),
+		memWake:      make(chan struct{}, 1),
+		provWake:     make(chan struct{}, 1),
+		verWake:      make(chan struct{}, 1),
+		secWake:      make(chan struct{}, 1),
+		planWake:     make(chan struct{}, 1),
+		archWake:     make(chan struct{}, 1),
 		store:        st,
 		coord:        collaboration.NewCoordinator(st, nil),
 		router:       harness.NewULTRARouter(nil),
@@ -425,18 +567,18 @@ func NewWorkspace(st *store.Store, projectID, sessionID string) *Workspace {
 	ws.completer.ctx.InstallableSkills = ws.readInstallableSkills
 	ws.navReleased = navigationReleased
 	ws.cmd = NewCommandHandler(ws)
+	// The palette ranks by the Board's focus and selection as it opens.
+	ws.palette.context = ws.paletteContext
 	ws.tmuxActiveWins = make(map[string]*activeTmuxAgent)
 	return ws
 }
 
-// SetTheme configures the active theme mode and animation setting.
+// SetTheme configures the active theme mode and animation setting. NO_COLOR
+// and the locale are honoured through ResolveTheme.
 func (w *Workspace) SetTheme(mode ThemeMode, animation bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	unicode := true
-	if mode == ThemeNoColor {
-		unicode = false
-	}
+	mode, unicode := ResolveTheme(mode)
 	w.theme = NewTheme(mode, unicode, animation)
 	w.composer.theme = w.theme
 	w.palette.theme = w.theme
@@ -532,6 +674,11 @@ func (w *Workspace) RefreshState(ctx context.Context) error {
 		state.ActiveTurn = sess.ActiveTurn
 	}
 
+	// Re-apply any recorded provider auth-unavailable state after the live
+	// participant probe resets activity, so text surfaces such as /agents keep
+	// an unsigned-in provider marked UNAVAILABLE rather than IDLE.
+	state, _ = applyAuthUnavailableToState(state, workDir)
+
 	// 8. Recover recent messages
 	msgs, err := st.ListAgentMessages(ctx, w.sessionID, 30)
 	if err == nil {
@@ -595,7 +742,7 @@ func (w *Workspace) liveStateLocked() UIState {
 	state := w.state
 	state.UltraEntitled = w.ultra.Entitled()
 	state.UltraExecution = w.ultraExecution
-	state.NavigationAvailable = w.navReleased && state.UltraEntitled
+	state.NavigationAvailable = (editionExtreme || w.navReleased) && (editionExtreme || state.UltraEntitled)
 	state.SessionMode = effectiveModeLabel(w.mode, state.UltraEntitled)
 	return state
 }
@@ -636,6 +783,9 @@ func (w *Workspace) ExecuteCommand(ctx context.Context, line string) (string, er
 // Supports full raw mode line editing, Tab autocomplete, Ctrl+P palette, diff viewer,
 // or clean fallback to buffered scanner if non-terminal.
 func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error {
+	if buildMarker != "" {
+		fmt.Fprintln(out, buildMarker)
+	}
 	defer w.Close()
 	w.out = out
 	if w.terminal != nil && w.terminal.IsTerminal() && in == os.Stdin && out == os.Stdout {
@@ -654,14 +804,39 @@ func (w *Workspace) Run(ctx context.Context, in io.Reader, out io.Writer) error 
 
 	// Check if running in a real interactive terminal
 	if w.terminal != nil && w.terminal.IsTerminal() && in == os.Stdin && out == os.Stdout {
-		return w.runRawTerminal(ctx)
+		if err := w.runRawTerminal(ctx); err != nil {
+			return err
+		}
+		// The operator opened another session (CTUI-0219): the launcher
+		// starts it in this terminal once this workspace has closed.
+		if id := w.relaunchTarget(); id != "" {
+			return &SessionRelaunch{SessionID: id}
+		}
+		return nil
 	}
 
 	// Fallback for piped or non-terminal environments
 	if w.nativeOnStart != nil {
-		return fmt.Errorf("native agent requires an interactive terminal")
+		return fmt.Errorf("native agent requires an interactive terminal; for one-shot, non-interactive work use %s", nativeOneShotHint(w.nativeStartupProvider))
 	}
 	return w.runLineScanner(ctx, in, out)
+}
+
+// nativeOneShotHint names the provider's own one-shot CLI form so a native
+// launch without a terminal can tell the operator exactly what to run instead
+// of only refusing.
+func nativeOneShotHint(provider string) string {
+	switch provider {
+	case "codex":
+		return `marshal codex exec "<prompt>"`
+	case "opencode":
+		return `marshal opencode run "<prompt>"`
+	case "claude":
+		return `marshal claude -p "<prompt>"`
+	case "antigravity":
+		return `marshal agy -p "<prompt>"`
+	}
+	return "marshal tui"
 }
 
 func (w *Workspace) runRawTerminal(ctx context.Context) error {
@@ -686,6 +861,11 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	w.terminal.EnableBracketedPaste()
 	w.syncMouseMode()
 	w.screen = NewScreen(w.terminal)
+	w.mu.Lock()
+	// The Board is the screen from the start, a run or not. The test
+	// seam keeps the classic screen for the classic composer's PTY tests.
+	w.homeBoard = os.Getenv("MARSHAL_TEST_CLASSIC_SCREEN") != "1"
+	w.mu.Unlock()
 	defer func() {
 		w.terminal.DisableMouse()
 		w.terminal.DisableBracketedPaste()
@@ -693,6 +873,10 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 		w.terminal.LeaveAltScreen()
 		w.terminal.Restore()
 		w.reportActiveTmuxSessions()
+		if id := w.relaunchTarget(); id != "" {
+			fmt.Fprintf(w.out, "Leaving session %s for session %s. Any durable session data is preserved.\n", w.sessionID, id)
+			return
+		}
 		fmt.Fprintln(w.out, "Exiting MARSHAL terminal workspace. Any durable session data is preserved.")
 	}()
 
@@ -700,6 +884,15 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 	ctx = loopCtx
 	defer func() { loopCancel(); w.Close() }()
 	w.navView.OnRepaint(w.requestRepaint)
+	w.startAnimator()
+	defer w.stopAnimator()
+	w.startFollowers(ctx)
+	// The host watcher runs for as long as this screen does.
+	w.startHostWatch(ctx)
+	// The Marshal chat is docked beside the Board while this screen runs and
+	// returned to its own window before the workspace closes.
+	w.startDock(ctx)
+	defer w.endDock()
 	w.navView.mu.Lock()
 	w.navView.asyncActions = true
 	w.navView.commandBusy = &w.commandBusy
@@ -786,6 +979,8 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 			// laid out for the old geometry.
 			w.screen.Reset()
 			w.renderFullView()
+			// The window's split follows its new width.
+			w.kickDock()
 		case kr := <-keys:
 			keyPending = kr.err == nil
 			event, err := kr.event, kr.err
@@ -796,307 +991,428 @@ func (w *Workspace) runRawTerminal(ctx context.Context) error {
 				return fmt.Errorf("read terminal input: %w", err)
 			}
 
-			// Ctrl+C is an interrupt, not a quit. It unwinds the innermost
-			// context first: an open overlay, then pending composer input. Only
-			// when there is nothing left to interrupt does a second consecutive
-			// press exit, so a reflexive Ctrl+C never discards a session the
-			// operator is still working in.
-			if event.Type == KeyCtrlC {
-				if w.commandBusy.Load() {
-					w.cancelCommand()
-					continue
-				}
-				if w.interruptNavigation() {
-					w.renderFullView()
-					continue
-				}
-				if w.palette.IsOpen() {
-					w.palette.Close()
-					w.interruptArmed = false
-					w.renderFullView()
-					continue
-				}
-				if w.diffViewer.IsOpen() {
-					w.diffViewer.Close()
-					w.interruptArmed = false
-					w.renderFullView()
-					continue
-				}
-				if w.composer.Text() != "" {
-					w.composer.SetText("")
-					w.interruptArmed = false
-					w.renderFullView()
-					continue
-				}
-				if !w.interruptArmed {
-					w.interruptArmed = true
-					w.renderFullView()
-					continue
-				}
-				w.terminal.ClearScreen()
+			if w.handleTerminalKey(ctx, event) {
 				return nil
 			}
-
-			// Any other key cancels a pending exit confirmation.
-			if w.interruptArmed {
-				w.interruptArmed = false
-				w.renderFullView()
-			}
-
-			// Navigation owns every key while it is open, and Ctrl+N opens it.
-			if event.Type == KeyF7 {
-				w.runCommand(ctx, "/codex")
-				continue
-			}
-			if event.Type == KeyF8 {
-				w.runCommand(ctx, "/claude")
-				continue
-			}
-			if event.Type == KeyF9 {
-				w.runCommand(ctx, "/opencode")
-				continue
-			}
-			// F10 is the update action next to the notice. With a release
-			// already found it installs that release; with none found it is
-			// the check, so the key means the same thing either way: ask
-			// about the update.
-			if event.Type == KeyF10 {
-				w.runCommand(ctx, w.updateKeyCommand())
-				continue
-			}
-			if event.Type == KeyF11 {
-				if w.diffViewer.IsOpen() || w.palette.IsOpen() {
-					w.diffViewer.Close()
-					if w.palette.IsOpen() {
-						w.palette.Close()
-					}
-					w.renderFullView()
-					continue
-				}
-				// F11 returns to MARSHAL from tmux agent windows; inside MARSHAL
-				// it leaves the workspace and any in-progress composer draft alone.
-				continue
-			}
-			if event.Type == KeyF12 {
-				w.runCommand(ctx, "/agy")
-				continue
-			}
-			if event.Type == KeyCtrlX {
-				// One key stops all workers but never the Marshal (Decision 9)
-				w.runCommand(ctx, "/stop all")
-				continue
-			}
-			// The dispatch lives in its own method so a test can drive exactly
-			// the branch this loop takes rather than a copy of it.
-			if w.dispatchNavigationKey(ctx, event) {
-				w.syncMouseMode()
-				w.mu.RLock()
-				exitRequested := w.exitRequested
-				w.mu.RUnlock()
-				if exitRequested {
-					w.terminal.ClearScreen()
-					return nil
-				}
-				w.renderFullView()
-				continue
-			}
-
-			// Handle Command Palette (Ctrl+P)
-			if event.Type == KeyCtrlP {
-				w.closeCompletion()
-				w.palette.Toggle()
-				w.renderFullView()
-				continue
-			}
-
-			if w.palette.IsOpen() {
-				action, executed := w.palette.HandleKey(event)
-				if executed && action != nil {
-					w.runCommand(ctx, action.Command)
-				}
-				w.renderFullView()
-				continue
-			}
-
-			// Handle Diff Viewer (d / Esc)
-			if w.diffViewer.IsOpen() {
-				if w.diffViewer.HandleKey(event) {
-					w.renderFullView()
-					continue
-				}
-			}
-
-			// Function keys (F1–F6) provide immediate one-touch actions without typing
-			switch event.Type {
-			case KeyF1:
-				w.runCommand(ctx, "/help")
-				continue
-			case KeyF2:
-				w.runCommand(ctx, "/review")
-				continue
-			case KeyF3:
-				w.runCommand(ctx, "/diff")
-				continue
-			case KeyF4:
-				w.runCommand(ctx, "/status")
-				continue
-			case KeyF5:
-				w.runCommand(ctx, "/models")
-				continue
-			case KeyF6:
-				w.runCommand(ctx, "/mcp")
-				continue
-			}
-
-			// Advertised single-rune shortcuts when composer is empty and no popup/overlay is active
-			if w.handleShortcut(ctx, event) {
-				continue
-			}
-
-			// Esc toggles navigation mode when composer is empty and no popup/overlay is active
-			if event.Type == KeyEsc && w.composer.Text() == "" && !w.completionOpen && !w.diffViewer.IsOpen() && !w.palette.IsOpen() {
-				// Navigation is closed until verified, and an ULTRA surface
-				// after that, so Esc on an empty composer must not drop a
-				// session into it.
-				if refusal := w.navigationRefusal(); refusal != "" {
-					w.setOutput(refusal, false)
-					continue
-				}
-				w.openNavigation(ctx)
-				w.renderFullView()
-				continue
-			}
-
-			// While the completion popup is open it owns the arrow keys, Tab,
-			// Enter and Esc, so selection is never confused with history
-			// navigation or submit. Moving the highlight leaves the buffer
-			// alone; only accepting writes to it.
-			if w.completionOpen {
-				switch event.Type {
-				case KeyEsc:
-					w.closeCompletion()
-					w.renderComposer()
-					continue
-				case KeyUp:
-					w.moveCompletion(-1)
-					w.renderComposer()
-					continue
-				case KeyDown:
-					w.moveCompletion(1)
-					w.renderComposer()
-					continue
-				case KeyShiftTab:
-					w.cycleCompletion(-1)
-					w.renderComposer()
-					continue
-				case KeyTab:
-					// Tab steps to the next candidate and leaves the menu open,
-					// the way a shell does. It never submits: Enter settles the
-					// choice, and the operator can still add arguments first.
-					w.cycleCompletion(1)
-					w.renderComposer()
-					continue
-				case KeyEnter:
-					// Enter settles the candidate being completed and stops
-					// there, so the operator can Tab again for the next level
-					// rather than running something half-written. The second
-					// Enter runs it through the ordinary path, because by then
-					// no menu is open.
-					//
-					// Nothing is being completed when the word at the cursor is
-					// empty: the menu is only offering what could come next.
-					// Without an explicit selection, Enter means what it
-					// always means. Without this, "/goal " — a finished command
-					// with a trailing space — would take a subcommand instead
-					// of running, and the operator would watch Enter not work.
-					if w.completionShouldSubmit() {
-						w.closeCompletion()
-						cmd, submitted := w.composer.HandleKey(KeyEvent{Type: KeyEnter})
-						if submitted {
-							if cmd == "/quit" || cmd == "/exit" {
-								return nil
-							}
-							w.runCommand(ctx, cmd)
-							if w.commandExitRequested() {
-								w.terminal.ClearScreen()
-								return nil
-							}
-						}
-						w.renderComposer()
-						continue
-					}
-					w.acceptCompletion()
-					w.renderComposer()
-					continue
-				}
-			}
-
-			// Tab with no menu open offers one. An empty composer gets the full
-			// command list, which is how the surface is discovered without
-			// knowing a single command name already.
-			if event.Type == KeyTab || event.Type == KeyShiftTab {
-				if w.composer.Text() == "" {
-					w.composer.SetText("/")
-					w.composer.cursor = 1
-				}
-				w.refreshCompletion()
-				w.renderComposer()
-				continue
-			}
-
-			// Scroll navigation for transcript activity
-			if event.Type == KeyPgUp {
-				w.scrollOffset += 5
-				w.renderFullView()
-				continue
-			}
-			if event.Type == KeyPgDn {
-				w.scrollOffset -= 5
-				if w.scrollOffset < 0 {
-					w.scrollOffset = 0
-				}
-				w.renderFullView()
-				continue
-			}
-			if event.Type == KeyEnd && w.scrollOffset > 0 {
-				w.scrollOffset = 0
-				w.unreadNew = 0
-				w.renderFullView()
-				continue
-			}
-
-			// Pass key to composer line editor
-			cmd, submitted := w.composer.HandleKey(event)
-			// The menu follows the buffer rather than being summoned: typing a
-			// trigger opens it, typing on narrows it, and typing past it closes
-			// it, which is what makes it discoverable without pressing Tab.
-			if !submitted {
-				w.refreshCompletion()
-			} else {
-				w.closeCompletion()
-			}
-			if submitted {
-				if cmd == "/quit" || cmd == "/exit" {
-					return nil
-				}
-				w.runCommand(ctx, cmd)
-				if w.commandExitRequested() {
-					w.terminal.ClearScreen()
-					return nil
-				}
-			}
-			w.renderComposer()
 		}
 	}
 }
 
+// handleTerminalKey routes one key the way the raw terminal loop does:
+// overlays first, then the Board, the inbox, navigation, the palette and
+// finally the composer, painting after each. It reports whether the key
+// asked the workspace to exit. Tests drive the Board through it so they
+// take exactly the branches the loop takes.
+func (w *Workspace) handleTerminalKey(ctx context.Context, event KeyEvent) (exit bool) {
+	// The native Marshal chat owns typing while its composer is focused.
+	if w.handleNativeChatKey(ctx, event) {
+		w.renderFullView()
+		return w.commandExitRequested()
+	}
+	// Ctrl+C is an interrupt, not a quit. It unwinds the innermost
+	// context first: an open overlay, then pending composer input. Only
+	// when there is nothing left to interrupt does a second consecutive
+	// press exit, so a reflexive Ctrl+C never discards a session the
+	// operator is still working in.
+	if event.Type == KeyCtrlC {
+		if w.commandBusy.Load() {
+			w.cancelCommand()
+			return false
+		}
+		if w.interruptNavigation() {
+			w.renderFullView()
+			return false
+		}
+		if w.palette.IsOpen() {
+			w.palette.Close()
+			w.interruptArmed = false
+			w.renderFullView()
+			return false
+		}
+		if w.boardHelp.Swap(false) {
+			w.interruptArmed = false
+			w.renderFullView()
+			return false
+		}
+		if w.diffViewer.IsOpen() {
+			w.diffViewer.Close()
+			w.interruptArmed = false
+			w.renderFullView()
+			return false
+		}
+		if w.composing() {
+			w.composer.SetText("")
+			w.say.open.Store(false)
+			w.interruptArmed = false
+			w.renderFullView()
+			return false
+		}
+		if !w.interruptArmed {
+			w.interruptArmed = true
+			w.renderFullView()
+			return false
+		}
+		w.clearTerminal()
+		return true
+	}
+
+	// Any other key cancels a pending exit confirmation.
+	if w.interruptArmed {
+		w.interruptArmed = false
+		w.renderFullView()
+	}
+
+	// Navigation owns every key while it is open, and Ctrl+N opens it.
+	if event.Type == KeyF7 {
+		w.runCommand(ctx, "/codex")
+		return false
+	}
+	if event.Type == KeyF8 {
+		w.runCommand(ctx, "/claude")
+		return false
+	}
+	if event.Type == KeyF9 {
+		w.runCommand(ctx, "/opencode")
+		return false
+	}
+	// F10 is the update action next to the notice. With a release
+	// already found it installs that release; with none found it is
+	// the check, so the key means the same thing either way: ask
+	// about the update.
+	if event.Type == KeyF10 {
+		w.runCommand(ctx, w.updateKeyCommand())
+		return false
+	}
+	if event.Type == KeyF11 {
+		if w.diffViewer.IsOpen() || w.palette.IsOpen() {
+			w.diffViewer.Close()
+			if w.palette.IsOpen() {
+				w.palette.Close()
+			}
+			w.renderFullView()
+			return false
+		}
+		// F11 returns to MARSHAL from tmux agent windows; inside MARSHAL
+		// it leaves the workspace and any in-progress composer draft alone.
+		return false
+	}
+	if event.Type == KeyF12 {
+		w.runCommand(ctx, "/agy")
+		return false
+	}
+	if event.Type == KeyCtrlX {
+		// One key stops all workers but never the Marshal (Decision 9)
+		w.runCommand(ctx, "/stop all")
+		return false
+	}
+	if w.handleBoardMouse(ctx, event) {
+		w.renderFullView()
+		return false
+	}
+	if w.handleBoardHelpKey(event) {
+		w.renderFullView()
+		return false
+	}
+	if w.handleBoardAnswerKey(event) {
+		w.renderFullView()
+		return false
+	}
+	if w.handleBoardKey(event) {
+		w.renderFullView()
+		return false
+	}
+	if w.handleBoardInboxKey(ctx, event) {
+		w.renderFullView()
+		return false
+	}
+	// The dispatch lives in its own method so a test can drive exactly
+	// the branch this loop takes rather than a copy of it.
+	if w.dispatchNavigationKey(ctx, event) {
+		w.syncMouseMode()
+		w.mu.RLock()
+		exitRequested := w.exitRequested
+		w.mu.RUnlock()
+		if exitRequested {
+			w.clearTerminal()
+			return true
+		}
+		w.renderFullView()
+		return false
+	}
+
+	// Handle Command Palette (Ctrl+P)
+	if event.Type == KeyCtrlP {
+		w.closeCompletion()
+		w.palette.Toggle()
+		w.renderFullView()
+		return false
+	}
+
+	if w.palette.IsOpen() {
+		action, executed := w.palette.HandleKey(event)
+		if executed && action != nil {
+			w.runPaletteAction(ctx, *action)
+		}
+		w.renderFullView()
+		return false
+	}
+
+	// Handle Diff Viewer (d / Esc)
+	if w.diffViewer.IsOpen() {
+		if w.diffViewer.HandleKey(event) {
+			w.renderFullView()
+			return false
+		}
+	}
+
+	// Function keys (F1–F6) provide immediate one-touch actions without typing
+	switch event.Type {
+	case KeyF1:
+		w.runCommand(ctx, "/help")
+		return false
+	case KeyF2:
+		w.runCommand(ctx, "/review")
+		return false
+	case KeyF3:
+		w.runCommand(ctx, "/diff")
+		return false
+	case KeyF4:
+		w.runCommand(ctx, "/status")
+		return false
+	case KeyF5:
+		w.runCommand(ctx, "/models")
+		return false
+	case KeyF6:
+		w.runCommand(ctx, "/mcp")
+		return false
+	}
+
+	// Advertised single-rune shortcuts when composer is empty and no popup/overlay is active
+	if w.handleShortcut(ctx, event) {
+		return false
+	}
+
+	// Esc toggles navigation mode when composer is empty and no popup/overlay is active
+	// On the Board, Esc closes only what is open over it (handled
+	// above); on the bare Board it does nothing. Opening the full-screen
+	// menu there put operators into its search while they meant to type a
+	// command. Ctrl+N opens the menu.
+	if event.Type == KeyEsc && w.say.open.Load() {
+		// Esc closes the message to the Marshal; what was typed is
+		// dropped as Esc drops a command.
+		w.say.open.Store(false)
+		w.composer.SetText("")
+		w.renderFullView()
+		return false
+	}
+	if event.Type == KeyEsc && w.composer.Text() == "" && w.boardVisible() {
+		return false
+	}
+	if event.Type == KeyEsc && w.composer.Text() == "" && !w.completionOpen && !w.diffViewer.IsOpen() && !w.palette.IsOpen() {
+		// Navigation is closed until verified, and an ULTRA surface
+		// after that, so Esc on an empty composer must not drop a
+		// session into it.
+		if refusal := w.navigationRefusal(); refusal != "" {
+			w.setOutput(refusal, false)
+			return false
+		}
+		w.openNavigation(ctx)
+		w.renderFullView()
+		return false
+	}
+
+	// While the completion popup is open it owns the arrow keys, Tab,
+	// Enter and Esc, so selection is never confused with history
+	// navigation or submit. Moving the highlight leaves the buffer
+	// alone; only accepting writes to it.
+	if w.completionOpen {
+		switch event.Type {
+		case KeyEsc:
+			w.closeCompletion()
+			w.renderComposer()
+			return false
+		case KeyUp:
+			w.moveCompletion(-1)
+			w.renderComposer()
+			return false
+		case KeyDown:
+			w.moveCompletion(1)
+			w.renderComposer()
+			return false
+		case KeyShiftTab:
+			w.cycleCompletion(-1)
+			w.renderComposer()
+			return false
+		case KeyTab:
+			// Tab steps to the next candidate and leaves the menu open,
+			// the way a shell does. It never submits: Enter settles the
+			// choice, and the operator can still add arguments first.
+			w.cycleCompletion(1)
+			w.renderComposer()
+			return false
+		case KeyEnter:
+			// Enter settles the candidate being completed and stops
+			// there, so the operator can Tab again for the next level
+			// rather than running something half-written. The second
+			// Enter runs it through the ordinary path, because by then
+			// no menu is open.
+			//
+			// Nothing is being completed when the word at the cursor is
+			// empty: the menu is only offering what could come next.
+			// Without an explicit selection, Enter means what it
+			// always means. Without this, "/goal " — a finished command
+			// with a trailing space — would take a subcommand instead
+			// of running, and the operator would watch Enter not work.
+			if w.completionShouldSubmit() {
+				w.closeCompletion()
+				cmd, submitted := w.composer.HandleKey(KeyEvent{Type: KeyEnter})
+				if submitted {
+					if cmd == "/quit" || cmd == "/exit" {
+						return true
+					}
+					w.runCommand(ctx, cmd)
+					if w.commandExitRequested() {
+						w.clearTerminal()
+						return true
+					}
+				}
+				w.renderComposer()
+				return false
+			}
+			w.acceptCompletion()
+			w.renderComposer()
+			return false
+		}
+	}
+
+	// Tab with no menu open offers one. An empty composer gets the full
+	// command list, which is how the surface is discovered without
+	// knowing a single command name already.
+	if event.Type == KeyTab || event.Type == KeyShiftTab {
+		if w.composer.Text() == "" {
+			w.composer.SetText("/")
+			w.composer.cursor = 1
+		}
+		w.refreshCompletion()
+		w.renderComposer()
+		return false
+	}
+
+	// Scroll navigation for transcript activity
+	if event.Type == KeyPgUp {
+		w.scrollOffset += 5
+		w.renderFullView()
+		return false
+	}
+	if event.Type == KeyPgDn {
+		w.scrollOffset -= 5
+		if w.scrollOffset < 0 {
+			w.scrollOffset = 0
+		}
+		w.renderFullView()
+		return false
+	}
+	if event.Type == KeyEnd && w.scrollOffset > 0 {
+		w.scrollOffset = 0
+		w.unreadNew = 0
+		w.renderFullView()
+		return false
+	}
+
+	if event.Type == KeyEnter && w.composer.Text() == "" && w.say.open.Load() {
+		w.say.open.Store(false)
+		w.renderFullView()
+		return false
+	}
+	// Pass key to composer line editor
+	cmd, submitted := w.composer.HandleKey(event)
+	// The menu follows the buffer rather than being summoned: typing a
+	// trigger opens it, typing on narrows it, and typing past it closes
+	// it, which is what makes it discoverable without pressing Tab.
+	if !submitted {
+		w.refreshCompletion()
+	} else {
+		w.closeCompletion()
+	}
+	if submitted {
+		if cmd == "/quit" || cmd == "/exit" {
+			return true
+		}
+		// On the Board, a line that is not a command is said to the
+		// Marshal: it goes to the chat as the operator's message.
+		w.say.open.Store(false)
+		if w.boardVisible() && !strings.HasPrefix(strings.TrimSpace(cmd), "/") {
+			w.sayToMarshal(ctx, cmd)
+			w.renderFullView()
+			return false
+		}
+		w.runCommand(ctx, cmd)
+		if w.commandExitRequested() {
+			w.clearTerminal()
+			return true
+		}
+	}
+	w.renderComposer()
+	return false
+}
+
+// startFollowers starts the Board's follower and each body view's. They
+// stop with ctx or when the workspace closes, and a closed view's follower
+// sleeps without reading anything.
+func (w *Workspace) startFollowers(ctx context.Context) {
+	w.startBackground(ctx, w.followBoard)
+	// The first-use card reads the providers once, off the paint path.
+	w.startBackground(ctx, w.loadFirstUse)
+	// The Memory view reads the store only while it is open.
+	w.startBackground(ctx, w.followMemory)
+	// So does the Providers view.
+	w.startBackground(ctx, w.followProviders)
+	// So does the Verify view.
+	w.startBackground(ctx, w.followVerify)
+	// So does the Security view.
+	w.startBackground(ctx, w.followSecurity)
+	// So do the Plan and Architecture views.
+	w.startBackground(ctx, w.followPlan)
+	w.startBackground(ctx, w.followArch)
+}
+
+// clearTerminal clears the screen when there is a terminal to clear.
+func (w *Workspace) clearTerminal() {
+	if w.terminal != nil {
+		w.terminal.ClearScreen()
+	}
+}
+
 func (w *Workspace) handleShortcut(ctx context.Context, event KeyEvent) bool {
-	if event.Type == KeyRune && w.composer.Text() == "" && !w.completionOpen && !w.diffViewer.IsOpen() && !w.palette.IsOpen() {
+	if event.Type == KeyRune && !w.composing() && !w.completionOpen && !w.diffViewer.IsOpen() && !w.palette.IsOpen() {
 		switch event.Rune {
+		case 'm':
+			// The native chat takes the keyboard in its composer; Esc
+			// gives it back.
+			if w.nativeChatShown() && !w.navView.IsOpen() && !w.inboxView.Confirming() {
+				w.focusNativeChat(true)
+				return true
+			}
+			// The chat is always docked beside the Board; m moves the
+			// keyboard there and F11 brings it back. With no Board on
+			// screen m is ordinary composer input.
+			if !w.boardVisible() || w.navView.IsOpen() || w.inboxView.Confirming() || w.inboxView.Inspecting() || w.boardUI.inspect != "" {
+				return false
+			}
+			if err := w.focusMarshalChat(ctx); err != nil {
+				w.setOutput(err.Error(), true)
+			}
+			return true
 		case 'd':
 			w.runCommand(ctx, "/diff")
 			return true
 		case '?':
+			// Over the Board, ? opens the keys; elsewhere the overview.
+			if w.boardVisible() && !w.navView.IsOpen() {
+				w.openBoardHelp()
+				w.renderFullView()
+				return true
+			}
 			w.runCommand(ctx, "/help")
 			return true
 		}
@@ -1175,6 +1491,7 @@ func (w *Workspace) runCommand(ctx context.Context, cmd string) {
 func (w *Workspace) recordCommandResult(cmd, resp string, err error) {
 
 	w.mu.Lock()
+	w.outputSeq.Add(1)
 	if err != nil {
 		w.state.LastOutput = fmt.Sprintf("Error: %v", err)
 		if strings.TrimSpace(resp) != "" {
@@ -1189,7 +1506,12 @@ func (w *Workspace) recordCommandResult(cmd, resp string, err error) {
 	if cmd != "/help all" {
 		w.state.LastOutput = activityTail(w.state.LastOutput)
 	}
+	w.answer, w.answerIsError = w.state.LastOutput, w.state.LastOutputIsError
 	w.state.LastCommand = RedactContent(cmd, w.state.KnownSecrets)
+	w.lastCommandError = ""
+	if err != nil {
+		w.lastCommandError = w.state.LastOutput
+	}
 	w.scrollOffset = 0
 	if cmd == "/help all" && err == nil {
 		cols, rows := 80, 24
@@ -1231,17 +1553,19 @@ func (w *Workspace) SuspendTerminal() func() {
 }
 
 // handleTab opens or advances the completion popup.
-// syncMouseMode holds mouse reporting only while the navigation view is open.
+// syncMouseMode holds mouse reporting only while the navigation view or the
+// Board is on screen.
 //
 // Mouse tracking makes the terminal report button presses instead of running
 // its own selection, so holding it open on the composer takes drag-select and
 // copy away from the operator on a surface that never reads a mouse event.
-// Navigation is the only consumer, so it is the only place the mode is on.
+// Navigation and the Board are the consumers, so they are the only places
+// the mode is on.
 func (w *Workspace) syncMouseMode() {
 	if w.terminal == nil || !w.terminal.IsTerminal() {
 		return
 	}
-	want := w.navView != nil && w.navView.IsOpen()
+	want := w.navView != nil && w.navView.IsOpen() || w.boardMouseWanted()
 	if want == w.mouseOn {
 		return
 	}
@@ -1368,7 +1692,23 @@ func (w *Workspace) moveCompletion(delta int) {
 }
 
 func (w *Workspace) completionShouldSubmit() bool {
-	return w.completingWord() == "" && !w.completionSelected
+	if w.completionSelected {
+		return false
+	}
+	word := w.completingWord()
+	if word == "" {
+		return true
+	}
+	// A word already typed out in full is not being completed either:
+	// "/mode" with "/mode" on offer runs on the first Enter, rather than
+	// Enter only writing the same word again (and "/task" running, not
+	// turning into "/task " beside "/tasks").
+	for _, c := range w.completions {
+		if strings.EqualFold(strings.TrimSpace(c), word) {
+			return true
+		}
+	}
+	return false
 }
 
 // completingWord returns the word the cursor sits in, which is what a
@@ -1479,6 +1819,18 @@ func (w *Workspace) dispatchNavigationKey(ctx context.Context, event KeyEvent) b
 	// While navigation is open it owns every key, so arrow keys and Enter
 	// drive the frozen IA rather than the composer.
 	if w.navView.IsOpen() {
+		// '/' always starts a command, even from the menu: typed after it,
+		// "/marshal retry …" went into the menu's search instead. The
+		// menu's own search stays on Ctrl+K, and text the menu is editing
+		// (its search, filter, a form) still takes '/'.
+		if event.Type == KeyRune && event.Rune == '/' && !w.navView.TakesText() {
+			w.navView.Close()
+			w.composer.SetText("/")
+			w.composer.cursor = 1
+			w.refreshCompletion()
+			w.renderFullView()
+			return true
+		}
 		w.navView.HandleKey(ctx, event)
 		w.mu.Lock()
 		replaced := w.runtimeReplaced
@@ -1517,12 +1869,9 @@ func (w *Workspace) dispatchNavigationKey(ctx context.Context, event KeyEvent) b
 	return false
 }
 
-// navigationReleased is false while the navigation surface is incomplete and
-// unverified: it has declared nodes with no capability behind them, and no
-// end-to-end run has shown that it works. Until that is proven every entry
-// point refuses, whatever the session's entitlement. Its own tests switch it
-// on to keep exercising the code.
-var navigationReleased = false
+// Community navigation stays unreleased. Extreme exposes the canonical
+// destinations and keeps unavailable actions disabled with their reasons.
+var navigationReleased = buildNavigationReleased
 
 // navigationNotReleasedMessage says the surface is not offered yet, so nobody
 // takes an unfinished screen for a working one.
@@ -1532,10 +1881,10 @@ const navigationNotReleasedMessage = "The navigation surface is not available ye
 // navigationRefusal says why this session may not open navigation, or ""
 // when it may.
 func (w *Workspace) navigationRefusal() string {
-	if !w.navReleased {
+	if !editionExtreme && !w.navReleased {
 		return navigationNotReleasedMessage
 	}
-	if !w.navigationEntitled() {
+	if !editionExtreme && !w.navigationEntitled() {
 		return navigationNotEntitledMessage
 	}
 	return ""
@@ -1562,8 +1911,10 @@ func (w *Workspace) navigationEntitled() bool {
 // behind in scrollback.
 func (w *Workspace) setOutput(text string, isError bool) {
 	w.mu.Lock()
+	w.outputSeq.Add(1)
 	w.state.LastOutput = text
 	w.state.LastOutputIsError = isError
+	w.answer, w.answerIsError = text, isError
 	w.mu.Unlock()
 	w.renderFullView()
 }
@@ -1587,6 +1938,8 @@ func (w *Workspace) interruptNavigation() bool {
 // screens still render, and every action refuses with the reason — which is
 // the truthful behaviour for a workspace that cannot reach an authority.
 func (w *Workspace) AttachRuntime(runtime *app.Runtime, identity projectid.ID) {
+	releaseMemoryReads := w.cmd.prepareOperatorMemoryRuntimeAttach()
+	defer releaseMemoryReads()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.runtime = runtime
@@ -1594,7 +1947,219 @@ func (w *Workspace) AttachRuntime(runtime *app.Runtime, identity projectid.ID) {
 	if runtime != nil {
 		runtime.SetEgressAlertSink(w.deliverEgressAlert)
 		runtime.SetPermissionSink(w.queuePermission)
+		runtime.SetWorkspaceRecoveryHooks(w.recoveryHooks())
+		w.startRecoveryCoordinator(runtime)
 	}
+}
+
+// recoveryHooks are the trusted workspace composition SessionRecoveryService
+// needs: Freeze serializes workspace/env/budget mutations, and Observe recomputes
+// the exact project/root/worktree/constitution/policy/goal binding from live
+// canonical state. Observe verifies source-process liveness before adoption.
+func (w *Workspace) recoveryHooks() app.SessionRecoveryHooks {
+	return app.SessionRecoveryHooks{
+		Freeze: func(context.Context) (func(), error) {
+			w.mu.Lock()
+			return w.mu.Unlock, nil
+		},
+		Observe: func(ctx context.Context, rec model.SessionRecovery) (model.SessionRecoveryBinding, app.MemoryReconcileRequest, bool, error) {
+			return w.observeRecovery(ctx, rec)
+		},
+	}
+}
+
+func (w *Workspace) observeRecovery(ctx context.Context, rec model.SessionRecovery) (model.SessionRecoveryBinding, app.MemoryReconcileRequest, bool, error) {
+	if w.runtime == nil || w.store == nil {
+		return model.SessionRecoveryBinding{}, app.MemoryReconcileRequest{}, false, model.ErrUnavailable
+	}
+	projectID := w.runtime.ProjectIdentity()
+	root := w.runtime.ProjectRoot()
+	binding := model.SessionRecoveryBinding{
+		ProjectID:            projectID,
+		ProjectRoot:          root,
+		WorktreeDigest:       w.worktreeDigest(ctx, root),
+		ConstitutionVersion:  constitution.Current.String(),
+		PolicyDigest:         "none",
+		BudgetEvidenceDigest: "none",
+	}
+	if policy, err := w.store.GetActivePolicy(ctx); err == nil {
+		binding.PolicyID = string(policy.Policy.ID)
+		binding.PolicyVersion = int64(policy.Policy.Version)
+		binding.PolicyDigest = string(policy.Binding.Digest)
+	}
+
+	sourceSession := rec.SourceSessionID
+	if sourceSession == "" {
+		sourceSession = w.sessionID
+	}
+
+	if goal, err := w.store.GetActiveGoalContract(ctx, sourceSession); err == nil {
+		binding.GoalID = goal.ID
+		binding.GoalRevision = goal.Revision
+		binding.OriginalIntentDigest = goal.RequestDigest
+		binding.GoalBudgetDigest = model.SessionRecoveryDigest(goal.BudgetLimits)
+	} else if rec.Binding.GoalID != "" {
+		if goal, err := w.store.GetGoalContract(ctx, rec.Binding.GoalID, rec.Binding.GoalRevision); err == nil {
+			binding.GoalID = goal.ID
+			binding.GoalRevision = goal.Revision
+			binding.OriginalIntentDigest = goal.RequestDigest
+			binding.GoalBudgetDigest = model.SessionRecoveryDigest(goal.BudgetLimits)
+		}
+	}
+
+	if rec.Binding.PlanID != "" {
+		if p, err := w.store.GetPlan(ctx, rec.Binding.PlanID, rec.Binding.PlanVersion); err == nil {
+			binding.PlanID = p.ID
+			binding.PlanVersion = p.Version
+			binding.PlanDigest = rec.Binding.PlanDigest
+		}
+	} else if p, err := w.store.GetActivePlan(ctx, projectid.ID(projectID)); err == nil {
+		binding.PlanID = p.ID
+		binding.PlanVersion = p.Version
+		binding.PlanDigest = model.SessionRecoveryDigest(p)
+	}
+
+	if rec.Binding.RunID != "" {
+		if r, err := w.store.GetMarshalRun(ctx, projectID, rec.Binding.RunID); err == nil {
+			binding.RunID = rec.Binding.RunID
+			binding.RunVersion = r.Revision
+			binding.RunDigest = rec.Binding.RunDigest
+		}
+	}
+
+	if budget, err := w.store.GetBudgetTracker(ctx, sourceSession, binding.GoalID, binding.GoalRevision); err == nil && budget != nil {
+		binding.BudgetEvidenceDigest = model.SessionRecoveryDigest(budget)
+	} else if rec.Binding.BudgetEvidenceDigest != "" {
+		binding.BudgetEvidenceDigest = rec.Binding.BudgetEvidenceDigest
+	} else {
+		binding.BudgetEvidenceDigest = "none"
+	}
+
+	stopped := app.VerifySourceProcessStopped(root, sourceSession, w.sessionID)
+	return binding, app.MemoryReconcileRequest{ProjectID: projectID}, stopped, nil
+}
+
+func (w *Workspace) startRecoveryCoordinator(runtime *app.Runtime) {
+	root := runtime.ProjectRoot()
+	sessionID := w.sessionID
+	app.RecordSessionLiveness(root, sessionID)
+
+	w.startBackground(context.Background(), func(ctx context.Context) {
+		defer func() {
+			app.ClearSessionLiveness(root, sessionID)
+		}()
+
+		// Each tick opens local control and observes the binding; a sub-second
+		// cadence kept an idle TUI busy enough to heat the host.
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+
+		var (
+			lastRecovery   model.SessionRecovery
+			lastGeneration int64
+			lastDigest     string
+			lastBinding    model.SessionRecoveryBinding
+			headLoaded     bool
+			failedBinding  model.SessionRecoveryBinding
+			retryAt        time.Time
+		)
+
+		for {
+			select {
+			case <-ctx.Done():
+				if lastRecovery.ID != "" && lastRecovery.State == "recoverable" {
+					closeCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+					local, err := runtime.OpenLocalControl(closeCtx)
+					if err == nil {
+						opCtx := local.Context(closeCtx)
+						service := runtime.WorkspaceRecovery(w.recoveryHooks())
+						e := app.CommandEnvelope{
+							ProjectID:       runtime.ProjectIdentity(),
+							SessionID:       sessionID,
+							TargetID:        lastRecovery.ID,
+							ExpectedVersion: lastRecovery.Generation,
+							IdempotencyKey:  fmt.Sprintf("close-%s-gen%d", sessionID, lastRecovery.Generation+1),
+						}
+						_, _ = service.Close(opCtx, e, lastRecovery.Digest)
+					}
+					cancel()
+				}
+				return
+			case <-ticker.C:
+				checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+				local, err := runtime.OpenLocalControl(checkCtx)
+				if err != nil {
+					cancel()
+					continue
+				}
+				opCtx := local.Context(checkCtx)
+				binding, _, _, err := w.observeRecovery(opCtx, model.SessionRecovery{SourceSessionID: sessionID})
+				if err != nil || binding.GoalID == "" {
+					cancel()
+					continue
+				}
+				if binding == lastBinding && lastRecovery.ID != "" {
+					cancel()
+					continue
+				}
+
+				// A refused checkpoint is not retried for the same binding until
+				// the backoff passes; a changed binding is tried at once.
+				if binding == failedBinding && time.Now().Before(retryAt) {
+					cancel()
+					continue
+				}
+
+				service := runtime.WorkspaceRecovery(w.recoveryHooks())
+				targetID := fmt.Sprintf("recovery-%s", sessionID)
+				// A restarted workspace keeps its session ID. Continue from the
+				// stored head, or the first checkpoint replays an idempotency key
+				// that already binds an earlier process's checkpoint.
+				if !headLoaded {
+					head, err := service.Get(opCtx, targetID, 0)
+					if err == nil && head.SourceSessionID == sessionID {
+						lastGeneration, lastDigest = head.Generation, head.Digest
+						headLoaded = true
+					} else if errors.Is(err, model.ErrNotFound) {
+						headLoaded = true
+					}
+				}
+				e := app.CommandEnvelope{
+					ProjectID:       runtime.ProjectIdentity(),
+					SessionID:       sessionID,
+					TargetID:        targetID,
+					ExpectedVersion: lastGeneration,
+					IdempotencyKey:  fmt.Sprintf("checkpoint-%s-gen%d", sessionID, lastGeneration+1),
+				}
+				rec, err := service.Checkpoint(opCtx, e, binding, nil, lastDigest)
+				if err == nil {
+					lastRecovery = rec
+					lastGeneration = rec.Generation
+					lastDigest = rec.Digest
+					lastBinding = binding
+					failedBinding = model.SessionRecoveryBinding{}
+				} else {
+					failedBinding, retryAt = binding, time.Now().Add(30*time.Second)
+					headLoaded = false
+				}
+				cancel()
+			}
+		}
+	})
+}
+
+func (w *Workspace) worktreeDigest(ctx context.Context, root string) string {
+	if cmd, err := hostgit.Command(ctx, root, "rev-parse", "HEAD"); err == nil {
+		var out strings.Builder
+		cmd.WaitDelay = 100 * time.Millisecond
+		cmd.Stdout = &out
+		if err := cmd.Run(); err == nil {
+			if trimmed := strings.TrimSpace(out.String()); trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	return model.SessionRecoveryDigest(root)
 }
 
 // AttachULTRARequest supplies the canonical entitlement request path.
@@ -1679,6 +2244,7 @@ func (w *Workspace) controlSource() *ControlSource {
 				defer w.mu.RUnlock()
 				return w.ultraExecution
 			},
+			relauncher: w,
 			requestExit: func() error {
 				w.mu.Lock()
 				defer w.mu.Unlock()
@@ -1693,6 +2259,7 @@ func (w *Workspace) controlSource() *ControlSource {
 			replaceRuntime: func(reopened *app.Runtime) {
 				w.mu.Lock()
 				defer w.mu.Unlock()
+				closeLocalServers(w.runtime)
 				w.runtime = reopened
 				reopened.SetEgressAlertSink(w.deliverEgressAlert)
 				reopened.SetPermissionSink(w.queuePermission)
@@ -1758,11 +2325,16 @@ func (w *Workspace) attachNavigation(ctx context.Context) {
 		},
 	}
 	w.mu.RUnlock()
+	w.attachLifecycleSource(source)
 	control := w.controlSource()
 	var providers ProviderReader
 	if control != nil {
 		if authority, ok := control.Authority.(*runtimeControlAuthority); ok {
 			providers = authority
+			// The runtime control authority adapts the persisted entitlement
+			// request state (Status CTUI-0157 / Models CTUI-0557) to F's
+			// presentation DTO, so Status and Models report the same attempt.
+			source.RequestReader = authority
 		}
 	}
 	w.navView.AttachSource(source, providers)
@@ -1787,8 +2359,9 @@ func (w *Workspace) attachNavigation(ctx context.Context) {
 			ProjectID: control.ProjectID,
 		})
 		w.navView.AttachModels(&ModelsFeed{
-			Reader:    authority,
-			ProjectID: control.ProjectID,
+			Reader:        authority,
+			ProjectID:     control.ProjectID,
+			RequestReader: authority,
 		})
 		w.navView.AttachSecurity(&SecurityFeed{
 			Reader:    authority,
@@ -1839,11 +2412,23 @@ func (w *Workspace) paint() {
 		return
 	}
 	cols, rows := w.terminal.Size()
+	lines, cursorRow, cursorCol := w.frameLines(cols, rows)
+	// The Board comes and goes with a run, so the mouse follows the
+	// screen that is painted rather than the key that changed it.
+	w.syncMouseMode()
+	w.screen.Render(lines, cols, rows, cursorRow, cursorCol)
+}
 
+// frameLinesFull composes the frame paint draws in cols, with its cursor.
+// It reads no terminal, so a test sees exactly the frame the screen would
+// get. frameLines wraps it to dock the native chat.
+func (w *Workspace) frameLinesFull(cols, rows int) ([]string, int, int) {
 	w.mu.RLock()
 	state := w.liveStateLocked()
 	th := w.theme
 	workDir := w.workDir
+	classic := w.boardClassic
+	home := w.homeBoard
 	w.mu.RUnlock()
 
 	// The navigation view owns the screen while open, as the diff viewer does.
@@ -1852,8 +2437,7 @@ func (w *Workspace) paint() {
 		for len(lines) < rows {
 			lines = append(lines, "")
 		}
-		w.screen.Render(lines, cols, rows, rows, 1)
-		return
+		return lines, rows, 1
 	}
 
 	// The diff viewer and palette own the screen while open.
@@ -1862,8 +2446,7 @@ func (w *Workspace) paint() {
 		for len(lines) < rows {
 			lines = append(lines, "")
 		}
-		w.screen.Render(lines, cols, rows, rows, 1)
-		return
+		return lines, rows, 1
 	}
 
 	var popup []string
@@ -1873,6 +2456,12 @@ func (w *Workspace) paint() {
 		popup = renderCompletionPopup(w.completions, w.completionIndex, th, cols, w.completer.descriptionsFor(w.composer.Text(), w.composer.CursorPos()))
 	}
 
+	// The Board is the screen, a run or not, unless /view classic chose
+	// the classic screen: with no run it shows the first-use card.
+	if (state.Marshal != nil || home) && !classic {
+		return w.boardFrame(state, th, popup, cols, rows)
+	}
+
 	frame := BuildFrame(state, th, workDir, w.composer, popup, cols, rows)
 	if w.interruptArmed {
 		frame.Status = PadCell(th.Colorize(th.Warning, " Press Ctrl+C again to exit, or /quit. Durable session data is preserved."), cols)
@@ -1880,7 +2469,7 @@ func (w *Workspace) paint() {
 	frame.ScrollOffset = w.scrollOffset
 	frame.UnreadCount = w.unreadNew
 	lines, cursorRow := frame.Lines(cols, rows)
-	w.screen.Render(lines, cols, rows, cursorRow, frame.CursorCol)
+	return lines, cursorRow, frame.CursorCol
 }
 
 // printBatchFrame writes the workspace once for a non-interactive stream.

@@ -32,8 +32,9 @@ type claudeStreamClient interface {
 }
 
 type liveClaudeStreamTurn struct {
-	client  claudeStreamClient
-	binding execution.NativeTurnBinding
+	startedAt time.Time
+	client    claudeStreamClient
+	binding   execution.NativeTurnBinding
 	// initialWorktreeDigest is retained only while the native turn is live.
 	// Unlike binding.WorktreeDigest, which advances to the exact pause point
 	// for approval TOCTOU checks, it proves whether a mutating task made any
@@ -89,7 +90,7 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
 	if _, err := r.AssessTool(ctx, risk.AssessmentRequest{
-		ID:         risk.AssessmentID("process05-claude-" + canonicalTask.ID),
+		ID:         process05RiskAssessmentID("claude", canonicalTask.ID, task),
 		Descriptor: risk.ToolDescriptor{Tool: "marshal-process05", Action: "shell.execute", Resource: worktree, Factors: risk.Factors{ExternalWrite: true, ScopeBreadth: 1}},
 	}); err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, err
@@ -107,12 +108,22 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
+	if err := r.preflightRequiredProcess05Context(ctx, task, agentID, "claude", modelName, pkg); err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
+	ctx, transportPause, err := r.reviewProviderTransport(ctx, task, pkg, canonicalTask, agentID, "claude", modelName, worktree)
+	if err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
+	if transportPause != nil {
+		return *transportPause, nil
+	}
 	proxySocket, closeEgress, err := r.startProviderEgress(ctx, egressRunID, task.RunID, "claude", modelName, canonicalTask, agentID, task.RunID, model.RoleDeveloper)
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
 	defer closeEgress()
-	provider, grantID, err := r.resolveAdapter(ctx, "claude", canonicalTask, worktree, agentID, proxySocket != "", modelName, proxySocket)
+	provider, grantID, err := r.resolveAdapter(withProcess05OutsideReadHints(ctx, task, pkg), "claude", canonicalTask, worktree, agentID, proxySocket != "", modelName, proxySocket)
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
@@ -125,6 +136,10 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID}, err
 	}
+	trustedHeader, err := r.providerConstraintPrompt(ctx, task, pkg, worktree)
+	if err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
 	request := adapter.Request{
 		TaskID:            canonicalTask.ID,
 		Title:             pkg.TaskDescription,
@@ -132,12 +147,30 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 		Model:             modelName,
 		AllowedOperations: []string{"filesystem.read", "filesystem.write", "shell.execute"},
 		EvidenceRequired:  append([]string(nil), pkg.VerificationObligations...),
-		TrustedContext:    pkg.FormatPromptHeader(),
+		TrustedContext:    trustedHeader,
 	}
 	// The prepared adapter retains the isolation and capability runner for
 	// every provider invocation, including probes and task execution.
 	started := time.Now().UTC()
-	result, runErr := provider.Run(ctx, request)
+	workerCtx, closeKnowledge, err := r.workerMCPContext(ctx, canonicalTask.ID, agentID, "claude", &task)
+	if err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
+	defer closeKnowledge()
+	providerCtx, finishContext, err := r.prepareWatchedRequiredProcess05Request(workerCtx, task, agentID, "claude", modelName, &request, r.workerKnowledgeContext(workerCtx, agentID, canonicalTask.ID, task.BaseCommit))
+	if err != nil {
+		return execution.TaskResult{TaskID: task.TaskID}, err
+	}
+	defer finishContext()
+	result, runErr := provider.Run(providerCtx, request)
+	// A worker that hits its provider's own quota or rate limit marks the
+	// provider limited, so the next draft or review moves off it.
+	if runErr != nil || result.ExitCode != 0 {
+		r.noteProviderLimit("claude", fmt.Sprint(runErr)+"\n"+string(result.Stdout)+"\n"+string(result.Stderr))
+	}
+	if contextErr := finishContext(); contextErr != nil {
+		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: "required project context changed; provider result quarantined"}, contextErr
+	}
 	if runErr != nil {
 		return execution.TaskResult{TaskID: task.TaskID, ErrorMessage: runErr.Error()}, runErr
 	}
@@ -160,7 +193,8 @@ func (r *Runtime) executeProcess05Claude(ctx context.Context, task execution.Tas
 		TaskID:  task.TaskID,
 		Success: success,
 		EvidenceList: []execution.ExecutionEvidence{{
-			EvidenceID: evidenceID, TaskID: task.TaskID, ToolName: "claude", Cwd: worktree,
+			ProviderObservation: process05ProviderObservation(task, result, nil, "adapter_process"),
+			EvidenceID:          evidenceID, TaskID: task.TaskID, ToolName: "claude", Cwd: worktree,
 			ExitCode: result.ExitCode, StdoutSummary: string(stdout), StderrSummary: string(stderr),
 			OutputDigest: "sha256:" + hex.EncodeToString(digest[:]), BinaryVersion: probe.Version,
 			Status: execution.EvidenceValid, DurationMs: duration.Milliseconds(), RelevantFiles: task.TargetFiles, CreatedAt: time.Now().UTC(),
@@ -220,6 +254,7 @@ func (r *Runtime) executeProcess05ClaudeStream(ctx context.Context, task executi
 			_ = server.Close()
 			return execution.TaskResult{TaskID: task.TaskID}, false, err
 		}
+		startedAt := time.Now().UTC()
 		turn, err := server.StartTurn(runCtx, session, request)
 		if err != nil {
 			runCancel()
@@ -234,7 +269,7 @@ func (r *Runtime) executeProcess05ClaudeStream(ctx context.Context, task executi
 			_ = server.Close()
 			return execution.TaskResult{TaskID: task.TaskID}, true, err
 		}
-		live = &liveClaudeStreamTurn{client: server, initialWorktreeDigest: worktreeDigest, binding: execution.NativeTurnBinding{
+		live = &liveClaudeStreamTurn{startedAt: startedAt, client: server, initialWorktreeDigest: worktreeDigest, binding: execution.NativeTurnBinding{
 			Provider: "claude-stream", ThreadID: turn.SessionID, TurnID: turn.TurnID, SessionID: turn.SessionID,
 			Worktree: worktree, WorktreeDigest: worktreeDigest, Model: session.Model, ConstraintDigest: pkg.Digest,
 			RunRevision: task.RunRevision, State: "RUNNING",
@@ -325,8 +360,9 @@ func (r *Runtime) executeProcess05ClaudeStream(ctx context.Context, task executi
 	if err != nil {
 		return execution.TaskResult{TaskID: task.TaskID, NativeTurn: &live.binding}, true, err
 	}
+	observed := process05ProviderObservation(task, adapter.Result{StartedAt: live.startedAt, EndedAt: time.Now().UTC(), Usage: result.Usage}, &live.binding, "runtime_native_turn_lifecycle")
 	success := result.Status == "completed"
-	return execution.TaskResult{TaskID: task.TaskID, Success: success, NativeTurn: &live.binding, EvidenceList: []execution.ExecutionEvidence{{EvidenceID: evidenceID, TaskID: task.TaskID, ToolName: "claude-stream", Cwd: worktree, ExitCode: 0, StdoutSummary: string(stdout), OutputDigest: "sha256:" + hex.EncodeToString(digest[:]), BinaryVersion: binaryVersion, Status: execution.EvidenceValid, DurationMs: result.Usage.DurationMs, RelevantFiles: task.TargetFiles, CreatedAt: time.Now().UTC()}}, ErrorMessage: func() string {
+	return execution.TaskResult{TaskID: task.TaskID, Success: success, NativeTurn: &live.binding, EvidenceList: []execution.ExecutionEvidence{{ProviderObservation: observed, EvidenceID: evidenceID, TaskID: task.TaskID, ToolName: "claude-stream", Cwd: worktree, ExitCode: 0, StdoutSummary: string(stdout), OutputDigest: "sha256:" + hex.EncodeToString(digest[:]), BinaryVersion: binaryVersion, Status: execution.EvidenceValid, DurationMs: result.Usage.DurationMs, RelevantFiles: task.TargetFiles, CreatedAt: time.Now().UTC()}}, ErrorMessage: func() string {
 		if success {
 			return ""
 		}
@@ -355,39 +391,5 @@ func (r *Runtime) removeLiveClaudeStreamTurn(key string) {
 // authority identity; treating it as one would bypass the canonical policy and
 // capability binding.
 func (r *Runtime) process05ClaudeAgent(ctx context.Context, task execution.TaskExecution) (string, error) {
-	if task.AssignedAgent != "" {
-		if agent, err := r.store.GetAgent(ctx, task.AssignedAgent); err == nil {
-			if agent.Status != model.AgentDisabled && agent.ModelProvider == "claude" {
-				return task.AssignedAgent, nil
-			}
-			return "", fmt.Errorf("%w: assigned Process 05 agent %q is not an eligible local Claude agent", model.ErrUnavailable, task.AssignedAgent)
-		}
-	}
-	agents, err := r.Agents(ctx)
-	if err != nil {
-		return "", fmt.Errorf("list Process 05 agents: %w", err)
-	}
-	var eligible []model.Agent
-	var allClaude []model.Agent
-	for _, agent := range agents {
-		if agent.Status != model.AgentDisabled && agent.ModelProvider == "claude" {
-			allClaude = append(allClaude, agent)
-			if task.AssignedRole != "" && string(agent.Role) == task.AssignedRole {
-				eligible = append(eligible, agent)
-			}
-		}
-	}
-	// Some Process 04 assignment roles are provider route labels ("claude")
-	// rather than an Agent.Role enum. In that case only a *unique* eligible
-	// Claude principal may be used; multiple candidates remain a hard refusal.
-	if len(eligible) == 0 {
-		eligible = allClaude
-	}
-	if len(eligible) == 1 {
-		return eligible[0].ID, nil
-	}
-	if len(eligible) > 1 {
-		return "", fmt.Errorf("%w: %d eligible local Claude agents match Process 05 assignment %q; bind AssignedAgent explicitly", model.ErrInvalid, len(eligible), task.AssignedRole)
-	}
-	return "", fmt.Errorf("%w: no registered local Claude agent matches Process 05 assignment %q", model.ErrUnavailable, task.AssignedRole)
+	return r.resolveProcess05Worker(ctx, task, "claude", "Claude", func(p string) bool { return p == "claude" }, false)
 }

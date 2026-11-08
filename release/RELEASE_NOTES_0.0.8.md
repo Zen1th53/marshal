@@ -1,8 +1,45 @@
 # MARSHAL v0.0.8
 
+### Installation telemetry and connected ULTRA
+
+- Standard and ULTRA register once per random machine installation identity and
+  authority, then report fixed-field `app_start` and two-minute `heartbeat`
+  telemetry. Only identifier, version, OS, architecture, mode and advisory event
+  time are reported; registration also sends the public key. No prompts, code,
+  commands, projects, paths or free text are included. Stable identifiers make
+  records pseudonymous and correlatable.
+- Delivery is bounded, runs in the background and drops silently offline without
+  delaying commands. The first interactive run displays a short notice.
+- `marshal telemetry status|disable|enable` persists the choice across projects
+  and editions. Disable saves the preference first and attempts the exact
+  five-field opt-out event once. It stops telemetry even when unreachable;
+  a failed opt-out attempt cannot change server aggregates immediately. Enable
+  creates a new identifier and keypair because server opt-outs are permanent.
+- `/ultra request` and `marshal ultra request` use durable tracked requests and
+  proof of possession. The server auto-grants by default; restart after a grant
+  to obtain a fresh signed short lease. Failed ULTRA heartbeat or renewal drops
+  the session to Standard with an honest status. Opting out of telemetry keeps
+  ULTRA's required authority calls; `MARSHAL_CLOUD_ENDPOINT=off` disables both.
+
+
 Evidence and verification integrity.
 
 ## What changed
+
+### EGM design review and memory
+
+- The Marshal recommends Elephant-Goldfish design review for goals that need
+  design decisions, with fresh reviewer sessions and explicit design approval
+  before task planning. Small, clear fixes can skip it.
+- The external Apache-2.0 EGM plugin is pinned to v0.1.0 /
+  `6690c125f298c370410557f1d8399b6f9f880e6e`. Local compatibility checks appear in
+  `marshal egm status` and `marshal doctor`; missing or changed installs use a
+  built-in draft/review flow. `marshal egm install --provider X` prints a pinned
+  recipe and runs nothing.
+- MCP `design_record` and `marshal egm record` save briefs, designs, findings and
+  resolutions through existing candidate memory with producer and digest
+  provenance. No automatic promotion or EGM vendoring. See
+  [EGM integration](../docs/public/egm.md).
 
 ### Approval and acceptance binding
 
@@ -128,8 +165,19 @@ missing dependency does not make installation fail.
 
 The automated source inventory reports:
 
-- Constitution enforcement: 0.9%
-- Scope of protection: 7.4%
+- Constitution enforcement: 2.2% (8/353)
+- Scope of protection: 13.0% (46/353)
+
+The current private `0.0.9-candidate-extreme` source adds an exact model-reviewed
+transport-consumption audit boundary. Its current inventory reports:
+
+- Constitution enforcement: 2.1% (8/367)
+- Scope of protection: 10.8% (40/367)
+
+The private Codex readiness queue adds three material transport sites without granting approval protection credit; its read-only observations and owned buffer cleanup are support sites.
+
+These candidate counts do not retroactively change the installed 0.0.8 artifact
+or establish completed real-provider delivery or blanket constitutional coverage.
 
 Constitution enforcement is the percentage of material source call sites that a constitutional verdict can refuse before the effect occurs.
 Scope of protection is the percentage of material source call sites guarded before execution by a constitutional gate, approval binding, policy authorisation or sandbox.
@@ -163,7 +211,7 @@ recording a verdict or warning does not count as enforcement. The reviewed
   refuses task import. Deliberate unauthenticated serving requires `--insecure`
   and a literal loopback listen address; non-loopback peers are refused.
 - **Credential broker is opt-in per project and provider.** Use
-  `/permission credential request <codex|claude|gemini|opencode>` and press
+  `/permission credential request <codex|claude|opencode>` and press
   uppercase `A` in the fixed permission prompt. Revoke with
   `/permission credential revoke <provider>`. New broker requests are refused
   immediately; active exchanges close when their owning runtime consumes the
