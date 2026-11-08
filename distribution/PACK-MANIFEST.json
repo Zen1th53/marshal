@@ -2101,8 +2101,8 @@
     },
     {
       "path": "internal/app/marshal_amend_packet_test.go",
-      "sha256": "42d301a34e28039aa9080a706c9ddae548bb7917228fcb3ce861457709f162dc",
-      "bytes": 3306
+      "sha256": "0639ec79cfcf7dcfa0801e0da1c4daec8b838dc52370228939c9d3cbc6e35c8b",
+      "bytes": 3349
     },
     {
       "path": "internal/app/marshal_approval_binding.go",
@@ -3181,8 +3181,8 @@
     },
     {
       "path": "internal/app/project_context_execution_extreme_test.go",
-      "sha256": "330e8bdeec65c22a416f7b51341f391bf3971939b3aebdc0837eec822b12c9f9",
-      "bytes": 9773
+      "sha256": "e12162dd372a13e0958d56b2189a6615d30dd0d776a8192f83cbd1534c1fbade",
+      "bytes": 9835
     },
     {
       "path": "internal/app/project_context_integration_source_default.go",
@@ -9066,8 +9066,8 @@
     },
     {
       "path": "internal/projectcontext/context.go",
-      "sha256": "5ca54e6f3ab5a3eaab0266f83dc3fcd171f5739acda064907409c65a87d468c3",
-      "bytes": 24416
+      "sha256": "1338682843851cce0095b1e53e303686539b2b20057cdaf239efa51949ed507d",
+      "bytes": 24551
     },
     {
       "path": "internal/projectcontext/context_test.go",

@@ -26,11 +26,11 @@ func TestActualEngineRequiredContextUsesCurrentOwnedWorktreeAndRefusesMissingMem
 }
 
 func TestActualEngineRequiredContextRefusesOversizedInstructionsBeforeProvider(t *testing.T) {
-	testActualApprovedInstructionContext(t, strings.Repeat("large mandatory instructions\n", 4096))
+	testActualApprovedInstructionContext(t, strings.Repeat("large mandatory instructions\n", projectcontext.MaximumPacketBytes/16))
 }
 
 func TestActualEngineRequiredContextRefusesEscapedWireOverflowBeforeProvider(t *testing.T) {
-	testActualApprovedInstructionContext(t, strings.Repeat("\"\\", 20000))
+	testActualApprovedInstructionContext(t, strings.Repeat("\"\\", projectcontext.MaximumPacketBytes/3))
 }
 
 func testActualApprovedInstructionContext(t *testing.T, oversized string) {
