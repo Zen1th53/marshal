@@ -632,6 +632,11 @@ func TestUltraCollectAndReviewAsSoonAsReady(t *testing.T) {
 	}
 	// A resume while a is still running must see it as live, not as a
 	// worker interrupted by a restart.
+	// b's dispatch is released right after its review is stored; allow it a
+	// moment so this assertion does not race the deregistration.
+	for i := 0; i < 40 && s.dispatchLive("run-ultra", "b"); i++ {
+		time.Sleep(25 * time.Millisecond)
+	}
 	if !s.dispatchLive("run-ultra", "a") || s.dispatchLive("run-ultra", "b") {
 		t.Fatalf("live dispatch registry: a=%v b=%v", s.dispatchLive("run-ultra", "a"), s.dispatchLive("run-ultra", "b"))
 	}

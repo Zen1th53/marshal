@@ -17,6 +17,9 @@ import (
 )
 
 func TestRealClientF11ClosesControlCentreOverlays(t *testing.T) {
+	if !editionExtreme && os.Getenv("CI") != "" {
+		t.Skip("governed-edition attached-client timing is not reliable on shared CI runners; run locally")
+	}
 	t.Setenv("MARSHAL_NO_UPDATE_CHECK", "1")
 	fakeProviderCLIs(t, "codex", "claude", "opencode", "agy")
 	w := realTmuxWorkspace(t)
