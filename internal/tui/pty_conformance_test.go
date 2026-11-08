@@ -162,8 +162,9 @@ func startPTYTUI(t *testing.T, rows, cols uint16, bin, project string, env []str
 		}
 	})
 
-	// Wait for the workspace to paint before driving input.
-	s.waitFor("Marshal", 15*time.Second)
+	// The header is painted before the composer is ready to accept input. Wait
+	// for the prompt itself so callers never race the initial frame on slow CI.
+	s.mustSee(PromptMarker)
 	return s
 }
 
