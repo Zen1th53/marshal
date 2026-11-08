@@ -400,6 +400,10 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 	case "/alignment":
 		return h.handleAlignment(ctx, parts[1:])
 
+	case "/notify":
+		h.ws.notifyCommand(parts[1:])
+		return "", nil
+
 	case "/diff":
 		if len(parts) > 2 || (len(parts) == 2 && parts[1] != "staged" && parts[1] != "unstaged" && parts[1] != "untracked") {
 			return "Usage: /diff [staged|unstaged|untracked]", nil
@@ -740,6 +744,7 @@ func (h *CommandHandler) helpText() string {
   /approval [inspect|diff] <id>  Inspect an approval; /codex approval for native policy
   /termination             Inspect termination state
   /context                 Inspect context and drift
+  /notify on|off|status    bell and desktop notifications
   /diff [staged|unstaged|untracked]  Bounded diff inventory (default: combined)
   /models [provider]       List models of the default provider, or of each installed provider
   /model [show]            Show execution model preferences and saved harness defaults

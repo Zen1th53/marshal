@@ -131,18 +131,19 @@ var eventStates = map[events.EventType]TaskState{
 
 // TaskRow is one plan task.
 type TaskRow struct {
-	ID                      string
-	Worker                  string
-	Scope                   []string // the task's files
-	Title, ParentID, Branch string
-	Checks                  []string
-	Criteria                []string
-	AuthorizedHosts         []string // available authority manifest entries
-	AuthorizedTools         []string
-	EvidenceSummary         string // verifier's compact claim summary, when known
-	State                   TaskState
-	Evidence                int // count supplied by the projection when evidence is available
-	EvidenceKnown           bool
+	BaseCommit, ResultCommit string
+	ID                       string
+	Worker                   string
+	Scope                    []string // the task's files
+	Title, ParentID, Branch  string
+	Checks                   []string
+	Criteria                 []string
+	AuthorizedHosts          []string // available authority manifest entries
+	AuthorizedTools          []string
+	EvidenceSummary          string // verifier's compact claim summary, when known
+	State                    TaskState
+	Evidence                 int // count supplied by the projection when evidence is available
+	EvidenceKnown            bool
 	// Since is when the task entered State: the latest event that moves a
 	// task into State. Zero when no event does, as for a task an amendment
 	// queued again.
@@ -167,17 +168,19 @@ func NewTaskRow(t marshal.Task, settings marshal.Settings) TaskRow {
 		panic("board: unknown marshal task state " + string(t.State))
 	}
 	return TaskRow{
-		ID:          t.PlanTaskID,
-		Worker:      t.Worker,
-		Scope:       slices.Clone(t.Files),
-		Title:       t.Title,
-		ParentID:    t.ParentID,
-		Branch:      t.Branch,
-		Checks:      taskChecks(t.Checks),
-		Criteria:    slices.Clone(t.Criteria),
-		State:       state,
-		Returns:     t.ReturnsByAgent[t.Worker],
-		ReworkLimit: settings.ReworkLimit,
+		BaseCommit:   t.BaseCommit,
+		ResultCommit: t.ResultCommit,
+		ID:           t.PlanTaskID,
+		Worker:       t.Worker,
+		Scope:        slices.Clone(t.Files),
+		Title:        t.Title,
+		ParentID:     t.ParentID,
+		Branch:       t.Branch,
+		Checks:       taskChecks(t.Checks),
+		Criteria:     slices.Clone(t.Criteria),
+		State:        state,
+		Returns:      t.ReturnsByAgent[t.Worker],
+		ReworkLimit:  settings.ReworkLimit,
 	}
 }
 
