@@ -4636,8 +4636,8 @@
     },
     {
       "path": "internal/cli/control_center.go",
-      "sha256": "d58085a0209c70b7484234d36783f0de035061715764f00f93d18f796f96ea47",
-      "bytes": 6651
+      "sha256": "1fadb084dd2bfd8b2b0de15da7ea8c0353102b0a910a5bab3ff9fbc6120514d1",
+      "bytes": 6728
     },
     {
       "path": "internal/cli/control_center_test.go",
