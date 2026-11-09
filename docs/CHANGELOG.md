@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.4
+
+### Fixed
+- Telemetry reports `app_start` at launch on slow connections instead of deferring it a heartbeat interval; per-attempt and offline bounds are unchanged.
+
 ## 0.2.3
 
 ### Fixed
