@@ -20,6 +20,8 @@ type DiffFile struct {
 
 // DiffViewer provides interactive navigation over git diffs with syntax coloring.
 type DiffViewer struct {
+	rawTitle     string
+	rawMode      bool
 	theme        *Theme
 	workDir      string
 	active       bool
@@ -55,12 +57,24 @@ func (dv *DiffViewer) IsOpen() bool {
 
 // Open loads the latest git diff from the working directory and opens the viewer.
 func (dv *DiffViewer) Open() error {
+	dv.rawMode = false
+	dv.rawTitle = ""
 	if err := dv.Refresh(); err != nil {
 		dv.active = false
 		return err
 	}
 	dv.active = true
 	return nil
+}
+
+// OpenRaw opens a standalone raw diff without inventory sections.
+func (dv *DiffViewer) OpenRaw(title, raw string) {
+	dv.rawMode = true
+	dv.rawTitle = title
+	dv.scope = ""
+	dv.truncated = false
+	dv.LoadRawDiff(raw)
+	dv.active = true
 }
 
 // Close closes the diff viewer.
@@ -289,6 +303,9 @@ func (dv *DiffViewer) Render(width, height int) []string {
 	if dv.truncated {
 		title += "[inventory truncated] "
 	}
+	if dv.rawMode {
+		title = " " + dv.rawTitle + " "
+	}
 	remWidth := boxWidth - VisibleLen(title) - 2
 	if remWidth < 0 {
 		remWidth = 0
@@ -302,22 +319,24 @@ func (dv *DiffViewer) Render(width, height int) []string {
 	)
 	lines = append(lines, header)
 
-	sections := "staged | unstaged | untracked"
-	if dv.scope != "" {
-		sections = dv.scope
-	}
-	lines = append(lines, dv.theme.BoxVert+" Sections: "+sections)
-	for _, section := range []string{"staged", "unstaged", "untracked"} {
-		if dv.scope != "" && dv.scope != section {
-			continue
+	if !dv.rawMode {
+		sections := "staged | unstaged | untracked"
+		if dv.scope != "" {
+			sections = dv.scope
 		}
-		count := 0
-		for _, file := range dv.files {
-			if file.Scope == section {
-				count++
+		lines = append(lines, dv.theme.BoxVert+" Sections: "+sections)
+		for _, section := range []string{"staged", "unstaged", "untracked"} {
+			if dv.scope != "" && dv.scope != section {
+				continue
 			}
+			count := 0
+			for _, file := range dv.files {
+				if file.Scope == section {
+					count++
+				}
+			}
+			lines = append(lines, fmt.Sprintf("%s %s: %d files", dv.theme.BoxVert, section, count))
 		}
-		lines = append(lines, fmt.Sprintf("%s %s: %d files", dv.theme.BoxVert, section, count))
 	}
 	if len(dv.files) == 0 {
 		cleanMsg := "  Working tree is clean (no uncommitted changes)"

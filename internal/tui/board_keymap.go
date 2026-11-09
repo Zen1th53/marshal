@@ -63,7 +63,7 @@ var boardKeymap = []boardKey{
 	{Group: "BOARD", Keys: "Esc", What: "close the inspector, a view, help", Class: KeyOpen},
 	{Group: "BOARD", Keys: "e", What: "inspector: toggle all events", Class: KeyOpen},
 	{Group: "BOARD", Keys: "Enter  ⌫", What: "inspector: child task, parent task", Class: KeyOpen},
-	{Group: "BOARD", Keys: "d", What: "diff (when the inbox is empty)", Command: "/diff", Class: KeyOpen},
+	{Group: "BOARD", Keys: "d  D", What: "diff; D: the task against base", Command: "/diff", Class: KeyOpen},
 
 	{Group: "INBOX", Keys: "y  u  K", What: "reply; changed files: undo, keep", Class: KeyConfirm, Except: map[string]KeyClass{"K": KeyOpen}},
 	{Group: "INBOX", Keys: "a  A  d  r", What: "allow once, for the run, deny, return", Class: KeyConfirm},
@@ -84,7 +84,7 @@ var boardKeymap = []boardKey{
 
 	{Group: "MARSHAL", Keys: "m  F11", What: "chat; F11 or Alt+arrow switch", Press: pressRune('m'), Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "s", What: "say it to the Marshal, Enter", Press: pressRune('s'), Class: KeyOpen},
-	{Group: "MARSHAL", Keys: "/", What: "type a command", Class: KeyOpen},
+	{Group: "MARSHAL", Keys: "/", What: "command; /notify on|off alerts", Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "Ctrl+P", What: "command palette", Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "Ctrl+N", What: "navigation", Command: "/menu", Class: KeyOpen},
 	{Group: "MARSHAL", Keys: "?", What: "this help", Class: KeyOpen},

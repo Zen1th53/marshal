@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2
+
+### Added
+- Live worker output per running lane on the Board.
+- Inline task diff in the inspector (`D`), with accept and rework.
+- Terminal bell and desktop notifications for NEEDS YOU and run close/stop (`/notify on|off|status`).
+- Provider quota in the Board header when the provider records it locally.
+
+### Fixed
+- `marshal/` branch prefix (older runs continue), honest Security view and doctor, 112 KiB context packets.
+
 ## 0.2.1
 
 First published release of the new Marshal line.

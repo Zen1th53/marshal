@@ -87,7 +87,7 @@ func (v boardVisual) layoutCounts() layout.Counts {
 	if _, stopped := v.stopNotice(); stopped {
 		inbox++
 	}
-	return layout.Counts{Lanes: len(b.Lanes), Tasks: len(b.Tasks), Inbox: inbox, Activity: len(b.Activity)}
+	return layout.Counts{Lanes: len(b.Lanes) + v.tailWant, Tasks: len(b.Tasks), Inbox: inbox, Activity: len(b.Activity)}
 }
 
 // stateChip is the header's run state: a stopped run says so in words, in
