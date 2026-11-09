@@ -40,9 +40,21 @@ trap 'rm -rf "$release_staging"' EXIT
 release_plain=${release_version#v}
 release_go_version=$(go env GOVERSION)
 release_ldflags="-s -w -buildid= -X github.com/Zen1th53/marshal/internal/cli.Version=$release_version -X github.com/Zen1th53/marshal/internal/cli.Commit=$release_commit -X github.com/Zen1th53/marshal/internal/cli.BuildDate=$release_date"
+# Build matrix. Darwin binaries are cross-compiled from the same pure-Go tree
+# (CGO is off); the Go linker ad-hoc signs darwin/arm64 so it runs on Apple
+# Silicon, and a curl-based install is not Gatekeeper-quarantined, so no Apple
+# signing or notarization is required for the one-command install to work.
+release_targets=(
+  "linux/amd64"
+  "linux/arm64"
+  "darwin/amd64"
+  "darwin/arm64"
+)
 release_files=(
   "marshal_${release_plain}_linux_amd64.tar.gz"
   "marshal_${release_plain}_linux_arm64.tar.gz"
+  "marshal_${release_plain}_darwin_amd64.tar.gz"
+  "marshal_${release_plain}_darwin_arm64.tar.gz"
   "marshal_${release_plain}_sbom.spdx.json"
   "build-metadata.json"
   "checksums.txt"
@@ -56,10 +68,12 @@ done
 
 python3 tools/release_verify.py . distribution/PACK-MANIFEST.json
 
-for release_arch in amd64 arm64; do
-  release_bundle="$release_staging/bundle-$release_arch"
+for release_target in "${release_targets[@]}"; do
+  release_os=${release_target%/*}
+  release_arch=${release_target#*/}
+  release_bundle="$release_staging/bundle-$release_os-$release_arch"
   mkdir -p "$release_bundle"
-  CGO_ENABLED=0 GOOS=linux GOARCH="$release_arch" go build \
+  CGO_ENABLED=0 GOOS="$release_os" GOARCH="$release_arch" go build \
     -trimpath -buildvcs=false -ldflags "$release_ldflags" \
     -o "$release_bundle/marshal" ./cmd/marshal
   cp LICENSE docs/legal/LICENSING.md README.md docs/legal/THIRD_PARTY_NOTICES.md release/INSTALL.md "$release_bundle/"
@@ -71,7 +85,7 @@ for release_arch in amd64 arm64; do
   TZ=UTC tar --sort=name --mtime="$release_date" --owner=0 --group=0 \
     --numeric-owner -C "$release_bundle" -cf - \
     INSTALL.md LICENSE LICENSING.md README.md THIRD_PARTY_NOTICES.md marshal | \
-    gzip -n > "$release_output/marshal_${release_plain}_linux_${release_arch}.tar.gz"
+    gzip -n > "$release_output/marshal_${release_plain}_${release_os}_${release_arch}.tar.gz"
 done
 
 python3 tools/release_trust.py generate-sbom \
@@ -90,7 +104,7 @@ metadata = {
     "build_date": build_date,
     "commit": commit,
     "go_version": go_version,
-    "platforms": ["linux/amd64", "linux/arm64"],
+    "platforms": ["linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"],
     "version": version,
 }
 pathlib.Path(destination).write_text(
@@ -103,6 +117,8 @@ PY
   sha256sum \
     "marshal_${release_plain}_linux_amd64.tar.gz" \
     "marshal_${release_plain}_linux_arm64.tar.gz" \
+    "marshal_${release_plain}_darwin_amd64.tar.gz" \
+    "marshal_${release_plain}_darwin_arm64.tar.gz" \
     "marshal_${release_plain}_sbom.spdx.json" \
     build-metadata.json > checksums.txt
 )

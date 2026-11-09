@@ -98,6 +98,8 @@ func healthyProject(root string) *fakeProber {
 	prober.dirs[filepath.Join(root, statepath.DirName)] = true
 	prober.files[filepath.Join(root, "CAPABILITIES.yaml")] = true
 	prober.writable[root] = true
+	// A fully set-up host has at least one supported coding tool installed.
+	prober.onPath["claude"] = true
 	return prober
 }
 
@@ -523,5 +525,42 @@ func TestSystemProberWritableIgnoresAnotherSessionsProbe(t *testing.T) {
 	}
 	if len(entries) != 1 {
 		t.Fatalf("probes left files behind: %v", entries)
+	}
+}
+
+func TestHarnessProbeReportsMissingProviderWithoutBlocking(t *testing.T) {
+	root := "/work/project"
+
+	// No provider CLI on PATH: a non-required, non-blocking warning, provider
+	// execution gone, but the control center still opens and local work stays.
+	prober := healthyProject(root)
+	delete(prober.onPath, "claude")
+	a := startup.Assess(context.Background(), prober, healthyEnv(root))
+	h, ok := a.Check("env.harness")
+	if !ok {
+		t.Fatal("no env.harness check was produced")
+	}
+	if h.Status != startup.StatusMissing || h.Reason != startup.ReasonHarnessMissing {
+		t.Fatalf("missing harness reported as %s/%s", h.Status, h.Reason)
+	}
+	if h.Required {
+		t.Fatal("a missing harness must not be Required")
+	}
+	if !a.ControlCenterOpens() {
+		t.Fatal("a missing harness closed the control center")
+	}
+	if a.Has(startup.CapProviderExecution) {
+		t.Fatal("a missing harness left provider execution enabled")
+	}
+
+	// Any one supported provider on PATH clears it.
+	for _, bin := range []string{"codex", "claude", "opencode", "agy"} {
+		p := healthyProject(root)
+		delete(p.onPath, "claude")
+		p.onPath[bin] = true
+		got, ok := startup.Assess(context.Background(), p, healthyEnv(root)).Check("env.harness")
+		if !ok || got.Status != startup.StatusReady {
+			t.Fatalf("%s on PATH did not satisfy the harness check: %+v", bin, got)
+		}
 	}
 }

@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "235c90488f57fda1101bfbde629b3c6d25d47fcebb3271924aada86284446411",
-      "bytes": 9095
+      "sha256": "1752ff92a088ed09ac604a6a907a75eff920fa2e2dfce2c7514f072f544b9cb8",
+      "bytes": 9231
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -651,8 +651,8 @@
     },
     {
       "path": "install.sh",
-      "sha256": "ce550ae131c0bbf0c610273133faa1788cfdc60bc3be8c694cf9090c9d5b3710",
-      "bytes": 5182
+      "sha256": "2d042fe02511fd353678c6c1ef632a904b339084c9219ccc3fc8b7ba0cc6af57",
+      "bytes": 5362
     },
     {
       "path": "internal/a2a/a2a_test.go",
@@ -16036,8 +16036,8 @@
     },
     {
       "path": "tools/build_release.sh",
-      "sha256": "1e40f4e3f145f338a537f44e64fb0fc0105c7b72013259e5a0a22cf95a9cb4f3",
-      "bytes": 3754
+      "sha256": "44c09981887bed17dc9553311649d59edee87832576a0a6a0fc67caffe34db65",
+      "bytes": 4496
     },
     {
       "path": "tools/ci/test-shard.sh",

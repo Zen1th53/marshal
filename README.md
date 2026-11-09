@@ -13,7 +13,7 @@ and only verified work lands on `main`.**
 [![Release](https://img.shields.io/github/v/release/Zen1th53/marshal?color=blue)](https://github.com/Zen1th53/marshal/releases)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Zen1th53/marshal)](https://go.dev)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux-informational)](#requirements)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-informational)](#requirements)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | 
 ## One-minute start
 
 ```bash
-# 1. Install (Linux amd64/arm64, checksum-verified)
+# 1. Install (Linux & macOS, amd64/arm64, checksum-verified)
 curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | sh
 
 # 2. Any Git repository
@@ -148,7 +148,7 @@ and `[o]` open the worker pane. [All keys →](docs/board-and-keys.md)
 
 ## Requirements
 
-- Linux (amd64 or arm64)
+- Linux or macOS (amd64 or Apple Silicon/arm64)
 - Git and tmux 3.3a or newer
 - At least one provider CLI, installed and signed in:
   `claude` (Claude Code), `codex` (OpenAI Codex), `opencode` (OpenCode) or
@@ -189,7 +189,8 @@ Turn it off with `marshal telemetry disable` or `MARSHAL_CLOUD_ENDPOINT=off`.
 Marshal is free. Agents run on your existing provider accounts and plans.
 
 **Which platforms?**
-Linux today. Prebuilt binaries for amd64 and arm64.
+Linux and macOS. Prebuilt, checksum-verified binaries for amd64 and arm64
+(Apple Silicon included); the one-line install picks the right one.
 
 **Is it production-ready?**
 It is young (v0.2). The run loop above is tested end to end on fresh

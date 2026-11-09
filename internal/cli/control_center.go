@@ -48,6 +48,13 @@ func (c *command) controlCenter(ctx context.Context, args []string) error {
 		return fmt.Errorf("MARSHAL project %q cannot start; run `marshal doctor` for details", canonicalRoot)
 	}
 
+	// A missing coding tool does not block the control center from opening, but
+	// nothing can run until one is installed, so say it up front rather than at
+	// the first failed run. Printed before the TUI takes the terminal.
+	if h, ok := assessment.Check("env.harness"); ok && h.Status == startup.StatusMissing {
+		fmt.Fprintf(c.stderr, "Warning: %s\n  %s\n  Run `marshal doctor` for details.\n", h.Impact, h.Remedy)
+	}
+
 	// Decision 1: The MARSHAL TUI ALWAYS runs inside tmux.
 	// If MARSHAL is not started inside tmux, it creates (or re-attaches to) a dedicated
 	// per-project tmux session and runs itself inside it. If it is already inside tmux,

@@ -23,16 +23,20 @@ need() {
     command -v "$1" >/dev/null 2>&1 || die "this installer needs $1, which is not on PATH"
 }
 
-# Releases are built for Linux only. Saying so beats installing a binary that
-# cannot run, or silently doing nothing.
-os=$(uname -s)
-[ "$os" = "Linux" ] || die "release binaries are built for Linux; this is $os.
-  Build from source instead: go install github.com/$REPO/cmd/marshal@latest"
+# Releases are built for Linux and macOS. A curl install of the binary is not
+# Gatekeeper-quarantined on macOS, and the darwin/arm64 binary is ad-hoc signed
+# by the Go linker, so it runs on Apple Silicon without any extra step.
+case $(uname -s) in
+    Linux) os="linux" ;;
+    Darwin) os="darwin" ;;
+    *) die "no release binary for $(uname -s); Marshal publishes linux and darwin (macOS).
+  Build from source instead: go install github.com/$REPO/cmd/marshal@latest" ;;
+esac
 
 case $(uname -m) in
     x86_64 | amd64) arch="amd64" ;;
     aarch64 | arm64) arch="arm64" ;;
-    *) die "no release binary for $(uname -m); Marshal publishes linux amd64 and arm64" ;;
+    *) die "no release binary for $(uname -m); Marshal publishes amd64 and arm64" ;;
 esac
 
 need curl
@@ -69,14 +73,14 @@ if [ -z "$tag" ]; then
 fi
 version="${tag#v}"
 
-archive="marshal_${version}_linux_${arch}.tar.gz"
+archive="marshal_${version}_${os}_${arch}.tar.gz"
 base="https://github.com/$REPO/releases/download/$tag"
 
 tmp=$(mktemp -d)
 # Leave nothing behind, including when the download or verification fails.
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-info "Downloading Marshal $tag for linux/$arch..."
+info "Downloading Marshal $tag for $os/$arch..."
 fetch -o "$tmp/$archive" "$base/$archive" ||
     die "could not download $archive from release $tag"
 fetch --max-time 60 -o "$tmp/checksums.txt" "$base/checksums.txt" ||
