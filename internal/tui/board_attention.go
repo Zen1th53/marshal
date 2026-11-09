@@ -203,21 +203,28 @@ func saveAttention(root, value string) error {
 	}
 	return os.Chmod(path, 0o600)
 }
-func (w *Workspace) notifyCommand(args []string) {
+
+// notifyCommand turns attention alerts on or off and returns the reply the
+// command line shows; the Board also records it as a note.
+func (w *Workspace) notifyCommand(args []string) string {
 	root := w.providerRoot()
 	if len(args) > 1 || (len(args) == 1 && args[0] != "status" && args[0] != "on" && args[0] != "off") {
-		w.addNote("Usage: /notify on|off|status", true)
-		return
+		msg := "Usage: /notify on|off|status"
+		w.addNote(msg, true)
+		return msg
 	}
 	if len(args) == 1 && args[0] != "status" {
 		if err := saveAttention(root, args[0]); err != nil {
-			w.addNote("Notifications: "+err.Error(), true)
-			return
+			msg := "Notifications: " + err.Error()
+			w.addNote(msg, true)
+			return msg
 		}
 	}
 	status := "on"
 	if !attentionEnabled(root) {
 		status = "off"
 	}
-	w.addNote(fmt.Sprintf("Notifications %s for this project (%s)", status, attentionPath(root)), false)
+	msg := fmt.Sprintf("Notifications %s for this project (%s)", status, attentionPath(root))
+	w.addNote(msg, false)
+	return msg
 }

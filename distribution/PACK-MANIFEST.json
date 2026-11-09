@@ -12256,8 +12256,8 @@
     },
     {
       "path": "internal/tui/board_attention.go",
-      "sha256": "23e4c5bb4e119135d9e11a09a3fa2bc0f13e49e749a6e751f11187324914731d",
-      "bytes": 5615
+      "sha256": "b8cf8108b058797f3801259bfd1d327c98ff6588a7592770d588548cf90e375c",
+      "bytes": 5820
     },
     {
       "path": "internal/tui/board_attention_test.go",
@@ -12356,8 +12356,8 @@
     },
     {
       "path": "internal/tui/board_keymap.go",
-      "sha256": "f5c5ea35a00f7aa01944ebc774404881371429e32394c4c626fb8297b09b8673",
-      "bytes": 17610
+      "sha256": "0187f9a2bb655777f4719b0f40a8447fc02a5e20440fae0164da2a53d1b740fc",
+      "bytes": 17609
     },
     {
       "path": "internal/tui/board_keymap_test.go",
@@ -12431,8 +12431,8 @@
     },
     {
       "path": "internal/tui/board_seams_test.go",
-      "sha256": "433d600c0f3b28c2b6fcb2c0beb32d81ddb61680681fa3d369bb385b1c046b7a",
-      "bytes": 2660
+      "sha256": "a5a7a7ca7fbe868cae5f37dc4153ff896be864c647c8aefe1abec2320ac5f3ab",
+      "bytes": 2690
     },
     {
       "path": "internal/tui/board_stop.go",
@@ -12566,8 +12566,8 @@
     },
     {
       "path": "internal/tui/commands.go",
-      "sha256": "a47d1da6bbae6ade8f368aac52853ad6485f434c473a26ec308ece067fae1cb9",
-      "bytes": 31613
+      "sha256": "8d0d710008afc61bf9695b1c122512ea96be74cfdd862f2da63d15930f7e1a62",
+      "bytes": 31608
     },
     {
       "path": "internal/tui/commands_alignment.go",

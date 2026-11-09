@@ -65,7 +65,6 @@ var boardKeymap = []boardKey{
 	{Group: "BOARD", Keys: "Enter  ⌫", What: "inspector: child task, parent task", Class: KeyOpen},
 	{Group: "BOARD", Keys: "d  D", What: "diff; D: the task against base", Command: "/diff", Class: KeyOpen},
 
-
 	{Group: "INBOX", Keys: "y  u  K", What: "reply; changed files: undo, keep", Class: KeyConfirm, Except: map[string]KeyClass{"K": KeyOpen}},
 	{Group: "INBOX", Keys: "a  A  d  r", What: "allow once, for the run, deny, return", Class: KeyConfirm},
 	{Group: "INBOX", Keys: "i  Enter", What: "show the request's reason", Class: KeyOpen},

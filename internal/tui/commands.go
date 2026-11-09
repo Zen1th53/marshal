@@ -401,8 +401,7 @@ func (h *CommandHandler) Handle(ctx context.Context, line string) (string, error
 		return h.handleAlignment(ctx, parts[1:])
 
 	case "/notify":
-		h.ws.notifyCommand(parts[1:])
-		return "", nil
+		return h.ws.notifyCommand(parts[1:]), nil
 
 	case "/diff":
 		if len(parts) > 2 || (len(parts) == 2 && parts[1] != "staged" && parts[1] != "unstaged" && parts[1] != "untracked") {

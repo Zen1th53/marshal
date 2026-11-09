@@ -57,7 +57,7 @@ func TestSeams(t *testing.T) {
 	})
 	t.Run("notify command", func(t *testing.T) {
 		reply, err := NewCommandHandler(w).Handle(ctx, "/notify status")
-		if err != nil || reply != "" {
+		if err != nil || !strings.Contains(reply, "Notifications") {
 			t.Fatalf("notify: %q %v", reply, err)
 		}
 	})
