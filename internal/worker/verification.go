@@ -73,10 +73,16 @@ func runUnconfined(ctx context.Context, cause error, dir string, command []strin
 		return adapter.ProcessResult{}, fmt.Errorf("%w: empty verification command", model.ErrInvalid)
 	}
 	// The host run keeps the host environment and, like the sandbox, gives the
-	// command its build output directory when the caller supplied one.
-	var env []string
+	// command its build output directory: the caller's when supplied, otherwise
+	// a per-user cache directory so builds never fall back to a small or
+	// quota-limited /tmp.
+	build := DefaultBuildDir()
 	if len(outputDir) > 0 && outputDir[0] != "" {
-		env = append(os.Environ(), "MARSHAL_BUILD_DIR="+outputDir[0])
+		build = outputDir[0]
+	}
+	var env []string
+	if build != "" {
+		env = append(os.Environ(), "MARSHAL_BUILD_DIR="+build)
 	}
 	result, err := New(timeout, 3*time.Second, limit).Run(ctx, adapter.Command{Path: command[0], Args: command[1:], Dir: dir, Env: env})
 	result.Isolation = model.IsolationCapability{Level: model.IsolationProcessOnly, Reason: UnconfinedReasonPrefix + "ran on the host after confinement refused: " + cause.Error()}
@@ -84,6 +90,29 @@ func runUnconfined(ctx context.Context, cause error, dir string, command []strin
 		err = fmt.Errorf("%w: verification did not complete", model.ErrUnavailable)
 	}
 	return result, err
+}
+
+// DefaultBuildDir is the build output directory used when a caller supplies
+// none. It is a per-user cache directory ($XDG_CACHE_HOME/marshal/build, else
+// ~/.cache/marshal/build), created 0700, so host verification never writes to
+// a small or quota-limited /tmp. MARSHAL_BUILD_DIR still overrides it in the
+// check's own environment. It falls back to os.TempDir only when no home or
+// cache directory is available or the directory cannot be created.
+func DefaultBuildDir() string {
+	base := os.Getenv("XDG_CACHE_HOME")
+	if base == "" {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			base = filepath.Join(home, ".cache")
+		}
+	}
+	if base == "" {
+		return os.TempDir()
+	}
+	dir := filepath.Join(base, "marshal", "build")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return os.TempDir()
+	}
+	return dir
 }
 
 // sandboxGoModCache is where a sandbox sees the host's Go module cache.

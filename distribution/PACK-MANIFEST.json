@@ -15501,8 +15501,13 @@
     },
     {
       "path": "internal/worker/verification.go",
-      "sha256": "cbcabd5f8214780dd04a6fdf93934c4043e33ef081686a780a9e5480f3ea46dd",
-      "bytes": 6999
+      "sha256": "646f72439d815d8b6c74121a86de62edf7a8325e091fe1e7845f6135d9bcf5b5",
+      "bytes": 8001
+    },
+    {
+      "path": "internal/worker/verification_builddir_test.go",
+      "sha256": "78d9daab193f64cf13b624e8c5e6c40717a0b01df25a744c3eeb87e18b2b79e7",
+      "bytes": 1235
     },
     {
       "path": "internal/worker/verification_host_extreme_test.go",
@@ -16091,8 +16096,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "5f002e851128680c960219becd565b938ed0e384df99e14e946721ef52e6cff5",
-      "bytes": 398537
+      "sha256": "e650017915491b1bcbf73525dde6d729154203098915ef51ec095720eae57ef2",
+      "bytes": 398862
     },
     {
       "path": "tools/extreme/prq/main_default.go",
