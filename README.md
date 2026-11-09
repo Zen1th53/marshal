@@ -148,7 +148,8 @@ and `[o]` open the worker pane. [All keys →](docs/board-and-keys.md)
 
 ## Requirements
 
-- Linux or macOS (amd64 or Apple Silicon/arm64)
+- Linux or macOS (amd64 or Apple Silicon/arm64). On Windows, use WSL2: run
+  the installer inside your WSL2 Linux distribution.
 - Git and tmux 3.3a or newer
 - At least one provider CLI, installed and signed in:
   `claude` (Claude Code), `codex` (OpenAI Codex), `opencode` (OpenCode) or
@@ -258,7 +259,10 @@ Marshal is free. Agents run on your existing provider accounts and plans.
 
 **Which platforms?**
 Linux and macOS. Prebuilt, checksum-verified binaries for amd64 and arm64
-(Apple Silicon included); the one-line install picks the right one.
+(Apple Silicon included); the one-line install picks the right one. On Windows,
+run it inside **WSL2** — the Linux binary installs and runs there as usual.
+There is no native Windows build: the TUI requires tmux, which has no native
+Windows build.
 
 **Is it production-ready?**
 It is young (v0.2). The run loop above is tested end to end on fresh
