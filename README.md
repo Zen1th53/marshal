@@ -195,7 +195,7 @@ party sees is listed below — there is no other payload.
 
 ```json
 {
-  "installation_id": "inst-3f9a1c2b7e4d8a60",
+  "installation_id": "inst-xxxxxxxxxxxxxxxx",
   "public_key": "b3zH1Qc9ukE2y0rW...",
   "client_version": "0.2.4",
   "os": "linux",
@@ -218,7 +218,7 @@ party sees is listed below — there is no other payload.
 [
   {
     "kind": "app_start",
-    "installation_id": "inst-3f9a1c2b7e4d8a60",
+    "installation_id": "inst-xxxxxxxxxxxxxxxx",
     "client_version": "0.2.4",
     "os": "linux",
     "arch": "amd64",

@@ -146,7 +146,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "4cb33f8e1620793377ca53d9d000b5eb094818134bc018327e539f0be92cb211",
+      "sha256": "65535cbc877ba89285b87021aac53d2a5f3ff7389c30bf63e906a6e5e82ce591",
       "bytes": 11943
     },
     {
@@ -601,7 +601,7 @@
     },
     {
       "path": "docs/telemetry.md",
-      "sha256": "5e5b829f13084a8cacb3bad0a4389ba0cc54ad9f9b7d594626ecd91401c2d445",
+      "sha256": "2fe8f246163301c16d7e8c0711ca0e15d0e65a2dc1ff3d355e0f8b7221faed3e",
       "bytes": 4653
     },
     {
