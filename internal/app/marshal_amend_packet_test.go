@@ -21,10 +21,10 @@ func TestMarshalAmendOverCapRunUsesScopedPacket(t *testing.T) {
 		{PlanTaskID: "fix", Title: "Fix scope", Worker: "codex", Mode: marshal.Governed, Type: marshal.TaskChange, Files: []string{"a.go"}, Criteria: []string{"a.go is updated"}, Checks: []marshal.Check{{Command: "go test ./...", Criteria: []string{"a.go is updated"}}}, Instructions: "Change a.go", ExpectedOutput: "updated a.go"},
 		{PlanTaskID: "other", Title: "Other work", Worker: "codex", Mode: marshal.Governed, Type: marshal.TaskChange, Files: []string{"b.go"}, Criteria: []string{"b.go is updated"}, Checks: []marshal.Check{{Command: "go test ./...", Criteria: []string{"b.go is updated"}}}, Instructions: "Change b.go", ExpectedOutput: "updated b.go"},
 	}
-	run := marshal.Run{PlanID: "PLAN-test", PlanVersion: 1, Tasks: tasks, Pack: &marshal.PlanPack{Requirements: strings.Repeat("history ", 11000)}}
+	run := marshal.Run{PlanID: "PLAN-test", PlanVersion: 1, Tasks: tasks, Pack: &marshal.PlanPack{Requirements: strings.Repeat("history ", projectcontext.MaximumPacketBytes/8+2000)}}
 	full, err := json.Marshal(run)
 	if err != nil || len(full) <= projectcontext.MaximumPacketBytes {
-		t.Fatalf("fixture must exceed 64 KiB: %d bytes, %v", len(full), err)
+		t.Fatalf("fixture must exceed the packet cap: %d bytes, %v", len(full), err)
 	}
 	amended := proposalFromRun(marshal.Run{Tasks: []marshal.Task{tasks[0]}}).Tasks[0]
 	amended.Paths = []string{"a.go", "new.go"}

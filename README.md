@@ -136,7 +136,7 @@ the right.
 | `y` | Accept what a **NEEDS YOU** gate asks (architecture, plan) |
 | `Enter` | Inspect the highlighted task; on a lane, open the worker's session |
 | `v` | Verify a provider |
-| `1`–`8` | Views: Board, Host, Memory, Providers, Verify, Plan, Architecture |
+| `1`–`8` | Views: Board, Host, Memory, Providers, Verify, Security, Plan, Architecture |
 | `Ctrl+P` | Command palette |
 | `Ctrl+X` | Stop all workers (never the Marshal) |
 | `?` | Every key |

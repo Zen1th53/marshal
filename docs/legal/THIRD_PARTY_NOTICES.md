@@ -44,11 +44,9 @@ MARSHAL's own terms and the dependency audit reports it as review-required.
 
 ## 3. External Runtime Tools
 
-MARSHAL executes the separately installed `bubblewrap` (`bwrap`) binary to
-construct Linux sandbox namespaces. Bubblewrap is not linked into MARSHAL,
-vendored in this repository, or bundled in MARSHAL release archives. Its
-upstream source identifies the license as `LGPL-2.0-or-later` and is available
-from [containers/bubblewrap](https://github.com/containers/bubblewrap).
+Marshal runs separately installed tools: `git`, `tmux` and the provider CLIs
+you choose. None of them is linked into Marshal, vendored in this repository,
+or bundled in release archives.
 
 Provider CLIs are likewise discovered and executed as separately installed
 operator-selected tools; MARSHAL does not redistribute them.

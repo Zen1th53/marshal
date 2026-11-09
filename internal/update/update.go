@@ -38,6 +38,17 @@ const Repository = "Zen1th53/marshal"
 // GitHub at all.
 const DisableEnv = "MARSHAL_NO_UPDATE_CHECK"
 
+// APIEnv points the release feed at another GitHub-compatible API, for a
+// mirror or for tests that must never reach the real feed.
+const APIEnv = "MARSHAL_UPDATE_API"
+
+func envOr(name, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
+	}
+	return fallback
+}
+
 // Release is a published release, reduced to what an update needs.
 type Release struct {
 	// Tag is the release tag, for example "v0.0.3".
@@ -79,7 +90,7 @@ func NewChecker() *Checker {
 			ResponseHeaderTimeout: 30 * time.Second,
 		}},
 		StallTimeout: 30 * time.Second,
-		BaseAPI:      "https://api.github.com",
+		BaseAPI:      envOr(APIEnv, "https://api.github.com"),
 		BaseDownload: "https://github.com",
 		Executable:   os.Executable,
 	}

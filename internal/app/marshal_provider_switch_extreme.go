@@ -92,7 +92,7 @@ func (r *Runtime) prepareProcess05ProviderSwitch(ctx context.Context, s *Marshal
 func (r *Runtime) recordFlexibleWorkerChoice(ctx context.Context, s *MarshalService, req driver.Request, fromWorker, fromModel, toModel string) (string, error) {
 	event, err := s.decisionEvent(req.RunID, req.Task.PlanTaskID, events.EventTypePolicyAllowed, map[string]any{
 		"decision": "flexible worker model", "previous_worker": fromWorker, "previous_model": fromModel,
-		"worker": req.Task.Worker, "model": toModel, "decided_by": "marshal-runtime", "source": "marshal-extreme",
+		"worker": req.Task.Worker, "model": toModel, "decided_by": "marshal-runtime", "source": "marshal",
 	})
 	if err != nil {
 		return "", err

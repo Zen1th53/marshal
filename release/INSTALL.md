@@ -51,10 +51,9 @@ Workers run on the host without a sandbox. Use a dedicated project directory;
 CLIs and credentials are optional and are not bundled. Use
 `marshal doctor --probe-providers` to probe installed providers.
 
-Back up project state and stop old sessions before upgrading. A lone
-`.marshal-extreme/` is atomically renamed to `.marshal/`, then stored absolute
-paths are relocated with backups. Existing `.marshal/` state takes precedence;
-old public schema-90 databases upgrade in place. Recovery details are in
+Back up project state and stop old sessions before upgrading. Projects created
+by v0.0.x keep their `.marshal/` state, and old schema-90 databases upgrade in
+place. Recovery details are in
 [the upgrade guide](https://github.com/Zen1th53/marshal/blob/main/docs/upgrading.md).
 
 Anonymous telemetry is enabled at `https://marshal.blackhat.uz`. Opt out with

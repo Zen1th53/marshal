@@ -115,7 +115,7 @@ def main():
     parser.add_argument("--destination", type=Path)
     args = parser.parse_args()
     lock = json.loads(LOCK.read_text())
-    destination = args.destination or Path.home() / ".cache/marshal-extreme/opencode-bootstrap" / lock.get("bootstrap_revision", lock["version"])
+    destination = args.destination or Path.home() / ".cache/marshal/opencode-bootstrap" / lock.get("bootstrap_revision", lock["version"])
     prepare(destination, lock)
     print("offline_bootstrap=" + str(destination))
 

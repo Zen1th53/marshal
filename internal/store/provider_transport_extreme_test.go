@@ -78,7 +78,7 @@ func TestProviderTransportReviewRequiresAppliedNativeExactRequest(t *testing.T) 
 		if err := s.InitMCPProposals(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.AppendEvent(ctx, nil, model.Event{ID: "fake", Type: "PERMISSION_DECIDED", ProjectID: "PROJECT-local", Timestamp: time.Now(), Data: map[string]any{"allow": true, "source": "marshal-extreme", "object": "/marshal approve-task approval-a"}}); err != nil {
+		if err := s.AppendEvent(ctx, nil, model.Event{ID: "fake", Type: "PERMISSION_DECIDED", ProjectID: "PROJECT-local", Timestamp: time.Now(), Data: map[string]any{"allow": true, "source": "marshal", "object": "/marshal approve-task approval-a"}}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := s.AppliedMCPTransportReview(ctx, "PROJECT-local", "approval-a"); err == nil {

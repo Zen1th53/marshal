@@ -55,7 +55,6 @@ run_check "TOOLS V6 TESTS" python3 -m unittest discover -s tools/tests_v6 -v
 
 printf '%s\n' "---------------------------------------------------------" "5. Documentation & Manifest"
 run_check "PUBLIC DOCS CHECK" bash scripts/docs-check.sh
-run_check "SOURCE DOCS CHECK" bash scripts/private-docs-check.sh
 
 printf '%s\n' "---------------------------------------------------------" "6. Edition Verification"
 run_check "EDITION INTEGRITY" bash -c '

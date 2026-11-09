@@ -44,7 +44,13 @@ type securityPaint struct {
 
 // securityEdition is what the build's edition says about its security:
 // its mode, sandbox and secrets policy.
-type securityEdition struct{ Mode, Sandbox, Secrets string }
+type securityEdition struct {
+	Mode, Sandbox, Secrets string
+	// Headline, EgressNote and LeaseNote describe how this edition handles
+	// network calls and credentials, so the view never claims enforcement
+	// the build does not perform.
+	Headline, EgressNote, LeaseNote string
+}
 
 // securityDecisionColour colours an egress decision.
 var securityDecisionColour = map[string]string{store.EgressAllowed: "merged", store.EgressWaiting: "waiting", store.EgressDenied: "failed"}
@@ -91,7 +97,7 @@ func securityColumns(w int) securityCols {
 func (v boardVisual) securityLines(m securityPaint, w int) ([]string, int) {
 	s := m.Snap
 	ed := m.Edition
-	out := []string{v.title("SECURITY", ed.Mode+" · egress only through the broker", false, w)}
+	out := []string{v.title("SECURITY", ed.Mode+" · "+ed.Headline, false, w)}
 	if !s.Loaded {
 		read := "reading the store…"
 		if s.Err != "" {
@@ -119,7 +125,7 @@ func (v boardVisual) securityLines(m securityPaint, w int) ([]string, int) {
 	}
 	out = append(out, v.kv("honeypot", trips, w), v.kv("audit", "append-only records · not hash chained", w))
 
-	out = append(out, "", v.title("EGRESS", "every network call a worker makes in this run", false, w))
+	out = append(out, "", v.title("EGRESS", ed.EgressNote, false, w))
 	c := securityColumns(w)
 	row := func(dot, decision, worker, task, host, reason string) string {
 		return strings.Join([]string{PadCell(dot, 1), PadCell(decision, c.decision), PadCell(worker, c.worker), PadCell(task, c.task), PadCell(host, c.host), PadCell(reason, c.reason)}, " ")
@@ -161,7 +167,7 @@ func (v boardVisual) securityLines(m securityPaint, w int) ([]string, int) {
 		out = append(out, PadCell("  "+keys, w))
 	}
 
-	out = append(out, "", v.title("CREDENTIAL LEASES", "short, per task, revoked when the lane ends", false, w))
+	out = append(out, "", v.title("CREDENTIAL LEASES", ed.LeaseNote, false, w))
 	if len(o.Leases) == 0 {
 		out = append(out, v.fg("dim", PadCell("  no active leases", w)))
 	}
