@@ -121,8 +121,8 @@
     },
     {
       "path": ".gitignore",
-      "sha256": "85a5996219fad967ba044c592d5a0d2a074f0f0f9b74531f2a3da9772d6d7e2e",
-      "bytes": 1625
+      "sha256": "a894c02cb815bae77da8bf573baa0272e6ea6570021cdfc9b39a174145279a19",
+      "bytes": 1630
     },
     {
       "path": "CAPABILITIES.yaml",
@@ -15643,31 +15643,6 @@
       "path": "mkdocs.yml",
       "sha256": "7cb2d36cde660c0da781b2373c63a45a6e8650a6a52bcb5b2937ce2aea668be8",
       "bytes": 1957
-    },
-    {
-      "path": "out/demo/1-plan.ans",
-      "sha256": "35b9e2aa32c40560c27a8509440eb6d195582cf605a05ff5b2a76d382b9b1dce",
-      "bytes": 8327
-    },
-    {
-      "path": "out/demo/2-build.ans",
-      "sha256": "eb416cfa1690b0c44502cf0cadbdb91ef68efb082a5d968829647e5bb0dc5c2d",
-      "bytes": 10076
-    },
-    {
-      "path": "out/demo/3-review.ans",
-      "sha256": "4a986f7b34b9de8390a3f2e2db40147eecbd8c7175b1bf133be9b4d1983a37af",
-      "bytes": 10076
-    },
-    {
-      "path": "out/demo/4-verify.ans",
-      "sha256": "f8c8b08e02b51a981634e52f164f7942f1899125dec974f4e5517b6a1c2d163c",
-      "bytes": 10076
-    },
-    {
-      "path": "out/demo/5-merge.ans",
-      "sha256": "afba397d480824de76ac2744be54b8520f966d43c798f39047b3f2ecee999e97",
-      "bytes": 10076
     },
     {
       "path": "release/INSTALL.md",
