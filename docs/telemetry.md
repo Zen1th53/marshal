@@ -28,7 +28,7 @@ When telemetry is enabled, Marshal sends periodic heartbeat and startup events c
 Two HTTPS requests, JSON bodies. Every field either party sees is below — there
 is no other payload.
 
-**Registration** (once per install) — `POST /v1/installations/register`:
+**Registration** (once per install), over HTTPS:
 
 ```json
 {
@@ -47,7 +47,7 @@ is no other payload.
 - `client_version`, `os`, `arch` — describe the build, not who runs it.
 
 **Events** (app start, then a heartbeat every 2 minutes) —
-`POST /v1/telemetry/events`, a batched array:
+over HTTPS, a batched array:
 
 ```json
 [
