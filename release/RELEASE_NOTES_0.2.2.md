@@ -24,8 +24,6 @@ under cross-provider review.
 - The Security view and `marshal doctor` describe host execution accurately.
 - Large repositories no longer stop a run on the context-packet limit
   (raised from 64 KiB to 112 KiB).
-- The Board flags project files changed outside a run while the Marshal plans,
-  with undo and keep.
 
 ## Known issues
 

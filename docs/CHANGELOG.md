@@ -9,7 +9,7 @@
 - Provider quota in the Board header when the provider records it locally.
 
 ### Fixed
-- `marshal/` branch prefix (older runs continue), honest Security view and doctor, 112 KiB context packets, Board guard for files changed outside a run.
+- `marshal/` branch prefix (older runs continue), honest Security view and doctor, 112 KiB context packets.
 
 ## 0.2.1
 
