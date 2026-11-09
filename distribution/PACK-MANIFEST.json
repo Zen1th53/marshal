@@ -12371,13 +12371,13 @@
     },
     {
       "path": "internal/tui/board_lane_tail.go",
-      "sha256": "cbf4e1dbf2d950c548964c1286fcabf2c03932087db2205a68a09fda7393472e",
-      "bytes": 7877
+      "sha256": "eb4ab8d80913cfa87d0b9683d3b9e3cd2e0db0a0af0420a7eef779a9e71b121d",
+      "bytes": 7901
     },
     {
       "path": "internal/tui/board_lane_tail_test.go",
-      "sha256": "b3f52bdeb2784a85b3247a077de78833335d760783780c58aa59663f8f63f4ac",
-      "bytes": 10114
+      "sha256": "bde774120607fa6352559bcd2bfe815b3eb31d32d638be7fc1f71ff0969ff8bc",
+      "bytes": 11626
     },
     {
       "path": "internal/tui/board_live.go",
@@ -12466,8 +12466,8 @@
     },
     {
       "path": "internal/tui/board_visual.go",
-      "sha256": "3fe8e15467d7c6c85ca0889b7413d46f4132e009d1902ab6849385a12a256762",
-      "bytes": 43198
+      "sha256": "b15e9b5035b92c122215e0a0da08ddae697a2c233e4885c6269c5b29e0507af3",
+      "bytes": 44594
     },
     {
       "path": "internal/tui/briefing_dir.go",
@@ -14886,8 +14886,8 @@
     },
     {
       "path": "internal/tui/testdata/board/lane-tail/home-120x40.golden",
-      "sha256": "ca5993d56a925198d6c80ac79d103045f9b34026538d1948134e17cdff62b8b2",
-      "bytes": 5113
+      "sha256": "2a26ccac26c9b1ed384d25e066c4b18f1a34ba3ca9a5a0a91999e942902b0ba7",
+      "bytes": 5117
     },
     {
       "path": "internal/tui/testdata/board/memory-split-120x40.golden",
