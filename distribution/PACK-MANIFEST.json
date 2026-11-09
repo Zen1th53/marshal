@@ -71,8 +71,8 @@
     },
     {
       "path": ".github/assets/demo.gif",
-      "sha256": "51711bbc5ee018af6bdee3e3023fb4c25db428c4a0cd9e63ef68871a3e5aa435",
-      "bytes": 8027561
+      "sha256": "86382e2db9d36f87632c375f4da72a3a25a2430360f606c5f609cbcc677c1846",
+      "bytes": 475064
     },
     {
       "path": ".github/dependabot.yml",
@@ -121,8 +121,8 @@
     },
     {
       "path": ".gitignore",
-      "sha256": "85a5996219fad967ba044c592d5a0d2a074f0f0f9b74531f2a3da9772d6d7e2e",
-      "bytes": 1625
+      "sha256": "a894c02cb815bae77da8bf573baa0272e6ea6570021cdfc9b39a174145279a19",
+      "bytes": 1630
     },
     {
       "path": "CAPABILITIES.yaml",
@@ -13013,6 +13013,11 @@
       "path": "internal/tui/dedicatedscreen_test.go",
       "sha256": "7a751325a5267d823affbc6b5351ee2c10fb96afac7c521fe0627f147ca81480",
       "bytes": 1945
+    },
+    {
+      "path": "internal/tui/demo_sequence_test.go",
+      "sha256": "01780ccf078884edfae3623c8350683ea4e60ec68b393f54e61c94b88d1385c0",
+      "bytes": 2909
     },
     {
       "path": "internal/tui/diff_scopes_test.go",
