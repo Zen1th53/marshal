@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "65535cbc877ba89285b87021aac53d2a5f3ff7389c30bf63e906a6e5e82ce591",
-      "bytes": 11943
+      "sha256": "d7e1ef050c06ee9a48b1e44ccad7eca33de4fbc856d3cfabe44c9ed2c0c21218",
+      "bytes": 12079
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -651,8 +651,8 @@
     },
     {
       "path": "install.sh",
-      "sha256": "ce550ae131c0bbf0c610273133faa1788cfdc60bc3be8c694cf9090c9d5b3710",
-      "bytes": 5182
+      "sha256": "2d042fe02511fd353678c6c1ef632a904b339084c9219ccc3fc8b7ba0cc6af57",
+      "bytes": 5362
     },
     {
       "path": "internal/a2a/a2a_test.go",
@@ -4636,8 +4636,8 @@
     },
     {
       "path": "internal/cli/control_center.go",
-      "sha256": "43d0aac87eff506390a2e64afc8e90224ec089aa8abe999c746cd0d28b0ea902",
-      "bytes": 6230
+      "sha256": "d58085a0209c70b7484234d36783f0de035061715764f00f93d18f796f96ea47",
+      "bytes": 6651
     },
     {
       "path": "internal/cli/control_center_test.go",
@@ -9846,13 +9846,13 @@
     },
     {
       "path": "internal/startup/probe.go",
-      "sha256": "c957e7b264feaac0361ef5cbe4cfaf6ffd24c79031ddd8c13f62c3ddf89c3672",
-      "bytes": 15348
+      "sha256": "cc1dc16aad476a600b8dbd7cf580029941bee5473c4a8fa9d2853cc829851605",
+      "bytes": 16828
     },
     {
       "path": "internal/startup/probe_test.go",
-      "sha256": "695feb8ff5b21c6bd2e25c6decb6d29efe5d55943f01b4ae63eda970585b9e8a",
-      "bytes": 17576
+      "sha256": "1e48fc0c5c4320e1ef940a462d44540a47296f9156c0e2cccc03f7420341f6de",
+      "bytes": 19014
     },
     {
       "path": "internal/startup/project_identity.go",
@@ -16036,8 +16036,8 @@
     },
     {
       "path": "tools/build_release.sh",
-      "sha256": "1e40f4e3f145f338a537f44e64fb0fc0105c7b72013259e5a0a22cf95a9cb4f3",
-      "bytes": 3754
+      "sha256": "44c09981887bed17dc9553311649d59edee87832576a0a6a0fc67caffe34db65",
+      "bytes": 4496
     },
     {
       "path": "tools/ci/test-shard.sh",

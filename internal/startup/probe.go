@@ -131,6 +131,7 @@ func Assess(ctx context.Context, prober Prober, env Environment) Assessment {
 		checks = append(checks, ProjectIdentityCheck(ctx, projectRoot))
 	}
 	checks = append(checks, probeIsolation(env)...)
+	checks = append(checks, probeHarness(prober))
 	checks = append(checks, probeUltra(env))
 
 	firstRun := projectRoot == "" || !marshalInitialized(prober, projectRoot)
@@ -370,6 +371,36 @@ func probeIsolation(env Environment) []Check {
 		})
 	}
 	return checks
+}
+
+// harnessBinaries are the provider CLIs Marshal can drive. Work runs through
+// one of them, so a host with none installed can open the control center but
+// cannot run anything — which is worth saying up front rather than at the
+// first failed run.
+var harnessBinaries = []string{"codex", "claude", "opencode", "agy"}
+
+// probeHarness reports whether at least one supported provider CLI is on PATH.
+// It only looks the binaries up; it never runs one. Missing harnesses remove
+// provider execution but do not block local project work, so the check is not
+// Required and the control center still opens.
+func probeHarness(prober Prober) Check {
+	for _, binary := range harnessBinaries {
+		if _, err := prober.LookPath(binary); err == nil {
+			return Check{
+				ID: "env.harness", Dimension: DimensionEnvironment, Status: StatusReady,
+				Required: false, Reason: ReasonOK,
+				Summary: "A supported coding tool is installed.",
+			}
+		}
+	}
+	return Check{
+		ID: "env.harness", Dimension: DimensionEnvironment, Status: StatusMissing,
+		Required: false, Reason: ReasonHarnessMissing,
+		Summary:      "No supported coding tool was found.",
+		Impact:       "Marshal opens, but no work can run until one is installed. Install one of: claude (Claude Code), codex (OpenAI Codex), opencode (OpenCode) or agy (Antigravity).",
+		Remedy:       Describe(ReasonHarnessMissing).Remedy,
+		Capabilities: []Capability{CapProviderExecution},
+	}
 }
 
 // probeUltra reports entitlement state. ULTRA is never enabled here; startup
