@@ -1911,8 +1911,8 @@
     },
     {
       "path": "internal/app/harness_verify.go",
-      "sha256": "5f9d43a4250a8822d0c388405a85d46def85418349693978e1d793ec52293a2e",
-      "bytes": 14698
+      "sha256": "4ecbb365f58251b6078bf6f7cb9136d85879cd9aaf0e2cbff26bf5ec0dafb9cb",
+      "bytes": 15010
     },
     {
       "path": "internal/app/harness_verify_default_test.go",
