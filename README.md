@@ -195,7 +195,7 @@ Telemetry is anonymous and opt-out. It goes to `https://marshal.blackhat.uz`
 over HTTPS as JSON. There are exactly two requests, and every field either
 party sees is listed below — there is no other payload.
 
-**1. Registration** — once per install, `POST /v1/installations/register`:
+**1. Registration** — once per install, over HTTPS:
 
 ```json
 {
@@ -216,7 +216,7 @@ party sees is listed below — there is no other payload.
   `linux`, `amd64`. They say nothing about who runs it.
 
 **2. Events** — on start, then a heartbeat every 2 minutes while running,
-`POST /v1/telemetry/events` (a batched JSON array):
+over HTTPS, as a batched JSON array:
 
 ```json
 [
