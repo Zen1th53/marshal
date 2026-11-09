@@ -212,15 +212,21 @@ func runInstallationTelemetryClientStarted(ctx context.Context, client *Client, 
 		if !current.TelemetryDisabled {
 			attempt, cancel := context.WithTimeout(ctx, telemetryTimeout)
 			_, err = client.ensureRegistered(attempt, st, false)
+			cancel()
 			if err == nil {
 				if !started {
 					reporter.Record(KindAppStart, mode.modeForInstallation(st.InstallationID), "")
 					started = true
 				}
 				reporter.Record(KindHeartbeat, mode.modeForInstallation(st.InstallationID), "")
-				_ = reporter.Flush(attempt)
+				// A fresh bound for the flush: on a slow link the registration
+				// round trip can consume most of one budget, so sharing it would
+				// drop the first app_start/heartbeat and defer them a full
+				// interval. Each network op still stays within telemetryTimeout.
+				flush, flushCancel := context.WithTimeout(ctx, telemetryTimeout)
+				_ = reporter.Flush(flush)
+				flushCancel()
 			}
-			cancel()
 			// No retries/backlog: a later heartbeat describes current activity.
 			reporter.mu.Lock()
 			reporter.queue = nil
