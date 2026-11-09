@@ -393,7 +393,7 @@ def deep_probe(pane, rec, outdir):
 # 810 specs BOUND, which says nothing about whether Enter does anything.
 WIRED_SCHEMA = "marshal.tui.wired.v1"
 # Bugs land with the audit fixes; unwired features with Community features
-# built by Extreme (private-docs/tui-v3-board.md "Phasing", roadmap B3).
+# built by the public engine.
 PHASE_BUG = "A5"
 PHASE_UNWIRED = "B3"
 # Status lines the walker can catch that are not the refusal itself.

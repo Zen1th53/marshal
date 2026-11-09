@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"context"
+	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,6 +61,13 @@ func TestMissingCodexAndBwrapAreDegraded(t *testing.T) {
 		}
 		return availableTools(name)
 	}})
+	if statepath.PublicEngine {
+		// The public engine runs workers on the host and never needs bwrap.
+		if report.Verdict != Degraded || report.Check("codex").Verdict != Degraded || report.Check("bwrap").Verdict != Pass {
+			t.Fatalf("report = %#v", report)
+		}
+		return
+	}
 	if report.Verdict != Degraded || report.Check("codex").Verdict != Degraded || report.Check("bwrap").Verdict != Degraded {
 		t.Fatalf("report = %#v", report)
 	}

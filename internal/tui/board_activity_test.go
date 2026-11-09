@@ -17,7 +17,7 @@ func TestActivityRunCloseNamesItsSubject(t *testing.T) {
 	evs := []events.Event{
 		{Sequence: 24, RunID: "R", Type: events.EventTypeMarshalPlanApproved, At: at.Add(-3 * time.Minute), Data: map[string]any{"plan_version": float64(2)}},
 		{Sequence: 41, RunID: "R", TaskID: "hello-cli", Type: events.EventTypeMarshalTaskMerged, At: at.Add(-2 * time.Minute), Data: map[string]any{"operation_kind": "merge"}},
-		{Sequence: 49, RunID: "R", Type: events.EventTypeMarshalRunClosed, At: at, Data: map[string]any{"checkpoint": "refs/marshal-extreme/R/pre-close", "commit": "017b2d0c768b38ddd1c74ad1de7494b31a8270dd", "operation_kind": "close", "previous_commit": "5735885a6d9f", "target": "main"}},
+		{Sequence: 49, RunID: "R", Type: events.EventTypeMarshalRunClosed, At: at, Data: map[string]any{"checkpoint": "refs/marshal/R/pre-close", "commit": "017b2d0c768b38ddd1c74ad1de7494b31a8270dd", "operation_kind": "close", "previous_commit": "5735885a6d9f", "target": "main"}},
 	}
 	b := boardmodel.Project(boardmodel.Snapshot{RunID: "R", Run: marshal.Run{State: marshal.Closed}}, evs)
 	th := NewTheme(ThemeDefault, true, true)

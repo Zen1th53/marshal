@@ -131,7 +131,6 @@ esac
 	}
 }
 
-
 func TestMonitorTitleHeuristicFallbackWhenOSC7501Absent(t *testing.T) {
 	tempDir := t.TempDir()
 	fakeTmuxPath := filepath.Join(tempDir, "tmux")

@@ -830,10 +830,10 @@ func (f *fakeAuthority) CodexSessions(_ context.Context) ([]CodexSessionSummary,
 
 func (f *fakeAuthority) CodexPlugins(_ context.Context) ([]codex.PluginInfo, []codex.SkillInfo, error) {
 	return []codex.PluginInfo{
-		{PluginID: "plugin-1", Name: "Test Plugin", Installed: true, Enabled: true},
-	}, []codex.SkillInfo{
-		{Name: "test-skill", Description: "Test Skill", Root: "/test"},
-	}, nil
+			{PluginID: "plugin-1", Name: "Test Plugin", Installed: true, Enabled: true},
+		}, []codex.SkillInfo{
+			{Name: "test-skill", Description: "Test Skill", Root: "/test"},
+		}, nil
 }
 
 func (f *fakeAuthority) ClaudeHealth(_ context.Context) (ClaudeHealthReport, error) {

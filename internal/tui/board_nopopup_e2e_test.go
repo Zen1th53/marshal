@@ -12,7 +12,7 @@ import (
 	"github.com/Zen1th53/marshal/internal/tmux"
 )
 
-// D20 (private-docs/tui-v3-board.md): while the Board is on screen a
+// Board design rule: while the Board is on screen a
 // permission request goes to the attention inbox and never opens a tmux
 // popup. These tests drive the real permission queue against a fake tmux
 // that records every command it is asked to run and would happily open a

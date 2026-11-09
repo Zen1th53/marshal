@@ -3,7 +3,7 @@ package tui
 import "strings"
 
 // KeyClass is what pressing a Board key may do. The Board's rule
-// (private-docs/tui-v3-board.md, Keys) is that a movement key never acts
+// (the Board key design) is that a movement key never acts
 // and a mutating action never has a bare key: its key opens a
 // confirmation and the confirmation acts.
 type KeyClass string

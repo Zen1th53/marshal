@@ -116,7 +116,7 @@ func TestEditionReadOfUndecidedFolder(t *testing.T) {
 	for _, e := range list {
 		if e.Type == "PERMISSION_DECIDED" && e.Data["kind"] == "read" {
 			recorded++
-			if e.Data["object"] != resolved || e.Data["allow"] != true || e.Data["decided_by"] != "marshal-runtime" || e.Data["source"] != "marshal-extreme" || e.Data["reason"] != "Marshal: reads outside the project apply automatically" {
+			if e.Data["object"] != resolved || e.Data["allow"] != true || e.Data["decided_by"] != "marshal-runtime" || e.Data["source"] != "marshal" || e.Data["reason"] != "Marshal: reads outside the project apply automatically" {
 				t.Fatalf("incomplete automatic read evidence: %+v", e)
 			}
 		}

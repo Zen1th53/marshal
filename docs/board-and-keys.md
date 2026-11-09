@@ -121,6 +121,7 @@ At the bottom of the inspector, the **Action Row** provides contextual one-key a
 | `3` | Memory view (MCP candidates and promoted knowledge) |
 | `4` | Providers view (harness health, model selection) |
 | `5` | Verify view (claims, test evidence, verification status) |
+| `6` | Security view (how workers run, network requests and audit records) |
 | `7` | Plan view (task graph and plan versions) |
 | `8` or `b` | Architecture view (project contracts and components) |
 

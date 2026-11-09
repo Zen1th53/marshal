@@ -89,7 +89,7 @@ func (w *Workspace) settleUnansweredDecision(ctx context.Context, req permission
 				"request_id": id, "kind": req.Kind, "object": req.Object, "cause": cause, "attempt": attempt,
 				"max_redeliveries": extremeDecisionRedeliveries, "next_utc": r.next.UTC().Format(time.RFC3339Nano),
 				"await_without_deadline": attempt > extremeDecisionRedeliveries, "provider": provider,
-				"decided_by": marshalRuntimeDecider, "source": "marshal-extreme",
+				"decided_by": marshalRuntimeDecider, "source": "marshal",
 			}})
 		}
 	}
@@ -118,7 +118,7 @@ func (w *Workspace) keepUnansweredImportCandidate(ctx context.Context, req permi
 	}
 	_ = w.store.AppendEvent(context.WithoutCancel(ctx), nil, model.Event{ID: eventID, Type: "PERMISSION_UNANSWERED_KEPT_CANDIDATE", ProjectID: w.projectID, Timestamp: time.Now().UTC(), Data: map[string]any{
 		"request_id": id, "kind": req.Kind, "object": req.Object, "cause": cause, "provider": provider,
-		"lifecycle": "candidate", "source": "marshal-extreme",
+		"lifecycle": "candidate", "source": "marshal",
 	}})
 }
 

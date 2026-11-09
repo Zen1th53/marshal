@@ -32,7 +32,9 @@ const (
 	FormatVersion = 1
 	// MaximumPacketBytes is a defensive upper bound, not the selected runtime
 	// default. The complete provider request needs its own measured envelope cap.
-	MaximumPacketBytes = 64 << 10
+	// It stays below Linux's 128 KiB single-argument limit, because some
+	// providers receive the packet as one command-line argument.
+	MaximumPacketBytes = 112 << 10
 	// Classification is a one-time bounded proposal input. Inspection replies
 	// keep their separate 4 KiB wire cap, and provider context keeps its own cap.
 	MaximumContractSubmissionBytes = 64 << 10

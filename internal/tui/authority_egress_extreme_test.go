@@ -51,7 +51,7 @@ func TestExtremeProviderEgressQueueBypassesJudgeWithEvidence(t *testing.T) {
 	for _, event := range history {
 		if event.Type == "PERMISSION_DECIDED" && event.Data["object"] == req.Object {
 			found = true
-			if event.Data["allow"] != true || event.Data["source"] != "marshal-extreme" || event.Data["provider"] != "codex" || !strings.Contains(event.Data["decision_reason"].(string), "Registered provider CLI") {
+			if event.Data["allow"] != true || event.Data["source"] != "marshal" || event.Data["provider"] != "codex" || !strings.Contains(event.Data["decision_reason"].(string), "Registered provider CLI") {
 				t.Fatalf("missing automatic permission evidence: %+v", event)
 			}
 		}
@@ -68,7 +68,7 @@ func TestExtremeProviderEgressQueueBypassesJudgeWithEvidence(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, event := range history {
-			if event.Type == "PERMISSION_DECIDED" && event.Data["object"] == object && event.Data["allow"] == allow && (!allow || event.Data["decided_by"] == "marshal-runtime" && event.Data["source"] == "marshal-extreme") {
+			if event.Type == "PERMISSION_DECIDED" && event.Data["object"] == object && event.Data["allow"] == allow && (!allow || event.Data["decided_by"] == "marshal-runtime" && event.Data["source"] == "marshal") {
 				return true
 			}
 		}

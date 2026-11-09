@@ -51,7 +51,7 @@ func TestExtremeReadsApplyAutomatically(t *testing.T) {
 	decided := map[string]bool{}
 	for _, e := range events {
 		if e.Type == "PERMISSION_DECIDED" && e.Data["kind"] == "read" && e.Data["allow"] == true {
-			if e.Data["source"] != "marshal-extreme" || e.Data["decided_by"] != "marshal-runtime" || e.Data["decision_reason"] != extremeReadReason {
+			if e.Data["source"] != "marshal" || e.Data["decided_by"] != "marshal-runtime" || e.Data["decision_reason"] != extremeReadReason {
 				t.Fatalf("incomplete automatic read evidence: %+v", e.Data)
 			}
 			decided[e.Data["object"].(string)] = true

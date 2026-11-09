@@ -34,7 +34,7 @@ func (r *Runtime) buildUndecidedRead(resolved string) bool {
 	if err == nil {
 		err = r.store.AppendEvent(context.Background(), nil, model.Event{ID: id, Type: "PERMISSION_DECIDED", ProjectID: r.ProjectID(), Timestamp: time.Now().UTC(), Data: map[string]any{
 			"kind": "read", "object": folder, "scope": "this runtime, read-only", "allow": true,
-			"actor": ExtremeRuntimeDecider, "decided_by": ExtremeRuntimeDecider, "source": "marshal-extreme",
+			"actor": ExtremeRuntimeDecider, "decided_by": ExtremeRuntimeDecider, "source": "marshal",
 			"reason": extremeReadReason, "decision_reason": extremeReadReason, "runtime_instance": r.runtimeInstanceID,
 		}})
 	}
