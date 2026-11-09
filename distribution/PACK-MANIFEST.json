@@ -5061,8 +5061,8 @@
     },
     {
       "path": "internal/cloud/installation_telemetry.go",
-      "sha256": "794aa8c4aedac25bf33118d07031bf3378f51c58e3b12bfc24a1be8b64ca2726",
-      "bytes": 8427
+      "sha256": "99f5e828c957587f17d978fa61c24a3fa4bcc56ccd3b180644a32df3288ebc01",
+      "bytes": 8784
     },
     {
       "path": "internal/cloud/installation_telemetry_test.go",
