@@ -18,7 +18,8 @@
 [2m      [0m│  [38;5;15mEsc        [0m close the inspector, a view, help        [38;5;15m/          [0m type a command                         │[2m7 evi…[0m
 [2m      [0m│  [38;5;15me          [0m inspector: toggle all events             [38;5;15mCtrl+P     [0m command palette                        │[2mrg ou…[0m
 [2m      [0m│  [38;5;15mEnter  ⌫   [0m inspector: child task, parent task       [38;5;15mCtrl+N     [0m navigation                             │[2m      [0m
-[2m      [0m│  [38;5;15md          [0m diff (when the inbox is empty)           [38;5;15m?          [0m this help                              │[2m      [0m
+[2m      [0m│  [38;5;15md          [0m diff (when the inbox is empty)           [38;5;15m/notify on…[0m bell and desktop notifications         │[2m      [0m
+[2m      [0m│  [38;5;15mD          [0m diff against base                        [38;5;15m?          [0m this help                              │[2m      [0m
 [2m      [0m│                                                       [38;5;15mCtrl+X     [0m stop all workers, never the Marshal    │[2m      [0m
 [2m      [0m│ [1m[38;5;111mINBOX[0m[0m                                                 [38;5;15mCtrl+C     [0m interrupt; twice to exit               │[2m      [0m
 [2m      [0m│  [38;5;15my  u  K    [0m reply; changed files: undo, keep                                                            │[2m      [0m
@@ -31,10 +32,9 @@
 [2m      [0m│ [1m[38;5;111mMOUSE[0m[0m[38;5;243m left click; never decides[0m                       [38;5;15mF6         [0m MCP                                    │[2m      [0m
 [2m      [0m│  [38;5;15mtask  lane    [0m select; again: inspect or show        [38;5;15mF7         [0m native Codex                           │[2m      [0m
 [2m      [0m│  [38;5;15mheader chip   [0m focus its pane or open its view       [38;5;15mF8         [0m native Claude                          │[2m      [0m
-[2m      [0m│  [38;5;15m[a] [d] [y]…  [0m open its confirmation                 [38;5;15mF9         [0m native OpenCode                        │[2m      [0m
-[2mINBOX [0m│  [38;5;15mtype › cmd    [0m run stopped: fill command line        [38;5;15mF10        [0m update: check or install               │[2m      [0m
-[2m⚑ T-02[0m│  [38;5;15mfooter key    [0m press it; any click closes help       [38;5;15mF12        [0m native Antigravity                     │[2m      [0m
+[2mINBOX [0m│  [38;5;15m[a] [d] [y]…  [0m open its confirmation                 [38;5;15mF9         [0m native OpenCode                        │[2m      [0m
+[2m⚑ T-02[0m│  [38;5;15mtype › cmd    [0m run stopped: fill command line        [38;5;15mF10        [0m update: check or install               │[2m      [0m
 [2m⚑ T-03[0m│                                                                                                          │[2m      [0m
-[2m    co[0m╰─[38;5;243m Esc or ? closes [0m────────────────────────────────────────────────────────────────────────────────────────╯[2m      [0m
+[2m    co[0m╰─[38;5;243m Esc or ? closes · j/k scroll · 1 more lines [0m────────────────────────────────────────────────────────────╯[2m      [0m
 [2m                                                                  │                                                     [0m
  [48;5;239m[38;5;15mj/k[0m[48;5;239m[0m [38;5;243mmove[0m  [48;5;239m[38;5;15m⏎[0m[48;5;239m[0m [38;5;243minspect[0m  [48;5;239m[38;5;15mm[0m[48;5;239m[0m [38;5;243mmarshal[0m  [48;5;239m[38;5;15mi[0m[48;5;239m[0m [38;5;243minbox[0m  [48;5;239m[38;5;15mt[0m[48;5;239m[0m [38;5;243mtasks[0m  [48;5;239m[38;5;15ml[0m[48;5;239m[0m [38;5;243mlanes[0m  [48;5;239m[38;5;15m1[0m[48;5;239m[0m [38;5;243mboard[0m  [48;5;239m[38;5;15m/[0m[48;5;239m[0m [38;5;243mcommand[0m  [48;5;239m[38;5;15m^P[0m[48;5;239m[0m [38;5;243mpalette[0m  [48;5;239m[38;5;15m^N[0m[48;5;239m[0m [38;5;243madvanced[0m  [48;5;239m[38;5;15m?[0m[48;5;239m[0m [38;5;243mhelp[0m         

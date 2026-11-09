@@ -477,6 +477,11 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 			v.status = v.fg("failed", v.status)
 		}
 	}
+	v.tails = w.laneTailFor
+	v.tailWant = w.laneTailWant()
+	if !empty {
+		v.usageWide, v.usageNarrow = w.usageSegment(cols)
+	}
 	l := layout.ComputeFor(cols, rows, w.boardLayoutMode(), v.layoutCounts())
 	var lines []string
 	_, docked := l.Pane(layout.Inspector)
@@ -648,6 +653,9 @@ func (w *Workspace) handleBoardKey(event KeyEvent) bool {
 		// The inspector keeps its own navigation: e toggles all events,
 		// Enter walks down the delegation chain, Backspace up it and, at
 		// the top, closes like Esc.
+		if event.Type == KeyRune && event.Rune == 'D' && w.openTaskDiff(ui.inspect) {
+			return true
+		}
 		v := ui.inspector(p.Board, ui.inspect)
 		switch {
 		case event.Type == KeyEsc || event.Type == KeyRune && event.Rune == 'q':

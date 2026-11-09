@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"unicode/utf8"
 
@@ -87,6 +88,7 @@ type KeyEvent struct {
 
 // Terminal handles raw mode, window sizing, resize signals, and ANSI escape sequences.
 type Terminal struct {
+	writerMu   sync.Mutex
 	in         io.Reader
 	out        io.Writer
 	inFd       int
@@ -627,4 +629,12 @@ func ResolveTheme(mode ThemeMode) (ThemeMode, bool) {
 		mode = ThemeDefault
 	}
 	return mode, IsUTF8()
+}
+
+// Bell rings the terminal under the writer lock.
+func (t *Terminal) Bell() error {
+	t.writerMu.Lock()
+	defer t.writerMu.Unlock()
+	_, err := io.WriteString(t.out, "\a")
+	return err
 }
