@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "47fa50034d114f84aba0d7d1b098b569788e571846e2bd3d92980254f6355133",
-      "bytes": 3201
+      "sha256": "83313961b92158721f07e44485961e38ab26b392f54ca91d7e44f8ca6562f582",
+      "bytes": 3485
     },
     {
       "path": "docs/assets/marshal-tui.png",
@@ -15511,8 +15511,13 @@
     },
     {
       "path": "internal/worker/verification.go",
-      "sha256": "cbcabd5f8214780dd04a6fdf93934c4043e33ef081686a780a9e5480f3ea46dd",
-      "bytes": 6999
+      "sha256": "646f72439d815d8b6c74121a86de62edf7a8325e091fe1e7845f6135d9bcf5b5",
+      "bytes": 8001
+    },
+    {
+      "path": "internal/worker/verification_builddir_test.go",
+      "sha256": "78d9daab193f64cf13b624e8c5e6c40717a0b01df25a744c3eeb87e18b2b79e7",
+      "bytes": 1235
     },
     {
       "path": "internal/worker/verification_host_extreme_test.go",
@@ -15653,6 +15658,11 @@
       "path": "release/RELEASE_NOTES_0.2.2.md",
       "sha256": "e0295d7830ed71f2cd929961413bb9ad3250b4c1b0b1ce49c171f715b98d55d6",
       "bytes": 1479
+    },
+    {
+      "path": "release/RELEASE_NOTES_0.2.3.md",
+      "sha256": "10df4360c1005d72da162f361f1bea471456a09875ff8ea70410ec47c9d18d00",
+      "bytes": 1091
     },
     {
       "path": "release/archive/RELEASE_NOTES_0.0.2.md",
@@ -16101,8 +16111,8 @@
     },
     {
       "path": "tools/effect-inventory/sites.csv",
-      "sha256": "5b8338167971805cb94197dd4620b05504902c67d704cd2127b68a3d50ad5366",
-      "bytes": 397018
+      "sha256": "74953c3badb719449352992d1c9e801c91cf2c17e5a5fa40ddce4e3b5ad450e1",
+      "bytes": 397343
     },
     {
       "path": "tools/extreme/prq/main_default.go",
