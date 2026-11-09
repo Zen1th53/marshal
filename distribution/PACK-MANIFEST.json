@@ -146,8 +146,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "1752ff92a088ed09ac604a6a907a75eff920fa2e2dfce2c7514f072f544b9cb8",
-      "bytes": 9231
+      "sha256": "d7e1ef050c06ee9a48b1e44ccad7eca33de4fbc856d3cfabe44c9ed2c0c21218",
+      "bytes": 12079
     },
     {
       "path": "RUNTIME-VERSION.yaml",
@@ -601,8 +601,8 @@
     },
     {
       "path": "docs/telemetry.md",
-      "sha256": "08aae866ce0a5e6fe0e8df50a61a6c00d6bd8d7e286172710b157709ce854f23",
-      "bytes": 2724
+      "sha256": "2fe8f246163301c16d7e8c0711ca0e15d0e65a2dc1ff3d355e0f8b7221faed3e",
+      "bytes": 4653
     },
     {
       "path": "docs/troubleshooting.md",
