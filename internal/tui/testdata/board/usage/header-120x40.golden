@@ -1,0 +1,40 @@
+ Marshal · run R-7f3a "MCP memory PoC" · DISPATCHING · 12/53 done · ⣾ 9 lanes · budget ▰▰▰▰▰▱▱▱ 61% · inbox 2 · 14:02:31|
+TASKS plan v2 · 53 tasks · 9 running · 2 parked · 12 merged       │LANES 9 of 12 · codex 4/4 · claude 2/2 · agy 2/2 · o…|
+  ID     state       worker       scope                  ev rework│  worker       task    elapsed tokens        last ac…|
+  T-009  ✓ merged    opencode-1   …al/mcp/events_list.go 7  0/2   │⣾ codex-1      T-017   04:12   ▁▃▂▅▄▇▆█  41k  edit  …|
+  T-011  ◆ verifying codex-2      …al/mcp/run_digest*.go 5  0/2   │⣾ claude-1     T-018   03:58   ▁▃▂▅▄▇▆█  28k  test  …|
+  T-017  ⣾ working   codex-1      …/mcp/memory_recall.go 3  0/2   │⣾ agy-1        T-019   03:41   ▁▃▂▅▄▇▆█  19k  read  …|
+  T-018  ⣾ working   claude-1     …memory_candidates*.go 2  0/2   │◆ codex-2      T-011   09:03   ▁▃▂▅▄▇▆█  63k  verify…|
+  T-019  ⣾ working   agy-1        …ore/memory_restore.go 1  0/2   │⣾ codex-1      T-020   06:20   ▁▃▂▅▄▇▆█  52k  review…|
+  T-020  ⣾ review    codex-1      …/app/memory_bridge.go 4  0/2   │▮ codex-3      T-023   —       ▁▃▂▅▄▇▆█  12k  parked…|
+  T-023  ▮ parked    codex-3      …tpolicy/broker_npm.go 1  0/2   │↻ claude-2     T-024   07:55   ▁▃▂▅▄▇▆█  52k  rework…|
+  T-024  ↻ rework    claude-2     …p/credential_lease.go 3  1/2   │⣾ opencode-2   T-027   01:12   ▁▃▂▅▄▇▆█  11k  edit  …|
+  T-027  ⣾ working   opencode-2   …ory_review_extreme.go 0  0/2   │▮ agy-2        T-031   —       ▁▃▂▅▄▇▆█   4k  probe …|
+  T-031  ▮ parked    agy-2        …/release/push_tags.sh 0  0/2   │                                                     |
+  T-033  · queued    —            …grations_canonical.go 0  0/2   │ACTIVITY state changes only · full log in inspector  |
+  T-034  · queued    —            docs/mcp-memory.md     0  0/2   │14:02:29 T-009 merged · → integration a91f2c · 7 evi…|
+                                                                  │14:02:14 T-023 parked · egress registry.npmjs.org ou…|
+INBOX 2 waiting · nothing blocks                                  │                                                     |
+⚑ T-023 egress → registry.npmjs.org:443  taint U · outside manife…│                                                     |
+⚑ T-031 hard gate · git push --force origin main  irreversible · …│                                                     |
+    confirm › task.T-031.release-push [d] deny                    │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+                                                                  │                                                     |
+ j/k move  ⏎ inspect  m marshal  i inbox  t tasks  l lanes  / command  ^P palette  ^N advanced  ? help                  |
