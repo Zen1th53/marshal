@@ -242,12 +242,13 @@ func (w *Workspace) routeBuildPermission(ctx context.Context, req permission.Req
 		// The native chat takes the same text as one structured user turn.
 		err = w.deliverNativeChatTurn(ctx, p.text)
 	} else {
-		// JSON quoting prevents control characters/newlines from entering terminal
-		// input. Literal send-keys never interprets the description as tmux keys.
-		_, err = tmux.RunCommand(ctx, "send-keys", "-t", pane, "-l", "--", p.text)
-		if err == nil {
-			_, err = tmux.RunCommand(ctx, "send-keys", "-t", pane, "Enter")
-		}
+		// Bracketed paste keeps the description out of tmux key parsing, and the
+		// bounded Enter retries submit it even when Claude Code accepts the paste
+		// a moment after it lands (otherwise Enter races ahead and the message
+		// sits unsent in the composer). The tmux transport stays a direct call
+		// here so the effect inventory still sees it.
+		run := func(ctx context.Context, args ...string) ([]byte, error) { return tmux.RunCommand(ctx, args...) }
+		err = deliverChatTurn(ctx, run, pane, p.text, deliverEnterTries, deliverEnterWait)
 	}
 	if err != nil {
 		w.permissions.mu.Lock()

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3
+
+### Fixed
+- Check builds default to `~/.cache/marshal/build` instead of `/tmp`.
+- Runtime messages to the Marshal chat no longer get stuck unsent.
+- OpenCode harness verification from the Board uses `MARSHAL_OPENCODE_MODEL`.
+- Every running lane shows its own live output.
+
 ## 0.2.2
 
 ### Added

@@ -325,8 +325,13 @@ func (r *Runtime) harnessProbeModel(ctx context.Context, provider, modelName str
 		// worker or delegate model selection to the host CLI.
 		modelName = antigravity.DefaultModel
 	}
+	if modelName == "" && provider == "opencode" {
+		// OpenCode reports no current model; MARSHAL_OPENCODE_MODEL is the
+		// model Marshal already uses for OpenCode elsewhere.
+		modelName = strings.TrimSpace(os.Getenv("MARSHAL_OPENCODE_MODEL"))
+	}
 	if modelName == "" {
-		return "", errors.New("harness verification requires an explicit model; installed provider reported no current model")
+		return "", fmt.Errorf("harness verification requires an explicit model; %s reported no current model: run /harness verify %s <model> or set MARSHAL_OPENCODE_MODEL", provider, provider)
 	}
 	if err := validatePrivateAGYModel(provider, modelName); err != nil {
 		return "", err
