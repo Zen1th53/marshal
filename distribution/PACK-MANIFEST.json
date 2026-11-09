@@ -501,8 +501,8 @@
     },
     {
       "path": "docs/CHANGELOG.md",
-      "sha256": "83313961b92158721f07e44485961e38ab26b392f54ca91d7e44f8ca6562f582",
-      "bytes": 3485
+      "sha256": "cb72ce48c00649e2f194b947c733ee75e222b05425ebc997e2c5694aad75c5f8",
+      "bytes": 3660
     },
     {
       "path": "docs/assets/marshal-tui.png",
@@ -15663,6 +15663,11 @@
       "path": "release/RELEASE_NOTES_0.2.3.md",
       "sha256": "10df4360c1005d72da162f361f1bea471456a09875ff8ea70410ec47c9d18d00",
       "bytes": 1091
+    },
+    {
+      "path": "release/RELEASE_NOTES_0.2.4.md",
+      "sha256": "5d468d453e566b19196e7e854e199e7a44d5b584917bf3919dac768ea3bc5bdc",
+      "bytes": 959
     },
     {
       "path": "release/archive/RELEASE_NOTES_0.0.2.md",
