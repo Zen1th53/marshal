@@ -183,7 +183,75 @@ No. Your code goes only to the providers you choose, through their CLIs.
 Marshal's own anonymous telemetry sends a random installation ID, version,
 OS/architecture, mode and timestamps, never code, prompts, paths or commands.
 Turn it off with `marshal telemetry disable` or `MARSHAL_CLOUD_ENDPOINT=off`.
-[Details →](docs/telemetry.md)
+
+<details>
+<summary><b>Exactly what telemetry sends, on the wire</b></summary>
+
+Telemetry is anonymous and opt-out. It goes to `https://marshal.blackhat.uz`
+over HTTPS as JSON. There are exactly two requests, and every field either
+party sees is listed below — there is no other payload.
+
+**1. Registration** — once per install, `POST /v1/installations/register`:
+
+```json
+{
+  "installation_id": "inst-xxxxxxxxxxxxxxxx",
+  "public_key": "b3zH1Qc9ukE2y0rW...",
+  "client_version": "0.2.4",
+  "os": "linux",
+  "arch": "amd64"
+}
+```
+
+- `installation_id` — a random local ID (`inst-` + 16–64 hex). Not tied to you,
+  your machine, or your projects; delete `.marshal`/the state dir and it is gone.
+- `public_key` — the base64url ed25519 **public** key generated on your machine.
+  The private key never leaves it. Used only to authenticate this install's
+  own later requests.
+- `client_version`, `os`, `arch` — describe the build, e.g. `0.2.4`,
+  `linux`, `amd64`. They say nothing about who runs it.
+
+**2. Events** — on start, then a heartbeat every 2 minutes while running,
+`POST /v1/telemetry/events` (a batched JSON array):
+
+```json
+[
+  {
+    "kind": "app_start",
+    "installation_id": "inst-xxxxxxxxxxxxxxxx",
+    "client_version": "0.2.4",
+    "os": "linux",
+    "arch": "amd64",
+    "mode": "standard",
+    "occurred_at": "2026-11-09T06:23:46Z"
+  }
+]
+```
+
+| Field | Always sent | What it is |
+|---|---|---|
+| `kind` | yes | One of: `registration`, `app_start`, `heartbeat`, `mode_change`, `activation_success`, `activation_failure`, `renewal_success`, `renewal_failure`, `error_class` |
+| `installation_id` | yes | The same random ID as above |
+| `client_version` | yes | Build version, e.g. `0.2.4` |
+| `os`, `arch` | yes | e.g. `linux`, `amd64` |
+| `mode` | when known | `standard` or `ultra` |
+| `occurred_at` | yes | RFC 3339 UTC timestamp of the event |
+| `session_id` | optional | A random per-run ID (`sess-…`), when a run is active |
+| `error_class` | only on `error_class` | A **coarse category only** — one of `network`, `auth`, `lease_expired`, `lease_invalid`, `rate_limited`, `server`, `client`, `sandbox`, `unknown`. Never a message, stack trace, or detail |
+
+The only request header beyond `Content-Type` is `MARSHAL-Client-Version`.
+No cookies, no account, no auth token for telemetry. A failed or timed-out
+send is silently dropped; it never blocks or changes what Marshal does.
+
+**Never sent, in any field:** source code or file contents, prompts,
+instructions or goals, model output or conversation text, file names, paths or
+repository URLs, commit messages, diffs or author identities, environment
+variables, API keys or credentials, and terminal commands or their output.
+
+Inspect or turn it off: `marshal telemetry status` · `marshal telemetry disable`
+· `MARSHAL_CLOUD_ENDPOINT=off`. [Full policy →](docs/telemetry.md)
+
+</details>
 
 **What does it cost?**
 Marshal is free. Agents run on your existing provider accounts and plans.
