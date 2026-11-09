@@ -23,6 +23,62 @@ When telemetry is enabled, Marshal sends periodic heartbeat and startup events c
 
 ---
 
+## Exactly What Is Sent, on the Wire
+
+Two HTTPS requests, JSON bodies. Every field either party sees is below — there
+is no other payload.
+
+**Registration** (once per install) — `POST /v1/installations/register`:
+
+```json
+{
+  "installation_id": "inst-3f9a1c2b7e4d8a60",
+  "public_key": "b3zH1Qc9ukE2y0rW...",
+  "client_version": "0.2.4",
+  "os": "linux",
+  "arch": "amd64"
+}
+```
+
+- `installation_id` — random local ID (`inst-` + 16–64 hex); delete the state
+  dir and it is gone.
+- `public_key` — base64url ed25519 **public** key made on your machine; the
+  private key never leaves it.
+- `client_version`, `os`, `arch` — describe the build, not who runs it.
+
+**Events** (app start, then a heartbeat every 2 minutes) —
+`POST /v1/telemetry/events`, a batched array:
+
+```json
+[
+  {
+    "kind": "app_start",
+    "installation_id": "inst-3f9a1c2b7e4d8a60",
+    "client_version": "0.2.4",
+    "os": "linux",
+    "arch": "amd64",
+    "mode": "standard",
+    "occurred_at": "2026-11-09T06:23:46Z"
+  }
+]
+```
+
+| Field | Always | Values |
+|---|---|---|
+| `kind` | yes | `registration`, `app_start`, `heartbeat`, `mode_change`, `activation_success`, `activation_failure`, `renewal_success`, `renewal_failure`, `error_class` |
+| `installation_id` | yes | the random ID above |
+| `client_version`, `os`, `arch` | yes | e.g. `0.2.4`, `linux`, `amd64` |
+| `mode` | when known | `standard` or `ultra` |
+| `occurred_at` | yes | RFC 3339 UTC timestamp |
+| `session_id` | optional | random per-run ID (`sess-…`) |
+| `error_class` | only on `error_class` events | a **coarse category only**: `network`, `auth`, `lease_expired`, `lease_invalid`, `rate_limited`, `server`, `client`, `sandbox`, `unknown` — never a message or detail |
+
+The only extra request header is `MARSHAL-Client-Version`. No cookies, no
+account, no telemetry auth token. A failed or timed-out send is dropped
+silently and never changes what Marshal does.
+
+---
+
 ## What is NEVER Collected
 
 Marshal adheres to strict privacy guarantees. Telemetry **never** collects, transmits, or logs:
