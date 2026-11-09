@@ -31,9 +31,9 @@ curl -fsSL https://raw.githubusercontent.com/Zen1th53/marshal/main/install.sh | 
 <br>
 
 <p align="center">
-  <img src=".github/assets/demo.gif" alt="From an empty folder to a merged, verified change in about a minute: git init, marshal init, marshal, state a goal, accept the architecture with y, watch a worker build it, review and verification pass, the run closes to main." width="100%">
+  <img src=".github/assets/demo.gif" alt="From an empty folder: marshal init, verify Claude Code, Codex, OpenCode and Antigravity, state a goal, accept the architecture with y, and four agents build four modules in parallel while a different model reviews each one." width="100%">
   <br>
-  <sub>Real recording, sped up: empty folder → <code>marshal init</code> → goal → accept the architecture with <code>y</code> → a worker builds it → review and checks pass → closed to <code>main</code>.</sub>
+  <sub>Real recording, sped up: empty folder → <code>marshal init</code> → verify four providers → goal → accept the architecture with <code>y</code> → Codex, Claude, OpenCode and Antigravity build four modules in parallel → each hand-in reviewed by a different model.</sub>
 </p>
 
 ---
