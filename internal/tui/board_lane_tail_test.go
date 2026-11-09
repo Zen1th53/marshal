@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -128,7 +129,7 @@ func TestLaneTailSamplerThrottle(t *testing.T) {
 	if got := w.laneTailFor("%4"); !slices.Equal(got, []string{"claude", "> thinking"}) {
 		t.Fatalf("tail %%4 = %q", got)
 	}
-	if w.laneTailWant() != laneTailRows || laneTailRows != 3 {
+	if w.laneTailWant() != 2*laneTailRows || laneTailRows != 3 {
 		t.Fatalf("laneTailWant = %d", w.laneTailWant())
 	}
 	if w.laneTailFor("%9") != nil {
@@ -287,7 +288,7 @@ func TestLaneTailFrames(t *testing.T) {
 	f.set("%3", "$ go test ./internal/mcp/...\n\x1b[32mok\x1b[0m  internal/mcp\t0.41s\n=== RUN   TestMemoryRecall\n", nil)
 	f.set("%4", "● Reading internal/app/memory_candidates.go\n  token=ghp_abcdefghijklmnopqrstuvwxyz0123\n● Editing memory_candidates.go\n", nil)
 	w.sampleLaneTails(f)
-	if w.laneTailWant() != 3 {
+	if w.laneTailWant() != 2*laneTailRows {
 		t.Fatalf("laneTailWant = %d", w.laneTailWant())
 	}
 
@@ -301,9 +302,8 @@ func TestLaneTailFrames(t *testing.T) {
 		}
 	}
 	text := strings.Join(frame, "\n")
-	// The lanes get laneTailWant rows for tails: the first running lane's
-	// three lines, under the lanes, inside the lanes pane.
-	for _, want := range []string{"  $ go test ./internal/mcp/...", "  ok  internal/mcp        0.41s", "  === RUN   TestMemoryRecall"} {
+	// Each lane's captured lines appear below its own row, indented.
+	for _, want := range []string{"  $ go test ./internal/mcp/...", "  ok  internal/mcp        0.41s", "  === RUN   TestMemoryRecall", "  ● Reading internal/app/memory_candidates.go", "  ● Editing memory_candidates.go"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("120x40 frame lacks %q:\n%s", want, text)
 		}
@@ -321,5 +321,45 @@ func TestLaneTailFrames(t *testing.T) {
 		if strings.Contains(small, tail) {
 			t.Fatalf("80x24 frame shows tail %q:\n%s", tail, small)
 		}
+	}
+}
+
+func TestLaneTailRendersForTwoAndThreeLanes(t *testing.T) {
+	for _, count := range []int{2, 3} {
+		t.Run(fmt.Sprintf("%d lanes", count), func(t *testing.T) {
+			w, _, _ := tailWorkspace(t)
+			now := time.Date(2026, 11, 2, 14, 2, 31, 0, time.UTC)
+			b := demoBoard(now)
+			panes := []string{"%3", "%4", "%5"}
+			want := []string{"tail one", "tail two", "tail three"}
+			for i, task := range []string{"T-017", "T-018", "T-019"} {
+				if i >= count {
+					continue
+				}
+				for j := range b.Lanes {
+					if b.Lanes[j].TaskID == task {
+						b.Lanes[j].Pane = panes[i]
+					}
+				}
+				w.laneTail.mu.Lock()
+				if w.laneTail.tails == nil {
+					w.laneTail.tails = make(map[string][]string)
+				}
+				w.laneTail.tails[panes[i]] = []string{want[i]}
+				w.laneTail.mu.Unlock()
+			}
+			selected := map[string]bool{"T-017": true, "T-018": true, "T-019": count == 3}
+			b.Lanes = slices.DeleteFunc(b.Lanes, func(l model.Lane) bool { return !selected[l.TaskID] })
+			v := boardVisual{board: b, now: now, theme: NewTheme(ThemeNoColor, true, false), focus: layout.Tasks, health: map[string]string{}}
+			v.tails = w.laneTailFor
+			v.tailWant = count * laneTailRows
+			frame := paintBoard(layout.ComputeFor(120, 40, layout.Home, v.layoutCounts()), v.theme, v.render)
+			joined := strings.Join(frame, "\n")
+			for i := 0; i < count; i++ {
+				if !strings.Contains(joined, "  "+want[i]) {
+					t.Fatalf("missing lane %d tail %q:\n%s", i+1, want[i], joined)
+				}
+			}
+		})
 	}
 }

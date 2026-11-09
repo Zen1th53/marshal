@@ -1063,12 +1063,54 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 		v.unhit(p.Rect.Y + h - 1)
 	}
 	if p.Density != layout.Strip && v.tails != nil {
-		for _, lane := range v.board.Lanes {
-			for _, line := range v.tails(lane.Pane) {
-				if len(out) >= h {
-					return out
+		// Share the rows left after lane rows between captured running lanes.
+		// Allocate one line to each lane first, then a second and third line
+		// in rounds so a short pane does not spend its tail space on one lane.
+		tails := make([][]string, len(v.board.Lanes))
+		for i := range v.board.Lanes {
+			tails[i] = v.tails(v.board.Lanes[i].Pane)
+		}
+		// Rebuild the lane section in order, placing each tail beneath its row.
+		laneRows := make([]string, 0, len(v.board.Lanes))
+		// Lane rows were appended after the two heading rows above.
+		laneRows = append(laneRows, out[2:]...)
+		out = out[:2]
+		available := max(0, h-len(out))
+		shown := min(len(laneRows), available)
+		minTails := func(n int) int {
+			count := 0
+			for _, tail := range tails[:n] {
+				if len(tail) > 0 {
+					count++
 				}
-				out = append(out, PadCell("  "+redaction.RedactContent(line, nil), w))
+			}
+			return count
+		}
+		// Keep a lane and one tail row together. If they cannot all fit,
+		// reduce the number of lanes shown before giving any lane zero lines.
+		for shown > 0 && shown+minTails(shown) > available {
+			shown--
+		}
+		allocated := make([]int, len(tails))
+		remaining := available - shown
+		for i := 0; i < shown; i++ {
+			if len(tails[i]) > 0 {
+				allocated[i] = 1
+				remaining--
+			}
+		}
+		for row := 1; row < laneTailRows && remaining > 0; row++ {
+			for i := 0; i < shown && remaining > 0; i++ {
+				if len(tails[i]) > row {
+					allocated[i]++
+					remaining--
+				}
+			}
+		}
+		for i := 0; i < shown; i++ {
+			out = append(out, laneRows[i])
+			for j := 0; j < allocated[i] && len(out) < h; j++ {
+				out = append(out, PadCell("  "+redaction.RedactContent(tails[i][j], nil), w))
 			}
 		}
 	}

@@ -94,18 +94,19 @@ func (w *Workspace) laneTailFor(paneID string) []string {
 	return slices.Clone(s.tails[paneID])
 }
 
-// laneTailWant is how many rows the lanes pane asks for tails: laneTailRows
-// when any running lane has one, else none.
+// laneTailWant is how many rows the lanes pane asks for tails: up to
+// laneTailRows for every running lane with a captured tail.
 func (w *Workspace) laneTailWant() int {
 	s := &w.laneTail
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	want := 0
 	for _, t := range s.tails {
 		if len(t) > 0 {
-			return laneTailRows
+			want += laneTailRows
 		}
 	}
-	return 0
+	return want
 }
 
 // sampleLaneTails captures each running worker pane that is due and keeps
