@@ -4636,8 +4636,8 @@
     },
     {
       "path": "internal/cli/control_center.go",
-      "sha256": "43d0aac87eff506390a2e64afc8e90224ec089aa8abe999c746cd0d28b0ea902",
-      "bytes": 6230
+      "sha256": "d58085a0209c70b7484234d36783f0de035061715764f00f93d18f796f96ea47",
+      "bytes": 6651
     },
     {
       "path": "internal/cli/control_center_test.go",
@@ -9846,13 +9846,13 @@
     },
     {
       "path": "internal/startup/probe.go",
-      "sha256": "c957e7b264feaac0361ef5cbe4cfaf6ffd24c79031ddd8c13f62c3ddf89c3672",
-      "bytes": 15348
+      "sha256": "cc1dc16aad476a600b8dbd7cf580029941bee5473c4a8fa9d2853cc829851605",
+      "bytes": 16828
     },
     {
       "path": "internal/startup/probe_test.go",
-      "sha256": "695feb8ff5b21c6bd2e25c6decb6d29efe5d55943f01b4ae63eda970585b9e8a",
-      "bytes": 17576
+      "sha256": "1e48fc0c5c4320e1ef940a462d44540a47296f9156c0e2cccc03f7420341f6de",
+      "bytes": 19014
     },
     {
       "path": "internal/startup/project_identity.go",
