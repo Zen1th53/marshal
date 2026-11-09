@@ -79,7 +79,9 @@ for source in (root / 'internal').rglob('*.go'):
                                 'github.com', 'api.github.com', 'marshal.blackhat.uz'}:
             endpoint_hosts.add(host.lower())
     # Cover bare host/domain literals in Cloud/backend code as well.
-    if 'cloud' in source.as_posix().lower() or 'backend' in source.as_posix().lower():
+    # Classify by the path inside the repository, not where it is checked out.
+    relative_source = source.relative_to(root).as_posix().lower()
+    if 'cloud' in relative_source or 'backend' in relative_source:
         for literal in re.findall(r'"([^"\n]+)"', text):
             if re.fullmatch(r'(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?::\d+)?', literal):
                 h = literal.split(':')[0].lower()

@@ -46,13 +46,13 @@
     },
     {
       "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
-      "sha256": "480dd6ca13539e37aa9c1314c9a9a9694b54c78463381145a7c43e1f31079a67",
-      "bytes": 1191
+      "sha256": "d2a2342d5d6ed6553b3489578a98cc609e69e00765662798f74224d50d592691",
+      "bytes": 2513
     },
     {
       "path": ".github/ISSUE_TEMPLATE/config.yml",
-      "sha256": "d0681ef3e8f3481b211fe3681d89000388aafc2ac93facf88bcb8db5965076fb",
-      "bytes": 432
+      "sha256": "3a5c7b5644ae5bd6c114090d23e19a4b193cbed2edd5a94542df2b60e606a451",
+      "bytes": 400
     },
     {
       "path": ".github/ISSUE_TEMPLATE/feature_request.yml",
@@ -86,8 +86,8 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "d8b8f01d0d2f4bf6662106e6cceaf65ebc0b69f2366e4c2f0a89e9dfc9c21612",
-      "bytes": 7335
+      "sha256": "291e66e8cf035c1163b17d7e187b807e0102a49e86daa4ab3cc137f69ea3475f",
+      "bytes": 7558
     },
     {
       "path": ".github/workflows/codeql.yml",
@@ -15606,8 +15606,8 @@
     },
     {
       "path": "scripts/docs-audit.py",
-      "sha256": "7e9d75aa17541827692521429a337bbf05ef223999bf75575365f90dcf4954e7",
-      "bytes": 6625
+      "sha256": "20c22aefcce53ec3b21b89814fdc704a9e2a363799da04ef60acf3d694c53c9c",
+      "bytes": 6750
     },
     {
       "path": "scripts/docs-check.sh",
