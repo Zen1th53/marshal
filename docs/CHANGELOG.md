@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.5
+
+### Added
+- macOS release binaries (darwin amd64 and Apple Silicon arm64); the one-line install works on macOS with no extra step.
+- Startup warns, and `marshal doctor` reports, when no supported coding tool (claude/codex/opencode/agy) is installed.
+
+### Documentation
+- Telemetry docs show the exact wire format (endpoints, example JSON, every field sent).
+
 ## 0.2.4
 
 ### Fixed
