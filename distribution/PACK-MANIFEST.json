@@ -7391,8 +7391,8 @@
     },
     {
       "path": "internal/mcp/run_digest_test.go",
-      "sha256": "6816d64ca91b83fa3ceadfea65472bca68ae8b0c63a56e17182d36f3b6b39a96",
-      "bytes": 2154
+      "sha256": "5da2c6ed7af00a4eeabc8257e90006c726e8750a90f456c60b953ab17ccfbb34",
+      "bytes": 3870
     },
     {
       "path": "internal/mcp/server.go",
