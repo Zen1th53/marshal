@@ -13,7 +13,7 @@ and only verified work lands on `main`.**
 [![Release](https://img.shields.io/github/v/release/Zen1th53/marshal?color=blue)](https://github.com/Zen1th53/marshal/releases)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Zen1th53/marshal)](https://go.dev)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-informational)](#requirements)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows%20(WSL)-informational)](#requirements)
 [![Status: early release](https://img.shields.io/badge/status-early%20release-orange.svg)](https://marshal.blackhat.uz)
 
 **[Documentation → marshal.blackhat.uz/docs](https://marshal.blackhat.uz/docs)**
