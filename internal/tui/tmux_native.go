@@ -149,15 +149,21 @@ func (w *Workspace) InitTmux(root ...string) {
 	if tmux.IsInsideTmux() {
 		_ = tmux.SelectWindow(context.Background(), target)
 	}
-	if w.runtime == nil {
-		w.ensureMarshalChatAuto(projectRoot)
-	}
 	w.startPermissionQueue()
-	if w.runtime != nil && tmux.IsInsideTmux() {
-		if _, err := w.marshalChat(context.WithValue(context.Background(), tmuxBackgroundLaunchKey{}, true)); err != nil && !isProviderAuthError(err) {
-			w.RecordActivity("Marshal chat: " + err.Error())
+	// The Marshal chat starts only after the launch check finished ready (or
+	// ready with warnings): the protocol says the Marshal is started only once
+	// the doctor passed. afterLaunchCheck runs this once then, immediately if
+	// the check is already ready, and never while the project is blocked.
+	w.afterLaunchCheck(func() {
+		if w.runtime == nil {
+			w.ensureMarshalChatAuto(projectRoot)
 		}
-	}
+		if w.runtime != nil && tmux.IsInsideTmux() {
+			if _, err := w.marshalChat(context.WithValue(context.Background(), tmuxBackgroundLaunchKey{}, true)); err != nil && !isProviderAuthError(err) {
+				w.RecordActivity("Marshal chat: " + err.Error())
+			}
+		}
+	})
 	if err := w.reconcileStartupDock(context.Background()); err != nil {
 		w.RecordActivity("Marshal dock: " + err.Error())
 	}

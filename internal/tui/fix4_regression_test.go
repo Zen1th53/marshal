@@ -137,6 +137,7 @@ func TestAutomaticNativeMarshalLaunchUsesCompiledOpening(t *testing.T) {
 	w.workDir = t.TempDir()
 	cleanupTmuxWorkspace(t, w)
 	fixtureTmuxNamespace(t, w.workDir)
+	readyLaunch(w)
 	w.InitTmux(w.workDir)
 	w.tmuxMu.Lock()
 	a := copyAgentLocked(w.tmuxActiveWins["marshal-chat"])

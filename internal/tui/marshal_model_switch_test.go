@@ -117,6 +117,7 @@ func TestMarshalModelSwitchPersistsAndRestarts(t *testing.T) {
 			reattached.workDir = root
 			cleanupTmuxWorkspace(t, reattached)
 			fixtureTmuxNamespace(t, root)
+			readyLaunch(reattached)
 			reattached.InitTmux(root)
 			if a := reattached.tmuxActiveWins["marshal-chat"]; a == nil || a.provider != "claude" {
 				t.Fatal("reattach lost provider")
@@ -215,6 +216,7 @@ func TestMarshalChatStartupUsesPersistedProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixtureTmuxNamespace(t, root)
+	readyLaunch(w)
 	w.InitTmux(root)
 	w.tmuxMu.Lock()
 	chat := copyAgentLocked(w.tmuxActiveWins["marshal-chat"])

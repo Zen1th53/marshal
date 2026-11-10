@@ -137,6 +137,7 @@ func TestAuthPreflightBlocksMarshalChatAndMarksProviderUnavailable(t *testing.T)
 	assertFrameParticipantState(t, initialRendered, "codex", "IDLE")
 
 	// 1. Automatic Marshal chat launch on InitTmux must not open a window.
+	readyLaunch(ws)
 	ws.InitTmux(workDir)
 	if preflightCalls.Load() == 0 {
 		t.Fatal("expected auth preflight to run before starting Marshal chat")

@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/Zen1th53/marshal/internal/statepath"
 	"os"
@@ -52,6 +53,42 @@ func TestDetectInstallCommand(t *testing.T) {
 		strings.Contains(cmd, "brew")
 	if !valid {
 		t.Fatalf("unexpected install command: %s", cmd)
+	}
+}
+
+func TestInstallCommandFor(t *testing.T) {
+	never := func(string) error { return errors.New("not found") }
+	cases := []struct {
+		name     string
+		pkg      string
+		distroID string
+		look     func(string) error
+		want     string
+	}{
+		{"arch git", "git", "arch", never, "sudo pacman -S git"},
+		{"manjaro bubblewrap", "bubblewrap", "manjaro", never, "sudo pacman -S bubblewrap"},
+		{"ubuntu git", "git", "ubuntu", never, "sudo apt install git"},
+		{"fedora git", "git", "fedora", never, "sudo dnf install git"},
+		{"opensuse git", "git", "opensuse suse", never, "sudo zypper install git"},
+		{"unknown falls back to pacman on PATH", "git", "", func(name string) error {
+			if name == "pacman" {
+				return nil
+			}
+			return errors.New("not found")
+		}, "sudo pacman -S git"},
+		{"unknown with nothing on PATH", "git", "", never, "sudo apt install git"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := installCommandFor(tc.pkg, tc.distroID, tc.look); got != tc.want {
+				t.Fatalf("installCommandFor(%q, %q) = %q, want %q", tc.pkg, tc.distroID, got, tc.want)
+			}
+		})
+	}
+
+	// DetectInstallCommand must stay a thin delegate for tmux.
+	if got := InstallCommandFor("tmux"); got != DetectInstallCommand() {
+		t.Fatalf("DetectInstallCommand() = %q, InstallCommandFor(\"tmux\") = %q; must match", DetectInstallCommand(), got)
 	}
 }
 
