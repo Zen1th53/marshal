@@ -16,10 +16,6 @@ import (
 // header and footer. The Marshal chat stays docked beside it.
 const hostPane layout.PaneID = "host"
 
-// lowDiskBytes is where the chip's disk figure turns to a warning, as in
-// the prototype: below 120 GB free on the root mount.
-const lowDiskBytes = 120e9
-
 // tempColor is the prototype's temperature scale.
 func tempColor(t float64) string {
 	switch {
@@ -52,7 +48,7 @@ func (s hostSnapshot) chip() hostChip {
 	if r, ok := s.root(); ok {
 		c.DiskPct = int(math.Round(float64(r.UsedBytes) / float64(r.TotalBytes) * 100))
 		c.DiskKnown = true
-		c.LowDisk = float64(r.FreeBytes) < lowDiskBytes
+		c.LowDisk = r.FreeBytes < 2*s.Policy.DiskFreeThresholdBytes(r.TotalBytes)
 	}
 	return c
 }
@@ -465,15 +461,16 @@ func (v boardVisual) hostDisk(s hostSnapshot, w int) []string {
 	pct := float64(r.UsedBytes) / float64(r.TotalBytes) * 100
 	free := float64(r.FreeBytes) / 1e9
 	out := []string{v.title("DISK", fmt.Sprintf("/ %.0f%% used · %.0f GB free", pct, free), false, w)}
+	thr := s.Policy.DiskFreeThresholdBytes(r.TotalBytes)
 	col := "merged"
 	switch {
-	case free < s.Policy.DiskFreeThresholdGB:
+	case r.FreeBytes < thr:
 		col = "failed"
-	case float64(r.FreeBytes) < lowDiskBytes:
+	case r.FreeBytes < 2*thr:
 		col = "waiting"
 	}
 	suffix := fmt.Sprintf("%.0f%%", pct)
-	if float64(r.FreeBytes) < lowDiskBytes {
+	if r.FreeBytes < 2*thr {
 		suffix = v.fg("waiting", suffix)
 	}
 	out = append(out, v.gauge(PadCell("/", 8), float64(r.UsedBytes), float64(r.TotalBytes), col, nil, suffix, w))
@@ -577,9 +574,12 @@ func (s hostSnapshot) policyRows() []hostPolicyRow {
 	}
 	rows = append(rows, thermal)
 
-	disk := hostPolicyRow{rule: fmt.Sprintf("root free < %s GB", trimFloat(p.DiskFreeThresholdGB)), action: "notice in footer and log · warn < 120 GB"}
+	disk := hostPolicyRow{
+		rule:   fmt.Sprintf("root free < %s GB or %s%%", trimFloat(p.DiskFreeThresholdGB), trimFloat(p.DiskFreeThresholdPercent)),
+		action: "notice in footer and log · warn below twice that",
+	}
 	if r, ok := s.root(); ok {
-		disk.state = state(ruleDisk, float64(r.FreeBytes) < lowDiskBytes)
+		disk.state = state(ruleDisk, r.FreeBytes < 2*p.DiskFreeThresholdBytes(r.TotalBytes))
 		disk.now = fmt.Sprintf("%.0f GB", float64(r.FreeBytes)/1e9)
 	} else {
 		disk = unknown(disk)

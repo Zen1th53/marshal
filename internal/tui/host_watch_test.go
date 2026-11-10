@@ -133,7 +133,7 @@ func logHas(h *hostWatcher, kind, part string) bool {
 }
 
 // demoHost is the watcher the Host view goldens paint: a hot spell that
-// tripped the thermal guard and released it, with / below 120 GB free.
+// tripped the thermal guard and released it, with / at 116 GB free.
 func demoHost(t *testing.T) hostSnapshot {
 	sink := &fakeCapSink{cap: 12, accept: true}
 	h, f, c := testWatcher(t, sink)
@@ -181,7 +181,7 @@ func TestHostChipTextAndColours(t *testing.T) {
 	}
 	snap := demoHost(t)
 	c := snap.chip()
-	if !c.TempKnown || c.Guard || !c.LowDisk || c.DiskPct != 94 {
+	if !c.TempKnown || c.Guard || c.LowDisk || c.DiskPct != 94 {
 		t.Fatalf("chip from snapshot = %+v", c)
 	}
 	if got := StripANSI(v.hostChip(c)); !strings.HasPrefix(got, "host ") || !strings.HasSuffix(got, "°C disk 94%") {
@@ -322,7 +322,7 @@ func TestHostViewContent(t *testing.T) {
 		"eno1 192.168.3.21",
 		"last minute",
 		"CPU package > 90 °C (30 s avg) OK",
-		"root free < 50 GB WARN",
+		"root free < 10 GB or 5% OK",
 		"available < 8 GiB OK",
 		"what Marshal noticed and did",
 		"GUARD · package 30 s avg",
@@ -350,12 +350,12 @@ func TestHostPolicyEdgesLogAndNotice(t *testing.T) {
 	if s := h.snapshot(); s.Notice != "" || len(s.Log) != 0 {
 		t.Fatalf("calm host logged %+v notice %q", s.Log, s.Notice)
 	}
-	f.set(func(f *fakeHost) { f.free = 40e9 })
+	f.set(func(f *fakeHost) { f.free = 4e9 })
 	steps(h, c, 3)
-	if !logHas(h, "disk", "Disk free on / (40.00 GB) < threshold 50.00 GB → notice only") {
+	if !logHas(h, "disk", "Disk almost full on /: 4 GB left") {
 		t.Fatalf("no disk trigger in log: %+v", h.snapshot().Log)
 	}
-	if n := h.snapshot().Notice; !strings.Contains(n, "Disk free on /") || !strings.Contains(n, "No automatic action") {
+	if n := h.snapshot().Notice; n != "Disk almost full: 4 GB left. Marshal keeps running." {
 		t.Fatalf("notice %q", n)
 	}
 	// Edge-triggered: staying low adds nothing.
@@ -366,7 +366,7 @@ func TestHostPolicyEdgesLogAndNotice(t *testing.T) {
 	}
 	f.set(func(f *fakeHost) { f.free = 200e9; f.avail = 4 * gibBytes })
 	steps(h, c, 2)
-	if !logHas(h, "disk", "Disk free on all monitored mounts >= threshold") || !logHas(h, "memory", "Available memory 4.00 GiB < threshold 8.00 GiB") {
+	if !logHas(h, "disk", "Disk space is fine again") || !logHas(h, "memory", "Available memory 4.00 GiB < threshold 8.00 GiB") {
 		t.Fatalf("log %+v", h.snapshot().Log)
 	}
 	if n := h.snapshot().Notice; !strings.Contains(n, "Available memory") {
