@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const telemetryTimeout = 750 * time.Millisecond
+const telemetryTimeout = 900 * time.Millisecond
 const startupTelemetryTimeout = 300 * time.Millisecond
 const telemetryInterval = 2 * time.Minute
 
