@@ -325,54 +325,6 @@ func probeMarshalProject(prober Prober, root string) []Check {
 	return checks
 }
 
-// probeIsolation reports sandbox and network enforcement.
-//
-// Both are reported from what the runtime actually determined, never inferred
-// from the presence of a binary. Neither is ever downgraded to "good enough":
-// when isolation is unavailable, execution is blocked rather than allowed to
-// proceed unprotected, which is the behaviour Process 00 requires.
-func probeIsolation(env Environment) []Check {
-	var checks []Check
-
-	if env.SandboxEnforced {
-		checks = append(checks, Check{
-			ID: "env.sandbox", Dimension: DimensionEnvironment, Status: StatusReady,
-			Required: true, Reason: ReasonOK,
-			Summary: "Work runs in an isolated sandbox.",
-		})
-	} else {
-		checks = append(checks, Check{
-			ID: "env.sandbox", Dimension: DimensionEnvironment, Status: StatusMissing,
-			Required: true, Reason: ReasonSandboxUnavailable,
-			Summary:      "Sandbox isolation is not available.",
-			Impact:       "Work is blocked rather than run without isolation.",
-			Remedy:       Describe(ReasonSandboxUnavailable).Remedy,
-			Capabilities: []Capability{CapProjectExecution, CapProviderExecution},
-		})
-	}
-
-	if env.NetworkEnforced {
-		checks = append(checks, Check{
-			ID: "env.network", Dimension: DimensionEnvironment, Status: StatusReady,
-			Required: false, Reason: ReasonOK,
-			Summary: networkReadySummary,
-		})
-	} else {
-		// Unenforced egress removes network and provider capability but does
-		// not block local work, so it is not marked Required. Reporting it as
-		// LIMITED would overstate it: enforcement is absent, not partial.
-		checks = append(checks, Check{
-			ID: "env.network", Dimension: DimensionEnvironment, Status: StatusMissing,
-			Required: false, Reason: ReasonNetworkUnenforced,
-			Summary:      "Outbound access cannot be restricted to approved destinations.",
-			Impact:       "Features that reach the network are unavailable. Local work continues.",
-			Remedy:       Describe(ReasonNetworkUnenforced).Remedy,
-			Capabilities: []Capability{CapNetworkEgress, CapProviderExecution},
-		})
-	}
-	return checks
-}
-
 // harnessBinaries are the provider CLIs Marshal can drive. Work runs through
 // one of them, so a host with none installed can open the control center but
 // cannot run anything — which is worth saying up front rather than at the
