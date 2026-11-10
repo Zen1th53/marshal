@@ -42,6 +42,7 @@ esac
 need curl
 need tar
 need install
+need mkdir
 
 # sha256sum is coreutils; shasum is the Perl one. Either verifies the download,
 # and an installer that skipped verification when neither was present would be
@@ -95,7 +96,8 @@ tar -xzf "$tmp/$archive" -C "$tmp" ||
     die "could not extract $archive"
 [ -f "$tmp/marshal" ] || die "$archive does not contain a marshal binary"
 
-install -Dm755 "$tmp/marshal" "$INSTALL_DIR/marshal" ||
+{ mkdir -p "$INSTALL_DIR" &&
+    install -m 755 "$tmp/marshal" "$INSTALL_DIR/marshal"; } ||
     die "could not install to $INSTALL_DIR; set MARSHAL_INSTALL_DIR to a writable directory"
 
 info ""

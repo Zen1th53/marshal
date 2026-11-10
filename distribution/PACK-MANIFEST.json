@@ -651,8 +651,8 @@
     },
     {
       "path": "install.sh",
-      "sha256": "2d042fe02511fd353678c6c1ef632a904b339084c9219ccc3fc8b7ba0cc6af57",
-      "bytes": 5362
+      "sha256": "ef7a8c75137bd139c37d7373f6391a7bab392f4a1a9df38c34d2f1c0ae3ccc5d",
+      "bytes": 5409
     },
     {
       "path": "internal/a2a/a2a_test.go",
@@ -16231,8 +16231,8 @@
     },
     {
       "path": "tools/tests/test_install_dependencies.py",
-      "sha256": "35f142e590214dde51f7c5caa5a8920668890479eb68b193d07594a1271eacf4",
-      "bytes": 4117
+      "sha256": "efc8d4a2899c784ba2f692c59be4531d89ca8e5c55a3953c86df8500a0e2c8d7",
+      "bytes": 4797
     },
     {
       "path": "tools/tests/test_marshal.py",
