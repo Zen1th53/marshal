@@ -9181,8 +9181,8 @@
     },
     {
       "path": "internal/projectmemory/assimilate.go",
-      "sha256": "270c1b00bab0a97ef6971c63b64956f4a211cc956a97000bed231554224adbdc",
-      "bytes": 18954
+      "sha256": "e90e54f500ecf31328769c7c6a9e1e239381edf72b1ccbed285072a51b82f037",
+      "bytes": 18109
     },
     {
       "path": "internal/projectmemory/assimilate_test.go",

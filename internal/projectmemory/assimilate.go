@@ -458,23 +458,3 @@ func onlyRedactionMarkers(text string) bool {
 	remaining := strings.TrimSpace(strings.ReplaceAll(strings.ToLower(text), "[redacted]", ""))
 	return strings.Trim(remaining, " \t\n\r:=,.;-_\"'") == ""
 }
-
-// reviewConcerns lists reasons a candidate should not be promoted unexamined.
-// Any concern blocks promotion at the gate, so this is the mechanism by which
-// a suspicious source is held back without needing a separate refusal path.
-func reviewConcerns(candidate Candidate) []string {
-	var concerns []string
-	if candidate.SecretsRedacted {
-		concerns = append(concerns, "the source contained credential material")
-	}
-	if candidate.Freshness == FreshStale {
-		concerns = append(concerns, "the source describes an older state of the repository")
-	}
-	if candidate.Freshness == FreshUnknown {
-		concerns = append(concerns, "the source could not be checked against the current repository")
-	}
-	if len(candidate.ConflictsWith) > 0 {
-		concerns = append(concerns, "the source contradicts something else found in this project")
-	}
-	return concerns
-}
