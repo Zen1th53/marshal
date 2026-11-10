@@ -90,7 +90,10 @@ func parseMarshalProposal(line string) (marshalProposal, error) {
 	var keys []string
 	switch p.action {
 	case "intake":
-		keys = []string{"action", "language", "earlier_work"}
+		keys = []string{"action", "language"}
+		if _, ok := fields["earlier_work"]; ok {
+			keys = append(keys, "earlier_work")
+		}
 		if strings.TrimSpace(p.language) == "" || len(p.language) > 100 || (p.earlierWork != "" && p.earlierWork != "yes" && p.earlierWork != "no") {
 			return p, invalid
 		}
