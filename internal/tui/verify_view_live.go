@@ -165,16 +165,23 @@ func (w *Workspace) refreshVerify(ctx context.Context) {
 		runID = p.RunID
 	}
 	w.mu.RUnlock()
-	var o store.VerifyOverview
-	err := errors.New("no Marshal run")
-	if runID != "" {
-		o, err = src.VerifyOverview(ctx, runID)
+	if runID == "" {
+		w.ver.mu.Lock()
+		w.ver.snap = verifySnapshot{NoRun: true, At: time.Now()}
+		w.ver.clampLocked()
+		w.ver.mu.Unlock()
+		if w.verView.Load() && w.boardVisible() {
+			w.requestRepaint()
+		}
+		return
 	}
+	o, err := src.VerifyOverview(ctx, runID)
 	if ctx.Err() != nil {
 		return
 	}
 	w.ver.mu.Lock()
 	w.ver.snap.At = time.Now()
+	w.ver.snap.NoRun = false
 	if err != nil {
 		w.ver.snap.Err = err.Error()
 	} else {

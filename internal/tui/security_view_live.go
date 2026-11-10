@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -205,16 +204,23 @@ func (w *Workspace) refreshSecurity(ctx context.Context) {
 		runID = p.RunID
 	}
 	w.mu.RUnlock()
-	var o store.SecurityOverview
-	err := errors.New("no Marshal run")
-	if runID != "" {
-		o, err = src.SecurityOverview(ctx, w.projectID, runID)
+	if runID == "" {
+		w.sec.mu.Lock()
+		w.sec.snap = securitySnapshot{NoRun: true, At: time.Now()}
+		w.sec.clampLocked()
+		w.sec.mu.Unlock()
+		if w.secView.Load() && w.boardVisible() {
+			w.requestRepaint()
+		}
+		return
 	}
+	o, err := src.SecurityOverview(ctx, w.projectID, runID)
 	if ctx.Err() != nil {
 		return
 	}
 	w.sec.mu.Lock()
 	w.sec.snap.At = time.Now()
+	w.sec.snap.NoRun = false
 	if err != nil {
 		w.sec.snap.Err = err.Error()
 	} else {

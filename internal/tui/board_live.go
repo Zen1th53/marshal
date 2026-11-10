@@ -430,6 +430,7 @@ func (w *Workspace) boardFrame(state UIState, th *Theme, popup []string, cols, r
 	v.secView = v.security && w.secView.Load()
 	v.plan = w.planSrc() != nil
 	v.planView = v.plan && w.planView.Load()
+	v.viewNoRun = w.currentRunID() == ""
 	v.arch = w.archSrc() != nil
 	v.archView = v.arch && w.archView.Load()
 	if v.arch {

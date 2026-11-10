@@ -15,6 +15,10 @@ import (
 // header and footer.
 const planPane layout.PaneID = "plan"
 
+// viewNoRunLine is the one line the Verify, Security and Plan views show
+// before the first Marshal run: no error, just what to do next.
+const viewNoRunLine = "  No run yet. Press s and tell the Marshal what to build."
+
 // planSnapshot is the Plan view's data: the last overview read and when
 // it was read.
 type planSnapshot struct {
@@ -24,6 +28,8 @@ type planSnapshot struct {
 	Loaded bool
 	At     time.Time
 	Err    string
+	// NoRun is set when there is no Marshal run to read; nothing failed.
+	NoRun bool
 }
 
 // planPaint is what one frame of the Plan view needs.
@@ -141,11 +147,14 @@ func boardASCIIGlyphs(lines []string) []string {
 func (v boardVisual) planLines(m planPaint, w, h int) []string {
 	s := m.Snap
 	o := s.Overview
-	head := joinNonEmpty(" · ", o.RunID, planVersionHead(o, v.now))
+	head := planVersionHead(o, v.now)
 	if s.Loaded {
 		head = joinNonEmpty(" · ", head, fmt.Sprintf("%d tasks", len(o.Tasks)))
 	}
 	out := []string{v.title("PLAN", head, false, w)}
+	if s.NoRun {
+		return append(out, PadCell(viewNoRunLine, w))
+	}
 	if !s.Loaded {
 		read := "reading the store…"
 		if s.Err != "" {

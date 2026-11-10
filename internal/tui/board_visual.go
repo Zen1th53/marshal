@@ -64,6 +64,8 @@ type boardVisual struct {
 	// plan is set when the Plan view can open; planView paints it in the
 	// body.
 	plan, planView bool
+	// viewNoRun is set when views 5-7 have no run to show.
+	viewNoRun bool
 	// arch is set when the Architecture view can open; archView paints it
 	// in the body. It also puts the architecture chip in the header:
 	// "arch —" until archLoaded, then archRev, the accepted revision last
@@ -669,6 +671,9 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 	}
 	if v.planView {
 		items = [][2]string{{"j/k", "select"}, {"⏎", "inspect"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
+	}
+	if v.viewNoRun && (v.verView || v.secView || v.planView) {
+		items = [][2]string{{"esc", "board"}, {"s", "tell the Marshal"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}
 	}
 	if v.archView {
 		items = [][2]string{{"j/k", "scroll"}, {"o", "open in browser"}, {"d", "diff since accepted"}, {"esc", "board"}, {"m", "marshal"}, {"/", "command"}, {"^P", "palette"}, {"?", "help"}}

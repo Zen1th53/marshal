@@ -142,7 +142,7 @@ func TestPlanViewContent(t *testing.T) {
 	m := demoPlanPaint(now)
 	text := strings.Join(v.planLines(m, 120, 38), "\n")
 	for _, want := range []string{
-		"R-7f3a · plan v2 approved 13:41 · 12 tasks",
+		"plan v2 approved 13:41 · 12 tasks",
 		"read 4s ago · every 10 s while open",
 		"level 0         level 1         level 2         level 3",
 		"T-018 memory candidates",
