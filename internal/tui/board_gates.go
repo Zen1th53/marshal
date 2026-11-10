@@ -136,7 +136,6 @@ func (w *Workspace) ownerGates(p *MarshalPanel) []ownerGate {
 		if b.Run.Title != "" {
 			summary = firstLine(b.Run.Title) + " · " + summary
 		}
-		summary += " · run " + b.Run.ID
 		out = append(out, ownerGate{key: "plan:" + b.Run.ID + ":" + b.PlanID, kind: "plan", title: title, summary: summary, reply: gateReplyPlan, details: '7'})
 	}
 	for i := range out {

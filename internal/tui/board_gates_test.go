@@ -99,8 +99,8 @@ func draftingPanel(note string) *MarshalPanel {
 }
 
 // A drafted plan waiting for approval is an inbox entry on the run's Board
-// with the plan view one click away; NEEDS YOU replaces DRAFTING. A plan
-// being drafted, being approved or a major amendment is no such gate.
+// with the plan view one click away; "waiting for you" replaces the state.
+// A plan being drafted, being approved or a major amendment is no such gate.
 func TestOwnerGateShowsDraftedPlanAwaitingApproval(t *testing.T) {
 	w := emptyBoardWorkspace(t)
 	defer w.Close()
@@ -108,10 +108,10 @@ func TestOwnerGateShowsDraftedPlanAwaitingApproval(t *testing.T) {
 	w.setMarshalPanel(draftingPanel("awaiting plan approval; /marshal approve"))
 	text := frameText(w, 170, 40)
 	head := strings.SplitN(text, "\n", 2)[0]
-	if !strings.Contains(head, "NEEDS YOU") || strings.Contains(head, "DRAFTING") {
+	if !strings.Contains(head, "waiting for you") || strings.Contains(head, "planning") {
 		t.Fatalf("header: %q", head)
 	}
-	for _, want := range []string{"plan · drafted plan waits for your approval · 1 task · run RUN-1794117001273523713", "[y] approve the plan", "[7] open the plan"} {
+	for _, want := range []string{"plan · drafted plan waits for your approval · 1 task", "[y] approve the plan", "[7] open the plan"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("Board misses %q:\n%s", want, text)
 		}

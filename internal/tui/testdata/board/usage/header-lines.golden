@@ -1,5 +1,5 @@
- Marshal · R-7f3a · DISPATCHING · 1/4 · ⣾2 · ⚑0 · cx 82/49 · cl ? · oc ? · ag ? |
- Marshal · R-7f3a · DISPATCHING · 1/4 · ⣾2 · inbox 0 · cx 82/49 · cl ? · oc ? · ag ?                |
- Marshal · run R-7f3a "usage" · DISPATCHING · 1/4 done · ⣾ 2 lanes · budget — · inbox 0 · 14:02:31                      |
- Marshal · run R-7f3a "usage" · DISPATCHING · 1/4 done · ⣾ 2 lanes · budget — · inbox 0 · 14:02:31                                                              |
- Marshal · run R-7f3a "usage" · DISPATCHING · 1/4 done · ⣾ 2 lanes · budget — · inbox 0 · 14:02:31 · codex 5h 82% · wk 49% left · claude unknown · opencode unknown · agy unknown                       |
+ Marshal · "usage" · running · 1/4 · ⣾2 · ⚑0 · cx 82/49 · cl ? · oc ? · ag ?    |
+ Marshal · "usage" · running · 1/4 · ⣾2 · inbox 0 · cx 82/49 · cl ? · oc ? · ag ?                   |
+ Marshal · "usage" · running · 1/4 done · ⣾ 2 lanes · budget — · inbox 0 · 14:02:31                                     |
+ Marshal · "usage" · running · 1/4 done · ⣾ 2 lanes · budget — · inbox 0 · 14:02:31                                                                             |
+ Marshal · "usage" · running · 1/4 done · ⣾ 2 lanes · budget — · inbox 0 · 14:02:31 · codex 5h 82% · wk 49% left · claude unknown · opencode unknown · agy unknown                                      |

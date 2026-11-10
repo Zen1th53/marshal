@@ -13,7 +13,6 @@ func TestHeaderProviderDots(t *testing.T) {
 			v := boardVisual{
 				board: demoBoard(now), now: now, theme: NewTheme(mode, true, true), edition: "Marshal",
 				health: map[string]string{"codex": "●", "claude": "◐", "agy": "×", "opencode": "○"},
-				arch:   true, archLoaded: true, archRev: 7,
 			}
 			if withHost {
 				host := demoHost(t)
@@ -39,9 +38,6 @@ func TestHeaderProviderDots(t *testing.T) {
 							t.Errorf("width %d: missing %s status color for %q", width, color, dot)
 						}
 					}
-				}
-				if !strings.Contains(plain, StripANSI(v.archChip(false))) && !strings.Contains(plain, StripANSI(v.archChip(true))) {
-					t.Errorf("width %d: missing architecture chip in %q", width, plain)
 				}
 				if width == 200 {
 					for _, provider := range []string{"codex ●", "claude ◐", "agy ×", "opencode ○"} {

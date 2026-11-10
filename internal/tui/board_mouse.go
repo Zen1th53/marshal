@@ -209,7 +209,7 @@ func (w *Workspace) handleBoardMouse(ctx context.Context, event KeyEvent) bool {
 
 // boardChipViews maps the header chips that stand for a body view to the
 // key that opens it.
-var boardChipViews = map[string]rune{"health": '4', "host": 'h', "arch": 'b'}
+var boardChipViews = map[string]rune{"health": '4', "host": 'h'}
 
 // openChip opens what a header chip stands for: its view, or the Board with
 // the pane it counts focused.

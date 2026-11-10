@@ -71,7 +71,7 @@ func (f *fakePlanView) calls() int {
 // boardViewVisual is the Board visual the view goldens paint, every view
 // available.
 func boardViewVisual(now time.Time, th *Theme) boardVisual {
-	return boardVisual{board: demoBoard(now), now: now, theme: th, frame: anim.Frame{}, edition: "Marshal", health: map[string]string{"codex": "●", "claude": "●", "agy": "◐", "opencode": "●"}, memory: true, providers: true, verify: true, security: true, plan: true, arch: true, archLoaded: true, archRev: 7}
+	return boardVisual{board: demoBoard(now), now: now, theme: th, frame: anim.Frame{}, edition: "Marshal", health: map[string]string{"codex": "●", "claude": "●", "agy": "◐", "opencode": "●"}, memory: true, providers: true, verify: true, security: true, plan: true, arch: true}
 }
 
 // checkViewGolden compares a view's frame with its golden and, with

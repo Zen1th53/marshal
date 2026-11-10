@@ -413,9 +413,8 @@ func TestBoardEndToEnd(t *testing.T) {
 	for _, sz := range sizes {
 		checkFrameShape(t, w, sz[0], sz[1])
 	}
-	// "arch rev 7" is the Architecture follower's one read at start-up; the
-	// frame counts below begin after it.
-	frame := waitFrame(t, w, 120, 40, "Marshal", e2eRunID, "DISPATCHING", "TASKS", "LANES", "ACTIVITY", "T-101", "T-106", "arch rev 7")
+	// The header names the run by its title and its state in plain words.
+	frame := waitFrame(t, w, 120, 40, "Marshal", "running", "TASKS", "LANES", "ACTIVITY", "T-101", "T-106")
 
 	// Every view by its key, at both sizes, and back with Esc.
 	views := []struct {

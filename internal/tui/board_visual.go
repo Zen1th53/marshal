@@ -67,12 +67,8 @@ type boardVisual struct {
 	// viewNoRun is set when views 5-7 have no run to show.
 	viewNoRun bool
 	// arch is set when the Architecture view can open; archView paints it
-	// in the body. It also puts the architecture chip in the header:
-	// "arch —" until archLoaded, then archRev, the accepted revision last
-	// read, 0 for none.
+	// in the body.
 	arch, archView bool
-	archLoaded     bool
-	archRev        int64
 	// hits, when set, collects what a click on this paint can reach.
 	hits *[]boardHit
 	// empty is set when no run is open: the body is the first-use card
@@ -323,7 +319,7 @@ func (v boardVisual) renderLines(p layout.Pane) []string {
 			line, spans = v.firstUseHeaderLine(p.Rect.W)
 		}
 		for _, sp := range spans {
-			if boardChipClickable(sp.name) && (sp.name != "health" || v.providers) && (sp.name != "arch" || v.arch) {
+			if boardChipClickable(sp.name) && (sp.name != "health" || v.providers) {
 				v.hit(boardHit{row: p.Rect.Y, x0: p.Rect.X + sp.x0, x1: p.Rect.X + min(sp.x1, p.Rect.W), kind: hitChip, id: sp.name})
 			}
 		}
@@ -358,9 +354,9 @@ type headerPart struct {
 
 // headerSteps is how a header too narrow for every part gives way, one
 // step at a time until it fits: a part is shortened ("-") or left out.
-// The host chip gives way before the run's own identity, state and inbox;
-// the architecture chip stays longest, after the brand.
-var headerSteps = []string{"usage", "-run", "clock", "-health", "-budget", "-lanes", "-done", "-brand", "budget", "lanes", "done", "health", "-host", "host", "-arch", "inbox", "run", "state", "arch", "brand"}
+// The host chip gives way before the run's own identity, state and inbox,
+// which stay longest, after the brand.
+var headerSteps = []string{"usage", "-run", "clock", "-health", "-budget", "-lanes", "-done", "-brand", "budget", "lanes", "done", "health", "-host", "host", "inbox", "run", "state", "brand"}
 
 // headerSpan is where one header part landed on the line, in cells.
 type headerSpan struct {
@@ -402,31 +398,23 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 	if b.Run.ActiveLanes > 0 {
 		live = b.Run.ActiveLanes
 	}
-	state := strings.ToUpper(string(b.Run.State))
-	if state == "" {
-		state = "IDLE"
-	}
-	title := b.Run.Title
+	title := firstLine(b.Run.Title)
 	if title == "" {
-		title = b.Run.ID
+		title = "current run"
+	} else {
+		title = fmt.Sprintf("%q", title)
 	}
 	brand := v.bold(v.fg("white", "Marshal"))
 	full := brand
 	if v.edition != "" && v.edition != "Marshal" {
 		full += " " + v.fg("verify", v.edition)
 	}
-	run := v.fg("dim", "run ") + v.fg("accent", b.Run.ID)
-	// A long run id gives way to its last six characters, as R-7f3a in
-	// the mockups, so the run stays named on a narrow Board.
-	short := b.Run.ID
-	if n := len(short); n > 10 {
-		short = "R-" + short[n-6:]
-	}
-	shortRun := v.fg("dim", "run ") + v.fg("accent", short)
+	run := v.fg("accent", Truncate(title, 40))
+	shortRun := v.fg("accent", Truncate(title, 16))
 	parts := []headerPart{
 		{"brand", full, brand},
-		{"run", run + " " + v.fg("dim", fmt.Sprintf("%q", title)), shortRun},
-		{"state", v.stateChip(state), ""},
+		{"run", run, shortRun},
+		{"state", v.stateChip(), ""},
 		{"done", v.fg("waiting", fmt.Sprint(b.Run.Done)) + v.fg("dim", fmt.Sprintf("/%d done", b.Run.Total)), v.fg("waiting", fmt.Sprint(b.Run.Done)) + v.fg("dim", fmt.Sprintf("/%d", b.Run.Total))},
 		{"lanes", v.fg("working", v.glyph(model.TaskWorking)) + fmt.Sprintf(" %d lanes", live), v.fg("working", v.glyph(model.TaskWorking)) + fmt.Sprint(live)},
 	}
@@ -467,10 +455,7 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 			parts = append(parts, headerPart{"health", strings.Join(hs, " "), strings.Join(dots, " ")})
 		}
 	}
-	// The architecture and host chips stay while anything else can go.
-	if v.arch {
-		parts = append(parts, headerPart{"arch", v.archChip(false), v.archChip(true)})
-	}
+	// The host chip stays while anything else can go.
 	if v.host != nil {
 		c := v.host.chip()
 		parts = append(parts, headerPart{"host", v.hostChip(c), v.hostChipCompact(c)})
@@ -480,7 +465,7 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 		parts = slices.DeleteFunc(parts, func(p headerPart) bool { return p.name == "clock" })
 	}
 	if w <= 100 {
-		return v.narrowHeader(w, brand, full, short, state, inboxColor)
+		return v.narrowHeader(w, brand, full, run, shortRun, inboxColor)
 	}
 	if v.usageWide != "" {
 		parts = append(parts, headerPart{"usage", v.usageWide, ""})
@@ -491,15 +476,15 @@ func (v boardVisual) headerLine(w int) (string, []headerSpan) {
 
 // narrowHeaderSteps is how a header of 100 columns or fewer gives way, as
 // mockups 05 and 06 draw it: the edition and the inbox label go first, then
-// a warm host chip, the budget bar, the lanes and the done count; the run,
-// its state and the architecture chip ("rev 7 D3") stay longest.
-var narrowHeaderSteps = []string{"usage", "-brand", "-inbox", "-host", "budget", "lanes", "done", "host", "inbox", "state", "run", "arch", "brand"}
+// a warm host chip, the budget bar, the lanes and the done count; the run
+// and its state stay longest.
+var narrowHeaderSteps = []string{"usage", "-brand", "-inbox", "-host", "budget", "lanes", "done", "host", "inbox", "state", "run", "brand"}
 
 // narrowHeader is the header at 100 columns or fewer (owner decision
-// 2026-11-06, mockups 05 and 06): the run id, its state, the done count,
-// the lanes and the budget bar stay; the architecture chip is shortened to
-// "rev 7 D3"; the host chip shows only while the host is warm or guarded.
-func (v boardVisual) narrowHeader(w int, brand, full, shortRun, state, inboxColor string) (string, []headerSpan) {
+// 2026-11-06, mockups 05 and 06): the run, its state, the done count, the
+// lanes and the budget bar stay; the host chip shows only while the host is
+// warm or guarded.
+func (v boardVisual) narrowHeader(w int, brand, full, run, shortRun, inboxColor string) (string, []headerSpan) {
 	b := v.board
 	live := 0
 	for _, l := range b.Lanes {
@@ -512,8 +497,8 @@ func (v boardVisual) narrowHeader(w int, brand, full, shortRun, state, inboxColo
 	}
 	parts := []headerPart{
 		{"brand", full, brand},
-		{"run", v.fg("accent", b.Run.ID), v.fg("accent", shortRun)},
-		{"state", v.stateChip(state), ""},
+		{"run", run, shortRun},
+		{"state", v.stateChip(), ""},
 		{"done", v.fg("waiting", fmt.Sprint(b.Run.Done)) + v.fg("dim", fmt.Sprintf("/%d", b.Run.Total)), ""},
 		{"lanes", v.fg("working", v.glyph(model.TaskWorking)) + fmt.Sprint(live), ""},
 	}
@@ -525,9 +510,6 @@ func (v boardVisual) narrowHeader(w int, brand, full, shortRun, state, inboxColo
 	parts = append(parts, headerPart{"inbox", v.fg("dim", "inbox ") + v.fg(inboxColor, fmt.Sprint(v.inboxCount())), v.fg(inboxColor, "⚑"+fmt.Sprint(v.inboxCount()))})
 	if w <= 80 {
 		parts[len(parts)-1].text = parts[len(parts)-1].short
-	}
-	if v.arch {
-		parts = append(parts, headerPart{"arch", v.archChipNarrow(), ""})
 	}
 	if v.host != nil {
 		if c := v.host.chip(); c.Guard || (c.TempKnown && c.Temp >= 70) {
@@ -762,7 +744,7 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 	if v.board.Run.Done > 0 {
 		merged = v.board.Run.Done
 	}
-	summary := fmt.Sprintf("plan %s · %d tasks · %d running · %d parked · %d merged", v.board.PlanID, v.board.Run.Total, run, park, merged)
+	summary := fmt.Sprintf("%d tasks · %d running · %d parked · %d merged", v.board.Run.Total, run, park, merged)
 	out := []string{v.title("TASKS", summary, v.focus == layout.Tasks, w)}
 	if h == 1 {
 		return out
@@ -779,15 +761,15 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 		// id and the scope, so neither is cut to a stub.
 		idW = min(idW, max(taskIDWidth, (w-37)/2+1))
 	}
-	scopeW := max(1, w-50-(idW-taskIDWidth))
+	scopeW := max(1, w-56-(idW-taskIDWidth))
 	if compact {
-		scopeW = max(1, w-41-(idW-taskIDWidth))
+		scopeW = max(1, w-47-(idW-taskIDWidth))
 	}
 	var head string
 	if compact {
-		head = "  " + PadCell("ID", idW) + PadCell("state", 12) + PadCell("worker", 13) + PadCell("scope", scopeW) + " rework"
+		head = "  " + PadCell("ID", idW) + PadCell("state", 12) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + PadCell("sent back", 12)
 	} else {
-		head = "  " + PadCell("ID", idW) + PadCell("state", 13) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + PadCell("elapsed", 8) + "rework"
+		head = "  " + PadCell("ID", idW) + PadCell("state", 13) + PadCell("worker", 13) + PadCell("scope", scopeW) + " " + PadCell("elapsed", 8) + PadCell("sent back", 12)
 	}
 	out = append(out, v.fg("dim", PadCell(head, w)))
 	visible := max(0, h-2)
@@ -848,17 +830,24 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 			}
 			elapsed = fmt.Sprintf("%02d:%02d", int(d.Minutes()), int(d.Seconds())%60)
 		}
-		rw := fmt.Sprintf("%d/%d", t.Returns, t.ReworkLimit)
-		if t.State == model.TaskRework && t.Returns > 0 {
-			// A task sent back for rework shows how many returns it used.
-			rw = v.fg("waiting", rw)
+		rw := ""
+		if t.Returns > 0 {
+			times := "×"
+			if !v.unicode() {
+				times = "x"
+			}
+			rw = fmt.Sprintf("sent back %d%s", t.Returns, times)
+			if t.State == model.TaskRework {
+				// A task sent back for rework shows how many returns it used.
+				rw = v.fg("waiting", rw)
+			}
 		}
 		var line string
 		id := dim(PadCell(Truncate(t.ID, idW-1), idW))
 		if compact {
-			line = mark + id + PadCell(state, 12) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + dim(PadCell(rw, 6))
+			line = mark + id + PadCell(state, 12) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + dim(PadCell(rw, 12))
 		} else {
-			line = mark + id + PadCell(state, 13) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + PadCell(v.fg("dim", elapsed), 8) + dim(PadCell(rw, 6))
+			line = mark + id + PadCell(state, 13) + dim(PadCell(worker, 13)) + PadCell(v.fg("dim", scope), scopeW) + " " + PadCell(v.fg("dim", elapsed), 8) + dim(PadCell(rw, 12))
 		}
 		line = PadCell(line, w)
 		if v.frame.Pulsing(t.ID) {
@@ -983,13 +972,18 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 			parts = append(parts, fmt.Sprintf("%s %d/%d", n, c[0], c[1]))
 		}
 	}
-	count := len(v.board.Lanes)
-	if v.board.Run.ActiveLanes > 0 {
-		count = v.board.Run.ActiveLanes
+	busy := 0
+	for _, l := range v.board.Lanes {
+		if l.State != model.LaneIdle && l.State != model.LaneParked {
+			busy++
+		}
 	}
-	summary := fmt.Sprintf("%d live", count)
-	if c := v.board.Run.LaneCap; c > 0 {
-		summary = fmt.Sprintf("%d of %d", count, c)
+	if v.board.Run.ActiveLanes > 0 {
+		busy = v.board.Run.ActiveLanes
+	}
+	summary := "idle"
+	if busy > 0 {
+		summary = fmt.Sprintf("%d running", busy)
 	}
 	if len(parts) > 0 {
 		summary += " · " + strings.Join(parts, " · ")

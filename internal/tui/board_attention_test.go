@@ -16,20 +16,20 @@ func TestAttentionEdges(t *testing.T) {
 	now := time.Unix(100, 0)
 	base := attnSnapshot{observed: true, runID: "R1"}
 	cases := []struct {
-		name       string
-		prev, next attnSnapshot
-		title      string
+		name        string
+		prev, next  attnSnapshot
+		title, body string
 	}{
-		{"first", attnSnapshot{}, attnSnapshot{runID: "R1", needsYou: true}, ""},
-		{"new run", base, attnSnapshot{runID: "R2", needsYou: true, closed: true}, ""},
-		{"attention", base, attnSnapshot{runID: "R1", needsYou: true}, "Marshal needs you"},
-		{"closed", base, attnSnapshot{runID: "R1", closed: true}, "Run closed"},
-		{"stopped", base, attnSnapshot{runID: "R1", stopped: true, stopNote: "failed"}, "Run stopped: failed"},
-		{"closed overrides stopped", base, attnSnapshot{runID: "R1", closed: true, stopped: true}, "Run closed"},
-		{"steady", base, base, ""},
-		{"cleared", attnSnapshot{observed: true, runID: "R1", needsYou: true, stopped: true}, base, ""},
-		{"same stop", attnSnapshot{observed: true, runID: "R1", stopped: true, stopNote: "failed"}, attnSnapshot{runID: "R1", stopped: true, stopNote: "failed"}, ""},
-		{"changed stop", attnSnapshot{observed: true, runID: "R1", stopped: true, stopNote: "old"}, attnSnapshot{runID: "R1", stopped: true, stopNote: "new"}, "Run stopped: new"},
+		{"first", attnSnapshot{}, attnSnapshot{runID: "R1", needsYou: true}, "", ""},
+		{"new run", base, attnSnapshot{runID: "R2", needsYou: true, closed: true}, "", ""},
+		{"attention", base, attnSnapshot{runID: "R1", needsYou: true}, "Marshal needs you", "The Marshal needs you. Open the Board."},
+		{"closed", base, attnSnapshot{runID: "R1", closed: true}, "Run finished", "The run finished."},
+		{"stopped", base, attnSnapshot{runID: "R1", stopped: true, stopNote: "failed"}, "Run stopped", "failed"},
+		{"closed overrides stopped", base, attnSnapshot{runID: "R1", closed: true, stopped: true}, "Run finished", "The run finished."},
+		{"steady", base, base, "", ""},
+		{"cleared", attnSnapshot{observed: true, runID: "R1", needsYou: true, stopped: true}, base, "", ""},
+		{"same stop", attnSnapshot{observed: true, runID: "R1", stopped: true, stopNote: "failed"}, attnSnapshot{runID: "R1", stopped: true, stopNote: "failed"}, "", ""},
+		{"changed stop", attnSnapshot{observed: true, runID: "R1", stopped: true, stopNote: "old"}, attnSnapshot{runID: "R1", stopped: true, stopNote: "new"}, "Run stopped", "new"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -40,7 +40,7 @@ func TestAttentionEdges(t *testing.T) {
 				}
 				return
 			}
-			if len(events) != 1 || events[0].title != c.title || !strings.Contains(events[0].body, "R1") {
+			if len(events) != 1 || events[0].title != c.title || events[0].body != c.body {
 				t.Fatal(events)
 			}
 		})
@@ -150,7 +150,7 @@ func TestAttentionDelivery(t *testing.T) {
 	w.attentionPoll(ctx)
 	select {
 	case m := <-n.messages:
-		if m[0] != "Marshal needs you" || m[1] != "Run R1 needs your attention on the Board." {
+		if m[0] != "Marshal needs you" || m[1] != "The Marshal needs you. Open the Board." {
 			t.Fatal(m)
 		}
 	case <-time.After(time.Second):

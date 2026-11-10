@@ -97,9 +97,9 @@ func (w *Workspace) paintArchState() archPaint {
 	return archPaint{Snap: w.arch.snap, Edition: archEdition(), Rules: archRulesInForce(w.arch.snap.Telemetry)}
 }
 
-// archChipState is what the Board header's chip paints from: whether a
-// read has succeeded yet and the accepted revision it found, 0 for none.
-func (w *Workspace) archChipState() (loaded bool, rev int64) {
+// archState is what the Architecture view last read: whether a read has
+// succeeded yet and the accepted revision it found, 0 for none.
+func (w *Workspace) archState() (loaded bool, rev int64) {
 	w.arch.mu.Lock()
 	defer w.arch.mu.Unlock()
 	if a := w.arch.snap.Overview.Accepted; a != nil {
@@ -111,7 +111,7 @@ func (w *Workspace) archChipState() (loaded bool, rev int64) {
 // archRevision is the accepted revision last read; 0 before a read or an
 // acceptance.
 func (w *Workspace) archRevision() int64 {
-	_, rev := w.archChipState()
+	_, rev := w.archState()
 	return rev
 }
 
@@ -182,7 +182,7 @@ func (w *Workspace) refreshArch(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
-	loaded, rev := w.archChipState()
+	loaded, rev := w.archState()
 	telemetry := cloud.TelemetryActive()
 	w.arch.mu.Lock()
 	w.arch.snap.At = time.Now()
@@ -195,7 +195,7 @@ func (w *Workspace) refreshArch(ctx context.Context) {
 	w.arch.mu.Unlock()
 	// The open view repaints for every read; the Board only when its chip
 	// changed.
-	nowLoaded, nowRev := w.archChipState()
+	nowLoaded, nowRev := w.archState()
 	if w.boardVisible() && (w.archView.Load() || loaded != nowLoaded || rev != nowRev) {
 		w.requestRepaint()
 	}

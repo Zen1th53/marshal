@@ -179,37 +179,6 @@ func archAge(d time.Duration) string {
 	return fmt.Sprintf("%dm", int(d/time.Minute))
 }
 
-// archChip is the Board header's architecture chip: "arch — · step S"
-// until the first read succeeds (or when there is nothing to read), then
-// the accepted revision and the step the run is at. A step that is not
-// live carries its flag ("step M5 stale"). The compact form, for a narrow
-// header, keeps the revision and the step.
-func (v boardVisual) archChip(compact bool) string {
-	pos := bpAt(v.board, v.now)
-	step := v.fg("waiting", pos.Step)
-	if pos.Flag != "" {
-		step += " " + v.fg("parked", pos.Flag)
-	}
-	rev := v.fg("dim", "—")
-	if v.archLoaded {
-		rev = v.fg("parked", "none")
-		if v.archRev > 0 {
-			rev = v.fg("merged", fmt.Sprintf("rev %d", v.archRev))
-		}
-	}
-	if compact {
-		return v.fg("dim", "arch ") + rev + " " + step
-	}
-	return v.fg("dim", "arch ") + rev + v.fg("dim", " · step ") + step
-}
-
-// archChipNarrow is the architecture chip of a header of 100 columns or
-// fewer: the revision and the step, "rev 7 D3".
-func (v boardVisual) archChipNarrow() string {
-	full := v.archChip(true)
-	return strings.TrimPrefix(full, v.fg("dim", "arch "))
-}
-
 // archAccepted is the ARCHITECTURE title's summary: the accepted revision,
 // who accepted it and when, and the edition.
 func archAccepted(o store.ArchitectureOverview, edition string, now time.Time) string {

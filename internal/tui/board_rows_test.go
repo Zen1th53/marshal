@@ -74,7 +74,9 @@ func TestTaskIDWholeAndScopeKeepsFileName(t *testing.T) {
 		{ID: "T-1", State: model.TaskQueued, Scope: []string{"a.go"}},
 		{ID: "T-ABCDEFGHIJKLMNOP", State: model.TaskQueued},
 	}}
-	for _, w := range []int{70, 120} {
+	// 73 is the widest compact pane (compact is under 74); its scope column
+	// still holds the cut file name beside the 12-cell "sent back" column.
+	for _, w := range []int{73, 120} {
 		v := rowsVisual(b, ThemeNoColor, true)
 		lines := v.tasks(layout.Pane{ID: layout.Tasks, Rect: layout.Rect{W: w, H: 8}})
 		for _, l := range lines {
@@ -152,22 +154,20 @@ func TestPulsingTaskRowIsBold(t *testing.T) {
 	}
 }
 
-// The lanes summary names the run's lane cap, not a fixed 12.
-func TestLanesSummaryUsesTheRunsCap(t *testing.T) {
+// The lanes summary says how many lanes are running, in plain words, never
+// the lane cap.
+func TestLanesSummaryRunning(t *testing.T) {
 	r := marshal.Run{State: marshal.Dispatching, Tasks: []marshal.Task{{PlanTaskID: "T-1", Worker: "codex", State: marshal.Dispatched}}}
 	b := model.Project(model.Snapshot{RunID: "R1", Run: r, Workers: []model.Worker{{ID: "codex-1", Provider: "codex", TaskID: "T-1"}}}, nil)
-	if b.Run.LaneCap <= 0 {
-		t.Fatalf("projected lane cap %d", b.Run.LaneCap)
-	}
-	b.Run.LaneCap = 5
 	v := rowsVisual(b, ThemeNoColor, true)
 	title := StripANSI(v.lanes(layout.Pane{ID: layout.Lanes, Rect: layout.Rect{W: 80, H: 4}})[0])
-	if !strings.Contains(title, "1 of 5") || strings.Contains(title, "of 12") {
-		t.Fatalf("lanes summary %q, want 1 of 5", title)
+	if !strings.Contains(title, "1 running") || strings.Contains(title, "of ") || strings.Contains(title, "live") {
+		t.Fatalf("lanes summary %q, want 1 running", title)
 	}
-	b.Run.LaneCap = 0
-	v = rowsVisual(b, ThemeNoColor, true)
-	if title := StripANSI(v.lanes(layout.Pane{ID: layout.Lanes, Rect: layout.Rect{W: 80, H: 4}})[0]); !strings.Contains(title, "1 live") {
-		t.Fatalf("unknown cap summary %q, want 1 live", title)
+	// With no busy lane the summary reads idle.
+	bi := model.Project(model.Snapshot{RunID: "R1", Run: marshal.Run{State: marshal.Dispatching}}, nil)
+	vi := rowsVisual(bi, ThemeNoColor, true)
+	if title := StripANSI(vi.lanes(layout.Pane{ID: layout.Lanes, Rect: layout.Rect{W: 80, H: 4}})[0]); !strings.Contains(title, "idle") {
+		t.Fatalf("empty lanes summary %q, want idle", title)
 	}
 }

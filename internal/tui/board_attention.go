@@ -64,13 +64,13 @@ func attentionEdges(prev, next attnSnapshot, now time.Time) []attnEvent {
 		out = append(out, attnEvent{kind, title, body, next.runID})
 	}
 	if !prev.needsYou && next.needsYou {
-		add("attention", "Marshal needs you", "Run "+next.runID+" needs your attention on the Board.")
+		add("attention", "Marshal needs you", "The Marshal needs you. Open the Board.")
 	}
 	if !prev.closed && next.closed {
-		add("closed", "Run closed", "Run "+next.runID+" closed.")
+		add("closed", "Run finished", "The run finished.")
 	}
 	if next.stopped && !next.closed && (!prev.stopped || prev.stopNote != next.stopNote) {
-		add("stopped", "Run stopped: "+next.stopNote, "Run "+next.runID+": "+next.stopNote)
+		add("stopped", "Run stopped", next.stopNote)
 	}
 	return out
 }
