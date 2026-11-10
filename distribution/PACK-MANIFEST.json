@@ -10856,8 +10856,8 @@
     },
     {
       "path": "internal/store/memory_overview.go",
-      "sha256": "48d045fa5057dbacb9c04f9e18ec352e58a1848ccd2611cd718e74780b6f4be7",
-      "bytes": 10052
+      "sha256": "97a1197720af961cf938f459d1064b9c4f294bc9fd7780d1a1777aa663da3bd8",
+      "bytes": 7827
     },
     {
       "path": "internal/store/memory_overview_default.go",
@@ -10876,8 +10876,8 @@
     },
     {
       "path": "internal/store/memory_overview_test.go",
-      "sha256": "b71ceaf2c49fe8b0bcdf2f12d4020dcd57e5150cde10929b592370045a140b88",
-      "bytes": 14793
+      "sha256": "1a9ee2353dc3c69cf30821921bab50f5810bd85916eee0186f59b356ae4b68c4",
+      "bytes": 11663
     },
     {
       "path": "internal/store/memory_persistence_a02_test.go",
@@ -13711,8 +13711,8 @@
     },
     {
       "path": "internal/tui/memory_view.go",
-      "sha256": "210328ef4c73675fe5049c22994315ec6fa1b9e3a61a4f8249e3d9c920a5421a",
-      "bytes": 11585
+      "sha256": "4f4f4d7f5281f401759de4edc2c114e5019564a6b4ea133d2e54fd1cec28ca0c",
+      "bytes": 9771
     },
     {
       "path": "internal/tui/memory_view_live.go",
@@ -13721,8 +13721,8 @@
     },
     {
       "path": "internal/tui/memory_view_test.go",
-      "sha256": "3aa75dd55bd6bf6687f6c7e180543f7e63d29860528833aae50cb5e43673aab9",
-      "bytes": 13917
+      "sha256": "73d767415e1319dcaf77f45fcbec5639fc119cc8e7a7a38f90be9a9a7d8cae51",
+      "bytes": 13359
     },
     {
       "path": "internal/tui/memorydata.go",
@@ -14941,13 +14941,13 @@
     },
     {
       "path": "internal/tui/testdata/board/memory-split-120x40.golden",
-      "sha256": "ce14578c4ffc220a27c78ffbe143f3ac12423c803ae24d5fdd78f0c98122c416",
-      "bytes": 7754
+      "sha256": "9cbd70ce9c0171538d7f90b472e825b3f1c2d310348d35f6de6a3f8274ff6845",
+      "bytes": 6853
     },
     {
       "path": "internal/tui/testdata/board/memory-split-80x24.golden",
-      "sha256": "63d908bced47a98b43795925dab74fecb39b28fda2b35a0cbae951d72f560c16",
-      "bytes": 4156
+      "sha256": "80abb0c8eddc742a395573785edf02fbcf89aff5521d91997db6236c7918cd3c",
+      "bytes": 3541
     },
     {
       "path": "internal/tui/testdata/board/overlay-090x30.golden",
