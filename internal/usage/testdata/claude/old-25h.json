@@ -1,0 +1,11 @@
+{
+  "numStartups": 3,
+  "oauthAccount": {"emailAddress": "fixture@example.invalid"},
+  "cachedUsageUtilization": {
+    "fetchedAtMs": 1794070800000,
+    "utilization": {
+      "five_hour": {"utilization": 12, "resets_at": "2026-11-08T20:00:00.000000+00:00"},
+      "seven_day": {"utilization": 42, "resets_at": "2026-11-12T20:00:00.000000+00:00"}
+    }
+  }
+}

@@ -193,6 +193,17 @@ func TestCodexCutLine(t *testing.T) {
 	}
 }
 
+func TestCodexStaleMark(t *testing.T) {
+	stale := codexFrom(t, "fresh.jsonl", now.Add(-45*time.Minute))
+	if !stale.Known || !stale.Stale || !stale.AsOf.Equal(now.Add(-45*time.Minute)) {
+		t.Fatalf("45m old must be Known and Stale: %+v", stale)
+	}
+	fresh := codexFrom(t, "fresh.jsonl", now.Add(-time.Minute))
+	if !fresh.Known || fresh.Stale || !fresh.AsOf.Equal(now.Add(-time.Minute)) {
+		t.Fatalf("1m old must be Known, not Stale: %+v", fresh)
+	}
+}
+
 func TestCodexWindowLabels(t *testing.T) {
 	for minutes, want := range map[int64]string{300: "5h", 10080: "wk", 60: "60m", 1440: "1440m"} {
 		if got := windowLabel(minutes); got != want {

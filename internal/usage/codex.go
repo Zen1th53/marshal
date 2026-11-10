@@ -83,6 +83,10 @@ func readCodex(now time.Time, dir string) Quota {
 	case !q.Known:
 		q.Reason = firstReason
 	}
+	if q.Known {
+		q.AsOf = mod
+		q.Stale = now.Sub(mod) >= FreshFor
+	}
 	return q
 }
 

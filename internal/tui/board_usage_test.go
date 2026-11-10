@@ -86,12 +86,12 @@ func TestUsageFromCodexFile(t *testing.T) {
 	if err := os.Chtimes(path, mod, mod); err != nil {
 		t.Fatal(err)
 	}
-	wide, narrow := usageWorkspace(usage.Read(usageNow, dir)).usageSegment(120)
+	wide, narrow := usageWorkspace(usage.Read(usageNow, usage.Sources{CodexDir: dir})).usageSegment(120)
 	if wide != "codex 5h 82% · wk 49% left · claude unknown · opencode unknown · agy unknown" || narrow != "cx 82/49 · cl ? · oc ? · ag ?" {
 		t.Fatalf("fresh file: %q %q", wide, narrow)
 	}
 	// A day later the same file is stale: unknown, not the old percent.
-	_, narrow = usageWorkspace(usage.Read(usageNow.Add(24*time.Hour), dir)).usageSegment(120)
+	_, narrow = usageWorkspace(usage.Read(usageNow.Add(24*time.Hour), usage.Sources{CodexDir: dir})).usageSegment(120)
 	if narrow != "cx ? · cl ? · oc ? · ag ?" {
 		t.Fatalf("stale file: %q", narrow)
 	}

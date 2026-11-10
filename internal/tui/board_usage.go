@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -67,7 +68,18 @@ func (w *Workspace) readUsage(now time.Time) []usage.Quota {
 	if err != nil {
 		dir = ""
 	}
-	return usage.Read(now, dir)
+	src := usage.Sources{CodexDir: dir, ClaudeFile: usage.ClaudeConfigFile()}
+	return usage.Read(now, src)
+}
+
+// usageQuotas is the last reading, copied; ok is false before the first.
+func (w *Workspace) usageQuotas() (qs []usage.Quota, ok bool) {
+	w.usage.mu.Lock()
+	defer w.usage.mu.Unlock()
+	if !w.usage.read {
+		return nil, false
+	}
+	return slices.Clone(w.usage.quotas), true
 }
 
 // storeUsage caches a reading and repaints the Board when the header text
