@@ -109,9 +109,6 @@ type boardVisual struct {
 	echo []sayEcho
 }
 
-var boardHex = map[string]string{"bg": "0b0e14", "panel": "0f131b", "band": "161b26", "sel": "1d2433", "rule": "262d3c", "fg": "c9d1e3", "dim": "6b7489", "faint": "3b4356", "accent": "8fb3ff", "working": "6fa8ff", "waiting": "e6c35c", "parked": "f0943f", "failed": "f2677a", "merged": "7fd69a", "verify": "c39bff", "white": "ffffff"}
-var board256 = map[string]int{"bg": 233, "panel": 233, "band": 235, "sel": 237, "rule": 239, "fg": 252, "dim": 243, "faint": 238, "accent": 111, "working": 111, "waiting": 179, "parked": 215, "failed": 203, "merged": 114, "verify": 141, "white": 15}
-
 func (v boardVisual) code(name string, background bool) string {
 	if v.theme == nil || v.theme.Mode == ThemeNoColor {
 		return ""
@@ -252,7 +249,7 @@ func (v boardVisual) glyph(st model.TaskState) string {
 	case model.TaskWorking, model.TaskReview:
 		return v.frame.Spinner(true)
 	case "verifying":
-		return "◆"
+		return "◎"
 	case model.TaskParked:
 		return "▮"
 	case model.TaskRework:
@@ -272,7 +269,7 @@ func boardStateColor(st model.TaskState) string {
 	case "verifying":
 		return "verify"
 	case model.TaskParked, model.TaskRework, "returned":
-		return "parked"
+		return "waiting"
 	case model.TaskMerged, model.TaskAccepted:
 		return "merged"
 	case model.TaskQueued:
@@ -304,7 +301,7 @@ func (v boardVisual) render(p layout.Pane) []string {
 // ascii is lines in the monochrome ASCII theme, each w cells wide.
 func (v boardVisual) ascii(lines []string, w int) []string {
 	lines = slices.Clone(lines)
-	repl := strings.NewReplacer("°C", "C", "▲", "^", "·", ".", "→", "->", "›", ">", "▰", "#", "▱", "-", "◆", "*", "↻", "~", "▮", "#", "✓", "v", "○", "o", "⏎", "Enter", "▸", ">")
+	repl := strings.NewReplacer("°C", "C", "▲", "^", "·", ".", "→", "->", "›", ">", "▰", "#", "▱", "-", "◎", "*", "↻", "~", "▮", "#", "✓", "v", "○", "o", "⏎", "Enter", "▸", ">")
 	for i, s := range lines {
 		s = repl.Replace(s)
 		s = strings.Map(func(r rune) rune {
@@ -675,7 +672,7 @@ func (v boardVisual) footerSpans(w int) (string, []footerSpan) {
 	}
 	// A host notice follows the run's note, and only when it fits whole.
 	if v.host != nil && v.host.Notice != "" {
-		if part := v.fg("parked", "▲ ") + cleanBoard(v.host.Notice) + "   "; VisibleLen(" "+s+part) <= w {
+		if part := v.fg("waiting", "▲ ") + cleanBoard(v.host.Notice) + "   "; VisibleLen(" "+s+part) <= w {
 			s += part
 		}
 	}
@@ -822,6 +819,7 @@ func (v boardVisual) tasks(p layout.Pane) []string {
 		if !v.unicode() && worker == "—" {
 			worker = "-"
 		}
+		worker = v.mark(providerOf(worker), "") + worker
 		// A long scope keeps its end, where the file name is.
 		scope := truncateLeft(cleanBoard(strings.Join(t.Scope, ",")), scopeW)
 		elapsed := "—"
@@ -935,7 +933,7 @@ func (v boardVisual) tasksBrief(p layout.Pane) []string {
 			if worker == "" {
 				worker = "—"
 			}
-			line += PadCell(worker, 13)
+			line += PadCell(v.mark(providerOf(worker), "")+worker, 13)
 		}
 		scope := strings.TrimPrefix(cleanBoard(strings.Join(t.Scope, ",")), "internal/")
 		line += v.fg("dim", truncateLeft(scope, max(1, w-VisibleLen(line))))
@@ -971,7 +969,7 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 	var parts []string
 	for _, n := range names {
 		if c, ok := by[n]; ok {
-			parts = append(parts, fmt.Sprintf("%s %d/%d", n, c[0], c[1]))
+			parts = append(parts, fmt.Sprintf("%s%s %d/%d", v.mark(n, ""), n, c[0], c[1]))
 		}
 	}
 	busy := 0
@@ -1042,10 +1040,10 @@ func (v boardVisual) lanes(p layout.Pane) []string {
 			}
 			return r
 		}, act)
-		worker := PadCell(l.Worker, 13)
+		worker := PadCell(v.mark(providerOf(l.Worker), "")+l.Worker, 13)
 		if l.State == model.LaneWorking {
 			// A lane at work stands out by name, as in the prototype.
-			worker = v.bold(v.fg("white", PadCell(l.Worker, 13)))
+			worker = v.bold(v.fg("white", PadCell(v.mark(providerOf(l.Worker), "")+l.Worker, 13)))
 		}
 		tok := fmt.Sprintf("%dk", l.Tokens/1000)
 		line := v.fg(boardStateColor(st), g) + " " + worker + v.fg("accent", PadCell(task, 8)) + v.fg("dim", PadCell(el, 8)) + v.fg(boardStateColor(st), spark) + " " + v.fg("dim", strings.Repeat(" ", max(0, 4-VisibleLen(tok)))+tok) + "  " + v.fg(laneActColor(l), act)
@@ -1238,7 +1236,7 @@ func (v boardVisual) inbox(p layout.Pane) []string {
 		if hard {
 			kind = "hard gate"
 		}
-		color := "parked"
+		color := "needs"
 		if hard {
 			color = "failed"
 		}

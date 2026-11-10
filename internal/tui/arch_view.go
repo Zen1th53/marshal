@@ -286,7 +286,7 @@ func (v boardVisual) archLines(m archPaint, w, h int) []string {
 			read = "Couldn't refresh; showing what was read " + hostAgo(v.now.Sub(s.At)) + "."
 		}
 		top = append(top, v.kv("updated", read, w))
-		force := v.fg("parked", "nothing accepted yet · the owner accepts a draft with \"accept architecture\"")
+		force := v.fg("needs", "nothing accepted yet · the owner accepts a draft with \"accept architecture\"")
 		if a := o.Accepted; a != nil {
 			force = v.fg("merged", fmt.Sprintf("rev %d accepted · Marshal acts only inside it", a.Revision))
 		}

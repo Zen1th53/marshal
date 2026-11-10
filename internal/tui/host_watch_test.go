@@ -161,7 +161,7 @@ func TestHostChipTextAndColours(t *testing.T) {
 	}{
 		{"cool", hostChip{Temp: 65, TempKnown: true, DiskPct: 60, DiskKnown: true}, []string{"\x1b[38;5;243mhost", "\x1b[38;5;114m65°C", "\x1b[38;5;243mdisk 60%"}, []string{"GUARD"}},
 		{"warm", hostChip{Temp: 74, TempKnown: true, DiskPct: 60, DiskKnown: true}, []string{"\x1b[38;5;179m74°C"}, nil},
-		{"hot", hostChip{Temp: 84, TempKnown: true, DiskPct: 60, DiskKnown: true}, []string{"\x1b[38;5;215m84°C"}, nil},
+		{"hot", hostChip{Temp: 84, TempKnown: true, DiskPct: 60, DiskKnown: true}, []string{"\x1b[38;5;179m84°C"}, nil},
 		{"guard", hostChip{Temp: 92, TempKnown: true, Guard: true, DiskPct: 94, DiskKnown: true, LowDisk: true}, []string{"\x1b[38;5;203m92°C", "\x1b[38;5;203mGUARD", "\x1b[38;5;179mdisk 94%"}, nil},
 	}
 	for _, tc := range cases {

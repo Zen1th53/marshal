@@ -287,7 +287,7 @@ func (v boardVisual) firstUseHeaderLine(w int) (string, []headerSpan) {
 	if v.ownerWaits() {
 		// The Marshal waits for the owner before any run exists: the
 		// project contract to accept, or files changed to keep or undo.
-		parts[2] = headerPart{"state", v.bold(v.bg("sel", v.fg("waiting", " NEEDS YOU "))), v.bold(v.fg("waiting", "NEEDS YOU"))}
+		parts[2] = headerPart{"state", v.bold(v.bg("sel", v.fg("needs", " NEEDS YOU "))), v.bold(v.fg("needs", "NEEDS YOU"))}
 	}
 	inboxColor := "merged"
 	if v.inboxCount() > 0 {
@@ -447,7 +447,7 @@ func (v boardVisual) firstUseBody(w, h, y int) []string {
 		if c.state == "limited" && !c.until.IsZero() {
 			word = "limited until " + c.until.In(v.now.Location()).Format("15:04")
 		}
-		text := v.fg(col, v.firstUseGlyph(c.state)) + " " + v.bold(v.fg("white", c.name)) + " " + v.fg(col, word)
+		text := v.fg(col, v.firstUseGlyph(c.state)) + " " + v.mark(c.name, "") + v.bold(v.fg("white", c.name)) + " " + v.fg(col, word)
 		n := VisibleLen(text)
 		if x > len(pad) && x+3+n > w {
 			flush()

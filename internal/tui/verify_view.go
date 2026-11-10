@@ -42,8 +42,8 @@ type verifyPaint struct {
 // verifyStateColour colours a run task's state as the Board does.
 var verifyStateColour = map[marshal.TaskState]string{
 	"": "dim", marshal.Queued: "dim", marshal.Dispatched: "working", marshal.HandedIn: "verify",
-	marshal.Accepted: "merged", marshal.Merged: "merged", marshal.Returned: "parked", marshal.Reassigned: "parked",
-	marshal.Escalated: "parked", marshal.Cancelled: "failed",
+	marshal.Accepted: "merged", marshal.Merged: "merged", marshal.Returned: "waiting", marshal.Reassigned: "waiting",
+	marshal.Escalated: "waiting", marshal.Cancelled: "failed",
 }
 
 // verifyUnsupported is the selected task's claims that are not SUPPORTED:
@@ -156,7 +156,7 @@ func (v boardVisual) verifyLines(m verifyPaint, w int) ([]string, int) {
 		}
 		state := string(t.State)
 		if m.Busy == t.ID {
-			state, col = "returning", "parked"
+			state, col = "returning", "waiting"
 		}
 		line := PadCell(row(v.fg(col, "●"), cleanBoard(t.ID), v.fg(col, state), cleanBoard(t.Worker), claims, supported, reviewer, other), w)
 		if t.ID == m.Selected {

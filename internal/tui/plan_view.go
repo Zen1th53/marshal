@@ -136,7 +136,7 @@ func (v boardVisual) planRender(m planPaint, w, h int) []string {
 // boardASCIIGlyphs replaces the Board's state glyphs that hostASCII does
 // not know.
 func boardASCIIGlyphs(lines []string) []string {
-	r := strings.NewReplacer("✓", "v", "▸", ">", "↻", "~", "◆", "*", "⏎", "Enter")
+	r := strings.NewReplacer("✓", "v", "▸", ">", "↻", "~", "◎", "*", "⏎", "Enter")
 	out := make([]string, len(lines))
 	for i, l := range lines {
 		out[i] = r.Replace(l)

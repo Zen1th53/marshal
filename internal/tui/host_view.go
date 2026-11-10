@@ -21,8 +21,6 @@ func tempColor(t float64) string {
 	switch {
 	case t >= 90:
 		return "failed"
-	case t >= 80:
-		return "parked"
 	case t >= 70:
 		return "waiting"
 	}
