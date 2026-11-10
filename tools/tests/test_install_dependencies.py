@@ -12,32 +12,39 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 class InstallDependencyTests(unittest.TestCase):
-    def install(self, manager, present):
+    def install(self, manager, present, uname=("Linux", "x86_64"), platform="linux_amd64",
+                install_stub=False):
         with tempfile.TemporaryDirectory(prefix="marshal-install-") as directory:
             root = pathlib.Path(directory)
             commands = root / "commands"
             commands.mkdir()
-            for name in ("tar", "gzip", "install", "sha256sum", "mktemp", "rm", "grep"):
+            for name in ("tar", "gzip", "install", "sha256sum", "mktemp", "rm", "grep", "mkdir"):
                 (commands / name).symlink_to(shutil.which(name))
 
             def stub(name, body):
                 path = commands / name
+                if path.is_symlink():
+                    path.unlink()
                 path.write_text("#!/bin/sh\n" + body + "\n")
                 path.chmod(0o755)
 
-            stub("uname", 'case "$1" in -s) echo Linux;; -m) echo x86_64;; esac')
+            stub("uname", f'case "$1" in -s) echo {uname[0]};; -m) echo {uname[1]};; esac')
+            if install_stub:
+                # BSD install (macOS) has no -D; reject it as macOS does.
+                stub("install", f'''for a in "$@"; do case "$a" in -D*) echo "install: illegal option -- D" >&2; exit 64;; esac; done
+exec {shutil.which("install")} "$@"''')
             if manager:
                 stub(manager, "exit 97")  # Running a manager must fail the test.
             for name in present:
                 stub(name, "exit 98")  # Checking availability must not run tools.
             binary = root / "marshal"
             binary.write_text("fixture binary\n")
-            archive = root / "marshal_0.0.5_linux_amd64.tar.gz"
+            archive = root / f"marshal_0.0.5_{platform}.tar.gz"
             with tarfile.open(archive, "w:gz") as package:
                 package.add(binary, arcname="marshal")
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             (root / "checksums.txt").write_text(f"{digest}  {archive.name}\n")
-            stub("curl", '''destination=""
+            stub("curl", f'''destination=""
 while [ "$#" -gt 0 ]; do
     if [ "$1" = -o ]; then shift; destination="$1"; fi
     url="$1"
@@ -45,7 +52,7 @@ while [ "$#" -gt 0 ]; do
 done
 case "$url" in
     */checksums.txt) /bin/cp "$FIXTURES/checksums.txt" "$destination" ;;
-    */marshal_0.0.5_linux_amd64.tar.gz) /bin/cp "$FIXTURES/marshal_0.0.5_linux_amd64.tar.gz" "$destination" ;;
+    */{archive.name}) /bin/cp "$FIXTURES/{archive.name}" "$destination" ;;
     *) exit 99 ;;
 esac''')
             result = subprocess.run(
@@ -56,7 +63,12 @@ esac''')
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((root / "installed/marshal").read_bytes(), binary.read_bytes())
+            self.assertEqual((root / "installed/marshal").stat().st_mode & 0o777, 0o755)
             return [line for line in result.stderr.splitlines() if line.startswith("Missing ")]
+
+    def test_bsd_install_without_dash_D(self):
+        self.install(None, (), uname=("Darwin", "arm64"), platform="darwin_arm64",
+                     install_stub=True)
 
     def test_package_managers_and_each_missing_tool(self):
         for manager in ("pacman", "apt", "apt-get", "dnf", "zypper", "brew"):
